@@ -177,13 +177,16 @@ void buildRandom(aig::Manager& m, std::mt19937& rng, unsigned nCi,
       return (rng() & 1) ? aig::neg(l) : l;
     };
     const unsigned which = rng() % 100;
+    // Sequenced: an argument list would draw them in whatever order the
+    // compiler evaluates it, and the circuits must not depend on that.
+    const aig::Lit p0 = pick(), p1 = pick(), p2 = pick();
     aig::Lit r;
     if (which < 25)
-      r = m.Xor(pick(), pick());
+      r = m.Xor(p0, p1);
     else if (which < 40)
-      r = m.Mux(pick(), pick(), pick());
+      r = m.Mux(p0, p1, p2);
     else
-      r = m.And(pick(), pick());
+      r = m.And(p0, p1);
     if (!aig::isConst(r))
       pool.push_back(r);
   }
@@ -342,6 +345,61 @@ TEST(Tseitin, MuxCostsFourClausesInsteadOfNine)
   EXPECT_EQ(folded.clauseCount(), 6u);
   EXPECT_EQ(folded.literalCount(), 16u);
   EXPECT_EQ(folded.varCount(), 1u + 3u + 1u + 1u);
+}
+
+// A MUX selecting between an arm and an operand of its own exclusive-or
+// condition -- the comparators' borrow cell -- is a three-literal majority:
+// one variable, its six prime implicates, and the exclusive-or vanishes.
+TEST(Tseitin, ComparatorCellBecomesTheMajorityBlock)
+{
+  aig::Manager m;
+  const aig::Lit l = m.createCi(), r = m.createCi(), prev = m.createCi();
+  m.createOutput(m.Mux(aig::neg(m.Xor(r, l)), prev, r));
+  ASSERT_EQ(m.andCount(), 6u);
+
+  const CNF folded = aig::deriveTseitin(m, 1, aig::Recover::PatternsAndAnds);
+  EXPECT_EQ(folded.clauseCount(), 6u + 2u);
+  EXPECT_EQ(folded.literalCount(), 18u + 4u);
+  EXPECT_EQ(folded.varCount(), 1u + 3u + 1u + 1u);
+
+  ASSERT_NO_FATAL_FAILURE(checkExact(m, 1, aig::Recover::PatternsAndAnds));
+}
+
+// The chain's bottom cell folds to an AND reading an exclusive-or against
+// one of the exclusive-or's own operands, which is the two-literal
+// conjunction the exclusive-or's other operand decides.
+TEST(Tseitin, XorAgainstItsOwnOperandCollapses)
+{
+  aig::Manager m;
+  const aig::Lit a = m.createCi(), b = m.createCi();
+  m.createOutput(m.And(m.Xor(a, b), a)); // = a & !b
+  ASSERT_EQ(m.andCount(), 4u);
+
+  const CNF folded = aig::deriveTseitin(m, 1, aig::Recover::PatternsAndAnds);
+  EXPECT_EQ(folded.clauseCount(), 3u + 2u);
+  EXPECT_EQ(folded.literalCount(), 7u + 4u);
+  EXPECT_EQ(folded.varCount(), 1u + 2u + 1u + 1u);
+
+  ASSERT_NO_FATAL_FAILURE(checkExact(m, 1, aig::Recover::PatternsAndAnds));
+}
+
+// The guard on both collapses: an exclusive-or something else also reads
+// keeps its variable, and the cell must fall back to the ordinary pattern.
+TEST(Tseitin, SharedConditionDeclinesTheMajorityBlock)
+{
+  aig::Manager m;
+  const aig::Lit l = m.createCi(), r = m.createCi(), prev = m.createCi();
+  const aig::Lit eq = aig::neg(m.Xor(r, l));
+  m.createOutput(m.Mux(eq, prev, r));
+  m.createOutput(eq);
+
+  const CNF folded = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds);
+  // An ITE block over the live exclusive-or, the exclusive-or's own block,
+  // and two tie clauses per named output.
+  EXPECT_EQ(folded.clauseCount(), 4u + 4u + 4u);
+  EXPECT_EQ(folded.varCount(), 1u + 3u + 2u + 2u);
+
+  ASSERT_NO_FATAL_FAILURE(checkExact(m, 2, aig::Recover::PatternsAndAnds));
 }
 
 // Exclusive-or is the same shape with a second complementary pair, and gets

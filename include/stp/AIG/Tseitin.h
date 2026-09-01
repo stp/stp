@@ -56,6 +56,20 @@ namespace aig
 // isAnd() has agreed, so c, t and e always name real nodes.
 bool matchIte(const Manager& m, Node n, Lit& c, Lit& t, Lit& e);
 
+// Is node `n` an if-then-else whose condition is an exclusive-or that shares
+// a node with one of the arms? Selecting between an arm and a literal the
+// condition already relates collapses the pair of gates to one three-literal
+// majority: n = maj(x, y, z). The borrow chain the comparators blast into is
+// made of exactly this cell. Structural only -- whether the condition's
+// nodes are private to `n` is the caller's to establish.
+bool matchMajority(const Manager& m, Node n, Lit& x, Lit& y, Lit& z);
+
+// Is node `n` an AND reading an exclusive-or against one of the
+// exclusive-or's own operands? Fixing the shared operand fixes what the
+// exclusive-or contributes, so the node is a plain two-literal conjunction
+// over the operands: n = g & h. Structural only, as matchMajority is.
+bool matchXorAnd(const Manager& m, Node n, Lit& g, Lit& h);
+
 // The leaves of the maximal AND rooted at `n`, appended to `into`.
 //
 // An AIG has no OR node: `a | b` is `!(!a & !b)`, one AND with the
@@ -114,6 +128,20 @@ public:
     return (pattern_[n >> 6] >> (n & 63)) & 1u;
   }
 
+  // A comparator/borrow cell: an ITE over a private exclusive-or that one
+  // arm shares a node with, encoded as the six prime implicates of the
+  // three-literal majority it computes. The exclusive-or and all four
+  // intermediates get no variables.
+  bool majorityCell(Node n) const
+  {
+    return (majority_[n >> 6] >> (n & 63)) & 1u;
+  }
+
+  // An AND over a private exclusive-or and one of its operands, collapsed
+  // to the two-literal conjunction it computes. The exclusive-or and its
+  // intermediates get no variables.
+  bool xorAnd(Node n) const { return (xorAnd_[n >> 6] >> (n & 63)) & 1u; }
+
   // A recovered full adder: sum and carry defined together by one fourteen-
   // clause block over the operands -- the minimum propagation-complete
   // clause set for the relation, which the per-gate encodings are not. The
@@ -158,6 +186,8 @@ public:
 private:
   void setLive(Node n) { live_[n >> 6] |= 1ull << (n & 63); }
   void setPatterned(Node n) { pattern_[n >> 6] |= 1ull << (n & 63); }
+  void setMajority(Node n) { majority_[n >> 6] |= 1ull << (n & 63); }
+  void setXorAnd(Node n) { xorAnd_[n >> 6] |= 1ull << (n & 63); }
   void setAbsorbed(Node n) { absorbed_[n >> 6] |= 1ull << (n & 63); }
   void setFaSum(Node n) { faSum_[n >> 6] |= 1ull << (n & 63); }
   void setFaCarry(Node n) { faCarry_[n >> 6] |= 1ull << (n & 63); }
@@ -166,6 +196,8 @@ private:
 
   std::vector<uint64_t> live_;
   std::vector<uint64_t> pattern_;
+  std::vector<uint64_t> majority_;
+  std::vector<uint64_t> xorAnd_;
   std::vector<uint64_t> absorbed_;
   std::vector<uint64_t> faSum_;
   std::vector<uint64_t> faCarry_;
@@ -263,7 +295,32 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
       continue;
     }
 
-    if (cone.patterned(n))
+    if (cone.majorityCell(n))
+    {
+      Lit x, y, z;
+      const bool matched = matchMajority(m, n, x, y, z);
+      assert(matched);
+      (void)matched;
+      const int lx = cnfLit(x), ly = cnfLit(y), lz = cnfLit(z);
+      sink.clause(px, lx ^ 1, ly ^ 1);
+      sink.clause(px, lx ^ 1, lz ^ 1);
+      sink.clause(px, ly ^ 1, lz ^ 1);
+      sink.clause(nx, lx, ly);
+      sink.clause(nx, lx, lz);
+      sink.clause(nx, ly, lz);
+    }
+    else if (cone.xorAnd(n))
+    {
+      Lit g, h;
+      const bool matched = matchXorAnd(m, n, g, h);
+      assert(matched);
+      (void)matched;
+      const int lg = cnfLit(g), lh = cnfLit(h);
+      sink.clause(nx, lg);
+      sink.clause(nx, lh);
+      sink.clause(px, lg ^ 1, lh ^ 1);
+    }
+    else if (cone.patterned(n))
     {
       Lit c, t, e;
       const bool matched = matchIte(m, n, c, t, e);
