@@ -378,6 +378,70 @@ TEST(Flatten_Test, ManyParentsIsStillShared)
   EXPECT_EQ(post, pre);
 }
 
+// A NOT among XOR operands is pulled above the XOR: the factory strips it
+// at creation and accumulates the parity, and flattening then widens the
+// stripped chain. Both groupings must meet at the same NOT(XOR(a,b,c)).
+TEST(Flatten_Test, XorFlattensThroughAPulledUpNot)
+{
+  const std::string input = R"(
+    (assert (= (xor a (not (xor b c))) (not (xor (xor a b) c))))
+    )";
+
+  Context c;
+  ASTNode pre = c.parse(input);
+  ASSERT_TRUE(hasSameKindEdge(pre, stp::XOR));
+  ASSERT_NE(pre, c.mgr.ASTTrue);
+  ASTNode post = c.flatten.topLevel(pre);
+  EXPECT_EQ(post, c.mgr.ASTTrue);
+}
+
+// The BVNOT analogue, odd parity: one BVNOT below meets one written above.
+TEST(Flatten_Test, BvxorFlattensThroughAPulledUpBvnot)
+{
+  const std::string input = R"(
+    (assert (= (bvxor v0 (bvnot (bvxor v1 v2)))
+               (bvnot (bvxor (bvxor v0 v1) v2))))
+    )";
+
+  Context c;
+  ASTNode pre = c.parse(input);
+  ASSERT_TRUE(hasSameKindEdge(pre, stp::BVXOR));
+  ASSERT_NE(pre, c.mgr.ASTTrue);
+  ASTNode post = c.flatten.topLevel(pre);
+  EXPECT_EQ(post, c.mgr.ASTTrue);
+}
+
+// Even parity: two pulled-up BVNOTs cancel and no BVNOT survives.
+TEST(Flatten_Test, TwoPulledUpBvnotsCancel)
+{
+  const std::string input = R"(
+    (assert (= (bvxor (bvnot v0) (bvnot (bvxor v1 v2)))
+               (bvxor v0 v1 v2)))
+    )";
+
+  Context c;
+  ASTNode pre = c.parse(input);
+  ASSERT_NE(pre, c.mgr.ASTTrue);
+  ASTNode post = c.flatten.topLevel(pre);
+  EXPECT_EQ(post, c.mgr.ASTTrue);
+}
+
+// Pulling the BVNOT up must not defeat the sharing rule: the xor chain the
+// strip exposes is still shared, so it stays nested.
+TEST(Flatten_Test, SharedChildExposedByBvnotStripStaysShared)
+{
+  const std::string input = R"(
+    (assert (= v3 (bvxor v2 (bvnot (bvxor v0 v1)))))
+    (assert (= v4 (bvxor v0 v1)))
+    )";
+
+  Context c;
+  ASTNode pre = c.parse(input);
+  ASSERT_TRUE(hasSameKindEdge(pre, stp::BVXOR));
+  ASTNode post = c.flatten.topLevel(pre);
+  EXPECT_EQ(post, pre);
+}
+
 // FP arithmetic is commutative but not associative under rounding, so no
 // FP kind may flatten. FP_ADD also carries its rounding mode as a child.
 TEST(Flatten_Test, FpAddChainIsLeftAlone)

@@ -21,6 +21,7 @@ THE SOFTWARE.
 #include "stp/cpp_interface.h"
 #include "stp/Parser/parser.h"
 #include "stp/Simplifier/CommonSubSum.h"
+#include "stp/Simplifier/Flatten.h"
 #include <gtest/gtest.h>
 #include <set>
 
@@ -196,6 +197,121 @@ TEST(CommonSubSum_Test, shared_pair_factored_into_one_product_node)
       shared++;
   }
   ASSERT_EQ(shared, 1);
+}
+
+// A larger shared operand subset falls out of repeated pair extraction.
+// {v0,v1,v4,v6} is common to both sums, so two rounds pull out two shared
+// pairs; the smaller sum ends as exactly the sum of those pairs and the
+// larger one keeps them as operands:
+//   (v0+v1+v4+v6), (v0+v1+v2+v3+v4+v5+v6)
+//     -->  s1+s2, (s1+s2+v2+v3+v5)   with s1, s2 shared.
+TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
+{
+  const std::string input = R"(
+    (declare-fun v4 () (_ BitVec 20))
+    (declare-fun v5 () (_ BitVec 20))
+    (declare-fun v6 () (_ BitVec 20))
+    (assert (= (bvmul v2 (bvadd v0 v1 v4 v6)) (_ bv0 20)))
+    (assert (= (bvmul v3 (bvadd v0 v1 v2 v3 v4 v5 v6)) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(n, plusNodes, visited);
+
+  // The two shared pairs, the two-operand rewrite of the small sum, and the
+  // five-operand rewrite of the wide one.
+  ASSERT_EQ(plusNodes.size(), 4u);
+
+  std::multiset<unsigned> degrees;
+  int sharedTwice = 0;
+  for (const ASTNode& s : plusNodes)
+  {
+    degrees.insert(s.Degree());
+    int parents = 0;
+    for (const ASTNode& p : plusNodes)
+      for (const ASTNode& child : p.GetChildren())
+        if (child == s)
+          parents++;
+    if (parents == 2)
+      sharedTwice++;
+  }
+  EXPECT_EQ(degrees, (std::multiset<unsigned>{2, 2, 2, 5}));
+  EXPECT_EQ(sharedTwice, 2);
+}
+
+// A pair held by three sums is built once and referenced from all three.
+TEST(CommonSubSum_Test, pair_shared_by_three_sums_extracted_once)
+{
+  const std::string input = R"(
+    (declare-fun v4 () (_ BitVec 20))
+    (assert (= (bvmul v2 (bvadd v0 v1 v2)) (_ bv0 20)))
+    (assert (= (bvmul v3 (bvadd v0 v1 v3)) (_ bv33 20)))
+    (assert (= (bvmul v4 (bvadd v0 v1 v4)) (_ bv7 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(n, plusNodes, visited);
+
+  ASSERT_EQ(plusNodes.size(), 4u);
+  int sharedByThree = 0;
+  for (const ASTNode& s : plusNodes)
+  {
+    ASSERT_EQ(s.Degree(), 2u);
+    int parents = 0;
+    for (const ASTNode& p : plusNodes)
+      for (const ASTNode& child : p.GetChildren())
+        if (child == s)
+          parents++;
+    if (parents == 3)
+      sharedByThree++;
+  }
+  EXPECT_EQ(sharedByThree, 1);
+}
+
+// Nesting hides the pair -- (v0 + (v1 + v2)) and (v1 + (v0 + v3)) share
+// {v0,v1} but no node, and two-operand sums are below the pass's reach --
+// so extraction only fires once Flatten has widened the sums. This is the
+// pipeline ordering the pass is written for.
+TEST(CommonSubSum_Test, flatten_exposes_pairs_hidden_by_nesting)
+{
+  const std::string input = R"(
+    (assert (= (bvmul v2 (bvadd v0 (bvadd v1 v2))) (_ bv0 20)))
+    (assert (= (bvmul v3 (bvadd v1 (bvadd v0 v3))) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode parsed = c.parse(input);
+
+  ASTNode untouched = c.subSum.topLevel(parsed);
+  EXPECT_EQ(untouched, parsed);
+
+  stp::Flatten flatten(&c.mgr, &c.snf);
+  ASTNode flat = flatten.topLevel(parsed);
+  ASTNode extracted = c.subSum.topLevel(flat);
+
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(extracted, plusNodes, visited);
+
+  ASSERT_EQ(plusNodes.size(), 3u);
+  int shared = 0;
+  for (const ASTNode& s : plusNodes)
+  {
+    ASSERT_EQ(s.Degree(), 2u);
+    int parents = 0;
+    for (const ASTNode& p : plusNodes)
+      for (const ASTNode& child : p.GetChildren())
+        if (child == s)
+          parents++;
+    if (parents == 2)
+      shared++;
+  }
+  EXPECT_EQ(shared, 1);
 }
 
 // A pair shared between a sum and a product has no node both could use:
