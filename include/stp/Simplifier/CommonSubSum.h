@@ -68,6 +68,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include <map>
+#include <queue>
 
 namespace stp
 {
@@ -92,31 +93,66 @@ class CommonSubSum
   // partial extraction rather than a fixed point.
   bool truncated;
 
-  // Operand lists of the additions being rewritten, keyed by node number,
-  // and a way back from a node number to its node.
-  std::map<uint64_t, ASTVec> operands;
-  std::map<uint64_t, ASTNode> byNum;
-
-  typedef std::pair<uint64_t, uint64_t> NodePair;
-
-  // Node numbers are allocated densely from zero, so the raw pair has almost
-  // no entropy in its high bits. One multiply-xor spreads it over the whole
-  // word, which is what 'is_avalanching' promises the table.
-  struct PairHash
+  // Operand lists of the additions being rewritten, in ascending
+  // node-number order so every walk over them is deterministic, an index
+  // from node number to entry, and a way back from a node number to its
+  // node.
+  struct SumEntry
   {
-    using is_avalanching = void;
-    uint64_t operator()(const NodePair& p) const noexcept
-    {
-      return ankerl::unordered_dense::detail::wyhash::mix(
-          p.first + UINT64_C(0x9E3779B97F4A7C15), p.second);
-    }
+    uint64_t num;
+    ASTVec ops;
   };
+  std::vector<SumEntry> sums;
+  ankerl::unordered_dense::map<uint64_t, uint32_t> sumIndex;
+  ankerl::unordered_dense::map<uint64_t, ASTNode> byNum;
+
+  // A pair of node numbers in one word, ordered operand first. Node numbers
+  // are allocated densely from zero, so 32 bits apiece is far beyond any
+  // DAG that fits in memory; packing halves the tally entry and makes the
+  // key compare one word. Numeric order on the packed key is lexicographic
+  // order on the pair, so the tie-break reads straight off it.
+  typedef uint64_t NodePair;
+
+  static NodePair packPair(uint64_t a, uint64_t b)
+  {
+    assert(a < b);
+    assert(b < (uint64_t(1) << 32));
+    return (a << 32) | b;
+  }
 
   // How many of the additions hold each pair of operands. Only the tally is
   // kept: the additions holding the winning pair are recovered by a scan,
   // which is far cheaper than a list of them hanging off every pair. The
   // table is patched as additions change rather than rebuilt each round.
-  ankerl::unordered_dense::map<NodePair, uint32_t, PairHash> occurrences;
+  ankerl::unordered_dense::map<NodePair, uint32_t> occurrences;
+
+  // Tally snapshots, popped lazily: a snapshot only counts if it still
+  // matches the table, and every increment to >=2 pushes one, so the pair
+  // with the highest live tally always has a live snapshot. Replaces a
+  // full table scan per extraction round. Ordered highest tally first,
+  // lowest pair first within a tally, matching the scan's tie-break.
+  struct Candidate
+  {
+    uint32_t count;
+    NodePair pair;
+  };
+  struct CandidateOrder
+  {
+    bool operator()(const Candidate& a, const Candidate& b) const
+    {
+      if (a.count != b.count)
+        return a.count < b.count;
+      return a.pair > b.pair;
+    }
+  };
+  std::priority_queue<Candidate, std::vector<Candidate>, CandidateOrder>
+      candidates;
+
+  // While the initial tally is being built, counts only rise, so pushing a
+  // snapshot per increment floods the heap with entries that are stale the
+  // moment the next increment lands. The tally is heapified once instead,
+  // one snapshot per pair, and only the extraction rounds push.
+  bool tallying = false;
 
   // Operands worth pairing. A pair can only be shared by two additions if
   // each of its operands is, so an operand that starts out in one addition
