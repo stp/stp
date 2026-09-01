@@ -383,6 +383,26 @@ TEST(Tseitin, XorAgainstItsOwnOperandCollapses)
   ASSERT_NO_FATAL_FAILURE(checkExact(m, 1, aig::Recover::PatternsAndAnds));
 }
 
+// The blaster's shared half adder: an exclusive-or whose inner conjunction
+// is the live carry. The carry keeps its own gate, the sum adds the four
+// linking clauses, and the disjunction interior dies.
+TEST(Tseitin, SharedCarryHalfAdderLinks)
+{
+  aig::Manager m;
+  const aig::Lit a = m.createCi(), b = m.createCi();
+  const aig::Lit conj = m.And(a, b);
+  const aig::Lit disj = m.Or(a, b);
+  m.createOutput(m.And(disj, aig::neg(conj)));
+  m.createOutput(conj);
+
+  const CNF folded = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds);
+  EXPECT_EQ(folded.clauseCount(), 3u + 4u + 4u);
+  EXPECT_EQ(folded.literalCount(), 7u + 11u + 8u);
+  EXPECT_EQ(folded.varCount(), 1u + 2u + 2u + 2u);
+
+  ASSERT_NO_FATAL_FAILURE(checkExact(m, 2, aig::Recover::PatternsAndAnds));
+}
+
 // The guard on both collapses: an exclusive-or something else also reads
 // keeps its variable, and the cell must fall back to the ordinary pattern.
 TEST(Tseitin, SharedConditionDeclinesTheMajorityBlock)

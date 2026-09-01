@@ -70,6 +70,13 @@ bool matchMajority(const Manager& m, Node n, Lit& x, Lit& y, Lit& z);
 // over the operands: n = g & h. Structural only, as matchMajority is.
 bool matchXorAnd(const Manager& m, Node n, Lit& g, Lit& h);
 
+// The blaster's shared half adder: an exclusive-or whose interior
+// conjunction is itself the live carry. `carryQ` names which interior the
+// cone chose; (a, b) are that interior's own fanins, so n = a xor b and
+// carry = a & b hold structurally with no polarity cases.
+bool matchHalfAdder(const Manager& m, Node n, bool carryQ, Lit& a, Lit& b,
+                    Node& carry);
+
 // The leaves of the maximal AND rooted at `n`, appended to `into`.
 //
 // An AIG has no OR node: `a | b` is `!(!a & !b)`, one AND with the
@@ -142,6 +149,19 @@ public:
   // intermediates get no variables.
   bool xorAnd(Node n) const { return (xorAnd_[n >> 6] >> (n & 63)) & 1u; }
 
+  // A shared half adder's sum: the carry interior keeps its own gate, and
+  // the sum emits the four linking clauses that make the window over
+  // (a, b, sum, carry) propagation-complete. haCarryQ says which interior
+  // is the carry.
+  bool halfAdderSum(Node n) const
+  {
+    return (halfAdder_[n >> 6] >> (n & 63)) & 1u;
+  }
+  bool haCarryQ(Node n) const
+  {
+    return (haCarryQ_[n >> 6] >> (n & 63)) & 1u;
+  }
+
   // A recovered full adder: sum and carry defined together by one fourteen-
   // clause block over the operands -- the minimum propagation-complete
   // clause set for the relation, which the per-gate encodings are not. The
@@ -188,6 +208,8 @@ private:
   void setPatterned(Node n) { pattern_[n >> 6] |= 1ull << (n & 63); }
   void setMajority(Node n) { majority_[n >> 6] |= 1ull << (n & 63); }
   void setXorAnd(Node n) { xorAnd_[n >> 6] |= 1ull << (n & 63); }
+  void setHalfAdder(Node n) { halfAdder_[n >> 6] |= 1ull << (n & 63); }
+  void setHaCarryQ(Node n) { haCarryQ_[n >> 6] |= 1ull << (n & 63); }
   void setAbsorbed(Node n) { absorbed_[n >> 6] |= 1ull << (n & 63); }
   void setFaSum(Node n) { faSum_[n >> 6] |= 1ull << (n & 63); }
   void setFaCarry(Node n) { faCarry_[n >> 6] |= 1ull << (n & 63); }
@@ -198,6 +220,8 @@ private:
   std::vector<uint64_t> pattern_;
   std::vector<uint64_t> majority_;
   std::vector<uint64_t> xorAnd_;
+  std::vector<uint64_t> halfAdder_;
+  std::vector<uint64_t> haCarryQ_;
   std::vector<uint64_t> absorbed_;
   std::vector<uint64_t> faSum_;
   std::vector<uint64_t> faCarry_;
@@ -319,6 +343,21 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
       sink.clause(nx, lg);
       sink.clause(nx, lh);
       sink.clause(px, lg ^ 1, lh ^ 1);
+    }
+    else if (cone.halfAdderSum(n))
+    {
+      Lit a, b;
+      Node carry;
+      const bool matched =
+          matchHalfAdder(m, n, cone.haCarryQ(n), a, b, carry);
+      assert(matched);
+      (void)matched;
+      const int la = cnfLit(a), lb = cnfLit(b);
+      const int tv = static_cast<int>(2 * var[carry]);
+      sink.clause(nx, tv ^ 1);
+      sink.clause(la ^ 1, px, tv);
+      sink.clause(la, lb ^ 1, px);
+      sink.clause(la, lb, nx);
     }
     else if (cone.patterned(n))
     {
