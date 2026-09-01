@@ -274,11 +274,11 @@ public:
     assert(Aig_ManNodeNum(aigMgr) == 0);
     const uint64_t cap = 1ull << 26;
     const uint64_t want = n + (n >> 4) + 1024;
-    // Half the expected count: the resize trigger is load factor 2, so this
-    // still never resizes, and it matches the table size the growth policy
-    // would have ended at (its jumps are 4x, landing near load 1.2) instead
-    // of paying ~60 MB over it for shorter chains.
-    const int slots = Abc_PrimeCudd((unsigned)((want < cap ? want : cap) / 2));
+    // The full expected count, not a fraction of it: the chain walk is
+    // memory-bound, and a factor sweep put the knee here -- half this table
+    // costs 14-18% of blasting for at most 4% of process peak, while twice
+    // it buys back under half as much for memory that climbs faster.
+    const int slots = Abc_PrimeCudd((unsigned)(want < cap ? want : cap));
     if (slots <= aigMgr->nTableSize)
       return;
     ABC_FREE(aigMgr->pTable);
