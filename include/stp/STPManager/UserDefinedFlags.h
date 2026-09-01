@@ -1089,7 +1089,11 @@ public:
     enable_ite_context = false;
     distinct_ordering = false;
 
-    simple_cnf=true;
+    // simple_cnf is deliberately not set here. It used to be, which made
+    // "skip the word-level simplifications" silently also mean "use the
+    // worst CNF generator" -- Cnf_DeriveSimple, at about 1.9x the clauses
+    // of the cheapest real rung. The two are separate decisions; the CNF
+    // rung stays whatever --cnf-generation-effort says.
   }
 
   void disableSizeIncreasingSimplifications()
