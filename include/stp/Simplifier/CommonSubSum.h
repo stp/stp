@@ -166,7 +166,11 @@ class CommonSubSum
   // anyway -- so one wider addition holding it is enough to be worth doing.
   ankerl::unordered_dense::map<NodePair, uint32_t> realized;
 
+  // Whole shared chunks found in one pass, before any pair is tallied.
+  long chunked = 0;
+
   void collect(const ASTNode& n, ASTNodeSet& seen, ASTVec& plusNodes);
+  void extractCoTravellers();
   void markShareable();
   void markRealized(const ASTVec& v);
   void eligibleOf(const ASTVec& v, std::vector<uint64_t>& out) const;
