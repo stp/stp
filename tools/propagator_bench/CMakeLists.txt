@@ -23,6 +23,7 @@ add_executable(propagator_bench
     Ops.cpp
     Cbitp.cpp
     Bcp.cpp
+    Consistency.cpp
     Domains.cpp
     Report.cpp
 )

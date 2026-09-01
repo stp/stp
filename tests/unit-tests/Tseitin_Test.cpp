@@ -248,6 +248,25 @@ void checkExact(const aig::Manager& m, unsigned namedOutputs,
   }
 }
 
+// The blaster's full-adder spelling: two half adders sharing their carries,
+// with each XOR built so its inner conjunction is the half adder's carry.
+aig::Lit xorSharing(aig::Manager& m, aig::Lit a, aig::Lit b)
+{
+  const aig::Lit conj = m.And(a, b);
+  const aig::Lit disj = m.Or(a, b);
+  return m.And(disj, aig::neg(conj));
+}
+
+void fullAdder(aig::Manager& m, aig::Lit a, aig::Lit b, aig::Lit cin,
+               aig::Lit& sum, aig::Lit& carry)
+{
+  const aig::Lit axb = xorSharing(m, a, b);
+  const aig::Lit carry1 = m.And(a, b);
+  sum = xorSharing(m, axb, cin);
+  const aig::Lit carry2 = m.And(axb, cin);
+  carry = m.Or(carry1, carry2);
+}
+
 } // namespace
 
 // The headline: on random circuits, with every output named, the CNF says
@@ -357,6 +376,79 @@ TEST(Tseitin, SharedIntermediateDeclinesTheMerge)
 
 // Over random circuits the matcher must never make a formula bigger, on any
 // of the three measures, and must sometimes make it smaller.
+// A full adder collapses to the fourteen-clause block over its operands, sum
+// and carry -- the relation's minimum propagation-complete clause set -- and
+// the five interior nodes get no variables.
+TEST(Tseitin, FullAdderBecomesTheFourteenClauseBlock)
+{
+  aig::Manager m;
+  const aig::Lit a = m.createCi(), b = m.createCi(), c = m.createCi();
+  aig::Lit sum = aig::LIT_NULL, carry = aig::LIT_NULL;
+  fullAdder(m, a, b, c, sum, carry);
+  m.createOutput(sum);
+  m.createOutput(carry);
+
+  checkExact(m, 2, aig::Recover::Patterns);
+  checkExact(m, 2, aig::Recover::PatternsAndAnds);
+
+  // The block, plus two clauses tying each named output to its driver.
+  const CNF folded = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds);
+  EXPECT_EQ(folded.clauseCount(), 18u);
+  // 1 + three CIs + two named outputs + only the sum and carry nodes.
+  EXPECT_EQ(folded.varCount(), 8u);
+}
+
+// A ripple chain recovers every interior adder; the top bit's carry is dead,
+// so its sum falls back to the XOR patterns. Exactness is checked from every
+// input assignment, contradictions included.
+TEST(Tseitin, RippleCarryChainRecoversEveryFullAdder)
+{
+  aig::Manager m;
+  const unsigned width = 4;
+  std::vector<aig::Lit> a, b;
+  for (unsigned i = 0; i < width; i++)
+    a.push_back(m.createCi());
+  for (unsigned i = 0; i < width; i++)
+    b.push_back(m.createCi());
+
+  std::vector<aig::Lit> sums;
+  sums.push_back(xorSharing(m, a[0], b[0]));
+  aig::Lit cin = m.And(a[0], b[0]);
+  for (unsigned i = 1; i < width; i++)
+  {
+    aig::Lit s = aig::LIT_NULL, cout = aig::LIT_NULL;
+    fullAdder(m, a[i], b[i], cin, s, cout);
+    sums.push_back(s);
+    cin = cout; // the top carry is built and dropped, as the blaster does
+  }
+  for (const aig::Lit s : sums)
+    m.createOutput(s);
+
+  checkExact(m, width, aig::Recover::PatternsAndAnds);
+
+  const CNF plain = aig::deriveTseitin(m, width, aig::Recover::Nothing);
+  const CNF folded = aig::deriveTseitin(m, width, aig::Recover::PatternsAndAnds);
+  EXPECT_LT(folded.clauseCount(), plain.clauseCount());
+  EXPECT_LT(folded.varCount(), plain.varCount());
+}
+
+// An interior shared with outside logic keeps the plain encoding: the block
+// does not define the interiors, so absorbing one that something else reads
+// would leave it unconstrained.
+TEST(Tseitin, SharedFullAdderInteriorDeclinesTheBlock)
+{
+  aig::Manager m;
+  const aig::Lit a = m.createCi(), b = m.createCi(), c = m.createCi();
+  aig::Lit sum = aig::LIT_NULL, carry = aig::LIT_NULL;
+  fullAdder(m, a, b, c, sum, carry);
+  m.createOutput(sum);
+  m.createOutput(carry);
+  m.createOutput(m.And(a, b)); // the half adder's carry, hash-consed
+
+  checkExact(m, 3, aig::Recover::Patterns);
+  checkExact(m, 3, aig::Recover::PatternsAndAnds);
+}
+
 TEST(Tseitin, MatchingNeverCostsAnything)
 {
   uint64_t savedClauses = 0, savedLiterals = 0, savedVars = 0;

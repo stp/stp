@@ -122,6 +122,43 @@ string precisionDetail(const Row& r)
       o << ", " << e.unsound << " UNSOUND";
     o << ")";
   }
+  if (r.consistency.ran)
+  {
+    const ConsistencyCheck& k = r.consistency;
+    o << "; consistency w=" << k.width << " (" << k.clauses << " clauses/"
+      << k.variables << " vars, " << k.ioVars << " io): URC "
+      << (k.urc() ? "yes" : "NO");
+    if (k.urcMissed > 0)
+    {
+      unsigned worst = 0;
+      for (size_t u = 0; u < k.urcMissedByUnset.size(); u++)
+        if (k.urcMissedByUnset[u] > 0)
+        {
+          worst = (unsigned)u;
+          break;
+        }
+      o << " (" << k.urcMissed << "/" << k.ioContradictory
+        << " conflicts missed, some with only " << worst << " unset)";
+    }
+    o << ", GAC " << (k.gac() ? "yes" : "NO");
+    if (k.gacDerivable > 0)
+      o << " (" << fixed(100.0 * k.gacDerived / k.gacDerivable, 1)
+        << "% of implied literals over " << k.ioCases << " cases)";
+    o << ", PC ";
+    if (!k.pcRan)
+      o << "not checked";
+    else
+    {
+      o << (k.pc() ? "yes" : "NO") << " ("
+        << (k.pcExhaustive ? "exhaustive" : "sampled") << ", ";
+      if (k.pcDerivable > 0)
+        o << fixed(100.0 * k.pcDerived / k.pcDerivable, 1) << "% of literals, ";
+      o << k.pcMissedConflict << "/" << k.pcContradictory
+        << " conflicts missed)";
+    }
+    if (k.unsound > 0)
+      o << ", " << k.unsound << " UNSOUND";
+  }
   if (r.witnessUnsound > 0)
     o << "; " << r.witnessUnsound << " timed cases lost their solution";
   if (r.conflicts > 0)
@@ -209,7 +246,13 @@ void writeCsv(const Config& cfg, const vector<Row>& rows, const string& path)
        "exhaustive_width,exhaustive_cases,exhaustive_precise,"
        "exhaustive_unsound,exhaustive_missed_conflicts,deducible_bits,"
        "gained_bits,sat_cases,sat_precise,sat_unsound,"
-       "bcp_cases,bcp_bits,bcp_cbitp_bits,bcp_clauses,bcp_vars\n";
+       "bcp_cases,bcp_bits,bcp_cbitp_bits,bcp_clauses,bcp_vars,"
+       "cons_width,cons_clauses,cons_literals,cons_vars,cons_io_vars,"
+       "cons_urc,cons_gac,cons_pc,cons_io_cases,cons_io_contradictory,"
+       "cons_urc_missed,cons_urc_missed_min_unset,cons_gac_incomplete,"
+       "cons_gac_derivable,cons_gac_derived,cons_pc_mode,cons_pc_cases,"
+       "cons_pc_contradictory,cons_pc_missed_conflicts,cons_pc_incomplete,"
+       "cons_pc_derivable,cons_pc_derived,cons_unsound\n";
   for (const Row& r : rows)
   {
     f << name(r.domain) << "," << r.op << "," << name(r.direction) << ","
@@ -222,7 +265,25 @@ void writeCsv(const Config& cfg, const vector<Row>& rows, const string& path)
       << r.precision.gained << "," << r.sat.cases << "," << r.sat.precise
       << "," << r.sat.unsound << "," << r.bcp.cases << ","
       << fixed(r.bcp.bcpBits, 4) << "," << fixed(r.bcp.cbitpBits, 4) << ","
-      << r.bcp.clauses << "," << r.bcp.variables << "\n";
+      << r.bcp.clauses << "," << r.bcp.variables;
+
+    const ConsistencyCheck& k = r.consistency;
+    int minUnset = -1;
+    for (size_t u = 0; u < k.urcMissedByUnset.size() && minUnset < 0; u++)
+      if (k.urcMissedByUnset[u] > 0)
+        minUnset = (int)u;
+    f << "," << (k.ran ? k.width : 0) << "," << k.clauses << "," << k.literals
+      << "," << k.variables << "," << k.ioVars << ","
+      << (!k.ran ? "" : k.urc() ? "yes" : "no") << ","
+      << (!k.ran ? "" : k.gac() ? "yes" : "no") << ","
+      << (!k.pcRan ? "" : k.pc() ? "yes" : "no") << "," << k.ioCases << ","
+      << k.ioContradictory << "," << k.urcMissed << "," << minUnset << ","
+      << k.gacIncomplete << "," << k.gacDerivable << "," << k.gacDerived
+      << ","
+      << (!k.pcRan ? "" : k.pcExhaustive ? "exhaustive" : "sampled") << ","
+      << k.pcCases << "," << k.pcContradictory << "," << k.pcMissedConflict
+      << "," << k.pcIncomplete << "," << k.pcDerivable << "," << k.pcDerived
+      << "," << k.unsound << "\n";
   }
   (void)cfg;
   std::cout << "wrote " << path << std::endl;

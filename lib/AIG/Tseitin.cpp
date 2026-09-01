@@ -75,6 +75,91 @@ bool matchIte(const Manager& m, Node n, Lit& c, Lit& t, Lit& e)
   return true;
 }
 
+namespace
+{
+
+// n = !(p & q) ... no: n = !p' & !q' with q's fanins the complements of p's --
+// the AIG spelling of an exclusive-or over p's fanins. Returns the two fanin
+// nodes; which of them conjoins the operands positively is for the caller to
+// settle, since XOR(u,v) == XOR(!u,!v).
+bool xorShape(const Manager& m, Node n, Node& p, Node& q)
+{
+  if (!m.isAnd(n))
+    return false;
+  const Lit f0 = m.fanin0(n), f1 = m.fanin1(n);
+  if (!isNeg(f0) || !isNeg(f1))
+    return false;
+  p = nodeOf(f0);
+  q = nodeOf(f1);
+  if (!m.isAnd(p) || !m.isAnd(q))
+    return false;
+  const Lit pa = m.fanin0(p), pb = m.fanin1(p);
+  const Lit qa = m.fanin0(q), qb = m.fanin1(q);
+  return (qa == neg(pa) && qb == neg(pb)) || (qa == neg(pb) && qb == neg(pa));
+}
+
+// The structural match proposes; this disposes. Evaluates the two roots over
+// all eight operand assignments, only ever stepping on the seven nodes a full
+// adder owns, so any aliasing or polarity surprise the match missed fails
+// here instead of miscoding.
+bool verifyFullAdder(const Manager& m, Lit la, Lit lb, Lit lc, Node sum,
+                     Node carry, const Node allowed[10])
+{
+  struct Eval
+  {
+    const Manager& m;
+    const Node* allowed;
+    Node leaf[3];
+    bool val[3];
+    int depth = 0;
+    bool ok = true;
+
+    bool node(Node x)
+    {
+      for (int i = 0; i < 3; i++)
+        if (x == leaf[i])
+          return val[i];
+      if (++depth > 16)
+      {
+        ok = false;
+        return false;
+      }
+      bool inCone = false;
+      for (int i = 0; i < 10 && !inCone; i++)
+        inCone = allowed[i] == x;
+      if (!inCone || !m.isAnd(x))
+      {
+        ok = false;
+        return false;
+      }
+      const bool r = lit(m.fanin0(x)) && lit(m.fanin1(x));
+      --depth;
+      return r;
+    }
+    bool lit(Lit l) { return node(nodeOf(l)) ^ (isNeg(l) ? true : false); }
+  };
+
+  for (unsigned bits = 0; bits < 8; bits++)
+  {
+    Eval e{m, allowed, {nodeOf(la), nodeOf(lb), nodeOf(lc)},
+           {(bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0}};
+    const bool A = e.val[0] ^ (isNeg(la) ? true : false);
+    const bool B = e.val[1] ^ (isNeg(lb) ? true : false);
+    const bool C = e.val[2] ^ (isNeg(lc) ? true : false);
+    const bool s = e.node(sum);
+    const bool o = e.node(carry);
+    if (!e.ok || s != (A ^ B ^ C))
+      return false;
+    // The carry-out literal is the complement of the carry node.
+    const bool maj = (A && B) || (A && C) || (B && C);
+    if (o != !maj)
+      return false;
+  }
+  return true;
+}
+
+} // namespace
+
 void collectAndLeaves(const Manager& m, Node n,
                       const std::vector<uint64_t>& absorbed,
                       std::vector<Lit>& into, std::vector<Lit>& stack)
@@ -97,6 +182,118 @@ void collectAndLeaves(const Manager& m, Node n,
   }
 }
 
+void Cone::clearFa(Node carry)
+{
+  const FullAdder fa = fas_.at(carry);
+  faCarry_[carry >> 6] &= ~(1ull << (carry & 63));
+  faSum_[fa.sum >> 6] &= ~(1ull << (fa.sum & 63));
+  fas_.erase(carry);
+  carryOfSum_.erase(fa.sum);
+}
+
+// One descending scan proposing full adders. The carry node is created after
+// the sum (fullAdder builds the sum tower first), so descending order meets
+// the carry first: a node of carry shape -- !(operand-conjunction | tower-
+// conjunction) -- files itself under (tower-conjunction, operand-conjunction),
+// and the sum tower that later mentions both claims it. The interior
+// reference counts must be exactly what a private cone gives (1,2,2,1,2):
+// anything shared with outside logic keeps the plain encoding, since the
+// block does not define the interiors.
+void Cone::findFullAdders(const Manager& m, const std::vector<uint8_t>& refs)
+{
+  std::unordered_map<uint64_t, Node> pending; // (mB << 32) | nA -> carry
+  const auto key = [](Node mB, Node nA) {
+    return (static_cast<uint64_t>(mB) << 32) | nA;
+  };
+
+  for (Node n = static_cast<Node>(m.nodeCount()); n-- > 1;)
+  {
+    if (refs[n] == 0 || !m.isAnd(n))
+      continue;
+    const Lit f0 = m.fanin0(n), f1 = m.fanin1(n);
+    if (!isNeg(f0) || !isNeg(f1))
+      continue;
+    const Node p = nodeOf(f0), q = nodeOf(f1);
+    if (!m.isAnd(p) || !m.isAnd(q))
+      continue;
+
+    // Carry candidacy: one fanin conjoins the operands, the other conjoins
+    // the operands' exclusive-or with the carry-in.
+    for (int pick = 0; pick < 2; pick++)
+    {
+      const Node mB = pick ? q : p;
+      const Node nA = pick ? p : q;
+      for (int side = 0; side < 2; side++)
+      {
+        const Node x = nodeOf(side ? m.fanin1(mB) : m.fanin0(mB));
+        Node u, v;
+        if (xorShape(m, x, u, v) && (u == nA || v == nA))
+          pending[key(mB, nA)] = n;
+      }
+    }
+
+    // Sum candidacy: the two-level exclusive-or tower whose inner conjunction
+    // a filed carry also uses.
+    Node m1, m2;
+    if (!xorShape(m, n, m1, m2))
+      continue;
+    for (int pick = 0; pick < 2 && !faSum(n); pick++)
+    {
+      const Node mB = pick ? m2 : m1;
+      const Node mOther = pick ? m1 : m2;
+      for (int side = 0; side < 2 && !faSum(n); side++)
+      {
+        const Lit xl = side ? m.fanin1(mB) : m.fanin0(mB);
+        const Lit lc = side ? m.fanin0(mB) : m.fanin1(mB);
+        const Node x1 = nodeOf(xl);
+        Node u, v;
+        if (!xorShape(m, x1, u, v))
+          continue;
+        for (int cand = 0; cand < 2; cand++)
+        {
+          const Node nA = cand ? v : u;
+          const Node n1 = cand ? u : v;
+          const auto it = pending.find(key(mB, nA));
+          if (it == pending.end())
+            continue;
+          const Node carry = it->second;
+
+          // The interiors must be private to the cone, and nothing may be
+          // claimed twice. refs saturates at 3, so == distinguishes an
+          // exact count from "more".
+          const Node interior[5] = {n1, nA, x1, mOther, mB};
+          const uint8_t want[5] = {1, 2, 2, 1, 2};
+          bool ok = !faSum(carry) && !faCarry(carry) && !faSum(n) &&
+                    !faCarry(n) && carry != n;
+          for (int i = 0; i < 5 && ok; i++)
+          {
+            const Node node = interior[i];
+            ok = refs[node] == want[i] && node != n && node != carry &&
+                 !faSum(node) && !faCarry(node);
+            for (int j = 0; j < i && ok; j++)
+              ok = interior[j] != node;
+          }
+          if (!ok)
+            continue;
+
+          const Lit la = m.fanin0(nA), lb = m.fanin1(nA);
+          const Node allowed[10] = {n1, nA, x1, mOther, mB,
+                                    n,  carry, 0, 0, 0};
+          if (!verifyFullAdder(m, la, lb, lc, n, carry, allowed))
+            continue;
+
+          setFaSum(n);
+          setFaCarry(carry);
+          fas_[carry] = FullAdder{la, lb, lc, n};
+          carryOfSum_[n] = carry;
+          pending.erase(it);
+          break;
+        }
+      }
+    }
+  }
+}
+
 Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
 {
   const uint32_t nCo = m.outputCount();
@@ -111,6 +308,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   live_.assign(words, 0);
   pattern_.assign(words, 0);
   absorbed_.assign(words, 0);
+  faSum_.assign(words, 0);
+  faCarry_.assign(words, 0);
 
   // A pattern is only taken when it removes its two intermediates outright,
   // which needs to know whether anything else uses them. Nothing does if they
@@ -124,7 +323,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   // is that a node's references are not all above the node that would absorb
   // it -- they are only all above the node itself.
   //
-  // One byte each, saturating at two, and it is gone when this constructor
+  // One byte each, saturating at three -- the full-adder match needs to tell
+  // an exact count of two from "more" -- and gone when this constructor
   // returns.
   const bool matchPatterns = recover != Recover::Nothing;
   const bool collapseAnds = recover == Recover::PatternsAndAnds;
@@ -134,7 +334,7 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   {
     refs.assign(nNodes, 0);
     const auto bump = [&refs](Node x) {
-      if (x != 0 && refs[x] < 2)
+      if (x != 0 && refs[x] < 3)
         refs[x]++;
     };
     for (uint32_t i = 0; i < nCo; i++)
@@ -146,6 +346,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       bump(nodeOf(m.fanin0(n)));
       bump(nodeOf(m.fanin1(n)));
     }
+
+    findFullAdders(m, refs);
   }
 
   for (uint32_t i = 0; i < nCo; i++)
@@ -158,10 +360,12 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   // conjunction: absorbing it saves the parent two clauses, while folding it
   // saves five by removing both of its intermediates, and the two are
   // mutually exclusive.
+  const auto faMember = [&](Node x) { return faSum(x) || faCarry(x); };
   const auto wouldPattern = [&](Node x) {
     Lit c, t, e;
-    return matchPatterns && m.isAnd(x) &&
+    return matchPatterns && m.isAnd(x) && !faMember(x) &&
            refs[nodeOf(m.fanin0(x))] == 1 && refs[nodeOf(m.fanin1(x))] == 1 &&
+           !faMember(nodeOf(m.fanin0(x))) && !faMember(nodeOf(m.fanin1(x))) &&
            matchIte(m, x, c, t, e);
   };
 
@@ -169,6 +373,32 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   {
     if (!live(n) || !m.isAnd(n))
       continue;
+
+    // A recovered full adder defines its sum and carry in one block over the
+    // operands; the interiors stay dead. The carry has the higher id, so it
+    // is reached first, and by then every consumer of both roots has been
+    // processed -- if the sum never came live (its consumers folded it some
+    // other way), the recovery is dropped and both nodes take the ordinary
+    // path.
+    if (faCarry(n))
+    {
+      const FullAdder& fa = fas_.at(n);
+      if (live(fa.sum))
+      {
+        setLive(nodeOf(fa.a));
+        setLive(nodeOf(fa.b));
+        setLive(nodeOf(fa.c));
+        continue;
+      }
+      clearFa(n);
+    }
+    else if (faSum(n))
+    {
+      const Node carry = carryOfSum_.at(n);
+      if (live(carry))
+        continue; // operands were marked when the carry was reached
+      clearFa(carry);
+    }
 
     Lit c, t, e;
     if (wouldPattern(n))
@@ -193,7 +423,7 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       const Node x = nodeOf(f);
       setLive(x);
       if (collapseAnds && !isNeg(f) && m.isAnd(x) && refs[x] == 1 &&
-          !wouldPattern(x))
+          !faMember(x) && !wouldPattern(x))
         setAbsorbed(x);
     }
   }
@@ -207,6 +437,14 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
     if (!live(n) || !m.isAnd(n) || absorbed(n))
       continue;
     ++nAnds_;
+    if (faSum(n))
+      continue; // priced with its carry's block
+    if (faCarry(n))
+    {
+      nClauses_ += 14;
+      nLiterals_ += 44;
+      continue;
+    }
     if (patterned(n))
     {
       nClauses_ += 4;

@@ -157,6 +157,20 @@ struct BcpEncoding
   unsigned clauses() const { return (unsigned)cnf.clauseCount(); }
   unsigned variables() const { return cnf.varCount(); }
 
+  // A copy of the clauses and the symbol-bit variables, for a checker that
+  // propagates them itself rather than through a solver.
+  void material(vector<vector<int>>& outClauses,
+                vector<vector<unsigned>>& io, unsigned& nv) const
+  {
+    static_assert(NOT_ENCODED == BCP_NOT_ENCODED,
+                  "the header's sentinel is this class's contract");
+    outClauses.clear();
+    for (CNF::ClauseCursor c = cnf.clauses(); c.next();)
+      outClauses.push_back(vector<int>(c.begin(), c.end()));
+    io = vars;
+    nv = cnf.varCount();
+  }
+
 private:
   // constexpr, not const: resize() below binds it by reference, which needs
   // a definition, and in C++17 a constexpr static member is implicitly inline.
@@ -234,6 +248,13 @@ unsigned bcpVariables(const BcpEncoding* e)
   return e->variables();
 }
 
+bool bcpMaterial(const BcpEncoding* e, vector<vector<int>>& clauses,
+                 vector<vector<unsigned>>& io, unsigned& variables)
+{
+  e->material(clauses, io, variables);
+  return true;
+}
+
 } // namespace propbench
 
 #else // !USE_CRYPTOMINISAT
@@ -273,6 +294,12 @@ unsigned bcpClauses(const BcpEncoding*)
 unsigned bcpVariables(const BcpEncoding*)
 {
   return 0;
+}
+
+bool bcpMaterial(const BcpEncoding*, vector<vector<int>>&,
+                 vector<vector<unsigned>>&, unsigned&)
+{
+  return false;
 }
 
 } // namespace propbench
