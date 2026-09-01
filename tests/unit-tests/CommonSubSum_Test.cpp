@@ -171,13 +171,11 @@ TEST(CommonSubSum_Test, shared_pair_factored_into_one_node)
 
 // An addition whose operands are a sub-multiset of another's ends up being
 // the adder they have in common, rather than having it built twice:
-//   (v0 + v1 + v2), (v0 + v1 + v2 + v3)
-//     -->  s = (v0 + v1);  t = (s + v2);  t, (t + v3)
-// The greedy walks the smaller addition down to two operands and, at that
-// point, it *is* the pair the wider one still holds. Without counting a
-// two-operand addition as an adder others can reuse it votes for nothing
-// from there and stops one step short, leaving `t` built twice. This is the
-// shape stp#444 reduces to.
+//   (v0 + v1 + v2), (v0 + v1 + v2 + v3)  -->  t = (v0 + v1 + v2);  t, (t + v3)
+// {v0,v1,v2} occur in exactly the same additions, so the co-traveller step
+// takes the whole group at once: the chunk it builds hash-conses to the
+// smaller addition, which the wider one then references. This is the shape
+// stp#444 reduces to.
 TEST(CommonSubSum_Test, sub_multiset_sum_becomes_the_shared_node)
 {
   const std::string input = R"(
@@ -191,19 +189,15 @@ TEST(CommonSubSum_Test, sub_multiset_sum_becomes_the_shared_node)
   std::set<ASTNode> plusNodes, visited;
   collectPlusNodes(n, plusNodes, visited);
 
-  // s, t, and the wider addition rewritten around t: three binary adders
-  // for what arrived as a three-operand and a four-operand addition.
-  ASSERT_EQ(plusNodes.size(), 3u);
-  for (const ASTNode& p : plusNodes)
-    ASSERT_EQ(p.Degree(), 2u);
+  // The smaller addition, whole, and the wider one rewritten around it.
+  ASSERT_EQ(plusNodes.size(), 2u);
 
-  // The smaller addition is now a child of the wider one. That is the last
-  // extraction, and it is the one that does not happen without the change.
   const ASTNode& widest = *std::max_element(
       plusNodes.begin(), plusNodes.end(),
       [](const ASTNode& a, const ASTNode& b) {
         return a.GetNodeNum() < b.GetNodeNum();
       });
+  ASSERT_EQ(widest.Degree(), 2u);
 
   int shared = 0;
   for (const ASTNode& s : plusNodes)
@@ -268,13 +262,12 @@ TEST(CommonSubSum_Test, shared_pair_factored_into_one_product_node)
   ASSERT_EQ(shared, 1);
 }
 
-// A larger shared operand subset falls out of repeated pair extraction.
-// {v0,v1,v4,v6} is common to both sums, so two rounds pull out two shared
-// pairs, and once the smaller sum has narrowed to exactly those pairs it
-// counts as an adder the wider one can reuse, so a third round finishes
-// the job:
+// A larger shared operand subset is one co-traveller class: {v0,v1,v4,v6}
+// occur in exactly the same two sums, so the whole group is taken in one
+// step. The chunk hash-conses to the smaller sum, which the wider one then
+// references -- no intermediate pair nodes at all:
 //   (v0+v1+v4+v6), (v0+v1+v2+v3+v4+v5+v6)
-//     -->  t = s1+s2;  t, (t+v2+v3+v5)   with s1, s2 under t alone.
+//     -->  t = (v0+v1+v4+v6);  t, (t+v2+v3+v5)
 TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
 {
   const std::string input = R"(
@@ -291,9 +284,8 @@ TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
   std::set<ASTNode> plusNodes, visited;
   collectPlusNodes(n, plusNodes, visited);
 
-  // The two pairs, the narrowed small sum over them, and the wide sum
-  // rewritten around the small one.
-  ASSERT_EQ(plusNodes.size(), 4u);
+  // The small sum, whole, and the wide sum rewritten around it.
+  ASSERT_EQ(plusNodes.size(), 2u);
 
   std::multiset<unsigned> degrees;
   int sharedOnce = 0;
@@ -308,10 +300,8 @@ TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
     if (parents == 1)
       sharedOnce++;
   }
-  EXPECT_EQ(degrees, (std::multiset<unsigned>{2, 2, 2, 4}));
-  // s1 and s2 sit under the small sum, and the small sum under the wide
-  // one: a chain, not two duplicated adders.
-  EXPECT_EQ(sharedOnce, 3);
+  EXPECT_EQ(degrees, (std::multiset<unsigned>{4, 4}));
+  EXPECT_EQ(sharedOnce, 1);
 }
 
 // A pair held by three sums is built once and referenced from all three.

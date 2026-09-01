@@ -62,6 +62,115 @@ void CommonSubSum::collect(const ASTNode& n, ASTNodeSet& seen,
   }
 }
 
+// Operands with identical holder sets always travel together: every
+// addition holding one of them holds all of them, so the whole group is a
+// single shared sub-term and can be extracted in one step -- k operands
+// shared by h additions become h references to one k-ary chunk. Grouping
+// costs one holder list per operand and one map insertion, with no pair
+// tally at all, and it collapses what the greedy loop below would spend
+// k-1 rounds of full bookkeeping converging to. The loop still runs
+// afterwards: partial overlaps, where holder sets merely intersect, are
+// invisible here.
+//
+// An addition whose operands are exactly one group hash-conses to the
+// chunk itself, so it is left alone and the other holders come to
+// reference it -- the sub-multiset outcome, whole, in one step.
+void CommonSubSum::extractCoTravellers()
+{
+  // Holder lists build in ascending sum order, so each list arrives
+  // sorted. An operand that repeats inside any addition is left out: the
+  // chunk would need its multiplicity, and the greedy loop handles
+  // repeats already.
+  ankerl::unordered_dense::map<uint64_t, std::vector<uint32_t>> holders;
+  ankerl::unordered_dense::set<uint64_t> repeated;
+  for (uint32_t i = 0; i < sums.size(); i++)
+  {
+    const ASTVec& v = sums[i].ops;
+
+    // Two-operand additions sit out, as they do for the pair tally: with
+    // one in a class the rewrite nests the wider holder around it, which
+    // costs nothing at gate level but restructures additions other passes
+    // key on -- BV abstraction stops counting the nested chain. The
+    // realized-pair path in the greedy loop handles reusing them, gated on
+    // shareability.
+    if (v.size() < 3)
+      continue;
+
+    for (size_t j = 0; j < v.size(); j++)
+    {
+      if (j > 0 && v[j] == v[j - 1])
+      {
+        repeated.insert(v[j].GetNodeNum());
+        continue;
+      }
+      holders[v[j].GetNodeNum()].push_back(i);
+    }
+  }
+
+  // An ordered map keyed by the holder list itself: grouping and a
+  // deterministic order in one structure, with lookups that usually
+  // decide on the first element.
+  std::map<std::vector<uint32_t>, std::vector<uint64_t>> classes;
+  for (const auto& h : holders)
+    if (h.second.size() >= 2 && repeated.count(h.first) == 0)
+      classes[h.second].push_back(h.first);
+
+  for (auto& entry : classes)
+  {
+    std::vector<uint64_t>& members = entry.second;
+    if (members.size() < 2)
+      continue;
+    std::sort(members.begin(), members.end());
+
+    ASTVec chunkOps;
+    chunkOps.reserve(members.size());
+    for (const uint64_t num : members)
+      chunkOps.push_back(byNum[num]);
+
+    const ASTNode chunk =
+        booleanKind()
+            ? nf->CreateNode(kind, chunkOps)
+            : nf->CreateTerm(kind, chunkOps[0].GetValueWidth(), chunkOps);
+    byNum[chunk.GetNodeNum()] = chunk;
+
+    long replacedIn = 0;
+    for (const uint32_t si : entry.first)
+    {
+      // This addition is the chunk: leave it whole, and the replacements
+      // below make the other holders reference it.
+      if (sums[si].num == chunk.GetNodeNum())
+        continue;
+
+      ASTVec& v = sums[si].ops;
+      ASTVec next;
+      next.reserve(v.size() - members.size() + 1);
+      size_t mi = 0;
+      for (const ASTNode& op : v)
+      {
+        if (mi < members.size() && op.GetNodeNum() == members[mi])
+        {
+          mi++;
+          continue;
+        }
+        next.push_back(op);
+      }
+      assert(mi == members.size());
+      next.push_back(chunk);
+      std::sort(next.begin(), next.end(), byNodeNum);
+      v.swap(next);
+      replacedIn++;
+    }
+
+    if (replacedIn > 0)
+    {
+      const long k = (long)members.size();
+      const bool existing = sumIndex.find(chunk.GetNodeNum()) != sumIndex.end();
+      saved += (k - 1) * (replacedIn - (existing ? 0 : 1));
+      chunked++;
+    }
+  }
+}
+
 // Which operands are worth enumerating pairs of. An addition never gains an
 // operand it didn't start with -- a substitution only removes two and adds
 // the node built from them -- so an operand in one addition now is in one
@@ -304,6 +413,21 @@ bool CommonSubSum::extractOnePair()
   // deterministic. Stale snapshots are discarded on sight; a pair whose
   // live tally is >=2 always has a live snapshot, because the increment
   // that set the tally pushed one and only a winning pop consumes it.
+  // Stale snapshots can pile up faster than pops retire them -- an input
+  // whose every round repairs wide additions pushes thousands per round --
+  // and every pop then sifts down a heap that is mostly dead weight. Once
+  // the dead outnumber even the whole tally severalfold, rebuild the heap
+  // from the table: the same one-snapshot-per-pair state the initial
+  // heapify establishes, so nothing observable changes.
+  if (candidates.size() > 4 * occurrences.size() + 1024)
+  {
+    std::vector<Candidate> alive;
+    for (const auto& entry : occurrences)
+      if (entry.second >= 2)
+        alive.push_back({entry.second, entry.first});
+    candidates = decltype(candidates)(CandidateOrder(), std::move(alive));
+  }
+
   uint32_t best = 0;
   NodePair bestPair = 0;
   while (!candidates.empty())
@@ -475,6 +599,7 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
   stpMgr->GetRunTimes()->start(RunTimes::CommonSubSum);
 
   saved = 0;
+  chunked = 0;
   truncated = false;
   sums.clear();
   sumIndex.clear();
@@ -509,6 +634,7 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
     for (uint32_t i = 0; i < sums.size(); i++)
       sumIndex[sums[i].num] = i;
 
+    extractCoTravellers();
     markShareable();
 
     // A pair needs two shareable operands, so fewer than two shareable
@@ -551,7 +677,7 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
 
   if (stpMgr->UserFlags.stats_flag)
     std::cerr << "{CommonSubSum} " << _kind_names[kind]
-              << " applications saved:" << saved
+              << " applications saved:" << saved << " Chunks:" << chunked
               << " Truncated:" << (truncated ? 1 : 0) << std::endl;
 
   sums.clear();
