@@ -70,6 +70,17 @@ bool matchMajority(const Manager& m, Node n, Lit& x, Lit& y, Lit& z);
 // over the operands: n = g & h. Structural only, as matchMajority is.
 bool matchXorAnd(const Manager& m, Node n, Lit& g, Lit& h);
 
+// The same two cells for a condition that stays live because something else
+// reads it. matchJointCell normalizes an ITE cell to the study templates
+// over (a, b, e, other, out) with e == (a == b): tSide false means
+// out = e ? other : b (the borrow-chain cell), true means out = e ? a :
+// other. matchXorAndJoint normalizes the bottom cell to out = !e & b.
+// Both verify the claim by evaluating the cone over every operand
+// assignment, so a polarity surprise declines instead of miscoding.
+bool matchJointCell(const Manager& m, Node n, Lit& a, Lit& b, Lit& e,
+                    Lit& other, bool& tSide);
+bool matchXorAndJoint(const Manager& m, Node n, Lit& a, Lit& b, Lit& e);
+
 // The leaves of the maximal AND rooted at `n`, appended to `into`.
 //
 // An AIG has no OR node: `a | b` is `!(!a & !b)`, one AND with the
@@ -142,6 +153,19 @@ public:
   // intermediates get no variables.
   bool xorAnd(Node n) const { return (xorAnd_[n >> 6] >> (n & 63)) & 1u; }
 
+  // The same two cells when the exclusive-or is shared: it keeps its
+  // variable and its own definition, and the cell emits the minimum linking
+  // clauses that keep the window propagation-complete with the equality
+  // inside it -- ten for the full cell, five for the bottom.
+  bool majorityLink(Node n) const
+  {
+    return (majorityLink_[n >> 6] >> (n & 63)) & 1u;
+  }
+  bool xorAndLink(Node n) const
+  {
+    return (xorAndLink_[n >> 6] >> (n & 63)) & 1u;
+  }
+
   // A recovered full adder: sum and carry defined together by one fourteen-
   // clause block over the operands -- the minimum propagation-complete
   // clause set for the relation, which the per-gate encodings are not. The
@@ -187,7 +211,9 @@ private:
   void setLive(Node n) { live_[n >> 6] |= 1ull << (n & 63); }
   void setPatterned(Node n) { pattern_[n >> 6] |= 1ull << (n & 63); }
   void setMajority(Node n) { majority_[n >> 6] |= 1ull << (n & 63); }
+  void setMajorityLink(Node n) { majorityLink_[n >> 6] |= 1ull << (n & 63); }
   void setXorAnd(Node n) { xorAnd_[n >> 6] |= 1ull << (n & 63); }
+  void setXorAndLink(Node n) { xorAndLink_[n >> 6] |= 1ull << (n & 63); }
   void setAbsorbed(Node n) { absorbed_[n >> 6] |= 1ull << (n & 63); }
   void setFaSum(Node n) { faSum_[n >> 6] |= 1ull << (n & 63); }
   void setFaCarry(Node n) { faCarry_[n >> 6] |= 1ull << (n & 63); }
@@ -197,7 +223,9 @@ private:
   std::vector<uint64_t> live_;
   std::vector<uint64_t> pattern_;
   std::vector<uint64_t> majority_;
+  std::vector<uint64_t> majorityLink_;
   std::vector<uint64_t> xorAnd_;
+  std::vector<uint64_t> xorAndLink_;
   std::vector<uint64_t> absorbed_;
   std::vector<uint64_t> faSum_;
   std::vector<uint64_t> faCarry_;
@@ -309,6 +337,36 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
       sink.clause(nx, lx, lz);
       sink.clause(nx, ly, lz);
     }
+    else if (cone.majorityLink(n))
+    {
+      Lit a, b, e, other;
+      bool tSide;
+      const bool matched = matchJointCell(m, n, a, b, e, other, tSide);
+      assert(matched);
+      (void)matched;
+      // The minimum linking sets from the comparator study: with the
+      // exclusive-or's own four clauses alongside (its patterned emission),
+      // the window over (a, b, e, other, out) is propagation-complete.
+      static const int8_t ESIDE[10][3] = {
+          {-3, -4, 5}, {-3, 4, -5}, {-2, -4, 5}, {-1, 3, -5}, {-1, 4, -5},
+          {1, -4, 5},  {1, -2, 5},  {1, 3, 5},   {2, 3, -5},  {2, 4, -5}};
+      static const int8_t TSIDE[10][3] = {
+          {-2, -4, 5}, {-1, -4, 5}, {-1, -3, 5}, {-1, -2, 5}, {1, 2, -5},
+          {1, 4, -5},  {2, -3, -5}, {2, 4, -5},  {3, -4, 5},  {3, 4, -5}};
+      const int base[6] = {0, cnfLit(a), cnfLit(b), cnfLit(e), cnfLit(other),
+                           px};
+      const int8_t(*tpl)[3] = tSide ? TSIDE : ESIDE;
+      for (int i = 0; i < 10; i++)
+      {
+        int lits[3];
+        for (int j = 0; j < 3; j++)
+        {
+          const int t = tpl[i][j];
+          lits[j] = base[t < 0 ? -t : t] ^ (t < 0 ? 1 : 0);
+        }
+        sink.clause(lits[0], lits[1], lits[2]);
+      }
+    }
     else if (cone.xorAnd(n))
     {
       Lit g, h;
@@ -319,6 +377,19 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
       sink.clause(nx, lg);
       sink.clause(nx, lh);
       sink.clause(px, lg ^ 1, lh ^ 1);
+    }
+    else if (cone.xorAndLink(n))
+    {
+      Lit a, b, e;
+      const bool matched = matchXorAndJoint(m, n, a, b, e);
+      assert(matched);
+      (void)matched;
+      const int la = cnfLit(a), lb = cnfLit(b), le = cnfLit(e);
+      sink.clause(le ^ 1, nx);
+      sink.clause(la ^ 1, nx);
+      sink.clause(lb, nx);
+      sink.clause(la, lb ^ 1, px);
+      sink.clause(la, le, px);
     }
     else if (cone.patterned(n))
     {

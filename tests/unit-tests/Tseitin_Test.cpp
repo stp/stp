@@ -383,9 +383,11 @@ TEST(Tseitin, XorAgainstItsOwnOperandCollapses)
   ASSERT_NO_FATAL_FAILURE(checkExact(m, 1, aig::Recover::PatternsAndAnds));
 }
 
-// The guard on both collapses: an exclusive-or something else also reads
-// keeps its variable, and the cell must fall back to the ordinary pattern.
-TEST(Tseitin, SharedConditionDeclinesTheMajorityBlock)
+// A shared condition must not weaken the cell: the exclusive-or keeps its
+// variable and its own four clauses for the other reader, and the cell
+// emits the ten linking clauses that keep the window propagation-complete
+// with the equality inside it.
+TEST(Tseitin, SharedConditionEmitsTheLinkBlock)
 {
   aig::Manager m;
   const aig::Lit l = m.createCi(), r = m.createCi(), prev = m.createCi();
@@ -394,9 +396,45 @@ TEST(Tseitin, SharedConditionDeclinesTheMajorityBlock)
   m.createOutput(eq);
 
   const CNF folded = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds);
-  // An ITE block over the live exclusive-or, the exclusive-or's own block,
-  // and two tie clauses per named output.
-  EXPECT_EQ(folded.clauseCount(), 4u + 4u + 4u);
+  // The link block, the exclusive-or's own block, and two tie clauses per
+  // named output.
+  EXPECT_EQ(folded.clauseCount(), 10u + 4u + 4u);
+  EXPECT_EQ(folded.literalCount(), 30u + 12u + 8u);
+  EXPECT_EQ(folded.varCount(), 1u + 3u + 2u + 2u);
+
+  ASSERT_NO_FATAL_FAILURE(checkExact(m, 2, aig::Recover::PatternsAndAnds));
+}
+
+// The bottom cell under the same sharing: five linking clauses beside the
+// exclusive-or's four.
+TEST(Tseitin, SharedXorConjunctionEmitsTheLinkBlock)
+{
+  aig::Manager m;
+  const aig::Lit a = m.createCi(), b = m.createCi();
+  const aig::Lit x = m.Xor(a, b);
+  m.createOutput(m.And(x, a)); // = a & !b
+  m.createOutput(x);
+
+  const CNF folded = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds);
+  EXPECT_EQ(folded.clauseCount(), 5u + 4u + 4u);
+  EXPECT_EQ(folded.literalCount(), 12u + 12u + 8u);
+  EXPECT_EQ(folded.varCount(), 1u + 2u + 2u + 2u);
+
+  ASSERT_NO_FATAL_FAILURE(checkExact(m, 2, aig::Recover::PatternsAndAnds));
+}
+
+// The agreeing-arm variant: out = e ? a : z, the arm on the equal branch
+// being an operand of the exclusive-or.
+TEST(Tseitin, SharedConditionAgreeingArmLinks)
+{
+  aig::Manager m;
+  const aig::Lit a = m.createCi(), b = m.createCi(), z = m.createCi();
+  const aig::Lit eq = aig::neg(m.Xor(a, b));
+  m.createOutput(m.Mux(eq, a, z));
+  m.createOutput(eq);
+
+  const CNF folded = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds);
+  EXPECT_EQ(folded.clauseCount(), 10u + 4u + 4u);
   EXPECT_EQ(folded.varCount(), 1u + 3u + 2u + 2u);
 
   ASSERT_NO_FATAL_FAILURE(checkExact(m, 2, aig::Recover::PatternsAndAnds));
@@ -507,9 +545,15 @@ TEST(Tseitin, SharedFullAdderInteriorDeclinesTheBlock)
   checkExact(m, 3, aig::Recover::PatternsAndAnds);
 }
 
-TEST(Tseitin, MatchingNeverCostsAnything)
+// Matching never costs a variable, and pays for itself overall. It can cost
+// a few clauses on one circuit: every cell sharing one exclusive-or adds
+// its linking clauses beside the exclusive-or's own, which passes plain
+// Tseitin's count from the third sharer on -- bought deliberately, for
+// propagation completeness under sharing.
+TEST(Tseitin, MatchingNeverCostsVariablesAndSavesOverall)
 {
-  uint64_t savedClauses = 0, savedLiterals = 0, savedVars = 0;
+  int64_t savedClauses = 0, savedLiterals = 0;
+  uint64_t savedVars = 0;
   for (unsigned seed = 0; seed < 200; seed++)
   {
     std::mt19937 rng(seed);
@@ -521,15 +565,15 @@ TEST(Tseitin, MatchingNeverCostsAnything)
 
     const CNF plain = aig::deriveTseitin(m, 0, aig::Recover::Nothing);
     const CNF folded = aig::deriveTseitin(m, 0, aig::Recover::PatternsAndAnds);
-    ASSERT_LE(folded.clauseCount(), plain.clauseCount()) << seed;
-    ASSERT_LE(folded.literalCount(), plain.literalCount()) << seed;
     ASSERT_LE(folded.varCount(), plain.varCount()) << seed;
-    savedClauses += plain.clauseCount() - folded.clauseCount();
-    savedLiterals += plain.literalCount() - folded.literalCount();
+    savedClauses += static_cast<int64_t>(plain.clauseCount()) -
+                    static_cast<int64_t>(folded.clauseCount());
+    savedLiterals += static_cast<int64_t>(plain.literalCount()) -
+                     static_cast<int64_t>(folded.literalCount());
     savedVars += plain.varCount() - folded.varCount();
   }
-  EXPECT_GT(savedClauses, 0u);
-  EXPECT_GT(savedLiterals, 0u);
+  EXPECT_GT(savedClauses, 0);
+  EXPECT_GT(savedLiterals, 0);
   EXPECT_GT(savedVars, 0u);
 }
 
