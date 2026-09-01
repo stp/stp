@@ -270,10 +270,11 @@ TEST(CommonSubSum_Test, shared_pair_factored_into_one_product_node)
 
 // A larger shared operand subset falls out of repeated pair extraction.
 // {v0,v1,v4,v6} is common to both sums, so two rounds pull out two shared
-// pairs; the smaller sum ends as exactly the sum of those pairs and the
-// larger one keeps them as operands:
+// pairs, and once the smaller sum has narrowed to exactly those pairs it
+// counts as an adder the wider one can reuse, so a third round finishes
+// the job:
 //   (v0+v1+v4+v6), (v0+v1+v2+v3+v4+v5+v6)
-//     -->  s1+s2, (s1+s2+v2+v3+v5)   with s1, s2 shared.
+//     -->  t = s1+s2;  t, (t+v2+v3+v5)   with s1, s2 under t alone.
 TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
 {
   const std::string input = R"(
@@ -290,12 +291,12 @@ TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
   std::set<ASTNode> plusNodes, visited;
   collectPlusNodes(n, plusNodes, visited);
 
-  // The two shared pairs, the two-operand rewrite of the small sum, and the
-  // five-operand rewrite of the wide one.
+  // The two pairs, the narrowed small sum over them, and the wide sum
+  // rewritten around the small one.
   ASSERT_EQ(plusNodes.size(), 4u);
 
   std::multiset<unsigned> degrees;
-  int sharedTwice = 0;
+  int sharedOnce = 0;
   for (const ASTNode& s : plusNodes)
   {
     degrees.insert(s.Degree());
@@ -304,11 +305,13 @@ TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
       for (const ASTNode& child : p.GetChildren())
         if (child == s)
           parents++;
-    if (parents == 2)
-      sharedTwice++;
+    if (parents == 1)
+      sharedOnce++;
   }
-  EXPECT_EQ(degrees, (std::multiset<unsigned>{2, 2, 2, 5}));
-  EXPECT_EQ(sharedTwice, 2);
+  EXPECT_EQ(degrees, (std::multiset<unsigned>{2, 2, 2, 4}));
+  // s1 and s2 sit under the small sum, and the small sum under the wide
+  // one: a chain, not two duplicated adders.
+  EXPECT_EQ(sharedOnce, 3);
 }
 
 // A pair held by three sums is built once and referenced from all three.
