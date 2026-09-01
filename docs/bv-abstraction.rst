@@ -242,7 +242,7 @@ Which CNF generator
 The abstraction's search is many-solve: every refinement round is another
 call on a solver that keeps the whole CNF, and which CNF it keeps decides
 how that search goes far more than it decides one solve. With
-``--cnf-generation-effort`` at its default ``auto``, turning
+``--cnf-generation-effort`` at ``auto``, turning
 ``--bv-term-abstraction`` on therefore selects the Gia backend at its lowest
 rung (``gia-low``) rather than the size-based choice between ``very-low``
 and ``medium``, and ``-s`` says so:

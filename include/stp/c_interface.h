@@ -487,13 +487,12 @@ enum ifaceflag_t
   //! 3 high, 4 very high. Higher is slower to generate and yields a smaller
   //! CNF.
   //!
-  //! 5 is auto, and is the default: it picks between very low and medium
-  //! from the size of the circuit, on the reasoning below. Ordinals 6 to 11
-  //! name rungs that blast the query with a different backend rather than
-  //! spending a different amount of effort -- 6, 7 and 8 the in-house
-  //! writer, 9, 10 and 11 the same generator as 1, 3 and 4 over a circuit
-  //! built without ABC. Auto never selects those; asking for one is an
-  //! explicit choice of backend.
+  //! 5 is auto: it picks a rung from the size of the circuit, on the
+  //! reasoning below. Ordinals 6 to 11 name rungs that blast the query with
+  //! a different backend rather than spending a different amount of effort
+  //! -- 6, 7 and 8 the in-house writer, 9, 10 and 11 the same generator as
+  //! 1, 3 and 4 over a circuit built without ABC. The default is 8, the
+  //! in-house writer's medium rung.
   //!
   //! It is a real trade and not a quality dial. A query whose search is
   //! trivial but whose circuit is large -- a floating-point square root over

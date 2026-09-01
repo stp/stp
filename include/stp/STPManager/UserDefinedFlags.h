@@ -933,7 +933,7 @@ public:
            e == CNF_EFFORT_GIA_VERY_HIGH;
   }
 
-  enum CNFEffort cnf_effort = CNF_EFFORT_AUTO;
+  enum CNFEffort cnf_effort = CNF_EFFORT_NEW_MEDIUM;
 
   // AND-node count at or above which AUTO stops paying for CNF
   // minimisation: against the recorded estimate it selects NEW_MEDIUM

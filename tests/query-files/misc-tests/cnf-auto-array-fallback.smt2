@@ -7,7 +7,7 @@
 ; Twelve reads at distinct symbolic indexes, so the read count is past the
 ; eager-encoding regime and the solve actually refines.
 ;
-; RUN: %solver --SMTLIB2 -s %s 2>&1 | %OutputCheck %s
+; RUN: %solver --SMTLIB2 -s --cnf-generation-effort auto %s 2>&1 | %OutputCheck %s
 ;
 ; CHECK-NOT: estimated
 ; CHECK: ^cnf-auto: [0-9]+ AIG nodes, chose medium$

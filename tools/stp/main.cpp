@@ -104,7 +104,7 @@ public:
 
   // Likewise for UserFlags.cnf_effort; always mapped, so it carries the
   // default spelling.
-  std::string cnf_effort = "auto";
+  std::string cnf_effort = "new-medium";
 
   // Likewise for the named mask of BV abstraction schema families.
   std::string bv_schema_groups = formatBVSchemaGroups(BV_SCHEMA_GROUP_DEFAULT);

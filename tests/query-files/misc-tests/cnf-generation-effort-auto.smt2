@@ -14,7 +14,6 @@
 ; is the default wherever it is installed, so the auto runs say --cadical.
 ; REQUIRES: cadical
 ;
-; RUN: %solver --SMTLIB2 -s --cadical %s 2>&1 | %OutputCheck --check-prefix=SMALL %s
 ; RUN: %solver --SMTLIB2 -s --cadical --cnf-generation-effort auto %s 2>&1 | %OutputCheck --check-prefix=SMALL %s
 ; RUN: %solver --SMTLIB2 -s --cadical --cnf-generation-effort auto --cnf-auto-threshold 1 %s 2>&1 | %OutputCheck --check-prefix=BIG %s
 ;
@@ -42,11 +41,13 @@
 ; BADLEVEL: Unknown --cnf-generation-effort value 'nonsense'\. Expected one of: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, gia-low, gia-high, gia-very-high\.
 ;
 ; The new-* rungs are a different generator over a different AIG, so they
-; say so rather than printing one of the ABC lines.
+; say so rather than printing one of the ABC lines. new-medium is the
+; default, so the bare run prints the same line.
 ;
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new-very-low %s 2>&1 | %OutputCheck --check-prefix=NEWVERYLOW %s
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new-low %s 2>&1 | %OutputCheck --check-prefix=NEWLOW %s
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new-medium %s 2>&1 | %OutputCheck --check-prefix=NEWMEDIUM %s
+; RUN: %solver --SMTLIB2 -s %s 2>&1 | %OutputCheck --check-prefix=NEWMEDIUM %s
 ;
 ; NEWVERYLOW-NOT: cnf-auto:
 ; NEWVERYLOW-NOT: advanced CNF

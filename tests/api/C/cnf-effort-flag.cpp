@@ -56,12 +56,13 @@ void countError(const char*)
 }
 } // namespace
 
-TEST(cnf_effort_flag, TheDefaultIsAuto)
+TEST(cnf_effort_flag, TheDefaultIsNewMedium)
 {
   VC vc = vc_createValidityChecker();
-  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_AUTO, flags(vc).cnf_effort);
-  // AUTO is not a level of its own at conversion time: it resolves to VERY_LOW
-  // or MEDIUM from the size of the AIG. The threshold has to be reachable, or
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM,
+            flags(vc).cnf_effort);
+  // AUTO is not a level of its own at conversion time: it resolves to another
+  // rung from the size of the circuit. The threshold has to be reachable, or
   // the decision cannot be exercised or adjusted.
   EXPECT_GT(flags(vc).cnf_auto_threshold, 0u);
   vc_Destroy(vc);
@@ -108,9 +109,8 @@ TEST(cnf_effort_flag, EveryLevelIsReachable)
   vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 4);
   EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_VERY_HIGH, flags(vc).cnf_effort);
 
-  // Auto is a level like the others here, and the only one that matters to a
-  // caller that has already set another: it is the default, so without it
-  // there is no way back to where the checker started.
+  // Auto is a level like the others here: it spends no effort of its own,
+  // but a caller has to be able to hand the choice back to the solver.
   vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 5);
   EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_AUTO, flags(vc).cnf_effort);
 
