@@ -888,17 +888,22 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   if (simp->hasUnappliedSubstitutions())
     inputToSat = simp->applySubstitutionMap(inputToSat);
 
-  // Extract sub-terms shared between same-kind applications of each
-  // associative-commutative operator, ahead of unconstrained-variable
+  // Extract sub-terms shared between same-kind applications of the
+  // associative-commutative term operators, ahead of unconstrained-variable
   // elimination: a pair of otherwise-unused variables occurring only inside
   // the shared node makes that node collapsible there. This also keeps the
   // extraction ahead of the ConstantBitPropagation object built below,
   // whose fixed-point map must describe the exact tree handed to ToSATAIG.
   // BVOR is absent because the node factory lowers it to BVNOT/BVAND at
   // creation, so its sharing is BVAND sharing by the time this runs.
+  // The Boolean kinds (XOR, AND, OR) are deliberately absent: their
+  // regrouping is absorbed whole by the AIG's structural hashing -- on
+  // altair1.10.asp the pass rewrote 130k Boolean applications, spent 22
+  // seconds, and the CNF came out identical -- so tallying them is pure
+  // cost. The pass itself still accepts those kinds.
   if (bm->UserFlags.enable_common_subsum)
   {
-    for (const Kind k : {BVPLUS, BVMULT, BVXOR, BVAND, XOR, AND, OR})
+    for (const Kind k : {BVPLUS, BVMULT, BVXOR, BVAND})
     {
       CommonSubSum cse(bm, bm->defaultNodeFactory, k);
       inputToSat = cse.topLevel(inputToSat);

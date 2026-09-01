@@ -1355,9 +1355,11 @@ struct IncrementalSolver::Impl
           StrengthReduction sr(bm->defaultNodeFactory, &pieceFlags);
           trialOut = sr.topLevel(trialOut, domain);
         }
+        // Term kinds only, for the reason given at the batch call site:
+        // Boolean regrouping is absorbed whole by AIG structural hashing.
         if (pieceFlags.enable_common_subsum)
         {
-          for (const Kind k : {BVPLUS, BVMULT, BVXOR, BVAND, XOR, AND, OR})
+          for (const Kind k : {BVPLUS, BVMULT, BVXOR, BVAND})
           {
             CommonSubSum cse(bm, bm->defaultNodeFactory, k);
             trialOut = cse.topLevel(trialOut);
