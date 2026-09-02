@@ -4262,6 +4262,59 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivMod(const BBNodeVec& y,
         operandConstant = false;
   }
 
+  if (uf->division_variant_5 && !operandConstant)
+  {
+    // Restoring long division with the quotient bit from a comparator: per
+    // step, widen the working remainder by the incoming dividend bit, ask
+    // divisor <= window outright, and subtract the divisor gated bitwise by
+    // that answer -- no restore multiplexer, and the quotient bit is
+    // defined by an order relation rather than read off a borrow chain.
+    // A zero divisor: the comparison is always true, the gated subtrahend
+    // is zero, so the remainder accumulates the dividend and every
+    // quotient bit is one.
+    const unsigned int w = y.size();
+    assert(x.size() == w);
+    assert(rwidth == w);
+
+    // The divisor, one bit wider, once.
+    BBNodeVec xExt(x);
+    xExt.push_back(nf->getFalse());
+
+    BBNodeVec rem(w, nf->getFalse());
+    q = BBNodeVec(w, nf->getFalse());
+
+    for (unsigned step = 0; step < w; step++)
+    {
+      const unsigned i = w - 1 - step; // dividend bit, most significant first
+
+      // The window: remainder shifted up one, dividend bit in at the
+      // bottom. The invariant rem < divisor keeps it inside w+1 bits.
+      BBNodeVec win;
+      win.reserve(w + 1);
+      win.push_back(y[i]);
+      for (unsigned j = 0; j < w; j++)
+        win.push_back(rem[j]);
+
+      q[i] = BBBVLE(xExt, win, false);
+
+      BBNodeVec gated;
+      gated.reserve(w + 1);
+      for (unsigned j = 0; j <= w; j++)
+        gated.push_back(nf->CreateNode(AND, xExt[j], q[i]));
+
+      BBSub(win, gated, support);
+      // The subtracted window fits back into w bits: whichever branch the
+      // comparator took, the new remainder is below the divisor.
+      for (unsigned j = 0; j < w; j++)
+        rem[j] = win[j];
+    }
+
+    r = rem;
+    assert(q.size() == w);
+    assert(r.size() == w);
+    return;
+  }
+
   if (uf->division_variant_4 && !operandConstant)
   {
     const unsigned int w = y.size();

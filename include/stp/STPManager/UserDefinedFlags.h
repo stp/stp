@@ -807,6 +807,10 @@ public:
   bool division_variant_2 = true;
   bool division_variant_3 = false;
   bool division_variant_4 = false;
+  // Variant 5 replaces the divider with restoring long division whose
+  // quotient bit comes from a dedicated comparator per row, the divisor
+  // gated bitwise by that answer instead of restored through multiplexers.
+  bool division_variant_5 = false;
   // Assert the order laws of each divider as side constraints: b!=0 -> r<b,
   // r<=a, b!=0 -> q<=a, the b=0 clamps and the b=1 identities. They are
   // consequences of the circuit that its unit propagation provably cannot

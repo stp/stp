@@ -342,6 +342,7 @@ struct Config
   int divVariant2 = -1;
   int divVariant3 = -1;
   int divVariant4 = -1;
+  int divVariant5 = -1;
   int divLemmas = -1;     // likewise division_lemmas
   int divByMult = -1;     // likewise division_by_multiplication
   unsigned duelWidth = 0; // 0 disables the UP-vs-cbitp duel
