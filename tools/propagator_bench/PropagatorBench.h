@@ -338,6 +338,7 @@ struct Config
   uint64_t pcSamples = 1000000; // sampled cases when 3^vars exceeds the cap
   int adderVariant = -1;  // -1 leaves UserDefinedFlags::adder_variant alone
   int bvplusVariant = -1; // likewise bvplus_variant
+  int multVariant = -1;   // likewise multiplication_variant
   unsigned seed = 42;
   // How the CNF that --bcp-check propagates over is generated. Empty leaves
   // STP's default (medium) alone. A different encoding of the same circuit
