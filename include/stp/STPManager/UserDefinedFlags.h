@@ -812,6 +812,12 @@ public:
   // consequences of the circuit that its unit propagation provably cannot
   // rederive (2026-09-03 division-encoding study).
   bool division_lemmas = false;
+  // Encode division and remainder through their defining relation instead
+  // of a divider circuit: fresh variables q and r, the constraint
+  // x = y*q + r carried at double width so nothing wraps, and r < y
+  // wherever the divisor is nonzero. The circuit computes nothing; every
+  // quotient bit is the SAT solver's to find.
+  bool division_by_multiplication = false;
   bool adder_variant = true;
   bool bbbvle_variant =true;
   bool upper_multiplication_bound = false;

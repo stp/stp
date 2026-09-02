@@ -343,6 +343,7 @@ struct Config
   int divVariant3 = -1;
   int divVariant4 = -1;
   int divLemmas = -1;     // likewise division_lemmas
+  int divByMult = -1;     // likewise division_by_multiplication
   unsigned duelWidth = 0; // 0 disables the UP-vs-cbitp duel
   string duelDump;        // write asymmetric duel cases here
   unsigned seed = 42;

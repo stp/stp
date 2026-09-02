@@ -551,6 +551,13 @@ void ExtraMain::create_options()
            "of the circuit that its own unit propagation cannot rederive",
            bb_group);
 
+  bool_arg("--bb.div-by-mult", bm->UserFlags.division_by_multiplication,
+           "encode division and remainder through their defining relation: "
+           "fresh quotient and remainder variables, x = y*q + r at double "
+           "width, and r < y wherever the divisor is nonzero, instead of a "
+           "divider circuit",
+           bb_group);
+
   bool_arg("--bb.div-v1", bm->UserFlags.division_variant_1,
            "unsigned division encoding variant 1", bb_group);
 
