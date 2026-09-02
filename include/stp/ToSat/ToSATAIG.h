@@ -65,6 +65,7 @@ private:
 
   bool runSolver(SATSolver& satSolver);
   void handle_cnf_options(const CNF& cnf, bool needAbsRef);
+  void dump_term_abstraction_map();
 
   // Resolve the injectivity guard to a SAT variable and decide how it is
   // held: assumed (and so retractable) on a backend that can assume, and

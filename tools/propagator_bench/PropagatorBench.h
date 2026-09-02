@@ -338,6 +338,12 @@ struct Config
   uint64_t pcSamples = 1000000; // sampled cases when 3^vars exceeds the cap
   int adderVariant = -1;  // -1 leaves UserDefinedFlags::adder_variant alone
   int bvplusVariant = -1; // likewise bvplus_variant
+  int divVariant1 = -1;   // likewise division_variant_1..4
+  int divVariant2 = -1;
+  int divVariant3 = -1;
+  int divVariant4 = -1;
+  unsigned duelWidth = 0; // 0 disables the UP-vs-cbitp duel
+  string duelDump;        // write asymmetric duel cases here
   unsigned seed = 42;
   // How the CNF that --bcp-check propagates over is generated. Empty leaves
   // STP's default (medium) alone. A different encoding of the same circuit
@@ -409,6 +415,13 @@ bool bcpMaterial(const BcpEncoding* e, vector<vector<int>>& clauses,
 // The graded GAC/URC/PC check, at cfg.consistencyWidth. See Consistency.cpp.
 ConsistencyCheck consistencyCheck(stp::STPMgr* mgr, const OpSpec& op,
                                   const Config& cfg);
+
+// Exhaustive per-state head-to-head at cfg.duelWidth: for every ternary
+// partial assignment of the operation's input/output bits, compare what unit
+// propagation on the bit-blasted CNF derives against what the constant-bit
+// transfer function derives, refereed by the exact solution table. Prints a
+// summary; returns false when the width does not fit under the caps.
+bool duelCheck(stp::STPMgr* mgr, const OpSpec& op, const Config& cfg);
 
 // Writes the encoding of op at cfg.dumpWidth as DIMACS, with `c sym` header
 // lines mapping every input/output bit to its variable -- the varying

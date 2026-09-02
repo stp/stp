@@ -123,6 +123,15 @@ void usage()
       << "  --bb.add-v2 0|1     UserDefinedFlags::bvplus_variant: 1 pairwise\n"
       << "                      ripple chains (default), 0 the addition\n"
       << "                      network\n"
+      << "  --bb.div-v1 0|1     UserDefinedFlags::division_variant_1..4;\n"
+      << "  --bb.div-v2 0|1     v1..v3 toggle pieces of the recursive\n"
+      << "  --bb.div-v3 0|1     divider (defaults 1,1,0), v4 selects the\n"
+      << "  --bb.div-v4 0|1     two-stage shift/subtract divider (default 0)\n"
+      << "  --duel W            exhaustive per-state head-to-head at width W:\n"
+      << "                      unit propagation on the encoding vs the\n"
+      << "                      constant-bit transfer function, refereed by\n"
+      << "                      the exact relation; needs --ops\n"
+      << "  --duel-dump FILE    write the asymmetric duel cases to FILE\n"
       << "  --no-shift-bias     draw shift amounts uniformly, instead of\n"
       << "                      half of them from [0, width)\n"
       << "  --seed N            random seed (default 42)\n"
@@ -251,6 +260,18 @@ int main(int argc, char** argv)
     { cfg.adderVariant = atoi(value.c_str()); i++; }
     else if (arg == "--bb.add-v2")
     { cfg.bvplusVariant = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-v1")
+    { cfg.divVariant1 = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-v2")
+    { cfg.divVariant2 = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-v3")
+    { cfg.divVariant3 = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-v4")
+    { cfg.divVariant4 = atoi(value.c_str()); i++; }
+    else if (arg == "--duel")
+    { cfg.duelWidth = atoi(value.c_str()); i++; }
+    else if (arg == "--duel-dump")
+    { cfg.duelDump = value; i++; }
     else if (arg == "--cnf") { cfg.cnf = value; i++; }
     else if (arg == "--seed") { cfg.seed = atoi(value.c_str()); i++; }
     else if (arg == "--html") { cfg.html = value; i++; }
@@ -329,6 +350,32 @@ int main(int argc, char** argv)
     mgr->UserFlags.adder_variant = cfg.adderVariant != 0;
   if (cfg.bvplusVariant >= 0)
     mgr->UserFlags.bvplus_variant = cfg.bvplusVariant != 0;
+  if (cfg.divVariant1 >= 0)
+    mgr->UserFlags.division_variant_1 = cfg.divVariant1 != 0;
+  if (cfg.divVariant2 >= 0)
+    mgr->UserFlags.division_variant_2 = cfg.divVariant2 != 0;
+  if (cfg.divVariant3 >= 0)
+    mgr->UserFlags.division_variant_3 = cfg.divVariant3 != 0;
+  if (cfg.divVariant4 >= 0)
+    mgr->UserFlags.division_variant_4 = cfg.divVariant4 != 0;
+
+  if (cfg.duelWidth > 0)
+  {
+    if (cfg.ops.empty() || !bcpAvailable())
+    {
+      std::cerr << "propagator_bench: --duel needs --ops and a CryptoMiniSat "
+                   "build\n";
+      return 1;
+    }
+    for (const string& o : cfg.ops)
+      if (!duelCheck(mgr, *findOp(o), cfg))
+      {
+        std::cerr << "propagator_bench: duel could not run for " << o
+                  << " at width " << cfg.duelWidth << "\n";
+        return 1;
+      }
+    return 0;
+  }
 
   if (!cfg.dumpCnf.empty())
   {
