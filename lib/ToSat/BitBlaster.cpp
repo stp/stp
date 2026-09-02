@@ -3435,10 +3435,41 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
   BBNodeVec r(width);
   BBDivMod(x, y, q, r, width, support);
 
+  BBNodeVec zero(width, BBFalse);
+
+  if (uf->division_lemmas)
+  {
+    // The relation's order laws, asserted as side constraints. Each is a
+    // consequence of the circuit above, so asserting them globally is sound
+    // wherever the term appears; what they add is propagation the restoring
+    // chain cannot do on its own -- deriving r < y needs "the subtraction
+    // succeeded at every step" simultaneously, which no clause window holds
+    // (2026-09-03 division-encoding study).
+    const BBNode divisorZero = BBEQ(zero, y);
+    support.insert(BBBVLE(r, x, false)); // r <= x, equality when y = 0
+    support.insert(
+        nf->CreateNode(OR, divisorZero, BBBVLE(r, y, false, true)));
+    support.insert(nf->CreateNode(OR, divisorZero, BBBVLE(q, x, false)));
+
+    BBNodeVec one(width, BBFalse);
+    one[0] = BBTrue;
+    const BBNode notOne = nf->CreateNode(NOT, BBEQ(one, y));
+    const BBNode divisorNonzero = nf->CreateNode(NOT, divisorZero);
+    for (unsigned i = 0; i < width; i++)
+    {
+      // y = 0 -> r = x ; y = 1 -> q = x and r = 0.
+      support.insert(nf->CreateNode(OR, divisorNonzero,
+                                    nf->CreateNode(IFF, r[i], x[i])));
+      support.insert(
+          nf->CreateNode(OR, notOne, nf->CreateNode(IFF, q[i], x[i])));
+      support.insert(
+          nf->CreateNode(OR, notOne, nf->CreateNode(NOT, r[i])));
+    }
+  }
+
   if (k == BVMOD)
     return r;
 
-  BBNodeVec zero(width, BBFalse);
   BBNodeVec max(width, BBTrue);
   return BBITE(BBEQ(zero, y), max, q);
 }

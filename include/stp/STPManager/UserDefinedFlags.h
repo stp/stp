@@ -807,6 +807,11 @@ public:
   bool division_variant_2 = true;
   bool division_variant_3 = false;
   bool division_variant_4 = false;
+  // Assert the order laws of each divider as side constraints: b!=0 -> r<b,
+  // r<=a, b!=0 -> q<=a, the b=0 clamps and the b=1 identities. They are
+  // consequences of the circuit that its unit propagation provably cannot
+  // rederive (2026-09-03 division-encoding study).
+  bool division_lemmas = false;
   bool adder_variant = true;
   bool bbbvle_variant =true;
   bool upper_multiplication_bound = false;
