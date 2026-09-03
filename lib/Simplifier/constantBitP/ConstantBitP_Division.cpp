@@ -259,9 +259,13 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
                                        FixedBits& output, STPMgr* bm,
                                        WhatIsOutput whatIs);
 
+// `divisorNonzero` lets a caller assert b >= 1 from outside the bits: the
+// zero-divisor case split runs this engine on its b != 0 branch with states
+// whose bits still admit zero.
 Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
                                       FixedBits& output, STPMgr* bm,
-                                      WhatIsOutput whatIs)
+                                      WhatIsOutput whatIs,
+                                      bool divisorNonzero = false)
 {
   assert(output.getWidth() == children[0]->getWidth());
   assert(output.getWidth() == children[1]->getWidth());
@@ -287,6 +291,18 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
   stp::CBV minBottom = pool[2];
   stp::CBV maxBottom = pool[3];
   setUnsignedMinMax(b, minBottom, maxBottom);
+  if (divisorNonzero && CONSTANTBV::BitVector_is_empty(minBottom))
+  {
+    CONSTANTBV::BitVector_increment(minBottom);
+    if (CONSTANTBV::BitVector_Lexicompare(minBottom, maxBottom) > 0)
+    {
+      // The divisor is fixed to zero, so the caller's b != 0 branch holds
+      // no state at all. Without this exit the loop below divides by
+      // maxBottom, which is zero.
+      CONSTANTBV::BitVector_Destroy_List(pool, 15);
+      return CONFLICT;
+    }
+  }
 
   stp::CBV minQuotient = pool[4];
   stp::CBV maxQuotient = pool[5];
@@ -603,7 +619,10 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   a.copyIn(*children[0]);
   b.copyIn(*children[1]);
 
-  assert(!b.containsZero());
+  // b's bits may still admit zero: the constraint set below contains r < b,
+  // which excludes b = 0 on its own, so this engine always reasons under the
+  // divisor-nonzero branch of the relation. The zero-divisor case split in
+  // bvUnsignedModulusBothWays relies on exactly that.
 
   if (whatIs == QUOTIENT_IS_OUTPUT)
     q.copyIn(output);
@@ -714,8 +733,29 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   return NOT_IMPLEMENTED;
 }
 
-Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
-                                 FixedBits& output, STPMgr* bm)
+// Fix into `dst` every newly fixed bit of `src`, a state derived from dst
+// by propagation. `conflict` is raised when the two disagree on a fixed
+// bit: impossible for distinct operands, but the operands may be one
+// aliased object -- x udiv x reaches here with children[0] and children[1]
+// the same FixedBits -- and then the two branch copies can force one bit
+// each way, which says the combined state has no solution at all.
+static bool adoptFixings(FixedBits& dst, const FixedBits& src, bool& conflict)
+{
+  bool changed = false;
+  for (unsigned i = 0; i < dst.getWidth(); i++)
+    if (src.isFixed(i) && !dst.isFixed(i))
+    {
+      dst.setFixed(i, true);
+      dst.setValue(i, src.getValue(i));
+      changed = true;
+    }
+    else if (src.isFixed(i) && dst.getValue(i) != src.getValue(i))
+      conflict = true;
+  return changed;
+}
+
+static Result bvUnsignedModulusOnce(vector<FixedBits*>& children,
+                                    FixedBits& output, STPMgr* bm)
 {
 
   Result r1 = NO_CHANGE;
@@ -728,8 +768,80 @@ Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
   r1 = bvLessThanEqualsBothWays(v, truN);
 
   if (children[1]->containsZero())
-    return r1;
+  {
+    // Case split on the divisor. The b = 0 branch forces r = a bit for bit;
+    // the b != 0 branch is the a = q*b + r, r < b engine, whose r < b
+    // constraint assumes exactly that branch. What both force is forced; a
+    // dead branch decides the divisor.
+    FixedBits& a = *children[0];
+    FixedBits& b = *children[1];
+    const unsigned width = output.getWidth();
 
+    bool zeroBranchOk = true;
+    for (unsigned i = 0; i < width && zeroBranchOk; i++)
+      zeroBranchOk = !(a.isFixed(i) && output.isFixed(i) &&
+                       a.getValue(i) != output.getValue(i));
+
+    FixedBits aB(a), bB(b), oB(output);
+    vector<FixedBits*> copies;
+    copies.push_back(&aB);
+    copies.push_back(&bB);
+    const Result rB =
+        bvUnsignedQuotientAndRemainder(copies, oB, bm, REMAINDER_IS_OUTPUT);
+
+    if (!zeroBranchOk && rB == CONFLICT)
+      return CONFLICT;
+
+    bool changed = false;
+    const auto fixTo = [&changed](FixedBits& f, unsigned i, bool value) {
+      if (!f.isFixed(i))
+      {
+        f.setFixed(i, true);
+        f.setValue(i, value);
+        changed = true;
+      }
+    };
+    if (!zeroBranchOk)
+    {
+      // The remainder differs from the dividend, so the divisor is not zero.
+      bool aliasConflict = false;
+      changed |= adoptFixings(a, aB, aliasConflict);
+      changed |= adoptFixings(b, bB, aliasConflict);
+      changed |= adoptFixings(output, oB, aliasConflict);
+      if (aliasConflict)
+        return CONFLICT;
+    }
+    else if (rB == CONFLICT)
+    {
+      // No solution has a nonzero divisor: b = 0 and r = a, both ways.
+      for (unsigned i = 0; i < width; i++)
+      {
+        fixTo(b, i, false);
+        if (a.isFixed(i))
+          fixTo(output, i, a.getValue(i));
+        if (output.isFixed(i))
+          fixTo(a, i, output.getValue(i));
+      }
+    }
+    else
+    {
+      // Join. The zero branch forces b = 0, r_i = a_i where a_i is fixed,
+      // and a_i = r_i where r_i is fixed; a bit survives when the nonzero
+      // branch fixed it to the same value.
+      for (unsigned i = 0; i < width; i++)
+      {
+        if (bB.isFixed(i) && !bB.getValue(i))
+          fixTo(b, i, false);
+        if (a.isFixed(i) && oB.isFixed(i) &&
+            a.getValue(i) == oB.getValue(i))
+          fixTo(output, i, a.getValue(i));
+        if (output.isFixed(i) && aB.isFixed(i) &&
+            output.getValue(i) == aB.getValue(i))
+          fixTo(a, i, output.getValue(i));
+      }
+    }
+    return merge(changed ? CHANGED : NO_CHANGE, r1);
+  }
 
   Result r =
       bvUnsignedQuotientAndRemainder(children, output, bm, REMAINDER_IS_OUTPUT);
@@ -740,13 +852,88 @@ Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
   return merge(r, r1);
 }
 
-Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
-                                  FixedBits& output, STPMgr* bm)
+static Result bvUnsignedDivisionOnce(vector<FixedBits*>& children,
+                                     FixedBits& output, STPMgr* bm)
 {
   Result r0 = NO_CHANGE;
 
   if (children[1]->containsZero())
-    return r0; // TODO fix so we learn something if we might be dividing by zero..
+  {
+    // Case split on the divisor. The b = 0 branch is exact on its own:
+    // b = 0, q all ones, the dividend free. The b != 0 branch reruns this
+    // function on copies whose interval engine is seeded past zero. What
+    // both branches force is forced; a dead branch decides the divisor.
+    FixedBits& b = *children[1];
+    const unsigned width = output.getWidth();
+
+    bool zeroBranchOk = true;
+    for (unsigned i = 0; i < width && zeroBranchOk; i++)
+      zeroBranchOk = !(output.isFixed(i) && !output.getValue(i));
+
+    FixedBits aB(*children[0]), bB(b), oB(output);
+    vector<FixedBits*> copies;
+    copies.push_back(&aB);
+    copies.push_back(&bB);
+    const Result rB =
+        bvUnsignedQuotientAndRemainder(copies, oB, bm, QUOTIENT_IS_OUTPUT,
+                                       /*divisorNonzero=*/true);
+
+    if (!zeroBranchOk && rB == CONFLICT)
+      return CONFLICT;
+
+    bool changed = false;
+    bool aliasConflict = false;
+    if (!zeroBranchOk)
+    {
+      // The quotient cannot be all ones, so the divisor is not zero.
+      changed |= adoptFixings(*children[0], aB, aliasConflict);
+      changed |= adoptFixings(b, bB, aliasConflict);
+      changed |= adoptFixings(output, oB, aliasConflict);
+      if (aliasConflict)
+        return CONFLICT;
+    }
+    else if (rB == CONFLICT)
+    {
+      // No solution has a nonzero divisor: b = 0 and q = all ones.
+      for (unsigned i = 0; i < width; i++)
+      {
+        if (!b.isFixed(i))
+        {
+          b.setFixed(i, true);
+          b.setValue(i, false);
+          changed = true;
+        }
+        if (!output.isFixed(i))
+        {
+          output.setFixed(i, true);
+          output.setValue(i, true);
+          changed = true;
+        }
+      }
+    }
+    else
+    {
+      // Join: the zero branch forces b = 0 and q = 1, so a bit survives
+      // exactly when the nonzero branch fixed it to the same value. The
+      // dividend is free in the zero branch, so nothing of it survives.
+      for (unsigned i = 0; i < width; i++)
+      {
+        if (!b.isFixed(i) && bB.isFixed(i) && !bB.getValue(i))
+        {
+          b.setFixed(i, true);
+          b.setValue(i, false);
+          changed = true;
+        }
+        if (!output.isFixed(i) && oB.isFixed(i) && oB.getValue(i))
+        {
+          output.setFixed(i, true);
+          output.setValue(i, true);
+          changed = true;
+        }
+      }
+    }
+    return changed ? CHANGED : NO_CHANGE;
+  }
 
   // Enforce that the output must be less than the numerator: the
   // numerator's leading fixed zeroes are the quotient's too.
@@ -787,6 +974,49 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
       bvUnsignedQuotientAndRemainder(children, output, bm, QUOTIENT_IS_OUTPUT);
 
   return merge(r0, r);
+}
+
+
+// The case split above is not idempotent: a pass can decide the divisor and
+// leave the ordinary engine, on the next entry, with more to derive. Run to
+// a fixed point so one call settles -- fixing is monotone, so the count of
+// fixed bits bounds the passes.
+Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
+                                  FixedBits& output, STPMgr* bm)
+{
+  Result overall = NO_CHANGE;
+  while (true)
+  {
+    const unsigned before = children[0]->countFixed() +
+                            children[1]->countFixed() + output.countFixed();
+    const Result r = bvUnsignedDivisionOnce(children, output, bm);
+    if (r == CONFLICT)
+      return CONFLICT;
+    overall = merge(overall, r);
+    if (children[0]->countFixed() + children[1]->countFixed() +
+            output.countFixed() ==
+        before)
+      return overall;
+  }
+}
+
+Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
+                                 FixedBits& output, STPMgr* bm)
+{
+  Result overall = NO_CHANGE;
+  while (true)
+  {
+    const unsigned before = children[0]->countFixed() +
+                            children[1]->countFixed() + output.countFixed();
+    const Result r = bvUnsignedModulusOnce(children, output, bm);
+    if (r == CONFLICT)
+      return CONFLICT;
+    overall = merge(overall, r);
+    if (children[0]->countFixed() + children[1]->countFixed() +
+            output.countFixed() ==
+        before)
+      return overall;
+  }
 }
 
 bool canBe(const FixedBits& b, int index, bool value)
