@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/BVExactEncoder.h"
+#include "stp/ToSat/BVLemmaCatalogue.h"
 #include "stp/FloatBlaster/DecimalLiteral.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
@@ -3490,6 +3491,37 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     if (!(x[i] == BBTrue || x[i] == BBFalse) ||
         !(y[i] == BBTrue || y[i] == BBFalse))
       bothConstant = false;
+
+  if (uf->division_abstraction_encoding && !bothConstant)
+  {
+    // The term abstraction's schema registry on a free result, asserted
+    // eagerly: the measurement arm for what those lemmas propagate. No
+    // divider, no totalisation ITE, none of the refiner's other
+    // mechanisms -- the registry alone, or one entry, or a prefix of the
+    // refiner's offer order.
+    BBNodeVec t(width);
+    for (unsigned i = 0; i < width; i++)
+      t[i] = nf->CreateFreshInput();
+
+    const int only = uf->division_abstraction_only_lemma;
+    const unsigned prefix = uf->division_abstraction_prefix;
+    const unsigned count =
+        (k == BVDIV) ? BV_DIV_LEMMA_COUNT : BV_REM_LEMMA_COUNT;
+    for (unsigned i = 0; i < count; i++)
+    {
+      if (only >= 0 && (unsigned)only != i)
+        continue;
+      if (prefix > 0 && i >= prefix)
+        continue;
+      if (k == BVDIV)
+        support.insert(
+            BBDivLemma(static_cast<DivLemma>(i), x, y, t, support));
+      else
+        support.insert(
+            BBRemLemma(static_cast<RemLemma>(i), x, y, t, support));
+    }
+    return t;
+  }
 
   if (uf->division_by_multiplication && !bothConstant)
   {

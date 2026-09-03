@@ -134,6 +134,11 @@ void usage()
       << "  --bb.div-mult 0|1   encode division through its defining\n"
       << "                      relation x = y*q + r on fresh q, r instead\n"
       << "                      of a divider circuit (default 0)\n"
+      << "  --bb.div-abs 0|1    encode division as a free result under the\n"
+      << "                      term abstraction's schema registry, asserted\n"
+      << "                      eagerly (default 0)\n"
+      << "  --bb.div-abs-only K assert only registry entry K\n"
+      << "  --bb.div-abs-prefix N  assert only the first N entries\n"
       << "  --duel W            exhaustive per-state head-to-head at width W:\n"
       << "                      unit propagation on the encoding vs the\n"
       << "                      constant-bit transfer function, refereed by\n"
@@ -281,6 +286,12 @@ int main(int argc, char** argv)
     { cfg.divLemmas = atoi(value.c_str()); i++; }
     else if (arg == "--bb.div-mult")
     { cfg.divByMult = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-abs")
+    { cfg.divAbs = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-abs-only")
+    { cfg.divAbsOnly = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-abs-prefix")
+    { cfg.divAbsPrefix = atoi(value.c_str()); i++; }
     else if (arg == "--duel")
     { cfg.duelWidth = atoi(value.c_str()); i++; }
     else if (arg == "--duel-dump")
@@ -377,6 +388,12 @@ int main(int argc, char** argv)
     mgr->UserFlags.division_lemmas = cfg.divLemmas != 0;
   if (cfg.divByMult >= 0)
     mgr->UserFlags.division_by_multiplication = cfg.divByMult != 0;
+  if (cfg.divAbs >= 0)
+    mgr->UserFlags.division_abstraction_encoding = cfg.divAbs != 0;
+  if (cfg.divAbsOnly >= 0)
+    mgr->UserFlags.division_abstraction_only_lemma = cfg.divAbsOnly;
+  if (cfg.divAbsPrefix >= 0)
+    mgr->UserFlags.division_abstraction_prefix = (unsigned)cfg.divAbsPrefix;
 
   if (cfg.duelWidth > 0)
   {

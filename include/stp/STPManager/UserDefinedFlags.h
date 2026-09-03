@@ -822,6 +822,14 @@ public:
   // wherever the divisor is nonzero. The circuit computes nothing; every
   // quotient bit is the SAT solver's to find.
   bool division_by_multiplication = false;
+  // Measurement arm: encode division and remainder as a free result
+  // constrained only by the term abstraction's schema registry, asserted
+  // eagerly, so the lemmas' propagation can be graded on its own. The
+  // registry deliberately lacks the basic bounds the refiner supplies by
+  // other mechanisms, so this is the lemmas alone, not the abstraction.
+  bool division_abstraction_encoding = false;
+  int division_abstraction_only_lemma = -1; // one registry entry alone
+  unsigned division_abstraction_prefix = 0; // first N entries; 0 = all
   bool adder_variant = true;
   bool bbbvle_variant =true;
   bool upper_multiplication_bound = false;
