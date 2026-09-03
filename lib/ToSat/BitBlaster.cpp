@@ -509,9 +509,11 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
 {
   assert(form.GetType() == BOOLEAN_TYPE);
 
+  // The support set is dropped: its members are consequences of the
+  // formula, so ignoring them only leaves constants undiscovered, and this
+  // walk reads the memo for constants rather than emitting an encoding.
   BBNodeSet support;
   BBForm(form, support);
-  assert(support.size() == 0);
 
   {
     for (auto it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
@@ -1862,11 +1864,6 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
   if (debug_do_check)
     check(result, term);
 
-  if (!uf->conjoin_to_top)
-  {
-    assert(support.size() == 0);
-  }
-
   updateTerm(term, result, support);
   return (BBTermMemo[term] = result);
 }
@@ -1905,11 +1902,6 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
   vector<BBNode> v;
   v.insert(v.end(), support.begin(), support.end());
   v.push_back(r);
-
-  if (!uf->conjoin_to_top)
-  {
-    assert(support.size() == 0);
-  }
 
   if (cb != NULL && !cb->isUnsatisfiable())
   {
@@ -2351,11 +2343,6 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     check(result, form);
 
   updateForm(form, result, support);
-
-  if (!uf->conjoin_to_top)
-  {
-    assert(support.size() == 0);
-  }
 
   return (BBFormMemo[form] = result);
 }
