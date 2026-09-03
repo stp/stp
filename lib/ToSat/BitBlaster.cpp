@@ -3404,11 +3404,18 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBShiftRightByVariable(
 }
 
 // Division and remainder through their defining relation. The quotient and
-// remainder are fresh variables; x = y*q + r is carried at double width so
-// nothing wraps, making the pair unique once r < y is asserted wherever the
-// divisor is nonzero. A zero divisor collapses the relation to r = x, which
-// is what bvurem asks for, and leaves q free -- the caller's totalisation
-// pins the returned quotient to all-ones there.
+// remainder are fresh variables; x = y*q + r is asserted at width w, made
+// exact not by a double-width product but by a magnitude ladder: h_i says
+// the divisor's bits from i up are zero, so one clause per set quotient
+// bit -- q_k demands y < 2^(w-k) -- is the whole "no partial product
+// reaches column w" staircase, and a high divisor bit clears high quotient
+// bits back down the chain by contraposition. The rows are truncated to
+// the columns the ladder allows and every accumulation step's carry-out is
+// asserted false, so the sum is the integer sum and stays below 2^w. With
+// r < y wherever the divisor is nonzero the pair is unique. A zero divisor
+// collapses the relation to r = x, which is what bvurem asks for, and
+// leaves q free -- the caller's totalisation pins the returned quotient to
+// all-ones there.
 template <class BBNode, class BBNodeManagerT>
 void BitBlaster<BBNode, BBNodeManagerT>::BBDivByMult(const BBNodeVec& x,
                                                      const BBNodeVec& y,
@@ -3427,23 +3434,33 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivByMult(const BBNodeVec& x,
     r[i] = nf->CreateFreshInput();
   }
 
-  // y*q + r at width 2w: one partial product per quotient bit, each row
-  // guarded by that bit, summed onto the remainder with the chain adder.
-  BBNodeVec sum(2 * w, BBFalse);
+  // The ladder: h[i] <=> y < 2^i, one AND gate per rung.
+  BBNodeVec h(w + 1);
+  h[w] = BBTrue;
+  for (unsigned i = w; i-- > 0;)
+    h[i] = nf->CreateNode(AND, nf->CreateNode(NOT, y[i]), h[i + 1]);
+
+  for (unsigned k = 1; k < w; k++)
+    support.insert(
+        nf->CreateNode(OR, nf->CreateNode(NOT, q[k]), h[w - k]));
+
+  // y*q + r at width w+1: rows guarded by their quotient bit and truncated
+  // at column w, each step's carry-out asserted false and pinned.
+  BBNodeVec acc(w + 1, BBFalse);
   for (unsigned i = 0; i < w; i++)
-    sum[i] = r[i];
+    acc[i] = r[i];
   for (unsigned j = 0; j < w; j++)
   {
-    BBNodeVec partial(2 * w, BBFalse);
-    for (unsigned i = 0; i < w; i++)
-      partial[i + j] = nf->CreateNode(AND, y[i], q[j]);
-    BBPlus2(sum, partial, BBFalse);
+    BBNodeVec row(w + 1, BBFalse);
+    for (unsigned i = 0; i + j < w; i++)
+      row[i + j] = nf->CreateNode(AND, y[i], q[j]);
+    BBPlus2(acc, row, BBFalse);
+    support.insert(nf->CreateNode(NOT, acc[w]));
+    acc[w] = BBFalse;
   }
 
-  // The low half is the dividend and the high half vanishes.
-  BBNodeVec xw(x);
-  xw.resize(2 * w, BBFalse);
-  support.insert(BBEQ(sum, xw));
+  const BBNodeVec accLow(acc.begin(), acc.begin() + w);
+  support.insert(BBEQ(accLow, x));
 
   const BBNodeVec zero(w, BBFalse);
   support.insert(
