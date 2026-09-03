@@ -7,8 +7,12 @@
 ; keeps both operations live through preprocessing.
 ; The schema below is chosen off the first candidate model, which rides on
 ; the CNF: the rung is pinned so a backend or compiler change cannot move it.
-; RUN: %solver --incremental=off -s --cnf-generation-effort=medium --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=base,divrem-full %s 2>&1 | %OutputCheck %s
-; RUN: %solver --incremental=off -s --cnf-generation-effort=medium --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 %s 2>&1 | %OutputCheck %s --check-prefix=INHERITED
+; Constant bit propagation is pinned off: the divisor-zero case split in the
+; division transfers decides this query at preprocessing (b even with r = 1
+; forces a odd, against a's low bits), and the point here is the refinement
+; machinery the blaster is handed, not the word-level pipeline ahead of it.
+; RUN: %solver --incremental=off -s --disable-cbitp --cnf-generation-effort=medium --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=base,divrem-full %s 2>&1 | %OutputCheck %s
+; RUN: %solver --incremental=off -s --disable-cbitp --cnf-generation-effort=medium --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 %s 2>&1 | %OutputCheck %s --check-prefix=INHERITED
 ; CHECK: BV abstraction: paired BVDIV/BVMOD recomposition lemma over 256 bits
 ; CHECK-NEXT: BV abstraction: refined 1 operations
 ; CHECK: ^unsat$
