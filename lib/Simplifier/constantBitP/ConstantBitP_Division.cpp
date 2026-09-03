@@ -292,7 +292,17 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
   stp::CBV maxBottom = pool[3];
   setUnsignedMinMax(b, minBottom, maxBottom);
   if (divisorNonzero && CONSTANTBV::BitVector_is_empty(minBottom))
+  {
     CONSTANTBV::BitVector_increment(minBottom);
+    if (CONSTANTBV::BitVector_Lexicompare(minBottom, maxBottom) > 0)
+    {
+      // The divisor is fixed to zero, so the caller's b != 0 branch holds
+      // no state at all. Without this exit the loop below divides by
+      // maxBottom, which is zero.
+      CONSTANTBV::BitVector_Destroy_List(pool, 15);
+      return CONFLICT;
+    }
+  }
 
   stp::CBV minQuotient = pool[4];
   stp::CBV maxQuotient = pool[5];
