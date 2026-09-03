@@ -771,67 +771,80 @@ Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
     FixedBits& b = *children[1];
     const unsigned width = output.getWidth();
 
-    bool zeroBranchOk = true;
-    for (unsigned i = 0; i < width && zeroBranchOk; i++)
-      zeroBranchOk = !(a.isFixed(i) && output.isFixed(i) &&
-                       a.getValue(i) != output.getValue(i));
+    // Iterated and aliasing-preserving for the same reasons as the
+    // division split below: one call must settle, and one variable read
+    // twice must be one copy.
+    const bool aliased = children[0] == children[1];
+    bool any = false;
+    for (;;)
+    {
+      bool zeroBranchOk = true;
+      for (unsigned i = 0; i < width && zeroBranchOk; i++)
+        zeroBranchOk = !(a.isFixed(i) && output.isFixed(i) &&
+                         a.getValue(i) != output.getValue(i));
 
-    FixedBits aB(a), bB(b), oB(output);
-    vector<FixedBits*> copies;
-    copies.push_back(&aB);
-    copies.push_back(&bB);
-    const Result rB =
-        bvUnsignedQuotientAndRemainder(copies, oB, bm, REMAINDER_IS_OUTPUT);
+      FixedBits aB(a), bBs(b), oB(output);
+      FixedBits& bB = aliased ? aB : bBs;
+      vector<FixedBits*> copies;
+      copies.push_back(&aB);
+      copies.push_back(&bB);
+      const Result rB =
+          bvUnsignedQuotientAndRemainder(copies, oB, bm, REMAINDER_IS_OUTPUT);
 
-    if (!zeroBranchOk && rB == CONFLICT)
-      return CONFLICT;
+      if (!zeroBranchOk && rB == CONFLICT)
+        return CONFLICT;
 
-    bool changed = false;
-    const auto fixTo = [&changed](FixedBits& f, unsigned i, bool value) {
-      if (!f.isFixed(i))
+      bool changed = false;
+      const auto fixTo = [&changed](FixedBits& f, unsigned i, bool value) {
+        if (!f.isFixed(i))
+        {
+          f.setFixed(i, true);
+          f.setValue(i, value);
+          changed = true;
+        }
+      };
+      if (!zeroBranchOk)
       {
-        f.setFixed(i, true);
-        f.setValue(i, value);
-        changed = true;
+        // The remainder differs from the dividend, so the divisor is not
+        // zero.
+        changed |= adoptFixings(a, aB);
+        changed |= adoptFixings(b, bB);
+        changed |= adoptFixings(output, oB);
       }
-    };
-    if (!zeroBranchOk)
-    {
-      // The remainder differs from the dividend, so the divisor is not zero.
-      changed |= adoptFixings(a, aB);
-      changed |= adoptFixings(b, bB);
-      changed |= adoptFixings(output, oB);
-    }
-    else if (rB == CONFLICT)
-    {
-      // No solution has a nonzero divisor: b = 0 and r = a, both ways.
-      for (unsigned i = 0; i < width; i++)
+      else if (rB == CONFLICT)
       {
-        fixTo(b, i, false);
-        if (a.isFixed(i))
-          fixTo(output, i, a.getValue(i));
-        if (output.isFixed(i))
-          fixTo(a, i, output.getValue(i));
-      }
-    }
-    else
-    {
-      // Join. The zero branch forces b = 0, r_i = a_i where a_i is fixed,
-      // and a_i = r_i where r_i is fixed; a bit survives when the nonzero
-      // branch fixed it to the same value.
-      for (unsigned i = 0; i < width; i++)
-      {
-        if (bB.isFixed(i) && !bB.getValue(i))
+        // No solution has a nonzero divisor: b = 0 and r = a, both ways.
+        for (unsigned i = 0; i < width; i++)
+        {
           fixTo(b, i, false);
-        if (a.isFixed(i) && oB.isFixed(i) &&
-            a.getValue(i) == oB.getValue(i))
-          fixTo(output, i, a.getValue(i));
-        if (output.isFixed(i) && aB.isFixed(i) &&
-            output.getValue(i) == aB.getValue(i))
-          fixTo(a, i, output.getValue(i));
+          if (a.isFixed(i))
+            fixTo(output, i, a.getValue(i));
+          if (output.isFixed(i))
+            fixTo(a, i, output.getValue(i));
+        }
       }
+      else
+      {
+        // Join. The zero branch forces b = 0, r_i = a_i where a_i is fixed,
+        // and a_i = r_i where r_i is fixed; a bit survives when the nonzero
+        // branch fixed it to the same value.
+        for (unsigned i = 0; i < width; i++)
+        {
+          if (bB.isFixed(i) && !bB.getValue(i))
+            fixTo(b, i, false);
+          if (a.isFixed(i) && oB.isFixed(i) &&
+              a.getValue(i) == oB.getValue(i))
+            fixTo(output, i, a.getValue(i));
+          if (output.isFixed(i) && aB.isFixed(i) &&
+              output.getValue(i) == aB.getValue(i))
+            fixTo(a, i, output.getValue(i));
+        }
+      }
+      if (!changed)
+        break;
+      any = true;
     }
-    return merge(changed ? CHANGED : NO_CHANGE, r1);
+    return merge(any ? CHANGED : NO_CHANGE, r1);
   }
 
   Result r =
@@ -857,70 +870,83 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
     FixedBits& b = *children[1];
     const unsigned width = output.getWidth();
 
-    bool zeroBranchOk = true;
-    for (unsigned i = 0; i < width && zeroBranchOk; i++)
-      zeroBranchOk = !(output.isFixed(i) && !output.getValue(i));
-
-    FixedBits aB(*children[0]), bB(b), oB(output);
-    vector<FixedBits*> copies;
-    copies.push_back(&aB);
-    copies.push_back(&bB);
-    const Result rB =
-        bvUnsignedQuotientAndRemainder(copies, oB, bm, QUOTIENT_IS_OUTPUT,
-                                       /*divisorNonzero=*/true);
-
-    if (!zeroBranchOk && rB == CONFLICT)
-      return CONFLICT;
-
-    bool changed = false;
-    if (!zeroBranchOk)
+    // Run the split to its own fixed point: a round's fixings can kill the
+    // zero branch or sharpen the next round's copies, and one transfer call
+    // must settle. Aliased operands share one copy, so the branch cannot
+    // fix two views of the same variable apart.
+    const bool aliased = children[0] == children[1];
+    bool any = false;
+    for (;;)
     {
-      // The quotient cannot be all ones, so the divisor is not zero.
-      changed |= adoptFixings(*children[0], aB);
-      changed |= adoptFixings(b, bB);
-      changed |= adoptFixings(output, oB);
-    }
-    else if (rB == CONFLICT)
-    {
-      // No solution has a nonzero divisor: b = 0 and q = all ones.
-      for (unsigned i = 0; i < width; i++)
+      bool zeroBranchOk = true;
+      for (unsigned i = 0; i < width && zeroBranchOk; i++)
+        zeroBranchOk = !(output.isFixed(i) && !output.getValue(i));
+
+      FixedBits aB(*children[0]), bBs(b), oB(output);
+      FixedBits& bB = aliased ? aB : bBs;
+      vector<FixedBits*> copies;
+      copies.push_back(&aB);
+      copies.push_back(&bB);
+      const Result rB =
+          bvUnsignedQuotientAndRemainder(copies, oB, bm, QUOTIENT_IS_OUTPUT,
+                                         /*divisorNonzero=*/true);
+
+      if (!zeroBranchOk && rB == CONFLICT)
+        return CONFLICT;
+
+      bool changed = false;
+      if (!zeroBranchOk)
       {
-        if (!b.isFixed(i))
+        // The quotient cannot be all ones, so the divisor is not zero.
+        changed |= adoptFixings(*children[0], aB);
+        changed |= adoptFixings(b, bB);
+        changed |= adoptFixings(output, oB);
+      }
+      else if (rB == CONFLICT)
+      {
+        // No solution has a nonzero divisor: b = 0 and q = all ones.
+        for (unsigned i = 0; i < width; i++)
         {
-          b.setFixed(i, true);
-          b.setValue(i, false);
-          changed = true;
-        }
-        if (!output.isFixed(i))
-        {
-          output.setFixed(i, true);
-          output.setValue(i, true);
-          changed = true;
+          if (!b.isFixed(i))
+          {
+            b.setFixed(i, true);
+            b.setValue(i, false);
+            changed = true;
+          }
+          if (!output.isFixed(i))
+          {
+            output.setFixed(i, true);
+            output.setValue(i, true);
+            changed = true;
+          }
         }
       }
-    }
-    else
-    {
-      // Join: the zero branch forces b = 0 and q = 1, so a bit survives
-      // exactly when the nonzero branch fixed it to the same value. The
-      // dividend is free in the zero branch, so nothing of it survives.
-      for (unsigned i = 0; i < width; i++)
+      else
       {
-        if (!b.isFixed(i) && bB.isFixed(i) && !bB.getValue(i))
+        // Join: the zero branch forces b = 0 and q = 1, so a bit survives
+        // exactly when the nonzero branch fixed it to the same value. The
+        // dividend is free in the zero branch, so nothing of it survives.
+        for (unsigned i = 0; i < width; i++)
         {
-          b.setFixed(i, true);
-          b.setValue(i, false);
-          changed = true;
-        }
-        if (!output.isFixed(i) && oB.isFixed(i) && oB.getValue(i))
-        {
-          output.setFixed(i, true);
-          output.setValue(i, true);
-          changed = true;
+          if (!b.isFixed(i) && bB.isFixed(i) && !bB.getValue(i))
+          {
+            b.setFixed(i, true);
+            b.setValue(i, false);
+            changed = true;
+          }
+          if (!output.isFixed(i) && oB.isFixed(i) && oB.getValue(i))
+          {
+            output.setFixed(i, true);
+            output.setValue(i, true);
+            changed = true;
+          }
         }
       }
+      if (!changed)
+        break;
+      any = true;
     }
-    return changed ? CHANGED : NO_CHANGE;
+    return any ? CHANGED : NO_CHANGE;
   }
 
   // Enforce that the output must be less than the numerator: the
