@@ -733,9 +733,13 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   return NOT_IMPLEMENTED;
 }
 
-// Fix into `dst` every newly fixed bit of `src`, a state derived from dst by
-// propagation (so the two can never disagree on a commonly fixed bit).
-static bool adoptFixings(FixedBits& dst, const FixedBits& src)
+// Fix into `dst` every newly fixed bit of `src`, a state derived from dst
+// by propagation. `conflict` is raised when the two disagree on a fixed
+// bit: impossible for distinct operands, but the operands may be one
+// aliased object -- x udiv x reaches here with children[0] and children[1]
+// the same FixedBits -- and then the two branch copies can force one bit
+// each way, which says the combined state has no solution at all.
+static bool adoptFixings(FixedBits& dst, const FixedBits& src, bool& conflict)
 {
   bool changed = false;
   for (unsigned i = 0; i < dst.getWidth(); i++)
@@ -745,11 +749,13 @@ static bool adoptFixings(FixedBits& dst, const FixedBits& src)
       dst.setValue(i, src.getValue(i));
       changed = true;
     }
+    else if (src.isFixed(i) && dst.getValue(i) != src.getValue(i))
+      conflict = true;
   return changed;
 }
 
-Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
-                                 FixedBits& output, STPMgr* bm)
+static Result bvUnsignedModulusOnce(vector<FixedBits*>& children,
+                                    FixedBits& output, STPMgr* bm)
 {
 
   Result r1 = NO_CHANGE;
@@ -798,9 +804,12 @@ Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
     if (!zeroBranchOk)
     {
       // The remainder differs from the dividend, so the divisor is not zero.
-      changed |= adoptFixings(a, aB);
-      changed |= adoptFixings(b, bB);
-      changed |= adoptFixings(output, oB);
+      bool aliasConflict = false;
+      changed |= adoptFixings(a, aB, aliasConflict);
+      changed |= adoptFixings(b, bB, aliasConflict);
+      changed |= adoptFixings(output, oB, aliasConflict);
+      if (aliasConflict)
+        return CONFLICT;
     }
     else if (rB == CONFLICT)
     {
@@ -843,8 +852,8 @@ Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
   return merge(r, r1);
 }
 
-Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
-                                  FixedBits& output, STPMgr* bm)
+static Result bvUnsignedDivisionOnce(vector<FixedBits*>& children,
+                                     FixedBits& output, STPMgr* bm)
 {
   Result r0 = NO_CHANGE;
 
@@ -873,12 +882,15 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
       return CONFLICT;
 
     bool changed = false;
+    bool aliasConflict = false;
     if (!zeroBranchOk)
     {
       // The quotient cannot be all ones, so the divisor is not zero.
-      changed |= adoptFixings(*children[0], aB);
-      changed |= adoptFixings(b, bB);
-      changed |= adoptFixings(output, oB);
+      changed |= adoptFixings(*children[0], aB, aliasConflict);
+      changed |= adoptFixings(b, bB, aliasConflict);
+      changed |= adoptFixings(output, oB, aliasConflict);
+      if (aliasConflict)
+        return CONFLICT;
     }
     else if (rB == CONFLICT)
     {
@@ -962,6 +974,49 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
       bvUnsignedQuotientAndRemainder(children, output, bm, QUOTIENT_IS_OUTPUT);
 
   return merge(r0, r);
+}
+
+
+// The case split above is not idempotent: a pass can decide the divisor and
+// leave the ordinary engine, on the next entry, with more to derive. Run to
+// a fixed point so one call settles -- fixing is monotone, so the count of
+// fixed bits bounds the passes.
+Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
+                                  FixedBits& output, STPMgr* bm)
+{
+  Result overall = NO_CHANGE;
+  while (true)
+  {
+    const unsigned before = children[0]->countFixed() +
+                            children[1]->countFixed() + output.countFixed();
+    const Result r = bvUnsignedDivisionOnce(children, output, bm);
+    if (r == CONFLICT)
+      return CONFLICT;
+    overall = merge(overall, r);
+    if (children[0]->countFixed() + children[1]->countFixed() +
+            output.countFixed() ==
+        before)
+      return overall;
+  }
+}
+
+Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
+                                 FixedBits& output, STPMgr* bm)
+{
+  Result overall = NO_CHANGE;
+  while (true)
+  {
+    const unsigned before = children[0]->countFixed() +
+                            children[1]->countFixed() + output.countFixed();
+    const Result r = bvUnsignedModulusOnce(children, output, bm);
+    if (r == CONFLICT)
+      return CONFLICT;
+    overall = merge(overall, r);
+    if (children[0]->countFixed() + children[1]->countFixed() +
+            output.countFixed() ==
+        before)
+      return overall;
+  }
 }
 
 bool canBe(const FixedBits& b, int index, bool value)
