@@ -680,11 +680,12 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   nVars_ = static_cast<uint32_t>(vars);
 }
 
-CNF deriveTseitin(const Manager& m, unsigned namedOutputs, Recover recover)
+CNF deriveTseitin(const Manager& m, unsigned namedOutputs, Recover recover,
+                  std::vector<uint32_t>* nodeVarOut)
 {
   const Cone cone(m, namedOutputs, recover);
   CNF cnf;
-  writeTseitin(m, cone, cnf);
+  writeTseitin(m, cone, cnf, nodeVarOut);
   return cnf;
 }
 

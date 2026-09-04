@@ -243,7 +243,8 @@ private:
 // DIMACS writer or one that feeds a live solver costs no indirection when it
 // arrives.
 template <class Sink>
-void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
+void writeTseitin(const Manager& m, const Cone& cone, Sink& sink,
+                  std::vector<uint32_t>* nodeVarOut = nullptr)
 {
   const uint32_t nCi = m.ciCount();
   const uint32_t nCo = m.outputCount();
@@ -422,11 +423,14 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
     }
   }
   sink.end();
+  if (nodeVarOut)
+    *nodeVarOut = var;
 }
 
 // Both passes, into a materialised CNF.
 CNF deriveTseitin(const Manager& m, unsigned namedOutputs = 0,
-                  Recover recover = Recover::PatternsAndAnds);
+                  Recover recover = Recover::PatternsAndAnds,
+                  std::vector<uint32_t>* nodeVarOut = nullptr);
 
 } // namespace aig
 } // namespace stp

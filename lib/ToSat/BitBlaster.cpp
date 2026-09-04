@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/Util/DagWalk.h"
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 #include <deque>
 #include <cmath>
 #include <limits>
@@ -1239,6 +1240,12 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       {
         temp_result[i] = nf->CreateNode(ITE, remainder, toFill, temp_result[i]);
       }
+
+      static const bool tapShifts = getenv("STP_SHIFT_ANNOTATE") != NULL;
+      if (tapShifts && !term[1].isConstant())
+        recordShiftTapHook(nf,
+                           k == BVLEFTSHIFT ? 0 : k == BVRIGHTSHIFT ? 1 : 2,
+                           bbarg1, bbarg2, temp_result);
 
       result = temp_result;
     }
@@ -7381,6 +7388,20 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBEQ(const BBNodeVec& left,
   }
   else
     return nf->CreateNode(IFF, *lit, *rit);
+}
+
+// Shift-tap hook for the lazy-oracle experiments: a no-op except on the
+// Lit manager, and only when STP_SHIFT_ANNOTATE is set.
+template <class M, class V>
+static void recordShiftTapHook(M*, int, const V&, const V&, const V&)
+{
+}
+static void recordShiftTapHook(BBNodeManagerLit* nf, int kind,
+                               const std::vector<BBNodeLit>& a,
+                               const std::vector<BBNodeLit>& s,
+                               const std::vector<BBNodeLit>& r)
+{
+  nf->shiftTaps.push_back(BBNodeManagerLit::ShiftTap{kind, a, s, r});
 }
 
 std::ostream& operator<<(std::ostream& output, const BBNodeAIG& /*h*/)
