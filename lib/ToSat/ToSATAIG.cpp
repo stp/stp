@@ -86,6 +86,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
     return false;
   }
 
+  dump_term_abstraction_map();
   handle_cnf_options(cnf, needAbsRef);
 
   assert(satSolver.nVars() == 0);
@@ -140,6 +141,45 @@ void ToSATAIG::bind_injectivity_guard(SATSolver& satSolver)
   SATSolver::vec_literals unit;
   unit.push(SATSolver::mkLit(found->second[0], false));
   satSolver.addClause(unit);
+}
+
+// STP_DIVMAP=<path> writes every term-abstraction record's kind, width, and
+// the DIMACS variables (as --output-CNF numbers them; 0 = bit never reached a
+// variable) of its operand and result bits. External-propagator experiments
+// read this next to the --output-CNF file.
+void ToSATAIG::dump_term_abstraction_map()
+{
+  const char* path = getenv("STP_DIVMAP");
+  if (path == NULL || !abstraction_.hasTerms())
+    return;
+  std::ofstream f(path);
+  const auto emit = [&](const char* tag, const ASTNode& n, bool negated,
+                        unsigned width, const std::vector<unsigned>* direct) {
+    f << tag << (negated ? " neg" : " pos");
+    const std::vector<unsigned>* vars = direct;
+    if (vars == NULL || vars->empty())
+    {
+      const ASTNodeToSATVar::const_iterator it = nodeToSATVar.find(n);
+      vars = it == nodeToSATVar.end() ? NULL : &it->second;
+    }
+    for (unsigned i = 0; i < width; i++)
+    {
+      const unsigned v = (vars && i < vars->size()) ? (*vars)[i] : ~0u;
+      f << " " << (v == ~0u ? 0 : v + 1);
+    }
+    f << "\n";
+  };
+  for (const BVTermAbstraction& t : abstraction_.terms())
+  {
+    f << "term " << _kind_names[t.opKind] << " " << t.width << " "
+      << t.numOperands << "\n";
+    for (unsigned i = 0; i < t.numOperands; i++)
+      emit("op", t.operands[i], t.operandNegated[i],
+           t.operands[i].GetValueWidth() > 0 ? t.operands[i].GetValueWidth()
+                                             : 1,
+           NULL);
+    emit("res", t.termNode, false, t.width, &t.resultSATVars);
+  }
 }
 
 void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)

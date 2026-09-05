@@ -545,6 +545,12 @@ void ExtraMain::create_options()
            refinement_group);
 
   const char* const bb_group = "Bit-blasting options";
+  bool_arg("--bb.div-lemmas", bm->UserFlags.division_lemmas,
+           "assert each divider's order laws (b!=0 implies r<b and q<=a, "
+           "r<=a, the b=0 and b=1 cases) as side constraints; consequences "
+           "of the circuit that its own unit propagation cannot rederive",
+           bb_group);
+
   bool_arg("--bb.div-v1", bm->UserFlags.division_variant_1,
            "unsigned division encoding variant 1", bb_group);
 
