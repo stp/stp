@@ -680,6 +680,29 @@ private:
   std::vector<BBNode> sideConstraints_;
 
 public:
+  // One narrow shift whose exact prime implicates are to be added as raw
+  // clauses. They have to reach the solver as clauses, not as circuit:
+  // routed through the AIG each prime becomes an OR tree and costs about
+  // 18 clauses and 4 fresh variables instead of one clause and none,
+  // which throws away the only thing that makes the prime list
+  // attractive. So the bits are named by combinational inputs here and
+  // the clauses are emitted after CNF conversion, once those inputs have
+  // SAT variables.
+  struct ShiftPrimeBlock
+  {
+    int op;                       // 0 shl, 1 lshr, 2 ashr
+    unsigned width;
+    std::vector<BBNode> bits;     // a, then s, then r -- all CIs
+  };
+  const std::vector<ShiftPrimeBlock>& shiftPrimeBlocks() const
+  {
+    return shiftPrimeBlocks_;
+  }
+
+private:
+  std::vector<ShiftPrimeBlock> shiftPrimeBlocks_;
+
+public:
   const std::vector<RawBVTermAbstraction>& abstractedTerms() const
   {
     return abstractedTerms_;

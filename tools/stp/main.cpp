@@ -580,6 +580,34 @@ void ExtraMain::create_options()
            "modify the recursive circuit that runs instead",
            bb_group);
 
+  int64_arg("--bb.shift-variant", bm->UserFlags.shift_variant,
+            "symbolic-amount shift encoding. 0 (default) is the barrel: "
+            "conditionally shift by each power of two, O(w log w) gates. "
+            "1 is one-hot selectors, o_k meaning the amount is exactly k, "
+            "with the result the disjunction of the terms they gate -- it "
+            "propagates better than the barrel at 64 bits but costs O(w^2) "
+            "gates. 2 adds the amount-support family, 2w redundant clauses "
+            "that let unit propagation fix an amount bit once every class "
+            "disagreeing with it is dead. 3 adds an order ladder over the "
+            "selectors and the zeroing bound built on it. 4 leaves the "
+            "barrel in place and adds the exact prime implicates of the "
+            "relation for shifts up to 5 bits wide, which makes those "
+            "propagation complete for a fixed clause block and no new "
+            "variables. Constant amounts are wiring and never reach any of "
+            "this. All of 1 to 4 measured slower than the barrel on the "
+            "benchmarks tried, most starkly on pure-shift refutations, so "
+            "0 remains the default",
+            bb_group);
+
+  int64_arg("--bb.shift-onehot-minw", bm->UserFlags.shift_onehot_min_width,
+            "narrowest shift the selector variants (--bb.shift-variant 1 "
+            "to 3) apply to; below it the barrel is used", bb_group);
+
+  int64_arg("--bb.shift-onehot-maxw", bm->UserFlags.shift_onehot_max_width,
+            "widest shift the selector variants apply to. They are O(w^2) "
+            "gates, and past 256 bits cost 8.8x the clauses and time out "
+            "where the barrel takes ten seconds", bb_group);
+
   bool_arg("--bb.add-v1", bm->UserFlags.adder_variant,
            "addition encoding variant 1", bb_group);
 

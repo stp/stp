@@ -94,6 +94,13 @@ private:
 public:
   void add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf);
 
+  // --bb.shift-variant 4: exact prime implicates of the narrow shifts, as
+  // raw clauses over the SAT variables their interface bits landed on.
+  // Filled once CNF conversion has assigned those variables; empty
+  // otherwise. Each entry is one clause, in solver literal encoding.
+  std::vector<std::vector<int>> shiftPrimeClauses_;
+  void add_shift_primes_to_solver(SATSolver& satSolver);
+
   // Blast `input` and convert it to CNF. Returns false, having freed the AIG
   // and the constant-bit propagator and left `cnf` untouched, when
   // UserFlags::aig_node_budget is set and the blast exceeds it -- there is no

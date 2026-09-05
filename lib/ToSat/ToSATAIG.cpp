@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/ToSat/ShiftPrimes.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/Simplifier/Simplifier.h"
@@ -438,6 +439,40 @@ bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
     return v == 0 ? BV_ABSTRACTION_NO_VAR : v;
   };
 
+  // Resolve the narrow-shift prime blocks now that their combinational
+  // inputs have variables. A bit that reached none means the conversion
+  // dropped it, and a clause naming it cannot be stated -- skipped
+  // soundly, since every one of these clauses is redundant.
+  shiftPrimeClauses_.clear();
+  for (const auto& blk : bb.shiftPrimeBlocks())
+  {
+    const unsigned w = blk.width;
+    std::vector<uint32_t> var(3 * w, 0);
+    bool usable = true;
+    for (unsigned i = 0; i < 3 * w && usable; i++)
+    {
+      var[i] = cnf.varOfCi((uint32_t)mgr.ciOrdinal(blk.bits[i]));
+      if (var[i] == 0)
+        usable = false;
+    }
+    if (!usable)
+      continue;
+    for (const int* p = shiftprimes::table[blk.op][w]; p && *p;)
+    {
+      std::vector<int> cl;
+      for (; *p; p++)
+      {
+        const int lit = *p;
+        const unsigned idx = (unsigned)(lit < 0 ? -lit : lit) - 1;
+        // solver literal encoding: (var << 1) | isNegated. The bits are
+        // freshly minted inputs, so none of them is complemented.
+        cl.push_back((int)(var[idx] << 1) | (lit < 0 ? 1 : 0));
+      }
+      p++;
+      shiftPrimeClauses_.push_back(std::move(cl));
+    }
+  }
+
   // Record what each abstraction stands for, now that CNF conversion has
   // assigned the SAT variable its combinational input carries. Refinement
   // reads these back to compare the candidate against the operands.
@@ -526,7 +561,50 @@ void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf)
     if (!satSolver.okay())
       break;
   }
+  add_shift_primes_to_solver(satSolver);
   bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
+}
+
+// --bb.shift-variant 4. These are implicates of the shift relation, so
+// they change no answer; what they change is how much of it the solver
+// sees without searching.
+void ToSATAIG::add_shift_primes_to_solver(SATSolver& satSolver)
+{
+  if (shiftPrimeClauses_.empty() || !satSolver.okay())
+    return;
+  SATSolver::vec_literals cl;
+  uint64_t added = 0, skipped = 0;
+  for (const auto& clause : shiftPrimeClauses_)
+  {
+    cl.clear();
+    bool ok = true;
+    for (int lit : clause)
+    {
+      const uint32_t v = (uint32_t)(lit >> 1);
+      if (v >= satSolver.nVars())
+      {
+        ok = false;   // a variable the conversion never emitted
+        break;
+      }
+      cl.push(SATSolver::mkLit(v, lit & 1));
+    }
+    if (!ok)
+    {
+      skipped++;
+      continue;
+    }
+    added++;
+    satSolver.addClause(cl);
+    if (!satSolver.okay())
+      break;
+  }
+  // A run where every clause was skipped looks exactly like the barrel,
+  // and silence would make that indistinguishable from the block having
+  // no effect.
+  if (bm->UserFlags.stats_flag)
+    cerr << "shift primes: " << added << " clauses added, " << skipped
+         << " skipped (a bit that reached no variable)" << endl;
+  shiftPrimeClauses_.clear();
 }
 
 void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
