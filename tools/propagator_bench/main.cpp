@@ -123,6 +123,10 @@ void usage()
       << "  --bb.add-v2 0|1     UserDefinedFlags::bvplus_variant: 1 pairwise\n"
       << "                      ripple chains (default), 0 the addition\n"
       << "                      network\n"
+      << "  --bb.mult-v N       UserDefinedFlags::multiplication_variant:\n"
+      << "                      1 shift-add ripple (default), 3 Booth +\n"
+      << "                      addition network, 4 sorter, 6/7/8/9/13\n"
+      << "                      network variants, 15 radix-4 Booth\n"
       << "  --no-shift-bias     draw shift amounts uniformly, instead of\n"
       << "                      half of them from [0, width)\n"
       << "  --seed N            random seed (default 42)\n"
@@ -251,6 +255,8 @@ int main(int argc, char** argv)
     { cfg.adderVariant = atoi(value.c_str()); i++; }
     else if (arg == "--bb.add-v2")
     { cfg.bvplusVariant = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.mult-v")
+    { cfg.multVariant = atoi(value.c_str()); i++; }
     else if (arg == "--cnf") { cfg.cnf = value; i++; }
     else if (arg == "--seed") { cfg.seed = atoi(value.c_str()); i++; }
     else if (arg == "--html") { cfg.html = value; i++; }
@@ -329,6 +335,8 @@ int main(int argc, char** argv)
     mgr->UserFlags.adder_variant = cfg.adderVariant != 0;
   if (cfg.bvplusVariant >= 0)
     mgr->UserFlags.bvplus_variant = cfg.bvplusVariant != 0;
+  if (cfg.multVariant >= 0)
+    mgr->UserFlags.multiplication_variant = cfg.multVariant;
 
   if (!cfg.dumpCnf.empty())
   {
