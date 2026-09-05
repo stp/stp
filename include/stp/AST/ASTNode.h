@@ -167,24 +167,32 @@ public:
   // that self-assignment is safe.
   DLL_PUBLIC ASTNode& operator=(const ASTNode& n)
   {
-    if (n._int_node_ptr)
-      n._int_node_ptr->IncRef();
+    // Taken before the DecRef below: n may live inside this node's
+    // children, which are tail-allocated in the interior the DecRef can
+    // free -- `node = node[0]` on a sole owner reads n from freed storage
+    // otherwise.
+    ASTInternal* const other = n._int_node_ptr;
+    if (other)
+      other->IncRef();
 
     if (_int_node_ptr)
       _int_node_ptr->DecRef();
 
-    _int_node_ptr = n._int_node_ptr;
+    _int_node_ptr = other;
     return *this;
   }
 
   DLL_PUBLIC ASTNode& operator=(ASTNode&& n)
   {
+    // The same aliasing hazard as the copy assignment; stealing n's
+    // reference first also keeps a self-move harmless.
+    ASTInternal* const other = n._int_node_ptr;
+    n._int_node_ptr = 0;
+
     if (_int_node_ptr)
       _int_node_ptr->DecRef();
 
-    _int_node_ptr = n._int_node_ptr;
-
-    n._int_node_ptr = 0;
+    _int_node_ptr = other;
     return *this;
   }
 
