@@ -45,7 +45,10 @@ THE SOFTWARE.
 #include "stp/Simplifier/Rewriting.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/SubstitutionMap.h"
+#include "stp/Util/DagWalk.h"
 #include <list>
+#include <deque>
+#include <vector>
 
 namespace stp
 {
@@ -72,50 +75,29 @@ namespace stp
   }
 
   // counter is 1 if the node has one reference in the tree.
+  //
+  // The walk is iterative because the input decides how deep it goes, and
+  // deep inputs exist: a call per level of the DAG exhausts the stack. The
+  // continuation stack holds pointers into each node's own child storage,
+  // which the node above keeps alive for the whole walk. It stores suspended
+  // ancestors, not every sibling in a wide frontier.
   void Rewriting::buildShareCount(const ASTNode& n)
   {
-    if (n.Degree() == 0)
-      return;
+    walkPreOrder(n, [&](const ASTNode& current) {
+      if (current.Degree() == 0)
+        return false;
 
-    if (shareCount[n.GetNodeNum()]++ > 0) // 0 first time, 1 second time.
-      return;
-  
-    for (const auto& c: n.GetChildren())
-        buildShareCount(c);
+      if (shareCount[current.GetNodeNum()]++ > 0) // 0 first time, 1 second.
+        return false;
+      return true;
+    });
   }
 
-  ASTNode Rewriting::rewrite(const ASTNode& n)
+  // Every sharing-aware rule, in order, applied to one node. Each rule
+  // sees what the rules before it produced. Nothing here descends into
+  // the DAG: the caller decides what to do with a node that changed.
+  ASTNode Rewriting::applyRules(ASTNode c)
   {
-    if (n.Degree() == 0)
-      return n;
-
-    if (fromTo.find(n.GetNodeNum()) != fromTo.end())
-      return fromTo[n.GetNodeNum()];
-
-    ASTNode result =n;
-
-    const ASTChildren children = n.GetChildren();
-    ASTVec newChildren;
-
-    // Copy on write.
-    bool changed =false;
-    auto fill = [&](const ASTNode& find)
-    {
-      newChildren.reserve(children.size());
-      const auto findIt = std::find(children.begin(), children.end(), find);
-      assert(findIt != children.end());
-      newChildren.insert(newChildren.end(), children.begin(), findIt);
-      changed=true;
-    };
-
-
-    for (auto c: children)
-    {
-     const ASTNode begin = c;
-     
-     c = rewrite(c);
-
-     const ASTNode start = c;
 
      if (
         c.GetKind() == EQ 
@@ -259,7 +241,7 @@ namespace stp
          exception to never increasing the node count: they add one node (two
          comparisons and a connective replace one comparison), but eliminate
          a plus from under the comparison, which is a large win on the
-         difficulty score (a comparison costs 6*width, a plus 14*width). The
+         difficulty score (a comparison costs 6*width, a plus 11*width). The
          single-use guard on the plus is what secures that win: if the plus
          survived for another use, the extra comparison would be a pure loss.
       */
@@ -710,30 +692,242 @@ namespace stp
           c = nf->CreateNode(EQ, left,right);
         }
 
-       if (start != c)
+/*
+  An if-then-else with an if-then-else one level down that chooses the same
+  value: the two multiplexers become one, selected by a connective. With the
+  inner one on the else side,
+
+    ITE(c, t, ITE(d, t, b))  -->  ITE(c OR d,     t, b)
+    ITE(c, t, ITE(d, a, t))  -->  ITE(c OR NOT d, t, a)
+
+  and on the then side, where the outer's else branch is what repeats,
+
+    ITE(c, ITE(d, a, e), e)  -->  ITE(c AND d,     a, e)
+    ITE(c, ITE(d, e, b), e)  -->  ITE(c AND NOT d, b, e)
+
+  Bit-blasting a w-bit multiplexer costs 3w AND gates and the connective costs
+  one, so this trades the whole width for a single gate. The two negated forms
+  additionally build a NOT, which is a complemented edge in the AIG and so
+  costs nothing there -- the pass's only rules that add an AST node without
+  adding bit-blasted difficulty.
+
+  All four need the inner multiplexer to die with the rewrite. Where it is
+  shared it stays, the merged node is built beside it, and the rewrite is a
+  straight loss -- hence the share count. Symbolic execution emits these:
+  a branch that leaves part of the state alone reaches the same value under
+  several guards.
+*/
+      if (
+        c.GetKind() == ITE
+        && c[2].GetKind() == ITE
+        && (c[2][1] == c[1] || c[2][2] == c[1])
+        && shareCount[c[2].GetNodeNum()] <= 1
+       )
        {
-          c = rewrite(c);
-          removed++;
+          // Which branch of the inner if-then-else repeats the outer's then.
+          const bool repeatedOnThen = (c[2][1] == c[1]);
+
+          const auto inner =
+              repeatedOnThen ? c[2][0] : nf->CreateNode(NOT, c[2][0]);
+          const auto cond = nf->CreateNode(OR, c[0], inner);
+          const auto other = repeatedOnThen ? c[2][2] : c[2][1];
+
+          if (c.GetType() == BOOLEAN_TYPE)
+            c = nf->CreateNode(ITE, cond, c[1], other);
+          else
+            c = nf->CreateArrayTerm(ITE, c.GetIndexWidth(), c.GetValueWidth(),
+                                    cond, c[1], other);
        }
-       // TODO should probably update the sharecount.
-       if (begin!=c && !changed)
-          fill(begin);
-        if (changed)   
-          newChildren.push_back(c);
-    }    
 
-    if (newChildren.size() > 0)
+      if (
+        c.GetKind() == ITE
+        && c[1].GetKind() == ITE
+        && (c[1][1] == c[2] || c[1][2] == c[2])
+        && shareCount[c[1].GetNodeNum()] <= 1
+       )
+       {
+          // Which branch of the inner if-then-else repeats the outer's else.
+          const bool repeatedOnThen = (c[1][1] == c[2]);
+
+          const auto inner =
+              repeatedOnThen ? nf->CreateNode(NOT, c[1][0]) : c[1][0];
+          const auto cond = nf->CreateNode(AND, c[0], inner);
+          const auto other = repeatedOnThen ? c[1][2] : c[1][1];
+
+          if (c.GetType() == BOOLEAN_TYPE)
+            c = nf->CreateNode(ITE, cond, other, c[2]);
+          else
+            c = nf->CreateArrayTerm(ITE, c.GetIndexWidth(), c.GetValueWidth(),
+                                    cond, other, c[2]);
+       }
+
+    return c;
+  }
+
+  // A leaf, or a node already rewritten: answered without a frame, exactly
+  // as the recursive version answered it without a call.
+  bool Rewriting::alreadyKnown(const ASTNode& n, ASTNode& answer)
+  {
+    if (n.Degree() == 0)
     {
-      assert(newChildren.size() == children.size());
-
-      if (n.GetType() == BOOLEAN_TYPE)
-        result = nf->CreateNode(n.GetKind(), newChildren);
-      else
-        result = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),n.GetValueWidth(), newChildren);
+      answer = n;
+      return true;
     }
 
-    //TODO is this right? We've replaced the children, but never this node?
-    fromTo.insert({n.GetNodeNum(),result});
-    return result;
+    const auto it = fromTo.find(n.GetNodeNum());
+    if (it != fromTo.end())
+    {
+      answer = it->second;
+      return true;
+    }
+    return false;
+  }
+
+  // One node's progress through its children. `phase` says what a value
+  // arriving from below is: the recursive rewrite() had two call sites per
+  // child -- the child itself, and again on whatever the rules made of it
+  // -- and a frame has to know which one it is waiting for.
+  struct Rewriting::Frame
+  {
+    ASTNode n;
+    ASTChildren children;
+    ASTVec newChildren; // copy on write: empty until a child changes.
+    bool changed = false;
+    unsigned i = 0; // the child being worked on
+
+    ASTNode begin; // that child as it was before anything ran on it
+    ASTNode start; // and as it was after rewriting, before the rules
+
+    enum Phase
+    {
+      Fresh,
+      AwaitingChild,
+      AwaitingTransformed
+    };
+    Phase phase = Fresh;
+
+    Frame(const ASTNode& n_) : n(n_), children(n_.GetChildren()) {}
+  };
+
+  ASTNode Rewriting::rewrite(const ASTNode& n)
+  {
+    ASTNode result;
+    if (alreadyKnown(n, result))
+      return result;
+
+    // A deque, so descending into a child never moves the frames above it:
+    // `current` stays valid across a push.
+    std::deque<Frame> stack;
+    stack.emplace_back(n);
+
+    // Copy on write.
+    auto fill = [](Frame& f, const ASTNode& find)
+    {
+      f.newChildren.reserve(f.children.size());
+      const auto findIt =
+          std::find(f.children.begin(), f.children.end(), find);
+      assert(findIt != f.children.end());
+      f.newChildren.insert(f.newChildren.end(), f.children.begin(), findIt);
+      f.changed = true;
+    };
+
+    // The tail of the recursive version's loop body: `c` is the child in
+    // its final form.
+    auto finishChild = [&fill](Frame& f, const ASTNode& c)
+    {
+      // TODO should probably update the sharecount.
+      if (f.begin != c && !f.changed)
+        fill(f, f.begin);
+      if (f.changed)
+        f.newChildren.push_back(c);
+      f.i++;
+    };
+
+    // With the child rewritten, run the rules over it. A rule that fires
+    // sends its result back through the walk, which is the second of the
+    // two call sites; true means this frame has descended for that.
+    auto afterRewrite = [&](Frame& f, const ASTNode& rewritten) -> bool
+    {
+      f.start = rewritten;
+      const ASTNode c = applyRules(rewritten);
+
+      if (f.start == c)
+      {
+        finishChild(f, c);
+        return false;
+      }
+
+      ASTNode known;
+      if (alreadyKnown(c, known))
+      {
+        removed++;
+        finishChild(f, known);
+        return false;
+      }
+
+      f.phase = Frame::AwaitingTransformed;
+      stack.emplace_back(c);
+      return true;
+    };
+
+    while (true)
+    {
+      Frame& current = stack.back();
+      bool descended = false;
+
+      // Take delivery of the child this frame descended for.
+      if (current.phase == Frame::AwaitingChild)
+      {
+        current.phase = Frame::Fresh;
+        descended = afterRewrite(current, result);
+      }
+      else if (current.phase == Frame::AwaitingTransformed)
+      {
+        current.phase = Frame::Fresh;
+        removed++;
+        finishChild(current, result);
+      }
+
+      while (!descended && current.i < current.children.size())
+      {
+        current.begin = current.children[current.i];
+
+        ASTNode known;
+        if (alreadyKnown(current.begin, known))
+        {
+          descended = afterRewrite(current, known);
+          continue;
+        }
+
+        current.phase = Frame::AwaitingChild;
+        stack.emplace_back(current.begin);
+        descended = true;
+      }
+
+      if (descended)
+        continue;
+
+      Frame& done = stack.back();
+      result = done.n;
+
+      if (done.newChildren.size() > 0)
+      {
+        assert(done.newChildren.size() == done.children.size());
+
+        if (done.n.GetType() == BOOLEAN_TYPE)
+          result = nf->CreateNode(done.n.GetKind(), done.newChildren);
+        else
+          result = nf->CreateArrayTerm(done.n.GetKind(), done.n.GetIndexWidth(),
+                                       done.n.GetValueWidth(),
+                                       done.newChildren);
+      }
+
+      //TODO is this right? We've replaced the children, but never this node?
+      fromTo.insert({done.n.GetNodeNum(), result});
+
+      stack.pop_back();
+      if (stack.empty())
+        return result;
+    }
   }
 }

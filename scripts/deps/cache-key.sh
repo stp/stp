@@ -2,22 +2,37 @@
 
 # Print "key=<hash>" for use as a CI cache key for the deps directory.
 #
-# A setup script that clones without pinning a revision would keep being
-# served a cache built from whatever that repository happened to contain the
-# first time, so for those the commit the default branch currently points at
-# is folded in: upstream movement then produces a new key. CryptoMiniSat,
-# CaDiCaL, GTest and minisat are pinned to a tag or commit inside their
-# scripts, which the script hash already covers -- OutputCheck, a test-only
-# dependency that is never linked into anything, is the one that is not.
+# Every dependency is pinned in the file that knows how to get it -- a Find
+# module under cmake/, CryptoMiniSat's included now that the build produces
+# that one too -- so hashing those files is enough. Move a pin, get a new key.
+#
+# This used to have to resolve a revision over the network, because OutputCheck
+# was cloned without one and a cache built from it would otherwise be served
+# for ever. It is pinned in tests/CMakeLists.txt now, so the key is a pure
+# function of the tree.
+#
+# The gap this used to carry is closed. CryptoMiniSat's tag was pinned, but
+# from 5.14 it fetched cadical and cadiback from meelgroup's default branches,
+# so what it bundled was pinned by nothing here and a cached deps/install could
+# hold an older bundle than a fresh build would produce. Built NOCADICAL it
+# fetches neither, and its own commit is pinned in FindCryptoMiniSat.cmake,
+# which is hashed below.
 
 set -e -u -o pipefail
 
+here=$(dirname "$0")
+root=$(cd "${here}/../.." && pwd)
+
 hash=$(
   {
-    for repo in stp/OutputCheck; do
-      git ls-remote "https://github.com/${repo}" HEAD
-    done
-    cat "$(dirname "$0")"/setup-*.sh
+    cat "${root}"/cmake/Find*.cmake
+    cat "${root}"/cmake/deps-helper.cmake
+    find "${root}"/cmake/deps-utils -type f | sort | xargs cat
+    # The FetchContent pins live beside what they are added to rather than in
+    # a Find module: mimalloc and unordered_dense in the top-level CMakeLists,
+    # GoogleTest and OutputCheck in the test tree.
+    grep -hE "GIT_TAG|GIT_REPOSITORY|ABC_GIT_TAG" \
+        "${root}"/CMakeLists.txt "${root}"/tests/CMakeLists.txt
   } | sha256sum | cut -d' ' -f1
 )
 

@@ -66,7 +66,11 @@ private:
   // Convert theory nodes to fresh variables.
   ASTNode theoryToFresh(const ASTNode& n, ASTNodeMap& fromTo);
 
-  typedef std::map<Aig_Obj_t*, ASTNode> cacheType;
+  // Keyed by AIG literal -- 2*id + complement -- rather than by Aig_Obj_t*.
+  // A pointer-keyed container is one iteration away from ordering the pass by
+  // address, and the literal also lets the complemented form be cached, which
+  // the pointer key could not do without conflating x with !x.
+  typedef std::unordered_map<unsigned, ASTNode> cacheType;
 
   // Convert the AIG back to an ASTNode.
   ASTNode convert(BBNodeManagerAIG& mgr, Aig_Obj_t* obj, cacheType& cache);

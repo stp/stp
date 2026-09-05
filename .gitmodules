@@ -1,6 +1,0 @@
-[submodule "lib/extlib-abc"]
-	path = lib/extlib-abc
-	url = https://github.com/berkeley-abc/abc.git
-[submodule "lib/extlib-mimalloc"]
-	path = lib/extlib-mimalloc
-	url = https://github.com/microsoft/mimalloc.git

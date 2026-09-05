@@ -1,0 +1,29 @@
+% RUN: %solver %s | %OutputCheck %s
+%% Result = InValid
+%% Language = presentation
+%
+% Every operator here is pinned to a constant result, so a misparse or a
+% wrong CVC-to-AST mapping flips the answer from Invalid to Valid rather
+% than passing quietly.  This is the CVC-syntax half of what the shift,
+% multiply and exclusive-or tests in sample-smt-tests cover semantically;
+% those were converted out of this directory, and the operator spellings
+% they used are only reachable through the CVC parser.
+
+X, Y, Z : BITVECTOR(8);
+
+ASSERT X = 0hex0f;
+ASSERT Y = BVSHL(X, 0hex02);                  % 0x0f << 2 = 0x3c
+ASSERT Z = BVLSHR(Y, 0hex03);                 % 0x3c >> 3 = 0x07
+ASSERT BVASHR(0hexf0, 0hex04) = 0hexff;       % the sign bit is replicated
+ASSERT BVXOR(Y, Z) = 0hex3b;
+ASSERT BVSUB(8, Y, Z) = 0hex35;
+ASSERT BVGE(Y, Z);
+ASSERT NOT BVLE(Y, Z);
+ASSERT BVMULT(8, Z, 0hex03) = 0hex15;
+ASSERT BVPLUS(8, X, Y, Z, 0hex01) = 0hex53;   % the n-ary form
+ASSERT BVUMINUS(Z) = 0hexf9;
+ASSERT (0hex00 @ X)[7:4] = 0hex0;             % concatenation and extraction
+ASSERT (IF BVGT(Y, Z) THEN X ELSE Z ENDIF) = 0hex0f;
+
+% CHECK: ^[Ii]nvalid
+QUERY FALSE;

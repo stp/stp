@@ -137,7 +137,7 @@ public:
   {
     mgr->soft_timeout_expired = false;
 
-    const long st = stp::getCurrentTime();
+    const int64_t st = stp::getCurrentTime();
     int checked_to = 0;
 
     // Start it verifying where we left off..
@@ -176,7 +176,8 @@ public:
     }
 
     if (getVerifiedToBits() <= checked_to)
-      setVerified(checked_to, getTime() + (stp::getCurrentTime() - st));
+      setVerified(checked_to,
+                  getTime() + static_cast<int>(stp::getCurrentTime() - st));
 
     // The timer might not have expired yet.
     setitimer(ITIMER_VIRTUAL, NULL, NULL);

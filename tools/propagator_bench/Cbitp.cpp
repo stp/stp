@@ -96,7 +96,7 @@ bool isShift(Kind k)
 
 vector<Case> makeCases(STPMgr* mgr, const OpSpec& op, const Layout& l,
                        Direction dir, unsigned prob, unsigned count,
-                       MTRand& rand, bool shiftBias)
+                       std::mt19937& rand, bool shiftBias)
 {
   vector<Case> cases;
   cases.reserve(count);
@@ -111,10 +111,10 @@ vector<Case> makeCases(STPMgr* mgr, const OpSpec& op, const Layout& l,
       FixedBits bits(1, false);
       if (spec.isConstant)
         bits = concreteOf(spec, spec.value);
-      else if (shiftBias && isShift(op.kind) && j == 1 && (rand.randInt() % 2))
+      else if (shiftBias && isShift(op.kind) && j == 1 && (rand() % 2))
         // Otherwise a random 64 bit shift amount is out of range almost
         // every time, and the propagator only ever sees the easy case.
-        bits = concreteOf(spec, rand.randInt() % spec.width);
+        bits = concreteOf(spec, rand() % spec.width);
       else
         bits = randomConcrete(spec, rand);
 
@@ -758,6 +758,14 @@ void runCbitp(STPMgr* mgr, const Config& cfg, vector<Row>& out)
       bcpEx = bcpExhaustiveCheck(mgr, op, cfg);
     }
 
+    ConsistencyCheck cons;
+    if (cfg.consistencyWidth > 0)
+    {
+      if (cfg.verbose)
+        std::cerr << "encoding consistency " << op.name << std::endl;
+      cons = consistencyCheck(mgr, op, cfg);
+    }
+
     const bool isBoolean =
         op.shape == Shape::BoolNary || op.shape == Shape::BoolUnary;
     vector<unsigned> widths = isBoolean ? vector<unsigned>{1} : cfg.widths;
@@ -785,7 +793,7 @@ void runCbitp(STPMgr* mgr, const Config& cfg, vector<Row>& out)
             std::cerr << "cbitp speed " << op.name << " " << name(dir) << " w="
                       << width << " p=" << prob << std::endl;
 
-          MTRand rand(cfg.seed);
+          std::mt19937 rand(cfg.seed);
           const vector<Case> cases =
               makeCases(mgr, op, l, dir, prob, cfg.iterations, rand,
                         cfg.shiftBias);
@@ -807,6 +815,7 @@ void runCbitp(STPMgr* mgr, const Config& cfg, vector<Row>& out)
           row.witnessUnsound = t.unsound;
           row.precision = precision;
           row.bcpExhaustive = bcpEx;
+          row.consistency = cons;
 
           if (cfg.satCases > 0 && op.satCheckable)
           {

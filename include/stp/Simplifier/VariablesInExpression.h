@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "Symbols.h"
 #include "stp/AST/AST.h"
 #include "stp/Util/Attributes.h"
+#include "stp/Util/DagWalk.h"
 
 namespace stp
 {
@@ -36,9 +37,13 @@ class VariablesInExpression
 {
 private:
   void insert(const ASTNode& n, Symbols* s);
+  Symbols* getSymbol(const ASTNode& n, bool knownMissing);
 
   typedef std::unordered_map<uint64_t, Symbols*> ASTNodeToNodes;
   ASTNodeToNodes symbol_graph;
+
+  // Debug-only: verify that priming keeps getSymbol's call depth bounded.
+  PrimeAudit symbolAudit{"VariablesInExpression::getSymbol", 8};
 
 public:
   DLL_PUBLIC VariablesInExpression();
@@ -52,6 +57,12 @@ public:
   typedef std::unordered_set<Symbols*, SymbolPtrHasher> SymbolPtrSet;
 
   Symbols* getSymbol(const ASTNode& n);
+
+  // getSymbol reaches a node's children by calling itself, so a deeply
+  // nested input exhausts the stack. Fill symbol_graph from the bottom up
+  // first, and those calls answer from it instead. See DeepDag_Test.cpp.
+  void primeSymbols(const ASTNode& n);
+  bool priming = false;
 
   // this map is useful while traversing terms and uniquely
   // identifying variables in the those terms. Prevents double

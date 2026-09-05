@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Mate Soos, Andrew V. Jones
+ * AUTHORS: Mate Soos, Andrew Teylu
  *
  * BEGIN DATE: November, 2013
  *
@@ -31,6 +31,11 @@ using std::vector;
 namespace stp
 {
 
+std::string CryptoMiniSat5::version()
+{
+  return CMSat::SATSolver::get_version();
+}
+
 void CryptoMiniSat5::enableRefinement(const bool enable)
 {
   // might break if we simplify with refinement enabled..
@@ -61,9 +66,17 @@ void CryptoMiniSat5::setMaxConflicts(int64_t _max_confl)
 {
   assert(_max_confl >= 0);
   max_confl = _max_confl;
+
+  // The budget belongs to the query being armed for, so measure it from
+  // this point rather than from the solver's birth -- Minisat's
+  // setConfBudget does exactly this (conflicts + x). It made no difference
+  // while every query got a fresh solver; the incremental driver re-arms
+  // per check-sat on one long-lived solver, where counting from birth made
+  // each successive budget smaller until every solve gave up on arrival.
+  confl_base = s->get_sum_conflicts();
 }
 
-bool CryptoMiniSat5::addClause(
+bool CryptoMiniSat5::addClauseInternal(
     const vec_literals& ps) // Add a clause to the solver.
 {
   // Cryptominisat uses a slightly different vec class.
@@ -79,13 +92,32 @@ bool CryptoMiniSat5::addClause(
   return s->add_clause(real_temp_cl);
 }
 
+void CryptoMiniSat5::unsatAssumptions(const vec_literals& assumps,
+                                      std::vector<int>& out)
+{
+  // As in MiniSat, get_conflict() is the final conflict clause expressed over
+  // the assumptions, so it holds the NEGATION of each one the refutation
+  // used. An assumption is in the core iff its negation appears there.
+  const std::vector<CMSat::Lit>& conflict = s->get_conflict();
+
+  out.clear();
+  for (int i = 0; i < assumps.size(); i++)
+  {
+    const CMSat::Lit assumed(var(assumps[i]), sign(assumps[i]));
+    if (std::find(conflict.begin(), conflict.end(), ~assumed) != conflict.end())
+      out.push_back(assumps[i].x);
+  }
+}
+
 bool CryptoMiniSat5::okay()
     const // FALSE means solver is in a conflicting state
 {
   return s->okay();
 }
 
-bool CryptoMiniSat5::solveInternal(bool& timeout_expired)
+// Arm what is left of the query's conflict/time budgets before a solve call;
+// FALSE means a budget is already spent and the caller should give up now.
+bool CryptoMiniSat5::armBudgets(bool& timeout_expired)
 {
   /*
    * The conflict budget is for the query, so what is handed over is what is
@@ -93,8 +125,9 @@ bool CryptoMiniSat5::solveInternal(bool& timeout_expired)
    * of zero down and relying on how CryptoMiniSat reads it.
    */
   if (max_confl >= 0) {
-     const int64_t remaining =
-         max_confl - static_cast<int64_t>(s->get_sum_conflicts());
+     const int64_t spent =
+         static_cast<int64_t>(s->get_sum_conflicts() - confl_base);
+     const int64_t remaining = max_confl - spent;
 
      if (remaining <= 0) {
         timeout_expired = true;
@@ -124,7 +157,35 @@ bool CryptoMiniSat5::solveInternal(bool& timeout_expired)
      s->set_max_time(remaining);
   }
 
+  return true;
+}
+
+bool CryptoMiniSat5::solveInternal(bool& timeout_expired)
+{
+  if (!armBudgets(timeout_expired))
+    return false;
+
   CMSat::lbool ret = s->solve();
+  if (ret == CMSat::l_Undef)
+  {
+    timeout_expired = true;
+  }
+  return ret == CMSat::l_True;
+}
+
+bool CryptoMiniSat5::solveWithAssumptionsInternal(
+    const stp::SATSolver::vec_literals& assumps, bool& timeout_expired)
+{
+  if (!armBudgets(timeout_expired))
+    return false;
+
+  // Cryptominisat uses its own vec and Lit classes, as in addClause.
+  std::vector<CMSat::Lit> real_assumps;
+  real_assumps.reserve(assumps.size());
+  for (int i = 0; i < assumps.size(); i++)
+    real_assumps.push_back(CMSat::Lit(var(assumps[i]), sign(assumps[i])));
+
+  CMSat::lbool ret = s->solve(&real_assumps);
   if (ret == CMSat::l_Undef)
   {
     timeout_expired = true;
@@ -143,7 +204,7 @@ uint32_t CryptoMiniSat5::newVar()
   return s->nVars() - 1;
 }
 
-bool CryptoMiniSat5::setSearchBias(SearchBias bias)
+bool CryptoMiniSat5::setSearchBiasInternal(SearchBias bias)
 {
   // CryptoMiniSat has no named configurations, so what it offers has to be
   // picked out by hand. Turning off SLS is the piece that carries over: it is
@@ -179,7 +240,7 @@ void CryptoMiniSat5::setVerbosity(int v)
   s->set_verbosity(v);
 }
 
-unsigned long CryptoMiniSat5::nVars() const
+uint32_t CryptoMiniSat5::nVars() const
 {
   return s->nVars();
 }
@@ -189,21 +250,13 @@ void CryptoMiniSat5::printStats() const
   // s->printStats();
 }
 
-void CryptoMiniSat5::solveAndDump()
-  {
-     bool t;
-     solve(t);
-     s->open_file_and_dump_irred_clauses("clauses.txt");
-  }
-
-
 
 // Count how many literals/bits get fixed subject to the assumptions. Sets
 // `conflict` when unit propagation refutes them instead, in which case the
 // return value carries no information.
 uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps, const std::unordered_set<unsigned>& literals, bool& conflict )
 {
-  const uint64_t conf = s->get_sum_conflicts();
+  [[maybe_unused]] const uint64_t conf = s->get_sum_conflicts();
   assert(conf == 0);
 
 

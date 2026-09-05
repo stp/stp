@@ -133,12 +133,6 @@ AchievableImage::~AchievableImage()
     destroy(h);
 }
 
-void AchievableImage::addHint(const ASTNode& k)
-{
-  assert(k.isConstant());
-  hints.push_back(clone(k.GetBVConst()));
-}
-
 namespace
 {
 // Deterministic integer square root (no libm: the result seeds samples,

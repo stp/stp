@@ -24,113 +24,94 @@ THE SOFTWARE.
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
 #include "stp/STPManager/STPManager.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Util/CBVOps.h"
 #include "stp/Util/NodeIterator.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <sstream>
 
 namespace stp
 {
 using std::cout;
 using std::endl;
 
-ASTInterior* STPMgr::LookupOrCreateInterior(ASTInterior* n_ptr)
+void STPMgr::noteAIGBudgetExhausted(int nodeCount)
 {
-  ASTInteriorSet::iterator it = _interior_unique_table.find(n_ptr);
-  if (it == _interior_unique_table.end())
-  {
-    // Make a new ASTInterior node We want (NOT alpha) always to
-    // have alpha.nodenum + 1.
-    if (n_ptr->GetKind() == NOT)
-    {
-      // The internal node can't be a NOT, because then we'd add
-      // 1 to the NOT's node number, meaning we'd hit an even number,
-      // which could duplicate the next newNodeNum().
-      assert(n_ptr->GetChildren()[0].GetKind() != NOT);
-    }
-
-    std::pair<ASTInteriorSet::const_iterator, bool> p =
-        _interior_unique_table.insert(n_ptr);
-    return *(p.first);
-  }
-
-  // Delete the temporary node, and return the found node.
-  delete n_ptr;
-  return *it;
+  std::ostringstream detail;
+  detail << "the AIG node budget set by --aig-node-budget ("
+         << UserFlags.aig_node_budget << ") ran out at " << nodeCount
+         << " AND gates; raise it, or set it to -1 for no limit";
+  noteUnknown(UnknownReason::AIGBudget, detail.str());
+  soft_timeout_expired = true;
 }
 
-// Probe the unique table with an already-built stack node; on a miss, move
-// it onto the heap (stealing the probe's children, node number and hash).
-ASTInterior* STPMgr::insertOrReuseProbe(ASTInterior&& probe)
+namespace
 {
-  const ASTInteriorSet::iterator it = _interior_unique_table.find(&probe);
+// unordered_dense grows its value array before it grows/rebuilds the bucket
+// array.  An allocation failure while rebuilding the latter leaves the
+// container valid for destruction but not for another lookup.  AST hash-cons
+// tables must remain usable after a caught allocation failure, so perform a
+// potentially-growing reserve on a copy and publish it only after every
+// allocation succeeds.  This is paid only at geometric growth boundaries;
+// ordinary inserts retain the normal constant-time path.
+template <class DenseTable>
+void prepareStrongDenseInsert(DenseTable& table)
+{
+  if (!table.stp_insertion_may_rehash())
+    return;
+
+  DenseTable grown(table);
+  const std::size_t requested =
+      std::max<std::size_t>(table.size() + 1, table.size() * 2 + 8);
+  grown.reserve(requested);
+  table.swap(grown);
+}
+} // namespace
+
+// Probe the unique table with a non-owning (kind, borrowed children) key. On
+// a hit nothing is built; only on a miss is the tail-allocated node created.
+ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, ASTChildren children)
+{
+  const ASTInteriorSet::iterator it =
+      _interior_unique_table.find(ASTInterior::Probe{kind, children});
   if (it != _interior_unique_table.end())
     return *it;
 
-  if (probe.GetKind() == NOT)
+  if (kind == NOT)
   {
     // The internal node can't be a NOT, because then we'd add
     // 1 to the NOT's node number, meaning we'd hit an even number,
     // which could duplicate the next newNodeNum().
-    assert(probe.GetChildren()[0].GetKind() != NOT);
+    assert(children[0].GetKind() != NOT);
   }
 
-  ASTInterior* n_ptr = new ASTInterior(std::move(probe));
-  _interior_unique_table.insert(n_ptr);
-  return n_ptr;
-}
-
-ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, const ASTVec& children)
-{
-  ASTInterior probe(this, kind, children);
-  return insertOrReuseProbe(std::move(probe));
-}
-
-ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, ASTVec&& children)
-{
-  ASTInterior probe(this, kind, std::move(children));
-  return insertOrReuseProbe(std::move(probe));
-}
-
-ASTInterior* STPMgr::CreateInteriorNode(Kind /*kind*/,
-                                        // children array of this
-                                        // node will be modified.
-                                        ASTInterior* n_ptr,
-                                        const ASTVec& back_children)
-{
-
-  // insert back_children at end of front_children
-  ASTVec& front_children = n_ptr->_children;
-  front_children.reserve(front_children.size() + back_children.size());
-
-  front_children.insert(front_children.end(), back_children.begin(),
-                        back_children.end());
-
-  // check for undefined nodes.
-  ASTVec::const_iterator it_end = front_children.end();
-  for (ASTVec::const_iterator it = front_children.begin(); it != it_end; it++)
+  prepareStrongDenseInsert(_interior_unique_table);
+  ASTInterior* n_ptr = ASTInterior::create(this, kind, children);
+  try
   {
-    if (it->IsNull())
-    {
-      FatalError("CreateInteriorNode:"
-                 "Undefined childnode in CreateInteriorNode: ",
-                 ASTUndefined);
-    }
+    const std::pair<ASTInteriorSet::iterator, bool> inserted =
+        _interior_unique_table.insert(n_ptr);
+    if (inserted.second)
+      return n_ptr;
+
+    // There is no concurrent construction, so the earlier lookup makes this
+    // unreachable.  Keep ownership correct if that invariant ever changes.
+    ASTInterior* const existing = *inserted.first;
+    delete n_ptr;
+    return existing;
   }
-
-  return LookupOrCreateInterior(n_ptr);
-}
-
-ostream& operator<<(ostream& os, const ASTNodeMap& nmap)
-{
-  ASTNodeMap::const_iterator iend = nmap.end();
-  for (ASTNodeMap::const_iterator i = nmap.begin(); i != iend; i++)
+  catch (...)
   {
-    os << "Key: " << i->first << endl;
-    os << "Value: " << i->second << endl;
+    // The node has not acquired a public ASTNode reference yet.  Destroying it
+    // directly releases the child references copied into its tail allocation.
+    delete n_ptr;
+    throw;
   }
-  return os;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -138,9 +119,29 @@ ostream& operator<<(ostream& os, const ASTNodeMap& nmap)
 ////////////////////////////////////////////////////////////////
 ASTNode STPMgr::LookupOrCreateSymbol(const char* const name)
 {
+  // This legacy entry point has no sort parameter. Preserve its historical
+  // name lookup semantics for internal clients, while all typed public
+  // declarations go through CreateSourceSymbol instead.
+  ASTNode existing;
+  if (LookupSymbol(name, existing))
+    return existing;
+
   ASTSymbol temp_sym(this, name);
   ASTNode n(LookupOrCreateSymbol(temp_sym));
   return n;
+}
+
+ASTNode STPMgr::CreateSourceSymbol(const char* const name,
+                                   const SourceSort& source_sort)
+{
+  if (!source_sort.isKnown())
+    FatalError("CreateSourceSymbol requires a known source sort");
+  if (source_sort.containsFloatingPoint())
+    noteFloatingPoint();
+  else if (source_sort.usesFloatingPointTheory())
+    noteFloatingPointTheory();
+  ASTSymbol temp_sym(this, name, source_sort);
+  return ASTNode(LookupOrCreateSymbol(temp_sym));
 }
 
 // FIXME: _name is now a constant field, and this assigns to it
@@ -168,10 +169,15 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     // _name because it's const).  Can cast the iterator to
     // non-const -- carefully.
     // std::string strname(s_ptr->GetName());
-    ASTSymbol* s_ptr1 = new ASTSymbol(this, strdup(s_ptr->GetName()));
+    ASTSymbol* s_ptr1 =
+        new ASTSymbol(this, strdup(s_ptr->GetName()), s_ptr->_source_sort);
     s_ptr1->_value_width = s_ptr->_value_width;
+    s_ptr1->_index_width = s_ptr->_index_width;
+    s_ptr1->_exp_width = s_ptr->_exp_width;
+    s_ptr1->_sig_width = s_ptr->_sig_width;
     std::pair<ASTSymbolSet::const_iterator, bool> p =
         _symbol_unique_table.insert(s_ptr1);
+    indexSymbolName(s_ptr1);
     return *p.first;
   }
   else
@@ -181,47 +187,125 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
   }
 }
 
-bool STPMgr::LookupSymbol(ASTSymbol& s)
+ASTNode STPMgr::introducedSymbol(const std::string& name,
+                                 unsigned index_width, unsigned value_width)
 {
-  ASTSymbol* s_ptr = &s; // it's a temporary key.
+  const std::map<std::string, ASTNode>::const_iterator found =
+      _introduced_by_name.find(name);
+  if (found != _introduced_by_name.end())
+    return found->second;
 
-  if (_symbol_unique_table.find(s_ptr) == _symbol_unique_table.end())
-    return false;
-  else
-    return true;
+  // Only ever on the first request, and only reachable if a public boundary
+  // let a reserved name through, which is precisely what they refuse. Adopting
+  // the existing symbol instead -- which is what the name-only lookup below
+  // does unaided -- makes a user's declaration into one of STP's own objects.
+  if (LookupSymbol(name.c_str()))
+    FatalError("introducedSymbol: a symbol STP reserves for itself has "
+               "already been declared: ",
+               ASTUndefined, 0);
+
+  const ASTNode symbol =
+      defaultNodeFactory->CreateSymbol(name.c_str(), index_width, value_width);
+  noteIntroducedSymbol(symbol);
+  _introduced_by_name[name] = symbol;
+  return symbol;
 }
 
+ASTNode STPMgr::CreateDeterministicSourceVariable(
+    const SourceSort& sourceSort, const std::string& prefix,
+    const ASTNode& key)
+{
+  // Bool, or any scalar sort with a carrier to blast: BitVec, RoundingMode
+  // and FloatingPoint all answer packedWidth(). A symbol whose sort needs a
+  // side condition to denote (RoundingMode is one-hot in five of thirty-two
+  // patterns) is still created here; asserting that condition belongs to
+  // whoever introduces the symbol, not to the factory.
+  if (!(sourceSort.kind() == SourceSort::Kind::Bool ||
+        (sourceSort.isScalar() && sourceSort.packedWidth() > 0)))
+    FatalError("CreateDeterministicSourceVariable requires Bool or a "
+               "nonzero-width scalar source sort");
+  if (key.IsNull() || !key.IsOwnedBy(this))
+    FatalError("CreateDeterministicSourceVariable requires a live local key");
+
+  std::ostringstream name;
+  name << '@' << prefix << "_k" << key.GetNodeNum();
+  const std::map<std::string, ASTNode>::const_iterator found =
+      _introduced_by_name.find(name.str());
+  if (found != _introduced_by_name.end())
+  {
+    if (found->second.GetSourceSort() != sourceSort)
+      FatalError("a deterministic introduced symbol was requested at two "
+                 "different source sorts",
+                 found->second);
+    return found->second;
+  }
+
+  if (LookupSymbol(name.str().c_str()))
+    FatalError("a symbol in STP's reserved deterministic namespace already "
+               "exists");
+  const ASTNode symbol = CreateSourceSymbol(name.str().c_str(), sourceSort);
+  noteIntroducedSymbol(symbol);
+  _introduced_by_name[name.str()] = symbol;
+  return symbol;
+}
+
+void STPMgr::indexSymbolName(ASTSymbol* symbol)
+{
+  _symbol_name_index[symbol->GetName()].push_back(symbol);
+}
+
+void STPMgr::unindexSymbolName(ASTSymbol* symbol)
+{
+  const SymbolNameIndex::iterator entry =
+      _symbol_name_index.find(symbol->GetName());
+  if (entry == _symbol_name_index.end())
+    return;
+
+  std::vector<ASTSymbol*>& declared = entry->second;
+  for (size_t i = 0; i < declared.size(); i++)
+  {
+    if (declared[i] == symbol)
+    {
+      declared.erase(declared.begin() + i);
+      break;
+    }
+  }
+
+  if (declared.empty())
+    _symbol_name_index.erase(entry);
+}
+
+// The two name-only lookups. A symbol's sort is part of its identity, so
+// these cannot probe the unique table; they go through the name index, which
+// is maintained alongside it (see _symbol_name_index).
 bool STPMgr::LookupSymbol(const char* const name)
 {
-  ASTSymbol s(this, name);
-  ASTSymbol* s_ptr = &s; // it's a temporary key.
-
-  if (_symbol_unique_table.find(s_ptr) == _symbol_unique_table.end())
-    return false;
-  else
-    return true;
+  return _symbol_name_index.find(name) != _symbol_name_index.end();
 }
 
 bool STPMgr::LookupSymbol(const char* const name, ASTNode& output)
 {
-  ASTSymbol temp_sym(this, name);
-  ASTSymbolSet::const_iterator it = _symbol_unique_table.find(&temp_sym);
-  if (it != _symbol_unique_table.end())
-  {
-    output = ASTNode(*it);
-    return true;
-  }
-  return false;
+  const SymbolNameIndex::const_iterator entry = _symbol_name_index.find(name);
+  if (entry == _symbol_name_index.end())
+    return false;
+
+  // The first symbol declared under the name, where the old scan returned
+  // whichever the table happened to iterate first. Only a name declared at
+  // two different sorts can tell the difference, and then a deterministic
+  // answer is the better one.
+  assert(!entry->second.empty());
+  output = ASTNode(entry->second.front());
+  return true;
 }
 
 // Create a ASTBVConst node
 ASTNode STPMgr::CreateBVConst(unsigned int width,
-                              unsigned long long int bvconst)
+                              uint64_t bvconst)
 {
   if (width == 0)
     FatalError("CreateBVConst: "
                "trying to create bvconst using "
-               "unsigned long long of width: ",
+               "uint64_t of width: ",
                ASTUndefined, width);
 
   // We create a single bvconst that gets reused.
@@ -230,36 +314,24 @@ ASTNode STPMgr::CreateBVConst(unsigned int width,
   CreateBVConstVal = CONSTANTBV::BitVector_Resize(CreateBVConstVal, width);
   CONSTANTBV::BitVector_Empty(CreateBVConstVal);
 
-  unsigned long c_val = (~((unsigned long)0)) & bvconst;
-  unsigned int copied = 0;
-
-  // sizeof(unsigned long) returns the number of bytes in unsigned
-  // long. In order to convert it to bits, we need to shift left by
-  // 3. Hence, sizeof(unsigned long)*8
-
-  // The algo below works as follows: It starts by copying the
-  // lower-order bits of the input "bvconst" in chunks of size =
-  // number of bits in unsigned long. The variable "copied" keeps
-  // track of the number of chunks copied so far
-
-  const int shift_amount = sizeof(unsigned long) * 8;
-  while (copied + shift_amount < width)
+  // Copy the value into the bitvector 32 bits at a time, low chunk first.
+  //
+  // 32 rather than the width of a machine word: Chunk_Store takes its value
+  // as an "unsigned long", which is 32 bits on i386 and on 64-bit Windows,
+  // so a wider chunk would be silently truncated there. This loop stores the
+  // same chunks on every target, and needs no shift by the word size -- which
+  // is what the old version suppressed -Wshift-count-overflow for.
+  //
+  // Any width above 64 keeps the zeroes BitVector_Empty just wrote, because
+  // the source value has no bits up there.
+  const unsigned chunk = 32;
+  for (unsigned offset = 0; offset < width && offset < 64; offset += chunk)
   {
-    CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, shift_amount, copied,
-                                      c_val);
-    if (shift_amount < (sizeof(bvconst) * 8))
-    {
-      bvconst >>= shift_amount;
-    }
-    else
-    {
-      bvconst = 0;
-    }
-    c_val = (~((unsigned long)0)) & bvconst;
-    copied += shift_amount;
+    const unsigned size = (width - offset < chunk) ? (width - offset) : chunk;
+    const unsigned long c_val =
+        static_cast<uint32_t>(bvconst >> offset);
+    CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, size, offset, c_val);
   }
-  CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, width - copied, copied,
-                                    c_val);
 
   ASTBVConst temp_bvconst(this, CreateBVConstVal, width, true);
   return ASTNode(LookupOrCreateBVConst(temp_bvconst));
@@ -344,6 +416,319 @@ ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
   ASTNode n(LookupOrCreateBVConst(temp_bvconst));
   CONSTANTBV::BitVector_Destroy(bv);
   return n;
+}
+
+void STPMgr::noteFloatingPoint()
+{
+  has_floating_point = true;
+  has_floating_point_theory = true;
+}
+
+ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
+                              unsigned exp_width, unsigned sig_width)
+{
+  assert(bvconst.GetKind() == BVCONST);
+  assert(exp_width + sig_width == bvconst.GetValueWidth());
+
+  // Temporary key sharing the source's CBV; interning clones it.
+  ASTBVConst* src = (ASTBVConst*)bvconst._int_node_ptr;
+
+  // Every NaN pattern interns as the one canonical quiet NaN. SMT-LIB's
+  // FloatingPoint sort has a single NaN, and no operation can recover a
+  // payload (fp.to_ieee_bv canonicalises; symfpu carries none) -- but the
+  // node-creation-time simplifiers do compare constants by identity and by
+  // bit pattern (chaseRead's "definately different" skip, CreateSimpleEQ's
+  // constant case), and they run before any pass could quotient NaN. Two
+  // NaN literals with different payloads used as array indexes would be
+  // "proved" to address different cells. Baking the quotient into the
+  // constant itself makes those comparisons exact: distinct floating-point
+  // constants of one format now denote distinct values.
+  {
+    CBV b = src->GetBVConst();
+    const unsigned stored_sig = sig_width - 1; // the hidden bit is not stored
+    bool exp_all_ones = true;
+    for (unsigned i = 0; exp_all_ones && i < exp_width; i++)
+      exp_all_ones = CONSTANTBV::BitVector_bit_test(b, stored_sig + i);
+    bool sig_nonzero = false;
+    for (unsigned i = 0; !sig_nonzero && i < stored_sig; i++)
+      sig_nonzero = CONSTANTBV::BitVector_bit_test(b, i);
+
+    if (exp_all_ones && sig_nonzero)
+    {
+      // Already canonical -- positive, and only the quiet bit set -- means
+      // stop, or the CreateFPSpecialConst below would recurse forever.
+      bool low_payload_zero = true;
+      for (unsigned i = 0; low_payload_zero && i + 1 < stored_sig; i++)
+        low_payload_zero = !CONSTANTBV::BitVector_bit_test(b, i);
+      const bool canonical =
+          low_payload_zero &&
+          CONSTANTBV::BitVector_bit_test(b, stored_sig - 1) &&
+          !CONSTANTBV::BitVector_bit_test(b, exp_width + sig_width - 1);
+      if (!canonical)
+        return CreateFPSpecialConst(FPSpecial::NaN, exp_width, sig_width);
+    }
+  }
+
+  ASTFPConst temp(this, src->GetBVConst(), exp_width, sig_width);
+
+  noteFloatingPoint();
+
+  ASTNode n(LookupOrCreateFPConst(temp));
+  assert(n.GetKind() == BVCONST);
+  return n;
+}
+
+// As LookupOrCreateBVConst. The same table holds both flavours of constant:
+// the equality functor compares the format widths too, so a floating-point
+// constant never unifies with a plain bitvector constant of the same bits.
+ASTFPConst* STPMgr::LookupOrCreateFPConst(ASTFPConst& s)
+{
+  ASTBVConstSet::const_iterator it = _bvconst_unique_table.find(&s);
+  if (it != _bvconst_unique_table.end())
+    return static_cast<ASTFPConst*>(*it);
+
+  ASTFPConst* s_copy = new ASTFPConst(s);
+  _bvconst_unique_table.insert(s_copy);
+  return s_copy;
+}
+
+ASTNode STPMgr::CreateRMConst(unsigned mode)
+{
+  using namespace symbolic_fp;
+  switch (mode)
+  {
+    case ROUND_NEAREST_TIES_TO_EVEN:
+    case ROUND_TOWARD_POSITIVE:
+    case ROUND_TOWARD_NEGATIVE:
+    case ROUND_TOWARD_ZERO:
+    case ROUND_NEAREST_TIES_TO_AWAY:
+      break;
+    default:
+      FatalError("CreateRMConst requires one of the five rounding modes");
+  }
+
+  // A rounding mode has no format, so noteFloatingPoint is never reached for
+  // it -- but it still needs FpTotalise's pinning pass to run.
+  noteFloatingPointTheory();
+
+  const ASTNode bits = CreateBVConst(5, mode);
+  ASTBVConst* src = static_cast<ASTBVConst*>(bits._int_node_ptr);
+  ASTRMConst temp(this, src->GetBVConst());
+  return ASTNode(LookupOrCreateRMConst(temp));
+}
+
+ASTRMConst* STPMgr::LookupOrCreateRMConst(ASTRMConst& s)
+{
+  const ASTBVConstSet::const_iterator it = _bvconst_unique_table.find(&s);
+  if (it != _bvconst_unique_table.end())
+    return static_cast<ASTRMConst*>(*it);
+
+  ASTRMConst* copy = new ASTRMConst(s);
+  _bvconst_unique_table.insert(copy);
+  return copy;
+}
+
+ASTNode STPMgr::LiftSourceValue(const ASTNode& carrier,
+                                const SourceSort& source_sort)
+{
+  switch (source_sort.kind())
+  {
+    case SourceSort::Kind::FloatingPoint:
+      if (carrier.GetKind() != BVCONST ||
+          carrier.GetValueWidth() != source_sort.packedWidth())
+        FatalError("LiftSourceValue: invalid floating-point carrier: ",
+                   carrier);
+      return CreateFPConst(carrier, source_sort.exponentWidth(),
+                           source_sort.significandWidth());
+    case SourceSort::Kind::RoundingMode:
+      if (carrier.GetKind() != BVCONST || carrier.GetValueWidth() != 5)
+        FatalError("LiftSourceValue: invalid RoundingMode carrier: ", carrier);
+      return CreateRMConst(carrier.GetUnsignedConst());
+    case SourceSort::Kind::Bool:
+      if (carrier != ASTTrue && carrier != ASTFalse)
+        FatalError("LiftSourceValue: invalid Boolean carrier: ", carrier);
+      return carrier;
+    case SourceSort::Kind::BitVector:
+      if (carrier.GetKind() != BVCONST ||
+          carrier.GetValueWidth() != source_sort.bitVectorWidth())
+        FatalError("LiftSourceValue: invalid bitvector carrier: ", carrier);
+      return carrier;
+    case SourceSort::Kind::Uninterpreted:
+      // Returned unchanged, like a bit-vector and unlike a float or a rounding
+      // mode: bit equality on the carrier *is* this sort's equality, so the
+      // carrier pattern is the element and there is nothing to lift it into.
+      // Which element of the sort a given pattern denotes is a question for the
+      // printer, not for this function.
+      if (carrier.GetKind() != BVCONST ||
+          carrier.GetValueWidth() != source_sort.packedWidth())
+        FatalError("LiftSourceValue: invalid uninterpreted-sort carrier: ",
+                   carrier);
+      return carrier;
+    default:
+      FatalError("LiftSourceValue: cannot lift this source sort");
+  }
+}
+
+ASTNode STPMgr::roundingModeValidConstraint(const ASTNode& s)
+{
+  using namespace symbolic_fp;
+  ASTVec one_of;
+  for (const unsigned mode :
+       {ROUND_NEAREST_TIES_TO_EVEN, ROUND_TOWARD_POSITIVE,
+        ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO, ROUND_NEAREST_TIES_TO_AWAY})
+  {
+    one_of.push_back(
+        defaultNodeFactory->CreateNode(EQ, s, CreateRMConst(mode)));
+  }
+  return defaultNodeFactory->CreateNode(OR, one_of);
+}
+
+bool STPMgr::isRoundingModeSortedTerm(const ASTNode& n) const
+{
+  return n.GetSourceSort().kind() == SourceSort::Kind::RoundingMode;
+}
+
+bool STPMgr::isUninterpretedSortedTerm(const ASTNode& n) const
+{
+  return n.GetSourceSort().kind() == SourceSort::Kind::Uninterpreted;
+}
+
+std::string STPMgr::uninterpretedElementName(const SourceSort& sort,
+                                            const ASTNode& carrier)
+{
+  assert(sort.kind() == SourceSort::Kind::Uninterpreted);
+  for (const UninterpretedElement& element : uninterpreted_elements)
+    if (element.sort == sort && element.carrier == carrier)
+      return element.name;
+
+  // Numbered per sort rather than globally, so a model reads as one sort's
+  // elements enumerated from zero and does not change when an unrelated sort
+  // gains an element.
+  size_t ordinal = 0;
+  for (const UninterpretedElement& element : uninterpreted_elements)
+    if (element.sort == sort)
+      ordinal++;
+
+  // The name has to be one nothing else in this query answers to, because the
+  // model declares it as a fresh constant: an input free to declare |S!0|
+  // itself would get a model that both invents S!0 and defines the input's own
+  // S!0 as something else, and reading it back is then a redeclaration. Step
+  // past any name already taken rather than assume the shape is private.
+  const std::string base = uninterpretedSortName(sort.uninterpretedId()) + "!";
+  std::string name;
+  while (true)
+  {
+    name = base + std::to_string(ordinal);
+    bool taken = LookupSymbol(name.c_str());
+    for (const UninterpretedElement& element : uninterpreted_elements)
+      taken = taken || element.name == name;
+    if (!taken)
+      break;
+    ordinal++;
+  }
+
+  UninterpretedElement fresh;
+  fresh.sort = sort;
+  fresh.name = name;
+  fresh.carrier = carrier;
+  uninterpreted_elements.push_back(fresh);
+  noteUninterpretedSortPrinted(sort);
+  return fresh.name;
+}
+
+ASTNode STPMgr::arrayBaseSymbol(const ASTNode& arr) const
+{
+  ASTNode n = arr;
+  while (true)
+  {
+    switch (n.GetKind())
+    {
+      case SYMBOL:
+        return n;
+      case WRITE:
+        n = n[0];
+        break;
+      case ITE:
+      {
+        // Both branches type as arrays of one bit layout; requiring one
+        // *sort* keeps a read from being canonicalised under one branch's
+        // index sort and taken raw under the other's.
+        const ASTNode left = arrayBaseSymbol(n[1]);
+        const ASTNode right = arrayBaseSymbol(n[2]);
+        if (left.IsNull())
+          return right;
+        if (!right.IsNull() && left.GetSourceSort() != right.GetSourceSort())
+          FatalError("arrayBaseSymbol: an if-then-else mixes arrays whose "
+                     "index or element sorts differ: ",
+                     n);
+        return left;
+      }
+      default:
+        return ASTNode();
+    }
+  }
+}
+
+bool STPMgr::arrayHasFpIndex(const ASTNode& arr, unsigned& exp_width,
+                             unsigned& sig_width) const
+{
+  const SourceSort sort = arr.GetSourceSort();
+  if (sort.kind() != SourceSort::Kind::Array ||
+      sort.index().kind() != SourceSort::Kind::FloatingPoint)
+    return false;
+  exp_width = sort.index().exponentWidth();
+  sig_width = sort.index().significandWidth();
+  return true;
+}
+
+bool STPMgr::arrayHasRmIndex(const ASTNode& arr) const
+{
+  const SourceSort sort = arr.GetSourceSort();
+  return sort.kind() == SourceSort::Kind::Array &&
+         sort.index().kind() == SourceSort::Kind::RoundingMode;
+}
+
+bool STPMgr::arrayHasRmElement(const ASTNode& arr) const
+{
+  const SourceSort sort = arr.GetSourceSort();
+  return sort.kind() == SourceSort::Kind::Array &&
+         sort.element().kind() == SourceSort::Kind::RoundingMode;
+}
+
+ASTNode STPMgr::CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
+                                     unsigned sig_width)
+{
+  if (exp_width == 0 || sig_width == 0)
+    FatalError("CreateFPSpecialConst: a floating-point format needs nonzero "
+               "exponent and significand widths");
+
+  const unsigned width = exp_width + sig_width;
+  const unsigned stored_sig = sig_width - 1; // the hidden bit is not stored
+
+  // Packed layout, LSB first: [significand | exponent | sign].
+  CBV bits = CONSTANTBV::BitVector_Create(width, true);
+
+  const bool negative =
+      which == FPSpecial::MinusInfinity || which == FPSpecial::MinusZero;
+  const bool exp_all_ones = which == FPSpecial::NaN ||
+                            which == FPSpecial::PlusInfinity ||
+                            which == FPSpecial::MinusInfinity;
+
+  if (negative)
+    CONSTANTBV::BitVector_Bit_On(bits, width - 1);
+  for (unsigned i = 0; exp_all_ones && i < exp_width; i++)
+    CONSTANTBV::BitVector_Bit_On(bits, stored_sig + i);
+  // symfpu's canonical NaN: exponent all ones and only the top stored-
+  // significand bit set (pack() emits nanPattern(packedSigWidth) =
+  // 1 << (stored_sig - 1), the quiet-bit convention). Matching it keeps the
+  // interned constant bit-identical to the NaN every blasted operation
+  // produces. Semantically either way is a NaN; bit-identical is tidier.
+  if (which == FPSpecial::NaN && stored_sig > 0)
+    CONSTANTBV::BitVector_Bit_On(bits, stored_sig - 1);
+
+  // CreateBVConst destroys `bits`.
+  ASTNode packed = CreateBVConst(bits, width);
+  return CreateFPConst(packed, exp_width, sig_width);
 }
 
 ASTNode STPMgr::CreateZeroConst(unsigned width)
@@ -571,16 +956,16 @@ unsigned int STPMgr::NodeSize(const ASTNode& a)
 
 bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 {
-  if (READ == term.GetKind() && WRITE == term[0].GetKind()
-      /*&& !GetRemoveWritesFlag()*/)
+  // A read-over-write term answers "not seen" WITHOUT walking inside:
+  // occurrences of `var` under the write are invisible to this check.
+  // (The condition once depended on a remove-writes flag whose other
+  // arm returned true; the flag is long gone and the second branch was
+  // unreachable, so it has been removed.) Callers using this as an
+  // occurs check must therefore refuse array-carrying terms before
+  // asking, as the incremental driver's definition harvests do.
+  if (READ == term.GetKind() && WRITE == term[0].GetKind())
   {
     return false;
-  }
-
-  if (READ == term.GetKind() && WRITE == term[0].GetKind()
-      /*&& GetRemoveWritesFlag()*/)
-  {
-    return true;
   }
 
   ASTNodeMap::iterator it;
@@ -631,9 +1016,29 @@ ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
 }
 
 // If ASTNode remain with references (somewhere), this will segfault.
+ExtensionalityContext* STPMgr::getExtensionality()
+{
+  if (extensionality == NULL)
+    extensionality = new ExtensionalityContext(this);
+  return extensionality;
+}
+
+UFContext* STPMgr::getUFContext()
+{
+  if (uninterpretedFunctions == NULL)
+    uninterpretedFunctions = new UFContext(this);
+  return uninterpretedFunctions;
+}
+
 STPMgr::~STPMgr()
 {
   ClearAllTables();
+
+  delete extensionality;
+  extensionality = NULL;
+
+  delete uninterpretedFunctions;
+  uninterpretedFunctions = NULL;
 
   printer::NodeLetVarMap.clear();
   printer::NodeLetVarVec.clear();
@@ -655,8 +1060,17 @@ STPMgr::~STPMgr()
   if (NULL != CreateBVConstVal)
     CONSTANTBV::BitVector_Destroy(CreateBVConstVal);
 
+  // Released here, in the body, for the same reason as every other member
+  // above: destroying a node reaches back into this manager (ASTSymbol::CleanUp
+  // unindexes its name, ASTInterior::CleanUp erases from the interior table),
+  // and the implicit member-destruction phase runs after those tables are gone.
+  uninterpreted_elements.clear();
+  uninterpreted_sorts_printed.clear();
+  uf_injectivity_guard = ASTNode();
+
   Introduced_SymbolsSet.clear();
   _symbol_unique_table.clear();
+  _symbol_name_index.clear();
   _bvconst_unique_table.clear();
 
   vector<ASTVec*>::iterator it = _asserts.begin();

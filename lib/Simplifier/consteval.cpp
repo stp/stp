@@ -22,6 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/FloatBlaster/FloatBlast.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/literal_fp.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Util/CBVOps.h"
 #include <cassert>
@@ -796,12 +799,14 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
 
     case ITE:
     {
-      if (ASTTrue == input_children[0])
+      // As with NOT: the condition must be read after eager folding.
+      if (ASTTrue == children[0])
         OutputNode = children[1];
-      else if (ASTFalse == input_children[0])
+      else if (ASTFalse == children[0])
         OutputNode = children[2];
       else
       {
+        std::cerr << children[0];
         FatalError(
             "BVConstEvaluator: ITE condiional must be either TRUE or FALSE:");
       }
@@ -815,14 +820,17 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       OutputNode = ASTFalse;
       break;
     case NOT:
-      if (ASTTrue == input_children[0])
+      // Test the eagerly-folded child, like every other case: the raw
+      // input child may be an unsimplified formula that folds to a
+      // constant (e.g. when the caller built the tree with a
+      // non-simplifying factory).
+      if (ASTTrue == children[0])
         return ASTFalse;
-      else if (ASTFalse == input_children[0])
+      else if (ASTFalse == children[0])
         return ASTTrue;
       else
       {
-        std::cerr << ASTFalse;
-        std::cerr << input_children[0];
+        std::cerr << children[0];
         FatalError("BVConstEvaluator: unexpected not input");
       }
 
@@ -928,7 +936,201 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         OutputNode = ASTFalse;
       break;
     }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_SIGNED:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
+    case FP_SMT_EQ:
+    {
+      // A float's format is carried on the node, not implied by its kind, so
+      // it is lost every time a node is rebuilt -- and evaluating a nested
+      // operation rebuilds one. The inner operation's result comes back from
+      // NonMemberBVConstEvaluator as a bare BVCONST with no format, and the
+      // outer operation then blasts it against a format of (0, 0). That does
+      // not fail; it computes the wrong bits. Recover the format from
+      // whichever child still has one and put it back on the others.
+      unsigned int exp_width = 0;
+      unsigned int sig_width = 0;
 
+      if (k == FP_TOFP || k == FP_TOFP_SIGNED || k == FP_TOFP_UNSIGNED)
+      {
+        // to_fp names its target format in its first two children rather
+        // than inheriting it from an operand.
+        assert(children.size() >= 2);
+        exp_width = children[0].GetUnsignedConst();
+        sig_width = children[1].GetUnsignedConst();
+      }
+      else
+      {
+        for (size_t i = 0; i < children.size(); i++)
+        {
+          if (children[i].GetExpWidth() != 0)
+          {
+            exp_width = children[i].GetExpWidth();
+            sig_width = children[i].GetSigWidth();
+            break;
+          }
+        }
+      }
+
+      ASTVec formatted;
+      formatted.reserve(children.size());
+
+      // to_fp's operands are not floats to be re-formatted: children 0 and 1
+      // are the target format, and the source is either a float that already
+      // carries its own format or a bitvector that must stay one. Stamping a
+      // format onto that source would make a 32-bit integer argument look
+      // like a Float32 and take the reformat path instead of the convert one.
+      const bool format_children =
+          (k != FP_TOFP && k != FP_TOFP_SIGNED && k != FP_TOFP_UNSIGNED &&
+           k != FP_TO_UBV && k != FP_TO_SBV);
+
+      // fp.to_ubv/fp.to_sbv are the same story from the other side: their
+      // children are (m, rm, x, unspecified), of which only x is a float, and
+      // their *result* is a bitvector. Both the width argument and the result
+      // happen to be as wide as e + s in the common 32-bit case, so stamping
+      // a format on them would turn an integer into a Float32.
+
+      for (size_t i = 0; i < children.size(); i++)
+      {
+        if (!format_children)
+        {
+          formatted.push_back(children[i]);
+          continue;
+        }
+
+        // Rounding modes and to_fp's format arguments are bitvectors that
+        // are not floats; leave them alone. A float operand is as wide as
+        // the format it is packed in.
+        //
+        // A plain BVCONST cannot carry a format at all -- ASTBVConst's
+        // getExpWidth() is hardwired to 0 and its setter asserts -- so the
+        // constant has to be re-made as an ASTFPConst first. That is what
+        // CreateFPConst is for, and what the lowering pass does with its
+        // own result.
+        formatted.push_back(
+            FloatBlaster::withFormat(_bm, children[i], exp_width, sig_width));
+      }
+
+      // The predicates are formulas; everything else is a term of the node's
+      // own width (which for to_ubv/to_sbv is the target width, not
+      // exp + sig). CreateNode would leave a term's value width zero.
+      const bool boolean_result =
+          k == FP_LEQ || k == FP_LT || k == FP_GEQ || k == FP_GT ||
+          k == FP_EQ || k == FP_SMT_EQ || k == FP_ISNORMAL ||
+          k == FP_ISSUBNORMAL || k == FP_ISZERO || k == FP_ISINFINITE ||
+          k == FP_ISNAN || k == FP_ISNEGATIVE || k == FP_ISPOSITIVE;
+
+      // Build the normalisation copy through the HASHING factory, never the
+      // default one: the simplifying factory folds all-constant
+      // floating-point nodes by calling back into this evaluator, so
+      // rebuilding the same kind over the same constant children through it
+      // would recurse without bound. Nothing is lost -- the factory
+      // shortcuts this skips (abs of a constant, x*1.0, same-operand
+      // comparisons) are all handled by lowering below, and the evaluation
+      // of `blasted` already supports an unfolded circuit.
+      ASTNode temp(boolean_result
+                       ? _bm->hashingNodeFactory->CreateNode(k, formatted)
+                       : _bm->hashingNodeFactory->CreateTerm(k, inputwidth,
+                                                             formatted));
+
+      // Only a floating-point *result* carries a floating-point format. The
+      // classifications and comparisons return a Boolean and to_ubv/to_sbv
+      // return a bit-vector; stamping a format on temp for those is wrong,
+      // because lowering would then copy temp's format onto its output --
+      // poisoning the shared Boolean constant, whose GetType() afterwards reads
+      // FLOATINGPOINT and sends the constant evaluator down its bit-vector
+      // (GetBVConst) path. temp's type already distinguishes the cases.
+      const bool float_result = (temp.GetType() == FLOATINGPOINT_TYPE);
+      if (float_result)
+      {
+        temp.SetExpWidth(exp_width);
+        temp.SetSigWidth(sig_width);
+      }
+
+      // The factory may have rewritten the operation as it was built:
+      // folded it to a constant (abs/neg of a constant is a sign-bit edit,
+      // x*1.0 folds to x), or into different structure entirely -- fp.leq of
+      // a term with itself becomes (not (fp.isNaN ...)). Interned constants
+      // compare pointer-equal, so the same-operand rules do fire here. In
+      // either case evaluate what came back rather than blasting it: the
+      // blaster only handles floating-point operations, and asserts on
+      // anything else.
+      if (temp.GetKind() != k)
+      {
+        OutputNode =
+            temp.isConstant() ? temp : NonMemberBVConstEvaluator(_bm, temp);
+        if (float_result)
+          OutputNode =
+              FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
+        break;
+      }
+
+      // Evaluate directly when the literal backend covers the operation:
+      // the same symfpu semantics as the circuit, instantiated over
+      // concrete CBV arithmetic -- microseconds instead of building and
+      // collapsing thousands of interned gates. The per-kind agreement of
+      // the two paths is machine-checked exhaustively at a small format
+      // (FpConstantFold_Test) and against the hardware oracle.
+      {
+        const ASTNode literal = literal_fp::tryEvaluateFpConstant(_bm, temp);
+        if (!literal.IsNull())
+        {
+          OutputNode = literal;
+          if (float_result)
+            OutputNode =
+                FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
+          break;
+        }
+      }
+
+      // One table, the same one the solver's lowering pass uses, reached with
+      // the node rather than with its parts: it reads each operand's format
+      // from its source sort, so nothing here has to work out which child
+      // carries the format and pass it alongside.
+      ASTNode blasted(FloatBlast::lowerOperation(_bm, temp));
+
+      // How much work the next line is depends on the installed factory: a
+      // simplifying one has already folded the circuit to its answer while
+      // building it, so this is a no-op; a hashing one hands back the circuit
+      // itself, and it is evaluated here. Both are supported, which is what
+      // the memo in NonMemberBVConstEvaluator is for -- the circuit is a
+      // deeply shared DAG, and evaluating it by paths does not finish.
+      OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
+
+      // Carry the format out, so an enclosing operation sees a formatted
+      // operand rather than a bare bit-vector.
+      if (float_result)
+        OutputNode =
+            FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
+      break;
+    }
     default:
       FatalError("BVConstEvaluator: The input kind is not supported yet:");
       break;
@@ -948,14 +1150,72 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   return OutputNode;
 }
 
+// One evaluation per distinct node, rather than one per path to it.
+//
+// The argument is a DAG and the walk below is a tree walk, so without this a
+// shared subterm is re-evaluated once for every route into it. That is
+// affordable for the word-level bit-vector nodes this was written for, whose
+// sharing is shallow. It is not affordable for a lowered floating-point
+// circuit: those are deeply shared by construction, and the floating-point
+// arm above folds by lowering the operation and then evaluating the circuit
+// it gets back. A single Float(3,4) fp.add does not finish.
+//
+// It has not bitten because the CLI and the C API both install the
+// simplifying factory, which folds as it builds -- so lowerOperation hands
+// back a BVCONST that is already the answer and the evaluation below is a
+// no-op. That is a property of the caller's configuration, not of this
+// module, and STPMgr's own constructor installs the hashing factory instead.
+//
+// Children are evaluated here rather than left to the kind-and-children
+// overload, which does the same thing one level down but has no memo to
+// consult. Handing it constants throughout makes its own recursion
+// unreachable; the two agree on everything else, since it evaluates every
+// child eagerly regardless of kind.
+static ASTNode evaluateMemoised(STPMgr* mgr, const ASTNode& t,
+                                ASTNodeMap& memo)
+{
+  if (t.isConstant())
+    return t;
+
+  const ASTNodeMap::const_iterator cached = memo.find(t);
+  if (cached != memo.end())
+    return cached->second;
+
+  ASTVec children;
+  children.reserve(t.Degree());
+  for (size_t i = 0; i < t.Degree(); i++)
+    children.push_back(evaluateMemoised(mgr, t[i], memo));
+
+  const ASTNode out = NonMemberBVConstEvaluator(mgr, t.GetKind(), children,
+                                                t.GetValueWidth());
+  memo[t] = out;
+  return out;
+}
+
 // Const evaluator logical and arithmetic operations.
 ASTNode NonMemberBVConstEvaluator(STPMgr* mgr, const ASTNode& t)
 {
   if (t.isConstant())
     return t;
 
-  return NonMemberBVConstEvaluator(mgr, t.GetKind(), toASTVec(t.GetChildren()),
-                                   t.GetValueWidth());
+  // The common case by far: an operation over constants, reached from the
+  // simplifying factory's fold. There is nothing under it to share, so it
+  // does not pay for a memo it would use once.
+  bool children_are_constant = true;
+  for (size_t i = 0; i < t.Degree(); i++)
+    if (!t[i].isConstant())
+    {
+      children_are_constant = false;
+      break;
+    }
+
+  if (children_are_constant)
+    return NonMemberBVConstEvaluator(mgr, t.GetKind(),
+                                     toASTVec(t.GetChildren()),
+                                     t.GetValueWidth());
+
+  ASTNodeMap memo;
+  return evaluateMemoised(mgr, t, memo);
 }
 
 } // end of namespace stp

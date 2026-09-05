@@ -27,7 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTNode.h"
 #include "stp/STPManager/STPManager.h"
-#include <stack>
+#include <vector>
 
 namespace stp
 {
@@ -36,52 +36,55 @@ namespace stp
 // wrong.
 class NodeIterator // not copyable
 {
-  std::stack<ASTNode> toVisit;
+  // A contiguous LIFO frontier retains the historical traversal order while
+  // avoiding std::stack's deque blocks. It stores one AST handle per pending
+  // edge; the path-frame representation stored two words per active ancestor
+  // and repeatedly re-entered ancestors to discover their next child.
+  std::vector<ASTNode> toVisit;
 
   const ASTNode& sentinel;
   uint8_t iteration;
+
+protected:
+  // The generic iterator retains its historical virtual `ok` hook. Known
+  // built-in filters call this templated core directly, letting their
+  // predicate inline into the walk instead of paying an indirect call for
+  // every node.
+  template <typename Accept>
+  ASTNode nextIf(Accept&& accept)
+  {
+    while (!toVisit.empty())
+    {
+      ASTNode result = toVisit.back();
+      toVisit.pop_back();
+      if (!accept(result) || result.getIteration() == iteration)
+        continue;
+
+      if (result == sentinel)
+        return result;
+
+      result.setIteration(iteration);
+      for (const ASTNode& child : result.GetChildren())
+      {
+        if (child.getIteration() != iteration)
+          toVisit.push_back(child);
+      }
+      return result;
+    }
+
+    return sentinel;
+  }
 
 public:
   NodeIterator(const ASTNode& n, const ASTNode& _sentinel, STPMgr& stpMgr)
       : sentinel(_sentinel), iteration(stpMgr.getNextIteration())
   {
-    toVisit.push(n);
+    toVisit.push_back(n);
   }
 
   ASTNode next()
   {
-    ASTNode result = sentinel;
-
-    while (true)
-    {
-      if (toVisit.empty())
-        return sentinel;
-
-      result = toVisit.top();
-      toVisit.pop();
-
-      if (!ok(result))
-        continue; // Not OK to investigate.
-
-      if (result.getIteration() != iteration)
-        break; // not visited, DONE!
-    }
-
-    if (result == sentinel)
-      return result;
-
-    result.setIteration(iteration);
-
-    const ASTChildren c = result.GetChildren();
-    auto itC = c.begin();
-    auto itendC = c.end();
-    for (; itC != itendC; itC++)
-    {
-      if (itC->getIteration() == iteration)
-        continue; // already examined.
-      toVisit.push(*itC);
-    }
-    return result;
+    return nextIf([this](const ASTNode& n) { return ok(n); });
   }
 
   ASTNode end() { return sentinel; }
@@ -90,14 +93,19 @@ public:
 };
 
 // Iterator that omits return atoms.
-class NonAtomIterator : public NodeIterator
+class NonAtomIterator final : public NodeIterator
 {
-  virtual bool ok(const ASTNode& n) { return !n.isAtom(); }
+  bool ok(const ASTNode& n) override { return !n.isAtom(); }
 
 public:
   NonAtomIterator(const ASTNode& n, const ASTNode& uf, STPMgr& stpMgr)
       : NodeIterator(n, uf, stpMgr)
   {
+  }
+
+  ASTNode next()
+  {
+    return nextIf([](const ASTNode& n) { return !n.isAtom(); });
   }
 };
 }

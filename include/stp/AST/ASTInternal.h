@@ -29,6 +29,7 @@ THE SOFTWARE.
 // including ASTNode.h would create a circular include that forces the hot
 // ASTNode accessors (GetKind/GetNodeNum/...) to be defined out-of-line.
 #include "stp/AST/UsefulDefs.h"
+#include "stp/AST/SourceSort.h"
 #include <iostream>
 
 using std::ostream;
@@ -95,6 +96,41 @@ protected:
   virtual void setValueWidth(uint32_t) = 0;
   virtual uint32_t getValueWidth() const = 0;
 
+  virtual void setExpWidth(uint32_t) = 0;
+  virtual uint32_t getExpWidth() const = 0;
+
+  virtual void setSigWidth(uint32_t) = 0;
+  virtual uint32_t getSigWidth() const = 0;
+
+  // Source-language identity carried by leaves. Interior-node sorts are
+  // derived by ASTNode::GetSourceSort from their operator and children.
+  virtual SourceSort getDeclaredSourceSort() const
+  {
+    return SourceSort::unknown();
+  }
+
+  // Memo for the *derived* source sort, on the nodes that derive one.
+  //
+  // ASTNode::GetSourceSort walks children for READ, WRITE and ITE -- and for
+  // ITE it walks both branches -- so without a memo a shared-branch ITE DAG
+  // costs Theta(2^depth) per query and a store chain costs Theta(depth), on a
+  // graph of linear size. The front ends ask once per node they build, and
+  // containsFloatingPointTheory asks once per node of every query, so the
+  // recomputation is not incidental. This is the same treatment cacheFPFormat
+  // already gives the floating-point format, for the same reason, and it is
+  // sound for the same reason: the derivation reads only the node's kind,
+  // children and widths.
+  //
+  // The pointer is into the manager's intern pool, so a cached answer costs
+  // eight bytes and no allocation, and Unknown interns like any other sort --
+  // a non-null pointer to an Unknown sort is the negative cache.
+  //
+  // Only ASTInterior can hold one. Leaves either carry a declared sort or
+  // derive theirs from widths that legacy callers still set after
+  // construction, and both are already O(1).
+  virtual const SourceSort* cachedSourceSort() const { return NULL; }
+  virtual void setCachedSourceSort(const SourceSort*) const {}
+
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
    * ASTNode is of type ARRAY   <==> ((indexwidth>0)&&(valuewidth>0))*
@@ -117,9 +153,6 @@ protected:
   /****************************************************************
    * Protected Member Functions                                   *
    ****************************************************************/
-
-  // Copying assign operator.  Also copies contents of children.
-  ASTInternal& operator=(const ASTInternal& int_node);
 
   // Cleanup function for removing from hash table
   virtual void CleanUp() = 0;

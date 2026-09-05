@@ -52,9 +52,6 @@ struct LetizeState
   vector<std::pair<stp::ASTNode, stp::ASTNode>>& letVarVec;
   // Name prefix for the generated variables.
   const char* prefix;
-  // When set, only BITVECTOR_TYPE subterms are letized: SMT-LIB1 can bind
-  // terms but not formulas.
-  bool termsOnly;
 };
 
 void LetizeNode(const stp::ASTNode& n, LetizeState& st, STPMgr*);
@@ -71,8 +68,6 @@ ostream& Lisp_Print_indent(ostream& os, const stp::ASTNode& n,
                            int indentation = 0);
 
 // The "PrintBack" functions also define all the variables that are used.
-DLL_PUBLIC void SMTLIB1_PrintBack(ostream& os, const stp::ASTNode& n,
-                                  STPMgr* mgr);
 DLL_PUBLIC void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* stp,
                                   bool definately_bv = false);
 
@@ -82,11 +77,24 @@ DLL_PUBLIC void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* stp,
 DLL_PUBLIC void SMTLIB2_Print1(ostream& os, const stp::ASTNode n,
                                int indentation, bool letize);
 
-// Emitters for a BVCONST (or a BITVECTOR wrapping one). outputBitVec writes
-// the SMT-LIB1 spelling, "bv<decimal>[<width>]"; the dot and GDL printers use
-// it too, so their node labels are in SMT-LIB1 syntax.
-void outputBitVec(const ASTNode n, ostream& os);
+// Prints one term on one line, without declarations and without a trailing
+// newline, sharing every repeated subterm through `let`. Used by get-value,
+// which echoes back a term the caller chose and so cannot assume it is small
+// or unshared -- printing a DAG as a tree is exponential in its sharing.
+DLL_PUBLIC void SMTLIB2_PrintTerm(ostream& os, STPMgr* stp,
+                                  const stp::ASTNode& n);
+
+// Emitters for a BVCONST (or a BITVECTOR wrapping one).
 void outputBitVecSMTLIB2(const ASTNode n, ostream& os);
+void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
+                                const ASTNode term);
+void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
+                                unsigned int exp_width,
+                                unsigned int sig_width);
+
+// The SMT-LIB short name (RNE...) for a one-hot rounding-mode encoding
+// (see symbolic_fp's rounding_modes), or NULL when the value names no mode.
+const char* roundingModeName(unsigned encoding);
 
 DLL_PUBLIC ostream& GDL_Print(ostream& os, const stp::ASTNode n);
 DLL_PUBLIC ostream& GDL_Print(ostream& os, const ASTNode n,

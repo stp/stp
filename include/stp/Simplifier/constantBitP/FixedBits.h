@@ -29,14 +29,12 @@ THE SOFTWARE.
 #include <cstring>
 #include "stp/Util/Attributes.h"
 #include "stp/Util/BitOps.h"
-#include <stp/Util/Attributes.h>
 
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <random>
 #include <vector>
-
-class MTRand;
 
 namespace stp
 {
@@ -54,8 +52,6 @@ namespace constantBitP
 #define CONSTANTBITP_UTILITY_STR(s) #s
 #define CONSTANTBITP_UTILITY_XSTR(s) CONSTANTBITP_UTILITY_STR(s)
 #define LOCATION __FILE__ ":" CONSTANTBITP_UTILITY_XSTR(__LINE__) ": "
-
-static THREAD_LOCAL_IE int staticUniqueId = 1;
 
 // Bits can be fixed, or unfixed. Fixed bits are fixed to either zero or one.
 // Unfixed bits are marked as '*' when using operator[]
@@ -102,10 +98,6 @@ private:
   }
 
   DLL_PUBLIC void init(const FixedBits& copy);
-  int uniqueId;
-
-  bool unsignedHolds_new(unsigned val);
-  bool unsignedHolds_old(unsigned val);
 
 public:
   DLL_PUBLIC FixedBits(unsigned n, bool isBoolean);
@@ -114,7 +106,6 @@ public:
   {
     assert(this != &copy);
     init(copy);
-    uniqueId = staticUniqueId++;
   }
 
   bool isBoolean() const { return representsBoolean; }
@@ -123,11 +114,6 @@ public:
   {
     if (onHeap())
       delete[] fixedW_;
-  }
-
-  bool operator<=(const FixedBits& copy) const
-  {
-    return uniqueId <= copy.uniqueId;
   }
 
   char operator[](const unsigned n) const
@@ -140,9 +126,6 @@ public:
     else
       return '0';
   }
-
-  // Equality when I was a java programmer sorry!~.
-  bool operator==(const FixedBits& other) const { return this == &(other); }
 
   FixedBits& operator=(const FixedBits& copy)
   {
@@ -219,7 +202,8 @@ private:
   }
 
 public:
-  // returns -1 if it's zero.
+  // returns -1 if it's zero. Signed for that sentinel: check for it before
+  // using the result as a bit position, which is unsigned.
   int topmostPossibleLeadingOne()
   {
     for (int w = (int)numWords() - 1; w >= 0; w--)
@@ -243,33 +227,17 @@ public:
     return lowestSet(&FixedBits::possibleOnes);
   }
 
-  unsigned maximum_numberOfTrailingZeroes()
-  {
-    return lowestSet(&FixedBits::fixedOnes);
-  }
-
   // Returns the position of the first non-fixed value.
   unsigned leastUnfixed() const
   {
     return lowestSet(&FixedBits::unfixedBits);
   }
 
-  int mostUnfixed() const
-  {
-    for (int w = (int)numWords() - 1; w >= 0; w--)
-    {
-      const uint64_t t = unfixedBits(w);
-      if (t != 0)
-        return w * 64 + 63 - ::stp::countLeadingZeroes64(t);
-    }
-    return -1;
-  }
-
   // is this bit fixed to zero?
-  bool isFixedToZero(int n) const { return isFixed(n) && !getValue(n); }
+  bool isFixedToZero(unsigned n) const { return isFixed(n) && !getValue(n); }
 
   // is this bit fixed to one?
-  bool isFixedToOne(int n) const { return isFixed(n) && getValue(n); }
+  bool isFixedToOne(unsigned n) const { return isFixed(n) && getValue(n); }
 
   // is this bit fixed to either zero or one?
   bool isFixed(unsigned n) const
@@ -289,27 +257,6 @@ public:
       fixedW_[n >> 6] &= ~bit;
   }
 
-  // Whether the set of values contains this one.
-  bool unsignedHolds(unsigned val);
-
-  void replaceWithContents(const FixedBits& a)
-  {
-    assert(getWidth() >= a.getWidth());
-
-    for (unsigned i = 0; i < a.getWidth(); i++)
-    {
-      if (a.isFixed(i))
-      {
-        setFixed(i, true);
-        setValue(i, a.getValue(i));
-      }
-      else
-      {
-        setFixed(i, false);
-      }
-    }
-  }
-
   void copyIn(const FixedBits& a)
   {
     const unsigned to = std::min(getWidth(), a.getWidth());
@@ -326,7 +273,6 @@ public:
     }
   }
 
-  // todo merger with unsignedHolds()
   bool containsZero() const
   {
     for (unsigned w = 0; w < numWords(); w++)
@@ -350,8 +296,6 @@ public:
 
   // Result needs to be explicitly deleted.
   stp::CBV GetBVConst(unsigned to, unsigned from) const;
-
-  void getUnsignedMinMax(unsigned& minShift, unsigned& maxShift) const;
 
   // Writes ceil(width/8) bytes into each buffer: bit i of minBuf is set
   // for a fixed one, and maxBuf additionally has every unfixed bit. Bits
@@ -429,9 +373,7 @@ public:
 
   DLL_PUBLIC static FixedBits createRandom(const unsigned length,
                                 const unsigned probabilityOfSetting,
-                                MTRand& rand);
-
-  DLL_PUBLIC void fromUnsigned(unsigned val);
+                                std::mt19937& rand);
 
   static FixedBits fromUnsignedInt(unsigned width, unsigned val);
 

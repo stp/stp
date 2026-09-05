@@ -65,6 +65,15 @@ struct UnsignedInterval
   UnsignedInterval(UnsignedInterval const&) = delete;
   UnsignedInterval& operator=(UnsignedInterval const&) = delete;
 
+  void print() const
+  {
+    unsigned char* a = CONSTANTBV::BitVector_to_Bin(minV);
+    unsigned char* b = CONSTANTBV::BitVector_to_Bin(maxV);
+    std::cerr << a << " " << b << std::endl;
+    free(a);
+    free(b);
+  }
+
   bool isConstant() const
   { 
     return !CONSTANTBV::BitVector_Lexicompare(minV, maxV); 

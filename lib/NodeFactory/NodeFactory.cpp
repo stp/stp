@@ -27,9 +27,30 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 
 stp::ASTNode NodeFactory::CreateTerm(stp::Kind kind, unsigned int width,
-                                     const stp::ASTVec& children)
+                                     stp::ASTChildren children)
 {
   return CreateTerm(kind, width, children);
+}
+
+ASTNode NodeFactory::CreateTerm(Kind kind, unsigned int width,
+                                std::initializer_list<ASTNode> children)
+{
+  return CreateTerm(kind, width,
+                    ASTChildren(children.begin(), children.size()));
+}
+
+ASTNode NodeFactory::CreateArrayTerm(
+    Kind kind, unsigned int index, unsigned int width,
+    std::initializer_list<ASTNode> children)
+{
+  return CreateArrayTerm(kind, index, width,
+                         ASTChildren(children.begin(), children.size()));
+}
+
+ASTNode NodeFactory::CreateNode(Kind kind,
+                                std::initializer_list<ASTNode> children)
+{
+  return CreateNode(kind, ASTChildren(children.begin(), children.size()));
 }
 
 ASTNode NodeFactory::CreateTerm(Kind kind, unsigned int width,
@@ -122,7 +143,7 @@ ASTNode NodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
 
 stp::ASTNode NodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
                                           unsigned int width,
-                                          const stp::ASTVec& children)
+                                          stp::ASTChildren children)
 {
   ASTNode result = CreateTerm(kind, width, children);
   result.SetIndexWidth(index);
@@ -154,9 +175,13 @@ ASTNode NodeFactory::CreateSymbol(const char* const name, unsigned indexWidth,
   return n;
 }
 
-ASTNode NodeFactory::CreateConstant(stp::CBV cbv, unsigned width)
+ASTNode NodeFactory::CreateConstant(stp::CBV cbv, unsigned width,
+                                    unsigned exp_width, unsigned sig_width)
 {
-  return bm.CreateBVConst(cbv, width);
+  ASTNode c = bm.CreateBVConst(cbv, width);
+  if (exp_width != 0)
+    c = bm.CreateFPConst(c, exp_width, sig_width);
+  return c;
 }
 
 ASTNode NodeFactory::CreateOneConst(unsigned width)
@@ -183,7 +208,13 @@ ASTNode NodeFactory::CreateSignedMinConst(unsigned width)
 
 
 ASTNode NodeFactory::CreateBVConst(unsigned int width,
-                                   unsigned long long int bvconst)
+                                   uint64_t bvconst)
 {
   return bm.CreateBVConst(width, bvconst);
+}
+
+ASTNode NodeFactory::CreateFPConst(const stp::ASTNode& bvconst,
+                                   unsigned exp_width, unsigned sig_width)
+{
+  return bm.CreateFPConst(bvconst, exp_width, sig_width);
 }

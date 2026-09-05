@@ -1,5 +1,5 @@
 /***********
-AUTHORS:  Trevor Hansen, Dan Liew, Andrew V. Jones
+AUTHORS:  Trevor Hansen, Dan Liew, Andrew Teylu
 
 BEGIN DATE: Jan, 2012
 
@@ -47,6 +47,8 @@ void test_timeout(bool test_with_time, uint32_t max_value, bool use_cms)
     }
     else
     {
+      // Falls back to the build's default backend when MiniSat is absent;
+      // the timeout behaviour under test does not depend on which one runs.
       vc_useMinisat(vc);
     }
 
@@ -72,7 +74,7 @@ void test_timeout(bool test_with_time, uint32_t max_value, bool use_cms)
     }
     std::cout << timeout_type << " : " << limit << " : result " << std::flush;
 
-    // returns 3 on timeout
+    // returns unknown (3), with timeout available through the reason API
     int query = vc_query_with_timeout(vc, vc_falseExpr(vc), max_conflicts, max_time);
     ASSERT_TRUE(query == 3);
 

@@ -32,24 +32,80 @@ THE SOFTWARE.
 // always be tracked.
 
 #include "stp/Util/RunTimes.h"
-#include "minisat/utils/System.h"
 #include "stp/Util/Attributes.h"
 #include <cassert>
 #include <iostream>
 #include <sstream>
-#include <sys/time.h>
 #include <utility>
+
+#include <sys/time.h>
+
+#if defined(_WIN32)
+// A bare windows.h drags in winsock.h, whose struct timeval collides with
+// the winports sys/time.h shim MSVC builds compile against.
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <psapi.h>
+#else
+#include <sys/resource.h>
+#endif
 
 namespace stp
 {
 ATTR_NORETURN void FatalError(const char* str);
-}
 
-long RunTimes::getCurrentTime()
+// The only definition of the millisecond clock; declared in RunTimes.h and
+// used both here and by the rewrite-rule tools.
+//
+// tv_sec is widened before the multiply on purpose. Where time_t is 32 bits
+// -- the default on i386 -- "1000 * t.tv_sec" is a signed overflow, and the
+// millisecond result does not fit a 32-bit long either.
+int64_t getCurrentTime()
 {
   timeval t;
   gettimeofday(&t, NULL);
-  return (1000 * t.tv_sec) + (t.tv_usec / 1000);
+  return (1000 * static_cast<int64_t>(t.tv_sec)) +
+         (static_cast<int64_t>(t.tv_usec) / 1000);
+}
+}
+
+// CPU time this process has spent in user mode, in seconds.
+double stp::processCpuTime()
+{
+#if defined(_WIN32)
+  FILETIME creation, exited, kernel, user;
+  if (GetProcessTimes(GetCurrentProcess(), &creation, &exited, &kernel, &user))
+  {
+    ULARGE_INTEGER u;
+    u.LowPart = user.dwLowDateTime;
+    u.HighPart = user.dwHighDateTime;
+    return (double)u.QuadPart * 1e-7; // 100ns ticks
+  }
+  return 0.0;
+#else
+  struct rusage ru;
+  getrusage(RUSAGE_SELF, &ru);
+  return (double)ru.ru_utime.tv_sec + (double)ru.ru_utime.tv_usec * 1e-6;
+#endif
+}
+
+// Peak resident set size of this process, in megabytes.
+double stp::peakMemoryMB()
+{
+#if defined(_WIN32)
+  PROCESS_MEMORY_COUNTERS pmc;
+  if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+    return (double)pmc.PeakWorkingSetSize / (1024.0 * 1024.0);
+  return 0.0;
+#elif defined(__APPLE__)
+  struct rusage ru;
+  getrusage(RUSAGE_SELF, &ru);
+  return (double)ru.ru_maxrss / (1024.0 * 1024.0); // ru_maxrss is in bytes
+#else
+  struct rusage ru;
+  getrusage(RUSAGE_SELF, &ru);
+  return (double)ru.ru_maxrss / 1024.0; // ru_maxrss is in kilobytes
+#endif
 }
 
 void RunTimes::print()
@@ -65,13 +121,13 @@ void RunTimes::print()
   std::ostringstream result;
   result << "statistics\n";
   std::map<Category, int>::const_iterator it1 = counts.begin();
-  std::map<Category, long>::const_iterator it2 = times.begin();
+  std::map<Category, int64_t>::const_iterator it2 = times.begin();
 
-  int cummulative_ms = 0;
+  int64_t cummulative_ms = 0;
 
   while (it1 != counts.end())
   {
-    int time_ms = 0;
+    int64_t time_ms = 0;
     if ((it2 = times.find(it1->first)) != times.end())
       time_ms = it2->second;
 
@@ -92,28 +148,43 @@ void RunTimes::print()
   std::cerr.precision(2);
   std::cerr << "Statistics Total: " << ((double)cummulative_ms) / 1000 << "s"
             << std::endl;
-  std::cerr << "CPU Time Used   : " << Minisat::cpuTime() << "s" << std::endl;
-  std::cerr << "Peak Memory Used: " << Minisat::memUsed() / (1024.0 * 1024.0)
-            << "MB" << std::endl;
+  std::cerr << "CPU Time Used   : " << stp::processCpuTime() << "s" << std::endl;
+  std::cerr << "Peak Memory Used: " << stp::peakMemoryMB() << "MB" << std::endl;
 
   std::cerr.flags(f);
   clear();
 }
 
+std::vector<RunTimes::CategoryTotal> RunTimes::totals() const
+{
+  std::vector<CategoryTotal> result;
+  for (std::map<Category, int>::const_iterator it = counts.begin();
+       it != counts.end(); it++)
+  {
+    const std::map<Category, int64_t>::const_iterator time =
+        times.find(it->first);
+    CategoryTotal total;
+    total.category = it->first;
+    total.count = it->second;
+    total.time_ms = time == times.end() ? 0 : time->second;
+    result.push_back(total);
+  }
+  return result;
+}
+
 std::string RunTimes::getDifference()
 {
   std::stringstream s;
-  long val = getCurrentTime();
+  int64_t val = stp::getCurrentTime();
   s << (val - lastTime) << "ms";
   lastTime = val;
-  s << ":" << std::fixed << std::setprecision(0)
-    << Minisat::memUsed() / (1024.0 * 1024.0) << "MB";
+  s << ":" << std::fixed << std::setprecision(0) << stp::peakMemoryMB() << "MB";
   return s.str();
 }
 
-void RunTimes::addTime(Category c, long milliseconds)
+void RunTimes::addTime(Category c, int64_t milliseconds)
 {
-  std::map<Category, long>::iterator it;
+  std::map<Category, int64_t>::iterator it;
   if ((it = times.find(c)) == times.end())
   {
     times[c] = milliseconds;
@@ -147,11 +218,11 @@ void RunTimes::stop(Category c)
     std::cerr << c;
     stp::FatalError("Don't match");
   }
-  addTime(c, getCurrentTime() - e.second);
+  addTime(c, stp::getCurrentTime() - e.second);
   addCount(c);
 }
 
 void RunTimes::start(Category c)
 {
-  category_stack.push(std::make_pair(c, getCurrentTime()));
+  category_stack.push(std::make_pair(c, stp::getCurrentTime()));
 }

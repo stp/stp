@@ -75,7 +75,7 @@ struct BcpEncoding
 {
   BcpEncoding(STPMgr* mgr_, const OpSpec& op, const Layout& l)
       : mgr(mgr_), sm(mgr_), simp(mgr_, &sm), at(mgr_, &simp), aig(mgr_, &at),
-        cnf(NULL), ok(false)
+        ok(false)
   {
     const ASTNode node = buildNode(mgr, op, l);
 
@@ -93,7 +93,11 @@ struct BcpEncoding
     // sbvdiv, sbvrem and sbvmod reach the bit-blaster only after this.
     constraint = at.TransformFormula_TopLevel(constraint);
 
-    cnf = aig.bitblast(constraint, false);
+    if (!aig.bitblast(constraint, false, cnf))
+      return;
+    // NULL means the AIG node budget stopped the blast. This tool never sets
+    // one, so it cannot happen today -- but leaving `ok` false is the honest
+    // answer for a layout with no CNF, and costs a single branch.
     const ToSATBase::ASTNodeToSATVar& map = aig.SATVar_to_SymbolIndexMap();
 
     // The varying children, in layout order, then the result. GetChildren()
@@ -111,12 +115,6 @@ struct BcpEncoding
       return;
 
     ok = true;
-  }
-
-  ~BcpEncoding()
-  {
-    if (cnf != NULL)
-      aig.release_cnf_memory(cnf);
   }
 
   // Counts the variables fixed at level zero once `bits` are asserted, or
@@ -156,8 +154,22 @@ struct BcpEncoding
   }
 
   bool usable() const { return ok; }
-  unsigned clauses() const { return cnf == NULL ? 0 : (unsigned)cnf->nClauses; }
-  unsigned variables() const { return cnf == NULL ? 0 : (unsigned)cnf->nVars; }
+  unsigned clauses() const { return (unsigned)cnf.clauseCount(); }
+  unsigned variables() const { return cnf.varCount(); }
+
+  // A copy of the clauses and the symbol-bit variables, for a checker that
+  // propagates them itself rather than through a solver.
+  void material(vector<vector<int>>& outClauses,
+                vector<vector<unsigned>>& io, unsigned& nv) const
+  {
+    static_assert(NOT_ENCODED == BCP_NOT_ENCODED,
+                  "the header's sentinel is this class's contract");
+    outClauses.clear();
+    for (CNF::ClauseCursor c = cnf.clauses(); c.next();)
+      outClauses.push_back(vector<int>(c.begin(), c.end()));
+    io = vars;
+    nv = cnf.varCount();
+  }
 
 private:
   // constexpr, not const: resize() below binds it by reference, which needs
@@ -187,7 +199,7 @@ private:
   Simplifier simp;
   ArrayTransformer at;
   mutable ToSATAIG aig;
-  Cnf_Dat_t* cnf;
+  CNF cnf;
   vector<vector<unsigned>> vars; // one entry per varying child, then result
   std::unordered_set<unsigned> interesting;
   bool ok;
@@ -236,6 +248,13 @@ unsigned bcpVariables(const BcpEncoding* e)
   return e->variables();
 }
 
+bool bcpMaterial(const BcpEncoding* e, vector<vector<int>>& clauses,
+                 vector<vector<unsigned>>& io, unsigned& variables)
+{
+  e->material(clauses, io, variables);
+  return true;
+}
+
 } // namespace propbench
 
 #else // !USE_CRYPTOMINISAT
@@ -275,6 +294,12 @@ unsigned bcpClauses(const BcpEncoding*)
 unsigned bcpVariables(const BcpEncoding*)
 {
   return 0;
+}
+
+bool bcpMaterial(const BcpEncoding*, vector<vector<int>>&,
+                 vector<vector<unsigned>>&, unsigned&)
+{
+  return false;
 }
 
 } // namespace propbench

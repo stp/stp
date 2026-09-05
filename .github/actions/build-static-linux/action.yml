@@ -1,7 +1,7 @@
 name: Build a static Linux stp
 description: >
-  Build a statically linked stp and smoke-test it. The repository, including
-  submodules, must already be checked out. The CI jobs that keep static
+  Build a statically linked stp and smoke-test it. The repository must
+  already be checked out. The CI jobs that keep static
   linking working and the release workflow that ships the binary all use
   this, so that what gets published is built exactly the way CI builds it.
   CI runs it in both configurations, including the one the release uses.
@@ -38,10 +38,10 @@ runs:
 
   steps:
 
-  # No lit and no gtest here: STATICCOMPILE turns BUILD_SHARED_LIBS off, and
-  # the top-level CMakeLists forces ENABLE_TESTING off when it is off (the
-  # Python bindings and the test harness both want a shared libstp), so a
-  # static build has no tests to run. See the smoke test at the end.
+  # No lit and no gtest here: this job leaves ENABLE_TESTING off, so there is
+  # no test harness to install or build. A static build can run the suite --
+  # nothing forces the option off any more -- but what this job exists to cover
+  # is the static link itself. See the smoke test at the end.
   - name: Packages
     shell: bash
     run: |
@@ -54,9 +54,9 @@ runs:
         flex \
         gcc \
         git \
-        libboost-program-options-dev \
         libgmp-dev \
         ninja-build \
+        python3 \
         zlib1g-dev
 
   - name: Resolve dependency revisions
@@ -71,12 +71,12 @@ runs:
   # builds CryptoMiniSat into a static-linkable prefix, and the only one that
   # needs neither gtest nor OutputCheck.
   #
-  # Only deps/install: both setup scripts install self-contained CMake
-  # packages there -- archives and configs, with no path pointing back at
-  # deps/cms or deps/minisat -- so the source and build trees are worth
-  # nothing after the install and several hundred megabytes to carry. On a
-  # hit the step below is skipped and they are not wanted; on a miss they are
-  # cloned again. This is what every other job caches.
+  # Only deps/install: the setup script installs a self-contained CMake
+  # package there -- archives and configs, with no path pointing back at
+  # deps/cms -- so the source and build trees are worth nothing after the
+  # install and several hundred megabytes to carry. On a hit the step below
+  # is skipped and they are not wanted; on a miss they are cloned again.
+  # This is what every other job caches.
   #
   # Shared between the build types below, which differ only in how STP itself
   # is compiled: the dependencies are identical either way. Two jobs racing
@@ -89,17 +89,6 @@ runs:
       path: deps/install
       key: deps-x86_64-static-cms-${{ steps.deps-key.outputs.key }}
 
-  # Neither script needs an argument here: both already build a static (PIC)
-  # library, which is what a static STP links against and what gets folded
-  # into a shared libstp otherwise. setup-cms.sh additionally builds
-  # CryptoMiniSat in Release.
-  - name: Dependencies
-    if: steps.deps-cache.outputs.cache-hit != 'true'
-    shell: bash
-    run: |
-      ./scripts/deps/setup-minisat.sh
-      ./scripts/deps/setup-cms.sh
-
   # Keyed by build type as well: the two differ in optimisation level and in
   # whether NDEBUG is defined, so they share no compilations. One key would
   # have them evicting each other's entries inside the 800M budget while
@@ -108,8 +97,8 @@ runs:
     uses: actions/cache@v4
     with:
       path: ~/.cache/ccache
-      key: ccache-static-${{ inputs.build-type || 'default' }}-${{ github.run_id }}
-      restore-keys: ccache-static-${{ inputs.build-type || 'default' }}-
+      key: ccache-static-${{ inputs.build-type || 'default' }}/${{ github.run_id }}
+      restore-keys: ccache-static-${{ inputs.build-type || 'default' }}/
 
   # CryptoMiniSat is linked in rather than disabled, because UserDefinedFlags
   # makes whichever solver is compiled in the default one, and MiniSat is not
@@ -119,11 +108,12 @@ runs:
   # ahead of it if both were compiled in, so this build deliberately does not
   # enable USE_CADICAL. CryptoMiniSat uses CaDiCaL internally regardless.
   #
-  # Linking it needs the static GMP archives (libgmp.a, libgmpxx.a) the
-  # CryptoMiniSat config asks for, hence libgmp-dev above -- the runner image
-  # supplies the shared library but a static link needs the archive.
+  # Linking it needs GMP: the CryptoMiniSat config puts it on the link line,
+  # and with STATICCOMPILE it is looked up as libgmp.a, hence libgmp-dev
+  # above. The runner image happens to ship that package already, but the
+  # dependency is this action's, so it is named rather than assumed.
   #
-  # FORCE_CMS turns a CryptoMiniSat that was not found into a configure-time
+  # USE_CRYPTOMINISAT=ON turns a CryptoMiniSat that was not found into a configure-time
   # error. Without it find_package failing is silent: the build simply falls
   # through to MiniSat and the mistake surfaces at the smoke test below,
   # after a full build has been paid for. The smoke test stays anyway --
@@ -144,22 +134,20 @@ runs:
       if [ -n "$BUILD_TYPE" ]; then
         args+=("-DCMAKE_BUILD_TYPE=$BUILD_TYPE")
       fi
-      cmake -DSTATICCOMPILE:BOOL=ON -Dcryptominisat5_DIR:PATH="$GITHUB_WORKSPACE/deps/install/lib/cmake/cryptominisat5" -DFORCE_CMS:BOOL=ON -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+      cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
-  # ONLY_SIMPLE, or a runner without Boost, produces stp_simple rather than
-  # stp. Report whichever was built so the caller does not have to guess.
   - name: Build
     id: build
     shell: bash
     working-directory: build
+    # 400M rather than 800M; see the note in ci.yml's gcc/clang job.
     env:
-      CCACHE_MAXSIZE: 800M
+      CCACHE_MAXSIZE: 400M
     run: |
       ccache --zero-stats
       cmake --build . --parallel "$(nproc)"
       ccache --show-stats
-      stp=$([ -x ./stp ] && echo stp || echo stp_simple)
-      echo "binary=build/$stp" >> "$GITHUB_OUTPUT"
+      echo "binary=build/stp" >> "$GITHUB_OUTPUT"
 
   # Linking is most of the point of this action, but a binary that links and
   # then dies on the first query would still pass, so solve something and
@@ -193,5 +181,43 @@ runs:
         echo "$expected.smt2: '$got'"
         [ "$got" = "$expected" ] || exit 1
       done
+      # Real-literal folding through the statically linked LibBF: the
+      # decimal fold must equal its packed-bits spelling.
+      echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)' > lit.smt2
+      got=$("$stp" lit.smt2)
+      echo "lit.smt2: '$got'"
+      [ "$got" = "unsat" ] || exit 1
+
+  # A static libstp does not absorb the archives it links, so a consumer has
+  # to resolve them itself -- which means an installed static STP has to ship
+  # them and its STPTargets.cmake has to name them somewhere that still exists
+  # on the machine doing the consuming. Nothing else checks that: the
+  # install-tree consumer test in the suite runs only where ENABLE_TESTING is
+  # on, and this job leaves it off.
+  #
+  # The build tree and the dependency directory are moved out of the way first.
+  # Without that this passes on paths that happen to still be there, which is
+  # exactly how it passed while naming paths no other machine would have.
+  - name: Installed static package is self-contained
+    shell: bash
+    run: |
+      # DESTDIR rather than --install --prefix: STP installs its public
+      # headers to an absolute CMAKE_INSTALL_FULL_INCLUDEDIR, which --prefix
+      # cannot redirect, so the install would land in /usr/local and fail on
+      # permissions. Staging is what the in-suite consumer test does too.
+      stage="$GITHUB_WORKSPACE/static-install"
+      cmake -E env DESTDIR="$stage" cmake --install build
+      mv "$stage" "$stage-moved"
+      mv build build-away
+      mv deps deps-away
+      cmakedir=$(dirname "$(find "$stage-moved" -name STPConfig.cmake | head -1)")
+      echo "consuming $cmakedir"
+      cmake -S tests/api/install/uf-public-header-consumer -B consumer \
+            -DSTP_DIR="$cmakedir" \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/deps-away/install"
+      cmake --build consumer --parallel "$(nproc)"
+      ctest --test-dir consumer --output-on-failure
+      mv build-away build
+      mv deps-away deps
 
 # EOF

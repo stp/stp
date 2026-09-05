@@ -1,0 +1,8 @@
+(set-logic QF_AX)
+(declare-sort Index 0)
+(declare-sort OtherIndex 0)
+(declare-sort Element 0)
+(declare-fun a () (Array Index Element))
+(declare-fun b () (Array OtherIndex Element))
+(assert (= a b))
+(check-sat)

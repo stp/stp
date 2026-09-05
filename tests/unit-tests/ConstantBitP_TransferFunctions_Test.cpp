@@ -641,21 +641,20 @@ TEST_F(ConstantBitP_TransferFunctions, signedRemainderExhaustiveWidth3)
       OVERAPPROXIMATES, SETTLES_IN_ONE_CALL, RESULT_IS_VAGUE);
 }
 
-// bvsmod is the only transfer function that fails to settle on a single call
-// with *distinct* children: 795 of the 19683 width-3 starting states derive
-// more on a later call, and 671 of those end in a CONFLICT the first call
-// missed. propagate() only ever gives it one call, so that reasoning is
-// currently unreachable in the solver.
+// bvsmod used to be the only transfer function that failed to settle on a
+// single call with *distinct* children: 795 of the 19683 width-3 starting
+// states derived more on a later call, 671 of them a CONFLICT the first
+// call missed. It now iterates its structural and decompose passes to an
+// internal fixed point, so it must settle in one call like everything else.
 TEST_F(ConstantBitP_TransferFunctions, signedModulusExhaustiveWidth3)
 {
-  const unsigned bvsmodNeedsThreeCalls = 3;
   exhaustiveCheck(
       "bvsmod",
       [this](std::vector<FixedBits*>& children, FixedBits& out) {
         return bvSignedModulusBothWays(children, out, &mgr);
       },
       evaluatorSemantics(&mgr, stp::SBVMOD, 3), bv3(2), out3(),
-      OVERAPPROXIMATES, bvsmodNeedsThreeCalls);
+      OVERAPPROXIMATES, SETTLES_IN_ONE_CALL);
 }
 
 TEST_F(ConstantBitP_TransferFunctions, multiplicationExhaustiveWidth3)
@@ -690,6 +689,34 @@ TEST_F(ConstantBitP_TransferFunctions, multiplicationThreeChildrenDoesNothing)
   EXPECT_EQ(NO_CHANGE, bvMultiplyBothWays(children, out, &mgr, NULL));
   EXPECT_TRUE(FixedBits::equals(out, fromString("***")));
   EXPECT_TRUE(FixedBits::equals(a, fromString("**1")));
+}
+
+// The dispatcher must also leave no multiplication-stats entry for a wider
+// multiply: bvMultiplyBothWays bails before filling the stats in, and an
+// empty entry's NULL column arrays would be read by the bit-blaster's
+// getMS() later.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationThreeChildrenStoresNoStats)
+{
+  FixedBits a = fromString("**1");
+  FixedBits b = fromString("**1");
+  FixedBits c = fromString("***");
+  FixedBits out = fromString("***");
+
+  std::vector<FixedBits*> children;
+  children.push_back(&a);
+  children.push_back(&b);
+  children.push_back(&c);
+
+  const stp::ASTNode x = mgr.CreateSymbol("msmX", 0, 3);
+  const stp::ASTNode y = mgr.CreateSymbol("msmY", 0, 3);
+  const stp::ASTNode z = mgr.CreateSymbol("msmZ", 0, 3);
+  const stp::ASTNode n =
+      mgr.hashingNodeFactory->CreateTerm(stp::BVMULT, 3, x, y, z);
+
+  MultiplicationStatsMap msm;
+  EXPECT_EQ(NO_CHANGE, ConstantBitPropagation::dispatchToTransferFunctions(
+                           &mgr, stp::BVMULT, children, out, n, &msm));
+  EXPECT_TRUE(msm.map.empty());
 }
 
 // An odd operand c is invertible mod 2^k, so c * other == output can also be

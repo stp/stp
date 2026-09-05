@@ -57,7 +57,6 @@ class StrengthReduction
 
   // A special version that handles the lhs appearing in the rhs of the fromTo
   // map.
-  ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache);
 
   ASTNode visit(const ASTNode& n, stp::NodeDomainAnalysis& nda, ASTNodeMap& fromTo);
 
@@ -67,8 +66,8 @@ class StrengthReduction
 
 public:
 
-  using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
-  using NodeToFixedBitsMap = std::unordered_map<const ASTNode, FixedBits*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+  // The domain-map types come from NodeDomainAnalysis.h (the owner of the
+  // data); duplicating them here previously shadowed those definitions.
 
   StrengthReduction(NodeFactory *nf, UserDefinedFlags *uf);
   

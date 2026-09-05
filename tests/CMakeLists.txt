@@ -21,13 +21,115 @@
 # -----------------------------------------------------------------------------
 # Check we can find the lit tool
 # -----------------------------------------------------------------------------
-find_program(LIT_TOOL
-             lit
-             DOC "Path to lit tool"
-            )
+# lit is the last thing here that a machine had to have been prepared for: it
+# is not a library STP links but a program the tests are driven by, it is not
+# packaged by every distribution, and `pip install lit` into the system
+# interpreter is not something a build should ask for. So it is treated like
+# every other dependency -- named explicitly, found if installed, and otherwise
+# fetched, which for a Python program means a virtual environment of its own in
+# the build tree.
+#
+#   LIT_TOOL              rung 0, an absolute path to a lit
+#   an installed lit      rung 1
+#   ENABLE_AUTO_DOWNLOAD  rung 3, pip install into ${CMAKE_BINARY_DIR}/venv
+# 23.1.0, not 18.1.8. lit 23 rejects the external shell this suite used to ask
+# for, so the two have to move together; pinning the venv to 18 while CI
+# installed whatever pip called latest is what let a lit release break every
+# job that runs these tests.
+set(LIT_VERSION "23.1.0" CACHE STRING "lit version to install when one has to be")
+mark_as_advanced(LIT_VERSION)
+
+set(STP_VENV_DIR "${PROJECT_BINARY_DIR}/venv")
+
+# find_program caches its answer, and the auto-download branch below ends by
+# FORCEing its own into that same cache entry. Left alone the two self-disable:
+# every reconfigure after the first finds LIT_TOOL already set, skips the
+# branch whole, and takes the version check inside it along too. Both failures
+# are quiet ones. A venv removed under a surviving cache -- a cleaned build
+# tree, a pruned scratch disk -- reaches the "path does not seem to exist"
+# error below and asks the user to edit a cache variable by hand, when
+# recreating what we put there ourselves is plainly what was wanted. And a
+# bumped LIT_VERSION goes unread, which is the one thing the check exists to
+# stop.
+#
+# So discard the cached answer before searching, when it no longer resolves or
+# when it is the one we installed. A lit named by the user or found on PATH is
+# left alone in both respects: it sits on a higher rung, and its version is
+# deliberately not our business -- see tests/query-files/lit.cfg, which is
+# written to parse on whatever lit is already installed rather than only the
+# newest.
+if(LIT_TOOL AND NOT EXISTS "${LIT_TOOL}")
+    message(STATUS
+        "Discarding LIT_TOOL (${LIT_TOOL}): the path no longer exists")
+    unset(LIT_TOOL CACHE)
+elseif(LIT_TOOL AND LIT_TOOL STREQUAL "${STP_VENV_DIR}/bin/lit")
+    # Ours from a previous configure. Re-derived below so that LIT_VERSION
+    # still governs; the venv itself survives when it already holds it.
+    unset(LIT_TOOL CACHE)
+endif()
+
+find_program(LIT_TOOL lit DOC "Path to lit tool")
+
+if(NOT LIT_TOOL AND ENABLE_AUTO_DOWNLOAD)
+    # Created once and reused: pip is slow, and reconfiguring is not rare. But
+    # reused only while it holds the version asked for -- a bumped LIT_VERSION
+    # against an existing build tree used to be ignored in silence, and the
+    # status line below would then report the version that was wanted rather
+    # than the one about to run the tests.
+    set(_venv_lit_ok FALSE)
+    if(EXISTS "${STP_VENV_DIR}/bin/lit")
+        execute_process(
+            COMMAND "${STP_VENV_DIR}/bin/lit" --version
+            OUTPUT_VARIABLE _venv_lit_version
+            ERROR_VARIABLE _venv_lit_version
+            OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE _venv_lit_rc)
+        if(_venv_lit_rc EQUAL 0 AND
+           _venv_lit_version MATCHES "(^| )${LIT_VERSION}( |$)")
+            set(_venv_lit_ok TRUE)
+        else()
+            message(STATUS
+                "Replacing the lit virtual environment: wanted ${LIT_VERSION}, "
+                "found \"${_venv_lit_version}\"")
+            file(REMOVE_RECURSE "${STP_VENV_DIR}")
+        endif()
+    endif()
+    if(NOT _venv_lit_ok)
+        message(STATUS "Creating a virtual environment for lit: ${STP_VENV_DIR}")
+        execute_process(
+            COMMAND "${PYTHON_EXECUTABLE}" -m venv "${STP_VENV_DIR}"
+            RESULT_VARIABLE _venv_rc OUTPUT_QUIET)
+        if(NOT _venv_rc EQUAL 0)
+            message(FATAL_ERROR
+                "Could not create a virtual environment with "
+                "${PYTHON_EXECUTABLE} -m venv. On Debian-likes the venv module "
+                "is a separate package (python3-venv); install it, or install "
+                "lit yourself and point -DLIT_TOOL at it.")
+        endif()
+        # Quiet unless it fails, in which case pip's own diagnosis is the
+        # useful part and gets printed with ours.
+        execute_process(
+            COMMAND "${STP_VENV_DIR}/bin/pip" install --quiet
+                    --disable-pip-version-check "lit==${LIT_VERSION}"
+            RESULT_VARIABLE _pip_rc
+            OUTPUT_VARIABLE _pip_out ERROR_VARIABLE _pip_out)
+        if(NOT _pip_rc EQUAL 0)
+            message(FATAL_ERROR
+                "Could not install lit==${LIT_VERSION} into ${STP_VENV_DIR}:\n"
+                "${_pip_out}\n"
+                "Install lit yourself and point -DLIT_TOOL at it.")
+        endif()
+    endif()
+    set(LIT_TOOL "${STP_VENV_DIR}/bin/lit" CACHE FILEPATH "Path to lit tool" FORCE)
+    message(STATUS "Using lit ${LIT_VERSION} from ${STP_VENV_DIR}")
+endif()
 
 if(NOT LIT_TOOL)
-    message(FATAL_ERROR "Could not find 'lit' tool. You need to install it by e.g. 'pip install lit' If it's already installed, set LIT_TOOL to the full path for lit")
+    message(FATAL_ERROR
+        "Could not find the 'lit' tool, which the tests are driven by. "
+        "Configure with -DENABLE_AUTO_DOWNLOAD=ON to have it installed into a "
+        "virtual environment in the build tree, install it yourself "
+        "(pip install lit) and put it on PATH, or point -DLIT_TOOL at one. "
+        "To build without the tests, configure with -DENABLE_TESTING=OFF.")
 endif()
 
 # Checking absolute path because if(EXISTS ...) behaviour only well
@@ -52,13 +154,52 @@ set(LIT_ARGS -s CACHE STRING "Arguments to pass to lit")
 # so ``find_package(GTest REQUIRED)`` fails.
 #
 # Instead it is recommended that projects build their own copy of GTest, which
-# is what happens here: scripts/deps/setup-gtest.sh clones upstream googletest
-# at a pinned tag into deps/gtest, and it is built from source as part of this
-# build. Everyone therefore compiles the same GTest with the same flags as STP.
-set(GTEST_PREFIX ${PROJECT_SOURCE_DIR}/deps/gtest)
-if (NOT EXISTS "${GTEST_PREFIX}/CMakeLists.txt")
-    message(FATAL_ERROR "Could not find GTest. Did you run scripts/deps/setup-gtest.sh?")
+# is what happens here: it is fetched at a pinned tag and built from source as
+# part of this build, so everyone compiles the same GTest with the same flags
+# as STP.
+#
+# So GTest is the one dependency here that is fetched but not built by an
+# ExternalProject. An ExternalProject builds in a separate CMake invocation,
+# with its own cache and its own flags, which is exactly what must not happen:
+# GTest has to be compiled with STP's flags, with gtest_force_shared_crt under
+# MSVC, and with whatever a sanitizer build has put in CMAKE_CXX_FLAGS. That
+# needs add_subdirectory(), which needs the source to exist during *this*
+# configure -- which is what FetchContent is for and ExternalProject is not.
+#
+# GTEST_DIR is rung 0, and handing it to FetchContent as the source directory
+# rather than branching on it keeps one code path: FetchContent skips the
+# download entirely when it is told where the source already is.
+include(FetchContent)
+
+set(GTEST_DIR "${PROJECT_SOURCE_DIR}/deps/gtest" CACHE PATH
+    "Path to a googletest checkout to build GTest from")
+
+if (EXISTS "${GTEST_DIR}/CMakeLists.txt")
+    if (NOT DEFINED FETCHCONTENT_SOURCE_DIR_GOOGLETEST)
+        set(FETCHCONTENT_SOURCE_DIR_GOOGLETEST "${GTEST_DIR}")
+    endif()
+elseif (NOT DEFINED FETCHCONTENT_SOURCE_DIR_GOOGLETEST
+        AND NOT ENABLE_AUTO_DOWNLOAD
+        AND NOT FETCHCONTENT_FULLY_DISCONNECTED)
+    # Unlike an ExternalProject, FetchContent downloads at configure time, so
+    # there is no deferred rung to fall through to and the gate has to be
+    # checked by hand. FETCHCONTENT_FULLY_DISCONNECTED stands in for
+    # check_ep_downloaded(): an already-populated base directory, with CMake
+    # guaranteeing no download rather than us inferring it from what is there.
+    message(FATAL_ERROR
+        "Could not find googletest, which ENABLE_TESTING needs. Configure "
+        "with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here, point "
+        "-DGTEST_DIR at an existing checkout, set "
+        "-DFETCHCONTENT_FULLY_DISCONNECTED=ON if a shared "
+        "FETCHCONTENT_BASE_DIR already holds it, or build without the tests "
+        "with -DENABLE_TESTING=OFF.")
 endif()
+
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest
+    GIT_TAG v1.17.0
+)
 
 if (MSVC)
   # STP is built with the shared version of the CRT, gtest defaults to the
@@ -79,7 +220,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-nonliteral -Wno-missing-fiel
 if (WERROR AND NOT MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
 endif()
-add_subdirectory(${GTEST_PREFIX} gtest)
+# Does the add_subdirectory(), inside the flags set just above.
+FetchContent_MakeAvailable(googletest)
 set(CMAKE_CXX_FLAGS "${PREV_CMAKE_CXX_FLAGS}")
 set(GTEST_BOTH_LIBRARIES gtest gtest_main)
 
@@ -88,7 +230,74 @@ set(GTEST_BOTH_LIBRARIES gtest gtest_main)
 # STP's own test translation units that include them. The gtest target carries
 # the same directory as a SYSTEM INTERFACE include, so this is belt and braces
 # for any test target that includes the header without linking the library.
-include_directories(SYSTEM ${GTEST_PREFIX}/googletest/include)
+include_directories(SYSTEM ${googletest_SOURCE_DIR}/googletest/include)
+
+# -----------------------------------------------------------------------------
+# Find OutputCheck, which the query-file tests match solver output with
+# -----------------------------------------------------------------------------
+# A tree of Python, so there is nothing to build and nothing to install --
+# FetchContent populates it and stops, because it has no CMakeLists for
+# MakeAvailable to descend into.
+#
+# Pinned, which it never was before. It was the one dependency whose revision
+# nothing recorded, which is why scripts/deps/cache-key.sh has to resolve its
+# HEAD over the network to build a CI cache key: with a pin here, the key can
+# be a hash of these files and nothing else.
+set(OUTPUTCHECK_DIR "${PROJECT_SOURCE_DIR}/deps/OutputCheck" CACHE PATH
+    "Path to an OutputCheck checkout")
+
+if (EXISTS "${OUTPUTCHECK_DIR}/bin/OutputCheck")
+    if (NOT DEFINED FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK)
+        set(FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK "${OUTPUTCHECK_DIR}")
+    endif()
+elseif (NOT DEFINED FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK
+        AND NOT ENABLE_AUTO_DOWNLOAD
+        AND NOT FETCHCONTENT_FULLY_DISCONNECTED)
+    message(FATAL_ERROR
+        "Could not find OutputCheck, which the query-file tests need. "
+        "Configure with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here, "
+        "point -DOUTPUTCHECK_DIR at an existing checkout, set "
+        "-DFETCHCONTENT_FULLY_DISCONNECTED=ON if a shared "
+        "FETCHCONTENT_BASE_DIR already holds it, or build without "
+        "the tests with -DENABLE_TESTING=OFF.")
+endif()
+
+FetchContent_Declare(
+    outputcheck
+    GIT_REPOSITORY https://github.com/stp/OutputCheck
+    GIT_TAG e0133ed42b091a7ddea6b901055e142447819a9e
+)
+FetchContent_MakeAvailable(outputcheck)
+
+# Handed to lit through lit.site.cfg rather than worked out inside lit.cfg from
+# the source tree, which is where it used to be assumed to sit.
+set(STP_OUTPUTCHECK_TOOL "${outputcheck_SOURCE_DIR}/bin/OutputCheck")
+if (NOT EXISTS "${STP_OUTPUTCHECK_TOOL}")
+    message(FATAL_ERROR "OutputCheck was found at ${outputcheck_SOURCE_DIR} "
+                        "but has no bin/OutputCheck in it")
+endif()
+message(STATUS "Found OutputCheck: ${STP_OUTPUTCHECK_TOOL}")
+
+# OutputCheck ships a `not` helper whose shebang is #!/usr/bin/env python, and
+# a great many systems have no bare `python` -- only python3. lit already puts
+# OutputCheck's bin/ on PATH so that helper can be found; give it a `python` to
+# find there too, pointing at the interpreter this build already settled on.
+#
+# Without this every error-path test -- each one a `not %solver ...` -- fails,
+# because the shebang cannot be resolved and the helper feeds OutputCheck an
+# empty stream. That was already true of any freshly cloned OutputCheck; it
+# simply used to be worked around by hand, one machine at a time.
+#
+# Not on Windows: `not` is a shell script with a POSIX shebang, so it would not
+# run there whatever is on PATH, and the Windows jobs do not run lit.
+if (NOT WIN32)
+    set(STP_PYTHON_SHIM_DIR "${CMAKE_CURRENT_BINARY_DIR}/python-shim")
+    file(MAKE_DIRECTORY "${STP_PYTHON_SHIM_DIR}")
+    file(CREATE_LINK "${PYTHON_EXECUTABLE}" "${STP_PYTHON_SHIM_DIR}/python"
+         SYMBOLIC)
+else()
+    set(STP_PYTHON_SHIM_DIR "")
+endif()
 
 # Add handy macros/functions
 include(AddSTPGTest)
@@ -146,7 +355,7 @@ option(TEST_QUERY_FILES
        ON
       )
 
-if(TEST_QUERY_FILES)
+if(TEST_QUERY_FILES AND STP_EXECUTABLE_AVAILABLE)
     add_subdirectory(query-files)
 endif()
 
@@ -175,4 +384,54 @@ option(TEST_UNITS
 
 if(TEST_UNITS)
     add_subdirectory(unit-tests)
+endif()
+
+# -----------------------------------------------------------------------------
+# The floating-point self-test tools (built under tools/ whenever
+# ENABLE_TESTING is on) exit non-zero on failure, so they run as plain
+# CTest tests.
+# -----------------------------------------------------------------------------
+
+add_test(NAME test_fpbackend COMMAND test_fpbackend)
+add_test(NAME test_fprewrites COMMAND test_fprewrites)
+
+# scripts/benchmark-bv-refinement.sh is evaluation machinery, not solver code,
+# and scripts/check-benchmark-bv-refinement.sh exercises it against a fake
+# solver. Neither is wired into CTest: they need bash, timeout, sha256sum and
+# /usr/bin/time, so the coverage would silently disappear on a platform that
+# lacks one, and a self-check that is only sometimes run is worse than one a
+# person runs deliberately.
+
+# -----------------------------------------------------------------------------
+# Default-off baseline differential for the array-equality feature
+#
+# Builds the pinned pre-extension baseline commit from repository history
+# with the candidate's toolchain, runs the identical C API observation
+# driver (tools/extdiff) against both with array equality disabled, and
+# requires byte-identical output after canonicalizing the API's unspecified
+# counterexample-array entry order. Skips cleanly when the baseline commit is
+# unavailable (e.g. shallow CI clones). The baseline checkout/build is cached
+# inside the build tree, so only the first run pays for it.
+#
+# Opt-in (-DTEST_BASELINE_DIFFERENTIAL=ON): the first run configures and
+# compiles an entire second STP from git history, which a plain ctest
+# invocation should not pay for by surprise.
+# -----------------------------------------------------------------------------
+
+option(TEST_BASELINE_DIFFERENTIAL
+       "Enable the default-off C API baseline differential test"
+       OFF
+      )
+
+if(TEST_BASELINE_DIFFERENTIAL AND BUILD_EXECUTABLES)
+    add_test(
+      NAME default-off-capi-baseline-differential
+      COMMAND ${PROJECT_SOURCE_DIR}/scripts/extdiff-baseline-differential.sh
+              ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}
+    )
+    set_tests_properties(default-off-capi-baseline-differential PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 1800
+      LABELS "baseline-differential"
+    )
 endif()

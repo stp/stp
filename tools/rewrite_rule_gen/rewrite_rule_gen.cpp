@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <memory>
 #include <vector>
 
@@ -47,7 +48,8 @@ THE SOFTWARE.
 #include "stp/NodeFactory/TypeChecker.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Sat/MinisatCore.h"
+#include "stp/Sat/SATSolver.h"
+#include "stp/Sat/SATSolverFactory.h"
 #include "stp/Simplifier/DifficultyScore.h"
 #include "stp/cpp_interface.h"
 
@@ -509,7 +511,7 @@ int getDifficulty(const ASTNode& n_)
     return -1;
 
   BBNodeManagerAIG nm;
-  BitBlaster bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
+  BitBlasterAIG bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
 
   // equals fresh variable to convert to boolean type.
   ASTNode f = mgr->CreateFreshVariable(0, widen_to, "ffff");
@@ -519,47 +521,53 @@ int getDifficulty(const ASTNode& n_)
 
   clearSAT();
 
-  Cnf_Dat_t* cnfData = NULL;
+  CNF cnfData;
   ToCNFAIG toCNF(mgr->UserFlags);
   ToSATBase::ASTNodeToSATVar nodeToSATVar;
   toCNF.toCNF(BBFormula, cnfData, nodeToSATVar, false, nm);
 
-  // Send the clauses to Minisat, do unit propagation.
+  // Send the clauses to the SAT solver, do unit propagation, and count what
+  // is left. Backends that keep no clause count fall back to the raw CNF
+  // size: a coarser difficulty, but still monotone with formula size.
   ///////////////
-
-  // Create a new sat variable for each of the variables in the CNF.
-  assert(ss->nVars() == 0);
-  for (int i = 0; i < cnfData->nVars; i++)
-    ss->newVar();
-
-  SATSolver::vec_literals satSolverClause;
-  for (int i = 0; i < cnfData->nClauses; i++)
+  int score;
+  if (ss->reportsClauseCount())
   {
-    satSolverClause.clear();
-    for (int *pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
-         pLit < pStop; pLit++)
+    // Create a new sat variable for each of the variables in the CNF.
+    assert(ss->nVars() == 0);
+    for (uint32_t i = 0; i < cnfData.varCount(); i++)
+      ss->newVar();
+
+    SATSolver::vec_literals satSolverClause;
+    for (CNF::ClauseCursor c = cnfData.clauses(); c.next();)
     {
-      uint32_t var = (*pLit) >> 1;
-      assert((var < ss->nVars()));
-      Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
-      satSolverClause.push(l);
+      satSolverClause.clear();
+      for (const int *pLit = c.begin(), *pStop = c.end(); pLit < pStop; pLit++)
+      {
+        uint32_t var = (*pLit) >> 1;
+        assert((var < ss->nVars()));
+        SATSolver::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
+        satSolverClause.push(l);
+      }
+
+      ss->addClause(satSolverClause);
     }
 
-    ss->addClause(satSolverClause);
+    ss->simplify();
+    assert(ss->okay());
+    // should be satisfiable.
+
+    // Why we go to all this trouble. The number of clauses.
+    score = ss->nClauses();
+    assert(score <= (int)cnfData.clauseCount());
   }
-
-  ss->simplify();
-  assert(ss->okay());
-  // should be satisfiable.
-
-  // Why we go to all this trouble. The number of clauses.
-  const int score = ss->nClauses();
-  assert(score <= cnfData->nClauses);
+  else
+  {
+    score = (int)cnfData.clauseCount();
+  }
   //////////////
 
-  // Cnf_ClearMemory();
-  Cnf_DataFree(cnfData);
-  cnfData = NULL;
+  cnfData.clear();
 
   // Free the memory in the AIGs.
   BBFormula = BBNodeAIG(); // null node
@@ -642,7 +650,7 @@ void startup()
   mgr->UserFlags.stats_flag = false;
   mgr->UserFlags.optimize_flag = true;
 
-  ss = new MinisatCore;
+  ss = createSATSolver(mgr->UserFlags);
 
   // Prime the cache with 100..
   for (int i = 0; i < 100; i++)
@@ -677,7 +685,7 @@ void shutdown()
 void clearSAT()
 {
   delete ss;
-  ss = new MinisatCore;
+  ss = createSATSolver(mgr->UserFlags);
 
   delete GlobalSTP->tosat;
   ToSATAIG* aig = new ToSATAIG(mgr, GlobalSTP->arrayTransformer);
@@ -694,7 +702,7 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
 
   ASTNode query2 = nf->CreateNode(NOT, query);
 
-  assert(ss->nClauses() == 0);
+  assert(!ss->reportsClauseCount() || ss->nClauses() == 0);
   mgr->SetQuery(mgr->ASTUndefined);
 
   // A negative budget means "no limit", which is spelled by not configuring
@@ -703,7 +711,7 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
     ss->setMaxConflicts(timeout_max_confl);
 
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(
-      *ss, query2, query2, GlobalSTP->tosat, false);
+      *ss, query2, query2, query2, GlobalSTP->tosat, false);
 
   return (r == SOLVER_VALID); // unsat, always true
 }
@@ -804,77 +812,143 @@ bool is_subgraph(const ASTNode& g, const ASTNode& h)
 
 // Breaks the expressions into buckets recursively, then pairwise checks that
 // they are equivalent.
+// This used to recurse three ways, and an unbounded run segfaulted: the stack
+// ran out at depth 23771. Two of the calls were tail calls -- "narrow the list
+// by one counterexample, start again, and return" -- and the list shrinks by
+// about one element each time, so they alone went tens of thousands of frames
+// deep. The third splits the list into equivalence buckets and recurses into
+// each, and because a narrowed restart re-enters that split, converting only
+// the tail calls just moved the growth (it then died at depth 38730).
+//
+// So the search carries its own stack. `pending` holds the buckets still to
+// be examined, the tail calls are iterations of the inner loop, and the depth
+// STP's own stack reaches no longer depends on the size of the function list.
 void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
                   const int depth = 0)
 {
-  if (expressions.size() < 2)
+  struct Frame
   {
-    discarded += expressions.size();
-    return;
+    ASTVec expressions;
+    vector<VariableAssignment> values;
+    int depth;
+  };
+
+  vector<Frame> pending;
+  {
+    // Taken by reference and consumed, exactly as before.
+    Frame first;
+    first.expressions.swap(expressions);
+    first.values = values;
+    first.depth = depth;
+    pending.push_back(std::move(first));
   }
 
-  if (max_search_depth >= 0 && depth >= max_search_depth)
+  while (!pending.empty())
   {
-    discarded += expressions.size();
-    return;
+  ASTVec work;
+  work.swap(pending.back().expressions);
+  vector<VariableAssignment> vals(std::move(pending.back().values));
+  int d = pending.back().depth;
+  pending.pop_back();
+
+  // The former tail calls set this and go round again with a narrowed list.
+  bool restart = true;
+  // Set when a split separated nothing, so the next round goes straight to
+  // the pairwise pass instead of performing the identical split again.
+  bool skipSplit = false;
+  while (restart)
+  {
+  restart = false;
+
+  if (work.size() < 2)
+  {
+    discarded += work.size();
+    break;
+  }
+
+  if (max_search_depth >= 0 && d >= max_search_depth)
+  {
+    discarded += work.size();
+    break;
   }
 
   if (max_rules_wanted >= 0 &&
       (int)rewrite_system.size() >= max_rules_wanted)
   {
-    discarded += expressions.size();
-    return;
+    discarded += work.size();
+    break;
   }
 
   cout << '\n'
-       << "depth:" << depth << ", size:" << expressions.size()
-       << " values:" << values.size() << " found: " << rewrite_system.size()
+       << "depth:" << d << ", size:" << work.size()
+       << " values:" << vals.size() << " found: " << rewrite_system.size()
        << " done:" << discarded << "\n";
 
-  assert(expressions.size() > 0);
+  assert(work.size() > 0);
 
-  if (values.size() > 0)
+  if (vals.size() > 0 && !skipSplit)
   {
-    const int old_size = values.size();
+    const int old_size = vals.size();
     if (old_size > 10)
-      removeDuplicates(expressions);
+      removeDuplicates(work);
 
-    discarded += (old_size - values.size());
+    discarded += (old_size - vals.size());
 
     // Put the functions in buckets based on their results on the values.
     std::unordered_map<uint64_t, ASTVec> map;
-    for (size_t i = 0; i < expressions.size(); i++)
+    for (size_t i = 0; i < work.size(); i++)
     {
-      if (expressions[i] == mgr->ASTUndefined)
+      if (work[i] == mgr->ASTUndefined)
         continue; // omit undefined.
 
       if (i % 50000 == 49999)
         cout << ".";
-      uint64_t hash = getHash(expressions[i], values);
+      uint64_t hash = getHash(work[i], vals);
       if (map.find(hash) == map.end())
         map.insert(make_pair(hash, ASTVec()));
-      map[hash].push_back(expressions[i]);
+      map[hash].push_back(work[i]);
     }
-    expressions.clear();
+    work.clear();
 
     std::unordered_map<uint64_t, ASTVec>::iterator it2;
 
     cout << "Split into " << map.size() << " pieces\n";
-    if (depth > 0)
+    if (d > 0)
     {
       assert(map.size() > 0);
     }
 
-    for (it2 = map.begin(); it2 != map.end(); it2++)
+    // One bucket holding everything means this value set told the expressions
+    // apart not at all, so it has taught us nothing and must be kept rather
+    // than reset -- resetting it is what made every split as coarse as the
+    // first, and the pairwise pass then produced the same counterexample
+    // forever. Go on to examine the group pairwise, and retry the split once
+    // that pass has contributed another assignment.
+    if (map.size() == 1)
     {
-      ASTVec& equiv = it2->second;
-      vector<VariableAssignment> a;
-      findRewrites(equiv, a, depth + 1);
-      equiv.clear();
+      work.swap(map.begin()->second);
+      skipSplit = true;
+      restart = true;
+      continue; // same frame, straight to the pairwise pass
     }
-    return;
+
+    // Pushed rather than recursed into. Reversed first so they come back off
+    // the stack in the order the recursive version visited them.
+    vector<ASTVec> buckets;
+    for (it2 = map.begin(); it2 != map.end(); it2++)
+      buckets.push_back(std::move(it2->second));
+    map.clear();
+
+    for (size_t b = buckets.size(); b-- > 0;)
+    {
+      Frame f;
+      f.expressions.swap(buckets[b]);
+      f.depth = d + 1;
+      pending.push_back(std::move(f));
+    }
+    break;
   }
-  ASTVec& equiv = expressions;
+  ASTVec& equiv = work;
 
   for (size_t i = 0; i < equiv.size(); i++)
   {
@@ -915,11 +989,11 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
 
       VariableAssignment different;
       bool bad = false;
-      const long st = getCurrentTime();
+      const int64_t st = getCurrentTime();
 
       if (checkRule(from, to, different, bad))
       {
-        const long checktime = getCurrentTime() - st;
+        const int64_t checktime = getCurrentTime() - st;
 
         equiv[i] = rewriteThroughWithAIGS(equiv[i]);
         equiv[j] = rewriteThroughWithAIGS(equiv[j]);
@@ -960,8 +1034,15 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
           // If it can fit into an unsigned. Split the list on it.
           if (sizeof(unsigned int) * 8 > bad.getV().GetValueWidth())
           {
-            findRewrites(equiv, ass, depth + 1);
-            return;
+            // equiv aliases work, so the list carries over untouched.
+            // Accumulated, not replaced: dropping the assignments already
+            // found makes every split as coarse as the first one, so a group
+            // the newest value cannot separate never gets separated.
+            vals.push_back(bad);
+            skipSplit = false; // the enlarged set can separate them now
+            d++;
+            restart = true;
+            break;
           }
           else
             continue;
@@ -997,8 +1078,12 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
                         equiv.end());
         equiv.clear();
 
-        findRewrites(newEquiv, ass, depth + 1);
-        return;
+        work.swap(newEquiv);
+        vals.push_back(different); // accumulated, see above
+        skipSplit = false; // the enlarged set can separate them now
+        d++;
+        restart = true;
+        break;
       }
 
       // Write out the rules intermitently.
@@ -1009,8 +1094,16 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
         lastOutput = rewrite_system.size();
       }
     }
+    if (restart)
+      break;
   }
-  discarded += expressions.size();
+
+  if (restart)
+    continue; // narrowed list, one more counterexample: go round again
+
+  discarded += work.size();
+  } // while (restart)
+  } // while (!pending.empty())
 }
 
 // Widen the rule.
@@ -1264,32 +1357,31 @@ void load_new_rules(const string fileName = "rules_new.smt2")
 
   if (!ifstream(
           fileName.c_str())) /// use stdin if the default file is not found.
+  {
+    // Silently blocking on a terminal looks like a hang, and reading rules
+    // from a pipe by accident looks like there were none.
+    cerr << "rewrite_rule_gen: no " << fileName << ", reading rules from stdin"
+         << endl;
     in = stdin;
+  }
   else
   {
+    cerr << "rewrite_rule_gen: reading rules from " << fileName << endl;
     in = fopen(fileName.c_str(), "r");
     opended = true; // so we know to fclose it.
   }
 
-  // We store references to "v" and "w", so we need to remove the
-  // definitions from the input we parse.
-
-  v = mgr->LookupOrCreateSymbol("v");
-  v.SetValueWidth(bits);
-  w = mgr->LookupOrCreateSymbol("w");
-  w.SetValueWidth(bits);
+  // We store references to "v" and "w". A symbol's source sort is part of its
+  // identity, so these have to be made at the sort the parser will declare
+  // them at -- LookupOrCreateSymbol leaves it Unknown, which interns a
+  // *different* node from the one the rule blocks then talk about.
+  v = mgr->CreateSourceSymbol("v", stp::SourceSort::bitVector(bits));
+  w = mgr->CreateSourceSymbol("w", stp::SourceSort::bitVector(bits));
 
   TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
   Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
   mgr->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
   GlobalParserInterface = &piTypeCheckDefault;
-
-  stringstream v_ss, w_ss;
-  v_ss << "(declare-fun v () (_ BitVec " << bits << "))";
-  string v_string = v_ss.str();
-
-  w_ss << "(declare-fun w () (_ BitVec " << bits << "))";
-  string w_string = w_ss.str();
 
   // This file I/O code: 1) Is terrible  2) I'm in a big rush so just getting it
   // working 3) am embarised by it.
@@ -1332,8 +1424,10 @@ void load_new_rules(const string fileName = "rules_new.smt2")
 
     mgr->GetRunTimes()->start(RunTimes::Parsing);
 
-    replace(s, v_string, "");
-    replace(s, w_string, "");
+    // The declarations are left in: the parser resolves a name through its
+    // own binding frames and no longer falls back to the manager's symbol
+    // table, so each block has to declare what it names. They intern to the
+    // v and w above, which were made at the same sort.
 
     // Load it into a string because other wise the parser reads in big blocks
     // way past where we want it to.
@@ -1539,6 +1633,287 @@ void test()
   rewrite_system.clear();
 }
 
+// ---------------------------------------------------------------------------
+// missed-constants: expressions the simplifying node factory left as
+// expressions, when they can only ever take one value.
+//
+// Every two-level function and predicate over the two variables is built --
+// no constant leaves, so nothing folds merely because a constant was handed
+// in -- and each result the factory did not reduce to a constant is asked
+// whether it is one anyway. (bvsub v v) is the shape being looked for.
+//
+// Constancy is "n agrees with a copy of itself over fresh variables, for
+// every assignment", which needs no candidate value to be guessed. A
+// concrete-evaluation filter runs first: a node taking two different values
+// under two assignments needs no solver call at all.
+
+// Substitutes concrete values for the variables. Every leaf is a constant
+// afterwards, so the factory folds the result -- unless it is missing a fold,
+// which is what this mode hunts, so the caller checks rather than assumes.
+// The variables the enumeration is over, and a disjoint copy of each. The
+// copies are what makes constancy decidable without guessing a value: n is
+// constant exactly when it agrees with itself over fresh variables.
+vector<ASTNode> mcVars;
+vector<ASTNode> mcFresh;
+
+// Substitutes concrete values for the variables. Every leaf is a constant
+// afterwards, so the factory folds the result -- unless it is missing a fold,
+// which is what this mode hunts, so the caller checks rather than assumes.
+ASTNode evalAt(const ASTNode& n, const vector<ASTNode>& values)
+{
+  ASTNodeMap ft;
+  for (size_t i = 0; i < mcVars.size(); i++)
+    ft.insert(make_pair(mcVars[i], values[i]));
+  ASTNodeMap cache;
+  return SubstitutionMap::replace(n, ft, cache, nf);
+}
+
+bool isFolded(const ASTNode& n)
+{
+  return n.isConstant() || n == mgr->ASTTrue || n == mgr->ASTFalse;
+}
+
+// Distinct nodes in the DAG; used only to report the smallest findings first.
+size_t nodeCount(const ASTNode& n, ASTNodeSet& seen)
+{
+  if (!seen.insert(n).second)
+    return 0;
+  size_t total = 1;
+  for (size_t i = 0; i < n.Degree(); i++)
+    total += nodeCount(n[i], seen);
+  return total;
+}
+
+size_t nodeCount(const ASTNode& n)
+{
+  ASTNodeSet seen;
+  return nodeCount(n, seen);
+}
+
+// True when n takes the same value at every sample. Wrong only in the safe
+// direction: it can pass a node that is not constant, never reject one that
+// is.
+bool sameAtEverySample(const ASTNode& n, const vector<vector<ASTNode>>& samples,
+                       ASTNode& value)
+{
+  value = evalAt(n, samples[0]);
+  if (!isFolded(value))
+    return false; // not folded even fully applied; not what this looks for
+
+  for (size_t i = 1; i < samples.size(); i++)
+    if (evalAt(n, samples[i]) != value)
+      return false;
+  return true;
+}
+
+// n is constant exactly when it agrees with a copy of itself over fresh
+// variables, whatever they are assigned.
+bool provablyConstant(const ASTNode& n)
+{
+  ASTNodeMap ft;
+  for (size_t i = 0; i < mcVars.size(); i++)
+    ft.insert(make_pair(mcVars[i], mcFresh[i]));
+  ASTNodeMap cache;
+  const ASTNode other = SubstitutionMap::replace(n, ft, cache, nf);
+
+  const ASTNode agree = (n.GetType() == BOOLEAN_TYPE)
+                            ? nf->CreateNode(IFF, n, other)
+                            : nf->CreateNode(EQ, n, other);
+  if (agree == mgr->ASTTrue)
+    return true;
+  return isConstantToSat(agree, -1);
+}
+
+// One more level of operators over `fromTerms`, appending to `terms` and
+// `preds`. Unary, binary, and up to `maxArity` children for the kinds the AST
+// lets take more than two. No constants are introduced anywhere.
+void addLevel(const ASTVec& fromTerms, ASTVec& terms, ASTVec& preds,
+              unsigned maxArity)
+{
+  static const Kind termUnary[] = {stp::BVNOT, stp::BVUMINUS};
+  static const Kind termBinary[] = {
+      stp::BVPLUS,       stp::BVSUB,   stp::BVMULT, stp::BVDIV,
+      stp::BVMOD,        stp::SBVDIV,  stp::SBVREM, stp::SBVMOD,
+      stp::BVAND,        stp::BVOR,    stp::BVXOR,  stp::BVLEFTSHIFT,
+      stp::BVRIGHTSHIFT, stp::BVSRSHIFT};
+  static const Kind predBinary[] = {stp::EQ,    stp::BVLT,  stp::BVLE,
+                                    stp::BVGT,  stp::BVGE,  stp::BVSLT,
+                                    stp::BVSLE, stp::BVSGT, stp::BVSGE};
+  // The kinds that take a variable number of children.
+  static const Kind termNary[] = {stp::BVPLUS, stp::BVMULT, stp::BVAND,
+                                  stp::BVOR, stp::BVXOR};
+
+  for (size_t i = 0; i < fromTerms.size(); i++)
+  {
+    for (size_t u = 0; u < sizeof(termUnary) / sizeof(Kind); u++)
+    {
+      ASTVec c;
+      c.push_back(fromTerms[i]);
+      terms.push_back(create(termUnary[u], c));
+    }
+
+    for (size_t j = 0; j < fromTerms.size(); j++)
+    {
+      for (size_t b = 0; b < sizeof(termBinary) / sizeof(Kind); b++)
+        terms.push_back(create(termBinary[b], fromTerms[i], fromTerms[j]));
+      for (size_t b = 0; b < sizeof(predBinary) / sizeof(Kind); b++)
+        preds.push_back(create(predBinary[b], fromTerms[i], fromTerms[j]));
+    }
+  }
+
+  // Three and more children, for the kinds that allow it. These are all
+  // commutative and associative, so only non-decreasing index tuples are
+  // built: any other order is the same node.
+  for (unsigned arity = 3; arity <= maxArity; arity++)
+  {
+    vector<size_t> idx(arity, 0);
+    while (true)
+    {
+      ASTVec c;
+      for (unsigned a = 0; a < arity; a++)
+        c.push_back(fromTerms[idx[a]]);
+      for (size_t b = 0; b < sizeof(termNary) / sizeof(Kind); b++)
+        terms.push_back(create(termNary[b], c));
+
+      // Odometer over non-decreasing tuples.
+      int a = (int)arity - 1;
+      while (a >= 0 && ++idx[a] >= fromTerms.size())
+        a--;
+      if (a < 0)
+        break;
+      for (unsigned f = a + 1; f < arity; f++)
+        idx[f] = idx[a];
+    }
+  }
+}
+
+void findMissedConstants(unsigned numVars, unsigned maxArity)
+{
+  mcVars.clear();
+  mcFresh.clear();
+  for (unsigned i = 0; i < numVars; i++)
+  {
+    std::stringstream a, b;
+    a << "x" << i;
+    b << "x" << i << "_fresh";
+    ASTNode s0 = mgr->LookupOrCreateSymbol(a.str().c_str());
+    s0.SetValueWidth(bits);
+    ASTNode s1 = mgr->LookupOrCreateSymbol(b.str().c_str());
+    s1.SetValueWidth(bits);
+    mcVars.push_back(s0);
+    mcFresh.push_back(s1);
+  }
+
+  // Corners first, then random: the corners are where the shift and division
+  // edge cases live.
+  vector<vector<ASTNode>> samples;
+  const ASTNode corner[] = {mgr->CreateZeroConst(bits),
+                            mgr->CreateOneConst(bits),
+                            mgr->CreateMaxConst(bits)};
+  for (size_t c = 0; c < 3; c++)
+  {
+    samples.push_back(vector<ASTNode>(numVars, corner[c]));
+    for (unsigned i = 0; i < numVars; i++)
+    {
+      vector<ASTNode> one(numVars, mgr->CreateZeroConst(bits));
+      one[i] = corner[c];
+      samples.push_back(one);
+    }
+  }
+  for (int r = 0; r < 12; r++)
+  {
+    vector<ASTNode> vals;
+    for (unsigned i = 0; i < numVars; i++)
+      vals.push_back(mgr->CreateBVConst(bits, rand() % (1 << bits)));
+    samples.push_back(vals);
+  }
+
+  // No constant leaves: a fold that only fires because a constant was passed
+  // in is not what this is looking for.
+  ASTVec leaves(mcVars.begin(), mcVars.end());
+
+  ASTVec terms(leaves), preds;
+  addLevel(leaves, terms, preds, maxArity);
+  removeDuplicates(terms);
+  removeDuplicates(preds);
+  cout << "one level:  " << terms.size() << " terms, " << preds.size()
+       << " predicates" << endl;
+
+  const ASTVec firstLevel(terms);
+  addLevel(firstLevel, terms, preds, maxArity);
+  removeDuplicates(terms);
+  removeDuplicates(preds);
+  cout << "two levels: " << terms.size() << " terms, " << preds.size()
+       << " predicates" << endl;
+
+  ASTVec all(terms);
+  all.insert(all.end(), preds.begin(), preds.end());
+
+  // The second level pairs the first with itself, so this grows fast enough
+  // to be worth saying out loud before it runs for half an hour.
+  if (all.size() > 1000000)
+    cout << "note: " << all.size()
+         << " expressions. Measured: 4 variables at arity 3 takes about half "
+            "an hour and 1.2GB, and finds exactly what 2 variables at arity 3 "
+            "finds in twenty seconds."
+         << endl;
+
+  unsigned candidates = 0, found = 0;
+
+  // (op x0 x0) and (op x1 x1) are the same finding twice. Reporting is keyed
+  // on the expression with every variable mapped to the first, which
+  // collapses them.
+  std::set<string> seen;
+  vector<std::pair<size_t, string>> hits; // node count, text
+
+  for (size_t i = 0; i < all.size(); i++)
+  {
+    const ASTNode& n = all[i];
+
+    if (isFolded(n))
+      continue; // the factory already reduced it; nothing missed here
+
+    ASTNode value;
+    if (!sameAtEverySample(n, samples, value))
+      continue;
+
+    candidates++;
+    if (!provablyConstant(n))
+      continue;
+
+    ASTNodeMap ft;
+    for (size_t k = 1; k < mcVars.size(); k++)
+      ft.insert(make_pair(mcVars[k], mcVars[0]));
+    ASTNodeMap cache;
+    const ASTNode canonical =
+        ft.empty() ? n : SubstitutionMap::replace(n, ft, cache, nf);
+
+    std::stringstream key;
+    printer::SMTLIB2_Print1(key, canonical, 0, false);
+    if (!seen.insert(key.str()).second)
+      continue;
+
+    found++;
+
+    std::stringstream line;
+    printer::SMTLIB2_Print1(line, n, 0, false);
+    line << "\n    is always ";
+    printer::SMTLIB2_Print1(line, value, 0, false);
+    hits.push_back(std::make_pair(nodeCount(n), line.str()));
+  }
+
+  // Smallest first: those are the ones worth teaching the factory.
+  std::sort(hits.begin(), hits.end());
+  for (size_t i = 0; i < hits.size(); i++)
+    cout << "\n" << hits[i].second << endl;
+
+  cout << "\nchecked " << all.size() << " expressions at " << bits
+       << " bits over " << numVars << " variables, n-ary arity up to "
+       << maxArity << "; " << candidates << " constant at every sample, "
+       << found << " distinct shapes confirmed constant but not folded"
+       << endl;
+}
+
 void createVariables()
 {
   v = mgr->LookupOrCreateSymbol("v");
@@ -1580,8 +1955,51 @@ void unit_test()
   assert(commutative_matchNode(plus_v, plus_w, sub, 1));
 }
 
+// The modes, and what each needs. Without this the only way to find out was
+// to read main(): an unrecognised argument fell through every branch and the
+// tool exited 0, so a typo looked exactly like success.
+void usage()
+{
+  cout <<
+      "usage: rewrite_rule_gen [mode [arguments]]\n"
+      "\n"
+      "Searches for bit-vector rewrite rules, and checks the ones already\n"
+      "found. Rules are read from ./rules_new.smt2 where a mode needs them,\n"
+      "and written back there.\n"
+      "\n"
+      "  (no arguments)        search for new rules, unbounded. Reads the\n"
+      "                        current rule set from stdin if there is no\n"
+      "                        rules_new.smt2.\n"
+      "  generate D N          the same search, stopping at depth D or after\n"
+      "                        N rules. -1 for either means no limit.\n"
+      "  verify [FILE]         SAT-check every rule in FILE.\n"
+      "  expand MS [FILE]      widen the bit-widths the rules are checked at,\n"
+      "                        spending at most MS milliseconds on each.\n"
+      "  rewrite               apply the rule set to itself and write it back.\n"
+      "  write-out             re-emit the rule set, including its C++ form.\n"
+      "  missed-constants [V A]\n"
+      "                        build every two-level function and predicate\n"
+      "                        over V variables, with no constant leaves and\n"
+      "                        up to A children for the n-ary kinds, and\n"
+      "                        report the ones the node factory left as\n"
+      "                        expressions that can only take one value.\n"
+      "                        Defaults to 4 variables and arity 3.\n"
+      "  unit-test             check the commutative matcher. Needs no input.\n"
+      "  test                  check the rule properties. Needs no input.\n"
+      "\n"
+      "The search prints its progress; it can run for a long time before it\n"
+      "reports anything.\n";
+}
+
 int main(int argc, const char* argv[])
 {
+  if (argc > 1 && (!strcmp("--help", argv[1]) || !strcmp("-h", argv[1]) ||
+                   !strcmp("help", argv[1])))
+  {
+    usage();
+    return 0;
+  }
+
   startup();
 
   if (argc == 1) // Read the current rule set, find new rules.
@@ -1677,6 +2095,11 @@ int main(int argc, const char* argv[])
   {
     // load the rules and apply the rewrite system to itself.
     load_new_rules();
+    if (rewrite_system.size() == 0)
+    {
+      cerr << "rewrite_rule_gen: no rules to rewrite" << endl;
+      return 1;
+    }
     createVariables();
     rewrite_system.eraseDuplicates();
     rewrite_system.rewriteAll();
@@ -1685,6 +2108,12 @@ int main(int argc, const char* argv[])
   else if (argc == 2 && !strcmp("write-out", argv[1]))
   {
     load_new_rules();
+    if (rewrite_system.size() == 0)
+    {
+      // Otherwise this truncates rules_new.smt2 to nothing and reports success.
+      cerr << "rewrite_rule_gen: no rules to write out" << endl;
+      return 1;
+    }
     createVariables();
     rewrite_system.rewriteAll();
     writeOutRules(); // have the times now..
@@ -1697,6 +2126,28 @@ int main(int argc, const char* argv[])
   {
     load_new_rules();
     t2();
+  }
+  else if ((argc == 2 || argc == 4) && !strcmp("missed-constants", argv[1]))
+  {
+    const unsigned numVars = (argc == 4) ? atoi(argv[2]) : 4;
+    const unsigned maxArity = (argc == 4) ? atoi(argv[3]) : 3;
+    if (numVars < 1 || maxArity < 2)
+    {
+      cerr << "rewrite_rule_gen: missed-constants needs at least 1 variable "
+              "and arity 2"
+           << endl;
+      return 1;
+    }
+    findMissedConstants(numVars, maxArity);
+  }
+  else
+  {
+    cerr << "rewrite_rule_gen: unrecognised mode";
+    for (int i = 1; i < argc; i++)
+      cerr << " " << argv[i];
+    cerr << "\n\n";
+    usage();
+    return 1;
   }
 
   for (size_t i = 0; i < saved_array.size(); i++)
@@ -1992,7 +2443,7 @@ ASTNode rewriteThroughWithAIGS(const ASTNode& n_)
   ASTNode n = create(EQ, n_, f);
 
   BBNodeManagerAIG nm;
-  BitBlaster bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
+  BitBlasterAIG bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
   ASTNodeMap fromTo;
   ASTNodeMap equivs;
   bb.getConsts(n, fromTo, equivs);

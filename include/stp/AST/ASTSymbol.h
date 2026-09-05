@@ -37,8 +37,6 @@ class ASTSymbol : public ASTInternal
 {
   friend class STPMgr;
   friend class ASTNode;
-  friend class ASTNodeHasher;
-  friend class ASTNodeEqual;
 
   const static ASTVec empty_children;
 
@@ -54,7 +52,8 @@ private:
   public:
     size_t operator()(const ASTSymbol* sym_ptr) const
     {
-      return CStringHash()(sym_ptr->_name);
+      return CStringHash()(sym_ptr->_name) ^
+             (sym_ptr->_source_sort.hash() * 0x9e3779b97f4a7c15ULL);
     };
   };
 
@@ -72,7 +71,8 @@ private:
 
   friend bool operator==(const ASTSymbol& sym1, const ASTSymbol& sym2)
   {
-    return (strcmp(sym1._name, sym2._name) == 0);
+    return strcmp(sym1._name, sym2._name) == 0 &&
+           sym1._source_sort == sym2._source_sort;
   }
 
   // Get the name of the symbol
@@ -80,28 +80,116 @@ private:
 
   // Print function for symbol -- return name. (c_friendly is for
   // printing hex. numbers that C compilers will accept)
-  virtual void nodeprint(ostream& os, bool c_friendly = false);
+  void nodeprint(ostream& os, bool c_friendly = false) override;
 
   // Call this when deleting a node that has been stored in the the
   // unique table
-  virtual void CleanUp();
+  void CleanUp() override;
 
   uint32_t _value_width;
   uint32_t _index_width;
 
-  virtual void setIndexWidth(uint32_t i) { _index_width = i; }
-  virtual uint32_t getIndexWidth() const { return _index_width; }
+  uint32_t _sig_width;
+  uint32_t _exp_width;
 
-  virtual void setValueWidth(uint32_t v) { _value_width = v; }
-  virtual uint32_t getValueWidth() const { return _value_width; }
+  // Fixed at construction for typed source symbols. Legacy internal symbols
+  // retain Unknown and may use the historical width setters.
+  const SourceSort _source_sort;
+
+  void setIndexWidth(uint32_t i) override
+  {
+    if (_source_sort.isKnown())
+    {
+      assert(i == _index_width);
+      return;
+    }
+    _index_width = i;
+  }
+  uint32_t getIndexWidth() const override { return _index_width; }
+
+  void setValueWidth(uint32_t v) override
+  {
+    if (_source_sort.isKnown())
+    {
+      assert(v == _value_width);
+      return;
+    }
+    _value_width = v;
+  }
+  uint32_t getValueWidth() const override { return _value_width; }
+
+  void setSigWidth(uint32_t sw) override
+  {
+    if (_source_sort.isKnown())
+    {
+      assert(sw == _sig_width);
+      return;
+    }
+    _sig_width = sw;
+  }
+  uint32_t getSigWidth() const override { return _sig_width; }
+
+  void setExpWidth(uint32_t ew) override
+  {
+    if (_source_sort.isKnown())
+    {
+      assert(ew == _exp_width);
+      return;
+    }
+    _exp_width = ew;
+  }
+  uint32_t getExpWidth() const override { return _exp_width; }
+
+  SourceSort getDeclaredSourceSort() const override { return _source_sort; }
 
 public:
-  virtual ASTChildren GetChildren() const { return empty_children; }
+  ASTChildren GetChildren() const override { return empty_children; }
 
   // Constructor.  This does NOT copy its argument.
   ASTSymbol(STPMgr* mgr, const char* const name)
-      : ASTInternal(mgr, SYMBOL), _name(name), _value_width(0), _index_width(0)
+      : ASTInternal(mgr, SYMBOL), _name(name), _value_width(0), _index_width(0),
+        _sig_width(0), _exp_width(0), _source_sort(SourceSort::unknown())
   {
+  }
+
+  ASTSymbol(STPMgr* mgr, const char* const name, const SourceSort& source_sort)
+      : ASTInternal(mgr, SYMBOL), _name(name), _value_width(0), _index_width(0),
+        _sig_width(0), _exp_width(0), _source_sort(source_sort)
+  {
+    switch (_source_sort.kind())
+    {
+      case SourceSort::Kind::Bool:
+        break;
+      case SourceSort::Kind::BitVector:
+        _value_width = _source_sort.bitVectorWidth();
+        break;
+      case SourceSort::Kind::FloatingPoint:
+        _exp_width = _source_sort.exponentWidth();
+        _sig_width = _source_sort.significandWidth();
+        _value_width = _source_sort.packedWidth();
+        break;
+      case SourceSort::Kind::RoundingMode:
+        _value_width = _source_sort.packedWidth();
+        break;
+      case SourceSort::Kind::Uninterpreted:
+        // Its carrier, exactly as RoundingMode takes its carrier. Missing this
+        // arm leaves the width at zero, which the legacy width checks read as
+        // a Boolean -- and locally that is a warning, not an error.
+        _value_width = _source_sort.packedWidth();
+        break;
+      case SourceSort::Kind::Array:
+        _index_width = _source_sort.index().packedWidth();
+        _value_width = _source_sort.element().packedWidth();
+        if (_source_sort.element().kind() ==
+            SourceSort::Kind::FloatingPoint)
+        {
+          _exp_width = _source_sort.element().exponentWidth();
+          _sig_width = _source_sort.element().significandWidth();
+        }
+        break;
+      case SourceSort::Kind::Unknown:
+        break;
+    }
   }
 
   virtual ~ASTSymbol() {}
@@ -109,7 +197,9 @@ public:
   // Copy constructor
   ASTSymbol(const ASTSymbol& sym)
       : ASTInternal(sym.nodeManager, sym._kind), _name(sym._name),
-        _value_width(sym._value_width), _index_width(sym._index_width)
+        _value_width(sym._value_width), _index_width(sym._index_width),
+        _sig_width(sym._sig_width), _exp_width(sym._exp_width),
+        _source_sort(sym._source_sort)
   {
     // printf("inside ASTSymbol constructor %s\n", _name);
   }

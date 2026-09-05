@@ -1,0 +1,201 @@
+# STP_CONSUMER_EXPORT picks how the package the consumer is pointed at was
+# produced. Three ways, because they fail differently:
+#
+#   install-tree    DESTDIR staging, the packagers' route
+#   install-prefix  cmake --install --prefix, relocating at install time
+#   build-tree      export() rather than install(EXPORT)
+#
+# The two exported STPTargets.cmake files have different contents -- a build
+# tree exports the build interface, so anything wrapped in $<BUILD_INTERFACE:>
+# that install() would have dropped is still in it -- and an install(DESTINATION)
+# written as an absolute path honours DESTDIR while ignoring --prefix, so
+# passing under one of these says little about the others.
+if(NOT DEFINED STP_CONSUMER_EXPORT OR STP_CONSUMER_EXPORT STREQUAL "")
+  set(STP_CONSUMER_EXPORT "install-tree")
+endif()
+
+set(stp_build_dir "@PROJECT_BINARY_DIR@")
+set(consumer_source_dir
+    "@CMAKE_CURRENT_SOURCE_DIR@/uf-public-header-consumer")
+# Per export, so the two tests can run concurrently under ctest --parallel.
+set(scratch_dir
+    "@CMAKE_CURRENT_BINARY_DIR@/uf-consumer-run-${STP_CONSUMER_EXPORT}")
+set(stage_dir "${scratch_dir}/stage")
+set(consumer_build_dir "${scratch_dir}/build")
+
+file(REMOVE_RECURSE "${scratch_dir}")
+
+if(STP_CONSUMER_EXPORT STREQUAL "build-tree")
+  set(stp_cmake_dir "${stp_build_dir}")
+elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
+  # --prefix overrides CMAKE_INSTALL_PREFIX at install time, which only reaches
+  # destinations that were written relative to it. An absolute one -- as
+  # PUBLIC_HEADER used to be -- is fixed when the cache is written, so the
+  # libraries moved and the headers went to the configured prefix instead.
+  set(prefix_dir "${scratch_dir}/prefix")
+  file(MAKE_DIRECTORY "${prefix_dir}")
+  file(MAKE_DIRECTORY "${stage_dir}")
+  # DESTDIR prepends the whole prefix, leading slash and all.
+  string(REGEX REPLACE "^/+" "" _staged_prefix_rel "${prefix_dir}")
+  set(staged_prefix_dir "${stage_dir}/${_staged_prefix_rel}")
+
+  set(install_command
+      "@CMAKE_COMMAND@" --install "${stp_build_dir}" --prefix "${prefix_dir}")
+  if(DEFINED STP_TEST_CONFIG AND NOT STP_TEST_CONFIG STREQUAL "")
+    list(APPEND install_command --config "${STP_TEST_CONFIG}")
+  endif()
+  # DESTDIR as well, and not to weaken the check. --prefix only redirects
+  # destinations written relative to the prefix, and the Python bindings are
+  # deliberately not: PYTHON_LIB_INSTALL_DIR is the interpreter's
+  # site-packages, outside any prefix. Without a staging root that write needs
+  # root and the install dies there, before reaching anything this is about.
+  # Under DESTDIR it lands harmlessly beside the prefix instead, and what is
+  # asserted below is unchanged: the C and C++ package has to appear under the
+  # prefix that was asked for.
+  execute_process(
+    COMMAND "@CMAKE_COMMAND@" -E env "DESTDIR=${stage_dir}" ${install_command}
+    RESULT_VARIABLE install_result
+    OUTPUT_VARIABLE install_stdout
+    ERROR_VARIABLE install_stderr
+  )
+  if(NOT install_result EQUAL 0)
+    message(FATAL_ERROR
+      "STP install --prefix failed (${install_result})\n${install_stdout}\n${install_stderr}")
+  endif()
+
+  # Everything the package needs has to be under the prefix that was asked
+  # for. Searching rather than reconstructing the layout, so this checks where
+  # the files went instead of restating where they were meant to go.
+  file(GLOB_RECURSE _found_config "${staged_prefix_dir}/*/STPConfig.cmake")
+  file(GLOB_RECURSE _found_header "${staged_prefix_dir}/*/c_interface.h")
+  if(NOT _found_config)
+    message(FATAL_ERROR
+      "cmake --install --prefix put no STPConfig.cmake under ${staged_prefix_dir}")
+  endif()
+  if(NOT _found_header)
+    message(FATAL_ERROR
+      "cmake --install --prefix put no c_interface.h under ${staged_prefix_dir}; "
+      "an install DESTINATION is still absolute and ignored the new prefix")
+  endif()
+  list(GET _found_config 0 _found_config)
+  get_filename_component(stp_cmake_dir "${_found_config}" DIRECTORY)
+else()
+  file(MAKE_DIRECTORY "${stage_dir}")
+
+  set(install_command "@CMAKE_COMMAND@" --install "${stp_build_dir}")
+  if(DEFINED STP_TEST_CONFIG AND NOT STP_TEST_CONFIG STREQUAL "")
+    list(APPEND install_command --config "${STP_TEST_CONFIG}")
+  endif()
+  execute_process(
+    COMMAND "@CMAKE_COMMAND@" -E env "DESTDIR=${stage_dir}" ${install_command}
+    RESULT_VARIABLE install_result
+    OUTPUT_VARIABLE install_stdout
+    ERROR_VARIABLE install_stderr
+  )
+  if(NOT install_result EQUAL 0)
+    message(FATAL_ERROR
+      "STP install failed (${install_result})\n${install_stdout}\n${install_stderr}")
+  endif()
+
+  # DESTDIR prepends the configured absolute prefix on Unix. Strip its leading
+  # slash before joining so this remains a path below the test scratch tree.
+  set(configured_prefix "@CMAKE_INSTALL_PREFIX@")
+  string(REGEX REPLACE "^/+" "" relative_prefix "${configured_prefix}")
+  set(staged_prefix "${stage_dir}/${relative_prefix}")
+
+  function(staged_install_path output configured_path)
+    if(IS_ABSOLUTE "${configured_path}")
+      string(REGEX REPLACE "^/+" "" relative_path "${configured_path}")
+      set(result "${stage_dir}/${relative_path}")
+    else()
+      set(result "${staged_prefix}/${configured_path}")
+    endif()
+    set(${output} "${result}" PARENT_SCOPE)
+  endfunction()
+
+  staged_install_path(stp_cmake_dir "@STP_INSTALL_CMAKE_DIR@")
+endif()
+
+# CMAKE_PREFIX_PATH is a list, and all of it has to reach the consumer inside
+# one -D argument. execute_process() splits each element of its command on
+# semicolons, so an unescaped list turns every path after the first into a
+# stray positional argument -- which CMake reports only as "Ignoring extra path
+# from command line", and then the consumer fails much later, complaining that
+# cryptominisat5's package references imported targets that are missing.
+#
+# This held a single entry until STP grew a second dependency prefix
+# (STP_DEP_DIR, alongside the deps/install the setup scripts write), so the
+# escaping was never needed before and its absence was invisible.
+set(stp_prefix_path "@CMAKE_PREFIX_PATH@")
+string(REPLACE ";" "\\;" stp_prefix_path "${stp_prefix_path}")
+
+set(configure_command
+    "@CMAKE_COMMAND@"
+    -S "${consumer_source_dir}"
+    -B "${consumer_build_dir}"
+    "-DSTP_DIR=${stp_cmake_dir}"
+    "-Dcryptominisat5_DIR=@cryptominisat5_DIR@"
+    # The parent build's whole search context, not just CryptoMiniSat's own
+    # package directory. A static CryptoMiniSat's package references the
+    # cadiback and cadical imported targets of the CaDiCaL it was built
+    # against, and its config can only recreate them if those packages are
+    # findable -- which they were for the configure that built libstp
+    # precisely through this path (STP's CMakeLists puts its dependency
+    # prefix on it). A consumer given the package but not the context fails
+    # with "imported targets are referenced, but are missing".
+    "-DCMAKE_PREFIX_PATH=${stp_prefix_path}")
+if(NOT "@CMAKE_GENERATOR@" STREQUAL "")
+  list(APPEND configure_command -G "@CMAKE_GENERATOR@")
+endif()
+if(NOT "@CMAKE_GENERATOR_PLATFORM@" STREQUAL "")
+  list(APPEND configure_command -A "@CMAKE_GENERATOR_PLATFORM@")
+endif()
+if(NOT "@CMAKE_GENERATOR_TOOLSET@" STREQUAL "")
+  list(APPEND configure_command -T "@CMAKE_GENERATOR_TOOLSET@")
+endif()
+
+execute_process(
+  COMMAND ${configure_command}
+  RESULT_VARIABLE configure_result
+  OUTPUT_VARIABLE configure_stdout
+  ERROR_VARIABLE configure_stderr
+)
+if(NOT configure_result EQUAL 0)
+  message(FATAL_ERROR
+    "UF ${STP_CONSUMER_EXPORT} consumer configure failed (${configure_result})\n"
+    "${configure_stdout}\n${configure_stderr}")
+endif()
+
+set(build_command "@CMAKE_COMMAND@" --build "${consumer_build_dir}")
+if(DEFINED STP_TEST_CONFIG AND NOT STP_TEST_CONFIG STREQUAL "")
+  list(APPEND build_command --config "${STP_TEST_CONFIG}")
+endif()
+execute_process(
+  COMMAND ${build_command}
+  RESULT_VARIABLE build_result
+  OUTPUT_VARIABLE build_stdout
+  ERROR_VARIABLE build_stderr
+)
+if(NOT build_result EQUAL 0)
+  message(FATAL_ERROR
+    "UF ${STP_CONSUMER_EXPORT} consumer build failed (${build_result})\n"
+    "${build_stdout}\n${build_stderr}")
+endif()
+
+set(test_command
+    "@CMAKE_CTEST_COMMAND@" --test-dir "${consumer_build_dir}"
+    --output-on-failure)
+if(DEFINED STP_TEST_CONFIG AND NOT STP_TEST_CONFIG STREQUAL "")
+  list(APPEND test_command -C "${STP_TEST_CONFIG}")
+endif()
+execute_process(
+  COMMAND ${test_command}
+  RESULT_VARIABLE test_result
+  OUTPUT_VARIABLE test_stdout
+  ERROR_VARIABLE test_stderr
+)
+if(NOT test_result EQUAL 0)
+  message(FATAL_ERROR
+    "UF ${STP_CONSUMER_EXPORT} consumer tests failed (${test_result})\n"
+    "${test_stdout}\n${test_stderr}")
+endif()

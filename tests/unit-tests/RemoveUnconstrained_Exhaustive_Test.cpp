@@ -147,8 +147,8 @@ struct Context
     ASTNode cur = n;
     for (int i = 0; i < 64; i++)
     {
-      ASTNodeMap fromTo = *simp.Return_SolverMap(); // replace() mutates it.
-      ASTNodeMap cache;
+      DenseNodeMap fromTo = *simp.Return_SolverMap(); // replace() mutates it.
+      DenseNodeMap cache;
       ASTNode next = SubstitutionMap::replace(cur, fromTo, cache, &snf);
       if (next == cur)
         return cur;
@@ -190,17 +190,17 @@ struct Context
     std::vector<ASTNode> syms(symSet.begin(), symSet.end());
 
     // Guard against an accidental combinatorial explosion.
-    unsigned long combos = 1;
+    uint64_t combos = 1;
     for (const auto& s : syms)
       combos *= domainSize(s);
     ASSERT_LE(combos, 1u << 16)
         << "too many assignments (" << combos << ") -- lower the width";
 
     std::vector<unsigned> idx(syms.size(), 0);
-    for (unsigned long c = 0; c < combos; c++)
+    for (uint64_t c = 0; c < combos; c++)
     {
       ASTNodeMap assignment;
-      unsigned long rest = c;
+      uint64_t rest = c;
       for (size_t i = 0; i < syms.size(); i++)
       {
         const unsigned size = domainSize(syms[i]);
@@ -254,6 +254,163 @@ struct Context
     ASTNode result = run(top);
     ASTNode back = backSubstitute(top);
     checkEquivalent(back, result);
+  }
+
+  //-------------------------------------------------------------------
+  // Arrays.
+  //
+  // An array symbol has no scalar domain to enumerate, so the checks
+  // above cannot see one. At the widths used here it has a small
+  // explicit one: an index width of IW and an element width of VW makes
+  // (2^VW)^(2^IW) distinct arrays -- four for the 1x1 arrays below. So
+  // the same exhaustive identity is available, once array-sorted terms
+  // can be evaluated under an assignment of concrete arrays.
+  //
+  // ground() does that by folding every array-rooted subterm away: a
+  // read becomes the cell it selects and an array equality becomes a
+  // constant, after which the formula is array-free and the existing
+  // scalar evaluator finishes the job.
+  //-------------------------------------------------------------------
+
+  static constexpr unsigned IW = 1; // index width of the test arrays
+  static constexpr unsigned VW = 1; // element width
+
+  typedef std::vector<unsigned> Cells; // one entry per index, 2^IW of them
+  typedef std::map<ASTNode, Cells> ArrayAssignment;
+
+  ASTNode array(unsigned iw = IW, unsigned vw = VW)
+  {
+    return mgr.CreateSymbol(("a" + std::to_string(counter++)).c_str(), iw, vw);
+  }
+
+  unsigned evalConst(const ASTNode& groundScalar)
+  {
+    ASTNode c = groundScalar.isConstant()
+                    ? groundScalar
+                    : NonMemberBVConstEvaluator(&mgr, groundScalar);
+    if (c.GetType() == BOOLEAN_TYPE)
+      return c == mgr.ASTTrue ? 1 : 0;
+    return c.GetUnsignedConst();
+  }
+
+  Cells arrayValue(const ASTNode& n, const ArrayAssignment& av)
+  {
+    if (n.GetKind() == SYMBOL)
+    {
+      auto it = av.find(n);
+      EXPECT_NE(it, av.end()) << "no value for array symbol " << n;
+      return it == av.end() ? Cells(1u << IW, 0) : it->second;
+    }
+    if (n.GetKind() == WRITE)
+    {
+      Cells v = arrayValue(n[0], av);
+      v[evalConst(ground(n[1], av))] = evalConst(ground(n[2], av));
+      return v;
+    }
+    if (n.GetKind() == ITE)
+      return evalConst(ground(n[0], av)) ? arrayValue(n[1], av)
+                                         : arrayValue(n[2], av);
+    ADD_FAILURE() << "cannot evaluate array term of kind " << n.GetKind();
+    return Cells(1u << IW, 0);
+  }
+
+  // `n` with every array-rooted subterm folded to a constant.
+  ASTNode ground(const ASTNode& n, const ArrayAssignment& av)
+  {
+    if (n.GetKind() == READ)
+    {
+      const Cells cells = arrayValue(n[0], av);
+      return konst(cells[evalConst(ground(n[1], av))], n.GetValueWidth());
+    }
+    if (n.GetKind() == ARRAY_EQ)
+      return arrayValue(n[0], av) == arrayValue(n[1], av) ? mgr.ASTTrue
+                                                          : mgr.ASTFalse;
+    if (n.GetKind() == SYMBOL || n.isConstant() || n.Degree() == 0)
+      return n;
+
+    ASTVec children;
+    children.reserve(n.Degree());
+    for (const auto& c : n)
+      children.push_back(ground(c, av));
+
+    if (n.GetType() == BOOLEAN_TYPE)
+      return nf->CreateNode(n.GetKind(), children);
+    return nf->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
+  }
+
+  // As checkEquivalent, but ranging over array symbols as well: every
+  // assignment of concrete arrays, times every scalar assignment.
+  //
+  // The scalars are substituted first. A write's index and value are
+  // ordinary scalar terms -- and the write rule exists precisely because
+  // the value can be an unconstrained symbol -- so grounding an array
+  // term needs them already settled.
+  void checkEquivalentWithArrays(const ASTNode& before, const ASTNode& after)
+  {
+    ASTNodeSet symSet;
+    collectSymbols(before, symSet);
+    collectSymbols(after, symSet);
+
+    std::vector<ASTNode> arrays, scalars;
+    for (const auto& s : symSet)
+      (s.GetIndexWidth() > 0 ? arrays : scalars).push_back(s);
+
+    const unsigned cellCount = 1u << IW;
+    const unsigned perArray = 1u << (cellCount * VW); // arrays of this sort
+    uint64_t arrayCombos = 1;
+    for (size_t i = 0; i < arrays.size(); i++)
+      arrayCombos *= perArray;
+    uint64_t scalarCombos = 1;
+    for (const auto& s : scalars)
+      scalarCombos *= domainSize(s);
+    ASSERT_LE(arrayCombos * scalarCombos, 1u << 16)
+        << "too many assignments -- lower the widths";
+
+    for (uint64_t ac = 0; ac < arrayCombos; ac++)
+    {
+      ArrayAssignment av;
+      uint64_t rest = ac;
+      for (size_t i = 0; i < arrays.size(); i++)
+      {
+        unsigned code = rest % perArray;
+        rest /= perArray;
+        Cells cells(cellCount);
+        for (unsigned j = 0; j < cellCount; j++)
+        {
+          cells[j] = code & ((1u << VW) - 1);
+          code >>= VW;
+        }
+        av.insert({arrays[i], cells});
+      }
+
+      for (uint64_t sc = 0; sc < scalarCombos; sc++)
+      {
+        ASTNodeMap assignment;
+        uint64_t srest = sc;
+        for (size_t i = 0; i < scalars.size(); i++)
+        {
+          const unsigned size = domainSize(scalars[i]);
+          assignment.insert({scalars[i], valueFor(scalars[i], srest % size)});
+          srest /= size;
+        }
+
+        ASTNodeMap m1 = assignment, m2 = assignment, ca1, ca2, e1, e2;
+        const ASTNode b =
+            ground(SubstitutionMap::replace(before, m1, ca1, &snf), av);
+        const ASTNode a =
+            ground(SubstitutionMap::replace(after, m2, ca2, &snf), av);
+        ASSERT_EQ(eval(b, e1), eval(a, e2))
+            << "unconstrained rewrite changed the meaning at array "
+            << "assignment " << ac << ", scalar assignment " << sc;
+      }
+    }
+  }
+
+  void checkSoundArrays(const ASTNode& top)
+  {
+    ASTNode result = run(top);
+    ASTNode back = backSubstitute(top);
+    checkEquivalentWithArrays(back, result);
   }
 
   // As checkSound, but the operator takes the surviving `keep` as one operand
@@ -339,6 +496,14 @@ TEST(RemoveUnconstrained_Exhaustive, mult_odd_constant)
   // The other operand is an odd constant, so the multiplicative-inverse rule
   // fires rather than the both-unconstrained one.
   c.checkSound(c.hf->CreateTerm(BVMULT, W, c.konst(3), c.bv()));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, mult_three_operands)
+{
+  Context c;
+  // The BVMULT rules only exist for two operands; a wider multiply must be
+  // skipped soundly, not taken apart.
+  c.checkSound(c.hf->CreateTerm(BVMULT, W, c.bv(), c.bv(), c.bv()));
 }
 
 TEST(RemoveUnconstrained_Exhaustive, udiv_both_unconstrained)
@@ -447,6 +612,119 @@ TEST(RemoveUnconstrained_Exhaustive, uge_one_sided)
   c.checkSoundWithKeep(BVGE, /*termLevel=*/false);
 }
 
+// --- Array rules. Each enumerates every concrete array as well as every
+// scalar assignment; see checkEquivalentWithArrays. ---
+
+TEST(RemoveUnconstrained_Exhaustive, array_read)
+{
+  Context c;
+  // read(a, 0) with `a` used once. The read is free, so it stands in
+  // for `keep`, which survives via the anchor.
+  ASTNode a = c.array();
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode read = c.hf->CreateTerm(READ, Context::VW, a, c.konst(0, Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, read, keep), c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_read_constrained_array_untouched)
+{
+  Context c;
+  // Two reads of the same array: it is not unconstrained, and neither
+  // read may be replaced by a free value -- congruence has to hold.
+  ASTNode a = c.array();
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode r0 = c.hf->CreateTerm(READ, Context::VW, a, c.konst(0, Context::IW));
+  ASTNode r1 = c.hf->CreateTerm(READ, Context::VW, a, c.konst(0, Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, c.hf->CreateTerm(BVPLUS, Context::VW, r0, r1),
+                            keep),
+      c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_write)
+{
+  Context c;
+  // write(a, 0, e) with both the base array and the written value free.
+  ASTNode a = c.array();
+  ASTNode e = c.bv(Context::VW);
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode w = c.hf->CreateArrayTerm(WRITE, Context::IW, Context::VW, a,
+                                    c.konst(0, Context::IW), e);
+  ASTNode read = c.hf->CreateTerm(READ, Context::VW, w,
+                                  c.konst(1 % (1u << Context::IW), Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, read, keep), c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_write_constrained_value)
+{
+  Context c;
+  // The value is a constant, so the write is pinned at index 0 and is
+  // NOT a free array. This is the case the rule's value condition
+  // exists for: a rule keyed on the base array alone would be unsound
+  // here, and the enumeration would catch it.
+  ASTNode a = c.array();
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode w = c.hf->CreateArrayTerm(WRITE, Context::IW, Context::VW, a,
+                                    c.konst(0, Context::IW),
+                                    c.konst(1, Context::VW));
+  ASTNode read =
+      c.hf->CreateTerm(READ, Context::VW, w, c.konst(0, Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, read, keep), c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_write_shared_value)
+{
+  Context c;
+  // As above, but the written value is a symbol used a second time, so
+  // it is constrained rather than constant. Dropping the rule's value
+  // condition makes it fire here and answer wrongly -- the write
+  // is pinned to whatever `e` turns out to be -- which the enumeration
+  // below detects. (With a *constant* value the same mistake trips
+  // replace()'s SYMBOL precondition instead, so this is the case that
+  // keeps the guard honest.)
+  ASTNode a = c.array();
+  ASTNode e = c.bv(Context::VW);
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode w = c.hf->CreateArrayTerm(WRITE, Context::IW, Context::VW, a,
+                                    c.konst(0, Context::IW), e);
+  ASTNode read =
+      c.hf->CreateTerm(READ, Context::VW, w, c.konst(0, Context::IW));
+  ASTVec conjuncts;
+  conjuncts.push_back(c.hf->CreateNode(EQ, read, keep));
+  conjuncts.push_back(c.hf->CreateNode(EQ, e, keep)); // second use of `e`
+  conjuncts.push_back(c.anchorFor(keep));
+  c.checkSoundArrays(c.hf->CreateNode(AND, conjuncts));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_ite)
+{
+  Context c;
+  // An if-then-else over two free arrays is itself free.
+  ASTNode cond = c.boolean();
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode ite = c.hf->CreateArrayTerm(ITE, Context::IW, Context::VW, cond,
+                                      c.array(), c.array());
+  ASTNode read =
+      c.hf->CreateTerm(READ, Context::VW, ite, c.konst(0, Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, read, keep), c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_Collapse, array_equality)
+{
+  // The literature's rule set also eliminates an array equality with
+  // one unconstrained side. STP deliberately does not -- see the header
+  // comment in RemoveUnconstrained.cpp -- so this must NOT collapse. If
+  // a rule is added back, this is the test that will say so.
+  expectNoCollapse([](Context& c) {
+    c.mgr.UserFlags.enable_array_equality = true;
+    return c.hf->CreateNode(ARRAY_EQ, c.array(), c.array());
+  });
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // 2) Collapse diagnostic: which operators reduce a formula of unconstrained
 //    variables all the way down to true. Missing rules show up as the
@@ -458,6 +736,32 @@ TEST(RemoveUnconstrained_Exhaustive, uge_one_sided)
 TEST(RemoveUnconstrained_Collapse, eq)
 {
   expectCollapse([](Context& c) { return c.hf->CreateNode(EQ, c.bv(), c.bv()); });
+}
+
+TEST(RemoveUnconstrained_Collapse, mult_three_unconstrained)
+{
+  expectCollapse([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVMULT, W, c.bv(), c.bv(), c.bv()), c.konst(2));
+  });
+}
+
+TEST(RemoveUnconstrained_Collapse, mult_wide_with_odd_constant)
+{
+  expectCollapse([](Context& c) {
+    ASTVec ch = {c.konst(3), c.bv(), c.bv(), c.bv()};
+    return c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, ch), c.konst(2));
+  });
+}
+
+TEST(RemoveUnconstrained_Collapse, mult_wide_with_even_constant_stays)
+{
+  // An even coefficient pins the product's low bit, so the wide product is
+  // not free to take every value and must not be replaced.
+  expectNoCollapse([](Context& c) {
+    ASTVec ch = {c.konst(2), c.bv(), c.bv(), c.bv()};
+    return c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, ch), c.konst(3));
+  });
 }
 
 TEST(RemoveUnconstrained_Collapse, sgt)
@@ -950,4 +1254,293 @@ TEST(RemoveUnconstrained_GroundPath, shared_interior_no_collapse)
 
   Context c;
   c.checkSoundTop(build(c));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// 4) Symbolic-side collapse: the predicate's other side is any term. The
+//    predicate is rewritten into its invertibility condition over that term
+//    joined with a fresh boolean, and x is defined to realise either truth
+//    value -- EQ via the chain's pseudo-inverse, comparisons via the exact
+//    enumerated extremes of the chain's image.
+/////////////////////////////////////////////////////////////////////////////
+
+namespace
+{
+// Run the pass on `top`, require that `x` was eliminated, and check the
+// back-substituted original agrees with the result on every assignment.
+void checkSymbolicFires(Context& c, const ASTNode& x, const ASTNode& top)
+{
+  ASTNode result = c.run(top);
+  ASTNodeSet syms;
+  c.collectSymbols(result, syms);
+  EXPECT_EQ(syms.count(x), 0u) << "x survived the symbolic-side collapse";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+} // namespace
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_and_mask)
+{
+  // (= (bvand x 5) t): the invertibility condition is (t & ~5) == 0.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, c.konst(5)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_bijective_chain_with_concat)
+{
+  // (= (bvadd (concat 2 (bvxor x 5)) 7) t): xor and plus invert exactly;
+  // the concat contributes the condition that t's high slice inverts to
+  // the constant 2.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv(5);
+  ASTNode t = c.hf->CreateTerm(BVNOT, 5, keep);
+  ASTNode inner = c.hf->CreateTerm(BVXOR, W, x, c.konst(5));
+  ASTNode mid = c.hf->CreateTerm(BVCONCAT, 5, c.konst(2, 2), inner);
+  ASTNode chain = c.hf->CreateTerm(BVPLUS, 5, mid, c.konst(7, 5));
+  ASTNode pred = c.hf->CreateNode(EQ, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_urem)
+{
+  // (= (bvurem x 5) t): condition t <u 5, witness x := t.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMOD, W, x, c.konst(5)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_shift_right_t_first)
+{
+  // (= t (bvlshr x 1)) with the term on the left: condition on t's top
+  // bit, witness x := t << 1.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred = c.hf->CreateNode(
+      EQ, t, c.hf->CreateTerm(BVRIGHTSHIFT, W, x, c.konst(1)));
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_extract_bottom)
+{
+  // (= ((_ extract 2 1) x) t): every t is achievable; x pads with zeros.
+  Context c;
+  ASTNode x = c.bv(4);
+  ASTNode keep = c.bv(2);
+  ASTNode t = c.hf->CreateTerm(BVNOT, 2, keep);
+  ASTNode ex =
+      c.hf->CreateTerm(BVEXTRACT, 2, x, c.konst(2, 32), c.konst(1, 32));
+  ASTNode pred = c.hf->CreateNode(EQ, ex, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, ugt_concat_plus)
+{
+  // (bvugt (bvadd (concat 1 x) 3) t): enumerated exact extremes of the
+  // chain's image drive the rewrite.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv(5);
+  ASTNode t = c.hf->CreateTerm(BVNOT, 5, keep);
+  ASTNode mid = c.hf->CreateTerm(BVCONCAT, 5, c.konst(1, 2), x);
+  ASTNode chain = c.hf->CreateTerm(BVPLUS, 5, mid, c.konst(3, 5));
+  ASTNode pred = c.hf->CreateNode(BVGT, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, ult_t_first_sext)
+{
+  // (bvult t (sign_extend x)): the path is the second operand, and the
+  // sext image wraps in unsigned order, where an interval analysis loses
+  // exactness; enumeration finds the true unsigned extremes regardless.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv(5);
+  ASTNode t = c.hf->CreateTerm(BVNOT, 5, keep);
+  ASTNode chain = c.hf->CreateTerm(BVSX, 5, x, c.konst(5, 32));
+  ASTNode pred = c.hf->CreateNode(BVLT, t, chain);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, sgt_mult_chain)
+{
+  // (bvsgt (bvmul x 3) t): multiplication has no inverse entry, but the
+  // comparison path only needs enumerated extremes, in signed order.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode chain = c.hf->CreateTerm(BVMULT, W, x, c.konst(3));
+  ASTNode pred = c.hf->CreateNode(BVSGT, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, ite_frame_distributes)
+{
+  // (= (ite b (bvand x 5) keep) t): the ITE frame distributes and the
+  // rewritten equality sits on x's branch.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode keep2 = c.bv();
+  ASTNode b = c.boolean();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep2);
+  ASTNode masked = c.hf->CreateTerm(BVAND, W, x, c.konst(5));
+  ASTNode ite = c.hf->CreateTerm(ITE, W, b, masked, keep);
+  ASTNode pred = c.hf->CreateNode(EQ, ite, t);
+  ASTNode top = c.hf->CreateNode(
+      AND, pred, c.hf->CreateNode(AND, c.anchorFor(keep), c.anchorFor(keep2)));
+  checkSymbolicFires(c, x, top);
+}
+
+// --- Cases that must NOT fire. ---
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_lossy_above_lossy_refused)
+{
+  // (= (bvand (bvor x 1) 3) t): a lossy step above another step. The
+  // walk's per-step conditions only characterise a lossy step's image
+  // when its input is the free variable itself, so a non-bottom and/or
+  // must be refused and x must survive.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode inner = c.hf->CreateTerm(BVOR, W, x, c.konst(1));
+  ASTNode chain = c.hf->CreateTerm(BVAND, W, inner, c.konst(3));
+  ASTNode pred = c.hf->CreateNode(EQ, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+
+  ASTNode result = c.run(top);
+  ASTNodeSet syms;
+  c.collectSymbols(result, syms);
+  EXPECT_EQ(syms.count(x), 1u) << "walk stepped past a non-bottom lossy step";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_degenerate_mask_refused)
+{
+  // (= (bvand x 0) t): the image is {0}; the chain is a constant in
+  // disguise and the rule must leave it to constant folding.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, c.konst(0)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+
+  ASTNode result = c.run(top);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, shared_chain_refused)
+{
+  // The masked node is used twice; the climb must refuse to step past it.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode masked = c.hf->CreateTerm(BVAND, W, x, c.konst(5));
+  ASTNode pred = c.hf->CreateNode(EQ, masked, t);
+  ASTNode top = c.hf->CreateNode(
+      AND, pred,
+      c.hf->CreateNode(AND, c.hf->CreateNode(BVGT, masked, c.konst(1)),
+                       c.anchorFor(keep)));
+
+  ASTNode result = c.run(top);
+  ASTNodeSet syms;
+  c.collectSymbols(result, syms);
+  EXPECT_EQ(syms.count(x), 1u) << "stepped past a shared interior node";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_odd_mid_chain)
+{
+  // (= (bvadd (bvmul x 5) 7) t): an odd multiplication is a bijection
+  // (modular inverse), so it may sit anywhere on the chain.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode mul = c.hf->CreateTerm(BVMULT, W, x, c.konst(5));
+  ASTNode chain = c.hf->CreateTerm(BVPLUS, W, mul, c.konst(7));
+  ASTNode pred = c.hf->CreateNode(EQ, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_even_bottom)
+{
+  // (= (bvmul x 6) t): 6 = 3 * 2, so the image is exactly the even
+  // values; condition t[0] == 0, witness x := inv(3) * (t >> 1).
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, x, c.konst(6)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_even_above_refused)
+{
+  // (= (bvmul (bvurem x 5) 6) t): the even multiplication is not at the
+  // bottom (a bvnot inner step wouldn't do here: its per-kind rule fires
+  // first and legitimately leaves the mult at the bottom of the fresh
+  // variable's chain), so its free low preimage bits belong to the inner
+  // chain and the walk must refuse.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode chain = c.hf->CreateTerm(
+      BVMULT, W, c.hf->CreateTerm(BVMOD, W, x, c.konst(5)), c.konst(6));
+  ASTNode pred = c.hf->CreateNode(EQ, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+
+  ASTNode result = c.run(top);
+  ASTNodeSet syms;
+  c.collectSymbols(result, syms);
+  EXPECT_EQ(syms.count(x), 1u) << "walk stepped past a non-bottom even mult";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_zero_refused)
+{
+  // (= (bvmul x 0) t): the image is {0}; leave it to constant folding.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, x, c.konst(0)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+
+  ASTNode result = c.run(top);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
 }

@@ -96,8 +96,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     # Release, not the RelWithDebInfo most of CI leaves it at: CMakeLists only
     # turns ENABLE_ASSERTIONS off for an exact "Release", and a published
@@ -114,7 +112,7 @@ jobs:
         build-type: Release
         werror: 'OFF'
 
-    # Stripped: worth ~1.7M (24M -> 22M) now that setup-cms.sh builds the
+    # Stripped: worth ~1.7M (24M -> 22M) now that the build builds the
     # solver stack in Release, which is where the bulk of the debug info used
     # to come from. Kept because it still removes the symbol table, and
     # because a release asset has no use for either.
@@ -125,6 +123,12 @@ jobs:
         cp "${{ steps.build.outputs.binary }}" \
            "assets/stp-${{ needs.check-version.outputs.version }}-linux-amd64"
         strip "assets/stp-${{ needs.check-version.outputs.version }}-linux-amd64"
+        # The asset is one static binary rather than an archive, so there is
+        # nothing inside it to carry the notices of the third-party code it was
+        # linked from. Several of those licences (MIT, BSD) require the notice to
+        # accompany a binary distribution, so the two files go up as assets of
+        # their own, next to it on the release page.
+        cp LICENSE LICENSE_COMPONENTS assets/
         ls -l assets/
 
     - uses: actions/upload-artifact@v4
@@ -238,7 +242,7 @@ jobs:
       shell: bash
       working-directory: assets
       run: |
-        sha256sum stp-* > SHA256SUMS
+        sha256sum stp-* LICENSE LICENSE_COMPONENTS > SHA256SUMS
         cat SHA256SUMS
         sha256sum --check SHA256SUMS
 

@@ -6,6 +6,11 @@ config.stp_src_root = "@STP_SOURCE_DIR@"
 config.stp_obj_root = "@STP_BINARY_DIR@"
 config.python_executable = "@PYTHON_EXECUTABLE@"
 config.stp_executable = "@STP_EXECUTABLE_PATH@"
+config.stp_have_minisat = @STP_MINISAT_PYBOOL@
+config.stp_have_cadical = @STP_CADICAL_PYBOOL@
+config.stp_cadical_inprobing = @STP_CADICAL_INPROBING_PYBOOL@
+config.outputcheck_tool = "@STP_OUTPUTCHECK_TOOL@"
+config.python_shim_dir = "@STP_PYTHON_SHIM_DIR@"
 
 # Let the main config do the real work.
 lit_config.load_config(config, "@STP_SOURCE_DIR@/tests/query-files/lit.cfg")

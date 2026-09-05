@@ -26,17 +26,16 @@ THE SOFTWARE.
 #define BBNodeManagerAIG_H_
 
 #include <cstdint>
+#include <stdexcept>
 
 #include "BBNodeAIG.h"
+#include "stp/ToSat/AIGBudget.h"
 #include "stp/ToSat/ToSATBase.h"
 
 // From ABC
 #include "aig/aig/aig.h"
 #include "sat/cnf/cnf.h"
 #include "opt/dar/dar.h"
-
-typedef Cnf_Dat_t_ CNFData;
-typedef Aig_Obj_t AIGNode;
 
 namespace stp
 {
@@ -85,11 +84,33 @@ inline Aig_Obj_t* orderedAigMux(Aig_Man_t* p, Aig_Obj_t* pC, Aig_Obj_t* p1,
   return Aig_Or(p, thn, els);
 }
 
+// The DAR 4-input subgraph library is a process-global that costs roughly
+// 150M instructions to build, and all three of its users -- AIG rewriting
+// inside CNF conversion, the exact-encoder's rewrite, and the propositional
+// core simplifier -- share the one copy.
+//
+// It used to have three callers of Dar_LibStart() and a single Dar_LibStop(),
+// so the core simplifier tore down the library the other two were still
+// relying on and the next rewrite re-paid the build. Dar_LibStop() also
+// asserts the library is live, making a second call an abort rather than a
+// no-op. One owner, started on demand and kept for the process: Dar_LibStart()
+// is already idempotent, so the cost is paid once however many callers there
+// are.
+inline void ensureDarLibrary()
+{
+  Dar_LibStart();
+}
+
 // Creates AIG nodes with ABC and wraps them in BBNodeAIG's.
 class BBNodeManagerAIG
 {
 public:
   Aig_Man_t* aigMgr;
+
+  // Hard cap on AND gates; -1 (the default) is no limit, 0 permits none.
+  // Set it before any blasting starts -- checkBudget() reads it on every
+  // CreateNode().
+  int64_t nodeBudget = -1;
 
   // Map from symbols to their AIG nodes.
   typedef std::map<ASTNode, vector<BBNodeAIG>> SymbolToBBNode;
@@ -98,6 +119,100 @@ public:
   int totalNumberOfNodes()
   {
     return aigMgr->nObjs[AIG_OBJ_AND]; // without having removed non-reachable.
+  }
+
+  // --- the interface everything above the manager is allowed to use --------
+  //
+  // These exist so that no caller reaches through `aigMgr` into ABC. That is
+  // not tidiness: BitBlaster cannot be instantiated over a second node
+  // representation while it names Aig_Obj_t directly, and every one of these
+  // is a method that representation would have to provide anyway.
+
+  // A combinational input that stands for no symbol. The BV abstraction
+  // machinery mints these for proxies and for abstracted results, which is
+  // why it does not go through CreateSymbol.
+  BBNodeAIG CreateFreshInput()
+  {
+    BBNodeAIG fresh(Aig_ObjCreateCi(aigMgr));
+    fresh.symbol_index = aigMgr->vCis->nSize - 1;
+    return fresh;
+  }
+
+  // How many combinational inputs exist, and the object id of one of them by
+  // creation order. The CNF seam left one caller for the id -- the
+  // propositional core's map back to the AIG it rewrote -- and everything
+  // that wanted a SAT variable now asks CNF::varOfCi() for it by the same
+  // ordinal.
+  //
+  // Positional rather than by node, because dag-aware rewriting replaces the
+  // manager wholesale and only the position in vCis survives it.
+  int ciCount() const { return aigMgr->vCis->nSize; }
+
+  int ciObjectId(int ordinal) const
+  {
+    assert(ordinal >= 0 && ordinal < ciCount());
+    return Aig_ObjId((Aig_Obj_t*)Vec_PtrEntry(aigMgr->vCis, ordinal));
+  }
+
+  BBNodeAIG ciNode(int ordinal) const
+  {
+    assert(ordinal >= 0 && ordinal < ciCount());
+    return BBNodeAIG((Aig_Obj_t*)Vec_PtrEntry(aigMgr->vCis, ordinal));
+  }
+
+  // Node-level queries, all on the uncomplemented node: a literal and its
+  // negation answer these identically.
+  static bool isCI(const BBNodeAIG& n) { return Aig_ObjIsCi(Aig_Regular(n.n)); }
+
+  // Whether this handle is an input of this manager's own making, held
+  // uncomplemented so that its ordinal is meaningful -- and that ordinal.
+  //
+  // Not the same question as isCI(), which strips the complement bit before
+  // asking: a complemented input is still an input, but it is not one the
+  // blaster can name, and an abstraction record that stored its ordinal would
+  // be recording the wrong polarity. The blaster asks these rather than
+  // reading BBNodeAIG::symbol_index, so that the shared blasting code does
+  // not depend on one backend's handle carrying an ordinal at all.
+  static bool isNamedCI(const BBNodeAIG& n)
+  {
+    return !n.IsNull() && n.symbol_index >= 0;
+  }
+  static int ciOrdinal(const BBNodeAIG& n)
+  {
+    assert(isNamedCI(n));
+    return n.symbol_index;
+  }
+  static bool isConstant(const BBNodeAIG& n)
+  {
+    return Aig_ObjIsConst1(Aig_Regular(n.n));
+  }
+  static bool isAnd(const BBNodeAIG& n) { return Aig_ObjIsAnd(Aig_Regular(n.n)); }
+  static unsigned nodeId(const BBNodeAIG& n)
+  {
+    return Aig_ObjId(Aig_Regular(n.n));
+  }
+
+  // The fanins of an AND, with the sign stripped. Provenance and traversal
+  // are both sign-insensitive; returning the signed edge here would key two
+  // memo entries per node.
+  static BBNodeAIG fanin0(const BBNodeAIG& n)
+  {
+    return BBNodeAIG(Aig_ObjFanin0(Aig_Regular(n.n)));
+  }
+  static BBNodeAIG fanin1(const BBNodeAIG& n)
+  {
+    return BBNodeAIG(Aig_ObjFanin1(Aig_Regular(n.n)));
+  }
+
+  // Called after every CreateNode(). A single node can add a whole fan-in
+  // tower before this runs, so the count at the throw can overshoot the
+  // budget by the width of one operator -- the cap is a bound on the order
+  // of magnitude, not an exact ceiling.
+  void checkBudget() const
+  {
+    if (nodeBudget >= 0 &&
+        static_cast<int64_t>(aigMgr->nObjs[AIG_OBJ_AND]) > nodeBudget)
+      throw AIGBudgetExhausted(aigMgr->nObjs[AIG_OBJ_AND]);
   }
 
 private:
@@ -145,6 +260,31 @@ public:
     aigMgr = Aig_ManStart(0);
     // fancier strashing.
     aigMgr->fAddStrash = 1;
+  }
+
+  // Swap in a strash table sized for the whole blast, before anything is
+  // built. Only the table: restarting the manager at the hinted size would
+  // also make its node-page chunk that large, which costs real memory --
+  // measured at +5-9% peak on large blasts -- while the table alone retires
+  // Aig_TableResize and runs at load factor <= 1 where the growth policy
+  // oscillates between 0.5 and 2. The table holds only AND nodes and none
+  // exist yet, so an empty replacement is the same table, larger.
+  void hintExpectedAnds(uint64_t n)
+  {
+    assert(Aig_ManNodeNum(aigMgr) == 0);
+    const uint64_t cap = 1ull << 26;
+    const uint64_t want = n + (n >> 4) + 1024;
+    // The full expected count, not a fraction of it: the chain walk is
+    // memory-bound, and a factor sweep put the knee here -- half this table
+    // costs 14-18% of blasting for at most 4% of process peak, while twice
+    // it buys back under half as much for memory that climbs faster.
+    const int slots = Abc_PrimeCudd((unsigned)(want < cap ? want : cap));
+    if (slots <= aigMgr->nTableSize)
+      return;
+    ABC_FREE(aigMgr->pTable);
+    aigMgr->nTableSize = slots;
+    aigMgr->pTable = ABC_ALLOC(Aig_Obj_t*, slots);
+    memset(aigMgr->pTable, 0, sizeof(Aig_Obj_t*) * slots);
   }
 
   void stop()
@@ -217,7 +357,13 @@ public:
         break;
 
       case NAND:
-        if (children.size() == 2)
+        // The one-child cases mirror AND and OR above. makeTower needs at
+        // least two, and a single-bit field is not hypothetical: the
+        // significand of a two-bit format has exactly one stored bit, so
+        // NOR over it arrives here with one child.
+        if (children.size() == 1)
+          pNode = children[0].n;
+        else if (children.size() == 2)
           pNode = Aig_And(aigMgr, children[0].n, children[1].n);
         else
           pNode = makeTower(Aig_And, children);
@@ -230,7 +376,9 @@ public:
         break;
 
       case NOR:
-        if (children.size() == 2)
+        if (children.size() == 1)
+          pNode = children[0].n;
+        else if (children.size() == 2)
           pNode = Aig_Or(aigMgr, children[0].n, children[1].n);
         else
           pNode = makeTower(Aig_Or, children);
@@ -238,7 +386,9 @@ public:
         break;
 
       case XOR:
-        if (children.size() == 2)
+        if (children.size() == 1)
+          pNode = children[0].n;
+        else if (children.size() == 2)
           pNode = orderedAigExor(aigMgr, children[0].n, children[1].n);
         else
           pNode = makeTower(orderedAigExor, children);
@@ -267,6 +417,7 @@ public:
         assert(false);
         exit(-1);
     }
+    checkBudget();
     return BBNodeAIG(pNode);
   }
 

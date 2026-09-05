@@ -18,18 +18,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-find_package(Perl)
-
 set(AST_KIND_HEADER_LOCATION "${PROJECT_BINARY_DIR}/include/stp/AST/ASTKind.h")
 if(NOT STP_TIMESTAMPS)
   set(GK_FLAGS "--no-timestamp")
 endif()
+# genkinds.py writes ASTKind.h and ASTKind.cpp into its working directory,
+# which for a custom command is CMAKE_CURRENT_BINARY_DIR.
 add_custom_command(
     OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/ASTKind.cpp ${AST_KIND_HEADER_LOCATION}
-    COMMAND ${PERL_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/genkinds.pl ${GK_FLAGS} --file ${CMAKE_CURRENT_SOURCE_DIR}/ASTKind.kinds
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/genkinds.py ${GK_FLAGS} --file ${CMAKE_CURRENT_SOURCE_DIR}/ASTKind.kinds
     COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/include/stp/AST
     COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_CURRENT_BINARY_DIR}/ASTKind.h ${AST_KIND_HEADER_LOCATION}
-    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/genkinds.pl
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/genkinds.py
     DEPENDS ASTKind.kinds
 )
 
@@ -39,8 +39,11 @@ add_library(AST OBJECT
     ${CMAKE_CURRENT_BINARY_DIR}/ASTKind.cpp
     ASTInterior.cpp
     ASTNode.cpp
+    SourceSort.cpp
     ASTUtil.cpp
     ASTBVConst.cpp
+    ASTFPConst.cpp
+    ASTRMConst.cpp
     ASTmisc.cpp
     ASTSymbol.cpp
     MutableASTNode.cpp

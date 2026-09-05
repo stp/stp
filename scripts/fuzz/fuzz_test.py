@@ -94,7 +94,7 @@ class Tester:
 
         # print options
         # --print-back-CVC", "--print-back-SMTLIB2"
-        # --print-back-SMTLIB1", "--print-back-GDL", "--print-back-dot"
+        # --print-back-GDL", "--print-back-dot"
         # -p (COUNTEREXAMPLE), -s (STATS), -t (quick stats), -v (notes), -y (counterexample in binary)
         # -b (print back input to output)
 

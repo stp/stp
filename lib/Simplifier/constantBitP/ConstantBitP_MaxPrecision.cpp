@@ -27,11 +27,13 @@ THE SOFTWARE.
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Sat/MinisatCore.h"
+#include "stp/Sat/SATSolver.h"
+#include "stp/Sat/SATSolverFactory.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/ToSat/BitBlaster.h"
+#include <memory>
 
 using namespace stp;
 
@@ -158,7 +160,6 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   bool printOutput = beev->UserFlags.print_output_flag;
   bool checkCounter = beev->UserFlags.check_counterexample_flag;
   bool constructCounter = beev->UserFlags.construct_counterexample_flag;
-
   beev->UserFlags.bitConstantProp_flag = false;
   beev->UserFlags.print_output_flag = false;
   beev->UserFlags.check_counterexample_flag = false;
@@ -230,9 +231,21 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   Simplifier simp(beev, &sm );
   ArrayTransformer at(beev, &simp);
   AbsRefine_CounterExample ce(beev, &simp, &at);
-  MinisatCore newS;
+  std::unique_ptr<SATSolver> newS_owner(createSATSolver(beev->UserFlags));
+  SATSolver& newS = *newS_owner;
 
-  ToSATAIG tosat(beev, &at);
+  // Exactly, whatever the session's abstraction flags say. The BV abstraction
+  // turns CallSAT_ResultCheck into a refinement producer: it can answer
+  // SOLVER_UNDECIDED (2) with no arrays involved, returning before the model
+  // this loop is about to read is constructed, and the result handling below
+  // reads 2 as "error from solver" and aborts. These auxiliary queries are a
+  // few bits wide and gain nothing from abstracting anyway.
+  //
+  // Said to this encoding rather than by clearing the manager's flags and
+  // putting them back: that was a manager-wide write for a decision belonging
+  // to one lowering, invisible to anything else sharing the manager, and
+  // restored only on the paths that reach the bottom of this function.
+  ToSATAIG tosat(beev, &at, /*allowAbstraction=*/false);
 
   SATSolver::vec_literals satSolverClause;
 
@@ -244,7 +257,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
     if (first)
     {
       beev->SetQuery(beev->ASTUndefined);
-      result = ce.CallSAT_ResultCheck(newS, expr, expr, &tosat, true);
+      result = ce.CallSAT_ResultCheck(newS, expr, expr, expr, &tosat, true);
     }
     else
     {
@@ -254,7 +267,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
 
       beev->SetQuery(beev->ASTUndefined);
       result = ce.CallSAT_ResultCheck(newS, beev->ASTTrue, beev->ASTTrue,
-                                      &tosat, true);
+                                      beev->ASTTrue, &tosat, true);
     }
 
     if (2 == result)

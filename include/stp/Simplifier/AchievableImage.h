@@ -96,7 +96,6 @@ public:
   // to samples, the hints (width-adapted) are tried as members first --
   // e.g. (x & 0x55) == 0x41 only finds the true-witness x = 0x41 this
   // way. Call before apply()ing the steps.
-  void addHint(const ASTNode& k);
 
   // Back-propagate the predicate constant `k` through the whole
   // collected path with a per-operator heuristic preimage, recording a
@@ -114,6 +113,11 @@ public:
 
   static bool handledKind(Kind k);
   static bool predicateKind(Kind k);
+
+  // Evaluate one step at a concrete path value. Returns a fresh CBV.
+  // Shared with RemoveUnconstrained's symbolic-side collapse, which
+  // needs forward evaluation of a chain outside any image object.
+  static CBV evalStep(const GroundStep& step, const CBV in);
 
   // Whether the image is still tracked as an exact interval (rather
   // than under-approximating samples). Tests use this to know when
@@ -148,7 +152,7 @@ private:
   // invert an image value back to an x value.
   std::vector<std::pair<CBV, CBV>> exactBounds;
   std::vector<Sample> samples;
-  std::vector<CBV> hints; // owned; see addHint
+  std::vector<CBV> hints; // owned; see addHintChain
 
   bool applyExact(const GroundStep& step);
   void applyToSamples(const GroundStep& step);
@@ -158,7 +162,6 @@ private:
   CBV invertPrefix(CBV value); // takes and returns ownership
   CBV invertStep(const GroundStep& step, const CBV inLo, const CBV inHi,
                  const CBV value);
-  CBV evalStep(const GroundStep& step, const CBV in);
   bool evalPredicate(Kind pred, bool pathIsFirstOperand, const CBV member,
                      const CBV k);
   bool validate(const CBV xWitness, Kind pred, bool pathIsFirstOperand,

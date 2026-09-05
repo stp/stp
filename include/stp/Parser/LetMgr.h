@@ -26,6 +26,8 @@ THE SOFTWARE.
 #define LETMGR_H
 
 #include "stp/AST/AST.h"
+#include "stp/cpp_interface.h"
+#include <string_view>
 
 namespace stp
 {
@@ -35,9 +37,9 @@ using std::string;
 class LetMgr
 {
 private:
-  const ASTNode ASTUndefined;
-
-  typedef std::unordered_map<string, ASTNode> MapType;
+  typedef ankerl::unordered_dense::map<string, ASTNode, TransparentStringHash,
+                                       std::equal_to<>>
+      MapType;
 
   // This maps from bound IDs that occur in LETs to
   // expressions. It's used to replace the IDs
@@ -48,7 +50,11 @@ private:
   // Each name maps to the stack of bindings that shadow each other,
   // innermost last, tagged with the index of the frame they belong to.
   // A single hash lookup resolves a name however deeply lets are nested.
-  std::unordered_map<string, std::vector<std::pair<size_t, ASTNode>>> bindings;
+  // A dense hash map probed via string_view: the lexer asks about every
+  // identifier it sees, so the probe must not copy the name.
+  ankerl::unordered_dense::map<string, std::vector<std::pair<size_t, ASTNode>>,
+                               TransparentStringHash, std::equal_to<>>
+      bindings;
 
   // The names bound in each open frame, so pop() can undo them.
   // Initally empty because we expect push() to be called before any bindings are added.
@@ -64,7 +70,7 @@ public:
   
   bool frameMode = true;
 
-  LetMgr(ASTNode undefined) : ASTUndefined(undefined)
+  LetMgr([[maybe_unused]] ASTNode undefined)
   {
     assert(!undefined.IsNull());
     push(); // CVC format has a global let scope.
@@ -81,14 +87,10 @@ public:
 
   void CleanupLetIDMap(void);
 
-  // Has a let with this name has already been declared.
-  bool isLetDeclared(const string& s) const;
-
   // The expression the innermost binding of s maps to, or nullptr.
   // The pointer is invalidated by any change to the bindings.
-  const ASTNode* lookupLet(const string& s) const;
+  const ASTNode* lookupLet(std::string_view s) const;
 
-  ASTNode resolveLet(const string& s) const;
   ASTNode ResolveID(const ASTNode& var);
 
   // Functions that are used to create LET expressions

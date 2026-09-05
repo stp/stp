@@ -41,7 +41,7 @@ namespace
 const int QUERY_INVALID = 0;
 const int QUERY_VALID = 1;
 const int QUERY_ERROR = 2;
-const int QUERY_TIMEOUT = 3;
+const int QUERY_UNKNOWN = 3;
 
 const int NO_LIMIT = -1;
 
@@ -61,14 +61,13 @@ std::vector<Backend> backends()
 {
   std::vector<Backend> result;
 
+#ifdef USE_MINISAT
   result.push_back({"minisat", vc_useMinisat, false});
   result.push_back({"simplifying-minisat", vc_useSimplifyingMinisat, false});
+#endif
 
 #ifdef USE_CRYPTOMINISAT
   result.push_back({"cryptominisat", vc_useCryptominisat, true});
-#endif
-#ifdef USE_RISS
-  result.push_back({"riss", vc_useRiss, false});
 #endif
 #ifdef USE_CADICAL
   result.push_back({"cadical", vc_useCadical, true});
@@ -151,7 +150,7 @@ TEST(timeout_budget, zero_time_budget_gives_up_immediately)
         std::chrono::steady_clock::now();
 
     EXPECT_EQ(vc_query_with_timeout(vc, vc_falseExpr(vc), NO_LIMIT, 0),
-              QUERY_TIMEOUT);
+              QUERY_UNKNOWN);
     EXPECT_LT(seconds_since(start), 30.0);
 
     vc_Destroy(vc);
@@ -169,7 +168,7 @@ TEST(timeout_budget, zero_conflict_budget_gives_up_immediately)
     assert_hard_instance(vc);
 
     EXPECT_EQ(vc_query_with_timeout(vc, vc_falseExpr(vc), 0, NO_LIMIT),
-              QUERY_TIMEOUT);
+              QUERY_UNKNOWN);
 
     vc_Destroy(vc);
   }
@@ -200,7 +199,7 @@ TEST(timeout_budget, time_budget_covers_the_whole_query)
         std::chrono::steady_clock::now();
 
     EXPECT_EQ(vc_query_with_timeout(vc, vc_falseExpr(vc), NO_LIMIT, 2),
-              QUERY_TIMEOUT);
+              QUERY_UNKNOWN);
     EXPECT_LT(seconds_since(start), 30.0);
 
     vc_Destroy(vc);
@@ -224,7 +223,7 @@ TEST(timeout_budget, no_limit_reaches_the_solver)
 
     // 60491 == 251 * 241, factored in milliseconds, but still an answer
     // that has to come out of the SAT solver: give this same instance a
-    // budget of zero conflicts and every backend reports a timeout.
+    // budget of zero conflicts and every backend reports unknown.
     const int width = 32;
     Expr a = vc_varExpr(vc, "a", vc_bvType(vc, width));
     Expr b = vc_varExpr(vc, "b", vc_bvType(vc, width));
@@ -306,8 +305,10 @@ TEST(timeout_budget, cadical_is_selectable)
   EXPECT_TRUE(vc_useCadical(vc));
   EXPECT_TRUE(vc_isUsingCadical(vc));
 
+#ifdef USE_MINISAT
   EXPECT_TRUE(vc_useMinisat(vc));
   EXPECT_FALSE(vc_isUsingCadical(vc));
+#endif
 
   vc_Destroy(vc);
 }

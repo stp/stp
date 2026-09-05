@@ -1,13 +1,23 @@
 The MIT License
 
 Copyright (c)
-    2005 - 2015 Vijay Ganesh. Main codebase, project lead
-    2010 - 2014 Trevor Hansen
-    2013 - 2015 Ryan Govostes
-    2013 - 2015 Dan Liew
-    2011 - 2013 Khoo Yit Phang
-    2005 - 2015 David L. Dill
-    2009 - 2015 Mate Soos
+    2005 - 2010, 2015 Vijay Ganesh
+    2009 - 2024, 2026 Trevor Hansen
+    2009 - 2022       Mate Soos
+    2018 - 2026       Andrew Teylu
+    2013 - 2017       Dan Liew
+    2013 - 2025       Ryan Govostes
+    2005 - 2008       David L. Dill
+    2017              Felix Kutzner
+    2011 - 2013       Khoo Yit Phang
+    2014              Jurriaan Bremer
+    2008 - 2010       Michael Katelman
+    2018 - 2019       Norbert Manthey
+    2008 - 2010       Stephen McCamant
+    2013 - 2014       Florian Merz
+    2007              Tim King
+    and the other contributors recorded in the revision history of this
+    project
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -30,14 +40,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ---
 
-Also includes copyrighted software from:
-    * Bit::Vector -- Copyright (c) 1995 - 2004 by Steffen Beyer
-    * CVC's SMT-LIB Parser -- Copyright (C) 2004 by the Board of Trustees
-        of Leland Stanford Junior University and by New York University.
-    * ABC -- Copyright (c) The Regents of the University of California.
-    * mimalloc -- Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen
-    * ankerl::unordered_dense -- Copyright (c) 2022-2024 Martin Leitner-Ankerl
-    * Mersenne Twister -- Copyright (C) 1997 - 2002 Makoto Matsumoto and
-        Takuji Nishimura, Copyright (C) 2000 - 2003 Richard J. Wagner
+The authors assert their moral rights, and in particular the right to be
+identified as the authors of this work. Moral rights are personal to each
+author and are not transferred by the licence above.
 
-For licenses of these SW packages, please see LICENSE_COMPONENTS
+---
+
+STP incorporates code from other projects, and is distributed with further
+third-party code that it does not compile in. That code is not covered by
+the licence above: each component is licensed by its own authors, on its own
+terms. The components, and the terms they are licensed under, are listed in
+LICENSE_COMPONENTS.

@@ -31,3 +31,10 @@ endif()
 if(TEST_PYTHON_API)
     add_subdirectory(python)
 endif()
+
+# Exercise the installed package as an external UF C++ consumer. DESTDIR is
+# used by the driver, so even configurations whose install prefix is /usr/local
+# remain confined to the build tree.
+if(UNIX)
+    add_subdirectory(install)
+endif()

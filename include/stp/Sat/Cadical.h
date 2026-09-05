@@ -29,8 +29,25 @@ THE SOFTWARE.
 #define CADICAL_H_
 
 #include "SATSolver.h"
-#include "src/cadical.hpp"
+#include <cadical/cadical.hpp>
 #include <chrono>
+
+// STP_CADICAL_HAS_FACTOR is decided by the configure, from the version of the
+// CaDiCaL it located; the header that actually arrives here is decided by the
+// include path. Those are two different answers to the same question, and they
+// have disagreed: CryptoMiniSat >= 5.14 installs a bundled CaDiCaL's header
+// under the same cadical/cadical.hpp, and once its prefix was on the search
+// path ahead of STP's, the 2.1.3 header was compiled against a build that had
+// read 3.0.1 off the checkout. lib/Sat/CMakeLists.txt keeps that from
+// happening; this says so if it ever does again, rather than leaving it to
+// surface as a missing member several hundred lines away -- or, for an API
+// that happens to line up in both, not surfacing at all.
+#if defined(STP_CADICAL_HAS_FACTOR) && \
+    (!defined(CADICAL_MAJOR) || CADICAL_MAJOR < 3)
+#error "cadical/cadical.hpp is older than the CaDiCaL this build configured \
+against. Some other dependency's include directory is shadowing it -- see the \
+CryptoMiniSat note in lib/Sat/CMakeLists.txt."
+#endif
 
 namespace stp
 {
@@ -60,12 +77,26 @@ namespace stp
 
   int64_t max_confl = -1;
 
+  // Bounded variable addition (factor) invents extension variables in the
+  // external index space, so once it is enabled STP's dense 1..n numbering
+  // can no longer be used as CaDiCaL's directly: every variable has to be
+  // declared, CaDiCaL picks where each declared range lives, and clause
+  // literals and model lookups translate through this table. ext_of_stp[v]
+  // is the CaDiCaL external index declared for STP variable v (1-based;
+  // entry 0 unused). Empty and unused while factor is off, which keeps the
+  // untranslated fast path bit-for-bit identical to pre-factor builds.
+  std::vector<int> ext_of_stp;
+  bool factor_enabled = false;
+
+  // Probed once at construction (inside the configuration window):
+  // whether this CaDiCaL build knows the "inprobing" option at all.
+  bool inprobing_control = false;
+  void declareNewVariables();
+
 public:
   Cadical();
 
   ~Cadical();
-
-  bool addClause(const vec_literals& ps) override; // Add a clause to the solver.
 
   bool okay() const override; // FALSE means solver is in a conflicting state
 
@@ -77,11 +108,37 @@ public:
 
   uint32_t newVar() override;
 
-  bool setSearchBias(SearchBias bias) override;
+  void setFrozen(uint32_t var) override;
+
+  // Root-level facts CaDiCaL has derived; see SATSolver.
+  int simplifyOnly() override;
+  int rootFixed(unsigned var) override;
+  bool reportsRootFixed() const override { return true; }
+
+  bool setSearchBiasInternal(SearchBias bias) override;
+
+  bool enableBVAInternal() override;
+
+  bool supportsInprobingControl() const override;
+  bool disableInprobingInternal() override;
+  bool disableEliminationAndShrinkingInternal() override;
+  bool disableLuckyPhasesInternal() override;
+
+  bool enableTrailReuseInternal() override;
+
+  void suggestPhase(uint32_t var, bool value) override;
+  void declarePendingVariables() override;
+
+  void unsatAssumptions(const vec_literals& assumps,
+                        std::vector<int>& out) override;
 
   void setVerbosity(int v) override;
 
-  unsigned long nVars() const override;
+  uint32_t nVars() const override;
+
+  bool reportsClauseCount() const override { return true; }
+
+  int nClauses() override;
 
   void printStats() const override;
 
@@ -89,8 +146,14 @@ public:
   lbool false_literal() const override { return ((uint8_t)-1); }
   lbool undef_literal() const override { return ((uint8_t)2); }
 
+public:
+  bool supportsAssumptions() const override { return true; }
+
 protected:
+  bool addClauseInternal(const vec_literals& ps) override;
   bool solveInternal(bool& timeout_expired) override;
+  bool solveWithAssumptionsInternal(const vec_literals& assumps,
+                                    bool& timeout_expired) override;
 
   // Cadical polls the Terminator we connect during search.
   bool canInterruptSearch() const override { return true; }

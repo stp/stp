@@ -1,7 +1,7 @@
 # author: Dan Liew
 # date: Sep, 2014
 #
-# author: Andrew V. Jones
+# author: Andrew Teylu
 # date: Apr, 2019
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,16 +24,34 @@
 
 
 from .stp import (
+    AnyExpr,
+    ArrayExpr,
     Expr,
+    FloatExpr,
+    RoundingModeExpr,
+    Sort,
+    UninterpretedFunction,
     Solver,
     stp,
     add,
+    array,
     bitvec,
     bitvecs,
     check,
     model,
+    RNE,
+    RTP,
+    RTN,
+    RTZ,
+    RNA,
     get_git_version_sha,
     get_git_version_tag,
     get_compilation_env,
     get_lib,
 )
+
+# This list is what `from stp import *` gives, and it must stay equal to
+# stp.stp.__all__ -- the names the module declares public are exactly the ones
+# the package should re-export. test_package_reexports_everything_public keeps
+# the two from drifting apart again.
+from .stp import __all__ as __all__

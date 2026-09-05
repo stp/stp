@@ -119,16 +119,16 @@ struct Context
     collectSymbols(after, symSet);
     std::vector<ASTNode> syms(symSet.begin(), symSet.end());
 
-    unsigned long combos = 1;
+    uint64_t combos = 1;
     for (const auto& s : syms)
       combos *= domainSize(s);
     ASSERT_LE(combos, 1u << 16)
         << "too many assignments (" << combos << ") -- lower the width";
 
-    for (unsigned long c = 0; c < combos; c++)
+    for (uint64_t c = 0; c < combos; c++)
     {
       ASTNodeMap assignment;
-      unsigned long rest = c;
+      uint64_t rest = c;
       for (size_t i = 0; i < syms.size(); i++)
       {
         const unsigned size = domainSize(syms[i]);
@@ -457,6 +457,35 @@ TEST(SimplifyingNodeFactory_Exhaustive, eq_concat_shared_half)
   c.checkNode(EQ, {sharedTail1, sharedTail2});
   EXPECT_EQ(c.nf->CreateNode(EQ, sharedTail1, sharedTail2),
             c.nf->CreateNode(EQ, x, y));
+}
+
+/* constant = high ++ low --> high = constant[high] && low = constant[low].
+   This is the common one-level case, which does not need the nested-concat
+   continuation stack. */
+TEST(SimplifyingNodeFactory_Exhaustive, eq_constant_shallow_concat)
+{
+  Context c;
+  const ASTNode high = c.bv(2);
+  const ASTNode low = c.bv(3);
+  const ASTNode concat = c.hf->CreateTerm(BVCONCAT, 5, high, low);
+  const ASTNode constant = c.konst(0b10110, 5);
+  const ASTNode plain = c.hf->CreateNode(EQ, constant, concat);
+  const ASTNode simplified = c.nf->CreateNode(EQ, constant, concat);
+  const ASTNode reversePlain = c.hf->CreateNode(EQ, concat, constant);
+  const ASTNode reverseSimplified = c.nf->CreateNode(EQ, concat, constant);
+
+  const ASTNode lowEquality =
+      c.nf->CreateNode(EQ, low, c.konst(0b110, 3));
+  const ASTNode highEquality =
+      c.nf->CreateNode(EQ, high, c.konst(0b10, 2));
+  const ASTNode expected = c.nf->CreateNode(AND, lowEquality, highEquality);
+
+  EXPECT_NE(plain, simplified);
+  EXPECT_EQ(expected, simplified);
+  EXPECT_NE(reversePlain, reverseSimplified);
+  EXPECT_EQ(expected, reverseSimplified);
+  c.checkEquivalent(plain, simplified);
+  c.checkEquivalent(reversePlain, reverseSimplified);
 }
 
 /* equality and signed comparison of two sign extensions from the same
@@ -933,6 +962,312 @@ TEST(SimplifyingNodeFactory_Exhaustive, plus_cancels_negated_sum)
       EXPECT_EQ(c.nf->CreateTerm(BVSUB, w, x, notNeg), c.konst(1, w));
     }
   }
+}
+
+/* a + (-b) * (a sdiv b) --> a srem b, and the unsigned pair, for a symbolic
+   divisor and for every constant one. */
+TEST(SimplifyingNodeFactory_Exhaustive, plus_of_division_product)
+{
+  const unsigned w = 4;
+  const struct
+  {
+    Kind div;
+    Kind rem;
+  } pairs[] = {{SBVDIV, SBVREM}, {BVDIV, BVMOD}};
+
+  for (const auto& p : pairs)
+  {
+    {
+      Context c;
+      ASTNode a = c.bv(w);
+      ASTNode b = c.bv(w);
+      ASTNode quot = c.hf->CreateTerm(p.div, w, a, b);
+      ASTNode negB = c.hf->CreateTerm(BVUMINUS, w, b);
+      // The multiplier's operands, and the sum's, in both orders.
+      for (const ASTVec& mulArgs :
+           {ASTVec{negB, quot}, ASTVec{quot, negB}})
+      {
+        ASTNode mult = c.hf->CreateTerm(BVMULT, w, mulArgs);
+        EXPECT_EQ(c.nf->CreateTerm(BVPLUS, w, a, mult),
+                  c.nf->CreateTerm(p.rem, w, a, b));
+        c.checkTerm(BVPLUS, w, {a, mult});
+        c.checkTerm(BVPLUS, w, {mult, a});
+      }
+    }
+
+    for (unsigned bv = 0; bv < (1u << w); bv++)
+    {
+      Context c;
+      ASTNode a = c.bv(w);
+      ASTNode b = c.konst(bv, w);
+      ASTNode negB = c.konst(((1u << w) - bv) & ((1u << w) - 1), w);
+      ASTNode quot = c.hf->CreateTerm(p.div, w, a, b);
+      ASTNode mult = c.hf->CreateTerm(BVMULT, w, negB, quot);
+      EXPECT_EQ(c.nf->CreateTerm(BVPLUS, w, a, mult),
+                c.nf->CreateTerm(p.rem, w, a, b));
+      c.checkTerm(BVPLUS, w, {a, mult});
+    }
+  }
+}
+
+/* The same sum written as a subtraction: a - b * (a sdiv b), which reaches
+   the rule as a plus of a negated product. */
+TEST(SimplifyingNodeFactory_Exhaustive, subtract_division_product)
+{
+  const unsigned w = 4;
+  Context c;
+  ASTNode a = c.bv(w);
+  ASTNode b = c.bv(w);
+
+  for (const auto& p : {std::make_pair(SBVDIV, SBVREM),
+                        std::make_pair(BVDIV, BVMOD)})
+  {
+    ASTNode quot = c.hf->CreateTerm(p.first, w, a, b);
+    for (const ASTVec& mulArgs : {ASTVec{b, quot}, ASTVec{quot, b}})
+    {
+      ASTNode mult = c.hf->CreateTerm(BVMULT, w, mulArgs);
+      EXPECT_EQ(c.nf->CreateTerm(BVSUB, w, a, mult),
+                c.nf->CreateTerm(p.second, w, a, b));
+      c.checkTerm(BVSUB, w, {a, mult});
+      c.checkTerm(BVPLUS, w, {a, c.hf->CreateTerm(BVUMINUS, w, mult)});
+    }
+  }
+}
+
+/* The pair is found wherever it sits in a wider sum. */
+TEST(SimplifyingNodeFactory_Exhaustive, plus_of_division_product_nary)
+{
+  const unsigned w = 4;
+  Context c;
+  ASTNode a = c.bv(w);
+  ASTNode b = c.bv(w);
+  ASTNode other = c.bv(w);
+  ASTNode quot = c.hf->CreateTerm(SBVDIV, w, a, b);
+  ASTNode mult =
+      c.hf->CreateTerm(BVMULT, w, c.hf->CreateTerm(BVUMINUS, w, b), quot);
+
+  ASTNode expected =
+      c.nf->CreateTerm(BVPLUS, w, c.nf->CreateTerm(SBVREM, w, a, b), other);
+  EXPECT_EQ(c.nf->CreateTerm(BVPLUS, w, {a, mult, other}), expected);
+  EXPECT_EQ(c.nf->CreateTerm(BVPLUS, w, {other, mult, a}), expected);
+  c.checkTerm(BVPLUS, w, {a, mult, other});
+  c.checkTerm(BVPLUS, w, {mult, other, a});
+}
+
+/* Near misses: the multiplier is not the negated divisor, the dividend is not
+   the other operand, or the quotient is signed where the sum is not. */
+TEST(SimplifyingNodeFactory_Exhaustive, plus_of_division_product_near_misses)
+{
+  const unsigned w = 4;
+  Context c;
+  ASTNode a = c.bv(w);
+  ASTNode b = c.bv(w);
+  ASTNode d = c.bv(w);
+  ASTNode quot = c.hf->CreateTerm(SBVDIV, w, a, b);
+  ASTNode negB = c.hf->CreateTerm(BVUMINUS, w, b);
+  ASTNode negD = c.hf->CreateTerm(BVUMINUS, w, d);
+
+  // Multiplied by the divisor rather than its negation.
+  c.checkTerm(BVPLUS, w, {a, c.hf->CreateTerm(BVMULT, w, b, quot)}, false);
+  // Multiplied by an unrelated negated term.
+  c.checkTerm(BVPLUS, w, {a, c.hf->CreateTerm(BVMULT, w, negD, quot)}, false);
+  // Added to something that is not the dividend.
+  c.checkTerm(BVPLUS, w, {d, c.hf->CreateTerm(BVMULT, w, negB, quot)}, false);
+  // Subtracted product, but of the negated divisor.
+  c.checkTerm(BVSUB, w, {a, c.hf->CreateTerm(BVMULT, w, negB, quot)}, false);
+}
+
+/* (x srem y) / y, (x smod y) / y and (x umod y) / y are zero away from a zero
+   divisor, where they take the total quotient of the dividend. */
+TEST(SimplifyingNodeFactory_Exhaustive, division_of_remainder)
+{
+  const unsigned w = 4;
+  const struct
+  {
+    Kind rem;
+    Kind div;
+  } pairs[] = {{SBVREM, SBVDIV}, {SBVMOD, SBVDIV}, {BVMOD, BVDIV}};
+
+  for (const auto& p : pairs)
+  {
+    {
+      Context c;
+      ASTNode a = c.bv(w);
+      ASTNode b = c.bv(w);
+      ASTNode rem = c.hf->CreateTerm(p.rem, w, a, b);
+      c.checkTerm(p.div, w, {rem, b});
+    }
+
+    for (unsigned bv = 0; bv < (1u << w); bv++)
+    {
+      Context c;
+      ASTNode a = c.bv(w);
+      ASTNode b = c.konst(bv, w);
+      ASTNode rem = c.hf->CreateTerm(p.rem, w, a, b);
+      c.checkTerm(p.div, w, {rem, b});
+      if (bv != 0)
+      {
+        EXPECT_EQ(c.nf->CreateTerm(p.div, w, rem, b), c.konst(0, w));
+      }
+    }
+  }
+}
+
+/* Near misses for the same: a remainder taken against a different divisor,
+   and a remainder of the wrong signedness for the division. */
+TEST(SimplifyingNodeFactory_Exhaustive, division_of_remainder_near_misses)
+{
+  const unsigned w = 4;
+  Context c;
+  ASTNode a = c.bv(w);
+  ASTNode b = c.bv(w);
+  ASTNode d = c.bv(w);
+
+  c.checkTerm(SBVDIV, w, {c.hf->CreateTerm(SBVREM, w, a, d), b}, false);
+  c.checkTerm(BVDIV, w, {c.hf->CreateTerm(BVMOD, w, a, d), b}, false);
+  // An unsigned remainder can exceed a signed divisor's magnitude, and a
+  // signed one can exceed an unsigned divisor's, so neither cross pair folds.
+  c.checkTerm(SBVDIV, w, {c.hf->CreateTerm(BVMOD, w, a, b), b}, false);
+  c.checkTerm(BVDIV, w, {c.hf->CreateTerm(SBVREM, w, a, b), b}, false);
+}
+
+/* An extract narrows through a whole stack of operators at once, not just the
+   one immediately beneath it: every slice of a term built from concats, sign
+   extensions, complements and nested extracts must mean what it meant before
+   the pushes, at every assignment and for every slice. */
+TEST(SimplifyingNodeFactory_Exhaustive, extract_narrows_through_a_stack)
+{
+  Context c;
+  ASTNode x = c.bv(2);
+  ASTNode y = c.bv(2);
+
+  // (~(sx(x, 4) ++ y))[hi:lo], and the same under an outer extract, so the
+  // walk crosses concat, bvnot, bvsx and extract in one go.
+  ASTNode sx = c.hf->CreateTerm(BVSX, 4, x, c.konst(4, 32));
+  ASTNode cat = c.hf->CreateTerm(BVCONCAT, 6, sx, y);
+  ASTNode nt = c.hf->CreateTerm(BVNOT, 6, cat);
+  ASTNode neg = c.hf->CreateTerm(BVUMINUS, 6, nt);
+
+  for (const ASTNode& base : {cat, nt, neg})
+  {
+    for (unsigned hi = 0; hi < 6; hi++)
+    {
+      for (unsigned lo = 0; lo <= hi; lo++)
+      {
+        // Every slice, whichever side of the concat it falls on and whether
+        // or not it straddles the split.
+        c.checkTerm(BVEXTRACT, hi - lo + 1,
+                    {base, c.konst(hi, 32), c.konst(lo, 32)}, false);
+
+        // The same slice reached through an outer extract of an inner one.
+        ASTNode inner = c.hf->CreateTerm(BVEXTRACT, hi + 1, base,
+                                         c.konst(hi, 32), c.konst(0, 32));
+        c.checkTerm(BVEXTRACT, hi - lo + 1,
+                    {inner, c.konst(hi - lo, 32), c.konst(0, 32)}, false);
+      }
+    }
+  }
+}
+
+/* The n-ary bvmul rules (multRules). */
+
+/* a zero operand anywhere zeroes the whole product */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_zero_child)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTVec ch = {x, c.konst(0, 3), y};
+  EXPECT_EQ(c.nf->CreateTerm(BVMULT, 3, ch), c.konst(0, 3));
+  c.checkTerm(BVMULT, 3, ch);
+}
+
+/* a one operand drops out */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_one_dropped)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTVec ch = {x, c.konst(1, 3), y};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 3, ch);
+  EXPECT_EQ(BVMULT, r.GetKind());
+  EXPECT_EQ(2u, r.Degree());
+  c.checkTerm(BVMULT, 3, ch);
+}
+
+/* constants fold together wherever they sit */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_constants_fold)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTVec ch = {c.konst(2, 3), x, c.konst(3, 3)};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 3, ch);
+  EXPECT_EQ(BVMULT, r.GetKind());
+  EXPECT_EQ(2u, r.Degree());
+  EXPECT_TRUE(r[0] == c.konst(6, 3) || r[1] == c.konst(6, 3)) << r;
+  c.checkTerm(BVMULT, 3, ch);
+}
+
+/* negations lift out of the product; an even number cancels entirely */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_negation_parity_even)
+{
+  Context c;
+  ASTNode x = c.bv(2), y = c.bv(2), z = c.bv(2);
+  ASTNode nx = c.hf->CreateTerm(BVUMINUS, 2, x);
+  ASTNode ny = c.hf->CreateTerm(BVUMINUS, 2, y);
+  ASTVec ch = {nx, ny, z};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 2, ch);
+  EXPECT_EQ(BVMULT, r.GetKind());
+  EXPECT_EQ(3u, r.Degree());
+  c.checkTerm(BVMULT, 2, ch);
+}
+
+/* an odd number of negations leaves one on top */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_negation_parity_odd)
+{
+  Context c;
+  ASTNode x = c.bv(2), y = c.bv(2), z = c.bv(2);
+  ASTNode nx = c.hf->CreateTerm(BVUMINUS, 2, x);
+  ASTVec ch = {nx, y, z};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 2, ch);
+  EXPECT_EQ(BVUMINUS, r.GetKind());
+  c.checkTerm(BVMULT, 2, ch);
+}
+
+/* a max constant is -1: it becomes the sign of the product */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_max_becomes_negation)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTVec ch = {c.konst(7, 3), x, y};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 3, ch);
+  EXPECT_EQ(BVUMINUS, r.GetKind());
+  c.checkTerm(BVMULT, 3, ch);
+}
+
+/* constants, ones and negations together */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_mixed)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode nx = c.hf->CreateTerm(BVUMINUS, 3, x);
+  ASTVec ch = {nx, c.konst(2, 3), y, c.konst(3, 3)};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 3, ch);
+  EXPECT_EQ(BVUMINUS, r.GetKind());
+  EXPECT_EQ(BVMULT, r[0].GetKind());
+  EXPECT_EQ(3u, r[0].Degree());
+  c.checkTerm(BVMULT, 3, ch);
+}
+
+/* no rule applies: the product must SURVIVE as one n-ary node -- the
+   defining property of this representation change */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_arity_survives)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3), z = c.bv(3);
+  ASTVec ch = {x, y, z};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 3, ch);
+  EXPECT_EQ(BVMULT, r.GetKind());
+  EXPECT_EQ(3u, r.Degree());
+  c.checkTerm(BVMULT, 3, ch, false);
 }
 
 } // namespace

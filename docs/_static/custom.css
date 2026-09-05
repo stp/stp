@@ -1,0 +1,78 @@
+/* Rules that finish matching the manual to the project website in web/.
+   Everything expressible as an alabaster theme option lives in conf.py; this
+   file holds the rest. The colours are the ones in web/assets/main.scss. */
+
+/* The website shows the logo as a circle inside a thin ring. */
+div.sphinxsidebar p.logo img.logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 2px solid #F1EED9;
+  box-shadow: 0 0 0 3px #46433A;
+}
+
+/* Name and tagline sit under the logo, centred on it. */
+div.sphinxsidebar h1.logo-name,
+div.sphinxsidebar p.blurb {
+  text-align: center;
+}
+
+div.sphinxsidebar h1.logo-name {
+  font-size: 2em;
+  margin-top: 0.6em;
+}
+
+/* The "Overview" link is a list of its own (see _templates/navigation.html);
+   run it into the toctree below so the menu reads as one list. */
+div.sphinxsidebar ul.nav-overview {
+  margin-bottom: 0;
+}
+
+div.sphinxsidebar ul.nav-overview + ul {
+  margin-top: 0;
+}
+
+/* Links are plain until hovered, as on the website. */
+a,
+a:hover {
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* The website separates the header from the content with a rule that fades
+   out at both ends. */
+div.sphinxsidebar hr,
+div.body hr {
+  border: 0;
+  height: 1px;
+  background-image: linear-gradient(to right,
+                                    rgba(0, 0, 0, 0), #46433A, rgba(0, 0, 0, 0));
+}
+
+/* The awards are bulleted with a trophy, as they were on the website. The
+   icon is drawn here rather than pulled from an icon font so that the page
+   needs nothing from a third party to render; it is filled with the body
+   text colour, which cannot be inherited into an image, so #46433A is
+   repeated in the markup below. */
+div.body ul.awards {
+  list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 16 16' fill='%2346433A'%3E%3Cpath d='M4 1h8v4a4 4 0 0 1-8 0V1z'/%3E%3Cpath d='M4 2H1.6v1.6A2.9 2.9 0 0 0 4.5 6.5h.6V5.1h-.6A1.5 1.5 0 0 1 3 3.6V3.4h1V2z'/%3E%3Cpath d='M12 2h2.4v1.6A2.9 2.9 0 0 1 11.5 6.5h-.6V5.1h.6A1.5 1.5 0 0 0 13 3.6V3.4h-1V2z'/%3E%3Crect x='7.2' y='8.6' width='1.6' height='2.6'/%3E%3Crect x='4.6' y='11.2' width='6.8' height='1.8' rx='.4'/%3E%3C/svg%3E");
+}
+
+/* Alabaster's search box defaults to a white field, which is the one bright
+   patch left on the page. */
+div.sphinxsidebar input[type="text"] {
+  background-color: #FAF8EC;
+  border: 1px solid #C9C3A4;
+  color: #46433A;
+}
+
+/* Code blocks: a soft border keeps them readable now that the fill is only
+   slightly darker than the page. */
+div.highlight pre,
+div.body pre {
+  border: 1px solid #D8D2B4;
+  border-radius: 3px;
+}

@@ -31,7 +31,10 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToCNFAIG.h"
+#include "stp/ToSat/ToCNFGia.h"
+#include "stp/ToSat/ToCNFTseitin.h"
 #include "stp/ToSat/BitBlaster.h"
+#include "stp/ToSat/BVAbstractionRefiner.h"
 #include "stp/Util/RunTimes.h"
 
 namespace stp
@@ -56,32 +59,75 @@ private:
   // simplified-away variables. Here we mark them as frozen which prevents them
   // from being removed.
   void mark_variables_as_frozen(SATSolver& satSolver);
+  // Advisory first-candidate bias for the congruence checker's scalars;
+  // a no-op unless --uf-phase-hints is set.
+  void suggest_uf_scalar_phases(SATSolver& satSolver);
 
   bool runSolver(SATSolver& satSolver);
-  void handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef);
- 
-  int count;
+  void handle_cnf_options(const CNF& cnf, bool needAbsRef);
+  void dump_term_abstraction_map();
+
+  // Resolve the injectivity guard to a SAT variable and decide how it is
+  // held: assumed (and so retractable) on a backend that can assume, and
+  // asserted as a unit otherwise. Called once, with the rest of the
+  // freezing, so that every refinement round after it holds the same thing.
+  void bind_injectivity_guard(SATSolver& satSolver);
+
+  // The guard's variable and whether this query is still holding it. Lives
+  // on the lowering rather than on the manager because retraction is a
+  // property of one encoding, and the batch pipeline builds a fresh one per
+  // query.
+  STPMgr::InjectivityAssumption injectivity_;
+
   bool first;
 
-  ToCNFAIG toCNF;
 
-  void init()
-  {
-    count = 0;
-    first = true;
-  }
+  // The abstractions this lowering minted, and the CEGAR loop that
+  // refines them. Both live here for the batch pipeline's lifetime of one
+  // query; the incremental driver keeps its own across a session.
+  BVAbstractionRefiner abstraction_;
+  // Whether this lowering may abstract at all; see the constructors.
+  bool allowAbstraction_ = true;
 
-  static THREAD_LOCAL_IE int cnf_calls;
+  void init() { first = true; }
 
 public:
-  void add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData);
-  Cnf_Dat_t* bitblast(const ASTNode& input, bool needAbsRef);
-  void release_cnf_memory(Cnf_Dat_t* cnfData);
+  void add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf);
+
+  // Blast `input` and convert it to CNF. Returns false, having freed the AIG
+  // and the constant-bit propagator and left `cnf` untouched, when
+  // UserFlags::aig_node_budget is set and the blast exceeds it -- there is no
+  // CNF in that case, and the caller must abandon the query rather than treat
+  // the absence as unsatisfiable.
+  bool bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf);
+
+private:
+  // The body of bitblast(), over whichever node representation, manager and
+  // lowering the flags selected. Defined in the .cpp; both instantiations are
+  // used there and nowhere else.
+  template <class BBNodeT, class ManagerT, class BlasterT, class LoweringT>
+  bool bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf);
+
+public:
 
   bool cbIsDestructed() { return cb == NULL; }
 
-  ToSATAIG(STPMgr* bm, ArrayTransformer* at)
-      : ToSATBase(bm), toCNF(bm->UserFlags)
+  // `allowAbstraction` is false for a lowering whose query must be encoded
+  // exactly whatever the session's flags say -- the same argument BitBlaster
+  // takes, reaching it from here so that a caller does not have to clear the
+  // manager's flags and put them back.
+  //
+  // maxPrecision is the one such caller: it drives this class over auxiliary
+  // queries a few bits wide, which gain nothing from abstracting, and its
+  // result handling reads the SOLVER_UNDECIDED a refinement round returns as
+  // an error from the backend. It used to save the two feature flags, clear
+  // them and restore them around its loop, which is a manager-wide write for
+  // a decision belonging to one encoding, invisible to anything else sharing
+  // the manager, and undone only on the paths that reach the bottom of the
+  // function.
+  ToSATAIG(STPMgr* bm, ArrayTransformer* at, bool allowAbstraction = true)
+      : ToSATBase(bm), abstraction_(bm),
+        allowAbstraction_(allowAbstraction)
   {
     cb = NULL;
     init();
@@ -89,22 +135,48 @@ public:
   }
 
   ToSATAIG(STPMgr* bm, simplifier::constantBitP::ConstantBitPropagation* cb_,
-           ArrayTransformer* at)
-      : ToSATBase(bm), cb(cb_), toCNF(bm->UserFlags)
+           ArrayTransformer* at, bool allowAbstraction = true)
+      : ToSATBase(bm), cb(cb_), abstraction_(bm),
+        allowAbstraction_(allowAbstraction)
   {
-    cb = cb_;
     init();
     arrayTransformer = at;
   }
 
   ~ToSATAIG();
 
-  void ClearAllTables() { nodeToSATVar.clear(); }
+  void ClearAllTables() override { nodeToSATVar.clear(); }
 
   // Used to read out the satisfiable answer.
-  ASTNodeToSATVar& SATVar_to_SymbolIndexMap() { return nodeToSATVar; }
+  ASTNodeToSATVar& SATVar_to_SymbolIndexMap() override { return nodeToSATVar; }
 
-  bool CallSAT(SATSolver& satSolver, const ASTNode& input, bool needAbsRef);
+  bool CallSAT(SATSolver& satSolver, const ASTNode& input,
+               bool needAbsRef) override;
+
+  bool hasBVEQAbstractions() const { return abstraction_.hasEqualities(); }
+  bool hasBVTermAbstractions() const { return abstraction_.hasTerms(); }
+
+  // Test-only inspection: the term records this lowering filed. The invariant
+  // under test is that each carries its own result variables rather than
+  // relying on the AST-keyed registry, which holds one vector per node and so
+  // can name only the newest result registered for it. Nothing observable
+  // changes while canonical reuse holds, which is why it needs pinning here
+  // rather than by a query that would answer the same either way.
+  const std::vector<BVTermAbstraction>& termRecordsForTesting() const
+  {
+    return abstraction_.terms();
+  }
+  void reportBVAbstractionRecords(std::ostream& out) const
+  {
+    abstraction_.reportRecords(out);
+  }
+
+  AbstractionRefinementResult
+  refineAbstractions(SATSolver& solver) override;
+  uint64_t abstractionRefinements() const override
+  {
+    return abstraction_.refinements();
+  }
 };
 }
 

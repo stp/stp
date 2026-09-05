@@ -222,7 +222,7 @@ PrecisionResult intervalPrecision(STPMgr* mgr, const OpSpec& op,
   result.ran = true;
   result.width = width;
 
-  UnsignedIntervalAnalysis analysis(*mgr);
+  UnsignedIntervalAnalysis analysis;
   const ASTNode node = buildNode(mgr, op, l);
   const vector<uint64_t> table = semanticsTable(mgr, op, l);
   const vector<unsigned> varying = l.varying();
@@ -444,7 +444,7 @@ PrecisionResult valueSetPrecision(STPMgr* mgr, const OpSpec& op,
 
 void runInterval(STPMgr* mgr, const Config& cfg, vector<Row>& out)
 {
-  UnsignedIntervalAnalysis analysis(*mgr);
+  UnsignedIntervalAnalysis analysis;
 
   for (const OpSpec& op : allOps())
   {
@@ -480,7 +480,7 @@ void runInterval(STPMgr* mgr, const Config& cfg, vector<Row>& out)
           std::cerr << "interval speed " << op.name << " w=" << width
                     << " p=" << prob << std::endl;
 
-        MTRand rand(cfg.seed);
+        std::mt19937 rand(cfg.seed);
         // Inputs are read-only, so one set is reused by every repeat.
         vector<vector<UnsignedInterval*>> owned(cfg.iterations);
         vector<vector<const UnsignedInterval*>> cases(cfg.iterations);
@@ -599,7 +599,7 @@ void runValueSet(STPMgr* mgr, const Config& cfg, vector<Row>& out)
           std::cerr << "valueset speed " << op.name << " w=" << width
                     << " n=" << setSize << std::endl;
 
-        MTRand rand(cfg.seed);
+        std::mt19937 rand(cfg.seed);
         vector<vector<ValueSet*>> owned(cfg.iterations);
         vector<vector<const ValueSet*>> cases(cfg.iterations);
         bool buildable = true;
@@ -621,7 +621,7 @@ void runValueSet(STPMgr* mgr, const Config& cfg, vector<Row>& out)
                    k < setSize && tries < 20 * setSize; tries++)
               {
                 const uint64_t v =
-                    (((uint64_t)rand.randInt() << 32) | rand.randInt()) %
+                    (((uint64_t)rand() << 32) | rand()) %
                     limit;
                 if (std::find(values.begin(), values.end(), v) == values.end())
                 {

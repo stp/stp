@@ -24,11 +24,12 @@ THE SOFTWARE.
 
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Printer/printers.h"
+#include "stp/STPManager/STPManager.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include <cassert>
 
 // Functions shared between the printers: the letize pass used by all of
-// them, and the traversal shared by the version1 and version2 SMT-LIB
-// printers.
+// them, and the SMT-LIB2 traversal.
 
 namespace printer
 {
@@ -56,11 +57,24 @@ THREAD_LOCAL_IE vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
 // correctly print shared subterms inside the LET itself
 THREAD_LOCAL_IE stp::ASTNodeMap NodeLetVarMap1;
 
-// Prints one node, in SMT-LIB1 syntax when smtlib1 is set and in SMT-LIB2
-// syntax otherwise. The two dialects share the whole traversal; they differ
-// in exactly five places, each marked "dialect:" below.
-void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
-                   bool smtlib1)
+// A rounding mode in operand position: the five constants print by name;
+// anything else -- a RoundingMode variable, an ite -- prints as itself.
+static void printRoundingModeSMTLIB2(ostream& os, const ASTNode& rm,
+                                     bool letize)
+{
+  if (rm.GetKind() == stp::BVCONST && rm.GetValueWidth() == 5)
+  {
+    if (const char* name = roundingModeName(rm.GetUnsignedConst()))
+    {
+      os << name;
+      return;
+    }
+  }
+  SMTLIB_Print1(os, rm, 0, letize);
+}
+
+// Prints one node, in SMT-LIB2 syntax.
+void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 {
   if (!n.IsDefined())
   {
@@ -73,7 +87,7 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
   // of "(LET v0 = term1, v1=term1@term2,...
   if ((NodeLetVarMap1.find(n) != NodeLetVarMap1.end()) && !letize)
   {
-    SMTLIB_Print1(os, (NodeLetVarMap1[n]), indentation, letize, smtlib1);
+    SMTLIB_Print1(os, (NodeLetVarMap1[n]), indentation, letize);
     return;
   }
 
@@ -81,7 +95,7 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
   // term to be printed
   if ((NodeLetVarMap.find(n) != NodeLetVarMap.end()) && letize)
   {
-    SMTLIB_Print1(os, (NodeLetVarMap[n]), indentation, letize, smtlib1);
+    SMTLIB_Print1(os, (NodeLetVarMap[n]), indentation, letize);
     return;
   }
 
@@ -92,24 +106,46 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
   {
     case BITVECTOR:
     case BVCONST:
-      // dialect 1: the bitvector constant spelling.
-      if (smtlib1)
-        outputBitVec(n, os);
+      // A rounding mode and a float are both stored as packed bits but
+      // denote neither: print them by mode name and in (fp ...) syntax
+      // rather than as bitvector literals.
+      if (n.GetSourceSort().kind() == stp::SourceSort::Kind::RoundingMode)
+      {
+        const char* name = roundingModeName(n.GetUnsignedConst());
+        if (name == NULL)
+          FatalError("invalid RoundingMode literal", n);
+        os << name;
+      }
+      else if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+        outputFloatingPointSMTLIB2(n, os, n);
       else
         outputBitVecSMTLIB2(n, os);
       break;
     case SYMBOL:
-      // dialect 2: SMT-LIB2 quotes symbols so that STP's names, which can
-      // contain characters SMT-LIB2 reserves, survive a round trip.
-      if (smtlib1)
-        n.nodeprint(os);
-      else
-      {
-        os << "|";
-        n.nodeprint(os);
-        os << "|";
-      }
+      // Quoted, so that STP's names, which can contain characters SMT-LIB2
+      // reserves, survive a round trip.
+      os << "|";
+      n.nodeprint(os);
+      os << "|";
       break;
+    case UF_APPLY:
+    {
+      STPMgr* manager = n.GetNodeManager();
+      UFContext* context =
+          manager == NULL ? NULL : manager->getUFContextIfAny();
+      const UFDecl* declaration =
+          context == NULL || c.empty() ? NULL : context->lookupIdentity(c[0]);
+      if (declaration == NULL)
+        FatalError("cannot print an unregistered UF_APPLY", n);
+      os << "(|" << declaration->name() << '|';
+      for (size_t i = 1; i < c.size(); ++i)
+      {
+        os << ' ';
+        SMTLIB_Print1(os, c[i], 0, letize);
+      }
+      os << ')';
+      break;
+    }
     case FALSE:
       os << "false";
       break;
@@ -124,9 +160,9 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
       else
         os << "("
            << "or ";
-      SMTLIB_Print1(os, c[0], 0, letize, smtlib1);
+      SMTLIB_Print1(os, c[0], 0, letize);
       os << " ";
-      SMTLIB_Print1(os, c[1], 0, letize, smtlib1);
+      SMTLIB_Print1(os, c[1], 0, letize);
       os << "))";
       break;
     case TRUE:
@@ -136,14 +172,9 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
     case BVZX:
     {
       unsigned int amount = c[1].GetUnsignedConst();
-      // dialect 3: indexed identifier syntax.
-      if (smtlib1)
-        os << (BVZX == kind ? "(zero_extend[" : "(sign_extend[");
-      else
-        os << (BVZX == kind ? "((_ zero_extend " : "((_ sign_extend ");
-
-      os << (amount - c[0].GetValueWidth()) << (smtlib1 ? "]" : ") ");
-      SMTLIB_Print1(os, c[0], indentation, letize, smtlib1);
+      os << (BVZX == kind ? "((_ zero_extend " : "((_ sign_extend ");
+      os << (amount - c[0].GetValueWidth()) << ") ";
+      SMTLIB_Print1(os, c[0], indentation, letize);
       os << ")";
     }
     break;
@@ -152,19 +183,107 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
       unsigned int upper = c[1].GetUnsignedConst();
       unsigned int lower = c[2].GetUnsignedConst();
       assert(upper >= lower);
-      // dialect 4: indexed identifier syntax.
-      if (smtlib1)
-        os << "(extract[" << upper << ":" << lower << "] ";
-      else
-        os << "((_ extract " << upper << " " << lower << ") ";
-      SMTLIB_Print1(os, c[0], indentation, letize, smtlib1);
+      os << "((_ extract " << upper << " " << lower << ") ";
+      SMTLIB_Print1(os, c[0], indentation, letize);
       os << ")";
     }
     break;
+    // The rounded operations lead with their rounding mode, which prints by
+    // name (RNE...) when it is one of the five constants.
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_ROUNDTOINTEGRAL:
+    {
+      os << "(" << functionToSMTLIBName(kind) << " ";
+      printRoundingModeSMTLIB2(os, c[0], letize);
+      for (size_t i = 1; i < c.size(); i++)
+      {
+        os << " ";
+        SMTLIB_Print1(os, c[i], 0, letize);
+      }
+      os << ")";
+    }
+    break;
+    case FP_MIN:
+    case FP_MAX:
+    {
+      // A totalised node carries a third, internal child (the (+0, -0)
+      // choice); the SMT-LIB form has exactly two operands.
+      os << "(" << functionToSMTLIBName(kind);
+      for (size_t i = 0; i < 2; i++)
+      {
+        os << " ";
+        SMTLIB_Print1(os, c[i], 0, letize);
+      }
+      os << ")";
+    }
+    break;
+    case FP_TOFP:
+    {
+      // Children: (eb, sb, bits) reinterprets; (eb, sb, rm, source) converts.
+      os << "((_ to_fp " << c[0].GetUnsignedConst() << " "
+         << c[1].GetUnsignedConst() << ")";
+      if (c.size() == 4)
+      {
+        os << " ";
+        printRoundingModeSMTLIB2(os, c[2], letize);
+        os << " ";
+        SMTLIB_Print1(os, c[3], 0, letize);
+      }
+      else
+      {
+        os << " ";
+        SMTLIB_Print1(os, c[2], 0, letize);
+      }
+      os << ")";
+    }
+    break;
+    // Spelled `to_fp` -- SMT-LIB overloads the name on the operand's sort;
+    // the separate kind is ours, so that the sort survives blasting.
+    case FP_TOFP_SIGNED:
+    {
+      os << "((_ to_fp " << c[0].GetUnsignedConst() << " "
+         << c[1].GetUnsignedConst() << ") ";
+      printRoundingModeSMTLIB2(os, c[2], letize);
+      os << " ";
+      SMTLIB_Print1(os, c[3], 0, letize);
+      os << ")";
+    }
+    break;
+    case FP_TOFP_UNSIGNED:
+    {
+      os << "((_ to_fp_unsigned " << c[0].GetUnsignedConst() << " "
+         << c[1].GetUnsignedConst() << ") ";
+      printRoundingModeSMTLIB2(os, c[2], letize);
+      os << " ";
+      SMTLIB_Print1(os, c[3], 0, letize);
+      os << ")";
+    }
+    break;
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    {
+      // Children: (width, rm, float[, unspecified-value]); the totalised
+      // fourth child is internal.
+      os << "((_ " << (kind == FP_TO_UBV ? "fp.to_ubv" : "fp.to_sbv") << " "
+         << c[0].GetUnsignedConst() << ") ";
+      printRoundingModeSMTLIB2(os, c[1], letize);
+      os << " ";
+      SMTLIB_Print1(os, c[2], 0, letize);
+      os << ")";
+    }
+    break;
+    case FP_TO_IEEE_BV:
+      FatalError("SMTLIB2: a float-to-IEEE-bits node (an API-only operation) "
+                 "has no SMT-LIB spelling",
+                 n);
+      break;
     default:
     {
-      // dialect 5: a handful of operators were renamed between the versions,
-      // which functionToSMTLIBName() takes care of.
       if ((kind == AND || kind == OR || kind == XOR) && n.Degree() == 1)
       {
         FatalError("Wrong number of arguments to operation (must be >1).", n);
@@ -172,31 +291,31 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
 
       // SMT-LIB only allows these functions to have two parameters.
       if ((kind == AND || kind == OR || kind == XOR || BVPLUS == kind ||
-           kind == BVOR || kind == BVAND) &&
+           kind == BVMULT || kind == BVOR || kind == BVAND) &&
           n.Degree() > 2)
       {
         string close = "";
 
-        for (long int i = 0; i < (long int)c.size() - 1; i++)
+        for (size_t i = 0; i + 1 < c.size(); i++)
         {
-          os << "(" << functionToSMTLIBName(kind, smtlib1);
+          os << "(" << functionToSMTLIBName(kind);
           os << " ";
-          SMTLIB_Print1(os, c[i], 0, letize, smtlib1);
+          SMTLIB_Print1(os, c[i], 0, letize);
           os << " ";
           close += ")";
         }
-        SMTLIB_Print1(os, c[c.size() - 1], 0, letize, smtlib1);
+        SMTLIB_Print1(os, c[c.size() - 1], 0, letize);
         os << close;
       }
       else
       {
-        os << "(" << functionToSMTLIBName(kind, smtlib1);
+        os << "(" << functionToSMTLIBName(kind);
 
         auto iend = c.end();
         for (auto i = c.begin(); i != iend; i++)
         {
           os << " ";
-          SMTLIB_Print1(os, *i, 0, letize, smtlib1);
+          SMTLIB_Print1(os, *i, 0, letize);
         }
 
         os << ")";
@@ -207,7 +326,7 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
 
 // copied from Presentation Langauge printer.
 ostream& SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n,
-                      const int indentation, bool smtlib1)
+                      const int indentation)
 {
   // Clear the maps
   NodeLetVarMap.clear();
@@ -217,8 +336,7 @@ ostream& SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n,
   // pass 1: letize the node
   {
     ASTNodeSet seen;
-    // The last argument: SMT-LIB1 can only let-bind terms, not formulas.
-    LetizeState st = {seen, NodeLetVarMap, NodeLetVarVec, "?let_k_", smtlib1};
+    LetizeState st = {seen, NodeLetVarMap, NodeLetVarVec, "?let_k_"};
     LetizeNode(n, st, mgr);
   }
 
@@ -235,17 +353,13 @@ ostream& SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n,
     vector<pair<ASTNode, ASTNode>>::iterator it = NodeLetVarVec.begin();
     const vector<pair<ASTNode, ASTNode>>::iterator itend = NodeLetVarVec.end();
 
-    os << "(let (";
-    if (!smtlib1)
-      os << "(";
+    os << "(let ((";
     // print the let var first
-    SMTLIB_Print1(os, it->first, indentation, false, smtlib1);
+    SMTLIB_Print1(os, it->first, indentation, false);
     os << " ";
     // print the expr
-    SMTLIB_Print1(os, it->second, indentation, false, smtlib1);
-    os << " )";
-    if (!smtlib1)
-      os << ")";
+    SMTLIB_Print1(os, it->second, indentation, false);
+    os << " ))";
 
     // update the second map for proper printing of LET
     NodeLetVarMap1[it->second] = it->first;
@@ -254,31 +368,82 @@ ostream& SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n,
     for (it++; it != itend; it++)
     {
       os << " " << endl;
-      os << "(let (";
-      if (!smtlib1)
-        os << "(";
+      os << "(let ((";
       // print the let var first
-      SMTLIB_Print1(os, it->first, indentation, false, smtlib1);
+      SMTLIB_Print1(os, it->first, indentation, false);
       os << " ";
       // print the expr
-      SMTLIB_Print1(os, it->second, indentation, false, smtlib1);
-      os << ")";
-      if (!smtlib1)
-        os << ")";
+      SMTLIB_Print1(os, it->second, indentation, false);
+      os << "))";
 
       // update the second map for proper printing of LET
       NodeLetVarMap1[it->second] = it->first;
       closing += ")";
     }
     os << endl;
-    SMTLIB_Print1(os, n, indentation, true, smtlib1);
+    SMTLIB_Print1(os, n, indentation, true);
     os << closing;
     os << " )  ";
   }
   else
-    SMTLIB_Print1(os, n, indentation, false, smtlib1);
+    SMTLIB_Print1(os, n, indentation, false);
 
   os << endl;
+  return os;
+}
+
+// One term, printed so that a repeated subterm is written once: the letize
+// pass names every non-atomic subterm that occurs more than once, and the
+// bindings are emitted as a chain of lets around the body.
+//
+// Without this a shared DAG is written out as a tree. get-value answers about
+// arbitrary terms now, and terms built by a chain of define-funs share
+// aggressively: twenty steps of t[i+1] = (bvxor (bvand t[i] y) (bvor t[i] x))
+// wrote 40MB for one (get-value (t20)), twenty-four steps wrote 638MB, and
+// twenty-six steps wrote 2.5GB while holding 4.9GB.
+//
+// Unlike SMTLIB_Print this writes no newline anywhere, because the caller is
+// composing one line of a response, and it leaves the letize maps empty on
+// exit rather than populated. That second part matters twice: nothing it did
+// is visible to a later SMTLIB_Print1, and the let variables -- which are
+// real, interned symbols -- lose their last reference with the maps, so they
+// leave the symbol table that (get-model) enumerates.
+ostream& SMTLIB_PrintTerm(ostream& os, STPMgr* mgr, const ASTNode n)
+{
+  NodeLetVarMap.clear();
+  NodeLetVarVec.clear();
+  NodeLetVarMap1.clear();
+
+  {
+    ASTNodeSet seen;
+    LetizeState st = {seen, NodeLetVarMap, NodeLetVarVec, "?let_k_"};
+    LetizeNode(n, st, mgr);
+  }
+
+  const bool letized = !NodeLetVarVec.empty();
+  string closing;
+  for (auto it = NodeLetVarVec.begin(), itend = NodeLetVarVec.end();
+       it != itend; it++)
+  {
+    os << "(let ((";
+    SMTLIB_Print1(os, it->first, 0, false);
+    os << " ";
+    // A binding's right-hand side sees the bindings already made and not the
+    // ones still to come, which is why NodeLetVarMap1 is filled in as we go.
+    // The letize pass finishes a subterm before it can name it, so a subterm
+    // repeated inside this right-hand side was named before it -- each
+    // binding therefore prints its own sub-DAG once.
+    SMTLIB_Print1(os, it->second, 0, false);
+    os << ")) ";
+    NodeLetVarMap1[it->second] = it->first;
+    closing += ")";
+  }
+  SMTLIB_Print1(os, n, 0, letized);
+  os << closing;
+
+  NodeLetVarMap.clear();
+  NodeLetVarVec.clear();
+  NodeLetVarMap1.clear();
   return os;
 }
 
@@ -314,8 +479,7 @@ void LetizeNode(const ASTNode& n, LetizeState& st, STPMgr* stp)
       //
       // 2. if no, then create a new var and add it to the
       // 2. letVarMap
-      if ((!st.termsOnly || ccc.GetType() == BITVECTOR_TYPE) &&
-          st.letVarMap.find(ccc) == st.letVarMap.end())
+      if (st.letVarMap.find(ccc) == st.letVarMap.end())
       {
         // Create a new symbol. Get some name. if it conflicts with a
         // declared name, too bad.
@@ -340,20 +504,16 @@ void LetizeNode(const ASTNode& n, LetizeState& st, STPMgr* stp)
   }
 }
 
-string functionToSMTLIBName(const Kind k, bool smtlib1)
+string functionToSMTLIBName(const Kind k)
 {
   switch (k)
   {
     case IFF:
-      if (smtlib1)
-        return "iff";
-      else
-        return "=";
+      return "=";
+    case DISTINCT:
+      return "distinct";
     case IMPLIES:
-      if (smtlib1)
-        return "implies";
-      else
-        return "=>";
+      return "=>";
     case AND:
     case BVAND:
     case BVNAND:
@@ -410,6 +570,7 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
     case BVUMINUS:
       return "bvneg";
     case EQ:
+    case ARRAY_EQ:
       return "=";
     case READ:
       return "select";
@@ -421,6 +582,59 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
       return "bvsrem";
     case SBVMOD:
       return "bvsmod";
+
+    // Floating point. The indexed operators (to_fp, fp.to_ubv...) print
+    // through their own cases in SMTLIB_Print1, not through this name map.
+    case FP_ABS:
+      return "fp.abs";
+    case FP_NEG:
+      return "fp.neg";
+    case FP_ADD:
+      return "fp.add";
+    case FP_SUB:
+      return "fp.sub";
+    case FP_MUL:
+      return "fp.mul";
+    case FP_DIV:
+      return "fp.div";
+    case FP_FMA:
+      return "fp.fma";
+    case FP_SQRT:
+      return "fp.sqrt";
+    case FP_REM:
+      return "fp.rem";
+    case FP_ROUNDTOINTEGRAL:
+      return "fp.roundToIntegral";
+    case FP_MIN:
+      return "fp.min";
+    case FP_MAX:
+      return "fp.max";
+    case FP_LEQ:
+      return "fp.leq";
+    case FP_LT:
+      return "fp.lt";
+    case FP_GEQ:
+      return "fp.geq";
+    case FP_GT:
+      return "fp.gt";
+    case FP_EQ:
+      return "fp.eq";
+    case FP_ISNORMAL:
+      return "fp.isNormal";
+    case FP_ISSUBNORMAL:
+      return "fp.isSubnormal";
+    case FP_ISZERO:
+      return "fp.isZero";
+    case FP_ISINFINITE:
+      return "fp.isInfinite";
+    case FP_ISNAN:
+      return "fp.isNaN";
+    case FP_ISNEGATIVE:
+      return "fp.isNegative";
+    case FP_ISPOSITIVE:
+      return "fp.isPositive";
+    case FP_SMT_EQ:
+      return "=";
 
     default:
     {

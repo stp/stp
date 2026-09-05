@@ -27,15 +27,11 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include <cassert>
-#include <ostream>
-using std::endl;
 
 namespace simplifier
 {
 namespace constantBitP
 {
-
-extern const bool debug_multiply;
 
 struct ColumnStats
 {
@@ -54,9 +50,6 @@ struct ColumnStats
 
     assert(index < x.getWidth());
     assert(y.getWidth() == x.getWidth());
-
-    if (debug_multiply)
-      log << "ColumnStats" << index << " " << x << " " << y << endl;
 
     for (unsigned i = 0; i <= index; i++)
     {
@@ -81,16 +74,6 @@ struct ColumnStats
            (index + 1));
   }
 };
-
-inline std::ostream& operator<<(std::ostream& o, const ColumnStats& cs)
-{
-  o << "cUnfixed:" << cs.columnUnfixed << endl; // both unfixed.
-  o << "cOneFixed:" << cs.columnOneFixed
-    << endl; // one of the values is fixed to one.
-  o << "cOnes:" << cs.columnOnes << endl;
-  o << "cZero:" << cs.columnZeroes << endl;
-  return o;
-}
 }
 }
 

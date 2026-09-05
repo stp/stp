@@ -34,6 +34,11 @@ sys.path.insert(0, "@PYTHON_INTERFACE_DIR@")
 import stp
 import unittest
 import ctypes
+import gc
+import importlib
+import os
+import subprocess
+import textwrap
 
 
 @stp.stp
@@ -47,12 +52,106 @@ def test0_bar(a, b):
     return a * b == 12345
 
 
+class _MallInfo2(ctypes.Structure):
+    """glibc's struct mallinfo2, as of glibc 2.33."""
+    _fields_ = [(field, ctypes.c_size_t) for field in (
+        'arena', 'ordblks', 'smblks', 'hblks', 'hblkhd', 'usmblks',
+        'fsmblks', 'uordblks', 'fordblks', 'keepcost')]
+
+
+try:
+    _mallinfo2 = ctypes.CDLL('libc.so.6').mallinfo2
+    _mallinfo2.restype = _MallInfo2
+    _mallinfo2.argtypes = []
+except (OSError, AttributeError):  # not glibc, or older than 2.33
+    _mallinfo2 = None
+
+
+def _allocated_bytes():
+    """How many bytes the process allocator currently has handed out, or
+    None where it cannot be asked.
+
+    A leak inside libstp is invisible to the interpreter -- no Python object
+    holds the memory -- and invisible to the resident set as well, because a
+    heap that has been running for a while holds enough free space to absorb
+    megabytes of small allocations without faulting a single new page. The
+    allocator itself is the only witness.
+    """
+    if _mallinfo2 is None:
+        return None
+    gc.collect()
+    return _mallinfo2().uordblks
+
+
 class TestSTP(unittest.TestCase):
     def setUp(self):
         self.s = stp.Solver()
         self.stp_solvers = set(
-            ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Riss", "Cadical"]
+            ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Cadical"]
         )
+
+    def test_package_reexports_everything_public(self):
+        # stp/stp.py declares what is public; stp/__init__.py is what users
+        # actually import from. The two drifted once -- array, ArrayExpr and
+        # the rounding modes were declared but never re-exported, so
+        # `from stp import array` raised ImportError -- so check every name.
+        #
+        # Reached through importlib because the package re-exports a function
+        # called `stp`, which shadows the submodule of the same name.
+        module = importlib.import_module("stp.stp")
+        for name in module.__all__:
+            with self.subTest(name=name):
+                self.assertTrue(
+                    hasattr(stp, name),
+                    "%s is in stp/stp.py's __all__ but stp/__init__.py does "
+                    "not re-export it" % name,
+                )
+        self.assertEqual(list(stp.__all__), list(module.__all__))
+
+    def test_rounding_modes_are_distinct_and_one_hot(self):
+        # These mirror enum VCRoundingMode in c_interface.h, which is one-hot
+        # because it mirrors STP's internal encoding. They are five distinct
+        # modes rather than flags, so no two may share a value.
+        modes = {
+            "RNE": stp.RNE,
+            "RTP": stp.RTP,
+            "RTN": stp.RTN,
+            "RTZ": stp.RTZ,
+            "RNA": stp.RNA,
+        }
+        self.assertEqual(len(set(modes.values())), len(modes))
+        for name, value in modes.items():
+            with self.subTest(name=name):
+                self.assertEqual(value & (value - 1), 0)
+
+    def assert_python_probe_survives(self, body):
+        """Run a ctypes edge case out of process.
+
+        A native abort or invalid-handle segfault must be reported as an
+        ordinary unittest failure, rather than taking the rest of the Python
+        API suite down with it.
+        """
+        package_root = os.path.dirname(os.path.dirname(stp.__file__))
+        environment = os.environ.copy()
+        old_pythonpath = environment.get('PYTHONPATH')
+        environment['PYTHONPATH'] = package_root + (
+            os.pathsep + old_pythonpath if old_pythonpath else '')
+        program = (
+            'import importlib\nimport stp\n'
+            '_stp_native = importlib.import_module("stp.stp")\n' +
+            textwrap.dedent(body))
+        completed = subprocess.run(
+            [sys.executable, '-c', program],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+            timeout=30)
+        self.assertEqual(
+            completed.returncode, 0,
+            'isolated Python UF probe did not survive (return code %d)\n'
+            'stdout:\n%s\nstderr:\n%s' %
+            (completed.returncode, completed.stdout, completed.stderr))
 
     def test_long(self):
         s = self.s
@@ -71,6 +170,328 @@ class TestSTP(unittest.TestCase):
         d = s.bitvecval(32, 42)
         self.assertTrue(s.check(b.eq(d), a.add(b).eq(c)))
         self.assertEqual(s.model(), {'a': 1337-42, 'b': 42})
+
+    def test_uninterpreted_function_durable_values(self):
+        s = stp.Solver(uninterpreted_functions=True)
+        f = s.function('f', [8, None], 16)
+        x = s.bitvec('x', 8)
+        b = s.true()
+        application = f(x, b)
+        s.add(x == 7, application == s.bitvecval(16, 0x1234))
+        self.assertTrue(s.check())
+        self.assertEqual(application.value, 0x1234)
+
+        predicate = s.function('predicate', [None], None)
+        observed = predicate(b)
+        s.add(observed)
+        self.assertTrue(s.check())
+        self.assertIs(observed.value, True)
+
+        with self.assertRaises(ValueError):
+            f(x)
+        with self.assertRaises(ValueError):
+            f(b, b)
+
+    def test_uninterpreted_function_float_and_rounding_mode_sorts(self):
+        """Sorts that have no integer spelling, which is why Sort exists."""
+        s = stp.Solver(uninterpreted_functions=True)
+        single = stp.Sort.float(8, 24)
+
+        # A float codomain comes back as a FloatExpr of the declared format,
+        # so it is usable as a floating-point operand rather than as bits.
+        q = s.function('q', [stp.Sort.bitvec(4)], single)
+        i = s.bitvec('i', 4)
+        result = q(i)
+        self.assertIsInstance(result, stp.FloatExpr)
+        self.assertEqual((result.eb, result.sb), (8, 24))
+        s.add(i == 3, result == s.fpval(8, 24, 1.5))
+        self.assertTrue(s.check())
+        self.assertEqual(result.value, 1.5)
+
+        # A rounding-mode codomain comes back as one of the five modes, never
+        # as a bare five-bit vector.
+        s2 = stp.Solver(uninterpreted_functions=True)
+        k = s2.function('k', [stp.Sort.bitvec(4)], stp.Sort.rounding_mode())
+        j = s2.bitvec('j', 4)
+        mode = k(j)
+        self.assertIsInstance(mode, stp.RoundingModeExpr)
+        s2.add(j == 1, mode == stp.RTP)
+        self.assertTrue(s2.check())
+        self.assertEqual(mode.value, stp.RTP)
+
+    def test_uninterpreted_function_float_arguments_compare_by_value(self):
+        """A float argument is compared as a value, not as a bit pattern.
+
+        Every NaN is one value, so f(x) and f(y) agree when both are NaN --
+        the query below is unsatisfiable. -0 and +0 are two values, so the
+        same shape over them is satisfiable.
+        """
+        single = stp.Sort.float(8, 24)
+        s = stp.Solver(uninterpreted_functions=True)
+        f = s.function('f', [single], stp.Sort.bitvec(4))
+        x = s.fp('x', 8, 24)
+        y = s.fp('y', 8, 24)
+        self.assertFalse(s.check(x.is_nan(), y.is_nan(), f(x) != f(y)))
+
+        s2 = stp.Solver(uninterpreted_functions=True)
+        g = s2.function('g', [single], stp.Sort.bitvec(4))
+        u = s2.fp('u', 8, 24)
+        v = s2.fp('v', 8, 24)
+        self.assertTrue(s2.check(u == s2.fpval_from_bits(8, 24, 1 << 31),
+                                 v == s2.fpval_from_bits(8, 24, 0),
+                                 g(u) != g(v)))
+
+    def test_uninterpreted_function_rounding_mode_arguments(self):
+        s = stp.Solver(uninterpreted_functions=True)
+        rm = stp.Sort.rounding_mode()
+        f = s.function('f', [rm], stp.Sort.bitvec(4))
+
+        # The five mode constants are accepted directly, and a symbolic mode
+        # pinned to one of them has to agree with it.
+        r = s.rounding_mode_var('r')
+        self.assertIsInstance(r, stp.RoundingModeExpr)
+        self.assertFalse(s.check(r == s.rounding_mode_val(stp.RTZ),
+                                 f(r) != f(stp.RTZ)))
+
+        # Distinct modes are distinct values and put no obligation on f.
+        s2 = stp.Solver(uninterpreted_functions=True)
+        g = s2.function('g', [rm], stp.Sort.bitvec(4))
+        self.assertTrue(s2.check(g(stp.RNE) != g(stp.RTZ)))
+
+    def test_uninterpreted_function_sort_mismatches_are_rejected(self):
+        def expect_message(action, expected):
+            with self.assertRaises(ValueError) as raised:
+                action()
+            self.assertEqual(str(raised.exception), expected)
+
+        s = stp.Solver(uninterpreted_functions=True)
+        f = s.function('f', [stp.Sort.float(8, 24)], stp.Sort.bitvec(4))
+        expect_message(
+            lambda: f(s.fp('wrong', 11, 53)),
+            'argument 0 of f has sort (_ FloatingPoint 11 53) but the '
+            'declaration requires (_ FloatingPoint 8 24)')
+        expect_message(
+            lambda: f(s.bitvec('bits', 32)),
+            'argument 0 of f must be a FloatExpr from the same Solver, or a '
+            'Python value matching the declared sort (_ FloatingPoint 8 24)')
+
+        k = s.function('k', [stp.Sort.rounding_mode()], stp.Sort.bitvec(4))
+        expect_message(
+            lambda: k(s.bitvec('five', 5)),
+            'argument 0 of k must be a RoundingModeExpr from the same '
+            'Solver, or a Python value matching the declared sort '
+            'RoundingMode')
+
+        # Array sorts have no Sort factory at all, and the shorthand cannot
+        # name one either.
+        expect_message(
+            lambda: s.function('bad', [object()], 8),
+            "domain sort 0 of 'bad' must be a Sort, or the shorthand None/0 "
+            'for Bool or a positive integer for a BitVec width')
+
+    def test_uninterpreted_function_diagnostics_are_actionable(self):
+        def expect_message(action, expected):
+            with self.assertRaises(ValueError) as raised:
+                action()
+            self.assertEqual(str(raised.exception), expected)
+
+        disabled = stp.Solver()
+        expect_message(
+            lambda: disabled.function('off', [8], 8),
+            'uninterpreted functions were not enabled (construct Solver with '
+            'uninterpreted_functions=True)')
+
+        s = stp.Solver(uninterpreted_functions=True)
+        expect_message(
+            lambda: s.function('negative-domain', [-1], 8),
+            "domain sort 0 of 'negative-domain' must be a Sort, or the "
+            'shorthand None/0 for Bool or a positive integer for a BitVec '
+            'width')
+        expect_message(
+            lambda: s.function('zero', [], 8),
+            "'zero' needs at least one domain sort; a zero-arity declaration "
+            'is an ordinary symbol, not an uninterpreted function')
+        expect_message(
+            lambda: s.function('negative-result', [8], -1),
+            "the codomain of 'negative-result' must be a Sort, or the "
+            'shorthand None/0 for Bool or a positive integer for a BitVec '
+            'width')
+
+        f = s.function('diagnostic_f', [8], 8)
+        expect_message(
+            lambda: f(),
+            'diagnostic_f expects 1 argument, got 0')
+        expect_message(
+            lambda: f(s.true()),
+            'argument 0 of diagnostic_f has sort Bool but the declaration '
+            'requires (_ BitVec 8)')
+
+        other = stp.Solver(uninterpreted_functions=True)
+        expect_message(
+            lambda: f(other.bitvec('foreign', 8)),
+            'argument 0 of diagnostic_f must be a Expr from the same Solver, '
+            "or a Python value matching the declared sort (_ BitVec 8)")
+        expect_message(
+            lambda: s.function('diagnostic_f', [8], 8),
+            "the declaration of 'diagnostic_f' was rejected by the solver "
+            '(check the name, solver lifetime, and supported sorts)')
+
+        x = s.bitvec('diagnostic_x', 8)
+        f.declaration = 1
+        expect_message(
+            lambda: f(x),
+            'the application of diagnostic_f was rejected by the solver (a '
+            'declaration or expression handle may be stale, foreign, or '
+            'invalid)')
+
+    def test_uninterpreted_function_python_literals(self):
+        s = stp.Solver(uninterpreted_functions=True)
+        f = s.function('literal_f', [8, None], 8)
+        application = f(7, True)
+        predicate = s.function('literal_predicate', [None], None)
+        observed = predicate(False)
+        legacy_bitvector_bool = s.bitvec('legacy_bitvector_bool', 8)
+        s.add(application == 3, observed == False,
+              legacy_bitvector_bool == True)
+        self.assertTrue(s.check())
+        self.assertEqual(application.value, 3)
+        self.assertIs(observed.value, False)
+        self.assertEqual(legacy_bitvector_bool.value, 1)
+
+    def test_uninterpreted_function_inactive_bitvector_value_is_exception(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            f = s.function('f', [8], 8)
+            application = f(s.bitvec('x', 8))
+            try:
+                application.value
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('inactive UF application returned a value')
+        ''')
+
+    def test_uninterpreted_function_stale_bitvector_value_is_exception(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            f = s.function('f', [8], 8)
+            application = f(s.bitvec('x', 8))
+            s.add(application == s.bitvecval(8, 23))
+            assert s.check()
+            assert application.value == 23
+            s.add(s.true())
+            try:
+                application.value
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('stale UF application returned a value')
+        ''')
+
+    def test_uninterpreted_function_inactive_boolean_value_is_exception(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            predicate = s.function('predicate', [None], None)
+            application = predicate(s.true())
+            try:
+                application.value
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('inactive Bool UF returned a value')
+        ''')
+
+    def test_uninterpreted_function_stale_boolean_value_is_exception(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            predicate = s.function('predicate', [None], None)
+            application = predicate(s.true())
+            s.add(application)
+            assert s.check()
+            assert application.value is True
+            s.add(s.true())
+            try:
+                application.value
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('stale Bool UF returned a value')
+        ''')
+
+    def test_uninterpreted_function_boolean_false_value(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            predicate = s.function('predicate', [None], None)
+            application = predicate(s.true())
+            s.add(s.not_(application))
+            assert s.check()
+            assert application.value is False
+        ''')
+
+    def test_uninterpreted_function_cross_context_argument_is_exception(self):
+        first = stp.Solver(uninterpreted_functions=True)
+        second = stp.Solver(uninterpreted_functions=True)
+        f = first.function('f', [8], 8)
+        foreign = second.bitvec('foreign', 8)
+        with self.assertRaises(ValueError):
+            f(foreign)
+
+    def test_uninterpreted_function_invalid_declaration_is_exception(self):
+        s = stp.Solver(uninterpreted_functions=True)
+        f = s.function('f', [8], 8)
+        f.declaration = 1
+        with self.assertRaises(ValueError):
+            f(s.bitvec('x', 8))
+
+    def test_uninterpreted_function_destroyed_argument_is_exception(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            f = s.function('f', [8], 8)
+            x = s.bitvec('x', 8)
+            _stp_native._lib.vc_DeleteExpr(x.expr)
+            try:
+                f(x)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError('destroyed argument was accepted')
+        ''')
+
+    def test_uninterpreted_function_destroyed_declaration_is_exception(self):
+        self.assert_python_probe_survives('''
+            owner = stp.Solver(uninterpreted_functions=True)
+            f = owner.function('f', [8], 8)
+            stale = f.declaration
+            _stp_native._lib.vc_Destroy(owner.vc)
+            owner.vc = None
+
+            live = stp.Solver(uninterpreted_functions=True)
+            x = live.bitvec('x', 8)
+            raw = (_stp_native._Expr * 1)(x.expr)
+            result = _stp_native._lib.vc_applyUninterpretedFunction(live.vc, stale, raw, 1)
+            if result:
+                raise AssertionError('destroyed declaration was accepted')
+        ''')
+
+    def test_uninterpreted_function_namespace_is_consistent(self):
+        first = stp.Solver(uninterpreted_functions=True)
+        f = first.function('f', [8], 8)
+        with self.assertRaises(ValueError):
+            first.bitvec('f', 8)
+        with self.assertRaises(ValueError):
+            first.fp('f', 5, 11)
+        with self.assertRaises(ValueError):
+            first.array('f', 8, 8)
+        # A rejected colliding symbol must not displace the UF declaration.
+        self.assertIsInstance(f(first.bitvec('x', 8)), stp.Expr)
+
+        second = stp.Solver(uninterpreted_functions=True)
+        x = second.bitvec('x', 8)
+        with self.assertRaises(ValueError):
+            second.function('x', [8], 8)
+        # A rejected colliding UF must not displace the ordinary symbol.
+        x_again = second.bitvec('x', 8)
+        self.assertTrue(second.check(x == x_again))
 
     def test_equal(self):
       s = self.s
@@ -123,6 +544,127 @@ class TestSTP(unittest.TestCase):
         s.add(a != 0, b != 0, c != 0, a != b, b != c, a != c)
         self.assertTrue(s.check(a * 2 + b * 2 == c * 2))
         self.assertEqual((s['a'] * 2 + s['b'] * 2)%2**32, s['c'] * 2 % 2**32)
+
+    def test_array_equality(self):
+        # Whole-array equality (the extensional theory of arrays) is
+        # available when the solver is created with array_equality=True.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 4, 8)
+        b = s.array('b', 4, 8)
+        i = s.bitvec('i', 4)
+        v = s.bitvec('v', 8)
+
+        # Equal arrays cannot differ at any index.
+        self.assertFalse(s.check(a == b, a[i] != b[i]))
+
+        # A store chain equated with its own base forces the stored
+        # value to be in the base already.
+        self.assertFalse(s.check(a.store(i, v) == a, a[i] != v))
+
+        # Integer indices coerce to index-width constants.
+        self.assertFalse(s.check(a == b, a[2] != b[2]))
+
+        # Distinct arrays must differ somewhere.
+        self.assertTrue(s.check(a != b))
+
+        # A satisfying assignment gives each array its observed
+        # entries, in ascending index order, and equal arrays agree.
+        s2 = stp.Solver(array_equality=True)
+        c = s2.array('c', 4, 8)
+        d = s2.array('d', 4, 8)
+        s2.add(c == d, c[3] == 7, d[5] == 9)
+        self.assertTrue(s2.check())
+        cm = c.model()
+        self.assertEqual(cm[3], 7)
+        self.assertEqual(cm[5], 9)
+        self.assertEqual(cm, d.model())
+        self.assertEqual(list(cm.keys()), sorted(cm.keys()))
+
+        # BitVector operations are refused on arrays.
+        with self.assertRaises(TypeError):
+            a + b
+        with self.assertRaises(TypeError):
+            a & b
+
+    def test_array_equality_requires_the_flag(self):
+        # Without array_equality=True, whole-array equality raises a
+        # catchable error at construction time; historically the query
+        # only failed at solve time, aborting the interpreter from
+        # inside the library.
+        s = stp.Solver()
+        a = s.array('a', 4, 8)
+        b = s.array('b', 4, 8)
+        with self.assertRaises(RuntimeError):
+            a == b
+        with self.assertRaises(RuntimeError):
+            a != b
+        with self.assertRaises(RuntimeError):
+            a.eq(b)
+        # Element-level work stays available without the option.
+        self.assertTrue(s.check(a[1] == 5))
+
+    def test_array_refuses_all_bitvector_operations(self):
+        # Every BitVector operation inherited from Expr must raise
+        # TypeError on an array rather than build a malformed node --
+        # or, for the widening operations, abort the whole interpreter
+        # on a type-check failure inside the library.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 4, 8)
+        b = s.array('b', 4, 8)
+
+        binary = ('add sub rsub mul div rdiv mod rmod rem rrem sdiv rsdiv '
+                  'smod rsmod srem rsrem lt le gt ge slt sle sgt sge and_ '
+                  'or_ xor nand nor xnor uaddo saddo usubo ssubo umulo '
+                  'smulo shl rshl shr rshr sar rsar').split()
+        for name in binary:
+            with self.assertRaises(TypeError, msg=name):
+                getattr(a, name)(b)
+
+        with self.assertRaises(TypeError):
+            a.extract(3, 0)
+        with self.assertRaises(TypeError):
+            a.zero_extend(16)
+        with self.assertRaises(TypeError):
+            a.sign_extend(16)
+        with self.assertRaises(TypeError):
+            a.neg()
+        with self.assertRaises(TypeError):
+            a.not_()
+        with self.assertRaises(TypeError):
+            a.simplify()
+
+    def test_array_model_repeated_calls(self):
+        # model() releases the entry buffers it receives on every call
+        # (they are malloc'd by libstp and freed there too); repeated
+        # calls must keep returning the same entries without corruption.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 8, 8)
+        b = s.array('b', 8, 8)
+        s.add(a == b)
+        for i in range(20):
+            s.add(a[i] == i + 100)
+        self.assertTrue(s.check())
+        first = a.model()
+        for i in range(20):
+            self.assertEqual(first[i], i + 100)
+        for _ in range(200):
+            self.assertEqual(first, a.model())
+            self.assertEqual(first, b.value)
+
+    def test_array_model_wide_entries(self):
+        # Array model entries keep their exact values at any width:
+        # getBVUnsignedLongLong alone saturates above 64 bits, and wide
+        # indices would additionally collapse into a single dict key.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 96, 128)
+        big_index = (1 << 90) + 7
+        big_value = (1 << 100) + 12345
+        s.add(a[big_index] == big_value, a[70] == 77)
+        self.assertTrue(s.check())
+        m = a.model()
+        self.assertEqual(m[big_index], big_value)
+        self.assertEqual(m[70], 77)
+        self.assertEqual(list(m.keys()), sorted(m.keys()))
 
     def test_boolean_expr(self):
         s = self.s
@@ -280,17 +822,31 @@ class TestSTP(unittest.TestCase):
 
     def test_get_value_for_bitvecval(self):
         solver = self.s
-        name_for_x = "x"
-        value_for_x = 0
-        x = solver.bitvec(name_for_x)
-        self.assertEqual(x.name, name_for_x)
-        self.assertEqual(x.value, value_for_x)
 
+        #
+        # A constant carries its own value, so it reads back with no query
+        # behind it -- there is nothing about it to take from a model.
+        #
         name_for_bitvecval = None
         value_for_bitvecval = 18
         bitvecval = solver.bitvecval(32, value_for_bitvecval)
         self.assertEqual(bitvecval.name, name_for_bitvecval)
         self.assertEqual(bitvecval.value, value_for_bitvecval)
+
+        #
+        # A symbol's value is the model's to give, so reading one takes a
+        # query. With no model behind it the API says so, rather than handing
+        # back a value invented out of an empty model, which is what it used
+        # to do -- and what this test used to assert.
+        #
+        name_for_x = "x"
+        value_for_x = 0
+        x = solver.bitvec(name_for_x)
+        self.assertEqual(x.name, name_for_x)
+        with self.assertRaises(RuntimeError):
+            x.value
+        self.assertTrue(solver.check(x == value_for_x))
+        self.assertEqual(x.value, value_for_x)
 
         #
         # Build up a complex expression and check we can look it up from the
@@ -299,6 +855,307 @@ class TestSTP(unittest.TestCase):
         expr_for_add = x.add(bitvecval.mul(2))
         value_from_model = solver.model(expr=expr_for_add)
         self.assertEqual(value_from_model, value_for_x + (value_for_bitvecval * 2))
+
+    def test_model_reads_release_the_expressions_they_are_handed(self):
+        # vc_getCounterExample hands back a freshly allocated expression that
+        # the caller owns, and so does every vc_bvExtract used to slice a
+        # value wider than 64 bits. _counterexample_int dropped all of them
+        # on the floor: 32 bytes for an 8-bit read, and 128 for a 128-bit one
+        # -- two slices, each costing an extract and a counterexample.
+        # Polling a model in a loop, which is what enumerating solutions
+        # looks like, therefore grew the process for as long as it ran.
+        #
+        # Only bit-vectors are measured. A float wider than binary64 is
+        # sliced through vc_fpToIEEEBV, whose result libstp registers for
+        # destruction with the manager, so that read still grows the persist
+        # list by one entry -- 44 bytes a read here against master's 172, but
+        # not nothing. Emptying it needs a C entry point that does not exist.
+        if _allocated_bytes() is None:
+            self.skipTest('the leak is in libstp\'s heap, and only the '
+                          'process allocator can see it; this one cannot '
+                          'be asked')
+
+        s = stp.Solver()
+        narrow = s.bitvec('narrow', 8)
+        wide = s.bitvec('wide', 128)
+        wide_value = (1 << 100) + 5
+        s.add(narrow == 3, wide == wide_value)
+        self.assertTrue(s.check())
+
+        # The leak costs 640 KiB over the first loop and 512 KiB over the
+        # second, so eight kibibytes is two orders of magnitude clear of it
+        # -- and clear the other way too, since a loop that releases what it
+        # takes drifts by nothing at all once its first few reads have
+        # populated the caches they touch.
+        budget = 8 << 10
+
+        for _ in range(2000):
+            narrow.value
+        before = _allocated_bytes()
+        for _ in range(20000):
+            narrow.value
+        self.assertEqual(narrow.value, 3)
+        self.assertLess(_allocated_bytes() - before, budget,
+                        'reading an 8-bit model value leaks')
+
+        for _ in range(1000):
+            wide.value
+        before = _allocated_bytes()
+        for _ in range(4000):
+            wide.value
+        self.assertEqual(wide.value, wide_value)
+        self.assertLess(_allocated_bytes() - before, budget,
+                        'reading a 128-bit model value leaks')
+
+    def test_a_boolean_literal_stays_in_boolean_sort(self):
+        # A Python bool is an int, so the literal coercion has to ask about
+        # bool before it asks about int, or True and False never reach their
+        # own arm: a Boolean expression compared against True asked for a
+        # bit-vector constant of width None and died three frames inside the
+        # binding. Comparing two Booleans then has to be IFF -- a Boolean has
+        # no bits for a bit-vector equality to compare, and libstp ends the
+        # process rather than answer for them.
+        s = self.s
+        a, b = s.bitvecs('a b', 8)
+        overflow = a.uaddo(b)
+        self.assertIsNone(overflow.width)
+
+        # An integer is not a Boolean, and now says so where a caller can
+        # hear it.
+        with self.assertRaises(TypeError):
+            overflow.eq(1)
+
+        # Neither do the two sorts mix, in either order.
+        with self.assertRaises(TypeError):
+            overflow.eq(a)
+        with self.assertRaises(TypeError):
+            a.eq(overflow)
+
+        # Every spelling of "this Boolean holds" builds a formula the solver
+        # accepts, and they all say the same thing.
+        for formula in (overflow == True, overflow.eq(True),
+                        overflow != False,
+                        s.and_(overflow, b.uaddo(a)) == True):
+            self.assertIsNone(formula.width)
+            s.add(formula)
+        self.assertTrue(s.check())
+        self.assertGreaterEqual(a.value + b.value, 1 << 8)
+
+        # ...and the same spellings can deny it, so this is not vacuous.
+        denied = stp.Solver()
+        x, y = denied.bitvecs('x y', 8)
+        denied.add(x.uaddo(y) == False, x == 200)
+        self.assertTrue(denied.check())
+        self.assertLess(x.value + y.value, 1 << 8)
+
+        # Against a bit-vector the historical shorthand is unchanged: True is
+        # one and False is zero.
+        shorthand = stp.Solver()
+        p, q = shorthand.bitvecs('p q', 8)
+        shorthand.add(p == True, q == False)
+        self.assertTrue(shorthand.check())
+        self.assertEqual(p.value, 1)
+        self.assertEqual(q.value, 0)
+
+    def test_floating_point(self):
+        #
+        # Build and solve a floating-point problem through the Pythonic layer,
+        # and read a native Python float back from the model.
+        #
+        s = self.s
+        a = s.fp("a", 5, 11)   # half precision
+        d = s.fp("d", 11, 53)  # IEEE double
+        s.add(a == 4.0)        # fp.eq; 4.0 is coerced to a (5, 11) constant
+        s.add(d == s.fpval(11, 53, 3.5))
+        s.add(a > 2.0)         # ordered comparison
+        s.add(a.is_normal())   # classification
+
+        self.assertTrue(s.check())
+        self.assertEqual(s.model("a"), 4.0)
+        self.assertIsInstance(s.model("a"), float)
+        self.assertEqual(s.model("d"), 3.5)
+        self.assertEqual(s.model_bits("a"), 0x4400)
+        self.assertEqual((a * a).value, 16.0)
+        self.assertEqual((a + a).value, 8.0)
+        self.assertEqual((a - 1.0).value, 3.0)
+        self.assertEqual((a / 2.0).value, 2.0)
+        self.assertEqual(a.sqrt().value, 2.0)
+        self.assertEqual((-a).value, -4.0)
+        self.assertEqual(abs(-a).value, 4.0)
+
+    def test_fp_operations(self):
+        # fp.rem, fp.min, fp.max, fp.roundToIntegral, fp.fma.
+        s = self.s
+        a, b = s.fp("a", 5, 11), s.fp("b", 5, 11)
+        s.add(a == 4.0, b == 2.0)
+        self.assertTrue(s.check())
+        self.assertEqual(a.fp_rem(b).value, 0.0)            # 4 rem 2
+        self.assertEqual(a.fp_min(b).value, 2.0)
+        self.assertEqual(a.fp_max(b).value, 4.0)
+        self.assertEqual(a.round_to_integral().value, 4.0)
+        self.assertEqual(a.fma(b, b).value, 10.0)           # 4*2 + 2
+
+        simplified = s.fp_zero(5, 11).fp_min(
+            s.fp_zero(5, 11, negative=True)).simplify()
+        self.assertIsInstance(simplified, stp.FloatExpr)
+        self.assertEqual((simplified.eb, simplified.sb), (5, 11))
+
+    def test_fp_comparisons(self):
+        # The ordered comparisons and !=, all holding together.
+        s = self.s
+        a = s.fp("a", 5, 11)
+        s.add(a == 3.0, a < 4.0, a <= 3.0, a > 2.0, a >= 3.0, a != 5.0)
+        self.assertTrue(s.check())
+
+    def test_fp_comparison_unsat(self):
+        s = self.s
+        a = s.fp("a", 5, 11)
+        s.add(a == 3.0, a < 2.0)   # 3 < 2 is false
+        self.assertFalse(s.check())
+
+    def test_fp_mixed_formats_rejected(self):
+        # Equal packed widths do not make distinct FP formats interchangeable.
+        # This check belongs in the Python layer as well as the C boundary: in a
+        # Release library the old assertion-only check interpreted the right
+        # operand under the left operand's format.
+        s = self.s
+        single = s.fp("single", 8, 24)
+        other32 = s.fp("other32", 11, 21)
+        with self.assertRaisesRegex(ValueError, "same format"):
+            single + other32
+        with self.assertRaisesRegex(ValueError, "same format"):
+            single < other32
+        with self.assertRaisesRegex(ValueError, "same format"):
+            s.ite(s.true(), single, other32)
+
+        another = stp.Solver()
+        foreign = another.fp("foreign", 8, 24)
+        with self.assertRaisesRegex(ValueError, "different solvers"):
+            single == foreign
+
+    def test_fp_classifications(self):
+        # The special-value constructors classify as claimed.
+        s = self.s
+        s.add(s.fp_nan(5, 11).is_nan(),
+              s.fp_inf(5, 11).is_infinite(),
+              s.fp_inf(5, 11).is_positive(),
+              s.fp_inf(5, 11, negative=True).is_negative(),
+              s.fp_zero(5, 11).is_zero(),
+              s.fp_zero(5, 11).is_positive(),
+              s.fp_zero(5, 11, negative=True).is_negative())
+        self.assertTrue(s.check())
+
+    def test_fp_classification_unsat(self):
+        s = self.s
+        x = s.fp("x", 5, 11)
+        s.add(x.is_nan(), x.is_zero())   # nothing is both
+        self.assertFalse(s.check())
+
+    def test_fp_subnormal(self):
+        s = self.s
+        x = s.fp("x", 5, 11)
+        s.add(x == s.fpval_from_bits(5, 11, 0x0001))   # smallest subnormal
+        s.add(x.is_subnormal())
+        self.assertTrue(s.check())
+
+    def test_fp_bits_and_conversions(self):
+        # to_ieee_bits + field extraction, model_bits, and fp.to_ubv.
+        s = self.s
+        x = s.fp("x", 5, 11)
+        s.add(x == 3.0)   # half 3.0 is 0x4200 = sign 0, exp 0b10000, sig 0x200
+        bits = x.to_ieee_bits()
+        self.assertTrue(s.check())
+        self.assertEqual(s.model_bits("x"), 0x4200)
+        self.assertEqual(s.model(expr=bits), 0x4200)
+        self.assertEqual(s.model(expr=bits.extract(14, 10)), 16)     # exponent
+        self.assertEqual(s.model(expr=bits.extract(9, 0)), 0x200)    # significand
+        self.assertEqual(s.model(expr=x.to_ubv(8)), 3)
+
+    def test_fp_model_wider_than_sixty_four_bits(self):
+        # A value wider than 64 bits is read out in 64-bit slices, and slicing
+        # is vc_bvExtract -- which refuses a float, because the C boundary
+        # enforces the source sort. So model() and model_bits() aborted the
+        # interpreter on every format above binary64, in the very methods
+        # whose docstrings advertise the wide case. They slice the IEEE bits
+        # now, which are legal at any width and are the packed bits wanted.
+        s = self.s
+        x = s.fp("x", 15, 113)          # binary128
+        s.add(x.is_nan())
+        self.assertTrue(s.check())
+
+        # Canonical quiet NaN: sign 0, exponent all ones, leading significand
+        # bit set. binary128 has no native Python float, so model() gives the
+        # packed bits back unchanged, exactly as the narrow path does for a
+        # format it cannot decode.
+        canonical_nan = 0x7fff8000000000000000000000000000
+        self.assertEqual(s.model_bits("x"), canonical_nan)
+        self.assertEqual(s.model("x"), canonical_nan)
+
+    def test_fp_has_no_bitvector_operations(self):
+        # FloatExpr used to subclass Expr and neutralise the bit-vector
+        # methods it must not offer with a hand-written list of names. A list
+        # of names over a base class you do not control cannot be kept
+        # correct, and was not: thirteen were missing -- nand, nor, xnor, the
+        # six overflow predicates, zero_extend, sign_extend, rsub, rdiv --
+        # and each reached a C entry point that refuses a float, so instead of
+        # the documented TypeError they aborted the interpreter. Nine of the
+        # thirteen had been added to Expr the day after the list was written.
+        #
+        # The classes are separate now, so there is no list and nothing to
+        # drift. This test states that structurally rather than by naming
+        # methods, so it keeps holding as Expr grows.
+        import inspect
+        s = self.s
+        x = s.fp("x", 8, 24)
+
+        bitvector_only = [
+            name for name, _ in inspect.getmembers(stp.Expr, callable)
+            if not name.startswith("_") and not hasattr(stp.FloatExpr, name)
+        ]
+        # If this is ever zero the test has stopped testing anything.
+        self.assertGreater(len(bitvector_only), 20)
+        for name in bitvector_only:
+            self.assertFalse(hasattr(x, name),
+                             "%s leaked onto FloatExpr" % name)
+
+        # The named ones raise AttributeError and the operators TypeError,
+        # both from Python, because the operation genuinely is not there.
+        with self.assertRaises(AttributeError):
+            x.and_(x)
+        with self.assertRaises(TypeError):
+            x & x
+        with self.assertRaises(TypeError):
+            x << x
+        with self.assertRaises(TypeError):
+            ~x
+
+        # Bit-level work goes through to_ieee_bits(), which is an Expr and has
+        # all of them.
+        bits = x.to_ieee_bits()
+        self.assertIsInstance(bits, stp.Expr)
+        for name in bitvector_only:
+            self.assertTrue(hasattr(bits, name))
+
+    def test_fp_is_an_expression_to_the_solver(self):
+        # Separating the classes must not cost FloatExpr its standing as
+        # something the solver accepts: the shared base is what the
+        # solver-level checks ask about.
+        s = self.s
+        x = s.fp("x", 5, 11)
+        self.assertIsInstance(x, stp.AnyExpr)
+        self.assertNotIsInstance(x, stp.Expr)
+
+        s.add(x == 2.0)
+        self.assertTrue(s.check())
+        self.assertEqual(s.model("x"), 2.0)
+        self.assertEqual(x.value, 2.0)
+
+    def test_fp_to_sbv(self):
+        s = self.s
+        x = s.fp("x", 5, 11)
+        s.add(x == s.fpval_from_bits(5, 11, 0xC000))    # -2.0
+        self.assertTrue(s.check())
+        self.assertEqual(s.model(expr=x.to_sbv(8)), 0xFE)   # -2 in 8-bit two's complement
 
     def test_urem(self):
         #
@@ -380,25 +1237,19 @@ class TestSTP(unittest.TestCase):
         """
         Checks that the underlying solver can be set to be minisat
         """
-        self._test_solver("Minisat", is_default_solver=True)
+        self._test_solver("Minisat")
 
     def test_simplifyingminisat(self):
         """
         Checks that the underlying solver can be set to be simplifyingminisat
         """
-        self._test_solver("SimplifyingMinisat", is_default_solver=True)
+        self._test_solver("SimplifyingMinisat")
 
     def test_cryptominisat(self):
         """
         Checks that the underlying solver can be set to be cryptominisat
         """
         self._test_solver("Cryptominisat", is_default_solver=False)
-
-    def test_riss(self):
-        """
-        Checks that the underlying solver can be set to be riss
-        """
-        self._test_solver("Riss", is_default_solver=False)
 
     def test_cadical(self):
         """
@@ -455,15 +1306,36 @@ class TestSTP(unittest.TestCase):
         self._hard_instance()
         self.assertEqual(self.s.check_with_timeout(max_conflicts=0), 3)
 
+    def test_check_still_brackets_its_query_in_a_frame(self):
+        """
+        check() opens a frame around the query and closes it again. Nothing
+        is ever asserted into that frame -- what it is for is vc_push, which
+        is what marks a C API session incremental, so after the first few
+        checks the persistent driver decides the query where the batch
+        pipeline used to. A zero time budget is where that becomes visible:
+        the driver reports the budget it was given, while the batch pipeline
+        settles this instance by substitution without consulting the clock.
+
+        A solver built with uninterpreted_functions=True is the one solver
+        that gets no frame, because vc_pop would discard the certified model
+        an application's value is read from. Every other solver keeps the
+        behaviour it has always had, which is what this pins.
+        """
+        s = self.s
+        x = s.bitvec('x', 8)
+        s.add(x == 5)
+        answers = [s.check_with_timeout(max_time=0) for _ in range(8)]
+        self.assertIn(3, answers)
+
     def test_no_limit_reaches_the_solver(self):
         """
         An unlimited query must still reach the SAT solver and come back with
         an answer: a backend that mistook "no budget configured" for a budget
-        of zero would report a timeout here.
+        of zero would report unknown here.
 
         60491 == 251 * 241, factored in milliseconds. Given a budget of zero
-        conflicts this same instance times out, so the answer really does
-        come from the SAT solver.
+        conflicts this same instance returns unknown, so the answer really
+        does come from the SAT solver.
         """
         s = self.s
         a = s.bitvec('a', 32)

@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Mate Soos, Andrew V. Jones
+ * AUTHORS: Mate Soos, Andrew Teylu
  *
  * BEGIN DATE: November, 2013
  *
@@ -29,6 +29,7 @@ THE SOFTWARE.
 #define CRYPTOMINISAT5_H_
 
 #include "stp/Sat/SATSolver.h"
+#include <string>
 #include <unordered_set>
 
 namespace CMSat
@@ -48,25 +49,32 @@ namespace stp
   CMSat::SATSolver* s;
 
 public:
+  // The version of the CryptoMiniSat that is actually linked. Kept here, and
+  // not read from CMSat::SATSolver directly at the call site, so that
+  // cryptominisat.h is needed by this wrapper's own translation unit and by
+  // nothing else -- see the include-directory note in lib/Sat/CMakeLists.txt.
+  static std::string version();
+
   CryptoMiniSat5(int num_threads);
 
   ~CryptoMiniSat5();
 
   void setMaxConflicts(int64_t max_confl) override; // set max solver conflicts
 
-  bool addClause(const vec_literals& ps) override; // Add a clause to the solver.
-
   bool okay() const override; // FALSE means solver is in a conflicting state
+
+  void unsatAssumptions(const vec_literals& assumps,
+                        std::vector<int>& out) override;
 
   uint8_t modelValue(uint32_t x) const override;
 
   uint32_t newVar() override;
 
-  bool setSearchBias(SearchBias bias) override;
+  bool setSearchBiasInternal(SearchBias bias) override;
 
   void setVerbosity(int v) override;
 
-  unsigned long nVars() const override;
+  uint32_t nVars() const override;
 
   void printStats() const override;
 
@@ -80,20 +88,28 @@ public:
   uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps,  const std::unordered_set<unsigned>& literals, bool& conflict );
 
 
-  void solveAndDump();
 
+  bool supportsAssumptions() const override { return true; }
 
 protected:
+  bool addClauseInternal(const vec_literals& ps) override;
   bool solveInternal(bool& timeout_expired) override;
+  bool solveWithAssumptionsInternal(const vec_literals& assumps,
+                                    bool& timeout_expired) override;
 
   // CryptoMiniSat polls its own wall-clock limit during search.
   bool canInterruptSearch() const override { return true; }
 
 private:
+  bool armBudgets(bool& timeout_expired);
+
   void* temp_cl;
   // Negative means no budget was configured. This cannot default to 0,
   // which is now a budget of zero rather than the absence of one.
   int64_t max_confl = -1;
+  // The solver's lifetime conflict count when the budget was last armed;
+  // what the budget's query has spent is measured from here.
+  uint64_t confl_base = 0;
 };
 }
 

@@ -25,29 +25,56 @@ THE SOFTWARE.
 #define __STDC_FORMAT_MACROS
 #include "stp/Sat/MinisatCore.h"
 #include "minisat/core/Solver.h"
+#include <iostream>
 //#include "utils/System.h"
 //#include "simp/SimpSolver.h"
-
-namespace MiniSat
-{
-}
-using namespace MiniSat;
 
 namespace stp
 {
 
-uint8_t MinisatCore::value(uint32_t x) const
+// STP's literal encoding (variable*2 + sign) is the one MiniSat itself
+// uses, so translation is a straight reinterpretation of each literal.
+static void convert(const SATSolver::vec_literals& ps,
+                    Minisat::vec<Minisat::Lit>& out)
 {
-  return Minisat::toInt(s->value(x));
+  for (int i = 0; i < ps.size(); i++)
+    out.push(Minisat::toLit(SATSolver::toInt(ps[i])));
 }
+
+#ifdef STP_MINISAT_HAS_TERMINATOR
+namespace
+{
+// Reads the deadline the SATSolver base class keeps, so there is one notion of
+// "time left" across every backend rather than a second clock living in here.
+// MiniSat polls this on every conflict and every restart, so it has to be
+// cheap: one steady_clock read, no allocation, no locking.
+class DeadlineTerminator : public Minisat::Terminator
+{
+  const stp::SATSolver& owner;
+
+public:
+  explicit DeadlineTerminator(const stp::SATSolver& o) : owner(o) {}
+
+  bool terminate() override { return owner.timeLimitExpired(); }
+};
+} // namespace
+#endif
 
 MinisatCore::MinisatCore()
 {
   s = new Minisat::Solver;
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  deadline_terminator.reset(new DeadlineTerminator(*this));
+  s->connectTerminator(deadline_terminator.get());
+#endif
 }
 
 MinisatCore::~MinisatCore()
 {
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  // Before the terminator it points at.
+  s->connectTerminator(nullptr);
+#endif
   delete s;
 }
 
@@ -57,29 +84,33 @@ void MinisatCore::setMaxConflicts(int64_t max_confl)
   s->setConfBudget(max_confl);
 }
 
-bool MinisatCore::addClause(
+bool MinisatCore::addClauseInternal(
     const SATSolver::vec_literals& ps) // Add a clause to the solver.
 {
-  return s->addClause(ps);
+  Minisat::vec<Minisat::Lit> clause;
+  convert(ps, clause);
+  return s->addClause_(clause);
+}
+
+void MinisatCore::unsatAssumptions(const vec_literals& assumps,
+                                   std::vector<int>& out)
+{
+  // After an unsat assumption solve, MiniSat's `conflict` holds the final
+  // conflict clause expressed in the assumptions: the negations of the
+  // failed ones. An assumption is in the core iff its negation appears.
+  out.clear();
+  for (int i = 0; i < assumps.size(); i++)
+  {
+    const Minisat::Lit assumed =
+        Minisat::toLit(SATSolver::toInt(assumps[i]));
+    if (s->conflict.has(~assumed))
+      out.push_back(assumps[i].x);
+  }
 }
 
 bool MinisatCore::okay() const // FALSE means solver is in a conflicting state
 {
   return s->okay();
-}
-
-// *Doesn't solve*, just does a single unit propagate.
-// returns false if UNSAT.
-bool MinisatCore::propagateWithAssumptions(
-    const stp::SATSolver::vec_literals& assumps)
-{
-  if (!s->simplify())
-    return false;
-
-  setMaxConflicts(0);
-  Minisat::lbool ret = s->solveLimited(assumps);
-  assert(s->conflicts ==0);
-  return ret != (Minisat::lbool)Minisat::l_False;
 }
 
 bool MinisatCore::solveInternal(bool& timeout_expired)
@@ -89,6 +120,25 @@ bool MinisatCore::solveInternal(bool& timeout_expired)
 
   Minisat::vec<Minisat::Lit> assumps;
   Minisat::lbool ret = s->solveLimited(assumps);
+  if (ret == (Minisat::lbool)Minisat::l_Undef)
+  {
+    timeout_expired = true;
+  }
+
+  return ret == (Minisat::lbool)Minisat::l_True;
+}
+
+bool MinisatCore::solveWithAssumptionsInternal(
+    const stp::SATSolver::vec_literals& assumps, bool& timeout_expired)
+{
+  // simplify() only removes clauses satisfied at level 0; the core solver
+  // never eliminates variables, so assumption literals are safe across it.
+  if (!s->simplify())
+    return false;
+
+  Minisat::vec<Minisat::Lit> ms_assumps;
+  convert(assumps, ms_assumps);
+  Minisat::lbool ret = s->solveLimited(ms_assumps);
   if (ret == (Minisat::lbool)Minisat::l_Undef)
   {
     timeout_expired = true;
@@ -112,14 +162,42 @@ void MinisatCore::setVerbosity(int v)
   s->verbosity = v;
 }
 
-unsigned long MinisatCore::nVars() const
+uint32_t MinisatCore::nVars() const
 {
   return s->nVars();
 }
 
 void MinisatCore::printStats() const
 {
-  //s->printStats();
+  // MiniSat's periodic table is useful while a long search is running, but
+  // fixed-conflict profiles also need exact final totals. In particular,
+  // propagations/conflict distinguishes SAT-search work from front-end time.
+  std::cerr << "MiniSat starts: " << s->starts << '\n';
+  std::cerr << "MiniSat conflicts: " << s->conflicts << '\n';
+  std::cerr << "MiniSat decisions: " << s->decisions << '\n';
+  std::cerr << "MiniSat propagations: " << s->propagations << '\n';
+  std::cerr << "MiniSat variables: " << s->nVars() << '\n';
+  if (s->conflicts != 0)
+  {
+    std::cerr << "MiniSat decisions per conflict: "
+              << static_cast<double>(s->decisions) / s->conflicts << '\n';
+    std::cerr << "MiniSat propagations per conflict: "
+              << static_cast<double>(s->propagations) / s->conflicts << '\n';
+  }
+  std::cerr << "MiniSat active original clauses: " << s->nClauses() << '\n';
+  std::cerr << "MiniSat active original literals: " << s->clauses_literals
+            << '\n';
+  std::cerr << "MiniSat active learnt clauses: " << s->nLearnts() << '\n';
+  std::cerr << "MiniSat active learnt literals: " << s->learnts_literals
+            << '\n';
+  if (s->nLearnts() != 0)
+    std::cerr << "MiniSat active learnt literals per clause: "
+              << static_cast<double>(s->learnts_literals) / s->nLearnts()
+              << '\n';
+  std::cerr << "MiniSat learnt literals before minimization: "
+            << s->max_literals << '\n';
+  std::cerr << "MiniSat learnt literals after minimization: "
+            << s->tot_literals << '\n';
 }
 
 int MinisatCore::nClauses()

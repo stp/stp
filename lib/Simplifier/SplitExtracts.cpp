@@ -27,6 +27,12 @@ THE SOFTWARE.
 
 namespace stp
 {
+  // The walk is over the whole input, so its depth is the input's depth and
+  // it cannot be left on the call stack: the depth is chosen by whoever wrote
+  // the query. Frames carry the position within the parent's children, so
+  // the order entries are appended in is exactly what the recursion produced
+  // -- ranges for one symbol are sorted afterwards by an unstable sort, and
+  // equal keys would otherwise be free to reorder.
   void SplitExtracts::buildMap(const ASTNode & n, std::unordered_set<uint64_t> &visited, NodeToExtractsMap& nodeToExtracts)
   {
     if (n.Degree() == 0)
@@ -35,19 +41,45 @@ namespace stp
     if (!visited.insert(n.GetNodeNum()).second)
       return;
 
-    for (const auto & c :n)
+    struct Frame
     {
-      if (c.GetKind() == stp::SYMBOL && n.GetKind() == stp::BVEXTRACT)
+      ASTNode n;
+      size_t i = 0; // the operand being worked on
+    };
+
+    std::vector<Frame> stack;
+    stack.push_back(Frame{n});
+
+    while (!stack.empty())
+    {
+      if (stack.back().i == stack.back().n.Degree())
       {
-        nodeToExtracts[c].push_back(std::make_tuple(n, n[1].GetUnsignedConst(), n[2].GetUnsignedConst()));
+        stack.pop_back();
+        continue;
+      }
+
+      // Both are read before anything can push and invalidate the frame.
+      const ASTNode parent = stack.back().n;
+      const ASTNode c = parent[stack.back().i];
+      stack.back().i++;
+
+      if (c.GetKind() == stp::SYMBOL && parent.GetKind() == stp::BVEXTRACT)
+      {
+        nodeToExtracts[c].push_back(std::make_tuple(parent, parent[1].GetUnsignedConst(), parent[2].GetUnsignedConst()));
         extractsFound++;
       }
       else if (c.GetKind() == stp::SYMBOL)
       {
-      nodeToExtracts[c].push_back(std::make_tuple(ASTUndefined, UINT64_MAX,0));
+        nodeToExtracts[c].push_back(std::make_tuple(ASTUndefined, UINT64_MAX,0));
       }
 
-      buildMap(c,visited,nodeToExtracts);
+      // The two early returns of the recursive form, in the same order.
+      if (c.Degree() == 0)
+        continue;
+      if (!visited.insert(c.GetNodeNum()).second)
+        continue;
+
+      stack.push_back(Frame{c});
     }
   }
 
@@ -80,7 +112,7 @@ namespace stp
 
       for (const auto& e: nodeToExtracts )
       {
-        const auto& symbol = e.first;
+        [[maybe_unused]] const auto& symbol = e.first;
         assert(symbol.GetKind() == SYMBOL);
 
         auto ranges = e.second;

@@ -18,7 +18,7 @@
 #
 #
 # name minkids maxkids category1 category2
-Categories:	Term	Form
+Categories:	Term	Form	FP
 
 # Leaf nodes.
 UNDEFINED	0	0
@@ -88,8 +88,139 @@ READ		2	2	Term
 WRITE		3	3	Term
 
 #Types: These kinds are used only in the API. Once processed inside
-#the API, they are never used again in the system 
+#the API, they are never used again in the system
 ARRAY           0       0
 BITVECTOR       0       0
 BOOLEAN         0       0
+FLOATINGPOINT   0       0
+ROUNDINGMODE    0       0
 
+# Floating point _terms_ (i.e., things that produce FPs)
+
+# fp.abs: fp -> fp
+# The public C API mirrors every kind below in include/stp/c_interface.h
+# (enum exprkind_t) by numeric value; keep the two in lockstep. Anchoring
+# static_asserts live next to getExprKind in lib/Interface/c_interface.cpp.
+FP_ABS                      1    1    Term    FP
+
+# fp.neg: fp -> fp
+FP_NEG                      1    1    Term    FP
+
+# fp.add: rm, fp, fp -> fp
+FP_ADD                      3    3    Term    FP
+
+# fp.sub: rm, fp, fp -> fp
+FP_SUB                      3    3    Term    FP
+
+# fp.mul: rm, fp, fp -> fp
+FP_MUL                      3    3    Term    FP
+
+# fp.div: rm, fp, fp -> fp
+FP_DIV                      3    3    Term    FP
+
+# fp.fma: rm, fp, fp, fp -> fp
+FP_FMA                      4    4    Term    FP
+
+# fp.sqrt: rm, fp -> fp
+FP_SQRT                     2    2    Term    FP
+
+# fp.rem: fp, fp -> fp
+FP_REM                      2    2    Term    FP
+
+# fp.roundToIntegral: rm, fp -> fp
+FP_ROUNDTOINTEGRAL          2    2    Term    FP
+
+# fp.min: fp, fp -> fp
+FP_MIN                      2    3    Term    FP
+
+# fp.max: fp, fp -> fp
+FP_MAX                      2    3    Term    FP
+
+# to_fp: eb, sb, bv -> fp        (reinterpret the bits)
+# to_fp: eb, sb, rm, fp -> fp     (reformat a float)
+FP_TOFP                     3   4    Term    FP
+
+# to_fp: eb, sb, rm, bv -> fp     (convert a SIGNED integer)
+#
+# A kind of its own, rather than the four-argument FP_TOFP it is spelled as
+# in SMT-LIB, because nothing downstream could otherwise tell the two apart.
+# The distinction is in the source's *sort*, and a blasted float is its packed
+# bits -- so by the time the blaster sees the operand, a float and an integer
+# look identical. Asking the operand's type made an integer source get read as
+# a float and answer the wrong thing. The parser and the C API know which one
+# was written, so they record it here.
+FP_TOFP_SIGNED              4    4    Term    FP
+
+# to_fp_unsigned: eb, sb, rm, bv -> fP
+FP_TOFP_UNSIGNED            4    4    Term    FP
+
+# fp.to_ubv: bw, rm, fp -> bv
+FP_TO_UBV                   3    4    Term    FP
+
+# fp.to_sbv: bw, rm, fp -> bv
+FP_TO_SBV                   3    4    Term    FP
+
+# fp -> its packed IEEE bits (reinterpret, canonicalising NaN); API-only, no
+# SMT-LIB syntax. One float in, an (eb + sb)-bit bitvector out.
+FP_TO_IEEE_BV               1    1    Term    FP
+
+# Floating point _formulae_ (i.e., things that produce Booleans)
+
+# fp.leq: fp, fp -> bool
+FP_LEQ              2    2    Form    FP
+
+# fp.lt: fp, fp -> bool
+FP_LT               2    2    Form    FP
+
+# fp.geq: fp, fp -> bool
+FP_GEQ              2    2    Form    FP
+
+# fp.gt: fp, fp -> bool
+FP_GT               2    2    Form    FP
+
+# fp.eq: fp, fp -> bool
+FP_EQ               2    2    Form    FP
+
+# fp.isNormal: fp -> bool
+FP_ISNORMAL         1    1    Form    FP
+
+# fp.isSubnormal: fp -> bool
+FP_ISSUBNORMAL      1    1    Form    FP
+
+# fp.isZero: fp -> bool
+FP_ISZERO           1    1    Form    FP
+
+# fp.isInfinite: fp -> bool
+FP_ISINFINITE       1    1    Form    FP
+
+# fp.isNaN: fp -> bool
+FP_ISNAN            1    1    Form    FP
+
+# fp.isNegative: fp -> bool
+FP_ISNEGATIVE       1    1    Form    FP
+
+# fp.isPositive: fp -> bool
+FP_ISPOSITIVE       1    1    Form    FP
+
+# FP `=`
+FP_SMT_EQ           2    2    Form    FP
+
+# The five special floating-point values (NaN, +/-oo, +/-zero) have no kinds
+# of their own: they are ordinary packed constants, built interned by
+# STPMgr::CreateFPSpecialConst so that the format is part of node identity.
+
+# Opaque whole-array equality. The extensionality prepass lowers this before
+# ordinary solving. Public kinds are append-only so their exported numeric
+# values remain stable.
+ARRAY_EQ        2       2       Form
+
+# Durable, typed application of an uninterpreted function. Child 0 is the
+# manager-owned declaration identity; the remaining children are the ordered
+# source-language actuals. This stays opaque until solve-boundary UF lowering.
+UF_APPLY        2       -       Term    Form
+
+# Durable SMT-LIB distinct predicate. Its operands remain together through
+# frontend substitution and query assembly, then the completed-root distinct
+# pass either exploits their symmetry or lowers them to pairwise disequalities.
+# Keep new public kinds at the end: their numeric values are ABI-visible.
+DISTINCT        2       -       Form

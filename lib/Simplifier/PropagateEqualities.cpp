@@ -22,6 +22,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/PropagateEqualities.h"
+#include "stp/Util/DagWalk.h"
 #include <string>
 #include <utility>
 #include <queue>
@@ -29,19 +30,19 @@ THE SOFTWARE.
 namespace stp
 {
 
-void log([[maybe_unused]] std::string s)
-{
-#if 0
-  std::cerr << ">>" << s;
-#endif
-}
+typedef PropagateEqualities::IdSet IdSet;
+typedef ankerl::unordered_dense::map<uint64_t, uint64_t> IdToId;
+typedef ankerl::unordered_dense::map<uint64_t, IdSet> IdToIdSet;
+// Safe as a dense set: only inserted into, then copied out and sorted by
+// expression number -- its iteration order never reaches a decision.
+typedef ankerl::unordered_dense::set<ASTNode, ASTNode::ASTNodeHasher,
+                                     ASTNode::ASTNodeEqual> DenseNodeSet;
+// Values must stay pointer-stable: the priority queue and update() hold
+// pointers/references into the map while it is queried, so this stays a
+// node-based std::unordered_map (mapped is never inserted into after build).
+typedef PropagateEqualities::MapToNodeSet MapToNodeSet;
 
-typedef std::unordered_set<uint64_t> IdSet;
-typedef std::unordered_map<uint64_t, uint64_t> IdToId;
-typedef std::unordered_map<uint64_t, IdSet> IdToIdSet;
-typedef std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet, int > > MapToNodeSet;
-
-void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, ASTNodeSet& shared)
+void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, DenseNodeSet& shared)
 {
   if (n.Degree() == 0)
     return; 
@@ -71,10 +72,10 @@ void intersection(const ASTNode& n, IdSet& visited, IdSet& variables, const IdSe
   if (!visited.insert(n_id).second)
     return;
 
-  if (cache.find(n_id) != cache.end())
+  const auto cit = cache.find(n_id);
+  if (cit != cache.end())
   {
-    const auto& item = cache.find(n_id)->second;
-    variables.insert(item.begin(), item.end());
+    variables.insert(cit->second.begin(), cit->second.end());
     return;
   }
  
@@ -90,7 +91,7 @@ void intersection(const ASTNode& n, IdSet& visited, IdSet& variables, const IdSe
 
 MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& allLhsVariables)
 {
-  ASTNodeSet shared;
+  DenseNodeSet shared;
   {
     IdToId tags;
     uint64_t tag = 0;
@@ -117,6 +118,7 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
   // Without the id field, which we sort the priority queue on, the order that the rules were applied
   // was not deterministic, giving diffent CNF.
   MapToNodeSet mapped;
+  mapped.reserve(candidates.size());
   int id =0;
 
   for (const auto& e: candidates)
@@ -124,34 +126,85 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
     IdSet visited;
     IdSet variables;
     intersection(e.second, visited, variables, allLhsVariables, cache);
-    mapped.insert(std::make_pair(e.first.GetNodeNum(), std::make_tuple(e.first, e.second, variables, id++)));
+    mapped.insert(std::make_pair(
+        e.first.GetNodeNum(),
+        PropagateEqualities::CandidateInfo{e.first, e.second,
+                                          std::move(variables), id++, 0}));
   }
 
   return mapped;
 }
 
-void update(const uint64_t n, MapToNodeSet& m, const IdSet& replaced)
+// Bring candidate `start`'s variable set up to date with the replacements
+// performed so far. Each candidate remembers how many replacements it has
+// already folded in (upTo), so only the newly replaced variables need
+// checking. Invariant: a replaced variable still present in a set must have
+// been replaced after that set's upTo, and an up-to-date set contains no
+// replaced variables at all -- which is why folding a dependency's set in
+// cannot re-introduce work, and why the fold order doesn't matter.
+static void update(const uint64_t start, MapToNodeSet& m,
+                   const std::vector<uint64_t>& replacedOrder,
+                   const IdToId& replacedIndex)
 {
-    auto& variables = std::get<2>(m[n]);
-    vector<uint64_t> toRemove;
-    vector<IdSet*> toAdd;
+  const size_t now = replacedOrder.size();
 
-    // all the variables that get inserted have already been updated.
-    for (const auto& v: variables)
+  struct Frame
+  {
+    uint64_t n;
+    std::vector<uint64_t> deps;
+    bool expanded = false;
+  };
+  std::vector<Frame> stack;
+  stack.push_back({start, {}, false});
+
+  while (!stack.empty())
+  {
+    Frame& f = stack.back();
+    assert(m.find(f.n) != m.end());
+    PropagateEqualities::CandidateInfo& ci = m.find(f.n)->second;
+
+    if (!f.expanded)
     {
-      if (replaced.find(v) != replaced.end())
-      {
-          // It's been replaced.
-          update(v,m,replaced);
-          toRemove.push_back(v);
-          toAdd.push_back(&std::get<2>(m.find(v)->second));
-      }
-    }
-    for (const auto& e: toRemove)
-      variables.erase(e);
+      f.expanded = true;
 
-    for (const auto& e: toAdd)
-      variables.insert(e->begin(), e->end()); 
+      // Find the replaced variables in ci.vars, probing whichever side is
+      // smaller: the pending replacements, or the set itself.
+      if (now - ci.upTo < ci.vars.size())
+      {
+        for (size_t i = ci.upTo; i < now; i++)
+          if (ci.vars.count(replacedOrder[i]) != 0)
+            f.deps.push_back(replacedOrder[i]);
+      }
+      else
+      {
+        for (const auto v : ci.vars)
+        {
+          const auto it = replacedIndex.find(v);
+          if (it != replacedIndex.end() && it->second >= ci.upTo)
+            f.deps.push_back(v);
+        }
+      }
+
+      bool pushed = false;
+      for (const auto v : f.deps)
+        if (m.find(v)->second.upTo != now)
+        {
+          stack.push_back({v, {}, false});
+          pushed = true;
+        }
+      if (pushed)
+        continue; // fold once the dependencies are up to date themselves
+    }
+
+    for (const auto v : f.deps)
+    {
+      ci.vars.erase(v);
+      const IdSet& add = m.find(v)->second.vars;
+      ci.vars.insert(add.begin(), add.end());
+    }
+    ci.upTo = now;
+    stack.pop_back();
+  }
 }
 
 void PropagateEqualities::processCandidates()
@@ -171,39 +224,49 @@ void PropagateEqualities::processCandidates()
   MapToNodeSet mapped;
   mapped = buildMapOfLHStoVariablesInRHS(allLhsVariables);
 
-  typedef std::tuple<ASTNode, ASTNode, const IdSet*, int> qType;
-  auto cmp = [](qType left, qType right) 
-    { 
-      if (std::get<2>(left)->size() > std::get<2>(right)->size())
+  typedef const CandidateInfo* qType;
+  auto cmp = [](qType left, qType right)
+    {
+      if (left->vars.size() > right->vars.size())
           return true;
-      if (std::get<2>(left)->size() == std::get<2>(right)->size())
-          return std::get<3>(left) > std::get<3>(right);
+      if (left->vars.size() == right->vars.size())
+          return left->id > right->id;
       return false;
-    };  
-  std::priority_queue < qType, vector<qType>, decltype(cmp) > q(cmp);
+    };
+  // Fill the backing vector first and heapify once, rather than pushing
+  // into an empty queue element by element: that is O(n) instead of
+  // O(n log n), and the pop order is unchanged because cmp is a total order
+  // (equal variable counts are broken by the unique id).
+  //
+  // It also sidesteps a GCC false positive. Move-constructing the queue from
+  // an *empty* reserved vector runs make_heap over a range GCC cannot see is
+  // empty, and it then derives an absurd trip count and reports
+  // -Waggressive-loop-optimizations, which is fatal under -Werror in a
+  // release build.
+  vector<qType> qStore;
+  qStore.reserve(mapped.size());
 
   for (const auto& e: mapped)
-  {
-    const ASTNode& lhs = std::get<0>(e.second);
-    const ASTNode& rhs = std::get<1>(e.second);
-    const IdSet* varsInRHS = &(std::get<2>(e.second));
-    const int id = std::get<3>(e.second);
-    auto d = std::make_tuple(lhs,rhs,varsInRHS,id);
-    q.push(d);
-  }
+    qStore.push_back(&e.second);
 
-  IdSet variablesReplacedAlready;
+  std::priority_queue<qType, vector<qType>, decltype(cmp)> q(
+      cmp, std::move(qStore));
+
+  std::vector<uint64_t> replacedOrder;
+  replacedOrder.reserve(mapped.size());
+  IdToId replacedIndex;
+  replacedIndex.reserve(mapped.size());
 
   while (!q.empty())
   {
-    auto e = q.top();
+    const CandidateInfo* e = q.top();
     q.pop();
 
-    const ASTNode& lhs = std::get<0>(e);
+    const ASTNode& lhs = e->lhs;
     const uint64_t lhs_id = lhs.GetNodeNum();
 
-    const ASTNode& rhs = std::get<1>(e);
-    const IdSet& rhsVariables = *std::get<2>(e);
+    const ASTNode& rhs = e->rhs;
+    const IdSet& rhsVariables = e->vars;
 
     assert(SYMBOL == lhs.GetKind());
 
@@ -211,28 +274,29 @@ void PropagateEqualities::processCandidates()
     if (rhsVariables.find(lhs_id) != rhsVariables.end())
       continue; // Loops already, so no more processing.
 
-    if (variablesReplacedAlready.find(lhs_id) != variablesReplacedAlready.end())
+    if (replacedIndex.find(lhs_id) != replacedIndex.end())
       continue; // already replaced.
 
-    update(lhs.GetNodeNum(), mapped, variablesReplacedAlready);
-    
-    if (!q.empty() && 5* std::get<2>(q.top())->size() < rhsVariables.size())
+    update(lhs_id, mapped, replacedOrder, replacedIndex);
+
+    if (!q.empty() && 5* q.top()->vars.size() < rhsVariables.size())
     {
       // The priority queue doesn't automatically update as the priorties change.
       // If the next item in the priority queue is much smaller, loop.
       q.push(e);
       continue;
     }
- 
+
     if (rhsVariables.find(lhs_id) == rhsVariables.end())
     {
       simp->UpdateSubstitutionMapFewChecks(lhs, rhs);
-      variablesReplacedAlready.insert(lhs_id);
+      replacedIndex.emplace(lhs_id, replacedOrder.size());
+      replacedOrder.push_back(lhs_id);
     }
   }
 
   if (bm->UserFlags.stats_flag)
-    std::cerr <<  "{PropagateEqualities} Applied:" << variablesReplacedAlready.size() << std::endl;
+    std::cerr <<  "{PropagateEqualities} Applied:" << replacedOrder.size() << std::endl;
 
   candidates.clear();
 }
@@ -248,10 +312,7 @@ ASTNode PropagateEqualities::topLevel(const ASTNode& a)
   result = simp->applySubstitutionMapAtTopLevel(result);
  
   bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
-  
-  //if (AND == a.GetKind())
-    //result = AndPropagate(result, at);
-    // TODO should write the substitutions through?
+
   buildCandidateList(result);
   
   if (bm->UserFlags.stats_flag)
@@ -276,7 +337,26 @@ void PropagateEqualities::addCandidate(const ASTNode a, const ASTNode b)
   candidates.push_back(std::make_pair(a,b));
 
   if (SYMBOL == b.GetKind())
-    candidates.push_back(std::make_pair(b,a));    
+    candidates.push_back(std::make_pair(b,a));
+}
+
+// FP constant folding is deferred solver-wide, so a float literal usually
+// arrives as to_fp's three-child reinterpret form over constant bits
+// rather than as an interned constant. Resolve that form through the
+// canonicalising funnel (CreateFPConst) -- the same lookthrough
+// RemoveUnconstrained's comparison rule and FloatBlast's native-comparison
+// gate use -- so the substitution installs an interned constant that folds
+// at every use site. Anything else is returned unchanged.
+ASTNode PropagateEqualities::resolveFpLiteral(const ASTNode& n)
+{
+  if (n.GetKind() == FP_TOFP && n.Degree() == 3 && n[2].GetKind() == BVCONST)
+  {
+    const SourceSort sort = n.GetSourceSort();
+    if (sort.kind() == SourceSort::Kind::FloatingPoint)
+      return bm->CreateFPConst(n[2], sort.exponentWidth(),
+                               sort.significandWidth());
+  }
+  return n;
 }
 
 void PropagateEqualities::buildXORCandidates(const ASTNode a, bool negated)
@@ -365,63 +445,6 @@ void PropagateEqualities::buildXORCandidates(const ASTNode a, bool negated)
     }
 }
 
-#if 0
-ASTNode PropagateEqualities::AndPropagate(const ASTNode& input, ArrayTransformer* at)
-{
-  assert(input.GetKind() == AND);
-  ASTVec c = FlattenKind(AND, input.GetChildren());
-  
-  ASTVec result;
-
-  bool different = false;
-  for (const auto& it : c)
-  {
-    ASTNode changed = it;
-    const Kind k = changed.GetKind();
-    assert(k != AND); // Should have been flattened out already.
-
-    if (NOT == k && SYMBOL == it[0].GetKind()) // (NOT a)
-        changed = propagate(it,at);
-    else if (SYMBOL == k) // (a)
-        changed = propagate(it,at);
-    else if ((IFF == k || EQ == k) && (it[0].GetKind() == SYMBOL && it[1].GetChildren().size() == 0)) // (= x y), (= x 55)
-        changed = propagate(it,at);
-    else if ((IFF == k || EQ == k) && (it[0].GetKind() == SYMBOL && it[1].Degree() == 0 && it[1][0].GetKind() == SYMBOL))  // (= x (bvnot y)), 
-        changed = propagate(it,at);
-    else if (XOR == k && it.Degree() == 2 && it[0].GetKind() == SYMBOL && it[1].Degree() == 0) 
-        changed = propagate(it,at);
-    else if (NOT == k && XOR == it[0].GetKind() && it[0].Degree() == 2 && it[0][0].GetKind() == SYMBOL && it[0][1].Degree() == 0)
-        changed = propagate(it,at);
-  
-    if (!different && it != changed) 
-    {
-        different = true;
-        result.reserve(c.size());
-        for (ASTVec::iterator it1 = c.begin(); *it1 != it; it1++)
-           result.push_back(*it1);
-    }
-
-    if (changed != ASTTrue)
-       result.push_back(changed);
-
-     alreadyVisited.insert(it.GetNodeNum());
-  }
-
-  if (!different)
-    return input;
-
-  ASTNode output;
-  if (result.size() == 0)
-    output = ASTTrue;
-  else if (result.size() == 1)
-    output = result[0];
-  else 
-    output = nf->CreateNode(AND, result);
-
-  return output;
-}
-#endif
-
 bool PropagateEqualities::isSymbol(ASTNode c)
 {
     if (c.GetKind() == BVUMINUS || c.GetKind() == BVNOT)
@@ -448,11 +471,21 @@ void PropagateEqualities::countToDo(ASTNode n)
   }
 }
 
+// The AND arm below is the only place this reaches another node. Walk its
+// spine with suspended ancestors so both deeply nested and very wide
+// conjunctions have bounded auxiliary memory. See DeepDag_Test.cpp.
 void PropagateEqualities::buildCandidateList(const ASTNode& a)
+{
+  walkPreOrder(a, [&](const ASTNode& current) {
+    return buildCandidateListNode(current);
+  });
+}
+
+bool PropagateEqualities::buildCandidateListNode(const ASTNode& a)
 {
 
   if (!alreadyVisited.insert(a.GetNodeNum()).second)
-    return;
+    return false;
 
   const Kind k = a.GetKind();
 
@@ -535,11 +568,39 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
     }
 
   }
-  else if (AND == k)
+  else if (FP_SMT_EQ == k)
   {
-    for (const auto& it : a)
-      buildCandidateList(it);
+    // SMT `=` on floats is true equality on the abstract domain (one NaN,
+    // two distinct zeros), so substituting one side for the other is sound
+    // in every context. fp.eq (FP_EQ) must NEVER be propagated: it
+    // identifies +0 with -0, which fp.isNegative, division etc.
+    // distinguish. Kept separate from the EQ arm above so the bitvector
+    // inverse rewrites (BVNOT/BVUMINUS/BVPLUS) can't see float operands.
+    const ASTNode left = resolveFpLiteral(a[0]);
+    const ASTNode right = resolveFpLiteral(a[1]);
+    if (SYMBOL == left.GetKind())
+      addCandidate(left, right);
+    else if (SYMBOL == right.GetKind())
+      addCandidate(right, left);
   }
+  else if (ARRAY_EQ == k &&
+           !a[0].GetSourceSort().usesFloatingPointTheory())
+  {
+    // Whole-array `=` asserted at the top level is true equality on the
+    // array domain, so a symbol operand substitutes away exactly like
+    // the bitvector EQ case (the occurs check in processCandidates
+    // rejects A = store(A, i, v)). Kept separate from the EQ arm above
+    // so the bitvector inverse rewrites (BVNOT/BVUMINUS/BVPLUS) can't
+    // see array operands. Float- or RoundingMode-sorted arrays are left
+    // to abstraction: the model machinery that reconstructs a
+    // substituted symbol's cells reads them as plain bits, which is
+    // wrong under NaN's many packings and float index canonicalisation.
+    if (SYMBOL == a[0].GetKind())
+      addCandidate(a[0], a[1]);
+    else if (SYMBOL == a[1].GetKind())
+      addCandidate(a[1], a[0]);
+  }
+  return AND == k;
 }
 
 

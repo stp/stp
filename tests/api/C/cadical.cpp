@@ -44,6 +44,12 @@ const bool cadical_available = true;
 const bool cadical_available = false;
 #endif
 
+#ifdef USE_MINISAT
+const bool minisat_available = true;
+#else
+const bool minisat_available = false;
+#endif
+
 } // namespace
 
 // Whether STP can offer CaDiCaL is a build-time property, and the API has to
@@ -66,6 +72,14 @@ TEST(cadical, selected_by_use_cadical)
 {
   VC vc = vc_createValidityChecker();
 
+  if (!minisat_available)
+  {
+    // Moving the selection somewhere visible first needs a second backend.
+    vc_Destroy(vc);
+    GTEST_SKIP() << "needs the MiniSat backend to move the selection off "
+                    "CaDiCaL first";
+  }
+
   ASSERT_TRUE(vc_useMinisat(vc));
   ASSERT_TRUE(vc_isUsingMinisat(vc));
 
@@ -81,7 +95,12 @@ TEST(cadical, selected_by_interface_flag)
 {
   VC vc = vc_createValidityChecker();
 
-  ASSERT_TRUE(vc_useMinisat(vc));
+  if (minisat_available)
+  {
+    // Move the selection somewhere visible first, so setting the flag is
+    // observable as a change and not just the default reasserting itself.
+    ASSERT_TRUE(vc_useMinisat(vc));
+  }
 
   vc_setInterfaceFlags(vc, CADICAL, 0);
 
@@ -92,9 +111,23 @@ TEST(cadical, selected_by_interface_flag)
   EXPECT_FALSE(vc_isUsingMinisat(vc));
   EXPECT_FALSE(vc_isUsingSimplifyingMinisat(vc));
   EXPECT_FALSE(vc_isUsingCryptominisat(vc));
-  EXPECT_FALSE(vc_isUsingRiss(vc));
 
   vc_Destroy(vc);
+}
+
+/*
+ * The numbers themselves, not just the names. Value 4 was RISS, and removing
+ * the Riss backend left the slot empty rather than closing it up, so MSP and
+ * CADICAL are still 5 and 6 for a caller compiled against an older header.
+ */
+TEST(cadical, interface_flag_values_are_unchanged)
+{
+  EXPECT_EQ(static_cast<int>(EXPRDELETE), 0);
+  EXPECT_EQ(static_cast<int>(MS), 1);
+  EXPECT_EQ(static_cast<int>(SMS), 2);
+  EXPECT_EQ(static_cast<int>(CMS4), 3);
+  EXPECT_EQ(static_cast<int>(MSP), 5);
+  EXPECT_EQ(static_cast<int>(CADICAL), 6);
 }
 
 /*
@@ -106,16 +139,19 @@ TEST(cadical, other_interface_flags_still_select_their_own_solver)
 {
   VC vc = vc_createValidityChecker();
 
+  // vc_isUsingMinisat answers for the build as well as the selection, so in
+  // a build without the MiniSat backend it stays false; the flag has still
+  // moved the selection off CaDiCaL, which is the part that must not shift.
   vc_setInterfaceFlags(vc, MS, 0);
-  EXPECT_TRUE(vc_isUsingMinisat(vc));
+  EXPECT_EQ(vc_isUsingMinisat(vc), minisat_available);
   EXPECT_FALSE(vc_isUsingCadical(vc));
 
   vc_setInterfaceFlags(vc, SMS, 0);
-  EXPECT_TRUE(vc_isUsingSimplifyingMinisat(vc));
+  EXPECT_EQ(vc_isUsingSimplifyingMinisat(vc), minisat_available);
   EXPECT_FALSE(vc_isUsingCadical(vc));
 
   vc_setInterfaceFlags(vc, MSP, 0);
-  EXPECT_TRUE(vc_isUsingMinisat(vc));
+  EXPECT_EQ(vc_isUsingMinisat(vc), minisat_available);
   EXPECT_FALSE(vc_isUsingCadical(vc));
 
   vc_Destroy(vc);

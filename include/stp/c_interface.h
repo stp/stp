@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Michael Katelman, Vijay Ganesh, Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Michael Katelman, Vijay Ganesh, Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: Apr, 2008
  *
@@ -36,6 +36,7 @@ extern "C" {
 #endif
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /////////////////////////////////////////////////////////////////////////////
@@ -105,6 +106,13 @@ typedef void* Type;
 typedef void* WholeCounterExample;
 #endif
 
+//! Opaque, nonzero identity of a context-owned UF declaration. Identities are
+//! allocated monotonically across the process and never reused; zero is the
+//! invalid handle. They are values, not pointers: callers never dereference,
+//! cast, or free them. Destroying the owning VC retires its registry entry, so
+//! a stale or cross-context identity can be rejected without dereferencing it.
+typedef uint64_t UFDeclHandle;
+
 /////////////////////////////////////////////////////////////////////////////
 /// START API
 /////////////////////////////////////////////////////////////////////////////
@@ -127,6 +135,7 @@ DLL_PUBLIC const char* get_compilation_env(void);
 //!  - 'a': Disables optimization. TODO: What kind of optimization is meant here?
 //!  - 'c': Enables construction of counter examples.
 //!  - 'd': Enables construction and checking of counter examples. Superseeds flag 'c'.
+//!  - 'i': Enables incremental solving from the first vc_query on.
 //!  - 'm': Use SMTLib1 parser. Conflicts with using SMTLib2 parser.
 //!  - 'n': Enables printing of the output. TODO: What is meant with output here?
 //!  - 'p': Enables printing of counter examples.
@@ -134,8 +143,11 @@ DLL_PUBLIC const char* get_compilation_env(void);
 //!  - 'r': Enables accermannisation.
 //!  - 's': Sets the status flag to true. TODO: What consequenses does this have?
 //!  - 't': Enables quick statistics. TODO: What is this?
+//!  - 'u': Enables uninterpreted-function support.
 //!  - 'v': Enables printing of nodes.
-//!  - 'w': Enables word-level solving. TODO: What is mean with this?
+//!  - 'w': *Disables* word-level solving, despite the name.
+//!  - 'x': Enables deciding equality between whole arrays (the extensional
+//!         theory of arrays). Must be set before any such equality is built.
 //!  - 'y': Enables printing binaries. TODO: What is meant with this?
 //!
 //! This function panics if given an unsupported or unknown flag.
@@ -159,6 +171,19 @@ DLL_PUBLIC void vc_setFlags(VC vc, char c,
 //! For more information about this look into the documentation of process_argument.
 //!
 DLL_PUBLIC void vc_setFlag(VC vc, char c);
+
+//! Atomic mask/round pairs accepted by BV_TERM_ABSTRACTION_PROFILE.
+enum bv_term_abstraction_profile_t
+{
+  //! The inherited mask: base schemas, the UREM registry and MulRef3, at a
+  //! thirty-two round ceiling.
+  STP_BV_TERM_ABSTRACTION_PROFILE_QUALIFIED = 0,
+  //! The broad single-record catalogue, at sixteen.
+  STP_BV_TERM_ABSTRACTION_PROFILE_BROAD = 1,
+  //! The same catalogue plus the full-width paired identity, whose wide
+  //! multiplier is the reason it is not part of the profile above.
+  STP_BV_TERM_ABSTRACTION_PROFILE_AGGRESSIVE = 2
+};
 
 //! Interface-only flags.
 //!
@@ -194,24 +219,385 @@ enum ifaceflag_t
   //!
   CMS4,
 
-  //! Use the SAT solver Riss.
-  //!
-  RISS,
-
   //! \brief Deprecated: use `MS` instead!
   //!
   //! This used to be the array version of the minisat SAT solver.
   //!
   //! Currently simply forwards to MS.
   //!
-  MSP,
+  //! Note: 4 was `RISS`, removed along with the Riss backend. The value is
+  //! written out here so that this flag and the ones below keep the values
+  //! they had while Riss existed.
+  //!
+  MSP = 5,
 
   //! Use the SAT solver CaDiCaL.
   //!
   //! Note: this is last so that the values of the flags above are unchanged
   //! from the releases before CaDiCaL was added.
   //!
-  CADICAL
+  CADICAL = 6,
+
+  //! The real-query ordinal at which a session that never asked for the
+  //! incremental driver starts using it anyway.
+  //!
+  //! `param_value` is that ordinal: 1 engages on the first query, N on the
+  //! Nth, 0 disables automatic engagement entirely, and a negative value
+  //! restores the default (the third query). `vc_setFlags(vc, 'i')` still
+  //! forces the driver from the first query regardless of this.
+  //!
+  //! Set this before the first query; it is read per query, so changing it
+  //! mid-session takes effect on the next one.
+  //!
+  //! Note: appended so the values of the flags above are unchanged.
+  //!
+  INCREMENTAL_AUTO_ENGAGE_AT,
+
+  //! Narrow the result sort of a UF declaration whose applications are only
+  //! ever compared for equality, to ceil(log2(N)) bits, where N is how many
+  //! applications the query has.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --uf-narrow-results. The analysis is conservative:
+  //! any non-equality use of an application leaves that declaration at its
+  //! declared width, so the narrowing is invisible to a caller -- a model
+  //! value still reads back at the declared sort.
+  //!
+  //! Set this before the query it should apply to; it is read while the
+  //! query's applications are lowered, not when a declaration is registered.
+  //!
+  //! Note: appended so the values of the flags above are unchanged.
+  //!
+  UF_NARROW_RESULTS,
+
+  //! Assert injectivity for equality-only UF declarations in the eager
+  //! congruence encoding, so that equal results force equal arguments.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is the
+  //! C API's way to reach --uf-inject-args.
+  //!
+  //! Injectivity is an assumption the query did not make, so the encoding
+  //! describes the query with that assumption conjoined. Only models are lost
+  //! by that, never gained, which is why the two answers are not treated
+  //! alike: a `sat` is a genuine model of the query, while an `unsat` refutes
+  //! only the strengthened query.
+  //!
+  //! STP therefore installs the assumption retractably and settles the
+  //! question itself -- a refutation that used it is taken back and the query
+  //! decided without it -- so vc_query answers the same thing with this flag
+  //! set as without it. It is a search hint, not a change of semantics.
+  //!
+  //! What it buys is faster model-finding on a query whose functions are
+  //! injective anyway. What it costs is a second search on a query where the
+  //! assumption turns out to be wrong, so it is worth setting for the shape
+  //! it suits and not as a general optimisation.
+  //!
+  //! Set this before the query it should apply to, as for UF_NARROW_RESULTS.
+  //!
+  UF_EQUALITY_INJECTIVITY,
+
+  //! How many congruence lemmas one refuted candidate may install during
+  //! uninterpreted-function refinement (default 8).
+  //!
+  //! `param_value` is that count: zero installs every conflict the candidate
+  //! exposes, and one restricts each candidate to a single installed lemma.
+  //! This is the C API's way to reach --uf-lemmas-per-round. A negative value
+  //! is refused with a nonfatal diagnostic.
+  //!
+  UF_LEMMAS_PER_ROUND,
+
+  //! Whether a function's pairwise congruence constraints are installed
+  //! before the first solve rather than earned by a refuted candidate.
+  //!
+  //! `param_value` is 0 for 'auto' (the default: the declarations whose pair
+  //! count fits UF_ACKERMANN_BUDGET, cheapest first), 1 for 'on' (every
+  //! declaration) and 2 for 'off' (none). This is the C API's way to reach
+  //! --uf-ackermann. Any other value is refused with a nonfatal diagnostic
+  //! and leaves the mode unchanged, because the field is an enumeration and
+  //! a value outside it names no mode at all.
+  //!
+  UF_ACKERMANN,
+
+  //! How many congruence constraints UF_ACKERMANN's 'auto' mode may install
+  //! up front (default 256).
+  //!
+  //! `param_value` is that count. This is the C API's way to reach
+  //! --uf-ackermann-budget. A negative value is refused with a nonfatal
+  //! diagnostic.
+  //!
+  UF_ACKERMANN_BUDGET,
+
+  //! Bias the first candidate so the congruence checker's scalars start out
+  //! pairwise different.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is the
+  //! C API's way to reach --uf-phase-hints. It is advisory and affects search
+  //! order only, so it cannot change an answer.
+  //!
+  UF_PHASE_HINTS,
+
+  //! The bit-vector width given to a sort introduced by (declare-sort S 0),
+  //! which bounds how many elements of that sort a query can tell apart
+  //! (default 16).
+  //!
+  //! `param_value` is that width. A larger value is always sound and only a
+  //! smaller one is not, so raising it is the way to answer a query that
+  //! exhausted the carrier. This is the C API's way to reach --uf-sort-width.
+  //!
+  //! Accepted between 1 and 1024, and refused with a nonfatal diagnostic
+  //! outside that, leaving the width unchanged. Both ends were reachable and
+  //! neither failed cleanly: zero made every element a zero-width term that
+  //! the legacy width checks read as a Boolean, and a width past the ceiling
+  //! overflowed the word arithmetic the bit-vector layer is built on and
+  //! answered unsat for two elements of an unbounded sort.
+  //!
+  UF_SORT_WIDTH,
+
+  //! Replace a (distinct ...) over variables that occur nowhere else with a
+  //! strict chain, fixing one of the n! equivalent orderings the bit-blaster
+  //! would otherwise search.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --distinct-ordering.
+  //!
+  DISTINCT_ORDERING,
+
+  //! A hard limit on the AND gates bit-blasting may build, so that a query
+  //! whose AIG would exhaust the machine reports unknown instead (default -1:
+  //! no limit).
+  //!
+  //! `param_value` is that count. -1 means no limit and is the only negative
+  //! value accepted; any other negative value is refused with a nonfatal
+  //! diagnostic. Zero is a budget of no gates at all, which gives up before
+  //! the first one. This is the C API's way to reach --aig-node-budget.
+  //!
+  //! Exceeding it ends the query without an answer: vc_query returns 3, the
+  //! value every way of giving up returns, and vc_getReasonUnknown returns
+  //! REASON_UNKNOWN_AIG_BUDGET with a sentence naming this budget and the
+  //! count it stopped at -- the same sentence SMT-LIB2 reads through
+  //! (get-info :reason-unknown).
+  //!
+  AIG_NODE_BUDGET,
+
+  //! Replace a wide bit-vector equality with a fresh Boolean during
+  //! bit-blasting, refining it lazily via CEGAR.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is the
+  //! C API's way to reach --bv-eq-abstraction. Only equalities at least
+  //! BV_ABSTRACTION_WIDTH bits wide are abstracted.
+  //!
+  BV_EQ_ABSTRACTION,
+
+  //! The narrowest bit-vector operand width at which BV_EQ_ABSTRACTION and
+  //! BV_TERM_ABSTRACTION engage (default 64).
+  //!
+  //! `param_value` is that width. One abstracts every candidate; a width
+  //! wider than any term in the query leaves the query unabstracted. A
+  //! negative value is refused with a nonfatal diagnostic and leaves the
+  //! width unchanged, because the flag it sets is unsigned and would
+  //! otherwise wrap to a width nothing can reach. This is the C API's way to
+  //! reach --bv-abstraction-width.
+  //!
+  BV_ABSTRACTION_WIDTH,
+
+  //! The initial prefix width refined when an abstracted equality is found
+  //! inconsistent with the candidate model (default 0: refine the whole
+  //! width at once).
+  //!
+  //! `param_value` is that width; each further refinement of the same
+  //! equality doubles it, up to the equality's width. A negative value is
+  //! refused with a nonfatal diagnostic, as for BV_ABSTRACTION_WIDTH. This
+  //! is the C API's way to reach --bv-eq-refine-width.
+  //!
+  BV_EQ_REFINE_WIDTH,
+
+  //! Abstract wide bit-vector multiplication, division and remainder
+  //! during bit-blasting, refining them lazily via CEGAR; BVPLUS,
+  //! if-then-else and the comparisons join through the three flags at the
+  //! end of this enumeration.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is the
+  //! C API's way to reach --bv-term-abstraction. It shares the width floor
+  //! set by BV_ABSTRACTION_WIDTH.
+  //!
+  BV_TERM_ABSTRACTION,
+
+  //! Scope switch for BVMULT, and for BVDIV and BVMOD unless those are named
+  //! separately.
+  //!
+  //! `param_value` nonzero includes them (the default), zero leaves them
+  //! encoded exactly from the start. This flag covered all three operations
+  //! before BV_TERM_ABSTRACTION_DIVMOD existed and still does when it is the
+  //! only one set; once DIV/MOD has been set explicitly that setting wins,
+  //! in either call order. This is the C API's way to reach
+  //! --bv-term-abstraction-mult, and it resolves the pair the same way.
+  //!
+  BV_TERM_ABSTRACTION_MULT,
+
+  //! How many blocking lemmas one abstracted BVMULT, BVDIV or BVMOD may take
+  //! before its refinement encodes the operation exactly instead of ruling
+  //! out further operand pairs (default 32).
+  //!
+  //! `param_value` is that count; zero never escalates and enumerates without
+  //! limit. A negative value is refused with a nonfatal diagnostic and leaves
+  //! the count unchanged. This is the C API's way to reach
+  //! --bv-term-abstraction-rounds.
+  //!
+  BV_TERM_ABSTRACTION_ROUNDS,
+
+  //! Whether abstracted BVPLUS, BVMULT, BVDIV and BVMOD operations are
+  //! refined with algebraic facts about every pair of operands before their
+  //! operation-specific fallback.
+  //!
+  //! `param_value` nonzero turns them on (the default). Zero makes an
+  //! inconsistent addition exact immediately and leaves value-pair blocking
+  //! as the only refinement for multiplication, division and remainder.
+  //! This is the C API's way to reach --bv-term-abstraction-schemas.
+  //!
+  BV_TERM_ABSTRACTION_SCHEMAS,
+
+  //! Scales that ceiling with the operand width: the allowance becomes
+  //! width/`param_value`, floored at one and capped by the ceiling.
+  //!
+  //! A blocking lemma rules out one pair of operand values out of 2^(2W),
+  //! so what one is worth falls away as the operands widen and a flat
+  //! allowance means something quite different at either end. Zero turns
+  //! the scaling off and leaves the flat ceiling as the allowance, and is
+  //! the default: the rate measured as a wash against the flat allowance at
+  //! two widths, so it is available rather than assumed. A negative value is
+  //! refused with a nonfatal diagnostic. This is the C API's way to reach
+  //! --bv-term-abstraction-value-divisor.
+  //!
+  BV_TERM_ABSTRACTION_VALUE_DIVISOR,
+
+  //! Whether an abstracted BVMULT escalates a piece at a time rather than
+  //! encoding its whole width at once.
+  //!
+  //! `param_value` nonzero encodes only the bits up to and a little past
+  //! the lowest one the candidate got wrong; zero (the default) encodes the
+  //! whole operation. BVMULT alone, because the low bits of a truncated
+  //! product depend only on the low bits of its operands and a quotient's
+  //! do not. This is the C API's way to reach
+  //! --bv-term-abstraction-inc-bitblast.
+  //!
+  BV_TERM_ABSTRACTION_INC_BITBLAST,
+
+  //! How much effort the CNF generator spends minimising the formula it
+  //! hands the SAT solver, as an ordinal: 0 very low, 1 low, 2 medium,
+  //! 3 high, 4 very high. Higher is slower to generate and yields a smaller
+  //! CNF.
+  //!
+  //! 5 is auto, and is the default: it picks between very low and medium
+  //! from the size of the circuit, on the reasoning below. Ordinals 6 to 11
+  //! name rungs that blast the query with a different backend rather than
+  //! spending a different amount of effort -- 6, 7 and 8 the in-house
+  //! writer, 9, 10 and 11 the same generator as 1, 3 and 4 over a circuit
+  //! built without ABC. Auto never selects those; asking for one is an
+  //! explicit choice of backend.
+  //!
+  //! It is a real trade and not a quality dial. A query whose search is
+  //! trivial but whose circuit is large -- a floating-point square root over
+  //! a wide significand, say -- can spend the whole of its time in cut
+  //! enumeration and none in the SAT solver, and wants the low end; a query
+  //! whose search is the expensive part wants the high end. A value outside
+  //! the range is refused with a nonfatal diagnostic. This is the C API's
+  //! way to reach --cnf-generation-effort.
+  //!
+  CNF_GENERATION_EFFORT,
+
+  //! Whether the incremental driver offers the whole active stack to the
+  //! exact-stack preprocessor on every check, rather than only on an
+  //! explicitly forced first engagement, and offers it stacks carrying
+  //! array reads and floating point rather than plain bit-vectors alone.
+  //!
+  //! The per-level route encodes each level as it arrives and never
+  //! simplifies across the stack, so the SAT solver is handed a formula
+  //! nobody has been over. `param_value` nonzero offers it; zero (the
+  //! default) is the behaviour that has always been. This is the C API's
+  //! way to reach --incremental-scoped-preprocessing.
+  //!
+  INCREMENTAL_SCOPED_PREPROCESSING,
+
+  //! Whether the incremental driver runs the batch pipeline's rewriting
+  //! passes -- strength reduction over a derived interval domain, and
+  //! common sub-sum extraction -- on each piece it prepares.
+  //!
+  //! The driver trades whole-formula simplification for a retained
+  //! encoding. These passes do not force that trade: each is a function of
+  //! the piece it is handed and of nothing else, so the rewritten piece is
+  //! equivalent whatever the rest of the stack asserts later, and both the
+  //! rewriting and the encoding built from it can be kept. `param_value`
+  //! nonzero runs them. This is the C API's way to reach
+  //! --incremental-piece-rewriting.
+  //!
+  INCREMENTAL_PIECE_REWRITING,
+
+  //! \brief The AIG size at which CNF_EFFORT_AUTO stops minimising.
+  //!
+  //! AUTO reads the AIG about to be converted and drops from medium effort to
+  //! very low at or above this many AND nodes. The default is deliberately
+  //! high, so that AUTO overrides the effort only where minimising is clearly
+  //! not worth its cost. Where the crossover really falls is a property of the
+  //! workload rather than a constant, so a caller who has measured their own
+  //! can move it here. Negative values are refused with a nonfatal diagnostic,
+  //! as for BV_ABSTRACTION_WIDTH. This is the C API's way to reach
+  //! --cnf-auto-threshold.
+  //!
+  //! Appended rather than filed next to CNF_GENERATION_EFFORT: these are
+  //! integers callers compile into their binaries before loading a newer
+  //! libstp, so the published prefix has to stay put -- the same rule
+  //! tests/api/C/counter-enum-abi.cpp keeps for stp_counter_t.
+  //!
+  CNF_AUTO_THRESHOLD,
+
+  //! Whether BV_TERM_ABSTRACTION covers BVDIV and BVMOD.
+  //!
+  //! `param_value` nonzero includes them (the default), zero leaves them
+  //! encoded exactly from the start. Setting this at all takes division and
+  //! remainder out of BV_TERM_ABSTRACTION_MULT's scope, so the two may be
+  //! given in either order. This is the C API's way to reach
+  //! --bv-term-abstraction-divmod.
+  //!
+  BV_TERM_ABSTRACTION_DIVMOD,
+
+  //! Applies one complete BV term-abstraction schema profile. `param_value`
+  //! is a bv_term_abstraction_profile_t ordinal. QUALIFIED is the inherited
+  //! base/UREM/MulRef3 mask with a 32-round ceiling; BROAD selects the broad
+  //! single-record catalogue at 16 rounds; and AGGRESSIVE adds the
+  //! full-width paired DIV/REM identity to it. Invalid values
+  //! are refused without changing either field. This is the C API's way to
+  //! reach --bv-term-abstraction-profile.
+  //!
+  BV_TERM_ABSTRACTION_PROFILE,
+
+  //! Caps BVDIV/BVMOD value-pair blocking independently of
+  //! BV_TERM_ABSTRACTION_ROUNDS and BVMULT.
+  //!
+  //! `param_value` is the cap applied after the round ceiling and optional
+  //! width scaling. Unlike changing ROUNDS, this leaves the algebraic-schema
+  //! budget untouched, making 4/8/16/32 value-block experiments comparable.
+  //! Zero (the default) adds no cap and preserves the existing allowance; a
+  //! negative value is refused. Appended to preserve every published ordinal.
+  //! This is the C API's way to reach
+  //! --bv-term-abstraction-divmod-value-limit.
+  //!
+  BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT,
+
+  //! Whether BV_TERM_ABSTRACTION also abstracts wide BVPLUS, wide
+  //! if-then-else over bit-vector terms, and the wide bit-vector
+  //! comparisons.
+  //!
+  //! `param_value` nonzero includes the kind, zero leaves it encoded
+  //! exactly (the default for all three). Each is a linear circuit that
+  //! refinement pins exactly the first time a candidate contradicts it, so
+  //! abstracting it saves little; inside a floating-point circuit it costs
+  //! a free variable per one of hundreds of them. These are the C API's
+  //! way to reach --bv-term-abstraction-plus, --bv-term-abstraction-ite and
+  //! --bv-term-abstraction-compare.
+  //!
+  BV_TERM_ABSTRACTION_PLUS,
+  BV_TERM_ABSTRACTION_ITE,
+  BV_TERM_ABSTRACTION_COMPARE
 
 };
 
@@ -237,6 +623,16 @@ DLL_PUBLIC void make_division_total(VC vc);
 //!
 DLL_PUBLIC VC vc_createValidityChecker(void);
 
+//! \brief Creates a validity checker over an existing node manager.
+//!
+//! `_bm` must be a live stp::STPMgr* (the parameter is void* only so this C
+//! header need not name the C++ type). Lets a client that builds nodes
+//! through the C++ objects solve them through the C API. The manager keeps
+//! any node factory it was already given, and stays owned by the caller's
+//! vc_Destroy like any other checker's manager.
+//!
+DLL_PUBLIC VC vc_createValidityCheckerReuse(void* _bm);
+
 //! \brief Returns the boolean type for the given validity checker.
 //!
 DLL_PUBLIC Type vc_boolType(VC vc);
@@ -244,7 +640,13 @@ DLL_PUBLIC Type vc_boolType(VC vc);
 //! \brief Returns an array type with the given index type and data type
 //!        for the given validity checker.
 //!
-//! Note that index type and data type must both be of bitvector (bv) type.
+//! Index type and data type may each be a bitvector type (vc_bvType), a
+//! floating-point type (vc_fpType) or the RoundingMode type
+//! (vc_fpRoundingModeType), matching SMT-LIB's (Array X Y) over those
+//! sorts. Reads and writes then expect (and vc_readExpr's result carries)
+//! the corresponding sorts; a float-indexed array follows SMT-LIB '='
+//! on its indexes, so every NaN addresses one cell while +0 and -0 stay
+//! distinct cells.
 //!
 DLL_PUBLIC Type vc_arrayType(VC vc, Type typeIndex, Type typeData);
 
@@ -270,8 +672,319 @@ DLL_PUBLIC Expr vc_varExpr(VC vc, const char* name, Type type);
 //! The variable name must only consist of alphanumerics and underscore
 //! characters, otherwise this may behave in undefined ways, e.g. segfault.
 //!
+//! A positive 'indexwidth' asks for an array, whose elements are
+//! 'valuewidth' bits wide; a zero 'indexwidth' asks for a bit-vector of
+//! 'valuewidth' bits, or for a Boolean when 'valuewidth' is zero too.
+//! A zero-width bit-vector is not a sort, so an array whose element width
+//! is not positive is a fatal error, as it is in vc_bvType: the message
+//! reaches any handler registered with vc_registerErrorHandler and the
+//! call does not return.
+//!
 DLL_PUBLIC Expr vc_varExpr1(VC vc, const char* name, int indexwidth,
                             int valuewidth);
+
+//! \brief Declares a nonzero-arity uninterpreted function and returns its
+//!        context-owned identity.
+//!
+//! Call vc_setFlag(vc, 'u') before constructing any Type or Expr handle that
+//! will be supplied to the UF API. Each domain entry and the codomain must be
+//! a live Type owned by this VC, constructed with vc_boolType, vc_bvType,
+//! vc_fpType or vc_fpRoundingModeType; bit-vector widths must be positive.
+//! Array types are not accepted, because an uninterpreted function is decided
+//! by comparing concrete argument values and a counterexample gives an array
+//! only as a partial map. domainCount must be at least one: SMT-LIB treats a
+//! zero-arity declare-fun as an ordinary symbol, which vc_varExpr represents.
+//!
+//! A FloatingPoint position is compared by *value*, not by bit pattern: every
+//! NaN is one value, so f(NaN) and f(NaN) agree however each was built, while
+//! -0 and +0 are distinct arguments.
+//!
+//! The Type array and its elements are borrowed for this call; ownership is
+//! not transferred. The declaration copies the name and source sorts, so the
+//! caller may release UF-tracked Type wrappers afterwards with vc_DeleteExpr.
+//! The returned UFDeclHandle is immutable, owned by the VC, is not an Expr,
+//! must not be passed to vc_DeleteExpr, and remains safely rejectable after
+//! the VC is destroyed. Ordinary symbols and UFs share one namespace.
+//!
+//! On a null/foreign/destroyed Type, unsupported or empty signature, invalid
+//! or colliding name, disabled feature, or other validation failure, no
+//! declaration is registered. A nonfatal diagnostic is sent to the handler
+//! installed with vc_registerErrorHandler (or stderr), and zero is returned.
+DLL_PUBLIC UFDeclHandle vc_declareUninterpretedFunction(
+    VC vc, const char* name, const Type* domain, size_t domainCount,
+    Type codomain);
+
+//! \brief Builds a durable, exactly typed application of a declared UF.
+//!
+//! function must be a live declaration identity owned by this VC. arguments
+//! is borrowed for this call and each entry must be a live UF-tracked Expr
+//! from the same VC; no ownership is transferred. The argument count and
+//! every source sort must match the declaration exactly -- a float argument
+//! must have the declared format, and a rounding mode the RoundingMode sort
+//! rather than a bare 5-bit vector.
+//!
+//! The returned Expr denotes the public UF_APPLY itself, never a temporary
+//! lowered SAT symbol. Its underlying hash-consed node has context lifetime;
+//! this wrapper is caller-owned until vc_DeleteExpr or vc_Destroy, whichever
+//! comes first. As with every legacy raw Expr, a wrapper is invalid after
+//! vc_DeleteExpr.
+//!
+//! A bad/stale/cross-context declaration, bad argument handle, arity mismatch
+//! or sort mismatch builds and registers nothing, reports a nonfatal
+//! diagnostic through vc_registerErrorHandler (or stderr), and returns NULL.
+DLL_PUBLIC Expr vc_applyUninterpretedFunction(
+    VC vc, UFDeclHandle function, const Expr* arguments,
+    size_t argumentCount);
+
+//! \brief Evaluates a durable UF_APPLY in the most recently certified model.
+//!
+//! The application must be a live wrapper owned by this VC, must have been
+//! reachable from the public root of the most recent satisfiable query, and
+//! that query's UF model must still be certified. Assertion/stack changes,
+//! another query, or declaration changes can invalidate the certified map.
+//! vc_getCounterExample dispatches UF_APPLY handles through this same map.
+//!
+//! Success returns a caller-owned constant wrapper of the declared codomain
+//! sort -- a Boolean, a bit-vector literal, a floating-point constant of the
+//! declared format, or one of the five rounding modes -- released with
+//! vc_DeleteExpr. A non-application, stale/inactive/cross-context wrapper,
+//! unobserved application, or missing/invalidated certified model reports a
+//! nonfatal diagnostic through vc_registerErrorHandler (or stderr) and
+//! returns NULL. No internal lowered symbol is exposed.
+DLL_PUBLIC Expr vc_getUninterpretedFunctionValue(VC vc, Expr application);
+
+//! \brief Why the last query had no answer.
+//!
+//! vc_query reports a query it could not decide as 3, whatever stopped it, so
+//! this is how a caller learns which of the causes it was and whether trying
+//! again could help. It is the C API's reading of the same record SMT-LIB2
+//! reports through (get-info :reason-unknown).
+//!
+enum reason_unknown_t
+{
+  //! No unknown to explain: the last query was answered, or none has run.
+  REASON_UNKNOWN_NONE = 0,
+
+  //! The wall clock given to vc_query_with_timeout ran out. The only cause
+  //! that more time on the same machine may get past.
+  REASON_UNKNOWN_TIMEOUT,
+
+  //! The conflict budget given to vc_query_with_timeout ran out. Deterministic
+  //! -- re-running with a longer clock reproduces it exactly -- so what is
+  //! worth doing is raising the budget.
+  REASON_UNKNOWN_CONFLICT_BUDGET,
+
+  //! Something stopped before an answer and has no value of its own here yet.
+  //! vc_getReasonUnknownToBuffer gives the sentence, which says what.
+  //!
+  //! Later named causes are appended rather than inserted so that nothing
+  //! already reporting as incomplete moves. A caller that has not heard of a
+  //! later addition compares unequal to every value it knows and still has the
+  //! sentence to fall back on, which makes naming a cause safe.
+  REASON_UNKNOWN_INCOMPLETE,
+
+  //! A sort introduced by (declare-sort S 0) had a carrier too narrow for the
+  //! query, so an unsat that may be an artefact of the encoding was withheld
+  //! rather than reported. Raise UF_SORT_WIDTH.
+  //!
+  //! Not reachable through this interface today: a declared sort can only come
+  //! from an SMT-LIB2 (declare-sort), and the sorts a UF may be declared over
+  //! here are built by vc_boolType, vc_bvType, vc_fpType and
+  //! vc_fpRoundingModeType. Named for what it is so that reading the sentence
+  //! is not the only way to know it, if that ever changes.
+  REASON_UNKNOWN_CARRIER_EXHAUSTED,
+
+  //! UF_EQUALITY_INJECTIVITY put injectivity into the encoding, and the driver
+  //! holding the verdict could neither confirm nor take back a refutation that
+  //! may rest on it, so the unsat was withheld rather than reported. Clearing
+  //! that flag and asking again decides the query.
+  //!
+  //! Not reachable through either shipped driver today: both install the
+  //! assumption behind an activation literal, ask the search whether the
+  //! refutation used it, and decide the query without it when it did. Named
+  //! for what it is because it is the floor those drivers would fall to, and
+  //! because a caller reading a value it does not recognise is better served
+  //! than one reading `unsat`.
+  REASON_UNKNOWN_ASSUMED_INJECTIVITY,
+
+  //! AIG_NODE_BUDGET stopped bit-blasting before the AIG exhausted memory.
+  //! Deterministic: re-running reproduces it exactly, so what is worth doing
+  //! is raising that budget. vc_getReasonUnknownToBuffer says how many AND
+  //! gates had been built when it stopped.
+  REASON_UNKNOWN_AIG_BUDGET
+};
+
+//! What the encoding options did to the queries this checker has run, as
+//! against what they were allowed to do. Cumulative over the checker's
+//! lifetime, so a caller samples the difference across a solve, or reads the
+//! totals once at the end of a session.
+//!
+//! A caller that enables an abstraction and wants to know it engaged needs
+//! both halves: CANDIDATES counts the operations that reached bit-blasting at
+//! or above BV_ABSTRACTION_WIDTH -- what the abstraction could have taken,
+//! whether or not it was on -- and ABSTRACTED counts what it did take. Zero
+//! of both means the query never built an operation wide enough, or never
+//! reached the bit-blaster at all, which QUERIES_BITBLASTED tells apart.
+enum stp_counter_t
+{
+  //! Queries that reached bit-blasting. A query the simplifier settled never
+  //! gets there, and none of the counters below can move for it.
+  STP_COUNTER_QUERIES_BITBLASTED = 0,
+
+  //! Wide operations reaching the bit-blaster, by kind.
+  STP_COUNTER_BV_CANDIDATES_EQ,
+  STP_COUNTER_BV_CANDIDATES_COMPARE,
+  STP_COUNTER_BV_CANDIDATES_ITE,
+  STP_COUNTER_BV_CANDIDATES_PLUS,
+  STP_COUNTER_BV_CANDIDATES_MULT,
+  STP_COUNTER_BV_CANDIDATES_DIVMOD,
+
+  //! ... and the ones actually replaced by a fresh input.
+  STP_COUNTER_BV_ABSTRACTED_EQ,
+  STP_COUNTER_BV_ABSTRACTED_COMPARE,
+  STP_COUNTER_BV_ABSTRACTED_ITE,
+  STP_COUNTER_BV_ABSTRACTED_PLUS,
+  STP_COUNTER_BV_ABSTRACTED_MULT,
+  STP_COUNTER_BV_ABSTRACTED_DIVMOD,
+
+  //! Refinement passes that installed one or more constraints, and individual
+  //! blocking lemmas installed for abstracted BVMULT, BVDIV or BVMOD nodes.
+  //! One pass may refine several nodes, so these counters have different
+  //! units.
+  STP_COUNTER_BV_REFINEMENT_ROUNDS,
+  STP_COUNTER_BV_BLOCKING_LEMMAS,
+
+  //! Uninterpreted-function applications the lowering decided, and the
+  //! constraints installed for them -- eagerly during lowering, or by the
+  //! refinement that a refuted candidate earned.
+  STP_COUNTER_UF_APPLICATIONS_LOWERED = 15,
+  STP_COUNTER_UF_CONSTRAINTS_INSTALLED = 16,
+
+  //! Individual algebraic schema lemmas installed over abstracted BVPLUS,
+  //! BVMULT, BVDIV and BVMOD nodes. For one inconsistent operation a schema
+  //! lemma replaces that operation's usual fallback, but a pass may visit
+  //! several operations and increment both lemma counters. Other abstraction
+  //! kinds increment the pass counter without incrementing either lemma
+  //! counter, so the two lemma counts do not partition
+  //! STP_COUNTER_BV_REFINEMENT_ROUNDS.
+  STP_COUNTER_BV_SCHEMA_LEMMAS = 17,
+
+  //! Value-pair refinements which spent their allowance and installed an
+  //! exact circuit, in total and partitioned between multiplication and
+  //! division/remainder.
+  STP_COUNTER_BV_EXACT_ESCALATIONS,
+  STP_COUNTER_BV_EXACT_ESCALATIONS_MULT,
+  STP_COUNTER_BV_EXACT_ESCALATIONS_DIVMOD,
+
+  //! What the refinement's FULL-WIDTH installs cost: clauses and variables
+  //! they added to the solver, and the wall-clock microseconds spent building
+  //! them. Read from the solver's own totals across each encode, not
+  //! estimated from the circuit.
+  //!
+  //! Wider than the escalations above. The paired DIV/REM recomposition lemma
+  //! builds a full-width multiplier without any abstraction being given up,
+  //! so it is counted here and not there -- it costs as much as an escalation
+  //! and is the reason the aggressive profile is the slowest, which is the
+  //! trade these exist to expose.
+  STP_COUNTER_BV_EXACT_CLAUSES,
+  STP_COUNTER_BV_EXACT_VARIABLES,
+  STP_COUNTER_BV_EXACT_MICROSECONDS,
+
+  //! What the algebraic schemas cost, on the same terms and in their own
+  //! bucket.
+  //!
+  //! STP_COUNTER_BV_SCHEMA_LEMMAS counts how many were installed, and one
+  //! lemma is not one price: a bound is a comparison chain and a registry fact
+  //! such as UDIV15 is three barrel shifters, which at 256 bits is 229,374
+  //! clauses. A schema profile is a choice of which families to enable, so a
+  //! count without a price cannot answer the question the profiles exist to
+  //! ask. Kept apart from the full-width totals above because rolled in with
+  //! one exact divider it would be invisible.
+  STP_COUNTER_BV_SCHEMA_CLAUSES,
+  STP_COUNTER_BV_SCHEMA_VARIABLES,
+  STP_COUNTER_BV_SCHEMA_MICROSECONDS
+};
+
+//! \brief Reads one of the counters above.
+//!
+//! An unrecognised counter reads 0 and reports a nonfatal diagnostic, so a
+//! caller built against a later header keeps working against an earlier
+//! library.
+DLL_PUBLIC unsigned long long vc_getCounter(VC vc, enum stp_counter_t counter);
+
+//! \brief Selects which families of algebraic facts
+//! BV_TERM_ABSTRACTION_SCHEMAS may offer.
+//!
+//! `groups` is spelled the way --bv-term-abstraction-schema-groups spells it:
+//! a comma-separated list of group names, or "all", or "none". The same
+//! parser answers both, so the two doors accept the same vocabulary,
+//! including its aliases, and reject with the same message.
+//!
+//! Returns 1 if the list was accepted. An unknown name is refused with a
+//! nonfatal diagnostic naming the valid set, and leaves the current selection
+//! unchanged -- so a caller that mistypes one group does not silently run
+//! with a narrower catalogue than it asked for.
+//!
+//! Names rather than published constants because the partition is a research
+//! instrument: which families exist, and how finely they are cut, is expected
+//! to change, and none of that should turn into an installed-header ABI
+//! break. BV_TERM_ABSTRACTION_PROFILE is the stable surface -- three levels
+//! that keep their meaning as the families beneath them move.
+DLL_PUBLIC int vc_setSchemaGroups(VC vc, const char* groups);
+
+//! How many BV schema groups there are, for sizing an array with one slot per
+//! group. It is also the bound on the index the two calls below take: an
+//! index runs from zero to one below this, in the order
+//! vc_schemaGroupName reports.
+#define STP_BV_SCHEMA_GROUP_COUNT 15
+
+//! \brief STP_COUNTER_BV_SCHEMA_LEMMAS, restricted to one schema group.
+//!
+//! The groups partition the aggregate exactly: every schema lemma the
+//! refinement installs increments the total and precisely one group. Read the
+//! breakdown with
+//!
+//!     for (unsigned i = 0; i < STP_BV_SCHEMA_GROUP_COUNT; i++)
+//!         printf("%s: %llu\n", vc_schemaGroupName(i),
+//!                vc_getSchemaGroupCounter(vc, i));
+//!
+//! An index at or above STP_BV_SCHEMA_GROUP_COUNT reads 0 and reports a
+//! nonfatal diagnostic, so a caller built against a later header keeps
+//! working against an earlier library.
+//!
+//! An index rather than one published ordinal per group, for the same reason
+//! vc_setSchemaGroups takes names: a family added, renamed or merged should
+//! not renumber stp_counter_t.
+DLL_PUBLIC unsigned long long vc_getSchemaGroupCounter(VC vc, unsigned group);
+
+//! \brief The command-line spelling of the group at this index, or NULL if
+//! the index is out of range. These are the names vc_setSchemaGroups and
+//! --bv-term-abstraction-schema-groups accept, so a breakdown can be fed
+//! straight back in.
+DLL_PUBLIC const char* vc_schemaGroupName(unsigned group);
+
+//! \brief Returns why the last query had no answer.
+//!
+//! Meaningful after vc_query returns 3; REASON_UNKNOWN_NONE at any other
+//! time, since there is then no unknown to explain. The record is cleared at
+//! the start of every query, so this describes the last one and not the
+//! session.
+DLL_PUBLIC enum reason_unknown_t vc_getReasonUnknown(VC vc);
+
+//! \brief Prints why the last query had no answer into a buffer allocated by
+//!        STP.
+//!
+//! The buffer is returned via output parameter 'buf' alongside its length
+//! 'len'. It is the responsibility of the caller to free the memory
+//! afterwards.
+//!
+//! REASON_UNKNOWN_INCOMPLETE, REASON_UNKNOWN_CARRIER_EXHAUSTED,
+//! REASON_UNKNOWN_ASSUMED_INJECTIVITY and REASON_UNKNOWN_AIG_BUDGET carry a
+//! sentence, saying what was reached or what was assumed; the AIG sentence
+//! also gives the gate count. Prose is for a person to read: a caller deciding
+//! what to do next wants vc_getReasonUnknown, which is why the two are
+//! separate.
+DLL_PUBLIC void vc_getReasonUnknownToBuffer(VC vc, char** buf, size_t* len);
 
 //! \brief Returns the type of the given expression.
 //!
@@ -284,6 +997,11 @@ DLL_PUBLIC int vc_getBVLength(VC vc, Expr e);
 //! \brief Create an equality expression. The two children must have the same type.
 //!
 //! Returns a boolean expression.
+//!
+//! On floating-point operands this is SMT-LIB's '=': +0 and -0 are
+//! distinct, and every NaN equals every NaN (payloads are not
+//! distinguished). For IEEE equality (+0 == -0, NaN unequal to
+//! everything) use vc_fpEqExpr.
 //!
 DLL_PUBLIC Expr vc_eqExpr(VC vc, Expr child0, Expr child1);
 
@@ -391,14 +1109,22 @@ DLL_PUBLIC Expr vc_paramBoolExpr(VC vc, Expr var, Expr param);
 //! \brief Returns an array-read-expression representing the reading of
 //!        the given array's entry of the given index.
 //!
-//! The array parameter must be of type array and index must be of type bitvector.
+//! The array parameter must be of type array, and the index must have the
+//! array's index sort: a bitvector for a bitvector-indexed array, a float
+//! of the declared format for a float-indexed one, a rounding mode for a
+//! RoundingMode-indexed one. The result carries the array's element sort
+//! (a read from a float-element array is a float of that format, usable
+//! anywhere a float is; a read from a RoundingMode-element array is a
+//! rounding mode, pinned to the five legal encodings at solve time).
 //!
 DLL_PUBLIC Expr vc_readExpr(VC vc, Expr array, Expr index);
 
 //! \brief Returns an array-write-expressions representing the writing of
 //!        the given new value into the given array at the given entry index.
 //!
-//! The array parameter must be of type array, and index and newValue of type bitvector.
+//! The array parameter must be of type array; the index must have the
+//! array's index sort and newValue the array's element sort, as for
+//! vc_readExpr.
 //!
 DLL_PUBLIC Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue);
 
@@ -413,11 +1139,22 @@ DLL_PUBLIC Expr vc_parseExpr(VC vc, const char* filepath);
 
 //! \brief Prints the given expression to stdout in the presentation language.
 //!
+//! The presentation language has no floating-point syntax. An expression that
+//! uses the floating-point theory -- including a RoundingMode -- is refused
+//! here rather than printed; use vc_printSMTLIB2.
+//!
 DLL_PUBLIC void vc_printExpr(VC vc, Expr e);
 
-//! \brief Prints the given expression to stdout in the STMLib2 format.
+//! \brief Returns the given expression in the SMT-LIB 2 format.
 //!
-DLL_PUBLIC char* vc_printSMTLIB(VC vc, Expr e);
+//! It is the responsibility of the caller to free the returned string.
+//!
+//! This is the export that understands every sort STP has: bit-vectors,
+//! arrays, FloatingPoint and RoundingMode. Prefer it to vc_printExpr, which
+//! predates the floating-point theory and refuses it. (vc_printSMTLIB, which
+//! returned SMT-LIB 1, has been removed.)
+//!
+DLL_PUBLIC char* vc_printSMTLIB2(VC vc, Expr e);
 
 //! \brief Prints the given expression into the file with the given file descriptor
 //!        in the presentation language.
@@ -437,13 +1174,31 @@ DLL_PUBLIC void vc_printExprFile(VC vc, Expr e, int fd);
 //! The buffer is returned via output parameter 'buf' alongside its length 'len'.
 //! It is the responsibility of the caller to free the memory afterwards.
 DLL_PUBLIC void vc_printExprToBuffer(VC vc, Expr e, char** buf,
-                                     unsigned long* len);
+                                     size_t* len);
 
-//! \brief Prints the counter example after an invalid query to stdout.
+//! \brief Prints the counter example after an invalid query to stdout, in the
+//!        presentation language.
 //!
 //! This method should only be called after a query which returns false.
 //!
+//! The presentation language has no floating-point or rounding-mode syntax, so
+//! values of those sorts print as their packed carriers here -- a float as its
+//! IEEE bits, a rounding mode as a 5-bit constant. Use
+//! vc_printCounterExampleSMTLIB2 to get them at the sort they were declared
+//! with.
+//!
 DLL_PUBLIC void vc_printCounterExample(VC vc);
+
+//! \brief Prints the counter example after an invalid query to stdout, in the
+//!        SMT-LIB 2 `(define-fun ...)` form.
+//!
+//! This method should only be called after a query which returns false.
+//!
+//! Unlike vc_printCounterExample this states each value at its declared sort:
+//! a float as `(fp #b... #b... #b...)` of the right `(_ FloatingPoint eb sb)`,
+//! a rounding mode by name. Symbols STP introduced for itself are left out.
+//!
+DLL_PUBLIC void vc_printCounterExampleSMTLIB2(VC vc);
 
 //! \brief Prints variable declarations to stdout.
 //!
@@ -475,7 +1230,7 @@ DLL_PUBLIC void vc_printAsserts(VC vc, int simplify_print _CVCL_DEFAULT_ARG(0));
 //! to enable simplifications of the query state during printing.
 //!
 DLL_PUBLIC void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf,
-                                           unsigned long* len,
+                                           size_t* len,
                                            int simplify_print);
 
 //! \brief Prints the found counter example to a buffer allocated by STP
@@ -488,7 +1243,7 @@ DLL_PUBLIC void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf,
 //! to enable simplifications of the counter example during printing.
 //!
 DLL_PUBLIC void vc_printCounterExampleToBuffer(VC vc, char** buf,
-                                               unsigned long* len);
+                                               size_t* len);
 
 //! \brief Prints the query to stdout in presentation language.
 //!
@@ -525,7 +1280,7 @@ DLL_PUBLIC Expr vc_simplify(VC vc, Expr e);
 //!   0: if 'e' is INVALID
 //!   1: if 'e' is VALID
 //!   2: if errors occured
-//!   3: if the timeout was reached
+//!   3: if the query could not be answered; call vc_getReasonUnknown for why
 //!
 //! Note: only the cryptominisat and cadical solvers can abandon a search that
 //!       is already running. With the other solvers 'timeout_max_time' is
@@ -546,6 +1301,27 @@ DLL_PUBLIC int vc_query(VC vc, Expr e);
 
 //! \brief Returns the counter example after an invalid query.
 //!
+//! The value has the sort of 'e': the value of a floating-point term is a
+//! floating-point constant of that term's format, not the bitvector of its
+//! packed bits. So it can be fed straight back -- vc_eqExpr(vc, e, value) is
+//! well sorted, and asserting it pins 'e' to the value.
+//!
+//! There has to be a model to read. A query must have been answered -- VALID
+//! or INVALID, not UNKNOWN or an error -- and it must still be the last
+//! thing to have happened: as vc_pop and vc_push document, a counterexample
+//! survives vc_pop and is discarded by the next vc_push or vc_query. Called
+//! with no model behind it, this reports a nonfatal diagnostic through
+//! vc_registerErrorHandler (or stderr) and returns NULL, rather than failing
+//! fatally -- as vc_getUninterpretedFunctionValue does for the same class of
+//! misuse. It used to answer from the empty counterexample map instead, which
+//! invented a value for a bit-vector or a Boolean and was fatal for a float.
+//!
+//! A constant is the exception, and needs no query behind it: it already is
+//! its own value, so there is nothing for it to read out of a model and
+//! nothing to invent. That covers a bit-vector constant and the Boolean
+//! constants; a symbol, and any term that has to be evaluated to reach a
+//! value, needs a model like everything else.
+//!
 DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 
 //! \brief Returns an array from a counter example after an invalid query.
@@ -554,10 +1330,26 @@ DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 //! non-null expected out parameters 'outIndices' for the indices, 'outValues'
 //! for the values and 'outSize' for the size of the array.
 //!
-//! It is the caller's responsibility to free the memory afterwards.
+//! As for vc_getCounterExample, each index has the array's index sort and
+//! each value its element sort, so an entry can be fed back as
+//! vc_readExpr(vc, e, index) and vc_eqExpr with the value.
+//!
+//! It is the caller's responsibility to free the memory afterwards;
+//! vc_deleteCounterExampleArray does so with the allocator that made it.
 //!
 DLL_PUBLIC void vc_getCounterExampleArray(VC vc, Expr e, Expr** outIndices,
                                           Expr** outValues, int* outSize);
+
+//! \brief Frees a counter example array returned by
+//!        vc_getCounterExampleArray.
+//!
+//! Deletes every entry expression and releases both buffers inside the
+//! library, so allocation and deallocation always use the same
+//! allocator even when the embedding process links a different one.
+//! With a size of zero nothing was allocated and nothing is freed.
+//!
+DLL_PUBLIC void vc_deleteCounterExampleArray(Expr* indices, Expr* values,
+                                             int size);
 
 //! \brief Returns the size of the counter example array,
 //!        i.e. the number of variable and array locations
@@ -567,13 +1359,27 @@ DLL_PUBLIC int vc_counterexample_size(VC vc);
 
 //! \brief Checkpoints the current context and increases the scope level.
 //!
-//! TODO: What effects has this?
+//! Opens a new assertion level: formulas asserted after this call are
+//! retracted again by the matching vc_pop. Also discards the previous
+//! query's counterexample and derived solver state, since the assertion
+//! set is about to change.
+//!
+//! Symbols are not scoped: an Expr created at any level remains valid --
+//! and remains the same variable -- after any number of pops.
 //!
 DLL_PUBLIC void vc_push(VC vc);
 
 //! \brief Restores the current context to its state at the last checkpoint.
 //!
-//! TODO: What effects has this?
+//! Retracts every formula asserted since the matching vc_push. The last
+//! query's counterexample is deliberately retained: the idiomatic use of
+//! this API brackets each vc_query in push/pop and reads the model
+//! afterwards. The counterexample describes the last vc_query (its
+//! assertions plus the negated query at that moment) and stays readable
+//! until the next vc_push or vc_query discards it.
+//! A certified uninterpreted-function application map is intentionally
+//! stricter: because it is keyed by the solved stack/block, vc_pop invalidates
+//! UF application-value reads even while legacy scalar/array values remain.
 //!
 DLL_PUBLIC void vc_pop(VC vc);
 
@@ -603,7 +1409,7 @@ DLL_PUBLIC uint64_t getBVUnsignedLongLong(Expr e);
 //!
 //! It is the callers responsibility to free the buffer's memory.
 //!
-DLL_PUBLIC void vc_printBVBitStringToBuffer(Expr e, char** buf, unsigned long* len);
+DLL_PUBLIC void vc_printBVBitStringToBuffer(Expr e, char** buf, size_t* len);
 
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR OPERATIONS
@@ -629,6 +1435,206 @@ DLL_PUBLIC int vc_getValueSize(VC /* vc */, Type type);
 //! \brief Returns the index size for the given type.
 //!
 DLL_PUBLIC int vc_getIndexSize(VC /* vc */, Type type);
+
+/////////////////////////////////////////////////////////////////////////////
+/// FLOATING POINT OPERATIONS
+/////////////////////////////////////////////////////////////////////////////
+
+//! \brief Returns the IEEE-754 floating-point type with `exp_bits` exponent
+//!        bits and `sig_bits` significand bits.
+//!
+//! The significand width INCLUDES the hidden bit, matching SMT-LIB's
+//! `(_ FloatingPoint eb sb)`. For example `vc_fpType(vc, 11, 53)` is an IEEE
+//! double and `vc_fpType(vc, 8, 24)` an IEEE single. Use it anywhere a type is
+//! expected, e.g. `vc_varExpr(vc, "x", vc_fpType(vc, 11, 53))`.
+//!
+DLL_PUBLIC Type vc_fpType(VC vc, int exp_bits, int sig_bits);
+
+//! \brief The RoundingMode sort, for declaring rounding-mode variables with
+//!        vc_varExpr.
+//!
+//! A variable of this sort ranges over exactly the five modes: vc_varExpr
+//! asserts the validity constraint (at the current assertion level, so it
+//! scopes with vc_push/vc_pop like any assertion), and
+//! vc_printCounterExampleSMTLIB2 prints the variable's value by mode name.
+//! (vc_printCounterExample prints the 5-bit carrier: the presentation language
+//! has no rounding-mode syntax.) Read it from a model with
+//! vc_getCounterExample; the bits are the enum VCRoundingMode encoding.
+//! vc_fpRoundingModeVar is a one-call convenience for the same thing.
+DLL_PUBLIC Type vc_fpRoundingModeType(VC vc);
+
+//! \brief Returns the exponent width of a floating-point expression, value or
+//!        type (0 if `e` is not floating-point).
+//!
+DLL_PUBLIC int vc_getExpWidth(Expr e);
+
+//! \brief Returns the significand width (including the hidden bit) of a
+//!        floating-point expression, value or type (0 if not floating-point).
+//!
+DLL_PUBLIC int vc_getSigWidth(Expr e);
+
+//! \brief Builds a floating-point constant of format (exp_bits, sig_bits) by
+//!        reinterpreting the bits of the bitvector constant `bv`.
+//!
+//! `bv`'s width must equal exp_bits + sig_bits, laid out most-significant-first
+//! as sign : exponent : trailing-significand (the hidden significand bit is not
+//! stored). This is the exact, format-generic primitive for floating-point
+//! constants; every value -- normals, subnormals, the zeros, the infinities and
+//! NaN -- has such a bit pattern. NaN payloads are not preserved: the sort has
+//! a single NaN, so every NaN pattern (any sign, any payload) interns as the
+//! one canonical quiet NaN -- the same bits every floating-point operation and
+//! vc_fpToIEEEBV produce. If exact NaN bits matter, keep them in a bitvector
+//! and reinterpret at the boundary.
+//!
+DLL_PUBLIC Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv);
+
+//! \brief Returns the IEEE floating-point equality `a == b` (fp.eq).
+//!
+//! True exactly when `a` and `b` are equal as numbers: +0 == -0, and any NaN
+//! operand makes it false. For SMT-LIB's '=' -- which keeps +0 and -0
+//! distinct and makes every NaN equal to every NaN (payloads are not
+//! distinguished) -- use vc_eqExpr instead.
+//!
+DLL_PUBLIC Expr vc_fpEqExpr(VC vc, Expr a, Expr b);
+
+//! \brief Rounding modes, matching SMT-LIB's RoundingMode. Pass one to
+//!        vc_fpRoundingMode to obtain a rounding-mode expression.
+//!
+enum VCRoundingMode
+{
+  //! The values are one-hot because they mirror STP's internal rounding-mode
+  //! encoding. They are five DISTINCT modes, not flags: combining them with
+  //! bitwise-or does not name a mode, and vc_fpRoundingMode rejects it.
+  VC_RM_RNE = 1,  //!< round nearest, ties to even  (roundNearestTiesToEven)
+  VC_RM_RTP = 2,  //!< round toward positive        (roundTowardPositive)
+  VC_RM_RTN = 4,  //!< round toward negative        (roundTowardNegative)
+  VC_RM_RTZ = 8,  //!< round toward zero            (roundTowardZero)
+  VC_RM_RNA = 16  //!< round nearest, ties to away  (roundNearestTiesToAway)
+};
+
+//! \brief Returns a rounding-mode expression for `mode`, to pass as the first
+//!        operand of the rounding operations (add, sub, mul, div, fma, sqrt and
+//!        roundToIntegral).
+//!
+DLL_PUBLIC Expr vc_fpRoundingMode(VC vc, enum VCRoundingMode mode);
+
+//! \brief A fresh variable of SMT-LIB's RoundingMode sort, usable wherever
+//!        vc_fpRoundingMode's constants are. Shorthand for vc_varExpr over
+//!        vc_fpRoundingModeType (see there for the semantics).
+//!
+//! Do NOT substitute a plain 5-bit variable: nothing would constrain it to
+//! denote one of the five modes.
+DLL_PUBLIC Expr vc_fpRoundingModeVar(VC vc, const char* name);
+
+// Arithmetic. The result is a floating-point value with the same format as the
+// operands (which must all share that format).
+
+//! \brief fp.abs: the magnitude of `f` (clears the sign bit).
+DLL_PUBLIC Expr vc_fpAbsExpr(VC vc, Expr f);
+//! \brief fp.neg: `f` with its sign bit flipped.
+DLL_PUBLIC Expr vc_fpNegExpr(VC vc, Expr f);
+//! \brief fp.add of `a` and `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpAddExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.sub of `a` and `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpSubExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.mul of `a` and `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpMulExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.div of `a` by `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpDivExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.fma under rounding mode `rm`: round(a*b + c).
+DLL_PUBLIC Expr vc_fpFMAExpr(VC vc, Expr rm, Expr a, Expr b, Expr c);
+//! \brief fp.sqrt of `f` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpSqrtExpr(VC vc, Expr rm, Expr f);
+//! \brief fp.roundToIntegral of `f` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpRoundToIntegralExpr(VC vc, Expr rm, Expr f);
+//! \brief fp.rem: the IEEE remainder of `a` by `b` (exact; no rounding mode).
+DLL_PUBLIC Expr vc_fpRemExpr(VC vc, Expr a, Expr b);
+//! \brief fp.min of `a` and `b` (no rounding mode).
+DLL_PUBLIC Expr vc_fpMinExpr(VC vc, Expr a, Expr b);
+//! \brief fp.max of `a` and `b` (no rounding mode).
+DLL_PUBLIC Expr vc_fpMaxExpr(VC vc, Expr a, Expr b);
+
+// Predicates. The result is Boolean.
+
+//! \brief fp.lt: ordered less-than (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpLtExpr(VC vc, Expr a, Expr b);
+//! \brief fp.leq: ordered less-or-equal (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpLeqExpr(VC vc, Expr a, Expr b);
+//! \brief fp.gt: ordered greater-than (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpGtExpr(VC vc, Expr a, Expr b);
+//! \brief fp.geq: ordered greater-or-equal (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpGeqExpr(VC vc, Expr a, Expr b);
+//! \brief fp.isNormal: true when `f` is a normal number.
+DLL_PUBLIC Expr vc_fpIsNormalExpr(VC vc, Expr f);
+//! \brief fp.isSubnormal: true when `f` is subnormal.
+DLL_PUBLIC Expr vc_fpIsSubnormalExpr(VC vc, Expr f);
+//! \brief fp.isZero: true when `f` is +0 or -0.
+DLL_PUBLIC Expr vc_fpIsZeroExpr(VC vc, Expr f);
+//! \brief fp.isInfinite: true when `f` is +oo or -oo.
+DLL_PUBLIC Expr vc_fpIsInfiniteExpr(VC vc, Expr f);
+//! \brief fp.isNaN: true when `f` is NaN.
+DLL_PUBLIC Expr vc_fpIsNaNExpr(VC vc, Expr f);
+//! \brief fp.isNegative: true when `f` is negative (includes -oo and -0).
+DLL_PUBLIC Expr vc_fpIsNegativeExpr(VC vc, Expr f);
+//! \brief fp.isPositive: true when `f` is positive (includes +oo and +0).
+DLL_PUBLIC Expr vc_fpIsPositiveExpr(VC vc, Expr f);
+
+// Special-value constants of a given floating-point type.
+
+//! \brief The NaN of `fpType`.
+DLL_PUBLIC Expr vc_fpNaN(VC vc, Type fpType);
+//! \brief +oo of `fpType`.
+DLL_PUBLIC Expr vc_fpPlusInfinity(VC vc, Type fpType);
+//! \brief -oo of `fpType`.
+DLL_PUBLIC Expr vc_fpMinusInfinity(VC vc, Type fpType);
+//! \brief +0 of `fpType`.
+DLL_PUBLIC Expr vc_fpPlusZero(VC vc, Type fpType);
+//! \brief -0 of `fpType`.
+DLL_PUBLIC Expr vc_fpMinusZero(VC vc, Type fpType);
+
+//! \brief A constant of `target` floating-point type equal to the native
+//!        double `d`, rounded under `rm`.
+//!
+//! `d` is already an IEEE-754 binary64 value, so this reinterprets its bits as
+//! a (11,53) float and, when `target` differs, reformats with fp.to_fp under
+//! `rm` (exact when `target` is binary64, so `rm` is then irrelevant). Note: a
+//! literal such as 0.1 is rounded to the nearest double by the C compiler
+//! before it reaches here.
+//!
+DLL_PUBLIC Expr vc_fpConstFromDouble(VC vc, Type target, Expr rm, double d);
+//! \brief As vc_fpConstFromDouble, from a native float (IEEE-754 binary32).
+DLL_PUBLIC Expr vc_fpConstFromFloat(VC vc, Type target, Expr rm, float f);
+
+// Conversions.
+
+//! \brief One-argument (_ to_fp eb sb): reinterpret the bits of bitvector `bv`
+//!        (whose width must be eb+sb) as a float. No rounding.
+DLL_PUBLIC Expr vc_fpToFPFromIEEEBV(VC vc, int eb, int sb, Expr bv);
+//! \brief (_ to_fp eb sb) rm f: reformat float `f` to format (eb,sb) under `rm`.
+DLL_PUBLIC Expr vc_fpToFPFromFP(VC vc, int eb, int sb, Expr rm, Expr f);
+//! \brief (_ to_fp eb sb) rm bv: convert the signed integer in `bv` to a float
+//!        of format (eb,sb) under `rm`.
+DLL_PUBLIC Expr vc_fpToFPFromSignedBV(VC vc, int eb, int sb, Expr rm, Expr bv);
+//! \brief (_ to_fp_unsigned eb sb) rm bv: convert the unsigned integer in `bv`
+//!        to a float of format (eb,sb) under `rm`.
+DLL_PUBLIC Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv);
+//! \brief (_ fp.to_ubv m) rm f: round float `f` to an m-bit unsigned integer
+//!        (a bitvector) under `rm`.
+DLL_PUBLIC Expr vc_fpToUBVExpr(VC vc, int width, Expr rm, Expr f);
+//! \brief (_ fp.to_sbv m) rm f: round float `f` to an m-bit signed integer
+//!        (a bitvector) under `rm`.
+DLL_PUBLIC Expr vc_fpToSBVExpr(VC vc, int width, Expr rm, Expr f);
+
+//! \brief Reinterpret float `f` as its packed IEEE bits: a bitvector of width
+//!        exp_width + sig_width, laid out most-significant-first as
+//!        sign : exponent : trailing-significand.
+//!
+//! The inverse of vc_fpToFPFromIEEEBV. Use vc_bvExtract on the result to pull
+//! out the sign, exponent or significand field (e.g. the exponent is bits
+//! [sig_width-1 .. sig_width+exp_width-2]). NaN is canonicalised -- the payload
+//! is not preserved -- so every NaN yields the same bits.
+//!
+DLL_PUBLIC Expr vc_fpToIEEEBV(VC vc, Expr f);
 
 //Const expressions for string, int, long-long, etc
 
@@ -1132,8 +2138,16 @@ DLL_PUBLIC Expr getChild(Expr e, int n);
 //!
 DLL_PUBLIC int vc_isBool(Expr e);
 
-//! \brief Registers the given error handler function to be called for each
-//!        fatal error that occures while running STP.
+//! \brief Registers the error handler called for fatal STP errors and for
+//!        documented nonfatal validation failures such as UF API misuse.
+//!
+//! The callback is process-global and is invoked synchronously. Passing NULL
+//! restores the default reporting path (stderr for nonfatal UF validation).
+//!
+//! One nonfatal diagnostic reaches it as well: vc_getCounterExample reports a
+//! model read with no model behind it this way and then returns NULL, rather
+//! than ending the process. A handler must therefore not assume that it is
+//! only ever called on the way to abort().
 //!
 DLL_PUBLIC void
 vc_registerErrorHandler(void (*error_hdlr)(const char* err_msg));
@@ -1151,6 +2165,14 @@ DLL_PUBLIC void vc_Destroy(VC vc);
 
 //! \brief Destroy the given expression, freeing its associated memory.
 //!
+//! Only for expressions the caller owns. Do NOT pass expressions returned by
+//! the vc_fp* constructors (or the type/true/false constructors): those are
+//! owned by the checker and freed by vc_Destroy -- deleting one here frees
+//! it twice. Exception: after vc_setFlag(vc, 'u') has enabled UF handle
+//! tracking, wrappers constructed subsequently are tracked and may be released
+//! explicitly; vc_declareUninterpretedFunction documents this for its borrowed
+//! Type arguments.
+//!
 DLL_PUBLIC void vc_DeleteExpr(Expr e);
 
 //! \brief Returns the whole counterexample from the given validity checker.
@@ -1159,6 +2181,12 @@ DLL_PUBLIC WholeCounterExample vc_getWholeCounterExample(VC vc);
 
 //! \brief Returns the value of the given term expression from the given whole counter example.
 //!
+//! As for vc_getCounterExample, the value has the sort of 'e' -- a
+//! floating-point term's value is a floating-point constant of that term's
+//! format. Note that 'e' must be a variable or something the model already
+//! records: unlike vc_getCounterExample this does not evaluate a term
+//! against the model, and hands an unrecorded term straight back.
+//!
 DLL_PUBLIC Expr vc_getTermFromCounterExample(VC vc, Expr e,
                                              WholeCounterExample c);
 
@@ -1166,7 +2194,13 @@ DLL_PUBLIC Expr vc_getTermFromCounterExample(VC vc, Expr e,
 //!
 DLL_PUBLIC void vc_deleteWholeCounterExample(WholeCounterExample cc);
 
-//! Covers all kinds of expressions that exist in STP.
+//! Covers the expression kinds exposed by the public C API. Internal kinds
+//! may be represented by their corresponding public kind.
+//!
+//! Mirrors the internal stp::Kind (generated from lib/AST/ASTKind.kinds) by
+//! numeric value: getExprKind is a direct cast, so the enumerators must stay
+//! in the same order. static_asserts next to getExprKind's implementation
+//! pin the correspondence.
 //!
 enum exprkind_t
 {
@@ -1225,11 +2259,49 @@ enum exprkind_t
   IMPLIES,   //!< Implication boolean expression
   PARAMBOOL, //!< Parameterized boolean expression. No longer created;
              //!< kept so that the later kind values don't change.
-  READ,      //!< Array read expression
-  WRITE,     //!< Array write expression
-  ARRAY,     //!< Array creation expression
-  BITVECTOR, //!< Bitvector creation expression
-  BOOLEAN    //!< Boolean creation expression
+  READ,          //!< Array read expression
+  WRITE,         //!< Array write expression
+  ARRAY,         //!< Array creation expression
+  BITVECTOR,     //!< Bitvector creation expression
+  BOOLEAN,       //!< Boolean creation expression
+  FLOATINGPOINT, //!< Floating point creation expression
+  ROUNDINGMODE,  //!< RoundingMode type expression (vc_fpRoundingModeType)
+  FP_ABS,
+  FP_NEG,
+  FP_ADD,
+  FP_SUB,
+  FP_MUL,
+  FP_DIV,
+  FP_FMA,
+  FP_SQRT,
+  FP_REM,
+  FP_ROUNDTOINTEGRAL,
+  FP_MIN,
+  FP_MAX,
+  FP_TOFP,
+  FP_TOFP_SIGNED,
+  FP_TOFP_UNSIGNED,
+  FP_TO_UBV,
+  FP_TO_SBV,
+  FP_TO_IEEE_BV,
+  FP_LEQ,
+  FP_LT,
+  FP_GEQ,
+  FP_GT,
+  FP_EQ,
+  FP_ISNORMAL,
+  FP_ISSUBNORMAL,
+  FP_ISZERO,
+  FP_ISINFINITE,
+  FP_ISNAN,
+  FP_ISNEGATIVE,
+  FP_ISPOSITIVE,
+  FP_SMT_EQ, //!< SMT-LIB '=' over floats: +0 and -0 distinct, all NaNs equal.
+  //! Durable uninterpreted-function application. ARRAY_EQ is the unexposed
+  //! internal kind between FP_SMT_EQ and UF_APPLY.
+  UF_APPLY = FP_SMT_EQ + 2,
+  //! Native variadic SMT-LIB distinct predicate.
+  DISTINCT = UF_APPLY + 1,
 };
 
 //! \brief Returns the expression-kind of the given expression.
@@ -1246,12 +2318,18 @@ DLL_PUBLIC int getBVLength(Expr e);
 
 //! Covers all kinds of types that exist in STP.
 //!
+//! FLOATINGPOINT_TYPE and ROUNDINGMODE_TYPE are appended after the legacy
+//! values so that values compiled into older clients stay valid. This public
+//! enum describes source sorts; STP's internal carrier enum has no separate
+//! RoundingMode entry.
 enum type_t
 {
   BOOLEAN_TYPE = 0,
   BITVECTOR_TYPE,
   ARRAY_TYPE,
-  UNKNOWN_TYPE
+  UNKNOWN_TYPE,
+  FLOATINGPOINT_TYPE,
+  ROUNDINGMODE_TYPE
 };
 
 //! \brief Returns the type-kind of the given expression.
@@ -1300,9 +2378,6 @@ DLL_PUBLIC int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery,
 
 //! \brief Checks if STP was compiled with support for minisat
 //!
-//!  Note: always returns true (future support for minisat being the
-//!  non-default)
-//!
 DLL_PUBLIC bool vc_supportsMinisat(VC vc);
 
 //! \brief Sets underlying SAT solver to minisat
@@ -1314,9 +2389,6 @@ DLL_PUBLIC bool vc_useMinisat(VC vc);
 DLL_PUBLIC bool vc_isUsingMinisat(VC vc);
 
 //! \brief Checks if STP was compiled with support for simplifying minisat
-//!
-//!  Note: always returns true (future support for simplifying minisat being
-//!  the non-default)
 //!
 DLL_PUBLIC bool vc_supportsSimplifyingMinisat(VC vc);
 
@@ -1340,18 +2412,6 @@ DLL_PUBLIC bool vc_useCryptominisat(VC vc);
 //!
 DLL_PUBLIC bool vc_isUsingCryptominisat(VC vc);
 
-//! \brief Checks if STP was compiled with support for riss
-//!
-DLL_PUBLIC bool vc_supportsRiss(VC vc);
-
-//! \brief Sets underlying SAT solver to riss
-//!
-DLL_PUBLIC bool vc_useRiss(VC vc);
-
-//! \brief Checks if underlying SAT solver is riss
-//!
-DLL_PUBLIC bool vc_isUsingRiss(VC vc);
-
 //! \brief Checks if STP was compiled with support for cadical
 //!
 DLL_PUBLIC bool vc_supportsCadical(VC vc);
@@ -1363,7 +2423,6 @@ DLL_PUBLIC bool vc_useCadical(VC vc);
 //! \brief Checks if underlying SAT solver is cadical
 //!
 DLL_PUBLIC bool vc_isUsingCadical(VC vc);
-
 
 #ifdef __cplusplus
 }

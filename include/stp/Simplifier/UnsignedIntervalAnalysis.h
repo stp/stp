@@ -41,9 +41,15 @@ namespace stp
 {
 using std::make_pair;
 
+// Shared with NodeDomainAnalysis and StrengthReduction (this header is the
+// lowest in the include order, so the type lives here). Flat map: probed per
+// node visit, iterated only for order-independent cleanup.
+using NodeToUnsignedIntervalMap =
+    ankerl::unordered_dense::map<ASTNode, UnsignedInterval*,
+                                 ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+
 class UnsignedIntervalAnalysis
 {
-  STPMgr& bm;
   CBV littleOne;
   CBV littleZero;
 
@@ -63,20 +69,16 @@ class UnsignedIntervalAnalysis
 
 public:
 
-  using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+  UnsignedIntervalAnalysis();
 
-  UnsignedIntervalAnalysis(STPMgr& _bm);
-  
   UnsignedIntervalAnalysis(const UnsignedIntervalAnalysis&) = delete;
   UnsignedIntervalAnalysis & operator=(const UnsignedIntervalAnalysis&) = delete;
   
   ~UnsignedIntervalAnalysis();
 
   // Replace some of the things that unsigned intervals can figure out for us.
-  ASTNode topLevel(const ASTNode& top);
 
   UnsignedInterval* dispatchToTransferFunctions(const ASTNode&n, const vector<const UnsignedInterval*>& children);
-  UnsignedInterval* visit(const ASTNode& n, NodeToUnsignedIntervalMap& visited);
 
 
   void stats();

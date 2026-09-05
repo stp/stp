@@ -31,9 +31,8 @@ if ( USE_CRYPTOMINISAT)
     # user of ABC has to link it directly.
     target_link_libraries(rewrite_rule_gen
         stp
-        $<TARGET_FILE:libabc-pic>
+        ABC
     )
     # $<TARGET_FILE:...> names a file rather than a target, so the build order
     # has to be spelled out, exactly as lib/CMakeLists.txt does for libstp.
-    add_dependencies(rewrite_rule_gen libabc-pic)
 endif()

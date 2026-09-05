@@ -75,20 +75,26 @@ function(get_git_head_revision _refspecvar _hashvar)
 	# 	get_filename_component(GIT_DIR ${SUBMODULE_DIR}/${GIT_DIR_RELATIVE} ABSOLUTE)
 	# endif()
 
+	# A linked worktree's .git is a file pointing at <common>/worktrees/<name>,
+	# which holds this worktree's HEAD; refs stay in the common dir, so HEAD
+	# must be read from the per-worktree dir and refs resolved against GIT_DIR.
+	set(GIT_HEAD_DIR "${GIT_DIR}")
 	if(NOT IS_DIRECTORY "${GIT_DIR}")
 		file(READ ${GIT_DIR} worktree)
- 		string(REGEX REPLACE "gitdir: (.*)worktrees(.*)\n$" "\\1" GIT_DIR ${worktree})
- 	endif()
+		string(STRIP "${worktree}" worktree)
+		string(REGEX REPLACE "^gitdir: *" "" GIT_HEAD_DIR "${worktree}")
+		string(REGEX REPLACE "/worktrees/.*$" "" GIT_DIR "${GIT_HEAD_DIR}")
+	endif()
 	set(GIT_DATA "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/git-data")
 	if(NOT EXISTS "${GIT_DATA}")
 		file(MAKE_DIRECTORY "${GIT_DATA}")
 	endif()
 
-	if(NOT EXISTS "${GIT_DIR}/HEAD")
+	if(NOT EXISTS "${GIT_HEAD_DIR}/HEAD")
 		return()
 	endif()
 	set(HEAD_FILE "${GIT_DATA}/HEAD")
-	configure_file("${GIT_DIR}/HEAD" "${HEAD_FILE}" COPYONLY)
+	configure_file("${GIT_HEAD_DIR}/HEAD" "${HEAD_FILE}" COPYONLY)
 
 	configure_file("${_gitdescmoddir}/GetGitRevisionDescription.cmake.in"
 		"${GIT_DATA}/grabRef.cmake"

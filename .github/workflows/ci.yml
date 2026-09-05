@@ -1,14 +1,25 @@
-# workflow_dispatch adds a "Run workflow" button on the Actions tab, so a run
-# can be started by hand against any branch — useful for re-running against a
-# branch whose last push predates a fix elsewhere.
-on: [push, pull_request, workflow_dispatch]
+# Pushes are only built on master. An unfiltered push event fires a second,
+# identical run alongside the pull_request one whenever the branch lives in
+# this repository rather than in a fork. The pull_request run is the one
+# worth keeping: it builds the branch merged with master, which is what
+# actually lands. Tags do not match either, and release.yml builds and
+# smoke-tests the tagged tree itself.
+#
+# A branch is therefore covered from the moment a pull request is opened.
+# Before that, and for re-running against a branch whose last push predates
+# a fix elsewhere, workflow_dispatch adds a "Run workflow" button on the
+# Actions tab that works against any branch.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
 name: CI
 
 # A newer commit makes the runs still going for the previous one pointless.
-# A push to a branch with an open pull request fires both a push and a
-# pull_request run, so those are grouped separately rather than cancelling
-# each other. Pushes to master are left running, so every commit there
-# keeps a result.
+# github.ref is refs/pull/N/merge on a pull_request event, so a superseded
+# run of a pull request is cancelled. Pushes to master are left running, so
+# every commit there keeps a result.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
@@ -24,19 +35,36 @@ jobs:
             env: CC=gcc CXX=g++
           - name: clang
             env: CC=clang CXX=clang++
+          # Release strips assertions -- the configuration users install.
+          # NB the floating-point tests run here without symfpu's internal
+          # checks; small significand widths stay unvalidated until
+          # martin-cs/symfpu#14.
+          - name: gcc-release
+            env: CC=gcc CXX=g++
+            build_type: Release
 
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
 
+    # 400M rather than the 800M this used to be. Every ccache leg compiles about
+    # 1280 files at a 99.6% hit rate, but what that costs in cache varies by
+    # 2.6x: 243MB on this leg, 645MB on cadical rel-2.1.3, for the same tree and
+    # the same hit rate. One build's working set is around 250MB; the rest is
+    # objects from source versions that will never be compiled again, which
+    # ccache had no reason to evict while the ceiling was 800M. That slack is not
+    # free -- the Actions cache is one 10GB allowance shared by every key in the
+    # repository -- and it buys nothing, since the leg holding a third as much
+    # hits just as often. See cache-cleanup.yml for the other half of this.
     env:
-      CCACHE_MAXSIZE: 800M
+      CCACHE_MAXSIZE: 400M
 
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
+    # libgmp-dev is CryptoMiniSat's, which the build builds and this job
+    # links; STP itself does not use GMP. The runner image happens to ship
+    # it already, but the dependency is this job's, so it is named here.
     - name: Packages
       run: |
         sudo apt-get update
@@ -49,53 +77,58 @@ jobs:
           flex \
           gcc \
           git \
-          libboost-program-options-dev \
+          libgmp-dev \
           ninja-build \
           python3 \
           python3-pip \
           python3-setuptools \
           zlib1g-dev
-        sudo pip3 install -U lit
+        # Pinned to the 23 series. lit is installed unpinned nowhere else,
+        # and an unpinned -U picks up whatever is newest: 23.1.0 landed on
+        # 2026-08-25 after fourteen months without a release and broke every
+        # job that runs this suite, because lit 23 refuses the external shell
+        # the config asked for. A major version of a test runner should be
+        # something this repository moves to deliberately.
+        sudo pip3 install -U 'lit~=23.1'
 
-    # Most of these are cloned without a pinned revision, so the cache key
-    # tracks what their default branches currently point at: a new upstream
-    # commit gets a new key rather than a stale cache.
+    # Every dependency is pinned in the file that fetches it, so this hashes
+    # those files and nothing else -- it used to have to resolve a revision
+    # over the network, because OutputCheck was cloned without one.
     - name: Resolve dependency revisions
       id: deps-key
       run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
 
+    # One directory, because the build installs everything it fetches into
+    # STP_DEP_DIR -- CryptoMiniSat included, now that it is built here like
+    # every other dependency.
     - name: Restore dependencies
       id: deps-cache
       uses: actions/cache@v4
       with:
-        path: |
-          deps/install
-          deps/gtest
-          deps/OutputCheck
+        path: deps
         key: deps-x86_64-${{ steps.deps-key.outputs.key }}
-
-    - name: Dependencies
-      if: steps.deps-cache.outputs.cache-hit != 'true'
-      run: |
-        ./scripts/deps/setup-minisat.sh
-        ./scripts/deps/setup-cms.sh
-        ./scripts/deps/setup-gtest.sh
-        ./scripts/deps/setup-outputcheck.sh
 
     # Keyed per run so every build writes a fresh entry; restore-keys picks
     # up the most recent one from this branch, or from the base branch.
+    #
+    # The separator before the run id is a slash rather than a hyphen, and
+    # has to be something a leg's name cannot contain. restore-keys matches
+    # by prefix, so while it was a hyphen `ccache-gcc-` also matched
+    # `ccache-gcc-release-...`: the gcc leg restored the release leg's cache
+    # every run, shared nothing with it, and recompiled all 311 files from
+    # cold while every other leg sat at 96-99% hits.
     - name: Compiler cache
       uses: actions/cache@v4
       with:
         path: ~/.cache/ccache
-        key: ccache-${{ matrix.name }}-${{ github.run_id }}
-        restore-keys: ccache-${{ matrix.name }}-
+        key: ccache-${{ matrix.name }}/${{ github.run_id }}
+        restore-keys: ccache-${{ matrix.name }}/
 
     - name: Configure
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -107,6 +140,20 @@ jobs:
     - name: Test
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
+
+    # Independently lower generated UF problems to eager Ackermann constraints
+    # and decide those through the classic feature-off path.  Compare that
+    # oracle with both lazy UF adapters, including push/pop verdict sequences.
+    # Run once per matrix rather than once per compiler: this checks semantics,
+    # while the full suite above supplies compiler/build-mode coverage.
+    - name: UF differential oracle and trend corpus
+      if: matrix.name == 'gcc'
+      run: |
+        python3 scripts/fuzz/uf-differential-fuzz.py \
+          --stp build/stp --seed 42 --rounds 150
+        python3 tests/ufstp/performance.py \
+          --stp build/stp --scales 16 --repeats 1 \
+          --evidence-out build/uf-performance-evidence.json
 
     # BUILD_EXTRA_TOOLS is off by default and nothing else compiles these five
     # tools, so all of them had quietly stopped building: headers that were
@@ -137,6 +184,70 @@ jobs:
         ./tools/rewrite_rule_gen/rewrite_rule_gen generate 5 3
       working-directory: build
 
+    # CryptoMiniSat >= 5.14 builds its own CaDiCaL (the meelgroup fork, 2.1.3
+    # as of 5.14.7) and installs it into the same prefix as itself, so
+    # deps/install holds a second CaDiCaL that has nothing to do with the one
+    # this leg clones below. This is the leg that can check they stay apart:
+    # it is the only one with a static CryptoMiniSat in deps/install, which is
+    # exactly the prefix the bundled copy lands in. Both properties below are
+    # settled during configure, so neither costs a build.
+    #
+    # Left unchecked, the two failure modes are a silent wrong answer and a
+    # misattributed one: the first linked CryptoMiniSat's 2.1.3 library into a
+    # libstp compiled against 3.x headers, and the second produced a wall of
+    # duplicate-symbol errors that never mentions CryptoMiniSat at all.
+    - name: CaDiCaL alongside CryptoMiniSat
+      if: matrix.name == 'gcc'
+      run: |
+        # Cloned here rather than through the build's own CaDiCaL: the point
+        # of this leg is that there are two distinct CaDiCaLs about, and one
+        # of them has to be somewhere the build did not put it.
+        git clone --depth 1 --branch rel-3.0.1 \
+          https://github.com/arminbiere/cadical deps/cadical
+        ( cd deps/cadical && ./configure -fPIC && make -j"$(nproc)" )
+
+        # CADICAL_DIR has to outrank the CaDiCaL in deps/install. find_library
+        # reaches CMAKE_PREFIX_PATH before HINTS, and CMakeLists puts
+        # deps/install on that path, so a HINTS lookup resolved to the wrong one.
+        cmake -S . -B build-cadical-pick -G Ninja \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+          -DUSE_CADICAL:BOOL=ON \
+          -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
+          -DUSE_CRYPTOMINISAT:STRING=OFF
+        picked=$(sed -n 's/^CADICAL_LIBRARY:FILEPATH=//p' build-cadical-pick/CMakeCache.txt)
+        echo "CADICAL_LIBRARY=$picked"
+        if [ "$picked" != "$GITHUB_WORKSPACE/deps/cadical/build/libcadical.a" ]; then
+          echo "::error::CADICAL_LIBRARY resolved to '$picked', not the CADICAL_DIR copy"
+          exit 1
+        fi
+
+        # This combination used to have to be refused: a static CryptoMiniSat
+        # brought its own CaDiCaL, both archives reached libstp's link line and
+        # their symbols collided. Built NOCADICAL it brings none, so there is
+        # one CaDiCaL -- the CADICAL_DIR copy -- and the combination has to
+        # configure, and has to actually use CryptoMiniSat rather than quietly
+        # dropping it, which is the shape the old guard's AUTO branch had.
+        cmake -S . -B build-cadical-cms -G Ninja \
+             -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+             -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+             -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+             -DUSE_CADICAL:BOOL=ON \
+             -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
+             -DUSE_CRYPTOMINISAT:STRING=ON
+        if ! grep -q "^USE_CRYPTOMINISAT:STRING=ON" build-cadical-cms/CMakeCache.txt; then
+          echo "::error::CryptoMiniSat was dropped from a build that asked for it alongside CaDiCaL"
+          exit 1
+        fi
+        # And the CaDiCaL it uses is still the CADICAL_DIR one, not something
+        # CryptoMiniSat dragged in.
+        picked=$(sed -n 's/^CADICAL_LIBRARY:FILEPATH=//p' build-cadical-cms/CMakeCache.txt)
+        if [ "$picked" != "$GITHUB_WORKSPACE/deps/cadical/build/libcadical.a" ]; then
+          echo "::error::with CryptoMiniSat on, CADICAL_LIBRARY resolved to '$picked'"
+          exit 1
+        fi
+
     # The bindings walk the CPython AST, whose node types drift between
     # releases: 3.14 removed NodeVisitor's visit_Num fallback, so every
     # numeric literal in an @stp-decorated function began reaching
@@ -166,18 +277,281 @@ jobs:
         python3 allocator_tests.py
       working-directory: build/tests/api/python
 
-  build-cadical:
-    name: gcc (cadical)
+    # The three legs of this matrix configure identically and differ only in
+    # compiler and optimisation level, which makes them the pairs worth
+    # comparing: the CNF is a function of the input, so nothing about how the
+    # binary was built should reach it. The cnf-determinism job below diffs
+    # the manifests. See scripts/cnf-manifest.sh for what a difference means.
+    # Not on the clang leg. STP's own code builds its operands in a fixed
+    # order, but SymFPU -- which only the floating-point path reaches -- does
+    # not, and C++ leaves the order of an overloaded operator's operands to
+    # the implementation. gcc and clang each choose consistently but
+    # differently, so their CNF differs on nine of the corpus's inputs, all
+    # floating-point. That is an encoding difference, not a wrong answer, and
+    # the fix is to replace SymFPU rather than to rewrite it; see
+    # bench-hard/reports/2026-08-10-cnf-build-determinism.md. Comparing the
+    # two gcc legs still covers optimisation level and assertions, and holds
+    # for every input with nothing excluded.
+    - name: CNF manifest
+      if: matrix.name != 'clang'
+      run: |
+        ./scripts/cnf-manifest.sh build/stp tests/query-files 120 \
+          > "cnf-${{ matrix.name }}.manifest"
+        wc -l < "cnf-${{ matrix.name }}.manifest"
+
+    - uses: actions/upload-artifact@v4
+      if: matrix.name != 'clang'
+      with:
+        name: cnf-manifest-${{ matrix.name }}
+        path: cnf-${{ matrix.name }}.manifest
+        if-no-files-found: error
+
+  # Whether the CNF STP writes depends on anything but its input. It should
+  # not: a build-dependent CNF means something upstream is reading an address
+  # rather than a value -- iteration over a pointer-keyed hash table, a sort
+  # tie broken on node identity, an uninitialised read -- and that class of
+  # bug makes measurements irreproducible and bug reports unrepeatable while
+  # staying invisible to a suite that only checks sat/unsat.
+  #
+  # This reuses the builds the matrix above already made, so it costs one
+  # short job rather than any extra compilation.
+  cnf-determinism:
+    name: CNF determinism
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: cnf-manifest-*
+        merge-multiple: true
+
+    - name: Compare the manifests
+      run: |
+        set -u
+        ls -l ./*.manifest
+
+        # Every input is compared; there is no exclusion list.
+        #
+        # Every manifest is compared against the first, so a difference is
+        # reported once per differing build rather than once per pair.
+        reference=$(find . -maxdepth 1 -name '*.manifest' | LC_ALL=C sort | head -1)
+        echo "reference: $reference ($(wc -l < "$reference") inputs compared)"
+
+        failed=0
+        for manifest in $(find . -maxdepth 1 -name '*.manifest' | LC_ALL=C sort | tail -n +2); do
+          if diff -u "$reference" "$manifest" > delta.txt; then
+            echo "OK       $manifest matches $reference"
+          else
+            failed=1
+            echo "::error::$manifest and $reference disagree on the CNF for $(grep -c '^-' delta.txt) input(s)"
+            echo "--- $reference vs $manifest ---"
+            cat delta.txt
+          fi
+        done
+
+        if [ "$failed" -ne 0 ]; then
+          echo
+          echo "The CNF STP generates differs between builds of the same source."
+          echo "The CNF is a function of the input; a build-dependent one means"
+          echo "something upstream depends on node creation order or on an"
+          echo "address. Each line above names the input that provokes it:"
+          echo "  stp --array-equality --output-CNF --exit-after-CNF <input>"
+          echo "under both builds, then diff output_0.cnf."
+          exit 1
+        fi
+
+        echo "All builds agree on the CNF for every input compared."
+
+  # Undefined behaviour is invisible to every other job here. A build that
+  # executes it answers exactly like a build that does not, right up until an
+  # optimiser or a target decides otherwise, so it has to be looked for
+  # deliberately -- and nothing was looking. CMakeLists.txt has carried a
+  # SANITIZE option for years, but it only ever adds CXX flags, and ABC --
+  # the vendored library that turns every query's AIG into CNF -- is C, so
+  # the code most in need of the check was the code that option cannot reach.
+  #
+  # What was sitting there: a signed left shift that overflows for any cut
+  # whose truth table has bit 15 set, cuts handed out at addresses their own
+  # pointer members are not aligned for, and a hash mix that overflows a
+  # signed int once the AIG passes ~270,600 nodes. The first two are issue
+  # #881; the third turned up on fp-tests/rem-exponent-width-boundary.smt2
+  # when the whole suite was swept rather than that one regression. All three
+  # are fixed on the `stp` branch of the ABC fork the build pins, and
+  # this job is what keeps them fixed.
+  #
+  # -fno-sanitize-recover=all rather than UBSAN_OPTIONS=halt_on_error=1,
+  # because it makes aborting a property of the binary rather than of whoever
+  # runs it. Nothing has to remember to export anything -- not this workflow,
+  # not a developer reproducing a failure by hand -- and it does not rest on
+  # lit forwarding UBSAN_OPTIONS to the query file tests, which lit does do
+  # today but from a pass-through list that is lit's to change, not STP's.
+  build-ubsan:
+    name: clang (ubsan)
     runs-on: ubuntu-latest
 
+    # 400M rather than 800M; see the note on the gcc/clang job above.
     env:
-      CCACHE_MAXSIZE: 800M
+      CCACHE_MAXSIZE: 400M
+      # The file, line and check that failed are printed without this; it adds
+      # the stack that got there. lit forwards UBSAN_OPTIONS, so the query
+      # file tests get it too.
+      UBSAN_OPTIONS: print_stacktrace=1
 
     steps:
 
     - uses: actions/checkout@v7
+
+    # llvm for llvm-symbolizer, which is what turns the frames of a stack
+    # trace into names and line numbers.
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          clang \
+          cmake \
+          flex \
+          git \
+          llvm \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
       with:
-          submodules: 'true'
+        path: deps
+        key: deps-x86_64-ubsan-${{ steps.deps-key.outputs.key }}
+
+    # CaDiCaL, and only CaDiCaL. The backend is built by its own script,
+    # uninstrumented, so whichever one is linked is not what is under test
+    # here; this is the one that is a static archive and builds in seconds.
+    - name: Dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
+      run: |
+        :  # everything here is fetched by the configure step below
+
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-ubsan/${{ github.run_id }}
+        restore-keys: ccache-ubsan/
+
+    # CMAKE_C_FLAGS is the half that matters most: ABC is C, and it is where
+    # the CNF that every query is decided from is built.
+    #
+    # -shared-libsan puts the sanitizer runtime in a shared object that
+    # libstp.so then records as a dependency, which is what lets the Python
+    # bindings dlopen it. With clang's default static runtime that dlopen
+    # fails outright -- "undefined symbol: __ubsan_handle_type_mismatch_v1" --
+    # and python-interface-tests is lost. Nothing then puts that shared object
+    # on the loader's path, hence the -rpath: clang adds none of its own, so
+    # without it every binary this job builds fails to start. The directory
+    # comes from -print-file-name rather than -print-runtime-dir because the
+    # two disagree on some distributions, and it is the one that answers where
+    # the file actually is.
+    #
+    # STP_ALLOCATOR=system leaves the vendored mimalloc out of the build. It
+    # is a third-party allocator that replaces malloc wholesale; instrumenting
+    # it would make this job partly about mimalloc rather than about STP and
+    # ABC.
+    #
+    # WERROR is left off deliberately. The clang job above already compiles
+    # this tree with -Werror, and gating a run-time check on whether an
+    # instrumented build warns differently would only add a way for this job
+    # to fail for a reason it is not looking for.
+    - name: Configure
+      run: |
+        set -u
+        soname=libclang_rt.ubsan_standalone-x86_64.so
+        rtdir=$(dirname "$(clang -print-file-name=$soname)")
+        echo "sanitizer runtime: $rtdir"
+        if [ ! -e "$rtdir/$soname" ]; then
+          echo "::error::clang cannot find $soname; -shared-libsan has nothing to link"
+          exit 1
+        fi
+
+        mkdir build
+        cd build
+        CC=clang CXX=clang++ cmake \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+          -DUSE_CRYPTOMINISAT:STRING=OFF \
+          -DUSE_CADICAL:BOOL=ON \
+          -DSTP_ALLOCATOR=system \
+          -DENABLE_TESTING:BOOL=ON \
+          -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
+          -DCMAKE_C_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+          -DCMAKE_CXX_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=undefined -shared-libsan -Wl,-rpath,$rtdir" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=undefined -shared-libsan -Wl,-rpath,$rtdir" \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -G Ninja ..
+
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
+      working-directory: build
+
+    # A job that quietly built without the sanitizer would pass everything
+    # below while checking nothing, so confirm the flags reached both
+    # artifacts before trusting the tests. The _abort suffix is the half that
+    # is easy to lose: those entry points are what -fno-sanitize-recover=all
+    # emits, and without it undefined behaviour only prints a line and
+    # carries on.
+    - name: The build really is instrumented
+      run: |
+        set -u
+        for f in build/stp build/lib/libstp.so; do
+          n=$(nm -D "$f" | grep -c '__ubsan_handle_.*_abort' || true)
+          echo "$f: $n aborting UBSan entry points"
+          if [ "$n" -eq 0 ]; then
+            echo "::error::$f was not built with -fsanitize=undefined -fno-sanitize-recover=all"
+            exit 1
+          fi
+        done
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+  build-cadical:
+    name: gcc (cadical ${{ matrix.cadical_tag }})
+    runs-on: ubuntu-latest
+
+    # Both supported CaDiCaL lines: 3.x compiles in --cadical-factor and its
+    # variable-translation machinery (ctest grows a factor-forced lit sweep),
+    # 2.x compiles the wrapper without it and has to keep building and
+    # declining the flag gracefully.
+    strategy:
+      fail-fast: false
+      matrix:
+        cadical_tag: [rel-3.0.1, rel-2.1.3]
+
+    # 400M rather than 800M; see the note on the gcc/clang job above.
+    env:
+      CCACHE_MAXSIZE: 400M
+
+    steps:
+
+    - uses: actions/checkout@v7
 
     - name: Packages
       run: |
@@ -190,7 +564,6 @@ jobs:
           flex \
           gcc \
           git \
-          libboost-program-options-dev \
           ninja-build \
           python3 \
           python3-pip \
@@ -210,29 +583,30 @@ jobs:
       id: deps-cache
       uses: actions/cache@v4
       with:
-        path: |
-          deps/install
-          deps/cadical
-          deps/gtest
-          deps/OutputCheck
-        key: deps-x86_64-cadical-${{ steps.deps-key.outputs.key }}
+        path: deps
+        # The tag is part of the key by hand: cache-key.sh hashes the setup
+        # scripts, and the matrix override never changes their content.
+        key: deps-cadical-${{ matrix.cadical_tag }}-${{ steps.deps-key.outputs.key }}
 
     # CryptoMiniSat is left out: USE_CADICAL makes CaDiCaL the default
-    # solver, so building CMS as well would only add build time.
+    # solver, so building CMS as well would only add build time. The
+    # combination itself is covered by the cms-cadical job below, which is
+    # where it has to be a shared CryptoMiniSat -- see the comment there.
+    # MiniSat is left out too, deliberately: this job is the one that proves
+    # STP configures, builds and passes its tests with no MiniSat anywhere.
     - name: Dependencies
       if: steps.deps-cache.outputs.cache-hit != 'true'
       run: |
-        ./scripts/deps/setup-minisat.sh
-        ./scripts/deps/setup-cadical.sh
-        ./scripts/deps/setup-gtest.sh
-        ./scripts/deps/setup-outputcheck.sh
+        :  # everything here is fetched by the configure step below
+
+    # Outside the cached step, as in the main job: tiny and quick to build.
 
     - name: Compiler cache
       uses: actions/cache@v4
       with:
         path: ~/.cache/ccache
-        key: ccache-cadical-${{ github.run_id }}
-        restore-keys: ccache-cadical-
+        key: ccache-cadical-${{ matrix.cadical_tag }}/${{ github.run_id }}
+        restore-keys: ccache-cadical-${{ matrix.cadical_tag }}/
 
     # CMAKE_INSTALL_PREFIX and PYTHON_LIB_INSTALL_DIR are set so that the
     # install steps below land in the workspace rather than needing root.
@@ -245,7 +619,7 @@ jobs:
         mkdir build
         mkdir -p "$GITHUB_WORKSPACE/install/pylib"
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCaDiCaL_TAG:STRING=${{ matrix.cadical_tag }} -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -267,15 +641,14 @@ jobs:
     # install. Nothing caught it because the build tree links against absolute
     # paths and every test ran from the build directory.
     #
-    # LD_LIBRARY_PATH supplies the dependencies the install tree genuinely
-    # does not contain - minisat is installed under deps/ - and deliberately
-    # omits install/lib, since finding that is the property under test.
+    # LD_LIBRARY_PATH is deliberately left unset: this configuration has no
+    # solver shared libraries outside the install tree (CaDiCaL is a static
+    # archive), and finding install/lib is the property under test.
     - name: Check the installed stp runs from an unrelated directory
       run: |
         cmake --install build
 
         stp="$GITHUB_WORKSPACE/install/bin/stp"
-        deps="$GITHUB_WORKSPACE/deps/install/lib"
         readelf -d "$stp" | grep -E 'R(UN)?PATH' || echo "(no RPATH/RUNPATH)"
 
         soname=$(readelf -d "$stp" |
@@ -283,47 +656,229 @@ jobs:
         test -n "$soname"
 
         cd "$(mktemp -d)"
-        LD_LIBRARY_PATH="$deps" "$stp" --version > /dev/null
+        "$stp" --version > /dev/null
         echo "ok: runs from $PWD"
 
         # ...and must not be diverted by a decoy sitting in ./lib. Loading
         # this one fails outright ("file too short"), so a pass here means the
         # loader never consulted it rather than that it got away with it.
         mkdir lib && echo 'not an ELF file' > "lib/$soname"
-        LD_LIBRARY_PATH="$deps" "$stp" --version > /dev/null
+        "$stp" --version > /dev/null
         echo "ok: ignored the decoy ./lib/$soname"
 
-    # examples/simple is not part of the main build - no add_subdirectory
-    # reaches it - so nothing used to compile it, and it sat at
-    # cmake_minimum_required(VERSION 2.8) until CMake 4 made that a hard
-    # error. Build it against an install tree, which is the arrangement its
-    # README documents and the one downstream users actually get: this
-    # exercises `cmake --install` and the installed STPConfig.cmake together.
-    # This job is the one to do it in because it configures with
-    # NOCRYPTOMINISAT, so the generated STPConfig.cmake has no
-    # find_dependency(cryptominisat5) to satisfy.
+    # Everything above ran with the build tree still there, so nothing had
+    # established that the install tree stands on its own: a RUNPATH, a
+    # generated path or an exported target could point back into build/ and
+    # every check would still have passed. Delete it and use only what was
+    # installed. CMAKE_INSTALL_PREFIX is $GITHUB_WORKSPACE/install, set at
+    # configure time, so this is also the not-in-/usr/local case.
     #
-    # The prefix comes from CMAKE_INSTALL_PREFIX at configure time rather than
-    # `cmake --install --prefix` here, because the latter does not relocate the
-    # headers: lib/CMakeLists.txt installs PUBLIC_HEADER to the absolute
-    # CMAKE_INSTALL_FULL_INCLUDEDIR, which is fixed when the cache is written.
-    #
-    # deps/install/lib appears on both the link and the run, for the same
-    # reason the step above needs it: libstp records minisat as a DT_NEEDED
-    # rather than naming it in its link interface, and this workspace keeps
-    # minisat in a prefix no default search path covers. -rpath-link lets the
-    # linker resolve that DT_NEEDED; LD_LIBRARY_PATH lets the loader find it.
-    # A consumer whose minisat came from a distro package needs neither.
-    - name: Build the example against the install tree
+    # This is the last step in the job; nothing after it may use build/.
+    - name: Use the install tree with the build tree deleted
       run: |
-        cmake --install build
-        cmake -S examples/simple -B build-example \
-          -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" \
-          -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath-link,$GITHUB_WORKSPACE/deps/install/lib" \
+        rm -rf build
+        prefix="$GITHUB_WORKSPACE/install"
+
+        printf '%s\n' \
+          '(set-logic QF_BV)' \
+          '(declare-fun x () (_ BitVec 8))' \
+          '(assert (= (bvadd x x) (bvmul (_ bv2 8) x)))' \
+          '(check-sat)' \
+          '(exit)' > query.smt2
+
+        "$prefix/bin/stp" query.smt2 | grep -qx sat
+        echo "ok: installed stp solves a query"
+
+        # A find_package(STP) that cannot see this prefix does not fail: it
+        # keeps searching and settles on any other STP present, so the step
+        # would report on a package this job did not build. Pinning STP_DIR
+        # and switching the registries off is not enough on its own -- the
+        # system prefixes are still searched, and a stale /usr/local/lib/cmake/STP
+        # answers -- so the check that matters is asserting afterwards which
+        # package was actually resolved.
+        cmake -S tests/api/install/uf-public-header-consumer -B consumer \
+          -DSTP_DIR:PATH="$prefix/lib/cmake/STP" \
+          -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
+          -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF \
           -G Ninja
-        cmake --build build-example --parallel "$(nproc)"
-        LD_LIBRARY_PATH="$GITHUB_WORKSPACE/install/lib:$GITHUB_WORKSPACE/deps/install/lib" \
-          ./build-example/stp-example
+        grep -qx "STP_DIR:PATH=$prefix/lib/cmake/STP" consumer/CMakeCache.txt
+        cmake --build consumer --parallel "$(nproc)"
+        ctest --test-dir consumer --output-on-failure
+        echo "ok: consumer builds and runs against the installed package"
+
+        # The installed Python package, whose library_path.py comes from
+        # library_path.py.in_install and names the install prefix. The
+        # build-tree template is a different file, and it is the only one the
+        # ctest suite imports, so this is the first time the installed one is
+        # loaded at all.
+        PYTHONPATH="$prefix/pylib" python3 -c "
+        import stp
+        s = stp.Solver()
+        x = s.bitvec('x', width=8)
+        s.add(x + x != 2 * x)
+        assert s.check() is False, 'installed python module gave the wrong answer'
+        "
+        echo "ok: installed python module solves a query"
+
+        # And again from a different directory, which is what a packager
+        # staging into a temporary root or anyone unpacking a tarball
+        # elsewhere ends up with. This is what an absolute install RPATH
+        # breaks: the binary keeps looking where it was configured, and on a
+        # machine that has another libstp there it loads that one and crashes
+        # rather than reporting a missing library.
+        #
+        # The Python module is not retried here. Its library_path.py names
+        # ${prefix}/lib outright, so it is still tied to the configured
+        # prefix -- a separate matter from the RPATH.
+        mv "$prefix" "${prefix}-moved"
+        "${prefix}-moved/bin/stp" query.smt2 | grep -qx sat
+        ldd "${prefix}-moved/bin/stp" | grep -q "${prefix}-moved/bin/../lib/libstp"
+        echo "ok: relocated install tree runs and loads its own libstp"
+
+        cmake -S tests/api/install/uf-public-header-consumer -B consumer-moved \
+          -DSTP_DIR:PATH="${prefix}-moved/lib/cmake/STP" \
+          -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
+          -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF \
+          -G Ninja
+        grep -qx "STP_DIR:PATH=${prefix}-moved/lib/cmake/STP" consumer-moved/CMakeCache.txt
+        cmake --build consumer-moved --parallel "$(nproc)"
+        ctest --test-dir consumer-moved --output-on-failure
+        echo "ok: consumer builds against the relocated package"
+
+  # CryptoMiniSat and CaDiCaL in one binary. Every other Linux job enables
+  # exactly one of them, so until this job existed nothing established that
+  # the combination works -- the exclusions elsewhere were about build time,
+  # not about it being known-good, and a user who wanted both had only a link
+  # error to go on.
+  #
+  # This used to be the subtle job. CryptoMiniSat >= 5.14 built its own CaDiCaL
+  # and exported it as an imported target named plainly `cadical`, which a
+  # static libcryptominisat5 carried in its link interface -- so both CaDiCaLs
+  # reached libstp's link line and collided, and fitting them in one binary
+  # took a shared CryptoMiniSat installed into a prefix of its own, plus an
+  # LD_LIBRARY_PATH to run it. Built NOCADICAL it brings no CaDiCaL, so this is
+  # now an ordinary build with both backends on and no accommodation anywhere.
+  cms-cadical:
+    name: cms + cadical
+    runs-on: ubuntu-latest
+
+    # 400M rather than 800M; see the note on the gcc/clang job above.
+    env:
+      CCACHE_MAXSIZE: 400M
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    # libgmp-dev is CryptoMiniSat's, which the build builds and this job
+    # links; STP itself does not use GMP.
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          cmake \
+          flex \
+          gcc \
+          git \
+          libgmp-dev \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    # Its own key prefix because the dependency set differs: this is the only
+    # Linux job that builds both backends, so its deps/install holds both.
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: deps
+        key: deps-x86_64-cms-cadical-${{ steps.deps-key.outputs.key }}
+
+    # Outside the cached step, as in the gcc/clang job: the pinned mirror
+    # is small and builds in seconds.
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-cms-cadical/${{ github.run_id }}
+        restore-keys: ccache-cms-cadical/
+
+    # With CryptoMiniSat installed elsewhere, deps/install holds STP's
+    # dependencies and nothing else, so the pinned CaDiCaL can be fetched into
+    # it as usual and the two are simply in different places. That is the whole
+    # arrangement: STP's 3.0.1 in deps/install, CryptoMiniSat's 2.1.3 inside
+    # libcryptominisat5.so, two CaDiCaLs in one process, which is what this job
+    # is for. Until this branch they were the same directory, so STP's lookup
+    # found CryptoMiniSat's copy and stopped -- and the job silently built
+    # against 2.1.3, never fetched 3.0.1, and had one CaDiCaL to test with.
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
+      working-directory: build
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+    # ctest only ever reaches the default backend, which USE_CADICAL makes
+    # CaDiCaL, so solve through each backend by name and check the answers. A
+    # binary that links both and calls one of them wrongly passes everything
+    # above and fails here.
+    - name: Both backends solve
+      run: |
+        stp=build/stp
+
+        # The CaDiCaL linked is STP's own pin, which is what sharing the one
+        # CryptoMiniSat used to bundle gave up: that copy was 2.1.3, and the
+        # fallback to it was silent -- the build linked, solved, and passed
+        # everything below a version behind. Nothing bundles one now, so a 2.x
+        # here means something has gone back to finding one that does.
+        versions=$("$stp" --version | sed -n 's/^STP SAT solvers //p')
+        echo "linked: $versions"
+        case "$versions" in
+          *"cadical 3."*) ;;
+          *)
+            echo "::error::expected a 3.x CaDiCaL, got '$versions'"
+            exit 1 ;;
+        esac
+        case "$versions" in
+          *"cryptominisat "*) ;;
+          *) echo "::error::CryptoMiniSat is not in '$versions'"; exit 1 ;;
+        esac
+        # And nothing installed a second CaDiCaL beside it.
+        if ls "$GITHUB_WORKSPACE"/deps/install/lib*/libcadiback.a >/dev/null 2>&1; then
+          echo "::error::CadiBack was installed, so CryptoMiniSat was not built NOCADICAL"
+          exit 1
+        fi
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > sat.smt2
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(assert (and (= a #x01) (= a #x02)))(check-sat)' > unsat.smt2
+        for backend in --cadical --cryptominisat; do
+          out=$("$stp" $backend sat.smt2)
+          echo "$backend sat.smt2 -> '$out'"
+          [ "$out" = "sat" ] || { echo "::error::$backend answered '$out', expected sat"; exit 1; }
+          out=$("$stp" $backend unsat.smt2)
+          echo "$backend unsat.smt2 -> '$out'"
+          [ "$out" = "unsat" ] || { echo "::error::$backend answered '$out', expected unsat"; exit 1; }
+        done
 
   # Until this job existed, the only static build in CI was the Windows one,
   # so a break that only shows up when everything is linked into one
@@ -363,13 +918,176 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     - uses: ./.github/actions/build-static-linux
       with:
         build-type: ${{ matrix.build-type }}
         werror: ${{ matrix.werror }}
+
+  # -fvisibility=hidden is applied only when ENABLE_TESTING and
+  # BUILD_EXTRA_TOOLS are both off, because the tests and the extra tools
+  # call into entry points that are not part of the public API. Every other
+  # Linux job here turns at least one of them on, and the two that do not
+  # are STATICCOMPILE builds, where visibility does not affect linking at
+  # all. So the shared library CI built was never the one users get: the
+  # combination that hides symbols had no coverage.
+  #
+  # What that missed is a link failure, not a subtle one. Anything the stp
+  # binary calls in libstp has to be annotated DLL_PUBLIC, and a new call to
+  # an unannotated function -- get_git_version_tag's neighbour in
+  # printVersionInfo was exactly this -- fails to link in the default build
+  # while all of CI stays green.
+  #
+  # So: the documented build, no testing, no extra tools, shared library.
+  # The three settings are passed explicitly rather than left to their
+  # defaults, so that flipping a default cannot quietly stop covering the
+  # hidden-visibility case. MiniSat is the cheapest backend to install, and
+  # which one is linked does not matter here -- the point is the link.
+  build-default-shared:
+    name: gcc (default shared, hidden visibility)
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          cmake \
+          flex \
+          git \
+          ninja-build \
+          python3 \
+          zlib1g-dev
+
+    - name: Dependencies
+      run: |
+        :  # everything here is fetched by the configure step below
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DBUILD_SHARED_LIBS:BOOL=ON -DENABLE_TESTING:BOOL=OFF -DBUILD_EXTRA_TOOLS:BOOL=OFF -G Ninja ..
+
+    - name: Build
+      run: cmake --build build --parallel "$(nproc)"
+
+    # Confirm the hidden library really is loadable and complete enough to
+    # solve, not merely linkable. --version is here because it is what broke:
+    # it reaches four separate accessors in libstp and prints them.
+    - name: Smoke test
+      run: |
+        ldd build/stp | grep libstp
+        build/stp --version
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > test.smt2
+        out=$(build/stp test.smt2)
+        echo "output: '$out'"
+        [ "$out" = "sat" ]
+
+  # The MiniSat backend is opt-in (-DUSE_MINISAT) and no other Linux job
+  # enables it, so this is the configuration that keeps it honest: MiniSat
+  # as the only backend, which also makes it the default solver the whole
+  # test suite runs against. The USE_MINISAT-gated tests (the MiniSat
+  # gtest suites, the 'minisat' lit feature) only ever execute here.
+  build-minisat:
+    name: gcc (minisat only)
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          cmake \
+          flex \
+          git \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    - name: Dependencies
+      run: |
+        :  # everything here is fetched by the configure step below
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+
+    - name: Build
+      run: cmake --build build --parallel "$(nproc)"
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+    # The substitution solver answers trivial queries during simplification,
+    # so this one is built to reach bitblasting, ABC's CNF generation and
+    # MiniSat itself.
+    - name: Smoke test
+      run: |
+        stp=build/stp
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > test.smt2
+        out=$("$stp" --minisat test.smt2)
+        echo "minisat output: '$out'"
+        [ "$out" = "sat" ]
+        out=$("$stp" --simplifying-minisat test.smt2)
+        echo "simplifying-minisat output: '$out'"
+        [ "$out" = "sat" ]
+
+    # Rung 0 of the ladder in cmake/deps-helper.cmake: a MiniSat that is
+    # already built, named by MINISAT_INCLUDE_DIRS and MINISAT_LIBDIR. It is
+    # the only rung that decides MINISAT_HAS_TERMINATOR by compiling against
+    # the headers rather than deriving it from the pin, so it is the only one
+    # that would notice the probe going wrong -- and no job takes it since the
+    # MSVC leg moved onto the ExternalProject. The build above installed a
+    # MiniSat into deps/install; point a second configure straight at it.
+    #
+    # Configure only. What is under test is settled during configure, and
+    # rebuilding STP against the same archive it just linked would prove
+    # nothing the job has not already proved.
+    - name: Probe an already-built MiniSat
+      run: |
+        cmake -S . -B build-minisat-probe -G Ninja \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+          -DUSE_MINISAT:BOOL=ON \
+          -DUSE_CRYPTOMINISAT:STRING=OFF \
+          -DUSE_CADICAL:BOOL=OFF \
+          -DMINISAT_INCLUDE_DIRS:PATH="$GITHUB_WORKSPACE/deps/install/include" \
+          -DMINISAT_LIBDIR:PATH="$GITHUB_WORKSPACE/deps/install/lib" \
+          > probe.log 2>&1 || { cat probe.log; exit 1; }
+        grep -i minisat probe.log || true
+
+        # Without this the check below is vacuous: a configure that fell
+        # through to the ExternalProject would report the terminator too,
+        # having derived it from the pin rather than probed for it.
+        want="$GITHUB_WORKSPACE/deps/install/lib/libminisat.a"
+        if ! grep -qF "Found MiniSat: $want" probe.log; then
+          echo "::error::rung 0 did not resolve to $want, so nothing was probed"
+          cat probe.log
+          exit 1
+        fi
+        if ! grep -q "MiniSat can be stopped mid-search" probe.log; then
+          echo "::error::the terminator probe did not fire against the pinned MiniSat"
+          cat probe.log
+          exit 1
+        fi
 
   build-32bit:
     name: gcc (i386)
@@ -378,8 +1096,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     - name: Resolve dependency revisions
       id: deps-key
@@ -388,11 +1104,11 @@ jobs:
     - name: Restore dependencies
       uses: actions/cache@v4
       with:
-        path: |
-          deps/install
-          deps/gtest
-          deps/OutputCheck
-        key: deps-i386-${{ steps.deps-key.outputs.key }}
+        path: deps
+        # "cadical" in the prefix: the path set changed when the job moved
+        # off MiniSat, and the old entries (same script hashes) would
+        # otherwise hit forever without ever containing deps/cadical.
+        key: deps-i386-cadical-${{ steps.deps-key.outputs.key }}
 
     # Inside the workspace so the bind mount carries it back out to the
     # runner for the post-job save.
@@ -400,14 +1116,14 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .ccache
-        key: ccache-i386-${{ github.run_id }}
-        restore-keys: ccache-i386-
+        key: ccache-i386/${{ github.run_id }}
+        restore-keys: ccache-i386/
 
     - name: Build and test in a 32-bit container
       run: |
         mkdir -p .ccache
         docker run --rm -v "$GITHUB_WORKSPACE":/stp -w /stp \
-          -e CCACHE_DIR=/stp/.ccache -e CCACHE_MAXSIZE=800M -e CCACHE_UMASK=022 \
+          -e CCACHE_DIR=/stp/.ccache -e CCACHE_MAXSIZE=400M -e CCACHE_UMASK=022 \
           i386/debian:bookworm linux32 ./scripts/ci-32bit.sh
 
     # The container writes as root; hand the cached trees back to the runner
@@ -418,26 +1134,35 @@ jobs:
         mkdir -p .ccache deps
         sudo chown -R "$(id -u):$(id -g)" .ccache deps
 
-  build-windows:
-    name: windows
+  # The MSVC leg is the MiniSat one out of necessity, not preference: MSVC
+  # compiles neither CryptoMiniSat (POSIX-only oracle code) nor CaDiCaL
+  # (unguarded __builtin_* throughout), so MiniSat is the only backend a
+  # cl-built STP can link. The MinGW job below covers CaDiCaL on Windows.
+  build-windows-minisat:
+    name: windows (minisat, MSVC)
     runs-on: windows-2025
 
     env:
-      MINISAT_ROOT: ${{ github.workspace }}\minisat\install
       # Build ABC single-threaded: its pthread/atomics code paths don't
       # compile with MSVC. ABC's Makefile (run during CMake configure to
       # extract flags) reads this from the environment.
       ABC_USE_NO_PTHREADS: 1
-      # minisat and STP both predate CMP0074, so ZLIB_ROOT is ignored;
-      # pass the include dir and library explicitly instead.
+      # vcpkg installs the static zlib as zs.lib, which is not one of the
+      # names FindZLIB searches for, so ZLIB_ROOT does not find it: name the
+      # include directory and the library file instead.
+      # cmake/FindMiniSat.cmake hands both on to MiniSat's own build, which
+      # searches the default paths only and so would never find the vcpkg
+      # copy by itself.
       # ZLIB_LIBRARY is located after the vcpkg install (see below).
       ZLIB_INCLUDE_DIR: C:\vcpkg\installed\x64-windows-static\include
+      # Turns on sccache's GitHub Actions storage backend. It has to be set for
+      # the job rather than the step, because the first compile starts a
+      # long-lived sccache server that inherits it once and keeps it.
+      SCCACHE_GHA_ENABLED: 'true'
 
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     # Fetched straight from the upstream release rather than via
     # 'choco install winflexbison3': community.chocolatey.org intermittently
@@ -523,26 +1248,147 @@ jobs:
         if (-not $lib) { throw "no zlib .lib found" }
         "ZLIB_LIBRARY=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-    - name: Build minisat
+    # The Ninja generator below needs cl on PATH with INCLUDE/LIB/LIBPATH set,
+    # rather than locating the toolchain for itself the way the Visual Studio
+    # generator does. vswhere and Enter-VsDevShell ship on the runner images, so
+    # this needs no third-party action; the environment they produce is handed to
+    # every later step through GITHUB_PATH and GITHUB_ENV, which is why it is
+    # entered once here instead of separately in each step that compiles.
+    - name: Enter the MSVC developer environment
       run: |
-        git clone --depth 1 https://github.com/stp/minisat
-        cd minisat
-        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
-        cmake --build build --config Release --target install
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        $vs = & $vswhere -latest -property installationPath
+        if (-not $vs) { throw "vswhere found no Visual Studio" }
+        $before = $env:PATH -split ';'
+        Import-Module (Join-Path $vs "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
+        Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64'
 
+        # GITHUB_PATH is prepended to the PATH of every later step, so only the
+        # entries the dev shell added are written out: re-listing the whole of
+        # PATH would put a second copy of the runner's own entries --
+        # winflexbison, installed above, among them -- ahead of the originals.
+        $env:PATH -split ';' |
+          Where-Object { $_ -and $before -notcontains $_ } |
+          Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+        foreach ($name in 'INCLUDE', 'LIB', 'LIBPATH') {
+          $value = [Environment]::GetEnvironmentVariable($name)
+          if (-not $value) { throw "$name is unset after Enter-VsDevShell" }
+          "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        }
+
+        # Fails the step here, with a clear message, rather than at the first
+        # compile with a CMake toolchain-detection error. Ninja is on the runner
+        # image in its own right; the dev shell also carries the copy that comes
+        # with VS's C++ CMake component, so which one answers is not important.
+        foreach ($tool in 'cl', 'ninja') {
+          "$($tool): $((Get-Command $tool).Source)"
+        }
+
+    # sccache keys each compiled object on the preprocessed source, the compiler
+    # and its flags, and stores it in the GitHub Actions cache. ABC is 920 C
+    # files pinned at a fixed revision, so it recompiles identically every
+    # run and hits in full; STP's own objects hit for whatever the branch did not
+    # touch. Nothing here needs a cache key maintained by hand, the way the
+    # actions/cache steps in the Linux jobs do -- sccache derives its own, so a
+    # stale hit is not expressible.
+    - uses: mozilla-actions/sccache-action@v0.0.11
+
+    # LibBF used to be fetched with the script's clone half and then compiled
+    # here by hand, because the script's compile half is cc/ar and this job has
+    # cl. cmake/FindLibBF.cmake supplies LibBF with a CMakeLists of its own, so
+    # the configure step below builds it with whatever compiler this build is
+    # using -- cl included -- and there is nothing Windows-specific left to do.
+    #
+    # MiniSat was the last of those hand-built dependencies, and the only one
+    # whose pinned commit had to be written out twice -- once here and once in
+    # cmake/FindMiniSat.cmake, where the two drifting apart would have left
+    # this leg quietly testing a MiniSat no other job builds. It is an
+    # ExternalProject like the rest now: the configure step below fetches and
+    # builds it, with this job's compiler, flags and sccache.
+
+    # Ninja rather than the Visual Studio generator, for two reasons. MSBuild
+    # invoked without /m builds one project at a time, and its ClCompile task
+    # without /MP compiles one file at a time within a project; neither is set
+    # anywhere, so this job used to compile ~1400 translation units serially,
+    # 920 of them ABC's. Ninja parallelises by default. And
+    # CMAKE_<LANG>_COMPILER_LAUNCHER, which is how sccache is wired into a CMake
+    # build, is honoured only by the Makefile and Ninja generators -- the Visual
+    # Studio generator ignores it silently, caching nothing.
+    #
+    # The build type has to be named now that the generator is single-config.
+    # RelWithDebInfo is what this job already configured: the Visual Studio
+    # generator ignored CMAKE_BUILD_TYPE and compiled --config Release, but
+    # ENABLE_ASSERTIONS was settled from CMAKE_BUILD_TYPE at configure time, so
+    # the binary this job smoke-tests has always asserted. Naming Release here
+    # would compile the same flags but quietly drop that, leaving no Windows job
+    # with assertions live.
+    #
+    # CMP0141/Embedded is what makes RelWithDebInfo cacheable: it moves CMake off
+    # the default /Zi, whose shared PDB sccache cannot reproduce from a hit, onto
+    # /Z7. See the matching note on the /Z7 in CMakeLists.txt. NB sccache's own
+    # README spells this -DCMAKE_POLICY_CMP0141, which is not a CMake variable
+    # and so does nothing: the policy default is CMAKE_POLICY_DEFAULT_CMP<NNNN>.
+    # Getting it wrong is silent -- /Zi survives and nothing is ever cached --
+    # which is what the hit rate printed after the build is there to catch.
+    #
+    # USE_CRYPTOMINISAT=OFF: CryptoMiniSat does not build with MSVC (CaDiCaL
+    # and CMS's oracle use POSIX-only code); upstream CMS only supports
+    # MinGW on Windows.
     - name: Configure
-      # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
-      # and CMS's oracle use POSIX-only code); upstream CMS only supports
-      # MinGW on Windows.
-      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+      run: >
+        cmake -B build -G Ninja
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
+        -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
+        -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        -DENABLE_AUTO_DOWNLOAD=ON
+        -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DUSE_CRYPTOMINISAT=OFF -DUSE_CADICAL=OFF
+        -DENABLE_PYTHON_INTERFACE=OFF
+        "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR"
+        "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY"
+        .
 
+    # No --config: Ninja is single-config, and no --parallel either, since Ninja
+    # already defaults to one job per core plus two. The stats are printed so a
+    # run that quietly stops hitting is visible rather than just slow.
     - name: Build
-      run: cmake --build build --config Release
+      run: |
+        sccache --zero-stats
+        cmake --build build
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        sccache --show-stats
 
+    # build\stp.exe, not the build\bin\stp.exe this used to look for, and the
+    # generator is what moved it. tools/stp/CMakeLists.txt sets the target's own
+    # RUNTIME_OUTPUT_DIRECTORY to PROJECT_BINARY_DIR. Under the Visual Studio
+    # generator that was outranked: the WIN32 block in CMakeLists.txt points
+    # CMAKE_RUNTIME_OUTPUT_DIRECTORY at bin/, and the multi-config branch below
+    # copies it into CMAKE_RUNTIME_OUTPUT_DIRECTORY_<CONFIG>, which initialises
+    # the per-config target property -- and a per-config property beats the plain
+    # one. Ninja has no per-config property, so the tool's own setting wins and
+    # the binary lands where every Linux job already finds it.
+
+    # ExternalProject logs each step to a file and prints only a truncated tail
+    # when one fails, so a dependency that emits many warnings hides its own
+    # error. Keep the logs: they are the only way to diagnose a Windows-only
+    # failure from here.
+    - name: Keep the dependency build logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ep-logs-${{ github.job }}
+        path: |
+          build/deps/src/*-stamp/*.log
+        if-no-files-found: ignore
     - name: Smoke test
       run: |
-        dir build\bin
-        $stp = if (Test-Path build\bin\stp.exe) { "build\bin\stp.exe" } else { "build\bin\stp_simple.exe" }
+        $stp = "build\stp.exe"
+        if (-not (Test-Path $stp)) {
+          Get-ChildItem build -Filter *.exe -Recurse | ForEach-Object { $_.FullName }
+          throw "$stp was not built; the executables found are listed above"
+        }
+        Get-Item $stp
         "(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)" | Out-File -Encoding ascii test.smt2
         $out = & $stp test.smt2 2>&1 | Out-String
         "solver output: '$($out.Trim())'"
@@ -552,12 +1398,157 @@ jobs:
         if ($out.Trim() -ne "sat") { exit 1 }
         # The query above is answered by the substitution solver during
         # simplification, so it never reaches the SAT backend. This one
-        # cannot be simplified away: it is the only line here that
-        # exercises bitblasting, ABC's CNF generation and minisat.
+        # cannot be simplified away, so it exercises bitblasting, ABC's
+        # CNF generation and minisat.
         "(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)" | Out-File -Encoding ascii testsat.smt2
         $out = & $stp testsat.smt2 2>&1 | Out-String
         "sat-backend output: '$($out.Trim())'"
         "sat-backend exit code: $LASTEXITCODE"
         if ($out.Trim() -ne "sat") { exit 1 }
+        "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (fp.gt (fp.add RNE x x) x))(check-sat)" | Out-File -Encoding ascii testfp.smt2
+        $outfp = & $stp testfp.smt2 2>&1 | Out-String
+        "fp solver output: '$($outfp.Trim())'"
+        "fp solver exit code: $LASTEXITCODE"
+        if ($outfp.Trim() -ne "sat") { exit 1 }
+        # Real-literal folding through LibBF as MSVC compiled it: the decimal
+        # fold must equal its packed-bits spelling, and a rational under a
+        # symbolic rounding mode pinned to RTZ must pick that conversion.
+        "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)" | Out-File -Encoding ascii testlit.smt2
+        $outlit = & $stp testlit.smt2 2>&1 | Out-String
+        "real-literal output: '$($outlit.Trim())'"
+        "real-literal exit code: $LASTEXITCODE"
+        if ($outlit.Trim() -ne "unsat") { exit 1 }
+        "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(declare-fun r () RoundingMode)(assert (= x ((_ to_fp 8 24) r (/ 1 3))))(assert (= r RTZ))(assert (distinct x ((_ to_fp 8 24) #x3eaaaaaa)))(check-sat)" | Out-File -Encoding ascii testrat.smt2
+        $outrat = & $stp testrat.smt2 2>&1 | Out-String
+        "rational/symbolic-rm output: '$($outrat.Trim())'"
+        "rational/symbolic-rm exit code: $LASTEXITCODE"
+        if ($outrat.Trim() -ne "unsat") { exit 1 }
+
+  # CaDiCaL on Windows. MSVC cannot compile CaDiCaL, but CaDiCaL's BUILD.md
+  # documents a MinGW build, so this leg compiles both CaDiCaL and STP with
+  # the MSYS2 UCRT64 toolchain: the Windows counterpart of the Linux cadical
+  # job, and CaDiCaL-only backend-wise.
+  build-windows-cadical:
+    name: windows (cadical, MinGW)
+    runs-on: windows-2025
+
+    env:
+      # Build ABC single-threaded, as the MSVC leg does: fewer moving parts
+      # than winpthreads, and nothing here needs a threaded ABC.
+      ABC_USE_NO_PTHREADS: 1
+      # ABC's arch_flags probe assumes 8-byte pointers mean 64-bit Linux and
+      # prints -DLIN64, whose ABC_PTRINT_T is 'long' -- 32 bits on LLP64
+      # MinGW, so pointer-carrying casts fail to compile. (MSVC never hit
+      # this: cl cannot build the probe the way the makefile invokes it, so
+      # the flags come out empty there.) This routes abc_global.h onto
+      # stdint.h's intptr_t instead of the probe's guess.
+      ABC_USE_STDINT_H: 1
+      # Turns on sccache's GitHub Actions storage backend. It has to be set for
+      # the job rather than the step, because the first compile starts a
+      # long-lived sccache server that inherits it once and keeps it.
+      SCCACHE_GHA_ENABLED: 'true'
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    # sccache keys each compiled object on the preprocessed source, the compiler
+    # and its flags, and stores it in the GitHub Actions cache. ABC is 920 C
+    # files pinned at a fixed revision, so it recompiles identically every
+    # run and hits in full; STP's own objects hit for whatever the branch did not
+    # touch. Nothing here needs a cache key maintained by hand, the way the
+    # actions/cache steps in the Linux jobs do -- sccache derives its own, so a
+    # stale hit is not expressible.
+    - uses: mozilla-actions/sccache-action@v0.0.11
+
+    # The action puts sccache on the *Windows* PATH, which setup-msys2 does not
+    # import into the MSYS2 shell (its path-type defaults to "minimal"). The
+    # SCCACHE_PATH it exports does survive, being an ordinary environment
+    # variable, but it names the binary without the .exe suffix. Resolve both
+    # here, once, in forward-slash form so that CMake and bash can each take the
+    # result verbatim. Run under pwsh: this is the one step in the job that is
+    # talking to the runner rather than to the MSYS2 toolchain.
+    - name: Locate sccache
+      shell: pwsh
+      run: |
+        $exe = $env:SCCACHE_PATH
+        if (-not $exe.EndsWith('.exe')) { $exe = "$exe.exe" }
+        if (-not (Test-Path $exe)) { throw "sccache is not at $exe" }
+        & $exe --version
+        if ($LASTEXITCODE -ne 0) { throw "sccache failed to run" }
+        "SCCACHE=$($exe -replace '\\', '/')" |
+          Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: false
+        install: >-
+          bison
+          flex
+          git
+          make
+          mingw-w64-ucrt-x86_64-cmake
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-ninja
+
+    # CaDiCaL and LibBF used to be built by hand here, each with flags this
+    # toolchain needs and the setup scripts did not have. Both are now the
+    # build's own job: cmake/FindCaDiCaL.cmake drives CaDiCaL's configure
+    # script and builds libcadical.a alone -- which is what the hand-written
+    # step was for, since CaDiCaL's default target also builds mobical, and
+    # mobical does not compile on MinGW -- and cmake/FindLibBF.cmake gives
+    # LibBF a CMakeLists, so the UCRT64 gcc compiles it like everything else.
+
+    - name: Configure
+      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_PYTHON_INTERFACE:BOOL=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
+
+    # CaDiCaL above is built by its own makefile and so is not cached; ABC and
+    # STP are, which is the bulk of this step. The stats are printed so a run
+    # that quietly stops hitting is visible rather than just slow.
+    - name: Build
+      run: |
+        "$SCCACHE" --zero-stats
+        cmake --build build --parallel "$(nproc)"
+        "$SCCACHE" --show-stats
+
+    # The first query is answered during simplification; the second cannot
+    # be, so it exercises bitblasting, ABC's CNF generation and CaDiCaL.
+
+    # ExternalProject logs each step to a file and prints only a truncated tail
+    # when one fails, so a dependency that emits many warnings hides its own
+    # error. Keep the logs: they are the only way to diagnose a Windows-only
+    # failure from here.
+    - name: Keep the dependency build logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ep-logs-${{ github.job }}
+        path: |
+          build/deps/src/*-stamp/*.log
+        if-no-files-found: ignore
+    - name: Smoke test
+      run: |
+        stp=$(find build -name 'stp.exe' | head -1)
+        echo "binary: $stp"
+        test -n "$stp"
+        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > test.smt2
+        out=$("$stp" test.smt2)
+        echo "output: '$out'"
+        [ "$out" = "sat" ]
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > testsat.smt2
+        out=$("$stp" testsat.smt2)
+        echo "sat-backend output: '$out'"
+        [ "$out" = "sat" ]
+        # Real-literal folding through LibBF as MinGW compiled it: the decimal
+        # fold must equal its packed-bits spelling.
+        echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)' > testlit.smt2
+        out=$("$stp" testlit.smt2)
+        echo "real-literal output: '$out'"
+        [ "$out" = "unsat" ]
 
 # EOF

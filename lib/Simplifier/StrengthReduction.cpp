@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Util/CBVOps.h"
+#include "stp/Util/DagWalk.h"
 #include <iostream>
 
 namespace stp
@@ -33,105 +34,43 @@ namespace stp
   using std::make_pair;
   using simplifier::constantBitP::FixedBits;
 
-  // A special version that handles the lhs appearing in the rhs of the fromTo
-  // map.
-  ASTNode StrengthReduction::replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache)
-  {
-    if (n.isAtom())
-      return n;
-
-    {
-      const ASTNodeMap::const_iterator it = cache.find(n);
-      if (it != cache.end())
-        return it->second;
-    }
-
-    ASTNode result = n;
-
-    {
-      const ASTNodeMap::iterator it = fromTo.find(n);
-      if (it != fromTo.end())
-      {
-        result = it->second;
-        fromTo.erase(it); // this is how it differs from the everyday replace.
-      }
-    }
-
-    ASTVec new_children;
-    new_children.reserve(result.GetChildren().size());
-
-    for (size_t i = 0; i < result.Degree(); i++)
-      new_children.push_back(replace(result[i], fromTo, cache));
-
-    if (ASTChildren(new_children) == result.GetChildren())
-    {
-      cache.insert(make_pair(n, result));
-      return result;
-    }
-
-    if (n.GetValueWidth() == 0) // n.GetType() == BOOLEAN_TYPE
-    {
-      result = nf->CreateNode(result.GetKind(), new_children);
-    }
-    else
-    {
-      // If the index and value width aren't saved, they are reset sometimes
-      // (??)
-      result = nf->CreateArrayTerm(result.GetKind(), result.GetIndexWidth(),
-                                   result.GetValueWidth(), new_children);
-    }
-
-    cache.insert(make_pair(n, result));
-    return result;
-  }
-
   // visit each node apply strength reductions to it.
+  //
+  // postOrderRebuild does the walking, on the heap: how deeply the input
+  // nests is not this pass's choice, and a call per level exhausts the
+  // stack. What is left here is the reduction of a single node.
   ASTNode StrengthReduction::visit(const ASTNode& n, NodeDomainAnalysis& nda, ASTNodeMap& cache)
   {
-    if (n.Degree() == 0 )
-      return n;
+    return postOrderRebuild(
+        n, cache, [&](const ASTNode& node, const ASTVec& children) {
+          ASTNode newN;
+          if (node.GetType() == BOOLEAN_TYPE)
+            newN = nf->CreateNode(node.GetKind(), children);
+          else
+            newN = nf->CreateArrayTerm(node.GetKind(), node.GetIndexWidth(),
+                                       node.GetValueWidth(), children);
 
-    {
-      const ASTNodeMap::const_iterator it = cache.find(n);
-      if (it != cache.end())
-        return it->second;
-    }
+          // buildMap memoises on the node, so it only needs redoing when the
+          // preceding reduction actually replaced the node.
+          nda.buildMap(newN);
+          ASTNode reduced = strengthReduction(newN, *nda.getCbitMap());
 
-    ASTVec children;
-    children.reserve(n.Degree());
-    
-    for (const auto & c: n)
-    {
-      children.push_back(visit(c,nda,cache));
-    }
+          if (reduced != newN)
+          {
+            newN = reduced;
+            nda.buildMap(newN);
+          }
+          reduced = strengthReduction(newN, *nda.getIntervalMap());
 
-    ASTNode newN;
-    if (n.GetType() == BOOLEAN_TYPE)
-      newN = nf->CreateNode(n.GetKind(), children);
-    else
-      newN = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),n.GetValueWidth(), children);
-   
-    // buildMap memoises on the node, so it only needs redoing when the
-    // preceding reduction actually replaced the node.
-    nda.buildMap(newN);
-    ASTNode reduced = strengthReduction(newN, *nda.getCbitMap());
+          if (reduced != newN)
+          {
+            newN = reduced;
+            nda.buildMap(newN);
+          }
+          newN = strengthReduction(newN, *nda.getValueSetMap());
 
-    if (reduced != newN)
-    {
-      newN = reduced;
-      nda.buildMap(newN);
-    }
-    reduced = strengthReduction(newN, *nda.getIntervalMap());
-
-    if (reduced != newN)
-    {
-      newN = reduced;
-      nda.buildMap(newN);
-    }
-    newN = strengthReduction(newN, *nda.getValueSetMap());
-
-    cache.insert({n,newN});
-    return newN;
+          return newN;
+        });
   }
 
   ASTNode StrengthReduction::topLevel(const ASTNode& top, NodeDomainAnalysis& nda)
@@ -390,7 +329,16 @@ namespace stp
           newN = nf->getFalse();
       }
       else
-        newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth());
+      {
+        // The replaced node's floating-point format (if it has one) must be
+        // passed along: a constant is a leaf, so unlike the interior node it
+        // stands in for it cannot derive a format from children. A bare
+        // bitvector constant put where a float was makes the parent
+        // operation's rebuild abort -- fp.neg of a constant folds by making
+        // a floating-point constant, of format (0, 0) then.
+        newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth(),
+                                  n.GetExpWidth(), n.GetSigWidth());
+      }
 
       replaceWithConstant++;
     }
@@ -522,6 +470,129 @@ namespace stp
     }
     else if (kind == BVPLUS || kind == BVXOR)
     {
+      // A pair of addends whose possibly-one bits are disjoint can never
+      // carry into each other, so their sum is their bitwise-or. Peeling
+      // such a pair out of an n-ary sum removes an adder stage. Unlike the
+      // whole-node rule below this needs bit information for only the two
+      // addends being paired, so it still applies when the rest are unknown.
+      if (uf->enable_pair_extract && kind == BVPLUS && n.Degree() > 2)
+      {
+        const unsigned w = n.GetValueWidth();
+        const unsigned words = (w + 63) / 64;
+
+        // A group holds addends that are pairwise disjoint, so the group's
+        // sum is its bitwise-or. Addends with no bit information sit in
+        // singleton groups and never merge.
+        vector<ASTVec> groups;
+        vector<vector<uint64_t>> masks;
+        vector<char> known;
+        groups.reserve(n.Degree());
+        masks.reserve(n.Degree());
+        known.reserve(n.Degree());
+
+        for (unsigned j = 0; j < n.Degree(); j++)
+        {
+          groups.push_back(ASTVec(1, n[j]));
+          const auto it = visited.find(n[j]);
+          const bool haveBits = (it != visited.end() && it->second != nullptr);
+          known.push_back(haveBits ? 1 : 0);
+          masks.push_back(vector<uint64_t>(words, 0));
+          if (!haveBits)
+            continue;
+          for (unsigned i = 0; i < w; i++)
+            if (!it->second->isFixed(i) || it->second->getValue(i))
+              masks.back()[i / 64] |= (uint64_t(1) << (i % 64));
+        }
+
+        bool merged = false;
+        for (unsigned x = 0; x < groups.size(); x++)
+        {
+          if (!known[x])
+            continue;
+          for (unsigned y = x + 1; y < groups.size();)
+          {
+            bool overlap = !known[y];
+            for (unsigned k = 0; k < words && !overlap; k++)
+              if (masks[x][k] & masks[y][k])
+                overlap = true;
+            if (overlap)
+            {
+              y++;
+              continue;
+            }
+            for (unsigned k = 0; k < words; k++)
+              masks[x][k] |= masks[y][k];
+            groups[x].insert(groups[x].end(), groups[y].begin(),
+                             groups[y].end());
+            groups.erase(groups.begin() + y);
+            masks.erase(masks.begin() + y);
+            known.erase(known.begin() + y);
+            merged = true;
+          }
+        }
+
+        if (merged)
+        {
+          ASTVec newKids;
+          newKids.reserve(groups.size());
+          for (const auto& g : groups)
+          {
+            if (g.size() == 1)
+            {
+              newKids.push_back(g[0]);
+              continue;
+            }
+
+            // The group's members are pairwise disjoint, so each bit is
+            // owned by at most one of them and the group is just wiring:
+            // a concatenation of slices of its members, with zero constants
+            // where no member can be one.
+            vector<int> owner(w, -1);
+            for (unsigned m = 0; m < g.size(); m++)
+            {
+              const auto it = visited.find(g[m]);
+              if (it == visited.end() || it->second == nullptr)
+                continue;
+              for (unsigned i = 0; i < w; i++)
+                if (!it->second->isFixed(i) || it->second->getValue(i))
+                  owner[i] = (int)m;
+            }
+
+            // Walk the maximal runs of equal ownership from the top down,
+            // folding them into a right-leaning concatenation.
+            ASTNode acc;
+            unsigned accWidth = 0;
+            unsigned hi = w;
+            while (hi > 0)
+            {
+              unsigned lo = hi - 1;
+              while (lo > 0 && owner[lo - 1] == owner[hi - 1])
+                lo--;
+              const unsigned pieceWidth = hi - lo;
+              const ASTNode piece =
+                  (owner[hi - 1] < 0)
+                      ? nf->CreateZeroConst(pieceWidth)
+                      : nf->CreateTerm(BVEXTRACT, pieceWidth, g[owner[hi - 1]],
+                                       nf->CreateBVConst(32, hi - 1),
+                                       nf->CreateBVConst(32, lo));
+              if (accWidth == 0)
+                acc = piece;
+              else
+                acc = nf->CreateTerm(BVCONCAT, accWidth + pieceWidth, acc,
+                                     piece);
+              accWidth += pieceWidth;
+              hi = lo;
+            }
+            newKids.push_back(acc);
+          }
+
+          newN = (newKids.size() == 1) ? newKids[0]
+                                       : nf->CreateTerm(BVPLUS, w, newKids);
+          replaceWithSimpler++;
+          return newN;
+        }
+      }
+
       // If all the bits are zero except for one, in each position, replace by OR
       vector<FixedBits*> children;
       bool bad = false;
@@ -600,24 +671,66 @@ namespace stp
           // addition narrows to the width that can carry.
           const unsigned width = n.GetValueWidth();
 
+          // An operand with e possibly-one bits is at most 2^e - 1, so the
+          // sum is at most the sum of those, and the width that can carry
+          // it is that bound's bit length.
+          //
+          // Summing the bounds rather than taking the widest and allowing
+          // ceil(log2(m)) bits of carry is both tighter and, more usefully,
+          // stable: the loose form reads the operand *count*, so two
+          // additions over almost the same operands land on different
+          // widths whenever their counts straddle a power of two. Their
+          // operands are then extracted to different widths, share no node,
+          // and every later chance to build one adder instead of two --
+          // CommonSubSum's, and the bit-blaster's own structural sharing --
+          // is gone. See stp#444.
+          const unsigned limbs = width / 64 + 2;
+          std::vector<uint64_t> bound(limbs, 0);
           unsigned maxEffective = 0;
+
           for (unsigned i = 0; i < children.size(); i++)
           {
             unsigned nlz = 0;
             while (nlz < width && children[i]->isFixed(width - 1 - nlz) &&
                    !children[i]->getValue(width - 1 - nlz))
               nlz++;
-            if (width - nlz > maxEffective)
-              maxEffective = width - nlz;
+            const unsigned effective = width - nlz;
+            if (effective > maxEffective)
+              maxEffective = effective;
+
+            // 2^effective, taken back down to sum(2^e - 1) below. Adding
+            // the power is one bit and a carry walk; adding the mask is
+            // the same answer the long way round.
+            unsigned limb = effective / 64;
+            uint64_t addend = UINT64_C(1) << (effective % 64);
+            while (addend != 0 && limb < limbs)
+            {
+              bound[limb] += addend;
+              addend = (bound[limb] < addend) ? 1 : 0;
+              limb++;
+            }
           }
 
-          // Adding m terms can carry ceil(log2(m)) bits upwards.
-          unsigned carry = 0;
-          while ((1u << carry) < children.size())
-            carry++;
+          uint64_t borrow = children.size();
+          for (unsigned limb = 0; borrow != 0 && limb < limbs; limb++)
+          {
+            const uint64_t before = bound[limb];
+            bound[limb] -= borrow;
+            borrow = (bound[limb] > before) ? 1 : 0;
+          }
 
-          const unsigned rest = maxEffective + carry;
-          if (maxEffective > 0 && rest < width)
+          unsigned rest = 0;
+          for (unsigned limb = limbs; limb-- > 0;)
+            if (bound[limb] != 0)
+            {
+              unsigned bit = 63;
+              while ((bound[limb] & (UINT64_C(1) << bit)) == 0)
+                bit--;
+              rest = limb * 64 + bit + 1;
+              break;
+            }
+
+          if (maxEffective > 0 && rest > 0 && rest < width)
           {
             ASTVec narrowed;
             narrowed.reserve(n.Degree());
@@ -938,5 +1051,6 @@ namespace stp
     std::cerr << "{" << name
               << "} replace with simpler operation: " << replaceWithSimpler
               << std::endl;
+
   }
 }

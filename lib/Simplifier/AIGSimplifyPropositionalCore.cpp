@@ -43,7 +43,10 @@ THE SOFTWARE.
 #include "opt/dar/dar.h"
 
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BitBlaster.h"
+
+#include <iostream>
 
 namespace stp
 {
@@ -128,42 +131,84 @@ ASTNode AIGSimplifyPropositionalCore::theoryToFresh(const ASTNode& n,
   return result;
 }
 
-// Convert the AIG back to an ASTNode.
-ASTNode AIGSimplifyPropositionalCore::convert(BBNodeManagerAIG& mgr,
-                                              Aig_Obj_t* obj, cacheType& cache)
+// The AIG literal an object stands for: 2*id + complement, so x and !x are
+// distinct keys and neither is a pointer.
+static inline unsigned aigLit(Aig_Obj_t* obj)
 {
-  cacheType::const_iterator it;
-  if ((it = cache.find(obj)) != cache.end())
-    return it->second;
+  return 2u * Aig_ObjId(Aig_Regular(obj)) + (Aig_IsComplement(obj) ? 1u : 0u);
+}
 
-  if (Aig_IsComplement(obj))
-    return nf->CreateNode(NOT, convert(mgr, Aig_Regular(obj), cache));
-  else if (Aig_ObjIsAnd(obj))
+// Convert the AIG back to an ASTNode.
+//
+// Iterative, two-visit post-order. The recursive form put one frame on the
+// stack for every AND node, and nothing bounds an AIG's depth: DeepDag_Test
+// covers the blaster and ABC's own CNF walks but has never reached this pass,
+// so the overflow here was latent rather than absent.
+//
+// Operands are pushed child1-then-child0 so that child0 is finished first,
+// which is the order the recursive form used. Node creation order decides
+// node_uid, and node_uid decides every sort that ties on node identity.
+ASTNode AIGSimplifyPropositionalCore::convert(BBNodeManagerAIG& mgr,
+                                              Aig_Obj_t* root, cacheType& cache)
+{
+  std::vector<std::pair<Aig_Obj_t*, bool>> pending(1,
+                                                   std::make_pair(root, false));
+  while (!pending.empty())
   {
-    // Argument evaluation order is unspecified, so convert each child into a
-    // named variable first, otherwise the nodes are built in a
-    // compiler-dependent order.
-    const ASTNode child0 = convert(mgr, Aig_ObjChild0(obj), cache);
-    const ASTNode child1 = convert(mgr, Aig_ObjChild1(obj), cache);
-    ASTNode result = nf->CreateNode(AND, child0, child1);
-    cache.insert(make_pair(obj, result));
-    return result;
+    Aig_Obj_t* obj = pending.back().first;
+    const bool expanded = pending.back().second;
+    pending.pop_back();
+
+    if (cache.find(aigLit(obj)) != cache.end())
+      continue;
+
+    if (Aig_IsComplement(obj))
+    {
+      Aig_Obj_t* regular = Aig_Regular(obj);
+      if (!expanded)
+      {
+        pending.push_back(std::make_pair(obj, true));
+        pending.push_back(std::make_pair(regular, false));
+        continue;
+      }
+      cache[aigLit(obj)] =
+          nf->CreateNode(NOT, cache.at(aigLit(regular)));
+    }
+    else if (Aig_ObjIsAnd(obj))
+    {
+      if (!expanded)
+      {
+        pending.push_back(std::make_pair(obj, true));
+        pending.push_back(std::make_pair(Aig_ObjChild1(obj), false));
+        pending.push_back(std::make_pair(Aig_ObjChild0(obj), false));
+        continue;
+      }
+      cache[aigLit(obj)] = nf->CreateNode(AND, cache.at(aigLit(Aig_ObjChild0(obj))),
+                                          cache.at(aigLit(Aig_ObjChild1(obj))));
+    }
+    else if (obj == Aig_ManConst1(mgr.aigMgr))
+      cache[aigLit(obj)] = bm->ASTTrue;
+    else if (obj == Aig_ManConst0(mgr.aigMgr))
+      cache[aigLit(obj)] = bm->ASTFalse;
+    else if (Aig_ObjIsCo(obj))
+    {
+      if (!expanded)
+      {
+        pending.push_back(std::make_pair(obj, true));
+        pending.push_back(std::make_pair(Aig_ObjChild0(obj), false));
+        continue;
+      }
+      cache[aigLit(obj)] = cache.at(aigLit(Aig_ObjChild0(obj)));
+    }
+    else
+    {
+      // Every combinational input was put into the cache by topLevel(), so
+      // reaching here means the symbol-to-input mapping is incomplete.
+      assert(!Aig_ObjIsCi(obj) && "AIG input missing from the symbol map");
+      FatalError("AIGSimplifyPropositionalCore: unhandled AIG object type");
+    }
   }
-  else if (obj == Aig_ManConst1(mgr.aigMgr))
-    return bm->ASTTrue;
-  else if (obj == Aig_ManConst0(mgr.aigMgr))
-    return bm->ASTFalse;
-  else if (Aig_ObjIsCo(obj))
-    return convert(mgr, Aig_ObjChild0(obj), cache);
-  else
-  {
-    // Every combinational input was put into the cache by topLevel(), so
-    // reaching here means the symbol-to-input mapping is incomplete.
-    assert(!Aig_ObjIsCi(obj) && "AIG input missing from the symbol map");
-    FatalError("AIGSimplifyPropositionalCore: unhandled AIG object type");
-  }
-  assert(false);
-  exit(-1);
+  return cache.at(aigLit(root));
 }
 
 ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
@@ -181,8 +226,26 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
   SubstitutionMap sm (bm);
   Simplifier simplifier(bm, &sm );
   BBNodeManagerAIG mgr;
-  BitBlaster bb(&mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);
-  BBNodeAIG blasted = bb.BBForm(replaced);
+  mgr.nodeBudget = bm->UserFlags.aig_node_budget;
+  BitBlasterAIG bb(&mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);
+
+  // This pass is an optimisation, so an exhausted budget costs nothing but
+  // the work already done: hand back the formula that came in and let the
+  // ordinary bit-blaster -- which enforces the same cap -- decide the query.
+  BBNodeAIG blasted;
+  try
+  {
+    blasted = bb.BBForm(replaced);
+  }
+  catch (const AIGBudgetExhausted& e)
+  {
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "AIG core simplification abandoned at " << e.nodeCount
+                << " nodes: node budget exhausted" << std::endl;
+    mgr.stop();
+    bm->GetRunTimes()->stop(RunTimes::AIGSimplifyCore);
+    return top;
+  }
 
   Aig_ObjCreateCo(mgr.aigMgr, blasted.n);
   Aig_ManCleanup(mgr.aigMgr);       // remove nodes not connected to the PO.
@@ -190,14 +253,17 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
 
   assert(Aig_ManCoNum(mgr.aigMgr) == 1);
 
-  int initial_nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
+  int initial_nodeCount = mgr.totalNumberOfNodes();
   // cerr << "Nodes before AIG rewrite:" << initial_nodeCount << endl;
 
-  Dar_LibStart(); // About 150M instructions. Very expensive.
+  ensureDarLibrary();
   Dar_RwrPar_t Pars, *pPars = &Pars;
   Dar_ManDefaultRwrParams(pPars);
 
-  // Assertion errors occur with this enabled.
+  // The warning that stood here -- that assertion errors occur with this
+  // enabled -- was copied from ToCNFAIG.cpp, where the line is commented out.
+  // It is stale in both places: over 347 query files in an assertions build
+  // this path aborts on none of them and changes no answer.
   pPars->fUseZeros = 1;
 
   const int iterations = 3;
@@ -218,11 +284,11 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
     Aig_ManStop(pTemp);
 
     // cerr << "After rewrite [" << i << "]  nodes:"
-    //		<< mgr.aigMgr->nObjs[AIG_OBJ_AND] << endl;
+    //		<< mgr.totalNumberOfNodes() << endl;
 
-    if (lastNodeCount == mgr.aigMgr->nObjs[AIG_OBJ_AND])
+    if (lastNodeCount == mgr.totalNumberOfNodes())
       break;
-    lastNodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
+    lastNodeCount = mgr.totalNumberOfNodes();
   }
 
   cacheType ptrToOrig;
@@ -248,16 +314,14 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
     // symbol_index indexes vCis (see BBNodeManagerAIG::CreateSymbol), so this
     // is a combinational input. Not Aig_ManLi, which is the latch-input
     // accessor and reads past the end of vCos on a combinational AIG.
-    assert(index < Aig_ManCiNum(mgr.aigMgr));
-    Aig_Obj_t* pi = Aig_ManCi(mgr.aigMgr, index);
-    ptrToOrig.insert(make_pair(pi, result));
+    assert(index < mgr.ciCount());
+    ptrToOrig.insert(make_pair(2u * (unsigned)mgr.ciObjectId(index), result));
   }
 
-  Aig_Obj_t* pObj = (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vCos, 0);
+  Aig_Obj_t* pObj = Aig_ManCo(mgr.aigMgr, 0);
 
   ASTNode result = convert(mgr, pObj, ptrToOrig);
 
-  Dar_LibStop();
 
   bm->GetRunTimes()->stop(RunTimes::AIGSimplifyCore);
   return result;

@@ -26,8 +26,19 @@ THE SOFTWARE.
 #define DIFFICULTYSCORE_H_
 
 #include "stp/AST/AST.h"
+#include <cstdint>
 
-// estimate how difficult that input is to solve based on some simple rules.
+// Estimates how many AIG AND-nodes bit-blasting a formula would build,
+// without building them: the per-operation costs are measured, and summed
+// over the formula's distinct nodes. Used to decide whether a simplification
+// left the problem harder than it found it. See DifficultyScore.cpp for what
+// the estimate does and does not model, and tools/difficulty_bench for the
+// measurement it is fitted to.
+//
+// int64_t rather than long: the estimate is a sum of quadratic (and, for
+// fp.sqrt, cubic) terms over every node of a formula, so it outgrows 32 bits
+// on inputs that are not especially large -- and `long` is 32 bits on Windows
+// and on i386.
 
 namespace stp
 {
@@ -35,11 +46,11 @@ class DifficultyScore // not copyable
 {
 private:
   // maps from nodeNumber to the previously calculated difficulty score..
-  std::map<uint64_t, long> cache;
-  long evalCount = 0;
+  std::map<uint64_t, int64_t> cache;
+  int64_t evalCount = 0;
 
 public:
-  long score(const ASTNode& top, STPMgr*);
+  int64_t score(const ASTNode& top, STPMgr*);
   auto getEvalCount() {return evalCount;}
 };
 }

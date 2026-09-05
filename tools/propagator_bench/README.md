@@ -17,7 +17,8 @@ It covers the three abstract domains STP propagates over:
 
 ## Building and running
 
-It is one of the extra tools:
+It is one of the extra tools, and it needs a build with CryptoMiniSat --
+without one the target is not created at all and the configure step says so:
 
 ```sh
 cmake -DBUILD_EXTRA_TOOLS=ON -DCMAKE_BUILD_TYPE=Release ..
@@ -44,7 +45,10 @@ rest of the options.
 
 ## What a row means
 
-> cbitp, bvsgt, bottom-up, 64 bit, 50% fixed: 40.7M ops/sec, 0.19 bits, precise
+Output is a fixed-width table with the columns `op`, `direction`, `width`,
+`input`, `ops/sec`, `ns/call`, `bits`, `precise` and `detail`. Reading one row:
+`cbitp` on `bvsgt`, seeded `bottom-up`, at 64 bits with 50% of the input bits
+fixed, deducing 0.19 bits per call.
 
 * **direction** is what was *seeded*, not what the code can deduce. The
   constant-bit transfer functions all propagate in both directions; the
@@ -92,9 +96,12 @@ caps how long a row may spend on it. This one is `cbitp` only, and skips
 `extract` and the two extends, whose structural children can't be turned into
 plain SAT variables.
 
-A row is `yes` only when both checks that ran agree, `no` when either found
-something more to deduce, and `unsound` when a real solution was excluded --
-which would be a bug in the propagator, not a precision result.
+A row is `yes` only when the exhaustive check ran and found nothing more to
+deduce, and any SAT check that also ran agreed; `no` when either found
+something more to deduce; and `unsound` when a real solution was excluded --
+which would be a bug in the propagator, not a precision result. Without the
+exhaustive check the column is `?`, whatever the SAT check said, because a
+sampled check cannot establish precision on its own.
 
 ## Against the bit-blasted encoding
 
@@ -127,7 +134,7 @@ five `cnf_effort` levels `very-low`, `low`, `medium` (STP's default), `high`,
 `very-high`. The row reports the clause and variable counts, so the size of
 the encoding and its propagation strength can be read together. For `bvand`
 the setting changes the size by up to 2.1x and the deduced bits hardly at
-all; see `bench-hard/reports/2026-08-02-cnf-effort-vs-propagation.md`.
+all.
 
 ### Is the encoding arc-consistent?
 
@@ -150,10 +157,10 @@ is 3^(children+result bits).
 Operations whose bits are independent -- `bvand`, `bvor`, `bvxor`, `bvnot` --
 come out arc-consistent under every `--cnf` setting. Ones with a carry chain
 or a global relation -- `bvadd`, `bvmul`, `bvudiv`, `bvult` -- do not, which
-is where the propagator earns its keep. `concat`, `extract` and the extends
-need an even width, so choose W accordingly.
+is where the propagator earns its keep. `concat` and the two extends
+need an even width, so choose W accordingly; `extract` only needs at least 2.
 
-Both options need a CryptoMiniSat build (`-DNOCRYPTOMINISAT=OFF`); they are
+Both options need a CryptoMiniSat build (`-DUSE_CRYPTOMINISAT=ON`); they are
 refused otherwise rather than quietly reporting nothing. It is much slower
 per case than the propagator it measures -- a fresh solver and a full CNF
 load each time -- so `--bcp-budget` caps it, and the reported per-case cost

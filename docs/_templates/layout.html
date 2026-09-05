@@ -1,0 +1,22 @@
+{% extends "!layout.html" %}
+
+{#- The tags the Jekyll site used to emit from _includes/head.html: what a link
+    to a page looks like when a chat client or a search engine unfurls it. The
+    canonical link is already emitted by the theme. `pageurl` comes from
+    html_baseurl and `og_image` from html_context, both set in conf.py. -#}
+{%- set pagetitle = title|striptags|e if title else docstitle|e %}
+
+{% block extrahead %}
+  <meta name="description" content="{{ docstitle|e }}">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ docstitle|e }}">
+  <meta property="og:title" content="{{ pagetitle }}">
+  <meta property="og:url" content="{{ pageurl|e }}">
+  <meta property="og:image" content="{{ og_image|e }}">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ pagetitle }}">
+  <meta name="twitter:url" content="{{ pageurl|e }}">
+  <meta name="twitter:image" content="{{ og_image|e }}">
+{% endblock %}

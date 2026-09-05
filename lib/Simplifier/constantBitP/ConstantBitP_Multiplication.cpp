@@ -31,8 +31,6 @@ THE SOFTWARE.
 #include "stp/Util/BitOps.h"
 #include <cstdint>
 #include <cstring>
-#include <set>
-#include <stdexcept>
 // Multiply.
 
 using namespace stp;
@@ -42,11 +40,7 @@ namespace simplifier
 namespace constantBitP
 {
 using std::endl;
-using std::pair;
-using std::set;
 
-const bool debug_multiply = false;
-std::ostream& log = std::cerr;
 
 static inline uint64_t rightShiftedWord(const uint64_t* m, unsigned words,
                                         unsigned s, unsigned j);
@@ -157,7 +151,7 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
   Result result = NO_CHANGE;
 
   // only one of the conditionals can run.
-  bool run = false;
+  [[maybe_unused]] bool run = false;
 
   // We need every value that is unfixed to be set to one.
   if (aspirationalSum == columnOnes + columnOneFixed + columnUnfixed &&
@@ -218,9 +212,6 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
       }
     }
   }
-  if (debug_multiply && result == CONFLICT)
-    log << "CONFLICT" << endl;
-
   return result;
 }
 
@@ -433,7 +424,8 @@ Result useLeadingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output)
   }
 
   stp::CBV result = CONSTANTBV::BitVector_Create(2 * bitWidth + 1, true);
-  CONSTANTBV::ErrCode ec = CONSTANTBV::BitVector_Multiply(result, x_c, y_c);
+  [[maybe_unused]] CONSTANTBV::ErrCode ec =
+      CONSTANTBV::BitVector_Multiply(result, x_c, y_c);
   assert(ec == CONSTANTBV::ErrCode_Ok);
 
   for (int j = (2 * bitWidth) - 1; j >= 0; j--)
@@ -772,16 +764,7 @@ Result multiplyCore(vector<FixedBits*>& children, FixedBits& output,
   // fall back to it here.
   const bool aliased = (children[0] == children[1]);
 
-  if (debug_multiply)
-    cerr << "======================" << endl;
 
-  if (debug_multiply)
-  {
-    cerr << "Initial Fixing";
-    cerr << x << "*";
-    cerr << y << "=";
-    cerr << output << endl;
-  }
 
   Result r = useTrailingZeroesToFix(x, y, output);
   if (CONFLICT == r)
@@ -789,8 +772,8 @@ Result multiplyCore(vector<FixedBits*>& children, FixedBits& output,
 
   // bitWidth is unbounded, so wide instances go to the heap (this used to
   // alloca inside the loop, which only returns the stack space when the
-  // function exits). Uninitialised: the ColumnCounts constructor writes
-  // columnL/columnH and rebuildSums writes sumL/sumH each iteration.
+  // function exits). Uninitialised: the loop below writes columnL/columnH
+  // and rebuildSums writes sumL/sumH each iteration.
   const unsigned INLINE_COLUMNS = 256; // 6KB of stack.
   signed stackCols[6 * INLINE_COLUMNS];
   std::vector<signed> heapCols;
@@ -819,8 +802,7 @@ Result multiplyCore(vector<FixedBits*>& children, FixedBits& output,
   while (changed)
   {
     changed = false;
-    ColumnCounts cc(columnH, columnL, sumH, sumL, bitWidth, output,
-                    /*initialise*/ false);
+    ColumnCounts cc(columnH, columnL, sumH, sumL, bitWidth, output);
 
     if (columnsDirty)
     {
@@ -898,13 +880,6 @@ Result multiplyCore(vector<FixedBits*>& children, FixedBits& output,
       }
     }
 
-    if (debug_multiply)
-    {
-      cerr << "At end";
-      cerr << "x:" << x << endl;
-      cerr << "y:" << y << endl;
-      cerr << "output:" << output << endl;
-    }
 
     assert(CONFLICT != r);
 
@@ -959,8 +934,8 @@ Result multiplyCore(vector<FixedBits*>& children, FixedBits& output,
     if (!FixedBits::equals(x_c, x) || !FixedBits::equals(y_c, y) ||
         !FixedBits::equals(o_c, output))
     {
-      cerr << x << y << output << endl;
-      cerr << x_c << y_c << o_c << endl;
+      std::cerr << x << y << output << endl;
+      std::cerr << x_c << y_c << o_c << endl;
       assert(false);
     }
   }

@@ -31,9 +31,9 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-#include "stp/Simplifier/constantBitP/MersenneTwister.h"
 
 #include <cstdint>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -236,6 +236,55 @@ struct BcpExhaustive
   }
 };
 
+// Graded consistency of the bit-blasted encoding, from a self-contained unit
+// propagator over the generated clauses (Consistency.cpp). Three claims,
+// strongest last:
+//   URC  unit propagation refutes every inconsistent partial assignment of
+//        the operation's input/output bits
+//   GAC  URC, and every implied input/output literal is derived
+//   PC   both, quantified over every CNF variable, auxiliaries included
+struct ConsistencyCheck
+{
+  bool ran = false;
+  unsigned width = 0;
+  unsigned clauses = 0;
+  unsigned literals = 0;
+  unsigned variables = 0; // CNF variables, auxiliaries included
+  unsigned ioVars = 0;    // of them, input/output bits
+
+  // Over the input/output variables, exhaustively.
+  uint64_t ioCases = 0;
+  uint64_t ioContradictory = 0;
+  uint64_t gacIncomplete = 0; // cases that left an implied literal underived
+  uint64_t gacDerivable = 0;  // implied literals over all consistent cases
+  uint64_t gacDerived = 0;
+  uint64_t urcMissed = 0; // contradictory cases unit propagation let through
+  // urcMissed again, indexed by how many input/output bits the case left
+  // unset. A miss at index 0 is a fully assigned contradiction the encoding
+  // cannot see; misses only at high indices are the cheap kind.
+  vector<uint64_t> urcMissedByUnset;
+  uint64_t unsound = 0; // derived something no solution supports: a bug
+
+  // Over every variable: exhaustive when 3^variables fits the cap, else
+  // sampled -- a sample can prove PC absent, never present.
+  bool pcRan = false;
+  bool pcExhaustive = false;
+  uint64_t pcCases = 0;
+  uint64_t pcContradictory = 0;
+  uint64_t pcIncomplete = 0;
+  uint64_t pcDerivable = 0;
+  uint64_t pcDerived = 0;
+  uint64_t pcMissedConflict = 0;
+
+  bool urc() const { return ran && urcMissed == 0 && unsound == 0; }
+  bool gac() const { return urc() && gacIncomplete == 0; }
+  bool pc() const
+  {
+    return gac() && pcRan && pcExhaustive && pcIncomplete == 0 &&
+           pcMissedConflict == 0;
+  }
+};
+
 struct Row
 {
   Domain domain = Domain::Cbitp;
@@ -259,6 +308,7 @@ struct Row
   SatCheck sat;              // at this row's width
   BcpCheck bcp;              // against the bit-blasted encoding
   BcpExhaustive bcpExhaustive; // arc consistency of that encoding
+  ConsistencyCheck consistency; // graded GAC / URC / PC of that encoding
 };
 
 struct Config
@@ -281,6 +331,26 @@ struct Config
   unsigned bcpCases = 0;        // 0 disables the bit-blasted comparison
   double bcpBudgetSeconds = 5;  // a fresh solver and CNF load per case
   unsigned bcpExhaustiveWidth = 0; // 0 disables the arc-consistency check
+  string dumpCnf;          // write the encoding as DIMACS here and exit
+  unsigned dumpWidth = 64; // at this width
+  unsigned consistencyWidth = 0;   // 0 disables the graded GAC/URC/PC check
+  uint64_t consistencyCap = 20000000; // most exhaustive cases per scope
+  uint64_t pcSamples = 1000000; // sampled cases when 3^vars exceeds the cap
+  int adderVariant = -1;  // -1 leaves UserDefinedFlags::adder_variant alone
+  int bvplusVariant = -1; // likewise bvplus_variant
+  int multVariant = -1;   // likewise multiplication_variant
+  int divVariant1 = -1;   // likewise division_variant_1..4
+  int divVariant2 = -1;
+  int divVariant3 = -1;
+  int divVariant4 = -1;
+  int divVariant5 = -1;
+  int divLemmas = -1;     // likewise division_lemmas
+  int divByMult = -1;     // likewise division_by_multiplication
+  int divAbs = -1;        // likewise division_abstraction_encoding
+  int divAbsOnly = -1;    // division_abstraction_only_lemma
+  int divAbsPrefix = -1;  // division_abstraction_prefix
+  unsigned duelWidth = 0; // 0 disables the UP-vs-cbitp duel
+  string duelDump;        // write asymmetric duel cases here
   unsigned seed = 42;
   // How the CNF that --bcp-check propagates over is generated. Empty leaves
   // STP's default (medium) alone. A different encoding of the same circuit
@@ -340,6 +410,33 @@ unsigned bcpVisibleFixed(const BcpEncoding* e,
 unsigned bcpClauses(const BcpEncoding* e);
 unsigned bcpVariables(const BcpEncoding* e);
 
+// The raw material the consistency checker propagates over itself: the
+// clauses (literals encoded 2*variable+negated, variables from 1) and the SAT
+// variable of every input/output bit -- the varying children in layout order,
+// then the result, BCP_NOT_ENCODED for bits the CNF never saw. False in a
+// build without CryptoMiniSat.
+constexpr unsigned BCP_NOT_ENCODED = ~((unsigned)0);
+bool bcpMaterial(const BcpEncoding* e, vector<vector<int>>& clauses,
+                 vector<vector<unsigned>>& io, unsigned& variables);
+
+// The graded GAC/URC/PC check, at cfg.consistencyWidth. See Consistency.cpp.
+ConsistencyCheck consistencyCheck(stp::STPMgr* mgr, const OpSpec& op,
+                                  const Config& cfg);
+
+// Exhaustive per-state head-to-head at cfg.duelWidth: for every ternary
+// partial assignment of the operation's input/output bits, compare what unit
+// propagation on the bit-blasted CNF derives against what the constant-bit
+// transfer function derives, refereed by the exact solution table. Prints a
+// summary; returns false when the width does not fit under the caps.
+bool duelCheck(stp::STPMgr* mgr, const OpSpec& op, const Config& cfg);
+
+// Writes the encoding of op at cfg.dumpWidth as DIMACS, with `c sym` header
+// lines mapping every input/output bit to its variable -- the varying
+// children in layout order, then the result, 0 for a bit the CNF never saw.
+// For drivers that append query clauses and hand the file to a SAT solver.
+bool dumpEncoding(stp::STPMgr* mgr, const OpSpec& op, const Config& cfg,
+                  const string& path);
+
 // ---------------------------------------------------------------------------
 // Reporting.
 
@@ -351,10 +448,10 @@ void writeHtml(const Config& c, const vector<Row>& rows, const string& path);
 // Small shared helpers.
 
 // A fully fixed FixedBits holding a random value (or the given one).
-FixedBits randomConcrete(const ChildSpec& spec, MTRand& rand);
+FixedBits randomConcrete(const ChildSpec& spec, std::mt19937& rand);
 FixedBits concreteOf(const ChildSpec& spec, uint64_t value);
 // Unfixes every bit with probability (100 - percent)%.
-void unfixTo(FixedBits& bits, unsigned percent, MTRand& rand);
+void unfixTo(FixedBits& bits, unsigned percent, std::mt19937& rand);
 uint64_t unsignedValue(const FixedBits& bits);
 
 double median(vector<double>& v);

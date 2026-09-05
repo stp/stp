@@ -21,9 +21,15 @@
 add_library(tosat OBJECT
     BitBlaster.cpp
     ToSATBase.cpp
-    BBNodeManagerAIG.cpp
     ToCNFAIG.cpp
+    ToCNFTseitin.cpp
+    ToCNFGia.cpp
     ToSATAIG.cpp
+    BVAbstractionRefiner.cpp
+    BVExactEncoder.cpp
+    BVLemmaCatalogue.cpp
+    BVLemmaCircuits.cpp
+    BVEQCongruenceClosure.cpp
 )
 
 add_dependencies(tosat ASTKind_header)

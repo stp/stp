@@ -20,7 +20,6 @@ apt-get install -y --no-install-recommends \
   cmake \
   flex \
   git \
-  libboost-program-options-dev \
   ninja-build \
   python3 \
   python3-pip \
@@ -33,14 +32,24 @@ pip3 install --break-system-packages -U lit
 git config --global --add safe.directory '*'
 
 # CI restores these from a cache; only build what is missing.
-compgen -G 'deps/install/lib*/libminisat*' > /dev/null || ./scripts/deps/setup-minisat.sh
-[ -d deps/gtest ] || ./scripts/deps/setup-gtest.sh
-[ -d deps/OutputCheck ] || ./scripts/deps/setup-outputcheck.sh
+# CaDiCaL, GoogleTest and OutputCheck are all fetched by the configure below,
+# into deps/install, which is what this script's caller caches.
+
+# LibBF is worth naming here specifically: a 32-bit toolchain gives it its
+# 32-bit limb build (LIMB_BITS = 32, BF_EXP_BITS_MAX = 29), which no other job
+# exercises -- and it gets that automatically now, since the build compiles it
+# with the same toolchain as everything else rather than with whatever `cc` a
+# shell script found.
+stp_root="$(pwd)"
 
 mkdir -p build-32bit
 cd build-32bit
 cmake \
-  -DNOCRYPTOMINISAT:BOOL=ON \
+  -DUSE_CADICAL:BOOL=ON \
+  -DSTP_DEP_DIR:PATH="${stp_root}/deps/install" \
+  -DFETCHCONTENT_BASE_DIR:PATH="${stp_root}/deps/fetch" \
+  -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+  -DUSE_CRYPTOMINISAT:STRING=OFF \
   -DENABLE_TESTING:BOOL=ON \
   -DWERROR:BOOL=ON \
   -DLIT_ARGS:STRING=-v \

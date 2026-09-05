@@ -1,5 +1,12 @@
 ; RUN: %solver %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
+;
+; One of the two SMT-LIB1 files kept after the rest of the format was
+; converted to SMT-LIB2. Between them they are all that still drives the
+; SMT-LIB1 parser end to end, and the .smt extension that selects it, so they
+; were chosen for coverage rather than history: this one is unsatisfiable and
+; carries no :formula at all, only assumptions, while working_55.smt is
+; satisfiable and ends with :formula true. See also working_55.smt.
 (
 benchmark temp20.smt
 :source {Minkeyrink Solver}

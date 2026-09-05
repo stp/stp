@@ -42,13 +42,21 @@ class Rewriting
   STPMgr* stpMgr;
   NodeFactory* nf;
 
-  std::unordered_map<uint64_t, uint8_t> shareCount;
+  // uint8_t wrapped: 257 references read back as 1, i.e. unshared.
+  std::unordered_map<uint64_t, uint32_t> shareCount;
   std::unordered_map<uint64_t, ASTNode> fromTo;
 
   int removed;
 
   // sharecount is 1 if the node has one reference in the tree.
   void buildShareCount(const ASTNode& n);
+  ASTNode applyRules(ASTNode c);
+
+  // rewrite() walks the DAG with its frames on the heap: the input decides
+  // how deep the walk goes, so a call per level exhausts the stack on the
+  // deeply nested formulas that exist. See DeepDag_Test.cpp.
+  struct Frame;
+  bool alreadyKnown(const ASTNode& n, ASTNode& answer);
   ASTNode rewrite(const ASTNode& n);
 
 public:

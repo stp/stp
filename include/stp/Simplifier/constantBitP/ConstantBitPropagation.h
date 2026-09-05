@@ -74,7 +74,6 @@ class ConstantBitPropagation
   vector<unsigned> previousChildrenFixedCount;
   vector<FixedBits*> childrenBits;
 
-  void printNodeWithFixings();
 
   FixedBits* getUpdatedFixedBits(const ASTNode& n);
 
@@ -95,7 +94,6 @@ class ConstantBitPropagation
 
   FixedBits* createFixedBits(const ASTNode& n);
 
-  void scheduleDown(const ASTNode& n);
 
 public:
   NodeToFixedBitsMap* fixedMap;
@@ -142,7 +140,15 @@ public:
 
   stp::ASTNodeMap getAllFixed();
 
-  ASTNode bitsToNode(const ASTNode& node, const FixedBits& bits);
+  // Static, so the incremental engine converts its fixings through the
+  // same code on its own factory.
+  static ASTNode bitsToNode(NodeFactory* nf, const ASTNode& node,
+                            const FixedBits& bits);
+
+  // A fresh FixedBits for `n`, seeded from a syntactic constant where the
+  // node is one; no map is touched. The batch table and the incremental
+  // engine's trailed table both create their entries through this.
+  static FixedBits* makeInitialFixedBits(const ASTNode& n);
 
   void initWorkList(const ASTNode n) { workList->initWorkList(n); }
 

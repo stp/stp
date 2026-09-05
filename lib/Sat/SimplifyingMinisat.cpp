@@ -25,15 +25,10 @@ THE SOFTWARE.
 #define __STDC_FORMAT_MACROS
 #include "stp/Sat/SimplifyingMinisat.h"
 #include "minisat/simp/SimpSolver.h"
-
-namespace MiniSat
-{
-}
-using namespace MiniSat;
+#include <iostream>
 
 namespace stp
 {
-using std::cout;
 
 SimplifyingMinisat::SimplifyingMinisat()
 {
@@ -54,10 +49,15 @@ void SimplifyingMinisat::setMaxConflicts(int64_t max_confl)
   s->setConfBudget(max_confl);
 }
 
-bool SimplifyingMinisat::addClause(
+bool SimplifyingMinisat::addClauseInternal(
     const vec_literals& ps) // Add a clause to the solver.
 {
-  return s->addClause(ps);
+  // STP's literal encoding (variable*2 + sign) is MiniSat's own, so the
+  // translation is a straight reinterpretation of each literal.
+  Minisat::vec<Minisat::Lit> clause;
+  for (int i = 0; i < ps.size(); i++)
+    clause.push(Minisat::toLit(toInt(ps[i])));
+  return s->addClause_(clause);
 }
 
 bool SimplifyingMinisat::okay()
@@ -101,14 +101,39 @@ uint32_t SimplifyingMinisat::newVar()
   return s->newVar();
 }
 
-unsigned long SimplifyingMinisat::nVars() const
+uint32_t SimplifyingMinisat::nVars() const
 {
   return s->nVars();
 }
 
 void SimplifyingMinisat::printStats() const
 {
-  //s->printStats();
+  std::cerr << "MiniSat starts: " << s->starts << '\n';
+  std::cerr << "MiniSat conflicts: " << s->conflicts << '\n';
+  std::cerr << "MiniSat decisions: " << s->decisions << '\n';
+  std::cerr << "MiniSat propagations: " << s->propagations << '\n';
+  std::cerr << "MiniSat variables: " << s->nVars() << '\n';
+  if (s->conflicts != 0)
+  {
+    std::cerr << "MiniSat decisions per conflict: "
+              << static_cast<double>(s->decisions) / s->conflicts << '\n';
+    std::cerr << "MiniSat propagations per conflict: "
+              << static_cast<double>(s->propagations) / s->conflicts << '\n';
+  }
+  std::cerr << "MiniSat active original clauses: " << s->nClauses() << '\n';
+  std::cerr << "MiniSat active original literals: " << s->clauses_literals
+            << '\n';
+  std::cerr << "MiniSat active learnt clauses: " << s->nLearnts() << '\n';
+  std::cerr << "MiniSat active learnt literals: " << s->learnts_literals
+            << '\n';
+  if (s->nLearnts() != 0)
+    std::cerr << "MiniSat active learnt literals per clause: "
+              << static_cast<double>(s->learnts_literals) / s->nLearnts()
+              << '\n';
+  std::cerr << "MiniSat learnt literals before minimization: "
+            << s->max_literals << '\n';
+  std::cerr << "MiniSat learnt literals after minimization: "
+            << s->tot_literals << '\n';
 }
 
 void SimplifyingMinisat::setFrozen(uint32_t x)

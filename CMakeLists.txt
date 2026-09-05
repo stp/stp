@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# 3.18 is what lib/extlib-mimalloc requires, and mimalloc is the default
+# 3.18 is what mimalloc requires, and mimalloc is the default
 # STP_ALLOCATOR, so a default build already needs it. Anyone on an older CMake
 # can configure with -DSTP_ALLOCATOR=system, which skips that subdirectory.
 #
@@ -35,10 +35,19 @@ set(CMAKE_CXX_STANDARD 17)
 include(GNUInstallDirs)
 include(FeatureSummary)
 
-# Search paths for custom CMake modules
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
+# Search paths for custom CMake modules. cmake/ holds the per-dependency Find
+# modules; cmake/modules/ holds everything else STP carries.
+set(CMAKE_MODULE_PATH
+    ${PROJECT_SOURCE_DIR}/cmake
+    ${PROJECT_SOURCE_DIR}/cmake/modules
+)
 
-# Search for packages in the deps directory
+include(STPOptions)
+include(FetchContent)
+
+# Where the scripts/deps/*.sh scripts install. Appended, so that a dependency
+# this build produced in STP_DEP_DIR -- which deps-helper prepends -- outranks
+# one left behind by an earlier hand-run script.
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_SOURCE_DIR}/deps/install")
 
 # generate JSON file of compile commands -- useful for code extension
@@ -84,10 +93,18 @@ foreach (build_config ${build_types})
     endforeach()
 endforeach()
 
-option(ENABLE_ASSERTIONS "Build with assertions enabled" ON)
+# Three-valued, so that the build type can supply a default without silently
+# overruling a choice. It used to be a plain option() defaulting ON with an
+# unconditional set(ENABLE_ASSERTIONS OFF) for Release underneath it, which
+# meant -DENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release quietly produced a
+# build with no assertions in it -- the request was accepted and discarded.
+stp_migrate_bool_option(ENABLE_ASSERTIONS)
+stp_option(ENABLE_ASSERTIONS "Build with assertions enabled")
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(ENABLE_ASSERTIONS OFF)
+    # Release means "ship this", so no assertions unless they were asked for.
+    stp_set_option(ENABLE_ASSERTIONS OFF)
 endif()
+stp_set_option(ENABLE_ASSERTIONS ON)
 
 if (ENABLE_ASSERTIONS)
     # NDEBUG was already removed.
@@ -136,8 +153,20 @@ if (STATICCOMPILE)
 endif()
 add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 
+# Settings below that have to hold across the whole link, not just STP's
+# own objects, are collected here as well as applied. A dependency STP
+# builds for itself is a separate CMake project: it inherits none of the
+# directory-scope state set here, so anything it also needs has to be
+# handed over deliberately -- cmake/deps-helper.cmake forwards this list
+# to every one of them.
+#
+# Add to it whenever a global setting is about to be one both sides must
+# agree on. Getting that wrong does not show up here; it shows up as a
+# link error in a dependency, which is a long way from the line that
+# caused it.
+set(STP_EP_INHERITED_DEFINITIONS "")
+
 if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") OR (NOT BUILD_SHARED_LIBS))
-    set(Boost_USE_STATIC_LIBS ON)
     set(Minisat_USE_STATIC_LIBS ON)
 endif()
 
@@ -156,6 +185,33 @@ if (NOT BUILD_SHARED_LIBS)
             #message("Original (${VAR_TO_MODIFY}) is ${${VAR_TO_MODIFY}} replacement is ${replacement}")
             set(${VAR_TO_MODIFY} "${replacement}" CACHE STRING "Default flags for ${build_config} configuration" FORCE)
         endforeach()
+
+        # -static needs a static libc, libstdc++ and libm to link against, and
+        # a machine can have the compiler without having those: they are a
+        # separate package almost everywhere, and one several distributions no
+        # longer ship at all. Ask now, because the alternative is asking at the
+        # end -- every object compiled, the dependencies built, and then
+        #
+        #   /usr/bin/ld: cannot find -lc: No such file or directory
+        #
+        # from the link of the last target in the build.
+        # Nothing is added to the probe: CMAKE_EXE_LINKER_FLAGS was given the
+        # -static two lines up and try_compile() links with it, which is what
+        # every other probe in this file was tripping over. So this one asks
+        # the question in exactly the form the real link will.
+        include(CheckCXXSourceCompiles)
+        check_cxx_source_compiles(
+            "#include <string>\nint main() { return (int)std::string(\"x\").size(); }"
+            STP_STATIC_LINK_WORKS)
+        if(NOT STP_STATIC_LINK_WORKS)
+            message(FATAL_ERROR
+                    "STATICCOMPILE is on, but ${CMAKE_CXX_COMPILER} cannot link "
+                    "a program with -static here. The usual cause is that the "
+                    "static C and C++ libraries are not installed -- glibc-static "
+                    "and libstdc++-devel-static on Fedora and openSUSE, "
+                    "libc6-dev and libstdc++-*-dev on Debian and Ubuntu. "
+                    "CMakeFiles/CMakeConfigureLog.yaml has what the linker said.")
+        endif()
     endif()
 else ()
     # use, i.e. don't skip the full RPATH for the build tree
@@ -165,17 +221,30 @@ else ()
     # (but later on when installing)
     SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
-    SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
+    # Relative to the loading binary, so the installation can be moved. An
+    # absolute CMAKE_INSTALL_FULL_LIBDIR here means a relocated tree -- a
+    # packager's staging root, a tarball unpacked elsewhere -- has binaries
+    # looking for libstp where it was configured, not where it is. Where some
+    # other libstp is installed the loader finds that one instead, and the
+    # mismatch surfaces as a crash rather than as a missing library. macOS has
+    # always used @loader_path below; $ORIGIN is the ELF equivalent.
+    #
+    # The same expression serves executables in BINDIR and libraries in LIBDIR
+    # as long as the two are siblings: from LIBDIR, "../<libdir>" is LIBDIR.
+    #
+    # Nothing is set when LIBDIR is a system directory: the loader searches
+    # those anyway, and an RPATH into one is what distribution packaging
+    # checks object to.
+    LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_FULL_LIBDIR}" isSystemDir)
+    IF("${isSystemDir}" STREQUAL "-1")
+        FILE(RELATIVE_PATH _stp_bindir_to_libdir
+             "${CMAKE_INSTALL_FULL_BINDIR}" "${CMAKE_INSTALL_FULL_LIBDIR}")
+        SET(CMAKE_INSTALL_RPATH "$ORIGIN/${_stp_bindir_to_libdir}")
+    ENDIF("${isSystemDir}" STREQUAL "-1")
 
     # add the automatically determined parts of the RPATH
     # which point to directories outside the build tree to the install RPATH
     SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-    # the RPATH to be used when installing, but only if it's not a system directory
-    LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_FULL_LIBDIR}" isSystemDir)
-    IF("${isSystemDir}" STREQUAL "-1")
-        SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
-    ENDIF("${isSystemDir}" STREQUAL "-1")
 
     if (APPLE)
       set(CMAKE_MACOSX_RPATH ON)
@@ -204,11 +273,21 @@ if (NOT MSVC)
     endif()
 else()
     # see https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx for details
-    # /ZI = include debug info
+    # /Z7 = include debug info
     # /Wall = all warnings
 
     add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/O2>")
-    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/ZI>")
+    # /Z7 rather than /ZI or /Zi. Both of those write every object's debug
+    # information into one shared PDB through mspdbsrv, which a parallel build
+    # has to serialise on (/FS exists only to make that safe at all), and which
+    # a compiler cache cannot reproduce when it replays a hit -- sccache
+    # declines to cache anything compiled that way. /Z7 puts the same debug
+    # information in the object file itself, so it is per-object, needs no
+    # serialisation and survives caching; the linker still emits a PDB from it.
+    # /ZI additionally asks for Edit and Continue, which is a debugger feature
+    # of no use to a build, and which cl does not honour alongside the /O2
+    # above in any case.
+    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/Z7>")
 
     add_compile_options("$<$<CONFIG:RELEASE>:/O2>")
     add_compile_options("$<$<CONFIG:RELEASE>:/D>")
@@ -236,6 +315,11 @@ else()
 
         # Creates a multithreaded executable (static) file using LIBCMT.lib.
         add_compile_options(/MT)
+        # The same choice has to reach the dependencies, which cannot see
+        # this. deps-helper turns it into CMAKE_MSVC_RUNTIME_LIBRARY rather
+        # than a flag, because a sub-build's own per-configuration defaults
+        # would otherwise put /MD back after it.
+        set(STP_EP_INHERITED_STATIC_RUNTIME TRUE)
     endif()
 
     # buffers security check
@@ -287,6 +371,9 @@ else()
 
         # inline is not a keyword in visual studios old C version, allow its redefinition
         add_definitions("-D_ALLOW_KEYWORD_MACROS")
+        # ABC needs this too: it defines `inline` as a macro, and its one
+        # C++ file then meets <xkeycheck.h>, which makes that a hard error.
+        list(APPEND STP_EP_INHERITED_DEFINITIONS "-D_ALLOW_KEYWORD_MACROS")
     endif()
 
 endif()
@@ -297,8 +384,77 @@ endif()
 include(CheckCXXCompilerFlag)
 include(CheckLinkerFlag)
 
+# CMake's probes -- check_cxx_compiler_flag(), check_include_file(),
+# check_type_size() -- compile a program and then link it, and report the whole
+# thing as unsupported if either half fails.  Most of what STP asks them has
+# nothing to do with linking, and one thing STP does to itself makes the link
+# fail for reasons that have nothing to do with the question being asked:
+# STATICCOMPILE puts -static on every link, and on a machine with no static
+# libc that is
+#
+#   /usr/bin/ld: cannot find -lc: No such file or directory
+#
+# for every probe in the file.  Nothing announces it.  The build then carries
+# on having concluded that this compiler supports no warning flags, no
+# -fvisibility=hidden and no -mpopcnt, that unistd.h does not exist -- which
+# makes flex emit a scanner calling an isatty() it has not declared -- and that
+# a pointer is not eight bytes, which selects ABC's 32-bit ABI on a 64-bit host
+# and ends the build inside ABC's headers a few minutes later.
+#
+# So probes that only need to compile are told to stop at a static library and
+# never reach the linker.  Probes that really are about linking -- the
+# check_linker_flag() below, and the LTO check further down, which exists
+# precisely because a compile-only probe answered the wrong question -- are
+# deliberately left alone.
+#
+# Not nestable: one saved value, one restore.
+macro(stp_probe_without_linking)
+  set(_stp_saved_try_compile_target_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+endmacro()
+
+# Restored rather than unset: a toolchain file may have set it, for the same
+# reason this does.
+macro(stp_probe_with_linking_again)
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_stp_saved_try_compile_target_type}")
+  unset(_stp_saved_try_compile_target_type)
+endmacro()
+
+# And one probe needs the optimiser kept away from it as well.
+# check_type_size() does not read its answer off an exit status: it compiles a
+# program with the size written into a string constant, and then greps that
+# constant out of the artifact it copied back.  Stopping at a static library
+# means the artifact is whatever the compiler emits without a link, and under
+# clang's -flto that is bytecode, which does not hold the string in a form
+# file(STRINGS) can see.  The compile succeeded, so the probe reports "done"
+# and hands back an empty size -- which is worse than a failure, because
+# everything downstream reads "" as "not 8" and configures ABC's 32-bit ABI on
+# a 64-bit host.  (GCC's bytecode keeps the string, so only clang shows it.)
+#
+# A word size is decided by the target, not by whether the build is optimised
+# across translation units, so the flag comes off for the probe and stays on
+# for the build.  The pattern matches -flto and -flto=thin as well as GCC's
+# -fno-fat-lto-objects, and not a path that happens to contain those letters.
+#
+# Not nestable either: one saved value, one restore.
+macro(stp_probe_without_lto)
+  set(_stp_saved_c_flags "${CMAKE_C_FLAGS}")
+  set(_stp_saved_cxx_flags "${CMAKE_CXX_FLAGS}")
+  string(REGEX REPLACE "-f[a-z-]*lto[^ ]*" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  string(REGEX REPLACE "-f[a-z-]*lto[^ ]*" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+endmacro()
+
+macro(stp_probe_with_lto_again)
+  set(CMAKE_C_FLAGS "${_stp_saved_c_flags}")
+  set(CMAKE_CXX_FLAGS "${_stp_saved_cxx_flags}")
+  unset(_stp_saved_c_flags)
+  unset(_stp_saved_cxx_flags)
+endmacro()
+
 macro(add_cxx_flag_if_supported flagname)
+  stp_probe_without_linking()
   check_cxx_compiler_flag("${flagname}" HAVE_FLAG_${flagname})
+  stp_probe_with_linking_again()
 
   if(HAVE_FLAG_${flagname})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
@@ -377,7 +533,8 @@ if(NOT MSVC)
 
         set(CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_LINKER_FLAGS} -Wl,--discard-all -Wl,--build-id=sha1")
     endif()
-    # add_cxx_flag_if_supported("-flto") # slow compile and not enough benefits
+    # LTO is not decided here any more; see ENABLE_LTO below, which has to set
+    # it late enough that cmake/deps-helper.cmake can forward it.
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
@@ -408,6 +565,255 @@ if(USE_POPCNT)
   endif()
 endif()
 
+# -----------------------------------------------------------------------------
+# Link-time optimisation
+# -----------------------------------------------------------------------------
+# Off by default, and set through CMAKE_<LANG>_FLAGS rather than with
+# add_compile_options() or CMAKE_INTERPROCEDURAL_OPTIMIZATION, for one reason:
+# that string is what cmake/deps-helper.cmake hands to every dependency this
+# build compiles.  ABC and CaDiCaL are where most of a hard query's time goes
+# -- CaDiCaL's propagate() alone is a quarter of the instructions retired on a
+# ten-second QF_BV query -- so an optimisation that stops at libstp's edge
+# reaches the smaller half of the program.
+#
+# Measured over 726 SMT-LIB queries against the same compiler's -O3 build, LTO
+# on its own is worth about 1%: within a percent of nothing on wall time, and
+# -0.5% on instructions retired.  It earns its place next to PGO rather than
+# instead of it -- see the PGO block below -- because a profile is what tells
+# LTO which of the call sites it has newly made visible are worth inlining.
+option(ENABLE_LTO "Build with link-time optimisation" OFF)
+add_feature_info(LTO ENABLE_LTO
+                 "Optimises across translation units, and across STP and the dependencies it builds")
+
+# A flag that has to reach C as well as C++.  add_cxx_flag_if_supported() only
+# does the latter, and the rest of this file works around that one flag at a
+# time (see USE_POPCNT above); LTO and PGO need it a dozen times between them.
+#
+# Set rather than probed: which of these flags to use is already decided per
+# compiler below, and several of them carry a path, which
+# check_cxx_compiler_flag() would turn into a cache variable name with slashes
+# in it.  What is worth probing -- that the toolchain can actually link LTO
+# bytecode -- is probed on its own, below.
+macro(add_c_cxx_flag flagname)
+  string(APPEND CMAKE_C_FLAGS " ${flagname}")
+  string(APPEND CMAKE_CXX_FLAGS " ${flagname}")
+endmacro()
+
+if(ENABLE_LTO)
+  # The C and the C++ compiler have to be the same one.  Without LTO they only
+  # have to agree on an ABI, and a machine whose `cc` and `g++` are different
+  # GCC releases -- which is what a distribution that ships several of them
+  # looks like -- builds STP quite happily.  With LTO they exchange bytecode,
+  # and bytecode has a version:
+  #
+  #   lto1: fatal error: bytecode stream in file 'libabc-pic.a' generated with
+  #   LTO version 15.1 instead of the expected 11.3
+  #
+  # at the end of the build, naming a dependency rather than the mismatch.
+  # Said here instead, before anything is compiled.
+  if(NOT CMAKE_C_COMPILER_ID STREQUAL CMAKE_CXX_COMPILER_ID
+     OR NOT CMAKE_C_COMPILER_VERSION VERSION_EQUAL CMAKE_CXX_COMPILER_VERSION)
+    message(FATAL_ERROR
+            "ENABLE_LTO needs one compiler, and this is two: C is "
+            "${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION} "
+            "(${CMAKE_C_COMPILER}), C++ is ${CMAKE_CXX_COMPILER_ID} "
+            "${CMAKE_CXX_COMPILER_VERSION} (${CMAKE_CXX_COMPILER}). They "
+            "exchange bytecode under LTO and will not agree on its version. "
+            "Name both, as in CC=gcc-13 CXX=g++-13, or build without --lto.")
+  endif()
+
+  if(MSVC)
+    add_compile_options(/GL)
+    foreach(_stp_lto_linker EXE SHARED STATIC MODULE)
+      string(APPEND CMAKE_${_stp_lto_linker}_LINKER_FLAGS " /LTCG")
+    endforeach()
+  else()
+    # The two compilers want to be told different things.  Clang has two
+    # schemes, and ThinLTO is the one to ask for: measured, it lands within
+    # 0.3% of its full LTO, for a fraction of the link time and the link-time
+    # memory.  GCC has one scheme, and =auto is how it is told to parallelise
+    # it across this machine; -fno-fat-lto-objects is what stops it compiling
+    # every object twice, once to bytecode and once to machine code that is
+    # then thrown away at link time.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      set(_stp_lto_flags "-flto=thin")
+    else()
+      set(_stp_lto_flags "-flto=auto -fno-fat-lto-objects")
+    endif()
+
+    # Probed through CMAKE_REQUIRED_FLAGS rather than with
+    # add_cxx_flag_if_supported(), because an LTO flag has to reach the link
+    # and not just the compile.  check_cxx_compiler_flag() puts it on the
+    # compile line alone, so the try_compile emits an object of bytecode and
+    # then links it with a plain driver invocation:
+    #
+    #   src.cxx.o: file not recognized: file format not recognized
+    #
+    # which reports a flag that works perfectly well as unsupported -- and
+    # then, silently, ENABLE_LTO builds without LTO in it.  Which is what this
+    # used to do.
+    include(CheckCXXSourceCompiles)
+    set(_stp_lto_saved_required "${CMAKE_REQUIRED_FLAGS}")
+    string(APPEND CMAKE_REQUIRED_FLAGS " ${_stp_lto_flags}")
+    check_cxx_source_compiles("int main() { return 0; }" STP_LTO_WORKS)
+    set(CMAKE_REQUIRED_FLAGS "${_stp_lto_saved_required}")
+    unset(_stp_lto_saved_required)
+    if(NOT STP_LTO_WORKS)
+      # Fatal rather than a quiet fall back to a non-LTO build: an
+      # optimisation that was asked for and did not happen is worth stopping
+      # for, and the two-pass PGO build below would otherwise spend a training
+      # run producing a binary that is not the one being measured.
+      message(FATAL_ERROR
+              "ENABLE_LTO is on, but ${CMAKE_CXX_COMPILER_ID} cannot compile "
+              "and link a program with '${_stp_lto_flags}'. The usual cause "
+              "is a linker with no plugin for this compiler's bytecode; lld "
+              "or mold will do for either, and GNU ld needs the plugin its "
+              "distribution installs in bfd-plugins.")
+    endif()
+    add_c_cxx_flag("${_stp_lto_flags}")
+
+    # Which linker finishes an LTO build is not only a build-time question.
+    # Measured over the same queries, with the same objects and a bytecode-for-
+    # bytecode identical .text, clang's ThinLTO through lld came out about 2%
+    # ahead of GNU ld and of mold on the heaviest ones -- the same code, laid
+    # out differently.  Said rather than done: which linker to use belongs to
+    # whoever is packaging this, and lld is not installed everywhere.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang"
+       AND NOT CMAKE_CXX_FLAGS MATCHES "-fuse-ld="
+       AND NOT CMAKE_EXE_LINKER_FLAGS MATCHES "-fuse-ld="
+       AND NOT CMAKE_LINKER_TYPE)
+      find_program(STP_LTO_LLD NAMES ld.lld)
+      mark_as_advanced(STP_LTO_LLD)
+      if(STP_LTO_LLD)
+        message(STATUS
+                "ENABLE_LTO: ${STP_LTO_LLD} is installed, and clang's ThinLTO "
+                "through it measured about 2% faster on hard queries than "
+                "through the default linker. To use it, add -fuse-ld=lld to "
+                "CMAKE_EXE_LINKER_FLAGS and CMAKE_SHARED_LINKER_FLAGS -- or, "
+                "on CMake 3.29 or newer, -DCMAKE_LINKER_TYPE=LLD.")
+      endif()
+    endif()
+
+    # ar, nm and ranlib have to understand the compiler's IR to index an
+    # archive of it.  Binutils can, through the plugin in its bfd-plugins
+    # directory, but only if the distribution installed one there -- and STP
+    # builds several static dependencies, so an archive it cannot index is a
+    # link failure at the end of a long build.  The compiler ships wrappers
+    # that pass the plugin explicitly; prefer those when they exist.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      set(_stp_lto_tool_prefix llvm)
+    else()
+      set(_stp_lto_tool_prefix gcc)
+    endif()
+    foreach(_stp_lto_tool AR NM RANLIB)
+      string(TOLOWER "${_stp_lto_tool}" _stp_lto_tool_lc)
+      find_program(STP_LTO_${_stp_lto_tool}
+                   NAMES "${_stp_lto_tool_prefix}-${_stp_lto_tool_lc}")
+      mark_as_advanced(STP_LTO_${_stp_lto_tool})
+      if(STP_LTO_${_stp_lto_tool})
+        set(CMAKE_${_stp_lto_tool} "${STP_LTO_${_stp_lto_tool}}")
+      endif()
+    endforeach()
+  endif()
+  message(STATUS "Link-time optimisation enabled")
+endif()
+
+# -----------------------------------------------------------------------------
+# Profile-guided optimisation
+# -----------------------------------------------------------------------------
+# A two-pass build: -DPGO=generate produces a binary that writes a profile as
+# it runs, something is run through it, and -DPGO=use compiles again with what
+# that recorded.  scripts/pgo-build.sh drives the whole cycle; this is the part
+# of it the build system owns.
+#
+# Worth, over the same 726 SMT-LIB queries and trained on nothing but
+# tests/query-files -- so on the test suite that comes with the source, not on
+# the queries it was measured against:
+#
+#                                clang 21   gcc 13
+#   PGO alone                       -3.7%    -1.5%
+#   PGO with ENABLE_LTO             -5.4%    -3.8%
+#
+# (geometric mean of per-query wall time, against the same compiler at -O3.)
+# Instructions retired fall by rather more than that -- 6.2% for gcc with both
+# -- which is the honest shape of the result: PGO removes work, and what is
+# left is increasingly waiting on memory rather than executing.
+#
+# Two properties of that number are worth keeping in mind before changing what
+# the training run does.  The first is that a bigger corpus does not buy more:
+# trained on a disjoint sample of 443 SMT-LIB queries, on 60 deliberately hard
+# ones, or on both corpora together, the same build lands within half a percent
+# either way, and which is ahead changes with the compiler.  The profile is
+# being used to decide inlining and code layout, and the small queries in
+# tests/query-files exercise the same code as the large ones, just less of it.
+# The second is that GCC needs -fprofile-partial-training to get there.  Without
+# it, code the training run never reached is optimised for size, and since
+# tests/query-files leaves most of CaDiCaL's search cold that is most of what a
+# hard query then runs.
+set(PGO "off" CACHE STRING
+    "Profile-guided optimisation: off, generate (instrument), or use (optimise)")
+set_property(CACHE PGO PROPERTY STRINGS off generate use)
+set(PGO_DIR "${PROJECT_BINARY_DIR}/pgo-data" CACHE PATH
+    "Where PGO=generate writes profiles and PGO=use reads them")
+add_feature_info(PGO "NOT PGO STREQUAL off" "Profile-guided optimisation (${PGO})")
+
+if(NOT PGO STREQUAL "off")
+  if(MSVC)
+    message(FATAL_ERROR "PGO is not wired up for MSVC; configure with -DPGO=off")
+  endif()
+  if(NOT PGO MATCHES "^(generate|use)$")
+    message(FATAL_ERROR "PGO is '${PGO}'; it has to be off, generate or use")
+  endif()
+
+  # GCC names each .gcda after the absolute path of the object file it came
+  # from, so a profile generated in one build directory is invisible from
+  # another.  Both passes therefore have to run in the same build directory --
+  # which is what scripts/pgo-build.sh does, and what anyone driving the two
+  # passes by hand has to do as well.
+  if(PGO STREQUAL "generate")
+    add_c_cxx_flag("-fprofile-generate=${PGO_DIR}")
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      # STP is single-threaded, but the counters live in libstp, and a caller
+      # that is not gets counter updates from several threads at once.
+      add_c_cxx_flag("-fprofile-update=prefer-atomic")
+    endif()
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # Clang reads one merged file rather than a directory of raw counters;
+    # llvm-profdata produces it, and scripts/pgo-build.sh puts it here.
+    set(_stp_pgo_profdata "${PGO_DIR}/stp.profdata")
+    if(NOT EXISTS "${_stp_pgo_profdata}")
+      message(FATAL_ERROR
+              "PGO=use, but there is no profile at ${_stp_pgo_profdata}. Run "
+              "the generate pass first, or use scripts/pgo-build.sh, "
+              "runs both.")
+    endif()
+    add_c_cxx_flag("-fprofile-use=${_stp_pgo_profdata}")
+    # A profile is a snapshot of a source tree that has since been edited, and
+    # it is normal for some of it not to line up any more.  Say so once, here,
+    # rather than once per translation unit for the rest of the build.
+    add_c_cxx_flag("-Wno-profile-instr-out-of-date")
+    add_c_cxx_flag("-Wno-profile-instr-unprofiled")
+  else()
+    if(NOT EXISTS "${PGO_DIR}")
+      message(FATAL_ERROR
+              "PGO=use, but there is no profile in ${PGO_DIR}. Run the "
+              "generate pass first, or use scripts/pgo-build.sh, which "
+              "both -- from this same build directory, which is where GCC "
+              "looks for the counters it wrote.")
+    endif()
+    add_c_cxx_flag("-fprofile-use=${PGO_DIR}")
+    # Counters merged from many processes do not always add up to a consistent
+    # flow graph; without this, GCC discards such a function's profile rather
+    # than repairing it.
+    add_c_cxx_flag("-fprofile-correction")
+    # See the note above: without this, whatever the training run did not reach
+    # is optimised for size.
+    add_c_cxx_flag("-fprofile-partial-training")
+    add_c_cxx_flag("-Wno-missing-profile")
+  endif()
+  message(STATUS "Profile-guided optimisation: ${PGO} (${PGO_DIR})")
+endif()
+
 option(COVERAGE "Build with coverage check" OFF)
 if (COVERAGE)
     add_cxx_flag("--coverage")
@@ -431,9 +837,7 @@ add_feature_info(ThreadLocal USE_THREAD_LOCAL "Enables use of thread-local stora
 if(WIN32)
   set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Flex path hints, can be null if on your path")
   set(BISON_PATH_HINT "e:/cygwin/bin" CACHE STRING "Bison path hints, can be null if on your path")
-  set(PERL_PATH_HINT "C:/Perl/bin" CACHE STRING "Perl path hints, can be null if on your pat")
-
-  set(PHINTS ${PERL_PATH_HINT} ${FLEX_PATH_HINT} ${BISON_PATH_HINT})
+  set(PHINTS ${FLEX_PATH_HINT} ${BISON_PATH_HINT})
   add_definitions(${STP_DEFS_COMM})
 endif()
 
@@ -466,14 +870,9 @@ MESSAGE(STATUS "PROJECT_VERSION_MAJOR: ${PROJECT_VERSION_MAJOR}")
 MESSAGE(STATUS "PROJECT_VERSION_MINOR: ${PROJECT_VERSION_MINOR}")
 MESSAGE(STATUS "PROJECT_VERSION_PATCH: ${PROJECT_VERSION_PATCH}")
 
-# -----------------------------------------------------------------------------
-# Write out the config.h
-# -----------------------------------------------------------------------------
-
-configure_file(
-  "${CMAKE_CURRENT_SOURCE_DIR}/include/stp/config.h.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/include/stp/config.h"
-)
+# config.h is materialized after SAT-backend discovery below.  Public C++
+# headers use its backend capability values, so generating it here would leave
+# installed clients with incomplete information.
 
 # -----------------------------------------------------------------------------
 # Set up includes
@@ -485,56 +884,97 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 include_directories(# For extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
-# ABC is a vendored upstream submodule, so local fixes cannot simply be
-# committed to it. Any patch in patches/ that touches ABC is applied here, at
-# configure time, before it is built.
+
+# -----------------------------------------------------------------------------
+# ankerl::unordered_dense
+# -----------------------------------------------------------------------------
+# A single header, used in place of std::unordered_map where it pays off. It
+# used to be a copy of that header sitting in lib/extlib-unordered-dense; there
+# is no reason for STP to carry upstream's file, so it is fetched at a pinned
+# release like everything else.
 #
-# Applying is idempotent: a patch that reverse-applies cleanly is already in
-# the tree and is skipped, so re-running cmake, or configuring a second build
-# directory against the same source, does not double-apply. A patch that does
-# neither is a hard error rather than a silent miscompile -- that happens when
-# the submodule is bumped past the code the patch was written against, and the
-# patch then needs rebasing or, if upstream has taken it, deleting.
-file(GLOB STP_ABC_PATCHES "${PROJECT_SOURCE_DIR}/patches/*.patch")
-list(SORT STP_ABC_PATCHES)
-if(STP_ABC_PATCHES AND EXISTS "${PROJECT_SOURCE_DIR}/lib/extlib-abc/src/opt/dar/darCut.c")
-  if(NOT GIT_EXECUTABLE)
+# FetchContent rather than an ExternalProject, and for once not because
+# anything has to be compiled: stp/AST/AST.h includes it, so effectively every
+# translation unit in STP does, and it is reached through a project-wide
+# include rather than through any one target. That leaves nothing for an
+# ExternalProject's dependency edge to attach to -- the header would be
+# installed at build time, with no ordering guarantee that it lands before the
+# first compile that needs it. FetchContent populates during configuration,
+# which is the guarantee. There is nothing to build, so that costs nothing.
+set(UNORDERED_DENSE_VERSION "4.5.0")
+set(UNORDERED_DENSE_CHECKSUM "2364ce4bc4c23bd02549bbb3a7572d881684cd46057f3737fd53be53669743aa")
+
+# FETCHCONTENT_FULLY_DISCONNECTED is the rung between the two: a base directory
+# some earlier build already populated. It is what the dependencies built by
+# ExternalProject get from check_ep_downloaded(), and asking for it is a promise
+# CMake keeps rather than a guess we make -- it skips the download and update
+# steps outright, so it cannot reach the network even if a pin has moved since.
+if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE
+   AND NOT ENABLE_AUTO_DOWNLOAD
+   AND NOT FETCHCONTENT_FULLY_DISCONNECTED)
     message(FATAL_ERROR
-            "patches/ contains patches for the vendored ABC but git was not "
-            "found to apply them. Install git, or remove the patches.")
-  endif()
-  foreach(_patch ${STP_ABC_PATCHES})
-    get_filename_component(_patch_name "${_patch}" NAME)
-    execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${_patch}"
-                    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/lib/extlib-abc"
-                    RESULT_VARIABLE _already OUTPUT_QUIET ERROR_QUIET)
-    if(_already EQUAL 0)
-      message(STATUS "ABC patch already applied: ${_patch_name}")
-    else()
-      execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${_patch}"
-                      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/lib/extlib-abc"
-                      RESULT_VARIABLE _rc ERROR_VARIABLE _err)
-      if(NOT _rc EQUAL 0)
-        message(FATAL_ERROR
-                "Failed to apply ${_patch_name} to lib/extlib-abc:\n${_err}"
-                "It neither applies nor is already applied. If the ABC "
-                "submodule was bumped, rebase the patch onto the new revision, "
-                "or delete it if upstream has taken the change.")
-      endif()
-      message(STATUS "Applied ABC patch: ${_patch_name}")
-    endif()
-  endforeach()
+        "ankerl::unordered_dense is required. Configure with "
+        "-DENABLE_AUTO_DOWNLOAD=ON to have it fetched, point "
+        "-DFETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE at a checkout, or, if a "
+        "shared FETCHCONTENT_BASE_DIR already holds it, "
+        "-DFETCHCONTENT_FULLY_DISCONNECTED=ON.")
 endif()
 
-# ABC is a vendored upstream submodule (berkeley-abc/abc); mark its headers as
-# SYSTEM so their warnings (e.g. -Wpedantic zero-size arrays, -Wunused-parameter
-# in inline helpers) don't trip -Werror in the STP translation units that
-# include them.
-include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/lib/extlib-abc/src)
+FetchContent_Declare(
+    unordereddense
+    URL https://github.com/martinus/unordered_dense/archive/refs/tags/v${UNORDERED_DENSE_VERSION}.tar.gz
+    URL_HASH SHA256=${UNORDERED_DENSE_CHECKSUM}
+    SOURCE_SUBDIR stp-does-not-build-this
+)
+FetchContent_MakeAvailable(unordereddense)
+message(STATUS "ankerl::unordered_dense ${UNORDERED_DENSE_VERSION}: ${unordereddense_SOURCE_DIR}")
+
+include(cmake/PrepareUnorderedDense.cmake)
+
+# SYSTEM, and project-wide because stp/AST/AST.h reaches it: upstream code
+# whose warnings STP does not control, compiled into nearly every translation
+# unit here.
+include_directories(SYSTEM ${STP_UNORDERED_DENSE_INCLUDE_DIR})
+
+# -----------------------------------------------------------------------------
+# ABC
+# -----------------------------------------------------------------------------
+# Looked for after the word-size check below, because ABC_ABI_DEFINITIONS has
+# to exist before the Find module can forward it.
+
 # abc related word size check
 include(CheckTypeSize)
-# Check size of void pointer (void*)
+
+# A word size is a property of the compiler, not of how the final binary will
+# be linked or how hard it is optimised; see stp_probe_without_linking() above
+# for what happens when these are allowed to depend on a link that cannot be
+# made, and stp_probe_without_lto() for what LTO does to the way this
+# particular probe reports its answer.
+stp_probe_without_linking()
+stp_probe_without_lto()
 CHECK_TYPE_SIZE("void*" SIZEOF_VOID_P)
+CHECK_TYPE_SIZE("long" SIZEOF_LONG)
+CHECK_TYPE_SIZE("int" SIZEOF_INT)
+stp_probe_with_lto_again()
+stp_probe_with_linking_again()
+
+# And if one of them still does not come back, stop here.  Everything below is
+# derived from these three, and a wrong answer is not a configuration error
+# that reports itself: it is an ABI disagreement between STP's translation
+# units and ABC's, which surfaces as a compile error inside ABC's headers if
+# you are lucky, and as a truncated tagged pointer in CNF generation if you
+# are not.  Guessing is worse than stopping.
+foreach(_stp_size SIZEOF_VOID_P SIZEOF_LONG SIZEOF_INT)
+    if(NOT "${${_stp_size}}" MATCHES "^[0-9]+$")
+        message(FATAL_ERROR
+                "check_type_size() could not determine ${_stp_size}, and ABC's "
+                "ABI is selected from it -- so there is nothing safe to assume "
+                "here. The probe's own output is in "
+                "${PROJECT_BINARY_DIR}/CMakeFiles/CMakeConfigureLog.yaml.")
+    endif()
+endforeach()
+unset(_stp_size)
+
 # LIN/LIN64 select ABC's Linux code paths, and NT64 the 64-bit Windows
 # ones. (abc_global.h only detects the platform by itself when
 # ABC_USE_STDINT_H is set; without NT64 its fallback ladder sees MSVC's
@@ -542,72 +982,87 @@ CHECK_TYPE_SIZE("void*" SIZEOF_VOID_P)
 # (Aig_Not/Aig_Regular) truncate 64-bit heap pointers -- the first query
 # to reach ABC's CNF generation then dies with an access violation.
 # 32-bit Windows is already correct via the WIN32 fallback.)
+# These are collected rather than added one at a time, because ABC has to be
+# compiled with exactly the same set. They decide the width of ABC_PTRUINT_T,
+# and STP's own translation units include ABC's headers -- so if the two
+# disagree, ABC's tagged AIG pointers (Aig_Not/Aig_Regular) truncate on one
+# side of the boundary and not the other, and the first query to reach CNF
+# generation dies. That used to be guaranteed by ABC being added with
+# add_subdirectory(), which inherited them; ABC is built separately now, so
+# they are forwarded to it explicitly and recorded in the dependency
+# directory's stamp.
+set(ABC_ABI_DEFINITIONS "")
 if(NOT WIN32)
     if(SIZEOF_VOID_P EQUAL 8)
-        add_definitions(-DLIN64)
+        list(APPEND ABC_ABI_DEFINITIONS -DLIN64)
     else()
-        add_definitions(-DLIN)
+        list(APPEND ABC_ABI_DEFINITIONS -DLIN)
     endif()
 else()
     if(SIZEOF_VOID_P EQUAL 8)
-        add_definitions(-DNT64)
+        list(APPEND ABC_ABI_DEFINITIONS -DNT64)
     endif()
     # ABC is linked statically; without this its headers declare the
     # ABC API __declspec(dllimport), producing unresolved __imp_ symbols.
-    add_definitions(-DWIN32_NO_DLL)
+    list(APPEND ABC_ABI_DEFINITIONS -DWIN32_NO_DLL)
 endif()
-add_definitions(-DSIZEOF_VOID_P=${SIZEOF_VOID_P})
+list(APPEND ABC_ABI_DEFINITIONS -DSIZEOF_VOID_P=${SIZEOF_VOID_P})
+list(APPEND ABC_ABI_DEFINITIONS -DSIZEOF_LONG=${SIZEOF_LONG})
+list(APPEND ABC_ABI_DEFINITIONS -DSIZEOF_INT=${SIZEOF_INT})
 
-# Check size of long
-CHECK_TYPE_SIZE("long" SIZEOF_LONG)
-add_definitions(-DSIZEOF_LONG=${SIZEOF_LONG})
+# STP's own sources need them too, for the reason above.
+add_definitions(${ABC_ABI_DEFINITIONS})
 
-# Check size of int
-CHECK_TYPE_SIZE("int" SIZEOF_INT)
-add_definitions(-DSIZEOF_INT=${SIZEOF_INT})
+# ABC itself, now that the defines it must be compiled with are known.
+find_package(ABC REQUIRED)
 
-
-
-option(ONLY_SIMPLE "Only build very simplistic executable -- no Boost needed" OFF)
-if (NOT ONLY_SIMPLE)
-  find_package( Boost 1.46 COMPONENTS program_options)
-endif()
-
-if(NOT Boost_FOUND)
-    set(ONLY_SIMPLE ON)
-endif()
-add_feature_info(SimpleOptions ONLY_SIMPLE "Simplifies command-line interface, only a few command-line options will be available")
+# Declared here, well before its first use (the manpage rule); the subdirs it
+# gates are added at the bottom of this file.
+option(BUILD_EXECUTABLES "Build executables" ON)
 
 # -----------------------------------------------------------------------------
-# Find Riss
+# Dependency machinery
 # -----------------------------------------------------------------------------
-option(USE_RISS "Try to use Riss" OFF)
-add_feature_info(Riss USE_RISS "Enables Riss solver")
+# Included here, and not up with the other includes, because
+# STP_EP_COMMON_CMAKE_ARGS captures CMAKE_CXX_FLAGS in order to hand STP's own
+# toolchain to anything it builds -- and those flags are not finished being
+# assembled until above this line. Included from up there, a sanitizer build
+# would compile its dependencies without the sanitizer, and the mismatch would
+# surface as a link failure with nothing pointing back here.
+include(deps-helper)
 
-if (USE_RISS)
-    add_definitions(-DUSE_RISS)
-    include_directories(${RISS_DIR}/)        # should point to the base directory: ~/git/riss/
-    link_directories(${RISS_DIR}/build/lib)  # should point to the base directory: ~/git/riss/build/lib
-endif()
+# -----------------------------------------------------------------------------
+# MiniSat
+# -----------------------------------------------------------------------------
+option(USE_MINISAT "Use the MiniSat solver backend" OFF)
+add_feature_info(MiniSat USE_MINISAT "Enables the MiniSat and simplifying-MiniSat solvers")
 
 # -----------------------------------------------------------------------------
 # Setup Cadical
 # -----------------------------------------------------------------------------
-option(USE_CADICAL "Try to use Cadical" OFF)
+# Unconditionally on by default, and the only backend that is: CryptoMiniSat
+# is only linked when the machine already has one, so something has to be
+# there for a plain `cmake ..` to solve with -- and CaDiCaL is the one to
+# pick: it needs no system library (CryptoMiniSat wants GMP, MiniSat wants
+# zlib), it is the backend the documentation recommends for hard bitvector
+# problems, and with -DENABLE_AUTO_DOWNLOAD=ON the build can produce one
+# itself. A build that also finds CryptoMiniSat runs that by default and
+# keeps CaDiCaL behind --cadical.
+option(USE_CADICAL "Use the CaDiCaL solver backend" ON)
 add_feature_info(Cadical USE_CADICAL "Enables Cadical solver")
 
 if (USE_CADICAL)
-    set(CADICAL_DIR "" CACHE PATH "Path to a CaDiCaL checkout (the directory containing src/cadical.hpp and build/libcadical.a)")
-    find_path(CADICAL_INCLUDE_DIR NAMES src/cadical.hpp HINTS ${CADICAL_DIR})
-    find_library(CADICAL_LIBRARY NAMES cadical HINTS ${CADICAL_DIR}/build)
-    if (NOT CADICAL_INCLUDE_DIR OR NOT CADICAL_LIBRARY)
-        message(FATAL_ERROR "USE_CADICAL is set but CaDiCaL was not found. "
-                "Set CADICAL_DIR to a CaDiCaL checkout containing src/cadical.hpp and build/libcadical.a")
-    endif()
-    message(STATUS "Found CaDiCaL: ${CADICAL_LIBRARY}")
+    # CADICAL_DIR still names a checkout, and is still what decides when it is
+    # set; cmake/FindCaDiCaL.cmake keeps that, adds an installed CaDiCaL as a
+    # second choice, and can build one otherwise. It is also where the version
+    # is worked out, and with it whether bounded variable addition
+    # (--cadical-factor) can be compiled in.
+    find_package(CaDiCaL REQUIRED)
     add_definitions(-DUSE_CADICAL)
-    include_directories(${CADICAL_INCLUDE_DIR})
-    link_libraries(${CADICAL_LIBRARY})
+    set(STP_BUILD_WITH_CADICAL ON)
+    if (CADICAL_HAS_FACTOR)
+        add_definitions(-DSTP_CADICAL_HAS_FACTOR)
+    endif()
 endif()
 
 # -----------------------------------------------------------------------------
@@ -617,10 +1072,11 @@ endif()
 # the AIG and CNF data structures, and the SAT solvers churn clause memory.
 # The C library allocator is the bottleneck; any of the modern replacements is
 # ~15% faster to CNF, ~14% faster for CaDiCaL solving and ~7% for CryptoMiniSat,
-# with identical results. mimalloc is vendored as a submodule so that a fast
-# allocator is always available and is what you get unless you ask otherwise.
+# with identical results. mimalloc is fetched and built as part of STP so that
+# a fast allocator is always available, and is what you get unless you ask
+# otherwise.
 #
-#   mimalloc  (default) build and link the vendored lib/extlib-mimalloc
+#   mimalloc  (default) fetch and build mimalloc, and link it
 #   tcmalloc            link the system gperftools tcmalloc, if it can be found
 #   system              plain malloc from the C library
 set(STP_ALLOCATOR "mimalloc" CACHE STRING
@@ -643,11 +1099,25 @@ endif()
 set(STP_ALLOCATOR_LIBRARY "")
 
 if (STP_ALLOCATOR STREQUAL "mimalloc")
-    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib/extlib-mimalloc/CMakeLists.txt")
+    # Fetched, not linked, for the same reason as ABC: STP configures
+    # mimalloc's build rather than consuming its output, and that needs
+    # add_subdirectory().
+    #
+    # A hard error rather than a quiet fall back to system malloc, which the
+    # documentation measures at roughly 14% slower. An allocator silently
+    # changing under a build is exactly the kind of thing nobody notices until
+    # a benchmark disagrees with the last one.
+    if (NOT DEFINED FETCHCONTENT_SOURCE_DIR_MIMALLOC
+        AND NOT ENABLE_AUTO_DOWNLOAD
+        AND NOT FETCHCONTENT_FULLY_DISCONNECTED)
         message(FATAL_ERROR
-            "STP_ALLOCATOR=mimalloc but lib/extlib-mimalloc is empty. "
-            "Run: git submodule update --init lib/extlib-mimalloc "
-            "(or configure with -DSTP_ALLOCATOR=system).")
+            "STP_ALLOCATOR is mimalloc, which has to be fetched. Configure "
+            "with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here, point "
+            "-DFETCHCONTENT_SOURCE_DIR_MIMALLOC at an existing checkout, set "
+            "-DFETCHCONTENT_FULLY_DISCONNECTED=ON if a shared "
+            "FETCHCONTENT_BASE_DIR already holds it, or "
+            "choose another allocator with -DSTP_ALLOCATOR=tcmalloc or "
+            "-DSTP_ALLOCATOR=system (the last is about 14% slower).")
     endif()
     # The static library is what the executables link: it keeps them
     # self-contained, with nothing extra to install or ship. The shared one is
@@ -659,7 +1129,17 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
     set(MI_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_STATIC ON  CACHE BOOL "" FORCE)
     set(MI_OVERRIDE     ON  CACHE BOOL "" FORCE)
-    add_subdirectory(lib/extlib-mimalloc EXCLUDE_FROM_ALL)
+    # SOURCE_SUBDIR names a directory mimalloc has not got, so MakeAvailable
+    # populates without calling add_subdirectory(): this one needs
+    # EXCLUDE_FROM_ALL, which MakeAvailable could not be told until CMake 3.28.
+    FetchContent_Declare(
+        mimalloc
+        GIT_REPOSITORY https://github.com/microsoft/mimalloc.git
+        GIT_TAG 30ac9d56b8b9ea57ae84bc8ef17ef39000da08fe  # v2.4.1
+        SOURCE_SUBDIR stp-adds-this-subdirectory-itself
+    )
+    FetchContent_MakeAvailable(mimalloc)
+    add_subdirectory(${mimalloc_SOURCE_DIR} ${mimalloc_BINARY_DIR} EXCLUDE_FROM_ALL)
     # Vendored upstream code whose warnings we do not control.
     if (WERROR AND NOT MSVC)
         target_compile_options(mimalloc-static PRIVATE -Wno-error)
@@ -671,7 +1151,7 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
     # back in.
     set_target_properties(mimalloc PROPERTIES EXCLUDE_FROM_ALL FALSE)
     set(STP_ALLOCATOR_PRELOADABLE mimalloc)
-    message(STATUS "Allocator: vendored mimalloc (lib/extlib-mimalloc)")
+    message(STATUS "Allocator: mimalloc (${mimalloc_SOURCE_DIR})")
 
 elseif (STP_ALLOCATOR STREQUAL "tcmalloc")
     if (NOT BUILD_SHARED_LIBS)
@@ -706,102 +1186,304 @@ add_feature_info(Allocator "NOT STP_ALLOCATOR STREQUAL system"
 # -----------------------------------------------------------------------------
 # Find CryptoMiniSat
 # -----------------------------------------------------------------------------
-option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)
+# Three-valued, because "use CryptoMiniSat" has three answers and this used to
+# need three variables to say them:
+#
+#   OFF            do not look for it              (was -DNOCRYPTOMINISAT=ON)
+#   ON             it is required; fail if it is missing  (was -DFORCE_CMS=ON)
+#   AUTO (default) use it if it happens to be installed
+#
+# AUTO rather than ON because STP does not build CryptoMiniSat for you: an
+# installed one is linked and becomes the default backend, and a machine
+# without one still configures and still gets CaDiCaL. Say -DUSE_CRYPTOMINISAT=ON
+# to make a missing CryptoMiniSat a configuration error, or OFF to pin the
+# build to the backends it names regardless of what the machine has installed.
+set(CMS_OPTION_DOC "Use the CryptoMiniSat solver backend: ON requires it, OFF never uses it, AUTO uses it if installed")
+set(USE_CRYPTOMINISAT "AUTO" CACHE STRING "${CMS_OPTION_DOC}")
+set_property(CACHE USE_CRYPTOMINISAT PROPERTY STRINGS OFF ON AUTO)
 
-if (NOT NOCRYPTOMINISAT)
-  set(cryptominisat5_DIR "" CACHE PATH "Path to directory containing cryptominisat5Config.cmake")
-  find_package(GMP REQUIRED)
-  message(STATUS "GMP includes: ${GMP_INCLUDE_DIRS}")
-  message(STATUS "GMP libraries: ${GMP_LIBRARIES}")
-  include_directories(SYSTEM ${GMP_INCLUDE_DIRS})
-  set(LIBS ${LIBS} ${GMP_LIBRARIES})
-  # A static CryptoMiniSat references cadical/cadiback imported targets but its
-  # config file does not find them itself; a shared CryptoMiniSat has no such
-  # packages, hence QUIET. cadical's export in turn references Threads::Threads.
-  find_package(Threads QUIET)
-  find_package(cadical CONFIG QUIET)
-  find_package(cadiback CONFIG QUIET)
-  find_package(cryptominisat5 CONFIG)
-  if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
-    message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
-    message(STATUS "CryptoMiniSat5 static lib:  ${CRYPTOMINISAT5_STATIC_LIBRARIES}")
-    message(STATUS "CryptoMiniSat5 static lib deps: ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS}")
-    message(STATUS "CryptoMiniSat5 include dirs: ${CRYPTOMINISAT5_INCLUDE_DIRS}")
+# Back-compat for the two variables this replaces. Both are still accepted and
+# still mean what they meant -- including NOCRYPTOMINISAT=OFF, which meant "do
+# look for it", and so translates to AUTO rather than to ON. Translated once
+# and then remembered, the way USE_TCMALLOC -> STP_ALLOCATOR is below: a
+# deprecated name left sitting in a build directory's cache must not go on
+# overruling a later -DUSE_CRYPTOMINISAT=, and the warning should be seen once
+# rather than on every reconfigure.
+if (NOT DEFINED _STP_CMS_FROM_LEGACY_OPTION)
+    if (DEFINED FORCE_CMS AND FORCE_CMS)
+        message(WARNING "FORCE_CMS is deprecated, use -DUSE_CRYPTOMINISAT=ON")
+        set(USE_CRYPTOMINISAT ON CACHE STRING "${CMS_OPTION_DOC}" FORCE)
+        set(_STP_CMS_FROM_LEGACY_OPTION ON CACHE INTERNAL "")
+    elseif (DEFINED NOCRYPTOMINISAT)
+        if (NOCRYPTOMINISAT)
+            message(WARNING "NOCRYPTOMINISAT is deprecated, use -DUSE_CRYPTOMINISAT=OFF")
+            set(USE_CRYPTOMINISAT OFF CACHE STRING "${CMS_OPTION_DOC}" FORCE)
+        else()
+            message(WARNING "NOCRYPTOMINISAT=OFF is deprecated, use -DUSE_CRYPTOMINISAT=AUTO")
+            set(USE_CRYPTOMINISAT AUTO CACHE STRING "${CMS_OPTION_DOC}" FORCE)
+        endif()
+        set(_STP_CMS_FROM_LEGACY_OPTION ON CACHE INTERNAL "")
+    endif()
+endif()
+
+if (NOT USE_CRYPTOMINISAT MATCHES "^(ON|OFF|AUTO)$")
+    message(FATAL_ERROR "USE_CRYPTOMINISAT must be ON, OFF or AUTO, not "
+            "'${USE_CRYPTOMINISAT}'")
+endif()
+
+# Asked for by name, or merely not refused? The two differ only when the lookup
+# fails: an explicit ON is a configuration error, AUTO is not.
+if (USE_CRYPTOMINISAT STREQUAL "ON")
+    set(CMS_EXPLICITLY_REQUESTED TRUE)
+else()
+    set(CMS_EXPLICITLY_REQUESTED FALSE)
+endif()
+
+if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
+  # REQUIRED only when it was asked for by name: an explicit ON makes a missing
+  # CryptoMiniSat a configuration error, while leaving the option unset means
+  # "use it if it is there". cmake/FindCryptoMiniSat.cmake carries the GMP
+  # warning, the cadical/cadiback preamble and the reason it is the one
+  # dependency STP does not build for you.
+  # 5.11 is the floor, and it is chosen from evidence rather than taste: it is
+  # the oldest release anything in this repository builds -- the Dockerfiles do
+  # -- and every method lib/Sat/CryptoMinisat5.cpp calls exists in it. Nothing
+  # here builds anything older, so nothing here can say an older one works.
+  if (CMS_EXPLICITLY_REQUESTED)
+      find_package(CryptoMiniSat 5.11 REQUIRED)
+  else()
+      find_package(CryptoMiniSat 5.11)
+  endif()
+  # HAVE_FLAG_STD_CPP11 is in the condition because CryptoMiniSat's headers are
+  # C++11: a compiler that cannot be told to accept them cannot compile against
+  # it whether or not the package was found.
+  if (CryptoMiniSat_FOUND AND HAVE_FLAG_STD_CPP11)
     add_definitions(-DUSE_CRYPTOMINISAT)
+    set(STP_BUILD_WITH_CRYPTOMINISAT ON)
     set(USE_CRYPTOMINISAT ON)
   else()
+    set(USE_CRYPTOMINISAT OFF)
   endif()
+else()
+  set(USE_CRYPTOMINISAT OFF)
 endif()
-add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, allows --cryptominisat5 option")
+add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, allows --cryptominisat option")
 
-option(FORCE_CMS "Must build with CryptoMiniSat" OFF)
-if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
-    message(FATAL_ERROR "CryptoMiniSat 5.x was not found but it was requested. Exiting.")
+# CryptoMiniSat >= 5.14 builds its own CaDiCaL -- the meelgroup fork, 2.1.3 as
+# of 5.14.7 -- and installs it beside itself, exported as an imported target
+# named plainly `cadical`. cryptominisat5Targets.cmake then requires a target
+# by that name to exist, which is why the block above has to find_package it.
+#
+# When libcryptominisat5 is static, that target is part of its link interface:
+# a consumer has to resolve a static library's private dependencies itself, so
+# both CaDiCaLs reach libstp's link line and their symbols collide. Neither
+# target can be renamed, so refuse the combination here. Left to the linker it
+# surfaces as pages of duplicate definitions that never mention CryptoMiniSat.
+#
+# A shared libcryptominisat5 is fine and is not rejected: CMake resolves its
+# private dependencies inside the .so, which exports no CaDiCaL symbols at all,
+# so only the CaDiCaL that CADICAL_DIR names is ever linked or called.
+# `TARGET cadical` is not the same question as "CryptoMiniSat brings one".
+# cmake/FindCryptoMiniSat.cmake find_package()es cadical unconditionally, to
+# satisfy the imported targets a static CryptoMiniSat's export names -- so the
+# target can equally come from a copy installed on the machine that nothing
+# here ever links. And a CryptoMiniSat built -DNOCADICAL=ON names no CaDiCaL in
+# its export at all. Either way the collision this guards against is decided by
+# what is on CryptoMiniSat's link interface, which is what reaches libstp, and
+# not by which targets happen to be defined.
+set(_cms_brings_cadical FALSE)
+if (TARGET cryptominisat5)
+    get_target_property(_cms_link_iface cryptominisat5 INTERFACE_LINK_LIBRARIES)
+    if (_cms_link_iface MATCHES "cadical|cadiback")
+        set(_cms_brings_cadical TRUE)
+    endif()
 endif()
+
+unset(_cms_link_iface)
+
+if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadical
+    AND _cms_brings_cadical)
+    get_target_property(_cms_type cryptominisat5 TYPE)
+    if (_cms_type STREQUAL "STATIC_LIBRARY")
+        get_target_property(_cms_cadical cadical IMPORTED_LOCATION_RELEASE)
+        if (NOT _cms_cadical)
+            get_target_property(_cms_cadical cadical IMPORTED_LOCATION)
+        endif()
+
+        # Two names for one archive are not two CaDiCaLs. Pointing
+        # CADICAL_INCLUDE_DIR and CADICAL_LIBRARY at the copy CryptoMiniSat
+        # installed is how both backends fit against a static CryptoMiniSat:
+        # one library on the link line, one set of symbols. It costs whatever
+        # that copy is behind on -- the version probe reads 2.1.3 off it, so
+        # --cadical-factor turns itself off -- which is a trade to be told
+        # about rather than one to be refused.
+        set(_cadicals_are_one FALSE)
+        if (_cms_cadical AND CADICAL_LIBRARY)
+            get_filename_component(_cms_cadical_real "${_cms_cadical}" REALPATH)
+            get_filename_component(_stp_cadical_real "${CADICAL_LIBRARY}" REALPATH)
+            if (_cms_cadical_real STREQUAL _stp_cadical_real)
+                set(_cadicals_are_one TRUE)
+            endif()
+        endif()
+
+        if (_cadicals_are_one)
+            message(STATUS
+                "CryptoMiniSat is static and STP is using the CaDiCaL it "
+                "bundles: ${_stp_cadical_real}")
+        else()
+            if (NOT _cms_cadical)
+                set(_cms_cadical "the copy in CryptoMiniSat's install prefix")
+            endif()
+            # Refusing the combination is right when CryptoMiniSat was named,
+            # and wrong when it was merely found: AUTO means "use it if it
+            # happens to be installed", and a machine that happens to have an
+            # uncombinable one must still configure. So AUTO drops it here,
+            # with the reason, and the build goes on with CaDiCaL alone.
+            if (NOT CMS_EXPLICITLY_REQUESTED)
+                message(WARNING
+                    "Not using the CryptoMiniSat that is installed: it is "
+                    "static and bundles its own CaDiCaL "
+                    "(${_cms_cadical}), whose symbols would collide with "
+                    "STP's (${CADICAL_LIBRARY}). Say "
+                    "-DUSE_CRYPTOMINISAT=ON to make this an error instead, "
+                    "and see the ways out that it lists.")
+                remove_definitions(-DUSE_CRYPTOMINISAT)
+                set(USE_CRYPTOMINISAT OFF)
+            else()
+                message(FATAL_ERROR
+                    "A static CryptoMiniSat cannot be combined with a second "
+                    "CaDiCaL. Both put one on libstp's link line and their symbols "
+                    "collide:\n"
+                    "    CryptoMiniSat's bundled CaDiCaL: ${_cms_cadical}\n"
+                    "    STP's CaDiCaL:                   ${CADICAL_LIBRARY}\n"
+                    "Left to the linker it surfaces as pages of duplicate "
+                    "definitions that never mention CryptoMiniSat. Ways out.\n"
+                    "  Build CryptoMiniSat with -DNOCADICAL=ON, which is "
+                    "what STP's own build of it does: it then bundles no "
+                    "CaDiCaL and there is nothing to collide.\n"
+                    "  Or build it as a shared library, which keeps its "
+                    "bundled CaDiCaL to itself and leaves STP's own choice of "
+                    "CaDiCaL alone.\n"
+                    "  Or share the one it bundles, giving up the 3.x features: "
+                    "-UCADICAL_DIR -DCADICAL_LIBRARY=${_cms_cadical} "
+                    "-DCADICAL_INCLUDE_DIR=<CryptoMiniSat prefix>/include.\n"
+                    "  Or leave CryptoMiniSat out: -DUSE_CRYPTOMINISAT=OFF.")
+            endif()
+        endif()
+    endif()
+endif()
+unset(_cms_brings_cadical)
 
 # -----------------------------------------------------------------------------
-# Find ZLIB (needed for MiniSat)
-# yes, we need to include the zlib header location or STP will not build
-# thanks to MiniSat include-ing it n the header
+# Every backend is optional, but a solver with no SAT backend at all cannot
+# solve anything, so insist that at least one made it in.
+#
+# This is the point at which all three are settled: USE_MINISAT and USE_CADICAL
+# are plain options decided above, and USE_CRYPTOMINISAT has just been resolved
+# from its three-valued form to a definite ON or OFF. Asking here, rather than
+# after MiniSat has been searched for, means the answer arrives before any of
+# the per-backend lookups spend time or produce their own errors.
 # -----------------------------------------------------------------------------
-find_package(ZLIB)
-include_directories(${ZLIB_INCLUDE_DIR})
-include_directories(${minisat_SOURCE_DIR})
+if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL)
+    message(FATAL_ERROR
+            "No SAT backend is enabled, so this build could not solve "
+            "anything. Enable at least one of:\n"
+            "    -DUSE_CADICAL=ON     (on by default; -DENABLE_AUTO_DOWNLOAD=ON builds one)\n"
+            "    -DUSE_CRYPTOMINISAT=ON  (5.11 or newer, and must already be installed)\n"
+            "    -DUSE_MINISAT=ON")
+endif()
 
 # ----------
 # manpage
 # ----------
-if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+# Three-valued, because whether stp.1 is built and installed used to be decided
+# entirely by whether help2man happened to be on the build machine. That made
+# the contents of an install depend on something nobody had asked for and which
+# did not appear in the feature summary -- awkward for a packager, who wants
+# either a guarantee the page is there or a guarantee it is not.
+#
+#   IGNORE  build it if help2man is available          (the historical default)
+#   ON      build it; fail configure if help2man is missing
+#   OFF     never build it
+stp_option(BUILD_MANPAGE "Build and install the stp(1) manpage with help2man")
+
+if (NOT ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    # help2man runs the binary it documents, so it is not something to attempt
+    # when the build may not be able to run its own output.
+    if (BUILD_MANPAGE)
+        message(FATAL_ERROR "BUILD_MANPAGE is ON but the manpage is only built on Linux")
+    endif()
+    set(BUILD_MANPAGE OFF)
+    message(STATUS "Not on Linux, not creating manpage")
+elseif (NOT BUILD_EXECUTABLES)
+    # There is no stp binary to extract --help from.
+    if (BUILD_MANPAGE)
+        message(FATAL_ERROR "BUILD_MANPAGE is ON but BUILD_EXECUTABLES is OFF, "
+                            "so there is no stp binary to document")
+    endif()
+    set(BUILD_MANPAGE OFF)
+elseif (NOT BUILD_MANPAGE STREQUAL "OFF")
     find_program(HELP2MAN_FOUND help2man)
     if (HELP2MAN_FOUND)
-        if (NOT ONLY_SIMPLE)
-            ADD_CUSTOM_TARGET(man_stp
-                ALL
-                DEPENDS stp-bin
-            )
-
-            ADD_CUSTOM_COMMAND(
-                TARGET man_stp
-                COMMAND help2man
-                ARGS  --name="Simple Theorem Prover SMT solver" --version-string=${STP_FULL_VERSION} --help-option="--help" $<TARGET_FILE:stp-bin> -o ${CMAKE_CURRENT_BINARY_DIR}/stp.1
-            )
-
-            INSTALL(
-                FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.1
-                DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man1)
-            message(STATUS "Manpage will be created and installed")
-        endif()
+        set(BUILD_MANPAGE ON)
+    elseif (BUILD_MANPAGE)
+        message(FATAL_ERROR "BUILD_MANPAGE is ON but help2man was not found. "
+                            "Install help2man, or configure with -DBUILD_MANPAGE=OFF.")
     else()
-        MESSAGE(STATUS "Cannot find help2man, not creating manpage")
+        set(BUILD_MANPAGE OFF)
+        message(STATUS "Cannot find help2man, not creating manpage")
     endif()
 else()
-    MESSAGE(STATUS "Not on Linux, not creating manpage")
+    set(BUILD_MANPAGE OFF)
 endif()
+
+if (BUILD_MANPAGE)
+    ADD_CUSTOM_TARGET(man_stp
+        ALL
+        DEPENDS stp-bin
+    )
+
+    ADD_CUSTOM_COMMAND(
+        TARGET man_stp
+        COMMAND help2man
+        ARGS  --name="Simple Theorem Prover SMT solver" --version-string=${STP_FULL_VERSION} --help-option="--help" $<TARGET_FILE:stp-bin> -o ${CMAKE_CURRENT_BINARY_DIR}/stp.1
+    )
+
+    INSTALL(
+        FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.1
+        DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man1)
+    message(STATUS "Manpage will be created and installed")
+endif()
+add_feature_info(Manpage BUILD_MANPAGE "Builds and installs the stp(1) manpage")
 
 
 # -----------------------------------------------------------------------------
 # Find Minisat
 # -----------------------------------------------------------------------------
 
-find_package(minisat)
-set(MINISAT_INCLUDE_DIR "" CACHE PATH "MiniSat include directory")
-set(MINISAT_LIBRARY "" CACHE PATH "MiniSat library directory")
-
-if (minisat_FOUND)
-    message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
-else()
-    message(STATUS "Not found using installed MiniSat, looking for built MiniSat")
-    find_package(minisat CONFIG)
-
-    if (minisat_FOUND)
-        message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
-    else()
-        message(FATAL_ERROR "You must install minisat from https://github.com/stp/minisat")
+if (USE_MINISAT)
+    # MINISAT_INCLUDE_DIRS and MINISAT_LIBDIR still name a MiniSat that was
+    # built but not installed, and zlib is still required -- both now live in
+    # cmake/FindMiniSat.cmake, along with the ability to build one.
+    find_package(MiniSat REQUIRED)
+    add_definitions(-DUSE_MINISAT)
+    set(STP_BUILD_WITH_MINISAT ON)
+    if (MINISAT_HAS_TERMINATOR)
+        add_definitions(-DSTP_MINISAT_HAS_TERMINATOR)
     endif()
+    # The include directory is no longer added project-wide: the MiniSat target
+    # carries it to lib/Sat and lib/Incremental, which are the two object
+    # libraries whose sources reach a MiniSat header, and to the unit tests
+    # through AddSTPGTest. (There used to be a `set(LIBS ...)` here too, whose
+    # value nothing ever read.)
 endif()
 
-include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
-set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
+# Materialize config.h now that backend discovery is final so an installed C++
+# client gets the same inline UserDefinedFlags constructor as libstp itself.
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/stp/config.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/include/stp/config.h"
+)
 
 # -----------------------------------------------------------------------------
 # Find Parser and Lexer generators
@@ -841,8 +1523,23 @@ if (BISON_VERSION VERSION_LESS "2.6")
     message(FATAL_ERROR "STP requires Bison 2.6 or newer")
 endif()
 
-# required for genkinds.pl and a few other scripts
-find_package(Perl REQUIRED)
+# -----------------------------------------------------------------------------
+# Floating-point support (uses the header-only SymFPU library)
+# -----------------------------------------------------------------------------
+# Required: every build of STP solves the SMT-LIB floating-point theory.
+# SYMFPU_INCLUDE_DIRS still names a directory containing a symfpu clone, and
+# cmake/FindSymFPU.cmake can fetch and patch one otherwise.
+find_package(SymFPU REQUIRED)
+
+# LibBF folds the real literals in floating-point input -- ((_ to_fp 8 24)
+# RNE 1.5) -- to their exactly-rounded bits while parsing. It is required, and
+# with -DENABLE_AUTO_DOWNLOAD=ON it does not have to be installed: see
+# cmake/FindLibBF.cmake.
+find_package(LibBF REQUIRED)
+
+# The shared dependency directory, if there is one, now holds whatever this
+# configure decided to build. Check it was not filled by an incompatible build.
+stp_check_dep_dir_config()
 
 # -----------------------------------------------------------------------------
 # Query definitions
@@ -892,48 +1589,65 @@ endif()
 # -----------------------------------------------------------------------------
 set(STP_EXPORT_NAME "STPTargets")
 
+# Tests which exercise the staged install tree are configured before the
+# install rules below.  Publish the package location now so those tests and
+# the eventual install(EXPORT) use the same cache-controlled destination.
+if(WIN32 AND NOT CYGWIN)
+  set(DEF_INSTALL_CMAKE_DIR CMake)
+else()
+  set(DEF_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/STP)
+endif()
+set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
+  "Installation directory for STP CMake files"
+)
+
 # -----------------------------------------------------------------------------
 # Testing and Python interface options
 # -----------------------------------------------------------------------------
 
 option(ENABLE_TESTING "Enable testing" OFF)
 
-# try finding python if the user did not explicitly said that
-# he/she does not want python bindings
-if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
-    # Python 3 only. PYTHON_EXECUTABLE stays the documented way to choose the
-    # interpreter (the rest of the build and our CI use that name), so feed it
-    # to the finder and write the validated result back to it.
-    set(PYTHON_DOC_STRING "Python 3 interpreter for the bindings and the test suite")
-    if(CMAKE_VERSION VERSION_LESS 3.12)
-        # FindPython3 arrived in CMake 3.12; on older CMake ask the deprecated
-        # module for a Python 3 interpreter instead. It searches PYTHON_EXECUTABLE
-        # directly, so no hint needs forwarding.
-        find_package(PythonInterp 3)
-        set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
-        set(Python3_Interpreter_FOUND ${PYTHONINTERP_FOUND})
-    else()
-        if(PYTHON_EXECUTABLE)
-            set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH
-                "${PYTHON_DOC_STRING}" FORCE)
-        endif()
-        find_package(Python3 COMPONENTS Interpreter)
-    endif()
-
-    # Publish the result in the cache so that subprojects looking for an
-    # interpreter of their own (e.g. gtest, which still uses the deprecated
-    # FindPythonInterp) pick up this Python 3 rather than finding a Python 2.
-    if(Python3_Interpreter_FOUND)
-        set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH
+# A Python 3 interpreter is always needed: lib/AST/genkinds.py generates the
+# kind tables at build time, so the search cannot be tied to the (optional)
+# Python bindings. PYTHON_EXECUTABLE stays the documented way to choose the
+# interpreter (the rest of the build and our CI use that name), so feed it
+# to the finder and write the validated result back to it.
+set(PYTHON_DOC_STRING "Python 3 interpreter for the code generator, the bindings and the test suite")
+if(CMAKE_VERSION VERSION_LESS 3.12)
+    # FindPython3 arrived in CMake 3.12; on older CMake ask the deprecated
+    # module for a Python 3 interpreter instead. It searches PYTHON_EXECUTABLE
+    # directly, so no hint needs forwarding.
+    find_package(PythonInterp 3)
+    set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
+    set(Python3_Interpreter_FOUND ${PYTHONINTERP_FOUND})
+else()
+    if(PYTHON_EXECUTABLE)
+        set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH
             "${PYTHON_DOC_STRING}" FORCE)
-    else()
-        set(PYTHON_EXECUTABLE "" CACHE FILEPATH "${PYTHON_DOC_STRING}" FORCE)
-        # Don't let a rejected interpreter stick in the cache, or every later
-        # reconfigure would keep re-testing the same unsuitable one.
-        unset(Python3_EXECUTABLE CACHE)
     endif()
+    find_package(Python3 COMPONENTS Interpreter)
+endif()
 
-    if(Python3_Interpreter_FOUND AND BUILD_SHARED_LIBS)
+# Publish the result in the cache so that subprojects looking for an
+# interpreter of their own (e.g. gtest, which still uses the deprecated
+# FindPythonInterp) pick up this Python 3 rather than finding a Python 2.
+if(Python3_Interpreter_FOUND)
+    set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH
+        "${PYTHON_DOC_STRING}" FORCE)
+else()
+    set(PYTHON_EXECUTABLE "" CACHE FILEPATH "${PYTHON_DOC_STRING}" FORCE)
+    # Don't let a rejected interpreter stick in the cache, or every later
+    # reconfigure would keep re-testing the same unsuitable one.
+    unset(Python3_EXECUTABLE CACHE)
+    message(FATAL_ERROR
+        "STP requires a Python 3 interpreter to generate lib/AST/ASTKind.{h,cpp}. "
+        "Install python3, or point -DPYTHON_EXECUTABLE=<path> at one.")
+endif()
+
+# The Python bindings are a separate, optional matter: they additionally need
+# a shared library to bind against.
+if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
+    if(BUILD_SHARED_LIBS)
         set(ENABLE_PYTHON_INTERFACE ON)
     else()
         set(ENABLE_PYTHON_INTERFACE OFF)
@@ -947,9 +1661,19 @@ add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interfa
 
 message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
 
-option(BUILD_EXECUTABLES "Build executables" ON)
 add_subdirectory(lib)
+
+# Only tools/stp/main.cpp includes CLI11, so it is looked for only when there
+# is a binary to build.
+if (BUILD_EXECUTABLES)
+    find_package(CLI11 REQUIRED)
+endif()
 add_subdirectory(tools)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/STPExecutableTargetGuard.cmake")
+stp_resolve_option_target_availability(
+  TARGET stp-bin
+  OPTION BUILD_EXECUTABLES
+  OUT_VAR STP_EXECUTABLE_AVAILABLE)
 add_subdirectory(bindings)
 add_feature_info(Executables BUILD_EXECUTABLES "Enables executables compilation")
 
@@ -975,11 +1699,12 @@ if(ENABLE_TESTING AND NOT PYTHON_EXECUTABLE)
     set(ENABLE_TESTING OFF)
 endif()
 
-if(ENABLE_TESTING)
-    if (NOT BUILD_SHARED_LIBS)
-        set(ENABLE_TESTING OFF)
-    endif()
-endif()
+# Nothing forces ENABLE_TESTING off for a static build. The unit tests link
+# against a static libstp: the archives libstp does not absorb are on their own
+# link line, and the --exclude-libs localisation that would hide them from a
+# test is a shared-library link step that a static build never reaches. The
+# guard that used to sit here dated from 2016, and the per-target static link
+# handling it stood in for was deleted from AddSTPGTest.cmake in 2019.
 
 if(ENABLE_TESTING)
   enable_testing()
@@ -1018,27 +1743,54 @@ configure_file(STPConfigVersion.cmake.in
   "${PROJECT_BINARY_DIR}/${STP_CONFIG_VERSION_FILENAME}" @ONLY
 )
 
-# Export this package to the CMake user package registry
-# Now the user can just use find_package(STP) on their system
-export(PACKAGE STP)
+# No export(PACKAGE STP) here. Under CMP0090, NEW since the 3.18 baseline, it
+# writes nothing unless CMAKE_EXPORT_PACKAGE_REGISTRY is on, so the comment it
+# used to carry -- that find_package(STP) would then just work -- had not been
+# true for some time. Switching it back on would not be an improvement: a
+# registry entry lets find_package(STP) resolve to a build tree the caller
+# never named, which is hard to notice and harder to attribute. Point
+# CMAKE_PREFIX_PATH at an installation, or STP_DIR at the directory holding
+# STPConfig.cmake.
 
+# -----------------------------------------------------------------------------
+# Install the licences
+# -----------------------------------------------------------------------------
+# STP's own licence, and the notices of the third-party code compiled into it.
+# Several of those -- ABC, mimalloc, ankerl::unordered_dense, LibBF -- are MIT
+# or BSD, whose one condition is that the notice travels with the binary, so an
+# install that left these behind would not meet it. Which components are
+# actually linked in varies with the configuration, and the file says which
+# ones are conditional, so it is installed whole rather than assembled per
+# build.
+install(FILES
+  "${PROJECT_SOURCE_DIR}/LICENSE"
+  "${PROJECT_SOURCE_DIR}/LICENSE_COMPONENTS"
+  DESTINATION "${CMAKE_INSTALL_DOCDIR}"
+)
 
 # -----------------------------------------------------------------------------
 # Export our targets so that other CMake based projects can interface with
 # the build of STP that is installed.
 # -----------------------------------------------------------------------------
-if(WIN32 AND NOT CYGWIN)
-  set(DEF_INSTALL_CMAKE_DIR CMake)
-else()
-  set(DEF_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/STP)
-endif()
-set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
-  "Installation directory for STP CMake files"
-)
-
 # Create STPConfig file
 set(EXPORT_TYPE "installed")
-set(CONF_INCLUDE_DIRS "${CMAKE_INSTALL_FULL_INCLUDEDIR}")
+# Relative to the config file, which knows where it is, rather than to the
+# prefix this build was configured with. STPConfig.cmake.in is configured
+# @ONLY, so ${STP_CMAKE_DIR} passes through and is evaluated by find_package()
+# in the installation the caller actually has. The imported target already
+# resolves its include directory this way through _IMPORT_PREFIX; this is the
+# variable half saying the same thing.
+# From wherever the config is actually installed: STP_INSTALL_CMAKE_DIR is a
+# cache variable, and is CMake/ rather than lib/cmake/STP on Windows.
+set(_stp_cmakedir "${STP_INSTALL_CMAKE_DIR}")
+if(NOT IS_ABSOLUTE "${_stp_cmakedir}")
+    set(_stp_cmakedir "${CMAKE_INSTALL_PREFIX}/${_stp_cmakedir}")
+endif()
+file(RELATIVE_PATH _stp_cmakedir_to_includedir
+     "${_stp_cmakedir}" "${CMAKE_INSTALL_FULL_INCLUDEDIR}")
+set(CONF_INCLUDE_DIRS "\${STP_CMAKE_DIR}/${_stp_cmakedir_to_includedir}")
+unset(_stp_cmakedir)
+unset(_stp_cmakedir_to_includedir)
 configure_file(STPConfig.cmake.in
   "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}" @ONLY
 )

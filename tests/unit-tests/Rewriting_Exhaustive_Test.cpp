@@ -142,16 +142,16 @@ struct Context
     collectSymbols(after, symSet);
     std::vector<ASTNode> syms(symSet.begin(), symSet.end());
 
-    unsigned long combos = 1;
+    uint64_t combos = 1;
     for (const auto& s : syms)
       combos *= domainSize(s);
     ASSERT_LE(combos, 1u << 16)
         << "too many assignments (" << combos << ") -- lower the width";
 
-    for (unsigned long c = 0; c < combos; c++)
+    for (uint64_t c = 0; c < combos; c++)
     {
       ASTNodeMap assignment;
-      unsigned long rest = c;
+      uint64_t rest = c;
       for (size_t i = 0; i < syms.size(); i++)
       {
         const unsigned size = domainSize(syms[i]);
@@ -439,6 +439,169 @@ TEST(Rewriting_Exhaustive, plus_of_shared_factor_mults)
   ASTNode top2 = c.hf->CreateNode(EQ, plus2, c.bv(3));
   EXPECT_NE(c.run(top2), top2);
   c.checkEquivalent(top2, c.run(top2));
+}
+
+// Distinct nodes of a kind reachable from n, so a shared node counts once.
+static void countKind(const Kind k, const ASTNode& n, ASTNodeSet& seen,
+                      unsigned& found)
+{
+  if (!seen.insert(n).second)
+    return;
+  if (n.GetKind() == k)
+    found++;
+  for (const auto& c : n)
+    countKind(k, c, seen, found);
+}
+
+static unsigned countKind(const Kind k, const ASTNode& n)
+{
+  ASTNodeSet seen;
+  unsigned found = 0;
+  countKind(k, n, seen, found);
+  return found;
+}
+
+/* ITE(p, x, ITE(q, x, y)) --> ITE(p OR q, x, y): the inner multiplexer is
+   unshared, so it dies with the rewrite. */
+TEST(Rewriting_Exhaustive, ite_chain_repeated_then)
+{
+  Context c;
+  ASTNode p = c.boolean(), q = c.boolean();
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode inner = c.hf->CreateTerm(ITE, 3, q, x, y);
+  ASTNode outer = c.hf->CreateTerm(ITE, 3, p, x, inner);
+  ASTNode top = c.hf->CreateNode(EQ, outer, c.bv(3));
+
+  ASTNode after = c.run(top);
+  ASSERT_EQ(2u, countKind(ITE, top));
+  ASSERT_EQ(1u, countKind(ITE, after));
+  c.checkEquivalent(top, after);
+}
+
+/* ITE(p, x, ITE(q, y, x)) --> ITE(p OR NOT q, x, y). */
+TEST(Rewriting_Exhaustive, ite_chain_repeated_else)
+{
+  Context c;
+  ASTNode p = c.boolean(), q = c.boolean();
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode inner = c.hf->CreateTerm(ITE, 3, q, y, x);
+  ASTNode outer = c.hf->CreateTerm(ITE, 3, p, x, inner);
+  ASTNode top = c.hf->CreateNode(EQ, outer, c.bv(3));
+
+  ASTNode after = c.run(top);
+  ASSERT_EQ(2u, countKind(ITE, top));
+  ASSERT_EQ(1u, countKind(ITE, after));
+  c.checkEquivalent(top, after);
+}
+
+/* A chain of them collapses into one disjunction, one multiplexer at a time.
+   */
+TEST(Rewriting_Exhaustive, ite_chain_three_deep)
+{
+  Context c;
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode x = c.bv(2), y = c.bv(2);
+  ASTNode i2 = c.hf->CreateTerm(ITE, 2, r, x, y);
+  ASTNode i1 = c.hf->CreateTerm(ITE, 2, q, x, i2);
+  ASTNode i0 = c.hf->CreateTerm(ITE, 2, p, x, i1);
+  ASTNode top = c.hf->CreateNode(EQ, i0, c.bv(2));
+
+  ASTNode after = c.run(top);
+  ASSERT_EQ(3u, countKind(ITE, top));
+  ASSERT_EQ(1u, countKind(ITE, after));
+  c.checkEquivalent(top, after);
+}
+
+/* With the inner multiplexer shared, merging would leave it in place and
+   build the merged node beside it, so the rule declines. */
+TEST(Rewriting_Exhaustive, ite_chain_inner_shared)
+{
+  Context c;
+  ASTNode p = c.boolean(), q = c.boolean();
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode inner = c.hf->CreateTerm(ITE, 3, q, x, y);
+  ASTNode outer = c.hf->CreateTerm(ITE, 3, p, x, inner);
+  ASTNode top = c.hf->CreateNode(EQ, outer, inner);
+
+  ASTNode after = c.run(top);
+  ASSERT_EQ(2u, countKind(ITE, after));
+  c.checkEquivalent(top, after);
+}
+
+/* The same shape over formulas rather than terms. */
+TEST(Rewriting_Exhaustive, ite_chain_boolean)
+{
+  Context c;
+  ASTNode p = c.boolean(), q = c.boolean();
+  ASTNode x = c.boolean(), y = c.boolean();
+  ASTNode inner = c.hf->CreateNode(ITE, q, x, y);
+  ASTNode outer = c.hf->CreateNode(ITE, p, x, inner);
+  ASTNode top = c.hf->CreateNode(NOT, outer);
+
+  c.checkEquivalent(top, c.run(top));
+}
+
+/* ITE(p, ITE(q, x, y), y) --> ITE(p AND q, x, y): the inner multiplexer is
+   the then branch this time, and the outer's else is what repeats. */
+TEST(Rewriting_Exhaustive, ite_chain_then_side_repeated_else)
+{
+  Context c;
+  ASTNode p = c.boolean(), q = c.boolean();
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode inner = c.hf->CreateTerm(ITE, 3, q, x, y);
+  ASTNode outer = c.hf->CreateTerm(ITE, 3, p, inner, y);
+  ASTNode top = c.hf->CreateNode(EQ, outer, c.bv(3));
+
+  ASTNode after = c.run(top);
+  ASSERT_EQ(2u, countKind(ITE, top));
+  ASSERT_EQ(1u, countKind(ITE, after));
+  c.checkEquivalent(top, after);
+}
+
+/* ITE(p, ITE(q, y, x), y) --> ITE(p AND NOT q, x, y). */
+TEST(Rewriting_Exhaustive, ite_chain_then_side_repeated_then)
+{
+  Context c;
+  ASTNode p = c.boolean(), q = c.boolean();
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode inner = c.hf->CreateTerm(ITE, 3, q, y, x);
+  ASTNode outer = c.hf->CreateTerm(ITE, 3, p, inner, y);
+  ASTNode top = c.hf->CreateNode(EQ, outer, c.bv(3));
+
+  ASTNode after = c.run(top);
+  ASSERT_EQ(2u, countKind(ITE, top));
+  ASSERT_EQ(1u, countKind(ITE, after));
+  c.checkEquivalent(top, after);
+}
+
+/* The then-side rule respects sharing too. */
+TEST(Rewriting_Exhaustive, ite_chain_then_side_inner_shared)
+{
+  Context c;
+  ASTNode p = c.boolean(), q = c.boolean();
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode inner = c.hf->CreateTerm(ITE, 3, q, x, y);
+  ASTNode outer = c.hf->CreateTerm(ITE, 3, p, inner, y);
+  ASTNode top = c.hf->CreateNode(EQ, outer, inner);
+
+  ASTNode after = c.run(top);
+  ASSERT_EQ(2u, countKind(ITE, after));
+  c.checkEquivalent(top, after);
+}
+
+/* Both sides at once: an inner multiplexer on each branch, each repeating the
+   value the other branch of the outer selects. */
+TEST(Rewriting_Exhaustive, ite_chain_both_sides)
+{
+  Context c;
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode x = c.bv(2), y = c.bv(2), z = c.bv(2);
+  ASTNode thenSide = c.hf->CreateTerm(ITE, 2, q, x, y);
+  ASTNode elseSide = c.hf->CreateTerm(ITE, 2, r, thenSide, z);
+  ASTNode outer = c.hf->CreateTerm(ITE, 2, p, thenSide, elseSide);
+  ASTNode top = c.hf->CreateNode(EQ, outer, c.bv(2));
+
+  c.checkEquivalent(top, c.run(top));
 }
 
 } // namespace
