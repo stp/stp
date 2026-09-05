@@ -807,11 +807,29 @@ public:
   bool division_variant_2 = true;
   bool division_variant_3 = false;
   bool division_variant_4 = false;
+  // Variant 5 replaces the divider with restoring long division whose
+  // quotient bit comes from a dedicated comparator per row, the divisor
+  // gated bitwise by that answer instead of restored through multiplexers.
+  bool division_variant_5 = false;
   // Assert the order laws of each divider as side constraints: b!=0 -> r<b,
   // r<=a, b!=0 -> q<=a, the b=0 clamps and the b=1 identities. They are
   // consequences of the circuit that its unit propagation provably cannot
   // rederive (2026-09-03 division-encoding study).
   bool division_lemmas = false;
+  // Encode division and remainder through their defining relation instead
+  // of a divider circuit: fresh variables q and r, the constraint
+  // x = y*q + r carried at double width so nothing wraps, and r < y
+  // wherever the divisor is nonzero. The circuit computes nothing; every
+  // quotient bit is the SAT solver's to find.
+  bool division_by_multiplication = false;
+  // Measurement arm: encode division and remainder as a free result
+  // constrained only by the term abstraction's schema registry, asserted
+  // eagerly, so the lemmas' propagation can be graded on its own. The
+  // registry deliberately lacks the basic bounds the refiner supplies by
+  // other mechanisms, so this is the lemmas alone, not the abstraction.
+  bool division_abstraction_encoding = false;
+  int division_abstraction_only_lemma = -1; // one registry entry alone
+  unsigned division_abstraction_prefix = 0; // first N entries; 0 = all
   bool adder_variant = true;
   bool bbbvle_variant =true;
   bool upper_multiplication_bound = false;

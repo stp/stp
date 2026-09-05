@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/BVExactEncoder.h"
+#include "stp/ToSat/BVLemmaCatalogue.h"
 #include "stp/FloatBlaster/DecimalLiteral.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
@@ -3403,6 +3404,70 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBShiftRightByVariable(
   return result;
 }
 
+// Division and remainder through their defining relation. The quotient and
+// remainder are fresh variables; x = y*q + r is asserted at width w, made
+// exact not by a double-width product but by a magnitude ladder: h_i says
+// the divisor's bits from i up are zero, so one clause per set quotient
+// bit -- q_k demands y < 2^(w-k) -- is the whole "no partial product
+// reaches column w" staircase, and a high divisor bit clears high quotient
+// bits back down the chain by contraposition. The rows are truncated to
+// the columns the ladder allows and every accumulation step's carry-out is
+// asserted false, so the sum is the integer sum and stays below 2^w. With
+// r < y wherever the divisor is nonzero the pair is unique. A zero divisor
+// collapses the relation to r = x, which is what bvurem asks for, and
+// leaves q free -- the caller's totalisation pins the returned quotient to
+// all-ones there.
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBDivByMult(const BBNodeVec& x,
+                                                     const BBNodeVec& y,
+                                                     BBNodeVec& q,
+                                                     BBNodeVec& r,
+                                                     BBNodeSet& support)
+{
+  const unsigned w = x.size();
+  assert(y.size() == w);
+
+  q = BBNodeVec(w);
+  r = BBNodeVec(w);
+  for (unsigned i = 0; i < w; i++)
+  {
+    q[i] = nf->CreateFreshInput();
+    r[i] = nf->CreateFreshInput();
+  }
+
+  // The ladder: h[i] <=> y < 2^i, one AND gate per rung.
+  BBNodeVec h(w + 1);
+  h[w] = BBTrue;
+  for (unsigned i = w; i-- > 0;)
+    h[i] = nf->CreateNode(AND, nf->CreateNode(NOT, y[i]), h[i + 1]);
+
+  for (unsigned k = 1; k < w; k++)
+    support.insert(
+        nf->CreateNode(OR, nf->CreateNode(NOT, q[k]), h[w - k]));
+
+  // y*q + r at width w+1: rows guarded by their quotient bit and truncated
+  // at column w, each step's carry-out asserted false and pinned.
+  BBNodeVec acc(w + 1, BBFalse);
+  for (unsigned i = 0; i < w; i++)
+    acc[i] = r[i];
+  for (unsigned j = 0; j < w; j++)
+  {
+    BBNodeVec row(w + 1, BBFalse);
+    for (unsigned i = 0; i + j < w; i++)
+      row[i + j] = nf->CreateNode(AND, y[i], q[j]);
+    BBPlus2(acc, row, BBFalse);
+    support.insert(nf->CreateNode(NOT, acc[w]));
+    acc[w] = BBFalse;
+  }
+
+  const BBNodeVec accLow(acc.begin(), acc.begin() + w);
+  support.insert(BBEQ(accLow, x));
+
+  const BBNodeVec zero(w, BBFalse);
+  support.insert(
+      nf->CreateNode(OR, BBEQ(zero, y), BBBVLE(r, y, false, true)));
+}
+
 template <class BBNode, class BBNodeManagerT>
 vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     const ASTNode& term, const BBNodeVec& x, const BBNodeVec& y,
@@ -3420,7 +3485,65 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
 
   BBNodeVec q(width);
   BBNodeVec r(width);
-  BBDivMod(x, y, q, r, width, support);
+
+  bool bothConstant = true;
+  for (unsigned i = 0; i < width && bothConstant; i++)
+    if (!(x[i] == BBTrue || x[i] == BBFalse) ||
+        !(y[i] == BBTrue || y[i] == BBFalse))
+      bothConstant = false;
+
+  if (uf->division_abstraction_encoding && !bothConstant)
+  {
+    // The term abstraction's schema registry on a free result, asserted
+    // eagerly: the measurement arm for what those lemmas propagate. No
+    // divider, no totalisation ITE, none of the refiner's other
+    // mechanisms -- the registry alone, or one entry, or a prefix of the
+    // refiner's offer order.
+    BBNodeVec t(width);
+    for (unsigned i = 0; i < width; i++)
+      t[i] = nf->CreateFreshInput();
+
+    const int only = uf->division_abstraction_only_lemma;
+    const unsigned prefix = uf->division_abstraction_prefix;
+    const unsigned count =
+        (k == BVDIV) ? BV_DIV_LEMMA_COUNT : BV_REM_LEMMA_COUNT;
+    for (unsigned i = 0; i < count; i++)
+    {
+      if (only >= 0 && (unsigned)only != i)
+        continue;
+      if (prefix > 0 && i >= prefix)
+        continue;
+      if (k == BVDIV)
+        support.insert(
+            BBDivLemma(static_cast<DivLemma>(i), x, y, t, support));
+      else
+        support.insert(
+            BBRemLemma(static_cast<RemLemma>(i), x, y, t, support));
+    }
+    return t;
+  }
+
+  if (uf->division_by_multiplication && !bothConstant)
+  {
+    // BVDIV and BVMOD of one operand pair share one relation, keyed by the
+    // quotient's node whichever of the two arrives first.
+    const ASTNode key =
+        (k == BVDIV) ? term
+                     : ASTNF->CreateTerm(BVDIV, width, term[0], term[1]);
+    const auto it = divByMultMemo.find(key);
+    if (it != divByMultMemo.end())
+    {
+      q = it->second.first;
+      r = it->second.second;
+    }
+    else
+    {
+      BBDivByMult(x, y, q, r, support);
+      divByMultMemo.emplace(key, std::make_pair(q, r));
+    }
+  }
+  else
+    BBDivMod(x, y, q, r, width, support);
 
   BBNodeVec zero(width, BBFalse);
 
@@ -4186,6 +4309,59 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivMod(const BBNodeVec& y,
     for (unsigned j = 0; j < y.size() && operandConstant; j++)
       if (!(y[j] == nf->getTrue() || y[j] == nf->getFalse()))
         operandConstant = false;
+  }
+
+  if (uf->division_variant_5 && !operandConstant)
+  {
+    // Restoring long division with the quotient bit from a comparator: per
+    // step, widen the working remainder by the incoming dividend bit, ask
+    // divisor <= window outright, and subtract the divisor gated bitwise by
+    // that answer -- no restore multiplexer, and the quotient bit is
+    // defined by an order relation rather than read off a borrow chain.
+    // A zero divisor: the comparison is always true, the gated subtrahend
+    // is zero, so the remainder accumulates the dividend and every
+    // quotient bit is one.
+    const unsigned int w = y.size();
+    assert(x.size() == w);
+    assert(rwidth == w);
+
+    // The divisor, one bit wider, once.
+    BBNodeVec xExt(x);
+    xExt.push_back(nf->getFalse());
+
+    BBNodeVec rem(w, nf->getFalse());
+    q = BBNodeVec(w, nf->getFalse());
+
+    for (unsigned step = 0; step < w; step++)
+    {
+      const unsigned i = w - 1 - step; // dividend bit, most significant first
+
+      // The window: remainder shifted up one, dividend bit in at the
+      // bottom. The invariant rem < divisor keeps it inside w+1 bits.
+      BBNodeVec win;
+      win.reserve(w + 1);
+      win.push_back(y[i]);
+      for (unsigned j = 0; j < w; j++)
+        win.push_back(rem[j]);
+
+      q[i] = BBBVLE(xExt, win, false);
+
+      BBNodeVec gated;
+      gated.reserve(w + 1);
+      for (unsigned j = 0; j <= w; j++)
+        gated.push_back(nf->CreateNode(AND, xExt[j], q[i]));
+
+      BBSub(win, gated, support);
+      // The subtracted window fits back into w bits: whichever branch the
+      // comparator took, the new remainder is below the divisor.
+      for (unsigned j = 0; j < w; j++)
+        rem[j] = win[j];
+    }
+
+    r = rem;
+    assert(q.size() == w);
+    assert(r.size() == w);
+    return;
   }
 
   if (uf->division_variant_4 && !operandConstant)

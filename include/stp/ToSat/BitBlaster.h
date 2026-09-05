@@ -233,6 +233,17 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                 BBNodeVec& q, BBNodeVec& r, unsigned int rwidth,
                 BBNodeSet& support);
 
+  // Division through its defining relation: fresh q and r constrained by
+  // x = y*q + r at double width, plus r < y wherever y is nonzero.
+  void BBDivByMult(const BBNodeVec& x, const BBNodeVec& y, BBNodeVec& q,
+                   BBNodeVec& r, BBNodeSet& support);
+
+  // One (q, r) pair per operand pair: BVDIV and BVMOD of the same operands
+  // must name the same fresh variables, which strashing cannot arrange.
+  std::unordered_map<ASTNode, std::pair<BBNodeVec, BBNodeVec>,
+                     ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+      divByMultMemo;
+
   // Return formula for majority function of three formulas.
   BBNode Majority(const BBNode& a, const BBNode& b, const BBNode& c);
 
