@@ -410,8 +410,19 @@ size_t AbsRefine_CounterExample::emitChainReadLemmas(
         guardVar.assign(nLevels, -1);
       const auto guard = [&](size_t m) {
         if (guardVar[m] < 0)
+        {
           guardVar[m] = getEquals(SatSolver, row.levels[m].indexAnchor,
                                   row.indexAnchor, satVar, Polarity::BOTH);
+          // The lemma for level k names every guard below it, so a guard
+          // minted in one round is written into clauses in later rounds,
+          // with the backend's own simplification running in between. A
+          // guard the simplifying MiniSat has eliminated by then is one it
+          // cannot take a clause over (SimpSolver::addClause_ asserts on
+          // exactly that), so keep the cached guards, as the anchors the
+          // lemmas are written over already are, and as the array-equality
+          // encoder keeps its cached equality literals.
+          SatSolver.setFrozen((uint32_t)guardVar[m]);
+        }
         return (uint32_t)guardVar[m];
       };
 

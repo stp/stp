@@ -338,6 +338,7 @@ struct Config
   uint64_t pcSamples = 1000000; // sampled cases when 3^vars exceeds the cap
   int adderVariant = -1;  // -1 leaves UserDefinedFlags::adder_variant alone
   int bvplusVariant = -1; // likewise bvplus_variant
+  int multVariant = -1;   // likewise multiplication_variant
   int divVariant1 = -1;   // likewise division_variant_1..4
   int divVariant2 = -1;
   int divVariant3 = -1;
