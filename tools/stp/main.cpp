@@ -597,8 +597,21 @@ void ExtraMain::create_options()
             "16 chooses between 14 and 15 for each multiply. "
             "3, 4, 6, 7, 8, 9 and 13 Booth recode and differ in how the "
             "partial-product columns are summed. 5 uses the constant-bit "
-            "multiplication bounds, and needs --bb.mult-v2. Any other value "
+            "multiplication bounds, and needs --bb.mult-v2. 17 accumulates "
+            "the partial-product rows in carry-save form with one final "
+            "adder. 18 reduces the Booth-recoded columns as a Dadda tree. "
+            "19 is 1 with the operands of a symbolic multiply put in a "
+            "canonical order, so both orders of one product share a circuit. "
+            "20 is radix-4 with a hard triple, every row a select of "
+            "0, y, 2y or 3y. Any other value "
             "is an error, reported once bit-blasting reaches a multiply",
+            bb_group);
+
+  int64_arg("--bb.mult-lemmas", bm->UserFlags.multiplication_lemmas,
+            "conjoin to each multiply the low-bit residue implicates its "
+            "circuit cannot propagate: 0 (default) none, 3 the six clauses "
+            "that make the 3-bit relation refutation-complete, 4 the 88 for "
+            "4 bits",
             bb_group);
 
   bool_arg("--bb.mult-v2", bm->UserFlags.upper_multiplication_bound,

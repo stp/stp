@@ -70,6 +70,12 @@ public:
     std::vector<BBNodeLit> a, s, r;
   };
   std::vector<ShiftTap> shiftTaps;
+  // Likewise one record per multiply, under STP_MULT_ANNOTATE.
+  struct MultTap
+  {
+    std::vector<BBNodeLit> x, y, r;
+  };
+  std::vector<MultTap> multTaps;
 
   int totalNumberOfNodes() { return static_cast<int>(mgr.andCount()); }
 

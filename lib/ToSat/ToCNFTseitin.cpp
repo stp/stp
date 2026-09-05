@@ -53,9 +53,42 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
     recover = aig::Recover::Patterns;
 
   const char* annPath = getenv("STP_SHIFT_ANNOTATE");
+  const char* multPath = getenv("STP_MULT_ANNOTATE");
   std::vector<uint32_t> nodeVar;
   cnf = aig::deriveTseitin(mgr.mgr, 0, recover,
-                           annPath ? &nodeVar : nullptr);
+                           (annPath || multPath) ? &nodeVar : nullptr);
+
+  // The literal id of one bit in writeDimacs numbering: t/f for a
+  // constant, 0 for a bit no variable reached, negative for a complement.
+  auto litId = [&](const BBNodeLit& bit, std::ostream& out) {
+    if (!bit.IsNull() && aig::isConst(bit.n))
+    {
+      out << " " << (bit.n == aig::LIT_TRUE ? "t" : "f");
+      return;
+    }
+    int id = 0;
+    if (!bit.IsNull())
+    {
+      const uint32_t v = nodeVar[aig::nodeOf(bit.n)];
+      if (v != 0)
+        id = aig::isNeg(bit.n) ? -(int)(v + 1) : (int)(v + 1);
+    }
+    out << " " << id;
+  };
+
+  if (multPath)
+  {
+    // One line per multiply: c mult W x_0..x_{W-1} y_0.. r_0..
+    std::ofstream ann(multPath);
+    for (const auto& tap : mgr.multTaps)
+    {
+      ann << "c mult " << tap.x.size();
+      for (const std::vector<BBNodeLit>* vec : {&tap.x, &tap.y, &tap.r})
+        for (const BBNodeLit& bit : *vec)
+          litId(bit, ann);
+      ann << "\n";
+    }
+  }
 
   if (annPath)
   {
