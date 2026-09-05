@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/BVExactEncoder.h"
+#include "stp/ToSat/ShiftPrimes.h"
 #include "stp/ToSat/BVLemmaCatalogue.h"
 #include "stp/FloatBlaster/DecimalLiteral.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
@@ -1188,6 +1189,102 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       const unsigned width = bbarg1.size();
       const unsigned log2Width = (unsigned)std::log2(width) + 1;
 
+      // --bb.shift-variant: alternatives to the barrel below. 1 replaces it
+      // with one-hot selectors, 2 and 3 add redundant families on top of
+      // those, 4 leaves the barrel alone and adds the relation's exact
+      // prime implicates at the widths where that list is small. A
+      // constant amount is wiring and reaches none of this.
+      const int64_t shiftVariant = uf->shift_variant;
+      const bool oneHotShift = shiftVariant >= 1 && shiftVariant <= 3;
+      const bool wantAmountSupport = shiftVariant >= 2 && shiftVariant <= 3;
+      const bool wantOrderBounds = shiftVariant == 3;
+      if (oneHotShift && !term[1].isConstant() &&
+          width >= (unsigned)uf->shift_onehot_min_width &&
+          width <= (unsigned)uf->shift_onehot_max_width)
+      {
+        const unsigned w = width;
+        // o_k = AND_i (s_i == bit i of k). An amount of w or more matches
+        // no selector, so hi is the negation of their disjunction.
+        std::vector<BBNode> sel(w);
+        for (unsigned amt = 0; amt < w; amt++)
+        {
+          std::vector<BBNode> lits;
+          lits.reserve(w);
+          for (unsigned i = 0; i < w; i++)
+          {
+            const bool bit = (i < 63) && (((uint64_t)amt >> i) & 1);
+            lits.push_back(bit ? bbarg2[i] : nf->CreateNode(NOT, bbarg2[i]));
+          }
+          sel[amt] = nf->CreateNode(AND, lits);
+        }
+        std::vector<BBNode> anySel(sel);
+        const BBNode hi = nf->CreateNode(NOT, nf->CreateNode(OR, anySel));
+
+        std::vector<BBNode> res(w);
+        for (unsigned j = 0; j < w; j++)
+        {
+          std::vector<BBNode> terms;
+          for (unsigned amt = 0; amt < w; amt++)
+          {
+            long src = (k == BVLEFTSHIFT) ? (long)j - (long)amt
+                                          : (long)j + (long)amt;
+            if (BVSRSHIFT == k && src >= (long)w)
+              src = (long)w - 1;             // the sign bit saturates
+            if (src < 0 || src >= (long)w)
+              continue;   // this amount shifts r_j out: it contributes 0
+            terms.push_back(nf->CreateNode(AND, sel[amt], bbarg1[src]));
+          }
+          if (BVSRSHIFT == k)
+            terms.push_back(nf->CreateNode(AND, hi, toFill));
+          res[j] = terms.empty() ? nf->getFalse() : nf->CreateNode(OR, terms);
+        }
+        temp_result = res;
+
+        // Redundant families: nothing for the meaning, everything for what
+        // unit propagation can see, so they go in as side constraints
+        // rather than into the result circuit.
+        if (wantAmountSupport)
+        {
+          // s_i = v is forced once every class disagreeing with it, and
+          // the overflow case, are dead.
+          for (unsigned i = 0; i < w; i++)
+            for (unsigned v = 0; v < 2; v++)
+            {
+              std::vector<BBNode> lits;
+              lits.push_back(v ? bbarg2[i] : nf->CreateNode(NOT, bbarg2[i]));
+              for (unsigned amt = 0; amt < w; amt++)
+              {
+                const bool bit = (i < 63) && (((uint64_t)amt >> i) & 1);
+                if ((unsigned)bit != v)
+                  lits.push_back(sel[amt]);
+              }
+              lits.push_back(hi);
+              sideConstraints_.push_back(nf->CreateNode(OR, lits));
+            }
+        }
+        if (wantOrderBounds && BVSRSHIFT != k)
+        {
+          // u_t = "amount >= t", built down from the top so each step is
+          // one OR, then the zeroing law as one implication per bit.
+          std::vector<BBNode> u(w + 1);
+          u[w] = hi;
+          for (unsigned t = w - 1; t >= 1; t--)
+            u[t] = nf->CreateNode(OR, sel[t], u[t + 1]);
+          for (unsigned j = 0; j < w; j++)
+          {
+            // shl zeroes the low bits, lshr the high ones
+            const unsigned t = (k == BVLEFTSHIFT) ? j + 1 : w - j;
+            if (t < 1 || t > w)
+              continue;
+            sideConstraints_.push_back(
+                nf->CreateNode(OR, nf->CreateNode(NOT, u[t]),
+                               nf->CreateNode(NOT, res[j])));
+          }
+        }
+        result = temp_result;
+        break;
+      }
+
       if (k == BVSRSHIFT || k == BVRIGHTSHIFT)
         for (unsigned int i = 0; i < log2Width; i++)
         {
@@ -1238,6 +1335,47 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       for (unsigned int i = 0; i < width; i++)
       {
         temp_result[i] = nf->CreateNode(ITE, remainder, toFill, temp_result[i]);
+      }
+
+      // Variant 4: leave the barrel alone and add the relation's exact
+      // prime implicates. For an aux-free encoding over the interface GAC
+      // and PC coincide, and the all-primes set is both, so a shift this
+      // narrow becomes propagation complete for a fixed clause block and
+      // no new variables. The list grows about x3 per bit of width --
+      // 15/53/162/483 clauses for bvshl at w=2/3/4/5 -- which is why the
+      // table stops where it does. Independent of the width window above.
+      if (shiftVariant == 4 && !term[1].isConstant() && width >= 2 &&
+          (int)width <= shiftprimes::kMaxWidth)
+      {
+        const int opIdx = (k == BVLEFTSHIFT) ? 0
+                          : (k == BVRIGHTSHIFT) ? 1 : 2;
+        if (shiftprimes::table[opIdx][width] != nullptr)
+        {
+          // Name each interface bit with a combinational input. The
+          // clauses themselves are emitted after CNF conversion: routed
+          // through the AIG instead, each prime becomes an OR tree
+          // costing about 18 clauses and 4 fresh variables rather than
+          // one clause and none, which throws away the only thing that
+          // makes the prime list worth having.
+          ShiftPrimeBlock blk;
+          blk.op = opIdx;
+          blk.width = width;
+          blk.bits.reserve(3 * width);
+          for (unsigned part = 0; part < 3; part++)
+            for (unsigned i = 0; i < width; i++)
+            {
+              const BBNode& bit = part == 0   ? bbarg1[i]
+                                  : part == 1 ? bbarg2[i]
+                                              : temp_result[i];
+              // Always a fresh input, even where the bit already is one:
+              // a reused CI may be complemented, and the clause emitter
+              // downstream would then need the polarity too.
+              BBNode proxy = nf->CreateFreshInput();
+              sideConstraints_.push_back(nf->CreateNode(IFF, proxy, bit));
+              blk.bits.push_back(proxy);
+            }
+          shiftPrimeBlocks_.push_back(std::move(blk));
+        }
       }
 
       result = temp_result;
