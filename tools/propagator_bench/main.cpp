@@ -363,6 +363,8 @@ int main(int argc, char** argv)
       uf.cnf_effort = UF::CNF_EFFORT_NEW_LOW;
     else if (cfg.cnf == "new-medium")
       uf.cnf_effort = UF::CNF_EFFORT_NEW_MEDIUM;
+    else if (cfg.cnf == "new-high")
+      uf.cnf_effort = UF::CNF_EFFORT_NEW_HIGH;
     else if (cfg.cnf == "gia-low")
       uf.cnf_effort = UF::CNF_EFFORT_GIA_LOW;
     else if (cfg.cnf == "gia-high")

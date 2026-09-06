@@ -604,7 +604,8 @@ void ExtraMain::create_options()
             "canonical order, so both orders of one product share a circuit. "
             "20 is radix-4 with a hard triple, every row a select of "
             "0, y, 2y or 3y. 21 is 14 for a constant multiplier and 19 for a "
-            "symbolic one; 22 is 21 with carry-save rows. Any other value "
+            "symbolic one; 22 is 21 with carry-save rows; 23 is 21 with the "
+            "hard-triple rows of 20. Any other value "
             "is an error, reported once bit-blasting reaches a multiply",
             bb_group);
 
@@ -778,7 +779,7 @@ void ExtraMain::create_options()
       ->group(misc_group);
   app.add_option("--cnf-generation-effort", cnf_effort,
                  "effort spent minimising the CNF: auto, very-low, low, "
-                 "medium, high, very-high, new-very-low, new-low, new-medium. "
+                 "medium, high, very-high, new-very-low, new-low, new-medium, new-high. "
                  "Higher is slower to "
                  "generate but yields a smaller CNF; auto picks gia-low or, "
                  "for large estimated blasts, new-medium, since minimising a "
@@ -1111,6 +1112,8 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_LOW;
   else if (cnf_effort == "new-medium")
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM;
+  else if (cnf_effort == "new-high")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_HIGH;
   else if (cnf_effort == "gia-low")
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
   else if (cnf_effort == "gia-high")

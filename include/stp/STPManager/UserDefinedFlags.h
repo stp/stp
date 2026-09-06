@@ -947,6 +947,7 @@ public:
     CNF_EFFORT_NEW_VERY_LOW,
     CNF_EFFORT_NEW_LOW,
     CNF_EFFORT_NEW_MEDIUM,
+    CNF_EFFORT_NEW_HIGH,
 
     // Mf_ManGenerateCnf again -- the same generator low, high and very-high
     // reach -- but over a Gia the blaster built itself rather than one

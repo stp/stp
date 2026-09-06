@@ -4179,6 +4179,24 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMultVariant(
       return mult_csaRows(x, y, support, n);
     }
 
+    case 23:
+    {
+      // 21 with the hard-triple radix-4 rows (20) for the symbolic pair,
+      // in canonical order.
+      if (mult_Booth_constant(x, y, support, products, n))
+        return buildAdditionNetworkResult(products, support, n);
+      bool xConst = true;
+      for (const BBNode& b : x)
+        if (b != BBTrue && b != BBFalse)
+          xConst = false;
+      if (!xConst && std::lexicographical_compare(y.begin(), y.end(),
+                                                  x.begin(), x.end()))
+        mult_radix4_hard(y, x, products, n);
+      else
+        mult_radix4_hard(x, y, products, n);
+      return buildAdditionNetworkResult(products, support, n);
+    }
+
     default:
     {
       cerr << "Unk variant" << uf->multiplication_variant;

@@ -51,6 +51,8 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
     recover = aig::Recover::Nothing;
   else if (uf.cnf_effort == UserDefinedFlags::CNF_EFFORT_NEW_LOW)
     recover = aig::Recover::Patterns;
+  else if (uf.cnf_effort == UserDefinedFlags::CNF_EFFORT_NEW_HIGH)
+    recover = aig::Recover::Cells;
 
   const char* annPath = getenv("STP_SHIFT_ANNOTATE");
   const char* multPath = getenv("STP_MULT_ANNOTATE");
@@ -148,6 +150,7 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
   if (uf.stats_flag)
     std::cerr << (recover == aig::Recover::Nothing    ? "new-very-low CNF"
                   : recover == aig::Recover::Patterns ? "new-low CNF"
+                  : recover == aig::Recover::Cells    ? "new-high CNF"
                                                       : "new-medium CNF")
               << std::endl;
 }

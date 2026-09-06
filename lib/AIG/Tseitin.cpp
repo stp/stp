@@ -23,6 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AIG/Tseitin.h"
+#include <algorithm>
+#include <unordered_map>
 
 #include <limits>
 #include <stdexcept>
@@ -387,6 +389,235 @@ void Cone::findFullAdders(const Manager& m, const std::vector<uint8_t>& refs)
   }
 }
 
+
+// The prime implicates of a function of k <= 5 inputs, over the k inputs and
+// the output: every clause implied by output == f(inputs) with no implied
+// proper subclause. Aux-free, so the set is propagation-complete for the
+// cell. Cached by truth table.
+namespace
+{
+struct CellKey
+{
+  uint32_t table;
+  uint8_t k;
+  bool operator==(const CellKey& o) const
+  {
+    return table == o.table && k == o.k;
+  }
+};
+struct CellKeyHash
+{
+  size_t operator()(const CellKey& c) const
+  {
+    return (static_cast<size_t>(c.table) * 1000003u) ^ c.k;
+  }
+};
+
+const std::vector<std::vector<int8_t>>& primeImplicates(uint32_t table,
+                                                        unsigned k)
+{
+  static std::unordered_map<CellKey, std::vector<std::vector<int8_t>>,
+                            CellKeyHash>
+      cache;
+  const CellKey key{table, static_cast<uint8_t>(k)};
+  auto it = cache.find(key);
+  if (it != cache.end())
+    return it->second;
+
+  const unsigned nv = k + 1;
+  unsigned nCand = 1;
+  for (unsigned i = 0; i < nv; i++)
+    nCand *= 3;
+  // Candidate clause c (base-3 digits: 0 absent, 1 positive, 2 negative).
+  // A model is a row r (leaf bits) with output bit f(r); the clause is
+  // implied iff no model falsifies every literal.
+  std::vector<uint8_t> implied(nCand, 0);
+  std::vector<uint8_t> digits(nv);
+  for (unsigned c = 1; c < nCand; c++)
+  {
+    unsigned x = c;
+    for (unsigned i = 0; i < nv; i++)
+    {
+      digits[i] = x % 3;
+      x /= 3;
+    }
+    bool falsified = false;
+    for (unsigned r = 0; r < (1u << k) && !falsified; r++)
+    {
+      bool allFalse = true;
+      for (unsigned i = 0; i < nv && allFalse; i++)
+      {
+        if (digits[i] == 0)
+          continue;
+        const bool val = i < k ? ((r >> i) & 1u) : ((table >> r) & 1u);
+        const bool litTrue = digits[i] == 1 ? val : !val;
+        if (litTrue)
+          allFalse = false;
+      }
+      if (allFalse)
+        falsified = true;
+    }
+    implied[c] = falsified ? 0 : 1;
+  }
+  std::vector<std::vector<int8_t>> primes;
+  for (unsigned c = 1; c < nCand; c++)
+  {
+    if (!implied[c])
+      continue;
+    unsigned x = c, pow3 = 1;
+    bool prime = true;
+    for (unsigned i = 0; i < nv && prime; i++)
+    {
+      const unsigned d = x % 3;
+      x /= 3;
+      if (d != 0 && implied[c - d * pow3])
+        prime = false; // dropping literal i keeps it implied
+      pow3 *= 3;
+    }
+    if (!prime)
+      continue;
+    std::vector<int8_t> cl;
+    x = c;
+    for (unsigned i = 0; i < nv; i++)
+    {
+      const unsigned d = x % 3;
+      x /= 3;
+      if (d)
+        cl.push_back(static_cast<int8_t>(i * 2 + (d == 2 ? 1 : 0)));
+    }
+    primes.push_back(cl);
+  }
+  return cache.emplace(key, std::move(primes)).first->second;
+}
+} // namespace
+
+// Grow the largest private cone under n that keeps at most five leaves:
+// a leaf is expanded when every reference to it comes from inside the cone
+// (its saturating count is below three and equals the count seen here),
+// it is an AND, and it is not a recovered full adder's root. Interior nodes
+// of an accepted cell get no variables; the block over the leaves and the
+// root replaces their gates. Refused when the cone is a single gate or its
+// implicate set is bigger than four clauses per gate replaced.
+bool Cone::tryCell(const Manager& m, Node n, const std::vector<uint8_t>& refs)
+{
+  const unsigned K = 5;
+  if (!m.isAnd(n) || faSum(n) || faCarry(n))
+    return false;
+  std::vector<Node> interior{n};
+  std::vector<Node> leaves;
+  std::vector<std::pair<Node, uint8_t>> internal; // internal reference counts
+  const auto bumpInternal = [&](Node x) {
+    for (auto& e : internal)
+      if (e.first == x)
+      {
+        e.second++;
+        return;
+      }
+    internal.push_back({x, 1});
+  };
+  const auto internalRefs = [&](Node x) -> unsigned {
+    for (const auto& e : internal)
+      if (e.first == x)
+        return e.second;
+    return 0;
+  };
+  const auto addLeaf = [&](Node x) {
+    for (const Node l : leaves)
+      if (l == x)
+        return;
+    leaves.push_back(x);
+  };
+  for (const Lit f : {m.fanin0(n), m.fanin1(n)})
+  {
+    bumpInternal(nodeOf(f));
+    addLeaf(nodeOf(f));
+  }
+  const auto expandable = [&](Node x) {
+    return m.isAnd(x) && !faSum(x) && !faCarry(x) && refs[x] < 3 &&
+           refs[x] == internalRefs(x) && interior.size() < 12;
+  };
+  // Expand leaves whose fanins are already leaves first (no growth), then
+  // any other private leaf while the leaf budget allows.
+  bool progress = true;
+  while (progress)
+  {
+    progress = false;
+    for (size_t i = 0; i < leaves.size(); i++)
+    {
+      const Node x = leaves[i];
+      if (!expandable(x))
+        continue;
+      const Node a = nodeOf(m.fanin0(x)), b = nodeOf(m.fanin1(x));
+      unsigned growth = 0;
+      bool aLeaf = false, bLeaf = false;
+      for (const Node l : leaves)
+      {
+        if (l == a)
+          aLeaf = true;
+        if (l == b)
+          bLeaf = true;
+      }
+      if (!aLeaf)
+        growth++;
+      if (!bLeaf && b != a)
+        growth++;
+      if (leaves.size() - 1 + growth > K)
+        continue;
+      leaves.erase(leaves.begin() + i);
+      interior.push_back(x);
+      bumpInternal(a);
+      bumpInternal(b);
+      addLeaf(a);
+      addLeaf(b);
+      progress = true;
+      break;
+    }
+  }
+  if (interior.size() < 2 || leaves.size() > K)
+    return false;
+  // Truth table of the root over the leaves; interior nodes evaluate in
+  // increasing id order, which is fanin order.
+  std::vector<Node> order(interior);
+  std::sort(order.begin(), order.end());
+  const unsigned k = static_cast<unsigned>(leaves.size());
+  uint32_t table = 0;
+  std::vector<std::pair<Node, bool>> vals;
+  for (unsigned r = 0; r < (1u << k); r++)
+  {
+    vals.clear();
+    for (unsigned i = 0; i < k; i++)
+      vals.push_back({leaves[i], ((r >> i) & 1u) != 0});
+    const auto value = [&](Lit l) {
+      const Node x = nodeOf(l);
+      bool v = false;
+      for (const auto& e : vals)
+        if (e.first == x)
+        {
+          v = e.second;
+          break;
+        }
+      return v ^ (isNeg(l) ? true : false);
+    };
+    for (const Node x : order)
+      vals.push_back({x, value(m.fanin0(x)) && value(m.fanin1(x))});
+    if (vals.back().second)
+      table |= 1u << r;
+  }
+  const std::vector<std::vector<int8_t>>& primes = primeImplicates(table, k);
+  if (primes.size() > 4 * interior.size() + 2)
+    return false;
+  Cell cell;
+  cell.leaves = leaves;
+  cell.clauses = primes;
+  for (const auto& cl : primes)
+    cell.literals += cl.size();
+  cells_[n] = std::move(cell);
+  setCell(n);
+  for (const Node l : leaves)
+    setLive(l);
+  return true;
+}
+
 Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
 {
   const uint32_t nCo = m.outputCount();
@@ -424,7 +655,10 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   // an exact count of two from "more" -- and gone when this constructor
   // returns.
   const bool matchPatterns = recover != Recover::Nothing;
-  const bool collapseAnds = recover == Recover::PatternsAndAnds;
+  const bool collapseAnds = recover == Recover::PatternsAndAnds ||
+                            recover == Recover::Cells;
+  const bool cells = recover == Recover::Cells;
+  cell_.assign(words, 0);
 
   std::vector<uint8_t> refs;
   if (matchPatterns)
@@ -522,6 +756,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       clearFa(carry);
     }
 
+    if (cells && tryCell(m, n, refs))
+      continue;
     Lit c, t, e;
     if (wouldPattern(n))
     {
@@ -615,6 +851,13 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
     {
       nClauses_ += 14;
       nLiterals_ += 44;
+      continue;
+    }
+    if (cellRoot(n))
+    {
+      const Cell& cell = cells_.at(n);
+      nClauses_ += cell.clauses.size();
+      nLiterals_ += cell.literals;
       continue;
     }
     if (majorityCell(n))
