@@ -3934,6 +3934,52 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_radix4_hard(
   }
 }
 
+// Which operand should supply the rows (or the radix-4 digits) of a
+// symbolic multiply. Cheaper first: fewer symbolic bits, then fewer
+// distinct literals -- a sign-extended operand repeats one literal across
+// its width, and rows drawn from it share their cells while rows drawn
+// against it do not -- then the lexicographic order, which only serves to
+// give both orders of one product the same circuit. Symmetric in the pair,
+// so x*y and y*x agree. Returns true when y should take x's role.
+// How many bits of a vector are symbolic, and how many distinct nodes they
+// are (a sign-extended value has many symbolic bits and few nodes).
+template <class BBNode>
+static void operandProfile(const std::vector<BBNode>& v, const BBNode& bbTrue,
+                           const BBNode& bbFalse, unsigned& symbolic,
+                           unsigned& distinct)
+{
+  symbolic = 0;
+  std::vector<BBNode> seen;
+  for (const BBNode& b : v)
+  {
+    if (b == bbTrue || b == bbFalse)
+      continue;
+    symbolic++;
+    if (std::find(seen.begin(), seen.end(), b) == seen.end())
+      seen.push_back(b);
+  }
+  distinct = seen.size();
+}
+
+template <class BBNode>
+static bool cheaperAsMultiplier(const std::vector<BBNode>& x,
+                                const std::vector<BBNode>& y,
+                                const BBNode& bbTrue, const BBNode& bbFalse)
+{
+  unsigned xs, xd, ys, yd;
+  operandProfile(x, bbTrue, bbFalse, xs, xd);
+  operandProfile(y, bbTrue, bbFalse, ys, yd);
+  if (xs == 0)
+    return false; // a constant multiplier already sits in x
+  if (ys == 0)
+    return true;
+  if (ys != xs)
+    return ys < xs;
+  if (yd != xd)
+    return yd < xd;
+  return std::lexicographical_compare(y.begin(), y.end(), x.begin(), x.end());
+}
+
 template <class BBNode, class BBNodeManagerT>
 vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
                                                           const BBNodeVec& _y,
@@ -4128,12 +4174,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMultVariant(
       // ordering the vectors makes the two orders one AIG node, which is
       // what the Booth path's per-column sort achieves for the network
       // variants.
-      bool xConst = true;
-      for (const BBNode& b : x)
-        if (b != BBTrue && b != BBFalse)
-          xConst = false;
-      if (!xConst && std::lexicographical_compare(y.begin(), y.end(),
-                                                  x.begin(), x.end()))
+      if (cheaperAsMultiplier(x, y, BBTrue, BBFalse))
         return mult_normal(y, x, support, n);
       return mult_normal(x, y, support, n);
     }
@@ -4153,12 +4194,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMultVariant(
       // its operand class; nothing else changes.
       if (mult_Booth_constant(x, y, support, products, n))
         return buildAdditionNetworkResult(products, support, n);
-      bool xConst = true;
-      for (const BBNode& b : x)
-        if (b != BBTrue && b != BBFalse)
-          xConst = false;
-      if (!xConst && std::lexicographical_compare(y.begin(), y.end(),
-                                                  x.begin(), x.end()))
+      if (cheaperAsMultiplier(x, y, BBTrue, BBFalse))
         return mult_normal(y, x, support, n);
       return mult_normal(x, y, support, n);
     }
@@ -4169,12 +4205,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMultVariant(
       // symbolic pair.
       if (mult_Booth_constant(x, y, support, products, n))
         return buildAdditionNetworkResult(products, support, n);
-      bool xConst = true;
-      for (const BBNode& b : x)
-        if (b != BBTrue && b != BBFalse)
-          xConst = false;
-      if (!xConst && std::lexicographical_compare(y.begin(), y.end(),
-                                                  x.begin(), x.end()))
+      if (cheaperAsMultiplier(x, y, BBTrue, BBFalse))
         return mult_csaRows(y, x, support, n);
       return mult_csaRows(x, y, support, n);
     }
@@ -4182,18 +4213,21 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMultVariant(
     case 23:
     {
       // 21 with the hard-triple radix-4 rows (20) for the symbolic pair,
-      // in canonical order.
+      // in canonical order -- unless an operand repeats a few literals
+      // across its width (a sign- or digit-extended value), where the AND
+      // rows of the shift-add path share their cells and the 3y adder and
+      // select cells cannot: there 21's rows are three times smaller.
       if (mult_Booth_constant(x, y, support, products, n))
         return buildAdditionNetworkResult(products, support, n);
-      bool xConst = true;
-      for (const BBNode& b : x)
-        if (b != BBTrue && b != BBFalse)
-          xConst = false;
-      if (!xConst && std::lexicographical_compare(y.begin(), y.end(),
-                                                  x.begin(), x.end()))
-        mult_radix4_hard(y, x, products, n);
-      else
-        mult_radix4_hard(x, y, products, n);
+      const bool swap = cheaperAsMultiplier(x, y, BBTrue, BBFalse);
+      const BBNodeVec& a = swap ? y : x;
+      const BBNodeVec& b = swap ? x : y;
+      unsigned as, ad, bs, bd;
+      operandProfile(a, BBTrue, BBFalse, as, ad);
+      operandProfile(b, BBTrue, BBFalse, bs, bd);
+      if (2 * ad < as || 2 * bd < bs)
+        return mult_normal(a, b, support, n);
+      mult_radix4_hard(a, b, products, n);
       return buildAdditionNetworkResult(products, support, n);
     }
 
