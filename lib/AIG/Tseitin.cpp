@@ -587,19 +587,27 @@ bool Cone::tryCell(const Manager& m, Node n, const std::vector<uint8_t>& refs)
     vals.clear();
     for (unsigned i = 0; i < k; i++)
       vals.push_back({leaves[i], ((r >> i) & 1u) != 0});
-    const auto value = [&](Lit l) {
+    // Every fanin of an interior node is either a leaf or an interior node
+    // of lower id, and `order` is ascending, so each lookup is already in
+    // `vals`. A miss would mean the cone is not closed, which would encode
+    // the wrong function -- refuse the cell rather than trust it.
+    bool closed = true;
+    const auto value = [&](Lit l) -> bool {
       const Node x = nodeOf(l);
-      bool v = false;
       for (const auto& e : vals)
         if (e.first == x)
-        {
-          v = e.second;
-          break;
-        }
-      return v ^ (isNeg(l) ? true : false);
+          return e.second != isNeg(l);
+      closed = false;
+      return false;
     };
     for (const Node x : order)
-      vals.push_back({x, value(m.fanin0(x)) && value(m.fanin1(x))});
+    {
+      const bool a = value(m.fanin0(x));
+      const bool b = value(m.fanin1(x));
+      vals.push_back({x, a && b});
+    }
+    if (!closed)
+      return false;
     if (vals.back().second)
       table |= 1u << r;
   }
