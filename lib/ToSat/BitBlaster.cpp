@@ -4144,6 +4144,41 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMultVariant(
       return buildAdditionNetworkResult(products, support, n);
     }
 
+    case 21:
+    {
+      // 14 and 19 together: a constant multiplier with a run of ones is
+      // Booth recoded and summed by the column network, and a symbolic
+      // pair takes the shift-add rows in canonical order, so both orders
+      // of one product share a circuit. Each half is the measured win for
+      // its operand class; nothing else changes.
+      if (mult_Booth_constant(x, y, support, products, n))
+        return buildAdditionNetworkResult(products, support, n);
+      bool xConst = true;
+      for (const BBNode& b : x)
+        if (b != BBTrue && b != BBFalse)
+          xConst = false;
+      if (!xConst && std::lexicographical_compare(y.begin(), y.end(),
+                                                  x.begin(), x.end()))
+        return mult_normal(y, x, support, n);
+      return mult_normal(x, y, support, n);
+    }
+
+    case 22:
+    {
+      // 21 with carry-save rows (17) in place of the ripple rows for the
+      // symbolic pair.
+      if (mult_Booth_constant(x, y, support, products, n))
+        return buildAdditionNetworkResult(products, support, n);
+      bool xConst = true;
+      for (const BBNode& b : x)
+        if (b != BBTrue && b != BBFalse)
+          xConst = false;
+      if (!xConst && std::lexicographical_compare(y.begin(), y.end(),
+                                                  x.begin(), x.end()))
+        return mult_csaRows(y, x, support, n);
+      return mult_csaRows(x, y, support, n);
+    }
+
     default:
     {
       cerr << "Unk variant" << uf->multiplication_variant;

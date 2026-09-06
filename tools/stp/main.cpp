@@ -603,7 +603,8 @@ void ExtraMain::create_options()
             "19 is 1 with the operands of a symbolic multiply put in a "
             "canonical order, so both orders of one product share a circuit. "
             "20 is radix-4 with a hard triple, every row a select of "
-            "0, y, 2y or 3y. Any other value "
+            "0, y, 2y or 3y. 21 is 14 for a constant multiplier and 19 for a "
+            "symbolic one; 22 is 21 with carry-save rows. Any other value "
             "is an error, reported once bit-blasting reaches a multiply",
             bb_group);
 
