@@ -546,6 +546,12 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case UF_PHASE_HINTS:
       b->UserFlags.uf_phase_hints = param_value != 0;
       break;
+    case UF_PROPAGATE_EQUALITIES:
+      b->UserFlags.uf_propagate_equalities = param_value != 0;
+      break;
+    case UF_SKELETON_PREPROC:
+      b->UserFlags.uf_skeleton_preproc = param_value != 0;
+      break;
     case DISTINCT_ORDERING:
       b->UserFlags.distinct_ordering = param_value != 0;
       break;

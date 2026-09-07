@@ -558,6 +558,19 @@ void ExtraMain::create_options()
            "equality to ceil(log2(N+1)) bits, cutting the AIG cost of each "
            "congruence constraint from O(width) to O(log N)",
            refinement_group);
+  bool_arg("--uf-propagate-equalities",
+           bm->UserFlags.uf_propagate_equalities,
+           "before lowering, rewrite the query under its own top-level "
+           "equalities with applications still in place, so that `x = y` "
+           "merges (f x) and (f y) into one application and `a = (f y)` "
+           "or `(f 3) = 0` reach the terms built on a or (f 3)",
+           refinement_group);
+  bool_arg("--uf-skeleton-preproc", bm->UserFlags.uf_skeleton_preproc,
+           "let --uf-propagate-equalities also read the facts the query's "
+           "Boolean skeleton forces, so an equality stated under an "
+           "implication the structure resolves still crosses the "
+           "applications; one SAT call over the skeleton per UF solve",
+           refinement_group);
   bool_arg("--uf-inject-args", bm->UserFlags.uf_inject_args,
            "assume equality-only UF declarations are injective and encode it, "
            "giving the SAT solver bidirectional propagation between argument "

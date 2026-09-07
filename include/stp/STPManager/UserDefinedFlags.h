@@ -437,6 +437,26 @@ public:
   // declaration. Enabled by default; set to false if it causes trouble.
   bool uf_narrow_results = true;
 
+  // Before lowering replaces each application by a fresh symbol, read the
+  // equalities the query states at the top level and rewrite the rest of it
+  // under them, applications included: `x = 5` sends `(f x)` to `(f 5)`,
+  // `a = (f y)` sends every `a` to `(f y)`, `(f 3) = 0` sends every other
+  // `(f 3)` to 0. Lowering then protects the scalars it introduces from the
+  // simplifier, so this is the one point where such a fact can cross an
+  // application; see UFPreLowering. Verdict-preserving: the defining
+  // conjunct is kept, so no model is lost or invented.
+  bool uf_propagate_equalities = true;
+
+  // Whether the pass above first asks the Boolean skeleton what it forces
+  // (see SkeletonPreproc) and reads those facts too. A query that states
+  // `x = 5` only under an implication its structure resolves is common in
+  // the UF corpus -- every top-level assertion of a verification query is a
+  // guarded implication -- and without this the fact never reaches (f x).
+  // Distinct from --skeleton-preproc, which runs after lowering and cannot
+  // cross an application; this one is on by default for exactly that reason,
+  // and costs one SAT call over the skeleton per UF solve.
+  bool uf_skeleton_preproc = true;
+
   // For declarations whose results appear only in equality contexts, add
   // the reverse implication (= result_i result_j) => (= arg_i arg_j) in
   // the eager congruence encoding. This asserts injectivity, giving the

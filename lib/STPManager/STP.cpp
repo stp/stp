@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/EmbeddedConstraints.h"
 #include "stp/Simplifier/SkeletonPreproc.h"
 #include "stp/UninterpretedFunctions/UFLowering.h"
+#include "stp/UninterpretedFunctions/UFPreLowering.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
@@ -272,15 +273,37 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   // the submitted root in batchUFView and pass only its semantic replacement
   // plus query-local naming definitions onward.
   *batchUFView = LoweredApplicationView();
+  ASTNodeMap batchUFHandleAliases;
   // Each batch query builds its encoding from nothing, so what the last one
   // assumed says nothing about this one.
   bm->clearInjectivityAssumed();
   skeletonAsked = false;
   if (bm->UserFlags.enable_uninterpreted_functions)
   {
+    // While an application is still a term, push the query's own top-level
+    // equalities through it; once lowered, its arguments are protected from
+    // exactly this. Gated on the general simplification switches as well as
+    // its own, and skipped outright for a root with no application, which
+    // has nothing to gain and is the common case.
+    if (bm->UserFlags.optimize_flag && bm->UserFlags.propagate_equalities &&
+        bm->UserFlags.uf_propagate_equalities &&
+        containsKind(original_input, UF_APPLY))
+    {
+      const bool askSkeleton = bm->UserFlags.uf_skeleton_preproc ||
+                               bm->UserFlags.skeleton_preproc;
+      UFPreLowering pre(bm);
+      UFPreLoweringStats preStats;
+      original_input = pre.propagate(original_input, &preStats, askSkeleton,
+                                     &batchUFHandleAliases);
+      pre.report(preStats);
+      // The skeleton has been asked; sizeReducing need not ask it again.
+      if (askSkeleton)
+        skeletonAsked = true;
+    }
     UFLowering lowerer(bm);
     *batchUFView = lowerer.lowerCompletedRoot(
         original_input, UFSolveScope::batch(++batchUFScopeGeneration));
+    batchUFView->handleAliases = batchUFHandleAliases;
     original_input = batchUFView->semanticRootWithDefinitions(bm);
     if (containsKind(original_input, UF_APPLY))
       FatalError("UF_APPLY crossed the batch completed-root lowering barrier",

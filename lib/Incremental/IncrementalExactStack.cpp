@@ -354,13 +354,31 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // public conjunction separately in activeUFView.
   activeUFView = LoweredApplicationView();
   ASTNode ufSemantic = activeConjunction;
+  // As in the batch pipeline: the stack's own top-level equalities cross the
+  // applications now, while they are still terms. The rewritten root is a
+  // function of the raw conjunction, so an identical stack still lowers to
+  // an identical block; the raw conjunction stays the key of every cache
+  // below.
+  ASTNode ufRoot = activeConjunction;
   if (ufRound)
   {
+    ASTNodeMap handleAliases;
+    if (uf.optimize_flag && uf.propagate_equalities &&
+        uf.uf_propagate_equalities)
+    {
+      UFPreLowering pre(bm);
+      UFPreLoweringStats preStats;
+      ufRoot = pre.propagate(ufRoot, &preStats,
+                             uf.uf_skeleton_preproc || uf.skeleton_preproc,
+                             &handleAliases);
+      pre.report(preStats);
+    }
     UFLowering lowerer(bm);
     activeUFView = lowerer.lowerCompletedRoot(
-        activeConjunction,
-        UFSolveScope::persistent(activeConjunction.GetNodeNum(),
+        ufRoot,
+        UFSolveScope::persistent(ufRoot.GetNodeNum(),
                                  encodingEpochGeneration));
+    activeUFView.handleAliases = handleAliases;
     ufSemantic = activeUFView.semanticRootWithDefinitions(bm);
     if (containsKind(ufSemantic, UF_APPLY))
       FatalError("UF_APPLY crossed the persistent completed-block lowering "
@@ -483,11 +501,13 @@ IncrementalSolver::Impl::exactStackCheckSat(
     inputToSat = ext->prepare(inputToSat);
 
   exactStackKeepAlive.insert(activeConjunction);
+  exactStackKeepAlive.insert(ufRoot);
   exactStackKeepAlive.insert(ufSemantic);
   exactStackKeepAlive.insert(prepared);
   exactStackKeepAlive.insert(semantic);
   exactStackKeepAlive.insert(inputToSat);
   chargeSemanticRoot(activeConjunction);
+  chargeSemanticRoot(ufRoot);
   chargeSemanticRoot(ufSemantic);
   chargeSemanticRoot(prepared);
   chargeSemanticRoot(semantic);

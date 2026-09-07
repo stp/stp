@@ -597,7 +597,29 @@ enum ifaceflag_t
   //!
   BV_TERM_ABSTRACTION_PLUS,
   BV_TERM_ABSTRACTION_ITE,
-  BV_TERM_ABSTRACTION_COMPARE
+  BV_TERM_ABSTRACTION_COMPARE,
+
+  //! Before lowering, rewrite the query under its own top-level equalities
+  //! with applications still in place, so that `x = y` merges (f x) and
+  //! (f y) into one application and a fact such as `a = (f y)` reaches the
+  //! terms built on a.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --uf-propagate-equalities. Verdict-preserving: the
+  //! defining equality is kept, so no model is lost or invented. Appended to
+  //! preserve every published ordinal.
+  //!
+  UF_PROPAGATE_EQUALITIES,
+
+  //! Whether UF_PROPAGATE_EQUALITIES also reads the facts the query's
+  //! Boolean skeleton forces, so that an equality stated under an
+  //! implication the structure resolves still crosses the applications.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --uf-skeleton-preproc. Appended to preserve every
+  //! published ordinal.
+  //!
+  UF_SKELETON_PREPROC
 
 };
 
