@@ -86,8 +86,12 @@ protected:
   }
 
   // What the pass reports, as a signed verdict per atom: 1 forced true,
-  // -1 forced false, 0 not forced.
-  void verdicts(const ASTNode& query, int& va, int& vb, int& vc, bool& unsat)
+  // -1 forced false, 0 not forced. Facts about the structure itself -- a
+  // connective the pass fixed, or its negation -- are handed back in
+  // `structural` for the caller to judge, since they are not verdicts on
+  // any one atom.
+  void verdicts(const ASTNode& query, int& va, int& vb, int& vc, bool& unsat,
+                ASTVec* structural = nullptr)
   {
     SkeletonPreproc sk(&mgr);
     const ASTVec facts = sk.derive(query, unsat);
@@ -100,7 +104,55 @@ protected:
       if (atom == a) va = sign;
       else if (atom == b) vb = sign;
       else if (atom == c) vc = sign;
+      else if (SkeletonPreproc::isConnective(atom) && structural != nullptr)
+        structural->push_back(f);
       else ADD_FAILURE() << "a fact was reported about an unknown atom";
+    }
+  }
+
+  // Evaluate a formula over the three atoms under assignment `m`, whose
+  // bits 0..2 give a, b, c. Written independently of anything the pass
+  // does, so a structural fact can be checked against every model of the
+  // query it came from.
+  bool eval(const ASTNode& n, unsigned m)
+  {
+    if (n == a) return (m & 1u) != 0;
+    if (n == b) return (m & 2u) != 0;
+    if (n == c) return (m & 4u) != 0;
+    if (n.GetKind() == TRUE) return true;
+    if (n.GetKind() == FALSE) return false;
+    std::vector<bool> in;
+    for (const ASTNode& ch : n.GetChildren())
+      in.push_back(eval(ch, m));
+    switch (n.GetKind())
+    {
+      case NOT: return !in[0];
+      case AND:
+      case NAND:
+      {
+        bool r = true;
+        for (bool x : in) r = r && x;
+        return n.GetKind() == AND ? r : !r;
+      }
+      case OR:
+      case NOR:
+      {
+        bool r = false;
+        for (bool x : in) r = r || x;
+        return n.GetKind() == OR ? r : !r;
+      }
+      case IMPLIES: return !in[0] || in[1];
+      case XOR:
+      case IFF:
+      {
+        bool r = false;
+        for (bool x : in) r = r != x;
+        return n.GetKind() == XOR ? r : !r;
+      }
+      case ITE: return in[0] ? in[1] : in[2];
+      default:
+        ADD_FAILURE() << "eval: unexpected kind in a structural fact";
+        return false;
     }
   }
 };
@@ -182,6 +234,91 @@ TEST_F(SkeletonTest, an_arithmetic_contradiction_is_left_alone)
   EXPECT_EQ(facts.size(), backendReports() ? 2u : 0u);
 }
 
+// Facts about the structure itself. A disjunction the query never asserts
+// but forces -- here through an equivalence whose other side is a forced
+// atom -- is surfaced as a top-level fact, where EmbeddedConstraints can
+// replace its other occurrences. The atoms under it stay open.
+TEST_F(SkeletonTest, a_forced_disjunction_buried_in_an_equivalence_is_surfaced)
+{
+  if (!backendReports())
+    GTEST_SKIP() << "this backend does not report root-fixed literals";
+  const ASTNode either = nf->CreateNode(OR, a, b);
+  int va, vb, vc; bool unsat;
+  ASTVec structural;
+  verdicts(nf->CreateNode(AND, nf->CreateNode(IFF, c, either), c), va, vb, vc,
+           unsat, &structural);
+  EXPECT_FALSE(unsat);
+  EXPECT_EQ(vc, 1);
+  EXPECT_EQ(va, 0);
+  EXPECT_EQ(vb, 0);
+  ASSERT_EQ(structural.size(), 1u) << "exactly the buried disjunction";
+  EXPECT_EQ(structural[0], either);
+}
+
+// The same, forced false: the fact comes back negated.
+TEST_F(SkeletonTest, a_refuted_conjunction_buried_in_an_equivalence_is_surfaced)
+{
+  if (!backendReports())
+    GTEST_SKIP() << "this backend does not report root-fixed literals";
+  const ASTNode both = nf->CreateNode(AND, a, b);
+  int va, vb, vc; bool unsat;
+  ASTVec structural;
+  verdicts(nf->CreateNode(AND, nf->CreateNode(IFF, c, both), NOTof(c)), va,
+           vb, vc, unsat, &structural);
+  EXPECT_FALSE(unsat);
+  EXPECT_EQ(vc, -1);
+  EXPECT_EQ(va, 0);
+  EXPECT_EQ(vb, 0);
+  ASSERT_EQ(structural.size(), 1u);
+  EXPECT_EQ(structural[0], NOTof(both));
+}
+
+// What is not news is not reported: a conjunction whose inputs are both
+// forced is settled by the atom facts, and a conjunct of the query -- or a
+// connective under a top-level negation -- is already at the top level.
+TEST_F(SkeletonTest, settled_and_top_level_connectives_are_not_repeated)
+{
+  if (!backendReports())
+    GTEST_SKIP() << "this backend does not report root-fixed literals";
+  int va, vb, vc; bool unsat;
+  {
+    // AND(a, b): a and b, and nothing about the AND.
+    ASTVec structural;
+    verdicts(nf->CreateNode(AND, a, b), va, vb, vc, unsat, &structural);
+    EXPECT_EQ(va, 1);
+    EXPECT_EQ(vb, 1);
+    EXPECT_TRUE(structural.empty()) << "settled by its inputs";
+  }
+  {
+    // AND(OR(a, b), c): the disjunction is a conjunct already.
+    ASTVec structural;
+    verdicts(nf->CreateNode(AND, nf->CreateNode(OR, a, b), c), va, vb, vc,
+             unsat, &structural);
+    EXPECT_EQ(vc, 1);
+    EXPECT_TRUE(structural.empty()) << "a conjunct of the query";
+  }
+  {
+    // AND(NOT(AND(a, b)), c): the negated conjunct, likewise.
+    ASTVec structural;
+    verdicts(nf->CreateNode(AND, NOTof(nf->CreateNode(AND, a, b)), c), va, vb,
+             vc, unsat, &structural);
+    EXPECT_EQ(vc, 1);
+    EXPECT_TRUE(structural.empty()) << "under a top-level negation";
+  }
+  {
+    // AND(c, ITE(c, OR(a, b), a)): the conditional's output is settled by
+    // its forced condition and the disjunction is what it selects -- the
+    // disjunction is the fact, and the conditional is not repeated.
+    const ASTNode either = nf->CreateNode(OR, a, b);
+    ASTVec structural;
+    verdicts(nf->CreateNode(AND, c, nf->CreateNode(ITE, c, either, a)), va,
+             vb, vc, unsat, &structural);
+    EXPECT_EQ(vc, 1);
+    ASSERT_EQ(structural.size(), 1u);
+    EXPECT_EQ(structural[0], either);
+  }
+}
+
 // Every Boolean function of three atoms, against what it really forces.
 //
 // The query is built as an explicit disjunction of the assignments the
@@ -221,8 +358,24 @@ TEST_F(SkeletonTest, every_function_of_three_atoms)
     }
 
     int va, vb, vc; bool unsat;
-    verdicts(query, va, vb, vc, unsat);
+    ASTVec structural;
+    verdicts(query, va, vb, vc, unsat, &structural);
     ASSERT_FALSE(unsat) << "table " << table << " has a model";
+
+    // A structural fact has to hold in every model of the function, and
+    // must not be one of the query's own conjuncts said again.
+    for (const ASTNode& f : structural)
+    {
+      for (unsigned m = 0; m < 8; m++)
+      {
+        if (((table >> m) & 1u) == 0)
+          continue;
+        ASSERT_TRUE(eval(f, m))
+            << "table " << table << ": a structural fact is false in model "
+            << m;
+      }
+      ASSERT_NE(f, query) << "table " << table << ": the query itself";
+    }
 
     // The pass may report fewer facts than the function forces -- it asks a
     // SAT solver what it settled while simplifying, not what is entailed --
