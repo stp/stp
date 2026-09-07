@@ -90,6 +90,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   handle_cnf_options(cnf, needAbsRef);
 
   assert(satSolver.nVars() == 0);
+  configure_trail_reuse(satSolver, cnf, needAbsRef);
   add_cnf_to_solver(satSolver, cnf);
 
   // The clauses are in the solver now; give the formula back before the
@@ -500,6 +501,28 @@ bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
   mgr.stop();
 
   return true;
+}
+
+void ToSATAIG::configure_trail_reuse(SATSolver& satSolver, const CNF& cnf,
+                                     bool needAbsRef)
+{
+  // A backend that will only ever be asked once has no trail worth keeping.
+  // What this is for is the refinement loop -- array reads, the bit-vector
+  // abstractions, uninterpreted functions -- which adds the clauses that
+  // refute the last candidate and asks the same backend again, carrying no
+  // assumptions, so only the ALL scope keeps anything for it.
+  const UserDefinedFlags& uf = bm->UserFlags;
+  if (!needAbsRef || !uf.refinement_trail_reuse)
+    return;
+
+  // Configuration-window-only on the backends that have it. CallSAT hands
+  // this backend its first clause right after this, and asserts that none
+  // preceded, so the window is open by construction.
+  const bool kept = satSolver.enableTrailReuse(SATSolver::TrailReuse::ALL);
+  if (uf.stats_flag)
+    cerr << "Refinement trail reuse: "
+         << (kept ? "on" : "declined by the backend") << " ("
+         << cnf.varCount() - 1 << " variables)" << endl;
 }
 
 void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf)

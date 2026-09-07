@@ -271,18 +271,25 @@ bool Cadical::enableBVAInternal()
 #endif
 }
 
-// Incremental lazy backtracking: on a new solve whose assumptions extend a
-// prefix of the previous call's, CaDiCaL backtracks only to the first
-// difference and keeps the shared trail, instead of re-deciding and
-// re-propagating everything from the root. Mode 1 restricts the kept
-// trail to the assumption prefix; measured equal to mode 2 on the
-// many-small-queries workloads this targets.
-bool Cadical::enableTrailReuseInternal()
+// Incremental lazy backtracking, CaDiCaL's "ilb". Mode 1: on a new solve
+// whose assumptions extend a prefix of the previous call's, CaDiCaL
+// backtracks only to the first difference and keeps the shared trail,
+// instead of re-deciding and re-propagating everything from the root -- and
+// a call with no assumptions keeps nothing (sort_and_reuse_assumptions
+// backtracks to the root outright). Mode 2 keeps the whole trail whether or
+// not the call carries assumptions, so a clause added between calls unwinds
+// it only as far as the level that falsifies the clause. The incremental
+// driver asks for mode 1, measured equal to mode 2 on the many-small-queries
+// workloads it targets, where every call carries assumptions; the batch
+// pipeline's refinement loop asks for mode 2, because its calls carry none.
+bool Cadical::enableTrailReuseInternal(TrailReuse scope)
 {
   // Like factor, "ilb" may only be set while the solver is still in its
   // configuration window; the driver's size gate therefore works by
-  // rebuilding onto a fresh solver rather than by toggling.
-  return s->set("ilb", 1);
+  // rebuilding onto a fresh solver rather than by toggling. A CaDiCaL whose
+  // "ilb" is a plain switch (the 2.x line) declines the value 2, which the
+  // caller reads as the hint being declined.
+  return s->set("ilb", scope == TrailReuse::ALL ? 2 : 1);
 }
 
 bool Cadical::supportsInprobingControl() const

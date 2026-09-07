@@ -1099,6 +1099,23 @@ public:
   // OFF retires from the first driver solve.
   BVAMode incremental_inprobing = BVAMode::AUTO;
 
+  // Whether the batch pipeline's refinement loop may keep CaDiCaL's search
+  // trail from one of its solve calls to the next (SATSolver::TrailReuse::
+  // ALL, CaDiCaL's ilb=2). Without it every refinement round backtracks to
+  // the root and repeats the pre-search phases -- the preprocessing rounds,
+  // lucky phases, local search -- before it searches again; with it a
+  // round unwinds the trail only as far as the lemma that refutes the last
+  // candidate reaches. On by default. Measured over the QF_ABV corpus
+  // (15148 files, 20 s cap): 4797 queries engage the loop, no verdict
+  // moved, two fewer timeouts. The 57 of them above a second, re-run three
+  // times each and compared by medians: a 0.875 geometric mean of wall
+  // clock, 0.80 above two seconds and 0.73 above five; neutral below ten
+  // thousand variables (0.996) and 0.81-0.83 above it -- the class where
+  // the incremental driver's own gate switches reuse off, which is why
+  // there is no size gate here. A solve that is never asked twice is
+  // unaffected whatever this says.
+  bool refinement_trail_reuse = true;
+
   bool get_print_output_at_all() const
   {
     return print_STPinput_back_flag || print_STPinput_back_SMTLIB2_flag ||

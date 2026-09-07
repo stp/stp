@@ -45,6 +45,15 @@ TEST(UserDefinedFlags_Test, disable_simplifications_clears_distinct_ordering)
   EXPECT_FALSE(uf.distinct_ordering);
 }
 
+// The refinement loop keeps CaDiCaL's trail between its rounds unless asked
+// not to; the query-file test gives both settings by name, so the default
+// is pinned here.
+TEST(UserDefinedFlags_Test, refinement_trail_reuse_defaults_on)
+{
+  stp::UserDefinedFlags uf;
+  EXPECT_TRUE(uf.refinement_trail_reuse);
+}
+
 TEST(UserDefinedFlags_Test, caller_model_request_is_derived_from_source_flags)
 {
   stp::UserDefinedFlags uf;

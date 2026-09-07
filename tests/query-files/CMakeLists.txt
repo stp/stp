@@ -36,6 +36,13 @@ if (CADICAL_HAS_INPROBING)
 else()
     set(STP_CADICAL_INPROBING_PYBOOL "False")
 endif()
+# The 3.x line as a whole: what the whole-trail reuse (ilb=2) and the
+# decision hints need, and what CADICAL_HAS_FACTOR is decided from.
+if (CADICAL_HAS_FACTOR)
+    set(STP_CADICAL_3_PYBOOL "True")
+else()
+    set(STP_CADICAL_3_PYBOOL "False")
+endif()
 
 # Create llvm-lit configuration file
 configure_file(lit.site.cfg.in lit.site.cfg.g @ONLY)
@@ -65,6 +72,22 @@ if (USE_CADICAL AND CADICAL_HAS_FACTOR)
     # directory, so running them concurrently under ctest -j corrupts each
     # other's results. Serialise them against each other (only).
     set_tests_properties(query-files query-files-cadical-factor-off
+        PROPERTIES RESOURCE_LOCK query-files-exec-root
+    )
+endif()
+
+# The refinement loop keeps CaDiCaL's trail between its rounds by default, so
+# the run above already covers every verdict reached across a kept trail.
+# What it no longer covers is the other side of the switch, so this sweep
+# forces the trail dropped instead: the re-descending path has to keep
+# answering identically.
+if (USE_CADICAL)
+    add_test(NAME query-files-refinement-trail-reuse-off
+        COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG>
+                --param solver_params=--refinement-trail-reuse=0 .
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+    )
+    set_tests_properties(query-files-refinement-trail-reuse-off
         PROPERTIES RESOURCE_LOCK query-files-exec-root
     )
 endif()

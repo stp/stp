@@ -297,6 +297,12 @@ void ExtraMain::create_options()
              "solves, where re-probing the whole encoding every solve "
              "costs more than it earns)")
           ->group(solver_group);
+  bool_arg("--refinement-trail-reuse", bm->UserFlags.refinement_trail_reuse,
+           "keep cadical's search trail between the solve calls of a "
+           "refinement loop (array reads, bit-vector abstractions, "
+           "uninterpreted functions) instead of restarting each round from "
+           "the root",
+           solver_group);
 #endif
 
 #ifdef USE_CRYPTOMINISAT

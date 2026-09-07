@@ -167,19 +167,42 @@ public:
     return enableBVAInternal();
   }
 
-  // Ask the backend to reuse the solver trail across incremental solve
-  // calls when consecutive assumption sequences share a prefix, instead of
-  // re-deciding and re-propagating from the root every call (CaDiCaL's
-  // incremental lazy backtracking). Only correct to rely on when the
-  // caller keeps its assumption order prefix-stable across calls, which
-  // the incremental driver does: assumptions are emitted in assertion
-  // stack order and push/pop only ever change the suffix. FALSE means the
-  // backend has no such mechanism -- a performance hint declined, not an
-  // error.
-  bool enableTrailReuse()
+  // How much of its search trail a backend may keep from one solve call to
+  // the next, instead of re-deciding and re-propagating from the root every
+  // call (CaDiCaL's incremental lazy backtracking).
+  //
+  //   ASSUMPTIONS  keep the part of the trail that consecutive assumption
+  //                sequences share, and nothing else: a call that carries
+  //                no assumptions starts from the root. What the
+  //                incremental driver asks for. Only worth anything to a
+  //                caller whose assumption order is prefix-stable across
+  //                calls, which that driver's is: assumptions are emitted
+  //                in assertion stack order, and push/pop only ever change
+  //                the suffix.
+  //
+  //   ALL          keep the whole trail, assumptions or none. A clause
+  //                added between calls then unwinds the trail only to just
+  //                below the level at which it is falsified, rather than
+  //                to the root, and a search that resumes above the root
+  //                skips the pre-search phases a fresh descent repeats
+  //                every call (the preprocessing rounds, lucky phases,
+  //                local search). What a refinement loop wants: it adds
+  //                the few clauses that refute the last candidate and asks
+  //                the same backend again, with no assumptions at all, so
+  //                ASSUMPTIONS would keep nothing for it.
+  enum class TrailReuse
+  {
+    ASSUMPTIONS,
+    ALL
+  };
+
+  // Ask the backend for that much trail reuse. FALSE means the backend has
+  // no such mechanism, or not that much of one -- a performance hint
+  // declined, not an error.
+  bool enableTrailReuse(TrailReuse scope = TrailReuse::ASSUMPTIONS)
   {
     assertConfigurable("enableTrailReuse");
-    return enableTrailReuseInternal();
+    return enableTrailReuseInternal(scope);
   }
 
   // Whether this backend can turn probe-based inprocessing off, and the
@@ -409,7 +432,10 @@ protected:
   // technique -- a performance hint declined, not an error.
   virtual bool setSearchBiasInternal(SearchBias /*bias*/) { return false; }
   virtual bool enableBVAInternal() { return false; }
-  virtual bool enableTrailReuseInternal() { return false; }
+  virtual bool enableTrailReuseInternal(TrailReuse /*scope*/)
+  {
+    return false;
+  }
   virtual bool disableInprobingInternal() { return false; }
   virtual bool disableEliminationAndShrinkingInternal() { return false; }
   virtual bool disableLuckyPhasesInternal() { return false; }

@@ -1775,7 +1775,7 @@ struct IncrementalSolver::Impl
     // the shared trail between solves instead of re-descending from the
     // root every call. Size-gated: see trailReuseAllowed.
     if (trailReuseAllowed)
-      solver->enableTrailReuse();
+      solver->enableTrailReuse(SATSolver::TrailReuse::ASSUMPTIONS);
 
     // Lucky-phase probing re-tries trivial whole assignments over the
     // entire clause database at every solve call. The driver's solver is
@@ -3119,7 +3119,7 @@ struct IncrementalSolver::Impl
       ufAdapter->advanceBackendGeneration(satBackendGeneration);
     solver->enableRefinement(true);
     if (trailReuseAllowed)
-      solver->enableTrailReuse();
+      solver->enableTrailReuse(SATSolver::TrailReuse::ASSUMPTIONS);
     if (inprobingRetired)
     {
       solver->disableInprobing();
