@@ -898,6 +898,14 @@ public:
   bool fp_domain_row_bounds = false;
 
   int64_t multiplication_variant = 1;
+  // Conjoin to every multiply the prime implicates of the k-bit
+  // multiplication relation that its circuit cannot rederive by unit
+  // propagation: the odd-residue and 2-adic laws over the low k bits
+  // (2026-09-02 multiplication-encoding study). 0 = none, 3 = the six
+  // clauses that make the 3-bit relation refutation-complete, 4 = the 88
+  // that do the same for 4 bits. Sound at any width, since the low k
+  // product bits depend only on the low k operand bits.
+  int64_t multiplication_lemmas = 0;
 
   // If the bit-blaster discovers new constants, should the term simplifier be
   // re-run.
@@ -946,7 +954,11 @@ public:
     // against low is a comparison of the two backends and nothing else.
     CNF_EFFORT_GIA_LOW,
     CNF_EFFORT_GIA_HIGH,
-    CNF_EFFORT_GIA_VERY_HIGH
+    CNF_EFFORT_GIA_VERY_HIGH,
+
+    // new-medium's recovery plus prime-implicate blocks for private cones.
+    // On the end, as the note above requires, however much effort it spends.
+    CNF_EFFORT_NEW_HIGH
   };
 
   // Whether a level blasts through the Gia backend rather than ABC's Aig.

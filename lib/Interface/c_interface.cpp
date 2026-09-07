@@ -614,7 +614,7 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       // has set any other level with no way back to the one it started with.
       // The bound tracks the enum, and the numbers in the message with it.
       if (param_value < 0 ||
-          param_value > stp::UserDefinedFlags::CNF_EFFORT_GIA_VERY_HIGH)
+          param_value > stp::UserDefinedFlags::CNF_EFFORT_NEW_HIGH)
         reportCAPIError("CNF_GENERATION_EFFORT takes an effort ordinal from "
                         "0 (very low) to 11 (gia very high)");
       else

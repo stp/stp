@@ -23,6 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/ToCNFTseitin.h"
+#include <cstdlib>
+#include <fstream>
 
 #include "stp/AIG/Tseitin.h"
 
@@ -49,8 +51,78 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
     recover = aig::Recover::Nothing;
   else if (uf.cnf_effort == UserDefinedFlags::CNF_EFFORT_NEW_LOW)
     recover = aig::Recover::Patterns;
+  else if (uf.cnf_effort == UserDefinedFlags::CNF_EFFORT_NEW_HIGH)
+    recover = aig::Recover::Cells;
 
-  cnf = aig::deriveTseitin(mgr.mgr, 0, recover);
+  const char* annPath = getenv("STP_SHIFT_ANNOTATE");
+  const char* multPath = getenv("STP_MULT_ANNOTATE");
+  std::vector<uint32_t> nodeVar;
+  cnf = aig::deriveTseitin(mgr.mgr, 0, recover,
+                           (annPath || multPath) ? &nodeVar : nullptr);
+
+  // The literal id of one bit in writeDimacs numbering: t/f for a
+  // constant, 0 for a bit no variable reached, negative for a complement.
+  auto litId = [&](const BBNodeLit& bit, std::ostream& out) {
+    if (!bit.IsNull() && aig::isConst(bit.n))
+    {
+      out << " " << (bit.n == aig::LIT_TRUE ? "t" : "f");
+      return;
+    }
+    int id = 0;
+    if (!bit.IsNull())
+    {
+      const uint32_t v = nodeVar[aig::nodeOf(bit.n)];
+      if (v != 0)
+        id = aig::isNeg(bit.n) ? -(int)(v + 1) : (int)(v + 1);
+    }
+    out << " " << id;
+  };
+
+  if (multPath)
+  {
+    // One line per multiply: c mult W x_0..x_{W-1} y_0.. r_0..
+    std::ofstream ann(multPath);
+    for (const auto& tap : mgr.multTaps)
+    {
+      ann << "c mult " << tap.x.size();
+      for (const std::vector<BBNodeLit>* vec : {&tap.x, &tap.y, &tap.r})
+        for (const BBNodeLit& bit : *vec)
+          litId(bit, ann);
+      ann << "\n";
+    }
+  }
+
+  if (annPath)
+  {
+    // One line per symbolic-amount shift: variable ids in the numbering
+    // writeDimacs uses (internal var + 1); negative = the bit is the
+    // variable's complement; 0 = the bit reached no variable.
+    std::ofstream ann(annPath);
+    static const char* names[3] = {"shl", "lshr", "ashr"};
+    for (const auto& tap : mgr.shiftTaps)
+    {
+      ann << "c shift " << names[tap.kind] << " " << tap.a.size();
+      for (const std::vector<BBNodeLit>* vec : {&tap.a, &tap.s, &tap.r})
+        for (const BBNodeLit& bit : *vec)
+        {
+          if (!bit.IsNull() && aig::isConst(bit.n))
+          {
+            // constants matter to the oracle: t/f instead of a var id
+            ann << " " << (bit.n == aig::LIT_TRUE ? "t" : "f");
+            continue;
+          }
+          int id = 0;
+          if (!bit.IsNull())
+          {
+            const uint32_t v = nodeVar[aig::nodeOf(bit.n)];
+            if (v != 0)
+              id = aig::isNeg(bit.n) ? -(int)(v + 1) : (int)(v + 1);
+          }
+          ann << " " << id;
+        }
+      ann << "\n";
+    }
+  }
 
   // Each symbol maps to the variables its bits carry. ~0u for a bit that
   // reached no variable, which is the same sentinel fill_node_to_var writes
@@ -78,6 +150,7 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
   if (uf.stats_flag)
     std::cerr << (recover == aig::Recover::Nothing    ? "new-very-low CNF"
                   : recover == aig::Recover::Patterns ? "new-low CNF"
+                  : recover == aig::Recover::Cells    ? "new-high CNF"
                                                       : "new-medium CNF")
               << std::endl;
 }

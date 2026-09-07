@@ -159,6 +159,16 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                            const ASTNode& n);
   BBNodeVec mult_normal(const BBNodeVec& x, const BBNodeVec& y,
                              BBNodeSet& support, const ASTNode& n);
+  BBNodeVec mult_csaRows(const BBNodeVec& x, const BBNodeVec& y,
+                         BBNodeSet& support, const ASTNode& n);
+  BBNodeVec mult_dadda(vector<list<BBNode>>& products, BBNodeSet& support,
+                       const ASTNode& n);
+  void mult_radix4_hard(const BBNodeVec& x, const BBNodeVec& y,
+                        vector<list<BBNode>>& products, const ASTNode& n);
+  BBNodeVec BBMultVariant(const BBNodeVec& x, const BBNodeVec& y,
+                          BBNodeSet& support, const ASTNode& n);
+  void multLemmaBlock(const BBNodeVec& x, const BBNodeVec& y,
+                      const BBNodeVec& p, BBNodeSet& support);
 
   BBNodeVec batcher(const BBNodeVec& in);
   BBNodeVec mergeSorted(const BBNodeVec& in1,

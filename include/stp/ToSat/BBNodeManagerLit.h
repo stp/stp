@@ -61,6 +61,22 @@ public:
   typedef std::map<ASTNode, std::vector<BBNodeLit>> SymbolToBBNode;
   SymbolToBBNode symbolToBBNode;
 
+  // Diagnostic taps for the lazy-shift-oracle experiments: one record per
+  // symbolic-amount shift, filled by the blaster only when
+  // STP_SHIFT_ANNOTATE is set, written out by ToCNFTseitin.
+  struct ShiftTap
+  {
+    int kind; // 0 shl, 1 lshr, 2 ashr
+    std::vector<BBNodeLit> a, s, r;
+  };
+  std::vector<ShiftTap> shiftTaps;
+  // Likewise one record per multiply, under STP_MULT_ANNOTATE.
+  struct MultTap
+  {
+    std::vector<BBNodeLit> x, y, r;
+  };
+  std::vector<MultTap> multTaps;
+
   int totalNumberOfNodes() { return static_cast<int>(mgr.andCount()); }
 
   // Size the node array and strash table before anything is built. The
