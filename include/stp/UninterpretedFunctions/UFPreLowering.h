@@ -49,6 +49,9 @@ struct DLL_PUBLIC UFPreLoweringStats
   size_t symbolSubstitutions = 0;
   // Applications replaced by the constant a top-level equality pins them to.
   size_t applicationSubstitutions = 0;
+  // Other asserted atoms and connectives whose recurrences elsewhere in the
+  // root became true (or false, for a negated one).
+  size_t atomSubstitutions = 0;
   // Rewrite rounds until the root stopped changing.
   size_t rounds = 0;
   // Distinct applications left in the root once the pass is done.
@@ -67,11 +70,14 @@ struct DLL_PUBLIC UFPreLoweringStats
 // This pass runs on the completed root before lowering, while an application
 // is still an ordinary term, and does what that ordinary term allows: it
 // reads the conjuncts of the root and rewrites every other conjunct under
-// them. A symbol equated with a term becomes that term; an application
-// equated with a constant becomes that constant; a Boolean symbol or
-// application asserted outright becomes true or false. Hash-consing then
-// makes `(f x)` and `(f y)` one application when `x = y` was asserted, which
-// is exactly the structural merge an e-graph solver gets at internalisation.
+// them. A symbol equated with a constant, another symbol or an application
+// becomes that; an application equated with a constant becomes that
+// constant; and any conjunct at all holds wherever else it occurs, so its
+// recurrences become true and those of what it negates become false -- the
+// embedded-constraints rewrite, over the structure the query has before its
+// applications are hidden. Hash-consing then makes `(f x)` and `(f y)` one
+// application when `x = y` was asserted, which is exactly the structural
+// merge an e-graph solver gets at internalisation.
 //
 // The defining conjunct is kept, so the pass changes no model: every fact it
 // used still constrains the symbol it was used on, and the ordinary

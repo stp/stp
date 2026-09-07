@@ -103,25 +103,40 @@ struct Candidate
   size_t conjunct = 0;
 };
 
-// Constants first, then symbols, then everything else: a chain x = y, y = 5
-// resolves to x = 5 only if 5 is in the map before y is asked about, and a
-// symbol equated with two things keeps the cheaper one.
-int rank(const ASTNode& value)
+// The order the candidates are tried in, which decides what a conjunct that
+// could be read two ways is used for. A symbol equated with a constant, with
+// another symbol, or with an application is a definition worth applying: it
+// folds constants, merges applications and removes the symbol from every
+// argument position. Only then is a conjunct read as an asserted atom, sent
+// to true wherever else it occurs. A symbol equated with any other term is
+// left as that atom: pushing a wide division into every argument position
+// that named it makes each congruence premise a comparison of dividers
+// where it was a comparison of symbols, and the ordinary preprocessing that
+// follows lowering substitutes the symbol anyway wherever no application
+// protects it. Within a class, constants come first so that a chain x = y,
+// y = 5 resolves to x = 5 before y is asked about.
+int rank(const Candidate& candidate)
 {
-  if (value.isConstant())
+  const bool definition = isScalarSymbol(candidate.key) ||
+                          isApplication(candidate.key);
+  if (definition && candidate.value.isConstant())
     return 0;
-  if (value.GetKind() == SYMBOL)
+  if (definition && candidate.value.GetKind() == SYMBOL)
     return 1;
-  return 2;
+  if (definition && isApplication(candidate.value))
+    return 2;
+  if (!definition)
+    return 3;
+  return 4;
 }
 
-void addSymbolCandidate(std::vector<Candidate>& out, const ASTNode& symbol,
-                        const ASTNode& value, size_t conjunct)
+void addCandidate(std::vector<Candidate>& out, const ASTNode& key,
+                  const ASTNode& value, size_t conjunct)
 {
-  if (symbol == value)
+  if (key == value)
     return;
   Candidate c;
-  c.key = symbol;
+  c.key = key;
   c.value = value;
   c.conjunct = conjunct;
   out.push_back(c);
@@ -132,81 +147,83 @@ void readCandidates(const ASTNode& conjunct, size_t index,
                     std::vector<Candidate>& out)
 {
   const Kind k = conjunct.GetKind();
-
-  // A Boolean asserted outright, or its negation.
-  if (isScalarSymbol(conjunct) || isApplication(conjunct))
-  {
-    addSymbolCandidate(out, conjunct, astTrue, index);
-    return;
-  }
-  if (k == NOT && (isScalarSymbol(conjunct[0]) || isApplication(conjunct[0])))
-  {
-    addSymbolCandidate(out, conjunct[0], astFalse, index);
-    return;
-  }
-
-  if ((k != EQ && k != IFF) || conjunct.Degree() != 2)
+  if (conjunct.isConstant())
     return;
 
-  const ASTNode& a = conjunct[0];
-  const ASTNode& b = conjunct[1];
+  // What an equality says about its sides comes first, so that `x = 5`
+  // sends x to 5 rather than merely the atom to true; the atom then folds
+  // wherever it recurs.
+  if ((k == EQ || k == IFF) && conjunct.Degree() == 2)
+  {
+    const ASTNode& a = conjunct[0];
+    const ASTNode& b = conjunct[1];
 
-  if (isScalarSymbol(a) && isScalarSymbol(b))
-  {
-    // Either orientation is sound; the later symbol is the one that goes,
-    // so that the choice is a function of the query alone.
-    if (a.GetNodeNum() > b.GetNodeNum())
-      addSymbolCandidate(out, a, b, index);
-    else
-      addSymbolCandidate(out, b, a, index);
-    return;
-  }
-  if (isScalarSymbol(a))
-  {
-    addSymbolCandidate(out, a, b, index);
-    return;
-  }
-  if (isScalarSymbol(b))
-  {
-    addSymbolCandidate(out, b, a, index);
-    return;
+    if (isScalarSymbol(a) && isScalarSymbol(b))
+    {
+      // Either orientation is sound; the later symbol is the one that goes,
+      // so that the choice is a function of the query alone.
+      if (a.GetNodeNum() > b.GetNodeNum())
+        addCandidate(out, a, b, index);
+      else
+        addCandidate(out, b, a, index);
+    }
+    else if (isScalarSymbol(a))
+      addCandidate(out, a, b, index);
+    else if (isScalarSymbol(b))
+      addCandidate(out, b, a, index);
+    // An application pinned to a constant. An application equated with a
+    // non-constant term is left alone: replacing it by that term would move
+    // the application into the equality alone and buy nothing, while the
+    // symbol case above already covers `(f x) = a` by sending `a` to
+    // `(f x)`.
+    else if (isApplication(a) && b.isConstant())
+      addCandidate(out, a, b, index);
+    else if (isApplication(b) && a.isConstant())
+      addCandidate(out, b, a, index);
   }
 
-  // An application pinned to a constant. An application equated with a
-  // non-constant term is left alone: replacing it by that term would move
-  // the application into the equality alone and buy nothing, while the
-  // symbol case above already covers `(f x) = a` by sending `a` to `(f x)`.
-  if (isApplication(a) && b.isConstant())
-    addSymbolCandidate(out, a, b, index);
-  else if (isApplication(b) && a.isConstant())
-    addSymbolCandidate(out, b, a, index);
+  // Whatever the conjunct is, it holds: every other occurrence of it is
+  // true, and every other occurrence of what it negates is false. This is
+  // the embedded-constraints rewrite, over the structure the query has
+  // before its applications are hidden. A Boolean symbol or application
+  // asserted outright is the same rule with the atom as its own key.
+  if (k == NOT)
+    addCandidate(out, conjunct[0], astFalse, index);
+  else
+    addCandidate(out, conjunct, astTrue, index);
 }
 
-// Rebuild an application over rewritten arguments without rewriting the
-// application itself, which the map may send to a constant. The declaration
-// identity in child 0 is a symbol no fact ever equates, so it survives
-// replace() unchanged and is passed through untouched here as well.
-ASTNode rewriteArguments(const ASTNode& application, ASTNodeMap& fromTo,
-                         NodeFactory* factory)
+// Rebuild a node over rewritten children without rewriting the node itself,
+// which the map may send elsewhere: an application pinned to a constant, or
+// an asserted atom sent to true. An application's declaration identity in
+// child 0 is a symbol no fact ever equates, so it is passed through as is.
+ASTNode rewriteChildren(const ASTNode& node, ASTNodeMap& fromTo,
+                        NodeFactory* factory)
 {
+  if (node.Degree() == 0)
+    return node;
   ASTVec children;
-  children.reserve(application.Degree());
-  children.push_back(application[0]);
+  children.reserve(node.Degree());
   bool changed = false;
-  for (size_t i = 1; i < application.Degree(); ++i)
+  for (size_t i = 0; i < node.Degree(); ++i)
   {
+    if (i == 0 && isApplication(node))
+    {
+      children.push_back(node[0]);
+      continue;
+    }
     ASTNodeMap cache;
     const ASTNode rewritten =
-        SubstitutionMap::replace(application[i], fromTo, cache, factory);
-    changed = changed || rewritten != application[i];
+        SubstitutionMap::replace(node[i], fromTo, cache, factory);
+    changed = changed || rewritten != node[i];
     children.push_back(rewritten);
   }
   if (!changed)
-    return application;
-  if (application.GetType() == BOOLEAN_TYPE)
-    return factory->CreateNode(UF_APPLY, children);
-  return factory->CreateTerm(UF_APPLY, application.GetValueWidth(),
-                             children);
+    return node;
+  if (node.GetType() == BOOLEAN_TYPE)
+    return factory->CreateNode(node.GetKind(), children);
+  return factory->CreateArrayTerm(node.GetKind(), node.GetIndexWidth(),
+                                  node.GetValueWidth(), children);
 }
 
 // Every distinct application in `root`, in the order the walk meets them.
@@ -309,7 +326,7 @@ ASTNode UFPreLowering::propagate(const ASTNode& root, UFPreLoweringStats* stats,
 
     std::stable_sort(candidates.begin(), candidates.end(),
                      [](const Candidate& left, const Candidate& right) {
-                       return rank(left.value) < rank(right.value);
+                       return rank(left) < rank(right);
                      });
 
     ASTNodeMap fromTo;
@@ -320,6 +337,7 @@ ASTNode UFPreLowering::propagate(const ASTNode& root, UFPreLoweringStats* stats,
     std::vector<ASTNode> definedKey(conjuncts.size());
     size_t symbolSubstitutions = 0;
     size_t applicationSubstitutions = 0;
+    size_t atomSubstitutions = 0;
 
     for (const Candidate& candidate : candidates)
     {
@@ -347,8 +365,10 @@ ASTNode UFPreLowering::propagate(const ASTNode& root, UFPreLoweringStats* stats,
         continue;
       if (isApplication(candidate.key))
         applicationSubstitutions++;
-      else
+      else if (candidate.key.GetKind() == SYMBOL)
         symbolSubstitutions++;
+      else
+        atomSubstitutions++;
     }
 
     if (fromTo.empty())
@@ -357,7 +377,7 @@ ASTNode UFPreLowering::propagate(const ASTNode& root, UFPreLoweringStats* stats,
     for (const ASTNode& application : originalApplications)
     {
       ASTNode& current_image = image.find(application)->second;
-      current_image = rewriteArguments(current_image, fromTo, factory);
+      current_image = rewriteChildren(current_image, fromTo, factory);
     }
 
     ASTVec rewritten;
@@ -373,13 +393,13 @@ ASTNode UFPreLowering::propagate(const ASTNode& root, UFPreLoweringStats* stats,
       }
 
       // The defining conjunct, restated as the key against its resolved
-      // value. An application key keeps its own arguments current so that
-      // it stays the one application every other occurrence merged into.
+      // value. The key keeps its own children current -- an application
+      // stays the one application every other occurrence merged into, an
+      // atom reads what the other definitions say about its operands --
+      // without being sent where the map sends its other occurrences.
       const ASTNode& key = definedKey[i];
       const ASTNode& value = fromTo.find(key)->second;
-      ASTNode keptKey = key;
-      if (isApplication(key))
-        keptKey = rewriteArguments(key, fromTo, factory);
+      const ASTNode keptKey = rewriteChildren(key, fromTo, factory);
       if (value == manager_->ASTTrue)
         rewritten.push_back(keptKey);
       else if (value == manager_->ASTFalse)
@@ -394,6 +414,7 @@ ASTNode UFPreLowering::propagate(const ASTNode& root, UFPreLoweringStats* stats,
                              : factory->CreateNode(AND, rewritten);
     s.symbolSubstitutions += symbolSubstitutions;
     s.applicationSubstitutions += applicationSubstitutions;
+    s.atomSubstitutions += atomSubstitutions;
     if (next == current)
       break;
     s.rounds++;
@@ -426,7 +447,8 @@ void UFPreLowering::report(const UFPreLoweringStats& stats) const
   }
   std::cerr << "UF: pre-lowering substituted " << stats.symbolSubstitutions
             << " symbol(s) and " << stats.applicationSubstitutions
-            << " application(s) in " << stats.rounds << " round(s)";
+            << " application(s) and " << stats.atomSubstitutions
+            << " asserted atom(s) in " << stats.rounds << " round(s)";
   if (stats.skeletonFacts != 0)
     std::cerr << " using " << stats.skeletonFacts << " skeleton fact(s)";
   std::cerr << ", " << stats.applicationsRemaining

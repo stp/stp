@@ -4,15 +4,19 @@
 ; (f x) to (f #x05) -- which the query pins to #x00 -- so the quotient below
 ; is w and the query is refuted with no divider built and no lemma learned.
 ;
-; RUN: %solver -s --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
-; RUN: %solver -s --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
-; CHECK: UF: pre-lowering substituted [0-9]+ symbol\(s\) and [0-9]+ application\(s\) in [0-9]+ round\(s\) using [0-9]+ skeleton fact\(s\), 0 application\(s\) remain
+; The skeleton pass reads what the SAT backend fixed at the root, which
+; only CaDiCaL reports, so the pass is a no-op under another backend.
+; REQUIRES: cadical
+;
+; RUN: %solver --cadical -s --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
+; RUN: %solver --cadical -s --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
+; CHECK: UF: pre-lowering substituted [0-9]+ symbol\(s\) and [0-9]+ application\(s\) and [0-9]+ asserted atom\(s\) in [0-9]+ round\(s\) using [0-9]+ skeleton fact\(s\), 0 application\(s\) remain
 ; CHECK-NOT: installed congruence lemma
 ; CHECK: ^unsat$
 ;
 ; Without the skeleton the fact stays buried: both applications survive
 ; lowering and the congruence machinery has to relate them.
-; RUN: %solver -s --uninterpreted-functions --uf-skeleton-preproc=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=NOSKEL %s
+; RUN: %solver --cadical -s --uninterpreted-functions --uf-skeleton-preproc=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=NOSKEL %s
 ; NOSKEL-NOT: skeleton fact
 ; NOSKEL: 2 application\(s\) remain
 ; NOSKEL: ^unsat$

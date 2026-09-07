@@ -197,23 +197,23 @@ TEST(UFPreLowering, ASymbolIsNeverReplacedByATermMentioningIt)
   ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
   const ASTNode x = fx.symbol("x");
   const ASTNode y = fx.symbol("y");
-  // x = (f x) is a fact about x, not a definition of it; y = x + 1 is.
+  const ASTNode z = fx.symbol("z");
+  // x = (f x) is a fact about x, not a definition of it, however well an
+  // application ranks as a value; y = x and (f y) = z are definitions.
   const ASTNode root = fx.factory->CreateNode(
-      AND, {fx.eq(x, fx.apply(x)),
-            fx.eq(y, fx.factory->CreateTerm(BVPLUS, 8, x, fx.constant(1))),
-            fx.eq(fx.apply(y), fx.constant(9))});
+      AND, {fx.eq(x, fx.apply(x)), fx.eq(y, x), fx.eq(fx.apply(y), z)});
 
   UFPreLowering pass(&fx.manager);
   UFPreLoweringStats stats;
   const ASTNode rewritten = pass.propagate(root, &stats);
 
-  EXPECT_EQ(1u, stats.symbolSubstitutions);
+  EXPECT_EQ(2u, stats.symbolSubstitutions);
   const ASTNodeSet conjuncts = conjunctsOf(rewritten);
+  // x was left alone, and (f y) became (f x): one application, still the
+  // one x is equated with.
   EXPECT_NE(conjuncts.end(), conjuncts.find(fx.eq(x, fx.apply(x))));
-  // (f y) became (f (x + 1)); x itself was left alone.
-  const ASTNode expected = fx.apply(fx.factory->CreateTerm(BVPLUS, 8, x, fx.constant(1)));
-  EXPECT_NE(conjuncts.end(), conjuncts.find(fx.eq(expected, fx.constant(9))));
-  EXPECT_EQ(2u, stats.applicationsRemaining);
+  EXPECT_NE(conjuncts.end(), conjuncts.find(fx.eq(z, fx.apply(x))));
+  EXPECT_EQ(1u, stats.applicationsRemaining);
 }
 
 TEST(UFPreLowering, ARootWithNoFactIsReturnedUnchanged)
@@ -233,3 +233,81 @@ TEST(UFPreLowering, ARootWithNoFactIsReturnedUnchanged)
   EXPECT_EQ(0u, stats.rounds);
   EXPECT_EQ(2u, stats.applicationsRemaining);
 }
+
+TEST(UFPreLowering, AnAssertedAtomIsTrueWhereverElseItOccurs)
+{
+  Fixture fx;
+  ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
+  const ASTNode x = fx.symbol("x");
+  const ASTNode y = fx.symbol("y");
+  const ASTNode guard = fx.factory->CreateNode(BVLE, y, fx.constant(16));
+  // The guard is asserted, and it guards the fact that pins x. Nothing
+  // equates a symbol at the top level, so only the atom rewrite can expose
+  // x = 5 to the application.
+  const ASTNode root = fx.factory->CreateNode(
+      AND, {guard,
+            fx.factory->CreateNode(IMPLIES, guard, fx.eq(x, fx.constant(5))),
+            fx.eq(fx.apply(x), fx.constant(9)),
+            fx.eq(fx.apply(fx.constant(5)), fx.constant(3))});
+  ASSERT_EQ(2u, applicationsIn(root).size());
+
+  UFPreLowering pass(&fx.manager);
+  UFPreLoweringStats stats;
+  const ASTNode rewritten = pass.propagate(root, &stats);
+
+  EXPECT_GE(stats.atomSubstitutions, 1u);
+  // The implication collapsed to x = 5, the second round read it, and
+  // (f x) became (f 5): pinned to both 9 and 3, the root is false.
+  EXPECT_EQ(fx.manager.ASTFalse, rewritten);
+}
+
+TEST(UFPreLowering, ANegatedAssertionIsFalseWhereverElseItOccurs)
+{
+  Fixture fx;
+  ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
+  const ASTNode x = fx.symbol("x");
+  const ASTNode y = fx.symbol("y");
+  const ASTNode guard = fx.factory->CreateNode(BVLE, y, fx.constant(16));
+  const ASTNode root = fx.factory->CreateNode(
+      AND, {fx.factory->CreateNode(NOT, guard),
+            fx.factory->CreateNode(OR, guard, fx.eq(x, fx.constant(5))),
+            fx.eq(fx.apply(x), fx.constant(9)),
+            fx.eq(fx.apply(fx.constant(5)), fx.constant(3))});
+
+  UFPreLowering pass(&fx.manager);
+  UFPreLoweringStats stats;
+  const ASTNode rewritten = pass.propagate(root, &stats);
+
+  EXPECT_GE(stats.atomSubstitutions, 1u);
+  EXPECT_EQ(fx.manager.ASTFalse, rewritten);
+}
+
+TEST(UFPreLowering, ASymbolEquatedWithAnArithmeticTermStaysItsName)
+{
+  Fixture fx;
+  ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
+  const ASTNode a = fx.symbol("a");
+  const ASTNode b = fx.symbol("b");
+  const ASTNode x = fx.symbol("x");
+  const ASTNode quotient = fx.factory->CreateTerm(BVDIV, 8, a, b);
+  // x names a quotient and is an argument of f. The quotient is not pushed
+  // into the application: x keeps naming it, and the conjunct is used as an
+  // asserted atom instead.
+  const ASTNode root = fx.factory->CreateNode(
+      AND, {fx.eq(x, quotient),
+            fx.factory->CreateNode(
+                IMPLIES, fx.eq(x, quotient),
+                fx.eq(fx.apply(x), fx.constant(9)))});
+
+  UFPreLowering pass(&fx.manager);
+  UFPreLoweringStats stats;
+  const ASTNode rewritten = pass.propagate(root, &stats);
+
+  EXPECT_EQ(0u, stats.symbolSubstitutions);
+  EXPECT_GE(stats.atomSubstitutions, 1u);
+  const ASTNodeSet conjuncts = conjunctsOf(rewritten);
+  EXPECT_NE(conjuncts.end(), conjuncts.find(fx.eq(x, quotient)));
+  EXPECT_NE(conjuncts.end(),
+            conjuncts.find(fx.eq(fx.apply(x), fx.constant(9))));
+}
+
