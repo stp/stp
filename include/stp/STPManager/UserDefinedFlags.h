@@ -457,6 +457,29 @@ public:
   // and costs one SAT call over the skeleton per UF solve.
   bool uf_skeleton_preproc = true;
 
+  // Whether a solve with uninterpreted functions abstracts its wide
+  // multiplications, divisions and remainders (see --bv-term-abstraction)
+  // without being asked to by name.
+  //
+  // AUTO -- the default -- turns the abstraction on for a UF solve whose
+  // root holds a BVMULT, BVDIV or BVMOD at or above --bv-abstraction-width,
+  // and leaves every other solve exactly as the general flag says. ON and
+  // OFF decide it for every UF solve. The general flag is off by default
+  // because on plain bit-vector workloads the abstraction was measured as a
+  // wash; the UF corpus is a different population -- 256-bit contract
+  // verification queries with a handful of products and quotients each,
+  // most of which the search never needs exactly -- and there it is the
+  // difference between finishing and not: with it Bitwuzla, which abstracts
+  // these operations unconditionally, decides
+  // QF_UFBV/20241113-Certora/0884 in 3s, and without it in 96s.
+  enum class UFAbstractionMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  UFAbstractionMode uf_bv_term_abstraction = UFAbstractionMode::AUTO;
+
   // For declarations whose results appear only in equality contexts, add
   // the reverse implication (= result_i result_j) => (= arg_i arg_j) in
   // the eager congruence encoding. This asserts injectivity, giving the

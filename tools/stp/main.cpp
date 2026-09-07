@@ -146,6 +146,9 @@ public:
   // input file.
   std::string uf_ackermann;
   CLI::Option* uf_ackermann_option = nullptr;
+  // Likewise for UserFlags.uf_bv_term_abstraction.
+  std::string uf_bv_term_abstraction;
+  CLI::Option* uf_bv_term_abstraction_option = nullptr;
 };
 
 int ExtraMain::create_and_parse_options(int argc, char** argv)
@@ -571,6 +574,17 @@ void ExtraMain::create_options()
            "implication the structure resolves still crosses the "
            "applications; one SAT call over the skeleton per UF solve",
            refinement_group);
+  uf_bv_term_abstraction_option =
+      app.add_option("--uf-bv-term-abstraction", uf_bv_term_abstraction,
+                     "whether a solve with uninterpreted functions abstracts "
+                     "its wide multiplications, divisions and remainders as "
+                     "--bv-term-abstraction does: 'auto' (the default) does "
+                     "so when the query holds one at or above "
+                     "--bv-abstraction-width, 'on' and 'off' decide it for "
+                     "every UF solve")
+          ->group(refinement_group)
+          ->type_name("TEXT")
+          ->default_str("auto");
   bool_arg("--uf-inject-args", bm->UserFlags.uf_inject_args,
            "assume equality-only UF declarations are injective and encode it, "
            "giving the SAT solver bidirectional propagation between argument "
@@ -1300,6 +1314,23 @@ int ExtraMain::parse_options(int argc, char** argv)
   }
 #endif
 
+  if (uf_bv_term_abstraction_option->count())
+  {
+    typedef UserDefinedFlags::UFAbstractionMode Mode;
+    if (uf_bv_term_abstraction == "on")
+      bm->UserFlags.uf_bv_term_abstraction = Mode::ON;
+    else if (uf_bv_term_abstraction == "off")
+      bm->UserFlags.uf_bv_term_abstraction = Mode::OFF;
+    else if (uf_bv_term_abstraction == "auto")
+      bm->UserFlags.uf_bv_term_abstraction = Mode::AUTO;
+    else
+    {
+      cerr << "ERROR: --uf-bv-term-abstraction must be one of 'on', 'off' "
+              "or 'auto'"
+           << endl;
+      exit(-1);
+    }
+  }
   if (uf_ackermann_option->count())
   {
     typedef UserDefinedFlags::UFEagerMode Mode;

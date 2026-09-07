@@ -52,6 +52,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/Rewriting.h"
 #include "stp/Simplifier/MergeSame.h"
+#include "stp/Util/DagWalk.h"
 #include <memory>
 using std::cout;
 
@@ -210,6 +211,40 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   return second;
 }
 
+namespace
+{
+
+// Whether `root` holds a multiplication, division or remainder that
+// --bv-term-abstraction would abstract: at or above `width` bits. The signed
+// forms count, since the bit-blaster lowers them to the unsigned circuits.
+bool containsWideArithmetic(const ASTNode& root, unsigned width)
+{
+  bool found = false;
+  ASTNodeSet visited;
+  walkPreOrder(root, [&](const ASTNode& n) -> bool {
+    if (found || !visited.insert(n).second)
+      return false;
+    switch (n.GetKind())
+    {
+      case BVMULT:
+      case BVDIV:
+      case BVMOD:
+      case SBVDIV:
+      case SBVREM:
+      case SBVMOD:
+        if (n.GetValueWidth() >= width)
+          found = true;
+        break;
+      default:
+        break;
+    }
+    return !found;
+  });
+  return found;
+}
+
+} // namespace
+
 SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
                                         const ASTNode& query)
 {
@@ -317,6 +352,36 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
                                       ? batchUFAdapter.get()
                                       : NULL);
 
+  // A UF solve abstracts its wide arithmetic unless told otherwise; see
+  // UserDefinedFlags::uf_bv_term_abstraction. Decided on the word-level root,
+  // before floating-point lowering can introduce products of its own, and
+  // for this solve only: the general flag and the CNF rung it selects are
+  // put back afterwards, so a later plain bit-vector query in the same
+  // session is encoded exactly as it always was.
+  const bool savedTermAbstraction = bm->UserFlags.bv_term_abstraction;
+  const UserDefinedFlags::CNFEffort savedCnfEffort = bm->UserFlags.cnf_effort;
+  if (batchUFView->active())
+  {
+    typedef UserDefinedFlags::UFAbstractionMode Mode;
+    const Mode mode = bm->UserFlags.uf_bv_term_abstraction;
+    bool abstractTerms = savedTermAbstraction;
+    if (mode == Mode::ON)
+      abstractTerms = true;
+    else if (mode == Mode::OFF)
+      abstractTerms = false;
+    else if (!abstractTerms)
+      abstractTerms = containsWideArithmetic(
+          original_input, bm->UserFlags.bv_abstraction_width);
+    if (abstractTerms != savedTermAbstraction)
+    {
+      bm->UserFlags.bv_term_abstraction = abstractTerms;
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "UF: " << (abstractTerms ? "abstracting" : "not abstracting")
+                  << " wide arithmetic for this solve "
+                  << "(--uf-bv-term-abstraction)" << std::endl;
+    }
+  }
+
   // The latch is the same kind of cheap fast-negative the lowering test below
   // uses, widened to cover RoundingMode -- which carries no format, so it
   // never reaches noteFloatingPoint, and which is exactly why this test could
@@ -347,6 +412,8 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
 
   bm->UserFlags.construct_counterexample_flag = constructForCaller;
   bm->UserFlags.ackermannisation = saved_ack;
+  bm->UserFlags.bv_term_abstraction = savedTermAbstraction;
+  bm->UserFlags.cnf_effort = savedCnfEffort;
   // Raw: whether an unsat here is the query's is TopLevelSTP's question, and
   // it has a second run to answer it with.
   return result;

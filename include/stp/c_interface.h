@@ -619,7 +619,18 @@ enum ifaceflag_t
   //! C API's way to reach --uf-skeleton-preproc. Appended to preserve every
   //! published ordinal.
   //!
-  UF_SKELETON_PREPROC
+  UF_SKELETON_PREPROC,
+
+  //! Whether a solve with uninterpreted functions abstracts its wide
+  //! multiplications, divisions and remainders as BV_TERM_ABSTRACTION does.
+  //!
+  //! `param_value` 0 is off for every UF solve, 1 is on for every UF solve,
+  //! and 2 (the default) is automatic: on for a UF solve whose query holds
+  //! such an operation at or above BV_ABSTRACTION_WIDTH. This is the C API's
+  //! way to reach --uf-bv-term-abstraction. Appended to preserve every
+  //! published ordinal.
+  //!
+  UF_BV_TERM_ABSTRACTION
 
 };
 

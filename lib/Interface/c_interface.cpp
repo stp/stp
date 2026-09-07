@@ -552,6 +552,14 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case UF_SKELETON_PREPROC:
       b->UserFlags.uf_skeleton_preproc = param_value != 0;
       break;
+    case UF_BV_TERM_ABSTRACTION:
+      b->UserFlags.uf_bv_term_abstraction =
+          param_value == 0
+              ? stp::UserDefinedFlags::UFAbstractionMode::OFF
+              : param_value == 1
+                    ? stp::UserDefinedFlags::UFAbstractionMode::ON
+                    : stp::UserDefinedFlags::UFAbstractionMode::AUTO;
+      break;
     case DISTINCT_ORDERING:
       b->UserFlags.distinct_ordering = param_value != 0;
       break;
