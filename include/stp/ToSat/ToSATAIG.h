@@ -62,9 +62,19 @@ private:
   // Advisory first-candidate bias for the congruence checker's scalars;
   // a no-op unless --uf-phase-hints is set.
   void suggest_uf_scalar_phases(SATSolver& satSolver);
+  // The same for the free indices of each array's reads; a no-op unless
+  // --array-index-hints is set and the solver is headed for refinement.
+  void suggest_array_index_hints(SATSolver& satSolver, bool needAbsRef);
 
   bool runSolver(SATSolver& satSolver);
   void handle_cnf_options(const CNF& cnf, bool needAbsRef);
+  // Ask the backend to keep its search trail across the refinement rounds
+  // this solver may see; see UserDefinedFlags::refinement_trail_reuse.
+  // Called with the CNF in hand and before its first clause is submitted,
+  // which is the only moment that both knows the size and can still
+  // configure the backend.
+  void configure_trail_reuse(SATSolver& satSolver, const CNF& cnf,
+                             bool needAbsRef);
   void dump_term_abstraction_map();
 
   // Resolve the injectivity guard to a SAT variable and decide how it is

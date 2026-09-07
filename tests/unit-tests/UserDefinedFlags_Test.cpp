@@ -45,6 +45,23 @@ TEST(UserDefinedFlags_Test, disable_simplifications_clears_distinct_ordering)
   EXPECT_FALSE(uf.distinct_ordering);
 }
 
+// The refinement loop keeps CaDiCaL's trail between its rounds unless asked
+// not to; the query-file test gives both settings by name, so the default
+// is pinned here.
+TEST(UserDefinedFlags_Test, refinement_trail_reuse_defaults_on)
+{
+  stp::UserDefinedFlags uf;
+  EXPECT_TRUE(uf.refinement_trail_reuse);
+}
+
+// The array index hints measured level to worse over the QF_ABV corpus, so
+// they are opt-in; the query-file tests give every mode by name.
+TEST(UserDefinedFlags_Test, array_index_hints_default_off)
+{
+  stp::UserDefinedFlags uf;
+  EXPECT_EQ(uf.array_index_hints, stp::UserDefinedFlags::ArrayIndexHints::OFF);
+}
+
 TEST(UserDefinedFlags_Test, caller_model_request_is_derived_from_source_flags)
 {
   stp::UserDefinedFlags uf;

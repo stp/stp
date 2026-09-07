@@ -83,6 +83,10 @@ public:
   std::string search_bias;
   CLI::Option* search_bias_option = nullptr;
 
+  // Likewise for UserFlags.array_index_hints.
+  std::string array_index_hints;
+  CLI::Option* array_index_hints_option = nullptr;
+
   // Likewise for UserFlags.cadical_factor.
   std::string cadical_factor;
 #ifdef USE_CADICAL
@@ -297,6 +301,14 @@ void ExtraMain::create_options()
              "solves, where re-probing the whole encoding every solve "
              "costs more than it earns)")
           ->group(solver_group);
+  bool_arg("--refinement-trail-reuse", bm->UserFlags.refinement_trail_reuse,
+           "keep cadical's search trail between the solve calls of a "
+           "refinement loop (array reads, bit-vector abstractions, "
+           "uninterpreted functions) instead of restarting each round from "
+           "the root",
+           solver_group)
+      // As for --array-index-hints: a sweep's setting yields to the test's.
+      ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
 #endif
 
 #ifdef USE_CRYPTOMINISAT
@@ -377,6 +389,19 @@ void ExtraMain::create_options()
            bm->UserFlags.bv_term_abstraction_compare,
            "also abstract wide inequalities (off, for the same reason)",
            refinement_group);
+  array_index_hints_option =
+      app.add_option(
+             "--array-index-hints", array_index_hints,
+             "seed the free indices of each array's reads apart before the "
+             "first solve, so that fewer candidates collide two reads on one "
+             "index: 'off' (the default), 'phase' (suggest a counting value "
+             "per index), or 'decide' (also decide those bits first, through "
+             "cadical's external propagator; other backends get the phases)")
+          ->group(refinement_group)
+          // A corpus sweep prepends one setting to every test's command
+          // line, and a test about the option says its own: the later one
+          // wins.
+          ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
   bool_arg("--skeleton-preproc", bm->UserFlags.skeleton_preproc,
            "ask the query's propositional skeleton what it forces, and assert "
            "that before solving", refinement_group);
@@ -1190,6 +1215,25 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
   }
 #endif
+
+  if (array_index_hints_option->count())
+  {
+    if (array_index_hints == "off")
+      bm->UserFlags.array_index_hints = UserDefinedFlags::ArrayIndexHints::OFF;
+    else if (array_index_hints == "phase")
+      bm->UserFlags.array_index_hints =
+          UserDefinedFlags::ArrayIndexHints::PHASE;
+    else if (array_index_hints == "decide")
+      bm->UserFlags.array_index_hints =
+          UserDefinedFlags::ArrayIndexHints::DECIDE;
+    else
+    {
+      cerr << "ERROR: --array-index-hints must be one of 'off', 'phase' or "
+              "'decide'"
+           << endl;
+      std::exit(-1);
+    }
+  }
 
   if (search_bias_option->count())
   {
