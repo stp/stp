@@ -99,6 +99,7 @@ page <https://smt-lib.org/>`__.
 
    c-api-lifetime
    array-extensionality
+   uninterpreted-functions
    incremental-solving
    bv-abstraction
 
