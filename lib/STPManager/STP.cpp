@@ -360,6 +360,8 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   // session is encoded exactly as it always was.
   const bool savedTermAbstraction = bm->UserFlags.bv_term_abstraction;
   const UserDefinedFlags::CNFEffort savedCnfEffort = bm->UserFlags.cnf_effort;
+  const uint32_t savedSchemaGroups =
+      bm->UserFlags.bv_term_abstraction_schema_groups;
   if (batchUFView->active())
   {
     typedef UserDefinedFlags::UFAbstractionMode Mode;
@@ -379,6 +381,19 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
         std::cerr << "UF: " << (abstractTerms ? "abstracting" : "not abstracting")
                   << " wide arithmetic for this solve "
                   << "(--uf-bv-term-abstraction)" << std::endl;
+    }
+    // The division facts the corpus needs; see
+    // UserDefinedFlags::uf_quotient_threshold_schemas.
+    if (abstractTerms && bm->UserFlags.uf_quotient_threshold_schemas &&
+        !bm->UserFlags.bv_term_abstraction_schema_groups_explicit &&
+        !bvSchemaGroupEnabled(savedSchemaGroups,
+                              BVSchemaGroup::QUOTIENT_THRESHOLDS))
+    {
+      bm->UserFlags.bv_term_abstraction_schema_groups |=
+          bvSchemaGroupBit(BVSchemaGroup::QUOTIENT_THRESHOLDS);
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "UF: admitting the quotient-threshold schemas for this "
+                  << "solve (--uf-quotient-threshold-schemas)" << std::endl;
     }
   }
 
@@ -414,6 +429,7 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   bm->UserFlags.ackermannisation = saved_ack;
   bm->UserFlags.bv_term_abstraction = savedTermAbstraction;
   bm->UserFlags.cnf_effort = savedCnfEffort;
+  bm->UserFlags.bv_term_abstraction_schema_groups = savedSchemaGroups;
   // Raw: whether an unsat here is the query's is TopLevelSTP's question, and
   // it has a second run to answer it with.
   return result;

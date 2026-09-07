@@ -6,12 +6,24 @@
 ;
 ; RUN: %solver -s --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
 ; CHECK: UF: abstracting wide arithmetic for this solve
+; CHECK: UF: admitting the quotient-threshold schemas for this solve
 ; CHECK: ^unsat$
 ;
-; The policy is a policy, not a fact about the query: it can be refused.
+; The policy is a policy, not a fact about the query: it can be refused,
+; and the schemas it admits can be refused on their own.
 ; RUN: %solver -s --uninterpreted-functions --uf-bv-term-abstraction=off --incremental=off %s 2>&1 | %OutputCheck --check-prefix=OFF %s
 ; OFF-NOT: abstracting wide arithmetic
+; OFF-NOT: quotient-threshold schemas
 ; OFF: ^unsat$
+; RUN: %solver -s --uninterpreted-functions --uf-quotient-threshold-schemas=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=NOQ %s
+; NOQ: abstracting wide arithmetic for this solve
+; NOQ-NOT: quotient-threshold schemas
+; NOQ: ^unsat$
+; A caller who named the groups keeps exactly those.
+; RUN: %solver -s --uninterpreted-functions --bv-term-abstraction-schema-groups=base --incremental=off %s 2>&1 | %OutputCheck --check-prefix=NAMED %s
+; NAMED: abstracting wide arithmetic for this solve
+; NAMED-NOT: quotient-threshold schemas
+; NAMED: ^unsat$
 ;
 ; And it leaves the general flag as it found it for the next solve, which
 ; the second query below checks: without an application of its own it is

@@ -139,7 +139,7 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   VC vc = vc_createValidityChecker();
   EXPECT_TRUE(flags(vc).uf_narrow_results);
   EXPECT_FALSE(flags(vc).uf_inject_args);
-  EXPECT_EQ(8u, flags(vc).uf_lemmas_per_round);
+  EXPECT_EQ(0u, flags(vc).uf_lemmas_per_round);
   EXPECT_EQ(stp::UserDefinedFlags::UFEagerMode::AUTO, flags(vc).uf_eager_mode);
   EXPECT_EQ(256u, flags(vc).uf_eager_budget);
   EXPECT_FALSE(flags(vc).uf_phase_hints);
@@ -647,7 +647,7 @@ TEST(refinement_flags, ANegativeUnsignedValueIsRefusedAndLeavesTheFieldAlone)
   EXPECT_EQ(4u, flags(vc).bv_term_abstraction_divmod_value_limit);
 
   vc_setInterfaceFlags(vc, UF_LEMMAS_PER_ROUND, -1);
-  EXPECT_EQ(8u, flags(vc).uf_lemmas_per_round);
+  EXPECT_EQ(0u, flags(vc).uf_lemmas_per_round);
   vc_setInterfaceFlags(vc, UF_ACKERMANN_BUDGET, -1);
   EXPECT_EQ(256u, flags(vc).uf_eager_budget);
   EXPECT_EQ(7, errors);

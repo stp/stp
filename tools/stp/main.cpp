@@ -585,6 +585,13 @@ void ExtraMain::create_options()
           ->group(refinement_group)
           ->type_name("TEXT")
           ->default_str("auto");
+  bool_arg("--uf-quotient-threshold-schemas",
+           bm->UserFlags.uf_quotient_threshold_schemas,
+           "when --uf-bv-term-abstraction abstracts a solve, also admit the "
+           "quotient-threshold division schemas for it (see "
+           "--bv-term-abstraction-schema-groups); naming the groups yourself "
+           "overrides this",
+           refinement_group);
   bool_arg("--uf-inject-args", bm->UserFlags.uf_inject_args,
            "assume equality-only UF declarations are injective and encode it, "
            "giving the SAT solver bidirectional propagation between argument "

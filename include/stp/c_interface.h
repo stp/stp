@@ -297,7 +297,7 @@ enum ifaceflag_t
   UF_EQUALITY_INJECTIVITY,
 
   //! How many congruence lemmas one refuted candidate may install during
-  //! uninterpreted-function refinement (default 8).
+  //! uninterpreted-function refinement (default 0, unlimited).
   //!
   //! `param_value` is that count: zero installs every conflict the candidate
   //! exposes, and one restricts each candidate to a single installed lemma.

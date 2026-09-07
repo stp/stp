@@ -336,14 +336,21 @@ public:
   // How many congruence lemmas one refuted candidate may install before the
   // solver is asked again; 0 is unlimited. Every conflict a candidate exposes
   // is refuted by that same assignment, so installing several together trades
-  // clauses for whole SAT calls. The trade is not monotone: a small batch is
-  // worth several rounds, while draining every conflict installs most of the
-  // quadratic congruence encoding a round at a time and is slower than
-  // emitting one. Measured over collision and pigeonhole families at 30..100
-  // applications, 8 was the best of 1/2/4/8/16/32/unlimited everywhere and
-  // 2.3x-4x faster than 1; unlimited was the worst setting tried. Setting 1
+  // clauses for whole SAT calls.
+  //
+  // Unlimited, which is what Bitwuzla does. The cap used to be 8, chosen on
+  // synthetic collision and pigeonhole families of 30..100 applications
+  // where it beat 1/2/4/16/32/unlimited and unlimited was the worst: there,
+  // draining every conflict installs most of the quadratic congruence
+  // encoding a round at a time. The corpus does not have that shape. On the
+  // 42 hardest Certora queries (256-bit contract verification, a few dozen
+  // applications per declaration, wide arithmetic abstracted), every round
+  // is a SAT call over a million-clause instance and what a candidate
+  // exposes is a handful of conflicts, so the cap only added rounds: at 60s,
+  // 8 solved 28 of the 42, 16 and unlimited solved 30, and with the
+  // quotient-threshold schemas below unlimited solved 34. Setting 1
   // restricts each candidate to one installed congruence lemma.
-  unsigned uf_lemmas_per_round = 8;
+  unsigned uf_lemmas_per_round = 0;
 
   // Whether to install a declaration's pairwise congruence constraints before
   // the first solve instead of waiting for a candidate to earn them.
@@ -479,6 +486,18 @@ public:
     OFF
   };
   UFAbstractionMode uf_bv_term_abstraction = UFAbstractionMode::AUTO;
+
+  // When the policy above abstracts, it also admits the quotient-threshold
+  // schemas (--bv-term-abstraction-schema-groups quotient-thresholds) for
+  // that solve, unless the groups were named on the command line. The
+  // Certora queries compare quotients against thresholds far more often than
+  // they divide by a power of two or by zero, which is what the base group's
+  // division facts cover; with the base group alone the refinement spends
+  // its rounds on value lemmas and then encodes the divider exactly.
+  // Measured on the 42 hardest such queries at 60s: 28 solved with the base
+  // group, 30 with this one added, and 34 with the lemma cap above lifted as
+  // well. Off, the policy leaves the groups exactly as configured.
+  bool uf_quotient_threshold_schemas = true;
 
   // For declarations whose results appear only in equality contexts, add
   // the reverse implication (= result_i result_j) => (= arg_i arg_j) in
