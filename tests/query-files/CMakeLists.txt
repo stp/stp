@@ -91,3 +91,19 @@ if (USE_CADICAL)
         PROPERTIES RESOURCE_LOCK query-files-exec-root
     )
 endif()
+
+# The array index hints are off by default, so nothing above drives
+# CaDiCaL's external propagator. This sweep decides every array's read
+# indices through it on every query in the corpus: the propagator's
+# bookkeeping of what is assigned has to agree with CaDiCaL's on every
+# search shape here, or CaDiCaL rejects a proposed decision outright.
+if (USE_CADICAL)
+    add_test(NAME query-files-array-index-hints-decide
+        COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG>
+                --param solver_params=--array-index-hints=decide .
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+    )
+    set_tests_properties(query-files-array-index-hints-decide
+        PROPERTIES RESOURCE_LOCK query-files-exec-root
+    )
+endif()

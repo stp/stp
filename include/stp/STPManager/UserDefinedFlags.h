@@ -1116,6 +1116,42 @@ public:
   // unaffected whatever this says.
   bool refinement_trail_reuse = true;
 
+  // How the batch pipeline seeds the free indices of an array's reads so
+  // that the first candidate does not land several of them on one value.
+  // Read refinement's cost is collisions -- two reads of one array whose
+  // indices take the same value while their values differ -- each paid
+  // for with a congruence lemma and another solve, and the backend's
+  // default phase makes the collisions at once. PHASE counts the symbolic
+  // indices of each array off against an increasing value (skipping the
+  // values its constant indices take) and suggests those bits, the way
+  // --uf-phase-hints seeds the checker's scalars. DECIDE additionally asks
+  // the backend to decide those bits first, before anything else can pull
+  // the indices together, which CaDiCaL does through its external
+  // propagator; a backend without one gets the phases. Search advice
+  // either way: no verdict can move.
+  //
+  // Off by default. Measured over the QF_ABV corpus (15148 files, 20 s
+  // cap, one run each): no verdict moved under either mode; the 1160
+  // queries that refine take 8866 solves without hints and 9598 with
+  // decisions overall, but 378 against 208 on the 27 that take over a
+  // second, and 185 against 96 above two seconds -- the collisions the
+  // hints exist to avoid do go away. Wall clock does not follow: PAR2 is
+  // level under phases and worse under decisions (timeouts 44 to 48), a
+  // 0.93 geometric mean above a second bought by two 10x wins
+  // (brummayerbiere2/countbitstableuninit1024, 14.3 s to 1.2 s over 66
+  // rounds down to 4) against two 2-5x losses (the dwp_formulas
+  // try5_small_difret pair), and a connected propagator switches off
+  // CaDiCaL's lucky-phase probing and keeps every hinted variable out of
+  // elimination for the whole solve. The mechanism is kept for the
+  // workloads it wins on and for what it says about the rest.
+  enum class ArrayIndexHints
+  {
+    OFF = 0,
+    PHASE,
+    DECIDE
+  };
+  ArrayIndexHints array_index_hints = ArrayIndexHints::OFF;
+
   bool get_print_output_at_all() const
   {
     return print_STPinput_back_flag || print_STPinput_back_SMTLIB2_flag ||

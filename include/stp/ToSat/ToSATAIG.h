@@ -62,6 +62,9 @@ private:
   // Advisory first-candidate bias for the congruence checker's scalars;
   // a no-op unless --uf-phase-hints is set.
   void suggest_uf_scalar_phases(SATSolver& satSolver);
+  // The same for the free indices of each array's reads; a no-op unless
+  // --array-index-hints is set and the solver is headed for refinement.
+  void suggest_array_index_hints(SATSolver& satSolver, bool needAbsRef);
 
   bool runSolver(SATSolver& satSolver);
   void handle_cnf_options(const CNF& cnf, bool needAbsRef);

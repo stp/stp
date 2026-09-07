@@ -307,6 +307,38 @@ public:
   // the first solve can ask for it explicitly here instead.
   virtual void declarePendingVariables() {}
 
+  // A decision hint: decide this variable, to this value, before the
+  // backend's own heuristic chooses. Stronger than suggestPhase, which only
+  // says which value to try once the heuristic reaches the variable.
+  struct DecisionHint
+  {
+    uint32_t var;
+    bool value;
+  };
+
+  // Ask the backend to make these decisions first, in this order, each at
+  // the first decision point at which its variable is still open, and once
+  // only: after that the value persists as whatever the backend saves of a
+  // phase, which its search may overrule. Search advice, like
+  // suggestPhase: a hint cannot change a verdict, only which model is
+  // reached first and by what route.
+  // What it is for is a group of bit-vectors the encoding leaves free but
+  // that refinement makes pay for landing on one value -- the indices of an
+  // array's reads -- which a counting value per vector, decided before
+  // anything else can pull them together, keeps apart.
+  //
+  // Only accepted before the first search, on a backend with the mechanism:
+  // CaDiCaL's external propagator observes the hinted variables, and a
+  // variable may only be observed while inprocessing has not yet touched
+  // it, which before the first search is every variable. FALSE means the
+  // backend has no such mechanism or the moment has passed -- a performance
+  // hint declined, not an error -- and a caller may fall back to
+  // suggestPhase. Every hinted variable must already exist (newVar).
+  virtual bool preferDecisions(const std::vector<DecisionHint>& /*hints*/)
+  {
+    return false;
+  }
+
   // ---------------------------------------------------------------------
   // Resource budgets.
   //
