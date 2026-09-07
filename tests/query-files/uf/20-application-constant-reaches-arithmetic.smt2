@@ -5,7 +5,7 @@
 ;
 ; RUN: %solver -s --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
 ; RUN: %solver -s --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
-; CHECK: UF: pre-lowering substituted 1 symbol\(s\) and 1 application\(s\)
+; CHECK: UF: pre-lowering substituted 0 symbol\(s\) and 1 application\(s\)
 ; CHECK: ^unsat$
 ;
 ; EXPECT: unsat

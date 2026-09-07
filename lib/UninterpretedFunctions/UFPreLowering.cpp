@@ -197,8 +197,13 @@ void readCandidates(const ASTNode& conjunct, size_t index,
 // which the map may send elsewhere: an application pinned to a constant, or
 // an asserted atom sent to true. An application's declaration identity in
 // child 0 is a symbol no fact ever equates, so it is passed through as is.
+//
+// `cache` memoises replace() under `fromTo`, which does not change while a
+// round is being applied, so one cache serves every rewrite of the round: a
+// subterm shared by thousands of conjuncts is rewritten once, not once per
+// conjunct.
 ASTNode rewriteChildren(const ASTNode& node, ASTNodeMap& fromTo,
-                        NodeFactory* factory)
+                        ASTNodeMap& cache, NodeFactory* factory)
 {
   if (node.Degree() == 0)
     return node;
@@ -212,7 +217,6 @@ ASTNode rewriteChildren(const ASTNode& node, ASTNodeMap& fromTo,
       children.push_back(node[0]);
       continue;
     }
-    ASTNodeMap cache;
     const ASTNode rewritten =
         SubstitutionMap::replace(node[i], fromTo, cache, factory);
     changed = changed || rewritten != node[i];
@@ -288,11 +292,22 @@ ASTNode UFPreLowering::propagate(const ASTNode& root, UFPreLoweringStats* stats,
       s.skeletonUnsat = true;
       return manager_->ASTFalse;
     }
-    if (!facts.empty())
+    // A top-level conjunct is trivially forced, and comes back as a fact;
+    // only what the structure derived beyond the conjuncts themselves is
+    // worth conjoining. A query of fifteen thousand assertions otherwise
+    // doubles in size for nothing, and pays for it in every round below.
+    ASTVec conjuncts;
+    collectConjuncts(current, conjuncts);
+    const ASTNodeSet present(conjuncts.begin(), conjuncts.end());
+    ASTVec fresh;
+    for (const ASTNode& fact : facts)
+      if (present.find(fact) == present.end())
+        fresh.push_back(fact);
+    if (!fresh.empty())
     {
-      s.skeletonFacts = facts.size();
-      facts.push_back(current);
-      current = factory->CreateNode(AND, facts);
+      s.skeletonFacts = fresh.size();
+      fresh.push_back(current);
+      current = factory->CreateNode(AND, fresh);
     }
   }
 
@@ -374,15 +389,15 @@ ASTNode UFPreLowering::propagate(const ASTNode& root, UFPreLoweringStats* stats,
     if (fromTo.empty())
       break;
 
+    ASTNodeMap cache;
     for (const ASTNode& application : originalApplications)
     {
       ASTNode& current_image = image.find(application)->second;
-      current_image = rewriteChildren(current_image, fromTo, factory);
+      current_image = rewriteChildren(current_image, fromTo, cache, factory);
     }
 
     ASTVec rewritten;
     rewritten.reserve(conjuncts.size());
-    ASTNodeMap cache;
     for (size_t i = 0; i < conjuncts.size(); ++i)
     {
       if (!defines[i])
@@ -399,7 +414,7 @@ ASTNode UFPreLowering::propagate(const ASTNode& root, UFPreLoweringStats* stats,
       // without being sent where the map sends its other occurrences.
       const ASTNode& key = definedKey[i];
       const ASTNode& value = fromTo.find(key)->second;
-      const ASTNode keptKey = rewriteChildren(key, fromTo, factory);
+      const ASTNode keptKey = rewriteChildren(key, fromTo, cache, factory);
       if (value == manager_->ASTTrue)
         rewritten.push_back(keptKey);
       else if (value == manager_->ASTFalse)
