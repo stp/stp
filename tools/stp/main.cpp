@@ -628,6 +628,20 @@ void ExtraMain::create_options()
            "with the quotient bit from a dedicated comparator per row",
            bb_group);
 
+  bool_arg("--bb.div-by-const", bm->UserFlags.division_by_constant,
+           "encode a division or remainder by a constant through its "
+           "defining relation, x = c*q + r with r < c, where the product is "
+           "the constant's shift-and-add over the fresh quotient; a 256-bit "
+           "division by a 34-bit constant is 22k clauses this way against "
+           "510k as a divider",
+           bb_group);
+  app.add_option("--bb.div-by-const-width",
+                 bm->UserFlags.division_by_constant_width,
+                 "the width from which --bb.div-by-const applies; below it "
+                 "the divider is small either way")
+      ->group(bb_group)
+      ->capture_default_str();
+
   bool_arg("--bb.div-by-mult", bm->UserFlags.division_by_multiplication,
            "encode division and remainder through their defining relation: "
            "fresh quotient and remainder variables, x = y*q + r at double "

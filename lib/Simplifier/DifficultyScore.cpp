@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/DifficultyScore.h"
+#include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTKind.h"
 #include "stp/Util/NodeIterator.h"
@@ -199,6 +200,44 @@ int64_t constantDivisionCost(bool dividendIsConstant,
   return score;
 }
 
+// A division or remainder by a constant from --bb.div-by-const-width is its
+// defining relation over the constant's shift-and-add rather than a divider:
+// a shifted copy of the fresh quotient per set divisor bit, summed at width
+// w+1 by full adders of seven nodes a bit, the remainder added the same way,
+// the sum's equality with the dividend, and the remainder's comparison with
+// the divisor over the divisor's span. At 64 bits by a constant of three set
+// bits the divider estimate above is 22,883 nodes and the relation builds
+// 2,562.
+int64_t constantDivisorRelationCost(const ASTNode& constant, int64_t w)
+{
+  const CBV cbv = constant.GetBVConst();
+  int64_t setBits = 0;
+  int64_t span = 0;
+  for (int64_t i = 0; i < w; i++)
+    if (CONSTANTBV::BitVector_bit_test(cbv, static_cast<unsigned>(i)))
+    {
+      setBits++;
+      span = i + 1;
+    }
+  return 7 * (w + 1) * setBits + 4 * w + 3 * span;
+}
+
+// Whether the blaster takes the relation for this divisor: the flag, the
+// width, and a divisor that is not zero -- a zero constant stays with the
+// divider, whose totalisation it needs.
+bool divisorTakesRelation(const UserDefinedFlags* flags,
+                          const ASTNode& divisor, int64_t w)
+{
+  if (flags == NULL || !flags->division_by_constant ||
+      w < static_cast<int64_t>(flags->division_by_constant_width))
+    return false;
+  const CBV cbv = divisor.GetBVConst();
+  for (int64_t i = 0; i < w; i++)
+    if (CONSTANTBV::BitVector_bit_test(cbv, static_cast<unsigned>(i)))
+      return true;
+  return false;
+}
+
 // The exponent and significand widths of a floating-point node. Lowering
 // leaves the natively-encoded predicates over packed bit-vector operands, so
 // the source sort is not always still there to ask; fall back to the standard
@@ -364,7 +403,7 @@ int64_t fpEval(const ASTNode& b, const Kind k)
 
 } // namespace
 
-int64_t eval(const ASTNode& b)
+int64_t eval(const ASTNode& b, const UserDefinedFlags* flags)
 {
   const Kind k = b.GetKind();
 
@@ -461,21 +500,29 @@ int64_t eval(const ASTNode& b)
     case BVDIV:
     case BVMOD:
       // Restoring long division: a subtract and a select per quotient bit,
-      // over a remainder as wide as the dividend.
+      // over a remainder as wide as the dividend -- or, by a constant wide
+      // enough, the relation over the constant's shift-and-add.
       if (b[0].isConstant())
         return constantDivisionCost(true, b[0], lw);
       if (b[1].isConstant())
-        return constantDivisionCost(false, b[1], lw);
+        return divisorTakesRelation(flags, b[1], lw)
+                   ? constantDivisorRelationCost(b[1], lw)
+                   : constantDivisionCost(false, b[1], lw);
       return 20 * (lw - 1) * (lw - 1) + 29 * lw;
 
     case SBVDIV:
     case SBVREM:
     case SBVMOD:
-      // The unsigned circuit plus the sign fixups on either side of it.
+      // The unsigned circuit plus the sign fixups on either side of it. The
+      // magnitude of a constant divisor is a constant, so it takes the
+      // relation as the unsigned case does.
       if (b[0].isConstant())
         return constantDivisionCost(true, b[0], lw) + 12 * lw;
       if (b[1].isConstant())
-        return constantDivisionCost(false, b[1], lw) + 12 * lw;
+        return (divisorTakesRelation(flags, b[1], lw)
+                    ? constantDivisorRelationCost(b[1], lw)
+                    : constantDivisionCost(false, b[1], lw)) +
+               12 * lw;
       return 20 * (lw - 1) * (lw - 1) + 50 * lw;
 
     case BVLEFTSHIFT:
@@ -588,7 +635,7 @@ int64_t DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
   while ((current = ni.next()) != ni.end())
     {
       evalCount++;
-      result += eval(current);
+      result += eval(current, &mgr->UserFlags);
     }
 
   cache.insert(std::make_pair(top.GetNodeNum(), result));

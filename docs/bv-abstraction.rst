@@ -115,7 +115,11 @@ refinement has three tiers:
    stops enumerating and says what the operation is, using the same
    bit-blaster entry point an unabstracted query would have used -- with the
    operand bits the original blast already knew, so a multiply against a
-   literal does not become a fully symbolic multiplier.
+   literal does not become a fully symbolic multiplier, and a division by a
+   literal is its defining relation over such a multiply
+   (``--bb.div-by-const``, on from 64 bits): 37,000 clauses for a 256-bit
+   division by a 34-bit constant, where the restoring divider, which the
+   constant prunes only within each of its 256 levels, is 510,000.
 
 ``--bv-term-abstraction-schemas`` (on by default) governs the first tier. Off,
 each operation falls back on its own tier-2 or tier-3 behaviour, which is what

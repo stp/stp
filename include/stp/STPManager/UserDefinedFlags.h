@@ -908,6 +908,16 @@ public:
   // wherever the divisor is nonzero. The circuit computes nothing; every
   // quotient bit is the SAT solver's to find.
   bool division_by_multiplication = false;
+
+  // Encode a division or remainder by a constant through the defining
+  // relation, x = c*q + r with r < c, where the product is the constant's
+  // shift-and-add over the fresh quotient. The restoring divider prunes
+  // against a constant divisor only within each level, so at 256 bits a
+  // 34-bit constant still costs it 510,000 clauses; the relation is a row
+  // per set divisor bit, 22,000 clauses for the same operation. Below the
+  // width the divider is small either way and is left alone.
+  bool division_by_constant = true;
+  unsigned division_by_constant_width = 64;
   // Measurement arm: encode division and remainder as a free result
   // constrained only by the term abstraction's schema registry, asserted
   // eagerly, so the lemmas' propagation can be graded on its own. The
