@@ -32,19 +32,28 @@ ordinary term:
     through the applications (``--uf-propagate-equalities``, on by default).
     A symbol equated with a constant, another symbol, an application or any
     other term free of wide arithmetic becomes that; an application pinned
-    to a constant becomes the constant everywhere else; any asserted atom is
-    true wherever else it occurs. A query asserting ``x = y`` therefore
-    lowers ``(f x)`` and ``(f y)`` as one application, which is the
-    structural merge an e-graph solver gets at internalisation, a fact such
-    as ``(f 3) = 0`` reaches the arithmetic built on ``(f 3)``, and a bound
-    stated on ``x`` under ``x = a + b`` meets the sum. A symbol equated with
-    a term holding a multiplication or division at or above
+    to a constant becomes the constant everywhere else; two applications
+    equated become the earlier of the two everywhere else; any asserted
+    atom is true wherever else it occurs. A query asserting ``x = y``
+    therefore lowers ``(f x)`` and ``(f y)`` as one application, which is
+    the structural merge an e-graph solver gets at internalisation, a fact
+    such as ``(f 3) = 0`` reaches the arithmetic built on ``(f 3)``, and a
+    bound stated on ``x`` under ``x = a + b`` meets the sum. Merging two
+    equated applications is what makes a term built on either one term: a
+    verification query that computes a quantity through two accessors,
+    asserts that they agree, and takes the difference of a product of a
+    quotient of each has that difference fold to zero, where with each side
+    its own application it is two abstracted products of two abstracted
+    quotients that the refinement never pins. A symbol equated with a term
+    holding a multiplication or division at or above
     ``--bv-abstraction-width`` keeps naming it: pushed into every argument
     position, such a term would make each congruence premise a comparison
     of dividers. The defining conjunct is kept, so no model is lost or
-    invented. Once lowered, the scalars of an application are protected from
-    the simplifier -- a lemma is later encoded over exactly their SAT bits --
-    so this is the one point at which such a fact can cross an application.
+    invented, and an application that was merged away is still one the
+    congruence checker sees. Once lowered, the scalars of an application
+    are protected from the simplifier -- a lemma is later encoded over
+    exactly their SAT bits -- so this is the one point at which such a fact
+    can cross an application.
 
 *   The Boolean skeleton is asked what it forces at the start of every
     round (``--uf-skeleton-preproc``, on by default), and those facts are

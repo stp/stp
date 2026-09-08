@@ -263,11 +263,28 @@ void readCandidates(const ASTNode& conjunct, size_t index,
       addCandidate(out, a, b, index, wideWidth, marks);
     else if (isScalarSymbol(b))
       addCandidate(out, b, a, index, wideWidth, marks);
-    // An application pinned to a constant. An application equated with a
-    // non-constant term is left alone: replacing it by that term would move
-    // the application into the equality alone and buy nothing, while the
-    // symbol case above already covers `(f x) = a` by sending `a` to
-    // `(f x)`.
+    // Two applications equated: the later goes, as for two symbols. Every
+    // term built on either is then one term built on the survivor, which
+    // is what a verification query needs when it computes the same value
+    // through two accessors and takes their difference: with each side its
+    // own application the difference is two wide products of two wide
+    // quotients, which an abstraction refines round after round, and with
+    // one application it is a term less itself. The equality is kept, so
+    // the application that goes is still one the congruence checker sees,
+    // its result pinned to the survivor's, its arguments still meeting
+    // every other application of its declaration. An application equated
+    // with any other non-constant term is left alone: replacing it by that
+    // term would move the application into the equality alone and buy
+    // nothing, while the symbol case above already covers `(f x) = a` by
+    // sending `a` to `(f x)`.
+    else if (isApplication(a) && isApplication(b))
+    {
+      if (a.GetNodeNum() > b.GetNodeNum())
+        addCandidate(out, a, b, index, wideWidth, marks);
+      else
+        addCandidate(out, b, a, index, wideWidth, marks);
+    }
+    // An application pinned to a constant.
     else if (isApplication(a) && b.isConstant())
       addCandidate(out, a, b, index, wideWidth, marks);
     else if (isApplication(b) && a.isConstant())

@@ -373,3 +373,67 @@ TEST(UFPreLowering, TheStructureIsReadAgainAfterEachRound)
   EXPECT_GE(stats.rounds, 2u);
 }
 
+
+// Two applications the query equates are one application everywhere else,
+// so a term built on either is one term. The query says (f x) = (g y) and
+// pins (f (f x)) and (f (g y)) to different values; merged, the two outer
+// applications are one, and its two values contradict in the next round.
+TEST(UFPreLowering, EquatedApplicationsMergeTheTermsBuiltOnThem)
+{
+  Fixture fx;
+  ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
+  const UFDecl* g =
+      fx.context->declareFunction("g", {fx.bv8}, fx.bv8, &fx.diagnostic);
+  ASSERT_NE(nullptr, g) << fx.diagnostic;
+  const ASTNode x = fx.symbol("x");
+  const ASTNode y = fx.symbol("y");
+  const ASTNode fOfX = fx.apply(x);
+  const ASTNode gOfY = fx.context->apply(g, {y}, &fx.diagnostic);
+  ASSERT_FALSE(gOfY.IsNull()) << fx.diagnostic;
+  const ASTNode root = fx.factory->CreateNode(
+      AND, {fx.eq(fOfX, gOfY), fx.eq(fx.apply(fOfX), fx.constant(5)),
+            fx.eq(fx.apply(gOfY), fx.constant(6))});
+  ASSERT_NE(fx.manager.ASTFalse, root);
+
+  UFPreLowering pass(&fx.manager);
+  UFPreLoweringStats stats;
+  const ASTNode rewritten = pass.propagate(root, &stats);
+
+  EXPECT_GE(stats.applicationSubstitutions, 1u);
+  EXPECT_EQ(fx.manager.ASTFalse, rewritten);
+}
+
+// It is the later of the two that goes, and the equality is kept: the
+// application that went is still one the congruence checker sees, pinned to
+// the survivor, and a term that was built on it is built on the survivor.
+TEST(UFPreLowering, TheLaterOfTwoEquatedApplicationsGoesAndTheEqualityStays)
+{
+  Fixture fx;
+  ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
+  const UFDecl* g =
+      fx.context->declareFunction("g", {fx.bv8}, fx.bv8, &fx.diagnostic);
+  ASSERT_NE(nullptr, g) << fx.diagnostic;
+  const ASTNode x = fx.symbol("x");
+  const ASTNode y = fx.symbol("y");
+  const ASTNode fOfX = fx.apply(x);
+  const ASTNode gOfY = fx.context->apply(g, {y}, &fx.diagnostic);
+  ASSERT_FALSE(gOfY.IsNull()) << fx.diagnostic;
+  ASSERT_LT(fOfX.GetNodeNum(), gOfY.GetNodeNum());
+  const ASTNode fOfGOfY = fx.apply(gOfY);
+  const ASTNode root = fx.factory->CreateNode(
+      AND, {fx.eq(fOfX, gOfY), fx.eq(fOfGOfY, fx.constant(5))});
+
+  UFPreLowering pass(&fx.manager);
+  UFPreLoweringStats stats;
+  const ASTNode rewritten = pass.propagate(root, &stats);
+
+  EXPECT_GE(stats.applicationSubstitutions, 1u);
+  const ASTNodeSet applications = applicationsIn(rewritten);
+  EXPECT_NE(applications.end(), applications.find(fOfX));
+  EXPECT_NE(applications.end(), applications.find(gOfY));
+  EXPECT_NE(applications.end(), applications.find(fx.apply(fOfX)));
+  EXPECT_EQ(applications.end(), applications.find(fOfGOfY));
+  const ASTNodeSet conjuncts = conjunctsOf(rewritten);
+  EXPECT_TRUE(conjuncts.find(fx.eq(fOfX, gOfY)) != conjuncts.end() ||
+              conjuncts.find(fx.eq(gOfY, fOfX)) != conjuncts.end());
+}
