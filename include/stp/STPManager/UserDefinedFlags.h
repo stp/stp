@@ -419,7 +419,13 @@ public:
   // and each collision costs a lemma and a round. A phase hint is advisory --
   // it moves the search order and nothing else -- so biasing those scalars
   // apart can only change how quickly an answer is found, never which answer.
-  bool uf_phase_hints = false;
+  //
+  // On by default. Measured with the rest of the current UF defaults on the
+  // Certora corpus at 30s: 51 of the 79-file regression sample solved with
+  // the hints against 49 without (three gained, one lost), and 35 of the 42
+  // hardest files at 60s against 34, with the total time down by a tenth
+  // in both.
+  bool uf_phase_hints = true;
 
   // The carrier width given to a sort introduced by (declare-sort S 0).
   //

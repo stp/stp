@@ -142,7 +142,7 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   EXPECT_EQ(0u, flags(vc).uf_lemmas_per_round);
   EXPECT_EQ(stp::UserDefinedFlags::UFEagerMode::AUTO, flags(vc).uf_eager_mode);
   EXPECT_EQ(256u, flags(vc).uf_eager_budget);
-  EXPECT_FALSE(flags(vc).uf_phase_hints);
+  EXPECT_TRUE(flags(vc).uf_phase_hints);
   EXPECT_EQ(16u, flags(vc).uf_sort_width);
   EXPECT_TRUE(flags(vc).distinct_ordering);
   EXPECT_EQ(-1, flags(vc).aig_node_budget);
