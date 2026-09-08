@@ -30,22 +30,31 @@ ordinary term:
 
 *   The query's own top-level equalities and asserted atoms are pushed
     through the applications (``--uf-propagate-equalities``, on by default).
-    A symbol equated with a constant, another symbol or an application
-    becomes that; an application pinned to a constant becomes the constant
-    everywhere else; any asserted atom is true wherever else it occurs. A
-    query asserting ``x = y`` therefore lowers ``(f x)`` and ``(f y)`` as one
-    application, which is the structural merge an e-graph solver gets at
-    internalisation, and a fact such as ``(f 3) = 0`` reaches the arithmetic
-    built on ``(f 3)``. The defining conjunct is kept, so no model is lost or
+    A symbol equated with a constant, another symbol, an application or any
+    other term free of wide arithmetic becomes that; an application pinned
+    to a constant becomes the constant everywhere else; any asserted atom is
+    true wherever else it occurs. A query asserting ``x = y`` therefore
+    lowers ``(f x)`` and ``(f y)`` as one application, which is the
+    structural merge an e-graph solver gets at internalisation, a fact such
+    as ``(f 3) = 0`` reaches the arithmetic built on ``(f 3)``, and a bound
+    stated on ``x`` under ``x = a + b`` meets the sum. A symbol equated with
+    a term holding a multiplication or division at or above
+    ``--bv-abstraction-width`` keeps naming it: pushed into every argument
+    position, such a term would make each congruence premise a comparison
+    of dividers. The defining conjunct is kept, so no model is lost or
     invented. Once lowered, the scalars of an application are protected from
     the simplifier -- a lemma is later encoded over exactly their SAT bits --
     so this is the one point at which such a fact can cross an application.
 
-*   The Boolean skeleton is asked first what it forces
-    (``--uf-skeleton-preproc``, on by default), and those facts are read as
-    well. A verification query states most of its equalities under an
-    implication whose guard the structure resolves; this is what lets them
-    reach the applications.
+*   The Boolean skeleton is asked what it forces at the start of every
+    round (``--uf-skeleton-preproc``, on by default), and those facts are
+    read as well. A verification query states most of its equalities under
+    an implication whose guard the structure resolves; this is what lets
+    them reach the applications. Asking again after each round matters: a
+    round's rewrite renames the atoms and folds connectives, so a guard the
+    structure could not see through before it is one it resolves after it.
+    On the Certora queries this is the difference between a solve that ends
+    in the rewrite and one that bit-blasts millions of gates.
 
 Congruence up front
 -------------------

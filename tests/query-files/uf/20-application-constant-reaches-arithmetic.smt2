@@ -1,11 +1,13 @@
 ; An application pinned to a constant at the top level is that constant
 ; everywhere else, so the divisor below folds to 1 and the quotient to w
 ; before anything is bit-blasted. Lowering would have hidden (f #x03) behind
-; a protected result symbol, and the divider would have been built.
+; a protected result symbol, and the divider would have been built. The
+; symbol z names the quotient, which at eight bits is not wide arithmetic,
+; so z is sent to it as well: the one symbol substitution reported.
 ;
 ; RUN: %solver -s --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
 ; RUN: %solver -s --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
-; CHECK: UF: pre-lowering substituted 0 symbol\(s\) and 1 application\(s\)
+; CHECK: UF: pre-lowering substituted 1 symbol\(s\) and 1 application\(s\)
 ; CHECK: ^unsat$
 ;
 ; EXPECT: unsat

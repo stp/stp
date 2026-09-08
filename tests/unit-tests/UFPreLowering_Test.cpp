@@ -282,22 +282,55 @@ TEST(UFPreLowering, ANegatedAssertionIsFalseWhereverElseItOccurs)
   EXPECT_EQ(fx.manager.ASTFalse, rewritten);
 }
 
-TEST(UFPreLowering, ASymbolEquatedWithAnArithmeticTermStaysItsName)
+// A symbol equated with a term free of wide arithmetic is sent to the term,
+// like one equated with a constant or another symbol: the fact stated about
+// the symbol then meets the term it names. The conjunct is kept as the
+// definition, and the atom folds where it recurs.
+TEST(UFPreLowering, ASymbolEquatedWithAPlainTermIsSentToIt)
 {
   Fixture fx;
   ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
   const ASTNode a = fx.symbol("a");
   const ASTNode b = fx.symbol("b");
   const ASTNode x = fx.symbol("x");
-  const ASTNode quotient = fx.factory->CreateTerm(BVDIV, 8, a, b);
-  // x names a quotient and is an argument of f. The quotient is not pushed
-  // into the application: x keeps naming it, and the conjunct is used as an
-  // asserted atom instead.
+  const ASTNode sum = fx.factory->CreateTerm(BVPLUS, 8, a, b);
+  // x names the sum, and the query pins f(x) and f(a + b) to different
+  // values: the two are one application once x is sent to the sum.
+  const ASTNode root = fx.factory->CreateNode(
+      AND, {fx.eq(x, sum), fx.eq(fx.apply(x), fx.constant(9)),
+            fx.eq(fx.apply(sum), fx.constant(3))});
+
+  UFPreLowering pass(&fx.manager);
+  UFPreLoweringStats stats;
+  const ASTNode rewritten = pass.propagate(root, &stats);
+
+  EXPECT_GE(stats.symbolSubstitutions, 1u);
+  EXPECT_EQ(fx.manager.ASTFalse, rewritten);
+}
+
+// A symbol equated with a term holding a wide multiplication or division
+// keeps naming it: pushing a wide quotient into every argument position
+// that named it makes each congruence premise a comparison of dividers
+// where it was a comparison of symbols. The conjunct is used as an asserted
+// atom instead.
+TEST(UFPreLowering, ASymbolEquatedWithAWideQuotientStaysItsName)
+{
+  Fixture fx;
+  ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
+  const SourceSort bv64 = SourceSort::bitVector(64);
+  const UFDecl* g =
+      fx.context->declareFunction("g", {bv64}, fx.bv8, &fx.diagnostic);
+  ASSERT_NE(nullptr, g) << fx.diagnostic;
+  const ASTNode a = fx.manager.CreateSourceSymbol("a", bv64);
+  const ASTNode b = fx.manager.CreateSourceSymbol("b", bv64);
+  const ASTNode x = fx.manager.CreateSourceSymbol("x", bv64);
+  const ASTNode quotient = fx.factory->CreateTerm(BVDIV, 64, a, b);
+  const ASTNode gx = fx.context->apply(g, {x}, &fx.diagnostic);
+  ASSERT_FALSE(gx.IsNull()) << fx.diagnostic;
   const ASTNode root = fx.factory->CreateNode(
       AND, {fx.eq(x, quotient),
-            fx.factory->CreateNode(
-                IMPLIES, fx.eq(x, quotient),
-                fx.eq(fx.apply(x), fx.constant(9)))});
+            fx.factory->CreateNode(IMPLIES, fx.eq(x, quotient),
+                                   fx.eq(gx, fx.constant(9)))});
 
   UFPreLowering pass(&fx.manager);
   UFPreLoweringStats stats;
@@ -307,7 +340,36 @@ TEST(UFPreLowering, ASymbolEquatedWithAnArithmeticTermStaysItsName)
   EXPECT_GE(stats.atomSubstitutions, 1u);
   const ASTNodeSet conjuncts = conjunctsOf(rewritten);
   EXPECT_NE(conjuncts.end(), conjuncts.find(fx.eq(x, quotient)));
-  EXPECT_NE(conjuncts.end(),
-            conjuncts.find(fx.eq(fx.apply(x), fx.constant(9))));
+  EXPECT_NE(conjuncts.end(), conjuncts.find(fx.eq(gx, fx.constant(9))));
+}
+
+// The Boolean structure is asked what it forces at every round, since a
+// round's rewrite is what opens the structure the next one reads. Here the
+// facts that refute the query sit under a Boolean symbol's definition: p
+// is defined as a conjunction of two application facts, and p is asserted
+// only through an equality with q, which is asserted. Reading q, then p,
+// then the definition takes rounds, and the structure sees the facts only
+// once p has been sent to true.
+TEST(UFPreLowering, TheStructureIsReadAgainAfterEachRound)
+{
+  Fixture fx;
+  ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
+  const SourceSort boolSort = SourceSort::boolean();
+  const ASTNode p = fx.manager.CreateSourceSymbol("p", boolSort);
+  const ASTNode q = fx.manager.CreateSourceSymbol("q", boolSort);
+  const ASTNode x = fx.symbol("x");
+  const ASTNode definition = fx.factory->CreateNode(
+      AND, fx.eq(fx.apply(x), fx.constant(9)),
+      fx.eq(fx.apply(fx.constant(5)), fx.constant(3)));
+  const ASTNode root = fx.factory->CreateNode(
+      AND, {q, fx.factory->CreateNode(IFF, p, q),
+            fx.factory->CreateNode(IFF, p, definition),
+            fx.eq(x, fx.constant(5))});
+
+  UFPreLowering pass(&fx.manager);
+  UFPreLoweringStats stats;
+  const ASTNode withStructure = pass.propagate(root, &stats, true);
+  EXPECT_EQ(fx.manager.ASTFalse, withStructure);
+  EXPECT_GE(stats.rounds, 2u);
 }
 
