@@ -98,6 +98,15 @@ private:
   BVAbstractionRefiner abstraction_;
   // Whether this lowering may abstract at all; see the constructors.
   bool allowAbstraction_ = true;
+  // Whether the refinement this lowering was told to expect (needAbsRef) is
+  // only the uninterpreted-function loop, with no array read refinement in
+  // it. That loop writes its lemmas as clauses over the scalars the
+  // registrar gives SAT variables after conversion, whatever produced the
+  // CNF, so such a solve can choose its CNF rung from the estimate exactly
+  // as a plain bit-vector query does. Array refinement keeps the ABC
+  // lowering, where the size-based fallback lives, because the in-house
+  // rungs have not been measured under it. See setUFOnlyRefinement.
+  bool ufOnlyRefinement_ = false;
 
   void init() { first = true; }
 
@@ -162,6 +171,9 @@ public:
 
   bool CallSAT(SATSolver& satSolver, const ASTNode& input,
                bool needAbsRef) override;
+  // Tell the lowering that the refinement it should expect is only the
+  // uninterpreted-function loop; see ufOnlyRefinement_. Set before CallSAT.
+  void setUFOnlyRefinement(bool ufOnly) { ufOnlyRefinement_ = ufOnly; }
 
   bool hasBVEQAbstractions() const { return abstraction_.hasEqualities(); }
   bool hasBVTermAbstractions() const { return abstraction_.hasTerms(); }

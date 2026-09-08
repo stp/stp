@@ -1180,6 +1180,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
+  // Whether the refinement below is only the uninterpreted-function loop,
+  // which lets the lowering choose its CNF rung from the estimate rather
+  // than fall back to the size-based ABC rung meant for array refinement.
+  // The bit-vector abstractions choose their own rung ahead of this.
+  toSATAIG.setUFOnlyRefinement(
+      batchUFView->active() && !(arrayops && !bm->UserFlags.ackermannisation) &&
+      !extActive);
   ToSATBase* satBase = &toSATAIG;
   const auto reportBVAbstractionRecords = [&]() {
     if (bm->UserFlags.quick_statistics_flag)
