@@ -751,6 +751,15 @@ public:
   // after 16 bad candidates but before the old allowance, so repetition count
   // by itself could not identify when paying for an exact divider would help.
   unsigned bv_term_abstraction_divmod_value_limit = 0;
+  // A record one of whose operands the blast knew entirely -- a
+  // multiplication by a constant, a division or remainder by one -- has an
+  // exact encoding that is a constant's shift-and-add, tens of thousands of
+  // clauses at 256 bits where a symbolic operand costs half a million. The
+  // value-blocking allowance above was sized for the symbolic case, and on
+  // the Certora queries it spent thirty-two rounds ruling out one dividend
+  // at a time before building an encoding that was cheap all along. Such a
+  // record's allowance is capped here; zero leaves it uncapped.
+  unsigned bv_term_abstraction_constant_operand_limit = 1;
   // Escalate an abstracted BVMULT a piece at a time rather than all at once:
   // encode only the bits up to and a little past the lowest one the
   // candidate got wrong, and come back for more if that does not settle the
@@ -908,6 +917,16 @@ public:
   // wherever the divisor is nonzero. The circuit computes nothing; every
   // quotient bit is the SAT solver's to find.
   bool division_by_multiplication = false;
+
+  // Encode a division or remainder by a constant through the defining
+  // relation, x = c*q + r with r < c, where the product is the constant's
+  // shift-and-add over the fresh quotient. The restoring divider prunes
+  // against a constant divisor only within each level, so at 256 bits a
+  // 34-bit constant still costs it 510,000 clauses; the relation is a row
+  // per set divisor bit, 22,000 clauses for the same operation. Below the
+  // width the divider is small either way and is left alone.
+  bool division_by_constant = true;
+  unsigned division_by_constant_width = 64;
   // Measurement arm: encode division and remainder as a free result
   // constrained only by the term abstraction's schema registry, asserted
   // eagerly, so the lemmas' propagation can be graded on its own. The

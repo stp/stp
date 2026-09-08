@@ -404,7 +404,15 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
   rewrite(mgr, bm->UserFlags.AIG_rewrites_iterations);
   assert(Aig_ManCheck(mgr.aigMgr));
   assert((unsigned)Aig_ManCoNum(mgr.aigMgr) == outputs);
-  assert((unsigned)Aig_ManCiNum(mgr.aigMgr) == ciVars.size());
+  // The operand inputs were created before the circuit, so they are the
+  // first ciVars.size() inputs whatever the circuit added after them. A
+  // relation encoding of a division -- by a constant, or through a
+  // multiplier -- adds inputs of its own: the quotient and remainder it
+  // constrains through its side outputs rather than computes. Those have no
+  // operand variable to take, and the splice below gives each a fresh solver
+  // variable, which is exactly what a witness of x = y*q + r, r < y needs:
+  // the pair is unique given the operands, so the result is still defined.
+  assert((unsigned)Aig_ManCiNum(mgr.aigMgr) >= ciVars.size());
 
   // Use the query's selected CNF strategy. All outputs are named rather than
   // asserted because the splice below connects each result bit explicitly

@@ -1884,6 +1884,14 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
 {
   fpNativeAddIsZeroFusions = 0;
 
+  // A quotient-remainder pair a relational division encoding minted for an
+  // earlier root is constrained only by the relation conjoined into that
+  // root; under a later root it would be a free pair. The incremental
+  // driver blasts many roots through one blaster, each under its own
+  // literal, so every root starts the memo afresh -- within a root the
+  // division and remainder of one operand pair still share the pair.
+  divByMultMemo.clear();
+
   if (uf->fp_native_domain &&
       (fpNativeDomainRoot.IsNull() || !(fpNativeDomainRoot == form)))
   {
@@ -3478,6 +3486,73 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivByMult(const BBNodeVec& x,
       nf->CreateNode(OR, BBEQ(zero, y), BBBVLE(r, y, false, true)));
 }
 
+// Division by a constant through the defining relation. The divisor's bits
+// are all known and at least one is set, so y*q is a shifted copy of the
+// quotient per set divisor bit, summed at width w+1 where nothing can wrap:
+// the quotient has w-span+1 live bits, since q <= x/y < 2^w / 2^(span-1),
+// every row therefore fits in w bits, and the whole product is below
+// 2^(w+1). The product is then asserted below 2^w -- which is what makes
+// the pair unique together with r < y -- and x = y*q + r is asserted with
+// the sum's carry-out false. The remainder has span live bits, since it is
+// below the divisor. At 256 bits by a 34-bit constant this is eleven rows
+// against the restoring divider's 256 levels of subtract-compare-select,
+// each of which the constant prunes only to its own span.
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBDivByConstant(
+    const BBNodeVec& x, const BBNodeVec& y, BBNodeVec& q, BBNodeVec& r,
+    BBNodeSet& support)
+{
+  const unsigned w = x.size();
+  assert(y.size() == w);
+
+  unsigned span = 0;
+  for (unsigned i = 0; i < w; i++)
+  {
+    assert(y[i] == BBTrue || y[i] == BBFalse);
+    if (y[i] == BBTrue)
+      span = i + 1;
+  }
+  assert(span > 0);
+  const unsigned qBits = w - span + 1;
+
+  q = BBNodeVec(w, BBFalse);
+  r = BBNodeVec(w, BBFalse);
+  for (unsigned i = 0; i < qBits; i++)
+    q[i] = nf->CreateFreshInput();
+  for (unsigned i = 0; i < span; i++)
+    r[i] = nf->CreateFreshInput();
+
+  BBNodeVec acc(w + 1, BBFalse);
+  bool first = true;
+  for (unsigned i = 0; i < span; i++)
+  {
+    if (y[i] != BBTrue)
+      continue;
+    BBNodeVec row(w + 1, BBFalse);
+    for (unsigned j = 0; j < qBits; j++)
+      row[i + j] = q[j];
+    if (first)
+    {
+      acc = row;
+      first = false;
+    }
+    else
+      BBPlus2(acc, row, BBFalse);
+  }
+  support.insert(nf->CreateNode(NOT, acc[w]));
+  acc[w] = BBFalse;
+
+  BBNodeVec rExt(w + 1, BBFalse);
+  for (unsigned i = 0; i < span; i++)
+    rExt[i] = r[i];
+  BBPlus2(acc, rExt, BBFalse);
+  support.insert(nf->CreateNode(NOT, acc[w]));
+  const BBNodeVec accLow(acc.begin(), acc.begin() + w);
+  support.insert(BBEQ(accLow, x));
+
+  support.insert(BBBVLE(r, y, false, true));
+}
+
 template <class BBNode, class BBNodeManagerT>
 vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     const ASTNode& term, const BBNodeVec& x, const BBNodeVec& y,
@@ -3533,7 +3608,20 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     return t;
   }
 
-  if (uf->division_by_multiplication && !bothConstant)
+  bool divisorConstant = true;
+  bool divisorZero = true;
+  for (unsigned i = 0; i < width; i++)
+  {
+    if (!(y[i] == BBTrue || y[i] == BBFalse))
+      divisorConstant = false;
+    if (y[i] == BBTrue)
+      divisorZero = false;
+  }
+  const bool byConstant = uf->division_by_constant && !bothConstant &&
+                          divisorConstant && !divisorZero &&
+                          width >= uf->division_by_constant_width;
+
+  if (byConstant || (uf->division_by_multiplication && !bothConstant))
   {
     // BVDIV and BVMOD of one operand pair share one relation, keyed by the
     // quotient's node whichever of the two arrives first.
@@ -3548,7 +3636,10 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     }
     else
     {
-      BBDivByMult(x, y, q, r, support);
+      if (byConstant)
+        BBDivByConstant(x, y, q, r, support);
+      else
+        BBDivByMult(x, y, q, r, support);
       divByMultMemo.emplace(key, std::make_pair(q, r));
     }
   }
