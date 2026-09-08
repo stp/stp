@@ -159,6 +159,102 @@ TEST(TrailReuse, CadicalKeepsTrailAcrossRefinementRounds)
   EXPECT_EQ(seen.size(), 14u);
 }
 
+// The rounds above add clauses over variables the solver already had. The
+// refinement loop does more than that: it mints the variables its clauses
+// are written in. getEquals() takes a fresh variable for the equality it is
+// about to name and another for every bit of it, and getSatVariables()
+// takes and freezes a whole word for a leaf the blast never reached
+// (AbstractionRefinement.cpp). So the variable range grows while the solver
+// is holding the trail its last search left, which is a different path
+// through the backend from a clause over variables it has already sized its
+// structures for. Nothing above calls newVar() after the first solve; this
+// mints a round's worth every time, in the clause shape getEquals() emits,
+// and still requires every model exactly once.
+TEST(TrailReuse, CadicalGrowsTheVariableRangeUnderAKeptTrail)
+{
+  stp::Cadical s;
+#if defined(CADICAL_MAJOR) && CADICAL_MAJOR >= 3
+  EXPECT_TRUE(s.enableTrailReuse(SATSolver::TrailReuse::ALL));
+#else
+  // Older CaDiCaLs may decline the scope; the checks below then pin the
+  // ordinary re-descending path instead.
+  s.enableTrailReuse(SATSolver::TrailReuse::ALL);
+#endif
+
+  const unsigned n = 4;
+  std::vector<uint32_t> v;
+  for (unsigned i = 0; i < n; i++)
+  {
+    v.push_back(s.newVar());
+    // As the lowering does for a leaf a lemma may still be written over:
+    // an eliminated variable has no value to read back.
+    s.setFrozen(v.back());
+  }
+  const uint32_t before = s.nVars();
+
+  // Not all false, not all true: 14 of the 16 assignments remain.
+  SATSolver::vec_literals someTrue, someFalse;
+  for (unsigned i = 0; i < n; i++)
+  {
+    someTrue.push(SATSolver::mkLit(v[i], false));
+    someFalse.push(SATSolver::mkLit(v[i], true));
+  }
+  s.addClause(someTrue);
+  s.addClause(someFalse);
+
+  std::set<unsigned> seen;
+  bool timed_out = false;
+  unsigned rounds = 0;
+  while (s.solve(timed_out))
+  {
+    ASSERT_FALSE(timed_out);
+    unsigned model = 0;
+    for (unsigned i = 0; i < n; i++)
+      if (s.modelValue(v[i]) == s.true_literal())
+        model |= 1u << i;
+    EXPECT_NE(model, 0u) << "a model that falsifies the first clause";
+    EXPECT_NE(model, (1u << n) - 1) << "a model that falsifies the second";
+    EXPECT_TRUE(seen.insert(model).second)
+        << "model " << model << " was found twice: a blocking clause was "
+        << "lost across a trail kept over variables that did not exist "
+        << "when it was decided";
+
+    // Refute it the way getEquals() does, one polarity being all a blocking
+    // clause needs: a fresh variable per bit, forced true while that bit
+    // still agrees with the model just read, and a fresh variable standing
+    // for the whole agreement, which the unit then forbids. None of them is
+    // forced false, so every other assignment stays reachable -- and every
+    // one of them is minted while the solver holds a trail.
+    SATSolver::vec_literals agreement;
+    for (unsigned i = 0; i < n; i++)
+    {
+      const uint32_t agree = s.newVar();
+      s.setFrozen(agree);
+      SATSolver::vec_literals forced;
+      forced.push(SATSolver::mkLit(v[i], (model >> i) & 1u));
+      forced.push(SATSolver::mkLit(agree, false));
+      s.addClause(forced);
+      agreement.push(SATSolver::mkLit(agree, true));
+    }
+    const uint32_t same = s.newVar();
+    s.setFrozen(same);
+    agreement.push(SATSolver::mkLit(same, false));
+    s.addClause(agreement);
+
+    SATSolver::vec_literals block;
+    block.push(SATSolver::mkLit(same, true));
+    s.addClause(block);
+
+    ASSERT_LE(++rounds, 14u) << "more rounds than there are models";
+  }
+  EXPECT_FALSE(timed_out);
+  EXPECT_EQ(rounds, 14u) << "a model was never found";
+  EXPECT_EQ(seen.size(), 14u);
+  // n agreement bits and the variable naming them, every round: what the
+  // trail was kept across.
+  EXPECT_EQ(s.nVars(), before + 14u * (n + 1));
+}
+
 // The whole trail kept, then a call that does carry assumptions, and
 // units added between calls: the guard the batch pipeline assumes for
 // injectivity is exactly this mixture. Every verdict has to be right

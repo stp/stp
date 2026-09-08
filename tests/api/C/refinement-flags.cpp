@@ -110,6 +110,8 @@ static_assert(UF_BV_TERM_ABSTRACTION == 38,
               "published interface-flag ordinal changed");
 static_assert(UF_CHECK_DURING_BV_REFINEMENT == 39,
               "published interface-flag ordinal changed");
+static_assert(REFINEMENT_TRAIL_REUSE == 40,
+              "published interface-flag ordinal changed");
 // The published prefix ends at CNF_AUTO_THRESHOLD. Everything this feature
 // adds -- three interface flags and three profile ordinals -- is new in this
 // series and deliberately NOT pinned here: nothing outside the tree has linked
@@ -169,6 +171,7 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   EXPECT_EQ(0u, flags(vc).bv_term_abstraction_value_divisor);
   EXPECT_EQ(0u, flags(vc).bv_term_abstraction_divmod_value_limit);
   EXPECT_FALSE(flags(vc).bv_term_abstraction_inc_bitblast);
+  EXPECT_TRUE(flags(vc).refinement_trail_reuse);
   vc_Destroy(vc);
 }
 
@@ -319,6 +322,13 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
   EXPECT_TRUE(flags(vc).bv_term_abstraction_inc_bitblast);
   vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_INC_BITBLAST, 0);
   EXPECT_FALSE(flags(vc).bv_term_abstraction_inc_bitblast);
+
+  // On by default, so the off direction is the one a client comes here for.
+  EXPECT_TRUE(flags(vc).refinement_trail_reuse);
+  vc_setInterfaceFlags(vc, REFINEMENT_TRAIL_REUSE, 0);
+  EXPECT_FALSE(flags(vc).refinement_trail_reuse);
+  vc_setInterfaceFlags(vc, REFINEMENT_TRAIL_REUSE, 1);
+  EXPECT_TRUE(flags(vc).refinement_trail_reuse);
 
   // Zero is a meaning of its own for both of these, not an absence: install
   // every conflict the candidate exposes, and a budget of no gates at all.
