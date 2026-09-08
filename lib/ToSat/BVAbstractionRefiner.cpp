@@ -3149,6 +3149,26 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
     abs.blockedRounds++;
     abs.blockedThisQuery++;
     bm->UserFlags.coverage.bv_blocking_lemmas++;
+    if (bm->UserFlags.stats_flag)
+    {
+      const auto hexOf = [](const std::vector<bool>& bits) {
+        std::string out;
+        for (int i = (int)bits.size() - 4; i >= -3; i -= 4)
+        {
+          unsigned nibble = 0;
+          for (int j = 3; j >= 0; --j)
+            if (i + j >= 0 && i + j < (int)bits.size() && bits[i + j])
+              nibble |= 1u << j;
+          out.push_back("0123456789abcdef"[nibble]);
+        }
+        return out;
+      };
+      std::cerr << "BV abstraction: value-blocking " << _kind_names[abs.opKind]
+                << " " << abs.blockedThisQuery << "/" << limit << " over "
+                << W << " bits, record " << inc.absIdx
+                << " a=" << hexOf(inc.aBits) << " b=" << hexOf(inc.bBits)
+                << " expected=" << hexOf(inc.expected) << std::endl;
+    }
 
     // (a = va /\ b = vb) -> t = va op vb, through one fresh variable that
     // stands for the premise: one clause of 2W+1 literals says the premise

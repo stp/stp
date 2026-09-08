@@ -439,6 +439,12 @@ public:
   // in both.
   bool uf_phase_hints = true;
 
+  // Ask the congruence checker about a candidate the bit-vector abstraction
+  // has just refined, rather than only about a faithful one, so that the
+  // congruence lemmas the candidate exposes go in beside the abstraction's
+  // clauses. See CallSAT_ResultCheck.
+  bool uf_check_during_bv_refinement = true;
+
   // The carrier width given to a sort introduced by (declare-sort S 0).
   //
   // An uninterpreted sort has no operations but equality, so a query

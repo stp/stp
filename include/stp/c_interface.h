@@ -630,7 +630,19 @@ enum ifaceflag_t
   //! way to reach --uf-bv-term-abstraction. Appended to preserve every
   //! published ordinal.
   //!
-  UF_BV_TERM_ABSTRACTION
+  UF_BV_TERM_ABSTRACTION,
+
+  //! Whether the congruence checker is asked about a candidate the
+  //! bit-vector abstraction has just refined as well as about a faithful
+  //! one, so that the congruence lemmas the candidate exposes go in beside
+  //! the abstraction's clauses rather than after the abstraction is
+  //! faithful.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --uf-check-during-bv-refinement. Appended to
+  //! preserve every published ordinal.
+  //!
+  UF_CHECK_DURING_BV_REFINEMENT
 
 };
 

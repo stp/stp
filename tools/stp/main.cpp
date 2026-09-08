@@ -547,6 +547,12 @@ void ExtraMain::create_options()
            "bias the first candidate so the congruence checker's scalars "
            "start out pairwise different (advisory; affects search order "
            "only)", refinement_group);
+  bool_arg("--uf-check-during-bv-refinement",
+           bm->UserFlags.uf_check_during_bv_refinement,
+           "run the congruence checker on a candidate the bit-vector "
+           "abstraction has just refined as well, so its lemmas go in beside "
+           "the abstraction's rather than after the abstraction is faithful",
+           refinement_group);
   app.add_option("--uf-sort-width", bm->UserFlags.uf_sort_width,
                  "bit-vector width given to a sort introduced by "
                  "(declare-sort S 0); it bounds how many elements of that "

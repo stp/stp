@@ -177,6 +177,10 @@ public:
 
   bool hasBVEQAbstractions() const { return abstraction_.hasEqualities(); }
   bool hasBVTermAbstractions() const { return abstraction_.hasTerms(); }
+  bool hasAbstractions() const override
+  {
+    return hasBVEQAbstractions() || hasBVTermAbstractions();
+  }
 
   // Test-only inspection: the term records this lowering filed. The invariant
   // under test is that each carries its own result variables rather than

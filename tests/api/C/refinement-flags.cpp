@@ -102,6 +102,14 @@ static_assert(INCREMENTAL_PIECE_REWRITING == 28,
               "published interface-flag ordinal changed");
 static_assert(CNF_AUTO_THRESHOLD == 29,
               "published interface-flag ordinal changed");
+static_assert(UF_PROPAGATE_EQUALITIES == 36,
+              "published interface-flag ordinal changed");
+static_assert(UF_SKELETON_PREPROC == 37,
+              "published interface-flag ordinal changed");
+static_assert(UF_BV_TERM_ABSTRACTION == 38,
+              "published interface-flag ordinal changed");
+static_assert(UF_CHECK_DURING_BV_REFINEMENT == 39,
+              "published interface-flag ordinal changed");
 // The published prefix ends at CNF_AUTO_THRESHOLD. Everything this feature
 // adds -- three interface flags and three profile ordinals -- is new in this
 // series and deliberately NOT pinned here: nothing outside the tree has linked
@@ -190,6 +198,14 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
   EXPECT_TRUE(flags(vc).uf_phase_hints);
   vc_setInterfaceFlags(vc, UF_PHASE_HINTS, 0);
   EXPECT_FALSE(flags(vc).uf_phase_hints);
+
+  // On by default: the congruence lemmas a refined candidate exposes go in
+  // beside the abstraction's clauses.
+  EXPECT_TRUE(flags(vc).uf_check_during_bv_refinement);
+  vc_setInterfaceFlags(vc, UF_CHECK_DURING_BV_REFINEMENT, 0);
+  EXPECT_FALSE(flags(vc).uf_check_during_bv_refinement);
+  vc_setInterfaceFlags(vc, UF_CHECK_DURING_BV_REFINEMENT, 1);
+  EXPECT_TRUE(flags(vc).uf_check_during_bv_refinement);
 
   vc_setInterfaceFlags(vc, DISTINCT_ORDERING, 0);
   EXPECT_FALSE(flags(vc).distinct_ordering);

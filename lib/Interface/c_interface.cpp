@@ -560,6 +560,9 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
                     ? stp::UserDefinedFlags::UFAbstractionMode::ON
                     : stp::UserDefinedFlags::UFAbstractionMode::AUTO;
       break;
+    case UF_CHECK_DURING_BV_REFINEMENT:
+      b->UserFlags.uf_check_during_bv_refinement = param_value != 0;
+      break;
     case DISTINCT_ORDERING:
       b->UserFlags.distinct_ordering = param_value != 0;
       break;

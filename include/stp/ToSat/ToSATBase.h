@@ -129,6 +129,10 @@ public:
   // just ran refined anything without owning the abstraction tables.
   virtual uint64_t abstractionRefinements() const { return 0; }
 
+  // Whether any abstraction is in play, so a driver can tell ahead of
+  // refineAbstractions whether a candidate may yet be refuted by one.
+  virtual bool hasAbstractions() const { return false; }
+
   virtual void ClearAllTables(void) = 0;
 };
 }

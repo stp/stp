@@ -88,9 +88,21 @@ Refinement
 ``--uf-lemmas-per-round`` caps how many congruence lemmas one refuted
 candidate may install before the solver is asked again; the default, 0, is
 every conflict the candidate exposes. Every round is a SAT call, so on a
-large query the cap only adds rounds. ``-s`` reports what each stage did:
-the pre-lowering substitutions, the eager selection per declaration, the
-abstraction decision, and every lemma the refinement installs.
+large query the cap only adds rounds.
+
+A candidate the bit-vector abstraction refutes is asked about congruence
+too (``--uf-check-during-bv-refinement``, on by default). Equal arguments
+implying equal results is a theorem whatever values it is instantiated on,
+so the lemma is sound on such a candidate, and installed beside the
+abstraction's clauses it keeps the next candidate honest on both counts at
+once -- which is what a solver that consults every theory each round does.
+Left until the abstraction was faithful, the congruence facts arrived only
+after the abstraction had spent its rounds on candidates they would have
+refuted outright: on one Certora query thirty-seven solver calls became
+three. ``-s`` reports what each stage did: the pre-lowering substitutions,
+the eager selection per declaration, the abstraction decision, every lemma
+the refinement installs, and a congruence conflict found on a candidate the
+abstraction refined.
 
 Models
 ------
