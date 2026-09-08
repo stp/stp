@@ -751,6 +751,15 @@ public:
   // after 16 bad candidates but before the old allowance, so repetition count
   // by itself could not identify when paying for an exact divider would help.
   unsigned bv_term_abstraction_divmod_value_limit = 0;
+  // A record one of whose operands the blast knew entirely -- a
+  // multiplication by a constant, a division or remainder by one -- has an
+  // exact encoding that is a constant's shift-and-add, tens of thousands of
+  // clauses at 256 bits where a symbolic operand costs half a million. The
+  // value-blocking allowance above was sized for the symbolic case, and on
+  // the Certora queries it spent thirty-two rounds ruling out one dividend
+  // at a time before building an encoding that was cheap all along. Such a
+  // record's allowance is capped here; zero leaves it uncapped.
+  unsigned bv_term_abstraction_constant_operand_limit = 1;
   // Escalate an abstracted BVMULT a piece at a time rather than all at once:
   // encode only the bits up to and a little past the lowest one the
   // candidate got wrong, and come back for more if that does not settle the

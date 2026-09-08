@@ -1815,6 +1815,53 @@ BVAbstractionRefiner::divRemPairs(
   return pairs;
 }
 
+// Whether the blast knew an operand of the record entirely: either operand
+// of a multiplication, the divisor of a division or remainder -- a constant
+// dividend leaves the divider its full cost.
+static bool recordHasConstantOperand(const BVTermAbstraction& abs)
+{
+  const auto known = [&](unsigned op) {
+    const std::vector<signed char>& bits = abs.operandKnownBits[op];
+    if (bits.size() < abs.width)
+      return false;
+    for (unsigned i = 0; i < abs.width; ++i)
+      if (bits[i] < 0)
+        return false;
+    return true;
+  };
+  if (abs.opKind == BVMULT)
+    return known(0) || known(1);
+  if (abs.opKind == BVDIV || abs.opKind == BVMOD)
+    return known(1);
+  return false;
+}
+
+// The value-blocking allowance a record actually has: the width-scaled
+// allowance, capped for a record the blast knows one operand of entirely.
+// The refinement and the report read the same number.
+static unsigned effectiveValueLemmaAllowance(const UserDefinedFlags& uf,
+                                             const BVTermAbstraction& abs)
+{
+  unsigned limit = valueLemmaAllowance(uf, abs.width, abs.opKind);
+  const unsigned constantCap = uf.bv_term_abstraction_constant_operand_limit;
+  if (constantCap != 0 && recordHasConstantOperand(abs))
+    limit = (limit == 0) ? constantCap : std::min(limit, constantCap);
+  return limit;
+}
+
+// How many of an operand's bits the blast knew, which the report shows so
+// that a record whose escalation is a constant's shift-and-add can be told
+// from one whose escalation is a full circuit.
+static unsigned knownBitCount(const BVTermAbstraction& abs, unsigned op)
+{
+  unsigned count = 0;
+  if (op < 2)
+    for (const signed char bit : abs.operandKnownBits[op])
+      if (bit >= 0)
+        count++;
+  return count;
+}
+
 void BVAbstractionRefiner::reportRecords(std::ostream& out) const
 {
   std::vector<bool> isPaired(terms_.size(), false);
@@ -1846,9 +1893,8 @@ void BVAbstractionRefiner::reportRecords(std::ostream& out) const
     const bool hasValueAllowance =
         abs.opKind == BVMULT || abs.opKind == BVDIV || abs.opKind == BVMOD;
     const unsigned allowance =
-        hasValueAllowance
-            ? valueLemmaAllowance(bm->UserFlags, abs.width, abs.opKind)
-            : 0;
+        hasValueAllowance ? effectiveValueLemmaAllowance(bm->UserFlags, abs)
+                          : 0;
 
     out << "BV abstraction record: record=" << i
         << " node=" << abs.termNode.GetNodeNum()
@@ -1864,7 +1910,9 @@ void BVAbstractionRefiner::reportRecords(std::ostream& out) const
         << " blocking-literals=" << blockingLiterals
         << " exact-clauses=" << abs.exactClauses
         << " exact-vars=" << abs.exactVariables
-        << " exact-us=" << abs.exactMicroseconds << '\n';
+        << " exact-us=" << abs.exactMicroseconds
+        << " known=" << knownBitCount(abs, 0) << "/" << knownBitCount(abs, 1)
+        << '\n';
   }
 }
 
@@ -3035,7 +3083,14 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
     // BVExactEncoder. Two independent encodings of a divider that agree
     // today are two that can stop agreeing, and these two already had: the
     // written-out one and BBDivMod disagreed about a zero divisor.
-    const unsigned limit = valueLemmaAllowance(bm->UserFlags, W, abs.opKind);
+    // A record the blast knows one operand of entirely has an exact
+    // encoding that is a constant's shift-and-add -- the multiplier prunes
+    // its rows to the constant's set bits, and a division by a constant
+    // goes through its defining relation over such a product -- so ruling
+    // out one operand pair per round is a poor bargain against it, and its
+    // allowance is capped. See
+    // UserDefinedFlags::bv_term_abstraction_constant_operand_limit.
+    const unsigned limit = effectiveValueLemmaAllowance(bm->UserFlags, abs);
     if (limit != 0 && abs.blockedThisQuery >= limit)
     {
       // A previous query may already have established that this mandatory

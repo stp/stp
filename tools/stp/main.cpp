@@ -477,6 +477,14 @@ void ExtraMain::create_options()
                  "slower and no faster)")
       ->group(refinement_group)
       ->capture_default_str();
+  app.add_option("--bv-term-abstraction-constant-operand-limit",
+                 bm->UserFlags.bv_term_abstraction_constant_operand_limit,
+                 "cap on value-pair blocking rounds for an abstracted "
+                 "multiplication, division or remainder one of whose "
+                 "operands is a constant, whose exact encoding is a "
+                 "constant's shift-and-add (0: no cap)")
+      ->group(refinement_group)
+      ->capture_default_str();
   app.add_option("--bv-term-abstraction-divmod-value-limit",
                  bm->UserFlags.bv_term_abstraction_divmod_value_limit,
                  "independent cap on BVDIV/BVMOD value-pair blocking after "

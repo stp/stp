@@ -135,6 +135,16 @@ sixty it is break-even; past that it collapses -- a 64-bit factorisation spent
 5816 rounds and ninety seconds on a query the unabstracted solve answers in
 five hundredths of one. Zero never escalates and enumerates without limit.
 
+A record one of whose operands the blast knew entirely -- a multiplication by
+a constant, a division or remainder by one -- has its allowance capped by
+``--bv-term-abstraction-constant-operand-limit`` (1). Its exact circuit is a
+constant's shift-and-add, tens of thousands of clauses at 256 bits where a
+symbolic operand costs half a million, so a blocking lemma, which rules out
+one operand pair, buys little against it: on the Certora verification queries
+every such record spent its thirty-two rounds on one dividend at a time
+before building an encoding that was cheap all along. Zero leaves the
+allowance uncapped.
+
 Two optional refinements of that allowance:
 
 ``--bv-term-abstraction-value-divisor``
