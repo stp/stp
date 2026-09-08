@@ -642,7 +642,23 @@ enum ifaceflag_t
   //! C API's way to reach --uf-check-during-bv-refinement. Appended to
   //! preserve every published ordinal.
   //!
-  UF_CHECK_DURING_BV_REFINEMENT
+  UF_CHECK_DURING_BV_REFINEMENT,
+
+  //! Whether the batch pipeline's refinement loop keeps the SAT solver's
+  //! search trail from one of its solve calls to the next, so that a round
+  //! resumes where the last one stopped instead of re-deciding every
+  //! variable from the root before it reaches the clauses that refuted the
+  //! last candidate.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --refinement-trail-reuse, and covers every loop the
+  //! batch pipeline refines -- array reads, the bit-vector abstractions and
+  //! uninterpreted functions. It changes the search order only, so it cannot
+  //! change an answer; a backend without the mechanism declines it, and a
+  //! solve that is never asked twice is unaffected either way. Appended to
+  //! preserve every published ordinal.
+  //!
+  REFINEMENT_TRAIL_REUSE
 
 };
 

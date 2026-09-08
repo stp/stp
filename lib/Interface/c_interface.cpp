@@ -619,6 +619,12 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case BV_TERM_ABSTRACTION_INC_BITBLAST:
       b->UserFlags.bv_term_abstraction_inc_bitblast = param_value != 0;
       break;
+    // Not one loop's knob but every one of them: the field gates the trail
+    // the batch pipeline keeps between the solve calls of array-read,
+    // bit-vector-abstraction and uninterpreted-function refinement alike.
+    case REFINEMENT_TRAIL_REUSE:
+      b->UserFlags.refinement_trail_reuse = param_value != 0;
+      break;
     case INCREMENTAL_PIECE_REWRITING:
       b->UserFlags.incremental_piece_rewriting = param_value != 0;
       break;
