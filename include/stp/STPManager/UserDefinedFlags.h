@@ -210,6 +210,18 @@ public:
   bool enable_pair_extract = true;
   bool enable_common_subsum = true;
 
+  // Tally operations -- one increment or decrement of a pair's holder
+  // count -- common sub-term extraction may spend per operator before it
+  // stops. Building the tally and repairing it after each extraction are
+  // made of these, so this is the pass's running time in the unit that runs
+  // out: on a staircase of flattened gates, each conjunction a prefix of the
+  // next, the greedy loop otherwise re-nests the chain at the cube of its
+  // length (forty seconds on the pouring.2 CTI queries of the Goel
+  // hardware benchmarks, for a circuit the bit-blaster then built
+  // identically). Sixteen million is under a second, and two orders of
+  // magnitude above what the extraction spends where it pays off.
+  int64_t common_subsum_budget = 16000000;
+
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
   int64_t size_reducing_fixed_point = 0;
   

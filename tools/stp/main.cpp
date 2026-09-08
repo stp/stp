@@ -246,6 +246,13 @@ void ExtraMain::create_options()
            "circuit is built once (needs --flattening)",
            simp_group);
 
+  int64_arg("--common-subsum-budget", bm->UserFlags.common_subsum_budget,
+            "Tally operations --common-subsum may spend per operator before "
+            "it stops extracting and reports the result as truncated. A "
+            "chain of flattened gates, each a prefix of the next, otherwise "
+            "costs the cube of its length to re-nest",
+            simp_group);
+
   bool_arg("--pair-extract", bm->UserFlags.enable_pair_extract,
            "In an n-ary bvadd, replace a pair of addends whose possibly-one "
            "bits are disjoint by their bitwise-or, removing an adder stage",

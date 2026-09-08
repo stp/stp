@@ -169,6 +169,17 @@ class CommonSubSum
   // Whole shared chunks found in one pass, before any pair is tallied.
   long chunked = 0;
 
+  // Increments and decrements of the tally so far, and how many the pass
+  // may spend. The build and every round's repair are made of these, so the
+  // count is the pass's running time in the unit that runs out, and the
+  // budget is what bounds it: the round limit caps how many pairs are
+  // extracted, not what each extraction costs, and on a staircase of
+  // additions -- each a prefix of the next, which is what a flattened chain
+  // of gates looks like -- every round repairs every holder at a cost
+  // linear in its width, the cube of the staircase's length in all.
+  long tallyOps = 0;
+  long budget = 0;
+
   void collect(const ASTNode& n, ASTNodeSet& seen, ASTVec& plusNodes);
   void extractCoTravellers();
   void markShareable();
@@ -197,6 +208,11 @@ public:
   }
 
   ASTNode topLevel(const ASTNode& n);
+
+  // What the last run reported: whether a guard stopped it short of a fixed
+  // point, and the tally operations it spent.
+  bool stoppedEarly() const { return truncated; }
+  long tallyOperations() const { return tallyOps; }
 };
 }
 
