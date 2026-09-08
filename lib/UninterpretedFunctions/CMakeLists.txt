@@ -1,6 +1,7 @@
 add_library(uninterpretedfunctions OBJECT
     UFDecl.cpp
     UFContext.cpp
+    UFPreLowering.cpp
     UFLowering.cpp
     UFChecker.cpp
     UFLemma.cpp

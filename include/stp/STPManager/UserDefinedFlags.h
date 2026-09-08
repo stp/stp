@@ -210,6 +210,18 @@ public:
   bool enable_pair_extract = true;
   bool enable_common_subsum = true;
 
+  // Tally operations -- one increment or decrement of a pair's holder
+  // count -- common sub-term extraction may spend per operator before it
+  // stops. Building the tally and repairing it after each extraction are
+  // made of these, so this is the pass's running time in the unit that runs
+  // out: on a staircase of flattened gates, each conjunction a prefix of the
+  // next, the greedy loop otherwise re-nests the chain at the cube of its
+  // length (forty seconds on the pouring.2 CTI queries of the Goel
+  // hardware benchmarks, for a circuit the bit-blaster then built
+  // identically). Sixteen million is under a second, and two orders of
+  // magnitude above what the extraction spends where it pays off.
+  int64_t common_subsum_budget = 16000000;
+
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
   int64_t size_reducing_fixed_point = 0;
   
@@ -336,14 +348,21 @@ public:
   // How many congruence lemmas one refuted candidate may install before the
   // solver is asked again; 0 is unlimited. Every conflict a candidate exposes
   // is refuted by that same assignment, so installing several together trades
-  // clauses for whole SAT calls. The trade is not monotone: a small batch is
-  // worth several rounds, while draining every conflict installs most of the
-  // quadratic congruence encoding a round at a time and is slower than
-  // emitting one. Measured over collision and pigeonhole families at 30..100
-  // applications, 8 was the best of 1/2/4/8/16/32/unlimited everywhere and
-  // 2.3x-4x faster than 1; unlimited was the worst setting tried. Setting 1
+  // clauses for whole SAT calls.
+  //
+  // Unlimited, which is what Bitwuzla does. The cap used to be 8, chosen on
+  // synthetic collision and pigeonhole families of 30..100 applications
+  // where it beat 1/2/4/16/32/unlimited and unlimited was the worst: there,
+  // draining every conflict installs most of the quadratic congruence
+  // encoding a round at a time. The corpus does not have that shape. On the
+  // 42 hardest Certora queries (256-bit contract verification, a few dozen
+  // applications per declaration, wide arithmetic abstracted), every round
+  // is a SAT call over a million-clause instance and what a candidate
+  // exposes is a handful of conflicts, so the cap only added rounds: at 60s,
+  // 8 solved 28 of the 42, 16 and unlimited solved 30, and with the
+  // quotient-threshold schemas below unlimited solved 34. Setting 1
   // restricts each candidate to one installed congruence lemma.
-  unsigned uf_lemmas_per_round = 8;
+  unsigned uf_lemmas_per_round = 0;
 
   // Whether to install a declaration's pairwise congruence constraints before
   // the first solve instead of waiting for a candidate to earn them.
@@ -412,7 +431,19 @@ public:
   // and each collision costs a lemma and a round. A phase hint is advisory --
   // it moves the search order and nothing else -- so biasing those scalars
   // apart can only change how quickly an answer is found, never which answer.
-  bool uf_phase_hints = false;
+  //
+  // On by default. Measured with the rest of the current UF defaults on the
+  // Certora corpus at 30s: 51 of the 79-file regression sample solved with
+  // the hints against 49 without (three gained, one lost), and 35 of the 42
+  // hardest files at 60s against 34, with the total time down by a tenth
+  // in both.
+  bool uf_phase_hints = true;
+
+  // Ask the congruence checker about a candidate the bit-vector abstraction
+  // has just refined, rather than only about a faithful one, so that the
+  // congruence lemmas the candidate exposes go in beside the abstraction's
+  // clauses. See CallSAT_ResultCheck.
+  bool uf_check_during_bv_refinement = true;
 
   // The carrier width given to a sort introduced by (declare-sort S 0).
   //
@@ -436,6 +467,61 @@ public:
   // analysis is conservative: any non-equality use disqualifies the
   // declaration. Enabled by default; set to false if it causes trouble.
   bool uf_narrow_results = true;
+
+  // Before lowering replaces each application by a fresh symbol, read the
+  // equalities the query states at the top level and rewrite the rest of it
+  // under them, applications included: `x = 5` sends `(f x)` to `(f 5)`,
+  // `a = (f y)` sends every `a` to `(f y)`, `(f 3) = 0` sends every other
+  // `(f 3)` to 0. Lowering then protects the scalars it introduces from the
+  // simplifier, so this is the one point where such a fact can cross an
+  // application; see UFPreLowering. Verdict-preserving: the defining
+  // conjunct is kept, so no model is lost or invented.
+  bool uf_propagate_equalities = true;
+
+  // Whether the pass above first asks the Boolean skeleton what it forces
+  // (see SkeletonPreproc) and reads those facts too. A query that states
+  // `x = 5` only under an implication its structure resolves is common in
+  // the UF corpus -- every top-level assertion of a verification query is a
+  // guarded implication -- and without this the fact never reaches (f x).
+  // Distinct from --skeleton-preproc, which runs after lowering and cannot
+  // cross an application; this one is on by default for exactly that reason,
+  // and costs one SAT call over the skeleton per UF solve.
+  bool uf_skeleton_preproc = true;
+
+  // Whether a solve with uninterpreted functions abstracts its wide
+  // multiplications, divisions and remainders (see --bv-term-abstraction)
+  // without being asked to by name.
+  //
+  // AUTO -- the default -- turns the abstraction on for a UF solve whose
+  // root holds a BVMULT, BVDIV or BVMOD at or above --bv-abstraction-width,
+  // and leaves every other solve exactly as the general flag says. ON and
+  // OFF decide it for every UF solve. The general flag is off by default
+  // because on plain bit-vector workloads the abstraction was measured as a
+  // wash; the UF corpus is a different population -- 256-bit contract
+  // verification queries with a handful of products and quotients each,
+  // most of which the search never needs exactly -- and there it is the
+  // difference between finishing and not: with it Bitwuzla, which abstracts
+  // these operations unconditionally, decides
+  // QF_UFBV/20241113-Certora/0884 in 3s, and without it in 96s.
+  enum class UFAbstractionMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  UFAbstractionMode uf_bv_term_abstraction = UFAbstractionMode::AUTO;
+
+  // When the policy above abstracts, it also admits the quotient-threshold
+  // schemas (--bv-term-abstraction-schema-groups quotient-thresholds) for
+  // that solve, unless the groups were named on the command line. The
+  // Certora queries compare quotients against thresholds far more often than
+  // they divide by a power of two or by zero, which is what the base group's
+  // division facts cover; with the base group alone the refinement spends
+  // its rounds on value lemmas and then encodes the divider exactly.
+  // Measured on the 42 hardest such queries at 60s: 28 solved with the base
+  // group, 30 with this one added, and 34 with the lemma cap above lifted as
+  // well. Off, the policy leaves the groups exactly as configured.
+  bool uf_quotient_threshold_schemas = true;
 
   // For declarations whose results appear only in equality contexts, add
   // the reverse implication (= result_i result_j) => (= arg_i arg_j) in

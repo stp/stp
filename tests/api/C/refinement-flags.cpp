@@ -102,6 +102,14 @@ static_assert(INCREMENTAL_PIECE_REWRITING == 28,
               "published interface-flag ordinal changed");
 static_assert(CNF_AUTO_THRESHOLD == 29,
               "published interface-flag ordinal changed");
+static_assert(UF_PROPAGATE_EQUALITIES == 36,
+              "published interface-flag ordinal changed");
+static_assert(UF_SKELETON_PREPROC == 37,
+              "published interface-flag ordinal changed");
+static_assert(UF_BV_TERM_ABSTRACTION == 38,
+              "published interface-flag ordinal changed");
+static_assert(UF_CHECK_DURING_BV_REFINEMENT == 39,
+              "published interface-flag ordinal changed");
 // The published prefix ends at CNF_AUTO_THRESHOLD. Everything this feature
 // adds -- three interface flags and three profile ordinals -- is new in this
 // series and deliberately NOT pinned here: nothing outside the tree has linked
@@ -139,10 +147,10 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   VC vc = vc_createValidityChecker();
   EXPECT_TRUE(flags(vc).uf_narrow_results);
   EXPECT_FALSE(flags(vc).uf_inject_args);
-  EXPECT_EQ(8u, flags(vc).uf_lemmas_per_round);
+  EXPECT_EQ(0u, flags(vc).uf_lemmas_per_round);
   EXPECT_EQ(stp::UserDefinedFlags::UFEagerMode::AUTO, flags(vc).uf_eager_mode);
   EXPECT_EQ(256u, flags(vc).uf_eager_budget);
-  EXPECT_FALSE(flags(vc).uf_phase_hints);
+  EXPECT_TRUE(flags(vc).uf_phase_hints);
   EXPECT_EQ(16u, flags(vc).uf_sort_width);
   EXPECT_TRUE(flags(vc).distinct_ordering);
   EXPECT_EQ(-1, flags(vc).aig_node_budget);
@@ -190,6 +198,14 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
   EXPECT_TRUE(flags(vc).uf_phase_hints);
   vc_setInterfaceFlags(vc, UF_PHASE_HINTS, 0);
   EXPECT_FALSE(flags(vc).uf_phase_hints);
+
+  // On by default: the congruence lemmas a refined candidate exposes go in
+  // beside the abstraction's clauses.
+  EXPECT_TRUE(flags(vc).uf_check_during_bv_refinement);
+  vc_setInterfaceFlags(vc, UF_CHECK_DURING_BV_REFINEMENT, 0);
+  EXPECT_FALSE(flags(vc).uf_check_during_bv_refinement);
+  vc_setInterfaceFlags(vc, UF_CHECK_DURING_BV_REFINEMENT, 1);
+  EXPECT_TRUE(flags(vc).uf_check_during_bv_refinement);
 
   vc_setInterfaceFlags(vc, DISTINCT_ORDERING, 0);
   EXPECT_FALSE(flags(vc).distinct_ordering);
@@ -647,7 +663,7 @@ TEST(refinement_flags, ANegativeUnsignedValueIsRefusedAndLeavesTheFieldAlone)
   EXPECT_EQ(4u, flags(vc).bv_term_abstraction_divmod_value_limit);
 
   vc_setInterfaceFlags(vc, UF_LEMMAS_PER_ROUND, -1);
-  EXPECT_EQ(8u, flags(vc).uf_lemmas_per_round);
+  EXPECT_EQ(0u, flags(vc).uf_lemmas_per_round);
   vc_setInterfaceFlags(vc, UF_ACKERMANN_BUDGET, -1);
   EXPECT_EQ(256u, flags(vc).uf_eager_budget);
   EXPECT_EQ(7, errors);

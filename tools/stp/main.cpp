@@ -146,6 +146,9 @@ public:
   // input file.
   std::string uf_ackermann;
   CLI::Option* uf_ackermann_option = nullptr;
+  // Likewise for UserFlags.uf_bv_term_abstraction.
+  std::string uf_bv_term_abstraction;
+  CLI::Option* uf_bv_term_abstraction_option = nullptr;
 };
 
 int ExtraMain::create_and_parse_options(int argc, char** argv)
@@ -242,6 +245,13 @@ void ExtraMain::create_options()
            "bvand, xor, and, or) into a single shared node, so the shared "
            "circuit is built once (needs --flattening)",
            simp_group);
+
+  int64_arg("--common-subsum-budget", bm->UserFlags.common_subsum_budget,
+            "Tally operations --common-subsum may spend per operator before "
+            "it stops extracting and reports the result as truncated. A "
+            "chain of flattened gates, each a prefix of the next, otherwise "
+            "costs the cube of its length to re-nest",
+            simp_group);
 
   bool_arg("--pair-extract", bm->UserFlags.enable_pair_extract,
            "In an n-ary bvadd, replace a pair of addends whose possibly-one "
@@ -537,6 +547,12 @@ void ExtraMain::create_options()
            "bias the first candidate so the congruence checker's scalars "
            "start out pairwise different (advisory; affects search order "
            "only)", refinement_group);
+  bool_arg("--uf-check-during-bv-refinement",
+           bm->UserFlags.uf_check_during_bv_refinement,
+           "run the congruence checker on a candidate the bit-vector "
+           "abstraction has just refined as well, so its lemmas go in beside "
+           "the abstraction's rather than after the abstraction is faithful",
+           refinement_group);
   app.add_option("--uf-sort-width", bm->UserFlags.uf_sort_width,
                  "bit-vector width given to a sort introduced by "
                  "(declare-sort S 0); it bounds how many elements of that "
@@ -557,6 +573,37 @@ void ExtraMain::create_options()
            "narrow UF result sorts whose applications are used only for "
            "equality to ceil(log2(N+1)) bits, cutting the AIG cost of each "
            "congruence constraint from O(width) to O(log N)",
+           refinement_group);
+  bool_arg("--uf-propagate-equalities",
+           bm->UserFlags.uf_propagate_equalities,
+           "before lowering, rewrite the query under its own top-level "
+           "equalities with applications still in place, so that `x = y` "
+           "merges (f x) and (f y) into one application and `a = (f y)` "
+           "or `(f 3) = 0` reach the terms built on a or (f 3)",
+           refinement_group);
+  bool_arg("--uf-skeleton-preproc", bm->UserFlags.uf_skeleton_preproc,
+           "let --uf-propagate-equalities also read the facts the query's "
+           "Boolean skeleton forces, so an equality stated under an "
+           "implication the structure resolves still crosses the "
+           "applications; one SAT call over the skeleton per UF solve",
+           refinement_group);
+  uf_bv_term_abstraction_option =
+      app.add_option("--uf-bv-term-abstraction", uf_bv_term_abstraction,
+                     "whether a solve with uninterpreted functions abstracts "
+                     "its wide multiplications, divisions and remainders as "
+                     "--bv-term-abstraction does: 'auto' (the default) does "
+                     "so when the query holds one at or above "
+                     "--bv-abstraction-width, 'on' and 'off' decide it for "
+                     "every UF solve")
+          ->group(refinement_group)
+          ->type_name("TEXT")
+          ->default_str("auto");
+  bool_arg("--uf-quotient-threshold-schemas",
+           bm->UserFlags.uf_quotient_threshold_schemas,
+           "when --uf-bv-term-abstraction abstracts a solve, also admit the "
+           "quotient-threshold division schemas for it (see "
+           "--bv-term-abstraction-schema-groups); naming the groups yourself "
+           "overrides this",
            refinement_group);
   bool_arg("--uf-inject-args", bm->UserFlags.uf_inject_args,
            "assume equality-only UF declarations are injective and encode it, "
@@ -1287,6 +1334,23 @@ int ExtraMain::parse_options(int argc, char** argv)
   }
 #endif
 
+  if (uf_bv_term_abstraction_option->count())
+  {
+    typedef UserDefinedFlags::UFAbstractionMode Mode;
+    if (uf_bv_term_abstraction == "on")
+      bm->UserFlags.uf_bv_term_abstraction = Mode::ON;
+    else if (uf_bv_term_abstraction == "off")
+      bm->UserFlags.uf_bv_term_abstraction = Mode::OFF;
+    else if (uf_bv_term_abstraction == "auto")
+      bm->UserFlags.uf_bv_term_abstraction = Mode::AUTO;
+    else
+    {
+      cerr << "ERROR: --uf-bv-term-abstraction must be one of 'on', 'off' "
+              "or 'auto'"
+           << endl;
+      exit(-1);
+    }
+  }
   if (uf_ackermann_option->count())
   {
     typedef UserDefinedFlags::UFEagerMode Mode;

@@ -308,8 +308,15 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   // rung. And with no estimate recorded (the incremental driver, direct
   // API use) there is nothing to decide from. Written back rather than
   // resolved locally so the abstraction splices convert at the same rung.
+  //
+  // A refinement that is only the uninterpreted-function loop is not array
+  // refinement: its lemmas are clauses over scalars the registrar gives SAT
+  // variables after conversion, under any writer, so it decides from the
+  // estimate like a plain query. Left to the fallback, a UF solve of a
+  // large circuit was handed very-low -- on QF_UFBV/20210312-Bouvier the
+  // vlsat3 files went from under a second to a 30s timeout, 67 of 200.
   if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
-      !needAbsRef && bm->expected_blast_ands > 0 &&
+      (!needAbsRef || ufOnlyRefinement_) && bm->expected_blast_ands > 0 &&
       bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER)
   {
     const bool large = (uint64_t)bm->expected_blast_ands >=

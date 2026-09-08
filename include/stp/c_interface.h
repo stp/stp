@@ -297,7 +297,7 @@ enum ifaceflag_t
   UF_EQUALITY_INJECTIVITY,
 
   //! How many congruence lemmas one refuted candidate may install during
-  //! uninterpreted-function refinement (default 8).
+  //! uninterpreted-function refinement (default 0, unlimited).
   //!
   //! `param_value` is that count: zero installs every conflict the candidate
   //! exposes, and one restricts each candidate to a single installed lemma.
@@ -330,7 +330,7 @@ enum ifaceflag_t
   //! Bias the first candidate so the congruence checker's scalars start out
   //! pairwise different.
   //!
-  //! `param_value` nonzero enables, zero disables (the default). This is the
+  //! `param_value` nonzero enables (the default), zero disables. This is the
   //! C API's way to reach --uf-phase-hints. It is advisory and affects search
   //! order only, so it cannot change an answer.
   //!
@@ -597,7 +597,52 @@ enum ifaceflag_t
   //!
   BV_TERM_ABSTRACTION_PLUS,
   BV_TERM_ABSTRACTION_ITE,
-  BV_TERM_ABSTRACTION_COMPARE
+  BV_TERM_ABSTRACTION_COMPARE,
+
+  //! Before lowering, rewrite the query under its own top-level equalities
+  //! with applications still in place, so that `x = y` merges (f x) and
+  //! (f y) into one application and a fact such as `a = (f y)` reaches the
+  //! terms built on a.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --uf-propagate-equalities. Verdict-preserving: the
+  //! defining equality is kept, so no model is lost or invented. Appended to
+  //! preserve every published ordinal.
+  //!
+  UF_PROPAGATE_EQUALITIES,
+
+  //! Whether UF_PROPAGATE_EQUALITIES also reads the facts the query's
+  //! Boolean skeleton forces, so that an equality stated under an
+  //! implication the structure resolves still crosses the applications.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --uf-skeleton-preproc. Appended to preserve every
+  //! published ordinal.
+  //!
+  UF_SKELETON_PREPROC,
+
+  //! Whether a solve with uninterpreted functions abstracts its wide
+  //! multiplications, divisions and remainders as BV_TERM_ABSTRACTION does.
+  //!
+  //! `param_value` 0 is off for every UF solve, 1 is on for every UF solve,
+  //! and 2 (the default) is automatic: on for a UF solve whose query holds
+  //! such an operation at or above BV_ABSTRACTION_WIDTH. This is the C API's
+  //! way to reach --uf-bv-term-abstraction. Appended to preserve every
+  //! published ordinal.
+  //!
+  UF_BV_TERM_ABSTRACTION,
+
+  //! Whether the congruence checker is asked about a candidate the
+  //! bit-vector abstraction has just refined as well as about a faithful
+  //! one, so that the congruence lemmas the candidate exposes go in beside
+  //! the abstraction's clauses rather than after the abstraction is
+  //! faithful.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --uf-check-during-bv-refinement. Appended to
+  //! preserve every published ordinal.
+  //!
+  UF_CHECK_DURING_BV_REFINEMENT
 
 };
 

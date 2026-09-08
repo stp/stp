@@ -190,6 +190,12 @@ public:
   std::vector<LoweredApplicationRecord> applications;
   ASTNodeMap handleToResult;
   ASTNodeMap nameToTerm;
+  // Applications of the submitted root that pre-lowering rewrote into other
+  // applications, keyed by the original: (f x) to (f 7) under x = 7. It is
+  // the image that was lowered and certified, so a value asked for through
+  // the original handle is read through this map. Empty when the pass
+  // changed no application. See UFPreLowering.
+  ASTNodeMap handleAliases;
   ASTVec namingDefinitions;
   // Side conditions without which a solve scalar would denote nothing. Only
   // RoundingMode needs one today: its 5-bit carrier has thirty-two patterns
