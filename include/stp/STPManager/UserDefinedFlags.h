@@ -362,6 +362,13 @@ public:
   // 8 solved 28 of the 42, 16 and unlimited solved 30, and with the
   // quotient-threshold schemas below unlimited solved 34. Setting 1
   // restricts each candidate to one installed congruence lemma.
+  //
+  // A cap that doubles after each refuted candidate was tried against a
+  // fixed one -- small while a candidate is still cheap to replace, growing
+  // as the rounds show it is not -- and landed within noise, in opposite
+  // directions on two corpus sweeps. That was measured while the fixed cap
+  // was still 8; against unlimited there is nothing left for a schedule to
+  // withhold.
   unsigned uf_lemmas_per_round = 0;
 
   // Whether to install a declaration's pairwise congruence constraints before
@@ -1219,6 +1226,18 @@ public:
   // the incremental driver's own gate switches reuse off, which is why
   // there is no size gate here. A solve that is never asked twice is
   // unaffected whatever this says.
+  //
+  // Turning CaDiCaL's lucky phases off is the obvious second cut, and it is
+  // not here because it was measured and did nothing. A refinement query is
+  // many-solve, so its per-call whole-assignment probe looks like a
+  // recurring tax by the same argument that retires the probe on the
+  // incremental driver's persistent solver -- but on a refinement-heavy
+  // uninterpreted-function query, one whose rounds a kept trail alone takes
+  // from 915 to 338, switching it off changed nothing measurable. What a
+  // round pays for is the re-descent itself, not a phase in front of it.
+  // (Measured on the pipeline as it stood before the uninterpreted-function
+  // work that followed, so the round counts are not today's; what they rule
+  // out does not depend on them.)
   bool refinement_trail_reuse = true;
 
   // How the batch pipeline seeds the free indices of an array's reads so
