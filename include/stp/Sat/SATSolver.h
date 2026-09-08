@@ -167,19 +167,30 @@ public:
     return enableBVAInternal();
   }
 
+  // What a backend may keep of its trail between two solve calls.
+  enum class TrailReuse
+  {
+    // The prefix of the trail that the next call's assumptions still
+    // imply. Only correct to rely on when the caller keeps its assumption
+    // order prefix-stable across calls, which the incremental driver does:
+    // assumptions are emitted in assertion stack order and push/pop only
+    // ever change the suffix.
+    AssumptionPrefix,
+    // Everything a clause added since the last call has not falsified.
+    // For a refinement loop, whose rounds differ only by the clauses the
+    // last candidate earned, the next search then resumes where the last
+    // one stopped instead of re-deciding every variable from the root.
+    Everything
+  };
+
   // Ask the backend to reuse the solver trail across incremental solve
-  // calls when consecutive assumption sequences share a prefix, instead of
-  // re-deciding and re-propagating from the root every call (CaDiCaL's
-  // incremental lazy backtracking). Only correct to rely on when the
-  // caller keeps its assumption order prefix-stable across calls, which
-  // the incremental driver does: assumptions are emitted in assertion
-  // stack order and push/pop only ever change the suffix. FALSE means the
-  // backend has no such mechanism -- a performance hint declined, not an
-  // error.
-  bool enableTrailReuse()
+  // calls (CaDiCaL's incremental lazy backtracking) instead of re-deciding
+  // and re-propagating from the root every call. FALSE means the backend
+  // has no such mechanism -- a performance hint declined, not an error.
+  bool enableTrailReuse(TrailReuse scope = TrailReuse::AssumptionPrefix)
   {
     assertConfigurable("enableTrailReuse");
-    return enableTrailReuseInternal();
+    return enableTrailReuseInternal(scope);
   }
 
   // Whether this backend can turn probe-based inprocessing off, and the
@@ -409,7 +420,7 @@ protected:
   // technique -- a performance hint declined, not an error.
   virtual bool setSearchBiasInternal(SearchBias /*bias*/) { return false; }
   virtual bool enableBVAInternal() { return false; }
-  virtual bool enableTrailReuseInternal() { return false; }
+  virtual bool enableTrailReuseInternal(TrailReuse /*scope*/) { return false; }
   virtual bool disableInprobingInternal() { return false; }
   virtual bool disableEliminationAndShrinkingInternal() { return false; }
   virtual bool disableLuckyPhasesInternal() { return false; }

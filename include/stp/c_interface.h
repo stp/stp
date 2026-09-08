@@ -597,7 +597,18 @@ enum ifaceflag_t
   //!
   BV_TERM_ABSTRACTION_PLUS,
   BV_TERM_ABSTRACTION_ITE,
-  BV_TERM_ABSTRACTION_COMPARE
+  BV_TERM_ABSTRACTION_COMPARE,
+
+  //! Whether the SAT solver keeps its trail between congruence refinement
+  //! rounds, resuming the search where the refuted candidate left it
+  //! instead of re-deciding every variable from the root.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is
+  //! the C API's way to reach --uf-trail-reuse. It changes the search
+  //! order only, so it cannot change an answer. Appended to preserve every
+  //! published ordinal.
+  //!
+  UF_TRAIL_REUSE
 
 };
 

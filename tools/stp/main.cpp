@@ -512,6 +512,10 @@ void ExtraMain::create_options()
            "bias the first candidate so the congruence checker's scalars "
            "start out pairwise different (advisory; affects search order "
            "only)", refinement_group);
+  bool_arg("--uf-trail-reuse", bm->UserFlags.uf_trail_reuse,
+           "keep the SAT solver's trail between congruence refinement "
+           "rounds, resuming the search instead of re-deciding every "
+           "variable from the root", refinement_group);
   app.add_option("--uf-sort-width", bm->UserFlags.uf_sort_width,
                  "bit-vector width given to a sort introduced by "
                  "(declare-sort S 0); it bounds how many elements of that "

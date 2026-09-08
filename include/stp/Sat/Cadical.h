@@ -124,7 +124,7 @@ public:
   bool disableEliminationAndShrinkingInternal() override;
   bool disableLuckyPhasesInternal() override;
 
-  bool enableTrailReuseInternal() override;
+  bool enableTrailReuseInternal(TrailReuse scope) override;
 
   void suggestPhase(uint32_t var, bool value) override;
   void declarePendingVariables() override;

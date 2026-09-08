@@ -90,4 +90,62 @@ TEST(TrailReuse, CadicalPrefixStableAssumptionRounds)
   EXPECT_FALSE(s.solveWithAssumptions(a1, timed_out));
 }
 
+// The refinement loop's shape: plain solves with no assumptions at all,
+// each followed by clauses that reject the model just read, over fresh
+// variables the earlier calls never saw. With the trail kept across the
+// added clauses the solver resumes rather than re-descends, and every
+// model it publishes has to satisfy every clause added before the call.
+TEST(TrailReuse, CadicalClauseRoundsWithoutAssumptions)
+{
+  stp::Cadical s;
+  s.enableTrailReuse(SATSolver::TrailReuse::Everything);
+
+  bool timed_out = false;
+  const unsigned width = 6;
+  std::vector<uint32_t> bits;
+  for (unsigned i = 0; i < width; ++i)
+    bits.push_back(s.newVar());
+  // Something to decide: at least one bit set.
+  SATSolver::vec_literals any;
+  for (unsigned i = 0; i < width; ++i)
+    any.push(SATSolver::mkLit(bits[i], false));
+  s.addClause(any);
+
+  // Each round blocks the assignment just read, the way a congruence
+  // lemma refutes the candidate that earned it: a fresh helper stands
+  // for "the bits are as they were", is defined by clauses added now,
+  // and is then forbidden. 2^width - 1 assignments satisfy the first
+  // clause, so the loop ends with unsat after exactly that many models.
+  unsigned models = 0;
+  while (s.solve(timed_out))
+  {
+    ASSERT_FALSE(timed_out);
+    std::vector<bool> value(width);
+    bool anySet = false;
+    for (unsigned i = 0; i < width; ++i)
+    {
+      value[i] = s.modelValue(bits[i]) == s.true_literal();
+      anySet = anySet || value[i];
+    }
+    ASSERT_TRUE(anySet);
+    ++models;
+    ASSERT_LE(models, (1u << width) - 1);
+
+    const uint32_t same = s.newVar();
+    s.setFrozen(same);
+    // bits as read -> same
+    SATSolver::vec_literals imp;
+    for (unsigned i = 0; i < width; ++i)
+      imp.push(SATSolver::mkLit(bits[i], value[i]));
+    imp.push(SATSolver::mkLit(same, false));
+    s.addClause(imp);
+    // ~same
+    SATSolver::vec_literals block;
+    block.push(SATSolver::mkLit(same, true));
+    s.addClause(block);
+  }
+  ASSERT_FALSE(timed_out);
+  EXPECT_EQ(models, (1u << width) - 1);
+}
+
 #endif

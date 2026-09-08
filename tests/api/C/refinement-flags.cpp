@@ -143,6 +143,7 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   EXPECT_EQ(stp::UserDefinedFlags::UFEagerMode::AUTO, flags(vc).uf_eager_mode);
   EXPECT_EQ(256u, flags(vc).uf_eager_budget);
   EXPECT_FALSE(flags(vc).uf_phase_hints);
+  EXPECT_TRUE(flags(vc).uf_trail_reuse);
   EXPECT_EQ(16u, flags(vc).uf_sort_width);
   EXPECT_TRUE(flags(vc).distinct_ordering);
   EXPECT_EQ(-1, flags(vc).aig_node_budget);
@@ -190,6 +191,11 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
   EXPECT_TRUE(flags(vc).uf_phase_hints);
   vc_setInterfaceFlags(vc, UF_PHASE_HINTS, 0);
   EXPECT_FALSE(flags(vc).uf_phase_hints);
+
+  vc_setInterfaceFlags(vc, UF_TRAIL_REUSE, 0);
+  EXPECT_FALSE(flags(vc).uf_trail_reuse);
+  vc_setInterfaceFlags(vc, UF_TRAIL_REUSE, 1);
+  EXPECT_TRUE(flags(vc).uf_trail_reuse);
 
   vc_setInterfaceFlags(vc, DISTINCT_ORDERING, 0);
   EXPECT_FALSE(flags(vc).distinct_ordering);

@@ -276,13 +276,16 @@ bool Cadical::enableBVAInternal()
 // difference and keeps the shared trail, instead of re-deciding and
 // re-propagating everything from the root. Mode 1 restricts the kept
 // trail to the assumption prefix; measured equal to mode 2 on the
-// many-small-queries workloads this targets.
-bool Cadical::enableTrailReuseInternal()
+// many-small-queries workloads the incremental driver targets. Mode 2
+// also keeps the trail across clauses added between calls, backtracking
+// only as far as an added clause is falsified: what a refinement loop
+// with no assumptions needs, since mode 1 gives it nothing.
+bool Cadical::enableTrailReuseInternal(TrailReuse scope)
 {
   // Like factor, "ilb" may only be set while the solver is still in its
   // configuration window; the driver's size gate therefore works by
   // rebuilding onto a fresh solver rather than by toggling.
-  return s->set("ilb", 1);
+  return s->set("ilb", scope == TrailReuse::Everything ? 2 : 1);
 }
 
 bool Cadical::supportsInprobingControl() const

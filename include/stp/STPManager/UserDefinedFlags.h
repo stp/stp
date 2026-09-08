@@ -414,6 +414,15 @@ public:
   // apart can only change how quickly an answer is found, never which answer.
   bool uf_phase_hints = false;
 
+  // Whether the batch solver keeps its trail between congruence refinement
+  // rounds. A round differs from the last only by the clauses the refuted
+  // candidate earned, so the search can resume on the kept trail,
+  // backtracking only as far as one of those clauses is falsified. Without
+  // this every round re-decides and re-propagates every variable from the
+  // root before it reaches the new clauses, a cost that grows with the
+  // encoding rather than with the lemma.
+  bool uf_trail_reuse = true;
+
   // The carrier width given to a sort introduced by (declare-sort S 0).
   //
   // An uninterpreted sort has no operations but equality, so a query

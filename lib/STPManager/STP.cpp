@@ -1084,6 +1084,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     return bm->unknownResult();
 
   NewSolver.enableRefinement(maybeRefinement);
+  // A congruence round differs from the last only by the clauses its
+  // candidate earned, so the search resumes on the kept trail instead of
+  // re-deciding every variable from the root before it sees them.
+  if (batchUFView->active() && bm->UserFlags.uf_trail_reuse)
+    NewSolver.enableTrailReuse(SATSolver::TrailReuse::Everything);
 
   if (bm->UserFlags.stats_flag)
     bm->print_stats();
