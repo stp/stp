@@ -372,10 +372,13 @@ bool CommonSubSum::promote(const ASTNode& n)
   if (!shareable.insert(num).second)
     return true;
 
+  std::vector<uint32_t> holders;
+  holdersListed(num, holders);
+
   std::vector<uint64_t> eligible;
-  for (const auto& sum : sums)
+  for (const uint32_t i : holders)
   {
-    const ASTVec& v = sum.ops;
+    const ASTVec& v = sums[i].ops;
     if (!std::binary_search(v.begin(), v.end(), n, byNodeNum))
       continue;
 
@@ -386,6 +389,36 @@ bool CommonSubSum::promote(const ASTNode& n)
   }
 
   return true;
+}
+
+// The holder lists, from the operand lists as they stand once the
+// co-travelling groups have been taken out. An operand repeated in one
+// addition is listed under it once, as it is tallied once.
+void CommonSubSum::indexHolders()
+{
+  holdersOf.clear();
+  for (uint32_t i = 0; i < sums.size(); i++)
+  {
+    const ASTVec& v = sums[i].ops;
+    for (size_t j = 0; j < v.size(); j++)
+      if (j == 0 || v[j] != v[j - 1])
+        holdersOf[v[j].GetNodeNum()].push_back(i);
+  }
+}
+
+// The additions listed under an operand, ascending and each once, so that
+// a walk over them visits what the scan of every addition visited, in the
+// order it did.
+void CommonSubSum::holdersListed(uint64_t num,
+                                 std::vector<uint32_t>& out) const
+{
+  out.clear();
+  const auto it = holdersOf.find(num);
+  if (it == holdersOf.end())
+    return;
+  out = it->second;
+  std::sort(out.begin(), out.end());
+  out.erase(std::unique(out.begin(), out.end()), out.end());
 }
 
 // The tally over every addition, built once. Later rounds patch it.
@@ -499,14 +532,28 @@ bool CommonSubSum::extractOnePair()
     return false;
   }
 
+  // Every holder of the pair is listed under both operands, so the shorter
+  // list is walked and each entry checked against the operand list itself
+  // -- which also drops the entries gone stale.
   std::vector<uint32_t> hits;
-  for (uint32_t i = 0; i < sums.size(); i++)
   {
-    const ASTVec& v = sums[i].ops;
-    if (v.size() >= 3 &&
-        std::binary_search(v.begin(), v.end(), first, byNodeNum) &&
-        std::binary_search(v.begin(), v.end(), second, byNodeNum))
-      hits.push_back(i);
+    const auto ha = holdersOf.find(bestPair >> 32);
+    const auto hb = holdersOf.find(bestPair & 0xffffffffu);
+    if (ha != holdersOf.end() && hb != holdersOf.end())
+    {
+      const std::vector<uint32_t>& shorter =
+          (ha->second.size() <= hb->second.size()) ? ha->second : hb->second;
+      for (const uint32_t i : shorter)
+      {
+        const ASTVec& v = sums[i].ops;
+        if (v.size() >= 3 &&
+            std::binary_search(v.begin(), v.end(), first, byNodeNum) &&
+            std::binary_search(v.begin(), v.end(), second, byNodeNum))
+          hits.push_back(i);
+      }
+      std::sort(hits.begin(), hits.end());
+      hits.erase(std::unique(hits.begin(), hits.end()), hits.end());
+    }
   }
 
   long applied = 0;
@@ -542,6 +589,7 @@ bool CommonSubSum::extractOnePair()
     // is patched; every other pair's tally is still right.
     const bool room = repair(v, scratch);
     v.swap(scratch);
+    holdersOf[shared.GetNodeNum()].push_back(sum);
     applied++;
     if (!room)
     {
@@ -636,6 +684,7 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
   sumIndex.clear();
   byNum.clear();
   occurrences.clear();
+  holdersOf.clear();
   shareable.clear();
   realized.clear();
   candidates = decltype(candidates)();
@@ -666,6 +715,7 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
       sumIndex[sums[i].num] = i;
 
     extractCoTravellers();
+    indexHolders();
     markShareable();
 
     // A pair needs two shareable operands, so fewer than two shareable
@@ -716,6 +766,7 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
   sumIndex.clear();
   byNum.clear();
   occurrences.clear();
+  holdersOf.clear();
   shareable.clear();
   realized.clear();
   candidates = decltype(candidates)();

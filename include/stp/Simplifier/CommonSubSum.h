@@ -121,10 +121,24 @@ class CommonSubSum
   }
 
   // How many of the additions hold each pair of operands. Only the tally is
-  // kept: the additions holding the winning pair are recovered by a scan,
-  // which is far cheaper than a list of them hanging off every pair. The
-  // table is patched as additions change rather than rebuilt each round.
+  // kept: the additions holding the winning pair are recovered from the
+  // holder lists of its two operands, which is far cheaper than a list of
+  // them hanging off every pair. The table is patched as additions change
+  // rather than rebuilt each round.
   ankerl::unordered_dense::map<NodePair, uint32_t> occurrences;
+
+  // The additions holding each operand, by index into sums. The holders of
+  // a winning pair are those listed under both its operands, and the
+  // holders of a promoted node are its own list; before, each was a search
+  // of every addition per round, which on a query of fifty thousand
+  // disjunctions was three seconds of a pass whose tally work took a tenth
+  // of that. Lists only grow: an addition that loses an operand stays
+  // listed under it and is filtered by the same operand-list search the
+  // scan did, so a stale entry costs one search rather than one per round,
+  // and a list can name an addition twice or out of order -- a later
+  // round's shared node hash-conses to an operand already listed -- so
+  // what is read from one is sorted and deduplicated.
+  ankerl::unordered_dense::map<uint64_t, std::vector<uint32_t>> holdersOf;
 
   // Tally snapshots, popped lazily: a snapshot only counts if it still
   // matches the table, and every increment to >=2 pushes one, so the pair
@@ -190,6 +204,8 @@ class CommonSubSum
   bool addPairs(const ASTVec& v);
   bool repair(const ASTVec& before, const ASTVec& after);
   bool promote(const ASTNode& n);
+  void indexHolders();
+  void holdersListed(uint64_t num, std::vector<uint32_t>& out) const;
   bool buildOccurrences();
   bool extractOnePair();
   ASTNode rebuild(const ASTNode& n, const std::map<uint64_t, ASTVec>& changed,
