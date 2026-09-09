@@ -288,8 +288,7 @@ jobs:
     # the implementation. gcc and clang each choose consistently but
     # differently, so their CNF differs on nine of the corpus's inputs, all
     # floating-point. That is an encoding difference, not a wrong answer, and
-    # the fix is to replace SymFPU rather than to rewrite it; see
-    # bench-hard/reports/2026-08-10-cnf-build-determinism.md. Comparing the
+    # the fix is to replace SymFPU rather than to rewrite it. Comparing the
     # two gcc legs still covers optimisation level and assertions, and holds
     # for every input with nothing excluded.
     - name: CNF manifest

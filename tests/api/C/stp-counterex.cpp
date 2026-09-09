@@ -22,9 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-// g++ <this-filename> -I/home/vganesh/stp/c_interface
-// -L/home/vganesh/stp/lib -lstp -o cc
-
 #include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>

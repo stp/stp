@@ -1047,7 +1047,8 @@ TEST(RemoveUnconstrained_GroundPath, square)
 {
   // (zx(x) * zx(x)) == 4: the zero-extension is BOTH operands of the
   // multiply -- a unary function of x through a duplicated operand.
-  // The dominant dup-path shape on the bench-hard set (Sage2 squaring).
+  // The dominant dup-path shape on the hard QF_BV benchmarks (Sage2
+  // squaring).
   checkGroundPath([](Context& c) {
     ASTNode zx = c.hf->CreateTerm(BVZX, 2 * W, c.bv(), c.konst(2 * W, 32));
     return c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, 2 * W, zx, zx),

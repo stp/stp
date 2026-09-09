@@ -95,8 +95,7 @@ void collectAndLeaves(const Manager& m, Node n, const std::vector<uint64_t>& abs
                       std::vector<Lit>& into, std::vector<Lit>& stack);
 
 // What the writer recovers from the AIG before emitting. Each rung adds to
-// the one above it, and each is a strict size reduction -- see the report in
-// bench-hard for what each is worth.
+// the one above it, and each is a strict size reduction.
 enum class Recover
 {
   Nothing,         // plain Tseitin: three clauses for every AND node
