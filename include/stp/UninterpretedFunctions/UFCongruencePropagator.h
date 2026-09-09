@@ -98,9 +98,20 @@ public:
   // Every variable the backend has to observe. Only meaningful once frozen.
   const std::vector<unsigned>& observedVariables() const { return observed_; }
 
-  // Whether there is anything here to reason about: without atoms nothing
-  // ever joins, and without two terms there is nothing to join.
-  bool worthConnecting() const { return !atoms_.empty() && parent_.size() >= 2; }
+  // Whether there is anything here to reason about.
+  //
+  // Not just "some atoms": transitivity needs all three sides of a triangle
+  // to exist before it can say anything, so a graph with fewer edges than
+  // terms is a scattering that will never close one. That is what the
+  // refinement loop leaves behind on its own -- the pairs some candidate
+  // happened to collide on, 103 edges over 209 terms on one Certora query,
+  // where the closure found 18,030 joins and not one conflict. Refusing
+  // those keeps the backend unencumbered on every query the atom pool
+  // declined to cover.
+  bool worthConnecting() const
+  {
+    return parent_.size() >= 2 && atoms_.size() >= parent_.size();
+  }
 
   size_t termCount() const { return parent_.size(); }
   size_t atomCount() const { return atoms_.size(); }

@@ -411,20 +411,33 @@ TEST(UFCongruencePropagator, RepeatedNotificationIsIdempotent)
 
 // Nothing to reason over is reported as such, so the caller can leave the
 // backend unencumbered.
-TEST(UFCongruencePropagator, WorthConnectingNeedsAtoms)
+TEST(UFCongruencePropagator, WorthConnectingNeedsADenseEnoughGraph)
 {
   Terms terms;
   stp::UFCongruencePropagator empty;
   empty.freeze(4);
   EXPECT_FALSE(empty.worthConnecting());
 
-  stp::UFCongruencePropagator withAtom;
-  const unsigned a = withAtom.term(terms("a"));
-  const unsigned b = withAtom.term(terms("b"));
-  withAtom.addAtom(a, b, pos(1));
-  withAtom.freeze(4);
-  EXPECT_TRUE(withAtom.worthConnecting());
-  const std::vector<unsigned>& observed = withAtom.observedVariables();
-  EXPECT_EQ(1u, observed.size());
-  EXPECT_EQ(1u, observed[0]);
+  // Three terms, one edge: no triangle can ever close, so there is nothing
+  // for a closure to say and no reason to encumber the backend.
+  stp::UFCongruencePropagator sparse;
+  const unsigned s1 = sparse.term(terms("s1"));
+  const unsigned s2 = sparse.term(terms("s2"));
+  sparse.term(terms("s3"));
+  sparse.addAtom(s1, s2, pos(1));
+  sparse.freeze(8);
+  EXPECT_FALSE(sparse.worthConnecting());
+
+  // Every pair of three terms.
+  stp::UFCongruencePropagator dense;
+  const unsigned a = dense.term(terms("a"));
+  const unsigned b = dense.term(terms("b"));
+  const unsigned c = dense.term(terms("c"));
+  dense.addAtom(a, b, pos(1));
+  dense.addAtom(b, c, pos(2));
+  dense.addAtom(a, c, pos(3));
+  dense.freeze(8);
+  EXPECT_TRUE(dense.worthConnecting());
+  EXPECT_EQ(3u, dense.observedVariables().size())
+      << "the atoms, and nothing else, when applications are not watched";
 }
