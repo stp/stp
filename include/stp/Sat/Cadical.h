@@ -95,13 +95,31 @@ namespace stp
   bool inprobing_control = false;
   void declareNewVariables();
 
-  // The external propagator that turns preferDecisions() into decisions;
-  // see Cadical.cpp. Created on the first hint, so a solver that was never
-  // hinted runs without one: while one is connected CaDiCaL forgoes its
-  // lucky-phase probing and notifies the propagator of every assignment
-  // of a variable it observes.
-  class DecisionHints;
-  std::unique_ptr<DecisionHints> hints;
+  // The one external propagator CaDiCaL allows, shared by everything STP
+  // does from inside the search: preferDecisions() queues decisions on it,
+  // connectTheoryPropagator() hangs a theory off it. Created on the first
+  // of either, so a solver that uses neither runs without one -- while one
+  // is connected CaDiCaL forgoes its lucky-phase probing and notifies the
+  // propagator of every assignment of a variable it observes.
+  class PropagatorBridge;
+  std::unique_ptr<PropagatorBridge> bridge;
+
+  // Creates the bridge and connects it if that has not happened yet.
+  PropagatorBridge& propagatorBridge();
+
+  // STP's variable for a CaDiCaL external index, the inverse of ext_of_stp.
+  // Only built, and only consulted, while factor is enabled: without it the
+  // two numberings are the same. Extended whenever ext_of_stp grows.
+  std::vector<uint32_t> stp_of_ext;
+  void refreshExternalInverse();
+
+  // The two numberings, in the two directions the propagator needs them.
+  // STP spells a literal 2*var+sign; CaDiCaL spells it a signed 1-based
+  // index. Only variables STP itself created are ever translated here --
+  // the extension variables factor invents are never observed, so they
+  // never arrive in a notification.
+  int externalLiteralOfStp(uint32_t literal) const;
+  uint32_t stpLiteralOfExternal(int literal) const;
 
   // Whether a search or a simplification has run. Hints are accepted only
   // before either: a variable may only be observed while inprocessing has
@@ -125,6 +143,8 @@ public:
 
   void setFrozen(uint32_t var) override;
 
+  void protectFromElimination(uint32_t var) override;
+
   // Root-level facts CaDiCaL has derived; see SATSolver.
   int simplifyOnly() override;
   int rootFixed(unsigned var) override;
@@ -144,6 +164,11 @@ public:
   void suggestPhase(uint32_t var, bool value) override;
   void declarePendingVariables() override;
   bool preferDecisions(const std::vector<DecisionHint>& wanted) override;
+
+  bool supportsTheoryPropagation() const override { return true; }
+  bool connectTheoryPropagator(TheoryPropagator* theory) override;
+  void disconnectTheoryPropagator() override;
+  bool observeVariable(uint32_t var) override;
 
   void unsatAssumptions(const vec_literals& assumps,
                         std::vector<int>& out) override;

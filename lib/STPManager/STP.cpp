@@ -1191,6 +1191,29 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   const auto reportBVAbstractionRecords = [&]() {
     if (bm->UserFlags.quick_statistics_flag)
       toSATAIG.reportBVAbstractionRecords(std::cerr);
+    if (!bm->UserFlags.quick_statistics_flag && !bm->UserFlags.stats_flag)
+      return;
+    if (!batchUFView->active())
+      return;
+    // What the congruence loop actually did, next to the abstraction's own
+    // line: a solver-call count alone cannot say, because the bit-vector
+    // abstraction's rounds are counted there too.
+    const UFCongruencePropagator* propagator =
+        batchUFAdapter ? batchUFAdapter->congruencePropagator() : NULL;
+    std::cerr << "UF refinement: lemmas="
+              << (batchUFAdapter ? batchUFAdapter->lemmasEmitted() : 0);
+    if (propagator == NULL)
+      std::cerr << " propagator=off";
+    else
+      std::cerr << " propagator=on terms=" << propagator->termCount()
+                << " atoms=" << propagator->atomCount()
+                << " applications=" << propagator->applicationCount()
+                << " observed=" << propagator->observedVariables().size()
+                << " merges=" << propagator->merges()
+                << " transitivity=" << propagator->transitivityClauses()
+                << " congruence=" << propagator->congruenceClauses()
+                << " repeats=" << propagator->suppressedDuplicates();
+    std::cerr << std::endl;
   };
 
   if (bm->soft_timeout_expired)

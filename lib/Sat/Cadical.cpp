@@ -32,15 +32,21 @@ using std::vector;
 namespace stp
 {
 
-// Turns preferDecisions() into decisions: an external propagator that
-// proposes the hinted literals, in order, whenever CaDiCaL asks it for a
-// decision, until each has been proposed once. That is all it does -- it
-// propagates nothing, adds no clauses, and accepts every model -- so
-// CaDiCaL's search is its own except for where it starts. Proposing a hint
-// again after every backtrack was measured to pin the search to the seeded
-// values for its whole length: two refutations that take a few seconds
-// without hints ran past a minute with it. Seeded once, the values persist
-// only as CaDiCaL's own saved phases, which its search may then overrule.
+// The single external propagator CaDiCaL permits, doing both of the jobs STP
+// has from inside a search.
+//
+// preferDecisions(): proposes the hinted literals, in order, whenever
+// CaDiCaL asks it for a decision, until each has been proposed once.
+// Proposing a hint again after every backtrack was measured to pin the
+// search to the seeded values for its whole length: two refutations that
+// take a few seconds without hints ran past a minute with it. Seeded once,
+// the values persist only as CaDiCaL's own saved phases, which its search
+// may then overrule.
+//
+// connectTheoryPropagator(): forwards the notifications to a theory and
+// streams back whatever clauses it asks for. With no hints queued and no
+// theory connected this propagates nothing, adds no clauses and accepts
+// every model, so CaDiCaL's search is its own except for where it starts.
 //
 // CaDiCaL requires a proposed literal to be unassigned: proposing an
 // assigned or root-fixed one is an API violation, not a no-op. So the
@@ -59,9 +65,11 @@ namespace stp
 // older CaDiCaL declines every hint in preferDecisions() below and never
 // constructs one of these, so it needs only a complete type to destroy.
 #if defined(CADICAL_MAJOR) && CADICAL_MAJOR >= 3
-class Cadical::DecisionHints : public CaDiCaL::ExternalPropagator
+class Cadical::PropagatorBridge : public CaDiCaL::ExternalPropagator
 {
 public:
+  explicit PropagatorBridge(const Cadical& owner) : owner(owner) {}
+
   // A literal in CaDiCaL's external numbering.
   void hint(int lit)
   {
@@ -69,8 +77,19 @@ public:
     queue.push_back(lit);
   }
 
+  void setTheory(SATSolver::TheoryPropagator* connected)
+  {
+    theory = connected;
+    clause.clear();
+    clause_position = 0;
+  }
+
+  bool hasTheory() const { return theory != NULL; }
+
   void notify_assignment(const std::vector<int>& lits) override
   {
+    if (theory != NULL)
+      forwarded.clear();
     for (int lit : lits)
     {
       const int v = std::abs(lit);
@@ -84,16 +103,30 @@ public:
       }
       assigned[v] = value;
       trail.push_back(v);
+      // Only what was new here is forwarded: the theory is told each
+      // assignment once, which is what lets it keep an undo stack that
+      // matches the notified backtracks one for one.
+      if (theory != NULL)
+        forwarded.push_back(owner.stpLiteralOfExternal(lit));
     }
+    if (theory != NULL && !forwarded.empty())
+      theory->notifyAssignments(forwarded);
   }
 
   void notify_new_decision_level() override
   {
     levels.push_back(trail.size());
+    if (theory != NULL)
+      theory->notifyNewDecisionLevel();
   }
 
   void notify_backtrack(size_t new_level) override
   {
+    // The theory is told even when this level is one nothing was notified
+    // at: it keeps its own stack of levels, and skipping the call would
+    // leave that stack deeper than the search's.
+    if (theory != NULL)
+      theory->notifyBacktrack(new_level);
     if (new_level >= levels.size())
       return; // nothing above that level was ever notified
     const size_t keep = levels[new_level];
@@ -108,7 +141,7 @@ public:
 
   bool cb_check_found_model(const std::vector<int>& /*model*/) override
   {
-    return true;
+    return theory == NULL || theory->checkFinalModel();
   }
 
   int cb_decide() override
@@ -125,11 +158,43 @@ public:
 
   int cb_propagate() override { return 0; }
   int cb_add_reason_clause_lit(int /*propagated_lit*/) override { return 0; }
-  bool cb_has_external_clause(bool& /*is_forgettable*/) override
+
+  bool cb_has_external_clause(bool& is_forgettable) override
   {
-    return false;
+    if (theory == NULL)
+      return false;
+    // A clause is handed over one literal at a time, so one that is still
+    // being read out has to be answered for before the theory is asked for
+    // another.
+    // Theory consequences of the query, not of the search: irredundant means
+    // a lemma is derived once however often the search passes back through
+    // the assignment that exposed it. Set on both paths -- CaDiCaL clears
+    // the flag before each call, so leaving it alone would work, but not
+    // visibly.
+    is_forgettable = false;
+    if (clause_position < clause.size())
+      return true;
+    std::vector<uint32_t> next;
+    if (!theory->nextClause(next))
+      return false;
+    clause.clear();
+    clause_position = 0;
+    clause.reserve(next.size());
+    for (uint32_t literal : next)
+      clause.push_back(owner.externalLiteralOfStp(literal));
+    return true;
   }
-  int cb_add_external_clause_lit() override { return 0; }
+
+  int cb_add_external_clause_lit() override
+  {
+    if (clause_position >= clause.size())
+    {
+      clause.clear();
+      clause_position = 0;
+      return 0; // the closing zero
+    }
+    return clause[clause_position++];
+  }
 
 private:
   void grow(int v)
@@ -138,13 +203,19 @@ private:
       assigned.resize((size_t)v + 1, 0);
   }
 
+  const Cadical& owner;
+  SATSolver::TheoryPropagator* theory = NULL;
+  std::vector<uint32_t> forwarded; // scratch, STP literals
+  std::vector<int> clause;         // the clause being handed over
+  size_t clause_position = 0;
+
   std::vector<int8_t> assigned; // by variable: the current value, 0 open
   std::vector<int> trail;       // observed variables in assignment order
   std::vector<size_t> levels;   // trail size at each decision level
   std::deque<int> queue;        // literals to propose, oldest first
 };
 #else
-class Cadical::DecisionHints
+class Cadical::PropagatorBridge
 {
 };
 #endif
@@ -254,7 +325,7 @@ Cadical::Cadical() : time_limit(*this)
 
 Cadical::~Cadical()
 {
-  // The propagator, if any, outlives the solver: `hints` is destroyed after
+  // The propagator, if any, outlives the solver: `bridge` is destroyed after
   // this body, and CaDiCaL's own destructor never calls back into it.
   delete s;
   s = nullptr;
@@ -300,6 +371,26 @@ void Cadical::setFrozen(uint32_t var)
   // restoration (the simplifying Minisat family) genuinely need their
   // setFrozen; this one is a documented decision, not an omission.
   (void)var;
+}
+
+void Cadical::protectFromElimination(uint32_t var)
+{
+  // The real freeze, for the variables a theory propagator will observe.
+  // CaDiCaL only accepts an observation on a clean variable, and there is no
+  // moment between "the clauses that would restore an eliminated one have
+  // been added" and "the search that restores them has begun" at which it
+  // could be observed -- so such a variable has to be kept whole from the
+  // start. Nothing melts it again: the query owns these for its lifetime.
+  if (var == 0 || var > next_variable)
+    return;
+  uint32_t external = var;
+  if (factor_enabled)
+  {
+    if (ext_of_stp.size() <= next_variable)
+      declareNewVariables();
+    external = (uint32_t)ext_of_stp[var];
+  }
+  s->freeze((int)external);
 }
 
 int Cadical::simplifyOnly()
@@ -465,6 +556,129 @@ void Cadical::declarePendingVariables()
     declareNewVariables();
 }
 
+#if defined(CADICAL_MAJOR) && CADICAL_MAJOR >= 3
+void Cadical::refreshExternalInverse()
+{
+  if (!factor_enabled)
+    return;
+  for (uint32_t var = 1; var < ext_of_stp.size(); var++)
+  {
+    const size_t external = (size_t)ext_of_stp[var];
+    if (stp_of_ext.size() <= external)
+      stp_of_ext.resize(external + 1, 0);
+    stp_of_ext[external] = var;
+  }
+}
+
+int Cadical::externalLiteralOfStp(uint32_t literal) const
+{
+  uint32_t var = literal >> 1;
+  if (factor_enabled)
+  {
+    assert(var < ext_of_stp.size() && "an untranslated variable in a theory "
+                                      "clause: it was never declared");
+    var = (uint32_t)ext_of_stp[var];
+  }
+  return (literal & 1) != 0 ? -(int)var : (int)var;
+}
+
+uint32_t Cadical::stpLiteralOfExternal(int literal) const
+{
+  uint32_t var = (uint32_t)std::abs(literal);
+  if (factor_enabled)
+  {
+    assert(var < stp_of_ext.size() && stp_of_ext[var] != 0 &&
+           "CaDiCaL notified an external variable STP never declared");
+    var = stp_of_ext[var];
+  }
+  return 2 * var + (literal < 0 ? 1u : 0u);
+}
+
+Cadical::PropagatorBridge& Cadical::propagatorBridge()
+{
+  if (!bridge)
+  {
+    bridge.reset(new PropagatorBridge(*this));
+    s->connect_external_propagator(bridge.get());
+  }
+  return *bridge;
+}
+
+bool Cadical::connectTheoryPropagator(TheoryPropagator* theory)
+{
+  if (theory == NULL)
+    return false;
+  // Declaring here rather than at the first observeVariable: declaring can
+  // reset a model extension, and doing it once at connection keeps that out
+  // of the middle of a batch of observations.
+  if (factor_enabled && ext_of_stp.size() <= next_variable)
+    declareNewVariables();
+  refreshExternalInverse();
+  propagatorBridge().setTheory(theory);
+  return true;
+}
+
+void Cadical::disconnectTheoryPropagator()
+{
+  if (bridge)
+    bridge->setTheory(NULL);
+}
+
+bool Cadical::observeVariable(uint32_t var)
+{
+  if (!bridge || var == 0 || var > next_variable)
+    return false;
+  // Unlike a decision hint this is allowed after a search has run: what
+  // CaDiCaL requires is that the variable has not been eliminated, and a
+  // variable minted for a lemma between two solve calls has not been. A
+  // caller observing an older variable is asking for one inprocessing may
+  // already have taken, which is why the UF propagator only ever observes
+  // what its own round created.
+  uint32_t external = var;
+  if (factor_enabled)
+  {
+    if (ext_of_stp.size() <= next_variable)
+      declareNewVariables();
+    refreshExternalInverse();
+    external = (uint32_t)ext_of_stp[var];
+  }
+  s->add_observed_var((int)external);
+  return true;
+}
+#else
+void Cadical::refreshExternalInverse() {}
+
+int Cadical::externalLiteralOfStp(uint32_t literal) const
+{
+  const uint32_t var = literal >> 1;
+  return (literal & 1) != 0 ? -(int)var : (int)var;
+}
+
+uint32_t Cadical::stpLiteralOfExternal(int literal) const
+{
+  return 2 * (uint32_t)std::abs(literal) + (literal < 0 ? 1u : 0u);
+}
+
+Cadical::PropagatorBridge& Cadical::propagatorBridge()
+{
+  if (!bridge)
+    bridge.reset(new PropagatorBridge());
+  return *bridge;
+}
+
+bool Cadical::connectTheoryPropagator(TheoryPropagator*)
+{
+  return false;
+}
+
+void Cadical::disconnectTheoryPropagator() {}
+
+bool Cadical::observeVariable(uint32_t)
+{
+  return false;
+}
+#endif
+
 bool Cadical::preferDecisions(const std::vector<DecisionHint>& wanted)
 {
 #if defined(CADICAL_MAJOR) && CADICAL_MAJOR >= 3
@@ -478,11 +692,8 @@ bool Cadical::preferDecisions(const std::vector<DecisionHint>& wanted)
   if (factor_enabled && ext_of_stp.size() <= next_variable)
     declareNewVariables();
 
-  if (!hints)
-  {
-    hints.reset(new DecisionHints());
-    s->connect_external_propagator(hints.get());
-  }
+  PropagatorBridge& connected = propagatorBridge();
+  refreshExternalInverse();
   for (const DecisionHint& h : wanted)
   {
     assert(h.var >= 1 && h.var <= next_variable);
@@ -490,7 +701,7 @@ bool Cadical::preferDecisions(const std::vector<DecisionHint>& wanted)
     if (factor_enabled)
       var = (uint32_t)ext_of_stp[var];
     s->add_observed_var((int)var);
-    hints->hint(h.value ? (int)var : -(int)var);
+    connected.hint(h.value ? (int)var : -(int)var);
   }
   return true;
 #else

@@ -561,6 +561,29 @@ void ExtraMain::create_options()
            "abstraction has just refined as well, so its lemmas go in beside "
            "the abstraction's rather than after the abstraction is faithful",
            refinement_group);
+  bool_arg("--uf-propagator", bm->UserFlags.uf_propagator,
+           "give the SAT solver the congruence closure as a theory it "
+           "consults during search, so that transitivity of equality and "
+           "functional consistency are enforced on partial assignments "
+           "rather than only on the models it returns", refinement_group);
+  app.add_option("--uf-propagator-after", bm->UserFlags.uf_propagator_after,
+                 "how many congruence lemmas the query must have earned "
+                 "before that theory is connected; it reasons over the "
+                 "equality atoms those lemmas minted")
+      ->group(refinement_group)
+      ->capture_default_str();
+  bool_arg("--uf-propagator-congruence",
+           bm->UserFlags.uf_propagator_congruence,
+           "let that theory watch the applications too, so a pair whose "
+           "arguments the search has driven together is made to agree on its "
+           "result during the search rather than at the next candidate",
+           refinement_group);
+  app.add_option("--uf-propagator-pool", bm->UserFlags.uf_propagator_pool,
+                 "how many distinct argument terms of one sort that theory "
+                 "may be given every equality atom over; 0 leaves it the "
+                 "atoms the refinement loop happened to mint")
+      ->group(refinement_group)
+      ->capture_default_str();
   app.add_option("--uf-sort-width", bm->UserFlags.uf_sort_width,
                  "bit-vector width given to a sort introduced by "
                  "(declare-sort S 0); it bounds how many elements of that "

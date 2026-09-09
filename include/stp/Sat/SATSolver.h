@@ -340,6 +340,67 @@ public:
   }
 
   // ---------------------------------------------------------------------
+  // Theory propagation.
+  //
+  // A refinement loop asks the backend for a complete model and refutes it
+  // afterwards, so every round it spends a whole search reaching an
+  // assignment the theory was always going to reject. A theory propagator
+  // is consulted from inside that search instead: it sees the assignments
+  // to the variables it asked to observe as they are made, and hands back
+  // clauses that are theory consequences of the query.
+  //
+  // Literals are STP's own 2*var+sign encoding throughout, so a theory
+  // never sees a backend's numbering. Everything a propagator returns is a
+  // clause the query entails, so nothing here can change a verdict; what it
+  // changes is how early the search is told.
+  // ---------------------------------------------------------------------
+  class TheoryPropagator
+  {
+  public:
+    virtual ~TheoryPropagator() = default;
+
+    // Observed variables just assigned, in trail order. A backend may
+    // repeat an assignment it has already reported -- chronological
+    // backtracking keeps assignments above the level it returns to and
+    // notifies them again -- so this has to be idempotent.
+    virtual void notifyAssignments(const std::vector<uint32_t>& literals) = 0;
+    virtual void notifyNewDecisionLevel() = 0;
+    // Everything assigned above `level` has been unassigned.
+    virtual void notifyBacktrack(size_t level) = 0;
+
+    // Whether the theory accepts this complete assignment. Answering FALSE
+    // obliges the propagator to have a clause ready in nextClause(), which
+    // is how the search is told what was wrong with it.
+    virtual bool checkFinalModel() = 0;
+
+    // The next clause the theory wants installed, if it has one. Called
+    // repeatedly until it answers FALSE.
+    virtual bool nextClause(std::vector<uint32_t>& clause) = 0;
+  };
+
+  // Whether this backend consults a theory during search at all.
+  virtual bool supportsTheoryPropagation() const { return false; }
+
+  // Connect a theory for the searches that follow. The propagator must
+  // outlive the connection, and only one may be connected at a time.
+  // FALSE means the backend has no such mechanism -- not an error; the
+  // caller keeps its refinement loop, which is what it would have had.
+  virtual bool connectTheoryPropagator(TheoryPropagator* /*theory*/)
+  {
+    return false;
+  }
+
+  virtual void disconnectTheoryPropagator() {}
+
+  // Put a variable under the connected theory's observation, so that its
+  // assignments are notified and clauses may name it. Observed variables
+  // are exempt from whatever elimination the backend does, which is what
+  // makes a clause over them still expressible later in the search.
+  // FALSE means the backend declined -- no theory connected, or a variable
+  // it can no longer observe.
+  virtual bool observeVariable(uint32_t /*var*/) { return false; }
+
+  // ---------------------------------------------------------------------
   // Resource budgets.
   //
   // STP spells "no limit" as -1, and that case is filtered out by the
@@ -421,6 +482,23 @@ public:
 
   // The simplifying solvers shouldn't eliminate index / value variables.
   virtual void setFrozen(uint32_t /*var*/) {}
+
+  // Keep a variable out of the backend's variable elimination for good.
+  //
+  // Distinct from setFrozen, which several backends implement as nothing
+  // because they restore an eliminated variable the moment a later clause
+  // mentions it -- enough for a refinement loop that only writes clauses and
+  // reads models. It is not enough for a theory propagator: a variable may
+  // only be observed while it is clean, and an eliminated one is not clean
+  // until a restore has run, which happens inside the next solve and so
+  // never before the observation that needs it. A caller that will observe a
+  // variable therefore has to say so while the variable is still whole.
+  //
+  // Deliberately narrow. Protecting everything a refinement loop can name
+  // measured ~25% slower on the array-equality benchmarks, which is why
+  // setFrozen stayed a no-op; this is for the few variables a theory
+  // actually watches.
+  virtual void protectFromElimination(uint32_t /*var*/) {}
 
   virtual void enableRefinement(const bool /*enable*/) {}
 

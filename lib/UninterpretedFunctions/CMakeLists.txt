@@ -6,6 +6,7 @@ add_library(uninterpretedfunctions OBJECT
     UFChecker.cpp
     UFLemma.cpp
     UFRefinement.cpp
+    UFCongruencePropagator.cpp
     UFModel.cpp
 )
 

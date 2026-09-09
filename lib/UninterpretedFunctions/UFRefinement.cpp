@@ -558,6 +558,16 @@ void defineEquality(SATSolver& solver, CachedEquality& cached,
   addGuardedClause(solver, reverse, guardLiteral);
 }
 
+// Both halves of an atom's definition. The lemma encoder writes only the one
+// its clause needs; a caller that reads the atom in the other direction --
+// the congruence propagator, whose chains of asserted equalities have to
+// imply the equalities themselves -- has to ask for the rest.
+void completeEquality(SATSolver& solver, CachedEquality& cached)
+{
+  defineEquality(solver, cached, Polarity::Positive, -1);
+  defineEquality(solver, cached, Polarity::Negative, -1);
+}
+
 // Fold constants and SAT aliases before allocating an XNOR helper; the helper
 // itself is left undefined here and is given whichever half the use needs.
 BitHelper bitEquality(SATSolver& solver, const BitOperand& left,
@@ -596,11 +606,19 @@ BitHelper bitEquality(SATSolver& solver, const BitOperand& left,
   return helper;
 }
 
+// `protectAtoms` keeps a newly minted atom out of the backend's variable
+// elimination. Only wanted when the congruence propagator may later observe
+// it: an observation is only accepted on a variable that has not been
+// eliminated, and the restore that would make an eliminated one whole again
+// runs inside the next solve, which is after the last moment it could be
+// observed. Off, the encoder's variables stay as eliminable as every other
+// refinement variable, which is what they were before.
 ClauseTerm equalityTerm(SATSolver& solver,
                         const ToSATBase::ASTNodeToSATVar& bindings,
                         const UFEqualityAtom& atom, Polarity polarity,
                         int guardLiteral,
-                        std::map<EqualityKey, CachedEquality>& cache)
+                        std::map<EqualityKey, CachedEquality>& cache,
+                        bool protectAtoms)
 {
   const EqualityKey key = equalityKey(atom.left, atom.right, atom.sort);
   if (key.left == key.right)
@@ -657,14 +675,38 @@ ClauseTerm equalityTerm(SATSolver& solver,
   }
   const std::map<EqualityKey, CachedEquality>::iterator inserted =
       cache.insert(std::make_pair(key, cached)).first;
+  if (protectAtoms)
+    solver.protectFromElimination(
+        (unsigned)(inserted->second.literal >> 1));
   defineEquality(solver, inserted->second, polarity, guardLiteral);
   return ClauseTerm::satLiteral(inserted->second.literal);
+}
+
+// The atom for one term pair, with both halves of its definition, as the
+// literal that carries it -- or -1 when the pair folds to a constant and
+// needs no atom at all.
+int mintEquality(SATSolver& solver,
+                 const ToSATBase::ASTNodeToSATVar& bindings,
+                 const UFEqualityAtom& atom,
+                 std::map<EqualityKey, CachedEquality>& cache)
+{
+  const ClauseTerm term = equalityTerm(solver, bindings, atom,
+                                       Polarity::Negative, -1, cache, true);
+  if (term.constant)
+    return -1;
+  const std::map<EqualityKey, CachedEquality>::iterator hit =
+      cache.find(equalityKey(atom.left, atom.right, atom.sort));
+  if (hit == cache.end())
+    return -1;
+  completeEquality(solver, hit->second);
+  return hit->second.literal;
 }
 
 void encodeOneLemma(MutableAdapterState& state, const PendingLemma& entry,
                     SATSolver& solver,
                     ToSATBase::ASTNodeToSATVar& bindings, int guardLiteral,
-                    std::map<EqualityKey, CachedEquality>& cache)
+                    std::map<EqualityKey, CachedEquality>& cache,
+                    bool protectAtoms)
 {
   std::vector<ClauseTerm> body;
   body.reserve(entry.lemma.premise.size() + 1);
@@ -672,7 +714,7 @@ void encodeOneLemma(MutableAdapterState& state, const PendingLemma& entry,
   {
     const ClauseTerm equality =
         equalityTerm(solver, bindings, premise, Polarity::Negative,
-                     guardLiteral, cache);
+                     guardLiteral, cache, protectAtoms);
     if (equality.constant)
     {
       if (!equality.value)
@@ -683,7 +725,7 @@ void encodeOneLemma(MutableAdapterState& state, const PendingLemma& entry,
   }
   const ClauseTerm conclusion =
       equalityTerm(solver, bindings, entry.lemma.conclusion,
-                   Polarity::Positive, guardLiteral, cache);
+                   Polarity::Positive, guardLiteral, cache, protectAtoms);
   if (conclusion.constant)
   {
     if (conclusion.value)
@@ -724,8 +766,14 @@ void encodeLemmas(MutableAdapterState& state, SATSolver& solver,
   for (const PendingLemma& entry : state.pending)
     validateLemmaBeforeMutation(entry.lemma, bindings, solver, guardLiteral);
 
+  // Only the batch adapter can connect a theory to its backend -- a
+  // persistent block's clauses are guarded and its solver outlives the
+  // query -- so only its atoms are worth protecting.
+  const bool protectAtoms = guardLiteral < 0 &&
+                            state.manager->UserFlags.uf_propagator;
   for (const PendingLemma& entry : state.pending)
-    encodeOneLemma(state, entry, solver, bindings, guardLiteral, cache);
+    encodeOneLemma(state, entry, solver, bindings, guardLiteral, cache,
+                   protectAtoms);
 
   // Some backends detect at insertion time that a validated blocking clause
   // closes the entire instance. That is a normal refinement outcome: leave the
@@ -768,6 +816,9 @@ public:
   explicit Impl(STPMgr* manager) : state(manager) {}
   MutableAdapterState state;
   std::map<EqualityKey, CachedEquality> equalityCache;
+  // Connected once, then owned for the life of the query: the backend holds
+  // a pointer to it and its own trail is the theory's context.
+  std::unique_ptr<UFCongruencePropagator> propagator;
 };
 
 UFBatchAdapter::UFBatchAdapter(STPMgr* manager) : impl_(new Impl(manager))
@@ -780,10 +831,190 @@ void UFBatchAdapter::beginQuery(const LoweredApplicationView* view)
   clear();
   impl_->state.beginView(view);
 }
+// Every atom in the query's equality cache, with both halves of its
+// definition, handed to the closure along with the applications it may find
+// congruent.
+//
+// The atoms are the ones the refinement loop has already minted, so the
+// clauses added here are the missing half of a definition that is already
+// paid for -- not a new pool. That is the whole economy of the thing: an
+// eager pool over the same terms costs O(terms^2) atom definitions and
+// O(terms^3) triples whether or not the search ever needs them, and on the
+// queries that are refuted in two rounds it is an order of magnitude more
+// clauses than the query itself.
+bool UFBatchAdapter::installCongruencePropagator(SATSolver& solver,
+                                                 ToSATBase* tosat)
+{
+  STPMgr* const manager = impl_->state.manager;
+  if (impl_->propagator || tosat == NULL || impl_->state.view == NULL)
+    return false;
+  if (!manager->UserFlags.uf_propagator)
+    return false;
+  if (impl_->state.emittedLemmaCount < manager->UserFlags.uf_propagator_after)
+    return false;
+  if (!solver.supportsTheoryPropagation())
+    return false;
+
+  std::unique_ptr<UFCongruencePropagator> propagator(
+      new UFCongruencePropagator());
+
+  // Every pair of argument terms of a sort the cap admits, so that the
+  // closure has a graph dense enough to reason over.
+  //
+  // The refinement loop's own atoms are the pairs some candidate collided
+  // on, and transitivity needs all three sides of a triangle to exist before
+  // it can say anything -- 103 atoms over 209 terms is not a graph, it is a
+  // scattering of edges. Pairs go by lowering sort rather than by
+  // declaration and position: applications of different declarations still
+  // share the terms their arguments name, and the sort is what decides
+  // whether an equality between two of them is well formed at all.
+  //
+  // The cost is the O(n^2) atom definitions, which the cap bounds. The
+  // O(n^3) transitivity triples an eager encoding needs beside them are
+  // exactly what the closure is here to replace.
+  const unsigned poolCap = manager->UserFlags.uf_propagator_pool;
+  if (poolCap >= 2)
+  {
+    const ToSATBase::ASTNodeToSATVar& bindings =
+        tosat->SATVar_to_SymbolIndexMap();
+    // Grouped by the carrier the encoder actually compares: a kind and a
+    // width. Two sorts that share both are compared bit for bit the same
+    // way, and the representative carries whichever one names the group.
+    std::map<std::pair<int, unsigned>,
+             std::pair<SourceSort, std::vector<ASTNode>>> bySort;
+    for (const LoweredApplicationRecord& record :
+         impl_->state.view->applications)
+    {
+      if (!record.observableArguments || record.declaration == NULL)
+        continue;
+      const std::vector<SourceSort>& domain =
+          record.declaration->signature().domain();
+      for (size_t i = 0;
+           i < record.namedActuals.size() && i < domain.size(); ++i)
+      {
+        const SourceSort sort = UFSignature::loweringSort(domain[i]);
+        const std::pair<int, unsigned> key(static_cast<int>(sort.kind()),
+                                           scalarWidth(sort));
+        std::pair<SourceSort, std::vector<ASTNode>>& group = bySort[key];
+        group.first = sort;
+        group.second.push_back(record.namedActuals[i]);
+      }
+    }
+
+    for (std::map<std::pair<int, unsigned>,
+                  std::pair<SourceSort, std::vector<ASTNode>>>::iterator it =
+             bySort.begin();
+         it != bySort.end(); ++it)
+    {
+      std::vector<ASTNode>& terms = it->second.second;
+      // Node order, so the same query mints the same pool.
+      std::sort(terms.begin(), terms.end(),
+                [](const ASTNode& left, const ASTNode& right)
+                { return left.GetNodeNum() < right.GetNodeNum(); });
+      terms.erase(std::unique(terms.begin(), terms.end()), terms.end());
+      if (terms.size() < 2 || terms.size() > poolCap)
+        continue;
+      for (size_t left = 0; left < terms.size(); ++left)
+        for (size_t right = left + 1; right < terms.size(); ++right)
+        {
+          UFEqualityAtom pair;
+          pair.left = terms[left];
+          pair.right = terms[right];
+          pair.sort = it->second.first;
+          mintEquality(solver, bindings, pair, impl_->equalityCache);
+        }
+    }
+  }
+
+  for (std::map<EqualityKey, CachedEquality>::iterator it =
+           impl_->equalityCache.begin();
+       it != impl_->equalityCache.end(); ++it)
+  {
+    CachedEquality& cached = it->second;
+    if (cached.literal < 0)
+      continue;
+    // Both halves, whichever the lemmas happened to need. A chain of atoms
+    // that are merely implied by their equalities proves nothing: the
+    // closure reads an atom in the direction the lemmas never did.
+    completeEquality(solver, cached);
+    const unsigned left = propagator->term(it->first.left);
+    const unsigned right = propagator->term(it->first.right);
+    propagator->addAtom(left, right, (uint32_t)cached.literal);
+  }
+
+  if (manager->UserFlags.uf_propagator_congruence)
+  {
+    const ToSATBase::ASTNodeToSATVar& bindings =
+        tosat->SATVar_to_SymbolIndexMap();
+    for (const LoweredApplicationRecord& record : impl_->state.view->applications)
+    {
+      // An application whose arguments the lowering declined to name is
+      // interpreted by a constant, and has no argument terms to close over.
+      if (!record.observableArguments || record.resultSymbol.IsNull())
+        continue;
+      const ToSATBase::ASTNodeToSATVar::const_iterator result =
+          bindings.find(record.resultSymbol);
+      if (result == bindings.end() || result->second.empty())
+        continue;
+
+      std::vector<unsigned> resultBits;
+      resultBits.reserve(result->second.size());
+      bool complete = true;
+      for (unsigned bit : result->second)
+      {
+        if (bit == ~((unsigned)0))
+        {
+          complete = false; // a bit that reached no variable: nothing to watch
+          break;
+        }
+        resultBits.push_back(bit);
+      }
+      if (!complete)
+        continue;
+
+      std::vector<unsigned> arguments;
+      arguments.reserve(record.namedActuals.size());
+      for (const ASTNode& actual : record.namedActuals)
+        arguments.push_back(propagator->term(actual));
+      propagator->addApplication(record.declaration, arguments, resultBits);
+    }
+  }
+
+  propagator->freeze(solver.nVars());
+  if (!propagator->worthConnecting())
+    return false;
+  if (!solver.connectTheoryPropagator(propagator.get()))
+    return false;
+  for (unsigned var : propagator->observedVariables())
+    solver.observeVariable(var);
+
+  if (manager->UserFlags.stats_flag)
+    std::cerr << "UF: congruence propagator connected after "
+              << impl_->state.emittedLemmaCount << " lemmas over "
+              << propagator->termCount() << " terms, "
+              << propagator->atomCount() << " equality atoms and "
+              << propagator->applicationCount() << " applications ("
+              << propagator->observedVariables().size()
+              << " observed variables)" << std::endl;
+
+  impl_->propagator.swap(propagator);
+  return true;
+}
+
+const UFCongruencePropagator* UFBatchAdapter::congruencePropagator() const
+{
+  return impl_->propagator.get();
+}
+
 void UFBatchAdapter::clear()
 {
   impl_->state.clearActive();
   impl_->equalityCache.clear();
+  // beginQuery() calls this, and the backend that was consulting the
+  // propagator is deleted at the end of every topLevelSTPOnce, before
+  // either -- so nothing is left holding the pointer. Its atoms were that
+  // solver's variables in any case.
+  impl_->propagator.reset();
 }
 bool UFBatchAdapter::active() const
 {
@@ -801,6 +1032,7 @@ bool UFBatchAdapter::hasPendingLemma() const
 void UFBatchAdapter::encodePendingLemmas(SATSolver& solver, ToSATBase* tosat)
 {
   encodeLemmas(impl_->state, solver, tosat, -1, impl_->equalityCache);
+  installCongruencePropagator(solver, tosat);
 }
 bool UFBatchAdapter::hasCertifiedModel() const
 {

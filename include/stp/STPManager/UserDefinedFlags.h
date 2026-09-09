@@ -452,6 +452,53 @@ public:
   // clauses. See CallSAT_ResultCheck.
   bool uf_check_during_bv_refinement = true;
 
+  // Whether to hand the congruence closure to the SAT solver as a theory it
+  // consults during search, instead of only refuting the complete models it
+  // returns. See UFCongruencePropagator: it supplies the transitivity of
+  // equality, which no model can ever exhibit a violation of and which
+  // otherwise has to be written out as O(terms^3) clauses before the search.
+  bool uf_propagator = true;
+
+  // How many congruence lemmas the query must have earned before the theory
+  // is connected. The propagator reasons over the equality atoms the
+  // refinement loop has already minted, so connecting it before there are
+  // any is connecting it to nothing; and a query that is refuted in one or
+  // two rounds never needed the reasoning. 0 connects at the first round
+  // that mints an atom.
+  unsigned uf_propagator_after = 32;
+
+  // Whether the theory also watches the applications themselves, so that a
+  // pair whose arguments the search has driven together is told to agree on
+  // its result there and then.
+  //
+  // Off by default, on measurement rather than on principle. It does what it
+  // claims -- on the largest Certora query it takes the refinement loop from
+  // 17 rounds to 11 -- but it pays for those rounds with a clause per
+  // disagreeing result bit of every congruent pair the search meets, 167,000
+  // of them on that query, about a tenth of the encoding again. Unloaded,
+  // 2246.smt2: 73.6 s with no theory, 41.0 s with transitivity alone, 60.3 s
+  // with this as well. The rounds it saves were not what the query was
+  // spending its time on.
+  //
+  // It also costs the observation of every watched application's result
+  // bits, which have to be kept out of variable elimination from the first
+  // solve -- 18,720 variables against 1,611 for transitivity alone.
+  bool uf_propagator_congruence = false;
+
+  // How many distinct argument terms of one sort the theory may be given a
+  // complete set of equality atoms over, when the query's own lemmas have
+  // not minted enough to reason with. 0 leaves it with exactly the atoms
+  // the refinement loop minted.
+  //
+  // Those are the pairs a candidate happened to collide on, which is far too
+  // sparse for a closure: on a 209-term query the loop had minted 103 atoms
+  // by the time the theory connected, and a chain needs all three sides of a
+  // triangle to exist before it can say anything. A complete pool over n
+  // terms of width w costs O(n^2 * w) definition clauses, which is what the
+  // cap is for -- and, unlike an eagerly encoded pool, no triples: the
+  // closure supplies those, so the O(n^3) half of the price is not paid.
+  unsigned uf_propagator_pool = 64;
+
   // The carrier width given to a sort introduced by (declare-sort S 0).
   //
   // An uninterpreted sort has no operations but equality, so a query

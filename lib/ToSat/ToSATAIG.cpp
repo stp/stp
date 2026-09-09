@@ -704,11 +704,23 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
         FatalError("UF batch liveness mapping has the wrong width", symbol);
       if (found->second.size() < width)
         found->second.resize(width, ~((unsigned)0));
+      // A congruence propagator observes the result bits of the
+      // applications it watches, and a backend only accepts an observation
+      // on a variable it has not eliminated -- the restore that would make
+      // an eliminated one whole again runs inside the next solve, which is
+      // after the last moment it could be observed. So these are kept whole
+      // from here, rather than left to setFrozen, which the backend that
+      // has the propagator implements as nothing. Bounded by the checker's
+      // own scalars: the argument names and one result per application.
+      const bool protect = bm->UserFlags.uf_propagator &&
+                           bm->UserFlags.uf_propagator_congruence;
       for (unsigned bit = 0; bit < width; ++bit)
       {
         if (found->second[bit] == ~((unsigned)0))
           found->second[bit] = satSolver.newVar();
         satSolver.setFrozen(found->second[bit]);
+        if (protect)
+          satSolver.protectFromElimination(found->second[bit]);
       }
     }
     suggest_uf_scalar_phases(satSolver);

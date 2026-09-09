@@ -28,6 +28,7 @@ THE SOFTWARE.
 #ifndef STP_UFREFINEMENT_H
 #define STP_UFREFINEMENT_H
 
+#include "stp/UninterpretedFunctions/UFCongruencePropagator.h"
 #include "stp/UninterpretedFunctions/UFLemma.h"
 #include <cstdint>
 #include <memory>
@@ -103,6 +104,20 @@ public:
   const LoweredApplicationView* applicationView() const override;
   const std::string& diagnostic() const override;
   uint64_t lemmasEmitted() const override;
+
+  // Hands the backend the congruence closure as a theory to consult during
+  // its own search, over the equality atoms this query's lemmas have already
+  // minted. Answers TRUE on the round that connects it.
+  //
+  // Once only, and deliberately: the batch driver keeps the solver's trail
+  // across the clauses it adds between calls, so the theory's own stack of
+  // levels has to line up with a trail that is never rebuilt. Atoms minted
+  // after the connection are still used by the lemmas that mint them; they
+  // are simply not part of what the closure reasons over.
+  bool installCongruencePropagator(SATSolver& solver, ToSATBase* tosat);
+
+  // What it has done. NULL until it is connected.
+  const UFCongruencePropagator* congruencePropagator() const;
 
 private:
   class Impl;
