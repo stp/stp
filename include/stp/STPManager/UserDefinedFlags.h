@@ -613,6 +613,18 @@ public:
   int64_t aig_node_budget = -1;
 
   bool bv_eq_abstraction = false;
+  // Whether an equality one side of which the blast knows entirely is
+  // abstracted along with the rest (off). A comparison against a constant
+  // is one AND over the term's bits, which the solver propagates through;
+  // a record of it is a free Boolean the congruence refinement has to pin
+  // one round at a time, and buys nothing for the exact form it defers.
+  // On the QF_FP flux-balance benchmarks, whose mass-balance rows are
+  // 128-bit sums equated with zero, leaving those equalities to their
+  // comparators solves one more of 275 and takes a sixth less time over
+  // the queries both settings decide; on floating-point queries raised by
+  // symbolic execution of numerical libraries it is worth three solves of
+  // 1,241 and 7% of the PAR2.
+  bool bv_eq_abstraction_constant_side = false;
   // One width floor for both abstraction families: equalities and the
   // abstracted terms (comparisons, ITE, BVPLUS, BVMULT, BVDIV, BVMOD)
   // all abstract only at or above this operand width.

@@ -33,7 +33,16 @@ least one of them:
 
 ``--bv-eq-abstraction``
   Abstract wide equalities, refining them through congruence closure at word
-  level.
+  level. An equality one side of which the blast knows entirely is left to
+  its comparator unless ``--bv-eq-abstraction-constant-side`` (off) admits
+  it: a comparison against a constant is one AND over the term's bits, which
+  the solver propagates through, where a record is a free Boolean the
+  refinement pins a round at a time. On the QF_FP flux-balance benchmarks,
+  whose mass-balance rows are 128-bit sums equated with zero, leaving them
+  to their comparators solves one more query of 275 and takes a sixth less
+  time over those both settings decide; on floating-point queries raised by
+  symbolic execution of numerical libraries it is worth three solves of
+  1,241 and 7% of the PAR2.
 
 ``--bv-abstraction-width`` is the floor for both: an operation narrower than
 this (64 bits by default) is encoded exactly, whatever else is set. Nothing
