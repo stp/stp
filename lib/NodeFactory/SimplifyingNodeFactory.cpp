@@ -273,6 +273,18 @@ static bool fpIsRoundToIntegral(const stp::ASTNode& n)
   return n.GetKind() == stp::FP_ROUNDTOINTEGRAL && n.Degree() == 2;
 }
 
+// Whether every value of the format's top binade is an integer, which is
+// when 2^(eb-1) >= sb. Then rounding to an integer never leaves the finite
+// range. In the formats where it fails -- the exponent range narrower than
+// the significand, which no IEEE format has -- the top binade holds
+// non-integers whose rounding up is beyond the largest finite and is an
+// infinity, so a finite can round to an infinity there.
+static bool fpRoundToIntegralNeverOverflows(const stp::ASTNode& n)
+{
+  const unsigned eb = n.GetExpWidth(), sb = n.GetSigWidth();
+  return eb >= 1 && eb < 64 && ((unsigned long long)1 << (eb - 1)) >= sb;
+}
+
 bool SimplifyingNodeFactory::children_all_constants(
     const ASTChildren children) const
 {
@@ -1104,7 +1116,8 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
                ((t.GetKind() == stp::FP_SQRT && t.Degree() == 2) ||
                 fpIsSelfSum(t)))
         result = NodeFactory::CreateNode(kind, t[1]);
-      else if (kind == stp::FP_ISINFINITE && fpIsRoundToIntegral(t))
+      else if (kind == stp::FP_ISINFINITE && fpIsRoundToIntegral(t) &&
+               fpRoundToIntegralNeverOverflows(t))
         result = NodeFactory::CreateNode(kind, t[1]);
       else if (kind == stp::FP_ISSUBNORMAL && fpIsRoundToIntegral(t))
         result = ASTFalse;
