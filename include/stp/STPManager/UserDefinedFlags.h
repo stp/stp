@@ -1051,6 +1051,20 @@ public:
   // product bits depend only on the low k operand bits.
   int64_t multiplication_lemmas = 0;
 
+  // Symbolic-amount shift encoding. 0 is the barrel shifter. 1 to 4 all
+  // propagate more of what the shift relation entails -- at 64 bits the
+  // barrel derives 72.9% of the entailed literals against variant 3's
+  // 98.7% -- and all of them measured slower than the barrel on the
+  // benchmarks tried, so they stay off.
+  int64_t shift_variant = 0;
+
+  // Width window the selector-based shift variants (1 to 3) apply to.
+  // Below the floor the barrel is already close to arc consistent; above
+  // the ceiling the selector encodings are O(w^2) gates and blow up --
+  // 8.8x the clauses and 11.6x the wall past 256 bits.
+  int64_t shift_onehot_min_width = 33;
+  int64_t shift_onehot_max_width = 64;
+
   // If the bit-blaster discovers new constants, should the term simplifier be
   // re-run.
   bool simplify_during_BB_flag = false;
