@@ -50,8 +50,10 @@ THE SOFTWARE.
 //    there says what is lost.
 //
 // The functions checked only for soundness (OVERAPPROXIMATES rather than
-// MAX_PRECISE below) are multiplication and the five division operations.
-// Everything else is confirmed maximally precise here.
+// MAX_PRECISE below) are the five division operations. Multiplication is
+// maximally precise up to width 8 (the exact low-bits solve covers the
+// whole relation there) and is checked as MAX_PRECISE at width 3; above
+// width 8 only its low 8 bits carry that guarantee.
 //
 // Every operator is checked twice: once with a distinct FixedBits per
 // operand, and once ALIASED, with one FixedBits shared between several
@@ -665,7 +667,7 @@ TEST_F(ConstantBitP_TransferFunctions, multiplicationExhaustiveWidth3)
         return bvMultiplyBothWays(children, out, &mgr, NULL);
       },
       [](const std::vector<unsigned>& v) { return (v[0] * v[1]) & 7; },
-      bv3(2), out3(), OVERAPPROXIMATES, SETTLES_IN_ONE_CALL, RESULT_IS_VAGUE);
+      bv3(2), out3(), MAX_PRECISE, SETTLES_IN_ONE_CALL, RESULT_IS_VAGUE);
 }
 
 // BVTypeCheck accepts BVMULT with more than two children, and the hashing
@@ -783,8 +785,9 @@ TEST_F(ConstantBitP_TransferFunctions, multiplicationInverseSolvesOperand)
   EXPECT_TRUE(FixedBits::equals(y, fromString("0011")));
 }
 
-// Aliased square with an odd low prefix: t ≡ 3 (mod 8) means t*t ≡ 1
-// (mod 8), fixing the output's low bits while t itself stays untouched.
+// Aliased square with an odd low prefix: t is 3 or 11, and both squares
+// are 9 mod 16, so the output is completely determined. (The inverse view
+// alone gives the low three bits; the exact solve pins bit 3 too.)
 TEST_F(ConstantBitP_TransferFunctions, multiplicationInverseAliasedSquare)
 {
   FixedBits t = fromString("*011");
@@ -793,29 +796,118 @@ TEST_F(ConstantBitP_TransferFunctions, multiplicationInverseAliasedSquare)
   std::vector<FixedBits*> children = {&t, &t};
   bvMultiplyBothWays(children, out, &mgr, NULL);
 
-  EXPECT_TRUE(FixedBits::equals(out, fromString("*001")));
+  EXPECT_TRUE(FixedBits::equals(out, fromString("1001")));
   EXPECT_TRUE(FixedBits::equals(t, fromString("*011")));
 }
 
+// The exact low-bits solve catches correlations the column counts and the
+// inverse view both lose: x and y are each 1 or 3 (mod 8), so the product
+// is 1 or 3 as well and output bit 2 must be zero.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationExactLowBitsCorrelation)
+{
+  FixedBits x = fromString("0*1");
+  FixedBits y = fromString("0*1");
+  FixedBits out = fromString("***");
+
+  std::vector<FixedBits*> children = {&x, &y};
+  bvMultiplyBothWays(children, out, &mgr, NULL);
+
+  EXPECT_TRUE(FixedBits::equals(out, fromString("0*1")));
+  EXPECT_TRUE(FixedBits::equals(x, fromString("0*1")));
+  EXPECT_TRUE(FixedBits::equals(y, fromString("0*1")));
+}
+
+// The same correlation contradicted is a conflict only the exact solve
+// sees: no product of two values in {1,3} has bit 2 set.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationExactLowBitsConflict)
+{
+  FixedBits x = fromString("0*1");
+  FixedBits y = fromString("0*1");
+  FixedBits out = fromString("1**");
+
+  std::vector<FixedBits*> children = {&x, &y};
+  EXPECT_EQ(CONFLICT, bvMultiplyBothWays(children, out, &mgr, NULL));
+}
+
+// Above width 8 the exact solve still covers the low 8 bits: with x == 3,
+// output bit 2 of 3*y is y1 XOR y1 == 0 whenever y2 == 0 and y0 == 1,
+// independent of the unfixed y1 — a correlation the column intervals lose
+// to the carry.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationExactLowBitsWideWidth)
+{
+  FixedBits x = fromString("0000000000000011");
+  FixedBits y = fromString("*************0*1");
+  FixedBits out = fromString("****************");
+
+  std::vector<FixedBits*> children = {&x, &y};
+  bvMultiplyBothWays(children, out, &mgr, NULL);
+
+  EXPECT_TRUE(out.isFixedToOne(0));
+  EXPECT_TRUE(out.isFixedToZero(2));
+  EXPECT_FALSE(out.isFixed(1)); // y1 really is free: 3*1=3, 3*3=9.
+  EXPECT_TRUE(FixedBits::equals(y, fromString("*************0*1")));
+}
+
+// Aliased square through the exact solve: t in {1,3} gives t*t in {1,9},
+// both 001 mod 8, so the output is completely determined.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationExactLowBitsAliased)
+{
+  FixedBits t = fromString("0*1");
+  FixedBits out = fromString("***");
+
+  std::vector<FixedBits*> children = {&t, &t};
+  bvMultiplyBothWays(children, out, &mgr, NULL);
+
+  EXPECT_TRUE(FixedBits::equals(out, fromString("001")));
+  EXPECT_TRUE(FixedBits::equals(t, fromString("0*1")));
+}
+
+// With only six unfixed operand bits the bounded enumeration solves the
+// relation exactly over the full width: two (x, y) pairs survive, agreeing
+// on all of x, on y bit 2, and on output bit 7 — high-bit correlations
+// the column counts, the inverse view and the low-8 solve all miss.
+// (Brute-force verified: the expectations are the join of the survivors.)
+TEST_F(ConstantBitP_TransferFunctions, multiplicationSmallDomainEnumeration)
+{
+  FixedBits x = fromString("110*1*111*");
+  FixedBits y = fromString("1*10**0110");
+  FixedBits out = fromString("11**110100");
+
+  std::vector<FixedBits*> children = {&x, &y};
+  bvMultiplyBothWays(children, out, &mgr, NULL);
+
+  EXPECT_TRUE(FixedBits::equals(x, fromString("1101111110")));
+  EXPECT_TRUE(FixedBits::equals(y, fromString("1010*00110")));
+  EXPECT_TRUE(FixedBits::equals(out, fromString("111*110100")));
+}
+
+// The same state with output bit 7 forced to zero admits no solution at
+// all (both survivors above have it set) — a conflict only the bounded
+// enumeration detects.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationSmallDomainConflict)
+{
+  FixedBits x = fromString("110*1*111*");
+  FixedBits y = fromString("1*10**0110");
+  FixedBits out = fromString("110*110100");
+
+  std::vector<FixedBits*> children = {&x, &y};
+  EXPECT_EQ(CONFLICT, bvMultiplyBothWays(children, out, &mgr, NULL));
+}
+
 // With no odd fixed low prefix on either operand the inverse view doesn't
-// apply, and bvMultiplyBothWays must behave exactly like the core column
-// reasoning.
-TEST_F(ConstantBitP_TransferFunctions, multiplicationEvenPrefixMatchesCore)
+// apply (the exact low-bits solve still runs; here it confirms exactly
+// what the columns derive: x ≡ 2 mod 4 times an odd y ends in binary 10).
+TEST_F(ConstantBitP_TransferFunctions, multiplicationEvenPrefix)
 {
   FixedBits x = fromString("**10");
   FixedBits y = fromString("***1");
   FixedBits out = fromString("****");
 
-  FixedBits cx(x), cy(y), cout_(out);
-  std::vector<FixedBits*> coreChildren = {&cx, &cy};
-  multiplyCore(coreChildren, cout_, NULL);
-
   std::vector<FixedBits*> children = {&x, &y};
   bvMultiplyBothWays(children, out, &mgr, NULL);
 
-  EXPECT_TRUE(FixedBits::equals(x, cx));
-  EXPECT_TRUE(FixedBits::equals(y, cy));
-  EXPECT_TRUE(FixedBits::equals(out, cout_));
+  EXPECT_TRUE(FixedBits::equals(x, fromString("**10")));
+  EXPECT_TRUE(FixedBits::equals(y, fromString("***1")));
   EXPECT_TRUE(FixedBits::equals(out, fromString("**10")));
 }
 
