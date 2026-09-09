@@ -371,6 +371,14 @@ void ExtraMain::create_options()
            "bit-blaster proxies non-input ones -- with fresh Boolean "
            "variables during bit-blasting, refining lazily via CEGAR",
            refinement_group);
+  bool_arg("--bv-eq-abstraction-constant-side",
+           bm->UserFlags.bv_eq_abstraction_constant_side,
+           "abstract an equality one side of which the blast knows "
+           "entirely; off by default, such an equality is lowered exactly, "
+           "since a comparison against a constant is one AND over the "
+           "term's bits, where a record is a free Boolean the refinement "
+           "pins a round at a time",
+           refinement_group);
   app.add_option("--bv-abstraction-width",
                  bm->UserFlags.bv_abstraction_width,
                  "minimum operand width at which --bv-eq-abstraction and "

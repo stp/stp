@@ -2216,8 +2216,12 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
           firstCandidateSighting(form))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_EQ]++;
 
+      // An equality against a constant is left to its comparator unless
+      // --bv-eq-abstraction-constant-side asks for a record.
       if (eqAbstractionAllowed() &&
-          left.size() >= uf->bv_abstraction_width)
+          left.size() >= uf->bv_abstraction_width &&
+          (uf->bv_eq_abstraction_constant_side ||
+           !(isConstant(left) || isConstant(right))))
       {
         // One Boolean per predicate, not per occurrence: see
         // abstractedFormulas_ for why the term families' registry does not
