@@ -154,6 +154,20 @@ every such record spent its thirty-two rounds on one dividend at a time
 before building an encoding that was cheap all along. Zero leaves the
 allowance uncapped.
 
+Whether such an operation is abstracted at all is
+``--bv-term-abstraction-constant-operands`` (on). Declined, a multiplication
+one of whose operands the blast knows entirely, or a division or remainder
+by such a divisor, is lowered exactly from the start: the constant's
+shift-and-add propagates from the other operand, where a record still costs
+a refinement round per candidate before it escalates to that same circuit.
+Measured, declining loses -- on the 1,029 queries of that same Certora
+corpus it solves 893 against 906 at 60 s, with 41 queries more than twice as
+slow against 23 faster -- because what decides it is the fraction of these
+operations a search needs exactly, and a query holding hundreds of them
+mostly never needs them. The knob is for the opposite shape, a query whose
+wide arithmetic is all by constants and all of it needed, where declining is
+worth five solves of 275 on the QF_FP flux-balance benchmarks.
+
 Two optional refinements of that allowance:
 
 ``--bv-term-abstraction-value-divisor``
