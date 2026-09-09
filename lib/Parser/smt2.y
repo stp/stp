@@ -350,8 +350,10 @@ namespace stp
 
   // STP's lowering layer intentionally treats a float's packed
   // representation as bits, but that is an internal implementation detail.
-  // At the SMT-LIB boundary a BV operator accepts only a BitVec-sorted term;
-  // callers must use fp.to_ieee_bv to expose a float's representation.
+  // At the SMT-LIB boundary a BV operator accepts only a BitVec-sorted
+  // term; no operator exposes a float's representation (fp.to_ieee_bv is
+  // not implemented -- and note it is underspecified for NaN, whose
+  // payload nothing else in the language can observe either).
   void checkBitVectorTerm(const ASTNode& n)
   {
     if (n.GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
