@@ -477,6 +477,14 @@ void ExtraMain::create_options()
                  "slower and no faster)")
       ->group(refinement_group)
       ->capture_default_str();
+  bool_arg("--bv-term-abstraction-constant-operands",
+           bm->UserFlags.bv_term_abstraction_constant_operands,
+           "abstract a multiplication one of whose operands the blast knows "
+           "entirely, or a division or remainder by such a divisor (on by "
+           "default); declined, such an operation is lowered exactly, since "
+           "the constant's shift-and-add propagates where a record spends a "
+           "round per candidate before escalating to it",
+           refinement_group);
   app.add_option("--bv-term-abstraction-constant-operand-limit",
                  bm->UserFlags.bv_term_abstraction_constant_operand_limit,
                  "cap on value-pair blocking rounds for an abstracted "

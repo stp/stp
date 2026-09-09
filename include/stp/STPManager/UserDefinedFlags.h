@@ -767,6 +767,26 @@ public:
   // at a time before building an encoding that was cheap all along. Such a
   // record's allowance is capped here; zero leaves it uncapped.
   unsigned bv_term_abstraction_constant_operand_limit = 1;
+  // Whether such an operation is abstracted at all (on). Declined, a
+  // multiplication one of whose operands the blast knows entirely, or a
+  // division or remainder by such a divisor, is lowered exactly from the
+  // start: the constant's shift-and-add propagates from the other operand,
+  // where a record costs a refinement round per candidate before it
+  // escalates to that same circuit.
+  //
+  // Measured, declining loses: on the 1,029 queries of
+  // QF_UFBV/20241113-Certora, where such a record is a 256-bit product by
+  // ten billion, it solves 893 against 906 at 60 s, with 41 queries running
+  // more than twice as slow against 23 faster; on two corpora of
+  // floating-point queries it is level. What decides it is the fraction of
+  // these operations a search needs exactly: declining builds every one of
+  // them up front, where a record escalates to the same circuit only when a
+  // candidate is refuted, and a query holding hundreds of them mostly never
+  // does. So the records stay and the cap above governs them, and the knob
+  // is for a query whose wide arithmetic is all by constants and all of it
+  // needed -- flux-balance models are the shape, where declining is worth
+  // five solves of 275.
+  bool bv_term_abstraction_constant_operands = true;
   // Escalate an abstracted BVMULT a piece at a time rather than all at once:
   // encode only the bits up to and a little past the lowest one the
   // candidate got wrong, and come back for more if that does not settle the

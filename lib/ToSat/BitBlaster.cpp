@@ -1619,8 +1619,12 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           firstCandidateSighting(term))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_MULT]++;
 
+      // A multiplication by a constant is left to its shift-and-add
+      // unless --bv-term-abstraction-constant-operands asks for a record.
       if (termAbstractionAllowed() && uf->bv_term_abstraction_mult &&
-          num_bits >= uf->bv_abstraction_width)
+          num_bits >= uf->bv_abstraction_width &&
+          (uf->bv_term_abstraction_constant_operands ||
+           !(isConstant(mpcd1) || isConstant(mpcd2))))
       {
         {
           BBNodeVec reused;
@@ -1692,8 +1696,11 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           firstCandidateSighting(term))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_DIVMOD]++;
 
+      // A division or remainder by a constant likewise: its defining
+      // relation over a constant multiplier is the cheap circuit.
       if (termAbstractionAllowed() && uf->bv_term_abstraction_divmod &&
-          num_bits >= uf->bv_abstraction_width)
+          num_bits >= uf->bv_abstraction_width &&
+          (uf->bv_term_abstraction_constant_operands || !isConstant(dvsr)))
       {
         {
           BBNodeVec reused;
