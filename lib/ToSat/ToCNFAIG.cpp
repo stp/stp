@@ -247,6 +247,7 @@ CNF ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs)
     case UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW:
     case UserDefinedFlags::CNF_EFFORT_NEW_LOW:
     case UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM:
+    case UserDefinedFlags::CNF_EFFORT_NEW_HIGH:
       return fromAig(Cnf_DeriveFast(mgr.aigMgr, (int)namedOutputs));
 
     case UserDefinedFlags::CNF_EFFORT_GIA_LOW:

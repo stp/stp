@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include <fstream>
+#include <set>
 #include <sstream>
 
 namespace stp
@@ -91,6 +92,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   handle_cnf_options(cnf, needAbsRef);
 
   assert(satSolver.nVars() == 0);
+  configure_trail_reuse(satSolver, cnf, needAbsRef);
   add_cnf_to_solver(satSolver, cnf);
 
   // The clauses are in the solver now; give the formula back before the
@@ -103,6 +105,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
 
   mark_variables_as_frozen(satSolver);
   bind_injectivity_guard(satSolver);
+  suggest_array_index_hints(satSolver, needAbsRef);
 
   return runSolver(satSolver);
 }
@@ -306,8 +309,15 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   // rung. And with no estimate recorded (the incremental driver, direct
   // API use) there is nothing to decide from. Written back rather than
   // resolved locally so the abstraction splices convert at the same rung.
+  //
+  // A refinement that is only the uninterpreted-function loop is not array
+  // refinement: its lemmas are clauses over scalars the registrar gives SAT
+  // variables after conversion, under any writer, so it decides from the
+  // estimate like a plain query. Left to the fallback, a UF solve of a
+  // large circuit was handed very-low -- on QF_UFBV/20210312-Bouvier the
+  // vlsat3 files went from under a second to a 30s timeout, 67 of 200.
   if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
-      !needAbsRef && bm->expected_blast_ands > 0 &&
+      (!needAbsRef || ufOnlyRefinement_) && bm->expected_blast_ands > 0 &&
       bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER)
   {
     const bool large = (uint64_t)bm->expected_blast_ands >=
@@ -322,7 +332,8 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   const enum UserDefinedFlags::CNFEffort e = bm->UserFlags.cnf_effort;
   if (e == UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW ||
       e == UserDefinedFlags::CNF_EFFORT_NEW_LOW ||
-      e == UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM)
+      e == UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM ||
+      e == UserDefinedFlags::CNF_EFFORT_NEW_HIGH)
     return bitblastWith<BBNodeLit, BBNodeManagerLit, BitBlasterLit,
                         ToCNFTseitin>(input, needAbsRef, cnf);
   if (UserDefinedFlags::isGiaEffort(bm->UserFlags.cnf_effort))
@@ -534,6 +545,28 @@ bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
   mgr.stop();
 
   return true;
+}
+
+void ToSATAIG::configure_trail_reuse(SATSolver& satSolver, const CNF& cnf,
+                                     bool needAbsRef)
+{
+  // A backend that will only ever be asked once has no trail worth keeping.
+  // What this is for is the refinement loop -- array reads, the bit-vector
+  // abstractions, uninterpreted functions -- which adds the clauses that
+  // refute the last candidate and asks the same backend again, carrying no
+  // assumptions, so only the ALL scope keeps anything for it.
+  const UserDefinedFlags& uf = bm->UserFlags;
+  if (!needAbsRef || !uf.refinement_trail_reuse)
+    return;
+
+  // Configuration-window-only on the backends that have it. CallSAT hands
+  // this backend its first clause right after this, and asserts that none
+  // preceded, so the window is open by construction.
+  const bool kept = satSolver.enableTrailReuse(SATSolver::TrailReuse::ALL);
+  if (uf.stats_flag)
+    cerr << "Refinement trail reuse: "
+         << (kept ? "on" : "declined by the backend") << " ("
+         << cnf.varCount() - 1 << " variables)" << endl;
 }
 
 void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf)
@@ -814,6 +847,157 @@ void ToSATAIG::suggest_uf_scalar_phases(SATSolver& satSolver)
       satSolver.suggestPhase(found->second[bit], on);
     }
   }
+}
+
+// Bias the first candidate so the reads of one array start out on
+// different indices.
+//
+// Read refinement's cost is collisions: two reads of the same array whose
+// indices take one value in a candidate while their values differ, each
+// paid for with a congruence lemma and another solve. Nothing in the
+// encoding tells the backend that spreading free indices apart is worth
+// anything, so its default phase puts many of them on the same value at
+// once. Counting each array's symbolic indices off against an increasing
+// value seeds the search away from that -- the same seeding the checker's
+// scalars get -- and the values its constant indices take are skipped,
+// because landing on one of those is a collision too. A backend that takes
+// decision hints also decides the indices first, so they reach those values
+// before anything else can pull them together; any other is asked for the
+// phases alone.
+//
+// A hint: it reorders the search and cannot change which answers are
+// reachable, so no soundness argument rests on the values being good.
+// Arrays and indices are visited in node order, so the same query gets the
+// same hints.
+void ToSATAIG::suggest_array_index_hints(SATSolver& satSolver, bool needAbsRef)
+{
+  const UserDefinedFlags::ArrayIndexHints mode =
+      bm->UserFlags.array_index_hints;
+  if (mode == UserDefinedFlags::ArrayIndexHints::OFF || !needAbsRef ||
+      arrayTransformer == NULL)
+    return;
+
+  // The low 64 bits of a constant, and whether they are all of it: a wider
+  // constant with a bit set above them can never equal a counting value.
+  const auto lowBits = [](const ASTNode& c, uint64_t& out) {
+    assert(c.GetKind() == BVCONST);
+    const unsigned width = c.GetValueWidth();
+    out = 0;
+    for (unsigned bit = 0; bit < width; ++bit)
+    {
+      if (!CONSTANTBV::BitVector_bit_test(c.GetBVConst(), bit))
+        continue;
+      if (bit >= 64)
+        return false;
+      out |= 1ULL << bit;
+    }
+    return true;
+  };
+
+  std::vector<SATSolver::DecisionHint> hints;
+  size_t arrays = 0, indices = 0;
+  for (ArrayTransformer::ArrType::const_iterator arr =
+           arrayTransformer->arrayToIndexToRead.begin();
+       arr != arrayTransformer->arrayToIndexToRead.end(); ++arr)
+  {
+    std::set<uint64_t> taken;
+    std::vector<ASTNode> symbolic;
+    for (ArrayTransformer::arrTypeMap::const_iterator read = arr->second.begin();
+         read != arr->second.end(); ++read)
+    {
+      const ASTNode& index = read->second.index_symbol;
+      if (index.IsNull())
+        continue;
+      if (index.isConstant())
+      {
+        uint64_t value;
+        if (lowBits(index, value))
+          taken.insert(value);
+        continue;
+      }
+      // A bare symbol that appears in no read's value and nowhere else is
+      // not blasted at all: refinement gives it variables when its first
+      // axiom needs them, which is after the first candidate has put every
+      // such index on the same value. Give it variables now instead --
+      // fresh and unconstrained, the way the UF liveness mapping above
+      // does for the checker's scalars -- so the hint has bits to land
+      // on, and refinement finds the same binding later. Only a whole
+      // symbol: a partial mapping is left to the refinement's own check.
+      ASTNodeToSATVar::iterator found = nodeToSATVar.find(index);
+      if (found == nodeToSATVar.end() && index.GetKind() == SYMBOL)
+      {
+        std::vector<unsigned>& bits =
+            nodeToSATVar.insert(std::make_pair(index, std::vector<unsigned>()))
+                .first->second;
+        for (unsigned bit = 0; bit < index.GetValueWidth(); ++bit)
+        {
+          bits.push_back(satSolver.newVar());
+          satSolver.setFrozen(bits.back());
+        }
+        found = nodeToSATVar.find(index);
+      }
+      if (found != nodeToSATVar.end())
+        symbolic.push_back(index);
+    }
+    if (symbolic.empty())
+      continue;
+    std::sort(symbolic.begin(), symbolic.end(),
+              [](const ASTNode& left, const ASTNode& right)
+              { return left.GetNodeNum() < right.GetNodeNum(); });
+    symbolic.erase(std::unique(symbolic.begin(), symbolic.end()),
+                   symbolic.end());
+
+    uint64_t value = 0;
+    for (const ASTNode& index : symbolic)
+    {
+      const unsigned width = index.GetValueWidth();
+      const uint64_t mask =
+          width >= 64 ? ~0ULL : ((1ULL << width) - 1);
+      // The next value no constant index takes. A domain the constants
+      // exhaust leaves nothing to count with.
+      uint64_t tries = 0;
+      while (taken.count(value & mask) && tries <= mask)
+      {
+        value++;
+        tries++;
+      }
+      if (tries > mask)
+        break;
+      const uint64_t chosen = value & mask;
+      value++;
+
+      const std::vector<unsigned>& bits = nodeToSATVar.find(index)->second;
+      for (unsigned bit = 0; bit < bits.size(); ++bit)
+      {
+        if (bits[bit] == ~((unsigned)0))
+          continue;
+        const bool on = bit < 64 && ((chosen >> bit) & 1ULL) != 0;
+        SATSolver::DecisionHint h;
+        h.var = bits[bit];
+        h.value = on;
+        hints.push_back(h);
+      }
+      indices++;
+    }
+    arrays++;
+  }
+  if (hints.empty())
+    return;
+
+  // Hints land only on variables the backend has declared; see
+  // suggest_uf_scalar_phases for why declaring is the caller's job.
+  satSolver.declarePendingVariables();
+
+  bool decided = false;
+  if (mode == UserDefinedFlags::ArrayIndexHints::DECIDE)
+    decided = satSolver.preferDecisions(hints);
+  if (!decided)
+    for (const SATSolver::DecisionHint& h : hints)
+      satSolver.suggestPhase(h.var, h.value);
+
+  if (bm->UserFlags.stats_flag)
+    cerr << "Array index hints: " << (decided ? "decided" : "phased") << ", "
+         << indices << " indices over " << arrays << " arrays" << endl;
 }
 
 bool ToSATAIG::runSolver(SATSolver& satSolver)

@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/EmbeddedConstraints.h"
 #include "stp/Simplifier/SkeletonPreproc.h"
 #include "stp/UninterpretedFunctions/UFLowering.h"
+#include "stp/UninterpretedFunctions/UFPreLowering.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
@@ -51,6 +52,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/Rewriting.h"
 #include "stp/Simplifier/MergeSame.h"
+#include "stp/Util/DagWalk.h"
 #include <memory>
 using std::cout;
 
@@ -209,6 +211,40 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   return second;
 }
 
+namespace
+{
+
+// Whether `root` holds a multiplication, division or remainder that
+// --bv-term-abstraction would abstract: at or above `width` bits. The signed
+// forms count, since the bit-blaster lowers them to the unsigned circuits.
+bool containsWideArithmetic(const ASTNode& root, unsigned width)
+{
+  bool found = false;
+  ASTNodeSet visited;
+  walkPreOrder(root, [&](const ASTNode& n) -> bool {
+    if (found || !visited.insert(n).second)
+      return false;
+    switch (n.GetKind())
+    {
+      case BVMULT:
+      case BVDIV:
+      case BVMOD:
+      case SBVDIV:
+      case SBVREM:
+      case SBVMOD:
+        if (n.GetValueWidth() >= width)
+          found = true;
+        break;
+      default:
+        break;
+    }
+    return !found;
+  });
+  return found;
+}
+
+} // namespace
+
 SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
                                         const ASTNode& query)
 {
@@ -272,15 +308,37 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   // the submitted root in batchUFView and pass only its semantic replacement
   // plus query-local naming definitions onward.
   *batchUFView = LoweredApplicationView();
+  ASTNodeMap batchUFHandleAliases;
   // Each batch query builds its encoding from nothing, so what the last one
   // assumed says nothing about this one.
   bm->clearInjectivityAssumed();
   skeletonAsked = false;
   if (bm->UserFlags.enable_uninterpreted_functions)
   {
+    // While an application is still a term, push the query's own top-level
+    // equalities through it; once lowered, its arguments are protected from
+    // exactly this. Gated on the general simplification switches as well as
+    // its own, and skipped outright for a root with no application, which
+    // has nothing to gain and is the common case.
+    if (bm->UserFlags.optimize_flag && bm->UserFlags.propagate_equalities &&
+        bm->UserFlags.uf_propagate_equalities &&
+        containsKind(original_input, UF_APPLY))
+    {
+      const bool askSkeleton = bm->UserFlags.uf_skeleton_preproc ||
+                               bm->UserFlags.skeleton_preproc;
+      UFPreLowering pre(bm);
+      UFPreLoweringStats preStats;
+      original_input = pre.propagate(original_input, &preStats, askSkeleton,
+                                     &batchUFHandleAliases);
+      pre.report(preStats);
+      // The skeleton has been asked; sizeReducing need not ask it again.
+      if (askSkeleton)
+        skeletonAsked = true;
+    }
     UFLowering lowerer(bm);
     *batchUFView = lowerer.lowerCompletedRoot(
         original_input, UFSolveScope::batch(++batchUFScopeGeneration));
+    batchUFView->handleAliases = batchUFHandleAliases;
     original_input = batchUFView->semanticRootWithDefinitions(bm);
     if (containsKind(original_input, UF_APPLY))
       FatalError("UF_APPLY crossed the batch completed-root lowering barrier",
@@ -293,6 +351,51 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   Ctr_Example->setUFTheoryAdapter(batchUFView->active()
                                       ? batchUFAdapter.get()
                                       : NULL);
+
+  // A UF solve abstracts its wide arithmetic unless told otherwise; see
+  // UserDefinedFlags::uf_bv_term_abstraction. Decided on the word-level root,
+  // before floating-point lowering can introduce products of its own, and
+  // for this solve only: the general flag and the CNF rung it selects are
+  // put back afterwards, so a later plain bit-vector query in the same
+  // session is encoded exactly as it always was.
+  const bool savedTermAbstraction = bm->UserFlags.bv_term_abstraction;
+  const UserDefinedFlags::CNFEffort savedCnfEffort = bm->UserFlags.cnf_effort;
+  const uint32_t savedSchemaGroups =
+      bm->UserFlags.bv_term_abstraction_schema_groups;
+  if (batchUFView->active())
+  {
+    typedef UserDefinedFlags::UFAbstractionMode Mode;
+    const Mode mode = bm->UserFlags.uf_bv_term_abstraction;
+    bool abstractTerms = savedTermAbstraction;
+    if (mode == Mode::ON)
+      abstractTerms = true;
+    else if (mode == Mode::OFF)
+      abstractTerms = false;
+    else if (!abstractTerms)
+      abstractTerms = containsWideArithmetic(
+          original_input, bm->UserFlags.bv_abstraction_width);
+    if (abstractTerms != savedTermAbstraction)
+    {
+      bm->UserFlags.bv_term_abstraction = abstractTerms;
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "UF: " << (abstractTerms ? "abstracting" : "not abstracting")
+                  << " wide arithmetic for this solve "
+                  << "(--uf-bv-term-abstraction)" << std::endl;
+    }
+    // The division facts the corpus needs; see
+    // UserDefinedFlags::uf_quotient_threshold_schemas.
+    if (abstractTerms && bm->UserFlags.uf_quotient_threshold_schemas &&
+        !bm->UserFlags.bv_term_abstraction_schema_groups_explicit &&
+        !bvSchemaGroupEnabled(savedSchemaGroups,
+                              BVSchemaGroup::QUOTIENT_THRESHOLDS))
+    {
+      bm->UserFlags.bv_term_abstraction_schema_groups |=
+          bvSchemaGroupBit(BVSchemaGroup::QUOTIENT_THRESHOLDS);
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "UF: admitting the quotient-threshold schemas for this "
+                  << "solve (--uf-quotient-threshold-schemas)" << std::endl;
+    }
+  }
 
   // The latch is the same kind of cheap fast-negative the lowering test below
   // uses, widened to cover RoundingMode -- which carries no format, so it
@@ -324,6 +427,9 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
 
   bm->UserFlags.construct_counterexample_flag = constructForCaller;
   bm->UserFlags.ackermannisation = saved_ack;
+  bm->UserFlags.bv_term_abstraction = savedTermAbstraction;
+  bm->UserFlags.cnf_effort = savedCnfEffort;
+  bm->UserFlags.bv_term_abstraction_schema_groups = savedSchemaGroups;
   // Raw: whether an unsat here is the query's is TopLevelSTP's question, and
   // it has a second run to answer it with.
   return result;
@@ -1074,6 +1180,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
+  // Whether the refinement below is only the uninterpreted-function loop,
+  // which lets the lowering choose its CNF rung from the estimate rather
+  // than fall back to the size-based ABC rung meant for array refinement.
+  // The bit-vector abstractions choose their own rung ahead of this.
+  toSATAIG.setUFOnlyRefinement(
+      batchUFView->active() && !(arrayops && !bm->UserFlags.ackermannisation) &&
+      !extActive);
   ToSATBase* satBase = &toSATAIG;
   const auto reportBVAbstractionRecords = [&]() {
     if (bm->UserFlags.quick_statistics_flag)

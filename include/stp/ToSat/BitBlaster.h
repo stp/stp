@@ -159,6 +159,16 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                            const ASTNode& n);
   BBNodeVec mult_normal(const BBNodeVec& x, const BBNodeVec& y,
                              BBNodeSet& support, const ASTNode& n);
+  BBNodeVec mult_csaRows(const BBNodeVec& x, const BBNodeVec& y,
+                         BBNodeSet& support, const ASTNode& n);
+  BBNodeVec mult_dadda(vector<list<BBNode>>& products, BBNodeSet& support,
+                       const ASTNode& n);
+  void mult_radix4_hard(const BBNodeVec& x, const BBNodeVec& y,
+                        vector<list<BBNode>>& products, const ASTNode& n);
+  BBNodeVec BBMultVariant(const BBNodeVec& x, const BBNodeVec& y,
+                          BBNodeSet& support, const ASTNode& n);
+  void multLemmaBlock(const BBNodeVec& x, const BBNodeVec& y,
+                      const BBNodeVec& p, BBNodeSet& support);
 
   BBNodeVec batcher(const BBNodeVec& in);
   BBNodeVec mergeSorted(const BBNodeVec& in1,
@@ -238,8 +248,18 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   void BBDivByMult(const BBNodeVec& x, const BBNodeVec& y, BBNodeVec& q,
                    BBNodeVec& r, BBNodeSet& support);
 
+  // Division by a constant through the same relation, with the product a
+  // shift-and-add of the fresh quotient over the constant's set bits. The
+  // divisor must be entirely constant and nonzero.
+  void BBDivByConstant(const BBNodeVec& x, const BBNodeVec& y, BBNodeVec& q,
+                       BBNodeVec& r, BBNodeSet& support);
+
   // One (q, r) pair per operand pair: BVDIV and BVMOD of the same operands
   // must name the same fresh variables, which strashing cannot arrange.
+  // The pair is only as good as the relation asserted over it, which is
+  // conjoined into the root the pair was minted under, so the memo lives
+  // for one top-level BBForm: a blaster that outlives a root, as the
+  // incremental driver's does, starts the next one afresh.
   std::unordered_map<ASTNode, std::pair<BBNodeVec, BBNodeVec>,
                      ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
       divByMultMemo;

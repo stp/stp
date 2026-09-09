@@ -23,6 +23,7 @@ THE SOFTWARE.
 
 #include <iostream>
 #include <memory>
+#include <unordered_set>
 
 namespace stp
 {
@@ -96,6 +97,7 @@ ASTVec SkeletonPreproc::derive(const ASTNode& input, bool& unsat)
   unsat = false;
   atomToVar.clear();
   varToAtom.clear();
+  varToConnective.clear();
   litOf.clear();
 
   std::unique_ptr<SATSolver> solver(createSATSolver(bm->UserFlags));
@@ -191,6 +193,8 @@ ASTVec SkeletonPreproc::derive(const ASTNode& input, bool& unsat)
     const unsigned out = solver->newVar();
     solver->setFrozen(out);
     const int o = mkLit(out, false);
+    varToConnective.resize(out + 1);
+    varToConnective[out] = node;
 
     switch (k)
     {
@@ -305,16 +309,153 @@ ASTVec SkeletonPreproc::derive(const ASTNode& input, bool& unsat)
     facts.push_back(fixed > 0 ? varToAtom[v]
                               : bm->CreateNode(NOT, varToAtom[v]));
   }
+  const size_t atomFacts = facts.size();
 
-  // One line, because the three numbers together are what says whether the
-  // pass earned its SAT call: how much structure there was, how much of it
-  // was a distinct predicate, and how much the solver settled.
+  // The connectives the same simplification fixed. Not every one of them is
+  // news: a conjunct of the query is already at the top level, and so is
+  // whatever sits under a chain of its negations (a NOT has no variable of
+  // its own -- its literal is its child's, negated -- so the fixed node is
+  // the child); and an output that its fixed inputs settle by the truth
+  // table is implied by the facts above. What is left is a fact the query
+  // implies but never states: a disjunction fixed true through an
+  // equivalence whose other side was forced, a conjunction fixed false
+  // through a conditional, and the like.
+  std::unordered_set<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+      topLevel;
+  {
+    std::vector<ASTNode> walk;
+    walk.push_back(input);
+    while (!walk.empty())
+    {
+      const ASTNode n = walk.back();
+      walk.pop_back();
+      if (!topLevel.insert(n).second)
+        continue;
+      if (n.GetKind() == AND || n.GetKind() == NOT)
+        for (const ASTNode& c : n.GetChildren())
+          walk.push_back(c);
+    }
+  }
+  for (unsigned v = 0; v < varToConnective.size(); v++)
+  {
+    const ASTNode& node = varToConnective[v];
+    if (node.IsNull() || topLevel.count(node))
+      continue;
+    const int fixed = solver->rootFixed(v);
+    if (fixed == 0)
+      continue;
+    const int settled = settledByInputs(*solver, node);
+    // Inputs that settle the output settle it to the value the backend
+    // fixed: both read the same clauses, and the formula has a model.
+    assert(settled == 0 || settled == fixed);
+    if (settled != 0)
+      continue;
+    facts.push_back(fixed > 0 ? node : bm->CreateNode(NOT, node));
+  }
+
+  // One line, because the numbers together are what says whether the pass
+  // earned its SAT call: how much structure there was, how much of it was a
+  // distinct predicate, how many atoms the solver settled, and how many
+  // facts about the structure itself it found on top of them.
   if (bm->UserFlags.stats_flag)
     std::cerr << "Skeleton preprocessing: " << litOf.size() << " nodes, "
-              << atomToVar.size() << " atoms, " << facts.size() << " forced"
-              << std::endl;
+              << atomToVar.size() << " atoms, " << atomFacts << " forced, "
+              << facts.size() - atomFacts << " connectives" << std::endl;
 
   return facts;
+}
+
+int SkeletonPreproc::valueOf(SATSolver& solver, int lit) const
+{
+  const int fixed = solver.rootFixed(varOf(lit));
+  return (lit & 1) ? -fixed : fixed;
+}
+
+int SkeletonPreproc::settledByInputs(SATSolver& solver,
+                                     const ASTNode& node) const
+{
+  std::vector<int> in;
+  in.reserve(node.Degree());
+  for (const ASTNode& c : node.GetChildren())
+  {
+    const auto it = litOf.find(c);
+    assert(it != litOf.end());
+    in.push_back(valueOf(solver, it->second));
+  }
+
+  // AND is false on any false input and true only on all true; OR the
+  // other way about. NAND and NOR are their negations.
+  const auto conjunction = [&]() {
+    bool allTrue = true;
+    for (int x : in)
+    {
+      if (x < 0)
+        return -1;
+      allTrue = allTrue && x > 0;
+    }
+    return allTrue ? 1 : 0;
+  };
+  const auto disjunction = [&]() {
+    bool allFalse = true;
+    for (int x : in)
+    {
+      if (x > 0)
+        return 1;
+      allFalse = allFalse && x < 0;
+    }
+    return allFalse ? -1 : 0;
+  };
+
+  switch (node.GetKind())
+  {
+    case AND:
+      return conjunction();
+    case NAND:
+      return -conjunction();
+    case OR:
+      return disjunction();
+    case NOR:
+      return -disjunction();
+
+    case IMPLIES:
+      if (in[0] < 0 || in[1] > 0)
+        return 1;
+      if (in[0] > 0 && in[1] < 0)
+        return -1;
+      return 0;
+
+    case XOR:
+    case IFF:
+    {
+      // The same left fold derive() encodes: XOR is the parity of the
+      // inputs, and IFF is its negation applied once at the end. Any open
+      // input leaves the parity open.
+      int parity = -1;
+      for (int x : in)
+      {
+        if (x == 0)
+          return 0;
+        if (x > 0)
+          parity = -parity;
+      }
+      return node.GetKind() == XOR ? parity : -parity;
+    }
+
+    case ITE:
+      if (in[0] > 0)
+        return in[1];
+      if (in[0] < 0)
+        return in[2];
+      // An open condition still settles the output when both branches
+      // agree.
+      return (in[1] != 0 && in[1] == in[2]) ? in[1] : 0;
+
+    default:
+      // isConnective admitted it, and NOT never reaches here: it has no
+      // output variable of its own.
+      assert(false && "settledByInputs: not a connective with an output");
+      return 0;
+  }
 }
 
 } // namespace stp

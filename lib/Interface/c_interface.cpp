@@ -546,6 +546,23 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case UF_PHASE_HINTS:
       b->UserFlags.uf_phase_hints = param_value != 0;
       break;
+    case UF_PROPAGATE_EQUALITIES:
+      b->UserFlags.uf_propagate_equalities = param_value != 0;
+      break;
+    case UF_SKELETON_PREPROC:
+      b->UserFlags.uf_skeleton_preproc = param_value != 0;
+      break;
+    case UF_BV_TERM_ABSTRACTION:
+      b->UserFlags.uf_bv_term_abstraction =
+          param_value == 0
+              ? stp::UserDefinedFlags::UFAbstractionMode::OFF
+              : param_value == 1
+                    ? stp::UserDefinedFlags::UFAbstractionMode::ON
+                    : stp::UserDefinedFlags::UFAbstractionMode::AUTO;
+      break;
+    case UF_CHECK_DURING_BV_REFINEMENT:
+      b->UserFlags.uf_check_during_bv_refinement = param_value != 0;
+      break;
     case DISTINCT_ORDERING:
       b->UserFlags.distinct_ordering = param_value != 0;
       break;
@@ -602,6 +619,12 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case BV_TERM_ABSTRACTION_INC_BITBLAST:
       b->UserFlags.bv_term_abstraction_inc_bitblast = param_value != 0;
       break;
+    // Not one loop's knob but every one of them: the field gates the trail
+    // the batch pipeline keeps between the solve calls of array-read,
+    // bit-vector-abstraction and uninterpreted-function refinement alike.
+    case REFINEMENT_TRAIL_REUSE:
+      b->UserFlags.refinement_trail_reuse = param_value != 0;
+      break;
     case INCREMENTAL_PIECE_REWRITING:
       b->UserFlags.incremental_piece_rewriting = param_value != 0;
       break;
@@ -614,7 +637,7 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       // has set any other level with no way back to the one it started with.
       // The bound tracks the enum, and the numbers in the message with it.
       if (param_value < 0 ||
-          param_value > stp::UserDefinedFlags::CNF_EFFORT_GIA_VERY_HIGH)
+          param_value > stp::UserDefinedFlags::CNF_EFFORT_NEW_HIGH)
         reportCAPIError("CNF_GENERATION_EFFORT takes an effort ordinal from "
                         "0 (very low) to 11 (gia very high)");
       else

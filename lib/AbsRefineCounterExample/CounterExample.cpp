@@ -2985,27 +2985,78 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
   }
   else if (SatSolver.okay())
   {
-    // Before anything else looks at this candidate. The bit-vector
-    // abstractions are an over-approximation: an abstracted equality or
-    // operation is a free Boolean, or a free vector of bits, until
-    // refinement pins it to the operands it stands for, and a candidate
-    // which gives it a value the operands do not justify is not an
-    // assignment of the query. Both theory checkers and the model
-    // evaluation below treat exactly that as an internal error -- they
-    // are entitled to, since every other producer of a candidate hands
-    // them a faithful bit-vector layer -- so the abstraction has to be
-    // the first refinement owner consulted, not a later one in the
-    // driver's loop. It is also the only one whose progress does not
-    // depend on a constructed counterexample: it reads the SAT model
-    // directly, which is what lets it run ahead of the shortcut below
-    // and keeps a query that asked for no model from being answered
-    // from an unrefined abstraction.
+    // The congruence checker, ahead of the abstraction refinement, when
+    // there is an abstraction that may refute this candidate. The
+    // refinement is an over-approximation's: an abstracted operation is a
+    // free vector of bits until refinement pins it to its operands, and a
+    // candidate that gives it a value the operands do not justify is not
+    // an assignment of the query -- which is why the refinement is
+    // consulted before any model is read from the candidate, below.
+    // Congruence asks nothing of the arithmetic between the application
+    // scalars, though, only for their values: equal arguments implying
+    // equal results is a theorem whatever values it is instantiated on, so
+    // the checker's lemmas are as sound on such a candidate as on a faithful
+    // one. Asked now, the congruence lemmas this candidate exposes go in
+    // beside the abstraction's clauses and the next candidate answers to
+    // both, as it does in a solver that consults every theory each round.
+    // Left to wait for a faithful candidate they arrived only after the
+    // abstraction had spent its rounds on candidates they would have refuted
+    // outright: on 0884 of the Certora queries, thirty-seven solver calls
+    // and sixty-seven value-blocking lemmas became three calls and one. It
+    // runs first because the refinement writes clauses, which takes the
+    // solver out of the state its model can be read in. Whatever it
+    // certifies is withdrawn if the refinement then refutes the candidate,
+    // since a model over an unfaithful layer is no model; a faithful
+    // candidate is asked again below, in its turn after the array checker,
+    // exactly as before.
+    if (ufActive && bm->UserFlags.uf_check_during_bv_refinement &&
+        tosat->hasAbstractions())
+    {
+      bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
+      CounterExampleMap.clear();
+      ComputeFormulaMap.clear();
+      ConstructCounterExample(SatSolver, tosat->SATVar_to_SymbolIndexMap(),
+                              ufActive);
+      const UFCandidateOutcome early = ufTheoryAdapter->checkCandidate(*this);
+      bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+      if (early == UFCandidateOutcome::InternalError)
+        FatalError(("UFCHK internal error: " + ufTheoryAdapter->diagnostic())
+                       .c_str());
+      if (early == UFCandidateOutcome::Conflict &&
+          !ufTheoryAdapter->hasPendingLemma())
+        FatalError("UFCHK reported a conflict without a pending lemma");
+    }
+
+    // Before anything else reads a model from this candidate. Both theory
+    // checkers' certification and the model evaluation below treat an
+    // unfaithful bit-vector layer as an internal error -- they are entitled
+    // to, since every other producer of a candidate hands them a faithful
+    // one -- so the abstraction has to be the first refinement owner
+    // consulted, not a later one in the driver's loop. It is also the only
+    // one whose progress does not depend on a constructed counterexample:
+    // it reads the SAT model directly, which is what lets it run ahead of
+    // the shortcut below and keeps a query that asked for no model from
+    // being answered from an unrefined abstraction.
     const AbstractionRefinementResult bvRefinement =
         tosat->refineAbstractions(SatSolver);
     if (bvRefinement.isUnknown())
       return bm->unknownResult();
     if (bvRefinement.madeProgress())
+    {
+      if (ufActive)
+      {
+        if (ufTheoryAdapter->hasPendingLemma())
+        {
+          if (bm->UserFlags.stats_flag)
+            std::cerr << "Theory coordination: BV abstraction refined; UFCHK "
+                         "conflict on the same candidate"
+                      << std::endl;
+        }
+        else
+          ufTheoryAdapter->invalidateCertifiedModel();
+      }
       return SOLVER_UNDECIDED;
+    }
     assert(bvRefinement.isFaithful());
 
     if (!bm->UserFlags.construct_counterexample_flag && !ufActive)

@@ -36,6 +36,7 @@ THE SOFTWARE.
 #include "stp/Util/DagWalk.h"
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 #include <deque>
 #include <cmath>
 #include <limits>
@@ -1337,6 +1338,12 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
         temp_result[i] = nf->CreateNode(ITE, remainder, toFill, temp_result[i]);
       }
 
+      static const bool tapShifts = getenv("STP_SHIFT_ANNOTATE") != NULL;
+      if (tapShifts && !term[1].isConstant())
+        recordShiftTapHook(nf,
+                           k == BVLEFTSHIFT ? 0 : k == BVRIGHTSHIFT ? 1 : 2,
+                           bbarg1, bbarg2, temp_result);
+
       // Variant 4: leave the barrel alone and add the relation's exact
       // prime implicates. For an aux-free encoding over the interface GAC
       // and PC coincide, and the all-primes set is both, so a shift this
@@ -1750,8 +1757,12 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           firstCandidateSighting(term))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_MULT]++;
 
+      // A multiplication by a constant is left to its shift-and-add
+      // unless --bv-term-abstraction-constant-operands asks for a record.
       if (termAbstractionAllowed() && uf->bv_term_abstraction_mult &&
-          num_bits >= uf->bv_abstraction_width)
+          num_bits >= uf->bv_abstraction_width &&
+          (uf->bv_term_abstraction_constant_operands ||
+           !(isConstant(mpcd1) || isConstant(mpcd2))))
       {
         {
           BBNodeVec reused;
@@ -1796,6 +1807,9 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       else
       {
         result = BBExactBinaryOp(term, mpcd1, mpcd2, support);
+        static const bool tapMults = getenv("STP_MULT_ANNOTATE") != NULL;
+        if (tapMults)
+          recordMultTapHook(nf, mpcd1, mpcd2, result);
       }
       break;
     }
@@ -1820,8 +1834,11 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           firstCandidateSighting(term))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_DIVMOD]++;
 
+      // A division or remainder by a constant likewise: its defining
+      // relation over a constant multiplier is the cheap circuit.
       if (termAbstractionAllowed() && uf->bv_term_abstraction_divmod &&
-          num_bits >= uf->bv_abstraction_width)
+          num_bits >= uf->bv_abstraction_width &&
+          (uf->bv_term_abstraction_constant_operands || !isConstant(dvsr)))
       {
         {
           BBNodeVec reused;
@@ -2011,6 +2028,14 @@ template <class BBNode, class BBNodeManagerT>
 const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
 {
   fpNativeAddIsZeroFusions = 0;
+
+  // A quotient-remainder pair a relational division encoding minted for an
+  // earlier root is constrained only by the relation conjoined into that
+  // root; under a later root it would be a free pair. The incremental
+  // driver blasts many roots through one blaster, each under its own
+  // literal, so every root starts the memo afresh -- within a root the
+  // division and remainder of one operand pair still share the pair.
+  divByMultMemo.clear();
 
   if (uf->fp_native_domain &&
       (fpNativeDomainRoot.IsNull() || !(fpNativeDomainRoot == form)))
@@ -2336,8 +2361,12 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
           firstCandidateSighting(form))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_EQ]++;
 
+      // An equality against a constant is left to its comparator unless
+      // --bv-eq-abstraction-constant-side asks for a record.
       if (eqAbstractionAllowed() &&
-          left.size() >= uf->bv_abstraction_width)
+          left.size() >= uf->bv_abstraction_width &&
+          (uf->bv_eq_abstraction_constant_side ||
+           !(isConstant(left) || isConstant(right))))
       {
         // One Boolean per predicate, not per occurrence: see
         // abstractedFormulas_ for why the term families' registry does not
@@ -3606,6 +3635,73 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivByMult(const BBNodeVec& x,
       nf->CreateNode(OR, BBEQ(zero, y), BBBVLE(r, y, false, true)));
 }
 
+// Division by a constant through the defining relation. The divisor's bits
+// are all known and at least one is set, so y*q is a shifted copy of the
+// quotient per set divisor bit, summed at width w+1 where nothing can wrap:
+// the quotient has w-span+1 live bits, since q <= x/y < 2^w / 2^(span-1),
+// every row therefore fits in w bits, and the whole product is below
+// 2^(w+1). The product is then asserted below 2^w -- which is what makes
+// the pair unique together with r < y -- and x = y*q + r is asserted with
+// the sum's carry-out false. The remainder has span live bits, since it is
+// below the divisor. At 256 bits by a 34-bit constant this is eleven rows
+// against the restoring divider's 256 levels of subtract-compare-select,
+// each of which the constant prunes only to its own span.
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBDivByConstant(
+    const BBNodeVec& x, const BBNodeVec& y, BBNodeVec& q, BBNodeVec& r,
+    BBNodeSet& support)
+{
+  const unsigned w = x.size();
+  assert(y.size() == w);
+
+  unsigned span = 0;
+  for (unsigned i = 0; i < w; i++)
+  {
+    assert(y[i] == BBTrue || y[i] == BBFalse);
+    if (y[i] == BBTrue)
+      span = i + 1;
+  }
+  assert(span > 0);
+  const unsigned qBits = w - span + 1;
+
+  q = BBNodeVec(w, BBFalse);
+  r = BBNodeVec(w, BBFalse);
+  for (unsigned i = 0; i < qBits; i++)
+    q[i] = nf->CreateFreshInput();
+  for (unsigned i = 0; i < span; i++)
+    r[i] = nf->CreateFreshInput();
+
+  BBNodeVec acc(w + 1, BBFalse);
+  bool first = true;
+  for (unsigned i = 0; i < span; i++)
+  {
+    if (y[i] != BBTrue)
+      continue;
+    BBNodeVec row(w + 1, BBFalse);
+    for (unsigned j = 0; j < qBits; j++)
+      row[i + j] = q[j];
+    if (first)
+    {
+      acc = row;
+      first = false;
+    }
+    else
+      BBPlus2(acc, row, BBFalse);
+  }
+  support.insert(nf->CreateNode(NOT, acc[w]));
+  acc[w] = BBFalse;
+
+  BBNodeVec rExt(w + 1, BBFalse);
+  for (unsigned i = 0; i < span; i++)
+    rExt[i] = r[i];
+  BBPlus2(acc, rExt, BBFalse);
+  support.insert(nf->CreateNode(NOT, acc[w]));
+  const BBNodeVec accLow(acc.begin(), acc.begin() + w);
+  support.insert(BBEQ(accLow, x));
+
+  support.insert(BBBVLE(r, y, false, true));
+}
+
 template <class BBNode, class BBNodeManagerT>
 vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     const ASTNode& term, const BBNodeVec& x, const BBNodeVec& y,
@@ -3661,7 +3757,20 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     return t;
   }
 
-  if (uf->division_by_multiplication && !bothConstant)
+  bool divisorConstant = true;
+  bool divisorZero = true;
+  for (unsigned i = 0; i < width; i++)
+  {
+    if (!(y[i] == BBTrue || y[i] == BBFalse))
+      divisorConstant = false;
+    if (y[i] == BBTrue)
+      divisorZero = false;
+  }
+  const bool byConstant = uf->division_by_constant && !bothConstant &&
+                          divisorConstant && !divisorZero &&
+                          width >= uf->division_by_constant_width;
+
+  if (byConstant || (uf->division_by_multiplication && !bothConstant))
   {
     // BVDIV and BVMOD of one operand pair share one relation, keyed by the
     // quotient's node whichever of the two arrives first.
@@ -3676,7 +3785,10 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     }
     else
     {
-      BBDivByMult(x, y, q, r, support);
+      if (byConstant)
+        BBDivByConstant(x, y, q, r, support);
+      else
+        BBDivByMult(x, y, q, r, support);
       divByMultMemo.emplace(key, std::make_pair(q, r));
     }
   }
@@ -3746,11 +3858,384 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBSquare(
   return buildAdditionNetworkResult(products, support, n);
 }
 
+// The prime implicates of the k-bit multiplication relation that repair
+// unit propagation's refutation completeness at k=3 (six clauses) and k=4
+// (eighty-eight), from the 2026-09-02 encoding study's closure-guided
+// greedy. Each clause is a list of {vector (0 = x, 1 = y, 2 = product), bit,
+// negated} literals terminated by a negative vector index. They are
+// implicates of p = x*y mod 2^k, hence of every wider multiply, and of
+// y*x as well.
+struct MultLemmaLit
+{
+  int8_t vec, bit, neg;
+};
+static const MultLemmaLit MULT_LEMMAS_K3[] = {
+{0,2,1},{1,2,1},{2,0,1},{2,2,1},{-1,0,0},
+{0,2,1},{1,2,0},{2,0,1},{2,2,0},{-1,0,0},
+{0,2,0},{1,2,1},{2,0,1},{2,2,0},{-1,0,0},
+{0,2,0},{1,2,0},{2,0,1},{2,2,1},{-1,0,0},
+{0,1,1},{1,1,1},{2,0,0},{2,1,0},{2,2,0},{-1,0,0},
+{0,1,1},{0,2,1},{1,1,1},{1,2,1},{2,1,1},{2,2,1},{-1,0,0}
+};
+static const MultLemmaLit MULT_LEMMAS_K4[] = {
+{0,2,1},{1,2,1},{2,0,1},{2,2,1},{-1,0,0},
+{0,2,1},{1,2,0},{2,0,1},{2,2,0},{-1,0,0},
+{0,2,0},{1,2,1},{2,0,1},{2,2,0},{-1,0,0},
+{0,2,0},{1,2,0},{2,0,1},{2,2,1},{-1,0,0},
+{0,1,1},{1,1,1},{2,0,0},{2,1,0},{2,2,0},{-1,0,0},
+{0,2,1},{1,0,0},{1,3,1},{2,1,1},{2,3,1},{-1,0,0},
+{0,2,1},{1,0,0},{1,3,0},{2,1,1},{2,3,0},{-1,0,0},
+{0,0,0},{0,3,1},{1,2,1},{2,1,1},{2,3,1},{-1,0,0},
+{0,0,0},{0,3,1},{1,2,0},{2,1,1},{2,3,0},{-1,0,0},
+{0,0,0},{0,3,0},{1,2,1},{2,1,1},{2,3,0},{-1,0,0},
+{0,0,0},{0,3,0},{1,2,0},{2,1,1},{2,3,1},{-1,0,0},
+{0,2,0},{1,0,0},{1,3,0},{2,1,1},{2,3,1},{-1,0,0},
+{0,2,0},{1,0,0},{1,3,1},{2,1,1},{2,3,0},{-1,0,0},
+{0,3,1},{1,1,1},{1,2,1},{1,3,1},{2,0,1},{2,3,1},{-1,0,0},
+{0,1,1},{0,2,1},{0,3,1},{1,3,1},{2,0,1},{2,3,1},{-1,0,0},
+{0,1,1},{0,2,1},{0,3,1},{1,3,0},{2,0,1},{2,3,0},{-1,0,0},
+{0,3,0},{1,1,1},{1,2,1},{1,3,1},{2,0,1},{2,3,0},{-1,0,0},
+{0,1,1},{0,2,1},{0,3,0},{1,3,1},{2,0,1},{2,3,0},{-1,0,0},
+{0,1,1},{0,2,1},{0,3,0},{1,3,0},{2,0,1},{2,3,1},{-1,0,0},
+{0,3,0},{1,1,1},{1,2,1},{1,3,0},{2,0,1},{2,3,1},{-1,0,0},
+{0,3,0},{1,3,1},{2,0,1},{2,1,1},{2,2,0},{2,3,0},{-1,0,0},
+{0,3,0},{1,3,1},{2,0,1},{2,1,0},{2,2,1},{2,3,0},{-1,0,0},
+{0,3,0},{1,3,0},{2,0,1},{2,1,1},{2,2,0},{2,3,1},{-1,0,0},
+{0,3,0},{1,3,0},{2,0,1},{2,1,0},{2,2,1},{2,3,1},{-1,0,0},
+{0,2,0},{1,2,0},{2,1,0},{2,2,1},{2,3,1},{-1,0,0},
+{0,1,1},{0,2,1},{1,1,1},{1,2,1},{2,2,1},{2,3,1},{-1,0,0},
+{0,3,1},{1,1,1},{1,2,1},{1,3,0},{2,0,1},{2,3,0},{-1,0,0},
+{0,1,1},{0,2,1},{1,2,0},{2,0,0},{2,1,0},{2,2,1},{2,3,0},{-1,0,0},
+{0,2,0},{1,1,1},{1,2,1},{2,0,0},{2,1,0},{2,2,1},{2,3,0},{-1,0,0},
+{0,3,1},{1,3,0},{2,0,1},{2,1,1},{2,2,0},{2,3,0},{-1,0,0},
+{0,1,1},{0,2,1},{1,1,1},{1,2,1},{2,1,1},{2,2,1},{-1,0,0},
+{0,3,1},{1,3,0},{2,0,1},{2,1,0},{2,2,1},{2,3,0},{-1,0,0},
+{0,1,0},{0,2,1},{1,1,0},{1,2,1},{2,0,0},{2,2,0},{2,3,1},{-1,0,0},
+{0,1,1},{0,2,1},{1,1,0},{1,2,1},{2,0,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,1,0},{0,3,1},{1,1,0},{1,3,1},{2,0,0},{2,2,1},{2,3,0},{-1,0,0},
+{0,1,0},{0,2,1},{1,1,1},{1,2,1},{2,0,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,1,0},{0,2,1},{0,3,1},{1,1,0},{1,3,0},{2,2,0},{2,3,1},{-1,0,0},
+{0,1,0},{0,3,0},{1,1,0},{1,2,1},{1,3,1},{2,2,0},{2,3,1},{-1,0,0},
+{0,2,1},{0,3,1},{1,0,1},{1,1,1},{1,3,1},{2,1,0},{2,3,1},{-1,0,0},
+{0,1,1},{0,3,1},{1,2,0},{1,3,0},{2,1,0},{2,2,0},{2,3,1},{-1,0,0},
+{0,0,1},{0,1,1},{0,3,1},{1,2,1},{1,3,1},{2,1,0},{2,3,1},{-1,0,0},
+{0,2,0},{0,3,0},{1,1,1},{1,3,1},{2,1,0},{2,2,0},{2,3,1},{-1,0,0},
+{0,3,1},{1,3,1},{2,0,1},{2,1,1},{2,2,0},{2,3,1},{-1,0,0},
+{0,3,1},{1,3,1},{2,0,1},{2,1,0},{2,2,1},{2,3,1},{-1,0,0},
+{0,1,1},{0,3,1},{1,1,0},{1,2,1},{1,3,1},{2,0,0},{2,2,1},{2,3,1},{-1,0,0},
+{0,1,0},{0,2,1},{0,3,1},{1,1,1},{1,3,1},{2,0,0},{2,2,1},{2,3,1},{-1,0,0},
+{0,1,1},{0,3,0},{1,2,1},{1,3,0},{2,1,1},{2,2,1},{2,3,0},{-1,0,0},
+{0,0,1},{0,2,1},{0,3,1},{1,1,0},{1,3,1},{2,1,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,1,0},{0,3,1},{1,0,1},{1,2,1},{1,3,1},{2,1,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,2,1},{0,3,0},{1,1,1},{1,2,0},{1,3,1},{2,1,0},{2,3,0},{-1,0,0},
+{0,1,1},{0,3,1},{1,1,1},{1,2,0},{1,3,1},{2,2,0},{2,3,0},{-1,0,0},
+{0,1,1},{0,2,0},{1,2,1},{1,3,0},{2,0,0},{2,1,0},{2,3,0},{-1,0,0},
+{0,1,1},{0,2,0},{0,3,1},{1,1,1},{1,3,1},{2,2,0},{2,3,0},{-1,0,0},
+{0,1,1},{0,2,0},{0,3,1},{1,1,1},{1,3,0},{2,2,0},{2,3,1},{-1,0,0},
+{0,1,1},{0,3,0},{1,1,1},{1,2,0},{1,3,1},{2,2,0},{2,3,1},{-1,0,0},
+{0,1,1},{0,3,0},{1,2,0},{1,3,0},{2,0,0},{2,2,0},{2,3,1},{-1,0,0},
+{0,2,0},{0,3,0},{1,1,1},{1,3,0},{2,0,0},{2,2,0},{2,3,1},{-1,0,0},
+{0,2,1},{0,3,1},{1,1,1},{1,2,0},{1,3,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,2,1},{0,3,1},{1,1,1},{1,3,0},{2,1,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,2,1},{0,3,0},{1,1,1},{1,3,1},{2,1,1},{2,2,1},{2,3,1},{-1,0,0},
+{0,2,1},{0,3,0},{1,1,1},{1,2,0},{2,0,0},{2,1,0},{2,3,0},{-1,0,0},
+{0,2,1},{0,3,0},{1,1,1},{1,3,0},{2,1,1},{2,2,1},{2,3,0},{-1,0,0},
+{0,1,1},{0,3,1},{1,2,1},{1,3,0},{2,1,1},{2,2,1},{2,3,1},{-1,0,0},
+{0,1,1},{0,3,1},{1,2,1},{1,3,0},{2,1,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,1,1},{0,3,1},{1,0,1},{1,2,0},{1,3,0},{2,2,1},{2,3,0},{-1,0,0},
+{0,1,1},{0,2,0},{0,3,0},{1,2,1},{1,3,1},{2,2,0},{2,3,0},{-1,0,0},
+{0,1,1},{0,2,0},{0,3,0},{1,1,1},{1,2,1},{1,3,1},{2,3,0},{-1,0,0},
+{0,1,1},{0,3,0},{1,2,1},{1,3,1},{2,1,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,1,1},{0,3,0},{1,0,1},{1,2,0},{1,3,0},{2,2,1},{2,3,1},{-1,0,0},
+{0,0,1},{0,2,0},{0,3,0},{1,1,1},{1,3,1},{2,2,1},{2,3,0},{-1,0,0},
+{0,0,1},{0,2,0},{0,3,0},{1,1,1},{1,3,0},{2,2,1},{2,3,1},{-1,0,0},
+{0,0,1},{0,1,1},{0,3,0},{1,2,1},{1,3,1},{2,1,1},{2,2,1},{2,3,1},{-1,0,0},
+{0,1,1},{0,3,1},{1,0,1},{1,2,1},{1,3,1},{2,2,0},{2,3,1},{-1,0,0},
+{0,0,1},{0,2,1},{0,3,1},{1,1,1},{1,3,1},{2,2,0},{2,3,1},{-1,0,0},
+{0,0,1},{0,2,1},{0,3,0},{1,2,0},{1,3,0},{2,1,0},{2,3,1},{-1,0,0},
+{0,0,1},{0,1,1},{0,3,0},{1,1,0},{1,3,1},{2,2,0},{2,3,0},{-1,0,0},
+{0,0,1},{0,1,1},{0,3,0},{1,1,0},{1,3,0},{2,2,0},{2,3,1},{-1,0,0},
+{0,1,0},{0,3,1},{1,0,1},{1,1,1},{1,3,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,1,0},{0,3,0},{1,0,1},{1,1,1},{1,3,0},{2,2,0},{2,3,1},{-1,0,0},
+{0,2,0},{0,3,1},{1,0,1},{1,2,1},{1,3,0},{2,1,0},{2,3,0},{-1,0,0},
+{0,2,0},{0,3,0},{1,0,1},{1,2,1},{1,3,0},{2,1,0},{2,3,1},{-1,0,0},
+{0,2,1},{0,3,1},{1,0,1},{1,1,1},{1,3,1},{2,1,1},{2,2,1},{2,3,0},{-1,0,0},
+{0,2,1},{0,3,1},{1,0,1},{1,1,1},{1,3,0},{2,1,1},{2,2,1},{2,3,1},{-1,0,0},
+{0,1,1},{0,2,0},{0,3,0},{1,0,1},{1,1,1},{1,3,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,0,1},{0,1,1},{0,3,1},{1,2,1},{1,3,1},{2,1,1},{2,2,1},{2,3,0},{-1,0,0},
+{0,0,1},{0,1,1},{0,2,0},{0,3,1},{1,2,0},{1,3,1},{2,1,0},{2,3,0},{-1,0,0},
+{0,0,1},{0,1,1},{0,3,0},{1,1,1},{1,2,0},{1,3,0},{2,2,0},{2,3,0},{-1,0,0},
+{0,2,0},{0,3,1},{1,0,1},{1,1,1},{1,2,0},{1,3,1},{2,1,0},{2,3,0},{-1,0,0}
+};
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::multLemmaBlock(const BBNodeVec& x,
+                                                        const BBNodeVec& y,
+                                                        const BBNodeVec& p,
+                                                        BBNodeSet& support)
+{
+  const MultLemmaLit* table;
+  size_t count;
+  unsigned k;
+  if (uf->multiplication_lemmas == 3)
+  {
+    table = MULT_LEMMAS_K3;
+    count = sizeof(MULT_LEMMAS_K3) / sizeof(MULT_LEMMAS_K3[0]);
+    k = 3;
+  }
+  else if (uf->multiplication_lemmas == 4)
+  {
+    table = MULT_LEMMAS_K4;
+    count = sizeof(MULT_LEMMAS_K4) / sizeof(MULT_LEMMAS_K4[0]);
+    k = 4;
+  }
+  else
+    return;
+  if (x.size() < k)
+    return;
+
+  BBNode clause = BBFalse;
+  for (size_t i = 0; i < count; i++)
+  {
+    const MultLemmaLit& l = table[i];
+    if (l.vec < 0)
+    {
+      if (clause != BBTrue)
+        support.insert(clause);
+      clause = BBFalse;
+      continue;
+    }
+    const BBNodeVec& v = l.vec == 0 ? x : l.vec == 1 ? y : p;
+    BBNode lit = v[l.bit];
+    if (l.neg)
+      lit = nf->CreateNode(NOT, lit);
+    clause = nf->CreateNode(OR, clause, lit);
+  }
+}
+
+// The partial-product rows accumulated in carry-save form: every row after
+// the first goes through one layer of full adders against the running sum
+// and carry vectors, and a single ripple adder combines the two at the end.
+// The same full-adder count as the column network, arranged row by row
+// with the carry chain deferred to the last step -- the array multiplier
+// of the hardware textbooks.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::mult_csaRows(
+    const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& /*support*/,
+    const ASTNode& n)
+{
+  const int bitWidth = n.GetValueWidth();
+  BBNodeVec ycopy(y);
+  BBNodeVec sum(bitWidth, BBFalse);
+  BBNodeVec carry(bitWidth, BBFalse);
+  bool first = true;
+
+  for (int i = 0; i < bitWidth; i++)
+  {
+    if (i > 0)
+      BBLShift(ycopy, 1);
+    if (x[i] == BBFalse)
+      continue;
+    const BBNodeVec row = BBAndBit(ycopy, x[i]);
+    if (first)
+    {
+      sum = row;
+      first = false;
+      continue;
+    }
+    BBNodeVec nextCarry(bitWidth, BBFalse);
+    for (int j = 0; j < bitWidth; j++)
+    {
+      BBNode s, c;
+      fullAdder(sum[j], carry[j], row[j], s, c);
+      sum[j] = s;
+      if (j + 1 < bitWidth)
+        nextCarry[j + 1] = c;
+    }
+    carry = nextCarry;
+  }
+  BBPlus2(sum, carry, BBFalse);
+  return sum;
+}
+
+// Dadda's reduction of the partial-product columns: stages with target
+// heights 2, 3, 4, 6, 9, 13, ... taken from the top, each column reduced to
+// the stage's height with as few adders as will do it (a half adder where
+// one bit too many, full adders otherwise), carries landing in the next
+// column of the same stage; then one ripple adder over the two rows left.
+// Fewer adders than the greedy column network, and a shallower tree.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::mult_dadda(
+    vector<list<BBNode>>& products, BBNodeSet& /*support*/, const ASTNode& n)
+{
+  const int bitWidth = n.GetValueWidth();
+  vector<vector<BBNode>> cols(bitWidth);
+  size_t maxHeight = 0;
+  for (int i = 0; i < bitWidth; i++)
+  {
+    for (const BBNode& b : products[i])
+      if (b != BBFalse)
+        cols[i].push_back(b);
+    products[i].clear();
+    maxHeight = std::max(maxHeight, cols[i].size());
+  }
+
+  vector<size_t> targets;
+  for (size_t d = 2; d < maxHeight; d = d + d / 2)
+    targets.push_back(d);
+
+  for (int t = (int)targets.size() - 1; t >= 0; t--)
+  {
+    const size_t d = targets[t];
+    vector<BBNode> carriesIn;
+    for (int i = 0; i < bitWidth; i++)
+    {
+      vector<BBNode> bits = cols[i];
+      bits.insert(bits.end(), carriesIn.begin(), carriesIn.end());
+      carriesIn.clear();
+      // The sums already produced stay in this column, so they count
+      // toward the stage's height along with the bits not yet reduced.
+      vector<BBNode> kept;
+      while (bits.size() + kept.size() > d)
+      {
+        BBNode s, c;
+        if (bits.size() + kept.size() == d + 1)
+        {
+          const BBNode a = bits.back();
+          bits.pop_back();
+          const BBNode b = bits.back();
+          bits.pop_back();
+          s = xorWithSharing(a, b);
+          c = nf->CreateNode(AND, a, b);
+        }
+        else
+        {
+          const BBNode a = bits.back();
+          bits.pop_back();
+          const BBNode b = bits.back();
+          bits.pop_back();
+          const BBNode cin = bits.back();
+          bits.pop_back();
+          fullAdder(a, b, cin, s, c);
+        }
+        kept.push_back(s);
+        if (i + 1 < bitWidth && c != BBFalse)
+          carriesIn.push_back(c);
+      }
+      bits.insert(bits.end(), kept.begin(), kept.end());
+      cols[i] = bits;
+    }
+  }
+
+  BBNodeVec rowA(bitWidth, BBFalse);
+  BBNodeVec rowB(bitWidth, BBFalse);
+  for (int i = 0; i < bitWidth; i++)
+  {
+    assert(cols[i].size() <= 2);
+    if (cols[i].size() > 0)
+      rowA[i] = cols[i][0];
+    if (cols[i].size() > 1)
+      rowB[i] = cols[i][1];
+  }
+  BBPlus2(rowA, rowB, BBFalse);
+  return rowA;
+}
+
+// Radix-4 without Booth: each pair of multiplier bits selects 0, y, 2y or
+// 3y, with 3y computed once by an adder. Half the rows of the AND array,
+// no negative digits, so no conditional inversion and no correction bit --
+// the question being whether modified Booth's propagation weakness is the
+// halving or the negation.
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::mult_radix4_hard(
+    const BBNodeVec& x, const BBNodeVec& y, vector<list<BBNode>>& products,
+    const ASTNode& n)
+{
+  const unsigned bitWidth = n.GetValueWidth();
+  booth_recoded.insert(n);
+
+  BBNodeVec y2(y);
+  BBLShift(y2, 1);
+  BBNodeVec y3(y);
+  BBPlus2(y3, y2, BBFalse);
+
+  for (unsigned base = 0; base < bitWidth; base += 2)
+  {
+    const BBNode& low = x[base];
+    const BBNode& high = (base + 1 < bitWidth) ? x[base + 1] : BBFalse;
+    for (unsigned j = 0; base + j < bitWidth; j++)
+    {
+      const BBNode whenHigh = nf->CreateNode(ITE, low, y3[j], y2[j]);
+      const BBNode whenLow = nf->CreateNode(AND, low, y[j]);
+      const BBNode bit = nf->CreateNode(ITE, high, whenHigh, whenLow);
+      if (bit != BBFalse)
+        products[base + j].push_back(bit);
+    }
+  }
+}
+
+// Which operand should supply the rows (or the radix-4 digits) of a
+// symbolic multiply. Cheaper first: fewer symbolic bits, then fewer
+// distinct literals -- a sign-extended operand repeats one literal across
+// its width, and rows drawn from it share their cells while rows drawn
+// against it do not -- then the lexicographic order, which only serves to
+// give both orders of one product the same circuit. Symmetric in the pair,
+// so x*y and y*x agree. Returns true when y should take x's role.
+// How many bits of a vector are symbolic, and how many distinct nodes they
+// are (a sign-extended value has many symbolic bits and few nodes).
+template <class BBNode>
+static void operandProfile(const std::vector<BBNode>& v, const BBNode& bbTrue,
+                           const BBNode& bbFalse, unsigned& symbolic,
+                           unsigned& distinct)
+{
+  symbolic = 0;
+  std::vector<BBNode> seen;
+  for (const BBNode& b : v)
+  {
+    if (b == bbTrue || b == bbFalse)
+      continue;
+    symbolic++;
+    if (std::find(seen.begin(), seen.end(), b) == seen.end())
+      seen.push_back(b);
+  }
+  distinct = seen.size();
+}
+
+template <class BBNode>
+static bool cheaperAsMultiplier(const std::vector<BBNode>& x,
+                                const std::vector<BBNode>& y,
+                                const BBNode& bbTrue, const BBNode& bbFalse)
+{
+  unsigned xs, xd, ys, yd;
+  operandProfile(x, bbTrue, bbFalse, xs, xd);
+  operandProfile(y, bbTrue, bbFalse, ys, yd);
+  if (xs == 0)
+    return false; // a constant multiplier already sits in x
+  if (ys == 0)
+    return true;
+  if (ys != xs)
+    return ys < xs;
+  if (yd != xd)
+    return yd < xd;
+  return std::lexicographical_compare(y.begin(), y.end(), x.begin(), x.end());
+}
+
 template <class BBNode, class BBNodeManagerT>
 vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
                                                           const BBNodeVec& _y,
                                                           BBNodeSet& support,
                                                           const ASTNode& n)
+{
+  const BBNodeVec result = BBMultVariant(_x, _y, support, n);
+  if (uf->multiplication_lemmas != 0)
+    multLemmaBlock(_x, _y, result, support);
+  return result;
+}
+
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMultVariant(
+    const BBNodeVec& _x, const BBNodeVec& _y, BBNodeSet& support,
+    const ASTNode& n)
 {
 
   //  if (uf->isSet("print_on_mult", "0"))
@@ -3906,6 +4391,83 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
       // symbolic. This picks between them per multiply rather than per query.
       if (!mult_Booth_constant(x, y, support, products, n))
         mult_Booth_radix4(x, y, products, n);
+      return buildAdditionNetworkResult(products, support, n);
+    }
+
+    case 17:
+    {
+      return mult_csaRows(x, y, support, n);
+    }
+
+    case 18:
+    {
+      mult_Booth(_x, _y, support, n[0], n[1], products, n);
+      setColumnsToZero(products, support, n);
+      return mult_dadda(products, support, n);
+    }
+
+    case 19:
+    {
+      // Variant 1 with the operands of a symbolic-by-symbolic multiply in
+      // a canonical order. mult_normal iterates over the bits of x, so
+      // x*y and y*x build different circuits and never hash together;
+      // ordering the vectors makes the two orders one AIG node, which is
+      // what the Booth path's per-column sort achieves for the network
+      // variants.
+      if (cheaperAsMultiplier(x, y, BBTrue, BBFalse))
+        return mult_normal(y, x, support, n);
+      return mult_normal(x, y, support, n);
+    }
+
+    case 20:
+    {
+      mult_radix4_hard(x, y, products, n);
+      return buildAdditionNetworkResult(products, support, n);
+    }
+
+    case 21:
+    {
+      // 14 and 19 together: a constant multiplier with a run of ones is
+      // Booth recoded and summed by the column network, and a symbolic
+      // pair takes the shift-add rows in canonical order, so both orders
+      // of one product share a circuit. Each half is the measured win for
+      // its operand class; nothing else changes.
+      if (mult_Booth_constant(x, y, support, products, n))
+        return buildAdditionNetworkResult(products, support, n);
+      if (cheaperAsMultiplier(x, y, BBTrue, BBFalse))
+        return mult_normal(y, x, support, n);
+      return mult_normal(x, y, support, n);
+    }
+
+    case 22:
+    {
+      // 21 with carry-save rows (17) in place of the ripple rows for the
+      // symbolic pair.
+      if (mult_Booth_constant(x, y, support, products, n))
+        return buildAdditionNetworkResult(products, support, n);
+      if (cheaperAsMultiplier(x, y, BBTrue, BBFalse))
+        return mult_csaRows(y, x, support, n);
+      return mult_csaRows(x, y, support, n);
+    }
+
+    case 23:
+    {
+      // 21 with the hard-triple radix-4 rows (20) for the symbolic pair,
+      // in canonical order -- unless an operand repeats a few literals
+      // across its width (a sign- or digit-extended value), where the AND
+      // rows of the shift-add path share their cells and the 3y adder and
+      // select cells cannot: there 21's rows are three times smaller.
+      if (mult_Booth_constant(x, y, support, products, n))
+        return buildAdditionNetworkResult(products, support, n);
+      const bool swap = cheaperAsMultiplier(x, y, BBTrue, BBFalse);
+      const BBNodeVec& a = swap ? y : x;
+      const BBNodeVec& b = swap ? x : y;
+      unsigned as, ad, bs, bd;
+      operandProfile(a, BBTrue, BBFalse, as, ad);
+      operandProfile(b, BBTrue, BBFalse, bs, bd);
+      if (2 * ad < as || 2 * bd < bs)
+        return mult_normal(a, b, support, n);
+      mult_radix4_hard(a, b, products, n);
       return buildAdditionNetworkResult(products, support, n);
     }
 
@@ -7519,6 +8081,32 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBEQ(const BBNodeVec& left,
   }
   else
     return nf->CreateNode(IFF, *lit, *rit);
+}
+
+// Shift-tap hook for the lazy-oracle experiments: a no-op except on the
+// Lit manager, and only when STP_SHIFT_ANNOTATE is set.
+template <class M, class V>
+static void recordShiftTapHook(M*, int, const V&, const V&, const V&)
+{
+}
+static void recordShiftTapHook(BBNodeManagerLit* nf, int kind,
+                               const std::vector<BBNodeLit>& a,
+                               const std::vector<BBNodeLit>& s,
+                               const std::vector<BBNodeLit>& r)
+{
+  nf->shiftTaps.push_back(BBNodeManagerLit::ShiftTap{kind, a, s, r});
+}
+
+template <class M, class V>
+static void recordMultTapHook(M*, const V&, const V&, const V&)
+{
+}
+static void recordMultTapHook(BBNodeManagerLit* nf,
+                              const std::vector<BBNodeLit>& x,
+                              const std::vector<BBNodeLit>& y,
+                              const std::vector<BBNodeLit>& r)
+{
+  nf->multTaps.push_back(BBNodeManagerLit::MultTap{x, y, r});
 }
 
 std::ostream& operator<<(std::ostream& output, const BBNodeAIG& /*h*/)

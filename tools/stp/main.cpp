@@ -83,6 +83,10 @@ public:
   std::string search_bias;
   CLI::Option* search_bias_option = nullptr;
 
+  // Likewise for UserFlags.array_index_hints.
+  std::string array_index_hints;
+  CLI::Option* array_index_hints_option = nullptr;
+
   // Likewise for UserFlags.cadical_factor.
   std::string cadical_factor;
 #ifdef USE_CADICAL
@@ -142,6 +146,9 @@ public:
   // input file.
   std::string uf_ackermann;
   CLI::Option* uf_ackermann_option = nullptr;
+  // Likewise for UserFlags.uf_bv_term_abstraction.
+  std::string uf_bv_term_abstraction;
+  CLI::Option* uf_bv_term_abstraction_option = nullptr;
 };
 
 int ExtraMain::create_and_parse_options(int argc, char** argv)
@@ -239,6 +246,13 @@ void ExtraMain::create_options()
            "circuit is built once (needs --flattening)",
            simp_group);
 
+  int64_arg("--common-subsum-budget", bm->UserFlags.common_subsum_budget,
+            "Tally operations --common-subsum may spend per operator before "
+            "it stops extracting and reports the result as truncated. A "
+            "chain of flattened gates, each a prefix of the next, otherwise "
+            "costs the cube of its length to re-nest",
+            simp_group);
+
   bool_arg("--pair-extract", bm->UserFlags.enable_pair_extract,
            "In an n-ary bvadd, replace a pair of addends whose possibly-one "
            "bits are disjoint by their bitwise-or, removing an adder stage",
@@ -297,6 +311,14 @@ void ExtraMain::create_options()
              "solves, where re-probing the whole encoding every solve "
              "costs more than it earns)")
           ->group(solver_group);
+  bool_arg("--refinement-trail-reuse", bm->UserFlags.refinement_trail_reuse,
+           "keep cadical's search trail between the solve calls of a "
+           "refinement loop (array reads, bit-vector abstractions, "
+           "uninterpreted functions) instead of restarting each round from "
+           "the root",
+           solver_group)
+      // As for --array-index-hints: a sweep's setting yields to the test's.
+      ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
 #endif
 
 #ifdef USE_CRYPTOMINISAT
@@ -349,6 +371,14 @@ void ExtraMain::create_options()
            "bit-blaster proxies non-input ones -- with fresh Boolean "
            "variables during bit-blasting, refining lazily via CEGAR",
            refinement_group);
+  bool_arg("--bv-eq-abstraction-constant-side",
+           bm->UserFlags.bv_eq_abstraction_constant_side,
+           "abstract an equality one side of which the blast knows "
+           "entirely; off by default, such an equality is lowered exactly, "
+           "since a comparison against a constant is one AND over the "
+           "term's bits, where a record is a free Boolean the refinement "
+           "pins a round at a time",
+           refinement_group);
   app.add_option("--bv-abstraction-width",
                  bm->UserFlags.bv_abstraction_width,
                  "minimum operand width at which --bv-eq-abstraction and "
@@ -377,6 +407,19 @@ void ExtraMain::create_options()
            bm->UserFlags.bv_term_abstraction_compare,
            "also abstract wide inequalities (off, for the same reason)",
            refinement_group);
+  array_index_hints_option =
+      app.add_option(
+             "--array-index-hints", array_index_hints,
+             "seed the free indices of each array's reads apart before the "
+             "first solve, so that fewer candidates collide two reads on one "
+             "index: 'off' (the default), 'phase' (suggest a counting value "
+             "per index), or 'decide' (also decide those bits first, through "
+             "cadical's external propagator; other backends get the phases)")
+          ->group(refinement_group)
+          // A corpus sweep prepends one setting to every test's command
+          // line, and a test about the option says its own: the later one
+          // wins.
+          ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
   bool_arg("--skeleton-preproc", bm->UserFlags.skeleton_preproc,
            "ask the query's propositional skeleton what it forces, and assert "
            "that before solving", refinement_group);
@@ -440,6 +483,22 @@ void ExtraMain::create_options()
                  "values, so what one is worth falls away as the operands "
                  "widen (0, the default: do not scale, which measured no "
                  "slower and no faster)")
+      ->group(refinement_group)
+      ->capture_default_str();
+  bool_arg("--bv-term-abstraction-constant-operands",
+           bm->UserFlags.bv_term_abstraction_constant_operands,
+           "abstract a multiplication one of whose operands the blast knows "
+           "entirely, or a division or remainder by such a divisor (on by "
+           "default); declined, such an operation is lowered exactly, since "
+           "the constant's shift-and-add propagates where a record spends a "
+           "round per candidate before escalating to it",
+           refinement_group);
+  app.add_option("--bv-term-abstraction-constant-operand-limit",
+                 bm->UserFlags.bv_term_abstraction_constant_operand_limit,
+                 "cap on value-pair blocking rounds for an abstracted "
+                 "multiplication, division or remainder one of whose "
+                 "operands is a constant, whose exact encoding is a "
+                 "constant's shift-and-add (0: no cap)")
       ->group(refinement_group)
       ->capture_default_str();
   app.add_option("--bv-term-abstraction-divmod-value-limit",
@@ -512,6 +571,12 @@ void ExtraMain::create_options()
            "bias the first candidate so the congruence checker's scalars "
            "start out pairwise different (advisory; affects search order "
            "only)", refinement_group);
+  bool_arg("--uf-check-during-bv-refinement",
+           bm->UserFlags.uf_check_during_bv_refinement,
+           "run the congruence checker on a candidate the bit-vector "
+           "abstraction has just refined as well, so its lemmas go in beside "
+           "the abstraction's rather than after the abstraction is faithful",
+           refinement_group);
   app.add_option("--uf-sort-width", bm->UserFlags.uf_sort_width,
                  "bit-vector width given to a sort introduced by "
                  "(declare-sort S 0); it bounds how many elements of that "
@@ -532,6 +597,37 @@ void ExtraMain::create_options()
            "narrow UF result sorts whose applications are used only for "
            "equality to ceil(log2(N+1)) bits, cutting the AIG cost of each "
            "congruence constraint from O(width) to O(log N)",
+           refinement_group);
+  bool_arg("--uf-propagate-equalities",
+           bm->UserFlags.uf_propagate_equalities,
+           "before lowering, rewrite the query under its own top-level "
+           "equalities with applications still in place, so that `x = y` "
+           "merges (f x) and (f y) into one application and `a = (f y)` "
+           "or `(f 3) = 0` reach the terms built on a or (f 3)",
+           refinement_group);
+  bool_arg("--uf-skeleton-preproc", bm->UserFlags.uf_skeleton_preproc,
+           "let --uf-propagate-equalities also read the facts the query's "
+           "Boolean skeleton forces, so an equality stated under an "
+           "implication the structure resolves still crosses the "
+           "applications; one SAT call over the skeleton per UF solve",
+           refinement_group);
+  uf_bv_term_abstraction_option =
+      app.add_option("--uf-bv-term-abstraction", uf_bv_term_abstraction,
+                     "whether a solve with uninterpreted functions abstracts "
+                     "its wide multiplications, divisions and remainders as "
+                     "--bv-term-abstraction does: 'auto' (the default) does "
+                     "so when the query holds one at or above "
+                     "--bv-abstraction-width, 'on' and 'off' decide it for "
+                     "every UF solve")
+          ->group(refinement_group)
+          ->type_name("TEXT")
+          ->default_str("auto");
+  bool_arg("--uf-quotient-threshold-schemas",
+           bm->UserFlags.uf_quotient_threshold_schemas,
+           "when --uf-bv-term-abstraction abstracts a solve, also admit the "
+           "quotient-threshold division schemas for it (see "
+           "--bv-term-abstraction-schema-groups); naming the groups yourself "
+           "overrides this",
            refinement_group);
   bool_arg("--uf-inject-args", bm->UserFlags.uf_inject_args,
            "assume equality-only UF declarations are injective and encode it, "
@@ -555,6 +651,20 @@ void ExtraMain::create_options()
            "unsigned division encoding variant 5: restoring long division "
            "with the quotient bit from a dedicated comparator per row",
            bb_group);
+
+  bool_arg("--bb.div-by-const", bm->UserFlags.division_by_constant,
+           "encode a division or remainder by a constant through its "
+           "defining relation, x = c*q + r with r < c, where the product is "
+           "the constant's shift-and-add over the fresh quotient; a 256-bit "
+           "division by a 34-bit constant is 22k clauses this way against "
+           "510k as a divider",
+           bb_group);
+  app.add_option("--bb.div-by-const-width",
+                 bm->UserFlags.division_by_constant_width,
+                 "the width from which --bb.div-by-const applies; below it "
+                 "the divider is small either way")
+      ->group(bb_group)
+      ->capture_default_str();
 
   bool_arg("--bb.div-by-mult", bm->UserFlags.division_by_multiplication,
            "encode division and remainder through their defining relation: "
@@ -625,8 +735,23 @@ void ExtraMain::create_options()
             "16 chooses between 14 and 15 for each multiply. "
             "3, 4, 6, 7, 8, 9 and 13 Booth recode and differ in how the "
             "partial-product columns are summed. 5 uses the constant-bit "
-            "multiplication bounds, and needs --bb.mult-v2. Any other value "
+            "multiplication bounds, and needs --bb.mult-v2. 17 accumulates "
+            "the partial-product rows in carry-save form with one final "
+            "adder. 18 reduces the Booth-recoded columns as a Dadda tree. "
+            "19 is 1 with the operands of a symbolic multiply put in a "
+            "canonical order, so both orders of one product share a circuit. "
+            "20 is radix-4 with a hard triple, every row a select of "
+            "0, y, 2y or 3y. 21 is 14 for a constant multiplier and 19 for a "
+            "symbolic one; 22 is 21 with carry-save rows; 23 is 21 with the "
+            "hard-triple rows of 20. Any other value "
             "is an error, reported once bit-blasting reaches a multiply",
+            bb_group);
+
+  int64_arg("--bb.mult-lemmas", bm->UserFlags.multiplication_lemmas,
+            "conjoin to each multiply the low-bit residue implicates its "
+            "circuit cannot propagate: 0 (default) none, 3 the six clauses "
+            "that make the 3-bit relation refutation-complete, 4 the 88 for "
+            "4 bits",
             bb_group);
 
   bool_arg("--bb.mult-v2", bm->UserFlags.upper_multiplication_bound,
@@ -792,7 +917,7 @@ void ExtraMain::create_options()
       ->group(misc_group);
   app.add_option("--cnf-generation-effort", cnf_effort,
                  "effort spent minimising the CNF: auto, very-low, low, "
-                 "medium, high, very-high, new-very-low, new-low, new-medium. "
+                 "medium, high, very-high, new-very-low, new-low, new-medium, new-high. "
                  "Higher is slower to "
                  "generate but yields a smaller CNF; auto picks gia-low or, "
                  "for large estimated blasts, new-medium, since minimising a "
@@ -1125,6 +1250,8 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_LOW;
   else if (cnf_effort == "new-medium")
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM;
+  else if (cnf_effort == "new-high")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_HIGH;
   else if (cnf_effort == "gia-low")
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
   else if (cnf_effort == "gia-high")
@@ -1202,6 +1329,25 @@ int ExtraMain::parse_options(int argc, char** argv)
   }
 #endif
 
+  if (array_index_hints_option->count())
+  {
+    if (array_index_hints == "off")
+      bm->UserFlags.array_index_hints = UserDefinedFlags::ArrayIndexHints::OFF;
+    else if (array_index_hints == "phase")
+      bm->UserFlags.array_index_hints =
+          UserDefinedFlags::ArrayIndexHints::PHASE;
+    else if (array_index_hints == "decide")
+      bm->UserFlags.array_index_hints =
+          UserDefinedFlags::ArrayIndexHints::DECIDE;
+    else
+    {
+      cerr << "ERROR: --array-index-hints must be one of 'off', 'phase' or "
+              "'decide'"
+           << endl;
+      std::exit(-1);
+    }
+  }
+
   if (search_bias_option->count())
   {
     if (search_bias == "sat")
@@ -1254,6 +1400,23 @@ int ExtraMain::parse_options(int argc, char** argv)
   }
 #endif
 
+  if (uf_bv_term_abstraction_option->count())
+  {
+    typedef UserDefinedFlags::UFAbstractionMode Mode;
+    if (uf_bv_term_abstraction == "on")
+      bm->UserFlags.uf_bv_term_abstraction = Mode::ON;
+    else if (uf_bv_term_abstraction == "off")
+      bm->UserFlags.uf_bv_term_abstraction = Mode::OFF;
+    else if (uf_bv_term_abstraction == "auto")
+      bm->UserFlags.uf_bv_term_abstraction = Mode::AUTO;
+    else
+    {
+      cerr << "ERROR: --uf-bv-term-abstraction must be one of 'on', 'off' "
+              "or 'auto'"
+           << endl;
+      exit(-1);
+    }
+  }
   if (uf_ackermann_option->count())
   {
     typedef UserDefinedFlags::UFEagerMode Mode;

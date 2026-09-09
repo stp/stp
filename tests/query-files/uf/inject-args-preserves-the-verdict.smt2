@@ -31,8 +31,11 @@
 ; force, the refutation has to really rest on it, and it has to be really taken
 ; back. These runs check the same verdicts as above.
 ;
-; RUN: %solver --uninterpreted-functions --incremental=off --uf-inject-args=1 -s %s 2>&1 | %OutputCheck --check-prefix=TRACE %s
-; RUN: %solver --uninterpreted-functions --incremental=on  --uf-inject-args=1 -s %s 2>&1 | %OutputCheck --check-prefix=TRACE %s
+; RUN: %solver --uf-propagate-equalities=0 --uninterpreted-functions --incremental=off --uf-inject-args=1 -s %s 2>&1 | %OutputCheck --check-prefix=TRACE %s
+; RUN: %solver --uf-propagate-equalities=0 --uninterpreted-functions --incremental=on  --uf-inject-args=1 -s %s 2>&1 | %OutputCheck --check-prefix=TRACE %s
+; --uf-propagate-equalities=0: this test exercises the refinement loop on a
+; top-level equality, which the pre-lowering pass would otherwise settle before
+; any lemma is needed.
 ;
 ; Three pairwise-distinct two-bit arguments to a function into one bit,
 ; asserting that two of the three results collide. That assertion is a

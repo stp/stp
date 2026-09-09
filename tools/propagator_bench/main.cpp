@@ -123,6 +123,7 @@ void usage()
       << "  --bb.add-v2 0|1     UserDefinedFlags::bvplus_variant: 1 pairwise\n"
       << "                      ripple chains (default), 0 the addition\n"
       << "                      network\n"
+      << "  --bb.mult-lemmas K  UserDefinedFlags::multiplication_lemmas\n"
       << "  --bb.mult-v N       UserDefinedFlags::multiplication_variant:\n"
       << "                      1 shift-add ripple (default), 3 Booth +\n"
       << "                      addition network, 4 sorter, 6/7/8/9/13\n"
@@ -278,6 +279,8 @@ int main(int argc, char** argv)
     { cfg.bvplusVariant = atoi(value.c_str()); i++; }
     else if (arg == "--bb.mult-v")
     { cfg.multVariant = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.mult-lemmas")
+    { cfg.multLemmas = atoi(value.c_str()); i++; }
     else if (arg == "--bb.div-v1")
     { cfg.divVariant1 = atoi(value.c_str()); i++; }
     else if (arg == "--bb.div-v2")
@@ -360,6 +363,8 @@ int main(int argc, char** argv)
       uf.cnf_effort = UF::CNF_EFFORT_NEW_LOW;
     else if (cfg.cnf == "new-medium")
       uf.cnf_effort = UF::CNF_EFFORT_NEW_MEDIUM;
+    else if (cfg.cnf == "new-high")
+      uf.cnf_effort = UF::CNF_EFFORT_NEW_HIGH;
     else if (cfg.cnf == "gia-low")
       uf.cnf_effort = UF::CNF_EFFORT_GIA_LOW;
     else if (cfg.cnf == "gia-high")
@@ -382,6 +387,8 @@ int main(int argc, char** argv)
     mgr->UserFlags.bvplus_variant = cfg.bvplusVariant != 0;
   if (cfg.multVariant >= 0)
     mgr->UserFlags.multiplication_variant = cfg.multVariant;
+  if (cfg.multLemmas >= 0)
+    mgr->UserFlags.multiplication_lemmas = cfg.multLemmas;
   if (cfg.divVariant1 >= 0)
     mgr->UserFlags.division_variant_1 = cfg.divVariant1 != 0;
   if (cfg.divVariant2 >= 0)

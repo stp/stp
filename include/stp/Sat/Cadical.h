@@ -31,6 +31,8 @@ THE SOFTWARE.
 #include "SATSolver.h"
 #include <cadical/cadical.hpp>
 #include <chrono>
+#include <memory>
+#include <vector>
 
 // STP_CADICAL_HAS_FACTOR is decided by the configure, from the version of the
 // CaDiCaL it located; the header that actually arrives here is decided by the
@@ -93,6 +95,19 @@ namespace stp
   bool inprobing_control = false;
   void declareNewVariables();
 
+  // The external propagator that turns preferDecisions() into decisions;
+  // see Cadical.cpp. Created on the first hint, so a solver that was never
+  // hinted runs without one: while one is connected CaDiCaL forgoes its
+  // lucky-phase probing and notifies the propagator of every assignment
+  // of a variable it observes.
+  class DecisionHints;
+  std::unique_ptr<DecisionHints> hints;
+
+  // Whether a search or a simplification has run. Hints are accepted only
+  // before either: a variable may only be observed while inprocessing has
+  // not touched it, and before the first search none has been.
+  bool searched = false;
+
 public:
   Cadical();
 
@@ -124,10 +139,11 @@ public:
   bool disableEliminationAndShrinkingInternal() override;
   bool disableLuckyPhasesInternal() override;
 
-  bool enableTrailReuseInternal() override;
+  bool enableTrailReuseInternal(TrailReuse scope) override;
 
   void suggestPhase(uint32_t var, bool value) override;
   void declarePendingVariables() override;
+  bool preferDecisions(const std::vector<DecisionHint>& wanted) override;
 
   void unsatAssumptions(const vec_literals& assumps,
                         std::vector<int>& out) override;

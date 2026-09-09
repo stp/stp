@@ -24,11 +24,131 @@ THE SOFTWARE.
 #include "stp/Sat/Cadical.h"
 #include <unordered_set>
 #include <algorithm>
+#include <cstdlib>
+#include <deque>
 #include <limits>
 using std::vector;
 
 namespace stp
 {
+
+// Turns preferDecisions() into decisions: an external propagator that
+// proposes the hinted literals, in order, whenever CaDiCaL asks it for a
+// decision, until each has been proposed once. That is all it does -- it
+// propagates nothing, adds no clauses, and accepts every model -- so
+// CaDiCaL's search is its own except for where it starts. Proposing a hint
+// again after every backtrack was measured to pin the search to the seeded
+// values for its whole length: two refutations that take a few seconds
+// without hints ran past a minute with it. Seeded once, the values persist
+// only as CaDiCaL's own saved phases, which its search may then overrule.
+//
+// CaDiCaL requires a proposed literal to be unassigned: proposing an
+// assigned or root-fixed one is an API violation, not a no-op. So the
+// propagator keeps the assignment of every variable it observes from the
+// notifications, in the shape the IPASIR-UP contract lays them out: a
+// batch of assignments per notification, a mark per new decision level, and
+// a backtrack that unassigns everything above a level. Root-level
+// assignments arrive the same way -- a variable fixed before it was
+// observed is notified when it is, and CaDiCaL repeats the root level after
+// compacting, hence the idempotence -- so a fixed variable stays assigned
+// here and is never proposed. Chronological backtracking keeps some
+// assignments that were notified above the level it returns to; CaDiCaL
+// notifies those again afterwards, which the same idempotence absorbs.
+//
+// Only on the 3.x line, whose propagator interface this is written to; an
+// older CaDiCaL declines every hint in preferDecisions() below and never
+// constructs one of these, so it needs only a complete type to destroy.
+#if defined(CADICAL_MAJOR) && CADICAL_MAJOR >= 3
+class Cadical::DecisionHints : public CaDiCaL::ExternalPropagator
+{
+public:
+  // A literal in CaDiCaL's external numbering.
+  void hint(int lit)
+  {
+    grow(std::abs(lit));
+    queue.push_back(lit);
+  }
+
+  void notify_assignment(const std::vector<int>& lits) override
+  {
+    for (int lit : lits)
+    {
+      const int v = std::abs(lit);
+      grow(v);
+      const int8_t value = lit < 0 ? -1 : 1;
+      if (assigned[v] != 0)
+      {
+        assert(assigned[v] == value && "an observed variable notified twice "
+                                       "with different values");
+        continue;
+      }
+      assigned[v] = value;
+      trail.push_back(v);
+    }
+  }
+
+  void notify_new_decision_level() override
+  {
+    levels.push_back(trail.size());
+  }
+
+  void notify_backtrack(size_t new_level) override
+  {
+    if (new_level >= levels.size())
+      return; // nothing above that level was ever notified
+    const size_t keep = levels[new_level];
+    levels.resize(new_level);
+    while (trail.size() > keep)
+    {
+      const int v = trail.back();
+      trail.pop_back();
+      assigned[v] = 0;
+    }
+  }
+
+  bool cb_check_found_model(const std::vector<int>& /*model*/) override
+  {
+    return true;
+  }
+
+  int cb_decide() override
+  {
+    while (!queue.empty())
+    {
+      const int lit = queue.front();
+      queue.pop_front();
+      if (assigned[std::abs(lit)] == 0)
+        return lit;
+    }
+    return 0;
+  }
+
+  int cb_propagate() override { return 0; }
+  int cb_add_reason_clause_lit(int /*propagated_lit*/) override { return 0; }
+  bool cb_has_external_clause(bool& /*is_forgettable*/) override
+  {
+    return false;
+  }
+  int cb_add_external_clause_lit() override { return 0; }
+
+private:
+  void grow(int v)
+  {
+    if ((size_t)v >= assigned.size())
+      assigned.resize((size_t)v + 1, 0);
+  }
+
+  std::vector<int8_t> assigned; // by variable: the current value, 0 open
+  std::vector<int> trail;       // observed variables in assignment order
+  std::vector<size_t> levels;   // trail size at each decision level
+  std::deque<int> queue;        // literals to propose, oldest first
+};
+#else
+class Cadical::DecisionHints
+{
+};
+#endif
+
 uint32_t Cadical::nVars() const
 {
   // Unlike other solvers Cadical doesn't need to be told about the variable in advance.
@@ -81,6 +201,7 @@ bool Cadical::solveInternal(bool& timeout_expired)
   if (factor_enabled && ext_of_stp.size() <= next_variable)
     declareNewVariables();
 
+  searched = true;
   auto ret = s->solve();
   if (ret == 0)
   {
@@ -133,6 +254,8 @@ Cadical::Cadical() : time_limit(*this)
 
 Cadical::~Cadical()
 {
+  // The propagator, if any, outlives the solver: `hints` is destroyed after
+  // this body, and CaDiCaL's own destructor never calls back into it.
   delete s;
   s = nullptr;
 }
@@ -185,6 +308,7 @@ int Cadical::simplifyOnly()
   // formula outright, which is a perfectly good outcome for the caller:
   // what it wants is whatever ends up fixed at the root, and a solved
   // formula fixes everything.
+  searched = true;
   return s->simplify();
 }
 
@@ -271,18 +395,25 @@ bool Cadical::enableBVAInternal()
 #endif
 }
 
-// Incremental lazy backtracking: on a new solve whose assumptions extend a
-// prefix of the previous call's, CaDiCaL backtracks only to the first
-// difference and keeps the shared trail, instead of re-deciding and
-// re-propagating everything from the root. Mode 1 restricts the kept
-// trail to the assumption prefix; measured equal to mode 2 on the
-// many-small-queries workloads this targets.
-bool Cadical::enableTrailReuseInternal()
+// Incremental lazy backtracking, CaDiCaL's "ilb". Mode 1: on a new solve
+// whose assumptions extend a prefix of the previous call's, CaDiCaL
+// backtracks only to the first difference and keeps the shared trail,
+// instead of re-deciding and re-propagating everything from the root -- and
+// a call with no assumptions keeps nothing (sort_and_reuse_assumptions
+// backtracks to the root outright). Mode 2 keeps the whole trail whether or
+// not the call carries assumptions, so a clause added between calls unwinds
+// it only as far as the level that falsifies the clause. The incremental
+// driver asks for mode 1, measured equal to mode 2 on the many-small-queries
+// workloads it targets, where every call carries assumptions; the batch
+// pipeline's refinement loop asks for mode 2, because its calls carry none.
+bool Cadical::enableTrailReuseInternal(TrailReuse scope)
 {
   // Like factor, "ilb" may only be set while the solver is still in its
   // configuration window; the driver's size gate therefore works by
-  // rebuilding onto a fresh solver rather than by toggling.
-  return s->set("ilb", 1);
+  // rebuilding onto a fresh solver rather than by toggling. A CaDiCaL whose
+  // "ilb" is a plain switch (the 2.x line) declines the value 2, which the
+  // caller reads as the hint being declined.
+  return s->set("ilb", scope == TrailReuse::ALL ? 2 : 1);
 }
 
 bool Cadical::supportsInprobingControl() const
@@ -332,6 +463,42 @@ void Cadical::declarePendingVariables()
 {
   if (factor_enabled && ext_of_stp.size() <= next_variable)
     declareNewVariables();
+}
+
+bool Cadical::preferDecisions(const std::vector<DecisionHint>& wanted)
+{
+#if defined(CADICAL_MAJOR) && CADICAL_MAJOR >= 3
+  // Observing is only allowed on a variable inprocessing has not touched,
+  // and only the first search is certain to find every variable untouched.
+  if (searched || wanted.empty())
+    return false;
+
+  // As for a phase hint: the observed variable has to be the one the
+  // clauses use, which under factor is the declared translation.
+  if (factor_enabled && ext_of_stp.size() <= next_variable)
+    declareNewVariables();
+
+  if (!hints)
+  {
+    hints.reset(new DecisionHints());
+    s->connect_external_propagator(hints.get());
+  }
+  for (const DecisionHint& h : wanted)
+  {
+    assert(h.var >= 1 && h.var <= next_variable);
+    uint32_t var = h.var;
+    if (factor_enabled)
+      var = (uint32_t)ext_of_stp[var];
+    s->add_observed_var((int)var);
+    hints->hint(h.value ? (int)var : -(int)var);
+  }
+  return true;
+#else
+  // The propagator interface this relies on -- batched assignment
+  // notification, observed variables -- is the 3.x shape.
+  (void)wanted;
+  return false;
+#endif
 }
 
 void Cadical::suggestPhase(uint32_t var, bool value)

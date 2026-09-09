@@ -33,7 +33,16 @@ least one of them:
 
 ``--bv-eq-abstraction``
   Abstract wide equalities, refining them through congruence closure at word
-  level.
+  level. An equality one side of which the blast knows entirely is left to
+  its comparator unless ``--bv-eq-abstraction-constant-side`` (off) admits
+  it: a comparison against a constant is one AND over the term's bits, which
+  the solver propagates through, where a record is a free Boolean the
+  refinement pins a round at a time. On the QF_FP flux-balance benchmarks,
+  whose mass-balance rows are 128-bit sums equated with zero, leaving them
+  to their comparators solves one more query of 275 and takes a sixth less
+  time over those both settings decide; on floating-point queries raised by
+  symbolic execution of numerical libraries it is worth three solves of
+  1,241 and 7% of the PAR2.
 
 ``--bv-abstraction-width`` is the floor for both: an operation narrower than
 this (64 bits by default) is encoded exactly, whatever else is set. Nothing
@@ -115,7 +124,11 @@ refinement has three tiers:
    stops enumerating and says what the operation is, using the same
    bit-blaster entry point an unabstracted query would have used -- with the
    operand bits the original blast already knew, so a multiply against a
-   literal does not become a fully symbolic multiplier.
+   literal does not become a fully symbolic multiplier, and a division by a
+   literal is its defining relation over such a multiply
+   (``--bb.div-by-const``, on from 64 bits): 37,000 clauses for a 256-bit
+   division by a 34-bit constant, where the restoring divider, which the
+   constant prunes only within each of its 256 levels, is 510,000.
 
 ``--bv-term-abstraction-schemas`` (on by default) governs the first tier. Off,
 each operation falls back on its own tier-2 or tier-3 behaviour, which is what
@@ -130,6 +143,30 @@ the abstraction is still two to four times faster than not abstracting; by
 sixty it is break-even; past that it collapses -- a 64-bit factorisation spent
 5816 rounds and ninety seconds on a query the unabstracted solve answers in
 five hundredths of one. Zero never escalates and enumerates without limit.
+
+A record one of whose operands the blast knew entirely -- a multiplication by
+a constant, a division or remainder by one -- has its allowance capped by
+``--bv-term-abstraction-constant-operand-limit`` (1). Its exact circuit is a
+constant's shift-and-add, tens of thousands of clauses at 256 bits where a
+symbolic operand costs half a million, so a blocking lemma, which rules out
+one operand pair, buys little against it: on the Certora verification queries
+every such record spent its thirty-two rounds on one dividend at a time
+before building an encoding that was cheap all along. Zero leaves the
+allowance uncapped.
+
+Whether such an operation is abstracted at all is
+``--bv-term-abstraction-constant-operands`` (on). Declined, a multiplication
+one of whose operands the blast knows entirely, or a division or remainder
+by such a divisor, is lowered exactly from the start: the constant's
+shift-and-add propagates from the other operand, where a record still costs
+a refinement round per candidate before it escalates to that same circuit.
+Measured, declining loses -- on the 1,029 queries of that same Certora
+corpus it solves 893 against 906 at 60 s, with 41 queries more than twice as
+slow against 23 faster -- because what decides it is the fraction of these
+operations a search needs exactly, and a query holding hundreds of them
+mostly never needs them. The knob is for the opposite shape, a query whose
+wide arithmetic is all by constants and all of it needed, where declining is
+worth five solves of 275 on the QF_FP flux-balance benchmarks.
 
 Two optional refinements of that allowance:
 

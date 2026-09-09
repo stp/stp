@@ -62,9 +62,19 @@ private:
   // Advisory first-candidate bias for the congruence checker's scalars;
   // a no-op unless --uf-phase-hints is set.
   void suggest_uf_scalar_phases(SATSolver& satSolver);
+  // The same for the free indices of each array's reads; a no-op unless
+  // --array-index-hints is set and the solver is headed for refinement.
+  void suggest_array_index_hints(SATSolver& satSolver, bool needAbsRef);
 
   bool runSolver(SATSolver& satSolver);
   void handle_cnf_options(const CNF& cnf, bool needAbsRef);
+  // Ask the backend to keep its search trail across the refinement rounds
+  // this solver may see; see UserDefinedFlags::refinement_trail_reuse.
+  // Called with the CNF in hand and before its first clause is submitted,
+  // which is the only moment that both knows the size and can still
+  // configure the backend.
+  void configure_trail_reuse(SATSolver& satSolver, const CNF& cnf,
+                             bool needAbsRef);
   void dump_term_abstraction_map();
 
   // Resolve the injectivity guard to a SAT variable and decide how it is
@@ -88,6 +98,15 @@ private:
   BVAbstractionRefiner abstraction_;
   // Whether this lowering may abstract at all; see the constructors.
   bool allowAbstraction_ = true;
+  // Whether the refinement this lowering was told to expect (needAbsRef) is
+  // only the uninterpreted-function loop, with no array read refinement in
+  // it. That loop writes its lemmas as clauses over the scalars the
+  // registrar gives SAT variables after conversion, whatever produced the
+  // CNF, so such a solve can choose its CNF rung from the estimate exactly
+  // as a plain bit-vector query does. Array refinement keeps the ABC
+  // lowering, where the size-based fallback lives, because the in-house
+  // rungs have not been measured under it. See setUFOnlyRefinement.
+  bool ufOnlyRefinement_ = false;
 
   void init() { first = true; }
 
@@ -159,9 +178,16 @@ public:
 
   bool CallSAT(SATSolver& satSolver, const ASTNode& input,
                bool needAbsRef) override;
+  // Tell the lowering that the refinement it should expect is only the
+  // uninterpreted-function loop; see ufOnlyRefinement_. Set before CallSAT.
+  void setUFOnlyRefinement(bool ufOnly) { ufOnlyRefinement_ = ufOnly; }
 
   bool hasBVEQAbstractions() const { return abstraction_.hasEqualities(); }
   bool hasBVTermAbstractions() const { return abstraction_.hasTerms(); }
+  bool hasAbstractions() const override
+  {
+    return hasBVEQAbstractions() || hasBVTermAbstractions();
+  }
 
   // Test-only inspection: the term records this lowering filed. The invariant
   // under test is that each carries its own result variables rather than
