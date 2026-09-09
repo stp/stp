@@ -457,7 +457,21 @@ public:
   // returns. See UFCongruencePropagator: it supplies the transitivity of
   // equality, which no model can ever exhibit a violation of and which
   // otherwise has to be written out as O(terms^3) clauses before the search.
-  bool uf_propagator = true;
+  //
+  // Off by default. It works -- on the five 20241113-Certora queries that
+  // are congruence-bound at all it is 0.60x, 0.71x, 0.75x and 0.99x on the
+  // four refutations -- but it is 1.29x on the one satisfiable member of
+  // that set, and the whole population is those five files out of 2,539: a
+  // census of the family finds six with a declaration of 1,000 or more
+  // applications, and the queries that are merely hard earn a few hundred
+  // lemmas in fifteen minutes and never reach the gate. Writing the same
+  // atoms out eagerly with their transitivity triples, gated on 1,000
+  // earned lemmas, measures better on every one of the five.
+  //
+  // Kept because the seam it exercises (SATSolver::TheoryPropagator) is
+  // what any in-search theory needs, and because a closure is the only
+  // scalable form once a term count makes an eager pool impossible.
+  bool uf_propagator = false;
 
   // How many congruence lemmas the query must have earned before the theory
   // is connected. The propagator reasons over the equality atoms the
