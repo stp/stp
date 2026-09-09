@@ -1051,9 +1051,11 @@ public:
   // product bits depend only on the low k operand bits.
   int64_t multiplication_lemmas = 0;
 
-  // Symbolic-amount shift encoding. 0 is the barrel shifter; the others are
-  // measured in reports/2026-09-05-shifts-what-we-learned.html and are all
-  // slower than the barrel on the benchmarks tried, so they stay off.
+  // Symbolic-amount shift encoding. 0 is the barrel shifter. 1 to 4 all
+  // propagate more of what the shift relation entails -- at 64 bits the
+  // barrel derives 72.9% of the entailed literals against variant 3's
+  // 98.7% -- and all of them measured slower than the barrel on the
+  // benchmarks tried, so they stay off.
   int64_t shift_variant = 0;
 
   // Width window the selector-based shift variants (1 to 3) apply to.
