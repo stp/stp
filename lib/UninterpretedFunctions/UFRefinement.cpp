@@ -148,6 +148,72 @@ struct PendingLemma
   const UFDecl* declaration = NULL;
 };
 
+// The packed carrier width of a solved sort; defined below with the rest of
+// the scalar reading, and needed here to group by carrier.
+unsigned scalarWidth(const SourceSort& sort);
+
+// The distinct argument terms of each lowering sort, in node order.
+//
+// Grouped by the carrier the encoder actually compares -- a kind and a width
+// -- because two sorts that share both are compared bit for bit the same way.
+// The propagator's atom pool and the decision of whether there can be one are
+// the same question asked twice, so they ask it here.
+typedef std::map<std::pair<int, unsigned>,
+                 std::pair<SourceSort, std::vector<ASTNode>>>
+    ArgumentTermsBySort;
+
+ArgumentTermsBySort argumentTermsBySort(const LoweredApplicationView& view)
+{
+  ArgumentTermsBySort out;
+  for (const LoweredApplicationRecord& record : view.applications)
+  {
+    if (!record.observableArguments || record.declaration == NULL)
+      continue;
+    const std::vector<SourceSort>& domain =
+        record.declaration->signature().domain();
+    for (size_t i = 0; i < record.namedActuals.size() && i < domain.size();
+         ++i)
+    {
+      const SourceSort sort = UFSignature::loweringSort(domain[i]);
+      const std::pair<int, unsigned> key(static_cast<int>(sort.kind()),
+                                         scalarWidth(sort));
+      std::pair<SourceSort, std::vector<ASTNode>>& group = out[key];
+      group.first = sort;
+      group.second.push_back(record.namedActuals[i]);
+    }
+  }
+  for (ArgumentTermsBySort::iterator it = out.begin(); it != out.end(); ++it)
+  {
+    std::vector<ASTNode>& terms = it->second.second;
+    // Node order, so the same query mints the same pool.
+    std::sort(terms.begin(), terms.end(),
+              [](const ASTNode& left, const ASTNode& right)
+              { return left.GetNodeNum() < right.GetNodeNum(); });
+    terms.erase(std::unique(terms.begin(), terms.end()), terms.end());
+  }
+  return out;
+}
+
+// Whether any sort has a pool the cap admits. Asked once per query, before
+// the first lemma, because the answer decides whether this query's equality
+// atoms are worth keeping out of variable elimination -- and that has to be
+// decided while they are still whole.
+//
+// It is not free to get wrong in either direction. Protecting the atoms of a
+// query the closure will never serve measured 7.8 s -> 8.8 s on 1462.smt2,
+// which has 81 lemmas and not one sort the cap admits.
+bool propagatorPoolPossible(const LoweredApplicationView& view, unsigned cap)
+{
+  if (cap < 2)
+    return false;
+  const ArgumentTermsBySort groups = argumentTermsBySort(view);
+  for (ArgumentTermsBySort::const_iterator it = groups.begin();
+       it != groups.end(); ++it)
+    if (it->second.second.size() >= 2 && it->second.second.size() <= cap)
+      return true;
+  return false;
+}
+
 struct MutableAdapterState
 {
   explicit MutableAdapterState(STPMgr* manager_) : manager(manager_) {}
@@ -165,6 +231,8 @@ struct MutableAdapterState
   std::string diagnostic;
   uint64_t nextCandidateVersion = 0;
   uint64_t emittedLemmaCount = 0;
+  // Whether this query can have an atom pool at all, decided at beginView.
+  bool propagatorPoolPossible = false;
 
   void clearRound()
   {
@@ -189,8 +257,13 @@ struct MutableAdapterState
     view = nextView;
     checkPlan = UFCheckPlan();
     checkPlanDiagnostic.clear();
+    propagatorPoolPossible = false;
     if (view == NULL || !view->active())
       return;
+    propagatorPoolPossible =
+        manager->UserFlags.uf_propagator &&
+        stp::propagatorPoolPossible(*view,
+                                    manager->UserFlags.uf_propagator_pool);
     UFContext* context = manager->getUFContextIfAny();
     if (context == NULL)
     {
@@ -769,8 +842,7 @@ void encodeLemmas(MutableAdapterState& state, SATSolver& solver,
   // Only the batch adapter can connect a theory to its backend -- a
   // persistent block's clauses are guarded and its solver outlives the
   // query -- so only its atoms are worth protecting.
-  const bool protectAtoms = guardLiteral < 0 &&
-                            state.manager->UserFlags.uf_propagator;
+  const bool protectAtoms = guardLiteral < 0 && state.propagatorPoolPossible;
   for (const PendingLemma& entry : state.pending)
     encodeOneLemma(state, entry, solver, bindings, guardLiteral, cache,
                    protectAtoms);
@@ -852,6 +924,8 @@ bool UFBatchAdapter::installCongruencePropagator(SATSolver& solver,
     return false;
   if (impl_->state.emittedLemmaCount < manager->UserFlags.uf_propagator_after)
     return false;
+  if (!impl_->state.propagatorPoolPossible)
+    return false;
   if (!solver.supportsTheoryPropagation())
     return false;
 
@@ -873,57 +947,25 @@ bool UFBatchAdapter::installCongruencePropagator(SATSolver& solver,
   // O(n^3) transitivity triples an eager encoding needs beside them are
   // exactly what the closure is here to replace.
   const unsigned poolCap = manager->UserFlags.uf_propagator_pool;
-  if (poolCap >= 2)
+  const ToSATBase::ASTNodeToSATVar& bindings =
+      tosat->SATVar_to_SymbolIndexMap();
+  const ArgumentTermsBySort groups =
+      argumentTermsBySort(*impl_->state.view);
+  for (ArgumentTermsBySort::const_iterator it = groups.begin();
+       it != groups.end(); ++it)
   {
-    const ToSATBase::ASTNodeToSATVar& bindings =
-        tosat->SATVar_to_SymbolIndexMap();
-    // Grouped by the carrier the encoder actually compares: a kind and a
-    // width. Two sorts that share both are compared bit for bit the same
-    // way, and the representative carries whichever one names the group.
-    std::map<std::pair<int, unsigned>,
-             std::pair<SourceSort, std::vector<ASTNode>>> bySort;
-    for (const LoweredApplicationRecord& record :
-         impl_->state.view->applications)
-    {
-      if (!record.observableArguments || record.declaration == NULL)
-        continue;
-      const std::vector<SourceSort>& domain =
-          record.declaration->signature().domain();
-      for (size_t i = 0;
-           i < record.namedActuals.size() && i < domain.size(); ++i)
+    const std::vector<ASTNode>& terms = it->second.second;
+    if (terms.size() < 2 || terms.size() > poolCap)
+      continue;
+    for (size_t left = 0; left < terms.size(); ++left)
+      for (size_t right = left + 1; right < terms.size(); ++right)
       {
-        const SourceSort sort = UFSignature::loweringSort(domain[i]);
-        const std::pair<int, unsigned> key(static_cast<int>(sort.kind()),
-                                           scalarWidth(sort));
-        std::pair<SourceSort, std::vector<ASTNode>>& group = bySort[key];
-        group.first = sort;
-        group.second.push_back(record.namedActuals[i]);
+        UFEqualityAtom pair;
+        pair.left = terms[left];
+        pair.right = terms[right];
+        pair.sort = it->second.first;
+        mintEquality(solver, bindings, pair, impl_->equalityCache);
       }
-    }
-
-    for (std::map<std::pair<int, unsigned>,
-                  std::pair<SourceSort, std::vector<ASTNode>>>::iterator it =
-             bySort.begin();
-         it != bySort.end(); ++it)
-    {
-      std::vector<ASTNode>& terms = it->second.second;
-      // Node order, so the same query mints the same pool.
-      std::sort(terms.begin(), terms.end(),
-                [](const ASTNode& left, const ASTNode& right)
-                { return left.GetNodeNum() < right.GetNodeNum(); });
-      terms.erase(std::unique(terms.begin(), terms.end()), terms.end());
-      if (terms.size() < 2 || terms.size() > poolCap)
-        continue;
-      for (size_t left = 0; left < terms.size(); ++left)
-        for (size_t right = left + 1; right < terms.size(); ++right)
-        {
-          UFEqualityAtom pair;
-          pair.left = terms[left];
-          pair.right = terms[right];
-          pair.sort = it->second.first;
-          mintEquality(solver, bindings, pair, impl_->equalityCache);
-        }
-    }
   }
 
   for (std::map<EqualityKey, CachedEquality>::iterator it =
