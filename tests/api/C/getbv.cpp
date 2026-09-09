@@ -22,9 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-/* g++ -I/home/vganesh/stp/c_interface simplify.c -L/home/vganesh/stp/lib -lstp
- * -g */
-
 #include "stp/c_interface.h"
 #include <cstdint>
 #include <gtest/gtest.h>

@@ -35,9 +35,9 @@ THE SOFTWARE.
  *
  * Every number below was measured, not guessed: each operation was built over
  * fresh symbols, bit-blasted on its own with BBNodeManagerAIG, and the
- * resulting AND-node count fitted against the bit-width. See
- * bench-hard/reports/2026-08-06-difficulty-scorer-vs-aig-size.md for the
- * sweep, the fits and the residuals.
+ * resulting AND-node count fitted against the bit-width. tools/difficulty_bench
+ * runs that sweep and prints the estimate against the measured count, which is
+ * how the fits are rechecked when the blaster changes.
  *
  * Two properties of the estimate are deliberate.
  *
