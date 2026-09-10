@@ -5,13 +5,13 @@
 ; decides the verdict.
 ;
 ; Ten interleaved bvult atoms under an xor tree and three ites survive the
-; word-level simplifier as a propositional core of ~74 AND gates -- enough
-; for a budget of 40 to stop the pass. The blast that follows needs far more
-; than 40 for ten 8-bit comparisons, so it is stopped too and the query is
+; word-level simplifier as a propositional core of ~21 AND gates -- enough
+; for a budget of 20 to stop the pass. The blast that follows needs far more
+; than that for ten 8-bit comparisons, so it is stopped too and the query is
 ; abandoned; no budget can separate the two, since the pass is always the
 ; cheaper of them.
 ;
-; RUN: %solver --SMTLIB2 -s --aig-core-simplification=1 --aig-node-budget 40 %s 2>&1 >/dev/null | %OutputCheck --check-prefix=ABANDONED %s
+; RUN: %solver --SMTLIB2 -s --aig-core-simplification=1 --aig-node-budget 20 %s 2>&1 >/dev/null | %OutputCheck --check-prefix=ABANDONED %s
 ; RUN: %solver --SMTLIB2 --aig-core-simplification=1 %s | %OutputCheck --check-prefix=ANSWER %s
 ; RUN: %solver --SMTLIB2 %s | %OutputCheck --check-prefix=ANSWER %s
 ;

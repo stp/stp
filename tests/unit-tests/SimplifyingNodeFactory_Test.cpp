@@ -1065,3 +1065,83 @@ TEST(SimplifyingNodeFactory_Test, bvand_nested_and_without_its_negation)
   ASSERT_NE(n, c.mgr.ASTTrue);
   ASSERT_NE(n, c.mgr.ASTFalse);
 }
+
+/* A branch of an if-then-else knows its own condition. Boolean ITEs used to
+   miss this: only the term version folded a nested test on the condition. */
+TEST(SimplifyingNodeFactory_Test, boolean_ite_nested_on_same_condition_then)
+{
+  const std::string input = R"(
+    (assert (= (ite a (ite a b c) (not b)) (ite a b (not b))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, boolean_ite_nested_on_same_condition_else)
+{
+  const std::string input = R"(
+    (assert (= (ite a (not b) (ite a b c)) (ite a (not b) c)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+/* Two equalities pinning one term to different constants can't both hold. */
+TEST(SimplifyingNodeFactory_Test, and_of_distinct_constant_equalities)
+{
+  const std::string input = R"(
+    (assert (and (= v0 (_ bv2 20)) (= v0 (_ bv1 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+TEST(SimplifyingNodeFactory_Test, or_of_negated_distinct_constant_equalities)
+{
+  const std::string input = R"(
+    (assert (= (or (not (= v0 (_ bv2 20))) (not (= v0 (_ bv1 20)))) true) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+/* The second literal may sit one level down in a same-kind child, which
+   contributes its own children conjunctively. */
+TEST(SimplifyingNodeFactory_Test, and_of_distinct_constant_equalities_nested)
+{
+  const std::string input = R"(
+    (assert (and (and (= v0 (_ bv2 20)) a) (= v0 (_ bv1 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+/* Same bits, two nodes: a rounding-mode literal interns apart from the plain
+   bitvector constant carrying it, so the two equalities below agree. A rule
+   that read "different constant nodes" as "different values" made this
+   unsatisfiable -- caught by the Python API's rounding-mode UF test. */
+TEST(SimplifyingNodeFactory_Test, rounding_mode_literal_agrees_with_its_carrier)
+{
+  Context c;
+  const ASTNode t = c.mgr.CreateSymbol("rm-term", 0, 5);
+  const ASTNode rm = c.mgr.CreateRMConst(1);
+  const ASTNode bits = c.mgr.CreateBVConst(5, 1);
+
+  ASSERT_NE(rm, bits);
+  ASSERT_TRUE(stp::constantsSameBits(rm, bits));
+
+  NodeFactory& f = c.snf;
+  const ASTNode conj = f.CreateNode(stp::AND, f.CreateNode(stp::EQ, t, rm),
+                                    f.CreateNode(stp::EQ, t, bits));
+  EXPECT_NE(conj, c.mgr.ASTFalse);
+}

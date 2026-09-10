@@ -85,6 +85,13 @@ private:
   const ASTNode& ASTUndefined;
 
   ASTNode CreateSimpleFormITE(ASTChildren children);
+
+  // A branch of an if-then-else knows its own condition. `branch` with the
+  // tests that condition decides taken out, or Null when it decides none of
+  // them. Never builds a node the branch did not already contain, so it
+  // cannot cost sharing: dropping one of three or more conjuncts, which
+  // would, is left to the sharing-aware Rewriting pass.
+  ASTNode decideBranch(const ASTNode& cond, bool holds, const ASTNode& branch);
   ASTNode CreateSimpleXor(ASTChildren children);
 
   ASTNode CreateSimpleAndOr(bool IsAnd, ASTChildren children);
