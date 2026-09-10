@@ -604,24 +604,6 @@ TEST(Rewriting_Exhaustive, ite_chain_both_sides)
   c.checkEquivalent(top, c.run(top));
 }
 
-static bool contains(const ASTNode& n, const ASTNode& target, ASTNodeSet& seen)
-{
-  if (n == target)
-    return true;
-  if (!seen.insert(n).second)
-    return false;
-  for (const auto& c : n)
-    if (contains(c, target, seen))
-      return true;
-  return false;
-}
-
-static bool contains(const ASTNode& n, const ASTNode& target)
-{
-  ASTNodeSet seen;
-  return contains(n, target, seen);
-}
-
 /* Every decision that costs nothing is the SimplifyingNodeFactory's; what
    reaches this pass is the one that rebuilds. Dropping one child of a wider
    disjunction builds a node the branch did not contain, so the shared copy
