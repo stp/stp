@@ -56,6 +56,7 @@ THE SOFTWARE.
  */
 
 #include "stp/Simplifier/RemoveUnconstrained.h"
+#include "stp/Simplifier/DifficultyScore.h"
 #include "stp/AST/MutableASTNode.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
@@ -618,9 +619,10 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   ASTNode predConst;
   MutableASTNode* predOther = NULL; // set instead when the side is symbolic.
 
-  // ITE frames on the path, innermost first. Each frame costs one
-  // rebuilt predicate around its other branch, so growth is linear in
-  // the frame count; the cap bounds it.
+  // ITE frames on the path, innermost first. Each frame re-applies the
+  // steps above it to that frame's other branch, so the distributed form
+  // holds one copy of the suffix chain per frame. The climb bounds the
+  // count at MAX_PATH; whether the copies are worth it is priced below.
   struct IteFrame
   {
     MutableASTNode* cond;
@@ -628,7 +630,6 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     bool pathThen;
     size_t stepsBelow;
   };
-  const size_t MAX_ITE_FRAMES = 4;
   std::vector<IteFrame> frames;
 
   MutableASTNode* cur = &muteNode;
@@ -667,8 +668,7 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     {
       // Capture a distribution frame and keep climbing; the ITE
       // contributes no image step (on x's branch it is the identity).
-      if (frames.size() >= MAX_ITE_FRAMES || p.GetIndexWidth() != 0 ||
-          kids.size() != 3)
+      if (p.GetIndexWidth() != 0 || kids.size() != 3)
         return false;
       const bool inThen = (kids[1] == cur);
       if ((!inThen && kids[2] != cur) || kids[1] == kids[2] || kids[0] == cur)
@@ -948,6 +948,16 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     fr.other->getAllVariablesRecursively(vars, visited);
   }
   visited.clear();
+
+  // Whether the copies collapse again depends on the other branches, not on
+  // how many frames there are: price the built term against the one it
+  // replaces and decline when it grew. (v is left unused on that path;
+  // introduced symbols are never printed.)
+  {
+    DifficultyScore ds;
+    if (ds.score(inner, &bm) > ds.score(predicate->toASTNode(&bm), &bm))
+      return false;
+  }
 
   // Splice the new formula in, reusing the existing mutable nodes for the
   // variables it mentions (same mechanics as the comparison rule).

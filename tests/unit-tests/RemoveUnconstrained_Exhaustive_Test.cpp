@@ -1207,22 +1207,49 @@ TEST(RemoveUnconstrained_GroundPath, ite_three_frames_with_suffixes)
   c.checkEquivalent(back, result);
 }
 
-TEST(RemoveUnconstrained_GroundPath, ite_frame_cap_declines)
+TEST(RemoveUnconstrained_GroundPath, ite_deep_stack_distributes)
 {
-  // Five stacked frames exceed MAX_ITE_FRAMES: x must survive. One
-  // shared condition variable keeps the equivalence check enumerable.
+  // Nine frames, deeper than any fixed cap would allow. Every other branch
+  // is a constant, so each re-applied suffix folds away and the distributed
+  // form is smaller than the predicate it replaces: it must be taken. One
+  // shared condition variable keeps the equivalence check enumerable, its
+  // constant wrapped to the W-bit range.
   Context c;
   ASTNode x = c.bv();
   ASTNode y = c.bv();
   ASTNode t = c.hf->CreateTerm(BVMOD, W, x, c.konst(4));
-  for (int i = 0; i < 5; i++)
-    t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(i)), t,
+  for (unsigned i = 0; i < 9; i++)
+    t = c.hf->CreateTerm(ITE, W,
+                         c.hf->CreateNode(EQ, y, c.konst(i % (1u << W))), t,
                          c.konst(7));
   ASTNode top = c.hf->CreateNode(EQ, t, c.konst(2));
 
   ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_growth_declines)
+{
+  // The same distribution with the chain above the frames instead, and
+  // distinct symbolic other branches: every frame gets its own copy of the
+  // remainder and none of them collapse. Bigger than the predicate it
+  // replaces, so x must survive.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode z = c.bv();
+  ASTNode t = x;
+  for (unsigned i = 0; i < 4; i++)
+    t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(i)), t,
+                         c.hf->CreateTerm(BVMULT, W, z, c.konst(i + 1)));
+  t = c.hf->CreateTerm(BVMOD, W, t, c.konst(3));
+  ASTNode top = c.hf->CreateNode(EQ, t, c.konst(2));
+
+  ASTNode result = c.run(top);
   EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
-      << "x eliminated past the frame cap";
+      << "x eliminated by a rewrite that grew the formula";
   ASTNode back = c.backSubstitute(top);
   c.checkEquivalent(back, result);
 }
