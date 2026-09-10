@@ -761,6 +761,80 @@ namespace stp
                                     cond, other, c[2]);
        }
 
+/*
+  A branch of an if-then-else knows its own condition, so a test the
+  condition decides can go. The SimplifyingNodeFactory already takes every
+  such test that costs nothing to remove -- a branch of a nested
+  multiplexer, or a conjunction that collapses to a constant or to its one
+  surviving conjunct. What is left for here is the case that rebuilds:
+
+    ITE(c, OR(c1, x, y), d)  -->  ITE(c, OR(x, y), d)   when c refutes c1
+
+  where the disjunction has three or more children, so dropping one builds a
+  node the branch did not contain. That is a loss unless the disjunction died
+  with it, which is what the share count decides.
+*/
+    if (c.GetKind() == ITE)
+      for (unsigned branch = 1; branch <= 2; branch++)
+      {
+        if (c.GetKind() != ITE)
+          continue;
+
+        const ASTNode inner = c[branch];
+        if ((inner.GetKind() != AND && inner.GetKind() != OR) ||
+            inner.Degree() < 3 || shareCount[inner.GetNodeNum()] > 1)
+          continue;
+
+        const ASTNode cond = c[0];
+        const ASTNode known = (branch == 1) ? cond : nf->CreateNode(NOT, cond);
+        const bool isAnd = (inner.GetKind() == AND);
+
+        // Whether `known` and `cond` can hold together. Delegated to the
+        // factory: conjoining them reaches every contradiction AND already
+        // folds, at the price of building the conjunction.
+        auto refutes = [&](const ASTNode& test) {
+          return nf->CreateNode(AND, known, test) == stpMgr->ASTFalse;
+        };
+
+        ASTVec kept;
+        bool annihilated = false;
+        for (const ASTNode& child : inner.GetChildren())
+        {
+          // A decided child is either the node's annihilator, which settles
+          // the branch, or its identity, which just goes.
+          if (refutes(isAnd ? child : nf->CreateNode(NOT, child)))
+          {
+            annihilated = true;
+            break;
+          }
+          if (!refutes(isAnd ? nf->CreateNode(NOT, child) : child))
+            kept.push_back(child);
+        }
+
+        if (!annihilated && kept.size() == inner.Degree())
+          continue;
+
+        // The collapsing cases are the factory's, but its test is the cheap
+        // syntactic one, so a branch it could not fold still lands here.
+        ASTNode replacement;
+        if (annihilated)
+          replacement = isAnd ? stpMgr->ASTFalse : stpMgr->ASTTrue;
+        else if (kept.empty())
+          replacement = isAnd ? stpMgr->ASTTrue : stpMgr->ASTFalse;
+        else if (kept.size() == 1)
+          replacement = kept[0];
+        else
+          replacement = nf->CreateNode(inner.GetKind(), kept);
+        const ASTNode thenBranch = (branch == 1) ? replacement : c[1];
+        const ASTNode elseBranch = (branch == 1) ? c[2] : replacement;
+
+        if (c.GetType() == BOOLEAN_TYPE)
+          c = nf->CreateNode(ITE, cond, thenBranch, elseBranch);
+        else
+          c = nf->CreateArrayTerm(ITE, c.GetIndexWidth(), c.GetValueWidth(),
+                                  cond, thenBranch, elseBranch);
+      }
+
     return c;
   }
 

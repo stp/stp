@@ -1485,6 +1485,48 @@ ASTNode SimplifyingNodeFactory::handle_2_children(bool IsAnd,
   return ASTUndefined;
 }
 
+// (= t k1) and (= t k2) with distinct constants k1, k2 can't both hold, so
+// conjoined they are FALSE and their negations disjoined are TRUE. Called
+// only once two children of the annihilating polarity have been seen.
+static bool pinsATermTwice(const stp::ASTChildren& children, bool IsAnd)
+{
+  std::unordered_map<uint64_t, stp::ASTNode> pinned;
+  const Kind node_kind = IsAnd ? stp::AND : stp::OR;
+
+  // A child of the same kind contributes its own children conjunctively
+  // (resp. disjunctively), so a pinning literal one level down counts too.
+  auto pins = [&](const stp::ASTNode& n) {
+    if (!IsAnd && n.GetKind() != stp::NOT)
+      return false;
+    const stp::ASTNode& lit = IsAnd ? n : n[0];
+    if (lit.GetKind() != EQ)
+      return false;
+
+    for (int i = 0; i < 2; i++)
+      if (lit[i].GetKind() == stp::BVCONST &&
+          lit[1 - i].GetKind() != stp::BVCONST)
+      {
+        const auto entry = pinned.emplace(lit[1 - i].GetNodeNum(), lit[i]);
+        return !entry.second && stp::constantsDenoteDifferentValues(
+                                    entry.first->second, lit[i]);
+      }
+    return false;
+  };
+
+  for (const stp::ASTNode& n : children)
+  {
+    if (n.GetKind() == node_kind)
+    {
+      for (const stp::ASTNode& nested : n.GetChildren())
+        if (pins(nested))
+          return true;
+    }
+    else if (pins(n))
+      return true;
+  }
+  return false;
+}
+
 ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
                                                   const ASTChildren c)
 {
@@ -1514,6 +1556,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 
   const Kind node_kind = IsAnd ? stp::AND : stp::OR;
   bool nested_same_kind = false;
+  size_t pinning_children = 0;
 
   const size_t num_children = children.size();
   for (size_t i = 0; i < num_children; i++)
@@ -1549,11 +1592,20 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
         new_children.push_back(curr);
       if (curr.GetKind() == node_kind)
         nested_same_kind = true;
+      const ASTNode& lit =
+          (!IsAnd && curr.GetKind() == stp::NOT) ? curr[0] : curr;
+      if (IsAnd == (curr.GetKind() == EQ) && lit.GetKind() == EQ &&
+          (lit[0].isConstant() || lit[1].isConstant()))
+        pinning_children++;
     }
   }
 
   const ASTChildren out =
       materialised ? ASTChildren(new_children) : children;
+
+  if ((pinning_children >= 2 || (pinning_children >= 1 && nested_same_kind)) &&
+      pinsATermTwice(out, IsAnd))
+    return annihilator;
 
   // A child of the same kind contributes its own children conjunctively
   // (resp. disjunctively), so a literal here and its negation one level
@@ -2110,6 +2162,168 @@ ASTNode SimplifyingNodeFactory::CreateSimpleXor(const ASTChildren children)
   return retval;
 }
 
+// Whether two equalities pin one term to constants that differ, which no
+// assignment satisfies together. Node identity is not the test: a rounding
+// mode or float literal interns apart from the plain constant with its bits,
+// so the values go through constantsDenoteDifferentValues.
+static bool pinApart(const stp::ASTNode& a, const stp::ASTNode& b)
+{
+  if (a.GetKind() != EQ || b.GetKind() != EQ)
+    return false;
+
+  for (int i = 0; i < 2; i++)
+  {
+    if (a[i].GetKind() != stp::BVCONST || a[1 - i].GetKind() == stp::BVCONST)
+      continue;
+    for (int j = 0; j < 2; j++)
+    {
+      if (b[j].GetKind() != stp::BVCONST || b[1 - j].GetKind() == stp::BVCONST)
+        continue;
+      if (a[1 - i] == b[1 - j] &&
+          stp::constantsDenoteDifferentValues(a[i], b[j]))
+        return true;
+    }
+  }
+  return false;
+}
+
+// The non-constant side of an equality against a constant, or Null when the
+// node is not one.
+static stp::ASTNode pinnedTerm(const stp::ASTNode& n)
+{
+  if (n.GetKind() != EQ)
+    return stp::ASTNode();
+  for (int i = 0; i < 2; i++)
+    if (n[i].GetKind() == stp::BVCONST && n[1 - i].GetKind() != stp::BVCONST)
+      return n[1 - i];
+  return stp::ASTNode();
+}
+
+// See the declaration.
+ASTNode SimplifyingNodeFactory::substituteConstant(const ASTNode& n,
+                                                   const ASTNode& t,
+                                                   const ASTNode& k,
+                                                   int& budget)
+{
+  if (n == t)
+    return k;
+  if (n.Degree() == 0 || budget-- <= 0)
+    return n;
+
+  ASTVec children;
+  children.reserve(n.Degree());
+  bool changed = false;
+  for (const ASTNode& c : n)
+  {
+    children.push_back(substituteConstant(c, t, k, budget));
+    changed = changed || (children.back() != c);
+  }
+
+  // Nothing under here mentioned the term, so there is nothing to build.
+  if (!changed)
+    return n;
+
+  // Unqualified, so the rebuild comes back through this factory and every
+  // operator on the way folds.
+  if (n.GetType() == stp::BOOLEAN_TYPE)
+    return CreateNode(n.GetKind(), children);
+  return CreateArrayTerm(n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(),
+                         children);
+}
+
+// How far substituteConstant walks before it gives up. Raising it to two
+// hundred decided 39 more tests across a sample of the hard set, so the
+// tests that fold are the small ones and the budget is there to stop the
+// rest costing anything.
+static const int substitution_budget = 40;
+
+// See the declaration. The cheap tests come first: they are a handful of
+// pointer comparisons, they run on every if-then-else built, and the
+// polarity is a flag rather than a NOT node around the condition, so they
+// allocate nothing.
+int SimplifyingNodeFactory::decides(const ASTNode& cond, bool holds,
+                                    const ASTNode& other)
+{
+  if (cond == other)
+    return holds ? 1 : -1;
+  if (other.GetKind() == stp::NOT && other[0] == cond)
+    return holds ? -1 : 1;
+
+  // Knowing that y is 2 rules out y being 1; knowing it is *not* 2 says
+  // nothing about any other value.
+  if (!holds)
+    return 0;
+  if (other.GetKind() == stp::NOT)
+  {
+    if (pinApart(cond, other[0]))
+      return 1;
+  }
+  else if (pinApart(cond, other))
+    return -1;
+
+  // The term is pinned in this branch, so put the constant through the test
+  // and keep the answer only if the whole test folds. A verdict replaces the
+  // test with TRUE or FALSE, which deletes an edge and builds nothing; the
+  // substituted structure is dropped, which is what separates this from
+  // rewriting the branch under a context.
+  const ASTNode t = pinnedTerm(cond);
+  if (t.IsNull())
+    return 0;
+
+  const ASTNode& k = (cond[0].GetKind() == stp::BVCONST) ? cond[0] : cond[1];
+  int budget = substitution_budget;
+  const ASTNode folded = substituteConstant(other, t, k, budget);
+  if (!folded.isConstant())
+    return 0;
+  return (folded == ASTTrue) ? 1 : -1;
+}
+
+// See the declaration.
+ASTNode SimplifyingNodeFactory::decideBranch(const ASTNode& cond, bool holds,
+                                             const ASTNode& branch)
+{
+  if (branch.GetKind() == ITE)
+  {
+    const int d = decides(cond, holds, branch[0]);
+    if (d != 0)
+      return (d > 0) ? branch[1] : branch[2];
+    return ASTUndefined;
+  }
+
+  if (branch.GetKind() != stp::AND && branch.GetKind() != stp::OR)
+    return ASTUndefined;
+
+  // A decided child is either the annihilator of the node it sits in, which
+  // settles the whole branch, or its identity, which just goes. Only the
+  // cases that build nothing are taken.
+  const bool isAnd = (branch.GetKind() == stp::AND);
+  ASTNode survivor = ASTUndefined;
+  unsigned undecided = 0;
+  unsigned dropped = 0;
+
+  for (const stp::ASTNode& child : branch.GetChildren())
+  {
+    const int d = decides(cond, holds, child);
+    if (d == 0)
+    {
+      if (undecided++ == 0)
+        survivor = child;
+      continue;
+    }
+    if ((d < 0) == isAnd)
+      return isAnd ? ASTFalse : ASTTrue; // The annihilator settles it.
+    dropped++;
+  }
+
+  if (dropped == 0)
+    return ASTUndefined;
+  if (undecided == 0)
+    return isAnd ? ASTTrue : ASTFalse; // Every child was the identity.
+  if (undecided > 1)
+    return ASTUndefined; // A rebuild, so it costs sharing: not ours.
+  return survivor;
+}
+
 ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(
     const ASTChildren children)
 {
@@ -2167,7 +2381,17 @@ ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(
   }
   else
   {
-    retval = hashing.CreateNode(ITE, children);
+    // Each branch knows its own condition, so a test the condition decides
+    // goes. e.g. y=2 rules out y=1 without the two ever matching.
+    const ASTNode thenBranch = decideBranch(child0, true, child1);
+    const ASTNode elseBranch = decideBranch(child0, false, child2);
+
+    if (thenBranch == ASTUndefined && elseBranch == ASTUndefined)
+      retval = hashing.CreateNode(ITE, children);
+    else
+      retval = NodeFactory::CreateNode(
+          ITE, child0, (thenBranch == ASTUndefined) ? child1 : thenBranch,
+          (elseBranch == ASTUndefined) ? child2 : elseBranch);
   }
 
   if (debug_simplifyingNodeFactory)
@@ -3450,25 +3674,25 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         result = children[2];
       else if (children[1] == children[2])
         result = children[1];
-      else if (children[2].GetKind() == ITE && (children[2][0] == children[0]))
+      // Each branch knows its own condition, so a nested multiplexer on a
+      // test the condition decides takes a fixed arm.
+      else if (decideBranch(children[0], true, children[1]) != ASTUndefined ||
+               decideBranch(children[0], false, children[2]) != ASTUndefined)
       {
-        if (stp::ARRAY_TYPE == children[2].GetType())
-          result = NodeFactory::CreateArrayTerm(
-              ITE, children[2].GetIndexWidth(), children[2].GetValueWidth(),
-              children[0], children[1], children[2][2]);
-        else
-          result = NodeFactory::CreateTerm(ITE, width, children[0], children[1],
-                                           children[2][2]);
-      }
-      else if (children[1].GetKind() == ITE && (children[1][0] == children[0]))
-      {
+        const ASTNode thn = decideBranch(children[0], true, children[1]);
+        const ASTNode els = decideBranch(children[0], false, children[2]);
+        const ASTNode& takenThen =
+            (thn == ASTUndefined) ? children[1] : thn;
+        const ASTNode& takenElse =
+            (els == ASTUndefined) ? children[2] : els;
+
         if (stp::ARRAY_TYPE == children[1].GetType())
           result = NodeFactory::CreateArrayTerm(
               ITE, children[1].GetIndexWidth(), children[1].GetValueWidth(),
-              children[0], children[1][1], children[2]);
+              children[0], takenThen, takenElse);
         else
-          result = NodeFactory::CreateTerm(ITE, width, children[0],
-                                           children[1][1], children[2]);
+          result = NodeFactory::CreateTerm(ITE, width, children[0], takenThen,
+                                           takenElse);
       }
       else if (children[0].GetKind() == stp::NOT)
       {

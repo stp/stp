@@ -350,6 +350,12 @@ TEST(UFPreLowering, ASymbolEquatedWithAWideQuotientStaysItsName)
 // only through an equality with q, which is asserted. Reading q, then p,
 // then the definition takes rounds, and the structure sees the facts only
 // once p has been sent to true.
+//
+// The refutation has to sit two merges deep. A round reads the structure to
+// a fixpoint, so a contradiction the first read can reach is answered in one
+// round: here round one only learns that y is 9, from f(x) and f(5) becoming
+// one application, and it takes a second round to substitute that and merge
+// f(y) with f(9), which pins one application to two constants.
 TEST(UFPreLowering, TheStructureIsReadAgainAfterEachRound)
 {
   Fixture fx;
@@ -358,9 +364,12 @@ TEST(UFPreLowering, TheStructureIsReadAgainAfterEachRound)
   const ASTNode p = fx.manager.CreateSourceSymbol("p", boolSort);
   const ASTNode q = fx.manager.CreateSourceSymbol("q", boolSort);
   const ASTNode x = fx.symbol("x");
+  const ASTNode y = fx.symbol("y");
   const ASTNode definition = fx.factory->CreateNode(
-      AND, fx.eq(fx.apply(x), fx.constant(9)),
-      fx.eq(fx.apply(fx.constant(5)), fx.constant(3)));
+      AND, {fx.eq(fx.apply(x), fx.constant(9)),
+            fx.eq(fx.apply(fx.constant(5)), y),
+            fx.eq(fx.apply(y), fx.constant(1)),
+            fx.eq(fx.apply(fx.constant(9)), fx.constant(2))});
   const ASTNode root = fx.factory->CreateNode(
       AND, {q, fx.factory->CreateNode(IFF, p, q),
             fx.factory->CreateNode(IFF, p, definition),

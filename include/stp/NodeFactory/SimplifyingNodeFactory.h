@@ -85,6 +85,25 @@ private:
   const ASTNode& ASTUndefined;
 
   ASTNode CreateSimpleFormITE(ASTChildren children);
+
+  // What a condition known to hold (or known not to) says about another
+  // test: 1 that it holds, -1 that it does not, 0 nothing.
+  int decides(const ASTNode& cond, bool holds, const ASTNode& other);
+
+  // `n` with the occurrences of `t` it reaches within `budget` interior
+  // nodes replaced by `k`. Builds nothing along a path with no `t` under it,
+  // and running out of budget only leaves occurrences in place: every
+  // occurrence equals `k` where this is used, so replacing any subset of
+  // them preserves the meaning.
+  ASTNode substituteConstant(const ASTNode& n, const ASTNode& t,
+                             const ASTNode& k, int& budget);
+
+  // A branch of an if-then-else knows its own condition. `branch` with the
+  // tests that condition decides taken out, or Null when it decides none of
+  // them. Never builds a node the branch did not already contain, so it
+  // cannot cost sharing: dropping one of three or more conjuncts, which
+  // would, is left to the sharing-aware Rewriting pass.
+  ASTNode decideBranch(const ASTNode& cond, bool holds, const ASTNode& branch);
   ASTNode CreateSimpleXor(ASTChildren children);
 
   ASTNode CreateSimpleAndOr(bool IsAnd, ASTChildren children);
