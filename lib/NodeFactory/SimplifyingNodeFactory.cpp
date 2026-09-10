@@ -2187,12 +2187,62 @@ static bool pinApart(const stp::ASTNode& a, const stp::ASTNode& b)
   return false;
 }
 
-// What a condition known to hold (or known not to) says about another test:
-// 1 that it holds, -1 that it does not, 0 nothing. Runs on every if-then-else
-// built, so it allocates nothing -- the polarity is a flag rather than a NOT
-// node around the condition.
-static int decides(const stp::ASTNode& cond, bool holds,
-                   const stp::ASTNode& other)
+// The non-constant side of an equality against a constant, or Null when the
+// node is not one.
+static stp::ASTNode pinnedTerm(const stp::ASTNode& n)
+{
+  if (n.GetKind() != EQ)
+    return stp::ASTNode();
+  for (int i = 0; i < 2; i++)
+    if (n[i].GetKind() == stp::BVCONST && n[1 - i].GetKind() != stp::BVCONST)
+      return n[1 - i];
+  return stp::ASTNode();
+}
+
+// See the declaration.
+ASTNode SimplifyingNodeFactory::substituteConstant(const ASTNode& n,
+                                                   const ASTNode& t,
+                                                   const ASTNode& k,
+                                                   int& budget)
+{
+  if (n == t)
+    return k;
+  if (n.Degree() == 0 || budget-- <= 0)
+    return n;
+
+  ASTVec children;
+  children.reserve(n.Degree());
+  bool changed = false;
+  for (const ASTNode& c : n)
+  {
+    children.push_back(substituteConstant(c, t, k, budget));
+    changed = changed || (children.back() != c);
+  }
+
+  // Nothing under here mentioned the term, so there is nothing to build.
+  if (!changed)
+    return n;
+
+  // Unqualified, so the rebuild comes back through this factory and every
+  // operator on the way folds.
+  if (n.GetType() == stp::BOOLEAN_TYPE)
+    return CreateNode(n.GetKind(), children);
+  return CreateArrayTerm(n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(),
+                         children);
+}
+
+// How far substituteConstant walks before it gives up. Raising it to two
+// hundred decided 39 more tests across a sample of the hard set, so the
+// tests that fold are the small ones and the budget is there to stop the
+// rest costing anything.
+static const int substitution_budget = 40;
+
+// See the declaration. The cheap tests come first: they are a handful of
+// pointer comparisons, they run on every if-then-else built, and the
+// polarity is a flag rather than a NOT node around the condition, so they
+// allocate nothing.
+int SimplifyingNodeFactory::decides(const ASTNode& cond, bool holds,
+                                    const ASTNode& other)
 {
   if (cond == other)
     return holds ? 1 : -1;
@@ -2204,8 +2254,28 @@ static int decides(const stp::ASTNode& cond, bool holds,
   if (!holds)
     return 0;
   if (other.GetKind() == stp::NOT)
-    return pinApart(cond, other[0]) ? 1 : 0;
-  return pinApart(cond, other) ? -1 : 0;
+  {
+    if (pinApart(cond, other[0]))
+      return 1;
+  }
+  else if (pinApart(cond, other))
+    return -1;
+
+  // The term is pinned in this branch, so put the constant through the test
+  // and keep the answer only if the whole test folds. A verdict replaces the
+  // test with TRUE or FALSE, which deletes an edge and builds nothing; the
+  // substituted structure is dropped, which is what separates this from
+  // rewriting the branch under a context.
+  const ASTNode t = pinnedTerm(cond);
+  if (t.IsNull())
+    return 0;
+
+  const ASTNode& k = (cond[0].GetKind() == stp::BVCONST) ? cond[0] : cond[1];
+  int budget = substitution_budget;
+  const ASTNode folded = substituteConstant(other, t, k, budget);
+  if (!folded.isConstant())
+    return 0;
+  return (folded == ASTTrue) ? 1 : -1;
 }
 
 // See the declaration.
