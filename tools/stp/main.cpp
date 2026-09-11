@@ -182,9 +182,15 @@ void ExtraMain::create_options()
   // A value-taking bool: accepts 1/0, true/false, on/off, as
   // '--flattening false' or '--flattening=false'. capture_default_str()
   // shows the current UserFlags default in --help.
+  // A repeated boolean flag takes its last value, so a test or a script
+  // that appends "--flag=1" to a command line that already says "--flag=0"
+  // gets the appended value rather than a parse error.
   auto bool_arg = [this](const char* name, bool& var, const char* desc,
                          const char* group) {
-    return app.add_option(name, var, desc)->capture_default_str()->group(group);
+    return app.add_option(name, var, desc)
+        ->capture_default_str()
+        ->group(group)
+        ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
   };
   auto int64_arg = [this](const char* name, int64_t& var, const char* desc,
                           const char* group) {
