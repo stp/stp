@@ -2868,13 +2868,6 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
   }
 // Disabled (kept for reference): guarded out of the build rather than left as
 // `else if (false && ...)`, which trips -Wunreachable-code under -Werror.
-#if 0
-  else if (n1.GetKind() == BVUMINUS &&
-           (n0.isConstant() && CONSTANTBV::BitVector_is_full(n0.GetBVConst())))
-  {
-    result = NodeFactory::CreateTerm(BVNOT, width, n1[0]);
-  }
-#endif
   else if (n1.GetKind() == BVUMINUS && n0.GetKind() == BVUMINUS)
   {
     ASTNode r = NodeFactory::CreateTerm(BVPLUS, width, n0[0], n1[0]);
@@ -3235,64 +3228,6 @@ ASTNode SimplifyingNodeFactory::handle_bvand(
   // there are one bits.
   // Disabled (kept for reference): guarded out of the build rather than left as
   // `if (false && ...)`, which trips -Wunreachable-code under -Werror.
-#if 0
-  if (children.size() == 2 &&
-      (children[0].isConstant() || children[1].isConstant()))
-  {
-    ASTNode c0 = children[0];
-    ASTNode c1 = children[1];
-    if (c1.isConstant())
-    {
-      ASTNode t = c0;
-      c0 = c1;
-      c1 = t;
-    }
-
-    int start = -1;
-    int end = -1;
-    stp::CBV c = c0.GetBVConst();
-    bool bad = false;
-    for (int i = 0; i < (int)width; i++)
-    {
-      if (CONSTANTBV::BitVector_bit_test(c, i))
-      {
-        if (start == -1)
-          start = i; // first one bit.
-        else if (end != -1)
-          bad = true;
-      }
-
-      if (!CONSTANTBV::BitVector_bit_test(c, i))
-      {
-        if (start != -1 && end == -1)
-          end = i - 1; // end of run.
-      }
-    }
-    if (start != -1 && end == -1)
-      end = (int)width - 1;
-
-    if (!bad && start != -1)
-    {
-      assert(end != -1);
-
-      ASTNode result = NodeFactory::CreateTerm(BVEXTRACT, end - start + 1, c1,
-                                       bm.CreateBVConst(32, end),
-                                       bm.CreateBVConst(32, start));
-
-      if (start > 0)
-      {
-        ASTNode z = bm.CreateZeroConst(start);
-        result = NodeFactory::CreateTerm(BVCONCAT, end + 1, result, z);
-      }
-      if (end < (int)width - 1)
-      {
-        ASTNode z = bm.CreateZeroConst((int)width - end - 1);
-        result =  NodeFactory::CreateTerm(BVCONCAT, width, z, result);
-      }
-      return result;
-    }
-  }
-#endif
 
   if (children.size() ==2 && children[1].GetKind() == stp::BVAND && children[0] == children[1][0])
   {
