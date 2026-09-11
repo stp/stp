@@ -79,10 +79,14 @@ if(NOT ABC_FOUND_SYSTEM)
         check_auto_download("ABC" "")
     endif()
 
-    # stp/abc is a fork: master tracks upstream untouched and the `stp` branch
-    # carries STP's changes as commits on top. To work on those, clone it and
+    # stp/abc is a fork: master tracks upstream untouched, and STP's changes
+    # sit as commits on top of an upstream revision. There are two lines of
+    # those. The `stp` branch is where they are reviewed, on a recent upstream;
+    # what is pinned here is the same set on the older upstream the pin has
+    # followed since PR #892, one tag per bump. Moving the pin to `stp` would
+    # bump the upstream base with it. To work on either, clone the fork and
     # point -DABC_DIR at a build of the clone. See docs/code-guide.rst.
-    set(ABC_GIT_TAG "bdacd898845aa91b2e2d650272b2ca35c1d4539f" CACHE STRING
+    set(ABC_GIT_TAG "b6e26a0fe6d813136687e9adf06c1c08d077d567" CACHE STRING
         "ABC revision to build when one has to be built")
     mark_as_advanced(ABC_GIT_TAG)
 

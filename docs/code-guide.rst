@@ -47,11 +47,16 @@ own targets; the other two are small enough to be carried in the tree:
 
 -  ABC: The `ABC <https://github.com/berkeley-abc/abc>`__ package, used to
    build AIGs and convert them to CNF. Fetched from
-   `stp/abc <https://github.com/stp/abc>`__ rather than from ABC itself. That fork keeps two branches: ``master`` mirrors upstream
-   untouched, and ``stp`` -- the branch ``ABC_GIT_TAG`` in the top-level
-   ``CMakeLists.txt`` pins a commit of -- carries our changes as commits on
-   top of the upstream revision we have taken. Bumping ABC means rebasing
-   ``stp`` onto a newer ``master`` in that repository, then moving that pin.
+   `stp/abc <https://github.com/stp/abc>`__ rather than from ABC itself. In
+   that fork ``master`` mirrors upstream untouched and our changes sit as
+   commits on top of an upstream revision we have taken. There are two lines
+   of those: ``stp``, which is where they are reviewed and which sits on a
+   recent upstream, and the line ``ABC_GIT_TAG`` in ``cmake/FindABC.cmake``
+   pins, which carries the same set on the older upstream the pin has followed
+   so far. A change to ABC goes onto both, and each bump of the pin is held by
+   a tag named ``stp-at-<upstream>-pr<NNNN>``. Moving the pin onto ``stp``
+   would bump the upstream base along with it; bumping that base is its own
+   piece of work, and means rebasing ``stp`` onto a newer ``master`` first.
 
    To work on the fork, clone it, build ``libabc-pic`` in it, and configure
    with ``-DABC_DIR=<clone>``: the build then uses that copy and fetches
