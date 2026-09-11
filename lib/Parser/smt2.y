@@ -1098,6 +1098,15 @@ namespace stp
     bool negative;
   };
 
+  static void destroyParsedRealConstant(ParsedRealConstant* value)
+  {
+    if (value == nullptr)
+      return;
+    delete value->num;
+    delete value->den;
+    delete value;
+  }
+
   // The five rounding modes as parse-time values. Rounding-mode constants
   // are interned, so comparing against the five is exact; anything else of
   // RoundingMode sort is symbolic.
@@ -2441,7 +2450,9 @@ SOURCE_TOK
 | VERSION_TOK
 {}
 | STATUS_TOK status
-{}
+{
+  delete $2;
+}
 | LICENSE_TOK
 {}
 | /* set-info accepts any keyword, not just the handful the lexer gives a
@@ -3425,12 +3436,16 @@ an_fp_term:
 }
 | LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_real_constant RPAREN_TOK
 {
+  $$ = nullptr;
+  destroyParsedRealConstant($8);
   fatal_yyerror("converting a real literal needs a rounding mode, e.g. "
                 "((_ to_fp 8 24) RNE 1.5); the one-argument form of to_fp "
                 "reinterprets the packed bits of a bitvector");
 }
 | LPAREN_TOK FP_TO_REAL_TOK an_term RPAREN_TOK
 {
+  $$ = nullptr;
+  delete $3;
   fatal_yyerror("fp.to_real is not supported: STP has no theory of reals");
 }
 | UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
