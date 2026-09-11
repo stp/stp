@@ -1,0 +1,74 @@
+diff --git a/src/aig/gia/giaAig.c b/src/aig/gia/giaAig.c
+index c764a0993..c0ac9bcbd 100644
+--- a/src/aig/gia/giaAig.c
++++ b/src/aig/gia/giaAig.c
+@@ -52,24 +52,55 @@ static inline Aig_Obj_t * Gia_ObjChild1Copy2( Aig_Obj_t ** ppNodes, Gia_Obj_t *
+   SeeAlso     []
+ 
+ ***********************************************************************/
+-void Gia_ManFromAig_rec( Gia_Man_t * pNew, Aig_Man_t * p, Aig_Obj_t * pObj )
++void Gia_ManFromAig_rec( Gia_Man_t * pNew, Aig_Man_t * p, Aig_Obj_t * pRoot )
+ {
+-    Aig_Obj_t * pNext;
+-    if ( pObj->iData )
++    // Iterative DFS: an AIG as deep as an unrolled trace overflows the C
++    // stack one call frame per level. Children first; an equivalence
++    // successor is scheduled before its node commits, preserving the
++    // recursive order exactly.
++    Vec_Ptr_t * vStack;
++    Aig_Obj_t * pObj, * pNext;
++    if ( pRoot->iData )
+         return;
+-    assert( Aig_ObjIsNode(pObj) );
+-    Gia_ManFromAig_rec( pNew, p, Aig_ObjFanin0(pObj) );
+-    Gia_ManFromAig_rec( pNew, p, Aig_ObjFanin1(pObj) );
+-    pObj->iData = Gia_ManAppendAnd( pNew, Gia_ObjChild0Copy(pObj), Gia_ObjChild1Copy(pObj) );
+-    if ( p->pEquivs && (pNext = Aig_ObjEquiv(p, pObj)) )
++    vStack = Vec_PtrAlloc( 1000 );
++    Vec_PtrPush( vStack, pRoot );
++    while ( Vec_PtrSize(vStack) )
+     {
+-        int iObjNew, iNextNew;
+-        Gia_ManFromAig_rec( pNew, p, pNext );
+-        iObjNew  = Abc_Lit2Var(pObj->iData);
+-        iNextNew = Abc_Lit2Var(pNext->iData);
+-        if ( pNew->pNexts )
+-            pNew->pNexts[iObjNew] = iNextNew;        
++        pObj = (Aig_Obj_t *)Vec_PtrEntryLast( vStack );
++        if ( pObj->iData )
++        {
++            Vec_PtrPop( vStack );
++            continue;
++        }
++        assert( Aig_ObjIsNode(pObj) );
++        if ( !Aig_ObjFanin0(pObj)->iData )
++        {
++            Vec_PtrPush( vStack, Aig_ObjFanin0(pObj) );
++            continue;
++        }
++        if ( !Aig_ObjFanin1(pObj)->iData )
++        {
++            Vec_PtrPush( vStack, Aig_ObjFanin1(pObj) );
++            continue;
++        }
++        pNext = (p->pEquivs ? Aig_ObjEquiv(p, pObj) : NULL);
++        if ( pNext && !pNext->iData && Aig_ObjIsNode(pNext) )
++        {
++            Vec_PtrPush( vStack, pNext );
++            continue;
++        }
++        pObj->iData = Gia_ManAppendAnd( pNew, Gia_ObjChild0Copy(pObj), Gia_ObjChild1Copy(pObj) );
++        if ( pNext )
++        {
++            int iObjNew, iNextNew;
++            iObjNew  = Abc_Lit2Var(pObj->iData);
++            iNextNew = Abc_Lit2Var(pNext->iData);
++            if ( pNew->pNexts )
++                pNew->pNexts[iObjNew] = iNextNew;
++        }
++        Vec_PtrPop( vStack );
+     }
++    Vec_PtrFree( vStack );
+ }
+ Gia_Man_t * Gia_ManFromAig( Aig_Man_t * p )
+ {

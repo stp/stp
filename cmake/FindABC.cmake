@@ -158,6 +158,8 @@ if(NOT ABC_FOUND_SYSTEM)
         ${STP_EP_COMMON_CONFIG}
         GIT_REPOSITORY https://github.com/stp/abc.git
         GIT_TAG ${ABC_GIT_TAG}
+        PATCH_COMMAND git apply --unidiff-zero
+                      "${CMAKE_CURRENT_LIST_DIR}/deps-utils/abc-gia-from-aig-iterative.patch"
         CONFIGURE_COMMAND
             ${CMAKE_COMMAND} -E env ABC_USE_NO_CUDD=1 ABC_USE_NO_PTHREADS=1
             ${CMAKE_COMMAND} -S <SOURCE_DIR> -B <BINARY_DIR>
