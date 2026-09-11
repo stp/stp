@@ -65,10 +65,9 @@ extern "C" {
 // fail at link time. A shared build gets dllexport while the library is being
 // compiled and dllimport for everyone else.
 //
-// The mechanism is currently dormant -- no shared MSVC build of STP is produced
-// (the only Windows CI job is STATICCOMPILE=ON, which forces BUILD_SHARED_LIBS
-// OFF), so neither __declspec arm is ever taken. It is kept correct so that
-// enabling a Windows DLL build later works.
+// The shared MSVC x64 product workflow is defined to exercise these
+// declarations. Static builds define neither macro and therefore retain the
+// empty expansion above.
 #if defined(STP_SHARED_LIB) && defined(STP_EXPORTS)
 // This is visible when building the STP library as a DLL.
 #define DLL_PUBLIC __declspec(dllexport)
@@ -112,6 +111,43 @@ typedef void* WholeCounterExample;
 //! cast, or free them. Destroying the owning VC retires its registry entry, so
 //! a stale or cross-context identity can be rejected without dereferencing it.
 typedef uint64_t UFDeclHandle;
+
+/////////////////////////////////////////////////////////////////////////////
+/// LEGACY RAW C-HANDLE LIFETIME CONTRACT
+///
+/// VC is the owning validity-checker handle.  Expr, Type,
+/// WholeCounterExample, and the expressions contained in counterexample
+/// arrays are manager-dependent child handles.  A child is supported only
+/// while its owning VC is live and the child has not been explicitly deleted.
+/// Destroying a VC invalidates every manager-dependent child.  Explicitly
+/// deleting a child invalidates that child immediately.
+///
+/// Delete caller-owned children and counterexample arrays before vc_Destroy.
+/// Do not use or delete a raw child after its owner has been destroyed, and do
+/// not reuse or delete a child after explicit deletion.  Such calls pass a
+/// dangling raw pointer and are outside the supported C API contract.  STP
+/// does not promise safe execution, deterministic diagnosis, an error message,
+/// a return value, or process continuation for them.
+///
+/// Lifetime and deletion rights follow ownership, not the numeric pointer
+/// value.  Copying a void* token does not copy ownership, extend lifetime,
+/// create another deletion right, make a child independent of its VC, or make
+/// a stale value valid again if an allocator later reuses the address.
+///
+/// Separately allocated returned values are exceptions only where documented.
+///
+/// Managed Python wrappers reject access after close before calling this raw
+/// API.  The C++ interface follows ordinary manager/scoped-lifetime and
+/// same-manager rules.  Those stronger managed behaviors do not promise raw-C
+/// dangling-pointer diagnostics.
+///
+/// Independent live managers may be used on separate threads under STP's
+/// documented concurrency controls.  Concurrent use and deletion of the same
+/// child, or concurrent use and destruction of its owner, are unsupported.
+///
+/// This documents the legacy lifetime contract.  It does not provide a handle registry,
+/// tombstones, generations, checked handles, or use-after-free hardening.
+/////////////////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
 /// START API
@@ -1397,6 +1433,8 @@ DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 //!
 //! It is the caller's responsibility to free the memory afterwards;
 //! vc_deleteCounterExampleArray does so with the allocator that made it.
+//! The buffers and all contained Expr handles must be deleted while the
+//! producing VC is still live.
 //!
 DLL_PUBLIC void vc_getCounterExampleArray(VC vc, Expr e, Expr** outIndices,
                                           Expr** outValues, int* outSize);
@@ -1408,6 +1446,8 @@ DLL_PUBLIC void vc_getCounterExampleArray(VC vc, Expr e, Expr** outIndices,
 //! library, so allocation and deallocation always use the same
 //! allocator even when the embedding process links a different one.
 //! With a size of zero nothing was allocated and nothing is freed.
+//! This cleanup must run before destruction of the VC that produced the
+//! buffers; the call immediately invalidates the buffers and their entries.
 //!
 DLL_PUBLIC void vc_deleteCounterExampleArray(Expr* indices, Expr* values,
                                              int size);
@@ -2222,6 +2262,12 @@ DLL_PUBLIC int vc_getHashQueryStateToBuffer(VC vc, Expr query);
 //! Removes all associated expressions with it if 'EXPRDELETE' was set to 'true'
 //! via 'vc_setInterfaceFlags' during the process.
 //!
+//! This call immediately invalidates the VC and every manager-dependent child,
+//! whether or not the numeric pointer values are retained.  Delete any
+//! caller-owned children and counterexample arrays first.  Passing the VC or
+//! any invalidated child to a later C API call is outside the supported
+//! contract and has no deterministic-diagnostic guarantee.
+//!
 DLL_PUBLIC void vc_Destroy(VC vc);
 
 //! \brief Destroy the given expression, freeing its associated memory.
@@ -2234,9 +2280,16 @@ DLL_PUBLIC void vc_Destroy(VC vc);
 //! explicitly; vc_declareUninterpretedFunction documents this for its borrowed
 //! Type arguments.
 //!
+//! The owning VC must still be live.  This call immediately invalidates the
+//! raw handle; reusing it or deleting it again is outside the supported
+//! contract.  Copying the pointer does not create another deletion right.
+//!
 DLL_PUBLIC void vc_DeleteExpr(Expr e);
 
 //! \brief Returns the whole counterexample from the given validity checker.
+//!
+//! The returned handle is a child of vc and is valid only while vc remains
+//! live and until vc_deleteWholeCounterExample is called.
 //!
 DLL_PUBLIC WholeCounterExample vc_getWholeCounterExample(VC vc);
 
@@ -2252,6 +2305,9 @@ DLL_PUBLIC Expr vc_getTermFromCounterExample(VC vc, Expr e,
                                              WholeCounterExample c);
 
 //! \brief Destroys the given whole counter example, freeing all of its associated memory.
+//!
+//! The producing VC must still be live.  This call immediately invalidates
+//! the handle; later use or deletion is outside the supported contract.
 //!
 DLL_PUBLIC void vc_deleteWholeCounterExample(WholeCounterExample cc);
 
