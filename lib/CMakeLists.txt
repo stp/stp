@@ -304,6 +304,7 @@ target_link_libraries(stp
 # own link line above, and the tests that call into ABC directly link it
 # themselves because a shared libstp localises its symbols.
 target_include_directories(stp SYSTEM INTERFACE
+    $<BUILD_INTERFACE:${STP_UNORDERED_DENSE_INCLUDE_DIR}>
     $<BUILD_INTERFACE:${SYMFPU_INCLUDE_DIRS}>
     $<BUILD_INTERFACE:${ABC_INCLUDE_DIR}>
 )
