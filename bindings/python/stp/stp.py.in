@@ -178,6 +178,7 @@ _set_func('get_git_version_sha', c_char_p)
 _set_func('get_git_version_tag', c_char_p)
 _set_func('get_compilation_env', c_char_p)
 _set_func('vc_createValidityChecker', _VC)
+_set_func('vc_setInterfaceFlags', None, _VC, c_int32, c_int32)
 _set_func('vc_supportsMinisat', c_bool, _VC)
 _set_func('vc_useMinisat', c_bool, _VC)
 _set_func('vc_isUsingMinisat', c_bool, _VC)
@@ -431,8 +432,18 @@ class Solver(object):
         self.arrays = {}
         self.array_equality = bool(array_equality)
         self.uninterpreted_functions = bool(uninterpreted_functions)
-        self.vc = _lib.vc_createValidityChecker()
-        assert self.vc is not None, 'Error creating validity checker'
+        self._vc = _lib.vc_createValidityChecker()
+        assert self._vc is not None, 'Error creating validity checker'
+        # EXPRDELETE=0 transfers every returned Expr/Type handle to this
+        # wrapper.  Set it before constructing anything: switching ownership
+        # mode later is explicitly unsupported by the C interface.
+        _lib.vc_setInterfaceFlags(self._vc, 0, 0)
+        # C Expr and Type values are owning pointers to heap-allocated
+        # ASTNode wrappers.  Keep one solve-owned copy of every pointer and
+        # release all of them before the validity checker destroys its node
+        # manager.  AnyExpr registers automatically; the few unwrapped type,
+        # query and counterexample temporaries register at their call sites.
+        self._owned_exprs = {}
         # Rounding mode for the arithmetic operators of FloatExprs made here.
         self.rounding_mode = RNE
         if array_equality:
@@ -440,10 +451,61 @@ class Solver(object):
         if uninterpreted_functions:
             _lib.vc_setFlag(self.vc, b'u')
 
+    @property
+    def vc(self):
+        if self._vc is None:
+            raise RuntimeError('the STP solver is closed')
+        return self._vc
+
+    @vc.setter
+    def vc(self, value):
+        """Retain the upstream ``solver.vc = None`` retirement spelling.
+
+        Some raw-ctypes clients destroy the native checker themselves and then
+        clear this historically public slot so finalization cannot destroy it
+        twice.  Only retirement is supported: replacing one live native owner
+        with another would invalidate every managed child.
+        """
+        if value is not None:
+            raise AttributeError('the native STP solver handle cannot be replaced')
+        self._vc = None
+        getattr(self, '_owned_exprs', {}).clear()
+
+    def _own_expr(self, expr):
+        if expr:
+            self._owned_exprs.setdefault(int(expr), expr)
+        return expr
+
+    def close(self):
+        """Release all C handles and the underlying validity checker.
+
+        Closing is deterministic and idempotent.  Wrapped expressions retain
+        their solver while live, so automatic destruction cannot run before
+        an expression that still needs the checker.
+        """
+        vc = getattr(self, '_vc', None)
+        if vc is None:
+            return
+        self._vc = None
+        owned = getattr(self, '_owned_exprs', {})
+        # UF mode has a native owner/generation registry. vc_Destroy retires
+        # exactly the handles still live in that registry; this matters when a
+        # raw-ctypes client has explicitly retired one behind its Python
+        # wrapper. Non-UF contexts have no registry and retain the legacy
+        # caller-owned deletion loop here.
+        if not self.uninterpreted_functions:
+            for expr in owned.values():
+                _lib.vc_DeleteExpr(expr)
+        owned.clear()
+        _lib.vc_Destroy(vc)
+
     def __del__(self):
-        # TODO We're not quite there yet.
-        # _lib.vc_Destroy(self.vc)
-        pass
+        try:
+            self.close()
+        except (AttributeError, TypeError):
+            # Module teardown can clear ctypes globals before a last Python
+            # object is finalized.  Explicit close()/with remains exact.
+            pass
 
     def __enter__(self):
         Solver.current = self
@@ -451,6 +513,7 @@ class Solver(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         Solver.current = None
+        self.close()
 
     def supportsMinisat(self):
         return _lib.vc_supportsMinisat(self.vc)
@@ -494,7 +557,7 @@ class Solver(object):
         # TODO Perhaps cache these calls per width?
         name_conv = name.encode('utf-8')
 
-        bv_type = _lib.vc_bvType(self.vc, width)
+        bv_type = self._own_expr(_lib.vc_bvType(self.vc, width))
         # vc_varExpr refuses a name an uninterpreted function already has, and
         # refuses it nonfatally: a NULL handle rather than an abort. Raised
         # here, because carrying the NULL into an Expr would move the failure
@@ -581,7 +644,8 @@ class Solver(object):
 
     def rounding_mode_expr(self):
         """The current rounding-mode expression (self.rounding_mode, default RNE)."""
-        return _lib.vc_fpRoundingMode(self.vc, self.rounding_mode)
+        return self._own_expr(
+            _lib.vc_fpRoundingMode(self.vc, self.rounding_mode))
 
     def fp(self, name, eb, sb):
         """Creates a new floating-point variable of format (eb, sb).
@@ -591,7 +655,7 @@ class Solver(object):
         24) an IEEE single.
         """
         name_conv = name.encode('utf-8')
-        fp_type = _lib.vc_fpType(self.vc, eb, sb)
+        fp_type = self._own_expr(_lib.vc_fpType(self.vc, eb, sb))
         expression = _lib.vc_varExpr(self.vc, name_conv, fp_type)
         if not expression:
             raise ValueError('floating-point declaration was rejected')
@@ -602,31 +666,32 @@ class Solver(object):
         """A floating-point constant of format (eb, sb) equal to the Python float
         `value`, rounded under the solver's rounding mode. (A literal like 0.1 is
         already rounded to the nearest double by Python before it gets here.)"""
-        fp_type = _lib.vc_fpType(self.vc, eb, sb)
+        fp_type = self._own_expr(_lib.vc_fpType(self.vc, eb, sb))
         expr = _lib.vc_fpConstFromDouble(
             self.vc, fp_type, self.rounding_mode_expr(), value)
         return FloatExpr(self, eb, sb, expr)
 
     def fpval_from_bits(self, eb, sb, bits):
         """A floating-point constant of format (eb, sb) from its packed IEEE bits."""
-        bv = _lib.vc_bvConstExprFromLL(self.vc, eb + sb, bits)
+        bv = self._own_expr(
+            _lib.vc_bvConstExprFromLL(self.vc, eb + sb, bits))
         expr = _lib.vc_fpConstFromBits(self.vc, eb, sb, bv)
         return FloatExpr(self, eb, sb, expr)
 
     def fp_nan(self, eb, sb):
         """The NaN of format (eb, sb)."""
-        t = _lib.vc_fpType(self.vc, eb, sb)
+        t = self._own_expr(_lib.vc_fpType(self.vc, eb, sb))
         return FloatExpr(self, eb, sb, _lib.vc_fpNaN(self.vc, t))
 
     def fp_inf(self, eb, sb, negative=False):
         """+oo (or -oo) of format (eb, sb)."""
-        t = _lib.vc_fpType(self.vc, eb, sb)
+        t = self._own_expr(_lib.vc_fpType(self.vc, eb, sb))
         e = (_lib.vc_fpMinusInfinity if negative else _lib.vc_fpPlusInfinity)(self.vc, t)
         return FloatExpr(self, eb, sb, e)
 
     def fp_zero(self, eb, sb, negative=False):
         """+0 (or -0) of format (eb, sb)."""
-        t = _lib.vc_fpType(self.vc, eb, sb)
+        t = self._own_expr(_lib.vc_fpType(self.vc, eb, sb))
         e = (_lib.vc_fpMinusZero if negative else _lib.vc_fpPlusZero)(self.vc, t)
         return FloatExpr(self, eb, sb, e)
 
@@ -641,9 +706,12 @@ class Solver(object):
         """
         name_conv = name.encode('utf-8')
 
-        arr_type = _lib.vc_arrayType(self.vc,
-                                     _lib.vc_bvType(self.vc, index_width),
-                                     _lib.vc_bvType(self.vc, value_width))
+        index_type = self._own_expr(
+            _lib.vc_bvType(self.vc, index_width))
+        value_type = self._own_expr(
+            _lib.vc_bvType(self.vc, value_width))
+        arr_type = self._own_expr(
+            _lib.vc_arrayType(self.vc, index_type, value_type))
         expr = _lib.vc_varExpr(self.vc, name_conv, arr_type)
         if not expr:
             raise ValueError('array declaration was rejected')
@@ -706,7 +774,7 @@ class Solver(object):
         _, length = self._n_exprs(*exprs)
         if (length > 0):
             expr = self.and_(*exprs)
-            expr = _lib.vc_notExpr(self.vc, expr.expr)
+            expr = self._own_expr(_lib.vc_notExpr(self.vc, expr.expr))
         else:
             expr = self.false().expr
 
@@ -758,22 +826,25 @@ class Solver(object):
             finally:
                 _lib.vc_DeleteExpr(value)
 
-        carrier = self._bit_carrier(expr)  # borrowed, not owned
-        result = 0
-        for i in range((width - 1) // 64 + 1):
-            slice_expr = _lib.vc_bvExtract(self.vc, carrier,
-                                           min((i + 1) * 64, width) - 1,
-                                           i * 64)
-            try:
-                slice_value = _model_value(self.vc, slice_expr)
+        carrier, carrier_owned = self._bit_carrier(expr)
+        try:
+            result = 0
+            for i in range((width - 1) // 64 + 1):
+                slice_expr = _lib.vc_bvExtract(
+                    self.vc, carrier, min((i + 1) * 64, width) - 1, i * 64)
                 try:
-                    result += (_lib.getBVUnsignedLongLong(slice_value)
-                               << (64 * i))
+                    slice_value = _model_value(self.vc, slice_expr)
+                    try:
+                        result += (_lib.getBVUnsignedLongLong(slice_value) <<
+                                   (64 * i))
+                    finally:
+                        _lib.vc_DeleteExpr(slice_value)
                 finally:
-                    _lib.vc_DeleteExpr(slice_value)
-            finally:
-                _lib.vc_DeleteExpr(slice_expr)
-        return result
+                    _lib.vc_DeleteExpr(slice_expr)
+            return result
+        finally:
+            if carrier_owned:
+                _lib.vc_DeleteExpr(carrier)
 
     def model(self, key=None, expr=None):
         """
@@ -809,12 +880,7 @@ class Solver(object):
             if _lib.getVWidth(expr) == 0:
                 # The same refusal _model_value raises for a wider term, in
                 # the same shape: one condition, one exception type.
-                value = _lib.vc_getCounterExample(self.vc, expr)
-                if not value:
-                    raise RuntimeError(
-                        'there is no model to read: a value is only defined '
-                        'by a satisfying assignment, so check() has to have '
-                        'been run and to have succeeded')
+                value = _model_value(self.vc, expr)
                 try:
                     boolean = _lib.vc_isBool(value)
                     if boolean >= 0:
@@ -848,14 +914,14 @@ class Solver(object):
         which are exactly the packed bits the slicing wants. A bit-vector is
         already its own carrier.
 
-        The result is borrowed, not owned. For a bit-vector it is the
-        caller's own argument, and for a float it is a handle vc_fpToIEEEBV
-        has already registered with the manager, which deletes it again at
-        vc_Destroy; passing either to vc_DeleteExpr is a double free.
+        Return the handle together with whether this call created it. A
+        bit-vector is the caller's borrowed argument. A float requires a new
+        caller-owned vc_fpToIEEEBV wrapper, which the model reader releases
+        after slicing it.
         """
         if _lib.vc_getExpWidth(expr):
-            return _lib.vc_fpToIEEEBV(self.vc, expr)
-        return expr
+            return _lib.vc_fpToIEEEBV(self.vc, expr), True
+        return expr, False
 
     def model_bits(self, key=None, expr=None):
         """Like model(), but always returns the raw packed bits as an integer,
@@ -1057,13 +1123,15 @@ class AnyExpr(object):
     def __init__(self, s, width, expr, name=None):
         self.s = s
         self.width = width
-        self.expr = expr
+        self._expr = s._own_expr(expr)
         self.name = name
 
-    def __del__(self):
-        # TODO We're not quite there yet.
-        # _lib.vc_DeleteExpr(self.expr)
-        pass
+    @property
+    def expr(self):
+        # Read the solver property first so a wrapper retained after explicit
+        # close raises instead of handing ctypes a dangling pointer.
+        self.s.vc
+        return self._expr
 
     @property
     def value(self):
@@ -1414,7 +1482,8 @@ class FloatExpr(AnyExpr):
         raise TypeError('operand must be a FloatExpr or a number')
 
     def _rm(self):
-        return _lib.vc_fpRoundingMode(self.s.vc, self.s.rounding_mode)
+        return self.s._own_expr(
+            _lib.vc_fpRoundingMode(self.s.vc, self.s.rounding_mode))
 
     def _fp1(self, cb):
         return FloatExpr(self.s, self.eb, self.sb, cb(self.s.vc, self.expr))
@@ -1514,15 +1583,15 @@ class FloatExpr(AnyExpr):
     def to_ubv(self, width, rm=None):
         """Round to a `width`-bit unsigned integer (a BitVector Expr) under the
         given rounding mode (default the solver's)."""
-        r = _lib.vc_fpRoundingMode(
-            self.s.vc, self.s.rounding_mode if rm is None else rm)
+        r = self.s._own_expr(_lib.vc_fpRoundingMode(
+            self.s.vc, self.s.rounding_mode if rm is None else rm))
         return Expr(self.s, width, _lib.vc_fpToUBVExpr(self.s.vc, width, r, self.expr))
 
     def to_sbv(self, width, rm=None):
         """Round to a `width`-bit signed integer (a BitVector Expr) under the
         given rounding mode (default the solver's)."""
-        r = _lib.vc_fpRoundingMode(
-            self.s.vc, self.s.rounding_mode if rm is None else rm)
+        r = self.s._own_expr(_lib.vc_fpRoundingMode(
+            self.s.vc, self.s.rounding_mode if rm is None else rm))
         return Expr(self.s, width, _lib.vc_fpToSBVExpr(self.s.vc, width, r, self.expr))
 
     # Defining __eq__ suppresses the default hash; hash by identity. (This
