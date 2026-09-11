@@ -246,6 +246,52 @@ void BVAbstractionRefiner::prepareTermForQuery(BVTermAbstraction& term)
   term.queryGeneration = queryGeneration_;
 }
 
+// Every SAT variable this round's scan can reach: the records' own, and the
+// bits of the nodes they stand over. Only these are read. A backend is under
+// no obligation to answer for a variable the refiner was never going to ask
+// about, and sweeping the whole range asks about all of them.
+static void noteVars(const ToSATBase::ASTNodeToSATVar& nodeToSATVar,
+                     const ASTNode& node, std::vector<unsigned>& wanted)
+{
+  const auto it = nodeToSATVar.find(node);
+  if (it == nodeToSATVar.end())
+    return;
+  for (unsigned var : it->second)
+    if (var != BV_ABSTRACTION_NO_VAR)
+      wanted.push_back(var);
+}
+
+void BVAbstractionRefiner::captureCandidate(
+    SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
+{
+  std::vector<unsigned> wanted;
+  for (const BVEQAbstraction& abs : eqs_)
+  {
+    if (abs.abstractionSATVar != BV_ABSTRACTION_NO_VAR)
+      wanted.push_back(abs.abstractionSATVar);
+    noteVars(nodeToSATVar, abs.leftSymbol, wanted);
+    noteVars(nodeToSATVar, abs.rightSymbol, wanted);
+  }
+  for (const BVTermAbstraction& abs : terms_)
+  {
+    if (abs.condSATVar != BV_ABSTRACTION_NO_VAR)
+      wanted.push_back(abs.condSATVar);
+    for (unsigned var : abs.resultSATVars)
+      if (var != BV_ABSTRACTION_NO_VAR)
+        wanted.push_back(var);
+    noteVars(nodeToSATVar, abs.termNode, wanted);
+    for (unsigned i = 0; i < abs.numOperands && i < 3; ++i)
+      noteVars(nodeToSATVar, abs.operands[i], wanted);
+  }
+  unsigned highest = 0;
+  for (unsigned var : wanted)
+    highest = std::max(highest, var);
+  candidateBits_.assign(wanted.empty() ? 0 : highest + 1, 0);
+  for (unsigned var : wanted)
+    candidateBits_[var] =
+        (solver.modelValue(var) == solver.true_literal()) ? 1 : 0;
+}
+
 AbstractionRefinementResult BVAbstractionRefiner::refine(
     SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
 {
@@ -268,15 +314,40 @@ AbstractionRefinementResult BVAbstractionRefiner::refine(
       scope.allRecords ? NULL : &scope.equalityIndices;
   const std::vector<size_t>* selectedTerms =
       scope.allRecords ? NULL : &scope.termIndices;
+  // Copy the candidate out before either pass runs. A solver that has taken
+  // a clause is no longer in a satisfied state -- CaDiCaL declines a value
+  // read there outright -- so whichever pass emitted first used to end the
+  // round for the other, and the equalities always emitted first. Against a
+  // copy both passes see the same candidate whatever the other has already
+  // asserted, which is what lets the second of them run at all.
+  // Only once there is a record to check: a refiner with nothing registered
+  // has nothing to ask the candidate about, and must not ask. The backend is
+  // not obliged to hold a model it was never going to be asked for, and at
+  // least one of them answers a read of one it does not have by throwing.
+  if (hasEqualities() || hasTerms())
+    captureCandidate(solver, nodeToSATVar);
   unsigned refined = 0;
   AbstractionRefinementResult result =
       AbstractionRefinementResult::faithful();
   if (hasEqualities())
     refined = refineEqualities(solver, nodeToSATVar, selectedEqualities);
-  if (refined == 0 && hasTerms())
+  // A round that pinned a single equality is not worth a solver call of its
+  // own while term records wait: a query whose float comparisons are blasted
+  // over packed values carries a hundred wide equalities beside its
+  // multiplications and used to alternate a round refining one of them with
+  // a round refining a hundred term records. Where the equalities are the
+  // work -- refining fifteen or twenty of them a round -- the terms still
+  // wait for a round the equalities have nothing left to say in, since
+  // pinning an operation at one pair of operand values is the weaker lemma
+  // and there is no sense spending the budget on it early.
+  if (refined <= 1 && hasTerms())
     result = refineTerms(solver, nodeToSATVar, selectedTerms);
-  else if (refined > 0)
-    result = AbstractionRefinementResult::progress(refined);
+  // An exhausted budget in the term pass decides the candidate whatever the
+  // equalities did; short of that the round's progress is the two together.
+  if (result.isUnknown())
+    result = AbstractionRefinementResult::unknown(result.refined + refined);
+  else if (result.refined + refined > 0)
+    result = AbstractionRefinementResult::progress(result.refined + refined);
 
   refined = result.refined;
   if (refined > 0)
@@ -530,7 +601,7 @@ unsigned BVAbstractionRefiner::refineEqualities(
           abs.abstractionSATVar, abs.eqNode,
           "BV abstraction: an abstracted equality's own variable never "
           "reached the solver: ");
-      bool modelTrue = (solver.modelValue(eqVar) == solver.true_literal());
+      bool modelTrue = candidateTrue(eqVar);
       eqInfos.push_back({symbolToIdx[abs.leftSymbol],
                           symbolToIdx[abs.rightSymbol],
                           eqVar,
@@ -575,7 +646,7 @@ unsigned BVAbstractionRefiner::refineEqualities(
         abs.abstractionSATVar, abs.eqNode,
         "BV abstraction: an abstracted equality's own variable never "
         "reached the solver: ");
-    bool absTrue = (solver.modelValue(eqVar) == solver.true_literal());
+    bool absTrue = candidateTrue(eqVar);
 
     // Both sides, whatever their kind: the blaster registers a constant
     // operand as a vector of inputs pinned to it, so there is nothing to
@@ -589,7 +660,7 @@ unsigned BVAbstractionRefiner::refineEqualities(
     bool actualEqual = true;
     for (unsigned bit = 0; bit < abs.width; ++bit)
     {
-      if (solver.modelValue(leftVars[bit]) != solver.modelValue(rightVars[bit]))
+      if (candidateTrue(leftVars[bit]) != candidateTrue(rightVars[bit]))
       {
         actualEqual = false;
         break;
@@ -613,7 +684,7 @@ unsigned BVAbstractionRefiner::refineEqualities(
       inc.sharedValue.resize(abs.width);
       for (unsigned bit = 0; bit < abs.width; ++bit)
         inc.sharedValue[bit] =
-            (solver.modelValue(leftVars[bit]) == solver.true_literal());
+            candidateTrue(leftVars[bit]);
     }
     incEQs.push_back(std::move(inc));
   }
@@ -743,19 +814,19 @@ std::vector<bool> bvOperationValue(Kind opKind,
 }
 
 static void readModelBits(const std::vector<unsigned>& satVars,
-                          unsigned width, SATSolver& solver,
+                          unsigned width, const BVAbstractionRefiner& refiner,
                           std::vector<bool>& bits)
 {
   assert(satVars.size() >= width);
   bits.resize(width);
   for (unsigned i = 0; i < width; ++i)
-    bits[i] = (solver.modelValue(satVars[i]) == solver.true_literal());
+    bits[i] = refiner.candidateTrue(satVars[i]);
 }
 
 static void getOperandBits(
     const ASTNode& operand, unsigned width,
-    const ToSATBase::ASTNodeToSATVar& nodeToSATVar, SATSolver& solver,
-    std::vector<bool>& bits)
+    const ToSATBase::ASTNodeToSATVar& nodeToSATVar,
+    const BVAbstractionRefiner& refiner, std::vector<bool>& bits)
 {
   bits.resize(width);
   if (operand.GetKind() == BVCONST)
@@ -767,7 +838,7 @@ static void getOperandBits(
   }
   const std::vector<unsigned>& satVars =
       encodedBitsOf(operand, width, nodeToSATVar);
-  readModelBits(satVars, width, solver, bits);
+  readModelBits(satVars, width, refiner, bits);
 }
 
 static bool isBVCompare(Kind k)
@@ -2423,13 +2494,13 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
         continue;
 
       std::vector<bool> dividendBits, divisorBits, quotientBits, remainderBits;
-      getOperandBits(div.operands[0], div.width, nodeToSATVar, solver,
+      getOperandBits(div.operands[0], div.width, nodeToSATVar, *this,
                      dividendBits);
-      getOperandBits(div.operands[1], div.width, nodeToSATVar, solver,
+      getOperandBits(div.operands[1], div.width, nodeToSATVar, *this,
                      divisorBits);
-      readModelBits(encodedResultBitsOf(div, nodeToSATVar), div.width, solver,
+      readModelBits(encodedResultBitsOf(div, nodeToSATVar), div.width, *this,
                     quotientBits);
-      readModelBits(encodedResultBitsOf(rem, nodeToSATVar), rem.width, solver,
+      readModelBits(encodedResultBitsOf(rem, nodeToSATVar), rem.width, *this,
                     remainderBits);
 
       if (divRemIdentityHolds(dividendBits, divisorBits, quotientBits,
@@ -2467,11 +2538,11 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
           "its answer: ");
 
       std::vector<bool> aBits, bBits;
-      getOperandBits(abs.operands[0], abs.width, nodeToSATVar, solver, aBits);
-      getOperandBits(abs.operands[1], abs.width, nodeToSATVar, solver, bBits);
+      getOperandBits(abs.operands[0], abs.width, nodeToSATVar, *this, aBits);
+      getOperandBits(abs.operands[1], abs.width, nodeToSATVar, *this, bBits);
 
       bool expected = computeBVCompare(abs.opKind, aBits, bBits);
-      bool actual = (solver.modelValue(condVar) == solver.true_literal());
+      bool actual = candidateTrue(condVar);
       if (expected == actual)
         continue;
 
@@ -2489,8 +2560,8 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
     if (abs.opKind == BVPLUS)
     {
       std::vector<bool> leftBits, rightBits;
-      getOperandBits(abs.operands[0], abs.width, nodeToSATVar, solver, leftBits);
-      getOperandBits(abs.operands[1], abs.width, nodeToSATVar, solver, rightBits);
+      getOperandBits(abs.operands[0], abs.width, nodeToSATVar, *this, leftBits);
+      getOperandBits(abs.operands[1], abs.width, nodeToSATVar, *this, rightBits);
 
       const bool lNeg = abs.operandNegated[0];
       const bool rNeg = abs.operandNegated[1];
@@ -2503,7 +2574,7 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
       {
         bool l = leftBits[bit] ^ lNeg;
         bool r = rightBits[bit] ^ rNeg;
-        bool s = (solver.modelValue(resultVars[bit]) == solver.true_literal());
+        bool s = candidateTrue(resultVars[bit]);
         actual[bit] = s;
         bool expectedSum = l ^ r ^ carry;
         carry = (l && r) || (l && carry) || (r && carry);
@@ -2534,16 +2605,16 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
           "BV abstraction: an abstracted if-then-else has no input carrying "
           "its condition: ");
 
-      bool condVal = (solver.modelValue(condVar) == solver.true_literal());
+      bool condVal = candidateTrue(condVar);
       unsigned branchIdx = condVal ? 1 : 2;
       std::vector<bool> branchBits;
-      getOperandBits(abs.operands[branchIdx], abs.width, nodeToSATVar, solver,
+      getOperandBits(abs.operands[branchIdx], abs.width, nodeToSATVar, *this,
                      branchBits);
 
       bool consistent = true;
       for (unsigned bit = 0; bit < abs.width; ++bit)
       {
-        bool r = (solver.modelValue(resultVars[bit]) == solver.true_literal());
+        bool r = candidateTrue(resultVars[bit]);
         if (r != branchBits[bit]) { consistent = false; break; }
       }
       if (consistent) continue;
@@ -2553,8 +2624,8 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
     else if (abs.opKind == BVMULT || abs.opKind == BVDIV || abs.opKind == BVMOD)
     {
       std::vector<bool> aBits, bBits;
-      getOperandBits(abs.operands[0], abs.width, nodeToSATVar, solver, aBits);
-      getOperandBits(abs.operands[1], abs.width, nodeToSATVar, solver, bBits);
+      getOperandBits(abs.operands[0], abs.width, nodeToSATVar, *this, aBits);
+      getOperandBits(abs.operands[1], abs.width, nodeToSATVar, *this, bBits);
 
       unsigned W = abs.width;
       // What the operation really is at these operand values. This is the
@@ -2575,7 +2646,7 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
       std::vector<bool> actual(W);
       for (unsigned bit = 0; bit < W; ++bit)
         actual[bit] =
-            (solver.modelValue(resultVars[bit]) == solver.true_literal());
+            candidateTrue(resultVars[bit]);
 
       unsigned lowestWrongBit = W;
       for (unsigned bit = 0; bit < W; ++bit)

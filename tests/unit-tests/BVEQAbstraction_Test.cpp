@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATAIG.h"
 
 #include <gtest/gtest.h>
+#include <stdexcept>
 
 #include <map>
 #include <set>
@@ -752,6 +753,21 @@ private:
   uint32_t next = 1;
 };
 
+// A backend is not obliged to hold a model it was never going to be asked
+// for, and at least one of them answers a read of a model it does not have by
+// throwing rather than by returning a value. So a refiner with no records
+// must ask nothing at all, and the stub above, which answers every read with
+// false, cannot tell whether it did.
+class ThrowingModelSolver : public NoModelSolver
+{
+public:
+  uint8_t modelValue(uint32_t) const override
+  {
+    throw std::out_of_range(
+        "the candidate was read when there was no record to check");
+  }
+};
+
 TEST_F(BVEQAbstractionTest, IncompleteScopeIsExplicitlyUnknown)
 {
   BVAbstractionRefiner refiner(&mgr);
@@ -1104,6 +1120,146 @@ TEST_F(BVEQAbstractionTest, SaidUnequalRoundBlocksTheCandidate)
   EXPECT_EQ(1u, refiner.equalities()[0].refinedBits);
   EXPECT_FALSE(refiner.equalities()[0].defined);
   EXPECT_TRUE(solver.someClauseBlocksModel());
+}
+
+// One round refines both families. The equalities used to go first and take
+// the round with them, so a candidate that contradicted a hundred products
+// and one equality spent the round on the equality alone and came back for
+// the products next time. Both passes read a copy of the candidate rather
+// than the solver, which is what lets the second of them run at all: the
+// first to add a clause leaves the solver unable to answer for a value.
+// Nothing registered, nothing asked. The round copies the candidate out of
+// the backend before either pass runs, which is what lets the second of them
+// read it after the first has emitted; that copy must not happen when there
+// is no record to check, or a plain query with no abstraction in it pays for
+// a model read it never needed -- and, on a backend that throws, does not
+// survive it.
+TEST_F(BVEQAbstractionTest, ARefinerWithNoRecordsNeverReadsTheCandidate)
+{
+  BVAbstractionRefiner refiner(&mgr);
+  ThrowingModelSolver solver;
+  ToSATBase::ASTNodeToSATVar bits;
+  EXPECT_TRUE(refiner.refine(solver, bits).isFaithful());
+}
+
+TEST_F(BVEQAbstractionTest, OneRoundRefinesAnEqualityAndATermTogether)
+{
+  mgr.UserFlags.bv_eq_refine_width = 1;
+  ASTNode x = makeSymbol("both_x", 4);
+  ASTNode y = makeSymbol("both_y", 4);
+  ASTNode p = makeSymbol("both_p", 4);
+  ASTNode q = makeSymbol("both_q", 4);
+  ASTNode product = factory->CreateTerm(BVMULT, 4, p, q);
+
+  BVAbstractionRefiner refiner(&mgr);
+  BVEQAbstraction equality;
+  equality.eqNode = factory->CreateNode(EQ, x, y);
+  equality.abstractionSATVar = 5;
+  equality.leftSymbol = x;
+  equality.rightSymbol = y;
+  equality.width = 4;
+  appendEqualityRecord(refiner, equality);
+
+  BVTermAbstraction term;
+  term.termNode = product;
+  term.opKind = BVMULT;
+  term.operands[0] = p;
+  term.operands[1] = q;
+  term.numOperands = 2;
+  term.width = 4;
+  appendTermRecord(refiner, term);
+
+  ToSATBase::ASTNodeToSATVar bits;
+  bits[x] = std::vector<unsigned>{10, 11, 12, 13};
+  bits[y] = std::vector<unsigned>{20, 21, 22, 23};
+  bits[p] = std::vector<unsigned>{30, 31, 32, 33};
+  bits[q] = std::vector<unsigned>{40, 41, 42, 43};
+  bits[product] = std::vector<unsigned>{50, 51, 52, 53};
+
+  RecordingSolver solver;
+  // The candidate says the equality is false while both sides hold five, and
+  // says two times three is zero. Each is a contradiction its own pass pins.
+  solver.model[5] = false;
+  for (unsigned bit = 0; bit < 4; ++bit)
+  {
+    const bool five = (bit == 0 || bit == 2);
+    solver.model[10 + bit] = five;
+    solver.model[20 + bit] = five;
+    solver.model[30 + bit] = (bit == 1);
+    solver.model[40 + bit] = (bit == 0 || bit == 1);
+    solver.model[50 + bit] = false;
+  }
+
+  // Two, not one: the equality pinned a bit and the product was pinned in
+  // the same round, whether by a schema or by blocking the pair of values.
+  EXPECT_EQ(2u, refinedCount(refiner.refine(solver, bits)));
+  EXPECT_EQ(1u, refiner.equalities()[0].refinedBits);
+  EXPECT_EQ(1u, refiner.terms()[0].blockedRounds +
+                    refiner.terms()[0].schemaRounds);
+}
+
+// And a round where the equalities are the work keeps it. Pinning an
+// operation at one pair of operand values is the weaker lemma of the two,
+// so while the equality pass is still pinning records by the handful the
+// term records wait for a round it has nothing left to say in.
+TEST_F(BVEQAbstractionTest, TermsWaitWhileTheEqualitiesArePinningRecords)
+{
+  mgr.UserFlags.bv_eq_refine_width = 1;
+  ASTNode p = makeSymbol("wait_p", 4);
+  ASTNode q = makeSymbol("wait_q", 4);
+  ASTNode product = factory->CreateTerm(BVMULT, 4, p, q);
+
+  BVAbstractionRefiner refiner(&mgr);
+  ToSATBase::ASTNodeToSATVar bits;
+  RecordingSolver solver;
+
+  // Two equalities the candidate contradicts, so the pass pins two.
+  for (unsigned which = 0; which < 2; ++which)
+  {
+    ASTNode x = makeSymbol(which ? "wait_x1" : "wait_x0", 4);
+    ASTNode y = makeSymbol(which ? "wait_y1" : "wait_y0", 4);
+    BVEQAbstraction equality;
+    equality.eqNode = factory->CreateNode(EQ, x, y);
+    equality.abstractionSATVar = 5 + which;
+    equality.leftSymbol = x;
+    equality.rightSymbol = y;
+    equality.width = 4;
+    appendEqualityRecord(refiner, equality);
+    const unsigned left = 60 + 10 * which;
+    const unsigned right = 80 + 10 * which;
+    bits[x] = std::vector<unsigned>{left, left + 1, left + 2, left + 3};
+    bits[y] = std::vector<unsigned>{right, right + 1, right + 2, right + 3};
+    solver.model[5 + which] = false;
+    for (unsigned bit = 0; bit < 4; ++bit)
+    {
+      const bool five = (bit == 0 || bit == 2);
+      solver.model[left + bit] = five;
+      solver.model[right + bit] = five;
+    }
+  }
+
+  BVTermAbstraction term;
+  term.termNode = product;
+  term.opKind = BVMULT;
+  term.operands[0] = p;
+  term.operands[1] = q;
+  term.numOperands = 2;
+  term.width = 4;
+  appendTermRecord(refiner, term);
+  bits[p] = std::vector<unsigned>{30, 31, 32, 33};
+  bits[q] = std::vector<unsigned>{40, 41, 42, 43};
+  bits[product] = std::vector<unsigned>{50, 51, 52, 53};
+  for (unsigned bit = 0; bit < 4; ++bit)
+  {
+    solver.model[30 + bit] = (bit == 1);
+    solver.model[40 + bit] = (bit == 0 || bit == 1);
+    solver.model[50 + bit] = false;
+  }
+
+  // Two equalities, and the product left for a later round.
+  EXPECT_EQ(2u, refinedCount(refiner.refine(solver, bits)));
+  EXPECT_EQ(0u, refiner.terms()[0].blockedRounds +
+                    refiner.terms()[0].schemaRounds);
 }
 
 // A defined equality's Boolean is exact, so transitivity chains are free
