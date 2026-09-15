@@ -431,12 +431,16 @@ declare -a g_simplify=(
 # have to share a group.
 declare -a g_mult=(
 ""
-# The default is 25: a constant multiplier Booth-recoded, a symbolic pair
-# summed as carry-save rows in canonical order, and a multiplier's runs of
-# identical symbolic bits recoded too. 1 is the plain shift-and-add array it
-# replaced, and the opt-out; 22 is the default without the run recoding.
+# The default is 27: a constant multiplier Booth-recoded, a symbolic pair
+# summed as ripple rows in canonical order with its runs of identical
+# symbolic bits recoded too, a constant Booth declines on carry-save rows.
+# 1 is the plain shift-and-add array it replaced, and the opt-out; 25 is the
+# default with carry-save rows for the symbolic pair, 26 with ripple rows
+# for the declined constant too, 22 is 25 without the run recoding.
 "--bb.mult-variant=1"
 "--bb.mult-variant=22"
+"--bb.mult-variant=25"
+"--bb.mult-variant=26"
 "--bb.mult-variant=3"
 "--bb.mult-variant=4"
 "--bb.mult-variant=5"

@@ -1042,19 +1042,17 @@ public:
   bool fp_domain_row_bounds = false;
 
   // Unsigned multiplication encoding; tools/stp/main.cpp lists the values.
-  // 22 Booth-recodes a constant multiplier's runs of ones and, for a
-  // symbolic pair, accumulates carry-save rows from the operands in a
-  // canonical order so x*y and y*x share one circuit. Against the plain
-  // shift-and-add array (1) it solved 185 of the 259-file hard set to 178
-  // in two independent rounds with a duplicate-default arm at exactly 178
-  // (2026-09-06 multiplication study); it changes the CNF of a quarter of
-  // those files and under a tenth of the easy corpus, and costs nothing to
-  // build. 25 is 22 with a multiplier's runs of identical symbolic bits --
-  // a sign extension's replicated sign bit -- Booth-recoded as well, which
-  // is 22's circuit on the 92% of hard files without such a run and up to
-  // half the clauses on the rest, 9% faster there against a duplicate
-  // default arm (2026-09-15 multiplication report).
-  int64_t multiplication_variant = 25;
+  // 27: a constant multiplier's runs of ones Booth-recoded and summed by
+  // the column network, a constant with no such run on carry-save rows,
+  // and a symbolic pair on ripple rows from the operand in canonical
+  // order with its runs of identical symbolic bits -- a sign extension's
+  // replicated sign bit -- Booth-recoded too. Ripple rows are what the
+  // unsigned multiplication overflow family needs (10-30x over carry-save
+  // rows) and carry-save rows what a divide-by-constant magic multiply
+  // needs (3x); against carry-save rows for both (25) the hard set solves
+  // the same count 6% faster and the fast tier one file more (2026-09-15
+  // multiplication report).
+  int64_t multiplication_variant = 27;
   // Conjoin to every multiply the prime implicates of the k-bit
   // multiplication relation that its circuit cannot rederive by unit
   // propagation: the odd-residue and 2-adic laws over the low k bits

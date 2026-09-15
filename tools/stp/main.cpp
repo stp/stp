@@ -749,11 +749,11 @@ void ExtraMain::create_options()
             "20 is radix-4 with a hard triple, every row a select of "
             "0, y, 2y or 3y. 21 is 14 for a constant multiplier and 19 for a "
             "symbolic one; 22 is 21 with carry-save rows; 23 is 21 with the "
-            "hard-triple rows of 20; 25 (default) is 22 with the runs of "
+            "hard-triple rows of 20; 25 is 22 with the runs of "
             "identical symbolic bits in the multiplier -- a sign "
             "extension's replicated sign bit -- Booth recoded as well; 26 "
-            "is 25 on 21's ripple rows; 27 is 26 with a constant's rows "
-            "carry-saved as 25 does. Any other value "
+            "is 25 on 21's ripple rows; 27 (default) is 26 with a constant's "
+            "rows carry-saved as 25 does. Any other value "
             "is an error, reported once bit-blasting reaches a multiply",
             bb_group);
 

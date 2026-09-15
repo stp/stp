@@ -23,7 +23,7 @@ not:
   the *magnitude* of the constant dividend, whereas `bvudiv x c` is quadratic in
   the width; `bvand x c` is free.
 * **A constant multiplier is Booth-recoded.** The default
-  `multiplication_variant`, 25, rewrites every run of three or more ones
+  `multiplication_variant`, 27, rewrites every run of three or more ones
   into a subtract at its foot and an add above its head, so a multiply by a
   constant costs one add per *row the recoding leaves*, not per set bit.
   `--mult-variant 1` measures the plain shift-and-add array instead, and the
