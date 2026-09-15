@@ -734,7 +734,7 @@ void ExtraMain::create_options()
            "comparison encoding variant 1", bb_group);
 
   int64_arg("--bb.mult-variant", bm->UserFlags.multiplication_variant,
-            "unsigned multiplication encoding. 1 (default) shifts and adds. "
+            "unsigned multiplication encoding. 1 shifts and adds. "
             "14 is 1, except that a multiplier holding a run of constant one "
             "bits is Booth recoded. 15 is radix-4 modified Booth, which halves "
             "the partial-product rows and recodes symbolic multipliers too. "
@@ -749,7 +749,10 @@ void ExtraMain::create_options()
             "20 is radix-4 with a hard triple, every row a select of "
             "0, y, 2y or 3y. 21 is 14 for a constant multiplier and 19 for a "
             "symbolic one; 22 is 21 with carry-save rows; 23 is 21 with the "
-            "hard-triple rows of 20. Any other value "
+            "hard-triple rows of 20; 25 (default) is 22 with the runs of "
+            "identical symbolic bits in the multiplier -- a sign "
+            "extension's replicated sign bit -- Booth recoded as well. Any "
+            "other value "
             "is an error, reported once bit-blasting reaches a multiply",
             bb_group);
 

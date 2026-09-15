@@ -431,6 +431,12 @@ declare -a g_simplify=(
 # have to share a group.
 declare -a g_mult=(
 ""
+# The default is 25: a constant multiplier Booth-recoded, a symbolic pair
+# summed as carry-save rows in canonical order, and a multiplier's runs of
+# identical symbolic bits recoded too. 1 is the plain shift-and-add array it
+# replaced, and the opt-out; 22 is the default without the run recoding.
+"--bb.mult-variant=1"
+"--bb.mult-variant=22"
 "--bb.mult-variant=3"
 "--bb.mult-variant=4"
 "--bb.mult-variant=5"
@@ -444,7 +450,14 @@ declare -a g_mult=(
 # the "QF_BV -nary 8 -ref 3" entry that exercises it (3/30 files), so the two
 # belong together -- dropping that logic entry silently stops fuzzing this
 # variant. Wider constants reach it more often still (7/30 at -Mc 8 -Mbw 32).
+# The same holds of the constant half of the default, 22, and of 21 and 23.
 "--bb.mult-variant=14"
+"--bb.mult-variant=17"
+"--bb.mult-variant=18"
+"--bb.mult-variant=19"
+"--bb.mult-variant=20"
+"--bb.mult-variant=21"
+"--bb.mult-variant=23"
 # 15 is the one Booth variant that recodes symbolic multipliers, and the only
 # one that skips setColumnsToZero(), so it reaches a bit-blasting path none of
 # the others do. 7/24 on the plain entries, as does 16.

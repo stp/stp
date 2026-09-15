@@ -3154,6 +3154,104 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_Booth(
   }
 }
 
+// 22's carry-save rows with the multiplier's runs of identical symbolic
+// bits Booth-recoded (see recodableRun). The rows are accumulated in
+// ascending shift order exactly as mult_csaRows accumulates the plain rows,
+// so a multiply with no run builds mult_csaRows' circuit node for node, and
+// one with a run shares every column below the run with a sibling product
+// over the same multiplier bits -- the signed and unsigned products of one
+// operand pair, which an overflow check builds side by side. Summing the
+// recoded rows through the column network instead loses that sharing, and
+// measured 40% larger on exactly those files. A run's foot row is the
+// complement of the gated copy of y; the two's-complement ones of all the
+// feet are one constant vector, and that vector seeds the accumulator: a
+// full adder with a constant input and no carry folds to wiring, so the
+// seed costs nothing, where an adder after the carries close cost a ripple
+// per recoded multiply (wienand's Booth-verification files, 6% larger).
+//
+// Only the multiplier's runs. A multiplicand's run can be lifted the same
+// way (x * y = x * y' + (x AND s) * (2^(hi+1) - 2^lo), with y' the
+// multiplicand less the run), but that costs two full-width rows however
+// few rows the multiplier has, and measured a net loss on the fast corpus
+// -- 71 files larger, one by 88% -- for a few percent where both operands
+// are sign extensions (2026-09-15 multiplication report).
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::mult_csaRuns(
+    const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& /*support*/,
+    const ASTNode& n)
+{
+  const int bitWidth = n.GetValueWidth();
+  const BBNode& BBTrue = nf->getTrue();
+  const BBNode& BBFalse = nf->getFalse();
+
+  // The feet's two's-complement ones, summed as a number rather than
+  // marked as bits: two feet in one column would carry into the next.
+  BBNodeVec ones(bitWidth, BBFalse);
+  const auto addOne = [&](int column) {
+    for (int c = column; c < bitWidth; c++)
+    {
+      if (ones[c] == BBFalse)
+      {
+        ones[c] = BBTrue;
+        return;
+      }
+      ones[c] = BBFalse;
+    }
+  };
+
+  // (shift, bits): the row `bits` placed at column `shift` upward.
+  std::vector<std::pair<int, BBNodeVec>> rows;
+  for (int i = 0; i < bitWidth;)
+  {
+    if (x[i] == BBFalse)
+    {
+      i++;
+      continue;
+    }
+    size_t hi = i;
+    if (recodableRun(x, i, hi, BBTrue, BBFalse))
+    {
+      const BBNodeVec sy = BBAndBit(y, x[i]);
+      BBNodeVec notSY;
+      for (int c = 0; c < bitWidth; c++)
+        notSY.push_back(nf->CreateNode(NOT, sy[c]));
+      rows.push_back(std::make_pair(i, notSY));
+      addOne(i);
+      if ((int)hi + 1 < bitWidth)
+        rows.push_back(std::make_pair((int)hi + 1, sy));
+      i = hi + 1;
+      continue;
+    }
+    rows.push_back(std::make_pair(i, BBAndBit(y, x[i])));
+    i++;
+  }
+
+  // With no run the seed is all false, and the first row's full adders
+  // fold to the row itself, as mult_csaRows starts.
+  BBNodeVec sum(ones);
+  BBNodeVec carry(bitWidth, BBFalse);
+  for (size_t r = 0; r < rows.size(); r++)
+  {
+    const int shift = rows[r].first;
+    const BBNodeVec& bits = rows[r].second;
+    BBNodeVec row(bitWidth, BBFalse);
+    for (int c = 0; c + shift < bitWidth; c++)
+      row[c + shift] = bits[c];
+    BBNodeVec nextCarry(bitWidth, BBFalse);
+    for (int j = 0; j < bitWidth; j++)
+    {
+      BBNode s, c;
+      fullAdder(sum[j], carry[j], row[j], s, c);
+      sum[j] = s;
+      if (j + 1 < bitWidth)
+        nextCarry[j + 1] = c;
+    }
+    carry = nextCarry;
+  }
+  BBPlus2(sum, carry, BBFalse);
+  return sum;
+}
+
 // Radix-4 modified Booth recoding.
 //
 // mult_Booth only rewrites runs of *constant* one bits, so a symbolic
@@ -4201,6 +4299,64 @@ static void operandProfile(const std::vector<BBNode>& v, const BBNode& bbTrue,
   distinct = seen.size();
 }
 
+// A run of identical symbolic bits in a multiplier -- the replicated sign
+// bit of a sign extension, or any bit a concat repeats -- contributes
+// s * (2^(hi+1) - 2^lo), linear in the common bit s, so Booth's recoding
+// of a run of ones applies to it unchanged: one row subtracted at the foot
+// and one added above the head, both gated by s. Whichever value s takes
+// the two rows sum to what the run's bits would have. A run of three or
+// more, or of two reaching the top bit (where the head's row falls off),
+// is cheaper recoded; shorter runs cost the same either way and are left.
+template <class BBNode>
+static bool recodableRun(const std::vector<BBNode>& v, size_t lo, size_t& hi,
+                         const BBNode& bbTrue, const BBNode& bbFalse)
+{
+  if (v[lo] == bbTrue || v[lo] == bbFalse)
+    return false;
+  hi = lo;
+  while (hi + 1 < v.size() && v[hi + 1] == v[lo])
+    hi++;
+  const size_t len = hi - lo + 1;
+  return len >= 3 || (len == 2 && hi + 1 == v.size());
+}
+
+// The rows mult_csaRuns would build from `v` as the multiplier: one per
+// symbolic bit outside a recoded run, two per recoded run (one at the top),
+// and the rows the constant bits recode to.
+template <class BBNode, class BBNodeManagerT>
+static unsigned boothRunRows(const std::vector<BBNode>& v, BBNodeManagerT* nf,
+                             const BBNode& bbTrue, const BBNode& bbFalse)
+{
+  int recoded = 0, symbolic = 0;
+  unsigned rows = boothRows(v, nf, recoded, symbolic);
+  for (size_t i = 0; i < v.size();)
+  {
+    size_t hi = i;
+    if (recodableRun(v, i, hi, bbTrue, bbFalse))
+    {
+      rows -= (hi - i + 1);
+      rows += (hi + 1 == v.size()) ? 1 : 2;
+      i = hi + 1;
+    }
+    else
+      i++;
+  }
+  return rows;
+}
+
+template <class BBNode>
+static bool hasRecodableRun(const std::vector<BBNode>& v, const BBNode& bbTrue,
+                            const BBNode& bbFalse)
+{
+  for (size_t i = 0; i < v.size(); i++)
+  {
+    size_t hi = i;
+    if (recodableRun(v, i, hi, bbTrue, bbFalse))
+      return true;
+  }
+  return false;
+}
+
 template <class BBNode>
 static bool cheaperAsMultiplier(const std::vector<BBNode>& x,
                                 const std::vector<BBNode>& y,
@@ -4448,6 +4604,28 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMultVariant(
       if (cheaperAsMultiplier(x, y, BBTrue, BBFalse))
         return mult_csaRows(y, x, support, n);
       return mult_csaRows(x, y, support, n);
+    }
+
+    case 25:
+    {
+      // 22 with the runs of identical symbolic bits in the multiplier
+      // Booth-recoded too (recodableRun, mult_csaRuns), so a sign-extended
+      // operand costs its own bits plus one row rather than one row per
+      // bit. The multiplier is the operand that leaves fewer rows after
+      // recoding, then the one with fewer distinct nodes, then the
+      // canonical order -- the same rule as 22 whenever neither operand
+      // has a run, and then the same circuit as 22.
+      if (mult_Booth_constant(x, y, support, products, n))
+        return buildAdditionNetworkResult(products, support, n);
+      const unsigned xr = boothRunRows(x, nf, BBTrue, BBFalse);
+      const unsigned yr = boothRunRows(y, nf, BBTrue, BBFalse);
+      const bool swap =
+          xr != yr ? yr < xr : cheaperAsMultiplier(x, y, BBTrue, BBFalse);
+      const BBNodeVec& a = swap ? y : x;
+      const BBNodeVec& b = swap ? x : y;
+      if (hasRecodableRun(a, BBTrue, BBFalse))
+        return mult_csaRuns(a, b, support, n);
+      return mult_csaRows(a, b, support, n);
     }
 
     case 23:
