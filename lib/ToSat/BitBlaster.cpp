@@ -4724,6 +4724,39 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMultVariant(
       return mult_normal(a, b, support, n);
     }
 
+    case 27:
+    {
+      // 26 for a symbolic pair and 25 for a constant multiplier that
+      // Booth declines. The two operand classes go opposite ways: the
+      // division-by-constant magic multiplies (0xCCCCCCCD at 64 bits,
+      // seventeen rows of length-two runs) prove in 64 s on carry-save
+      // rows and not within 200 s on ripple rows, the unsigned-overflow
+      // family 10-30x the other way.
+      if (mult_Booth_constant(x, y, support, products, n))
+        return buildAdditionNetworkResult(products, support, n);
+      const auto isConstant = [&](const BBNodeVec& v) {
+        for (const BBNode& b : v)
+          if (b != BBTrue && b != BBFalse)
+            return false;
+        return true;
+      };
+      if (isConstant(x) || isConstant(y))
+      {
+        if (cheaperAsMultiplier(x, y, BBTrue, BBFalse))
+          return mult_csaRows(y, x, support, n);
+        return mult_csaRows(x, y, support, n);
+      }
+      const unsigned xr = boothRunRows(x, nf, BBTrue, BBFalse);
+      const unsigned yr = boothRunRows(y, nf, BBTrue, BBFalse);
+      const bool swap =
+          xr != yr ? yr < xr : cheaperAsMultiplier(x, y, BBTrue, BBFalse);
+      const BBNodeVec& a = swap ? y : x;
+      const BBNodeVec& b = swap ? x : y;
+      if (hasRecodableRun(a, BBTrue, BBFalse))
+        return mult_normalRuns(a, b, support, n);
+      return mult_normal(a, b, support, n);
+    }
+
     case 23:
     {
       // 21 with the hard-triple radix-4 rows (20) for the symbolic pair,

@@ -177,7 +177,7 @@ bool variantRecodesConstants(const UserDefinedFlags* flags)
     return true;
   const int64_t v = flags->multiplication_variant;
   return v == 14 || v == 16 || v == 21 || v == 22 || v == 23 || v == 25 ||
-         v == 26;
+         v == 26 || v == 27;
 }
 
 bool variantUsesCarrySaveRows(const UserDefinedFlags* flags)
@@ -185,7 +185,7 @@ bool variantUsesCarrySaveRows(const UserDefinedFlags* flags)
   if (flags == NULL)
     return true;
   const int64_t v = flags->multiplication_variant;
-  return v == 17 || v == 22 || v == 25;
+  return v == 17 || v == 22 || v == 25 || v == 27;
 }
 
 // Whether the variant Booth-recodes a multiplier's runs of identical
@@ -196,7 +196,15 @@ bool variantRecodesSymbolicRuns(const UserDefinedFlags* flags)
   if (flags == NULL)
     return true;
   const int64_t v = flags->multiplication_variant;
-  return v == 25 || v == 26;
+  return v == 25 || v == 26 || v == 27;
+}
+
+// The symbolic pair's rows are carry-saved (27 carry-saves a constant's
+// rows only).
+static bool symbolicRowsAreCarrySave(const UserDefinedFlags* flags)
+{
+  const int64_t v = flags->multiplication_variant;
+  return v == 17 || v == 22 || v == 25;
 }
 
 // One binary multiply of width w. Every constant here was fitted to
@@ -735,7 +743,8 @@ int64_t eval(const ASTNode& b, const UserDefinedFlags* flags)
     {
       const int64_t ow = std::max(1u, b[0].GetValueWidth());
       if (variantRecodesSymbolicRuns(flags))
-        return 8 * (ow - 1) * (ow - 1) + 19 * (ow - 1);
+        return 8 * (ow - 1) * (ow - 1) +
+               (symbolicRowsAreCarrySave(flags) ? 19 : 11) * (ow - 1);
       return 23 * (ow - 1) * (ow - 1) / 2 + 15 * ow;
     }
 
