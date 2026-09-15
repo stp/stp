@@ -751,8 +751,8 @@ void ExtraMain::create_options()
             "symbolic one; 22 is 21 with carry-save rows; 23 is 21 with the "
             "hard-triple rows of 20; 25 (default) is 22 with the runs of "
             "identical symbolic bits in the multiplier -- a sign "
-            "extension's replicated sign bit -- Booth recoded as well. Any "
-            "other value "
+            "extension's replicated sign bit -- Booth recoded as well; 26 "
+            "is 25 on 21's ripple rows. Any other value "
             "is an error, reported once bit-blasting reaches a multiply",
             bb_group);
 

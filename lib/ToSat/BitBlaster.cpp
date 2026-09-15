@@ -2548,6 +2548,25 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBPlus2(BBNodeVec& sum,
   }
 }
 
+// BBPlus2 from column `from` up, with `cin` entering there. The columns
+// below are left alone, which is what BBPlus2 does to them when the addend
+// is false there; what this adds is a carry into the middle of the word.
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBPlus2From(BBNodeVec& sum,
+                                                     const BBNodeVec& y,
+                                                     int from, BBNode cin)
+{
+  const int bitWidth = sum.size();
+  assert(y.size() == (unsigned)bitWidth);
+  for (int i = from; i < bitWidth; i++)
+  {
+    BBNode nextcin, s;
+    fullAdder(sum[i], y[i], cin, s, nextcin);
+    sum[i] = s;
+    cin = nextcin;
+  }
+}
+
 // a XOR b as AND(OR(a, b), NOT(AND(a, b))): three gates, and the inner
 // conjunction is the half adder's carry, so a caller that wants both pays
 // for the exclusive-or alone. The ordered-exor lowering behind
@@ -3250,6 +3269,63 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::mult_csaRuns(
   }
   BBPlus2(sum, carry, BBFalse);
   return sum;
+}
+
+// mult_normal's ripple rows with the multiplier's runs of identical
+// symbolic bits Booth-recoded (see recodableRun and mult_csaRuns). Each
+// row is added as mult_normal adds it, in ascending order, so a multiply
+// with no run builds mult_normal's circuit node for node; a run's foot row
+// is the complement of the gated copy of y with its two's-complement one
+// entering the ripple as the carry into the foot's column.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::mult_normalRuns(
+    const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& /*support*/,
+    const ASTNode& n)
+{
+  const int bitWidth = n.GetValueWidth();
+  const BBNode& BBTrue = nf->getTrue();
+  const BBNode& BBFalse = nf->getFalse();
+
+  BBNodeVec prod(bitWidth, BBFalse);
+  bool first = true;
+  const auto addRow = [&](const BBNodeVec& bits, int shift, bool plusOne) {
+    BBNodeVec row(bitWidth, BBFalse);
+    for (int c = 0; c + shift < bitWidth; c++)
+      row[c + shift] = bits[c];
+    if (first && !plusOne)
+    {
+      prod = row;
+      first = false;
+      return;
+    }
+    first = false;
+    BBPlus2From(prod, row, shift, plusOne ? BBTrue : BBFalse);
+  };
+
+  for (int i = 0; i < bitWidth;)
+  {
+    if (x[i] == BBFalse)
+    {
+      i++;
+      continue;
+    }
+    size_t hi = i;
+    if (recodableRun(x, i, hi, BBTrue, BBFalse))
+    {
+      const BBNodeVec sy = BBAndBit(y, x[i]);
+      BBNodeVec notSY;
+      for (int c = 0; c < bitWidth; c++)
+        notSY.push_back(nf->CreateNode(NOT, sy[c]));
+      addRow(notSY, i, true);
+      if ((int)hi + 1 < bitWidth)
+        addRow(sy, hi + 1, false);
+      i = hi + 1;
+      continue;
+    }
+    addRow(BBAndBit(y, x[i]), i, false);
+    i++;
+  }
+  return prod;
 }
 
 // Radix-4 modified Booth recoding.
@@ -4626,6 +4702,26 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMultVariant(
       if (hasRecodableRun(a, BBTrue, BBFalse))
         return mult_csaRuns(a, b, support, n);
       return mult_csaRows(a, b, support, n);
+    }
+
+    case 26:
+    {
+      // 25 on 21's ripple rows instead of 22's carry-save rows: the same
+      // run recoding and the same operand rule, the rows summed as
+      // mult_normal sums them. The unsigned multiplication overflow
+      // family (umulov1bw160: 3.6 s ripple, 95 s carry-save) is what
+      // separates the two row forms.
+      if (mult_Booth_constant(x, y, support, products, n))
+        return buildAdditionNetworkResult(products, support, n);
+      const unsigned xr = boothRunRows(x, nf, BBTrue, BBFalse);
+      const unsigned yr = boothRunRows(y, nf, BBTrue, BBFalse);
+      const bool swap =
+          xr != yr ? yr < xr : cheaperAsMultiplier(x, y, BBTrue, BBFalse);
+      const BBNodeVec& a = swap ? y : x;
+      const BBNodeVec& b = swap ? x : y;
+      if (hasRecodableRun(a, BBTrue, BBFalse))
+        return mult_normalRuns(a, b, support, n);
+      return mult_normal(a, b, support, n);
     }
 
     case 23:

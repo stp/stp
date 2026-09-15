@@ -176,7 +176,8 @@ bool variantRecodesConstants(const UserDefinedFlags* flags)
   if (flags == NULL)
     return true;
   const int64_t v = flags->multiplication_variant;
-  return v == 14 || v == 16 || v == 21 || v == 22 || v == 23 || v == 25;
+  return v == 14 || v == 16 || v == 21 || v == 22 || v == 23 || v == 25 ||
+         v == 26;
 }
 
 bool variantUsesCarrySaveRows(const UserDefinedFlags* flags)
@@ -194,7 +195,8 @@ bool variantRecodesSymbolicRuns(const UserDefinedFlags* flags)
 {
   if (flags == NULL)
     return true;
-  return flags->multiplication_variant == 25;
+  const int64_t v = flags->multiplication_variant;
+  return v == 25 || v == 26;
 }
 
 // One binary multiply of width w. Every constant here was fitted to
