@@ -736,6 +736,10 @@ int64_t eval(const ASTNode& b, const UserDefinedFlags* flags)
     case BVUMULO:
     {
       const int64_t ow = std::max(1u, b[0].GetValueWidth());
+      // Schulte's detector: a (w+1)-wide product plus the leading-ones
+      // unit; else the 2w-wide product's high half.
+      if (flags == NULL || flags->umulo_schulte)
+        return std::max<int64_t>(1, 4 * ow * ow + 4 * ow - 12);
       return 8 * (ow - 1) * (ow - 1) + 6 * ow;
     }
 

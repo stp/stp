@@ -1061,6 +1061,15 @@ public:
   // that do the same for 4 bits. Sound at any width, since the low k
   // product bits depend only on the low k operand bits.
   int64_t multiplication_lemmas = 0;
+  // Unsigned multiplication overflow as Schulte's detector: a*b >= 2^w
+  // whenever bits i of a and j of b are both set with i + j >= w, else
+  // the product fits in w+1 bits and overflow is bit w of the (w+1)-wide
+  // product. Off: the 2w-wide product's high half ORed.
+  bool umulo_schulte = true;
+  // Rewrite the double-width spelling of that check, the high half of a
+  // multiply of zero-extended operands compared with zero, into the
+  // predicate, so it reaches the detector above.
+  bool mulo_recognition = true;
 
   // Symbolic-amount shift encoding. 0 is the barrel shifter. 1 to 4 all
   // propagate more of what the shift relation entails -- at 64 bits the

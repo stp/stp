@@ -8317,6 +8317,28 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBOverflow(const ASTNode& form,
     case BVUMULO:
     case BVSMULO:
     {
+      if (k == BVUMULO && uf->umulo_schulte)
+      {
+        // a*b >= 2^w whenever bits i of a and j of b are both set with
+        // i + j >= w. Otherwise every set-bit pair has i + j <= w-1, the
+        // product is below 2^(w+1), and overflow is bit w of the
+        // (w+1)-wide product (Schulte et al.).
+        const BBNodeVec a = BBTerm(form[0], support);
+        const BBNodeVec b = BBTerm(form[1], support);
+        // bge[j]: b has a set bit at position j or above.
+        BBNodeVec bge(w + 1, nf->getFalse());
+        for (int j = w - 1; j >= 0; j--)
+          bge[j] = nf->CreateNode(OR, b[j], bge[j + 1]);
+        BBNodeVec terms;
+        for (unsigned i = 1; i < w; i++)
+          terms.push_back(nf->CreateNode(AND, a[i], bge[w - i]));
+        const ASTNode widthConst = ASTNF->CreateBVConst(32, w + 1);
+        const ASTNode xE = ASTNF->CreateTerm(BVZX, w + 1, form[0], widthConst);
+        const ASTNode yE = ASTNF->CreateTerm(BVZX, w + 1, form[1], widthConst);
+        const ASTNode prod = ASTNF->CreateTerm(BVMULT, w + 1, xE, yE);
+        terms.push_back(BBTerm(prod, support)[w]);
+        return terms.size() == 1 ? terms[0] : nf->CreateNode(OR, terms);
+      }
       // Build the exact 2w-bit product (via zero/sign-extended operands) and
       // reuse the existing multiplier, then inspect the high bits.
       const Kind ext = (k == BVUMULO) ? BVZX : BVSX;
