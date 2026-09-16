@@ -228,6 +228,12 @@ void ExtraMain::create_options()
   bool_arg("--rewriting", bm->UserFlags.enable_sharing_aware_rewriting,
            "Enable sharing-aware rewriting", simp_group);
 
+  bool_arg("--mulo-recognition", bm->UserFlags.mulo_recognition,
+           "rewrite the high half of a multiply of zero-extended operands "
+           "compared with zero into the unsigned multiplication overflow "
+           "predicate",
+           simp_group);
+
   bool_arg("--split-extracts", bm->UserFlags.enable_split_extracts,
            "Create new variables for some extracts", simp_group);
 
@@ -647,6 +653,12 @@ void ExtraMain::create_options()
            refinement_group);
 
   const char* const bb_group = "Bit-blasting options";
+  bool_arg("--bb.umulo-schulte", bm->UserFlags.umulo_schulte,
+           "detect unsigned multiplication overflow from the operands' "
+           "leading ones and bit w of a (w+1)-wide product instead of the "
+           "high half of a 2w-wide product",
+           bb_group);
+
   bool_arg("--bb.div-lemmas", bm->UserFlags.division_lemmas,
            "assert each divider's order laws (b!=0 implies r<b and q<=a, "
            "r<=a, the b=0 and b=1 cases) as side constraints; consequences "
