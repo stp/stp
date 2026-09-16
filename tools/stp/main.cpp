@@ -229,9 +229,11 @@ void ExtraMain::create_options()
            "Enable sharing-aware rewriting", simp_group);
 
   bool_arg("--mulo-recognition", bm->UserFlags.mulo_recognition,
-           "rewrite the high half of a multiply of zero-extended operands "
-           "compared with zero into the unsigned multiplication overflow "
-           "predicate",
+           "rewrite the double-width spellings of a multiplication overflow "
+           "check -- the high half of a multiply of zero-extended operands "
+           "compared with zero, the high bits of a multiply of sign-extended "
+           "operands all zero or all one, or either product equal to the "
+           "extension of its own low half -- into the overflow predicates",
            simp_group);
 
   bool_arg("--split-extracts", bm->UserFlags.enable_split_extracts,
@@ -657,6 +659,13 @@ void ExtraMain::create_options()
            "detect unsigned multiplication overflow from the operands' "
            "leading ones and bit w of a (w+1)-wide product instead of the "
            "high half of a 2w-wide product",
+           bb_group);
+
+  bool_arg("--bb.smulo-schulte", bm->UserFlags.smulo_schulte,
+           "detect signed multiplication overflow from the operands' bits "
+           "that differ from their signs and the top three bits of a "
+           "(w+2)-wide product instead of a 2w-wide product tested against "
+           "its sign extension",
            bb_group);
 
   bool_arg("--bb.div-lemmas", bm->UserFlags.division_lemmas,
