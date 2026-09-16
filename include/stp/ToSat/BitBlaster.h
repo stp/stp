@@ -148,6 +148,12 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                         BBNodeSet& support, const ASTNode& n);
   void mult_allPairs(const BBNodeVec& x, const BBNodeVec& y,
                      BBNodeSet& support, vector<list<BBNode>>& products);
+  BBNodeVec mult_csaRuns(const BBNodeVec& x, const BBNodeVec& y,
+                         BBNodeSet& support, const ASTNode& n);
+  BBNodeVec mult_normalRuns(const BBNodeVec& x, const BBNodeVec& y,
+                            BBNodeSet& support, const ASTNode& n);
+  void BBPlus2From(BBNodeVec& sum, const BBNodeVec& y, int from, BBNode cin);
+
   void mult_Booth(const BBNodeVec& x_i, const BBNodeVec& y_i,
                   BBNodeSet& support, const stp::ASTNode& xN,
                   const stp::ASTNode& yN, vector<list<BBNode>>& products,

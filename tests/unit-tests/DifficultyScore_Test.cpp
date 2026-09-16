@@ -134,6 +134,27 @@ TEST(DifficultyScore, operations_with_a_constant_operand_are_within_a_factor_of_
     expectClose(f, f.mgr.CreateTerm(BVSUB, w, f.fresh(w), small), "bvsub-c");
     expectClose(f, f.mgr.CreateTerm(BVMULT, w, small, f.fresh(w)), "bvmul-c");
     expectClose(f, f.mgr.CreateTerm(BVMULT, w, large, f.fresh(w)), "bvmul-C");
+    // Constants the multiplier Booth-recodes: one long run, every bit set,
+    // and runs of three a zero apart, where recoding one run's head lands
+    // in the next run.
+    std::vector<unsigned> run, ones, runs3;
+    for (unsigned i = 0; i < w; i++)
+    {
+      if (i >= 1 && i < w - 2)
+        run.push_back(i);
+      ones.push_back(i);
+      if (i % 4 != 3)
+        runs3.push_back(i);
+    }
+    expectClose(f,
+                f.mgr.CreateTerm(BVMULT, w, f.constant(w, run), f.fresh(w)),
+                "bvmul-run");
+    expectClose(f,
+                f.mgr.CreateTerm(BVMULT, w, f.constant(w, ones), f.fresh(w)),
+                "bvmul-ones");
+    expectClose(f,
+                f.mgr.CreateTerm(BVMULT, w, f.constant(w, runs3), f.fresh(w)),
+                "bvmul-runs3");
     expectClose(f, f.mgr.CreateTerm(BVDIV, w, f.fresh(w), small), "bvudiv-c");
     expectClose(f, f.mgr.CreateTerm(BVDIV, w, small, f.fresh(w)), "c-bvudiv");
     expectClose(f, f.mgr.CreateTerm(BVDIV, w, large, f.fresh(w)), "C-bvudiv");

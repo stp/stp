@@ -22,9 +22,12 @@ not:
 * **Operations are not symmetric in their operands.** `bvudiv c x` is linear in
   the *magnitude* of the constant dividend, whereas `bvudiv x c` is quadratic in
   the width; `bvand x c` is free.
-* **The default multiplier is not Booth-recoded.** `multiplication_variant`
-  defaults to 1, which is a plain shift-and-add array, so a multiply by a
-  constant costs one add per *set bit*, not per run of set bits.
+* **A constant multiplier is Booth-recoded.** The default
+  `multiplication_variant`, 27, rewrites every run of three or more ones
+  into a subtract at its foot and an add above its head, so a multiply by a
+  constant costs one add per *row the recoding leaves*, not per set bit.
+  `--mult-variant 1` measures the plain shift-and-add array instead, and the
+  `bvmul-const-*` rows are the constants that tell the two apart.
 * **Floating point is dominated by a few operations.** `fp.sqrt` is cubic in
   the significand and `fp.rem` is exponential in the exponent width, so one of
   either can outweigh the rest of a benchmark.
@@ -55,6 +58,7 @@ make difficulty_bench
 ./difficulty_bench --widths 32 --no-fp      # just the bit-vector operations
 ./difficulty_bench --no-bv                  # just the floating-point operations
 ./difficulty_bench --arity 4                # n-ary operands
+./difficulty_bench --mult-variant 1         # as --bb.mult-variant 1 would blast
 ./difficulty_bench --csv > measured.csv     # for re-fitting
 ```
 
@@ -67,9 +71,9 @@ Sample output (the width-32 rows of a full run):
 ```
 operation                 width          aig        score    ratio
 bvadd                        32          345          345    1.00x
-bvmul                        32         5767         5767    1.00x
+bvmul                        32         3876         3845    0.99x
 bvudiv                       32        20136        20148    1.00x
-bvmul-const                  32          375          375    1.00x
+bvmul-const                  32          374          391    1.05x
 const-bvudiv                 32        15299        15552    1.02x
 bvult                        32          191          191    1.00x
 fp.mul                       32        17326        17054    0.98x

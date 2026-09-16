@@ -1041,7 +1041,18 @@ public:
   // association with rounding at every operation, excludes zero.
   bool fp_domain_row_bounds = false;
 
-  int64_t multiplication_variant = 1;
+  // Unsigned multiplication encoding; tools/stp/main.cpp lists the values.
+  // 27: a constant multiplier's runs of ones Booth-recoded and summed by
+  // the column network, a constant with no such run on carry-save rows,
+  // and a symbolic pair on ripple rows from the operand in canonical
+  // order with its runs of identical symbolic bits -- a sign extension's
+  // replicated sign bit -- Booth-recoded too. Ripple rows are what the
+  // unsigned multiplication overflow family needs (10-30x over carry-save
+  // rows) and carry-save rows what a divide-by-constant magic multiply
+  // needs (3x); against carry-save rows for both (25) the hard set solves
+  // the same count 6% faster and the fast tier one file more (2026-09-15
+  // multiplication report).
+  int64_t multiplication_variant = 27;
   // Conjoin to every multiply the prime implicates of the k-bit
   // multiplication relation that its circuit cannot rederive by unit
   // propagation: the odd-residue and 2-adic laws over the low k bits
