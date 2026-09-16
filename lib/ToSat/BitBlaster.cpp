@@ -8339,6 +8339,37 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBOverflow(const ASTNode& form,
         terms.push_back(BBTerm(prod, support)[w]);
         return terms.size() == 1 ? terms[0] : nf->CreateNode(OR, terms);
       }
+      if (k == BVSMULO && uf->smulo_schulte)
+      {
+        // A bit below the sign that differs from it is significant and puts
+        // |a| at or above 2^i. Two significant bits with i + j >= w-1 make
+        // |a*b| >= 2^(w-1), an overflow: the one value of that size that
+        // fits, -2^(w-1), takes two powers of two whose significant bits
+        // sum to w-2. Otherwise |a*b| <= 2^w, and the product fits in w
+        // bits iff the top three bits of its (w+2)-wide form agree.
+        const BBNodeVec a = BBTerm(form[0], support);
+        const BBNodeVec b = BBTerm(form[1], support);
+        BBNodeVec terms;
+        if (w >= 3)
+        {
+          // bge[j]: b has a significant bit at j or above.
+          BBNodeVec bge(w, nf->getFalse());
+          for (int j = w - 2; j >= 0; j--)
+            bge[j] = nf->CreateNode(OR, nf->CreateNode(XOR, b[j], b[w - 1]),
+                                    bge[j + 1]);
+          for (unsigned i = 1; i + 1 < w; i++)
+            terms.push_back(nf->CreateNode(
+                AND, nf->CreateNode(XOR, a[i], a[w - 1]), bge[w - 1 - i]));
+        }
+        const ASTNode widthConst = ASTNF->CreateBVConst(32, w + 2);
+        const ASTNode xE = ASTNF->CreateTerm(BVSX, w + 2, form[0], widthConst);
+        const ASTNode yE = ASTNF->CreateTerm(BVSX, w + 2, form[1], widthConst);
+        const ASTNode prod = ASTNF->CreateTerm(BVMULT, w + 2, xE, yE);
+        const BBNodeVec p = BBTerm(prod, support);
+        terms.push_back(nf->CreateNode(XOR, p[w + 1], p[w - 1]));
+        terms.push_back(nf->CreateNode(XOR, p[w], p[w - 1]));
+        return nf->CreateNode(OR, terms);
+      }
       // Build the exact 2w-bit product (via zero/sign-extended operands) and
       // reuse the existing multiplier, then inspect the high bits.
       const Kind ext = (k == BVUMULO) ? BVZX : BVSX;

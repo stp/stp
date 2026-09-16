@@ -1066,9 +1066,17 @@ public:
   // the product fits in w+1 bits and overflow is bit w of the (w+1)-wide
   // product. Off: the 2w-wide product's high half ORed.
   bool umulo_schulte = true;
-  // Rewrite the double-width spelling of that check, the high half of a
-  // multiply of zero-extended operands compared with zero, into the
-  // predicate, so it reaches the detector above.
+  // Signed multiplication overflow the same way: a bit that differs from
+  // the sign is significant and puts |a| at or above 2^i; two significant
+  // bits with i + j >= w-1 overflow, and otherwise |a*b| <= 2^w and the
+  // product fits in w bits iff the top three bits of its (w+2)-wide form
+  // agree. Off: the 2w-wide product tested against its sign extension.
+  bool smulo_schulte = true;
+  // Rewrite the double-width spellings of those checks -- the high half
+  // of a multiply of zero-extended operands compared with zero, the high
+  // bits of a multiply of sign-extended operands all zero or all one, or
+  // either product equal to the extension of its own low half -- into the
+  // predicates, so they reach the detectors above.
   bool mulo_recognition = true;
 
   // Symbolic-amount shift encoding. 0 is the barrel shifter. 1 to 4 all
