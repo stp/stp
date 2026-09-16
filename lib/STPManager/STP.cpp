@@ -49,10 +49,12 @@ THE SOFTWARE.
 #include "stp/Simplifier/UseITEContext.h"
 #include "stp/Simplifier/Flatten.h"
 #include "stp/Simplifier/CommonSubSum.h"
+#include "stp/Simplifier/LinearForm.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/Rewriting.h"
 #include "stp/Simplifier/MergeSame.h"
 #include "stp/Util/DagWalk.h"
+#include <limits>
 #include <memory>
 using std::cout;
 
@@ -765,6 +767,22 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   bm->UserFlags.construct_counterexample_flag =
       bm->UserFlags.modelConstructionRequired(
           (arrayops && !removed) || batchUFView->active());
+
+  // Ahead of everything that reads the term structure: constant bit
+  // propagation's fixed-point map, the difficulty score, the sub-sum
+  // extraction and the blaster all describe whatever tree they are handed,
+  // and a combination that has been given its canonical spelling is a
+  // combination they see once rather than twice.
+  if (bm->UserFlags.enable_linear_form)
+  {
+    LinearForm linear(bm, bm->defaultNodeFactory,
+                      bm->UserFlags.linear_form_addend_limit < 0
+                          ? std::numeric_limits<size_t>::max()
+                          : static_cast<size_t>(
+                                bm->UserFlags.linear_form_addend_limit));
+    inputToSat = linear.topLevel(inputToSat);
+    bm->ASTNodeStats("After Linear Canonical Form: ", inputToSat);
+  }
 
   if (bm->UserFlags.enable_flatten)
   {

@@ -38,6 +38,7 @@ add_library(simplifier OBJECT
     UnsignedIntervalAnalysis.cpp
     ValueSetAnalysis.cpp
     Flatten.cpp
+    LinearForm.cpp
     CommonSubSum.cpp
     NodeDomainAnalysis.cpp
     SplitExtracts.cpp

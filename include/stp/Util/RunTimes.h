@@ -78,7 +78,8 @@ public:
     SplitExtracts,
     Rewriting,
     MergeSame,
-    CommonSubSum
+    CommonSubSum,
+    LinearForm
   };
 
   std::vector<std::string> CategoryNames = {"Transforming",
@@ -106,7 +107,8 @@ public:
                                             "Spliting Extracts",
                                             "Sharing-aware rewriting",
                                             "Merge Same",
-                                            "Common Sub-sum Extraction"
+                                            "Common Sub-sum Extraction",
+                                            "Linear Canonical Form"
                                           };
 
 
