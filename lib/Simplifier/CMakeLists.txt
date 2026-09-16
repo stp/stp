@@ -39,6 +39,7 @@ add_library(simplifier OBJECT
     ValueSetAnalysis.cpp
     Flatten.cpp
     LinearForm.cpp
+    CongruenceCandidates.cpp
     CommonSubSum.cpp
     NodeDomainAnalysis.cpp
     SplitExtracts.cpp
