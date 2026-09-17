@@ -2037,6 +2037,12 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       break;
     }
 
+    case FP_REM:
+    {
+      result = BBfpRem(term, support);
+      break;
+    }
+
     // Only the four-child float-to-float form survives (comparisonLeaf);
     // the reinterpret form resolves to the operand's own bits there.
     case FP_TOFP:
@@ -2046,7 +2052,6 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
     }
 
     case FP_SUB:
-    case FP_REM:
     {
       FatalError("BBForm: FP terms should not reach the bit-blaster: ", term);
       break;
@@ -8879,6 +8884,224 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
     res = BBITE(anyInf, packSpecial(false, infSign), res);
     res = BBITE(anyNaN, packSpecial(true, nf->getFalse()), res);
   }
+  return res;
+}
+
+// Bit-blasted fp.rem: the IEEE remainder x - y*n, where n is the integer
+// nearest x/y with ties to even. The result is exact, so nothing rounds.
+//
+// SymFPU computes it by unrolling one step per unit of exponent difference,
+// which is why STP refuses the operation once that count passes a limit.
+// Here the whole quotient is a single division instead, stated as the same
+// relation the divider uses. The quotient is wide -- the exponent
+// difference can be 2^eb -- but the divisor is only a significand, so the
+// product is that many rows of a narrow multiplier rather than that many
+// subtract-and-select steps, and the rows accumulate in parallel.
+//
+// Scaling: normalise both significands, let D be the difference of their
+// exponents, and take the dividend shifted up by D+1 against twice the
+// divisor's significand. Their ratio is then exactly x/y, and the integer
+// remainder is the result's magnitude at the divisor's scale. Rounding the
+// quotient to nearest-even is a comparison of twice the remainder against
+// the divisor, with the quotient's low bit breaking the tie; rounding up
+// flips the result's sign, which is otherwise the dividend's.
+//
+// A dividend more than two exponents below the divisor cannot reach half of
+// it, so the quotient is zero and the remainder is the dividend itself.
+// That case is muxed rather than scaled, because the shift would clamp.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRem(const ASTNode& term,
+                                                           BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_REM);
+  assert(term.Degree() == 2);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = BBfpDivExpWidth(eb, sb);
+
+  const BBNodeVec pa = BBTerm(term[0], support);
+  const BBNodeVec pb = BBTerm(term[1], support);
+  assert(pa.size() == w && pb.size() == w);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[0]);
+  const bool bKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool aFinite = fpNativeKnownFinite(term[0]);
+  const bool bFinite = fpNativeKnownFinite(term[1]);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+  const auto countWidth = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+  const FpOperand b =
+      BBfpUnpack(pb, sb, w, E, support, bFinite, bKnownZero);
+
+  const unsigned lw = countWidth(sb);
+  const BBNodeVec la = BBfpCLZ(a.msig, lw);
+  const BBNodeVec lb = BBfpCLZ(b.msig, lw);
+  const BBNodeVec an = BBShiftLeftByVariable(a.msig, la);
+  const BBNodeVec bn = BBShiftLeftByVariable(b.msig, lb);
+  BBNodeVec ea = a.eUnb;
+  BBSub(ea, zext(la, E), support);
+  BBNodeVec ebn = b.eUnb;
+  BBSub(ebn, zext(lb, E), support);
+
+  // Twice the divisor's significand, and never zero -- a zero divisor is a
+  // NaN result, muxed below, but the relation still has to be satisfiable.
+  BBNodeVec divisorSig = b.msig;
+  const BBNode divisorZero = nf->CreateNode(NOR, divisorSig);
+  BBNodeVec dv(sb + 1, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    dv[i + 1] = bn[i];
+  dv[sb] = nf->CreateNode(OR, dv[sb], divisorZero);
+
+  // The dividend's shift, D+1, clamped into the frame. D is at most
+  // 2^eb + sb - 4, the same count SymFPU would have unrolled.
+  const unsigned smax = (1u << eb) + sb - 3;
+  const unsigned F = sb + smax;
+  BBNodeVec shift = ea;
+  BBSub(shift, ebn, support);
+  BBPlus2(shift, constVec(1, E), nf->getFalse()); // D + 1
+  const BBNode shiftNegative = shift[E - 1];
+  const BBNode shiftFar = nf->CreateNode(
+      NOT, BBBVLE(shift, constVec(smax, E), true /*signed*/));
+  const unsigned sw = countWidth(smax);
+  BBNodeVec sv(sw);
+  for (unsigned i = 0; i < sw; i++)
+  {
+    const BBNode clamped =
+        nf->CreateNode(ITE, shiftFar,
+                       ((smax >> i) & 1) ? nf->getTrue() : nf->getFalse(),
+                       shift[i]);
+    sv[i] = nf->CreateNode(AND, nf->CreateNode(NOT, shiftNegative), clamped);
+  }
+  BBNodeVec nx(F, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    nx[i] = an[i];
+  nx = BBShiftLeftByVariable(nx, sv);
+
+  // nx = dv*q + r with r < dv. The divisor is a significand, so the product
+  // is sb+1 narrow rows rather than one step per quotient bit.
+  const unsigned qw = F;
+  BBNodeVec q(qw);
+  BBNodeVec r(sb + 1);
+  for (unsigned i = 0; i < qw; i++)
+    q[i] = nf->CreateFreshInput();
+  for (unsigned i = 0; i < sb + 1; i++)
+    r[i] = nf->CreateFreshInput();
+  ++fpNativeDivRelations;
+
+  BBNodeVec acc(F + 1, nf->getFalse());
+  for (unsigned i = 0; i < sb + 1 && i < F; i++)
+    acc[i] = r[i];
+  for (unsigned j = 0; j < sb + 1; j++)
+  {
+    BBNodeVec row(F + 1, nf->getFalse());
+    for (unsigned i = 0; i + j < F; i++)
+      row[i + j] = nf->CreateNode(AND, q[i], dv[j]);
+    BBPlus2(acc, row, nf->getFalse());
+    support.insert(nf->CreateNode(NOT, acc[F]));
+    acc[F] = nf->getFalse();
+  }
+  const BBNodeVec accLow(acc.begin(), acc.begin() + F);
+  support.insert(BBEQ(accLow, nx));
+  support.insert(BBBVLE(r, dv, false /*unsigned*/, true /*strict*/));
+
+  // Round the quotient to nearest, ties to even: compare twice the
+  // remainder with the divisor, and break a tie on the quotient's low bit.
+  BBNodeVec twiceR(sb + 2, nf->getFalse());
+  for (unsigned i = 0; i < sb + 1; i++)
+    twiceR[i + 1] = r[i];
+  const BBNodeVec dvWide = zext(dv, sb + 2);
+  const BBNode twiceGreater =
+      nf->CreateNode(NOT, BBBVLE(twiceR, dvWide, false /*unsigned*/));
+  const BBNode twiceEqual = BBEQ(twiceR, dvWide);
+  const BBNode roundUp = nf->CreateNode(
+      OR, twiceGreater, nf->CreateNode(AND, twiceEqual, q[0]));
+
+  // Rounding up takes the remainder past the divisor, which flips the sign.
+  BBNodeVec complement = dv;
+  BBNodeVec negR(sb + 1);
+  for (unsigned i = 0; i < sb + 1; i++)
+    negR[i] = nf->CreateNode(NOT, r[i]);
+  BBNodeVec one(sb + 1, nf->getFalse());
+  one[0] = nf->getTrue();
+  BBPlus2(negR, one, nf->getFalse());
+  BBPlus2(complement, negR, nf->getFalse()); // dv - r
+  const BBNodeVec magnitude = BBITE(roundUp, complement, r);
+  const BBNode sign = nf->CreateNode(XOR, a.sign, roundUp);
+
+  // Both operands sit at the scale 2^(eyN - sb), because dv is twice the
+  // divisor's significand. The magnitude is at most half the divisor, so it
+  // never fills its sb+1 bits and normalising it loses nothing.
+  const unsigned lwm = countWidth(sb + 1);
+  const BBNodeVec ellm = BBfpCLZ(magnitude, lwm);
+  const BBNodeVec mn = BBShiftLeftByVariable(magnitude, ellm);
+  BBNodeVec rsig(mn.begin() + 1, mn.end()); // top sb bits
+  BBNodeVec be = ebn;
+  BBSub(be, zext(ellm, E), support);
+  BBPlus2(be, constVec(bias, E), nf->getFalse());
+
+  // The result is exact, so the shared rounder is only packing. It still
+  // wants a mode; with no guard and no sticky every mode behaves alike, and
+  // fp.rem has no mode of its own to pass.
+  BBNodeVec rne(5, nf->getFalse());
+  rne[0] = nf->getTrue();
+  BBNodeVec res = BBfpRoundPack(rne, sign, rsig, nf->getFalse(),
+                                nf->getFalse(), be, sb, eb, support, true);
+
+  // An exactly zero remainder takes the dividend's sign, which the packing
+  // above would otherwise have taken from the flipped one.
+  BBNodeVec magBits = magnitude;
+  BBNodeVec signedZero(w, nf->getFalse());
+  signedZero[w - 1] = a.sign;
+  res = BBITE(nf->CreateNode(NOR, magBits), signedZero, res);
+
+  // A dividend more than two exponents below the divisor cannot reach half
+  // of it, so the quotient is zero and the remainder is the dividend.
+  res = BBITE(shiftNegative, pa, res);
+
+  // Specials. A zero dividend, or an infinite divisor against a finite
+  // dividend, returns the dividend unchanged; an infinite dividend, a zero
+  // divisor, or either operand NaN is invalid.
+  res = BBITE(a.isZero, pa, res);
+  if (!bFinite)
+    res = BBITE(nf->CreateNode(AND, b.isInf,
+                               aFinite ? nf->getTrue()
+                                       : nf->CreateNode(NOT, a.isInf)),
+                pa, res);
+  BBNodeVec nanCases;
+  if (!aFinite)
+  {
+    nanCases.push_back(a.isNaN);
+    nanCases.push_back(a.isInf);
+  }
+  if (!bFinite)
+    nanCases.push_back(b.isNaN);
+  nanCases.push_back(b.isZero);
+  res = BBITE(nf->CreateNode(OR, nanCases), BBfpCanonicalNaN(sb, eb), res);
   return res;
 }
 

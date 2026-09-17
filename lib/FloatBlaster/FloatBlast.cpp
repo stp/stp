@@ -120,6 +120,24 @@ private:
            consumeNativeFpEnvelope(remaining, 4);
   }
 
+  // fp.rem's frame is one bit per unit of exponent difference, the same
+  // count SymFPU would have unrolled, so it inherits the same support
+  // limit: past it the circuit is not worth building at all.
+  static bool nativeFpRemFormatIsSafe(const SourceSort& sort)
+  {
+    if (!nativeFpArithmeticFormatIsSafe(sort))
+      return false;
+    const unsigned eb = sort.exponentWidth();
+    const unsigned sb = sort.significandWidth();
+    if (!FloatBlaster::remSupported(eb, sb))
+      return false;
+    std::uintmax_t remaining = nativeFpEnvelopeLimit();
+    return consumeNativeFpEnvelope(remaining, std::uintmax_t{1} << eb) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, 8);
+  }
+
   static bool nativeFpConvFormatIsSafe(const SourceSort& sort, unsigned n)
   {
     if (!nativeFpArithmeticFormatIsSafe(sort))
@@ -357,6 +375,27 @@ private:
       children.push_back(integer);
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(),
                                       children);
+    }
+    // fp.rem, through one division rather than one step per unit of
+    // exponent difference.
+    if (n.GetKind() == FP_REM && bm->UserFlags.fp_native_rem &&
+        n.Degree() == 2 && nativeFpRemFormatIsSafe(n.GetSourceSort()))
+    {
+      const ASTNode left = comparisonLeaf(n[0]);
+      if (left.IsNull())
+        return ASTNode();
+      const ASTNode right = comparisonLeaf(n[1]);
+      if (right.IsNull())
+        return ASTNode();
+      if (left.isConstant() && right.isConstant())
+        return ASTNode();
+      if (left == n[0] && right == n[1])
+        return n;
+      const ASTNode rebuilt =
+          node_factory->CreateTerm(FP_REM, n.GetValueWidth(), left, right);
+      if (rebuilt.GetKind() != FP_REM)
+        return comparisonLeaf(rebuilt);
+      return rebuilt;
     }
     // fp.fma: BBfpAdd's datapath at a doubled significand width, so the
     // product reaches the adder exactly and there is a single rounding.
