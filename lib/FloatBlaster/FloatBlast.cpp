@@ -1044,10 +1044,35 @@ private:
     {
       case FP_TO_UBV:
       case FP_TO_SBV:
+      {
         requireTotalised(n, 4);
+        // Natively the significand shifts so its units place lands at a
+        // fixed frame position, rounds there, and whatever is left above
+        // the requested width says the value was out of range. The
+        // rounding mode and the unspecified-value child are bit-vectors
+        // and lower either way; only the float stays packed.
+        if (bm->UserFlags.fp_native_conv &&
+            nativeFpConvFormatIsSafe(n[2].GetSourceSort(), n.GetValueWidth()))
+        {
+          const ASTNode operand = comparisonLeaf(n[2]);
+          if (!operand.IsNull() && !operand.isConstant())
+          {
+            ASTVec children;
+            children.push_back(n[0]);
+            children.push_back(lower(n[1]));
+            children.push_back(operand);
+            children.push_back(lower(n[3]));
+            if (children[1] == n[1] && operand == n[2] &&
+                children[3] == n[3])
+              return n;
+            return node_factory->CreateTerm(kind, n.GetValueWidth(),
+                                            children);
+          }
+        }
         return symbolic_fp::unpacked::toBV(
             formatOf(n[2]), lower(n[1]), asUnpacked(n[2]),
             n[0].GetUnsignedConst(), lower(n[3]), kind == FP_TO_SBV);
+      }
 
       case FP_TO_IEEE_BV:
       {

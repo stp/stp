@@ -373,6 +373,7 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   BBNodeVec BBfpRoundToIntegral(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpFma(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpFromBV(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpToBV(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToIeeeBV(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
 

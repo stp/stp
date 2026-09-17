@@ -2030,6 +2030,13 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       break;
     }
 
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    {
+      result = BBfpToBV(term, support);
+      break;
+    }
+
     // Only the four-child float-to-float form survives (comparisonLeaf);
     // the reinterpret form resolves to the operand's own bits there.
     case FP_TOFP:
@@ -2040,8 +2047,6 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
 
     case FP_SUB:
     case FP_REM:
-    case FP_TO_UBV:
-    case FP_TO_SBV:
     {
       FatalError("BBForm: FP terms should not reach the bit-blaster: ", term);
       break;
@@ -8875,6 +8880,161 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
     res = BBITE(anyNaN, packSpecial(true, nf->getFalse()), res);
   }
   return res;
+}
+
+// Bit-blasted fp.to_ubv and fp.to_sbv. The float's significand is shifted so
+// that its units place lands at a fixed frame position, rounded there by the
+// mode, and the bits left above the requested width are what says the result
+// was out of range.
+//
+// Only a right shift is needed. The significand starts at the highest offset
+// that could still be in range -- one where its lowest bit already carries
+// weight 2^m -- so a value too large to convert simply fails to shift far
+// enough and leaves those high bits set.
+//
+// SMT-LIB leaves the result unspecified for a NaN, an infinity, or a
+// magnitude out of range, so FpTotalise has given the node a fourth child
+// with the value to use there. A negative float that rounds to zero is in
+// range for fp.to_ubv: it is the rounded integer that has to fit, not the
+// float.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpToBV(const ASTNode& term,
+                                             BBNodeSet& support)
+{
+  const Kind k = term.GetKind();
+  assert(k == FP_TO_UBV || k == FP_TO_SBV);
+  assert(term.Degree() == 4);
+  const bool isSigned = (k == FP_TO_SBV);
+
+  const SourceSort sort = term[2].GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned m = term.GetValueWidth();
+  assert(m >= 1);
+  const unsigned E = BBfpConvExpWidth(eb, sb, m);
+
+  const BBNodeVec rm = BBTerm(term[1], support);
+  const BBNodeVec pa = BBTerm(term[2], support);
+  const BBNodeVec fallback = BBTerm(term[3], support);
+  assert(pa.size() == w && fallback.size() == m);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[2]);
+  const bool aFinite = fpNativeKnownFinite(term[2]);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+
+  // Frame: units place at 1, guard at 0, the requested width at [1, m], and
+  // anything above that out of range.
+  const unsigned F = m + sb + 2;
+  BBNodeVec frame(F, nf->getFalse());
+  for (unsigned i = 0; i < sb && i + m + 1 < F; i++)
+    frame[i + m + 1] = a.msig[i];
+
+  BBNodeVec dist = constVec(m + sb - 1, E);
+  BBSub(dist, a.eUnb, support); // m - e + sb - 1
+  const BBNode distNegative = dist[E - 1];
+  const BBNode distFar = nf->CreateNode(
+      NOT, BBBVLE(dist, constVec(F, E), true /*signed*/));
+  const unsigned dw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(F);
+  BBNodeVec dv(dw);
+  for (unsigned i = 0; i < dw; i++)
+  {
+    const BBNode clamped =
+        nf->CreateNode(ITE, distFar,
+                       ((F >> i) & 1) ? nf->getTrue() : nf->getFalse(),
+                       dist[i]);
+    dv[i] = nf->CreateNode(AND, nf->CreateNode(NOT, distNegative), clamped);
+  }
+
+  BBNode sticky = nf->getFalse();
+  frame = BBfpShiftRightSticky(frame, dv, sticky);
+  const BBNode guard = frame[0];
+
+  BBNodeVec magnitude(m);
+  for (unsigned i = 0; i < m; i++)
+    magnitude[i] = frame[i + 1];
+  BBNodeVec aboveBits(frame.begin() + (m + 1), frame.end());
+
+  const BBNode& rne = rm[0];
+  const BBNode& rtp = rm[1];
+  const BBNode& rtn = rm[2];
+  const BBNode& rna = rm[4];
+  const BBNode gs = nf->CreateNode(OR, guard, sticky);
+  BBNodeVec upCases;
+  upCases.push_back(nf->CreateNode(AND, rne, guard,
+                                   nf->CreateNode(OR, sticky, magnitude[0])));
+  upCases.push_back(nf->CreateNode(AND, rna, guard));
+  upCases.push_back(
+      nf->CreateNode(AND, rtp, nf->CreateNode(NOT, a.sign), gs));
+  upCases.push_back(nf->CreateNode(AND, rtn, a.sign, gs));
+  const BBNode roundUp = nf->CreateNode(OR, upCases);
+  BBNodeVec rounded = BBfpIncrement(magnitude, roundUp); // m+1 bits
+  const BBNode roundCarry = rounded[m];
+  BBNodeVec mag(rounded.begin(), rounded.begin() + m);
+
+  BBNodeVec magZeroBits = mag;
+  const BBNode magZero = nf->CreateNode(NOR, magZeroBits);
+  BBNode overflow = nf->CreateNode(
+      OR, aboveBits.empty() ? nf->getFalse() : nf->CreateNode(OR, aboveBits),
+      roundCarry);
+
+  BBNodeVec result;
+  BBNode inRange;
+  if (!isSigned)
+  {
+    // A negative float is in range only if it rounded to zero.
+    inRange = nf->CreateNode(
+        AND, nf->CreateNode(NOT, overflow),
+        nf->CreateNode(OR, nf->CreateNode(NOT, a.sign), magZero));
+    result = mag;
+  }
+  else
+  {
+    // Two's complement: magnitudes up to 2^(m-1) are in range when negative,
+    // and up to 2^(m-1)-1 when positive.
+    BBNodeVec limit(m, nf->getFalse());
+    limit[m - 1] = nf->getTrue(); // 2^(m-1), as an m-bit pattern
+    const BBNode magTop = mag[m - 1];
+    BBNodeVec magLow(mag.begin(), mag.begin() + (m - 1));
+    const BBNode magLowZero =
+        magLow.empty() ? nf->getTrue() : nf->CreateNode(NOR, magLow);
+    const BBNode isLimit = nf->CreateNode(AND, magTop, magLowZero);
+    const BBNode fits = nf->CreateNode(
+        ITE, a.sign, nf->CreateNode(OR, nf->CreateNode(NOT, magTop), isLimit),
+        nf->CreateNode(NOT, magTop));
+    inRange = nf->CreateNode(AND, nf->CreateNode(NOT, overflow), fits);
+
+    BBNodeVec negated(m);
+    for (unsigned i = 0; i < m; i++)
+      negated[i] = nf->CreateNode(NOT, mag[i]);
+    BBNodeVec one(m, nf->getFalse());
+    one[0] = nf->getTrue();
+    BBPlus2(negated, one, nf->getFalse());
+    result = BBITE(a.sign, negated, mag);
+    (void)limit;
+  }
+
+  if (!aFinite)
+    inRange = nf->CreateNode(AND, inRange, nf->CreateNode(NOT, a.isNaN),
+                             nf->CreateNode(NOT, a.isInf));
+  return BBITE(inRange, result, fallback);
 }
 
 // Bit-blasted to_fp from a bit-vector, signed or unsigned. Rounding an
