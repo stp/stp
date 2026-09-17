@@ -1992,6 +1992,19 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       break;
     }
 
+    case FP_MIN:
+    case FP_MAX:
+    {
+      result = BBfpMinMax(term, support);
+      break;
+    }
+
+    case FP_TO_IEEE_BV:
+    {
+      result = BBfpToIeeeBV(term, support);
+      break;
+    }
+
     // Only the four-child float-to-float form survives (comparisonLeaf);
     // the reinterpret form resolves to the operand's own bits there.
     case FP_TOFP:
@@ -2005,13 +2018,10 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
     case FP_SQRT:
     case FP_REM:
     case FP_ROUNDTOINTEGRAL:
-    case FP_MIN:
-    case FP_MAX:
     case FP_TOFP_SIGNED:
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
-    case FP_TO_IEEE_BV:
     {
       FatalError("BBForm: FP terms should not reach the bit-blaster: ", term);
       break;
@@ -7763,6 +7773,134 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpMul(const ASTNode& term,
     res = BBITE(anyNaN, packSpecial(true, false), res);
   }
   return res;
+}
+
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpOrderKey(const BBNodeVec& p,
+                                                 unsigned width)
+{
+  const BBNode& sign = p[width - 1];
+  BBNodeVec k;
+  k.reserve(width);
+  for (unsigned i = 0; i < width - 1; i++)
+    k.push_back(nf->CreateNode(XOR, p[i], sign));
+  k.push_back(nf->CreateNode(NOT, sign));
+  return k;
+}
+
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpCanonicalNaN(unsigned sb, unsigned eb)
+{
+  const unsigned w = eb + sb;
+  BBNodeVec s(w, nf->getFalse());
+  for (unsigned i = 0; i < eb; i++)
+    s[sb - 1 + i] = nf->getTrue();
+  s[sb - 2] = nf->getTrue();
+  return s;
+}
+
+// Bit-blasted fp.to_ieee_bv. The result is the operand's packed bits with
+// every NaN collapsed to the canonical one, which is one mux: asPacked
+// deliberately preserves a symbolic float's payload, and this is the
+// quotient boundary where SMT-LIB's identification of all NaNs has to be
+// made good. SymFPU spells the same thing as a full unpack and re-encode.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpToIeeeBV(const ASTNode& term,
+                                                 BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_TO_IEEE_BV);
+  assert(term.Degree() == 1);
+
+  const SourceSort sort = term[0].GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+
+  const BBNodeVec p = BBTerm(term[0], support);
+  assert(p.size() == w);
+
+  if (fpNativeKnownFinite(term[0]))
+    return p;
+  return BBITE(BBfpIsNaN(p, sb, w), BBfpCanonicalNaN(sb, eb), p);
+}
+
+// Bit-blasted fp.min / fp.max over packed IEEE-754 operands. Neither
+// rounds: the result is one of the two operands bit for bit, so this needs
+// no unpack, no rounder and no pack at all -- a total-order comparison and
+// a mux, against SymFPU's two unpacks, an ordering circuit and a pack.
+//
+// SMT-LIB leaves min(+0,-0) and max(+0,-0) unspecified, so FpTotalise gives
+// the node a third child selecting which operand to return there. The
+// polarity follows SymFPU's, whose min returns its left operand when that
+// selector holds and whose max returns its right:
+//
+//   min(l, r, z) = ITE(isNaN(r) || ordering(l, r, z), l, r)
+//   max(l, r, z) = ITE(isNaN(l) || ordering(l, r, z), r, l)
+//
+// with ordering false whenever either operand is NaN, and equal to the
+// selector when both are zero. Exactly one NaN therefore returns the other
+// operand, and two NaNs return a NaN, canonicalised here because SymFPU's
+// pack would have canonicalised it.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpMinMax(const ASTNode& term,
+                                               BBNodeSet& support)
+{
+  const Kind k = term.GetKind();
+  assert(k == FP_MIN || k == FP_MAX);
+  assert(term.Degree() == 3);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+
+  const BBNodeVec pa = BBTerm(term[0], support);
+  const BBNodeVec pb = BBTerm(term[1], support);
+  const BBNodeVec sel = BBTerm(term[2], support);
+  assert(pa.size() == w && pb.size() == w && sel.size() == 1);
+
+  const bool aFinite = fpNativeKnownFinite(term[0]);
+  const bool bFinite = fpNativeKnownFinite(term[1]);
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite) +
+                                 static_cast<size_t>(bFinite);
+
+  const BBNode aNaN =
+      aFinite ? nf->getFalse() : BBfpIsNaN(pa, sb, w);
+  const BBNode bNaN =
+      bFinite ? nf->getFalse() : BBfpIsNaN(pb, sb, w);
+  const BBNode aZero = BBfpIsZero(pa, w);
+  const BBNode bZero = BBfpIsZero(pb, w);
+
+  // Strict total order on the sign-magnitude keys. It separates -0 from +0,
+  // which is why the both-zero case is taken out first, and it orders every
+  // other pair the way IEEE does.
+  const BBNodeVec ka = BBfpOrderKey(pa, w);
+  const BBNodeVec kb = BBfpOrderKey(pb, w);
+  const BBNode keyLess =
+      nf->CreateNode(NOT, BBBVLE(kb, ka, false /*unsigned*/));
+
+  const BBNode bothZero = nf->CreateNode(AND, aZero, bZero);
+  const BBNode ordering = nf->CreateNode(
+      AND, nf->CreateNode(NOR, aNaN, bNaN),
+      nf->CreateNode(ITE, bothZero, sel[0], keyLess));
+
+  const BBNodeVec chosen =
+      (k == FP_MIN)
+          ? BBITE(nf->CreateNode(OR, bNaN, ordering), pa, pb)
+          : BBITE(nf->CreateNode(OR, aNaN, ordering), pb, pa);
+
+  if (aFinite && bFinite)
+    return chosen;
+  return BBITE(nf->CreateNode(AND, aNaN, bNaN), BBfpCanonicalNaN(sb, eb),
+               chosen);
 }
 
 // Bit-blasted fp.div over packed IEEE-754 operands, under the same flag and

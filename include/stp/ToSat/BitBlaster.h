@@ -368,6 +368,8 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   BBNodeVec BBfpAdd(const ASTNode& term, BBNodeSet& support);
   BBNode BBfpAddIsZero(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpDiv(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpMinMax(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpToIeeeBV(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
 
   // Kept separate from the native-domain profiling counters so the stacked
@@ -422,6 +424,14 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                                  BBNode& sticky);
   // v + inc (a single carry-in bit), one bit wider than v.
   BBNodeVec BBfpIncrement(const BBNodeVec& v, const BBNode& inc);
+  // The sign-magnitude sort key: flip every magnitude bit under a set sign
+  // and invert the sign, so unsigned comparison of two keys is the floats'
+  // total order. Distinguishes -0 from +0, which callers handle separately.
+  BBNodeVec BBfpOrderKey(const BBNodeVec& p, unsigned width);
+  // The canonical quiet NaN of format (eb, sb): exponent all ones, only the
+  // top stored significand bit set, sign clear. The value every native
+  // circuit and the SymFPU encoding both produce.
+  BBNodeVec BBfpCanonicalNaN(unsigned sb, unsigned eb);
 
   // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
   // BVUMULO, BVSMULO, BVUSUBO, BVSSUBO.

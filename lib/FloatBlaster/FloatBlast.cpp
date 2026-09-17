@@ -120,6 +120,14 @@ private:
            consumeNativeFpEnvelope(remaining, 4);
   }
 
+  // fp.min, fp.max and fp.to_ieee_bv read packed fields and mux; they form
+  // no exponent bounds at all, so they need only a well-formed format.
+  static bool nativeFpFieldFormatIsSafe(const SourceSort& sort)
+  {
+    return sort.kind() == SourceSort::Kind::FloatingPoint &&
+           sort.significandWidth() >= 2 && sort.exponentWidth() >= 2;
+  }
+
   static bool nativeFpDivFormatIsSafe(const SourceSort& sort)
   {
     if (!nativeFpArithmeticFormatIsSafe(sort))
@@ -291,6 +299,40 @@ private:
         return n;
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), n[0],
                                       left, right);
+    }
+    // fp.min and fp.max never round: the result is one of the operands bit
+    // for bit, so the native circuit is a total-order comparison and a mux
+    // over the packed bits, with no unpack and no pack. FpTotalise has
+    // already given the node its third child, the selector that decides
+    // min(+0,-0), and that child is a bit-vector so it lowers either way.
+    // Two constant operands stay on the SymFPU path: the factory does not
+    // fold a partial operation, so nothing else would collapse them.
+    if ((n.GetKind() == FP_MIN || n.GetKind() == FP_MAX) &&
+        bm->UserFlags.fp_native_minmax && n.Degree() == 3 &&
+        nativeFpFieldFormatIsSafe(n.GetSourceSort()))
+    {
+      const ASTNode left = comparisonLeaf(n[0]);
+      if (left.IsNull())
+        return ASTNode();
+      const ASTNode right = comparisonLeaf(n[1]);
+      if (right.IsNull())
+        return ASTNode();
+      if (left.isConstant() && right.isConstant())
+        return ASTNode();
+      const ASTNode selector = lower(n[2]);
+      if (left == n[0] && right == n[1] && selector == n[2])
+        return n;
+      ASTVec children;
+      children.push_back(left);
+      children.push_back(right);
+      children.push_back(selector);
+      const ASTNode rebuilt =
+          node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
+      // The factory folds min/max of identical operands, and of a NaN or an
+      // infinite operand, into something with no native arm of its own.
+      if (rebuilt.GetKind() != FP_MIN && rebuilt.GetKind() != FP_MAX)
+        return comparisonLeaf(rebuilt);
+      return rebuilt;
     }
     // The float-to-float form of to_fp (four children: the two format
     // constants, the rounding mode, the float operand), under the same
@@ -883,8 +925,24 @@ private:
             n[0].GetUnsignedConst(), lower(n[3]), kind == FP_TO_SBV);
 
       case FP_TO_IEEE_BV:
+      {
         assert(n.Degree() == 1);
+        // Natively this is the operand's bits with NaN collapsed to the
+        // canonical pattern: one mux, where canonicalPacked spells a full
+        // unpack and re-encode. A constant operand must still fold through
+        // SymFPU, as the constant evaluator does.
+        if (bm->UserFlags.fp_native_pack &&
+            nativeFpFieldFormatIsSafe(n[0].GetSourceSort()))
+        {
+          const ASTNode operand = comparisonLeaf(n[0]);
+          if (!operand.IsNull() && !operand.isConstant())
+            return operand == n[0]
+                       ? n
+                       : node_factory->CreateTerm(FP_TO_IEEE_BV,
+                                                  n.GetValueWidth(), operand);
+        }
         return canonicalPacked(n[0]);
+      }
 
       case FP_SMT_EQ:
       {
