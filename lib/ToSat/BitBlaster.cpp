@@ -2011,6 +2011,12 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       break;
     }
 
+    case FP_ROUNDTOINTEGRAL:
+    {
+      result = BBfpRoundToIntegral(term, support);
+      break;
+    }
+
     // Only the four-child float-to-float form survives (comparisonLeaf);
     // the reinterpret form resolves to the operand's own bits there.
     case FP_TOFP:
@@ -2022,7 +2028,6 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
     case FP_SUB:
     case FP_FMA:
     case FP_REM:
-    case FP_ROUNDTOINTEGRAL:
     case FP_TOFP_SIGNED:
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
@@ -7832,6 +7837,158 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpToIeeeBV(const ASTNode& term,
   if (fpNativeKnownFinite(term[0]))
     return p;
   return BBITE(BBfpIsNaN(p, sb, w), BBfpCanonicalNaN(sb, eb), p);
+}
+
+// Bit-blasted fp.roundToIntegral over a packed IEEE-754 operand.
+//
+// An operand whose exponent is at least sb-1 has no fractional bits and is
+// returned unchanged; otherwise the significand is shifted right by the
+// number of fractional bits it does have, collecting a guard and a sticky,
+// rounded by the mode, and the exact integer that results is renormalised.
+// The shift is clamped at sb+1 because shifting further changes nothing:
+// everything is already in the sticky by then, which is exactly the
+// "magnitude below one" case where the answer is zero or one.
+//
+// The result is exact by construction, so the shared rounder is handed a
+// zero guard and sticky and is doing the packing rather than any rounding.
+// A zero result keeps the operand's sign, which is what makes
+// roundToIntegral(-0.4) under round-toward-positive a minus zero.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundToIntegral(const ASTNode& term,
+                                                        BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_ROUNDTOINTEGRAL);
+  assert(term.Degree() == 2);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = BBfpDivExpWidth(eb, sb);
+
+  const BBNodeVec rm = BBTerm(term[0], support);
+  const BBNodeVec pa = BBTerm(term[1], support);
+  assert(pa.size() == w);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+
+  // The fractional bit count, clamped into the shifter's range. Past sb+1
+  // every further bit is already sticky, so the clamp loses nothing.
+  const unsigned dmax = sb + 1;
+  BBNodeVec fracBits = constVec(sb - 1, E);
+  BBSub(fracBits, a.eUnb, support); // (sb-1) - e, signed
+  const BBNode fracNegative = fracBits[E - 1];
+  const BBNode fracTooBig = nf->CreateNode(
+      NOT, BBBVLE(fracBits, constVec(dmax, E), true /*signed*/));
+  const unsigned dw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(dmax);
+  BBNodeVec d(dw);
+  for (unsigned i = 0; i < dw; i++)
+  {
+    const BBNode clamped =
+        nf->CreateNode(ITE, fracTooBig,
+                       ((dmax >> i) & 1) ? nf->getTrue() : nf->getFalse(),
+                       fracBits[i]);
+    d[i] = nf->CreateNode(AND, nf->CreateNode(NOT, fracNegative), clamped);
+  }
+
+  BBNode guard = nf->getFalse();
+  BBNode sticky = nf->getFalse();
+  BBNodeVec vg = a.msig;
+  vg.insert(vg.begin(), nf->getFalse()); // [guard, msig...]
+  vg = BBfpShiftRightSticky(vg, d, sticky);
+  guard = vg[0];
+  BBNodeVec shifted(sb);
+  for (unsigned i = 0; i < sb; i++)
+    shifted[i] = vg[i + 1];
+
+  // The same mode rules as the shared rounder, at the units place.
+  const BBNode& rne = rm[0];
+  const BBNode& rtp = rm[1];
+  const BBNode& rtn = rm[2];
+  const BBNode& rna = rm[4];
+  const BBNode gs = nf->CreateNode(OR, guard, sticky);
+  BBNodeVec upCases;
+  upCases.push_back(
+      nf->CreateNode(AND, rne, guard, nf->CreateNode(OR, sticky, shifted[0])));
+  upCases.push_back(nf->CreateNode(AND, rna, guard));
+  upCases.push_back(
+      nf->CreateNode(AND, rtp, nf->CreateNode(NOT, a.sign), gs));
+  upCases.push_back(nf->CreateNode(AND, rtn, a.sign, gs));
+  const BBNode roundUp = nf->CreateNode(OR, upCases);
+  BBNodeVec integral = BBfpIncrement(shifted, roundUp); // sb+1 bits
+
+  // The integer's scale: zero once anything was shifted out, and otherwise
+  // the operand's own, which is when the operand was integral already.
+  BBNodeVec t = a.eUnb;
+  BBSub(t, constVec(sb - 1, E), support);
+  const BBNodeVec scale = BBITE(t[E - 1], BBfill(E, nf->getFalse()), t);
+
+  // Renormalise the exact integer. Its top bit lands at sb, so the result
+  // significand is the sb bits below it and nothing is lost.
+  const unsigned lw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(sb + 1);
+  const BBNodeVec ell = BBfpCLZ(integral, lw);
+  const BBNodeVec normalised = BBShiftLeftByVariable(integral, ell);
+  BBNodeVec rsig(normalised.begin() + 1, normalised.end());
+
+  BBNodeVec be = scale;
+  BBSub(be, zext(ell, E), support);
+  BBPlus2(be, constVec(sb + bias, E), nf->getFalse());
+
+  const bool resultFinite = aFinite;
+  BBNodeVec res =
+      BBfpRoundPack(rm, a.sign, rsig, nf->getFalse(), nf->getFalse(), be, sb,
+                    eb, support, resultFinite);
+
+  // A magnitude that rounded away entirely is a signed zero, which the
+  // rounder would otherwise have to reach through its subnormal path.
+  BBNodeVec zero(w, nf->getFalse());
+  zero[w - 1] = a.sign;
+  res = BBITE(nf->CreateNode(NOR, integral), zero, res);
+
+  // Specials: zero and infinity return themselves, NaN canonicalises.
+  res = BBITE(a.isZero, zero, res);
+  if (!aFinite)
+  {
+    BBNodeVec inf(w, nf->getFalse());
+    for (unsigned i = 0; i < eb; i++)
+      inf[sb - 1 + i] = nf->getTrue();
+    inf[w - 1] = a.sign;
+    res = BBITE(a.isInf, inf, res);
+    res = BBITE(a.isNaN, BBfpCanonicalNaN(sb, eb), res);
+  }
+  return res;
 }
 
 // Bit-blasted fp.sqrt over a packed IEEE-754 operand. Like the divider this

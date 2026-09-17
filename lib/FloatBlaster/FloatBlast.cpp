@@ -300,6 +300,25 @@ private:
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), n[0],
                                       left, right);
     }
+    // fp.roundToIntegral: shift the fractional bits out of the significand,
+    // round at the units place by the mode, and renormalise the exact
+    // integer that results.
+    if (n.GetKind() == FP_ROUNDTOINTEGRAL && bm->UserFlags.fp_native_round &&
+        n.Degree() == 2 &&
+        (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
+        nativeFpDivFormatIsSafe(n.GetSourceSort()))
+    {
+      const ASTNode operand = comparisonLeaf(n[1]);
+      if (operand.IsNull())
+        return ASTNode();
+      if (operand == n[1])
+        return n;
+      const ASTNode rebuilt = node_factory->CreateTerm(
+          FP_ROUNDTOINTEGRAL, n.GetValueWidth(), n[0], operand);
+      if (rebuilt.GetKind() != FP_ROUNDTOINTEGRAL)
+        return comparisonLeaf(rebuilt);
+      return rebuilt;
+    }
     // fp.sqrt, through the same defining-relation idea as the divider:
     // Q*Q + R = N with R <= 2Q is the integer square root, and the squaring
     // is half a multiply's conjunctions. Needs the divider's wider exponent
