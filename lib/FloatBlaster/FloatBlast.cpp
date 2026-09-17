@@ -300,6 +300,28 @@ private:
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), n[0],
                                       left, right);
     }
+    // fp.sqrt, through the same defining-relation idea as the divider:
+    // Q*Q + R = N with R <= 2Q is the integer square root, and the squaring
+    // is half a multiply's conjunctions. Needs the divider's wider exponent
+    // envelope because it normalises its operand first.
+    if (n.GetKind() == FP_SQRT && bm->UserFlags.fp_native_sqrt &&
+        n.Degree() == 2 &&
+        (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
+        nativeFpDivFormatIsSafe(n.GetSourceSort()))
+    {
+      const ASTNode operand = comparisonLeaf(n[1]);
+      if (operand.IsNull())
+        return ASTNode();
+      if (operand == n[1])
+        return n;
+      const ASTNode rebuilt =
+          node_factory->CreateTerm(FP_SQRT, n.GetValueWidth(), n[0], operand);
+      // A constant operand folds at the factory, which is what keeps the
+      // constant evaluator and this circuit from having to agree.
+      if (rebuilt.GetKind() != FP_SQRT)
+        return comparisonLeaf(rebuilt);
+      return rebuilt;
+    }
     // fp.min and fp.max never round: the result is one of the operands bit
     // for bit, so the native circuit is a total-order comparison and a mux
     // over the packed bits, with no unpack and no pack. FpTotalise has

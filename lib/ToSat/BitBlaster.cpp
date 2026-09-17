@@ -2005,6 +2005,12 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       break;
     }
 
+    case FP_SQRT:
+    {
+      result = BBfpSqrt(term, support);
+      break;
+    }
+
     // Only the four-child float-to-float form survives (comparisonLeaf);
     // the reinterpret form resolves to the operand's own bits there.
     case FP_TOFP:
@@ -2015,7 +2021,6 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
 
     case FP_SUB:
     case FP_FMA:
-    case FP_SQRT:
     case FP_REM:
     case FP_ROUNDTOINTEGRAL:
     case FP_TOFP_SIGNED:
@@ -7827,6 +7832,176 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpToIeeeBV(const ASTNode& term,
   if (fpNativeKnownFinite(term[0]))
     return p;
   return BBITE(BBfpIsNaN(p, sb, w), BBfpCanonicalNaN(sb, eb), p);
+}
+
+// Bit-blasted fp.sqrt over a packed IEEE-754 operand. Like the divider this
+// states a defining relation rather than building a restoring array:
+// Q*Q + R = N with R <= 2Q says exactly that Q is the integer square root
+// of N, and the squaring is half the conjunctions of a general multiply
+// because column i+j+1 carries q_i AND q_j once for i < j and column 2i
+// carries q_i alone.
+//
+// The scaling is chosen so that no normalisation is needed at all. With the
+// significand normalised to A in [2^(sb-1), 2^sb) and its exponent e, the
+// value is (A / 2^(sb-1)) * 2^e; halving an odd exponent by doubling the
+// significand leaves a radicand r in [1, 4), whose root is in [1, 2). So
+// taking N = A << (sb+3) after that adjustment makes Q = isqrt(N) equal to
+// sqrt(r) * 2^(sb+1), which is exactly sb+2 bits with the top one always
+// set: significand, guard, and one bit that is known rather than computed.
+//
+// Specials: a NaN operand, or any negative operand other than minus zero,
+// is invalid and gives the canonical NaN. Plus infinity stays infinite,
+// minus infinity is invalid, and either zero returns itself with its sign.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrt(const ASTNode& term,
+                                             BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_SQRT);
+  assert(term.Degree() == 2);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = BBfpDivExpWidth(eb, sb);
+
+  const BBNodeVec rm = BBTerm(term[0], support);
+  const BBNodeVec pa = BBTerm(term[1], support);
+  assert(pa.size() == w);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+
+  const unsigned lw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(sb);
+  const BBNodeVec la = BBfpCLZ(a.msig, lw);
+  const BBNodeVec an = BBShiftLeftByVariable(a.msig, la);
+
+  // e = the normalised exponent. An odd one is made even by doubling the
+  // significand, which is what puts the radicand in [1, 4).
+  BBNodeVec e = a.eUnb;
+  BBSub(e, zext(la, E), support);
+  const BBNode expOdd = e[0];
+
+  BBNodeVec radicand(sb + 1, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    radicand[i] = nf->CreateNode(ITE, expOdd, nf->getFalse(), an[i]);
+  for (unsigned i = 0; i < sb; i++)
+    radicand[i + 1] =
+        nf->CreateNode(ITE, expOdd, an[i], radicand[i + 1]);
+
+  const unsigned qw = sb + 2;
+  const unsigned W = 2 * sb + 4;
+  BBNodeVec n(W, nf->getFalse());
+  for (unsigned i = 0; i < sb + 1 && i + sb + 3 < W; i++)
+    n[i + sb + 3] = radicand[i];
+
+  BBNodeVec q(qw);
+  BBNodeVec r(sb + 3);
+  for (unsigned i = 0; i < qw; i++)
+    q[i] = nf->CreateFreshInput();
+  for (unsigned i = 0; i < sb + 3; i++)
+    r[i] = nf->CreateFreshInput();
+  ++fpNativeDivRelations;
+
+  // q*q + r at width W, carry-outs pinned so the sum is the integer sum.
+  // The square's columns: q_i alone at 2i, and q_i AND q_j once at i+j+1.
+  BBNodeVec acc(W + 1, nf->getFalse());
+  for (unsigned i = 0; i < sb + 3 && i < W; i++)
+    acc[i] = r[i];
+  for (unsigned i = 0; i < qw; i++)
+  {
+    BBNodeVec row(W + 1, nf->getFalse());
+    if (2 * i < W)
+      row[2 * i] = q[i];
+    for (unsigned j = i + 1; j < qw && i + j + 1 < W; j++)
+      row[i + j + 1] = nf->CreateNode(AND, q[i], q[j]);
+    BBPlus2(acc, row, nf->getFalse());
+    support.insert(nf->CreateNode(NOT, acc[W]));
+    acc[W] = nf->getFalse();
+  }
+  const BBNodeVec accLow(acc.begin(), acc.begin() + W);
+  support.insert(BBEQ(accLow, n));
+
+  // r <= 2q, which with q*q + r = n is what makes q the integer root.
+  BBNodeVec twoQ(sb + 4, nf->getFalse());
+  for (unsigned i = 0; i < qw && i + 1 < sb + 4; i++)
+    twoQ[i + 1] = q[i];
+  support.insert(BBBVLE(zext(r, sb + 4), twoQ, false /*unsigned*/));
+
+  // Q is sqrt(r) * 2^(sb+1) with its top bit set by construction, so the
+  // significand is its top sb bits and no normalisation is needed.
+  BBNodeVec rsig(q.begin() + 2, q.end());
+  const BBNode guard = q[1];
+  const BBNode sticky = nf->CreateNode(OR, nf->CreateNode(OR, r), q[0]);
+
+  // The result exponent halves the (now even) operand exponent, which is an
+  // arithmetic shift right of the signed value.
+  BBNodeVec be(E);
+  for (unsigned i = 0; i + 1 < E; i++)
+    be[i] = e[i + 1];
+  be[E - 1] = e[E - 1];
+  BBPlus2(be, constVec(bias, E), nf->getFalse());
+
+  const bool directlyConstrainedZero =
+      fpNativeZeroMagnitudeFacts.find(term) !=
+      fpNativeZeroMagnitudeFacts.end();
+  const bool resultFinite =
+      !directlyConstrainedZero && fpNativeKnownFinite(term);
+  BBNodeVec res = BBfpRoundPack(rm, a.sign, rsig, guard, sticky, be, sb, eb,
+                                support, resultFinite);
+
+  auto packSpecial = [&](bool isnan, bool isinf, const BBNode& sgn) {
+    if (isnan)
+      return BBfpCanonicalNaN(sb, eb);
+    BBNodeVec s(w, nf->getFalse());
+    if (isinf)
+      for (unsigned i = 0; i < eb; i++)
+        s[sb - 1 + i] = nf->getTrue();
+    s[w - 1] = sgn;
+    return s;
+  };
+
+  // Innermost first: either zero returns itself, plus infinity stays
+  // infinite, and everything invalid -- a NaN operand, minus infinity, any
+  // other negative -- is the canonical NaN.
+  res = BBITE(a.isZero, packSpecial(false, false, a.sign), res);
+  if (!aFinite)
+    res = BBITE(nf->CreateNode(AND, a.isInf, nf->CreateNode(NOT, a.sign)),
+                packSpecial(false, true, nf->getFalse()), res);
+  BBNodeVec nanCases;
+  if (!aFinite)
+    nanCases.push_back(a.isNaN);
+  nanCases.push_back(
+      nf->CreateNode(AND, a.sign, nf->CreateNode(NOT, a.isZero)));
+  res = BBITE(nf->CreateNode(OR, nanCases),
+              packSpecial(true, false, nf->getFalse()), res);
+  return res;
 }
 
 // Bit-blasted fp.min / fp.max over packed IEEE-754 operands. Neither
