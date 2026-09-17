@@ -831,6 +831,13 @@ void ExtraMain::create_options()
            "SymFPU unpacking circuits (experimental)",
            bb_group);
 
+  bool_arg("--bb.fp-native-div", bm->UserFlags.fp_native_div,
+           "Bit-blast fp.div under surviving native predicates with the "
+           "hand-written packed-operand circuit, whose significand quotient "
+           "is the defining relation rather than a restoring array "
+           "(experimental)",
+           bb_group);
+
   bool_arg("--bb.fp-native-add-iszero",
            bm->UserFlags.fp_native_add_iszero,
            "Encode fp.isZero(fp.add ...) directly from its operands without "

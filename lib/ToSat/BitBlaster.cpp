@@ -1971,7 +1971,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       result = tmp_res;
       break;
     }
-    // fp.mul and fp.add survive to the bit-blaster under
+    // fp.mul, fp.add and fp.div survive to the bit-blaster under
     // --bb.fp-native-arith, when FloatBlast left them beneath a surviving
     // native predicate over packed views (comparisonLeaf).
     case FP_MUL:
@@ -1986,6 +1986,12 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       break;
     }
 
+    case FP_DIV:
+    {
+      result = BBfpDiv(term, support);
+      break;
+    }
+
     // Only the four-child float-to-float form survives (comparisonLeaf);
     // the reinterpret form resolves to the operand's own bits there.
     case FP_TOFP:
@@ -1995,7 +2001,6 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
     }
 
     case FP_SUB:
-    case FP_DIV:
     case FP_FMA:
     case FP_SQRT:
     case FP_REM:
@@ -7356,6 +7361,21 @@ unsigned BitBlaster<BBNode, BBNodeManagerT>::BBfpExpWidth(unsigned eb,
   return E;
 }
 
+// Division normalises both significands before dividing, so each exponent
+// moves by up to sb-1 and their difference spans about three biases. The
+// quotient saturates in BBfpRoundPack, but only if the exponent handed to
+// it has not wrapped first.
+template <class BBNode, class BBNodeManagerT>
+unsigned BitBlaster<BBNode, BBNodeManagerT>::BBfpDivExpWidth(unsigned eb,
+                                                             unsigned sb)
+{
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  unsigned E = eb + 2;
+  while ((1u << (E - 1)) <= 3 * bias + 2 * sb + 8)
+    E++;
+  return E;
+}
+
 template <class BBNode, class BBNodeManagerT>
 typename BitBlaster<BBNode, BBNodeManagerT>::FpOperand
 BitBlaster<BBNode, BBNodeManagerT>::BBfpUnpack(const BBNodeVec& p, unsigned sb,
@@ -7742,6 +7762,221 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpMul(const ASTNode& term,
     res = BBITE(anyInf, packSpecial(false, true), res);
     res = BBITE(anyNaN, packSpecial(true, false), res);
   }
+  return res;
+}
+
+// Bit-blasted fp.div over packed IEEE-754 operands, under the same flag and
+// gate as BBfpMul.
+//
+// The significand quotient is the whole cost of a floating-point divide --
+// at (11, 53) it is 96% of the operation -- so it is the one part worth
+// spelling differently from SymFPU, whose fixedPointDivide is a restoring
+// shift-subtract array of one step per quotient bit. Here it is the
+// defining relation instead: fresh quotient and remainder vectors with
+// N = D*Q + R and R < D, the same encoding --bb.div-by-mult gives bvudiv,
+// which measures at 0.45x the restoring array on this shape.
+//
+// Unlike multiplication, division cannot defer normalisation to the
+// result: with un-normalised operands the quotient spans 2sb bits either
+// side of the binary point and the divide would have to be three times as
+// wide to hold it. Both significands are therefore normalised first, two
+// leading-zero counts and two shifts, which is cheap against the divide
+// and pins the quotient to two bits of range.
+//
+// Shape (fields as in BBcompareFP: significand in bits [0, sb-2], exponent
+// in [sb-1, w-2], sign at w-1):
+//   1. Split both operands un-normalised (BBfpUnpack), then normalise each
+//      significand by its leading-zero count and fold that count into the
+//      exponent. A subnormal operand simply carries a larger count.
+//   2. Divide N = A << (sb+1) by D, through the relation. A and D both
+//      have their top bit set, so the quotient lands in [2^sb, 2^(sb+2)):
+//      sb+1 or sb+2 significant bits, one bit of normalisation rather than
+//      a full leading-zero count.
+//   3. Take the top sb bits as the significand, the next as guard, and OR
+//      the rest with "the remainder is nonzero" into sticky. That pair is
+//      exactly the residual the rounder needs.
+//   4. Round, denormalise and saturate in the shared BBfpRoundPack.
+//   5. Specials are muxed over the computed result: zero (x/inf, 0/finite),
+//      then infinity (inf/x, finite/0), then NaN (any NaN operand, 0/0 or
+//      inf/inf) outermost. The NaN produced is the canonical quiet NaN,
+//      the same value the SymFPU path packs.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpDiv(const ASTNode& term,
+                                                           BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_DIV);
+  assert(term.Degree() == 3);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned w = sort.exponentWidth() + sb;
+  const unsigned eb = w - sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = BBfpDivExpWidth(eb, sb);
+
+  const BBNodeVec rm = BBTerm(term[0], support); // one-hot, see
+                                                 // rounding_modes.h
+  const BBNodeVec pa = BBTerm(term[1], support);
+  const BBNodeVec pb = BBTerm(term[2], support);
+  assert(pa.size() == w && pb.size() == w);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool bKnownZero = fpNativeKnownZeroMagnitude(term[2]);
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  const bool bFinite = fpNativeKnownFinite(term[2]);
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite) +
+                                 static_cast<size_t>(bFinite);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+  const FpOperand b =
+      BBfpUnpack(pb, sb, w, E, support, bFinite, bKnownZero);
+
+  const BBNode sign = nf->CreateNode(XOR, a.sign, b.sign);
+
+  // Normalise both significands. BBfpCLZ counts v.size() for an all-zero
+  // vector, so a zero operand shifts to zero -- muxed out by the specials.
+  const unsigned lw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(sb);
+  const BBNodeVec la = BBfpCLZ(a.msig, lw);
+  const BBNodeVec lb = BBfpCLZ(b.msig, lw);
+  const BBNodeVec an = BBShiftLeftByVariable(a.msig, la);
+  BBNodeVec dn = BBShiftLeftByVariable(b.msig, lb);
+
+  // The relation is only satisfiable for a nonzero divisor: R < D has no
+  // model at D = 0, and N = D*Q + R cannot reach a nonzero N either. A zero
+  // divisor is a division by zero whose result the specials replace
+  // wholesale, so pin the divisor to a harmless power of two there rather
+  // than letting an unsatisfiable side constraint reach the solver.
+  BBNodeVec divisorSig = b.msig;
+  const BBNode divisorSigZero = nf->CreateNode(NOR, divisorSig);
+  dn[sb - 1] = nf->CreateNode(OR, dn[sb - 1], divisorSigZero);
+
+  // N = an << (sb+1). With an < 2^sb and dn >= 2^(sb-1) the quotient is
+  // below 2^(sb+2), and at least 2^sb whenever the dividend is nonzero.
+  const unsigned qw = sb + 2;
+  const unsigned W = 2 * sb + 2;
+  BBNodeVec n(W, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    n[i + sb + 1] = an[i];
+
+  BBNodeVec q(qw);
+  BBNodeVec r(sb);
+  for (unsigned i = 0; i < qw; i++)
+    q[i] = nf->CreateFreshInput();
+  for (unsigned i = 0; i < sb; i++)
+    r[i] = nf->CreateFreshInput();
+  ++fpNativeDivRelations;
+
+  // dn*q + r at width W, every accumulation step's carry-out pinned false
+  // so the sum is the integer sum: the bound above is what makes that
+  // sound, and pinning it is what makes the relation exact without a
+  // double-width product.
+  BBNodeVec acc(W + 1, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    acc[i] = r[i];
+  for (unsigned j = 0; j < qw; j++)
+  {
+    BBNodeVec row(W + 1, nf->getFalse());
+    for (unsigned i = 0; i < sb && i + j < W; i++)
+      row[i + j] = nf->CreateNode(AND, dn[i], q[j]);
+    BBPlus2(acc, row, nf->getFalse());
+    support.insert(nf->CreateNode(NOT, acc[W]));
+    acc[W] = nf->getFalse();
+  }
+  const BBNodeVec accLow(acc.begin(), acc.begin() + W);
+  support.insert(BBEQ(accLow, n));
+  // dn is nonzero by construction, so this needs no divisor-zero guard.
+  support.insert(BBBVLE(r, dn, false, true));
+
+  // One bit of normalisation: the quotient's top bit decides whether the
+  // leading one sits at qw-1 or qw-2.
+  const BBNode top = q[qw - 1];
+  BBNodeVec rsig(sb);
+  for (unsigned i = 0; i < sb; i++)
+    rsig[i] = nf->CreateNode(ITE, top, q[i + 2], q[i + 1]);
+  const BBNode guard = nf->CreateNode(ITE, top, q[1], q[0]);
+  const BBNode remainderNonzero = nf->CreateNode(OR, r);
+  const BBNode sticky = nf->CreateNode(
+      OR, remainderNonzero, nf->CreateNode(AND, top, q[0]));
+
+  // Biased result exponent: (eA - la) - (eB - lb) + bias + top - 1.
+  BBNodeVec be = a.eUnb;
+  BBSub(be, zext(la, E), support);
+  BBPlus2(be, zext(lb, E), nf->getFalse());
+  BBSub(be, b.eUnb, support);
+  BBPlus2(be, constVec(bias, E), nf->getFalse());
+  BBNodeVec topAdj(E, nf->getFalse());
+  topAdj[0] = top;
+  BBPlus2(be, topAdj, nf->getFalse());
+  BBSub(be, constVec(1, E), support);
+
+  // As in BBfpMul: a magnitude constraint on this quotient must not erase
+  // the producer relation that enforces it.
+  const bool directlyConstrainedZero =
+      fpNativeZeroMagnitudeFacts.find(term) !=
+      fpNativeZeroMagnitudeFacts.end();
+  const bool resultFinite =
+      !directlyConstrainedZero && fpNativeKnownFinite(term);
+  BBNodeVec res = BBfpRoundPack(rm, sign, rsig, guard, sticky, be, sb, eb,
+                                support, resultFinite);
+
+  auto packSpecial = [&](bool isnan, bool isinf) {
+    BBNodeVec s(w, nf->getFalse());
+    if (isnan || isinf)
+      for (unsigned i = 0; i < eb; i++)
+        s[sb - 1 + i] = nf->getTrue();
+    if (isnan)
+      s[sb - 2] = nf->getTrue(); // canonical quiet NaN, positive
+    else
+      s[w - 1] = sign;
+    return s;
+  };
+
+  // Innermost first. zero and infinity overlap only where the result is
+  // NaN (0/0 and inf/inf), which the outermost mux then replaces, so
+  // neither needs to exclude the other.
+  BBNodeVec zeroCases;
+  zeroCases.push_back(a.isZero);
+  if (!bFinite)
+    zeroCases.push_back(b.isInf);
+  res = BBITE(nf->CreateNode(OR, zeroCases), packSpecial(false, false), res);
+
+  BBNodeVec infCases;
+  if (!aFinite)
+    infCases.push_back(a.isInf);
+  infCases.push_back(b.isZero);
+  res = BBITE(nf->CreateNode(OR, infCases), packSpecial(false, true), res);
+
+  BBNodeVec nanCases;
+  if (!aFinite)
+    nanCases.push_back(a.isNaN);
+  if (!bFinite)
+    nanCases.push_back(b.isNaN);
+  nanCases.push_back(nf->CreateNode(AND, a.isZero, b.isZero));
+  if (!aFinite && !bFinite)
+    nanCases.push_back(nf->CreateNode(AND, a.isInf, b.isInf));
+  res = BBITE(nf->CreateNode(OR, nanCases), packSpecial(true, false), res);
+
   return res;
 }
 

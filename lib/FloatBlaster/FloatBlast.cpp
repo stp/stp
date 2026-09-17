@@ -120,6 +120,26 @@ private:
            consumeNativeFpEnvelope(remaining, 4);
   }
 
+  static bool nativeFpDivFormatIsSafe(const SourceSort& sort)
+  {
+    if (!nativeFpArithmeticFormatIsSafe(sort))
+      return false;
+
+    // BBfpDivExpWidth must represent 3*bias + 2*sb + 8: division normalises
+    // both significands first, so each exponent moves by up to sb-1 and
+    // their difference spans three biases rather than one.
+    const unsigned eb = sort.exponentWidth();
+    const unsigned sb = sort.significandWidth();
+    std::uintmax_t remaining = nativeFpEnvelopeLimit();
+    const std::uintmax_t bias = nativeFpBias(eb);
+    return consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, 8);
+  }
+
   static bool nativeFpToFpFormatsAreSafe(const SourceSort& source,
                                          const SourceSort& target)
   {
@@ -241,7 +261,7 @@ private:
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), inner);
     }
     // fp.mul and fp.add under --bb.fp-native-arith: the bit-blaster's
-    // hand-written packed circuits (BBfpMul, BBfpAdd) take over from
+    // hand-written packed circuits (BBfpMul, BBfpAdd, BBfpDiv) take over from
     // SymFPU when both float operands resolve to packed views and the
     // rounding mode is immediate (a constant, or a declared symbol --
     // whose one-hot validity is asserted at declaration), and the format's
@@ -251,10 +271,15 @@ private:
     // lowering-must-change invariant of constant folding and model
     // evaluation) and the identity rules still fire. fp.sub needs no arm:
     // the factory already lowers it to fp.add of the negation.
-    if ((n.GetKind() == FP_MUL || n.GetKind() == FP_ADD) &&
-        bm->UserFlags.fp_native_arith && n.Degree() == 3 &&
+    const bool nativeArithKind =
+        (n.GetKind() == FP_MUL || n.GetKind() == FP_ADD)
+            ? bm->UserFlags.fp_native_arith
+            : (n.GetKind() == FP_DIV ? bm->UserFlags.fp_native_div : false);
+    if (nativeArithKind && n.Degree() == 3 &&
         (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
-        nativeFpArithmeticFormatIsSafe(n.GetSourceSort()))
+        (n.GetKind() == FP_DIV
+             ? nativeFpDivFormatIsSafe(n.GetSourceSort())
+             : nativeFpArithmeticFormatIsSafe(n.GetSourceSort())))
     {
       const ASTNode left = comparisonLeaf(n[1]);
       if (left.IsNull())

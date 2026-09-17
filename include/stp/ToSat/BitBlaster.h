@@ -361,12 +361,13 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   bool fpNativeKnownFiniteNonnegative(const ASTNode& n);
   bool fpNativeKnownFiniteNonpositive(const ASTNode& n);
 
-  // bit blast fp.mul / fp.add / float-to-float to_fp over packed operands:
-  // hand-written unpack/compute/round/pack circuits, no SymFPU
+  // bit blast fp.mul / fp.add / fp.div / float-to-float to_fp over packed
+  // operands: hand-written unpack/compute/round/pack circuits, no SymFPU
   // (--bb.fp-native-arith)
   BBNodeVec BBfpMul(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpAdd(const ASTNode& term, BBNodeSet& support);
   BBNode BBfpAddIsZero(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpDiv(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
 
   // Kept separate from the native-domain profiling counters so the stacked
@@ -403,6 +404,14 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   // widened until the subnormal shift distance (up to bias + 2sb + 3,
   // counting fp.add's alignment headroom) cannot overflow it.
   static unsigned BBfpExpWidth(unsigned eb, unsigned sb);
+
+  // Division needs a wider exponent datapath than the other operations.
+  // Both operands are normalised before the divide, so each exponent moves
+  // by up to sb-1, and the difference of two such exponents spans about
+  // three biases rather than one. The result saturates, but the saturation
+  // test in BBfpRoundPack only fires if the exponent it reads has not
+  // wrapped.
+  static unsigned BBfpDivExpWidth(unsigned eb, unsigned sb);
 
   // Helpers for the native floating-point arithmetic circuits.
   // Count of leading zeros of v (from the MSB down) as an unsigned binary
@@ -511,6 +520,7 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   size_t fpNativeZeroAddFastPaths = 0;
   size_t fpNativeZeroMulFastPaths = 0;
   size_t fpNativeZeroToFpFastPaths = 0;
+  size_t fpNativeDivRelations = 0;
   size_t fpNativeKnownPositiveAddPaths = 0;
   size_t fpNativeKnownNegativeAddPaths = 0;
   size_t fpNativeKnownPositiveMulPaths = 0;
@@ -895,6 +905,7 @@ public:
     fpNativeZeroAddFastPaths = 0;
     fpNativeZeroMulFastPaths = 0;
     fpNativeZeroToFpFastPaths = 0;
+    fpNativeDivRelations = 0;
     fpNativeKnownPositiveAddPaths = 0;
     fpNativeKnownNegativeAddPaths = 0;
     fpNativeKnownPositiveMulPaths = 0;
