@@ -372,6 +372,7 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   BBNodeVec BBfpSqrt(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpRoundToIntegral(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpFma(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpFromBV(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToIeeeBV(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
 
@@ -423,6 +424,9 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   // exponent is that large, on top of a product exponent already spanning
   // two biases.
   static unsigned BBfpFmaExpWidth(unsigned eb, unsigned sb);
+
+  // Converting an n-bit integer needs room for an exponent as large as n.
+  static unsigned BBfpConvExpWidth(unsigned eb, unsigned sb, unsigned n);
 
   // Helpers for the native floating-point arithmetic circuits.
   // Count of leading zeros of v (from the MSB down) as an unsigned binary

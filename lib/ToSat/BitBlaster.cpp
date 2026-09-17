@@ -2023,6 +2023,13 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       break;
     }
 
+    case FP_TOFP_SIGNED:
+    case FP_TOFP_UNSIGNED:
+    {
+      result = BBfpFromBV(term, support);
+      break;
+    }
+
     // Only the four-child float-to-float form survives (comparisonLeaf);
     // the reinterpret form resolves to the operand's own bits there.
     case FP_TOFP:
@@ -2033,8 +2040,6 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
 
     case FP_SUB:
     case FP_REM:
-    case FP_TOFP_SIGNED:
-    case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
     {
@@ -7401,6 +7406,20 @@ unsigned BitBlaster<BBNode, BBNodeManagerT>::BBfpDivExpWidth(unsigned eb,
   return E;
 }
 
+// Converting an n-bit integer produces an exponent as large as n, on top of
+// the format's own bias.
+template <class BBNode, class BBNodeManagerT>
+unsigned BitBlaster<BBNode, BBNodeManagerT>::BBfpConvExpWidth(unsigned eb,
+                                                              unsigned sb,
+                                                              unsigned n)
+{
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  unsigned E = eb + 2;
+  while ((1u << (E - 1)) <= bias + n + 2 * sb + 8)
+    E++;
+  return E;
+}
+
 // The fused multiply-add's frame is about 4sb bits wide, so the leading-zero
 // count it subtracts can be that large, and it subtracts it from a product
 // exponent that already spans two biases.
@@ -8856,6 +8875,106 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
     res = BBITE(anyNaN, packSpecial(true, nf->getFalse()), res);
   }
   return res;
+}
+
+// Bit-blasted to_fp from a bit-vector, signed or unsigned. Rounding an
+// integer is the easy direction: take its magnitude, normalise it, and the
+// bits that fall off the bottom are the guard and sticky the shared rounder
+// wants. The only wrinkle is that the integer's width is unrelated to the
+// significand's, so the frame is widened to hold at least a guard and a
+// sticky position even when the integer is narrower than the significand,
+// in which case the conversion is exact and both come out zero.
+//
+// Integer zero converts to positive zero whatever the sign bit of a signed
+// input would suggest, which is why the zero case is muxed rather than left
+// to the datapath.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpFromBV(const ASTNode& term,
+                                               BBNodeSet& support)
+{
+  const Kind k = term.GetKind();
+  assert(k == FP_TOFP_SIGNED || k == FP_TOFP_UNSIGNED);
+  assert(term.Degree() == 4);
+  const bool isSigned = (k == FP_TOFP_SIGNED);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+
+  const BBNodeVec rm = BBTerm(term[2], support);
+  const BBNodeVec iv = BBTerm(term[3], support);
+  const unsigned n = iv.size();
+  assert(n >= 1);
+  const unsigned E = BBfpConvExpWidth(eb, sb, n);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+
+  // Magnitude and sign. A signed input's magnitude is its two's complement
+  // negation when negative, which for the most negative value is itself --
+  // correct, because that magnitude needs the n-th bit and the frame below
+  // is wide enough to hold it.
+  const BBNode sign = isSigned ? iv[n - 1] : nf->getFalse();
+  BBNodeVec magnitude(n);
+  if (isSigned)
+  {
+    BBNodeVec negated(n);
+    for (unsigned i = 0; i < n; i++)
+      negated[i] = nf->CreateNode(NOT, iv[i]);
+    BBNodeVec one(n, nf->getFalse());
+    one[0] = nf->getTrue();
+    BBPlus2(negated, one, nf->getFalse());
+    magnitude = BBITE(sign, negated, iv);
+  }
+  else
+    magnitude = iv;
+
+  // A frame with at least a guard and a sticky below the significand.
+  const unsigned F = (n >= sb + 2) ? n : (sb + 2);
+  BBNodeVec frame(F, nf->getFalse());
+  for (unsigned i = 0; i < n; i++)
+    frame[i + (F - n)] = magnitude[i];
+
+  const unsigned lw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(F);
+  const BBNodeVec ell = BBfpCLZ(frame, lw);
+  const BBNodeVec fn = BBShiftLeftByVariable(frame, ell);
+
+  BBNodeVec rsig(fn.begin() + (F - sb), fn.end());
+  const BBNode guard = fn[F - sb - 1];
+  BBNodeVec lowBits(fn.begin(), fn.begin() + (F - sb - 1));
+  const BBNode sticky =
+      lowBits.empty() ? nf->getFalse() : nf->CreateNode(OR, lowBits);
+
+  // The magnitude is (frame >> (F - n)), so its leading one sits n-1-ell
+  // places above the units position.
+  BBNodeVec be = constVec(n - 1 + bias, E);
+  BBSub(be, zext(ell, E), support);
+
+  BBNodeVec res =
+      BBfpRoundPack(rm, sign, rsig, guard, sticky, be, sb, eb, support, false);
+
+  BBNodeVec zero(sb + eb, nf->getFalse());
+  BBNodeVec magBits = magnitude;
+  return BBITE(nf->CreateNode(NOR, magBits), zero, res);
 }
 
 // Bit-blasted fp.fma over packed IEEE-754 operands: a*b + c with a single

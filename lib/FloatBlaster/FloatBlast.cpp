@@ -120,6 +120,24 @@ private:
            consumeNativeFpEnvelope(remaining, 4);
   }
 
+  static bool nativeFpConvFormatIsSafe(const SourceSort& sort, unsigned n)
+  {
+    if (!nativeFpArithmeticFormatIsSafe(sort))
+      return false;
+
+    // BBfpConvExpWidth must represent bias + n + 2*sb + 8, where n is the
+    // integer's width: converting an n-bit integer produces an exponent
+    // that large.
+    const unsigned eb = sort.exponentWidth();
+    const unsigned sb = sort.significandWidth();
+    std::uintmax_t remaining = nativeFpEnvelopeLimit();
+    return consumeNativeFpEnvelope(remaining, nativeFpBias(eb)) &&
+           consumeNativeFpEnvelope(remaining, n) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, 8);
+  }
+
   static bool nativeFpFmaFormatIsSafe(const SourceSort& sort)
   {
     if (!nativeFpArithmeticFormatIsSafe(sort))
@@ -318,6 +336,27 @@ private:
         return n;
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), n[0],
                                       left, right);
+    }
+    // to_fp from a bit-vector, signed or unsigned. The integer operand is
+    // a bit-vector already, so it lowers rather than resolving as a packed
+    // float; only the result is a float.
+    if ((n.GetKind() == FP_TOFP_SIGNED || n.GetKind() == FP_TOFP_UNSIGNED) &&
+        bm->UserFlags.fp_native_conv && n.Degree() == 4 &&
+        (n[2].GetKind() == SYMBOL || n[2].GetKind() == BVCONST) &&
+        nativeFpConvFormatIsSafe(n.GetSourceSort(), n[3].GetValueWidth()))
+    {
+      const ASTNode integer = lower(n[3]);
+      if (integer.isConstant() && n[2].GetKind() == BVCONST)
+        return ASTNode();
+      if (integer == n[3])
+        return n;
+      ASTVec children;
+      children.push_back(n[0]);
+      children.push_back(n[1]);
+      children.push_back(n[2]);
+      children.push_back(integer);
+      return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(),
+                                      children);
     }
     // fp.fma: BBfpAdd's datapath at a doubled significand width, so the
     // product reaches the adder exactly and there is a single rounding.
