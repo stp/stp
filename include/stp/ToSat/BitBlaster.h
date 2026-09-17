@@ -371,6 +371,7 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   BBNodeVec BBfpMinMax(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpSqrt(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpRoundToIntegral(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpFma(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToIeeeBV(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
 
@@ -416,6 +417,12 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   // test in BBfpRoundPack only fires if the exponent it reads has not
   // wrapped.
   static unsigned BBfpDivExpWidth(unsigned eb, unsigned sb);
+
+  // The fused multiply-add needs a wider one still. Its adder frame is
+  // about 4sb bits, so the leading-zero count it subtracts from the
+  // exponent is that large, on top of a product exponent already spanning
+  // two biases.
+  static unsigned BBfpFmaExpWidth(unsigned eb, unsigned sb);
 
   // Helpers for the native floating-point arithmetic circuits.
   // Count of leading zeros of v (from the MSB down) as an unsigned binary

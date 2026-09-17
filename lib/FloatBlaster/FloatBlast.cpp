@@ -120,6 +120,25 @@ private:
            consumeNativeFpEnvelope(remaining, 4);
   }
 
+  static bool nativeFpFmaFormatIsSafe(const SourceSort& sort)
+  {
+    if (!nativeFpArithmeticFormatIsSafe(sort))
+      return false;
+
+    // BBfpFmaExpWidth must represent 3*bias + 8*sb + 16: the adder frame is
+    // about 4sb bits, so the leading-zero count subtracted from the
+    // exponent is that large, over a product exponent spanning two biases.
+    const unsigned eb = sort.exponentWidth();
+    const unsigned sb = sort.significandWidth();
+    std::uintmax_t remaining = nativeFpEnvelopeLimit();
+    const std::uintmax_t bias = nativeFpBias(eb);
+    return consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, 8 * std::uintmax_t{sb}) &&
+           consumeNativeFpEnvelope(remaining, 16);
+  }
+
   // fp.min, fp.max and fp.to_ieee_bv read packed fields and mux; they form
   // no exponent bounds at all, so they need only a well-formed format.
   static bool nativeFpFieldFormatIsSafe(const SourceSort& sort)
@@ -299,6 +318,32 @@ private:
         return n;
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), n[0],
                                       left, right);
+    }
+    // fp.fma: BBfpAdd's datapath at a doubled significand width, so the
+    // product reaches the adder exactly and there is a single rounding.
+    if (n.GetKind() == FP_FMA && bm->UserFlags.fp_native_fma &&
+        n.Degree() == 4 &&
+        (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
+        nativeFpFmaFormatIsSafe(n.GetSourceSort()))
+    {
+      ASTVec children;
+      children.push_back(n[0]);
+      bool changed = false;
+      for (unsigned i = 1; i < 4; i++)
+      {
+        const ASTNode operand = comparisonLeaf(n[i]);
+        if (operand.IsNull())
+          return ASTNode();
+        changed = changed || operand != n[i];
+        children.push_back(operand);
+      }
+      if (!changed)
+        return n;
+      const ASTNode rebuilt =
+          node_factory->CreateTerm(FP_FMA, n.GetValueWidth(), children);
+      if (rebuilt.GetKind() != FP_FMA)
+        return comparisonLeaf(rebuilt);
+      return rebuilt;
     }
     // fp.roundToIntegral: shift the fractional bits out of the significand,
     // round at the units place by the mode, and renormalise the exact
