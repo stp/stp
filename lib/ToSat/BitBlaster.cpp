@@ -9235,8 +9235,8 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpToBV(const ASTNode& term,
   {
     // Two's complement: magnitudes up to 2^(m-1) are in range when negative,
     // and up to 2^(m-1)-1 when positive.
-    BBNodeVec limit(m, nf->getFalse());
-    limit[m - 1] = nf->getTrue(); // 2^(m-1), as an m-bit pattern
+    // The boundary is 2^(m-1): representable as a magnitude only when the
+    // value is negative, where it is the most negative two's complement.
     const BBNode magTop = mag[m - 1];
     BBNodeVec magLow(mag.begin(), mag.begin() + (m - 1));
     const BBNode magLowZero =
@@ -9254,7 +9254,6 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpToBV(const ASTNode& term,
     one[0] = nf->getTrue();
     BBPlus2(negated, one, nf->getFalse());
     result = BBITE(a.sign, negated, mag);
-    (void)limit;
   }
 
   if (!aFinite)
