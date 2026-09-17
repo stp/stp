@@ -265,6 +265,21 @@ void ExtraMain::create_options()
             "costs the cube of its length to re-nest",
             simp_group);
 
+  bool_arg("--linear-form", bm->UserFlags.enable_linear_form,
+           "Rewrite every bit-vector term into a canonical linear "
+           "combination of its non-linear sub-terms, so that two equal "
+           "combinations spelled differently become one node and share the "
+           "circuit built on them rather than each blasting their own",
+           simp_group);
+
+  int64_arg("--linear-form-addend-limit",
+            bm->UserFlags.linear_form_addend_limit,
+            "How many atoms a combination may hold before it keeps the "
+            "spelling it arrived with. Distributing a constant over a sum "
+            "writes one multiply per addend, so this bounds the growth a "
+            "single term can cause",
+            simp_group);
+
   bool_arg("--pair-extract", bm->UserFlags.enable_pair_extract,
            "In an n-ary bvadd, replace a pair of addends whose possibly-one "
            "bits are disjoint by their bitwise-or, removing an adder stage",
@@ -1155,7 +1170,7 @@ void ExtraMain::create_options()
                 "--flattening", "--rewriting", "--split-extracts",
                 "--ite-context-simplifications", "--use-intervals",
                 "--pure-literals", "--common-subsum", "--pair-extract",
-                "--merge-same", "--distinct-ordering"});
+                "--merge-same", "--distinct-ordering", "--linear-form"});
 
   // Likewise for what disableSizeIncreasingSimplifications() forces.
   excludes_all("--size-reducing-only",

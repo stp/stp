@@ -210,6 +210,24 @@ public:
   bool enable_pair_extract = true;
   bool enable_common_subsum = true;
 
+  // One canonical spelling for every linear combination of bit-vector
+  // terms, so that two equal combinations are the same node and share the
+  // circuit built on top of them. See LinearForm.h.
+  //
+  // Off by default. Over a thousand QF_BV, QF_ABV and QF_UFBV files from
+  // the SMT-LIB corpus, at a ten second cap and with each arm run on each
+  // file in turn so both see the same machine, it settles 4 files the
+  // exact encoding does not and loses 26 that it does. What it is for is
+  // the shape where the win is large -- translation validation, where the
+  // same combination is built twice from the two programs being compared.
+  bool enable_linear_form = false;
+
+  // How many atoms a combination may hold before it keeps the spelling it
+  // arrived with. Distributing a constant over a sum writes one multiply
+  // per addend, so this bounds the growth one node can cause; the
+  // combinations this pass exists for hold a handful of atoms.
+  int64_t linear_form_addend_limit = 64;
+
   // Tally operations -- one increment or decrement of a pair's holder
   // count -- common sub-term extraction may spend per operator before it
   // stops. Building the tally and repairing it after each extraction are
@@ -1364,6 +1382,7 @@ public:
     enable_merge_same = false;
     enable_pair_extract = false;
     enable_common_subsum = false;
+    enable_linear_form = false;
     enable_ite_context = false;
     distinct_ordering = false;
 
