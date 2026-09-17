@@ -50,6 +50,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Flatten.h"
 #include "stp/Simplifier/CommonSubSum.h"
 #include "stp/Simplifier/LinearForm.h"
+#include "stp/Simplifier/CongruenceCandidates.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/Rewriting.h"
 #include "stp/Simplifier/MergeSame.h"
@@ -782,6 +783,35 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
                                 bm->UserFlags.linear_form_addend_limit));
     inputToSat = linear.topLevel(inputToSat);
     bm->ASTNodeStats("After Linear Canonical Form: ", inputToSat);
+  }
+
+  // Before the passes that read the term structure, so that an equality
+  // proved here is one they can act on: constant bit propagation, the
+  // difficulty score and the blaster all describe whatever tree they are
+  // handed, and two applications a proved equality collapses are an
+  // application they see once.
+  //
+  // After the canonicaliser above, where both are asked for. A pair that
+  // differs only in how its combination is spelled is one that pass has
+  // already made a single node, so what is left to propose here is the
+  // pairs a spelling does not account for -- and each of those costs a
+  // sub-solve, where the canonical form costs a rewrite.
+  if (bm->UserFlags.enable_congruence_candidates)
+  {
+    CongruenceCandidates congruence(
+        bm, bm->defaultNodeFactory,
+        bm->UserFlags.congruence_candidate_limit < 0
+            ? std::numeric_limits<size_t>::max()
+            : static_cast<size_t>(bm->UserFlags.congruence_candidate_limit),
+        bm->UserFlags.congruence_candidate_conflicts);
+
+    ASTVec facts = congruence.derive(inputToSat);
+    if (!facts.empty())
+    {
+      facts.push_back(inputToSat);
+      inputToSat = bm->defaultNodeFactory->CreateNode(AND, facts);
+      bm->ASTNodeStats("After Congruence Candidates: ", inputToSat);
+    }
   }
 
   if (bm->UserFlags.enable_flatten)

@@ -447,6 +447,25 @@ void ExtraMain::create_options()
           // line, and a test about the option says its own: the later one
           // wins.
           ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+  bool_arg("--congruence-candidates",
+           bm->UserFlags.enable_congruence_candidates,
+           "prove equalities between terms the query applies the same "
+           "operator to in the same position, and assert the ones that "
+           "hold, so the two applications and everything built on them "
+           "collapse into one instead of being bit-blasted twice",
+           refinement_group);
+  int64_arg("--congruence-candidate-limit",
+            bm->UserFlags.congruence_candidate_limit,
+            "how many candidate equalities may be put to the solver. Each "
+            "is its own small query, so this is what the pass costs on a "
+            "query where nothing turns out to be equal",
+            refinement_group);
+  int64_arg("--congruence-candidate-conflicts",
+            bm->UserFlags.congruence_candidate_conflicts,
+            "conflicts one candidate may take before it is dropped "
+            "undecided; a candidate needing more than this to settle is not "
+            "one whose proof pays for itself. Negative removes the budget",
+            refinement_group);
   bool_arg("--skeleton-preproc", bm->UserFlags.skeleton_preproc,
            "ask the query's propositional skeleton what it forces, and assert "
            "that before solving", refinement_group);

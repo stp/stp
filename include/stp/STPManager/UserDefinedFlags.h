@@ -228,6 +228,20 @@ public:
   // combinations this pass exists for hold a handful of atoms.
   int64_t linear_form_addend_limit = 64;
 
+  // Prove equalities between terms the query applies the same operator to,
+  // and assert the ones that hold, so that the applications collapse into
+  // one. See CongruenceCandidates.h.
+  bool enable_congruence_candidates = false;
+
+  // How many candidate equalities may be put to the solver. Each is its own
+  // small query, so this is what the pass costs when it finds nothing.
+  int64_t congruence_candidate_limit = 64;
+
+  // Conflicts one candidate may take before it is dropped undecided. A
+  // candidate that needs more than this to settle is not one whose proof
+  // was going to pay for itself. Negative removes the budget.
+  int64_t congruence_candidate_conflicts = 20000;
+
   // Tally operations -- one increment or decrement of a pair's holder
   // count -- common sub-term extraction may spend per operator before it
   // stops. Building the tally and repairing it after each extraction are
