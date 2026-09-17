@@ -2043,11 +2043,14 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       break;
     }
 
-    // Only the four-child float-to-float form survives (comparisonLeaf);
-    // the reinterpret form resolves to the operand's own bits there.
     case FP_TOFP:
     {
-      result = BBfpToFp(term, support);
+      // The three-child reinterpretation is the operand's own bits; only
+      // the four-child float-to-float form has a circuit.
+      if (term.Degree() == 3)
+        result = BBTerm(term[2], support);
+      else
+        result = BBfpToFp(term, support);
       break;
     }
 

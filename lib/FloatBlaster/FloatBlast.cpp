@@ -305,6 +305,22 @@ private:
       return bm->CreateFPConst(n[2], sort.exponentWidth(),
                                sort.significandWidth());
     }
+    // The same reinterpretation over symbolic bits. There is nothing to
+    // compute: the operand already is the packed encoding, NaN payload
+    // included, which is what asPacked would have preserved anyway. Letting
+    // it survive is what keeps a bit-vector-to-float reinterpretation from
+    // dragging SymFPU back in, and it is the commonest shape in the mixed
+    // bit-vector and floating-point logics.
+    if (n.GetKind() == FP_TOFP && n.Degree() == 3 &&
+        bm->UserFlags.fp_native_pack &&
+        nativeFpFieldFormatIsSafe(n.GetSourceSort()))
+    {
+      const ASTNode bits = lower(n[2]);
+      if (bits == n[2])
+        return n;
+      return node_factory->CreateTerm(FP_TOFP, n.GetValueWidth(), n[0], n[1],
+                                      bits);
+    }
     // fp.neg and fp.abs are sign-bit edits on the packed encoding (IEEE-754
     // 5.5.1 quiet operations: no rounding, NaN payload untouched), so either
     // wrapped around a packed view is still a packed view: resolve the
@@ -469,8 +485,10 @@ private:
     // over the packed bits, with no unpack and no pack. FpTotalise has
     // already given the node its third child, the selector that decides
     // min(+0,-0), and that child is a bit-vector so it lowers either way.
-    // Two constant operands stay on the SymFPU path: the factory does not
-    // fold a partial operation, so nothing else would collapse them.
+    // Constant operands are allowed through: the factory does not fold a
+    // partial operation, so leaving them to SymFPU would keep a dependency
+    // alive for the commonest shape in the corpus, and the selector child
+    // is never constant so the node is never fully constant either.
     if ((n.GetKind() == FP_MIN || n.GetKind() == FP_MAX) &&
         bm->UserFlags.fp_native_minmax && n.Degree() == 3 &&
         nativeFpFieldFormatIsSafe(n.GetSourceSort()))
@@ -480,8 +498,6 @@ private:
         return ASTNode();
       const ASTNode right = comparisonLeaf(n[1]);
       if (right.IsNull())
-        return ASTNode();
-      if (left.isConstant() && right.isConstant())
         return ASTNode();
       const ASTNode selector = lower(n[2]);
       if (left == n[0] && right == n[1] && selector == n[2])
