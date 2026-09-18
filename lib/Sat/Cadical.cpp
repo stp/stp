@@ -556,7 +556,9 @@ bool Cadical::addClauseInternal(
       s->add(polarity? -(int)var : (int)var);
     }
   s->add(0);
-  return false;
+  // Report the current solver state, as the other backends do. CaDiCaL may
+  // defer detecting a contradiction until the next solve.
+  return okay();
 }
 
 uint8_t Cadical::modelValue(uint32_t x) const
