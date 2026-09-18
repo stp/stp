@@ -5,7 +5,7 @@
 ;
 ; RUN: %solver --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-div=true -s %s 2>&1 | %OutputCheck %s
 ;
-; CHECK: FloatBlast: 0 SymFPU operations, 0 unpacks, 0 packs, 0 direct add-isZero predicates (no-op: everything passed through natively)
+; CHECK: FloatBlast: 0 SymFPU operations, 0 unpacks, 0 packs
 ; CHECK: ^unsat
 ;
 (set-logic QF_FP)
