@@ -834,6 +834,15 @@ void ExtraMain::create_options()
            "via the SymFPU unpacking circuits",
            bb_group);
 
+  int64_arg("--bb.fp-add-variant", bm->UserFlags.fp_add_variant,
+            "alignment frame for the native fp.add datapath. 1 keeps a whole "
+            "significand below the larger operand, so alignment never shifts "
+            "anything out of the frame. 2 keeps only a guard, a round and a "
+            "sticky position, letting alignment past those reach the sticky "
+            "bit as it already does past the clamp, which halves the width "
+            "the cancellation shift and its leading-zero count run over",
+            bb_group);
+
   bool_arg("--bb.fp-native-arith", bm->UserFlags.fp_native_arith,
            "Bit-blast fp.add and fp.mul under surviving native predicates "
            "with the hand-written packed-operand circuits instead of the "
