@@ -1022,6 +1022,31 @@ public:
   // circuits. Experimental; off by default.
   bool fp_native_arith = false;
 
+  // Bit-blast fp.div with the hand-written packed-operand circuit (BBfpDiv)
+  // instead of SymFPU's. Separate from fp_native_arith because the two
+  // answer different questions: SymFPU's multiplier is near-tight, so
+  // native add/mul trades a small circuit win for the word-level
+  // simplifier's much larger one, while SymFPU's divider is a restoring
+  // shift-subtract array and the native one states the defining relation
+  // instead. Experimental; off by default.
+  bool fp_native_div = false;
+
+  // The remaining operations, each with its own switch so its circuit can
+  // be measured against SymFPU's on its own. --bb.fp-native-all turns on
+  // every one of them together, which is what a build without SymFPU would
+  // need. All experimental, all off by default.
+  bool fp_native_minmax = false;   // fp.min, fp.max
+  bool fp_native_pack = false;     // fp.to_ieee_bv
+  bool fp_native_round = false;    // fp.roundToIntegral
+  bool fp_native_sqrt = false;     // fp.sqrt
+  bool fp_native_fma = false;      // fp.fma
+  bool fp_native_conv = false;     // to_fp from a bit-vector, fp.to_ubv/sbv
+  bool fp_native_rem = false;      // fp.rem
+
+  // Set by --bb.fp-native-all, which turns every native floating-point
+  // circuit on at once: the state a build without SymFPU would need.
+  bool fp_native_all = false;
+
   // Recognise fp.isZero(fp.add ...) and encode the observed zero-result
   // condition directly instead of constructing and packing every result bit.
   // Enabled by default, but only active when native arithmetic is selected.

@@ -361,12 +361,28 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   bool fpNativeKnownFiniteNonnegative(const ASTNode& n);
   bool fpNativeKnownFiniteNonpositive(const ASTNode& n);
 
-  // bit blast fp.mul / fp.add / float-to-float to_fp over packed operands:
-  // hand-written unpack/compute/round/pack circuits, no SymFPU
+  // bit blast fp.mul / fp.add / fp.div / float-to-float to_fp over packed
+  // operands: hand-written unpack/compute/round/pack circuits, no SymFPU
   // (--bb.fp-native-arith)
+  // The significand product of fp.mul and fp.fma, handed to the ordinary
+  // bit-vector multiplier so that it inherits its variants -- the recoding
+  // of constant runs above all, which a floating-point multiply by a
+  // literal needs exactly as much as a bit-vector one does.
+  BBNodeVec BBfpSignificandProduct(const BBNodeVec& a, const BBNodeVec& b,
+                                   BBNodeSet& support);
+
   BBNodeVec BBfpMul(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpAdd(const ASTNode& term, BBNodeSet& support);
   BBNode BBfpAddIsZero(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpDiv(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpMinMax(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpSqrt(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpRoundToIntegral(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpFma(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpFromBV(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpToBV(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpRem(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpToIeeeBV(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
 
   // Kept separate from the native-domain profiling counters so the stacked
@@ -404,6 +420,23 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   // counting fp.add's alignment headroom) cannot overflow it.
   static unsigned BBfpExpWidth(unsigned eb, unsigned sb);
 
+  // Division needs a wider exponent datapath than the other operations.
+  // Both operands are normalised before the divide, so each exponent moves
+  // by up to sb-1, and the difference of two such exponents spans about
+  // three biases rather than one. The result saturates, but the saturation
+  // test in BBfpRoundPack only fires if the exponent it reads has not
+  // wrapped.
+  static unsigned BBfpDivExpWidth(unsigned eb, unsigned sb);
+
+  // The fused multiply-add needs a wider one still. Its adder frame is
+  // about 4sb bits, so the leading-zero count it subtracts from the
+  // exponent is that large, on top of a product exponent already spanning
+  // two biases.
+  static unsigned BBfpFmaExpWidth(unsigned eb, unsigned sb);
+
+  // Converting an n-bit integer needs room for an exponent as large as n.
+  static unsigned BBfpConvExpWidth(unsigned eb, unsigned sb, unsigned n);
+
   // Helpers for the native floating-point arithmetic circuits.
   // Count of leading zeros of v (from the MSB down) as an unsigned binary
   // vector of `countWidth` bits; an all-zero v counts v.size().
@@ -413,6 +446,14 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                                  BBNode& sticky);
   // v + inc (a single carry-in bit), one bit wider than v.
   BBNodeVec BBfpIncrement(const BBNodeVec& v, const BBNode& inc);
+  // The sign-magnitude sort key: flip every magnitude bit under a set sign
+  // and invert the sign, so unsigned comparison of two keys is the floats'
+  // total order. Distinguishes -0 from +0, which callers handle separately.
+  BBNodeVec BBfpOrderKey(const BBNodeVec& p, unsigned width);
+  // The canonical quiet NaN of format (eb, sb): exponent all ones, only the
+  // top stored significand bit set, sign clear. The value every native
+  // circuit and the SymFPU encoding both produce.
+  BBNodeVec BBfpCanonicalNaN(unsigned sb, unsigned eb);
 
   // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
   // BVUMULO, BVSMULO, BVUSUBO, BVSSUBO.
@@ -511,6 +552,9 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   size_t fpNativeZeroAddFastPaths = 0;
   size_t fpNativeZeroMulFastPaths = 0;
   size_t fpNativeZeroToFpFastPaths = 0;
+  size_t fpNativeDivRelations = 0;
+  // One placeholder multiply node per width, for BBfpSignificandProduct.
+  std::map<unsigned, ASTNode> fpSignificandProductShape;
   size_t fpNativeKnownPositiveAddPaths = 0;
   size_t fpNativeKnownNegativeAddPaths = 0;
   size_t fpNativeKnownPositiveMulPaths = 0;
@@ -895,6 +939,7 @@ public:
     fpNativeZeroAddFastPaths = 0;
     fpNativeZeroMulFastPaths = 0;
     fpNativeZeroToFpFastPaths = 0;
+    fpNativeDivRelations = 0;
     fpNativeKnownPositiveAddPaths = 0;
     fpNativeKnownNegativeAddPaths = 0;
     fpNativeKnownPositiveMulPaths = 0;

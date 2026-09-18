@@ -120,6 +120,89 @@ private:
            consumeNativeFpEnvelope(remaining, 4);
   }
 
+  // fp.rem's frame is one bit per unit of exponent difference, the same
+  // count SymFPU would have unrolled, so it inherits the same support
+  // limit: past it the circuit is not worth building at all.
+  static bool nativeFpRemFormatIsSafe(const SourceSort& sort)
+  {
+    if (!nativeFpArithmeticFormatIsSafe(sort))
+      return false;
+    const unsigned eb = sort.exponentWidth();
+    const unsigned sb = sort.significandWidth();
+    if (!FloatBlaster::remSupported(eb, sb))
+      return false;
+    std::uintmax_t remaining = nativeFpEnvelopeLimit();
+    return consumeNativeFpEnvelope(remaining, std::uintmax_t{1} << eb) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, 8);
+  }
+
+  static bool nativeFpConvFormatIsSafe(const SourceSort& sort, unsigned n)
+  {
+    if (!nativeFpArithmeticFormatIsSafe(sort))
+      return false;
+
+    // BBfpConvExpWidth must represent bias + n + 2*sb + 8, where n is the
+    // integer's width: converting an n-bit integer produces an exponent
+    // that large.
+    const unsigned eb = sort.exponentWidth();
+    const unsigned sb = sort.significandWidth();
+    std::uintmax_t remaining = nativeFpEnvelopeLimit();
+    return consumeNativeFpEnvelope(remaining, nativeFpBias(eb)) &&
+           consumeNativeFpEnvelope(remaining, n) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, 8);
+  }
+
+  static bool nativeFpFmaFormatIsSafe(const SourceSort& sort)
+  {
+    if (!nativeFpArithmeticFormatIsSafe(sort))
+      return false;
+
+    // BBfpFmaExpWidth must represent 3*bias + 8*sb + 16: the adder frame is
+    // about 4sb bits, so the leading-zero count subtracted from the
+    // exponent is that large, over a product exponent spanning two biases.
+    const unsigned eb = sort.exponentWidth();
+    const unsigned sb = sort.significandWidth();
+    std::uintmax_t remaining = nativeFpEnvelopeLimit();
+    const std::uintmax_t bias = nativeFpBias(eb);
+    return consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, 8 * std::uintmax_t{sb}) &&
+           consumeNativeFpEnvelope(remaining, 16);
+  }
+
+  // fp.min, fp.max and fp.to_ieee_bv read packed fields and mux; they form
+  // no exponent bounds at all, so they need only a well-formed format.
+  static bool nativeFpFieldFormatIsSafe(const SourceSort& sort)
+  {
+    return sort.kind() == SourceSort::Kind::FloatingPoint &&
+           sort.significandWidth() >= 2 && sort.exponentWidth() >= 2;
+  }
+
+  static bool nativeFpDivFormatIsSafe(const SourceSort& sort)
+  {
+    if (!nativeFpArithmeticFormatIsSafe(sort))
+      return false;
+
+    // BBfpDivExpWidth must represent 3*bias + 2*sb + 8: division normalises
+    // both significands first, so each exponent moves by up to sb-1 and
+    // their difference spans three biases rather than one.
+    const unsigned eb = sort.exponentWidth();
+    const unsigned sb = sort.significandWidth();
+    std::uintmax_t remaining = nativeFpEnvelopeLimit();
+    const std::uintmax_t bias = nativeFpBias(eb);
+    return consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, bias) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, 8);
+  }
+
   static bool nativeFpToFpFormatsAreSafe(const SourceSort& source,
                                          const SourceSort& target)
   {
@@ -222,6 +305,22 @@ private:
       return bm->CreateFPConst(n[2], sort.exponentWidth(),
                                sort.significandWidth());
     }
+    // The same reinterpretation over symbolic bits. There is nothing to
+    // compute: the operand already is the packed encoding, NaN payload
+    // included, which is what asPacked would have preserved anyway. Letting
+    // it survive is what keeps a bit-vector-to-float reinterpretation from
+    // dragging SymFPU back in, and it is the commonest shape in the mixed
+    // bit-vector and floating-point logics.
+    if (n.GetKind() == FP_TOFP && n.Degree() == 3 &&
+        bm->UserFlags.fp_native_pack &&
+        nativeFpFieldFormatIsSafe(n.GetSourceSort()))
+    {
+      const ASTNode bits = lower(n[2]);
+      if (bits == n[2])
+        return n;
+      return node_factory->CreateTerm(FP_TOFP, n.GetValueWidth(), n[0], n[1],
+                                      bits);
+    }
     // fp.neg and fp.abs are sign-bit edits on the packed encoding (IEEE-754
     // 5.5.1 quiet operations: no rounding, NaN payload untouched), so either
     // wrapped around a packed view is still a packed view: resolve the
@@ -241,7 +340,7 @@ private:
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), inner);
     }
     // fp.mul and fp.add under --bb.fp-native-arith: the bit-blaster's
-    // hand-written packed circuits (BBfpMul, BBfpAdd) take over from
+    // hand-written packed circuits (BBfpMul, BBfpAdd, BBfpDiv) take over from
     // SymFPU when both float operands resolve to packed views and the
     // rounding mode is immediate (a constant, or a declared symbol --
     // whose one-hot validity is asserted at declaration), and the format's
@@ -251,10 +350,15 @@ private:
     // lowering-must-change invariant of constant folding and model
     // evaluation) and the identity rules still fire. fp.sub needs no arm:
     // the factory already lowers it to fp.add of the negation.
-    if ((n.GetKind() == FP_MUL || n.GetKind() == FP_ADD) &&
-        bm->UserFlags.fp_native_arith && n.Degree() == 3 &&
+    const bool nativeArithKind =
+        (n.GetKind() == FP_MUL || n.GetKind() == FP_ADD)
+            ? bm->UserFlags.fp_native_arith
+            : (n.GetKind() == FP_DIV ? bm->UserFlags.fp_native_div : false);
+    if (nativeArithKind && n.Degree() == 3 &&
         (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
-        nativeFpArithmeticFormatIsSafe(n.GetSourceSort()))
+        (n.GetKind() == FP_DIV
+             ? nativeFpDivFormatIsSafe(n.GetSourceSort())
+             : nativeFpArithmeticFormatIsSafe(n.GetSourceSort())))
     {
       const ASTNode left = comparisonLeaf(n[1]);
       if (left.IsNull())
@@ -266,6 +370,149 @@ private:
         return n;
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), n[0],
                                       left, right);
+    }
+    // to_fp from a bit-vector, signed or unsigned. The integer operand is
+    // a bit-vector already, so it lowers rather than resolving as a packed
+    // float; only the result is a float.
+    if ((n.GetKind() == FP_TOFP_SIGNED || n.GetKind() == FP_TOFP_UNSIGNED) &&
+        bm->UserFlags.fp_native_conv && n.Degree() == 4 &&
+        (n[2].GetKind() == SYMBOL || n[2].GetKind() == BVCONST) &&
+        nativeFpConvFormatIsSafe(n.GetSourceSort(), n[3].GetValueWidth()))
+    {
+      const ASTNode integer = lower(n[3]);
+      if (integer.isConstant() && n[2].GetKind() == BVCONST)
+        return ASTNode();
+      if (integer == n[3])
+        return n;
+      ASTVec children;
+      children.push_back(n[0]);
+      children.push_back(n[1]);
+      children.push_back(n[2]);
+      children.push_back(integer);
+      return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(),
+                                      children);
+    }
+    // fp.rem, through one division rather than one step per unit of
+    // exponent difference.
+    if (n.GetKind() == FP_REM && bm->UserFlags.fp_native_rem &&
+        n.Degree() == 2 && nativeFpRemFormatIsSafe(n.GetSourceSort()))
+    {
+      const ASTNode left = comparisonLeaf(n[0]);
+      if (left.IsNull())
+        return ASTNode();
+      const ASTNode right = comparisonLeaf(n[1]);
+      if (right.IsNull())
+        return ASTNode();
+      if (left.isConstant() && right.isConstant())
+        return ASTNode();
+      if (left == n[0] && right == n[1])
+        return n;
+      const ASTNode rebuilt =
+          node_factory->CreateTerm(FP_REM, n.GetValueWidth(), left, right);
+      if (rebuilt.GetKind() != FP_REM)
+        return comparisonLeaf(rebuilt);
+      return rebuilt;
+    }
+    // fp.fma: BBfpAdd's datapath at a doubled significand width, so the
+    // product reaches the adder exactly and there is a single rounding.
+    if (n.GetKind() == FP_FMA && bm->UserFlags.fp_native_fma &&
+        n.Degree() == 4 &&
+        (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
+        nativeFpFmaFormatIsSafe(n.GetSourceSort()))
+    {
+      ASTVec children;
+      children.push_back(n[0]);
+      bool changed = false;
+      for (unsigned i = 1; i < 4; i++)
+      {
+        const ASTNode operand = comparisonLeaf(n[i]);
+        if (operand.IsNull())
+          return ASTNode();
+        changed = changed || operand != n[i];
+        children.push_back(operand);
+      }
+      if (!changed)
+        return n;
+      const ASTNode rebuilt =
+          node_factory->CreateTerm(FP_FMA, n.GetValueWidth(), children);
+      if (rebuilt.GetKind() != FP_FMA)
+        return comparisonLeaf(rebuilt);
+      return rebuilt;
+    }
+    // fp.roundToIntegral: shift the fractional bits out of the significand,
+    // round at the units place by the mode, and renormalise the exact
+    // integer that results.
+    if (n.GetKind() == FP_ROUNDTOINTEGRAL && bm->UserFlags.fp_native_round &&
+        n.Degree() == 2 &&
+        (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
+        nativeFpDivFormatIsSafe(n.GetSourceSort()))
+    {
+      const ASTNode operand = comparisonLeaf(n[1]);
+      if (operand.IsNull())
+        return ASTNode();
+      if (operand == n[1])
+        return n;
+      const ASTNode rebuilt = node_factory->CreateTerm(
+          FP_ROUNDTOINTEGRAL, n.GetValueWidth(), n[0], operand);
+      if (rebuilt.GetKind() != FP_ROUNDTOINTEGRAL)
+        return comparisonLeaf(rebuilt);
+      return rebuilt;
+    }
+    // fp.sqrt, through the same defining-relation idea as the divider:
+    // Q*Q + R = N with R <= 2Q is the integer square root, and the squaring
+    // is half a multiply's conjunctions. Needs the divider's wider exponent
+    // envelope because it normalises its operand first.
+    if (n.GetKind() == FP_SQRT && bm->UserFlags.fp_native_sqrt &&
+        n.Degree() == 2 &&
+        (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
+        nativeFpDivFormatIsSafe(n.GetSourceSort()))
+    {
+      const ASTNode operand = comparisonLeaf(n[1]);
+      if (operand.IsNull())
+        return ASTNode();
+      if (operand == n[1])
+        return n;
+      const ASTNode rebuilt =
+          node_factory->CreateTerm(FP_SQRT, n.GetValueWidth(), n[0], operand);
+      // A constant operand folds at the factory, which is what keeps the
+      // constant evaluator and this circuit from having to agree.
+      if (rebuilt.GetKind() != FP_SQRT)
+        return comparisonLeaf(rebuilt);
+      return rebuilt;
+    }
+    // fp.min and fp.max never round: the result is one of the operands bit
+    // for bit, so the native circuit is a total-order comparison and a mux
+    // over the packed bits, with no unpack and no pack. FpTotalise has
+    // already given the node its third child, the selector that decides
+    // min(+0,-0), and that child is a bit-vector so it lowers either way.
+    // Constant operands are allowed through: the factory does not fold a
+    // partial operation, so leaving them to SymFPU would keep a dependency
+    // alive for the commonest shape in the corpus, and the selector child
+    // is never constant so the node is never fully constant either.
+    if ((n.GetKind() == FP_MIN || n.GetKind() == FP_MAX) &&
+        bm->UserFlags.fp_native_minmax && n.Degree() == 3 &&
+        nativeFpFieldFormatIsSafe(n.GetSourceSort()))
+    {
+      const ASTNode left = comparisonLeaf(n[0]);
+      if (left.IsNull())
+        return ASTNode();
+      const ASTNode right = comparisonLeaf(n[1]);
+      if (right.IsNull())
+        return ASTNode();
+      const ASTNode selector = lower(n[2]);
+      if (left == n[0] && right == n[1] && selector == n[2])
+        return n;
+      ASTVec children;
+      children.push_back(left);
+      children.push_back(right);
+      children.push_back(selector);
+      const ASTNode rebuilt =
+          node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
+      // The factory folds min/max of identical operands, and of a NaN or an
+      // infinite operand, into something with no native arm of its own.
+      if (rebuilt.GetKind() != FP_MIN && rebuilt.GetKind() != FP_MAX)
+        return comparisonLeaf(rebuilt);
+      return rebuilt;
     }
     // The float-to-float form of to_fp (four children: the two format
     // constants, the rounding mode, the float operand), under the same
@@ -852,14 +1099,55 @@ private:
     {
       case FP_TO_UBV:
       case FP_TO_SBV:
+      {
         requireTotalised(n, 4);
+        // Natively the significand shifts so its units place lands at a
+        // fixed frame position, rounds there, and whatever is left above
+        // the requested width says the value was out of range. The
+        // rounding mode and the unspecified-value child are bit-vectors
+        // and lower either way; only the float stays packed.
+        if (bm->UserFlags.fp_native_conv &&
+            nativeFpConvFormatIsSafe(n[2].GetSourceSort(), n.GetValueWidth()))
+        {
+          const ASTNode operand = comparisonLeaf(n[2]);
+          if (!operand.IsNull() && !operand.isConstant())
+          {
+            ASTVec children;
+            children.push_back(n[0]);
+            children.push_back(lower(n[1]));
+            children.push_back(operand);
+            children.push_back(lower(n[3]));
+            if (children[1] == n[1] && operand == n[2] &&
+                children[3] == n[3])
+              return n;
+            return node_factory->CreateTerm(kind, n.GetValueWidth(),
+                                            children);
+          }
+        }
         return symbolic_fp::unpacked::toBV(
             formatOf(n[2]), lower(n[1]), asUnpacked(n[2]),
             n[0].GetUnsignedConst(), lower(n[3]), kind == FP_TO_SBV);
+      }
 
       case FP_TO_IEEE_BV:
+      {
         assert(n.Degree() == 1);
+        // Natively this is the operand's bits with NaN collapsed to the
+        // canonical pattern: one mux, where canonicalPacked spells a full
+        // unpack and re-encode. A constant operand must still fold through
+        // SymFPU, as the constant evaluator does.
+        if (bm->UserFlags.fp_native_pack &&
+            nativeFpFieldFormatIsSafe(n[0].GetSourceSort()))
+        {
+          const ASTNode operand = comparisonLeaf(n[0]);
+          if (!operand.IsNull() && !operand.isConstant())
+            return operand == n[0]
+                       ? n
+                       : node_factory->CreateTerm(FP_TO_IEEE_BV,
+                                                  n.GetValueWidth(), operand);
+        }
         return canonicalPacked(n[0]);
+      }
 
       case FP_SMT_EQ:
       {

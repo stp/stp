@@ -1971,7 +1971,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       result = tmp_res;
       break;
     }
-    // fp.mul and fp.add survive to the bit-blaster under
+    // fp.mul, fp.add and fp.div survive to the bit-blaster under
     // --bb.fp-native-arith, when FloatBlast left them beneath a surviving
     // native predicate over packed views (comparisonLeaf).
     case FP_MUL:
@@ -1986,27 +1986,75 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
       break;
     }
 
-    // Only the four-child float-to-float form survives (comparisonLeaf);
-    // the reinterpret form resolves to the operand's own bits there.
+    case FP_DIV:
+    {
+      result = BBfpDiv(term, support);
+      break;
+    }
+
+    case FP_MIN:
+    case FP_MAX:
+    {
+      result = BBfpMinMax(term, support);
+      break;
+    }
+
+    case FP_TO_IEEE_BV:
+    {
+      result = BBfpToIeeeBV(term, support);
+      break;
+    }
+
+    case FP_SQRT:
+    {
+      result = BBfpSqrt(term, support);
+      break;
+    }
+
+    case FP_ROUNDTOINTEGRAL:
+    {
+      result = BBfpRoundToIntegral(term, support);
+      break;
+    }
+
+    case FP_FMA:
+    {
+      result = BBfpFma(term, support);
+      break;
+    }
+
+    case FP_TOFP_SIGNED:
+    case FP_TOFP_UNSIGNED:
+    {
+      result = BBfpFromBV(term, support);
+      break;
+    }
+
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    {
+      result = BBfpToBV(term, support);
+      break;
+    }
+
+    case FP_REM:
+    {
+      result = BBfpRem(term, support);
+      break;
+    }
+
     case FP_TOFP:
     {
-      result = BBfpToFp(term, support);
+      // The three-child reinterpretation is the operand's own bits; only
+      // the four-child float-to-float form has a circuit.
+      if (term.Degree() == 3)
+        result = BBTerm(term[2], support);
+      else
+        result = BBfpToFp(term, support);
       break;
     }
 
     case FP_SUB:
-    case FP_DIV:
-    case FP_FMA:
-    case FP_SQRT:
-    case FP_REM:
-    case FP_ROUNDTOINTEGRAL:
-    case FP_MIN:
-    case FP_MAX:
-    case FP_TOFP_SIGNED:
-    case FP_TOFP_UNSIGNED:
-    case FP_TO_UBV:
-    case FP_TO_SBV:
-    case FP_TO_IEEE_BV:
     {
       FatalError("BBForm: FP terms should not reach the bit-blaster: ", term);
       break;
@@ -7356,6 +7404,49 @@ unsigned BitBlaster<BBNode, BBNodeManagerT>::BBfpExpWidth(unsigned eb,
   return E;
 }
 
+// Division normalises both significands before dividing, so each exponent
+// moves by up to sb-1 and their difference spans about three biases. The
+// quotient saturates in BBfpRoundPack, but only if the exponent handed to
+// it has not wrapped first.
+template <class BBNode, class BBNodeManagerT>
+unsigned BitBlaster<BBNode, BBNodeManagerT>::BBfpDivExpWidth(unsigned eb,
+                                                             unsigned sb)
+{
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  unsigned E = eb + 2;
+  while ((1u << (E - 1)) <= 3 * bias + 2 * sb + 8)
+    E++;
+  return E;
+}
+
+// Converting an n-bit integer produces an exponent as large as n, on top of
+// the format's own bias.
+template <class BBNode, class BBNodeManagerT>
+unsigned BitBlaster<BBNode, BBNodeManagerT>::BBfpConvExpWidth(unsigned eb,
+                                                              unsigned sb,
+                                                              unsigned n)
+{
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  unsigned E = eb + 2;
+  while ((1u << (E - 1)) <= bias + n + 2 * sb + 8)
+    E++;
+  return E;
+}
+
+// The fused multiply-add's frame is about 4sb bits wide, so the leading-zero
+// count it subtracts can be that large, and it subtracts it from a product
+// exponent that already spans two biases.
+template <class BBNode, class BBNodeManagerT>
+unsigned BitBlaster<BBNode, BBNodeManagerT>::BBfpFmaExpWidth(unsigned eb,
+                                                             unsigned sb)
+{
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  unsigned E = eb + 2;
+  while ((1u << (E - 1)) <= 3 * bias + 8 * sb + 16)
+    E++;
+  return E;
+}
+
 template <class BBNode, class BBNodeManagerT>
 typename BitBlaster<BBNode, BBNodeManagerT>::FpOperand
 BitBlaster<BBNode, BBNodeManagerT>::BBfpUnpack(const BBNodeVec& p, unsigned sb,
@@ -7656,15 +7747,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpMul(const ASTNode& term,
 
   // Significand product, 2sb bits, of the raw hidden-bit significands --
   // in [0, 4) counting subnormal fractions.
-  BBNodeVec prod = BBfill(2 * sb, nf->getFalse());
-  for (unsigned i = 0; i < sb; i++)
-  {
-    const BBNodeVec row = BBAndBit(b.msig, a.msig[i]);
-    BBNodeVec addend = BBfill(2 * sb, nf->getFalse());
-    for (unsigned j = 0; j < sb; j++)
-      addend[i + j] = row[j];
-    BBPlus2(prod, addend, nf->getFalse());
-  }
+  const BBNodeVec prod = BBfpSignificandProduct(a.msig, b.msig, support);
 
   // One normalisation for the whole product: shift its leading 1 to the
   // top and fold the shift count into the exponent. This also absorbs the
@@ -7742,6 +7825,716 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpMul(const ASTNode& term,
     res = BBITE(anyInf, packSpecial(false, true), res);
     res = BBITE(anyNaN, packSpecial(true, false), res);
   }
+  return res;
+}
+
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpOrderKey(const BBNodeVec& p,
+                                                 unsigned width)
+{
+  const BBNode& sign = p[width - 1];
+  BBNodeVec k;
+  k.reserve(width);
+  for (unsigned i = 0; i < width - 1; i++)
+    k.push_back(nf->CreateNode(XOR, p[i], sign));
+  k.push_back(nf->CreateNode(NOT, sign));
+  return k;
+}
+
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpCanonicalNaN(unsigned sb, unsigned eb)
+{
+  const unsigned w = eb + sb;
+  BBNodeVec s(w, nf->getFalse());
+  for (unsigned i = 0; i < eb; i++)
+    s[sb - 1 + i] = nf->getTrue();
+  s[sb - 2] = nf->getTrue();
+  return s;
+}
+
+// Bit-blasted fp.to_ieee_bv. The result is the operand's packed bits with
+// every NaN collapsed to the canonical one, which is one mux: asPacked
+// deliberately preserves a symbolic float's payload, and this is the
+// quotient boundary where SMT-LIB's identification of all NaNs has to be
+// made good. SymFPU spells the same thing as a full unpack and re-encode.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpToIeeeBV(const ASTNode& term,
+                                                 BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_TO_IEEE_BV);
+  assert(term.Degree() == 1);
+
+  const SourceSort sort = term[0].GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+
+  const BBNodeVec p = BBTerm(term[0], support);
+  assert(p.size() == w);
+
+  if (fpNativeKnownFinite(term[0]))
+    return p;
+  return BBITE(BBfpIsNaN(p, sb, w), BBfpCanonicalNaN(sb, eb), p);
+}
+
+// Bit-blasted fp.roundToIntegral over a packed IEEE-754 operand.
+//
+// An operand whose exponent is at least sb-1 has no fractional bits and is
+// returned unchanged; otherwise the significand is shifted right by the
+// number of fractional bits it does have, collecting a guard and a sticky,
+// rounded by the mode, and the exact integer that results is renormalised.
+// The shift is clamped at sb+1 because shifting further changes nothing:
+// everything is already in the sticky by then, which is exactly the
+// "magnitude below one" case where the answer is zero or one.
+//
+// The result is exact by construction, so the shared rounder is handed a
+// zero guard and sticky and is doing the packing rather than any rounding.
+// A zero result keeps the operand's sign, which is what makes
+// roundToIntegral(-0.4) under round-toward-positive a minus zero.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundToIntegral(const ASTNode& term,
+                                                        BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_ROUNDTOINTEGRAL);
+  assert(term.Degree() == 2);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = BBfpDivExpWidth(eb, sb);
+
+  const BBNodeVec rm = BBTerm(term[0], support);
+  const BBNodeVec pa = BBTerm(term[1], support);
+  assert(pa.size() == w);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+
+  // The fractional bit count, clamped into the shifter's range. Past sb+1
+  // every further bit is already sticky, so the clamp loses nothing.
+  const unsigned dmax = sb + 1;
+  BBNodeVec fracBits = constVec(sb - 1, E);
+  BBSub(fracBits, a.eUnb, support); // (sb-1) - e, signed
+  const BBNode fracNegative = fracBits[E - 1];
+  const BBNode fracTooBig = nf->CreateNode(
+      NOT, BBBVLE(fracBits, constVec(dmax, E), true /*signed*/));
+  const unsigned dw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(dmax);
+  BBNodeVec d(dw);
+  for (unsigned i = 0; i < dw; i++)
+  {
+    const BBNode clamped =
+        nf->CreateNode(ITE, fracTooBig,
+                       ((dmax >> i) & 1) ? nf->getTrue() : nf->getFalse(),
+                       fracBits[i]);
+    d[i] = nf->CreateNode(AND, nf->CreateNode(NOT, fracNegative), clamped);
+  }
+
+  BBNode guard = nf->getFalse();
+  BBNode sticky = nf->getFalse();
+  BBNodeVec vg = a.msig;
+  vg.insert(vg.begin(), nf->getFalse()); // [guard, msig...]
+  vg = BBfpShiftRightSticky(vg, d, sticky);
+  guard = vg[0];
+  BBNodeVec shifted(sb);
+  for (unsigned i = 0; i < sb; i++)
+    shifted[i] = vg[i + 1];
+
+  // The same mode rules as the shared rounder, at the units place.
+  const BBNode& rne = rm[0];
+  const BBNode& rtp = rm[1];
+  const BBNode& rtn = rm[2];
+  const BBNode& rna = rm[4];
+  const BBNode gs = nf->CreateNode(OR, guard, sticky);
+  BBNodeVec upCases;
+  upCases.push_back(
+      nf->CreateNode(AND, rne, guard, nf->CreateNode(OR, sticky, shifted[0])));
+  upCases.push_back(nf->CreateNode(AND, rna, guard));
+  upCases.push_back(
+      nf->CreateNode(AND, rtp, nf->CreateNode(NOT, a.sign), gs));
+  upCases.push_back(nf->CreateNode(AND, rtn, a.sign, gs));
+  const BBNode roundUp = nf->CreateNode(OR, upCases);
+  BBNodeVec integral = BBfpIncrement(shifted, roundUp); // sb+1 bits
+
+  // The integer's scale: zero once anything was shifted out, and otherwise
+  // the operand's own, which is when the operand was integral already.
+  BBNodeVec t = a.eUnb;
+  BBSub(t, constVec(sb - 1, E), support);
+  const BBNodeVec scale = BBITE(t[E - 1], BBfill(E, nf->getFalse()), t);
+
+  // Renormalise the exact integer. Its top bit lands at sb, so the result
+  // significand is the sb bits below it and nothing is lost.
+  const unsigned lw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(sb + 1);
+  const BBNodeVec ell = BBfpCLZ(integral, lw);
+  const BBNodeVec normalised = BBShiftLeftByVariable(integral, ell);
+  BBNodeVec rsig(normalised.begin() + 1, normalised.end());
+
+  BBNodeVec be = scale;
+  BBSub(be, zext(ell, E), support);
+  BBPlus2(be, constVec(sb + bias, E), nf->getFalse());
+
+  const bool resultFinite = aFinite;
+  BBNodeVec res =
+      BBfpRoundPack(rm, a.sign, rsig, nf->getFalse(), nf->getFalse(), be, sb,
+                    eb, support, resultFinite);
+
+  // A magnitude that rounded away entirely is a signed zero, which the
+  // rounder would otherwise have to reach through its subnormal path.
+  BBNodeVec zero(w, nf->getFalse());
+  zero[w - 1] = a.sign;
+  res = BBITE(nf->CreateNode(NOR, integral), zero, res);
+
+  // Specials: zero and infinity return themselves, NaN canonicalises.
+  res = BBITE(a.isZero, zero, res);
+  if (!aFinite)
+  {
+    BBNodeVec inf(w, nf->getFalse());
+    for (unsigned i = 0; i < eb; i++)
+      inf[sb - 1 + i] = nf->getTrue();
+    inf[w - 1] = a.sign;
+    res = BBITE(a.isInf, inf, res);
+    res = BBITE(a.isNaN, BBfpCanonicalNaN(sb, eb), res);
+  }
+  return res;
+}
+
+// Bit-blasted fp.sqrt over a packed IEEE-754 operand. Like the divider this
+// states a defining relation rather than building a restoring array:
+// Q*Q + R = N with R <= 2Q says exactly that Q is the integer square root
+// of N, and the squaring is half the conjunctions of a general multiply
+// because column i+j+1 carries q_i AND q_j once for i < j and column 2i
+// carries q_i alone.
+//
+// The scaling is chosen so that no normalisation is needed at all. With the
+// significand normalised to A in [2^(sb-1), 2^sb) and its exponent e, the
+// value is (A / 2^(sb-1)) * 2^e; halving an odd exponent by doubling the
+// significand leaves a radicand r in [1, 4), whose root is in [1, 2). So
+// taking N = A << (sb+3) after that adjustment makes Q = isqrt(N) equal to
+// sqrt(r) * 2^(sb+1), which is exactly sb+2 bits with the top one always
+// set: significand, guard, and one bit that is known rather than computed.
+//
+// Specials: a NaN operand, or any negative operand other than minus zero,
+// is invalid and gives the canonical NaN. Plus infinity stays infinite,
+// minus infinity is invalid, and either zero returns itself with its sign.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrt(const ASTNode& term,
+                                             BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_SQRT);
+  assert(term.Degree() == 2);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = BBfpDivExpWidth(eb, sb);
+
+  const BBNodeVec rm = BBTerm(term[0], support);
+  const BBNodeVec pa = BBTerm(term[1], support);
+  assert(pa.size() == w);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+
+  const unsigned lw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(sb);
+  const BBNodeVec la = BBfpCLZ(a.msig, lw);
+  const BBNodeVec an = BBShiftLeftByVariable(a.msig, la);
+
+  // e = the normalised exponent. An odd one is made even by doubling the
+  // significand, which is what puts the radicand in [1, 4).
+  BBNodeVec e = a.eUnb;
+  BBSub(e, zext(la, E), support);
+  const BBNode expOdd = e[0];
+
+  BBNodeVec radicand(sb + 1, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    radicand[i] = nf->CreateNode(ITE, expOdd, nf->getFalse(), an[i]);
+  for (unsigned i = 0; i < sb; i++)
+    radicand[i + 1] =
+        nf->CreateNode(ITE, expOdd, an[i], radicand[i + 1]);
+
+  const unsigned qw = sb + 2;
+  const unsigned W = 2 * sb + 4;
+  BBNodeVec n(W, nf->getFalse());
+  for (unsigned i = 0; i < sb + 1 && i + sb + 3 < W; i++)
+    n[i + sb + 3] = radicand[i];
+
+  BBNodeVec q(qw);
+  BBNodeVec r(sb + 3);
+  for (unsigned i = 0; i < qw; i++)
+    q[i] = nf->CreateFreshInput();
+  for (unsigned i = 0; i < sb + 3; i++)
+    r[i] = nf->CreateFreshInput();
+  ++fpNativeDivRelations;
+
+  // q*q + r at width W, carry-outs pinned so the sum is the integer sum.
+  // The square's columns: q_i alone at 2i, and q_i AND q_j once at i+j+1.
+  BBNodeVec acc(W + 1, nf->getFalse());
+  for (unsigned i = 0; i < sb + 3 && i < W; i++)
+    acc[i] = r[i];
+  for (unsigned i = 0; i < qw; i++)
+  {
+    BBNodeVec row(W + 1, nf->getFalse());
+    if (2 * i < W)
+      row[2 * i] = q[i];
+    for (unsigned j = i + 1; j < qw && i + j + 1 < W; j++)
+      row[i + j + 1] = nf->CreateNode(AND, q[i], q[j]);
+    BBPlus2(acc, row, nf->getFalse());
+    support.insert(nf->CreateNode(NOT, acc[W]));
+    acc[W] = nf->getFalse();
+  }
+  const BBNodeVec accLow(acc.begin(), acc.begin() + W);
+  support.insert(BBEQ(accLow, n));
+
+  // r <= 2q, which with q*q + r = n is what makes q the integer root.
+  BBNodeVec twoQ(sb + 4, nf->getFalse());
+  for (unsigned i = 0; i < qw && i + 1 < sb + 4; i++)
+    twoQ[i + 1] = q[i];
+  support.insert(BBBVLE(zext(r, sb + 4), twoQ, false /*unsigned*/));
+
+  // Q is sqrt(r) * 2^(sb+1) with its top bit set by construction, so the
+  // significand is its top sb bits and no normalisation is needed.
+  BBNodeVec rsig(q.begin() + 2, q.end());
+  const BBNode guard = q[1];
+  const BBNode sticky = nf->CreateNode(OR, nf->CreateNode(OR, r), q[0]);
+
+  // The result exponent halves the (now even) operand exponent, which is an
+  // arithmetic shift right of the signed value.
+  BBNodeVec be(E);
+  for (unsigned i = 0; i + 1 < E; i++)
+    be[i] = e[i + 1];
+  be[E - 1] = e[E - 1];
+  BBPlus2(be, constVec(bias, E), nf->getFalse());
+
+  const bool directlyConstrainedZero =
+      fpNativeZeroMagnitudeFacts.find(term) !=
+      fpNativeZeroMagnitudeFacts.end();
+  const bool resultFinite =
+      !directlyConstrainedZero && fpNativeKnownFinite(term);
+  BBNodeVec res = BBfpRoundPack(rm, a.sign, rsig, guard, sticky, be, sb, eb,
+                                support, resultFinite);
+
+  auto packSpecial = [&](bool isnan, bool isinf, const BBNode& sgn) {
+    if (isnan)
+      return BBfpCanonicalNaN(sb, eb);
+    BBNodeVec s(w, nf->getFalse());
+    if (isinf)
+      for (unsigned i = 0; i < eb; i++)
+        s[sb - 1 + i] = nf->getTrue();
+    s[w - 1] = sgn;
+    return s;
+  };
+
+  // Innermost first: either zero returns itself, plus infinity stays
+  // infinite, and everything invalid -- a NaN operand, minus infinity, any
+  // other negative -- is the canonical NaN.
+  res = BBITE(a.isZero, packSpecial(false, false, a.sign), res);
+  if (!aFinite)
+    res = BBITE(nf->CreateNode(AND, a.isInf, nf->CreateNode(NOT, a.sign)),
+                packSpecial(false, true, nf->getFalse()), res);
+  BBNodeVec nanCases;
+  if (!aFinite)
+    nanCases.push_back(a.isNaN);
+  nanCases.push_back(
+      nf->CreateNode(AND, a.sign, nf->CreateNode(NOT, a.isZero)));
+  res = BBITE(nf->CreateNode(OR, nanCases),
+              packSpecial(true, false, nf->getFalse()), res);
+  return res;
+}
+
+// Bit-blasted fp.min / fp.max over packed IEEE-754 operands. Neither
+// rounds: the result is one of the two operands bit for bit, so this needs
+// no unpack, no rounder and no pack at all -- a total-order comparison and
+// a mux, against SymFPU's two unpacks, an ordering circuit and a pack.
+//
+// SMT-LIB leaves min(+0,-0) and max(+0,-0) unspecified, so FpTotalise gives
+// the node a third child selecting which operand to return there. The
+// polarity follows SymFPU's, whose min returns its left operand when that
+// selector holds and whose max returns its right:
+//
+//   min(l, r, z) = ITE(isNaN(r) || ordering(l, r, z), l, r)
+//   max(l, r, z) = ITE(isNaN(l) || ordering(l, r, z), r, l)
+//
+// with ordering false whenever either operand is NaN, and equal to the
+// selector when both are zero. Exactly one NaN therefore returns the other
+// operand, and two NaNs return a NaN, canonicalised here because SymFPU's
+// pack would have canonicalised it.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpMinMax(const ASTNode& term,
+                                               BBNodeSet& support)
+{
+  const Kind k = term.GetKind();
+  assert(k == FP_MIN || k == FP_MAX);
+  assert(term.Degree() == 3);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+
+  const BBNodeVec pa = BBTerm(term[0], support);
+  const BBNodeVec pb = BBTerm(term[1], support);
+  const BBNodeVec sel = BBTerm(term[2], support);
+  assert(pa.size() == w && pb.size() == w && sel.size() == 1);
+
+  const bool aFinite = fpNativeKnownFinite(term[0]);
+  const bool bFinite = fpNativeKnownFinite(term[1]);
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite) +
+                                 static_cast<size_t>(bFinite);
+
+  const BBNode aNaN =
+      aFinite ? nf->getFalse() : BBfpIsNaN(pa, sb, w);
+  const BBNode bNaN =
+      bFinite ? nf->getFalse() : BBfpIsNaN(pb, sb, w);
+  const BBNode aZero = BBfpIsZero(pa, w);
+  const BBNode bZero = BBfpIsZero(pb, w);
+
+  // Strict total order on the sign-magnitude keys. It separates -0 from +0,
+  // which is why the both-zero case is taken out first, and it orders every
+  // other pair the way IEEE does.
+  const BBNodeVec ka = BBfpOrderKey(pa, w);
+  const BBNodeVec kb = BBfpOrderKey(pb, w);
+  const BBNode keyLess =
+      nf->CreateNode(NOT, BBBVLE(kb, ka, false /*unsigned*/));
+
+  const BBNode bothZero = nf->CreateNode(AND, aZero, bZero);
+  const BBNode ordering = nf->CreateNode(
+      AND, nf->CreateNode(NOR, aNaN, bNaN),
+      nf->CreateNode(ITE, bothZero, sel[0], keyLess));
+
+  const BBNodeVec chosen =
+      (k == FP_MIN)
+          ? BBITE(nf->CreateNode(OR, bNaN, ordering), pa, pb)
+          : BBITE(nf->CreateNode(OR, aNaN, ordering), pb, pa);
+
+  if (aFinite && bFinite)
+    return chosen;
+  return BBITE(nf->CreateNode(AND, aNaN, bNaN), BBfpCanonicalNaN(sb, eb),
+               chosen);
+}
+
+// The significand product, through the ordinary bit-vector multiplier.
+//
+// Open-coding the partial-product array here costs every multiplier variant
+// STP has. The recoding of constant runs is the one that matters: a
+// floating-point multiply by a literal has a constant significand, and
+// without recoding it is about 1.5x the clauses the bit-vector multiplier
+// would have produced for the same product.
+//
+// BBMultVariant reads a node for three things -- the result width, whether
+// to swap a constant to the left, and whether the two operands are the same
+// node and the product is therefore a square. Its children are otherwise
+// only printed, and the constant-bit statistics it looks up are absent for a
+// node the propagator never saw, which is correct for an intermediate that
+// exists only inside this circuit. So a placeholder of the right width
+// serves, with distinct children because equal ones would select the
+// squaring circuit. Constant recoding still fires: it reads the bit vectors,
+// not the node.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpSignificandProduct(
+    const BBNodeVec& a, const BBNodeVec& b, BBNodeSet& support)
+{
+  const unsigned sb = a.size();
+  assert(b.size() == sb);
+  const unsigned width = 2 * sb;
+
+  BBNodeVec x = a;
+  BBNodeVec y = b;
+  x.resize(width, nf->getFalse());
+  y.resize(width, nf->getFalse());
+
+  auto it = fpSignificandProductShape.find(width);
+  if (it == fpSignificandProductShape.end())
+  {
+    // Symbols rather than constants: a factory that folds would collapse a
+    // product of two constants, leaving a node with no children to read.
+    std::string stem = "@fp_significand_" + std::to_string(width);
+    const ASTNode left = ASTNF->CreateSymbol((stem + "_l").c_str(), 0, width);
+    const ASTNode right = ASTNF->CreateSymbol((stem + "_r").c_str(), 0, width);
+    it = fpSignificandProductShape
+             .emplace(width, ASTNF->CreateTerm(BVMULT, width, left, right))
+             .first;
+  }
+  return BBMult(x, y, support, it->second);
+}
+
+// Bit-blasted fp.div over packed IEEE-754 operands, under the same flag and
+// gate as BBfpMul.
+//
+// The significand quotient is the whole cost of a floating-point divide --
+// at (11, 53) it is 96% of the operation -- so it is the one part worth
+// spelling differently from SymFPU, whose fixedPointDivide is a restoring
+// shift-subtract array of one step per quotient bit. Here it is the
+// defining relation instead: fresh quotient and remainder vectors with
+// N = D*Q + R and R < D, the same encoding --bb.div-by-mult gives bvudiv,
+// which measures at 0.45x the restoring array on this shape.
+//
+// Unlike multiplication, division cannot defer normalisation to the
+// result: with un-normalised operands the quotient spans 2sb bits either
+// side of the binary point and the divide would have to be three times as
+// wide to hold it. Both significands are therefore normalised first, two
+// leading-zero counts and two shifts, which is cheap against the divide
+// and pins the quotient to two bits of range.
+//
+// Shape (fields as in BBcompareFP: significand in bits [0, sb-2], exponent
+// in [sb-1, w-2], sign at w-1):
+//   1. Split both operands un-normalised (BBfpUnpack), then normalise each
+//      significand by its leading-zero count and fold that count into the
+//      exponent. A subnormal operand simply carries a larger count.
+//   2. Divide N = A << (sb+1) by D, through the relation. A and D both
+//      have their top bit set, so the quotient lands in [2^sb, 2^(sb+2)):
+//      sb+1 or sb+2 significant bits, one bit of normalisation rather than
+//      a full leading-zero count.
+//   3. Take the top sb bits as the significand, the next as guard, and OR
+//      the rest with "the remainder is nonzero" into sticky. That pair is
+//      exactly the residual the rounder needs.
+//   4. Round, denormalise and saturate in the shared BBfpRoundPack.
+//   5. Specials are muxed over the computed result: zero (x/inf, 0/finite),
+//      then infinity (inf/x, finite/0), then NaN (any NaN operand, 0/0 or
+//      inf/inf) outermost. The NaN produced is the canonical quiet NaN,
+//      the same value the SymFPU path packs.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpDiv(const ASTNode& term,
+                                                           BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_DIV);
+  assert(term.Degree() == 3);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned w = sort.exponentWidth() + sb;
+  const unsigned eb = w - sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = BBfpDivExpWidth(eb, sb);
+
+  const BBNodeVec rm = BBTerm(term[0], support); // one-hot, see
+                                                 // rounding_modes.h
+  const BBNodeVec pa = BBTerm(term[1], support);
+  const BBNodeVec pb = BBTerm(term[2], support);
+  assert(pa.size() == w && pb.size() == w);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool bKnownZero = fpNativeKnownZeroMagnitude(term[2]);
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  const bool bFinite = fpNativeKnownFinite(term[2]);
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite) +
+                                 static_cast<size_t>(bFinite);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+  const FpOperand b =
+      BBfpUnpack(pb, sb, w, E, support, bFinite, bKnownZero);
+
+  const BBNode sign = nf->CreateNode(XOR, a.sign, b.sign);
+
+  // Normalise both significands. BBfpCLZ counts v.size() for an all-zero
+  // vector, so a zero operand shifts to zero -- muxed out by the specials.
+  const unsigned lw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(sb);
+  const BBNodeVec la = BBfpCLZ(a.msig, lw);
+  const BBNodeVec lb = BBfpCLZ(b.msig, lw);
+  const BBNodeVec an = BBShiftLeftByVariable(a.msig, la);
+  BBNodeVec dn = BBShiftLeftByVariable(b.msig, lb);
+
+  // The relation is only satisfiable for a nonzero divisor: R < D has no
+  // model at D = 0, and N = D*Q + R cannot reach a nonzero N either. A zero
+  // divisor is a division by zero whose result the specials replace
+  // wholesale, so pin the divisor to a harmless power of two there rather
+  // than letting an unsatisfiable side constraint reach the solver.
+  BBNodeVec divisorSig = b.msig;
+  const BBNode divisorSigZero = nf->CreateNode(NOR, divisorSig);
+  dn[sb - 1] = nf->CreateNode(OR, dn[sb - 1], divisorSigZero);
+
+  // N = an << (sb+1). With an < 2^sb and dn >= 2^(sb-1) the quotient is
+  // below 2^(sb+2), and at least 2^sb whenever the dividend is nonzero.
+  const unsigned qw = sb + 2;
+  const unsigned W = 2 * sb + 2;
+  BBNodeVec n(W, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    n[i + sb + 1] = an[i];
+
+  BBNodeVec q(qw);
+  BBNodeVec r(sb);
+  for (unsigned i = 0; i < qw; i++)
+    q[i] = nf->CreateFreshInput();
+  for (unsigned i = 0; i < sb; i++)
+    r[i] = nf->CreateFreshInput();
+  ++fpNativeDivRelations;
+
+  // dn*q + r at width W, every accumulation step's carry-out pinned false
+  // so the sum is the integer sum: the bound above is what makes that
+  // sound, and pinning it is what makes the relation exact without a
+  // double-width product.
+  BBNodeVec acc(W + 1, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    acc[i] = r[i];
+  for (unsigned j = 0; j < qw; j++)
+  {
+    BBNodeVec row(W + 1, nf->getFalse());
+    for (unsigned i = 0; i < sb && i + j < W; i++)
+      row[i + j] = nf->CreateNode(AND, dn[i], q[j]);
+    BBPlus2(acc, row, nf->getFalse());
+    support.insert(nf->CreateNode(NOT, acc[W]));
+    acc[W] = nf->getFalse();
+  }
+  const BBNodeVec accLow(acc.begin(), acc.begin() + W);
+  support.insert(BBEQ(accLow, n));
+  // dn is nonzero by construction, so this needs no divisor-zero guard.
+  support.insert(BBBVLE(r, dn, false, true));
+
+  // One bit of normalisation: the quotient's top bit decides whether the
+  // leading one sits at qw-1 or qw-2.
+  const BBNode top = q[qw - 1];
+  BBNodeVec rsig(sb);
+  for (unsigned i = 0; i < sb; i++)
+    rsig[i] = nf->CreateNode(ITE, top, q[i + 2], q[i + 1]);
+  const BBNode guard = nf->CreateNode(ITE, top, q[1], q[0]);
+  const BBNode remainderNonzero = nf->CreateNode(OR, r);
+  const BBNode sticky = nf->CreateNode(
+      OR, remainderNonzero, nf->CreateNode(AND, top, q[0]));
+
+  // Biased result exponent: (eA - la) - (eB - lb) + bias + top - 1.
+  BBNodeVec be = a.eUnb;
+  BBSub(be, zext(la, E), support);
+  BBPlus2(be, zext(lb, E), nf->getFalse());
+  BBSub(be, b.eUnb, support);
+  BBPlus2(be, constVec(bias, E), nf->getFalse());
+  BBNodeVec topAdj(E, nf->getFalse());
+  topAdj[0] = top;
+  BBPlus2(be, topAdj, nf->getFalse());
+  BBSub(be, constVec(1, E), support);
+
+  // As in BBfpMul: a magnitude constraint on this quotient must not erase
+  // the producer relation that enforces it.
+  const bool directlyConstrainedZero =
+      fpNativeZeroMagnitudeFacts.find(term) !=
+      fpNativeZeroMagnitudeFacts.end();
+  const bool resultFinite =
+      !directlyConstrainedZero && fpNativeKnownFinite(term);
+  BBNodeVec res = BBfpRoundPack(rm, sign, rsig, guard, sticky, be, sb, eb,
+                                support, resultFinite);
+
+  auto packSpecial = [&](bool isnan, bool isinf) {
+    BBNodeVec s(w, nf->getFalse());
+    if (isnan || isinf)
+      for (unsigned i = 0; i < eb; i++)
+        s[sb - 1 + i] = nf->getTrue();
+    if (isnan)
+      s[sb - 2] = nf->getTrue(); // canonical quiet NaN, positive
+    else
+      s[w - 1] = sign;
+    return s;
+  };
+
+  // Innermost first. zero and infinity overlap only where the result is
+  // NaN (0/0 and inf/inf), which the outermost mux then replaces, so
+  // neither needs to exclude the other.
+  BBNodeVec zeroCases;
+  zeroCases.push_back(a.isZero);
+  if (!bFinite)
+    zeroCases.push_back(b.isInf);
+  res = BBITE(nf->CreateNode(OR, zeroCases), packSpecial(false, false), res);
+
+  BBNodeVec infCases;
+  if (!aFinite)
+    infCases.push_back(a.isInf);
+  infCases.push_back(b.isZero);
+  res = BBITE(nf->CreateNode(OR, infCases), packSpecial(false, true), res);
+
+  BBNodeVec nanCases;
+  if (!aFinite)
+    nanCases.push_back(a.isNaN);
+  if (!bFinite)
+    nanCases.push_back(b.isNaN);
+  nanCases.push_back(nf->CreateNode(AND, a.isZero, b.isZero));
+  if (!aFinite && !bFinite)
+    nanCases.push_back(nf->CreateNode(AND, a.isInf, b.isInf));
+  res = BBITE(nf->CreateNode(OR, nanCases), packSpecial(true, false), res);
+
   return res;
 }
 
@@ -8130,6 +8923,718 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
                                                                b.sign));
     res = BBITE(anyInf, packSpecial(false, infSign), res);
     res = BBITE(anyNaN, packSpecial(true, nf->getFalse()), res);
+  }
+  return res;
+}
+
+// Bit-blasted fp.rem: the IEEE remainder x - y*n, where n is the integer
+// nearest x/y with ties to even. The result is exact, so nothing rounds.
+//
+// SymFPU computes it by unrolling one step per unit of exponent difference,
+// which is why STP refuses the operation once that count passes a limit.
+// Here the whole quotient is a single division instead, stated as the same
+// relation the divider uses. The quotient is wide -- the exponent
+// difference can be 2^eb -- but the divisor is only a significand, so the
+// product is that many rows of a narrow multiplier rather than that many
+// subtract-and-select steps, and the rows accumulate in parallel.
+//
+// Scaling: normalise both significands, let D be the difference of their
+// exponents, and take the dividend shifted up by D+1 against twice the
+// divisor's significand. Their ratio is then exactly x/y, and the integer
+// remainder is the result's magnitude at the divisor's scale. Rounding the
+// quotient to nearest-even is a comparison of twice the remainder against
+// the divisor, with the quotient's low bit breaking the tie; rounding up
+// flips the result's sign, which is otherwise the dividend's.
+//
+// A dividend more than two exponents below the divisor cannot reach half of
+// it, so the quotient is zero and the remainder is the dividend itself.
+// That case is muxed rather than scaled, because the shift would clamp.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRem(const ASTNode& term,
+                                                           BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_REM);
+  assert(term.Degree() == 2);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = BBfpDivExpWidth(eb, sb);
+
+  const BBNodeVec pa = BBTerm(term[0], support);
+  const BBNodeVec pb = BBTerm(term[1], support);
+  assert(pa.size() == w && pb.size() == w);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[0]);
+  const bool bKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool aFinite = fpNativeKnownFinite(term[0]);
+  const bool bFinite = fpNativeKnownFinite(term[1]);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+  const auto countWidth = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+  const FpOperand b =
+      BBfpUnpack(pb, sb, w, E, support, bFinite, bKnownZero);
+
+  const unsigned lw = countWidth(sb);
+  const BBNodeVec la = BBfpCLZ(a.msig, lw);
+  const BBNodeVec lb = BBfpCLZ(b.msig, lw);
+  const BBNodeVec an = BBShiftLeftByVariable(a.msig, la);
+  const BBNodeVec bn = BBShiftLeftByVariable(b.msig, lb);
+  BBNodeVec ea = a.eUnb;
+  BBSub(ea, zext(la, E), support);
+  BBNodeVec ebn = b.eUnb;
+  BBSub(ebn, zext(lb, E), support);
+
+  // Twice the divisor's significand, and never zero -- a zero divisor is a
+  // NaN result, muxed below, but the relation still has to be satisfiable.
+  BBNodeVec divisorSig = b.msig;
+  const BBNode divisorZero = nf->CreateNode(NOR, divisorSig);
+  BBNodeVec dv(sb + 1, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    dv[i + 1] = bn[i];
+  dv[sb] = nf->CreateNode(OR, dv[sb], divisorZero);
+
+  // The dividend's shift, D+1, clamped into the frame. D is at most
+  // 2^eb + sb - 4, the same count SymFPU would have unrolled.
+  const unsigned smax = (1u << eb) + sb - 3;
+  const unsigned F = sb + smax;
+  BBNodeVec shift = ea;
+  BBSub(shift, ebn, support);
+  BBPlus2(shift, constVec(1, E), nf->getFalse()); // D + 1
+  const BBNode shiftNegative = shift[E - 1];
+  const BBNode shiftFar = nf->CreateNode(
+      NOT, BBBVLE(shift, constVec(smax, E), true /*signed*/));
+  const unsigned sw = countWidth(smax);
+  BBNodeVec sv(sw);
+  for (unsigned i = 0; i < sw; i++)
+  {
+    const BBNode clamped =
+        nf->CreateNode(ITE, shiftFar,
+                       ((smax >> i) & 1) ? nf->getTrue() : nf->getFalse(),
+                       shift[i]);
+    sv[i] = nf->CreateNode(AND, nf->CreateNode(NOT, shiftNegative), clamped);
+  }
+  BBNodeVec nx(F, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    nx[i] = an[i];
+  nx = BBShiftLeftByVariable(nx, sv);
+
+  // nx = dv*q + r with r < dv. The divisor is a significand, so the product
+  // is sb+1 narrow rows rather than one step per quotient bit.
+  const unsigned qw = F;
+  BBNodeVec q(qw);
+  BBNodeVec r(sb + 1);
+  for (unsigned i = 0; i < qw; i++)
+    q[i] = nf->CreateFreshInput();
+  for (unsigned i = 0; i < sb + 1; i++)
+    r[i] = nf->CreateFreshInput();
+  ++fpNativeDivRelations;
+
+  BBNodeVec acc(F + 1, nf->getFalse());
+  for (unsigned i = 0; i < sb + 1 && i < F; i++)
+    acc[i] = r[i];
+  for (unsigned j = 0; j < sb + 1; j++)
+  {
+    BBNodeVec row(F + 1, nf->getFalse());
+    for (unsigned i = 0; i + j < F; i++)
+      row[i + j] = nf->CreateNode(AND, q[i], dv[j]);
+    BBPlus2(acc, row, nf->getFalse());
+    support.insert(nf->CreateNode(NOT, acc[F]));
+    acc[F] = nf->getFalse();
+  }
+  const BBNodeVec accLow(acc.begin(), acc.begin() + F);
+  support.insert(BBEQ(accLow, nx));
+  support.insert(BBBVLE(r, dv, false /*unsigned*/, true /*strict*/));
+
+  // Round the quotient to nearest, ties to even: compare twice the
+  // remainder with the divisor, and break a tie on the quotient's low bit.
+  BBNodeVec twiceR(sb + 2, nf->getFalse());
+  for (unsigned i = 0; i < sb + 1; i++)
+    twiceR[i + 1] = r[i];
+  const BBNodeVec dvWide = zext(dv, sb + 2);
+  const BBNode twiceGreater =
+      nf->CreateNode(NOT, BBBVLE(twiceR, dvWide, false /*unsigned*/));
+  const BBNode twiceEqual = BBEQ(twiceR, dvWide);
+  const BBNode roundUp = nf->CreateNode(
+      OR, twiceGreater, nf->CreateNode(AND, twiceEqual, q[0]));
+
+  // Rounding up takes the remainder past the divisor, which flips the sign.
+  BBNodeVec complement = dv;
+  BBNodeVec negR(sb + 1);
+  for (unsigned i = 0; i < sb + 1; i++)
+    negR[i] = nf->CreateNode(NOT, r[i]);
+  BBNodeVec one(sb + 1, nf->getFalse());
+  one[0] = nf->getTrue();
+  BBPlus2(negR, one, nf->getFalse());
+  BBPlus2(complement, negR, nf->getFalse()); // dv - r
+  const BBNodeVec magnitude = BBITE(roundUp, complement, r);
+  const BBNode sign = nf->CreateNode(XOR, a.sign, roundUp);
+
+  // Both operands sit at the scale 2^(eyN - sb), because dv is twice the
+  // divisor's significand. The magnitude is at most half the divisor, so it
+  // never fills its sb+1 bits and normalising it loses nothing.
+  const unsigned lwm = countWidth(sb + 1);
+  const BBNodeVec ellm = BBfpCLZ(magnitude, lwm);
+  const BBNodeVec mn = BBShiftLeftByVariable(magnitude, ellm);
+  BBNodeVec rsig(mn.begin() + 1, mn.end()); // top sb bits
+  BBNodeVec be = ebn;
+  BBSub(be, zext(ellm, E), support);
+  BBPlus2(be, constVec(bias, E), nf->getFalse());
+
+  // The result is exact, so the shared rounder is only packing. It still
+  // wants a mode; with no guard and no sticky every mode behaves alike, and
+  // fp.rem has no mode of its own to pass.
+  BBNodeVec rne(5, nf->getFalse());
+  rne[0] = nf->getTrue();
+  BBNodeVec res = BBfpRoundPack(rne, sign, rsig, nf->getFalse(),
+                                nf->getFalse(), be, sb, eb, support, true);
+
+  // An exactly zero remainder takes the dividend's sign, which the packing
+  // above would otherwise have taken from the flipped one.
+  BBNodeVec magBits = magnitude;
+  BBNodeVec signedZero(w, nf->getFalse());
+  signedZero[w - 1] = a.sign;
+  res = BBITE(nf->CreateNode(NOR, magBits), signedZero, res);
+
+  // A dividend more than two exponents below the divisor cannot reach half
+  // of it, so the quotient is zero and the remainder is the dividend.
+  res = BBITE(shiftNegative, pa, res);
+
+  // Specials. A zero dividend, or an infinite divisor against a finite
+  // dividend, returns the dividend unchanged; an infinite dividend, a zero
+  // divisor, or either operand NaN is invalid.
+  res = BBITE(a.isZero, pa, res);
+  if (!bFinite)
+    res = BBITE(nf->CreateNode(AND, b.isInf,
+                               aFinite ? nf->getTrue()
+                                       : nf->CreateNode(NOT, a.isInf)),
+                pa, res);
+  BBNodeVec nanCases;
+  if (!aFinite)
+  {
+    nanCases.push_back(a.isNaN);
+    nanCases.push_back(a.isInf);
+  }
+  if (!bFinite)
+    nanCases.push_back(b.isNaN);
+  nanCases.push_back(b.isZero);
+  res = BBITE(nf->CreateNode(OR, nanCases), BBfpCanonicalNaN(sb, eb), res);
+  return res;
+}
+
+// Bit-blasted fp.to_ubv and fp.to_sbv. The float's significand is shifted so
+// that its units place lands at a fixed frame position, rounded there by the
+// mode, and the bits left above the requested width are what says the result
+// was out of range.
+//
+// Only a right shift is needed. The significand starts at the highest offset
+// that could still be in range -- one where its lowest bit already carries
+// weight 2^m -- so a value too large to convert simply fails to shift far
+// enough and leaves those high bits set.
+//
+// SMT-LIB leaves the result unspecified for a NaN, an infinity, or a
+// magnitude out of range, so FpTotalise has given the node a fourth child
+// with the value to use there. A negative float that rounds to zero is in
+// range for fp.to_ubv: it is the rounded integer that has to fit, not the
+// float.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpToBV(const ASTNode& term,
+                                             BBNodeSet& support)
+{
+  const Kind k = term.GetKind();
+  assert(k == FP_TO_UBV || k == FP_TO_SBV);
+  assert(term.Degree() == 4);
+  const bool isSigned = (k == FP_TO_SBV);
+
+  const SourceSort sort = term[2].GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned m = term.GetValueWidth();
+  assert(m >= 1);
+  const unsigned E = BBfpConvExpWidth(eb, sb, m);
+
+  const BBNodeVec rm = BBTerm(term[1], support);
+  const BBNodeVec pa = BBTerm(term[2], support);
+  const BBNodeVec fallback = BBTerm(term[3], support);
+  assert(pa.size() == w && fallback.size() == m);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[2]);
+  const bool aFinite = fpNativeKnownFinite(term[2]);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+
+  // Frame: units place at 1, guard at 0, the requested width at [1, m], and
+  // anything above that out of range.
+  const unsigned F = m + sb + 2;
+  BBNodeVec frame(F, nf->getFalse());
+  for (unsigned i = 0; i < sb && i + m + 1 < F; i++)
+    frame[i + m + 1] = a.msig[i];
+
+  BBNodeVec dist = constVec(m + sb - 1, E);
+  BBSub(dist, a.eUnb, support); // m - e + sb - 1
+  const BBNode distNegative = dist[E - 1];
+  const BBNode distFar = nf->CreateNode(
+      NOT, BBBVLE(dist, constVec(F, E), true /*signed*/));
+  const unsigned dw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(F);
+  BBNodeVec dv(dw);
+  for (unsigned i = 0; i < dw; i++)
+  {
+    const BBNode clamped =
+        nf->CreateNode(ITE, distFar,
+                       ((F >> i) & 1) ? nf->getTrue() : nf->getFalse(),
+                       dist[i]);
+    dv[i] = nf->CreateNode(AND, nf->CreateNode(NOT, distNegative), clamped);
+  }
+
+  BBNode sticky = nf->getFalse();
+  frame = BBfpShiftRightSticky(frame, dv, sticky);
+  const BBNode guard = frame[0];
+
+  BBNodeVec magnitude(m);
+  for (unsigned i = 0; i < m; i++)
+    magnitude[i] = frame[i + 1];
+  BBNodeVec aboveBits(frame.begin() + (m + 1), frame.end());
+
+  const BBNode& rne = rm[0];
+  const BBNode& rtp = rm[1];
+  const BBNode& rtn = rm[2];
+  const BBNode& rna = rm[4];
+  const BBNode gs = nf->CreateNode(OR, guard, sticky);
+  BBNodeVec upCases;
+  upCases.push_back(nf->CreateNode(AND, rne, guard,
+                                   nf->CreateNode(OR, sticky, magnitude[0])));
+  upCases.push_back(nf->CreateNode(AND, rna, guard));
+  upCases.push_back(
+      nf->CreateNode(AND, rtp, nf->CreateNode(NOT, a.sign), gs));
+  upCases.push_back(nf->CreateNode(AND, rtn, a.sign, gs));
+  const BBNode roundUp = nf->CreateNode(OR, upCases);
+  BBNodeVec rounded = BBfpIncrement(magnitude, roundUp); // m+1 bits
+  const BBNode roundCarry = rounded[m];
+  BBNodeVec mag(rounded.begin(), rounded.begin() + m);
+
+  BBNodeVec magZeroBits = mag;
+  const BBNode magZero = nf->CreateNode(NOR, magZeroBits);
+  BBNode overflow = nf->CreateNode(
+      OR, aboveBits.empty() ? nf->getFalse() : nf->CreateNode(OR, aboveBits),
+      roundCarry);
+
+  BBNodeVec result;
+  BBNode inRange;
+  if (!isSigned)
+  {
+    // A negative float is in range only if it rounded to zero.
+    inRange = nf->CreateNode(
+        AND, nf->CreateNode(NOT, overflow),
+        nf->CreateNode(OR, nf->CreateNode(NOT, a.sign), magZero));
+    result = mag;
+  }
+  else
+  {
+    // Two's complement: magnitudes up to 2^(m-1) are in range when negative,
+    // and up to 2^(m-1)-1 when positive.
+    // The boundary is 2^(m-1): representable as a magnitude only when the
+    // value is negative, where it is the most negative two's complement.
+    const BBNode magTop = mag[m - 1];
+    BBNodeVec magLow(mag.begin(), mag.begin() + (m - 1));
+    const BBNode magLowZero =
+        magLow.empty() ? nf->getTrue() : nf->CreateNode(NOR, magLow);
+    const BBNode isLimit = nf->CreateNode(AND, magTop, magLowZero);
+    const BBNode fits = nf->CreateNode(
+        ITE, a.sign, nf->CreateNode(OR, nf->CreateNode(NOT, magTop), isLimit),
+        nf->CreateNode(NOT, magTop));
+    inRange = nf->CreateNode(AND, nf->CreateNode(NOT, overflow), fits);
+
+    BBNodeVec negated(m);
+    for (unsigned i = 0; i < m; i++)
+      negated[i] = nf->CreateNode(NOT, mag[i]);
+    BBNodeVec one(m, nf->getFalse());
+    one[0] = nf->getTrue();
+    BBPlus2(negated, one, nf->getFalse());
+    result = BBITE(a.sign, negated, mag);
+  }
+
+  if (!aFinite)
+    inRange = nf->CreateNode(AND, inRange, nf->CreateNode(NOT, a.isNaN),
+                             nf->CreateNode(NOT, a.isInf));
+  return BBITE(inRange, result, fallback);
+}
+
+// Bit-blasted to_fp from a bit-vector, signed or unsigned. Rounding an
+// integer is the easy direction: take its magnitude, normalise it, and the
+// bits that fall off the bottom are the guard and sticky the shared rounder
+// wants. The only wrinkle is that the integer's width is unrelated to the
+// significand's, so the frame is widened to hold at least a guard and a
+// sticky position even when the integer is narrower than the significand,
+// in which case the conversion is exact and both come out zero.
+//
+// Integer zero converts to positive zero whatever the sign bit of a signed
+// input would suggest, which is why the zero case is muxed rather than left
+// to the datapath.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpFromBV(const ASTNode& term,
+                                               BBNodeSet& support)
+{
+  const Kind k = term.GetKind();
+  assert(k == FP_TOFP_SIGNED || k == FP_TOFP_UNSIGNED);
+  assert(term.Degree() == 4);
+  const bool isSigned = (k == FP_TOFP_SIGNED);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+
+  const BBNodeVec rm = BBTerm(term[2], support);
+  const BBNodeVec iv = BBTerm(term[3], support);
+  const unsigned n = iv.size();
+  assert(n >= 1);
+  const unsigned E = BBfpConvExpWidth(eb, sb, n);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+
+  // Magnitude and sign. A signed input's magnitude is its two's complement
+  // negation when negative, which for the most negative value is itself --
+  // correct, because that magnitude needs the n-th bit and the frame below
+  // is wide enough to hold it.
+  const BBNode sign = isSigned ? iv[n - 1] : nf->getFalse();
+  BBNodeVec magnitude(n);
+  if (isSigned)
+  {
+    BBNodeVec negated(n);
+    for (unsigned i = 0; i < n; i++)
+      negated[i] = nf->CreateNode(NOT, iv[i]);
+    BBNodeVec one(n, nf->getFalse());
+    one[0] = nf->getTrue();
+    BBPlus2(negated, one, nf->getFalse());
+    magnitude = BBITE(sign, negated, iv);
+  }
+  else
+    magnitude = iv;
+
+  // A frame with at least a guard and a sticky below the significand.
+  const unsigned F = (n >= sb + 2) ? n : (sb + 2);
+  BBNodeVec frame(F, nf->getFalse());
+  for (unsigned i = 0; i < n; i++)
+    frame[i + (F - n)] = magnitude[i];
+
+  const unsigned lw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(F);
+  const BBNodeVec ell = BBfpCLZ(frame, lw);
+  const BBNodeVec fn = BBShiftLeftByVariable(frame, ell);
+
+  BBNodeVec rsig(fn.begin() + (F - sb), fn.end());
+  const BBNode guard = fn[F - sb - 1];
+  BBNodeVec lowBits(fn.begin(), fn.begin() + (F - sb - 1));
+  const BBNode sticky =
+      lowBits.empty() ? nf->getFalse() : nf->CreateNode(OR, lowBits);
+
+  // The magnitude is (frame >> (F - n)), so its leading one sits n-1-ell
+  // places above the units position.
+  BBNodeVec be = constVec(n - 1 + bias, E);
+  BBSub(be, zext(ell, E), support);
+
+  BBNodeVec res =
+      BBfpRoundPack(rm, sign, rsig, guard, sticky, be, sb, eb, support, false);
+
+  BBNodeVec zero(sb + eb, nf->getFalse());
+  BBNodeVec magBits = magnitude;
+  return BBITE(nf->CreateNode(NOR, magBits), zero, res);
+}
+
+// Bit-blasted fp.fma over packed IEEE-754 operands: a*b + c with a single
+// rounding, which is the whole reason the operation exists and the reason
+// it cannot be a multiply followed by an add.
+//
+// It is BBfpAdd's datapath widened. Write both addends with a 2sb-bit
+// significand -- the product is one already, and the addend becomes one by
+// shifting up sb places -- and the rest of the derivation is unchanged,
+// including the result exponent, which works out to the larger operand's
+// plus one minus the leading-zero count whatever that significand width is.
+//
+// The one thing that does not carry over is BBfpAdd's reason for ordering
+// operands by exponent and then significand: there it is magnitude order
+// because an IEEE operand above the minimum exponent is normal. A product
+// of a normal and a subnormal is not, so both significands are normalised
+// before the comparison, which restores the property.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpFma(const ASTNode& term,
+                                                           BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_FMA);
+  assert(term.Degree() == 4);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = BBfpFmaExpWidth(eb, sb);
+  const unsigned M = 2 * sb; // the shared significand width
+
+  const BBNodeVec rm = BBTerm(term[0], support);
+  const BBNodeVec pa = BBTerm(term[1], support);
+  const BBNodeVec pb = BBTerm(term[2], support);
+  const BBNodeVec pc = BBTerm(term[3], support);
+  assert(pa.size() == w && pb.size() == w && pc.size() == w);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool bKnownZero = fpNativeKnownZeroMagnitude(term[2]);
+  const bool cKnownZero = fpNativeKnownZeroMagnitude(term[3]);
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  const bool bFinite = fpNativeKnownFinite(term[2]);
+  const bool cFinite = fpNativeKnownFinite(term[3]);
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite) +
+                                 static_cast<size_t>(bFinite) +
+                                 static_cast<size_t>(cFinite);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+  const auto countWidth = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  };
+
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+  const FpOperand b =
+      BBfpUnpack(pb, sb, w, E, support, bFinite, bKnownZero);
+  const FpOperand c =
+      BBfpUnpack(pc, sb, w, E, support, cFinite, cKnownZero);
+
+  // The exact product: 2sb bits, and an exponent in the convention that a
+  // significand of width M carries value msig * 2^(e - M + 1).
+  const BBNodeVec prod = BBfpSignificandProduct(a.msig, b.msig, support);
+  BBNodeVec eProd = a.eUnb;
+  BBPlus2(eProd, b.eUnb, nf->getTrue()); // eA + eB + 1
+  const BBNode signProd = nf->CreateNode(XOR, a.sign, b.sign);
+
+  // The addend at the same significand width: shifting up sb places leaves
+  // its exponent unchanged in this convention.
+  BBNodeVec cWide(M, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+    cWide[i + sb] = c.msig[i];
+
+  // Normalise both so that (exponent, significand) is magnitude order. A
+  // zero significand shifts to zero and keeps a minimal exponent, so it
+  // still sorts below everything and contributes nothing.
+  const unsigned lwM = countWidth(M);
+  const BBNodeVec lProd = BBfpCLZ(prod, lwM);
+  const BBNodeVec lAdd = BBfpCLZ(cWide, lwM);
+  const BBNodeVec prodN = BBShiftLeftByVariable(prod, lProd);
+  const BBNodeVec addN = BBShiftLeftByVariable(cWide, lAdd);
+  BBNodeVec eProdN = eProd;
+  BBSub(eProdN, zext(lProd, E), support);
+  BBNodeVec eAddN = c.eUnb;
+  BBSub(eAddN, zext(lAdd, E), support);
+
+  // Normalising is what makes (exponent, significand) magnitude order, but
+  // only for a nonzero significand: leading-zero counting stops at the
+  // width, so a zero's exponent falls by M rather than to nothing, and a
+  // product smaller than that would sort below a zero addend. Order the
+  // zeros explicitly instead -- a zero is smaller than everything.
+  BBNodeVec prodBits = prod;
+  BBNodeVec addBits = cWide;
+  const BBNode prodZero = nf->CreateNode(NOR, prodBits);
+  const BBNode addZero = nf->CreateNode(NOR, addBits);
+  const BBNode eLess = BBBVLE(eProdN, eAddN, true /*signed*/, true);
+  const BBNode eEq = BBEQ(eProdN, eAddN);
+  const BBNode mLess = BBBVLE(prodN, addN, false /*unsigned*/, true);
+  const BBNode ordered =
+      nf->CreateNode(OR, eLess, nf->CreateNode(AND, eEq, mLess));
+  const BBNode swap = nf->CreateNode(
+      ITE, prodZero, nf->getTrue(),
+      nf->CreateNode(ITE, addZero, nf->getFalse(), ordered));
+  const BBNodeVec msigBig = BBITE(swap, addN, prodN);
+  const BBNodeVec msigSmall = BBITE(swap, prodN, addN);
+  const BBNodeVec eBig = BBITE(swap, eAddN, eProdN);
+  const BBNodeVec eSmall = BBITE(swap, eProdN, eAddN);
+  const BBNode signBig = nf->CreateNode(ITE, swap, c.sign, signProd);
+  const BBNode effSub = nf->CreateNode(XOR, signProd, c.sign);
+
+  const unsigned dmax = M + 3;
+  const unsigned W = M + dmax + 1;
+  BBNodeVec dist = eBig;
+  BBSub(dist, eSmall, support);
+  // Ordering the zeros by hand means the exponents themselves may now be
+  // the wrong way round, but only when the smaller operand is zero and the
+  // shift therefore moves nothing. Clamp at both ends.
+  const BBNode distNegative = dist[E - 1];
+  const BBNode distFar = nf->CreateNode(
+      NOT, BBBVLE(dist, constVec(dmax, E), true /*signed*/));
+  const unsigned dw = countWidth(dmax);
+  BBNodeVec dv(dw);
+  for (unsigned i = 0; i < dw; i++)
+  {
+    const BBNode clamped =
+        nf->CreateNode(ITE, distFar,
+                       ((dmax >> i) & 1) ? nf->getTrue() : nf->getFalse(),
+                       dist[i]);
+    dv[i] = nf->CreateNode(AND, nf->CreateNode(NOT, distNegative), clamped);
+  }
+
+  BBNodeVec big(W, nf->getFalse());
+  BBNodeVec small(W, nf->getFalse());
+  for (unsigned i = 0; i < M; i++)
+  {
+    big[dmax + i] = msigBig[i];
+    small[dmax + i] = msigSmall[i];
+  }
+  BBNode stickyTail = nf->getFalse();
+  small = BBfpShiftRightSticky(small, dv, stickyTail);
+
+  BBNodeVec addend(W);
+  for (unsigned i = 0; i < W; i++)
+    addend[i] = nf->CreateNode(XOR, small[i], effSub);
+  const BBNode cin =
+      nf->CreateNode(AND, effSub, nf->CreateNode(NOT, stickyTail));
+  BBNodeVec sum = big;
+  BBPlus2(sum, addend, cin);
+
+  const unsigned lwW = countWidth(W);
+  const BBNodeVec ell = BBfpCLZ(sum, lwW);
+  const BBNodeVec sn = BBShiftLeftByVariable(sum, ell);
+  BBNodeVec rsig(sn.begin() + (W - sb), sn.end());
+  const BBNode guard = sn[W - sb - 1];
+  BBNodeVec lowBits(sn.begin(), sn.begin() + (W - sb - 1));
+  const BBNode sticky =
+      nf->CreateNode(OR, nf->CreateNode(OR, lowBits), stickyTail);
+
+  BBNodeVec be = eBig;
+  BBPlus2(be, constVec(bias, E), nf->getTrue());
+  BBSub(be, zext(ell, E), support);
+
+  // An exact cancellation to zero is +0 in every mode but round-toward-
+  // negative, exactly as in addition.
+  const BBNode sumZero = nf->CreateNode(NOR, sum);
+  const BBNode exactZero = nf->CreateNode(
+      AND, effSub, sumZero, nf->CreateNode(NOT, stickyTail));
+  const BBNode sgn = nf->CreateNode(ITE, exactZero, rm[2], signBig);
+
+  const bool resultFinite = fpNativeKnownFinite(term);
+  BBNodeVec res = BBfpRoundPack(rm, sgn, rsig, guard, sticky, be, sb, eb,
+                                support, resultFinite);
+
+  // Specials. The product alone can be invalid (zero times infinity), and
+  // an infinite product against an infinite addend of the other sign is the
+  // subtraction of infinities.
+  auto packSpecial = [&](bool isnan, const BBNode& sign) {
+    if (isnan)
+      return BBfpCanonicalNaN(sb, eb);
+    BBNodeVec s(w, nf->getFalse());
+    for (unsigned i = 0; i < eb; i++)
+      s[sb - 1 + i] = nf->getTrue();
+    s[w - 1] = sign;
+    return s;
+  };
+  const BBNode prodInf =
+      (aFinite && bFinite)
+          ? nf->getFalse()
+          : nf->CreateNode(OR,
+                           aFinite ? nf->getFalse()
+                                   : nf->CreateNode(AND, a.isInf,
+                                                    nf->CreateNode(NOT,
+                                                                   b.isZero)),
+                           bFinite ? nf->getFalse()
+                                   : nf->CreateNode(AND, b.isInf,
+                                                    nf->CreateNode(NOT,
+                                                                   a.isZero)));
+  BBNodeVec nanCases;
+  if (!aFinite)
+    nanCases.push_back(a.isNaN);
+  if (!bFinite)
+    nanCases.push_back(b.isNaN);
+  if (!cFinite)
+    nanCases.push_back(c.isNaN);
+  if (!bFinite)
+    nanCases.push_back(nf->CreateNode(AND, a.isZero, b.isInf));
+  if (!aFinite)
+    nanCases.push_back(nf->CreateNode(AND, a.isInf, b.isZero));
+  if (!cFinite)
+    nanCases.push_back(nf->CreateNode(
+        AND, prodInf, c.isInf,
+        nf->CreateNode(XOR, signProd, c.sign)));
+
+  const BBNode cInf = cFinite ? nf->getFalse() : c.isInf;
+  const BBNode anyInf = nf->CreateNode(OR, prodInf, cInf);
+  if (!(aFinite && bFinite && cFinite))
+  {
+    const BBNode infSign = nf->CreateNode(ITE, prodInf, signProd, c.sign);
+    res = BBITE(anyInf, packSpecial(false, infSign), res);
+    if (!nanCases.empty())
+      res = BBITE(nf->CreateNode(OR, nanCases),
+                  packSpecial(true, nf->getFalse()), res);
   }
   return res;
 }

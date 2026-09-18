@@ -831,6 +831,52 @@ void ExtraMain::create_options()
            "SymFPU unpacking circuits (experimental)",
            bb_group);
 
+  bool_arg("--bb.fp-native-all", bm->UserFlags.fp_native_all,
+           "Turn on every native floating-point circuit at once: what a "
+           "build without SymFPU would need (experimental)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-minmax", bm->UserFlags.fp_native_minmax,
+           "Bit-blast fp.min and fp.max natively over packed operands "
+           "(experimental)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-pack", bm->UserFlags.fp_native_pack,
+           "Bit-blast fp.to_ieee_bv natively over packed operands "
+           "(experimental)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-round", bm->UserFlags.fp_native_round,
+           "Bit-blast fp.roundToIntegral natively over packed operands "
+           "(experimental)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-sqrt", bm->UserFlags.fp_native_sqrt,
+           "Bit-blast fp.sqrt natively over packed operands, through the "
+           "defining relation rather than a restoring array (experimental)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-fma", bm->UserFlags.fp_native_fma,
+           "Bit-blast fp.fma natively over packed operands (experimental)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-conv", bm->UserFlags.fp_native_conv,
+           "Bit-blast the bit-vector conversions -- to_fp from a signed or "
+           "unsigned bit-vector, fp.to_ubv and fp.to_sbv -- natively "
+           "(experimental)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-rem", bm->UserFlags.fp_native_rem,
+           "Bit-blast fp.rem natively over packed operands (experimental)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-div", bm->UserFlags.fp_native_div,
+           "Bit-blast fp.div under surviving native predicates with the "
+           "hand-written packed-operand circuit, whose significand quotient "
+           "is the defining relation rather than a restoring array "
+           "(experimental)",
+           bb_group);
+
   bool_arg("--bb.fp-native-add-iszero",
            bm->UserFlags.fp_native_add_iszero,
            "Encode fp.isZero(fp.add ...) directly from its operands without "
@@ -1224,6 +1270,22 @@ int ExtraMain::parse_options(int argc, char** argv)
     cerr << "Error: " << e.what() << endl;
     cerr << "Please give '--help' to get help" << endl;
     exit(-1);
+  }
+
+  // One switch for every native floating-point circuit. Each operation
+  // keeps its own flag so its encoding can be measured on its own; this
+  // turns the lot on, which is the state a build without SymFPU needs.
+  if (bm->UserFlags.fp_native_all)
+  {
+    bm->UserFlags.fp_native_arith = true;
+    bm->UserFlags.fp_native_div = true;
+    bm->UserFlags.fp_native_minmax = true;
+    bm->UserFlags.fp_native_pack = true;
+    bm->UserFlags.fp_native_round = true;
+    bm->UserFlags.fp_native_sqrt = true;
+    bm->UserFlags.fp_native_fma = true;
+    bm->UserFlags.fp_native_conv = true;
+    bm->UserFlags.fp_native_rem = true;
   }
 
   // The command line cannot reach the profile-versus-ceiling conflict at all
