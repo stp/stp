@@ -7634,6 +7634,7 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpRound(
     BBNodeVec e = biased;
     BBSub(e, constVec(bias, E), support);
     out.eUnb = e;
+    out.eBiased = biased;
     return out;
   };
 
@@ -7678,12 +7679,18 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpPack(
   const unsigned E = value.eUnb.size();
   assert(value.msig.size() == sb);
 
-  BBNodeVec biased = value.eUnb;
-  BBNodeVec biasV(E, nf->getFalse());
-  for (unsigned i = 0; i < E; i++)
-    if ((bias >> i) & 1)
-      biasV[i] = nf->getTrue();
-  BBPlus2(biased, biasV, nf->getFalse());
+  BBNodeVec biased;
+  if (value.eBiased.size() == E)
+    biased = value.eBiased; // straight from the rounder, already biased
+  else
+  {
+    biased = value.eUnb;
+    BBNodeVec biasV(E, nf->getFalse());
+    for (unsigned i = 0; i < E; i++)
+      if ((bias >> i) & 1)
+        biasV[i] = nf->getTrue();
+    BBPlus2(biased, biasV, nf->getFalse());
+  }
 
   const BBNode isNorm = value.msig[sb - 1];
   BBNodeVec res(w);
@@ -7747,6 +7754,8 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBfpRememberRecord(const ASTNode& n,
                            BBITE(value.isZero, zeroSig, value.msig)));
 
   value.eUnb = BBfpResizeExponent(value.eUnb, BBfpExpWidth(eb, sb));
+  value.eBiased.clear(); // its width no longer matches, and packing a
+                         // stored record is rare enough to re-add the bias
   fpUnpackedMemo[n] = value;
 }
 

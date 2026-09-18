@@ -398,6 +398,11 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
     BBNode sign, isZero, isInf, isNaN;
     BBNodeVec msig; // sb bits, hidden bit at msig[sb-1]
     BBNodeVec eUnb; // E bits, signed, unbiased (subnormals read exp as 1)
+    // The same exponent still biased, when the record came straight from
+    // the rounder and packing can use it without adding the bias back. The
+    // two directions cancel, and a record that has crossed a circuit
+    // boundary leaves this empty.
+    BBNodeVec eBiased;
   };
   FpOperand BBfpUnpack(const BBNodeVec& p, unsigned sb, unsigned w,
                        unsigned E, BBNodeSet& support,
