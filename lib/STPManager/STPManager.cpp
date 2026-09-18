@@ -169,16 +169,48 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     // _name because it's const).  Can cast the iterator to
     // non-const -- carefully.
     // std::string strname(s_ptr->GetName());
-    ASTSymbol* s_ptr1 =
-        new ASTSymbol(this, strdup(s_ptr->GetName()), s_ptr->_source_sort);
+    prepareStrongDenseInsert(_symbol_unique_table);
+    char* const owned_name = strdup(s_ptr->GetName());
+    if (owned_name == nullptr)
+      throw std::bad_alloc();
+
+    ASTSymbol* s_ptr1 = nullptr;
+    try
+    {
+      s_ptr1 = new ASTSymbol(this, owned_name, s_ptr->_source_sort);
+    }
+    catch (...)
+    {
+      free(owned_name);
+      throw;
+    }
     s_ptr1->_value_width = s_ptr->_value_width;
     s_ptr1->_index_width = s_ptr->_index_width;
     s_ptr1->_exp_width = s_ptr->_exp_width;
     s_ptr1->_sig_width = s_ptr->_sig_width;
-    std::pair<ASTSymbolSet::const_iterator, bool> p =
-        _symbol_unique_table.insert(s_ptr1);
-    indexSymbolName(s_ptr1);
-    return *p.first;
+    bool inserted = false;
+    try
+    {
+      const std::pair<ASTSymbolSet::const_iterator, bool> p =
+          _symbol_unique_table.insert(s_ptr1);
+      inserted = p.second;
+      if (!inserted)
+      {
+        free(owned_name);
+        delete s_ptr1;
+        return *p.first;
+      }
+      indexSymbolName(s_ptr1);
+      return s_ptr1;
+    }
+    catch (...)
+    {
+      if (inserted)
+        _symbol_unique_table.erase(s_ptr1);
+      free(owned_name);
+      delete s_ptr1;
+      throw;
+    }
   }
   else
   {
@@ -251,7 +283,22 @@ ASTNode STPMgr::CreateDeterministicSourceVariable(
 
 void STPMgr::indexSymbolName(ASTSymbol* symbol)
 {
-  _symbol_name_index[symbol->GetName()].push_back(symbol);
+  const SymbolNameIndex::iterator existing =
+      _symbol_name_index.find(symbol->GetName());
+  if (existing != _symbol_name_index.end())
+  {
+    existing->second.push_back(symbol);
+    return;
+  }
+
+  // Build both owning pieces before changing the dense table, and ensure a
+  // bucket growth failure cannot corrupt the published index.
+  std::string name(symbol->GetName());
+  std::vector<ASTSymbol*> symbols;
+  symbols.reserve(1);
+  symbols.push_back(symbol);
+  prepareStrongDenseInsert(_symbol_name_index);
+  _symbol_name_index.emplace(std::move(name), std::move(symbols));
 }
 
 void STPMgr::unindexSymbolName(ASTSymbol* symbol)

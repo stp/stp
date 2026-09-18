@@ -115,6 +115,15 @@ AddSTPGTest(UFChecker_Test.cpp)
 AddSTPGTest(UFRefinement_Test.cpp)
 # Builds float/rounding-mode constants, which is the whole point.
 AddSTPGTest(ConstantIdentity_Test.cpp)
+# Keep the allocation fault injector active under Memcheck. Its malloc/free
+# calls remain checked; replacing its operator new would disable the faults.
+function(add_symbol_insertion_test)
+    # This test defines operator new/delete itself, so use the system allocator.
+    set(STP_ALLOCATOR_LIBRARY "")
+    list(APPEND VALGRIND_ARGS --soname-synonyms=somalloc=nouserintercepts)
+    AddSTPGTest(SymbolInsertion_Test.cpp)
+endfunction()
+add_symbol_insertion_test()
 AddSTPGTest(FpConstantFold_Test.cpp)
 # The LibBF-backed real-literal conversion.
 AddSTPGTest(DecimalToFP_Test.cpp)
