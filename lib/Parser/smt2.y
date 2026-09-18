@@ -1498,6 +1498,15 @@ namespace stp
 %type <arr_component> an_array_sort_component
 %type <arr_sort> an_array_sort
 
+/* Release owning values discarded during parser recovery or teardown.
+   Successful reductions still transfer/delete their own RHS values. */
+%destructor { delete $$; } <node>
+%destructor { delete $$; } <vec>
+%destructor { delete $$; } <fp_size>
+%destructor { delete $$; } <arr_component>
+%destructor { delete $$; } <arr_sort>
+%destructor { destroyParsedRealConstant($$); } <realc>
+
 %token <uintval> NUMERAL_TOK
 
  /* A numeral too large for an unsigned, carrying its digits. It is a real
