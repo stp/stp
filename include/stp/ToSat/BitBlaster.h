@@ -364,6 +364,13 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   // bit blast fp.mul / fp.add / fp.div / float-to-float to_fp over packed
   // operands: hand-written unpack/compute/round/pack circuits, no SymFPU
   // (--bb.fp-native-arith)
+  // The significand product of fp.mul and fp.fma, handed to the ordinary
+  // bit-vector multiplier so that it inherits its variants -- the recoding
+  // of constant runs above all, which a floating-point multiply by a
+  // literal needs exactly as much as a bit-vector one does.
+  BBNodeVec BBfpSignificandProduct(const BBNodeVec& a, const BBNodeVec& b,
+                                   BBNodeSet& support);
+
   BBNodeVec BBfpMul(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpAdd(const ASTNode& term, BBNodeSet& support);
   BBNode BBfpAddIsZero(const ASTNode& term, BBNodeSet& support);
@@ -546,6 +553,8 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   size_t fpNativeZeroMulFastPaths = 0;
   size_t fpNativeZeroToFpFastPaths = 0;
   size_t fpNativeDivRelations = 0;
+  // One placeholder multiply node per width, for BBfpSignificandProduct.
+  std::map<unsigned, ASTNode> fpSignificandProductShape;
   size_t fpNativeKnownPositiveAddPaths = 0;
   size_t fpNativeKnownNegativeAddPaths = 0;
   size_t fpNativeKnownPositiveMulPaths = 0;

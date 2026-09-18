@@ -7747,15 +7747,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpMul(const ASTNode& term,
 
   // Significand product, 2sb bits, of the raw hidden-bit significands --
   // in [0, 4) counting subnormal fractions.
-  BBNodeVec prod = BBfill(2 * sb, nf->getFalse());
-  for (unsigned i = 0; i < sb; i++)
-  {
-    const BBNodeVec row = BBAndBit(b.msig, a.msig[i]);
-    BBNodeVec addend = BBfill(2 * sb, nf->getFalse());
-    for (unsigned j = 0; j < sb; j++)
-      addend[i + j] = row[j];
-    BBPlus2(prod, addend, nf->getFalse());
-  }
+  const BBNodeVec prod = BBfpSignificandProduct(a.msig, b.msig, support);
 
   // One normalisation for the whole product: shift its leading 1 to the
   // top and fold the shift count into the exponent. This also absorbs the
@@ -8284,6 +8276,51 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpMinMax(const ASTNode& term,
     return chosen;
   return BBITE(nf->CreateNode(AND, aNaN, bNaN), BBfpCanonicalNaN(sb, eb),
                chosen);
+}
+
+// The significand product, through the ordinary bit-vector multiplier.
+//
+// Open-coding the partial-product array here costs every multiplier variant
+// STP has. The recoding of constant runs is the one that matters: a
+// floating-point multiply by a literal has a constant significand, and
+// without recoding it is about 1.5x the clauses the bit-vector multiplier
+// would have produced for the same product.
+//
+// BBMultVariant reads a node for three things -- the result width, whether
+// to swap a constant to the left, and whether the two operands are the same
+// node and the product is therefore a square. Its children are otherwise
+// only printed, and the constant-bit statistics it looks up are absent for a
+// node the propagator never saw, which is correct for an intermediate that
+// exists only inside this circuit. So a placeholder of the right width
+// serves, with distinct children because equal ones would select the
+// squaring circuit. Constant recoding still fires: it reads the bit vectors,
+// not the node.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpSignificandProduct(
+    const BBNodeVec& a, const BBNodeVec& b, BBNodeSet& support)
+{
+  const unsigned sb = a.size();
+  assert(b.size() == sb);
+  const unsigned width = 2 * sb;
+
+  BBNodeVec x = a;
+  BBNodeVec y = b;
+  x.resize(width, nf->getFalse());
+  y.resize(width, nf->getFalse());
+
+  auto it = fpSignificandProductShape.find(width);
+  if (it == fpSignificandProductShape.end())
+  {
+    // Symbols rather than constants: a factory that folds would collapse a
+    // product of two constants, leaving a node with no children to read.
+    std::string stem = "@fp_significand_" + std::to_string(width);
+    const ASTNode left = ASTNF->CreateSymbol((stem + "_l").c_str(), 0, width);
+    const ASTNode right = ASTNF->CreateSymbol((stem + "_r").c_str(), 0, width);
+    it = fpSignificandProductShape
+             .emplace(width, ASTNF->CreateTerm(BVMULT, width, left, right))
+             .first;
+  }
+  return BBMult(x, y, support, it->second);
 }
 
 // Bit-blasted fp.div over packed IEEE-754 operands, under the same flag and
@@ -9438,15 +9475,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpFma(const ASTNode& term,
 
   // The exact product: 2sb bits, and an exponent in the convention that a
   // significand of width M carries value msig * 2^(e - M + 1).
-  BBNodeVec prod = BBfill(M, nf->getFalse());
-  for (unsigned i = 0; i < sb; i++)
-  {
-    const BBNodeVec row = BBAndBit(b.msig, a.msig[i]);
-    BBNodeVec addendRow = BBfill(M, nf->getFalse());
-    for (unsigned j = 0; j < sb; j++)
-      addendRow[i + j] = row[j];
-    BBPlus2(prod, addendRow, nf->getFalse());
-  }
+  const BBNodeVec prod = BBfpSignificandProduct(a.msig, b.msig, support);
   BBNodeVec eProd = a.eUnb;
   BBPlus2(eProd, b.eUnb, nf->getTrue()); // eA + eB + 1
   const BBNode signProd = nf->CreateNode(XOR, a.sign, b.sign);
