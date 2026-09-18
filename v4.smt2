@@ -1,0 +1,8 @@
+(set-logic QF_BVFP)
+(declare-fun bits () (_ BitVec 32))
+(define-fun x19 () (_ FloatingPoint 8 24) ((_ to_fp 8 24) bits))
+(define-fun k32 () (_ FloatingPoint 8 24) ((_ to_fp 8 24) (_ bv1251513984 32)))
+(define-fun k64 () (_ FloatingPoint 11 53) ((_ to_fp 11 53) (_ bv4707126720094797824 64)))
+(define-fun c () (_ FloatingPoint 8 24) (fp.add RTN (fp.add RTN (fp.add RTN x19 k32) k32) k32))
+(assert (not (fp.gt c k32)))
+(check-sat)

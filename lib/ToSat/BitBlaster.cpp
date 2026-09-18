@@ -2134,6 +2134,9 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
               << fpNativeFiniteArithOperands << '\n';
     std::cerr << "FP native domain finite round-packs: "
               << fpNativeFiniteRoundPacks << '\n';
+    std::cerr << "fp-native: rounded records reused instead of a pack and a "
+                 "re-split: "
+              << fpNativeRecordReuses << '\n';
     std::cerr << "FP native domain zero-magnitude facts: "
               << fpNativeZeroMagnitudeFacts.size() << '\n';
     std::cerr << "FP native domain zero-magnitude terms: "
@@ -7222,18 +7225,42 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBclassifyFP(const ASTNode& form,
 
   const BBNodeVec p = BBTerm(form[0], support);
 
+  // A native operation leaves its rounded record behind, and every
+  // classification is one of that record's fields. Reading it instead of
+  // the packed bits is what lets the arithmetic go dead when the query only
+  // asks about status: an operation's result is NaN exactly when its
+  // operands make it so, which is a handful of flags and no datapath at
+  // all. The record is built to agree with its own packing, so this answers
+  // the same question either way.
+  const auto cached = fpUnpackedMemo.find(form[0]);
+  const bool haveRecord = cached != fpUnpackedMemo.end();
+  if (haveRecord)
+    ++fpNativeRecordClassifications;
+
   switch (k)
   {
     case FP_ISZERO:
-      return knownZero ? nf->getTrue() : BBfpIsZero(p, w);
+      if (knownZero)
+        return nf->getTrue();
+      return haveRecord ? cached->second.isZero : BBfpIsZero(p, w);
 
     case FP_ISNAN:
-      return knownFinite ? nf->getFalse() : BBfpIsNaN(p, sb, w);
+      if (knownFinite)
+        return nf->getFalse();
+      return haveRecord ? cached->second.isNaN : BBfpIsNaN(p, sb, w);
 
     case FP_ISSUBNORMAL:
     {
       if (knownZero)
         return nf->getFalse();
+      if (haveRecord)
+      {
+        // Subnormal is the finite nonzero case with no hidden bit.
+        const FpOperand& r = cached->second;
+        return nf->CreateNode(AND, nf->CreateNode(NOT, r.msig[sb - 1]),
+                              nf->CreateNode(NOT, r.isZero),
+                              nf->CreateNode(NOR, r.isInf, r.isNaN));
+      }
       BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
       BBNodeVec sigField(p.begin(), p.begin() + (sb - 1));
       const BBNode expZero = nf->CreateNode(NOR, expField);
@@ -7245,6 +7272,12 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBclassifyFP(const ASTNode& form,
     {
       if (knownZero)
         return nf->getFalse();
+      if (haveRecord)
+      {
+        const FpOperand& r = cached->second;
+        return nf->CreateNode(AND, r.msig[sb - 1],
+                              nf->CreateNode(NOR, r.isInf, r.isNaN));
+      }
       // Built as NOT(AND(e)) rather than NAND(e) so the all-ones test is
       // the same AIG node isNaN and isInfinite build over this operand.
       BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
@@ -7260,6 +7293,8 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBclassifyFP(const ASTNode& form,
     {
       if (knownFinite)
         return nf->getFalse();
+      if (haveRecord)
+        return cached->second.isInf;
       BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
       BBNodeVec sigField(p.begin(), p.begin() + (sb - 1));
       const BBNode expAllOnes = nf->CreateNode(AND, expField);
@@ -7269,18 +7304,22 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBclassifyFP(const ASTNode& form,
 
     case FP_ISNEGATIVE:
     {
+      const BBNode sign = haveRecord ? cached->second.sign : p[w - 1];
       if (knownFinite)
-        return p[w - 1];
-      const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(p, sb, w));
-      return nf->CreateNode(AND, p[w - 1], notNaN);
+        return sign;
+      const BBNode notNaN = nf->CreateNode(
+          NOT, haveRecord ? cached->second.isNaN : BBfpIsNaN(p, sb, w));
+      return nf->CreateNode(AND, sign, notNaN);
     }
 
     case FP_ISPOSITIVE:
     {
-      const BBNode signClear = nf->CreateNode(NOT, p[w - 1]);
+      const BBNode signClear = nf->CreateNode(
+          NOT, haveRecord ? cached->second.sign : p[w - 1]);
       if (knownFinite)
         return signClear;
-      const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(p, sb, w));
+      const BBNode notNaN = nf->CreateNode(
+          NOT, haveRecord ? cached->second.isNaN : BBfpIsNaN(p, sb, w));
       return nf->CreateNode(AND, signClear, notNaN);
     }
 
@@ -7502,13 +7541,14 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpUnpack(const BBNodeVec& p, unsigned sb,
 }
 
 template <class BBNode, class BBNodeManagerT>
-vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundPack(
+typename BitBlaster<BBNode, BBNodeManagerT>::FpOperand
+BitBlaster<BBNode, BBNodeManagerT>::BBfpRound(
     const BBNodeVec& rm, const BBNode& sgn, const BBNodeVec& rsigIn,
     const BBNode& guardIn, const BBNode& stickyIn, const BBNodeVec& beIn,
     unsigned sb, unsigned eb, BBNodeSet& support, const bool resultKnownFinite)
 {
-  const unsigned w = eb + sb;
   const unsigned maxbe = (1u << eb) - 2;
+  const unsigned bias = (1u << (eb - 1)) - 1;
   const unsigned E = beIn.size();
   const BBNode& rne = rm[0];
   const BBNode& rtp = rm[1];
@@ -7579,20 +7619,28 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundPack(
   BBNodeVec beF = beAfter;
   BBPlus2(beF, BBfill(E, nf->getFalse()), carry);
 
-  // Pack the finite result. A significand without its leading 1 is
-  // subnormal: exponent field 0 (beAfter is 1 there, the same scale).
-  const BBNode isNormRes = rsigF[sb - 1];
-  BBNodeVec res(w);
-  for (unsigned i = 0; i < sb - 1; i++)
-    res[i] = rsigF[i];
-  for (unsigned i = 0; i < eb; i++)
-    res[sb - 1 + i] = nf->CreateNode(AND, isNormRes, beF[i]);
-  res[w - 1] = sgn;
+  // The rounded value as a record, in BBfpUnpack's conventions: the hidden
+  // bit explicit in the significand, and the exponent unbiased, which for a
+  // subnormal reads as one because beAfter was set to that scale.
+  auto record = [&](const BBNodeVec& msig, const BBNodeVec& biased,
+                    const BBNode& infinite) {
+    FpOperand out;
+    out.sign = sgn;
+    out.msig = msig;
+    out.isInf = infinite;
+    out.isNaN = nf->getFalse();
+    BBNodeVec magnitude = msig;
+    out.isZero = nf->CreateNode(NOR, magnitude);
+    BBNodeVec e = biased;
+    BBSub(e, constVec(bias, E), support);
+    out.eUnb = e;
+    return out;
+  };
 
   if (resultKnownFinite)
   {
     ++fpNativeFiniteRoundPacks;
-    return res;
+    return record(rsigF, beF, nf->getFalse());
   }
 
   // Overflow, checked after rounding; saturation is mode- and sign-
@@ -7607,18 +7655,148 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundPack(
   infCases.push_back(nf->CreateNode(AND, rtn, sgn));
   const BBNode roundsToInf = nf->CreateNode(OR, infCases);
 
+  // Saturating to the largest finite value is a change of fields; saturating
+  // to infinity is a change of status, which the record carries separately.
+  const BBNode toMaxFinite =
+      nf->CreateNode(AND, ovf, nf->CreateNode(NOT, roundsToInf));
+  BBNodeVec maxSig(sb, nf->getTrue());
+  const BBNodeVec msigF = BBITE(toMaxFinite, maxSig, rsigF);
+  const BBNodeVec beSat = BBITE(toMaxFinite, constVec(maxbe, E), beF);
+  return record(msigF, beSat, nf->CreateNode(AND, ovf, roundsToInf));
+}
+
+// Lay a record out as IEEE bits: the significand's stored bits, the biased
+// exponent masked by whether the value is normal, the sign, and the two
+// status encodings muxed over the top. A zero needs no case of its own --
+// its significand and exponent fields are already zero.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpPack(
+    const FpOperand& value, unsigned sb, unsigned eb)
+{
+  const unsigned w = eb + sb;
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = value.eUnb.size();
+  assert(value.msig.size() == sb);
+
+  BBNodeVec biased = value.eUnb;
+  BBNodeVec biasV(E, nf->getFalse());
+  for (unsigned i = 0; i < E; i++)
+    if ((bias >> i) & 1)
+      biasV[i] = nf->getTrue();
+  BBPlus2(biased, biasV, nf->getFalse());
+
+  const BBNode isNorm = value.msig[sb - 1];
+  BBNodeVec res(w);
+  for (unsigned i = 0; i < sb - 1; i++)
+    res[i] = value.msig[i];
+  for (unsigned i = 0; i < eb; i++)
+    res[sb - 1 + i] = nf->CreateNode(AND, isNorm, biased[i]);
+  res[w - 1] = value.sign;
+
   BBNodeVec inf(w, nf->getFalse());
-  BBNodeVec maxFin(w, nf->getFalse());
   for (unsigned i = 0; i < eb; i++)
     inf[sb - 1 + i] = nf->getTrue();
-  for (unsigned i = 0; i < sb - 1; i++)
-    maxFin[i] = nf->getTrue();
-  for (unsigned i = 1; i < eb; i++)
-    maxFin[sb - 1 + i] = nf->getTrue(); // maxbe = 2^eb - 2: LSB clear
-  inf[w - 1] = sgn;
-  maxFin[w - 1] = sgn;
+  inf[w - 1] = value.sign;
+  res = BBITE(value.isInf, inf, res);
+  return BBITE(value.isNaN, BBfpCanonicalNaN(sb, eb), res);
+}
 
-  return BBITE(ovf, BBITE(roundsToInf, inf, maxFin), res);
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBfpRememberRecord(const ASTNode& n,
+                                                            FpOperand value,
+                                                            unsigned sb,
+                                                            unsigned eb)
+{
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned E = value.eUnb.size();
+  auto constVec = [&](unsigned v, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((v >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+
+  // An infinity or a NaN unpacks to the exponent one above the largest
+  // normal's and a fixed significand. Writing those here means the stored
+  // exponent is never outside the format, whatever the datapath left behind
+  // under a status flag.
+  BBNodeVec infSig(sb, nf->getFalse());
+  infSig[sb - 1] = nf->getTrue();
+  BBNodeVec nanSig = infSig;
+  nanSig[sb - 2] = nf->getTrue();
+  // A zero is likewise fixed to empty fields at the subnormal scale, so a
+  // caller can raise the flag and leave whatever the datapath produced.
+  // Priority is NaN, then infinity, then zero, matching how packing reads
+  // them back.
+  BBNodeVec zeroSig(sb, nf->getFalse());
+  const BBNode special = nf->CreateNode(OR, value.isNaN, value.isInf);
+  value.isZero = nf->CreateNode(AND, value.isZero,
+                                nf->CreateNode(NOT, special));
+  BBNodeVec subnormalExp(E, nf->getFalse());
+  {
+    const int unbiased = 1 - static_cast<int>(bias);
+    for (unsigned i = 0; i < E; i++)
+      subnormalExp[i] =
+          ((static_cast<unsigned>(unbiased) >> i) & 1) ? nf->getTrue()
+                                                       : nf->getFalse();
+  }
+  value.eUnb = BBITE(special, constVec(bias + 1, E),
+                     BBITE(value.isZero, subnormalExp, value.eUnb));
+  value.msig = BBITE(value.isNaN, nanSig,
+                     BBITE(value.isInf, infSig,
+                           BBITE(value.isZero, zeroSig, value.msig)));
+
+  value.eUnb = BBfpResizeExponent(value.eUnb, BBfpExpWidth(eb, sb));
+  fpUnpackedMemo[n] = value;
+}
+
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpResizeExponent(
+    const BBNodeVec& e, unsigned width)
+{
+  BBNodeVec out = e;
+  while (out.size() < width)
+    out.push_back(out.back()); // sign-extend
+  out.resize(width);           // or truncate, which a rounded exponent allows
+  return out;
+}
+
+// A native operation's rounded record is already in BBfpUnpack's
+// conventions, so a consumer that wants an operand split can take it
+// directly rather than packing the producer's result and splitting it
+// again. That round trip is not an identity -- packing moves the hidden bit
+// and the subnormal case into the exponent field, and unpacking derives
+// them back out -- so no amount of rewriting downstream removes it.
+template <class BBNode, class BBNodeManagerT>
+typename BitBlaster<BBNode, BBNodeManagerT>::FpOperand
+BitBlaster<BBNode, BBNodeManagerT>::BBfpOperand(const ASTNode& n, unsigned sb,
+                                                unsigned w, unsigned E,
+                                                BBNodeSet& support,
+                                                const bool knownFinite,
+                                                const bool knownZeroMagnitude)
+{
+  const auto it = fpUnpackedMemo.find(n);
+  if (it != fpUnpackedMemo.end())
+  {
+    ++fpNativeRecordReuses;
+    FpOperand out = it->second;
+    out.eUnb = BBfpResizeExponent(out.eUnb, E);
+    return out;
+  }
+  return BBfpUnpack(BBTerm(n, support), sb, w, E, support, knownFinite,
+                    knownZeroMagnitude);
+}
+
+// The two together, which is what every circuit used before records existed.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundPack(
+    const BBNodeVec& rm, const BBNode& sgn, const BBNodeVec& rsig,
+    const BBNode& guard, const BBNode& sticky, const BBNodeVec& be,
+    unsigned sb, unsigned eb, BBNodeSet& support, const bool resultKnownFinite)
+{
+  const FpOperand rounded = BBfpRound(rm, sgn, rsig, guard, sticky, be, sb, eb,
+                                      support, resultKnownFinite);
+  return BBfpPack(rounded, sb, eb);
 }
 
 // Bit-blasted fp.mul over packed IEEE-754 operands: a hand-written
@@ -7732,9 +7910,9 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpMul(const ASTNode& term,
   // operand -- a leaf or a chained native result -- is only wiring and
   // four classification gates; normalisation is deferred to the product.
   const FpOperand a =
-      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+      BBfpOperand(term[1], sb, w, E, support, aFinite, aKnownZero);
   const FpOperand b =
-      BBfpUnpack(pb, sb, w, E, support, bFinite, bKnownZero);
+      BBfpOperand(term[2], sb, w, E, support, bFinite, bKnownZero);
 
   // A semantic-sign fact does not fix the packed sign of zero. Raw operand
   // signs therefore select an exact zero result, while every nonzero result
@@ -7787,8 +7965,8 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpMul(const ASTNode& term,
       fpNativeZeroMagnitudeFacts.end();
   const bool resultFinite =
       !directlyConstrainedZero && fpNativeKnownFinite(term);
-  BBNodeVec res = BBfpRoundPack(rm, roundSign, rsig, guard, sticky, be, sb, eb,
-                                support, resultFinite);
+  FpOperand out = BBfpRound(rm, roundSign, rsig, guard, sticky, be, sb, eb,
+                            support, resultFinite);
 
   // Specials, outermost first: NaN (any NaN operand, or zero times
   // infinity), then infinity, then zero.
@@ -7819,13 +7997,19 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpMul(const ASTNode& term,
               : (bFinite ? a.isInf : nf->CreateNode(OR, a.isInf, b.isInf));
   const BBNode anyZero = nf->CreateNode(OR, a.isZero, b.isZero);
 
-  res = BBITE(anyZero, packSpecial(false, false), res);
+  (void)packSpecial;
+  out.isZero = nf->CreateNode(OR, out.isZero, anyZero);
   if (!(aFinite && bFinite))
   {
-    res = BBITE(anyInf, packSpecial(false, true), res);
-    res = BBITE(anyNaN, packSpecial(true, false), res);
+    out.isInf = nf->CreateNode(OR, out.isInf, anyInf);
+    out.isNaN = anyNaN;
   }
-  return res;
+  // A zero or an infinity from a product takes the operands' sign product,
+  // which is the raw one rather than any proved semantic sign.
+  out.sign = nf->CreateNode(
+      ITE, nf->CreateNode(OR, out.isZero, out.isInf), zeroSign, out.sign);
+  BBfpRememberRecord(term, out, sb, eb);
+  return BBfpPack(out, sb, eb);
 }
 
 template <class BBNode, class BBNodeManagerT>
@@ -8721,9 +8905,9 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
   };
 
   const FpOperand a =
-      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+      BBfpOperand(term[1], sb, w, E, support, aFinite, aKnownZero);
   const FpOperand b =
-      BBfpUnpack(pb, sb, w, E, support, bFinite, bKnownZero);
+      BBfpOperand(term[2], sb, w, E, support, bFinite, bKnownZero);
   const BBNode effSub = knownSameSign
                             ? nf->getFalse()
                             : nf->CreateNode(XOR, a.sign, b.sign);
@@ -8882,12 +9066,12 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
   }
 
   const bool resultFinite = fpNativeKnownFinite(term);
-  BBNodeVec res =
-      BBfpRoundPack(rm, sgn, rsig, guard, sticky, be, sb, eb, support,
-                    resultFinite);
+  FpOperand out =
+      BBfpRound(rm, sgn, rsig, guard, sticky, be, sb, eb, support,
+                resultFinite);
 
   if (knownSameSign)
-    res[w - 1] = nf->CreateNode(ITE, bothZero, knownSignZeroSign, sgn);
+    out.sign = nf->CreateNode(ITE, bothZero, knownSignZeroSign, sgn);
 
   // Specials: NaN operands, or subtracting infinities; otherwise an
   // infinite operand's infinity, keeping that operand's sign.
@@ -8921,10 +9105,13 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
                                               : nf->CreateNode(ITE, a.isInf,
                                                                a.sign,
                                                                b.sign));
-    res = BBITE(anyInf, packSpecial(false, infSign), res);
-    res = BBITE(anyNaN, packSpecial(true, nf->getFalse()), res);
+    out.sign = nf->CreateNode(ITE, anyInf, infSign, out.sign);
+    out.isInf = nf->CreateNode(OR, out.isInf, anyInf);
+    out.isNaN = anyNaN;
   }
-  return res;
+  (void)packSpecial;
+  BBfpRememberRecord(term, out, sb, eb);
+  return BBfpPack(out, sb, eb);
 }
 
 // Bit-blasted fp.rem: the IEEE remainder x - y*n, where n is the integer
@@ -9700,7 +9887,8 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpToFp(const ASTNode& term,
 
   const bool sourceFinite = fpNativeKnownFinite(term[3]);
   const FpOperand s =
-      BBfpUnpack(p, sb1, w1, E, support, sourceFinite, sourceKnownZero);
+      BBfpOperand(term[3], sb1, w1, E, support, sourceFinite,
+                  sourceKnownZero);
 
   // Normalise the source significand; the count also lets a subnormal
   // source become normal in a wider target range.
@@ -9740,8 +9928,8 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpToFp(const ASTNode& term,
   BBSub(be, clzE, support);
   BBPlus2(be, constVec(bias2, E), nf->getFalse());
 
-  BBNodeVec res =
-      BBfpRoundPack(rm, s.sign, rsig, guard, sticky, be, sb2, eb2, support);
+  FpOperand out =
+      BBfpRound(rm, s.sign, rsig, guard, sticky, be, sb2, eb2, support);
 
   // Specials map to the target format's; a zero operand must be muxed
   // (its garbage leading-zero count would otherwise wander the exponent).
@@ -9756,10 +9944,15 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpToFp(const ASTNode& term,
       sp[w2 - 1] = s.sign;
     return sp;
   };
-  res = BBITE(s.isZero, packSpecial(false, false), res);
-  res = BBITE(s.isInf, packSpecial(false, true), res);
-  res = BBITE(s.isNaN, packSpecial(true, false), res);
-  return res;
+  (void)packSpecial;
+  // A conversion inherits its source's status exactly: it cannot create or
+  // destroy a NaN, an infinity or a zero, only re-round a finite value.
+  out.isZero = nf->CreateNode(OR, out.isZero, s.isZero);
+  out.isInf = nf->CreateNode(OR, out.isInf, s.isInf);
+  out.isNaN = s.isNaN;
+  out.sign = s.sign;
+  BBfpRememberRecord(term, out, sb2, eb2);
+  return BBfpPack(out, sb2, eb2);
 }
 
 // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,

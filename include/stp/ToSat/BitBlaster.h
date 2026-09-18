@@ -415,6 +415,42 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                           unsigned sb, unsigned eb, BBNodeSet& support,
                           bool resultKnownFinite = false);
 
+  // The same rounding, stopping before the bits are assembled. The record
+  // it returns is in BBfpUnpack's conventions -- hidden bit explicit,
+  // subnormals reading their exponent as one -- so a consumer cannot tell
+  // whether it came from a circuit or from splitting a packed operand.
+  FpOperand BBfpRound(const BBNodeVec& rm, const BBNode& sgn,
+                      const BBNodeVec& rsig, const BBNode& guard,
+                      const BBNode& sticky, const BBNodeVec& be, unsigned sb,
+                      unsigned eb, BBNodeSet& support,
+                      bool resultKnownFinite = false);
+
+  // Lay a record out as IEEE bits.
+  BBNodeVec BBfpPack(const FpOperand& value, unsigned sb, unsigned eb);
+
+  // The operand record for a floating-point node: a native operation's own
+  // rounded record when there is one, and otherwise its packed bits split.
+  FpOperand BBfpOperand(const ASTNode& n, unsigned sb, unsigned w, unsigned E,
+                        BBNodeSet& support, bool knownFinite = false,
+                        bool knownZeroMagnitude = false);
+
+  // Store a circuit's rounded result for a later consumer. The fields are
+  // first made to agree with what unpacking its own packed form would give,
+  // which keeps the stored exponent inside the format's range and is what
+  // lets the accessor resize it freely.
+  void BBfpRememberRecord(const ASTNode& n, FpOperand value, unsigned sb,
+                          unsigned eb);
+
+  // Sign-extend or truncate a signed exponent to `width`. Truncation is only
+  // used on a rounded exponent, which is inside the format's range.
+  BBNodeVec BBfpResizeExponent(const BBNodeVec& e, unsigned width);
+
+  // Rounded records of native operations, keyed by node, held at the
+  // narrowest exponent width any circuit uses.
+  std::unordered_map<ASTNode, FpOperand, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      fpUnpackedMemo;
+
   // Width of the internal signed exponent for format (eb, sb): eb+2
   // widened until the subnormal shift distance (up to bias + 2sb + 3,
   // counting fp.add's alignment headroom) cannot overflow it.
@@ -553,6 +589,8 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   size_t fpNativeZeroMulFastPaths = 0;
   size_t fpNativeZeroToFpFastPaths = 0;
   size_t fpNativeDivRelations = 0;
+  size_t fpNativeRecordReuses = 0;
+  size_t fpNativeRecordClassifications = 0;
   // One placeholder multiply node per width, for BBfpSignificandProduct.
   std::map<unsigned, ASTNode> fpSignificandProductShape;
   size_t fpNativeKnownPositiveAddPaths = 0;
@@ -940,6 +978,8 @@ public:
     fpNativeZeroMulFastPaths = 0;
     fpNativeZeroToFpFastPaths = 0;
     fpNativeDivRelations = 0;
+    fpNativeRecordReuses = 0;
+    fpNativeRecordClassifications = 0;
     fpNativeKnownPositiveAddPaths = 0;
     fpNativeKnownNegativeAddPaths = 0;
     fpNativeKnownPositiveMulPaths = 0;
