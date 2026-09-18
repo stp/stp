@@ -34,6 +34,7 @@ add_library(simplifier OBJECT
     UseITEContext.cpp
     FindPureLiterals.cpp
     StrengthReduction.cpp
+    MultiplyOverflowIdiom.cpp
     AIGSimplifyPropositionalCore.cpp
     UnsignedIntervalAnalysis.cpp
     ValueSetAnalysis.cpp

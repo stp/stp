@@ -746,6 +746,10 @@ int64_t eval(const ASTNode& b, const UserDefinedFlags* flags)
     case BVSMULO:
     {
       const int64_t ow = std::max(1u, b[0].GetValueWidth());
+      // The detector: a (w+2)-wide product of sign-extended operands plus
+      // the significance unit.
+      if (flags == NULL || flags->smulo_schulte)
+        return std::max<int64_t>(1, (9 * ow * ow + 30 * ow - 60) / 2);
       if (variantRecodesSymbolicRuns(flags))
         return 8 * (ow - 1) * (ow - 1) +
                (symbolicRowsAreCarrySave(flags) ? 19 : 11) * (ow - 1);

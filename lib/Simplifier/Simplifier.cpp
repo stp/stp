@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/MultiplyOverflowIdiom.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include <algorithm>
@@ -556,57 +557,6 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNode& conditionToNegate)
 
 // Tries to simplify the input to TRUE/FALSE. if it fails, then
 // return the constructed equality
-// t is a zero extension: a concat with a zero constant on top. Sets core to
-// what was extended.
-static bool zeroExtended(NodeFactory* nf, const ASTNode& t, ASTNode& core)
-{
-  if (t.GetKind() != BVCONCAT || t[0].GetKind() != BVCONST)
-    return false;
-  if (t[0] != nf->CreateZeroConst(t[0].GetValueWidth()))
-    return false;
-  core = t[1];
-  return true;
-}
-
-static ASTNode zeroExtendTo(NodeFactory* nf, const ASTNode& t, unsigned n)
-{
-  const unsigned w = t.GetValueWidth();
-  if (w == n)
-    return t;
-  return nf->CreateTerm(BVCONCAT, n, nf->CreateZeroConst(n - w), t);
-}
-
-// (extract [W-1:n] (bvmul (zx a) (zx b))) = 0 is the double-width spelling of
-// an unsigned multiplication overflow check: with the product exact
-// (W >= wa + wb) and n at least each operand's width, it holds exactly when
-// a*b < 2^n, which is NOT (bvumulo a b) at width n. Sets overflow to that
-// predicate.
-static bool unsignedMultiplyOverflowIdiom(NodeFactory* nf, const ASTNode& lhs,
-                                          const ASTNode& rhs, ASTNode& overflow)
-{
-  if (rhs.GetKind() != BVCONST || lhs.GetKind() != BVEXTRACT)
-    return false;
-  if (rhs != nf->CreateZeroConst(rhs.GetValueWidth()))
-    return false;
-  const ASTNode& prod = lhs[0];
-  if (prod.GetKind() != BVMULT || prod.Degree() != 2)
-    return false;
-  const unsigned W = prod.GetValueWidth();
-  if (lhs[1].GetUnsignedConst() != W - 1)
-    return false;
-  const unsigned n = lhs[2].GetUnsignedConst();
-  ASTNode a, b;
-  if (!zeroExtended(nf, prod[0], a) || !zeroExtended(nf, prod[1], b))
-    return false;
-  const unsigned wa = a.GetValueWidth();
-  const unsigned wb = b.GetValueWidth();
-  if (W < wa + wb || n < std::max(wa, wb))
-    return false;
-  overflow = nf->CreateNode(BVUMULO, zeroExtendTo(nf, a, n),
-                            zeroExtendTo(nf, b, n));
-  return true;
-}
-
 ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
 {
   CountersAndStats("CreateSimplifiedEQ", _bm);
@@ -619,10 +569,10 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
 
   if (_bm->UserFlags.mulo_recognition)
   {
-    ASTNode overflow;
-    if (unsignedMultiplyOverflowIdiom(nf, in1, in2, overflow) ||
-        unsignedMultiplyOverflowIdiom(nf, in2, in1, overflow))
-      return nf->CreateNode(NOT, overflow);
+    ASTNode rewritten;
+    if (multiplyOverflowIdiom(nf, in1, in2, rewritten) ||
+        multiplyOverflowIdiom(nf, in2, in1, rewritten))
+      return rewritten;
   }
 
   // Two constant nodes still may be semantically equal: a float constant
