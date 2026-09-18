@@ -195,7 +195,17 @@ bool CryptoMiniSat5::solveWithAssumptionsInternal(
 
 uint8_t CryptoMiniSat5::modelValue(uint32_t x) const
 {
-  return (s->get_model().at(x) == CMSat::l_True);
+  // The three values SATSolver promises. This used to answer 0 or 1, which
+  // made every false variable read as undef_literal() (also 0) to callers
+  // that distinguish an unassigned variable from an assigned false value.
+  const std::vector<CMSat::lbool>& model = s->get_model();
+  if (x >= model.size())
+    return undef_literal();
+  if (model[x] == CMSat::l_True)
+    return true_literal();
+  if (model[x] == CMSat::l_False)
+    return false_literal();
+  return undef_literal();
 }
 
 uint32_t CryptoMiniSat5::newVar()
