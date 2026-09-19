@@ -1047,6 +1047,15 @@ public:
   // circuit on at once: the state a build without SymFPU would need.
   bool fp_native_all = false;
 
+  // Frame width for the native fp.add datapath.
+  //   1  the alignment frame holds a whole significand below the larger
+  //      operand, so nothing shifted for alignment ever leaves it.
+  //   2  the frame holds only a guard, a round and a sticky position below,
+  //      and alignment past that goes to the sticky bit as it already does
+  //      past the clamp. Halves the width the cancellation shift and its
+  //      leading-zero count run over.
+  int64_t fp_add_variant = 1;
+
   // Recognise fp.isZero(fp.add ...) and encode the observed zero-result
   // condition directly instead of constructing and packing every result bit.
   // Enabled by default, but only active when native arithmetic is selected.

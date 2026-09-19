@@ -8943,9 +8943,22 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
                                                  : nf->getFalse())
                              : nf->CreateNode(ITE, swap, b.sign, a.sign);
 
-  // Alignment distance, clamped into the frame.
+  // Alignment distance, clamped into the frame. The clamp is where a shift
+  // stops telling us anything new; the frame's low margin is a separate
+  // choice, and the one the variant selects.
+  //
+  // Variant 1 gives the frame a whole significand of margin, so alignment
+  // never shifts a bit out of it. Variant 2 gives it three places -- a
+  // guard, a round and a sticky -- and lets everything below reach the
+  // sticky bit through the shifter, exactly as bits past the clamp already
+  // do. Three is what rounding needs, and for the case that cancels
+  // catastrophically nothing is lost anyway: a difference only cancels far
+  // when the exponents are within one, and then alignment moved almost
+  // nothing. The saving is in the phases that follow, because the frame is
+  // what the cancellation shift and its leading-zero count run over.
   const unsigned dmaxA = sb + 3;
-  const unsigned W = sb + dmaxA + 1; // headroom bit for the addition carry
+  const unsigned frameLow = (uf->fp_add_variant >= 2) ? 3 : dmaxA;
+  const unsigned W = sb + frameLow + 1; // headroom bit for the addition carry
   BBNodeVec dist = eBig;
   BBSub(dist, eSmall, support); // >= 0
   const BBNode distFar = nf->CreateNode(
@@ -8963,14 +8976,14 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
                                               : nf->getFalse(),
                            dist[i]);
 
-  // Big at [dmaxA, W-2]; small likewise, then shifted right, everything
+  // Big at [frameLow, W-2]; small likewise, then shifted right, everything
   // below the frame ORed into stickyTail.
   BBNodeVec big(W, nf->getFalse());
   BBNodeVec small(W, nf->getFalse());
   for (unsigned i = 0; i < sb; i++)
   {
-    big[dmaxA + i] = msigBig[i];
-    small[dmaxA + i] = msigSmall[i];
+    big[frameLow + i] = msigBig[i];
+    small[frameLow + i] = msigSmall[i];
   }
   BBNode stickyTail = nf->getFalse();
   small = BBfpShiftRightSticky(small, dv, stickyTail);
@@ -9003,14 +9016,14 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
     // the shared exponent), their unshifted sum can be packed directly at
     // biased exponent 1; a missing hidden bit then denotes a subnormal.
     const BBNode carry = sum[W - 1];
-    const BBNodeVec rsigNoCarry(sum.begin() + dmaxA,
-                                sum.begin() + dmaxA + sb);
-    const BBNodeVec rsigCarry(sum.begin() + dmaxA + 1, sum.end());
+    const BBNodeVec rsigNoCarry(sum.begin() + frameLow,
+                                sum.begin() + frameLow + sb);
+    const BBNodeVec rsigCarry(sum.begin() + frameLow + 1, sum.end());
     rsig = BBITE(carry, rsigCarry, rsigNoCarry);
-    guard = nf->CreateNode(ITE, carry, sum[dmaxA], sum[dmaxA - 1]);
+    guard = nf->CreateNode(ITE, carry, sum[frameLow], sum[frameLow - 1]);
 
-    BBNodeVec lowNoCarry(sum.begin(), sum.begin() + dmaxA - 1);
-    BBNodeVec lowCarry(sum.begin(), sum.begin() + dmaxA);
+    BBNodeVec lowNoCarry(sum.begin(), sum.begin() + frameLow - 1);
+    BBNodeVec lowCarry(sum.begin(), sum.begin() + frameLow);
     const BBNode stickyNoCarry = nf->CreateNode(
         OR, nf->CreateNode(OR, lowNoCarry), stickyTail);
     const BBNode stickyCarry = nf->CreateNode(
