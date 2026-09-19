@@ -1053,8 +1053,10 @@ public:
   //   2  the frame holds only a guard, a round and a sticky position below,
   //      and alignment past that goes to the sticky bit as it already does
   //      past the clamp. Halves the width the cancellation shift and its
-  //      leading-zero count run over.
-  int64_t fp_add_variant = 1;
+  //      leading-zero count run over. The default: never the larger of the
+  //      two on the hard floating-point set, and two more files solved
+  //      there.
+  int64_t fp_add_variant = 2;
 
   // Recognise fp.isZero(fp.add ...) and encode the observed zero-result
   // condition directly instead of constructing and packing every result bit.

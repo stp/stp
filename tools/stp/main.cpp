@@ -840,7 +840,8 @@ void ExtraMain::create_options()
             "anything out of the frame. 2 keeps only a guard, a round and a "
             "sticky position, letting alignment past those reach the sticky "
             "bit as it already does past the clamp, which halves the width "
-            "the cancellation shift and its leading-zero count run over",
+            "the cancellation shift and its leading-zero count run over. "
+            "2 is the default",
             bb_group);
 
   bool_arg("--bb.fp-native-arith", bm->UserFlags.fp_native_arith,
