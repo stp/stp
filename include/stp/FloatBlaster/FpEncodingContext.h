@@ -50,6 +50,10 @@ private:
   FpTotalise totalise;
   FpDomainSimplify domain;
   FloatBlast blast;
+  // The model path lowers every operation, including the ones the solve left
+  // to the bit-blaster's native circuits: evaluating a term over a model
+  // means computing it here, where there are no such circuits.
+  FloatBlast model_blast;
 };
 
 } // namespace stp

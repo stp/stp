@@ -132,6 +132,10 @@ public:
   // bv_term_abstraction_rounds_explicit -- which is what the C interface
   // resolves the same pair with, where they do not exclude each other.
   CLI::Option* bv_rounds_option = nullptr;
+  // --bb.fp-native-all and the per-operation switches it sets. Kept so that
+  // an operation named in its own right overrides the baseline.
+  CLI::Option* fp_native_all_option = nullptr;
+  std::vector<std::pair<CLI::Option*, bool*>> fp_native_options;
   // ... and the group list, for the same reason: it is the other half of the
   // pair a profile applies, and resolves the same way.
   CLI::Option* bv_schema_groups_option = nullptr;
@@ -191,6 +195,13 @@ void ExtraMain::create_options()
         ->capture_default_str()
         ->group(group)
         ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+  };
+
+  // One native floating-point circuit. Recorded so --bb.fp-native-all knows
+  // which switches it may set and which the command line named itself.
+  auto fp_native_arg = [this, &bool_arg](const char* name, bool& var,
+                                         const char* desc, const char* group) {
+    fp_native_options.emplace_back(bool_arg(name, var, desc, group), &var);
   };
   auto int64_arg = [this](const char* name, int64_t& var, const char* desc,
                           const char* group) {
@@ -850,56 +861,66 @@ void ExtraMain::create_options()
             "2 is the default",
             bb_group);
 
-  bool_arg("--bb.fp-native-arith", bm->UserFlags.fp_native_arith,
+  bool_arg("--bb.fp-normalise-lemma", bm->UserFlags.fp_normalise_lemma,
+           "Assert what normalising by a leading-zero count means -- the top "
+           "bit of the shifted vector is set exactly when the input is "
+           "nonzero -- beside each native normalising shifter, which reaches "
+           "the same fact only once every stage select has resolved",
+           bb_group);
+
+  fp_native_arg("--bb.fp-native-arith", bm->UserFlags.fp_native_arith,
            "Bit-blast fp.add and fp.mul under surviving native predicates "
            "with the hand-written packed-operand circuits instead of the "
-           "SymFPU unpacking circuits (experimental)",
+           "SymFPU unpacking circuits",
            bb_group);
 
-  bool_arg("--bb.fp-native-all", bm->UserFlags.fp_native_all,
-           "Turn on every native floating-point circuit at once: what a "
-           "build without SymFPU would need (experimental)",
+  // Deliberately without a captured default: this sets the switches above
+  // rather than holding a state of its own, and they do not all start alike,
+  // so a default shown here would misdescribe every one of them.
+  fp_native_all_option =
+      app.add_option("--bb.fp-native-all", bm->UserFlags.fp_native_all,
+                     "Set every native floating-point circuit at once, in "
+                     "whichever direction is given: on is what a build "
+                     "without SymFPU needs, off routes every operation "
+                     "through SymFPU. An operation named in its own right "
+                     "wins over this")
+          ->group(bb_group)
+          ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+
+  fp_native_arg("--bb.fp-native-minmax", bm->UserFlags.fp_native_minmax,
+           "Bit-blast fp.min and fp.max natively over packed operands",
            bb_group);
 
-  bool_arg("--bb.fp-native-minmax", bm->UserFlags.fp_native_minmax,
-           "Bit-blast fp.min and fp.max natively over packed operands "
-           "(experimental)",
+  fp_native_arg("--bb.fp-native-pack", bm->UserFlags.fp_native_pack,
+           "Bit-blast fp.to_ieee_bv natively over packed operands",
            bb_group);
 
-  bool_arg("--bb.fp-native-pack", bm->UserFlags.fp_native_pack,
-           "Bit-blast fp.to_ieee_bv natively over packed operands "
-           "(experimental)",
+  fp_native_arg("--bb.fp-native-round", bm->UserFlags.fp_native_round,
+           "Bit-blast fp.roundToIntegral natively over packed operands",
            bb_group);
 
-  bool_arg("--bb.fp-native-round", bm->UserFlags.fp_native_round,
-           "Bit-blast fp.roundToIntegral natively over packed operands "
-           "(experimental)",
-           bb_group);
-
-  bool_arg("--bb.fp-native-sqrt", bm->UserFlags.fp_native_sqrt,
+  fp_native_arg("--bb.fp-native-sqrt", bm->UserFlags.fp_native_sqrt,
            "Bit-blast fp.sqrt natively over packed operands, through the "
-           "defining relation rather than a restoring array (experimental)",
+           "defining relation rather than a restoring array",
            bb_group);
 
-  bool_arg("--bb.fp-native-fma", bm->UserFlags.fp_native_fma,
-           "Bit-blast fp.fma natively over packed operands (experimental)",
+  fp_native_arg("--bb.fp-native-fma", bm->UserFlags.fp_native_fma,
+           "Bit-blast fp.fma natively over packed operands",
            bb_group);
 
-  bool_arg("--bb.fp-native-conv", bm->UserFlags.fp_native_conv,
+  fp_native_arg("--bb.fp-native-conv", bm->UserFlags.fp_native_conv,
            "Bit-blast the bit-vector conversions -- to_fp from a signed or "
-           "unsigned bit-vector, fp.to_ubv and fp.to_sbv -- natively "
-           "(experimental)",
+           "unsigned bit-vector, fp.to_ubv and fp.to_sbv -- natively",
            bb_group);
 
-  bool_arg("--bb.fp-native-rem", bm->UserFlags.fp_native_rem,
-           "Bit-blast fp.rem natively over packed operands (experimental)",
+  fp_native_arg("--bb.fp-native-rem", bm->UserFlags.fp_native_rem,
+           "Bit-blast fp.rem natively over packed operands",
            bb_group);
 
-  bool_arg("--bb.fp-native-div", bm->UserFlags.fp_native_div,
+  fp_native_arg("--bb.fp-native-div", bm->UserFlags.fp_native_div,
            "Bit-blast fp.div under surviving native predicates with the "
            "hand-written packed-operand circuit, whose significand quotient "
-           "is the defining relation rather than a restoring array "
-           "(experimental)",
+           "is the defining relation rather than a restoring array",
            bb_group);
 
   bool_arg("--bb.fp-native-add-iszero",
@@ -1298,21 +1319,15 @@ int ExtraMain::parse_options(int argc, char** argv)
     exit(-1);
   }
 
-  // One switch for every native floating-point circuit. Each operation
-  // keeps its own flag so its encoding can be measured on its own; this
-  // turns the lot on, which is the state a build without SymFPU needs.
-  if (bm->UserFlags.fp_native_all)
-  {
-    bm->UserFlags.fp_native_arith = true;
-    bm->UserFlags.fp_native_div = true;
-    bm->UserFlags.fp_native_minmax = true;
-    bm->UserFlags.fp_native_pack = true;
-    bm->UserFlags.fp_native_round = true;
-    bm->UserFlags.fp_native_sqrt = true;
-    bm->UserFlags.fp_native_fma = true;
-    bm->UserFlags.fp_native_conv = true;
-    bm->UserFlags.fp_native_rem = true;
-  }
+  // One switch for every native floating-point circuit. Each operation keeps
+  // its own flag so its encoding can be measured on its own; naming this one
+  // sets the baseline for the lot, in whichever direction. An operation named
+  // in its own right keeps what it was given, which is what selects one
+  // circuit against SymFPU everywhere else.
+  if (fp_native_all_option->count() != 0)
+    for (const auto& entry : fp_native_options)
+      if (entry.first->count() == 0)
+        *entry.second = bm->UserFlags.fp_native_all;
 
   // The command line cannot reach the profile-versus-ceiling conflict at all
   // -- the two options exclude each other -- but a run that named the ceiling

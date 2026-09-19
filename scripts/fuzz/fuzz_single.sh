@@ -770,59 +770,47 @@ declare -a g_uf=(
 
 # Floating-point bit-blasting, drawn only for the FP logics: with no FP in the
 # input both settings leave the CNF byte-identical, so anywhere else they are a
-# wasted iteration. --bb.fp-native-arith only applies to predicates that stayed
-# native, so it is not combined with turning --bb.fp-native-cmp off.
+# wasted iteration.
 #
-# The last two are packed-operand shortcuts that are on by default, so the
-# entries opt out. Each wants a particular term under the predicate, so it is
-# the plain floating-point entry that reaches them -- 7/30 and 3/30 there
-# against 2/20 and 1/20 on the array one. Deliberately absent:
-# --bb.fp-native-known-sign, which reads zero on both entries even paired with
-# the --bb.fp-native-domain it needs, and the whole --fp-domain-* prepass
-# family, which wants asserted bounds a generated file does not carry.
+# Every operation but fp.sqrt and fp.div now blasts natively by default, so
+# most entries opt *out* -- the SymFPU circuit is the side that needs drawing.
+# The two that stayed on SymFPU opt in instead. --bb.fp-native-cmp is not
+# combined with an arithmetic entry: it only applies to predicates that stayed
+# native.
 #
-# #1117 gave every remaining operation a native circuit, one option each.
+# Deliberately absent: --bb.fp-native-known-sign, which reads zero on both
+# entries even paired with the --bb.fp-native-domain it needs, and the whole
+# --fp-domain-* prepass family, which wants asserted bounds a generated file
+# does not carry.
+#
 # Counts below are out of the files that emit a CNF at all: 28 of the plain
 # floating-point entry's 30, and 11 of the QF_ABVFP entry's 30. fp.sqrt and
 # fp.div are the ones the plain entry reaches most (7/28 and 4/28); the
 # conversions live on the array entry (7/11 against 2/28), which is where
 # to_ubv and to_sbv are generated. --bb.fp-add-variant picks the alignment
-# frame for the *native* adder, so it only means anything once
-# --bb.fp-native-arith has put that adder in place -- on its own it is
-# byte-identical on all 39, paired it changes 15/28 and 7/11.
+# frame for the native adder, which is now in place without asking: paired it
+# changed 15/28 and 7/11.
 declare -a g_fp=(
 ""
 "--bb.fp-native-cmp=0"
-"--bb.fp-native-arith=1"
+"--bb.fp-native-arith=0"
 "--bb.fp-native-add-iszero=0"
 "--bb.fp-native-domain=0"
 "--bb.fp-native-sqrt=1"
 "--bb.fp-native-div=1"
-"--bb.fp-native-round=1"
-"--bb.fp-native-rem=1"
-"--bb.fp-native-minmax=1"
-"--bb.fp-native-arith=1 --bb.fp-add-variant=1"
+"--bb.fp-native-round=0"
+"--bb.fp-native-rem=0"
+"--bb.fp-native-minmax=0"
+"--bb.fp-add-variant=1"
+"--bb.fp-normalise-lemma=0"
 
-# The packed-carrier conversions. Worth having: 13/28 and 2/28 changed on
-# the plain floating-point entry, 8/11 and 7/11 on the array one, and
-# --bb.fp-native-all is every native circuit at once, 17/28 and 8/11.
-#
-# KNOWN TO ABORT, deliberately left drawing anyway. All three fail on the
-# QF_ABVFP entry -- 16, 4 and 18 files in 30 respectively -- with
-#
-#   STP Error: floating-point model encoding made no progress: (FP_TO_IEEE_BV ..
-#
-# from CounterExample.cpp: the blaster handled the term natively, so the
-# lowering the model evaluator asks for returns it unchanged and the
-# evaluator gives up. Totalising an out-of-range fp.to_ubv is what puts an
-# FP_TO_IEEE_BV there, which is why the plain floating-point entry is clean
-# and the array one is not. Exit 255, no answer, on a query the default
-# answers fine, so an iteration drawing the pack entry with the QF_ABVFP
-# logic saves over half its files as mismatches -- ~1300 of 2500. Triage by
-# grepping what-happened.txt for the option name. Drop these back to
-# comments if that gets in the way of a hunt.
-"--bb.fp-native-pack=1"
-"--bb.fp-native-conv=1"
+# The packed-carrier conversions, and the whole native set at once. Worth
+# having: 13/28 and 2/28 changed on the plain floating-point entry, 8/11 and
+# 7/11 on the array one, and --bb.fp-native-all is every native circuit at
+# once, 17/28 and 8/11.
+"--bb.fp-native-pack=0"
+"--bb.fp-native-conv=0"
+"--bb.fp-native-all=0"
 "--bb.fp-native-all=1"
 
 # Absent because there is nothing to blast: --bb.fp-native-fma. FuzzSMT

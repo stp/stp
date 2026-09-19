@@ -482,6 +482,11 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   // Count of leading zeros of v (from the MSB down) as an unsigned binary
   // vector of `countWidth` bits; an all-zero v counts v.size().
   BBNodeVec BBfpCLZ(const BBNodeVec& v, unsigned countWidth);
+
+  // State to the solver what normalising by a leading-zero count means: the
+  // top bit of the result is set exactly when the input is nonzero.
+  void BBfpNormaliseLemma(const BBNodeVec& v, const BBNodeVec& r,
+                          unsigned countWidth, BBNodeSet& support);
   // Right shift v by `amt`, ORing every shifted-out bit into `sticky`.
   BBNodeVec BBfpShiftRightSticky(const BBNodeVec& v, const BBNodeVec& amt,
                                  BBNode& sticky);
