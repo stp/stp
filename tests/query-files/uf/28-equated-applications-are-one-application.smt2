@@ -15,12 +15,14 @@
 ; CHECK: ^unsat$
 ;
 ; The pass switched off, the two stay apart and each side is its own
-; product of its own quotient: four abstracted operations where the merged
-; query has none. The solve is not waited for -- with the sides apart it is
-; a hard SAT problem over the exact 256-bit encodings, which is the point.
+; quotient. The scale the two products share comes out of their difference,
+; so what remains is one multiplication over a difference of quotients:
+; three abstracted operations where the merged query has none. The solve is
+; not waited for -- with the sides apart it is a hard SAT problem over the
+; exact 256-bit encodings, which is the point.
 ; RUN: %solver -s -t --uninterpreted-functions --incremental=off --uf-propagate-equalities=0 --exit-after-CNF %s 2>&1 | %OutputCheck --check-prefix=APART %s
 ; APART-NOT: pre-lowering substituted
-; APART: Abstraction coverage \(candidates -> abstracted\): eq=2->0 compare=0->0 ite=0->0 plus=0->0 mult=2->2 divmod=2->2
+; APART: Abstraction coverage \(candidates -> abstracted\): eq=2->0 compare=0->0 ite=0->0 plus=1->0 mult=1->1 divmod=2->2
 ;
 ; EXPECT: unsat, then no answer (exit after CNF)
 (set-logic QF_UFBV)
