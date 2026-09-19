@@ -1019,8 +1019,8 @@ public:
 
   // Bit-blast fp.mul under surviving native predicates with the hand-written
   // packed-operand circuit (BBfpMul) instead of the SymFPU unpacking
-  // circuits. Experimental; off by default.
-  bool fp_native_arith = false;
+  // circuits.
+  bool fp_native_arith = true;
 
   // Bit-blast fp.div with the hand-written packed-operand circuit (BBfpDiv)
   // instead of SymFPU's. Separate from fp_native_arith because the two
@@ -1028,24 +1028,46 @@ public:
   // native add/mul trades a small circuit win for the word-level
   // simplifier's much larger one, while SymFPU's divider is a restoring
   // shift-subtract array and the native one states the defining relation
-  // instead. Experimental; off by default.
+  // instead.
+  //
+  // Off by default, with fp_native_sqrt, because a defining relation splits
+  // the two answers: it refutes far faster than the array -- the hard set's
+  // unsatisfiable division queries go from 29 solved to 41 -- and searches
+  // far slower, because nothing computes a witness forward. Satisfiable
+  // sqrt and division files regress up to 23x with it on.
   bool fp_native_div = false;
 
   // The remaining operations, each with its own switch so its circuit can
-  // be measured against SymFPU's on its own. --bb.fp-native-all turns on
-  // every one of them together, which is what a build without SymFPU would
-  // need. All experimental, all off by default.
-  bool fp_native_minmax = false;   // fp.min, fp.max
-  bool fp_native_pack = false;     // fp.to_ieee_bv
-  bool fp_native_round = false;    // fp.roundToIntegral
-  bool fp_native_sqrt = false;     // fp.sqrt
-  bool fp_native_fma = false;      // fp.fma
-  bool fp_native_conv = false;     // to_fp from a bit-vector, fp.to_ubv/sbv
-  bool fp_native_rem = false;      // fp.rem
+  // be measured against SymFPU's on its own.
+  bool fp_native_minmax = true;   // fp.min, fp.max
+  bool fp_native_pack = true;     // fp.to_ieee_bv
+  bool fp_native_round = true;    // fp.roundToIntegral
+  bool fp_native_sqrt = false;    // fp.sqrt, see fp_native_div
+  bool fp_native_fma = true;      // fp.fma
+  bool fp_native_conv = true;     // to_fp from a bit-vector, fp.to_ubv/sbv
+  bool fp_native_rem = true;      // fp.rem
 
-  // Set by --bb.fp-native-all, which turns every native floating-point
-  // circuit on at once: the state a build without SymFPU would need.
+  // Where --bb.fp-native-all lands. It sets every switch above rather than
+  // holding a state of its own, so nothing reads this except the code that
+  // applies it; the switches are what the blaster asks.
   bool fp_native_all = false;
+
+  // Set every native floating-point circuit at once. What
+  // --bb.fp-native-all reaches from the command line, and what a caller
+  // building a manager directly needs to select one encoding or the other.
+  void setNativeFloatingPoint(bool on)
+  {
+    fp_native_all = on;
+    fp_native_arith = on;
+    fp_native_div = on;
+    fp_native_minmax = on;
+    fp_native_pack = on;
+    fp_native_round = on;
+    fp_native_sqrt = on;
+    fp_native_fma = on;
+    fp_native_conv = on;
+    fp_native_rem = on;
+  }
 
   // Frame width for the native fp.add datapath.
   //   1  the alignment frame holds a whole significand below the larger
@@ -1057,6 +1079,12 @@ public:
   //      two on the hard floating-point set, and two more files solved
   //      there.
   int64_t fp_add_variant = 2;
+
+  // Assert what normalising by a leading-zero count means -- the top bit of
+  // the shifted vector is set exactly when the input is nonzero. Two clauses
+  // beside each of the native circuits' normalising shifters, which reach
+  // the same fact only once every stage select has resolved.
+  bool fp_normalise_lemma = true;
 
   // Recognise fp.isZero(fp.add ...) and encode the observed zero-result
   // condition directly instead of constructing and packing every result bit.

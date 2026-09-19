@@ -39,9 +39,25 @@ namespace stp
 class FloatBlast::Impl
 {
 public:
-  explicit Impl(STPMgr* bm_)
-      : bm(bm_), node_factory(bm_->defaultNodeFactory)
+  Impl(STPMgr* bm_, bool lowerEverything)
+      : bm(bm_), node_factory(bm_->defaultNodeFactory),
+        lower_everything(lowerEverything)
   {
+  }
+
+  // Will the bit-blaster take this *value* operation natively, leaving the
+  // source node for it to encode? Never in a context that lowers everything:
+  // the model evaluator reduces a term over a model and has no native
+  // circuits of its own, so it needs the operation spelled out whatever the
+  // bit-blaster would do with it.
+  //
+  // Predicates are not asked. A surviving comparison or classification is a
+  // Boolean over packed operands that the evaluator has always handled, and
+  // the direct add-isZero encoding is a specialization of the SymFPU
+  // construction rather than a hand-off to the bit-blaster.
+  bool native(bool userFlag) const
+  {
+    return lower_everything ? false : userFlag;
   }
 
   ASTNode topLevel(const ASTNode& n)
@@ -312,7 +328,7 @@ private:
     // dragging SymFPU back in, and it is the commonest shape in the mixed
     // bit-vector and floating-point logics.
     if (n.GetKind() == FP_TOFP && n.Degree() == 3 &&
-        bm->UserFlags.fp_native_pack &&
+        native(bm->UserFlags.fp_native_pack) &&
         nativeFpFieldFormatIsSafe(n.GetSourceSort()))
     {
       const ASTNode bits = lower(n[2]);
@@ -352,8 +368,9 @@ private:
     // the factory already lowers it to fp.add of the negation.
     const bool nativeArithKind =
         (n.GetKind() == FP_MUL || n.GetKind() == FP_ADD)
-            ? bm->UserFlags.fp_native_arith
-            : (n.GetKind() == FP_DIV ? bm->UserFlags.fp_native_div : false);
+            ? native(bm->UserFlags.fp_native_arith)
+            : (n.GetKind() == FP_DIV ? native(bm->UserFlags.fp_native_div)
+                                     : false);
     if (nativeArithKind && n.Degree() == 3 &&
         (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
         (n.GetKind() == FP_DIV
@@ -375,7 +392,7 @@ private:
     // a bit-vector already, so it lowers rather than resolving as a packed
     // float; only the result is a float.
     if ((n.GetKind() == FP_TOFP_SIGNED || n.GetKind() == FP_TOFP_UNSIGNED) &&
-        bm->UserFlags.fp_native_conv && n.Degree() == 4 &&
+        native(bm->UserFlags.fp_native_conv) && n.Degree() == 4 &&
         (n[2].GetKind() == SYMBOL || n[2].GetKind() == BVCONST) &&
         nativeFpConvFormatIsSafe(n.GetSourceSort(), n[3].GetValueWidth()))
     {
@@ -394,7 +411,7 @@ private:
     }
     // fp.rem, through one division rather than one step per unit of
     // exponent difference.
-    if (n.GetKind() == FP_REM && bm->UserFlags.fp_native_rem &&
+    if (n.GetKind() == FP_REM && native(bm->UserFlags.fp_native_rem) &&
         n.Degree() == 2 && nativeFpRemFormatIsSafe(n.GetSourceSort()))
     {
       const ASTNode left = comparisonLeaf(n[0]);
@@ -415,7 +432,7 @@ private:
     }
     // fp.fma: BBfpAdd's datapath at a doubled significand width, so the
     // product reaches the adder exactly and there is a single rounding.
-    if (n.GetKind() == FP_FMA && bm->UserFlags.fp_native_fma &&
+    if (n.GetKind() == FP_FMA && native(bm->UserFlags.fp_native_fma) &&
         n.Degree() == 4 &&
         (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
         nativeFpFmaFormatIsSafe(n.GetSourceSort()))
@@ -442,7 +459,8 @@ private:
     // fp.roundToIntegral: shift the fractional bits out of the significand,
     // round at the units place by the mode, and renormalise the exact
     // integer that results.
-    if (n.GetKind() == FP_ROUNDTOINTEGRAL && bm->UserFlags.fp_native_round &&
+    if (n.GetKind() == FP_ROUNDTOINTEGRAL &&
+        native(bm->UserFlags.fp_native_round) &&
         n.Degree() == 2 &&
         (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
         nativeFpDivFormatIsSafe(n.GetSourceSort()))
@@ -462,7 +480,7 @@ private:
     // Q*Q + R = N with R <= 2Q is the integer square root, and the squaring
     // is half a multiply's conjunctions. Needs the divider's wider exponent
     // envelope because it normalises its operand first.
-    if (n.GetKind() == FP_SQRT && bm->UserFlags.fp_native_sqrt &&
+    if (n.GetKind() == FP_SQRT && native(bm->UserFlags.fp_native_sqrt) &&
         n.Degree() == 2 &&
         (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
         nativeFpDivFormatIsSafe(n.GetSourceSort()))
@@ -490,7 +508,7 @@ private:
     // alive for the commonest shape in the corpus, and the selector child
     // is never constant so the node is never fully constant either.
     if ((n.GetKind() == FP_MIN || n.GetKind() == FP_MAX) &&
-        bm->UserFlags.fp_native_minmax && n.Degree() == 3 &&
+        native(bm->UserFlags.fp_native_minmax) && n.Degree() == 3 &&
         nativeFpFieldFormatIsSafe(n.GetSourceSort()))
     {
       const ASTNode left = comparisonLeaf(n[0]);
@@ -530,7 +548,7 @@ private:
     // rounds correctly there, but a circuit that disagrees with the
     // constant evaluator makes model validation reject its own models.
     // Until the evaluator side is fixed, the gate keeps the two aligned.
-    if (n.GetKind() == FP_TOFP && bm->UserFlags.fp_native_arith &&
+    if (n.GetKind() == FP_TOFP && native(bm->UserFlags.fp_native_arith) &&
         n.Degree() == 4 &&
         (n[2].GetKind() == SYMBOL || n[2].GetKind() == BVCONST) &&
         n[0].GetUnsignedConst() >= 3 &&
@@ -1106,7 +1124,7 @@ private:
         // the requested width says the value was out of range. The
         // rounding mode and the unspecified-value child are bit-vectors
         // and lower either way; only the float stays packed.
-        if (bm->UserFlags.fp_native_conv &&
+        if (native(bm->UserFlags.fp_native_conv) &&
             nativeFpConvFormatIsSafe(n[2].GetSourceSort(), n.GetValueWidth()))
         {
           const ASTNode operand = comparisonLeaf(n[2]);
@@ -1136,7 +1154,7 @@ private:
         // canonical pattern: one mux, where canonicalPacked spells a full
         // unpack and re-encode. A constant operand must still fold through
         // SymFPU, as the constant evaluator does.
-        if (bm->UserFlags.fp_native_pack &&
+        if (native(bm->UserFlags.fp_native_pack) &&
             nativeFpFieldFormatIsSafe(n[0].GetSourceSort()))
         {
           const ASTNode operand = comparisonLeaf(n[0]);
@@ -1277,6 +1295,7 @@ private:
 
   STPMgr* bm;
   NodeFactory* node_factory;
+  const bool lower_everything = false;
   FloatBlast::Statistics stats;
 
   // Only the source/target FP boundary survives between calls. Generic BV
@@ -1289,7 +1308,10 @@ private:
   UnpackedMap unpacked_cache;
 };
 
-FloatBlast::FloatBlast(STPMgr* bm_) : impl(new Impl(bm_)) {}
+FloatBlast::FloatBlast(STPMgr* bm_, bool lowerEverything)
+    : impl(new Impl(bm_, lowerEverything))
+{
+}
 
 FloatBlast::~FloatBlast() = default;
 
@@ -1298,8 +1320,10 @@ ASTNode FloatBlast::topLevel(const ASTNode& n) { return impl->topLevel(n); }
 ASTNode FloatBlast::lowerOperation(STPMgr* bm, const ASTNode& n)
 {
   // A context of its own: these callers lower one node, unrelated to the
-  // solve's, and must not share or disturb its caches.
-  FloatBlast lower(bm);
+  // solve's, and must not share or disturb its caches. They also want the
+  // operation spelled out rather than left for a native circuit -- both are
+  // evaluating it here and now.
+  FloatBlast lower(bm, true /*lowerEverything*/);
   return lower.topLevel(n);
 }
 

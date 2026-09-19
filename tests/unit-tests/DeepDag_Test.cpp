@@ -1092,6 +1092,10 @@ bool simplifyInternallyGeneratedFpTermOk(Context& c, unsigned exponentWidth)
   const ASTNode source = c.hf->CreateNode(FP_ISNAN, remainder);
   c.roots.push_back(source);
 
+  // The generated circuit this exercises is SymFPU's; the native circuits
+  // leave the source operation for the bit-blaster and lower nothing here.
+  c.mgr.UserFlags.setNativeFloatingPoint(false);
+
   FpEncodingContext encoding(&c.mgr);
   const ASTNode prepared = encoding.prepare(source);
   const ASTNode lowered = encoding.lowerPrepared(prepared);

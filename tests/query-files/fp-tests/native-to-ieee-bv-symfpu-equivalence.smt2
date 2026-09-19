@@ -6,7 +6,7 @@
 ; one mux differs from SymFPU's unpack-and-re-encode. The pack count falls
 ; from three to one because two of the three round trips became that mux.
 ;
-; RUN: %solver --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-minmax=true --bb.fp-native-pack=true -s %s 2>&1 | %OutputCheck %s
+; RUN: %solver --bb.fp-native-all=false --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-minmax=true --bb.fp-native-pack=true -s %s 2>&1 | %OutputCheck %s
 ;
 ; CHECK: FloatBlast: 3 SymFPU operations, 6 unpacks, 1 packs
 ; CHECK: ^unsat
