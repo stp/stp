@@ -451,24 +451,28 @@ declare -a g_simplify=(
 "--linear-form=1"
 "--linear-form=1 --linear-form-addend-limit=4"
 
-# HELD BACK, not absent: --congruence-candidates=1, which proves the
-# equalities a query implies between the terms it applies one operator to and
-# asserts the ones that hold. It is worth fuzzing -- 2/17 on the n-ary entry
-# and 7/26 and 8/20 on the two UF ones -- but on a query with arrays it
-# aborts:
+# Proving the equalities a query implies between the terms it applies one
+# operator to, and asserting the ones that hold. Wants repeated applications
+# of the same operator, so it is the n-ary entry (2/17) and the two UF ones
+# (7/26 and 8/20) that reach it, and nothing on the plain entries.
+#
+# KNOWN TO ABORT, deliberately left drawing anyway. On a query with arrays:
 #
 #   Fatal Error: BBTerm: Illegal kind to BBTerm  (READ (WRITE ...) ...)
 #
 # 4 files in 30 on the QF_AUFBV entry and 1 in 30 on the deep-write-chain
-# QF_ABV one, on the option alone with nothing else set. Exit 255, no answer,
-# where the default answers fine, so those files would all be saved as
-# mismatches. Restore this entry once that is fixed.
+# QF_ABV one, on the option alone with nothing else set -- exit 255, no
+# answer, where the default answers fine. Every one of those files is saved
+# as a mismatch, so an iteration drawing this entry with an array logic fills
+# FAIL_DIR with hundreds of copies of the one bug. Triage by grepping
+# what-happened.txt for the option name; what is left is everything else.
+# Drop this entry back to a comment if that gets in the way of a hunt.
 #
-# Its two budgets get no entry either way: a generated query offers fewer
-# candidates than --congruence-candidate-limit's 64 and settles each inside
+# Its two budgets get no entry: a generated query offers fewer candidates
+# than --congruence-candidate-limit's 64 and settles each inside
 # --congruence-candidate-conflicts' 20000, so neither binds (0/26), and
 # limit=0 just turns the pass back off.
-#"--congruence-candidates=1"
+"--congruence-candidates=1"
 
 # Not here: --switch-word, which turns the word-level solver off. A generated
 # file has no top-level equation for it to solve, so both settings emit the
@@ -792,23 +796,27 @@ declare -a g_fp=(
 "--bb.fp-native-minmax=1"
 "--bb.fp-native-arith=1 --bb.fp-add-variant=1"
 
-# HELD BACK, not absent: --bb.fp-native-pack=1, --bb.fp-native-conv=1, and
-# --bb.fp-native-all=1 (which turns both on) each abort on the QF_ABVFP
-# entry, 16, 4 and 18 files in 30 respectively, with
+# The packed-carrier conversions. Worth having: 13/28 and 2/28 changed on
+# the plain floating-point entry, 8/11 and 7/11 on the array one, and
+# --bb.fp-native-all is every native circuit at once, 17/28 and 8/11.
+#
+# KNOWN TO ABORT, deliberately left drawing anyway. All three fail on the
+# QF_ABVFP entry -- 16, 4 and 18 files in 30 respectively -- with
 #
 #   STP Error: floating-point model encoding made no progress: (FP_TO_IEEE_BV ..
 #
 # from CounterExample.cpp: the blaster handled the term natively, so the
 # lowering the model evaluator asks for returns it unchanged and the
-# evaluator gives up. Exit 255, no answer, on a query the default answers
-# fine -- so every one of those files would be saved as a mismatch, and a
-# single iteration drawing this entry would bury FAIL_DIR under ~1300 copies
-# of the one bug. Restore these three entries once that is fixed; they are
-# worth having -- 13/28 and 2/28 changed -- and clean on the plain
-# floating-point entry today.
-#"--bb.fp-native-pack=1"
-#"--bb.fp-native-conv=1"
-#"--bb.fp-native-all=1"
+# evaluator gives up. Totalising an out-of-range fp.to_ubv is what puts an
+# FP_TO_IEEE_BV there, which is why the plain floating-point entry is clean
+# and the array one is not. Exit 255, no answer, on a query the default
+# answers fine, so an iteration drawing the pack entry with the QF_ABVFP
+# logic saves over half its files as mismatches -- ~1300 of 2500. Triage by
+# grepping what-happened.txt for the option name. Drop these back to
+# comments if that gets in the way of a hunt.
+"--bb.fp-native-pack=1"
+"--bb.fp-native-conv=1"
+"--bb.fp-native-all=1"
 
 # Absent because there is nothing to blast: --bb.fp-native-fma. FuzzSMT
 # writes no fp.fma in either entry, so the option is byte-identical on all
