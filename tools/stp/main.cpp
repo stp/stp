@@ -267,6 +267,12 @@ void ExtraMain::create_options()
             "costs the cube of its length to re-nest",
             simp_group);
 
+  bool_arg("--common-factor", bm->UserFlags.enable_common_factor,
+           "Take a factor that several of a sum's products have in common "
+           "out of the sum, so that one multiplication is built where there "
+           "were several (needs --flattening)",
+           simp_group);
+
   bool_arg("--linear-form", bm->UserFlags.enable_linear_form,
            "Rewrite every bit-vector term into a canonical linear "
            "combination of its non-linear sub-terms, so that two equal "
@@ -1253,8 +1259,9 @@ void ExtraMain::create_options()
                 "--disable-equality", "--unconstrained-variable-elimination",
                 "--flattening", "--rewriting", "--split-extracts",
                 "--ite-context-simplifications", "--use-intervals",
-                "--pure-literals", "--common-subsum", "--pair-extract",
-                "--merge-same", "--distinct-ordering", "--linear-form"});
+                "--pure-literals", "--common-subsum", "--common-factor",
+                "--pair-extract", "--merge-same", "--distinct-ordering",
+                "--linear-form"});
 
   // Likewise for what disableSizeIncreasingSimplifications() forces.
   excludes_all("--size-reducing-only",
