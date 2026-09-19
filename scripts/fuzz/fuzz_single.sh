@@ -244,7 +244,12 @@ else
   echo "results: $FAIL_DIR"
 fi
 
-supported=$($STP --help 2>&1 | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*' | sort -u)
+# Every option-looking token in the help text, which is a superset of the
+# declared options: the descriptions name options too, and those names are
+# real. The trailing dot goes because a description ending "... needs
+# --bb.mult-v2." would otherwise contribute an option that does not exist.
+supported=$($STP --help 2>&1 | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*' \
+            | sed 's/\.$//' | sort -u)
 if [ -z "$supported" ]; then
   echo "Could not get the option list from $STP" >&2
   exit 1
@@ -352,6 +357,12 @@ rm -f probe.smt2
 # mismatch. `excludes_all` at the end of create_options() in tools/stp/main.cpp
 # is the list to check an entry against.
 #
+# The other way to get a rejected command line is to name one option in two
+# groups that can be drawn together: both pickers supply it and CLI11 refuses
+# the repeat. That one the script checks for itself, after the groups are
+# read -- see the clash check below -- because it is invisible to the
+# per-entry probe that catches everything else here.
+#
 # An entry has to be non-default AND has to actually change the output,
 # otherwise it silently re-runs the baseline and wastes the iteration. Check it
 # against the "arg (=N)" defaults in `stp --help`, then confirm the emitted CNF
@@ -371,9 +382,17 @@ rm -f probe.smt2
 # propagation having produced MultiplicationStats, which does not happen under
 # the default multiplication variant. Paired with variant 5 it does bite, so
 # that is the form kept below.
+#
+# Three options must never get an entry, whatever they change: --aig-node-budget,
+# --max-num-confl and --max-time all abandon the query through the soft-timeout
+# path, so STP answers "unknown" where the checker answered sat or unsat and
+# every file is saved as a mismatch. A budget is what -k gives the whole run,
+# not something to draw per iteration. The same goes for the --print-back-*
+# and --parse-only options, which replace the answer with something else
+# entirely.
 
-declare -a OPTION_GROUPS=(simplify mult bitblast abstract array uf fp cnf
-                          solver bias misc)
+declare -a OPTION_GROUPS=(simplify mult div shift bitblast abstract array uf
+                          fp cnf solver bias misc)
 
 # A group named here is drawn only when the iteration's logic matches the
 # pattern, which is how options that do nothing outside one theory stay out of
@@ -422,9 +441,53 @@ declare -a g_simplify=(
 "--unconstrained-variable-elimination=0"
 "--aig-rewrite-passes=1"
 
+# Canonical linear combinations. Only the n-ary entry builds a term worth
+# re-spelling: 5/17 there against 0 on both plain entries and 0 on the wide
+# one. The addend limit is what stops a constant being distributed over a
+# long sum, so the second entry pins it low enough to bind (4/17).
+# It has to live in this group rather than one of its own:
+# --disable-simplifications excludes it, and drawn separately the two would
+# be offered together and the command line refused.
+"--linear-form=1"
+"--linear-form=1 --linear-form-addend-limit=4"
+
+# HELD BACK, not absent: --congruence-candidates=1, which proves the
+# equalities a query implies between the terms it applies one operator to and
+# asserts the ones that hold. It is worth fuzzing -- 2/17 on the n-ary entry
+# and 7/26 and 8/20 on the two UF ones -- but on a query with arrays it
+# aborts:
+#
+#   Fatal Error: BBTerm: Illegal kind to BBTerm  (READ (WRITE ...) ...)
+#
+# 4 files in 30 on the QF_AUFBV entry and 1 in 30 on the deep-write-chain
+# QF_ABV one, on the option alone with nothing else set. Exit 255, no answer,
+# where the default answers fine, so those files would all be saved as
+# mismatches. Restore this entry once that is fixed.
+#
+# Its two budgets get no entry either way: a generated query offers fewer
+# candidates than --congruence-candidate-limit's 64 and settles each inside
+# --congruence-candidate-conflicts' 20000, so neither binds (0/26), and
+# limit=0 just turns the pass back off.
+#"--congruence-candidates=1"
+
 # Not here: --switch-word, which turns the word-level solver off. A generated
 # file has no top-level equation for it to solve, so both settings emit the
 # same CNF on all 170 files measured across the logic entries below.
+#
+# Nor these four, each measured byte-identical on all 150 files across the
+# five logic entries they could bite on:
+#   --mulo-recognition=0   rewrites the double-width spellings of an overflow
+#                          check into the overflow predicates. FuzzSMT emits
+#                          bvumulo and friends directly, so there is never a
+#                          spelling left to recognise.
+#   --distinct-ordering=0  fixes one of the n! orderings of a (distinct ...)
+#                          over variables used nowhere else. FuzzSMT only ever
+#                          writes the binary (distinct a b), which is a
+#                          disequality with no ordering to fix.
+#   --skeleton-preproc=1   and --embedded-constraints=1 never fire on a
+#                          generated query.
+# And not --common-subsum-budget: --common-subsum itself is already absent
+# for finding nothing to factor, so capping its tally changes nothing either.
 )
 
 # Multiplication: the variants are alternative settings of one option, so they
@@ -471,25 +534,82 @@ declare -a g_mult=(
 "--bb.mult-variant=5 --bb.mult-v2=1"
 )
 
-# The rest of bit-blasting. These are independent of each other, but keeping
-# them in one group bounds how far a single iteration strays from the default.
+# Division and remainder. One group because these are alternatives in fact:
+# v1 to v5 all rewire the same divider circuit, and the last three replace it
+# outright, so an iteration drawing two would be testing whichever the
+# blaster consults first.
 #
-# --bb.div-v2 and --bb.add-v1 are the exception to the rule that an entry has
-# to change the output: both alternatives are the same function written two
-# ways -- a strict less-than against the negation of the reversed one, and
-# Majority() against the three-conjunction OR -- and structural hashing folds
-# them back together, so the CNF is byte-identical on all 170 files measured,
-# under every rung of the cnf group. They are kept because the alternative
-# encoder does run: what is being fuzzed is the code, not the difference.
-declare -a g_bitblast=(
+# --bb.div-v2 is the exception to the rule that an entry has to change the
+# output: both settings are the same function written two ways -- a strict
+# less-than against the negation of the reversed one -- and structural
+# hashing folds them back together, so the CNF is byte-identical on all 170
+# files measured, under every rung of the cnf group. It is kept because the
+# alternative encoder does run: what is being fuzzed is the code, not the
+# difference.
+#
+# The rest do change it, on every logic entry that divides at all: v4 2/14,
+# 9/17 and 2/12 on the three bit-vector entries, v5 3/14, 8/17 and 2/12,
+# --bb.div-by-mult 7/14, 12/17 and 5/12, --bb.div-lemmas 5/14, 10/17 and
+# 5/12. --bb.div-by-const only applies from --bb.div-by-const-width, which
+# defaults to 64: opting out bites on the wide entry alone (1/12), and the
+# width has to be spelled out for the other entries to reach the pass at all.
+declare -a g_div=(
 ""
 "--bb.div-v1=0"
 "--bb.div-v2=0"
 "--bb.div-v3=1"
+"--bb.div-v4=1"
+"--bb.div-v5=1"
+"--bb.div-by-mult=1"
+"--bb.div-lemmas=1"
+"--bb.div-by-const=0"
+"--bb.div-by-const-width=8"
+)
+
+# Symbolic-amount shifts: alternative settings of one option, so one group.
+#
+# Which entry bites depends on the operand width the iteration's logic draws.
+# The selector variants 1 to 3 only apply between --bb.shift-onehot-minw (33)
+# and --bb.shift-onehot-maxw (64), so variant 1 on its own reaches only the
+# wide entry (4/12) and nothing else; dropping the floor to 1 is what lets
+# the other logics exercise them (8/17 on the n-ary entry, 2/14 on plain
+# QF_BV). Variant 4 is the opposite: it adds the exact prime implicates for
+# shift amounts up to 5 bits wide, so it wants narrow operands -- 19/26 and
+# 11/20 on the two UF entries, whose -Mbw is 8, against nothing on the plain
+# and wide ones. The maxw entry narrows the window from the other end.
+declare -a g_shift=(
+""
+"--bb.shift-variant=1"
+"--bb.shift-variant=1 --bb.shift-onehot-minw=1"
+"--bb.shift-variant=2 --bb.shift-onehot-minw=1"
+"--bb.shift-variant=3 --bb.shift-onehot-minw=1"
+"--bb.shift-variant=1 --bb.shift-onehot-minw=1 --bb.shift-onehot-maxw=8"
+"--bb.shift-variant=4"
+)
+
+# The rest of bit-blasting. These are independent of each other, but keeping
+# them in one group bounds how far a single iteration strays from the default.
+#
+# --bb.add-v1 is here for the same reason --bb.div-v2 is in the division
+# group: Majority() against the three-conjunction OR is the same function
+# twice, and the CNF is byte-identical on all 170 files measured.
+#
+# The two overflow detectors are on by default since #1113 and #1114, so the
+# entries are the opt-outs, back to the double-width product each replaced:
+# 3/14, 7/17 and 6/12 for unsigned, 5/14, 9/17 and 4/12 for signed. The
+# multiply residue implicates are additions to whatever --bb.mult-variant
+# built, which is why they are here and not in the mult group: 4/14, 13/17
+# and 8/12 for the 3-bit block, 6/14, 14/17 and 8/12 for the 4-bit one.
+declare -a g_bitblast=(
+""
 "--bb.add-v1=0"
 "--bb.add-v2=0"
 "--bb.vle-v1=0"
 "--bb.conjoin-constant=1"
+"--bb.umulo-schulte=0"
+"--bb.smulo-schulte=0"
+"--bb.mult-lemmas=3"
+"--bb.mult-lemmas=4"
 )
 
 # Lazy bit-vector abstraction, the CEGAR path that replaces a wide operation
@@ -505,15 +625,70 @@ declare -a g_bitblast=(
 # CNF is written and so is invisible to a CNF compare. They were checked
 # against the "Abstraction refinement:" counters `stp -t` prints, and move
 # them on 4 to 9 files in 30.
+#
+# The counts below are from that measurement, as changed/30 on the n-ary,
+# wide and QF_ABV entries respectively. Entries pairing several knobs are
+# deliberate: --bv-term-abstraction-ite, -plus and -compare each widen what
+# is abstracted and are independent of each other, so one entry turning all
+# three on covers the family without spending three draws on it.
+#
+# --bv-term-abstraction-profile excludes --bv-term-abstraction-schema-groups
+# and --bv-term-abstraction-rounds (they set the same two things), so no
+# entry may pair a profile with either. 'qualified' has no entry: it is the
+# inherited base, and measured identical to the default on all 90 files.
 declare -a g_abstract=(
 ""
 "--bv-eq-abstraction=1 --bv-abstraction-width=8"
 "--bv-eq-abstraction=1 --bv-abstraction-width=8 --bv-eq-refine-width=1"
+# An equality one side of which the blast knows entirely. 12/30 and 8/30 on
+# the two bit-vector entries.
+"--bv-eq-abstraction=1 --bv-abstraction-width=8 --bv-eq-abstraction-constant-side=1"
 "--bv-term-abstraction=1 --bv-abstraction-width=8"
 "--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-schemas=0"
 "--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-profile=aggressive"
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-profile=broad"
 "--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-inc-bitblast=1"
 "--bv-term-abstraction=1 --bv-term-abstraction-inc-bitblast=1"
+# The cheaper kinds, which the default leaves alone. Separately, ite is
+# 14/30, 10/30 and 16/30, plus 9/30, 6/30 and 9/30, compare 15/30, 12/30 and
+# 19/30; the entry turning all three on is 16/30 on the n-ary one.
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-ite=1 --bv-term-abstraction-plus=1 --bv-term-abstraction-compare=1"
+# Narrowing the scope the other way, which is what leaves division or
+# multiplication encoded exactly from the start: 14/30, 10/30, 21/30 for the
+# multiply scope and 11/30, 6/30, 14/30 for the DIV/MOD override.
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-mult=0"
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-divmod=0"
+# How long a record may enumerate operand pairs before it gives up and
+# encodes the operation exactly. 0 never escalates, 1 escalates at once,
+# and the divisor scales the allowance with the operand width.
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-rounds=0"
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-rounds=1 --bv-term-abstraction-value-divisor=8"
+# The constant-operand shortcut is on by default, so these opt out of it and
+# then uncap what it caps: 7/30, 6/30, 10/30 either way.
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-constant-operands=0"
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-constant-operand-limit=0"
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-divmod-value-limit=1"
+# The whole experimental schema stack, and none of it.
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-schema-groups=all"
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-schema-groups=none"
+
+# Reaching the same abstraction from a UF solve. These belong to the uf
+# group by subject, but they are here because --bv-abstraction-width is: an
+# iteration drawing a width from each group hands STP the option twice and
+# the command line is refused, which is what the clash check below forbids.
+# The price of keeping them here is that they are also drawn for the nine
+# non-UF logic entries, where they do nothing.
+#
+# --uf-bv-term-abstraction's default of 'auto' engages only for a query
+# holding an operation at or above the width, so at the UF entries' -Mbw 8
+# it declines. Spelled on with the width down at 8, 13/30 of them abstract
+# something, and the two knobs that only matter once one does then bite as
+# well: 6/30 for running the congruence checker beside the abstraction's
+# refinement, 8/30 for the quotient-threshold schemas. ('off' gets no entry:
+# it is what auto already does on these files.)
+"--bv-abstraction-width=8 --uf-bv-term-abstraction=on"
+"--bv-abstraction-width=8 --uf-bv-term-abstraction=on --uf-check-during-bv-refinement=0"
+"--bv-abstraction-width=8 --uf-bv-term-abstraction=on --uf-quotient-threshold-schemas=0"
 )
 
 # Arrays, drawn only for the logics that have them. One group because these
@@ -526,6 +701,12 @@ declare -a g_abstract=(
 # generator writes except the deep-chain one, so --ackermanize is inert on the
 # rest (0/30) and changes 18/30 there; a budget of zero is the opposite
 # setting, and changes 9/30 on the extensional entry and nothing on the chain.
+#
+# The index hints are the exception to the one-entry-per-alternative rule
+# being enough: 'phase' and 'decide' differ from the default and from each
+# other, so both are here. They need an array read whose index is free, which
+# is the deep-chain entry (17/30) and the QF_AUFBV one (9/30); on the other
+# array entries the indices are pinned and neither setting moves a counter.
 declare -a g_array=(
 ""
 "--ackermanize"
@@ -534,6 +715,8 @@ declare -a g_array=(
 "--lazy-write-reads-depth=0"
 "--lazy-write-reads-depth=1"
 "--lazy-write-reads-depth=8"
+"--array-index-hints=phase"
+"--array-index-hints=decide"
 )
 
 # Uninterpreted functions, drawn only for the UF logics. The eager policy and
@@ -549,6 +732,29 @@ declare -a g_uf=(
 "--uf-ackermann off --uf-lemmas-per-round=1"
 "--uf-ackermann off --uf-lemmas-per-round=0"
 "--uf-ackermann off --uf-phase-hints=1"
+
+# Not here, though they are UF options: the three --uf-bv-term-abstraction
+# entries. They need --bv-abstraction-width spelled down to 8, and that
+# option belongs to the abstract group, which is drawn for the UF logics
+# too -- naming it in both is the one thing the clash check further down
+# refuses. They live in the abstract group instead.
+#
+# Deliberately absent, each measured identical on all 46 files the two UF
+# entries emit a CNF for, with the UF counters `stp -s` prints identical too:
+#   --uf-propagate-equalities=0  the pass substitutes a couple of asserted
+#                                atoms on 6 files in 30 and the CNF comes out
+#                                byte-identical anyway, so turning it off
+#                                only skips work nothing depended on.
+#   --uf-narrow-results=0        narrows result sorts used only for equality;
+#                                FuzzSMT feeds every application into
+#                                arithmetic as well, so none qualifies.
+#   --uf-skeleton-preproc=0      the skeleton forces nothing on these queries.
+#   --uf-inject-args=1           wants equality-only declarations.
+#   --uf-sort-width              only sizes a sort from (declare-sort S 0),
+#                                which FuzzSMT never writes.
+# Nor --uninterpreted-functions, which decides UF for a logic whose name
+# omits it: FuzzSMT always names the logic correctly, so on the UF entries it
+# asks for what already happens and on the others there is no UF to decide.
 )
 
 # Floating-point bit-blasting, drawn only for the FP logics: with no FP in the
@@ -563,12 +769,51 @@ declare -a g_uf=(
 # --bb.fp-native-known-sign, which reads zero on both entries even paired with
 # the --bb.fp-native-domain it needs, and the whole --fp-domain-* prepass
 # family, which wants asserted bounds a generated file does not carry.
+#
+# #1117 gave every remaining operation a native circuit, one option each.
+# Counts below are out of the files that emit a CNF at all: 28 of the plain
+# floating-point entry's 30, and 11 of the QF_ABVFP entry's 30. fp.sqrt and
+# fp.div are the ones the plain entry reaches most (7/28 and 4/28); the
+# conversions live on the array entry (7/11 against 2/28), which is where
+# to_ubv and to_sbv are generated. --bb.fp-add-variant picks the alignment
+# frame for the *native* adder, so it only means anything once
+# --bb.fp-native-arith has put that adder in place -- on its own it is
+# byte-identical on all 39, paired it changes 15/28 and 7/11.
 declare -a g_fp=(
 ""
 "--bb.fp-native-cmp=0"
 "--bb.fp-native-arith=1"
 "--bb.fp-native-add-iszero=0"
 "--bb.fp-native-domain=0"
+"--bb.fp-native-sqrt=1"
+"--bb.fp-native-div=1"
+"--bb.fp-native-round=1"
+"--bb.fp-native-rem=1"
+"--bb.fp-native-minmax=1"
+"--bb.fp-native-arith=1 --bb.fp-add-variant=1"
+
+# HELD BACK, not absent: --bb.fp-native-pack=1, --bb.fp-native-conv=1, and
+# --bb.fp-native-all=1 (which turns both on) each abort on the QF_ABVFP
+# entry, 16, 4 and 18 files in 30 respectively, with
+#
+#   STP Error: floating-point model encoding made no progress: (FP_TO_IEEE_BV ..
+#
+# from CounterExample.cpp: the blaster handled the term natively, so the
+# lowering the model evaluator asks for returns it unchanged and the
+# evaluator gives up. Exit 255, no answer, on a query the default answers
+# fine -- so every one of those files would be saved as a mismatch, and a
+# single iteration drawing this entry would bury FAIL_DIR under ~1300 copies
+# of the one bug. Restore these three entries once that is fixed; they are
+# worth having -- 13/28 and 2/28 changed -- and clean on the plain
+# floating-point entry today.
+#"--bb.fp-native-pack=1"
+#"--bb.fp-native-conv=1"
+#"--bb.fp-native-all=1"
+
+# Absent because there is nothing to blast: --bb.fp-native-fma. FuzzSMT
+# writes no fp.fma in either entry, so the option is byte-identical on all
+# 60 files. It needs a logic entry that generates one before it is worth
+# adding.
 )
 
 # CNF generation. One option selects between three encoders, so the rungs
@@ -591,6 +836,9 @@ declare -a g_cnf=(
 "--cnf-generation-effort=new-very-low"
 "--cnf-generation-effort=new-low"
 "--cnf-generation-effort=new-medium"
+# The fourth new-* rung. Missing until now, and it changes every file that
+# emits a CNF at all -- 14/14 and 17/17 on the two plain entries.
+"--cnf-generation-effort=new-high"
 "--cnf-generation-effort=gia-low"
 "--cnf-generation-effort=gia-high"
 "--cnf-generation-effort=gia-very-high"
@@ -608,6 +856,12 @@ declare -a g_solver=(
 # 'auto' turns it on only for problems with array operations, so what this
 # entry means depends on the logic the iteration drew.
 "--cadical --cadical-factor auto"
+# Keeping cadical's search trail across the solve calls of a refinement loop
+# is on by default, so the entry is the opt-out, back to restarting each
+# round from the root. It needs a loop that runs more than one round, which
+# is the UF entries: 5/30 there, and nothing where refinement settles first
+# time. Other backends have no trail to keep, hence the pairing.
+"--cadical --refinement-trail-reuse=0"
 "--cryptominisat"
 "--cryptominisat --threads=4"
 "--simplifying-minisat"
@@ -623,9 +877,29 @@ declare -a g_bias=(
 "--search-bias sat"
 )
 
+# The incremental driver keeps the SAT solver and the bit-blasted encoding
+# across (check-sat) commands. A generated file has exactly one, and the
+# default 'auto' only switches over for an input that pushes, so without an
+# entry here the whole driver goes unfuzzed. 'on' engages it from the first
+# solve, which a profile confirms: the encoding is built and solved through
+# the driver rather than the batch pipeline on every file. --core-only is
+# the same driver without its fitted preprocessing and adaptive policies,
+# and changes the work counters on 30/30.
+#
+# The rest of the --incremental-* family gets no entry: the CBP rollback
+# knobs, the rebuild limits, the promotion and inprobing settings all only
+# act from the second check onwards, and they move no counter on 30/30
+# single-check files. Fuzzing them needs the generated files rewritten into
+# push/pop sessions, which this script does not do.
+#
+# Sharing this group with --interactive makes one iteration in two an
+# incremental one. Giving these entries a group of their own would raise
+# that, at the cost of every other iteration carrying the driver too.
 declare -a g_misc=(
 ""
 "--interactive=1"
+"--incremental=on"
+"--incremental=on --incremental-core-only"
 )
 
 # --cadical-factor is accepted by the option parser whatever CaDiCaL is linked,
@@ -705,6 +979,89 @@ if [ "${#dropped[@]}" -gt 0 ]; then
   echo >&2
 fi
 
+# The dropped check above catches an entry naming an option the binary lacks.
+# This one catches the opposite, and is what keeps this file honest as options
+# are added: an option the binary has that no group mentions. Without it a new
+# option simply never gets fuzzed, and nothing says so.
+#
+# Everything genuinely out of scope is listed here with the reason, so the
+# warning only fires for something new. Adding an option to this list is a
+# decision to leave it unfuzzed -- prefer an entry in a group.
+declare -a NOT_FUZZED=(
+# Answer-replacing: these make STP print something that is not the sat/unsat
+# the checker gave, so every file would be saved as a mismatch.
+--help --version --parse-only --output-CNF --exit-after-CNF
+--aig-node-budget --max-num-confl --max-time
+--print-stpinput --print-back-CVC --print-back-SMTLIB2 --print-back-GDL
+--print-back-dot --print-counterex --print-counterexbin --print-arrayval
+--print-functionstat --print-quickstat --print-nodes --print-output
+# Already fixed by the harness: -d is passed to every STP run, and the input
+# is SMT-LIB2 by extension.
+--check-sanity --CVC --SMTLIB1 --SMTLIB2
+# Measured inert on every generated file; see the group comments below for
+# what each would need before it is worth an entry.
+--bb.fp-native-fma --bb.fp-native-known-sign
+--fp-domain-simplify --fp-domain-derived-bounds --fp-domain-extremal-selectors
+--fp-domain-sound-zero-facts --fp-domain-row-bounds
+--mulo-recognition --distinct-ordering --skeleton-preproc
+--embedded-constraints --common-subsum --common-subsum-budget --switch-word
+--uninterpreted-functions --uf-propagate-equalities --uf-narrow-results
+--uf-skeleton-preproc --uf-inject-args --uf-sort-width
+--congruence-candidate-limit --congruence-candidate-conflicts
+# Only act from the second (check-sat) onwards. A generated file has one, so
+# fuzzing these needs the files rewritten into push/pop sessions, which this
+# script does not do.
+--incremental-auto-engage-at --incremental-profile --incremental-cbp-reset
+--incremental-cbp-bootstrap-limit --incremental-cbp-feed-cap
+--incremental-base-resimplify-limit --incremental-reencode-limit
+--incremental-semantic-cache-limit --incremental-promote-units
+--incremental-piece-rewriting --incremental-scoped-preprocessing
+--incremental-inprobing
+)
+
+# $supported is the wrong list to check against: it harvests every
+# option-looking token in the help text, so a description reading "unlike
+# --rounds this changes ..." contributes --rounds, and an underscore alias
+# spelt --max_num_confl contributes --max. Take the declared options instead,
+# which are the ones anchored at the start of a help line, after an optional
+# short form. Where a line gives two spellings the first is taken, which is
+# the one the groups use.
+# The trailing dot goes for the same reason it does above: a description
+# wrapping onto a line that starts "--bb.mult-v2. 17 accumulates ..." looks
+# like a declaration to an anchored match.
+declared=$($STP --help 2>&1 | sed -e 's/ Excludes:.*//' \
+           | grep -oP '^\s+(-\w,\s+)?\K--[a-zA-Z0-9.][a-zA-Z0-9.-]*' \
+           | sed 's/\.$//' | sort -u)
+
+# Read out of this file rather than out of the shell variables, so that a
+# commented-out entry counts as mentioned: one of those is a deliberate record
+# of an option known about and held back, not an oversight. $script_dir
+# because the working directory was changed further up.
+grouped=$(sed -n '/^declare -a g_/,/^)$/p' "$script_dir/${BASH_SOURCE[0]##*/}" \
+          | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*' | sed 's/\.$//' | sort -u)
+# The options a logic entry carries are fuzzed too, on every iteration that
+# draws that logic -- --array-equality is only ever supplied that way.
+grouped=$(printf '%s\n%s\n' "$grouped" \
+          "$(printf '%s\n' "${LOGIC_SETS[@]}" | sed 's/^[^|]*|//' \
+             | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*')" | sort -u)
+declare -a unfuzzed=()
+while read -r opt; do
+  [ -z "$opt" ] && continue
+  if grep -qx -- "$opt" <<< "$grouped"; then continue; fi
+  if printf '%s\n' "${NOT_FUZZED[@]}" | grep -qx -- "$opt"; then continue; fi
+  unfuzzed+=("$opt")
+done <<< "$declared"
+if [ "${#unfuzzed[@]}" -gt 0 ]; then
+  echo >&2
+  echo "WARNING: ${#unfuzzed[@]} option(s) this build has are named by no group:" >&2
+  printf '    %s\n' "${unfuzzed[@]}" >&2
+  echo "  They are not being fuzzed. Give each one an entry in the group it" >&2
+  echo "  belongs to -- check first that it is non-default and that it really" >&2
+  echo "  changes the CNF or a counter, as the comments on the groups explain" >&2
+  echo "  -- or add it to NOT_FUZZED above with the reason it cannot be." >&2
+  echo >&2
+fi
+
 # The empty entry never matches the filter, so a group cannot come out of that
 # loop empty unless the group itself was written empty.
 for gname in "${OPTION_GROUPS[@]}"; do
@@ -719,6 +1076,56 @@ for gname in "${OPTION_GROUPS[@]}"; do
   unset -n group
 done
 printf '  %-10s %2d entries\n' "logics" "${#LOGIC_SETS[@]}"
+
+# One option named by two groups that can be drawn together is a rejected
+# command line, not a degraded iteration: a picker from each supplies it and
+# CLI11 refuses the repeat with "At most 1 required but received 2", so STP
+# exits 255 having answered nothing and every file of that iteration is saved
+# as a mismatch. The entry probe further up cannot see it -- each entry is
+# offered on its own, and each is fine on its own.
+#
+# Checked per logic, because which groups are drawn together depends on the
+# filters: two groups that never apply to the same logic may share an option
+# safely. An option belongs in exactly one of the groups that clash; if both
+# need it, the entries in one of them have to do without and rely on a logic
+# entry that reaches the code at the shipped default instead.
+declare -A option_group=()
+clashes=0
+for entry in "${LOGIC_SETS[@]}"; do
+  IFS='|' read -r gen logic_opts <<< "$entry"
+  read -r -a gen_args <<< "$gen"
+  option_group=()
+  # The logic's own options go on the same command line, so they are part of
+  # the check: a group naming --array-equality would collide with the entries
+  # that carry it.
+  for opt in $(echo "$logic_opts" | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*'); do
+    option_group[$opt]="the logic entry"
+  done
+  for gname in "${OPTION_GROUPS[@]}"; do
+    filter=${GROUP_LOGIC_FILTER[$gname]:-}
+    if [ -n "$filter" ] && [[ ${gen_args[0]} != $filter ]]; then continue; fi
+    declare -n group="g_$gname"
+    # Within a group only one entry is drawn, so a name repeated across that
+    # group's entries is fine; sort -u makes this per-group, not per-entry.
+    for opt in $(printf '%s\n' "${group[@]}" \
+                 | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*' | sort -u); do
+      owner=${option_group[$opt]:-}
+      if [ -n "$owner" ] && [ "$owner" != "$gname" ]; then
+        echo "Groups '$owner' and '$gname' both set $opt, and both are drawn" >&2
+        echo "  for ${gen_args[0]}. STP refuses a command line that names it twice." >&2
+        clashes=$(( clashes + 1 ))
+      else
+        option_group[$opt]=$gname
+      fi
+    done
+    unset -n group
+  done
+done
+if [ "$clashes" -gt 0 ]; then
+  echo "Fix the groups above; every iteration drawing both would be a bogus" >&2
+  echo "mismatch rather than a test." >&2
+  exit 1
+fi
 
 # Summed over the logics rather than a flat product, because a filtered group
 # contributes only to the logics it applies to.
