@@ -10,7 +10,7 @@ namespace stp
 
 FpEncodingContext::FpEncodingContext(STPMgr* bm_)
     : bm(bm_), node_factory(bm_->defaultNodeFactory), totalise(bm_),
-      domain(bm_), blast(bm_)
+      domain(bm_), blast(bm_), model_blast(bm_, true /*lowerEverything*/)
 {
 }
 
@@ -95,7 +95,7 @@ ASTNode FpEncodingContext::lowerPrepared(const ASTNode& prepared)
 ASTNode FpEncodingContext::encodeForModel(const ASTNode& source)
 {
   requireOriginalNodeFactory();
-  return lowerPrepared(prepare(source));
+  return model_blast.topLevel(prepare(source));
 }
 
 } // namespace stp

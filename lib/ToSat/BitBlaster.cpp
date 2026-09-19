@@ -7354,6 +7354,30 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpCLZ(const BBNodeVec& v,
   return count;
 }
 
+// The normalise relation, asserted beside the barrel that implements it.
+//
+// r = v << clz(v) moves the leading one to the top, so r's top bit is set
+// exactly when v is nonzero. The shifter reaches that only once every stage
+// select has resolved; stated directly it is two clauses, and it fires from
+// a single known-one bit of v, or backwards from a known-zero hidden bit of
+// r to every bit of v at once.
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBfpNormaliseLemma(
+    const BBNodeVec& v, const BBNodeVec& r, unsigned countWidth,
+    BBNodeSet& support)
+{
+  if (!uf->fp_normalise_lemma || r.empty() || v.empty())
+    return;
+  // The all-zero count must be representable, and shifting by it must clear
+  // the vector; both hold exactly when the count width covers v.size().
+  if (countWidth >= std::numeric_limits<unsigned>::digits ||
+      (1u << countWidth) <= v.size())
+    return;
+  BBNodeVec bits = v;
+  support.insert(
+      nf->CreateNode(IFF, r[r.size() - 1], nf->CreateNode(OR, bits)));
+}
+
 // Logarithmic left shifter, zero fill. The amount is unsigned binary; any
 // amount >= value.size() shifts everything out. This used to be private to
 // the native floating-point circuits, whose shift amounts are narrow. Keep
@@ -7949,6 +7973,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpMul(const ASTNode& term,
   }(2 * sb);
   const BBNodeVec ell = BBfpCLZ(prod, lw2);
   const BBNodeVec pn = BBShiftLeftByVariable(prod, ell);
+  BBfpNormaliseLemma(prod, pn, lw2, support);
   BBNodeVec rsig(pn.begin() + sb, pn.end()); // top sb bits: 1.frac
   BBNode guard = pn[sb - 1];
   auto orVec = [&](BBNodeVec v) {
@@ -8196,6 +8221,7 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundToIntegral(const ASTNode& term,
   }(sb + 1);
   const BBNodeVec ell = BBfpCLZ(integral, lw);
   const BBNodeVec normalised = BBShiftLeftByVariable(integral, ell);
+  BBfpNormaliseLemma(integral, normalised, lw, support);
   BBNodeVec rsig(normalised.begin() + 1, normalised.end());
 
   BBNodeVec be = scale;
@@ -8294,6 +8320,7 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrt(const ASTNode& term,
   }(sb);
   const BBNodeVec la = BBfpCLZ(a.msig, lw);
   const BBNodeVec an = BBShiftLeftByVariable(a.msig, la);
+  BBfpNormaliseLemma(a.msig, an, lw, support);
 
   // e = the normalised exponent. An odd one is made even by doubling the
   // significand, which is what puts the radicand in [1, 4).
@@ -8611,7 +8638,9 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpDiv(const ASTNode& term,
   const BBNodeVec la = BBfpCLZ(a.msig, lw);
   const BBNodeVec lb = BBfpCLZ(b.msig, lw);
   const BBNodeVec an = BBShiftLeftByVariable(a.msig, la);
+  BBfpNormaliseLemma(a.msig, an, lw, support);
   BBNodeVec dn = BBShiftLeftByVariable(b.msig, lb);
+  BBfpNormaliseLemma(b.msig, dn, lw, support);
 
   // The relation is only satisfiable for a nonzero divisor: R < D has no
   // model at D = 0, and N = D*Q + R cannot reach a nonzero N either. A zero
@@ -9047,6 +9076,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
     }(W);
     const BBNodeVec ell = BBfpCLZ(sum, lwA);
     const BBNodeVec sn = BBShiftLeftByVariable(sum, ell);
+    BBfpNormaliseLemma(sum, sn, lwA, support);
     rsig.assign(sn.begin() + (W - sb), sn.end());
     guard = sn[W - sb - 1];
     BBNodeVec lowBits(sn.begin(), sn.begin() + (W - sb - 1));
@@ -9211,7 +9241,9 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRem(const ASTNode& term,
   const BBNodeVec la = BBfpCLZ(a.msig, lw);
   const BBNodeVec lb = BBfpCLZ(b.msig, lw);
   const BBNodeVec an = BBShiftLeftByVariable(a.msig, la);
+  BBfpNormaliseLemma(a.msig, an, lw, support);
   const BBNodeVec bn = BBShiftLeftByVariable(b.msig, lb);
+  BBfpNormaliseLemma(b.msig, bn, lw, support);
   BBNodeVec ea = a.eUnb;
   BBSub(ea, zext(la, E), support);
   BBNodeVec ebn = b.eUnb;
@@ -9308,6 +9340,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRem(const ASTNode& term,
   const unsigned lwm = countWidth(sb + 1);
   const BBNodeVec ellm = BBfpCLZ(magnitude, lwm);
   const BBNodeVec mn = BBShiftLeftByVariable(magnitude, ellm);
+  BBfpNormaliseLemma(magnitude, mn, lwm, support);
   BBNodeVec rsig(mn.begin() + 1, mn.end()); // top sb bits
   BBNodeVec be = ebn;
   BBSub(be, zext(ellm, E), support);
@@ -9588,6 +9621,7 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpFromBV(const ASTNode& term,
   }(F);
   const BBNodeVec ell = BBfpCLZ(frame, lw);
   const BBNodeVec fn = BBShiftLeftByVariable(frame, ell);
+  BBfpNormaliseLemma(frame, fn, lw, support);
 
   BBNodeVec rsig(fn.begin() + (F - sb), fn.end());
   const BBNode guard = fn[F - sb - 1];
@@ -9702,7 +9736,9 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpFma(const ASTNode& term,
   const BBNodeVec lProd = BBfpCLZ(prod, lwM);
   const BBNodeVec lAdd = BBfpCLZ(cWide, lwM);
   const BBNodeVec prodN = BBShiftLeftByVariable(prod, lProd);
+  BBfpNormaliseLemma(prod, prodN, lwM, support);
   const BBNodeVec addN = BBShiftLeftByVariable(cWide, lAdd);
+  BBfpNormaliseLemma(cWide, addN, lwM, support);
   BBNodeVec eProdN = eProd;
   BBSub(eProdN, zext(lProd, E), support);
   BBNodeVec eAddN = c.eUnb;
@@ -9774,6 +9810,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpFma(const ASTNode& term,
   const unsigned lwW = countWidth(W);
   const BBNodeVec ell = BBfpCLZ(sum, lwW);
   const BBNodeVec sn = BBShiftLeftByVariable(sum, ell);
+  BBfpNormaliseLemma(sum, sn, lwW, support);
   BBNodeVec rsig(sn.begin() + (W - sb), sn.end());
   const BBNode guard = sn[W - sb - 1];
   BBNodeVec lowBits(sn.begin(), sn.begin() + (W - sb - 1));
@@ -9922,6 +9959,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpToFp(const ASTNode& term,
   }(sb1);
   const BBNodeVec clz = BBfpCLZ(s.msig, lw1);
   const BBNodeVec sn = BBShiftLeftByVariable(s.msig, clz);
+  BBfpNormaliseLemma(s.msig, sn, lw1, support);
 
   // Map onto the target significand width.
   BBNodeVec rsig(sb2);
