@@ -88,7 +88,11 @@ public:
     size_t add_iszero_builds = 0;
   };
 
-  FloatBlast(STPMgr* bm_);
+  // lowerEverything: spell out every floating-point operation rather than
+  // leaving the ones the bit-blaster encodes natively for it. What a caller
+  // that evaluates the term itself needs -- the model evaluator and the
+  // constant folder -- since neither has native circuits.
+  explicit FloatBlast(STPMgr* bm_, bool lowerEverything = false);
   ~FloatBlast();
 
   FloatBlast(const FloatBlast&) = delete;
