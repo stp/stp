@@ -79,6 +79,7 @@ public:
     Rewriting,
     MergeSame,
     CommonSubSum,
+    CommonFactor,
     LinearForm,
     CongruenceCandidates
   };
@@ -109,6 +110,7 @@ public:
                                             "Sharing-aware rewriting",
                                             "Merge Same",
                                             "Common Sub-sum Extraction",
+                                            "Common Factor Extraction",
                                             "Linear Canonical Form",
                                             "Congruence Candidates"
                                           };

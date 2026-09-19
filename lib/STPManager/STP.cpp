@@ -48,6 +48,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/SplitExtracts.h"
 #include "stp/Simplifier/UseITEContext.h"
 #include "stp/Simplifier/Flatten.h"
+#include "stp/Simplifier/CommonFactor.h"
 #include "stp/Simplifier/CommonSubSum.h"
 #include "stp/Simplifier/LinearForm.h"
 #include "stp/Simplifier/CongruenceCandidates.h"
@@ -1041,6 +1042,19 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   if (simp->hasUnappliedSubstitutions())
     inputToSat = simp->applySubstitutionMap(inputToSat);
+
+  // Take the factor several of a sum's products have in common out of the
+  // sum, before the same-kind extraction below: a factor taken out is a
+  // product the extraction no longer has to tally, and the two are ordered
+  // this way round because a factor shared by every one of a group of
+  // products is worth more out of them than a pair of them is worth shared
+  // -- (x*y*a + x*y*b) factored is two multiplications, shared is three.
+  if (bm->UserFlags.enable_common_factor)
+  {
+    CommonFactor factor(bm, bm->defaultNodeFactory);
+    inputToSat = factor.topLevel(inputToSat);
+    bm->ASTNodeStats("After Common Factor Extraction: ", inputToSat);
+  }
 
   // Extract sub-terms shared between same-kind applications of each
   // associative-commutative operator, ahead of unconstrained-variable

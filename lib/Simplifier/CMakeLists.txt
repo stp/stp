@@ -42,6 +42,7 @@ add_library(simplifier OBJECT
     LinearForm.cpp
     CongruenceCandidates.cpp
     CommonSubSum.cpp
+    CommonFactor.cpp
     NodeDomainAnalysis.cpp
     SplitExtracts.cpp
     Rewriting.cpp

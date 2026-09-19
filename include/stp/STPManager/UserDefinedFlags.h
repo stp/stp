@@ -210,6 +210,11 @@ public:
   bool enable_pair_extract = true;
   bool enable_common_subsum = true;
 
+  // Take a factor several of a sum's products have in common out of the
+  // sum, so one multiplication is built where there were several. See
+  // CommonFactor.h.
+  bool enable_common_factor = true;
+
   // One canonical spelling for every linear combination of bit-vector
   // terms, so that two equal combinations are the same node and share the
   // circuit built on top of them. See LinearForm.h.
@@ -1440,6 +1445,7 @@ public:
     enable_merge_same = false;
     enable_pair_extract = false;
     enable_common_subsum = false;
+    enable_common_factor = false;
     enable_linear_form = false;
     enable_ite_context = false;
     distinct_ordering = false;

@@ -31,6 +31,7 @@ TEST(UserDefinedFlags_Test, disable_simplifications_clears_flattening_stack)
   uf.disableSimplifications();
   EXPECT_FALSE(uf.enable_flatten);
   EXPECT_FALSE(uf.enable_common_subsum);
+  EXPECT_FALSE(uf.enable_common_factor);
   EXPECT_FALSE(uf.enable_pair_extract);
 }
 

@@ -1416,6 +1416,7 @@ static const char* categoryKeyword(RunTimes::Category c)
     case RunTimes::Rewriting: return "sharing-aware-rewriting";
     case RunTimes::MergeSame: return "merge-same";
     case RunTimes::CommonSubSum: return "common-sub-sum-extraction";
+    case RunTimes::CommonFactor: return "common-factor-extraction";
     case RunTimes::LinearForm: return "linear-canonical-form";
     case RunTimes::CongruenceCandidates: return "congruence-candidates";
   }

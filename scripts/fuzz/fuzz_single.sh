@@ -430,6 +430,13 @@ declare -a g_simplify=(
 # included, because the pass finds nothing to factor there.
 "--pair-extract=0"
 
+# Common factor extraction, also on by default and so also an opt-out. This
+# one does earn an entry where --common-subsum does not: the generator
+# builds sums whose products share an operand on about 1 file in 300 at the
+# default shape and 3 in 300 at the -nary 8 -ref 3 entry above, so the two
+# settings are not the same run.
+"--common-factor=0"
+
 # A bit-blasting option, but it lives here because #789 made it exclude
 # --disable-opt-inc and --disable-simplifications, which are entries above.
 # Drawn from its own group it would be paired with them roughly one iteration
