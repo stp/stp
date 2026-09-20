@@ -1035,11 +1035,14 @@ public:
   // shift-subtract array and the native one states the defining relation
   // instead.
   //
-  // Off by default, with fp_native_sqrt, because a defining relation splits
-  // the two answers: it refutes far faster than the array -- the hard set's
-  // unsatisfiable division queries go from 29 solved to 41 -- and searches
-  // far slower, because nothing computes a witness forward. Satisfiable
-  // sqrt and division files regress up to 23x with it on.
+  // Off by default because a defining relation splits the two answers: it
+  // refutes far faster than the array -- the hard set's unsatisfiable
+  // division queries go from 29 solved to 41 -- and searches far slower,
+  // because nothing computes a witness forward. Satisfiable division files
+  // regress up to 23x with it on, and against a constant divisor the
+  // relation is the larger formula as well: a fresh quotient, a remainder
+  // and the comparator that bounds it, where a restoring array folds one
+  // comparison per step.
   bool fp_native_div = false;
 
   // The remaining operations, each with its own switch so its circuit can
@@ -1047,7 +1050,16 @@ public:
   bool fp_native_minmax = true;   // fp.min, fp.max
   bool fp_native_pack = true;     // fp.to_ieee_bv
   bool fp_native_round = true;    // fp.roundToIntegral
-  bool fp_native_sqrt = false;    // fp.sqrt, see fp_native_div
+  // fp.sqrt, on since the relation stopped being the pathological case it
+  // was: two roots of one operand under two rounding modes once minted two
+  // relations and searched (x, q1, r1, q2, r2), which is exponential in the
+  // significand and is what kept this off. With one relation per operand
+  // the corpus is level on total time and 4.5x faster at the median on the
+  // files where the encoding decides anything, on a formula a tenth the
+  // size at float64. Unlike division it is never the larger formula on a
+  // whole operand class, because a root has one operand and no constant
+  // divisor to fold against.
+  bool fp_native_sqrt = true;
   bool fp_native_fma = true;      // fp.fma
   bool fp_native_conv = true;     // to_fp from a bit-vector, fp.to_ubv/sbv
   bool fp_native_rem = true;      // fp.rem
