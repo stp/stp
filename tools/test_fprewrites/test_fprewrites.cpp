@@ -1159,6 +1159,68 @@ static void run(Ctx& c)
           {sqrtx},
           c.nf->CreateNode(AND, {c.nf->CreateNode(FP_ISNEGATIVE, {x}),
                                  c.nf->CreateNode(FP_ISZERO, {x})}));
+      // The arithmetic's NaN cases are the invalid operations IEEE-754
+      // names, and a product or quotient's sign is its operands' signs
+      // exclusive-ored -- none of it needs the datapath. A sum's sign does
+      // (cancellation), and so do isInfinite and isZero (overflow and
+      // underflow), so those keep no rule.
+      {
+        ASTNode y = c.fp(EB, SB);
+        ASTNode sum = mk(FP_ADD, {r, x, y});
+        ASTNode prod = mk(FP_MUL, {r, x, y});
+        ASTNode quot = mk(FP_DIV, {r, x, y});
+        ASTNode signsDiffer = c.nf->CreateNode(
+            XOR, {c.nf->CreateNode(FP_ISNEGATIVE, {x}),
+                  c.nf->CreateNode(FP_ISNEGATIVE, {y})});
+        c.checkNodeIs(
+            "isNaN(x + y) -> operand NaN, or infinities of opposite sign",
+            FP_ISNAN, {sum},
+            c.nf->CreateNode(
+                OR, {c.nf->CreateNode(FP_ISNAN, {x}),
+                     c.nf->CreateNode(FP_ISNAN, {y}),
+                     c.nf->CreateNode(
+                         AND, {c.nf->CreateNode(FP_ISINFINITE, {x}),
+                               c.nf->CreateNode(FP_ISINFINITE, {y}),
+                               signsDiffer})}));
+        c.checkNodeIs(
+            "isNaN(x * y) -> operand NaN, or zero times infinity", FP_ISNAN,
+            {prod},
+            c.nf->CreateNode(
+                OR, {c.nf->CreateNode(FP_ISNAN, {x}),
+                     c.nf->CreateNode(FP_ISNAN, {y}),
+                     c.nf->CreateNode(
+                         AND, {c.nf->CreateNode(FP_ISZERO, {x}),
+                               c.nf->CreateNode(FP_ISINFINITE, {y})}),
+                     c.nf->CreateNode(
+                         AND, {c.nf->CreateNode(FP_ISINFINITE, {x}),
+                               c.nf->CreateNode(FP_ISZERO, {y})})}));
+        c.checkNodeIs(
+            "isNaN(x / y) -> operand NaN, or zero by zero, or oo by oo",
+            FP_ISNAN, {quot},
+            c.nf->CreateNode(
+                OR, {c.nf->CreateNode(FP_ISNAN, {x}),
+                     c.nf->CreateNode(FP_ISNAN, {y}),
+                     c.nf->CreateNode(
+                         AND, {c.nf->CreateNode(FP_ISZERO, {x}),
+                               c.nf->CreateNode(FP_ISZERO, {y})}),
+                     c.nf->CreateNode(
+                         AND, {c.nf->CreateNode(FP_ISINFINITE, {x}),
+                               c.nf->CreateNode(FP_ISINFINITE, {y})})}));
+        c.checkNodeIs(
+            "isNegative(x * y) -> signs differ and not NaN", FP_ISNEGATIVE,
+            {prod},
+            c.nf->CreateNode(
+                AND, {signsDiffer,
+                      c.nf->CreateNode(
+                          NOT, {c.nf->CreateNode(FP_ISNAN, {prod})})}));
+        c.checkNodeIs(
+            "isPositive(x / y) -> signs agree and not NaN", FP_ISPOSITIVE,
+            {quot},
+            c.nf->CreateNode(
+                AND, {c.nf->CreateNode(NOT, {signsDiffer}),
+                      c.nf->CreateNode(
+                          NOT, {c.nf->CreateNode(FP_ISNAN, {quot})})}));
+      }
       c.checkNodeIs("isNegative(x+x) -> isNegative x", FP_ISNEGATIVE, {dbl},
                     c.hf->CreateNode(FP_ISNEGATIVE, {x}));
       c.checkNodeIs("isPositive(x+x) -> isPositive x", FP_ISPOSITIVE, {dbl},

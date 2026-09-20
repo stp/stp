@@ -44,16 +44,19 @@ TEST(fp_printing, smtlib2_states_the_source_sorts)
   Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
   Expr y = vc_varExpr(vc, "y", vc_fpType(vc, 8, 24));
   Expr r = vc_varExpr(vc, "r", vc_fpRoundingModeType(vc));
-  // Two DISTINCT floats: fp.isNaN(x + x) simplifies to fp.isNaN(x) at
-  // construction, which would drop the fp.add (and r) this test is about.
-  Expr f = vc_fpIsNaNExpr(vc, vc_fpAddExpr(vc, r, x, y));
+  // The predicate has to be one the factory cannot answer from the
+  // operands, or the fp.add (and with it r) is gone before anything is
+  // printed: fp.isNaN(x + x) folds to fp.isNaN(x), and fp.isNaN(x + y) to a
+  // question about the two operands' classes. Overflow is not a property of
+  // the operands, so fp.isInfinite of a sum keeps its adder.
+  Expr f = vc_fpIsInfiniteExpr(vc, vc_fpAddExpr(vc, r, x, y));
 
   const std::string out = smtlib2(vc, f);
 
   EXPECT_TRUE(contains(out, "(declare-fun |x| () (_ FloatingPoint 8 24)"))
       << out;
   EXPECT_TRUE(contains(out, "(declare-fun |r| () RoundingMode")) << out;
-  EXPECT_TRUE(contains(out, "fp.isNaN")) << out;
+  EXPECT_TRUE(contains(out, "fp.isInfinite")) << out;
   EXPECT_TRUE(contains(out, "fp.add")) << out;
   // An FP logic, not QF_BV.
   EXPECT_TRUE(contains(out, "(set-logic QF_BVFP)") ||
