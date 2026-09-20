@@ -264,6 +264,13 @@ static bool fpIsSelfSum(const stp::ASTNode& n)
 {
   return n.GetKind() == stp::FP_ADD && n.Degree() == 3 && n[1] == n[2];
 }
+// The binary arithmetic in the form the blaster sees: rounding mode and two
+// operands. fp.sub is lowered to fp.add of a negation before it gets here.
+static bool fpIsBinary(const stp::ASTNode& n, stp::Kind k)
+{
+  return n.GetKind() == k && n.Degree() == 3;
+}
+
 // fp.sqrt in the form the blaster sees, rounding mode and operand.
 static bool fpIsSqrt(const stp::ASTNode& n)
 {
@@ -1138,6 +1145,48 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
         result = NodeFactory::CreateNode(
             stp::AND, NodeFactory::CreateNode(stp::FP_ISINFINITE, t[1]),
             NodeFactory::CreateNode(stp::FP_ISPOSITIVE, t[1]));
+      // Whether an arithmetic result is NaN is a question about the
+      // operands' classes, never about the datapath: the invalid operations
+      // are the ones IEEE-754 names, and the rounding mode cannot create or
+      // destroy a NaN. Answering here is what lets a query that asks only
+      // this drop the circuit -- and the native encodings pack their result,
+      // so without it the whole adder or multiplier survives into the CNF.
+      //
+      // Signs differing is spelled over isNegative rather than a sign field
+      // because the only place it is asked is under an isInfinite guard,
+      // where neither operand can be NaN and the two agree.
+      else if (kind == stp::FP_ISNAN && fpIsBinary(t, stp::FP_ADD))
+        result = NodeFactory::CreateNode(
+            stp::OR, NodeFactory::CreateNode(stp::FP_ISNAN, t[1]),
+            NodeFactory::CreateNode(stp::FP_ISNAN, t[2]),
+            NodeFactory::CreateNode(
+                stp::AND, NodeFactory::CreateNode(stp::FP_ISINFINITE, t[1]),
+                NodeFactory::CreateNode(stp::FP_ISINFINITE, t[2]),
+                NodeFactory::CreateNode(
+                    stp::XOR, NodeFactory::CreateNode(stp::FP_ISNEGATIVE, t[1]),
+                    NodeFactory::CreateNode(stp::FP_ISNEGATIVE, t[2]))));
+      else if (kind == stp::FP_ISNAN && fpIsBinary(t, stp::FP_MUL))
+        result = NodeFactory::CreateNode(
+            stp::OR,
+            {NodeFactory::CreateNode(stp::FP_ISNAN, t[1]),
+             NodeFactory::CreateNode(stp::FP_ISNAN, t[2]),
+             NodeFactory::CreateNode(
+                 stp::AND, NodeFactory::CreateNode(stp::FP_ISZERO, t[1]),
+                 NodeFactory::CreateNode(stp::FP_ISINFINITE, t[2])),
+             NodeFactory::CreateNode(
+                 stp::AND, NodeFactory::CreateNode(stp::FP_ISINFINITE, t[1]),
+                 NodeFactory::CreateNode(stp::FP_ISZERO, t[2]))});
+      else if (kind == stp::FP_ISNAN && fpIsBinary(t, stp::FP_DIV))
+        result = NodeFactory::CreateNode(
+            stp::OR,
+            {NodeFactory::CreateNode(stp::FP_ISNAN, t[1]),
+             NodeFactory::CreateNode(stp::FP_ISNAN, t[2]),
+             NodeFactory::CreateNode(
+                 stp::AND, NodeFactory::CreateNode(stp::FP_ISZERO, t[1]),
+                 NodeFactory::CreateNode(stp::FP_ISZERO, t[2])),
+             NodeFactory::CreateNode(
+                 stp::AND, NodeFactory::CreateNode(stp::FP_ISINFINITE, t[1]),
+                 NodeFactory::CreateNode(stp::FP_ISINFINITE, t[2]))});
       else if (kind == stp::FP_ISINFINITE && fpIsRoundToIntegral(t) &&
                fpRoundToIntegralNeverOverflows(t))
         result = NodeFactory::CreateNode(kind, t[1]);
@@ -1164,6 +1213,18 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
         result = NodeFactory::CreateNode(stp::FP_ISPOSITIVE, t[0]);
       else if (fpIsRoundToIntegral(t) || fpIsSelfSum(t))
         result = NodeFactory::CreateNode(kind, t[1]);
+      // A product or a quotient carries the exclusive-or of its operands'
+      // signs, zeros and infinities included, so the sign needs no datapath
+      // either -- only the NaN guard, because NaN is neither negative nor
+      // positive. Sums cancel, so they get no such rule.
+      else if (fpIsBinary(t, stp::FP_MUL) || fpIsBinary(t, stp::FP_DIV))
+        result = NodeFactory::CreateNode(
+            stp::AND,
+            NodeFactory::CreateNode(
+                stp::XOR, NodeFactory::CreateNode(stp::FP_ISNEGATIVE, t[1]),
+                NodeFactory::CreateNode(stp::FP_ISNEGATIVE, t[2])),
+            NodeFactory::CreateNode(
+                stp::NOT, NodeFactory::CreateNode(stp::FP_ISNAN, t)));
       // sqrt(-0) is -0 and every other root is positive or NaN, so a root
       // is negative exactly when its operand is a negative zero.
       else if (fpIsSqrt(t))
@@ -1188,6 +1249,19 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
         result = NodeFactory::CreateNode(stp::FP_ISNEGATIVE, t[0]);
       else if (fpIsSqrt(t) || fpIsRoundToIntegral(t) || fpIsSelfSum(t))
         result = NodeFactory::CreateNode(kind, t[1]);
+      // The mirror of the FP_ISNEGATIVE rule above: positive is the sign
+      // clear and not NaN.
+      else if (fpIsBinary(t, stp::FP_MUL) || fpIsBinary(t, stp::FP_DIV))
+        result = NodeFactory::CreateNode(
+            stp::AND,
+            NodeFactory::CreateNode(
+                stp::NOT,
+                NodeFactory::CreateNode(
+                    stp::XOR,
+                    NodeFactory::CreateNode(stp::FP_ISNEGATIVE, t[1]),
+                    NodeFactory::CreateNode(stp::FP_ISNEGATIVE, t[2]))),
+            NodeFactory::CreateNode(
+                stp::NOT, NodeFactory::CreateNode(stp::FP_ISNAN, t)));
       break;
     }
 
