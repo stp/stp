@@ -439,7 +439,8 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                           const BBNodeVec& rsig, const BBNode& guard,
                           const BBNode& sticky, const BBNodeVec& be,
                           unsigned sb, unsigned eb, BBNodeSet& support,
-                          bool resultKnownFinite = false);
+                          bool resultKnownFinite = false,
+                          bool resultNeverSubnormal = false);
 
   // The same rounding, stopping before the bits are assembled. The record
   // it returns is in BBfpUnpack's conventions -- hidden bit explicit,
@@ -449,7 +450,12 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                       const BBNodeVec& rsig, const BBNode& guard,
                       const BBNode& sticky, const BBNodeVec& be, unsigned sb,
                       unsigned eb, BBNodeSet& support,
-                      bool resultKnownFinite = false);
+                      bool resultKnownFinite = false,
+                      // When the caller can prove the result is never
+                      // subnormal, the denormalising barrel and its sticky
+                      // are dead circuit; a square root can prove it from
+                      // the format alone.
+                      bool resultNeverSubnormal = false);
 
   // Lay a record out as IEEE bits.
   BBNodeVec BBfpPack(const FpOperand& value, unsigned sb, unsigned eb);
@@ -622,6 +628,8 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   size_t fpNativeDivRelations = 0;
   // Roots that reused an earlier root's relation rather than minting one.
   size_t fpNativeSqrtPreRoundReuses = 0;
+  // Roots whose format proves the denormalising barrel dead.
+  size_t fpNativeSqrtSubnormalBarrelsSkipped = 0;
   size_t fpNativeRecordReuses = 0;
   size_t fpNativeRecordClassifications = 0;
   // One placeholder multiply node per width, for BBfpSignificandProduct.
@@ -1012,6 +1020,7 @@ public:
     fpNativeZeroToFpFastPaths = 0;
     fpNativeDivRelations = 0;
     fpNativeSqrtPreRoundReuses = 0;
+    fpNativeSqrtSubnormalBarrelsSkipped = 0;
     fpNativeRecordReuses = 0;
     fpNativeRecordClassifications = 0;
     fpNativeKnownPositiveAddPaths = 0;

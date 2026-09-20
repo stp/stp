@@ -2143,6 +2143,8 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
               << fpNativeDivRelations << '\n';
     std::cerr << "fp-native: square roots sharing an earlier relation: "
               << fpNativeSqrtPreRoundReuses << '\n';
+    std::cerr << "fp-native: square-root subnormal barrels skipped: "
+              << fpNativeSqrtSubnormalBarrelsSkipped << '\n';
     std::cerr << "FP native domain zero-magnitude facts: "
               << fpNativeZeroMagnitudeFacts.size() << '\n';
     std::cerr << "FP native domain zero-magnitude terms: "
@@ -7575,7 +7577,8 @@ typename BitBlaster<BBNode, BBNodeManagerT>::FpOperand
 BitBlaster<BBNode, BBNodeManagerT>::BBfpRound(
     const BBNodeVec& rm, const BBNode& sgn, const BBNodeVec& rsigIn,
     const BBNode& guardIn, const BBNode& stickyIn, const BBNodeVec& beIn,
-    unsigned sb, unsigned eb, BBNodeSet& support, const bool resultKnownFinite)
+    unsigned sb, unsigned eb, BBNodeSet& support, const bool resultKnownFinite,
+    const bool resultNeverSubnormal)
 {
   const unsigned maxbe = (1u << eb) - 2;
   const unsigned bias = (1u << (eb - 1)) - 1;
@@ -7598,38 +7601,48 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpRound(
   BBNodeVec be = beIn;
 
   // Subnormal range: biased exponent <= 0 needs a right shift of 1 - be,
-  // clamped -- anything past guard is pure sticky.
-  const unsigned dmax = sb + 2;
-  const BBNode beNonPos =
-      nf->CreateNode(OR, be[E - 1], nf->CreateNode(NOR, be));
-  BBNodeVec shiftFull = constVec(1, E);
-  BBSub(shiftFull, be, support); // 1 - be, signed
-  const BBNode tooFar = nf->CreateNode(
-      NOT, BBBVLE(shiftFull, constVec(dmax, E), true /*signed*/));
-  const unsigned dw = [](unsigned x) {
-    unsigned bb = 1;
-    while ((1u << bb) <= x)
-      bb++;
-    return bb;
-  }(dmax);
-  BBNodeVec d(dw);
-  for (unsigned i = 0; i < dw; i++)
+  // clamped -- anything past guard is pure sticky. A caller that can prove
+  // the exponent never falls that far skips the whole block: the barrel,
+  // the subtraction that forms its shift amount (which would otherwise
+  // pin a carry into support and keep the dead cone alive), and the mux
+  // that re-scales behind it.
+  BBNodeVec beAfter;
+  if (resultNeverSubnormal)
+    beAfter = be;
+  else
   {
-    const BBNode inRange = nf->CreateNode(ITE, tooFar,
-                                          ((dmax >> i) & 1) ? nf->getTrue()
-                                                            : nf->getFalse(),
-                                          shiftFull[i]);
-    d[i] = nf->CreateNode(AND, beNonPos, inRange);
+    const unsigned dmax = sb + 2;
+    const BBNode beNonPos =
+        nf->CreateNode(OR, be[E - 1], nf->CreateNode(NOR, be));
+    BBNodeVec shiftFull = constVec(1, E);
+    BBSub(shiftFull, be, support); // 1 - be, signed
+    const BBNode tooFar = nf->CreateNode(
+        NOT, BBBVLE(shiftFull, constVec(dmax, E), true /*signed*/));
+    const unsigned dw = [](unsigned x) {
+      unsigned bb = 1;
+      while ((1u << bb) <= x)
+        bb++;
+      return bb;
+    }(dmax);
+    BBNodeVec d(dw);
+    for (unsigned i = 0; i < dw; i++)
+    {
+      const BBNode inRange = nf->CreateNode(ITE, tooFar,
+                                            ((dmax >> i) & 1) ? nf->getTrue()
+                                                              : nf->getFalse(),
+                                            shiftFull[i]);
+      d[i] = nf->CreateNode(AND, beNonPos, inRange);
+    }
+    BBNodeVec vg = rsig;
+    vg.insert(vg.begin(), guard); // [guard, rsig...]
+    vg = BBfpShiftRightSticky(vg, d, sticky);
+    guard = vg[0];
+    for (unsigned i = 0; i < sb; i++)
+      rsig[i] = vg[i + 1];
+    // After a subnormal shift the value sits at the exp=1 scale (the
+    // encoding with exponent field 0 shares it).
+    beAfter = BBITE(beNonPos, constVec(1, E), be);
   }
-  BBNodeVec vg = rsig;
-  vg.insert(vg.begin(), guard); // [guard, rsig...]
-  vg = BBfpShiftRightSticky(vg, d, sticky);
-  guard = vg[0];
-  for (unsigned i = 0; i < sb; i++)
-    rsig[i] = vg[i + 1];
-  // After a subnormal shift the value sits at the exp=1 scale (the encoding
-  // with exponent field 0 shares it).
-  BBNodeVec beAfter = BBITE(beNonPos, constVec(1, E), be);
 
   // Round.
   const BBNode gs = nf->CreateNode(OR, guard, sticky);
@@ -7838,10 +7851,12 @@ template <class BBNode, class BBNodeManagerT>
 vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundPack(
     const BBNodeVec& rm, const BBNode& sgn, const BBNodeVec& rsig,
     const BBNode& guard, const BBNode& sticky, const BBNodeVec& be,
-    unsigned sb, unsigned eb, BBNodeSet& support, const bool resultKnownFinite)
+    unsigned sb, unsigned eb, BBNodeSet& support, const bool resultKnownFinite,
+    const bool resultNeverSubnormal)
 {
-  const FpOperand rounded = BBfpRound(rm, sgn, rsig, guard, sticky, be, sb, eb,
-                                      support, resultKnownFinite);
+  const FpOperand rounded =
+      BBfpRound(rm, sgn, rsig, guard, sticky, be, sb, eb, support,
+                resultKnownFinite, resultNeverSubnormal);
   return BBfpPack(rounded, sb, eb);
 }
 
@@ -8445,14 +8460,31 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrt(const ASTNode& term,
     sqrtPreRoundMemo.emplace(term[1], pre);
   }
 
-  const bool directlyConstrainedZero =
-      fpNativeZeroMagnitudeFacts.find(term) !=
-      fpNativeZeroMagnitudeFacts.end();
-  const bool resultFinite =
-      !directlyConstrainedZero && fpNativeKnownFinite(term);
+  // Two properties of the square root the generic rounder cannot know, both
+  // provable from the format alone.
+  //
+  // It never overflows. The rounder is handed be = (e >> 1) + bias with e
+  // at most the all-ones unbiased exponent bias+1, so be <= (bias+1)/2 +
+  // bias, and one more for the rounding carry, which stays under maxbe =
+  // 2*bias for every eb >= 2. The infinite operand is muxed in below, so
+  // the finite path never has to produce an infinity either: the overflow
+  // test, its saturating significand and its exponent mux are dead.
+  //
+  // It is never subnormal unless sb >= 2^(eb-1). Halving the exponent
+  // compresses the range around one, and a root lands in the subnormal
+  // range only if the operand's exponent can reach twice the smallest
+  // subnormal's -- which needs a significand as long as the whole exponent
+  // range. This is SymFPU's own test, spelled there as
+  // positionOfLeadingOne(sb) >= eb - 1; the formats it excludes are
+  // (2,2), (3,4), (4,8), (5,16), (6,32), (7,64), (8,128) and wider, none
+  // of them an interchange format. Every format anyone uses skips the
+  // barrel, and the native path was building it unconditionally.
+  const bool neverOverflows = true;
+  const bool neverSubnormal = sb < (1u << (eb - 1));
+  fpNativeSqrtSubnormalBarrelsSkipped += static_cast<size_t>(neverSubnormal);
   BBNodeVec res = BBfpRoundPack(rm, pre.sign, pre.rsig, pre.guard,
                                 pre.sticky, pre.be, sb, eb, support,
-                                resultFinite);
+                                neverOverflows, neverSubnormal);
 
   auto packSpecial = [&](bool isnan, bool isinf, const BBNode& sgn) {
     if (isnan)
