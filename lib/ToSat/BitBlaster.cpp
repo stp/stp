@@ -7758,8 +7758,15 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBfpRememberRecord(const ASTNode& n,
   // A zero is likewise fixed to empty fields at the subnormal scale, so a
   // caller can raise the flag and leave whatever the datapath produced.
   // Priority is NaN, then infinity, then zero, matching how packing reads
-  // them back.
+  // them back -- and the flags themselves are masked to that priority, not
+  // just the fields under them. A producer is entitled to raise infinity
+  // and NaN together (fp.add does, for oo - oo: the operand is infinite and
+  // the result is NaN), and packing resolves it, but a consumer reading
+  // isInf off the record directly would not. Masking here is what makes the
+  // record agree with its own packing, which is the whole contract.
   BBNodeVec zeroSig(sb, nf->getFalse());
+  value.isInf = nf->CreateNode(AND, value.isInf,
+                               nf->CreateNode(NOT, value.isNaN));
   const BBNode special = nf->CreateNode(OR, value.isNaN, value.isInf);
   value.isZero = nf->CreateNode(AND, value.isZero,
                                 nf->CreateNode(NOT, special));
