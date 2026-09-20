@@ -2087,6 +2087,29 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
   divByMultMemo.clear();
   sqrtPreRoundMemo.clear();
 
+  // A relational encoding mints fresh inputs and constrains them only
+  // through the relation it conjoins into the root it was minted under.
+  // BBTermMemo outlives a root, so under the next one the cached result
+  // would come back with nothing constraining those variables -- free to
+  // take any value, which is unsound, and the incremental driver blasts
+  // many roots through one blaster.  The fp-native-domain path below
+  // clears the term memos on a root change for its own reasons, and that
+  // is why this has only ever been reachable with that flag off; the
+  // guarantee belongs here, where it does not depend on a flag.
+  //
+  // Only a root that follows one which minted a relation pays for it, so
+  // an incremental bit-vector workload keeps its sharing.
+  const bool rootChanged =
+      !lastBlastedRoot.IsNull() && !(lastBlastedRoot == form);
+  if (rootChanged && relationalFreshInputs > 0)
+  {
+    BBTermMemo.clear();
+    BBFormMemo.clear();
+  }
+  if (rootChanged)
+    relationalFreshInputs = 0;
+  lastBlastedRoot = form;
+
   if (uf->fp_native_domain &&
       (fpNativeDomainRoot.IsNull() || !(fpNativeDomainRoot == form)))
   {
@@ -3831,8 +3854,8 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivByMult(const BBNodeVec& x,
   r = BBNodeVec(w);
   for (unsigned i = 0; i < w; i++)
   {
-    q[i] = nf->CreateFreshInput();
-    r[i] = nf->CreateFreshInput();
+    q[i] = freshRelationalInput();
+    r[i] = freshRelationalInput();
   }
 
   // The ladder: h[i] <=> y < 2^i, one AND gate per rung.
@@ -3900,9 +3923,9 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivByConstant(
   q = BBNodeVec(w, BBFalse);
   r = BBNodeVec(w, BBFalse);
   for (unsigned i = 0; i < qBits; i++)
-    q[i] = nf->CreateFreshInput();
+    q[i] = freshRelationalInput();
   for (unsigned i = 0; i < span; i++)
-    r[i] = nf->CreateFreshInput();
+    r[i] = freshRelationalInput();
 
   BBNodeVec acc(w + 1, BBFalse);
   bool first = true;
@@ -3968,7 +3991,7 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     // refiner's offer order.
     BBNodeVec t(width);
     for (unsigned i = 0; i < width; i++)
-      t[i] = nf->CreateFreshInput();
+      t[i] = freshRelationalInput();
 
     const int only = uf->division_abstraction_only_lemma;
     const unsigned prefix = uf->division_abstraction_prefix;
@@ -8349,9 +8372,9 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrtPreRound(const ASTNode& operand,
   BBNodeVec q(qw);
   BBNodeVec r(sb + 3);
   for (unsigned i = 0; i < qw; i++)
-    q[i] = nf->CreateFreshInput();
+    q[i] = freshRelationalInput();
   for (unsigned i = 0; i < sb + 3; i++)
-    r[i] = nf->CreateFreshInput();
+    r[i] = freshRelationalInput();
   ++fpNativeDivRelations;
 
   // q*q + r at width W, carry-outs pinned so the sum is the integer sum.
@@ -8753,9 +8776,9 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpDiv(const ASTNode& term,
   BBNodeVec q(qw);
   BBNodeVec r(sb);
   for (unsigned i = 0; i < qw; i++)
-    q[i] = nf->CreateFreshInput();
+    q[i] = freshRelationalInput();
   for (unsigned i = 0; i < sb; i++)
-    r[i] = nf->CreateFreshInput();
+    r[i] = freshRelationalInput();
   ++fpNativeDivRelations;
 
   // dn*q + r at width W, every accumulation step's carry-out pinned false
@@ -9380,9 +9403,9 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRem(const ASTNode& term,
   BBNodeVec q(qw);
   BBNodeVec r(sb + 1);
   for (unsigned i = 0; i < qw; i++)
-    q[i] = nf->CreateFreshInput();
+    q[i] = freshRelationalInput();
   for (unsigned i = 0; i < sb + 1; i++)
-    r[i] = nf->CreateFreshInput();
+    r[i] = freshRelationalInput();
   ++fpNativeDivRelations;
 
   BBNodeVec acc(F + 1, nf->getFalse());
