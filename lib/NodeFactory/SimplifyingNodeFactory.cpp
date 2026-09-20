@@ -264,6 +264,12 @@ static bool fpIsSelfSum(const stp::ASTNode& n)
 {
   return n.GetKind() == stp::FP_ADD && n.Degree() == 3 && n[1] == n[2];
 }
+// fp.sqrt in the form the blaster sees, rounding mode and operand.
+static bool fpIsSqrt(const stp::ASTNode& n)
+{
+  return n.GetKind() == stp::FP_SQRT && n.Degree() == 2;
+}
+
 static bool fpIsSelfProduct(const stp::ASTNode& n)
 {
   return n.GetKind() == stp::FP_MUL && n.Degree() == 3 && n[1] == n[2];
@@ -1112,10 +1118,26 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
       else if (kind == stp::FP_ISNAN &&
                (fpIsRoundToIntegral(t) || fpIsSelfSum(t) || fpIsSelfProduct(t)))
         result = NodeFactory::CreateNode(kind, t[1]);
-      else if (kind == stp::FP_ISZERO &&
-               ((t.GetKind() == stp::FP_SQRT && t.Degree() == 2) ||
-                fpIsSelfSum(t)))
+      else if (kind == stp::FP_ISZERO && (fpIsSqrt(t) || fpIsSelfSum(t)))
         result = NodeFactory::CreateNode(kind, t[1]);
+      // A square root is NaN exactly when its operand is NaN or strictly
+      // below zero, and infinite exactly when its operand is +oo -- neither
+      // depends on the rounding mode, and neither needs the root. Asking
+      // only this of a root is what the corpus's status queries do, and
+      // answering it here drops the whole circuit rather than leaving a
+      // datapath wired into the NaN mux.
+      else if (kind == stp::FP_ISNAN && fpIsSqrt(t))
+        result = NodeFactory::CreateNode(
+            stp::OR, NodeFactory::CreateNode(stp::FP_ISNAN, t[1]),
+            NodeFactory::CreateNode(
+                stp::AND, NodeFactory::CreateNode(stp::FP_ISNEGATIVE, t[1]),
+                NodeFactory::CreateNode(
+                    stp::NOT,
+                    NodeFactory::CreateNode(stp::FP_ISZERO, t[1]))));
+      else if (kind == stp::FP_ISINFINITE && fpIsSqrt(t))
+        result = NodeFactory::CreateNode(
+            stp::AND, NodeFactory::CreateNode(stp::FP_ISINFINITE, t[1]),
+            NodeFactory::CreateNode(stp::FP_ISPOSITIVE, t[1]));
       else if (kind == stp::FP_ISINFINITE && fpIsRoundToIntegral(t) &&
                fpRoundToIntegralNeverOverflows(t))
         result = NodeFactory::CreateNode(kind, t[1]);
@@ -1142,6 +1164,12 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
         result = NodeFactory::CreateNode(stp::FP_ISPOSITIVE, t[0]);
       else if (fpIsRoundToIntegral(t) || fpIsSelfSum(t))
         result = NodeFactory::CreateNode(kind, t[1]);
+      // sqrt(-0) is -0 and every other root is positive or NaN, so a root
+      // is negative exactly when its operand is a negative zero.
+      else if (fpIsSqrt(t))
+        result = NodeFactory::CreateNode(
+            stp::AND, NodeFactory::CreateNode(stp::FP_ISNEGATIVE, t[1]),
+            NodeFactory::CreateNode(stp::FP_ISZERO, t[1]));
       break;
     }
     case stp::FP_ISPOSITIVE:
@@ -1158,8 +1186,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
             stp::NOT, NodeFactory::CreateNode(stp::FP_ISNAN, t[1]));
       else if (t.GetKind() == stp::FP_NEG)
         result = NodeFactory::CreateNode(stp::FP_ISNEGATIVE, t[0]);
-      else if ((t.GetKind() == stp::FP_SQRT && t.Degree() == 2) ||
-               fpIsRoundToIntegral(t) || fpIsSelfSum(t))
+      else if (fpIsSqrt(t) || fpIsRoundToIntegral(t) || fpIsSelfSum(t))
         result = NodeFactory::CreateNode(kind, t[1]);
       break;
     }
