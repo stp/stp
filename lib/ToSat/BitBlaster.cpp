@@ -2077,13 +2077,15 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
 {
   fpNativeAddIsZeroFusions = 0;
 
-  // A quotient-remainder pair a relational division encoding minted for an
-  // earlier root is constrained only by the relation conjoined into that
-  // root; under a later root it would be a free pair. The incremental
-  // driver blasts many roots through one blaster, each under its own
-  // literal, so every root starts the memo afresh -- within a root the
-  // division and remainder of one operand pair still share the pair.
+  // A quotient-remainder pair a relational encoding minted for an earlier
+  // root is constrained only by the relation conjoined into that root;
+  // under a later root it would be a free pair. The incremental driver
+  // blasts many roots through one blaster, each under its own literal, so
+  // every root starts the memos afresh -- within a root, the division and
+  // remainder of one operand pair still share their pair, and two square
+  // roots of one operand still share theirs.
   divByMultMemo.clear();
+  sqrtPreRoundMemo.clear();
 
   if (uf->fp_native_domain &&
       (fpNativeDomainRoot.IsNull() || !(fpNativeDomainRoot == form)))
@@ -2137,6 +2139,10 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
     std::cerr << "fp-native: rounded records reused instead of a pack and a "
                  "re-split: "
               << fpNativeRecordReuses << '\n';
+    std::cerr << "fp-native: relational encodings minted: "
+              << fpNativeDivRelations << '\n';
+    std::cerr << "fp-native: square roots sharing an earlier relation: "
+              << fpNativeSqrtPreRoundReuses << '\n';
     std::cerr << "FP native domain zero-magnitude facts: "
               << fpNativeZeroMagnitudeFacts.size() << '\n';
     std::cerr << "FP native domain zero-magnitude terms: "
@@ -8253,48 +8259,25 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundToIntegral(const ASTNode& term,
   return res;
 }
 
-// Bit-blasted fp.sqrt over a packed IEEE-754 operand. Like the divider this
-// states a defining relation rather than building a restoring array:
-// Q*Q + R = N with R <= 2Q says exactly that Q is the integer square root
-// of N, and the squaring is half the conjunctions of a general multiply
-// because column i+j+1 carries q_i AND q_j once for i < j and column 2i
-// carries q_i alone.
-//
-// The scaling is chosen so that no normalisation is needed at all. With the
-// significand normalised to A in [2^(sb-1), 2^sb) and its exponent e, the
-// value is (A / 2^(sb-1)) * 2^e; halving an odd exponent by doubling the
-// significand leaves a radicand r in [1, 4), whose root is in [1, 2). So
-// taking N = A << (sb+3) after that adjustment makes Q = isqrt(N) equal to
-// sqrt(r) * 2^(sb+1), which is exactly sb+2 bits with the top one always
-// set: significand, guard, and one bit that is known rather than computed.
-//
-// Specials: a NaN operand, or any negative operand other than minus zero,
-// is invalid and gives the canonical NaN. Plus infinity stays infinite,
-// minus infinity is invalid, and either zero returns itself with its sign.
+// The rounding-mode independent half of BBfpSqrt: unpack, normalise, mint
+// the relation's (q, r), assert q*q + r = N and r <= 2q, and hand back the
+// unrounded significand with its guard and sticky. Splitting the circuit
+// here is what lets two roots of one operand under two rounding modes name
+// one (q, r) instead of two; see sqrtPreRoundMemo.
 template <class BBNode, class BBNodeManagerT>
-vector<BBNode>
-BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrt(const ASTNode& term,
-                                             BBNodeSet& support)
+typename BitBlaster<BBNode, BBNodeManagerT>::SqrtPreRound
+BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrtPreRound(const ASTNode& operand,
+                                                     unsigned sb, unsigned eb,
+                                                     unsigned E,
+                                                     BBNodeSet& support)
 {
-  assert(term.GetKind() == FP_SQRT);
-  assert(term.Degree() == 2);
-
-  const SourceSort sort = term.GetSourceSort();
-  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
-  const unsigned sb = sort.significandWidth();
-  const unsigned eb = sort.exponentWidth();
   const unsigned w = eb + sb;
-  assert(sb >= 2 && eb >= 2);
   const unsigned bias = (1u << (eb - 1)) - 1;
-  const unsigned E = BBfpDivExpWidth(eb, sb);
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(operand);
+  const bool aFinite = fpNativeKnownFinite(operand);
 
-  const BBNodeVec rm = BBTerm(term[0], support);
-  const BBNodeVec pa = BBTerm(term[1], support);
+  const BBNodeVec pa = BBTerm(operand, support);
   assert(pa.size() == w);
-
-  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
-  const bool aFinite = fpNativeKnownFinite(term[1]);
-  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite);
 
   auto constVec = [&](unsigned value, unsigned width) {
     BBNodeVec c(width);
@@ -8388,13 +8371,81 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrt(const ASTNode& term,
   be[E - 1] = e[E - 1];
   BBPlus2(be, constVec(bias, E), nf->getFalse());
 
+  SqrtPreRound pre;
+  pre.sign = a.sign;
+  pre.isZero = a.isZero;
+  pre.isInf = a.isInf;
+  pre.isNaN = a.isNaN;
+  pre.rsig = rsig;
+  pre.be = be;
+  pre.guard = guard;
+  pre.sticky = sticky;
+  return pre;
+}
+
+// Bit-blasted fp.sqrt over a packed IEEE-754 operand. Like the divider this
+// states a defining relation rather than building a restoring array:
+// Q*Q + R = N with R <= 2Q says exactly that Q is the integer square root
+// of N, and the squaring is half the conjunctions of a general multiply
+// because column i+j+1 carries q_i AND q_j once for i < j and column 2i
+// carries q_i alone.
+//
+// The scaling is chosen so that no normalisation is needed at all. With the
+// significand normalised to A in [2^(sb-1), 2^sb) and its exponent e, the
+// value is (A / 2^(sb-1)) * 2^e; halving an odd exponent by doubling the
+// significand leaves a radicand r in [1, 4), whose root is in [1, 2). So
+// taking N = A << (sb+3) after that adjustment makes Q = isqrt(N) equal to
+// sqrt(r) * 2^(sb+1), which is exactly sb+2 bits with the top one always
+// set: significand, guard, and one bit that is known rather than computed.
+//
+// Specials: a NaN operand, or any negative operand other than minus zero,
+// is invalid and gives the canonical NaN. Plus infinity stays infinite,
+// minus infinity is invalid, and either zero returns itself with its sign.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrt(const ASTNode& term,
+                                             BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_SQRT);
+  assert(term.Degree() == 2);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned eb = sort.exponentWidth();
+  const unsigned w = eb + sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned E = BBfpDivExpWidth(eb, sb);
+
+  const BBNodeVec rm = BBTerm(term[0], support);
+
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite);
+
+  // Everything between the unpack and the rounder is a function of the
+  // operand alone, so a second rounding mode over the same operand reuses
+  // the relation rather than minting a second one.
+  SqrtPreRound pre;
+  const auto preIt = sqrtPreRoundMemo.find(term[1]);
+  if (preIt != sqrtPreRoundMemo.end())
+  {
+    pre = preIt->second;
+    ++fpNativeSqrtPreRoundReuses;
+  }
+  else
+  {
+    pre = BBfpSqrtPreRound(term[1], sb, eb, E, support);
+    sqrtPreRoundMemo.emplace(term[1], pre);
+  }
+
   const bool directlyConstrainedZero =
       fpNativeZeroMagnitudeFacts.find(term) !=
       fpNativeZeroMagnitudeFacts.end();
   const bool resultFinite =
       !directlyConstrainedZero && fpNativeKnownFinite(term);
-  BBNodeVec res = BBfpRoundPack(rm, a.sign, rsig, guard, sticky, be, sb, eb,
-                                support, resultFinite);
+  BBNodeVec res = BBfpRoundPack(rm, pre.sign, pre.rsig, pre.guard,
+                                pre.sticky, pre.be, sb, eb, support,
+                                resultFinite);
 
   auto packSpecial = [&](bool isnan, bool isinf, const BBNode& sgn) {
     if (isnan)
@@ -8410,15 +8461,16 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrt(const ASTNode& term,
   // Innermost first: either zero returns itself, plus infinity stays
   // infinite, and everything invalid -- a NaN operand, minus infinity, any
   // other negative -- is the canonical NaN.
-  res = BBITE(a.isZero, packSpecial(false, false, a.sign), res);
+  res = BBITE(pre.isZero, packSpecial(false, false, pre.sign), res);
   if (!aFinite)
-    res = BBITE(nf->CreateNode(AND, a.isInf, nf->CreateNode(NOT, a.sign)),
+    res = BBITE(nf->CreateNode(AND, pre.isInf,
+                               nf->CreateNode(NOT, pre.sign)),
                 packSpecial(false, true, nf->getFalse()), res);
   BBNodeVec nanCases;
   if (!aFinite)
-    nanCases.push_back(a.isNaN);
+    nanCases.push_back(pre.isNaN);
   nanCases.push_back(
-      nf->CreateNode(AND, a.sign, nf->CreateNode(NOT, a.isZero)));
+      nf->CreateNode(AND, pre.sign, nf->CreateNode(NOT, pre.isZero)));
   res = BBITE(nf->CreateNode(OR, nanCases),
               packSpecial(true, false, nf->getFalse()), res);
   return res;

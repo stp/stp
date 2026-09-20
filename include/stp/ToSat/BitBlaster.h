@@ -270,6 +270,27 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                      ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
       divByMultMemo;
 
+  // The rounding-mode independent half of a native square root: the
+  // relation's own (q, r) and everything the rounder is handed. FP_SQRT's
+  // memo key is the whole node, rounding mode included, so two roots of one
+  // operand under two modes mint two relations and leave the search ranging
+  // over (x, q1, r1, q2, r2) instead of (x, q, r). Everything up to
+  // BBfpRoundPack is a function of the operand alone, so it is keyed on the
+  // operand; like divByMultMemo the pair is only as good as the relation
+  // conjoined into the root it was minted under, so it lives for one root.
+  struct SqrtPreRound
+  {
+    BBNode sign, isZero, isInf, isNaN;
+    BBNodeVec rsig; // the unrounded significand, sb bits
+    BBNodeVec be;   // the biased result exponent, E bits
+    BBNode guard, sticky;
+  };
+  std::unordered_map<ASTNode, SqrtPreRound, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      sqrtPreRoundMemo;
+  SqrtPreRound BBfpSqrtPreRound(const ASTNode& operand, unsigned sb,
+                                unsigned eb, unsigned E, BBNodeSet& support);
+
   // Return formula for majority function of three formulas.
   BBNode Majority(const BBNode& a, const BBNode& b, const BBNode& c);
 
@@ -599,6 +620,8 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   size_t fpNativeZeroMulFastPaths = 0;
   size_t fpNativeZeroToFpFastPaths = 0;
   size_t fpNativeDivRelations = 0;
+  // Roots that reused an earlier root's relation rather than minting one.
+  size_t fpNativeSqrtPreRoundReuses = 0;
   size_t fpNativeRecordReuses = 0;
   size_t fpNativeRecordClassifications = 0;
   // One placeholder multiply node per width, for BBfpSignificandProduct.
@@ -988,6 +1011,7 @@ public:
     fpNativeZeroMulFastPaths = 0;
     fpNativeZeroToFpFastPaths = 0;
     fpNativeDivRelations = 0;
+    fpNativeSqrtPreRoundReuses = 0;
     fpNativeRecordReuses = 0;
     fpNativeRecordClassifications = 0;
     fpNativeKnownPositiveAddPaths = 0;
