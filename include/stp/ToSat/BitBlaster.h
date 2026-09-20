@@ -628,6 +628,16 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   size_t fpNativeDivRelations = 0;
   // Roots that reused an earlier root's relation rather than minting one.
   size_t fpNativeSqrtPreRoundReuses = 0;
+  // Fresh inputs minted for a defining relation under the current root.
+  // The variables mean nothing without the relation asserted beside them,
+  // and that relation goes into one root's support -- see BBForm.
+  size_t relationalFreshInputs = 0;
+  ASTNode lastBlastedRoot;
+  BBNode freshRelationalInput()
+  {
+    ++relationalFreshInputs;
+    return nf->CreateFreshInput();
+  }
   // Roots whose format proves the denormalising barrel dead.
   size_t fpNativeSqrtSubnormalBarrelsSkipped = 0;
   size_t fpNativeRecordReuses = 0;
