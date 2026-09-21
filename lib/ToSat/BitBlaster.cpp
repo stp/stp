@@ -8638,11 +8638,10 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpMinMax(const ASTNode& term,
 // not the node.
 template <class BBNode, class BBNodeManagerT>
 vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpSignificandProduct(
-    const BBNodeVec& a, const BBNodeVec& b, BBNodeSet& support)
+    const BBNodeVec& a, const BBNodeVec& b, BBNodeSet& support, unsigned wIn)
 {
-  const unsigned sb = a.size();
-  assert(b.size() == sb);
-  const unsigned width = 2 * sb;
+  const unsigned width = wIn ? wIn : 2 * a.size();
+  assert(a.size() <= width && b.size() <= width);
 
   BBNodeVec x = a;
   BBNodeVec y = b;
@@ -8788,24 +8787,56 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpDiv(const ASTNode& term,
     r[i] = freshRelationalInput();
   ++fpNativeDivRelations;
 
-  // dn*q + r at width W, every accumulation step's carry-out pinned false
-  // so the sum is the integer sum: the bound above is what makes that
-  // sound, and pinning it is what makes the relation exact without a
-  // double-width product.
-  BBNodeVec acc(W + 1, nf->getFalse());
-  for (unsigned i = 0; i < sb; i++)
-    acc[i] = r[i];
-  for (unsigned j = 0; j < qw; j++)
+  // dn*q + r at width W. The product never leaves W bits: dn < 2^sb and
+  // q < 2^(sb+2) give dn*q <= 2^W - 2^sb - 2^(sb+2) + 1, and r < 2^sb, so
+  // the sum is below 2^W for every assignment and a truncating width-W
+  // product is the exact one.
+  if (uf->fp_div_product < 0 || uf->fp_div_product > 2)
   {
-    BBNodeVec row(W + 1, nf->getFalse());
-    for (unsigned i = 0; i < sb && i + j < W; i++)
-      row[i + j] = nf->CreateNode(AND, dn[i], q[j]);
-    BBPlus2(acc, row, nf->getFalse());
-    support.insert(nf->CreateNode(NOT, acc[W]));
-    acc[W] = nf->getFalse();
+    cerr << "Unknown --bb.fp-div-product " << uf->fp_div_product;
+    FatalError("bad fp-div-product");
   }
-  const BBNodeVec accLow(acc.begin(), acc.begin() + W);
-  support.insert(BBEQ(accLow, n));
+  BBNodeVec acc;
+  if (uf->fp_div_product == 0)
+  {
+    // The open-coded array: one AND row per quotient bit, rippled in, each
+    // step's carry-out pinned false. The pins are implied by the bound
+    // above rather than needed for it.
+    acc.assign(W + 1, nf->getFalse());
+    for (unsigned i = 0; i < sb; i++)
+      acc[i] = r[i];
+    for (unsigned j = 0; j < qw; j++)
+    {
+      BBNodeVec row(W + 1, nf->getFalse());
+      for (unsigned i = 0; i < sb && i + j < W; i++)
+        row[i + j] = nf->CreateNode(AND, dn[i], q[j]);
+      BBPlus2(acc, row, nf->getFalse());
+      support.insert(nf->CreateNode(NOT, acc[W]));
+      acc[W] = nf->getFalse();
+    }
+    acc.resize(W);
+  }
+  else
+  {
+    // Through the bit-vector multiplier, which is what makes every
+    // --bb.mult-variant reach the divider. A constant divisor leaves dn a
+    // constant vector, and constant-run recoding is worth about a third of
+    // this product on its own.
+    acc = BBfpSignificandProduct(dn, q, support, W);
+    BBPlus2(acc, zext(r, W), nf->getFalse());
+    if (uf->fp_div_product == 2)
+    {
+      // The top column of the sum, asserted false. Not implied by the
+      // magnitude bound above -- 2^W - 2^sb - 2^(sb+2) + 1 has bit W-1 set
+      // -- but implied by the equality below, since n = an << (sb+1) is
+      // structurally zero at column 2sb+1. This is NOT the open-coded
+      // path's per-row pins, which are qw separate facts about intermediate
+      // sums a monolithic product does not expose.
+      for (unsigned i = 2 * sb + 1; i < W; i++)
+        support.insert(nf->CreateNode(NOT, acc[i]));
+    }
+  }
+  support.insert(BBEQ(acc, n));
   // dn is nonzero by construction, so this needs no divisor-zero guard.
   support.insert(BBBVLE(r, dn, false, true));
 
