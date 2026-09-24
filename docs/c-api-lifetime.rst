@@ -49,8 +49,10 @@ their producing ``VC`` is live.  For example:
    vc_DeleteExpr(bv8);
    vc_Destroy(vc);
 
-With the default ``EXPRDELETE`` policy, ``vc_Destroy`` releases the
-checker-owned wrappers.  Do not also delete a checker-owned wrapper.  Changing
+With the default ``EXPRDELETE`` policy, ``vc_Destroy`` releases every
+checker-owned wrapper the caller has not already deleted: an explicit
+``vc_DeleteExpr`` on one of them makes the checker forget it, so the example
+above is valid with or without its ``vc_setInterfaceFlags`` line.  Changing
 the ownership policy during a session is unsupported.
 
 Invalidated raw pointers

@@ -1026,8 +1026,10 @@ public:
 
   DLL_PUBLIC ~STPMgr();
 
-  // Used just via the C-Interface, to allow some nodes to be automaticaly deleted.
-  vector<stp::ASTNode*> persist;
+  // The C interface's checker-owned wrappers, released by vc_Destroy. A hash
+  // set so that vc_DeleteExpr can forget a wrapper the caller released in
+  // constant time; the order they are released in does not matter.
+  ankerl::unordered_dense::set<stp::ASTNode*> persist;
 
   void print_stats() const
   {

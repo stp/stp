@@ -130,7 +130,7 @@ void enableCExpressionTracking(VC vc)
   // created before the flag deliberately remain outside the safe UF registry.
   for (stp::ASTNode* expression : context->second.manager->persist)
   {
-    if (expression == NULL || expression->IsNull())
+    if (expression->IsNull())
       continue;
     CExpressionRecord record;
     record.contextGeneration = context->second.generation;
@@ -1157,7 +1157,7 @@ stp::ASTNode* persistNode(VC vc, stp::ASTNode n)
   stp::ASTNode* np = new stp::ASTNode(n);
   registerCExpression(np);
   if (b->UserFlags.cinterface_exprdelete_on_flag)
-    b->persist.push_back(np);
+    b->persist.insert(np);
   return np;
 }
 
@@ -3942,11 +3942,13 @@ void vc_Destroy(VC vc)
 
   if (b->UserFlags.cinterface_exprdelete_on_flag)
   {
-    for (vector<stp::ASTNode*>::iterator it = b->persist.begin();
-         it != b->persist.end(); it++)
-      if (*it != NULL)
-        vc_DeleteExpr(*it);
+    // vc_DeleteExpr erases the wrapper it releases from persist, so walk a
+    // copy and leave the manager's set empty for those erases to miss.
+    const std::vector<stp::ASTNode*> owned(b->persist.begin(),
+                                           b->persist.end());
     b->persist.clear();
+    for (stp::ASTNode* wrapper : owned)
+      vc_DeleteExpr(wrapper);
   }
 
   vc_clearDecls(vc);
@@ -3971,7 +3973,8 @@ void vc_DeleteExpr(Expr e)
   // vc_DeleteExpr has always required a live raw pointer. Consulting its
   // manager here lets unrelated legacy contexts retain the lock-free path
   // even when another context in the process has enabled UF support.
-  if (node->GetNodeManager()->UserFlags.enable_uninterpreted_functions)
+  stp::STPMgr* const manager = node->GetNodeManager();
+  if (manager->UserFlags.enable_uninterpreted_functions)
   {
     std::lock_guard<std::mutex> lock(cHandleMutex);
     const std::unordered_map<Expr, CExpressionRecord>::iterator found =
@@ -3981,28 +3984,22 @@ void vc_DeleteExpr(Expr e)
       const std::unordered_map<VC, CContextRecord>::iterator context =
           liveCContexts.find(found->second.owner);
       if (context != liveCContexts.end())
-      {
         context->second.expressions.erase(e);
-        // Context-managed handles also sit in STPMgr::persist. Mark the slot
-        // empty so vc_Destroy never revisits a caller-deleted wrapper.
-        if (context->second.manager->UserFlags.cinterface_exprdelete_on_flag)
-          for (stp::ASTNode*& persisted : context->second.manager->persist)
-            if (persisted == e)
-            {
-              persisted = NULL;
-              break;
-            }
-      }
       cExpressions.erase(found);
-      delete node;
-      return;
     }
   }
   // A deleted Expr is no longer a valid C handle. The live registry makes UF
   // API validation nonfatal before deletion, but the legacy raw-pointer ABI
   // cannot distinguish a second delete from allocator address reuse without
-  // retaining process-lifetime tombstones. Preserve the baseline ownership
-  // contract here and release untracked wrappers immediately.
+  // retaining process-lifetime tombstones, so the wrapper is released now on
+  // both paths.
+  //
+  // A checker-owned wrapper also sits in STPMgr::persist, which vc_Destroy
+  // walks to release whatever the caller did not. Forget it there first, so a
+  // wrapper the caller released is never read or freed again (#1140). The
+  // erase is one hash lookup, and its miss on a caller-owned wrapper costs
+  // the same, so this is not gated on the ownership flag.
+  manager->persist.erase(node);
   delete node;
 }
 

@@ -80,8 +80,9 @@ TEST(getbv, INT32)
     uint32_t print_index = getBVUnsignedLongLong(index_3);
     ASSERT_EQ(print_index, j);
     vc_DeleteExpr(a);
-    // vc_DeleteExpr(index_3); - Urgh... STP's C API is inconsistent regarding
-    // what we should delete ourselves and what vc_Destroy() will do for us.
+    // index_3 is checker-owned; deleting it early is allowed, and vc_Destroy
+    // will not revisit it.
+    vc_DeleteExpr(index_3);
     vc_Destroy(vc);
   }
 }
