@@ -4003,6 +4003,19 @@ void vc_DeleteExpr(Expr e)
   // cannot distinguish a second delete from allocator address reuse without
   // retaining process-lifetime tombstones. Preserve the baseline ownership
   // contract here and release untracked wrappers immediately.
+  //
+  // Context-managed handles also sit in STPMgr::persist. Mark the matching slot
+  // empty so vc_Destroy never revisits a caller-deleted wrapper, exactly as the
+  // UF branch above already does. Without this the legacy path leaves a
+  // dangling pointer in persist that vc_Destroy later reads and deletes again.
+  stp::STPMgr* const manager = node->GetNodeManager();
+  if (manager != NULL && manager->UserFlags.cinterface_exprdelete_on_flag)
+    for (stp::ASTNode*& persisted : manager->persist)
+      if (persisted == e)
+      {
+        persisted = NULL;
+        break;
+      }
   delete node;
 }
 
