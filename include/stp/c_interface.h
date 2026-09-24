@@ -230,12 +230,17 @@ enum ifaceflag_t
   //!
   //! This is set to true by default.
   //!
-  //! Affected methods are:
-  //!  - vc_arrayType
-  //!  - vc_boolType
-  //!  - vc_bvType
-  //!  - vc_bv32Type
-  //!  - vc_vcConstExprFromInt
+  //! The checker then owns, and vc_Destroy releases, the handles returned by
+  //!  - every Type constructor: vc_boolType, vc_bvType, vc_bv32Type,
+  //!    vc_arrayType, vc_fpType, vc_fpRoundingModeType and vc_getType;
+  //!  - vc_bvConstExprFromInt and vc_bv32ConstExprFromInt;
+  //!  - vc_fpRoundingMode and every other vc_fp* constant, operation,
+  //!    predicate and conversion, except vc_fpRoundingModeVar, which is a
+  //!    variable like any vc_varExpr.
+  //!
+  //! Every other handle is caller-owned and released only by vc_DeleteExpr.
+  //! A checker-owned handle may be passed to vc_DeleteExpr early as well; the
+  //! checker then forgets it. With the flag off, every handle is caller-owned.
   //!
   //! Changing this flag while STP is running may result in undefined behaviour.
   //!
@@ -2272,13 +2277,12 @@ DLL_PUBLIC void vc_Destroy(VC vc);
 
 //! \brief Destroy the given expression, freeing its associated memory.
 //!
-//! Only for expressions the caller owns. Do NOT pass expressions returned by
-//! the vc_fp* constructors (or the type/true/false constructors): those are
-//! owned by the checker and freed by vc_Destroy -- deleting one here frees
-//! it twice. Exception: after vc_setFlag(vc, 'u') has enabled UF handle
-//! tracking, wrappers constructed subsequently are tracked and may be released
-//! explicitly; vc_declareUninterpretedFunction documents this for its borrowed
-//! Type arguments.
+//! Every Expr and Type is a separately allocated wrapper. A caller-owned
+//! wrapper (variables, vc_trueExpr and vc_falseExpr, the vc_bvConstExprFrom*
+//! constants other than FromInt, every bit-vector, Boolean and array
+//! operation, counterexample values) is released only here. A checker-owned
+//! wrapper (see EXPRDELETE) is released by vc_Destroy; passing it here first
+//! is allowed and makes the checker forget it, so nothing is freed twice.
 //!
 //! The owning VC must still be live.  This call immediately invalidates the
 //! raw handle; reusing it or deleting it again is outside the supported

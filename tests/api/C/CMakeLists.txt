@@ -41,6 +41,7 @@ AddSTPGTest(if-check.cpp)
 AddSTPGTest(incremental-auto-engage.cpp)
 AddSTPGTest(interface-check.cpp)
 AddSTPGTest(leaks.cpp)
+AddSTPGTest(persist-delete.cpp)
 AddSTPGTest(multiple-queries.cpp)
 AddSTPGTest(parsefile-using-cinterface.cpp
                         CVC_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/t.cvc\"
