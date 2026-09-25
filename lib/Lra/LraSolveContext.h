@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -89,6 +90,7 @@ struct CoreVariableMapEntry final
   VariableId core_variable;
   CoreGeneration core_generation;
   CoreVariableRole role = CoreVariableRole::PublicRealSymbol;
+  std::uint32_t float_variable = 0xffffffffu;
 };
 
 struct CoreRowMapEntry final
@@ -96,6 +98,7 @@ struct CoreRowMapEntry final
   LraCanonicalRowId registry_row;
   RowId core_row;
   CoreGeneration core_generation;
+  std::uint32_t float_variable = 0xffffffffu;
 };
 
 struct CoreComponentMapEntry final
@@ -106,6 +109,10 @@ struct CoreComponentMapEntry final
   OriginId positive_origin;
   OriginId negative_origin;
   CoreGeneration core_generation;
+  /* The advisory tier's atom for this component, when the float driver is
+   * on; unset otherwise.  Float atoms are assigned in component order, so
+   * this needs no map of its own. */
+  std::uint32_t float_atom = 0xffffffffu;
 };
 
 struct OriginMapEntry final
@@ -245,6 +252,7 @@ struct LraSolveMetrics final
   std::uint64_t polarity_advice = 0;
   std::uint64_t polarity_changes = 0;
   std::uint64_t polarity_abstentions = 0;
+  std::uint64_t polarity_float = 0;
   std::uint64_t polarity_exact = 0;
   std::uint64_t models_staged = 0;
   std::uint64_t model_values_staged = 0;
@@ -255,6 +263,44 @@ struct LraSolveMetrics final
   std::uint64_t exact_check_nanoseconds = 0;
   std::uint64_t model_mapping_nanoseconds = 0;
   std::uint64_t model_evaluation_nanoseconds = 0;
+  // The advisory double tier, when the float driver is on: what it
+  // absorbed, what it flagged, and how its candidates fared under exact
+  // re-derivation.
+  std::uint64_t float_assertions = 0;
+  std::uint64_t float_checks = 0;
+  std::uint64_t float_check_conflicts = 0;
+  std::uint64_t float_local_conflicts = 0;
+  std::uint64_t float_checks_abandoned = 0;
+  // Times the float tier's fill blew past the reroute budget and the query
+  // was handed to the exact driver. At most once per solve; see
+  // UserDefinedFlags::lra_float_reroute.
+  std::uint64_t float_reroutes = 0;
+  std::uint64_t float_replays = 0;
+  std::uint64_t float_replay_conflicts = 0;
+  std::uint64_t float_replay_consistent = 0;
+  std::uint64_t float_disabled = 0;
+  std::uint64_t float_pivots = 0;
+  std::uint64_t float_check_nanoseconds = 0;
+  std::uint64_t float_sync_nanoseconds = 0;
+  // Certificate-first certification: conflicts staged straight from the
+  // float tier's verified Farkas certificate, and certificates the exact
+  // verifier rejected (each of those fell back to re-derivation).
+  std::uint64_t float_certified = 0;
+  std::uint64_t float_certificate_failed = 0;
+  // Models accepted by refinement of the float assignment, and refinement
+  // attempts the exact verifier rejected (each fell back to the core's
+  // own check).
+  std::uint64_t float_models_refined = 0;
+  std::uint64_t float_model_refine_failed = 0;
+  // Basis restarts taken before degrading a solve's float checks, and
+  // switches into the factorized representation.
+  std::uint64_t float_restarts = 0;
+  std::uint64_t float_rebuilds = 0;
+  std::uint64_t float_generalisations = 0;
+  std::uint64_t float_factorized = 0;
+  /* Times a solve continued in a fresh factorized tier built from the
+   * trail after the double tier tripped twice. */
+  std::uint64_t float_promotions = 0;
 };
 
 
@@ -336,6 +382,8 @@ class LraCoordinator;
 // normal reverse destruction releases the context first.
 using SerialIndex = std::unordered_map<std::uint64_t, std::size_t>;
 
+class FloatSimplex;
+
 class LraSolveContext final
 {
 public:
@@ -368,7 +416,37 @@ public:
       core_->setConflictVerification(enabled);
   }
   bool conflictVerification() const noexcept { return verify_conflicts_; }
+  /* Route the propagator's asserts and partial checks through the advisory
+   * double tier.  Enabling builds the float core from the maps the exact
+   * build has already validated; a build whose numbers do not all convert
+   * to finite doubles leaves the tier off and the exact path untouched. */
+  void setFloatDriver(bool enabled) noexcept;
+  void setConflictRecovery(bool enabled) noexcept
+  {
+    conflict_recovery_ = enabled;
+  }
+  void setFloatPromotionBudget(std::int64_t budget) noexcept
+  {
+    float_promotion_budget_ = budget <= 0 ? 0U : static_cast<unsigned>(std::min<std::int64_t>(budget, 1U << 30));
+  }
+  unsigned floatPromotionBudget() const noexcept { return float_promotion_budget_; }
   void setSeparateModelValues(bool enabled) noexcept;
+  // The fill multiple past which the float tier is judged pathological and the
+  // query rerouted to the exact driver; 0 disables it. Carried here so the
+  // candidate adapter, which sees only the context, can read it. See
+  // UserDefinedFlags::lra_float_reroute.
+  void setFloatRerouteBudget(unsigned budget) noexcept
+  {
+    float_reroute_budget_ = budget;
+  }
+  unsigned floatRerouteBudget() const noexcept { return float_reroute_budget_; }
+  void setFloatRerouteFloor(unsigned floor) noexcept
+  {
+    float_reroute_floor_ = floor;
+  }
+  unsigned floatRerouteFloor() const noexcept { return float_reroute_floor_; }
+  // On, built, and every input converted finitely.
+  bool floatActive() const noexcept;
   // The verifier, or an unconditional pass when it is switched off.
   VerificationResult verifyConflictChecked(
       const Conflict& conflict) const noexcept;
@@ -434,6 +512,14 @@ private:
   friend class LraCoordinator;
 
   void buildCore(std::uint64_t origin_serial_start);
+  void buildFloatCore() noexcept;
+  /* The float tier asked to be promoted (FloatSimplex::wantsPromotion):
+   * build a fresh tier from the same registry, replay the trail into
+   * it, switch it to the factorized representation and adopt it.  False
+   * leaves the old tier in place. */
+  bool promoteFloatCore() noexcept;
+  std::unique_ptr<FloatSimplex> makeFloatCore();
+  void bindFreshFloatMaps();
   void initializeSolveContext() noexcept;
   void invalidate(std::string detail) noexcept;
   /* Stop this context because a check could not reach a verdict, rather than
@@ -487,6 +573,16 @@ private:
   // every context-side exact copy.
   NumberBudget mapping_budget_;
   std::unique_ptr<ExactLraCore> core_;
+  /* The advisory tier and its replay mapping: float atoms are created in
+   * component order, so float_atom_core_atoms_[float_atom] is the exact
+   * atom to replay.  Doubles only; no budget involvement. */
+  std::unique_ptr<FloatSimplex> float_core_;
+  std::vector<AtomId> float_atom_core_atoms_;
+  bool float_driver_ = false;
+  unsigned float_reroute_budget_ = 0;
+  unsigned float_reroute_floor_ = 0;
+  bool conflict_recovery_ = true;
+  unsigned float_promotion_budget_ = 4;
   LraRegistrySnapshot registry_snapshot_;
   std::vector<CoreVariableMapEntry> variable_map_;
   std::vector<CoreRowMapEntry> row_map_;

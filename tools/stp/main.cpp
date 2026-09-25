@@ -469,6 +469,55 @@ void ExtraMain::create_options()
            "let the LRA theory take part in the SAT search, on a backend "
            "that hosts a propagator (CaDiCaL, CryptoMiniSat)",
            refinement_group);
+  bool_arg("--lra-float-driver", bm->UserFlags.lra_float_driver,
+           "drive partial theory checks with a double-precision simplex, "
+           "conflicts and models re-derived exactly (under "
+           "--lra-theory-propagation)",
+           refinement_group);
+  app.add_option("--lra-float-reroute", bm->UserFlags.lra_float_reroute,
+                 "when the float tableau's live fill exceeds this multiple of "
+                 "its pristine nonzero count, re-solve the query on the exact "
+                 "driver (which certifies float results, so the answer is "
+                 "unchanged) and keep it for the rest of the session; a few "
+                 "cpachecker cilled files blow the float tableau up and never "
+                 "finish while the exact driver settles them in under a "
+                 "second; 0 disables")
+      ->group(refinement_group)
+      ->capture_default_str();
+  app.add_option("--lra-float-reroute-floor",
+                 bm->UserFlags.lra_float_reroute_floor,
+                 "absolute live-nonzero count the float tableau must also "
+                 "exceed before a reroute fires; the fill ratio alone trips on "
+                 "small healthy problems, so this floor restricts the reroute "
+                 "to genuinely large tableaux; 0 means no floor")
+      ->group(refinement_group)
+      ->capture_default_str();
+  bool_arg("--lra-presolve-unconstrained",
+           bm->UserFlags.lra_presolve_unconstrained,
+           "fold single-use pure-polarity Real atoms, conjoining the "
+           "witness equality that realises them",
+           refinement_group);
+  bool_arg("--lra-presolve-propagate", bm->UserFlags.lra_presolve_propagate,
+           "propagate top-level truths through the Boolean structure before "
+           "registration",
+           refinement_group);
+  bool_arg("--lra-presolve-rows", bm->UserFlags.lra_presolve_rows,
+           "drop Real inequalities implied by a stronger same-polynomial "
+           "sibling; refute contradictory pairs",
+           refinement_group);
+  bool_arg("--lra-presolve-bounds", bm->UserFlags.lra_presolve_bounds,
+           "derive and propagate Real variable bounds before registration; "
+           "fix met bounds, refute contradictory ones",
+           refinement_group);
+  bool_arg("--lra-presolve-subst", bm->UserFlags.lra_presolve_subst,
+           "substitute top-level Real definitions (x = t) through the query "
+           "before registration, keeping the definitions conjoined",
+           refinement_group);
+  bool_arg(
+      "--lra-conflict-recovery", bm->UserFlags.lra_conflict_recovery,
+      "Recover floating-point conflict weights by bounded exact elimination "
+      "(default: on). Set to 0 to use exact simplex fallback directly.",
+      refinement_group);
   mode_arg("--lra-separate-model-values",
            bm->UserFlags.lra_separate_model_values,
            "before a satisfying assignment is published, move variables "
@@ -479,6 +528,9 @@ void ExtraMain::create_options()
            "declaration whose congruence is decided from model values, "
            "which is the only reader such a coincidence misleads",
            refinement_group);
+  int64_arg("--lra-float-promotion-budget", bm->UserFlags.lra_float_promotion_budget,
+            "fresh factorized float tiers one solve may build after infinitesimal "
+            "trips; 0 means unbounded", refinement_group);
   lra_decision_polarity_option =
       bool_arg("--lra-decision-polarity", bm->UserFlags.lra_decision_polarity,
                "advise arithmetic polarity for SAT's selected decision variable "

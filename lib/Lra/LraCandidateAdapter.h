@@ -94,6 +94,26 @@ private:
    * matters immediately. */
   std::vector<std::optional<Checkpoint>> level_checkpoints_;
   std::vector<SATSolver::Lit> pending_theory_clause_;
+  /* Float-driver state: the advisory tier's trail mark per decision level
+   * (same lazy discipline as level_checkpoints_), and the lazy exact
+   * mirror -- one batch per decision level that had asserts, each one
+   * exact-core checkpoint covering that level's slice of the float trail,
+   * built at sync time and popped exactly when the search leaves the
+   * level.  Kept levels are never re-asserted. */
+  std::vector<std::optional<std::size_t>> float_level_marks_;
+  struct SyncBatch final
+  {
+    Checkpoint checkpoint;
+    std::size_t level;
+    std::size_t to;
+  };
+  std::vector<SyncBatch> sync_batches_;
+  /* Unwinding is deferred to the next sync, so this records the lowest
+   * level any backtrack reached since the last reconcile: a batch for
+   * level 4 survives a sync at level 5 only if no backtrack dipped below
+   * 4 in between -- comparing against the sync-time level alone would
+   * keep batches whose entries a deeper backjump already undid. */
+  std::size_t unwind_low_level_ = static_cast<std::size_t>(-1);
   std::map<uint32_t, LraComponentId> component_by_variable_;
   bool propagating_ = false;
   // Once a callback skips work at the deadline, re-arming the backend's
@@ -105,7 +125,7 @@ private:
   // to a state that was checked.
   bool theory_dirty_ = false;
   bool decision_polarity_ = false;
-  enum class AdviceSource : std::uint8_t { None, Exact };
+  enum class AdviceSource : std::uint8_t { None, Float, Exact };
   AdviceSource advice_source_ = AdviceSource::None;
   /* Partial checks run under the observer's arithmetic guard. On a tableau
    * whose pivots stay in word arithmetic it never fires; on a dense one
@@ -118,12 +138,96 @@ private:
    * full-lazy behaviour inside the search. */
   bool partial_checks_enabled_ = true;
   unsigned partial_checks_abandoned_ = 0;
+  /* Fresh factorized tiers built from the trail in this solve, after the
+   * double tier tripped its infinitesimal cap.  One such tier is the design
+   * intent: a tableau whose pivot history blew up gets a factor over the
+   * pristine rows instead.  A tier that trips on its own first check has
+   * no history to blame, and building another identical one cannot end
+   * differently -- measured as 18,094 promotions in one solve, each a full
+   * trail replay and refactor, with SAT advancing a clause between them.
+   * Past the budget the abandonment cascade below runs instead. */
+  unsigned float_promotions_ = 0;
+  /* Float-driver degrade, per solve: when the float tableau keeps blowing
+   * its merge or pivot budget, its checks are hopeless for this instance
+   * -- but pruning must not stop, or the search builds thousands of
+   * doomed models that each pay a full exact replay.  Degraded means
+   * partial checks run sync-plus-exact on the lazily maintained mirror
+   * instead (as with --lra-float-driver=0), and the found-model float filter
+   * steps aside. */
+  bool float_checks_degraded_ = false;
+  unsigned float_restarts_ = 0;
+  /* Sampling counter for the float-tier reroute check: liveNonzeros scans the
+   * tableau, so the fill ratio is measured every few checks rather than every
+   * one. */
+  unsigned float_reroute_sample_ = 0;
 
   bool assertOneLiteral(SATSolver::Lit literal) noexcept;
   // Open a core checkpoint for the current level, if it has none yet.
   bool ensureLevelCheckpoint() noexcept;
+  /* The float-driver counterparts: a trail mark for the current level, a
+   * lazy sync that brings the exact core up to the float trail (popping
+   * diverged batches, asserting only the new slice), and the exact check
+   * over the synced state that certifies the advisory tier's candidates.
+   * The synced bounds persist across calls; only rewinds below a batch
+   * unwind it. */
+  bool ensureFloatLevelMark() noexcept;
+  /* Drop the mirror batches for levels above `level` and unwind the core
+   * past all of them with one pop -- pops resolve a checkpoint to the
+   * first level carrying it and unwind everything above, so the deepest
+   * dead batch's checkpoint removes the whole dead suffix in one repair
+   * pass instead of one per batch. */
+  bool unwindDeadBatches(std::size_t level) noexcept;
+  enum class SyncOutcome : std::uint8_t
+  {
+    Clean,
+    ConflictStaged,
+    /* A staged conflict's backtrack has not arrived yet: the core is in
+     * Conflict and refuses pushes.  The backend may assert and poll in
+     * that window; certifying nothing there is safe, the backtrack is
+     * already forced. */
+    CoreBusy,
+    Failed
+  };
+  SyncOutcome syncFloatTrailIntoExact() noexcept;
+  enum class ReplayVerdict : std::uint8_t
+  {
+    ConflictStaged,
+    Consistent,
+    Inconclusive
+  };
+  ReplayVerdict syncAndCheckExact(bool final_check,
+                                 std::optional<Model>* witness = nullptr) noexcept;
   // Keep the certified value object, not a reference to the current tableau.
   bool retainPropagatedModel(Model witness);
+  /* Certificate-first certification: hand the float tier's Farkas support
+   * (atoms, polarities, dyadic weights) to the core's candidate verifier
+   * and stage the returned exact Conflict.  False means no certificate,
+   * an unverifiable one, or staging failed -- the caller falls back to
+   * exact re-derivation. */
+  bool stageCertificateConflict() noexcept;
+  /* The certification middle of stageCertificateConflict: the float
+   * tier's certificate, converted and judged by the core, as a verified
+   * Conflict -- without any staging, so both the propagated path (theory
+   * clause) and the full-lazy path (pending clause) can consume it. */
+  std::optional<Conflict> certifyFloatCertificate() noexcept;
+  /* The full-lazy candidate check, attempted on the float engine: scratch
+   * -assert the selection, check, certify or refine, undo the scratch.
+   * True means `out` carries the staged outcome; false means the caller
+   * runs the exact path.  Throws only from staging, like that path. */
+  bool floatCompleteCandidate(std::uint64_t candidate, AdapterResult& out);
+  /* Model refinement off the float assignment: reconstruct every base
+   * variable's (value, epsilon) pair as exact rationals, and have the
+   * core substitute a concrete epsilon and verify against the float
+   * trail's asserted bounds. A rejected proposal allows an exact re-check;
+   * an observer stop ends the attempt before replaying the exact trail. */
+  struct ModelRefinement final
+  {
+    std::optional<Model> witness;
+    StopReason stop = StopReason::Continue;
+  };
+  ModelRefinement refineAndCertifyModel() noexcept;
+  bool assertOneLiteralFloat(SATSolver::Lit literal,
+                             const CoreComponentMapEntry& mapped) noexcept;
   bool stageTheoryConflict(const Conflict& conflict) noexcept;
   // The caller has already verified this witness against its support.
   bool stageVerifiedTheoryConflict(const Conflict& conflict) noexcept;
@@ -131,10 +235,20 @@ private:
   // round of assignments: a conflict is staged for takeClause.
   void checkPartialAssignment() noexcept;
 
+  // Sample the float tableau's fill and, if it has blown past the reroute
+  // budget, ask the SAT backend to stop so the query can be redone on the
+  // exact driver. Cheap and a no-op unless the budget is set and the float
+  // tier is live. Verdict-preserving: the exact core certifies float results,
+  // so the reroute only changes runtime. See UserDefinedFlags::lra_float_reroute.
+  void maybeRequestFloatReroute() noexcept;
+
   bool readLiteral(SATSolver::Lit literal, bool& value,
                    std::string& detail) const;
+  /* core_derived as in stageVerifiedModel: a candidate-certified conflict
+   * does not require the core's own state to say Conflict. */
   void copyVerifiedConflict(const Conflict& conflict,
-                            std::uint64_t candidate_serial);
+                            std::uint64_t candidate_serial,
+                            bool core_derived = true);
   /* core_derived: the model came from the core's own check, whose state
    * must then still say Consistent; a candidate-certified model's
    * vouching is its verification, not the core's state. */

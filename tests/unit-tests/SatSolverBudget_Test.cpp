@@ -77,6 +77,29 @@ TEST(SatSolverBudget, ReplacementBackendCannotRearmAnExpiredQuery)
   }
 }
 
+TEST(SatSolverBudget, RerouteDoesNotExpireTheOwningQueryOrRoundUpItsRemainder)
+{
+  stp::UserDefinedFlags flags;
+  flags.timeout_max_time = 60;
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(500);
+  CountingSolver first;
+  stp::applySolveBudgets(first, flags, deadline);
+  first.requestTheoryReroute();
+  EXPECT_TRUE(first.timeLimitExpired());
+  EXPECT_TRUE(first.theoryRerouteRequested());
+
+  CountingSolver replacement;
+  stp::applySolveBudgets(replacement, flags, deadline);
+  EXPECT_FALSE(replacement.theoryRerouteRequested());
+  EXPECT_LE(replacement.secondsRemaining(), 0.5);
+  EXPECT_GT(replacement.secondsRemaining(), 0.0);
+  bool timeout = false;
+  EXPECT_TRUE(replacement.solve(timeout));
+  EXPECT_FALSE(timeout);
+  EXPECT_EQ(1u, replacement.searches);
+}
+
 TEST(SatSolverBudget, PublicBatchQueriesStartFreshAfterTimeout)
 {
   stp::STPMgr manager;

@@ -3,12 +3,15 @@
 ; Forty Real if-then-elses, each one built on the one below it and named by a
 ; `let`, so the input is a shared DAG forty deep and under two kilobytes.
 ;
-; A walk over that DAG had no memo and so followed paths rather than nodes.
+; Two walks over that DAG had no memo and so followed paths rather than nodes.
 ; `Frontend::liftRealTermItes` named the value of every ite it reached, and
 ; reaching one by 2^depth paths named it 2^depth times and stated 2^depth pairs
-; of branch equalities for it.
+; of branch equalities for it.  The nonlinear catch-all inside presolve's
+; `eliminateUnconstrained` charged every Real symbol under an atom the linear
+; extractor refused, pushing every child of every node it popped with nothing
+; recording what it had already seen.
 ;
-; It is now once per node, which is what the sibling walk beside it
+; Both are now once per node, which is what the sibling walks beside them
 ; already did.  Before, twenty levels did not finish in two minutes and this
 ; file would not have finished at all; it now takes a hundredth of a second.
 ; --max-time is here so that a regression is a bounded `unknown` rather than a

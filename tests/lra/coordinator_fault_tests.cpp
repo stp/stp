@@ -84,6 +84,7 @@ enum class StageFault
   InconsistentNumerator,
   InvalidDenominator,
   WrongExactValue,
+  OriginalRejects
 };
 
 void applicationModelInvariants()
@@ -187,6 +188,26 @@ void runStageFault(StageFault fault)
     case StageFault::WrongExactValue:
       coordinator.testReplaceStagedExactValue();
       break;
+    case StageFault::OriginalRejects:
+    {
+      /* The query as it was written, before presolve rewrote it: the commit
+       * has to evaluate it and refuse a model that does not satisfy it.
+       * Were it not evaluated, the five default-on presolve stages
+       * would be the one part of the answer path no check covers, and a
+       * wrong rewrite there would reach the answer unchecked. */
+      LraReconstruction reconstruction;
+      reconstruction.original = manager.CreateNode(
+          AND, ASTVec{formula, manager.CreateRealPredicate(
+                                   EQ, x, manager.CreateRealConst("13/17"))});
+      coordinator.setReconstruction(std::move(reconstruction));
+      AbsRefine_CounterExample counterexample(&manager, nullptr, &arrays);
+      require(coordinator.verifyAndCommit(counterexample) !=
+                  CommitOutcome::Committed,
+              "a model the original query rejects must not be published");
+      require(!manager.HasRealModel(),
+              "a refused commit publishes nothing");
+      return;
+    }
   }
 
   const bool accepted = coordinator.testValidateStagedModel();
@@ -358,7 +379,7 @@ void extensionDeclineIsNotFailure()
           "a failed extension says what happened");
 }
 
-void decisionPolarityState()
+void decisionPolarityState(bool floating)
 {
   STPMgr manager;
   Frontend frontend(manager);
@@ -373,6 +394,7 @@ void decisionPolarityState()
   auto snapshot = registry.frameSnapshot(frame);
   std::unique_ptr<SATSolver> solver(createSATSolver(manager.UserFlags));
   LraSolveContext context(registry, *solver, frontend.numberLimits(), frame);
+  context.setFloatDriver(floating);
   std::vector<LraSatBinding> bindings;
   SATSolver::Lit lower{}, bad{}, upper{};
   for (auto const& c : snapshot.components)
@@ -404,11 +426,12 @@ void decisionPolarityState()
           "false polarity reaches the bridge");
   require(adapter.decisionPolarity(SATSolver::var(upper), value) && value,
           "true polarity reaches the bridge");
-  require(context.metrics().exact_checks == before.exact_checks,
+  require(context.metrics().exact_checks == before.exact_checks &&
+          context.metrics().float_checks == before.float_checks,
           "advice requests do not run arithmetic checks");
   require(context.metrics().polarity_advice == 2 &&
           context.metrics().polarity_changes == 2 &&
-          context.metrics().polarity_exact == 2,
+          (floating ? context.metrics().polarity_float : context.metrics().polarity_exact) == 2,
           "polarity counters report useful advice and its source");
   adapter.notifyNewLevel();
   adapter.notifyAssigned({bad});
@@ -485,7 +508,10 @@ int main()
     NoPolarityCadical unsupported;
     decisionPolarityRequirements(unsupported);
 #endif
-    decisionPolarityState();
+    for (bool floating : {false, true})
+    {
+      decisionPolarityState(floating);
+    }
     runStageFault(StageFault::None);
     runStageFault(StageFault::Epoch);
     runStageFault(StageFault::StageSerial);
@@ -497,6 +523,7 @@ int main()
     runStageFault(StageFault::InconsistentNumerator);
     runStageFault(StageFault::InvalidDenominator);
     runStageFault(StageFault::WrongExactValue);
+    runStageFault(StageFault::OriginalRejects);
     arraySerialMismatchFailsClosed();
     std::cout << "PASS coordinator faults\n";
     return 0;

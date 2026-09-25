@@ -149,6 +149,22 @@ class CadicalOptionsTests(unittest.TestCase):
         self.assertEqual(re.findall(r"^(?:sat|unsat|unknown)$", result.stdout,
                                     re.MULTILINE), ["sat", "sat"])
 
+    @needs_efficiency_controls
+    def test_exact_arithmetic_uses_explicit_controls(self):
+        source = """(set-logic QF_LRA)
+(declare-fun x () Real)
+(assert (or (< x 0.0) (> x 2.0)))
+(assert (<= x 1.0))
+(assert (>= x (- 1.0)))
+(check-sat)
+"""
+        result = self.check_settings(
+            ["--lra-float-driver=0", "--cadical-elim=0",
+             "--cadical-elimmineff=10000", "--cadical-elimmaxeff=100000"],
+            (0, 10000, 100000), source=source)
+        self.assertEqual(re.findall(r"^(?:sat|unsat|unknown)$", result.stdout,
+                                    re.MULTILINE), ["sat"])
+
 
 if __name__ == "__main__":
     unittest.main()

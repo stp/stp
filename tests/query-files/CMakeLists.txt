@@ -125,7 +125,7 @@ if (USE_CADICAL)
 endif()
 
 # The linear-arithmetic files under every backend that can host the theory
-# propagator: the propagator is the same
+# propagator, with the float driver on and off: the propagator is the same
 # code above both solvers, and each solver's bridge is what these sweeps
 # exercise. A CryptoMiniSat built without the interface is left out, as is
 # MiniSat, which hosts no propagator: the theory runs full-lazy on them.
@@ -156,16 +156,18 @@ if (_stp_lra_query_files AND
     endforeach()
     foreach(_backend ${_stp_lra_backends})
         string(REGEX REPLACE "^--" "" _backend_name "${_backend}")
-        set(_name "lra-query-files-${_backend_name}")
-        add_test(NAME ${_name}
-            COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG>
-                    --param "solver_params=${_backend}"
-                    --param backend_propagator=1
-                    ${_stp_lra_query_paths}
-            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-        )
-        set_tests_properties(${_name}
-            PROPERTIES RESOURCE_LOCK query-files-exec-root
-        )
+        foreach(_driver 1 0)
+            set(_name "lra-query-files-${_backend_name}-driver-${_driver}")
+            add_test(NAME ${_name}
+                COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG>
+                        --param "solver_params=${_backend} --lra-float-driver=${_driver}"
+                        --param backend_propagator=1
+                        ${_stp_lra_query_paths}
+                WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+            )
+            set_tests_properties(${_name}
+                PROPERTIES RESOURCE_LOCK query-files-exec-root
+            )
+        endforeach()
     endforeach()
 endif()

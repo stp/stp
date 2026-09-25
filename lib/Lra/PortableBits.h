@@ -2,6 +2,7 @@
 #define STP_LRA_PORTABLE_BITS_H
 
 #include <cstdint>
+#include <limits>
 
 #if !defined(__GNUC__) && !defined(__clang__) && defined(_MSC_VER) &&        \
     (defined(_M_X64) || defined(_M_ARM64))
@@ -95,6 +96,28 @@ inline int portableCountTrailingZeros(std::uint64_t value) noexcept
   return count;
 }
 
+inline bool portableMultiplyOverflows(std::int64_t a, std::int64_t b,
+                                      std::int64_t* result) noexcept
+{
+  using Limits = std::numeric_limits<std::int64_t>;
+  *result = static_cast<std::int64_t>(static_cast<std::uint64_t>(a) *
+                                      static_cast<std::uint64_t>(b));
+  if (a > 0)
+    return b > 0 ? a > Limits::max() / b : b < Limits::min() / a;
+  if (b > 0)
+    return a < Limits::min() / b;
+  return a != 0 && b < Limits::max() / a;
+}
+
+inline bool portableAddOverflows(std::int64_t a, std::int64_t b,
+                                 std::int64_t* result) noexcept
+{
+  using Limits = std::numeric_limits<std::int64_t>;
+  *result = static_cast<std::int64_t>(static_cast<std::uint64_t>(a) +
+                                      static_cast<std::uint64_t>(b));
+  return b > 0 ? a > Limits::max() - b : a < Limits::min() - b;
+}
+
 }  // namespace detail
 
 // The number of zero bits above the highest set bit. The value must not be
@@ -124,6 +147,29 @@ inline int countTrailingZeros(std::uint64_t value) noexcept
   return static_cast<int>(index);
 #else
   return detail::portableCountTrailingZeros(value);
+#endif
+}
+
+// Overflow-checked word arithmetic: whether the exact result does not fit
+// in 64 bits. Either way *result receives it wrapped to 64 bits, as the
+// builtins leave it.
+inline bool multiplyOverflows(std::int64_t a, std::int64_t b,
+                              std::int64_t* result) noexcept
+{
+#if defined(__GNUC__) || defined(__clang__)
+  return __builtin_mul_overflow(a, b, result);
+#else
+  return detail::portableMultiplyOverflows(a, b, result);
+#endif
+}
+
+inline bool addOverflows(std::int64_t a, std::int64_t b,
+                         std::int64_t* result) noexcept
+{
+#if defined(__GNUC__) || defined(__clang__)
+  return __builtin_add_overflow(a, b, result);
+#else
+  return detail::portableAddOverflows(a, b, result);
 #endif
 }
 

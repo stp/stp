@@ -3,9 +3,12 @@
 #include "LraModelIndex.h"
 
 #include "ExactLraVerificationData.h"
+#include "FloatSimplex.h"
+#include "PortableBits.h"
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <limits>
 #include <map>
 #include <new>
@@ -15,6 +18,103 @@
 #include <utility>
 
 namespace stp::lra {
+
+namespace
+{
+/* A double is a dyadic rational; this is its exact value, no rounding.
+ * mantissa * 2^exponent, with the power applied in word-sized chunks so
+ * the intermediate stays a plain rational under the caller's scope. */
+ExactRational exactOfDouble(double value)
+{
+  int exponent = 0;
+  double const fraction = std::frexp(value, &exponent);
+  auto const mantissa =
+      static_cast<std::int64_t>(std::ldexp(fraction, 53));
+  exponent -= 53;
+  ExactRational result(mantissa);
+  ExactRational const chunk(std::int64_t{1} << 62);
+  while (exponent >= 62)
+  {
+    result *= chunk;
+    exponent -= 62;
+  }
+  if (exponent > 0)
+    result *= ExactRational(std::int64_t{1} << exponent);
+  while (exponent <= -62)
+  {
+    result /= chunk;
+    exponent += 62;
+  }
+  if (exponent < 0)
+    result /= ExactRational(std::int64_t{1} << -exponent);
+  return result;
+}
+
+/* The nearest small rational to the double, by continued fractions.  The
+ * true Farkas weights of small-coefficient problems are small rationals
+ * -- pivot ratios like a third -- that a double only approximates, and
+ * the exact combination needs the true value to cancel; reconstruction
+ * recovers it whenever the approximation is within rounding of a
+ * rational with a modest denominator.  A weight that is exactly dyadic
+ * reconstructs to itself, and anything that fails the round-trip test
+ * falls back to the exact dyadic value (whose certificate then simply
+ * fails verification, as before). */
+ExactRational rationalOfDouble(double value)
+{
+  double x = value;
+  std::int64_t p0 = 0;
+  std::int64_t q0 = 1;
+  std::int64_t p1 = 1;
+  std::int64_t q1 = 0;
+  for (int iteration = 0; iteration < 40; ++iteration)
+  {
+    double const floor_x = std::floor(x);
+    if (!(floor_x >= -9.0e15 && floor_x <= 9.0e15))
+      break;
+    auto const a = static_cast<std::int64_t>(floor_x);
+    std::int64_t scaled_p = 0;
+    std::int64_t scaled_q = 0;
+    std::int64_t p2 = 0;
+    std::int64_t q2 = 0;
+    if (multiplyOverflows(a, p1, &scaled_p) ||
+        multiplyOverflows(a, q1, &scaled_q) ||
+        addOverflows(scaled_p, p0, &p2) ||
+        addOverflows(scaled_q, q0, &q2))
+      break;
+    p0 = p1;
+    q0 = q1;
+    p1 = p2;
+    q1 = q2;
+    if (q1 != 0)
+    {
+      double const approximation =
+          static_cast<double>(p1) / static_cast<double>(q1);
+      /* The snap tolerance absorbs pivot drift, not just rounding: a
+       * coefficient that is one in truth arrives as 1 - 2^-42 after a
+       * long substitution history, and at a tighter tolerance every
+       * such certificate fell through to its dyadic value and was
+       * rejected as not contradictory -- ten percent of the conflicts on
+       * tta_startup, each paying a full exact replay.  A wrong snap is
+       * harmless: the exact verifier rejects it, as it did the dyadic. */
+      if (std::fabs(approximation - value) <=
+          std::fabs(value) * 1.0e-9)
+      {
+        if (q1 < 0)
+        {
+          p1 = -p1;
+          q1 = -q1;
+        }
+        return ExactRational(p1, static_cast<std::uint64_t>(q1));
+      }
+    }
+    double const remainder = x - floor_x;
+    if (remainder < 1.0e-12)
+      break;
+    x = 1.0 / remainder;
+  }
+  return exactOfDouble(value);
+}
+}  // namespace
 
 namespace {
 
@@ -373,6 +473,16 @@ AdapterResult LraCandidateAdapter::checkCompleteCandidate() noexcept
             "SAT model violates the preregistered equality definition");
     }
 
+    /* The float engine first, as a scratch candidate: certificate or
+     * refined model, exactly verified either way, and the exact core's
+     * driver untouched.  Any shortfall falls through to the exact path
+     * below unchanged. */
+    {
+      AdapterResult float_result;
+      if (floatCompleteCandidate(candidate, float_result))
+        return float_result;
+    }
+
     const InputResult<Checkpoint> pushed = context_.core_->push();
     if (pushed.status == InputStatus::ResourceLimit)
     {
@@ -562,11 +672,13 @@ AdapterResult LraCandidateAdapter::checkCompleteCandidate() noexcept
 }
 
 void LraCandidateAdapter::copyVerifiedConflict(
-    const Conflict& conflict, std::uint64_t candidate_serial)
+    const Conflict& conflict, std::uint64_t candidate_serial,
+    bool core_derived)
 {
   if (conflict.tag.generation != context_.core_->generation() ||
       conflict.tag.state_revision == 0 || conflict.terms.empty() ||
-      context_.core_->status() != CheckStatus::Conflict)
+      (core_derived &&
+       context_.core_->status() != CheckStatus::Conflict))
     throw SolveContextFailure(SolveContextFailureKind::Invalid,
                               "conflict witness is stale or non-final");
   const NumberLimits limits = context_.mapping_budget_.limits();
@@ -894,7 +1006,15 @@ bool LraCandidateAdapter::beginTheoryPropagation(
     pending_theory_clause_.clear();
     partial_checks_enabled_ = true;
     partial_checks_abandoned_ = 0;
+    float_checks_degraded_ = false;
+    float_restarts_ = 0;
+    float_promotions_ = 0;
     conflict_pending_ = false;
+    float_level_marks_.clear();
+    sync_batches_.clear();
+    unwind_low_level_ = static_cast<std::size_t>(-1);
+    if (context_.floatActive())
+      context_.float_core_->undoTo(0);
     observed.clear();
     observed.reserve(context_.registry_snapshot_.components.size());
     for (const RegistryComponent& component :
@@ -919,6 +1039,7 @@ bool LraCandidateAdapter::beginTheoryPropagation(
     // The root level. Its checkpoint is opened by the first bound asserted
     // at it, like every other level.
     level_checkpoints_.emplace_back();
+    float_level_marks_.emplace_back();
     propagating_ = true;
     return true;
   }
@@ -937,6 +1058,9 @@ void LraCandidateAdapter::endTheoryPropagation() noexcept
   for (auto const& checkpoint : level_checkpoints_)
     if (checkpoint && (!first || checkpoint->depth < first->depth))
       first = checkpoint;
+  for (auto const& batch : sync_batches_)
+    if (!first || batch.checkpoint.depth < first->depth)
+      first = batch.checkpoint;
   if (first && context_.core_)
   {
     if (context_.core_->pop(*first) != InputStatus::Accepted)
@@ -948,6 +1072,11 @@ void LraCandidateAdapter::endTheoryPropagation() noexcept
   component_by_variable_.clear();
   level_checkpoints_.clear();
   pending_theory_clause_.clear();
+  float_level_marks_.clear();
+  sync_batches_.clear();
+  unwind_low_level_ = static_cast<std::size_t>(-1);
+  if (context_.floatActive())
+    context_.float_core_->undoTo(0);
   conflict_pending_ = false;
 }
 
@@ -1043,6 +1172,11 @@ bool LraCandidateAdapter::assertOneLiteral(SATSolver::Lit literal) noexcept
       return true;  // not an LRA atom; nothing to assert
     advice_source_ = AdviceSource::None;
     const CoreComponentMapEntry& mapped = context_.componentMap(found->second);
+    /* Dispatch before the exact level is opened: the advisory tier keeps
+     * its own trail marks, and an exact level opened here would never be
+     * popped by the float-mode backtrack path. */
+    if (context_.floatActive())
+      return assertOneLiteralFloat(literal, mapped);
     if (!ensureLevelCheckpoint())
       return false;
     const bool positive = !SATSolver::sign(literal);
@@ -1081,6 +1215,557 @@ bool LraCandidateAdapter::assertOneLiteral(SATSolver::Lit literal) noexcept
   }
 }
 
+bool LraCandidateAdapter::ensureFloatLevelMark() noexcept
+{
+  try
+  {
+    if (float_level_marks_.empty())
+      float_level_marks_.emplace_back();
+    if (float_level_marks_.back())
+      return true;
+    float_level_marks_.back() = context_.float_core_->mark();
+    return true;
+  }
+  catch (...)
+  {
+    context_.invalidate("unexpected failure marking a float level");
+    return false;
+  }
+}
+
+bool LraCandidateAdapter::unwindDeadBatches(std::size_t level) noexcept
+{
+  if (sync_batches_.empty() || sync_batches_.back().level <= level)
+    return true;
+  try
+  {
+    Checkpoint deepest = sync_batches_.back().checkpoint;
+    while (!sync_batches_.empty() && sync_batches_.back().level > level)
+    {
+      deepest = sync_batches_.back().checkpoint;
+      sync_batches_.pop_back();
+    }
+    if (context_.core_->pop(deepest) != InputStatus::Accepted)
+    {
+      context_.invalidate("dead batch unwind failed to pop");
+      return false;
+    }
+    ++context_.metrics_.exact_pops;
+    return true;
+  }
+  catch (...)
+  {
+    context_.invalidate("unexpected failure unwinding dead batches");
+    return false;
+  }
+}
+
+namespace
+{
+class ModelRefinementObserver final : public ExactLraResourceObserver
+{
+ public:
+  explicit ModelRefinementObserver(ExactLraResourceObserver& observer)
+      : observer_(observer)
+  {}
+  StopReason pollBeforePivot() noexcept override
+  {
+    if (stop_ == StopReason::Continue)
+      stop_ = observer_.pollBeforePivot();
+    return stop_;
+  }
+  void accountPivot(bool bland) noexcept override
+  {
+    observer_.accountPivot(bland);
+  }
+  StopReason stop() const noexcept { return stop_; }
+
+ private:
+  ExactLraResourceObserver& observer_;
+  StopReason stop_ = StopReason::Continue;
+};
+}  // namespace
+
+LraCandidateAdapter::ModelRefinement
+LraCandidateAdapter::refineAndCertifyModel() noexcept
+{
+  ModelRefinementObserver observer(context_.observer_);
+  try
+  {
+    if (observer.pollBeforePivot() != StopReason::Continue)
+      return {std::nullopt, observer.stop()};
+    const std::size_t base_count = context_.registry_snapshot_.symbols.size();
+    if (context_.variable_map_.size() != base_count)
+      return {};
+    std::vector<ModelCandidateValue> values;
+    {
+      NumberOperationScope operation(context_.mapping_budget_);
+      values.reserve(base_count);
+      for (std::size_t i = 0; i < base_count; ++i)
+      {
+        if (i % 256 == 0 && observer.pollBeforePivot() != StopReason::Continue)
+          return {std::nullopt, observer.stop()};
+        const FloatSimplex::DVal assignment =
+            context_.float_core_->assignmentOf(
+                context_.variable_map_[i].float_variable);
+        if (!std::isfinite(assignment.value) ||
+            !std::isfinite(assignment.delta))
+          return {};
+        values.push_back(
+            ModelCandidateValue{context_.variable_map_[i].core_variable,
+                                rationalOfDouble(assignment.value),
+                                rationalOfDouble(assignment.delta)});
+      }
+    }
+    const std::vector<FloatSimplex::TrailEntry>& trail =
+        context_.float_core_->trail();
+    std::vector<CandidateBound> bounds;
+    bounds.reserve(trail.size());
+    for (const FloatSimplex::TrailEntry& entry : trail)
+    {
+      if (bounds.size() % 256 == 0 &&
+          observer.pollBeforePivot() != StopReason::Continue)
+        return {std::nullopt, observer.stop()};
+      bounds.push_back(CandidateBound{
+          context_.float_atom_core_atoms_[entry.atom], entry.positive});
+    }
+    /* The float point's tight set: the bounds the assignment sits on,
+     * which the core solves exactly when the reconstructed coordinates
+     * alone fail -- decimal instances put vertices where no
+     * double-reconstructed rational lands. */
+    std::vector<FloatSimplex::PinnedBound> pinned_float;
+    context_.float_core_->collectPinnedBounds(pinned_float);
+    std::vector<CandidateBound> pinned;
+    pinned.reserve(pinned_float.size());
+    for (const FloatSimplex::PinnedBound& entry : pinned_float)
+    {
+      if (pinned.size() % 256 == 0 &&
+          observer.pollBeforePivot() != StopReason::Continue)
+        return {std::nullopt, observer.stop()};
+      pinned.push_back(CandidateBound{
+          context_.float_atom_core_atoms_[entry.atom], entry.positive});
+    }
+    InputResult<Model> certified = context_.core_->certifyCandidateModel(
+        values.data(), values.data() + values.size(), bounds.data(),
+        bounds.data() + bounds.size(), pinned.data(),
+        pinned.data() + pinned.size(), &observer);
+    if (certified.status != InputStatus::Accepted || !certified.value)
+      return {std::nullopt, observer.stop()};
+    return {std::move(certified.value), observer.stop()};
+  }
+  catch (...)
+  {
+    return {std::nullopt, observer.stop()};
+  }
+}
+
+std::optional<Conflict> LraCandidateAdapter::certifyFloatCertificate() noexcept
+{
+  try
+  {
+    FloatSimplex::Certificate const& certificate =
+        context_.float_core_->lastCertificate();
+    if (!certificate.valid || certificate.items.empty())
+      return std::nullopt;
+    std::vector<ConflictCandidateTerm> terms;
+    {
+      NumberOperationScope operation(context_.mapping_budget_);
+      terms.reserve(certificate.items.size());
+      for (FloatSimplex::CertificateItem const& item : certificate.items)
+      {
+        if (!std::isfinite(item.weight) || !(item.weight > 0.0))
+          return std::nullopt;
+        terms.push_back(ConflictCandidateTerm{
+            context_.float_atom_core_atoms_[item.atom], item.positive,
+            rationalOfDouble(item.weight)});
+      }
+    }
+    /* The core resolves the bounds and judges the exact combination --
+     * always, independent of the verification flag; an unverified
+     * certificate never becomes a clause.  The support's assertedness is
+     * the float trail's, which mirrors the search's own. */
+    InputResult<Conflict> certified = context_.core_->certifyCandidateConflict(
+        terms.data(), terms.data() + terms.size(), context_.conflict_recovery_,
+        &context_.observer_);
+    if (certified.status != InputStatus::Accepted || !certified.value)
+      return std::nullopt;
+    return std::move(certified.value);
+  }
+  catch (...)
+  {
+    return std::nullopt;
+  }
+}
+
+bool LraCandidateAdapter::stageCertificateConflict() noexcept
+{
+  try
+  {
+    const std::optional<Conflict> certified = certifyFloatCertificate();
+    // Candidate verification already checked the exact Farkas combination.
+    // Its support belongs to the float/SAT trail; the exact trail may be
+    // unsynchronized. Requiring that support to be active in the exact
+    // core would spuriously reject it when --lra-verify-conflicts is on.
+    return certified && stageVerifiedTheoryConflict(*certified);
+  }
+  catch (...)
+  {
+    return false;
+  }
+}
+
+bool LraCandidateAdapter::floatCompleteCandidate(std::uint64_t candidate,
+                                                 AdapterResult& out)
+{
+  if (!context_.floatActive() || float_checks_degraded_)
+    return false;
+  const std::size_t float_mark = context_.float_core_->mark();
+  std::optional<Conflict> conflict;
+  std::optional<Model> witness;
+  try
+  {
+    for (const CandidateComponentSelection& selection :
+         context_.current_selection_)
+    {
+      const CoreComponentMapEntry& mapped =
+          context_.componentMap(selection.component);
+      if (mapped.float_atom == FloatSimplex::kNoAtom)
+      {
+        context_.float_core_->undoTo(float_mark);
+        return false;
+      }
+      ++context_.metrics_.float_assertions;
+      if (context_.float_core_->assertAtom(mapped.float_atom,
+                                           selection.positive) ==
+          FloatSimplex::AssertOutcome::LocalConflict)
+      {
+        ++context_.metrics_.float_local_conflicts;
+        conflict = certifyFloatCertificate();
+        if (!conflict)
+        {
+          ++context_.metrics_.float_certificate_failed;
+          context_.float_core_->undoTo(float_mark);
+          return false;
+        }
+        ++context_.metrics_.float_certified;
+        break;
+      }
+    }
+    if (!conflict)
+    {
+      auto check = [&]()
+      {
+        ++context_.metrics_.float_checks;
+        const auto start = std::chrono::steady_clock::now();
+        const auto pivots = context_.float_core_->pivots();
+        const auto verdict =
+            context_.float_core_->check(context_.observer_, true);
+        context_.metrics_.float_pivots +=
+            context_.float_core_->pivots() - pivots;
+        context_.metrics_.float_check_nanoseconds += static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - start)
+                .count());
+        maybeRequestFloatReroute();
+        return verdict;
+      };
+      auto verdict = check();
+      if (verdict == FloatSimplex::Verdict::InfeasibleCandidate)
+      {
+        ++context_.metrics_.float_check_conflicts;
+        conflict = certifyFloatCertificate();
+        if (!conflict)
+        {
+          ++context_.metrics_.float_certificate_failed;
+          context_.float_core_->undoTo(float_mark);
+          return false;
+        }
+        ++context_.metrics_.float_certified;
+      }
+      else if (verdict != FloatSimplex::Verdict::Feasible)
+      {
+        ++context_.metrics_.float_checks_abandoned;
+        context_.float_core_->undoTo(float_mark);
+        return false;
+      }
+      else
+      {
+        ModelRefinement refined = refineAndCertifyModel();
+        if (refined.stop != StopReason::Continue)
+        {
+          context_.float_core_->undoTo(float_mark);
+          context_.clearSemanticState();
+          out = result(refined.stop == StopReason::Interrupted
+                           ? AdapterOutcome::Interrupted
+                           : AdapterOutcome::ResourceLimit,
+                       candidate, "model refinement reached a query limit");
+          return true;
+        }
+        witness = std::move(refined.witness);
+      }
+    }
+    context_.float_core_->undoTo(float_mark);
+    if (!conflict && !witness)
+    {
+      ++context_.metrics_.float_model_refine_failed;
+      return false;
+    }
+  }
+  catch (...)
+  {
+    try
+    {
+      context_.float_core_->undoTo(float_mark);
+    }
+    catch (...)
+    {
+    }
+    return false;
+  }
+  /* Staging: failures here propagate to the caller's catch, exactly as
+   * the exact path's staging failures do. */
+  if (conflict)
+  {
+    copyVerifiedConflict(*conflict, candidate, /*core_derived=*/false);
+    ++context_.metrics_.tableau_conflicts;
+    out = result(AdapterOutcome::ConflictPending, candidate);
+    return true;
+  }
+  ++context_.metrics_.float_models_refined;
+  stageVerifiedModel(*witness, candidate, /*core_derived=*/false);
+  out = result(AdapterOutcome::ModelStaged, candidate);
+  return true;
+}
+
+LraCandidateAdapter::SyncOutcome
+LraCandidateAdapter::syncFloatTrailIntoExact() noexcept
+{
+  try
+  {
+    const std::size_t current_level =
+        float_level_marks_.empty() ? 0 : float_level_marks_.size() - 1;
+    if (!unwindDeadBatches(std::min(unwind_low_level_, current_level)))
+      return SyncOutcome::Failed;
+    unwind_low_level_ = static_cast<std::size_t>(-1);
+    if (context_.core_->status() == CheckStatus::Conflict)
+      return SyncOutcome::CoreBusy;
+    const std::vector<FloatSimplex::TrailEntry>& trail =
+        context_.float_core_->trail();
+    std::size_t from = sync_batches_.empty() ? 0 : sync_batches_.back().to;
+    if (from == trail.size())
+    {
+      if (!sync_batches_.empty())
+        return SyncOutcome::Clean;  // already mirrored
+      /* Nothing on the trail and nothing pushed: not the same as mirrored.
+       * The exact core only answers check() with a candidate open, and the
+       * loop below is what opens one, so returning Clean here handed the
+       * checker a core still in Ready and got InternalError back -- on every
+       * query whose float trail stays empty, which is every query carrying a
+       * Real declaration but no Real atom to assert. Open the candidate the
+       * check is about to be asked about; it is empty, and an empty one is
+       * exactly what "the theory has no objection" looks like. */
+      const InputResult<Checkpoint> opened = context_.core_->push();
+      if (opened.status != InputStatus::Accepted || !opened.value)
+      {
+        context_.invalidate("sync push failed opening an empty candidate");
+        return SyncOutcome::Failed;
+      }
+      ++context_.metrics_.exact_pushes;
+      sync_batches_.push_back(SyncBatch{*opened.value, 0U, 0U});
+      return SyncOutcome::Clean;
+    }
+    /* One exact level per decision level with asserts, so the backtrack
+     * walk pops exactly the batches of the levels the search leaves.
+     * Entry tags are nondecreasing along the trail, so the slices are
+     * contiguous. */
+    while (from < trail.size())
+    {
+      const std::uint32_t level = trail[from].user_tag;
+      std::size_t to = from;
+      while (to < trail.size() && trail[to].user_tag == level)
+        ++to;
+      const InputResult<Checkpoint> pushed = context_.core_->push();
+      if (pushed.status != InputStatus::Accepted || !pushed.value)
+      {
+        context_.invalidate("sync push failed");
+        return SyncOutcome::Failed;
+      }
+      ++context_.metrics_.exact_pushes;
+      ++context_.metrics_.float_replays;
+      sync_batches_.push_back(
+          SyncBatch{*pushed.value, static_cast<std::size_t>(level), to});
+      for (std::size_t i = from; i < to; ++i)
+      {
+        const FloatSimplex::TrailEntry& entry = trail[i];
+        const AtomId atom = context_.float_atom_core_atoms_[entry.atom];
+        const AssertResult asserted =
+            context_.core_->assertLiteral(atom, entry.positive);
+        ++context_.metrics_.exact_assertions;
+        if (asserted.status != InputStatus::Accepted)
+        {
+          context_.invalidate(
+              asserted.status == InputStatus::ResourceLimit
+                  ? "synced assertion reached a resource limit"
+                  : "synced assertion was not accepted");
+          return SyncOutcome::Failed;
+        }
+        if (asserted.immediate_conflict)
+        {
+          if (!stageTheoryConflict(*asserted.immediate_conflict))
+          {
+            context_.invalidate("synced conflict failed verification");
+            return SyncOutcome::Failed;
+          }
+          /* The conflicting assert records nothing -- the core refuses it
+           * before pushing -- so the batch covers entries only up to it.
+           * A batch whose very first assert conflicted holds no bound at
+           * all: its checkpoint aliases the previous batch's (two pushes
+           * with no bound between them share a checkpoint), so the record
+           * is dropped rather than left to misresolve a later unwind. */
+          if (i == from)
+            sync_batches_.pop_back();
+          else
+            sync_batches_.back().to = i + 1;
+          ++context_.metrics_.float_replay_conflicts;
+          return SyncOutcome::ConflictStaged;
+        }
+      }
+      from = to;
+    }
+    return SyncOutcome::Clean;
+  }
+  catch (...)
+  {
+    context_.invalidate("unexpected failure syncing the float trail");
+    return SyncOutcome::Failed;
+  }
+}
+
+LraCandidateAdapter::ReplayVerdict
+LraCandidateAdapter::syncAndCheckExact(bool final_check,
+                                     std::optional<Model>* witness) noexcept
+{
+  const auto sync_start = std::chrono::steady_clock::now();
+  const auto account = [&]() noexcept {
+    context_.metrics_.float_sync_nanoseconds += static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - sync_start)
+            .count());
+  };
+  try
+  {
+    switch (syncFloatTrailIntoExact())
+    {
+      case SyncOutcome::ConflictStaged:
+        account();
+        return ReplayVerdict::ConflictStaged;
+      case SyncOutcome::CoreBusy:
+      case SyncOutcome::Failed:
+        account();
+        return ReplayVerdict::Inconclusive;
+      case SyncOutcome::Clean:
+        break;
+    }
+    context_.observer_.beginCheck(!final_check);
+    CheckResult checked = context_.core_->check(
+        context_.observer_, /*verify_model=*/final_check);
+    ++context_.metrics_.exact_checks;
+    if (!final_check)
+      context_.observer_.beginCheck(false);
+    if (checked.status == CheckStatus::Conflict && checked.conflict)
+    {
+      if (!stageTheoryConflict(*checked.conflict))
+      {
+        context_.invalidate("synced check conflict failed verification");
+        return ReplayVerdict::Inconclusive;
+      }
+      ++context_.metrics_.float_replay_conflicts;
+      /* The core stays in Conflict until the staged clause's backtrack
+       * pops the level batches -- the exact path's own lifecycle. */
+      account();
+      return ReplayVerdict::ConflictStaged;
+    }
+    if (checked.status == CheckStatus::Consistent)
+    {
+      if (witness != nullptr)
+      {
+        if (!final_check || !checked.model)
+        {
+          context_.invalidate("synced final check omitted its certified model");
+          account();
+          return ReplayVerdict::Inconclusive;
+        }
+        *witness = std::move(checked.model);
+      }
+      advice_source_ = AdviceSource::Exact;
+      ++context_.metrics_.float_replay_consistent;
+      account();
+      return ReplayVerdict::Consistent;
+    }
+    if (checked.status == CheckStatus::InternalError)
+    {
+      /* Not a give-up: the core is telling us its own state is wrong, and
+       * the caller's stop-without-deciding path would report that as a query
+       * nobody could answer. Fail as a fault so it stays visible. */
+      context_.invalidate("synced check reported an internal error");
+      account();
+      return ReplayVerdict::Inconclusive;
+    }
+    // Interrupted, guard-stopped, or out of budget: decide nothing.
+    account();
+    return ReplayVerdict::Inconclusive;
+  }
+  catch (...)
+  {
+    context_.invalidate("unexpected failure checking the synced state");
+    account();
+    return ReplayVerdict::Inconclusive;
+  }
+}
+
+bool LraCandidateAdapter::assertOneLiteralFloat(
+    SATSolver::Lit literal, const CoreComponentMapEntry& mapped) noexcept
+{
+  try
+  {
+    if (!ensureFloatLevelMark())
+      return false;
+    const bool positive = !SATSolver::sign(literal);
+    const std::uint32_t level = static_cast<std::uint32_t>(
+        float_level_marks_.empty() ? 0 : float_level_marks_.size() - 1);
+    const FloatSimplex::AssertOutcome outcome =
+        context_.float_core_->assertAtom(mapped.float_atom, positive, level);
+    ++context_.metrics_.float_assertions;
+    if (outcome == FloatSimplex::AssertOutcome::Ok)
+    {
+      theory_dirty_ = true;
+      return true;
+    }
+    /* The advisory tier sees a direct bound clash.  Certify it exactly; a
+     * disagreement -- the doubles lied within rounding -- just leaves the
+     * search to continue. */
+    ++context_.metrics_.float_local_conflicts;
+    if (stageCertificateConflict())
+    {
+      ++context_.metrics_.float_certified;
+      ++context_.metrics_.immediate_conflicts;
+      return true;
+    }
+    ++context_.metrics_.float_certificate_failed;
+    const ReplayVerdict verdict = syncAndCheckExact(false);
+    if (verdict == ReplayVerdict::ConflictStaged)
+      ++context_.metrics_.immediate_conflicts;
+    else
+      theory_dirty_ = true;
+    return !failed();
+  }
+  catch (...)
+  {
+    context_.invalidate("unexpected failure asserting a float literal");
+    return false;
+  }
+}
+
 void LraCandidateAdapter::notifyAssigned(
     const std::vector<SATSolver::Lit>& literals)
 {
@@ -1105,6 +1790,15 @@ void LraCandidateAdapter::notifyNewLevel()
     return;
   // The core checkpoint waits for the first bound asserted here.
   level_checkpoints_.emplace_back();
+  try
+  {
+    float_level_marks_.emplace_back();
+  }
+  catch (...)
+  {
+    context_.invalidate("unexpected failure opening a float level");
+    return;
+  }
 }
 
 void LraCandidateAdapter::notifyBacktrack(size_t level)
@@ -1122,6 +1816,37 @@ void LraCandidateAdapter::notifyBacktrack(size_t level)
     return;
   try
   {
+    if (context_.floatActive())
+    {
+      /* The exact mirror unwinds lazily, at the next sync.  The one thing
+       * that cannot wait is a core left in Conflict by a staged conflict:
+       * it must be Ready before anything consults it again, so that case
+       * unwinds now -- still a single pop to the deepest dead batch. */
+      unwind_low_level_ = std::min(unwind_low_level_, level);
+      if (context_.core_->status() == CheckStatus::Conflict)
+      {
+        if (!unwindDeadBatches(unwind_low_level_))
+          return;
+        unwind_low_level_ = static_cast<std::size_t>(-1);
+      }
+      /* Mirror of the level_checkpoints_ walk below: the lowest popped
+       * level carrying a mark is where the float trail rewinds to. */
+      std::optional<std::size_t> restore;
+      while (float_level_marks_.size() > level + 1)
+      {
+        if (float_level_marks_.back())
+          restore = *float_level_marks_.back();
+        float_level_marks_.pop_back();
+      }
+      if (restore)
+        context_.float_core_->undoTo(*restore);
+      /* The exact-path level vector still grows in notifyNewLevel; keep
+       * its length honest.  Entries are empty here -- no exact level is
+       * opened per decision level in float mode. */
+      while (level_checkpoints_.size() > level + 1)
+        level_checkpoints_.pop_back();
+      return;
+    }
     // level_checkpoints_[0] is the root, so decision level n keeps n+1
     // entries. Pop the ones the search has just abandoned.
     while (level_checkpoints_.size() > level + 1)
@@ -1162,12 +1887,160 @@ bool LraCandidateAdapter::takeClause(std::vector<SATSolver::Lit>& clause)
   return true;
 }
 
+void LraCandidateAdapter::maybeRequestFloatReroute() noexcept
+{
+  const unsigned budget = context_.floatRerouteBudget();
+  if (budget == 0 || !context_.floatActive() || context_.float_core_ == nullptr ||
+      solver_.theoryRerouteRequested())
+    return;
+  // liveNonzeros scans the rows, so sample the fill periodically rather than
+  // on every check.
+  constexpr unsigned kSampleEvery = 64;
+  if (++float_reroute_sample_ < kSampleEvery)
+    return;
+  float_reroute_sample_ = 0;
+  const std::uint64_t pristine = context_.float_core_->pristineNonzeros();
+  if (pristine == 0)
+    return;
+  const std::uint64_t live = context_.float_core_->liveNonzeros();
+  const std::uint64_t floor = context_.floatRerouteFloor();
+  // Both tests: the fill is a pathological multiple of pristine, and the
+  // tableau is large in absolute terms. The floor is what keeps a small
+  // healthy problem -- whose fill trivially exceeds a multiple of its tiny
+  // pristine -- from rerouting.
+  if (live > static_cast<std::uint64_t>(budget) * pristine && live >= floor)
+  {
+    ++context_.metrics_.float_reroutes;
+    solver_.requestTheoryReroute();
+  }
+}
+
 void LraCandidateAdapter::checkPartialAssignment() noexcept
 {
   if (!propagating_ || failed() || conflict_pending_ || !theory_dirty_ ||
       !partial_checks_enabled_ || pastTimeLimit())
     return;
   theory_dirty_ = false;
+  if (context_.floatActive() && float_checks_degraded_)
+  {
+    /* The float tableau gave up on this instance; prune the exact way:
+     * bring the mirror up to the trail and let the guarded exact check
+     * below do what the flag-off path does. */
+    switch (syncFloatTrailIntoExact())
+    {
+      case SyncOutcome::ConflictStaged:
+        ++context_.metrics_.partial_conflicts;
+        return;
+      case SyncOutcome::Failed:
+      case SyncOutcome::CoreBusy:
+        return;
+      case SyncOutcome::Clean:
+        break;
+    }
+  }
+  else if (context_.floatActive())
+  {
+    try
+    {
+      ++context_.metrics_.float_checks;
+      const auto check_start = std::chrono::steady_clock::now();
+      const std::uint64_t pivots_before = context_.float_core_->pivots();
+      const FloatSimplex::Verdict verdict =
+          context_.float_core_->check(context_.observer_);
+      context_.metrics_.float_pivots +=
+          context_.float_core_->pivots() - pivots_before;
+      context_.metrics_.float_check_nanoseconds +=
+          static_cast<std::uint64_t>(
+              std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  std::chrono::steady_clock::now() - check_start)
+                  .count());
+      // The tableau grows across the incremental rebuilds these partial
+      // checks drive; sample its fill here and reroute to the exact driver if
+      // it has blown up.
+      maybeRequestFloatReroute();
+      if (verdict == FloatSimplex::Verdict::Feasible)
+      {
+        advice_source_ = AdviceSource::Float;
+        return;
+      }
+      if (verdict == FloatSimplex::Verdict::Abandoned)
+      {
+        ++context_.metrics_.float_checks_abandoned;
+        /* A tableau that keeps blowing the pivot or merge budget has
+         * densified along its pivot history, not by the instance's
+         * nature: restart the basis first -- pristine sparse rows, same
+         * bounds -- and only degrade this solve to exact partial checks
+         * over the mirror once restarts stop helping. */
+        constexpr unsigned kFloatAbandonedBeforeDegrade = 3;
+        /* Zeroth line: the tier tripped its infinitesimal cap a second
+         * time.  A fresh factorized tier built from the same trail takes
+         * over; only if it cannot be built, or this solve has already
+         * been given its share of fresh tiers, does the cascade below
+         * run -- a fresh tier that trips on its own first check has no
+         * history to blame, and another identical one would trip the
+         * same way (see float_promotions_). */
+        unsigned const promotion_budget = context_.floatPromotionBudget();
+        bool const budget_spent =
+            promotion_budget != 0 && float_promotions_ >= promotion_budget;
+        if (context_.float_core_->wantsPromotion() && !budget_spent &&
+            context_.promoteFloatCore())
+        {
+          ++float_promotions_;
+          partial_checks_abandoned_ = 0;
+          theory_dirty_ = true;
+          return;
+        }
+        if (++partial_checks_abandoned_ >= kFloatAbandonedBeforeDegrade)
+        {
+          if (float_restarts_ == 0)
+          {
+            /* First line: restart the substitution tableau's basis. */
+            ++float_restarts_;
+            ++context_.metrics_.float_restarts;
+            partial_checks_abandoned_ = 0;
+            context_.float_core_->restartBasis();
+            theory_dirty_ = true;
+          }
+          else if (!context_.float_core_->factorized())
+          {
+            /* Second line: the factorized representation, where the
+             * original rows are immutable and densification cannot
+             * happen.  Its own budget (the pivot cap) feeds the same
+             * abandonment counter. */
+            ++float_restarts_;
+            ++context_.metrics_.float_factorized;
+            partial_checks_abandoned_ = 0;
+            context_.float_core_->switchToFactorized();
+            theory_dirty_ = true;
+          }
+          else
+          {
+            float_checks_degraded_ = true;
+            ++context_.metrics_.partial_checks_disabled;
+          }
+        }
+        return;
+      }
+      ++context_.metrics_.float_check_conflicts;
+      if (stageCertificateConflict())
+      {
+        ++context_.metrics_.float_certified;
+        ++context_.metrics_.partial_conflicts;
+        return;
+      }
+      ++context_.metrics_.float_certificate_failed;
+      const ReplayVerdict staged = syncAndCheckExact(false);
+      if (staged == ReplayVerdict::ConflictStaged)
+        ++context_.metrics_.partial_conflicts;
+      else if (staged == ReplayVerdict::Consistent)
+        context_.float_core_->dismissLastConflict();
+    }
+    catch (...)
+    {
+      context_.invalidate("unexpected failure in a float partial check");
+    }
+    return;
+  }
   try
   {
     constexpr unsigned kAbandonedBeforeOff = 2;
@@ -1223,14 +2096,20 @@ bool LraCandidateAdapter::decisionPolarity(uint32_t variable, bool& value) noexc
       {
         auto const& mapped = context_.componentMap(found->second);
         std::optional<bool> advice;
-        if (advice_source_ == AdviceSource::Exact)
+        if (advice_source_ == AdviceSource::Float && context_.floatActive() &&
+            !float_checks_degraded_)
+          advice = context_.float_core_->preferredPolarity(mapped.float_atom);
+        else if (advice_source_ == AdviceSource::Exact)
           advice = context_.core_->preferredPolarity(mapped.core_atom);
         if (advice)
         {
           ++context_.metrics_.polarity_advice;
           if (value != *advice)
             ++context_.metrics_.polarity_changes;
-          ++context_.metrics_.polarity_exact;
+          if (advice_source_ == AdviceSource::Float)
+            ++context_.metrics_.polarity_float;
+          else
+            ++context_.metrics_.polarity_exact;
           value = *advice;
           return true;
         }
@@ -1279,6 +2158,71 @@ bool LraCandidateAdapter::checkFoundModel()
   try
   {
     ++context_.metrics_.candidates_started;
+    if (context_.floatActive())
+    {
+      /* Cheap rejection first: a candidate model the float tier already
+       * sees as infeasible, certified exactly, never pays the exact
+       * replay.  Only float-feasible candidates -- which include every
+       * model that is eventually accepted -- reach the exact core. */
+      if (!float_checks_degraded_ &&
+          context_.float_core_->check(context_.observer_,
+                                      /*full_refresh=*/true) ==
+              FloatSimplex::Verdict::InfeasibleCandidate &&
+          stageCertificateConflict())
+      {
+        ++context_.metrics_.float_certified;
+        return false;  // rejected; the clause follows
+      }
+      /* Refinement first: reconstruct the float assignment exactly and
+       * have the core substitute an epsilon and verify it against the
+       * trail's bounds. Keep the certified witness for publication. */
+      std::optional<Model> witness;
+      if (!float_checks_degraded_)
+      {
+        ModelRefinement refined = refineAndCertifyModel();
+        if (refined.stop != StopReason::Continue)
+        {
+          if (refined.stop == StopReason::Interrupted && pastTimeLimit())
+            return true;  // publication reports the deadline interruption
+          context_.giveUp(refined.stop == StopReason::Interrupted
+                              ? "model refinement was interrupted"
+                              : "model refinement reached a resource limit");
+          return true;
+        }
+        witness = std::move(refined.witness);
+      }
+      if (witness)
+      {
+        ++context_.metrics_.float_models_refined;
+        context_.float_core_->dismissLastConflict();
+        return retainPropagatedModel(std::move(*witness));
+      }
+      if (!float_checks_degraded_)
+        ++context_.metrics_.float_model_refine_failed;
+      /* The final verdict is always exact: bring the exact mirror up to
+       * the float trail and keep the model produced by its final check. */
+      const ReplayVerdict verdict = syncAndCheckExact(true, &witness);
+      if (verdict == ReplayVerdict::Consistent)
+      {
+        context_.float_core_->dismissLastConflict();
+        return retainPropagatedModel(std::move(*witness));
+      }
+      if (verdict == ReplayVerdict::ConflictStaged)
+        return false;  // rejected; the clause follows
+      if (!failed() && pastTimeLimit())
+        return true;  // acceptPropagatedModel reports the interrupted search
+      if (!failed())
+        /* Inconclusive, which is not the same as wrong. syncAndCheckExact
+         * reaches here when the exact mirror was busy, interrupted,
+         * guard-stopped, or simply returned no verdict -- every one of them a
+         * reason to stop rather than evidence that anything is broken. The
+         * context still has to die, because returning true accepts a model
+         * nothing verified and only a dead context stops that being read as
+         * an answer; but dying as a fault made a query STP merely could not
+         * decide come back as SOLVER_ERROR. */
+        context_.giveUp("float final check produced no usable verdict");
+      return true;
+    }
     /* Everything observed is assigned, so the bounds are already in. This is
      * the final exact check, and the only place a model is accepted. */
     if (!ensureLevelCheckpoint())

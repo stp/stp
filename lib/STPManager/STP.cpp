@@ -44,6 +44,7 @@ THE SOFTWARE.
 #include "Lra/LraAtomRegistry.h"
 #include "Lra/LraBudgetRefusal.h"
 #include "Lra/LraFrontend.h"
+#include "Lra/LraPresolve.h"
 #include "Lra/LraCoordinator.h"
 #include "Lra/LraSolveContext.h"
 #include "Lra/NumberBudget.h"
@@ -147,7 +148,7 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
 
   applySolveBudgets(NewSolver, bm->UserFlags, deadline);
 
-  // reset the timeout expired flag for the new check
+  // A reroute's solver-local interrupt is not the next attempt's reason.
   bm->soft_timeout_expired = false;
   bm->clearUnknown();
   if (NewSolver.timeLimitExpired())
@@ -228,9 +229,9 @@ SATSolver* STP::get_new_sat_solver()
 SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
                                     const ASTNode& query)
 {
-  // One deadline for preprocessing, the floating-point restarts, restarted
-  // UF rounds, and the injectivity fallback. A later public query starts
-  // anew.
+  // One deadline for preprocessing, float-to-exact rerouting, the
+  // floating-point restarts, restarted UF rounds, and the injectivity
+  // fallback. A later public query starts anew.
   const auto started = std::chrono::steady_clock::now();
   QueryTiming timing(started);
   QueryTimingReport timing_report(bm->query_timing,
@@ -628,7 +629,34 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
         get_new_sat_solver(), {bm->query_timing, QueryPhase::SolverCleanup});
     result = solve_by_sat_solver(newS.get(), round_input, arrayEqualityRewrites,
                                  deadline);
+    // The LRA float tier can blow its tableau up on a handful of cpachecker
+    // files and never terminate, where the exact driver settles the same
+    // query in a fraction of the time. When that is detected the propagator
+    // ends the search (through the time-limit terminator) and leaves this
+    // flag; the answer it returned is the soft-timeout unknown, so redo the
+    // solve on the exact driver -- once -- and keep the exact driver for the
+    // rest of the session. The exact core certifies every float result, so
+    // the re-solve is verdict-preserving; only the runtime changes.
+    // Only when the float solve did not decide the query. A float result is
+    // exact-certified, so a SAT/UNSAT answer stands even if the fill crossed
+    // the budget on the way to it -- rerouting then would discard a good
+    // answer and needlessly pin the session to the exact driver.
+    const bool rerouteFloat = newS->theoryRerouteRequested() &&
+                              !bm->UserFlags.lra_force_exact_driver &&
+                              result != SOLVER_SATISFIABLE &&
+                              result != SOLVER_UNSATISFIABLE;
     newS.reset();
+    if (rerouteFloat)
+    {
+      bm->UserFlags.lra_force_exact_driver = true;
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "LRA: float tier blew up; re-solving on the exact driver"
+                  << std::endl;
+      newS.reset(get_new_sat_solver());
+      result = solve_by_sat_solver(newS.get(), round_input, arrayEqualityRewrites,
+                                   deadline);
+      newS.reset();
+    }
 
     // Only a satisfiable answer rests on a model, and only a model can break
     // congruence. An unsatisfiable one rests on the constraints stated so far,
@@ -885,6 +913,18 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
               actual.GetSourceSort().kind() == SourceSort::Kind::Real)
             spreadSymbols.push_back(actual);
       ASTNode lra_input = original_input;
+      lra::LraReconstruction reconstruction;
+      // Storage is available to presolve, and to the model commit, which
+      // checks its model against the `original` recorded here as well as
+      // against the presolved formula it solved.
+      lra::LraReconstruction* reconstruction_ptr = &reconstruction;
+      if (bm->UserFlags.lra_presolve_subst ||
+          bm->UserFlags.lra_presolve_bounds ||
+          bm->UserFlags.lra_presolve_rows ||
+          bm->UserFlags.lra_presolve_propagate ||
+          bm->UserFlags.lra_presolve_unconstrained)
+        lra_input = lra::presolveForSolve(*bm, original_input, &NewSolver,
+                                          reconstruction_ptr);
       if (NewSolver.timeLimitExpired())
       {
         bm->soft_timeout_expired = true;
@@ -895,6 +935,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       lraCoordinator.reset(new lra::LraCoordinator(
           *bm, NewSolver, lra_input, spreadSymbols));
       bm->checkPreparation(PreparationStage::LraCore);
+      // Unconditionally now: it carries the pre-presolve query the model
+      // commit checks against, which every Real solve wants.
+      lraCoordinator->setReconstruction(std::move(reconstruction));
       if (!lraCoordinator->ready())
         return SOLVER_ERROR;
       preregistered_input = lraCoordinator->booleanFormula();

@@ -258,7 +258,7 @@ WorkingPolynomial normalizeTerm(const ASTNode& term,
     incrementSaturating(metrics.normalization_nodes);
   };
   return normalizeAffineDag(term, ExactRational(std::int64_t{1}), resolve,
-                            visit, poll, {true});
+                            visit, poll, {true, false});
 }
 
 LinearPolynomial finishPolynomial(WorkingPolynomial working,

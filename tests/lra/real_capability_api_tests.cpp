@@ -736,6 +736,12 @@ void realInterfaceFlagsAreReachable()
       {LRA_THEORY_PROPAGATION, "lra-theory-propagation"},
       {LRA_VERIFY_CONFLICTS, "lra-verify-conflicts"},
       {LRA_VERIFY_CANONICAL, "lra-verify-canonical"},
+      {LRA_PRESOLVE_SUBST, "lra-presolve-subst"},
+      {LRA_PRESOLVE_BOUNDS, "lra-presolve-bounds"},
+      {LRA_PRESOLVE_ROWS, "lra-presolve-rows"},
+      {LRA_PRESOLVE_PROPAGATE, "lra-presolve-propagate"},
+      {LRA_PRESOLVE_UNCONSTRAINED, "lra-presolve-unconstrained"},
+      {LRA_FLOAT_DRIVER, "lra-float-driver"},
   };
 
   for (const auto& control : controls)
@@ -747,7 +753,7 @@ void realInterfaceFlagsAreReachable()
       vc_setInterfaceFlags(vc, control.flag, on);
 
       // A definition, a pair of bounds and a disjunction: enough shape for
-      // each control to have something to do.
+      // the presolve stages to have something to do.
       Expr x = realSymbol(owner, "x");
       Expr y = realSymbol(owner, "y");
       Expr z = realSymbol(owner, "z");

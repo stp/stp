@@ -52,6 +52,9 @@ class PreregistrationBuilder;
 class LraAtomRegistry;
 class LraCoordinator;
 class RealModel;
+struct LraReconstruction;
+ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
+                         SATSolver* solver, LraReconstruction* reconstruction);
 }
 class ExtensionalityContext;
 class UFContext;
@@ -77,6 +80,9 @@ enum class FPSpecial
 class STPMgr
 {
   friend class Cpp_interface;
+  friend ASTNode lra::presolveForSolve(STPMgr& manager, const ASTNode& input,
+                                       SATSolver* solver,
+                                       lra::LraReconstruction* reconstruction);
   friend class ASTNode;
   friend class ASTInterior;
   friend class ASTBVConst;

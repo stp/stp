@@ -499,6 +499,23 @@ public:
     return remaining.count() > 0.0 ? remaining.count() : 0.0;
   }
 
+  // A theory propagator asks the search to stop and be redone differently --
+  // today only the LRA float tier, when its tableau has blown up and the exact
+  // driver would settle the same query in a fraction of the time. Expiring the
+  // deadline is what actually ends the search: the backends already poll it
+  // through the same Terminator the time budget uses, so nothing new has to
+  // interrupt CaDiCaL mid-search. The flag is the record the caller reads once
+  // the search returns, to tell this abort apart from a real timeout and redo
+  // the solve rather than report unknown. The redo runs on a fresh solver,
+  // which starts with the flag clear.
+  void requestTheoryReroute()
+  {
+    theory_reroute_requested = true;
+    deadline = std::chrono::steady_clock::now();
+    deadline_set = true;
+  }
+  bool theoryRerouteRequested() const { return theory_reroute_requested; }
+
   virtual uint8_t modelValue(uint32_t x) const = 0;
 
   virtual uint32_t newVar() = 0;
@@ -600,6 +617,7 @@ private:
   uint64_t submitted_clauses = 0;
   std::chrono::steady_clock::time_point deadline;
   bool deadline_set = false;
+  bool theory_reroute_requested = false;
 };
 }
 #endif
