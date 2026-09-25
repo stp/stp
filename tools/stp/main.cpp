@@ -939,12 +939,24 @@ void ExtraMain::create_options()
 
   const char* const fp_abstraction_group =
       "Floating-point abstraction options";
+  bool_arg("--fp-abstraction-incremental",
+           bm->UserFlags.fp_abstraction_incremental,
+           "host the abstraction inside the incremental driver as well; a "
+           "hosted session expands arrays eagerly (--ackermanize)",
+           fp_abstraction_group);
+  bool_arg("--fp-abstraction-active-closure",
+           bm->UserFlags.fp_abstraction_active_closure,
+           "under the incremental driver, check only the records of the "
+           "active encoding units rather than every "
+           "record of the epoch; a measurement flag, off by default",
+           fp_abstraction_group);
   bool_arg("--fp-abstraction", bm->UserFlags.fp_abstraction,
            "abstract selected floating-point operations to same-sort "
            "surrogates constrained by exact class/sign, order, exponent-band "
            "and identity rules; check candidates against the exact evaluator "
            "and release the exact encoding only after a bounded number of "
-           "value lemmas (batch solves only)",
+           "value lemmas (batch solves only, unless "
+           "--fp-abstraction-incremental)",
            fp_abstraction_group);
   app.add_option("--fp-abstraction-ops", fp_abstraction_ops,
                  "comma-separated operations to abstract: mul, div, sqrt, "

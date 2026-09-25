@@ -1161,6 +1161,20 @@ public:
   // exact result for them: pure search advice, so the next candidate keeps
   // the operands and is consistent at once when nothing else forbids it.
   bool fp_abstraction_phase_hints = false;
+  // Host the abstraction inside the incremental driver too. OFF: the
+  // driver encodes floating point exactly (--fp-abstraction then applies
+  // to batch solves only). Opt-in: a hosted session takes the eager array
+  // expansion (STP::getIncrementalSolver), and a check the replay still
+  // rejects once every record is released is answered unknown.
+  bool fp_abstraction_incremental = false;
+  // Under the incremental driver, read only the records of the active
+  // encoding units at each candidate check -- the active closure: the
+  // records the asserted pieces mention, their inner records,
+  // proxy definitions and cross-rule partners, recorded per unit as it is
+  // encoded. OFF: every record of the epoch is read, including those of
+  // popped pieces, whose proxies are then unconstrained (sound, and the
+  // measured baseline).
+  bool fp_abstraction_active_closure = false;
   // Add an operand-box prefix constraint beside each value lemma for
   // mul/div/sqrt/add/sub/fma/rti, on the fixed-sign domains where corner
   // results bound the interior. Remainder and conversions are excluded.

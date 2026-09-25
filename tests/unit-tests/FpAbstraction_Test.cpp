@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/FpAbstractionRules.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/FloatBlaster/rounding_modes.h"
+#include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Sat/SATSolverFactory.h"
 #include "stp/STPManager/STP.h"
@@ -2383,6 +2384,38 @@ TEST(FpAbstraction, nan_value_lemma_uses_the_candidate_check_equality)
     // safe but would conceal a still-incorrect NaN-class value lemma.
     EXPECT_EQ(bitPrecise ? 1u : 0u, app.valueLemmas);
     EXPECT_FALSE(app.releasePending);
+  }
+}
+
+TEST(FpAbstraction, incremental_repair_does_not_forget_an_unasserted_release)
+{
+  for (bool repair : {false, true})
+  {
+    STPMgr mgr;
+    mgr.UserFlags.fp_abstraction = true;
+    mgr.UserFlags.fp_abstraction_incremental = true;
+    mgr.UserFlags.fp_abstraction_tiers = 0;
+    mgr.UserFlags.fp_abstraction_shape = false;
+    mgr.UserFlags.fp_abstraction_relational = false;
+    mgr.UserFlags.fp_abstraction_values = 0;
+    mgr.UserFlags.fp_abstraction_repair = repair;
+    SubstitutionMap substitutions(&mgr);
+    Simplifier simplifier(&mgr, &substitutions);
+    ArrayTransformer transformer(&mgr, &simplifier);
+    AbsRefine_CounterExample ce(&mgr, &simplifier, &transformer);
+    IncrementalSolver inc(&mgr, &ce, &simplifier, &transformer);
+    const ASTNode x = mgr.CreateSourceSymbol("incremental_repair_x",
+                                            SourceSort::floatingPoint(5, 11));
+    const ASTNode rm = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+    const ASTNode t = mgr.CreateTerm(FP_DIV, 16, ASTVec{rm, x, x});
+    const ASTNode base = conj(mgr, {mgr.CreateNode(FP_ISNORMAL, x),
+                                    mgr.CreateNode(FP_ISNORMAL, t)});
+    const ASTNode wrong = mgr.CreateNode(
+        NOT, mgr.CreateNode(FP_SMT_EQ, t, fpConst(mgr, 5, 11, 0x3c00)));
+    ASSERT_EQ(SOLVER_SATISFIABLE, inc.checkSat(ASTVec{base}));
+    EXPECT_EQ(SOLVER_UNSATISFIABLE, inc.checkSat(ASTVec{base, wrong}));
+    EXPECT_EQ(SOLVER_SATISFIABLE, inc.checkSat(ASTVec{base}));
+    EXPECT_EQ(SOLVER_UNSATISFIABLE, inc.checkSat(ASTVec{base, wrong}));
   }
 }
 
