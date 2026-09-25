@@ -28,10 +28,14 @@ RUN apt-get update \
         zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Build CryptoMiniSat, at the commit cmake/FindCryptoMiniSat.cmake pins and
-# with the flags it uses -- that is the combination CI exercises. Built here
-# rather than left to the build's own ExternalProject so that this stage is
-# cached separately from the STP compile below.
+# Build CryptoMiniSat, from the repository and at the commit
+# cmake/FindCryptoMiniSat.cmake pins and with the flags it uses -- that is the
+# combination CI exercises. Built here rather than left to the build's own
+# ExternalProject so that this stage is cached separately from the STP compile
+# below. The two pins have to move together: STP finds this installed copy
+# first, and it is the pinned commit's IPASIR-UP interface, which no
+# CryptoMiniSat release has, that lets lib/Sat/CryptoMinisat5.cpp host a theory
+# propagator.
 #
 # BUILD_SHARED_LIBS=OFF rather than STATICCOMPILE=ON: 5.14 removed
 # STATICCOMPILE, and BUILD_SHARED_LIBS defaults to ON, so asking the old way
@@ -46,7 +50,7 @@ RUN apt-get update \
 # list above.
 WORKDIR /cms
 RUN git clone https://github.com/stp/cryptominisat . \
- && git checkout 261392c4e993f40638392012b689a0a4a7794355 \
+ && git checkout e06847e1006f06ec630a62349d930e5ead54def6 \
  && mkdir build && cd build \
  && cmake .. \
         -DCMAKE_BUILD_TYPE=Release \

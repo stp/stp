@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "cryptominisat5/cryptominisat.h"
 #include <unordered_set>
 #include <algorithm>
+#include <cstdlib>
 using std::vector;
 
 namespace stp
@@ -45,7 +46,191 @@ void CryptoMiniSat5::enableRefinement(const bool enable)
   }
 }
 
+#ifdef STP_CRYPTOMINISAT_HAS_UP
+/* The IPASIR-UP side of SATSolver::TheoryPropagator. CryptoMiniSat speaks
+ * its own Lit, STP speaks var*2+sign; this is the only place the two meet.
+ *
+ * Nothing here may throw: these are called from inside the solver's search,
+ * across a boundary that is not prepared to unwind. The theory reports
+ * failure through failed() instead, and once it has, this stops asking it
+ * anything and lets the solve finish so the caller can see the failure. */
+class CryptoMiniSat5::PropagatorBridge final : public CMSat::ExternalPropagator
+{
+public:
+  explicit PropagatorBridge(SATSolver::TheoryPropagator& theory)
+      : theory(theory)
+  {
+    // The theory judges partial assignments as well as complete ones.
+    is_lazy = false;
+    // A reason the theory gives for a propagated literal is a fact of the
+    // theory, not of the trail; the solver may drop it once it is done with
+    // it, like any other learned clause.
+    are_reasons_forgettable = true;
+  }
+
+  void reserveNotificationBuffer(size_t count) { translated.reserve(count); }
+
+  void notify_assignment(const std::vector<CMSat::Lit>& lits) override
+  {
+    if (theory.failed())
+      return;
+    translated.clear();
+    for (CMSat::Lit lit : lits)
+      translated.push_back(fromCms(lit));
+    if (!translated.empty())
+      theory.notifyAssigned(translated);
+  }
+  void notify_new_decision_level() override
+  {
+    if (!theory.failed())
+      theory.notifyNewLevel();
+  }
+  void notify_backtrack(size_t new_level) override
+  {
+    pending.clear();
+    pending_index = 0;
+    pending_active = false;
+    if (!theory.failed())
+      theory.notifyBacktrack(new_level);
+  }
+  bool cb_check_found_model(const std::vector<CMSat::Lit>& model) override
+  {
+    (void)model;
+    // A failed theory cannot vouch for anything; the caller checks failed()
+    // and discards the verdict, and saying true is what lets the solve end.
+    if (theory.failed())
+      return true;
+    return theory.checkFoundModel();
+  }
+  bool cb_has_external_clause(bool& is_forgettable) override
+  {
+    // Every clause the theory hands over is a Farkas no-good: entailed by
+    // the theory, not by the trail, so it stays true for the rest of the
+    // solve and must not be forgotten.
+    is_forgettable = false;
+    if (pending_active)
+      return true;
+    if (theory.failed())
+      return false;
+    pending.clear();
+    pending_index = 0;
+    if (!theory.takeClause(pending) || pending.empty())
+      return false;
+    pending_active = true;
+    return true;
+  }
+  CMSat::Lit cb_add_external_clause_lit() override
+  {
+    if (!pending_active)
+      return CMSat::lit_Undef;
+    if (pending_index == pending.size())
+    {
+      pending.clear();
+      pending_index = 0;
+      pending_active = false;
+      return CMSat::lit_Undef; // terminator
+    }
+    return toCms(pending[pending_index++]);
+  }
+  CMSat::Lit cb_propagate() override
+  {
+    if (theory.failed())
+      return CMSat::lit_Undef;
+    SATSolver::Lit literal;
+    if (!theory.propagate(literal))
+      return CMSat::lit_Undef;
+    return toCms(literal);
+  }
+  CMSat::Lit cb_add_reason_clause_lit(CMSat::Lit propagated_lit) override
+  {
+    // One reason at a time, literal by literal, the propagated literal
+    // among them; the theory keeps the reason for every literal it hands
+    // out, so a lookup here fails only once the theory has.
+    if (!reason_active || !(reason_for == propagated_lit))
+    {
+      reason.clear();
+      reason_index = 0;
+      reason_for = propagated_lit;
+      reason_active = false;
+      if (theory.failed() ||
+          !theory.reasonFor(fromCms(propagated_lit), reason))
+      {
+        reason.clear();
+        return CMSat::lit_Undef;
+      }
+      reason_active = true;
+    }
+    if (reason_index == reason.size())
+    {
+      reason.clear();
+      reason_index = 0;
+      reason_active = false;
+      return CMSat::lit_Undef; // terminator
+    }
+    return toCms(reason[reason_index++]);
+  }
+
+private:
+  static SATSolver::Lit fromCms(CMSat::Lit lit)
+  {
+    SATSolver::Lit literal;
+    literal.x = (lit.var() << 1) | (lit.sign() ? 1u : 0u);
+    return literal;
+  }
+  static CMSat::Lit toCms(SATSolver::Lit literal)
+  {
+    return CMSat::Lit(literal.x >> 1, (literal.x & 1u) != 0);
+  }
+
+  SATSolver::TheoryPropagator& theory;
+  std::vector<SATSolver::Lit> pending;   // clause being handed over
+  size_t pending_index = 0;
+  bool pending_active = false;
+  std::vector<SATSolver::Lit> reason;    // reason clause being handed over
+  size_t reason_index = 0;
+  bool reason_active = false;
+  CMSat::Lit reason_for = CMSat::lit_Undef;
+  // Reused across notifications: this runs on every assignment of an
+  // observed variable, and must not allocate on that path.
+  std::vector<SATSolver::Lit> translated;
+};
+
+bool CryptoMiniSat5::connectTheoryPropagator(
+    SATSolver::TheoryPropagator* propagator,
+    const std::vector<uint32_t>& observed)
+{
+  if (propagator == nullptr || propagator_bridge || num_threads != 1)
+    return false;
+  propagator_bridge.reset(new PropagatorBridge(*propagator));
+  propagator_bridge->reserveNotificationBuffer(observed.size());
+  s->connect_external_propagator(propagator_bridge.get());
+  // Observing freezes the variable, so simplification will not eliminate
+  // or replace an atom the theory is reasoning about.
+  for (uint32_t var : observed)
+    s->add_observed_var(var);
+  return true;
+}
+
+void CryptoMiniSat5::disconnectTheoryPropagator()
+{
+  if (!propagator_bridge)
+    return;
+  s->disconnect_external_propagator(); // also un-observes every variable
+  propagator_bridge.reset();
+}
+
+void CryptoMiniSat5::expectTheoryPropagator()
+{
+  // A variable replaced by an equivalent literal can no longer be observed,
+  // and the propagator connects only after the first solve has simplified.
+  s->set_no_equivalent_lit_replacement();
+}
+#endif
+
 CryptoMiniSat5::CryptoMiniSat5(int num_threads)
+#ifdef STP_CRYPTOMINISAT_HAS_UP
+    : num_threads(num_threads)
+#endif
 {
   s = new CMSat::SATSolver;
   // s->log_to_file("stp.cnf");
@@ -57,6 +242,9 @@ CryptoMiniSat5::CryptoMiniSat5(int num_threads)
 
 CryptoMiniSat5::~CryptoMiniSat5()
 {
+#ifdef STP_CRYPTOMINISAT_HAS_UP
+  disconnectTheoryPropagator();
+#endif
   delete s;
   vector<CMSat::Lit>* real_temp_cl = (vector<CMSat::Lit>*)temp_cl;
   delete real_temp_cl;

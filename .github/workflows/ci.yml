@@ -240,6 +240,14 @@ jobs:
           echo "::error::CryptoMiniSat was dropped from a build that asked for it alongside CaDiCaL"
           exit 1
         fi
+        # That CryptoMiniSat is the pinned fork the first configure installed,
+        # found here as a package: the one rung that probes for the IPASIR-UP
+        # interface rather than deriving it from the pin, so the one place a
+        # broken probe would show. The cache entry exists only if it ran.
+        if ! grep -q "^_STP_CMS_UP_PROBE:INTERNAL=TRUE" build-cadical-cms/CMakeCache.txt; then
+          echo "::error::the external-propagator probe did not find the interface in the pinned CryptoMiniSat"
+          exit 1
+        fi
         # And the CaDiCaL it uses is still the CADICAL_DIR one, not something
         # CryptoMiniSat dragged in.
         picked=$(sed -n 's/^CADICAL_LIBRARY:FILEPATH=//p' build-cadical-cms/CMakeCache.txt)

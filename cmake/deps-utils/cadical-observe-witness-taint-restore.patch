@@ -1,0 +1,37 @@
+diff --git a/src/external.cpp b/src/external.cpp
+index 8ae7c67e..6d899048 100644
+--- a/src/external.cpp
++++ b/src/external.cpp
+@@ -355,21 +355,17 @@ void External::add_observed_var (int elit) {
+ 
+   int eidx = abs (elit);
+ 
+-  REQUIRE (eidx > max_var ||
+-               (!marked (witness, elit) && !marked (witness, -elit)),
+-           "Only clean variables are allowed to be observed.");
+-  // if (eidx <= max_var &&
+-  //     (marked (witness, elit) || marked (witness, -elit))) {
+-  //   LOG ("Error, only clean variables are allowed to become observed.");
+-  //   assert (false);
+-
+-  //   // TODO: here needs to come the taint and restore of the newly
+-  //   // observed variable. Restore_clauses must be called before continue.
+-  //   // LOG ("marking tainted %d", elit);
+-  //   // mark (tainted, elit);
+-  //   // mark (tainted, -elit);
+-  //   // restore_clauses ...
+-  // }
++  // A variable can be witness-marked while unobserved: eliminating a
++  // neighbour records witness clauses that mention it. Observing it again
++  // is legal once those clauses are restored, which is what the original
++  // TODO here asked for -- taint the variable and restore before going on.
++  if (eidx <= max_var &&
++      (marked (witness, elit) || marked (witness, -elit))) {
++    LOG ("observing witness-marked %d: tainting and restoring first", elit);
++    mark (tainted, elit);
++    mark (tainted, -elit);
++    restore_clauses ();
++  }
+ 
+   if (eidx >= (int64_t) is_observed.size ())
+     is_observed.resize (1 + (size_t) eidx, false);

@@ -166,7 +166,8 @@ Pinned revisions
 ~~~~~~~~~~~~~~~~
 
 The release links CryptoMiniSat, pinned by commit in
-``cmake/FindCryptoMiniSat.cmake``, and minisat, pinned by commit since
+``cmake/FindCryptoMiniSat.cmake`` at a commit of ``stp/cryptominisat``
+with the IPASIR-UP interface, and minisat, pinned by commit since
 ``stp/minisat`` carries only upstream's 2.0 and 2.2.x tags. This matters
 more here than in CI, because the workflow restores a dependency cache
 rather than rebuilding: an unpinned dependency would mean linking against

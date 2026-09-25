@@ -1,0 +1,87 @@
+diff --git a/src/cadical.hpp b/src/cadical.hpp
+index 6b7f1f38..1eed2882 100644
+--- a/src/cadical.hpp
++++ b/src/cadical.hpp
+@@ -230,0 +231 @@ class ExternalPropagator;
++class DecisionPolarityAdvisor;
+@@ -413,0 +415,7 @@ public:
++  // Optional read-only advice after ordinary decision-variable selection.
++  // Requires a connected non-lazy external propagator. Only observed
++  // variables are offered; assumptions and external decisions are excluded.
++  // The advisor must outlive the connection and may only choose the sign.
++  // Disconnecting the external propagator also disconnects this advisor.
++  void connect_decision_polarity_advisor (DecisionPolarityAdvisor *);
++  void disconnect_decision_polarity_advisor ();
+@@ -1250,0 +1259,8 @@ public:
++class DecisionPolarityAdvisor {
++public:
++  virtual ~DecisionPolarityAdvisor () {}
++  // Return 0 to retain the default, or +/- the offered literal. This
++  // callback must not mutate the solver, add variables, or backtrack.
++  virtual int advise_decision_polarity (int default_literal) = 0;
++};
++
+diff --git a/src/decide.cpp b/src/decide.cpp
+index fc8f8e09..7f38dc88 100644
+--- a/src/decide.cpp
++++ b/src/decide.cpp
+@@ -337,0 +338,2 @@ int Internal::decide () {
++        if (external->decision_polarity_advisor)
++          decision = ask_decision_polarity (decision);
+diff --git a/src/external.hpp b/src/external.hpp
+index 9f897af7..1798f14e 100644
+--- a/src/external.hpp
++++ b/src/external.hpp
+@@ -120,0 +121 @@ struct External {
++  DecisionPolarityAdvisor *decision_polarity_advisor = nullptr;
+diff --git a/src/external_propagate.cpp b/src/external_propagate.cpp
+index 7ebf20c2..4b8abbff 100644
+--- a/src/external_propagate.cpp
++++ b/src/external_propagate.cpp
+@@ -1363,0 +1364,18 @@ void Internal::notify_backtrack (size_t new_level) {
++int Internal::ask_decision_polarity (int ilit) {
++  if (!external->decision_polarity_advisor || !external_prop ||
++      external_prop_is_lazy || private_steps || !observed (ilit))
++    return ilit;
++  // ask_decision already delivered pending assignments. The selected
++  // variable is still open, and the callback cannot change that selection.
++  assert (!val (ilit));
++  const int elit = externalize (ilit);
++  LOG_INTERACTION_FOR (advise_decision_polarity, elit);
++  const int advice =
++      external->decision_polarity_advisor->advise_decision_polarity (elit);
++  LOG_INTERACTION_RETURN_FOR (advise_decision_polarity, elit, advice);
++  CB_REQUIRE (!advice || advice == elit || advice == -elit,
++              "advise_decision_polarity", advice,
++              "polarity advice must preserve the selected variable.");
++  return advice == -elit ? -ilit : ilit;
++}
++
+diff --git a/src/internal.hpp b/src/internal.hpp
+index 1a396a2d..dd53d4b3 100644
+--- a/src/internal.hpp
++++ b/src/internal.hpp
+@@ -830,0 +831 @@ struct Internal {
++  int ask_decision_polarity (int);
+diff --git a/src/solver.cpp b/src/solver.cpp
+index 90d7807b..0530c508 100644
+--- a/src/solver.cpp
++++ b/src/solver.cpp
+@@ -1102,0 +1103,15 @@ void Solver::connect_external_propagator (ExternalPropagator *propagator) {
++void Solver::connect_decision_polarity_advisor (DecisionPolarityAdvisor *p) {
++  REQUIRE_VALID_STATE ();
++  REQUIRE (p, "can not connect zero decision polarity advisor");
++  REQUIRE (external->propagator && !external->propagator->is_lazy,
++           "decision polarity advice requires a non-lazy propagator");
++  REQUIRE (!external->decision_polarity_advisor,
++           "can not connect more than one decision polarity advisor");
++  external->decision_polarity_advisor = p;
++}
++
++void Solver::disconnect_decision_polarity_advisor () {
++  REQUIRE_VALID_STATE ();
++  external->decision_polarity_advisor = nullptr;
++}
++
+@@ -1110,0 +1126 @@ void Solver::disconnect_external_propagator () {
++  external->decision_polarity_advisor = nullptr;

@@ -111,9 +111,80 @@ namespace stp
   // not touched it, and before the first search none has been.
   bool searched = false;
 
+  // The IPASIR-UP side of SATSolver::TheoryPropagator. CaDiCaL speaks signed
+  // external indices; STP speaks var*2+sign. This is the only place the two
+  // meet, which is what keeps the theory itself free of any CaDiCaL type.
+  //
+  // Nothing here may throw: these are called from inside CaDiCaL's search,
+  // across a C++ boundary that is not prepared to unwind. The theory reports
+  // failure through failed() instead, and once it has, this stops asking it
+  // anything and lets the solve finish so the caller can see the failure.
+  class PropagatorBridge : public CaDiCaL::ExternalPropagator
+#if defined(STP_CADICAL_HAS_DECISION_POLARITY)
+                        , public CaDiCaL::DecisionPolarityAdvisor
+#endif
+  {
+  public:
+    PropagatorBridge(Cadical& owner, SATSolver::TheoryPropagator& theory)
+        : owner(owner), theory(theory)
+    {
+      // The theory judges complete assignments as well as partial ones, so
+      // this is not a lazy propagator.
+      is_lazy = false;
+      // A reason the theory gives for a propagated literal is a fact of the
+      // theory, not of the trail; CaDiCaL may drop it once it is done with
+      // it, like any other learned clause.
+      are_reasons_forgettable = true;
+    }
+
+    void notify_assignment(const std::vector<int>& lits) override;
+    void notify_new_decision_level() override;
+    void notify_backtrack(size_t new_level) override;
+    bool cb_check_found_model(const std::vector<int>& model) override;
+    bool cb_has_external_clause(bool& is_forgettable) override;
+    int cb_add_external_clause_lit() override;
+    int cb_propagate() override;
+    int cb_add_reason_clause_lit(int propagated_lit) override;
+#if defined(STP_CADICAL_HAS_DECISION_POLARITY)
+    int advise_decision_polarity(int default_literal) override;
+#endif
+
+    // Called once, before the search starts, so the notification path never
+    // has to grow its buffer.
+    void reserveNotificationBuffer(size_t count) { translated.reserve(count); }
+
+  private:
+    Cadical& owner;
+    SATSolver::TheoryPropagator& theory;
+    std::vector<SATSolver::Lit> pending;   // clause being handed over
+    size_t pending_index = 0;
+    bool pending_active = false;
+    std::vector<SATSolver::Lit> reason;    // reason clause being handed over
+    size_t reason_index = 0;
+    int reason_for = 0;
+    // Reused across notifications: this runs on every assignment of an
+    // observed variable, and must not allocate on that path.
+    std::vector<SATSolver::Lit> translated;
+  };
+
+  std::unique_ptr<PropagatorBridge> propagator_bridge;
+  // CaDiCaL external index -> STP variable, populated only when factoring
+  // has moved the numbering apart.
+  std::vector<uint32_t> stp_of_ext;
+
+  int externalOfStpVar(uint32_t var);
+  bool stpVarOfExternal(int external, uint32_t& var) const;
+
 public:
   Cadical();
   explicit Cadical(const CadicalOptions& options);
+
+  bool supportsTheoryPropagator() const override { return true; }
+  bool supportsDecisionPolarity() const override;
+  bool connectTheoryPropagator(
+      SATSolver::TheoryPropagator* propagator,
+      const std::vector<uint32_t>& observed) override;
+  void disconnectTheoryPropagator() override;
 
   ~Cadical();
 
@@ -147,6 +218,8 @@ public:
 
   void suggestPhase(uint32_t var, bool value) override;
   void declarePendingVariables() override;
+  bool supportsSearchReset() const override { return !factor_enabled; }
+  bool resetSearch() override;
   bool preferDecisions(const std::vector<DecisionHint>& wanted) override;
 
   void unsatAssumptions(const vec_literals& assumps,
@@ -155,6 +228,10 @@ public:
   void setVerbosity(int v) override;
 
   uint32_t nVars() const override;
+  bool validVariable(uint32_t x) const override
+  {
+    return x != 0 && x <= nVars();
+  }
 
   bool reportsClauseCount() const override { return true; }
 

@@ -110,12 +110,12 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
     # CryptoMiniSat was not self-contained. What it reached STP as was a CMake
     # package -- one an ExternalProject writes at build time, too late for the
     # configure that has to read it. That is still true of the package, and the
-    # way past it is to stop needing one: what stp/cryptominisat's `stp` branch
+    # way past it is to stop needing one: what the fork pinned below
     # builds is an archive and a header, the shape every other dependency here
     # arrives in, so this can name the pieces itself exactly as
     # cmake/FindCaDiCaL.cmake does.
     #
-    # The branch is what makes that possible. Upstream CryptoMiniSat >= 5.14
+    # The fork is what makes that possible. Upstream CryptoMiniSat >= 5.14
     # fetches and installs its own CaDiCaL, whose imported target a static
     # libcryptominisat5 then names in its link interface -- so a consumer that
     # did not go through the package would be left with an unresolved `cadical`
@@ -142,9 +142,13 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
         return()
     endif()
 
-    # Pinned to a commit, as MiniSat, LibBF, SymFPU and ABC are. It is the head
-    # of the `stp` branch: release/v5.14.7 plus the NOCADICAL option.
-    set(CryptoMiniSat_COMMIT "261392c4e993f40638392012b689a0a4a7794355"
+    # Pinned to a commit, as MiniSat, LibBF, SymFPU and ABC are. It is on
+    # stp/cryptominisat's `stp-ipasir-up` branch: release/v5.14.7 with the
+    # NOCADICAL option this build depends on, as on the `stp` branch, plus the
+    # IPASIR-UP external propagator interface. The interface is what lets
+    # lib/Sat/CryptoMinisat5.cpp host a theory propagator; see
+    # CRYPTOMINISAT_HAS_UP below.
+    set(CryptoMiniSat_COMMIT "e06847e1006f06ec630a62349d930e5ead54def6"
         CACHE STRING "CryptoMiniSat commit to build when one has to be built")
     mark_as_advanced(CryptoMiniSat_COMMIT)
     # Not read off the checkout: nothing is checked out yet at configure time,
@@ -248,12 +252,110 @@ set(STP_CMS_FROM_PACKAGE ${CryptoMiniSat_FOUND_SYSTEM})
 
 set(CryptoMiniSat_FOUND TRUE)
 
+# Whether this CryptoMiniSat can host an external propagator.
+#
+# The IPASIR-UP interface lib/Sat/CryptoMinisat5.cpp bridges to is the pinned
+# fork's; a CryptoMiniSat release, and so a distribution's, does not have it.
+# So decide rather than require, as cmake/FindMiniSat.cmake does: without the
+# interface the backend still builds and solves, and reports that it hosts no
+# propagator, so a theory that wants one checks complete models instead.
+#
+# -DCRYPTOMINISAT_HAS_UP=ON or OFF answers the question outright. Otherwise
+# rungs 0 and 1 probe the copy they found and rungs 2 and 3 take the answer
+# from the pin. The probe's verdict is cached under a name of its own, next to
+# what it was asked of, so a configure that finds a different copy -- one
+# cryptominisat5_DIR names now, or the pin built because the installed copy is
+# gone -- asks again rather than inheriting an answer about another library.
+# A value given with -D is never INTERNAL, which is what tells it apart.
+get_property(_cms_up_type CACHE CRYPTOMINISAT_HAS_UP PROPERTY TYPE)
+set(_cms_up_probed FALSE)
+if(DEFINED CACHE{CRYPTOMINISAT_HAS_UP} AND NOT _cms_up_type STREQUAL "INTERNAL")
+    # The user's answer, read from the cache entry -D wrote.
+elseif(CryptoMiniSat_FOUND_SYSTEM)
+    unset(CRYPTOMINISAT_HAS_UP CACHE)
+    set(_cms_up_key "${cryptominisat5_DIR};${CRYPTOMINISAT5_INCLUDE_DIRS}")
+    if(NOT "${_STP_CMS_UP_PROBED_FOR}" STREQUAL "${_cms_up_key}")
+        unset(_STP_CMS_UP_PROBE CACHE)
+    endif()
+    if(NOT DEFINED CACHE{_STP_CMS_UP_PROBE})
+        # Somebody else's CryptoMiniSat: ask it, with the calls the bridge
+        # makes. The package's target carries GMP, which cryptominisat.h
+        # includes; the header directory is named as lib/Sat/CMakeLists.txt
+        # names it for the one file that includes it.
+        set(_up_src "${PROJECT_BINARY_DIR}/CryptoMiniSat_up.cpp")
+        file(WRITE "${_up_src}"
+             "#include <cryptominisat5/cryptominisat.h>\n"
+             "struct P : public CMSat::ExternalPropagator {\n"
+             "  P() { is_lazy = false; are_reasons_forgettable = true; }\n"
+             "  void notify_assignment(const std::vector<CMSat::Lit>&) override {}\n"
+             "  void notify_new_decision_level() override {}\n"
+             "  void notify_backtrack(size_t) override {}\n"
+             "  bool cb_check_found_model(const std::vector<CMSat::Lit>&) override { return true; }\n"
+             "  bool cb_has_external_clause(bool&) override { return false; }\n"
+             "  CMSat::Lit cb_add_external_clause_lit() override { return CMSat::lit_Undef; }\n"
+             "  CMSat::Lit cb_propagate() override { return CMSat::lit_Undef; }\n"
+             "  CMSat::Lit cb_add_reason_clause_lit(CMSat::Lit) override { return CMSat::lit_Undef; }\n"
+             "};\n"
+             "int main() {\n"
+             "  CMSat::SATSolver s; P p;\n"
+             "  s.set_no_equivalent_lit_replacement();\n"
+             "  s.new_var();\n"
+             "  s.connect_external_propagator(&p);\n"
+             "  s.add_observed_var(0);\n"
+             "  s.disconnect_external_propagator();\n"
+             "  return 0;\n"
+             "}\n")
+        try_compile(_STP_CMS_UP_PROBE
+                    "${PROJECT_BINARY_DIR}/CryptoMiniSat_up_probe" "${_up_src}"
+                    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${CRYPTOMINISAT5_INCLUDE_DIRS}"
+                    LINK_LIBRARIES ${CRYPTOMINISAT5_LIBRARIES})
+        set(_STP_CMS_UP_PROBED_FOR "${_cms_up_key}" CACHE INTERNAL
+            "The CryptoMiniSat _STP_CMS_UP_PROBE answers for")
+        unset(_up_src)
+    endif()
+    set(CRYPTOMINISAT_HAS_UP ${_STP_CMS_UP_PROBE})
+    set(_cms_up_probed TRUE)
+    unset(_cms_up_key)
+else()
+    # The pin above, which carries the interface. It cannot be probed: the
+    # ExternalProject builds during the build phase, so at configure time
+    # there is no header to compile against. Derived from the pin, as
+    # MiniSat's is.
+    unset(CRYPTOMINISAT_HAS_UP CACHE)
+    set(CRYPTOMINISAT_HAS_UP TRUE)
+endif()
+unset(_cms_up_type)
+
+if(CRYPTOMINISAT_HAS_UP)
+    message(STATUS "CryptoMiniSat hosts an external propagator")
+elseif(_cms_up_probed)
+    # A warning rather than a status line: CryptoMiniSat is the default
+    # backend whenever it is linked, and rung 1 prefers an installed copy to
+    # the pin, so a machine with a distribution's CryptoMiniSat would
+    # otherwise lose the propagator on the backend most queries use without
+    # anybody being told.
+    message(WARNING
+        "The CryptoMiniSat found at ${cryptominisat5_DIR} has no "
+        "external-propagator interface. It is still the default backend, "
+        "and it hosts no theory propagator: a theory checks complete models "
+        "on it instead. --cadical selects a backend that hosts one for a "
+        "run. The pinned fork (see docs/building.rst) hosts one too: name "
+        "it with -Dcryptominisat5_DIR, or remove this copy so that STP "
+        "builds the fork. -DCRYPTOMINISAT_HAS_UP=OFF accepts this copy as "
+        "it is, without this warning.")
+else()
+    message(STATUS "CryptoMiniSat has no external-propagator interface: a "
+                   "theory checks complete models on it instead")
+endif()
+unset(_cms_up_probed)
+
 message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
 message(STATUS "CryptoMiniSat5 static lib:  ${CRYPTOMINISAT5_STATIC_LIBRARIES}")
 message(STATUS "CryptoMiniSat5 static lib deps: ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS}")
 message(STATUS "CryptoMiniSat5 include dirs: ${CRYPTOMINISAT5_INCLUDE_DIRS}")
 message(STATUS "Found CryptoMiniSat ${CryptoMiniSat_VERSION}: ${CRYPTOMINISAT5_LIBRARIES}")
 
+mark_as_advanced(CRYPTOMINISAT_HAS_UP)
 mark_as_advanced(CryptoMiniSat_FOUND)
 mark_as_advanced(CryptoMiniSat_FOUND_SYSTEM)
 

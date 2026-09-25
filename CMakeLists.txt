@@ -1063,6 +1063,9 @@ if (USE_CADICAL)
     if (CADICAL_HAS_FACTOR)
         add_definitions(-DSTP_CADICAL_HAS_FACTOR)
     endif()
+    if (CADICAL_HAS_DECISION_POLARITY)
+        add_definitions(-DSTP_CADICAL_HAS_DECISION_POLARITY)
+    endif()
 endif()
 
 # -----------------------------------------------------------------------------
@@ -1249,6 +1252,9 @@ if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
   # the oldest release anything in this repository builds -- the Dockerfiles do
   # -- and every method lib/Sat/CryptoMinisat5.cpp calls exists in it. Nothing
   # here builds anything older, so nothing here can say an older one works.
+  # The propagator bridge in that file is the exception: it is compiled only
+  # against a CryptoMiniSat that has the interface (CRYPTOMINISAT_HAS_UP, from
+  # cmake/FindCryptoMiniSat.cmake).
   if (CMS_EXPLICITLY_REQUESTED)
       find_package(CryptoMiniSat 5.11 REQUIRED)
   else()
@@ -1261,6 +1267,9 @@ if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
     add_definitions(-DUSE_CRYPTOMINISAT)
     set(STP_BUILD_WITH_CRYPTOMINISAT ON)
     set(USE_CRYPTOMINISAT ON)
+    if (CRYPTOMINISAT_HAS_UP)
+      add_definitions(-DSTP_CRYPTOMINISAT_HAS_UP)
+    endif()
   else()
     set(USE_CRYPTOMINISAT OFF)
   endif()
@@ -1350,8 +1359,10 @@ if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadic
                 # config.h picks the default backend from
                 # STP_BUILD_WITH_CRYPTOMINISAT, so it goes with the rest.
                 remove_definitions(-DUSE_CRYPTOMINISAT)
+                remove_definitions(-DSTP_CRYPTOMINISAT_HAS_UP)
                 set(STP_BUILD_WITH_CRYPTOMINISAT OFF)
                 set(USE_CRYPTOMINISAT OFF)
+                set(CRYPTOMINISAT_HAS_UP FALSE)
             else()
                 message(FATAL_ERROR
                     "A static CryptoMiniSat cannot be combined with a second "
