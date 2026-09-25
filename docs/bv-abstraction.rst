@@ -281,8 +281,8 @@ call on a solver that keeps the whole CNF, and which CNF it keeps decides
 how that search goes far more than it decides one solve. With
 ``--cnf-generation-effort`` at its default ``auto``, turning
 ``--bv-term-abstraction`` on therefore selects the Gia backend at its lowest
-rung (``gia-low``) rather than the size-based choice between ``very-low``
-and ``medium``, and ``-s`` says so:
+rung (``gia-low``), ahead of every other rule ``auto`` carries, and ``-s``
+says so:
 
 .. code-block:: text
 
@@ -290,11 +290,41 @@ and ``medium``, and ``-s`` says so:
 
 Over 311 KLEE binary128 queries with multiplication and division abstracted,
 the size-based rung solved 300 with PAR2 2024 and ``gia-low`` 306 with PAR2
-1356 (Bitwuzla: 308 and 1647); without the abstraction the same rung is
-worth far less there, 286 against 283 solved, which is why the size-based
-choice stays for everything else. On 329 SMT-LIB QF_BV files where the
+1356 (Bitwuzla: 308 and 1647); without the abstraction that rung was worth
+far less there, 286 against 283 solved. On 329 SMT-LIB QF_BV files where the
 abstraction engages it costs nothing, 216 solved against 204 either way.
 An explicit level is always left alone.
+
+What ``auto`` does when nothing is abstracted has since changed underneath
+that gate. It resolves from the blast estimate recorded before lowering --
+``gia-low`` below ``--cnf-auto-threshold`` (200,000 AND nodes) and
+``new-medium`` at or above it -- and ``-s`` names the estimate rather than a
+measured AIG:
+
+.. code-block:: text
+
+    cnf-auto: estimated 17630 AND nodes, chose gia-low
+
+Three paths keep the older size-based choice between ``very-low`` and
+``medium``, which reports the graph it measured (``cnf-auto: 62257 AIG
+nodes, chose medium``): a refinement owner other than the
+uninterpreted-function loop alone -- lazy array reads, or
+``--bv-eq-abstraction`` -- under whose lowering the in-house rungs are
+unmeasured; SAT backends other than CaDiCaL; and any route that records no
+estimate, the incremental driver among them.
+
+So the question this section once left open -- whether ``auto`` should reach
+for ``gia-low`` more widely -- is answered in the code for the common path,
+and what is left to ask is whether forcing the rung past what the estimate
+picks buys anything. On a 30-file per-family sample of SMT-LIB QF_BV (56
+families, 1,030 files, 60 s, CaDiCaL) it does not: ``auto`` solves 806 and a
+forced ``gia-low`` 795, no answer differing, with ``auto`` also a fifth
+quicker over the sample (3,111 s against 3,710 s). Forcing gains ten
+propagation-heavy files (``pspace``'s ``shift1add``, ``Bouvier``,
+``picorv32``) and loses twenty-one spread wider. The same sample before the
+estimate rule landed: ``auto`` 777, forced ``gia-low`` 796. The forced arm
+has not moved (795); ``auto`` has -- which is where those thirty files came
+from, and why forcing the rung by hand now earns nothing.
 
 Reading what happened
 ---------------------
