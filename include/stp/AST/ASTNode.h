@@ -200,6 +200,11 @@ public:
         // An ite is a Real term exactly when its branches are. The condition
         // is Boolean either way, so the branch decides.
         return Degree() == 3 && (*this)[1].isRealTerm();
+      case UF_APPLY:
+        // An application is a Real term when the function returns one. The
+        // kind alone cannot say so -- every application shares it -- which is
+        // why this asks the sort the node was built at.
+        return GetSourceSort().kind() == SourceSort::Kind::Real;
       default:
         return false;
     }

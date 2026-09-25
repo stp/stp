@@ -1,3 +1,4 @@
+#include "Lra/ASTRealConst.h"
 #include "LraCoordinator.h"
 #include "LraBudgetRefusal.h"
 #include "LraModelIndex.h"
@@ -6,6 +7,7 @@
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ToSATBase.h"
 
+#include <iterator>
 #include <map>
 #include <algorithm>
 #include <iostream>
@@ -131,6 +133,24 @@ bool relationValue(int comparison, FrontendRelation relation)
 
 } // namespace
 
+// AUTO asks the query rather than the option: separating coincident values
+// only pays where something reads the model by grouping values, and the
+// lazy congruence round is the only such reader.
+//
+// The spread symbols are exactly that signal, and the coordinator is handed
+// them already: they are the arguments of uninterpreted applications, the
+// values the congruence round groups by. A query with none has nothing that
+// a coincidence could mislead. Asking the UF layer directly would say the
+// same thing and would make the arithmetic depend on it.
+bool LraCoordinator::separateModelValuesEnabled() const
+{
+  using Mode = UserDefinedFlags::OptionMode;
+  const Mode mode = manager_.UserFlags.lra_separate_model_values;
+  if (mode != Mode::AUTO)
+    return mode == Mode::ON;
+  return !spread_symbols_.empty();
+}
+
 bool LraCoordinator::decisionPolarityEnabled() const
 {
   return manager_.UserFlags.lra_decision_polarity &&
@@ -139,11 +159,13 @@ bool LraCoordinator::decisionPolarityEnabled() const
 }
 
 LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
-                               const ASTNode& submitted_formula)
+                               const ASTNode& submitted_formula,
+                               const std::vector<ASTNode>& spread_symbols)
     : manager_(manager), solver_(solver),
       submitted_formula_(submitted_formula), frontend_(manager),
       registry_(manager)
 {
+  spread_symbols_ = spread_symbols;
   manager_.InvalidateRealModel();
   try
   {
@@ -175,6 +197,8 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
         Frontend::containsRealSyntax(registered_.boolean_formula))
       throw std::runtime_error(
           "LRA preregistration did not produce a pure Boolean formula");
+    base_submitted_ = submitted_formula_;
+    base_registered_ = registered_.boolean_formula;
 
     // The complete Boolean formula is activated as a solve-local assumption
     // at the final CNF boundary.  Consequently a verified no-good can be
@@ -221,11 +245,14 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
     }
     opaque_atoms_.reserve(solve_snapshot.components.size() +
                           solve_snapshot.equalities.size());
-    std::set<ASTNode, ExprLess> unique;
+    // opaque_atom_set_ outlives this loop: extendInternal appends to the
+    // list and needs the same duplicate check across extensions that this
+    // does within construction.
+    opaque_atom_set_.clear();
     for (const RegistryComponent& component : solve_snapshot.components)
     {
       poll();
-      if (!unique.insert(component.opaque_atom).second)
+      if (!opaque_atom_set_.insert(component.opaque_atom).second)
         throw std::runtime_error("duplicate LRA component representative");
       else
         opaque_atoms_.push_back(component.opaque_atom);
@@ -233,7 +260,7 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
     for (const RegistryEqualityGroup& equality : solve_snapshot.equalities)
     {
       poll();
-      if (!unique.insert(equality.equality_atom).second)
+      if (!opaque_atom_set_.insert(equality.equality_atom).second)
         throw std::runtime_error("duplicate LRA equality opaque atom");
       else
         opaque_atoms_.push_back(equality.equality_atom);
@@ -248,6 +275,7 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
      * caller asks for it. */
     context_->setConflictVerification(
         manager_.UserFlags.lra_verify_conflicts);
+    context_->setSeparateModelValues(separateModelValuesEnabled());
     if (!context_->ready())
       rethrowContextFailure(*context_, "exact LRA context creation failed");
     adapter_ = std::make_unique<LraCandidateAdapter>(*context_, solver_);
@@ -382,6 +410,477 @@ void LraCoordinator::discardStagedModel(StagedDiscardReason reason) noexcept
     case StagedDiscardReason::SolverCall:
     case StagedDiscardReason::StopOrError:
       break;
+  }
+}
+
+namespace
+{
+
+// Clauses for a small Boolean formula, into a solver that has already been
+// running. Everything the formula names is either a scalar the first encoding
+// gave variables to -- looked up in the symbol map -- or an opaque LRA atom
+// that has none yet, which takes a fresh variable and is entered in that map
+// for the context to bind. The connectives are Tseitin-encoded, one fresh
+// variable per gate. Anything else is refused, and the caller starts over.
+class LemmaClauseEncoder final
+{
+public:
+  LemmaClauseEncoder(SATSolver& solver, ToSATBase::ASTNodeToSATVar& map,
+                     const PreparationControl* preparation)
+      : solver_(solver), map_(map),
+        poll_(preparation, PreparationStage::RefinementEncoding)
+  {
+  }
+
+  bool ok() const noexcept { return ok_; }
+  void checkPreparation() const { poll_.check(); }
+
+  static SATSolver::Lit neg(SATSolver::Lit literal)
+  {
+    return SATSolver::mkLit(SATSolver::var(literal), !SATSolver::sign(literal));
+  }
+
+  SATSolver::Lit encode(const ASTNode& node)
+  {
+    poll_();
+    const auto memo = memo_.find(node);
+    if (memo != memo_.end())
+      return memo->second;
+    SATSolver::Lit out = SATSolver::mkLit(0, false);
+    const Kind kind = node.GetKind();
+    switch (kind)
+    {
+      case TRUE:
+        out = constantTrue();
+        break;
+      case FALSE:
+        out = neg(constantTrue());
+        break;
+      case SYMBOL:
+        out = symbolLiteral(node);
+        break;
+      case NOT:
+        out = neg(encode(node[0]));
+        break;
+      case AND:
+      case OR:
+      {
+        std::vector<SATSolver::Lit> inputs;
+        for (size_t i = 0; i < node.Degree(); ++i)
+          inputs.push_back(encode(node[i]));
+        out = gate(kind == AND, inputs);
+        break;
+      }
+      case XOR:
+      case IFF:
+      {
+        if (node.Degree() != 2)
+        {
+          ok_ = false;
+          break;
+        }
+        const SATSolver::Lit a = encode(node[0]);
+        const SATSolver::Lit b = encode(node[1]);
+        out = kind == XOR ? exclusive(a, b) : neg(exclusive(a, b));
+        break;
+      }
+      case IMPLIES:
+      {
+        std::vector<SATSolver::Lit> inputs;
+        inputs.push_back(neg(encode(node[0])));
+        inputs.push_back(encode(node[1]));
+        out = gate(false, inputs);
+        break;
+      }
+      case ITE:
+      {
+        const SATSolver::Lit c = encode(node[0]);
+        const SATSolver::Lit t = encode(node[1]);
+        const SATSolver::Lit e = encode(node[2]);
+        std::vector<SATSolver::Lit> whenTrue;
+        whenTrue.push_back(neg(c));
+        whenTrue.push_back(t);
+        std::vector<SATSolver::Lit> whenFalse;
+        whenFalse.push_back(c);
+        whenFalse.push_back(e);
+        std::vector<SATSolver::Lit> both;
+        both.push_back(gate(false, whenTrue));
+        both.push_back(gate(false, whenFalse));
+        out = gate(true, both);
+        break;
+      }
+      case EQ:
+        out = bitEquality(node[0], node[1]);
+        break;
+      default:
+        ok_ = false;
+        break;
+    }
+    memo_.emplace(node, out);
+    return out;
+  }
+
+  void unitUnder(SATSolver::Lit guard, SATSolver::Lit literal)
+  {
+    add({neg(guard), literal});
+  }
+
+private:
+  SATSolver::Lit fresh()
+  {
+    poll_();
+    const unsigned variable = solver_.newVar();
+    solver_.setFrozen(variable);
+    return SATSolver::mkLit(variable, false);
+  }
+
+  void add(std::initializer_list<SATSolver::Lit> literals)
+  {
+    poll_();
+    SATSolver::vec_literals clause;
+    for (SATSolver::Lit literal : literals)
+      clause.push(literal);
+    solver_.addClause(clause);
+  }
+
+  SATSolver::Lit constantTrue()
+  {
+    if (!have_true_)
+    {
+      true_ = fresh();
+      add({true_});
+      have_true_ = true;
+    }
+    return true_;
+  }
+
+  // A Boolean scalar's variable, or a fresh one for an atom that has none.
+  SATSolver::Lit symbolLiteral(const ASTNode& symbol)
+  {
+    const auto found = map_.find(symbol);
+    if (found != map_.end())
+    {
+      if (found->second.size() != 1 ||
+          found->second[0] == ~static_cast<unsigned>(0) ||
+          !solver_.validVariable(found->second[0]))
+      {
+        ok_ = false;
+        return SATSolver::mkLit(0, false);
+      }
+      return SATSolver::mkLit(found->second[0], false);
+    }
+    if (symbol.GetType() != BOOLEAN_TYPE)
+    {
+      ok_ = false;
+      return SATSolver::mkLit(0, false);
+    }
+    const SATSolver::Lit literal = fresh();
+    map_[symbol] = std::vector<unsigned>{SATSolver::var(literal)};
+    return literal;
+  }
+
+  // z <-> AND(inputs), or z <-> OR(inputs).
+  SATSolver::Lit gate(bool conjunction, const std::vector<SATSolver::Lit>& in)
+  {
+    const SATSolver::Lit z = fresh();
+    SATSolver::vec_literals wide;
+    wide.push(conjunction ? z : neg(z));
+    for (SATSolver::Lit literal : in)
+    {
+      add({conjunction ? neg(z) : z, conjunction ? literal : neg(literal)});
+      wide.push(conjunction ? neg(literal) : literal);
+    }
+    solver_.addClause(wide);
+    return z;
+  }
+
+  // z <-> (a xor b).
+  SATSolver::Lit exclusive(SATSolver::Lit a, SATSolver::Lit b)
+  {
+    const SATSolver::Lit z = fresh();
+    add({neg(z), a, b});
+    add({neg(z), neg(a), neg(b)});
+    add({z, neg(a), b});
+    add({z, a, neg(b)});
+    return z;
+  }
+
+  // z <-> (every bit of a equals the same bit of b), for two scalars whose
+  // bits the first encoding gave variables to.
+  SATSolver::Lit bitEquality(const ASTNode& a, const ASTNode& b)
+  {
+    const auto left = map_.find(a);
+    const auto right = map_.find(b);
+    if (a.GetKind() != SYMBOL || b.GetKind() != SYMBOL ||
+        left == map_.end() || right == map_.end() ||
+        left->second.size() != right->second.size() || left->second.empty())
+    {
+      ok_ = false;
+      return SATSolver::mkLit(0, false);
+    }
+    std::vector<SATSolver::Lit> bits;
+    for (size_t i = 0; i < left->second.size(); ++i)
+    {
+      const unsigned x = left->second[i];
+      const unsigned y = right->second[i];
+      if (x == ~static_cast<unsigned>(0) || y == ~static_cast<unsigned>(0) ||
+          !solver_.validVariable(x) || !solver_.validVariable(y))
+      {
+        ok_ = false;
+        return SATSolver::mkLit(0, false);
+      }
+      bits.push_back(neg(exclusive(SATSolver::mkLit(x, false),
+                                   SATSolver::mkLit(y, false))));
+    }
+    return gate(true, bits);
+  }
+
+  SATSolver& solver_;
+  ToSATBase::ASTNodeToSATVar& map_;
+  PreparationPoller poll_;
+  std::map<ASTNode, SATSolver::Lit, ExprLess> memo_;
+  SATSolver::Lit true_ = SATSolver::mkLit(0, false);
+  bool have_true_ = false;
+  bool ok_ = true;
+};
+
+} // namespace
+
+void LraCoordinator::rebuildCoreAndContext()
+{
+  const auto context_start = std::chrono::steady_clock::now();
+  adapter_.reset();
+  context_.reset();
+  context_ = std::make_unique<LraSolveContext>(
+      registry_, solver_, frontend_.numberLimits(), frame_);
+  increment(metrics_.core_rebuilds);
+  context_->setConflictVerification(manager_.UserFlags.lra_verify_conflicts);
+  context_->setSeparateModelValues(separateModelValuesEnabled());
+  if (!context_->ready())
+    rethrowContextFailure(*context_, "exact LRA context rebuild failed");
+  adapter_ = std::make_unique<LraCandidateAdapter>(*context_, solver_);
+  adapter_->setDecisionPolarity(decisionPolarityEnabled());
+  if (!context_->ready())
+    rethrowContextFailure(*context_, "exact LRA adapter rebuild failed");
+  addElapsed(metrics_.context_rebuild_nanoseconds, context_start);
+  metrics_.solve_epoch = context_->solveEpoch();
+  bindings_ready_ = false;
+  // Every row keeps its clauses in the solver; re-stating the ordering
+  // axioms alongside is harmless.
+  ordering_axioms_emitted_ = false;
+}
+
+ExtensionOutcome LraCoordinator::extendWithFormula(const ASTNode& formula,
+                                                   ToSATBase& tosat) noexcept
+{
+  return extendInternal(formula, tosat, nullptr);
+}
+
+void LraCoordinator::rebuildLiveFormulas()
+{
+  ASTVec submitted{base_submitted_};
+  ASTVec registered{base_registered_};
+  submitted.insert(submitted.end(), permanent_submitted_.begin(),
+                   permanent_submitted_.end());
+  registered.insert(registered.end(), permanent_registered_.begin(),
+                    permanent_registered_.end());
+  submitted_formula_ =
+      submitted.size() == 1 ? submitted[0] : manager_.CreateNode(AND, submitted);
+  registered_.boolean_formula = registered.size() == 1
+                                    ? registered[0]
+                                    : manager_.CreateNode(AND, registered);
+}
+
+ExtensionOutcome LraCoordinator::extendInternal(
+    const ASTNode& formula, ToSATBase& tosat,
+    const ASTNode* frame_activation) noexcept
+{
+  /* Everything that can be answered without touching this coordinator, so
+   * that a decline really is one. Past this point the propagator comes out
+   * of the solver, the committed model is dropped and the registry grows,
+   * and a caller told to start over would find none of the three. The sort
+   * and ownership tests used to sit inside the work below and throw, which
+   * failed a well-formed refusal closed. */
+  if (!ready() || formula.IsNull() || !frontend_.ownsNode(formula) ||
+      formula.GetSourceSort().kind() != SourceSort::Kind::Bool)
+    return ExtensionOutcome::Declined;
+  try
+  {
+    // The propagator owns the adapter this rebuilds. Take it out of the
+    // solver for the duration of the rebuild, and put it back before this
+    // returns: disconnecting releases the observed variables, and a solve
+    // run in between could eliminate one, after which the backend refuses to
+    // observe it again. Reconnected in the same breath, nothing has moved.
+    const bool was_propagating = propagating_;
+    if (propagating_)
+    {
+      // CaDiCaL can deliver assignments while removing observed variables.
+      // Retire the arithmetic trail first, so those teardown notifications
+      // cannot reassert bounds into the accepted candidate or its conflict.
+      adapter_->endTheoryPropagation();
+      solver_.disconnectTheoryPropagator();
+      propagating_ = false;
+    }
+    manager_.InvalidateRealModel();
+
+    const auto preregistration_start = std::chrono::steady_clock::now();
+    const PreregisteredFormula preregistered = frontend_.preregister(formula);
+    const RegisteredLraFormula registered =
+        registry_.registerFormula(preregistered, frame_);
+    addElapsed(metrics_.preregistration_nanoseconds, preregistration_start);
+    if (registered.boolean_formula.IsNull() ||
+        Frontend::containsRealSyntax(registered.boolean_formula))
+      throw std::runtime_error(
+          "LRA extension did not produce a pure Boolean formula");
+
+    // The same alias bookkeeping as construction, for the new predicates.
+    //
+    // This used to snapshot the whole frame and index every component in it
+    // to answer a question about the handful the new formula produced, and
+    // then rebuild the atom list from that snapshot. Both are O(frame), the
+    // frame grows with every lemma, and a refinement round adds one lemma,
+    // so a query that took fifteen rounds paid for fifteen copies of an
+    // ever-larger frame. Everything else in this function was already an
+    // append; these are now too.
+    if (registered.component_occurrences.size() !=
+        preregistered.predicates.size())
+      throw std::runtime_error(
+          "registry component occurrence coverage is incomplete");
+    for (std::size_t i = 0; i < preregistered.predicates.size(); ++i)
+    {
+      const ASTNode interned = registry_.componentOpaqueAtom(
+          registered.component_occurrences[i], frame_);
+      if (interned.IsNull())
+        throw std::runtime_error(
+            "registry lost an LRA component occurrence alias");
+      source_atom_aliases_.emplace(preregistered.predicates[i].opaque_atom,
+                                   interned);
+    }
+
+    // Append what this formula added. opaque_atom_set_ carries the same
+    // duplicate check the rebuild did with a local set, across extensions
+    // rather than within one, so an atom the registry hands back twice --
+    // which is what interning a component onto an older representative
+    // looks like from here -- is dropped rather than listed twice.
+    //
+    // The bindings are still discarded: the context that follows binds every
+    // atom afresh, and a binding names a SAT variable of the solve that is
+    // being rebuilt. Appending to the atom list is safe because the list is
+    // the input to that rebind, not its output.
+    opaque_bindings_.clear();
+    for (const LraComponentId id : registered.component_occurrences)
+    {
+      const ASTNode atom = registry_.componentOpaqueAtom(id, frame_);
+      if (atom.IsNull())
+        throw std::runtime_error("registry lost an LRA component atom");
+      if (opaque_atom_set_.insert(atom).second)
+        opaque_atoms_.push_back(atom);
+    }
+    for (const LraEqualityGroupId id : registered.equality_groups)
+    {
+      const ASTNode atom = registry_.equalityOpaqueAtom(id, frame_);
+      if (atom.IsNull())
+        throw std::runtime_error("registry lost an LRA equality atom");
+      if (opaque_atom_set_.insert(atom).second)
+        opaque_atoms_.push_back(atom);
+    }
+
+    // What the solve now stands on: a frame's part can be retracted, a
+    // permanent extension's cannot.
+    if (frame_activation == nullptr)
+    {
+      permanent_submitted_.push_back(formula);
+      permanent_registered_.push_back(registered.boolean_formula);
+    }
+    {
+      NumberOperationScope operation(manager_.lra_ast_state->number_budget);
+      preregistered_.predicates.insert(
+          preregistered_.predicates.end(),
+          std::make_move_iterator(preregistered.predicates.begin()),
+          std::make_move_iterator(preregistered.predicates.end()));
+      preregistered_.equalities.insert(
+          preregistered_.equalities.end(),
+          std::make_move_iterator(preregistered.equalities.begin()),
+          std::make_move_iterator(preregistered.equalities.end()));
+    }
+    registered_.component_occurrences.insert(
+        registered_.component_occurrences.end(),
+        registered.component_occurrences.begin(),
+        registered.component_occurrences.end());
+    registered_.equality_groups.insert(registered_.equality_groups.end(),
+                                       registered.equality_groups.begin(),
+                                       registered.equality_groups.end());
+    if (frame_activation == nullptr)
+      rebuildLiveFormulas();
+
+    // Rebuild arithmetic over the enlarged registry. The SAT
+    // solver stays; old and new atoms are bound after encoding the lemma.
+    rebuildCoreAndContext();
+
+    ToSATBase::ASTNodeToSATVar& map = tosat.SATVar_to_SymbolIndexMap();
+    QueryPhaseScope encoding_time(manager_.query_timing, QueryPhase::EncodingOther);
+    LemmaClauseEncoder encoder(solver_, map, manager_.preparation_control);
+    SATSolver::Lit guard;
+    if (frame_activation == nullptr)
+    {
+      const auto activation = map.find(solve_activation_);
+      if (activation == map.end() || activation->second.size() != 1 ||
+          !solver_.validVariable(activation->second[0]))
+        throw std::runtime_error("LRA extension found no activation variable");
+      guard = SATSolver::mkLit(activation->second[0], false);
+    }
+    const SATSolver::Lit root = encoder.encode(registered.boolean_formula);
+    if (!encoder.ok())
+      throw std::runtime_error(
+          "LRA extension formula holds something the clause encoder does "
+          "not cover");
+    encoder.unitUnder(guard, root);
+    encoder.checkPreparation();
+    encoding_time.finish();
+    // A prior assumption solve may have returned UNSAT. Adding the new
+    // guarded clause releases that result (not a permanent inconsistency).
+    if (!solver_.okay())
+      throw std::runtime_error("SAT solver rejected the guarded LRA extension");
+    increment(metrics_.extensions);
+    if (was_propagating)
+    {
+      // The map is complete now -- the atoms the solver already held and
+      // the ones the encoder just gave variables to -- so the rebuilt
+      // context can bind them at once and the propagator resume without a
+      // full-lazy solve in between.
+      if (!bindOpaqueAtoms(tosat))
+        throw std::runtime_error("LRA extension could not bind its atoms");
+      std::vector<uint32_t> observed;
+      if (!adapter_->beginTheoryPropagation(observed))
+        throw std::runtime_error("theory propagation setup failed after extension");
+      if (!solver_.connectTheoryPropagator(adapter_.get(), observed))
+      {
+        adapter_->endTheoryPropagation();
+        throw std::runtime_error("backend refused the theory propagator after extension");
+      }
+      propagating_ = true;
+    }
+    return ExtensionOutcome::Extended;
+  }
+  catch (const PreparationInterrupted& stopped)
+  {
+    preparation_stop_ = stopped;
+    manager_.InvalidateRealModel();
+    return ExtensionOutcome::Interrupted;
+  }
+  catch (const std::exception& failure)
+  {
+    failClosed(failure.what());
+    /* Four layers do exact arithmetic on the way in and each refuses in its
+     * own currency; none of those refusals is a fault of STP's. Tell them
+     * apart here, where the exception is still in hand. */
+    return gaveUpOnABudget(failure) ? ExtensionOutcome::ResourceLimit
+                                    : ExtensionOutcome::Failed;
+  }
+  catch (...)
+  {
+    failClosed("unexpected LRA extension failure");
+    return ExtensionOutcome::Failed;
   }
 }
 
@@ -1112,7 +1611,7 @@ std::unique_ptr<RealModel> LraCoordinator::materializeStagedModel(
         "staged exact model misses a public registered Real symbol");
 
   auto model = std::make_unique<RealModel>(
-      frontend_.numberLimits(), seeds, requiredRealSymbols());
+      frontend_.numberLimits(), seeds, requiredRealSymbols(), spread_symbols_);
   return model;
 }
 
@@ -1240,7 +1739,7 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << ",\"sat_candidates\":" << metrics_.candidates
       << ",\"lra_consistent\":" << metrics_.lra_consistent
       << ",\"lra_conflicts\":" << metrics_.lra_conflicts
-      << ",\"lra_clauses\":" << metrics_.lra_clauses
+      << ",\"lra_clauses\":" << metrics_.lra_clauses << ",\"extensions\":" << metrics_.extensions
       << ",\"candidate_materialization_ns\":"
       << solve.candidate_read_nanoseconds
       << ",\"exact_assertions\":" << solve.exact_assertions

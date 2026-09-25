@@ -258,7 +258,7 @@ WorkingPolynomial normalizeTerm(const ASTNode& term,
     incrementSaturating(metrics.normalization_nodes);
   };
   return normalizeAffineDag(term, ExactRational(std::int64_t{1}), resolve,
-                            visit, poll);
+                            visit, poll, {true});
 }
 
 LinearPolynomial finishPolynomial(WorkingPolynomial working,
@@ -386,8 +386,9 @@ public:
   }
 
   // What one node becomes on its own, if it is decided without its children:
-  // a Real predicate by its registration, a non-Boolean by itself. Null for
-  // a Boolean connective, whose result is built from its children's.
+  // a Real predicate by its registration, a Boolean application by an opaque
+  // atom, a non-Boolean by itself. Null for a Boolean connective, whose
+  // result is built from its children's.
   std::optional<ASTNode> transformLeaf(const ASTNode& node)
   {
     poll_();
@@ -415,6 +416,17 @@ public:
     if (node.GetSourceSort().kind() != SourceSort::Kind::Bool)
       return node;
 
+    // A Boolean-valued application is one atom, whatever its arguments are
+    // made of. Descending into it would meet Real arguments outside any Real
+    // predicate and refuse them, but they are not this walk's to interpret:
+    // the arguments reach the arithmetic through the congruence constraints
+    // the lowering installs, and the application itself is opaque here. It
+    // is replaced rather than passed through so that no Real syntax survives
+    // the walk; by the time the solve-time coordinator runs, lowering has
+    // already retired every application anyway.
+    if (node.GetKind() == UF_APPLY)
+      return freshOpaque("lra_uf");
+
     return std::nullopt;
   }
 
@@ -423,7 +435,8 @@ public:
   // -- a bounded-model-checking trace nests one conjunct per step, tens of
   // thousands deep -- and a call frame per level is a stack overflow on
   // exactly the inputs that matter. Results are memoised by node, so a
-  // subterm the DAG shares is rewritten once.
+  // subterm the DAG shares is rewritten once and, where it is an application,
+  // gets one opaque atom rather than one per path to it.
   ASTNode transform(const ASTNode& root)
   {
     struct Frame
@@ -435,7 +448,8 @@ public:
     };
     std::vector<Frame> stack;
     // Everything that mints an atom is memoised by node, so a subterm the
-    // DAG shares becomes one atom however many paths reach it.
+    // DAG shares becomes one atom however many paths reach it: an
+    // application, and a Real predicate.
     //
     // Predicates used to be registered once per occurrence, on the grounds
     // that the registry hash-conses the row and its components anyway. It

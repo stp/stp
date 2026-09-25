@@ -178,6 +178,22 @@ public:
   RegisteredLraFormula registerFormula(
       const PreregisteredFormula& formula, LraAssertionFrameId frame);
 
+  /* One frame member's interned opaque atom, without copying the frame.
+   *
+   * Hash-consing can replace a component a formula has just preregistered
+   * with the stable representative an older frame already holds, so a caller
+   * that has just registered a formula has to ask which atom it actually
+   * got. Taking a whole frame snapshot to answer that is what these replace:
+   * the snapshot is O(frame), and an extension only ever asks about the
+   * handful of ids the new formula produced.
+   *
+   * Returns a null node when the id is not a member of that frame, which the
+   * caller should treat as the registry having lost the occurrence. */
+  ASTNode componentOpaqueAtom(LraComponentId id,
+                              LraAssertionFrameId frame) const noexcept;
+  ASTNode equalityOpaqueAtom(LraEqualityGroupId id,
+                             LraAssertionFrameId frame) const noexcept;
+
   LraRegistrySnapshot activeSnapshot(
       const PreparationControl* preparation = nullptr) const;
   // Snapshot only the closure owned by one assertion frame.  The coordinator uses this

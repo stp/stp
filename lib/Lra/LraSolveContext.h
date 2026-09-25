@@ -51,7 +51,7 @@ enum class SolveContextStatus : std::uint8_t
 
 /* Arithmetic resource refusals and invalid states use this exception.
  * Preparation cancellation retains its own typed interruption across the
- * noexcept constructor boundary. */
+ * noexcept constructor and extension boundary. */
 enum class SolveContextFailureKind : std::uint8_t
 {
   ResourceLimit,
@@ -368,6 +368,7 @@ public:
       core_->setConflictVerification(enabled);
   }
   bool conflictVerification() const noexcept { return verify_conflicts_; }
+  void setSeparateModelValues(bool enabled) noexcept;
   // The verifier, or an unconditional pass when it is switched off.
   VerificationResult verifyConflictChecked(
       const Conflict& conflict) const noexcept;

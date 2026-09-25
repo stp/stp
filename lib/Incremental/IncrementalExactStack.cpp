@@ -387,13 +387,12 @@ IncrementalSolver::Impl::exactStackCheckSat(
   if (ufRound)
   {
     ASTNodeMap handleAliases;
-    if (uf.optimize_flag && uf.propagate_equalities &&
-        uf.uf_propagate_equalities)
+    const UFPreLoweringChoice ufChoice = chooseUFPreLowering(*bm, ufRoot);
+    if (ufChoice.propagate)
     {
       UFPreLowering pre(bm);
       UFPreLoweringStats preStats;
-      ufRoot = pre.propagate(ufRoot, &preStats,
-                             uf.uf_skeleton_preproc || uf.skeleton_preproc,
+      ufRoot = pre.propagate(ufRoot, &preStats, ufChoice.askSkeleton,
                              &handleAliases);
       pre.report(preStats);
     }

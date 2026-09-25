@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define STP_H
 
 #include "stp/AST/AST.h"
+#include "stp/UninterpretedFunctions/UFLowering.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/FloatBlaster/FpAbstraction.h"
@@ -110,6 +111,8 @@ class STP
   // value remains alive with the model, while batchUFAdapter owns the
   // query-local SAT/checker mutation.
   std::unique_ptr<LoweredApplicationView> batchUFView;
+  // The lazy congruence rounds of the query in progress; see TopLevelSTPAux.
+  LazyCongruenceState lazyCongruence;
   std::unique_ptr<UFBatchAdapter> batchUFAdapter;
   uint64_t batchUFScopeGeneration = 0;
 

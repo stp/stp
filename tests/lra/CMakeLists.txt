@@ -207,6 +207,12 @@ set_tests_properties(lra_configured_backend_adapter PROPERTIES
 )
 
 if(STP_EXECUTABLE_AVAILABLE)
+  add_test(NAME lra_mixed_uf_model_cli
+    COMMAND "${PYTHON_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/mixed_uf_model_runner.py"
+      "$<TARGET_FILE:stp-bin>")
+  set_tests_properties(lra_mixed_uf_model_cli PROPERTIES
+    LABELS "lra;uf;model;semantic" TIMEOUT 120)
   add_test(NAME lra_dyadic_arithmetic
     COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/dyadic_arithmetic_runner.py"
       "$<TARGET_FILE:stp_lra_exact_tests>")
@@ -259,7 +265,7 @@ set_target_properties(stp_lra_real_capability_api_tests PROPERTIES
 add_test(NAME lra_real_capability_api
   COMMAND stp_lra_real_capability_api_tests)
 set_tests_properties(lra_real_capability_api PROPERTIES
-  LABELS "lra;api;ite"
+  LABELS "lra;api;ite;uf"
   TIMEOUT 3600
 )
 

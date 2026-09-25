@@ -1004,6 +1004,51 @@ LraRegistrySnapshot LraAtomRegistry::activeSnapshot(
   }
 }
 
+ASTNode LraAtomRegistry::componentOpaqueAtom(
+    LraComponentId id, LraAssertionFrameId frame_id) const noexcept
+{
+  try
+  {
+    const LraAtomRegistryState& current = state();
+    if (!frame_id.valid() || frame_id.domain != current.domain)
+      return ASTNode();
+    const auto frame = current.frames.find(frame_id);
+    if (frame == current.frames.end() || frame->second.components.count(id) != 1)
+      return ASTNode();
+    const auto found = current.components.find(id);
+    if (found == current.components.end())
+      return ASTNode();
+    return found->second.value.opaque_atom;
+  }
+  catch (...)
+  {
+    return ASTNode();
+  }
+}
+
+ASTNode LraAtomRegistry::equalityOpaqueAtom(
+    LraEqualityGroupId id, LraAssertionFrameId frame_id) const noexcept
+{
+  try
+  {
+    const LraAtomRegistryState& current = state();
+    if (!frame_id.valid() || frame_id.domain != current.domain)
+      return ASTNode();
+    const auto frame = current.frames.find(frame_id);
+    if (frame == current.frames.end() ||
+        frame->second.equalities.count(id) != 1)
+      return ASTNode();
+    const auto found = current.equalities.find(id);
+    if (found == current.equalities.end())
+      return ASTNode();
+    return found->second.value.equality_atom;
+  }
+  catch (...)
+  {
+    return ASTNode();
+  }
+}
+
 LraRegistrySnapshot
 LraAtomRegistry::frameSnapshot(LraAssertionFrameId frame_id,
                                const PreparationControl* preparation) const

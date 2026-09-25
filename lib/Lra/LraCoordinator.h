@@ -37,6 +37,27 @@ enum class StagedDiscardReason : std::uint8_t
   StopOrError
 };
 
+/* What an in-place extension did, which is not the same question as
+ * whether it succeeded.
+ *
+ * `Declined` is answered before anything is touched: the coordinator keeps
+ * its registry, its arithmetic and the model it has committed, and the
+ * caller's fallback -- solve the enlarged query again from the top -- can
+ * still read all three.  The other two are answered after the extension has
+ * begun to replace them, so that fallback is no longer available and no
+ * verdict from this solve can stand. `Interrupted` preserves preparation
+ * cancellation for the public query boundary. `ResourceLimit` says a budget refused
+ * the work, which is a query STP cannot decide; `Failed` says the
+ * coordinator is broken, which is a fault of ours. */
+enum class ExtensionOutcome : std::uint8_t
+{
+  Extended,
+  Declined,
+  Interrupted,
+  ResourceLimit,
+  Failed
+};
+
 /* What publishing a verified model did. The same two-state distinction the
  * candidate outcomes carry, at the one boundary that used to drop it: a
  * budget refusal in the publication checks is a query this solve cannot
@@ -55,6 +76,8 @@ struct LraCoordinatorMetrics final
   std::uint64_t lra_consistent = 0;
   std::uint64_t lra_conflicts = 0;
   std::uint64_t lra_clauses = 0;
+  // Times the solve took on more of the query without starting over.
+  std::uint64_t extensions = 0;
   // Actual arithmetic constructions, including the initial core.
   std::uint64_t core_rebuilds = 0;
   std::uint64_t conflict_support_literals = 0;
@@ -82,12 +105,19 @@ struct LraCoordinatorMetrics final
 };
 
 // Arithmetic owner for one batch query. The outer STP loop owns SAT search
-// and invokes the transition hooks between candidates.
+// and invokes the transition hooks between candidates and when the query
+// is extended.
 class LraCoordinator final
 {
 public:
+  // `spread_symbols`: Real symbols whose free values every model keeps
+  // apart -- the arguments of uninterpreted applications, which would
+  // otherwise all sit at zero and be taken for equal. See the RealModel
+  // constructor, and separateModelValuesEnabled, whose AUTO reads them.
   LraCoordinator(STPMgr& manager, SATSolver& solver,
-                 const ASTNode& submitted_formula);
+                 const ASTNode& submitted_formula,
+                 const std::vector<ASTNode>& spread_symbols =
+                     std::vector<ASTNode>());
   ~LraCoordinator() noexcept;
 
   LraCoordinator(const LraCoordinator&) = delete;
@@ -129,6 +159,27 @@ public:
   std::uint64_t candidateSerial() const noexcept;
 
   bool beforeSolverCall() noexcept;
+
+  // Take on more of the query between rounds, without a new solve. The
+  // formula's Real predicates are registered into this solve's frame, the
+  // exact core is rebuilt over the enlarged registry, and the Boolean
+  // formula that results -- over opaque atoms, scalars the first encoding
+  // already holds, and connectives -- is encoded as clauses into the SAT
+  // solver this solve has been using, under its activation, which keeps
+  // every clause that solver has learned. New atoms take fresh variables and
+  // are entered in `tosat`'s symbol map, where the rebuilt context binds
+  // them like the rest.
+  //
+  // `Declined` when the coordinator will not start: it is not ready, or the
+  // formula is not one of this manager's Boolean nodes. Nothing has moved,
+  // so the caller can fall back to solving again from the start.
+  // `ResourceLimit` and `Failed` are refusals from inside the work, after
+  // the registry, the arithmetic and the committed model have begun to be
+  // replaced; the caller has no query left to fall back to and must give up
+  // the solve. A connected theory propagator is disconnected first and
+  // reconnected by the solve that follows.
+  ExtensionOutcome extendWithFormula(const ASTNode& formula,
+                                     ToSATBase& tosat) noexcept;
   CoordinatorCandidateOutcome checkCompleteCandidate(ToSATBase& tosat) noexcept;
   bool hasPendingLraClause() const noexcept;
   bool encodePendingLraClause() noexcept;
@@ -175,6 +226,7 @@ public:
 
 private:
   bool decisionPolarityEnabled() const;
+  bool separateModelValuesEnabled() const;
   bool bindOpaqueAtoms(ToSATBase& tosat) noexcept;
   bool prepareTheorySearch() noexcept;
   bool readOpaqueValue(const ASTNode& atom, bool& value) const noexcept;
@@ -198,11 +250,24 @@ private:
   PreregisteredFormula preregistered_;
   RegisteredLraFormula registered_;
   std::vector<ASTNode> opaque_atoms_;
+  // Membership of opaque_atoms_, kept alongside it so an extension can
+  // append without re-deriving what is already listed.
+  std::set<ASTNode, ExprLess> opaque_atom_set_;
   std::map<ASTNode, ASTNode, ExprLess> source_atom_aliases_;
   std::map<ASTNode, SATSolver::Lit, ExprLess> opaque_bindings_;
   std::unique_ptr<LraSolveContext> context_;
   std::unique_ptr<LraCandidateAdapter> adapter_;
+  // See the constructor. Handed to every model this coordinator commits.
+  std::vector<ASTNode> spread_symbols_;
   bool frame_live_ = false;
+  ASTNode base_submitted_;
+  ASTNode base_registered_;
+  ASTVec permanent_submitted_;
+  ASTVec permanent_registered_;
+  ExtensionOutcome extendInternal(const ASTNode& formula, ToSATBase& tosat,
+                                  const ASTNode* frame_activation) noexcept;
+  void rebuildLiveFormulas();
+  void rebuildCoreAndContext();
   bool bindings_ready_ = false;
   // True once the theory has taken a seat inside the SAT search, which
   // replaces the candidate loop rather than supplementing it.

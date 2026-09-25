@@ -307,7 +307,7 @@ namespace stp
   // looking for a fragment STP has, not for a synonym of one.
   static const char* supportedLogicsPhrase()
   {
-    return "QF_BV, QF_ABV, QF_AX, QF_UF, QF_UFBV, QF_AUFBV, QF_LRA, "
+    return "QF_BV, QF_ABV, QF_AX, QF_UF, QF_UFBV, QF_AUFBV, QF_LRA, QF_UFLRA, "
            "the floating-point logics QF_FP, QF_BVFP, QF_ABVFP, QF_UFFP, "
            "QF_UFBVFP, QF_AUFBVFP, and their LRA variants";
   }
@@ -1813,7 +1813,7 @@ namespace stp
 %token FLOAT64_TOK
 %token FLOAT128_TOK
 
-/* Mathematical Real linear operations, live only under QF_LRA. */
+/* Mathematical Real linear operations, live only under QF_LRA and QF_UFLRA. */
 %token REAL_ADD_TOK REAL_SUB_TOK REAL_MUL_TOK REAL_DIV_TOK
 %token REAL_LT_TOK REAL_LE_TOK REAL_GT_TOK REAL_GE_TOK
 
@@ -2224,6 +2224,7 @@ cmdi:
             0 == strcmp($2->c_str(),"QF_AUFBVFPLRA") ||
             0 == strcmp($2->c_str(),"QF_UFABVFPLRA");
       const bool uf_logic =
+            0 == strcmp($2->c_str(),"QF_UFLRA") ||
             0 == strcmp($2->c_str(),"QF_UF") ||
             0 == strcmp($2->c_str(),"QF_UFBV") ||
             0 == strcmp($2->c_str(),"QF_AUFBV") ||
@@ -2236,7 +2237,8 @@ cmdi:
             0 == strcmp($2->c_str(),"QF_BVFPLRA") ||
             0 == strcmp($2->c_str(),"QF_ABVFPLRA") ||
             uf_fp_logic;
-      const bool real_logic = 0 == strcmp($2->c_str(),"QF_LRA");
+      const bool real_logic = 0 == strcmp($2->c_str(),"QF_LRA") ||
+                         0 == strcmp($2->c_str(),"QF_UFLRA");
       const bool supported_logic =
             0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
@@ -2973,6 +2975,13 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
   $$ = new stp::parsed_uf_sort(stp::SourceSort::boolean(), "Bool", true);
 }
+| REAL_TOK
+{
+  // Solved at its own sort, like Bool: no carrier, no packed width. The
+  // congruence relation over Real applications is decided from equality
+  // atoms rather than from byte patterns.
+  $$ = new stp::parsed_uf_sort(stp::SourceSort::real(), "Real", true);
+}
 | an_array_sort
 {
   const stp::SourceSort sort = $1->sourceSort();
@@ -3024,6 +3033,13 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 | BOOL_TOK
 {
   $$ = new stp::parsed_uf_sort(stp::SourceSort::boolean(), "Bool", true);
+}
+| REAL_TOK
+{
+  // Solved at its own sort, like Bool: no carrier, no packed width. The
+  // congruence relation over Real applications is decided from equality
+  // atoms rather than from byte patterns.
+  $$ = new stp::parsed_uf_sort(stp::SourceSort::real(), "Real", true);
 }
 | an_array_sort
 {

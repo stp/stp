@@ -224,8 +224,8 @@ def main() -> int:
         """, ["unsat"], [], []),
     ]
 
-    # For Reals, SMT-LIB advertises only the standard QF_LRA
-    # logic.  The disjoint combinations below are deliberately exercised
+    # For Reals, SMT-LIB advertises only the standard QF_LRA and QF_UFLRA
+    # logics.  The disjoint combinations below are deliberately exercised
     # through the unrestricted public construction API by the
     # lra_combination_api test; retaining their inputs here documents that no
     # invented combined logic is claimed.

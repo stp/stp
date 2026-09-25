@@ -42,11 +42,244 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
+#include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/UninterpretedFunctions/UFLowering.h"
 
 #include <gtest/gtest.h>
+
+#include <algorithm>
+#include <map>
+#include <vector>
+
+namespace
+{
+
+// Value the lowered symbols independently of UF refinement, so the candidate
+// presented to the lemma generators is fixed regardless of arithmetic driver.
+struct LazyCongruenceModel
+{
+  stp::STPMgr manager;
+  stp::STP solver{&manager};
+  stp::LoweredApplicationView view;
+  stp::ASTVec assignments;
+
+  LazyCongruenceModel()
+  {
+    manager.UserFlags.enable_uninterpreted_functions = true;
+    view.semanticRoot = manager.ASTTrue;
+  }
+
+  stp::ASTNode scalar(const char* name, const char* value)
+  {
+    const auto symbol =
+        manager.CreateSourceSymbol(name, stp::SourceSort::real());
+    assignments.push_back(manager.defaultNodeFactory->CreateNode(
+        stp::EQ, symbol, manager.CreateRealConst(value)));
+    return symbol;
+  }
+
+  void application(const stp::UFDecl* declaration, const stp::ASTNode& argument,
+                   const stp::ASTNode& result)
+  {
+    stp::LoweredApplicationRecord record;
+    record.declaration = declaration;
+    record.namedActuals = record.loweredActuals = {argument};
+    record.resultSymbol = result;
+    view.applications.push_back(record);
+  }
+
+  stp::ASTNode congruence(const stp::ASTNode& a, const stp::ASTNode& b,
+                          const stp::ASTNode& fa, const stp::ASTNode& fb)
+  {
+    auto* const factory = manager.defaultNodeFactory;
+    return factory->CreateNode(stp::IMPLIES, factory->CreateNode(stp::EQ, a, b),
+                               factory->CreateNode(stp::EQ, fa, fb));
+  }
+};
+
+void checkLazyDeclarationOrder(bool expand)
+{
+  stp::STPMgr manager;
+  stp::STP solver(&manager);
+  manager.UserFlags.enable_uninterpreted_functions = true;
+  manager.UserFlags.uf_lazy_round_limit = expand ? 1 : 8;
+  auto* const context = manager.getUFContext();
+  auto* const factory = manager.defaultNodeFactory;
+  const auto real = stp::SourceSort::real();
+  const size_t count = 64;
+  std::vector<const stp::UFDecl*> declarations;
+  std::string diagnostic;
+  for (size_t i = 0; i < count; ++i)
+  {
+    // Names run opposite to declaration IDs. Neither name order, pointer
+    // order nor the order applications reach lowering is the contract.
+    declarations.push_back(context->declareFunction(
+        "lazy_order_" + std::to_string(count - i), {real}, real, &diagnostic));
+    ASSERT_NE(nullptr, declarations.back()) << diagnostic;
+  }
+
+  stp::ASTVec assignments, arguments;
+  for (size_t i = 0; i < 3; ++i)
+  {
+    arguments.push_back(manager.CreateSourceSymbol(
+        ("lazy_arg_" + std::to_string(i)).c_str(), real));
+    assignments.push_back(factory->CreateNode(
+        stp::EQ, arguments.back(), manager.CreateRealConst(i == 2 ? "1" : "0")));
+  }
+  stp::LoweredApplicationView view;
+  view.semanticRoot = manager.ASTTrue;
+  std::map<stp::ASTNode, size_t> resultDeclarations;
+  // Each declaration has one broken pair at zero and an application at
+  // one. Full expansion must append the other two pairs for each function.
+  for (size_t i = count; i-- != 0;)
+    for (size_t k = 0; k < 3; ++k)
+    {
+      stp::LoweredApplicationRecord record;
+      record.declaration = declarations[i];
+      record.namedActuals = record.loweredActuals = {arguments[k]};
+      record.resultSymbol = manager.CreateSourceSymbol(
+          ("lazy_result_" + std::to_string(i) + "_" + std::to_string(k)).c_str(),
+          real);
+      assignments.push_back(factory->CreateNode(
+          stp::EQ, record.resultSymbol, manager.CreateRealConst(std::to_string(k))));
+      resultDeclarations.emplace(record.resultSymbol, i);
+      view.applications.push_back(record);
+    }
+
+  ASSERT_EQ(stp::SOLVER_INVALID, solver.TopLevelSTP(
+      factory->CreateNode(stp::AND, assignments), manager.ASTFalse));
+  ASSERT_TRUE(manager.HasRealModel());
+  stp::LazyCongruenceState state;
+  const auto lemmas = stp::nextLazyCongruenceRound(&manager, nullptr, view, state);
+  ASSERT_EQ((expand ? 3 : 1) * count, lemmas.size());
+  EXPECT_EQ(expand ? count : 0, state.expanded.size());
+  for (size_t i = 0; i < lemmas.size(); ++i)
+  {
+    const size_t expected = i < count ? i : (i - count) / 2;
+    stp::ASTVec pending{lemmas[i]};
+    bool foundResult = false;
+    while (!pending.empty())
+    {
+      const auto node = pending.back();
+      pending.pop_back();
+      const auto result = resultDeclarations.find(node);
+      if (result != resultDeclarations.end())
+      {
+        foundResult = true;
+        EXPECT_EQ(expected, result->second) << "lemma " << i;
+      }
+      pending.insert(pending.end(), node.begin(), node.end());
+    }
+    EXPECT_TRUE(foundResult) << "lemma " << i;
+  }
+}
+
+} // namespace
+
+TEST(UFLowering, LazyConflictsFollowDeclarationOrder)
+{
+  checkLazyDeclarationOrder(false);
+}
+
+TEST(UFLowering, LazyFullExpansionFollowsDeclarationOrder)
+{
+  checkLazyDeclarationOrder(true);
+}
+
+TEST(UFLowering, LazySmallCollisionEmitsEveryPair)
+{
+  LazyCongruenceModel model;
+  const auto real = stp::SourceSort::real();
+  std::string diagnostic;
+  const auto* f = model.manager.getUFContext()->declareFunction(
+      "f", {real}, real, &diagnostic);
+  ASSERT_NE(nullptr, f) << diagnostic;
+  const auto a = model.scalar("a", "0");
+  const auto b = model.scalar("b", "0");
+  const auto c = model.scalar("c", "0");
+  const auto fa = model.scalar("fa", "1");
+  const auto fb = model.scalar("fb", "2");
+  const auto fc = model.scalar("fc", "3");
+  model.application(f, a, fa);
+  model.application(f, b, fb);
+  model.application(f, c, fc);
+  ASSERT_EQ(
+      stp::SOLVER_INVALID,
+      model.solver.TopLevelSTP(model.manager.defaultNodeFactory->CreateNode(
+                                   stp::AND, model.assignments),
+                               model.manager.ASTFalse));
+  ASSERT_TRUE(model.manager.HasRealModel());
+
+  const auto lemmas =
+      stp::lazyCongruenceLemmasFromModel(&model.manager, nullptr, model.view);
+  ASSERT_EQ(3u, lemmas.size());
+  for (const auto& expected :
+       {model.congruence(a, b, fa, fb), model.congruence(a, c, fa, fc),
+        model.congruence(b, c, fb, fc)})
+    EXPECT_EQ(1, std::count(lemmas.begin(), lemmas.end(), expected));
+}
+
+TEST(UFLowering, LazyClosurePredictsNestedPair)
+{
+  LazyCongruenceModel model;
+  auto& flags = model.manager.UserFlags;
+  flags.uf_lazy_round_limit = 1;
+  flags.uf_lazy_full_expansion_pairs = 0;
+  const auto real = stp::SourceSort::real();
+  std::string diagnostic;
+  auto* const context = model.manager.getUFContext();
+  const auto* f = context->declareFunction("f", {real}, real, &diagnostic);
+  ASSERT_NE(nullptr, f) << diagnostic;
+  const auto* g = context->declareFunction("g", {real}, real, &diagnostic);
+  ASSERT_NE(nullptr, g) << diagnostic;
+  const auto a = model.scalar("a", "0");
+  const auto b = model.scalar("b", "0");
+  const auto c = model.scalar("c", "10");
+  const auto d = model.scalar("d", "10");
+  const auto ga = model.scalar("ga", "1");
+  const auto gb = model.scalar("gb", "2");
+  const auto fga = model.scalar("fga", "3");
+  const auto fgb = model.scalar("fgb", "4");
+  const auto fc = model.scalar("fc", "5");
+  const auto fd = model.scalar("fd", "6");
+  model.application(g, a, ga);
+  model.application(g, b, gb);
+  model.application(f, ga, fga);
+  model.application(f, gb, fgb);
+  model.application(f, c, fc);
+  model.application(f, d, fd);
+  ASSERT_EQ(
+      stp::SOLVER_INVALID,
+      model.solver.TopLevelSTP(model.manager.defaultNodeFactory->CreateNode(
+                                   stp::AND, model.assignments),
+                               model.manager.ASTFalse));
+  ASSERT_TRUE(model.manager.HasRealModel());
+
+  flags.uf_congruence_closure = stp::UserDefinedFlags::OptionMode::OFF;
+  stp::LazyCongruenceState off;
+  const auto direct =
+      stp::nextLazyCongruenceRound(&model.manager, nullptr, model.view, off);
+  ASSERT_EQ(2u, direct.size());
+  EXPECT_TRUE(off.expanded.empty());
+  for (const auto& expected :
+       {model.congruence(a, b, ga, gb), model.congruence(c, d, fc, fd)})
+    EXPECT_EQ(1, std::count(direct.begin(), direct.end(), expected));
+
+  // g(a) and g(b) have distinct candidate values. Only closure can predict
+  // that f(g(a)) and f(g(b)) must agree before a new model equates g's results.
+  flags.uf_congruence_closure = stp::UserDefinedFlags::OptionMode::ON;
+  stp::LazyCongruenceState on;
+  const auto predicted =
+      stp::nextLazyCongruenceRound(&model.manager, nullptr, model.view, on);
+  ASSERT_EQ(3u, predicted.size());
+  EXPECT_EQ(2u, on.expanded.size());
+  for (const auto& lemma : direct)
+    EXPECT_EQ(1, std::count(predicted.begin(), predicted.end(), lemma));
+  EXPECT_EQ(1, std::count(predicted.begin(), predicted.end(),
+                          model.congruence(ga, gb, fga, fgb)));
+}
 
 using namespace stp;
 

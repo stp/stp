@@ -238,15 +238,15 @@ void queryRecovery(PreparationStage stage, unsigned stop_after = 1)
     ASTVec terms{assertion, manyRows(manager)};
     auto* context = manager.getUFContext();
     std::string diagnostic;
-    const auto bv16 = SourceSort::bitVector(16);
-    const auto* function = context->declareFunction("deadline_f", {bv16}, bv16,
+    const auto real = SourceSort::real();
+    const auto* function = context->declareFunction("deadline_f", {real}, real,
                                                      &diagnostic);
     require(function != nullptr, "could not declare UF cancellation control");
     for (unsigned i = 0; i != 512; ++i)
     {
-      const auto value = manager.CreateBVConst(16, i);
+      const auto value = manager.CreateRealConst(std::to_string(i));
       const auto application = context->apply(function, {value}, &diagnostic);
-      terms.push_back(manager.CreateNode(EQ, application, value));
+      terms.push_back(manager.CreateRealPredicate(EQ, application, value));
     }
     assertion = manager.CreateNode(AND, terms);
   }
@@ -396,6 +396,53 @@ void constantBitOwnership()
           "fresh query failed after constant-bit ownership handoff");
 }
 
+void congruenceRecovery(PreparationStage target = PreparationStage::LraRegistry)
+{
+  STPMgr manager;
+  STP engine(&manager);
+  manager.UserFlags.enable_uninterpreted_functions = true;
+  manager.UserFlags.uf_propagate_equalities = UserDefinedFlags::OptionMode::OFF;
+  manager.UserFlags.uf_eager_mode = UserDefinedFlags::UFEagerMode::OFF;
+  const auto real = SourceSort::real();
+  const auto a = manager.CreateSourceSymbol("congruence_a", real);
+  const auto b = manager.CreateSourceSymbol("congruence_b", real);
+  auto* uf = manager.getUFContext();
+  std::string diagnostic;
+  const auto* f = uf->declareFunction("congruence_f", {real}, real, &diagnostic);
+  require(f != nullptr, "could not declare congruence control");
+  const auto fa = uf->apply(f, {a}, &diagnostic);
+  const auto fb = uf->apply(f, {b}, &diagnostic);
+  const auto formula = manager.CreateNode(AND, ASTVec{
+      manager.CreateRealPredicate(EQ, a, b),
+      manager.CreateRealPredicate(EQ, fa, manager.CreateRealConst("0")),
+      manager.CreateRealPredicate(EQ, fb, manager.CreateRealConst("1"))});
+  struct StopDuringRefinement
+  {
+    PreparationStage target;
+    bool encoded = false;
+    unsigned registrations = 0;
+    static bool observe(void* opaque, PreparationStage stage)
+    {
+      auto& self = *static_cast<StopDuringRefinement*>(opaque);
+      if (stage == PreparationStage::Encoding)
+        self.encoded = true;
+      return self.encoded && stage == self.target &&
+             ++self.registrations == 2;
+    }
+  } stop{target};
+  const PreparationControl observed(PreparationControl::Clock::time_point::max(),
+                                    nullptr, StopDuringRefinement::observe, &stop);
+  {
+    PreparationScope scope(manager.preparation_control, observed);
+    require(engine.TopLevelSTP(formula, manager.ASTFalse) == SOLVER_UNKNOWN &&
+                manager.getUnknownReason() == UnknownReason::Timeout &&
+                !manager.HasRealModel() && stop.registrations == 2,
+            "interrupted congruence preparation lost its timeout outcome");
+  }
+  require(engine.TopLevelSTP(formula, manager.ASTFalse) == SOLVER_UNSATISFIABLE,
+          "congruence query did not recover after interrupted registration");
+}
+
 // The candidate pass proves its equalities with sub-solves that go through
 // the same encoder, so a cancellation can land inside one. The pass's timer
 // and the manager state it sets aside for the sub-solve are both restored.
@@ -475,6 +522,8 @@ int main()
                        PreparationStage::BitBlasting, PreparationStage::CNFConversion,
                        PreparationStage::ClauseLoading})
       queryRecovery(stage, 3);
+    congruenceRecovery();
+    congruenceRecovery(PreparationStage::RefinementEncoding);
     constantBitOwnership();
     for (auto stage : {PreparationStage::BitBlasting, PreparationStage::ClauseLoading})
       congruenceCandidateRecovery(stage);

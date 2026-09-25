@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include <CLI/CLI.hpp>
 
 #include <climits>
+#include <cctype>
 #include <initializer_list>
 #include <iterator>
 #include <stdexcept>
@@ -220,6 +221,27 @@ void ExtraMain::create_options()
   auto int64_arg = [this](const char* name, int64_t& var, const char* desc,
                           const char* group) {
     return app.add_option(name, var, desc)->capture_default_str()->group(group);
+  };
+  auto mode_arg = [this](const char* name, UserDefinedFlags::OptionMode& mode,
+                         const char* desc, const char* group) {
+    using Mode = UserDefinedFlags::OptionMode;
+    return app.add_option_function<std::string>(
+        name, [&mode, name](std::string value) {
+          for (auto& c : value)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+          if (value == "auto")
+            mode = Mode::AUTO;
+          else if (value == "on" || value == "1" || value == "true")
+            mode = Mode::ON;
+          else if (value == "off" || value == "0" || value == "false")
+            mode = Mode::OFF;
+          else
+            throw CLI::ValidationError(name, "expected auto, on/1/true, or off/0/false");
+        }, desc)
+        ->type_name("MODE")
+        ->default_str(mode == Mode::AUTO ? "auto" : mode == Mode::ON ? "on" : "off")
+        ->group(group)
+        ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
   };
 
   app.add_flag("--disable-simplifications", disable_simplifications,
@@ -446,6 +468,16 @@ void ExtraMain::create_options()
   bool_arg("--lra-theory-propagation", bm->UserFlags.lra_theory_propagation,
            "let the LRA theory take part in the SAT search, on a backend "
            "that hosts a propagator (CaDiCaL, CryptoMiniSat)",
+           refinement_group);
+  mode_arg("--lra-separate-model-values",
+           bm->UserFlags.lra_separate_model_values,
+           "before a satisfying assignment is published, move variables "
+           "inside the slack their asserted bounds leave so that fewer of "
+           "them share a value by accident; a reader that groups by value, "
+           "as the lazy congruence round does, is then not handed pairs the "
+           "query never asked for; auto runs it when the query has a "
+           "declaration whose congruence is decided from model values, "
+           "which is the only reader such a coincidence misleads",
            refinement_group);
   lra_decision_polarity_option =
       bool_arg("--lra-decision-polarity", bm->UserFlags.lra_decision_polarity,
@@ -674,6 +706,42 @@ void ExtraMain::create_options()
                  "install up front")
       ->group(refinement_group)
       ->capture_default_str();
+  bool_arg("--uf-lazy-in-place", bm->UserFlags.uf_lazy_in_place,
+           "whether a lazy congruence round extends the running solve in "
+           "place, keeping the SAT solver, rather than starting a new one",
+           refinement_group);
+  app.add_option("--uf-lazy-full-expansion-pairs",
+                 bm->UserFlags.uf_lazy_full_expansion_pairs,
+                 "cap on n(n-1)/2 at which a persistently-breaking UF "
+                 "declaration is fully Ackermannised; larger functions stay "
+                 "lazy (0 never full-expands)")
+      ->capture_default_str()
+      ->group(refinement_group);
+  app.add_option("--uf-lazy-round-limit", bm->UserFlags.uf_lazy_round_limit,
+                 "how many rounds a lazily-decided Real function may keep "
+                 "breaking congruence before every pair it has left is "
+                 "stated at once")
+      ->group(refinement_group)
+      ->capture_default_str();
+  mode_arg("--uf-congruence-closure", bm->UserFlags.uf_congruence_closure,
+           "when a large function keeps breaking congruence past the round "
+           "limit -- too large for the full-expansion fallback, so otherwise "
+           "purely lazy -- escalate it to a transitive closure over the model, "
+           "which states the congruences a nested equality will break next "
+           "round instead of re-discovering them one round at a time; every "
+           "lemma is still a congruence axiom, so answers do not change; on "
+           "escalates every large stuck function, auto only those with at "
+           "least --uf-congruence-closure-min-apps applications",
+           refinement_group);
+  app.add_option("--uf-congruence-closure-min-apps",
+                 bm->UserFlags.uf_congruence_closure_min_apps,
+                 "in auto mode, the least applications a UF function must have "
+                 "before its congruence is escalated to the closure; the files "
+                 "the closure helps carry a function of many hundreds of "
+                 "applications, so this keeps auto off the medium functions "
+                 "where escalating only adds overhead")
+      ->group(refinement_group)
+      ->capture_default_str();
   app.add_option("--array-ackermann-budget", bm->UserFlags.array_eager_budget,
                  "how many index comparisons eager array Ackermannisation may "
                  "introduce before read refinement is preferred; 0 selects it "
@@ -711,18 +779,21 @@ void ExtraMain::create_options()
            "equality to ceil(log2(N+1)) bits, cutting the AIG cost of each "
            "congruence constraint from O(width) to O(log N)",
            refinement_group);
-  bool_arg("--uf-propagate-equalities",
+  mode_arg("--uf-propagate-equalities",
            bm->UserFlags.uf_propagate_equalities,
            "before lowering, rewrite the query under its own top-level "
            "equalities with applications still in place, so that `x = y` "
            "merges (f x) and (f y) into one application and `a = (f y)` "
-           "or `(f 3) = 0` reach the terms built on a or (f 3)",
+           "or `(f 3) = 0` reach the terms built on a or (f 3); auto runs "
+           "it unless the query has Real content, where it measures as a "
+           "loss",
            refinement_group);
-  bool_arg("--uf-skeleton-preproc", bm->UserFlags.uf_skeleton_preproc,
+  mode_arg("--uf-skeleton-preproc", bm->UserFlags.uf_skeleton_preproc,
            "let --uf-propagate-equalities also read the facts the query's "
            "Boolean skeleton forces, so an equality stated under an "
            "implication the structure resolves still crosses the "
-           "applications; one SAT call over the skeleton per UF solve",
+           "applications; one SAT call over the skeleton per UF solve, and "
+           "auto follows the pass it feeds",
            refinement_group);
   uf_bv_term_abstraction_option =
       app.add_option("--uf-bv-term-abstraction", uf_bv_term_abstraction,

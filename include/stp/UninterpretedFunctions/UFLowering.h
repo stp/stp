@@ -38,6 +38,7 @@ THE SOFTWARE.
 
 namespace stp
 {
+class AbsRefine_CounterExample;
 
 class STPMgr;
 class UFContext;
@@ -252,8 +253,9 @@ public:
 
 private:
   // Fills view.congruenceConstraints for the declarations the eager policy
-  // selects. A no-op when eager mode is off. `guard`, when not null, is the
-  // activation symbol each converse implication is installed behind.
+  // selects. A no-op when eager mode is off, unless a Real signature the lazy
+  // round cannot decide needs its constraints here. `guard`, when not null,
+  // is the activation symbol each converse implication is installed behind.
   void installEagerCongruence(LoweredApplicationView& view,
                               const std::set<const UFDecl*>& injectable,
                               const ASTNode& guard) const;
@@ -264,6 +266,90 @@ private:
 
   STPMgr* const manager_;
 };
+
+// Congruence a committed model has just broken, stated for exactly the pairs
+// that broke it.
+//
+// A declaration with a Real position and no float position is decided this
+// way. Its Real arguments and results are exact rationals the arithmetic
+// hands back with the model, and its bit-vector and Boolean ones are read
+// from the counterexample, so grouping the applications by the value of
+// their argument tuple is enough: two applications in one group stand at the
+// same point and must carry the same result. Where they do not, the pair has
+// earned its congruence constraint and gets it; every pair the model already
+// agrees about costs nothing and stays unstated.
+//
+// This is what keeps the equality atoms out of the tableau. Stating congruence
+// in advance costs a row and a slack variable per pair before the search has
+// run once, which is quadratic in the applications and was the whole of why a
+// couple of hundred of them did not finish.
+//
+// The result is empty when the model breaks nothing, which is the answer that
+// lets a satisfiable query be reported. Constraints are returned rather than
+// installed: the caller conjoins them and solves again.
+//
+// `broken`, when given, receives every declaration at least one lemma was
+// stated for: the caller counts rounds per declaration against
+// --uf-lazy-round-limit.
+DLL_PUBLIC ASTVec
+lazyCongruenceLemmasFromModel(STPMgr* manager,
+                              AbsRefine_CounterExample* counterexample,
+                              const LoweredApplicationView& view,
+                              std::set<const UFDecl*>* broken = NULL);
+
+// The same congruence lemmas the value-grouping path states for the pairs the
+// model directly breaks, plus the pairs an offline congruence closure over the
+// model proves congruent through nested applications -- stated a round ahead of
+// the value-grouping path, which sees a nested congruence only one layer per
+// re-solve. Every lemma is a congruence axiom (see congruenceForPair), so this
+// never changes an answer; it trades stating a pair now for a re-solve later.
+// Falls back to lazyCongruenceLemmasFromModel when the model does not value a
+// term the closure needs. `broken` behaves as it does there.
+//
+// `onlyFor`, when given, restricts what is *stated* to those declarations and
+// to the predictive pairs alone -- the cross-cell congruences a nested equality
+// will break next round, not the pairs the model already breaks. The whole
+// relation is still closed (a nested declaration's arguments are results of
+// declarations outside the set), so the prediction is correct; only the output
+// is narrowed. This is the escalation path: the value-grouping pass has already
+// stated the pairs the model breaks, and this adds the ones it would otherwise
+// re-discover a round at a time, for the large stuck declarations that
+// fullLazyCongruence declines to expand.
+DLL_PUBLIC ASTVec
+congruenceClosureLemmasFromModel(STPMgr* manager,
+                                 AbsRefine_CounterExample* counterexample,
+                                 const LoweredApplicationView& view,
+                                 std::set<const UFDecl*>* broken = NULL,
+                                 const std::set<const UFDecl*>* onlyFor = NULL);
+
+// Every pair of this declaration's applications that the cheap tests cannot
+// rule out, stated at once -- what eager would have installed before the
+// first solve. For a declaration that has kept breaking congruence round
+// after round, past --uf-lazy-round-limit, this ends it in one.
+DLL_PUBLIC ASTVec fullLazyCongruence(STPMgr* manager,
+                                     const LoweredApplicationView& view,
+                                     const UFDecl* declaration);
+
+// The bookkeeping one query's lazy rounds share: what has been stated, how
+// many rounds each declaration has broken in, which have been expanded in
+// full, and the counts the statistics line reports.
+struct LazyCongruenceState
+{
+  ASTNodeSet earned;
+  std::map<const UFDecl*, unsigned> brokenRounds;
+  std::set<const UFDecl*> expanded;
+  unsigned rounds = 0;
+  std::size_t lemmas = 0;
+};
+
+// The lemmas the next round adds, given the model just committed: the pairs
+// it broke, plus the whole relation of any declaration that has broken in
+// --uf-lazy-round-limit rounds, less anything already stated. Empty when the
+// model breaks nothing new, which is when a satisfiable answer stands.
+DLL_PUBLIC ASTVec
+nextLazyCongruenceRound(STPMgr* manager, AbsRefine_CounterExample* counterexample,
+                        const LoweredApplicationView& view,
+                        LazyCongruenceState& state);
 
 } // namespace stp
 

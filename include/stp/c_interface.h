@@ -647,10 +647,11 @@ enum ifaceflag_t
   //! (f y) into one application and a fact such as `a = (f y)` reaches the
   //! terms built on a.
   //!
-  //! `param_value` nonzero enables (the default), zero disables. This is the
-  //! C API's way to reach --uf-propagate-equalities. Verdict-preserving: the
-  //! defining equality is kept, so no model is lost or invented. Appended to
-  //! preserve every published ordinal.
+  //! `param_value` nonzero forces it on, zero disables; left unset, it runs
+  //! unless the query has Real content. This is the C API's way to reach
+  //! --uf-propagate-equalities. Verdict-preserving: the defining equality is
+  //! kept, so no model is lost or invented. Appended to preserve every
+  //! published ordinal.
   //!
   UF_PROPAGATE_EQUALITIES,
 
@@ -658,9 +659,9 @@ enum ifaceflag_t
   //! Boolean skeleton forces, so that an equality stated under an
   //! implication the structure resolves still crosses the applications.
   //!
-  //! `param_value` nonzero enables (the default), zero disables. This is the
-  //! C API's way to reach --uf-skeleton-preproc. Appended to preserve every
-  //! published ordinal.
+  //! `param_value` nonzero forces it on, zero disables; left unset, it runs
+  //! unless the query has Real content. This is the C API's way to reach
+  //! --uf-skeleton-preproc. Appended to preserve every published ordinal.
   //!
   UF_SKELETON_PREPROC,
 
@@ -1037,6 +1038,14 @@ DLL_PUBLIC int vc_hasQFLRA(void);
 //! through this interface. A construction capability, reported separately
 //! from vc_hasRealConstruction.
 DLL_PUBLIC int vc_hasRealIte(void);
+
+//! Whether the exact linear QF_UFLRA fragment is decided through this
+//! interface: Real is admissible in a vc_declareUninterpretedFunction
+//! signature, and applications at that sort are decided by congruence over
+//! the arithmetic's exact model values rather than by comparing packed
+//! carriers.
+//! Separate from vc_hasQFLRA because the two fragments moved independently.
+DLL_PUBLIC int vc_hasQFUFLRA(void);
 
 //! Exact model access.  Each returned string is independently allocated by
 //! STP and must be released with vc_deleteString.  No pointer aliases the

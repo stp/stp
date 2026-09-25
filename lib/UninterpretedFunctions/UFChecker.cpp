@@ -194,6 +194,19 @@ bool UFConcreteValue::fromConstant(const ASTNode& constant,
     diagnostic = "UFCHK constant was requested at an unsupported SourceSort";
     return false;
   }
+  // Real is admissible in a signature and has no concrete value here. This
+  // checker's currency is a scalar compared by its bytes, and a Real has
+  // neither a packed width nor a byte pattern -- congruence over Real
+  // applications is decided from the arithmetic's exact model values, not
+  // by bucketing carriers (see UFSignature::isSupportedSort). Refused
+  // rather than asked for a width it has not got: packedWidth throws, and
+  // that escaped as an uncaught logic_error the moment a Bool-codomain
+  // application over a Real argument was evaluated against a model.
+  if (sort.kind() == SourceSort::Kind::Real)
+  {
+    diagnostic = "UFCHK has no concrete value for a Real";
+    return false;
+  }
   // A model answers with the *carrier* of a source-sorted leaf -- a plain
   // BVCONST -- because that is what the SAT assignment materialises, while a
   // constant written in the query still carries its own sort. Both spell the
@@ -473,6 +486,20 @@ UFCheckPlan UFChecker::validate(
   return plan;
 }
 
+namespace {
+// Congruence over a Real position is not decided by this checker's value
+// comparison; see the note at the use below.
+bool hasRealPosition(const UFSignature& signature)
+{
+  if (signature.codomain().kind() == SourceSort::Kind::Real)
+    return true;
+  for (size_t i = 0; i < signature.domain().size(); ++i)
+    if (signature.domain()[i].kind() == SourceSort::Kind::Real)
+      return true;
+  return false;
+}
+} // namespace
+
 UFCheckResult UFChecker::check(const UFCheckPlan& plan,
                                const UFScalarCandidate& candidate,
                                const size_t maxConflicts)
@@ -493,6 +520,16 @@ UFCheckResult UFChecker::check(const UFCheckPlan& plan,
        declarationIndex < plan.declarations_.size(); ++declarationIndex)
   {
     const UFDecl* declaration = plan.declarations_[declarationIndex];
+    // A Real position has no value to read: it is an exact rational the
+    // arithmetic holds, and the SAT model this candidate came from says
+    // nothing about it. Congruence for such a declaration is decided
+    // elsewhere -- from the committed model by the lazy round (see
+    // lazyCongruenceLemmasFromModel), or, where a float position rules that
+    // out, stated up front by UFLowering::installEagerCongruence whatever the
+    // eager policy would otherwise have chosen -- so there is nothing left
+    // for a value comparison to find here.
+    if (hasRealPosition(declaration->signature()))
+      continue;
     const std::vector<const LoweredApplicationRecord*>& records =
         plan.recordsByDecl_[declarationIndex];
     ObservationTable table;

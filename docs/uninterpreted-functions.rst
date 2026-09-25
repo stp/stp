@@ -5,8 +5,8 @@ A ``declare-fun`` with a nonempty domain declares an uninterpreted function,
 and any logic whose name contains ``UF`` enables the support; the
 ``--uninterpreted-functions`` option (``vc_setFlag(vc, 'u')`` in the C API)
 enables it for an input whose logic omits it. Arguments and results may be
-``Bool``, bit-vectors, declared sorts, ``RoundingMode`` or floating-point
-sorts. Array sorts are refused in a signature.
+``Bool``, bit-vectors, declared sorts, ``RoundingMode``, floating-point
+sorts or ``Real``. Array sorts are refused in a signature.
 
 How a query is decided
 ----------------------
@@ -29,7 +29,8 @@ Two things happen before the lowering, while an application is still an
 ordinary term:
 
 *   The query's own top-level equalities and asserted atoms are pushed
-    through the applications (``--uf-propagate-equalities``, on by default).
+    through the applications (``--uf-propagate-equalities``, on by default
+    except on a query with Real content).
     A symbol equated with a constant, another symbol, an application or any
     other term free of wide arithmetic becomes that; an application pinned
     to a constant becomes the constant everywhere else; two applications
@@ -55,15 +56,35 @@ ordinary term:
     exactly their SAT bits -- so this is the one point at which such a fact
     can cross an application.
 
-*   The Boolean skeleton is asked what it forces at the start of every
-    round (``--uf-skeleton-preproc``, on by default), and those facts are
-    read as well. A verification query states most of its equalities under
-    an implication whose guard the structure resolves; this is what lets
-    them reach the applications. Asking again after each round matters: a
-    round's rewrite renames the atoms and folds connectives, so a guard the
-    structure could not see through before it is one it resolves after it.
-    On the Certora queries this is the difference between a solve that ends
-    in the rewrite and one that bit-blasts millions of gates.
+*   The Boolean skeleton is asked what it forces at the start of every round
+    (``--uf-skeleton-preproc``, on by default except on a query with Real
+    content), and those facts are read as well. A verification query states
+    most of its equalities under an implication whose guard the structure
+    resolves; this is what lets them reach the applications. Asking again
+    after each round matters: a round's rewrite renames the atoms and folds
+    connectives, so a guard the structure could not see through before it is
+    one it resolves after it. On the Certora queries this is the difference
+    between a solve that ends in the rewrite and one that bit-blasts
+    millions of gates.
+
+Real positions
+--------------
+
+A Real has no bits for the checker to read, so a function with a ``Real``
+argument or result, and no floating-point position, is decided from the
+arithmetic instead, unless ``--uf-ackermann=on`` asks for its congruence
+up front. After each solve the exact model's values group the applications
+by argument tuple, and only the pairs that model breaks are stated as
+lemmas; argument pairs the query's own bounds or linear forms already
+separate are never compared. Each round extends the running solve in
+place (``--uf-lazy-in-place``; otherwise the solve restarts with the
+lemmas). Past ``--uf-lazy-round-limit`` rounds (8), a function with at most
+``--uf-lazy-full-expansion-pairs`` argument pairs (256) is expanded fully,
+and a larger one that keeps breaking congruence escalates to a congruence
+closure over the model (``--uf-congruence-closure``; ``auto``, the
+default, does so from ``--uf-congruence-closure-min-apps`` applications,
+400). A signature that mixes Real and floating-point positions has its
+congruence installed up front whatever ``--uf-ackermann`` says.
 
 Congruence up front
 -------------------
@@ -74,7 +95,7 @@ installs the pairwise congruence constraints of the declarations whose
 estimated pair count fits ``--uf-ackermann-budget`` (256 constraints),
 cheapest first, ``on`` installs every declaration's and ``off`` none. The
 checker runs in every mode, so a declaration the policy left to refinement
-is still decided. A declaration whose results are only ever compared with
+is still decided; one with a Real position is decided as described above. A declaration whose results are only ever compared with
 each other has them narrowed to ``ceil(log2(N+1))`` bits first
 (``--uf-narrow-results``), which is what keeps a 256-bit codomain from
 costing 256 bits per constraint.

@@ -67,6 +67,7 @@ bool isCommutative(const Kind k);
 // the C++ call stack. Use for solve-boundary barriers whose answer cannot be
 // taken from a manager-lifetime "has ever seen" hint.
 bool containsKind(const ASTNode& n, Kind kind);
+bool containsRealSort(const ASTNode& n);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
 // Rebuild one node over replacement children, restoring whatever the original
 // carried. Three sorts answer differently and every generic tree walk in the

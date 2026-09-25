@@ -188,6 +188,15 @@ struct UserDefinedFlags
   UserDefinedFlags& operator=(UserDefinedFlags const&) = delete;
 
 public:
+  // A three-valued option: forced off, forced on, or resolved per query.
+  // AUTO is decided from the query in front of the pass and is never written
+  // back, so a decision made for one check cannot leak into the next. ON
+  // means what an explicit request has always meant: run regardless.
+  //
+  // Used by the UF pre-lowering options and by the arithmetic ones, so it is
+  // declared here rather than beside either group.
+  enum class OptionMode { OFF, ON, AUTO };
+
   /* Parsing options */
   bool smtlib1_parser_flag = false;
   bool smtlib2_parser_flag = false;
@@ -457,6 +466,78 @@ public:
   // the old behaviour for a query known to be that shape.
   unsigned uf_eager_budget = 256;
 
+  // How many rounds a lazily-decided declaration may keep breaking congruence
+  // before the rest of its relation is stated in one go. Each lazy round is
+  // a whole re-solve, so a declaration that breaks again and again is paying
+  // that price for a few pairs at a time; past this many rounds it is cheaper
+  // to state every pair it has left, which is what eager would have done from
+  // the start, and be done.
+  unsigned uf_lazy_round_limit = 8;
+  // Cap on the pair count at which a persistently-breaking declaration is
+  // fully Ackermannised (fullLazyCongruence). The fallback exists to finish
+  // a small function in one round rather than many, but on a large function
+  // it emits n(n-1)/2 congruence clauses -- 154,307 on one cpachecker file --
+  // and stalls the SAT solver. The ongoing lazy loop is O(n) per round
+  // (star+chain) and terminates via the earned-set dedup, so a large function
+  // is better left lazy. Measured over the multi-query benchmarks, gating
+  // this way is +29 files / -11% PAR2 / 0 losses. Full-expand only when
+  // n(n-1)/2 does not exceed this; 0 never full-expands, a very large value
+  // always full-expands.
+  unsigned uf_lazy_full_expansion_pairs = 256;
+
+  // Whether a large declaration that keeps breaking congruence escalates to a
+  // transitive closure over the committed model instead of staying purely
+  // lazy. The default path groups a declaration's applications by the model
+  // value of their argument tuple, so it relates only applications whose
+  // arguments the model already made equal; a nested (f (g a)) and (f (g b))
+  // stay unrelated until a later round has forced (g a) = (g b), so every
+  // layer of nesting costs a round. On a large function that keeps breaking,
+  // that is thousands of rounds -- fullLazyCongruence would end it in one but
+  // is gated off for large n (see uf_lazy_full_expansion_pairs), so it stays
+  // lazy and spins.
+  //
+  // ON fills exactly that gap: once such a declaration has broken
+  // uf_lazy_round_limit rounds and is too large to Ackermannise, the closure
+  // states the congruences a nested equality will break next round -- the
+  // pairs the lazy path would re-discover one round at a time. Every lemma is
+  // the same congruence axiom the default path states, so it cannot change an
+  // answer; it trades stating a pair now for a re-solve later. Measured
+  // unconditionally (from the first round, every declaration) it is a net loss
+  // -- the predictive lemmas perturb the SAT search on files that do not need
+  // them -- which is why it is gated behind the round limit and the size gate.
+  //
+  // ON escalates every large stuck declaration (past uf_lazy_full_expansion_
+  // pairs). AUTO is more selective: it escalates only declarations with at
+  // least uf_congruence_closure_min_apps applications, the range where the
+  // closure measured a robust win. A corpus characterisation found the files
+  // it helps carry one UF function of 475-1118 applications, while healthy
+  // files sit at a median of 33; escalating on everything past ~23 (the ON
+  // gate) is what made ON marginal. See congruenceClosureLemmasFromModel.
+  //
+  // AUTO by default. Measured over the multi-query corpus it fires on only the
+  // ~3% of files with a >= min_apps function and provably touches nothing else:
+  // the rescues it produces carry a 475- or 1118-application function, while
+  // every near-timeout file that moved in a run had under 400 -- run-to-run
+  // boundary noise the closure never ran on. So it is a small clean positive
+  // (a couple of robustly rescued files, no answer disagreement, PAR-2 within
+  // noise), which is why it is on at AUTO rather than left off.
+  OptionMode uf_congruence_closure = OptionMode::AUTO;
+  // In AUTO, the least applications a declaration must have before its
+  // congruence is escalated to the closure. Set from the characterisation
+  // above: the robust winners start around here, and the corpus's healthy
+  // files are far smaller, so this is what keeps AUTO off the medium functions
+  // ON fires on. Ignored under ON (which escalates every large one) and OFF.
+  unsigned uf_congruence_closure_min_apps = 400;
+
+  // Whether a lazy round extends the running solve in place -- registering
+  // the lemma's atoms, rebuilding the exact core, encoding the lemma into the
+  // SAT solver that has been running all along -- or starts a new solve over
+  // the query and everything earned so far. In place keeps every clause the
+  // SAT solver has learned and every no-good the arithmetic has derived; off
+  // is the fallback the solve takes anyway when the theory propagator holds
+  // its context, kept selectable so that it stays tested.
+  bool uf_lazy_in_place = true;
+
   // How many index comparisons the eager array-equality arm may introduce
   // before the solve is left to refinement. Counted by
   // arrayCongruenceEstimate, which charges only the comparisons that survive
@@ -526,7 +607,16 @@ public:
   // simplifier, so this is the one point where such a fact can cross an
   // application; see UFPreLowering. Verdict-preserving: the defining
   // conjunct is kept, so no model is lost or invented.
-  bool uf_propagate_equalities = true;
+  //
+  // AUTO runs it unless the query has Real content. The pass was written
+  // for and measured on QF_UFBV, where it is a large win; on the Real path
+  // it is a consistent loss -- across QF_UFLRA families it costs between a
+  // third and a half of the runtime of the files slow enough to measure,
+  // and solves fewer of them -- because those queries reach an answer
+  // through refinement rounds the rewriting does not shorten. ON forces it
+  // on a Real query anyway; OFF is the way to measure without it.
+  // See OptionMode above for what AUTO promises.
+  OptionMode uf_propagate_equalities = OptionMode::AUTO;
 
   // Whether the pass above first asks the Boolean skeleton what it forces
   // (see SkeletonPreproc) and reads those facts too. A query that states
@@ -536,7 +626,13 @@ public:
   // Distinct from --skeleton-preproc, which runs after lowering and cannot
   // cross an application; this one is on by default for exactly that reason,
   // and costs one SAT call over the skeleton per UF solve.
-  bool uf_skeleton_preproc = true;
+  //
+  // AUTO follows the same rule as the pass it feeds, and for the same
+  // measurements: on unless the query has Real content. Asking the skeleton
+  // is only useful if the facts it returns are then propagated, so leaving
+  // this ON while the pass above resolves to off buys a SAT call and
+  // nothing else.
+  OptionMode uf_skeleton_preproc = OptionMode::AUTO;
 
   // Whether a solve with uninterpreted functions abstracts its wide
   // multiplications, divisions and remainders (see --bv-term-abstraction)
@@ -689,6 +785,19 @@ public:
   // falling back. The CLI records whether the option was supplied; library
   // callers can set this alongside lra_decision_polarity to require support.
   bool lra_decision_polarity_explicit = false;
+  // Whether a satisfying assignment has accidental value coincidences broken
+  // before it is published. Two variables sharing a value by chance are one
+  // pair the lazy congruence round has to constrain and one round to state
+  // it, for a query that never asked them to be equal; separating them
+  // inside the slack the asserted bounds leave removes the pair instead.
+  //
+  // AUTO runs it when the query has a declaration whose congruence is
+  // decided from model values, which is the only reader a coincidence can
+  // mislead. Measured over the non-incremental benchmarks at three-run
+  // medians: on QF_UFLRA it is worth two solves and 11.8% of PAR2; on QF_LRA,
+  // which has no such reader, it gains nothing, costs two files and half a
+  // percent of PAR2. A flat default either way takes one of those.
+  OptionMode lra_separate_model_values = OptionMode::AUTO;
 
   // Re-derive every LRA conflict certificate independently before trusting
   // it. A self-check, not a solving step: off unless asked for.

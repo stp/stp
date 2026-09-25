@@ -37,6 +37,31 @@ namespace stp
 
 class STPMgr;
 
+// What --uf-propagate-equalities and --uf-skeleton-preproc resolve to for one
+// query. Both options are three-valued, and both call sites -- the batch
+// solve and the incremental stack -- have to resolve them the same way, so
+// the rule lives here rather than at either of them.
+struct DLL_PUBLIC UFPreLoweringChoice
+{
+  // Run the pass at all.
+  bool propagate = false;
+  // Ask the Boolean skeleton what it forces first, and read those facts too.
+  bool askSkeleton = false;
+};
+
+// Resolve both options against `root`, which must be the completed root the
+// pass would be given.
+//
+// AUTO means on unless the query has Real content. The pass was written for
+// and measured on QF_UFBV, where it is a large win; on QF_UFLRA it is a
+// consistent loss across every family slow enough to measure, because those
+// queries reach their answer through refinement rounds that the rewriting
+// does not shorten. A query with no application at all is not this
+// function's business: callers test that first, since the pass has nothing
+// to do there whatever the options say.
+DLL_PUBLIC UFPreLoweringChoice chooseUFPreLowering(const STPMgr& manager,
+                                                   const ASTNode& root);
+
 struct DLL_PUBLIC UFPreLoweringStats
 {
   // Facts the Boolean skeleton forced and the pass conjoined to the root

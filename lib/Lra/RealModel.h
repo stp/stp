@@ -7,6 +7,7 @@
 #include <iosfwd>
 #include <functional>
 #include <unordered_map>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -37,8 +38,15 @@ struct RealModelStrings final
 class RealModel final
 {
 public:
+  // A required symbol the solve never valued -- one no arithmetic mentions
+  // -- is given zero, unless it is named in `spread_symbols`, in which case
+  // it is given a value distinct from every other value in the model. Any
+  // value is a model value for such a symbol; the ones named are the
+  // arguments of uninterpreted applications, which would otherwise all sit
+  // at zero and be taken for equal by every congruence check.
   RealModel(NumberLimits limits, const std::vector<RealModelSeed>& staged,
-            const ASTVec& required_symbols);
+            const ASTVec& required_symbols,
+            const ASTVec& spread_symbols = ASTVec());
   ~RealModel() noexcept = default;
 
   RealModel(const RealModel&) = delete;
@@ -62,6 +70,36 @@ public:
     condition_oracle_ = std::move(oracle);
     eval_cache_.clear();
   }
+
+  // The other model's value key for a non-Real UF argument. Install before
+  // defineApplicationValues, so indexed observations and later queries use
+  // exactly the same interpretation. A failed evaluation must throw.
+  using ScalarKeyOracle = std::function<std::string(const ASTNode&)>;
+  void setScalarKeyOracle(ScalarKeyOracle oracle)
+  {
+    scalar_key_oracle_ = std::move(oracle);
+    eval_cache_.clear();
+  }
+
+  /* Give the applications of uninterpreted functions their model values.
+   *
+   * A Real-sorted application is not evaluated structurally the way a sum or
+   * an ite is: the UF lowering replaced it with a result symbol before the
+   * arithmetic ever saw it, and that symbol is what the solve valued. So the
+   * value exists and is already in this model -- it just answers to the
+   * wrong name. `handle_to_result` is UFLowering's own mapping from each
+   * application to its result symbol; this copies the value across so the
+   * application a caller holds is a term this model can be asked about.
+   *
+   * Applications at other sorts are ignored: their values are read through
+   * the UF checker's certified model, which compares packed carriers.
+   */
+  void defineApplicationValues(const ASTNodeMap& handle_to_result);
+
+  // This model is the committed answer rather than a candidate under
+  // verification. Until it is, an uninterpreted-function application is not
+  // its to decide: see the UF_APPLY arm of evaluateTermUncached.
+  void markCommitted() noexcept { committed_ = true; }
 
   bool hasConditionOracle() const noexcept
   {
@@ -94,6 +132,23 @@ private:
   void indexLastEntry();
 
   const ExactRational* findSymbol(const ASTNode& symbol) const noexcept;
+  /* The value of an uninterpreted-function application, by congruence.
+   *
+   * An application the solve never lowered has no value of its own -- a
+   * get-value may ask about a term the assertions never mentioned, and the
+   * lowering only reaches the ones they did. Any value satisfies such an
+   * application, but not independently of the others: two applications of one
+   * function whose arguments have equal values must agree, whether or not
+   * either was lowered.
+   *
+   * So they are keyed on what congruence is actually about -- the function,
+   * and the *values* its arguments take in this model, rather than the syntax
+   * of those arguments. An application that matches a lowered one answers
+   * with its value; one that matches nothing is unconstrained in this model
+   * and answers zero, as an unvalued required symbol does.
+   */
+  std::string applicationKey(const ASTNode& application) const;
+  ExactRational applicationValue(const ASTNode& application) const;
   // The value of a Real term under this model, memoised. The model is a
   // fixed assignment and the evaluation is a pure function of the term, so
   // a term (and every shared subterm) is evaluated once; a source-predicate
@@ -102,6 +157,7 @@ private:
   ExactRational evaluateTermUncached(const ASTNode& term) const;
   bool conditionValue(const ASTNode& condition) const;
   ConditionOracle condition_oracle_;
+  ScalarKeyOracle scalar_key_oracle_;
   static std::string smtlibValue(const ExactRational& value);
 
   // Values are destroyed before their allocation budget (reverse member
@@ -124,6 +180,12 @@ private:
   // number in bijection, so this is the same key operator== compares, and it
   // is the key eval_cache_ already uses.
   std::unordered_map<std::uint64_t, std::size_t> symbol_index_;
+  // Built by defineApplicationValues from the applications the solve lowered;
+  // read by applicationValue for the ones it did not.
+  std::map<std::string, ExactRational> applications_;
+  // Set when this model is installed as the committed one. See
+  // markCommitted, and the UF_APPLY arm of evaluateTermUncached.
+  bool committed_ = false;
   // Declared after the budget, so its exact values are destroyed before it.
   // Keyed by node number: hash-consing gives structurally equal terms the
   // same number, which is exactly the sharing this memoises.

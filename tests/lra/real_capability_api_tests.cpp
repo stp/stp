@@ -1,7 +1,8 @@
-// The Real capability the C API gained after the fragment itself did: a
-// Real-branch if-then-else. It was already decided by the core and reachable
-// from an .smt2 file, but had no C API spelling. These tests pin the
-// spelling, so the interface cannot drift back behind the parser.
+// The two Real capabilities the C API gained after the fragment itself did:
+// a Real-branch if-then-else, and Real as an admissible sort in an
+// uninterpreted-function signature. Both were already decided by the core and
+// reachable from an .smt2 file; neither had a C API spelling. These tests pin
+// the spellings, so the interface cannot drift back behind the parser.
 
 #include "stp/c_interface.h"
 
@@ -90,6 +91,7 @@ void capabilitiesAreReported()
   require(vc_hasRealConstruction() == 1, "Real construction capability");
   require(vc_hasQFLRA() == 1, "QF_LRA semantic capability");
   require(vc_hasRealIte() == 1, "Real-branch ite construction capability");
+  require(vc_hasQFUFLRA() == 1, "QF_UFLRA semantic capability");
 }
 
 // (ite c 3 5) with c pinned each way. The branch not taken must not reach the
@@ -172,6 +174,286 @@ void realIteFeedsArithmetic()
                              ", expected 2");
 }
 
+UFDeclHandle declare(OwnedVc& owner, const char* name,
+                     const std::vector<Type>& domain, Type codomain)
+{
+  UFDeclHandle handle = vc_declareUninterpretedFunction(
+      owner, name, domain.data(), domain.size(), codomain);
+  if (handle == 0)
+    throw std::runtime_error(std::string("could not declare '") + name + "'");
+  return handle;
+}
+
+Expr apply(OwnedVc& owner, UFDeclHandle function,
+           const std::vector<Expr>& arguments)
+{
+  Expr application = vc_applyUninterpretedFunction(
+      owner, function, arguments.data(), arguments.size());
+  if (application == nullptr)
+    throw std::runtime_error("could not apply uninterpreted function");
+  return owner.own(application);
+}
+
+// The SMT-LIB Real lexer does not admit every mixed-sort signature, so use
+// the C API to pin model completion for all other scalar argument sorts.
+void realUfScalarModelCompletion()
+{
+  for (bool propagate : {false, true})
+    for (bool rounding : {false, true})
+    {
+      OwnedVc owner(true);
+      VC vc = owner;
+      vc_setInterfaceFlags(vc, UF_PROPAGATE_EQUALITIES, propagate ? 1 : 0);
+      Type domain = rounding ? vc_fpRoundingModeType(vc) : vc_bvType(vc, 8);
+      UFDeclHandle f = declare(owner, "scalar_f", {domain}, vc_realType(vc));
+      Expr x = owner.own(vc_varExpr(vc, "scalar_x", domain));
+      Expr y = owner.own(vc_varExpr(vc, "scalar_y", domain));
+      Expr z = owner.own(vc_varExpr(vc, "scalar_z", domain));
+      Expr first = owner.own(rounding ? vc_fpRoundingMode(vc, VC_RM_RNE)
+                                     : vc_bvConstExprFromLL(vc, 8, 1));
+      Expr second = owner.own(rounding ? vc_fpRoundingMode(vc, VC_RM_RTZ)
+                                      : vc_bvConstExprFromLL(vc, 8, 2));
+      Expr third = owner.own(rounding ? vc_fpRoundingMode(vc, VC_RM_RTP)
+                                     : vc_bvConstExprFromLL(vc, 8, 3));
+      vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, first)));
+      vc_assertFormula(vc, owner.own(vc_eqExpr(vc, y, x)));
+      vc_assertFormula(vc, owner.own(vc_eqExpr(vc, z, second)));
+      vc_assertFormula(vc, owner.own(vc_eqExpr(
+          vc, apply(owner, f, {x}), real(owner, "4"))));
+      vc_assertFormula(vc, owner.own(vc_eqExpr(
+          vc, apply(owner, f, {second}), real(owner, "6"))));
+      require(owner.solve() == 0, "mixed scalar/Real model was not SAT");
+
+      require(realModelValue(owner, apply(owner, f, {y})) == "4",
+              "equal scalar values selected different function results");
+      require(realModelValue(owner, apply(owner, f, {z})) == "6",
+              "distinct scalar values selected the same function result");
+      Expr next = rounding
+                      ? owner.own(vc_iteExpr(vc, owner.own(vc_falseExpr(vc)),
+                                            y, second))
+                      : owner.own(vc_bvPlusExpr(vc, 8, y, first));
+      require(realModelValue(owner, apply(owner, f, {next})) == "6",
+              "computed scalar value did not select the observed result");
+      require(realModelValue(owner, apply(owner, f, {third})) == "0",
+              "unobserved scalar tuple did not use the default");
+    }
+}
+
+void realUfFloatingPointModelCompletion()
+{
+  for (bool propagate : {false, true})
+  {
+    OwnedVc owner(true);
+    VC vc = owner;
+    vc_setInterfaceFlags(vc, UF_PROPAGATE_EQUALITIES, propagate ? 1 : 0);
+    Type fp = vc_fpType(vc, 8, 24);
+    UFDeclHandle f = declare(owner, "fp_f", {fp}, vc_realType(vc));
+    auto bits = [&](unsigned value) {
+      return owner.own(vc_fpConstFromBits(
+          vc, 8, 24, owner.own(vc_bvConstExprFromLL(vc, 32, value))));
+    };
+    Expr x = owner.own(vc_varExpr(vc, "fp_x", fp));
+    Expr y = owner.own(vc_varExpr(vc, "fp_y", fp));
+    Expr pz = owner.own(vc_varExpr(vc, "fp_pz", fp));
+    Expr nz = owner.own(vc_varExpr(vc, "fp_nz", fp));
+    Expr positive_zero = bits(0);
+    Expr negative_zero = bits(0x80000000U);
+    vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, bits(0x7fc00001U))));
+    vc_assertFormula(vc, owner.own(vc_eqExpr(vc, y, bits(0x7f800002U))));
+    vc_assertFormula(vc, owner.own(vc_eqExpr(vc, pz, positive_zero)));
+    vc_assertFormula(vc, owner.own(vc_eqExpr(vc, nz, negative_zero)));
+    vc_assertFormula(vc, owner.own(vc_eqExpr(
+        vc, apply(owner, f, {x}), real(owner, "5"))));
+    vc_assertFormula(vc, owner.own(vc_eqExpr(
+        vc, apply(owner, f, {positive_zero}), real(owner, "7"))));
+    vc_assertFormula(vc, owner.own(vc_eqExpr(
+        vc, apply(owner, f, {negative_zero}), real(owner, "9"))));
+    require(owner.solve() == 0, "mixed FP/Real model was not SAT");
+
+    require(realModelValue(owner, apply(owner, f, {y})) == "5" &&
+                realModelValue(owner, apply(owner, f, {bits(0xffc12345U)})) == "5",
+            "NaN payloads did not name the same function argument");
+    require(realModelValue(owner, apply(owner, f,
+                {owner.own(vc_fpNegExpr(vc, nz))})) == "7" &&
+                realModelValue(owner, apply(owner, f,
+                {owner.own(vc_fpNegExpr(vc, pz))})) == "9",
+            "floating-point signed zeros were conflated");
+  }
+}
+
+// Real -> Real, declared, applied and solved. The declaration is the half
+// that cTypeToUFSort used to refuse.
+void realUninterpretedFunction()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr x = realSymbol(owner, "x");
+  Expr fx = apply(owner, f, {x});
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, real(owner, "7/3"))));
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, fx, real(owner, "-5/2"))));
+
+  require(owner.solve() == 0, "Real-sorted UF application was not SAT");
+  const std::string actual = realModelValue(owner, x);
+  if (actual != "7/3")
+    throw std::runtime_error("Real UF argument gave " + actual +
+                             ", expected 7/3");
+}
+
+// A constraint on the application alone has to be respected even though no
+// equality pins the argument: the result is a solved unknown of its own.
+void realUninterpretedFunctionResultIsConstrained()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr x = realSymbol(owner, "x");
+  Expr fx = apply(owner, f, {x});
+  vc_assertFormula(vc, owner.own(vc_realGtExpr(vc, fx, real(owner, "1"))));
+  vc_assertFormula(vc, owner.own(vc_realLtExpr(vc, fx, real(owner, "1"))));
+  require(owner.solve() == 1,
+          "contradictory bounds on a Real UF result were not UNSAT");
+}
+
+// The application itself is readable, not just its argument: the UF lowering
+// replaced it with a result symbol before the arithmetic saw it, and the
+// solved value is copied back onto the application so a caller can ask about
+// the node it actually holds.
+void realUninterpretedFunctionValueIsReadable()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr x = realSymbol(owner, "x");
+  Expr fx = apply(owner, f, {x});
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, real(owner, "7/3"))));
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, fx, real(owner, "-5/2"))));
+  require(owner.solve() == 0, "Real-sorted UF application was not SAT");
+
+  const std::string actual = realModelValue(owner, fx);
+  if (actual != "-5/2")
+    throw std::runtime_error("Real UF application read back as " + actual +
+                             ", expected -5/2");
+  // The numerator/denominator and SMT-LIB spellings answer for it too.
+  char* numerator = vc_getRealModelNumerator(vc, fx);
+  char* denominator = vc_getRealModelDenominator(vc, fx);
+  const std::string n(numerator ? numerator : "");
+  const std::string d(denominator ? denominator : "");
+  vc_deleteString(numerator);
+  vc_deleteString(denominator);
+  if (n != "-5" || d != "2")
+    throw std::runtime_error("Real UF application components were " + n + "/" +
+                             d + ", expected -5/2");
+}
+
+// Congruence forces two applications to one value, and both nodes have to
+// report it -- the mapping covers every application the solve lowered, not
+// just the first.
+void realUninterpretedFunctionCongruentValuesAgree()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr x = realSymbol(owner, "x");
+  Expr y = realSymbol(owner, "y");
+  Expr fx = apply(owner, f, {x});
+  Expr fy = apply(owner, f, {y});
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, y)));
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, fx, real(owner, "11/7"))));
+  // f(y) has to appear in the formula to be lowered at all: an application
+  // the solve never reached has no value of its own, which is the same rule
+  // that governs the bit-vector ones.
+  vc_assertFormula(vc, owner.own(vc_realGtExpr(vc, fy, real(owner, "0"))));
+  require(owner.solve() == 0, "congruent Real UF applications were not SAT");
+
+  const std::string left = realModelValue(owner, fx);
+  const std::string right = realModelValue(owner, fy);
+  if (left != "11/7" || right != "11/7")
+    throw std::runtime_error("congruent Real UF applications read back as " +
+                             left + " and " + right + ", expected 11/7 twice");
+}
+
+// Congruence over a Real domain: equal arguments must take equal values,
+// decided from the arithmetic's exact model values rather than a packed
+// carrier.
+void realUninterpretedFunctionCongruence()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr x = realSymbol(owner, "x");
+  Expr y = realSymbol(owner, "y");
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, y)));
+  Expr differ = owner.own(vc_notExpr(
+      vc, owner.own(vc_eqExpr(vc, apply(owner, f, {x}),
+                              apply(owner, f, {y})))));
+  vc_assertFormula(vc, differ);
+  require(owner.solve() == 1, "Real UF congruence was not enforced");
+}
+
+// The arguments are equal as *rationals* without being syntactically equal,
+// which is the case a carrier-comparing core would get wrong. Both arguments
+// stay symbolic; a concrete argument is covered by
+// realUninterpretedFunctionConstantArgumentTeardown.
+void realUninterpretedFunctionCongruenceAcrossArithmetic()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr x = realSymbol(owner, "x");
+  Expr y = realSymbol(owner, "y");
+  Expr shift = realSymbol(owner, "shift");
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, y)));
+
+  // x + shift and y + shift are the same rational however shift is chosen,
+  // so f has to agree on them.
+  Expr left = owner.own(vc_realPlusExpr(vc, x, shift));
+  Expr right = owner.own(vc_realPlusExpr(vc, y, shift));
+  Expr differ = owner.own(vc_notExpr(
+      vc, owner.own(vc_eqExpr(vc, apply(owner, f, {left}),
+                              apply(owner, f, {right})))));
+  vc_assertFormula(vc, differ);
+  require(owner.solve() == 1,
+          "Real UF congruence did not survive exact arithmetic");
+}
+
+// A Real literal in an uninterpreted-function argument reaches the frontend
+// registry, which holds a reference to it for the life of the manager. That
+// is correct; what was wrong was where the manager checked that no exact
+// constant had outlived its references -- before the delete that releases
+// them rather than after -- so this shape asserted at teardown.
+//
+// The application has to reach the solver for the registry to see it:
+// building f(1) and never constraining it was always clean, as was every
+// application over symbolic arguments. Nothing about the answers was ever
+// wrong.
+void realUninterpretedFunctionConstantArgumentTeardown()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr applied = apply(owner, f, {real(owner, "1")});
+  vc_assertFormula(vc,
+                   owner.own(vc_realGtExpr(vc, applied, real(owner, "1"))));
+  require(owner.solve() == 0, "Real UF over a constant argument was not SAT");
+}
+
+// Distinct arguments leave the function free, so this must stay SAT --
+// congruence must not be over-applied.
 // Preregistering an assertion does exact arithmetic, so the number budget can
 // refuse it: every constant below is individually representable, but folding
 // them into one linear form is not. That refusal used to escape
@@ -221,6 +503,141 @@ void refusedRealAssertionLeavesNoAnswer()
           "a query missing a refused assertion must answer unknown");
   require(vc_getReasonUnknown(vc) == REASON_UNKNOWN_INCOMPLETE,
           "the unknown must name a cause");
+}
+
+void realUninterpretedFunctionStaysFree()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr x = realSymbol(owner, "x");
+  Expr y = realSymbol(owner, "y");
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, real(owner, "1"))));
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, y, real(owner, "2"))));
+  Expr differ = owner.own(vc_notExpr(
+      vc, owner.own(vc_eqExpr(vc, apply(owner, f, {x}),
+                              apply(owner, f, {y})))));
+  vc_assertFormula(vc, differ);
+  require(owner.solve() == 0,
+          "Real UF over distinct arguments was wrongly UNSAT");
+}
+
+// Real in either half of a signature, and mixed with the sorts that were
+// already admissible.
+void realUninterpretedFunctionSignatures()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  Type bool_type = vc_boolType(vc);
+  Type bv_type = vc_bvType(vc, 8);
+
+  UFDeclHandle predicate = declare(owner, "p", {real_type}, bool_type);
+  UFDeclHandle from_bv = declare(owner, "g", {bv_type}, real_type);
+  UFDeclHandle mixed = declare(owner, "h", {real_type, bv_type}, real_type);
+
+  Expr x = realSymbol(owner, "x");
+  Expr b = owner.own(vc_varExpr(vc, "b", bv_type));
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, real(owner, "1"))));
+  vc_assertFormula(vc, apply(owner, predicate, {x}));
+  vc_assertFormula(
+      vc, owner.own(vc_eqExpr(vc, apply(owner, from_bv, {b}), x)));
+  Expr h = apply(owner, mixed, {x, b});
+  vc_assertFormula(vc, owner.own(vc_realGtExpr(vc, h, real(owner, "10"))));
+
+  require(owner.solve() == 0, "mixed Real UF signatures were not SAT");
+  // x is an ordinary Real leaf, so its value is readable directly.
+  const std::string actual = realModelValue(owner, x);
+  if (actual != "1")
+    throw std::runtime_error("mixed Real UF signatures gave x = " + actual +
+                             ", expected 1");
+}
+
+// The two new capabilities meeting: a Real-sorted application as an ite
+// branch. This is the shape that found BVTypeCheck's missing Real arm --
+// vc_iteExpr type-checks its operands, and a Real-codomain UF_APPLY is built
+// by the width-free constructor, so the fall-through that assumed a packed
+// bit-vector carrier declared it malformed. Nothing else type-checks such a
+// node: vc_eqExpr takes the Real path before its own check, which is why UFs
+// and ites were each fine on their own.
+void realIteOverUninterpretedFunction()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr c = owner.own(vc_varExpr(vc, "c", vc_boolType(vc)));
+  Expr x = realSymbol(owner, "x");
+  Expr y = realSymbol(owner, "y");
+  Expr chosen =
+      owner.own(vc_iteExpr(vc, c, apply(owner, f, {x}), apply(owner, f, {y})));
+
+  // Pin both applications and force the else branch, so the ite has to carry
+  // the second one's value rather than merely typecheck.
+  vc_assertFormula(vc, owner.own(vc_notExpr(vc, c)));
+  vc_assertFormula(
+      vc, owner.own(vc_realGtExpr(vc, chosen, real(owner, "10"))));
+  vc_assertFormula(
+      vc, owner.own(vc_realLtExpr(vc, apply(owner, f, {y}), real(owner, "10"))));
+  require(owner.solve() == 1,
+          "a Real ite over UF applications did not respect the else branch");
+}
+
+// An application the assertions never mention has no value of its own -- the
+// lowering only reaches the ones they do -- but a caller may still ask about
+// it, because a value query is not restricted to terms in the formula. Any
+// value satisfies it, so it answers zero rather than refusing.
+void realUninterpretedFunctionOutsideTheFormula()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr x = realSymbol(owner, "x");
+  Expr fx = apply(owner, f, {x});
+  // Nothing is asserted about f(x) -- nothing is asserted at all.
+  require(owner.solve() == 0, "an empty query was not SAT");
+  const std::string actual = realModelValue(owner, fx);
+  if (actual != "0")
+    throw std::runtime_error("an unconstrained Real UF application read back "
+                             "as " + actual + ", expected 0");
+
+  // And a predicate over it is decided rather than refused: f(x) < f(x) is
+  // false whatever the value, which is the shape that found this.
+  Expr self = owner.own(vc_realLtExpr(vc, fx, fx));
+  Expr decided = owner.own(vc_getCounterExample(vc, self));
+  require(decided != nullptr, "a predicate over it had no counterexample");
+}
+
+// The value an unlowered application gets is not free: congruence still binds
+// it to any lowered application whose arguments take the same values. Keyed
+// on those values rather than on syntax, so y reaching x's value is enough.
+void realUninterpretedFunctionCongruenceOutsideTheFormula()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type real_type = vc_realType(vc);
+  UFDeclHandle f = declare(owner, "f", {real_type}, real_type);
+
+  Expr x = realSymbol(owner, "x");
+  Expr y = realSymbol(owner, "y");
+  Expr fx = apply(owner, f, {x});
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, real(owner, "3/4"))));
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, y, real(owner, "3/4"))));
+  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, fx, real(owner, "-9/5"))));
+  require(owner.solve() == 0, "the congruence query was not SAT");
+
+  // f(y) is in no assertion, so it was never lowered -- but y and x hold the
+  // same value here, so it has to answer as f(x) does.
+  Expr fy = apply(owner, f, {y});
+  const std::string actual = realModelValue(owner, fy);
+  if (actual != "-9/5")
+    throw std::runtime_error("an unlowered congruent application read back "
+                             "as " + actual + ", expected -9/5");
 }
 
 // A Real ite's condition is decided from the counterexample for as long as
@@ -388,6 +805,22 @@ void realBudgetRefusalIsNotFatal()
     throw std::runtime_error("after a budget refusal x read back as " + actual);
 }
 
+// A signature the gate still has to refuse: an array sort is not comparable
+// as a value, so it is inadmissible whatever else changed.
+void arraySignatureIsStillRefused()
+{
+  OwnedVc owner(true);
+  VC vc = owner;
+  Type bv_type = vc_bvType(vc, 8);
+  Type array_type = vc_arrayType(vc, bv_type, bv_type);
+  Type real_type = vc_realType(vc);
+
+  std::vector<Type> domain{array_type};
+  require(vc_declareUninterpretedFunction(vc, "bad", domain.data(),
+                                          domain.size(), real_type) == 0,
+          "an array domain sort was wrongly admitted");
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -399,6 +832,24 @@ int main(int argc, char** argv)
       {"real-ite-under-theory", realIteUnderTheory},
       {"real-ite-conflicts", realIteConflicts},
       {"real-ite-feeds-arithmetic", realIteFeedsArithmetic},
+      {"real-uf-application", realUninterpretedFunction},
+      {"real-uf-scalar-model-completion", realUfScalarModelCompletion},
+      {"real-uf-fp-model-completion", realUfFloatingPointModelCompletion},
+      {"real-uf-result-constrained",
+       realUninterpretedFunctionResultIsConstrained},
+      {"real-uf-value-readable", realUninterpretedFunctionValueIsReadable},
+      {"real-uf-congruent-values-agree",
+       realUninterpretedFunctionCongruentValuesAgree},
+      {"real-uf-congruence", realUninterpretedFunctionCongruence},
+      {"real-uf-congruence-across-arithmetic",
+       realUninterpretedFunctionCongruenceAcrossArithmetic},
+      {"real-uf-stays-free", realUninterpretedFunctionStaysFree},
+      {"real-uf-signatures", realUninterpretedFunctionSignatures},
+      {"real-ite-over-uf", realIteOverUninterpretedFunction},
+      {"real-uf-outside-the-formula",
+       realUninterpretedFunctionOutsideTheFormula},
+      {"real-uf-congruence-outside-the-formula",
+       realUninterpretedFunctionCongruenceOutsideTheFormula},
       {"real-ite-condition-on-the-read-path",
        realIteConditionIsDecidedOnTheReadPath},
       {"real-counterexample-reads-real-model",
@@ -408,8 +859,11 @@ int main(int argc, char** argv)
       {"real-interface-flags-reachable", realInterfaceFlagsAreReachable},
       {"real-budget-refusal-is-not-fatal",
        realBudgetRefusalIsNotFatal},
+      {"array-signature-refused", arraySignatureIsStillRefused},
       {"refused-real-assertion-leaves-no-answer",
        refusedRealAssertionLeavesNoAnswer},
+      {"real-uf-constant-argument-teardown",
+       realUninterpretedFunctionConstantArgumentTeardown},
   };
 
   // Reproducers for defects that exist independently of what this file
