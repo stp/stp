@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/ToCNFAIG.h"
+#include "stp/ToSat/ToSATBase.h"
 
 #include <cassert>
 #include <limits>
@@ -473,6 +474,144 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
       addEquiv(solver, resultVars[i], var);
       continue;
     }
+    cl.clear();
+    cl.push(SATSolver::mkLit(var, false));
+    solver.addClause(cl);
+  }
+}
+
+} // namespace stp
+
+namespace stp
+{
+
+void BVExactEncoder::assertFormula(SATSolver& solver, ToSATBase& tosat,
+                                   const ASTNode& formula)
+{
+  if (formula == bm->ASTTrue)
+    return;
+
+  BBNodeManagerAIG mgr;
+  mgr.nodeBudget = bm->UserFlags.aig_node_budget;
+  // No constant-bit propagation and no abstraction, for the reasons
+  // encode() gives: this is a fragment of the query, spliced onto it.
+  BitBlasterAIG bb(&mgr, scratch_.get(), bm->defaultNodeFactory,
+                   &bm->UserFlags, NULL, /*allowAbstraction=*/false);
+
+  // The public BBForm folds whatever the circuit wants conjoined to the top
+  // into the node it returns, so the claim is the one output.
+  const BBNodeAIG claim = bb.BBForm(formula);
+  Aig_ObjCreateCo(mgr.aigMgr, claim.n);
+  const unsigned outputs = 1;
+  BBNodeSetAIG support;
+
+  // The symbols the formula mentions, and the input each bit of them became.
+  // Asked of the blaster after the formula so the memo answers rather than
+  // minting; a symbol whose bits it never needed reports no input and is
+  // skipped by the pVarNums test below.
+  std::vector<ASTNode> symbols;
+  {
+    ASTNodeSet seen;
+    std::vector<ASTNode> stack(1, formula);
+    while (!stack.empty())
+    {
+      const ASTNode n = stack.back();
+      stack.pop_back();
+      if (!seen.insert(n).second)
+        continue;
+      if (n.GetKind() == SYMBOL)
+        symbols.push_back(n);
+      for (const ASTNode& c : n.GetChildren())
+        stack.push_back(c);
+    }
+  }
+  struct Binding
+  {
+    int ci;           // position among the manager's inputs
+    unsigned var;     // the solver variable that bit is carried by
+  };
+  std::vector<Binding> bindings;
+  ToSATBase::ASTNodeToSATVar& live = tosat.SATVar_to_SymbolIndexMap();
+  for (const ASTNode& symbol : symbols)
+  {
+    const unsigned width = std::max(1u, symbol.GetValueWidth());
+    const BBNodeVecAIG bits = symbol.GetType() == BOOLEAN_TYPE
+                                  ? BBNodeVecAIG(1, bb.BBForm(symbol))
+                                  : bb.BBTerm(symbol, support);
+    assert(bits.size() == width);
+
+    ToSATBase::ASTNodeToSATVar::iterator found = live.find(symbol);
+    if (found == live.end())
+    {
+      // Free: give it variables, and let the model see them.
+      std::vector<unsigned> fresh(width);
+      for (unsigned i = 0; i < width; i++)
+      {
+        fresh[i] = solver.newVar();
+        solver.setFrozen(fresh[i]);
+      }
+      found = live.insert(std::make_pair(symbol, fresh)).first;
+    }
+    const std::vector<unsigned>& vars = found->second;
+    if (vars.size() != width)
+      FatalError("assertFormula: a symbol's SAT binding has the wrong width: ",
+                 symbol);
+    for (unsigned i = 0; i < width; i++)
+    {
+      if (vars[i] == ~((unsigned)0))
+        FatalError("assertFormula: a symbol reached the solver with a bit "
+                   "that has no SAT variable: ",
+                   symbol);
+      if (bits[i].symbol_index < 0)
+        FatalError("assertFormula: a symbol bit did not blast to an input: ",
+                   symbol);
+      bindings.push_back(Binding{bits[i].symbol_index, vars[i]});
+    }
+  }
+
+  rewrite(mgr, bm->UserFlags.AIG_rewrites_iterations);
+  assert(Aig_ManCheck(mgr.aigMgr));
+  assert((unsigned)Aig_ManCoNum(mgr.aigMgr) == outputs);
+
+  // No AUTO, as in encode() above: these clauses live in the solver for the
+  // rest of the search.
+  const CNF cnf =
+      ToCNFAIG(bm->UserFlags, /*allowAuto=*/false).derive_cnf(mgr, outputs);
+
+  std::vector<unsigned> cnfToSolver(cnf.varCount(), ~((unsigned)0));
+  for (const Binding& b : bindings)
+  {
+    const uint32_t var = cnf.varOfCi((uint32_t)b.ci);
+    if (var == 0)
+      continue; // an input nothing in the CNF mentions
+    cnfToSolver[var] = b.var;
+  }
+  // From 1, as in encode(): variable 0 names nothing.
+  for (uint32_t var = 1; var < cnf.varCount(); var++)
+    if (cnfToSolver[var] == ~((unsigned)0))
+    {
+      const unsigned fresh = solver.newVar();
+      solver.setFrozen(fresh);
+      cnfToSolver[var] = fresh;
+    }
+
+  SATSolver::vec_literals cl;
+  // The clause arena is walked forward, a clause at a time: it is indexed
+  // by length rather than by offset, so there is no random access.
+  for (CNF::ClauseCursor c = cnf.clauses(); c.next();)
+  {
+    cl.clear();
+    for (const int *pLit = c.begin(), *pStop = c.end(); pLit < pStop; pLit++)
+    {
+      assert(((*pLit) >> 1) != 0 && "a CNF generator numbered variables from 0");
+      cl.push(SATSolver::mkLit(cnfToSolver[(*pLit) >> 1], ((*pLit) & 1) != 0));
+    }
+    solver.addClause(cl);
+  }
+  for (unsigned i = 0; i < outputs; i++)
+  {
+    assert(cnf.varOfCo(i) != 0 && "a named output with no variable");
+    const unsigned var = cnfToSolver[cnf.varOfCo(i)];
     cl.clear();
     cl.push(SATSolver::mkLit(var, false));
     solver.addClause(cl);

@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include <vector>
@@ -608,6 +609,19 @@ bool SubstitutionMap::theoryProtected(const ASTNode& key,
     if (key.GetKind() == SYMBOL && uf->isProtected(key))
       return true;
     if (value.GetKind() == SYMBOL && uf->isProtected(value))
+      return true;
+  }
+
+  // The floating-point abstraction's surrogates and proxies: a lemma the
+  // refinement adds later is a circuit over exactly these symbols, spliced
+  // onto the SAT variables they were blasted to. One substituted away has no
+  // variables for the lemma to reach.
+  FpAbstraction* fp = bm->getFpAbstractionIfAny();
+  if (fp != NULL && fp->active())
+  {
+    if (key.GetKind() == SYMBOL && fp->isProtected(key))
+      return true;
+    if (value.GetKind() == SYMBOL && fp->isProtected(value))
       return true;
   }
   return false;

@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
 #include "stp/Simplifier/DistinctOrdering.h"
@@ -3059,7 +3060,9 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     }
     assert(bvRefinement.isFaithful());
 
-    if (!bm->UserFlags.construct_counterexample_flag && !ufActive)
+    const bool fpActive = fpAbstraction != NULL && fpAbstraction->active();
+    if (!bm->UserFlags.construct_counterexample_flag && !ufActive &&
+        !fpActive)
       return SOLVER_INVALID;
 
     bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
@@ -3071,7 +3074,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     // ConstructCounterExample only ever iterates it.
     const ToSATBase::ASTNodeToSATVar& satVarToSymbol =
         tosat->SATVar_to_SymbolIndexMap();
-    ConstructCounterExample(SatSolver, satVarToSymbol, ufActive);
+    ConstructCounterExample(SatSolver, satVarToSymbol, ufActive || fpActive);
     if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
     {
       ToSATBase::ASTNodeToSATVar m = tosat->SATVar_to_SymbolIndexMap();
@@ -3150,8 +3153,66 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     if (ufActive && ufOutcome != UFCandidateOutcome::Consistent)
       FatalError("UFCHK could neither certify nor refute an active candidate");
 
+    // The floating-point abstraction, after every lower-level owner has
+    // accepted the candidate: the bit-vector abstraction is faithful, and
+    // any array or UF producer of an operand has been certified, so the
+    // operand values the exact evaluator reads are the candidate's. A
+    // disagreement leaves a lemma pending and ends the round before the
+    // ordinary replay, which would otherwise re-evaluate the original
+    // operation the surrogate stood for and reject the candidate without
+    // anything to refine.
+    ASTNode orig_result;
+    if (fpAbstraction != NULL && fpAbstraction->active())
+    {
+      const FpAbstraction::Outcome fpOutcome =
+          fpAbstraction->checkCandidate(*this);
+      if (fpOutcome == FpAbstraction::Outcome::Conflict ||
+          fpOutcome == FpAbstraction::Outcome::Restart)
+      {
+        if (fpOutcome == FpAbstraction::Outcome::Conflict &&
+            !fpAbstraction->hasPendingLemma())
+          FatalError("FPCHK reported a conflict without a pending lemma");
+        // The surrogates are wrong; the candidate's values for the
+        // original symbols may nevertheless satisfy the original formula,
+        // which mentions no surrogate and evaluates every operation
+        // exactly. When they do, the candidate is a model and nothing
+        // needs refining: the ordinary replay, run before the lemmas
+        // rather than after them. Not under an active array equality: the
+        // replay decides such an equality by its lowering, and a read of
+        // an owned array from the contents the checker certified, both
+        // relative to the surrogates' values, so it is not an exact
+        // evaluation of the original formula there and cannot certify a
+        // candidate whose surrogates are wrong -- it accepted one that
+        // equated an array to a store of a product the exact product
+        // refuted.
+        if (bm->UserFlags.fp_abstraction_repair && fpRepairAllowed &&
+            !extActive)
+          orig_result = ComputeFormulaUsingModel(original_input);
+        if (orig_result == ASTTrue)
+        {
+          fpAbstraction->acceptRepairedCandidate();
+          if (bm->UserFlags.stats_flag)
+            std::cerr << "Theory coordination: FPCHK refuted the candidate; "
+                         "the original formula holds under it anyway"
+                      << std::endl;
+        }
+        else
+        {
+          if (bm->UserFlags.stats_flag)
+            std::cerr << "Theory coordination: FPCHK "
+                      << (fpOutcome == FpAbstraction::Outcome::Restart
+                              ? "release by restart"
+                              : "conflict")
+                      << "; ordinary replay skipped" << std::endl;
+          bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+          return SOLVER_UNDECIDED;
+        }
+      }
+    }
+
     // check if the counterexample is good or not
-    ASTNode orig_result = ComputeFormulaUsingModel(original_input);
+    if (orig_result.IsNull())
+      orig_result = ComputeFormulaUsingModel(original_input);
     if (!(ASTTrue == orig_result || ASTFalse == orig_result))
       FatalError("TopLevelSat: Original input must compute to "
                  "true or false against model");

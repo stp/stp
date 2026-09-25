@@ -26,13 +26,20 @@ THE SOFTWARE.
 // refinement loop end to end, and the rule catalogue against STP's own
 // exact semantics.
 
+#include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/FloatBlaster/FpAbstractionRules.h"
+#include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/FloatBlaster/rounding_modes.h"
+#include "stp/Sat/SATSolver.h"
+#include "stp/Sat/SATSolverFactory.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/SubstitutionMap.h"
+#include "stp/ToSat/ToSATAIG.h"
 
 #include <gtest/gtest.h>
 
@@ -48,6 +55,11 @@ using namespace stp;
 
 namespace
 {
+
+ASTNode fpConst(STPMgr& mgr, unsigned eb, unsigned sb, uint64_t bits)
+{
+  return mgr.CreateFPConst(mgr.CreateBVConst(eb + sb, bits), eb, sb);
+}
 
 ASTNode rmConst(STPMgr& mgr, unsigned mode)
 {
@@ -78,7 +90,339 @@ bool containsTerm(const ASTNode& root, const ASTNode& term)
   return false;
 }
 
+SOLVER_RETURN_TYPE solve(STPMgr& mgr, const ASTNode& formula, bool abstracted,
+                         FpAbstractionStatistics* stats = NULL)
+{
+  mgr.UserFlags.fp_abstraction = abstracted;
+  mgr.UserFlags.fp_abstraction_width = 4;
+  STP solver(&mgr);
+  const SOLVER_RETURN_TYPE result = solver.TopLevelSTP(formula, mgr.ASTFalse);
+  if (stats != NULL && abstracted && mgr.getFpAbstractionIfAny() != NULL)
+    *stats = mgr.getFpAbstractionIfAny()->statistics();
+  return result;
+}
+
+// Both pipelines on the same formula must agree; a satisfiable answer is
+// model-checked by the solve itself (check_counterexample).
+void expectParity(STPMgr& mgr, const ASTNode& formula,
+                  SOLVER_RETURN_TYPE expected)
+{
+  mgr.UserFlags.check_counterexample_flag = true;
+  EXPECT_EQ(expected, solve(mgr, formula, false));
+  EXPECT_EQ(expected, solve(mgr, formula, true));
+}
+
 } // namespace
+
+TEST(FpAbstraction, parses_operation_lists)
+{
+  unsigned mask = 0;
+  EXPECT_TRUE(parseFpAbstractionOps("mul,div,sqrt,fma", mask));
+  EXPECT_EQ(FP_ABSTRACT_DEFAULT, mask);
+  EXPECT_TRUE(parseFpAbstractionOps("mul,div,sqrt", mask));
+  EXPECT_EQ(FP_ABSTRACT_MUL | FP_ABSTRACT_DIV | FP_ABSTRACT_SQRT, mask);
+  EXPECT_TRUE(parseFpAbstractionOps("default", mask));
+  EXPECT_EQ(FP_ABSTRACT_DEFAULT, mask);
+  EXPECT_TRUE(parseFpAbstractionOps(" add , fma ", mask));
+  EXPECT_EQ(FP_ABSTRACT_ADD | FP_ABSTRACT_FMA, mask);
+  EXPECT_TRUE(parseFpAbstractionOps("all", mask));
+  EXPECT_EQ(1023u, mask);
+  EXPECT_TRUE(parseFpAbstractionOps("rti", mask));
+  EXPECT_EQ(FP_ABSTRACT_RTI, mask);
+  EXPECT_TRUE(parseFpAbstractionOps("to_sbv,to_ubv", mask));
+  EXPECT_EQ(FP_ABSTRACT_TO_SBV | FP_ABSTRACT_TO_UBV, mask);
+  EXPECT_TRUE(parseFpAbstractionOps("none", mask));
+  EXPECT_EQ(0u, mask);
+  mask = 7;
+  EXPECT_FALSE(parseFpAbstractionOps("mul,nope", mask));
+  EXPECT_EQ(7u, mask);
+}
+
+// --fp-abstraction-constant-operands decides whether a product with a
+// constant float operand is a record. Declined, it is lowered exactly: the
+// constant's circuit is small and propagates, where a record puts a free
+// result under rules the solver has to search. The symbolic product beside
+// it is abstracted either way, and the query here holds one, so the
+// automatic policy abstracts both.
+TEST(FpAbstraction, constant_operand_products_follow_the_knob)
+{
+  typedef UserDefinedFlags::FpConstantOperandMode Mode;
+  const Mode modes[] = {Mode::ON, Mode::OFF, Mode::AUTO};
+  for (const Mode mode : modes)
+  {
+    const bool admit = mode != Mode::OFF;
+    STPMgr mgr;
+    mgr.UserFlags.fp_abstraction = true;
+    mgr.UserFlags.fp_abstraction_width = 4;
+    mgr.UserFlags.fp_abstraction_constant_operands = mode;
+    const SourceSort format = SourceSort::floatingPoint(5, 11);
+    const ASTNode x = mgr.CreateSourceSymbol("c_x", format);
+    const ASTNode y = mgr.CreateSourceSymbol("c_y", format);
+    const ASTNode rne = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+    const ASTNode three = fpConst(mgr, 5, 11, 0x4200);
+    const ASTNode byConst = mgr.CreateTerm(FP_MUL, 16, ASTVec{rne, three, x});
+    const ASTNode symbolic = mgr.CreateTerm(FP_MUL, 16, ASTVec{rne, x, y});
+    const ASTNode formula =
+        conj(mgr, {mgr.CreateNode(FP_LT, byConst, symbolic),
+                   mgr.CreateNode(FP_ISNORMAL, x), mgr.CreateNode(FP_ISNORMAL, y)});
+
+    FpAbstraction abstraction(&mgr);
+    abstraction.abstract(formula);
+    ASSERT_TRUE(abstraction.active());
+    EXPECT_EQ(admit ? 2u : 1u, abstraction.applications().size());
+    bool sawConstantOperand = false;
+    for (const std::unique_ptr<FpAbstraction::Application>& app :
+         abstraction.applications())
+      for (const ASTNode& proxy : app->proxies)
+        if (proxy.isConstant() && proxy != app->proxies[0])
+          sawConstantOperand = true;
+    EXPECT_EQ(admit, sawConstantOperand);
+  }
+}
+
+// The automatic policy reads the query: this one is linear over its
+// coefficients -- every product is one constant times one variable,
+// standing alone, so nothing the configuration abstracts has two operands
+// it does not know and no record's operand is another record's result --
+// and the products are left to their pruned shift-and-add circuits, no
+// record being made. Asking for them explicitly still makes them.
+TEST(FpAbstraction, constant_operand_policy_reads_the_query)
+{
+  typedef UserDefinedFlags::FpConstantOperandMode Mode;
+  const Mode modes[] = {Mode::AUTO, Mode::ON};
+  for (const Mode mode : modes)
+  {
+    STPMgr mgr;
+    mgr.UserFlags.fp_abstraction = true;
+    mgr.UserFlags.fp_abstraction_width = 4;
+    mgr.UserFlags.fp_abstraction_constant_operands = mode;
+    const SourceSort format = SourceSort::floatingPoint(5, 11);
+    const ASTNode x = mgr.CreateSourceSymbol("l_x", format);
+    const ASTNode y = mgr.CreateSourceSymbol("l_y", format);
+    const ASTNode rne = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+    const ASTNode three = fpConst(mgr, 5, 11, 0x4200);
+    const ASTNode two = fpConst(mgr, 5, 11, 0x4000);
+    const ASTNode formula = conj(
+        mgr, {mgr.CreateNode(FP_LT, mgr.CreateTerm(FP_MUL, 16, ASTVec{rne, three, x}),
+                             mgr.CreateTerm(FP_MUL, 16, ASTVec{rne, two, y})),
+              mgr.CreateNode(FP_ISNORMAL, x), mgr.CreateNode(FP_ISNORMAL, y)});
+
+    FpAbstraction abstraction(&mgr);
+    abstraction.abstract(formula);
+    EXPECT_EQ(mode == Mode::ON ? 2u : 0u, abstraction.applications().size());
+    EXPECT_EQ(mode == Mode::ON, abstraction.active());
+  }
+}
+
+TEST(FpAbstraction, shared_and_commuted_applications_share_one_record)
+{
+  STPMgr mgr;
+  mgr.UserFlags.fp_abstraction = true;
+  mgr.UserFlags.fp_abstraction_width = 4;
+  const SourceSort format = SourceSort::floatingPoint(5, 11);
+  const ASTNode x = mgr.CreateSourceSymbol("s_x", format);
+  const ASTNode y = mgr.CreateSourceSymbol("s_y", format);
+  const ASTNode rne = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode xy = mgr.CreateTerm(FP_MUL, 16, ASTVec{rne, x, y});
+  const ASTNode yx = mgr.CreateTerm(FP_MUL, 16, ASTVec{rne, y, x});
+  const ASTNode one = fpConst(mgr, 5, 11, 0x3c00);
+  const ASTNode formula = conj(
+      mgr, {mgr.CreateNode(FP_LEQ, xy, one), mgr.CreateNode(FP_LEQ, one, yx),
+            mgr.CreateNode(FP_ISNORMAL, x)});
+
+  FpAbstraction abstraction(&mgr);
+  const ASTNode abstracted = abstraction.abstract(formula);
+  ASSERT_TRUE(abstraction.active());
+  EXPECT_NE(formula, abstracted);
+  EXPECT_EQ(1u, abstraction.applications().size());
+  const FpAbstraction::Application& app = *abstraction.applications()[0];
+  EXPECT_EQ(FP_MUL, app.kind);
+  EXPECT_EQ(3u, app.proxies.size());
+  EXPECT_TRUE(app.proxies[0].isConstant()); // the mode
+  EXPECT_EQ(SYMBOL, app.proxies[1].GetKind());
+  EXPECT_EQ(SYMBOL, app.proxies[2].GetKind());
+  EXPECT_EQ(SYMBOL, app.surrogate.GetKind());
+  EXPECT_EQ(16u, app.surrogate.GetValueWidth());
+  EXPECT_EQ(format, app.surrogateView.GetSourceSort());
+  EXPECT_TRUE(abstraction.isProtected(app.surrogate));
+  EXPECT_TRUE(abstraction.isProtected(app.proxies[1]));
+  EXPECT_FALSE(abstraction.isProtected(x));
+  EXPECT_EQ(2u, abstraction.statistics().candidates);
+  EXPECT_EQ(1u, abstraction.statistics().shared);
+  EXPECT_GT(abstraction.statistics().ruleLemmas, 10u);
+
+  // Disabled by default: an untouched manager abstracts nothing.
+  STPMgr plain;
+  EXPECT_FALSE(plain.UserFlags.fp_abstraction);
+}
+
+TEST(FpAbstraction, no_overflow_is_proved_without_the_multiplier)
+{
+  STPMgr mgr;
+  const SourceSort format = SourceSort::floatingPoint(8, 24);
+  const ASTNode x = mgr.CreateSourceSymbol("o_x", format);
+  const ASTNode y = mgr.CreateSourceSymbol("o_y", format);
+  const ASTNode rne = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode t = mgr.CreateTerm(FP_MUL, 32, ASTVec{rne, x, y});
+  const ASTNode eight = fpConst(mgr, 8, 24, 0x41000000);
+  const ASTNode formula = conj(
+      mgr, {mgr.CreateNode(FP_LEQ, mgr.CreateTerm(FP_ABS, 32, x), eight),
+            mgr.CreateNode(FP_LEQ, mgr.CreateTerm(FP_ABS, 32, y), eight),
+            mgr.CreateNode(OR, mgr.CreateNode(FP_ISINFINITE, t),
+                           mgr.CreateNode(FP_ISNAN, t))});
+  FpAbstractionStatistics stats;
+  EXPECT_EQ(SOLVER_VALID, solve(mgr, formula, true, &stats));
+  EXPECT_EQ(1u, stats.abstracted);
+  EXPECT_EQ(0u, stats.releases);
+  EXPECT_EQ(0u, stats.valueLemmas);
+  EXPECT_EQ(SOLVER_VALID, solve(mgr, formula, false));
+}
+
+TEST(FpAbstraction, exact_witness_reaches_release_and_agrees)
+{
+  STPMgr mgr;
+  const SourceSort format = SourceSort::floatingPoint(5, 11);
+  const ASTNode x = mgr.CreateSourceSymbol("w_x", format);
+  const ASTNode y = mgr.CreateSourceSymbol("w_y", format);
+  const ASTNode z = mgr.CreateSourceSymbol("w_z", format);
+  const ASTNode rne = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode inner = mgr.CreateTerm(FP_MUL, 16, ASTVec{rne, x, y});
+  const ASTNode outer = mgr.CreateTerm(FP_MUL, 16, ASTVec{rne, inner, z});
+  const ASTNode pi = fpConst(mgr, 5, 11, 0x4248);
+  const ASTNode formula = conj(
+      mgr, {mgr.CreateNode(FP_ISNORMAL, x), mgr.CreateNode(FP_ISNORMAL, y),
+            mgr.CreateNode(FP_ISNORMAL, z), mgr.CreateNode(FP_SMT_EQ, outer, pi),
+            mgr.CreateNode(FP_LT, x, y)});
+  mgr.UserFlags.check_counterexample_flag = true;
+  // How many rounds this takes depends on the candidates the SAT solver
+  // offers -- with the significand bands the first is usually exact, and
+  // a refuted one may be repaired -- so what is checked is the answer,
+  // model-checked, and that both products were abstracted. The release
+  // path itself is forced in wide_release_restarts_the_pipeline.
+  FpAbstractionStatistics stats;
+  EXPECT_EQ(SOLVER_INVALID, solve(mgr, formula, true, &stats));
+  EXPECT_EQ(2u, stats.abstracted);
+  EXPECT_EQ(SOLVER_INVALID, solve(mgr, formula, false));
+  mgr.UserFlags.fp_abstraction_significand_bits = 0;
+  EXPECT_EQ(SOLVER_INVALID, solve(mgr, formula, true, &stats));
+  EXPECT_EQ(2u, stats.abstracted);
+  mgr.UserFlags.fp_abstraction_significand_bits = 8;
+}
+
+TEST(FpAbstraction, parity_on_a_battery_of_shapes)
+{
+  const unsigned modes[] = {symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN,
+                            symbolic_fp::ROUND_TOWARD_ZERO,
+                            symbolic_fp::ROUND_TOWARD_POSITIVE};
+  for (unsigned mode : modes)
+  {
+    STPMgr mgr;
+    const SourceSort format = SourceSort::floatingPoint(3, 4);
+    const ASTNode x = mgr.CreateSourceSymbol("b_x", format);
+    const ASTNode y = mgr.CreateSourceSymbol("b_y", format);
+    const ASTNode rm = rmConst(mgr, mode);
+    const ASTNode mul = mgr.CreateTerm(FP_MUL, 7, ASTVec{rm, x, y});
+    const ASTNode div = mgr.CreateTerm(FP_DIV, 7, ASTVec{rm, x, y});
+    const ASTNode sqrt = mgr.CreateTerm(FP_SQRT, 7, ASTVec{rm, x});
+    const ASTNode one = fpConst(mgr, 3, 4, 0x18);
+    const ASTNode two = fpConst(mgr, 3, 4, 0x20);
+    const ASTNode pzero = fpConst(mgr, 3, 4, 0x00);
+    const ASTNode nzero = fpConst(mgr, 3, 4, 0x40);
+    // Exact zero product from two nonzero normals is impossible in (3,4):
+    // the smallest product of two minimum normals is far above the
+    // smallest subnormal there. UNSAT.
+    expectParity(mgr,
+                 conj(mgr, {mgr.CreateNode(FP_ISNORMAL, x),
+                            mgr.CreateNode(FP_ISNORMAL, y),
+                            mgr.CreateNode(FP_ISZERO, mul)}),
+                 SOLVER_VALID);
+    // x / x = 1 for finite nonzero x. UNSAT.
+    expectParity(mgr,
+                 conj(mgr, {mgr.CreateNode(FP_ISNORMAL, x),
+                            mgr.CreateNode(NOT,
+                                           mgr.CreateNode(
+                                               FP_SMT_EQ,
+                                               mgr.CreateTerm(FP_DIV, 7,
+                                                              ASTVec{rm, x, x}),
+                                               one))}),
+                 SOLVER_VALID);
+    // sqrt above 1 is at most its argument. UNSAT.
+    expectParity(mgr,
+                 conj(mgr, {mgr.CreateNode(FP_LEQ, one, x),
+                            mgr.CreateNode(FP_LT, x, sqrt)}),
+                 SOLVER_VALID);
+    // A product equal to two with normal operands exists. SAT.
+    expectParity(mgr,
+                 conj(mgr, {mgr.CreateNode(FP_ISNORMAL, x),
+                            mgr.CreateNode(FP_ISNORMAL, y),
+                            mgr.CreateNode(FP_SMT_EQ, mul, two)}),
+                 SOLVER_INVALID);
+    // Signed zero: -0 * y with y positive finite is -0, never +0. UNSAT.
+    expectParity(mgr,
+                 conj(mgr, {mgr.CreateNode(FP_SMT_EQ, x, nzero),
+                            mgr.CreateNode(FP_ISNORMAL, y),
+                            mgr.CreateNode(FP_ISPOSITIVE, y),
+                            mgr.CreateNode(FP_SMT_EQ, mul, pzero)}),
+                 SOLVER_VALID);
+    // Division by zero of a nonzero finite is infinite. UNSAT.
+    expectParity(mgr,
+                 conj(mgr, {mgr.CreateNode(FP_ISNORMAL, x),
+                            mgr.CreateNode(FP_ISZERO, y),
+                            mgr.CreateNode(NOT,
+                                           mgr.CreateNode(FP_ISINFINITE, div))}),
+                 SOLVER_VALID);
+    // NaN through a symbolic-looking operand chain. SAT.
+    expectParity(mgr,
+                 conj(mgr, {mgr.CreateNode(FP_ISNAN, mul),
+                            mgr.CreateNode(NOT, mgr.CreateNode(FP_ISNAN, x)),
+                            mgr.CreateNode(NOT, mgr.CreateNode(FP_ISNAN, y))}),
+                 SOLVER_INVALID);
+    // Rounding to an integer keeps a magnitude of at least one at least
+    // one, in any mode. UNSAT.
+    mgr.UserFlags.fp_abstraction_ops = FP_ABSTRACT_DEFAULT | FP_ABSTRACT_RTI;
+    const ASTNode rti = mgr.CreateTerm(FP_ROUNDTOINTEGRAL, 7, ASTVec{rm, x});
+    expectParity(mgr,
+                 conj(mgr, {mgr.CreateNode(FP_LEQ, one, mgr.CreateTerm(FP_ABS, 7, x)),
+                            mgr.CreateNode(FP_LT, mgr.CreateTerm(FP_ABS, 7, rti), one)}),
+                 SOLVER_VALID);
+    // A rounding that moved: two is the integer of something that is not
+    // two. SAT.
+    expectParity(mgr,
+                 conj(mgr, {mgr.CreateNode(FP_SMT_EQ, rti, two),
+                            mgr.CreateNode(NOT, mgr.CreateNode(FP_SMT_EQ, x, two))}),
+                 SOLVER_INVALID);
+    mgr.UserFlags.fp_abstraction_ops = FP_ABSTRACT_DEFAULT;
+  }
+}
+
+TEST(FpAbstraction, symbolic_rounding_mode)
+{
+  STPMgr mgr;
+  const SourceSort format = SourceSort::floatingPoint(8, 24);
+  const ASTNode x = mgr.CreateSourceSymbol("r_x", format);
+  const ASTNode y = mgr.CreateSourceSymbol("r_y", format);
+  const ASTNode rm = mgr.CreateSourceSymbol("r_rm", SourceSort::roundingMode());
+  const ASTNode t = mgr.CreateTerm(FP_MUL, 32, ASTVec{rm, x, y});
+  const ASTNode one = fpConst(mgr, 8, 24, 0x3f800000);
+  // |y| > 1 -> |x*y| >= |x|, in every mode. UNSAT.
+  expectParity(mgr,
+               conj(mgr, {mgr.CreateNode(FP_ISNORMAL, x),
+                          mgr.CreateNode(FP_ISNORMAL, y),
+                          mgr.CreateNode(FP_LT, one, y),
+                          mgr.CreateNode(
+                              NOT, mgr.CreateNode(
+                                       FP_GEQ, mgr.CreateTerm(FP_ABS, 32, t),
+                                       mgr.CreateTerm(FP_ABS, 32, x)))}),
+               SOLVER_VALID);
+  // Under some mode the product of two chosen normals rounds to a chosen
+  // constant. SAT.
+  expectParity(mgr,
+               conj(mgr, {mgr.CreateNode(FP_ISNORMAL, x),
+                          mgr.CreateNode(FP_ISNORMAL, y),
+                          mgr.CreateNode(FP_SMT_EQ, t,
+                                         fpConst(mgr, 8, 24, 0x40490fdb))}),
+               SOLVER_INVALID);
+}
 
 namespace
 {
@@ -218,6 +562,7 @@ void expectExactRule(const FpRuleContext& context, const ASTNode& definition,
                      const ASTNode& rule)
 {
   STPMgr& mgr = *context.bm;
+  mgr.UserFlags.fp_abstraction = false;
   ASTNode validMode = mgr.ASTTrue;
   if (context.rm == 0 && !context.rmTerm.IsNull())
   {
@@ -652,6 +997,7 @@ TEST(FpAbstraction, every_rule_holds_against_the_exact_operation)
       if (c.kind == FP_REM && mode != modes[0])
         continue; // no mode
       STPMgr mgr;
+      mgr.UserFlags.fp_abstraction = false;
       RuleFixture f(mgr, c.kind, c.eb, c.sb, mode, "v");
       std::vector<ASTNode> rules;
       std::vector<FpRuleId> ids;
@@ -859,6 +1205,7 @@ TEST(FpAbstraction, conversion_rules_hold_against_the_exact_operation)
     for (unsigned mode : modes)
     {
       STPMgr mgr;
+      mgr.UserFlags.fp_abstraction = false;
       ConversionFixture f(mgr, c.kind, c.eb, c.sb, c.m, mode, "cv");
       std::vector<ASTNode> rules;
       std::vector<FpRuleId> ids;
@@ -908,6 +1255,7 @@ TEST(FpAbstraction, congruence_lemmas_are_chosen_by_violation_and_hold)
   for (Kind kind : kinds)
   {
     STPMgr mgr;
+    mgr.UserFlags.fp_abstraction = false;
     RuleFixture a(mgr, kind, eb, sb, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN,
                   "ca");
     RuleFixture b(mgr, kind, eb, sb, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN,
@@ -969,6 +1317,7 @@ TEST(FpAbstraction, significand_bands_hold_against_the_exact_operation)
     for (unsigned mode : modes)
     {
       STPMgr mgr;
+      mgr.UserFlags.fp_abstraction = false;
       RuleFixture f(mgr, c.kind, c.eb, c.sb, mode, "sb");
       std::vector<ASTNode> without;
       f.context.bandBits = 0;
@@ -993,6 +1342,7 @@ TEST(FpAbstraction, significand_bands_hold_against_the_exact_operation)
   // Too narrow for a band: nothing is emitted.
   {
     STPMgr mgr;
+    mgr.UserFlags.fp_abstraction = false;
     RuleFixture f(mgr, FP_MUL, 3, 4, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN,
                   "sn");
     std::vector<ASTNode> without, with;
@@ -1027,6 +1377,7 @@ TEST(FpAbstraction, relational_lemmas_are_chosen_by_violation_and_hold)
   for (const Case& c : cases)
   {
     STPMgr mgr;
+    mgr.UserFlags.fp_abstraction = false;
     RuleFixture a(mgr, c.kind, eb, sb, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN,
                   "ra");
     RuleFixture b(mgr, c.kind, eb, sb, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN,
@@ -1161,6 +1512,7 @@ TEST(FpAbstraction, cross_operation_fma_rules_hold)
     {
       const unsigned eb = f[0], sb = f[1], width = eb + sb;
       STPMgr mgr;
+      mgr.UserFlags.fp_abstraction = false;
       RuleFixture fma(mgr, FP_FMA, eb, sb, mode, "cf");
       // Partner contexts over the fma's own operand symbols, each with its
       // own result symbol and exact definition.
@@ -1202,6 +1554,409 @@ TEST(FpAbstraction, cross_operation_fma_rules_hold)
       }
     }
   expectRuleCoverage(seen, "cross");
+}
+
+// The pass that finds the partners: a product recorded before the fma, a
+// sum recorded after it, commuted operands, and nothing for a sum over the
+// wrong pair.
+TEST(FpAbstraction, cross_operation_rules_find_partners_either_way_round)
+{
+  STPMgr mgr;
+  mgr.UserFlags.fp_abstraction = true;
+  mgr.UserFlags.fp_abstraction_width = 4;
+  mgr.UserFlags.fp_abstraction_ops = 127;
+  const SourceSort format = SourceSort::floatingPoint(5, 11);
+  const ASTNode x = mgr.CreateSourceSymbol("c_x", format);
+  const ASTNode y = mgr.CreateSourceSymbol("c_y", format);
+  const ASTNode z = mgr.CreateSourceSymbol("c_z", format);
+  const ASTNode w = mgr.CreateSourceSymbol("c_w", format);
+  const ASTNode rne = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode yx = mgr.CreateTerm(FP_MUL, 16, ASTVec{rne, y, x});
+  const ASTNode fma = mgr.CreateTerm(FP_FMA, 16, ASTVec{rne, x, y, z});
+  const ASTNode zx = mgr.CreateTerm(FP_ADD, 16, ASTVec{rne, z, x});
+  const ASTNode zw = mgr.CreateTerm(FP_ADD, 16, ASTVec{rne, z, w});
+  const ASTNode formula = conj(
+      mgr, {mgr.CreateNode(FP_LT, yx, fma), mgr.CreateNode(FP_LT, zx, fma),
+            mgr.CreateNode(FP_LT, zw, fma)});
+  FpAbstraction abstraction(&mgr);
+  abstraction.abstract(formula);
+  ASSERT_TRUE(abstraction.active());
+  EXPECT_EQ(4u, abstraction.applications().size());
+  // Three against the product, one against add(x, z); add(z, w) shares
+  // only the addend and is no partner.
+  EXPECT_EQ(4u, abstraction.statistics().crossRules);
+
+  // And end to end: an fma against its product with a non-negative addend
+  // cannot be below it (unsat), while with a negative addend it can (sat).
+  {
+    STPMgr m;
+    const ASTNode a = m.CreateSourceSymbol("e_a", format);
+    const ASTNode b = m.CreateSourceSymbol("e_b", format);
+    const ASTNode c = m.CreateSourceSymbol("e_c", format);
+    const ASTNode rm = rmConst(m, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+    const ASTNode p = m.CreateTerm(FP_MUL, 16, ASTVec{rm, a, b});
+    const ASTNode t = m.CreateTerm(FP_FMA, 16, ASTVec{rm, a, b, c});
+    const ASTNode pzero = fpConst(m, 5, 11, 0x0000);
+    const ASTNode common = conj(
+        m, {m.CreateNode(NOT, m.CreateNode(FP_ISNAN, p)),
+            m.CreateNode(NOT, m.CreateNode(FP_ISNAN, t)),
+            m.CreateNode(FP_LT, t, p)});
+    m.UserFlags.fp_abstraction_ops = 127;
+    expectParity(m, conj(m, {common, m.CreateNode(FP_LEQ, pzero, c)}),
+                 SOLVER_VALID);
+    expectParity(m, conj(m, {common, m.CreateNode(FP_LT, c, pzero)}),
+                 SOLVER_INVALID);
+  }
+}
+
+// Incremental pieces can introduce partners in any order. The piece that
+// completes a relationship must assert it, with both records' definitions,
+// and a later use of either participant must remain self-contained.
+TEST(FpAbstraction, incremental_cross_rules_carry_late_partners_and_definitions)
+{
+  std::vector<unsigned> order{0, 1, 2, 3};
+  do
+  {
+    STPMgr mgr;
+    mgr.UserFlags.fp_abstraction = true;
+    mgr.UserFlags.fp_abstraction_width = 4;
+    mgr.UserFlags.fp_abstraction_ops = FP_ABSTRACT_FMA | FP_ABSTRACT_MUL |
+                                        FP_ABSTRACT_ADD;
+    FpAbstraction abstraction(&mgr);
+    const SourceSort format = SourceSort::floatingPoint(5, 11);
+    const ASTNode x = mgr.CreateSourceSymbol("late_x", format);
+    const ASTNode y = mgr.CreateSourceSymbol("late_y", format);
+    const ASTNode z = mgr.CreateSourceSymbol("late_z", format);
+    const ASTNode rm = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+    const ASTNode ops[] = {
+        mgr.CreateTerm(FP_FMA, 16, ASTVec{rm, x, y, z}),
+        mgr.CreateTerm(FP_MUL, 16, ASTVec{rm, y, x}), // commuted partner
+        mgr.CreateTerm(FP_ADD, 16, ASTVec{rm, z, x}),
+        mgr.CreateTerm(FP_ADD, 16, ASTVec{rm, y, z})};
+    const FpAbstraction::Application* records[4] = {};
+    for (unsigned next : order)
+    {
+      const ASTNode piece = abstraction.abstractPiece(
+          mgr.CreateNode(FP_ISNORMAL, ops[next]));
+      records[next] = abstraction.applications().back().get();
+      unsigned expected = 0;
+      if (records[0] != NULL)
+        for (unsigned partner = 1; partner < 4; ++partner)
+        {
+          if (records[partner] == NULL)
+            continue;
+          expected += partner == 1 ? 3 : 1;
+          if (next != 0 && next != partner)
+            continue;
+          unsigned found = 0;
+          for (const ASTNode& d : records[0]->defs)
+            if (containsTerm(d, records[0]->surrogate) &&
+                containsTerm(d, records[partner]->surrogate))
+            {
+              ++found;
+              EXPECT_TRUE(containsTerm(piece, d));
+            }
+          EXPECT_EQ(partner == 1 ? 3u : 1u, found);
+          // The product's own source contains no z: this also tests the
+          // closure through the FMA introduced by the new relationship.
+          EXPECT_TRUE(containsTerm(piece, z));
+          for (const auto* record : {records[0], records[partner]})
+            for (const ASTNode& d : record->defs)
+              EXPECT_TRUE(containsTerm(piece, d));
+        }
+      EXPECT_EQ(expected, abstraction.statistics().crossRules);
+    }
+    for (unsigned again : order)
+    {
+      const ASTNode piece = abstraction.abstractPiece(
+          mgr.CreateNode(FP_ISNORMAL, ops[again]));
+      for (const auto* record : records)
+        for (const ASTNode& d : record->defs)
+          EXPECT_TRUE(containsTerm(piece, d));
+    }
+    EXPECT_EQ(5u, abstraction.statistics().crossRules);
+  } while (std::next_permutation(order.begin(), order.end()));
+}
+
+TEST(FpAbstraction, incremental_cross_rules_keep_both_sum_roles)
+{
+  STPMgr mgr;
+  mgr.UserFlags.fp_abstraction = true;
+  mgr.UserFlags.fp_abstraction_width = 4;
+  mgr.UserFlags.fp_abstraction_ops = FP_ABSTRACT_FMA | FP_ABSTRACT_ADD;
+  const SourceSort format = SourceSort::floatingPoint(5, 11);
+  const ASTNode x = mgr.CreateSourceSymbol("roles_x", format);
+  const ASTNode z = mgr.CreateSourceSymbol("roles_z", format);
+  const ASTNode rm = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode fma = mgr.CreateTerm(FP_FMA, 16, ASTVec{rm, x, x, z});
+  const ASTNode sum = mgr.CreateTerm(FP_ADD, 16, ASTVec{rm, x, z});
+  FpAbstraction abstraction(&mgr);
+  abstraction.abstractPiece(mgr.CreateNode(FP_ISNORMAL, fma));
+  EXPECT_EQ(0u, abstraction.statistics().crossRules);
+  abstraction.abstractPiece(mgr.CreateNode(FP_ISNORMAL, sum));
+  EXPECT_EQ(2u, abstraction.statistics().crossRules);
+  abstraction.abstractPiece(mgr.CreateNode(FP_ISNORMAL, sum));
+  EXPECT_EQ(2u, abstraction.statistics().crossRules);
+}
+
+// A wide operation is released by running the pipeline again with it
+// lowered exactly; the run after that still abstracts the rest, and its
+// statistics count the run before it.
+TEST(FpAbstraction, wide_release_restarts_the_pipeline)
+{
+  STPMgr mgr;
+  mgr.UserFlags.fp_abstraction = true;
+  mgr.UserFlags.fp_abstraction_values = 0; // release at the first refutation
+  mgr.UserFlags.fp_abstraction_shape = false;
+  mgr.UserFlags.check_counterexample_flag = true;
+  const SourceSort format = SourceSort::floatingPoint(11, 53);
+  const ASTNode x = mgr.CreateSourceSymbol("rs_x", format);
+  const ASTNode y = mgr.CreateSourceSymbol("rs_y", format);
+  const ASTNode rne = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode xy = mgr.CreateTerm(FP_MUL, 64, ASTVec{rne, x, y});
+  const ASTNode two = fpConst(mgr, 11, 53, 0x4000000000000000ull);
+  const ASTNode x2 = mgr.CreateTerm(FP_MUL, 64, ASTVec{rne, x, two});
+  const ASTNode three = fpConst(mgr, 11, 53, 0x4008000000000000ull);
+  const ASTNode low = fpConst(mgr, 11, 53, 0x3ff199999999999aull);  // 1.1
+  const ASTNode high = fpConst(mgr, 11, 53, 0x3ff3333333333333ull); // 1.2
+  // The pinned product needs its value -- x is held in an interval whose
+  // ends are not factors of three, so no candidate the rules admit is
+  // exact -- and is released; the doubling is pinned by the power-of-two
+  // identity rule, so its candidate is always exact and it stays
+  // abstracted through every run.
+  const ASTNode formula = conj(
+      mgr, {mgr.CreateNode(FP_LT, low, x), mgr.CreateNode(FP_LT, x, high),
+            mgr.CreateNode(FP_ISNORMAL, y), mgr.CreateNode(FP_SMT_EQ, xy, three),
+            mgr.CreateNode(FP_ISNORMAL, x2)});
+  {
+    mgr.UserFlags.fp_abstraction_restart_width = 64;
+    STP solver(&mgr);
+    EXPECT_EQ(SOLVER_INVALID, solver.TopLevelSTP(formula, mgr.ASTFalse));
+    ASSERT_TRUE(mgr.getFpAbstractionIfAny() != NULL);
+    const FpAbstraction& last = *mgr.getFpAbstractionIfAny();
+    EXPECT_EQ(1u, last.statistics().restarts);
+    EXPECT_EQ(1u, last.applications().size());
+    EXPECT_EQ(FP_MUL, last.applications()[0]->kind);
+    EXPECT_EQ(0u, last.statistics().releases);
+    EXPECT_FALSE(last.restartRequested());
+  }
+  {
+    // In place: one run, the release spliced, no restart.
+    mgr.UserFlags.fp_abstraction_restart_width = 0;
+    STP solver(&mgr);
+    EXPECT_EQ(SOLVER_INVALID, solver.TopLevelSTP(formula, mgr.ASTFalse));
+    ASSERT_TRUE(mgr.getFpAbstractionIfAny() != NULL);
+    const FpAbstraction& last = *mgr.getFpAbstractionIfAny();
+    EXPECT_EQ(0u, last.statistics().restarts);
+    EXPECT_EQ(2u, last.applications().size());
+    EXPECT_EQ(1u, last.statistics().releases);
+  }
+  // And below the width, in place whatever the setting.
+  {
+    STPMgr m;
+    m.UserFlags.fp_abstraction = true;
+    m.UserFlags.fp_abstraction_restart_width = 64;
+    m.UserFlags.fp_abstraction_values = 0;
+    m.UserFlags.fp_abstraction_shape = false;
+    m.UserFlags.check_counterexample_flag = true;
+    const SourceSort f32 = SourceSort::floatingPoint(8, 24);
+    const ASTNode a = m.CreateSourceSymbol("rs_a", f32);
+    const ASTNode b = m.CreateSourceSymbol("rs_b", f32);
+    const ASTNode rm = rmConst(m, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+    const ASTNode ab = m.CreateTerm(FP_MUL, 32, ASTVec{rm, a, b});
+    const ASTNode formula32 = conj(
+        m, {m.CreateNode(FP_LT, fpConst(m, 8, 24, 0x3f8ccccd), a), // 1.1
+            m.CreateNode(FP_LT, a, fpConst(m, 8, 24, 0x3f99999a)), // 1.2
+            m.CreateNode(FP_ISNORMAL, b),
+            m.CreateNode(FP_SMT_EQ, ab, fpConst(m, 8, 24, 0x40400000))});
+    STP solver(&m);
+    EXPECT_EQ(SOLVER_INVALID, solver.TopLevelSTP(formula32, m.ASTFalse));
+    ASSERT_TRUE(m.getFpAbstractionIfAny() != NULL);
+    EXPECT_EQ(0u, m.getFpAbstractionIfAny()->statistics().restarts);
+    EXPECT_EQ(1u, m.getFpAbstractionIfAny()->statistics().releases);
+  }
+}
+
+// A refuted candidate whose values for the original symbols satisfy the
+// original formula is a model: accepted by the replay, with nothing
+// refined. Without the repair the same query takes a round.
+TEST(FpAbstraction, refuted_candidate_is_accepted_when_the_formula_holds_anyway)
+{
+  const bool repair[] = {true, false};
+  for (bool r : repair)
+  {
+    STPMgr mgr;
+    mgr.UserFlags.fp_abstraction = true;
+    mgr.UserFlags.fp_abstraction_width = 4;
+    mgr.UserFlags.fp_abstraction_repair = r;
+    // No significand bands: the first candidate's surrogate is then never
+    // the exact product by chance, so the candidate is always refuted.
+    mgr.UserFlags.fp_abstraction_significand_bits = 0;
+    mgr.UserFlags.check_counterexample_flag = true;
+    const SourceSort format = SourceSort::floatingPoint(8, 24);
+    const ASTNode x = mgr.CreateSourceSymbol("mr_x", format);
+    const ASTNode y = mgr.CreateSourceSymbol("mr_y", format);
+    const ASTNode z = mgr.CreateSourceSymbol("mr_z", format);
+    const ASTNode rne = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+    const ASTNode xy = mgr.CreateTerm(FP_MUL, 32, ASTVec{rne, x, y});
+    // For finite x and y and a z that is not NaN, one of t < z and z <= t
+    // holds whatever the product is: the claim holds of the exact product
+    // whatever the surrogate said, and no box arithmetic sees it.
+    // The factors are held in intervals no identity rule pins, so the
+    // candidate's surrogate is not the product.
+    const ASTNode formula = conj(
+        mgr, {mgr.CreateNode(FP_LT, fpConst(mgr, 8, 24, 0x3f8ccccd), x), // 1.1
+              mgr.CreateNode(FP_LT, x, fpConst(mgr, 8, 24, 0x3f99999a)), // 1.2
+              mgr.CreateNode(FP_LT, fpConst(mgr, 8, 24, 0x3fa66666), y), // 1.3
+              mgr.CreateNode(FP_LT, y, fpConst(mgr, 8, 24, 0x3fb33333)), // 1.4
+              mgr.CreateNode(NOT, mgr.CreateNode(FP_ISNAN, z)),
+              mgr.CreateNode(OR, mgr.CreateNode(FP_LT, xy, z),
+                             mgr.CreateNode(FP_LEQ, z, xy))});
+    STP solver(&mgr);
+    EXPECT_EQ(SOLVER_INVALID, solver.TopLevelSTP(formula, mgr.ASTFalse));
+    ASSERT_TRUE(mgr.getFpAbstractionIfAny() != NULL);
+    const FpAbstractionStatistics& st = mgr.getFpAbstractionIfAny()->statistics();
+    if (r)
+    {
+      // The first candidate is refuted and repaired: nothing refined.
+      EXPECT_EQ(1u, st.inconsistent);
+      EXPECT_EQ(1u, st.repairs);
+      EXPECT_EQ(0u, st.rounds);
+      EXPECT_EQ(0u, st.releases);
+    }
+    else
+    {
+      // Refined until a candidate is exact. How many candidates that takes
+      // is the SAT solver's (one under CaDiCaL, five under CryptoMiniSat).
+      EXPECT_EQ(0u, st.repairs);
+      EXPECT_GE(st.inconsistent, 1u);
+      EXPECT_GE(st.rounds, 1u);
+    }
+  }
+}
+
+// The restart guard: not past the limit, and not after a run that met
+// nothing it released.
+TEST(FpAbstraction, restart_is_refused_past_the_limit_and_without_progress)
+{
+  STPMgr mgr;
+  mgr.UserFlags.fp_abstraction = true;
+  mgr.UserFlags.fp_abstraction_width = 4;
+  mgr.UserFlags.fp_abstraction_restart_limit = 2;
+  const SourceSort format = SourceSort::floatingPoint(11, 53);
+  const ASTNode x = mgr.CreateSourceSymbol("rg_x", format);
+  const ASTNode y = mgr.CreateSourceSymbol("rg_y", format);
+  const ASTNode rne = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode formula =
+      mgr.CreateNode(FP_ISNORMAL, mgr.CreateTerm(FP_MUL, 64, ASTVec{rne, x, y}));
+  {
+    FpAbstraction fresh(&mgr);
+    EXPECT_TRUE(fresh.restartAllowed());
+  }
+  {
+    FpAbstraction atLimit(&mgr, std::set<ASTNode>(), 2, 1);
+    EXPECT_FALSE(atLimit.restartAllowed());
+  }
+  {
+    // One restart so far, after a run of two records: this run's one is
+    // progress.
+    FpAbstraction progressed(&mgr, std::set<ASTNode>(), 1, 2);
+    progressed.abstract(formula);
+    ASSERT_TRUE(progressed.active());
+    EXPECT_TRUE(progressed.restartAllowed());
+  }
+  {
+    // One restart, after a run of one record: this run's one is none.
+    FpAbstraction stuck(&mgr, std::set<ASTNode>(), 1, 1);
+    stuck.abstract(formula);
+    ASSERT_TRUE(stuck.active());
+    EXPECT_FALSE(stuck.restartAllowed());
+  }
+}
+
+TEST(FpAbstraction, fma_is_abstracted_as_a_link_in_a_chain)
+{
+  STPMgr mgr;
+  mgr.UserFlags.fp_abstraction = true;
+  const SourceSort format = SourceSort::floatingPoint(8, 24);
+  const ASTNode x = mgr.CreateSourceSymbol("ch_x", format);
+  const ASTNode y = mgr.CreateSourceSymbol("ch_y", format);
+  const ASTNode z = mgr.CreateSourceSymbol("ch_z", format);
+  const ASTNode w = mgr.CreateSourceSymbol("ch_w", format);
+  const ASTNode rne = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode xy = mgr.CreateTerm(FP_MUL, 32, ASTVec{rne, x, y});
+  // Over the product's result: a link in a chain. Over inputs alone: not.
+  const ASTNode chainedFma = mgr.CreateTerm(FP_FMA, 32, ASTVec{rne, xy, z, w});
+  const ASTNode plainFma = mgr.CreateTerm(FP_FMA, 32, ASTVec{rne, x, z, w});
+  const ASTNode formula =
+      conj(mgr, {mgr.CreateNode(FP_ISNORMAL, x),
+                 mgr.CreateNode(FP_LT, chainedFma, plainFma)});
+  {
+    // By default the fma is abstracted wherever it stands.
+    FpAbstraction abs(&mgr);
+    abs.abstract(formula);
+    ASSERT_TRUE(abs.active());
+    EXPECT_EQ(3u, abs.applications().size());
+    EXPECT_EQ(0u, abs.statistics().chained);
+  }
+  mgr.UserFlags.fp_abstraction_ops =
+      FP_ABSTRACT_MUL | FP_ABSTRACT_DIV | FP_ABSTRACT_SQRT;
+  mgr.UserFlags.fp_abstraction_chain_ops = FP_ABSTRACT_FMA;
+  {
+    // As a chain operation: the one over the product's result only.
+    FpAbstraction abs(&mgr);
+    abs.abstract(formula);
+    ASSERT_TRUE(abs.active());
+    ASSERT_EQ(2u, abs.applications().size());
+    EXPECT_EQ(1u, abs.statistics().chained);
+    EXPECT_EQ(FP_MUL, abs.applications()[0]->kind);
+    EXPECT_EQ(FP_FMA, abs.applications()[1]->kind);
+    // The chained fma's product operand is the product's surrogate view,
+    // and its symbol in lemmas is the product's surrogate.
+    EXPECT_EQ(abs.applications()[0]->surrogateView,
+              abs.applications()[1]->children[1]);
+    EXPECT_EQ(abs.applications()[0]->surrogate,
+              abs.applications()[1]->proxies[1]);
+  }
+  {
+    // Neither named nor a chain operation: the product alone.
+    mgr.UserFlags.fp_abstraction_chain_ops = 0;
+    FpAbstraction abs(&mgr);
+    abs.abstract(formula);
+    ASSERT_EQ(1u, abs.applications().size());
+    EXPECT_EQ(0u, abs.statistics().chained);
+  }
+  // And a chained record answers like the exact encoding: in (3,4), over
+  // normals, x*y*z + w is never NaN (an overflowed product gives an
+  // infinity, and infinity plus a finite is that infinity) but can be
+  // infinite.
+  {
+    STPMgr small;
+    small.UserFlags.fp_abstraction = true;
+    small.UserFlags.fp_abstraction_width = 4;
+    small.UserFlags.fp_abstraction_ops =
+        FP_ABSTRACT_MUL | FP_ABSTRACT_DIV | FP_ABSTRACT_SQRT;
+    small.UserFlags.fp_abstraction_chain_ops = FP_ABSTRACT_FMA;
+    const SourceSort tiny = SourceSort::floatingPoint(3, 4);
+    const ASTNode a = small.CreateSourceSymbol("ch_a", tiny);
+    const ASTNode b = small.CreateSourceSymbol("ch_b", tiny);
+    const ASTNode c = small.CreateSourceSymbol("ch_c", tiny);
+    const ASTNode d = small.CreateSourceSymbol("ch_d", tiny);
+    const ASTNode rm = rmConst(small, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+    const ASTNode ab = small.CreateTerm(FP_MUL, 7, ASTVec{rm, a, b});
+    const ASTNode fma = small.CreateTerm(FP_FMA, 7, ASTVec{rm, ab, c, d});
+    const ASTNode normals =
+        conj(small, {small.CreateNode(FP_ISNORMAL, a),
+                     small.CreateNode(FP_ISNORMAL, b),
+                     small.CreateNode(FP_ISNORMAL, c),
+                     small.CreateNode(FP_ISNORMAL, d)});
+    expectParity(small,
+                 conj(small, {normals, small.CreateNode(FP_ISNAN, fma)}),
+                 SOLVER_VALID);
+    expectParity(small,
+                 conj(small, {normals, small.CreateNode(FP_ISINFINITE, fma)}),
+                 SOLVER_INVALID);
+  }
 }
 
 TEST(FpAbstraction, trailing_exponent_predicate_matches_the_concrete_definition)
@@ -1335,4 +2090,409 @@ TEST(FpAbstraction, binary128_shape_lemma_cuts_its_candidate)
   const ASTNode lemma = fpAbstractionShapeLemma(c, {x, x}, t);
   ASSERT_FALSE(lemma.IsNull());
   EXPECT_EQ(mgr.ASTFalse, NonMemberBVConstEvaluator(&mgr, lemma));
+}
+
+namespace
+{
+struct CandidateFixture
+{
+  STPMgr mgr;
+  SubstitutionMap substitutions{&mgr};
+  Simplifier simplifier{&mgr, &substitutions};
+  ArrayTransformer transformer{&mgr, &simplifier};
+  FpEncodingContext encoding{&mgr};
+  AbsRefine_CounterExample model{&mgr, &simplifier, &transformer};
+  FpAbstraction abstraction{&mgr};
+
+  CandidateFixture()
+  {
+    mgr.UserFlags.fp_abstraction = true;
+    mgr.UserFlags.fp_abstraction_width = 4;
+    mgr.UserFlags.fp_abstraction_tiers = 0;
+    mgr.UserFlags.fp_abstraction_shape = false;
+    mgr.UserFlags.fp_abstraction_relational = false;
+    mgr.UserFlags.fp_abstraction_budget = 0;
+    model.setFpEncodingContext(&encoding);
+  }
+
+  const FpAbstraction::Application& division(uint64_t x, uint64_t y, uint64_t t)
+  {
+    const SourceSort format = SourceSort::floatingPoint(5, 11);
+    const ASTNode sx = mgr.CreateSourceSymbol("repair_x", format);
+    const ASTNode sy = mgr.CreateSourceSymbol("repair_y", format);
+    const ASTNode rm = rmConst(mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+    const ASTNode div = mgr.CreateTerm(FP_DIV, 16, ASTVec{rm, sx, sy});
+    abstraction.abstract(mgr.CreateNode(FP_ISNORMAL, div));
+    const auto& app = *abstraction.applications().at(0);
+    model.InsertIntoCounterExampleMap(sx, mgr.CreateBVConst(16, x));
+    model.InsertIntoCounterExampleMap(sy, mgr.CreateBVConst(16, y));
+    model.InsertIntoCounterExampleMap(app.proxies[1], mgr.CreateBVConst(16, x));
+    model.InsertIntoCounterExampleMap(app.proxies[2], mgr.CreateBVConst(16, y));
+    model.InsertIntoCounterExampleMap(app.surrogate, mgr.CreateBVConst(16, t));
+    return app;
+  }
+
+  const FpAbstraction::Application& operation(
+      Kind kind, unsigned eb, unsigned sb, unsigned mode,
+      const std::vector<uint64_t>& operands, uint64_t result,
+      bool symbolicMode = false)
+  {
+    mgr.UserFlags.fp_abstraction_ops = 1023;
+    const SourceSort format = SourceSort::floatingPoint(eb, sb);
+    ASTVec children, values;
+    if (kind != FP_REM)
+    {
+      children.push_back(symbolicMode
+                             ? mgr.CreateSourceSymbol("box_rm", SourceSort::roundingMode())
+                             : rmConst(mgr, mode));
+      values.push_back(mgr.CreateBVConst(5, mode));
+    }
+    for (size_t i = 0; i < operands.size(); ++i)
+    {
+      children.push_back(mgr.CreateSourceSymbol(
+          ("box_arg_" + std::to_string(i)).c_str(), format));
+      values.push_back(mgr.CreateBVConst(eb + sb, operands[i]));
+    }
+    const ASTNode op = mgr.CreateTerm(kind, eb + sb, children);
+    abstraction.abstract(mgr.CreateNode(FP_ISNORMAL, op));
+    const auto& app = *abstraction.applications().at(0);
+    for (size_t i = 0; i < children.size(); ++i)
+      if (!children[i].isConstant())
+      {
+        model.InsertIntoCounterExampleMap(children[i], values[i]);
+        model.InsertIntoCounterExampleMap(app.proxies[i], values[i]);
+      }
+    model.InsertIntoCounterExampleMap(app.surrogate,
+                                     mgr.CreateBVConst(eb + sb, result));
+    return app;
+  }
+};
+} // namespace
+
+TEST(FpAbstraction, remainder_box_counterexample_uses_only_a_value_lemma)
+{
+  CandidateFixture f;
+  f.mgr.UserFlags.fp_abstraction_box_lemmas = true;
+  const auto& app = f.operation(FP_REM, 8, 24, 0,
+                                {0x791b0000, 0x3fd90000}, 0x3ed80000);
+  ASSERT_EQ(FpAbstraction::Outcome::Conflict, f.abstraction.checkCandidate(f.model));
+  ASSERT_EQ(1u, f.abstraction.pendingLemmas().size());
+  EXPECT_EQ(1u, f.abstraction.statistics().valueLemmas);
+  EXPECT_EQ(0u, f.abstraction.statistics().boxLemmas);
+  // These operands are inside the old corner box, but their exact remainder
+  // has a different prefix. The valid value lemma must preserve this model.
+  f.model.ClearCounterExampleMap();
+  f.model.ClearComputeFormulaMap();
+  const uint64_t witness[] = {0x791b3fff, 0x3fd90000};
+  for (size_t i = 0; i < 2; ++i)
+    f.model.InsertIntoCounterExampleMap(app.proxies[i], f.mgr.CreateBVConst(32, witness[i]));
+  f.model.InsertIntoCounterExampleMap(app.surrogate, f.mgr.CreateBVConst(32, 0x3ed80000));
+  for (const ASTNode& lemma : f.abstraction.pendingLemmas())
+    EXPECT_EQ(f.mgr.ASTTrue, f.model.ModelValueOfFormula(lemma));
+}
+
+// Verify the actual emitted implications against exact symbolic circuits,
+// not against the corner evaluator that constructed them. Symbolic modes
+// check that widening retains the mode guard; both output signs are covered.
+TEST(FpAbstraction, operand_boxes_hold_against_exact_circuits)
+{
+  const unsigned modes[] = {symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN,
+                            symbolic_fp::ROUND_NEAREST_TIES_TO_AWAY,
+                            symbolic_fp::ROUND_TOWARD_POSITIVE,
+                            symbolic_fp::ROUND_TOWARD_NEGATIVE,
+                            symbolic_fp::ROUND_TOWARD_ZERO};
+  struct Case { Kind kind; std::vector<uint64_t> operands; };
+  // Format (3,15): 1.5, 1.25 and 0.5, with room for the 12-bit prefix
+  // and interior tuples that are not corners of its fraction box.
+  const Case cases[] = {{FP_MUL, {0xe000, 0xd000}},
+                        {FP_DIV, {0xe000, 0xd000}},
+                        {FP_SQRT, {0xe000}},
+                        {FP_ADD, {0xe000, 0xd000}},
+                        {FP_SUB, {0xe000, 0x8000}},
+                        {FP_FMA, {0xe000, 0xd000, 0x8000}},
+                        {FP_ROUNDTOINTEGRAL, {0xe000}}};
+  for (const Case& c : cases)
+    for (unsigned mode : modes)
+      for (bool negative : {false, true})
+      {
+        if (negative && c.kind == FP_SQRT)
+          continue;
+        SCOPED_TRACE(::testing::Message() << c.kind << " mode=" << mode
+                                          << " negative=" << negative);
+        CandidateFixture f;
+        f.mgr.UserFlags.fp_abstraction_box_lemmas = true;
+        std::vector<uint64_t> operands = c.operands;
+        // Avoid straddling a result-prefix boundary through cancellation,
+        // where the correct behavior would be to omit the optional box.
+        operands[0] += 12;
+        if (negative)
+          operands[0] |= 1u << 17;
+        const auto& app = f.operation(c.kind, 3, 15, mode, operands, 0, true);
+        ASSERT_EQ(FpAbstraction::Outcome::Conflict, f.abstraction.checkCandidate(f.model));
+        ASSERT_EQ(1u, f.abstraction.statistics().boxLemmas);
+        ASSERT_EQ(2u, f.abstraction.pendingLemmas().size());
+        const ASTNode exact = f.mgr.CreateNode(
+            FP_SMT_EQ, app.surrogateView,
+            f.mgr.CreateTerm(c.kind, 18, app.proxyViews));
+        ASSERT_EQ((std::vector<FpRuleId>{FpRuleId::REF_V1, FpRuleId::REF_B1}),
+                  f.abstraction.pendingRuleIds());
+        SCOPED_TRACE(fpRuleName(f.abstraction.pendingRuleIds().back()));
+        const ASTNode box = f.abstraction.pendingLemmas().back();
+        EXPECT_EQ(SOLVER_VALID,
+                  solve(f.mgr, conj(f.mgr, {exact, f.mgr.CreateNode(NOT, box)}), false));
+      }
+}
+
+TEST(FpAbstraction, operand_box_rejects_a_zero_divisor_endpoint)
+{
+  CandidateFixture f;
+  f.mgr.UserFlags.fp_abstraction_box_lemmas = true;
+  f.operation(FP_DIV, 3, 15, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN, {1, 1}, 0);
+  ASSERT_EQ(FpAbstraction::Outcome::Conflict, f.abstraction.checkCandidate(f.model));
+  EXPECT_EQ(0u, f.abstraction.statistics().boxLemmas);
+  EXPECT_EQ(1u, f.abstraction.statistics().valueLemmas);
+}
+
+TEST(FpAbstraction, repair_discards_pending_releases_without_marking_exact)
+{
+  for (bool restart : {false, true})
+  {
+    CandidateFixture f;
+    f.mgr.UserFlags.fp_abstraction_values = 0;
+    f.mgr.UserFlags.fp_abstraction_restart_width = restart ? 4 : 0;
+    const auto& app = f.division(0x3c00, 0x4000, 0x3c00); // 1/2 != 1
+    const auto conflict = restart ? FpAbstraction::Outcome::Restart
+                                  : FpAbstraction::Outcome::Conflict;
+    ASSERT_EQ(conflict, f.abstraction.checkCandidate(f.model));
+    EXPECT_TRUE(app.releasePending);
+    EXPECT_FALSE(app.released);
+    f.abstraction.acceptRepairedCandidate();
+    EXPECT_TRUE(f.abstraction.pendingRuleIds().empty());
+    EXPECT_FALSE(app.releasePending);
+    EXPECT_FALSE(app.released);
+    EXPECT_FALSE(f.abstraction.hasPendingLemma());
+    EXPECT_FALSE(f.abstraction.restartRequested());
+    EXPECT_EQ(0u, f.abstraction.statistics().releases);
+    f.abstraction.beginQuery();
+    EXPECT_EQ(conflict, f.abstraction.checkCandidate(f.model));
+  }
+}
+
+TEST(FpAbstraction, committed_release_replays_with_fresh_symbol_bindings)
+{
+  CandidateFixture f;
+  f.mgr.UserFlags.fp_abstraction_values = 0;
+  f.abstraction.forbidRestarts();
+  f.abstraction.useBitPreciseEqualities();
+  const auto& app = f.division(0x3c00, 0x4000, 0x3c00); // 1/2 != 1
+  ASSERT_EQ(FpAbstraction::Outcome::Conflict, f.abstraction.checkCandidate(f.model));
+  ASSERT_TRUE(app.releasePending);
+  ASSERT_EQ(std::vector<FpRuleId>{FpRuleId::REF_E1},
+            f.abstraction.pendingRuleIds());
+  SCOPED_TRACE(fpRuleName(f.abstraction.pendingRuleIds().front()));
+  for (unsigned epoch = 0; epoch < 2; ++epoch)
+  {
+    std::unique_ptr<SATSolver> solver(createSATSolver(f.mgr.UserFlags));
+    ToSATAIG tosat(&f.mgr, &f.transformer, false);
+    ASSERT_TRUE(solver->supportsAssumptions());
+    // Give the second backend different variable numbers, as a real
+    // rebuild does; replay must bind the symbols through its new live map.
+    for (unsigned i = 0; i < epoch * 9; ++i)
+      solver->newVar();
+    auto& live = tosat.SATVar_to_SymbolIndexMap();
+    for (const ASTNode& s : f.abstraction.protectedSymbols())
+      for (unsigned i = 0; i < s.GetValueWidth(); ++i)
+      {
+        const unsigned v = solver->newVar();
+        solver->setFrozen(v);
+        live[s].push_back(v);
+      }
+    if (epoch == 0)
+      f.abstraction.encodePendingLemmas(*solver, &tosat);
+    else
+    {
+      f.abstraction.resetForNewSolverEpoch();
+      ASSERT_TRUE(f.abstraction.hasUnassertedFacts());
+      ASSERT_EQ(std::vector<FpRuleId>{FpRuleId::REF_E1},
+                f.abstraction.committedRuleIds());
+      EXPECT_TRUE(f.abstraction.pendingRuleIds().empty());
+      ASSERT_TRUE(app.released);
+      f.abstraction.syncPermanentFacts(*solver, &tosat);
+    }
+    ASSERT_EQ(std::vector<FpRuleId>{FpRuleId::REF_E1},
+              f.abstraction.committedRuleIds());
+    EXPECT_TRUE(f.abstraction.pendingRuleIds().empty());
+    ASSERT_TRUE(app.released);
+    ASSERT_FALSE(app.releasePending);
+    ASSERT_FALSE(f.abstraction.hasUnassertedFacts());
+    const auto permits = [&](unsigned x, unsigned y, unsigned t) {
+      SATSolver::vec_literals assumptions;
+      const ASTNode symbols[] = {app.proxies[1], app.proxies[2], app.surrogate};
+      const unsigned values[] = {x, y, t};
+      for (unsigned j = 0; j < 3; ++j)
+        for (unsigned i = 0; i < 16; ++i)
+          assumptions.push(SATSolver::mkLit(live.at(symbols[j])[i],
+                                            ((values[j] >> i) & 1) == 0));
+      bool timeout = false;
+      const bool sat = solver->solveWithAssumptions(assumptions, timeout);
+      EXPECT_FALSE(timeout);
+      return sat;
+    };
+    EXPECT_FALSE(permits(0x3c00, 0x4000, 0x3c00));
+    EXPECT_TRUE(permits(0x3c00, 0x4000, 0x3800));
+    // Retracting the former operand assumptions must leave only the
+    // operation's equation, with no stale operand values pinned in it.
+    EXPECT_FALSE(permits(0x3c00, 0x3c00, 0x3800));
+    EXPECT_TRUE(permits(0x3c00, 0x3c00, 0x3c00));
+  }
+}
+
+TEST(FpAbstraction, repair_restores_discarded_value_budgets)
+{
+  CandidateFixture f;
+  f.mgr.UserFlags.fp_abstraction_values = 1;
+  const auto& app = f.division(0x3c00, 0x4000, 0x3c00);
+  ASSERT_EQ(FpAbstraction::Outcome::Conflict, f.abstraction.checkCandidate(f.model));
+  ASSERT_EQ(1u, app.valueLemmas);
+  EXPECT_EQ(std::vector<FpRuleId>{FpRuleId::REF_V1},
+            f.abstraction.pendingRuleIds());
+  f.abstraction.acceptRepairedCandidate();
+  EXPECT_TRUE(f.abstraction.pendingRuleIds().empty());
+  EXPECT_EQ(0u, app.valueLemmas);
+  EXPECT_EQ(0u, f.abstraction.statistics().valueLemmas);
+  // No beginQuery: the transaction itself, not the next query, restores it.
+  EXPECT_EQ(FpAbstraction::Outcome::Conflict, f.abstraction.checkCandidate(f.model));
+  EXPECT_EQ(1u, app.valueLemmas);
+  EXPECT_FALSE(app.releasePending);
+}
+
+TEST(FpAbstraction, nan_value_lemma_uses_the_candidate_check_equality)
+{
+  for (bool bitPrecise : {false, true})
+  {
+    CandidateFixture f;
+    f.mgr.UserFlags.fp_abstraction_values = 1;
+    if (bitPrecise)
+      f.abstraction.useBitPreciseEqualities();
+    // Exact 0/0 is the circuit's canonical NaN, not this payload.
+    const auto& app = f.division(0, 0, 0x7e01);
+    const auto expected = bitPrecise ? FpAbstraction::Outcome::Conflict
+                                    : FpAbstraction::Outcome::Consistent;
+    EXPECT_EQ(expected, f.abstraction.checkCandidate(f.model));
+    // A bit-precise value lemma must cut; falling through to release is
+    // safe but would conceal a still-incorrect NaN-class value lemma.
+    EXPECT_EQ(bitPrecise ? 1u : 0u, app.valueLemmas);
+    EXPECT_FALSE(app.releasePending);
+  }
+}
+
+TEST(FpAbstraction, nan_operand_value_lemma_pins_the_class_in_the_semantic_host)
+{
+  // mul(NaN, 1) is NaN and the candidate says 1. Under SMT-LIB equality
+  // the operand's proxy may carry any payload, so the value lemma must cut
+  // the same tuple with another payload as well; a bit-precise host defines
+  // its proxies bit-for-bit and pins the payload it saw.
+  for (bool bitPrecise : {false, true})
+  {
+    CandidateFixture f;
+    if (bitPrecise)
+      f.abstraction.useBitPreciseEqualities();
+    const auto& app = f.operation(FP_MUL, 5, 11,
+                                  symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN,
+                                  {0x7e01, 0x3c00}, 0x3c00);
+    ASSERT_EQ(FpAbstraction::Outcome::Conflict,
+              f.abstraction.checkCandidate(f.model));
+    ASSERT_EQ(1u, f.abstraction.pendingLemmas().size());
+    ASSERT_EQ(FpRuleId::REF_V1, f.abstraction.pendingRuleIds().at(0));
+    const ASTNode lemma = f.abstraction.pendingLemmas().at(0);
+    EXPECT_EQ(f.mgr.ASTFalse, f.model.ModelValueOfFormula(lemma));
+    // The same tuple and result, with another NaN payload in the operand.
+    // The model map refuses overwrites, so it is rebuilt.
+    f.model.ClearCounterExampleMap();
+    f.model.ClearComputeFormulaMap();
+    f.model.InsertIntoCounterExampleMap(app.children[1],
+                                        f.mgr.CreateBVConst(16, 0x7f55));
+    f.model.InsertIntoCounterExampleMap(app.proxies[1],
+                                        f.mgr.CreateBVConst(16, 0x7f55));
+    f.model.InsertIntoCounterExampleMap(app.children[2],
+                                        f.mgr.CreateBVConst(16, 0x3c00));
+    f.model.InsertIntoCounterExampleMap(app.proxies[2],
+                                        f.mgr.CreateBVConst(16, 0x3c00));
+    f.model.InsertIntoCounterExampleMap(app.surrogate,
+                                        f.mgr.CreateBVConst(16, 0x3c00));
+    EXPECT_EQ(bitPrecise ? f.mgr.ASTTrue : f.mgr.ASTFalse,
+              f.model.ModelValueOfFormula(lemma));
+  }
+}
+
+TEST(FpAbstraction, invalid_mode_candidate_is_skipped_not_evaluated)
+{
+  // Only a popped unit's unconstrained mode proxy can hold a pattern that
+  // is not a rounding-mode encoding; such a record is outside the active
+  // closure, so the check neither evaluates nor refines it.
+  for (unsigned pattern : {0u, 3u, 31u})
+  {
+    CandidateFixture f;
+    f.abstraction.useBitPreciseEqualities();
+    const auto& app = f.operation(FP_DIV, 5, 11, pattern, {0x3c00, 0x3c00},
+                                  0x0000, true);
+    EXPECT_EQ(FpAbstraction::Outcome::Consistent,
+              f.abstraction.checkCandidate(f.model));
+    EXPECT_EQ(1u, f.abstraction.statistics().skippedChecks);
+    EXPECT_EQ(0u, f.abstraction.statistics().checks);
+    EXPECT_EQ(0u, app.valueLemmas);
+    EXPECT_FALSE(app.releasePending);
+    EXPECT_TRUE(f.abstraction.pendingLemmas().empty());
+  }
+}
+
+TEST(FpAbstraction, active_closure_filter_reads_only_armed_records)
+{
+  // Two records in one abstraction. With a closure holding only the first
+  // armed, the second stands for a popped unit's record: it is neither read
+  // nor refined, and its wrong surrogate does not disturb the verdict.
+  // Disarmed, it is read and refuted as before.
+  CandidateFixture f;
+  f.mgr.UserFlags.fp_abstraction_ops = 1023;
+  const SourceSort format = SourceSort::floatingPoint(5, 11);
+  const ASTNode a = f.mgr.CreateSourceSymbol("closure_a", format);
+  const ASTNode b = f.mgr.CreateSourceSymbol("closure_b", format);
+  const ASTNode c = f.mgr.CreateSourceSymbol("closure_c", format);
+  const ASTNode d = f.mgr.CreateSourceSymbol("closure_d", format);
+  const ASTNode rm = rmConst(f.mgr, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode mul = f.mgr.CreateTerm(FP_MUL, 16, ASTVec{rm, a, b});
+  const ASTNode div = f.mgr.CreateTerm(FP_DIV, 16, ASTVec{rm, c, d});
+  f.abstraction.abstract(conj(f.mgr, {f.mgr.CreateNode(FP_ISNORMAL, mul),
+                                      f.mgr.CreateNode(FP_ISNORMAL, div)}));
+  ASSERT_EQ(2u, f.abstraction.applications().size());
+  const auto& first = *f.abstraction.applications().at(0);
+  const auto& second = *f.abstraction.applications().at(1);
+  const auto& mulApp = first.kind == FP_MUL ? first : second;
+  const auto& divApp = first.kind == FP_MUL ? second : first;
+  ASSERT_EQ(FP_DIV, divApp.kind);
+  const ASTNode one = f.mgr.CreateBVConst(16, 0x3c00);
+  const ASTNode zero = f.mgr.CreateBVConst(16, 0);
+  for (const ASTNode& s : {a, b, c, d})
+    f.model.InsertIntoCounterExampleMap(s, one);
+  for (const auto* app : {&mulApp, &divApp})
+    for (size_t i = 1; i < app->proxies.size(); ++i)
+      f.model.InsertIntoCounterExampleMap(app->proxies[i], one);
+  // 1 * 1 = 1 is right; 1 / 1 = 0 is wrong.
+  f.model.InsertIntoCounterExampleMap(mulApp.surrogate, one);
+  f.model.InsertIntoCounterExampleMap(divApp.surrogate, zero);
+
+  f.abstraction.setActiveClosure({mulApp.surrogate});
+  EXPECT_EQ(FpAbstraction::Outcome::Consistent,
+            f.abstraction.checkCandidate(f.model));
+  EXPECT_EQ(1u, f.abstraction.statistics().checks);
+  EXPECT_EQ(1u, f.abstraction.statistics().skippedChecks);
+  EXPECT_EQ(1u, f.abstraction.statistics().inactiveSkips);
+  EXPECT_EQ(0u, divApp.valueLemmas);
+  EXPECT_TRUE(f.abstraction.pendingLemmas().empty());
+
+  f.abstraction.disarmActiveClosure();
+  EXPECT_EQ(FpAbstraction::Outcome::Conflict,
+            f.abstraction.checkCandidate(f.model));
+  EXPECT_EQ(3u, f.abstraction.statistics().checks);
+  EXPECT_EQ(1u, divApp.valueLemmas);
 }

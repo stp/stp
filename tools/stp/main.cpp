@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "main_common.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 
 #include <CLI/CLI.hpp>
 
@@ -116,6 +117,8 @@ public:
   // A named, atomic schema-mask/refinement-round pair. Empty means the two
   // lower-level options retain their independently parsed values.
   std::string bv_abstraction_profile;
+  std::string fp_abstraction_ops;
+  std::string fp_abstraction_chain_ops;
 
   // Which of the two scope options were actually given. The older MULT
   // switch covers all three nonlinear operations while it is the only one
@@ -150,6 +153,10 @@ public:
   // input file.
   std::string uf_ackermann;
   CLI::Option* uf_ackermann_option = nullptr;
+  // Likewise for UserFlags.fp_abstraction_constant_operands.
+  std::string fp_abstraction_constant_operands;
+  CLI::Option* fp_constant_operands_option = nullptr;
+
   // Likewise for UserFlags.uf_bv_term_abstraction.
   std::string uf_bv_term_abstraction;
   CLI::Option* uf_bv_term_abstraction_option = nullptr;
@@ -930,6 +937,147 @@ void ExtraMain::create_options()
            "works with both SymFPU and native arithmetic)",
            bb_group);
 
+  const char* const fp_abstraction_group =
+      "Floating-point abstraction options";
+  bool_arg("--fp-abstraction", bm->UserFlags.fp_abstraction,
+           "abstract selected floating-point operations to same-sort "
+           "surrogates constrained by exact class/sign, order, exponent-band "
+           "and identity rules; check candidates against the exact evaluator "
+           "and release the exact encoding only after a bounded number of "
+           "value lemmas (batch solves only)",
+           fp_abstraction_group);
+  app.add_option("--fp-abstraction-ops", fp_abstraction_ops,
+                 "comma-separated operations to abstract: mul, div, sqrt, "
+                 "add, sub, fma, rem, rti, to_sbv, to_ubv; 'default' is "
+                 "mul,div,sqrt,fma and 'all' every one of them")
+      ->group(fp_abstraction_group);
+  app.add_option("--fp-abstraction-chain-ops", fp_abstraction_chain_ops,
+                 "operations abstracted only as links in a chain, when an "
+                 "operand is the result of an application already "
+                 "abstracted (the names of --fp-abstraction-ops); none by "
+                 "default")
+      ->group(fp_abstraction_group);
+  app.add_option("--fp-abstraction-width",
+                 bm->UserFlags.fp_abstraction_width,
+                 "minimum packed width (exponent plus significand bits) at "
+                 "which an operation is abstracted")
+      ->group(fp_abstraction_group)
+      ->capture_default_str();
+  app.add_option("--fp-abstraction-tiers",
+                 bm->UserFlags.fp_abstraction_tiers,
+                 "highest rule tier emitted with a surrogate: 0 the exact "
+                 "class/sign shell, 1 adds order facts, 2 adds exponent "
+                 "bands and overflow selection, 3 adds identities")
+      ->group(fp_abstraction_group)
+      ->capture_default_str();
+  app.add_option("--fp-abstraction-values",
+                 bm->UserFlags.fp_abstraction_values,
+                 "value lemmas one abstracted operation may take before its "
+                 "exact encoding is released")
+      ->group(fp_abstraction_group)
+      ->capture_default_str();
+  bool_arg("--fp-abstraction-shape", bm->UserFlags.fp_abstraction_shape,
+           "spend model-instantiated trailing-exponent (exactness) lemmas "
+           "before value lemmas",
+           fp_abstraction_group);
+  bool_arg("--fp-abstraction-relational",
+           bm->UserFlags.fp_abstraction_relational,
+           "emit pairwise monotonicity lemmas between abstracted operations "
+           "that share an operand, for the pair a candidate violates",
+           fp_abstraction_group);
+  app.add_option("--fp-abstraction-relational-last-width",
+                 bm->UserFlags.fp_abstraction_relational_last_width,
+                 "packed width at or above which a monotonicity lemma is "
+                 "stated only once the record's value budget is spent, "
+                 "instead of before its first value lemma: keeps wide "
+                 "witness hunts from stalling under many pairwise facts, "
+                 "at the cost of the narrow ones the facts carry; 0 never, "
+                 "128 by default")
+      ->group(fp_abstraction_group)
+      ->capture_default_str();
+  bool_arg("--fp-abstraction-box-lemmas",
+           bm->UserFlags.fp_abstraction_box_lemmas,
+           "add an operand-box result-prefix constraint beside value lemmas "
+           "for mul/div/sqrt/add/sub/fma/rti, when monotone corner bounds "
+           "establish it (excludes remainder and integer conversions)",
+           fp_abstraction_group);
+  bool_arg("--fp-abstraction-phase-hints",
+           bm->UserFlags.fp_abstraction_phase_hints,
+           "after a refuted candidate, suggest to the SAT solver the "
+           "operand values it tried and the exact result for them, so the "
+           "next candidate keeps the operands and is consistent at once "
+           "when nothing else forbids it",
+           fp_abstraction_group);
+  bool_arg("--fp-abstraction-repair", bm->UserFlags.fp_abstraction_repair,
+           "before refining a candidate the abstraction refuted, replay the "
+           "original formula under it and accept the candidate as a model "
+           "when the formula holds for its values of the original symbols",
+           fp_abstraction_group);
+  app.add_option("--fp-abstraction-restart-limit",
+                 bm->UserFlags.fp_abstraction_restart_limit,
+                 "how many times one query may run the pipeline again to "
+                 "release operations exactly; past it, and whenever a run "
+                 "abstracted no fewer operations than the run before it, "
+                 "releases are spliced instead")
+      ->group(fp_abstraction_group)
+      ->capture_default_str();
+  app.add_option("--fp-abstraction-significand-bits",
+                 bm->UserFlags.fp_abstraction_significand_bits,
+                 "significand bits of the reduced-precision bands emitted "
+                 "with an abstracted multiplication, division or square "
+                 "root: the operands truncated to this many bits bound the "
+                 "result through a small multiplier; 0 emits none")
+      ->group(fp_abstraction_group)
+      ->capture_default_str();
+  app.add_option("--fp-abstraction-significand-bits-wide",
+                 bm->UserFlags.fp_abstraction_significand_bits_wide,
+                 "the same at packed widths of 128 bits and above; 0 uses "
+                 "--fp-abstraction-significand-bits everywhere")
+      ->group(fp_abstraction_group)
+      ->capture_default_str();
+  app.add_option("--fp-abstraction-restart-width",
+                 bm->UserFlags.fp_abstraction_restart_width,
+                 "packed width at or above which releasing a multiplication, "
+                 "division, square root, fma or remainder exactly runs the "
+                 "whole pipeline again with it lowered exactly, so that the "
+                 "bit-vector abstraction can see its circuit, instead of "
+                 "splicing the circuit into the running solver; 0 never "
+                 "restarts, and is the default unless --bv-term-abstraction "
+                 "is on, which sets 128")
+      ->group(fp_abstraction_group)
+      ->capture_default_str();
+  fp_constant_operands_option =
+      app.add_option("--fp-abstraction-constant-operands",
+                     fp_abstraction_constant_operands,
+                     "whether an operation one of whose float operands is a "
+                     "constant is abstracted: 'auto' (the default) does so "
+                     "when the configuration abstracts an operation of two "
+                     "operands it does not know or one whose operand is "
+                     "another abstracted operation, 'on' and 'off' decide it "
+                     "for every query. Declined, such an operation is "
+                     "lowered exactly, since a constant's circuit is small "
+                     "and propagates where the abstraction would have the "
+                     "solver search -- which wins on queries that only scale "
+                     "their unknowns and loses on those that compute with "
+                     "them")
+          ->group(fp_abstraction_group)
+          ->type_name("TEXT")
+          ->default_str("auto");
+  app.add_flag("--fp-abstraction-decline-pinned",
+               bm->UserFlags.fp_abstraction_decline_pinned,
+               "leave exact any operation whose result the query equates "
+               "directly with a constant or a conversion -- the witness-hunt "
+               "signature, where the solve must produce the exact value "
+               "anyway and a surrogate only defers the circuit")
+      ->group(fp_abstraction_group);
+  app.add_option("--fp-abstraction-budget",
+                 bm->UserFlags.fp_abstraction_budget,
+                 "wall-clock seconds after which a batch refinement releases "
+                 "every remaining record exactly, spliced in place, bounding "
+                 "a loss near the budget instead of the timeout; 0 never")
+      ->group(fp_abstraction_group)
+      ->capture_default_str();
+
   bool_arg("--bb.fp-native-domain", bm->UserFlags.fp_native_domain,
            "Mine simple finite box bounds and omit NaN/infinity cases that "
            "are impossible under those top-level facts (enabled by default)",
@@ -1369,6 +1517,38 @@ int ExtraMain::parse_options(int argc, char** argv)
     }
   }
 
+  if (!fp_abstraction_ops.empty() &&
+      !parseFpAbstractionOps(fp_abstraction_ops,
+                             bm->UserFlags.fp_abstraction_ops))
+  {
+    cerr << "ERROR: --fp-abstraction-ops: unknown operation in '"
+         << fp_abstraction_ops
+         << "' (expected mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, "
+            "to_ubv, default or all)"
+         << endl;
+    return -1;
+  }
+  if (!fp_abstraction_chain_ops.empty() &&
+      !parseFpAbstractionOps(fp_abstraction_chain_ops,
+                             bm->UserFlags.fp_abstraction_chain_ops))
+  {
+    cerr << "ERROR: --fp-abstraction-chain-ops: unknown operation in '"
+         << fp_abstraction_chain_ops
+         << "' (expected mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, "
+            "to_ubv, default, all or none)"
+         << endl;
+    return -1;
+  }
+  // A release by restart exists so that the bit-vector abstraction can see
+  // the released circuit; without it the restart loses more than it wins
+  // (docs/fp-abstraction.rst, the release step), so it is on by default
+  // only with --bv-term-abstraction, and then from 128 bits: at binary64
+  // the smaller circuit it buys is worth less than the learnt clauses it
+  // throws away.
+  if (app.count("--fp-abstraction-restart-width") == 0 &&
+      bm->UserFlags.bv_term_abstraction)
+    bm->UserFlags.fp_abstraction_restart_width = 128;
+
   onePrintBack = bm->UserFlags.get_print_output_at_all();
 
   if (disable_opt_inc)
@@ -1558,6 +1738,24 @@ int ExtraMain::parse_options(int argc, char** argv)
     }
   }
 #endif
+
+  if (fp_constant_operands_option->count())
+  {
+    typedef UserDefinedFlags::FpConstantOperandMode Mode;
+    if (fp_abstraction_constant_operands == "on")
+      bm->UserFlags.fp_abstraction_constant_operands = Mode::ON;
+    else if (fp_abstraction_constant_operands == "off")
+      bm->UserFlags.fp_abstraction_constant_operands = Mode::OFF;
+    else if (fp_abstraction_constant_operands == "auto")
+      bm->UserFlags.fp_abstraction_constant_operands = Mode::AUTO;
+    else
+    {
+      cerr << "ERROR: --fp-abstraction-constant-operands must be one of "
+              "'on', 'off' or 'auto'"
+           << endl;
+      exit(-1);
+    }
+  }
 
   if (uf_bv_term_abstraction_option->count())
   {

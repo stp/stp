@@ -22,6 +22,7 @@ add_library(floatblaster OBJECT
     DecimalLiteral.cpp
     FloatBlaster.cpp
     FloatBlast.cpp
+    FpAbstraction.cpp
     FpAbstractionRules.cpp
     FpDomainSimplify.cpp
     FpEncodingContext.cpp
