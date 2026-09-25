@@ -59,6 +59,9 @@ class FpAbstraction;
 class FpEncodingContext;
 class ArrayReadRefinementProgress;
 class UFTheoryAdapter;
+namespace lra {
+class LraCoordinator;
+}
 
 class AbsRefine_CounterExample // not copyable
 {
@@ -325,6 +328,38 @@ public:
   // Computes the truth value of a formula w.r.t counter_example
   ASTNode ComputeFormulaUsingModel(const ASTNode& form);
 
+  // QueryFormulaAgainstModel() saves and restores the two maps that
+  // ComputeFormulaUsingModel() mutates (the model, CounterExampleMap, and
+  // its memo, ComputeFormulaMap) on every call, so a caller that evaluates
+  // many Boolean leaves of one formula against one model pays that
+  // save/restore per leaf -- O(model size) each, and the model grows with an
+  // incremental session's base. This holds one save for a whole run of
+  // unguarded ComputeFormulaUsingModel() calls and restores once at scope
+  // exit. Rollback semantics match the per-call guard: every entry the run
+  // materialised is undone. Sound to batch because materialisation is
+  // deterministic in the fixed model, so a default one leaf writes is the
+  // same value the next leaf would have written.
+  class ModelQueryScope
+  {
+    AbsRefine_CounterExample& ce_;
+    ASTNodeMap savedCells_;
+    ASTNodeMap savedFormulas_;
+
+  public:
+    explicit ModelQueryScope(AbsRefine_CounterExample& ce)
+        : ce_(ce), savedCells_(ce.CounterExampleMap),
+          savedFormulas_(ce.ComputeFormulaMap)
+    {
+    }
+    ~ModelQueryScope()
+    {
+      ce_.CounterExampleMap = std::move(savedCells_);
+      ce_.ComputeFormulaMap = std::move(savedFormulas_);
+    }
+    ModelQueryScope(const ModelQueryScope&) = delete;
+    ModelQueryScope& operator=(const ModelQueryScope&) = delete;
+  };
+
   // Do two array terms denote the same array in the finished model?
   //
   // Decided from the model alone -- no abstraction variable, no
@@ -407,7 +442,9 @@ public:
   CallSAT_ResultCheck(SATSolver& SatSolver, const ASTNode& modified_input,
                       const ASTNode& original_input,
                       const ASTNode& submitted_input, ToSATBase* tosat,
-                      bool refinement);
+                      bool refinement
+                      , lra::LraCoordinator* lra_coordinator = NULL
+                      );
 
   SOLVER_RETURN_TYPE
   SATBased_ArrayReadRefinement(SATSolver& newS, const ASTNode& original_input,
@@ -422,6 +459,13 @@ public:
     std::map<ASTNode, size_t> frontiers;
     std::map<ASTNode, std::vector<int64_t>> guards;
   };
+
+  // One same-candidate legacy array-read refinement step.  It may encode one
+  // deterministic checker-owned batch, but never invokes SAT; the LRA
+  // coordinator's outer loop owns the following re-solve.
+  bool AddArrayReadRefinementForCandidate(
+      SATSolver& solver, ToSATBase* tosat,
+      ArrayReadRefinementProgress* progress = NULL);
 
   // Path lemmas for the abstracted write-chain reads: with emitAll false,
   // every clause up to each violated row's model resolution point; with

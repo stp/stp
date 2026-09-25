@@ -32,6 +32,10 @@ THE SOFTWARE.
 #include <set>
 #include <sstream>
 
+#include <limits>
+#include <set>
+#include <stdexcept>
+
 namespace stp
 {
 
@@ -49,14 +53,17 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   }
 
   QueryPhaseScope encoding(bm->query_timing, QueryPhase::EncodingOther);
+  ASTNode materialized_input = input;
 
   // Shortcut if known. This avoids calling the setup of the CNF generator.
   // setup of the CNF generator is expensive. NB, these checks have to occur
   // after calling the sat solver (if it's not the first time.)
-  if (input == ASTFalse)
+  if (materialized_input == ASTFalse)
+  {
     return false;
+  }
 
-  if (input == ASTTrue)
+  if (materialized_input == ASTTrue)
   {
     // A formula which preprocessing proved true can still own active UF
     // results and argument names.  They are the sole candidate authority for
@@ -85,7 +92,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   // `false` alone would be read as UNSAT. Raising the soft-timeout flag is
   // what makes CallSAT_ResultCheck report SOLVER_UNKNOWN instead -- it tests
   // that flag before it tests this return value.
-  if (!bitblast(input, needAbsRef, cnf))
+  if (!bitblast(materialized_input, needAbsRef, cnf))
   {
     bm->soft_timeout_expired = true;
     return false;
@@ -681,6 +688,15 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
       if (v[i] != ~((unsigned)0))
         satSolver.setFrozen(v[i]);
   };
+  for (const ASTNode& symbol : protectedSymbols)
+  {
+    const ASTNodeToSATVar::const_iterator found = nodeToSATVar.find(symbol);
+    if (found == nodeToSATVar.end())
+      continue;
+    for (const unsigned variable : found->second)
+      if (variable != ~static_cast<unsigned>(0))
+        satSolver.setFrozen(variable);
+  }
 
   for (ArrayTransformer::ArrType::iterator it =
            arrayTransformer->arrayToIndexToRead.begin();
@@ -1027,14 +1043,34 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
 {
   bm->checkPreparation(PreparationStage::Encoding);
   bm->GetRunTimes()->start(RunTimes::Solving);
-  // The injectivity guard is the only assumption the batch pipeline makes,
-  // and it is rebuilt on every round because a round that retracted it must
-  // not put it back. Every other clause in this encoding is asserted, so an
-  // empty vector here is the ordinary case and the helper solves plainly.
-  SATSolver::vec_literals assumps;
-  injectivity_.assumeInto(assumps);
-  bool result =
-      bm->solveRetractingInjectivity(satSolver, assumps, injectivity_);
+  // The LRA activation, when present, precedes the optional UF injectivity
+  // guard. solveRetractingInjectivity requires the retractable guard last so
+  // it can remove only that assumption and retain the exact query activation.
+  SATSolver::vec_literals assumptions;
+  for (const ASTNode& required : requiredSolveAssumptions)
+  {
+    if (!satSolver.supportsAssumptions())
+    {
+      internalSolveFailure =
+          "configured SAT backend lacks required solve assumptions";
+      break;
+    }
+    const ASTNodeToSATVar::const_iterator found = nodeToSATVar.find(required);
+    if (found == nodeToSATVar.end() || found->second.size() != 1 ||
+        found->second.front() == ~static_cast<unsigned>(0) ||
+        !satSolver.validVariable(found->second.front()))
+    {
+      internalSolveFailure =
+          "solve activation has no complete AST-to-SAT binding";
+      break;
+    }
+    assumptions.push(SATSolver::mkLit(found->second.front(), false));
+  }
+  injectivity_.assumeInto(assumptions);
+  bool result = false;
+  if (internalSolveFailure.empty())
+    result = bm->solveRetractingInjectivity(
+        satSolver, assumptions, injectivity_);
   bm->GetRunTimes()->stop(RunTimes::Solving);
 
   if (bm->soft_timeout_expired)
@@ -1051,6 +1087,17 @@ ToSATAIG::refineAbstractions(SATSolver& solver)
 {
   return abstraction_.refine(solver, nodeToSATVar);
 }
+
+bool ToSATAIG::setRequiredSolveAssumption(const ASTNode& symbol)
+{
+  if (!first || symbol.IsNull() || symbol.GetKind() != SYMBOL ||
+      symbol.GetSourceSort().kind() != SourceSort::Kind::Bool)
+    return false;
+  requiredSolveAssumptions.assign(1, symbol);
+  protectSymbol(symbol);
+  return true;
+}
+
 
 ToSATAIG::~ToSATAIG()
 {

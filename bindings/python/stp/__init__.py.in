@@ -55,3 +55,4 @@ from .stp import (
 # the package should re-export. test_package_reexports_everything_public keeps
 # the two from drifting apart again.
 from .stp import __all__ as __all__
+from .stp import ExactRealValue, RealExpr, real, reals

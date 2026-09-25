@@ -39,14 +39,24 @@ THE SOFTWARE.
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Util/Attributes.h"
+#include "stp/config.h"
 #include <ankerl/unordered_dense.h>
 #include <cstdint>
 #include <set>
 
 namespace stp
 {
+namespace lra {
+class Frontend;
+class PreregistrationBuilder;
+class LraAtomRegistry;
+class LraCoordinator;
+class RealModel;
+}
 class ExtensionalityContext;
 class UFContext;
+class ASTRealConst;
+class LraAstState;
 class FpAbstraction;
 
 // The five SMT-LIB floating-point special values. Their nodes are ordinary
@@ -66,10 +76,17 @@ enum class FPSpecial
  */
 class STPMgr
 {
+  friend class Cpp_interface;
   friend class ASTNode;
   friend class ASTInterior;
   friend class ASTBVConst;
+  friend class ASTRealConst;
   friend class ASTSymbol;
+  friend class lra::Frontend;
+  friend class lra::PreregistrationBuilder;
+  friend class lra::LraAtomRegistry;
+  friend class lra::LraCoordinator;
+  friend class lra::RealModel;
   friend ASTNode HashingNodeFactory::CreateNode(
       Kind kind, ASTChildren back_children);
 
@@ -129,6 +146,22 @@ private:
 
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
+
+  // Created only by the private LRA frontend, on the first Real
+  // construction.  The incomplete type keeps ExactRational, IMath, frontend
+  // IDs, and their allocation policy out of every installed header.
+  LraAstState* lra_ast_state = nullptr;
+
+  ASTRealConst* LookupOrCreateRealConst(ASTRealConst& value);
+  void EraseRealConst(ASTRealConst* value);
+  void RecordRealSymbol(const ASTNode& symbol);
+  void RegisterLraAssertion(const ASTNode& assertion);
+  void PushLraAssertionFrame();
+  void PopLraAssertionFrame();
+  void DestroyLraAtomRegistry();
+  void DestroyLraAstState();
+  void ResetLraStateForPublicReset();
+  void InstallRealModel(lra::RealModel* model);
 
   uint8_t last_iteration;
 
@@ -475,6 +508,7 @@ private:
   // assertions in that logical context. Logical contexts are
   // created by PUSH/POP
   vector<ASTVec*> _asserts;
+  size_t lra_refused_depth = 0;
 
   // Memo table that tracks terms already seen
   ASTNodeMap TermsAlreadySeenMap;
@@ -499,6 +533,10 @@ private:
 
   // Create unique ASTSymbol node.
   ASTSymbol* LookupOrCreateSymbol(ASTSymbol& s);
+  ASTNode CreateInternalSourceSymbol(const char* name,
+                                     const SourceSort& source_sort);
+  ASTNode CreateFreshInternalSourceVariable(const SourceSort& source_sort,
+                                            const std::string& prefix);
 
   // Called by ASTNode constructors to uniqueify ASTBVConst
   ASTBVConst* LookupOrCreateBVConst(ASTBVConst& s);
@@ -631,6 +669,16 @@ public:
                                    unsigned exp_width, unsigned sig_width);
   DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
 
+  // Exact Real construction. Text is parsed only by the private
+  // ExactRational implementation; no binary floating representation enters
+  // this boundary. The two-string form requires integer decimal components.
+  DLL_PUBLIC ASTNode CreateRealConst(const std::string& decimal_or_fraction);
+  DLL_PUBLIC ASTNode CreateRealConst(const std::string& numerator,
+                                     const std::string& denominator);
+  DLL_PUBLIC ASTNode CreateRealTerm(Kind kind, const ASTVec& children);
+  DLL_PUBLIC ASTNode CreateRealPredicate(Kind kind, const ASTNode& lhs,
+                                         const ASTNode& rhs);
+
   // Restore a model carrier value to the immutable sort of the source term
   // it answers. The solver itself continues to evaluate plain bitvectors.
   ASTNode LiftSourceValue(const ASTNode& carrier,
@@ -657,6 +705,11 @@ public:
   // negative and walked the DAG of every pure bit-vector query.
   bool has_floating_point_theory = false;
 
+  // Like the FP latches, false is a cheap manager-lifetime proof. Positive
+  // query decisions still inspect the current assertion DAG because Real
+  // declarations and popped terms may outlive their active use.
+  bool has_real = false;
+
   void noteFloatingPointTheory() { has_floating_point_theory = true; }
 
   // Conservative manager-lifetime hint, like the two floating-point latches
@@ -676,6 +729,65 @@ public:
   // not the format then needs storing on a node, since a node that derives its
   // format from its kind and children may later occur in a query.
   DLL_PUBLIC void noteFloatingPoint();
+  DLL_PUBLIC void noteReal();
+  bool HasSeenRealSyntax() const noexcept { return has_real; }
+
+  // Exact model access never exposes the private arithmetic type.  Returned
+  // strings own their bytes and remain valid independently of subsequent
+  // model invalidation.
+  // The current Real model's value for `term`, as an interned REAL_CONST.
+  // False when there is no model or it does not value the term, leaving
+  // `value` untouched.
+  DLL_PUBLIC bool RealModelValueNode(const ASTNode& term, ASTNode& value);
+  // Lend the current Real model somewhere to decide the Boolean condition of
+  // a Real ite, for as long as that model lives. The model holds the Real
+  // variables and nothing else, so such a condition is not its to answer;
+  // whoever holds a model of the Booleans supplies this. No-op without a
+  // model. See RealModel::setConditionOracle.
+  DLL_PUBLIC void SetRealConditionOracle(
+      const std::function<bool(const ASTNode&)>& oracle);
+  // Whether the current Real model decides `predicate` -- one of REAL_LT,
+  // REAL_LE, REAL_GT, REAL_GE or an EQ over two Real operands -- and if so
+  // its value. False without a model, or for anything else, leaving `value`
+  // untouched: the caller then still has its own error to report.
+  //
+  // `condition_oracle`, when given, is how a Real ite inside `predicate`
+  // resolves its Boolean condition: this model holds the Real variables and
+  // nothing else, so a condition over Boolean ones is not its to answer. The
+  // caller that has a model of those lends it one, as the exact verifier
+  // does. Without it such a predicate is simply not decided.
+  DLL_PUBLIC bool EvaluateRealPredicate(
+      const ASTNode& predicate, bool& value,
+      const std::function<bool(const ASTNode&)>& condition_oracle =
+          std::function<bool(const ASTNode&)>()) const noexcept;
+  DLL_PUBLIC bool HasRealModelValue(const ASTNode& term) const noexcept;
+  DLL_PUBLIC std::string GetRealModelValue(const ASTNode& term) const;
+  DLL_PUBLIC std::string GetRealModelNumerator(const ASTNode& term) const;
+  DLL_PUBLIC std::string GetRealModelDenominator(const ASTNode& term) const;
+  DLL_PUBLIC std::string GetRealModelSMTLIB(const ASTNode& term) const;
+  DLL_PUBLIC bool HasRealModel() const noexcept;
+  DLL_PUBLIC void PrintRealModelSMTLIB2(std::ostream& out,
+                                        const ASTVec& visible_symbols) const;
+  void InvalidateRealModel() noexcept;
+
+  // A Real assertion the exact-arithmetic budget refused is not in _asserts,
+  // so a later query would be answered without it -- soundly wrong rather
+  // than merely incomplete. Record the depth it was refused at; every query
+  // at or below that depth must answer "unknown" instead, and popping back
+  // past it clears the debt.
+  void NoteRealAssertionRefused() noexcept;
+  bool RealAssertionRefused() const noexcept
+  {
+    return lra_refused_depth != 0;
+  }
+  ASTVec AllRealSymbols() const;
+
+  /* Whether exact rationals re-derive a canonical form their construction
+   * already proves. A self-check on the number layer: budgets do it unless
+   * told otherwise, so every test and every API caller keeps it, and the
+   * command-line solver turns it off from its own flag. Must be set before
+   * the first exact value is built. */
+  DLL_PUBLIC void SetLraCanonicalVerification(bool enabled) noexcept;
 
   bool isRoundingModeSymbol(const ASTNode& n) const
   {
@@ -851,6 +963,9 @@ public:
 
   void Pop(void);
   void Push(void);
+  // Internal check-sat-assuming pop variant for the SMT-LIB rule that the
+  // accepted model remains readable after its call-local frame closes.
+  void PopPreservingRealModel(void);
 
   // Queries aren't maintained on a stack.
   // Used by CVC & C-interface.

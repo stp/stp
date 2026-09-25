@@ -43,6 +43,22 @@ if (CADICAL_HAS_FACTOR)
 else()
     set(STP_CADICAL_3_PYBOOL "False")
 endif()
+# Whether the backend a query gets when its RUN line names none can host the
+# theory propagator. That backend is CryptoMiniSat when it is compiled in,
+# else CaDiCaL, else MiniSat (UserDefinedFlags.h). CaDiCaL always can,
+# CryptoMiniSat only when built with the interface, and MiniSat never.
+if (STP_BUILD_WITH_CRYPTOMINISAT)
+    set(_stp_default_backend_propagates "${CRYPTOMINISAT_HAS_UP}")
+elseif (STP_BUILD_WITH_CADICAL)
+    set(_stp_default_backend_propagates TRUE)
+else()
+    set(_stp_default_backend_propagates FALSE)
+endif()
+if (_stp_default_backend_propagates)
+    set(STP_DEFAULT_BACKEND_PROPAGATOR_PYBOOL "True")
+else()
+    set(STP_DEFAULT_BACKEND_PROPAGATOR_PYBOOL "False")
+endif()
 
 # Create llvm-lit configuration file
 configure_file(lit.site.cfg.in lit.site.cfg.g @ONLY)
@@ -106,4 +122,50 @@ if (USE_CADICAL)
     set_tests_properties(query-files-array-index-hints-decide
         PROPERTIES RESOURCE_LOCK query-files-exec-root
     )
+endif()
+
+# The linear-arithmetic files under every backend that can host the theory
+# propagator: the propagator is the same
+# code above both solvers, and each solver's bridge is what these sweeps
+# exercise. A CryptoMiniSat built without the interface is left out, as is
+# MiniSat, which hosts no propagator: the theory runs full-lazy on them.
+# The sweep above already runs these files under the default backend, so
+# when that is the only backend listed nothing new is registered here. A
+# test that names a backend of its own would clash with the flag appended
+# here; none of the lra-* files does. Every backend listed hosts the
+# propagator, and each run tells lit so (backend_propagator=1): a file that
+# requires one runs here even when the default backend cannot host it.
+file(GLOB _stp_lra_query_files CONFIGURE_DEPENDS
+     RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "lra-*.smt2")
+set(_stp_lra_backends "")
+if (USE_CADICAL)
+    list(APPEND _stp_lra_backends "--cadical")
+endif()
+if (STP_BUILD_WITH_CRYPTOMINISAT AND CRYPTOMINISAT_HAS_UP)
+    list(APPEND _stp_lra_backends "--cryptominisat")
+endif()
+list(LENGTH _stp_lra_backends _stp_lra_backend_count)
+# A default backend that can host the propagator is on the list, and a list
+# of one is then that backend alone. One that cannot is not on it.
+if (_stp_lra_query_files AND
+    (_stp_lra_backend_count GREATER 1 OR
+     (_stp_lra_backend_count EQUAL 1 AND NOT _stp_default_backend_propagates)))
+    set(_stp_lra_query_paths "")
+    foreach(_file ${_stp_lra_query_files})
+        list(APPEND _stp_lra_query_paths "./${_file}")
+    endforeach()
+    foreach(_backend ${_stp_lra_backends})
+        string(REGEX REPLACE "^--" "" _backend_name "${_backend}")
+        set(_name "lra-query-files-${_backend_name}")
+        add_test(NAME ${_name}
+            COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG>
+                    --param "solver_params=${_backend}"
+                    --param backend_propagator=1
+                    ${_stp_lra_query_paths}
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        )
+        set_tests_properties(${_name}
+            PROPERTIES RESOURCE_LOCK query-files-exec-root
+        )
+    endforeach()
 endif()

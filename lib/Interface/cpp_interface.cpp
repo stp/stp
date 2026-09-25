@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFModel.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "stp/Util/GitSHA1.h"
+#include "Lra/LraFrontend.h"
 #include <cassert>
 #include <limits>
 
@@ -79,6 +80,7 @@ void Cpp_interface::init()
       bm.UserFlags.incremental_mode == UserDefinedFlags::IncrementalMode::ON;
   session_incremental = incremental_from_start;
   delayed_bv_auto_engagement = false;
+  lra_logic = false;
   solves_run = 0;
 }
 
@@ -198,6 +200,7 @@ void Cpp_interface::setLogic(const std::string& logic)
   // API clients retain the established solve-3 policy until separately
   // measured. An explicit --incremental-auto-engage-at still wins below.
   delayed_bv_auto_engagement = logic == "QF_BV" || logic == "QF_ABV";
+  lra_logic = logic == "QF_LRA";
 }
 
 void Cpp_interface::restoreUFOptionAfterLogic()
@@ -220,7 +223,24 @@ void Cpp_interface::AddAssert(const ASTNode& assert)
 {
   if (current_command_rejected)
     return;
-  bm.AddAssert(assert);
+  try
+  {
+    bm.AddAssert(assert);
+  }
+  catch (const lra::FrontendFailure& failure)
+  {
+    // Registering an assertion preregisters its Real atoms, and that walk
+    // does exact arithmetic, so it can refuse the same way a Real term
+    // constructor can -- a chain of products outgrows the number budget
+    // before any solving starts. registerFormula, one line further on,
+    // translates every frontend failure it sees; preregister's escaped
+    // instead, and nothing above here catches it, so a budget refusal on
+    // an assert reached terminate. Decline the command with the refusal's
+    // own diagnostic, which is what every other refused Real command does.
+    refuseCurrentCommand(std::string("assertion could not be registered: ") +
+                         failure.what());
+    return;
+  }
   session_touched = true;
 
   // SMT-LIB: an assertion invalidates the most recent model, and the last
@@ -318,6 +338,23 @@ ASTNode Cpp_interface::CreateRMConst(unsigned mode)
 {
   return bm.CreateRMConst(mode);
 }
+
+ASTNode Cpp_interface::CreateRealConst(const std::string& exact_text)
+{
+  return bm.CreateRealConst(exact_text);
+}
+
+ASTNode Cpp_interface::CreateRealTerm(Kind kind, const ASTVec& children)
+{
+  return bm.CreateRealTerm(kind, children);
+}
+
+ASTNode Cpp_interface::CreateRealPredicate(Kind kind, const ASTNode& lhs,
+                                           const ASTNode& rhs)
+{
+  return bm.CreateRealPredicate(kind, lhs, rhs);
+}
+
 
 ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
                                           const SourceSort& source_sort)
@@ -590,6 +627,9 @@ void Cpp_interface::addSymbol(ASTNode& s)
 {
   if (current_command_rejected)
     return;
+  // A public declaration changes the context whose combined model is being
+  // described, even when the new symbol belongs to a disjoint theory.
+  bm.InvalidateRealModel();
   frames.back()->addSymbol(s);
   session_touched = true;
 }
@@ -797,6 +837,13 @@ void Cpp_interface::reset()
 
   cleanUp();
 
+  // reset is stronger than reset-assertions: old declarations and both LRA
+  // identity registries cease to be current before the new base frame is
+  // created.  Any retained low-level AST handle remains safely owned by the
+  // manager but cannot leak an old model or registry identity into this
+  // fresh public context.
+  bm.ResetLraStateForPublicReset();
+
   checkInvariant();
 
   init();
@@ -927,7 +974,7 @@ void Cpp_interface::popAssumptionFrame()
   // danger of derived tables referencing removed symbols, and the tables
   // are kept so the model remains readable. The next real solve clears
   // them first (checkSat calls resetSolver before solving).
-  bm.Pop();
+  bm.PopPreservingRealModel();
   cache.erase(cache.end() - 1);
   removeFrame();
   checkInvariant();
@@ -977,6 +1024,33 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
 {
   if (ignoreCheckSatRequest)
     return;
+
+  // Upstream post-solve accounting can allocate after the coordinator has
+  // installed an exact model.  A public check that unwinds at any later
+  // boundary did not complete, so it must not leave that model readable.
+  struct ExactModelFailureGuard final
+  {
+    STPMgr& manager;
+    bool& public_model_valid;
+    bool armed = true;
+
+    ~ExactModelFailureGuard() noexcept
+    {
+      if (!armed)
+        return;
+      manager.InvalidateRealModel();
+      public_model_valid = false;
+    }
+
+    void release() noexcept { armed = false; }
+  } exact_model_failure_guard{bm, model_valid};
+
+  bm.InvalidateRealModel();
+  bool active_real = lra_logic || !bm.AllRealSymbols().empty();
+  for (const ASTNode& assertion : assertionsSMT2)
+    active_real = active_real || lra::Frontend::containsRealSyntax(assertion);
+  // A new public check invalidates the previous exact model until this call
+  // reaches a fresh all-checkers-consistent candidate.
 
   // Any ordinary check supersedes the last check-sat-assuming round;
   // checkSatAssuming re-records after this returns.
@@ -1035,7 +1109,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   // We might have run this query before, or it might already be shown to be
   // unsat. If it was sat, we've stored the result (but not the model), so we 
   // can shortcut and return what we know - if we don't need the model.
-  if ( (!((last_run.result == SOLVER_SATISFIABLE) || last_run.result == SOLVER_UNSATISFIABLE)) ||
+  if (active_real ||
+       (!((last_run.result == SOLVER_SATISFIABLE) || last_run.result == SOLVER_UNSATISFIABLE)) ||
         (last_run.result == SOLVER_SATISFIABLE && bm.UserFlags.construct_counterexample_flag)
      )
   {
@@ -1048,7 +1123,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
         bm.UserFlags.incremental_auto_engage_at, delayed_bv_auto_engagement,
         solves_run);
     const bool use_incremental =
-        session_incremental &&
+        !active_real && session_incremental &&
         (incremental_from_start || autoEngaged) &&
         GlobalSTP->getIncrementalSolver()->canHandle(assertionsSMT2);
     // The `use_incremental &&` this used to carry was dead: the value is read
@@ -1138,7 +1213,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   // constructed a counterexample. On the shortcut paths (verdict reused,
   // no model wanted) nothing was constructed, so nothing may be read.
   model_valid = (last_run.result == SOLVER_SATISFIABLE) &&
-                bm.UserFlags.construct_counterexample_flag;
+                (bm.UserFlags.construct_counterexample_flag || active_real);
 
   recordCheckWork(work_before);
 
@@ -1161,6 +1236,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
 
 
   bm.GetRunTimes()->start(RunTimes::Parsing);
+  exact_model_failure_guard.release();
 }
 
 // This method sets up some of the globally required data.
@@ -1690,7 +1766,13 @@ void Cpp_interface::getValue(const ASTVec& v)
 {
   if (current_command_rejected)
     return;
-  if (!bm.UserFlags.construct_counterexample_flag || !model_valid)
+  bool readable_model = bm.UserFlags.construct_counterexample_flag;
+  // Exact Real solving constructs and certifies a combined model even when
+  // the caller did not request the ordinary counterexample product. The
+  // solve restores that request flag after each query, so use the actual
+  // published model instead of latching the flag.
+  readable_model = readable_model || bm.HasRealModel();
+  if (!readable_model || !model_valid)
   {
     unsupported();
     return;
@@ -1709,6 +1791,19 @@ void Cpp_interface::getValue(const ASTVec& v)
 
   for (ASTNode n : v)
   {
+    if (n.GetSourceSort().kind() == SourceSort::Kind::Real)
+    {
+      if (!bm.HasRealModelValue(n))
+      {
+        unsupported();
+        return;
+      }
+      os << "(";
+      printer::SMTLIB2_Print1(os, n, 0, false);
+      os << " " << bm.GetRealModelSMTLIB(n) << ")" << std::endl;
+      continue;
+    }
+
     if (n.GetKind() == UF_APPLY)
     {
       std::string diagnostic;
@@ -1897,7 +1992,9 @@ void Cpp_interface::getUnsatAssumptions()
 // Note, doesn't consider that extra assertions might have been applied?
 void Cpp_interface::getModel()
 {
-  if (!bm.UserFlags.construct_counterexample_flag)
+  bool readable_model = bm.UserFlags.construct_counterexample_flag;
+  readable_model = readable_model || bm.HasRealModel();
+  if (!readable_model)
   {
     // Perhaps this is confusing and instead it whould return "()"?
     unsupported();
@@ -1922,6 +2019,21 @@ void Cpp_interface::getModel()
   // come before the definitions that use them.
   std::ostringstream os;
   GlobalSTP->Ctr_Example->PrintFullCounterExampleSMTLIB2(os);
+  if (bm.HasRealModel())
+  {
+    ASTVec visible_real_symbols;
+    // Current frames keep their declaration vectors private. Resolve every
+    // manager-known Real name through the frame lookup instead: only the
+    // innermost live binding compares equal, while popped and shadowed nodes
+    // remain excluded. The RealModel applies its own deterministic ordering.
+    for (const ASTNode& symbol : bm.AllRealSymbols())
+    {
+      ASTNode visible;
+      if (LookupSymbol(symbol.GetName(), visible) && visible == symbol)
+        visible_real_symbols.push_back(symbol);
+    }
+    bm.PrintRealModelSMTLIB2(os, visible_real_symbols);
+  }
 
   cout << "(" << std::endl;
 

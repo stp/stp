@@ -123,8 +123,11 @@ bool isScalarSymbol(const ASTNode& n)
 {
   // Arrays are equated through ARRAY_EQ, never EQ, so an array symbol does
   // not reach here from an EQ; the width test keeps it that way for any
-  // other route.
-  return n.GetKind() == SYMBOL && n.GetIndexWidth() == 0;
+  // other route. A Real symbol is scalar as well, and is asked first: it has
+  // no array index width, and asking for one is a fatal error, not a zero.
+  if (n.GetKind() != SYMBOL)
+    return false;
+  return n.isRealTerm() || n.GetIndexWidth() == 0;
 }
 
 bool isApplication(const ASTNode& n)
@@ -333,7 +336,10 @@ ASTNode rewriteChildren(const ASTNode& node, ASTNodeMap& fromTo,
   }
   if (!changed)
     return node;
-  if (node.GetType() == BOOLEAN_TYPE)
+  // A Real term has no widths to restore, and asking it for either is a
+  // fatal error -- CreateNode is the whole of it, as in
+  // SubstitutionMap::replace.
+  if (node.GetType() == BOOLEAN_TYPE || node.isRealTerm())
     return factory->CreateNode(node.GetKind(), children);
   return factory->CreateArrayTerm(node.GetKind(), node.GetIndexWidth(),
                                   node.GetValueWidth(), children);

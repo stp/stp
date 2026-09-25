@@ -71,6 +71,7 @@
   // (they parsed before floating-point support existed, and must keep
   // parsing). See fpKeyword() below and stp::SMT2SetFloatTokens.
   static thread_local bool floatTokensActive = false;
+  static thread_local bool realTokensActive = false;
 
   // The most recent floating-point name that the gate above handed back as an
   // ordinary identifier without finding a declaration for it. A missing
@@ -146,6 +147,11 @@ namespace stp
     // a single parse. A name left behind by an earlier script must not attach
     // its hint to this one's first error.
     unresolvedFpKeyword.clear();
+  }
+
+  void SMT2SetRealTokens(bool enable)
+  {
+    realTokensActive = enable;
   }
 
   // define-sort's body never reaches the rules below -- SKIP_SEXPR swallows
@@ -297,6 +303,8 @@ namespace stp
               return FLOATINGPOINT_FUNCTIONID_TOK;
             case stp::SourceSort::Kind::Array:
               return ARRAY_FUNCTIONID_TOK;
+            case stp::SourceSort::Kind::Real:
+              return REAL_FUNCTIONID_TOK;
             case stp::SourceSort::Kind::Uninterpreted:
               return DECLAREDSORT_FUNCTIONID_TOK;
             case stp::SourceSort::Kind::Unknown:
@@ -363,6 +371,15 @@ namespace stp
     }
     return fallback;
   }
+
+  // Mathematical Real names are keywords only in QF_LRA.
+  // Outside that logic they retain the ordinary identifier behavior
+  // required by the existing BV/FP grammars (notably '-' and '/' in to_fp
+  // literals).
+  static int realKeyword(int token)
+  {
+    return realTokensActive ? token : lookup(smt2text);
+  }
 %}
 
 %x  COMMENT
@@ -385,6 +402,11 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
     exact, while every other use of a numeral is a syntax error rather than
     the silently wrapped value strtoul would hand back. */
 {DIGIT}+               {
+                         if (realTokensActive)
+                         {
+                           smt2lval.str = new std::string(smt2text);
+                           return REAL_NUMERAL_TOK;
+                         }
                          errno = 0;
                          const unsigned long value = strtoul(smt2text, NULL, 10);
                          if (errno == ERANGE ||
@@ -399,7 +421,9 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
 #b{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
 #x({DIGIT}|[a-fA-F])+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_HEXIDECIMAL_TOK; }
-{DIGIT}+"."{DIGIT}+    { smt2lval.str = new std::string(smt2text); return DECIMAL_TOK;}
+{DIGIT}+"."{DIGIT}+    { smt2lval.str = new std::string(smt2text);
+                         return realTokensActive ? REAL_DECIMAL_TOK
+                                                 : DECIMAL_TOK;}
 
 ";" { BEGIN COMMENT; }
 <COMMENT>"\n" { smt2lineno++; BEGIN INITIAL; /* return to normal mode */}
@@ -529,6 +553,18 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "Float32" { return fpKeyword(FLOAT32_TOK); }
 "Float64" { return fpKeyword(FLOAT64_TOK); }
 "Float128" { return fpKeyword(FLOAT128_TOK); }
+
+ /* Mathematical Real sort and linear operations.  These do not share the
+  * floating-point keyword gate: QF_FPLRA remains an FP logic. */
+"Real"          { return realKeyword(REAL_TOK); }
+"+"             { return realKeyword(REAL_ADD_TOK); }
+"-"             { return realKeyword(REAL_SUB_TOK); }
+"*"             { return realKeyword(REAL_MUL_TOK); }
+"/"             { return realKeyword(REAL_DIV_TOK); }
+"<"             { return realKeyword(REAL_LT_TOK); }
+"<="            { return realKeyword(REAL_LE_TOK); }
+">"             { return realKeyword(REAL_GT_TOK); }
+">="            { return realKeyword(REAL_GE_TOK); }
 
 
  /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */

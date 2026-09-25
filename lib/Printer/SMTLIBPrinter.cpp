@@ -104,6 +104,9 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
   const ASTChildren c = n.GetChildren();
   switch (kind)
   {
+    case REAL_CONST:
+      n.nodeprint(os);
+      break;
     case BITVECTOR:
     case BVCONST:
       // A rounding mode and a float are both stored as packed bits but
@@ -479,6 +482,13 @@ void LetizeNode(const ASTNode& n, LetizeState& st, STPMgr* stp)
       //
       // 2. if no, then create a new var and add it to the
       // 2. letVarMap
+      // A Real let would need a source-sorted fresh symbol.  The legacy
+      // letizer manufactures width-based carrier symbols, so leave shared
+      // Real expressions expanded until that generic facility is made
+      // source-sort aware; this is exact, deterministic, and never asks a
+      // Real expression for a BV width.
+      if (ccc.GetSourceSort().kind() == SourceSort::Kind::Real)
+        continue;
       if (st.letVarMap.find(ccc) == st.letVarMap.end())
       {
         // Create a new symbol. Get some name. if it conflicts with a
@@ -635,6 +645,24 @@ string functionToSMTLIBName(const Kind k)
       return "fp.isPositive";
     case FP_SMT_EQ:
       return "=";
+
+    case REAL_ADD:
+      return "+";
+    case REAL_SUB:
+    case REAL_NEG:
+      return "-";
+    case REAL_MUL:
+      return "*";
+    case REAL_DIV:
+      return "/";
+    case REAL_LT:
+      return "<";
+    case REAL_LE:
+      return "<=";
+    case REAL_GT:
+      return ">";
+    case REAL_GE:
+      return ">=";
 
     default:
     {

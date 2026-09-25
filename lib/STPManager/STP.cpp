@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/STPManager/STP.h"
+#include "stp/AbsRefineCounterExample/ArrayReadRefinementProgress.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
@@ -39,6 +40,12 @@ THE SOFTWARE.
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 
 #include "stp/Sat/SATSolverFactory.h"
+#include "Lra/LraAtomRegistry.h"
+#include "Lra/LraBudgetRefusal.h"
+#include "Lra/LraFrontend.h"
+#include "Lra/LraCoordinator.h"
+#include "Lra/LraSolveContext.h"
+#include "Lra/NumberBudget.h"
 
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 #include "stp/Simplifier/DifficultyScore.h"
@@ -142,6 +149,7 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
   bm->clearUnknown();
   if (NewSolver.timeLimitExpired())
   {
+    bm->InvalidateRealModel();
     bm->soft_timeout_expired = true;
     bm->noteBudgetExhausted(NewSolver);
     return bm->unknownResult();
@@ -298,6 +306,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   {
     QueryPhaseScope cleanup(bm->query_timing, QueryPhase::QueryCleanup);
     bm->UserFlags.uf_inject_args = original_inject_args;
+    bm->InvalidateRealModel();
     bm->ClearAllTables();
     ClearAllTables();
     bm->clearInjectivityAssumed();
@@ -383,6 +392,10 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
             bm->UserFlags.cnf_effort,
             bm->UserFlags.bv_term_abstraction_schema_groups};
 
+  // A public check never inherits a model from an earlier epoch.  The
+  // coordinator installs a replacement only after every same-candidate gate
+  // succeeds.
+  bm->InvalidateRealModel();
   bm->checkPreparation(PreparationStage::Boundary);
   if (bm->UserFlags.timeout_max_time >= 0 &&
       std::chrono::steady_clock::now() >= deadline)
@@ -547,6 +560,13 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   const bool input_uses_floating_point_theory =
       bm->has_floating_point_theory &&
       containsFloatingPointTheory(original_input, bm);
+  // Mixed FP/LRA input must reach exact Real preregistration in its original
+  // submitted form.  Defer FP totalisation to TopLevelSTPAux, immediately
+  // after the coordinator has replaced only its Real predicates.  Pure FP
+  // and every feature-off path retain the established ordering here.
+  const bool defer_fp_until_after_lra_preregistration =
+      lra::Frontend::containsRealSyntax(original_input) ||
+      !bm->AllRealSymbols().empty();
 
   // Make the partial floating-point operations total, canonicalise the
   // indexes of float-indexed arrays, and pin every rounding mode the formula
@@ -555,7 +575,8 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   // term must not send a later pure-BV query through an FP-only pass.
   // RoundingMode-element arrays and RoundingMode symbols can each appear
   // without a single float node, hence the broader source-theory test.
-  if (input_uses_floating_point_theory)
+  if (input_uses_floating_point_theory &&
+      !defer_fp_until_after_lra_preregistration)
   {
     original_input = fpEncodingContext->prepare(original_input);
     fpEncodingContext->copyArrayEqualityRewrites(arrayEqualityRewrites);
@@ -568,6 +589,28 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
       solve_by_sat_solver(newS.get(), original_input, arrayEqualityRewrites,
                           deadline);
   newS.reset();
+
+  // Lend the Real model somewhere to decide a Real ite's Boolean condition,
+  // for as long as it lives. The counterexample is the model of the Booleans
+  // and outlives every Real model installed against it, so this is safe to
+  // leave in place; without it, reading the value of any term with such an
+  // ite under it fails, which a caller meets as soon as it asks. The
+  // counterexample check lends its own for the same reason, but only for the
+  // formula it is checking -- a value query is not that.
+  if (result == SOLVER_INVALID && bm->HasRealModel())
+  {
+    AbsRefine_CounterExample* counterexample = Ctr_Example;
+    STPMgr* manager = bm;
+    bm->SetRealConditionOracle(
+        [counterexample, manager](const ASTNode& condition) {
+          const ASTNode decided =
+              counterexample->ModelValueOfFormula(condition);
+          if (decided == manager->ASTTrue) return true;
+          if (decided == manager->ASTFalse) return false;
+          throw std::runtime_error(
+              "Real ite condition did not evaluate to a Boolean constant");
+        });
+  }
 
   // Raw: whether an unsat here is the query's is TopLevelSTP's question, and
   // it has a second run to answer it with.
@@ -713,6 +756,16 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
 // Acceps a query, calls the SAT solver and generates Valid/InValid.
 // if returned 0 then input is INVALID if returned 1 then input is
 // VALID if returned 2 then UNDECIDED
+namespace
+{
+// The predicate now lives in Lra/LraBudgetRefusal.h, so that this and the C
+// interface cannot drift apart about which layers count as a budget refusal.
+bool lraGaveUpOnABudget(const std::exception& thrown)
+{
+  return lra::gaveUpOnABudget(thrown);
+}
+} // namespace
+
 SOLVER_RETURN_TYPE
 STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
                     const ASTNodeMap& arrayEqualityRewrites)
@@ -731,6 +784,67 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   UFContext* ufSolveContext =
       batchUFView->active() ? bm->getUFContextIfAny() : NULL;
   UFContext::SolveScope ufSolveScope(ufSolveContext);
+
+  std::unique_ptr<lra::LraCoordinator, QueryTimedDelete<lra::LraCoordinator>>
+      lraCoordinator(nullptr, {bm->query_timing, QueryPhase::LraCleanup});
+  ASTNode preregistered_input = original_input;
+  ASTNode submitted_counterexample_input = original_input;
+  if (lra::Frontend::containsRealSyntax(original_input) ||
+      !bm->AllRealSymbols().empty())
+  {
+    try
+    {
+      ASTNode lra_input = original_input;
+      if (NewSolver.timeLimitExpired())
+      {
+        bm->soft_timeout_expired = true;
+        bm->noteBudgetExhausted(NewSolver);
+        return bm->unknownResult();
+      }
+      bm->checkPreparation(PreparationStage::LraPreregistration);
+      lraCoordinator.reset(new lra::LraCoordinator(
+          *bm, NewSolver, lra_input));
+      bm->checkPreparation(PreparationStage::LraCore);
+      if (!lraCoordinator->ready())
+        return SOLVER_ERROR;
+      preregistered_input = lraCoordinator->booleanFormula();
+      submitted_counterexample_input = preregistered_input;
+    }
+    catch (const PreparationInterrupted&)
+    {
+      throw; // The public query boundary owns timeout reporting and cleanup.
+    }
+    catch (const std::exception& thrown)
+    {
+      bm->InvalidateRealModel();
+      // Building the LRA problem does exact arithmetic at four layers, and
+      // each one refuses in its own currency: the number budget itself, the
+      // frontend's normalisation, the atom registry, the solve context that
+      // hands the core its rows. Every one of them can run out on a query
+      // that is perfectly well formed, and none of that is an error in STP.
+      //
+      // SOLVER_ERROR said it was. It is this interface's "the call was
+      // malformed", it is the one verdict that carries no reason, and it
+      // leaves the raw internal value on a C boundary documented to answer
+      // 0, 1, 2 or 3 -- so a caller could neither find out what happened nor
+      // reliably tell it apart from an answer. Give up the way the rest of
+      // the solver gives up instead, and keep SOLVER_ERROR for the failures
+      // that really are ours.
+      if (!lraGaveUpOnABudget(thrown))
+        return SOLVER_ERROR;
+      bm->noteUnknown(
+          UnknownReason::Incomplete,
+          std::string("the exact linear arithmetic solver could not build "
+                      "this query within its resource budget: ") +
+              thrown.what());
+      return bm->unknownResult();
+    }
+  }
+
+  const bool lraActive = lraCoordinator != nullptr;
+  // The Real path's Boolean skeleton is the shape on which the fast CNF
+  // generator is the slow one; see the flag.
+  bm->UserFlags.cnf_auto_real_path = lraActive;
 
   // ARRAY_EQ remains a normal, traversable AST node through query assembly
   // and macro/function substitution. Lower it only now, at the complete-query
@@ -755,12 +869,22 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   std::unique_ptr<PropagateEqualities> pe(
       new PropagateEqualities(simp, bm->defaultNodeFactory, bm));
 
-  ASTNode semantic_input = original_input;
+  ASTNode semantic_input =
+      preregistered_input;
+  ASTNodeMap effective_array_equality_rewrites = arrayEqualityRewrites;
+  if (lraActive && bm->has_floating_point_theory &&
+      containsFloatingPointTheory(original_input, bm))
+  {
+    semantic_input = fpEncodingContext->prepare(semantic_input);
+    effective_array_equality_rewrites.clear();
+    fpEncodingContext->copyArrayEqualityRewrites(
+        effective_array_equality_rewrites);
+  }
   if (bm->UserFlags.enable_array_equality)
   {
     const bool hasOpaqueEquality =
         containsKind(original_input, ARRAY_EQ) ||
-        !arrayEqualityRewrites.empty();
+        !effective_array_equality_rewrites.empty();
 
     // A definitional equality -- a symbol equated with an array term at
     // the top level, (= A (store B i v)) -- substitutes the symbol away
@@ -770,7 +894,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     // remains (negated, nested, or non-definitional equalities) lowers
     // as before. This is the only point in the solve where the
     // propagator can see an ARRAY_EQ at all.
-    if (hasOpaqueEquality && bm->UserFlags.optimize_flag &&
+    if (!lraActive && hasOpaqueEquality && bm->UserFlags.optimize_flag &&
         bm->UserFlags.propagate_equalities)
     {
       semantic_input = pe->topLevel(semantic_input);
@@ -790,7 +914,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     // selector bits come from wide divisions that no model needs, so
     // reaching abstraction at all means bit-blasting an unsatisfiable
     // amount of dead arithmetic.
-    if (hasOpaqueEquality && bm->UserFlags.optimize_flag &&
+    if (!lraActive && hasOpaqueEquality && bm->UserFlags.optimize_flag &&
         bm->UserFlags.enable_unconstrained)
     {
       RemoveUnconstrained r(*bm);
@@ -809,7 +933,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     // no equality.
     if (ext != NULL)
       semantic_input =
-          ext->lowerArrayEqualities(semantic_input, arrayEqualityRewrites);
+          ext->lowerArrayEqualities(semantic_input,
+                                    effective_array_equality_rewrites);
   }
 
   bm->ASTNodeStats("input asserts and query: ", semantic_input);
@@ -904,11 +1029,41 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // the default, so a decline (no CaDiCaL 3.x behind the build, or a
   // different backend) is only worth a warning when ON was asked for by
   // name; a declined AUTO is just the heuristic not applying.
+  //
+  // ON is a bit-vector default: the measurement behind it (a 0.76-0.80
+  // geometric mean of wall clock on hard QF_BV, -12.5% total wall over 42k
+  // easy ones) never saw a Real query, and the shape it was fitted on is not
+  // the shape the Real path produces. What BVA is handed there is a wide,
+  // shallow conjunction of small clauses over opaque atoms, one per Real
+  // predicate. Over all 3 037 SMT-LIB QF_LRA and QF_UFLRA files, each run
+  // under both settings back to back on one binary, factoring costs seven
+  // files (2 650 solved against 2 657) and 2.8% of the CPU the 1 000 both
+  // settle spend, at a 0.983 geometric mean. No answer disagreed.
+  //
+  // Its cost is concentrated rather than broad, and only part of the win is
+  // work removed. Sampling 47 hard files puts factoring at a mean 0.4% of
+  // the profile and at nothing at all on 26 of them, but at 20-23% on the
+  // LassoRanker queries where it does engage -- and of the eleven files
+  // turning it off newly solves, four carry a share that large while the
+  // rest sit near zero and simply get a different, luckier search out of the
+  // smaller encoding. Both halves point the same way here; only the first
+  // half would survive a change to CaDiCaL's search.
+  //
+  // So an active Real solve that did not name the flag takes the AUTO rule
+  // instead of the ON default. AUTO rather than OFF because a Real query can
+  // still carry array operations, and surviving arrays are exactly the shape
+  // AUTO was fitted to keep BVA for; on the QF_LRA/QF_UFLRA sets, which have
+  // none, the two coincide and the measurement above is of this code. An
+  // explicit --cadical-factor is honoured as before, on either path.
+  UserDefinedFlags::BVAMode bvaMode = bm->UserFlags.cadical_factor;
+  if (lraActive && !bm->UserFlags.cadical_factor_explicit &&
+      bvaMode == UserDefinedFlags::BVAMode::ON)
+    bvaMode = UserDefinedFlags::BVAMode::AUTO;
+
   enableBVAIfWanted(
       NewSolver, bm->UserFlags,
-      bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::ON ||
-          (bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::AUTO &&
-           arrayops),
+      bvaMode == UserDefinedFlags::BVAMode::ON ||
+          (bvaMode == UserDefinedFlags::BVAMode::AUTO && arrayops),
       true);
 
   // Recomputed per query, never latched: every input is available here,
@@ -916,6 +1071,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // candidate model cannot leave construction switched on for the rest of
   // the session.
   bm->UserFlags.construct_counterexample_flag =
+      lraActive ||
       bm->UserFlags.modelConstructionRequired(
           (arrayops && !removed) || batchUFView->active() ||
           bm->UserFlags.fp_abstraction);
@@ -925,7 +1081,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // extraction and the blaster all describe whatever tree they are handed,
   // and a combination that has been given its canonical spelling is a
   // combination they see once rather than twice.
-  if (bm->UserFlags.enable_linear_form)
+  if (!lraActive && bm->UserFlags.enable_linear_form)
   {
     LinearForm linear(bm, bm->defaultNodeFactory,
                       bm->UserFlags.linear_form_addend_limit < 0
@@ -947,7 +1103,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // already made a single node, so what is left to propose here is the
   // pairs a spelling does not account for -- and each of those costs a
   // sub-solve, where the canonical form costs a rewrite.
-  if (bm->UserFlags.enable_congruence_candidates)
+  if (!lraActive && bm->UserFlags.enable_congruence_candidates)
   {
     CongruenceCandidates congruence(
         bm, bm->defaultNodeFactory,
@@ -965,6 +1121,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     }
   }
 
+  // Flattening is structural -- nested conjunctions and disjunctions become
+  // one n-ary node -- so it is sound over the opaque atoms an active Real
+  // solve has put in the formula, and it is what keeps a formula nested as
+  // deep as an unrolled trace from reaching the CNF layer as a chain the
+  // bit-blaster's recursion has to follow level by level.
   if (bm->UserFlags.enable_flatten)
   {
     Flatten flatten(bm,bm->defaultNodeFactory);
@@ -972,7 +1133,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     bm->ASTNodeStats("After Sharing-aware Flattening: ", inputToSat);
   }
 
-  if (bm->UserFlags.bitConstantProp_flag)
+  if (!lraActive && bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
     simplifier::constantBitP::ConstantBitPropagation cb(
@@ -990,9 +1151,31 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   std::unique_ptr<NodeDomainAnalysis> domain(new NodeDomainAnalysis(bm));
 
-  // Run size reducing just once.
-  inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
-  int64_t initial_difficulty_score = difficulty.score(inputToSat, bm);
+  // LRA keeps the preregistered Boolean skeleton intact through the word-level
+  // pipeline.  Legacy simplifiers are allowed to assign pure/unconstrained
+  // Boolean symbols and remember those assignments only in model-replay
+  // tables; an opaque theory atom must instead remain in the SAT candidate so
+  // a verified no-good can constrain the same literal on the next round.
+  if (!lraActive)
+    inputToSat =
+        sizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
+
+  // Difficulty reversion asks whether the word-level simplifiers left the
+  // formula harder than they found it, and puts it back if they did. An
+  // active Real solve runs none of them -- every pass between the two scores
+  // is behind !lraActive -- so both scores are the same node's, the test
+  // reads X > 0.8X, and the revert fires on every solve to restore what
+  // nothing changed. It costs the scorer's walk of the whole DAG, it makes
+  // the simplifier drop its tables a few hundred lines before the solve
+  // drops them anyway, and under -s it reports "simplification made the
+  // problem harder" about a query that was never simplified. None of the
+  // state it touches -- the solver map, the read registry, optimize_flag --
+  // is read again on this path before it is cleared or restored. So do not
+  // run the apparatus rather than pay for it to do nothing.
+  const bool difficultyReversionApplies = !lraActive;
+
+  int64_t initial_difficulty_score =
+      difficultyReversionApplies ? difficulty.score(inputToSat, bm) : 0;
 
   // It's helpful to know the initial node size. The difficulty scorer can easily get something similar:
   const int64_t initial_node_size = difficulty.getEvalCount();
@@ -1000,7 +1183,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
   // so it's expensive to call.
-  if (!arrayops && ( -1 == bm->UserFlags.size_reducing_fixed_point || initial_node_size < bm->UserFlags.size_reducing_fixed_point))
+  if (!lraActive && !arrayops &&
+      (-1 == bm->UserFlags.size_reducing_fixed_point ||
+       initial_node_size < bm->UserFlags.size_reducing_fixed_point))
   {
     inputToSat =
         callSizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
@@ -1032,7 +1217,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // surrogates are packed views of bit-vector symbols, so nothing here
   // builds a SymFPU operation. See FpAbstraction.
   bool fpAbstractionActive = false;
-  if (input_has_floating_point && bm->UserFlags.fp_abstraction)
+  // Declined on an LRA solve: the exact linear Real coordinator owns that
+  // solve's candidate check and refinement loop, and one owner is enough.
+  if (input_has_floating_point && bm->UserFlags.fp_abstraction && !lraActive)
   {
     fpAbstraction.reset(new FpAbstraction(bm, fpAbstractionExact,
                                           fpAbstractionRestarts,
@@ -1063,22 +1250,25 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     // difficulty reversion later compares against has to describe that form
     // rather than the much smaller word-level FP syntax. Retaken here because
     // the recompute below is skipped for array problems.
-    initial_difficulty_score = difficulty.score(inputToSat, bm);
+    if (difficultyReversionApplies)
+      initial_difficulty_score = difficulty.score(inputToSat, bm);
   }
 
-  if (!arrayops || bm->UserFlags.array_difficulty_reversion)
+  if (difficultyReversionApplies &&
+      (!arrayops || bm->UserFlags.array_difficulty_reversion))
   {
     initial_difficulty_score = difficulty.score(inputToSat, bm);
   }
 
-  if (bm->UserFlags.stats_flag)
+  if (bm->UserFlags.stats_flag && difficultyReversionApplies)
     cout << "Difficulty After Size reducing:" << initial_difficulty_score
          << endl;
 
   // So we can delete the object and release all the hash-buckets storage.
   std::unique_ptr<Revert_to> revert(new Revert_to());
 
-  if (!arrayops || bm->UserFlags.array_difficulty_reversion)
+  if (difficultyReversionApplies &&
+      (!arrayops || bm->UserFlags.array_difficulty_reversion))
   {
     revert->initialSolverMap.insert(simp->Return_SolverMap()->begin(),
                                     simp->Return_SolverMap()->end());
@@ -1101,7 +1291,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     if (bm->soft_timeout_expired)
       return bm->unknownResult();
 
-    if (bm->UserFlags.optimize_flag)
+    if (!lraActive && bm->UserFlags.optimize_flag)
     {
       if (bm->UserFlags.propagate_equalities)
       {
@@ -1163,7 +1353,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     }
   } while (tmp_inputToSAT != inputToSat);
 
-  if (bm->UserFlags.bitConstantProp_flag)
+  if (!lraActive && bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
     simplifier::constantBitP::ConstantBitPropagation cb(
@@ -1179,7 +1369,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     bm->ASTNodeStats(cb_message.c_str(), inputToSat);
   }
 
-  if (bm->UserFlags.enable_use_intervals && bm->UserFlags.bitConstantProp_flag)
+  if (!lraActive && bm->UserFlags.enable_use_intervals &&
+      bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::StrengthReduction);
     StrengthReduction sr(bm->defaultNodeFactory, &bm->UserFlags);
@@ -1191,7 +1382,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   domain.reset(nullptr);
 
-  if (bm->UserFlags.enable_pure_literals)
+  if (!lraActive && bm->UserFlags.enable_pure_literals)
   {
     FindPureLiterals fpl;
     bool changed = fpl.topLevel(inputToSat, simp, bm);
@@ -1205,21 +1396,21 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   if (bm->soft_timeout_expired)
     return bm->unknownResult();
 
-  if (bm->UserFlags.enable_ite_context)
+  if (!lraActive && bm->UserFlags.enable_ite_context)
   {
     UseITEContext iteC(bm);
     inputToSat = iteC.topLevel(inputToSat);
     bm->ASTNodeStats("After ITE Context: ", inputToSat);
   }
 
-  if (bm->UserFlags.enable_aig_core_simplify)
+  if (!lraActive && bm->UserFlags.enable_aig_core_simplify)
   {
     AIGSimplifyPropositionalCore aigRR(bm);
     inputToSat = aigRR.topLevel(inputToSat);
     bm->ASTNodeStats("After AIG Core: ", inputToSat);
   }
 
-  if (simp->hasUnappliedSubstitutions())
+  if (!lraActive && simp->hasUnappliedSubstitutions())
     inputToSat = simp->applySubstitutionMap(inputToSat);
 
   // Extract sub-terms shared between same-kind applications of each
@@ -1230,7 +1421,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // whose fixed-point map must describe the exact tree handed to ToSATAIG.
   // BVOR is absent because the node factory lowers it to BVNOT/BVAND at
   // creation, so its sharing is BVAND sharing by the time this runs.
-  if (bm->UserFlags.enable_common_subsum)
+  if (!lraActive && bm->UserFlags.enable_common_subsum)
   {
     for (const Kind k : {BVPLUS, BVMULT, BVXOR, BVAND, XOR, AND, OR})
     {
@@ -1240,7 +1431,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     bm->ASTNodeStats("After Common Sub-term Extraction: ", inputToSat);
   }
 
-  if (bm->UserFlags.enable_unconstrained)
+  if (!lraActive && bm->UserFlags.enable_unconstrained)
   {
     RemoveUnconstrained r(*bm);
     inputToSat = r.topLevel(inputToSat, simp);
@@ -1255,9 +1446,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // Simplification has to have taken a fifth off the score to count as having
   // helped. Written as an assignment now that the AIG node count is gone: it
   // was the second of the two things that could set this.
-  const bool worse = final_difficulty_score > .8 * initial_difficulty_score;
+  const bool worse = difficultyReversionApplies &&
+                     final_difficulty_score > .8 * initial_difficulty_score;
 
-  if (bm->UserFlags.stats_flag)
+  if (bm->UserFlags.stats_flag && difficultyReversionApplies)
   {
     cerr << "(3) Initial/Final Difficulty Score:" << initial_difficulty_score << " / " << final_difficulty_score <<  endl;
   }
@@ -1384,16 +1576,17 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // The bit-vector abstractions are refined from candidate models too, so a
   // query carrying one needs the refinement machinery kept alive even with no
   // array operation in it.
-  const bool maybeRefinement = (arrayops && !bm->UserFlags.ackermannisation) ||
-                               bm->UserFlags.bv_eq_abstraction ||
-                               bm->UserFlags.bv_term_abstraction ||
-                               batchUFView->active() || fpAbstractionActive;
+  const bool maybeRefinement =
+      lraActive || (arrayops && !bm->UserFlags.ackermannisation) ||
+      bm->UserFlags.bv_eq_abstraction ||
+      bm->UserFlags.bv_term_abstraction || batchUFView->active() ||
+      fpAbstractionActive;
 
   simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
   std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
 
   //TODO should be replaced by the upwards cbitp cache.
-  if (bm->UserFlags.bitConstantProp_flag)
+  if (!lraActive && bm->UserFlags.bitConstantProp_flag)
   {
     bm->GetRunTimes()->start(RunTimes::ConstantBitPropagation);
     cb = new simplifier::constantBitP::ConstantBitPropagation(
@@ -1433,6 +1626,34 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       fpAbstraction->reportStatistics(std::cerr);
   };
 
+
+  if (lraCoordinator != nullptr)
+  {
+    for (const ASTNode& atom : lraCoordinator->opaqueAtoms())
+      toSATAIG.protectSymbol(atom);
+    lraCoordinator->setLegacyArrayRefinementEnabled(
+        arrayops && !extActive && !bm->UserFlags.ackermannisation);
+
+    // Keep the whole transformed abstraction retractable while a candidate
+    // is being inspected.  A theory no-good is inserted only after this
+    // assumption has been released; the following same-solver call asserts
+    // it again.  Thus root-level abstraction UNSAT is reported by solve(),
+    // never misclassified as an addClause failure on a strict backend.
+    if (!inputToSat.isConstant())
+    {
+      const ASTNode& activation = lraCoordinator->solveActivation();
+      inputToSat = bm->CreateNode(
+          IMPLIES, activation, inputToSat);
+      if (!NewSolver.supportsAssumptions() ||
+          !toSATAIG.setRequiredSolveAssumption(activation))
+      {
+        lraCoordinator->failClosed(
+            "active LRA solve requires common SAT assumptions");
+        return SOLVER_ERROR;
+      }
+    }
+  }
+
   if (bm->soft_timeout_expired)
     return bm->unknownResult();
 
@@ -1448,16 +1669,18 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // skeleton the lowering rebuilt rather than repeating the question
   // just answered. The equalities themselves are checked against the
   // published array cells, not re-evaluated here.
-
   // Snapshotted before the first solve: that call refines the bit-vector
   // abstractions too, and the driver's loop below reads the count to decide
   // whether the round it is looking at made progress.
   uint64_t abstractionsRefined = satBase->abstractionRefinements();
 
   bm->checkPreparation(PreparationStage::Encoding);
-  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, semantic_input,
-                                         original_input, satBase,
-                                         maybeRefinement);
+  res = Ctr_Example->CallSAT_ResultCheck(
+      NewSolver, inputToSat, semantic_input,
+      submitted_counterexample_input,
+      satBase, maybeRefinement
+      , lraCoordinator.get()
+      );
 
   if (bm->soft_timeout_expired)
   {
@@ -1479,14 +1702,14 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   }
 
   // An undecided result belongs to an active array, bit-vector abstraction,
-  // floating-point abstraction or UF refinement owner.
+  // floating-point abstraction, UF, or LRA refinement owner.
   assert(arrayops || toSATAIG.hasBVEQAbstractions() ||
          toSATAIG.hasBVTermAbstractions() || batchUFView->active() ||
-         fpAbstractionActive);
-  // Refinement must be enabled too, unless an abstraction or UF owns the
-  // round.
+         fpAbstractionActive || lraActive);
+  // Refinement must be enabled too, unless an abstraction, UF, or LRA owns
+  // the round.
   assert(toSATAIG.hasBVEQAbstractions() || toSATAIG.hasBVTermAbstractions() ||
-         batchUFView->active() || fpAbstractionActive ||
+         batchUFView->active() || fpAbstractionActive || lraActive ||
          !bm->UserFlags.ackermannisation);
 
   // Refinement driver. Every owner that retained a candidate-blocking
@@ -1506,69 +1729,113 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // pending theory lemma and legacy read refinement is never entered.
   // Without an active equality, retain STP's ordinary read-refinement
   // path unchanged.
+  ArrayReadRefinementProgress lraReadRefinementProgress;
   while (true)
   {
     const uint64_t refinedNow = satBase->abstractionRefinements();
     bool progress = refinedNow != abstractionsRefined;
     abstractionsRefined = refinedNow;
 
-    if (extActive)
+    if (lraCoordinator != nullptr && lraCoordinator->hasPendingLraClause())
     {
-      // An undecided candidate the bit-vector abstraction did not account
-      // for is still a checker's, and one of them still owes a lemma for
-      // it -- or the floating-point abstraction does, which refutes a
-      // candidate the array checker has already accepted.
-      if (!progress && !ext->hasPendingLemma() &&
-          !(batchUFView->active() && batchUFAdapter->hasPendingLemma()) &&
-          !(fpAbstractionActive && (fpAbstraction->hasPendingLemma() ||
-                                    fpAbstraction->restartRequested())))
-        FatalError("array-equality: an active refinement round has neither "
-                   "a decision nor a pending theory lemma");
-      if (ext->hasPendingLemma())
-      {
-        ext->encodePendingLemmas(NewSolver, satBase);
-        progress = true;
-      }
-    }
-    if (batchUFView->active() && batchUFAdapter->hasPendingLemma())
-    {
-      batchUFAdapter->encodePendingLemmas(NewSolver, satBase);
-      progress = true;
-    }
-    // A floating-point release that is to be made by running the pipeline
-    // again (FpAbstraction::restartRequested): this run is over, and
-    // TopLevelSTP starts the next with the operation lowered exactly.
-    if (fpAbstractionActive && fpAbstraction->restartRequested())
-    {
-      if (toSATAIG.cbIsDestructed())
-        cleaner.release();
-      reportBVAbstractionRecords();
-      return SOLVER_UNDECIDED;
-    }
-    // A floating-point candidate the exact evaluator refuted: its value
-    // lemma, shape lemma or exact release is pending, and is a definitional
-    // fact about the operation, so it joins whatever else this round
-    // installs.
-    if (fpAbstractionActive && fpAbstraction->hasPendingLemma())
-    {
-      fpAbstraction->encodePendingLemmas(NewSolver, satBase);
-      progress = true;
-    }
-
-    if (progress)
-    {
+      if (!lraCoordinator->encodePendingLraClause())
+        return SOLVER_ERROR;
       bm->checkPreparation(PreparationStage::Encoding);
-      res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
-                                             semantic_input, original_input,
-                                             satBase, true);
+      res = Ctr_Example->CallSAT_ResultCheck(
+          NewSolver, bm->ASTTrue, semantic_input,
+          submitted_counterexample_input, satBase, true,
+          lraCoordinator.get());
+    }
+    else if (lraCoordinator != nullptr &&
+             lraCoordinator->legacyArrayRefinementPending())
+    {
+      const bool encoded = Ctr_Example->AddArrayReadRefinementForCandidate(
+          NewSolver, satBase, &lraReadRefinementProgress);
+      if (!encoded)
+      {
+        lraCoordinator->failClosed(
+            "ordinary mismatch produced no legacy array-read refinement");
+        return SOLVER_ERROR;
+      }
+      lraCoordinator->noteLegacyArrayRefinementEncoded();
+      if (!lraCoordinator->ready())
+        return SOLVER_ERROR;
+      Ctr_Example->ClearAllTables();
+      bm->checkPreparation(PreparationStage::Encoding);
+      res = Ctr_Example->CallSAT_ResultCheck(
+          NewSolver, bm->ASTTrue, semantic_input,
+          submitted_counterexample_input, satBase, true,
+          lraCoordinator.get());
     }
     else
     {
-      if (!arrayops)
-        FatalError("refinement reached undecided without a pending "
-                   "candidate-blocking lemma");
-      res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
-                                                      semantic_input, satBase);
+      if (extActive)
+      {
+        // An undecided candidate the bit-vector abstraction did not account
+        // for is still a checker's, and one of them still owes a lemma for
+        // it -- or the floating-point abstraction does, which refutes a
+        // candidate the array checker has already accepted.
+        if (!progress && !ext->hasPendingLemma() &&
+            !(batchUFView->active() && batchUFAdapter->hasPendingLemma()) &&
+            !(fpAbstractionActive && (fpAbstraction->hasPendingLemma() ||
+                                      fpAbstraction->restartRequested())))
+          FatalError("array-equality: an active refinement round has neither "
+                     "a decision nor a pending theory lemma");
+        if (ext->hasPendingLemma())
+        {
+          ext->encodePendingLemmas(NewSolver, satBase);
+          progress = true;
+        }
+      }
+      if (batchUFView->active() && batchUFAdapter->hasPendingLemma())
+      {
+        batchUFAdapter->encodePendingLemmas(NewSolver, satBase);
+        progress = true;
+      }
+      // A floating-point release that is to be made by running the pipeline
+      // again (FpAbstraction::restartRequested): this run is over, and
+      // TopLevelSTP starts the next with the operation lowered exactly.
+      if (fpAbstractionActive && fpAbstraction->restartRequested())
+      {
+        if (toSATAIG.cbIsDestructed())
+          cleaner.release();
+        reportBVAbstractionRecords();
+        return SOLVER_UNDECIDED;
+      }
+      // A floating-point candidate the exact evaluator refuted: its value
+      // lemma, shape lemma or exact release is pending, and is a
+      // definitional fact about the operation, so it joins whatever else
+      // this round installs.
+      if (fpAbstractionActive && fpAbstraction->hasPendingLemma())
+      {
+        fpAbstraction->encodePendingLemmas(NewSolver, satBase);
+        progress = true;
+      }
+
+      if (progress)
+      {
+        bm->checkPreparation(PreparationStage::Encoding);
+        res = Ctr_Example->CallSAT_ResultCheck(
+            NewSolver, bm->ASTTrue, semantic_input,
+            submitted_counterexample_input,
+            satBase, true
+            , lraCoordinator.get()
+            );
+      }
+      else
+      {
+        if (lraCoordinator != nullptr)
+        {
+          lraCoordinator->failClosed(
+              "LRA coordinator reached refinement without a pending owner");
+          return SOLVER_ERROR;
+        }
+        if (!arrayops)
+          FatalError("refinement reached undecided without a pending "
+                     "candidate-blocking lemma");
+        res = Ctr_Example->SATBased_ArrayReadRefinement(
+            NewSolver, semantic_input, satBase);
+      }
     }
 
     if (SOLVER_UNDECIDED != res)
@@ -1588,7 +1855,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
     if (!toSATAIG.hasBVEQAbstractions() && !toSATAIG.hasBVTermAbstractions() &&
         !extActive && !batchUFView->active() && !fpAbstractionActive)
+    {
+      if (lraCoordinator != nullptr)
+        continue;
       break;
+    }
   }
 
   FatalError("TopLevelSTPAux: reached the end without proper conclusion:"

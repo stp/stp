@@ -24,7 +24,15 @@ add_library(stpmgr OBJECT
     UserDefinedFlags.cpp
 )
 
+# Reaches the exact-rational header, which includes <imrat.h>. For IMath's
+# INTERFACE_INCLUDE_DIRECTORIES; see the note in
+# lib/AbsRefineCounterExample/CMakeLists.txt.
+target_link_libraries(stpmgr PRIVATE IMath)
+
 add_dependencies(stpmgr ASTKind_header)
+
+target_include_directories(stpmgr PRIVATE
+    "${PROJECT_SOURCE_DIR}/lib/Lra")
 
 if (NOT MSVC)
     set_source_files_properties(STPManager.cpp

@@ -65,6 +65,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <limits>
 #include <string>
 #include <vector>
@@ -306,8 +307,8 @@ namespace stp
   // looking for a fragment STP has, not for a synonym of one.
   static const char* supportedLogicsPhrase()
   {
-    return "QF_BV, QF_ABV, QF_AX, QF_UF, QF_UFBV, QF_AUFBV, the "
-           "floating-point logics QF_FP, QF_BVFP, QF_ABVFP, QF_UFFP, "
+    return "QF_BV, QF_ABV, QF_AX, QF_UF, QF_UFBV, QF_AUFBV, QF_LRA, "
+           "the floating-point logics QF_FP, QF_BVFP, QF_ABVFP, QF_UFFP, "
            "QF_UFBVFP, QF_AUFBVFP, and their LRA variants";
   }
 
@@ -1118,6 +1119,196 @@ namespace stp
     delete value;
   }
 
+  static ASTNode* createExactRealLiteral(std::string* text)
+  {
+    try
+    {
+      ASTNode value = stp::GlobalParserInterface->CreateRealConst(*text);
+      delete text;
+      return stp::GlobalParserInterface->newNode(value);
+    }
+    catch (const std::exception& failure)
+    {
+      const std::string diagnostic =
+          std::string("invalid exact Real literal: ") + failure.what();
+      delete text;
+      fatal_yyerror(diagnostic.c_str());
+    }
+    return nullptr;
+  }
+
+  static ASTNode* createExactRealTerm(Kind kind, ASTVec* children)
+  {
+    try
+    {
+      /* SMT-LIB declares * and / :left-assoc, so (* a b c) is (* (* a b) c).
+       * CreateRealTerm takes + and - at any arity but these two only in
+       * pairs, so fold them here rather than refuse a query the standard
+       * allows -- the C interface folds them the same way, so a file could
+       * not state what a client could. Folding left is also what keeps a
+       * product legal: the constants meet each other before any symbol does,
+       * and every binary node then has the concrete operand the linear
+       * fragment asks for. ITE is not associative and is left alone. */
+      if ((kind == stp::REAL_MUL || kind == stp::REAL_DIV)
+          && children->size() > 2)
+      {
+        ASTNode folded = (*children)[0];
+        for (std::size_t i = 1, n = children->size(); i != n; ++i)
+          folded = stp::GlobalParserInterface->CreateRealTerm(
+              kind, ASTVec{folded, (*children)[i]});
+        delete children;
+        return stp::GlobalParserInterface->newNode(folded);
+      }
+      ASTNode value =
+          stp::GlobalParserInterface->CreateRealTerm(kind, *children);
+      delete children;
+      return stp::GlobalParserInterface->newNode(value);
+    }
+    catch (const std::exception& failure)
+    {
+      const std::string diagnostic =
+          std::string("unsupported or malformed exact Real operation: ") +
+          failure.what();
+      delete children;
+      fatal_yyerror(diagnostic.c_str());
+    }
+    return nullptr;
+  }
+
+  /* Expanding a define-fun rebuilds the body's nodes through the node
+   * factory, which folds constant Real arithmetic through CreateRealTerm --
+   * so a macro over Reals can exhaust the number budget while it expands,
+   * exactly as a written-out literal can. createExactRealTerm guards the
+   * literal path; nothing guarded this one, and SMT2Parse() catches only
+   * DeclassifiedNameAbandon, so a NumberFailure escaped the parse and
+   * reached std::terminate: SIGABRT with no (error ...) line, where the same
+   * overflow spelled as a literal is a clean syntax error.
+   *
+   * The guard belongs in the action rather than around the parse. checkSat
+   * runs from a grammar action too, so a handler at SMT2Parse() would sit
+   * above the solve and swallow solve-time budget refusals, which
+   * lra::gaveUpOnABudget deliberately tells apart from a bug in STP. Staying
+   * inside the action also leaves bison to reclaim its own stack through the
+   * %destructor rules, which yyerror's comment above says it relies on. */
+  template <class FunctionRef>
+  static ASTNode applyFunctionChecked(const FunctionRef& f,
+                                      const ASTVec& params)
+  {
+    try
+    {
+      return stp::GlobalParserInterface->applyFunction(f, params);
+    }
+    catch (const stp::DeclassifiedNameAbandon&)
+    {
+      throw;
+    }
+    catch (const std::exception& failure)
+    {
+      const std::string diagnostic =
+          std::string("define-fun expansion failed: ") + failure.what();
+      fatal_yyerror(diagnostic.c_str());
+    }
+    return ASTNode();
+  }
+
+  static std::string exactRealSignature(const std::string& operation,
+                                        const ASTVec& children)
+  {
+    std::ostringstream diagnostic;
+    diagnostic << operation << '(';
+    for (size_t i = 0; i < children.size(); ++i)
+    {
+      if (i != 0)
+        diagnostic << ", ";
+      diagnostic << children[i].GetSourceSort();
+    }
+    diagnostic << ')';
+    return diagnostic.str();
+  }
+
+  static ASTNode* createExactRealPredicate(Kind kind, ASTNode* lhs,
+                                           ASTNode* rhs)
+  {
+    try
+    {
+      ASTNode value = stp::GlobalParserInterface->CreateRealPredicate(
+          kind, *lhs, *rhs);
+      delete lhs;
+      delete rhs;
+      return stp::GlobalParserInterface->newNode(value);
+    }
+    catch (const std::exception& failure)
+    {
+      const std::string diagnostic =
+          std::string("unsupported or malformed exact Real comparison: ") +
+          failure.what();
+      delete lhs;
+      delete rhs;
+      fatal_yyerror(diagnostic.c_str());
+    }
+    return nullptr;
+  }
+
+  static ASTNode* createExactRealPredicate(Kind kind, ASTVec* operands)
+  {
+    /* SMT-LIB declares <, <=, > and >= over Reals :chainable, so (> a b c) is
+     * (and (> a b) (> b c)) and any arity of two or more is well formed, as
+     * it is through the C interface, which chains these itself. */
+    if (operands->size() < 2)
+    {
+      const std::string diagnostic =
+          "Real comparison " +
+          exactRealSignature(stp::_kind_names[kind], *operands) +
+          ": expected at least two operands";
+      delete operands;
+      fatal_yyerror(diagnostic.c_str());
+      return nullptr;
+    }
+    if (operands->size() == 2)
+    {
+      ASTNode* lhs = new ASTNode((*operands)[0]);
+      ASTNode* rhs = new ASTNode((*operands)[1]);
+      delete operands;
+      return createExactRealPredicate(kind, lhs, rhs);
+    }
+    ASTVec conjuncts;
+    conjuncts.reserve(operands->size() - 1);
+    for (std::size_t i = 0, n = operands->size() - 1; i != n; ++i)
+    {
+      ASTNode* lhs = new ASTNode((*operands)[i]);
+      ASTNode* rhs = new ASTNode((*operands)[i + 1]);
+      ASTNode* link = createExactRealPredicate(kind, lhs, rhs);
+      conjuncts.push_back(*link);
+      // The grammar action that consumes a node owns it; these links are
+      // consumed here, so they are released here.
+      delete link;
+    }
+    delete operands;
+    return stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateNode(stp::AND, conjuncts));
+  }
+
+  static unsigned exactCommandNumeral(std::string* text)
+  {
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long parsed = strtoul(text->c_str(), &end, 10);
+    const bool invalid = errno == ERANGE || end == text->c_str() ||
+                         *end != '\0' ||
+                         parsed > std::numeric_limits<unsigned>::max();
+    delete text;
+    if (invalid)
+      fatal_yyerror("command numeral does not fit an unsigned value");
+    return static_cast<unsigned>(parsed);
+  }
+
+  static ASTNode createExactRealSourceSymbol(const char* name)
+  {
+    return stp::GlobalParserInterface->CreateSourceSymbol(
+        name, stp::SourceSort::real());
+    return ASTNode();
+  }
+
   // The five rounding modes as parse-time values. Rounding-mode constants
   // are interned, so comparing against the five is exact; anything else of
   // RoundingMode sort is symbolic.
@@ -1499,7 +1690,7 @@ namespace stp
 %type <vec> an_formulas an_terms function_params an_mixed
 
 %type <node> an_term  an_formula function_param an_const an_fp_term an_fp_predicate an_rounding_mode
-%type <uintval> an_fp_const
+%type <uintval> an_fp_const command_numeral
 %type <str> info_flag
 %type <str> uf_decl_name function_def_name
 %type <ufsortvec> uf_domain_sorts
@@ -1532,12 +1723,13 @@ namespace stp
  /* Carries its text: to_fp folds real literals, and set-info values
     like :smt-lib-version 2.0 land here too (and are freed unused). */
 %token <str> DECIMAL_TOK
+%token <str> REAL_NUMERAL_TOK REAL_DECIMAL_TOK
 %type <str> an_real_magnitude
 %type <realc> an_real_constant
 
 %token <node> FORMID_TOK TERMID_TOK
 %token <str> STRING_TOK
-%token <fn> BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK
+%token <fn> BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK REAL_FUNCTIONID_TOK
 %token <ufdecl> UF_BV_FUNCTIONID_TOK UF_BOOL_FUNCTIONID_TOK
 
  /* set-info tokens */
@@ -1613,12 +1805,17 @@ namespace stp
 /* Types for QF_FP and QF_BVFP. */
 %token FLOATINGPOINT_TOK
 %token ROUNDINGMODE_TOK
+%token REAL_TOK
 %token <fn> ROUNDINGMODE_FUNCTIONID_TOK
 %token <fn> DECLAREDSORT_FUNCTIONID_TOK
 %token FLOAT16_TOK
 %token FLOAT32_TOK
 %token FLOAT64_TOK
 %token FLOAT128_TOK
+
+/* Mathematical Real linear operations, live only under QF_LRA. */
+%token REAL_ADD_TOK REAL_SUB_TOK REAL_MUL_TOK REAL_DIV_TOK
+%token REAL_LT_TOK REAL_LE_TOK REAL_GT_TOK REAL_GE_TOK
 
 /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
 %token TRUE_TOK;
@@ -1726,6 +1923,17 @@ namespace stp
 %token END 0 "end of file"
 
 %%
+command_numeral:
+  NUMERAL_TOK
+{
+  $$ = $1;
+}
+| REAL_NUMERAL_TOK
+{
+  $$ = exactCommandNumeral($1);
+}
+;
+
 cmd: commands END
 {
        stp::GlobalParserInterface->cleanUp();
@@ -1840,7 +2048,7 @@ cmdi:
 |
      /* :random-seed, :verbosity and :reproducible-resource-limit take a
         numeral. */
-     SET_OPTION_TOK COLON_TOK STRING_TOK NUMERAL_TOK
+     SET_OPTION_TOK COLON_TOK STRING_TOK command_numeral
     {
        stp::GlobalParserInterface->setOption(*$3,std::to_string($4));
        delete $3;
@@ -1912,7 +2120,7 @@ cmdi:
        Parametric sorts (arity > 0) have no such reading and stay
        unsupported. Nullary sorts are accepted either when the UF frontend is
        enabled or when QF_AX selected them for array indices and elements. */
-     DECLARE_SORT_TOK STRING_TOK NUMERAL_TOK
+     DECLARE_SORT_TOK STRING_TOK command_numeral
     {
        if ($3 != 0 ||
            !stp::GlobalParserInterface->declaredSortsEnabled())
@@ -1961,14 +2169,14 @@ cmdi:
        stp::GlobalParserInterface->unsupported();
     }
 |
-     PUSH_TOK NUMERAL_TOK
+     PUSH_TOK command_numeral
     {
         for (unsigned i=0; i < $2;i++)
             stp::GlobalParserInterface->push();
         stp::GlobalParserInterface->success();
     }
 |
-     POP_TOK NUMERAL_TOK
+     POP_TOK command_numeral
     {
         for (unsigned i=0; i < $2;i++)
             stp::GlobalParserInterface->pop();
@@ -1978,16 +2186,18 @@ cmdi:
      RESET_TOK
     {
        stp::GlobalParserInterface->reset();
-       // reset clears the logic, and with it the floating-point keywords.
+       // reset clears the logic, and with it all theory keyword gates.
        stp::SMT2SetFloatTokens(false);
+       stp::SMT2SetRealTokens(false);
        stp::GlobalParserInterface->success();
     }
 |
      LOGIC_TOK STRING_TOK
     {
-      // The *LRA logics are the FP logics plus a theory of reals. STP has no
-      // such theory, and the grammar admits a real only as the literal
-      // argument of to_fp -- which is the only way these benchmarks use one.
+      // The *FPLRA logics are the FP logics plus a theory of reals. The
+      // SMT-LIB frontend does not enable its Real theory under these names,
+      // so the grammar admits a real only as the literal argument of to_fp --
+      // which is the only way these benchmarks use one.
       // Anything more (a Real declaration, arithmetic over reals) has no
       // production and is a syntax error, so accepting the name here cannot
       // answer a query STP could not decide.
@@ -2026,12 +2236,14 @@ cmdi:
             0 == strcmp($2->c_str(),"QF_BVFPLRA") ||
             0 == strcmp($2->c_str(),"QF_ABVFPLRA") ||
             uf_fp_logic;
+      const bool real_logic = 0 == strcmp($2->c_str(),"QF_LRA");
       const bool supported_logic =
             0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
             0 == strcmp($2->c_str(),"QF_AX") ||
             uf_logic ||
-            fp_logic;
+            fp_logic ||
+            real_logic;
       // A logic STP cannot decide ends the session. STP answers
       // (get-info :error-behavior) with immediate-exit, and continuing here
       // was the one place that answer was untrue: the refusal was printed,
@@ -2056,6 +2268,7 @@ cmdi:
       // everywhere else names like "fp" or "NaN" stay ordinary symbols,
       // exactly as before floating-point support existed.
       stp::SMT2SetFloatTokens(fp_logic);
+      stp::SMT2SetRealTokens(real_logic);
       stp::GlobalParserInterface->success();
       delete $2;
     }
@@ -2077,9 +2290,21 @@ cmdi:
       stp::GlobalParserInterface->success();
     }
 |
+     NOTES_TOK attribute REAL_NUMERAL_TOK
+    {
+      delete $3;
+      stp::GlobalParserInterface->success();
+    }
+|
      /* set-info values are not interpreted, so an oversized one is no more
         of a problem here than an ordinary numeral is. */
      NOTES_TOK attribute BIG_NUMERAL_TOK
+    {
+      delete $3;
+      stp::GlobalParserInterface->success();
+    }
+|
+     NOTES_TOK attribute REAL_DECIMAL_TOK
     {
       delete $3;
       stp::GlobalParserInterface->success();
@@ -2113,6 +2338,19 @@ function_param_open STRING_TOK BOOL_TOK RPAREN_TOK
 {
   $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
       $2->c_str(), stp::SourceSort::boolean()));
+  stp::GlobalParserInterface->addTemporarySymbol(*$$);
+  delete $2;
+}
+|
+function_param_open STRING_TOK REAL_TOK RPAREN_TOK
+{
+  // A define-fun formal of Real sort. These are macro parameters, not
+  // uninterpreted functions: Cpp_interface::applyFunction substitutes the
+  // arguments into the stored body, so nothing of Real sort survives the
+  // expansion that the Real fragment does not already handle. The families
+  // that use them define min and max this way.
+  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
+      $2->c_str(), stp::SourceSort::real()));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
   delete $2;
 }
@@ -2270,6 +2508,30 @@ function_def_name LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
 
   delete $1;
   stp::GlobalParserInterface->deleteNode($5);
+}
+|
+function_def_name LPAREN_TOK RPAREN_TOK REAL_TOK an_term
+{
+  if ($5->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
+    fatal_yyerror("define-fun Real alias body must have Real sort");
+  ASTVec empty;
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
+  delete $1;
+  stp::GlobalParserInterface->deleteNode($5);
+}
+|
+function_def_name LPAREN_TOK function_params RPAREN_TOK REAL_TOK an_term
+{
+  // A Real-returning macro with formals. Substitution happens at each
+  // application, so the body is only ever seen by the Real fragment after
+  // its parameters have been replaced by the actual arguments. This is how
+  // the calendar-automata families spell min and max.
+  if ($6->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
+    fatal_yyerror("define-fun Real body must have Real sort");
+  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
+  delete $1;
+  delete $3;
+  stp::GlobalParserInterface->deleteNode($6);
 }
 |
 function_def_name LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK an_term
@@ -2517,7 +2779,7 @@ an_array_sort_component:
   // An index or element sort of an (Array X Y) sort. Every supported scalar
   // keeps its full source identity here even though the solver sees its
   // packed bit-vector carrier below this boundary.
-  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
+  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK command_numeral RPAREN_TOK
 {
   checkBitVectorWidth($4);
   $$ = new stp::array_sort_component(stp::SourceSort::bitVector($4));
@@ -2541,6 +2803,11 @@ an_array_sort_component:
   $$ = new stp::array_sort_component(resolved);
   delete $1;
 }
+| REAL_TOK
+{
+  $$ = nullptr;
+  fatal_yyerror("arrays with a Real index or element sort are not supported");
+}
 ;
 
 an_array_sort:
@@ -2558,6 +2825,12 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   ABANDON_IF_REDECLARED_ZERO_ARITY(delete $1);
   checkBitVectorWidth($7);
   declareScalarSymbol($1, stp::SourceSort::bitVector($7));
+}
+| STRING_TOK LPAREN_TOK RPAREN_TOK REAL_TOK
+{
+  ASTNode s = createExactRealSourceSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+  delete $1;
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK STRING_TOK
 {
@@ -2790,6 +3063,12 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   checkBitVectorWidth($5);
   declareScalarSymbol($1, stp::SourceSort::bitVector($5));
 }
+| STRING_TOK REAL_TOK
+{
+  ASTNode s = createExactRealSourceSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+  delete $1;
+}
 | STRING_TOK BOOL_TOK
 {
   declareScalarSymbol($1, stp::SourceSort::boolean());
@@ -2909,7 +3188,23 @@ FORMID_TOK
 {
    $$ = $2;
 }
-| LPAREN_TOK EQ_TOK an_terms RPAREN_TOK
+| LPAREN_TOK REAL_LT_TOK an_terms RPAREN_TOK
+{
+  $$ = createExactRealPredicate(stp::REAL_LT, $3);
+}
+| LPAREN_TOK REAL_LE_TOK an_terms RPAREN_TOK
+{
+  $$ = createExactRealPredicate(stp::REAL_LE, $3);
+}
+| LPAREN_TOK REAL_GT_TOK an_terms RPAREN_TOK
+{
+  $$ = createExactRealPredicate(stp::REAL_GT, $3);
+}
+| LPAREN_TOK REAL_GE_TOK an_terms RPAREN_TOK
+{
+  $$ = createExactRealPredicate(stp::REAL_GE, $3);
+}
+| LPAREN_TOK EQ_TOK an_mixed RPAREN_TOK
 {
   const ASTVec& terms = *$3;
 
@@ -2919,13 +3214,22 @@ FORMID_TOK
   checkSameSourceSort(terms, "= requires operands of the same sort");
 
   bool one_float = false;
+  bool one_real = false;
+  bool one_boolean = false;
   for (unsigned i = 0; i < terms.size();i++)
   {
     one_float |= (terms[i].GetSourceSort().kind() ==
                   stp::SourceSort::Kind::FloatingPoint);
+    one_real |= (terms[i].GetSourceSort().kind() ==
+                 stp::SourceSort::Kind::Real);
+    one_boolean |= (terms[i].GetSourceSort().kind() ==
+                    stp::SourceSort::Kind::Bool);
   }
 
-  Kind k = one_float ? FP_SMT_EQ : EQ;
+  if (one_real && terms.size() != 2)
+    fatal_yyerror("Real equality is binary in the exact linear QF_LRA fragment");
+
+  Kind k = one_float ? FP_SMT_EQ : (one_boolean ? IFF : EQ);
 
   if (terms.size() ==2)
   {
@@ -3115,45 +3419,6 @@ FORMID_TOK
 {
   $$ = createNode(XOR, $3);
 }
-| LPAREN_TOK EQ_TOK an_formulas RPAREN_TOK
-{
-  const ASTVec& forms = *$3;
-
-  // As with = over terms: catch mismatched operands before the factory can
-  // fold them. A float can reach this rule too (parenthesised fp terms parse
-  // as formulas), in which case its width differs from a Boolean's zero.
-  checkSameSourceSort(forms, "= requires operands of the same sort");
-
-  bool one_float = false;
-  for (unsigned i = 0; i < forms.size();i++)
-  {
-    one_float |= (forms[i].GetSourceSort().kind() ==
-                  stp::SourceSort::Kind::FloatingPoint);
-  }
-
-  Kind k = one_float ? FP_SMT_EQ : IFF;
-
-  if (forms.size() ==2)
-  {
-    $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(k, forms));
-    delete $3;
-  }
-  else  if (forms.size() >2) 
-  {
-    ASTVec result;
-    result.reserve(forms.size()-1);
-    for (unsigned i =1; i < forms.size();i++)
-    {
-        result.push_back(stp::GlobalParserInterface->CreateNode(k, forms[i], forms[i-1]));
-    }
-    $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, result));
-    delete $3;
-  }
-  else
-  {
-    fatal_yyerror("too few arguments to formula eq."); 
-  }
-}
 | LPAREN_TOK LET_TOK lets an_formula RPAREN_TOK
   {
     $$ = $4;
@@ -3161,7 +3426,7 @@ FORMID_TOK
   }
 | LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
+  $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
   delete $3;
 }
 | LPAREN_TOK UF_BOOL_FUNCTIONID_TOK an_mixed RPAREN_TOK
@@ -3175,7 +3440,7 @@ FORMID_TOK
 | BOOLEAN_FUNCTIONID_TOK
 {
   ASTVec empty;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+  $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
 }
 | LPAREN_TOK EXCLAIMATION_MARK_TOK an_formula NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
 {
@@ -3547,11 +3812,37 @@ TERMID_TOK
   $$ = stp::GlobalParserInterface->newNode((*$1));
   stp::GlobalParserInterface->deleteNode( $1);
 }
+| REAL_FUNCTIONID_TOK
+{
+  ASTVec empty;
+  $$ = stp::GlobalParserInterface->newNode(
+      applyFunctionChecked(*$1, empty));
+  if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
+    fatal_yyerror("Real define-fun alias did not return Real sort");
+}
+| LPAREN_TOK REAL_FUNCTIONID_TOK an_mixed RPAREN_TOK
+{
+  // A Real-returning macro applied to arguments. Substitution happens
+  // here, so what leaves this rule is an ordinary Real term.
+  $$ = stp::GlobalParserInterface->newNode(
+      applyFunctionChecked(*$2, *$3));
+  if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
+    fatal_yyerror("Real define-fun did not return Real sort");
+  delete $3;
+}
+| REAL_NUMERAL_TOK
+{
+  $$ = createExactRealLiteral($1);
+}
+| REAL_DECIMAL_TOK
+{
+  $$ = createExactRealLiteral($1);
+}
 | ARRAY_FUNCTIONID_TOK
 {
   // A use of a nullary array-sorted define-fun expands to its body.
   ASTVec empty;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+  $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
 }
 | LPAREN_TOK an_term RPAREN_TOK
 {
@@ -3571,6 +3862,22 @@ TERMID_TOK
      declaration constraint built from them), so it must be derivable here,
      not only in the dedicated rounding-mode operand slots. */
   $$ = $1;
+}
+| LPAREN_TOK REAL_ADD_TOK an_terms RPAREN_TOK
+{
+  $$ = createExactRealTerm(stp::REAL_ADD, $3);
+}
+| LPAREN_TOK REAL_SUB_TOK an_terms RPAREN_TOK
+{
+  $$ = createExactRealTerm(stp::REAL_SUB, $3);
+}
+| LPAREN_TOK REAL_MUL_TOK an_terms RPAREN_TOK
+{
+  $$ = createExactRealTerm(stp::REAL_MUL, $3);
+}
+| LPAREN_TOK REAL_DIV_TOK an_terms RPAREN_TOK
+{
+  $$ = createExactRealTerm(stp::REAL_DIV, $3);
 }
 | SELECT_TOK an_term an_term
 {
@@ -3647,6 +3954,18 @@ TERMID_TOK
       $3->GetSourceSort() != $4->GetSourceSort())
   {
     fatal_yyerror("ite branches must have the same sort");
+  }
+
+  // A Real ite has no bit-vector width to carry, so it is built through the
+  // Real constructor; the frontend later names it and states what it stands
+  // for on each branch.
+  if ($3->GetSourceSort().kind() == stp::SourceSort::Kind::Real)
+  {
+    $$ = createExactRealTerm(ITE, new ASTVec{*$2, *$3, *$4});
+    stp::GlobalParserInterface->deleteNode( $2);
+    stp::GlobalParserInterface->deleteNode( $3);
+    stp::GlobalParserInterface->deleteNode( $4);
+    break;
   }
   const unsigned int width = $3->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateArrayTerm(ITE,$4->GetIndexWidth(), width,*$2, *$3, *$4));
@@ -3845,7 +4164,7 @@ TERMID_TOK
 }
 | LPAREN_TOK BITVECTOR_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
+  $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
 
   if ($$->GetType() != BITVECTOR_TYPE)
       yyerror("Must be bitvector type");
@@ -3862,7 +4181,7 @@ TERMID_TOK
 }
 | LPAREN_TOK FLOATINGPOINT_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
+  $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
 
   if ($$->GetType() != FLOATINGPOINT_TYPE)
       yyerror("Must be floating-point type");
@@ -3872,7 +4191,7 @@ TERMID_TOK
 | FLOATINGPOINT_FUNCTIONID_TOK
 {
   ASTVec empty;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+  $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
 
   if ($$->GetType() != FLOATINGPOINT_TYPE)
     yyerror("Must be floating-point type");
@@ -3880,7 +4199,7 @@ TERMID_TOK
 | BITVECTOR_FUNCTIONID_TOK
 {
   ASTVec empty;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+  $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
 
   if ($$->GetType() != BITVECTOR_TYPE)
     yyerror("Must be bitvector type");
@@ -3888,7 +4207,7 @@ TERMID_TOK
 | LPAREN_TOK ROUNDINGMODE_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(
-      stp::GlobalParserInterface->applyFunction(*$2, *$3));
+      applyFunctionChecked(*$2, *$3));
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
     yyerror("Must be RoundingMode type");
   delete $3;
@@ -3897,7 +4216,7 @@ TERMID_TOK
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(
-      stp::GlobalParserInterface->applyFunction(*$1, empty));
+      applyFunctionChecked(*$1, empty));
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
     yyerror("Must be RoundingMode type");
 }
@@ -3909,7 +4228,7 @@ TERMID_TOK
   // own such a function reached the bit-vector token and was accepted as a
   // bit-vector term.
   $$ = stp::GlobalParserInterface->newNode(
-      stp::GlobalParserInterface->applyFunction(*$2, *$3));
+      applyFunctionChecked(*$2, *$3));
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::Uninterpreted)
     yyerror("Must be a declared sort");
   delete $3;
@@ -3918,7 +4237,7 @@ TERMID_TOK
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(
-      stp::GlobalParserInterface->applyFunction(*$1, empty));
+      applyFunctionChecked(*$1, empty));
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::Uninterpreted)
     yyerror("Must be a declared sort");
 }
@@ -3977,6 +4296,7 @@ namespace stp {
     // Each SMT2Parse is one script: the floating-point keywords start
     // disabled and turn on at an FP set-logic.
     SMT2SetFloatTokens(false);
+    SMT2SetRealTokens(false);
     SMT2ResetCommandLexerState();
     int result;
     try

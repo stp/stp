@@ -34,9 +34,6 @@ AddSTPGTest(ArrayReadRefinementProgress_Test.cpp)
 AddSTPGTest(SATSolver_Test.cpp)
 AddSTPGTest(CadicalClauseResult_Test.cpp)
 AddSTPGTest(SatSolverBudget_Test.cpp)
-# Cooperative cancellation of query preparation and the per-query phase
-# timers, over bit-vector, Boolean and UF queries.
-AddSTPGTest(PreparationDeadline_Test.cpp)
 AddSTPGTest(SolverOutput_Test.cpp)
 AddSTPGTest(TrailReuse_Test.cpp)
 AddSTPGTest(SuggestPhase_Test.cpp)

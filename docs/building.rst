@@ -140,7 +140,7 @@ fork's ``stp-ipasir-up`` branch, is release 5.14.7 with the ``NOCADICAL``
 option and the IPASIR-UP propagator interface the linear-arithmetic theory
 drives. A CryptoMiniSat without the interface -- a release, or your
 distribution's -- still builds STP;
-that backend then hosts no theory propagator.
+the arithmetic theory then runs in the full-lazy loop on it.
 Configure warns when the copy it found lacks the interface, because
 CryptoMiniSat is then still the default backend: ``--cadical`` restores the
 propagator for a run, and the pinned fork restores it for the build, named
@@ -247,6 +247,10 @@ distribution's minisat package works too, as does one built by hand:
     cmake --build . -j$(nproc)
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
+
+MiniSat hosts no theory propagator: on it the arithmetic theory runs
+in the full-lazy loop, judging complete assignments rather than working
+inside the search.
 
 Every dependency is fetched and built by the build itself under
 ``-DENABLE_AUTO_DOWNLOAD=ON``; none of them needs a script beforehand.

@@ -33,6 +33,7 @@ THE SOFTWARE.
 // (IncrementalSolverImpl.h).
 
 #include "IncrementalSolverImpl.h"
+#include "Lra/LraFrontend.h"
 
 namespace stp
 {
@@ -327,6 +328,9 @@ IncrementalSolver::Impl::exactStackCheckSat(
     bool requireScopedCollapse, bool* scopedAccepted,
     const ASTNode& completedRoot, size_t orderedDistincts)
 {
+  for (const ASTNode& assertion : assertionsSMT2)
+    if (lra::Frontend::containsRealSyntax(assertion))
+      return SOLVER_ERROR;
   UserDefinedFlags& uf = bm->UserFlags;
   assert(orderedDistincts == 0 || !completedRoot.IsNull());
 

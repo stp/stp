@@ -135,6 +135,8 @@ typedef uint64_t UFDeclHandle;
 /// a stale value valid again if an allocator later reuses the address.
 ///
 /// Separately allocated returned values are exceptions only where documented.
+/// In particular, exact Real model strings are independently caller-owned and
+/// remain valid after VC destruction until released with vc_deleteString.
 ///
 /// Managed Python wrappers reject access after close before calling this raw
 /// API.  The C++ interface follows ordinary manager/scoped-lifetime and
@@ -915,7 +917,40 @@ enum ifaceflag_t
   //! --fp-abstraction-constant-operands. Appended to preserve every
   //! published ordinal.
   //!
-  FP_ABSTRACTION_CONSTANT_OPERANDS
+  FP_ABSTRACTION_CONSTANT_OPERANDS,
+
+  // The exact linear Real controls. Each sets the same UserFlags field its
+  // --lra-... command-line option writes, so a C API client reaches the
+  // same settings as a query read from a file. Appended, like everything
+  // above, to preserve every published ordinal.
+  //
+  // They matter to a caller for the same reason the bit-vector abstraction
+  // controls do: every one of them is meant to preserve the verdict, so a
+  // client that can vary them can compare a varied run against a plain one
+  // and see a soundness fault as a disagreement rather than waiting for a
+  // crash. `param_value` is nonzero for on and zero for off throughout.
+
+  //! Let the theory take part in the SAT search: check the tableau on partial
+  //! assignments and return a cross-row conflict as a clause where it arises,
+  //! rather than after a whole model has been built on top of it. On by
+  //! default; a backend without a propagator runs the full-lazy loop
+  //! regardless. --lra-theory-propagation.
+  LRA_THEORY_PROPAGATION,
+
+  //! Check each exact conflict as it is produced. A debugging aid: it can
+  //! only turn a wrong answer into a diagnosed one. --lra-verify-conflicts.
+  LRA_VERIFY_CONFLICTS,
+
+  //! Check that every exact rational stays canonical. As above: paid for in
+  //! time, and it decides nothing. Unlike the flags around it this one is
+  //! not per validity checker: it sets a default for the whole process,
+  //! which each exact-arithmetic budget reads once, when it is created. So
+  //! it reaches every checker, on any thread, that creates a budget
+  //! afterwards, and a checker's own Real terms only if it is set before
+  //! that checker builds its first one. On by default for a library caller;
+  //! the command-line solver turns it off unless --lra-verify-canonical asks
+  //! for it.
+  LRA_VERIFY_CANONICAL
 
 };
 
@@ -954,6 +989,67 @@ DLL_PUBLIC VC vc_createValidityCheckerReuse(void* _bm);
 //! \brief Returns the boolean type for the given validity checker.
 //!
 DLL_PUBLIC Type vc_boolType(VC vc);
+
+//! Mathematical Real type.
+DLL_PUBLIC Type vc_realType(VC vc);
+
+//! Exact Real constants.  The first form accepts an integer, finite decimal,
+//! or canonical n/d text.  The second accepts owned decimal components and
+//! canonicalizes the sign and gcd exactly.
+DLL_PUBLIC Expr vc_realConstExprFromStr(VC vc, const char* exact_text);
+DLL_PUBLIC Expr vc_realConstExpr(VC vc, const char* numerator,
+                                 const char* denominator);
+
+//! Every constructor below, and the two above, answers NULL when the exact
+//! arithmetic budget refuses the work -- reporting through the handler
+//! vc_registerErrorHandler installs, as the other nonfatal refusals in this
+//! interface do.
+//!
+//! It is not a misuse and it is not predictable from the operands. The limits
+//! are fixed (64 KiBit per operand and per result) and exact arithmetic over
+//! folded constants grows superexponentially: a 48-digit constant cubed, then
+//! raised to the fifth, then squared, crosses the line while every individual
+//! step looks unremarkable. A caller that meets it should build something
+//! smaller. Ill-formed input -- a null operand, an operand from another
+//! checker, a product of two unknowns -- remains fatal, because that is a bug
+//! in the caller rather than a limit it ran into.
+//!
+//! Exact linear Real construction.  Multiplication requires exactly one
+//! concrete constant operand; division requires a concrete nonzero divisor.
+DLL_PUBLIC Expr vc_realPlusExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realMinusExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realUMinusExpr(VC vc, Expr operand);
+DLL_PUBLIC Expr vc_realMultExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realDivExpr(VC vc, Expr numerator, Expr denominator);
+DLL_PUBLIC Expr vc_realLtExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realLeExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realGtExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realGeExpr(VC vc, Expr left, Expr right);
+
+
+//! Construction and semantic capability are reported separately. A
+//! build reports the exact linear QF_LRA fragment through both calls.
+DLL_PUBLIC int vc_hasRealConstruction(void);
+DLL_PUBLIC int vc_hasQFLRA(void);
+
+//! Whether vc_iteExpr accepts Real branches, i.e. whether an if-then-else
+//! selecting between two Real terms on a Boolean condition can be built
+//! through this interface. A construction capability, reported separately
+//! from vc_hasRealConstruction.
+DLL_PUBLIC int vc_hasRealIte(void);
+
+//! Exact model access.  Each returned string is independently allocated by
+//! STP and must be released with vc_deleteString.  No pointer aliases the
+//! manager's private model or arithmetic representation.  After a successful
+//! return the string remains caller-owned independently of the VC lifetime.
+DLL_PUBLIC int vc_hasRealModel(VC vc);
+DLL_PUBLIC int vc_hasRealModelValue(VC vc, Expr term);
+DLL_PUBLIC char* vc_getRealModelValue(VC vc, Expr term);
+DLL_PUBLIC char* vc_getRealModelNumerator(VC vc, Expr term);
+DLL_PUBLIC char* vc_getRealModelDenominator(VC vc, Expr term);
+DLL_PUBLIC char* vc_getRealModelSMTLIBValue(VC vc, Expr term);
+DLL_PUBLIC char* vc_getRealModelSMTLIB2(VC vc);
+DLL_PUBLIC void vc_deleteString(char* value);
 
 //! \brief Returns an array type with the given index type and data type
 //!        for the given validity checker.
@@ -2701,6 +2797,16 @@ enum exprkind_t
   UF_APPLY = FP_SMT_EQ + 2,
   //! Native variadic SMT-LIB distinct predicate.
   DISTINCT = UF_APPLY + 1,
+  REAL_CONST = DISTINCT + 1,
+  REAL_ADD,
+  REAL_SUB,
+  REAL_NEG,
+  REAL_MUL,
+  REAL_DIV,
+  REAL_LT,
+  REAL_LE,
+  REAL_GT,
+  REAL_GE,
 };
 
 //! \brief Returns the expression-kind of the given expression.
@@ -2728,7 +2834,8 @@ enum type_t
   ARRAY_TYPE,
   UNKNOWN_TYPE,
   FLOATINGPOINT_TYPE,
-  ROUNDINGMODE_TYPE
+  ROUNDINGMODE_TYPE,
+  REAL_TYPE
 };
 
 //! \brief Returns the type-kind of the given expression.

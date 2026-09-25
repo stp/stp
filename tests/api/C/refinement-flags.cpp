@@ -112,6 +112,14 @@ static_assert(UF_CHECK_DURING_BV_REFINEMENT == 39,
               "published interface-flag ordinal changed");
 static_assert(REFINEMENT_TRAIL_REUSE == 40,
               "published interface-flag ordinal changed");
+// The exact linear Real controls, appended after the floating-point
+// abstraction's and each after the one before.
+static_assert(LRA_THEORY_PROPAGATION == 61,
+              "published interface-flag ordinal changed");
+static_assert(LRA_VERIFY_CONFLICTS == 62,
+              "published interface-flag ordinal changed");
+static_assert(LRA_VERIFY_CANONICAL == 63,
+              "published interface-flag ordinal changed");
 // The published prefix ends at CNF_AUTO_THRESHOLD. Everything this feature
 // adds -- three interface flags and three profile ordinals -- is new in this
 // series and deliberately NOT pinned here: nothing outside the tree has linked

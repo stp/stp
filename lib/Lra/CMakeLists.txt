@@ -114,6 +114,120 @@ stp_lra_group_number_substrate(stp_lra_exact)
 # requirement of this target, not just an implementation detail of it.
 target_link_libraries(stp_lra_exact PUBLIC stp_lra_imath)
 
+# Exact source frontend.  It may depend on the number substrate and common
+# AST types only: it deliberately has no SATSolver header/symbol and no
+# ExactLraCore consumer edge.
+add_library(stp_lra_frontend STATIC EXCLUDE_FROM_ALL
+  ASTRealConst.cpp
+  LraFrontend.cpp
+  LraAtomRegistry.cpp
+)
+set_target_properties(stp_lra_frontend PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+  POSITION_INDEPENDENT_CODE ON
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON
+)
+set_property(TARGET stp_lra_frontend PROPERTY INCLUDE_DIRECTORIES
+  "${PROJECT_SOURCE_DIR}/include"
+  "${PROJECT_SOURCE_DIR}/lib"
+  "${PROJECT_BINARY_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+set_property(TARGET stp_lra_frontend PROPERTY COMPILE_DEFINITIONS "")
+if(ENABLE_TESTING)
+  target_compile_definitions(stp_lra_frontend PRIVATE
+    STP_LRA_TEST_FAULT_INJECTION
+  )
+endif()
+target_include_directories(stp_lra_frontend SYSTEM PUBLIC
+  "${STP_UNORDERED_DENSE_INCLUDE_DIR}"
+)
+target_link_libraries(stp_lra_frontend PUBLIC stp_lra_exact)
+add_dependencies(stp_lra_frontend ASTKind_header)
+if(MSVC)
+  target_compile_options(stp_lra_frontend PRIVATE /W4)
+else()
+  target_compile_options(stp_lra_frontend PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
+    $<$<BOOL:${WERROR}>:-Werror>
+  )
+endif()
+
+# Self-contained LRA implementation closure for libstp. A private
+# static-library dependency would leak into the exported link interface when
+# libstp itself is static.  Compiling the same reviewed sources as hidden
+# objects makes both shared and static libstp contain the implementation while
+# preserving stp_lra_frontend and its number archives as independent review
+# and test targets.  The repository root adds these objects to stp only after
+# this subdirectory has been configured.
+add_library(stp_lra_product_objects OBJECT
+  ASTRealConst.cpp
+  LraBudgetRefusal.cpp
+  LraFrontend.cpp
+  LraAtomRegistry.cpp
+  RealModel.cpp
+  LraSolveContext.cpp
+  LraCandidateAdapter.cpp
+  LraCoordinator.cpp
+  ExactLraCore.cpp
+  ExactLraRegistration.cpp
+  ExactConflictVerifier.cpp
+  ExactModelVerifier.cpp
+  Storage/StorageFailure.cpp
+  Storage/LraIds.cpp
+  Storage/DenseMembership.cpp
+  DeltaRational.cpp
+  VariableStore.cpp
+  BoundStore.cpp
+  ExactSimplex.cpp
+  ExactRational.cpp
+  NumberBudget.cpp
+  ImathAllocHooks.c
+)
+target_link_libraries(stp_lra_product_objects PRIVATE IMath)
+set_target_properties(stp_lra_product_objects PROPERTIES
+  C_STANDARD 99
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+  POSITION_INDEPENDENT_CODE ON
+  C_VISIBILITY_PRESET hidden
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON
+)
+set_property(TARGET stp_lra_product_objects PROPERTY INCLUDE_DIRECTORIES
+  "${PROJECT_SOURCE_DIR}/include"
+  "${PROJECT_SOURCE_DIR}/lib"
+  "${PROJECT_BINARY_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+set_property(TARGET stp_lra_product_objects PROPERTY COMPILE_DEFINITIONS "")
+if(ENABLE_TESTING)
+  target_compile_definitions(stp_lra_product_objects PRIVATE
+    STP_LRA_TEST_FAULT_INJECTION
+  )
+endif()
+stp_lra_group_number_substrate(stp_lra_product_objects)
+target_include_directories(stp_lra_product_objects SYSTEM PRIVATE
+  "${STP_UNORDERED_DENSE_INCLUDE_DIR}"
+)
+add_dependencies(stp_lra_product_objects ASTKind_header)
+if(MSVC)
+  target_compile_options(stp_lra_product_objects PRIVATE /W4)
+else()
+  target_compile_options(stp_lra_product_objects PRIVATE
+    -Wall -Wextra -Wpedantic
+    $<$<COMPILE_LANGUAGE:CXX>:-Wconversion>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wsign-conversion>
+    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<BOOL:${WERROR}>>:-Werror>
+  )
+endif()
+
 # Private storage/identity substrate for the future exact-LRA core.  This
 # target is intentionally absent from libstp, install, export, and package
 # graphs.  It cannot produce a solver result.
@@ -193,6 +307,55 @@ target_include_directories(stp_lra_core SYSTEM PUBLIC
   "${STP_UNORDERED_DENSE_INCLUDE_DIR}"
 )
 
+# Private registry/core/SAT adapter and coordinator.  It consumes only the
+# common STP SATSolver interface and is deliberately absent from
+# install/export/package rules.  The existing outer solve owner remains the
+# only code allowed to invoke SAT search.
+add_library(stp_lra_integration STATIC EXCLUDE_FROM_ALL
+  RealModel.cpp
+  LraSolveContext.cpp
+  LraCandidateAdapter.cpp
+  LraCoordinator.cpp
+  LraBudgetRefusal.cpp
+)
+set_target_properties(stp_lra_integration PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+  POSITION_INDEPENDENT_CODE ON
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON
+)
+set_property(TARGET stp_lra_integration PROPERTY INCLUDE_DIRECTORIES
+  "${PROJECT_SOURCE_DIR}/include"
+  "${PROJECT_SOURCE_DIR}/lib"
+  "${PROJECT_BINARY_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+set_property(TARGET stp_lra_integration PROPERTY COMPILE_DEFINITIONS "")
+if(ENABLE_TESTING)
+  target_compile_definitions(stp_lra_integration PRIVATE
+    STP_LRA_TEST_FAULT_INJECTION
+  )
+endif()
+target_include_directories(stp_lra_integration SYSTEM PUBLIC
+  "${STP_UNORDERED_DENSE_INCLUDE_DIR}"
+)
+# PUBLIC: the focused tests link this target and include LraFrontend.h and the
+# core headers through it, so both are usage requirements.
+target_link_libraries(stp_lra_integration PUBLIC
+  stp_lra_frontend
+  stp_lra_core
+)
+add_dependencies(stp_lra_integration ASTKind_header)
+if(MSVC)
+  target_compile_options(stp_lra_integration PRIVATE /W4)
+else()
+  target_compile_options(stp_lra_integration PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
+    $<$<BOOL:${WERROR}>:-Werror>
+  )
+endif()
 if(MSVC)
   target_compile_options(stp_lra_core PRIVATE /W4)
 else()

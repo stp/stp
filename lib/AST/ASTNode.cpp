@@ -23,12 +23,34 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AST/AST.h"
+#include "Lra/ASTRealConstAccess.h"
 #include "stp/STPManager/STP.h"
 #include "stp/Util/DagWalk.h"
 #include <sstream>
 
 namespace stp
 {
+
+std::string ASTNode::GetRealCanonical() const
+{
+  if (GetKind() != REAL_CONST)
+    FatalError("GetRealCanonical: node is not an exact Real constant");
+  return lra::detail::realCanonical(_int_node_ptr);
+}
+
+std::string ASTNode::GetRealNumerator() const
+{
+  if (GetKind() != REAL_CONST)
+    FatalError("GetRealNumerator: node is not an exact Real constant");
+  return lra::detail::realNumerator(_int_node_ptr);
+}
+
+std::string ASTNode::GetRealDenominator() const
+{
+  if (GetKind() != REAL_CONST)
+    FatalError("GetRealDenominator: node is not an exact Real constant");
+  return lra::detail::realDenominator(_int_node_ptr);
+}
 
 uint8_t ASTNode::getIteration() const
 {
@@ -51,11 +73,15 @@ STPMgr* ASTNode::GetSTPMgr() const
 
 void ASTNode::SetIndexWidth(unsigned int _iw) const
 {
+  if (isRealTerm())
+    FatalError("SetIndexWidth: mathematical Real has no array index width");
   _int_node_ptr->setIndexWidth(_iw);
 }
 
 void ASTNode::SetValueWidth(unsigned int vw) const
 {
+  if (isRealTerm())
+    FatalError("SetValueWidth: mathematical Real has no bit-vector width");
   _int_node_ptr->setValueWidth(vw);
 }
 
@@ -149,6 +175,13 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
     case ITE:
     {
       if (n.Degree() != 3)
+        return false;
+
+      // A Real ite selects between two Real branches and has no
+      // floating-point format at all; asking one for an exponent width is
+      // an error, not a zero.
+      if (n[1].GetSourceSort().kind() == SourceSort::Kind::Real ||
+          n[2].GetSourceSort().kind() == SourceSort::Kind::Real)
         return false;
 
       e = n[1].GetExpWidth();
@@ -346,6 +379,8 @@ void ASTNode::cacheFPFormat() const
 
 unsigned int ASTNode::GetExpWidth() const
 {
+  if (isRealTerm())
+    FatalError("GetExpWidth: mathematical Real has no floating-point format");
   unsigned int stored = _int_node_ptr->getExpWidth();
   if (stored == FP_NOT_A_FLOAT)
     return 0;
@@ -383,6 +418,8 @@ bool ASTNode::canStoreFPFormat() const
 
 void ASTNode::SetExpWidth(unsigned int _ew) const
 {
+  if (isRealTerm())
+    FatalError("SetExpWidth: mathematical Real has no floating-point format");
   // A format may be set, re-set to the same value, or cleared -- never
   // changed. Two contexts disagreeing about a shared node's format is the
   // hash-consing corruption this trips on.
@@ -405,6 +442,8 @@ void ASTNode::SetExpWidth(unsigned int _ew) const
 
 unsigned int ASTNode::GetSigWidth() const
 {
+  if (isRealTerm())
+    FatalError("GetSigWidth: mathematical Real has no floating-point format");
   if (_int_node_ptr->getExpWidth() == FP_NOT_A_FLOAT)
     return 0;
 
@@ -418,6 +457,8 @@ unsigned int ASTNode::GetSigWidth() const
 
 void ASTNode::SetSigWidth(unsigned int _sw) const
 {
+  if (isRealTerm())
+    FatalError("SetSigWidth: mathematical Real has no floating-point format");
   assert(_int_node_ptr->getSigWidth() == 0 || _sw == 0 ||
          _int_node_ptr->getSigWidth() == _sw);
   _int_node_ptr->setSigWidth(_sw);
@@ -582,6 +623,18 @@ SourceSort ASTNode::deriveSourceSort() const
       break;
     case ROUNDINGMODE:
       return SourceSort::roundingMode();
+    case REAL_CONST:
+    case REAL_ADD:
+    case REAL_SUB:
+    case REAL_NEG:
+    case REAL_MUL:
+    case REAL_DIV:
+      return SourceSort::real();
+    case REAL_LT:
+    case REAL_LE:
+    case REAL_GT:
+    case REAL_GE:
+      return SourceSort::boolean();
     case ARRAY:
       if (Degree() == 2)
       {
@@ -655,6 +708,8 @@ SourceSort ASTNode::deriveSourceSort() const
                                   : SourceSort::bitVector(GetValueWidth());
     case FLOATINGPOINT_TYPE:
       return SourceSort::floatingPoint(GetExpWidth(), GetSigWidth());
+    case REAL_TYPE:
+      return SourceSort::real();
     case ARRAY_TYPE:
     {
       const SourceSort index = SourceSort::bitVector(GetIndexWidth());

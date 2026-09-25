@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "IncrementalSolverImpl.h"
 #include "stp/Simplifier/DistinctOrdering.h"
+#include "Lra/LraFrontend.h"
 
 namespace stp
 {
@@ -204,11 +205,16 @@ bool IncrementalSolver::automaticEngagementReady(int64_t configuredThreshold,
 
 bool IncrementalSolver::canHandle(const ASTVec& assertionsSMT2)
 {
+  // STP deliberately rebuilds one exact core per public check; active Real
+  // formulas therefore use the unified batch/full-lazy coordinator rather
+  // than either persistent incremental implementation.
+  for (const ASTNode& assertion : assertionsSMT2)
+    if (lra::Frontend::containsRealSyntax(assertion))
+      return false;
   // Every construct the SMT-LIB frontend can produce is covered: plain
   // bit-vectors, arrays (lazy or --ackermanize), floating point, and
   // whole-array equality. The method remains the seam for any future
   // exclusion.
-  (void)assertionsSMT2;
   return true;
 }
 

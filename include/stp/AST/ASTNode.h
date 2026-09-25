@@ -25,17 +25,28 @@ THE SOFTWARE.
 #define ASTNODE_H
 
 #include <cstdint>
+#include "stp/config.h"
+#include <string>
 
 #include "stp/NodeFactory/HashingNodeFactory.h"
 #include "stp/Util/Attributes.h"
 #include "ASTInternal.h"
 #include "stp/Globals/Globals.h"
 
+class SimplifyingNodeFactory;
+
 namespace stp
 {
+namespace lra {
+class Frontend;
+}
+namespace detail {
+class CInterfaceNodeAccess;
+}
 using std::ostream;
 class ASTInternal;
 class UFContext;
+DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str);
 
 /******************************************************************
  *  A Kind of Smart pointer to actual ASTInternal datastructure.  *
@@ -47,6 +58,9 @@ class ASTNode
   friend class STPMgr;
   friend class ASTInterior;
   friend class UFContext;
+  friend class lra::Frontend;
+  friend class detail::CInterfaceNodeAccess;
+  friend class ::SimplifyingNodeFactory;
   friend class vector<ASTNode>;
   friend ASTNode HashingNodeFactory::CreateNode(
       stp::Kind kind, stp::ASTChildren back_children);
@@ -142,7 +156,9 @@ public:
   bool isConstant() const
   {
     const Kind k = GetKind();
-    return k == BVCONST || k == TRUE || k == FALSE;
+    return k == BVCONST || k == TRUE || k == FALSE
+           || k == REAL_CONST
+        ;
   }
 
   bool isAtom() const
@@ -157,7 +173,36 @@ public:
     return k == BVLT || k == BVLE || k == BVGT || k == BVGE || k == BVSLT ||
            k == BVSLE || k == BVSGT || k == BVSGE || k == BVUADDO ||
            k == BVSADDO || k == BVUMULO || k == BVSMULO || k == BVUSUBO ||
-           k == BVSSUBO || k == EQ || k == ARRAY_EQ || k == DISTINCT;
+           k == BVSSUBO || k == EQ || k == ARRAY_EQ || k == DISTINCT
+           || k == REAL_LT || k == REAL_LE || k == REAL_GT || k == REAL_GE
+        ;
+  }
+
+  // This is a source-level classification, independent of packed widths.
+  // Comparisons are Boolean and therefore deliberately excluded.
+  bool isRealTerm() const
+  {
+    if (IsNull())
+      return false;
+    switch (GetKind())
+    {
+      case REAL_CONST:
+      case REAL_ADD:
+      case REAL_SUB:
+      case REAL_NEG:
+      case REAL_MUL:
+      case REAL_DIV:
+        return true;
+      case SYMBOL:
+        return _int_node_ptr->getDeclaredSourceSort().kind() ==
+               SourceSort::Kind::Real;
+      case ITE:
+        // An ite is a Real term exactly when its branches are. The condition
+        // is Boolean either way, so the branch decides.
+        return Degree() == 3 && (*this)[1].isRealTerm();
+      default:
+        return false;
+    }
   }
 
   // delegates to the ASTInternal node.
@@ -231,6 +276,12 @@ public:
   // Get the BVCONST value.
   CBV GetBVConst() const;
 
+  // Exact Real values cross the AST boundary only as owned strings.  The
+  // private representation remains ExactRational and is never installed.
+  DLL_PUBLIC std::string GetRealCanonical() const;
+  DLL_PUBLIC std::string GetRealNumerator() const;
+  DLL_PUBLIC std::string GetRealDenominator() const;
+
   unsigned int GetUnsignedConst() const;
 
   /*******************************************************************
@@ -243,9 +294,16 @@ public:
   // Inlined for the same reason as the ref-counting members: ASTInternal is
   // complete here, so these fold to a single virtual dispatch at the call site
   // instead of a call into the library that then dispatches.
-  unsigned int GetIndexWidth() const { return _int_node_ptr->getIndexWidth(); }
+  unsigned int GetIndexWidth() const
+  {
+    if (isRealTerm())
+      FatalError("GetIndexWidth: mathematical Real has no array index width");
+    return _int_node_ptr->getIndexWidth();
+  }
   DLL_PUBLIC unsigned int GetValueWidth() const
   {
+    if (isRealTerm())
+      FatalError("GetValueWidth: mathematical Real has no bit-vector width");
     // Invariant: a float-formatted node stores its packed width as the value
     // width like any other term (the declaration rules and node builders all
     // maintain this). The format is never the width's only source -- this
@@ -263,6 +321,9 @@ public:
   // cost up to six dispatches for what is two pieces of information.
   types GetType(void) const
   {
+    if (isRealTerm())
+      return REAL_TYPE;
+
     const unsigned int iw = GetIndexWidth();
     const unsigned int vw = GetValueWidth();
 
