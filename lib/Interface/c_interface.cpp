@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 #include "stp/c_interface.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 
 #include <cassert>
 #include <cinttypes>
@@ -593,6 +594,65 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case BV_TERM_ABSTRACTION_COMPARE:
       b->UserFlags.bv_term_abstraction_compare = param_value != 0;
       break;
+    case FP_ABSTRACTION:
+      b->UserFlags.fp_abstraction = param_value != 0;
+      break;
+    case FP_ABSTRACTION_OPS:
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_OPS"))
+      {
+        // The C mask and the internal one are the same values by
+        // construction; keep them provably so.
+        static_assert(
+            stp::FP_ABSTRACT_MUL == 1 && stp::FP_ABSTRACT_DIV == 2 &&
+                stp::FP_ABSTRACT_SQRT == 4 && stp::FP_ABSTRACT_ADD == 8 &&
+                stp::FP_ABSTRACT_SUB == 16 && stp::FP_ABSTRACT_FMA == 32 &&
+                stp::FP_ABSTRACT_REM == 64 && stp::FP_ABSTRACT_RTI == 128 &&
+                stp::FP_ABSTRACT_TO_SBV == 256 &&
+                stp::FP_ABSTRACT_TO_UBV == 512 &&
+                stp::FP_ABSTRACT_DEFAULT == 39,
+            "the documented FP_ABSTRACTION_OPS bits drifted");
+        b->UserFlags.fp_abstraction_ops =
+            param_value == 0 ? unsigned(stp::FP_ABSTRACT_DEFAULT)
+                             : static_cast<unsigned>(param_value);
+      }
+      break;
+    case FP_ABSTRACTION_INCREMENTAL:
+      b->UserFlags.fp_abstraction_incremental = param_value != 0;
+      break;
+    case FP_ABSTRACTION_CHAIN_OPS:
+      // Zero is a meaningful value here -- it is the default, naming no
+      // chain-only operation -- so unlike FP_ABSTRACTION_OPS it is stored
+      // rather than read as "restore the default".
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_CHAIN_OPS"))
+        b->UserFlags.fp_abstraction_chain_ops =
+            static_cast<unsigned>(param_value);
+      break;
+    case FP_ABSTRACTION_SHAPE:
+      b->UserFlags.fp_abstraction_shape = param_value != 0;
+      break;
+    case FP_ABSTRACTION_RELATIONAL:
+      b->UserFlags.fp_abstraction_relational = param_value != 0;
+      break;
+    case FP_ABSTRACTION_BOX_LEMMAS:
+      b->UserFlags.fp_abstraction_box_lemmas = param_value != 0;
+      break;
+    case FP_ABSTRACTION_PHASE_HINTS:
+      b->UserFlags.fp_abstraction_phase_hints = param_value != 0;
+      break;
+    case FP_ABSTRACTION_REPAIR:
+      b->UserFlags.fp_abstraction_repair = param_value != 0;
+      break;
+    case FP_ABSTRACTION_DECLINE_PINNED:
+      b->UserFlags.fp_abstraction_decline_pinned = param_value != 0;
+      break;
+    case FP_ABSTRACTION_CONSTANT_OPERANDS:
+      b->UserFlags.fp_abstraction_constant_operands =
+          param_value == 0
+              ? stp::UserDefinedFlags::FpConstantOperandMode::OFF
+              : param_value == 1
+                    ? stp::UserDefinedFlags::FpConstantOperandMode::ON
+                    : stp::UserDefinedFlags::FpConstantOperandMode::AUTO;
+      break;
     case BV_TERM_ABSTRACTION_PROFILE:
       if (param_value == STP_BV_TERM_ABSTRACTION_PROFILE_QUALIFIED)
       {
@@ -677,6 +737,54 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       if (nonNegativeFlag(param_value,
                           "BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT"))
         b->UserFlags.bv_term_abstraction_divmod_value_limit =
+            static_cast<unsigned>(param_value);
+      break;
+    // The floating-point abstraction's unsigned knobs. Every one of these is
+    // a width, a tier, a budget or a count, and every one would wrap to
+    // something enormous under a negative value -- for a width, a floor no
+    // format can reach; for a budget, no limit at all -- so a negative is
+    // refused and the field left as it was.
+    case FP_ABSTRACTION_WIDTH:
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_WIDTH"))
+        b->UserFlags.fp_abstraction_width = static_cast<unsigned>(param_value);
+      break;
+    case FP_ABSTRACTION_TIERS:
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_TIERS"))
+        b->UserFlags.fp_abstraction_tiers = static_cast<unsigned>(param_value);
+      break;
+    case FP_ABSTRACTION_VALUES:
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_VALUES"))
+        b->UserFlags.fp_abstraction_values =
+            static_cast<unsigned>(param_value);
+      break;
+    case FP_ABSTRACTION_RELATIONAL_LAST_WIDTH:
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_RELATIONAL_LAST_WIDTH"))
+        b->UserFlags.fp_abstraction_relational_last_width =
+            static_cast<unsigned>(param_value);
+      break;
+    case FP_ABSTRACTION_RESTART_LIMIT:
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_RESTART_LIMIT"))
+        b->UserFlags.fp_abstraction_restart_limit =
+            static_cast<unsigned>(param_value);
+      break;
+    case FP_ABSTRACTION_RESTART_WIDTH:
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_RESTART_WIDTH"))
+        b->UserFlags.fp_abstraction_restart_width =
+            static_cast<unsigned>(param_value);
+      break;
+    case FP_ABSTRACTION_SIGNIFICAND_BITS:
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_SIGNIFICAND_BITS"))
+        b->UserFlags.fp_abstraction_significand_bits =
+            static_cast<unsigned>(param_value);
+      break;
+    case FP_ABSTRACTION_SIGNIFICAND_BITS_WIDE:
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_SIGNIFICAND_BITS_WIDE"))
+        b->UserFlags.fp_abstraction_significand_bits_wide =
+            static_cast<unsigned>(param_value);
+      break;
+    case FP_ABSTRACTION_BUDGET:
+      if (nonNegativeFlag(param_value, "FP_ABSTRACTION_BUDGET"))
+        b->UserFlags.fp_abstraction_budget =
             static_cast<unsigned>(param_value);
       break;
     case UF_LEMMAS_PER_ROUND:
@@ -979,6 +1087,13 @@ void vc_printCounterExampleToBuffer(VC vc, char** buf, size_t* len)
 
 unsigned long long vc_getCounter(VC vc, enum stp_counter_t counter)
 {
+  // The floating-point abstraction accumulates into its own per-instance
+  // statistics and folds them into the coverage totals when it publishes;
+  // fold in whatever the live instances hold before reading, so a caller
+  // that asks mid-session -- which is every caller, since the checker is
+  // usually still alive when its coverage is read -- sees the abstraction it
+  // just ran rather than zeroes. Idempotent, and free when nothing is live.
+  mgr(vc)->publishFpCoverage();
   const stp::UserDefinedFlags::EncodingCoverage& c =
       mgr(vc)->UserFlags.coverage;
   typedef stp::UserDefinedFlags UF;
@@ -1033,6 +1148,26 @@ unsigned long long vc_getCounter(VC vc, enum stp_counter_t counter)
     case STP_COUNTER_BV_SCHEMA_VARIABLES: return c.bv_schema_variables;
     case STP_COUNTER_BV_SCHEMA_MICROSECONDS:
       return c.bv_schema_microseconds;
+
+    case STP_COUNTER_FP_CANDIDATES: return c.fp_candidates;
+    case STP_COUNTER_FP_ABSTRACTED: return c.fp_abstracted;
+    case STP_COUNTER_FP_SHARED: return c.fp_shared;
+    case STP_COUNTER_FP_CHAINED: return c.fp_chained;
+    case STP_COUNTER_FP_RULE_LEMMAS: return c.fp_rule_lemmas;
+    case STP_COUNTER_FP_CROSS_RULES: return c.fp_cross_rules;
+    case STP_COUNTER_FP_CHECKS: return c.fp_checks;
+    case STP_COUNTER_FP_SKIPPED_CHECKS: return c.fp_skipped_checks;
+    case STP_COUNTER_FP_INCONSISTENT: return c.fp_inconsistent;
+    case STP_COUNTER_FP_VALUE_LEMMAS: return c.fp_value_lemmas;
+    case STP_COUNTER_FP_BOX_LEMMAS: return c.fp_box_lemmas;
+    case STP_COUNTER_FP_SHAPE_LEMMAS: return c.fp_shape_lemmas;
+    case STP_COUNTER_FP_RELATIONAL_LEMMAS: return c.fp_relational_lemmas;
+    case STP_COUNTER_FP_RELEASES: return c.fp_releases;
+    case STP_COUNTER_FP_REFINEMENT_ROUNDS: return c.fp_refinement_rounds;
+    case STP_COUNTER_FP_RESTARTS: return c.fp_restarts;
+    case STP_COUNTER_FP_REPAIRS: return c.fp_repairs;
+    case STP_COUNTER_FP_LEMMA_MICROSECONDS:
+      return c.fp_lemma_microseconds;
   }
   reportCAPIError("vc_getCounter: unrecognised counter");
   return 0;

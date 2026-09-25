@@ -39,6 +39,7 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 #include <ankerl/unordered_dense.h>
 #include <cstdint>
+#include <set>
 
 namespace stp
 {
@@ -109,6 +110,9 @@ private:
   // active: owned by STP for exactly one batch solve, and consulted by the
   // preprocessing passes that must not touch its symbols.
   FpAbstraction* fpAbstraction = nullptr;
+  // Every FpAbstraction constructed under this manager and not yet
+  // destroyed; see registerFpAbstraction below.
+  std::set<FpAbstraction*> liveFpAbstractions;
 
   // Why the last solve had no answer, and the sentence to give a caller who
   // asks. Recorded rather than derived because the reasons are produced in
@@ -153,6 +157,26 @@ public:
   {
     fpAbstraction = abstraction;
   }
+
+  // Every FpAbstraction alive under this manager, whether or not it is the
+  // one the pointer above names: the pointer is the *active* instance and is
+  // cleared and re-published around batch warm-ups and fallbacks, while a
+  // reader of the session's coverage counters needs whatever exists right
+  // now. An instance registers itself here on construction and folds its
+  // totals into UserFlags.coverage on destruction; publishFpCoverage() folds
+  // in what the live ones have accumulated since they last published, so
+  // vc_getCounter answers mid-session as well as after teardown. There are
+  // at most a handful: one per batch solve or restart, one per encoding
+  // epoch under --fp-abstraction-incremental.
+  void registerFpAbstraction(FpAbstraction* abstraction)
+  {
+    liveFpAbstractions.insert(abstraction);
+  }
+  void unregisterFpAbstraction(FpAbstraction* abstraction)
+  {
+    liveFpAbstractions.erase(abstraction);
+  }
+  DLL_PUBLIC void publishFpCoverage();
 
   // frequently used nodes
   ASTNode ASTFalse, ASTTrue, ASTUndefined;

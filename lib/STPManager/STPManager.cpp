@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Util/CBVOps.h"
@@ -463,6 +464,16 @@ ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
   ASTNode n(LookupOrCreateBVConst(temp_bvconst));
   CONSTANTBV::BitVector_Destroy(bv);
   return n;
+}
+
+void STPMgr::publishFpCoverage()
+{
+  // Each live instance folds in what it has accumulated since it last
+  // published, so this is idempotent and safe to call as often as a reader
+  // likes. Instances that have already been destroyed published on the way
+  // out and are not here to publish twice.
+  for (FpAbstraction* abstraction : liveFpAbstractions)
+    abstraction->publishCoverage();
 }
 
 void STPMgr::noteFloatingPoint()
