@@ -386,6 +386,13 @@ if(TEST_UNITS)
     add_subdirectory(unit-tests)
 endif()
 
+if(USE_CADICAL AND STP_EXECUTABLE_AVAILABLE)
+    add_test(NAME cadical-options-cli
+        COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/cadical_options.py"
+                "$<TARGET_FILE:stp-bin>" "$<BOOL:${CADICAL_HAS_INPROBING}>")
+    set_tests_properties(cadical-options-cli PROPERTIES TIMEOUT 180)
+endif()
+
 # -----------------------------------------------------------------------------
 # The floating-point self-test tools (built under tools/ whenever
 # ENABLE_TESTING is on) exit non-zero on failure, so they run as plain

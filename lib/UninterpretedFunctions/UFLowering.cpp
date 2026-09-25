@@ -59,11 +59,13 @@ struct NarrowAnalysis
   std::set<const UFDecl*> nonNarrowable;
 };
 
-NarrowAnalysis analyzeNarrowability(const ASTNode& root, UFContext* context)
+NarrowAnalysis analyzeNarrowability(const ASTNode& root, UFContext* context,
+                                    PreparationPoller& poll)
 {
   NarrowAnalysis result;
   ASTNodeSet visited;
   walkPreOrder(root, [&](const ASTNode& n) -> bool {
+    poll();
     if (!visited.insert(n).second)
       return false;
 
@@ -76,6 +78,7 @@ NarrowAnalysis analyzeNarrowability(const ASTNode& root, UFContext* context)
 
     for (size_t i = 0; i < n.Degree(); i++)
     {
+      poll();
       if (n[i].GetKind() != UF_APPLY)
         continue;
       const UFDecl* childDecl = context->lookupIdentity(n[i][0]);
@@ -114,24 +117,8 @@ ASTNode rebuildWithChildren(const ASTNode& original,
                             const ASTVec& loweredChildren, STPMgr* manager)
 {
   assert(original.Degree() == loweredChildren.size());
-  bool changed = false;
-  for (size_t i = 0; i < loweredChildren.size(); ++i)
-    changed = changed || loweredChildren[i] != original[i];
-  if (!changed)
-    return original;
-
-  NodeFactory* const factory = manager->defaultNodeFactory;
-  ASTNode rebuilt;
-  if (original.GetValueWidth() == 0)
-    rebuilt = factory->CreateNode(original.GetKind(), loweredChildren);
-  else
-    // Mirror SubstitutionMap's rebuild funnel: CreateArrayTerm preserves both
-    // widths for arrays and is also the width-preserving CreateTerm path for
-    // non-Boolean bit-vector terms when the index width is zero.
-    rebuilt =
-        factory->CreateArrayTerm(original.GetKind(), original.GetIndexWidth(),
-                                 original.GetValueWidth(), loweredChildren);
-
+  const ASTNode rebuilt =
+      rebuildNodeWithChildren(manager, original, loweredChildren);
   if (rebuilt.GetSourceSort() != original.GetSourceSort())
     FatalError("UF lowering rebuilt a node at the wrong SourceSort", rebuilt);
   return rebuilt;
@@ -341,6 +328,7 @@ void UFLowering::installEagerCongruence(
     LoweredApplicationView& view, const std::set<const UFDecl*>& injectable,
     const ASTNode& guard) const
 {
+  PreparationPoller poll(manager_->preparation_control, PreparationStage::UFLowering);
   typedef UserDefinedFlags::UFEagerMode Mode;
   const Mode mode = manager_->UserFlags.uf_eager_mode;
   view.eagerStats.budget = manager_->UserFlags.uf_eager_budget;
@@ -352,6 +340,7 @@ void UFLowering::installEagerCongruence(
       byDeclaration;
   for (const LoweredApplicationRecord& record : view.applications)
   {
+    poll();
     // A record with no readable argument tuple belongs to a declaration with
     // one application, which has no pairs to constrain anyway.
     if (record.observableArguments)
@@ -366,6 +355,7 @@ void UFLowering::installEagerCongruence(
   std::map<const UFDecl*, CongruenceGroups> groupsByDeclaration;
   for (const auto& entry : byDeclaration)
   {
+    poll();
     const CongruenceGroups grouped = groupForCongruence(entry.second);
     const uint64_t cost = grouped.estimate;
     groupsByDeclaration.emplace(entry.first, grouped);
@@ -411,6 +401,7 @@ void UFLowering::installEagerCongruence(
   uint64_t budget = manager_->UserFlags.uf_eager_budget;
   for (const std::pair<uint64_t, const UFDecl*>& candidate : selection)
   {
+    poll();
     UFEagerDeclarationStat& stat =
         view.eagerStats.declarations[statIndex[candidate.second]];
     if (mode == Mode::AUTO)
@@ -476,10 +467,12 @@ void UFLowering::installEagerCongruence(
     const UFSignature& signature = candidate.second->signature();
     for (const CongruencePart& part : groupsByDeclaration[candidate.second].parts)
     {
+      poll();
     const std::vector<const LoweredApplicationRecord*>& records = part.records;
     for (size_t i = 0; i < part.symbolic; ++i)
       for (size_t j = i + 1; j < records.size(); ++j)
       {
+        poll();
         const LoweredApplicationRecord& left = *records[i];
         const LoweredApplicationRecord& right = *records[j];
         stat.enumeratedPairs++;
@@ -487,6 +480,7 @@ void UFLowering::installEagerCongruence(
         bool impossible = false;
         for (size_t k = 0; k < signature.arity() && !impossible; ++k)
         {
+          poll();
           const SourceSort solved =
               UFSignature::loweringSort(signature.domain()[k]);
           switch (comparePosition(factory, left.loweredActuals[k],
@@ -614,6 +608,7 @@ LoweredApplicationView
 UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
                                const UFSolveScope& scope) const
 {
+  PreparationPoller poll(manager_->preparation_control, PreparationStage::UFLowering);
   if (publicRoot.IsNull() || !publicRoot.IsOwnedBy(manager_))
     FatalError("UF lowering requires a completed root owned by its context");
 
@@ -647,7 +642,7 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
   NarrowAnalysis narrowing;
   if (manager_->UserFlags.uf_narrow_results ||
       manager_->UserFlags.uf_inject_args)
-    narrowing = analyzeNarrowability(publicRoot, context);
+    narrowing = analyzeNarrowability(publicRoot, context, poll);
 
   // A name is canonical per lowered expression, matching the reference
   // oracle. This both avoids redundant definitions and makes an identical
@@ -771,6 +766,7 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
 
         for (size_t i = 1; i < loweredChildren.size(); ++i)
         {
+          poll();
           const ASTNode& lowered = loweredChildren[i];
           const SourceSort& expected = declaration->signature().domain()[i - 1];
           if (application[i].GetSourceSort() != expected ||
@@ -879,7 +875,7 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
         // "reinterpret these bits" to_fp. Every other sort is returned as
         // itself.
         return theoryResult(record.resultSymbol, codomain);
-      });
+      }, [&poll] { poll(); });
 
   // Only a declaration with two or more lowered applications can ever produce
   // a congruence lemma, and a name for a compound actual exists solely so that
@@ -894,7 +890,10 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
   // makes its record unobservable.
   std::map<const UFDecl*, size_t> applicationsPerDeclaration;
   for (const LoweredApplicationRecord& record : view.applications)
+  {
+    poll();
     applicationsPerDeclaration[record.declaration]++;
+  }
 
   const auto comparable = [&](const PendingName& pending) {
     return applicationsPerDeclaration[view.applications[pending.record]
@@ -903,6 +902,7 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
 
   for (const PendingName& pending : pendingNames)
   {
+    poll();
     if (!comparable(pending))
       continue;
     ASTNode name;
@@ -932,6 +932,7 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
 
   for (const PendingName& pending : pendingNames)
   {
+    poll();
     if (comparable(pending))
       continue;
     LoweredApplicationRecord& record = view.applications[pending.record];
@@ -1001,6 +1002,7 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
     FatalError("UF_APPLY crossed the completed-root lowering barrier",
                view.semanticRoot);
 
+  poll.check();
   context->installSolveProtection(view.protectedSymbols, view.solveScalars);
   return view;
 }

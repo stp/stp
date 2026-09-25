@@ -86,7 +86,11 @@ if(NOT ABC_FOUND_SYSTEM)
     # followed since PR #892, one tag per bump. Moving the pin to `stp` would
     # bump the upstream base with it. To work on either, clone the fork and
     # point -DABC_DIR at a build of the clone. See docs/code-guide.rst.
-    set(ABC_GIT_TAG "b6e26a0fe6d813136687e9adf06c1c08d077d567" CACHE STRING
+    #
+    # The pinned commit adds one fix to that set: Cnf_CutDeriveTruth keeps its
+    # truth-table scratch per call rather than in a static array, so managers
+    # deriving CNF on separate threads do not race.
+    set(ABC_GIT_TAG "b1e6f8f09f19c59a799c01e4ab684006065d402c" CACHE STRING
         "ABC revision to build when one has to be built")
     mark_as_advanced(ABC_GIT_TAG)
 

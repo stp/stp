@@ -145,6 +145,28 @@ public:
   DLL_PUBLIC void stop(Category c);
   DLL_PUBLIC void print();
 
+  // Balance a phase on ordinary return and when preparation is cancelled.
+  class Scope final
+  {
+  public:
+    Scope(RunTimes& times, Category category)
+        : times_(&times), category_(category) { times_->start(category_); }
+    ~Scope() { finish(); }
+    void finish()
+    {
+      if (times_)
+      {
+        times_->stop(category_);
+        times_ = nullptr;
+      }
+    }
+    Scope(const Scope&) = delete;
+    Scope& operator=(const Scope&) = delete;
+  private:
+    RunTimes* times_;
+    Category category_;
+  };
+
   // Read what has been charged so far without disturbing it. print() ends by
   // clearing, which a reader that only reports -- (get-info :all-statistics)
   // -- must not do to a session that goes on solving.

@@ -14,10 +14,14 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <ostream>
 #include <unordered_set>
 
 namespace stp
 {
+
+class SourceSort;
+std::string uninterpretedSortName(unsigned id);
 
 class SourceSort final
 {
@@ -222,6 +226,38 @@ public:
       h = h * 1315423911u + element().hash();
     }
     return h;
+  }
+
+  std::string name() const
+  {
+    switch (kind_)
+    {
+      case Kind::Unknown:
+        return "Unknown";
+      case Kind::Bool:
+        return "Bool";
+      case Kind::BitVector:
+        return "(_ BitVec " + std::to_string(first_) + ")";
+      case Kind::FloatingPoint:
+        return "(_ FloatingPoint " + std::to_string(first_) + " " +
+               std::to_string(second_) + ")";
+      case Kind::RoundingMode:
+        return "RoundingMode";
+      case Kind::Array:
+        return "(Array " + index().name() + " " + element().name() + ")";
+      case Kind::Uninterpreted:
+      {
+        const std::string declared = uninterpretedSortName(first_);
+        return declared.empty() ? "<unknown-uninterpreted-sort>" : declared;
+      }
+    }
+    assert(false && "exhaustive SourceSort::Kind switch");
+    return "Unknown";
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const SourceSort& sort)
+  {
+    return os << sort.name();
   }
 
   // For the manager's intern pool, which is what lets a derived sort be

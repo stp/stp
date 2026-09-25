@@ -48,6 +48,8 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
     return runSolver(satSolver);
   }
 
+  QueryPhaseScope encoding(bm->query_timing, QueryPhase::EncodingOther);
+
   // Shortcut if known. This avoids calling the setup of the CNF generator.
   // setup of the CNF generator is expensive. NB, these checks have to occur
   // after calling the sat solver (if it's not the first time.)
@@ -72,6 +74,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
     assert(satSolver.nVars() == 0);
     mark_variables_as_frozen(satSolver);
     bind_injectivity_guard(satSolver);
+    encoding.finish();
     return runSolver(satSolver);
   }
 
@@ -107,6 +110,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   bind_injectivity_guard(satSolver);
   suggest_array_index_hints(satSolver, needAbsRef);
 
+  encoding.finish();
   return runSolver(satSolver);
 }
 
@@ -346,10 +350,12 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
 template <class BBNodeT, class ManagerT, class BlasterT, class LoweringT>
 bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
 {
+  QueryPhaseScope encoding(bm->query_timing, QueryPhase::EncodingOther);
   stp::SubstitutionMap sm(bm);
   Simplifier simp(bm, &sm);
 
   ManagerT mgr;
+  mgr.setPreparationControl(bm->preparation_control);
   mgr.nodeBudget = bm->UserFlags.aig_node_budget;
   if (bm->expected_blast_ands > 0)
   {
@@ -362,16 +368,14 @@ bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
                 allowAbstraction_);
 
   BBNodeT BBFormula;
+  QueryCleanupOnExit cleanup(bm->query_timing, QueryPhase::EncodingCleanup);
 
   bm->UserFlags.coverage.queries_bitblasted++;
-  bm->GetRunTimes()->start(RunTimes::BitBlasting);
+  QueryPhaseScope blast_time(bm->query_timing, QueryPhase::BitBlasting);
+  RunTimes::Scope blast_runtime(*bm->GetRunTimes(), RunTimes::BitBlasting);
 
-  // Only BBForm() and the side-constraint fold below create AIG nodes, so
-  // only they can exceed the budget -- ToCNFAIG drives ABC directly and never
-  // calls mgr.CreateNode(). Keeping the try that narrow is what lets the
-  // handler close RunTimes::BitBlasting unconditionally; RunTimes::stop()
-  // FatalErrors on a category mismatch, so a try wide enough to span
-  // CNFConversion would abort instead of report.
+  // Only the blast and side-constraint fold can exceed the AIG node budget.
+  // The scoped timer also closes when a query-deadline interruption unwinds.
   try
   {
     BBFormula = bb.BBForm(input);
@@ -405,7 +409,8 @@ bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
   }
   catch (const AIGBudgetExhausted& e)
   {
-    bm->GetRunTimes()->stop(RunTimes::BitBlasting);
+    blast_runtime.finish();
+    blast_time.finish();
     if (bm->UserFlags.stats_flag)
       cerr << "AIG node budget exhausted at " << e.nodeCount << " nodes"
            << endl;
@@ -429,16 +434,21 @@ bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
     return false;
   }
 
-  bm->GetRunTimes()->stop(RunTimes::BitBlasting);
+  blast_runtime.finish();
+  blast_time.finish();
 
   delete cb;
   cb = NULL;
   bb.cb = NULL;
 
-  bm->GetRunTimes()->start(RunTimes::CNFConversion);
-  LoweringT lowering(bm->UserFlags);
-  lowering.toCNF(BBFormula, cnf, nodeToSATVar, needAbsRef, mgr);
-  bm->GetRunTimes()->stop(RunTimes::CNFConversion);
+  {
+    RunTimes::Scope cnf_runtime(*bm->GetRunTimes(), RunTimes::CNFConversion);
+    QueryPhaseScope cnf_time(bm->query_timing, QueryPhase::CNFConversion);
+    bm->checkPreparation(PreparationStage::CNFConversion);
+    LoweringT lowering(bm->UserFlags);
+    lowering.toCNF(BBFormula, cnf, nodeToSATVar, needAbsRef, mgr);
+    bm->checkPreparation(PreparationStage::CNFConversion);
+  }
 
   // The abstraction records below name their combinational inputs by ordinal,
   // which is what the CI projection is indexed by. 0 is CNF's "no variable"
@@ -541,8 +551,11 @@ bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
   }
 
   // Free the memory in the AIGs.
-  BBFormula = BBNodeT(); // null node
-  mgr.stop();
+  {
+    QueryPhaseScope cleanup_time(bm->query_timing, QueryPhase::EncodingCleanup);
+    BBFormula = BBNodeT(); // null node
+    mgr.stop();
+  }
 
   return true;
 }
@@ -571,19 +584,26 @@ void ToSATAIG::configure_trail_reuse(SATSolver& satSolver, const CNF& cnf,
 
 void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf)
 {
-  bm->GetRunTimes()->start(RunTimes::SendingToSAT);
+  QueryPhaseScope clause_time(bm->query_timing, QueryPhase::ClauseLoading);
+  RunTimes::Scope clause_runtime(*bm->GetRunTimes(), RunTimes::SendingToSAT);
+  PreparationPoller poll(bm->preparation_control, PreparationStage::ClauseLoading);
 
   // Create a new sat variable for each of the variables in the CNF.
   int satV = satSolver.nVars();
   for (int i = 0; i < (int)cnf.varCount() - satV; i++)
+  {
+    poll();
     satSolver.newVar();
+  }
 
   SATSolver::vec_literals satSolverClause;
   for (CNF::ClauseCursor c = cnf.clauses(); c.next();)
   {
+    poll();
     satSolverClause.clear();
     for (const int *pLit = c.begin(), *pStop = c.end(); pLit < pStop; pLit++)
     {
+      poll();
       uint32_t var = (*pLit) >> 1;
       assert((var < satSolver.nVars()));
       SATSolver::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
@@ -595,7 +615,7 @@ void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf)
       break;
   }
   add_shift_primes_to_solver(satSolver);
-  bm->GetRunTimes()->stop(RunTimes::SendingToSAT);
+  poll.check();
 }
 
 // --bb.shift-variant 4. These are implicates of the shift relation, so
@@ -605,14 +625,17 @@ void ToSATAIG::add_shift_primes_to_solver(SATSolver& satSolver)
 {
   if (shiftPrimeClauses_.empty() || !satSolver.okay())
     return;
+  PreparationPoller poll(bm->preparation_control, PreparationStage::ClauseLoading);
   SATSolver::vec_literals cl;
   uint64_t added = 0, skipped = 0;
   for (const auto& clause : shiftPrimeClauses_)
   {
+    poll();
     cl.clear();
     bool ok = true;
     for (int lit : clause)
     {
+      poll();
       const uint32_t v = (uint32_t)(lit >> 1);
       if (v >= satSolver.nVars())
       {
@@ -1002,6 +1025,7 @@ void ToSATAIG::suggest_array_index_hints(SATSolver& satSolver, bool needAbsRef)
 
 bool ToSATAIG::runSolver(SATSolver& satSolver)
 {
+  bm->checkPreparation(PreparationStage::Encoding);
   bm->GetRunTimes()->start(RunTimes::Solving);
   // The injectivity guard is the only assumption the batch pipeline makes,
   // and it is rebuilt on every round because a round that retracted it must

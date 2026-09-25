@@ -376,7 +376,18 @@ namespace stp
     for (size_t i = 1; i < terms.size(); ++i)
     {
       if (terms[i].GetSourceSort() != expected)
-        fatal_yyerror(message);
+      {
+        std::ostringstream diagnostic;
+        diagnostic << message << ": observed (";
+        for (size_t j = 0; j < terms.size(); ++j)
+        {
+          if (j != 0)
+            diagnostic << ", ";
+          diagnostic << terms[j].GetSourceSort();
+        }
+        diagnostic << ')';
+        fatal_yyerror(diagnostic.str().c_str());
+      }
     }
   }
 

@@ -485,8 +485,16 @@ void primeMemo(const ASTNode& top, Classify classify, Visit visit)
 // `combine` is a template parameter rather than a std::function so that it
 // inlines: this runs once per node, and an indirect call per node would be a
 // real cost on ordinary shallow input.
-template <class Cache, class Combine>
-ASTNode postOrderRebuild(const ASTNode& top, Cache& cache, Combine combine)
+// An optional checkpoint covers descent and leaf-heavy nodes as well as
+// combination. Callers without cancellation compile the empty check away.
+struct NoWalkCheckpoint
+{
+  void operator()() const {}
+};
+
+template <class Cache, class Combine, class Checkpoint = NoWalkCheckpoint>
+ASTNode postOrderRebuild(const ASTNode& top, Cache& cache, Combine combine,
+                         Checkpoint checkpoint = Checkpoint())
 {
   // One node's progress: where its children begin in the shared LIFO arena,
   // and how far along its own child list it has got. Keeping an ASTVec in
@@ -515,7 +523,8 @@ ASTNode postOrderRebuild(const ASTNode& top, Cache& cache, Combine combine)
 
   // Answers that need no frame, which is what the recursive form answered
   // without a call.
-  auto known = [&cache, &result](const ASTNode& n) -> bool {
+  auto known = [&cache, &result, &checkpoint](const ASTNode& n) -> bool {
+    checkpoint();
     if (n.Degree() == 0)
     {
       result = n;

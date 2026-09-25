@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include "BBNodeAIG.h"
 #include "stp/ToSat/AIGBudget.h"
+#include "stp/Util/PreparationControl.h"
 #include "stp/ToSat/ToSATBase.h"
 
 // From ABC
@@ -102,7 +103,7 @@ inline void ensureDarLibrary()
 }
 
 // Creates AIG nodes with ABC and wraps them in BBNodeAIG's.
-class BBNodeManagerAIG
+class BBNodeManagerAIG : public EncodingPreparation
 {
 public:
   Aig_Man_t* aigMgr;
@@ -133,6 +134,7 @@ public:
   // why it does not go through CreateSymbol.
   BBNodeAIG CreateFreshInput()
   {
+    pollPreparation();
     BBNodeAIG fresh(Aig_ObjCreateCi(aigMgr));
     fresh.symbol_index = aigMgr->vCis->nSize - 1;
     return fresh;
@@ -189,7 +191,7 @@ public:
   static bool isAnd(const BBNodeAIG& n) { return Aig_ObjIsAnd(Aig_Regular(n.n)); }
   static unsigned nodeId(const BBNodeAIG& n)
   {
-    return Aig_ObjId(Aig_Regular(n.n));
+    return static_cast<unsigned>(Aig_ObjId(Aig_Regular(n.n)));
   }
 
   // The fanins of an AND, with the sign stripped. Provenance and traversal
@@ -210,6 +212,7 @@ public:
   // of magnitude, not an exact ceiling.
   void checkBudget() const
   {
+    pollPreparation();
     if (nodeBudget >= 0 &&
         static_cast<int64_t>(aigMgr->nObjs[AIG_OBJ_AND]) > nodeBudget)
       throw AIGBudgetExhausted(aigMgr->nObjs[AIG_OBJ_AND]);
@@ -224,10 +227,14 @@ private:
     std::deque<Aig_Obj_t*> names;
 
     for (size_t i = 0, size = children.size(); i < size; ++i)
+    {
+      pollPreparation();
       names.push_back(children[i].n);
+    }
 
     while (names.size() > 2)
     {
+      pollPreparation();
       Aig_Obj_t* a = names.front();
       names.pop_front();
 
@@ -284,7 +291,7 @@ public:
     ABC_FREE(aigMgr->pTable);
     aigMgr->nTableSize = slots;
     aigMgr->pTable = ABC_ALLOC(Aig_Obj_t*, slots);
-    memset(aigMgr->pTable, 0, sizeof(Aig_Obj_t*) * slots);
+    memset(aigMgr->pTable, 0, sizeof(Aig_Obj_t*) * static_cast<size_t>(slots));
   }
 
   void stop()
@@ -304,6 +311,7 @@ public:
   // if it doesn't you will get the wrong answer.
   BBNodeAIG CreateSymbol(const ASTNode& n, unsigned i)
   {
+    pollPreparation();
     assert(n.GetKind() == SYMBOL);
 
     // booleans have width 0.

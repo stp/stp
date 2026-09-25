@@ -228,6 +228,8 @@ public:
   // and learned-clause shrinking taxes every conflict of a many-solve
   // session. Both measured as steady per-solve losses on the sessions
   // that retire inprobing, and their removal composes with it.
+  // An explicit request to keep CaDiCaL elimination enabled takes precedence:
+  // this returns false but can still retire shrinking.
   bool disableEliminationAndShrinking()
   {
     assertConfigurable("disableEliminationAndShrinking");
@@ -257,7 +259,7 @@ public:
   {
     out.clear();
     for (int i = 0; i < assumps.size(); i++)
-      out.push_back(assumps[i].x);
+      out.push_back(static_cast<int>(assumps[i].x));
   }
 
   // Run whatever simplification the backend can do without being asked to
@@ -368,9 +370,15 @@ public:
   virtual void setMaxTime(int64_t max_time) // seconds
   {
     assert(max_time >= 0);
+    setDeadline(std::chrono::steady_clock::now() +
+                std::chrono::seconds(max_time));
+  }
 
-    deadline = std::chrono::steady_clock::now() +
-               std::chrono::seconds(max_time);
+  // Replacement backends inherit the query's original deadline, including
+  // fractional seconds already spent in preprocessing or another driver.
+  void setDeadline(std::chrono::steady_clock::time_point query_deadline)
+  {
+    deadline = query_deadline;
     deadline_set = true;
 
     if (!canInterruptSearch())

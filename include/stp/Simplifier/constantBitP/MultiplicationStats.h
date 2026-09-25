@@ -111,7 +111,8 @@ public:
                       signed* sumL_, signed* sumH_)
       : x(1, false), y(1, false), r(1, false)
   {
-    bitWidth = bitWidth_;
+    assert(bitWidth_ >= 0);
+    bitWidth = static_cast<unsigned>(bitWidth_);
     columnL = new signed[bitWidth];
     columnH = new signed[bitWidth];
     sumL = new signed[bitWidth];

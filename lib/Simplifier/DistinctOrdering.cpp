@@ -269,19 +269,6 @@ ASTNode chainFor(STPMgr* manager, const ASTVec& ordered)
              : manager->defaultNodeFactory->CreateNode(AND, conjuncts);
 }
 
-ASTNode rebuildWithChildren(STPMgr* manager, const ASTNode& node,
-                            const ASTVec& children)
-{
-  bool changed = false;
-  for (size_t i = 0; i < children.size() && !changed; ++i)
-    changed = children[i] != node[i];
-  if (!changed)
-    return node;
-  if (node.GetType() == BOOLEAN_TYPE)
-    return manager->defaultNodeFactory->CreateNode(node.GetKind(), children);
-  return manager->defaultNodeFactory->CreateArrayTerm(
-      node.GetKind(), node.GetIndexWidth(), node.GetValueWidth(), children);
-}
 
 } // namespace
 
@@ -296,7 +283,7 @@ ASTNode lowerDistinct(STPMgr* manager, const ASTNode& root)
       [&](const ASTNode& node, const ASTVec& children) -> ASTNode
       {
         if (node.GetKind() != DISTINCT)
-          return rebuildWithChildren(manager, node, children);
+          return rebuildNodeWithChildren(manager, node, children);
 
         if (children.size() < 2)
           FatalError("distinct lowering: expected at least two operands", node);
@@ -430,7 +417,7 @@ ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
         const ASTNodeMap::const_iterator found = replacements.find(node);
         if (found != replacements.end())
           return found->second;
-        return rebuildWithChildren(manager, node, children);
+        return rebuildNodeWithChildren(manager, node, children);
       });
 }
 

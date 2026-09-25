@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AIG/Manager.h"
 #include "stp/AST/AST.h"
 #include "stp/ToSat/AIGBudget.h"
+#include "stp/Util/PreparationControl.h"
 #include "stp/ToSat/BBNodeLit.h"
 
 #include <algorithm>
@@ -47,7 +48,7 @@ namespace stp
 // without the manager: ABC's object carries its own kind and its own fanins,
 // so isCI() and friends are static there. A node here is an index into an
 // array, so they are ordinary members and the blaster asks through `nf`.
-class BBNodeManagerLit
+class BBNodeManagerLit : public EncodingPreparation
 {
 public:
   aig::Manager mgr;
@@ -104,11 +105,12 @@ public:
 
   // An input that stands for no symbol. The BV abstraction machinery mints
   // these for proxies and for abstracted results.
-  BBNodeLit CreateFreshInput() { return BBNodeLit(mgr.createCi()); }
+  BBNodeLit CreateFreshInput() { pollPreparation(); return BBNodeLit(mgr.createCi()); }
 
   // The same symbol always has to come back as the same node.
   BBNodeLit CreateSymbol(const ASTNode& n, unsigned i)
   {
+    pollPreparation();
     assert(n.GetKind() == SYMBOL);
     const unsigned width = std::max((unsigned)1, n.GetValueWidth());
 
@@ -279,6 +281,7 @@ public:
   // order of magnitude rather than being an exact ceiling.
   void checkBudget() const
   {
+    pollPreparation();
     if (nodeBudget >= 0 && static_cast<int64_t>(mgr.andCount()) > nodeBudget)
       throw AIGBudgetExhausted(static_cast<int>(mgr.andCount()));
   }
@@ -302,10 +305,14 @@ private:
 
     std::deque<aig::Lit> names;
     for (size_t i = 0, size = children.size(); i < size; ++i)
+    {
+      pollPreparation();
       names.push_back(children[i].n);
+    }
 
     while (names.size() > 2)
     {
+      pollPreparation();
       const aig::Lit a = names.front();
       names.pop_front();
       const aig::Lit b = names.front();

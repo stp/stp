@@ -157,29 +157,38 @@ bool CongruenceCandidates::proves(const ASTNode& equality)
   // that is what the budget is for -- and the flag and reason it raises on
   // its way out would otherwise be read by the main query as its own, which
   // turns a query STP can answer into an unknown. The current query is
-  // manager-wide for the same reason: the C interface reads it back.
-  const ASTNode savedQuery = bm->GetQuery();
-  const bool savedExpired = bm->soft_timeout_expired;
-  const UnknownReason savedReason = bm->getUnknownReason();
-  const std::string savedDetail = bm->getUnknownReasonDetail();
+  // manager-wide for the same reason: the C interface reads it back. Put
+  // back on every exit, including a cancelled preparation unwinding out of
+  // the sub-solve.
+  struct RestoreManager
+  {
+    STPMgr* manager;
+    ASTNode savedQuery;
+    bool savedExpired;
+    UnknownReason savedReason;
+    std::string savedDetail;
+    ~RestoreManager()
+    {
+      manager->SetQuery(savedQuery);
+      manager->soft_timeout_expired = savedExpired;
+      manager->clearUnknown();
+      if (savedReason != UnknownReason::None)
+        manager->noteUnknown(savedReason, savedDetail);
+    }
+  } restore{bm, bm->GetQuery(), bm->soft_timeout_expired,
+            bm->getUnknownReason(), bm->getUnknownReasonDetail()};
 
   bm->SetQuery(bm->ASTUndefined);
 
   const SOLVER_RETURN_TYPE result = counterExample.CallSAT_ResultCheck(
       *solver, query, query, query, &tosat, false);
 
-  bm->SetQuery(savedQuery);
-  bm->soft_timeout_expired = savedExpired;
-  bm->clearUnknown();
-  if (savedReason != UnknownReason::None)
-    bm->noteUnknown(savedReason, savedDetail);
-
   return result == SOLVER_VALID;
 }
 
 ASTVec CongruenceCandidates::derive(const ASTNode& input)
 {
-  bm->GetRunTimes()->start(RunTimes::CongruenceCandidates);
+  RunTimes::Scope timer(*bm->GetRunTimes(), RunTimes::CongruenceCandidates);
 
   proposed = 0;
   tested = 0;
@@ -264,7 +273,6 @@ ASTVec CongruenceCandidates::derive(const ASTNode& input)
 
   slots.clear();
 
-  bm->GetRunTimes()->stop(RunTimes::CongruenceCandidates);
   return found;
 }
 }

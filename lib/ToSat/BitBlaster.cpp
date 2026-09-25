@@ -1073,6 +1073,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
   // Debug-only, and the whole of what holds primeMemos to the blaster: every
   // node reached from here is one the walk has to have offered, and every
   // operand the walk primed is one that has to be reached from here.
+  nf->pollPreparation();
   PrimeAudit::Running running(memoAudit, term);
 
   auto it = BBTermMemo.end();
@@ -2270,6 +2271,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::primeMemos(const ASTNode& n,
       n,
       [this](const ASTNode& node)
       {
+        nf->pollPreparation();
         if (node.GetType() == BOOLEAN_TYPE)
         {
           // Ahead of the constant test below, because BBForm memoises TRUE
@@ -2312,6 +2314,7 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
 {
   // The other half of the audit above: the two memos are primed by one walk,
   // so the walk is held to both functions at once.
+  nf->pollPreparation();
   PrimeAudit::Running running(memoAudit, form);
 
   auto it = BBFormMemo.end();

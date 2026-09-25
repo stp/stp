@@ -26,7 +26,10 @@ THE SOFTWARE.
 #include <algorithm>
 #include <cstdlib>
 #include <deque>
+#include <iostream>
 #include <limits>
+#include <stdexcept>
+#include <string>
 using std::vector;
 
 namespace stp
@@ -241,15 +244,42 @@ bool Cadical::solveWithAssumptionsInternal(const vec_literals& assumps,
   return solveInternal(timeout_expired);
 }
 
-Cadical::Cadical() : time_limit(*this)
+Cadical::Cadical() : Cadical(CadicalOptions{}) {}
+
+Cadical::Cadical(const CadicalOptions& requested)
+    : options(requested), time_limit(*this)
 {
-  s = new CaDiCaL::Solver ();
+  // Own the backend while validating: a rejected option must not leak it.
+  auto backend = std::make_unique<CaDiCaL::Solver>();
+  s = backend.get();
   s->set("quiet",1);
   // Probe for the "inprobing" option (CaDiCaL 3.x) while the
   // configuration window is certainly open: setting it to its current
   // value changes nothing but reports whether the option exists, which
   // lets a caller decide about a LIVE solver without touching it.
   inprobing_control = s->set("inprobing", s->get("inprobing"));
+  applyOptions();
+  backend.release();
+}
+
+void Cadical::applyOptions()
+{
+  const auto apply = [this](const char* name, const std::optional<int>& value) {
+    if (!value)
+      return;
+    if (!s->set(name, *value))
+      throw std::invalid_argument(std::string("--cadical-") + name +
+                                  " is unavailable in this CaDiCaL build");
+    // CaDiCaL's setter silently clamps out-of-range values. An explicit
+    // command-line setting must either take effect exactly or be rejected.
+    if (s->get(name) != *value)
+      throw std::invalid_argument(std::string("--cadical-") + name + "=" +
+                                  std::to_string(*value) +
+                                  " is outside this CaDiCaL build's supported range");
+  };
+  apply("elim", options.elim);
+  apply("elimmineff", options.elimmineff);
+  apply("elimmaxeff", options.elimmaxeff);
 }
 
 Cadical::~Cadical()
@@ -262,6 +292,16 @@ Cadical::~Cadical()
 
 void Cadical::printStats() const
 {
+  std::cerr << "CaDiCaL elimination:";
+  for (const char* name : {"elim", "elimmineff", "elimmaxeff"})
+  {
+    std::cerr << ' ' << name << '=';
+    if (CaDiCaL::Solver::is_valid_option(name))
+      std::cerr << s->get(name);
+    else
+      std::cerr << "unavailable";
+  }
+  std::cerr << std::endl;
 #if defined(CADICAL_MAJOR) && CADICAL_MAJOR >= 3
   // These counters remain available in the UNKNOWN state produced by our
   // Terminator. Keep this compact: CaDiCaL's full reporter is several hundred
@@ -353,7 +393,9 @@ bool Cadical::setSearchBiasInternal(SearchBias bias)
       return true; // nothing to do, which counts as honouring the request.
   }
 
-  return s->configure(config);
+  const bool accepted = s->configure(config);
+  applyOptions();
+  return accepted;
 }
 
 void Cadical::setVerbosity(int v)
@@ -431,7 +473,9 @@ bool Cadical::disableInprobingInternal()
 
 bool Cadical::disableEliminationAndShrinkingInternal()
 {
-  const bool a = s->set("elim", 0);
+  // Incremental retirement is a heuristic; an explicit request to keep
+  // elimination enabled survives it. Shrinking may still be retired.
+  const bool a = options.elim != 1 && s->set("elim", 0);
   const bool b = s->set("shrink", 0);
   return a && b;
 }
@@ -563,6 +607,11 @@ bool Cadical::addClauseInternal(
 
 uint8_t Cadical::modelValue(uint32_t x) const
 {
+  // val() is defined only in the SATISFIED state; report "false" rather
+  // than aborting the process when a caller reads a model that the last
+  // solve did not leave, so the read fails the caller's own check.
+  if (s->state() != CaDiCaL::State::SATISFIED)
+    return false_literal();
   if (factor_enabled)
     x = (x < ext_of_stp.size()) ? (uint32_t)ext_of_stp[x] : 0;
   if (x != 0 && s->val(x) > 0)

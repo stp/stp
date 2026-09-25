@@ -24,15 +24,21 @@ THE SOFTWARE.
 #ifndef UDEFFLAGS_H
 #define UDEFFLAGS_H
 
-#include "stp/Sat/SearchBias.h"
 #include "stp/Util/Attributes.h"
+#include "stp/Sat/CadicalOptions.h"
 #include "stp/config.h"
+
 #include <cstdint>
 #include <iosfwd>
 #include <string>
 
 namespace stp
 {
+
+// The complete enum remains in its established SAT header.  An opaque scoped
+// enum is sufficient for neutral manager configuration and keeps AST/frontend
+// targets from acquiring a SAT-header dependency.
+enum class SearchBias;
 
 // Independently selectable families of algebraic facts used by BV term
 // abstraction. The ordinal is also the coverage-counter index; the mask
@@ -1504,7 +1510,9 @@ public:
 
   // Which answer to tune the SAT search towards. NONE, the default, leaves
   // every backend at its own settings, so the option is opt-in.
-  SearchBias search_bias = SearchBias::NONE;
+  SearchBias search_bias = static_cast<SearchBias>(0);
+
+  CadicalOptions cadical_options;
 
   // Whether CaDiCaL may use bounded variable addition (its "factor"
   // technique). ON is the default: measured on QF_BV, where the AUTO

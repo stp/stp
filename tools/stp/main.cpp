@@ -24,12 +24,15 @@ THE SOFTWARE.
 
 #include "main_common.h"
 #include "stp/FloatBlaster/FpAbstraction.h"
+#include "stp/Sat/SearchBias.h"
+#include "stp/Sat/SATSolverFactory.h"
 
 #include <CLI/CLI.hpp>
 
 #include <climits>
 #include <initializer_list>
 #include <iterator>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -345,6 +348,23 @@ void ExtraMain::create_options()
 
 #ifdef USE_CADICAL
   app.add_flag("--cadical", use_cadical, "use cadical as the solver")
+      ->group(solver_group);
+  app.add_option("--cadical-elim", bm->UserFlags.cadical_options.elim,
+                 "CaDiCaL variable elimination: 0 disables, 1 enables; an "
+                 "explicit value overrides the environment, search bias and "
+                 "incremental retirement. Unspecified keeps existing policies")
+      ->check(CLI::Range(0, 1))
+      ->group(solver_group);
+  app.add_option("--cadical-elimmineff", bm->UserFlags.cadical_options.elimmineff,
+                 "CaDiCaL minimum elimination effort; overrides CADICAL_ELIMMINEFF. "
+                 "Unspecified keeps the backend setting")
+      ->check(CLI::Range(0, INT_MAX))
+      ->group(solver_group);
+  app.add_option("--cadical-elimmaxeff", bm->UserFlags.cadical_options.elimmaxeff,
+                 "CaDiCaL maximum elimination effort; overrides CADICAL_ELIMMAXEFF. "
+                 "The backend may raise the allowance for large formulas. "
+                 "Unspecified keeps the backend setting")
+      ->check(CLI::Range(0, INT_MAX))
       ->group(solver_group);
   cadical_factor_option =
       app.add_option("--cadical-factor", cadical_factor,
@@ -1679,6 +1699,16 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
   }
 #endif
+
+  try
+  {
+    validateCadicalOptions(bm->UserFlags);
+  }
+  catch (const std::invalid_argument& error)
+  {
+    cerr << "ERROR: " << error.what() << endl;
+    return -1;
+  }
 
   if (array_index_hints_option->count())
   {

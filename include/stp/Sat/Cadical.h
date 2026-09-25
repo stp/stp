@@ -29,6 +29,7 @@ THE SOFTWARE.
 #define CADICAL_H_
 
 #include "SATSolver.h"
+#include "CadicalOptions.h"
 #include <cadical/cadical.hpp>
 #include <chrono>
 #include <memory>
@@ -61,6 +62,8 @@ namespace stp
 {
   uint32_t next_variable = 0;
   CaDiCaL::Solver * s;
+  const CadicalOptions options;
+  void applyOptions();
 
   // Cadical has no wall-clock limit of its own; it polls a Terminator
   // during search, so asking the base class whether the query's deadline
@@ -110,6 +113,7 @@ namespace stp
 
 public:
   Cadical();
+  explicit Cadical(const CadicalOptions& options);
 
   ~Cadical();
 
