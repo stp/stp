@@ -568,6 +568,27 @@ struct Differential : Fixture
     ASSERT_EQ(viaCircuit, viaLiteral) << _kind_names[k];
     ++checked;
   }
+
+  // The same, for a kind the literal backend answers only on part of its
+  // domain: an instance it declines is the circuit's alone, and is counted
+  // rather than compared.
+  unsigned declined = 0, answered = 0;
+  void agreeIfAnswered(Kind k, const ASTVec& kids, unsigned width,
+                       unsigned eb, unsigned sb)
+  {
+    const ASTNode t = temp(k, kids, width, eb, sb, false);
+    const ASTNode viaLiteral = literal_fp::tryEvaluateFpConstant(&mgr, t);
+    if (viaLiteral.IsNull())
+    {
+      ++declined;
+      return;
+    }
+    const ASTNode blasted = FloatBlast::lowerOperation(&mgr, t);
+    const ASTNode viaCircuit = NonMemberBVConstEvaluator(&mgr, blasted);
+    ASSERT_EQ(viaCircuit, viaLiteral) << _kind_names[k];
+    ++checked;
+    ++answered;
+  }
 };
 
 void runDifferential(Differential& d, const unsigned eb, const unsigned sb)
@@ -621,10 +642,14 @@ void runDifferential(Differential& d, const unsigned eb, const unsigned sb)
     for (unsigned j = i % 3; j < N; j += 3)
       d.agree(FP_REM, ASTVec{c[i], c[j]}, w, eb, sb, true);
 
-  // sqrt under every mode; fma over a coarse grid under RNE.
+  // sqrt and roundToIntegral under every mode; fma over a coarse grid
+  // under RNE.
   for (const unsigned m : modes)
     for (unsigned i = 0; i < N; i++)
+    {
       d.agree(FP_SQRT, ASTVec{d.rm(m), c[i]}, w, eb, sb, true);
+      d.agree(FP_ROUNDTOINTEGRAL, ASTVec{d.rm(m), c[i]}, w, eb, sb, true);
+    }
   for (unsigned i = 0; i < N; i += 7)
     for (unsigned j = 0; j < N; j += 7)
       for (unsigned l = 0; l < N; l += 7)
@@ -653,6 +678,22 @@ void runDifferential(Differential& d, const unsigned eb, const unsigned sb)
               true);
     }
   }
+
+  // float->integer in the totalised form (width, mode, x, unspecified):
+  // every value under every mode at three target widths. The literal
+  // backend answers where the operand's class and exponent decide the
+  // result or symfpu's literal path cannot trap, and declines the narrow
+  // rounding boundary; agreement is checked wherever it answers.
+  for (const unsigned m : {2u, 3u, w})
+  {
+    const ASTNode mc = d.mgr.CreateBVConst(32, m);
+    const ASTNode undef = d.mgr.CreateBVConst(m, (1u << (m - 1)) + 1);
+    for (const unsigned mode : modes)
+      for (unsigned i = 0; i < N; i++)
+        for (const Kind k : {FP_TO_SBV, FP_TO_UBV})
+          d.agreeIfAnswered(k, ASTVec{mc, d.rm(mode), c[i], undef}, m, eb,
+                            sb);
+  }
 }
 
 } // namespace
@@ -662,6 +703,10 @@ TEST(FpConstantFold, literal_backend_agrees_with_the_circuit_exhaustively)
   Differential d;
   runDifferential(d, 3, 4);
   EXPECT_GT(d.checked, 90000u);
+  // The partial kinds took both branches: the literal backend answered
+  // conversions that were then compared, and declined the boundary ones.
+  EXPECT_GT(d.answered, 3000u);
+  EXPECT_GT(d.declined, 0u);
 }
 
 // The same gate at the formats that used to be refused outright.

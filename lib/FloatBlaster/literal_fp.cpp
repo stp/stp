@@ -23,6 +23,7 @@ THE SOFTWARE.
 
 #include "stp/FloatBlaster/literal_fp.h"
 
+#include "stp/FloatBlaster/FpAbstractionRules.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/STPManager/STPManager.h"
 
@@ -769,9 +770,88 @@ ASTNode tryEvaluateFpConstant(STPMgr* bm, const ASTNode& n)
       return packedResult(bm, target, r);
     }
 
-    // fp.min/fp.max/fp.to_ubv/fp.to_sbv route their unspecified cases
-    // through FpTotalise; fp.roundToIntegral keeps the circuit path so its
-    // guard-bug refusals stay identical. All fall back.
+    case FP_ROUNDTOINTEGRAL:
+    {
+      if (!formatOk(n[1]))
+        return ASTNode();
+      const floatingPointTypeInfo fmt = formatOf(n[1]);
+      return packedResult(bm, fmt,
+                          symfpu::roundToIntegral<traits>(fmt, rmOf(n[0]),
+                                                          unpackChild(n[1])));
+    }
+
+    // The integer conversions, in their totalised form (width, rm, x,
+    // unspecified): symfpu takes the unspecified choice as an argument, so
+    // a constant choice makes the whole operation a constant. symfpu's
+    // literal backend, though, asserts its preconditions mid-computation
+    // -- conditionalNegate traps on the negation edge even when the result
+    // would be the unspecified branch -- so the regions this can decide
+    // from the operand's class and exponent are answered directly, symfpu
+    // is called only where its computation is trap-free, and the narrow
+    // rounding boundary returns no answer at all rather than a guess.
+    case FP_TO_SBV:
+    case FP_TO_UBV:
+    {
+      if (n.Degree() != 4 || !formatOk(n[2]) || !n[3].isConstant())
+        return ASTNode();
+      const floatingPointTypeInfo fmt = formatOf(n[2]);
+      const unsigned eb = n[2].GetExpWidth(), sb = n[2].GetSigWidth();
+      const bitWidthType m = n[0].GetUnsignedConst();
+      if (m < 2)
+        return ASTNode();
+      const ASTNode undefNode = n[3];
+      const FpPackedValue xv = decodeFpPackedValue(
+          bm->CreateBVConst(
+              CONSTANTBV::BitVector_Clone(packedOf(n[2]).rawBits()), eb + sb),
+          eb, sb);
+      if (xv.cls == FpPackedValue::NaN || xv.cls == FpPackedValue::Inf)
+        return undefNode;
+      if (xv.cls == FpPackedValue::Zero)
+        return bm->CreateZeroConst((unsigned)m);
+      // |x| >= 2^m is out of either range under every rounding mode.
+      if (xv.e >= (int64_t)m)
+        return undefNode;
+      const roundingMode rm = rmOf(n[1]);
+      const bool neg = xv.negative;
+      if (k == FP_TO_UBV)
+      {
+        // A negative of magnitude one or more rounds at or below -1.
+        if (neg && xv.e >= 0)
+          return undefNode;
+        if (neg)
+        {
+          // |x| < 1: truncation and rounding up give zero; the modes that
+          // can round to -1 are fraction-dependent and stay unanswered.
+          const roundingMode negSmall = rmOf(n[1]);
+          if (negSmall == traits::RTZ() || negSmall == traits::RTP())
+            return bm->CreateZeroConst((unsigned)m);
+          return ASTNode();
+        }
+        if (xv.e > (int64_t)m - 2)
+          return ASTNode(); // the round-up boundary at 2^m
+      }
+      else
+      {
+        // The negation edge and the signed boundary: |x| in [2^(m-2), 2^m)
+        // can round to 2^(m-1), which the literal negate traps on and the
+        // positive range excludes.
+        if (xv.e > (int64_t)m - 3)
+          return ASTNode();
+      }
+      const traits::ubv undef = packedOf(undefNode);
+      const traits::ubv r =
+          (k == FP_TO_SBV)
+              ? symfpu::convertFloatToSBV<traits>(fmt, rm, unpackChild(n[2]),
+                                                  m, undef.toSigned())
+                    .toUnsigned()
+              : symfpu::convertFloatToUBV<traits>(fmt, rm, unpackChild(n[2]),
+                                                  m, undef);
+      return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(r.rawBits()),
+                               (unsigned)m);
+    }
+
+    // fp.min/fp.max route their unspecified cases through FpTotalise. All
+    // fall back.
     default:
       return ASTNode();
   }
