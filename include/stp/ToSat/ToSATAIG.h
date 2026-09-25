@@ -190,6 +190,7 @@ public:
   }
 
   bool setRequiredSolveAssumption(const ASTNode& symbol) override;
+  bool setRequiredSolveAssumptions(const ASTVec& symbols) override;
   bool hasInternalSolveFailure() const override
   {
     return !internalSolveFailure.empty();

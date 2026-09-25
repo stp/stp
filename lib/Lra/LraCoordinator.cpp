@@ -186,6 +186,16 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
             "cmake/deps-utils/cadical-decision-polarity.patch");
     }
 
+    const auto& controls = manager_.UserFlags;
+    if (controls.lra_extension_mode > 3 || controls.lra_row_order > 3)
+      throw std::runtime_error("invalid LRA experimental control");
+    if ((controls.lra_extension_mode || controls.lra_row_order ||
+         controls.lra_extension_restart_float_basis || controls.lra_extension_restart_sat) &&
+        (controls.lra_incremental_session || controls.lra_persistent_state))
+      throw std::runtime_error("LRA extension controls require batch solves");
+    if (controls.lra_extension_restart_sat && !solver_.supportsSearchReset())
+      throw std::runtime_error("LRA SAT search reset requires CaDiCaL with factoring disabled");
+
     frame_ = registry_.pushAssertionFrame();
     frame_live_ = true;
     const auto preregistration_start = std::chrono::steady_clock::now();
@@ -268,15 +278,22 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
 
     const auto context_start = std::chrono::steady_clock::now();
     context_ = std::make_unique<LraSolveContext>(
-        registry_, solver_, frontend_.numberLimits(), frame_);
+        registry_, solver_, frontend_.numberLimits(), frame_,
+        std::numeric_limits<std::uint64_t>::max(), nullptr,
+        manager_.UserFlags.lra_row_order);
     increment(metrics_.core_rebuilds);
     /* The context verifies by default so that anything building one directly
      * keeps the check; the solver follows the flag, which is off unless the
      * caller asks for it. */
     context_->setConflictVerification(
         manager_.UserFlags.lra_verify_conflicts);
+    context_->setEarlyConflictDetection(manager_.UserFlags.lra_early_conflicts);
+    context_->setSoi(manager_.UserFlags.lra_soi);
+    context_->setFloatDormantRows(manager_.UserFlags.lra_float_dormant_rows,
+                                  manager_.UserFlags.lra_float_dormant_min_cells);
     context_->setFloatPromotionBudget(manager_.UserFlags.lra_float_promotion_budget);
     context_->setSeparateModelValues(separateModelValuesEnabled());
+    context_->setDenseRecovery(manager_.UserFlags.lra_dense_recovery);
     context_->setFloatDriver(manager_.UserFlags.lra_float_driver &&
                              !manager_.UserFlags.lra_force_exact_driver);
     context_->setFloatRerouteBudget(manager_.UserFlags.lra_float_reroute);
@@ -656,20 +673,54 @@ void LraCoordinator::rebuildCoreAndContext()
 {
   const auto context_start = std::chrono::steady_clock::now();
   adapter_.reset();
-  context_.reset();
-  context_ = std::make_unique<LraSolveContext>(
-      registry_, solver_, frontend_.numberLimits(), frame_);
-  increment(metrics_.core_rebuilds);
-  context_->setConflictVerification(manager_.UserFlags.lra_verify_conflicts);
-  context_->setFloatPromotionBudget(manager_.UserFlags.lra_float_promotion_budget);
-  context_->setSeparateModelValues(separateModelValuesEnabled());
-  context_->setFloatDriver(manager_.UserFlags.lra_float_driver &&
-                           !manager_.UserFlags.lra_force_exact_driver);
-  context_->setFloatRerouteBudget(manager_.UserFlags.lra_float_reroute);
-  context_->setFloatRerouteFloor(manager_.UserFlags.lra_float_reroute_floor);
-  context_->setConflictRecovery(manager_.UserFlags.lra_conflict_recovery);
+  const auto& controls = manager_.UserFlags;
+  const bool reuse = controls.lra_extension_mode == 1 ||
+                     controls.lra_extension_mode == 3 ||
+                     (controls.lra_extension_mode == 0 &&
+                      controls.lra_persistent_state);
+  if (reuse)
+  {
+    if (!context_->extendFromRegistry())
+      rethrowContextFailure(*context_, "persistent LRA extension failed");
+    increment(metrics_.context_reuses);
+  }
+  else
+  {
+    const auto solve = context_->metrics();
+    metrics_.retired_exact_pivots += context_->coreStatistics().engine_pivots;
+    metrics_.retired_float_checks += solve.float_checks;
+    metrics_.retired_float_pivots += solve.float_pivots;
+    metrics_.retired_float_check_nanoseconds += solve.float_check_nanoseconds;
+    metrics_.retired_float_sync_nanoseconds += solve.float_sync_nanoseconds;
+    context_.reset();
+    context_ = std::make_unique<LraSolveContext>(
+        registry_, solver_, frontend_.numberLimits(), frame_,
+        std::numeric_limits<std::uint64_t>::max(), nullptr,
+        controls.lra_row_order);
+    increment(metrics_.core_rebuilds);
+    context_->setConflictVerification(manager_.UserFlags.lra_verify_conflicts);
+    context_->setEarlyConflictDetection(manager_.UserFlags.lra_early_conflicts);
+    context_->setSoi(manager_.UserFlags.lra_soi);
+    context_->setFloatDormantRows(manager_.UserFlags.lra_float_dormant_rows,
+                                  manager_.UserFlags.lra_float_dormant_min_cells);
+    context_->setFloatPromotionBudget(manager_.UserFlags.lra_float_promotion_budget);
+    context_->setSeparateModelValues(separateModelValuesEnabled());
+    context_->setDenseRecovery(manager_.UserFlags.lra_dense_recovery);
+    context_->setFloatDriver(manager_.UserFlags.lra_float_driver &&
+                             !manager_.UserFlags.lra_force_exact_driver);
+    context_->setFloatRerouteBudget(manager_.UserFlags.lra_float_reroute);
+    context_->setFloatRerouteFloor(manager_.UserFlags.lra_float_reroute_floor);
+    context_->setConflictRecovery(manager_.UserFlags.lra_conflict_recovery);
+  }
   if (!context_->ready())
     rethrowContextFailure(*context_, "exact LRA context rebuild failed");
+  if (controls.lra_extension_mode == 3 || controls.lra_extension_restart_float_basis)
+  {
+    const bool basis_only = controls.lra_extension_mode != 3;
+    if (!context_->restartArithmeticState(basis_only))
+      rethrowContextFailure(*context_, "arithmetic search reset failed");
+    increment(basis_only ? metrics_.float_basis_resets : metrics_.arithmetic_state_resets);
+  }
   adapter_ = std::make_unique<LraCandidateAdapter>(*context_, solver_);
   adapter_->setDecisionPolarity(decisionPolarityEnabled());
   if (!context_->ready())
@@ -688,10 +739,134 @@ ExtensionOutcome LraCoordinator::extendWithFormula(const ASTNode& formula,
   return extendInternal(formula, tosat, nullptr);
 }
 
+ExtensionOutcome LraCoordinator::extendFrame(const ASTNode& formula,
+                                             ToSATBase& tosat,
+                                             const ASTNode& activation) noexcept
+{
+  if (activation.IsNull() || activation.GetKind() != SYMBOL ||
+      activation.GetSourceSort().kind() != SourceSort::Kind::Bool)
+    return ExtensionOutcome::Declined;
+  return extendInternal(formula, tosat, &activation);
+}
+
+bool LraCoordinator::retractFrame(const ASTNode& activation) noexcept
+{
+  try
+  {
+    // A frame that grew across checks was encoded by repeated extendFrame
+    // calls under one activation, so several SessionFrames can share it.
+    // Retract them all: deactivating only the first would leave the rest
+    // live, and liveActivations() would then assume an activation the
+    // permanent unit below forces false -- an immediate spurious conflict.
+    SATSolver::Lit literal{};
+    bool found = false;
+    bool any_live = false;
+    for (SessionFrame& frame : frames_)
+    {
+      if (!(frame.activation == activation))
+        continue;
+      if (!found)
+        literal = frame.literal;
+      found = true;
+      if (frame.live)
+      {
+        frame.live = false;
+        any_live = true;
+      }
+    }
+    if (!found)
+      return false;
+    if (!any_live)
+      return true;
+    if (propagating_)
+    {
+      adapter_->endTheoryPropagation();
+      solver_.disconnectTheoryPropagator();
+      propagating_ = false;
+    }
+    SATSolver::vec_literals unit;
+    unit.push(SATSolver::mkLit(SATSolver::var(literal),
+                               !SATSolver::sign(literal)));
+    if (!solver_.addClause(unit) && !solver_.okay())
+      return false;
+    manager_.InvalidateRealModel();
+    rebuildLiveFormulas();
+    // Retired atoms remain registered. Public pops may change the global
+    // registry identity, but do not change this session's owned rows.
+    if (manager_.UserFlags.lra_persistent_state)
+    {
+      context_->clearSemanticState();
+      if (!defer_rebuild_ && !context_->refreshRegistryIdentity())
+        return false;
+    }
+    else if (defer_rebuild_)
+      rebuild_pending_ = true;
+    else
+      rebuildCoreAndContext();
+    return true;
+  }
+  catch (...)
+  {
+    return false;
+  }
+}
+
+void LraCoordinator::beginExtensionBatch() noexcept
+{
+  defer_rebuild_ = true;
+  rebuild_pending_ = false;
+}
+
+bool LraCoordinator::endExtensionBatch() noexcept
+{
+  defer_rebuild_ = false;
+  if (!rebuild_pending_)
+    return !manager_.UserFlags.lra_persistent_state ||
+           context_->refreshRegistryIdentity();
+  rebuild_pending_ = false;
+  try
+  {
+    rebuildCoreAndContext();
+    return true;
+  }
+  catch (const PreparationInterrupted& stopped)
+  {
+    preparation_stop_ = stopped;
+    manager_.InvalidateRealModel();
+    return false;
+  }
+  catch (const std::exception& failure)
+  {
+    failClosed(failure.what());
+    return false;
+  }
+  catch (...)
+  {
+    failClosed("deferred LRA core rebuild failed");
+    return false;
+  }
+}
+
+ASTVec LraCoordinator::liveActivations() const
+{
+  ASTVec live{solve_activation_};
+  for (const SessionFrame& frame : frames_)
+    if (frame.live)
+      live.push_back(frame.activation);
+  return live;
+}
+
 void LraCoordinator::rebuildLiveFormulas()
 {
   ASTVec submitted{base_submitted_};
   ASTVec registered{base_registered_};
+  for (const SessionFrame& frame : frames_)
+  {
+    if (!frame.live)
+      continue;
+    submitted.push_back(frame.submitted);
+    registered.push_back(frame.registered);
+  }
   submitted.insert(submitted.end(), permanent_submitted_.begin(),
                    permanent_submitted_.end());
   registered.insert(registered.end(), permanent_registered_.begin(),
@@ -825,9 +1000,13 @@ ExtensionOutcome LraCoordinator::extendInternal(
     if (frame_activation == nullptr)
       rebuildLiveFormulas();
 
-    // Rebuild arithmetic over the enlarged registry. The SAT
+    // Extend or rebuild arithmetic over the enlarged registry. The SAT
     // solver stays; old and new atoms are bound after encoding the lemma.
-    rebuildCoreAndContext();
+    // The encoding below reads only the ToSAT map, so a batch may defer this.
+    if (defer_rebuild_)
+      rebuild_pending_ = true;
+    else
+      rebuildCoreAndContext();
 
     ToSATBase::ASTNodeToSATVar& map = tosat.SATVar_to_SymbolIndexMap();
     QueryPhaseScope encoding_time(manager_.query_timing, QueryPhase::EncodingOther);
@@ -841,6 +1020,12 @@ ExtensionOutcome LraCoordinator::extendInternal(
         throw std::runtime_error("LRA extension found no activation variable");
       guard = SATSolver::mkLit(activation->second[0], false);
     }
+    else
+    {
+      guard = encoder.encode(*frame_activation);
+      if (!encoder.ok())
+        throw std::runtime_error("LRA frame activation could not be encoded");
+    }
     const SATSolver::Lit root = encoder.encode(registered.boolean_formula);
     if (!encoder.ok())
       throw std::runtime_error(
@@ -853,8 +1038,22 @@ ExtensionOutcome LraCoordinator::extendInternal(
     // guarded clause releases that result (not a permanent inconsistency).
     if (!solver_.okay())
       throw std::runtime_error("SAT solver rejected the guarded LRA extension");
+    if (frame_activation != nullptr)
+    {
+      frames_.push_back(SessionFrame{*frame_activation, guard, formula,
+                                     registered.boolean_formula, true});
+      rebuildLiveFormulas();
+    }
     increment(metrics_.extensions);
-    if (was_propagating)
+    if (frame_activation == nullptr && manager_.UserFlags.lra_extension_restart_sat)
+    {
+      const auto reset_start = std::chrono::steady_clock::now();
+      if (!solver_.resetSearch())
+        throw std::runtime_error("SAT backend declined search reset");
+      increment(metrics_.sat_search_resets);
+      addElapsed(metrics_.sat_search_reset_nanoseconds, reset_start);
+    }
+    if (was_propagating && !defer_rebuild_)
     {
       // The map is complete now -- the atoms the solver already held and
       // the ones the encoder just gave variables to -- so the rebuilt
@@ -918,6 +1117,18 @@ bool LraCoordinator::beforeSolverCall() noexcept
   return prepareTheorySearch();
 }
 
+bool LraCoordinator::afterCnf(ToSATBase& tosat) noexcept
+{
+  if (!ready())
+    return false;
+  bool const first_binding = !bindings_ready_;
+  if (!bindOpaqueAtoms(tosat) || !prepareTheorySearch())
+    return false;
+  if (first_binding && propagating_ && context_->current_candidate_serial_ == 0)
+    increment(metrics_.first_search_connections);
+  return true;
+}
+
 bool LraCoordinator::prepareTheorySearch() noexcept
 {
   try
@@ -925,8 +1136,8 @@ bool LraCoordinator::prepareTheorySearch() noexcept
     /* Take the theory's seat inside the search, if the backend has one to
      * offer. Same timing as the ordering axioms and for the same reason: the
      * atoms are only bound to SAT variables once a CNF exists, and connecting
-     * a propagator is only legal between solves. So the first solve runs the
-     * full-lazy way and every later one is driven. */
+     * a propagator is only legal between solves. afterCnf supplies this window
+     * for the first search when the first-search experiment is enabled. */
     if (manager_.UserFlags.lra_theory_propagation && !propagating_ &&
         solver_.supportsTheoryPropagator())
     {
@@ -954,17 +1165,48 @@ bool LraCoordinator::prepareTheorySearch() noexcept
     }
     /* State the per-row bound ordering to the SAT solver, once, as plain
      * clauses.  This has to happen between solves: the atoms are only bound to
-     * SAT variables once the first CNF exists, and adding a clause while a
+     * SAT variables once the CNF exists, and adding a clause while a
      * backend is in its satisfied state invalidates the model the candidate
-     * reader is about to consume.  So the first solve runs without the axioms
-     * and every later one has them -- which is where they pay anyway, since the
-     * enumeration blowup is in the re-solves.
+     * reader is about to consume. The after-CNF hook can also emit them
+     * before the first search.
      *
      * They are entailed by the theory, so they cannot change a verdict; they
      * only stop the full-lazy loop from handing over candidates that differ
      * solely in atoms the theory already implies. */
     if (bindings_ready_ && !ordering_axioms_emitted_)
     {
+      if (manager_.UserFlags.lra_persistent_state)
+      {
+        // Frame guards control assertions, not the meaning of an opaque
+        // equality. Keep E <-> (LE && GE) after a frame is retired, so its
+        // still-observed atoms cannot disagree in subsequent models.
+        for (auto const& equality : context_->registry_snapshot_.equalities)
+        {
+          if (!context_->equalityBound(equality.id) ||
+              !context_->componentBound(equality.less_equal_component) ||
+              !context_->componentBound(equality.greater_equal_component))
+            continue;
+          auto e = context_->equalityBinding(equality.id);
+          auto le = context_->componentBinding(equality.less_equal_component);
+          auto ge = context_->componentBinding(equality.greater_equal_component);
+          auto neg = [](SATSolver::Lit lit) { lit.x ^= 1U; return lit; };
+          auto addDefinition = [&](std::initializer_list<SATSolver::Lit> literals) {
+            SATSolver::vec_literals clause;
+            for (auto lit : literals)
+              clause.push(lit);
+            if (!solver_.addClause(clause))
+            {
+              failClosed("SAT solver rejected a persistent equality definition");
+              return false;
+            }
+            increment(metrics_.persistent_equality_clauses);
+            return true;
+          };
+          if (!addDefinition({neg(e), le}) || !addDefinition({neg(e), ge}) ||
+              !addDefinition({e, neg(le), neg(ge)}))
+            return false;
+        }
+      }
       const AdapterResult axioms = adapter_->emitBoundOrderingAxioms();
       if (axioms.outcome != AdapterOutcome::ClauseInserted)
       {
@@ -1634,6 +1876,8 @@ std::unique_ptr<RealModel> LraCoordinator::materializeStagedModel(
 
   auto model = std::make_unique<RealModel>(
       frontend_.numberLimits(), seeds, requiredRealSymbols(), spread_symbols_);
+  if (!reconstruction_.definitions.empty())
+    model->reconstruct(reconstruction_.definitions);
   return model;
 }
 
@@ -1696,7 +1940,7 @@ CommitOutcome LraCoordinator::verifyAndCommit(
   catch (const std::exception& failure)
   {
     /* Everything above here does exact arithmetic -- materialising the
-     * staged values, re-evaluating the
+     * staged values, replaying the reconstruction, re-evaluating the
      * submitted formula -- so a budget can run out on the last step of a
      * query that has otherwise been answered. That is a query STP could not
      * finish, and the candidate path two call sites up already reports it
@@ -1760,10 +2004,25 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << frontend_metrics.maximum_coefficient_bits
       << ",\"registry_active_components\":"
       << registry_metrics.active_components
+      << ",\"ordering_axioms\":" << solve.ordering_axioms
       << ",\"sat_candidates\":" << metrics_.candidates
       << ",\"lra_consistent\":" << metrics_.lra_consistent
       << ",\"lra_conflicts\":" << metrics_.lra_conflicts
       << ",\"lra_clauses\":" << metrics_.lra_clauses << ",\"extensions\":" << metrics_.extensions
+      << ",\"extension_mode\":" << manager_.UserFlags.lra_extension_mode
+      << ",\"row_order\":" << manager_.UserFlags.lra_row_order
+      << ",\"context_reuses\":" << metrics_.context_reuses
+      << ",\"arithmetic_state_resets\":" << metrics_.arithmetic_state_resets
+      << ",\"float_basis_resets\":" << metrics_.float_basis_resets
+      << ",\"sat_search_resets\":" << metrics_.sat_search_resets
+      << ",\"sat_search_reset_ns\":" << metrics_.sat_search_reset_nanoseconds
+      << ",\"total_exact_pivots\":" << metrics_.retired_exact_pivots + core.engine_pivots
+      << ",\"total_float_checks\":" << metrics_.retired_float_checks + solve.float_checks
+      << ",\"total_float_pivots\":" << metrics_.retired_float_pivots + solve.float_pivots
+      << ",\"total_float_check_ns\":"
+      << metrics_.retired_float_check_nanoseconds + solve.float_check_nanoseconds
+      << ",\"total_float_sync_ns\":"
+      << metrics_.retired_float_sync_nanoseconds + solve.float_sync_nanoseconds
       << ",\"candidate_materialization_ns\":"
       << solve.candidate_read_nanoseconds
       << ",\"exact_assertions\":" << solve.exact_assertions
@@ -1775,6 +2034,13 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << ",\"core_activations\":" << core.engine_activations
       << ",\"core_deactivations\":" << core.engine_deactivations
       << ",\"core_normalised_cells\":" << core.engine_normalised_cells
+      << ",\"core_identity_rows\":" << core.identity_rows
+      << ",\"core_singleton_rows\":" << core.singleton_rows
+      << ",\"core_direct_rows\":" << core.direct_rows
+      << ",\"core_early_conflicts\":" << core.engine_early_conflicts
+      << ",\"core_soi_steps\":" << core.engine_soi_steps
+      << ",\"core_soi_bound_flips\":" << core.engine_soi_bound_flips
+      << ",\"core_soi_fallbacks\":" << core.engine_soi_fallbacks
       << ",\"exact_conflicts\":"
       << (solve.immediate_conflicts + solve.tableau_conflicts)
       << ",\"partial_conflicts\":" << solve.partial_conflicts
@@ -1790,6 +2056,10 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << ",\"float_replay_consistent\":" << solve.float_replay_consistent
       << ",\"float_disabled\":" << solve.float_disabled
       << ",\"float_pivots\":" << solve.float_pivots
+      << ",\"float_early_conflicts\":" << solve.float_early_conflicts
+      << ",\"float_soi_steps\":" << solve.float_soi_steps
+      << ",\"float_soi_bound_flips\":" << solve.float_soi_bound_flips
+      << ",\"float_soi_fallbacks\":" << solve.float_soi_fallbacks
       << ",\"float_check_ns\":" << solve.float_check_nanoseconds
       << ",\"float_sync_ns\":" << solve.float_sync_nanoseconds
       << ",\"float_certified\":" << solve.float_certified
@@ -1801,9 +2071,16 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << ",\"float_model_refine_failed\":"
       << solve.float_model_refine_failed
       << ",\"float_restarts\":" << solve.float_restarts
+      << ",\"float_row_activations\":" << solve.float_row_activations
+      << ",\"float_rows_dormant\":" << solve.float_rows_dormant
+      << ",\"float_dormant_evaluations\":" << solve.float_dormant_evaluations
       << ",\"float_rebuilds\":" << solve.float_rebuilds
       << ",\"float_generalisations\":" << solve.float_generalisations
       << ",\"float_factorized\":" << solve.float_factorized
+      << ",\"float_complete_recoveries\":" << solve.float_complete_recoveries
+      << ",\"float_cold_recoveries\":" << solve.float_cold_recoveries
+      << ",\"float_refactor_failures\":" << solve.float_refactor_failures
+      << ",\"float_robust_refactors\":" << solve.float_robust_refactors
       << ",\"float_promotions\":" << solve.float_promotions
       << ",\"exact_pivots\":" << core.pivots
       << ",\"bland_pivots\":" << core.bland_pivots
@@ -1815,6 +2092,7 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << ",\"equality_support_compressions\":"
       << metrics_.equality_support_compressions
       << ",\"sat_resolves\":" << metrics_.sat_resolves
+      << ",\"first_search_connections\":" << metrics_.first_search_connections
       << ",\"polarity_supported\":" << (solver_.supportsDecisionPolarity() ? 1 : 0)
       << ",\"polarity_enabled\":" << (decisionPolarityEnabled() ? 1 : 0)
       << ",\"polarity_queries\":" << solve.polarity_queries
@@ -1823,6 +2101,9 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << ",\"polarity_abstentions\":" << solve.polarity_abstentions
       << ",\"polarity_float\":" << solve.polarity_float
       << ",\"polarity_exact\":" << solve.polarity_exact
+      << ",\"persistent_extensions\":" << solve.persistent_extensions
+      << ",\"persistent_equality_clauses\":" << metrics_.persistent_equality_clauses
+      << ",\"float_extensions\":" << solve.float_extensions
       << ",\"core_rebuilds\":" << metrics_.core_rebuilds
       << ",\"core_rebuild_time_ns\":"
       << metrics_.context_rebuild_nanoseconds

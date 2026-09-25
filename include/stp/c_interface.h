@@ -981,7 +981,25 @@ enum ifaceflag_t
   //! exact, so this is meant to change how long an answer takes and not which
   //! answer it is. On by default; 0 selects the exact core alone.
   //! --lra-float-driver.
-  LRA_FLOAT_DRIVER
+  LRA_FLOAT_DRIVER,
+
+  //! Keep one Real solve across the check-sats of an incremental SMT-LIB2
+  //! session instead of starting a new one per check. The coordinator, the
+  //! CNF and the SAT solver persist, with their learned clauses, atom
+  //! bindings and registrations; a pushed level is added under an activation
+  //! of its own and a popped one is retracted. The exact core is not kept: it
+  //! is rebuilt at every check whose assertion stack has changed since the
+  //! last one. The session engages from the first push, or from the first
+  //! check under --incremental=on, and only on stacks of Boolean and Real
+  //! terms: uninterpreted functions, bit-vectors, arrays, floating point,
+  //! DISTINCT and check-sat-assuming all go to the batch path, as does any
+  //! check the session cannot take. A check that spends its time or conflict
+  //! budget answers unknown, and the next check starts a new session. Only
+  //! the SMT-LIB2 check-sat (Cpp_interface::checkSat) reaches that session;
+  //! vc_query and vc_query_with_timeout solve each query on its own, so this
+  //! flag has no effect on them. Off by default: sound, but not yet faster.
+  //! --lra-incremental-session.
+  LRA_INCREMENTAL_SESSION
 
 };
 

@@ -492,11 +492,34 @@ void ExtraMain::create_options()
                  "to genuinely large tableaux; 0 means no floor")
       ->group(refinement_group)
       ->capture_default_str();
+  app.add_option("--lra-extension-mode", bm->UserFlags.lra_extension_mode,
+                 "arithmetic extensions: 0 automatic, 1 reuse, 2 rebuild, "
+                 "3 reuse IDs but reset assignments/bases (experimental)")
+      ->check(CLI::Range(0, 3))->group(refinement_group);
+  app.add_option("--lra-row-order", bm->UserFlags.lra_row_order,
+                 "arithmetic row insertion: 0 original, 1 reverse, "
+                 "2 sparse first, 3 dense first (experimental)")
+      ->check(CLI::Range(0, 3))->group(refinement_group);
+  bool_arg("--lra-extension-restart-float-basis",
+           bm->UserFlags.lra_extension_restart_float_basis,
+           "restart the advisory basis after arithmetic extensions "
+           "while keeping assignments and IDs (experimental)", refinement_group);
+  bool_arg("--lra-extension-restart-sat", bm->UserFlags.lra_extension_restart_sat,
+           "copy the current Boolean formula into a fresh CaDiCaL search "
+           "after permanent arithmetic extensions (experimental)", refinement_group);
   bool_arg("--lra-presolve-unconstrained",
            bm->UserFlags.lra_presolve_unconstrained,
            "fold single-use pure-polarity Real atoms, conjoining the "
            "witness equality that realises them",
            refinement_group);
+  bool_arg("--lra-presolve-monotone", bm->UserFlags.lra_presolve_monotone,
+           "eliminate Real variables constrained in one direction across "
+           "several atoms, with exact model reconstruction (experimental)",
+           refinement_group);
+  app.add_option("--lra-presolve-monotone-work",
+                 bm->UserFlags.lra_presolve_monotone_work,
+                 "maximum monotone presolve work visits; on exhaustion "
+                 "retain the input (default 1000000)")->group(refinement_group);
   bool_arg("--lra-presolve-propagate", bm->UserFlags.lra_presolve_propagate,
            "propagate top-level truths through the Boolean structure before "
            "registration",
@@ -513,11 +536,116 @@ void ExtraMain::create_options()
            "substitute top-level Real definitions (x = t) through the query "
            "before registration, keeping the definitions conjoined",
            refinement_group);
+  app.add_option("--lra-presolve-rounds", bm->UserFlags.lra_presolve_rounds,
+                 "maximum ordinary presolve rounds, stopping at a fixed point "
+                 "(1-8, default 1; extra rounds experimental)")
+      ->check(CLI::Range(1, 8))->group(refinement_group);
+  app.add_option("--lra-presolve-subst-growth", bm->UserFlags.lra_presolve_subst_growth,
+                 "query-wide allowance for new substitution DAG nodes plus "
+                 "child links; 0 disables substitution guards (default 0)")
+      ->group(refinement_group);
+  app.add_option("--lra-presolve-subst-work", bm->UserFlags.lra_presolve_subst_work,
+                 "query-wide work visits when substitution growth is guarded; "
+                 "exhaustion retains equations (default 1000000)")
+      ->group(refinement_group);
+  app.add_option("--lra-direct-bounds", bm->UserFlags.lra_direct_bounds,
+                 "exact bounds without auxiliary rows: 0 off, 1 +1 identity "
+                 "rows, 2 all singleton rows (experimental)")
+      ->check(CLI::Range(0, 2))->group(refinement_group);
+  bool_arg("--lra-singleton-ordering", bm->UserFlags.lra_singleton_ordering,
+           "emit SAT ordering clauses across scaled bounds on the same Real "
+           "variable (experimental)", refinement_group);
+  bool_arg("--lra-highs-replay", bm->UserFlags.lra_highs_replay,
+           "replay binary branches with exact conditional conflicts (experimental; implies HiGHS LP)", refinement_group);
+  app.add_option("--lra-highs-replay-nodes", bm->UserFlags.lra_highs_replay_nodes,
+                 "maximum binary replay LP nodes (default 128; hard cap 8192)")->group(refinement_group);
+  bool_arg("--lra-highs-cuts", bm->UserFlags.lra_highs_cuts,
+           "reconstruct selected binary root cuts exactly (experimental; requires HiGHS root-cut patch)", refinement_group);
+  app.add_option("--lra-highs-cut-limit", bm->UserFlags.lra_highs_cut_limit,
+                 "maximum certified root cuts (default 64)")->group(refinement_group);
+  bool_arg("--lra-highs-mip", bm->UserFlags.lra_highs_mip,
+           "propose exact models for asserted binary domains (experimental; requires HiGHS; includes LP recovery)", refinement_group);
+  bool_arg("--lra-highs-lp", bm->UserFlags.lra_highs_lp,
+           "try original-row LP bases and rays with exact certification (experimental; requires HiGHS)", refinement_group);
+  app.add_option("--lra-highs-seconds", bm->UserFlags.lra_highs_seconds,
+                 "total time budget for general HiGHS proposals (default 5 seconds)")->group(refinement_group);
+  mode_arg("--lra-relu-bounds", bm->UserFlags.lra_relu_bounds,
+           "propagate exact bounds through asserted ReLUs and affine "
+           "definitions: auto (default, bounded recognition), on, or off; "
+           "explicit LP/cases/branch still implies bounds", refinement_group);
+  mode_arg("--lra-relu-lp", bm->UserFlags.lra_relu_lp,
+           "optimize uncertain ReLU bounds with exact dual certification "
+           "and model proposals: auto (default, eligible graphs only), on "
+           "(full search), or off; on requires HiGHS", refinement_group);
+  app.add_option("--lra-relu-auto-seconds", bm->UserFlags.lra_relu_auto_seconds,
+                 "initial automatic ReLU LP budget in seconds (default 1; 0 skips automatic LP)")
+      ->group(refinement_group);
+  bool_arg("--lra-relu-cases", bm->UserFlags.lra_relu_cases,
+           "refute property alternatives using exact affine network bounds "
+           "inside each alternative's input box (experimental; implies ReLU bounds)",
+           refinement_group);
+  app.add_option("--lra-relu-cases-seconds", bm->UserFlags.lra_relu_cases_seconds,
+                 "time budget for checking ReLU property alternatives (default 60 seconds)")
+      ->group(refinement_group);
+  app.add_option("--lra-relu-lp-rounds", bm->UserFlags.lra_relu_lp_rounds,
+                 "maximum ReLU bound optimization rounds (default 8)")
+      ->group(refinement_group);
+  app.add_option("--lra-relu-lp-seconds", bm->UserFlags.lra_relu_lp_seconds,
+                 "ReLU bound optimization time budget in seconds (default 60)")
+      ->group(refinement_group);
+  app.add_option("--lra-relu-lp-call-seconds", bm->UserFlags.lra_relu_lp_call_seconds,
+                 "time budget per advisory LP in tightening and phase search "
+                 "(default 2 seconds)")
+      ->group(refinement_group);
+  bool_arg("--lra-relu-branch", bm->UserFlags.lra_relu_branch,
+           "use relaxation-guided ReLU phase search and exactly checked "
+           "conditional conflicts (experimental; requires HiGHS)", refinement_group);
+  bool_arg("--lra-relu-property-branches", bm->UserFlags.lra_relu_property_branches,
+           "include arithmetic property alternatives in ReLU phase search "
+           "and its conflict explanations (default: on; requires phase search)",
+           refinement_group);
+  bool_arg("--lra-dense-recovery", bm->UserFlags.lra_dense_recovery,
+           "use density-aware work budgets and bounded floating basis recovery "
+           "before exact fallback (experimental)",
+           refinement_group);
+  mode_arg("--lra-model-reconstruction", bm->UserFlags.lra_model_reconstruction,
+           "reconstruct eliminated affine definitions and check complete "
+           "Real models: auto (default, eligible ReLU proposals only), on "
+           "(also ordinary LRA), or off",
+           refinement_group);
+  app.add_option("--lra-relu-branch-nodes", bm->UserFlags.lra_relu_branch_nodes,
+                 "maximum relaxation-guided phase nodes (default 128)")
+      ->group(refinement_group);
+  app.add_option("--lra-relu-branch-seconds", bm->UserFlags.lra_relu_branch_seconds,
+                 "ReLU phase search time budget in seconds (default 60)")
+      ->group(refinement_group);
+  bool_arg("--lra-replay-screen", bm->UserFlags.lra_replay_screen,
+           "screen candidate inputs by floating network replay before exact "
+           "model reconstruction (default: on; requires reconstruction)", refinement_group);
+  bool_arg("--lra-boolean-bounds", bm->UserFlags.lra_boolean_bounds,
+           "derive interval hulls across asserted Boolean alternatives during "
+           "ReLU preprocessing (default: on; requires ReLU preprocessing)", refinement_group);
+  bool_arg("--lra-lp-screen", bm->UserFlags.lra_lp_screen,
+           "skip exact LP certificates unlikely to improve a bound (default: on)", refinement_group);
+  bool_arg("--lra-lp-partial", bm->UserFlags.lra_lp_partial,
+           "exactly check dual proposals from unfinished LP searches (default: on)", refinement_group);
+  bool_arg("--lra-incremental-session", bm->UserFlags.lra_incremental_session,
+           "keep a Real solve's coordinator, CNF and SAT solver across the "
+           "check-sats of a pushing session on Boolean and Real terms; the "
+           "exact core is still rebuilt when the stack changes "
+           "(experimental; off by default)",
+           refinement_group);
   bool_arg(
       "--lra-conflict-recovery", bm->UserFlags.lra_conflict_recovery,
       "Recover floating-point conflict weights by bounded exact elimination "
       "(default: on). Set to 0 to use exact simplex fallback directly.",
       refinement_group);
+  bool_arg("--lra-early-conflicts", bm->UserFlags.lra_early_conflicts,
+           "detect conflicts in affected arithmetic rows before repair pivots "
+           "(experimental; off by default)", refinement_group);
+  bool_arg("--lra-first-search", bm->UserFlags.lra_first_search,
+           "connect arithmetic before the first SAT search "
+           "(experimental; off by default)", refinement_group);
   mode_arg("--lra-separate-model-values",
            bm->UserFlags.lra_separate_model_values,
            "before a satisfying assignment is published, move variables "
@@ -528,6 +656,19 @@ void ExtraMain::create_options()
            "declaration whose congruence is decided from model values, "
            "which is the only reader such a coincidence misleads",
            refinement_group);
+  bool_arg("--lra-persistent-state", bm->UserFlags.lra_persistent_state,
+           "preserve arithmetic registrations and bases across incremental "
+           "Real checks (experimental; implies the Real session)", refinement_group);
+  bool_arg("--lra-soi", bm->UserFlags.lra_soi,
+           "use bounded sum-of-infeasibilities arithmetic repair "
+           "(experimental; off by default)", refinement_group);
+  bool_arg("--lra-float-dormant-rows", bm->UserFlags.lra_float_dormant_rows,
+           "keep float-tier rows with no asserted bound out of the tableau "
+           "until their first bound (experimental; off by default)",
+           refinement_group);
+  int64_arg("--lra-float-dormant-min-cells", bm->UserFlags.lra_float_dormant_min_cells,
+            "with --lra-float-dormant-rows, only rows with at least this many "
+            "cells start dormant; 0 means every row", refinement_group);
   int64_arg("--lra-float-promotion-budget", bm->UserFlags.lra_float_promotion_budget,
             "fresh factorized float tiers one solve may build after infinitesimal "
             "trips; 0 means unbounded", refinement_group);
@@ -1881,6 +2022,23 @@ int ExtraMain::parse_options(int argc, char** argv)
     }
   }
 
+#ifndef STP_HAVE_HIGHS_CUT_LOG
+  if (bm->UserFlags.lra_highs_cuts)
+  {
+    cerr << "ERROR: --lra-highs-cuts requires -DENABLE_HIGHS_CUT_LOG=ON and the HiGHS root-cut patch" << endl;
+    return -1;
+  }
+#endif
+#ifndef STP_HAVE_HIGHS
+  if (bm->UserFlags.lra_relu_lp == UserDefinedFlags::OptionMode::ON ||
+      bm->UserFlags.lra_relu_branch ||
+      bm->UserFlags.lra_highs_lp || bm->UserFlags.lra_highs_mip ||
+      bm->UserFlags.lra_highs_replay)
+  {
+    cerr << "ERROR: LRA LP/branch search requires a build with -DENABLE_HIGHS=ON" << endl;
+    return -1;
+  }
+#endif
   if (array_index_hints_option->count())
   {
     if (array_index_hints == "off")

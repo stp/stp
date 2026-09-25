@@ -46,6 +46,7 @@ THE SOFTWARE.
 namespace stp
 {
 class FpAbstraction;
+struct RealSessionState;
 class IncrementalSolver;
 class LoweredApplicationView;
 class UFBatchAdapter;
@@ -128,6 +129,7 @@ public:
   // use and destroyed by reset/reset-assertions. NULL while no incremental
   // session is active; the batch pipeline never touches it.
   IncrementalSolver* incrementalSolver = nullptr;
+  RealSessionState* realSession = nullptr;
 
   // The C API's engagement bookkeeping, mirroring the SMT-LIB2 frontend's:
   // the driver engages from the second solve of a session (the first,
@@ -159,6 +161,22 @@ public:
 
   DLL_PUBLIC IncrementalSolver* getIncrementalSolver();
   DLL_PUBLIC void resetIncrementalSolver();
+  DLL_PUBLIC bool realSessionCanHandle(const ASTVec& assertions) const;
+  DLL_PUBLIC SOLVER_RETURN_TYPE checkSatRealSession(
+      const std::vector<ASTVec*>& levels, bool& handled);
+  DLL_PUBLIC void discardRealSession();
+private:
+  // The LRA-only solve loop the session runs: one SAT solve (blasting
+  // `modified_input`, or nothing when it is TRUE), then draining the
+  // coordinator's pending theory clauses until it decides. No UF or array
+  // refinement -- the session declines both. `first` blasts the base's
+  // skeleton; later checks pass TRUE because the solver already holds
+  // everything.
+  SOLVER_RETURN_TYPE lraSessionSolve(SATSolver& solver, ToSATAIG& tosat,
+                                     lra::LraCoordinator& coordinator,
+                                     const ASTNode& modified_input, bool first);
+  ASTNode CreateFreshSessionActivation();
+public:
   bool hasIncrementalSolver() const { return incrementalSolver != nullptr; }
 
 public:
@@ -173,6 +191,7 @@ public:
   // NB doesn't delete the STPMgr.
   void deleteObjects()
   {
+    discardRealSession();
     resetIncrementalSolver();
 
     if (Ctr_Example != NULL)

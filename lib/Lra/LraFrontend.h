@@ -5,6 +5,7 @@
 #include "stp/AST/AST.h"
 
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -149,6 +150,9 @@ public:
 
   LinearPolynomial normalize(const ASTNode& term);
   NormalizedPredicate normalizePredicate(const ASTNode& predicate);
+  // Recognize an exact (b=0 or b=1) domain, including affine spellings, without
+  // allocating stable symbol IDs or changing the frontend registration order.
+  std::optional<ASTNode> binaryDomainSymbol(const ASTNode& predicate) const;
   PreregisteredFormula preregister(const ASTNode& formula);
 
   std::string exportPolynomial(const LinearPolynomial& polynomial) const;

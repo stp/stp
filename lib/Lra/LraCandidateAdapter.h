@@ -156,6 +156,8 @@ private:
    * steps aside. */
   bool float_checks_degraded_ = false;
   unsigned float_restarts_ = 0;
+  unsigned complete_recoveries_ = 0;
+  unsigned cold_factorized_restarts_ = 0;
   /* Sampling counter for the float-tier reroute check: liveNonzeros scans the
    * tableau, so the fill ratio is measured every few checks rather than every
    * one. */

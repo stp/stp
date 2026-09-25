@@ -3,6 +3,7 @@
 #include "LraSolveContext.h"
 #include "LraCandidateAdapter.h"
 #include "LraModelIndex.h"
+#include "RealModel.h"
 #include "ImathAllocHooks.h"
 
 #include "stp/STPManager/STPManager.h"
@@ -658,6 +659,85 @@ void relationPolarities()
               "ordinary relation/polarity did not stage an exact model");
     }
   }
+}
+
+void singletonOrdering()
+{
+  for (unsigned direct : {0U, 1U, 2U})
+    for (bool enabled : {false, true})
+      {
+        STPMgr manager;
+        manager.UserFlags.lra_direct_bounds = direct;
+        manager.UserFlags.lra_singleton_ordering = enabled;
+        Frontend frontend(manager);
+        LraAtomRegistry registry(manager);
+        const auto frame = registry.pushAssertionFrame();
+        const auto x = manager.CreateSourceSymbol("ordering_x", SourceSort::real());
+        struct Spec { Kind relation; const char* coefficient; const char* bound; };
+        const std::array<Spec, 6> specs{{
+            {REAL_LE, "2", "6"}, {REAL_LE, "1", "5"},
+            {REAL_GE, "-3", "-9"}, {REAL_LT, "2/3", "2"},
+            {REAL_LE, "-7/3", "-7"}, {REAL_GT, "5", "15"}}};
+        ASTVec atoms;
+        for (const auto& spec : specs)
+          atoms.push_back(manager.CreateRealPredicate(spec.relation,
+              manager.CreateRealTerm(REAL_MUL,
+                  ASTVec{manager.CreateRealConst(spec.coefficient), x}),
+              manager.CreateRealConst(spec.bound)));
+        (void)registerNode(frontend, registry, frame, manager.CreateNode(AND, atoms));
+        const auto snapshot = registry.activeSnapshot();
+        require(snapshot.rows.size() == specs.size(),
+                "ordering must not merge the semantic rows");
+        FakeSolver solver;
+        auto bindings = makeBindings(snapshot, solver);
+        LraSolveContext context(registry, solver, generousLimits());
+        require(context.ready() && context.bindOpaqueAtoms(bindings.bindings),
+                "singleton ordering fixture binding failed: " + context.failureDetail());
+        LraCandidateAdapter adapter(context, solver);
+        require(adapter.emitBoundOrderingAxioms().outcome == AdapterOutcome::ClauseInserted,
+                "singleton ordering must emit valid axioms");
+        require(context.metrics().ordering_axioms == solver.clauses().size(),
+                "ordering clause accounting must include singleton chains");
+        if (!enabled)
+        {
+          require(solver.clauses().empty(), "disabled ordering must preserve separate scales");
+          continue;
+        }
+
+        // Evaluate the original source predicates at every endpoint and open
+        // interval, independently of the ordering implementation. Its clauses
+        // must admit exactly these Boolean patterns, including strictness and
+        // equivalent/complementary bounds in different source orientations.
+        std::set<std::uint64_t> possible;
+        for (const char* value : {"-10", "3", "4", "5", "6"})
+        {
+          RealModel model(generousLimits(), {{x, value, "1"}}, ASTVec{x});
+          std::uint64_t mask = 0;
+          for (const auto& component : snapshot.components)
+          {
+            const auto var = bindings.components.at(component.id);
+            const bool truth = model.predicateValue(component.sources.front().source);
+            if (truth != SATSolver::sign(bindings.bindings[var].literal))
+              mask |= UINT64_C(1) << var;
+          }
+          possible.insert(mask);
+        }
+        for (std::uint64_t mask = 0; mask < (UINT64_C(1) << solver.nVars()); ++mask)
+        {
+          bool allowed = true;
+          for (const auto& clause : solver.clauses())
+          {
+            require(clause.size() == 2, "ordering must use binary clauses");
+            bool holds = false;
+            for (const auto literal : clause)
+              holds = holds || ((((mask >> SATSolver::var(literal)) & 1U) != 0) !=
+                                SATSolver::sign(literal));
+            allowed = allowed && holds;
+          }
+          require(allowed == (possible.count(mask) != 0),
+                  "ordering clauses must encode exactly the feasible singleton patterns");
+        }
+      }
 }
 
 void immediateClausesAndProgress()
@@ -1643,6 +1723,7 @@ int main()
     const std::uint64_t registration_fault_points =
         registrationOwnershipFaultGate();
     relationPolarities();
+    singletonOrdering();
     immediateClausesAndProgress();
     budgetRefusalIsRecognisedFromEveryLayer();
     tableauClause();

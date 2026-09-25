@@ -30,6 +30,15 @@ build puts their code inside the binary, so the released binaries carry them:
 	* MiniSat Copyright (c) 2003-2010 Niklas Een, Niklas Sorensson, when
 		selected with -DUSE_MINISAT=ON.
 
+STP can also be built against HiGHS, an LP and MIP solver that it likewise
+links but does not import:
+	* HiGHS Copyright (c) 2024 HiGHS, when built with -DENABLE_HIGHS=ON.
+		What STP builds itself is release 1.12.0, to which, with
+		-DENABLE_HIGHS_CUT_LOG=ON, it first applies
+		cmake/deps-utils/highs-root-cut-log.patch: a callback reporting how
+		HiGHS derived the cuts it adds at the root of a MIP search. The
+		patched files stay under HiGHS's licence.
+
 Our build system includes third-party CMake modules (these are not compiled
 into STP, but they are distributed with it):
 	* GetGitRevisionDescription.cmake Copyright Iowa State University 2009-2010.
@@ -378,6 +387,31 @@ MiniSat
 	LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 	OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 	WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+HiGHS
+	MIT License
+
+	Copyright (c) 2024 HiGHS
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+	[STP note: reproduced from the LICENSE.txt of HiGHS release 1.12.0.]
 
 GetGitRevisionDescription.cmake (cmake/modules)
 	Original Author:

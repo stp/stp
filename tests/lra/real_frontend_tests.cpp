@@ -152,6 +152,25 @@ void normalization()
 {
   STPMgr manager;
   Frontend frontend(manager);
+  const auto b = manager.CreateSourceSymbol("binary_probe_b", SourceSort::real());
+  const auto c = manager.CreateSourceSymbol("binary_probe_c", SourceSort::real());
+  const auto zero = manager.CreateRealConst("0");
+  const auto one = manager.CreateRealConst("1");
+  const auto b_zero = manager.CreateNode(EQ, b, zero);
+  const auto b_one = manager.CreateNode(EQ, one, b);
+  require(frontend.binaryDomainSymbol(manager.CreateNode(OR, b_zero, b_one)) == b,
+          "exact binary domain was not recognized");
+  require(!frontend.binaryDomainSymbol(manager.CreateNode(
+              OR, b_zero, manager.CreateNode(EQ, c, one))),
+          "different unregistered symbols were conflated in domain inspection");
+  const auto twice_b = manager.CreateRealTerm(
+      REAL_MUL, ASTVec{manager.CreateRealConst("2"), b});
+  require(frontend.binaryDomainSymbol(manager.CreateNode(
+              OR, manager.CreateNode(EQ, twice_b, zero),
+              manager.CreateNode(EQ, twice_b, manager.CreateRealConst("2")))) == b,
+          "scaled binary domain was not recognized");
+  // The successful and unsuccessful inspections above must not register b or
+  // c. The existing checks below require x and y to retain IDs 1 and 2.
   const ASTNode x = manager.CreateSourceSymbol("x", SourceSort::real());
   const ASTNode y = manager.CreateSourceSymbol("y", SourceSort::real());
   const ASTNode two_x = manager.CreateRealTerm(

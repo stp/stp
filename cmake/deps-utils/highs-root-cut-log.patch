@@ -1,0 +1,136 @@
+--- a/highs/interfaces/highs_c_api.cpp
++++ b/highs/interfaces/highs_c_api.cpp
+@@ -1787,3 +1787,5 @@
+ HighsInt Highs_getScaledModelStatus(const void* highs) {
+   return (HighsInt)((Highs*)highs)->getModelStatus();
+ }
++
++HighsInt Highs_getStpRootCutLogVersion(void) { return 1; }
+--- a/highs/interfaces/highs_c_api.h
++++ b/highs/interfaces/highs_c_api.h
+@@ -106,6 +106,9 @@
+ static const HighsInt kHighsCallbackMipGetCutPool = 7;
+ static const HighsInt kHighsCallbackMipDefineLazyConstraints = 8;
+ static const HighsInt kHighsCallbackCallbackMipUserSolution = 9;
++// STP extension, versioned separately from the upstream callback ABI.
++#define HIGHS_STP_ROOT_CUT_LOG_VERSION 1
++static const HighsInt kHighsCallbackMipRootCutRecipe = 10;
+ 
+ static const char* const kHighsCallbackDataOutLogTypeName = "log_type";
+ static const char* const kHighsCallbackDataOutRunningTimeName = "running_time";
+@@ -282,6 +285,9 @@
+  * @returns A pointer to the Highs instance.
+  */
+ void* Highs_create(void);
++
++/** Version of the optional STP root-cut recipe ABI; requires the patched library. */
++HighsInt Highs_getStpRootCutLogVersion(void);
+ 
+ /**
+  * Destroy the model `highs` created by `Highs_create` and free all
+--- a/highs/lp_data/HConst.h
++++ b/highs/lp_data/HConst.h
+@@ -237,7 +237,8 @@
+   kCallbackMipGetCutPool,             // 7
+   kCallbackMipDefineLazyConstraints,  // 8
+   kCallbackMipUserSolution,           // 9
+-  kCallbackMax = kCallbackMipUserSolution,
++  kCallbackMipRootCutRecipe,          // 10: STP optional recipe log
++  kCallbackMax = kCallbackMipRootCutRecipe,
+   kNumCallbackType
+ };
+ 
+--- a/highs/lp_data/HighsCallback.cpp
++++ b/highs/lp_data/HighsCallback.cpp
+@@ -30,6 +30,8 @@
+   this->data_out.mip_dual_bound = -kHighsInf;
+   this->data_out.mip_gap = -1;
+   this->data_out.mip_solution.clear();
++  this->data_out.root_cut_recipe_row.clear();
++  this->data_out.root_cut_recipe_weight.clear();
+   this->data_out.cutpool_start.clear();
+   this->data_out.cutpool_index.clear();
+   this->data_out.cutpool_value.clear();
+@@ -88,7 +90,8 @@
+       callback_type == kCallbackMipLogging ||
+       callback_type == kCallbackMipGetCutPool ||
+       callback_type == kCallbackMipDefineLazyConstraints ||
+-      callback_type == kCallbackMipUserSolution)
++      callback_type == kCallbackMipUserSolution ||
++      callback_type == kCallbackMipRootCutRecipe)
+     assert(!action);
+   return action;
+ }
+@@ -134,6 +137,9 @@
+                            ? nullptr
+                            : const_cast<double*>(cutpool_upper.data());
+ 
++  data.root_cut_recipe_size = root_cut_recipe_row.size();
++  data.root_cut_recipe_row = root_cut_recipe_row.data();
++  data.root_cut_recipe_weight = root_cut_recipe_weight.data();
+   data.external_solution_query_origin =
+       static_cast<HighsInt>(external_solution_query_origin);
+   return data;
+--- a/highs/lp_data/HighsCallback.h
++++ b/highs/lp_data/HighsCallback.h
+@@ -55,6 +55,8 @@
+   std::vector<double> cutpool_lower;
+   std::vector<double> cutpool_upper;
+   ExternalMipSolutionQueryOrigin external_solution_query_origin;
++  std::vector<HighsInt> root_cut_recipe_row;
++  std::vector<double> root_cut_recipe_weight;
+ 
+   operator HighsCallbackDataOut() const;
+ };
+--- a/highs/lp_data/HighsCallbackStruct.h
++++ b/highs/lp_data/HighsCallbackStruct.h
+@@ -45,6 +45,12 @@
+   double* cutpool_lower;
+   double* cutpool_upper;
+   HighsInt external_solution_query_origin;
++  // Borrowed until the root-cut callback returns. These are row aggregation
++  // hints, NOT a proof of the final floating MIR cut. Negative weights select
++  // the opposite aggregation; consumers must rederive a supported exact cut.
++  HighsInt root_cut_recipe_size;
++  const HighsInt* root_cut_recipe_row;
++  const double* root_cut_recipe_weight;
+ } HighsCallbackDataOut;
+ 
+ // Some external packages (e.g., jump) currently assume that the first 2 fields
+--- a/highs/mip/HighsTableauSeparator.cpp
++++ b/highs/mip/HighsTableauSeparator.cpp
+@@ -228,13 +228,32 @@
+         lpSolver.getLp(), baseRowInds.data(), baseRowVals.data(),
+         baseRowInds.size());
+ 
++    // Snapshot only aggregations whose generated cut enters the pool at the
++    // main root. No allocation or copying when the callback is disabled.
++    auto logRootRecipe = [&](bool negate) {
++      if (mip.submip || mip.mipdata_->num_nodes != 0 ||
++          &lpRelaxation != &mip.mipdata_->lp || !mip.callback_ ||
++          !mip.callback_->callbackActive(kCallbackMipRootCutRecipe)) return;
++      auto& out = mip.callback_->data_out;
++      out.root_cut_recipe_row.clear();
++      out.root_cut_recipe_weight.clear();
++      for (const auto& term : fracvar.row_ep) {
++        out.root_cut_recipe_row.push_back(term.first);
++        out.root_cut_recipe_weight.push_back(negate ? -term.second : term.second);
++      }
++      mip.callback_->callbackAction(kCallbackMipRootCutRecipe);
++      out.root_cut_recipe_row.clear();
++      out.root_cut_recipe_weight.clear();
++    };
+     double rhs = 0;
+-    cutGen.generateCut(transLp, baseRowInds, baseRowVals, rhs);
++    if (cutGen.generateCut(transLp, baseRowInds, baseRowVals, rhs))
++      logRootRecipe(false);
+     if (mip.mipdata_->domain.infeasible()) break;
+ 
+     lpAggregator.getCurrentAggregation(baseRowInds, baseRowVals, true);
+     rhs = 0;
+-    cutGen.generateCut(transLp, baseRowInds, baseRowVals, rhs);
++    if (cutGen.generateCut(transLp, baseRowInds, baseRowVals, rhs))
++      logRootRecipe(true);
+     if (mip.mipdata_->domain.infeasible()) break;
+ 
+     lpAggregator.clear();

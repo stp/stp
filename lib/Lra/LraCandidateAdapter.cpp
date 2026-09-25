@@ -5,6 +5,7 @@
 #include "ExactLraVerificationData.h"
 #include "FloatSimplex.h"
 #include "PortableBits.h"
+#include "stp/STPManager/STPManager.h"
 
 #include <algorithm>
 #include <chrono>
@@ -1053,7 +1054,8 @@ void LraCandidateAdapter::endTheoryPropagation() noexcept
 {
   context_.propagated_model_.reset();
   advice_source_ = AdviceSource::None;
-  // Disconnecting must release the root as well as decision levels.
+  // Disconnecting must release the root as well as decision levels. A
+  // persistent core will be reused or extended after this adapter ends.
   std::optional<Checkpoint> first;
   for (auto const& checkpoint : level_checkpoints_)
     if (checkpoint && (!first || checkpoint->depth < first->depth))
@@ -1470,6 +1472,48 @@ bool LraCandidateAdapter::floatCompleteCandidate(std::uint64_t candidate,
         return verdict;
       };
       auto verdict = check();
+      for (unsigned attempt = 0;
+           context_.dense_recovery_ && attempt < 2 &&
+           complete_recoveries_ < 8 &&
+           verdict == FloatSimplex::Verdict::Abandoned &&
+           context_.observer_.pollBeforePivot() == StopReason::Continue;
+           ++attempt)
+      {
+        bool recovered = false;
+        if (context_.float_core_->wantsPromotion())
+          recovered = context_.promoteFloatCore();
+        else if (context_.float_core_->factorized())
+        {
+          if (context_.float_core_->refactorFailed() &&
+              cold_factorized_restarts_ == 0)
+          {
+            ++cold_factorized_restarts_;
+            ++context_.metrics_.float_cold_recoveries;
+            context_.float_core_->restartBasis();
+            recovered = true;
+          }
+        }
+        else if (context_.float_core_->denseInput() || attempt != 0 ||
+                 float_restarts_ != 0)
+        {
+          ++context_.metrics_.float_factorized;
+          context_.float_core_->switchToFactorized();
+          recovered = true;
+        }
+        else
+        {
+          ++float_restarts_;
+          ++context_.metrics_.float_restarts;
+          context_.float_core_->restartBasis();
+          recovered = true;
+        }
+        if (!recovered)
+          break;
+        ++context_.metrics_.float_checks_abandoned;
+        ++context_.metrics_.float_complete_recoveries;
+        ++complete_recoveries_;
+        verdict = check();
+      }
       if (verdict == FloatSimplex::Verdict::InfeasibleCandidate)
       {
         ++context_.metrics_.float_check_conflicts;
@@ -1945,10 +1989,19 @@ void LraCandidateAdapter::checkPartialAssignment() noexcept
       ++context_.metrics_.float_checks;
       const auto check_start = std::chrono::steady_clock::now();
       const std::uint64_t pivots_before = context_.float_core_->pivots();
+      const auto early_before = context_.float_core_->earlyConflicts();
+      const auto soi_before = context_.float_core_->soiSteps();
+      const auto flips_before = context_.float_core_->soiBoundFlips();
+      const auto fallbacks_before = context_.float_core_->soiFallbacks();
       const FloatSimplex::Verdict verdict =
           context_.float_core_->check(context_.observer_);
       context_.metrics_.float_pivots +=
           context_.float_core_->pivots() - pivots_before;
+      context_.metrics_.float_early_conflicts +=
+          context_.float_core_->earlyConflicts() - early_before;
+      context_.metrics_.float_soi_steps += context_.float_core_->soiSteps() - soi_before;
+      context_.metrics_.float_soi_bound_flips += context_.float_core_->soiBoundFlips() - flips_before;
+      context_.metrics_.float_soi_fallbacks += context_.float_core_->soiFallbacks() - fallbacks_before;
       context_.metrics_.float_check_nanoseconds +=
           static_cast<std::uint64_t>(
               std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -1966,6 +2019,18 @@ void LraCandidateAdapter::checkPartialAssignment() noexcept
       if (verdict == FloatSimplex::Verdict::Abandoned)
       {
         ++context_.metrics_.float_checks_abandoned;
+        if (context_.dense_recovery_ && context_.float_core_->factorized() &&
+            context_.float_core_->refactorFailed() &&
+            cold_factorized_restarts_ == 0 &&
+            context_.observer_.pollBeforePivot() == StopReason::Continue)
+        {
+          ++cold_factorized_restarts_;
+          ++context_.metrics_.float_cold_recoveries;
+          context_.float_core_->restartBasis();
+          partial_checks_abandoned_ = 0;
+          theory_dirty_ = true;
+          return;
+        }
         /* A tableau that keeps blowing the pivot or merge budget has
          * densified along its pivot history, not by the instance's
          * nature: restart the basis first -- pristine sparse rows, same
@@ -2338,6 +2403,14 @@ AdapterResult LraCandidateAdapter::emitBoundOrderingAxioms() noexcept
 
     NumberOperationScope operation(context_.mapping_budget_);
     std::map<LraCanonicalRowId, std::vector<HalfLine>> rows;
+    std::map<LraRegistrySymbolId, std::vector<HalfLine>> singleton_rows;
+    const bool singleton_ordering =
+        context_.registry_.manager().UserFlags.lra_singleton_ordering;
+    // Stable ownership for normalized thresholds; at most one per component.
+    // The ordinary path keeps borrowing its existing threshold without copies.
+    std::vector<ExactRational> normalized;
+    if (singleton_ordering)
+      normalized.reserve(context_.registry_snapshot_.components.size());
     for (const RegistryComponent& component :
          context_.registry_snapshot_.components)
     {
@@ -2367,6 +2440,28 @@ AdapterResult LraCandidateAdapter::emitBoundOrderingAxioms() noexcept
           throw SolveContextFailure(
               SolveContextFailureKind::Invalid,
               "equality relation reached the bound ordering axioms");
+      }
+      if (singleton_ordering)
+      {
+        const RegistryRow& row = context_.registryRow(component.row);
+        if (row.terms.size() == 1)
+        {
+          const auto& term = row.terms.front();
+          if (term.coefficient.isZero())
+            throw SolveContextFailure(SolveContextFailureKind::Invalid,
+                                      "zero singleton ordering coefficient");
+          normalized.push_back(component.threshold / term.coefficient);
+          entry.bound = &normalized.back();
+          if (term.coefficient.sign() < 0)
+          {
+            // r <= b becomes x >= b/a. Complement it to regain an upper
+            // half-line; complementing swaps open and closed endpoints too.
+            entry.literal.x ^= 1U;
+            entry.closed = !entry.closed;
+          }
+          singleton_rows[term.symbol].push_back(entry);
+          continue;
+        }
       }
       rows[component.row].push_back(entry);
     }
@@ -2431,6 +2526,8 @@ AdapterResult LraCandidateAdapter::emitBoundOrderingAxioms() noexcept
       }
     };
     for (auto& row : rows)
+      emitChain(row.second);
+    for (auto& row : singleton_rows)
       emitChain(row.second);
     return result(AdapterOutcome::ClauseInserted, candidate);
   }

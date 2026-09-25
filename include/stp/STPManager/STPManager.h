@@ -54,7 +54,8 @@ class LraCoordinator;
 class RealModel;
 struct LraReconstruction;
 ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
-                         SATSolver* solver, LraReconstruction* reconstruction);
+                         SATSolver* solver, LraReconstruction* reconstruction,
+                         bool highs_enabled);
 }
 class ExtensionalityContext;
 class UFContext;
@@ -80,9 +81,11 @@ enum class FPSpecial
 class STPMgr
 {
   friend class Cpp_interface;
+  friend class STP;
   friend ASTNode lra::presolveForSolve(STPMgr& manager, const ASTNode& input,
                                        SATSolver* solver,
-                                       lra::LraReconstruction* reconstruction);
+                                       lra::LraReconstruction* reconstruction,
+                                       bool highs_enabled);
   friend class ASTNode;
   friend class ASTInterior;
   friend class ASTBVConst;
@@ -506,6 +509,7 @@ public:
   }
 
   size_t getAssertLevel() { return _asserts.size(); }
+  const vector<ASTVec*>& AssertLevels() const noexcept { return _asserts; }
 
 private:
   // Stack of Logical Context. each entry in the stack is a logical

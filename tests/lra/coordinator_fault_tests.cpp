@@ -84,6 +84,8 @@ enum class StageFault
   InconsistentNumerator,
   InvalidDenominator,
   WrongExactValue,
+  ReconstructionValid,
+  ReconstructionWrong,
   OriginalRejects
 };
 
@@ -127,6 +129,73 @@ void applicationModelInvariants()
   unreadable.setScalarKeyOracle([](const ASTNode&) { return "unobserved-value"; });
   require(unreadable.stringsFor(fp).canonical_fraction == "0",
           "readable unmatched tuple lost its total-function default");
+}
+
+void reconstructionOrder()
+{
+  STPMgr manager;
+  const auto x =
+      manager.CreateSourceSymbol("reconstruct_x", SourceSort::real());
+  const auto y =
+      manager.CreateSourceSymbol("reconstruct_y", SourceSort::real());
+  const auto z =
+      manager.CreateSourceSymbol("reconstruct_z", SourceSort::real());
+  const auto half = manager.CreateRealConst("1/2");
+  const auto term = manager.CreateRealTerm(REAL_ADD, ASTVec{x, half});
+  Frontend frontend(manager);
+  RealModel model(frontend.numberLimits(), {{x, "3", "2"}}, ASTVec{x, y, z});
+  require(model.stringsFor(y).canonical_fraction == "0", "unvalued default");
+  model.reconstruct({{y, term}, {z, y}});
+  require(model.stringsFor(y).canonical_fraction == "2" &&
+              model.stringsFor(z).canonical_fraction == "2",
+          "exact DAG replay");
+  using ReconstructionKind = RealModelDefinition::Kind;
+  RealModel monotone(frontend.numberLimits(), {{x, "3", "2"}}, ASTVec{x, y, z});
+  monotone.reconstruct({{y, ASTVec{x, half}, ReconstructionKind::AboveMaximum},
+                        {z, ASTVec{y, term}, ReconstructionKind::BelowMinimum}});
+  require(monotone.stringsFor(y).canonical_fraction == "5/2" &&
+              monotone.stringsFor(z).canonical_fraction == "1",
+          "exact extrema and margins must share the model number budget");
+  for (const std::vector<RealModelDefinition>& bad :
+       {std::vector<RealModelDefinition>{{y, z}, {z, term}},
+        std::vector<RealModelDefinition>{{y, y}},
+        std::vector<RealModelDefinition>{{y, term}, {y, half}},
+        std::vector<RealModelDefinition>{{half, term}},
+        std::vector<RealModelDefinition>{
+            {y, ASTVec{x, z}, ReconstructionKind::AboveMaximum}, {z, term}},
+        std::vector<RealModelDefinition>{
+            {y, ASTVec{x, y}, ReconstructionKind::BelowMinimum}},
+        std::vector<RealModelDefinition>{
+            {y, term}, {y, ASTVec{x}, ReconstructionKind::AboveMaximum}},
+        std::vector<RealModelDefinition>{
+            {y, ASTVec{}, ReconstructionKind::AboveMaximum}},
+        std::vector<RealModelDefinition>{
+            {y, ASTVec{ASTNode()}, ReconstructionKind::BelowMinimum}}})
+  {
+    RealModel candidate(frontend.numberLimits(), {{x, "3", "2"}},
+                        ASTVec{x, y, z});
+    bool rejected = false;
+    try
+    {
+      candidate.reconstruct(bad);
+    }
+    catch (const std::exception&)
+    {
+      rejected = true;
+    }
+    require(rejected, "malformed reconstruction must fail closed");
+  }
+  model.markCommitted();
+  bool rejected = false;
+  try
+  {
+    model.reconstruct({{y, half}});
+  }
+  catch (const std::exception&)
+  {
+    rejected = true;
+  }
+  require(rejected, "published models cannot be reconstructed");
 }
 
 void runStageFault(StageFault fault)
@@ -190,15 +259,18 @@ void runStageFault(StageFault fault)
       break;
     case StageFault::OriginalRejects:
     {
-      /* The query as it was written, before presolve rewrote it: the commit
-       * has to evaluate it and refuse a model that does not satisfy it.
-       * Were it not evaluated, the five default-on presolve stages
+      /* The query as it was written, before presolve rewrote it, with no
+       * replay definitions at all: the commit has to evaluate it and refuse
+       * a model that does not satisfy it. Were it evaluated only when a
+       * reconstruction had been selected -- under HiGHS, or an explicit
+       * --lra-model-reconstruction=on -- the five default-on presolve stages
        * would be the one part of the answer path no check covers, and a
        * wrong rewrite there would reach the answer unchecked. */
       LraReconstruction reconstruction;
       reconstruction.original = manager.CreateNode(
           AND, ASTVec{formula, manager.CreateRealPredicate(
                                    EQ, x, manager.CreateRealConst("13/17"))});
+      require(reconstruction.definitions.empty(), "no replay for this case");
       coordinator.setReconstruction(std::move(reconstruction));
       AbsRefine_CounterExample counterexample(&manager, nullptr, &arrays);
       require(coordinator.verifyAndCommit(counterexample) !=
@@ -206,6 +278,31 @@ void runStageFault(StageFault fault)
               "a model the original query rejects must not be published");
       require(!manager.HasRealModel(),
               "a refused commit publishes nothing");
+      return;
+    }
+    case StageFault::ReconstructionValid:
+    case StageFault::ReconstructionWrong:
+    {
+      const auto y =
+          manager.CreateSourceSymbol("reconstructed_y", SourceSort::real());
+      const auto term = manager.CreateRealTerm(
+          REAL_ADD, ASTVec{x, manager.CreateRealConst("1")});
+      LraReconstruction reconstruction;
+      reconstruction.original = manager.CreateNode(
+          AND, ASTVec{formula, manager.CreateRealPredicate(EQ, y, term)});
+      reconstruction.definitions.push_back(
+          {y, fault == StageFault::ReconstructionValid
+                  ? term
+                  : manager.CreateRealConst("0")});
+      coordinator.setReconstruction(std::move(reconstruction));
+      AbsRefine_CounterExample counterexample(&manager, nullptr, &arrays);
+      const bool accepted = coordinator.verifyAndCommit(counterexample) ==
+                            CommitOutcome::Committed;
+      require(accepted == (fault == StageFault::ReconstructionValid),
+              "original formula must reject a corrupted reconstruction");
+      require(manager.HasRealModel() == accepted,
+              "only checked models are published");
+      manager.InvalidateRealModel();
       return;
     }
   }
@@ -249,6 +346,169 @@ void arraySerialMismatchFailsClosed()
   coordinator.noteArrayOutcome(true);
   require(!coordinator.ready() && !manager.HasRealModel(),
           "array checker accepted a stale candidate serial");
+}
+
+void firstSearchIntegration(bool enabled, bool float_driver, bool corrupt_binding,
+                            std::unique_ptr<SATSolver> solver = nullptr)
+{
+  STPMgr manager;
+  manager.UserFlags.lra_first_search = enabled;
+  manager.UserFlags.lra_float_driver = float_driver;
+  manager.UserFlags.lra_early_conflicts = true;
+  manager.UserFlags.lra_verify_conflicts = true;
+  auto x = manager.CreateSourceSymbol("first_x", SourceSort::real());
+  auto y = manager.CreateSourceSymbol("first_y", SourceSort::real());
+  auto one = manager.CreateRealConst("1");
+  auto sum = manager.CreateRealTerm(REAL_ADD, ASTVec{x, y});
+  auto formula = manager.CreateNode(AND, ASTVec{
+      manager.CreateRealPredicate(REAL_GE, x, one),
+      manager.CreateRealPredicate(REAL_GE, y, one),
+      manager.CreateRealPredicate(REAL_LE, sum, one)});
+  if (!solver)
+    solver.reset(createSATSolver(manager.UserFlags));
+  LraCoordinator coordinator(manager, *solver, formula);
+  require(coordinator.ready(), coordinator.failureDetail());
+  ArrayTransformer arrays(&manager, nullptr);
+  ToSATAIG tosat(&manager, &arrays);
+  for (auto const& atom : coordinator.opaqueAtoms())
+    tosat.protectSymbol(atom);
+  require(tosat.setRequiredSolveAssumption(coordinator.solveActivation()),
+          "first search activation");
+  auto gated = manager.CreateNode(IMPLIES, coordinator.solveActivation(),
+                                  coordinator.booleanFormula());
+  require(coordinator.beforeSolverCall(), coordinator.failureDetail());
+  bool called = false;
+  if (enabled)
+    tosat.setBeforeSearch([&]() {
+      called = true;
+      require(coordinator.candidateSerial() == 0, "hook precedes first candidate");
+      auto& map = tosat.SATVar_to_SymbolIndexMap();
+      require(!map.empty(), "hook follows CNF binding");
+      if (corrupt_binding)
+        map.at(coordinator.opaqueAtoms().front()).front() = ~0U;
+      return coordinator.afterCnf(tosat);
+    });
+  bool sat = tosat.CallSAT(*solver, gated, true);
+  tosat.clearBeforeSearch();
+  require(called == enabled, "first search hook called as configured");
+  if (corrupt_binding)
+  {
+    require(!sat && tosat.hasInternalSolveFailure() && !coordinator.ready(),
+            "failed first binding is an error, not an UNSAT answer");
+    return;
+  }
+  require(!tosat.hasInternalSolveFailure(), tosat.internalSolveFailureDetail());
+  bool driven = enabled && solver->supportsTheoryPropagator();
+  require(sat != driven, "theory contradiction is found within the first search");
+  require(coordinator.metrics().first_search_connections == (driven ? 1U : 0U),
+          "first search connection counted");
+  if (driven)
+    require(coordinator.solveMetrics().float_checks +
+            coordinator.coreStatistics().checks > 0, "arithmetic checked during first search");
+}
+
+void persistentCoordinator(bool persistent, bool floating, bool propagation,
+                           unsigned extension_mode = 0, unsigned row_order = 0,
+                           bool reset_sat = false)
+{
+  STPMgr manager;
+  manager.UserFlags.lra_persistent_state = persistent;
+  manager.UserFlags.lra_extension_mode = extension_mode;
+  manager.UserFlags.lra_row_order = row_order;
+  manager.UserFlags.lra_extension_restart_sat = reset_sat;
+  if (reset_sat)
+  {
+    manager.UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
+    manager.UserFlags.cadical_factor = UserDefinedFlags::BVAMode::OFF;
+  }
+  manager.UserFlags.lra_float_driver = floating;
+  manager.UserFlags.lra_theory_propagation = propagation;
+  manager.UserFlags.lra_early_conflicts = true;
+  manager.UserFlags.lra_soi = true;
+  manager.UserFlags.lra_verify_conflicts = true;
+  auto x = manager.CreateSourceSymbol("persist_x", SourceSort::real());
+  auto y = manager.CreateSourceSymbol("persist_y", SourceSort::real());
+  auto z = manager.CreateSourceSymbol("persist_z", SourceSort::real());
+  auto base = manager.CreateRealPredicate(REAL_GE, x, manager.CreateRealConst("1"));
+  std::unique_ptr<SATSolver> solver(createSATSolver(manager.UserFlags));
+  LraCoordinator coordinator(manager, *solver, base);
+  ArrayTransformer arrays(&manager, nullptr);
+  ToSATAIG tosat(&manager, &arrays);
+  for (auto const& atom : coordinator.opaqueAtoms())
+    tosat.protectSymbol(atom);
+  auto gated = manager.CreateNode(IMPLIES, coordinator.solveActivation(), coordinator.booleanFormula());
+  auto solve = [&](bool first) {
+    require(tosat.setRequiredSolveAssumptions(coordinator.liveActivations()), "persistent activations");
+    for (unsigned attempt = 0; attempt < 100; ++attempt)
+    {
+      require(coordinator.beforeSolverCall(), coordinator.failureDetail());
+      tosat.setBeforeSearch([&]() { return coordinator.afterCnf(tosat); });
+      bool sat = tosat.CallSAT(*solver, first ? gated : manager.ASTTrue, true);
+      first = false;
+      tosat.clearBeforeSearch();
+      require(!tosat.hasInternalSolveFailure(), tosat.internalSolveFailureDetail());
+      if (!sat)
+        return false;
+      auto outcome = coordinator.checkCompleteCandidate(tosat);
+      if (outcome == CoordinatorCandidateOutcome::ModelStaged)
+      {
+        require(coordinator.testValidateStagedModel(), "persistent staged model validates");
+        return true;
+      }
+      require(outcome == CoordinatorCandidateOutcome::ConflictPending &&
+              coordinator.encodePendingLraClause(), coordinator.failureDetail());
+    }
+    throw std::runtime_error("persistent solve did not converge");
+  };
+  require(solve(true), "persistent base SAT");
+  auto epoch = coordinator.solveEpoch();
+  auto extra = manager.CreateNode(AND, ASTVec{
+      manager.CreateRealPredicate(EQ, y, manager.CreateRealConst("2/3")),
+      manager.CreateRealPredicate(REAL_GE,
+          manager.CreateRealTerm(REAL_ADD, ASTVec{x, y}), manager.CreateRealConst("2"))});
+  require(coordinator.extendWithFormula(extra, tosat) ==
+              ExtensionOutcome::Extended, coordinator.failureDetail());
+  require(!coordinator.hasStagedModel(), "extension discards old staged model");
+  const bool reuse = persistent || extension_mode == 1 || extension_mode == 3;
+  require((coordinator.solveEpoch() == epoch) == reuse, "context epoch reuse as configured");
+  require(solve(false), "new structural variable after old row SAT");
+  auto second = manager.CreateRealPredicate(EQ, z, manager.CreateRealConst("7/3"));
+  coordinator.beginExtensionBatch();
+  require(coordinator.extendWithFormula(second, tosat) ==
+              ExtensionOutcome::Extended, coordinator.failureDetail());
+  require(coordinator.endExtensionBatch(), coordinator.failureDetail());
+  require(solve(false), "second persistent extension SAT");
+  auto activation = manager.CreateSourceSymbol("persist_frame", SourceSort::boolean());
+  auto bad = manager.CreateRealPredicate(REAL_LT, x, manager.CreateRealConst("0"));
+  require(coordinator.extendFrame(bad, tosat, activation) ==
+              ExtensionOutcome::Extended, coordinator.failureDetail());
+  require(!solve(false), "pushed contradiction UNSAT");
+  epoch = coordinator.solveEpoch();
+  require(coordinator.retractFrame(activation), "retract contradictory frame");
+  require((coordinator.solveEpoch() == epoch) == reuse, "pop keeps configured context");
+  require(solve(false), "pop restores SAT");
+  require(coordinator.metrics().core_rebuilds == (reuse ? 1U : 5U),
+          "persistent mode constructs one core; baseline rebuilds on changes");
+  require(coordinator.metrics().arithmetic_state_resets == (extension_mode == 3 ? 4U : 0U),
+          "search reset preserves IDs through append and retraction");
+  require(coordinator.metrics().sat_search_resets == (reset_sat ? 2U : 0U),
+          "only the two permanent extensions reset SAT search");
+  if (persistent)
+  {
+    require(coordinator.solveMetrics().persistent_extensions == 3, "three arithmetic extensions");
+    require(coordinator.solveMetrics().float_extensions == (floating ? 3U : 0U),
+            "float tableau extended as configured");
+    require(coordinator.coreStatistics().variables == 3, "stable variable registration count");
+    // A new exact threshold may stop fitting in the advisory tier. Keep
+    // the persistent exact core and finish the query through it.
+    auto huge = manager.CreateRealPredicate(REAL_GE, x,
+        manager.CreateRealConst("1" + std::string(400, '0')));
+    auto stable_epoch = coordinator.solveEpoch();
+    require(coordinator.extendWithFormula(huge, tosat) ==
+                ExtensionOutcome::Extended, coordinator.failureDetail());
+    require(solve(false), "non-finite float extension falls back to exact arithmetic");
+    require(coordinator.solveEpoch() == stable_epoch, "float fallback keeps exact context");
+  }
 }
 
 /* A budget that refuses mid-check is a query this solve could not finish,
@@ -360,6 +620,13 @@ void extensionDeclineIsNotFailure()
   require(coordinator.extendWithFormula(x, tosat) ==
               ExtensionOutcome::Declined, "a Real-sorted formula declines");
   untouched("a Real-sorted formula");
+
+  // A frame activation that is not a Boolean symbol declines the same way.
+  const auto activation =
+      manager.CreateSourceSymbol("decline_frame", SourceSort::real());
+  require(coordinator.extendFrame(base, tosat, activation) ==
+              ExtensionOutcome::Declined, "a Real activation declines");
+  untouched("a Real activation");
 
   // A Boolean formula this manager owns whose leaves the lemma encoder does
   // not cover. Everything before the encoder runs, so this refusal arrives
@@ -500,6 +767,7 @@ int main()
     STPMgr manager;
     std::unique_ptr<SATSolver> solver(createSATSolver(manager.UserFlags));
     decisionPolarityRequirements(*solver);
+    reconstructionOrder();
     applicationModelInvariants();
     budgetRefusalIsNotAnError();
     extensionDeclineIsNotFailure();
@@ -507,10 +775,28 @@ int main()
     searchResetPreservesFormula();
     NoPolarityCadical unsupported;
     decisionPolarityRequirements(unsupported);
+    for (bool floating : {false, true})
+      firstSearchIntegration(true, floating, false,
+                             std::make_unique<NoPolarityCadical>());
 #endif
     for (bool floating : {false, true})
     {
       decisionPolarityState(floating);
+      for (bool propagation : {false, true})
+      {
+        persistentCoordinator(false, floating, propagation);
+        persistentCoordinator(true, floating, propagation);
+        for (unsigned mode : {1U, 2U, 3U})
+          for (unsigned order : {0U, 1U, 2U, 3U})
+            persistentCoordinator(false, floating, propagation, mode, order);
+#if defined(USE_CADICAL)
+          for (unsigned mode : {1U, 2U, 3U})
+            persistentCoordinator(false, floating, propagation, mode, 0, true);
+#endif
+      }
+      firstSearchIntegration(false, floating, false);
+      firstSearchIntegration(true, floating, false);
+      firstSearchIntegration(true, floating, true);
     }
     runStageFault(StageFault::None);
     runStageFault(StageFault::Epoch);
@@ -523,9 +809,11 @@ int main()
     runStageFault(StageFault::InconsistentNumerator);
     runStageFault(StageFault::InvalidDenominator);
     runStageFault(StageFault::WrongExactValue);
+    runStageFault(StageFault::ReconstructionValid);
+    runStageFault(StageFault::ReconstructionWrong);
     runStageFault(StageFault::OriginalRejects);
     arraySerialMismatchFailsClosed();
-    std::cout << "PASS coordinator faults\n";
+    std::cout << "PASS coordinator faults and first-search integration\n";
     return 0;
   }
   catch (const std::exception& failure)

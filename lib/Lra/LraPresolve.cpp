@@ -4,15 +4,19 @@
 #include "Lra/ASTRealConst.h"
 #include "Lra/ExactRational.h"
 #include "Lra/LraReconstruction.h"
+#include "Lra/LraRelu.h"
+#include "Lra/LraHighs.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 
 #include <array>
 #include <chrono>
+#include <deque>
 #include <map>
 #include <optional>
 
 #include <iostream>
+#include <limits>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -23,14 +27,152 @@ namespace {
 
 using NodeMap = std::unordered_map<std::uint64_t, ASTNode>;
 
+struct SubstitutionLimit {};
+
+// A heuristic refusal keeps the complete input equations. It must not poison
+// the query's arithmetic budget or be replenished by another presolve round.
+class SubstitutionBudget final
+{
+public:
+  SubstitutionBudget(STPMgr& manager, SATSolver* solver)
+      : manager_(manager), solver_(solver),
+        growth_limit_(manager.UserFlags.lra_presolve_subst_growth),
+        work_limit_(manager.UserFlags.lra_presolve_subst_work) {}
+
+  bool enabled() const { return growth_limit_ != 0; }
+  bool stopped() const { return stopped_; }
+
+  void poll()
+  {
+    if ((work_ & 255U) == 0)
+    {
+      manager_.checkPreparation(PreparationStage::LraPresolve);
+      if (solver_ && solver_->timeLimitExpired())
+        throw PreparationInterrupted(PreparationStage::LraPresolve,
+                                     std::chrono::steady_clock::now());
+    }
+    if (work_ >= work_limit_)
+      stop("work");
+    ++work_;
+  }
+
+  void begin(const ASTNode& input)
+  {
+    before_.reset();
+    after_.reset();
+    before_ = measure(input, true);
+    after_ = before_;
+  }
+
+  void created(const ASTNode& root)
+  {
+    ASTVec todo{root};
+    while (!todo.empty())
+    {
+      poll();
+      const auto node = todo.back();
+      todo.pop_back();
+      if (known_.count(node))
+        continue;
+      const auto degree = static_cast<std::uint64_t>(node.Degree());
+      // Subtraction before addition avoids wraparound even at UINT64_MAX.
+      if (growth_ >= growth_limit_ || degree > growth_limit_ - growth_ - 1)
+        stop("growth");
+      growth_ += degree + 1;
+      ++added_nodes_;
+      known_.insert(node);
+      for (const auto& child : node.GetChildren())
+        todo.push_back(child);
+    }
+  }
+
+  void finish(const ASTNode& result)
+  {
+    created(result);
+    after_ = measure(result, false);
+  }
+
+  void refused() { ++refusals_; }
+
+  void report(unsigned round) const
+  {
+    std::cerr << "LRA substitution round: index=" << round
+              << ", work=" << work_ << ", growth=" << growth_
+              << ", added_nodes=" << added_nodes_ << ", refusals=" << refusals_
+              << ", stop=" << reason_ << ", dag_before=";
+    printSize(before_);
+    std::cerr << ", dag_after=";
+    printSize(after_);
+    std::cerr << '\n';
+  }
+
+private:
+  struct Size { std::uint64_t nodes = 0, edges = 0; };
+  static std::uint64_t add(std::uint64_t a, std::uint64_t b)
+  {
+    const auto max = std::numeric_limits<std::uint64_t>::max();
+    return b > max - a ? max : a + b;
+  }
+  static void printSize(const std::optional<Size>& size)
+  {
+    if (size)
+      std::cerr << size->nodes << '/' << size->edges;
+    else
+      std::cerr << "unmeasured";
+  }
+  Size measure(const ASTNode& root, bool baseline)
+  {
+    Size size;
+    ASTNodeSet seen;
+    ASTVec todo{root};
+    while (!todo.empty())
+    {
+      poll();
+      const auto node = todo.back();
+      todo.pop_back();
+      if (!seen.insert(node).second)
+        continue;
+      size.nodes = add(size.nodes, 1);
+      size.edges = add(size.edges, node.Degree());
+      if (baseline)
+        known_.insert(node);
+      for (const auto& child : node.GetChildren())
+        todo.push_back(child);
+    }
+    return size;
+  }
+  [[noreturn]] void stop(const char* reason)
+  {
+    stopped_ = true;
+    reason_ = reason;
+    throw SubstitutionLimit{};
+  }
+  STPMgr& manager_;
+  SATSolver* solver_;
+  std::uint64_t growth_limit_, work_limit_;
+  std::uint64_t work_ = 0, growth_ = 0, added_nodes_ = 0, refusals_ = 0;
+  bool stopped_ = false;
+  const char* reason_ = "none";
+  // Pin observed nodes so an intermediate node number cannot be recycled
+  // while the next round uses it for growth accounting.
+  ASTNodeSet known_;
+  std::optional<Size> before_, after_;
+};
+
 /* Top-level conjuncts, through nested ANDs only. */
-void flattenConjuncts(const ASTNode& input, ASTVec& out)
+void flattenConjuncts(const ASTNode& input, ASTVec& out,
+                     const std::function<void()>& poll = {})
 {
   std::vector<ASTNode> work{input};
+  ASTNodeSet seen;
   while (!work.empty())
   {
+    if (poll)
+      poll();
     const ASTNode node = work.back();
     work.pop_back();
+    if (poll && !seen.insert(node).second)
+      continue;
     if (node.GetKind() == AND)
     {
       for (std::size_t i = node.Degree(); i > 0; --i)
@@ -41,12 +183,15 @@ void flattenConjuncts(const ASTNode& input, ASTVec& out)
   }
 }
 
-bool occurs(const ASTNode& haystack, const ASTNode& needle)
+bool occurs(const ASTNode& haystack, const ASTNode& needle,
+            const std::function<void()>& poll = {})
 {
   std::unordered_set<std::uint64_t> seen;
   std::vector<ASTNode> work{haystack};
   while (!work.empty())
   {
+    if (poll)
+      poll();
     const ASTNode node = work.back();
     work.pop_back();
     if (node == needle)
@@ -71,7 +216,8 @@ public:
   {
   }
 
-  ASTNode apply(const ASTNode& root)
+  ASTNode apply(const ASTNode& root, const std::function<void()>& poll = {},
+                const std::function<void(const ASTNode&)>& created = {})
   {
     /* Explicit stack: the query is as deep as the trace it was unrolled
      * from, and a call frame per level overflows exactly the way the
@@ -85,6 +231,8 @@ public:
     pending.push_back(Frame{root});
     while (!pending.empty())
     {
+      if (poll)
+        poll();
       Frame& frame = pending.back();
       const ASTNode& node = frame.node;
       if (memo_.find(node.GetNodeNum()) != memo_.end())
@@ -123,6 +271,8 @@ public:
             result = manager_.CreateNode(node.GetKind(), children);
         }
       }
+      if (created && result != node)
+        created(result);
       memo_.emplace(node.GetNodeNum(), result);
       pending.pop_back();
     }
@@ -152,15 +302,15 @@ struct LinearView final
   ExactRational constant;
 };
 
+template <typename Poll>
 bool addLinear(LinearView& view, const ASTNode& term,
-               const ExactRational& scale)
+               const ExactRational& scale, Poll& poll)
 {
   const auto resolve = [&](const ASTNode& symbol) {
     view.symbols.emplace(symbol.GetNodeNum(), symbol);
     return symbol.GetNodeNum();
   };
   const auto visit = [](const ASTNode&) {};
-  auto poll = []() {};
   AffinePolynomial polynomial;
   try
   {
@@ -191,6 +341,13 @@ bool addLinear(LinearView& view, const ASTNode& term,
   return true;
 }
 
+bool addLinear(LinearView& view, const ASTNode& term,
+               const ExactRational& scale)
+{
+  auto poll = []() {};
+  return addLinear(view, term, scale, poll);
+}
+
 /* Rebuild a linear view (minus one solved variable) as a Real term:
  * t = (-constant - sum of other monomials) / a for the solved variable's
  * coefficient a. Constants print through the exact canonical fraction, so
@@ -201,7 +358,9 @@ ASTNode constantNode(STPMgr& manager, const ExactRational& value)
 }
 
 ASTNode solveViewFor(STPMgr& manager, const LinearView& view,
-                     std::uint64_t solve_for)
+                     std::uint64_t solve_for,
+                     const std::function<void()>& poll = {},
+                     const std::function<void(const ASTNode&)>& created = {})
 {
   const ExactRational& a = view.coefficients.at(solve_for);
   ExactRational minus_inverse = a.inverse();
@@ -209,6 +368,8 @@ ASTNode solveViewFor(STPMgr& manager, const LinearView& view,
   ASTVec monomials;
   for (const auto& entry : view.coefficients)
   {
+    if (poll)
+      poll();
     if (entry.first == solve_for)
       continue;
     ExactRational coefficient = entry.second;
@@ -219,12 +380,16 @@ ASTNode solveViewFor(STPMgr& manager, const LinearView& view,
     else
       monomials.push_back(manager.CreateRealTerm(
           REAL_MUL, ASTVec{constantNode(manager, coefficient), symbol}));
+    if (created)
+      created(monomials.back());
   }
   if (!view.constant.isZero() || monomials.empty())
   {
     ExactRational constant = view.constant;
     constant *= minus_inverse;
     monomials.push_back(constantNode(manager, constant));
+    if (created)
+      created(monomials.back());
   }
   if (monomials.size() == 1)
     return monomials[0];
@@ -237,11 +402,19 @@ ASTNode solveViewFor(STPMgr& manager, const LinearView& view,
  * one defining row and every model question about it stays answerable.
  * Later definitions see earlier substitutions applied first, which keeps
  * the map triangular without a transitive-closure pass. */
-ASTNode substituteDefinitions(STPMgr& manager, const ASTNode& input,
-                              std::size_t& definitions_used)
+ASTNode substituteDefinitionsImpl(STPMgr& manager, const ASTNode& input,
+                                  std::size_t& definitions_used,
+                                  SubstitutionBudget* budget)
 {
+  std::function<void()> poll;
+  std::function<void(const ASTNode&)> created;
+  if (budget)
+  {
+    poll = [&]() { budget->poll(); };
+    created = [&](const ASTNode& node) { budget->created(node); };
+  }
   ASTVec conjuncts;
-  flattenConjuncts(input, conjuncts);
+  flattenConjuncts(input, conjuncts, poll);
   if (conjuncts.size() < 2)
     return input;
 
@@ -251,6 +424,8 @@ ASTNode substituteDefinitions(STPMgr& manager, const ASTNode& input,
   std::vector<ASTNode> defines(conjuncts.size());
   for (std::size_t i = 0; i < conjuncts.size(); ++i)
   {
+    if (poll)
+      poll();
     const ASTNode& conjunct = conjuncts[i];
     if (conjunct.GetKind() != EQ || conjunct.Degree() != 2)
       continue;
@@ -275,8 +450,8 @@ ASTNode substituteDefinitions(STPMgr& manager, const ASTNode& input,
         definition.GetSourceSort().kind() != SourceSort::Kind::Real)
       continue;
     Rewriter forward(manager, substitution);
-    const ASTNode resolved = forward.apply(definition);
-    if (occurs(resolved, symbol))
+    const ASTNode resolved = forward.apply(definition, poll, created);
+    if (occurs(resolved, symbol, poll))
       continue;
     substitution.emplace(symbol.GetNodeNum(), resolved);
     defined.insert(symbol.GetNodeNum());
@@ -292,6 +467,8 @@ ASTNode substituteDefinitions(STPMgr& manager, const ASTNode& input,
   ASTVec gaussian_conflict;
   for (std::size_t i = 0; i < conjuncts.size(); ++i)
   {
+    if (poll)
+      poll();
     if (is_definition[i])
       continue;
     const ASTNode& conjunct = conjuncts[i];
@@ -299,7 +476,7 @@ ASTNode substituteDefinitions(STPMgr& manager, const ASTNode& input,
         conjunct[0].GetSourceSort().kind() != SourceSort::Kind::Real)
       continue;
     Rewriter forward(manager, substitution);
-    const ASTNode resolved_conjunct = forward.apply(conjunct);
+    const ASTNode resolved_conjunct = forward.apply(conjunct, poll, created);
     /* Substitution can collapse the equality at the factory: a second
      * definition of an already-defined symbol folds to a constant. Guard
      * on the RESOLVED shape, not the original's -- indexing a folded
@@ -316,8 +493,11 @@ ASTNode substituteDefinitions(STPMgr& manager, const ASTNode& input,
     LinearView view;
     const ExactRational plus(std::int64_t{1});
     const ExactRational minus(std::int64_t{-1});
-    if (!addLinear(view, resolved_conjunct[0], plus) ||
-        !addLinear(view, resolved_conjunct[1], minus))
+    const auto linear = [&](const ASTNode& term, const ExactRational& scale) {
+      return budget ? addLinear(view, term, scale, poll)
+                    : addLinear(view, term, scale);
+    };
+    if (!linear(resolved_conjunct[0], plus) || !linear(resolved_conjunct[1], minus))
       continue;
     if (view.coefficients.empty())
     {
@@ -341,8 +521,10 @@ ASTNode substituteDefinitions(STPMgr& manager, const ASTNode& input,
     if (!found)
       continue;
     const ASTNode symbol = view.symbols.at(solve_for);
-    const ASTNode solved = solveViewFor(manager, view, solve_for);
-    if (occurs(solved, symbol))
+    const ASTNode solved = solveViewFor(manager, view, solve_for, poll, created);
+    if (created)
+      created(solved);
+    if (occurs(solved, symbol, poll))
       continue;
     substitution.emplace(symbol.GetNodeNum(), solved);
     defined.insert(symbol.GetNodeNum());
@@ -360,6 +542,8 @@ ASTNode substituteDefinitions(STPMgr& manager, const ASTNode& input,
   rebuilt.reserve(conjuncts.size());
   for (std::size_t i = 0; i < conjuncts.size(); ++i)
   {
+    if (poll)
+      poll();
     if (is_definition[i])
     {
       // The definition keeps its solved shape, EQ(x, t), from the record
@@ -367,13 +551,38 @@ ASTNode substituteDefinitions(STPMgr& manager, const ASTNode& input,
       const ASTNode& symbol = defines[i];
       const auto target = substitution.find(symbol.GetNodeNum());
       rebuilt.push_back(manager.CreateNode(EQ, symbol, target->second));
+      if (created)
+        created(rebuilt.back());
       continue;
     }
-    rebuilt.push_back(rewriter.apply(conjuncts[i]));
+    rebuilt.push_back(rewriter.apply(conjuncts[i], poll, created));
   }
   if (rebuilt.size() == 1)
     return rebuilt[0];
   return manager.CreateNode(AND, rebuilt);
+}
+
+ASTNode substituteDefinitions(STPMgr& manager, const ASTNode& input,
+                              std::size_t& definitions_used,
+                              SubstitutionBudget& budget)
+{
+  if (!budget.enabled())
+    return substituteDefinitionsImpl(manager, input, definitions_used, nullptr);
+  if (budget.stopped())
+    return input;
+  try
+  {
+    budget.begin(input);
+    const auto result = substituteDefinitionsImpl(manager, input, definitions_used, &budget);
+    budget.finish(result);
+    return result;
+  }
+  catch (const SubstitutionLimit&)
+  {
+    definitions_used = 0;
+    budget.refused();
+    return input;
+  }
 }
 
 /* ---- Stage: propagation. ----------------------------------------------
@@ -1122,6 +1331,249 @@ ASTNode tightenRows(STPMgr& manager, const ASTNode& input,
   return manager.CreateNode(AND, rebuilt);
 }
 
+/* A monotone variable can satisfy all its effective literals by moving far
+ * enough in one direction. Analyse each Boolean DAG node at each polarity,
+ * then remove atoms through an incidence worklist. Each removed atom is
+ * visited once, including when its removal exposes another candidate.
+ *
+ * This is the trivial one-sided case of Fourier-Motzkin elimination (a
+ * variable bounded from one side only is projected away with every atom
+ * that bounds it; Schrijver, "Theory of Linear and Integer Programming",
+ * Wiley 1986), and the model is recovered as in LP postsolve, witnesses
+ * replayed in reverse elimination order (Andersen & Andersen, "Presolving
+ * in linear programming", Math. Programming 71 (1995)). */
+ASTNode eliminateMonotone(STPMgr& manager, const ASTNode& input,
+                          SATSolver* solver, LraReconstruction& reconstruction,
+                          std::size_t& variables_removed,
+                          std::size_t& atoms_removed)
+{
+  // Lowered UF results are not independent variables: later congruence
+  // lemmas can constrain them. Keep the existing unconstrained-pass guard.
+  if (manager.getUFContextIfAny() != nullptr)
+    return input;
+  struct WorkLimit {};
+  std::uint64_t visits = 0;
+  auto poll = [&]() {
+    if ((visits & 255U) == 0)
+      manager.checkPreparation(PreparationStage::LraPresolve);
+    if (visits >= manager.UserFlags.lra_presolve_monotone_work ||
+        ((visits & 255U) == 0 && solver && solver->timeLimitExpired()))
+      throw WorkLimit{};
+    ++visits;
+  };
+  try
+  {
+    struct Atom
+    {
+      ASTNode node;
+      Relation relation;
+      std::uint8_t polarity;
+      LinearView view;
+      bool active = true;
+    };
+    struct Walk { ASTNode node; std::uint8_t polarity; };
+    std::vector<Walk> work{{input, 1}};
+    std::unordered_map<std::uint64_t, std::uint8_t> seen;
+    std::map<std::uint64_t, ASTNode> atom_nodes;
+    std::unordered_set<std::uint64_t> blocked, opaque_seen;
+    const auto blockVariables = [&](const ASTNode& root) {
+      ASTVec pending{root};
+      while (!pending.empty())
+      {
+        poll();
+        const auto node = pending.back();
+        pending.pop_back();
+        if (!opaque_seen.insert(node.GetNodeNum()).second)
+          continue;
+        if (realSymbol(node))
+          blocked.insert(node.GetNodeNum());
+        for (const auto& child : node.GetChildren())
+          pending.push_back(child);
+      }
+    };
+    const auto negate = [](std::uint8_t p) -> std::uint8_t {
+      return p == 1 ? 2 : p == 2 ? 1 : 3;
+    };
+    while (!work.empty())
+    {
+      poll();
+      const auto frame = work.back();
+      work.pop_back();
+      const auto& node = frame.node;
+      auto& visited = seen[node.GetNodeNum()];
+      if ((visited & frame.polarity) == frame.polarity)
+        continue;
+      visited = static_cast<std::uint8_t>(visited | frame.polarity);
+      Relation relation;
+      if (node.Degree() == 2 && relationFor(node.GetKind(), relation) &&
+          node[0].isRealTerm() && node[1].isRealTerm())
+      {
+        atom_nodes.emplace(node.GetNodeNum(), node);
+        continue;
+      }
+      // An opaque context pins all of its Real variables, but need not
+      // prevent elimination of independent supported arithmetic elsewhere.
+      if (node.GetType() != BOOLEAN_TYPE)
+      {
+        blockVariables(node);
+        continue;
+      }
+      const auto kind = node.GetKind();
+      switch (kind)
+      {
+        case TRUE: case FALSE: case SYMBOL: break;
+        case NOT: case AND: case OR: case IMPLIES: case IFF: case XOR:
+        case ITE: case NAND: case NOR: break;
+        default:
+          blockVariables(node);
+          continue;
+      }
+      for (std::size_t i = 0; i < node.Degree(); ++i)
+      {
+        poll();
+        auto polarity = frame.polarity;
+        if (kind == NOT || kind == NAND || kind == NOR ||
+            (kind == IMPLIES && i == 0))
+          polarity = negate(polarity);
+        else if (kind == IFF || kind == XOR || (kind == ITE && i == 0))
+          polarity = 3;
+        work.push_back({node[i], polarity});
+      }
+    }
+    struct Variable
+    {
+      ASTNode symbol;
+      // 0: unsupported use, 1: increasing, 2: decreasing.
+      std::array<std::size_t, 3> counts{};
+      std::vector<std::size_t> atoms;
+      bool queued = false;
+    };
+    std::map<std::uint64_t, Variable> variables;
+    std::vector<Atom> atoms;
+    const auto direction = [](const Atom& atom,
+                              const ExactRational& coefficient) -> unsigned {
+      if (atom.relation == Relation::Equal || atom.polarity == 3)
+        return 0;
+      bool positive = atom.relation == Relation::Greater ||
+                      atom.relation == Relation::GreaterEqual;
+      if (atom.polarity == 2)
+        positive = !positive;
+      return (coefficient.sign() > 0) == positive ? 1U : 2U;
+    };
+    for (const auto& entry : atom_nodes)
+    {
+      poll();
+      Relation relation;
+      if (!relationFor(entry.second.GetKind(), relation))
+        return input;
+      Atom atom{entry.second, relation, seen.at(entry.first), {}, true};
+      if (!addLinear(atom.view, atom.node[0], ExactRational(std::int64_t{1}), poll) ||
+          !addLinear(atom.view, atom.node[1], ExactRational(std::int64_t{-1}), poll))
+      {
+        // Block the whole atom, including any supported leaves: none of its
+        // thresholds can be saved safely for reconstruction after removal.
+        blockVariables(atom.node);
+        continue;
+      }
+      const auto index = atoms.size();
+      for (const auto& term : atom.view.coefficients)
+      {
+        poll();
+        if (term.second.isZero())
+          continue;
+        auto& variable = variables[term.first];
+        variable.symbol = atom.view.symbols.at(term.first);
+        ++variable.counts[direction(atom, term.second)];
+        variable.atoms.push_back(index);
+      }
+      atoms.push_back(std::move(atom));
+    }
+    const auto eligible = [&](const Variable& v) {
+      return v.counts[0] == 0 && ((v.counts[1] != 0) != (v.counts[2] != 0)) &&
+             blocked.count(v.symbol.GetNodeNum()) == 0 &&
+             !manager.FoundIntroducedSymbolSet(v.symbol);
+    };
+    std::deque<std::uint64_t> queue;
+    for (auto& entry : variables)
+      if (eligible(entry.second))
+      {
+        queue.push_back(entry.first);
+        entry.second.queued = true;
+      }
+    NodeMap truths;
+    std::vector<RealModelDefinition> eliminated;
+    while (!queue.empty())
+    {
+      poll();
+      const auto id = queue.front();
+      queue.pop_front();
+      auto& variable = variables.at(id);
+      variable.queued = false;
+      if (!eligible(variable))
+        continue;
+      const bool lower = variable.counts[1] != 0;
+      ASTVec bounds;
+      for (const auto index : variable.atoms)
+      {
+        poll();
+        auto& atom = atoms[index];
+        if (!atom.active)
+          continue;
+        bounds.push_back(solveViewFor(manager, atom.view, id));
+        truths.emplace(atom.node.GetNodeNum(), atom.polarity == 1
+                                                  ? manager.ASTTrue
+                                                  : manager.ASTFalse);
+        atom.active = false;
+        for (const auto& term : atom.view.coefficients)
+        {
+          poll();
+          if (term.second.isZero())
+            continue;
+          auto& affected = variables.at(term.first);
+          --affected.counts[direction(atom, term.second)];
+          if (term.first != id && !affected.queued && eligible(affected))
+          {
+            affected.queued = true;
+            queue.push_back(term.first);
+          }
+        }
+      }
+      using Kind = RealModelDefinition::Kind;
+      eliminated.emplace_back(variable.symbol, std::move(bounds),
+                              lower ? Kind::AboveMaximum : Kind::BelowMinimum);
+    }
+    if (truths.empty())
+      return input;
+    const auto removed_atoms = truths.size();
+    // A normalized zero coefficient may leave syntactic occurrences behind,
+    // e.g. y = x-x after removing x > y. They are independent of x, but a
+    // later affine reconstruction would otherwise record a spurious cycle
+    // y -> x -> y. Erase these cancelled occurrences from the working formula;
+    // the saved witnesses and final original-formula check still value x.
+    const auto zero = manager.CreateRealConst("0");
+    for (const auto& definition : eliminated)
+    {
+      poll();
+      truths.emplace(definition.symbol.GetNodeNum(), zero);
+    }
+    Rewriter rewriter(manager, truths);
+    const auto result = rewriter.apply(input, poll);
+    poll();
+    // Commit formula and witnesses together. Any work/deadline refusal above
+    // leaves both the input and the caller's reconstruction unchanged.
+    std::reverse(eliminated.begin(), eliminated.end());
+    reconstruction.definitions.insert(reconstruction.definitions.begin(),
+                                      eliminated.begin(), eliminated.end());
+    variables_removed += eliminated.size();
+    atoms_removed += removed_atoms;
+    return result;
+  }
+  catch (const WorkLimit&)
+  {
+    return input;
+  }
+}
+
 /* ---- Stage: unconstrained. ---------------------------------------------
 
    A Real variable occurring in exactly one atom, with that atom at a pure
@@ -1367,7 +1819,8 @@ ASTNode eliminateUnconstrained(STPMgr& manager, const ASTNode& input,
 } // namespace
 
 ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
-                         SATSolver* solver, LraReconstruction* reconstruction)
+                         SATSolver* solver, LraReconstruction* reconstruction,
+                         bool highs_enabled)
 {
   ASTNode current = input;
   const auto expired = [&]()
@@ -1381,6 +1834,7 @@ ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
   };
   if (expired())
     return current;
+  using Mode = UserDefinedFlags::OptionMode;
   if (reconstruction)
   {
     /* Keep the query as the caller wrote it, always, so that the model
@@ -1394,8 +1848,27 @@ ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
      * perimeter would be the layer doing the rewriting, where a wrong
      * rewrite would go unchecked (see eliminateUnconstrained). Recording
      * the input costs a node reference; checking against it costs one
-     * evaluation of the original formula, once, on a committed model. */
+     * evaluation of the original formula, once, on a committed model.
+     *
+     * `eliminate_definitions` is separate. It selects a transformation, not
+     * a check, and the definitions it leaves behind are what
+     * `RealModel::reconstruct` replays. Like a replay, it is selected only
+     * where the caller allows one. */
     reconstruction->original = input;
+    reconstruction->replay_selected =
+        reconstruction->replay_allowed &&
+        (highs_enabled ||
+         manager.UserFlags.lra_model_reconstruction == Mode::ON);
+    reconstruction->eliminate_definitions =
+        reconstruction->replay_allowed &&
+        manager.UserFlags.lra_model_reconstruction == Mode::ON;
+  }
+  if (highs_enabled)
+  {
+    current = presolveHighs(manager, current, solver, reconstruction,
+                           manager.lra_ast_state->number_budget);
+    if (current == manager.ASTTrue || current == manager.ASTFalse || expired())
+      return current;
   }
   std::size_t definitions_used = 0;
   std::size_t fixed_variables = 0;
@@ -1403,14 +1876,23 @@ ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
   std::size_t facts_propagated = 0;
   std::size_t atoms_folded = 0;
   std::size_t vars_witnessed = 0;
+  std::size_t monotone_variables = 0;
+  std::size_t monotone_atoms = 0;
   std::uint64_t bounds_nanoseconds = 0;
   std::uint64_t bounds_operations = 0;
   bool proved_unsat = false;
+  SubstitutionBudget substitution_budget(manager, solver);
   {
     // One budget scope over every stage, in the one function the manager
     // befriends; the helpers below only consume the active budget. Stage
     // one needs it too since the Gaussian pass works in exact rationals.
     NumberOperationScope operation(manager.lra_ast_state->number_budget);
+    bool relu_graph = false;
+    if (manager.UserFlags.lra_relu_bounds != Mode::OFF || manager.UserFlags.lra_relu_cases ||
+        manager.UserFlags.lra_relu_lp != Mode::OFF ||
+        manager.UserFlags.lra_relu_branch)
+      current =
+          presolveRelus(manager, current, relu_graph, solver, reconstruction);
     if (expired())
       return current;
     const auto operations = [&]() {
@@ -1418,47 +1900,110 @@ ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
       return metrics.additions + metrics.subtractions +
              metrics.multiplications + metrics.divisions;
     };
-    if (manager.UserFlags.lra_presolve_subst)
-      current = substituteDefinitions(manager, current, definitions_used);
-    if (expired())
-      return current;
-    if (manager.UserFlags.lra_presolve_propagate && current != manager.ASTFalse)
-      current = propagateFacts(manager, current, facts_propagated, proved_unsat);
-    if (expired())
-      return current;
-    if (manager.UserFlags.lra_presolve_unconstrained &&
-        current != manager.ASTFalse)
-      current = eliminateUnconstrained(manager, current, vars_witnessed, proved_unsat);
-    if (expired())
-      return current;
-    if (manager.UserFlags.lra_presolve_rows && current != manager.ASTFalse)
-      current = tightenRows(manager, current, rows_dropped, proved_unsat);
-    if (expired())
-      return current;
-    if (manager.UserFlags.lra_presolve_bounds && !proved_unsat &&
-        current != manager.ASTFalse)
+    const unsigned limit = std::max(1U, std::min(8U, manager.UserFlags.lra_presolve_rounds));
+    for (unsigned round = 0; round < limit; ++round)
     {
-      const auto before = manager.UserFlags.stats_flag ? operations() : 0;
-      const auto start = manager.UserFlags.stats_flag
-                             ? std::chrono::steady_clock::now()
-                             : std::chrono::steady_clock::time_point{};
-      current = boundsPresolve(manager, current, fixed_variables, atoms_folded,
-                               proved_unsat);
-      if (manager.UserFlags.stats_flag)
+      if (expired())
+        return current;
+      if (current == manager.ASTTrue || current == manager.ASTFalse)
+        break;
+      const ASTNode before_round = current;
+      const auto before_operations = manager.UserFlags.stats_flag ? operations() : 0;
+      // Some helpers assign counters, and tightenRows reads its local count
+      // to decide whether anything changed. Never feed them accumulated totals.
+      std::size_t definitions = 0, fixed = 0, rows = 0, facts = 0, folded = 0;
+      std::size_t witnessed = 0, monotone_vars = 0, removed_atoms = 0;
+      // Keep a recognized ReLU graph sparse across every round. Recognition,
+      // LP attempts and the final dead-definition pass stay outside this loop.
+      if (manager.UserFlags.lra_presolve_subst && !relu_graph)
       {
-        bounds_operations += operations() - before;
-        bounds_nanoseconds += static_cast<std::uint64_t>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now() - start).count());
+        current = substituteDefinitions(manager, current, definitions, substitution_budget);
+        if (manager.UserFlags.stats_flag && substitution_budget.enabled())
+          substitution_budget.report(round + 1);
       }
+      if (expired())
+        return current;
+      if (manager.UserFlags.lra_presolve_propagate && current != manager.ASTFalse)
+        current = propagateFacts(manager, current, facts, proved_unsat);
+      if (expired())
+        return current;
+      if (manager.UserFlags.lra_presolve_monotone && reconstruction &&
+          !relu_graph && current != manager.ASTFalse && current != manager.ASTTrue)
+      {
+        if (manager.getUFContextIfAny() == nullptr)
+        {
+          // Solved equalities retained for model publication can make an
+          // otherwise one-sided variable appear pinned. Save dead definitions
+          // before analysing directions, even when optional LP replay is off.
+          // Each subsequent elimination prepends its dependencies to this same
+          // trail. UF results may acquire constraints later and stay protected.
+          std::uint64_t visits = 0;
+          const auto poll = [&]() {
+            if ((visits++ & 255U) == 0 && expired())
+              throw PreparationInterrupted(PreparationStage::LraPresolve,
+                                           std::chrono::steady_clock::now());
+          };
+          current = removeDeadRealDefinitions(manager, current, *reconstruction, poll);
+        }
+        current = eliminateMonotone(manager, current, solver, *reconstruction,
+                                    monotone_vars, removed_atoms);
+      }
+      if (expired())
+        return current;
+      if (manager.UserFlags.lra_presolve_unconstrained && !relu_graph &&
+          current != manager.ASTFalse)
+        current = eliminateUnconstrained(manager, current, witnessed, proved_unsat);
+      if (expired())
+        return current;
+      if (manager.UserFlags.lra_presolve_rows && current != manager.ASTFalse)
+        current = tightenRows(manager, current, rows, proved_unsat);
+      if (expired())
+        return current;
+      if (manager.UserFlags.lra_presolve_bounds && !proved_unsat &&
+          current != manager.ASTFalse)
+      {
+        const auto before = manager.UserFlags.stats_flag ? operations() : 0;
+        const auto start = manager.UserFlags.stats_flag
+                               ? std::chrono::steady_clock::now()
+                               : std::chrono::steady_clock::time_point{};
+        current = boundsPresolve(manager, current, fixed, folded, proved_unsat);
+        if (manager.UserFlags.stats_flag)
+        {
+          bounds_operations += operations() - before;
+          bounds_nanoseconds += static_cast<std::uint64_t>(
+              std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  std::chrono::steady_clock::now() - start).count());
+        }
+      }
+      definitions_used += definitions;
+      fixed_variables += fixed;
+      rows_dropped += rows;
+      facts_propagated += facts;
+      atoms_folded += folded;
+      vars_witnessed += witnessed;
+      monotone_variables += monotone_vars;
+      monotone_atoms += removed_atoms;
+      if (manager.UserFlags.stats_flag && limit > 1)
+        std::cerr << "LRA presolve round: index=" << round + 1
+                  << ", changed=" << (current != before_round)
+                  << ", definitions=" << definitions << ", fixed=" << fixed
+                  << ", rows=" << rows << ", facts=" << facts
+                  << ", folded=" << folded << ", witnessed=" << witnessed
+                  << ", monotone=" << monotone_vars
+                  << ", arithmetic_ops=" << operations() - before_operations << '\n';
+      if (current == before_round || proved_unsat)
+        break;
     }
   }
   if (expired())
     return current;
+  if (reconstruction && reconstruction->eliminate_definitions &&
+      current != manager.ASTFalse)
+    current = removeDeadRealDefinitions(manager, current, *reconstruction);
   if (manager.UserFlags.stats_flag &&
       (definitions_used != 0 || fixed_variables != 0 || rows_dropped != 0 ||
        facts_propagated != 0 || atoms_folded != 0 || vars_witnessed != 0 ||
-       proved_unsat || bounds_nanoseconds != 0))
+       proved_unsat || bounds_nanoseconds != 0 || monotone_variables != 0))
     std::cerr << "LRA presolve: " << definitions_used << " definitions, "
               << fixed_variables << " fixed variables, " << rows_dropped
               << " rows dropped, " << facts_propagated << " facts propagated, "
@@ -1467,6 +2012,9 @@ ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
               << (proved_unsat ? ", infeasible" : "")
               << ", bounds_ns=" << bounds_nanoseconds
               << ", bounds_ops=" << bounds_operations << std::endl;
+  if (manager.UserFlags.stats_flag && manager.UserFlags.lra_presolve_monotone)
+    std::cerr << "LRA monotone: variables=" << monotone_variables
+              << ", atoms=" << monotone_atoms << '\n';
   return current;
 }
 

@@ -930,6 +930,9 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       // setting it any time before a query is what takes effect.
       b->UserFlags.lra_float_driver = param_value != 0;
       break;
+    case LRA_INCREMENTAL_SESSION:
+      b->UserFlags.lra_incremental_session = param_value != 0;
+      break;
     case UF_LEMMAS_PER_ROUND:
       if (nonNegativeFlag(param_value, "UF_LEMMAS_PER_ROUND"))
         b->UserFlags.uf_lemmas_per_round = static_cast<unsigned>(param_value);

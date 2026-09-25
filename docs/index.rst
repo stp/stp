@@ -103,6 +103,7 @@ page <https://smt-lib.org/>`__.
    incremental-solving
    bv-abstraction
    fp-abstraction
+   lra-abstraction
 
 Header
 ------

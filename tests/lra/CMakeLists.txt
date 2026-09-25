@@ -16,7 +16,28 @@ set_target_properties(stp_lra_imath_smoke PROPERTIES
 add_test(NAME lra_imath_smoke COMMAND stp_lra_imath_smoke)
 set_tests_properties(lra_imath_smoke PROPERTIES LABELS "lra;imath")
 
+add_executable(stp_lra_highs_cut_tests highs_cut_tests.cpp
+  "${PROJECT_SOURCE_DIR}/lib/Lra/LraHighsCuts.cpp")
+target_link_libraries(stp_lra_highs_cut_tests PRIVATE stp_lra_exact)
+target_include_directories(stp_lra_highs_cut_tests PRIVATE "${PROJECT_SOURCE_DIR}/lib/Lra")
+set_target_properties(stp_lra_highs_cut_tests PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+add_test(NAME lra_highs_cut_certificates COMMAND stp_lra_highs_cut_tests)
+set_tests_properties(lra_highs_cut_certificates PROPERTIES LABELS "lra;highs;certificate")
 find_package(Threads REQUIRED)
+add_executable(stp_lra_relaxation_tests relaxation_certificate_tests.cpp
+  "${PROJECT_SOURCE_DIR}/lib/Lra/LraRelaxation.cpp")
+target_link_libraries(stp_lra_relaxation_tests PRIVATE stp_lra_exact)
+target_include_directories(stp_lra_relaxation_tests PRIVATE
+  "${PROJECT_SOURCE_DIR}/lib/Lra" "${PROJECT_SOURCE_DIR}/lib" "${PROJECT_SOURCE_DIR}/include"
+  "${PROJECT_BINARY_DIR}/include" "${STP_UNORDERED_DENSE_INCLUDE_DIR}")
+add_dependencies(stp_lra_relaxation_tests ASTKind_header)
+set_target_properties(stp_lra_relaxation_tests PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+if(ENABLE_HIGHS)
+  target_link_libraries(stp_lra_relaxation_tests PRIVATE HiGHS)
+  target_compile_definitions(stp_lra_relaxation_tests PRIVATE STP_HAVE_HIGHS)
+endif()
+add_test(NAME lra_relaxation_certificates COMMAND stp_lra_relaxation_tests)
+set_tests_properties(lra_relaxation_certificates PROPERTIES LABELS "lra;relu;certificate")
 add_executable(stp_lra_exact_tests exact_rational_tests.cpp)
 target_link_libraries(stp_lra_exact_tests PRIVATE
   stp_lra_exact
@@ -51,6 +72,34 @@ set(stp_lra_frontend_test_libraries
   stp_lra_integration
 )
 
+# Replay is private product code. Use its actual objects with the static host
+# rather than exporting its implementation through the public shared library.
+add_executable(stp_lra_replay_deadline_tests replay_deadline_tests.cpp
+  $<TARGET_OBJECTS:stp_lra_product_objects>)
+target_link_libraries(stp_lra_replay_deadline_tests PRIVATE
+  stp_lra_focused_host IMath Threads::Threads)
+target_include_directories(stp_lra_replay_deadline_tests PRIVATE
+  "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/lib"
+  "${PROJECT_SOURCE_DIR}/lib/Lra" "${PROJECT_BINARY_DIR}/include"
+  "${STP_UNORDERED_DENSE_INCLUDE_DIR}")
+set_target_properties(stp_lra_replay_deadline_tests PROPERTIES
+  CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+add_test(NAME lra_replay_deadline COMMAND stp_lra_replay_deadline_tests)
+set_tests_properties(lra_replay_deadline PROPERTIES LABELS "lra;relu;model;deadline")
+
+add_executable(stp_lra_presolve_tests presolve_tests.cpp
+  $<TARGET_OBJECTS:stp_lra_product_objects>)
+target_link_libraries(stp_lra_presolve_tests PRIVATE
+  stp_lra_focused_host IMath Threads::Threads)
+target_include_directories(stp_lra_presolve_tests PRIVATE
+  "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/lib"
+  "${PROJECT_SOURCE_DIR}/lib/Lra" "${PROJECT_BINARY_DIR}/include"
+  "${STP_UNORDERED_DENSE_INCLUDE_DIR}")
+set_target_properties(stp_lra_presolve_tests PROPERTIES
+  CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+add_test(NAME lra_presolve COMMAND stp_lra_presolve_tests)
+set_tests_properties(lra_presolve PROPERTIES LABELS "lra;presolve;model;deadline")
+
 # Registration order and public reset also exercise the solve/model path.
 # Use the product objects without changing the independent frontend tests.
 add_executable(stp_lra_real_symbol_tests real_symbol_tests.cpp
@@ -72,6 +121,9 @@ elseif(SIZEOF_VOID_P EQUAL 8)
   target_compile_definitions(stp_lra_real_symbol_tests PRIVATE LIN64)
 else()
   target_compile_definitions(stp_lra_real_symbol_tests PRIVATE LIN)
+endif()
+if(ENABLE_HIGHS)
+  target_link_libraries(stp_lra_real_symbol_tests PRIVATE HiGHS)
 endif()
 set_target_properties(stp_lra_real_symbol_tests PROPERTIES
   CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
@@ -100,6 +152,9 @@ elseif(SIZEOF_VOID_P EQUAL 8)
   target_compile_definitions(stp_lra_preparation_deadline_tests PRIVATE LIN64)
 else()
   target_compile_definitions(stp_lra_preparation_deadline_tests PRIVATE LIN)
+endif()
+if(ENABLE_HIGHS)
+  target_link_libraries(stp_lra_preparation_deadline_tests PRIVATE HiGHS)
 endif()
 set_target_properties(stp_lra_preparation_deadline_tests PROPERTIES
   CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
@@ -253,6 +308,26 @@ set_tests_properties(lra_configured_backend_adapter PROPERTIES
 )
 
 if(STP_EXECUTABLE_AVAILABLE)
+  add_test(NAME lra_monotone_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/monotone_runner.py"
+      "$<TARGET_FILE:stp-bin>" "$<$<BOOL:${USE_CADICAL}>:--cadical>")
+  set_tests_properties(lra_monotone_cli PROPERTIES
+    LABELS "lra;presolve;semantic;model" TIMEOUT 120)
+  add_test(NAME lra_presolve_rounds_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/presolve_rounds_runner.py"
+      "$<TARGET_FILE:stp-bin>" "$<$<BOOL:${USE_CADICAL}>:--cadical>")
+  set_tests_properties(lra_presolve_rounds_cli PROPERTIES
+    LABELS "lra;presolve;semantic;model" TIMEOUT 120)
+  add_test(NAME lra_substitution_growth_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/substitution_growth_runner.py"
+      "$<TARGET_FILE:stp-bin>" "$<$<BOOL:${USE_CADICAL}>:--cadical>")
+  set_tests_properties(lra_substitution_growth_cli PROPERTIES
+    LABELS "lra;presolve;semantic;model;resource" TIMEOUT 120)
+  add_test(NAME lra_direct_bounds_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/direct_bounds_runner.py"
+      "$<TARGET_FILE:stp-bin>" "$<$<BOOL:${USE_CADICAL}>:--cadical>")
+  set_tests_properties(lra_direct_bounds_cli PROPERTIES
+    LABELS "lra;semantic;model;certificate;extension" TIMEOUT 180)
   add_test(NAME lra_mixed_uf_model_cli
     COMMAND "${PYTHON_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/mixed_uf_model_runner.py"
@@ -265,10 +340,67 @@ if(STP_EXECUTABLE_AVAILABLE)
       "$<TARGET_FILE:stp-bin>")
   set_tests_properties(lra_affine_dag_cli PROPERTIES
     LABELS "lra;frontend;semantic;presolve" TIMEOUT 60)
+  add_test(NAME lra_relu_auto_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/relu_auto_runner.py"
+            "$<TARGET_FILE:stp-bin>" "$<IF:$<BOOL:${ENABLE_HIGHS}>,ON,OFF>")
+  set_tests_properties(lra_relu_auto_cli PROPERTIES LABELS "lra;semantic;relu;defaults" TIMEOUT 180)
+  add_test(NAME lra_highs_defaults_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/highs_runner.py"
+            "$<TARGET_FILE:stp-bin>" defaults "$<IF:$<BOOL:${ENABLE_HIGHS}>,ON,OFF>")
+  set_tests_properties(lra_highs_defaults_cli PROPERTIES LABELS "lra;semantic;highs" TIMEOUT 180)
+  add_test(NAME lra_boolean_bounds_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/boolean_bounds_runner.py"
+            "$<TARGET_FILE:stp-bin>" "$<IF:$<BOOL:${ENABLE_HIGHS}>,ON,OFF>")
+  set_tests_properties(lra_boolean_bounds_cli PROPERTIES LABELS "lra;semantic;relu" TIMEOUT 180)
+  add_test(NAME lra_reconstruction_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/reconstruction_runner.py"
+            "$<TARGET_FILE:stp-bin>" "$<IF:$<BOOL:${ENABLE_HIGHS}>,ON,OFF>")
+  set_tests_properties(lra_reconstruction_cli PROPERTIES LABELS "lra;semantic;model" TIMEOUT 180)
+  add_test(NAME lra_relu_cases_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/relu_cases_runner.py"
+      "$<TARGET_FILE:stp-bin>")
+  set_tests_properties(lra_relu_cases_cli PROPERTIES LABELS "lra;semantic;relu" TIMEOUT 120)
   add_test(NAME lra_dyadic_arithmetic
     COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/dyadic_arithmetic_runner.py"
       "$<TARGET_FILE:stp_lra_exact_tests>")
   set_tests_properties(lra_dyadic_arithmetic PROPERTIES LABELS "lra;arithmetic;differential" TIMEOUT 90)
+  add_test(NAME lra_dense_recovery_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/dense_recovery_runner.py"
+            "$<TARGET_FILE:stp-bin>")
+  set_tests_properties(lra_dense_recovery_cli PROPERTIES LABELS "lra;semantic;float" TIMEOUT 240)
+  if(ENABLE_HIGHS)
+    if(ENABLE_HIGHS_CUT_LOG)
+      add_test(NAME lra_highs_cuts_cli
+        COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/highs_runner.py"
+                "$<TARGET_FILE:stp-bin>" cuts)
+      set_tests_properties(lra_highs_cuts_cli PROPERTIES LABELS "lra;semantic;highs" TIMEOUT 180)
+    endif()
+    add_test(NAME lra_highs_replay_cli
+      COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/highs_runner.py"
+              "$<TARGET_FILE:stp-bin>" replay)
+    set_tests_properties(lra_highs_replay_cli PROPERTIES LABELS "lra;semantic;highs" TIMEOUT 180)
+    add_test(NAME lra_highs_mip_cli
+      COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/highs_runner.py"
+              "$<TARGET_FILE:stp-bin>" mip)
+    set_tests_properties(lra_highs_mip_cli PROPERTIES LABELS "lra;semantic;highs" TIMEOUT 180)
+    add_test(NAME lra_highs_lp_cli
+      COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/highs_runner.py"
+              "$<TARGET_FILE:stp-bin>" lp)
+    set_tests_properties(lra_highs_lp_cli PROPERTIES LABELS "lra;semantic;highs" TIMEOUT 180)
+    add_test(NAME lra_relu_branch_cli
+      COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/relu_branch_runner.py"
+              "$<TARGET_FILE:stp-bin>")
+    set_tests_properties(lra_relu_branch_cli PROPERTIES LABELS "lra;semantic;relu" TIMEOUT 120)
+    add_test(NAME lra_relu_lp_cli
+      COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/relu_lp_runner.py"
+              "$<TARGET_FILE:stp-bin>")
+    set_tests_properties(lra_relu_lp_cli PROPERTIES LABELS "lra;semantic;relu" TIMEOUT 120)
+  endif()
+  add_test(NAME lra_relu_bounds_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/relu_runner.py"
+            "$<TARGET_FILE:stp-bin>")
+  set_tests_properties(lra_relu_bounds_cli PROPERTIES
+    LABELS "lra;semantic;presolve;relu" TIMEOUT 180)
   add_test(NAME lra_dense_bounds_cli
     COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/dense_bounds_runner.py"
             "$<TARGET_FILE:stp-bin>")
@@ -283,6 +415,69 @@ if(STP_EXECUTABLE_AVAILABLE)
     COMMAND "${PYTHON_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/semantic_runner.py"
             "$<TARGET_FILE:stp-bin>" "${backend_label}")
+  add_test(NAME lra_early_conflict_context_matrix
+    COMMAND "${PYTHON_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/semantic_runner.py"
+            "$<TARGET_FILE:stp-bin>" "${backend_label}"
+            "--lra-early-conflicts=1")
+  set_tests_properties(lra_early_conflict_context_matrix PROPERTIES
+    LABELS "lra;semantic;coordinator;early-conflict" TIMEOUT 3600)
+  add_test(NAME lra_persistent_session
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/persistent_session_runner.py"
+            "$<TARGET_FILE:stp-bin>")
+  set_tests_properties(lra_persistent_session PROPERTIES
+    LABELS "lra;semantic;persistent" TIMEOUT 3600)
+  if(USE_CADICAL AND CADICAL_HAS_DECISION_POLARITY)
+    add_test(NAME lra_polarity_cli
+      COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/decision_polarity_runner.py"
+              "$<TARGET_FILE:stp-bin>")
+    set_tests_properties(lra_polarity_cli PROPERTIES LABELS "lra;semantic;polarity" TIMEOUT 120)
+    add_test(NAME lra_polarity_persistent_session
+      COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/persistent_session_runner.py"
+              "$<TARGET_FILE:stp-bin>" "--cadical" "--lra-decision-polarity=1")
+    set_tests_properties(lra_polarity_persistent_session PROPERTIES
+      LABELS "lra;semantic;persistent;polarity" TIMEOUT 3600)
+  endif()
+  foreach(arithmetic float exact)
+    if(arithmetic STREQUAL "float")
+      set(first_search_float 1)
+    else()
+      set(first_search_float 0)
+    endif()
+    add_test(NAME lra_first_search_${arithmetic}_context_matrix
+      COMMAND "${PYTHON_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/semantic_runner.py"
+              "$<TARGET_FILE:stp-bin>" "${backend_label}"
+              "--lra-first-search=1" "--lra-early-conflicts=1"
+              "--lra-float-driver=${first_search_float}")
+    add_test(NAME lra_soi_${arithmetic}_context_matrix
+      COMMAND "${PYTHON_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/semantic_runner.py"
+              "$<TARGET_FILE:stp-bin>" "${backend_label}"
+              "--lra-first-search=1" "--lra-early-conflicts=1" "--lra-soi=1"
+              "--lra-float-driver=${first_search_float}")
+    add_test(NAME lra_persistent_${arithmetic}_context_matrix
+      COMMAND "${PYTHON_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/semantic_runner.py"
+              "$<TARGET_FILE:stp-bin>" "${backend_label}"
+              "--lra-persistent-state=1" "--lra-early-conflicts=1" "--lra-soi=1"
+              "--incremental=on" "--lra-float-driver=${first_search_float}")
+    set_tests_properties(lra_persistent_${arithmetic}_context_matrix PROPERTIES
+      LABELS "lra;semantic;coordinator;persistent" TIMEOUT 3600)
+    set_tests_properties(lra_soi_${arithmetic}_context_matrix PROPERTIES
+      LABELS "lra;semantic;coordinator;soi" TIMEOUT 3600)
+    set_tests_properties(lra_first_search_${arithmetic}_context_matrix PROPERTIES
+      LABELS "lra;semantic;coordinator;first-search" TIMEOUT 3600)
+    if(USE_CADICAL AND CADICAL_HAS_DECISION_POLARITY)
+      add_test(NAME lra_polarity_${arithmetic}_context_matrix
+        COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/semantic_runner.py"
+                "$<TARGET_FILE:stp-bin>" "${backend_label}"
+                "--cadical" "--lra-first-search=1" "--lra-decision-polarity=1"
+                "--lra-float-driver=${first_search_float}")
+      set_tests_properties(lra_polarity_${arithmetic}_context_matrix PROPERTIES
+        LABELS "lra;semantic;polarity" TIMEOUT 3600)
+    endif()
+  endforeach()
   set_tests_properties(lra_semantic_context_matrix PROPERTIES
     LABELS "lra;semantic;coordinator;model;context;combine;backend"
     TIMEOUT 3600

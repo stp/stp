@@ -203,10 +203,11 @@ LraSolveContext::LraSolveContext(LraAtomRegistry& registry, SATSolver& solver,
                                  NumberLimits exact_limits,
                                  LraAssertionFrameId solve_frame,
                                  std::uint64_t maximum_pivots,
-                                 const std::atomic<bool>* interrupted)
+                                 const std::atomic<bool>* interrupted,
+                                 unsigned row_order)
     : registry_(registry), registry_frame_(solve_frame), solver_(solver),
       observer_(solver, maximum_pivots, interrupted),
-      mapping_budget_(exact_limits)
+      mapping_budget_(exact_limits), row_order_(row_order)
 {
   initializeSolveContext();
 }
@@ -241,10 +242,17 @@ void LraSolveContext::initializeSolveContext() noexcept
                          &RegistryComponent::id, preparation);
     registry_equality_index_ = buildSerialIndex(
         registry_snapshot_.equalities, &RegistryEqualityGroup::id, preparation);
-    core_ = std::make_unique<ExactLraCore>(mapping_budget_.limits());
+    const auto direct_bounds = registry_.manager().UserFlags.lra_direct_bounds;
+    if (direct_bounds > 2)
+      throw SolveContextFailure(SolveContextFailureKind::Invalid,
+                                "invalid direct bounds mode");
+    core_ = std::make_unique<ExactLraCore>(
+        mapping_budget_.limits(), static_cast<DirectBoundsMode>(direct_bounds));
     // A context whose verification setting was chosen before the core existed
     // still has to reach it.
     core_->setConflictVerification(verify_conflicts_);
+    core_->setEarlyConflictDetection(early_conflicts_);
+    core_->setSoi(soi_);
     buildCore(originStartForContext());
     status_ = SolveContextStatus::Ready;
   }
@@ -313,6 +321,8 @@ void LraSolveContext::buildCore(std::uint64_t origin_serial_start)
   for (const RegistrySymbol& symbol : registry_snapshot_.symbols)
   {
     poll();
+    if (variable_map_index_.count(symbol.id.serial))
+      continue;
     if (!symbol.id.valid() || symbol.id.domain != registry_snapshot_.tag.domain ||
         symbol.frontend_id.value == 0 || symbol.symbol.IsNull() ||
         symbol.symbol.GetSourceSort().kind() != SourceSort::Kind::Real)
@@ -330,9 +340,11 @@ void LraSolveContext::buildCore(std::uint64_t origin_serial_start)
   variable_map_index_ = buildSerialIndex(
       variable_map_, &CoreVariableMapEntry::registry_symbol, preparation);
 
-  for (const RegistryRow& row : registry_snapshot_.rows)
+  const auto register_row = [&](const RegistryRow& row)
   {
     poll();
+    if (row_map_index_.count(row.id.serial))
+      return;
     if (!row.id.valid() || row.id.domain != registry_snapshot_.tag.domain ||
         row.terms.empty())
       throw SolveContextFailure(SolveContextFailureKind::Invalid,
@@ -369,6 +381,27 @@ void LraSolveContext::buildCore(std::uint64_t origin_serial_start)
                                 "core row generation mismatch");
     row_map_.push_back(CoreRowMapEntry{row.id, *added.value, generation});
     ++metrics_.rows_registered;
+  };
+  if (row_order_ == 0)
+  {
+    for (const RegistryRow& row : registry_snapshot_.rows)
+      register_row(row);
+  }
+  else
+  {
+    std::vector<const RegistryRow*> ordered;
+    for (const RegistryRow& row : registry_snapshot_.rows)
+      if (!row_map_index_.count(row.id.serial))
+        ordered.push_back(&row);
+    if (row_order_ == 1)
+      std::reverse(ordered.begin(), ordered.end());
+    else
+      std::stable_sort(ordered.begin(), ordered.end(), [&](const auto* a, const auto* b) {
+        return row_order_ == 2 ? a->terms.size() < b->terms.size()
+                               : a->terms.size() > b->terms.size();
+      });
+    for (const RegistryRow* row : ordered)
+      register_row(*row);
   }
   row_map_index_ =
       buildSerialIndex(row_map_, &CoreRowMapEntry::registry_row, preparation);
@@ -376,6 +409,8 @@ void LraSolveContext::buildCore(std::uint64_t origin_serial_start)
   for (const RegistryComponent& component : registry_snapshot_.components)
   {
     poll();
+    if (component_map_index_.count(component.id.serial))
+      continue;
     if (!component.id.valid() ||
         component.id.domain != registry_snapshot_.tag.domain ||
         component.sources.empty())
@@ -442,15 +477,188 @@ void LraSolveContext::buildCore(std::uint64_t origin_serial_start)
                               "ExactLraCore::initialize failed");
 }
 
+bool LraSolveContext::refreshRegistryIdentity() noexcept
+{
+  if (!ready())
+    return false;
+  // Public pushes/pops also advance the manager's registry generation.
+  // They can leave this session's independently owned frame unchanged.
+  // Revalidate its contents before accepting the new identity.
+  registry_snapshot_.tag = registry_.tag();
+  bool const valid = registry_frame_.valid()
+      ? registry_.validateFrameSnapshot(registry_snapshot_, registry_frame_)
+      : registry_.validateSnapshot(registry_snapshot_);
+  if (!valid)
+  {
+    invalidate("persistent registry refresh changed the owned frame");
+    return false;
+  }
+  clearSemanticState();
+  return true;
+}
+
+bool LraSolveContext::extendFromRegistry() noexcept
+{
+  try
+  {
+    const auto* preparation = registry_.manager().preparation_control;
+    if (!ready() || !core_)
+      return false;
+    auto fresh = registry_frame_.valid() ? registry_.frameSnapshot(registry_frame_, preparation)
+                                        : registry_.activeSnapshot(preparation);
+    bool valid = registry_frame_.valid()
+        ? registry_.validateFrameSnapshot(fresh, registry_frame_)
+        : registry_.validateSnapshot(fresh);
+    if (!valid || fresh.tag.domain != registry_snapshot_.tag.domain)
+      throw std::runtime_error("invalid registry extension snapshot");
+    auto symbols = buildSerialIndex(fresh.symbols, &RegistrySymbol::id, preparation);
+    auto rows = buildSerialIndex(fresh.rows, &RegistryRow::id, preparation);
+    auto components = buildSerialIndex(fresh.components, &RegistryComponent::id, preparation);
+    auto equalities = buildSerialIndex(fresh.equalities, &RegistryEqualityGroup::id, preparation);
+    {
+      NumberOperationScope operation(mapping_budget_);
+      // An extension may add ownership aliases, but cannot remove or alter
+      // any arithmetic object whose stable ID the warm core already holds.
+      for (auto const& old : registry_snapshot_.symbols)
+      {
+        auto const& now = findIndexed(fresh.symbols, symbols, old.id, &RegistrySymbol::id,
+                                       "extended symbol");
+        if (now.symbol != old.symbol || now.frontend_id != old.frontend_id)
+          throw std::runtime_error("registry extension changed a symbol");
+      }
+      for (auto const& old : registry_snapshot_.rows)
+      {
+        auto const& now = findIndexed(fresh.rows, rows, old.id, &RegistryRow::id, "extended row");
+        if (now.canonical_key != old.canonical_key || now.terms.size() != old.terms.size())
+          throw std::runtime_error("registry extension changed a row");
+        for (std::size_t i = 0; i < old.terms.size(); ++i)
+          if (now.terms[i].symbol != old.terms[i].symbol ||
+              now.terms[i].coefficient != old.terms[i].coefficient)
+            throw std::runtime_error("registry extension changed a coefficient");
+      }
+      for (auto const& old : registry_snapshot_.components)
+      {
+        auto const& now = findIndexed(fresh.components, components, old.id,
+                                      &RegistryComponent::id, "extended component");
+        if (now.row != old.row || now.relation != old.relation ||
+            now.threshold != old.threshold || now.opaque_atom != old.opaque_atom)
+          throw std::runtime_error("registry extension changed a component");
+      }
+      for (auto const& old : registry_snapshot_.equalities)
+      {
+        auto const& now = findIndexed(fresh.equalities, equalities, old.id,
+                                      &RegistryEqualityGroup::id, "extended equality");
+        if (now.frame != old.frame || now.equality_atom != old.equality_atom ||
+            now.less_equal_component != old.less_equal_component ||
+            now.greater_equal_component != old.greater_equal_component)
+          throw std::runtime_error("registry extension changed an equality");
+      }
+    }
+    if (core_->beginExtension() != InputStatus::Accepted)
+      throw std::runtime_error("arithmetic extension requires an unwound core");
+    clearSemanticState();
+    bindings_ready_ = false;
+    component_bindings_.clear();
+    equality_bindings_.clear();
+    registry_snapshot_ = std::move(fresh);
+    registry_row_index_ = std::move(rows);
+    registry_component_index_ = std::move(components);
+    registry_equality_index_ = std::move(equalities);
+    buildCore(next_origin_serial_);
+    extendFloatCore();
+    ++metrics_.persistent_extensions;
+    return validateCurrentState();
+  }
+  catch (const PreparationInterrupted& stopped)
+  {
+    preparation_stop_ = stopped;
+    status_ = SolveContextStatus::Interrupted;
+    clearSemanticState();
+    return false;
+  }
+  catch (std::exception const& failure)
+  {
+    invalidate(failure.what());
+    return false;
+  }
+  catch (...)
+  {
+    invalidate("unexpected arithmetic extension failure");
+    return false;
+  }
+}
+
+bool LraSolveContext::restartArithmeticState(bool float_basis_only) noexcept
+{
+  try
+  {
+    if (!ready())
+      return false;
+    if (!float_basis_only &&
+        core_->restartSearchState() != InputStatus::Accepted)
+      throw std::runtime_error("exact arithmetic search reset failed");
+    if (float_core_)
+    {
+      float_core_->resetSearchState(float_basis_only);
+    }
+    clearSemanticState();
+    return true;
+  }
+  catch (const std::exception& failure)
+  {
+    invalidate(failure.what());
+    return false;
+  }
+  catch (...)
+  {
+    invalidate("unexpected arithmetic search reset failure");
+    return false;
+  }
+}
+
 CoreGeneration LraSolveContext::coreGeneration() const noexcept
 {
   return core_ == nullptr ? CoreGeneration{0} : core_->generation();
+}
+
+void LraSolveContext::setDenseRecovery(bool enabled) noexcept
+{
+  dense_recovery_ = enabled;
+  if (float_core_)
+    float_core_->setDenseRecovery(enabled);
 }
 
 void LraSolveContext::setSeparateModelValues(bool enabled) noexcept
 {
   if (core_)
     core_->setSeparateModelValues(enabled);
+}
+
+void LraSolveContext::setSoi(bool enabled) noexcept
+{
+  soi_ = enabled;
+  if (core_)
+    core_->setSoi(enabled);
+  if (float_core_)
+    float_core_->setSoi(enabled);
+}
+
+void LraSolveContext::setFloatDormantRows(bool enabled, std::int64_t min_cells) noexcept
+{
+  /* Recorded for the cores built from here on; a live float core keeps
+   * its discipline, since switching with bounds asserted is not defined. */
+  float_dormant_rows_ = enabled;
+  float_dormant_min_cells_ =
+      min_cells <= 0 ? 0U : static_cast<std::uint32_t>(std::min<std::int64_t>(min_cells, 0xffffffffLL));
+}
+
+void LraSolveContext::setEarlyConflictDetection(bool enabled) noexcept
+{
+  early_conflicts_ = enabled;
+  if (core_)
+    core_->setEarlyConflictDetection(enabled);
+  if (float_core_)
+    float_core_->setEarlyConflictDetection(enabled);
 }
 
 void LraSolveContext::setFloatDriver(bool enabled) noexcept
@@ -490,6 +698,10 @@ double doubleOfExact(const ExactRational& value)
 std::unique_ptr<FloatSimplex> LraSolveContext::makeFloatCore()
 {
   auto fresh = std::make_unique<FloatSimplex>();
+  fresh->setEarlyConflictDetection(early_conflicts_);
+  fresh->setSoi(soi_);
+  fresh->setDenseRecovery(dense_recovery_);
+  fresh->setDormantRows(float_dormant_rows_, float_dormant_min_cells_);
   std::unordered_map<std::uint64_t, FloatSimplex::Var> columns, rows;
   for (auto const& mapped : variable_map_)
     columns.emplace(mapped.registry_symbol.serial, fresh->addColumn());
@@ -528,6 +740,54 @@ void LraSolveContext::bindFreshFloatMaps()
   float_atom_core_atoms_.swap(atoms);
 }
 
+void LraSolveContext::extendFloatCore() noexcept
+{
+  if (!float_driver_)
+    return;
+  if (!float_core_)
+  {
+    buildFloatCore();
+    return;
+  }
+  try
+  {
+    NumberOperationScope operation(mapping_budget_);
+    for (auto& mapped : variable_map_)
+      if (mapped.float_variable == FloatSimplex::kNoVar)
+        mapped.float_variable = float_core_->addColumn();
+    std::vector<FloatSimplex::Term> terms;
+    for (auto& mapped : row_map_)
+    {
+      if (mapped.float_variable != FloatSimplex::kNoVar)
+        continue;
+      terms.clear();
+      for (auto const& term : registryRow(mapped.registry_row).terms)
+        terms.push_back({variableMap(term.symbol).float_variable,
+                          doubleOfExact(term.coefficient)});
+      mapped.float_variable = float_core_->addRow(terms.data(), terms.data() + terms.size());
+    }
+    for (auto& mapped : component_map_)
+    {
+      if (mapped.float_atom != FloatSimplex::kNoAtom)
+        continue;
+      auto const& component = registryComponent(mapped.registry_component);
+      mapped.float_atom = float_core_->addAtom(rowMap(component.row).float_variable,
+          coreRelation(component.relation), doubleOfExact(component.threshold));
+      if (mapped.float_atom != float_atom_core_atoms_.size())
+        throw std::runtime_error("nonmonotonic appended float atom");
+      float_atom_core_atoms_.push_back(mapped.core_atom);
+    }
+    if (!float_core_->buildUsable())
+      throw std::runtime_error("non-finite float extension");
+    ++metrics_.float_extensions;
+  }
+  catch (...)
+  {
+    float_core_.reset();
+    ++metrics_.float_disabled;
+  }
+}
+
 void LraSolveContext::buildFloatCore() noexcept
 {
   try
@@ -540,6 +800,11 @@ void LraSolveContext::buildFloatCore() noexcept
       return;  // the exact path stands alone
     }
     bindFreshFloatMaps();
+    if (float_core_)
+    {
+      metrics_.float_refactor_failures += float_core_->refactorFailures();
+      metrics_.float_robust_refactors += float_core_->robustRefactors();
+    }
     float_core_ = std::move(fresh);
   }
   catch (...)
@@ -574,6 +839,8 @@ bool LraSolveContext::promoteFloatCore() noexcept
       return false;
     fresh->switchToFactorized();
     ++metrics_.float_promotions;
+    metrics_.float_refactor_failures += float_core_->refactorFailures();
+    metrics_.float_robust_refactors += float_core_->robustRefactors();
     bindFreshFloatMaps();
     float_core_ = std::move(fresh);
     return true;
@@ -804,6 +1071,16 @@ LraSolveMetrics LraSolveContext::metrics() const noexcept
       float_core_ ? float_core_->assignmentRebuilds() : 0;
   result.float_generalisations =
       float_core_ ? float_core_->generalisations() : 0;
+  result.float_row_activations =
+      float_core_ ? float_core_->rowActivations() : 0;
+  result.float_rows_dormant =
+      float_core_ ? float_core_->dormantRowCount() : 0;
+  result.float_dormant_evaluations =
+      float_core_ ? float_core_->dormantEvaluations() : 0;
+  result.float_refactor_failures +=
+      float_core_ ? float_core_->refactorFailures() : 0;
+  result.float_robust_refactors +=
+      float_core_ ? float_core_->robustRefactors() : 0;
   return result;
 }
 

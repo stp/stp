@@ -821,8 +821,22 @@ public:
   // deliberately not done -- an incremental session that blew up once stays on
   // the exact driver.
   bool lra_force_exact_driver = false;
+  // Experimental controls for permanent arithmetic extensions. Zero chooses
+  // (retain under lra_persistent_state, reconstruct otherwise), one retains
+  // the context, two reconstructs it, and three retains IDs/registration order
+  // but resets arithmetic search state.
+  unsigned lra_extension_mode = 0;
+  // Arithmetic row insertion only; Boolean atoms and source order are unchanged.
+  // 0: registry order, 1: reverse, 2: sparse first, 3: dense first.
+  unsigned lra_row_order = 0;
+  bool lra_extension_restart_float_basis = false;
+  bool lra_extension_restart_sat = false;
   // Reconstruct rejected floating-point conflict weights on their support.
   bool lra_conflict_recovery = true;
+  // Scan affected substitution rows for blocked repairs before pivoting.
+  bool lra_early_conflicts = false;
+  // Bind and connect arithmetic after CNF generation, before the first search.
+  bool lra_first_search = false;
   // Advise only the sign of SAT's selected decision variable, with no extra
   // checks. On by default when theory propagation and the backend's advisor
   // API are available. False restores the backend's own decision polarity.
@@ -831,6 +845,18 @@ public:
   // falling back. The CLI records whether the option was supplied; library
   // callers can set this alongside lra_decision_polarity to require support.
   bool lra_decision_polarity_explicit = false;
+  // Bounded sum-of-infeasibilities line search, with ordinary repair fallback.
+  bool lra_soi = false;
+  // Keep float-tier rows whose basic variable has no asserted bound out of
+  // the substitution tableau's column lists until their first bound, the
+  // exact tier's dormancy discipline.  Off by default.
+  bool lra_float_dormant_rows = false;
+  // With dormancy on, only rows at least this wide (cells at the time the
+  // decision is made: structural nonzeros for original rows) start dormant.
+  // Narrow rows are cheap to keep live and cost a normalisation to wake for
+  // no saving; the expensive rows to rewrite are the wide ones.  0 = every
+  // row.  The in-solver analogue of the abstraction's min-terms threshold.
+  std::int64_t lra_float_dormant_min_cells = 0;
   // Fresh factorized float tiers a single solve may build after the double
   // tier trips its infinitesimal cap.  A tier that trips on its own first
   // check has no pivot history to blame, and another identical one cannot
@@ -852,6 +878,64 @@ public:
   // percent of PAR2. A flat default either way takes one of those.
   OptionMode lra_separate_model_values = OptionMode::AUTO;
 
+  // Keep the coordinator, CNF and SAT solver of a Real solve alive across
+  // check-sats instead of rebuilding them per check (a pushed level becomes
+  // an extension frame retracted on pop). Off by default: the session is
+  // sound but not yet faster -- it still rebuilds the exact core per
+  // extension and accumulates clauses across checks, so on the many-check
+  // QF_LRA incremental files it engages on it is slower than the batch path,
+  // and the UF-heavy sets it would most help are declined for now.
+  bool lra_incremental_session = false;
+  // Extend arithmetic registrations and preserve bases inside a Real session.
+  // Also selects that session and its before-search binding hook.
+  bool lra_persistent_state = false;
+
+  // Recognize asserted direct-OR ReLUs, propagate exact intervals through
+  // affected definitions and eliminate phases proved by those intervals.
+  OptionMode lra_relu_bounds = OptionMode::AUTO;
+  // Original-row LP proposals, accepted only by exact model/ray checks.
+  bool lra_highs_lp = false;
+  // Off by default. Attempted on queries with an asserted exact binary domain,
+  // it measured as paying for itself nowhere: over the whole corpus
+  // all-HiGHS-on was the worst of five settings and HiGHS-off marginally the
+  // best, and on ONNX network queries where MIP applies, mip-on and mip-off
+  // solved the same 6 of 20 in identical time, no file differing. General LP,
+  // cuts and replay are opt-in as well. Enable with --lra-highs-mip=1. ReLU LP
+  // (lra_relu_lp) stays AUTO and query-gated.
+  bool lra_highs_mip = false;
+  bool lra_highs_cuts = false;
+  unsigned lra_highs_cut_limit = 64;
+  bool lra_highs_replay = false;
+  unsigned lra_highs_replay_nodes = 128;
+  unsigned lra_highs_seconds = 5;
+  // Check bounded property alternatives in their own input boxes, preserving
+  // correlations through affine portions of the asserted ReLU graph.
+  bool lra_relu_cases = false;
+  unsigned lra_relu_cases_seconds = 60;
+  // Selective LP objectives; accepted bounds always pass exact residual checks.
+  // Implies ReLU recognition. Requires an ENABLE_HIGHS build.
+  OptionMode lra_relu_lp = OptionMode::AUTO;
+  // AUTO tries at most 16 LP objectives/probes without tightening rounds.
+  // Its deadline is also capped by the explicit LP and query deadlines.
+  unsigned lra_relu_auto_seconds = 1;
+  unsigned lra_relu_lp_rounds = 8;
+  unsigned lra_relu_lp_seconds = 60;
+  unsigned lra_relu_lp_call_seconds = 2;
+  // Bounded phase search guided by the relaxation, with conditional exact
+  // refutations returned as clauses. Independent of LP bound tightening.
+  bool lra_relu_branch = false;
+  bool lra_relu_property_branches = true;
+  unsigned lra_relu_branch_nodes = 128;
+  unsigned lra_relu_branch_seconds = 60;
+  bool lra_dense_recovery = false;
+  // AUTO enables reconstruction only for eligible ReLU LP/branch proposals;
+  // ON also enables affine definition elimination on ordinary LRA queries.
+  OptionMode lra_model_reconstruction = OptionMode::AUTO;
+  bool lra_replay_screen = true;
+  bool lra_boolean_bounds = true;
+  bool lra_lp_screen = true;
+  bool lra_lp_partial = true;
+
   // Presolve stage one: a top-level Real conjunct EQ(x, t), x not in t,
   // defines x. Substitute the definition through the rest of the query and
   // keep it conjoined, so the definition holds one row while every other
@@ -859,6 +943,11 @@ public:
   // bit-vector pipeline gets from PropagateEqualities and the Real path
   // bypasses. On by default.
   bool lra_presolve_subst = true;
+  // Optional query-wide substitution guards. Growth counts newly reached AST
+  // nodes plus child links, including tentative rewrites later discarded.
+  // Zero growth disables both guards and preserves the unbounded baseline.
+  std::uint64_t lra_presolve_subst_growth = 0;
+  std::uint64_t lra_presolve_subst_work = 1000000;
 
   // Presolve stage two: bounds. Unit conjuncts feed a per-variable bound
   // table, one propagation round derives bounds through multi-variable
@@ -888,6 +977,23 @@ public:
   // keeping the model complete and handing the Gaussian stage a solved
   // definition to dissolve. On by default after a suite-wide validation.
   bool lra_presolve_unconstrained = true;
+
+  // Experimental multi-atom monotone elimination with exact model replay.
+  // Its local worklist is independent of ordinary presolve repetition.
+  bool lra_presolve_monotone = false;
+  std::uint64_t lra_presolve_monotone_work = 1000000;
+
+  // Ordinary presolve rounds, including the first (experimental above 1).
+  // The implementation caps this at 8 for API callers as well as the CLI.
+  unsigned lra_presolve_rounds = 1;
+
+  // Exact-core singleton bounds without auxiliary rows: 0 off, 1 only +1
+  // identities, 2 arbitrary nonzero coefficients. Float keeps its own rows.
+  unsigned lra_direct_bounds = 0;
+
+  // Order all scaled singleton predicates by their structural variable at
+  // the SAT boundary, independently of exact-core direct-bound selection.
+  bool lra_singleton_ordering = false;
 
   // Re-derive every LRA conflict certificate independently before trusting
   // it. A self-check, not a solving step: off unless asked for.

@@ -45,6 +45,7 @@ THE SOFTWARE.
 #include "Lra/LraBudgetRefusal.h"
 #include "Lra/LraFrontend.h"
 #include "Lra/LraPresolve.h"
+#include "Lra/LraHighs.h"
 #include "Lra/LraCoordinator.h"
 #include "Lra/LraSolveContext.h"
 #include "Lra/NumberBudget.h"
@@ -914,17 +915,35 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
             spreadSymbols.push_back(actual);
       ASTNode lra_input = original_input;
       lra::LraReconstruction reconstruction;
-      // Storage is available to presolve, and to the model commit, which
-      // checks its model against the `original` recorded here as well as
-      // against the presolved formula it solved.
+      // Storage is available to query-local AUTO selection, and to the model
+      // commit, which checks its model against the `original` recorded here
+      // as well as against the presolved formula it solved. An empty
+      // `definitions` means no reconstruction was selected and incurs no
+      // model replay.
       lra::LraReconstruction* reconstruction_ptr = &reconstruction;
-      if (bm->UserFlags.lra_presolve_subst ||
+      // An active UF view declines replay: the congruence lemmas of later
+      // rounds constrain Real rows and lowered results that a replay would
+      // eliminate as dead or settle with a witness.
+      reconstruction.replay_allowed = !batchUFView->active();
+      const bool highs_enabled =
+          (bm->UserFlags.lra_highs_lp || bm->UserFlags.lra_highs_cuts ||
+           bm->UserFlags.lra_highs_replay || !batchUFView->active()) &&
+          lra::highsEnabledForQuery(*bm, original_input, &NewSolver);
+      using Mode = UserDefinedFlags::OptionMode;
+      if (highs_enabled ||
+          bm->UserFlags.lra_relu_bounds != Mode::OFF ||
+          bm->UserFlags.lra_relu_cases ||
+          bm->UserFlags.lra_relu_lp != Mode::OFF ||
+          bm->UserFlags.lra_relu_branch ||
+          bm->UserFlags.lra_model_reconstruction == Mode::ON ||
+          bm->UserFlags.lra_presolve_subst ||
           bm->UserFlags.lra_presolve_bounds ||
           bm->UserFlags.lra_presolve_rows ||
           bm->UserFlags.lra_presolve_propagate ||
-          bm->UserFlags.lra_presolve_unconstrained)
+          bm->UserFlags.lra_presolve_unconstrained ||
+          bm->UserFlags.lra_presolve_monotone)
         lra_input = lra::presolveForSolve(*bm, original_input, &NewSolver,
-                                          reconstruction_ptr);
+                                          reconstruction_ptr, highs_enabled);
       if (NewSolver.timeLimitExpired())
       {
         bm->soft_timeout_expired = true;
@@ -936,7 +955,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
           *bm, NewSolver, lra_input, spreadSymbols));
       bm->checkPreparation(PreparationStage::LraCore);
       // Unconditionally now: it carries the pre-presolve query the model
-      // commit checks against, which every Real solve wants.
+      // commit checks against, which every Real solve wants, as well as the
+      // replay definitions only some select.
       lraCoordinator->setReconstruction(std::move(reconstruction));
       if (!lraCoordinator->ready())
         return SOLVER_ERROR;

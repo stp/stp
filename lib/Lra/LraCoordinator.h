@@ -81,12 +81,24 @@ struct LraCoordinatorMetrics final
   std::uint64_t extensions = 0;
   // Actual arithmetic constructions, including the initial core.
   std::uint64_t core_rebuilds = 0;
+  std::uint64_t context_reuses = 0;
+  std::uint64_t arithmetic_state_resets = 0;
+  std::uint64_t float_basis_resets = 0;
+  std::uint64_t sat_search_resets = 0;
+  std::uint64_t sat_search_reset_nanoseconds = 0;
+  std::uint64_t retired_exact_pivots = 0;
+  std::uint64_t retired_float_checks = 0;
+  std::uint64_t retired_float_pivots = 0;
+  std::uint64_t retired_float_check_nanoseconds = 0;
+  std::uint64_t retired_float_sync_nanoseconds = 0;
   std::uint64_t conflict_support_literals = 0;
   std::uint64_t learned_clause_literals = 0;
   std::uint64_t maximum_conflict_support = 0;
   std::uint64_t maximum_learned_clause = 0;
   std::uint64_t equality_support_compressions = 0;
   std::uint64_t sat_resolves = 0;
+  std::uint64_t first_search_connections = 0;
+  std::uint64_t persistent_equality_clauses = 0;
   std::uint64_t array_consistent = 0;
   std::uint64_t array_conflicts = 0;
   std::uint64_t array_not_applicable = 0;
@@ -111,9 +123,9 @@ struct LraCoordinatorMetrics final
   std::uint64_t publication_nanoseconds = 0;
 };
 
-// Arithmetic owner for one batch query. The outer STP loop owns SAT search
-// and invokes the transition hooks between candidates and when the query
-// is extended.
+// Arithmetic owner for a batch query or a persistent Real session. The
+// outer STP loop owns SAT search and invokes the transition hooks between
+// candidates and when extending or retracting assertion frames.
 class LraCoordinator final
 {
 public:
@@ -170,13 +182,14 @@ public:
   std::uint64_t candidateSerial() const noexcept;
 
   bool beforeSolverCall() noexcept;
+  bool afterCnf(ToSATBase& tosat) noexcept;
 
   // Take on more of the query between rounds, without a new solve. The
   // formula's Real predicates are registered into this solve's frame, the
-  // exact core is rebuilt over the enlarged registry, and the Boolean
-  // formula that results -- over opaque atoms, scalars the first encoding
-  // already holds, and connectives -- is encoded as clauses into the SAT
-  // solver this solve has been using, under its activation, which keeps
+  // exact core is extended when persistent arithmetic is enabled (rebuilt
+  // otherwise), and the Boolean formula that results -- over opaque atoms,
+  // scalars the first encoding already holds, and connectives -- is encoded
+  // as clauses into the SAT solver under its activation, which keeps
   // every clause that solver has learned. New atoms take fresh variables and
   // are entered in `tosat`'s symbol map, where the rebuilt context binds
   // them like the rest.
@@ -191,6 +204,24 @@ public:
   // reconnected by the solve that follows.
   ExtensionOutcome extendWithFormula(const ASTNode& formula,
                                      ToSATBase& tosat) noexcept;
+  // A pushed level's assertions, encoded under an activation of their own so
+  // a pop can retract them (the clauses stay, inert under a permanent unit).
+  // A solve assumes liveActivations().
+  ExtensionOutcome extendFrame(const ASTNode& formula, ToSATBase& tosat,
+                               const ASTNode& activation) noexcept;
+  bool retractFrame(const ASTNode& activation) noexcept;
+  // A session reconciliation runs several extensions and retractions back to
+  // back before its one solve, and each would rebuild the exact core over
+  // the whole registry. Between begin and end the rebuilds are coalesced:
+  // the mutations still run (registry, clauses, frames), and the single
+  // rebuild happens in endExtensionBatch. The propagator, disconnected by
+  // the first deferred mutation, is re-armed by the next solve exactly as
+  // after a retract today (the rebuild leaves bindings_ready_ false either
+  // way). endExtensionBatch is false when that rebuild fails; the batch
+  // caller declines, as it would on a failed extension.
+  void beginExtensionBatch() noexcept;
+  bool endExtensionBatch() noexcept;
+  ASTVec liveActivations() const;
   CoordinatorCandidateOutcome checkCompleteCandidate(ToSATBase& tosat) noexcept;
   bool hasPendingLraClause() const noexcept;
   bool encodePendingLraClause() noexcept;
@@ -274,6 +305,15 @@ private:
   // See the constructor. Handed to every model this coordinator commits.
   std::vector<ASTNode> spread_symbols_;
   bool frame_live_ = false;
+  struct SessionFrame
+  {
+    ASTNode activation;
+    SATSolver::Lit literal;
+    ASTNode submitted;
+    ASTNode registered;
+    bool live = true;
+  };
+  std::vector<SessionFrame> frames_;
   ASTNode base_submitted_;
   ASTNode base_registered_;
   ASTVec permanent_submitted_;
@@ -282,6 +322,10 @@ private:
                                   const ASTNode* frame_activation) noexcept;
   void rebuildLiveFormulas();
   void rebuildCoreAndContext();
+  // Inside an extension batch, mutations mark the rebuild pending instead of
+  // performing it; endExtensionBatch performs at most one.
+  bool defer_rebuild_ = false;
+  bool rebuild_pending_ = false;
   bool bindings_ready_ = false;
   // True once the theory has taken a seat inside the SAT search, which
   // replaces the candidate loop rather than supplementing it.

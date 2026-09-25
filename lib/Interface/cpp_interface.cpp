@@ -791,7 +791,10 @@ void Cpp_interface::resetSolver()
 void Cpp_interface::resetIncrementalSolver()
 {
   if (GlobalSTP != NULL)
+  {
     GlobalSTP->resetIncrementalSolver();
+    GlobalSTP->discardRealSession();
+  }
 }
 
 // Public and define-fun handles retain opaque ARRAY_EQ nodes, never generated
@@ -1132,7 +1135,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
         IncrementalSolver::forcedFirstSolve(incremental_from_start, solves_run);
     solves_run++;
 
-    SOLVER_RETURN_TYPE last_result;
+    SOLVER_RETURN_TYPE last_result = SOLVER_ERROR;
     if (use_incremental)
     {
       // The incremental driver keeps its SAT solver and encoding across
@@ -1165,16 +1168,28 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
     }
     else
     {
-      ASTNode query;
-
-      if (assertionsSMT2.size() > 1)
-        query = nf->CreateNode(AND, assertionsSMT2);
-      else if (assertionsSMT2.size() == 1)
-        query = assertionsSMT2[0];
-      else
-        query = bm.ASTTrue;
-
-      last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
+      bool sessionHandled = false;
+      if ((bm.UserFlags.lra_incremental_session || bm.UserFlags.lra_persistent_state) &&
+          active_real &&
+          !fromCheckSatAssuming && session_incremental &&
+          bm.UserFlags.incremental_mode !=
+              UserDefinedFlags::IncrementalMode::OFF &&
+          GlobalSTP->realSessionCanHandle(assertionsSMT2))
+        last_result =
+            GlobalSTP->checkSatRealSession(bm.AssertLevels(), sessionHandled);
+      if (!sessionHandled)
+      {
+        if (active_real)
+          GlobalSTP->discardRealSession();
+        ASTNode query;
+        if (assertionsSMT2.size() > 1)
+          query = nf->CreateNode(AND, assertionsSMT2);
+        else if (assertionsSMT2.size() == 1)
+          query = assertionsSMT2[0];
+        else
+          query = bm.ASTTrue;
+        last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
+      }
     }
 
     // Store away the answer. It may also be unknown or an error.
