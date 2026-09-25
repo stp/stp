@@ -109,6 +109,7 @@ AddSTPGTest(FpTotalise_Test.cpp)
 # Truth values the model-formula evaluator gives the two float
 # equalities; the circuit's answers are covered elsewhere.
 AddSTPGTest(FpModelEquality_Test.cpp)
+AddSTPGTest(FpAbstraction_Test.cpp)
 AddSTPGTest(SourceSort_Test.cpp)
 AddSTPGTest(UninterpretedFunctionsFrontend_Test.cpp)
 AddSTPGTest(ParserCleanup_Test.cpp)
