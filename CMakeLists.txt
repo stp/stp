@@ -1550,6 +1550,7 @@ find_package(SymFPU REQUIRED)
 # with -DENABLE_AUTO_DOWNLOAD=ON it does not have to be installed: see
 # cmake/FindLibBF.cmake.
 find_package(LibBF REQUIRED)
+find_package(IMath REQUIRED)
 
 # The shared dependency directory, if there is one, now holds whatever this
 # configure decided to build. Check it was not filled by an incompatible build.
@@ -1676,6 +1677,7 @@ add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interfa
 message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
 
 add_subdirectory(lib)
+add_subdirectory(lib/Lra)
 
 # Only tools/stp/main.cpp includes CLI11, so it is looked for only when there
 # is a binary to build.

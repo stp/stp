@@ -386,6 +386,8 @@ if(TEST_UNITS)
     add_subdirectory(unit-tests)
 endif()
 
+add_subdirectory(lra)
+
 if(USE_CADICAL AND STP_EXECUTABLE_AVAILABLE)
     add_test(NAME cadical-options-cli
         COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/cadical_options.py"

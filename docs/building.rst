@@ -89,6 +89,28 @@ branch the pin names -- adds STP's MSVC portability changes on top. Moving
 to a newer release means importing its tarball there and rebasing ``stp``
 onto it, then moving the pin here.
 
+`IMath <https://github.com/creachadair/imath>`__, the arbitrary-precision
+integer and rational arithmetic under STP's exact linear real arithmetic, is
+required too and is not vendored either. STP builds it from a pinned commit
+of release 1.35, against STP's own allocation hooks, and with one patch, kept
+in ``cmake/deps-utils``, that renames IMath's GMP-shaped private type --
+which would otherwise collide with a real GMP in the same link -- and makes
+its tuning globals immutable. STP's sources name the renamed type, so an
+unpatched copy does not compile against them, and that is why an installed
+IMath -- a distribution's, say -- is never looked for. That leaves two ways
+to get it, tried in this order:
+
+-  ``-DIMATH_DIR=<path>`` naming a prefix that holds ``include/imrat.h``
+   and ``lib/`` with the ``imath`` library, as an earlier build installs
+   them. Without it ``deps/imath`` is searched, as ``deps/libbf`` is for
+   LibBF, and an ``STP_DEP_DIR`` that an earlier build filled is searched
+   as well
+-  ``-DENABLE_AUTO_DOWNLOAD=ON``, which clones
+   `creachadair/imath <https://github.com/creachadair/imath>`__ at the
+   pinned commit, applies the patch, and builds it as part of this build
+
+Without either, configuration fails and says so.
+
 SAT backends
 ------------
 
@@ -322,6 +344,8 @@ These apply to all generators:
 -  ``CLI11_DIR`` -- build against an existing CLI11 rather than fetching
    one
 -  ``LIBBF_DIR`` -- where to find an already-built LibBF
+-  ``IMATH_DIR`` -- where to find an already-built, STP-patched IMath
+   (see above)
 -  ``ENABLE_AUTO_DOWNLOAD`` -- download and build dependencies that were
    not found, rather than failing. Off by default: a build that reaches
    the network should be asked to
@@ -334,10 +358,12 @@ These apply to all generators:
    configuration stops -- ``configure.sh --local-deps`` turns both on.
 
    A ``-D<X>_DIR`` naming a copy is unaffected: that is an answer rather
-   than a search, and the build uses what it was given. LibBF is the one
-   to know about, because the ``deps/libbf`` it falls back on when
-   ``LIBBF_DIR`` says nothing *is* a search, and is skipped along with the
-   rest; pass ``-DLIBBF_DIR=<path>`` to use a LibBF there anyway.
+   than a search, and the build uses what it was given. LibBF and IMath
+   are the ones to know about, because the ``deps/libbf`` and
+   ``deps/imath`` they fall back on when ``LIBBF_DIR`` or ``IMATH_DIR``
+   says nothing *are* a search, and are skipped along with the rest; pass
+   ``-DLIBBF_DIR=<path>`` or ``-DIMATH_DIR=<path>`` to use a copy there
+   anyway.
    CryptoMiniSat is the exception, being the one dependency STP cannot
    build: under this option it is used only if ``cryptominisat5_DIR``
    names one, and ``-DUSE_CRYPTOMINISAT=ON`` without that is a
@@ -694,7 +720,7 @@ Windows at all -- upstream supports MinGW there, and STP does not package
 it -- so both configure with ``-DUSE_CRYPTOMINISAT=OFF``.
 
 Everything else is fetched. ``-DENABLE_AUTO_DOWNLOAD=ON`` builds ABC,
-LibBF, SymFPU, CLI11 and the SAT backend as part of the build, with its
+LibBF, IMath, SymFPU, CLI11 and the SAT backend as part of the build, with its
 compiler and its flags, so the toolchain, flex, bison and -- for MiniSat
 -- a zlib are all that has to be installed beforehand.
 
