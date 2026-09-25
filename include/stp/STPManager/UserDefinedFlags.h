@@ -1108,6 +1108,137 @@ public:
   // Enabled by default, but only active when native arithmetic is selected.
   bool fp_native_add_iszero = true;
 
+  // Native floating-point abstraction/refinement (FpAbstraction): replace
+  // selected floating-point operations by same-sort surrogates constrained
+  // by exact class/sign, order, exponent-band and identity rules, check
+  // candidates against the literal SymFPU backend, and release the exact
+  // encoding only after a bounded number of value lemmas. Off by default;
+  // batch solves only.
+  bool fp_abstraction = false;
+  // Which operations are abstracted: a mask of FpAbstractionOps. Multiply,
+  // divide and square root -- the three whose exact circuits are an order
+  // of magnitude above their rules from binary32 up -- and the fused
+  // multiply-add, which compiled numerical code contracts a*b+c into and
+  // which measured as a gain on every corpus of such code.
+  unsigned fp_abstraction_ops = 39; // FP_ABSTRACT_DEFAULT
+  // Which operations are abstracted only as links in a chain: an
+  // application of one of these kinds is abstracted when one of its
+  // operands is the result of an application already abstracted, and
+  // encoded exactly otherwise. None by default. Tried for the fma: it
+  // takes the fmas over abstracted products (the running sums of SUNDIALS'
+  // norms, every one of that corpus's gains) and misses the accumulations
+  // over inputs that feed a quotient at the top (LAPACK's solves, where
+  // abstracting every fma gains), so the fma went into the default set
+  // instead. The policy is kept for sums, which the same corpora suggest
+  // reward abstraction only beside a product they share an operand with.
+  unsigned fp_abstraction_chain_ops = 0;
+  // Minimum packed width (eb + sb) at which an operation is abstracted. At
+  // binary16 a multiplier is barely larger than its rules.
+  unsigned fp_abstraction_width = 16;
+  // Highest rule tier emitted with a surrogate: 0 class/sign shell, 1 +order,
+  // 2 +exponent bands and overflow, 3 +identities.
+  unsigned fp_abstraction_tiers = 3;
+  // Value lemmas (one candidate operand tuple ruled out each) a record may
+  // take before its exact encoding is released.
+  unsigned fp_abstraction_values = 4;
+  // Model-instantiated trailing-exponent (exactness) lemmas before a value
+  // lemma is spent.
+  bool fp_abstraction_shape = true;
+  // Pairwise monotonicity lemmas between records of one operator that share
+  // an operand, emitted only for the pair a candidate violates.
+  bool fp_abstraction_relational = true;
+  // At and above this packed width, emit them only once a record's value
+  // budget is spent, rather than before the first value lemma; 0 never
+  // does. A monotonicity fact is a pair of comparators over the format:
+  // stated first they carry the binary32 and binary64 witness hunts of the
+  // SMT-LIB corpus (griggio's sin and sqrt loops, 7-70 facts and no circuit
+  // built), stated last at binary128 they keep the LAPACK triangular
+  // solves from stalling under eight wide comparator pairs in one round
+  // (six timeouts to 3-9 s). See docs/fp-abstraction.rst for the numbers.
+  unsigned fp_abstraction_relational_last_width = 128;
+  // After a refuted candidate, suggest to the SAT solver's decision
+  // heuristic the operand values it just tried and, for the surrogate, the
+  // exact result for them: pure search advice, so the next candidate keeps
+  // the operands and is consistent at once when nothing else forbids it.
+  bool fp_abstraction_phase_hints = false;
+  // Add an operand-box prefix constraint beside each value lemma for
+  // mul/div/sqrt/add/sub/fma/rti, on the fixed-sign domains where corner
+  // results bound the interior. Remainder and conversions are excluded.
+  bool fp_abstraction_box_lemmas = false;
+  // Packed width at or above which a released wide-significand operation
+  // (mul, div, sqrt, fma, rem) is lowered by running the pipeline again
+  // rather than spliced into the running solver; 0 never restarts. The
+  // restart exists to let the bit-vector abstraction see the released
+  // circuit; without it the run loses more (its learnt clauses, and at 128
+  // bits a multi-second exact solve per restart) than constant-bit
+  // propagation and the simplifier win back, so the command line sets 128
+  // only when --bv-term-abstraction is on.
+  unsigned fp_abstraction_restart_width = 0;
+  // How many such runs one query may take; past it, releases are spliced.
+  unsigned fp_abstraction_restart_limit = 4;
+  // Significand bits of the reduced-precision bands emitted with the rules
+  // of an abstracted mul, div or sqrt: a k-bit truncation of each operand
+  // bounds the result through a k x k multiplier; 0 emits none.
+  unsigned fp_abstraction_significand_bits = 8;
+  // The same at packed widths of 128 bits and above, where a 16 x 16 band
+  // is still a fraction of a percent of the exact multiplier and turns the
+  // deep satisfiable paths that an 8-bit band leaves to their value lemmas;
+  // 0 uses the narrow setting everywhere.
+  unsigned fp_abstraction_significand_bits_wide = 16;
+  // Before refining a candidate the abstraction refuted, replay the
+  // original formula under it: a candidate whose surrogates are wrong but
+  // whose values for the original symbols satisfy the formula is a model.
+  bool fp_abstraction_repair = true;
+  // Decline to abstract an operation whose result the query itself pins:
+  // a direct equality between the operation and a constant or a
+  // conversion. That is the witness-hunt signature -- such a solve must
+  // produce the operation's exact value anyway, so a surrogate only
+  // defers the circuit through refinement rounds.
+  bool fp_abstraction_decline_pinned = false;
+  // Whether an operation with a constant float operand is abstracted. Off,
+  // such an operation is lowered exactly: a multiplication by a constant is
+  // a shift-and-add network the blast prunes to the constant's set bits,
+  // which the SAT solver propagates through, where the abstraction puts a
+  // free result and rules it has to search under. On the converted
+  // flux-balance QF_FP queries, where every multiplication is by a
+  // coefficient, abstracting them turned two-second solves into timeouts.
+  // Whether an operation with a constant float operand is abstracted.
+  // Declined, such an operation is lowered exactly: a multiplication by a
+  // constant is a shift-and-add network the blast prunes to the constant's
+  // set bits, which the SAT solver propagates through, where the
+  // abstraction puts a free result and rules it has to search under.
+  // Measured both ways, the two corpora disagree. On the converted
+  // flux-balance QF_FP queries every multiplication is by a coefficient and
+  // abstracting them turns two-second solves into timeouts: declining them
+  // solves four more of 275. On the KLEE corpus a product by a constant is
+  // a step of a Horner polynomial in library code, which is where the layer
+  // earns its keep: declining them costs fourteen solves of 1,241 hard
+  // queries and a tenth of the PAR2.
+  //
+  // What separates the two is visible in the query. AUTO abstracts them
+  // when the configuration abstracts some operation at least two of whose
+  // float operands are not constants -- a product of unknowns, whose result
+  // feeds the next operation and which the rules carry -- and declines them
+  // when it does not, the query then being linear over its coefficients.
+  // Decided once, on the prepared formula, for the batch pipeline; a piece
+  // the incremental driver hands over is not the session, so there AUTO
+  // abstracts.
+  enum class FpConstantOperandMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  FpConstantOperandMode fp_abstraction_constant_operands =
+      FpConstantOperandMode::AUTO;
+  // Wall-clock seconds after which a batch refinement releases every
+  // remaining record, spliced in place: past the budget the solve is the
+  // exact encoding plus whatever the rules already added, so a loss on a
+  // witness hunt is bounded near the budget instead of the timeout. 0
+  // never fires. Batch only: the incremental driver's checks have their
+  // own timing discipline.
+  unsigned fp_abstraction_budget = 0;
+
   // Mine simple top-level finite box bounds and use them to omit NaN/infinity
   // cases from native packed-field circuits when those cases are already
   // impossible. This does not enable the separate domain prepass or its

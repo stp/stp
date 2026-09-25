@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/STPManager/STP.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/Simplifier/EmbeddedConstraints.h"
 #include "stp/Simplifier/SkeletonPreproc.h"
@@ -106,7 +107,11 @@ void STP::ClearAllTables(void)
   {
     Ctr_Example->ClearAllTables();
     Ctr_Example->setFpEncodingContext(NULL);
+    Ctr_Example->setFpAbstraction(NULL);
   }
+  if (bm != NULL)
+    bm->setFpAbstraction(NULL);
+  fpAbstraction.reset();
   fpEncodingContext.reset();
   *batchUFView = LoweredApplicationView();
   if (batchUFAdapter)
@@ -181,7 +186,32 @@ SATSolver* STP::get_new_sat_solver()
 SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
                                     const ASTNode& query)
 {
-  const SOLVER_RETURN_TYPE first = topLevelSTPOnce(inputasserts, query);
+  fpAbstractionExact.clear();
+  fpAbstractionRestarts = 0;
+  fpAbstractionPreviouslyAbstracted = 0;
+  SOLVER_RETURN_TYPE first = topLevelSTPOnce(inputasserts, query);
+  // A floating-point release by restart (FpAbstraction::restartRequested):
+  // the run ended undecided with the operations to lower exactly noted,
+  // and the pipeline runs again over the same formula with them held out
+  // of the abstraction. Each run releases at least one more, so this ends.
+  // The same table clearing as the UF second run below, for the same
+  // reason.
+  while (fpAbstraction != NULL && fpAbstraction->restartRequested())
+  {
+    const std::set<ASTNode>& requests = fpAbstraction->releaseRequests();
+    fpAbstractionExact.insert(requests.begin(), requests.end());
+    fpAbstractionPreviouslyAbstracted = fpAbstraction->applications().size();
+    ++fpAbstractionRestarts;
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "FpAbstraction: releasing " << requests.size()
+                << " operation(s) exactly by running the pipeline again ("
+                << fpAbstractionExact.size() << " exact in total)"
+                << std::endl;
+    bm->ClearAllTables();
+    ClearAllTables();
+    skeletonAsked = false;
+    first = topLevelSTPOnce(inputasserts, query);
+  }
   if (first != SOLVER_UNSATISFIABLE || bm->uf_injectivity_assumed == 0)
     return first;
 
@@ -264,6 +294,13 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   Ctr_Example->setFpEncodingContext(NULL);
   fpEncodingContext.reset(new FpEncodingContext(bm));
   Ctr_Example->setFpEncodingContext(fpEncodingContext.get());
+
+  // The same lifetime for the floating-point abstraction: one per solve,
+  // alive with the model afterwards, registered with the manager only for
+  // the solve that abstracted something (TopLevelSTPAux).
+  Ctr_Example->setFpAbstraction(NULL);
+  bm->setFpAbstraction(NULL);
+  fpAbstraction.reset();
 
   // Unfortunatey this is a global variable,which the aux function needs to
   // overwrite sometimes.
@@ -781,7 +818,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // the session.
   bm->UserFlags.construct_counterexample_flag =
       bm->UserFlags.modelConstructionRequired(
-          (arrayops && !removed) || batchUFView->active());
+          (arrayops && !removed) || batchUFView->active() ||
+          bm->UserFlags.fp_abstraction);
 
   // Ahead of everything that reads the term structure: constant bit
   // propagation's fixed-point map, the difficulty score, the sub-sum
@@ -888,6 +926,34 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // children and stamping a float format on them to make them type check,
   // and that stamp landed on hash-consed nodes the input still used as plain
   // bitvectors.
+  // Floating-point abstraction (--fp-abstraction): immediately before the
+  // lowering commits an operation to its circuit, replace the admitted
+  // operations by same-sort surrogates and conjoin their proxy definitions
+  // and rule tiers. The result is lowered like any other formula; the
+  // surrogates are packed views of bit-vector symbols, so nothing here
+  // builds a SymFPU operation. See FpAbstraction.
+  bool fpAbstractionActive = false;
+  if (input_has_floating_point && bm->UserFlags.fp_abstraction)
+  {
+    fpAbstraction.reset(new FpAbstraction(bm, fpAbstractionExact,
+                                          fpAbstractionRestarts,
+                                          fpAbstractionPreviouslyAbstracted));
+    const ASTNode abstracted = fpAbstraction->abstract(inputToSat);
+    if (fpAbstraction->active())
+    {
+      inputToSat = abstracted;
+      fpAbstractionActive = true;
+      bm->setFpAbstraction(fpAbstraction.get());
+      Ctr_Example->setFpAbstraction(fpAbstraction.get());
+      // The shared counterexample machinery may still carry the driver's
+      // array-route repair gate; the batch replay certifies.
+      Ctr_Example->setFpRepairAllowed(true);
+      bm->ASTNodeStats("After floating-point abstraction: ", inputToSat);
+    }
+    else
+      fpAbstraction.reset();
+  }
+
   if (input_has_floating_point)
   {
     inputToSat = fpEncodingContext->lowerPrepared(inputToSat);
@@ -1221,7 +1287,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   const bool maybeRefinement = (arrayops && !bm->UserFlags.ackermannisation) ||
                                bm->UserFlags.bv_eq_abstraction ||
                                bm->UserFlags.bv_term_abstraction ||
-                               batchUFView->active();
+                               batchUFView->active() || fpAbstractionActive;
 
   simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
   std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
@@ -1253,6 +1319,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   const auto reportBVAbstractionRecords = [&]() {
     if (bm->UserFlags.quick_statistics_flag)
       toSATAIG.reportBVAbstractionRecords(std::cerr);
+    if (fpAbstractionActive &&
+        (bm->UserFlags.stats_flag || bm->UserFlags.quick_statistics_flag))
+      fpAbstraction->reportStatistics(std::cerr);
   };
 
   if (bm->soft_timeout_expired)
@@ -1307,14 +1376,16 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     return res;
   }
 
-  // An undecided result belongs to an active array, bit-vector abstraction
-  // or UF refinement owner.
+  // An undecided result belongs to an active array, bit-vector abstraction,
+  // floating-point abstraction or UF refinement owner.
   assert(arrayops || toSATAIG.hasBVEQAbstractions() ||
-         toSATAIG.hasBVTermAbstractions() || batchUFView->active());
+         toSATAIG.hasBVTermAbstractions() || batchUFView->active() ||
+         fpAbstractionActive);
   // Refinement must be enabled too, unless an abstraction or UF owns the
   // round.
   assert(toSATAIG.hasBVEQAbstractions() || toSATAIG.hasBVTermAbstractions() ||
-         batchUFView->active() || !bm->UserFlags.ackermannisation);
+         batchUFView->active() || fpAbstractionActive ||
+         !bm->UserFlags.ackermannisation);
 
   // Refinement driver. Every owner that retained a candidate-blocking
   // lemma is drained before the next solve, rather than the first one
@@ -1341,10 +1412,14 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
     if (extActive)
     {
-      // An undecided candidate the abstraction did not account for is
-      // still a checker's, and one of them still owes a lemma for it.
+      // An undecided candidate the bit-vector abstraction did not account
+      // for is still a checker's, and one of them still owes a lemma for
+      // it -- or the floating-point abstraction does, which refutes a
+      // candidate the array checker has already accepted.
       if (!progress && !ext->hasPendingLemma() &&
-          !(batchUFView->active() && batchUFAdapter->hasPendingLemma()))
+          !(batchUFView->active() && batchUFAdapter->hasPendingLemma()) &&
+          !(fpAbstractionActive && (fpAbstraction->hasPendingLemma() ||
+                                    fpAbstraction->restartRequested())))
         FatalError("array-equality: an active refinement round has neither "
                    "a decision nor a pending theory lemma");
       if (ext->hasPendingLemma())
@@ -1356,6 +1431,25 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     if (batchUFView->active() && batchUFAdapter->hasPendingLemma())
     {
       batchUFAdapter->encodePendingLemmas(NewSolver, satBase);
+      progress = true;
+    }
+    // A floating-point release that is to be made by running the pipeline
+    // again (FpAbstraction::restartRequested): this run is over, and
+    // TopLevelSTP starts the next with the operation lowered exactly.
+    if (fpAbstractionActive && fpAbstraction->restartRequested())
+    {
+      if (toSATAIG.cbIsDestructed())
+        cleaner.release();
+      reportBVAbstractionRecords();
+      return SOLVER_UNDECIDED;
+    }
+    // A floating-point candidate the exact evaluator refuted: its value
+    // lemma, shape lemma or exact release is pending, and is a definitional
+    // fact about the operation, so it joins whatever else this round
+    // installs.
+    if (fpAbstractionActive && fpAbstraction->hasPendingLemma())
+    {
+      fpAbstraction->encodePendingLemmas(NewSolver, satBase);
       progress = true;
     }
 
@@ -1395,7 +1489,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     }
 
     if (!toSATAIG.hasBVEQAbstractions() && !toSATAIG.hasBVTermAbstractions() &&
-        !extActive && !batchUFView->active())
+        !extActive && !batchUFView->active() && !fpAbstractionActive)
       break;
   }
 

@@ -60,6 +60,7 @@ THE SOFTWARE.
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Simplifier/AchievableImage.h"
 #include "stp/Simplifier/constantBitP/Dependencies.h"
@@ -97,14 +98,24 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   UFContext* uf = bm.getUFContextIfAny();
   const ASTNodeSet* ufSet =
       (uf != NULL && uf->activeInSolve()) ? &uf->getProtectedSymbols() : NULL;
+  // The floating-point abstraction's surrogates and proxies, for the same
+  // reason as the array-equality symbols above: the one constraint such a
+  // symbol occurs in must stay, because the refinement's lemmas over it
+  // splice onto the variables that constraint gives it.
+  FpAbstraction* fp = bm.getFpAbstractionIfAny();
+  const std::set<ASTNode>* fpSet =
+      (fp != NULL && fp->active()) ? &fp->protectedSymbols() : NULL;
   std::set<ASTNode> mergedUntouchable;
   const std::set<ASTNode>* effective = NULL;
-  if (extSet != NULL || ufSet != NULL || alsoUntouchable != NULL)
+  if (extSet != NULL || ufSet != NULL || fpSet != NULL ||
+      alsoUntouchable != NULL)
   {
     if (extSet != NULL)
       mergedUntouchable.insert(extSet->begin(), extSet->end());
     if (ufSet != NULL)
       mergedUntouchable.insert(ufSet->begin(), ufSet->end());
+    if (fpSet != NULL)
+      mergedUntouchable.insert(fpSet->begin(), fpSet->end());
     if (alsoUntouchable != NULL)
       mergedUntouchable.insert(alsoUntouchable->begin(),
                                alsoUntouchable->end());

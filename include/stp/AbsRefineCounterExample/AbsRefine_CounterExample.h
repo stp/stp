@@ -55,6 +55,7 @@ uint32_t getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
                    ToSATBase::ASTNodeToSATVar& satVar,
                    Polarity polary = Polarity::BOTH);
 
+class FpAbstraction;
 class FpEncodingContext;
 class ArrayReadRefinementProgress;
 class UFTheoryAdapter;
@@ -92,6 +93,12 @@ private:
   // Non-owning current solve-mode coordinator. STP owns the fresh-query
   // adapter; IncrementalSolver owns the exact-stack adapter.
   UFTheoryAdapter* ufTheoryAdapter;
+
+  // Non-owning floating-point abstraction of the current batch solve, NULL
+  // when nothing was abstracted. Its checker runs on every candidate after
+  // the array and UF checkers and before the ordinary replay.
+  FpAbstraction* fpAbstraction;
+  bool fpRepairAllowed;
 
   FpEncodingContext& requireFpEncodingContext() const;
 
@@ -198,7 +205,8 @@ public:
 public:
   AbsRefine_CounterExample(STPMgr* b, Simplifier* s, ArrayTransformer* at)
       : bm(b), simp(s), ArrayTransform(at), fpEncodingContext(NULL),
-        fpEncodedEvaluationDepth(0), ufTheoryAdapter(NULL)
+        fpEncodedEvaluationDepth(0), ufTheoryAdapter(NULL),
+        fpAbstraction(NULL), fpRepairAllowed(true)
   {
     ASTTrue = bm->CreateNode(TRUE);
     ASTFalse = bm->CreateNode(FALSE);
@@ -214,6 +222,18 @@ public:
   {
     ufTheoryAdapter = adapter;
   }
+  void setFpAbstraction(FpAbstraction* abstraction)
+  {
+    fpAbstraction = abstraction;
+  }
+  // Whether a refuted floating-point candidate may be accepted because the
+  // ordinary replay holds under it (--fp-abstraction-repair). The replay is
+  // the certifier on the batch pipeline and on the incremental driver's
+  // written-out routes, and the repair is sound exactly there; on the
+  // driver's array-refinement routes the read table is still being refined
+  // around the candidate, the replay is not the certifier, and an accept
+  // wedges the refinement coordination, so those routes turn it off.
+  void setFpRepairAllowed(bool allowed) { fpRepairAllowed = allowed; }
   UFTheoryAdapter* getUFTheoryAdapter() const { return ufTheoryAdapter; }
 
   // Prints the counterexample to stdout

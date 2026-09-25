@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/STPManager/STPManager.h"
@@ -38,9 +39,11 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 #include <memory>
+#include <set>
 
 namespace stp
 {
+class FpAbstraction;
 class IncrementalSolver;
 class LoweredApplicationView;
 class UFBatchAdapter;
@@ -88,6 +91,17 @@ class STP
   // The source-to-carrier mapping for the most recent solve. It remains
   // alive after TopLevelSTP returns so model queries use that exact encoding.
   std::unique_ptr<FpEncodingContext> fpEncodingContext;
+
+  // The floating-point abstraction of the most recent batch solve
+  // (--fp-abstraction): its records, protected symbols and statistics. Kept
+  // with the model like the encoding context; rebuilt for every solve.
+  std::unique_ptr<FpAbstraction> fpAbstraction;
+  // Applications released by restart in earlier runs of the current query
+  // (FpAbstraction::restartRequested): lowered exactly by every later run.
+  // Reset at the start of each TopLevelSTP.
+  std::set<ASTNode> fpAbstractionExact;
+  uint64_t fpAbstractionRestarts = 0;
+  size_t fpAbstractionPreviouslyAbstracted = 0;
 
   // Public and semantic UF roots for the most recent fresh-query solve. The
   // value remains alive with the model, while batchUFAdapter owns the
@@ -158,8 +172,12 @@ public:
     if (Ctr_Example != NULL)
     {
       Ctr_Example->setFpEncodingContext(NULL);
+      Ctr_Example->setFpAbstraction(NULL);
       Ctr_Example->setUFTheoryAdapter(NULL);
     }
+    if (bm != NULL)
+      bm->setFpAbstraction(NULL);
+    fpAbstraction.reset();
     fpEncodingContext.reset();
 
     delete Ctr_Example;

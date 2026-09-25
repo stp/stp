@@ -44,6 +44,7 @@ namespace stp
 {
 class ExtensionalityContext;
 class UFContext;
+class FpAbstraction;
 
 // The five SMT-LIB floating-point special values. Their nodes are ordinary
 // packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
@@ -104,6 +105,10 @@ private:
 
   ExtensionalityContext* extensionality = nullptr;
   UFContext* uninterpretedFunctions = nullptr;
+  // The floating-point abstraction of the solve in progress, if one is
+  // active: owned by STP for exactly one batch solve, and consulted by the
+  // preprocessing passes that must not touch its symbols.
+  FpAbstraction* fpAbstraction = nullptr;
 
   // Why the last solve had no answer, and the sentence to give a caller who
   // asks. Recorded rather than derived because the reasons are produced in
@@ -140,6 +145,14 @@ public:
   // completed-root boundary.
   DLL_PUBLIC UFContext* getUFContext();
   UFContext* getUFContextIfAny() const { return uninterpretedFunctions; }
+
+  // The active floating-point abstraction, or NULL. Set by STP for the
+  // duration of a batch solve that abstracted something.
+  FpAbstraction* getFpAbstractionIfAny() const { return fpAbstraction; }
+  void setFpAbstraction(FpAbstraction* abstraction)
+  {
+    fpAbstraction = abstraction;
+  }
 
   // frequently used nodes
   ASTNode ASTFalse, ASTTrue, ASTUndefined;
