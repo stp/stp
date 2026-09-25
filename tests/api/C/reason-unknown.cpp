@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Andrew Teylu
+ * AUTHORS: Andrew Teylu, Albert ZHANG Tongjun
  *
  * BEGIN DATE: August, 2026
  *
@@ -101,6 +101,47 @@ TEST(reason_unknown, AnAnsweredQueryHasNoReason)
   ASSERT_EQ(0, vc_query_with_timeout(vc, vc_falseExpr(vc), -1, -1));
   EXPECT_EQ(REASON_UNKNOWN_NONE, vc_getReasonUnknown(vc));
   EXPECT_EQ("", detail(vc));
+  vc_Destroy(vc);
+}
+
+// ... and it describes the LAST query, so an answer clears the reason a query
+// before it left. The one above asks one question of a fresh checker, where a
+// record that is never cleared cannot be told from one that is: a checker
+// that gave up once kept reporting why after every query it later answered.
+TEST(reason_unknown, AnAnswerClearsTheReasonAnEarlierQueryLeft)
+{
+  VC vc = vc_createValidityChecker();
+  if (!assertFactoring(vc))
+  {
+    vc_Destroy(vc);
+    GTEST_SKIP() << "CaDiCaL backend not compiled in";
+  }
+  ASSERT_EQ(3, vc_query_with_timeout(vc, vc_falseExpr(vc), 0, -1));
+  ASSERT_EQ(REASON_UNKNOWN_CONFLICT_BUDGET, vc_getReasonUnknown(vc));
+
+  EXPECT_EQ(1, vc_query(vc, vc_trueExpr(vc)));
+  EXPECT_EQ(REASON_UNKNOWN_NONE, vc_getReasonUnknown(vc));
+  EXPECT_EQ("", detail(vc));
+  vc_Destroy(vc);
+}
+
+// ... and a later query that gives up for ANOTHER reason reports that one. The
+// budget path keeps an earlier reason within a query (a solve may call it on
+// every refinement round); without a clear between queries the first query's
+// CONFLICT_BUDGET also answered for the next query's clock.
+TEST(reason_unknown, ALaterUnknownReportsItsOwnReason)
+{
+  VC vc = vc_createValidityChecker();
+  if (!assertFactoring(vc))
+  {
+    vc_Destroy(vc);
+    GTEST_SKIP() << "CaDiCaL backend not compiled in";
+  }
+  ASSERT_EQ(3, vc_query_with_timeout(vc, vc_falseExpr(vc), 0, -1));
+  ASSERT_EQ(REASON_UNKNOWN_CONFLICT_BUDGET, vc_getReasonUnknown(vc));
+
+  EXPECT_EQ(3, vc_query_with_timeout(vc, vc_falseExpr(vc), -1, 0));
+  EXPECT_EQ(REASON_UNKNOWN_TIMEOUT, vc_getReasonUnknown(vc));
   vc_Destroy(vc);
 }
 

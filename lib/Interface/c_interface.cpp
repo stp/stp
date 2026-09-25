@@ -1375,6 +1375,13 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
   // solve targets it, not whichever checker was created or solved last.
   stp::GlobalParserBM = b;
 
+  // A reason-unknown describes the query that produced it. vc_getReasonUnknown
+  // promises REASON_UNKNOWN_NONE after any answer but 3 and a record "cleared
+  // at the start of every query"; without this, a query that gave up left its
+  // reason behind for every later one that was answered. Cleared before the
+  // argument checks, so a query refused with 2 reads NONE as well.
+  b->clearUnknown();
+
   /*
    * -1 is the only negative value that means anything ("no limit"). Reject
    * the rest rather than silently running unlimited, which is the dangerous
