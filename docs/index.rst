@@ -102,6 +102,7 @@ page <https://smt-lib.org/>`__.
    uninterpreted-functions
    incremental-solving
    bv-abstraction
+   fp-abstraction
 
 Header
 ------
