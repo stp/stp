@@ -1188,10 +1188,65 @@ FpAbstraction::FpAbstraction(STPMgr* bm, const std::set<ASTNode>& exact,
 {
   stats_.restarts = restarts;
   restartAllowed_ = restarts < bm->UserFlags.fp_abstraction_restart_limit;
+  bm->registerFpAbstraction(this);
 }
 
 FpAbstraction::~FpAbstraction()
 {
+  // Publish whatever has not been published yet, so a session's totals are
+  // complete however this instance ended -- a batch solve finishing, a
+  // restart replacing it, an encoding epoch rotating, or the checker being
+  // torn down -- and a reader asking whether the abstraction engaged at all
+  // does not have to know which one happened.
+  publishCoverage();
+  bm_->unregisterFpAbstraction(this);
+}
+
+void FpAbstraction::publishCoverage()
+{
+  // bm_ outlives every instance: vc_Destroy deletes the STP object, and with
+  // it the driver and the batch pipeline, before the manager.
+  //
+  // Every difference below is unsigned, and stats_ is not monotone --
+  // acceptRepairedCandidate rolls the lemma and release counts back to what
+  // they were when the check that queued them began. That is safe here
+  // only because publishing happens at settled points: from the destructor,
+  // and from vc_getCounter, which a caller can only reach between API
+  // calls, never inside a refinement round. The rollback floor is the start
+  // of the current check, which is at or above the totals at the end of the
+  // previous one, so a published watermark is never above the live value.
+  // A publish added anywhere inside the check-and-refine loop would break
+  // that and wrap these subtractions to enormous numbers; take the delta
+  // against a saturating floor there rather than moving this call.
+  UserDefinedFlags::EncodingCoverage& c = bm_->UserFlags.coverage;
+  c.fp_candidates += stats_.candidates - published_.candidates;
+  c.fp_abstracted += stats_.abstracted - published_.abstracted;
+  c.fp_shared += stats_.shared - published_.shared;
+  c.fp_chained += stats_.chained - published_.chained;
+  c.fp_rule_lemmas += stats_.ruleLemmas - published_.ruleLemmas;
+  c.fp_cross_rules += stats_.crossRules - published_.crossRules;
+  c.fp_checks += stats_.checks - published_.checks;
+  c.fp_skipped_checks += stats_.skippedChecks - published_.skippedChecks;
+  c.fp_inconsistent += stats_.inconsistent - published_.inconsistent;
+  c.fp_value_lemmas += stats_.valueLemmas - published_.valueLemmas;
+  c.fp_box_lemmas += stats_.boxLemmas - published_.boxLemmas;
+  c.fp_shape_lemmas += stats_.shapeLemmas - published_.shapeLemmas;
+  c.fp_relational_lemmas +=
+      stats_.relationalLemmas - published_.relationalLemmas;
+  c.fp_releases += stats_.releases - published_.releases;
+  c.fp_refinement_rounds += stats_.rounds - published_.rounds;
+  c.fp_repairs += stats_.repairs - published_.repairs;
+  // stats_.restarts is how many runs came BEFORE this one and never changes,
+  // so the chain a restarting query builds reports 0,1,...,n and only the
+  // last is the query's total. Adding the values would count a triangular
+  // number; counting one per instance that had a predecessor gives n, which
+  // is what a counter of restarts should say. Published once, on the first
+  // call, like everything else here.
+  if (stats_.restarts > 0 && published_.restarts == 0)
+    c.fp_restarts += 1;
+  c.fp_lemma_microseconds += static_cast<uint64_t>(
+      (stats_.lemmaSeconds - published_.lemmaSeconds) * 1e6);
+  published_ = stats_;
 }
 
 ASTNode FpAbstraction::abstract(const ASTNode& prepared)

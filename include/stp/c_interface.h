@@ -694,7 +694,223 @@ enum ifaceflag_t
   //! solve that is never asked twice is unaffected either way. Appended to
   //! preserve every published ordinal.
   //!
-  REFINEMENT_TRAIL_REUSE
+  REFINEMENT_TRAIL_REUSE,
+
+  //! Decide selected floating-point operations by abstraction and
+  //! refinement instead of building their circuits up front.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is
+  //! the C API's way to reach --fp-abstraction, and on its own it reaches
+  //! the batch pipeline only. The incremental driver hosts the abstraction
+  //! for a whole encoding epoch -- records and everything refinement
+  //! teaches them persisting across the session's queries -- but only when
+  //! FP_ABSTRACTION_INCREMENTAL is set as well, exactly as the command line
+  //! requires --fp-abstraction-incremental beside --fp-abstraction.
+  //!
+  FP_ABSTRACTION,
+
+  //! Which floating-point operations FP_ABSTRACTION may abstract.
+  //!
+  //! `param_value` is a bitmask: 1 fp.mul, 2 fp.div, 4 fp.sqrt, 8 fp.add,
+  //! 16 fp.sub, 32 fp.fma, 64 fp.rem, 128 fp.roundToIntegral, 256
+  //! fp.to_sbv, 512 fp.to_ubv -- the same mask --fp-abstraction-ops builds,
+  //! and the default is mul|div|sqrt|fma (39). Zero restores that default;
+  //! a negative value is refused with a nonfatal diagnostic.
+  //!
+  FP_ABSTRACTION_OPS,
+
+  //! Host FP_ABSTRACTION inside the incremental driver as well as the batch
+  //! pipeline.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is
+  //! the C API's way to reach --fp-abstraction-incremental. It does nothing
+  //! on its own: FP_ABSTRACTION is what turns the abstraction on, and this
+  //! decides whether the driver hosts it or encodes every floating-point
+  //! operation exactly. An abstracted session takes the eager array
+  //! expansion, decided once when the driver is created, so set this before
+  //! the session's first query.
+  //!
+  FP_ABSTRACTION_INCREMENTAL,
+
+  //! The operations abstracted only as links in a chain: an application of
+  //! one of these is abstracted when one of its operands is the result of
+  //! an application already abstracted, and encoded exactly otherwise.
+  //!
+  //! `param_value` is a mask over the FP_ABSTRACTION_OPS bits; zero (the
+  //! default) names none, and an operation in both masks is abstracted
+  //! wherever it stands. A negative value is refused with a nonfatal
+  //! diagnostic. This is the C API's way to reach
+  //! --fp-abstraction-chain-ops.
+  //!
+  FP_ABSTRACTION_CHAIN_OPS,
+
+  //! The floor on the packed width -- exponent plus significand bits --
+  //! below which an operation is encoded exactly whatever else is set
+  //! (default 16, so binary16 is the narrowest format touched).
+  //!
+  //! `param_value` is that width; one abstracts every admitted operation at
+  //! every format. A negative value is refused with a nonfatal diagnostic
+  //! and leaves the width unchanged, because the flag it sets is unsigned
+  //! and would otherwise wrap to a width nothing can reach. This is the C
+  //! API's way to reach --fp-abstraction-width.
+  //!
+  FP_ABSTRACTION_WIDTH,
+
+  //! The highest rule tier emitted with a surrogate (default 3).
+  //!
+  //! `param_value` is that tier: 0 the exact class-and-sign shell alone, 1
+  //! adds the order facts, 2 the exponent bands and overflow selection, 3
+  //! the identities. Lower tiers are cheaper and prune less; every tier is
+  //! sound. A negative value is refused with a nonfatal diagnostic. This is
+  //! the C API's way to reach --fp-abstraction-tiers.
+  //!
+  FP_ABSTRACTION_TIERS,
+
+  //! How many value lemmas one abstracted operation may take before its
+  //! exact encoding is released (default 4).
+  //!
+  //! `param_value` is that count. A negative value is refused with a
+  //! nonfatal diagnostic. This is the C API's way to reach
+  //! --fp-abstraction-values.
+  //!
+  FP_ABSTRACTION_VALUES,
+
+  //! Spend model-instantiated trailing-exponent (exactness) lemmas before
+  //! value lemmas.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is
+  //! the C API's way to reach --fp-abstraction-shape.
+  //!
+  FP_ABSTRACTION_SHAPE,
+
+  //! Emit pairwise monotonicity lemmas between abstracted operations that
+  //! share an operand, for the pair a candidate violates.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is
+  //! the C API's way to reach --fp-abstraction-relational.
+  //!
+  FP_ABSTRACTION_RELATIONAL,
+
+  //! The packed width at or above which a monotonicity lemma is stated only
+  //! once the record's value budget is spent, instead of before its first
+  //! value lemma (default 128).
+  //!
+  //! `param_value` is that width; zero never defers, so every order is
+  //! stated up front at every width. A negative value is refused with a
+  //! nonfatal diagnostic. This is the C API's way to reach
+  //! --fp-abstraction-relational-last-width.
+  //!
+  FP_ABSTRACTION_RELATIONAL_LAST_WIDTH,
+
+  //! State each value lemma over the widest box of operand tuples -- the
+  //! candidate's sign, exponent and top fraction bits -- whose results
+  //! still share a prefix, rather than over one tuple.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is
+  //! the C API's way to reach --fp-abstraction-box-lemmas.
+  //!
+  FP_ABSTRACTION_BOX_LEMMAS,
+
+  //! After a refuted candidate, suggest to the SAT solver's decision
+  //! heuristic the operand values it tried and the exact result for them.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is
+  //! the C API's way to reach --fp-abstraction-phase-hints.
+  //!
+  FP_ABSTRACTION_PHASE_HINTS,
+
+  //! Before refining a candidate the abstraction refuted, replay the
+  //! original formula under it and accept the candidate as a model when the
+  //! formula holds for its values of the original symbols.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is
+  //! the C API's way to reach --fp-abstraction-repair.
+  //!
+  FP_ABSTRACTION_REPAIR,
+
+  //! How many times one query may run the pipeline again to release
+  //! operations exactly (default 4).
+  //!
+  //! `param_value` is that limit; past it, and whenever a run abstracted no
+  //! fewer operations than the run before it, releases are spliced instead.
+  //! A negative value is refused with a nonfatal diagnostic. Restarts are
+  //! a batch-pipeline notion: the incremental driver always splices, so
+  //! this does nothing under FP_ABSTRACTION_INCREMENTAL. This is the C
+  //! API's way to reach --fp-abstraction-restart-limit.
+  //!
+  FP_ABSTRACTION_RESTART_LIMIT,
+
+  //! The packed width at or above which releasing a multiplication,
+  //! division, square root, fma or remainder exactly runs the whole
+  //! pipeline again with it lowered exactly, so that the bit-vector
+  //! abstraction can see its circuit, instead of splicing the circuit into
+  //! the running solver.
+  //!
+  //! `param_value` is that width; zero never restarts and is the default.
+  //! Note that the command line raises that default to 128 when
+  //! --bv-term-abstraction is on, and this flag does not: a C caller that
+  //! wants the interaction asks for it by name. A negative value is refused
+  //! with a nonfatal diagnostic. This is the C API's way to reach
+  //! --fp-abstraction-restart-width.
+  //!
+  FP_ABSTRACTION_RESTART_WIDTH,
+
+  //! The significand bits of the reduced-precision bands emitted with an
+  //! abstracted multiplication, division or square root (default 8).
+  //!
+  //! `param_value` is that count; zero emits no bands. A negative value is
+  //! refused with a nonfatal diagnostic. This is the C API's way to reach
+  //! --fp-abstraction-significand-bits.
+  //!
+  FP_ABSTRACTION_SIGNIFICAND_BITS,
+
+  //! The same at packed widths of 128 bits and above (default 16).
+  //!
+  //! `param_value` is that count; zero uses FP_ABSTRACTION_SIGNIFICAND_BITS
+  //! everywhere. A negative value is refused with a nonfatal diagnostic.
+  //! This is the C API's way to reach
+  //! --fp-abstraction-significand-bits-wide.
+  //!
+  FP_ABSTRACTION_SIGNIFICAND_BITS_WIDE,
+
+  //! Leave exact any operation whose result the query equates directly with
+  //! a constant or a conversion -- the witness-hunt signature, where the
+  //! solve must produce the exact value anyway and a surrogate only defers
+  //! the circuit.
+  //!
+  //! `param_value` nonzero declines those, zero abstracts them (the
+  //! default). This is a *decline*: setting it turns the abstraction off
+  //! for a shape, not on. This is the C API's way to reach
+  //! --fp-abstraction-decline-pinned.
+  //!
+  FP_ABSTRACTION_DECLINE_PINNED,
+
+  //! Wall-clock seconds after which a batch refinement releases every
+  //! remaining record exactly, spliced in place, bounding a loss near the
+  //! budget instead of the timeout.
+  //!
+  //! `param_value` is that many seconds; zero never gives up and is the
+  //! default. A negative value is refused with a nonfatal diagnostic. This
+  //! is the C API's way to reach --fp-abstraction-budget.
+  //!
+  FP_ABSTRACTION_BUDGET,
+
+  //! Whether an operation one of whose float operands is a constant is
+  //! abstracted. Declined, such an operation goes to the exact lowering,
+  //! whose circuit for a constant is small and propagates, where the
+  //! abstraction has the solver search under rules for a free result.
+  //! Which is faster depends on the query: on linear arithmetic over
+  //! coefficients the exact lowering wins, on the polynomials of library
+  //! code the abstraction does.
+  //!
+  //! `param_value` 0 declines them for every query, 1 abstracts them for
+  //! every query, and 2 (the default) is automatic: abstracted when the
+  //! configuration abstracts an operation at least two of whose float
+  //! operands are not constants. This is the C API's way to reach
+  //! --fp-abstraction-constant-operands. Appended to preserve every
+  //! published ordinal.
+  //!
+  FP_ABSTRACTION_CONSTANT_OPERANDS
 
 };
 
@@ -999,7 +1215,69 @@ enum stp_counter_t
   //! one exact divider it would be invisible.
   STP_COUNTER_BV_SCHEMA_CLAUSES,
   STP_COUNTER_BV_SCHEMA_VARIABLES,
-  STP_COUNTER_BV_SCHEMA_MICROSECONDS
+  STP_COUNTER_BV_SCHEMA_MICROSECONDS,
+
+  //! What FP_ABSTRACTION did, on the same terms as the bit-vector counters
+  //! above: CANDIDATES is every application of an admitted kind the
+  //! abstraction was offered, ABSTRACTED the ones it took. Zero of both
+  //! means the query built no floating-point operation of an admitted kind
+  //! at or above FP_ABSTRACTION_WIDTH -- which is a different thing from
+  //! the abstraction being off, and the pair is what tells them apart.
+  //!
+  //! Accumulated across every instance the session builds: one per batch
+  //! solve, one more per restart, and one per encoding epoch under
+  //! FP_ABSTRACTION_INCREMENTAL. Like every counter here they only ever
+  //! rise.
+  STP_COUNTER_FP_CANDIDATES,
+  STP_COUNTER_FP_ABSTRACTED,
+
+  //! Occurrences that reused an existing record rather than minting one (an
+  //! operation is abstracted once per distinct application), and records
+  //! admitted as links in a chain by FP_ABSTRACTION_CHAIN_OPS rather than
+  //! outright by FP_ABSTRACTION_OPS.
+  STP_COUNTER_FP_SHARED,
+  STP_COUNTER_FP_CHAINED,
+
+  //! Rule conjuncts emitted with the surrogates at abstraction time, and
+  //! the ones relating records of different operations. These are what the
+  //! abstraction is for -- a query decided by the rules alone never
+  //! releases a circuit -- so a run with abstractions and no rule lemmas is
+  //! a tier setting, not a quiet corpus.
+  STP_COUNTER_FP_RULE_LEMMAS,
+  STP_COUNTER_FP_CROSS_RULES,
+
+  //! Record checks against a candidate, the ones a host's filter excluded
+  //! before evaluating, and the ones whose candidate disagreed with the
+  //! exact result.
+  STP_COUNTER_FP_CHECKS,
+  STP_COUNTER_FP_SKIPPED_CHECKS,
+  STP_COUNTER_FP_INCONSISTENT,
+
+  //! The refinement lemmas an inconsistent candidate earned, by kind. BOX
+  //! counts the value lemmas of them that FP_ABSTRACTION_BOX_LEMMAS widened
+  //! to a box of operand tuples, so it is a subset of VALUE and not a
+  //! separate total.
+  STP_COUNTER_FP_VALUE_LEMMAS,
+  STP_COUNTER_FP_BOX_LEMMAS,
+  STP_COUNTER_FP_SHAPE_LEMMAS,
+  STP_COUNTER_FP_RELATIONAL_LEMMAS,
+
+  //! Exact encodings released -- an operation that spent its value budget
+  //! and got its circuit after all -- and refinement rounds that encoded
+  //! one or more floating-point lemmas. A run whose releases approach its
+  //! abstractions decided almost nothing by the rules.
+  STP_COUNTER_FP_RELEASES,
+  STP_COUNTER_FP_REFINEMENT_ROUNDS,
+
+  //! Pipeline runs a query made past its first to release operations
+  //! exactly (FP_ABSTRACTION_RESTART_WIDTH), and refuted candidates the
+  //! replay accepted as models anyway (FP_ABSTRACTION_REPAIR).
+  STP_COUNTER_FP_RESTARTS,
+  STP_COUNTER_FP_REPAIRS,
+
+  //! Wall-clock microseconds spent lowering and splicing floating-point
+  //! lemmas, on the same terms as the bit-vector encode totals above.
+  STP_COUNTER_FP_LEMMA_MICROSECONDS
 };
 
 //! \brief Reads one of the counters above.

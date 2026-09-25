@@ -377,6 +377,15 @@ public:
 
   const FpAbstractionStatistics& statistics() const { return stats_; }
 
+  // Fold everything this instance has counted since it last published into
+  // the manager's session-long EncodingCoverage, which is what the C
+  // interface's vc_getCounter reads. Called from the destructor, so a
+  // session's totals are complete however an instance ended, and from
+  // STPMgr::publishFpCoverage, so a reader that asks mid-session -- a
+  // fuzzing campaign dumping coverage before it destroys the checker -- sees
+  // what the live instances have done so far. Idempotent: it publishes the
+  // delta since the last call, never the totals again.
+  void publishCoverage();
   void reportStatistics(std::ostream& out) const;
 
   // Test/inspection access.
@@ -416,6 +425,9 @@ private:
   size_t previouslyAbstracted_ = 0;
   bool restartAllowed_ = true;
   FpAbstractionStatistics stats_;
+  // What publishCoverage has already handed to the manager, so a second call
+  // adds only what happened in between.
+  FpAbstractionStatistics published_;
   // What the statistics said before the last check queued anything, so a
   // repaired candidate's discarded lemmas are not counted as spent.
   FpAbstractionStatistics statsBeforeCheck_;

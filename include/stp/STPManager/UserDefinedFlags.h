@@ -1744,6 +1744,38 @@ public:
     // constraints it installed for them.
     uint64_t uf_applications_lowered = 0;
     uint64_t uf_constraints_installed = 0;
+    // What the floating-point abstraction did, accumulated from every
+    // FpAbstraction the session builds: one per batch solve, one more per
+    // restart, and one per encoding epoch when the incremental driver hosts
+    // it. The instance's own FpAbstractionStatistics is per-instance and
+    // dies with it -- that is what --stats reports -- so the totals a
+    // session-long reader needs (a fuzzing campaign asking whether the
+    // abstraction engaged at all, above all) are folded in here as each
+    // instance is destroyed. Field for field the same quantities, so the
+    // two can be compared without a translation table.
+    uint64_t fp_candidates = 0;
+    uint64_t fp_abstracted = 0;
+    uint64_t fp_shared = 0;
+    uint64_t fp_chained = 0;
+    uint64_t fp_rule_lemmas = 0;
+    uint64_t fp_cross_rules = 0;
+    uint64_t fp_checks = 0;
+    uint64_t fp_skipped_checks = 0;
+    uint64_t fp_inconsistent = 0;
+    uint64_t fp_value_lemmas = 0;
+    uint64_t fp_box_lemmas = 0;
+    uint64_t fp_shape_lemmas = 0;
+    uint64_t fp_relational_lemmas = 0;
+    uint64_t fp_releases = 0;
+    uint64_t fp_refinement_rounds = 0;
+    // The restart count an instance carries is the number of runs BEFORE
+    // it, so a chain of n+1 instances reports 0,1,...,n and only the last
+    // is the query's total. Accumulating the differences rather than the
+    // values keeps this a count of restarts rather than a triangular
+    // number; see FpAbstraction's destructor.
+    uint64_t fp_restarts = 0;
+    uint64_t fp_repairs = 0;
+    uint64_t fp_lemma_microseconds = 0;
     // Queries that reached bit-blasting at all: the denominator, without
     // which a zero above cannot be told from a query the simplifier settled.
     uint64_t queries_bitblasted = 0;
