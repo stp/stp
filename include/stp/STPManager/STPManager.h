@@ -109,9 +109,10 @@ private:
   // asks. Recorded rather than derived because the reasons are produced in
   // different places -- a spent search budget wherever the solver was asked
   // to run, an abandoned encoding before it ever was -- and only one of them
-  // has anything to say beyond its name. The SMT-LIB frontend clears this at
-  // the top of every check-sat and on reset / reset-assertions. SMT-LIB reads
-  // it through (get-info :reason-unknown), and the C API through
+  // has anything to say beyond its name. Each frontend clears it at its own
+  // query boundary: the SMT-LIB frontend at the top of every check-sat and on
+  // reset / reset-assertions, the C API at the top of every vc_query. SMT-LIB
+  // reads it through (get-info :reason-unknown), and the C API through
   // vc_getReasonUnknown.
   UnknownReason unknown_reason = UnknownReason::None;
   std::string unknown_detail;
