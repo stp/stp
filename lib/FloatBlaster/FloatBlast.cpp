@@ -800,6 +800,16 @@ private:
     {
       out = n;
     }
+    else if (n.GetKind() == FP_TOFP && n.Degree() == 3 &&
+             n[2].GetKind() != BVCONST)
+    {
+      // The reinterpretation of a non-constant bit-vector: its packed bits
+      // are the operand's, payload included (canonicalPacked is where a
+      // caller that needs the NaN quotient asks). The constant case keeps
+      // its decode/encode route below so a constant reinterpretation still
+      // folds to the interned constant.
+      out = lower(n[2]);
+    }
     else if (n.GetKind() == UF_APPLY)
     {
       // Opaque carrier, like a leaf: the application's own bits are the

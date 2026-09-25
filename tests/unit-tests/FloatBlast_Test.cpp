@@ -247,6 +247,44 @@ TEST(FloatBlast, reinterpret_cache_distinguishes_equal_width_formats)
   EXPECT_EQ(0u, lower.statistics().pack_builds);
 }
 
+TEST(FloatBlast, predicate_over_reinterpretation_stays_native)
+{
+  STPMgr mgr;
+  const ASTNode bits =
+      mgr.CreateSourceSymbol("bits", SourceSort::bitVector(16));
+  const ASTNode binary16 = mgr.CreateTerm(
+      FP_TOFP, 16,
+      ASTVec{mgr.CreateBVConst(32, 5), mgr.CreateBVConst(32, 11), bits});
+  const ASTNode exponent8 = mgr.CreateTerm(
+      FP_TOFP, 16,
+      ASTVec{mgr.CreateBVConst(32, 8), mgr.CreateBVConst(32, 8), bits});
+
+  // The packed bits of ((_ to_fp eb sb) bits) are `bits`; a class predicate
+  // or comparison over the view is decided on those bits directly, as it is
+  // for a float symbol, so no SymFPU decode is built and the predicate
+  // survives lowering as a native leaf. The two views remain two nodes: the
+  // format is in the predicate's operand, not in the cache alone.
+  const ASTNode both =
+      mgr.CreateNode(AND, mgr.CreateNode(FP_ISNORMAL, binary16),
+                     mgr.CreateNode(FP_ISNORMAL, exponent8));
+
+  FloatBlast lower(&mgr);
+  const ASTNode lowered = lower.topLevel(both);
+
+  EXPECT_TRUE(containsFloatingPointKind(lowered));
+  EXPECT_EQ(0u, lower.statistics().unpack_builds);
+  EXPECT_EQ(0u, lower.statistics().pack_builds);
+  ASSERT_EQ(AND, lowered.GetKind());
+  ASSERT_EQ(2u, lowered.Degree());
+  EXPECT_NE(lowered[0], lowered[1]);
+  for (unsigned i = 0; i < 2; ++i)
+  {
+    EXPECT_EQ(FP_ISNORMAL, lowered[i].GetKind());
+    EXPECT_EQ(FP_TOFP, lowered[i][0].GetKind());
+    EXPECT_EQ(bits, lowered[i][0][2]);
+  }
+}
+
 TEST(FloatBlast, totalisation_defers_canonical_boundaries_to_lowering)
 {
   STPMgr mgr;
