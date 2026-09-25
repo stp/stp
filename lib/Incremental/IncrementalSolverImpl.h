@@ -55,6 +55,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/UninterpretedFunctions/UFLowering.h"
@@ -386,6 +387,15 @@ struct IncrementalSolver::Impl
   // shadows an active cell with a floating value, makes the checker
   // reject every candidate, and refinement cannot converge.
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> readsOfEncoded;
+  // Per encode key, the surrogates of the floating-point records the unit
+  // carries (abstractPiece's closure): the unit's share of the active
+  // closure.
+  // Same lifecycle as readsOfEncoded: written where the unit is encoded,
+  // kept while its cached encoding may be re-asserted, released with the
+  // encoding epoch. The exact-stack block's closure is held separately,
+  // for the round that encodes it.
+  std::map<ASTNode, std::set<ASTNode>> fpClosureOfKey;
+  std::set<ASTNode> fpBlockClosure;
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> chainsOfEncoded;
 
   IncrementalSymbolMapCache symbolMapCache;
@@ -395,6 +405,12 @@ struct IncrementalSolver::Impl
 
   // Created on first floating-point use; see fpContext().
   std::unique_ptr<FpEncodingContext> fpCtx;
+
+  // Created with the first abstracted piece (--fp-abstraction); one
+  // instance per encoding epoch, exactly as fpCtx, holding the records,
+  // their permanent facts and everything refinement teaches them. See
+  // fpAbstractionInst().
+  std::unique_ptr<FpAbstraction> fpAbs;
 
   // The completed public block and its current solve-local UF lowering.
   // UFPersistentAdapter owns block- and encoding-epoch-qualified clauses and
@@ -2360,7 +2376,22 @@ struct IncrementalSolver::Impl
              "encoding raw content over a dropped base definition");
 #endif
     if (frag.fp)
+    {
+      // The abstraction sits immediately before the lowering commits an
+      // operation to its circuit, exactly as in the batch pipeline. The
+      // piece's occurrences are replaced by surrogate views, which
+      // retract with the piece. Each piece carries its records' transitive
+      // proxy definitions and rule tiers, including cross-operation partners;
+      // only refinements and releases use the permanent fact ledger.
+      if (FpAbstraction* fa = fpAbstractionInst())
+      {
+        std::set<ASTNode> closure;
+        toEncode = fa->abstractPiece(toEncode, &closure);
+        fpClosureOfKey[key].swap(closure);
+        publishFpAbstraction();
+      }
       toEncode = fpContext()->lowerPrepared(toEncode);
+    }
 
     if (frag.arrays)
     {
@@ -2369,6 +2400,8 @@ struct IncrementalSolver::Impl
       toEncode = transformed.formula;
       readsOfEncoded[key].swap(transformed.touchedReads);
       chainsOfEncoded[key].swap(transformed.touchedChains);
+      recordDriverReadPairs(arrayRegistry.reads);
+      recordDriverReadPairs(batchAT->arrayToIndexToRead);
       assert(!containsArrayOps(toEncode, bm));
       totalizeRegistrySymbols();
 
@@ -2597,6 +2630,38 @@ struct IncrementalSolver::Impl
   // which is one per solve.
   void publishFpContext() { ce->setFpEncodingContext(fpContext()); }
 
+  // NULL while --fp-abstraction is off; otherwise the epoch's instance,
+  // created on first use. Releases always splice: a release by running
+  // the pipeline again has no meaning on a persistent solver.
+  FpAbstraction* fpAbstractionInst()
+  {
+    if (!bm->UserFlags.fp_abstraction ||
+        !bm->UserFlags.fp_abstraction_incremental ||
+        !bm->has_floating_point_theory)
+      return NULL;
+    if (!fpAbs)
+    {
+      fpAbs.reset(new FpAbstraction(bm));
+      fpAbs->forbidRestarts();
+      fpAbs->useBitPreciseEqualities();
+    }
+    return fpAbs.get();
+  }
+
+  // The preprocessing passes and the candidate checker find the instance
+  // through the manager and the counterexample machinery exactly as the
+  // batch pipeline's do -- and a batch warm-up or fallback solve clears
+  // those pointers at its end, so they are re-published wherever the
+  // driver needs them next.
+  void publishFpAbstraction()
+  {
+    if (fpAbs)
+    {
+      bm->setFpAbstraction(fpAbs.get());
+      ce->setFpAbstraction(fpAbs.get());
+    }
+  }
+
   // Give every bit of a symbol a CNF variable, allocating unconstrained
   // ones where the encoded cones never needed the bit. The refinement
   // machinery encodes congruence axioms straight over the bit variables of
@@ -2634,6 +2699,41 @@ struct IncrementalSolver::Impl
   std::map<std::pair<ASTNode, ASTNode>, size_t> seededChainRef;
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> foldedChainsOf;
   std::vector<ASTNode> pendingBaseSeed;
+  // Every read symbol the driver has ever encoded, per array, with the
+  // syntactic index it reads at: the persistent record the model-side
+  // row materialisation needs under eager Ackermannisation, where the
+  // batch transform tables are cleared per check and the registry only
+  // holds the registry-path subset. Cleared with the encoding epoch.
+  std::map<ASTNode, std::vector<ArrayTransformer::ReadKey>> driverReadPairs;
+  std::set<ASTNode> driverReadPairSymbols;
+  // The row's value term, by read symbol. A row's cell is NOT the bare
+  // read symbol: under eager Ackermannisation the transformer's row value
+  // is the congruence if-then-else over previously minted reads, and the
+  // bare symbol is only its all-indices-distinct branch. Materialising
+  // (symbol, symbol) rows binds a cell to that branch's SAT value even
+  // when the model makes another read's index coincide -- a value the
+  // encoding never constrained -- and every later evaluation that
+  // consults the cell diverges from the encoding built on the full
+  // if-then-else.
+  ASTNodeMap driverReadPairValue;
+
+  void recordDriverReadPairs(const ArrayTransformer::ArrType& table)
+  {
+    for (ArrayTransformer::ArrType::const_iterator it = table.begin();
+         it != table.end(); ++it)
+      for (ArrayTransformer::arrTypeMap::const_iterator rit =
+               it->second.begin();
+           rit != it->second.end(); ++rit)
+      {
+        if (driverReadPairSymbols.insert(rit->second.symbol).second)
+        {
+          driverReadPairs[it->first].push_back(
+              std::make_pair(rit->first, rit->second.symbol));
+          driverReadPairValue[rit->second.symbol] = rit->second.ite;
+        }
+      }
+  }
+
 
   // The PUSHED keys seedActiveReads last folded, sorted by node number; base
   // keys fold monotonically and need no fingerprint.
@@ -2770,6 +2870,64 @@ struct IncrementalSolver::Impl
       if (iit == ait->second.end())
         continue;
       fresh[ai.first].insert(*iit);
+    }
+    // Under eager Ackermannisation most reads never become registry rows:
+    // they are rewritten to fresh read symbols whose congruence lives in
+    // the persistent ack-pair chains. Model evaluation still resolves a
+    // source-level READ through the row table, so materialise a row for
+    // every ack pair as well -- the read symbol is its own value term, and
+    // its SAT assignment is exactly the cell's model value. Without these
+    // rows a mid-refinement or deferred model evaluates such cells with
+    // the invented completion, and every raw-stack verdict built on it is
+    // noise.
+    // Under eager Ackermannisation most reads never become registry rows:
+    // they are rewritten to fresh read symbols whose congruence lives in
+    // the ack-pair chains. Model evaluation still resolves a source-level
+    // READ through the row table, so materialise a row for every pair
+    // whose symbol the CURRENT solve actually carries -- congruence makes
+    // any live symbol at a cell the cell's value, while a pair from a
+    // piece this solve never blasted has no value at all and would poison
+    // the cell with a default.
+    // Under eager Ackermannisation most reads never become registry rows,
+    // and the batch tables they were transformed against are cleared per
+    // check: the persistent driver-owned read-pair record is the model
+    // side's source of rows. Only pairs whose symbol the CURRENT solve
+    // carries participate -- congruence makes any live symbol at a cell
+    // the cell's value, while a pair this solve never blasted has no
+    // value and would poison the cell with a default.
+    if (bm->UserFlags.ackermannisation)
+    {
+      const BBNodeManagerAIG::SymbolToBBNode& blasted =
+          encoding.nodes().symbolToBBNode;
+      auto live = [&](const ASTNode& s)
+      {
+        BBNodeManagerAIG::SymbolToBBNode::const_iterator it =
+            blasted.find(s);
+        if (it == blasted.end())
+          return false;
+        for (const BBNodeAIG& bit : it->second)
+          if (!bit.IsNull() && varOfAig(Aig_Regular(bit.n)) != -1)
+            return true;
+        return false;
+      };
+      for (const auto& ap : driverReadPairs)
+      {
+        ArrayTransformer::arrTypeMap& rows = fresh[ap.first];
+        for (const ArrayTransformer::ReadKey& rk : ap.second)
+        {
+          if (live(rk.second))
+          {
+            // The full row value, never the bare symbol: see
+            // driverReadPairValue.
+            ASTNodeMap::const_iterator vit =
+                driverReadPairValue.find(rk.second);
+            const ASTNode& value =
+                vit != driverReadPairValue.end() ? vit->second : rk.second;
+            rows.insert(std::make_pair(
+                rk.first, ArrayTransformer::ArrayRead(value, rk.second)));
+          }
+        }
+      }
     }
     batchAT->arrayToIndexToRead = fresh;
 
@@ -2933,12 +3091,26 @@ struct IncrementalSolver::Impl
     if (fpCtx)
       ce->setFpEncodingContext(NULL);
     fpCtx.reset();
+    if (fpAbs)
+    {
+      // The records and their ledger die with the epoch that keyed them;
+      // the rebuilt stack mints fresh ones.
+      if (bm->getFpAbstractionIfAny() == fpAbs.get())
+        bm->setFpAbstraction(NULL);
+      ce->setFpAbstraction(NULL);
+      fpAbs.reset();
+    }
     adapter.reset();
     symbolMapCache.releaseStorage();
 
+    releaseContainer(driverReadPairs);
+    releaseContainer(driverReadPairSymbols);
+    releaseContainer(driverReadPairValue);
     releaseContainer(fragmentCache);
     arrayRegistry.releaseStorage();
     releaseContainer(readsOfEncoded);
+    releaseContainer(fpClosureOfKey);
+    releaseContainer(fpBlockClosure);
     releaseContainer(exactStackKeepAlive);
     releaseContainer(exactScopedPreprocessOf);
     releaseContainer(preparedPieceOf);
@@ -3153,6 +3325,8 @@ struct IncrementalSolver::Impl
     harvestedEQAbstractions = 0;
     harvestedTermAbstractions = 0;
     assertedSideConstraints = 0;
+    if (fpAbs)
+      fpAbs->resetForNewSolverEpoch();
     abstractionScope = BVAbstractionScope::all();
     abstractionIdsOfEncodedRoot.clear();
     permanentAbstractionIds.clear();
@@ -3917,6 +4091,166 @@ struct IncrementalSolver::Impl
     out.insert(std::make_pair(n, vars));
   }
 
+  // Totalise the proxy and surrogate symbols and encode the pending
+  // floating-point lemmas (with any ledger backlog a SAT-backend rebuild
+  // left): the one way lemma clauses may reach the solver, so their
+  // symbol bindings are always driver-owned.
+  void encodeFpLemmas()
+  {
+    for (const ASTNode& s : fpAbs->protectedSymbols())
+      totalizeSymbol(s);
+    symbolMapCache.invalidate();
+    fpAbs->encodePendingLemmas(*solver, ensureAdapter());
+  }
+
+  // Arm the abstraction's active closure for this solve
+  // (--fp-abstraction-active-closure): the union of the record closures of
+  // every asserted unit -- the base level's, the active pushed levels' (the
+  // keys seedActiveReads uses for the same purpose) and, on the exact-stack
+  // route, the block's. Over-inclusion is harmless; a unit's closure is
+  // recorded where it is encoded, under the key its encoding is cached by,
+  // so a reused unit keeps its closure. With the flag off the abstraction
+  // reads every record, the measured baseline.
+  void armFpActiveClosure(const std::set<ASTNode>* blockClosure)
+  {
+    if (!fpAbs)
+      return;
+    if (!bm->UserFlags.fp_abstraction_active_closure)
+    {
+      fpAbs->disarmActiveClosure();
+      return;
+    }
+    std::set<ASTNode> active;
+    const auto add = [&](const ASTNode& key) {
+      const std::map<ASTNode, std::set<ASTNode>>::const_iterator it =
+          fpClosureOfKey.find(key);
+      if (it != fpClosureOfKey.end())
+        active.insert(it->second.begin(), it->second.end());
+    };
+    for (const ASTNode& k : level0Asserted)
+      add(k);
+    for (const ASTNode& k : scopes.activeSemanticKeys())
+      add(k);
+    if (blockClosure != NULL)
+      active.insert(blockClosure->begin(), blockClosure->end());
+    fpAbs->setActiveClosure(std::move(active));
+  }
+
+  void syncFpAbstraction()
+  {
+    if (!fpAbs || !fpAbs->hasUnassertedFacts())
+      return;
+    // Only after a SAT-backend rebuild: the ledger holds refinement
+    // lemmas and releases, pure bit-vector facts over the proxy and
+    // surrogate symbols. Give those symbols bits of the driver's own
+    // encoding before the splice binds them, as the extensionality
+    // checker's frozen symbols are totalised: BVExactEncoder binds
+    // symbols through the live map, and a binding it minted itself would
+    // be forgotten by the next symbol-map cache rebuild.
+    for (const ASTNode& s : fpAbs->protectedSymbols())
+      totalizeSymbol(s);
+    symbolMapCache.invalidate();
+    fpAbs->syncPermanentFacts(*solver, ensureAdapter());
+  }
+
+  // The same evaluation checkModelSatisfiesRawStack asserts, as a verdict:
+  // the floating-point repair asks it of every refuted candidate.
+  bool modelSatisfiesRawStackQuietly(const ASTVec& assertionsSMT2)
+  {
+    bm->ValidFlag = false;
+    ASTVec conjuncts;
+    for (const ASTNode& levelConjunction : assertionsSMT2)
+    {
+      conjuncts.clear();
+      splitConjuncts(levelConjunction, bm->ASTTrue, conjuncts);
+      for (const ASTNode& c : conjuncts)
+        if (ce->GetCounterExample(c) != bm->ASTTrue)
+          return false;
+    }
+    return true;
+  }
+
+  // The floating-point candidate check for the routes whose refinement
+  // loop is written out (they never enter CallSAT_ResultCheck, which
+  // carries the batch sequencing). Reads the candidate, checks every
+  // record the current solver carries, and either accepts the candidate
+  // -- consistent, or refuted but satisfying the raw stack anyway (the
+  // repair) -- or splices its lemmas. Returns true when lemmas were
+  // spliced and the caller must search again.
+  bool fpRefineCandidate(const ASTVec& assertionsSMT2)
+  {
+    if (!fpAbs || !fpAbs->active())
+      return false;
+    ScopedProfileTimer refinementTimer(profile.enabled, profile.refinementNs);
+    bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
+    // Eager Ackermannisation clears the batch transformer's tables per
+    // check, and counterexample construction evaluates source-level READ
+    // terms from the active read rows: without re-materialising them a
+    // mid-refinement candidate reports arbitrary array values, and every
+    // raw-stack verdict built on it -- the repair, and the replay below --
+    // is noise. The construct path at the end of the solve does exactly
+    // this (IncrementalSolver.cpp), for exactly this reason.
+    if (bm->UserFlags.ackermannisation)
+      seedActiveReads(scopes.activeSemanticKeys());
+    ce->ClearCounterExampleMap();
+    ce->ClearComputeFormulaMap();
+    seedEliminatedIntoModelChannel();
+    publishFpContext();
+    publishFpAbstraction();
+    // Every record must be readable before the verdict is trusted: a
+    // record whose surrogate has no bits in the current live map would be
+    // skipped by the filter below, and a Consistent verdict that never
+    // read it is no verdict at all. Totalising the protected symbols
+    // (cheap and memoised) puts every proxy and surrogate in the map.
+    for (const ASTNode& s : fpAbs->protectedSymbols())
+      totalizeSymbol(s);
+    symbolMapCache.invalidate();
+    ToSATBase* tosat = ensureAdapter();
+    const ToSATBase::ASTNodeToSATVar& live = tosat->SATVar_to_SymbolIndexMap();
+    ce->ConstructCounterExample(*solver, live, true);
+    // After the totalisation above every protected symbol is in the live
+    // map, so this filter admits every record: the check reads all epoch
+    // records, including those of popped pieces, whose proxies are then
+    // unconstrained. That is sound -- every refinement fact is a universal
+    // consequence of the exact equations, and the joint extension of a
+    // source model covers popped records -- and checkCandidate skips the
+    // one pattern such a proxy can take that no active record can, a mode
+    // that is not a rounding-mode encoding. The filter stays as the guard
+    // against a symbol the totalisation somehow missed, whose bits could
+    // not be read.
+    fpAbs->setCheckFilter(
+        [&live](const ASTNode& s) { return live.find(s) != live.end(); });
+    const FpAbstraction::Outcome outcome = fpAbs->checkCandidate(*ce);
+    fpAbs->setCheckFilter(nullptr);
+    bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+    if (outcome != FpAbstraction::Outcome::Conflict)
+    {
+      assert(outcome != FpAbstraction::Outcome::Restart);
+      // No raw-stack backstop: every encoding unit carries the
+      // definitions of every record it mentions, so the encoded stack is
+      // as strong as the exact one and a bit-precise Consistent verdict
+      // certifies the candidate -- exactly the batch argument, without
+      // the batch replay. The raw-stack evaluation stays best-effort (it
+      // serves -d and the repair) but is not an authority over FPCHK: on
+      // rebuild-heavy sessions a cell whose only readers lost their
+      // variables evaluates from a completion, and a backstop trusting
+      // that evaluation aborted genuinely satisfiable checks.
+      return false;
+    }
+    // The candidate's values for the original symbols may satisfy the raw
+    // stack even though a surrogate is wrong: the raw assertions mention
+    // no surrogate and evaluate every operation exactly. Then it is a
+    // model and nothing needs refining.
+    if (bm->UserFlags.fp_abstraction_repair &&
+        modelSatisfiesRawStackQuietly(assertionsSMT2))
+    {
+      fpAbs->acceptRepairedCandidate();
+      return false;
+    }
+    encodeFpLemmas();
+    return true;
+  }
+
   // Resolve the roots this route committed into a semantic, dependency-closed
   // record view. A root sees only the outer producer CI when one abstraction
   // consumes another, so direct AIG reachability is merely the seed; raw
@@ -4136,7 +4470,53 @@ struct IncrementalSolver::Impl
                                          &progress);
     if (res == SOLVER_UNDECIDED &&
         progress.emittedAxiomCount() == emittedBefore)
+    {
+      // A rejected candidate no array axiom explains, while abstracted
+      // floating-point records are still in play: fall back to the exact
+      // encoding of every record and search again. On deep chain-read
+      // stacks a candidate can satisfy every emitted axiom and every
+      // record lemma yet evaluate false on the raw operations the
+      // surrogates stand for; the exact circuits decide it the way the
+      // exact driver would. Fires at most once per epoch -- afterwards
+      // nothing is left abstracted -- so the guard below keeps its
+      // meaning for everything else.
+      if (fpAbs && fpAbs->active() && fpAbs->releaseAllUnreleased() > 0)
+      {
+        if (bm->UserFlags.stats_flag)
+          std::cerr << "Incremental: FP abstraction released every record "
+                       "after an unexplained rejection"
+                    << std::endl;
+        encodeFpLemmas();
+        // Search again here, as the read refinement does after its own
+        // axioms: the callers re-enter this round only for a pending
+        // lemma or a bit-vector refinement, and neither is left once the
+        // releases are spliced, so a round that returned undecided now
+        // would come straight back to a rejection with nothing left to
+        // release -- and answer unknown without ever searching the exact
+        // circuits it just installed.
+        return ce->CallSAT_ResultCheck(*solver, bm->ASTTrue, semanticRoot,
+                                       semanticRoot, tosat, true);
+      }
+      if (fpAbs && fpAbs->active())
+      {
+        // Everything is already released and the candidate is still
+        // rejected: on deep chain-read stacks the seeded axiom set can
+        // fail to pin a candidate the structural evaluation refutes, a
+        // divergence the exact driver's search happens never to expose.
+        // Answering this one check honestly beats aborting the session.
+        // No budget ran out, so say what did happen: a caller acting on
+        // the reason would otherwise retry with more time.
+        if (bm->UserFlags.stats_flag)
+          std::cerr << "Incremental: FP abstraction answering unknown for "
+                       "a rejection no axiom or release explains"
+                    << std::endl;
+        bm->noteUnknown(UnknownReason::Incomplete,
+                        "the incremental driver rejected a candidate that "
+                        "no array axiom or floating-point release explains");
+        return bm->unknownResult();
+      }
       FatalError(stuck);
+    }
     return res;
   }
 

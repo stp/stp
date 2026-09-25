@@ -145,8 +145,29 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
 IncrementalSolver* STP::getIncrementalSolver()
 {
   if (incrementalSolver == nullptr)
+  {
+    // The abstraction under the driver runs the batch candidate check on
+    // every solve, and that check's ordinary replay is the certifier of
+    // last resort. With lazy array reads the replay can reject a candidate
+    // that no seeded read axiom, chain lemma, or record release explains
+    // -- a completeness gap of the lazily seeded tables that the exact
+    // driver's search happens never to reach -- so a session under the
+    // floating-point abstraction takes the eager array expansion, where
+    // every measured session answers every check. Decided here, before the
+    // first piece is prepared, so the whole session sees one array strategy.
+    if (bm->UserFlags.fp_abstraction &&
+        bm->UserFlags.fp_abstraction_incremental &&
+        !bm->UserFlags.ackermannisation)
+    {
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "Note: --fp-abstraction under the incremental driver "
+                     "expands arrays eagerly (--ackermanize)."
+                  << std::endl;
+      bm->UserFlags.ackermannisation = true;
+    }
     incrementalSolver =
         new IncrementalSolver(bm, Ctr_Example, simp, arrayTransformer);
+  }
   return incrementalSolver;
 }
 

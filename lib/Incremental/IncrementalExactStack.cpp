@@ -210,8 +210,14 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
       break;
     }
     if (refinement.isFaithful())
-      break;
-    assert(refinement.madeProgress());
+    {
+      // The floating-point records, once the bit-vector ones are
+      // faithful; see the ordinary route.
+      if (!fpRefineCandidate(assertionsSMT2))
+        break;
+    }
+    else
+      assert(refinement.madeProgress());
 
     bm->GetRunTimes()->start(RunTimes::Solving);
     if (profile.enabled)
@@ -271,6 +277,19 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
   }
 
   bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
+  // Under eager Ackermannisation the evaluation of source-level reads
+  // needs the active read rows, exactly as on the ordinary route: this
+  // route's transform populated per-check tables that resetSolver()
+  // clears, and a model built without re-materialised rows answers
+  // unwritten cells with the invented completion -- a bogus published
+  // model, or a self-check abort on a genuine one. Scoped to epochs
+  // hosting the floating-point abstraction, whose model channel the
+  // rows serve: array-equality rounds populate these tables under the
+  // pointwise instantiation scheme, and splicing driver pairs captured
+  // from Ackermannised transforms into that namespace makes the model
+  // check reject genuine models.
+  if (bm->UserFlags.ackermannisation && fpAbstractionInst() != NULL)
+    seedActiveReads(scopes.activeSemanticKeys());
   ce->ClearCounterExampleMap();
   ce->ClearComputeFormulaMap();
   seedEliminatedIntoModelChannel();
@@ -278,6 +297,7 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
   // floating-point terms in the block; model evaluation needs the context
   // that lowered them, exactly as the refinement paths wire it.
   publishFpContext();
+  publishFpAbstraction();
 
   ToSATBase::ASTNodeToSATVar symbolMap;
   buildSymbolMap(symbolMap);
@@ -494,7 +514,18 @@ IncrementalSolver::Impl::exactStackCheckSat(
   scopes.commitWholeStack(stackTransaction);
 
   if (activeHasFp)
+  {
+    // As on the per-level route: abstraction immediately before lowering.
+    // The block is assumption-scoped and retracts whole; the records'
+    // definitions are permanent and follow via syncFpAbstraction.
+    if (FpAbstraction* fa = fpAbstractionInst())
+    {
+      fpBlockClosure.clear();
+      inputToSat = fa->abstractPiece(inputToSat, &fpBlockClosure);
+      publishFpAbstraction();
+    }
     inputToSat = fpContext()->lowerPrepared(inputToSat);
+  }
 
   const bool extPrepared = extActive && !inputToSat.isConstant();
   if (extPrepared)
@@ -531,7 +562,10 @@ IncrementalSolver::Impl::exactStackCheckSat(
 
   const bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
   if (arrayops)
+  {
     inputToSat = batchAT->TransformFormula_TopLevel(inputToSat);
+    recordDriverReadPairs(batchAT->arrayToIndexToRead);
+  }
   if (extPrepared)
     ext->bindAfterTransform(batchAT);
 
@@ -621,6 +655,12 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // blaster made are this driver's to refine. Taken across here, once this
   // round's block is encoded and before any search.
   syncAbstractions();
+  syncFpAbstraction();
+  if (fpAbs)
+  {
+    fpAbs->beginQuery();
+    armFpActiveClosure(activeHasFp ? &fpBlockClosure : NULL);
+  }
   // This round asserts one root: the block. Both routes below refine against
   // it, so the abstraction scope is named here rather than in each of them.
   if (!bvAbstraction.empty())
@@ -677,6 +717,10 @@ IncrementalSolver::Impl::exactStackCheckSat(
   }
 
   publishFpContext();
+  publishFpAbstraction();
+  // As on the ordinary refinement route: the replay is not the certifier
+  // here; see setFpRepairAllowed.
+  ce->setFpRepairAllowed(false);
 
   seedEliminatedIntoModelChannel();
 
@@ -753,6 +797,14 @@ IncrementalSolver::Impl::exactStackCheckSat(
     else if (activeUFView.active() && ufAdapter->hasPendingLemma())
     {
       ufAdapter->encodePendingLemmas(*solver, tosat);
+      res = ce->CallSAT_ResultCheck(*solver, bm->ASTTrue, semantic, prepared,
+                                    tosat, true);
+    }
+    else if (fpAbs && fpAbs->hasPendingLemma())
+    {
+      // FPCHK inside the call above refuted the candidate and the repair
+      // declined it; its lemmas are permanent facts of the epoch.
+      encodeFpLemmas();
       res = ce->CallSAT_ResultCheck(*solver, bm->ASTTrue, semantic, prepared,
                                     tosat, true);
     }

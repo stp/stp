@@ -6,6 +6,7 @@
 ;
 ; RUN: %solver %s | %OutputCheck %s
 ; RUN: %solver --fp-abstraction=true --fp-abstraction-ops=default,to_sbv,to_ubv -d %s | %OutputCheck %s
+; RUN: %solver --incremental=on --fp-abstraction=true --fp-abstraction-incremental=true --fp-abstraction-ops=default,to_sbv,to_ubv -d %s | %OutputCheck %s
 ; CHECK: ^unsat$
 (set-logic QF_BVFP)
 (declare-fun x () (_ FloatingPoint 8 24))
