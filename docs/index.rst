@@ -103,7 +103,7 @@ page <https://smt-lib.org/>`__.
    incremental-solving
    bv-abstraction
    fp-abstraction
-   lra-abstraction
+   linear-real-arithmetic
 
 Header
 ------
@@ -135,7 +135,7 @@ these, and rejects any other name:
    * - ``QF_UFBV``, ``QF_AUFBV``
      - bitvectors and uninterpreted functions, optionally with arrays
    * - ``QF_LRA``
-     - linear real arithmetic
+     - linear real arithmetic (see :doc:`linear-real-arithmetic`)
    * - ``QF_UFLRA``
      - linear real arithmetic and uninterpreted functions
    * - ``QF_FP``
