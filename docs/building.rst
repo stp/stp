@@ -113,23 +113,39 @@ CryptoMiniSat a configuration error, and ``-DUSE_CRYPTOMINISAT=OFF``
 never looks for one, which is what pins a build's set of backends to the
 flags that produced it. With ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do: STP clones and
 builds `stp/cryptominisat <https://github.com/stp/cryptominisat>`__ at a
-pinned commit, as it does for its other dependencies. An installed one is
-found and preferred, including one installed into ``deps/install``:
+pinned commit, as it does for its other dependencies. That commit, on the
+fork's ``stp-ipasir-up`` branch, is release 5.14.7 with the ``NOCADICAL``
+option and the IPASIR-UP propagator interface the linear-arithmetic theory
+drives. A CryptoMiniSat without the interface -- a release, or your
+distribution's -- still builds STP;
+that backend then hosts no theory propagator.
+Configure warns when the copy it found lacks the interface, because
+CryptoMiniSat is then still the default backend: ``--cadical`` restores the
+propagator for a run, and the pinned fork restores it for the build, named
+with ``-Dcryptominisat5_DIR`` or built by STP once no other copy is found.
+Configure answers the question by compiling against the copy it found;
+``-DCRYPTOMINISAT_HAS_UP=ON`` or ``OFF`` answers it instead, and ``OFF``
+accepts a copy without the interface without the warning. An installed one
+is found and preferred, including one installed into ``deps/install``:
 
 .. code-block:: bash
 
-    git clone https://github.com/msoos/cryptominisat
+    git clone https://github.com/stp/cryptominisat
     cd cryptominisat
+    git checkout e06847e1006f06ec630a62349d930e5ead54def6
     mkdir build && cd build
-    cmake ..
+    cmake .. -DNOCADICAL=ON -DBUILD_SHARED_LIBS=OFF -DSTATIC_BINARY=OFF \
+             -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     cmake --build . -j$(nproc)
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
 
-It is the one dependency STP does not build for you: it reaches the build
-as a CMake package rather than as a header and a library, and an
-ExternalProject would write that package only after the configure that
-has to read it. Install it, or run the script.
+The commit to check out is the one ``cmake/FindCryptoMiniSat.cmake`` pins,
+and the flags are among those it builds that commit with. ``-DNOCADICAL=ON``
+is the one that matters (see below); the others make a static,
+position-independent library, which links into a shared ``libstp`` and a
+static one alike. Moving the pin in that file is what moves it for the
+auto-download too.
 
 CaDiCaL is compiled in by default, is what a build without
 CryptoMiniSat solves with, and is worth having on hard bitvector

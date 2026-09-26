@@ -1,0 +1,5 @@
+# The patches under cmake/deps-utils are applied with `git apply` to dependency
+# checkouts whose line endings do not follow this repository's checkout
+# settings. Keep them byte for byte as committed, so that a checkout with
+# core.autocrlf does not give them CRLF endings that no longer apply.
+cmake/deps-utils/*.patch -text

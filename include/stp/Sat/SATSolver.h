@@ -298,6 +298,86 @@ public:
     (void)value;
   }
 
+  // ---------------------------------------------------------------------
+  // Theory propagation.
+  //
+  // A theory that takes part in the search rather than judging it after the
+  // fact. The backend reports assignments of the variables it was told to
+  // observe and reports movement between decision levels; the propagator
+  // answers with conflicts it has derived, and passes final judgement on a
+  // complete assignment before the backend calls it a model.
+  //
+  // This is what separates checking a candidate from steering the search
+  // that produces one. A backend with no such interface says so, and the
+  // caller keeps whatever candidate loop it already had -- so this is an
+  // optional capability, not a contract every backend has to meet.
+  // ---------------------------------------------------------------------
+  class TheoryPropagator
+  {
+  public:
+    virtual ~TheoryPropagator() {}
+
+    // The backend has just assigned these observed literals, in order.
+    virtual void notifyAssigned(const std::vector<Lit>& literals) = 0;
+
+    // The backend opened a new decision level, or backtracked to `level`.
+    virtual void notifyNewLevel() = 0;
+    virtual void notifyBacktrack(size_t level) = 0;
+
+    // Every observed variable is assigned. True accepts the assignment as a
+    // model; false rejects it, and the propagator must then have a clause.
+    virtual bool checkFoundModel() = 0;
+
+    // Take the pending clause, if there is one. Clears it.
+    virtual bool takeClause(std::vector<Lit>& clause) = 0;
+    // The next literal the theory implies under the current assignment, if
+    // it has one. The backend assigns it, and asks reasonFor() only if it
+    // ever needs to know why -- in conflict analysis -- which is what makes
+    // this cheaper than handing the implication over as a clause.
+    virtual bool propagate(Lit& /*literal*/) { return false; }
+    // The clause behind a literal handed out by propagate(): that literal
+    // first, then the negations of what it follows from. It is a fact of
+    // the theory, true under every assignment, so the backend may keep it
+    // or forget it as it likes. False only if the literal is unknown.
+    virtual bool reasonFor(Lit /*literal*/, std::vector<Lit>& /*clause*/)
+    {
+      return false;
+    }
+
+    // Optional sign advice for the backend's already-selected decision
+    // variable. No variable selection, solver mutation, or extra search.
+    virtual bool wantsDecisionPolarity() const { return false; }
+    virtual bool decisionPolarity(uint32_t /*variable*/, bool& /*value*/)
+    {
+      return false;
+    }
+
+    // Once this is true the propagator has failed and no verdict from this
+    // solve can be trusted. The backend stops asking.
+    virtual bool failed() const = 0;
+  };
+
+  // Whether this backend can host a TheoryPropagator at all.
+  virtual bool supportsTheoryPropagator() const { return false; }
+  virtual bool supportsDecisionPolarity() const { return false; }
+
+  // Connect one, naming every variable it needs to be told about. False if
+  // the backend cannot. The propagator must outlive the connection.
+  virtual bool connectTheoryPropagator(TheoryPropagator* /*propagator*/,
+                                       const std::vector<uint32_t>& /*observed*/)
+  {
+    return false;
+  }
+
+  virtual void disconnectTheoryPropagator() {}
+
+  // Notice, before a query's first solve, that a TheoryPropagator will be
+  // connected once the CNF exists. A backend that would otherwise rewrite
+  // its variables in ways that make them unobservable later -- CryptoMiniSat
+  // replaces equivalent literals -- keeps them observable from here on.
+  // Idempotent, and a no-op for a backend that needs no notice.
+  virtual void expectTheoryPropagator() {}
+
   // Bring every variable created so far to the backend's attention.
   //
   // A backend may declare variables lazily -- CaDiCaL's factoring layer
@@ -308,6 +388,12 @@ public:
   // much for a hint to do; a caller that knows it is between construction and
   // the first solve can ask for it explicitly here instead.
   virtual void declarePendingVariables() {}
+
+  // Experimental ablation between solves: retain the formula's model set and
+  // external variable identities, but discard search history. The caller
+  // must disconnect its theory propagator and reapply solve assumptions.
+  virtual bool supportsSearchReset() const { return false; }
+  virtual bool resetSearch() { return false; }
 
   // A decision hint: decide this variable, to this value, before the
   // backend's own heuristic chooses. Stronger than suggestPhase, which only
@@ -418,6 +504,12 @@ public:
   virtual uint32_t newVar() = 0;
 
   virtual uint32_t nVars() const = 0;
+
+  // Validate this backend's live variable domain without exposing its
+  // numbering convention. Most STP backends use [0,nVars()); CaDiCaL's
+  // public literals are one-based. The LRA coordinator and adapter check the
+  // variables they bind against it.
+  virtual bool validVariable(uint32_t x) const { return x < nVars(); }
 
   virtual void printStats() const = 0;
 

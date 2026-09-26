@@ -56,6 +56,13 @@ stp::CadicalOptions settings(int elim, int minimum = 10000, int maximum = 100000
   return stp::CadicalOptions{elim, minimum, maximum};
 }
 
+void addUnit(stp::SATSolver& solver, uint32_t variable, bool negative)
+{
+  stp::SATSolver::vec_literals clause;
+  clause.push(stp::SATSolver::mkLit(variable, negative));
+  solver.addClause(clause);
+}
+
 } // namespace
 
 TEST(CadicalOptions, FactoryAndSearchBiasPreserveExplicitSettings)
@@ -130,6 +137,35 @@ TEST(CadicalOptions, OlderCadicalRejectsEfficiencyControls)
                 std::string::npos)
           << error.what();
     }
+  }
+}
+
+TEST(CadicalOptions, SearchResetKeepsSettingsAndModelSemantics)
+{
+  for (int elim : {0, 1})
+  {
+    stp::Cadical solver(settings(elim));
+    ASSERT_TRUE(solver.setSearchBias(stp::SearchBias::SAT));
+    const uint32_t x = solver.newVar();
+    const uint32_t y = solver.newVar();
+    stp::SATSolver::vec_literals clause;
+    clause.push(stp::SATSolver::mkLit(x, false));
+    clause.push(stp::SATSolver::mkLit(y, false));
+    solver.addClause(clause);
+    addUnit(solver, x, true);
+    bool timedOut = false;
+    ASSERT_TRUE(solver.solve(timedOut));
+    EXPECT_FALSE(timedOut);
+    EXPECT_EQ(solver.modelValue(y), solver.true_literal());
+
+    ASSERT_TRUE(solver.resetSearch());
+    expectOptions(solver, elim, 10000, 100000);
+    ASSERT_TRUE(solver.solve(timedOut));
+    EXPECT_FALSE(timedOut);
+    EXPECT_EQ(solver.modelValue(y), solver.true_literal());
+    addUnit(solver, y, true);
+    EXPECT_FALSE(solver.solve(timedOut));
+    EXPECT_FALSE(timedOut);
   }
 }
 #else

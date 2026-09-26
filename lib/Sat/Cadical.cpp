@@ -517,6 +517,12 @@ bool Cadical::preferDecisions(const std::vector<DecisionHint>& wanted)
   if (searched || wanted.empty())
     return false;
 
+  // CaDiCaL has one external-propagator slot. If the theory already holds it,
+  // these stand down: the caller phases the hints instead, which is the same
+  // fallback it takes on a backend that cannot decide at all.
+  if (propagator_bridge)
+    return false;
+
   // As for a phase hint: the observed variable has to be the one the
   // clauses use, which under factor is the declared translation.
   if (factor_enabled && ext_of_stp.size() <= next_variable)
@@ -620,5 +626,287 @@ uint8_t Cadical::modelValue(uint32_t x) const
     return false_literal();
 }
 
+
+// ---------------------------------------------------------------------------
+// Theory propagation (IPASIR-UP).
+// ---------------------------------------------------------------------------
+
+int Cadical::externalOfStpVar(uint32_t var)
+{
+  if (!factor_enabled)
+    return static_cast<int>(var);
+  if (ext_of_stp.size() <= next_variable)
+    declareNewVariables();
+  return ext_of_stp[var];
+}
+
+bool Cadical::stpVarOfExternal(int external, uint32_t& var) const
+{
+  const int magnitude = external < 0 ? -external : external;
+  if (magnitude <= 0)
+    return false;
+  if (!factor_enabled)
+  {
+    var = static_cast<uint32_t>(magnitude);
+    return var <= next_variable;
+  }
+  const size_t index = static_cast<size_t>(magnitude);
+  if (index >= stp_of_ext.size())
+    return false;
+  var = stp_of_ext[index];
+  // Zero means "no STP variable lives here" -- a factoring extension
+  // variable, which the theory never observes and never hears about.
+  return var != 0;
+}
+
+bool Cadical::supportsDecisionPolarity() const
+{
+#if defined(STP_CADICAL_HAS_DECISION_POLARITY)
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool Cadical::connectTheoryPropagator(
+    SATSolver::TheoryPropagator* propagator,
+    const std::vector<uint32_t>& observed)
+{
+  if (propagator == nullptr || propagator_bridge ||
+      (propagator->wantsDecisionPolarity() && !supportsDecisionPolarity()))
+    return false;
+  if (factor_enabled && ext_of_stp.size() <= next_variable)
+    declareNewVariables();
+
+  // The decision hints may already hold the one external-propagator slot:
+  // they are handed over while the first CNF is built, which is before the
+  // atoms exist that bring the coordinator here. They are advisory and a
+  // refusal here is not -- the coordinator treats one as fatal -- so the
+  // theory takes the slot. What the hints observed stays observed, which
+  // costs only a notification the theory discards: a variable that is not
+  // one of its atoms is not in its map, and asserting it is a no-op.
+  if (hints)
+  {
+    s->disconnect_external_propagator();
+    hints.reset();
+  }
+
+  propagator_bridge.reset(new PropagatorBridge(*this, *propagator));
+  s->connect_external_propagator(propagator_bridge.get());
+
+  if (factor_enabled)
+  {
+    stp_of_ext.assign(ext_of_stp.size() + observed.size() + 1, 0);
+    for (uint32_t var = 1; var <= next_variable && var < ext_of_stp.size();
+         ++var)
+    {
+      const size_t external = static_cast<size_t>(ext_of_stp[var]);
+      if (external < stp_of_ext.size())
+        stp_of_ext[external] = var;
+    }
+  }
+
+  // Observing freezes the variable, so inprocessing will not eliminate an
+  // atom the theory is reasoning about.
+  propagator_bridge->reserveNotificationBuffer(observed.size());
+  for (uint32_t var : observed)
+    s->add_observed_var(externalOfStpVar(var));
+#if defined(STP_CADICAL_HAS_DECISION_POLARITY)
+  if (propagator->wantsDecisionPolarity())
+    s->connect_decision_polarity_advisor(propagator_bridge.get());
+#endif
+  return true;
+}
+
+#if defined(STP_CADICAL_HAS_DECISION_POLARITY)
+int Cadical::PropagatorBridge::advise_decision_polarity(int default_literal)
+{
+  // The backend supplied the variable, in external numbering (which may
+  // differ under factoring). Returning zero preserves its default sign.
+  uint32_t variable;
+  if (theory.failed() ||
+      !owner.stpVarOfExternal(std::abs(default_literal), variable))
+    return 0;
+  bool value = default_literal > 0;
+  try
+  {
+    if (theory.decisionPolarity(variable, value))
+      return value ? std::abs(default_literal) : -std::abs(default_literal);
+  }
+  catch (...)
+  {
+    // Advice has no semantic authority. A failed hint retains SAT's choice.
+  }
+  return 0;
+}
+#endif
+
+void Cadical::disconnectTheoryPropagator()
+{
+  if (!propagator_bridge)
+    return;
+  s->disconnect_external_propagator();
+  propagator_bridge.reset();
+  stp_of_ext.clear();
+}
+
+bool Cadical::resetSearch()
+{
+  if (!supportsSearchReset() || propagator_bridge || hints ||
+      next_variable > static_cast<uint32_t>(std::numeric_limits<int>::max()))
+    return false;
+  // CaDiCaL's documented copy preserves irredundant clauses, root units,
+  // options, preprocessing flags and witness reconstruction. Redundant
+  // learned clauses, activities, phases and assumptions are not cloned.
+  // Keep STP's external-variable translation and the query-wide deadline.
+  auto fresh = std::make_unique<CaDiCaL::Solver>();
+  s->copy(*fresh);
+  // A variable absent from the simplified clauses and reconstruction stack
+  // can still be named by STP's model reader or a future refinement. Preserve
+  // the allocated namespace even for these currently unconstrained atoms.
+  const int variables = std::max(s->vars(), static_cast<int>(next_variable));
+#if defined(CADICAL_MAJOR) && CADICAL_MAJOR >= 3
+  fresh->resize(variables);
+#else
+  fresh->reserve(variables);
+#endif
+  delete s;
+  s = fresh.release();
+  return true;
+}
+
+void Cadical::PropagatorBridge::notify_assignment(const std::vector<int>& lits)
+{
+  if (theory.failed())
+    return;
+  translated.clear();
+  for (int external : lits)
+  {
+    uint32_t var = 0;
+    if (!owner.stpVarOfExternal(external, var))
+      continue;
+    SATSolver::Lit literal;
+    literal.x = (var << 1) | (external < 0 ? 1u : 0u);
+    translated.push_back(literal);
+  }
+  if (!translated.empty())
+    theory.notifyAssigned(translated);
+}
+
+void Cadical::PropagatorBridge::notify_new_decision_level()
+{
+  if (theory.failed())
+    return;
+  theory.notifyNewLevel();
+}
+
+void Cadical::PropagatorBridge::notify_backtrack(size_t new_level)
+{
+  // A clause staged for the level we are leaving is no longer about the
+  // current trail, so it goes with it.
+  pending.clear();
+  pending_index = 0;
+  pending_active = false;
+  if (theory.failed())
+    return;
+  theory.notifyBacktrack(new_level);
+}
+
+bool Cadical::PropagatorBridge::cb_check_found_model(
+    const std::vector<int>& model)
+{
+  (void)model;
+  // A failed theory cannot vouch for anything. Accepting here would let a
+  // model out; the caller checks failed() and discards the verdict, and
+  // saying true is what lets the solve return at all.
+  if (theory.failed())
+    return true;
+  return theory.checkFoundModel();
+}
+
+bool Cadical::PropagatorBridge::cb_has_external_clause(bool& is_forgettable)
+{
+  // Every clause the theory hands over is a Farkas no-good: entailed by the
+  // theory, not by the current trail, so it stays true for the rest of the
+  // solve and must not be forgotten.
+  is_forgettable = false;
+  if (pending_active)
+    return true;
+  if (theory.failed())
+    return false;
+  pending.clear();
+  pending_index = 0;
+  if (!theory.takeClause(pending) || pending.empty())
+    return false;
+  pending_active = true;
+  return true;
+}
+
+int Cadical::PropagatorBridge::cb_propagate()
+{
+  if (theory.failed())
+    return 0;
+  SATSolver::Lit literal;
+  if (!theory.propagate(literal))
+    return 0;
+  const int external = owner.externalOfStpVar(literal.x >> 1);
+  return (literal.x & 1u) ? -external : external;
+}
+
+int Cadical::PropagatorBridge::cb_add_reason_clause_lit(int propagated_lit)
+{
+  // CaDiCaL asks for one reason at a time, literal by literal, and the
+  // clause must contain the propagated literal. A reason it cannot get
+  // would be an empty clause -- a refutation -- so the theory keeps the
+  // reason for every literal it hands out, and a lookup here cannot fail
+  // short of the theory having failed, after which nothing it says counts.
+  if (reason_for != propagated_lit)
+  {
+    reason.clear();
+    reason_index = 0;
+    reason_for = propagated_lit;
+    uint32_t var = 0;
+    SATSolver::Lit literal;
+    if (theory.failed() || !owner.stpVarOfExternal(propagated_lit, var))
+    {
+      reason_for = 0;
+      return 0;
+    }
+    literal.x = (var << 1) | (propagated_lit < 0 ? 1u : 0u);
+    if (!theory.reasonFor(literal, reason))
+    {
+      reason.clear();
+      reason_for = 0;
+      return 0;
+    }
+  }
+  if (reason_index == reason.size())
+  {
+    reason.clear();
+    reason_index = 0;
+    reason_for = 0;
+    return 0; // terminator
+  }
+  const SATSolver::Lit literal = reason[reason_index++];
+  const int external = owner.externalOfStpVar(literal.x >> 1);
+  return (literal.x & 1u) ? -external : external;
+}
+
+int Cadical::PropagatorBridge::cb_add_external_clause_lit()
+{
+  if (!pending_active)
+    return 0;
+  if (pending_index == pending.size())
+  {
+    pending.clear();
+    pending_index = 0;
+    pending_active = false;
+    return 0; // terminator
+  }
+  const SATSolver::Lit literal = pending[pending_index++];
+  const uint32_t var = literal.x >> 1;
+  const int external = owner.externalOfStpVar(var);
+  return (literal.x & 1u) ? -external : external;
+}
 
 } //end namespace stp

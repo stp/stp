@@ -21,7 +21,7 @@ cmake --build build -j$(nproc)
 sudo cmake --install build
 ```
 
-[CryptoMiniSat](https://github.com/msoos/cryptominisat) is the backend STP solves with by default, and `--auto-download` covers it like every other dependency: STP clones and builds [stp/cryptominisat](https://github.com/stp/cryptominisat) at a pinned commit. An installed one is found and preferred. `libgmp-dev`, `pkg-config` and `zlib1g-dev` are its packages, not STP's.
+[CryptoMiniSat](https://github.com/msoos/cryptominisat) is the backend STP solves with by default, and `--auto-download` covers it like every other dependency: STP clones and builds [stp/cryptominisat](https://github.com/stp/cryptominisat) at a pinned commit that carries the IPASIR-UP propagator interface the linear-arithmetic theory drives. A CryptoMiniSat without the interface still builds STP; that backend then hosts no theory propagator, configure warns about it, and `--cadical` restores one for a run. An installed one is found and preferred. `libgmp-dev`, `pkg-config` and `zlib1g-dev` are its packages, not STP's.
 
 [CaDiCaL](https://github.com/arminbiere/cadical) is compiled in alongside it, and is what a build without CryptoMiniSat solves with. `--cryptominisat`, `--cadical` or `--minisat` selects a compiled-in backend for one run.
 
