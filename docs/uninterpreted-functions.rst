@@ -70,6 +70,7 @@ ordinary term:
 Real positions
 --------------
 
+The arithmetic itself is described in :doc:`linear-real-arithmetic`.
 A Real has no bits for the checker to read, so a function with a ``Real``
 argument or result, and no floating-point position, is decided from the
 arithmetic instead, unless ``--uf-ackermann=on`` asks for its congruence
