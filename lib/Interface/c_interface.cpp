@@ -910,6 +910,26 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       b->UserFlags.lra_verify_canonical = param_value != 0;
       b->SetLraCanonicalVerification(b->UserFlags.lra_verify_canonical);
       break;
+    case LRA_PRESOLVE_SUBST:
+      b->UserFlags.lra_presolve_subst = param_value != 0;
+      break;
+    case LRA_PRESOLVE_BOUNDS:
+      b->UserFlags.lra_presolve_bounds = param_value != 0;
+      break;
+    case LRA_PRESOLVE_ROWS:
+      b->UserFlags.lra_presolve_rows = param_value != 0;
+      break;
+    case LRA_PRESOLVE_PROPAGATE:
+      b->UserFlags.lra_presolve_propagate = param_value != 0;
+      break;
+    case LRA_PRESOLVE_UNCONSTRAINED:
+      b->UserFlags.lra_presolve_unconstrained = param_value != 0;
+      break;
+    case LRA_FLOAT_DRIVER:
+      // Read when the coordinator builds or rebuilds its solve context, so
+      // setting it any time before a query is what takes effect.
+      b->UserFlags.lra_float_driver = param_value != 0;
+      break;
     case UF_LEMMAS_PER_ROUND:
       if (nonNegativeFlag(param_value, "UF_LEMMAS_PER_ROUND"))
         b->UserFlags.uf_lemmas_per_round = static_cast<unsigned>(param_value);

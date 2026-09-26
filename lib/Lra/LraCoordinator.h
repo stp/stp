@@ -4,6 +4,7 @@
 #include "LraAtomRegistry.h"
 #include "LraCandidateAdapter.h"
 #include "LraFrontend.h"
+#include "LraReconstruction.h"
 #include "RealModel.h"
 
 #include <chrono>
@@ -101,6 +102,12 @@ struct LraCoordinatorMetrics final
   std::uint64_t preregistration_nanoseconds = 0;
   std::uint64_t context_rebuild_nanoseconds = 0;
   std::uint64_t formula_evaluation_nanoseconds = 0;
+  /* How many committed models were checked against the query as the caller
+   * wrote it, rather than only against the presolved formula the solve
+   * actually ran on. One per committed model once presolve records the
+   * original for every Real query; zero says the five default-on presolve
+   * stages are outside the verification perimeter again. */
+  std::uint64_t original_formula_checks = 0;
   std::uint64_t publication_nanoseconds = 0;
 };
 
@@ -137,6 +144,10 @@ public:
   }
 
   bool ready() const noexcept;
+  void setReconstruction(LraReconstruction reconstruction)
+  {
+    reconstruction_ = std::move(reconstruction);
+  }
   const std::string& failureDetail() const noexcept { return failure_detail_; }
   void rethrowPreparationInterruption() const
   {
@@ -233,6 +244,8 @@ private:
   bool evaluateSubmittedFormula(const ASTNode& formula, const RealModel& model,
                                 AbsRefine_CounterExample& counterexample) const;
   bool validateSourcePredicates(const RealModel& model) const;
+  bool checkAgainstOriginal(const RealModel& model,
+                            AbsRefine_CounterExample& counterexample);
   std::unique_ptr<RealModel> materializeStagedModel(
       ) const;
   ASTVec requiredRealSymbols() const;
@@ -243,6 +256,7 @@ private:
   STPMgr& manager_;
   SATSolver& solver_;
   ASTNode submitted_formula_;
+  LraReconstruction reconstruction_;
   ASTNode solve_activation_;
   Frontend frontend_;
   LraAtomRegistry registry_;

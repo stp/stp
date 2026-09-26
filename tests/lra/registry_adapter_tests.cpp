@@ -1137,12 +1137,15 @@ void satBindingAndCandidateFailures()
 
 void propagatedModelOwnership()
 {
+  for (bool floating : {false, true})
   {
     STPMgr manager;
     Frontend frontend(manager);
     LraAtomRegistry registry(manager);
     const auto frame = registry.pushAssertionFrame();
     const auto x = manager.CreateSourceSymbol("retained_x", SourceSort::real());
+    // Continued-fraction reconstruction snaps this value to 1/3. The pinned
+    // equality must repair that proposal to the exact, slightly larger value.
     (void)registerNode(frontend, registry, frame, manager.CreateRealPredicate(
         EQ, x, manager.CreateRealConst("10000000001/30000000000")));
     const auto snapshot = registry.activeSnapshot();
@@ -1150,6 +1153,7 @@ void propagatedModelOwnership()
     const auto bindings = makeBindings(snapshot, solver);
     setAll(bindings, solver, true);
     LraSolveContext context(registry, solver, generousLimits());
+    context.setFloatDriver(floating);
     require(context.bindOpaqueAtoms(bindings.bindings), "retained model bindings");
     LraCandidateAdapter adapter(context, solver);
     std::vector<uint32_t> observed;
@@ -1163,6 +1167,9 @@ void propagatedModelOwnership()
             "retained model was not certified");
     const auto core_before = context.coreStatistics();
     const auto before = context.metrics();
+    if (floating)
+      require(core_before.model_repairs == 1 && before.float_models_refined == 1,
+              "non-dyadic witness did not exercise exact numerical repair");
     // CryptoMiniSat unwinds here before returning SAT. The empty notification
     // is also harmless: it conveys no new search activity.
     adapter.notifyBacktrack(0);
@@ -1179,6 +1186,7 @@ void propagatedModelOwnership()
                 core_after.model_verifications == core_before.model_verifications &&
                 core_after.model_repairs == core_before.model_repairs &&
                 core_after.models_produced == core_before.models_produced &&
+                after.float_models_refined == before.float_models_refined &&
                 after.candidates_started == before.candidates_started &&
                 after.models_staged == before.models_staged + 1,
             "publication solved or certified the accepted model again");
@@ -1199,6 +1207,7 @@ void propagatedModelOwnership()
   }
 
   enum class Change { NewSearch, NewLevel, Assignment, FinalSelection, Disconnect, Mutation };
+  for (bool floating : {false, true})
     for (const auto change : {Change::NewSearch, Change::NewLevel,
                               Change::Assignment, Change::FinalSelection,
                               Change::Disconnect, Change::Mutation})
@@ -1209,6 +1218,7 @@ void propagatedModelOwnership()
       const auto variable = bindings.components.begin()->second;
       solver.set(variable, true);
       LraSolveContext context(fixture.registry, solver, generousLimits());
+      context.setFloatDriver(floating);
       require(context.bindOpaqueAtoms(bindings.bindings), "stale witness bindings");
       LraCandidateAdapter adapter(context, solver);
       std::vector<uint32_t> observed;
@@ -1249,10 +1259,80 @@ void propagatedModelOwnership()
     }
 }
 
+void modelRefinementStops()
+{
+  for (bool propagated : {false, true})
+    for (bool interrupt : {false, true})
+    {
+      STPMgr manager;
+      Frontend frontend(manager);
+      LraAtomRegistry registry(manager);
+      const auto frame = registry.pushAssertionFrame();
+      const auto x = manager.CreateSourceSymbol("refinement_x", SourceSort::real());
+      (void)registerNode(frontend, registry, frame, manager.CreateRealPredicate(
+          REAL_GE, x, manager.CreateRealConst("0")));
+      FakeSolver solver;
+      const auto bindings = makeBindings(registry.activeSnapshot(), solver);
+      setAll(bindings, solver, true);
+      std::atomic<bool> interrupted{false};
+      LraSolveContext context(
+          registry, solver, generousLimits(),
+          interrupt ? std::numeric_limits<std::uint64_t>::max() : 0,
+          &interrupted);
+      context.setFloatDriver(true);
+      require(context.ready() && context.bindOpaqueAtoms(bindings.bindings),
+              "refinement stop binding failed");
+      LraCandidateAdapter adapter(context, solver);
+      if (propagated)
+      {
+        std::vector<uint32_t> observed;
+        require(adapter.beginTheoryPropagation(observed),
+                "refinement stop propagation setup failed");
+        adapter.notifyAssigned(
+            {SATSolver::mkLit(bindings.components.begin()->second, false)});
+      }
+      // Zero already satisfies the float bounds, so its feasibility check
+      // needs no pivot and does not poll. Certification must observe the
+      // stop and must not replay the assignment into the exact core.
+      const auto before = context.coreStatistics();
+      interrupted.store(interrupt, std::memory_order_relaxed);
+      if (propagated)
+      {
+        require(adapter.checkFoundModel() && adapter.failed() &&
+                    context.status() == SolveContextStatus::ResourceLimit,
+                "propagated refinement stop did not end the attempt");
+      }
+      else
+      {
+        const auto checked = adapter.checkCompleteCandidate();
+        require(checked.outcome == (interrupt ? AdapterOutcome::Interrupted
+                                             : AdapterOutcome::ResourceLimit) &&
+                    context.ready(),
+                "refinement stop was not reported as the observer requested");
+      }
+      const auto after = context.coreStatistics();
+      require(after.assertions == before.assertions &&
+                  after.pushes == before.pushes && after.checks == before.checks &&
+                  context.pendingClauseForTesting() == nullptr &&
+                  context.stagedModelForTesting() == nullptr,
+              "stopped refinement replayed or published a candidate");
+      if (!propagated && interrupt)
+      {
+        interrupted.store(false, std::memory_order_relaxed);
+        require(adapter.checkCompleteCandidate().outcome ==
+                    AdapterOutcome::ModelStaged,
+                "interrupted refinement was not safely retryable");
+      }
+      if (propagated)
+        adapter.endTheoryPropagation();
+    }
+}
+
 void interruptionAndResource()
 {
   // A backend can accept checkFoundModel's stop response before its own
   // deadline poll. No model may be recovered from the incomplete trail.
+  for (bool floating : {false, true})
     for (bool skip_assignment : {false, true})
     {
       SinglePredicateFixture fixture;
@@ -1261,6 +1341,7 @@ void interruptionAndResource()
       const auto variable = bindings.components.begin()->second;
       solver.set(variable, true);
       LraSolveContext context(fixture.registry, solver, generousLimits());
+      context.setFloatDriver(floating);
       require(context.ready() && context.bindOpaqueAtoms(bindings.bindings),
               "propagation deadline fixture binding failed");
       LraCandidateAdapter adapter(context, solver);
@@ -1570,6 +1651,7 @@ int main()
     modelLookupIdentitiesAndBudget();
     satBindingAndCandidateFailures();
     propagatedModelOwnership();
+    modelRefinementStops();
     interruptionAndResource();
     corruptionAndClauseFailures();
     equalitySnapshotRejection();

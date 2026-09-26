@@ -275,7 +275,13 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
      * caller asks for it. */
     context_->setConflictVerification(
         manager_.UserFlags.lra_verify_conflicts);
+    context_->setFloatPromotionBudget(manager_.UserFlags.lra_float_promotion_budget);
     context_->setSeparateModelValues(separateModelValuesEnabled());
+    context_->setFloatDriver(manager_.UserFlags.lra_float_driver &&
+                             !manager_.UserFlags.lra_force_exact_driver);
+    context_->setFloatRerouteBudget(manager_.UserFlags.lra_float_reroute);
+    context_->setFloatRerouteFloor(manager_.UserFlags.lra_float_reroute_floor);
+    context_->setConflictRecovery(manager_.UserFlags.lra_conflict_recovery);
     if (!context_->ready())
       rethrowContextFailure(*context_, "exact LRA context creation failed");
     adapter_ = std::make_unique<LraCandidateAdapter>(*context_, solver_);
@@ -655,7 +661,13 @@ void LraCoordinator::rebuildCoreAndContext()
       registry_, solver_, frontend_.numberLimits(), frame_);
   increment(metrics_.core_rebuilds);
   context_->setConflictVerification(manager_.UserFlags.lra_verify_conflicts);
+  context_->setFloatPromotionBudget(manager_.UserFlags.lra_float_promotion_budget);
   context_->setSeparateModelValues(separateModelValuesEnabled());
+  context_->setFloatDriver(manager_.UserFlags.lra_float_driver &&
+                           !manager_.UserFlags.lra_force_exact_driver);
+  context_->setFloatRerouteBudget(manager_.UserFlags.lra_float_reroute);
+  context_->setFloatRerouteFloor(manager_.UserFlags.lra_float_reroute_floor);
+  context_->setConflictRecovery(manager_.UserFlags.lra_conflict_recovery);
   if (!context_->ready())
     rethrowContextFailure(*context_, "exact LRA context rebuild failed");
   adapter_ = std::make_unique<LraCandidateAdapter>(*context_, solver_);
@@ -1268,6 +1280,16 @@ bool LraCoordinator::readOpaqueValue(const ASTNode& atom,
   return true;
 }
 
+bool LraCoordinator::checkAgainstOriginal(
+    const RealModel& model, AbsRefine_CounterExample& counterexample)
+{
+  const bool held =
+      evaluateSubmittedFormula(reconstruction_.original, model, counterexample);
+  if (held)
+    increment(metrics_.original_formula_checks);
+  return held;
+}
+
 bool LraCoordinator::validateSourcePredicates(const RealModel& model) const
 {
   for (const PredicateRegistration& predicate : preregistered_.predicates)
@@ -1656,7 +1678,9 @@ CommitOutcome LraCoordinator::verifyAndCommit(
         });
     if (!validateSourcePredicates(*candidate) ||
         !evaluateSubmittedFormula(submitted_formula_, *candidate,
-                                  counterexample))
+                                  counterexample) ||
+        (!reconstruction_.original.IsNull() &&
+         !checkAgainstOriginal(*candidate, counterexample)))
       throw std::runtime_error(
           "original submitted formula rejects the combined exact model");
     addElapsed(metrics_.formula_evaluation_nanoseconds, evaluation_start);
@@ -1756,6 +1780,31 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << ",\"partial_conflicts\":" << solve.partial_conflicts
       << ",\"partial_checks_abandoned\":" << solve.partial_checks_abandoned
       << ",\"partial_checks_disabled\":" << solve.partial_checks_disabled
+      << ",\"float_assertions\":" << solve.float_assertions
+      << ",\"float_checks\":" << solve.float_checks
+      << ",\"float_check_conflicts\":" << solve.float_check_conflicts
+      << ",\"float_local_conflicts\":" << solve.float_local_conflicts
+      << ",\"float_checks_abandoned\":" << solve.float_checks_abandoned
+      << ",\"float_replays\":" << solve.float_replays
+      << ",\"float_replay_conflicts\":" << solve.float_replay_conflicts
+      << ",\"float_replay_consistent\":" << solve.float_replay_consistent
+      << ",\"float_disabled\":" << solve.float_disabled
+      << ",\"float_pivots\":" << solve.float_pivots
+      << ",\"float_check_ns\":" << solve.float_check_nanoseconds
+      << ",\"float_sync_ns\":" << solve.float_sync_nanoseconds
+      << ",\"float_certified\":" << solve.float_certified
+      << ",\"float_certificate_failed\":" << solve.float_certificate_failed
+      << ",\"conflict_recovery_attempts\":" << core.conflict_recovery_attempts
+      << ",\"conflict_recoveries\":" << core.conflict_recoveries
+      << ",\"conflict_recovery_ns\":" << core.conflict_recovery_nanoseconds
+      << ",\"float_models_refined\":" << solve.float_models_refined
+      << ",\"float_model_refine_failed\":"
+      << solve.float_model_refine_failed
+      << ",\"float_restarts\":" << solve.float_restarts
+      << ",\"float_rebuilds\":" << solve.float_rebuilds
+      << ",\"float_generalisations\":" << solve.float_generalisations
+      << ",\"float_factorized\":" << solve.float_factorized
+      << ",\"float_promotions\":" << solve.float_promotions
       << ",\"exact_pivots\":" << core.pivots
       << ",\"bland_pivots\":" << core.bland_pivots
       << ",\"support_literals\":" << metrics_.conflict_support_literals
@@ -1772,6 +1821,7 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << ",\"polarity_advice\":" << solve.polarity_advice
       << ",\"polarity_changes\":" << solve.polarity_changes
       << ",\"polarity_abstentions\":" << solve.polarity_abstentions
+      << ",\"polarity_float\":" << solve.polarity_float
       << ",\"polarity_exact\":" << solve.polarity_exact
       << ",\"core_rebuilds\":" << metrics_.core_rebuilds
       << ",\"core_rebuild_time_ns\":"
@@ -1787,6 +1837,7 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << ",\"model_mapping_ns\":" << solve.model_mapping_nanoseconds
       << ",\"original_formula_evaluation_ns\":"
       << metrics_.formula_evaluation_nanoseconds
+      << ",\"original_formula_checks\":" << metrics_.original_formula_checks
       << ",\"publication_ns\":" << metrics_.publication_nanoseconds
       << ",\"array_consistent\":" << metrics_.array_consistent
       << ",\"array_conflicts\":" << metrics_.array_conflicts

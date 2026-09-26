@@ -169,9 +169,12 @@ add_library(stp_lra_product_objects OBJECT
   LraFrontend.cpp
   LraAtomRegistry.cpp
   RealModel.cpp
+  FloatSimplex.cpp
+  FloatBasis.cpp
   LraSolveContext.cpp
   LraCandidateAdapter.cpp
   LraCoordinator.cpp
+  LraPresolve.cpp
   ExactLraCore.cpp
   ExactLraRegistration.cpp
   ExactConflictVerifier.cpp
@@ -313,6 +316,8 @@ target_include_directories(stp_lra_core SYSTEM PUBLIC
 # only code allowed to invoke SAT search.
 add_library(stp_lra_integration STATIC EXCLUDE_FROM_ALL
   RealModel.cpp
+  FloatSimplex.cpp
+  FloatBasis.cpp
   LraSolveContext.cpp
   LraCandidateAdapter.cpp
   LraCoordinator.cpp

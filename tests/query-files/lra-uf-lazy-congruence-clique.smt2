@@ -1,8 +1,8 @@
 ; RUN: %solver --SMTLIB2 -s %s 2>&1 | %OutputCheck %s
 ;
 ; Three arguments pinned to [0, 1] with three results that must differ. The
-; first model may put all three arguments at 0, one collision group, or
-; it may already separate some of them. Stating
+; float driver's first model puts all three arguments at 0, one collision
+; group; an exact candidate may already separate some of them. Stating
 ; every disagreeing pair of a small group should settle this within one
 ; refinement round, using at most the three pairs. The deterministic
 ; UFLowering.LazySmallCollisionEmitsEveryPair unit test checks that a group

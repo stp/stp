@@ -19,6 +19,7 @@ struct AffinePolynomial final
 struct AffineNormalizationOptions final
 {
   bool allow_applications = false;
+  bool skip_zero_products = false;
 };
 
 /* Accumulate an affine expression over the AST DAG, not over its paths.
@@ -30,7 +31,8 @@ struct AffineNormalizationOptions final
  * growing polynomial for every intermediate sum.
  *
  * The frontend validates even subterms whose final scale cancels to zero.
- * Applications, when enabled, are opaque leaves.
+ * Presolve may opt into its existing 0*t shortcut, since it does not own
+ * input-fragment validation. Applications, when enabled, are opaque leaves.
  */
 template <typename ResolveSymbol, typename Visit, typename Poll>
 AffinePolynomial normalizeAffineDag(
@@ -115,8 +117,11 @@ AffinePolynomial normalizeAffineDag(
               FrontendFailureKind::Unsupported,
               "real * requires exactly one concrete exact rational operand");
         node.factor.emplace(constant(term[left_constant ? 0 : 1]));
-        node.first_child = left_constant ? 1 : 0;
-        node.end_child = node.first_child + 1;
+        if (!options.skip_zero_products || !node.factor->isZero())
+        {
+          node.first_child = left_constant ? 1 : 0;
+          node.end_child = node.first_child + 1;
+        }
         break;
       }
       case REAL_DIV:

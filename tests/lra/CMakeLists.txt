@@ -107,6 +107,52 @@ add_test(NAME lra_preparation_deadline COMMAND stp_lra_preparation_deadline_test
 set_tests_properties(lra_preparation_deadline PROPERTIES
   LABELS "lra;frontend;model;deadline")
 
+add_executable(stp_lra_float_basis_tests
+  float_basis_tests.cpp)
+target_link_libraries(stp_lra_float_basis_tests PRIVATE
+  stp_lra_focused_host
+  stp_lra_integration
+)
+set_property(TARGET stp_lra_float_basis_tests PROPERTY
+  INCLUDE_DIRECTORIES
+  "${PROJECT_SOURCE_DIR}/lib/Lra"
+)
+set_property(TARGET stp_lra_float_basis_tests PROPERTY
+  COMPILE_DEFINITIONS "")
+set_target_properties(stp_lra_float_basis_tests PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+add_test(NAME lra_float_basis COMMAND stp_lra_float_basis_tests)
+
+add_executable(stp_lra_float_simplex_tests
+  float_simplex_tests.cpp)
+target_link_libraries(stp_lra_float_simplex_tests PRIVATE
+  stp_lra_focused_host
+  stp_lra_integration
+)
+set_property(TARGET stp_lra_float_simplex_tests PROPERTY
+  INCLUDE_DIRECTORIES
+  "${PROJECT_SOURCE_DIR}/lib/Lra"
+)
+set_property(TARGET stp_lra_float_simplex_tests PROPERTY
+  COMPILE_DEFINITIONS "")
+set_target_properties(stp_lra_float_simplex_tests PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+if(MSVC)
+  target_compile_options(stp_lra_float_simplex_tests PRIVATE /W4)
+else()
+  target_compile_options(stp_lra_float_simplex_tests PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
+  )
+endif()
+add_test(NAME lra_float_simplex COMMAND stp_lra_float_simplex_tests)
+set_tests_properties(lra_float_simplex PROPERTIES LABELS "lra")
+
 add_executable(stp_lra_registry_adapter_tests
   registry_adapter_tests.cpp
   "${PROJECT_SOURCE_DIR}/lib/Lra/LraBudgetRefusal.cpp")
@@ -213,10 +259,26 @@ if(STP_EXECUTABLE_AVAILABLE)
       "$<TARGET_FILE:stp-bin>")
   set_tests_properties(lra_mixed_uf_model_cli PROPERTIES
     LABELS "lra;uf;model;semantic" TIMEOUT 120)
+  add_test(NAME lra_affine_dag_cli
+    COMMAND "${PYTHON_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/affine_dag_runner.py"
+      "$<TARGET_FILE:stp-bin>")
+  set_tests_properties(lra_affine_dag_cli PROPERTIES
+    LABELS "lra;frontend;semantic;presolve" TIMEOUT 60)
   add_test(NAME lra_dyadic_arithmetic
     COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/dyadic_arithmetic_runner.py"
       "$<TARGET_FILE:stp_lra_exact_tests>")
   set_tests_properties(lra_dyadic_arithmetic PROPERTIES LABELS "lra;arithmetic;differential" TIMEOUT 90)
+  add_test(NAME lra_dense_bounds_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/dense_bounds_runner.py"
+            "$<TARGET_FILE:stp-bin>")
+  set_tests_properties(lra_dense_bounds_cli PROPERTIES
+    LABELS "lra;semantic;presolve" TIMEOUT 240)
+  add_test(NAME lra_conflict_recovery_cli
+    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/conflict_recovery_runner.py"
+            "$<TARGET_FILE:stp-bin>")
+  set_tests_properties(lra_conflict_recovery_cli PROPERTIES
+    LABELS "lra;semantic;conflict-recovery" TIMEOUT 120)
   add_test(NAME lra_semantic_context_matrix
     COMMAND "${PYTHON_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/semantic_runner.py"

@@ -777,6 +777,52 @@ public:
   // full-lazy loop regardless.
   bool lra_theory_propagation = true;
 
+  // Drive the propagator's partial checks with a double-precision simplex
+  // (the engine's advisory floating-point tier), the exact core consulted
+  // only to re-derive its conflicts and to judge complete assignments. Every
+  // certificate and every model stays exact. On by default (medians of
+  // three over 3,037 QF_LRA and QF_UFLRA files, no answer disagreement):
+  // +38 QF_LRA files at 20 s, QF_UFLRA level, the typical file a quarter
+  // faster. =0 selects the exact core alone.
+  bool lra_float_driver = true;
+  // When the float tier's live tableau grows past this multiple of its
+  // pristine (as-built) nonzero count, the current query is re-solved on the
+  // exact driver from its start. A handful of cpachecker `cilled` files
+  // rebuild the incremental float tableau every round until its fill reaches
+  // tens of times pristine and it does not terminate, while the exact driver
+  // settles each in under a second; degrading a check mid-solve cannot help,
+  // because the giant tableau is already built. The exact core certifies every
+  // float result, so the reroute is verdict-preserving by construction -- it
+  // only changes the runtime. A healthy incremental solve stays near 1.3x, so
+  // a multiple well above that separates the pathology cleanly. 0 disables the
+  // reroute. On at 4 since it measured no harm at 30 s and a clean gain at
+  // 120 s: over the whole multi-query corpus at 30 s it is +1 solved / PAR-2
+  // within noise / no answer disagreement, and on a harder subset at 120 s
+  // it is +5 solved (43->48) / PAR-2 -15.4% / no disagreement. Paired with
+  // the floor below, which is what keeps it from firing on small healthy
+  // problems. Set by --lra-float-reroute.
+  unsigned lra_float_reroute = 4;
+  // Absolute floor, in live nonzeros, the tableau must also exceed before a
+  // reroute fires. The fill ratio alone is a poor detector: a small healthy
+  // problem easily exceeds any multiple of its tiny pristine count -- a corpus
+  // scan found 134 files tripping ratio 8, of which 131 solved on the float
+  // driver anyway, all with live fill under 400K, while the genuine blow-ups
+  // reach millions. The floor tells the two apart, so a query reroutes only
+  // when its tableau is both growing pathologically (the ratio) and large in
+  // absolute terms (this). 0 means no floor. Default 500,000: the false
+  // positives above sat under 400K live nonzeros, the genuine blow-ups reach
+  // millions, so this sits cleanly between them. Set by
+  // --lra-float-reroute-floor.
+  unsigned lra_float_reroute_floor = 500000;
+  // Runtime latch, not a user setting: once a query has rerouted, the exact
+  // driver is kept for the rest of the session (the file has shown itself
+  // pathological for the float tier). The coordinator reads it alongside
+  // lra_float_driver when it chooses the driver. Reset per top-level solve is
+  // deliberately not done -- an incremental session that blew up once stays on
+  // the exact driver.
+  bool lra_force_exact_driver = false;
+  // Reconstruct rejected floating-point conflict weights on their support.
+  bool lra_conflict_recovery = true;
   // Advise only the sign of SAT's selected decision variable, with no extra
   // checks. On by default when theory propagation and the backend's advisor
   // API are available. False restores the backend's own decision polarity.
@@ -785,6 +831,13 @@ public:
   // falling back. The CLI records whether the option was supplied; library
   // callers can set this alongside lra_decision_polarity to require support.
   bool lra_decision_polarity_explicit = false;
+  // Fresh factorized float tiers a single solve may build after the double
+  // tier trips its infinitesimal cap.  A tier that trips on its own first
+  // check has no pivot history to blame, and another identical one cannot
+  // end differently; unbounded, one solve was measured building 18,094 of
+  // them.  Past the budget the solve degrades to exact partial checks.
+  // 0 = unbounded.
+  std::int64_t lra_float_promotion_budget = 4;
   // Whether a satisfying assignment has accidental value coincidences broken
   // before it is published. Two variables sharing a value by chance are one
   // pair the lazy congruence round has to constrain and one round to state
@@ -798,6 +851,43 @@ public:
   // which has no such reader, it gains nothing, costs two files and half a
   // percent of PAR2. A flat default either way takes one of those.
   OptionMode lra_separate_model_values = OptionMode::AUTO;
+
+  // Presolve stage one: a top-level Real conjunct EQ(x, t), x not in t,
+  // defines x. Substitute the definition through the rest of the query and
+  // keep it conjoined, so the definition holds one row while every other
+  // predicate stops mentioning x. The cross-predicate simplification the
+  // bit-vector pipeline gets from PropagateEqualities and the Real path
+  // bypasses. On by default.
+  bool lra_presolve_subst = true;
+
+  // Presolve stage two: bounds. Unit conjuncts feed a per-variable bound
+  // table, one propagation round derives bounds through multi-variable
+  // rows, a variable whose bounds meet non-strictly is fixed and
+  // substituted (its defining equality kept conjoined), and contradictory
+  // bounds prove the query infeasible outright. The Real analogue of the
+  // bit-vector interval analysis. On by default: suite-wide it gained 42
+  // files and lost 19, with no verdict changed.
+  bool lra_presolve_bounds = true;
+
+  // Presolve stage three: rows. Top-level inequalities over the same
+  // canonical polynomial meet in one group; a conjunct implied by a
+  // stronger sibling is dropped (the sibling stays, so the implication
+  // survives in the query) and contradictory group bounds refute the query
+  // outright. On by default.
+  bool lra_presolve_rows = true;
+
+  // Presolve: propagate top-level truths under the Boolean structure --
+  // every occurrence of a conjunct (or its negation) below other conjuncts
+  // is replaced by its truth value, factory folding the constants exposed,
+  // to a small fixed point. On by default after a suite-wide validation.
+  bool lra_presolve_propagate = true;
+
+  // Presolve: a Real variable occurring in exactly one atom at a pure
+  // polarity leaves that atom free over the reals; it folds to its
+  // polarity's truth and the witness equality realising it is conjoined,
+  // keeping the model complete and handing the Gaussian stage a solved
+  // definition to dissolve. On by default after a suite-wide validation.
+  bool lra_presolve_unconstrained = true;
 
   // Re-derive every LRA conflict certificate independently before trusting
   // it. A self-check, not a solving step: off unless asked for.

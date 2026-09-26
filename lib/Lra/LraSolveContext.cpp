@@ -3,8 +3,10 @@
 #include "stp/STPManager/STPManager.h"
 
 #include "ExactLraVerificationData.h"
+#include "FloatSimplex.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <new>
 #include <set>
@@ -451,6 +453,137 @@ void LraSolveContext::setSeparateModelValues(bool enabled) noexcept
     core_->setSeparateModelValues(enabled);
 }
 
+void LraSolveContext::setFloatDriver(bool enabled) noexcept
+{
+  float_driver_ = enabled;
+  if (enabled && ready() && float_core_ == nullptr)
+    buildFloatCore();
+}
+
+bool LraSolveContext::floatActive() const noexcept
+{
+  return float_driver_ && float_core_ != nullptr &&
+         float_core_->buildUsable();
+}
+
+namespace
+{
+/* The advisory tier's number bridge.  Word-state rationals convert
+ * directly; imath-state ones go through their decimal digits, which strtod
+ * rounds to nearest or overflows to infinity -- and a non-finite double
+ * disables the float core rather than entering it.  Cold path: once per
+ * coefficient and threshold at build time, under the caller's operation
+ * scope. */
+double doubleOfExact(const ExactRational& value)
+{
+  if (const std::optional<SmallRational> small = value.trySmall())
+    return static_cast<double>(small->numerator) /
+           static_cast<double>(small->denominator);
+  const double numerator =
+      std::strtod(value.numeratorDecimal().c_str(), nullptr);
+  const double denominator =
+      std::strtod(value.denominatorDecimal().c_str(), nullptr);
+  return numerator / denominator;
+}
+}  // namespace
+
+std::unique_ptr<FloatSimplex> LraSolveContext::makeFloatCore()
+{
+  auto fresh = std::make_unique<FloatSimplex>();
+  std::unordered_map<std::uint64_t, FloatSimplex::Var> columns, rows;
+  for (auto const& mapped : variable_map_)
+    columns.emplace(mapped.registry_symbol.serial, fresh->addColumn());
+  std::vector<FloatSimplex::Term> terms;
+  for (auto const& mapped : row_map_)
+  {
+    terms.clear();
+    for (auto const& term : registryRow(mapped.registry_row).terms)
+      terms.push_back({columns.at(term.symbol.serial), doubleOfExact(term.coefficient)});
+    rows.emplace(mapped.registry_row.serial,
+                 fresh->addRow(terms.data(), terms.data() + terms.size()));
+  }
+  for (auto const& mapped : component_map_)
+  {
+    auto const& component = registryComponent(mapped.registry_component);
+    fresh->addAtom(rows.at(component.row.serial), coreRelation(component.relation),
+                   doubleOfExact(component.threshold));
+  }
+  if (!fresh->finalize())
+    return nullptr;
+  return fresh;
+}
+
+void LraSolveContext::bindFreshFloatMaps()
+{
+  std::vector<AtomId> atoms;
+  atoms.reserve(component_map_.size());
+  for (auto const& mapped : component_map_)
+    atoms.push_back(mapped.core_atom);
+  for (std::size_t i = 0; i < variable_map_.size(); ++i)
+    variable_map_[i].float_variable = static_cast<std::uint32_t>(i);
+  for (std::size_t i = 0; i < row_map_.size(); ++i)
+    row_map_[i].float_variable = static_cast<std::uint32_t>(variable_map_.size() + i);
+  for (std::size_t i = 0; i < component_map_.size(); ++i)
+    component_map_[i].float_atom = static_cast<std::uint32_t>(i);
+  float_atom_core_atoms_.swap(atoms);
+}
+
+void LraSolveContext::buildFloatCore() noexcept
+{
+  try
+  {
+    NumberOperationScope operation(mapping_budget_);
+    std::unique_ptr<FloatSimplex> fresh = makeFloatCore();
+    if (!fresh)
+    {
+      ++metrics_.float_disabled;
+      return;  // the exact path stands alone
+    }
+    bindFreshFloatMaps();
+    float_core_ = std::move(fresh);
+  }
+  catch (...)
+  {
+    /* The advisory tier is optional: a failed build leaves the exact path
+     * exactly as it was. */
+    float_core_.reset();
+  }
+}
+
+bool LraSolveContext::promoteFloatCore() noexcept
+{
+  if (float_core_ == nullptr)
+    return false;
+  try
+  {
+    NumberOperationScope operation(mapping_budget_);
+    std::unique_ptr<FloatSimplex> fresh = makeFloatCore();
+    if (!fresh)
+      return false;
+    /* The same atoms in the same order, so the trail replays verbatim
+     * and every mark the adapter holds keeps its meaning: nonbasic
+     * assignments land on their bounds, basic ones are recomputed from
+     * the pristine rows, and no pivot history comes along.  The tier
+     * runs factorized from here: immutable pristine rows under a factor
+     * with threshold pivoting, where the substitution tableau had grown
+     * the coefficients that tripped it. */
+    for (const FloatSimplex::TrailEntry& entry : float_core_->trail())
+      (void)fresh->assertAtom(entry.atom, entry.positive, entry.user_tag);
+    if (fresh->trail().size() != float_core_->trail().size() ||
+        fresh->poisoned())
+      return false;
+    fresh->switchToFactorized();
+    ++metrics_.float_promotions;
+    bindFreshFloatMaps();
+    float_core_ = std::move(fresh);
+    return true;
+  }
+  catch (...)
+  {
+    return false;
+  }
+}
+
 bool LraSolveContext::bindOpaqueAtoms(
     const std::vector<LraSatBinding>& bindings,
     const std::vector<ASTNode>& omitted) noexcept
@@ -667,6 +800,10 @@ LraSolveMetrics LraSolveContext::metrics() const noexcept
   result.observer_polls = observer_.polls();
   result.observer_pivots = observer_.pivots();
   result.observer_bland_pivots = observer_.blandPivots();
+  result.float_rebuilds =
+      float_core_ ? float_core_->assignmentRebuilds() : 0;
+  result.float_generalisations =
+      float_core_ ? float_core_->generalisations() : 0;
   return result;
 }
 

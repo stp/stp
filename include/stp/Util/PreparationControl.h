@@ -12,6 +12,7 @@ enum class PreparationStage
 {
   Boundary,
   UFLowering,
+  LraPresolve,
   LraPreregistration,
   LraRegistry,
   LraCore,
@@ -28,6 +29,7 @@ inline const char* preparationStageName(PreparationStage stage)
   {
     case PreparationStage::Boundary: return "boundary";
     case PreparationStage::UFLowering: return "uf-lowering";
+    case PreparationStage::LraPresolve: return "lra-presolve";
     case PreparationStage::LraPreregistration: return "lra-preregistration";
     case PreparationStage::LraRegistry: return "lra-registry";
     case PreparationStage::LraCore: return "lra-core";

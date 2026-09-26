@@ -403,6 +403,7 @@ void congruenceRecovery(PreparationStage target = PreparationStage::LraRegistry)
   manager.UserFlags.enable_uninterpreted_functions = true;
   manager.UserFlags.uf_propagate_equalities = UserDefinedFlags::OptionMode::OFF;
   manager.UserFlags.uf_eager_mode = UserDefinedFlags::UFEagerMode::OFF;
+  manager.UserFlags.lra_float_driver = false;
   const auto real = SourceSort::real();
   const auto a = manager.CreateSourceSymbol("congruence_a", real);
   const auto b = manager.CreateSourceSymbol("congruence_b", real);
@@ -512,11 +513,12 @@ int main()
     control();
     transactionRecovery();
     for (auto stage : {PreparationStage::Boundary, PreparationStage::UFLowering,
+                       PreparationStage::LraPresolve,
                        PreparationStage::LraPreregistration,
                        PreparationStage::LraRegistry,
                        PreparationStage::LraCore, PreparationStage::Encoding})
       queryRecovery(stage);
-    for (auto stage : {PreparationStage::UFLowering,
+    for (auto stage : {PreparationStage::UFLowering, PreparationStage::LraPresolve,
                        PreparationStage::LraPreregistration,
                        PreparationStage::LraRegistry, PreparationStage::LraCore,
                        PreparationStage::BitBlasting, PreparationStage::CNFConversion,

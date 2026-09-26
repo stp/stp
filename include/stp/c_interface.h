@@ -951,7 +951,37 @@ enum ifaceflag_t
   //! that checker builds its first one. On by default for a library caller;
   //! the command-line solver turns it off unless --lra-verify-canonical asks
   //! for it.
-  LRA_VERIFY_CANONICAL
+  LRA_VERIFY_CANONICAL,
+
+  //! Presolve stage one: substitute a top-level Real definition EQ(x, t)
+  //! through the rest of the query, and solve the remaining top-level linear
+  //! equalities by Gaussian elimination. --lra-presolve-subst.
+  LRA_PRESOLVE_SUBST,
+
+  //! Presolve stage two: fold unit conjuncts into per-variable bounds.
+  //! --lra-presolve-bounds.
+  LRA_PRESOLVE_BOUNDS,
+
+  //! Presolve stage three: drop a top-level inequality implied by a stronger
+  //! one over the same polynomial, and refute contradictory ones.
+  //! --lra-presolve-rows.
+  LRA_PRESOLVE_ROWS,
+
+  //! Presolve stage four: propagate the top-level truths under the Boolean
+  //! structure. --lra-presolve-propagate.
+  LRA_PRESOLVE_PROPAGATE,
+
+  //! Presolve stage five: fold single-use pure-polarity atoms, with witness
+  //! equalities. --lra-presolve-unconstrained.
+  LRA_PRESOLVE_UNCONSTRAINED,
+
+  //! Drive the propagator's partial checks with a double-precision simplex,
+  //! consulting the exact core only to re-derive that engine's conflicts and
+  //! to judge a complete assignment. Every certificate and every model stays
+  //! exact, so this is meant to change how long an answer takes and not which
+  //! answer it is. On by default; 0 selects the exact core alone.
+  //! --lra-float-driver.
+  LRA_FLOAT_DRIVER
 
 };
 
