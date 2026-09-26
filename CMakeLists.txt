@@ -1678,6 +1678,22 @@ message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
 
 add_subdirectory(lib)
 add_subdirectory(lib/Lra)
+# Embed the complete private LRA implementation into libstp without a
+# static-library dependency in its build or install export interface.
+target_sources(stp PRIVATE $<TARGET_OBJECTS:stp_lra_product_objects>)
+add_dependencies(stp stp_lra_product_objects)
+# GCC 11's libstdc++ gives some weak std::vector instantiations default
+# visibility even when their template argument is a hidden LRA type.  Keep
+# that compiler-owned spelling from disclosing the private Tableau ABI.
+# Other public STP symbols retain their existing annotations and exports.
+if(BUILD_SHARED_LIBS AND UNIX AND NOT APPLE)
+  set(stp_lra_private_map
+    "${CMAKE_CURRENT_SOURCE_DIR}/lib/Lra/stp_lra_private.map")
+  target_link_options(stp PRIVATE
+    "LINKER:--version-script=${stp_lra_private_map}")
+  set_property(TARGET stp APPEND PROPERTY LINK_DEPENDS
+    "${stp_lra_private_map}")
+endif()
 
 # Only tools/stp/main.cpp includes CLI11, so it is looked for only when there
 # is a binary to build.

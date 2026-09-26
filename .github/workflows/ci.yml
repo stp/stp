@@ -1430,6 +1430,19 @@ jobs:
         "rational/symbolic-rm output: '$($outrat.Trim())'"
         "rational/symbolic-rm exit code: $LASTEXITCODE"
         if ($outrat.Trim() -ne "unsat") { exit 1 }
+        # Linear real arithmetic through IMath and the exact simplex as MSVC
+        # compiled them: the constants are wider than any machine-word lane,
+        # so every pivot and the model's exact value go through IMath.
+        "(set-logic QF_LRA)(set-option :produce-models true)(declare-fun x () Real)(declare-fun y () Real)(assert (= (+ x y) 1000000000000000000000000000000000000000001))(assert (= (- x y) 2))(check-sat)(get-value (x))" | Out-File -Encoding ascii testlra.smt2
+        $outlra = & $stp testlra.smt2 2>&1 | Out-String
+        "lra output: '$($outlra.Trim())'"
+        "lra exit code: $LASTEXITCODE"
+        if (-not $outlra.StartsWith("sat") -or -not $outlra.Contains("(|x| (/ 1000000000000000000000000000000000000000003 2))")) { exit 1 }
+        "(set-logic QF_LRA)(declare-fun x () Real)(declare-fun y () Real)(assert (> (+ x y) 1000000000000000000000000000000000000000001))(assert (< (* 3 x) 1000000000000000000000000000000000000000001))(assert (< (* 3 y) 1000000000000000000000000000000000000000001))(check-sat)" | Out-File -Encoding ascii testlrau.smt2
+        $outlrau = & $stp testlrau.smt2 2>&1 | Out-String
+        "lra refutation output: '$($outlrau.Trim())'"
+        "lra refutation exit code: $LASTEXITCODE"
+        if ($outlrau.Trim() -ne "unsat") { exit 1 }
 
   # CaDiCaL on Windows. MSVC cannot compile CaDiCaL, but CaDiCaL's BUILD.md
   # documents a MinGW build, so this leg compiles both CaDiCaL and STP with
@@ -1556,6 +1569,18 @@ jobs:
         echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)' > testlit.smt2
         out=$("$stp" testlit.smt2)
         echo "real-literal output: '$out'"
+        [ "$out" = "unsat" ]
+        # Linear real arithmetic through IMath and the exact simplex as MinGW
+        # compiled them: the constants are wider than the 128-bit lane, so
+        # every pivot and the model's exact value go through IMath.
+        echo '(set-logic QF_LRA)(set-option :produce-models true)(declare-fun x () Real)(declare-fun y () Real)(assert (= (+ x y) 1000000000000000000000000000000000000000001))(assert (= (- x y) 2))(check-sat)(get-value (x))' > testlra.smt2
+        out=$("$stp" testlra.smt2)
+        echo "lra output: '$out'"
+        [ "$(echo "$out" | head -1)" = "sat" ]
+        echo "$out" | grep -qF '(|x| (/ 1000000000000000000000000000000000000000003 2))'
+        echo '(set-logic QF_LRA)(declare-fun x () Real)(declare-fun y () Real)(assert (> (+ x y) 1000000000000000000000000000000000000000001))(assert (< (* 3 x) 1000000000000000000000000000000000000000001))(assert (< (* 3 y) 1000000000000000000000000000000000000000001))(check-sat)' > testlrau.smt2
+        out=$("$stp" testlrau.smt2)
+        echo "lra refutation output: '$out'"
         [ "$out" = "unsat" ]
 
 # EOF

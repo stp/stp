@@ -37,29 +37,35 @@ struct PrinterCapture
 
 TEST(SolverOutput_Test, ErrorsAreFatalInEveryOutputMode)
 {
-  // Errors must be fatal for every output format, including callers that
-  // suppress verdict output.
+  // The previous error guard depended on whether the manager had seen Real
+  // syntax. Error handling must apply to every logic and also to callers
+  // that suppress verdict output, which the CLI always enables.
   for (int mode = 0; mode < 3; ++mode)
-    for (bool print : {false, true})
-    {
-      SCOPED_TRACE(::testing::Message()
-                   << "mode=" << mode << " print=" << print);
-      stp::STPMgr manager;
-      manager.UserFlags.smtlib1_parser_flag = mode == 1;
-      manager.UserFlags.smtlib2_parser_flag = mode == 2;
-      manager.UserFlags.print_output_flag = print;
-      manager.ValidFlag = true;
+    for (bool real : {false, true})
+      for (bool print : {false, true})
+      {
+        SCOPED_TRACE(::testing::Message()
+                     << "mode=" << mode << " real=" << real
+                     << " print=" << print);
+        stp::STPMgr manager;
+        manager.UserFlags.smtlib1_parser_flag = mode == 1;
+        manager.UserFlags.smtlib2_parser_flag = mode == 2;
+        manager.UserFlags.print_output_flag = print;
+        if (real)
+          manager.CreateRealConst("0");
+        ASSERT_EQ(manager.HasSeenRealSyntax(), real);
+        manager.ValidFlag = true;
 
-      PrinterCapture capture;
-      EXPECT_THROW(stp::ToSATBase::PrintOutput(&manager, stp::SOLVER_ERROR),
-                   SolverError);
-      EXPECT_FALSE(manager.ValidFlag);
-      const char* expected = !print ? "" : mode == 0 ? "Error.\n"
-          : "(error \"solver returned SOLVER_ERROR\")\n";
-      EXPECT_EQ(capture.out.str(), expected);
-      EXPECT_EQ(capture.err.str(),
-                "Fatal Error: solver returned SOLVER_ERROR\n");
-    }
+        PrinterCapture capture;
+        EXPECT_THROW(stp::ToSATBase::PrintOutput(&manager, stp::SOLVER_ERROR),
+                     SolverError);
+        EXPECT_FALSE(manager.ValidFlag);
+        const char* expected = !print ? "" : mode == 0 ? "Error.\n"
+            : "(error \"solver returned SOLVER_ERROR\")\n";
+        EXPECT_EQ(capture.out.str(), expected);
+        EXPECT_EQ(capture.err.str(),
+                  "Fatal Error: solver returned SOLVER_ERROR\n");
+      }
 }
 
 } // namespace

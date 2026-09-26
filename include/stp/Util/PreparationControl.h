@@ -12,6 +12,9 @@ enum class PreparationStage
 {
   Boundary,
   UFLowering,
+  LraPreregistration,
+  LraRegistry,
+  LraCore,
   Encoding,
   BitBlasting,
   CNFConversion,
@@ -24,6 +27,9 @@ inline const char* preparationStageName(PreparationStage stage)
   {
     case PreparationStage::Boundary: return "boundary";
     case PreparationStage::UFLowering: return "uf-lowering";
+    case PreparationStage::LraPreregistration: return "lra-preregistration";
+    case PreparationStage::LraRegistry: return "lra-registry";
+    case PreparationStage::LraCore: return "lra-core";
     case PreparationStage::Encoding: return "encoding";
     case PreparationStage::BitBlasting: return "bitblasting";
     case PreparationStage::CNFConversion: return "cnf-conversion";

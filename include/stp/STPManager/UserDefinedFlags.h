@@ -668,6 +668,39 @@ public:
   // symbolic execution of numerical libraries it is worth three solves of
   // 1,241 and 7% of the PAR2.
   bool bv_eq_abstraction_constant_side = false;
+
+  // Let the LRA theory drive the SAT search instead of judging complete
+  // models after it, where the backend can host a theory propagator.
+  // On by default: with the backend checking the tableau on partial
+  // assignments, the search learns a cross-row conflict where it arises
+  // rather than after a whole model has been built on top of it. Measured on
+  // the SMT-LIB QF_LRA and QF_UFLRA sets at twenty seconds: 938 to 1018 and
+  // 1234 to 1240 solved, no answer changed. CaDiCaL and CryptoMiniSat host
+  // the propagator; MiniSat, which hosts none, a CryptoMiniSat without the
+  // IPASIR-UP interface, or one asked for more than one thread runs the
+  // full-lazy loop regardless.
+  bool lra_theory_propagation = true;
+
+  // Advise only the sign of SAT's selected decision variable, with no extra
+  // checks. On by default when theory propagation and the backend's advisor
+  // API are available. False restores the backend's own decision polarity.
+  bool lra_decision_polarity = true;
+  // An explicit request must report missing prerequisites instead of silently
+  // falling back. The CLI records whether the option was supplied; library
+  // callers can set this alongside lra_decision_polarity to require support.
+  bool lra_decision_polarity_explicit = false;
+
+  // Re-derive every LRA conflict certificate independently before trusting
+  // it. A self-check, not a solving step: off unless asked for.
+  bool lra_verify_conflicts = false;
+
+  /* Re-derive the canonical form of every exact rational whose construction
+   * already proves it canonical. A self-check on the number layer, not a step
+   * towards an answer. The command-line solver applies this flag, so there
+   * it is off unless asked for; a library caller that never sets
+   * LRA_VERIFY_CANONICAL keeps the budgets' own default, which is on, as the
+   * tests do (see STPMgr::SetLraCanonicalVerification). */
+  bool lra_verify_canonical = false;
   // One width floor for both abstraction families: equalities and the
   // abstracted terms (comparisons, ITE, BVPLUS, BVMULT, BVDIV, BVMOD)
   // all abstract only at or above this operand width.
@@ -1439,6 +1472,32 @@ public:
   // CNF_AUTO_THRESHOLD interface flag.
   unsigned cnf_auto_threshold = 200000;
 
+  // Whether AUTO should read the threshold the Real path's way. Set for an
+  // active Real solve, and for nothing else; the bit-vector choice at either
+  // end of the threshold is untouched.
+  //
+  // Both bit-vector answers are wrong for the shape the Real path hands over
+  // -- a wide, shallow conjunction of small clauses over opaque atoms, one
+  // per Real predicate -- and they are wrong in opposite directions, which is
+  // why this is a different reading of the threshold rather than a different
+  // constant for it.
+  //
+  // Above the threshold, Cnf_DeriveFast is the slowest generator there is on
+  // this shape: on a 1.4M-node LassoRanker skeleton its leaf collection ran
+  // for a minute where cut enumeration at LUT size 3 took a second or two
+  // (with a one-second search budget, 86 s against 22.5 s; 90.6 s against
+  // 27.4 s on another; 5.4 s against 3.7 s at 240k nodes). That is what this
+  // flag was introduced for and it still holds: LOW.
+  //
+  // Below it -- where 523 of 547 measured Real queries land -- MEDIUM was
+  // paying ABC's cut enumeration and area-flow mapping to minimise a CNF the
+  // solver disposes of cheaply either way. Over all 3 037 QF_LRA and QF_UFLRA
+  // files, one binary, the efforts forced in turn and run back to back,
+  // VERY_LOW solved 2 680 against MEDIUM-below-threshold's 2 651 and LOW
+  // everywhere's 2 640, at a 0.939 geometric mean of CPU on the files they
+  // share. LassoRanker alone went 186 to 218. So: VERY_LOW.
+  bool cnf_auto_real_path = false;
+
   bool exit_after_CNF = false;
 
   // Stop after parsing the input, skipping any check-sat commands.
@@ -1527,6 +1586,12 @@ public:
   // Ackermannised away, so testing for surviving arrays separated the two.
   // It is kept as an explicit choice because it is the only way back to that
   // behaviour; on QF_BV it is equivalent to OFF.
+  //
+  // An active Real solve that did not name the flag reads ON as AUTO. Both
+  // measurements above are bit-vector ones, and on the Real path's Boolean
+  // skeleton factoring loses: see the demotion in TopLevelSTPAux for the
+  // numbers. Naming --cadical-factor overrides that, as it overrides
+  // everything else here.
   enum class BVAMode
   {
     AUTO = 0,

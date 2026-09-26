@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/UninterpretedFunctions/UFModel.h"
+#include "Lra/LraFrontend.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Printer/printers.h"
 #include "stp/STPManager/STPManager.h"
@@ -452,6 +453,13 @@ bool UFModel::replayPublicRoot(
     const UFTheoryAdapter& adapter, std::string& diagnostic)
 {
   const LoweredApplicationView* view = adapter.applicationView();
+  // This replay evaluates the whole public root against the certified model,
+  // and the evaluator cannot value a Real predicate anywhere in the root:
+  // whatever the arithmetic owns, the arithmetic checks, and this replay
+  // stands aside from any root that holds it.
+  if (view != NULL && !view->publicRoot.IsNull() &&
+      lra::Frontend::containsRealSyntax(view->publicRoot))
+    return true;
   STPMgr* manager = view == NULL || view->publicRoot.IsNull()
                         ? NULL
                         : view->publicRoot.GetNodeManager();

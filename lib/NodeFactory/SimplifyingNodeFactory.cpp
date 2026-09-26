@@ -834,7 +834,17 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
   // TRUE/FALSE, so constant floating-point comparisons and classifications
   // never outlive their creation. (The FP *term* fold, with its
   // format-carrying subtleties, is in CreateTerm.)
-  if (kind != stp::UNDEFINED && kind != stp::BOOLEAN &&
+  const bool has_real_operand =
+      std::any_of(children.begin(), children.end(), [](const ASTNode& child) {
+        return child.GetSourceSort().kind() == stp::SourceSort::Kind::Real;
+      });
+  if (has_real_operand)
+    for (const ASTNode& child : children)
+      if (child.GetSTPMgr() != &bm)
+        stp::FatalError(
+            "Real operation received an operand owned by another manager");
+  if (!has_real_operand &&
+      kind != stp::UNDEFINED && kind != stp::BOOLEAN &&
       kind != stp::BITVECTOR && kind != stp::ARRAY &&
       kind != stp::FLOATINGPOINT && kind != stp::ROUNDINGMODE &&
       kind != stp::DISTINCT && children_all_constants(children))
@@ -1040,7 +1050,23 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
       // may run over array operands. The hashing factory owns both the
       // conversion to ARRAY_EQ and the rejection when --array-equality is
       // off, so the rules only run once the node is legal to build.
-      if (children.size() == 2 && children[0].GetIndexWidth() > 0)
+      if (children.size() == 2 &&
+          children[0].GetSourceSort().kind() == stp::SourceSort::Kind::Real)
+      {
+        // Real equality is elaborated by the exact frontend.  The generic BV
+        // equality simplifier is width-based and must never inspect it.
+        if (children[0] == children[1])
+          result = bm.ASTTrue;
+        else if (children[0].GetKind() == stp::REAL_CONST &&
+                 children[1].GetKind() == stp::REAL_CONST)
+          result = bm.ASTFalse;
+        else
+          result = hashing.CreateNode(EQ, children);
+      }
+      else
+      if (children.size() == 2 &&
+               children[0].GetSourceSort().kind() ==
+                   stp::SourceSort::Kind::Array)
       {
         if (children[0] == children[1])
           result = bm.ASTTrue;
@@ -2325,8 +2351,8 @@ ASTNode SimplifyingNodeFactory::substituteConstant(const ASTNode& n,
     return n;
 
   // Unqualified, so the rebuild comes back through this factory and every
-  // operator on the way folds.
-  if (n.GetType() == stp::BOOLEAN_TYPE)
+  // operator on the way folds. Real terms have no carrier widths either.
+  if (n.isRealTerm() || n.GetType() == stp::BOOLEAN_TYPE)
     return CreateNode(n.GetKind(), children);
   return CreateArrayTerm(n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(),
                          children);

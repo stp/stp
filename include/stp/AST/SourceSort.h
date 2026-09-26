@@ -10,10 +10,12 @@
 #ifndef STP_SOURCESORT_H
 #define STP_SOURCESORT_H
 
+#include "stp/config.h"
 #include <cassert>
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <stdexcept>
 #include <ostream>
 #include <unordered_set>
 
@@ -37,7 +39,10 @@ public:
     // A sort introduced by (declare-sort S 0). Appended, never inserted: two
     // lemma-key comparators order by this ordinal and hash() mixes it, so
     // moving an existing enumerator renumbers nodes and reorders keys.
-    Uninterpreted
+    Uninterpreted,
+    // Appended after Uninterpreted so every earlier ordinal remains stable
+    // while the exact Real frontend remains source-distinct.
+    Real
   };
 
 private:
@@ -103,8 +108,13 @@ public:
     return SourceSort(Kind::Uninterpreted, id, width);
   }
 
+  static SourceSort real() { return SourceSort(Kind::Real); }
+
   static SourceSort array(const SourceSort& index, const SourceSort& element)
   {
+    if (index.kind() == Kind::Real || element.kind() == Kind::Real)
+      throw std::invalid_argument(
+          "mathematical Real array indices/elements are not supported");
     assert(index.isScalar() && element.isScalar());
     // A declared sort is represented by its finite bit-vector carrier below
     // the source boundary, so it is just as usable as the other scalar sorts
@@ -117,6 +127,9 @@ public:
   bool isKnown() const { return kind_ != Kind::Unknown; }
   bool isScalar() const
   {
+    // Real intentionally stays outside this legacy array-scalar predicate.
+    // Array constructors therefore reject Real indices and elements
+    // instead of silently giving them a nonexistent packed representation.
     return kind_ == Kind::BitVector || kind_ == Kind::FloatingPoint ||
            kind_ == Kind::RoundingMode || kind_ == Kind::Uninterpreted;
   }
@@ -181,6 +194,8 @@ public:
         return 5;
       case Kind::Uninterpreted:
         return second_;
+      case Kind::Real:
+        throw std::logic_error("mathematical Real has no packed width");
       default:
         assert(false && "packedWidth is defined only for scalar sorts");
         return 0;
@@ -250,6 +265,8 @@ public:
         const std::string declared = uninterpretedSortName(first_);
         return declared.empty() ? "<unknown-uninterpreted-sort>" : declared;
       }
+      case Kind::Real:
+        return "Real";
     }
     assert(false && "exhaustive SourceSort::Kind switch");
     return "Unknown";

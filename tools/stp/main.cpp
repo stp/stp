@@ -87,6 +87,10 @@ public:
   std::string search_bias;
   CLI::Option* search_bias_option = nullptr;
 
+  // The default polarity preference yields to backend capabilities; an
+  // explicit request must still diagnose missing prerequisites.
+  CLI::Option* lra_decision_polarity_option = nullptr;
+
   // Likewise for UserFlags.array_index_hints.
   std::string array_index_hints;
   CLI::Option* array_index_hints_option = nullptr;
@@ -439,6 +443,23 @@ void ExtraMain::create_options()
             "may-alias write levels a read still expands eagerly before the "
             "rest of its chain is abstracted",
             refinement_group);
+  bool_arg("--lra-theory-propagation", bm->UserFlags.lra_theory_propagation,
+           "let the LRA theory take part in the SAT search, on a backend "
+           "that hosts a propagator (CaDiCaL, CryptoMiniSat)",
+           refinement_group);
+  lra_decision_polarity_option =
+      bool_arg("--lra-decision-polarity", bm->UserFlags.lra_decision_polarity,
+               "advise arithmetic polarity for SAT's selected decision variable "
+               "(on by default with patched CaDiCaL and theory propagation; "
+               "=0 disables advice, explicit =1 requires support)", refinement_group);
+  bool_arg("--lra-verify-canonical", bm->UserFlags.lra_verify_canonical,
+           "re-derive the canonical form of exact rationals whose "
+           "construction already proves it",
+           refinement_group);
+  bool_arg("--lra-verify-conflicts", bm->UserFlags.lra_verify_conflicts,
+           "independently re-derive every LRA conflict certificate before "
+           "trusting it",
+           refinement_group);
   bool_arg("--bv-eq-abstraction", bm->UserFlags.bv_eq_abstraction,
            "replace wide BV equalities -- whatever their operands; the "
            "bit-blaster proxies non-input ones -- with fresh Boolean "
@@ -1548,6 +1569,10 @@ int ExtraMain::parse_options(int argc, char** argv)
       return -1;
     }
   }
+  /* Before anything can build an exact rational, so that every budget this
+   * run creates agrees about it. Left alone by every other entry point, which
+   * therefore keeps the check. */
+  bm->SetLraCanonicalVerification(bm->UserFlags.lra_verify_canonical);
 
   if (!fp_abstraction_ops.empty() &&
       !parseFpAbstractionOps(fp_abstraction_ops,
@@ -1708,6 +1733,29 @@ int ExtraMain::parse_options(int argc, char** argv)
   {
     cerr << "ERROR: " << error.what() << endl;
     return -1;
+  }
+
+  bm->UserFlags.lra_decision_polarity_explicit =
+      lra_decision_polarity_option->count() != 0;
+  if (bm->UserFlags.lra_decision_polarity &&
+      bm->UserFlags.lra_decision_polarity_explicit)
+  {
+    if (!bm->UserFlags.lra_theory_propagation)
+    {
+      cerr << "ERROR: --lra-decision-polarity requires "
+              "--lra-theory-propagation=1" << endl;
+      return -1;
+    }
+    bool supported = false;
+#if defined(USE_CADICAL) && defined(STP_CADICAL_HAS_DECISION_POLARITY)
+    supported = bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER;
+#endif
+    if (!supported)
+    {
+      cerr << "ERROR: --lra-decision-polarity requires CaDiCaL built with "
+              "cmake/deps-utils/cadical-decision-polarity.patch" << endl;
+      return -1;
+    }
   }
 
   if (array_index_hints_option->count())

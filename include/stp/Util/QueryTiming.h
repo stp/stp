@@ -17,6 +17,7 @@ enum class QueryPhase
   ClauseLoading,
   EncodingOther,
   EncodingCleanup,
+  LraCleanup,
   SolverCleanup,
   QueryCleanup,
   Count
@@ -57,7 +58,7 @@ public:
       total += value;
     static const char* names[] = {
         "other", "bitblast", "cnf", "clauses", "encoding_other",
-        "encoding_cleanup", "solver_cleanup", "query_cleanup"};
+        "encoding_cleanup", "lra_cleanup", "solver_cleanup", "query_cleanup"};
     out << "Query phases: total_ns=" << total;
     for (unsigned i = 0; i != count; ++i)
       out << ' ' << names[i] << "_ns=" << values[i];

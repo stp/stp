@@ -1145,3 +1145,39 @@ TEST(SimplifyingNodeFactory_Test, rounding_mode_literal_agrees_with_its_carrier)
                                     f.CreateNode(stp::EQ, t, bits));
   EXPECT_NE(conj, c.mgr.ASTFalse);
 }
+
+TEST(SimplifyingNodeFactory_Test, pinned_condition_rebuilds_real_ite)
+{
+  // Mixed Real/BV construction is supported by the API. Substituting a
+  // pinned BV value into a nested Real ite must preserve its widthless sort.
+  for (bool constant : {false, true})
+  {
+    Context c;
+    NodeFactory& f = c.snf;
+    NodeFactory& h = *c.mgr.hashingNodeFactory;
+    const ASTNode b = c.mgr.CreateSymbol("mixed-b", 0, 2);
+    const ASTNode condition = f.CreateNode(
+        stp::EQ, b, c.mgr.CreateBVConst(2, 1));
+    const ASTNode x = constant
+        ? c.mgr.CreateRealConst("-1/3")
+        : c.mgr.CreateSourceSymbol("mixed-x", stp::SourceSort::real());
+    const ASTNode term = c.mgr.CreateRealTerm(
+        stp::ITE, ASTVec{condition, x, c.mgr.CreateRealConst("1")});
+    const ASTNode test = c.mgr.CreateRealPredicate(
+        stp::REAL_LT, term, c.mgr.CreateRealConst("0"));
+    const ASTNode p = c.mgr.CreateSymbol("mixed-p", 0, 0);
+    const ASTNode q = c.mgr.CreateSymbol("mixed-q", 0, 0);
+    const ASTNode r = c.mgr.CreateSymbol("mixed-r", 0, 0);
+    const ASTNode inner = h.CreateNode(stp::ITE, test, p, q);
+    const ASTNode original = h.CreateNode(stp::ITE, condition, inner, r);
+    const ASTNode simplified = f.CreateNode(stp::ITE, condition, inner, r);
+    // Real comparisons may be left to the arithmetic frontend. If the
+    // constant case is decided here, only the true arm is justified; an
+    // open comparison must keep its original guard.
+    if (constant)
+      EXPECT_TRUE(simplified == original ||
+                  simplified == f.CreateNode(stp::ITE, condition, p, r));
+    else
+      EXPECT_EQ(original, simplified);
+  }
+}

@@ -30,11 +30,14 @@ THE SOFTWARE.
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "Lra/LraBudgetRefusal.h"
+#include "Lra/NumberBudget.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Incremental/IncrementalSolver.h"
@@ -52,6 +55,7 @@ THE SOFTWARE.
 #include "sat/cnf/cnf.h"
 
 #include "stp/ToSat/ToSATAIG.h"
+#include "Lra/LraFrontend.h"
 
 using std::cout;
 using std::ostream;
@@ -61,6 +65,21 @@ using std::endl;
 
 // Defined further down, but used by the boolean expression builders above it.
 Expr createBinaryNode(VC vc, Kind k, Expr left, Expr right);
+
+namespace stp::detail
+{
+// This deliberately private translation-unit facade lets the C boundary
+// reject handles from another manager without making ASTNode::GetSTPMgr part
+// of the installed C++ API.
+class CInterfaceNodeAccess final
+{
+public:
+  static bool isOwnedBy(const ASTNode& node, const STPMgr* manager) noexcept
+  {
+    return node.GetSTPMgr() == manager;
+  }
+};
+}
 
 namespace /* anonymous namespace for static */
 {
@@ -301,7 +320,10 @@ stp::ASTNode createPublicSourceSymbol(stp::STPMgr* bm, const char* name,
     stp::FatalError("CInterface: a symbol cannot be redeclared with a "
                     "different source sort");
   }
+  const bool new_declaration = found == bm->c_api_source_sorts.end();
   bm->c_api_source_sorts[name] = source_sort;
+  if (new_declaration)
+    bm->InvalidateRealModel();
   return bm->CreateSourceSymbol(name, source_sort);
 }
 
@@ -316,6 +338,16 @@ void requireBitVectorOperand(const char* operation, const stp::ASTNode& n)
   if (n.GetType() == stp::FLOATINGPOINT_TYPE)
     message += "; use vc_fpToIEEEBV to expose a float's packed bits";
   message += ": ";
+  stp::FatalError(message.c_str(), n);
+}
+
+void requireRealOperand(const char* operation, const stp::ASTNode& n)
+{
+  if (n.GetSourceSort().kind() == stp::SourceSort::Kind::Real)
+    return;
+  std::string message("CInterface: ");
+  message += operation;
+  message += " requires Real operands: ";
   stp::FatalError(message.c_str(), n);
 }
 
@@ -405,6 +437,70 @@ bool nonNegativeFlag(int param_value, const char* flag)
   return false;
 }
 
+[[noreturn]] void fatalRealCException(const char* operation,
+                                      const std::exception& failure)
+{
+  const std::string diagnostic =
+      std::string("CInterface: ") + operation + " failed: " + failure.what();
+  stp::FatalError(diagnostic.c_str());
+}
+
+// Whether an exact-arithmetic failure is the budget refusing work rather than
+// the caller having asked for something ill-formed.
+//
+// The distinction is what the caller can do about it. A null operand, a
+// foreign manager, a nonlinear product: those are contract violations, and
+// dying on them is telling the caller about a bug. A resource limit is not --
+// the limits are fixed at 64 KiBit per operand and result, exact arithmetic
+// over folded constants grows superexponentially, and no caller can predict
+// from the operands whether the next multiply will cross the line. Refusing
+// it is the guard doing its job, so it is reported and declined the way every
+// other nonfatal misuse of this interface is, and the caller backs off.
+bool isExactResourceLimit(const std::exception& failure)
+{
+  // The budget refuses in one place but reports in four, and this used to
+  // know about two of them: a RegistryFailure or SolveContextFailure carrying
+  // ResourceLimit fell through to fatalRealCException and killed the caller's
+  // process for a query that was merely too big.  The shared predicate is
+  // what the top of the solver already used.
+  return stp::lra::gaveUpOnABudget(failure);
+}
+
+// Report and return NULL for a budget refusal; otherwise do not return.
+Expr refuseRealCException(const char* operation,
+                          const std::exception& failure)
+{
+  if (isExactResourceLimit(failure))
+  {
+    reportCAPIError(std::string(operation) +
+                    " exceeded the exact-arithmetic budget: " +
+                    failure.what());
+    return NULL;
+  }
+  fatalRealCException(operation, failure);
+}
+
+stp::ASTNode& requireOwnedRealExpr(VC vc, const char* operation, Expr expr)
+{
+  if (expr == nullptr)
+  {
+    const std::string diagnostic =
+        std::string("CInterface: ") + operation + " received a null Expr";
+    stp::FatalError(diagnostic.c_str());
+  }
+  stp::ASTNode& node = *static_cast<stp::ASTNode*>(expr);
+  if (!stp::detail::CInterfaceNodeAccess::isOwnedBy(node, mgr(vc)))
+  {
+    const std::string diagnostic =
+        std::string("CInterface: ") + operation +
+        " received an Expr owned by a different validity checker";
+    stp::FatalError(diagnostic.c_str());
+  }
+  requireRealOperand(operation, node);
+  return node;
+}
+
+
 /* this method is purposefully not public! */
 std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
 {
@@ -418,6 +514,9 @@ std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
     case stp::BITVECTOR:
       indexWidth = 0;
       valueWidth = (*a)[0].GetUnsignedConst();
+      break;
+    case stp::REAL_CONST:
+      stp::FatalError("CInterface: mathematical Real has no bit width", *a);
       break;
     case stp::ARRAY:
       // The children are the index and element type nodes themselves (see
@@ -786,6 +885,23 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       if (nonNegativeFlag(param_value, "FP_ABSTRACTION_BUDGET"))
         b->UserFlags.fp_abstraction_budget =
             static_cast<unsigned>(param_value);
+      break;
+    // The exact linear Real controls. Boolean throughout: nonzero is on.
+    case LRA_THEORY_PROPAGATION:
+      b->UserFlags.lra_theory_propagation = param_value != 0;
+      break;
+    case LRA_VERIFY_CONFLICTS:
+      b->UserFlags.lra_verify_conflicts = param_value != 0;
+      break;
+    case LRA_VERIFY_CANONICAL:
+      // The flag alone is not the setting: the command line pairs it with
+      // this call (see tools/stp/main.cpp), because nothing reads UserFlags
+      // for it at use. The call sets the process-wide default that every
+      // exact-arithmetic budget reads once, when it is created: it reaches
+      // every budget created after it, for this checker or any other, and
+      // none created before.
+      b->UserFlags.lra_verify_canonical = param_value != 0;
+      b->SetLraCanonicalVerification(b->UserFlags.lra_verify_canonical);
       break;
     case UF_LEMMAS_PER_ROUND:
       if (nonNegativeFlag(param_value, "UF_LEMMAS_PER_ROUND"))
@@ -1475,7 +1591,27 @@ void vc_assertFormula(VC vc, Expr e)
     stp::FatalError("Trying to assert a NON formula: ", *a);
 
   assert(BVTypeCheck(*a));
-  b->AddAssert(*a);
+  // Preregistering the assertion's Real atoms does exact arithmetic, so this
+  // can refuse for the same reason a Real constructor can. Report it the way
+  // those do and leave the assertion out, rather than letting the refusal
+  // escape a void function and reach terminate.
+  try
+  {
+    b->AddAssert(*a);
+  }
+  catch (const std::exception& failure)
+  {
+    if (!isExactResourceLimit(failure))
+      fatalRealCException("vc_assertFormula", failure);
+    // The caller may well ignore the diagnostic, so the refusal has to be
+    // recorded where it cannot be ignored: without this the query would be
+    // answered as though the assertion had never been made.
+    b->NoteRealAssertionRefused();
+    reportCAPIError(std::string("vc_assertFormula") +
+                    " exceeded the exact-arithmetic budget: " +
+                    failure.what());
+    return;
+  }
   // A certified UF map belongs to one completed root. An assertion changes
   // that root even before the next query clears the ordinary model tables.
   if (stp_i->Ctr_Example->getUFTheoryAdapter() != NULL)
@@ -1537,6 +1673,19 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
   }
 
   assert(BVTypeCheck(*a));
+  // An assertion the budget refused is missing from the context, so there is
+  // no query here to answer -- only one to decline. 2 is this interface's
+  // "the call was malformed"; the verdict for having no answer is 3, and it
+  // owes a reason.
+  if (b->RealAssertionRefused())
+  {
+    b->noteUnknown(stp::UnknownReason::Incomplete,
+                   "an assertion exceeded the exact-arithmetic budget and "
+                   "could not be registered, so this query is missing one of "
+                   "its constraints and cannot be decided");
+    return recordQueryOutcome(stp_i, b->unknownResult());
+  }
+
   // Cached in case someone runs PrintQuery()
   b->SetQuery(*a);
 
@@ -1544,6 +1693,19 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
 
   stp_i->bm->UserFlags.timeout_max_conflicts = timeout_max_conflicts;
   stp_i->bm->UserFlags.timeout_max_time = timeout_max_time;
+
+  bool active_real = stp::lra::Frontend::containsRealSyntax(*a);
+  if (!active_real)
+  {
+    const stp::ASTVec active_assertions = b->GetAsserts();
+    for (const stp::ASTNode& assertion : active_assertions)
+      if (stp::lra::Frontend::containsRealSyntax(assertion))
+      {
+        active_real = true;
+        break;
+      }
+  }
+  active_real = active_real || !b->AllRealSymbols().empty();
 
   // Incremental sessions (a vc_push happened, or vc_setFlags 'i'): solve
   // through the persistent driver. vc_query decides asserts AND NOT query,
@@ -1562,7 +1724,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
   // the override was documented and inert for every embedder.
   // vc_setFlags 'i' still forces the driver from the first solve.
   const bool use_incremental =
-      stp_i->sessionIncremental &&
+      !active_real && stp_i->sessionIncremental &&
       (stp_i->incrementalFromStart ||
        stp::IncrementalSolver::automaticEngagementReady(
            stp_i->bm->UserFlags.incremental_auto_engage_at,
@@ -1633,22 +1795,56 @@ void vc_push(VC vc)
     stp_i->sessionIncremental = true;
 
   stp_i->ClearAllTables();
-  b->Push();
+  // Pushing a frame preregisters the frame's Real state, which does exact
+  // arithmetic and can therefore refuse on a budget.  Left unguarded the
+  // refusal escaped an extern "C" function, which no caller of this ABI can
+  // handle.  STPMgr::Push is strongly exception-safe -- it rolls back its own
+  // _asserts entry and rethrows -- so on this path the session is left at the
+  // depth it had, and reporting is the whole of the response.  Deliberately
+  // not NoteRealAssertionRefused: nothing was asserted, and that record is
+  // keyed on assertion depth.
+  try
+  {
+    b->Push();
+  }
+  catch (const std::exception& failure)
+  {
+    if (!isExactResourceLimit(failure))
+      fatalRealCException("vc_push", failure);
+    reportCAPIError(std::string("vc_push") +
+                    " exceeded the exact-arithmetic budget: " +
+                    failure.what());
+  }
 }
 
 //NB, doesn't remove symbols from decls, so they will be kept alive.
 //
-// Deliberately does NOT discard the counterexample tables, unlike vc_push
-// and vc_query: the C API's idiom brackets each query in push/pop and reads
-// the counterexample afterwards (see tests/api/C/stp-counterex.cpp). The
-// model belongs to the last vc_query, not to the assertion stack, and stays
-// readable until the next vc_push or vc_query clears it -- both of which
-// run before any state they clear could be reused for solving.
+// Deliberately does NOT discard the legacy counterexample tables, unlike
+// vc_push and vc_query: the C API's historical idiom brackets each query in
+// push/pop and reads the BV counterexample afterwards (see
+// tests/api/C/stp-counterex.cpp).  Exact Real models obey the stricter
+// public-pop invalidation rule in STPMgr::Pop().
 void vc_pop(VC vc)
 {
   stp::STP* stp_i = static_cast<stp::STP*>(vc);
   stp::STPMgr* b = stp_i->bm;
-  b->Pop();
+  // As vc_push, so the refusal cannot escape the C ABI.  STPMgr::Pop drops
+  // the LRA frame before its own _asserts entry, so unlike Push it is not
+  // formally strong; the window is narrow and reporting is still better than
+  // an exception leaving an extern "C" function.
+  try
+  {
+    b->Pop();
+  }
+  catch (const std::exception& failure)
+  {
+    if (!isExactResourceLimit(failure))
+      fatalRealCException("vc_pop", failure);
+    reportCAPIError(std::string("vc_pop") +
+                    " exceeded the exact-arithmetic budget: " +
+                    failure.what());
+    return;
+  }
 
   // Preserve the historical ordinary-scalar/array counterexample contract,
   // but not a UF certified handle map: that map is explicitly rooted in one
@@ -1697,6 +1893,36 @@ void vc_printCounterExampleSMTLIB2(VC vc)
 
 Expr vc_getCounterExample(VC vc, Expr e)
 {
+  // A Real term is answered by the Real model and nothing else, and that has
+  // to be decided before either branch below: the counterexample map holds
+  // bit patterns, so anything Real reaching it asks a node with no carrier
+  // for a value width and dies there.
+  if (vc != NULL && e != NULL &&
+      static_cast<stp::ASTNode*>(e)->GetSourceSort().kind() ==
+          stp::SourceSort::Kind::Real)
+  {
+    stp::STP* real_stp = static_cast<stp::STP*>(vc);
+    if (!static_cast<stp::ASTNode*>(e)->isConstant() &&
+        !real_stp->queryAnswered)
+    {
+      reportCAPIError("vc_getCounterExample: no model to read -- no query has "
+                      "been answered since the last vc_push or vc_query");
+      return NULL;
+    }
+    materializePendingModel(vc);
+    if (vc_hasRealModelValue(vc, e) != 1)
+    {
+      reportCAPIError("vc_getCounterExample: the exact Real model has no "
+                      "value for this term");
+      return NULL;
+    }
+    char* text = vc_getRealModelValue(vc, e);
+    if (text == NULL)
+      return NULL;
+    Expr value = vc_realConstExprFromStr(vc, text);
+    vc_deleteString(text);
+    return value;
+  }
   if (vc != NULL && e != NULL &&
       static_cast<stp::ASTNode*>(e)->GetKind() == stp::UF_APPLY)
     return vc_getUninterpretedFunctionValue(vc, e);
@@ -1906,6 +2132,7 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
     case stp::FLOATINGPOINT:
     case stp::ROUNDINGMODE:
     case stp::ARRAY:
+    case stp::REAL_CONST:
       break;
     default:
       stp::FatalError("CInterface: vc_varExpr expects a type node: ",
@@ -2144,6 +2371,15 @@ Expr vc_eqExpr(VC vc, Expr ccc0, Expr ccc1)
 
   stp::ASTNode* a = (stp::ASTNode*)ccc0;
   stp::ASTNode* aa = (stp::ASTNode*)ccc1;
+  if ((a != nullptr &&
+       a->GetSourceSort().kind() == stp::SourceSort::Kind::Real) ||
+      (aa != nullptr &&
+       aa->GetSourceSort().kind() == stp::SourceSort::Kind::Real))
+  {
+    stp::ASTNode& lhs = requireOwnedRealExpr(vc, "vc_eqExpr", ccc0);
+    stp::ASTNode& rhs = requireOwnedRealExpr(vc, "vc_eqExpr", ccc1);
+    return wrap(b->CreateRealPredicate(stp::EQ, lhs, rhs));
+  }
   assert(BVTypeCheck(*a));
   assert(BVTypeCheck(*aa));
   requireSamePublicSort("vc_eqExpr", b, *a, *aa);
@@ -2178,6 +2414,236 @@ Expr vc_boolType(VC vc)
 
   stp::ASTNode output = b->CreateNode(stp::BOOLEAN);
   return persistNode(vc, output);
+}
+
+int vc_hasRealConstruction(void)
+{
+  return 1;
+}
+
+int vc_hasQFLRA(void)
+{
+  return 1;
+}
+
+int vc_hasRealIte(void)
+{
+  return 1;
+}
+
+int vc_hasRealModel(VC vc)
+{
+  return mgr(vc)->HasRealModel() ? 1 : 0;
+}
+
+int vc_hasRealModelValue(VC vc, Expr term)
+{
+  if (term == nullptr)
+    return 0;
+  stp::ASTNode& node = *static_cast<stp::ASTNode*>(term);
+  if (!stp::detail::CInterfaceNodeAccess::isOwnedBy(node, mgr(vc)) ||
+      node.GetSourceSort().kind() != stp::SourceSort::Kind::Real)
+    return 0;
+  return mgr(vc)->HasRealModelValue(node) ? 1 : 0;
+}
+
+namespace {
+char* copyRealModelString(VC vc, const char* operation, Expr term,
+                          std::string (stp::STPMgr::*reader)(
+                              const stp::ASTNode&) const)
+{
+  try
+  {
+    stp::ASTNode& node = requireOwnedRealExpr(vc, operation, term);
+    const std::string value = (mgr(vc)->*reader)(node);
+    char* copy = strdup(value.c_str());
+    if (copy == nullptr)
+      stp::FatalError("CInterface: exact Real model string allocation failed");
+    return copy;
+  }
+  catch (const std::exception& failure)
+  {
+    fatalRealCException(operation, failure);
+  }
+}
+} // namespace
+
+char* vc_getRealModelValue(VC vc, Expr term)
+{
+  return copyRealModelString(vc, "vc_getRealModelValue", term,
+                             &stp::STPMgr::GetRealModelValue);
+}
+
+char* vc_getRealModelNumerator(VC vc, Expr term)
+{
+  return copyRealModelString(vc, "vc_getRealModelNumerator", term,
+                             &stp::STPMgr::GetRealModelNumerator);
+}
+
+char* vc_getRealModelDenominator(VC vc, Expr term)
+{
+  return copyRealModelString(vc, "vc_getRealModelDenominator", term,
+                             &stp::STPMgr::GetRealModelDenominator);
+}
+
+char* vc_getRealModelSMTLIBValue(VC vc, Expr term)
+{
+  return copyRealModelString(vc, "vc_getRealModelSMTLIBValue", term,
+                             &stp::STPMgr::GetRealModelSMTLIB);
+}
+
+char* vc_getRealModelSMTLIB2(VC vc)
+{
+  try
+  {
+    stp::STPMgr* manager = mgr(vc);
+    std::ostringstream out;
+    out << "(\n";
+    manager->PrintRealModelSMTLIB2(out, manager->AllRealSymbols());
+    out << ")\n";
+    char* copy = strdup(out.str().c_str());
+    if (copy == nullptr)
+      stp::FatalError("CInterface: exact Real model allocation failed");
+    return copy;
+  }
+  catch (const std::exception& failure)
+  {
+    fatalRealCException("vc_getRealModelSMTLIB2", failure);
+  }
+}
+
+void vc_deleteString(char* value)
+{
+  free(value);
+}
+
+Type vc_realType(VC vc)
+{
+  try
+  {
+    return persistNode(vc, mgr(vc)->CreateRealConst("0"));
+  }
+  catch (const std::exception& failure)
+  {
+    fatalRealCException("vc_realType", failure);
+  }
+}
+
+Expr vc_realConstExprFromStr(VC vc, const char* exact_text)
+{
+  if (exact_text == nullptr)
+    stp::FatalError("CInterface: vc_realConstExprFromStr received null text");
+  try
+  {
+    return wrap(mgr(vc)->CreateRealConst(exact_text));
+  }
+  catch (const std::exception& failure)
+  {
+    return refuseRealCException("vc_realConstExprFromStr", failure);
+  }
+}
+
+Expr vc_realConstExpr(VC vc, const char* numerator, const char* denominator)
+{
+  if (numerator == nullptr || denominator == nullptr)
+    stp::FatalError("CInterface: vc_realConstExpr received a null component");
+  try
+  {
+    return wrap(mgr(vc)->CreateRealConst(numerator, denominator));
+  }
+  catch (const std::exception& failure)
+  {
+    return refuseRealCException("vc_realConstExpr", failure);
+  }
+}
+
+namespace
+{
+Expr createRealBinary(VC vc, const char* operation, stp::Kind kind,
+                      Expr left, Expr right)
+{
+  stp::ASTNode& lhs = requireOwnedRealExpr(vc, operation, left);
+  stp::ASTNode& rhs = requireOwnedRealExpr(vc, operation, right);
+  try
+  {
+    return wrap(mgr(vc)->CreateRealTerm(kind, stp::ASTVec{lhs, rhs}));
+  }
+  catch (const std::exception& failure)
+  {
+    return refuseRealCException(operation, failure);
+  }
+}
+
+Expr createRealComparison(VC vc, const char* operation, stp::Kind kind,
+                          Expr left, Expr right)
+{
+  stp::ASTNode& lhs = requireOwnedRealExpr(vc, operation, left);
+  stp::ASTNode& rhs = requireOwnedRealExpr(vc, operation, right);
+  try
+  {
+    return wrap(mgr(vc)->CreateRealPredicate(kind, lhs, rhs));
+  }
+  catch (const std::exception& failure)
+  {
+    return refuseRealCException(operation, failure);
+  }
+}
+}
+
+Expr vc_realPlusExpr(VC vc, Expr left, Expr right)
+{
+  return createRealBinary(vc, "vc_realPlusExpr", stp::REAL_ADD, left, right);
+}
+
+Expr vc_realMinusExpr(VC vc, Expr left, Expr right)
+{
+  return createRealBinary(vc, "vc_realMinusExpr", stp::REAL_SUB, left, right);
+}
+
+Expr vc_realUMinusExpr(VC vc, Expr operand)
+{
+  stp::ASTNode& child =
+      requireOwnedRealExpr(vc, "vc_realUMinusExpr", operand);
+  try
+  {
+    return wrap(mgr(vc)->CreateRealTerm(stp::REAL_NEG,
+                                        stp::ASTVec{child}));
+  }
+  catch (const std::exception& failure)
+  {
+    return refuseRealCException("vc_realUMinusExpr", failure);
+  }
+}
+
+Expr vc_realMultExpr(VC vc, Expr left, Expr right)
+{
+  return createRealBinary(vc, "vc_realMultExpr", stp::REAL_MUL, left, right);
+}
+
+Expr vc_realDivExpr(VC vc, Expr numerator, Expr denominator)
+{
+  return createRealBinary(vc, "vc_realDivExpr", stp::REAL_DIV, numerator,
+                          denominator);
+}
+
+Expr vc_realLtExpr(VC vc, Expr left, Expr right)
+{
+  return createRealComparison(vc, "vc_realLtExpr", stp::REAL_LT, left, right);
+}
+
+Expr vc_realLeExpr(VC vc, Expr left, Expr right)
+{
+  return createRealComparison(vc, "vc_realLeExpr", stp::REAL_LE, left, right);
+}
+
+Expr vc_realGtExpr(VC vc, Expr left, Expr right)
+{
+  return createRealComparison(vc, "vc_realGtExpr", stp::REAL_GT, left, right);
+}
+
+Expr vc_realGeExpr(VC vc, Expr left, Expr right)
+{
+  return createRealComparison(vc, "vc_realGeExpr", stp::REAL_GE, left, right);
 }
 
 // ---------------------------------------------------------------------------
@@ -2885,6 +3351,34 @@ Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart)
   {
     stp::FatalError("CInterface: vc_iteExpr requires a Boolean condition: ",
                     *c);
+  }
+
+  // A Real-branch ite is inside the fragment, not outside it: selecting
+  // between two Real terms on a Boolean condition introduces no product of
+  // unknowns, which is why CreateRealTerm accepts ITE and why the SMT-LIB
+  // reader builds one (see smt2.y's an_term ite rule). Refusing it here left
+  // this interface stricter than both the core and the parser, so a formula
+  // a .smt2 file could state had no C API spelling at all.
+  //
+  // requireOwnedRealExpr on both branches first: it is what rejects a
+  // Real/non-Real pair, and it names which branch was wrong, which
+  // CreateRealTerm's own operand check cannot.
+  if (t->GetSourceSort().kind() == stp::SourceSort::Kind::Real ||
+      e->GetSourceSort().kind() == stp::SourceSort::Kind::Real)
+  {
+    stp::ASTNode& thenNode =
+        requireOwnedRealExpr(vc, "vc_iteExpr then branch", thenpart);
+    stp::ASTNode& elseNode =
+        requireOwnedRealExpr(vc, "vc_iteExpr else branch", elsepart);
+    try
+    {
+      return wrap(
+          b->CreateRealTerm(stp::ITE, stp::ASTVec{*c, thenNode, elseNode}));
+    }
+    catch (const std::exception& failure)
+    {
+      return refuseRealCException("vc_iteExpr", failure);
+    }
   }
 
   // Branches that BOTH claim to be floats must agree on the format: two
@@ -4027,6 +4521,8 @@ Type vc_getType(VC vc, Expr ex)
         // bit-vector type for a sort that deliberately is not one.
         stp::FatalError("c_interface: vc_getType: a sort declared by "
                         "declare-sort has no C API type");
+      case stp::SourceSort::Kind::Real:
+        return vc_realType(vc);
       default:
         stp::FatalError("c_interface: vc_GetType: expected scalar sort");
     }
@@ -4039,6 +4535,7 @@ Type vc_getType(VC vc, Expr ex)
     case stp::SourceSort::Kind::BitVector:
     case stp::SourceSort::Kind::FloatingPoint:
     case stp::SourceSort::Kind::RoundingMode:
+    case stp::SourceSort::Kind::Real:
       return scalar_type(sort);
     case stp::SourceSort::Kind::Array:
       return vc_arrayType(vc, scalar_type(sort.index()),
@@ -4149,16 +4646,29 @@ static_assert((int)FP_TO_IEEE_BV == (int)stp::FP_TO_IEEE_BV,
 static_assert((int)FP_SMT_EQ == (int)stp::FP_SMT_EQ, "exprkind_t drift");
 static_assert((int)UF_APPLY == (int)stp::UF_APPLY, "exprkind_t drift");
 static_assert((int)DISTINCT == (int)stp::DISTINCT, "exprkind_t drift");
+static_assert((int)REAL_CONST == (int)stp::REAL_CONST, "exprkind_t drift");
+static_assert((int)REAL_ADD == (int)stp::REAL_ADD, "exprkind_t drift");
+static_assert((int)REAL_SUB == (int)stp::REAL_SUB, "exprkind_t drift");
+static_assert((int)REAL_NEG == (int)stp::REAL_NEG, "exprkind_t drift");
+static_assert((int)REAL_MUL == (int)stp::REAL_MUL, "exprkind_t drift");
+static_assert((int)REAL_DIV == (int)stp::REAL_DIV, "exprkind_t drift");
+static_assert((int)REAL_LT == (int)stp::REAL_LT, "exprkind_t drift");
+static_assert((int)REAL_LE == (int)stp::REAL_LE, "exprkind_t drift");
+static_assert((int)REAL_GT == (int)stp::REAL_GT, "exprkind_t drift");
+static_assert((int)REAL_GE == (int)stp::REAL_GE, "exprkind_t drift");
 static_assert((int)BOOLEAN_TYPE == (int)stp::BOOLEAN_TYPE &&
                   (int)FLOATINGPOINT_TYPE == (int)stp::FLOATINGPOINT_TYPE &&
-                  (int)UNKNOWN_TYPE == (int)stp::UNKNOWN_TYPE,
+                  (int)UNKNOWN_TYPE == (int)stp::UNKNOWN_TYPE &&
+                  (int)REAL_TYPE == (int)stp::REAL_TYPE + 1,
               "type_t drift");
 
 exprkind_t getExprKind(Expr e)
 {
   stp::ASTNode* input = (stp::ASTNode*)e;
-  // ARRAY_EQ is an internal, opaque representation of ordinary equality.
-  // Do not expose a new C API enum value (or shift the stable existing ones).
+  // ARRAY_EQ predates the public enum entry and has always been reported as
+  // source-level equality.  Keep that established runtime behavior; the
+  // appended ARRAY_EQ enumerator is only the numeric bridge needed to keep
+  // later Real kinds in lockstep with the generated internal catalogue.
   if (input->GetKind() == stp::ARRAY_EQ)
     return EQ;
   return (exprkind_t)(input->GetKind());
@@ -4204,6 +4714,8 @@ type_t getType(Expr ex)
       // also unreachable today, since the C API cannot declare such a sort;
       // stated as its own arm so it is a decision rather than a fall-through.
       return UNKNOWN_TYPE;
+    case stp::SourceSort::Kind::Real:
+      return REAL_TYPE;
     default:
       return UNKNOWN_TYPE;
   }

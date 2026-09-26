@@ -36,6 +36,9 @@ THE SOFTWARE.
 #include <cstdint>
 #include <sstream>
 
+#include "LraFrontend.h"
+#include "NumberBudget.h"
+
 namespace stp
 {
 using std::cout;
@@ -132,17 +135,60 @@ ASTNode STPMgr::LookupOrCreateSymbol(const char* const name)
   return n;
 }
 
+void STPMgr::SetLraCanonicalVerification(bool enabled) noexcept
+{
+  lra::NumberBudget::setCanonicalVerificationDefault(enabled);
+}
+
 ASTNode STPMgr::CreateSourceSymbol(const char* const name,
                                    const SourceSort& source_sort)
 {
   if (!source_sort.isKnown())
     FatalError("CreateSourceSymbol requires a known source sort");
-  if (source_sort.containsFloatingPoint())
+  if (source_sort.kind() == SourceSort::Kind::Real)
+    noteReal();
+  else if (source_sort.containsFloatingPoint())
     noteFloatingPoint();
   else if (source_sort.usesFloatingPointTheory())
     noteFloatingPointTheory();
   ASTSymbol temp_sym(this, name, source_sort);
+  ASTNode result(LookupOrCreateSymbol(temp_sym));
+  if (source_sort.kind() == SourceSort::Kind::Real)
+    RecordRealSymbol(result);
+  return result;
+}
+
+ASTNode STPMgr::CreateInternalSourceSymbol(
+    const char* const name, const SourceSort& source_sort)
+{
+  if (!source_sort.isKnown())
+    FatalError("CreateInternalSourceSymbol requires a known source sort");
+  if (source_sort.kind() == SourceSort::Kind::Real)
+    noteReal();
+  else if (source_sort.containsFloatingPoint())
+    noteFloatingPoint();
+  else if (source_sort.usesFloatingPointTheory())
+    noteFloatingPointTheory();
+  ASTSymbol temp_sym(this, name, source_sort, true);
   return ASTNode(LookupOrCreateSymbol(temp_sym));
+}
+
+ASTNode STPMgr::CreateFreshInternalSourceVariable(
+    const SourceSort& source_sort, const std::string& prefix)
+{
+  char* d =
+      (char*)alloca(sizeof(char) * (32 + prefix.length()));
+  const unsigned int next_count = _symbol_count;
+  sprintf(d, "@%s_%d", prefix.c_str(), next_count);
+  ASTNode current = CreateInternalSourceSymbol(d, source_sort);
+  Introduced_SymbolsSet.insert(current);
+  _symbol_count = next_count + 1;
+  return current;
+}
+
+void STPMgr::noteReal()
+{
+  has_real = true;
 }
 
 // FIXME: _name is now a constant field, and this assigns to it
@@ -178,7 +224,8 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     ASTSymbol* s_ptr1 = nullptr;
     try
     {
-      s_ptr1 = new ASTSymbol(this, owned_name, s_ptr->_source_sort);
+      s_ptr1 = new ASTSymbol(this, owned_name, s_ptr->_source_sort,
+                             s_ptr->_internal_identity);
     }
     catch (...)
     {
@@ -284,6 +331,8 @@ ASTNode STPMgr::CreateDeterministicSourceVariable(
 
 void STPMgr::indexSymbolName(ASTSymbol* symbol)
 {
+  if (symbol->_internal_identity)
+    return;
   const SymbolNameIndex::iterator existing =
       _symbol_name_index.find(symbol->GetName());
   if (existing != _symbol_name_index.end())
@@ -304,6 +353,8 @@ void STPMgr::indexSymbolName(ASTSymbol* symbol)
 
 void STPMgr::unindexSymbolName(ASTSymbol* symbol)
 {
+  if (symbol->_internal_identity)
+    return;
   const SymbolNameIndex::iterator entry =
       _symbol_name_index.find(symbol->GetName());
   if (entry == _symbol_name_index.end())
@@ -622,6 +673,9 @@ ASTNode STPMgr::LiftSourceValue(const ASTNode& carrier,
         FatalError("LiftSourceValue: invalid uninterpreted-sort carrier: ",
                    carrier);
       return carrier;
+    case SourceSort::Kind::Real:
+      FatalError("LiftSourceValue: mathematical Real requires an exact Real "
+                 "model value, never a packed carrier");
     default:
       FatalError("LiftSourceValue: cannot lift this source sort");
   }
@@ -916,29 +970,76 @@ void STPMgr::AddAssert(const ASTNode& assert)
   if (_asserts.empty())
     _asserts.push_back(new ASTVec());
 
+  InvalidateRealModel();
   ASTVec& v = *_asserts.back();
   v.push_back(assert);
+  try
+  {
+    if (lra::Frontend::containsRealSyntax(assert))
+      RegisterLraAssertion(assert);
+  }
+  catch (...)
+  {
+    v.pop_back();
+    throw;
+  }
 }
 
 void STPMgr::Push(void)
 {
+  InvalidateRealModel();
   _asserts.push_back(new ASTVec());
+  try
+  {
+    PushLraAssertionFrame();
+  }
+  catch (...)
+  {
+    delete _asserts.back();
+    _asserts.pop_back();
+    throw;
+  }
+}
+
+void STPMgr::NoteRealAssertionRefused() noexcept
+{
+  const size_t depth = _asserts.size();
+  if (lra_refused_depth == 0 || depth < lra_refused_depth)
+    lra_refused_depth = depth;
 }
 
 void STPMgr::Pop(void)
 {
+  InvalidateRealModel();
   if (_asserts.empty())
     FatalError("POP on empty.");
 
+  PopLraAssertionFrame();
   ASTVec* c = _asserts.back();
   delete c;
   _asserts.pop_back();
+  if (lra_refused_depth != 0 && _asserts.size() < lra_refused_depth)
+    lra_refused_depth = 0;
+}
+
+void STPMgr::PopPreservingRealModel(void)
+{
+  if (_asserts.empty())
+    FatalError("POP on empty.");
+
+  PopLraAssertionFrame();
+  ASTVec* c = _asserts.back();
+  delete c;
+  _asserts.pop_back();
+  if (lra_refused_depth != 0 && _asserts.size() < lra_refused_depth)
+    lra_refused_depth = 0;
 }
 
 //BUG this is most probably wrongly handled. It gets propagated and messed up
 //with the state. On the next query, this mixed state then causes trouble
 void STPMgr::SetQuery(const ASTNode& q)
 {
+  InvalidateRealModel();
   _current_query = q;
 }
 
@@ -1115,6 +1216,12 @@ STPMgr::~STPMgr()
   ones.clear();
   max.clear();
 
+  InvalidateRealModel();
+  // Registry source metadata pins manager-owned Boolean/Real DAGs. Release it
+  // before the ordinary AST ownership tables so no exact constant can be kept
+  // alive beyond the table that owns it.
+  DestroyLraAtomRegistry();
+
   if (NULL != CreateBVConstVal)
     CONSTANTBV::BitVector_Destroy(CreateBVConstVal);
 
@@ -1145,5 +1252,9 @@ STPMgr::~STPMgr()
   delete hashingNodeFactory;
 
   _interior_unique_table.clear();
+
+  // Exact values retain a non-owning pointer to this state's NumberBudget,
+  // so it is necessarily the final manager-owned LRA object destroyed.
+  DestroyLraAstState();
 }
 } // end namespace beev

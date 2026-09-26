@@ -257,7 +257,7 @@ const char* roundingModeName(unsigned encoding)
 void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
                        const bool definately_bv)
 {
-  const bool has_arrays = !definately_bv && containsArrayOps(n, mgr);
+
   ASTNodeSet visited, symbols;
   buildListOfSymbols(n, visited, symbols);
 
@@ -270,12 +270,46 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
     has_bv_sort = has_bv_sort || sortContainsBitVector(sort);
   }
   const bool has_uninterpreted = !uninterpreted_sorts.empty();
-
   // Logic selection describes this expression, not every term ever interned
   // by the manager. Include RoundingMode-only formulas: that source sort is
   // part of the FP theory even when no FloatingPoint value occurs.
   const bool has_fp = containsFloatingPointTheory(n, mgr);
-  if (has_fp && has_uninterpreted)
+  bool has_real = false;
+  bool has_array_sort = false;
+  {
+    ASTVec pending(1, n);
+    ASTNodeSet seen;
+    while (!pending.empty())
+    {
+      const ASTNode current = pending.back();
+      pending.pop_back();
+      if (!seen.insert(current).second)
+        continue;
+      has_real = has_real || current.isRealTerm() ||
+                 current.GetKind() == REAL_LT ||
+                 current.GetKind() == REAL_LE ||
+                 current.GetKind() == REAL_GT ||
+                 current.GetKind() == REAL_GE;
+      has_array_sort =
+          has_array_sort || current.GetType() == stp::ARRAY_TYPE;
+      for (const ASTNode& child : current.GetChildren())
+        pending.push_back(child);
+    }
+  }
+  // The legacy array predicate identifies arrays from their nonzero packed
+  // index width. Asking an active Real node for that width is intentionally
+  // fatal, so use the carrier-type result from the same stack-safe scan when
+  // Real syntax is present. The legacy path stays byte-for-byte equivalent
+  // for formulas without Real syntax.
+  const bool has_arrays =
+      !definately_bv &&
+      (has_real ? has_array_sort : containsArrayOps(n, mgr));
+  if (has_real && !has_fp && !has_arrays && !has_uninterpreted)
+    os << "(set-logic QF_LRA)\n";
+  else if (has_real)
+    FatalError("SMTLIB2_PrintBack: no standard mixed Real logic name is enabled",
+               n);
+  else if (has_fp && has_uninterpreted)
     os << (has_arrays ? "(set-logic QF_AUFBVFP)\n"
                       : "(set-logic QF_UFBVFP)\n");
   else if (has_fp)
@@ -337,6 +371,12 @@ void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
 
     // Should be a symbol.
     assert(a.GetKind() == SYMBOL);
+    ASTNode declared_symbol;
+    if (!mgr->LookupSymbol(a.GetName(), declared_symbol) ||
+        declared_symbol != a)
+      FatalError("SMTLIB2_PrintBack refuses to expose an "
+                 "implementation-generated symbol as a user declaration",
+                 a);
     os << "|";
     a.nodeprint(os);
     os << "|";
@@ -411,6 +451,9 @@ void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
            << ") ";
         break;
       }
+      case stp::REAL_TYPE:
+        os << " () Real";
+        break;
       default:
         stp::FatalError("printVarDeclsToStream: Unsupported type", a);
         break;

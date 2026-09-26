@@ -31,6 +31,12 @@ add_library(cppinterface OBJECT
 add_dependencies(cinterface ASTKind_header)
 add_dependencies(cppinterface ASTKind_header)
 
+# Both reach the exact-rational header, which includes <imrat.h>. For IMath's
+# INTERFACE_INCLUDE_DIRECTORIES; see the note in
+# lib/AbsRefineCounterExample/CMakeLists.txt.
+target_link_libraries(cinterface PRIVATE IMath)
+target_link_libraries(cppinterface PRIVATE IMath)
+
 # FIXME: Remove this
 # For legacy reasons make the interface header files available in include/stp/ in the build directory
 if (NOT ("${PROJECT_BINARY_DIR}" STREQUAL "${PROJECT_SOURCE_DIR}"))

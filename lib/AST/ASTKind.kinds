@@ -224,3 +224,17 @@ UF_APPLY        2       -       Term    Form
 # pass either exploits their symmetry or lowers them to pairwise disequalities.
 # Keep new public kinds at the end: their numeric values are ABI-visible.
 DISTINCT        2       -       Form
+
+# Mathematical Real first-fragment nodes.  Keep this append-only catalogue in
+# numeric lockstep with the public C exprkind_t enum.  REAL_ADD and REAL_SUB
+# retain their parsed n-ary shape; the exact frontend canonicalizes them.
+REAL_CONST      0       0       Term
+REAL_ADD        2       -       Term
+REAL_SUB        1       -       Term
+REAL_NEG        1       1       Term
+REAL_MUL        2       2       Term
+REAL_DIV        2       2       Term
+REAL_LT         2       2       Form
+REAL_LE         2       2       Form
+REAL_GT         2       2       Form
+REAL_GE         2       2       Form

@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTKind.h"
 #include "stp/Util/Attributes.h"
+#include "stp/config.h"
 #include <cstdint>
 #include <initializer_list>
 #include <vector>
@@ -128,6 +129,15 @@ public:
   ASTNode CreateBVConst(unsigned int width, uint64_t bvconst);
   ASTNode CreateFPConst(const stp::ASTNode& bvconst, unsigned exp_width,
                         unsigned sig_width);
+
+  // Mathematical-Real entry points delegate to STPMgr so the private exact
+  // constant table and the common structural factory share one owner.
+  ASTNode CreateRealConst(const std::string& decimal_or_fraction);
+  ASTNode CreateRealConst(const std::string& numerator,
+                          const std::string& denominator);
+  ASTNode CreateRealTerm(Kind kind, const ASTVec& children);
+  ASTNode CreateRealPredicate(Kind kind, const ASTNode& lhs,
+                              const ASTNode& rhs);
 
   virtual std::string getName() = 0;
 };

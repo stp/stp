@@ -152,6 +152,9 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
     Kind k;
     unsigned int indexWidth;
     unsigned int valueWidth;
+    // A mathematical Real carries neither width, so both are meaningless
+    // for it and rebuilding goes through CreateNode instead.
+    bool realTerm;
 
     enum Phase
     {
@@ -201,7 +204,8 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
       // from fromTo, and a DenseNodeMap moves its elements when that
       // happens -- a reference here would dangle.
       frame.chainTarget = it->second;
-      assert(frame.chainTarget.GetIndexWidth() == node.GetIndexWidth());
+      assert(node.isRealTerm() ||
+             frame.chainTarget.GetIndexWidth() == node.GetIndexWidth());
       frame.phase = Frame::AwaitingChain;
 
       if (preventInfinite)
@@ -237,8 +241,9 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
 
     frame.n = node;
     frame.k = k;
-    frame.indexWidth = node.GetIndexWidth();
-    frame.valueWidth = node.GetValueWidth();
+    frame.realTerm = node.isRealTerm();
+    frame.indexWidth = frame.realTerm ? 0 : node.GetIndexWidth();
+    frame.valueWidth = frame.realTerm ? 0 : node.GetValueWidth();
     return true;
   };
 
@@ -285,8 +290,8 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
   // The answer for a rebuilt node, cached and handed back up.
   auto finish = [&](Frame& f, const ASTNode& value)
   {
-    assert(value.GetValueWidth() == f.valueWidth);
-    assert(value.GetIndexWidth() == f.indexWidth);
+    assert(f.realTerm || value.GetValueWidth() == f.valueWidth);
+    assert(f.realTerm || value.GetIndexWidth() == f.indexWidth);
 
     // If there is already an "n" element in the cache, the maps semantics
     // are to ignore the next insertion.
@@ -391,7 +396,9 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
     }
 
     ASTNode built;
-    if (current.valueWidth == 0) // n.GetType() == BOOLEAN_TYPE
+    // A Real term has no widths to restore; CreateNode is the whole of it,
+    // and asking a Real for a value width is an error rather than a zero.
+    if (current.realTerm || current.valueWidth == 0)
     {
       built = nf->CreateNode(current.k, current.newChildren);
     }

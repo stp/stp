@@ -29,9 +29,12 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 
 #include <cassert>
+#include <string>
 
 namespace stp
 {
+class SATSolver;
+
 // The bit-vector abstraction checker has three materially different answers.
 // A zero refinement count is not enough to distinguish a faithful candidate
 // from one whose mandatory exact encoding could not be built, so callers must
@@ -134,6 +137,22 @@ public:
   virtual bool hasAbstractions() const { return false; }
 
   virtual void ClearAllTables(void) = 0;
+
+
+  // The LRA full-lazy batch coordinator keeps the submitted CNF behind one
+  // internal activation literal.  Solving under that literal releases the
+  // assertion assignment before a verified theory clause is inserted, while
+  // retaining exactly the same logical problem for every refinement round.
+  virtual bool setRequiredSolveAssumption(const ASTNode& /*symbol*/)
+  {
+    return false;
+  }
+  virtual bool hasInternalSolveFailure() const { return false; }
+  virtual const std::string& internalSolveFailureDetail() const
+  {
+    static const std::string empty;
+    return empty;
+  }
 };
 }
 

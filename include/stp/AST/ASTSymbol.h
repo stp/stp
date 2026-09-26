@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef ASTSYMBOL_H
 #define ASTSYMBOL_H
 
+#include "stp/config.h"
 #include "stp/AST/ASTInternal.h"
 #include "stp/Util/StringHash.h"
 
@@ -43,6 +44,11 @@ class ASTSymbol : public ASTInternal
 private:
   // The name of the symbol
   const char* const _name;
+  // Manager-minted symbols occupy a separate identity domain even when a
+  // low-level API caller deliberately chooses the same spelling and sort.
+  // `false` contributes no hash bits, preserving every historical user
+  // symbol hash and equality result.
+  const bool _internal_identity;
 
   /****************************************************************
    * Hasher for ASTSymbol nodes                                   *
@@ -55,6 +61,10 @@ private:
       return CStringHash()(sym_ptr->_name) ^
              static_cast<size_t>(sym_ptr->_source_sort.hash() *
                                  0x9e3779b97f4a7c15ULL)
+             ^
+             (sym_ptr->_internal_identity
+                  ? static_cast<size_t>(0xd6e8feb86659fd93ULL)
+                  : static_cast<size_t>(0))
           ;
     };
   };
@@ -74,7 +84,9 @@ private:
   friend bool operator==(const ASTSymbol& sym1, const ASTSymbol& sym2)
   {
     return strcmp(sym1._name, sym2._name) == 0 &&
-           sym1._source_sort == sym2._source_sort;
+           sym1._source_sort == sym2._source_sort
+           && sym1._internal_identity == sym2._internal_identity
+        ;
   }
 
   // Get the name of the symbol
@@ -149,14 +161,25 @@ public:
 
   // Constructor.  This does NOT copy its argument.
   ASTSymbol(STPMgr* mgr, const char* const name)
-      : ASTInternal(mgr, SYMBOL), _name(name), _value_width(0), _index_width(0),
-        _sig_width(0), _exp_width(0), _source_sort(SourceSort::unknown())
+      : ASTInternal(mgr, SYMBOL), _name(name),
+        _internal_identity(false),
+        _value_width(0), _index_width(0), _sig_width(0), _exp_width(0),
+        _source_sort(SourceSort::unknown())
   {
   }
 
   ASTSymbol(STPMgr* mgr, const char* const name, const SourceSort& source_sort)
-      : ASTInternal(mgr, SYMBOL), _name(name), _value_width(0), _index_width(0),
-        _sig_width(0), _exp_width(0), _source_sort(source_sort)
+      : ASTSymbol(mgr, name, source_sort, false)
+  {
+  }
+
+private:
+  ASTSymbol(STPMgr* mgr, const char* const name,
+            const SourceSort& source_sort, bool internal_identity)
+      : ASTInternal(mgr, SYMBOL), _name(name),
+        _internal_identity(internal_identity), _value_width(0),
+        _index_width(0), _sig_width(0), _exp_width(0),
+        _source_sort(source_sort)
   {
     switch (_source_sort.kind())
     {
@@ -174,10 +197,14 @@ public:
         _value_width = _source_sort.packedWidth();
         break;
       case SourceSort::Kind::Uninterpreted:
-        // Its carrier, exactly as RoundingMode takes its carrier. Missing this
-        // arm leaves the width at zero, which the legacy width checks read as
-        // a Boolean -- and locally that is a warning, not an error.
+        // The declared sort retains its identity at the source boundary while
+        // its finite carrier uses the exact upstream packed width below it.
         _value_width = _source_sort.packedWidth();
+        break;
+      case SourceSort::Kind::Real:
+        // Mathematical Real has no packed carrier width.  Its source sort is
+        // immutable identity and ASTNode::GetType classifies it before the
+        // legacy width-based path.
         break;
       case SourceSort::Kind::Array:
         _index_width = _source_sort.index().packedWidth();
@@ -194,11 +221,13 @@ public:
     }
   }
 
+public:
   virtual ~ASTSymbol() {}
 
   // Copy constructor
   ASTSymbol(const ASTSymbol& sym)
       : ASTInternal(sym.nodeManager, sym._kind), _name(sym._name),
+        _internal_identity(sym._internal_identity),
         _value_width(sym._value_width), _index_width(sym._index_width),
         _sig_width(sym._sig_width), _exp_width(sym._exp_width),
         _source_sort(sym._source_sort)

@@ -466,6 +466,103 @@ size_t AbsRefine_CounterExample::emitChainReadLemmas(
   return emitted;
 }
 
+bool AbsRefine_CounterExample::AddArrayReadRefinementForCandidate(
+    SATSolver& SatSolver, ToSATBase* tosat,
+    ArrayReadRefinementProgress* progress)
+{
+  bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+  std::vector<AxiomToBe> remaining;
+
+  std::vector<std::pair<ASTNode, ArrayTransformer::arrTypeMap>> arrays;
+  arrays.insert(arrays.begin(), ArrayTransform->arrayToIndexToRead.begin(),
+                ArrayTransform->arrayToIndexToRead.end());
+  sort(arrays.begin(), arrays.end(), sortBySize);
+
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL && ext->activeInSolve())
+  {
+    bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+    return false;
+  }
+
+  for (const auto& array : arrays)
+  {
+    const std::map<ASTNode, ArrayTransformer::ArrayRead>& mapper =
+        array.second;
+    std::vector<std::pair<ASTNode, ArrayTransformer::ArrayRead>> reads(
+        mapper.begin(), mapper.end());
+    sort(reads.begin(), reads.end(), sortByIndexConstants);
+
+    ASTVec indexes;
+    ASTVec index_symbols;
+    ASTVec read_symbols;
+    std::vector<Kind> index_kinds;
+    ASTVec concrete_indexes;
+    ASTVec concrete_values;
+    indexes.reserve(reads.size());
+    index_symbols.reserve(reads.size());
+    read_symbols.reserve(reads.size());
+    index_kinds.reserve(reads.size());
+    concrete_indexes.reserve(reads.size());
+    concrete_values.reserve(reads.size());
+    for (const auto& read : reads)
+    {
+      indexes.push_back(read.first);
+      index_symbols.push_back(read.second.index_symbol);
+      read_symbols.push_back(read.second.symbol);
+      index_kinds.push_back(read.first.GetKind());
+      concrete_indexes.push_back(TermToConstTermUsingModel(read.first));
+      concrete_values.push_back(
+          TermToConstTermUsingModel(read.second.symbol));
+    }
+
+    for (std::size_t i = 0; i < indexes.size(); ++i)
+    {
+      std::vector<AxiomToBe> false_axioms;
+      for (std::size_t j = i + 1; j < indexes.size(); ++j)
+      {
+        if (indexes[i].GetKind() == BVCONST &&
+            index_kinds[j] == BVCONST &&
+            constantsDenoteDifferentValues(indexes[i], indexes[j]))
+          continue;
+        if (ASTFalse == simp->CreateSimplifiedEQ(indexes[i], indexes[j]))
+          continue;
+
+        AxiomToBe axiom(index_symbols[i], index_symbols[j], read_symbols[i],
+                        read_symbols[j]);
+        if (concrete_indexes[i] == concrete_indexes[j] &&
+            concrete_values[i] != concrete_values[j])
+          false_axioms.push_back(axiom);
+        else
+          remaining.push_back(axiom);
+      }
+
+      if (!false_axioms.empty())
+      {
+        ToSATBase::ASTNodeToSATVar& satVar =
+            tosat->SATVar_to_SymbolIndexMap();
+        const std::size_t emitted =
+            applyAxiomsToSolver(satVar, false_axioms, SatSolver, progress);
+        bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+        return emitted != 0;
+      }
+    }
+  }
+
+  if (!remaining.empty())
+  {
+    ToSATBase::ASTNodeToSATVar& satVar =
+        tosat->SATVar_to_SymbolIndexMap();
+    const std::size_t emitted =
+        applyAxiomsToSolver(satVar, remaining, SatSolver, progress);
+    bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+    return emitted != 0;
+  }
+
+  bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+  return false;
+}
+
 SOLVER_RETURN_TYPE
 AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
     SATSolver& SatSolver, const ASTNode& original_input, ToSATBase* tosat,

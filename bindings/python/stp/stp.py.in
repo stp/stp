@@ -26,7 +26,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import ast
-from ctypes import cdll, POINTER, CFUNCTYPE, byref
+from ctypes import cdll, POINTER, CFUNCTYPE, byref, string_at
 from ctypes import c_char, c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_size_t, c_bool
 from ctypes import c_double, c_float
 import inspect
@@ -34,6 +34,7 @@ import os.path
 import struct
 
 from .library_path import PATHS
+
 
 __all__ = [
     'AnyExpr', 'ArrayExpr', 'Expr', 'FloatExpr', 'RoundingModeExpr', 'Sort',
@@ -192,6 +193,28 @@ _set_func('vc_supportsCadical', c_bool, _VC)
 _set_func('vc_useCadical', c_bool, _VC)
 _set_func('vc_isUsingCadical', c_bool, _VC)
 _set_func('vc_boolType', _Type, _VC)
+_set_func('vc_realType', _Type, _VC)
+_set_func('vc_realConstExprFromStr', _Expr, _VC, c_char_p)
+_set_func('vc_realConstExpr', _Expr, _VC, c_char_p, c_char_p)
+_set_func('vc_realPlusExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_realMinusExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_realUMinusExpr', _Expr, _VC, _Expr)
+_set_func('vc_realMultExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_realDivExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_realLtExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_realLeExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_realGtExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_realGeExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_hasRealConstruction', c_int32)
+_set_func('vc_hasQFLRA', c_int32)
+_set_func('vc_hasRealModel', c_int32, _VC)
+_set_func('vc_hasRealModelValue', c_int32, _VC, _Expr)
+_set_func('vc_getRealModelValue', c_void_p, _VC, _Expr)
+_set_func('vc_getRealModelNumerator', c_void_p, _VC, _Expr)
+_set_func('vc_getRealModelDenominator', c_void_p, _VC, _Expr)
+_set_func('vc_getRealModelSMTLIBValue', c_void_p, _VC, _Expr)
+_set_func('vc_getRealModelSMTLIB2', c_void_p, _VC)
+_set_func('vc_deleteString', None, c_void_p)
 _set_func('vc_arrayType', _Type, _VC, _Type, _Type)
 _set_func('vc_varExpr', _Expr, _VC, c_char_p, _Type)
 _set_func('vc_varExpr1', _Expr, _VC, c_char_p, c_int32, c_int32)
@@ -415,6 +438,50 @@ def _model_value(vc, expr):
     return value
 
 
+class ExactRealValue(object):
+    """Immutable, exact value copied from an accepted STP Real model."""
+
+    __slots__ = ('_fraction', '_numerator', '_denominator', '_smtlib')
+
+    def __init__(self, fraction, numerator, denominator, smtlib):
+        object.__setattr__(self, '_fraction', fraction)
+        object.__setattr__(self, '_numerator', numerator)
+        object.__setattr__(self, '_denominator', denominator)
+        object.__setattr__(self, '_smtlib', smtlib)
+
+    def __setattr__(self, name, value):
+        raise AttributeError('ExactRealValue is immutable')
+
+    canonical_fraction = property(lambda self: self._fraction)
+    numerator = property(lambda self: self._numerator)
+    denominator = property(lambda self: self._denominator)
+    smtlib = property(lambda self: self._smtlib)
+
+    def __str__(self):
+        return self._fraction
+
+    def __repr__(self):
+        return 'ExactRealValue(%r)' % self._fraction
+
+    def __eq__(self, other):
+        return (isinstance(other, ExactRealValue) and
+                self._numerator == other._numerator and
+                self._denominator == other._denominator)
+
+    def __hash__(self):
+        return hash((self._numerator, self._denominator))
+
+
+def _take_stp_string(pointer):
+    """Copy an STP-owned string, then release it with its own allocator."""
+    if not pointer:
+        raise RuntimeError('STP returned no exact Real model string')
+    try:
+        return string_at(pointer).decode('ascii')
+    finally:
+        _lib.vc_deleteString(pointer)
+
+
 class Solver(object):
     current = None
 
@@ -429,6 +496,8 @@ class Solver(object):
         query is lowered at solve time.
         """
         self.keys = {}
+        self._real_keys = set()
+        self._real_constructed = False
         self.arrays = {}
         self.array_equality = bool(array_equality)
         self.uninterpreted_functions = bool(uninterpreted_functions)
@@ -571,6 +640,72 @@ class Solver(object):
     def bitvecs(self, names, width=32):
         """Creates one or more BitVectors variables."""
         return [self.bitvec(name, width) for name in names.split()]
+
+    def real(self, name):
+        """Create a mathematical Real variable in the exact linear fragment."""
+        encoded = name.encode('utf-8')
+        real_type = self._own_expr(_lib.vc_realType(self.vc))
+        expression = _lib.vc_varExpr(self.vc, encoded, real_type)
+        if not expression:
+            raise ValueError('Real declaration was rejected')
+        self.keys[name] = expression
+        self._real_keys.add(name)
+        self._real_constructed = True
+        return RealExpr(self, self.keys[name], name=name)
+
+    def reals(self, names):
+        """Create one or more exact Real variables."""
+        return [self.real(name) for name in names.split()]
+
+    def realval(self, value, denominator=None):
+        """Create an exact Real from integer/decimal/fraction text."""
+        def exact_text(component, label):
+            if isinstance(component, bool) or not isinstance(component, (int, str)):
+                raise TypeError(label + ' must be an int or exact ASCII text; floating-point values are not accepted')
+            return str(component).encode('ascii')
+
+        if denominator is None:
+            expr = _lib.vc_realConstExprFromStr(
+                self.vc, exact_text(value, 'Real value'))
+        else:
+            expr = _lib.vc_realConstExpr(
+                self.vc, exact_text(value, 'Real numerator'),
+                exact_text(denominator, 'Real denominator'))
+        self._real_constructed = True
+        return RealExpr(self, expr, concrete=True)
+
+    def has_real_construction(self):
+        return bool(_lib.vc_hasRealConstruction())
+
+    def has_qf_lra(self):
+        return bool(_lib.vc_hasQFLRA())
+
+    def has_real_model(self):
+        return bool(_lib.vc_hasRealModel(self.vc))
+
+    def real_model_value(self, expr=None, key=None):
+        """Return an immutable exact value for a current-model Real term."""
+        if expr is None:
+            if key is None or key not in self._real_keys:
+                raise TypeError('a named or wrapped Real expression is required')
+            raw = self.keys[key]
+        else:
+            if not isinstance(expr, RealExpr) or expr.s is not self:
+                raise TypeError('the term must be a RealExpr from this solver')
+            raw = expr.expr
+        if not _lib.vc_hasRealModelValue(self.vc, raw):
+            raise RuntimeError('no current exact Real model value')
+        return ExactRealValue(
+            _take_stp_string(_lib.vc_getRealModelValue(self.vc, raw)),
+            _take_stp_string(_lib.vc_getRealModelNumerator(self.vc, raw)),
+            _take_stp_string(_lib.vc_getRealModelDenominator(self.vc, raw)),
+            _take_stp_string(_lib.vc_getRealModelSMTLIBValue(self.vc, raw)))
+
+    def real_model_smtlib(self):
+        """Return deterministic SMT-LIB definitions for the exact model."""
+        if not self.has_real_model():
+            raise RuntimeError('no current exact Real model')
+        return _take_stp_string(_lib.vc_getRealModelSMTLIB2(self.vc))
 
     def bitvecval(self, width, value):
         """Creates a new BitVector with a constant value."""
@@ -788,12 +923,10 @@ class Solver(object):
         # written before this class grew a uninterpreted_functions argument
         # has had that, so every one of them keeps it.
         #
-        # A solver built for uninterpreted functions is the exception, and
-        # only it: vc_pop discards the certified UF model the query just
-        # produced -- that map is rooted in one unchanged assertion stack --
-        # and an application's value is read after check() returns, not
-        # during it.
-        bracket = not self.uninterpreted_functions
+        # Solvers built for uninterpreted functions and checks containing
+        # Real syntax are the exceptions. A pop discards either certified
+        # model, and an application's value is read after check() returns.
+        bracket = not (self.uninterpreted_functions or self._real_constructed)
         if bracket:
             self.push()
         ret = _lib.vc_query_with_timeout(self.vc, expr, max_conflicts, max_time)
@@ -863,6 +996,8 @@ class Solver(object):
                                       keys
         """
 
+        if isinstance(expr, RealExpr):
+            return self.real_model_value(expr=expr)
         if expr and isinstance(expr, AnyExpr):
             #
             # If we have an expression, and it is a _wrapped_ expression, we
@@ -870,6 +1005,8 @@ class Solver(object):
             #
             expr = expr.expr
         elif not expr and key is not None:
+            if key in self._real_keys:
+                return self.real_model_value(key=key)
             #
             # If have no expression, but we have a key, then look-up based on
             # keys (values stored in `self.keys) is already unboxed
@@ -979,6 +1116,8 @@ class Solver(object):
                 raise ValueError('ite floating-point branches must have the same format')
             expr = _lib.vc_iteExpr(self.vc, a.expr, b.expr, c.expr)
             return FloatExpr(self, b.eb, b.sb, expr)
+        if isinstance(b, RealExpr) or isinstance(c, RealExpr):
+            raise TypeError('Real-term ite is outside the exact linear Real fragment')
         assert b.width == c.width, 'Objects must have the same width' # compound expressions have width None or 0
         expr = _lib.vc_iteExpr(self.vc, a.expr, b.expr, c.expr)
         return Expr(self, b.width, expr)   
@@ -1142,6 +1281,105 @@ class AnyExpr(object):
         than hand back a value nothing decided.
         """
         return self.s.model(expr=self)
+
+
+class RealExpr(AnyExpr):
+    """A mathematical Real expression in STP's exact linear fragment.
+
+    RealExpr deliberately does not inherit Expr: bit-vector operations and
+    widths are not meaningful for mathematical Real values.
+    """
+
+    def __init__(self, solver, expr, name=None, concrete=False):
+        AnyExpr.__init__(self, solver, None, expr, name=name)
+        self._concrete = concrete
+
+    def _coerce(self, other):
+        if isinstance(other, RealExpr):
+            if other.s is not self.s:
+                raise ValueError('Real expressions belong to different solvers')
+            return other
+        if isinstance(other, (int, str)):
+            return self.s.realval(other)
+        raise TypeError('Real operand must be a RealExpr, int, or exact text')
+
+    def _binary(self, callback, other, reflected=False):
+        other = self._coerce(other)
+        left, right = (other, self) if reflected else (self, other)
+        return RealExpr(self.s, callback(self.s.vc, left.expr, right.expr),
+                        concrete=left._concrete and right._concrete)
+
+    def _predicate(self, callback, other, reflected=False):
+        other = self._coerce(other)
+        left, right = (other, self) if reflected else (self, other)
+        return Expr(self.s, None,
+                    callback(self.s.vc, left.expr, right.expr))
+
+    def __add__(self, other):
+        return self._binary(_lib.vc_realPlusExpr, other)
+
+    __radd__ = __add__
+
+    def __sub__(self, other):
+        return self._binary(_lib.vc_realMinusExpr, other)
+
+    def __rsub__(self, other):
+        return self._binary(_lib.vc_realMinusExpr, other, True)
+
+    def __neg__(self):
+        return RealExpr(self.s,
+                        _lib.vc_realUMinusExpr(self.s.vc, self.expr),
+                        concrete=self._concrete)
+
+    def __mul__(self, other):
+        other = self._coerce(other)
+        # Two concrete operands make a concrete product, which the C layer
+        # folds to a constant, so what is refused here is the nonlinear
+        # case: neither operand concrete.  Stated the same way in
+        # STPMgr::CreateRealTerm, HashingNodeFactory and BVTypeCheck.
+        if not self._concrete and not other._concrete:
+            raise TypeError('Real multiplication requires an exact concrete coefficient')
+        return RealExpr(self.s,
+                        _lib.vc_realMultExpr(self.s.vc, self.expr, other.expr),
+                        concrete=self._concrete and other._concrete)
+
+    __rmul__ = __mul__
+
+    def __truediv__(self, other):
+        other = self._coerce(other)
+        if not other._concrete:
+            raise TypeError('Real division requires an exact concrete divisor')
+        return RealExpr(self.s,
+                        _lib.vc_realDivExpr(self.s.vc, self.expr, other.expr),
+                        concrete=self._concrete)
+
+    def __rtruediv__(self, other):
+        left = self._coerce(other)
+        if not self._concrete:
+            raise TypeError('Real division requires an exact concrete divisor')
+        return RealExpr(self.s,
+                        _lib.vc_realDivExpr(self.s.vc, left.expr, self.expr),
+                        concrete=left._concrete)
+
+    def __eq__(self, other):
+        return self._predicate(_lib.vc_eqExpr, other)
+
+    __hash__ = object.__hash__
+
+    def __ne__(self, other):
+        return self.s.not_(self.__eq__(other))
+
+    def __lt__(self, other):
+        return self._predicate(_lib.vc_realLtExpr, other)
+
+    def __le__(self, other):
+        return self._predicate(_lib.vc_realLeExpr, other)
+
+    def __gt__(self, other):
+        return self._predicate(_lib.vc_realGtExpr, other)
+
+    def __ge__(self, other):
+        return self._predicate(_lib.vc_realGeExpr, other)
 
 
 class Expr(AnyExpr):
@@ -1966,6 +2204,14 @@ def bitvecs(*args, **kwargs):
     return Solver.current.bitvecs(*args, **kwargs)
 
 
+def real(*args, **kwargs):
+    return Solver.current.real(*args, **kwargs)
+
+
+def reals(*args, **kwargs):
+    return Solver.current.reals(*args, **kwargs)
+
+
 def array(*args, **kwargs):
     return Solver.current.array(*args, **kwargs)
 
@@ -1985,6 +2231,10 @@ def get_git_version_tag():
 
 def get_compilation_env():
     return _lib.get_compilation_env().decode('utf-8')
+
+
+__all__.extend(('ExactRealValue', 'RealExpr', 'real', 'reals'))
+
 
 def get_lib():
     #

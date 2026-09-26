@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include "stp/ToSat/BVAbstractionRefiner.h"
 #include "stp/Util/RunTimes.h"
 
+
 namespace stp
 {
 
@@ -44,6 +45,9 @@ class DLL_PUBLIC ToSATAIG : public ToSATBase
 {
 private:
   ASTNodeToSATVar nodeToSATVar;
+  ASTNodeSet protectedSymbols;
+  ASTVec requiredSolveAssumptions;
+  std::string internalSolveFailure;
   simplifier::constantBitP::ConstantBitPropagation* cb;
 
   ArrayTransformer* arrayTransformer;
@@ -175,6 +179,26 @@ public:
 
   // Used to read out the satisfiable answer.
   ASTNodeToSATVar& SATVar_to_SymbolIndexMap() override { return nodeToSATVar; }
+
+  // Keep solve-coordinator-owned Boolean atoms available to later common-API
+  // refinement and complete-model reads.  This is theory-neutral: ToSATAIG
+  // stores ordinary AST symbols and never includes an LRA implementation
+  // header.
+  void protectSymbol(const ASTNode& symbol)
+  {
+    protectedSymbols.insert(symbol);
+  }
+
+  bool setRequiredSolveAssumption(const ASTNode& symbol) override;
+  bool hasInternalSolveFailure() const override
+  {
+    return !internalSolveFailure.empty();
+  }
+  const std::string& internalSolveFailureDetail() const override
+  {
+    return internalSolveFailure;
+  }
+
 
   bool CallSAT(SATSolver& satSolver, const ASTNode& input,
                bool needAbsRef) override;
