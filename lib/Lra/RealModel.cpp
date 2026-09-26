@@ -110,6 +110,72 @@ RealModel::RealModel(NumberLimits limits,
 
 }
 
+void RealModel::reconstruct(const std::vector<RealModelDefinition>& definitions)
+{
+  if (committed_)
+    throw std::runtime_error("cannot reconstruct a committed model");
+  eval_cache_.clear();
+  std::set<ASTNode, ExprLess> pending;
+  for (const auto& definition : definitions)
+    if (!realSymbol(definition.symbol) ||
+        !pending.insert(definition.symbol).second)
+      throw std::runtime_error("invalid or duplicate reconstruction target");
+  for (const auto& definition : definitions)
+  {
+    using DefinitionKind = RealModelDefinition::Kind;
+    const bool affine = definition.kind == DefinitionKind::Affine;
+    if ((affine && (definition.term.IsNull() || !definition.bounds.empty())) ||
+        (!affine && (!definition.term.IsNull() || definition.bounds.empty() ||
+                     (definition.kind != DefinitionKind::AboveMaximum &&
+                      definition.kind != DefinitionKind::BelowMinimum))))
+      throw std::runtime_error("invalid reconstruction expression");
+    // Validate the dependency order at the publication boundary, including
+    // self-reference. Do not silently use a required symbol's default zero.
+    ASTVec todo = affine ? ASTVec{definition.term} : definition.bounds;
+    ASTNodeSet seen;
+    while (!todo.empty())
+    {
+      const auto node = todo.back();
+      todo.pop_back();
+      if (node.IsNull())
+        throw std::runtime_error("null reconstruction expression");
+      if (!seen.insert(node).second)
+        continue;
+      if (pending.count(node))
+        throw std::runtime_error("cyclic or unordered reconstruction");
+      for (const auto& child : node.GetChildren())
+        todo.push_back(child);
+    }
+    auto value = evaluateTermInScope(affine ? definition.term
+                                          : definition.bounds.front());
+    if (!affine)
+    {
+      const bool lower = definition.kind == DefinitionKind::AboveMaximum;
+      for (std::size_t i = 1; i < definition.bounds.size(); ++i)
+      {
+        auto bound = evaluateTermInScope(definition.bounds[i]);
+        NumberOperationScope operation(budget_);
+        const int comparison = bound.compare(value);
+        if (lower ? comparison > 0 : comparison < 0)
+          value = std::move(bound);
+      }
+      NumberOperationScope operation(budget_);
+      value += ExactRational(std::int64_t{lower ? 1 : -1});
+    }
+    const auto found = symbol_index_.find(definition.symbol.GetNodeNum());
+    if (found == symbol_index_.end())
+    {
+      entries_.emplace_back(definition.symbol, std::move(value));
+      indexLastEntry();
+    }
+    else
+      entries_[found->second].value = std::move(value);
+    pending.erase(definition.symbol);
+  }
+  // Queries following publication must see only reconstructed values.
+  eval_cache_.clear();
+}
+
 void RealModel::indexLastEntry()
 {
   // Positions are stable: entries_ is only ever appended to, never erased

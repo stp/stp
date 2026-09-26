@@ -23,6 +23,15 @@ THE SOFTWARE.
 
 #include <string>
 
+TEST(UserDefinedFlags_Test, lra_relu_policies_default_to_auto)
+{
+  stp::UserDefinedFlags flags;
+  using Mode = stp::UserDefinedFlags::OptionMode;
+  EXPECT_EQ(flags.lra_relu_bounds, Mode::AUTO);
+  EXPECT_EQ(flags.lra_relu_lp, Mode::AUTO);
+  EXPECT_EQ(flags.lra_model_reconstruction, Mode::AUTO);
+}
+
 // --disable-simplifications owns the whole stack: the bulk setter must
 // switch all of it off.
 TEST(UserDefinedFlags_Test, disable_simplifications_clears_flattening_stack)

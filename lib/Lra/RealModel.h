@@ -30,6 +30,25 @@ struct RealModelStrings final
   std::string smtlib;
 };
 
+// Evaluation order is topological: an eliminated dependency precedes its user.
+// These are owning AST references, with no solve-budget rational values.
+struct RealModelDefinition
+{
+  enum class Kind { Affine, AboveMaximum, BelowMinimum };
+
+  RealModelDefinition(ASTNode target, ASTNode expression)
+      : symbol(std::move(target)), term(std::move(expression)) {}
+  RealModelDefinition(ASTNode target, ASTVec thresholds, Kind direction)
+      : symbol(std::move(target)), kind(direction),
+        bounds(std::move(thresholds)) {}
+
+  ASTNode symbol, term;
+  Kind kind = Kind::Affine;
+  // Monotone witnesses choose max(bounds)+1 or min(bounds)-1. The exact
+  // margin satisfies strict as well as closed bounds, with no epsilon.
+  ASTVec bounds;
+};
+
 // Manager-owned, solve-independent exact Real model.  Every exact value is
 // reconstructed under this object's own NumberBudget, so no solve-context
 // budget, core object, registry ID, SAT literal, witness, or producer pointer
@@ -110,6 +129,7 @@ public:
   RealModelStrings stringsFor(const ASTNode& term) const;
   int compareTerms(const ASTNode& left, const ASTNode& right) const;
   bool predicateValue(const ASTNode& predicate) const;
+  void reconstruct(const std::vector<RealModelDefinition>& definitions);
   std::size_t size() const noexcept { return entries_.size(); }
 
   void printSmtlibDefinitions(std::ostream& out,

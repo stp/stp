@@ -350,6 +350,20 @@ These apply to all generators:
 -  ``LIBBF_DIR`` -- where to find an already-built LibBF
 -  ``IMATH_DIR`` -- where to find an already-built, STP-patched IMath
    (see above)
+-  ``ENABLE_HIGHS`` -- link `HiGHS <https://highs.dev>`__ into ``libstp``
+   as an advisory LP and MIP engine for the linear-arithmetic searches that
+   can use one: the ``--lra-highs-*`` options, and the ReLU bound
+   optimisation and phase search. STP certifies exactly whatever it takes
+   from HiGHS. Off by default. An installed HiGHS is used if one is found;
+   otherwise ``ENABLE_AUTO_DOWNLOAD`` builds release 1.12.0
+-  ``ENABLE_HIGHS_CUT_LOG`` -- with ``ENABLE_HIGHS``, build HiGHS with
+   ``cmake/deps-utils/highs-root-cut-log.patch``, which has it report how
+   it derived the cuts it adds at the root of a MIP search, so that
+   ``--lra-highs-cuts`` can rebuild them exactly. Off by default. An
+   installed HiGHS has to have been built with that patch
+-  ``HIGHS_DIR`` -- the prefix of an installed HiGHS to use, rather than
+   searching for one. ``STP_DEPS_LOCAL_ONLY`` skips that search, as it does
+   for the dependencies it names
 -  ``ENABLE_AUTO_DOWNLOAD`` -- download and build dependencies that were
    not found, rather than failing. Off by default: a build that reaches
    the network should be asked to

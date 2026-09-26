@@ -132,6 +132,8 @@ static_assert(LRA_PRESOLVE_UNCONSTRAINED == 68,
               "published interface-flag ordinal changed");
 static_assert(LRA_FLOAT_DRIVER == 69,
               "published interface-flag ordinal changed");
+static_assert(LRA_INCREMENTAL_SESSION == 70,
+              "published interface-flag ordinal changed");
 // The published prefix ends at CNF_AUTO_THRESHOLD. Everything this feature
 // adds -- three interface flags and three profile ordinals -- is new in this
 // series and deliberately NOT pinned here: nothing outside the tree has linked

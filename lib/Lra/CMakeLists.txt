@@ -175,6 +175,16 @@ add_library(stp_lra_product_objects OBJECT
   LraCandidateAdapter.cpp
   LraCoordinator.cpp
   LraPresolve.cpp
+  LraHighs.cpp
+  LraHighsCuts.cpp
+  LraRelu.cpp
+  LraBooleanBounds.cpp
+  LraReluCases.cpp
+  LraRelaxation.cpp
+  LraReluLp.cpp
+  LraReluBranch.cpp
+  LraReconstruction.cpp
+  LraReplay.cpp
   ExactLraCore.cpp
   ExactLraRegistration.cpp
   ExactConflictVerifier.cpp
@@ -191,6 +201,9 @@ add_library(stp_lra_product_objects OBJECT
   ImathAllocHooks.c
 )
 target_link_libraries(stp_lra_product_objects PRIVATE IMath)
+if(ENABLE_HIGHS)
+  target_link_libraries(stp_lra_product_objects PRIVATE HiGHS)
+endif()
 set_target_properties(stp_lra_product_objects PROPERTIES
   C_STANDARD 99
   C_STANDARD_REQUIRED ON
@@ -210,6 +223,12 @@ set_property(TARGET stp_lra_product_objects PROPERTY INCLUDE_DIRECTORIES
   "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 set_property(TARGET stp_lra_product_objects PROPERTY COMPILE_DEFINITIONS "")
+if(ENABLE_HIGHS)
+  target_compile_definitions(stp_lra_product_objects PRIVATE STP_HAVE_HIGHS)
+  if(ENABLE_HIGHS_CUT_LOG)
+    target_compile_definitions(stp_lra_product_objects PRIVATE STP_HAVE_HIGHS_CUT_LOG)
+  endif()
+endif()
 if(ENABLE_TESTING)
   target_compile_definitions(stp_lra_product_objects PRIVATE
     STP_LRA_TEST_FAULT_INJECTION

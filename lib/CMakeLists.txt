@@ -205,6 +205,9 @@ set(stp_link_libs ${stp_link_libs} ${LIBBF_LIBRARY})
 # the same reason and named the same way: by resolved path, so no unavailable
 # private target reaches STPTargets.cmake.
 set(stp_link_libs ${stp_link_libs} ${IMATH_LIBRARY})
+if(ENABLE_HIGHS)
+    set(stp_link_libs ${stp_link_libs} ${HIGHS_LIBRARY})
+endif()
 
 # RunTimes reads the process's peak memory through GetProcessMemoryInfo,
 # which lives in psapi. ABC's sclLiberty.c calls PathMatchSpec from
@@ -330,6 +333,12 @@ if(ENABLE_TESTING)
         VISIBILITY_INLINES_HIDDEN ON
     )
     target_link_libraries(stp_lra_focused_host PRIVATE ${stp_link_libs})
+    # stp_link_libs names HiGHS by path, which orders nothing, and none of
+    # these objects compiles against it. A test linking this archive could
+    # otherwise reach the link step while HiGHS-EP is still building.
+    if(ENABLE_HIGHS)
+        add_dependencies(stp_lra_focused_host HiGHS)
+    endif()
 endif()
 
 # ABC is interconnected enough that satisfying our ~30 entry points transitively

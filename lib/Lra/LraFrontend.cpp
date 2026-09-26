@@ -897,6 +897,53 @@ NormalizedPredicate Frontend::normalizePredicate(const ASTNode& predicate)
   }
 }
 
+std::optional<ASTNode> Frontend::binaryDomainSymbol(const ASTNode& predicate) const
+{
+  if (predicate.GetKind() != OR || predicate.Degree() != 2)
+    return std::nullopt;
+  for (const auto& child : predicate.GetChildren())
+    if (child.GetKind() != EQ || child.Degree() != 2 ||
+        !child[0].isRealTerm() || !child[1].isRealTerm())
+      return std::nullopt;
+  try
+  {
+    PreparationPoller poll(nullptr, PreparationStage::LraPreregistration);
+    if (predicate.GetSTPMgr() != &manager_)
+      throw FrontendFailure(FrontendFailureKind::Malformed,
+                            "binary domain belongs to another manager");
+    NumberOperationScope operation(manager_.lra_ast_state->number_budget);
+    LraFrontendRegistryState staged =
+        *manager_.lra_ast_state->frontend_registry;
+    FrontendMetrics metrics;
+    std::optional<LraSymbolId> id;
+    bool zero = false, one = false;
+    for (const auto& child : predicate.GetChildren())
+    {
+      const auto p = normalizePredicateImpl(child, staged, metrics, poll);
+      const auto& poly = p.canonical.lhs_minus_rhs;
+      if (poly.terms.size() != 1 ||
+          (id && *id != poly.terms[0].symbol))
+        return std::nullopt;
+      id = poly.terms[0].symbol;
+      const auto value = -poly.constant / poly.terms[0].coefficient;
+      zero = zero || value.isZero();
+      one = one || value.isOne();
+    }
+    if (!zero || !one || !id)
+      return std::nullopt;
+    return staged.symbol_by_id.at(id->value);
+  }
+  catch (const NumberFailure& failure)
+  {
+    throw translateNumberFailure(failure);
+  }
+  catch (const std::bad_alloc&)
+  {
+    throw FrontendFailure(FrontendFailureKind::AllocationFailure,
+                          "allocation failure during binary domain inspection");
+  }
+}
+
 PreregisteredFormula Frontend::preregister(const ASTNode& formula)
 {
   try

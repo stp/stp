@@ -742,6 +742,9 @@ void realInterfaceFlagsAreReachable()
       {LRA_PRESOLVE_PROPAGATE, "lra-presolve-propagate"},
       {LRA_PRESOLVE_UNCONSTRAINED, "lra-presolve-unconstrained"},
       {LRA_FLOAT_DRIVER, "lra-float-driver"},
+      // Only the SMT-LIB2 check-sat reads this one: here the call is pinned,
+      // and the solve below runs as it would with the flag off.
+      {LRA_INCREMENTAL_SESSION, "lra-incremental-session"},
   };
 
   for (const auto& control : controls)

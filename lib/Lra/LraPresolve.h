@@ -12,14 +12,18 @@ struct LraReconstruction;
 /* Presolve a Real query before the coordinator registers it: the
  * cross-predicate simplifications the bit-vector pipeline gets from its
  * preprocessing passes and the Real path bypasses. Every
- * transformation is model-preserving on the transformed formula itself --
- * solved definitions stay conjoined, so the model and the exact verifier
- * read the same query the solve used. Which stages run is decided by the
+ * transformation either keeps its witness conjoined or records exact model
+ * reconstruction, checked against the original input before publication.
+ * Monotone elimination requires a reconstruction destination. Which stages
+ * run is decided by the
  * lra_presolve_* flags; with every stage off the input is returned as is.
+ * highs_enabled is the query eligibility decision made before reconstruction
+ * setup; the MIP flag alone does not enable preprocessing everywhere.
  */
 ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
                          SATSolver* solver = nullptr,
-                         LraReconstruction* reconstruction = nullptr);
+                         LraReconstruction* reconstruction = nullptr,
+                         bool highs_enabled = false);
 
 } // namespace lra
 } // namespace stp

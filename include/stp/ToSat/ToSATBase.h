@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 
 #include <cassert>
+#include <functional>
 #include <string>
 
 namespace stp
@@ -82,6 +83,7 @@ protected:
 
   // Ptr to STPManager
   STPMgr* bm;
+  std::function<bool()> before_search_;
 
 public:
   typedef std::unordered_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
@@ -105,6 +107,15 @@ public:
   // Bitblasts, CNF conversion and calls toSATandSolve()
   virtual bool CallSAT(SATSolver& SatSolver, const ASTNode& input,
                        bool doesAbsRef) = 0;
+
+  // Runs after CNF installation and activation binding, before entering
+  // SAT search. The caller owns the callback's lifetime and clears it
+  // after CallSAT. A false result is an internal failure, never UNSAT.
+  void setBeforeSearch(std::function<bool()> callback)
+  {
+    before_search_ = std::move(callback);
+  }
+  void clearBeforeSearch() noexcept { before_search_ = nullptr; }
 
   virtual ASTNodeToSATVar& SATVar_to_SymbolIndexMap() = 0;
 
@@ -143,6 +154,10 @@ public:
   // internal activation literal.  Solving under that literal releases the
   // assertion assignment before a verified theory clause is inserted, while
   // retaining exactly the same logical problem for every refinement round.
+  virtual bool setRequiredSolveAssumptions(const ASTVec& /*symbols*/)
+  {
+    return false;
+  }
   virtual bool setRequiredSolveAssumption(const ASTNode& /*symbol*/)
   {
     return false;

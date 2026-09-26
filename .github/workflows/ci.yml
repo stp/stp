@@ -1096,6 +1096,79 @@ jobs:
           exit 1
         fi
 
+  # HiGHS is opt-in (-DENABLE_HIGHS, -DENABLE_HIGHS_CUT_LOG) and no other job
+  # enables it, so nothing else compiles the STP_HAVE_HIGHS paths in lib/Lra
+  # or runs the HiGHS-only tests (lra_highs_{lp,mip,replay,cuts}_cli,
+  # lra_relu_{lp,branch}_cli). Otherwise the gcc leg of the matrix: the
+  # runner's GCC 13, the same backends, -Werror and the whole suite.
+  build-highs:
+    name: gcc (highs)
+    runs-on: ubuntu-latest
+
+    env:
+      CCACHE_MAXSIZE: 400M
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          cmake \
+          flex \
+          gcc \
+          git \
+          libgmp-dev \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U 'lit~=23.1'
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    # A key of its own: HiGHS is built into deps/install like everything
+    # else, but only here, so an entry saved by a job without it would be
+    # restored, lack HiGHS, and never be saved again with it.
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: deps
+        key: deps-x86_64-highs-${{ steps.deps-key.outputs.key }}
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-highs/${{ github.run_id }}
+        restore-keys: ccache-highs/
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        CC=gcc CXX=g++ cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DENABLE_HIGHS:BOOL=ON -DENABLE_HIGHS_CUT_LOG:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
+      working-directory: build
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
   build-32bit:
     name: gcc (i386)
     runs-on: ubuntu-latest

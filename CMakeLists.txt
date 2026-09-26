@@ -1551,6 +1551,15 @@ find_package(SymFPU REQUIRED)
 # cmake/FindLibBF.cmake.
 find_package(LibBF REQUIRED)
 find_package(IMath REQUIRED)
+option(ENABLE_HIGHS "Enable optional HiGHS LP/MIP proposals with exact certification" OFF)
+option(ENABLE_HIGHS_CUT_LOG "Enable the optional HiGHS 1.12.0 root-cut recipe patch" OFF)
+if(ENABLE_HIGHS_CUT_LOG AND NOT ENABLE_HIGHS)
+  message(FATAL_ERROR "ENABLE_HIGHS_CUT_LOG requires ENABLE_HIGHS")
+endif()
+if(ENABLE_HIGHS)
+  find_package(HiGHS REQUIRED)
+endif()
+add_feature_info(HiGHS ENABLE_HIGHS "Advisory LP proposals with STP exact certification")
 
 # The shared dependency directory, if there is one, now holds whatever this
 # configure decided to build. Check it was not filled by an incompatible build.
@@ -1701,6 +1710,12 @@ if (BUILD_EXECUTABLES)
     find_package(CLI11 REQUIRED)
 endif()
 add_subdirectory(tools)
+if(ENABLE_HIGHS AND TARGET stp-bin)
+  target_compile_definitions(stp-bin PRIVATE STP_HAVE_HIGHS)
+  if(ENABLE_HIGHS_CUT_LOG)
+    target_compile_definitions(stp-bin PRIVATE STP_HAVE_HIGHS_CUT_LOG)
+  endif()
+endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/STPExecutableTargetGuard.cmake")
 stp_resolve_option_target_availability(
   TARGET stp-bin

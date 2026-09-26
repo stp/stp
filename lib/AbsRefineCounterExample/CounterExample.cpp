@@ -3094,6 +3094,16 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
 {
   if (lra_coordinator != NULL && !lra_coordinator->beforeSolverCall())
     return lraStopped(bm, lra_coordinator, "preparing the arithmetic solve");
+  struct SearchHookScope
+  {
+    ToSATBase* tosat;
+    ~SearchHookScope() { tosat->clearBeforeSearch(); }
+  } search_hook_scope{tosat};
+  if (lra_coordinator != NULL &&
+      (bm->UserFlags.lra_first_search || bm->UserFlags.lra_persistent_state))
+    tosat->setBeforeSearch([lra_coordinator, tosat]() {
+      return lra_coordinator->afterCnf(*tosat);
+    });
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
   const bool ufActive =
       ufTheoryAdapter != NULL && ufTheoryAdapter->active();

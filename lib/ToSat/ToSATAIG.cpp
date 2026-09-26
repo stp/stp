@@ -72,13 +72,20 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
     // solve the disconnected variables here instead of letting the model
     // evaluator invent values for symbols which never reached SAT.
     UFContext* uf = bm->getUFContextIfAny();
-    if (uf == NULL || !uf->activeInSolve() || uf->getSolveScalars().empty())
+    if ((uf == NULL || !uf->activeInSolve() || uf->getSolveScalars().empty()) &&
+        requiredSolveAssumptions.empty())
+    {
       return true;
+    }
 
     first = false;
     delete cb;
     cb = NULL;
     assert(satSolver.nVars() == 0);
+    // An initially empty Real session still needs its activation and an
+    // initialized SAT instance: later assertions are encoded against them.
+    for (const ASTNode& symbol : requiredSolveAssumptions)
+      nodeToSATVar.emplace(symbol, vector<unsigned>{satSolver.newVar()});
     mark_variables_as_frozen(satSolver);
     bind_injectivity_guard(satSolver);
     encoding.finish();
@@ -1067,6 +1074,8 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
     assumptions.push(SATSolver::mkLit(found->second.front(), false));
   }
   injectivity_.assumeInto(assumptions);
+  if (internalSolveFailure.empty() && before_search_ && !before_search_())
+    internalSolveFailure = "theory setup before SAT search failed";
   bool result = false;
   if (internalSolveFailure.empty())
     result = bm->solveRetractingInjectivity(
@@ -1095,6 +1104,22 @@ bool ToSATAIG::setRequiredSolveAssumption(const ASTNode& symbol)
     return false;
   requiredSolveAssumptions.assign(1, symbol);
   protectSymbol(symbol);
+  return true;
+}
+
+bool ToSATAIG::setRequiredSolveAssumptions(const ASTVec& symbols)
+{
+  requiredSolveAssumptions.clear();
+  for (const ASTNode& symbol : symbols)
+  {
+    if (symbol.IsNull() || symbol.GetKind() != SYMBOL)
+    {
+      requiredSolveAssumptions.clear();
+      return false;
+    }
+    requiredSolveAssumptions.push_back(symbol);
+    protectSymbol(symbol);
+  }
   return true;
 }
 

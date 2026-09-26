@@ -349,8 +349,12 @@ int Main::main(int argc, char** argv)
     query = ASTNode();
   }
 
-  // Save time by not calling the destructors.
+  // Save time by not calling the destructors -- except the one a persistent
+  // Real session prints its -s statistics from, so that a Release build
+  // reports what every other build does.
   #ifdef NDEBUG
+    if (bm->UserFlags.stats_flag)
+      stp->discardRealSession();
     std::exit(0);
   #endif
 

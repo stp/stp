@@ -226,6 +226,8 @@ struct LraSolveMetrics final
   std::uint64_t components_registered = 0;
   std::uint64_t origins_registered = 0;
   std::uint64_t initialize_calls = 0;
+  std::uint64_t persistent_extensions = 0;
+  std::uint64_t float_extensions = 0;
   std::uint64_t candidates_started = 0;
   std::uint64_t complete_model_reads = 0;
   std::uint64_t exact_assertions = 0;
@@ -280,6 +282,10 @@ struct LraSolveMetrics final
   std::uint64_t float_replay_consistent = 0;
   std::uint64_t float_disabled = 0;
   std::uint64_t float_pivots = 0;
+  std::uint64_t float_early_conflicts = 0;
+  std::uint64_t float_soi_steps = 0;
+  std::uint64_t float_soi_bound_flips = 0;
+  std::uint64_t float_soi_fallbacks = 0;
   std::uint64_t float_check_nanoseconds = 0;
   std::uint64_t float_sync_nanoseconds = 0;
   // Certificate-first certification: conflicts staged straight from the
@@ -298,9 +304,19 @@ struct LraSolveMetrics final
   std::uint64_t float_rebuilds = 0;
   std::uint64_t float_generalisations = 0;
   std::uint64_t float_factorized = 0;
+  std::uint64_t float_complete_recoveries = 0;
+  std::uint64_t float_cold_recoveries = 0;
+  std::uint64_t float_refactor_failures = 0;
+  std::uint64_t float_robust_refactors = 0;
   /* Times a solve continued in a fresh factorized tier built from the
    * trail after the double tier tripped twice. */
   std::uint64_t float_promotions = 0;
+  /* Row dormancy in the float tier (UserDefinedFlags::lra_float_dormant_rows):
+   * rows activated by a first bound, rows still dormant when the solve
+   * ended, and assignment reads served for dormant basics by evaluation. */
+  std::uint64_t float_row_activations = 0;
+  std::uint64_t float_rows_dormant = 0;
+  std::uint64_t float_dormant_evaluations = 0;
 };
 
 
@@ -397,7 +413,8 @@ public:
                   LraAssertionFrameId solve_frame,
                   std::uint64_t maximum_pivots =
                       std::numeric_limits<std::uint64_t>::max(),
-                  const std::atomic<bool>* interrupted = nullptr);
+                  const std::atomic<bool>* interrupted = nullptr,
+                  unsigned row_order = 0);
   ~LraSolveContext() noexcept;
 
   /* Whether each conflict certificate is independently re-derived before it
@@ -425,12 +442,19 @@ public:
   {
     conflict_recovery_ = enabled;
   }
+  void setEarlyConflictDetection(bool enabled) noexcept;
+  void setSoi(bool enabled) noexcept;
+  void setFloatDormantRows(bool enabled, std::int64_t min_cells = 0) noexcept;
   void setFloatPromotionBudget(std::int64_t budget) noexcept
   {
     float_promotion_budget_ = budget <= 0 ? 0U : static_cast<unsigned>(std::min<std::int64_t>(budget, 1U << 30));
   }
   unsigned floatPromotionBudget() const noexcept { return float_promotion_budget_; }
   void setSeparateModelValues(bool enabled) noexcept;
+  void setDenseRecovery(bool enabled) noexcept;
+  bool extendFromRegistry() noexcept;
+  bool restartArithmeticState(bool float_basis_only) noexcept;
+  bool refreshRegistryIdentity() noexcept;
   // The fill multiple past which the float tier is judged pathological and the
   // query rerouted to the exact driver; 0 disables it. Carried here so the
   // candidate adapter, which sees only the context, can read it. See
@@ -520,6 +544,7 @@ private:
   bool promoteFloatCore() noexcept;
   std::unique_ptr<FloatSimplex> makeFloatCore();
   void bindFreshFloatMaps();
+  void extendFloatCore() noexcept;
   void initializeSolveContext() noexcept;
   void invalidate(std::string detail) noexcept;
   /* Stop this context because a check could not reach a verdict, rather than
@@ -582,7 +607,13 @@ private:
   unsigned float_reroute_budget_ = 0;
   unsigned float_reroute_floor_ = 0;
   bool conflict_recovery_ = true;
+  bool early_conflicts_ = false;
+  bool soi_ = false;
+  bool float_dormant_rows_ = false;
+  std::uint32_t float_dormant_min_cells_ = 0;
   unsigned float_promotion_budget_ = 4;
+  bool dense_recovery_ = false;
+  unsigned row_order_ = 0;
   LraRegistrySnapshot registry_snapshot_;
   std::vector<CoreVariableMapEntry> variable_map_;
   std::vector<CoreRowMapEntry> row_map_;
@@ -594,8 +625,7 @@ private:
   // it indexes them; the identifier is still compared in full on whatever the
   // index returns, which is what keeps a foreign-domain lookup missing.
   //
-  // All of these are filled once, while the core is built, and are not
-  // touched again for the life of the context.
+  // Built or extended at registration boundaries; immutable during search.
   SerialIndex registry_row_index_;
   SerialIndex registry_component_index_;
   SerialIndex registry_equality_index_;
