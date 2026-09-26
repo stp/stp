@@ -920,7 +920,7 @@ ASTNode boundsPresolve(STPMgr& manager, const ASTNode& input,
   rows.reserve(conjuncts.size());
   for (const ASTNode& conjunct : conjuncts)
   {
-    Relation relation;
+    Relation relation{};
     if (conjunct.Degree() == 2 && relationFor(conjunct.GetKind(), relation) &&
         (conjunct[0].isRealTerm() || conjunct[0].GetKind() == SYMBOL) &&
         conjunct[0].GetSourceSort().kind() == SourceSort::Kind::Real)
@@ -973,7 +973,7 @@ ASTNode boundsPresolve(STPMgr& manager, const ASTNode& input,
       work.pop_back();
       if (!visited.insert(node.GetNodeNum()).second)
         continue;
-      Relation relation;
+      Relation relation{};
       if (node.Degree() == 2 && relationFor(node.GetKind(), relation) &&
           node[0].GetSourceSort().kind() == SourceSort::Kind::Real)
       {
@@ -1237,7 +1237,7 @@ ASTNode tightenRows(STPMgr& manager, const ASTNode& input,
   for (std::size_t i = 0; i < conjuncts.size(); ++i)
   {
     const ASTNode& conjunct = conjuncts[i];
-    Relation relation;
+    Relation relation{};
     if (conjunct.Degree() != 2 || !relationFor(conjunct.GetKind(), relation) ||
         relation == Relation::Equal ||
         conjunct[0].GetSourceSort().kind() != SourceSort::Kind::Real)
@@ -1404,7 +1404,7 @@ ASTNode eliminateMonotone(STPMgr& manager, const ASTNode& input,
       if ((visited & frame.polarity) == frame.polarity)
         continue;
       visited = static_cast<std::uint8_t>(visited | frame.polarity);
-      Relation relation;
+      Relation relation{};
       if (node.Degree() == 2 && relationFor(node.GetKind(), relation) &&
           node[0].isRealTerm() && node[1].isRealTerm())
       {
@@ -1463,7 +1463,7 @@ ASTNode eliminateMonotone(STPMgr& manager, const ASTNode& input,
     for (const auto& entry : atom_nodes)
     {
       poll();
-      Relation relation;
+      Relation relation{};
       if (!relationFor(entry.second.GetKind(), relation))
         return input;
       Atom atom{entry.second, relation, seen.at(entry.first), {}, true};
@@ -1538,9 +1538,10 @@ ASTNode eliminateMonotone(STPMgr& manager, const ASTNode& input,
           }
         }
       }
-      using Kind = RealModelDefinition::Kind;
+      using DefinitionKind = RealModelDefinition::Kind;
       eliminated.emplace_back(variable.symbol, std::move(bounds),
-                              lower ? Kind::AboveMaximum : Kind::BelowMinimum);
+                              lower ? DefinitionKind::AboveMaximum
+                                    : DefinitionKind::BelowMinimum);
     }
     if (truths.empty())
       return input;
@@ -1637,7 +1638,7 @@ ASTNode eliminateUnconstrained(STPMgr& manager, const ASTNode& input,
     if ((visited & mask(frame.polarity)) == mask(frame.polarity))
       continue;
     visited = static_cast<std::uint8_t>(visited | mask(frame.polarity));
-    Relation relation;
+    Relation relation{};
     if (node.Degree() == 2 && relationFor(node.GetKind(), relation) &&
         node[0].GetSourceSort().kind() == SourceSort::Kind::Real)
     {
@@ -1734,7 +1735,7 @@ ASTNode eliminateUnconstrained(STPMgr& manager, const ASTNode& input,
       continue;
     if (handled_atoms.count(use.atom.GetNodeNum()) != 0)
       continue;
-    Relation relation;
+    Relation relation{};
     if (!relationFor(use.atom.GetKind(), relation))
       continue;
     LinearView view;
