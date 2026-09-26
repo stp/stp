@@ -188,6 +188,29 @@ public:
     return extensionality;
   }
 
+  // Hides the context from a nested solve of a query of its own. The
+  // records, lowerings and graph describe the enclosing solve, and the
+  // nested solve's model satisfies none of their constraints.
+  class DetachedExtensionality
+  {
+    STPMgr* manager;
+    ExtensionalityContext* saved;
+
+  public:
+    explicit DetachedExtensionality(STPMgr* m)
+        : manager(m), saved(m->extensionality)
+    {
+      manager->extensionality = nullptr;
+    }
+    ~DetachedExtensionality()
+    {
+      assert(manager->extensionality == nullptr);
+      manager->extensionality = saved;
+    }
+    DetachedExtensionality(const DetachedExtensionality&) = delete;
+    DetachedExtensionality& operator=(const DetachedExtensionality&) = delete;
+  };
+
   // Manager-lifetime UF declarations and durable applications. Solve-local
   // lowering/checker/model state is owned below this context and reset at the
   // completed-root boundary.

@@ -123,6 +123,11 @@ void CongruenceCandidates::collect(const ASTNode& n)
 // would be read as "not proved" and throw away a theorem.
 bool CongruenceCandidates::proves(const ASTNode& equality)
 {
+  // An array equality's abstraction variable is an ordinary Boolean here,
+  // free to take either value; left attached, the enclosing solve's
+  // array-equality checker would judge this solve's model as its own.
+  STPMgr::DetachedExtensionality detached(bm);
+
   SubstitutionMap substitutions(bm);
   Simplifier simplifier(bm, &substitutions);
 
