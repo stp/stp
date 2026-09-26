@@ -44,6 +44,16 @@ class UFTheoryAdapter;
 class DLL_PUBLIC UFModel final
 {
 public:
+  // A value key shared by lazy congruence and public model completion.
+  // Reads Real values from the exact model and other scalars from the
+  // counterexample (or directly when already constant). Floating-point
+  // values use SMT equality: NaNs agree and the two zeros stay distinct.
+  // False means that no concrete value was available, not an unmatched key.
+  static bool scalarModelKey(STPMgr* manager,
+                             AbsRefine_CounterExample* counterexample,
+                             const ASTNode& scalar, const SourceSort& declared,
+                             std::string& key);
+
   // Build a constant of the value's own source sort in manager: a Boolean, a
   // bit-vector literal, or a rounding-mode constant. A carrier that denotes
   // no value of the sort is refused rather than published.
@@ -84,7 +94,8 @@ public:
   static bool evaluateApplicationInTerm(
       STPMgr* manager, const UFTheoryAdapter* adapter,
       const ASTNode& durableHandle, const std::vector<ASTNode>& actualValues,
-      ASTNode& value, std::string& diagnostic);
+      ASTNode& value, std::string& diagnostic,
+      AbsRefine_CounterExample* counterexample = NULL);
 
   // Complete every durable application in the preserved public root with its
   // certified value. This is used for the final pointwise model replay; the

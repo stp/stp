@@ -646,11 +646,18 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case UF_PHASE_HINTS:
       b->UserFlags.uf_phase_hints = param_value != 0;
       break;
+    // Both are three-valued internally, and this interface is integers, so
+    // it keeps saying what it has always said: zero off, anything else on.
+    // A caller wanting the per-query default asks for nothing at all.
     case UF_PROPAGATE_EQUALITIES:
-      b->UserFlags.uf_propagate_equalities = param_value != 0;
+      b->UserFlags.uf_propagate_equalities =
+          param_value != 0 ? stp::UserDefinedFlags::OptionMode::ON
+                           : stp::UserDefinedFlags::OptionMode::OFF;
       break;
     case UF_SKELETON_PREPROC:
-      b->UserFlags.uf_skeleton_preproc = param_value != 0;
+      b->UserFlags.uf_skeleton_preproc =
+          param_value != 0 ? stp::UserDefinedFlags::OptionMode::ON
+                           : stp::UserDefinedFlags::OptionMode::OFF;
       break;
     case UF_BV_TERM_ABSTRACTION:
       b->UserFlags.uf_bv_term_abstraction =
@@ -1896,7 +1903,10 @@ Expr vc_getCounterExample(VC vc, Expr e)
   // A Real term is answered by the Real model and nothing else, and that has
   // to be decided before either branch below: the counterexample map holds
   // bit patterns, so anything Real reaching it asks a node with no carrier
-  // for a value width and dies there.
+  // for a value width and dies there. Ahead of the UF_APPLY arm too, because
+  // a Real-codomain application is answered the same way -- the lowering's
+  // value is published onto the application node -- while the certified
+  // function model covers only the sorts it compares as packed carriers.
   if (vc != NULL && e != NULL &&
       static_cast<stp::ASTNode*>(e)->GetSourceSort().kind() ==
           stp::SourceSort::Kind::Real)
@@ -2179,6 +2189,17 @@ static bool cTypeToUFSort(VC vc, Type type, const char* position,
   }
   // A type handle has to be a type: a value expression of the right sort is
   // not one, and accepting it would let vc_bvType's discipline slip.
+  //
+  // REAL_CONST is on this list because that is the node vc_realType hands
+  // out -- the Real sort has no width or format to carry, so its type handle
+  // is the interned constant zero, exactly as vc_varExpr's identical switch
+  // already accepts it. Leaving it off made the C API stricter than both the
+  // core and the parser: UFSignature::isSupportedSort admits Real (its
+  // congruence is decided from the arithmetic's exact model values rather
+  // than from a packed carrier -- see lazyCongruenceLemmasFromModel), and an
+  // .smt2 file could declare a Real-sorted uninterpreted function that this
+  // function refused, which is the frontends-drifting-apart failure the
+  // comment below was written about.
   switch (node->GetKind())
   {
     case stp::BOOLEAN:
@@ -2186,6 +2207,7 @@ static bool cTypeToUFSort(VC vc, Type type, const char* position,
     case stp::FLOATINGPOINT:
     case stp::ROUNDINGMODE:
     case stp::ARRAY:
+    case stp::REAL_CONST:
       break;
     default:
       diagnostic = std::string(position) + " type is not a sort";
@@ -2430,6 +2452,12 @@ int vc_hasRealIte(void)
 {
   return 1;
 }
+
+int vc_hasQFUFLRA(void)
+{
+  return 1;
+}
+
 
 int vc_hasRealModel(VC vc)
 {

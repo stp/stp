@@ -445,6 +445,12 @@ CoreGeneration LraSolveContext::coreGeneration() const noexcept
   return core_ == nullptr ? CoreGeneration{0} : core_->generation();
 }
 
+void LraSolveContext::setSeparateModelValues(bool enabled) noexcept
+{
+  if (core_)
+    core_->setSeparateModelValues(enabled);
+}
+
 bool LraSolveContext::bindOpaqueAtoms(
     const std::vector<LraSatBinding>& bindings,
     const std::vector<ASTNode>& omitted) noexcept

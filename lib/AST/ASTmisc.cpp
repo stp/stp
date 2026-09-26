@@ -331,6 +331,29 @@ bool containsKind(const ASTNode& root, Kind kind)
   return false;
 }
 
+// True if any node in the DAG carries mathematical Real sort.
+//
+// Not expressible as containsKind: Real content is a sort worn by symbols,
+// constants, applications and ites alike, not one kind they all share, and
+// the Real arithmetic kinds appear only where arithmetic is written out.
+bool containsRealSort(const ASTNode& root)
+{
+  ASTNodeSet visited;
+  ASTVec pending(1, root);
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!visited.insert(node).second)
+      continue;
+    if (node.GetSourceSort().kind() == SourceSort::Kind::Real)
+      return true;
+    for (unsigned i = 0; i < node.Degree(); ++i)
+      pending.push_back(node[i]);
+  }
+  return false;
+}
+
 // True if any descendants are arrays.
 bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 {
@@ -753,8 +776,7 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       }
       // A float-codomain application derives its format from the same
       // declaration identity its sort comes from, so it types as a float
-      // rather than as its packed carrier. Every other admitted sort has a
-      // bit-vector carrier of the packed width.
+      // rather than as its packed carrier.
       else if (sort.kind() == SourceSort::Kind::FloatingPoint)
       {
         if (n.GetType() != FLOATINGPOINT_TYPE ||
@@ -762,6 +784,20 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
             n.GetSigWidth() != sort.significandWidth())
           FatalError("BVTypeCheck: float UF_APPLY has the wrong format", n);
       }
+      // A Real-codomain application has no carrier at all -- no packed width
+      // and no byte pattern -- so UFContext::apply builds it with the
+      // width-free constructor, exactly as it does a Bool, and asking it for
+      // a value width is itself a fatal error. Its congruence is decided from
+      // the arithmetic's exact model values rather than by comparing
+      // carriers; see UFSignature::isSupportedSort, which admits the sort
+      // this arm types.
+      else if (sort.kind() == SourceSort::Kind::Real)
+      {
+        if (n.GetType() != REAL_TYPE)
+          FatalError("BVTypeCheck: Real UF_APPLY has a non-Real carrier", n);
+      }
+      // Every remaining admitted sort has a bit-vector carrier of the packed
+      // width.
       else if (n.GetType() != BITVECTOR_TYPE ||
                n.GetValueWidth() != sort.packedWidth())
         FatalError("BVTypeCheck: UF_APPLY has the wrong carrier width", n);

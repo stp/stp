@@ -135,6 +135,8 @@ these, and rejects any other name:
      - bitvectors and uninterpreted functions, optionally with arrays
    * - ``QF_LRA``
      - linear real arithmetic
+   * - ``QF_UFLRA``
+     - linear real arithmetic and uninterpreted functions
    * - ``QF_FP``
      - floating-point
    * - ``QF_BVFP``

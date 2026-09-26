@@ -300,9 +300,12 @@ ASTNode STPMgr::CreateDeterministicSourceVariable(
   // side condition to denote (RoundingMode is one-hot in five of thirty-two
   // patterns) is still created here; asserting that condition belongs to
   // whoever introduces the symbol, not to the factory.
+  // Real joins Bool as a sort that denotes without a width: its values are
+  // exact rationals held by the arithmetic, not bit patterns held here.
   if (!(sourceSort.kind() == SourceSort::Kind::Bool ||
+        sourceSort.kind() == SourceSort::Kind::Real ||
         (sourceSort.isScalar() && sourceSort.packedWidth() > 0)))
-    FatalError("CreateDeterministicSourceVariable requires Bool or a "
+    FatalError("CreateDeterministicSourceVariable requires Bool, Real or a "
                "nonzero-width scalar source sort");
   if (key.IsNull() || !key.IsOwnedBy(this))
     FatalError("CreateDeterministicSourceVariable requires a live local key");

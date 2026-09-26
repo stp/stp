@@ -5,6 +5,7 @@
 #include "stp/STPManager/STPManager.h"
 #include "stp/Sat/SATSolverFactory.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 
 #if defined(USE_CADICAL)
 #include "stp/Sat/Cadical.h"
@@ -84,6 +85,48 @@ enum class StageFault
   InvalidDenominator,
   WrongExactValue,
 };
+
+void applicationModelInvariants()
+{
+  STPMgr manager;
+  manager.UserFlags.enable_uninterpreted_functions = true;
+  const auto p = manager.CreateSourceSymbol("argument_p", SourceSort::boolean());
+  const auto q = manager.CreateSourceSymbol("argument_q", SourceSort::boolean());
+  const auto x = manager.CreateSourceSymbol("result_x", SourceSort::real());
+  const auto y = manager.CreateSourceSymbol("result_y", SourceSort::real());
+  std::string diagnostic;
+  UFContext* context = manager.getUFContext();
+  const UFDecl* f = context->declareFunction(
+      "model_f", {SourceSort::boolean()}, SourceSort::real(), &diagnostic);
+  require(f != nullptr, "model invariant function declaration");
+  const auto fp = context->apply(f, ASTVec{p}, &diagnostic);
+  const auto fq = context->apply(f, ASTVec{q}, &diagnostic);
+  require(!fp.IsNull() && !fq.IsNull(), "model invariant applications");
+  Frontend frontend(manager);
+  RealModel conflicting(frontend.numberLimits(), {{x, "1", "1"}, {y, "2", "1"}},
+                        ASTVec{x, y});
+  conflicting.setScalarKeyOracle([](const ASTNode&) { return "same-value"; });
+  bool rejected = false;
+  try
+  {
+    conflicting.defineApplicationValues(ASTNodeMap{{fp, x}, {fq, y}});
+  }
+  catch (const std::exception&)
+  {
+    rejected = true;
+  }
+  require(rejected, "conflicting results for one argument tuple were published");
+
+  RealModel unreadable(frontend.numberLimits(), {}, {});
+  unreadable.markCommitted();
+  unreadable.setScalarKeyOracle([](const ASTNode&) -> std::string {
+    throw std::runtime_error("test unreadable scalar");
+  });
+  require(!unreadable.hasValue(fp), "unreadable argument silently became zero");
+  unreadable.setScalarKeyOracle([](const ASTNode&) { return "unobserved-value"; });
+  require(unreadable.stringsFor(fp).canonical_fraction == "0",
+          "readable unmatched tuple lost its total-function default");
+}
 
 void runStageFault(StageFault fault)
 {
@@ -258,6 +301,63 @@ void budgetRefusalIsNotAnError()
           "covers was not exercised");
 }
 
+/* A refusal from an extension means two different things and the caller has
+ * to be able to tell them apart.
+ *
+ * `Declined` is answered before the coordinator touches itself, so the
+ * caller's fallback -- state the lemma over a whole new solve -- still has
+ * the registry and the committed model it re-derives from.  A refusal from
+ * inside the work has already dropped both, and reporting it as a decline is
+ * how a query whose congruence the solver has just refuted came back `sat`:
+ * the restart loop re-derives its lemmas from the committed model, found it
+ * gone, had nothing to state, and returned the round's own verdict. */
+void extensionDeclineIsNotFailure()
+{
+  STPMgr manager;
+  const auto x = manager.CreateSourceSymbol("decline_x", SourceSort::real());
+  const auto base =
+      manager.CreateRealPredicate(REAL_GE, x, manager.CreateRealConst("1"));
+  std::unique_ptr<SATSolver> solver(createSATSolver(manager.UserFlags));
+  LraCoordinator coordinator(manager, *solver, base);
+  ArrayTransformer arrays(&manager, nullptr);
+  ToSATAIG tosat(&manager, &arrays);
+  require(coordinator.ready(), coordinator.failureDetail());
+
+  const auto untouched = [&](const char* what) {
+    require(coordinator.ready(), std::string(what) + " keeps the coordinator");
+    require(coordinator.failureDetail().empty(),
+            std::string(what) + " records no failure");
+    require(coordinator.metrics().extensions == 0,
+            std::string(what) + " counts no extension");
+  };
+
+  // Not a formula at all, and a formula of the wrong sort: answerable without
+  // reading anything this coordinator owns.
+  require(coordinator.extendWithFormula(ASTNode(), tosat) ==
+              ExtensionOutcome::Declined, "a null formula declines");
+  untouched("a null formula");
+  require(coordinator.extendWithFormula(x, tosat) ==
+              ExtensionOutcome::Declined, "a Real-sorted formula declines");
+  untouched("a Real-sorted formula");
+
+  // A Boolean formula this manager owns whose leaves the lemma encoder does
+  // not cover. Everything before the encoder runs, so this refusal arrives
+  // after the registry has grown and the model has been dropped -- which is
+  // exactly the class that must not read as a decline.
+  const auto a = manager.CreateSymbol("decline_a", 0, 8);
+  const auto b = manager.CreateSymbol("decline_b", 0, 8);
+  const auto unencodable = manager.CreateNode(BVLT, a, b);
+  const ExtensionOutcome failed =
+      coordinator.extendWithFormula(unencodable, tosat);
+  require(failed == ExtensionOutcome::Failed ||
+              failed == ExtensionOutcome::ResourceLimit,
+          "an extension that begins and cannot finish is not a decline");
+  require(!coordinator.ready(),
+          "a failed extension leaves the coordinator unusable");
+  require(!coordinator.failureDetail().empty(),
+          "a failed extension says what happened");
+}
+
 void decisionPolarityState()
 {
   STPMgr manager;
@@ -377,7 +477,9 @@ int main()
     STPMgr manager;
     std::unique_ptr<SATSolver> solver(createSATSolver(manager.UserFlags));
     decisionPolarityRequirements(*solver);
+    applicationModelInvariants();
     budgetRefusalIsNotAnError();
+    extensionDeclineIsNotFailure();
 #if defined(USE_CADICAL)
     searchResetPreservesFormula();
     NoPolarityCadical unsupported;

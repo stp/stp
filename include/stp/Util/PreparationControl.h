@@ -19,6 +19,7 @@ enum class PreparationStage
   BitBlasting,
   CNFConversion,
   ClauseLoading,
+  RefinementEncoding
 };
 
 inline const char* preparationStageName(PreparationStage stage)
@@ -34,6 +35,7 @@ inline const char* preparationStageName(PreparationStage stage)
     case PreparationStage::BitBlasting: return "bitblasting";
     case PreparationStage::CNFConversion: return "cnf-conversion";
     case PreparationStage::ClauseLoading: return "clause-loading";
+    case PreparationStage::RefinementEncoding: return "refinement-encoding";
   }
   return "unknown";
 }

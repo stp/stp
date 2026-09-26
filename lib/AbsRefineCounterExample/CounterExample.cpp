@@ -1053,10 +1053,8 @@ class AbsRefine_CounterExample::EvaluationDriver
         std::string diagnostic;
         if (!UFModel::evaluateApplicationInTerm(bm, owner.getUFTheoryAdapter(),
                                                 form, f.parts, value,
-                                                diagnostic))
-          FatalError(
-              (" ComputeFormulaUsingModel: " + diagnostic + ": ").c_str(),
-              form);
+                                                diagnostic, &owner))
+          throw std::runtime_error("ComputeFormulaUsingModel: " + diagnostic);
         return finish(value);
       }
       default:
@@ -1166,7 +1164,9 @@ class AbsRefine_CounterExample::EvaluationDriver
 
     // A Real term is answered by the Real model and by nothing below: it has
     // no carrier, so every arm of the switch that reaches for a width or a
-    // zero constant is fatal on one.
+    // zero constant is fatal on one -- which is what a Real symbol used as an
+    // uninterpreted function's argument met, the walk descending into the
+    // application to resolve its arguments.
     //
     // The counterpart of the Real arms in stepFormula. Deliberately not
     // routed through finish(), which asserts a BVCONST, and deliberately not
@@ -1174,6 +1174,13 @@ class AbsRefine_CounterExample::EvaluationDriver
     // the Real model is the stable authority for these anyway.
     if (term.GetSourceSort().kind() == SourceSort::Kind::Real)
     {
+      // A scalar-only UF solve need not install an arithmetic model. Exact
+      // constants still denote themselves when used as function arguments.
+      if (k == REAL_CONST)
+      {
+        result = term;
+        return StepResult::Finished;
+      }
       ASTNode value;
       if (bm->RealModelValueNode(term, value))
       {
@@ -1519,9 +1526,8 @@ class AbsRefine_CounterExample::EvaluationDriver
         std::string diagnostic;
         if (!UFModel::evaluateApplicationInTerm(bm, owner.getUFTheoryAdapter(),
                                                 term, f.parts, value,
-                                                diagnostic))
-          FatalError(("TermToConstTermUsingModel: " + diagnostic + ": ").c_str(),
-                     term);
+                                                diagnostic, &owner))
+          throw std::runtime_error("TermToConstTermUsingModel: " + diagnostic);
         return finish(value);
       }
       default:

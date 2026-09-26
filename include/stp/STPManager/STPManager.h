@@ -735,6 +735,11 @@ public:
   // Exact model access never exposes the private arithmetic type.  Returned
   // strings own their bytes and remain valid independently of subsequent
   // model invalidation.
+  // Publish the model values of Real-sorted uninterpreted-function
+  // applications, so a caller can read one back against the application node
+  // it holds rather than against the lowering's private result symbol. No-op
+  // without a current Real model. See RealModel::defineApplicationValues.
+  DLL_PUBLIC void PublishRealApplicationValues(const ASTNodeMap& handle_to_result);
   // The current Real model's value for `term`, as an interned REAL_CONST.
   // False when there is no model or it does not value the term, leaving
   // `value` untouched.
@@ -746,6 +751,10 @@ public:
   // model. See RealModel::setConditionOracle.
   DLL_PUBLIC void SetRealConditionOracle(
       const std::function<bool(const ASTNode&)>& oracle);
+  // Value-based keys for non-Real arguments of Real-valued applications.
+  // Install with the condition oracle before publishing application values.
+  DLL_PUBLIC void SetRealScalarKeyOracle(
+      const std::function<std::string(const ASTNode&)>& oracle);
   // Whether the current Real model decides `predicate` -- one of REAL_LT,
   // REAL_LE, REAL_GT, REAL_GE or an EQ over two Real operands -- and if so
   // its value. False without a model, or for anything else, leaving `value`

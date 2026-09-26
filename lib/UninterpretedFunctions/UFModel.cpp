@@ -182,6 +182,65 @@ bool seedFunctionBefore(const UFFunctionModelSeed* left,
 
 } // namespace
 
+bool UFModel::scalarModelKey(STPMgr* manager,
+                             AbsRefine_CounterExample* counterexample,
+                             const ASTNode& scalar, const SourceSort& declared,
+                             std::string& key)
+{
+  if (manager == NULL || scalar.IsNull() ||
+      !scalar.IsOwnedBy(manager) || !UFSignature::isSupportedSort(declared))
+    return false;
+  if (declared.kind() == SourceSort::Kind::Real)
+  {
+    if (scalar.GetKind() == REAL_CONST)
+    {
+      key = "r:" + scalar.GetRealNumerator();
+      const std::string denominator = scalar.GetRealDenominator();
+      if (denominator != "1")
+        key += '/' + denominator;
+      return true;
+    }
+    if (!manager->HasRealModelValue(scalar))
+      return false;
+    key = "r:" + manager->GetRealModelValue(scalar);
+    return true;
+  }
+  if (!scalar.isConstant() && counterexample == NULL)
+    return false;
+  ASTNode constant = scalar.isConstant()
+                         ? scalar
+                         : declared.kind() == SourceSort::Kind::Bool
+                               ? counterexample->ModelValueOfFormula(scalar)
+                               : counterexample->ModelValueOfTerm(scalar);
+  if (constant.IsNull())
+    return false;
+  if (declared.kind() == SourceSort::Kind::FloatingPoint)
+    constant = canonicalConstant(manager, constant, declared);
+  if (constant.IsNull())
+    return false;
+  UFConcreteValue value;
+  std::string diagnostic;
+  if (!UFConcreteValue::fromConstant(
+          constant, UFSignature::loweringSort(declared), value, diagnostic))
+    return false;
+
+  // Own the value's bytes rather than the identity of a temporary AST
+  // constant. Sorts travel with the key, as they do with UFConcreteValue.
+  key = std::to_string(static_cast<unsigned>(declared.kind())) + ':';
+  if (declared.kind() == SourceSort::Kind::Uninterpreted)
+    key += std::to_string(declared.uninterpretedId()) + ':';
+  if (declared.kind() == SourceSort::Kind::FloatingPoint)
+    key += std::to_string(declared.exponentWidth()) + ':';
+  key += std::to_string(declared.packedWidth()) + ':';
+  static const char digits[] = "0123456789abcdef";
+  for (uint8_t byte : value.bytes())
+  {
+    key += digits[byte >> 4];
+    key += digits[byte & 15];
+  }
+  return true;
+}
+
 ASTNode UFModel::concreteValue(STPMgr* manager,
                                const UFConcreteValue& value)
 {
@@ -297,7 +356,8 @@ bool UFModel::evaluateApplication(STPMgr* manager,
 bool UFModel::evaluateApplicationInTerm(
     STPMgr* manager, const UFTheoryAdapter* adapter,
     const ASTNode& durableHandle, const std::vector<ASTNode>& actualValues,
-    ASTNode& value, std::string& diagnostic)
+    ASTNode& value, std::string& diagnostic,
+    AbsRefine_CounterExample* counterexample)
 {
   // An application the solve reached has a certified value; prefer it.
   if (evaluateApplication(manager, adapter, durableHandle, value, diagnostic))
@@ -327,6 +387,69 @@ bool UFModel::evaluateApplicationInTerm(
     diagnostic = "uninterpreted-function application was given the wrong "
                  "number of evaluated actuals";
     return false;
+  }
+
+  // The packed-value checker does not build a function seed for a Real
+  // domain. Its certified handle values still cover every observed result.
+  // Complete such a function by comparing exact argument tuples against
+  // those observations, using the same value keys as lazy congruence.
+  const bool real_domain = std::any_of(
+      signature.domain().begin(), signature.domain().end(),
+      [](const SourceSort& sort) {
+        return sort.kind() == SourceSort::Kind::Real;
+      });
+  if (real_domain)
+  {
+    std::vector<std::string> requested(signature.arity());
+    for (size_t i = 0; i < signature.arity(); ++i)
+      if (!scalarModelKey(manager, counterexample, actualValues[i],
+                          signature.domain()[i], requested[i]))
+      {
+        diagnostic = "uninterpreted-function actual has no concrete model value";
+        return false;
+      }
+    const LoweredApplicationView* view =
+        adapter != NULL && adapter->hasCertifiedModel()
+            ? adapter->applicationView()
+            : NULL;
+    if (view != NULL)
+      for (const LoweredApplicationRecord& record : view->applications)
+      {
+        if (record.declaration != declaration)
+          continue;
+        if (record.loweredActuals.size() != signature.arity())
+        {
+          diagnostic = "certified application has an incomplete argument tuple";
+          return false;
+        }
+        bool same = true;
+        for (size_t i = 0; i < signature.arity(); ++i)
+        {
+          std::string observed;
+          if (!scalarModelKey(manager, counterexample, record.loweredActuals[i],
+                              signature.domain()[i], observed))
+          {
+            diagnostic = "certified application argument has no model value";
+            return false;
+          }
+          same = same && observed == requested[i];
+        }
+        if (!same)
+          continue;
+        UFConcreteValue result;
+        if (!adapter->lookupCertifiedApplication(record.durableHandle, result))
+        {
+          diagnostic = "certified application has no model result";
+          return false;
+        }
+        value = concreteValue(manager, result, signature.codomain());
+        return true;
+      }
+    value = concreteValue(
+        manager,
+        UFConcreteValue::zero(UFSignature::loweringSort(signature.codomain())),
+        signature.codomain());
+    return true;
   }
 
   // The actuals, as the seed keys them -- which is at the lowering sort, and
@@ -453,13 +576,35 @@ bool UFModel::replayPublicRoot(
     const UFTheoryAdapter& adapter, std::string& diagnostic)
 {
   const LoweredApplicationView* view = adapter.applicationView();
-  // This replay evaluates the whole public root against the certified model,
-  // and the evaluator cannot value a Real predicate anywhere in the root:
+  // This replay completes the public root by substituting the certified
+  // value of each application. A Real application has no such value: its
+  // interpretation is an exact rational the arithmetic holds, not a constant
+  // this map carries. It also has nothing here to verify -- congruence over
+  // a Real signature is stated as constraints inside the formula rather than
+  // as lemmas added behind the solver's back, so any model that satisfies
+  // the formula satisfies it by construction. Nothing is checked and nothing
+  // is claimed.
+  // Nor can the evaluator value a Real predicate anywhere else in the root:
   // whatever the arithmetic owns, the arithmetic checks, and this replay
   // stands aside from any root that holds it.
   if (view != NULL && !view->publicRoot.IsNull() &&
       lra::Frontend::containsRealSyntax(view->publicRoot))
     return true;
+  if (view != NULL)
+    for (const LoweredApplicationRecord& record : view->applications)
+    {
+      // Either end counts. A Real result has no constant to substitute, and a
+      // Real argument is a term this replay's evaluator would have to value,
+      // which it cannot. Read off the signature, not the named actuals: a
+      // declaration applied once has no pairs to constrain, so its actuals
+      // are never named, and an empty list says nothing about their sorts.
+      const UFSignature& signature = record.declaration->signature();
+      if (signature.codomain().kind() == SourceSort::Kind::Real)
+        return true;
+      for (const SourceSort& sort : signature.domain())
+        if (sort.kind() == SourceSort::Kind::Real)
+          return true;
+    }
   STPMgr* manager = view == NULL || view->publicRoot.IsNull()
                         ? NULL
                         : view->publicRoot.GetNodeManager();

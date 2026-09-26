@@ -39,7 +39,8 @@ bool symbolOrder(const ASTNode& left, const ASTNode& right)
 
 RealModel::RealModel(NumberLimits limits,
                      const std::vector<RealModelSeed>& staged,
-                     const ASTVec& required_symbols)
+                     const ASTVec& required_symbols,
+                     const ASTVec& spread_symbols)
     : budget_(limits)
 {
   NumberOperationScope operation(budget_);
@@ -73,6 +74,18 @@ RealModel::RealModel(NumberLimits limits,
   std::sort(ordered.begin(), ordered.end(), symbolOrder);
   entries_.reserve(ordered.size());
   symbol_index_.reserve(ordered.size());
+
+  // Every value the solve produced, by canonical text, so that a spread
+  // symbol can be given the smallest positive integer none of them holds --
+  // deterministic in symbol order, and distinct from the other spread symbols
+  // because each one takes its value out of the pool as it goes.
+  const std::set<ASTNode, ExprLess> spread(spread_symbols.begin(),
+                                           spread_symbols.end());
+  std::set<std::string> taken;
+  for (const auto& seed : exact_text)
+    taken.insert(seed.second.first + "/" + seed.second.second);
+  std::int64_t next_spread = 1;
+
   for (const ASTNode& symbol : ordered)
   {
     const auto found = exact_text.find(symbol);
@@ -80,6 +93,13 @@ RealModel::RealModel(NumberLimits limits,
     if (found != exact_text.end())
       value = ExactRational::fromCanonicalIntegers(found->second.first,
                                                    found->second.second);
+    else if (spread.count(symbol) != 0)
+    {
+      for (;; ++next_spread)
+        if (taken.insert(std::to_string(next_spread) + "/1").second)
+          break;
+      value = ExactRational(next_spread++);
+    }
     if (!value.invariantHolds() || value.denominatorDecimal().empty() ||
         value.denominatorDecimal().front() == '-' ||
         value.denominatorDecimal() == "0")
@@ -95,7 +115,8 @@ void RealModel::indexLastEntry()
   // Positions are stable: entries_ is only ever appended to, never erased
   // from or reordered, so an index recorded here stays correct for the life
   // of the model. A duplicate symbol would silently shadow, so refuse it --
-  // the constructor already rejects duplicate seeds.
+  // the constructor already rejects duplicate seeds, and
+  // defineApplicationValues checks findSymbol before it appends.
   const ASTNode& symbol = entries_.back().symbol;
   if (!symbol_index_.emplace(symbol.GetNodeNum(), entries_.size() - 1).second)
     throw std::runtime_error("duplicate symbol in the exact Real model");
@@ -113,6 +134,53 @@ const ExactRational* RealModel::findSymbol(const ASTNode& symbol) const noexcept
   return &entries_[found->second].value;
 }
 
+
+std::string RealModel::applicationKey(const ASTNode& application) const
+{
+  // One value-based interpretation at every sort. The scalar oracle uses
+  // UFModel's canonical keys, also used by solver-side lazy congruence.
+  // Evaluate outside an arithmetic scope: a scalar expression can itself
+  // ask this model about a Real predicate or application.
+  const std::size_t arity = application.Degree();
+  std::string key = std::to_string(application[0].GetNodeNum());
+  for (std::size_t i = 1; i != arity; ++i)
+  {
+    const ASTNode& argument = application[i];
+    std::string value;
+    if (argument.GetSourceSort().kind() == SourceSort::Kind::Real)
+      value = "r:" + stringsFor(argument).canonical_fraction;
+    else
+    {
+      if (!scalar_key_oracle_)
+        throw std::runtime_error("exact Real model has no scalar argument oracle");
+      value = scalar_key_oracle_(argument);
+    }
+    key += '|' + std::to_string(value.size()) + ':' + value;
+  }
+  return key;
+}
+
+ExactRational RealModel::applicationValue(const ASTNode& application) const
+{
+  if (application.Degree() < 2)
+    throw std::runtime_error("malformed uninterpreted-function application");
+  // Failure to evaluate an argument is not evidence that its tuple differs
+  // from every observed tuple. Refuse that query; only a successfully read,
+  // unmatched tuple may take the default below.
+  const std::string key = applicationKey(application);
+  const auto found = applications_.find(key);
+  if (found != applications_.end())
+  {
+    NumberOperationScope operation(budget_);
+    return found->second;
+  }
+  // Congruent to nothing the solve valued, so nothing in this model
+  // constrains it. Zero, as an unvalued required symbol gets: any value
+  // would do, and a fixed one keeps repeated queries agreeing with each
+  // other as well as with congruence.
+  NumberOperationScope operation(budget_);
+  return ExactRational(std::int64_t{0});
+}
 
 ExactRational RealModel::evaluateTermInScope(const ASTNode& term) const
 {
@@ -161,6 +229,34 @@ ExactRational RealModel::evaluateTermUncached(const ASTNode& term) const
         throw std::runtime_error("exact Real model has no value for symbol");
       NumberOperationScope operation(budget_);
       return *value;
+    }
+    case UF_APPLY:
+    {
+      // A leaf like a symbol, and for the same reason: the arithmetic never
+      // saw inside it. If the solve lowered this application,
+      // defineApplicationValues put its value here directly.
+      if (const ExactRational* value = findSymbol(term))
+      {
+        NumberOperationScope operation(budget_);
+        return *value;
+      }
+      // Otherwise it is an application the assertions never mentioned -- a
+      // get-value may ask about one -- and congruence decides it. See
+      // applicationValue.
+      //
+      // Only once this model is the committed one. Deciding an application in
+      // a candidate is neither wanted nor possible: the argument values that
+      // congruence is keyed on may need a Real ite's condition, which is
+      // answered by walking the counterexample, which comes back here for the
+      // Real terms in it -- and finds no installed model to ask, because this
+      // candidate is not installed yet. Refusing, as this arm always did
+      // before there was a congruence index, leaves the verifier to reject
+      // the candidate and the refinement loop to carry on.
+      if (!committed_)
+        throw std::runtime_error(
+            "exact Real model has no value for this uninterpreted-function "
+            "application");
+      return applicationValue(term);
     }
     case REAL_CONST:
     {
@@ -325,6 +421,71 @@ bool RealModel::conditionValue(const ASTNode& condition) const
   throw std::runtime_error("unsupported Real ite condition in model query");
 }
 
+void RealModel::defineApplicationValues(const ASTNodeMap& handle_to_result)
+{
+  for (const std::pair<const ASTNode, ASTNode>& entry : handle_to_result)
+  {
+    const ASTNode& application = entry.first;
+    const ASTNode& result_symbol = entry.second;
+    if (application.IsNull() || result_symbol.IsNull() ||
+        application.GetSourceSort().kind() != SourceSort::Kind::Real)
+      continue;
+    // Already named, from an earlier publication in the same solve.
+    if (findSymbol(application) != nullptr)
+      continue;
+    const ExactRational* value = findSymbol(result_symbol);
+    // A result symbol the solve never valued is not an error here: the
+    // application it stands for has no value to publish, and asking for one
+    // then fails in evaluateTermUncached, where the caller can see it.
+    if (value == nullptr)
+      continue;
+    NumberOperationScope operation(budget_);
+    entries_.emplace_back(application, *value);
+    indexLastEntry();
+  }
+  // An application that gained a value changes what a term over it evaluates
+  // to, and the memo predates that.
+  eval_cache_.clear();
+
+  // Index them by congruence, so an application the solve never lowered can
+  // be answered consistently with the ones it did. Built after every direct
+  // value is in place, because a key holds the argument values and an
+  // argument may itself be an application published above.
+  //
+  // With the congruence path closed for the duration: building a key
+  // evaluates the arguments, and an argument may hold an application of its
+  // own. Answering that one from a half-built index would let the order the
+  // entries happen to be visited in decide the answer.
+  const bool was_committed = committed_;
+  committed_ = false;
+  struct Restore
+  {
+    bool& flag;
+    bool value;
+    ~Restore() { flag = value; }
+  } restore{committed_, was_committed};
+  std::map<std::string, ExactRational> applications;
+  for (const std::pair<const ASTNode, ASTNode>& entry : handle_to_result)
+  {
+    const ASTNode& application = entry.first;
+    if (application.IsNull() || application.Degree() < 2 ||
+        application.GetSourceSort().kind() != SourceSort::Kind::Real)
+      continue;
+    const ExactRational* value = findSymbol(application);
+    if (value == nullptr)
+      continue;
+    // Key evaluation can call either model, so it precedes the arithmetic
+    // scope needed to copy and compare the exact result.
+    std::string key = applicationKey(application);
+    NumberOperationScope operation(budget_);
+    const auto inserted = applications.emplace(std::move(key), *value);
+    if (!inserted.second && inserted.first->second != *value)
+      throw std::runtime_error(
+          "congruent applications have different exact Real model values");
+  }
+  applications_.swap(applications);
+}
+
 bool RealModel::hasValue(const ASTNode& term) const noexcept
 {
   try
@@ -432,6 +593,8 @@ void STPMgr::InstallRealModel(lra::RealModel* model)
   }
   delete lra_ast_state->real_model;
   lra_ast_state->real_model = model;
+  // From here it is the answer, not a candidate.
+  model->markCommitted();
 }
 
 void STPMgr::InvalidateRealModel() noexcept
@@ -445,6 +608,13 @@ void STPMgr::InvalidateRealModel() noexcept
 bool STPMgr::HasRealModel() const noexcept
 {
   return lra_ast_state != nullptr && lra_ast_state->real_model != nullptr;
+}
+
+void STPMgr::PublishRealApplicationValues(const ASTNodeMap& handle_to_result)
+{
+  if (!HasRealModel())
+    return;
+  lra_ast_state->real_model->defineApplicationValues(handle_to_result);
 }
 
 bool STPMgr::RealModelValueNode(const ASTNode& term, ASTNode& value)
@@ -469,6 +639,14 @@ void STPMgr::SetRealConditionOracle(
   if (!HasRealModel())
     return;
   lra_ast_state->real_model->setConditionOracle(oracle);
+}
+
+void STPMgr::SetRealScalarKeyOracle(
+    const std::function<std::string(const ASTNode&)>& oracle)
+{
+  if (!HasRealModel())
+    return;
+  lra_ast_state->real_model->setScalarKeyOracle(oracle);
 }
 
 bool STPMgr::EvaluateRealPredicate(
@@ -511,8 +689,9 @@ bool STPMgr::EvaluateRealPredicate(
   }
   catch (const std::exception&)
   {
-    // A predicate over a term the model cannot reach. Not decided, and not
-    // this function's error to raise.
+    // A predicate over a term the model cannot reach -- an application the
+    // solve never lowered, say. Not decided, and not this function's error
+    // to raise.
     return false;
   }
 }

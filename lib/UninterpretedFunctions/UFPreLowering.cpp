@@ -367,6 +367,39 @@ size_t countApplications(const ASTNode& root)
 
 } // namespace
 
+UFPreLoweringChoice chooseUFPreLowering(const STPMgr& manager,
+                                        const ASTNode& root)
+{
+  using Mode = UserDefinedFlags::OptionMode;
+  const UserDefinedFlags& flags = manager.UserFlags;
+
+  // Only AUTO needs to know anything about the query, and the walk is only
+  // worth doing when a Real could be in there at all. HasSeenRealSyntax is
+  // a manager-lifetime flag, so it answers "no Real has ever been built
+  // here" exactly and "a Real may be in this root" approximately; a pure
+  // bit-vector solve therefore pays nothing, and the walk decides the rest.
+  const bool anyAuto = flags.uf_propagate_equalities == Mode::AUTO ||
+                       flags.uf_skeleton_preproc == Mode::AUTO;
+  const bool realQuery = anyAuto && manager.HasSeenRealSyntax() &&
+                         containsRealSort(root);
+
+  const auto resolve = [realQuery](Mode mode) {
+    return mode == Mode::ON || (mode == Mode::AUTO && !realQuery);
+  };
+
+  UFPreLoweringChoice choice;
+  choice.propagate = flags.optimize_flag && flags.propagate_equalities &&
+                     resolve(flags.uf_propagate_equalities);
+  // --skeleton-preproc is the separate, post-lowering option; when it is set
+  // the skeleton is asked regardless of what this pass would have chosen.
+  // Asking is only useful to a pass that then propagates, so a choice that
+  // does not propagate does not ask on its own account.
+  choice.askSkeleton =
+      choice.propagate &&
+      (resolve(flags.uf_skeleton_preproc) || flags.skeleton_preproc);
+  return choice;
+}
+
 UFPreLowering::UFPreLowering(STPMgr* manager) : manager_(manager)
 {
   assert(manager_ != NULL);

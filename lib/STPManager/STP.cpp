@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFLowering.h"
 #include "stp/UninterpretedFunctions/UFPreLowering.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
+#include "stp/UninterpretedFunctions/UFModel.h"
 #include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
@@ -66,6 +67,8 @@ THE SOFTWARE.
 #include "stp/Util/DagWalk.h"
 #include <limits>
 #include <memory>
+#include <map>
+#include <set>
 using std::cout;
 
 namespace stp
@@ -225,8 +228,9 @@ SATSolver* STP::get_new_sat_solver()
 SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
                                     const ASTNode& query)
 {
-  // One deadline for preprocessing, the floating-point restarts and the
-  // injectivity fallback. A later public query starts anew.
+  // One deadline for preprocessing, the floating-point restarts, restarted
+  // UF rounds, and the injectivity fallback. A later public query starts
+  // anew.
   const auto started = std::chrono::steady_clock::now();
   QueryTiming timing(started);
   QueryTimingReport timing_report(bm->query_timing,
@@ -475,12 +479,13 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
     // exactly this. Gated on the general simplification switches as well as
     // its own, and skipped outright for a root with no application, which
     // has nothing to gain and is the common case.
-    if (bm->UserFlags.optimize_flag && bm->UserFlags.propagate_equalities &&
-        bm->UserFlags.uf_propagate_equalities &&
-        containsKind(original_input, UF_APPLY))
+    const UFPreLoweringChoice ufChoice =
+        containsKind(original_input, UF_APPLY)
+            ? chooseUFPreLowering(*bm, original_input)
+            : UFPreLoweringChoice();
+    if (ufChoice.propagate)
     {
-      const bool askSkeleton = bm->UserFlags.uf_skeleton_preproc ||
-                               bm->UserFlags.skeleton_preproc;
+      const bool askSkeleton = ufChoice.askSkeleton;
       UFPreLowering pre(bm);
       UFPreLoweringStats preStats;
       original_input = pre.propagate(original_input, &preStats, askSkeleton,
@@ -582,35 +587,110 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
     fpEncodingContext->copyArrayEqualityRewrites(arrayEqualityRewrites);
   }
 
-  std::unique_ptr<SATSolver, QueryTimedDelete<SATSolver>> newS(
-      get_new_sat_solver(), {bm->query_timing, QueryPhase::SolverCleanup});
+  // Lazy congruence for the fully-Real declarations. Eager expansion states
+  // every pair before the first solve, and each pair it states is an equality
+  // atom, which is a row and a slack variable in the tableau -- quadratic in
+  // the applications, and paid whether or not the search ever needed it.
+  //
+  // A committed model can be asked instead. Group a declaration's
+  // applications by the exact values of their arguments, and any two in one
+  // group that carry different results have just shown that this pair, and
+  // only this pair, needed stating. Add those and solve again.
+  //
+  // Each round adds at least one constraint the previous model violated, so no
+  // round repeats another's work and the pairs available to state are finite:
+  // in the worst case this converges on exactly the eager constraint set, and
+  // in practice it stops after a round or two having stated almost none of it.
+  //
+  // The solve below takes the rounds on itself, extending its LRA context in
+  // place and keeping its SAT solver -- see TopLevelSTPAux. This loop is the
+  // fallback for when it cannot, which is when the theory propagator holds
+  // the context: then the next round is a whole new solve over the original
+  // query and everything earned so far.
+  SOLVER_RETURN_TYPE result;
+  ASTVec earnedCongruence;
+  lazyCongruence = LazyCongruenceState();
+  unsigned restarts = 0;
+  for (;;)
+  {
+    ASTNode round_input = original_input;
+    if (!earnedCongruence.empty())
+    {
+      ASTVec conjuncts;
+      conjuncts.reserve(earnedCongruence.size() + 1);
+      conjuncts.push_back(original_input);
+      conjuncts.insert(conjuncts.end(), earnedCongruence.begin(),
+                       earnedCongruence.end());
+      round_input = bm->CreateNode(AND, conjuncts);
+    }
 
-  SOLVER_RETURN_TYPE result =
-      solve_by_sat_solver(newS.get(), original_input, arrayEqualityRewrites,
-                          deadline);
-  newS.reset();
+    std::unique_ptr<SATSolver, QueryTimedDelete<SATSolver>> newS(
+        get_new_sat_solver(), {bm->query_timing, QueryPhase::SolverCleanup});
+    result = solve_by_sat_solver(newS.get(), round_input, arrayEqualityRewrites,
+                                 deadline);
+    newS.reset();
 
-  // Lend the Real model somewhere to decide a Real ite's Boolean condition,
-  // for as long as it lives. The counterexample is the model of the Booleans
-  // and outlives every Real model installed against it, so this is safe to
-  // leave in place; without it, reading the value of any term with such an
-  // ite under it fails, which a caller meets as soon as it asks. The
-  // counterexample check lends its own for the same reason, but only for the
-  // formula it is checking -- a value query is not that.
+    // Only a satisfiable answer rests on a model, and only a model can break
+    // congruence. An unsatisfiable one rests on the constraints stated so far,
+    // every one of which the query entails.
+    if (result != SOLVER_INVALID || !batchUFView->active())
+      break;
+    const ASTVec fresh = nextLazyCongruenceRound(bm, Ctr_Example, *batchUFView,
+                                                 lazyCongruence);
+    if (fresh.empty())
+      break;
+    earnedCongruence.insert(earnedCongruence.end(), fresh.begin(),
+                            fresh.end());
+    ++restarts;
+  }
+  // Install both parts of the combined interpretation before indexing UF
+  // observations: an argument can be scalar-valued, or a Real ite whose
+  // condition needs the counterexample. The counterexample outlives this
+  // model; query invalidation discards both before a later solve.
   if (result == SOLVER_INVALID && bm->HasRealModel())
   {
-    AbsRefine_CounterExample* counterexample = Ctr_Example;
-    STPMgr* manager = bm;
-    bm->SetRealConditionOracle(
-        [counterexample, manager](const ASTNode& condition) {
-          const ASTNode decided =
-              counterexample->ModelValueOfFormula(condition);
-          if (decided == manager->ASTTrue) return true;
-          if (decided == manager->ASTFalse) return false;
-          throw std::runtime_error(
-              "Real ite condition did not evaluate to a Boolean constant");
-        });
+    try
+    {
+      AbsRefine_CounterExample* counterexample = Ctr_Example;
+      STPMgr* manager = bm;
+      bm->SetRealConditionOracle(
+          [counterexample, manager](const ASTNode& condition) {
+            const ASTNode decided =
+                counterexample->ModelValueOfFormula(condition);
+            if (decided == manager->ASTTrue) return true;
+            if (decided == manager->ASTFalse) return false;
+            throw std::runtime_error(
+                "Real ite condition did not evaluate to a Boolean constant");
+          });
+      bm->SetRealScalarKeyOracle(
+          [counterexample, manager](const ASTNode& argument) {
+            std::string key;
+            if (!UFModel::scalarModelKey(manager, counterexample, argument,
+                                         argument.GetSourceSort(), key))
+              throw std::runtime_error(
+                  "Real function argument has no concrete scalar model value");
+            return key;
+          });
+      if (batchUFView->active())
+        bm->PublishRealApplicationValues(batchUFView->handleToResult);
+    }
+    catch (const std::exception& failure)
+    {
+      bm->InvalidateRealModel();
+      if (!lra::gaveUpOnABudget(failure))
+        return SOLVER_ERROR;
+      bm->noteUnknown(UnknownReason::Incomplete,
+                      std::string("could not publish the exact function model: ") +
+                          failure.what());
+      return bm->unknownResult();
+    }
   }
+
+  if (bm->UserFlags.stats_flag && batchUFView->active())
+    std::cerr << "UF lazy congruence: rounds=" << lazyCongruence.rounds
+              << " lemmas=" << lazyCongruence.lemmas
+              << " expanded=" << lazyCongruence.expanded.size()
+              << " restarts=" << restarts << std::endl;
 
   // Raw: whether an unsat here is the query's is TopLevelSTP's question, and
   // it has a second run to answer it with.
@@ -794,6 +874,16 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   {
     try
     {
+      // The Real arguments of the uninterpreted applications, for every
+      // model to keep apart. Each one starts at zero and nothing in the
+      // lowered formula moves it, so without this they all collide on the
+      // first model and congruence has to spend a round telling them apart.
+      std::vector<ASTNode> spreadSymbols;
+      for (const LoweredApplicationRecord& record : batchUFView->applications)
+        for (const ASTNode& actual : record.namedActuals)
+          if (actual.GetKind() == SYMBOL &&
+              actual.GetSourceSort().kind() == SourceSort::Kind::Real)
+            spreadSymbols.push_back(actual);
       ASTNode lra_input = original_input;
       if (NewSolver.timeLimitExpired())
       {
@@ -803,7 +893,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       }
       bm->checkPreparation(PreparationStage::LraPreregistration);
       lraCoordinator.reset(new lra::LraCoordinator(
-          *bm, NewSolver, lra_input));
+          *bm, NewSolver, lra_input, spreadSymbols));
       bm->checkPreparation(PreparationStage::LraCore);
       if (!lraCoordinator->ready())
         return SOLVER_ERROR;
@@ -1681,6 +1771,69 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       satBase, maybeRefinement
       , lraCoordinator.get()
       );
+  ++lazyCongruence.rounds;
+
+  // A satisfiable answer over an uninterpreted Real function is provisional
+  // until its model has been read for congruence. The pairs it breaks are
+  // stated to the same solve: the coordinator registers their atoms and
+  // rebuilds its exact core, the lemma is encoded into the SAT solver that
+  // has been running all along -- with every clause it has learned -- and
+  // the search resumes. Each round states something the previous model
+  // violated, so this ends.
+  const auto lazyCongruenceRound = [&]() -> bool {
+    if (res != SOLVER_INVALID || lraCoordinator == nullptr ||
+        !batchUFView->active() || !bm->UserFlags.uf_lazy_in_place)
+      return false;
+    const ASTVec fresh = nextLazyCongruenceRound(bm, Ctr_Example, *batchUFView,
+                                                 lazyCongruence);
+    if (fresh.empty())
+      return false;
+    const ASTNode lemma = fresh.size() == 1 ? fresh[0]
+                                            : bm->CreateNode(AND, fresh);
+    const lra::ExtensionOutcome extended =
+        lraCoordinator->extendWithFormula(lemma, *satBase);
+    lraCoordinator->rethrowPreparationInterruption();
+    if (extended != lra::ExtensionOutcome::Extended)
+    {
+      // Give the lemmas back either way: this round did not state them.
+      for (const ASTNode& item : fresh)
+        lazyCongruence.earned.erase(item);
+      lazyCongruence.lemmas -= fresh.size();
+      if (extended == lra::ExtensionOutcome::Declined)
+        // The coordinator would not take it on and nothing moved. The
+        // caller's restart loop finds the lemmas again and states them from
+        // the top over a new solve.
+        return false;
+      // The extension began and could not finish. It has already dropped the
+      // committed model the restart loop re-derives its lemmas from, so that
+      // loop would find nothing to state and return this round's `sat` -- for
+      // a query whose congruence this round has just shown to be broken.
+      // There is no answer here, only which kind of no-answer it is.
+      if (extended == lra::ExtensionOutcome::ResourceLimit)
+      {
+        bm->noteUnknown(
+            UnknownReason::Incomplete,
+            std::string("the exact linear arithmetic solver could not take on "
+                        "a congruence lemma within its resource budget: ") +
+                lraCoordinator->failureDetail());
+        res = bm->unknownResult();
+      }
+      else
+        res = SOLVER_ERROR;
+      return false;
+    }
+    batchUFAdapter->invalidateCertifiedModel();
+    Ctr_Example->ClearAllTables();
+    bm->checkPreparation(PreparationStage::Encoding);
+    res = Ctr_Example->CallSAT_ResultCheck(
+        NewSolver, bm->ASTTrue, semantic_input, submitted_counterexample_input,
+        satBase, true, lraCoordinator.get());
+    ++lazyCongruence.rounds;
+    return true;
+  };
+  while (lazyCongruenceRound())
+  {
+  }
 
   if (bm->soft_timeout_expired)
   {
@@ -1836,6 +1989,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
         res = Ctr_Example->SATBased_ArrayReadRefinement(
             NewSolver, semantic_input, satBase);
       }
+    }
+
+    while (lazyCongruenceRound())
+    {
     }
 
     if (SOLVER_UNDECIDED != res)

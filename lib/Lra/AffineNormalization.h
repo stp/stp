@@ -16,6 +16,11 @@ struct AffinePolynomial final
   ExactRational constant;
 };
 
+struct AffineNormalizationOptions final
+{
+  bool allow_applications = false;
+};
+
 /* Accumulate an affine expression over the AST DAG, not over its paths.
  * First validate it and find a postorder, resolving symbols on their first
  * left-to-right visit. Then send each node's accumulated scale to its
@@ -25,11 +30,13 @@ struct AffinePolynomial final
  * growing polynomial for every intermediate sum.
  *
  * The frontend validates even subterms whose final scale cancels to zero.
+ * Applications, when enabled, are opaque leaves.
  */
 template <typename ResolveSymbol, typename Visit, typename Poll>
 AffinePolynomial normalizeAffineDag(
     const ASTNode& root, const ExactRational& initial_scale,
-    ResolveSymbol resolve_symbol, Visit visit, Poll& poll)
+    ResolveSymbol resolve_symbol, Visit visit, Poll& poll,
+    AffineNormalizationOptions options = {})
 {
   struct Node final
   {
@@ -71,6 +78,12 @@ AffinePolynomial normalizeAffineDag(
     switch (term.GetKind())
     {
       case SYMBOL:
+        node.symbol = resolve_symbol(term);
+        break;
+      case UF_APPLY:
+        if (!options.allow_applications)
+          throw FrontendFailure(FrontendFailureKind::Unsupported,
+                                "unsupported Real operator UF_APPLY");
         node.symbol = resolve_symbol(term);
         break;
       case REAL_CONST:
@@ -165,7 +178,7 @@ AffinePolynomial normalizeAffineDag(
     if (node.scale.isZero())
       continue;
     const Kind kind = node.term.GetKind();
-    if (kind == SYMBOL)
+    if (kind == SYMBOL || kind == UF_APPLY)
     {
       auto found = result.coefficients.find(node.symbol);
       if (found == result.coefficients.end())
