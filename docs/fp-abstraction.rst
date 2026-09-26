@@ -30,6 +30,25 @@ Usage
   ``--fp-abstraction-incremental`` is also set, and otherwise encodes
   every floating-point operation exactly.
 
+``--fp-abstraction-incremental``
+  Host the abstraction inside the incremental driver as well, with one
+  abstraction per encoding epoch rather than per query, records shared
+  across the pieces of a session, and every release spliced in place (the
+  driver never restarts). Off by default. A hosted session expands arrays
+  eagerly, as if ``--ackermanize`` were given, decided once when the driver
+  is created, so set the flag before the first query. A check the driver's
+  replay still rejects once every record has been released is answered
+  ``unknown``, and ``(get-info :reason-unknown)`` reports it as incomplete.
+
+``--fp-abstraction-active-closure``
+  Under the incremental driver, check only the records of the encoding
+  units the current solve asserts -- those the asserted pieces mention,
+  their inner records, proxy definitions and cross-rule partners -- rather
+  than every record of the epoch. A measurement flag, off by default:
+  reading every record is sound, since a popped piece's proxies are
+  unconstrained, and is the measured baseline. ``-s`` counts the checks
+  this skips.
+
 ``--fp-abstraction-ops``
   A comma-separated list of the operations to abstract: ``mul``, ``div``,
   ``sqrt``, ``add``, ``sub``, ``fma``, ``rem``, ``rti``, ``to_sbv``,
@@ -101,7 +120,26 @@ Usage
 ``--fp-abstraction-repair``
   Before refining a candidate the abstraction refuted, replay the original
   formula under it and accept the candidate as a model when the formula
-  holds for its values of the original symbols (on by default).
+  holds for its values of the original symbols (on by default). Not under
+  an active array equality (``--array-equality``): there the replay decides
+  the equality by its lowering and a read of an owned array from the
+  contents the array checker certified, both relative to the surrogates'
+  values, so it cannot certify a candidate whose surrogates are wrong, and
+  such a candidate is refined instead.
+
+``--fp-abstraction-decline-pinned``
+  Leave exact any operation whose result the query equates directly with a
+  constant or a conversion. That is the witness-hunt signature: such a
+  solve must produce the operation's exact value anyway, and a surrogate
+  only defers the circuit through refinement rounds. Off by default.
+
+``--fp-abstraction-budget``
+  Wall-clock seconds after which a batch refinement releases every
+  remaining record exactly, spliced in place: past the budget the solve is
+  the exact encoding plus whatever the rules already added, so a loss on a
+  witness hunt is bounded near the budget instead of the timeout. 0, the
+  default, never fires. Batch solves only; the incremental driver's checks
+  have their own timing.
 
 ``--fp-abstraction-constant-operands``
   Whether an operation one of whose float operands is a constant is
@@ -156,6 +194,13 @@ Usage
   bit-vector abstraction can see the released circuit, and below 128 bits
   that circuit is not worth the learnt clauses a restart throws away. See
   the release step below.
+
+``--fp-abstraction-restart-limit``
+  How many times one query may run the pipeline again to release
+  operations exactly, 4 by default. Past it, and whenever a run abstracted
+  no fewer operations than the run before it -- the released operation was
+  not met again, so the restart gained nothing -- releases are spliced
+  instead.
 
 Which operations are abstracted
 -------------------------------
@@ -272,7 +317,8 @@ application whose candidate disagrees is first replayed: the original
 formula mentions no surrogate and evaluates every operation exactly, so if
 it holds for the candidate's values of the original symbols the candidate
 is a model, whatever its surrogates said, and nothing is refined
-(``--fp-abstraction-repair``; ``-s`` counts these as model repairs). A
+(``--fp-abstraction-repair``; ``-s`` counts these as model repairs; not
+under an active array equality, as the option's entry says). A
 property that constrains a result only through what the rules already
 guarantee -- its class, its sign, a bound the bands imply -- is decided
 this way on the first candidate. Otherwise it is refined by the first of
@@ -501,15 +547,19 @@ Reading what happened
 
 .. code-block:: text
 
-    FpAbstraction: 3 abstracted (1 shared occurrences, 4 candidates, 0 by chain), 63 rule conjuncts, 0 cross-operation rules, 9 checks, 4 inconsistent, 1 shape lemmas, 2 value lemmas, 0 relational lemmas, 1 releases, 4 rounds, 0 restarts, 0 model repairs, 0 box lemmas, 0.02 s encoding lemmas
+    FpAbstraction: 3 abstracted (1 shared occurrences, 4 candidates, 0 by chain), 63 rule conjuncts, 0 cross-operation rules, 9 checks, 0 skipped (0 outside the active closure, 0 with no mode encoding), 4 inconsistent, 1 shape lemmas, 2 value lemmas, 0 relational lemmas, 1 releases, 4 rounds, 0 restarts, 0 model repairs, 0 box lemmas, 0.02 s encoding lemmas
 
 *candidates* are applications of an admitted operation seen at or above the
 width floor; *abstracted* are the records made for them, *shared* the
 occurrences that reused one, *by chain* the records admitted through
 ``--fp-abstraction-chain-ops``; *cross-operation rules* are the facts between
 an fma and its partner records. *checks* are record checks against a
-candidate; *inconsistent* those that disagreed with the exact value, each
-followed by one of the four refinements counted after it. *rounds* is how
+candidate, and *skipped* the records a check passed over, because they lay
+outside the active closure (``--fp-abstraction-active-closure``, under the
+incremental driver) or their rounding-mode proxy had no encoding in the
+current solve; *inconsistent* those that disagreed with the exact value,
+each followed by one of the four refinements counted after it. *rounds* is
+how
 many refinement rounds encoded a floating-point lemma; *box lemmas* and the
 seconds spent *encoding lemmas* are the two experiments' counters. A solve
 that ends with no releases decided the query on the rules alone. A second line
@@ -533,3 +583,39 @@ solving a query with and without the abstraction under ``-d`` and comparing
 the answers is a differential test of it;
 ``tests/query-files/fp-abstraction-tests/`` runs the refinement loop end to
 end in the test suite.
+
+From the C interface
+--------------------
+
+Every option above but ``--fp-abstraction-active-closure`` has a
+``vc_setInterfaceFlags`` counterpart: ``FP_ABSTRACTION`` turns the
+abstraction on, ``FP_ABSTRACTION_OPS`` and ``FP_ABSTRACTION_CHAIN_OPS`` take
+the operation set as a bitmask (1 ``mul``, 2 ``div``, 4 ``sqrt``, 8 ``add``,
+16 ``sub``, 32 ``fma``, 64 ``rem``, 128 ``rti``, 256 ``to_sbv``, 512
+``to_ubv``; the default set is 39, and zero restores it), and the rest take
+the option's value under the same name, ``FP_ABSTRACTION_WIDTH`` for
+``--fp-abstraction-width`` and so on. Two differences from the command line:
+``FP_ABSTRACTION_RESTART_WIDTH`` is never raised for you when the bit-vector
+abstraction is on, and ``FP_ABSTRACTION_INCREMENTAL`` must be set before the
+session's first query, since the driver decides its array strategy once,
+when it is created.
+
+.. code-block:: c
+
+    vc_setInterfaceFlags(vc, FP_ABSTRACTION, 1);
+    vc_setInterfaceFlags(vc, FP_ABSTRACTION_OPS, 1 | 2 | 4 | 32 | 256);
+    /* ... build the query and solve it ... */
+    unsigned long long released = vc_getCounter(vc, STP_COUNTER_FP_RELEASES);
+
+``vc_getCounter`` reads what ``-s`` prints, as totals over every solve of
+the session: ``STP_COUNTER_FP_CANDIDATES``, ``STP_COUNTER_FP_ABSTRACTED``,
+``STP_COUNTER_FP_SHARED``, ``STP_COUNTER_FP_CHAINED``,
+``STP_COUNTER_FP_RULE_LEMMAS``, ``STP_COUNTER_FP_CROSS_RULES``,
+``STP_COUNTER_FP_CHECKS``, ``STP_COUNTER_FP_SKIPPED_CHECKS``,
+``STP_COUNTER_FP_INCONSISTENT``, ``STP_COUNTER_FP_VALUE_LEMMAS``,
+``STP_COUNTER_FP_BOX_LEMMAS``, ``STP_COUNTER_FP_SHAPE_LEMMAS``,
+``STP_COUNTER_FP_RELATIONAL_LEMMAS``, ``STP_COUNTER_FP_RELEASES``,
+``STP_COUNTER_FP_REFINEMENT_ROUNDS``, ``STP_COUNTER_FP_RESTARTS``,
+``STP_COUNTER_FP_REPAIRS`` and ``STP_COUNTER_FP_LEMMA_MICROSECONDS``. They
+answer mid-session as well as after a solve, and a query without floating
+point leaves them at zero.
