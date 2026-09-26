@@ -1347,7 +1347,10 @@ if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadic
                     "STP's (${CADICAL_LIBRARY}). Say "
                     "-DUSE_CRYPTOMINISAT=ON to make this an error instead, "
                     "and see the ways out that it lists.")
+                # config.h picks the default backend from
+                # STP_BUILD_WITH_CRYPTOMINISAT, so it goes with the rest.
                 remove_definitions(-DUSE_CRYPTOMINISAT)
+                set(STP_BUILD_WITH_CRYPTOMINISAT OFF)
                 set(USE_CRYPTOMINISAT OFF)
             else()
                 message(FATAL_ERROR

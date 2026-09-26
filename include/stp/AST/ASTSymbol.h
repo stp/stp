@@ -53,7 +53,9 @@ private:
     size_t operator()(const ASTSymbol* sym_ptr) const
     {
       return CStringHash()(sym_ptr->_name) ^
-             (sym_ptr->_source_sort.hash() * 0x9e3779b97f4a7c15ULL);
+             static_cast<size_t>(sym_ptr->_source_sort.hash() *
+                                 0x9e3779b97f4a7c15ULL)
+          ;
     };
   };
 

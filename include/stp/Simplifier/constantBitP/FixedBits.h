@@ -208,9 +208,9 @@ public:
   {
     for (int w = (int)numWords() - 1; w >= 0; w--)
     {
-      const uint64_t t = possibleOnes(w);
+      const uint64_t t = possibleOnes(static_cast<unsigned>(w));
       if (t != 0)
-        return w * 64 + 63 - ::stp::countLeadingZeroes64(t);
+        return w * 64 + 63 - static_cast<int>(::stp::countLeadingZeroes64(t));
     }
     return -1;
   }

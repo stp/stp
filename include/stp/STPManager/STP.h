@@ -38,6 +38,7 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/Simplifier/NodeDomainAnalysis.h"
+#include <chrono>
 #include <memory>
 #include <set>
 
@@ -84,7 +85,9 @@ class STP
   SOLVER_RETURN_TYPE solve_by_sat_solver(SATSolver* newS,
                                          ASTNode original_input,
                                          const ASTNodeMap&
-                                             arrayEqualityRewrites);
+                                             arrayEqualityRewrites,
+                                         std::chrono::steady_clock::time_point
+                                             deadline);
 
   SATSolver* get_new_sat_solver();
 
@@ -202,7 +205,9 @@ public:
   // TopLevelSTP calls it a second time when the first run reached an unsat
   // nobody could attribute -- see the comment there.
   SOLVER_RETURN_TYPE topLevelSTPOnce(const ASTNode& inputasserts,
-                                     const ASTNode& query);
+                                     const ASTNode& query,
+                                     std::chrono::steady_clock::time_point
+                                         deadline);
 
   DLL_PUBLIC SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts,
                                             const ASTNode& query);

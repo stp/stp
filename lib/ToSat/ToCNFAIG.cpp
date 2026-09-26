@@ -284,12 +284,14 @@ void ToCNFAIG::fill_node_to_var(const CNF& cnf,
                                 ToSATBase::ASTNodeToSATVar& nodeToVars,
                                 BBNodeManagerAIG& mgr)
 {
+  PreparationPoller poll(mgr.preparationControl(), PreparationStage::CNFConversion);
   BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
   assert(nodeToVars.size() == 0);
 
   // Each symbol maps to a vector of CNF variables.
   for (it = mgr.symbolToBBNode.begin(); it != mgr.symbolToBBNode.end(); it++)
   {
+    poll();
     const ASTNode& n = it->first;
     const vector<BBNodeAIG>& b = it->second;
     assert(nodeToVars.find(n) == nodeToVars.end());
@@ -301,6 +303,7 @@ void ToCNFAIG::fill_node_to_var(const CNF& cnf,
 
     for (unsigned i = 0; i < b.size(); i++)
     {
+      poll();
       if (!b[i].IsNull())
       {
         // 0 is CNF's "no variable"; ~0u is this map's, and the two have to be

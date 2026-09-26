@@ -25,6 +25,25 @@ sudo cmake --install build
 
 [CaDiCaL](https://github.com/arminbiere/cadical) is compiled in alongside it, and is what a build without CryptoMiniSat solves with. `--cryptominisat`, `--cadical` or `--minisat` selects a compiled-in backend for one run.
 
+With `--cadical`, `--cadical-elim=0|1` controls variable elimination, and
+`--cadical-elimmineff=N` / `--cadical-elimmaxeff=N` set its minimum and maximum
+effort. For example:
+
+```sh
+stp input.smt2 --cadical --cadical-elim=0
+stp input.smt2 --cadical --cadical-elimmineff=10000 --cadical-elimmaxeff=100000
+```
+
+Unspecified options retain the backend settings and STP's automatic policies.
+Explicit values override the corresponding `CADICAL_*` environment variables
+and search-bias settings, survive backend rebuilds, and an explicit
+`--cadical-elim=1` keeps elimination enabled when incremental inprocessing is
+retired. Invalid values and requests with another backend are rejected before
+solving. Add `-s` to see the effective settings. Effort limits follow CaDiCaL's
+cost model; it can raise the allowance for large formulas, so the maximum is
+not a hard resolution-count limit. These are tuning controls with measured
+tradeoffs; none of them is set by default.
+
 STP builds CryptoMiniSat with `-DNOCADICAL=ON`, so it bundles no CaDiCaL of its own and STP links the revision it pins -- which is what keeps `--cadical-factor` available. That option removes only backbone extraction, which STP never asks for.
 
 There are no submodules: `--auto-download` fetches every dependency at a pinned revision and builds it with this build's own compiler and flags. Without it, configuration stops and says what to install or where to point it -- nothing here reaches the network unless it is asked to.

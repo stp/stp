@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/ToSat/AIGBudget.h"
+#include "stp/Util/PreparationControl.h"
 #include "stp/ToSat/BBNodeGia.h"
 
 // From ABC
@@ -70,7 +71,7 @@ namespace stp
 // One thing is harder, and it is a correctness matter rather than a
 // convenience: the CIs of this manager are *not* objects 1..nCi. See
 // ToCNFGia for what depends on that and what is done about it.
-class BBNodeManagerGia
+class BBNodeManagerGia : public EncodingPreparation
 {
 public:
   Gia_Man_t* giaMgr;
@@ -139,11 +140,12 @@ public:
   // An input that stands for no symbol. The BV abstraction machinery mints
   // these for proxies and for abstracted results, which is why it does not go
   // through CreateSymbol.
-  BBNodeGia CreateFreshInput() { return BBNodeGia(Gia_ManAppendCi(giaMgr)); }
+  BBNodeGia CreateFreshInput() { pollPreparation(); return BBNodeGia(Gia_ManAppendCi(giaMgr)); }
 
   // The same symbol always has to come back as the same node.
   BBNodeGia CreateSymbol(const ASTNode& n, unsigned i)
   {
+    pollPreparation();
     assert(n.GetKind() == SYMBOL);
 
     // booleans have width 0.
@@ -319,7 +321,8 @@ public:
   // raises, which unwinds and reports.
   void checkBudget() const
   {
-    const int64_t ands = Gia_ManAndNum(giaMgr);
+    pollPreparation();
+    const int ands = Gia_ManAndNum(giaMgr);
     if (nodeBudget >= 0 && ands > nodeBudget)
       throw AIGBudgetExhausted(ands);
 
@@ -356,10 +359,14 @@ private:
 
     std::deque<int> names;
     for (size_t i = 0, size = children.size(); i < size; ++i)
+    {
+      pollPreparation();
       names.push_back(children[i].n);
+    }
 
     while (names.size() > 2)
     {
+      pollPreparation();
       const int a = names.front();
       names.pop_front();
       const int b = names.front();

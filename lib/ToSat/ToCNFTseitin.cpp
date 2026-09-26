@@ -35,6 +35,7 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
                          ToSATBase::ASTNodeToSATVar& nodeToVars,
                          bool /*needAbsRef*/, BBNodeManagerLit& mgr)
 {
+  PreparationPoller poll(mgr.preparationControl(), PreparationStage::CNFConversion);
   assert(nodeToVars.size() == 0);
   assert(mgr.mgr.outputCount() == 0);
   mgr.mgr.createOutput(top.n);
@@ -129,6 +130,7 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
   // and what the freezing pass and the model builder expect.
   for (const auto& entry : mgr.symbolToBBNode)
   {
+    poll();
     const ASTNode& n = entry.first;
     const std::vector<BBNodeLit>& bits = entry.second;
     assert(nodeToVars.find(n) == nodeToVars.end());
@@ -138,6 +140,7 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
 
     for (unsigned i = 0; i < bits.size(); i++)
     {
+      poll();
       if (bits[i].IsNull())
         continue;
       const uint32_t var = cnf.varOfCi(mgr.ciOrdinal(bits[i]));

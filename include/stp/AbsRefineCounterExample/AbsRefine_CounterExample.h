@@ -312,7 +312,10 @@ public:
   vector<std::pair<ASTNode, ASTNode>>
   GetSortedArrayModelEntries(const ASTNode& arraySym);
 
-  int CounterExampleSize(void) const { return CounterExampleMap.size(); }
+  int CounterExampleSize(void) const
+  {
+    return static_cast<int>(CounterExampleMap.size());
+  }
 
   // FIXME: This is bloody dangerous function. Hack attack to take
   // care of requests from users who want to store complete

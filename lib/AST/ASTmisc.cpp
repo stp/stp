@@ -290,6 +290,27 @@ bool constantsSameSourceValue(const ASTNode& a, const ASTNode& b,
   return packedConstantIsNaN(a, eb, sb) && packedConstantIsNaN(b, eb, sb);
 }
 
+ASTNode rebuildNodeWithChildren(STPMgr* stp, const ASTNode& original,
+                                const ASTVec& children)
+{
+  if (children.size() != original.Degree())
+    FatalError("rebuildNodeWithChildren: child count does not match the node",
+               original);
+
+  bool changed = false;
+  for (size_t i = 0; i < children.size() && !changed; ++i)
+    changed = children[i] != original[i];
+  if (!changed)
+    return original;
+
+  NodeFactory* const factory = stp->defaultNodeFactory;
+  if (original.GetType() == BOOLEAN_TYPE ||
+      original.GetValueWidth() == 0)
+    return factory->CreateNode(original.GetKind(), children);
+  return factory->CreateArrayTerm(original.GetKind(), original.GetIndexWidth(),
+                                  original.GetValueWidth(), children);
+}
+
 bool containsKind(const ASTNode& root, Kind kind)
 {
   ASTNodeSet visited;

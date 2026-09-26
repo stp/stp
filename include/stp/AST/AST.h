@@ -68,6 +68,13 @@ bool isCommutative(const Kind k);
 // taken from a manager-lifetime "has ever seen" hint.
 bool containsKind(const ASTNode& n, Kind kind);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
+// Rebuild one node over replacement children, restoring whatever the original
+// carried. A Boolean has no widths, while a bit-vector or array term has to
+// have both put back. Written once here because distinct lowering and
+// uninterpreted-function lowering each carried a copy of their own.
+// Returns the original node unchanged when no child moved.
+ASTNode rebuildNodeWithChildren(STPMgr* stp, const ASTNode& original,
+                                const ASTVec& children);
 // Query-local source-theory checks. The first asks whether FP lowering is
 // needed; the second also includes RoundingMode-only syntax for printing.
 bool containsFloatingPoint(const ASTNode& n, STPMgr* stp);

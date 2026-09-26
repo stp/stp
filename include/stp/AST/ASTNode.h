@@ -311,7 +311,11 @@ public:
   bool canStoreFPFormat() const;
 
   // Hash is the node's unique id. Inlined: used by every ==/</hash lookup.
-  size_t Hash() const { return _int_node_ptr ? _int_node_ptr->node_uid : 0; }
+  // node_uid is 64-bit everywhere; a 32-bit size_t keeps its low half.
+  size_t Hash() const
+  {
+    return _int_node_ptr ? static_cast<size_t>(_int_node_ptr->node_uid) : 0;
+  }
 
   // Lisp-form printer
   ostream& LispPrint(ostream& os, int indentation = 0) const;

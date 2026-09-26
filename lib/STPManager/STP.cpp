@@ -93,6 +93,7 @@ STP::~STP()
 
 void STP::ClearAllTables(void)
 {
+  QueryPhaseScope cleanup(bm->query_timing, QueryPhase::QueryCleanup);
   // The counterexample goes with them, so there is no longer a model to read.
   // Whoever decides the next query says so again.
   queryAnswered = false;
@@ -126,16 +127,25 @@ void STP::ClearAllTables(void)
 SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
                                             ASTNode original_input,
                                             const ASTNodeMap&
-                                                arrayEqualityRewrites)
+                                                arrayEqualityRewrites,
+                                            std::chrono::steady_clock::time_point
+                                                deadline)
 {
   SATSolver& NewSolver = *newS;
   if (bm->UserFlags.stats_flag)
     NewSolver.setVerbosity(1);
 
-  applySolveBudgets(NewSolver, bm->UserFlags);
+  applySolveBudgets(NewSolver, bm->UserFlags, deadline);
 
   // reset the timeout expired flag for the new check
   bm->soft_timeout_expired = false;
+  bm->clearUnknown();
+  if (NewSolver.timeLimitExpired())
+  {
+    bm->soft_timeout_expired = true;
+    bm->noteBudgetExhausted(NewSolver);
+    return bm->unknownResult();
+  }
 
   SOLVER_RETURN_TYPE result =
       TopLevelSTPAux(NewSolver, original_input, arrayEqualityRewrites);
@@ -207,63 +217,104 @@ SATSolver* STP::get_new_sat_solver()
 SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
                                     const ASTNode& query)
 {
+  // One deadline for preprocessing, the floating-point restarts and the
+  // injectivity fallback. A later public query starts anew.
+  const auto started = std::chrono::steady_clock::now();
+  QueryTiming timing(started);
+  QueryTimingReport timing_report(bm->query_timing,
+      bm->UserFlags.stats_flag ? &timing : nullptr, std::cerr);
+  const auto deadline = started +
+      std::chrono::seconds(bm->UserFlags.timeout_max_time >= 0
+                               ? bm->UserFlags.timeout_max_time : 0);
+  const PreparationControl preparation(
+      bm->UserFlags.timeout_max_time >= 0
+          ? deadline : PreparationControl::Clock::time_point::max(),
+      bm->preparation_control);
+  const PreparationScope preparation_scope(bm->preparation_control, preparation);
+  const bool original_inject_args = bm->UserFlags.uf_inject_args;
+  bm->soft_timeout_expired = false;
+  bm->clearUnknown();
   fpAbstractionExact.clear();
   fpAbstractionRestarts = 0;
   fpAbstractionPreviouslyAbstracted = 0;
-  SOLVER_RETURN_TYPE first = topLevelSTPOnce(inputasserts, query);
-  // A floating-point release by restart (FpAbstraction::restartRequested):
-  // the run ended undecided with the operations to lower exactly noted,
-  // and the pipeline runs again over the same formula with them held out
-  // of the abstraction. Each run releases at least one more, so this ends.
-  // The same table clearing as the UF second run below, for the same
-  // reason.
-  while (fpAbstraction != NULL && fpAbstraction->restartRequested())
+  try
   {
-    const std::set<ASTNode>& requests = fpAbstraction->releaseRequests();
-    fpAbstractionExact.insert(requests.begin(), requests.end());
-    fpAbstractionPreviouslyAbstracted = fpAbstraction->applications().size();
-    ++fpAbstractionRestarts;
+    SOLVER_RETURN_TYPE first = topLevelSTPOnce(inputasserts, query, deadline);
+    // A floating-point release by restart (FpAbstraction::restartRequested):
+    // the run ended undecided with the operations to lower exactly noted,
+    // and the pipeline runs again over the same formula with them held out
+    // of the abstraction. Each run releases at least one more, so this ends.
+    // The same table clearing as the UF second run below, for the same
+    // reason. Every run shares the query's one deadline.
+    while (fpAbstraction != NULL && fpAbstraction->restartRequested())
+    {
+      const std::set<ASTNode>& requests = fpAbstraction->releaseRequests();
+      fpAbstractionExact.insert(requests.begin(), requests.end());
+      fpAbstractionPreviouslyAbstracted = fpAbstraction->applications().size();
+      ++fpAbstractionRestarts;
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "FpAbstraction: releasing " << requests.size()
+                  << " operation(s) exactly by running the pipeline again ("
+                  << fpAbstractionExact.size() << " exact in total)"
+                  << std::endl;
+      bm->ClearAllTables();
+      ClearAllTables();
+      skeletonAsked = false;
+      first = topLevelSTPOnce(inputasserts, query, deadline);
+    }
+    if (first != SOLVER_UNSATISFIABLE || bm->uf_injectivity_assumed == 0)
+      return first;
+
     if (bm->UserFlags.stats_flag)
-      std::cerr << "FpAbstraction: releasing " << requests.size()
-                << " operation(s) exactly by running the pipeline again ("
-                << fpAbstractionExact.size() << " exact in total)"
+      std::cerr << "UF: refuted before the search could be asked about the "
+                << "injectivity assumption, deciding the query without it"
                 << std::endl;
+
+    const bool saved = bm->UserFlags.uf_inject_args;
+    bm->UserFlags.uf_inject_args = false;
+    // A second run of the pipeline is a second solve, and every solve reaches
+    // topLevelSTPOnce over tables nobody has written yet: the SMT-LIB2 frontend
+    // clears them in Cpp_interface::resetSolver, the C API in vc_query, and the
+    // single-query tool has never run anything. This one is reached from inside
+    // the driver, so nothing did it here, and the run inherits the first run's
+    // substitution map, array-transform tables and bit-blasting cache.
+    //
+    // The substitution map is the one that bites rather than merely wastes:
+    // RemoveUnconstrained's array rules meet a symbol the first run already
+    // substituted and call UpdateSubstitutionMapFewChecks, whose whole contract
+    // is that its caller has established the symbol is not in the map. Same
+    // clearing as the frontends do, and in the same place relative to the solve
+    // -- before it, so the first run's answer is complete and the second run's
+    // model is built over its own encoding.
     bm->ClearAllTables();
     ClearAllTables();
+    const SOLVER_RETURN_TYPE second = topLevelSTPOnce(inputasserts, query, deadline);
+    bm->UserFlags.uf_inject_args = saved;
+    bm->clearInjectivityAssumed();
     skeletonAsked = false;
-    first = topLevelSTPOnce(inputasserts, query);
+    return second;
   }
-  if (first != SOLVER_UNSATISFIABLE || bm->uf_injectivity_assumed == 0)
-    return first;
-
-  if (bm->UserFlags.stats_flag)
-    std::cerr << "UF: refuted before the search could be asked about the "
-              << "injectivity assumption, deciding the query without it"
-              << std::endl;
-
-  const bool saved = bm->UserFlags.uf_inject_args;
-  bm->UserFlags.uf_inject_args = false;
-  // A second run of the pipeline is a second solve, and every solve reaches
-  // topLevelSTPOnce over tables nobody has written yet: the SMT-LIB2 frontend
-  // clears them in Cpp_interface::resetSolver, the C API in vc_query, and the
-  // single-query tool has never run anything. This one is reached from inside
-  // the driver, so nothing did it here, and the run inherits the first run's
-  // substitution map, array-transform tables and bit-blasting cache.
-  //
-  // The substitution map is the one that bites rather than merely wastes:
-  // RemoveUnconstrained's array rules meet a symbol the first run already
-  // substituted and call UpdateSubstitutionMapFewChecks, whose whole contract
-  // is that its caller has established the symbol is not in the map. Same
-  // clearing as the frontends do, and in the same place relative to the solve
-  // -- before it, so the first run's answer is complete and the second run's
-  // model is built over its own encoding.
-  bm->ClearAllTables();
-  ClearAllTables();
-  const SOLVER_RETURN_TYPE second = topLevelSTPOnce(inputasserts, query);
-  bm->UserFlags.uf_inject_args = saved;
-  bm->clearInjectivityAssumed();
-  skeletonAsked = false;
-  return second;
+  catch (const PreparationInterrupted& stopped)
+  {
+    QueryPhaseScope cleanup(bm->query_timing, QueryPhase::QueryCleanup);
+    bm->UserFlags.uf_inject_args = original_inject_args;
+    bm->ClearAllTables();
+    ClearAllTables();
+    bm->clearInjectivityAssumed();
+    skeletonAsked = false;
+    bm->soft_timeout_expired = true;
+    bm->noteUnknown(UnknownReason::Timeout);
+    if (bm->UserFlags.stats_flag)
+    {
+      const auto finished = std::chrono::steady_clock::now();
+      std::cerr << "Preparation timeout: stage=" << preparationStageName(stopped.stage)
+                << " query_ns=" << std::chrono::duration_cast<std::chrono::nanoseconds>(
+                       stopped.noticed - started).count()
+                << " cleanup_ns=" << std::chrono::duration_cast<std::chrono::nanoseconds>(
+                       finished - stopped.noticed).count() << '\n';
+    }
+    return bm->unknownResult();
+  }
 }
 
 namespace
@@ -301,13 +352,45 @@ bool containsWideArithmetic(const ASTNode& root, unsigned width)
 } // namespace
 
 SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
-                                        const ASTNode& query)
+                                        const ASTNode& query,
+                                        std::chrono::steady_clock::time_point
+                                            deadline)
 {
   // Candidate construction and publication are separate decisions.
   // TopLevelSTPAux may force construction for array/UF
   // refinement, but nothing after this solve may interpret that as an SMT-LIB
   // get-model/get-value request.
   const bool constructForCaller = bm->UserFlags.callerRequestedModel();
+  // Preparation can unwind at any checkpoint, including before the ordinary
+  // return path. Restore query-local policy on every exit.
+  struct RestoreFlags
+  {
+    UserDefinedFlags& flags;
+    bool construct, ack, abstract, optimize;
+    UserDefinedFlags::CNFEffort cnf;
+    uint32_t schemas;
+    ~RestoreFlags()
+    {
+      flags.construct_counterexample_flag = construct;
+      flags.ackermannisation = ack;
+      flags.bv_term_abstraction = abstract;
+      flags.optimize_flag = optimize;
+      flags.cnf_effort = cnf;
+      flags.bv_term_abstraction_schema_groups = schemas;
+    }
+  } restore{bm->UserFlags, constructForCaller, bm->UserFlags.ackermannisation,
+            bm->UserFlags.bv_term_abstraction, bm->UserFlags.optimize_flag,
+            bm->UserFlags.cnf_effort,
+            bm->UserFlags.bv_term_abstraction_schema_groups};
+
+  bm->checkPreparation(PreparationStage::Boundary);
+  if (bm->UserFlags.timeout_max_time >= 0 &&
+      std::chrono::steady_clock::now() >= deadline)
+  {
+    bm->soft_timeout_expired = true;
+    bm->noteUnknown(UnknownReason::Timeout);
+    return bm->unknownResult();
+  }
 
   // One encoding context per actual solve. Keep it after this function
   // returns so counterexample/get-value requests reuse the exact mappings
@@ -322,10 +405,6 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   Ctr_Example->setFpAbstraction(NULL);
   bm->setFpAbstraction(NULL);
   fpAbstraction.reset();
-
-  // Unfortunatey this is a global variable,which the aux function needs to
-  // overwrite sometimes.
-  bool saved_ack = bm->UserFlags.ackermannisation;
 
   ASTNode original_input;
   ASTNodeMap arrayEqualityRewrites;
@@ -377,6 +456,7 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   skeletonAsked = false;
   if (bm->UserFlags.enable_uninterpreted_functions)
   {
+    bm->checkPreparation(PreparationStage::UFLowering);
     // While an application is still a term, push the query's own top-level
     // equalities through it; once lowered, its arguments are protected from
     // exactly this. Gated on the general simplification switches as well as
@@ -400,6 +480,7 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
     UFLowering lowerer(bm);
     *batchUFView = lowerer.lowerCompletedRoot(
         original_input, UFSolveScope::batch(++batchUFScopeGeneration));
+    bm->checkPreparation(PreparationStage::UFLowering);
     batchUFView->handleAliases = batchUFHandleAliases;
     original_input = batchUFView->semanticRootWithDefinitions(bm);
     if (containsKind(original_input, UF_APPLY))
@@ -421,7 +502,6 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   // put back afterwards, so a later plain bit-vector query in the same
   // session is encoded exactly as it always was.
   const bool savedTermAbstraction = bm->UserFlags.bv_term_abstraction;
-  const UserDefinedFlags::CNFEffort savedCnfEffort = bm->UserFlags.cnf_effort;
   const uint32_t savedSchemaGroups =
       bm->UserFlags.bv_term_abstraction_schema_groups;
   if (batchUFView->active())
@@ -481,17 +561,14 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
     fpEncodingContext->copyArrayEqualityRewrites(arrayEqualityRewrites);
   }
 
-  SATSolver* newS = get_new_sat_solver();
+  std::unique_ptr<SATSolver, QueryTimedDelete<SATSolver>> newS(
+      get_new_sat_solver(), {bm->query_timing, QueryPhase::SolverCleanup});
 
   SOLVER_RETURN_TYPE result =
-      solve_by_sat_solver(newS, original_input, arrayEqualityRewrites);
-  delete newS;
+      solve_by_sat_solver(newS.get(), original_input, arrayEqualityRewrites,
+                          deadline);
+  newS.reset();
 
-  bm->UserFlags.construct_counterexample_flag = constructForCaller;
-  bm->UserFlags.ackermannisation = saved_ack;
-  bm->UserFlags.bv_term_abstraction = savedTermAbstraction;
-  bm->UserFlags.cnf_effort = savedCnfEffort;
-  bm->UserFlags.bv_term_abstraction_schema_groups = savedSchemaGroups;
   // Raw: whether an unsat here is the query's is TopLevelSTP's question, and
   // it has a second run to answer it with.
   return result;
@@ -640,6 +717,7 @@ SOLVER_RETURN_TYPE
 STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
                     const ASTNodeMap& arrayEqualityRewrites)
 {
+  QueryPhaseScope query_work(bm->query_timing, QueryPhase::Other);
   if (bm->has_distinct && containsKind(original_input, DISTINCT))
     FatalError("DISTINCT reached ordinary batch preprocessing", original_input);
   if (bm->UserFlags.enable_uninterpreted_functions &&
@@ -977,6 +1055,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   if (input_has_floating_point)
   {
+    bm->checkPreparation(PreparationStage::Encoding);
     inputToSat = fpEncodingContext->lowerPrepared(inputToSat);
     bm->ASTNodeStats("After floating-point lowering: ", inputToSat);
 
@@ -1329,6 +1408,15 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
+  // The encoder may consume CB before CNF conversion. Match that handoff
+  // on every exit, including cancellation after it has already deleted CB.
+  struct ReleaseConsumedCB
+  {
+    std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation>& owner;
+    ToSATAIG& encoder;
+    ~ReleaseConsumedCB() { if (encoder.cbIsDestructed()) owner.release(); }
+  } release_consumed_cb{cleaner, toSATAIG};
+  QueryCleanupOnExit query_cleanup(bm->query_timing, QueryPhase::QueryCleanup);
   // Whether the refinement below is only the uninterpreted-function loop,
   // which lets the lowering choose its CNF rung from the estimate rather
   // than fall back to the size-based ABC rung meant for array refinement.
@@ -1366,26 +1454,19 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // whether the round it is looking at made progress.
   uint64_t abstractionsRefined = satBase->abstractionRefinements();
 
+  bm->checkPreparation(PreparationStage::Encoding);
   res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, semantic_input,
                                          original_input, satBase,
                                          maybeRefinement);
 
   if (bm->soft_timeout_expired)
   {
-    if (toSATAIG.cbIsDestructed())
-      cleaner.release();
-
     reportBVAbstractionRecords();
     return bm->unknownResult();
   }
 
   if (SOLVER_UNDECIDED != res)
   {
-    // If the aig converter knows that it is never going to be called again,
-    // it deletes the constant bit stuff before calling the SAT solver.
-    if (toSATAIG.cbIsDestructed())
-      cleaner.release();
-
     // The counters are cumulative over the checker's lifetime, so a batch
     // query decided before the refinement loop still has rounds to report
     // -- earlier queries' rounds. Both decision exits report, or a later
@@ -1476,6 +1557,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
     if (progress)
     {
+      bm->checkPreparation(PreparationStage::Encoding);
       res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
                                              semantic_input, original_input,
                                              satBase, true);
@@ -1491,9 +1573,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
     if (SOLVER_UNDECIDED != res)
     {
-      if (toSATAIG.cbIsDestructed())
-        cleaner.release();
-
       if (ext != NULL)
         ext->reportLemmaStats();
       reportBVAbstractionRecords();
@@ -1503,8 +1582,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
     if (bm->soft_timeout_expired)
     {
-      if (toSATAIG.cbIsDestructed())
-        cleaner.release();
       reportBVAbstractionRecords();
       return bm->unknownResult();
     }

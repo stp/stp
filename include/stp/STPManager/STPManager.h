@@ -26,6 +26,8 @@ THE SOFTWARE.
 #define STPMGR_H
 
 #include "stp/AST/ASTBVConst.h"
+#include "stp/Util/PreparationControl.h"
+#include "stp/Util/QueryTiming.h"
 #include "stp/AST/ASTFPConst.h"
 #include "stp/AST/ASTRMConst.h"
 #include "stp/AST/ASTInterior.h"
@@ -182,6 +184,17 @@ public:
   ASTNode ASTFalse, ASTTrue, ASTUndefined;
 
   bool soft_timeout_expired;
+
+  // Borrowed only within a PreparationScope. Public queries install their
+  // original deadline here and restore an optional outer observer on exit.
+  const PreparationControl* preparation_control = nullptr;
+  // Borrowed by the current public query; null unless statistics are enabled.
+  QueryTiming* query_timing = nullptr;
+  void checkPreparation(PreparationStage stage) const
+  {
+    if (preparation_control)
+      preparation_control->check(stage);
+  }
 
   // Fitted estimate of the AND nodes bit-blasting the formula will build,
   // recorded by the top level from the difficulty score it computes anyway.
@@ -903,7 +916,9 @@ public:
     sprintf(d, "@%s_%d", prefix.c_str(), _symbol_count++);
     assert(!LookupSymbol(d));
 
-    ASTNode CurrentSymbol = CreateSymbol(d, indexWidth, valueWidth);
+    ASTNode CurrentSymbol =
+        CreateSymbol(d, static_cast<unsigned int>(indexWidth),
+                     static_cast<unsigned int>(valueWidth));
     Introduced_SymbolsSet.insert(CurrentSymbol);
     return CurrentSymbol;
   }
@@ -947,7 +962,9 @@ public:
     char* d = (char*)alloca(sizeof(char) * (48 + prefix.length()));
     sprintf(d, "@%s_k%lu", prefix.c_str(),
             (unsigned long)key.GetNodeNum());
-    ASTNode current = CreateSymbol(d, indexWidth, valueWidth);
+    ASTNode current =
+        CreateSymbol(d, static_cast<unsigned int>(indexWidth),
+                     static_cast<unsigned int>(valueWidth));
     Introduced_SymbolsSet.insert(current);
     return current;
   }
@@ -961,7 +978,9 @@ public:
     sprintf(d, "@%s_k%lu_k%lu", prefix.c_str(),
             (unsigned long)key.GetNodeNum(),
             (unsigned long)key2.GetNodeNum());
-    ASTNode current = CreateSymbol(d, indexWidth, valueWidth);
+    ASTNode current =
+        CreateSymbol(d, static_cast<unsigned int>(indexWidth),
+                     static_cast<unsigned int>(valueWidth));
     Introduced_SymbolsSet.insert(current);
     return current;
   }
