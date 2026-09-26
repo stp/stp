@@ -6200,6 +6200,28 @@ BitBlaster<BBNode, BBNodeManagerT>::fpNativeExactRoundedRange(
   else
     return out;
 
+  // A known interval tells BBfpRound the exact result cannot overflow, so
+  // it leaves out saturation. A fixed mode can round an overflow to the
+  // largest finite value (RTZ, or a directed mode toward zero), which is
+  // finite but still needs saturating, so the outward roundings must be
+  // finite too.
+  if (fixed)
+  {
+    std::string value;
+    for (const EndpointPair& input : lowerInputs)
+      if (!fpNativeExactBinaryEndpoint(
+              sort, kind, input.first, input.second,
+              static_cast<unsigned>(symbolic_fp::ROUND_TOWARD_NEGATIVE),
+              value))
+        return out;
+    for (const EndpointPair& input : upperInputs)
+      if (!fpNativeExactBinaryEndpoint(
+              sort, kind, input.first, input.second,
+              static_cast<unsigned>(symbolic_fp::ROUND_TOWARD_POSITIVE),
+              value))
+        return out;
+  }
+
   std::string lower;
   for (const EndpointPair& input : lowerInputs)
   {
