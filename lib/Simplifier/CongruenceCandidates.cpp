@@ -63,6 +63,41 @@ bool CongruenceCandidates::worthMerging(Kind k)
   }
 }
 
+// The sub-solve hands its equality straight to the bit-blaster. The main
+// solve reaches the blaster only after array reads have been replaced and
+// floating-point operations lowered, and neither has happened yet here, so
+// a term that still holds either cannot be proved.
+bool CongruenceCandidates::blastable(const ASTNode& top)
+{
+  std::vector<std::pair<ASTNode, bool>> pending(1, {top, false});
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back().first;
+    if (blastableMemo.count(n.GetNodeNum()))
+    {
+      pending.pop_back();
+      continue;
+    }
+
+    if (!pending.back().second)
+    {
+      pending.back().second = true;
+      for (const ASTNode& child : n.GetChildren())
+        if (!blastableMemo.count(child.GetNodeNum()))
+          pending.push_back({child, false});
+      continue;
+    }
+
+    pending.pop_back();
+    bool ok = n.GetIndexWidth() == 0 && !is_FP_kind(n.GetKind()) &&
+              !n.GetSourceSort().containsFloatingPoint();
+    for (const ASTNode& child : n.GetChildren())
+      ok = ok && blastableMemo.at(child.GetNodeNum());
+    blastableMemo.emplace(n.GetNodeNum(), ok);
+  }
+  return blastableMemo.at(top.GetNodeNum());
+}
+
 void CongruenceCandidates::collect(const ASTNode& n)
 {
   walkPreOrder(n, [&](const ASTNode& current) {
@@ -80,6 +115,9 @@ void CongruenceCandidates::collect(const ASTNode& n)
       // either the same node or provably different, and neither is worth a
       // sub-solve.
       if (operand.GetKind() == BVCONST || operand.GetType() != BITVECTOR_TYPE)
+        continue;
+
+      if (!blastable(operand))
         continue;
 
       std::vector<uint64_t> others;
@@ -263,6 +301,7 @@ ASTVec CongruenceCandidates::derive(const ASTNode& input)
               << " tested:" << tested << " proved:" << proved << std::endl;
 
   slots.clear();
+  blastableMemo.clear();
 
   bm->GetRunTimes()->stop(RunTimes::CongruenceCandidates);
   return found;
