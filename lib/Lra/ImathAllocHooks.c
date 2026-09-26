@@ -14,6 +14,8 @@
 #define STP_LRA_ALLOCATION_MAGIC UINT64_C(0x5354504c5241494d)
 
 #if defined(_MSC_VER)
+/* The header is padded to the maximum alignment on purpose (C4324). */
+#  pragma warning(disable : 4324)
 #  define STP_LRA_ALIGNMENT_PREFIX __declspec(align(16))
 #  define STP_LRA_ALIGNMENT_SUFFIX
 #elif defined(__BIGGEST_ALIGNMENT__)
