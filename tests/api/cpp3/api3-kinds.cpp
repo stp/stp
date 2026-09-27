@@ -368,8 +368,20 @@ TEST_F(Kinds, floating_point_conversions)
   view(both(fp_to_ieee_bv(fx), Kind::FP_TO_IEEE_BV, {fx}), Kind::FP_TO_IEEE_BV, 1, {}, bv32);
   EXPECT_EQ(fp_to_ieee_bv(dx).sort().bv_size(), 64u);
   EXPECT_EQ(fp_to_ieee_bv(fx).str(), "(fp.to_ieee_bv fx)");
+  // a symbolic float has no engine conversion to a Real; a float value
+  // converts exactly, whatever the simplify setting
   API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, fp_to_real(fx));
   API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, tm.mk_term(Kind::FP_TO_REAL, {fx}));
+  const Sort f32v = tm.mk_fp32_sort();
+  EXPECT_TRUE(fp_to_real(tm.mk_fp(f32v, RoundingMode::RNE, 1.5)).same_as(tm.mk_real(3, 2)));
+  EXPECT_TRUE(fp_to_real(tm.mk_fp(f32v, RoundingMode::RNE, -2.5)).same_as(tm.mk_real(-5, 2)));
+  EXPECT_TRUE(fp_to_real(tm.mk_fp_neg_zero(f32v)).same_as(tm.mk_real(0)));
+  EXPECT_TRUE(fp_to_real(tm.mk_fp(f32v, RoundingMode::RNE, 16777216.0)).same_as(tm.mk_real(16777216)));
+  // the smallest subnormal of binary32 is 2^-149
+  EXPECT_EQ(fp_to_real(tm.mk_fp_from_bits(f32v, tm.mk_bv(32, 1))).to_rational().denominator,
+            "713623846352979940529142984724747568191373312");
+  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, fp_to_real(tm.mk_fp_nan(f32v)));
+  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, fp_to_real(tm.mk_fp_pos_inf(f32v)));
 }
 
 TEST_F(Kinds, reals)
@@ -557,7 +569,7 @@ TEST_F(Kinds, unsupported)
   API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED,
                     fp_rem(tm.declare("w1", wide), tm.declare("w2", wide)));
   EXPECT_EQ(fp_rem(tm.declare("d1", f64), tm.declare("d2", f64)).kind(), Kind::FP_REM);
-  EXPECT_EQ(capabilities()["kind.FP_TO_REAL"], "false");
+  EXPECT_EQ(capabilities()["kind.FP_TO_REAL"], "values-only");
   EXPECT_EQ(capabilities()["real.nonlinear"], "false");
   EXPECT_EQ(capabilities()["array.const-equality"], "false");
 }

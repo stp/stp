@@ -460,8 +460,19 @@ static void floats(void)
   CHECK(fpfp == one);
   r2fp = stp_to_fp_rm(tm, f32, STP_RM_RNE, stp_mk_real_str(tm, "1/4"));
   CHECK(r2fp != NULL && stp_term_fp_to_double(r2fp, &d) == STP_OK && d == 0.25);
-  CHECK(stp_fp_to_real(tm, one) == NULL); /* UNSUPPORTED in 3.0 */
-  expect_error(tm, STP_ERR_UNSUPPORTED);
+  {
+    /* a float value converts exactly to a Real value; a symbolic float has no
+       engine conversion */
+    stp_term r1 = stp_fp_to_real(tm, one);
+    stp_sort_kind sk;
+    char* num;
+    CHECK(r1 != NULL && stp_sort_get_kind(stp_term_sort(r1), &sk) == STP_OK && sk == STP_SORT_REAL);
+    num = stp_term_real_numerator(r1);
+    CHECK(num != NULL && strcmp(num, "1") == 0);
+    stp_free(num);
+    CHECK(stp_fp_to_real(tm, x) == NULL);
+    expect_error(tm, STP_ERR_UNSUPPORTED);
+  }
 
   stp_solver_delete(s);
   stp_tm_scope_pop(tm);

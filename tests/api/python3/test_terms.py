@@ -482,7 +482,11 @@ def test_fp_conversions():
     s.close()
     assert fpToIEEEBV(a).size() == 32 and simplify(fpToIEEEBV(FPVal(1.0, Float32()))).as_long() == 0x3F800000
     with pytest.raises(Unsupported):
-        fpToReal(a)  # 3.0: unsupported
+        fpToReal(a)  # a symbolic float has no engine conversion to a Real
+    assert fpToReal(FPVal(1.5, Float32())).as_fraction() == Fraction(3, 2)  # a value converts exactly
+    assert fpToReal(FPVal(-0.0, Float32())).as_fraction() == 0
+    with pytest.raises(Unsupported):
+        fpToReal(fpNaN(Float32()))  # no specified value
     with pytest.raises(TypeError):
         fpToFP(RNE(), Bool("p"), Float32())
     with pytest.raises(TypeError):

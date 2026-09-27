@@ -197,6 +197,8 @@ Limits of the alpha
 
 One live ``Solver`` per ``TermManager``; a manager is used from the thread that
 created it (``interrupt()`` is the exception); CryptoMiniSat is interrupted
-between its solver calls only; equality over a constant array and
-``fp.to_real`` are refused as UNSUPPORTED; ``unsat_assumptions`` after a batch
-check reports every assumption. ``capabilities()`` states each of these.
+between its solver calls only; equality over a constant array is refused as
+UNSUPPORTED; ``fp.to_real`` converts a float value exactly and refuses a
+symbolic float (the engine has no such conversion); ``unsat_assumptions``
+after a batch check reports every assumption. ``capabilities()`` states each
+of these.

@@ -920,7 +920,7 @@ py = "fpToReal"
 arity = "1"
 indices = 0
 sig = "(FP[e,s]) -> Real"
-engine = "3.1: UNSUPPORTED in 3.0 (capabilities: kind.FP_TO_REAL = false)"
+engine = "fold: a float value converts exactly to a Real value (NaN and the infinities have no specified value and are UNSUPPORTED); a symbolic float is UNSUPPORTED, the engine has no such conversion (capabilities: kind.FP_TO_REAL = values-only)"
 
 [[kind]]
 name = "FP_TO_IEEE_BV"

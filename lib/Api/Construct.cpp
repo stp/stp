@@ -819,8 +819,22 @@ ASTNode build_term(ManagerImpl* m, const char* fn, Kind k, const std::vector<AST
                        {c.c32(idx[0]), args[0], args[1]});
     }
     case Kind::FP_TO_REAL:
+    {
       c.expect_fp(0);
-      c.unsupported("fp.to_real is not supported in 3.0 (capabilities: kind.FP_TO_REAL = false)");
+      const SortRec& r = c.rec(0);
+      // A float value converts exactly (every finite float is a dyadic
+      // rational); the engine has no conversion from a symbolic float to a
+      // Real, so that operand is refused. Folded whatever the manager's
+      // simplify setting: there is no node to build otherwise.
+      if (kids[0].GetKind() != BVCONST)
+        c.unsupported("fp.to_real needs a float value; the engine has no conversion from a "
+                      "symbolic float to a Real (capabilities: kind.FP_TO_REAL = values-only)");
+      const FloatValue v = fp_value_of(kids[0], r.a, r.b);
+      const std::optional<RationalValue> q = v.to_rational();
+      if (!q)
+        c.unsupported("fp.to_real of NaN or of an infinity has no specified value");
+      return c.m->real_const(c.fn, q->numerator + "/" + q->denominator);
+    }
     case Kind::FP_TO_IEEE_BV:
     {
       c.expect_fp(0);
