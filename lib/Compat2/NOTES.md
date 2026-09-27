@@ -185,8 +185,7 @@ fare against it, and every 3.x defect met on the way.
    and a checker without a solver yet reads 0. `vc_setSchemaGroups` writes
    `bv-term-abstraction-schema-groups`; `vc_schemaGroupName` and the
    out-of-range refusal come from a 15-name table. `vc_getSchemaGroupCounter`
-   reads `bv.schema_group.<name>.lemmas`, which 3.x does not publish (defect 3),
-   so it is 0.
+   reads `bv.schema_group.<name>.lemmas`.
 10. **Backends.** `vc_supports*` is `stp_has_sat_backend`; `vc_use*` sets
     `sat-backend` and rebuilds the solver; `vc_isUsing*` compares the recorded
     name, which starts as the first available of cryptominisat, cadical,
@@ -282,7 +281,6 @@ fare against it, and every 3.x defect met on the way.
 | function | status |
 |---|---|
 | `vc_createValidityCheckerReuse` | **unsupported**: returns `NULL` after a diagnostic through the handler. 3.x has no door through which a raw engine manager can be adopted. Calling any function on the `NULL` result is then the usual fatal. |
-| `vc_getSchemaGroupCounter` | **inert**: always 0 (defect 3). `vc_setSchemaGroups`, `vc_schemaGroupName` and the range check work. |
 | `vc_setInterfaceFlags(UF_SORT_WIDTH)` | **inert**: validated and recorded, nothing observes it (decision 8). |
 | `vc_setFlags(..., num_absrefine)` | the second argument is ignored, as in 2.x. |
 | `vc_setFlag('h')` | fatal ("help" is not a flag a library can act on); 2.x printed the help and exited. |
@@ -515,10 +513,10 @@ as before this work.
    choice the solve made is not reachable from the model, so the shim cannot
    repair the value. Failing test:
    `fp_model_roundtrip.partial_choice_uses_current_solve_encoding`.
-3. **No per-schema-group statistics.** *File:* `lib/Api/Solver.cpp`, the
-   statistics snapshot (49 names). 2.x's `vc_getSchemaGroupCounter(vc, group)`
-   read the engine's per-group lemma counts; the 3.x snapshot has
-   `bv.schema_lemmas` only, so the shim answers 0 for every group.
+3. **No per-schema-group statistics** (fixed). The 3.x snapshot had
+   `bv.schema_lemmas` only, so `vc_getSchemaGroupCounter` answered 0 for
+   every group; it now publishes `bv.schema_group.<name>.lemmas` per group,
+   which the shim reads unchanged.
 4. **`stp_model_try_value` completes an unobserved function application.**
    *File:* `lib/Api/Model.cpp` (evaluation of `APPLY`). The header promises
    `NULL` "if completion would be needed"; for `f(8)` where the solve never
@@ -555,8 +553,6 @@ as before this work.
 
 - Remove the `BitVector_Boot` declaration and `boot_constant_bv_on_this_thread`
   once 3.x boots the library per thread.
-- If 3.x publishes `bv.schema_group.<name>.lemmas`, `vc_getSchemaGroupCounter`
-  starts answering with no change to the shim.
 - If the 3.x model carries the totalisation choice of a partial floating-point
   operation, `fp_model_roundtrip.partial_choice_uses_current_solve_encoding`
   passes with no change to the shim.

@@ -1278,8 +1278,7 @@ unsigned long long vc_getSchemaGroupCounter(VC vcp, unsigned group)
     report("vc_getSchemaGroupCounter: schema group index out of range");
     return 0;
   }
-  // statistics.toml promises bv.schema_group.<name>.lemmas; the snapshot the
-  // 3.x solver publishes does not carry it yet (NOTES.md), so this reads 0.
+  // the group's own statistic, bv.schema_group.<name>.lemmas
   bool known = false;
   return read_statistic(vc, std::string("bv.schema_group.") + kSchemaGroups[group] + ".lemmas", &known);
 }

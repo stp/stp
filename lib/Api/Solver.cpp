@@ -2299,6 +2299,18 @@ Statistics Solver::statistics() const
   e["bv.schema.clauses"] = static_cast<std::uint64_t>(c.bv_schema_clauses);
   e["bv.schema.variables"] = static_cast<std::uint64_t>(c.bv_schema_variables);
   e["bv.schema.microseconds"] = static_cast<std::uint64_t>(c.bv_schema_microseconds);
+  // The schema lemmas by group: all of them as 'group=count,...' in the
+  // engine's order, and each group's count as a statistic of its own, named
+  // as bv-term-abstraction-schema-groups names the group.
+  std::string by_group;
+  for (unsigned i = 0; i < BV_SCHEMA_GROUP_COUNT; ++i)
+  {
+    const std::string group = bvSchemaGroupName(static_cast<BVSchemaGroup>(i));
+    const std::uint64_t lemmas = c.bv_schema_group_lemmas[i];
+    by_group += (by_group.empty() ? "" : ",") + group + "=" + std::to_string(lemmas);
+    e["bv.schema_group." + group + ".lemmas"] = lemmas;
+  }
+  e["bv.schema_group.lemmas"] = by_group;
   e["uf.applications_lowered"] = static_cast<std::uint64_t>(c.uf_applications_lowered);
   e["uf.constraints_installed"] = static_cast<std::uint64_t>(c.uf_constraints_installed);
   e["fp.candidates"] = static_cast<std::uint64_t>(c.fp_candidates);
@@ -2349,6 +2361,21 @@ const StatSpec* stat_spec(std::string_view name)
   for (const StatSpec& s : kStatSpecs)
     if (name == s.name)
       return &s;
+  // bv.schema_group.<group>.lemmas, one per schema group: the table's
+  // bv.schema_group.lemmas entry describes the family
+  static const StatSpec kGroupLemmas{"bv.schema_group.<group>.lemmas", StatType::UINT64,
+                                     Tier::EXPERT, "vc_getSchemaGroupCounter",
+                                     "the lemmas of one schema group"};
+  const std::string_view prefix = "bv.schema_group.", suffix = ".lemmas";
+  if (name.size() > prefix.size() + suffix.size() && name.substr(0, prefix.size()) == prefix &&
+      name.substr(name.size() - suffix.size()) == suffix)
+  {
+    const std::string_view group =
+        name.substr(prefix.size(), name.size() - prefix.size() - suffix.size());
+    for (unsigned i = 0; i < BV_SCHEMA_GROUP_COUNT; ++i)
+      if (group == bvSchemaGroupName(static_cast<BVSchemaGroup>(i)))
+        return &kGroupLemmas;
+  }
   return nullptr;
 }
 } // namespace

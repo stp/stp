@@ -632,13 +632,21 @@ TEST(refinement_flags, EachSchemaGroupIndexReadsItsOwnCounterAndName)
   for (unsigned i = 0; i < stp::BV_SCHEMA_GROUP_COUNT; ++i)
     engine.coverage.bv_schema_group_lemmas[i] = 100 + i;
 
-  // The statistics table names the breakdown (bv.schema_group.lemmas, and
-  // bv.schema_group.<name>.lemmas per group).
+  // The statistics table names the breakdown: bv.schema_group.lemmas lists
+  // every group with its count in the engine's order, and
+  // bv.schema_group.<name>.lemmas is each group's own.
   const Statistics st = s.statistics();
   EXPECT_EQ(Tier::EXPERT, st.tier("bv.schema_group.lemmas"));
-  GTEST_SKIP() << "API gap: Solver::statistics() publishes no per-group schema lemma counts: "
-                  "bv.schema_group.lemmas reads empty and bv.schema_group.<name>.lemmas is an "
-                  "unknown statistic (INVALID_ARGUMENT)";
+  std::string all;
+  for (unsigned i = 0; i < stp::BV_SCHEMA_GROUP_COUNT; ++i)
+  {
+    const std::string name = stp::bvSchemaGroupName(static_cast<stp::BVSchemaGroup>(i));
+    all += (i == 0 ? "" : ",") + name + "=" + std::to_string(100 + i);
+    const std::string own = "bv.schema_group." + name + ".lemmas";
+    EXPECT_EQ(100u + i, st.uint64(own)) << own;
+    EXPECT_EQ(Tier::EXPERT, st.tier(own)) << own;
+  }
+  EXPECT_EQ(all, st.str("bv.schema_group.lemmas"));
 }
 
 // The name a breakdown reports has to be a name the selector accepts, and it
