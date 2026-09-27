@@ -1,0 +1,202 @@
+The 3.x API (C++, C and Python)
+================================
+
+STP 3.x replaces the ``vc_*`` interface of ``c_interface.h`` with one API
+designed together for three languages: ``<stp/stp.hpp>`` for C++17,
+``<stp/stp.h>`` for C, and the ``stp`` Python package (a Cython module under a
+z3py-style shell). The three surfaces share one object model and one option
+registry, so a program reads the same way in each. The 2.x interface survives as
+``libstp2``, a compatibility library implemented over the C API (see
+:ref:`api3-compat`).
+
+The design, its rationale and the survey of the peer solvers it was drawn
+from live outside the tree (``api-3x/`` in the design worktree); this page is
+the user-facing guide.
+
+Objects
+-------
+
+``TermManager``
+  Owns terms and sorts. Terms are hash-consed: building the same term twice
+  gives the same node. Copies of a manager handle share one manager; it lives
+  while anything that came from it lives. Three settings are fixed per manager:
+  whether construction folds constants (``simplify``, default on), the default
+  rounding mode used by floating-point operators, and the carrier width of
+  declared sorts.
+
+``Sort`` / ``Term``
+  Values, cheap to copy. A term knows its ``kind()`` (one of the 102 public
+  kinds of ``kinds.toml``), its ``sort()``, its ``children()`` and ``indices()``
+  (``(_ extract 7 0)`` has one child and two indices). A value term
+  (``kind() == VALUE``) is decoded with typed readers: ``to_uint64``,
+  ``to_bv_string(16)``, ``to_bv_limbs``, ``to_fp()``, ``to_rm()``,
+  ``to_rational()``.
+
+``Solver``
+  Assertions, ``push``/``pop``, ``check_sat`` (optionally under assumptions and
+  a per-check budget), ``entails``, the ``Model`` of the last satisfiable
+  check, ``interrupt()`` (safe from any thread), parsing of SMT-LIB 2, SMT-LIB 1
+  and CVC input, printing, statistics.
+
+``Model``
+  A detached snapshot: it survives every later assertion, push or pop, and it
+  evaluates any term of its manager, including terms built after the check.
+  Symbols the solver never assigned are completed with their sort's default;
+  ``try_value`` refuses to complete instead.
+
+``Options``
+  The whole option registry of the ``stp`` binary, settable by name with the
+  text form the command line uses, or through typed setters. Every entry has a
+  tier (stable, expert, experimental, diagnostic) and a settable window
+  (anytime, before the first check, at construction); a write outside the
+  window is a recoverable error, never silent.
+
+Errors are exceptions in C++ and Python and a per-manager error record in C.
+Every precondition is checked in every build type; a recoverable error leaves
+every object as it was. The library never calls ``exit()`` or ``abort()`` on a
+misuse.
+
+C++
+---
+
+.. code-block:: cpp
+
+   #include <stp/stp.hpp>
+   using namespace stp;
+
+   TermManager tm;
+   Sort bv32 = tm.mk_bv_sort(32);
+   Term x = tm.declare("x", bv32), y = tm.declare("y", bv32);
+
+   Solver s(tm);
+   s.add(x * 3 == 7);                 // literals take the term's sort and must fit
+   s.add(bvult(y, 10));               // no <,> on terms: signedness is explicit
+   if (s.check_sat().is_sat())
+   {
+     Model m = s.model();
+     std::cout << m.uint64_value(x) << "\n";   // 2863311533
+     std::cout << m.value(x * 3) << "\n";      // #x00000007
+   }
+
+Arrays, floating point, uninterpreted functions and Reals use the same shapes:
+
+.. code-block:: cpp
+
+   Sort arr = tm.mk_array_sort(bv32, tm.mk_bv_sort(8));
+   Term a = tm.declare("a", arr), i = tm.declare("i", bv32);
+   s.add(a[i] == 42);                 // select; store(a, i, v) for the update
+   s.add(a == store(tm.declare("b", arr), i, tm.mk_bv(8, 1)));   // extensional
+
+   Sort f32 = tm.mk_fp32_sort();
+   Term fx = tm.declare("fx", f32);
+   s.add(fp_add(RoundingMode::RNE, fx, 1.0) == tm.mk_fp(f32, RoundingMode::RNE, 3.0));
+   FloatValue v = s.model().fp_value(fx);     // sign, exponent, significand, class
+
+   Term f = tm.declare("f", tm.mk_fun_sort({bv32}, bv32));
+   s.add(f(x) == f(y));
+   FunctionValue fv = s.model().function_value(f);
+
+   Term r = tm.declare("r", tm.mk_real_sort());
+   s.add(real_lt(r + 1, tm.mk_real("3/2")));
+   RationalValue q = s.model().real_value(r);
+
+Options are set at construction or on the live solver:
+
+.. code-block:: cpp
+
+   Options o;
+   o.set("max-time", "2s");           // the CLI's text form, unit required
+   o.set_str("sat-backend", "cadical");
+   o.set_args({"--fp-abstraction", "--bb.div-v3=false"});
+   Solver s(tm, o);
+   s.options().set_bool("check-sanity", true);   // anytime
+   Result r = s.check_sat({assumption}, CheckBudget{std::chrono::milliseconds(500), std::nullopt});
+   if (r.is_unknown()) std::cout << r.reason_message();
+
+C
+-
+
+The C header mirrors the C++ one function for function. Handles are retained
+engine nodes: every returned term carries a reference that
+``stp_term_release`` gives back, or that a scope (``stp_tm_scope_push`` /
+``stp_tm_scope_pop``) releases in bulk. A failing call returns ``NULL`` or
+``STP_ERROR`` and records the first error since ``stp_tm_clear_error`` in
+the manager (``stp_tm_error``); a ``NULL`` term argument propagates without a
+record so a chain of constructions can be checked once.
+
+.. code-block:: c
+
+   #include <stp/stp.h>
+
+   stp_tm tm = stp_tm_new();
+   stp_sort bv32 = stp_mk_bv_sort(tm, 32);
+   stp_term x = stp_declare(tm, "x", bv32);
+   stp_term c = stp_eq(tm, stp_bvmul(tm, x, stp_mk_bv_uint64(tm, 32, 3)),
+                       stp_mk_bv_uint64(tm, 32, 7));
+   stp_solver s = stp_solver_new(tm, NULL);
+   stp_solver_assert(s, c);
+   stp_result r;
+   if (stp_solver_check_sat(s, &r) == STP_OK && r.kind == STP_SAT)
+   {
+     stp_model m = stp_solver_model(s);
+     uint64_t v;
+     stp_model_uint64(m, x, &v);
+     stp_model_release(m);
+   }
+   if (stp_tm_error(tm))
+     fprintf(stderr, "%s\n", stp_tm_error(tm)->message);
+   stp_solver_delete(s);
+   stp_tm_release_all(tm);
+   stp_tm_release(tm);
+
+Python
+------
+
+The Python package is the z3py idiom over the same objects:
+
+.. code-block:: python
+
+   from stp import *
+
+   x, y = BitVecs('x y', 32)
+   s = Solver()
+   s.add(x * 3 == 7, ULT(y, 10))
+   if s.check() == sat:
+       m = s.model()
+       print(m[x].as_long(), m.eval(x * 3))
+
+   a = Array('a', BitVecSort(32), BitVecSort(8))
+   s.add(a[y] == 42)
+   f = FP('f', Float32())
+   s.add(fpAdd(RNE(), f, 1.0) == 3.0)
+
+Differences from z3py are deliberate and documented in the package: ``==``
+builds a term on every sort (``fpEQ`` is IEEE equality), ``bool(term)``
+raises unless the term is a ground Boolean value, bit-vector ``<`` and ``>>``
+are signed and arithmetic, ``/`` on bit-vectors raises (use ``UDiv``/``SDiv``),
+and literals are strict (``BitVecVal(256, 8)`` raises; ``wrap=True`` wraps).
+Options are keyword arguments with ``-`` and ``.`` spelled ``_``:
+``Solver(max_time='2s', bb_div_v3=False)``.
+
+.. _api3-compat:
+
+Compatibility with 2.x
+----------------------
+
+``libstp2`` implements ``c_interface.h`` over ``stp.h``: KLEE and other 2.x
+clients link it unchanged (``-lstp2`` instead of ``-lstp``). It reproduces the
+2.x ownership modes, the error handler and the model-lifetime rules, with two
+documented exceptions: reading a counterexample after a VALID answer returns
+``NULL`` with a diagnostic instead of an invented value, and an unmatched
+``vc_pop`` is an error instead of deleting the base assertions. The design
+documents carry the full 86-row mapping from 2.x functions to 3.x calls and
+the table of option letters and ``ifaceflag_t`` ordinals.
+
+Limits of the alpha
+-------------------
+
+One live ``Solver`` per ``TermManager``; a manager is used from the thread that
+created it (``interrupt()`` is the exception); CryptoMiniSat is interrupted
+between its solver calls only; equality over a constant array and
+``fp.to_real`` are refused as UNSUPPORTED; ``unsat_assumptions`` after a batch
+check reports every assumption. ``capabilities()`` states each of these.

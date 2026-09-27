@@ -118,6 +118,7 @@ page <https://smt-lib.org/>`__.
    :hidden:
    :maxdepth: 1
 
+   api3
    c-api-lifetime
    array-extensionality
    uninterpreted-functions
