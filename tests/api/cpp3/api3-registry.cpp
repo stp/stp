@@ -25,8 +25,8 @@ THE SOFTWARE.
 // api3-registry.cpp -- the option registry against the engine and the
 // command line it generates: every field-mapped entry's default is the
 // engine's (a fresh UserDefinedFlags), and the CLI tables of options.toml
-// are consistent with the entries. These read lib/Api/Internal.h, the
-// in-tree view of the registry that tools/stp/main.cpp registers from.
+// are consistent with the entries. These read lib/Api/Internal.h, which
+// includes the tables tools/stp/main.cpp registers from (lib/Api/Registry.h).
 
 #include "Api/Internal.h"
 
@@ -158,9 +158,9 @@ TEST(Registry, cli_tables_are_consistent)
   }
 }
 
-// The stp binary applies the registry to a bare STPMgr: the appliers that
-// consult the manager must do without one, and a manager-scoped entry
-// reaches its flag there rather than being refused.
+// Applied to a bare STPMgr, the appliers that consult the manager must do
+// without one, and a manager-scoped entry reaches its flag there rather than
+// being refused.
 TEST(Registry, applies_without_a_manager)
 {
   stp::UserDefinedFlags flags;

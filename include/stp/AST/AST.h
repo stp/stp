@@ -42,9 +42,10 @@ DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str);
 // FatalErrorThrows() is set. The 3.x API sets it for the duration of every
 // call that reaches the engine (lib/Api/Internal.h, EngineScope), turns the
 // exception into an INTERNAL error and poisons the manager whose state the
-// failure may have left inconsistent. The command line and the 2.x C
-// interface leave it clear, and FatalError ends the process for them as it
-// always has. The flag is per thread.
+// failure may have left inconsistent; the stp binary and libstp2 reach the
+// engine through it. Code that drives the engine directly leaves the flag
+// clear, and FatalError ends the process there as it always has. The flag is
+// per thread.
 struct EngineFatal : std::runtime_error
 {
   explicit EngineFatal(const std::string& what) : std::runtime_error(what) {}

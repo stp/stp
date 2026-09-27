@@ -22,14 +22,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "main_common.h"
-#include "stp/Sat/SATSolverFactory.h"
+// The stp binary: a client of the 3.x API (<stp/stp.hpp>) and of the option
+// registry's tables (lib/Api/Registry.h), and of nothing else of the library.
+// This file is its command line; run.cpp reads and runs the input.
 
-// The 3.x option registry: the rows of lib/Api/tables/options.toml, their
-// parsing and validation, and the table that carries a validated value into
-// UserDefinedFlags. The command line below is registered from it, so the
-// binary and the API accept the same options with the same meanings.
-#include "Api/Internal.h"
+#include "run.h"
+
+// The 3.x option registry's rows: the entries of lib/Api/tables/options.toml
+// and the command line's own rows. The command line below is registered from
+// them and every value goes to stp::Options, so the binary and the API
+// accept the same options with the same meanings.
+#include "Api/Registry.h"
+
+#include <stp/stp.hpp>
 
 #include <CLI/CLI.hpp>
 
@@ -37,47 +42,41 @@ THE SOFTWARE.
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <iterator>
 #include <map>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <variant>
 #include <vector>
 
-using namespace stp;
 using std::cout;
 using std::cerr;
 using std::endl;
 
+namespace api = stp::api;
 namespace reg = stp::api::detail;
-
-/********************************************************************
- * MAIN FUNCTION:
- *
- * step 0. Parse the input into an ASTVec.
- * step 1. Do BV Rewrites
- * step 2. Bitblasts the ASTNode.
- * step 3. Convert to CNF
- * step 4. Convert to SAT
- * step 5. Call SAT to determine if input is SAT or UNSAT
- ********************************************************************/
 
 // The command line is the option registry plus the frontend rows.
 //
 // Every [[option]] entry of options.toml with a CLI form is registered with
 // CLI11 from its row (name, aliases, short flag, negation, type, default,
-// help, group), its value is handed to the registry as text, and after the
-// parse the registry validates the whole set (excludes, requires, build) and
-// applies it to bm->UserFlags through the same appliers the library uses.
-// The [[alias]] rows are the bare backend flags (--cadical and friends) that
-// set sat-backend to a value. The [[frontend]] rows are the CLI-only
-// registrations, bound here by their key.
+// help, group), its value is handed to stp::Options as text, the options are
+// resolved (excludes, requires, build) and the solver is made from them,
+// which applies them to the engine through the appliers every library caller
+// goes through. The [[alias]] rows are the bare backend flags (--cadical and
+// friends) that set sat-backend to a value. The [[frontend]] rows are the
+// CLI-only registrations, bound here by their key to the Invocation that
+// run.cpp carries out.
 //
 // Hand-written and CLI-only, listed so that nothing else hides here:
 //   - the frontend rows' actions: the positional input file, --help,
-//     --version, the parser selection (--CVC, --SMTLIB1, --SMTLIB2), the
-//     print-back flags, --print-output, --output-CNF, --exit-after-CNF,
-//     --parse-only and --interactive, whose state is the binary's own;
+//     --version, the parser selection (--CVC, --SMTLIB1, --SMTLIB2, else the
+//     file's extension), the print-back flags, --print-output, --output-CNF,
+//     --exit-after-CNF (the solver's end-after-cnf), --parse-only and
+//     --interactive;
 //   - the reading of --max-time as a whole number of seconds (2.x
 //     compatibility; the registry's duration type wants a unit);
 //   - the wording of a refused value, kept to what the binary always said
@@ -97,17 +96,23 @@ namespace reg = stp::api::detail;
 //     `requires`), and CLI11's own exclusions for the frontend rows;
 //   - the split-value diagnostic for --incremental (a flag whose value must be
 //     attached with '=');
-//   - the checks that need this build's macros and must run after the flags
-//     are applied: CaDiCaL option consistency, --lra-decision-polarity's
-//     backend prerequisites, the HiGHS-only searches, and the LRA option
-//     combinations the coordinator would refuse only once a Real query
-//     reached it;
-//   - the manager-scoped `simplify` entry, honoured by the parser's choice of
-//     node factory (main_common.cpp).
-class ExtraMain : public Main
+//   - the defaults the binary keeps where the library's differ: no model is
+//     built unless asked for (produce-models) and exact rationals are not
+//     re-derived (lra-verify-canonical), both set explicitly unless given;
+//   - where the refusals the solver makes from the applied options (the
+//     CaDiCaL knobs, --lra-decision-polarity) and the HiGHS-only searches are
+//     reported;
+//   - the LRA option combinations the coordinator would refuse only once a
+//     Real query reached it (the extension controls with a Real session;
+//     --lra-extension-restart-sat without CaDiCaL, with an explicit
+//     --cadical-factor=on or with --array-index-hints=decide), refused by
+//     value;
+//   - the manager-scoped entries (simplify, uf-sort-width), which go to the
+//     TermManager: an input printed back is read without folding, as it
+//     always was.
+class CommandLine
 {
 public:
-  int create_and_parse_options(int argc, char** argv) override;
   void create_options();
   int parse_options(int argc, char** argv);
 
@@ -139,18 +144,23 @@ public:
   };
   std::vector<AliasFlag> alias_flags;
 
-  reg::OptionsImpl options;
+  stp::Options options;
 
-  // The frontend rows' state. Rows bound to a UserFlags member bind it
-  // directly; these are the binary's own.
+  // What the frontend rows set, carried out by run.cpp.
+  stp_cli::Invocation invocation;
+  // The frontend rows that are the command line's own.
   bool version = false;
   bool use_cvc = false;
   bool use_smtlib1 = false;
   bool use_smtlib2 = false;
-  // Tri-state: UserFlags.interactive_read is only overridden when the
-  // option was given, so the value needs its own presence check.
+  // Tri-state: --interactive is only honoured when it was given, so the
+  // value needs its own presence check.
   bool interactive = false;
   CLI::Option* interactive_option = nullptr;
+
+  // The manager and the solver the options made, for run.cpp.
+  std::optional<stp::TermManager> manager;
+  std::unique_ptr<stp::Solver> solver;
 
   std::string group_of(const reg::OptionSpec& spec) const;
   bool* frontend_target(const std::string& key);
@@ -163,18 +173,10 @@ public:
                              const api::Error& error) const;
   [[noreturn]] void refuse(const std::string& line) const;
   const Entry* entry_named(const char* name) const;
+  bool given(const char* name) const;
+  void make_solver();
+  void select_parser_by_extension();
 };
-
-int ExtraMain::create_and_parse_options(int argc, char** argv)
-{
-  create_options();
-  int ret = parse_options(argc, argv);
-  if (ret != 0)
-  {
-    return ret;
-  }
-  return 0;
-}
 
 // ---------------------------------------------------------------------
 // Registration
@@ -199,12 +201,9 @@ std::string quoted_list(const std::vector<std::string>& values)
 
 bool backend_available(const std::string& value)
 {
-  if (value == "cadical")
-    return STP_BUILD_WITH_CADICAL != 0;
-  if (value == "cryptominisat")
-    return STP_BUILD_WITH_CRYPTOMINISAT != 0;
-  if (value == "minisat" || value == "simplifying-minisat")
-    return STP_BUILD_WITH_MINISAT != 0;
+  if (value == "cadical" || value == "cryptominisat" || value == "minisat" ||
+      value == "simplifying-minisat")
+    return stp::has_sat_backend(value);
   return true;
 }
 
@@ -221,7 +220,7 @@ bool reads_uint32(const reg::OptionSpec& spec)
 }
 } // namespace
 
-std::string ExtraMain::group_of(const reg::OptionSpec& spec) const
+std::string CommandLine::group_of(const reg::OptionSpec& spec) const
 {
   std::size_t n = 0;
   const reg::CliCategory* cats = reg::cli_categories(n);
@@ -232,7 +231,7 @@ std::string ExtraMain::group_of(const reg::OptionSpec& spec) const
   throw std::logic_error(std::string("option category without a --help group: ") + spec.category);
 }
 
-const ExtraMain::Entry* ExtraMain::entry_named(const char* name) const
+const CommandLine::Entry* CommandLine::entry_named(const char* name) const
 {
   const reg::OptionSpec* spec = reg::find_option(name);
   if (spec == nullptr)
@@ -240,7 +239,7 @@ const ExtraMain::Entry* ExtraMain::entry_named(const char* name) const
   return &entries[reg::option_index(spec)];
 }
 
-bool* ExtraMain::frontend_target(const std::string& key)
+bool* CommandLine::frontend_target(const std::string& key)
 {
   if (key == "version")
     return &version;
@@ -253,34 +252,34 @@ bool* ExtraMain::frontend_target(const std::string& key)
   if (key == "interactive")
     return &interactive;
   if (key == "parse-only")
-    return &bm->UserFlags.parse_only;
+    return &invocation.parse_only;
   if (key == "exit-after-cnf")
-    return &bm->UserFlags.exit_after_CNF;
+    return &invocation.exit_after_cnf;
   if (key == "print-stpinput")
-    return &bm->UserFlags.print_STPinput_back_flag;
+    return &invocation.print_stpinput;
   if (key == "print-back-cvc")
-    return &bm->UserFlags.print_STPinput_back_CVC_flag;
+    return &invocation.print_back_cvc;
   if (key == "print-back-smtlib2")
-    return &bm->UserFlags.print_STPinput_back_SMTLIB2_flag;
+    return &invocation.print_back_smtlib2;
   if (key == "print-back-gdl")
-    return &bm->UserFlags.print_STPinput_back_GDL_flag;
+    return &invocation.print_back_gdl;
   if (key == "print-back-dot")
-    return &bm->UserFlags.print_STPinput_back_dot_flag;
+    return &invocation.print_back_dot;
   if (key == "print-output")
-    return &bm->UserFlags.print_output_flag;
+    return &invocation.print_output;
   if (key == "output-cnf")
-    return &bm->UserFlags.output_CNF_flag;
+    return &invocation.output_cnf;
   // A frontend row this binary has no action for is a table/binary mismatch.
   throw std::logic_error("options.toml frontend row with no binding here: " + key);
 }
 
-void ExtraMain::register_frontend(const reg::CliFrontend& row)
+void CommandLine::register_frontend(const reg::CliFrontend& row)
 {
   const std::string kind = row.kind;
   if (kind == "positional")
   {
     // positional-only, hidden from --help
-    app.add_option(row.spellings, infile, row.help)->group(kCliOnlyGroup);
+    app.add_option(row.spellings, invocation.infile, row.help)->group(kCliOnlyGroup);
     return;
   }
   if (kind == "help")
@@ -300,7 +299,7 @@ void ExtraMain::register_frontend(const reg::CliFrontend& row)
     interactive_option = opt;
 }
 
-void ExtraMain::register_entry(std::size_t index, const std::string& group)
+void CommandLine::register_entry(std::size_t index, const std::string& group)
 {
   std::size_t n = 0;
   const reg::OptionSpec& spec = reg::option_specs(n)[index];
@@ -438,7 +437,7 @@ void ExtraMain::register_entry(std::size_t index, const std::string& group)
   e.option = opt;
 }
 
-void ExtraMain::register_alias(std::size_t k, const std::string& group)
+void CommandLine::register_alias(std::size_t k, const std::string& group)
 {
   AliasFlag& af = alias_flags[k];
   // The flag of a backend this build lacks is not registered, as it never was.
@@ -456,7 +455,7 @@ void ExtraMain::register_alias(std::size_t k, const std::string& group)
 // to, so '--disable-simplifications --flattening false' is refused as well,
 // even though the two agree: the second option still had no bearing on the
 // run. The pairs are the rows' `excludes`, `of` and `requires` columns.
-void ExtraMain::register_exclusions()
+void CommandLine::register_exclusions()
 {
   for (const Entry& e : entries)
   {
@@ -509,7 +508,7 @@ void ExtraMain::register_exclusions()
   }
 }
 
-void ExtraMain::create_options()
+void CommandLine::create_options()
 {
   app.usage("USAGE: stp [options] <input-file>\n"
             " where input is SMTLIB1/2 or CVC depending on options and file "
@@ -558,7 +557,7 @@ void ExtraMain::create_options()
 // Parsing
 // ---------------------------------------------------------------------
 
-void ExtraMain::refuse(const std::string& line) const
+void CommandLine::refuse(const std::string& line) const
 {
   cerr << line << endl;
   std::exit(-1);
@@ -566,7 +565,7 @@ void ExtraMain::refuse(const std::string& line) const
 
 // The text the registry parses for an entry the command line gave, or the
 // line refusing it.
-std::string ExtraMain::entry_text(const Entry& e, std::string& refusal)
+std::string CommandLine::entry_text(const Entry& e, std::string& refusal)
 {
   const reg::OptionSpec& spec = *e.spec;
   switch (spec.type)
@@ -651,7 +650,7 @@ std::string fill_template(std::string text, const std::string& name, const std::
 // The line the binary prints about a value the registry refused: the wording
 // it has always used, spelled out by the row's template where it had one of
 // its own and built from the row's range and values otherwise.
-std::string ExtraMain::bad_value_line(const reg::OptionSpec& spec, const std::string& given,
+std::string CommandLine::bad_value_line(const reg::OptionSpec& spec, const std::string& given,
                                       const api::Error& error) const
 {
   const std::string flag = std::string("--") + spec.name;
@@ -742,7 +741,7 @@ bool listed(const char* name, const char* const* list, std::size_t n)
 }
 } // namespace
 
-int ExtraMain::parse_options(int argc, char** argv)
+int CommandLine::parse_options(int argc, char** argv)
 {
   try
   {
@@ -780,7 +779,7 @@ int ExtraMain::parse_options(int argc, char** argv)
       continue;
     try
     {
-      options.set_text("stp", e.spec->name, text);
+      options.set(e.spec->name, text);
     }
     catch (const api::Error& error)
     {
@@ -793,7 +792,7 @@ int ExtraMain::parse_options(int argc, char** argv)
       continue;
     try
     {
-      options.set_text("stp", a.alias->of, a.alias->value);
+      options.set(a.alias->of, a.alias->value);
     }
     catch (const api::Error& error)
     {
@@ -837,14 +836,20 @@ int ExtraMain::parse_options(int argc, char** argv)
     options.reset(spec.name);
   }
 
-  // The cross-entry rules (excludes, requires, a build without the backend),
-  // then the flags. The appliers are the library's: a value reaches
-  // UserDefinedFlags the same way from here and from Solver's options.
+  // The binary's own defaults where the library's differ, unless given: no
+  // model is built unless asked for, and exact rationals are not re-derived.
+  // --exit-after-CNF is the solver's end-after-cnf.
+  if (!given("produce-models"))
+    options.set_bool("produce-models", false);
+  if (!given("lra-verify-canonical"))
+    options.set_bool("lra-verify-canonical", false);
+  if (invocation.exit_after_cnf)
+    options.set_bool("end-after-cnf", true);
+
+  // The cross-entry rules (excludes, requires, a build without the backend).
   try
   {
-    options.resolve("stp");
-    reg::EngineTarget target{bm->UserFlags, nullptr, nullptr};
-    reg::apply_all_options(target, options);
+    options.resolve();
   }
   catch (const api::Error& error)
   {
@@ -852,49 +857,26 @@ int ExtraMain::parse_options(int argc, char** argv)
     refuse("ERROR: " + (name.empty() ? std::string() : "--" + name + ": ") + detail_of(error.what()));
   }
 
-  // The manager-scoped `simplify` entry is honoured by the parser's choice of
-  // node factory (main_common.cpp).
-  {
-    const Entry* simplify = entry_named("simplify");
-    if (simplify != nullptr)
-    {
-      const api::OptionValue v = options.resolved(reg::option_index(simplify->spec));
-      simplifyInput = v.index() == 0 ? std::get<bool>(v) : true;
-    }
-  }
-
-  /* Before anything can build an exact rational, so that every budget this
-   * run creates agrees about it. Left alone by every other entry point, which
-   * therefore keeps the check. */
-  bm->SetLraCanonicalVerification(bm->UserFlags.lra_verify_canonical);
-
-  onePrintBack = bm->UserFlags.get_print_output_at_all();
-
   if (interactive_option != nullptr && interactive_option->count())
-  {
-    bm->UserFlags.interactive_read = interactive ? 1 : 0;
-  }
+    invocation.interactive = interactive;
 
   int selected_type = 0;
   if (use_cvc)
   {
     selected_type++;
-    bm->UserFlags.smtlib1_parser_flag = false;
-    bm->UserFlags.smtlib2_parser_flag = false;
+    invocation.format = stp::Format::CVC;
   }
 
   if (use_smtlib2)
   {
     selected_type++;
-    bm->UserFlags.smtlib1_parser_flag = false;
-    bm->UserFlags.smtlib2_parser_flag = true;
+    invocation.format = stp::Format::SMTLIB2;
   }
 
   if (use_smtlib1)
   {
     selected_type++;
-    bm->UserFlags.smtlib1_parser_flag = true;
-    bm->UserFlags.smtlib2_parser_flag = false;
+    invocation.format = stp::Format::SMTLIB1;
   }
 
   if (selected_type > 1)
@@ -905,42 +887,17 @@ int ExtraMain::parse_options(int argc, char** argv)
     std::exit(-1);
   }
 
-  if (selected_type == 0)
-  {
-    bm->UserFlags.smtlib2_parser_flag = true;
-  }
-
+  // The solver applies the options and refuses what the applied options
+  // cannot honour (CaDiCaL's knobs, an explicit --lra-decision-polarity
+  // without what it needs), in the engine's words.
   try
   {
-    validateCadicalOptions(bm->UserFlags);
+    make_solver();
   }
-  catch (const std::invalid_argument& error)
+  catch (const api::Error& error)
   {
-    cerr << "ERROR: " << error.what() << endl;
+    cerr << "ERROR: " << detail_of(error.what()) << endl;
     return -1;
-  }
-
-  // The default polarity preference yields to backend capabilities; an
-  // explicit request must still diagnose missing prerequisites.
-  if (bm->UserFlags.lra_decision_polarity &&
-      bm->UserFlags.lra_decision_polarity_explicit)
-  {
-    if (!bm->UserFlags.lra_theory_propagation)
-    {
-      cerr << "ERROR: --lra-decision-polarity requires "
-              "--lra-theory-propagation=1" << endl;
-      return -1;
-    }
-    bool supported = false;
-#if defined(USE_CADICAL) && defined(STP_CADICAL_HAS_DECISION_POLARITY)
-    supported = bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER;
-#endif
-    if (!supported)
-    {
-      cerr << "ERROR: --lra-decision-polarity requires CaDiCaL built with "
-              "cmake/deps-utils/cadical-decision-polarity.patch" << endl;
-      return -1;
-    }
   }
 
   if (highs_cuts_requested)
@@ -948,10 +905,12 @@ int ExtraMain::parse_options(int argc, char** argv)
     cerr << "ERROR: --lra-highs-cuts requires -DENABLE_HIGHS_CUT_LOG=ON and the HiGHS root-cut patch" << endl;
     return -1;
   }
-#ifndef STP_HAVE_HIGHS
-  if (bm->UserFlags.lra_relu_lp == UserDefinedFlags::OptionMode::ON)
-    highs_search_requested = true;
-#endif
+  if (stp::capabilities()["highs"] != "true")
+  {
+    const api::OptionValue relu = options.resolved("lra-relu-lp");
+    if (std::holds_alternative<std::string>(relu) && std::get<std::string>(relu) == "on")
+      highs_search_requested = true;
+  }
   if (highs_search_requested)
   {
     cerr << "ERROR: LRA LP/branch search requires a build with -DENABLE_HIGHS=ON" << endl;
@@ -964,22 +923,20 @@ int ExtraMain::parse_options(int argc, char** argv)
   // combines with anything. LraCoordinator refuses the same combinations for
   // library callers, but only once a Real query reaches it.
   {
-    const UserDefinedFlags& uf = bm->UserFlags;
     std::vector<std::string> controls;
-    if (uf.lra_extension_mode != 0)
-      controls.push_back("--lra-extension-mode=" +
-                         std::to_string(uf.lra_extension_mode));
-    if (uf.lra_row_order != 0)
-      controls.push_back("--lra-row-order=" +
-                         std::to_string(uf.lra_row_order));
-    if (uf.lra_extension_restart_float_basis)
+    if (options.get_uint("lra-extension-mode") != 0)
+      controls.push_back("--lra-extension-mode=" + std::to_string(options.get_uint("lra-extension-mode")));
+    if (options.get_uint("lra-row-order") != 0)
+      controls.push_back("--lra-row-order=" + std::to_string(options.get_uint("lra-row-order")));
+    if (options.get_bool("lra-extension-restart-float-basis"))
       controls.push_back("--lra-extension-restart-float-basis=1");
-    if (uf.lra_extension_restart_sat)
+    const bool restart_sat = options.get_bool("lra-extension-restart-sat");
+    if (restart_sat)
       controls.push_back("--lra-extension-restart-sat=1");
     std::vector<std::string> sessions;
-    if (uf.lra_incremental_session)
+    if (options.get_bool("lra-incremental-session"))
       sessions.push_back("--lra-incremental-session=1");
-    if (uf.lra_persistent_state)
+    if (options.get_bool("lra-persistent-state"))
       sessions.push_back("--lra-persistent-state=1");
     if (!controls.empty() && !sessions.empty())
     {
@@ -989,47 +946,42 @@ int ExtraMain::parse_options(int argc, char** argv)
           joined += (joined.empty() ? "" : ", ") + name;
         return joined;
       };
-      cerr << "ERROR: " << join(controls) << " cannot be combined with "
-           << join(sessions)
-           << ": the LRA extension controls apply to batch solves only"
-           << endl;
+      cerr << "ERROR: " << join(controls) << " cannot be combined with " << join(sessions)
+           << ": the LRA extension controls apply to batch solves only" << endl;
       std::exit(-1);
     }
 
-    if (uf.lra_extension_restart_sat &&
-        uf.solver_to_use != UserDefinedFlags::CADICAL_SOLVER)
+    // 'auto' is the first backend the build has, in sat_backends()' order.
+    std::string backend = options.get_str("sat-backend");
+    if (backend == "auto")
     {
-#ifdef USE_CADICAL
-      cerr << "ERROR: --lra-extension-restart-sat=1 requires --cadical" << endl;
-#else
-      cerr << "ERROR: --lra-extension-restart-sat=1 requires a build with "
-              "CaDiCaL"
-           << endl;
-#endif
+      const std::vector<std::string> built = stp::sat_backends();
+      backend = built.empty() ? std::string() : built.front();
+    }
+    if (restart_sat && backend != "cadical")
+    {
+      if (stp::has_sat_backend("cadical"))
+        cerr << "ERROR: --lra-extension-restart-sat=1 requires --cadical" << endl;
+      else
+        cerr << "ERROR: --lra-extension-restart-sat=1 requires a build with CaDiCaL" << endl;
       std::exit(-1);
     }
 
 #ifdef STP_CADICAL_HAS_FACTOR
     // Only an explicit 'on': the unnamed default and 'auto' are turned off
     // for it (STP.cpp).
-    if (uf.lra_extension_restart_sat && uf.cadical_factor_explicit &&
-        uf.cadical_factor == UserDefinedFlags::BVAMode::ON)
+    if (restart_sat && options.is_set("cadical-factor") && options.get_str("cadical-factor") == "on")
     {
-      cerr << "ERROR: --lra-extension-restart-sat=1 requires "
-              "--cadical-factor=off"
-           << endl;
+      cerr << "ERROR: --lra-extension-restart-sat=1 requires --cadical-factor=off" << endl;
       std::exit(-1);
     }
 #endif
 
     // The decision hints hold CaDiCaL's propagator slot, which a search
     // reset cannot carry over.
-    if (uf.lra_extension_restart_sat &&
-        uf.array_index_hints == UserDefinedFlags::ArrayIndexHints::DECIDE)
+    if (restart_sat && options.get_str("array-index-hints") == "decide")
     {
-      cerr << "ERROR: --lra-extension-restart-sat=1 cannot be combined with "
-              "--array-index-hints=decide"
-           << endl;
+      cerr << "ERROR: --lra-extension-restart-sat=1 cannot be combined with --array-index-hints=decide" << endl;
       std::exit(-1);
     }
   }
@@ -1040,6 +992,7 @@ int ExtraMain::parse_options(int argc, char** argv)
   // --incremental (which means 'on') followed by an input file named 'off' --
   // the opposite of what was asked for, reported as "Cannot open off", which
   // names neither half of the mistake.
+  const std::string& infile = invocation.infile;
   const Entry* incremental = entry_named("incremental");
   if (incremental != nullptr && incremental->option != nullptr && incremental->option->count() &&
       (infile == "on" || infile == "off" || infile == "auto"))
@@ -1053,20 +1006,78 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (selected_type == 0)
   {
     // No parser is explicity requested.
-    check_infile_type();
+    select_parser_by_extension();
   }
 
   if (version)
   {
-    printVersionInfo();
+    stp_cli::print_version();
     exit(0);
   }
 
   return 0;
 }
 
+// Whether the command line gave the entry itself.
+bool CommandLine::given(const char* name) const
+{
+  const Entry* e = entry_named(name);
+  return e != nullptr && e->option != nullptr && e->option->count() > 0;
+}
+
+// The parser a file's extension picks when no flag picked one: .cvc and .smt
+// their own, SMT-LIB 2 for .smt2 and anything else.
+void CommandLine::select_parser_by_extension()
+{
+  const std::string& infile = invocation.infile;
+  if (infile.size() >= 5)
+  {
+    if (!infile.compare(infile.length() - 4, 4, ".cvc"))
+      invocation.format = stp::Format::CVC;
+    if (!infile.compare(infile.length() - 4, 4, ".smt"))
+      invocation.format = stp::Format::SMTLIB1;
+    if (!infile.compare(infile.length() - 5, 5, ".smt2"))
+      invocation.format = stp::Format::SMTLIB2;
+  }
+}
+
+namespace
+{
+std::uint64_t as_uint(const api::OptionValue& v)
+{
+  if (std::holds_alternative<std::uint64_t>(v))
+    return std::get<std::uint64_t>(v);
+  return static_cast<std::uint64_t>(std::get<std::int64_t>(v));
+}
+} // namespace
+
+// The manager and the solver, from the options. The manager-scoped entries
+// are the manager's: `simplify` (always off for an input printed back, which
+// is read as written) and the uninterpreted sorts' width. The solver copies
+// the rest, resolves and applies them.
+void CommandLine::make_solver()
+{
+  stp::TermManager::Config config;
+  const api::OptionValue simplify = options.resolved("simplify");
+  config.simplify = (!std::holds_alternative<bool>(simplify) || std::get<bool>(simplify)) &&
+                    !invocation.print_back();
+  config.uf_sort_width = static_cast<std::uint32_t>(as_uint(options.resolved("uf-sort-width")));
+  options.reset("simplify");
+  options.reset("uf-sort-width");
+  // An input printed back reports no run times; it never did (the read that
+  // prints it back would).
+  if (invocation.print_back() && !invocation.parse_only)
+    options.reset("print-quickstat");
+  manager.emplace(config);
+  solver = std::make_unique<stp::Solver>(*manager, options);
+}
+
 int main(int argc, char** argv)
 {
-  ExtraMain main;
-  return main.main(argc, argv);
+  CommandLine command_line;
+  command_line.create_options();
+  const int ret = command_line.parse_options(argc, argv);
+  if (ret != 0)
+    return ret;
+  return stp_cli::run(command_line.invocation, std::move(command_line.solver));
 }

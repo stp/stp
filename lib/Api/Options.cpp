@@ -985,9 +985,9 @@ bool custom_logic(EngineTarget& t, const OptionSpec&, const OptionValue& v)
   return true;
 }
 // The manager-scoped entries belong to TermManager's constructor when a
-// manager exists; the stp binary applies the registry to a bare STPMgr
-// (EngineTarget::mgr null), where `simplify` is the frontend's to honour and
-// the sort width is the engine flag.
+// manager exists; applied to a bare STPMgr (EngineTarget::mgr null),
+// `simplify` is the frontend's to honour and the sort width is the engine
+// flag.
 bool custom_manager_simplify(EngineTarget& t, const OptionSpec& spec, const OptionValue&)
 {
   if (t.mgr == nullptr)

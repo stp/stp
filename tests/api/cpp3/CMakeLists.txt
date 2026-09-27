@@ -144,7 +144,8 @@ set_property(TARGET api3-stp-test3Tests APPEND PROPERTY
              COMPILE_DEFINITIONS CVC_FILE="${CMAKE_CURRENT_SOURCE_DIR}/f.cvc")
 
 # The registry against the engine and the command line generated from it:
-# reads lib/Api/Internal.h, the in-tree view tools/stp/main.cpp registers from.
+# reads lib/Api/Internal.h, and through it the tables tools/stp/main.cpp
+# registers from (lib/Api/Registry.h).
 AddSTPGTest(api3-registry.cpp)
 target_include_directories(api3-registryTests PRIVATE ${PROJECT_SOURCE_DIR}/lib)
 add_dependencies(api3-registryTests stp_api_tables)

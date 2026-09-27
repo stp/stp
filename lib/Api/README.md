@@ -71,17 +71,17 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   `none`) in `options.toml`; `option_apply.inc` is generated from it and the custom
   appliers live in Options.cpp. Manager-scoped rows (`simplify`,
   `default-rounding-mode`, `uf-sort-width`) are refused on a solver.
-- The `stp` binary's command line is the same registry: `tools/stp/main.cpp`
-  registers every row with a `cli_form` (value, flag or none) from its
-  OptionSpec, the `[[alias]]` backend flags and the `[[frontend]]` rows
-  (`cli_table.inc`), hands each value to `OptionsImpl` as text and applies the
-  lot through `apply_all_options` with a manager-less `EngineTarget`, so the
-  appliers that consult the manager fall back to the frontend's `set-logic`
-  under `auto`. The `--help` groups come from the `[[cli_group]]` and
-  `[[category]]` sections; `option_defaults.inc` lets `api3-registry` hold the
-  table's defaults to `UserDefinedFlags`, and `api3-cli-help` reads the built
-  binary's `--help` back against the table. What stays hand-written in main.cpp
-  is listed in its header comment.
+- The `stp` binary is a client of this API: `tools/stp/main.cpp` registers
+  every row with a `cli_form` (value, flag or none) from its OptionSpec, the
+  `[[alias]]` backend flags and the `[[frontend]]` rows (`cli_table.inc`, read
+  through `Registry.h`), hands each value to `stp::Options` as text and makes
+  the solver from them; `tools/stp/run.cpp` reads the input with
+  `Solver::parse(std::istream&, Format, ParseMode::EXECUTE)` (or `PARSE_ONLY`)
+  and puts the sinks' text on stdout and stderr. The `--help` groups come from
+  the `[[cli_group]]` and `[[category]]` sections; `option_defaults.inc` lets
+  `api3-registry` hold the table's defaults to `UserDefinedFlags`, and
+  `api3-cli-help` reads the built binary's `--help` back against the table.
+  What stays hand-written in main.cpp is listed in its header comment.
 - `Term::str()` (the unshared SMT-LIB form) is the API's own printer (`Smt2Printer`
   in Terms.cpp): declared names quoted only where SMT-LIB requires (non-simple
   characters, a leading digit, a reserved word), lowercase hex, `(fp ...)`
@@ -120,11 +120,11 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   manager, whose state the failure may have left inconsistent: every later
   call on it, its solvers, models and terms is refused with STATE naming the
   failure. `FatalError` and `ReportFatalError` tell the engine's per-thread
-  observer first, which a solver's route points at its fatal error handler.
-  The command line never sets the flag, so `FatalError` ends the process for
-  it as it always has. libstp2, the 2.x C interface over the C API, reports
-  such a failure through the 2.x error handler and then aborts, as 2.x did,
-  unless `vc_setErrorPolicy` asked for `STP_ON_ERROR_RETURN`.
+  observer first, which a solver's route points at its fatal error handler:
+  the `stp` binary prints "STP Error:" there and exits, before anything
+  unwinds, as it always did. libstp2, the 2.x C interface over the C API,
+  reports such a failure through the 2.x error handler and then aborts, as 2.x
+  did, unless `vc_setErrorPolicy` asked for `STP_ON_ERROR_RETURN`.
 - Output: the engine prints with `std::cout` and `std::cerr`. The first route
   (`OutputRoute`, Output.cpp) puts a dispatching buffer in front of each
   stream's own; while a route is alive on a thread, that thread's writes go to

@@ -347,8 +347,8 @@ std::string option_text(const OptionSpec& spec, const OptionValue& v);
 OptionValue option_default(const OptionSpec& spec);
 void validate_option_value(const OptionSpec& spec, const OptionValue& v);
 
-// The registry is also the stp binary's command line (tools/stp/main.cpp):
-// what it calls is exported like the engine entry points it uses.
+// Exported for the api3-registry suite, which applies the registry to a
+// bare UserDefinedFlags.
 struct DLL_PUBLIC OptionsImpl
 {
   std::vector<OptionValue> values;    // by registry index

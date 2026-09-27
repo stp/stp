@@ -20,9 +20,9 @@ sets `smt2lineno = 1` before every scan in `run_parser` and `parse_term`.
 
 Symptom: `Fatal Error: Don't match` and a core dump. Root cause:
 `Cpp_interface::checkSat` stops the `RunTimes::Parsing` category and restarts
-it afterwards; the CLI (`tools/stp/main_common.cpp`) starts that category
-before handing the file to the parser, the API did not, so the category stack
-was empty when the frontend popped it. Fix: `run_parser` brackets every parse
+it afterwards; the CLI (then `tools/stp/main_common.cpp`) started that
+category before handing the file to the parser, the API did not, so the
+category stack was empty when the frontend popped it. Fix: `run_parser` brackets every parse
 with `start(RunTimes::Parsing)` / `stop(RunTimes::Parsing)`; the stop lives in
 the restore guard, so an error path stays balanced.
 
@@ -340,8 +340,9 @@ is enabled and `Parsing.frontend_refusals_are_parse_errors` covers the list.
 Symptom: an engine invariant reached through any API call (`Term::to_string`
 of a Real term in the CVC format, say) called `FatalError`, which
 `abort()`ed. Fix: `FatalError` throws `stp::EngineFatal` while the thread's
-`FatalErrorThrows()` flag is set (else it ends the process as before: the
-command line and the 2.x C interface never set it). The API sets it around
+`FatalErrorThrows()` flag is set (else it ends the process as before: code
+that drives the engine directly never sets it, and the stp binary and libstp2
+now reach the engine through the API). The API sets it around
 every engine-reaching entry (`EngineScope`/`engine_call` in `Internal.h`:
 construction, `simplify`, declare, the solver's construction, assert, push,
 pop, checks, parses, models, printing, options) and turns the exception into
@@ -446,7 +447,7 @@ a death test that pins the abort). Unwinding to `SMT2Parse()` with
 `DeclassifiedNameAbandon` instead of aborting was tried here and works for
 both callers -- the parse fails as a whole, so no later command of that script
 runs; the CLI prints the diagnostic and exits non-zero through its
-failed-parse path in `tools/stp/main_common.cpp`, and the API reports `PARSE`
+failed-parse path (now `tools/stp/run.cpp`), and the API reports `PARSE`
 with its solver put back -- but it fails that death test, so it was not
 kept. `Parsing.DISABLED_function_misuse_in_a_script_is_a_parse_error` holds
 the expectations for when the frontend's refusal ends the parse rather than
