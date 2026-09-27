@@ -99,7 +99,7 @@ def test_reader_errors():
     with pytest.raises(SortMismatch):
         s = Solver()
         s.add(x)  # not a Bool
-    Solver.close(main_tm()._solver()) if main_tm()._solver() else None
+    s.close()
 
 
 def test_no_model_and_state_errors():

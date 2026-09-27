@@ -913,7 +913,6 @@ Term mk_named(Kind k, const char* fn, const std::vector<Term>& args)
   if (m == nullptr)
     fail(ErrorCode::ARITY, fn, "no arguments");
   m->check_alive(fn);
-  m->check_thread(fn);
   std::vector<ASTNode> nodes;
   nodes.reserve(args.size());
   for (const Term& t : args)
@@ -1108,7 +1107,6 @@ ManagerImpl* live_like(const Term& like, const char* fn)
     fail(ErrorCode::NULL_HANDLE, fn, "the term is null");
   ManagerImpl* m = like.impl_manager();
   m->check_alive(fn);
-  m->check_thread(fn);
   return m;
 }
 } // namespace
@@ -1250,7 +1248,6 @@ Term indexed1(Kind k, const char* fn, std::uint32_t i, const Term& t)
     detail::fail(ErrorCode::NULL_HANDLE, fn, "the term is null", 1);
   detail::ManagerImpl* m = t.impl_manager();
   m->check_alive(fn);
-  m->check_thread(fn);
   return detail::make_term(m, detail::build_term(m, fn, k, {detail::node_of(t)}, {i}, std::nullopt));
 }
 
@@ -1260,7 +1257,6 @@ detail::ManagerImpl* fp_sort_manager(const Sort& fp, const char* fn)
     detail::fail(ErrorCode::NULL_HANDLE, fn, "the sort is null", 0);
   detail::ManagerImpl* m = fp.impl_manager();
   m->check_alive(fn);
-  m->check_thread(fn);
   if (m->rec(fp.impl_index()).kind != SortKind::FP)
     detail::fail(ErrorCode::SORT_MISMATCH, fn, "expected a floating-point sort", 0, {}, {fp});
   return m;
@@ -1302,7 +1298,6 @@ Term extract(std::uint32_t hi, std::uint32_t lo, const Term& t)
     detail::fail(ErrorCode::NULL_HANDLE, "extract", "the term is null", 2);
   detail::ManagerImpl* m = t.impl_manager();
   m->check_alive("extract");
-  m->check_thread("extract");
   return detail::make_term(m, detail::build_term(m, "extract", Kind::BV_EXTRACT, {detail::node_of(t)},
                                                  {hi, lo}, std::nullopt));
 }

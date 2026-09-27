@@ -28,6 +28,7 @@ THE SOFTWARE.
 // ASTVec and a forward declaration of ASTNode (both from UsefulDefs.h);
 // including ASTNode.h would create a circular include that forces the hot
 // ASTNode accessors (GetKind/GetNodeNum/...) to be defined out-of-line.
+#include <atomic>
 #include "stp/AST/UsefulDefs.h"
 #include "stp/AST/SourceSort.h"
 #include <iostream>
@@ -78,7 +79,9 @@ protected:
   // the are NOTs of.
   //
   uint64_t node_uid;
-  static THREAD_LOCAL_IE uint64_t node_uid_cntr;
+  // Process-wide and atomic: a manager may be used from any thread (one at
+  // a time), so ids handed out on different threads must never collide.
+  static std::atomic<uint64_t> node_uid_cntr;
 
   // reference counting for garbage collection
   uint32_t _ref_count;
@@ -173,7 +176,8 @@ protected:
 public:
   // Constructor (kind only, empty children, int nodenum)
   ASTInternal(STPMgr* mgr, Kind kind)
-      : nodeManager(mgr), node_uid(node_uid_cntr += 2), _ref_count(0),
+      : nodeManager(mgr), node_uid(node_uid_cntr.fetch_add(2, std::memory_order_relaxed) + 2),
+        _ref_count(0),
         _kind(kind), iteration(0)
   {
   }

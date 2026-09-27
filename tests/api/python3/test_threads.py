@@ -21,8 +21,8 @@
 # THE SOFTWARE.
 
 """Threads and signals (DESIGN.md section 9): interrupt() from another thread while a check
-runs with the GIL released, Ctrl-C on the main thread, the thread pin of a manager, and the
-deferred release of wrappers finalised off the manager's thread."""
+runs with the GIL released, Ctrl-C on the main thread, a manager used from several threads one
+call at a time, and the deferred release of wrappers finalised while their manager is busy."""
 
 import gc
 import os
@@ -90,29 +90,75 @@ def test_sigint_on_main_thread(hard):
     assert hard.check(timeout=0).reason == UnknownReason.TIMEOUT  # the solver is usable
 
 
-def test_manager_is_pinned_to_its_thread(fresh_manager):
+def test_manager_usable_from_another_thread(fresh_manager):
+    """A manager and everything created from it may be used from any thread, one call at a
+    time; the caller serialises (here: the join before the next use)."""
     x = BitVec("x", 8)
     s = Solver()
     s.add(x == 1)
     assert s.check() == sat
     m = s.model()
-    errors = []
+    results = []
 
     def other():
-        for op in (lambda: BitVec("y", 8), lambda: x + 1, lambda: s.check(), lambda: m[x], lambda: s.add(x == 2),
-                   lambda: fresh_manager.declare("q", BitVecSort(8))):
-            try:
-                op()
-                errors.append(None)
-            except Exception as e:  # noqa: BLE001
-                errors.append(e)
+        y = BitVec("y", 8)
+        s.add(y == x + 1)
+        results.append(s.check())
+        results.append(s.model()[y].as_long())
+        results.append(m[x].as_long())
+        results.append(fresh_manager.declare("q", BitVecSort(8)) is not None)
 
     t = threading.Thread(target=other)
     t.start()
     t.join()
-    assert len(errors) == 6 and all(isinstance(e, StateError) for e in errors)
-    assert all("pin" in str(e) for e in errors)  # the Python pin ("pinned") or the C++ core's own ("pins")
-    assert s.check() == sat and m[x].as_long() == 1  # nothing was touched
+    assert results == [sat, 2, 1, True]
+    assert s.check() == sat and s.model()[x].as_long() == 1 and m[x].as_long() == 1
+    s.close()
+
+
+def test_manager_handed_from_thread_to_thread(fresh_manager):
+    """Declared here, asserted and checked on a second thread, read on a third: every theory's
+    engine state is exercised off the creating thread."""
+    x = BitVec("x", 8)
+    fx = FP("fx", Float32())
+    r = Real("r")
+    f = Function("f", BitVecSort(8), BitVecSort(8))
+    a = Array("a", BitVecSort(8), BitVecSort(8))
+    half = FPVal(1.5, Float32())
+    s = Solver()
+    failures = []
+
+    def second():
+        try:
+            s.add(x == 5, fx == half, r + 1 < RealVal("3/2"), f(x) == 7, a[x] == 9)
+            if s.check() != sat:
+                failures.append("the check did not answer sat")
+        except Exception as e:  # noqa: BLE001
+            failures.append(repr(e))
+
+    t = threading.Thread(target=second)
+    t.start()
+    t.join()
+    assert not failures, failures
+    values = []
+
+    def third():
+        try:
+            m = s.model()
+            values.append(m[x].as_long())
+            values.append(m.eval(f(x)).as_long())
+            values.append(m.eval(a[x]).as_long())
+            values.append(m.eval(r).as_fraction() < 0.5)
+            values.append(m.eval(fx).eq(half))
+        except Exception as e:  # noqa: BLE001
+            failures.append(repr(e))
+
+    t = threading.Thread(target=third)
+    t.start()
+    t.join()
+    assert not failures, failures
+    assert values == [5, 7, 9, True, True]
+    assert s.model()[x].as_long() == 5  # and back here
     s.close()
 
 
@@ -137,11 +183,12 @@ def test_independent_managers_on_two_threads():
     assert r.returncode == 0 and "worker ok" in r.stdout and "main ok" in r.stdout, (r.returncode, r.stdout, r.stderr[-400:])
 
 
-def test_deferred_release_from_another_thread(fresh_manager):
+def test_release_from_another_thread_while_idle(fresh_manager):
     holder = [BitVec("dropme", 8) + 1, Solver()]
     holder[1].add(holder[0] == 2)
     assert holder[1].check() == sat
     holder.append(holder[1].model())
+    gc.collect()  # earlier tests' cyclic garbage, whose managers are gone, must not count below
     _core.drain_releases()
     before = _core.pending_releases()
 
@@ -152,30 +199,48 @@ def test_deferred_release_from_another_thread(fresh_manager):
     t = threading.Thread(target=drop)
     t.start()
     t.join()
-    # the wrappers died on the other thread: their handles wait on the queue
-    assert _core.pending_releases() > before
-    BitVec("touch", 8)  # an entry point on the owning thread drains it
-    assert _core.pending_releases() == 0
-    s = Solver()  # the solver slot is free again
+    # the manager was idle: the wrappers' handles were released on the spot
+    assert _core.pending_releases() == before
+    s = Solver()
     assert s.check() == sat
     s.close()
 
 
-def test_solver_use_from_another_thread_is_refused(fresh_manager):
+def test_release_during_a_check_is_deferred(hard):
+    tm = hard.manager()
+    holder = [BitVec("dropped_during_check", 8, tm=tm) + 1]
+    _core.drain_releases()
+    before = _core.pending_releases()
+
+    def other():
+        time.sleep(0.4)
+        holder.clear()  # the manager is busy on the main thread: the finaliser must not touch it
+        gc.collect()
+        hard.interrupt()
+
+    t = threading.Thread(target=other)
+    t.start()
+    r = hard.check()
+    t.join()
+    assert r == unknown and r.reason == UnknownReason.INTERRUPTED
+    assert _core.pending_releases() > before  # queued: its manager was busy
+    BitVec("touch", 8, tm=tm)  # any entry point, on any thread, drains it once the manager is idle
+    assert _core.pending_releases() == before
+
+
+def test_solver_use_from_another_thread_works(fresh_manager):
     s = Solver()
     x = BitVec("x", 8)
     s.add(x == 1)
     seen = []
 
     def other():
-        try:
-            s.check()
-        except StateError as e:
-            seen.append(e)
+        seen.append(s.check())
+        seen.append(s.model()[x].as_long())
 
     t = threading.Thread(target=other)
     t.start()
     t.join()
-    assert len(seen) == 1
+    assert seen == [sat, 1]
     assert s.check() == sat
     s.close()

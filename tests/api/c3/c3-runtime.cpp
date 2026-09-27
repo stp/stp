@@ -33,6 +33,7 @@ THE SOFTWARE.
 
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace
@@ -277,18 +278,82 @@ TEST(c3_runtime, the_failed_state_is_the_solvers_alone)
   stp_tm_release(tm);
 }
 
-TEST(c3_runtime, one_live_solver_per_manager_in_this_alpha)
+TEST(c3_runtime, several_solvers_per_manager)
 {
   stp_tm tm = stp_tm_new(nullptr);
+  stp_tm_scope_push(tm);
+  stp_sort bv8 = stp_mk_bv_sort(tm, 8);
+  stp_term x = stp_declare(tm, "x", bv8);
   stp_solver s1 = stp_solver_new(tm, nullptr);
-  ASSERT_NE(nullptr, s1);
   stp_solver s2 = stp_solver_new(tm, nullptr);
-  EXPECT_EQ(nullptr, s2);
-  EXPECT_EQ(STP_ERR_UNSUPPORTED, code_of(tm));
-  stp_solver_delete(s1);
-  s2 = stp_solver_new(tm, nullptr);
-  EXPECT_NE(nullptr, s2);
+  ASSERT_NE(nullptr, s1);
+  ASSERT_NE(nullptr, s2);
+  EXPECT_EQ(nullptr, stp_tm_error(tm));
+  EXPECT_EQ(STP_OK, stp_solver_assert(s1, stp_eq(tm, x, stp_mk_bv_uint64(tm, 8, 1))));
+  EXPECT_EQ(STP_OK, stp_solver_assert(s2, stp_eq(tm, x, stp_mk_bv_uint64(tm, 8, 2))));
+  stp_result r;
+  ASSERT_EQ(STP_OK, stp_solver_check_sat(s1, &r));
+  EXPECT_EQ(STP_SAT, r.kind);
+  ASSERT_EQ(STP_OK, stp_solver_check_sat(s2, &r));
+  EXPECT_EQ(STP_SAT, r.kind);
+  stp_model m1 = stp_solver_model(s1);
+  stp_model m2 = stp_solver_model(s2);
+  ASSERT_NE(nullptr, m1);
+  ASSERT_NE(nullptr, m2);
+  uint64_t v = 0;
+  EXPECT_EQ(STP_OK, stp_model_uint64(m1, x, &v));
+  EXPECT_EQ(1u, v);
+  EXPECT_EQ(STP_OK, stp_model_uint64(m2, x, &v));
+  EXPECT_EQ(2u, v);
+  stp_model_release(m1);
+  stp_model_release(m2);
+  stp_solver_delete(s1); // the first goes first: the second stays usable
+  ASSERT_EQ(STP_OK, stp_solver_check_sat(s2, &r));
+  EXPECT_EQ(STP_SAT, r.kind);
+  EXPECT_EQ(1u, stp_solver_num_assertions(s2));
   stp_solver_delete(s2);
+  stp_solver s3 = stp_solver_new(tm, nullptr);
+  ASSERT_NE(nullptr, s3);
+  EXPECT_EQ(0u, stp_solver_num_assertions(s3));
+  stp_solver_delete(s3);
+  stp_tm_scope_pop(tm);
+  stp_tm_release(tm);
+}
+
+// A manager may be used from any thread, one call at a time: declare on this
+// thread, assert, check and read the model on another.
+TEST(c3_runtime, a_manager_may_be_used_from_another_thread)
+{
+  stp_tm tm = stp_tm_new(nullptr);
+  stp_tm_scope_push(tm);
+  stp_sort bv8 = stp_mk_bv_sort(tm, 8);
+  stp_term x = stp_declare(tm, "x", bv8);
+  stp_solver s = stp_solver_new(tm, nullptr);
+  ASSERT_NE(nullptr, s);
+  uint64_t seen = 0;
+  bool ok = false;
+  std::thread worker([&] {
+    stp_tm_scope_push(tm);
+    stp_term y = stp_declare(tm, "y", bv8);
+    ok = stp_solver_assert(s, stp_eq(tm, x, stp_mk_bv_uint64(tm, 8, 5))) == STP_OK &&
+         stp_solver_assert(s, stp_eq(tm, y, stp_bvadd(tm, x, stp_mk_bv_uint64(tm, 8, 1)))) == STP_OK;
+    stp_result r;
+    ok = ok && stp_solver_check_sat(s, &r) == STP_OK && r.kind == STP_SAT;
+    stp_model m = stp_solver_model(s);
+    ok = ok && m != nullptr && stp_model_uint64(m, y, &seen) == STP_OK;
+    stp_model_release(m);
+    stp_tm_scope_pop(tm);
+  });
+  worker.join();
+  EXPECT_TRUE(ok);
+  EXPECT_EQ(6u, seen);
+  EXPECT_EQ(nullptr, stp_tm_error(tm));
+  // and back here
+  stp_result r;
+  ASSERT_EQ(STP_OK, stp_solver_check_sat(s, &r));
+  EXPECT_EQ(STP_SAT, r.kind);
+  stp_solver_delete(s);
+  stp_tm_scope_pop(tm);
   stp_tm_release(tm);
 }
 

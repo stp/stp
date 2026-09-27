@@ -184,8 +184,9 @@ def test_solver_options_and_manager():
     s2 = Solver(tm=TermManager(), produce_models=False)
     assert s2.options["produce_models"] is False and s2.manager() is not tm
     s2.close()
-    with pytest.raises(Unsupported):
-        Solver()  # this alpha: one live solver per manager
+    s4 = Solver()  # any number of solvers over one manager
+    assert s4.manager() is tm and s4.check() == sat
+    s4.close()
     s.close()
     s3 = Solver(ctx=tm)  # z3py's ctx= alias
     assert s3.manager() is tm

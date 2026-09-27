@@ -638,7 +638,8 @@ def _count(value, what):
 
 
 class Solver(_core.SolverHandle):
-    """One solver over a term manager (this alpha admits one live solver per manager).
+    """One solver over a term manager; any number may be live over one manager, each with
+    its own assertion stack, options and models.
     `with s:` is push/pop (z3py). Lifetime is garbage collection; close() releases early.
     A check releases the GIL; interrupt() takes no lock and works from any thread; Ctrl-C
     reaches a check running on the main thread (KeyboardInterrupt, solver still usable)."""
@@ -976,9 +977,9 @@ class Model(_core.ModelHandle):
 
     @staticmethod
     def from_smt2(text, tm=None):
-        """Rebuild a model from the text of to_smt2(). With tm=None, or when tm already
-        carries its one live solver, the model gets a private TermManager; lookups with
-        terms of other managers translate them by name."""
+        """Rebuild a model from the text of to_smt2() on tm (a private TermManager with
+        tm=None), through a scratch solver of its own; the solvers already live over tm are
+        untouched. Lookups with terms of other managers translate them by name."""
         from . import _smt2
         if tm is None:
             tm = TermManager()
@@ -991,14 +992,8 @@ _core.register_value_classes(model=Model)
 
 
 def _model_of_constraints(tm, constraints):
-    """A Model in which every constraint holds (the pinned values of a rebuilt model), on tm
-    when tm has no live solver; otherwise (this alpha admits one solver per manager, and
-    the live one carries the user's assertions) on a private manager that the constraints
-    are translated into -- lookups on the model translate their keys by name."""
-    if tm._solver() is not None:
-        tm2 = TermManager(simplify=tm.simplify, default_rounding_mode=tm.default_rounding_mode)
-        constraints = [c.translate(tm2) for c in constraints]
-        tm = tm2
+    """A Model in which every constraint holds (the pinned values of a rebuilt model), built
+    on tm by a scratch solver of its own; the solvers already live over tm are untouched."""
     s = Solver(tm)
     try:
         s.add(*constraints)
@@ -1034,12 +1029,8 @@ def _manager_of(fs, tm):
 
 @contextlib.contextmanager
 def _scratch_solver(tm, fs, **options):
-    """A solver to run one query in: a fresh one on tm, or, when tm already carries its one
-    live solver (this alpha), a fresh manager that the formulas are translated into."""
-    if tm._solver() is not None:
-        tm2 = TermManager(simplify=tm.simplify, default_rounding_mode=tm.default_rounding_mode)
-        fs = [f.translate(tm2) if isinstance(f, ExprRef) else f for f in fs]
-        tm = tm2
+    """A fresh solver on tm to run one query in; the solvers already live over tm are
+    untouched."""
     s = Solver(tm, **options)
     try:
         yield s, fs
@@ -1083,15 +1074,6 @@ def prove(f, tm=None, ctx=None, show=True, **options):
 def parse_smt2_string(text, tm=None, ctx=None):
     """The formulas asserted by an SMT-LIB 2 script (its declarations enter tm's name table)."""
     tm = _tm(tm, ctx)
-    live = tm._solver()
-    if live is not None:
-        live.push()
-        try:
-            before = len(live.assertions())
-            live.from_string(text)
-            return live.assertions()[before:]
-        finally:
-            live.pop()
     s = Solver(tm)
     try:
         s.from_string(text)

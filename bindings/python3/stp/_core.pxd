@@ -468,12 +468,11 @@ cdef extern from "stp/stp.h":
 # ------------------------------------------------------------ the wrapper classes
 cdef class Manager:
     cdef stp_tm _tm
-    cdef unsigned long _owner
+    cdef unsigned long _owner   # the creating thread (informational)
     cdef bint _busy
     cdef object _live          # WeakValueDictionary: node id -> wrapper
     cdef dict _sorts           # sort id -> Sort wrapper
     cdef object __weakref__
-    cdef object _solver_ref    # weakref to the live SolverHandle, or None
     cdef int _check(self) except -1
     cdef object _wrap(self, stp_term h)
     cdef object _wrap_sort(self, stp_sort h)
@@ -489,7 +488,7 @@ cdef class Sort:
 cdef class Term:
     cdef stp_term _h
     cdef Manager _m
-    cdef unsigned long _owner   # the manager's thread, kept as a C field so that it survives tp_clear
+    cdef size_t _key            # the manager's identity, kept as a C field so that it survives tp_clear
     cdef object __weakref__
 
 cdef class OptionsHandle:
@@ -499,7 +498,7 @@ cdef class OptionsHandle:
 cdef class SolverHandle:
     cdef stp_solver _s
     cdef Manager _m
-    cdef unsigned long _owner
+    cdef size_t _key
     cdef object _terminator
     cdef object _sink
     cdef object _callback_error
@@ -510,20 +509,20 @@ cdef class SolverHandle:
 cdef class ModelHandle:
     cdef stp_model _h
     cdef Manager _m
-    cdef unsigned long _owner
+    cdef size_t _key
     cdef object __weakref__
 
 cdef class ArrayValueHandle:
     cdef stp_array_value _h
     cdef Manager _m
-    cdef unsigned long _owner
+    cdef size_t _key
 
 cdef class FunValueHandle:
     cdef stp_fun_value _h
     cdef Manager _m
-    cdef unsigned long _owner
+    cdef size_t _key
 
 cdef class StatisticsHandle:
     cdef stp_statistics _h
     cdef Manager _m
-    cdef unsigned long _owner
+    cdef size_t _key

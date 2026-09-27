@@ -69,10 +69,22 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   zeros, `fp.to_ubv`/`fp.to_sbv` out of range) are taken from the solve for every
   such node in the checked formula; a node built afterwards evaluates with a zero
   choice.
-- CONSTANTBV's constants are thread-local, so the manager constructor boots the
-  library once per thread.
-- This alpha admits one live `Solver` per `TermManager` and pins a manager to the
-  thread that created it. `interrupt()` reaches CaDiCaL/MiniSat mid-search through
+- CONSTANTBV's constants are thread-local, so every entry point boots the library
+  on the calling thread (one thread-local read once a thread has booted), and
+  node ids come from one process-wide atomic counter. A manager and everything
+  created from it may be used from any thread, one call at a time (the caller
+  serialises); `Solver::interrupt()` may be called from any thread at any time.
+- Any number of `Solver`s may be live over one `TermManager`. The engine has one
+  assertion stack and one set of flags per manager, so each solver mirrors its
+  levels: the solver in use (the active one) owns the engine's stack and flags,
+  and a switch shelves the previous solver's levels (its pending model is
+  snapshotted first), installs the new one's, and re-applies its options over
+  every registry default (`SolverImpl::activate`). The incremental driver is each
+  solver's own and is handed its levels afresh at every check, so it is not
+  affected. The cost is the replay of the stack at every switch: alternating two
+  solvers with large stacks pays it every time. The engine's coverage counters
+  (`statistics()` entries other than the per-solver ones) are per manager.
+- `interrupt()` reaches CaDiCaL/MiniSat mid-search through
   `UserDefinedFlags::stop_poll`; CryptoMiniSat is interrupted between solver calls.
 
 ## Engine changes made for the API

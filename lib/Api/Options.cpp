@@ -980,7 +980,7 @@ bool custom_cadical_options_elimmaxeff(EngineTarget& t, const OptionSpec&, const
 bool custom_cadical_factor(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.cadical_factor = as_mode<Flags::BVAMode>(v);
-  t.flags.cadical_factor_explicit = true;
+  t.flags.cadical_factor_explicit = t.explicit_value;
   return true;
 }
 bool custom_incremental_inprobing(EngineTarget& t, const OptionSpec&, const OptionValue& v)
@@ -1022,7 +1022,7 @@ bool custom_bv_term_abstraction_schema_groups(EngineTarget& t, const OptionSpec&
   if (!parseBVSchemaGroups(as_list(v), mask, error))
     fail_option(ErrorCode::OPTION_VALUE, spec.name, error);
   t.flags.bv_term_abstraction_schema_groups = mask;
-  t.flags.bv_term_abstraction_schema_groups_explicit = true;
+  t.flags.bv_term_abstraction_schema_groups_explicit = t.explicit_value;
   return true;
 }
 bool custom_bv_term_abstraction_profile(EngineTarget& t, const OptionSpec& spec,
@@ -1139,8 +1139,10 @@ void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
     // a default that the build cannot honour (a backend it lacks) stays unapplied
     if (force_all && !o.is_set[i] && !option_build_supported(spec))
       continue;
+    t.explicit_value = o.is_set[i];
     apply_option_to_engine(t, i, spec, r);
   }
+  t.explicit_value = true;
 }
 
 std::vector<std::string> unmapped_options()

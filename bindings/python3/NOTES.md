@@ -44,26 +44,28 @@ defect of the C or C++ layers met on the way. Nothing in `lib/` was changed.
   exception cannot be ignored, so Python needs no failed state (DESIGN.md
   section 7.3). `ParseError.lineno/offset` are parsed from the message
   (`parse error at L:C`).
-- **Threads.** A `Manager` is pinned to the thread that created it (this alpha,
-  DESIGN.md section 9): every entry point checks the caller and raises
-  `StateError` otherwise; the C++ core has the same pin (`Term::sort` and
-  friends raise their own `StateError`). `stp_solver_check_sat_budget`,
-  `stp_solver_entails`, the parsers and `stp_solver_write_cnf` run with the GIL
-  released, so `Solver.interrupt()` (which takes no lock and works on any
-  thread) reaches a running check. On the main thread a C `SIGINT` handler is
-  installed for the duration of a check: it calls `stp_solver_interrupt` and,
-  after the check, Python's own handler is restored and the signal re-delivered
+- **Threads.** A `Manager` and everything created from it may be used from
+  any thread, one call at a time (DESIGN.md section 9): the GIL serialises the
+  Python entry points, and the calls that release it
+  (`stp_solver_check_sat_budget`, `stp_solver_entails`, the parsers and
+  `stp_solver_write_cnf`) must not overlap another call on the same manager,
+  which is the caller's business, as it is in C++. `Solver.interrupt()` (which
+  takes no lock) may be called from any thread at any time and reaches a
+  running check. On the main thread a C `SIGINT` handler is installed for the
+  duration of a check: it calls `stp_solver_interrupt` and, after the check,
+  Python's own handler is restored and the signal re-delivered
   (`PyErr_SetInterrupt`), so Ctrl-C raises `KeyboardInterrupt` from `check()`
   and the solver stays usable. A user terminator (`set_terminator`) runs with
   the GIL; an exception it raises interrupts the check and is re-raised.
-- **Deferred release.** Node reference counts are plain. A wrapper finalised on
-  another thread, or while its manager is inside a check (`Manager.busy`), or
-  after the cyclic garbage collector already cleared its manager reference,
-  does not release its handle: the handle goes onto a process-wide queue
-  tagged with the owning thread (kept in a C field, so it survives `tp_clear`),
-  and the owning thread releases it at its next entry point. Handles whose
-  thread has ended stay queued (they keep their manager alive; nothing is
-  freed twice).
+- **Deferred release.** Node reference counts are plain. A wrapper finalised
+  while its manager is inside a check (`Manager.busy`), or after the cyclic
+  garbage collector already cleared its manager reference, does not release
+  its handle: the handle goes onto a process-wide queue tagged with its manager
+  (kept in a C field, so it survives `tp_clear`), and the next entry point of
+  any manager, on whichever thread, releases every queued handle whose manager
+  is not busy at that moment. A finaliser that runs while the manager is idle
+  releases at once, from any thread: the GIL serialises it with every other
+  use of the manager.
 - **Options.** `Options` is a mapping over the registry (names, `python_key`s
   with `-` and `.` as `_`, the aliases, z3py's `timeout`); the type of the
   registry entry picks the typed setter (`bool`, `int`/`uint`, `duration` in

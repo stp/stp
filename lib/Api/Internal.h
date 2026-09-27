@@ -150,9 +150,12 @@ struct ManagerImpl
   long refs = 0;
   std::uint64_t id = 0;
   STPMgr* bm = nullptr;
-  SolverImpl* solver = nullptr; // this alpha: the one live solver
+  // Every live solver over this manager, and the one whose assertion levels
+  // are installed in the engine's stack and whose options are applied to the
+  // engine's flags; the others keep their levels shelved (SolverImpl::activate).
+  std::vector<SolverImpl*> solvers;
+  SolverImpl* active = nullptr;
   TermManager::Config config;
-  std::thread::id owner;
 
   // sorts, interned by a structural key
   std::vector<SortRec> sorts;
@@ -205,8 +208,10 @@ struct ManagerImpl
       delete this;
   }
 
+  // Refuses a poisoned manager, and readies the calling thread for the
+  // engine (the constant bit-vector library boots per thread): a manager may
+  // be used from any thread, one call at a time.
   void check_alive(const char* fn) const;
-  void check_thread(const char* fn) const;
 
   // sorts
   std::uint32_t intern_sort(const std::string& key, SortRec&& rec);
@@ -332,6 +337,11 @@ struct EngineTarget
   UserDefinedFlags& flags;
   ManagerImpl* mgr;
   SolverImpl* solver;
+  // Whether the value being applied was set by the caller (true) or is a
+  // registry default re-applied by apply_all_options (false): the engine's
+  // "explicitly requested" markers follow it, so a default never counts as a
+  // request (the CaDiCaL factor warning fires on requests only).
+  bool explicit_value = true;
 };
 bool apply_option_to_engine(EngineTarget& t, std::size_t index,
                             const OptionSpec& spec, const OptionValue& v);
@@ -439,12 +449,22 @@ struct SolverImpl
   // C layer: the failed state
   std::shared_ptr<const ErrorDetails> failed;
 
+  // While another solver of the manager is active, this solver's assertion
+  // levels (the base level first) live here; while this one is active they
+  // are the engine's own stack.
+  std::vector<std::vector<ASTNode>> shelf;
+
   SolverImpl(ManagerImpl* m, const Options& o);
   ~SolverImpl();
   SolverImpl(const SolverImpl&) = delete;
   SolverImpl& operator=(const SolverImpl&) = delete;
 
   void check_alive(const char* fn) const;
+  void enter(const char* fn); // check_alive, then activate: every engine-touching entry
+  void activate();            // install this solver's levels and options in the engine
+  void deactivate();          // shelve them (the active solver only)
+  std::size_t level_count() const; // engine levels while active, shelved ones otherwise
+  void reapply_engine_defaults(); // every registry default, then this solver's options
   void apply_options(const char* fn);
   bool option_window_open(const OptionSpec& spec) const;
   void ensure_snapshot(); // materialise a pending model before the tables change

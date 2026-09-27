@@ -587,7 +587,7 @@ STP_API const char* stp_option_info_short(const char* name);    /* "" if none */
 STP_API const char* stp_option_info_negation(const char* name); /* "" if none */
 
 /* ------------------------------------------------------------------ solver */
-STP_API stp_solver stp_solver_new(stp_tm, stp_options /* NULL: defaults; copied */); /* this alpha: one live solver per manager (UNSUPPORTED for a second) */
+STP_API stp_solver stp_solver_new(stp_tm, stp_options /* NULL: defaults; copied */); /* any number of solvers per manager, each with its own stack, options and models */
 STP_API void stp_solver_delete(stp_solver); /* terms, sorts and models stay valid */
 STP_API const stp_error* stp_solver_failed(stp_solver); /* the failure that put the solver in its failed state; NULL if none; infallible */
 STP_API void stp_solver_clear_error(stp_solver);        /* leave the failed state */

@@ -1043,8 +1043,8 @@ public:
 class STP_API_EXPORT Solver
 {
 public:
-  /// Copies options; resolve() runs here. This alpha admits one live solver
-  /// per manager and refuses a second with UNSUPPORTED.
+  /// Copies options; resolve() runs here. Any number of solvers may be live
+  /// over one manager; each has its own assertion stack, options and models.
   explicit Solver(TermManager tm, Options options = Options());
   Solver(Solver&&) noexcept;
   Solver& operator=(Solver&&) noexcept;

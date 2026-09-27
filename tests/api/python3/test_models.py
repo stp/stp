@@ -232,15 +232,15 @@ def test_model_pickle_and_translate():
     m4 = m.translate(tm2)
     assert m4.manager() is tm2 and m4[BitVec("x", 8, tm=tm2)].as_long() == 5 and m4[x].as_long() == 5
     assert m.translate(main_tm()) is m
-    # from_smt2 onto a manager whose one live solver is busy builds the model privately;
-    # the live solver is untouched
+    # from_smt2 onto a manager with a live solver builds the model through a scratch
+    # solver of its own; the live solver is untouched
     s = Solver()
     s.add(x == 1)
     m5 = Model.from_smt2(m.to_smt2(), main_tm())
-    assert m5.manager() is not main_tm() and m5[x].as_long() == 5 and m5[f](5).as_long() == 9
-    assert s.check() == sat and s.model()[x].as_long() == 1
+    assert m5.manager() is main_tm() and m5[x].as_long() == 5 and m5[f](5).as_long() == 9
+    assert s.check() == sat and s.model()[x].as_long() == 1 and len(s.assertions()) == 1
     s.close()
-    m6 = Model.from_smt2(m.to_smt2(), main_tm())  # no live solver: on the manager itself
+    m6 = Model.from_smt2(m.to_smt2(), main_tm())  # no live solver: the same
     assert m6.manager() is main_tm() and m6[x].as_long() == 5
     with pytest.raises(TypeError):
         Model.from_smt2("()", 3)

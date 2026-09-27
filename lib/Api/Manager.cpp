@@ -55,7 +55,9 @@ namespace
 std::atomic<std::uint64_t> g_manager_ids{1};
 
 // CONSTANTBV keeps its constants thread-local, so the boot is per thread: a
-// manager created on a second thread must not run on zeroed constants.
+// manager used from a second thread must not run on zeroed constants. Every
+// entry point passes through check_alive, which calls this; the check is one
+// thread-local read once a thread has booted.
 void boot_constant_bv()
 {
   static thread_local bool booted = false;
@@ -75,7 +77,6 @@ ManagerImpl::ManagerImpl(const TermManager::Config& cfg) : config(cfg)
 {
   boot_constant_bv();
   id = g_manager_ids.fetch_add(1);
-  owner = std::this_thread::get_id();
   bm = new STPMgr();
   if (config.simplify)
     bm->defaultNodeFactory = new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm);
@@ -127,15 +128,9 @@ ManagerImpl::~ManagerImpl()
 
 void ManagerImpl::check_alive(const char* fn) const
 {
+  boot_constant_bv();
   if (poisoned)
     fail(ErrorCode::STATE, fn, "the term manager is poisoned: " + poison_message);
-}
-
-void ManagerImpl::check_thread(const char* fn) const
-{
-  if (std::this_thread::get_id() != owner)
-    fail(ErrorCode::STATE, fn,
-         "this alpha pins a term manager to the thread that created it");
 }
 
 NodeFactory* ManagerImpl::folding_factory()
@@ -897,7 +892,6 @@ ManagerImpl* live(const TermManager& tm, const char* fn)
   if (m == nullptr)
     detail::fail(ErrorCode::STATE, fn, "the term manager handle was moved from");
   m->check_alive(fn);
-  m->check_thread(fn);
   return m;
 }
 } // namespace

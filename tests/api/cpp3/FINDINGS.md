@@ -322,7 +322,11 @@ allocating in the new thread's arena; glibc reports
 the engine in the process succeeds, and so does the same sequence on one
 thread. Every API entry the second thread makes on the first manager is
 refused with `STATE` as designed, so this is engine state shared between
-`STPMgr` instances, not the API's pinning. Reproducer: `Threads.DISABLED_a_manager_created_on_another_thread_works_there` in `api3-errors.cpp`.
+`STPMgr` instances, not the API's pinning. Reproducer: `Threads.a_manager_created_on_another_thread_works_there` in
+`api3-errors.cpp` (enabled since the fix). The pin itself is gone too: a
+manager may be used from any thread, one call at a time (node ids are
+process-wide, the constant library boots per thread at every entry point),
+and any number of solvers may be live over one manager (`api3-solvers.cpp`).
 
 ### D. A CVC or SMT-LIB 1 syntax error aborts, and CVC input requires a `QUERY`
 

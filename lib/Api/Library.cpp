@@ -106,9 +106,9 @@ std::map<std::string, std::string> capabilities()
   c["kind.FP_TO_FP_FROM_REAL"] = "values-only";
   c["cores.assertions"] = "false";
   c["cores.assumptions"] = "true";
-  c["solvers-per-manager"] = "1";
+  c["solvers-per-manager"] = "unbounded";
   c["interrupt.cryptominisat"] = "between-solver-calls";
-  c["threads"] = "pinned-to-creating-thread";
+  c["threads"] = "any-thread-one-call-at-a-time";
   c["api.version"] = "3.0.0-alpha";
   return c;
 }

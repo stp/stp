@@ -254,10 +254,15 @@ cdef int _raise_thread_local(const char* fn) except -1:
 # ----------------------------------------------------------------- deferred release
 #
 # Node reference counts are plain, and a manager is used by one thread at a
-# time; a wrapper finalised on another thread, or while the manager's thread
-# is inside a check (a Python callback ran the garbage collector), must not
-# touch them. Its handle goes onto this queue and is released at the owning
-# thread's next entry point.
+# time: the GIL serialises every wrapper finaliser with every other Python
+# use of the manager, except while a check or a parse runs with the GIL
+# released (Manager.busy). A wrapper finalised then, or after the cyclic
+# garbage collector cleared its manager reference, must not touch the
+# counts: its handle goes onto this queue, tagged with its manager, and the
+# next entry point of any manager (on whichever thread) releases every queued
+# handle whose manager is not busy then -- with the GIL held and the manager
+# idle, nothing else can be touching its counts. A manager's own handle is
+# tagged 0 and is never busy.
 
 cdef enum:
     DEFER_TERM = 0
@@ -270,12 +275,22 @@ cdef enum:
 
 _deferred = []
 _deferred_lock = threading.Lock()
+_busy_keys = set()  # the managers inside a check or a parse (the GIL is released there)
 
 
-cdef void _defer(unsigned long owner, int kind, void* h):
+cdef void _set_busy(Manager m, bint flag):
+    m._busy = flag
+    with _deferred_lock:
+        if flag:
+            _busy_keys.add(<size_t>m._tm)
+        else:
+            _busy_keys.discard(<size_t>m._tm)
+
+
+cdef void _defer(size_t key, int kind, void* h):
     try:
         with _deferred_lock:
-            _deferred.append((owner, kind, <size_t>h))
+            _deferred.append((key, kind, <size_t>h))
     except BaseException:
         pass  # a wrapper dying during interpreter teardown: leak rather than raise
 
@@ -297,15 +312,15 @@ cdef void _release_kind(int kind, void* h):
         stp_tm_release(<stp_tm>h)
 
 
-cdef void _drain(unsigned long me):
+cdef void _drain_idle():
     cdef list mine = []
     cdef list keep = []
     with _deferred_lock:
         for entry in _deferred:
-            if entry[0] == me:
-                mine.append(entry)
-            else:
+            if entry[0] in _busy_keys:
                 keep.append(entry)
+            else:
+                mine.append(entry)
         _deferred[:] = keep
     for entry in mine:
         _release_kind(<int>entry[1], <void*><size_t>entry[2])
@@ -318,8 +333,8 @@ def pending_releases():
 
 
 def drain_releases():
-    """Release the queued handles that belong to this thread (also done at every entry point)."""
-    _drain(PyThread_get_thread_ident())
+    """Release every queued handle whose manager is not busy (also done at every entry point)."""
+    _drain_idle()
 
 
 # ----------------------------------------------------------------- class registration
@@ -397,9 +412,10 @@ cdef object _int_from_hex(str digits, bint signed, uint32_t width):
 cdef class Manager:
     """A term manager (stp_tm): the node factory, the sort pool and the name table.
 
-    Pinned to the thread that created it (this alpha): every entry point checks
-    the calling thread and raises StateError from another one. interrupt() on a
-    solver is the one call allowed from any thread."""
+    Usable from any thread, one call at a time: the GIL serialises the Python
+    entry points, and a check or a parse (which release it) must not overlap
+    another call on the same manager. Solver.interrupt() may be called from
+    any thread at any time. Any number of solvers may be live over one manager."""
 
     def __cinit__(self, *args, **kwargs):
         self._tm = NULL
@@ -407,7 +423,6 @@ cdef class Manager:
         self._busy = False
         self._live = weakref.WeakValueDictionary()
         self._sorts = {}
-        self._solver_ref = None
 
     def __init__(self, OptionsHandle options=None, simplify=True, int default_rounding_mode=0,
                  uf_sort_width=16):
@@ -427,21 +442,17 @@ cdef class Manager:
 
     def __dealloc__(self):
         if self._tm != NULL:
-            if PyThread_get_thread_ident() == self._owner and not self._busy:
+            if not self._busy:
                 stp_tm_release(self._tm)
             else:
-                _defer(self._owner, DEFER_TM, <void*>self._tm)
+                _defer(0, DEFER_TM, <void*>self._tm)
             self._tm = NULL
 
     cdef int _check(self) except -1:
         if self._tm == NULL:
             raise StateError("the term manager is not initialised")
-        if PyThread_get_thread_ident() != self._owner:
-            raise StateError(
-                "this term manager is pinned to the thread that created it (this alpha); "
-                "use it from that thread only (Solver.interrupt() is allowed from any thread)")
         if _deferred:
-            _drain(self._owner)
+            _drain_idle()
         return 0
 
     cdef int _fail(self, const char* fn) except -1:
@@ -473,7 +484,7 @@ cdef class Manager:
         term = <Term>obj
         term._h = h
         term._m = self
-        term._owner = self._owner
+        term._key = <size_t>self._tm
         self._live[tid] = obj
         return obj
 
@@ -560,22 +571,14 @@ cdef class Manager:
 
     @property
     def owner_thread(self):
-        """The ident of the thread the manager is pinned to."""
+        """The ident of the thread that created the manager (informational: a manager may
+        be used from any thread, one call at a time)."""
         return self._owner
 
     @property
     def busy(self):
         """True while a check or a parse runs on this manager (the GIL is released then)."""
         return self._busy
-
-    def live_solver(self):
-        """The live SolverHandle over this manager, or None."""
-        if self._solver_ref is None:
-            return None
-        s = self._solver_ref()
-        if s is None or (<SolverHandle>s)._s == NULL:
-            return None
-        return s
 
     # ------------------------------------------------------------ sorts
     def bool_sort(self):
@@ -868,7 +871,7 @@ cdef class Manager:
         obj = cls.__new__(cls)
         (<Term>obj)._h = h
         (<Term>obj)._m = self
-        (<Term>obj)._owner = self._owner
+        (<Term>obj)._key = <size_t>self._tm
         return obj
 
     def simplify_term(self, Term t not None):
@@ -1008,16 +1011,17 @@ cdef class Term:
         self._m = None
 
     def __dealloc__(self):
-        # Released at once on the manager's thread while no check runs; otherwise (another
-        # thread, a check in progress, or the manager reference already cleared by the
-        # cyclic garbage collector) queued for the owning thread's next entry point.
+        # Released at once while no check runs on the manager (the GIL serialises this
+        # finaliser with every other use of it); otherwise (a check in progress, or the
+        # manager reference already cleared by the cyclic garbage collector) queued for
+        # the manager's next entry point.
         cdef Manager m
         if self._h != NULL:
             m = self._m
-            if m is not None and not m._busy and PyThread_get_thread_ident() == self._owner:
+            if m is not None and not m._busy:
                 stp_term_release(self._h)
             else:
-                _defer(self._owner, DEFER_TERM, <void*>self._h)
+                _defer(self._key, DEFER_TERM, <void*>self._h)
             self._h = NULL
 
     def _manager(self):
@@ -1512,7 +1516,8 @@ cdef void _collect_cb(const char* text, size_t n, void* user) noexcept with gil:
 # ----------------------------------------------------------------- Solver
 
 cdef class SolverHandle:
-    """A solver (stp_solver) over a Manager. This alpha admits one live solver per manager."""
+    """A solver (stp_solver) over a Manager; any number may be live over one manager, each
+    with its own assertion stack, options and models."""
 
     def __cinit__(self, *args, **kwargs):
         self._s = NULL
@@ -1529,17 +1534,16 @@ cdef class SolverHandle:
         if self._s == NULL:
             tm._fail("stp_solver_new")
         self._m = tm
-        self._owner = tm._owner
-        tm._solver_ref = weakref.ref(self)
+        self._key = <size_t>tm._tm
 
     def __dealloc__(self):
         cdef Manager m
         if self._s != NULL:
             m = self._m
-            if m is not None and not m._busy and PyThread_get_thread_ident() == self._owner:
+            if m is not None and not m._busy:
                 stp_solver_delete(self._s)
             else:
-                _defer(self._owner, DEFER_SOLVER, <void*>self._s)
+                _defer(self._key, DEFER_SOLVER, <void*>self._s)
             self._s = NULL
 
     cdef int _live(self) except -1:
@@ -1778,12 +1782,12 @@ cdef class SolverHandle:
                 stp_py_sigint_fired = 0
                 stp_py_sigint_target = self._s
                 old = signal(SIGINT, stp_py_sigint_handler)
-            self._m._busy = True
+            _set_busy(self._m, True)
             try:
                 with nogil:
                     st = stp_solver_check_sat_budget(self._s, n, arr, bp, &r)
             finally:
-                self._m._busy = False
+                _set_busy(self._m, False)
                 if main_thread:
                     stp_py_sigint_target = NULL
                     if old != SIG_ERR:
@@ -1824,12 +1828,12 @@ cdef class SolverHandle:
             stp_py_sigint_fired = 0
             stp_py_sigint_target = self._s
             old = signal(SIGINT, stp_py_sigint_handler)
-        self._m._busy = True
+        _set_busy(self._m, True)
         try:
             with nogil:
                 st = stp_solver_entails(self._s, f._h, bp, &r)
         finally:
-            self._m._busy = False
+            _set_busy(self._m, False)
             if main_thread:
                 stp_py_sigint_target = NULL
                 if old != SIG_ERR:
@@ -1924,7 +1928,7 @@ cdef class SolverHandle:
         obj = cls.__new__(cls)
         (<StatisticsHandle>obj)._h = h
         (<StatisticsHandle>obj)._m = self._m
-        (<StatisticsHandle>obj)._owner = self._m._owner
+        (<StatisticsHandle>obj)._key = <size_t>self._m._tm
         return obj
 
     # ------------------------------------------------------------ symbols and scripts
@@ -1944,12 +1948,12 @@ cdef class SolverHandle:
         cdef const char* p = b
         cdef stp_parse_mode mode = STP_PARSE_EXECUTE if execute else STP_PARSE_DECLARE_AND_ASSERT
         cdef stp_status st
-        self._m._busy = True
+        _set_busy(self._m, True)
         try:
             with nogil:
                 st = stp_solver_parse_smt2(self._s, p, mode)
         finally:
-            self._m._busy = False
+            _set_busy(self._m, False)
         if st != STP_OK:
             self._fail_mutate("stp_solver_parse_smt2")
 
@@ -1959,12 +1963,12 @@ cdef class SolverHandle:
         cdef const char* p = b
         cdef stp_format f = <stp_format>format
         cdef stp_status st
-        self._m._busy = True
+        _set_busy(self._m, True)
         try:
             with nogil:
                 st = stp_solver_parse(self._s, p, f)
         finally:
-            self._m._busy = False
+            _set_busy(self._m, False)
         if st != STP_OK:
             self._fail_mutate("stp_solver_parse")
 
@@ -1974,12 +1978,12 @@ cdef class SolverHandle:
         cdef const char* p = b
         cdef stp_format f = <stp_format>format
         cdef stp_status st
-        self._m._busy = True
+        _set_busy(self._m, True)
         try:
             with nogil:
                 st = stp_solver_parse_file(self._s, p, f)
         finally:
-            self._m._busy = False
+            _set_busy(self._m, False)
         if st != STP_OK:
             self._fail_mutate("stp_solver_parse_file")
 
@@ -2011,12 +2015,12 @@ cdef class SolverHandle:
         cdef list chunks = []
         cdef void* user = <void*>chunks
         cdef stp_status st
-        self._m._busy = True
+        _set_busy(self._m, True)
         try:
             with nogil:
                 st = stp_solver_write_cnf(self._s, _collect_cb, user)
         finally:
-            self._m._busy = False
+            _set_busy(self._m, False)
         if st != STP_OK:
             self._m._fail("stp_solver_write_cnf")
         return b"".join(chunks)
@@ -2039,7 +2043,7 @@ cdef object _wrap_model(Manager m, stp_model h):
     obj = cls.__new__(cls)
     (<ModelHandle>obj)._h = h
     (<ModelHandle>obj)._m = m
-    (<ModelHandle>obj)._owner = m._owner
+    (<ModelHandle>obj)._key = <size_t>m._tm
     return obj
 
 
@@ -2054,10 +2058,10 @@ cdef class ModelHandle:
         cdef Manager m
         if self._h != NULL:
             m = self._m
-            if m is not None and not m._busy and PyThread_get_thread_ident() == self._owner:
+            if m is not None and not m._busy:
                 stp_model_release(self._h)
             else:
-                _defer(self._owner, DEFER_MODEL, <void*>self._h)
+                _defer(self._key, DEFER_MODEL, <void*>self._h)
             self._h = NULL
 
     def _manager(self):
@@ -2116,7 +2120,7 @@ cdef class ModelHandle:
         obj = cls.__new__(cls)
         (<ArrayValueHandle>obj)._h = h
         (<ArrayValueHandle>obj)._m = self._m
-        (<ArrayValueHandle>obj)._owner = self._m._owner
+        (<ArrayValueHandle>obj)._key = <size_t>self._m._tm
         return obj
 
     def fun_value(self, Term t not None):
@@ -2128,7 +2132,7 @@ cdef class ModelHandle:
         obj = cls.__new__(cls)
         (<FunValueHandle>obj)._h = h
         (<FunValueHandle>obj)._m = self._m
-        (<FunValueHandle>obj)._owner = self._m._owner
+        (<FunValueHandle>obj)._key = <size_t>self._m._tm
         return obj
 
     def array_bytes(self, Term t not None, first_index, count):
@@ -2196,10 +2200,10 @@ cdef class ArrayValueHandle:
         cdef Manager m
         if self._h != NULL:
             m = self._m
-            if m is not None and not m._busy and PyThread_get_thread_ident() == self._owner:
+            if m is not None and not m._busy:
                 stp_array_value_release(self._h)
             else:
-                _defer(self._owner, DEFER_ARRAY, <void*>self._h)
+                _defer(self._key, DEFER_ARRAY, <void*>self._h)
             self._h = NULL
 
     def _manager(self):
@@ -2259,10 +2263,10 @@ cdef class FunValueHandle:
         cdef Manager m
         if self._h != NULL:
             m = self._m
-            if m is not None and not m._busy and PyThread_get_thread_ident() == self._owner:
+            if m is not None and not m._busy:
                 stp_fun_value_release(self._h)
             else:
-                _defer(self._owner, DEFER_FUN, <void*>self._h)
+                _defer(self._key, DEFER_FUN, <void*>self._h)
             self._h = NULL
 
     def _manager(self):
@@ -2356,10 +2360,10 @@ cdef class StatisticsHandle:
         cdef Manager m
         if self._h != NULL:
             m = self._m
-            if m is not None and not m._busy and PyThread_get_thread_ident() == self._owner:
+            if m is not None and not m._busy:
                 stp_statistics_release(self._h)
             else:
-                _defer(self._owner, DEFER_STATS, <void*>self._h)
+                _defer(self._key, DEFER_STATS, <void*>self._h)
             self._h = NULL
 
     def size(self):

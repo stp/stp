@@ -195,10 +195,17 @@ the table of option letters and ``ifaceflag_t`` ordinals.
 Limits of the alpha
 -------------------
 
-One live ``Solver`` per ``TermManager``; a manager is used from the thread that
-created it (``interrupt()`` is the exception); CryptoMiniSat is interrupted
-between its solver calls only; equality over a constant array is refused as
-UNSUPPORTED; ``fp.to_real`` converts a float value exactly and refuses a
-symbolic float (the engine has no such conversion); ``unsat_assumptions``
-after a batch check reports every assumption. ``capabilities()`` states each
-of these.
+CryptoMiniSat is interrupted between its solver calls only; equality over a
+constant array is refused as UNSUPPORTED; ``fp.to_real`` converts a float value
+exactly and refuses a symbolic float (the engine has no such conversion);
+``unsat_assumptions`` after a batch check reports every assumption.
+``capabilities()`` states each of these.
+
+Several solvers, several threads
+--------------------------------
+
+Any number of solvers may be live over one manager, each with its own
+assertion stack, options and models; switching between them replays the
+assertion stack, which is the one cost. A manager and everything created from
+it may be used from any thread, one call at a time: the caller serialises, and
+``interrupt()`` is the one call that may overlap a running check.

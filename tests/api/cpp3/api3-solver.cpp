@@ -24,8 +24,8 @@ THE SOFTWARE.
 
 // api3-solver.cpp -- the solver: the assertion stack, resets, checks with
 // assumptions, entailment, incremental sessions, budgets, interrupts,
-// terminators, candidate models, statistics, CNF output and the one-solver
-// rule of this alpha.
+// terminators, candidate models, statistics, CNF output and moved-from
+// solvers (several live solvers per manager: api3-solvers.cpp).
 
 #include "api3_common.hpp"
 
@@ -573,12 +573,9 @@ TEST_F(SolverTest, write_cnf)
   EXPECT_EQ(fresh.assertions().size(), 3u);
 }
 
-TEST_F(SolverTest, one_live_solver_per_manager)
+TEST_F(SolverTest, moved_from_solvers)
 {
-  auto e = API3_ERROR_OF(Solver(tm));
-  ASSERT_TRUE(e.has_value());
-  EXPECT_EQ(e->code(), ErrorCode::UNSUPPORTED);
-  EXPECT_EQ(capabilities()["solvers-per-manager"], "1");
+  EXPECT_EQ(capabilities()["solvers-per-manager"], "unbounded");
   s.add(x == 1);
   EXPECT_TRUE(s.check_sat().is_sat()); // the first is untouched
   // a moved-from solver is empty; the target owns the state
@@ -600,7 +597,9 @@ TEST_F(SolverTest, one_live_solver_per_manager)
   EXPECT_FALSE(s.interrupt_pending());
   s.interrupt(); // a no-op, not a crash
   s.clear_interrupt();
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, Solver third(tm));
+  Solver third(tm); // any number of solvers over the manager
+  EXPECT_TRUE(third.check_sat().is_sat());
+  EXPECT_TRUE(third.assertions().empty());
   // move-assignment releases the target's engine
   {
     TermManager t2;

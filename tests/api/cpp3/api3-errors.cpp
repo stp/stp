@@ -135,7 +135,13 @@ TEST(Errors, the_recoverable_call_had_no_effect)
   API3_EXPECT_ERROR(ErrorCode::OPTION_TIMING, s.options().set_uint("random-seed", 1));
   API3_EXPECT_ERROR(ErrorCode::VALUE_OUT_OF_RANGE, tm.mk_bv(8, 300));
   API3_EXPECT_ERROR(ErrorCode::ARITY, tm.mk_term(Kind::NOT, {}));
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, Solver second(tm));
+  {
+    // a second solver over the manager is fine and leaves the first alone
+    Solver second(tm);
+    second.add(x == 5);
+    EXPECT_TRUE(second.check_sat().is_sat());
+    EXPECT_EQ(second.model().uint64_value(x), 5u);
+  }
   API3_EXPECT_ERROR(ErrorCode::IO, s.parse_file("api3_no_such_file.smt2"));
   API3_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, s.check_sat({x}));
   EXPECT_EQ(tm.symbols().size(), symbols);
@@ -155,13 +161,13 @@ TEST(Library, version_and_capabilities)
   const std::map<std::string, std::string> caps = capabilities();
   EXPECT_EQ(caps.count("api.version"), 1u);
   EXPECT_EQ(caps.at("api.version").rfind("3.", 0), 0u);
-  EXPECT_EQ(caps.at("solvers-per-manager"), "1");
+  EXPECT_EQ(caps.at("solvers-per-manager"), "unbounded");
   EXPECT_EQ(caps.at("kind.FP_TO_REAL"), "values-only");
   EXPECT_EQ(caps.at("kind.FP_TO_FP_FROM_REAL"), "values-only");
   EXPECT_EQ(caps.at("real.nonlinear"), "false");
   EXPECT_EQ(caps.at("array.const-equality"), "false");
   EXPECT_EQ(caps.at("cores.assumptions"), "true");
-  EXPECT_EQ(caps.at("threads"), "pinned-to-creating-thread");
+  EXPECT_EQ(caps.at("threads"), "any-thread-one-call-at-a-time");
   EXPECT_EQ(caps.at("lra"), "true");
   EXPECT_TRUE(caps.at("highs") == "true" || caps.at("highs") == "false");
   // the backends of this build are listed with their versions
@@ -283,7 +289,10 @@ TEST(Containers, hash_equal_and_less)
   EXPECT_EQ((x != y).kind(), Kind::DISTINCT);
 }
 
-TEST(Threads, a_manager_is_pinned_to_its_thread)
+// A manager and everything created from it may be used from any thread, one
+// call at a time (the caller serialises); only interrupt() may overlap a
+// running check.
+TEST(Threads, a_manager_may_be_used_from_another_thread)
 {
   TermManager tm;
   const Sort bv8 = tm.mk_bv_sort(8);
@@ -292,46 +301,101 @@ TEST(Threads, a_manager_is_pinned_to_its_thread)
   s.add(x == 1);
   ASSERT_TRUE(s.check_sat().is_sat());
   const Model m = s.model();
-  std::vector<std::optional<RecoverableError>> errors;
-  bool noexcept_ok = false;
+  bool ok = false;
+  std::string failure;
   std::thread worker([&] {
-    errors.push_back(API3_ERROR_OF(tm.declare("y", bv8)));
-    errors.push_back(API3_ERROR_OF(tm.mk_bv(8, 1)));
-    errors.push_back(API3_ERROR_OF(x.kind()));
-    errors.push_back(API3_ERROR_OF(x + x));
-    errors.push_back(API3_ERROR_OF(x.sort()));
-    errors.push_back(API3_ERROR_OF(s.check_sat()));
-    errors.push_back(API3_ERROR_OF(s.add(x == 2)));
-    errors.push_back(API3_ERROR_OF(m.value(x)));
-    errors.push_back(API3_ERROR_OF(bvult(x, 3)));
-    // the noexcept queries and interrupt() are allowed anywhere
-    noexcept_ok = x.is_value() == false && x.is_const() && x.id() != 0 && !x.is_null() &&
-                  x.same_as(x) && tm.id() != 0 && !s.interrupt_pending();
-    s.interrupt();
-    noexcept_ok = noexcept_ok && s.interrupt_pending();
-    s.clear_interrupt();
+    try
+    {
+      const Term y = tm.declare("y", bv8);
+      const Term one = tm.mk_bv(8, 1);
+      ok = x.is_const() && (x + one).sort() == bv8 && m.uint64_value(x) == 1 &&
+           bvult(x, 3).sort().is_bool();
+      s.add(y == x + one);
+      ok = ok && s.check_sat().is_sat() && s.model().uint64_value(y) == 2;
+      s.interrupt();
+      ok = ok && s.interrupt_pending();
+      s.clear_interrupt();
+    }
+    catch (const RecoverableError& e)
+    {
+      failure = e.what();
+    }
   });
   worker.join();
-  ASSERT_EQ(errors.size(), 9u);
-  for (const std::optional<RecoverableError>& e : errors)
-  {
-    ASSERT_TRUE(e.has_value());
-    EXPECT_EQ(e->code(), ErrorCode::STATE);
-    EXPECT_NE(std::string(e->what()).find("thread"), std::string::npos);
-  }
-  EXPECT_TRUE(noexcept_ok);
-  // nothing changed, and the owning thread goes on
-  EXPECT_FALSE(tm.symbol("y").has_value());
-  EXPECT_EQ(s.assertions().size(), 1u);
+  EXPECT_TRUE(failure.empty()) << failure;
+  EXPECT_TRUE(ok);
+  // and the creating thread goes on where the worker left off
+  ASSERT_TRUE(tm.symbol("y").has_value());
+  EXPECT_EQ(s.assertions().size(), 2u);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.model().uint64_value(*tm.symbol("y")), 2u);
   EXPECT_EQ(m.uint64_value(x), 1u);
+}
+
+// Declared on one thread, asserted and checked on a second, read on a third:
+// every theory's engine state (constant bit-vectors, floats, Reals,
+// functions, arrays) is exercised off the creating thread.
+TEST(Threads, a_manager_handed_from_thread_to_thread)
+{
+  TermManager tm;
+  Solver s(tm);
+  const Sort bv8 = tm.mk_bv_sort(8), f32 = tm.mk_fp32_sort();
+  const Term x = tm.declare("x", bv8), fx = tm.declare("fx", f32);
+  const Term r = tm.declare("r", tm.mk_real_sort());
+  const Term f = tm.declare("f", tm.mk_fun_sort({bv8}, bv8));
+  const Term a = tm.declare("a", tm.mk_array_sort(bv8, bv8));
+  const Term one_and_a_half = tm.mk_fp(f32, RoundingMode::RNE, 1.5);
+  std::string failure;
+  std::thread second([&] {
+    try
+    {
+      s.add(x == 5);
+      s.add(fx == one_and_a_half);
+      s.add(real_lt(r + 1, tm.mk_real("3/2")));
+      s.add(f(x) == 7);
+      s.add(a[x] == 9);
+      if (!s.check_sat().is_sat())
+        failure = "the check did not answer sat";
+    }
+    catch (const RecoverableError& e)
+    {
+      failure = e.what();
+    }
+  });
+  second.join();
+  ASSERT_TRUE(failure.empty()) << failure;
+  std::thread third([&] {
+    try
+    {
+      const Model m = s.model();
+      if (m.uint64_value(x) != 5)
+        failure = "x";
+      if (!m.value(fx).same_as(one_and_a_half))
+        failure = "fx";
+      const RationalValue q = m.real_value(r);
+      if (q.to_double() >= 0.5)
+        failure = "r";
+      if (m.uint64_value(f(x)) != 7)
+        failure = "f";
+      if (m.uint64_value(a[x]) != 9)
+        failure = "a";
+    }
+    catch (const RecoverableError& e)
+    {
+      failure = e.what();
+    }
+  });
+  third.join();
+  EXPECT_TRUE(failure.empty()) << failure;
+  // and back on the creating thread
+  EXPECT_EQ(s.model().uint64_value(x), 5u);
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
-// A manager created on another thread belongs to that thread. Disabled: with
-// a manager already live on the main thread, the second manager's first
-// constant corrupts the heap inside the engine (FINDINGS.md, open item C);
-// on its own thread alone it works.
-TEST(Threads, DISABLED_a_manager_created_on_another_thread_works_there)
+// A manager created on another thread works there, alongside one live on the
+// main thread (the constant library boots per thread, node ids are
+// process-wide).
+TEST(Threads, a_manager_created_on_another_thread_works_there)
 {
   TermManager tm;
   Solver s(tm);
@@ -349,6 +413,7 @@ TEST(Threads, DISABLED_a_manager_created_on_another_thread_works_there)
   creator.join();
   ASSERT_TRUE(other_id.has_value());
   EXPECT_NE(*other_id, tm.id());
+  EXPECT_EQ(s.model().uint64_value(*tm.symbol("x")), 1u);
 }
 
 } // namespace

@@ -170,10 +170,6 @@ class TermManager(_core.Manager):
     def __repr__(self):
         return "TermManager(id=%d)" % self.id
 
-    # the live Solver over this manager (this alpha admits one), or None
-    def _solver(self):
-        return self.live_solver()
-
 
 _main_lock = threading.Lock()
 _main = None

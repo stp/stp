@@ -93,41 +93,42 @@ struct CoutCapture
 SolverImpl::SolverImpl(ManagerImpl* m, const Options& o) : mgr(m)
 {
   mgr->retain();
-  if (mgr->solver != nullptr)
-  {
-    mgr->release();
-    fail(ErrorCode::UNSUPPORTED, "Solver",
-         "this alpha admits one live solver per term manager (capabilities: "
-         "solvers-per-manager = 1)");
-  }
   options = *o.impl();
-  bool pushed_base = false;
+  bool registered = false;
   try
   {
     options.resolve("Solver");
+    // The engine's stack and flags become this solver's: the active solver,
+    // if any, shelves its levels first (it takes them back when next used).
+    if (mgr->active != nullptr)
+      mgr->active->deactivate();
     stp = new STP(mgr->bm);
-    mgr->solver = this;
-    if (mgr->bm->getAssertLevel() == 0)
-    {
-      mgr->bm->Push(); // the base level
-      pushed_base = true;
-    }
-    apply_options("Solver");
+    mgr->solvers.push_back(this);
+    registered = true;
+    mgr->active = this;
+    mgr->bm->Push(); // the base level
+    reapply_engine_defaults();
   }
   catch (...)
   {
-    // A refused option leaves the manager as it was: no live solver, no
-    // engine, no base level of ours. (The destructor does not run for a
-    // constructor that throws.)
+    // A refused option leaves the manager as it was: no live solver of ours,
+    // no engine, no base level. (The destructor does not run for a
+    // constructor that throws.) The solver shelved above stays shelved and is
+    // installed again by its next use.
     if (stp != nullptr)
     {
-      if (pushed_base)
-        mgr->bm->Pop();
+      if (mgr->active == this)
+      {
+        while (mgr->bm->getAssertLevel() > 0)
+          mgr->bm->Pop();
+        mgr->active = nullptr;
+      }
       stp->deleteObjects();
       delete stp;
       stp = nullptr;
     }
-    mgr->solver = nullptr;
+    if (registered)
+      mgr->solvers.erase(std::find(mgr->solvers.begin(), mgr->solvers.end(), this));
     mgr->release();
     throw;
   }
@@ -142,22 +143,110 @@ SolverImpl::~SolverImpl()
   last_failed_assumptions.clear();
   if (stp != nullptr)
   {
-    // the assertion stack belongs to this solver: leave the manager clean
-    while (mgr->bm->getAssertLevel() > 0)
-      mgr->bm->Pop();
+    if (mgr->active == this)
+    {
+      // The engine's stack is this solver's: leave it empty for the next
+      // solver to be used, which installs its own levels.
+      while (mgr->bm->getAssertLevel() > 0)
+        mgr->bm->Pop();
+      mgr->active = nullptr;
+      mgr->bm->UserFlags.stop_poll = nullptr;
+      mgr->bm->UserFlags.stop_poll_opaque = nullptr;
+    }
     stp->deleteObjects();
     delete stp;
   }
-  mgr->bm->UserFlags.stop_poll = nullptr;
-  mgr->bm->UserFlags.stop_poll_opaque = nullptr;
-  mgr->solver = nullptr;
+  shelf.clear();
+  auto it = std::find(mgr->solvers.begin(), mgr->solvers.end(), this);
+  if (it != mgr->solvers.end())
+    mgr->solvers.erase(it);
   mgr->release();
 }
 
 void SolverImpl::check_alive(const char* fn) const
 {
   mgr->check_alive(fn);
-  mgr->check_thread(fn);
+}
+
+void SolverImpl::enter(const char* fn)
+{
+  check_alive(fn);
+  activate();
+}
+
+std::size_t SolverImpl::level_count() const
+{
+  return mgr->active == this ? mgr->bm->getAssertLevel() : shelf.size();
+}
+
+// The engine has one assertion stack and one set of flags per manager, and
+// every solver mirrors its own levels. Switching the active solver is: shelve
+// the current one's levels (its pending model is snapshotted first, since it
+// reads the engine's tables), pop them, push this one's back, and re-apply
+// this one's options over every registry default. The incremental engine is
+// each solver's own STP object's and is handed its levels afresh at every
+// check, so it does not notice the stack having been away.
+void SolverImpl::activate()
+{
+  if (mgr->active == this)
+    return;
+  if (mgr->active != nullptr)
+    mgr->active->deactivate();
+  STPMgr* bm = mgr->bm;
+  try
+  {
+    for (const std::vector<ASTNode>& level : shelf)
+    {
+      bm->Push();
+      for (const ASTNode& a : level)
+        bm->AddAssert(a);
+    }
+  }
+  catch (const std::exception& e)
+  {
+    // An assertion the engine took before is refused on re-installation: the
+    // stack goes back to empty, the shelf is intact, and nothing is active.
+    while (bm->getAssertLevel() > 0)
+      bm->Pop();
+    fail(ErrorCode::INTERNAL, "Solver",
+         std::string("the engine refused to reinstall the assertion stack: ") + e.what());
+  }
+  shelf.clear();
+  mgr->active = this;
+  reapply_engine_defaults();
+}
+
+void SolverImpl::deactivate()
+{
+  if (mgr->active != this)
+    return;
+  ensure_snapshot(); // a pending model reads the engine's tables and stack
+  STPMgr* bm = mgr->bm;
+  shelf.clear();
+  for (const ASTVec* level : bm->AssertLevels())
+    shelf.emplace_back(level->begin(), level->end());
+  while (bm->getAssertLevel() > 0)
+    bm->Pop();
+  bm->UserFlags.stop_poll = nullptr;
+  bm->UserFlags.stop_poll_opaque = nullptr;
+  mgr->active = nullptr;
+}
+
+void SolverImpl::reapply_engine_defaults()
+{
+  // UserDefinedFlags is not assignable: every registry entry goes back to its
+  // default through the apply table, and the few explicit-marker flags and
+  // manager constants by hand.
+  UserDefinedFlags& flags = mgr->bm->UserFlags;
+  flags.bv_term_abstraction_rounds_explicit = false;
+  flags.bv_term_abstraction_schema_groups_explicit = false;
+  flags.bv_term_abstraction_divmod_explicit = false;
+  flags.cadical_factor_explicit = false;
+  flags.uf_sort_width = mgr->config.uf_sort_width;
+  flags.request_counterexample = true;
+  mgr->array_equality_off = false;
+  EngineTarget t{flags, mgr, this};
+  apply_all_options(t, options, /*force_all=*/true);
 }
 
 void SolverImpl::apply_options(const char* fn)
@@ -286,7 +375,7 @@ bool is_uf_application(const ASTNode& n)
 Result SolverImpl::run_check(const char* fn, const std::vector<ASTNode>& assumptions,
                              const std::optional<CheckBudget>& budget)
 {
-  check_alive(fn);
+  enter(fn);
   ensure_snapshot();
   options.resolve(fn);
   apply_options(fn);
@@ -520,6 +609,7 @@ Result SolverImpl::run_check(const char* fn, const std::vector<ASTNode>& assumpt
 
 void SolverImpl::rebuild_engine()
 {
+  // Called through enter(): this solver is the active one.
   model.reset();
   candidate.reset();
   model_pending = false;
@@ -529,24 +619,11 @@ void SolverImpl::rebuild_engine()
   stp->deleteObjects();
   delete stp;
   stp = nullptr;
-  // UserDefinedFlags is not assignable: every registry entry goes back to its
-  // default through the apply table, and the few explicit-marker flags by hand.
-  UserDefinedFlags& flags = mgr->bm->UserFlags;
-  flags.bv_term_abstraction_rounds_explicit = false;
-  flags.bv_term_abstraction_schema_groups_explicit = false;
-  flags.bv_term_abstraction_divmod_explicit = false;
-  flags.cadical_factor_explicit = false;
-  flags.uf_sort_width = mgr->config.uf_sort_width;
-  flags.request_counterexample = true;
-  mgr->array_equality_off = false;
   stp = new STP(mgr->bm);
   mgr->bm->Push();
   checks = 0;
   constructed = false;
-  {
-    EngineTarget t{flags, mgr, this};
-    apply_all_options(t, options, /*force_all=*/true);
-  }
+  reapply_engine_defaults();
   constructed = true;
 }
 
@@ -610,7 +687,7 @@ namespace
 {
 void live_write(SolverImpl* s, std::string_view name, const char* fn)
 {
-  s->check_alive(fn);
+  s->enter(fn);
   const detail::OptionSpec* spec = detail::find_option(name);
   if (spec == nullptr)
     detail::fail_option(ErrorCode::OPTION_UNKNOWN, std::string(name), "unknown option");
@@ -694,6 +771,7 @@ void SolverOptions::set_str(Option o, std::string_view v) { set_str(Options::nam
 void SolverOptions::set_duration(Option o, std::chrono::milliseconds v) { set_duration(Options::name_of(o), v); }
 void SolverOptions::set_args(const std::vector<std::string>& argv)
 {
+  solver_->enter("SolverOptions::set_args");
   // parse into a copy first so that a bad list changes nothing
   detail::OptionsImpl copy = solver_->options;
   copy.set_args("SolverOptions::set_args", argv);
@@ -743,7 +821,7 @@ void SolverOptions::reset(std::string_view name)
 }
 void SolverOptions::reset_all()
 {
-  solver_->check_alive("SolverOptions::reset_all");
+  solver_->enter("SolverOptions::reset_all");
   solver_->options.reset_all();
   solver_->apply_options("SolverOptions::reset_all");
 }
@@ -756,7 +834,21 @@ void SolverOptions::resolve() const { solver_->options.resolve("SolverOptions::r
 
 namespace
 {
+// The solver behind an entry that touches the engine: alive, and made the
+// active one (its assertion levels installed, its options applied).
 SolverImpl* live(const Solver& s, const char* fn)
+{
+  SolverImpl* impl = s.impl();
+  if (impl == nullptr)
+    detail::fail(ErrorCode::STATE, fn, "the solver was moved from");
+  impl->enter(fn);
+  return impl;
+}
+
+// The solver behind a reader that touches nothing of the engine's (a
+// snapshot, the mirrored stack, the option store): alive, not activated, so
+// reading several solvers in turn replays no stacks.
+SolverImpl* live_read(const Solver& s, const char* fn)
 {
   SolverImpl* impl = s.impl();
   if (impl == nullptr)
@@ -785,7 +877,6 @@ Solver::Solver(TermManager tm, Options options) : impl_(nullptr), options_view_(
   if (m == nullptr)
     detail::fail(ErrorCode::STATE, "Solver", "the term manager handle was moved from");
   m->check_alive("Solver");
-  m->check_thread("Solver");
   impl_ = new SolverImpl(m, options);
   options_view_.solver_ = impl_;
 }
@@ -816,18 +907,18 @@ Solver::~Solver()
 
 TermManager Solver::manager() const
 {
-  return TermManager(live(*this, "Solver::manager")->mgr);
+  return TermManager(live_read(*this, "Solver::manager")->mgr);
 }
 
 SolverOptions& Solver::options()
 {
-  live(*this, "Solver::options");
+  live_read(*this, "Solver::options");
   return options_view_;
 }
 
 const SolverOptions& Solver::options() const
 {
-  live(*this, "Solver::options");
+  live_read(*this, "Solver::options");
   return options_view_;
 }
 
@@ -898,17 +989,26 @@ std::uint32_t Solver::level() const noexcept
 {
   if (impl_ == nullptr)
     return 0;
-  const std::size_t n = impl_->mgr->bm->getAssertLevel();
+  const std::size_t n = impl_->level_count();
   return n == 0 ? 0 : static_cast<std::uint32_t>(n - 1);
 }
 
 std::vector<Term> Solver::assertions() const
 {
-  SolverImpl* s = live(*this, "Solver::assertions");
+  SolverImpl* s = live_read(*this, "Solver::assertions");
   std::vector<Term> out;
-  for (const ASTVec* level : s->mgr->bm->AssertLevels())
-    for (const ASTNode& a : *level)
-      out.push_back(detail::make_term(s->mgr, a));
+  if (s->mgr->active == s)
+  {
+    for (const ASTVec* level : s->mgr->bm->AssertLevels())
+      for (const ASTNode& a : *level)
+        out.push_back(detail::make_term(s->mgr, a));
+  }
+  else
+  {
+    for (const std::vector<ASTNode>& level : s->shelf)
+      for (const ASTNode& a : level)
+        out.push_back(detail::make_term(s->mgr, a));
+  }
   return out;
 }
 
@@ -961,7 +1061,7 @@ Entailment Solver::entails(const Term& formula, std::optional<CheckBudget> budge
 
 std::vector<Term> Solver::unsat_assumptions() const
 {
-  SolverImpl* s = live(*this, "Solver::unsat_assumptions");
+  SolverImpl* s = live_read(*this, "Solver::unsat_assumptions");
   if (!s->have_last || !s->last.is_unsat())
     detail::fail(ErrorCode::STATE, "Solver::unsat_assumptions",
                  std::string("no unsat assumptions: the last check answered ") +
@@ -974,7 +1074,9 @@ std::vector<Term> Solver::unsat_assumptions() const
 
 Model Solver::model() const
 {
-  SolverImpl* s = live(*this, "Solver::model");
+  // A pending model can only belong to the active solver (a switch snapshots
+  // it), so no activation is needed to read one.
+  SolverImpl* s = live_read(*this, "Solver::model");
   if (!s->have_last || !s->last.is_sat())
     detail::fail(ErrorCode::NO_MODEL, "Solver::model",
                  std::string("no model: the last check answered ") +
@@ -994,7 +1096,7 @@ Model Solver::model() const
 
 std::optional<Model> Solver::candidate_model() const
 {
-  SolverImpl* s = live(*this, "Solver::candidate_model");
+  SolverImpl* s = live_read(*this, "Solver::candidate_model");
   if (!s->candidate)
     return std::nullopt;
   return Model(s->candidate);
@@ -1019,7 +1121,7 @@ bool Solver::interrupt_pending() const noexcept
 
 void Solver::set_terminator(Terminator* t)
 {
-  live(*this, "Solver::set_terminator")->terminator = t;
+  live_read(*this, "Solver::set_terminator")->terminator = t;
 }
 
 std::optional<Term> Solver::symbol(std::string_view name) const
@@ -1642,7 +1744,7 @@ void Solver::write_cnf(std::ostream& os) const
 
 void Solver::set_diagnostic_sink(std::function<void(std::string_view)> sink)
 {
-  live(*this, "Solver::set_diagnostic_sink")->diagnostic_sink = std::move(sink);
+  live_read(*this, "Solver::set_diagnostic_sink")->diagnostic_sink = std::move(sink);
 }
 
 Statistics Solver::statistics() const

@@ -41,7 +41,7 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
-THREAD_LOCAL_IE uint64_t ASTInternal::node_uid_cntr = 0;
+std::atomic<uint64_t> ASTInternal::node_uid_cntr{0};
 
 /****************************************************************
  * Universal Helper Functions                                   *

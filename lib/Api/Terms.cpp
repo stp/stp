@@ -699,7 +699,6 @@ ManagerImpl* live(const Term& t, const char* fn)
     detail::fail(ErrorCode::NULL_HANDLE, fn, "the term is null", 0);
   ManagerImpl* m = t.impl_manager();
   m->check_alive(fn);
-  m->check_thread(fn);
   return m;
 }
 

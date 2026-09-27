@@ -622,7 +622,6 @@ const ModelSnapshot& snap_of(const Model& m, const char* fn)
   if (s == nullptr)
     detail::fail(ErrorCode::STATE, fn, "the model handle is empty");
   s->mgr->check_alive(fn);
-  s->mgr->check_thread(fn);
   return *s;
 }
 
