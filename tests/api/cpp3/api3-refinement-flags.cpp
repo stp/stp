@@ -806,9 +806,22 @@ TEST(refinement_flags, TheSortWidthIsRefusedOutsideTheRangeTheCLITakes)
     EXPECT_EQ(good, flags(in).uf_sort_width);
   }
 
-  GTEST_SKIP() << "API gap: TermManager::Config::uf_sort_width is not range-checked -- 0, "
-                  "1025 and 100000 are accepted, and with 0 a later declare_sort aborts on "
-                  "the engine assertion 'width > 0' (SourceSort::uninterpreted)";
+  // A Config, which does not go through the registry, is held to the same
+  // range.
+  for (const std::uint32_t bad : {0u, 1025u, 100000u})
+  {
+    TermManager::Config cfg;
+    cfg.uf_sort_width = bad;
+    API3_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, TermManager{cfg});
+  }
+  TermManager::Config widest;
+  widest.uf_sort_width = 1024;
+  TermManager wide(widest);
+  EXPECT_EQ(1024u, wide.uf_sort_width());
+  const Sort u = wide.declare_sort("U");
+  Solver w(wide);
+  w.add(wide.declare("p", u) != wide.declare("q", u));
+  EXPECT_TRUE(w.check_sat().is_sat());
 }
 
 // uf-ackermann names one of three modes. A value outside them names none, so

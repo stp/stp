@@ -111,6 +111,8 @@ struct EngineScope
   EngineScope& operator=(const EngineScope&) = delete;
 };
 [[noreturn]] DLL_PUBLIC void fail_engine(ManagerImpl* m, const char* fn, const std::string& what);
+// INVALID_ARGUMENT unless `width` is in the uf-sort-width entry's range.
+void check_uf_sort_width(std::uint64_t width, const char* fn, std::optional<int> arg);
 
 // ---------------------------------------------------------------- output
 

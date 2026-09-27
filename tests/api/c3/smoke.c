@@ -792,6 +792,11 @@ static void options_and_limits(void)
   /* the thread-local record for calls with no object */
   CHECK(stp_tm_new_with(true, (stp_rm)99, 16) == NULL);
   CHECK(stp_last_error() != NULL && stp_last_error()->code == STP_ERR_INVALID_ARGUMENT);
+  CHECK(stp_tm_new_with(true, STP_RM_RNE, 0) == NULL);
+  CHECK(stp_last_error() != NULL && stp_last_error()->code == STP_ERR_INVALID_ARGUMENT);
+  CHECK(stp_tm_new_with(true, STP_RM_RNE, 1025) == NULL);
+  CHECK(stp_last_error() != NULL && stp_last_error()->code == STP_ERR_INVALID_ARGUMENT &&
+        stp_last_error()->argument_index == 2);
   CHECK(stp_options_set_str(NULL, "logic", "QF_BV") == STP_ERROR);
   CHECK(stp_last_error() != NULL && stp_last_error()->code == STP_ERR_NULL_HANDLE);
   CHECK(stp_solver_check_sat(NULL, &r) == STP_ERROR);

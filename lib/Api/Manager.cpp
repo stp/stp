@@ -150,6 +150,18 @@ void fail_engine(ManagerImpl* m, const char* fn, const std::string& what)
                         "; the term manager is poisoned and refuses every later call");
 }
 
+void check_uf_sort_width(std::uint64_t width, const char* fn, std::optional<int> arg)
+{
+  // the uf-sort-width entry's range: a zero-width element is no bit-vector,
+  // and a wider one overflows the word arithmetic underneath
+  const OptionSpec* spec = find_option("uf-sort-width");
+  if (width < static_cast<std::uint64_t>(spec->min) || width > static_cast<std::uint64_t>(spec->max))
+    fail(ErrorCode::INVALID_ARGUMENT, fn,
+         "uf_sort_width must be between " + std::to_string(spec->min) + " and " +
+             std::to_string(spec->max) + " (it is " + std::to_string(width) + ")",
+         arg);
+}
+
 // ------------------------------------------------------------ sorts
 
 std::uint32_t ManagerImpl::intern_sort(const std::string& key, SortRec&& rec)
@@ -830,7 +842,16 @@ std::ostream& operator<<(std::ostream& os, const Sort& s)
 
 TermManager::TermManager() : TermManager(Config{}) {}
 
-TermManager::TermManager(const Config& cfg) : impl_(new ManagerImpl(cfg))
+namespace
+{
+const TermManager::Config& checked(const TermManager::Config& cfg)
+{
+  detail::check_uf_sort_width(cfg.uf_sort_width, "TermManager", std::nullopt);
+  return cfg;
+}
+} // namespace
+
+TermManager::TermManager(const Config& cfg) : impl_(new ManagerImpl(checked(cfg)))
 {
   impl_->retain();
 }
@@ -855,9 +876,8 @@ TermManager::Config config_from_options(const Options& o)
                               : rm == "RTN" ? RoundingMode::RTN
                               : rm == "RTZ" ? RoundingMode::RTZ
                                             : RoundingMode::RNE;
+  // the registry holds the entry to the range TermManager(Config) checks
   cfg.uf_sort_width = static_cast<std::uint32_t>(o.get_uint("uf-sort-width"));
-  if (cfg.uf_sort_width == 0)
-    detail::fail_option(ErrorCode::OPTION_VALUE, "uf-sort-width", "must be positive");
   return cfg;
 }
 } // namespace

@@ -761,8 +761,7 @@ stp_tm stp_tm_new_with(bool simplify, stp_rm default_rounding_mode, uint32_t uf_
     TermManager::Config cfg;
     cfg.simplify = simplify;
     cfg.default_rounding_mode = rm_arg(default_rounding_mode, "stp_tm_new_with", 1);
-    if (uf_sort_width == 0)
-      fail(ErrorCode::INVALID_ARGUMENT, "stp_tm_new_with", "uf_sort_width must be positive", 2);
+    detail::check_uf_sort_width(uf_sort_width, "stp_tm_new_with", 2);
     cfg.uf_sort_width = uf_sort_width;
     TermManager tm(cfg);
     return tm_of(cm_new(tm));
