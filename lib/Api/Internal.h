@@ -49,6 +49,7 @@ THE SOFTWARE.
 #include <memory>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -108,7 +109,7 @@ struct EngineScope
   EngineScope(const EngineScope&) = delete;
   EngineScope& operator=(const EngineScope&) = delete;
 };
-[[noreturn]] void fail_engine(ManagerImpl* m, const char* fn, const std::string& what);
+[[noreturn]] DLL_PUBLIC void fail_engine(ManagerImpl* m, const char* fn, const std::string& what);
 template <class F>
 auto engine_call(ManagerImpl* m, const char* fn, F&& f) -> decltype(f())
 {
@@ -331,18 +332,70 @@ struct OptionSpec
   const char* legacy_cli_unit;
   const char* engine;
   bool has_engine;
+  const char* cli_form;      // "value" | "flag" | "none": how tools/stp registers the entry
+  const char* cli_bad_value; // tools/stp's wording for a refused value ({name} {value} {member} {expected}), or nullptr
+  bool has_cli_range;        // a value window the command line checks itself, narrower than the range
+  std::int64_t cli_min;
+  std::int64_t cli_max;
 };
 
-const OptionSpec* option_specs(std::size_t& count);
-const OptionSpec* find_option(std::string_view name); // name or alias; nullptr if unknown
-std::size_t option_index(const OptionSpec* spec);
+DLL_PUBLIC const OptionSpec* option_specs(std::size_t& count);
+
+// The command-line data of tools/stp that is not a per-entry column
+// (lib/Api/gen/cli_table.inc, from the [[cli_group]], [[category]], [[alias]]
+// and [[frontend]] sections of options.toml).
+struct CliCategory
+{
+  const char* category; // an OptionSpec::category value
+  const char* group;    // the --help group its entries join
+};
+struct CliAlias
+{
+  const char* name;  // the bare flag, without the leading --
+  const char* of;    // the entry it sets
+  const char* value; // to this value
+  const char* help;
+};
+struct CliFrontend
+{
+  const char* key;       // what tools/stp binds the registration to
+  const char* spellings; // CLI11's name list ("--SMTLIB1,-m")
+  const char* kind;      // positional | help | flag | bool-option
+  const char* group;     // nullptr for the positional
+  const char* help;
+  const char* api;       // the API call with the same effect
+  const char* const* excludes; // spellings, nullptr-terminated
+  std::size_t num_excludes;
+};
+DLL_PUBLIC const char* const* cli_groups(std::size_t& count); // in --help order
+DLL_PUBLIC const CliCategory* cli_categories(std::size_t& count);
+DLL_PUBLIC const CliAlias* cli_aliases(std::size_t& count);
+DLL_PUBLIC const CliFrontend* cli_frontend(std::size_t& count);
+
+// The engine's default of every field-mapped entry, rendered as the registry
+// spells a value, so a test can hold the two sets of defaults together.
+struct DefaultCheck
+{
+  const char* name;
+  std::string (*engine_default)(const UserDefinedFlags&);
+};
+DLL_PUBLIC const DefaultCheck* option_default_checks(std::size_t& count);
+inline std::string flag_text(bool b) { return b ? "true" : "false"; }
+template <class I, std::enable_if_t<std::is_integral<I>::value && !std::is_same<I, bool>::value, int> = 0>
+std::string flag_text(I i) { return std::to_string(i); }
+template <class E, std::enable_if_t<std::is_enum<E>::value, int> = 0>
+std::string flag_text(E e) { return e == E::ON ? "on" : e == E::OFF ? "off" : "auto"; }
+DLL_PUBLIC const OptionSpec* find_option(std::string_view name); // name or alias; nullptr if unknown
+DLL_PUBLIC std::size_t option_index(const OptionSpec* spec);
 OptionValue parse_option_text(const OptionSpec& spec, std::string_view text);
 std::string option_text(const OptionSpec& spec, const OptionValue& v);
 OptionValue option_default(const OptionSpec& spec);
 void validate_option_value(const OptionSpec& spec, const OptionValue& v);
-bool option_build_supported(const OptionSpec& spec);
+DLL_PUBLIC bool option_build_supported(const OptionSpec& spec);
 
-struct OptionsImpl
+// The registry is also the stp binary's command line (tools/stp/main.cpp):
+// what it calls is exported like the engine entry points it uses.
+struct DLL_PUBLIC OptionsImpl
 {
   std::vector<OptionValue> values;    // by registry index
   std::vector<bool> is_set;
@@ -375,7 +428,7 @@ struct EngineTarget
 };
 bool apply_option_to_engine(EngineTarget& t, std::size_t index,
                             const OptionSpec& spec, const OptionValue& v);
-void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all = false);
+DLL_PUBLIC void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all = false);
 std::vector<std::string> unmapped_options(); // rows the apply table cannot reach yet
 
 // ---------------------------------------------------------------- models

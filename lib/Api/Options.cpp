@@ -48,11 +48,38 @@ namespace detail
 {
 
 #include "gen/option_table.inc"
+#include "gen/cli_table.inc"
+#include "gen/option_defaults.inc"
 
 const OptionSpec* option_specs(std::size_t& count)
 {
   count = kNumOptionSpecs;
   return kOptionSpecs;
+}
+const char* const* cli_groups(std::size_t& count)
+{
+  count = kNumCliGroups;
+  return kCliGroups;
+}
+const CliCategory* cli_categories(std::size_t& count)
+{
+  count = kNumCliCategories;
+  return kCliCategories;
+}
+const CliAlias* cli_aliases(std::size_t& count)
+{
+  count = kNumCliAliases;
+  return kCliAliases;
+}
+const CliFrontend* cli_frontend(std::size_t& count)
+{
+  count = kNumCliFrontend;
+  return kCliFrontend;
+}
+const DefaultCheck* option_default_checks(std::size_t& count)
+{
+  count = kNumDefaultChecks;
+  return kDefaultChecks;
 }
 
 namespace
@@ -331,7 +358,7 @@ void validate_option_value(const OptionSpec& spec, const OptionValue& v)
       const bool has_all = std::find(members.begin(), members.end(), "all") != members.end();
       const bool has_none = std::find(members.begin(), members.end(), "none") != members.end();
       if ((has_all || has_none) && members.size() != 1)
-        fail_option(ErrorCode::OPTION_VALUE, spec.name, "'all' and 'none' must stand alone");
+        fail_option(ErrorCode::OPTION_VALUE, spec.name, "'all' and 'none' must be used alone");
       return;
     }
     case OptType::BOOL:
@@ -649,7 +676,9 @@ void OptionsImpl::resolve(const char* /*fn*/) const
         fail_option(ErrorCode::OPTION_CONFLICT, spec.name,
                     std::string("cannot be combined with '") + other->name + "'");
     }
-    if (!option_build_supported(spec))
+    // An entry this build cannot honour is refused when it is set to anything
+    // but its default: naming the default asks for nothing the build lacks.
+    if (!option_build_supported(spec) && option_text(spec, values[i]) != spec.default_text)
       fail_option(ErrorCode::OPTION_UNAVAILABLE, spec.name,
                   std::string("needs a build with ") + spec.requires_build);
     if (spec.requires_option != nullptr && spec.requires_value != nullptr)
@@ -882,20 +911,54 @@ bool custom_logic(EngineTarget& t, const OptionSpec&, const OptionValue& v)
     t.flags.enable_array_equality = true;
   return true;
 }
-bool custom_manager_simplify(EngineTarget&, const OptionSpec& spec, const OptionValue&)
+// The manager-scoped entries belong to TermManager's constructor when a
+// manager exists; the stp binary applies the registry to a bare STPMgr
+// (EngineTarget::mgr null), where `simplify` is the frontend's to honour and
+// the sort width is the engine flag.
+bool custom_manager_simplify(EngineTarget& t, const OptionSpec& spec, const OptionValue&)
 {
+  if (t.mgr == nullptr)
+    return true;
   fail_option(ErrorCode::OPTION_VALUE, spec.name,
               "manager-scoped: pass it to TermManager's constructor, not to a solver");
 }
-bool custom_manager_default_rounding_mode(EngineTarget&, const OptionSpec& spec, const OptionValue&)
+bool custom_manager_default_rounding_mode(EngineTarget& t, const OptionSpec& spec, const OptionValue&)
 {
+  if (t.mgr == nullptr)
+    return true;
   fail_option(ErrorCode::OPTION_VALUE, spec.name,
               "manager-scoped: pass it to TermManager's constructor or set_default_rounding_mode");
 }
-bool custom_manager_uf_sort_width(EngineTarget&, const OptionSpec& spec, const OptionValue&)
+bool custom_manager_uf_sort_width(EngineTarget& t, const OptionSpec& spec, const OptionValue& v)
 {
+  if (t.mgr == nullptr)
+  {
+    t.flags.uf_sort_width = static_cast<unsigned>(as_int(v));
+    return true;
+  }
   fail_option(ErrorCode::OPTION_VALUE, spec.name,
               "manager-scoped: pass it to TermManager's constructor, not to a solver");
+}
+// Three switches whose 2.x frontends also recorded that the caller named them
+// (the *_explicit flags the engine and the C interface consult). A default
+// re-applied by apply_all_options is not a request (EngineTarget::explicit_value).
+bool custom_bv_term_abstraction_rounds(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.bv_term_abstraction_rounds = static_cast<unsigned>(as_int(v));
+  t.flags.bv_term_abstraction_rounds_explicit = t.explicit_value;
+  return true;
+}
+bool custom_bv_term_abstraction_divmod(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.bv_term_abstraction_divmod = as_bool(v);
+  t.flags.bv_term_abstraction_divmod_explicit = t.explicit_value;
+  return true;
+}
+bool custom_lra_decision_polarity(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.lra_decision_polarity = as_bool(v);
+  t.flags.lra_decision_polarity_explicit = t.explicit_value;
+  return true;
 }
 bool custom_incremental_mode(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
@@ -997,13 +1060,15 @@ bool custom_search_bias(EngineTarget& t, const OptionSpec&, const OptionValue& v
 bool custom_enable_array_equality(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   const std::string& s = as_str(v);
-  t.mgr->array_equality_off = s == "off";
+  if (t.mgr != nullptr)
+    t.mgr->array_equality_off = s == "off";
   if (s == "on")
     t.flags.enable_array_equality = true;
   else if (s == "off")
     t.flags.enable_array_equality = false;
-  else // auto: engaged by the content, whatever an earlier off left behind
+  else if (t.mgr != nullptr) // auto: engaged by the content, whatever an earlier off left behind
     t.flags.enable_array_equality = t.mgr->array_equality_seen;
+  // auto without a manager (the stp binary): the frontend's set-logic decides
   return true;
 }
 bool custom_array_index_hints(EngineTarget& t, const OptionSpec&, const OptionValue& v)
@@ -1049,11 +1114,12 @@ bool custom_enable_uninterpreted_functions(EngineTarget& t, const OptionSpec&, c
     t.flags.enable_uninterpreted_functions = true;
   else if (s == "off")
     t.flags.enable_uninterpreted_functions = false;
-  else // auto: engaged by a declaration, whatever an earlier off left behind
+  else if (t.mgr != nullptr) // auto: engaged by a declaration, whatever an earlier off left behind
   {
     const UFContext* ctx = t.mgr->bm->getUFContextIfAny();
     t.flags.enable_uninterpreted_functions = ctx != nullptr && !ctx->activeDeclarations().empty();
   }
+  // auto without a manager (the stp binary): the frontend's set-logic decides
   return true;
 }
 bool custom_uf_ackermann(EngineTarget& t, const OptionSpec&, const OptionValue& v)

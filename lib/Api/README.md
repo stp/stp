@@ -51,6 +51,17 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   `none`) in `options.toml`; `option_apply.inc` is generated from it and the custom
   appliers live in Options.cpp. Manager-scoped rows (`simplify`,
   `default-rounding-mode`, `uf-sort-width`) are refused on a solver.
+- The `stp` binary's command line is the same registry: `tools/stp/main.cpp`
+  registers every row with a `cli_form` (value, flag or none) from its
+  OptionSpec, the `[[alias]]` backend flags and the `[[frontend]]` rows
+  (`cli_table.inc`), hands each value to `OptionsImpl` as text and applies the
+  lot through `apply_all_options` with a manager-less `EngineTarget`, so the
+  appliers that consult the manager fall back to the frontend's `set-logic`
+  under `auto`. The `--help` groups come from the `[[cli_group]]` and
+  `[[category]]` sections; `option_defaults.inc` lets `api3-registry` hold the
+  table's defaults to `UserDefinedFlags`, and `api3-cli-help` reads the built
+  binary's `--help` back against the table. What stays hand-written in main.cpp
+  is listed in its header comment.
 - `Term::str()` (the unshared SMT-LIB form) is the API's own printer (`Smt2Printer`
   in Terms.cpp): declared names quoted only where SMT-LIB requires (non-simple
   characters, a leading digit, a reserved word), lowercase hex, `(fp ...)`

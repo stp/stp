@@ -46,6 +46,8 @@ set(STP_API_GENERATED
     ${STP_API_GEN_DIR}/lib/Api/gen/kind_ctors_c.inc
     ${STP_API_GEN_DIR}/lib/Api/gen/option_table.inc
     ${STP_API_GEN_DIR}/lib/Api/gen/option_apply.inc
+    ${STP_API_GEN_DIR}/lib/Api/gen/option_defaults.inc
+    ${STP_API_GEN_DIR}/lib/Api/gen/cli_table.inc
     ${STP_API_GEN_DIR}/lib/Api/gen/error_table.inc
     ${STP_API_GEN_DIR}/lib/Api/gen/stat_table.inc
     ${STP_API_GEN_DIR}/python/_gen_enums.pxi

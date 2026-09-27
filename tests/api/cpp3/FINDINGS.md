@@ -297,6 +297,15 @@ spellings with no CLI form (`--produce-models`, `--sat-backend`,
 `--random-seed`, `--model-array-fill`, `--logic`, `--simplify`,
 `--default-rounding-mode`, `--stop-after-cnf`), which are new in 3.x.
 
+Superseded: `tools/stp/main.cpp` now registers its command line from
+`options.toml` itself (every entry with a `cli_form`, the `[[alias]]` backend
+flags and the `[[frontend]]` rows), so there are no two copies to compare.
+`check_cli_parity.py` is gone; `api3-registry` holds the registry's defaults
+to the engine's and the CLI tables to the entries, and `api3-cli-help` reads
+the built binary's `--help` back against the table. Six of the eight spellings
+above are on the command line now (`--model-array-fill` and
+`--default-rounding-mode` are API-only, `cli_form = "none"`).
+
 ### 29. The frontend's refusals ended the process (A and F)
 
 Symptom: a sort error inside a script (`(= x #b1)` over an 8-bit `x`, a
@@ -344,6 +353,34 @@ The CVC printer's gaps (a float, a Real, an application) are refused as
 `Solver::to_string`; after that no public entry reaches a `FatalError` with
 valid input, so `api3-engine-failure.cpp` exercises the seam through the
 internal header.
+
+### 31. `options.toml` had drifted from the command line it described
+
+Found when `tools/stp/main.cpp` began registering its options from the table
+and the lit suite ran against the result. Four `follows = "bb.fp-native-all"`
+relations were wrong: only the nine per-operation circuits (`arith`, `minmax`,
+`pack`, `round`, `sqrt`, `fma`, `conv`, `rem`, `div`) took the all-switch's
+value on the CLI; `bb.fp-native-cmp`, `bb.fp-native-add-iszero`,
+`bb.fp-native-domain` and `bb.fp-native-known-sign` never did, and with the
+relation `--bb.fp-native-all=false` switched them off too (six
+`fp-tests/native-*` cases changed their SymFPU operation counts). The three
+CaDiCaL knobs (`cadical-elim`, `-elimmineff`, `-elimmaxeff`) use `-1` as the
+API's "unset" sentinel, which the CLI never accepted (`tests/cadical_options.py`
+requires `--cadical-elim=-1` to fail); the rows now carry a `cli_range` the
+binary checks itself. And five refusal wordings the tests pin
+(`Unknown --cnf-generation-effort value 'x'. Expected one of: ...`,
+`--fp-abstraction-ops: unknown operation in 'x'`, `unknown BV schema group
+'x'`, `unknown BV term-abstraction profile 'x'`, the `mode_arg` rows'
+`expected auto, on/1/true, or off/0/false`) differ from the registry's generic
+message; the rows spell them out as `cli_bad_value` templates. `exit-after-CNF`
+is a `[[frontend]]` row rather than an alias of `stop-after-cnf`: 2.x's flag
+exits the process where the 3.x entry answers unknown. The list the
+`cnf-generation-effort` refusal printed omitted `new-high`, an accepted
+value; the template and the lit test that pins it now name it. A row's
+template words only the registry's own refusal of a value or member: the
+schema-group row's applier (the engine's parser) keeps its own wording
+("'all' and 'none' must be used alone"), and the row's `{expected}` hole
+lists the groups as the engine does.
 
 ## Open
 

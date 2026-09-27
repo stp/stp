@@ -54,6 +54,9 @@ public:
 
   STPMgr* bm;
   bool onePrintBack;
+  // The registry's manager-scoped `simplify` entry: false parses the input
+  // through the hashing node factory, so the terms are built as written.
+  bool simplifyInput = true;
   FILE* toClose;
 
   virtual int create_and_parse_options(int argc, char** argv);

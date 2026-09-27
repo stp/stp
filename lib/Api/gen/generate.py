@@ -46,6 +46,8 @@
 #   lib/Api/gen/kind_ctors_c.inc         the named C constructor definitions
 #   lib/Api/gen/option_table.inc         OptionSpec rows
 #   lib/Api/gen/option_apply.inc         the option -> engine apply switch
+#   lib/Api/gen/option_defaults.inc      the engine default of every field-mapped option, for the parity test
+#   lib/Api/gen/cli_table.inc            the --help groups, the backend-flag aliases and the frontend rows of tools/stp
 #   lib/Api/gen/error_table.inc          ErrorSpec rows
 #   lib/Api/gen/stat_table.inc           StatSpec rows
 #   python/_gen_enums.pxi                Cython enum declarations
@@ -215,6 +217,10 @@ class Emitter:
     def __init__(self, tables, out, check):
         self.kinds = tables['kinds']['kind']
         self.options = tables['options']['option']
+        self.cli_groups = tables['options'].get('cli_group', [])
+        self.categories = tables['options'].get('category', [])
+        self.aliases = tables['options'].get('alias', [])
+        self.frontend = tables['options'].get('frontend', [])
         self.errors = tables['errors']['error']
         self.stats = tables['statistics']['stat']
         self.out = out
@@ -245,9 +251,81 @@ class Emitter:
                     raise SystemExit('options.toml: %s excludes unknown %s' % (o['name'], ex))
             if 'follows' in o and o['follows'] not in onames:
                 raise SystemExit('options.toml: %s follows unknown %s' % (o['name'], o['follows']))
+            form = o.get('cli_form', 'value')
+            if form not in ('value', 'flag', 'none'):
+                raise SystemExit('options.toml: %s: cli_form %r is not value, flag or none' % (o['name'], form))
+            if form == 'flag' and o['type'] not in ('bool', 'mode'):
+                raise SystemExit('options.toml: %s: only a bool or mode entry can be a CLI flag' % o['name'])
+            tmpl = o.get('cli_bad_value')
+            if tmpl is not None:
+                holes = set(re.findall(r'\{([a-z]+)\}', tmpl))
+                if not holes <= {'name', 'value', 'member', 'expected'}:
+                    raise SystemExit('options.toml: %s: cli_bad_value may use {name}, {value}, {member} and {expected} only' % o['name'])
+            cr = o.get('cli_range')
+            if cr is not None:
+                if o['type'] not in ('int', 'uint') or 'min' not in cr or 'max' not in cr or cr['min'] > cr['max']:
+                    raise SystemExit('options.toml: %s: cli_range needs min <= max on an int or uint entry' % o['name'])
+        self.validate_cli()
         values = [e['value'] for e in self.errors]
         if len(values) != len(set(values)):
             raise SystemExit('errors.toml: duplicate value')
+
+    def cli_spellings(self):
+        """Every spelling the CLI accepts: option names, aliases, negations, short flags, the
+        [[alias]] flags and the [[frontend]] rows."""
+        out = set()
+        for o in self.options:
+            if o.get('cli_form', 'value') == 'none':
+                continue
+            out.add('--' + o['name'])
+            for a in o.get('aliases', []):
+                out.add('--' + a)
+            if o.get('negation'):
+                out.add('--' + o['negation'])
+            if o.get('short'):
+                out.add('-' + o['short'])
+        for a in self.aliases:
+            out.add('--' + a['name'])
+        for row in self.frontend:
+            for sp in row['cli'].split(','):
+                out.add(sp.strip())
+        return out
+
+    def validate_cli(self):
+        """The [[cli_group]], [[category]], [[alias]] and [[frontend]] sections agree with the entries."""
+        onames = {o['name']: o for o in self.options}
+        groups = [g['name'] for g in self.cli_groups]
+        if len(groups) != len(set(groups)):
+            raise SystemExit('options.toml: duplicate cli_group')
+        cats = {c['name']: c for c in self.categories}
+        for c in self.categories:
+            if c['group'] not in groups:
+                raise SystemExit('options.toml: category %s names unknown group %s' % (c['name'], c['group']))
+        for o in self.options:
+            if o['category'] not in cats:
+                raise SystemExit('options.toml: %s: category %s has no [[category]] row' % (o['name'], o['category']))
+        for a in self.aliases:
+            of = onames.get(a['of'])
+            if of is None:
+                raise SystemExit('options.toml: alias %s of unknown entry %s' % (a['name'], a['of']))
+            if of['type'] != 'enum' or a['value'] not in of['values']:
+                raise SystemExit('options.toml: alias %s: %r is not a value of %s' % (a['name'], a['value'], a['of']))
+            if a['name'] in onames:
+                raise SystemExit('options.toml: alias %s is also an entry name' % a['name'])
+            if 'help' not in a:
+                raise SystemExit('options.toml: alias %s has no help' % a['name'])
+        keys = [r['key'] for r in self.frontend]
+        if len(keys) != len(set(keys)):
+            raise SystemExit('options.toml: duplicate frontend key')
+        spellings = self.cli_spellings()
+        for r in self.frontend:
+            if r['kind'] not in ('positional', 'help', 'flag', 'bool-option'):
+                raise SystemExit('options.toml: frontend %s: unknown kind %s' % (r['key'], r['kind']))
+            if r['kind'] != 'positional' and r.get('group') not in groups:
+                raise SystemExit('options.toml: frontend %s names unknown group %r' % (r['key'], r.get('group')))
+            for ex in r.get('excludes', []):
+                if ex not in spellings:
+                    raise SystemExit('options.toml: frontend %s excludes unknown spelling %s' % (r['key'], ex))
 
     def write(self, rel, text):
         path = os.path.join(self.out, rel)
@@ -542,7 +620,7 @@ class Emitter:
             req = o.get('requires', {})
             legacy = o.get('legacy', {})
             engine = o.get('engine', {})
-            rows.append('  { %s, %s, OptType::%s, %s, %s, %s, %s, %s, kOptValues%d, %d, Tier::%s, Settable::%s, OptionScope::%s, %s, %s, kOptAliases%d, %d, %s, %s, %s, %s, %s, kOptExcludes%d, %d, kOptImplies%d, %d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s },' % (
+            rows.append('  { %s, %s, OptType::%s, %s, %s, %s, %s, %s, kOptValues%d, %d, Tier::%s, Settable::%s, OptionScope::%s, %s, %s, kOptAliases%d, %d, %s, %s, %s, %s, %s, kOptExcludes%d, %d, kOptImplies%d, %d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s },' % (
                 cstr(o['name']), cstr(self.python_key(o['name'])), o['type'].upper(), cstr(self.default_text(o)),
                 'true' if 'min' in rng else 'false', str(rng.get('min', 0)),
                 'true' if 'max' in rng else 'false', str(rng.get('max', 0)),
@@ -558,7 +636,10 @@ class Emitter:
                 cstr(o.get('latched_by')), cstr(o.get('sentinel')),
                 cstr(legacy.get('letter')), cstr(legacy.get('iface_flag')), cstr(legacy.get('cli_unit')),
                 cstr(engine.get('field') or engine.get('custom') or engine.get('none')),
-                'true' if 'engine' in o else 'false'))
+                'true' if 'engine' in o else 'false',
+                cstr(o.get('cli_form', 'value')), cstr(o.get('cli_bad_value')),
+                'true' if 'cli_range' in o else 'false',
+                str(o.get('cli_range', {}).get('min', 0)), str(o.get('cli_range', {}).get('max', 0))))
         lines.append('')
         lines.append('static const OptionSpec kOptionSpecs[] = {')
         lines += rows
@@ -604,6 +685,55 @@ class Emitter:
         lines.append('// unmapped: %d' % len(unmapped))
         self.write('lib/Api/gen/option_apply.inc', '\n'.join(lines) + '\n')
         self.unmapped = unmapped
+
+    def emit_option_defaults(self):
+        """The engine's default of every field-mapped entry, read from a fresh UserDefinedFlags, so
+        a test can hold the registry's defaults to the engine's."""
+        lines = [HEADER, '// Included by lib/Api/Options.cpp: `flag_text` renders a UserDefinedFlags member as the',
+                 '// registry spells it (true/false, an integer, auto/on/off).', '']
+        rows = []
+        for o in self.options:
+            e = o.get('engine', {})
+            if 'field' not in e:
+                continue
+            expr = 'f.%s' % e['field']
+            if e.get('invert', False):
+                expr = '!(%s)' % expr
+            rows.append('  { %s, [](const UserDefinedFlags& f) { return flag_text(%s); } },' % (cstr(o['name']), expr))
+        lines.append('static const DefaultCheck kDefaultChecks[] = {')
+        lines += rows
+        lines.append('};')
+        lines.append('static const std::size_t kNumDefaultChecks = %d;' % len(rows))
+        self.write('lib/Api/gen/option_defaults.inc', '\n'.join(lines) + '\n')
+
+    def emit_cli_table(self):
+        """The command-line data of tools/stp that is not a per-entry column: the --help groups in
+        order, the category -> group map, the backend-flag aliases and the frontend rows."""
+        lines = [HEADER, '// Included by lib/Api/Options.cpp. The rows tools/stp registers besides the option',
+                 '// entries themselves (main.cpp walks kOptionSpecs for those).', '']
+        lines.append('static const char* const kCliGroups[] = { %s };' % ', '.join(cstr(g['name']) for g in self.cli_groups))
+        lines.append('static const std::size_t kNumCliGroups = %d;' % len(self.cli_groups))
+        lines.append('static const CliCategory kCliCategories[] = {')
+        for c in self.categories:
+            lines.append('  { %s, %s },' % (cstr(c['name']), cstr(c['group'])))
+        lines.append('};')
+        lines.append('static const std::size_t kNumCliCategories = %d;' % len(self.categories))
+        lines.append('static const CliAlias kCliAliases[] = {')
+        for a in self.aliases:
+            lines.append('  { %s, %s, %s, %s },' % (cstr(a['name']), cstr(a['of']), cstr(a['value']), cstr(a['help'])))
+        lines.append('};')
+        lines.append('static const std::size_t kNumCliAliases = %d;' % len(self.aliases))
+        for i, r in enumerate(self.frontend):
+            lines.append('static const char* const kCliFrontendExcludes%d[] = { %s };' % (
+                i, ', '.join([cstr(x) for x in r.get('excludes', [])] + ['nullptr'])))
+        lines.append('static const CliFrontend kCliFrontend[] = {')
+        for i, r in enumerate(self.frontend):
+            lines.append('  { %s, %s, %s, %s, %s, %s, kCliFrontendExcludes%d, %d },' % (
+                cstr(r['key']), cstr(r['cli']), cstr(r['kind']), cstr(r.get('group')), cstr(r['help']), cstr(r['api']),
+                i, len(r.get('excludes', []))))
+        lines.append('};')
+        lines.append('static const std::size_t kNumCliFrontend = %d;' % len(self.frontend))
+        self.write('lib/Api/gen/cli_table.inc', '\n'.join(lines) + '\n')
 
     # ----------------------------------------------------------------- errors
 
@@ -692,6 +822,8 @@ class Emitter:
         self.emit_options_h()
         self.emit_option_table()
         self.emit_option_apply()
+        self.emit_option_defaults()
+        self.emit_cli_table()
         self.emit_errors_hpp()
         self.emit_errors_h()
         self.emit_error_table()

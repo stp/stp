@@ -43,10 +43,19 @@ AddSTPGTest(api3-errors.cpp)
 AddSTPGTest(api3-engine-failure.cpp)
 AddSTPGTest(api3-rosetta.cpp)
 
-# Every spelling tools/stp accepts must be a registry spelling (options.toml),
-# and the registry spellings the binary lacks are listed as new in 3.x.
-add_test(NAME api3-cli-parity
-         COMMAND ${PYTHON_EXECUTABLE}
-                 ${PROJECT_SOURCE_DIR}/lib/Api/gen/check_cli_parity.py
-                 --main ${PROJECT_SOURCE_DIR}/tools/stp/main.cpp
-                 --tables ${PROJECT_SOURCE_DIR}/lib/Api/tables)
+# The registry against the engine and the command line generated from it:
+# reads lib/Api/Internal.h, the in-tree view tools/stp/main.cpp registers from.
+AddSTPGTest(api3-registry.cpp)
+target_include_directories(api3-registryTests PRIVATE ${PROJECT_SOURCE_DIR}/lib)
+add_dependencies(api3-registryTests stp_api_tables)
+
+# The stp binary's command line is generated from options.toml: its --help
+# must list every entry with a CLI form, every alias and short flag, and every
+# frontend row, and a sample of spellings must parse.
+if(BUILD_EXECUTABLES)
+    add_test(NAME api3-cli-help
+             COMMAND ${PYTHON_EXECUTABLE}
+                     ${PROJECT_SOURCE_DIR}/lib/Api/gen/check_cli_help.py
+                     --stp $<TARGET_FILE:stp-bin>
+                     --tables ${PROJECT_SOURCE_DIR}/lib/Api/tables)
+endif()

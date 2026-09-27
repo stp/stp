@@ -300,7 +300,7 @@ TEST(Options, aliases_shorts_and_negations_through_set_args)
   }
   // the registry's spellings for the documented cases
   Options o;
-  o.set_args({"--exit-after-CNF"});
+  o.set_args({"--stop-after-cnf"});
   EXPECT_TRUE(o.get_bool("stop-after-cnf"));
   o.set_args({"--max_time=2s", "--max_num_confl=5", "-w", "-d"});
   EXPECT_EQ(o.get_duration("max-time").count(), 2000);
@@ -697,16 +697,19 @@ TEST(Options, manager_scoped_rows)
 TEST(Options, resolution)
 {
   Options o;
-  // follows: an unset entry takes the value given to the composite switch
-  EXPECT_TRUE(o.get_bool("bb.fp-native-cmp"));
+  // follows: an unset entry takes the value given to the composite switch.
+  // The nine per-operation circuits follow bb.fp-native-all; the predicate
+  // switch (bb.fp-native-cmp) never did on the command line and does not here.
+  EXPECT_TRUE(o.get_bool("bb.fp-native-arith"));
   o.set_bool("bb.fp-native-all", false);
-  EXPECT_TRUE(o.get_bool("bb.fp-native-cmp"));
-  EXPECT_TRUE(o.resolved("bb.fp-native-cmp") == OptionValue(false));
+  EXPECT_TRUE(o.get_bool("bb.fp-native-arith"));
+  EXPECT_TRUE(o.resolved("bb.fp-native-arith") == OptionValue(false));
   EXPECT_TRUE(o.resolved("bb.fp-native-div") == OptionValue(false));
-  EXPECT_TRUE(o.info("bb.fp-native-cmp").current == OptionValue(true));
-  EXPECT_TRUE(o.info("bb.fp-native-cmp").resolved == OptionValue(false));
-  o.set_bool("bb.fp-native-cmp", true); // set explicitly: no longer follows
   EXPECT_TRUE(o.resolved("bb.fp-native-cmp") == OptionValue(true));
+  EXPECT_TRUE(o.info("bb.fp-native-arith").current == OptionValue(true));
+  EXPECT_TRUE(o.info("bb.fp-native-arith").resolved == OptionValue(false));
+  o.set_bool("bb.fp-native-arith", true); // set explicitly: no longer follows
+  EXPECT_TRUE(o.resolved("bb.fp-native-arith") == OptionValue(true));
   EXPECT_TRUE(o.resolved("bv-term-abstraction-divmod") == OptionValue(true));
   o.set_bool("bv-term-abstraction-mult", false);
   EXPECT_TRUE(o.resolved("bv-term-abstraction-divmod") == OptionValue(false));

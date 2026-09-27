@@ -49,7 +49,11 @@ Objects
   text form the command line uses, or through typed setters. Every entry has a
   tier (stable, expert, experimental, diagnostic) and a settable window
   (anytime, before the first check, at construction); a write outside the
-  window is a recoverable error, never silent.
+  window is a recoverable error, never silent. The binary registers its own
+  command line from the same registry, so an option has one spelling, one
+  default and one meaning whether it arrives as ``--name`` or through
+  ``Options::set``; the binary's only additions are its frontend switches
+  (input format, printing, ``--parse-only``, ``--interactive``).
 
 Errors are exceptions in C++ and Python and a per-manager error record in C.
 Every precondition is checked in every build type; a recoverable error leaves
