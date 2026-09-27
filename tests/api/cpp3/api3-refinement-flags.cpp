@@ -387,7 +387,8 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
   o.set_str("uf-ackermann", "auto");
   EXPECT_EQ(Mode::AUTO, flags(s).uf_eager_mode);
 
-  // Unset, DIV/MOD follows the older switch back on too.
+  // Unset, DIV/MOD follows the older switch back on too, and so does the
+  // engine.
   {
     Solver t(tm);
     t.options().set_bool("bv-term-abstraction-mult", false);
@@ -395,11 +396,29 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
     t.options().set_bool("bv-term-abstraction-mult", true);
     EXPECT_TRUE(flags(t).bv_term_abstraction_mult);
     EXPECT_TRUE(resolved_divmod(t));
+    EXPECT_TRUE(flags(t).bv_term_abstraction_divmod);
+    // a reset entry goes back to its default in the engine as well
+    t.options().set_bool("bv-term-abstraction-mult", false);
+    EXPECT_FALSE(flags(t).bv_term_abstraction_divmod);
+    t.options().reset("bv-term-abstraction-mult");
+    EXPECT_TRUE(flags(t).bv_term_abstraction_mult);
+    EXPECT_TRUE(flags(t).bv_term_abstraction_divmod);
+    // and so does every entry reset_all resets
+    t.options().set_bool("bv-term-abstraction-mult", false);
+    t.options().set_uint(kRounds, 7);
+    EXPECT_FALSE(flags(t).bv_term_abstraction_divmod);
+    EXPECT_EQ(7u, flags(t).bv_term_abstraction_rounds);
+    t.options().reset_all();
+    EXPECT_TRUE(flags(t).bv_term_abstraction_mult);
+    EXPECT_TRUE(flags(t).bv_term_abstraction_divmod);
+    EXPECT_EQ(32u, flags(t).bv_term_abstraction_rounds);
+    // what a check runs with
+    t.options().set_bool("bv-term-abstraction-mult", false);
+    EXPECT_FALSE(flags(t).bv_term_abstraction_divmod);
+    t.options().set_bool("bv-term-abstraction-mult", true);
+    EXPECT_TRUE(t.check_sat().is_sat());
+    EXPECT_TRUE(api3::engine_manager(tm).UserFlags.bv_term_abstraction_divmod);
   }
-  GTEST_SKIP() << "API gap: an unset entry that follows another is not re-applied when it "
-                  "resolves back to its default -- after bv-term-abstraction-mult false then "
-                  "true, resolved(bv-term-abstraction-divmod) is true but the engine's "
-                  "bv_term_abstraction_divmod stays false, through the next check too";
 }
 
 // The command line resolves this pair by which options were given, not by

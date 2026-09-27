@@ -859,9 +859,15 @@ void apply_one(SolverImpl* s, std::string_view name)
   const std::size_t index = detail::option_index(spec);
   // a reset entry goes back to its default, which is no request
   t.explicit_value = s->options.is_set[index];
+  const OptionValue r = s->options.resolved(index);
   detail::engine_call(s->mgr, "SolverOptions::set", [&] {
-    detail::apply_option_to_engine(t, index, *spec, s->options.resolved(index));
+    detail::apply_option_to_engine(t, index, *spec, r);
   });
+  // the entries that follow this one reach the engine with the next
+  // application of the whole set (apply_all_options)
+  if (index < s->engine_off_default.size())
+    s->engine_off_default[index] =
+        s->options.is_set[index] || detail::option_text(*spec, r) != spec->default_text;
 }
 } // namespace
 

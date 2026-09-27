@@ -515,6 +515,11 @@ struct SolverImpl
   UserDefinedFlags::EncodingCoverage coverage{};
   UserDefinedFlags::SATSolvers backend_when_shelved = UserDefinedFlags::MINISAT_SOLVER;
   bool shelved_backend_known = false;
+  // By registry index: whether the engine holds something other than the
+  // entry's default for this solver (the entry is set, or resolves away from
+  // its default through another), as last applied. An entry that goes back
+  // to its default is applied again only then (apply_all_options).
+  std::vector<bool> engine_off_default;
 
   SolverImpl(ManagerImpl* m, const Options& o);
   ~SolverImpl();

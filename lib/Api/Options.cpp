@@ -1273,6 +1273,12 @@ bool apply_option_to_engine(EngineTarget& t, std::size_t index, const OptionSpec
 
 void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
 {
+  // What the engine holds for the solver, entry by entry: an unset entry at
+  // its default is skipped unless the solver's last application left the
+  // engine elsewhere (it followed another entry, or was set and reset).
+  std::vector<bool>* off_default = t.solver != nullptr ? &t.solver->engine_off_default : nullptr;
+  if (off_default != nullptr && off_default->size() != kNumOptionSpecs)
+    off_default->assign(kNumOptionSpecs, false);
   for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
   {
     const OptionSpec& spec = kOptionSpecs[i];
@@ -1283,13 +1289,16 @@ void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
       continue;
     }
     const OptionValue r = o.resolved(i);
-    if (!force_all && !o.is_set[i] && option_text(spec, r) == spec.default_text)
+    const bool at_default = !o.is_set[i] && option_text(spec, r) == spec.default_text;
+    if (!force_all && at_default && !(off_default != nullptr && (*off_default)[i]))
       continue;
     // a default that the build cannot honour (a backend it lacks) stays unapplied
     if (force_all && !o.is_set[i] && !option_build_supported(spec))
       continue;
     t.explicit_value = o.is_set[i];
     apply_option_to_engine(t, i, spec, r);
+    if (off_default != nullptr)
+      (*off_default)[i] = !at_default;
   }
   t.explicit_value = true;
 }
