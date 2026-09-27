@@ -182,7 +182,7 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   EXPECT_EQ(32u, o.get_uint(kRounds));
   EXPECT_TRUE(o.get_bool("bv-term-abstraction-schemas"));
   EXPECT_EQ((std::vector<std::string>{"base", "urem", "mul-ref3"}), o.get_names(kGroups));
-  EXPECT_EQ("none", o.get_str(kProfile));
+  EXPECT_EQ("", o.get_str(kProfile)); // no profile chosen
   EXPECT_EQ(0u, o.get_uint("bv-term-abstraction-value-divisor"));
   EXPECT_EQ(0u, o.get_uint("bv-term-abstraction-divmod-value-limit"));
   EXPECT_FALSE(o.get_bool("bv-term-abstraction-inc-bitblast"));
@@ -572,21 +572,29 @@ TEST(refinement_flags, AnUnknownSchemaGroupNameIsRefused)
   }
 
   // An empty list -- "" by text, or no names at all, which is what the C++
-  // API has in place of a null list -- is refused as well.
+  // API has in place of a null list -- is refused as well, and so is an
+  // empty member. Each refusal leaves the option and the selection as they
+  // were, so the next check runs.
   {
     Solver t(tm);
     t.options().set(kGroups, "base");
     API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, t.options().set(kGroups, ""));
+    EXPECT_EQ(std::vector<std::string>{"base"}, t.options().get_names(kGroups));
+    EXPECT_EQ(base, flags(t).bv_term_abstraction_schema_groups);
+    EXPECT_TRUE(t.check_sat().is_sat());
   }
   {
     Solver t(tm);
     t.options().set(kGroups, "base");
     API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, t.options().set_names(kGroups, {}));
+    EXPECT_EQ(std::vector<std::string>{"base"}, t.options().get_names(kGroups));
+    EXPECT_EQ(base, flags(t).bv_term_abstraction_schema_groups);
+    EXPECT_TRUE(t.check_sat().is_sat());
   }
-  GTEST_SKIP() << "API gap: a refused empty list (\"\" or set_names({})) stays in the option "
-                  "store (is_set, value []), so every later check throws OPTION_VALUE; and "
-                  "\"urem,,mul8\" is accepted as urem,mul8 (the registry's set parser drops "
-                  "empty members) where the engine's own parser refuses it";
+  API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, s.options().set(kGroups, "urem,,mul8"));
+  EXPECT_EQ(std::vector<std::string>{"base"}, s.options().get_names(kGroups));
+  EXPECT_EQ(base, flags(s).bv_term_abstraction_schema_groups);
+  EXPECT_TRUE(s.check_sat().is_sat());
 }
 
 TEST(refinement_flags, InvalidBVProfileIsAtomic)

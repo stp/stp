@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <sstream>
 #include <unordered_map>
 
@@ -80,6 +81,11 @@ const DefaultCheck* option_default_checks(std::size_t& count)
 {
   count = kNumDefaultChecks;
   return kDefaultChecks;
+}
+const FieldRange* option_field_ranges(std::size_t& count)
+{
+  count = kNumFieldRanges;
+  return kFieldRanges;
 }
 
 namespace
@@ -140,6 +146,43 @@ std::string values_text(const OptionSpec& spec)
     out += (i ? ", " : "") + std::string(spec.values[i]);
   return out;
 }
+
+// An enum whose default is the empty string ("no choice made") also takes it.
+bool enum_accepts(const OptionSpec& spec, const std::string& v)
+{
+  return in_values(spec, v) || (v.empty() && *spec.default_text == '\0');
+}
+
+// The set entries the engine parses from text: a set is accepted exactly when
+// the engine's own parser accepts its comma list, so that the registry never
+// holds a list the applier then refuses, and a refusal is worded by the
+// parser that knows the syntax (an empty member, 'all' beside another).
+bool engine_parses_set(const OptionSpec& spec, const std::string& text, std::string& error)
+{
+  const std::string engine = spec.engine != nullptr ? spec.engine : "";
+  if (engine == "bv_term_abstraction_schema_groups")
+  {
+    std::uint32_t mask = 0;
+    return parseBVSchemaGroups(text, mask, error);
+  }
+  if (engine == "fp_abstraction_ops" || engine == "fp_abstraction_chain_ops")
+  {
+    unsigned mask = 0;
+    if (parseFpAbstractionOps(text, mask))
+      return true;
+    error = "invalid value '" + text + "'; expected a comma list of " + values_text(spec);
+    return false;
+  }
+  return true;
+}
+
+std::string joined(const std::vector<std::string>& members)
+{
+  std::string out;
+  for (std::size_t i = 0; i < members.size(); ++i)
+    out += (i ? "," : "") + members[i];
+  return out;
+}
 } // namespace
 
 const OptionSpec* find_option(std::string_view name)
@@ -198,6 +241,14 @@ OptionValue parse_option_text(const OptionSpec& spec, std::string_view raw)
       return out;
     }
     case OptType::MODE:
+      // A row that lists its spellings takes those alone, exactly as given.
+      if (spec.num_values > 0)
+      {
+        if (!in_values(spec, text))
+          fail_option(ErrorCode::OPTION_VALUE, spec.name,
+                      "invalid value '" + text + "'; expected one of " + values_text(spec));
+        return text;
+      }
       if (low == "auto")
         return std::string("auto");
       if (low == "on" || low == "1" || low == "true")
@@ -207,22 +258,18 @@ OptionValue parse_option_text(const OptionSpec& spec, std::string_view raw)
       fail_option(ErrorCode::OPTION_VALUE, spec.name,
                   "invalid value '" + text + "'; expected auto, on or off");
     case OptType::ENUM:
-    {
-      // enum members are matched case-insensitively except the rounding modes
-      std::string v = text;
-      if (!in_values(spec, v))
-      {
-        v = low;
-        if (!in_values(spec, v))
-          fail_option(ErrorCode::OPTION_VALUE, spec.name,
-                      "invalid value '" + text + "'; expected one of " + values_text(spec));
-      }
-      return v;
-    }
+      // matched exactly, case included, as the engine's own spellings are
+      if (!enum_accepts(spec, text))
+        fail_option(ErrorCode::OPTION_VALUE, spec.name,
+                    "invalid value '" + text + "'; expected one of " + values_text(spec));
+      return text;
     case OptType::SET:
     {
+      std::string error;
+      if (!engine_parses_set(spec, text, error))
+        fail_option(ErrorCode::OPTION_VALUE, spec.name, error);
       std::vector<std::string> members;
-      std::stringstream ss(low);
+      std::stringstream ss(text);
       std::string item;
       while (std::getline(ss, item, ','))
       {
@@ -268,7 +315,19 @@ OptionValue parse_option_text(const OptionSpec& spec, std::string_view raw)
       else
         fail_option(ErrorCode::OPTION_VALUE, spec.name,
                     "invalid duration unit in '" + text + "'; expected ms, s, m or h");
-      const double ms = std::stod(number) * scale;
+      double ms = 0;
+      try
+      {
+        ms = std::stod(number) * scale;
+      }
+      catch (const std::exception&) // "." alone, say
+      {
+        fail_option(ErrorCode::OPTION_VALUE, spec.name,
+                    "invalid duration '" + text + "'; expected a number with a unit (500ms, 2s, 1m)");
+      }
+      // a budget past what milliseconds can count is no limit in all but name
+      if (!(ms + 0.5 < 9223372036854775807.0))
+        return std::int64_t(INT64_MAX);
       return static_cast<std::int64_t>(ms + 0.5);
     }
   }
@@ -314,7 +373,17 @@ void validate_option_value(const OptionSpec& spec, const OptionValue& v)
       {
         const std::uint64_t u = std::get<std::uint64_t>(v);
         if (u > static_cast<std::uint64_t>(INT64_MAX))
-          fail_option(ErrorCode::OPTION_VALUE, spec.name, "the value is too large");
+        {
+          // Past every int64 bound: only an unsigned entry with no maximum
+          // (a 64-bit engine field) takes it.
+          if (spec.type != OptType::UINT)
+            fail_option(ErrorCode::OPTION_VALUE, spec.name, "the value is too large");
+          if (spec.has_max)
+            fail_option(ErrorCode::OPTION_VALUE, spec.name,
+                        "value " + std::to_string(u) + " is above the maximum " +
+                            std::to_string(spec.max));
+          return;
+        }
         i = static_cast<std::int64_t>(u);
       }
       else
@@ -335,7 +404,7 @@ void validate_option_value(const OptionSpec& spec, const OptionValue& v)
     case OptType::MODE:
       if (v.index() != 3)
         fail_option(ErrorCode::OPTION_VALUE, spec.name, "expected a name");
-      if (spec.type == OptType::ENUM && !in_values(spec, std::get<std::string>(v)))
+      if (spec.type == OptType::ENUM && !enum_accepts(spec, std::get<std::string>(v)))
         fail_option(ErrorCode::OPTION_VALUE, spec.name,
                     "invalid value '" + std::get<std::string>(v) + "'; expected one of " +
                         values_text(spec));
@@ -344,6 +413,9 @@ void validate_option_value(const OptionSpec& spec, const OptionValue& v)
         const std::string& s = std::get<std::string>(v);
         if (s != "auto" && s != "on" && s != "off")
           fail_option(ErrorCode::OPTION_VALUE, spec.name, "expected auto, on or off");
+        if (spec.num_values > 0 && !in_values(spec, s))
+          fail_option(ErrorCode::OPTION_VALUE, spec.name,
+                      "invalid value '" + s + "'; expected one of " + values_text(spec));
       }
       return;
     case OptType::SET:
@@ -355,10 +427,11 @@ void validate_option_value(const OptionSpec& spec, const OptionValue& v)
         if (!in_values(spec, s))
           fail_option(ErrorCode::OPTION_VALUE, spec.name,
                       "invalid member '" + s + "'; expected " + values_text(spec));
-      const bool has_all = std::find(members.begin(), members.end(), "all") != members.end();
-      const bool has_none = std::find(members.begin(), members.end(), "none") != members.end();
-      if ((has_all || has_none) && members.size() != 1)
-        fail_option(ErrorCode::OPTION_VALUE, spec.name, "'all' and 'none' must be used alone");
+      // what else a list may not say ('all' beside another group, say) is the
+      // engine parser's to decide
+      std::string error;
+      if (!engine_parses_set(spec, joined(members), error))
+        fail_option(ErrorCode::OPTION_VALUE, spec.name, error);
       return;
     }
     case OptType::BOOL:
@@ -1094,7 +1167,7 @@ bool custom_bv_term_abstraction_profile(EngineTarget& t, const OptionSpec& spec,
                                         const OptionValue& v)
 {
   const std::string& s = as_str(v);
-  if (s == "none")
+  if (s.empty()) // no profile: the schema-groups and rounds entries apply
     return true;
   std::string error;
   std::uint32_t mask = t.flags.bv_term_abstraction_schema_groups;

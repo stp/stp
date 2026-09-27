@@ -40,13 +40,15 @@
 #   aliases     other CLI spellings accepted for compatibility (2.x underscores etc.)
 #   short       single-letter CLI form
 #   type        bool | int | uint | mode | enum | set | string | path | duration
-#               mode is the one tri-state auto|on|off (replaces the three 2.x ordinal encodings)
+#               mode is the one tri-state auto|on|off (replaces the three 2.x ordinal encodings); it also takes
+#               1/true and 0/false in any case, unless the row lists `values`, which are then its only spellings
 #               set is a set of names (replaces bitmasks); the CLI accepts a comma list, "all" and "none"
-#               duration is milliseconds in every API; on the CLI a bare number means seconds (2.x compatibility,
-#               fractional allowed) and a suffixed value (500ms, 2s, 1m) is exact
-#   default     the value when unset; "none" for duration means no limit
-#   range       { min, max } for int/uint
-#   values      enum/set members
+#               duration is milliseconds in every API; on the CLI a bare number means seconds (2.x compatibility)
+#   default     the value when unset; "none" for duration means no limit; an enum whose default is "" takes ""
+#               (no choice made) besides its values
+#   range       { min, max } for int/uint; an entry that reaches a 32-bit engine field says so here, so that no
+#               value it accepts is truncated on the way in
+#   values      enum/set members, matched exactly (case included); for a mode, its only spellings
 #   sentinel    the documented meaning of a special value (e.g. "-1 = no limit"); every sentinel is explicit
 #   tier        stable | expert | experimental | diagnostic
 #   settable    anytime | before-first-check | construction; a late set is a recoverable OPTION_TIMING error
@@ -64,12 +66,18 @@
 #   legacy      { letter, iface_flag, cli_unit }: the 2.x spellings, for porting 2.x code
 #   cli_form    how tools/stp registers the entry: value (the default: --name VALUE, or --name=VALUE), flag (a bare
 #               --name, with an optional =VALUE; a mode flag reads bare as on) or none (API only, not on the CLI)
-#   cli_bad_value  the wording tools/stp uses for a value it refuses, where it differs from the generic
-#               "--name must be one of ..." / range form: {name} the entry, {value} the text given, {member} the
+#   cli_bad_value  the line tools/stp prints for a value it refuses, where it differs from the generic
+#               "ERROR: --name must be one of ..." form: {name} the entry, {value} the text given, {member} the
 #               member of a set the registry refused, {expected} the row's values as "a, b, or c". It words the
-#               registry's own refusal of a value or member; an applier's refusal keeps the applier's wording
+#               registry's own refusal of a value or member; an applier's or engine parser's refusal keeps its
+#               own wording
+#   cli_below_min, cli_above_max  the line tools/stp prints for a number outside `range`, where it differs from
+#               the generic "ERROR: --name must be <min> or greater" / "ERROR: --name must be at most <max>"
 #   cli_range   { min, max }: the window the command line checks itself (CLI11) where it is narrower than `range`,
 #               for an entry whose API sentinel (-1 = unset) the CLI never accepted
+#   cli_take_last  a repeated --name takes its last value (bool and lenient mode entries always do); otherwise
+#               CLI11 refuses the repetition
+#   cli_empty   "unset": an empty value on the command line leaves the entry unset, as if it was not given
 #   help        shown by --help and info(); the CLI text, so it may run to several sentences
 #
 # [[cli_group]] and [[category]] give the --help groups of tools/stp; [[alias]] the bare flags that set another
@@ -830,6 +838,8 @@ help = "CaDiCaL maximum elimination effort; overrides CADICAL_ELIMMAXEFF. The ba
 name = "cadical-factor"
 type = "mode"
 default = "on"
+values = ["on", "off", "auto"]
+cli_take_last = true
 tier = "expert"
 settable = "before-first-check"
 scope = "solver"
@@ -842,6 +852,7 @@ help = "let cadical use bounded variable addition: 'on' (the default), 'off', or
 name = "incremental-inprobing"
 type = "mode"
 default = "auto"
+values = ["on", "off", "auto"]
 tier = "expert"
 settable = "before-first-check"
 scope = "solver"
@@ -866,6 +877,7 @@ help = "keep cadical's search trail between the solve calls of a refinement loop
 name = "threads"
 type = "int"
 default = 1
+range = { min = -2147483648, max = 2147483647 }
 tier = "stable"
 settable = "construction"
 scope = "solver"
@@ -967,6 +979,7 @@ help = "drive partial theory checks with a double-precision simplex, conflicts a
 name = "lra-float-reroute"
 type = "uint"
 default = 4
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -978,6 +991,7 @@ help = "when the float tableau's live fill exceeds this multiple of its pristine
 name = "lra-float-reroute-floor"
 type = "uint"
 default = 500000
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1186,12 +1200,12 @@ help = "replay binary branches with exact conditional conflicts (experimental; i
 name = "lra-highs-replay-nodes"
 type = "uint"
 default = 128
+range = { max = 4294967295 }
 tier = "experimental"
 settable = "anytime"
 scope = "solver"
 engine = { field = "lra_highs_replay_nodes" }
 category = "lra"
-requires = { build = "highs" }
 help = "maximum binary replay LP nodes (default 128; hard cap 8192)"
 
 [[option]]
@@ -1210,12 +1224,12 @@ help = "reconstruct selected binary root cuts exactly (experimental; requires Hi
 name = "lra-highs-cut-limit"
 type = "uint"
 default = 64
+range = { max = 4294967295 }
 tier = "experimental"
 settable = "anytime"
 scope = "solver"
 engine = { field = "lra_highs_cut_limit" }
 category = "lra"
-requires = { build = "highs" }
 help = "maximum certified root cuts (default 64)"
 
 [[option]]
@@ -1246,12 +1260,12 @@ help = "try original-row LP bases and rays with exact certification (experimenta
 name = "lra-highs-seconds"
 type = "uint"
 default = 5
+range = { max = 4294967295 }
 tier = "experimental"
 settable = "anytime"
 scope = "solver"
 engine = { field = "lra_highs_seconds" }
 category = "lra"
-requires = { build = "highs" }
 help = "total time budget for general HiGHS proposals (default 5 seconds)"
 
 [[option]]
@@ -1263,7 +1277,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_relu_bounds" }
 category = "lra"
-cli_bad_value = "--{name}: expected auto, on/1/true, or off/0/false"
 help = "propagate exact bounds through asserted ReLUs and affine definitions: auto (default, bounded recognition), on, or off; explicit LP/cases/branch still implies bounds"
 
 [[option]]
@@ -1275,13 +1288,13 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_relu_lp" }
 category = "lra"
-cli_bad_value = "--{name}: expected auto, on/1/true, or off/0/false"
 help = "optimize uncertain ReLU bounds with exact dual certification and model proposals: auto (default, eligible graphs only), on (full search), or off; on requires HiGHS"
 
 [[option]]
 name = "lra-relu-auto-seconds"
 type = "uint"
 default = 1
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1304,6 +1317,7 @@ help = "refute property alternatives using exact affine network bounds inside ea
 name = "lra-relu-cases-seconds"
 type = "uint"
 default = 60
+range = { max = 4294967295 }
 tier = "experimental"
 settable = "anytime"
 scope = "solver"
@@ -1315,6 +1329,7 @@ help = "time budget for checking ReLU property alternatives (default 60 seconds)
 name = "lra-relu-lp-rounds"
 type = "uint"
 default = 8
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1326,6 +1341,7 @@ help = "maximum ReLU bound optimization rounds (default 8)"
 name = "lra-relu-lp-seconds"
 type = "uint"
 default = 60
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1337,6 +1353,7 @@ help = "ReLU bound optimization time budget in seconds (default 60)"
 name = "lra-relu-lp-call-seconds"
 type = "uint"
 default = 2
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1353,6 +1370,7 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_relu_branch" }
 category = "lra"
+requires = { build = "highs" }
 help = "use relaxation-guided ReLU phase search and exactly checked conditional conflicts (experimental; requires HiGHS)"
 
 [[option]]
@@ -1386,13 +1404,13 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_model_reconstruction" }
 category = "lra"
-cli_bad_value = "--{name}: expected auto, on/1/true, or off/0/false"
 help = "reconstruct eliminated affine definitions and check complete Real models: auto (default, eligible ReLU proposals only), on (also ordinary LRA), or off"
 
 [[option]]
 name = "lra-relu-branch-nodes"
 type = "uint"
 default = 128
+range = { max = 4294967295 }
 tier = "experimental"
 settable = "anytime"
 scope = "solver"
@@ -1404,6 +1422,7 @@ help = "maximum relaxation-guided phase nodes (default 128)"
 name = "lra-relu-branch-seconds"
 type = "uint"
 default = 60
+range = { max = 4294967295 }
 tier = "experimental"
 settable = "anytime"
 scope = "solver"
@@ -1509,7 +1528,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_separate_model_values" }
 category = "lra"
-cli_bad_value = "--{name}: expected auto, on/1/true, or off/0/false"
 help = "before a satisfying assignment is published, move variables inside the slack their asserted bounds leave so that fewer of them share a value by accident; a reader that groups by value, as the lazy congruence round does, is then not handed pairs the query never asked for; auto runs it when the query has a declaration whose congruence is decided from model values, which is the only reader such a coincidence misleads"
 
 [[option]]
@@ -1632,6 +1650,7 @@ help = "abstract an equality one side of which the blast knows entirely; off by 
 name = "bv-abstraction-width"
 type = "uint"
 default = 64
+range = { max = 4294967295 }
 tier = "expert"
 settable = "before-first-check"
 scope = "solver"
@@ -1645,6 +1664,7 @@ help = "minimum operand width at which --bv-eq-abstraction and --bv-term-abstrac
 name = "bv-eq-refine-width"
 type = "uint"
 default = 0
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1710,6 +1730,7 @@ name = "array-index-hints"
 type = "enum"
 default = "off"
 values = ["off", "phase", "decide"]
+cli_take_last = true
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1823,13 +1844,13 @@ scope = "solver"
 engine = { custom = "bv_term_abstraction_schema_groups" }
 category = "refinement.bv"
 values = ["base", "udiv15", "udiv-observed", "udiv-tail", "urem", "quotient-one-quot", "quotient-one-rem", "quotient-thresholds", "divisor-magnitude", "divrem-full", "mul8", "mul-ref3", "mul-tail", "add", "low-prefix", "udiv", "mul6", "quotient-one", "divrem-identity", "all", "none"]
-cli_bad_value = "--{name}: unknown BV schema group '{member}'; expected {expected}"
 help = "comma-separated schema families allowed by --bv-term-abstraction-schemas: base, udiv15, udiv-observed, udiv-tail, urem, mul8, mul-ref3, mul-tail, add, quotient-thresholds, low-prefix, quotient-one-rem, quotient-one-quot, divisor-magnitude, or divrem-full; 'all' selects the complete experimental stack and 'none' selects no schemas; semantic aliases are udiv, mul6, quotient-one and divrem-identity"
 
 [[option]]
 name = "bv-term-abstraction-rounds"
 type = "uint"
 default = 32
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1841,8 +1862,8 @@ help = "ceiling on the blocking lemmas one abstracted BVMULT/BVDIV/BVMOD may tak
 [[option]]
 name = "bv-term-abstraction-profile"
 type = "enum"
-default = "none"
-values = ["none", "qualified", "broad", "aggressive"]
+default = ""
+values = ["qualified", "broad", "aggressive"]
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1851,13 +1872,14 @@ category = "refinement.bv"
 legacy = { iface_flag = "BV_TERM_ABSTRACTION_PROFILE" }
 sentinel = "unset = no profile: the schema-groups and rounds entries apply"
 excludes = ["bv-term-abstraction-schema-groups", "bv-term-abstraction-rounds"]
-cli_bad_value = "--{name}: unknown BV term-abstraction profile '{value}'; expected qualified, broad, or aggressive"
+cli_bad_value = "ERROR: --{name}: unknown BV term-abstraction profile '{value}'; expected qualified, broad, or aggressive"
 help = "apply an atomic schema-mask/round pair: 'qualified' is the inherited base, UREM and MulRef3 mask at 32 rounds; 'broad' adds the observed UDIV and MUL8 facts, divisor-magnitude and quotient-one facts at 16 rounds but no paired DIV/REM relation; 'aggressive' adds the full-width paired DIV/REM identity to that"
 
 [[option]]
 name = "bv-term-abstraction-value-divisor"
 type = "uint"
 default = 0
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1882,6 +1904,7 @@ help = "abstract a multiplication one of whose operands the blast knows entirely
 name = "bv-term-abstraction-constant-operand-limit"
 type = "uint"
 default = 1
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1893,6 +1916,7 @@ help = "cap on value-pair blocking rounds for an abstracted multiplication, divi
 name = "bv-term-abstraction-divmod-value-limit"
 type = "uint"
 default = 0
+range = { max = 4294967295 }
 tier = "experimental"
 settable = "anytime"
 scope = "solver"
@@ -1957,6 +1981,7 @@ help = "decide uninterpreted functions over Bool, bit-vector, RoundingMode and f
 name = "uf-lemmas-per-round"
 type = "uint"
 default = 0
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -1970,6 +1995,7 @@ help = "how many congruence lemmas one refuted candidate may install (0: every c
 name = "uf-ackermann"
 type = "mode"
 default = "auto"
+values = ["on", "off", "auto"]
 tier = "stable"
 settable = "anytime"
 scope = "solver"
@@ -1982,6 +2008,7 @@ help = "whether to install a function's pairwise congruence constraints before t
 name = "uf-ackermann-budget"
 type = "uint"
 default = 256
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2005,6 +2032,7 @@ help = "whether a lazy congruence round extends the running solve in place, keep
 name = "uf-lazy-full-expansion-pairs"
 type = "uint"
 default = 256
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2016,6 +2044,7 @@ help = "cap on n(n-1)/2 at which a persistently-breaking UF declaration is fully
 name = "uf-lazy-round-limit"
 type = "uint"
 default = 8
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2032,13 +2061,13 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_congruence_closure" }
 category = "refinement.uf"
-cli_bad_value = "--{name}: expected auto, on/1/true, or off/0/false"
 help = "when a large function keeps breaking congruence past the round limit -- too large for the full-expansion fallback, so otherwise purely lazy -- escalate it to a transitive closure over the model, which states the congruences a nested equality will break next round instead of re-discovering them one round at a time; every lemma is still a congruence axiom, so answers do not change; on escalates every large stuck function, auto only those with at least --uf-congruence-closure-min-apps applications"
 
 [[option]]
 name = "uf-congruence-closure-min-apps"
 type = "uint"
 default = 400
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2050,6 +2079,7 @@ help = "in auto mode, the least applications a UF function must have before its 
 name = "array-ackermann-budget"
 type = "uint"
 default = 4000
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2116,7 +2146,6 @@ scope = "solver"
 engine = { field = "uf_propagate_equalities" }
 category = "refinement.uf"
 legacy = { iface_flag = "UF_PROPAGATE_EQUALITIES" }
-cli_bad_value = "--{name}: expected auto, on/1/true, or off/0/false"
 help = "before lowering, rewrite the query under its own top-level equalities with applications still in place, so that `x = y` merges (f x) and (f y) into one application and `a = (f y)` or `(f 3) = 0` reach the terms built on a or (f 3); auto runs it unless the query has Real content, where it measures as a loss"
 
 [[option]]
@@ -2129,13 +2158,13 @@ scope = "solver"
 engine = { field = "uf_skeleton_preproc" }
 category = "refinement.uf"
 legacy = { iface_flag = "UF_SKELETON_PREPROC" }
-cli_bad_value = "--{name}: expected auto, on/1/true, or off/0/false"
 help = "let --uf-propagate-equalities also read the facts the query's Boolean skeleton forces, so an equality stated under an implication the structure resolves still crosses the applications; one SAT call over the skeleton per UF solve, and auto follows the pass it feeds"
 
 [[option]]
 name = "uf-bv-term-abstraction"
 type = "mode"
 default = "auto"
+values = ["on", "off", "auto"]
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2226,6 +2255,7 @@ help = "encode a division or remainder by a constant through its defining relati
 name = "bb.div-by-const-width"
 type = "uint"
 default = 64
+range = { max = 4294967295 }
 tier = "expert"
 settable = "before-first-check"
 scope = "solver"
@@ -2613,7 +2643,8 @@ engine = { custom = "fp_abstraction_ops" }
 category = "fp-abstraction"
 legacy = { iface_flag = "FP_ABSTRACTION_OPS" }
 values = ["mul", "div", "sqrt", "add", "sub", "fma", "rem", "rti", "to_sbv", "to_ubv", "default", "all", "none"]
-cli_bad_value = "--{name}: unknown operation in '{value}' (expected mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, to_ubv, default or all)"
+cli_bad_value = "ERROR: --{name}: unknown operation in '{value}' (expected mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, to_ubv, default or all)"
+cli_empty = "unset"
 help = "comma-separated operations to abstract: mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, to_ubv; 'default' is mul,div,sqrt,fma and 'all' every one of them"
 
 [[option]]
@@ -2628,13 +2659,15 @@ engine = { custom = "fp_abstraction_chain_ops" }
 category = "fp-abstraction"
 legacy = { iface_flag = "FP_ABSTRACTION_CHAIN_OPS" }
 values = ["mul", "div", "sqrt", "add", "sub", "fma", "rem", "rti", "to_sbv", "to_ubv", "default", "all", "none"]
-cli_bad_value = "--{name}: unknown operation in '{value}' (expected mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, to_ubv, default, all or none)"
+cli_bad_value = "ERROR: --{name}: unknown operation in '{value}' (expected mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, to_ubv, default, all or none)"
+cli_empty = "unset"
 help = "operations abstracted only as links in a chain, when an operand is the result of an application already abstracted (the names of --fp-abstraction-ops); none by default"
 
 [[option]]
 name = "fp-abstraction-width"
 type = "uint"
 default = 16
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2647,6 +2680,7 @@ help = "minimum packed width (exponent plus significand bits) at which an operat
 name = "fp-abstraction-tiers"
 type = "uint"
 default = 3
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2659,6 +2693,7 @@ help = "highest rule tier emitted with a surrogate: 0 the exact class/sign shell
 name = "fp-abstraction-values"
 type = "uint"
 default = 4
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2695,6 +2730,7 @@ help = "emit pairwise monotonicity lemmas between abstracted operations that sha
 name = "fp-abstraction-relational-last-width"
 type = "uint"
 default = 128
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2743,6 +2779,7 @@ help = "before refining a candidate the abstraction refuted, replay the original
 name = "fp-abstraction-restart-limit"
 type = "uint"
 default = 4
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2755,6 +2792,7 @@ help = "how many times one query may run the pipeline again to release operation
 name = "fp-abstraction-significand-bits"
 type = "uint"
 default = 8
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2767,6 +2805,7 @@ help = "significand bits of the reduced-precision bands emitted with an abstract
 name = "fp-abstraction-significand-bits-wide"
 type = "uint"
 default = 16
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2779,6 +2818,7 @@ help = "the same at packed widths of 128 bits and above; 0 uses --fp-abstraction
 name = "fp-abstraction-restart-width"
 type = "uint"
 default = 0
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2792,6 +2832,7 @@ help = "packed width at or above which releasing a multiplication, division, squ
 name = "fp-abstraction-constant-operands"
 type = "mode"
 default = "auto"
+values = ["on", "off", "auto"]
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -2817,6 +2858,7 @@ help = "leave exact any operation whose result the query equates directly with a
 name = "fp-abstraction-budget"
 type = "uint"
 default = 0
+range = { max = 4294967295 }
 sentinel = "seconds"
 tier = "expert"
 settable = "anytime"
@@ -2927,6 +2969,7 @@ engine = { field = "aig_node_budget" }
 category = "limits"
 legacy = { iface_flag = "AIG_NODE_BUDGET" }
 range = { min = -1, max = 2147483647 }
+cli_above_max = "ERROR: --{name} must be at most 2147483647; larger caps can never be reached"
 help = "Number of AIG AND gates after which one query's bit-blast gives up. -1 means never, 0 means give up without blasting. Exceeding it abandons the query through the soft-timeout path, so the answer is the one --max-time gives -- \"unknown\" in SMT-LIB mode, with (get-info :reason-unknown) naming this budget, and \"Unknown.\" in the CVC language. Batch solves only: the incremental encoder's AIG outlives the check that grew it and is never capped, so engaging it with a budget set warns once instead. Bounds the blast, not the process -- CNF conversion and the SAT search allocate on top of it"
 
 [[option]]
@@ -3017,6 +3060,7 @@ help = "print nodes "
 name = "cnf-auto-threshold"
 type = "uint"
 default = 200000
+range = { max = 4294967295 }
 tier = "expert"
 settable = "anytime"
 scope = "solver"
@@ -3066,6 +3110,7 @@ name = "incremental"
 type = "mode"
 cli_form = "flag"
 default = "auto"
+values = ["on", "off", "auto"]
 tier = "stable"
 settable = "before-first-check"
 scope = "solver"
@@ -3079,6 +3124,7 @@ name = "incremental-auto-engage-at"
 type = "int"
 default = -1
 range = { min = -1 }
+cli_below_min = "ERROR: --{name} must be -1 (theory default), 0 (never), or greater"
 sentinel = "-1 = the engine default (3 checks); 0 = never; n = engage at the n-th check"
 tier = "stable"
 settable = "anytime"
@@ -3140,6 +3186,7 @@ name = "incremental-cbp-feed-cap"
 type = "int"
 default = 200000
 range = { min = 1 }
+cli_below_min = "ERROR: --{name} must be at least 1"
 sentinel = "M:2239-2243"
 tier = "expert"
 settable = "anytime"

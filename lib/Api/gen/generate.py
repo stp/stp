@@ -242,8 +242,11 @@ class Emitter:
                     raise SystemExit('options.toml: alias %s of %s is also a name' % (alias, o['name']))
             if o['type'] in ('enum', 'set') and 'values' not in o:
                 raise SystemExit('options.toml: %s has no values' % o['name'])
-            if o['type'] == 'enum' and o['default'] not in o['values']:
+            if o['type'] == 'enum' and o['default'] != '' and o['default'] not in o['values']:
                 raise SystemExit('options.toml: %s: default %r is not one of its values' % (o['name'], o['default']))
+            if o['type'] == 'mode' and 'values' in o:
+                if not set(o['values']) <= {'on', 'off', 'auto'} or o['default'] not in o['values']:
+                    raise SystemExit('options.toml: %s: a mode lists spellings among on, off and auto, its default included' % o['name'])
             if o['type'] == 'set' and any(m not in o['values'] for m in o['default']):
                 raise SystemExit('options.toml: %s: default %r has a member outside its values' % (o['name'], o['default']))
             for ex in o.get('excludes', []):
@@ -261,6 +264,17 @@ class Emitter:
                 holes = set(re.findall(r'\{([a-z]+)\}', tmpl))
                 if not holes <= {'name', 'value', 'member', 'expected'}:
                     raise SystemExit('options.toml: %s: cli_bad_value may use {name}, {value}, {member} and {expected} only' % o['name'])
+            for key in ('cli_below_min', 'cli_above_max'):
+                if key in o:
+                    side = 'min' if key == 'cli_below_min' else 'max'
+                    if o['type'] not in ('int', 'uint') or side not in o.get('range', {}):
+                        raise SystemExit('options.toml: %s: %s needs an int or uint entry with a range %s' % (o['name'], key, side))
+                    if not set(re.findall(r'\{([a-z]+)\}', o[key])) <= {'name'}:
+                        raise SystemExit('options.toml: %s: %s may use {name} only' % (o['name'], key))
+            if 'cli_take_last' in o and not isinstance(o['cli_take_last'], bool):
+                raise SystemExit('options.toml: %s: cli_take_last is true or false' % o['name'])
+            if 'cli_empty' in o and (o['cli_empty'] != 'unset' or o['type'] not in ('set', 'enum', 'string')):
+                raise SystemExit('options.toml: %s: cli_empty is "unset", on a set, enum or string entry' % o['name'])
             cr = o.get('cli_range')
             if cr is not None:
                 if o['type'] not in ('int', 'uint') or 'min' not in cr or 'max' not in cr or cr['min'] > cr['max']:
@@ -624,7 +638,7 @@ class Emitter:
             req = o.get('requires', {})
             legacy = o.get('legacy', {})
             engine = o.get('engine', {})
-            rows.append('  { %s, %s, OptType::%s, %s, %s, %s, %s, %s, kOptValues%d, %d, Tier::%s, Settable::%s, OptionScope::%s, %s, %s, kOptAliases%d, %d, %s, %s, %s, %s, %s, kOptExcludes%d, %d, kOptImplies%d, %d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s },' % (
+            rows.append('  { %s, %s, OptType::%s, %s, %s, %s, %s, %s, kOptValues%d, %d, Tier::%s, Settable::%s, OptionScope::%s, %s, %s, kOptAliases%d, %d, %s, %s, %s, %s, %s, kOptExcludes%d, %d, kOptImplies%d, %d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s },' % (
                 cstr(o['name']), cstr(self.python_key(o['name'])), o['type'].upper(), cstr(self.default_text(o)),
                 'true' if 'min' in rng else 'false', str(rng.get('min', 0)),
                 'true' if 'max' in rng else 'false', str(rng.get('max', 0)),
@@ -643,7 +657,10 @@ class Emitter:
                 'true' if 'engine' in o else 'false',
                 cstr(o.get('cli_form', 'value')), cstr(o.get('cli_bad_value')),
                 'true' if 'cli_range' in o else 'false',
-                str(o.get('cli_range', {}).get('min', 0)), str(o.get('cli_range', {}).get('max', 0))))
+                str(o.get('cli_range', {}).get('min', 0)), str(o.get('cli_range', {}).get('max', 0)),
+                cstr(o.get('cli_below_min')), cstr(o.get('cli_above_max')),
+                'true' if o.get('cli_take_last', False) else 'false',
+                'true' if o.get('cli_empty') == 'unset' else 'false'))
         lines.append('')
         lines.append('static const OptionSpec kOptionSpecs[] = {')
         lines += rows
@@ -708,6 +725,21 @@ class Emitter:
         lines += rows
         lines.append('};')
         lines.append('static const std::size_t kNumDefaultChecks = %d;' % len(rows))
+        # The values the engine field of each numeric entry can hold, so a test can
+        # hold the registry's range to them: an accepted value is never truncated.
+        ranges = []
+        for o in self.options:
+            e = o.get('engine', {})
+            if 'field' not in e or o['type'] not in ('int', 'uint'):
+                continue
+            t = 'decltype(UserDefinedFlags::%s)' % e['field']
+            ranges.append('  { %s, static_cast<std::int64_t>(std::numeric_limits<%s>::min()), '
+                          'static_cast<std::uint64_t>(std::numeric_limits<%s>::max()) },' % (cstr(o['name']), t, t))
+        lines.append('')
+        lines.append('static const FieldRange kFieldRanges[] = {')
+        lines += ranges
+        lines.append('};')
+        lines.append('static const std::size_t kNumFieldRanges = %d;' % len(ranges))
         self.write('lib/Api/gen/option_defaults.inc', '\n'.join(lines) + '\n')
 
     def emit_cli_table(self):

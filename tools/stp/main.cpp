@@ -37,6 +37,8 @@ THE SOFTWARE.
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <variant>
@@ -76,15 +78,20 @@ namespace reg = stp::api::detail;
 //     --version, the parser selection (--CVC, --SMTLIB1, --SMTLIB2), the
 //     print-back flags, --print-output, --output-CNF, --exit-after-CNF,
 //     --parse-only and --interactive, whose state is the binary's own;
-//   - the reading of --max-time's bare number as seconds (2.x compatibility;
-//     the registry's duration type wants a unit);
+//   - the reading of --max-time as a whole number of seconds (2.x
+//     compatibility; the registry's duration type wants a unit);
 //   - the wording of a refused value, kept to what the binary always said
 //     ("--max-time must be -1 (no limit) or greater", "--search-bias must be
 //     one of ..."), built from the row's range and values, or spelled out by
-//     the row's cli_bad_value template where the old wording was its own;
-//   - CLI11's own range check where the binary always had one: the unsigned
-//     entries with a range, and the rows whose cli_range is narrower than the
-//     API's (the CaDiCaL knobs, whose -1 means unset to the library);
+//     the row's cli_bad_value, cli_below_min or cli_above_max line where the
+//     old wording was its own, and the order in which the refusals of a
+//     command line with several mistakes are reported (kCheckedFirst ...);
+//   - CLI11's own checks where the binary always had them: a 32-bit slot for
+//     an entry over a 32-bit engine field (its range says so), the unsigned
+//     entries with a range, the rows whose cli_range is narrower than the
+//     API's (the CaDiCaL knobs, whose -1 means unset to the library), a
+//     lenient mode's values, and a repeated option (refused unless the row
+//     takes its last value);
 //   - the exclusions of the backend flags among themselves and against the
 //     entries that require a particular backend (from the rows' `of` and
 //     `requires`), and CLI11's own exclusions for the frontend rows;
@@ -92,7 +99,9 @@ namespace reg = stp::api::detail;
 //     attached with '=');
 //   - the checks that need this build's macros and must run after the flags
 //     are applied: CaDiCaL option consistency, --lra-decision-polarity's
-//     backend prerequisites and the HiGHS-only searches;
+//     backend prerequisites, the HiGHS-only searches, and the LRA option
+//     combinations the coordinator would refuse only once a Real query
+//     reached it;
 //   - the manager-scoped `simplify` entry, honoured by the parser's choice of
 //     node factory (main_common.cpp).
 class ExtraMain : public Main
@@ -105,7 +114,9 @@ public:
   CLI::App app;
 
   // One slot per registry row. CLI11 keeps references to the storage, so
-  // the vector is sized once, before the first registration.
+  // the vector is sized once, before the first registration. An entry that
+  // reaches a 32-bit engine field is read into a 32-bit slot, so that CLI11
+  // refuses what does not fit as it always did ("Could not convert").
   struct Entry
   {
     const reg::OptionSpec* spec = nullptr;
@@ -113,6 +124,8 @@ public:
     bool b = false;
     std::int64_t i = 0;
     std::uint64_t u = 0;
+    std::int32_t i32 = 0;
+    std::uint32_t u32 = 0;
     std::string s;
   };
   std::vector<Entry> entries;
@@ -145,10 +158,10 @@ public:
   void register_entry(std::size_t index, const std::string& group);
   void register_alias(std::size_t k, const std::string& group);
   void register_exclusions();
-  std::string entry_text(const Entry& e);
-  std::string bad_value_message(const reg::OptionSpec& spec, const std::string& given,
-                                const api::Error& error) const;
-  [[noreturn]] void refuse(const std::string& message) const;
+  std::string entry_text(const Entry& e, std::string& refusal);
+  std::string bad_value_line(const reg::OptionSpec& spec, const std::string& given,
+                             const api::Error& error) const;
+  [[noreturn]] void refuse(const std::string& line) const;
   const Entry* entry_named(const char* name) const;
 };
 
@@ -195,23 +208,16 @@ bool backend_available(const std::string& value)
   return true;
 }
 
-// The bare number of a legacy --max-time is seconds; -1 is no limit.
-bool looks_numeric(const std::string& s)
+// An entry whose range is exactly a 32-bit engine field's is read into a
+// 32-bit slot: CLI11 then refuses a value the field cannot hold.
+bool reads_int32(const reg::OptionSpec& spec)
 {
-  if (s.empty())
-    return false;
-  std::size_t i = (s[0] == '-' || s[0] == '+') ? 1 : 0;
-  if (i == s.size())
-    return false;
-  bool dot = false;
-  for (; i < s.size(); ++i)
-  {
-    if (s[i] == '.' && !dot)
-      dot = true;
-    else if (!std::isdigit(static_cast<unsigned char>(s[i])))
-      return false;
-  }
-  return true;
+  return spec.type == reg::OptType::INT && spec.has_min && spec.has_max && spec.min == INT32_MIN &&
+         spec.max == INT32_MAX;
+}
+bool reads_uint32(const reg::OptionSpec& spec)
+{
+  return spec.type == reg::OptType::UINT && !spec.has_min && spec.has_max && spec.max == UINT32_MAX;
 }
 } // namespace
 
@@ -311,6 +317,9 @@ void ExtraMain::register_entry(std::size_t index, const std::string& group)
     return;
   const bool flag = form == "flag";
   const bool mode_flag = flag && spec.type == reg::OptType::MODE;
+  // A mode that lists its spellings takes those alone; one that does not also
+  // reads 1/true and 0/false, in any case (the registry's `values`).
+  const bool lenient_mode = spec.type == reg::OptType::MODE && spec.num_values == 0;
 
   // The spelling list: --name, its aliases, the short flag; a mode flag reads
   // bare as on, so each spelling carries CLI11's {on} default value; a
@@ -346,6 +355,12 @@ void ExtraMain::register_entry(std::size_t index, const std::string& group)
       break;
     case reg::OptType::INT:
       e.i = std::strtoll(dflt.c_str(), nullptr, 10);
+      if (reads_int32(spec))
+      {
+        e.i32 = static_cast<std::int32_t>(e.i);
+        opt = app.add_option(names, e.i32, help)->capture_default_str();
+        break;
+      }
       opt = app.add_option(names, e.i, help);
       // a default outside the window the command line checks is the API's
       // sentinel, not a value this option takes: not shown
@@ -354,20 +369,47 @@ void ExtraMain::register_entry(std::size_t index, const std::string& group)
       break;
     case reg::OptType::UINT:
       e.u = std::strtoull(dflt.c_str(), nullptr, 10);
+      if (reads_uint32(spec))
+      {
+        e.u32 = static_cast<std::uint32_t>(e.u);
+        opt = app.add_option(names, e.u32, help)->capture_default_str();
+        break;
+      }
       opt = app.add_option(names, e.u, help)->capture_default_str();
       break;
     case reg::OptType::MODE:
-      if (flag)
+      if (flag && lenient_mode)
+      {
+        // A switch on or off, as a Boolean flag reads its value (bare: on).
+        e.b = dflt == "on";
+        opt = app.add_flag(names, e.b, help);
+      }
+      else if (flag)
         opt = app.add_flag(names, e.s, help);
       else
       {
         e.s = dflt;
         opt = app.add_option(names, e.s, help)->type_name("MODE")->default_str(dflt);
       }
+      // CLI11 refuses a lenient mode's bad value itself, in the words the
+      // command line always used for one
+      if (lenient_mode && !flag)
+        opt->check(CLI::Validator(
+            [](std::string& value) -> std::string {
+              std::string low = value;
+              for (char& c : low)
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+              for (const char* ok : {"auto", "on", "1", "true", "off", "0", "false"})
+                if (low == ok)
+                  return std::string();
+              return "expected auto, on/1/true, or off/0/false";
+            },
+            std::string(), std::string()));
       break;
     case reg::OptType::DURATION:
-      // Shown as the integer number of seconds the binary always took.
-      opt = app.add_option(names, e.s, help)
+      // A whole number of seconds, as the binary always took (-1: no limit).
+      e.i = -1;
+      opt = app.add_option(names, e.i, help)
                 ->type_name("INT")
                 ->default_str(dflt == "none" ? "-1" : dflt);
       break;
@@ -381,15 +423,18 @@ void ExtraMain::register_entry(std::size_t index, const std::string& group)
   }
   // The window the command line checks itself, as it always did: the row's
   // cli_range, or the range of an unsigned entry. A signed entry with a -1
-  // sentinel keeps the binary's own wording instead (bad_value_message).
+  // sentinel keeps the binary's own wording instead (bad_value_line).
   if (spec.has_cli_range)
     opt->check(CLI::Range(spec.cli_min, spec.cli_max));
   else if (spec.type == reg::OptType::UINT && spec.has_min && spec.has_max)
     opt->check(CLI::Range(static_cast<std::uint64_t>(spec.min), static_cast<std::uint64_t>(spec.max)));
-  // A repeated option takes its last value, so a test or a script that appends
-  // "--flag=1" to a command line that already says "--flag=0" gets the
-  // appended value rather than a parse error.
-  opt->multi_option_policy(CLI::MultiOptionPolicy::TakeLast)->group(group);
+  // A repeated flag, Boolean or lenient mode takes its last value, so a test
+  // or a script that appends "--flag=1" to a command line that already says
+  // "--flag=0" gets the appended value rather than a parse error; so does a
+  // row that says so. Any other option given twice is CLI11's refusal.
+  if (flag || spec.type == reg::OptType::BOOL || lenient_mode || spec.cli_take_last)
+    opt->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+  opt->group(group);
   e.option = opt;
 }
 
@@ -513,34 +558,37 @@ void ExtraMain::create_options()
 // Parsing
 // ---------------------------------------------------------------------
 
-void ExtraMain::refuse(const std::string& message) const
+void ExtraMain::refuse(const std::string& line) const
 {
-  cerr << "ERROR: " << message << endl;
+  cerr << line << endl;
   std::exit(-1);
 }
 
-// The text the registry parses for an entry the command line gave.
-std::string ExtraMain::entry_text(const Entry& e)
+// The text the registry parses for an entry the command line gave, or the
+// line refusing it.
+std::string ExtraMain::entry_text(const Entry& e, std::string& refusal)
 {
   const reg::OptionSpec& spec = *e.spec;
   switch (spec.type)
   {
     case reg::OptType::BOOL: return e.b ? "true" : "false";
-    case reg::OptType::INT: return std::to_string(e.i);
-    case reg::OptType::UINT: return std::to_string(e.u);
+    case reg::OptType::INT:
+      return std::to_string(reads_int32(spec) ? static_cast<std::int64_t>(e.i32) : e.i);
+    case reg::OptType::UINT:
+      return std::to_string(reads_uint32(spec) ? static_cast<std::uint64_t>(e.u32) : e.u);
+    case reg::OptType::MODE:
+      if (std::string(spec.cli_form) == "flag" && spec.num_values == 0)
+        return e.b ? "on" : "off";
+      return e.s;
     case reg::OptType::DURATION:
-    {
-      // 2.x compatibility: a bare number is seconds, -1 is no limit. -1 is
-      // the only negative value with a meaning; anything more negative than
-      // that is a mistake, and silently treating it as unlimited hides it.
-      if (!looks_numeric(e.s))
-        return e.s;
-      if (e.s == "-1")
+      // 2.x compatibility: a whole number of seconds, -1 no limit. -1 is the
+      // only negative value with a meaning; anything more negative than that
+      // is a mistake, and silently treating it as unlimited hides it.
+      if (e.i == -1)
         return "none";
-      if (e.s[0] == '-')
-        refuse(std::string("--") + spec.name + " must be -1 (no limit) or greater");
-      return e.s + "s";
-    }
+      if (e.i < -1)
+        refusal = std::string("ERROR: --") + spec.name + " must be -1 (no limit) or greater";
+      return std::to_string(e.i) + "s";
     default: return e.s;
   }
 }
@@ -600,19 +648,20 @@ std::string fill_template(std::string text, const std::string& name, const std::
 }
 } // namespace
 
-// What the binary says about a value the registry refused: the wording it has
-// always used, spelled out by the row's template where it had one of its own
-// and built from the row's range and values otherwise.
-std::string ExtraMain::bad_value_message(const reg::OptionSpec& spec, const std::string& given,
-                                         const api::Error& error) const
+// The line the binary prints about a value the registry refused: the wording
+// it has always used, spelled out by the row's template where it had one of
+// its own and built from the row's range and values otherwise.
+std::string ExtraMain::bad_value_line(const reg::OptionSpec& spec, const std::string& given,
+                                      const api::Error& error) const
 {
   const std::string flag = std::string("--") + spec.name;
   const std::string detail = detail_of(error.what());
+  const std::string plain = "ERROR: " + flag + ": " + detail;
   if (error.code() != api::ErrorCode::OPTION_VALUE)
-    return flag + ": " + detail;
+    return plain;
   // The row's own wording is for the registry's refusal of a value or a
-  // member; an applier that refuses in its own words (the engine's parser of
-  // a schema-group list, say) is quoted as it stands.
+  // member; an applier or an engine parser that refuses in its own words (the
+  // parser of a schema-group list, say) is quoted as it stands.
   if (spec.cli_bad_value != nullptr)
   {
     const bool registry_refusal =
@@ -620,7 +669,7 @@ std::string ExtraMain::bad_value_message(const reg::OptionSpec& spec, const std:
     if (registry_refusal)
       return fill_template(spec.cli_bad_value, spec.name, given, quoted_piece(error.what()),
                            expected_values(spec));
-    return flag + ": " + detail;
+    return plain;
   }
   switch (spec.type)
   {
@@ -632,39 +681,66 @@ std::string ExtraMain::bad_value_message(const reg::OptionSpec& spec, const std:
       const bool converted = errno == 0;
       if (converted && spec.has_min && v < spec.min)
       {
+        if (spec.cli_below_min != nullptr)
+          return fill_template(spec.cli_below_min, spec.name, given, "", "");
         const bool no_limit = spec.min == -1 && spec.sentinel != nullptr &&
                               std::strncmp(spec.sentinel, "-1 = no limit", 13) == 0;
-        return flag + " must be " + std::to_string(spec.min) + (no_limit ? " (no limit)" : "") +
-               " or greater";
+        return "ERROR: " + flag + " must be " + std::to_string(spec.min) +
+               (no_limit ? " (no limit)" : "") + " or greater";
       }
       if (converted && spec.has_max && v > spec.max)
-        return flag + " must be at most " + std::to_string(spec.max);
-      return flag + ": " + detail;
+      {
+        if (spec.cli_above_max != nullptr)
+          return fill_template(spec.cli_above_max, spec.name, given, "", "");
+        return "ERROR: " + flag + " must be at most " + std::to_string(spec.max);
+      }
+      return plain;
     }
     case reg::OptType::ENUM:
     case reg::OptType::MODE:
     {
       std::vector<std::string> values;
-      if (spec.type == reg::OptType::MODE)
+      for (std::size_t i = 0; i < spec.num_values; ++i)
+        values.emplace_back(spec.values[i]);
+      if (values.empty())
         values = {"on", "off", "auto"};
-      else
-        for (std::size_t i = 0; i < spec.num_values; ++i)
-          values.emplace_back(spec.values[i]);
-      std::string out = "Unknown " + flag + " value '" + given + "': " + flag + " must be one of " +
-                        quoted_list(values);
+      std::string out = "ERROR: " + flag + " must be one of " + quoted_list(values);
       if (std::string(spec.cli_form) == "flag")
         out += ", attached with '=' (a bare " + flag + " means 'on')";
       return out;
     }
-    case reg::OptType::SET:
-      return flag + ": " + detail;
-    case reg::OptType::DURATION:
-      return flag + ": expected a number of seconds, -1 for no limit, or a duration with a unit "
-                    "(500ms, 2s, 1m); given '" +
-             given + "'";
-    default: return flag + ": " + detail;
+    default: return plain;
   }
 }
+
+namespace
+{
+// Where the command line reports a refused value. It has always checked the
+// entries it validated itself in this order, interleaved with the checks
+// that are not about one value (the parser selection, CaDiCaL's options, the
+// polarity advice, the HiGHS searches, the LRA option combinations,
+// --incremental's split value); a command line with several mistakes is told
+// about the same one it always was. Every other refusal is CLI11's, while it
+// parses.
+const char* const kCheckedFirst[] = {"bv-term-abstraction-schema-groups", "bv-term-abstraction-profile",
+                                     "fp-abstraction-ops", "fp-abstraction-chain-ops",
+                                     "cnf-generation-effort"};
+const char* const kCheckedAfterHighs[] = {"array-index-hints", "search-bias", "cadical-factor",
+                                          "incremental-inprobing"};
+const char* const kCheckedAfterLra[] = {"fp-abstraction-constant-operands", "uf-bv-term-abstraction",
+                                        "uf-ackermann", "incremental"};
+const char* const kCheckedLast[] = {"max-num-confl", "max-time", "aig-node-budget",
+                                    "incremental-base-resimplify-limit", "incremental-cbp-feed-cap",
+                                    "incremental-auto-engage-at"};
+
+bool listed(const char* name, const char* const* list, std::size_t n)
+{
+  for (std::size_t i = 0; i < n; ++i)
+    if (std::strcmp(name, list[i]) == 0)
+      return true;
+  return false;
+}
+} // namespace
 
 int ExtraMain::parse_options(int argc, char** argv)
 {
@@ -684,32 +760,31 @@ int ExtraMain::parse_options(int argc, char** argv)
     exit(-1);
   }
 
-  // A flag's value has to be attached, so 'stp --incremental off' parses as
-  // --incremental (which means 'on') followed by an input file named 'off' --
-  // the opposite of what was asked for, reported as "Cannot open off", which
-  // names neither half of the mistake.
-  const Entry* incremental = entry_named("incremental");
-  if (incremental != nullptr && incremental->option != nullptr && incremental->option->count() &&
-      (infile == "on" || infile == "off" || infile == "auto"))
-  {
-    refuse("--incremental takes its value attached with '=', as --incremental=" + infile +
-           "; given as a separate argument it was read as the name of the input file");
-  }
-
   // Every entry the command line gave goes to the registry as text, which
-  // parses and validates it as the library would.
+  // parses and validates it as the library would; a refusal is kept for its
+  // place in the order above. An empty value of a row that says so leaves the
+  // entry unset, as if it was not given.
+  std::map<std::string, std::string> refused;
   for (const Entry& e : entries)
   {
     if (e.option == nullptr || e.option->count() == 0)
       continue;
-    const std::string text = entry_text(e);
+    std::string refusal;
+    const std::string text = entry_text(e, refusal);
+    if (!refusal.empty())
+    {
+      refused.emplace(e.spec->name, refusal);
+      continue;
+    }
+    if (text.empty() && e.spec->cli_empty_unset)
+      continue;
     try
     {
       options.set_text("stp", e.spec->name, text);
     }
     catch (const api::Error& error)
     {
-      refuse(bad_value_message(*e.spec, text, error));
+      refused.emplace(e.spec->name, bad_value_line(*e.spec, text, error));
     }
   }
   for (const AliasFlag& a : alias_flags)
@@ -722,8 +797,44 @@ int ExtraMain::parse_options(int argc, char** argv)
     }
     catch (const api::Error& error)
     {
-      refuse(std::string("--") + a.alias->name + ": " + error.what());
+      refuse(std::string("ERROR: --") + a.alias->name + ": " + detail_of(error.what()));
     }
+  }
+  const auto report = [&](const char* const* list, std::size_t n) {
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      const auto it = refused.find(list[i]);
+      if (it != refused.end())
+        refuse(it->second);
+    }
+  };
+  report(kCheckedFirst, std::size(kCheckedFirst));
+  // an entry with no place of its own (one the registry added) goes next
+  for (const Entry& e : entries)
+    if (e.spec != nullptr && refused.count(e.spec->name) &&
+        !listed(e.spec->name, kCheckedAfterHighs, std::size(kCheckedAfterHighs)) &&
+        !listed(e.spec->name, kCheckedAfterLra, std::size(kCheckedAfterLra)) &&
+        !listed(e.spec->name, kCheckedLast, std::size(kCheckedLast)))
+      refuse(refused[e.spec->name]);
+
+  // A HiGHS search this build cannot run is reported where the command line
+  // always checked for one, after the other build checks: set aside here, so
+  // that the registry's own refusal of it does not come first.
+  bool highs_cuts_requested = false, highs_search_requested = false;
+  for (const Entry& e : entries)
+  {
+    // an entry the command line does not register has no spec here
+    if (e.option == nullptr || e.option->count() == 0)
+      continue;
+    const reg::OptionSpec& spec = *e.spec;
+    if (spec.requires_build == nullptr || std::strncmp(spec.requires_build, "highs", 5) != 0 ||
+        reg::option_build_supported(spec))
+      continue;
+    const api::OptionInfo info = options.info(spec.name);
+    if (info.current == info.default_value)
+      continue;
+    (std::string(spec.name) == "lra-highs-cuts" ? highs_cuts_requested : highs_search_requested) = true;
+    options.reset(spec.name);
   }
 
   // The cross-entry rules (excludes, requires, a build without the backend),
@@ -738,17 +849,7 @@ int ExtraMain::parse_options(int argc, char** argv)
   catch (const api::Error& error)
   {
     const std::string name(error.option());
-    // The HiGHS entries in a build without HiGHS: the wording the binary has
-    // always used for that build.
-    const reg::OptionSpec* spec = name.empty() ? nullptr : reg::find_option(name);
-    if (error.code() == api::ErrorCode::OPTION_UNAVAILABLE && spec != nullptr &&
-        spec->requires_build != nullptr && std::strncmp(spec->requires_build, "highs", 5) == 0)
-    {
-      if (name == "lra-highs-cuts")
-        refuse("--lra-highs-cuts requires -DENABLE_HIGHS_CUT_LOG=ON and the HiGHS root-cut patch");
-      refuse("LRA LP/branch search requires a build with -DENABLE_HIGHS=ON (--" + name + ")");
-    }
-    refuse((name.empty() ? std::string() : "--" + name + ": ") + error.what());
+    refuse("ERROR: " + (name.empty() ? std::string() : "--" + name + ": ") + detail_of(error.what()));
   }
 
   // The manager-scoped `simplify` entry is honoured by the parser's choice of
@@ -842,23 +943,22 @@ int ExtraMain::parse_options(int argc, char** argv)
     }
   }
 
-#ifndef STP_HAVE_HIGHS_CUT_LOG
-  if (bm->UserFlags.lra_highs_cuts)
+  if (highs_cuts_requested)
   {
     cerr << "ERROR: --lra-highs-cuts requires -DENABLE_HIGHS_CUT_LOG=ON and the HiGHS root-cut patch" << endl;
     return -1;
   }
-#endif
 #ifndef STP_HAVE_HIGHS
-  if (bm->UserFlags.lra_relu_lp == UserDefinedFlags::OptionMode::ON ||
-      bm->UserFlags.lra_relu_branch ||
-      bm->UserFlags.lra_highs_lp || bm->UserFlags.lra_highs_mip ||
-      bm->UserFlags.lra_highs_replay)
+  if (bm->UserFlags.lra_relu_lp == UserDefinedFlags::OptionMode::ON)
+    highs_search_requested = true;
+#endif
+  if (highs_search_requested)
   {
     cerr << "ERROR: LRA LP/branch search requires a build with -DENABLE_HIGHS=ON" << endl;
     return -1;
   }
-#endif
+
+  report(kCheckedAfterHighs, std::size(kCheckedAfterHighs));
 
   // Checked by value, not presence: a control at 0 is the batch default and
   // combines with anything. LraCoordinator refuses the same combinations for
@@ -933,6 +1033,22 @@ int ExtraMain::parse_options(int argc, char** argv)
       std::exit(-1);
     }
   }
+
+  report(kCheckedAfterLra, std::size(kCheckedAfterLra));
+
+  // A flag's value has to be attached, so 'stp --incremental off' parses as
+  // --incremental (which means 'on') followed by an input file named 'off' --
+  // the opposite of what was asked for, reported as "Cannot open off", which
+  // names neither half of the mistake.
+  const Entry* incremental = entry_named("incremental");
+  if (incremental != nullptr && incremental->option != nullptr && incremental->option->count() &&
+      (infile == "on" || infile == "off" || infile == "auto"))
+  {
+    refuse("ERROR: --incremental takes its value attached with '=', as --incremental=" + infile +
+           "; given as a separate argument it was read as the name of the input file");
+  }
+
+  report(kCheckedLast, std::size(kCheckedLast));
 
   if (selected_type == 0)
   {

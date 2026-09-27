@@ -185,9 +185,6 @@ TEST(Options, every_enum_and_set_member)
       }
       API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, Options().set_names(name, {"no-such-member"}));
       API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, Options().set(name, "no-such-member"));
-      if (std::find(info.values.begin(), info.values.end(), "all") != info.values.end())
-        API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE,
-                          Options().set_names(name, {"all", info.values.front()}));
     }
     else if (info.type == "mode")
     {
@@ -198,21 +195,81 @@ TEST(Options, every_enum_and_set_member)
         EXPECT_EQ(o.get_str(name), v);
       }
       Options o;
+      API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_str(name, "maybe"));
+      if (!info.values.empty())
+      {
+        // a mode that lists its spellings takes those alone, exactly
+        EXPECT_EQ(info.values, (std::vector<std::string>{"on", "off", "auto"})) << name;
+        API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set(name, "1"));
+        API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set(name, "ON"));
+        continue;
+      }
       o.set(name, "1");
       EXPECT_EQ(o.get_str(name), "on");
       o.set(name, "false");
       EXPECT_EQ(o.get_str(name), "off");
-      API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_str(name, "maybe"));
+      o.set(name, "Auto");
+      EXPECT_EQ(o.get_str(name), "auto");
     }
   }
-  // set members: comma lists, spaces and case
+  // set members: comma lists and spaces; members, like enum values, match
+  // exactly
   Options o;
-  o.set("fp-abstraction-ops", "mul, FMA");
+  o.set("fp-abstraction-ops", "mul, fma");
+  EXPECT_EQ(o.get_names("fp-abstraction-ops"), (std::vector<std::string>{"mul", "fma"}));
+  API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("fp-abstraction-ops", "mul, FMA"));
   EXPECT_EQ(o.get_names("fp-abstraction-ops"), (std::vector<std::string>{"mul", "fma"}));
   o.set("fp-abstraction-ops", "none");
   EXPECT_EQ(o.get_names("fp-abstraction-ops"), std::vector<std::string>{"none"});
   o.set_names("fp-abstraction-ops", {});
   EXPECT_TRUE(o.get_names("fp-abstraction-ops").empty());
+  API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_str("sat-backend", "CADICAL"));
+}
+
+// A set the engine parses from text is held to that parser: what it accepts,
+// the registry accepts, and its refusal is the registry's, in its words.
+TEST(Options, sets_follow_the_engine_parser)
+{
+  Options o;
+  // the operations list skips empty items and takes 'all' and 'none' beside others
+  o.set("fp-abstraction-ops", "mul,,div");
+  EXPECT_EQ(o.get_names("fp-abstraction-ops"), (std::vector<std::string>{"mul", "div"}));
+  o.set_names("fp-abstraction-ops", {"all", "mul"});
+  o.set("fp-abstraction-chain-ops", "none,mul");
+  // the schema groups refuse an empty group and 'all' or 'none' beside another
+  const char* groups = "bv-term-abstraction-schema-groups";
+  for (const char* bad : {"", ",", "base,,urem", "base,", ",base", "all,base", "base,none", "BASE"})
+  {
+    SCOPED_TRACE(bad);
+    auto e = API3_ERROR_OF(o.set(groups, bad));
+    ASSERT_TRUE(e.has_value());
+    EXPECT_EQ(e->code(), ErrorCode::OPTION_VALUE);
+    EXPECT_EQ(e->option(), groups);
+  }
+  auto empty = API3_ERROR_OF(o.set(groups, "base,,urem"));
+  ASSERT_TRUE(empty.has_value());
+  EXPECT_NE(std::string(empty->what()).find("empty BV schema group; expected base"), std::string::npos)
+      << empty->what();
+  API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_names(groups, {"all", "base"}));
+  API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_names(groups, {}));
+  o.set(groups, " base , urem ");
+  EXPECT_EQ(o.get_names(groups), (std::vector<std::string>{"base", "urem"}));
+  o.set(groups, "udiv");
+  EXPECT_EQ(o.get_names(groups), std::vector<std::string>{"udiv"});
+}
+
+// The profile's "no profile" is the empty string: 'none' is not a profile.
+TEST(Options, the_profile_is_unset_by_the_empty_string)
+{
+  Options o;
+  EXPECT_EQ(o.get_str("bv-term-abstraction-profile"), "");
+  EXPECT_EQ(o.info("bv-term-abstraction-profile").values,
+            (std::vector<std::string>{"qualified", "broad", "aggressive"}));
+  o.set("bv-term-abstraction-profile", "broad");
+  o.set("bv-term-abstraction-profile", "");
+  EXPECT_EQ(o.get_str("bv-term-abstraction-profile"), "");
+  for (const char* bad : {"none", "NONE", "Qualified"})
+    API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("bv-term-abstraction-profile", bad));
 }
 
 TEST(Options, aliases_shorts_and_negations_through_set_args)
@@ -429,7 +486,8 @@ TEST(Options, bad_values)
   EXPECT_FALSE(o.get_bool("produce-models"));
   o.set("produce-models", "YES");
   EXPECT_TRUE(o.get_bool("produce-models"));
-  o.set_str("sat-backend", "CADICAL"); // enum members match case-insensitively
+  o.set_str("sat-backend", "cadical");
+  API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_str("sat-backend", "CADICAL")); // exactly
   EXPECT_EQ(o.get_str("sat-backend"), "cadical");
   // a refused write leaves the entry alone
   o.set_int("cadical-elim", 0);
@@ -635,6 +693,37 @@ TEST(Options, unavailable_in_this_build)
       API3_EXPECT_ERROR(ErrorCode::OPTION_UNAVAILABLE, Solver bad(t2, o));
     }
   }
+  // what needs HiGHS is turning a search on; its tuning numbers are
+  // accepted by every build
+  for (const char* tuning : {"lra-highs-seconds", "lra-highs-replay-nodes", "lra-highs-cut-limit"})
+  {
+    SCOPED_TRACE(tuning);
+    EXPECT_TRUE(probe.info(tuning).supported);
+    TermManager t3;
+    Options o;
+    o.set_uint(tuning, 7);
+    o.resolve();
+    Solver ok(t3, o);
+  }
+  EXPECT_EQ(probe.info("lra-relu-branch").supported, highs);
+}
+
+// An entry over a 32-bit engine field takes what the field holds and no more;
+// one over a 64-bit field takes all of it.
+TEST(Options, ranges_are_the_engine_fields)
+{
+  Options o;
+  o.set_uint("lra-float-reroute", 4294967295ull);
+  API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_uint("lra-float-reroute", 4294967296ull));
+  API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("bv-term-abstraction-rounds", "4294967296"));
+  EXPECT_EQ(o.get_uint("lra-float-reroute"), 4294967295ull);
+  o.set("threads", "-2147483648");
+  API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("threads", "2147483648"));
+  API3_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_int("threads", -2147483649ll));
+  o.set("lra-presolve-monotone-work", "18446744073709551615");
+  EXPECT_EQ(o.get_uint("lra-presolve-monotone-work"), UINT64_MAX);
+  o.set_uint("lra-presolve-subst-work", UINT64_MAX);
+  EXPECT_EQ(o.get_uint("lra-presolve-subst-work"), UINT64_MAX);
 }
 
 TEST(Options, manager_scoped_rows)

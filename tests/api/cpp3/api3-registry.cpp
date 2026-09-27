@@ -58,6 +58,37 @@ TEST(Registry, defaults_are_the_engines)
   }
 }
 
+// No numeric entry accepts a value its engine field cannot hold: an entry
+// over a 32-bit field says so with its range, or 4294967296 would reach an
+// `unsigned` member as 0 (and the command line would take what it always
+// refused).
+TEST(Registry, ranges_fit_the_engine_fields)
+{
+  std::size_t n = 0;
+  const reg::FieldRange* fields = reg::option_field_ranges(n);
+  ASSERT_GT(n, 50u);
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    const reg::OptionSpec* spec = reg::find_option(fields[i].name);
+    ASSERT_NE(spec, nullptr) << fields[i].name;
+    SCOPED_TRACE(fields[i].name);
+    const bool uint = spec->type == reg::OptType::UINT;
+    const std::int64_t lo = spec->has_min ? spec->min : uint ? 0 : INT64_MIN;
+    const std::uint64_t hi = spec->has_max ? static_cast<std::uint64_t>(spec->max)
+                                           : uint ? UINT64_MAX : static_cast<std::uint64_t>(INT64_MAX);
+    EXPECT_GE(lo, fields[i].min);
+    EXPECT_LE(hi, fields[i].max);
+  }
+  // two entries whose fields are reached by a hand-written applier
+  const reg::OptionSpec* threads = reg::find_option("threads");
+  ASSERT_NE(threads, nullptr);
+  EXPECT_TRUE(threads->has_min && threads->min == INT32_MIN && threads->has_max &&
+              threads->max == INT32_MAX);
+  const reg::OptionSpec* rounds = reg::find_option("bv-term-abstraction-rounds");
+  ASSERT_NE(rounds, nullptr);
+  EXPECT_TRUE(!rounds->has_min && rounds->has_max && rounds->max == UINT32_MAX);
+}
+
 // Every entry has a --help group, every alias sets an enum entry to one of
 // its values and never shadows an entry, and every frontend row is one of
 // the four kinds with a group (except the positional).

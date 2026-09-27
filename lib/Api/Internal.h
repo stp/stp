@@ -334,10 +334,14 @@ struct OptionSpec
   const char* engine;
   bool has_engine;
   const char* cli_form;      // "value" | "flag" | "none": how tools/stp registers the entry
-  const char* cli_bad_value; // tools/stp's wording for a refused value ({name} {value} {member} {expected}), or nullptr
+  const char* cli_bad_value; // tools/stp's line for a refused value ({name} {value} {member} {expected}), or nullptr
   bool has_cli_range;        // a value window the command line checks itself, narrower than the range
   std::int64_t cli_min;
   std::int64_t cli_max;
+  const char* cli_below_min; // tools/stp's line for a number below `min` ({name}), or nullptr
+  const char* cli_above_max; // ... above `max`
+  bool cli_take_last;        // a repeated spelling takes its last value (bool and lenient mode entries always do)
+  bool cli_empty_unset;      // an empty value on the command line leaves the entry unset
 };
 
 DLL_PUBLIC const OptionSpec* option_specs(std::size_t& count);
@@ -381,6 +385,14 @@ struct DefaultCheck
   std::string (*engine_default)(const UserDefinedFlags&);
 };
 DLL_PUBLIC const DefaultCheck* option_default_checks(std::size_t& count);
+// What the engine field of each numeric field-mapped entry can hold.
+struct FieldRange
+{
+  const char* name;
+  std::int64_t min;
+  std::uint64_t max;
+};
+DLL_PUBLIC const FieldRange* option_field_ranges(std::size_t& count);
 inline std::string flag_text(bool b) { return b ? "true" : "false"; }
 template <class I, std::enable_if_t<std::is_integral<I>::value && !std::is_same<I, bool>::value, int> = 0>
 std::string flag_text(I i) { return std::to_string(i); }

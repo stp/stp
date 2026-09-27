@@ -122,7 +122,7 @@ def main():
         samples = [
             ['--flattening=true'], ['--flattening', 'false'], ['--aig-rewrite-passes=1'],
             ['--uf-sort-width', '8'], ['--lra-relu-bounds=auto'], ['--search-bias=unsat'],
-            ['--bv-term-abstraction-schema-groups=base,urem'], ['--max-time', '5'], ['--max_time=500ms'],
+            ['--bv-term-abstraction-schema-groups=base,urem'], ['--max-time', '5'], ['--max_time=7'],
             ['-k', '2'], ['--switch-word'], ['-w'], ['--no-incremental-promote-units'],
             ['--incremental'], ['--incremental=off'], ['--array-equality'], ['--stop-after-cnf'],
             ['--sat-backend=auto'], ['--produce-models=false'], ['--simplify=false'],
