@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #********************************************************************
-# statistics.toml -- the STP 3.x statistics table (design sketch; see DESIGN.md §6.1 and stp.hpp Statistics).
+# statistics.toml -- the STP 3.x statistics table (see Statistics in stp.hpp).
 #
 # Generates: the name table behind Statistics::get / stp_statistics_* / stp.Statistics, the tier query,
 # and the docs. Names are dotted, stable strings; the 2.x `stp_counter_t` ordinals map onto the

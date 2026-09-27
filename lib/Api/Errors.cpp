@@ -242,7 +242,7 @@ bool error_recoverable(ErrorCode code)
 
 namespace
 {
-// The policy for the two unsafe codes, process-wide (DESIGN.md §7.6).
+// The policy for the two unsafe codes, process-wide.
 InternalErrorPolicy g_policy = [] {
   const char* env = std::getenv("STP_ABORT_ON_INTERNAL_ERROR");
   return (env != nullptr && std::strcmp(env, "1") == 0) ? InternalErrorPolicy::ABORT

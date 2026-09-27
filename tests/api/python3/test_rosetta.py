@@ -20,9 +20,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The seven Rosetta programs of api-3x/design/rosetta-3x.md, as written there, with
-their stated outcomes. R4's `b == c` is an equality against a store over a
-constant array, stated as the document states it."""
+"""Seven small end-to-end programs, one per theory and one for solver control, with
+their expected outcomes; the C++ versions are in tests/api/cpp3/api3-rosetta.cpp.
+R4's `b == c` is an equality against a store over a constant array."""
 
 from fractions import Fraction
 

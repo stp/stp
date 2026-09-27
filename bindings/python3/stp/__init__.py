@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""stp -- the STP 3.x Python API (z3py-flavoured; DESIGN.md section 12, stp.pyi).
+"""stp -- the STP 3.x Python API (z3py-flavoured).
 
     from stp import *
     x, y = BitVecs('x y', 32)

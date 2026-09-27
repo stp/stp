@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""Threads and signals (DESIGN.md section 9): interrupt() from another thread while a check
+"""Threads and signals: interrupt() from another thread while a check
 runs with the GIL released, Ctrl-C on the main thread, a manager used from several threads one
 call at a time, and the deferred release of wrappers finalised while their manager is busy."""
 
@@ -177,7 +177,7 @@ print("main ok", flush=True)
 
 
 def test_independent_managers_on_two_threads():
-    """DESIGN.md section 9: independent managers are fully concurrent. Run in a subprocess
+    """Independent managers are fully concurrent. Run in a subprocess
     because the failure is a glibc abort, which no test framework survives."""
     r = subprocess.run([sys.executable, "-c", _TWO_MANAGERS_TWO_THREADS], capture_output=True, text=True, timeout=120)
     assert r.returncode == 0 and "worker ok" in r.stdout and "main ok" in r.stdout, (r.returncode, r.stdout, r.stderr[-400:])

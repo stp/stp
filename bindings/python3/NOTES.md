@@ -1,9 +1,9 @@
-# The Python layer: notes against stp.pyi
+# The Python layer: implementation notes
 
-`bindings/python3/stp` implements `api-3x/design/stp.pyi` (in the `master`
-worktree) over the C API `<stp/stp.h>`. This file records how the layer is
-built, where it deviates from the stub, what the C API did not offer, and every
-defect of the C or C++ layers met on the way. Nothing in `lib/` was changed.
+`bindings/python3/stp` is the Python API, a z3py-style package over the C API
+`<stp/stp.h>`. This file records how the layer is built, the decisions that
+depart from z3py or from a literal reading of the C API, what the C API did
+not offer, and every defect of the C or C++ layers met on the way.
 
 ## Files
 
@@ -36,16 +36,14 @@ defect of the C or C++ layers met on the way. Nothing in `lib/` was changed.
   second wrapper of a node (`Manager.rewrap`): it decorates the store chain with
   the `stp_array_value` handle.
 - **Errors.** After a failing call the manager's record is read, turned into
-  the exception class of its code (the table of `errors.toml`, DESIGN.md
-  section 7.4), decorated with `.code`, `.recoverable`, `.function` (the C
+  the exception class of its code (the table of `errors.toml`), decorated with `.code`, `.recoverable`, `.function` (the C
   function), `.argument_index`, `.option` and `.terms`, and cleared. Calls with
   no manager read `stp_last_error()`. A failed *mutation* of a solver also
   leaves the solver's failed state at once (`stp_solver_clear_error`): a raised
-  exception cannot be ignored, so Python needs no failed state (DESIGN.md
-  section 7.3). `ParseError.lineno/offset` are parsed from the message
+  exception cannot be ignored, so Python needs no failed state. `ParseError.lineno/offset` are parsed from the message
   (`parse error at L:C`).
 - **Threads.** A `Manager` and everything created from it may be used from
-  any thread, one call at a time (DESIGN.md section 9): the GIL serialises the
+  any thread, one call at a time: the GIL serialises the
   Python entry points, and the calls that release it
   (`stp_solver_check_sat_budget`, `stp_solver_entails`, the parsers and
   `stp_solver_write_cnf`) must not overlap another call on the same manager,
@@ -75,9 +73,9 @@ defect of the C or C++ layers met on the way. Nothing in `lib/` was changed.
   option functions, where the entry's Settable window is enforced by the C
   layer (`OPTION_TIMING`).
 
-## Deviations from stp.pyi
+## Decisions of the implementation
 
-1. **The class layer is pure Python.** The stub (and DESIGN.md section 12.1)
+1. **The class layer is pure Python.** The plan
    puts the `ExprRef` family, `Solver`, `Model` and the operators in the
    Cython extension; here the extension holds the handles and the shell holds
    the classes. Behaviour is the stub's; the per-term path is Python.
@@ -153,7 +151,7 @@ defect of the C or C++ layers met on the way. Nothing in `lib/` was changed.
     (`_gen_kinds.py` is generated without the property).
 17. **Not done:** installation (the 2.x ctypes package installs under the same
     name `stp`; which one an installed tree carries is a packaging decision),
-    wheels, doctests, a generated `.pyi` (the design's `stp.pyi` is the stub).
+    wheels, doctests, a generated `.pyi` stub.
 
 ## C API gaps met while building this
 
@@ -191,7 +189,7 @@ noted, or were done with throw-away programs against `build-py/lib/libstp.so`.
    *no* manager was created on another thread is fine. Same thread, any
    number of managers: fine. Reproduced with a 20-line C program (pthreads,
    `stp_tm_new` on `main`, then a worker doing `stp_tm_new` +
-   `stp_mk_bv_uint64(tm2, 8, 3)`), and from Python. DESIGN.md section 9
+   `stp_mk_bv_uint64(tm2, 8, 3)`), and from Python. The API
    promises "independent managers are fully concurrent"; this is a
    thread-local or global in the constant path (`TermManager::mk_bv` ->
    `ASTBVConst` / the CONSTANTBV library) rather than a data race, since the
@@ -225,21 +223,21 @@ noted, or were done with throw-away programs against `build-py/lib/libstp.so`.
    `fp.add`/`fp.sqrt`/`fp.roundToIntegral`/`fp.eq`/`fp.lt`, `bvult`, `ite`
    and the bit-vector arithmetic fold. Deviation 7 covers the Bool and Real
    cases in Python; the FP conversions need a model.
-4. **The SMT-LIB 2 parser does not read the value forms the printers emit.**
-   `stp_solver_parse_term` (and `parse_smt2`) reject `(fp #b0 #b... #b...)`,
-   `(_ +zero 8 24)`, `(_ NaN 8 24)`, `RNE` and `fp.add` unless a
-   floating-point `set-logic` was given first (the lexer's "recognised only
-   after a floating-point (set-logic)" hint), and reject `(/ 1 3)`, `(- 3)`,
-   `1.5` and a declared-sort value `S!1` unconditionally (`((as const (Array
-   ...)) v)` parses since 2026-09-27). `stp_model_to_smt2` and `stp_term_str`
-   print exactly these
-   forms, so a model or a term cannot round-trip through the parser (hence
-   deviations 5 and 6).
+4. **The SMT-LIB 2 parser did not read the value forms the printers emit.**
+   FIXED except for declared-sort values: an API parse enables every
+   theory's keywords without a `set-logic`, so `(fp #b0 #b... #b...)`,
+   `(_ +zero 8 24)`, `(_ NaN 8 24)`, `RNE`, `fp.add`, `(/ 1 3)`, `(- 3)`,
+   `1.5` and `((as const (Array ...)) v)` all parse. A declared-sort value
+   such as `S!1` still does not, so a model over declared sorts cannot
+   round-trip through the parser (hence deviations 5 and 6).
 5. **Parse errors are echoed to stdout.** Every recoverable `PARSE` error also
    prints `(error "syntax error: ...")` on the process's stdout, and
    `(get-model)` in `DECLARE_AND_ASSERT` mode prints `unsupported` there
-   (`lib/Parser/smt2.y`, `Cpp_interface`). DESIGN.md section 10: nothing
-   writes to stdout unless a sink says so.
+   (`lib/Parser/smt2.y`, `Cpp_interface`), where nothing should write to
+   stdout unless a sink says so. FIXED for declare-and-assert parses (the
+   default): the frontend's stdout is captured there and the diagnostic is
+   the error's text; a script run in execute mode still prints its
+   responses, errors included, as the command line does.
 6. **`Model::try_value` completes array symbols and unseen function
    applications** (`lib/Api/Model.cpp`): for a scalar symbol outside the core
    it returns nothing (correct), for an array symbol outside the core it
@@ -248,7 +246,7 @@ noted, or were done with throw-away programs against `build-py/lib/libstp.so`.
    rule in Python.
 7. **A `define-fun` name is not in the name table**: after
    `(define-fun dfx () (_ BitVec 8) #x07)` both `stp_tm_symbol(tm, "dfx")` and
-   `stp_solver_symbol(s, "dfx")` return NULL, although DESIGN.md section 10
+   `stp_solver_symbol(s, "dfx")` return NULL, although the API
    says symbols a script declares are reachable through `Solver::symbol`.
    `(declare-fun ...)` names are reachable. Minor.
 8. **Arrays cannot hold Bools**: `stp_mk_array_sort(tm, bv, bool)` is

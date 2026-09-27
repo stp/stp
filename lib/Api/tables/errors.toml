@@ -21,17 +21,17 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #********************************************************************
-# errors.toml -- the STP 3.x error-code table (design sketch; see DESIGN.md §7).
+# errors.toml -- the STP 3.x error-code table.
 #
 # Generates: enum class stp::ErrorCode (stp.hpp), enum stp_error_code (stp.h), stp.ErrorCode and the
-# exception class mapping (stp.pyi / the Cython translator), the docs table, and the per-code
-# "no trace" test list (DESIGN.md §13: one test per recoverable code asserts that a refused call
-# left the manager, the solver, the assertion stack and every model unchanged).
+# exception class mapping (the Cython translator), the docs table, and the per-code "no trace"
+# test list (one test per recoverable code asserts that a refused call left the manager, the
+# solver, the assertion stack and every model unchanged).
 #
 # Fields
 #   name         the enumerator (pinned by `value`; append only)
 #   value        the pinned integer shared by C, C++ and Python
-#   recoverable  true: the call had no effect. false: the object is poisoned (DESIGN.md §7.1)
+#   recoverable  true: the call had no effect. false: the object is poisoned
 #   python       the Python exception class and its built-in mix-in(s), for the translator
 #   message      the message template the STP_CHECK builder fills; {fn} {arg} {sort} {expected} are placeholders
 #   fields       which structured fields the record carries (argument_index, terms, sorts, option)
@@ -116,7 +116,7 @@ python = "ArgumentError(Error, ValueError)"   # unreachable from Python
 message = "invalid call to '{fn}': argument {arg} is NULL"
 fields = ["argument_index"]
 # C only, and only for required NON-term arguments (a NULL manager, solver, options, model, or out-pointer).
-# A NULL term or sort argument propagates silently (DESIGN.md §7.3) and never records this code.
+# A NULL term or sort argument propagates silently and never records this code.
 
 [[error]]
 name = "UNSUPPORTED"

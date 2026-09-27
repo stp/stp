@@ -20,8 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""Sorts, the ExprRef family, the operator ledger (DESIGN.md section 5.7), literal
-strictness and every builder of stp.pyi at least once."""
+"""Sorts, the ExprRef family, the operator ledger, literal
+strictness and every builder at least once."""
 
 import pickle
 from fractions import Fraction

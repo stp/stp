@@ -4,9 +4,8 @@
 236 functions of `include/stp/c_interface.h` (STP's 2.x C API) and implements
 each of them over `include/stp/stp.h` (the 3.x C API) alone. It includes no
 engine header and no `stp.hpp`; the one symbol it names beyond `stp.h` is the
-workaround in defect 1 below. The design it realises is
-`api-3x/design/COMPAT2.md`; this file records where the implementation went
-its own way, what is approximate or unsupported, how the 2.x acceptance suites
+workaround in defect 1 below. This file records how each 2.x behaviour is
+reproduced, what is approximate or unsupported, how the 2.x acceptance suites
 fare against it, and every 3.x defect met on the way.
 
 ## Files
@@ -90,9 +89,9 @@ fare against it, and every 3.x defect met on the way.
   creates the solver only when something needs it; when a live solver refuses a
   write with `OPTION_TIMING`, the shim deletes it and creates a new one from
   the record, replaying the assertion stack (`push`es and `assert`s) into it.
-  That is a departure from COMPAT2.md §2.5, which proposed a nonfatal
-  diagnostic: the acceptance suites switch backends and flags between queries
-  and expect them to take effect, which the rebuild gives them. Refusals for
+  A nonfatal diagnostic would be the simpler answer, but the acceptance
+  suites switch backends and flags between queries and expect them to take
+  effect, which the rebuild gives them. Refusals for
   any other reason are reported through the handler and the setting is dropped.
 - **Errors.** `report()` is the nonfatal path: the handler if one is
   registered, else `CInterface: <message>` on stderr; the call returns its
@@ -289,7 +288,7 @@ fare against it, and every 3.x defect met on the way.
 
 | function | status |
 |---|---|
-| `vc_createValidityCheckerReuse` | **unsupported**: returns `NULL` after a diagnostic through the handler. 3.x has no door through which a raw engine manager can be adopted (COMPAT2.md §4). Calling any function on the `NULL` result is then the usual fatal. |
+| `vc_createValidityCheckerReuse` | **unsupported**: returns `NULL` after a diagnostic through the handler. 3.x has no door through which a raw engine manager can be adopted. Calling any function on the `NULL` result is then the usual fatal. |
 | `vc_getSchemaGroupCounter` | **inert**: always 0 (defect 3). `vc_setSchemaGroups`, `vc_schemaGroupName` and the range check work. |
 | `vc_setInterfaceFlags(UF_SORT_WIDTH)` | **inert**: validated and recorded, nothing observes it (decision 8). |
 | `vc_setFlags(..., num_absrefine)` | the second argument is ignored, as in 2.x. |
@@ -444,14 +443,13 @@ C API exposes.
 `fp_multi_checker.checker_reuse_over_existing_manager` and
 `push_pop_model.file_printer_materializes_deferred_counterexample` construct an
 `stp::STPMgr` and build a checker around it (the second also writes its
-`UserFlags`). The shim returns `NULL` (§4), and the next call aborts on the
+`UserFlags`). The shim returns `NULL` (see the function table), and the next call aborts on the
 null checker.
 
 **C. A documented 3.x semantic change (1 case).**
 `model_read_with_no_solve.a_valid_query_is_not_the_same_as_no_query` expects
 `vc_getCounterExample` to answer after a VALID query; that is 2.x's D2
-(inventing a value where there is no model), not reproduced by design
-(COMPAT2.md §2.4). The other 12 cases of the binary pass.
+(inventing a value where there is no model), not reproduced by design. The other 12 cases of the binary pass.
 
 **D. A 3.x defect (1 case), FIXED.**
 `fp_model_roundtrip.partial_choice_uses_current_solve_encoding` asserts
@@ -526,19 +524,17 @@ as before this work.
    run with `simplify = false` (it is the mode 2.x ran in, and the results the
    suites expect depend on it).
 
-## 7. Where this differs from COMPAT2.md
+## 7. Deliberate choices
 
 - Option timing: a rebuild with stack replay, not a diagnostic (§2 above).
 - `vc_getHashQueryStateToBuffer`: a term hash, not a text hash.
 - `vc_printSMTLIB2` and the model's SMT-LIB 2 text: composed by the shim, not
   taken from a scratch solver's `to_smt2` (defect 5).
-- The UF model rule stays the strict 2.x one (dies on assert, push and pop),
-  where the design allowed the permissive one: the UF suites test the strict
-  rule.
+- The UF model rule stays the strict 2.x one (dies on assert, push and pop)
+  rather than a permissive one: the UF suites test the strict rule.
 - Whole-array equality without `'x'` is refused at construction, as in 2.x,
-  where the design's table let `vc_eqExpr` build it.
-- The per-thread boot of the constant bit-vector library (defect 1) is not in
-  the design.
+  although the 3.x API would build it.
+- The per-thread boot of the constant bit-vector library (defect 1).
 
 ## 8. Follow-ups
 

@@ -21,26 +21,17 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #********************************************************************
-# options.toml -- the STP 3.x option registry (design sketch; see DESIGN.md §8).
+# options.toml -- the STP 3.x option registry.
 #
 # This file is the single source for options. It generates:
 #   - enum class stp::Option / enum stp_option (the "stable" tier only) and the by-name tables for every tier;
 #   - Options::set/get/info/names/help in C++, the stp_options_* functions in C, Solver.set(**kw) / Options in Python;
 #   - the CLI table of tools/stp (every entry's --name, aliases, short form and CLI form), its --help groups and text;
 #   - the option reference page of the docs;
-#   - the parity test: every entry is set through the CLI and through each API, and Options::resolved() is compared.
+#   - the checks api3-registry (the table's defaults against the engine's) and api3-cli-help (the built binary's --help).
 #
-# Provenance of this sketch: the 230 [[option]] entries below were generated from the parity audit's master table
-# (../survey/stp-options-parity.md, rows 4-250 minus the frontend rows, the four backend flags and --exit-after-CNF, which
-# became aliases), so name, aliases, short
-# form, type, default, help and the legacy letter/ordinal come from the audit. Three fields are ASSIGNED BY RULE and
-# must be reviewed per entry before implementation:
-#   tier      stable | expert | experimental | diagnostic   (rule: an explicit stable list; print-*/verify-* diagnostic;
-#             bb.*, fp-domain-*, most lra-* sub-knobs and the finer refinement knobs experimental; the rest expert)
-#   settable  anytime | before-first-check | construction   (rule: sat-backend/threads construction; simplification,
-#             bit-blasting, cnf, incremental, lra and structural entries before-first-check; limits, model, output and
-#             refinement tuning anytime -- the KLEE FP fork changes refinement knobs between checks)
-#   category  by name prefix
+# The entries began as a transcription of the command line tools/stp/main.cpp registered by hand;
+# the binary now registers its command line from this table.
 # Exclusions (the CLI's 37 pairs: 6 vanish inside the sat-backend enum, 3 become threads' `requires`, 4 belong to the frontend rows,
 # 24 are `excludes` below), implications (`implied_by`/`follows`/`implies`) and build requirements were transcribed from tools/stp/main.cpp.
 #
@@ -57,7 +48,7 @@
 #   range       { min, max } for int/uint
 #   values      enum/set members
 #   sentinel    the documented meaning of a special value (e.g. "-1 = no limit"); every sentinel is explicit
-#   tier        stable | expert | experimental | diagnostic (DESIGN.md §8.1)
+#   tier        stable | expert | experimental | diagnostic
 #   settable    anytime | before-first-check | construction; a late set is a recoverable OPTION_TIMING error
 #   scope       solver | manager
 #   category    grouping for help and docs
@@ -70,7 +61,7 @@
 #   excludes    entries that may not be set together (checked at resolve(), OPTION_CONFLICT)
 #   requires    { build = "cadical" | "highs" | "highs-cut-log" | "cryptominisat" | "minisat", option = "...", value = "..." }:
 #               OPTION_UNAVAILABLE in other builds; OPTION_CONFLICT when the named option does not hold the value; info().supported = false
-#   legacy      { letter, iface_flag, cli_unit }: the 2.x spellings, for MIGRATION.md and the porting guide
+#   legacy      { letter, iface_flag, cli_unit }: the 2.x spellings, for porting 2.x code
 #   cli_form    how tools/stp registers the entry: value (the default: --name VALUE, or --name=VALUE), flag (a bare
 #               --name, with an optional =VALUE; a mode flag reads bare as on) or none (API only, not on the CLI)
 #   cli_bad_value  the wording tools/stp uses for a value it refuses, where it differs from the generic
@@ -121,7 +112,7 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "random_seed" }
 category = "sat"
-help = "seed for every randomised component (SAT backend, phase and decision heuristics); 2.x had none in the CLI or the API (survey R22)"
+help = "seed for every randomised component (SAT backend, phase and decision heuristics)"
 
 [[option]]
 name = "model-array-fill"
@@ -310,7 +301,7 @@ help = "use installed simplifying minisat version as the solver"
 # ============================================================================ frontend-only registrations and their API meaning
 # These are not solver options. They exist on the CLI (tools/stp registers them from this section: `cli` is the
 # CLI11 spelling list, `kind` is positional | help | flag | bool-option, `group` the --help group) and each names
-# the API call that gives a library client the same capability (DESIGN.md §8.3). This is what makes the CLI a
+# the API call that gives a library client the same capability . This is what makes the CLI a
 # strict subset of the API. `key` is what tools/stp binds the registration to.
 
 [[frontend]]
@@ -442,7 +433,7 @@ help = "read the input a character at a time, as needed when driving stp interac
 api = "CLI only: a REPL that feeds lines to Solver::parse_smt2(text, ParseMode::EXECUTE)"
 excludes = ["--CVC", "--SMTLIB1"]
 
-# ============================================================================ in-band SMT-LIB 2 keys and environment taps (SURVEY §6.1 "Beyond argv")
+# ============================================================================ in-band SMT-LIB 2 keys and environment taps
 # (set-option :produce-models b) writes the registry entry produce-models. The other 2.x in-band keys are parser
 # state, not solver options: :print-success, :global-declarations, :produce-unsat-assumptions and
 # :diagnostic-output-channel are handled by the SMT-LIB 2 frontend of Solver::parse_smt2 (ParseMode::EXECUTE) and
@@ -880,7 +871,7 @@ settable = "construction"
 scope = "solver"
 engine = { custom = "threads" }
 category = "sat"
-# > 1 forfeits the fork-safety guarantee (DESIGN.md §9)
+# > 1 forfeits the fork-safety guarantee
 requires = { build = "cryptominisat", option = "sat-backend", value = "cryptominisat" }   # 2.x: --threads excluded every other backend flag
 help = "Number of threads for cryptominisat"
 
@@ -1596,7 +1587,7 @@ settable = "construction"
 scope = "solver"
 engine = { field = "lra_verify_canonical" }
 category = "lra"
-# 2.x: a process-wide atomic; 3.x: per solver (engine change, DESIGN.md §13 stage 2)
+# 2.x: a process-wide atomic; 3.x: per solver (an engine change)
 legacy = { iface_flag = "LRA_VERIFY_CANONICAL" }
 help = "re-derive the canonical form of exact rationals whose construction already proves it"
 

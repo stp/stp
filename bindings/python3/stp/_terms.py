@@ -21,8 +21,8 @@
 # THE SOFTWARE.
 
 """The term layer of the STP 3.x Python API: the term manager, sorts, the ExprRef
-family with its operators and literal coercion, and the z3py-style builders
-(DESIGN.md section 12, stp.pyi). Everything here is pure Python over stp._core."""
+family with its operators and literal coercion, and the z3py-style builders.
+Everything here is pure Python over stp._core."""
 
 import enum
 import threading

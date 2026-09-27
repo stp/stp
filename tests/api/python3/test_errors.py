@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The exception hierarchy (DESIGN.md section 7.4) and the fields every error carries."""
+"""The exception hierarchy and the fields every error carries."""
 
 import pytest
 

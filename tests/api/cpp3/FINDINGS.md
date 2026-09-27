@@ -123,7 +123,7 @@ fills empty levels with `true`) as a side effect. Fix: the level vector is
 built from `AssertLevels()` without touching them. The frontend's own
 `check-sat` (a script's, in either parse mode) still runs
 `getVectorOfAsserts()`, so a script containing `(check-sat)` leaves each
-level as one conjunction; recorded under the design points.
+level as one conjunction; recorded under the known differences below.
 
 ### 14. A script could not pop a level pushed by the API or by an earlier script
 
@@ -452,7 +452,7 @@ kept. `Parsing.DISABLED_function_misuse_in_a_script_is_a_parse_error` holds
 the expectations for when the frontend's refusal ends the parse rather than
 the process.
 
-## Design points the implementation does not honour (recorded, not changed)
+## Known differences from the intended behaviour (recorded, not changed)
 
 - **Construction-time lowering survives `simplify = false`.** `kind()`
   reports the lowered form for `BV_NAND`/`BV_NOR`/`BV_XNOR` (`BV_NOT` over the
@@ -464,16 +464,16 @@ the process.
   operand), `AND`/`OR` of one argument (the argument), and `DISTINCT` over FP,
   Real or array sorts (`NOT` of the equality, or an `AND` of those).
   `kinds.toml` lists these as `folds`, which its header defines as the rewrites
-  applied when `simplify = true`; DESIGN.md 5.6 promises faithful structure
-  under `simplify = false`. The engine has no node kinds for most of them, so
+  applied when `simplify = true`, and the API means to keep structure
+  faithful under `simplify = false`. The engine has no node kinds for most of them, so
   `api3-kinds.cpp` asserts the lowered view (the lines marked `lowered:`).
 - **Array equality against a constant array was `UNSUPPORTED`** (FIXED
   2026-09-27: constant arrays are the engine's, with the extensionality
   checker's rules K and K' and the completed models; `api3-const-arrays.cpp`),
   so `ArrayValue::as_term()` can be re-asserted as `a == av.as_term()` and the
   Rosetta R4 program states `b == c` directly. `Model::value` of an
-  array-sorted term returns the term itself rather than the store chain
-  DESIGN.md 6.3 describes; `array_value()` is the data door.
+  array-sorted term returns the term itself rather than a store chain over a
+  constant array; `array_value()` is the data door.
 - **`sat-backend` naming a backend the build lacks is refused at solver
   construction**, not "at set time" as the registry's help text says:
   `Options::set_str("sat-backend", "minisat")` succeeds on a build without
@@ -502,7 +502,7 @@ the process.
   values: `switch-word = true` with `disable-simplifications = false` is an
   `OPTION_CONFLICT`.
 - **A function a script declares is the manager's**, like a declared constant
-  (the unscoped name table of DESIGN.md 5.5): it survives an API `pop()` of the
+  (the manager's name table is unscoped): it survives an API `pop()` of the
   level it was declared in. A `(pop)` inside the script does deactivate it (the
   frontend's own scoping), and it is then not adopted. A script's
   `(check-sat)`, in either parse mode, still leaves each level as one

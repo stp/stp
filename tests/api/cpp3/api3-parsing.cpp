@@ -491,8 +491,8 @@ TEST(Parsing, functions_declared_by_scripts)
   s.parse_smt2("(push 1)\n(declare-fun g ((_ BitVec 8)) (_ BitVec 8))\n"
                "(assert (= (g x) x))\n(pop 1)\n");
   EXPECT_FALSE(tm.symbol("g").has_value());
-  // declared inside a level the API pops: the name table is unscoped
-  // (DESIGN.md 5.5), so it stays, as a declared constant does
+  // declared inside a level the API pops: the manager's name table is
+  // unscoped, so it stays, as a declared constant does
   s.parse_smt2("(push 1)\n(declare-fun h ((_ BitVec 8)) (_ BitVec 8))\n"
                "(declare-fun hx () (_ BitVec 8))\n(assert (= (h x) hx))\n");
   ASSERT_TRUE(tm.symbol("h").has_value());

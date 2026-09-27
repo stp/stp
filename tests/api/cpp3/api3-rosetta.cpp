@@ -22,10 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// api3-rosetta.cpp -- the seven Rosetta programs of api-3x/design/rosetta-3x.md
-// (their C++ versions), each run against the real API and checked for the
-// outcome the document states. The bodies follow the document line for line;
-// the checks replace its std::cout lines.
+// api3-rosetta.cpp -- seven small end-to-end programs, one per theory and one
+// for solver control (the Python versions are in tests/api/python3), each run
+// against the real API and checked for its expected outcome; the checks stand
+// where a user program would print.
 
 #include "api3_common.hpp"
 

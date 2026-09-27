@@ -80,7 +80,7 @@ from stp._gen_kinds import ErrorCode
 # ----------------------------------------------------------------- errors
 
 class Error(Exception):
-    """The base of every STP exception (DESIGN.md section 7.4).
+    """The base of every STP exception.
 
     Attributes: code (ErrorCode), recoverable, function (the C API function
     that refused), argument_index (0-based or None), option (the option name

@@ -1,7 +1,6 @@
 # The STP 3.x API (alpha)
 
-This directory implements the API designed in `api-3x/design/DESIGN.md` (in the
-`master` worktree): `<stp/stp.hpp>` is the primary, C++17 surface; `<stp/stp.h>`
+This directory implements the STP 3.x API: `<stp/stp.hpp>` is the primary, C++17 surface; `<stp/stp.h>`
 is the C layer over it; `stp._core` (Cython) is the Python layer over the C layer;
 `libstp2` re-implements the 2.x `c_interface.h` over `stp.h`.
 

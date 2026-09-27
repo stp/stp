@@ -9,10 +9,6 @@ registry, so a program reads the same way in each. The 2.x interface survives as
 ``libstp2``, a compatibility library implemented over the C API (see
 :ref:`api3-compat`).
 
-The design, its rationale and the survey of the peer solvers it was drawn
-from live outside the tree (``api-3x/`` in the design worktree); this page is
-the user-facing guide.
-
 Objects
 -------
 
@@ -197,9 +193,9 @@ clients link it unchanged (``-lstp2`` instead of ``-lstp``). It reproduces the
 2.x ownership modes, the error handler and the model-lifetime rules, with two
 documented exceptions: reading a counterexample after a VALID answer returns
 ``NULL`` with a diagnostic instead of an invented value, and an unmatched
-``vc_pop`` is an error instead of deleting the base assertions. The design
-documents carry the full 86-row mapping from 2.x functions to 3.x calls and
-the table of option letters and ``ifaceflag_t`` ordinals.
+``vc_pop`` is an error instead of deleting the base assertions.
+``lib/Compat2/NOTES.md`` records how each 2.x function, option letter and
+``ifaceflag_t`` ordinal maps onto the 3.x API.
 
 Limits of the alpha
 -------------------
