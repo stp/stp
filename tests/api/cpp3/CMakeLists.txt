@@ -45,6 +45,102 @@ AddSTPGTest(api3-engine-failure.cpp)
 AddSTPGTest(api3-rosetta.cpp)
 AddSTPGTest(api3-const-arrays.cpp)
 
+# The 2.x C API's suites, rewritten against this API. A suite that checks an
+# internal property (a flag reaching the engine, what the extensionality
+# checker holds) reaches the engine through api3_engine.hpp, which reads
+# lib/Api/Internal.h.
+set(API3_REWRITTEN_SUITES
+    array-cvcl-02
+    array-equality-retired-after-pop
+    bv-abstraction-array-candidate-is-bound
+    cnf-effort-flag
+    fp-abstraction-flags
+    incremental-scoped-preprocessing
+    counter-enum-abi
+    bv-abstraction-mult-schemas
+    bv-abstraction-nary-plus
+    array-extensionality
+    array-ite
+    b4-c2
+    b4-c
+    bvconst-width
+    getbv
+    hoangmle
+    if-check
+    incremental-auto-engage
+    interface-check
+    leaks
+    persist-delete
+    multiple-queries
+    parsefile-using-cinterface
+    parsestring-using-cinterface
+    print
+    multi-print
+    push-no-pop
+    push-pop
+    push-pop-model
+    reason-unknown
+    refinement-flags
+    incremental-query
+    sbvdiv
+    simplify
+    stp-array-model
+    stp-bool
+    stpcheck
+    stp-counterex
+    stp-div-001
+    stp-test3
+    x
+    y
+    multi-query-bug
+    reported_error
+    stp-even-eqn-assert
+    mdempsky
+    counterexample
+    example_broken
+    counter-example-reading
+    failing_solvermap
+    bit_string
+    check_sizes
+    timeout-budget
+    fp-model-reading
+    fp-model-roundtrip
+    fp-repeated-solve
+    fp-shared-bv-operand
+    fp-identity-passthrough
+    fp-lowered-ite-fold
+    fp-arithmetic
+    fp-constants-conversions
+    fp-multi-checker
+    fp-cpp-wrapper
+    fp-to-ieee-bv
+    fp-roundingmode-var
+    fp-roundingmode-survives-push-pop
+    fp-roundingmode-model-completion
+    fp-smt-equality
+    fp-arrays
+    fp-array-extensionality
+    fp-model-eval-predicates
+    fp-model-no-fp-in-query
+    model-read-with-no-solve
+    fp-printing
+    cadical
+    new-expr-kinds
+    varexpr-widths
+    uninterpreted-functions-api
+    uninterpreted-functions-handle-safety
+)
+foreach(suite IN LISTS API3_REWRITTEN_SUITES)
+    AddSTPGTest(api3-${suite}.cpp)
+    target_include_directories(api3-${suite}Tests PRIVATE ${PROJECT_SOURCE_DIR}/lib)
+    add_dependencies(api3-${suite}Tests stp_api_tables)
+endforeach()
+# The two suites that parse a CVC file from this directory.
+set_property(TARGET api3-parsefile-using-cinterfaceTests APPEND PROPERTY
+             COMPILE_DEFINITIONS CVC_FILE="${CMAKE_CURRENT_SOURCE_DIR}/t.cvc")
+set_property(TARGET api3-stp-test3Tests APPEND PROPERTY
+             COMPILE_DEFINITIONS CVC_FILE="${CMAKE_CURRENT_SOURCE_DIR}/f.cvc")
+
 # The registry against the engine and the command line generated from it:
 # reads lib/Api/Internal.h, the in-tree view tools/stp/main.cpp registers from.
 AddSTPGTest(api3-registry.cpp)
