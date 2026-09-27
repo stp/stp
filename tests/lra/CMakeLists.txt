@@ -924,6 +924,49 @@ set_tests_properties(lra_c_api_smoke PROPERTIES
   LABELS "lra;api;model"
 )
 
+# The API tests above rewritten against the 3.x API (C++ and C). The originals
+# stay as tests of libstp2, the 2.x C API over the 3.x one.
+foreach(api3_test combination_api real_capability_api)
+  add_executable(stp_lra_api3_${api3_test}_tests api3_${api3_test}_tests.cpp)
+  target_link_libraries(stp_lra_api3_${api3_test}_tests PRIVATE stp Threads::Threads)
+  set_property(TARGET stp_lra_api3_${api3_test}_tests PROPERTY INCLUDE_DIRECTORIES
+    "${PROJECT_BINARY_DIR}/include"
+    "${PROJECT_SOURCE_DIR}/include"
+  )
+  set_target_properties(stp_lra_api3_${api3_test}_tests PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+  )
+endforeach()
+add_test(NAME lra_api3_combination_api
+  COMMAND stp_lra_api3_combination_api_tests)
+set_tests_properties(lra_api3_combination_api PROPERTIES
+  LABELS "lra;api;combine;array;context;concurrency"
+  TIMEOUT 3600
+)
+add_test(NAME lra_api3_real_capability_api
+  COMMAND stp_lra_api3_real_capability_api_tests)
+set_tests_properties(lra_api3_real_capability_api PROPERTIES
+  LABELS "lra;api;ite;uf"
+  TIMEOUT 3600
+)
+add_executable(stp_lra_api3_real_c_api_smoke api3_real_c_api_smoke.c)
+target_link_libraries(stp_lra_api3_real_c_api_smoke PRIVATE stp)
+set_property(TARGET stp_lra_api3_real_c_api_smoke PROPERTY INCLUDE_DIRECTORIES
+  "${PROJECT_BINARY_DIR}/include"
+  "${PROJECT_SOURCE_DIR}/include"
+)
+set_target_properties(stp_lra_api3_real_c_api_smoke PROPERTIES
+  C_STANDARD 99
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+add_test(NAME lra_api3_c_api_smoke COMMAND stp_lra_api3_real_c_api_smoke)
+set_tests_properties(lra_api3_c_api_smoke PROPERTIES
+  LABELS "lra;api;model"
+)
+
 add_test(NAME lra_c_api_negative
   COMMAND "${PYTHON_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/real_c_api_negative_runner.py"
