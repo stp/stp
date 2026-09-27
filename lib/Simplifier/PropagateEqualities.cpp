@@ -336,7 +336,9 @@ void PropagateEqualities::addCandidate(const ASTNode a, const ASTNode b)
 {
   candidates.push_back(std::make_pair(a,b));
 
-  if (SYMBOL == b.GetKind())
+  // The swapped candidate defines b by a; a constant array (see the
+  // ARRAY_EQ arm) is a value and is never defined by anything.
+  if (SYMBOL == b.GetKind() && !bm->isConstArray(b))
     candidates.push_back(std::make_pair(b,a));
 }
 
@@ -595,9 +597,14 @@ bool PropagateEqualities::buildCandidateListNode(const ASTNode& a)
     // to abstraction: the model machinery that reconstructs a
     // substituted symbol's cells reads them as plain bits, which is
     // wrong under NaN's many packings and float index canonicalisation.
-    if (SYMBOL == a[0].GetKind())
+    //
+    // A constant array is a symbol only in representation: every cell of
+    // it is fixed, so it is a value, not something an equality defines.
+    // Substituting one away would make two constant arrays with different
+    // defaults 'equal' by definition.
+    if (SYMBOL == a[0].GetKind() && !bm->isConstArray(a[0]))
       addCandidate(a[0], a[1]);
-    else if (SYMBOL == a[1].GetKind())
+    else if (SYMBOL == a[1].GetKind() && !bm->isConstArray(a[1]))
       addCandidate(a[1], a[0]);
   }
   return AND == k;

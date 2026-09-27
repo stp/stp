@@ -105,13 +105,38 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   FpAbstraction* fp = bm.getFpAbstractionIfAny();
   const std::set<ASTNode>* fpSet =
       (fp != NULL && fp->active()) ? &fp->protectedSymbols() : NULL;
+  // A constant array is a symbol only in representation: every cell of it
+  // is fixed, so it is a value and never a variable this pass may give a
+  // value to. Its occurrences in the formula are collected here and kept
+  // untouchable.
+  std::set<ASTNode> constArrays;
+  if (bm.hasConstArrays())
+  {
+    ASTNodeSet visited;
+    std::vector<ASTNode> pending(1, result);
+    while (!pending.empty())
+    {
+      const ASTNode current = pending.back();
+      pending.pop_back();
+      if (!visited.insert(current).second)
+        continue;
+      if (current.GetKind() == SYMBOL && bm.isConstArray(current))
+        constArrays.insert(current);
+      for (const ASTNode& child : current.GetChildren())
+        pending.push_back(child);
+    }
+  }
+  const std::set<ASTNode>* constSet =
+      constArrays.empty() ? NULL : &constArrays;
   std::set<ASTNode> mergedUntouchable;
   const std::set<ASTNode>* effective = NULL;
   if (extSet != NULL || ufSet != NULL || fpSet != NULL ||
-      alsoUntouchable != NULL)
+      alsoUntouchable != NULL || constSet != NULL)
   {
     if (extSet != NULL)
       mergedUntouchable.insert(extSet->begin(), extSet->end());
+    if (constSet != NULL)
+      mergedUntouchable.insert(constSet->begin(), constSet->end());
     if (ufSet != NULL)
       mergedUntouchable.insert(ufSet->begin(), ufSet->end());
     if (fpSet != NULL)

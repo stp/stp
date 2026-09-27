@@ -94,6 +94,7 @@ Arrays, floating point, uninterpreted functions and Reals use the same shapes:
    Term a = tm.declare("a", arr), i = tm.declare("i", bv32);
    s.add(a[i] == 42);                 // select; store(a, i, v) for the update
    s.add(a == store(tm.declare("b", arr), i, tm.mk_bv(8, 1)));   // extensional
+   s.add(a != tm.mk_const_array(arr, tm.mk_bv(8, 0)));          // ((as const ...) #x00)
 
    Sort f32 = tm.mk_fp32_sort();
    Term fx = tm.declare("fx", f32);
@@ -203,11 +204,10 @@ the table of option letters and ``ifaceflag_t`` ordinals.
 Limits of the alpha
 -------------------
 
-CryptoMiniSat is interrupted between its solver calls only; equality over a
-constant array is refused as UNSUPPORTED; ``fp.to_real`` converts a float value
-exactly and refuses a symbolic float (the engine has no such conversion);
-``unsat_assumptions`` after a batch check reports every assumption.
-``capabilities()`` states each of these.
+CryptoMiniSat is interrupted between its solver calls only; ``fp.to_real``
+converts a float value exactly and refuses a symbolic float (the engine has no
+such conversion); ``unsat_assumptions`` after a batch check reports every
+assumption. ``capabilities()`` states each of these.
 
 Several solvers, several threads
 --------------------------------

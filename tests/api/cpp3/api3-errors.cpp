@@ -165,7 +165,7 @@ TEST(Library, version_and_capabilities)
   EXPECT_EQ(caps.at("kind.FP_TO_REAL"), "values-only");
   EXPECT_EQ(caps.at("kind.FP_TO_FP_FROM_REAL"), "values-only");
   EXPECT_EQ(caps.at("real.nonlinear"), "false");
-  EXPECT_EQ(caps.at("array.const-equality"), "false");
+  EXPECT_EQ(caps.at("array.const-equality"), "true");
   EXPECT_EQ(caps.at("cores.assumptions"), "true");
   EXPECT_EQ(caps.at("threads"), "any-thread-one-call-at-a-time");
   EXPECT_EQ(caps.at("lra"), "true");

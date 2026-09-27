@@ -524,9 +524,8 @@ def test_arrays():
     fb = ArrayFromBytes(b"\x01\x02\x03")
     assert fb.sort() is A and simplify(fb[2]).as_long() == 3 and simplify(fb[7]).as_long() == 0
     assert ArrayFromBytes(b"\x01", 16).domain() == BitVecSort(16)
-    with pytest.raises(Unsupported) as e:
-        a == Store(K(A, 0), 5, 0x2A)  # equality over a constant array: engine limit
-    assert e.value.code == ErrorCode.UNSUPPORTED
+    eq = a == Store(K(A, 0), 5, 0x2A)  # equality over a constant array
+    assert is_bool(eq) and eq.kind() == Kind.EQUAL
     with pytest.raises(TypeError):
         Select(BitVec("x", 8), 1)
     with pytest.raises(SortMismatch):

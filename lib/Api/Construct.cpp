@@ -203,9 +203,6 @@ ASTNode equality(const Ctx& c, std::size_t i, std::size_t j)
     case SortKind::REAL: return real_pred(c, EQ, a, b);
     case SortKind::ARRAY:
     {
-      if (c.m->const_arrays_involved(a) || c.m->const_arrays_involved(b))
-        c.unsupported("equality over a constant array is not supported by this "
-                      "engine (capabilities: array.const-equality = false)");
       if (c.m->array_equality_off)
         c.unsupported("array equality was switched off (array-equality = off)");
       // The factory builds the opaque ARRAY_EQ node; the solve boundary lowers it.
@@ -218,58 +215,6 @@ ASTNode equality(const Ctx& c, std::size_t i, std::size_t j)
     default:
       return c.node(EQ, {a, b});
   }
-}
-
-// A read through store chains and ites down to a constant array, expanded at
-// construction: the engine has no constant-array node, so a read must never
-// reach one.
-ASTNode read_const_base(const Ctx& c, const ASTNode& array, const ASTNode& index,
-                        std::uint32_t elem_sort)
-{
-  switch (array.GetKind())
-  {
-    case SYMBOL:
-    {
-      auto it = c.m->const_array_default.find(array);
-      if (it != c.m->const_array_default.end())
-        return it->second;
-      break;
-    }
-    case WRITE:
-    {
-      const ASTNode inner = read_const_base(c, array[0], index, elem_sort);
-      const ASTNode hit = (index == array[1]) ? c.bm()->ASTTrue : c.node(EQ, {index, array[1]});
-      if (hit == c.bm()->ASTTrue)
-        return array[2];
-      if (hit == c.bm()->ASTFalse)
-        return inner;
-      const SortRec& er = c.m->rec(elem_sort);
-      if (er.kind == SortKind::BOOL)
-        return c.node(ITE, {hit, array[2], inner});
-      ASTNode out = c.f()->CreateTerm(ITE, array[2].GetValueWidth(), hit, array[2], inner);
-      if (er.kind == SortKind::FP)
-        out = FloatBlaster::withFormat(c.bm(), out, er.a, er.b);
-      return out;
-    }
-    case ITE:
-    {
-      const ASTNode t = read_const_base(c, array[1], index, elem_sort);
-      const ASTNode e = read_const_base(c, array[2], index, elem_sort);
-      const SortRec& er = c.m->rec(elem_sort);
-      ASTNode out = c.f()->CreateTerm(ITE, t.GetValueWidth(), array[0], t, e);
-      if (er.kind == SortKind::FP)
-        out = FloatBlaster::withFormat(c.bm(), out, er.a, er.b);
-      return out;
-    }
-    default:
-      break;
-  }
-  // a genuine array below: a plain read
-  const SortRec& er = c.m->rec(elem_sort);
-  ASTNode out = c.f()->CreateTerm(READ, array.GetValueWidth(), array, index);
-  if (er.kind == SortKind::FP)
-    out = FloatBlaster::withFormat(c.bm(), out, er.a, er.b);
-  return out;
 }
 
 ASTNode to_fp_node(const Ctx& c, Kind_t ek, std::uint32_t e, std::uint32_t s, const ASTNode* rm,
@@ -310,26 +255,6 @@ ASTNode fp_from_real_value(const Ctx& c, std::uint32_t e, std::uint32_t s, const
 }
 
 } // namespace
-
-bool ManagerImpl::const_arrays_involved(const ASTNode& array) const
-{
-  ASTNode n = array;
-  for (;;)
-  {
-    switch (n.GetKind())
-    {
-      case SYMBOL:
-        return const_array_default.count(n) != 0;
-      case WRITE:
-        n = n[0];
-        continue;
-      case ITE:
-        return const_arrays_involved(n[1]) || const_arrays_involved(n[2]);
-      default:
-        return false;
-    }
-  }
-}
 
 ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vector<ASTNode>& args,
                         const std::vector<std::uint32_t>& idx,
@@ -662,7 +587,14 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
       const SortRec& r = c.rec(0);
       if (c.sort(1) != r.index)
         c.mismatch(1, m->sort_text(r.index));
-      return read_const_base(c, args[0], args[1], r.element);
+      // A read of a constant array (through any store chain and ite) folds
+      // to the default in the engine's hashing factory, in both
+      // construction modes.
+      const SortRec& er = c.m->rec(r.element);
+      ASTNode out = c.f()->CreateTerm(READ, args[0].GetValueWidth(), args[0], args[1]);
+      if (er.kind == SortKind::FP && out.GetExpWidth() == 0)
+        out = FloatBlaster::withFormat(c.bm(), out, er.a, er.b);
+      return out;
     }
     case Kind::STORE:
     {
@@ -689,14 +621,10 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
              std::nullopt, {}, {make_sort(m, *result_sort)});
       if (c.sort(0) != r.element)
         c.mismatch(0, m->sort_text(r.element));
-      const std::pair<std::uint32_t, ASTNode> key(*result_sort, args[0]);
-      auto it = m->const_arrays.find(key);
-      if (it != m->const_arrays.end())
-        return it->second;
-      ASTNode sym = m->bm->CreateFreshSourceVariable(r.source, "constarray");
-      m->const_array_default.emplace(sym, args[0]);
-      m->const_arrays.emplace(key, sym);
-      return sym;
+      // The engine registers the symbol with its default and interns by
+      // (sort, default), so the same request from a script or another
+      // call gives the same term.
+      return m->bm->CreateConstArray(r.source, args[0]);
     }
 
     // ------------------------------------------------------------ FP arithmetic

@@ -1924,6 +1924,7 @@ namespace stp
  /* Functions for QF_ABV. */
 %token SELECT_TOK;
 %token STORE_TOK;
+%token AS_TOK;
 
  /* generic FP token*/
 %token FP_TOK
@@ -3953,6 +3954,37 @@ TERMID_TOK
 | LPAREN_TOK REAL_DIV_TOK an_terms RPAREN_TOK
 {
   $$ = createExactRealTerm(stp::REAL_DIV, $3);
+}
+| LPAREN_TOK AS_TOK STRING_TOK an_array_sort RPAREN_TOK an_term
+{
+  // ((as const (Array I E)) v): the array whose every cell is v, the only
+  // qualified identifier the frontend admits. The manager registers the
+  // symbol with its default and interns by (sort, default), so the same
+  // text names the same array wherever it occurs.
+  // Both refusals end the parse, not the process (fatal_yyerror): an API
+  // parse reports them as a parse error, the command line exits with them.
+  if (*$3 != "const")
+  {
+    delete $3;
+    delete $4;
+    stp::GlobalParserInterface->deleteNode($6);
+    fatal_yyerror("only (as const ...) is supported after 'as'");
+  }
+  const stp::SourceSort array_sort = $4->sourceSort();
+  ASTNode value = *$6;
+  if (value.GetSourceSort() != array_sort.element())
+  {
+    delete $3;
+    delete $4;
+    stp::GlobalParserInterface->deleteNode($6);
+    fatal_yyerror("the default of a constant array must have the array's "
+                  "element sort");
+  }
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserBM->CreateConstArray(array_sort, value));
+  delete $3;
+  delete $4;
+  stp::GlobalParserInterface->deleteNode($6);
 }
 | SELECT_TOK an_term an_term
 {

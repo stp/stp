@@ -42,6 +42,7 @@ AddSTPGTest(api3-parsing.cpp)
 AddSTPGTest(api3-errors.cpp)
 AddSTPGTest(api3-engine-failure.cpp)
 AddSTPGTest(api3-rosetta.cpp)
+AddSTPGTest(api3-const-arrays.cpp)
 
 # The registry against the engine and the command line generated from it:
 # reads lib/Api/Internal.h, the in-tree view tools/stp/main.cpp registers from.

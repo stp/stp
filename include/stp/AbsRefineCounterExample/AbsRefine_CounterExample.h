@@ -140,6 +140,8 @@ private:
   // to record under would be found and the other missed, and the miss
   // completes to zero: one array reads a cell the other does not, and
   // two equal arrays are reported as differing.
+  std::map<ASTNode, ASTNode> arrayCompletions; // see setArrayCompletions
+
   typedef std::map<std::pair<ASTNode, ASTNode>, ASTNode> ModelCells;
   void CollectModelCells(const ASTNodeSet& arrays, ModelCells& out);
 
@@ -376,6 +378,12 @@ public:
   // term. Anywhere else both terms read the same default.
   bool ArraysEqualUsingModel(const ASTNode& left, const ASTNode& right);
 
+  // The array a term is built over once the model decides its
+  // if-then-elses and its writes are peeled (a substituted symbol is
+  // followed to its definition): the array whose completion its
+  // unobserved cells hold.
+  ASTNode BaseUnderModel(const ASTNode& arrayTerm);
+
   // Whether ArraysEqualUsingModel can answer about this array term at
   // all. Ask before asking; see the definition for the one case it
   // cannot.
@@ -400,7 +408,28 @@ public:
   // all-zero pattern denotes no mode at all, so a five-bit array of
   // modes cannot be completed with the same constant a five-bit array
   // of bitvectors is.
-  ASTNode defaultCellValue(const ASTNode& arrayTerm) const;
+  //
+  // Two arrays answer with something other than the sort's plain default.
+  // A constant array (STPMgr::isConstArray), or a write chain over one,
+  // answers with the constant array's default. An array the array-equality
+  // checker connected to a constant array in the certified candidate
+  // (through a true equality, a selected if-then-else branch or a write)
+  // answers with that default too: the checker publishes it through
+  // setArrayCompletions, and without it the printed model of an array
+  // equated with a constant array would fill its unobserved cells with
+  // zero and fail to satisfy the equality.
+  ASTNode defaultCellValue(const ASTNode& arrayTerm);
+
+  // The unobserved-cell completions the array-equality checker certified
+  // for one candidate: array node -> plain constant. Cleared with the
+  // tables, so a completion never outlives the candidate it belongs to.
+  void setArrayCompletions(const std::map<ASTNode, ASTNode>& completions);
+  // The value an array term's unobserved cells hold when it is not the
+  // sort's plain default: the default of the constant array it is built
+  // over (directly, through a write chain, a selected if-then-else branch
+  // or an equality propagation substituted away), or the checker's
+  // completion for the array it is built over. False for a plain array.
+  bool arrayCompletion(const ASTNode& array, ASTNode& out);
 
   // The mode a RoundingMode carrier with nothing behind it denotes.
   // defaultCellValue publishes it for an unobserved cell of an array of
@@ -480,6 +509,7 @@ public:
   {
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
+    arrayCompletions.clear();
   }
 
   ~AbsRefine_CounterExample() { ClearAllTables(); }

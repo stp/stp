@@ -230,6 +230,12 @@ public:
   // active solve. The final graph is built from the whole prepared formula,
   // so this set is a pre/post ownership tripwire: it must anticipate every
   // array symbol the checker may later own.
+  // Whether an array term is built over a constant array (itself, its
+  // write chain's base, or an if-then-else branch), and whether any active
+  // record's operand is; the eager instantiation arm is not taken then.
+  bool involvesConstArray(const ASTNode& arrayTerm) const;
+  bool anyRecordInvolvesConstArray() const;
+
   bool wasArrayAnticipated(const ASTNode& arraySymbol) const
   {
     return anticipatedArraySymbols.find(arraySymbol) !=
@@ -515,6 +521,17 @@ public:
       const std::vector<std::pair<ASTNode, ASTNode>>& right,
       const ASTNode& absent, const SourceSort& elementSort);
 
+  // The same question when the two arrays complete differently -- one
+  // side's unobserved cells hold a constant array's default, the other's
+  // do not, or two different defaults. Cells neither side observes then
+  // differ whenever such a cell exists, which an index sort with more
+  // values than the two observation lists name always has.
+  static bool contentsAgree(
+      const std::vector<std::pair<ASTNode, ASTNode>>& left,
+      const std::vector<std::pair<ASTNode, ASTNode>>& right,
+      const ASTNode& absentLeft, const ASTNode& absentRight,
+      unsigned indexWidth, const SourceSort& elementSort);
+
   // Validate one bit-vector lemma leaf: it must be a fixed-width
   // constant, or a SYMBOL whose complete SAT-variable vector was
   // encoded by the initial bit-blast (present, full width, every bit
@@ -626,6 +643,7 @@ private:
   bool arrayGraphIsFrozen;
   std::set<ASTNode> ownedArrays;
   std::map<ASTNode, ExtWriteNode> ownedWrites; // write node -> info
+  std::map<ASTNode, ExtConstArray> ownedConstArrays; // constant array -> default
   std::map<ASTNode, std::vector<ASTNode>> ownedWriteParents;
   std::map<ASTNode, ExtIteNode> ownedItes; // ite node -> info
   std::map<ASTNode, std::vector<ASTNode>> ownedIteParents;

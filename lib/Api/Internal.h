@@ -206,10 +206,11 @@ struct ManagerImpl
   // ids handed out by Term::id(), for term_from_id
   std::unordered_map<std::uint64_t, ASTNode> exposed_ids;
 
-  // constant arrays: an internal array symbol standing for (as const ...) v
-  std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher> const_array_default;
-  std::map<std::pair<std::uint32_t, ASTNode>, ASTNode> const_arrays; // (sort, element) -> symbol
-  bool const_arrays_involved(const ASTNode& array) const;
+  // constant arrays are the engine's (STPMgr::CreateConstArray registers the
+  // symbol with its default, and the hashing factory folds every read of
+  // one); these are the API's spellings of the two queries
+  bool is_const_array(const ASTNode& n) const;
+  const ASTNode& const_array_default(const ASTNode& n) const;
   // options that forbid what construction would otherwise enable on demand
   bool array_equality_off = false;
   // an equality between arrays was built or parsed: what array-equality = auto engages

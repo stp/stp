@@ -467,13 +467,13 @@ the process.
   applied when `simplify = true`; DESIGN.md 5.6 promises faithful structure
   under `simplify = false`. The engine has no node kinds for most of them, so
   `api3-kinds.cpp` asserts the lowered view (the lines marked `lowered:`).
-- **Array equality against a constant array is `UNSUPPORTED`**, so
-  `ArrayValue::as_term()` cannot be re-asserted as `a == av.as_term()` and the
-  Rosetta R4 program's `b == c` (with `c` a store over `(as const ...)`) is
-  refused; `api3-models.cpp` re-asserts the value through its reads and
-  `api3-rosetta.cpp` states R4's constraint through `b[5]`/`b[0]`.
-  `Model::value` of an array-sorted term returns the term itself rather than
-  the store chain DESIGN.md 6.3 describes; `array_value()` is the data door.
+- **Array equality against a constant array was `UNSUPPORTED`** (FIXED
+  2026-09-27: constant arrays are the engine's, with the extensionality
+  checker's rules K and K' and the completed models; `api3-const-arrays.cpp`),
+  so `ArrayValue::as_term()` can be re-asserted as `a == av.as_term()` and the
+  Rosetta R4 program states `b == c` directly. `Model::value` of an
+  array-sorted term returns the term itself rather than the store chain
+  DESIGN.md 6.3 describes; `array_value()` is the data door.
 - **`sat-backend` naming a backend the build lacks is refused at solver
   construction**, not "at set time" as the registry's help text says:
   `Options::set_str("sat-backend", "minisat")` succeeds on a build without

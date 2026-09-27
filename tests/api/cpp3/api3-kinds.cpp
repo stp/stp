@@ -279,9 +279,10 @@ TEST_F(Kinds, arrays)
   EXPECT_TRUE(k.child(0).same_as(tm.mk_bv(8, 9)));
   EXPECT_FALSE(k.is_const());
   EXPECT_FALSE(k.symbol().has_value());
-  // a read over a constant array is expanded at construction
+  // a read of a constant array folds to its default; one through a store stays a read
   EXPECT_TRUE(select(k, x).same_as(tm.mk_bv(8, 9)));
-  view(select(store(k, x, y), z), Kind::ITE, 3, {}, bv8);
+  view(select(store(k, x, y), z), Kind::SELECT, 2, {}, bv8);
+  EXPECT_TRUE(select(k, z).same_as(tm.mk_bv(8, 9))); // a read of the constant array itself folds
   // array-sorted ites and stores keep their sort
   view(store(ite(a, ar, ar2), x, y), Kind::STORE, 3, {}, A);
   const Sort AF = tm.mk_array_sort(f32, f32);
@@ -550,13 +551,13 @@ TEST_F(Kinds, unsupported)
 {
   const Term k = tm.mk_const_array(A, tm.mk_bv(8, 9));
   API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, fp_to_real(fx));
-  auto e = API3_ERROR_OF(eq(k, ar));
-  ASSERT_TRUE(e.has_value());
-  EXPECT_EQ(e->code(), ErrorCode::UNSUPPORTED);
-  EXPECT_EQ(e->terms().size(), 2u);
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, (void)(ar == k));
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, (void)(store(k, x, y) == ar));
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, distinct(k, ar));
+  // equality over constant arrays is supported (api3-const-arrays.cpp)
+  EXPECT_EQ(eq(k, ar).kind(), Kind::EQUAL);
+  EXPECT_EQ((store(k, x, y) == ar).kind(), Kind::EQUAL);
+  // two-operand distinct over arrays is built as the negated equality
+  const Term d = distinct(k, ar);
+  ASSERT_EQ(d.kind(), Kind::NOT);
+  EXPECT_EQ(d.child(0).kind(), Kind::EQUAL);
   API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, real_mul(rx, ry));
   API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, eq(f, f));
   API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, distinct(f, f));
@@ -571,7 +572,7 @@ TEST_F(Kinds, unsupported)
   EXPECT_EQ(fp_rem(tm.declare("d1", f64), tm.declare("d2", f64)).kind(), Kind::FP_REM);
   EXPECT_EQ(capabilities()["kind.FP_TO_REAL"], "values-only");
   EXPECT_EQ(capabilities()["real.nonlinear"], "false");
-  EXPECT_EQ(capabilities()["array.const-equality"], "false");
+  EXPECT_EQ(capabilities()["array.const-equality"], "true");
 }
 
 TEST_F(Kinds, null_and_foreign_arguments)

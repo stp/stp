@@ -83,9 +83,9 @@ defect of the C or C++ layers met on the way. Nothing in `lib/` was changed.
    the classes. Behaviour is the stub's; the per-term path is Python.
 2. **`Model.__getitem__` on an array value returns an `ArrayNumRef` view**
    built from `stp_model_array_value`; `v[i]` for a symbolic `i` builds
-   `Select(v, i)`, which the engine rewrites at construction into the `ite`
-   chain of the store entries (every select over a constant array is expanded,
-   `lib/Api/README.md`), so `v[i].kind()` is `ITE`, not `SELECT`.
+   `Select(v, i)` over the value's store chain on a constant array, and stays
+   a `SELECT` (only a read of the constant array itself folds, to its default,
+   `lib/Api/README.md`).
 3. **`Model.__getitem__` enforces the no-completion rule itself** for compound
    terms and array symbols, because `stp_model_try_value` completes them (C++
    defect 6 below); a core symbol or a value takes the fast path.
@@ -230,8 +230,9 @@ noted, or were done with throw-away programs against `build-py/lib/libstp.so`.
    `(_ +zero 8 24)`, `(_ NaN 8 24)`, `RNE` and `fp.add` unless a
    floating-point `set-logic` was given first (the lexer's "recognised only
    after a floating-point (set-logic)" hint), and reject `(/ 1 3)`, `(- 3)`,
-   `1.5`, `((as const (Array ...)) v)` and a declared-sort value `S!1`
-   unconditionally. `stp_model_to_smt2` and `stp_term_str` print exactly these
+   `1.5` and a declared-sort value `S!1` unconditionally (`((as const (Array
+   ...)) v)` parses since 2026-09-27). `stp_model_to_smt2` and `stp_term_str`
+   print exactly these
    forms, so a model or a term cannot round-trip through the parser (hence
    deviations 5 and 6).
 5. **Parse errors are echoed to stdout.** Every recoverable `PARSE` error also
@@ -257,6 +258,7 @@ noted, or were done with throw-away programs against `build-py/lib/libstp.so`.
    element)` reads as unrestricted.
 9. C NOTES defects 1 (assertion count after a check), 2 (`|x|` and the double
    space before constants; fixed since, simple names now print bare), 4
-   (equality over a constant array) were met again and shaped the tests: the rosetta R4 `b == c` is stated through reads,
+   (equality over a constant array; fixed since, `test_const_arrays.py`) were
+   met again and shaped the tests: the rosetta R4 `b == c` is now stated directly,
    assertion counts are checked before checks, printed symbols are compared
    by name.

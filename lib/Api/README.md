@@ -35,9 +35,15 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   `BV_EXTRACT` with one child and two indices, `NAND` as `NOT(AND)`, and so on
   (`view_of` in Terms.cpp). With `simplify = true` (the default) the manager folds
   at construction, so a term's kind is only guaranteed under `simplify = false`.
-- Constant arrays are internal array symbols registered in `const_array_default`;
-  every `SELECT` over them is expanded at construction (`read_const_base`), so the
-  engine never sees a read of one. Equality over a constant array is UNSUPPORTED.
+- Constant arrays are the engine's: `STPMgr::CreateConstArray` registers an
+  introduced array symbol with its default, interned by sort and default, so a
+  script's `((as const S) v)` and `mk_const_array` give one term. The hashing
+  factory folds every read of one to the default in both construction modes, and
+  the extensionality checker decides equality, distinct, ite and store chains
+  over them (rules K and K' in `lib/Extensionality/ExtChecker.cpp`), completing
+  an array it equates with a constant array with that default; the model printers
+  and `Model::array_value` take the completion from the engine. The API asks
+  `is_const_array` / `const_array_default` on the manager.
 - Array equality is built as the engine's opaque `ARRAY_EQ` (through the factory,
   which needs `enable_array_equality`); construction switches the flag on unless the
   `array-equality` option was set to `off`.

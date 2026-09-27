@@ -629,6 +629,55 @@ ASTNode STPMgr::CreateRMConst(unsigned mode)
   return ASTNode(LookupOrCreateRMConst(temp));
 }
 
+ASTNode STPMgr::CreateConstArray(const SourceSort& array_sort,
+                                 const ASTNode& default_value)
+{
+  if (array_sort.kind() != SourceSort::Kind::Array)
+    FatalError("CreateConstArray: the sort is not an array sort");
+  if (default_value.GetType() == ARRAY_TYPE ||
+      default_value.GetType() == BOOLEAN_TYPE)
+    FatalError("CreateConstArray: the default must be a scalar term",
+               default_value);
+  if (default_value.GetSTPMgr() != this)
+    FatalError("CreateConstArray: the default belongs to another manager",
+               default_value);
+  const SourceSort element = array_sort.element();
+  if (default_value.GetValueWidth() != element.packedWidth())
+    FatalError("CreateConstArray: the default's width is not the element "
+               "sort's width",
+               default_value);
+  const SourceSort given = default_value.GetSourceSort();
+  if (given.isKnown() && given != element)
+    FatalError("CreateConstArray: the default's sort is not the element "
+               "sort",
+               default_value);
+
+  const std::pair<std::string, ASTNode> key(sourceSortToSMTLib(array_sort),
+                                            default_value);
+  const std::map<std::pair<std::string, ASTNode>, ASTNode>::const_iterator
+      it = constArraysByKey.find(key);
+  if (it != constArraysByKey.end())
+    return it->second;
+  const ASTNode symbol = CreateFreshSourceVariable(array_sort, "constarray");
+  constArrayDefaults[symbol] = default_value;
+  constArraysByKey[key] = symbol;
+  return symbol;
+}
+
+bool STPMgr::isConstArray(const ASTNode& n) const
+{
+  return n.GetKind() == SYMBOL &&
+         constArrayDefaults.find(n) != constArrayDefaults.end();
+}
+
+const ASTNode& STPMgr::constArrayDefault(const ASTNode& n) const
+{
+  const ASTNodeMap::const_iterator it = constArrayDefaults.find(n);
+  if (it == constArrayDefaults.end())
+    FatalError("constArrayDefault: not a constant array", n);
+  return it->second;
+}
+
 ASTNode STPMgr::CreateUninterpretedConst(const ASTNode& carrier,
                                          const SourceSort& sort)
 {
@@ -1260,6 +1309,8 @@ STPMgr::~STPMgr()
   // and the implicit member-destruction phase runs after those tables are gone.
   uninterpreted_elements.clear();
   uninterpreted_sorts_printed.clear();
+  constArrayDefaults.clear();
+  constArraysByKey.clear();
   uf_injectivity_guard = ASTNode();
 
   Introduced_SymbolsSet.clear();

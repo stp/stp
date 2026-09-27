@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include <cassert>
+#include <sstream>
 
 // Functions shared between the printers: the letize pass used by all of
 // them, and the SMT-LIB2 traversal.
@@ -125,12 +126,29 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
         outputBitVecSMTLIB2(n, os);
       break;
     case SYMBOL:
+    {
+      // A constant array prints in its SMT-LIB spelling: the symbol that
+      // stands for it is the manager's, not the input's.
+      STPMgr* manager = n.GetNodeManager();
+      if (manager != NULL && manager->isConstArray(n))
+      {
+        // The constant printer puts a space before a literal; one space
+        // separates the sort from the default either way.
+        std::ostringstream value;
+        SMTLIB_Print1(value, manager->constArrayDefault(n), 0, letize);
+        std::string text = value.str();
+        text.erase(0, text.find_first_not_of(' '));
+        os << "((as const " << sourceSortToSMTLib(n.GetSourceSort()) << ") "
+           << text << ")";
+        break;
+      }
       // Quoted, so that STP's names, which can contain characters SMT-LIB2
       // reserves, survive a round trip.
       os << "|";
       n.nodeprint(os);
       os << "|";
       break;
+    }
     case UF_APPLY:
     {
       STPMgr* manager = n.GetNodeManager();

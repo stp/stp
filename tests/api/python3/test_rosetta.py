@@ -21,9 +21,8 @@
 # THE SOFTWARE.
 
 """The seven Rosetta programs of api-3x/design/rosetta-3x.md, as written there, with
-their stated outcomes. R4's `b == c` is an equality against a constant array, which
-the engine refuses (capabilities: array.const-equality = false); the same constraint
-is stated through the reads, as the C++ rosetta test does."""
+their stated outcomes. R4's `b == c` is an equality against a store over a
+constant array, stated as the document states it."""
 
 from fractions import Fraction
 
@@ -86,11 +85,10 @@ def test_r4_arrays():
     a, b = Array('a', BitVecSort(32), BitVecSort(8)), Array('b', BitVecSort(32), BitVecSort(8))
     c = Store(K(A, 0), 5, 0x2a)
     s = Solver(); s.add(a != b, a[0] == b[0])
-    with pytest.raises(Unsupported):
-        s.add(b == c)  # equality against a constant array: not supported by this engine
-    s.add(b[5] == c[5], b[0] == c[0], b[1] == c[1])
+    s.add(b == c)  # an equality against a store over a constant array
     assert s.check() == sat
     m = s.model()
+    assert is_true(m.eval(b == c)) and m[b].default.as_long() == 0
     for arr in (a, b):
         items, default = m[arr].items(), m[arr].default
         assert all(isinstance(k, BitVecNumRef) and isinstance(v, BitVecNumRef) for k, v in items)

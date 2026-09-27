@@ -142,14 +142,11 @@ TEST(Rosetta, R4_arrays)
   auto c = stp::store(tm.mk_const_array(A, tm.mk_bv(8, 0)), tm.mk_bv(32, 5), tm.mk_bv(8, 0x2a));
   s.add(a != b);
   s.add(a[tm.mk_bv(32, 0)] == b[tm.mk_bv(32, 0)]);
-  // The document's `b == c` is an equality against a constant array, which
-  // this engine refuses (capabilities: array.const-equality = false;
-  // FINDINGS.md). The same constraint is stated through the reads instead.
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, (void)(b == c));
-  s.add(b[tm.mk_bv(32, 5)] == c[tm.mk_bv(32, 5)]);
-  s.add(b[tm.mk_bv(32, 0)] == c[tm.mk_bv(32, 0)]);
+  s.add(b == c); // an equality against a store over a constant array
   ASSERT_TRUE(s.check_sat().is_sat());
   auto m = s.model();
+  EXPECT_TRUE(m.bool_value(b == c));
+  EXPECT_EQ(m.array_value(b).default_value().to_uint64(), 0u);
   std::ostringstream out;
   for (auto arr : {a, b})
   {

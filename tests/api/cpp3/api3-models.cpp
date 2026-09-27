@@ -213,9 +213,11 @@ TEST_F(Models, array_values)
     s.add(a[e.index] == select(chain, e.index));
   s.add(a[I(77)] == select(chain, I(77)));
   EXPECT_TRUE(s.check_sat().is_sat());
-  // equality against the constant array itself is outside the engine
-  // (FINDINGS.md, design points)
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, (void)(a == chain));
+  // and re-asserted as a whole: the value is an array the engine decides
+  // equality against (constant arrays are its own)
+  s.add(a == chain);
+  EXPECT_TRUE(s.check_sat().is_sat());
+  EXPECT_TRUE(s.model().bool_value(a == chain));
   // a model over an array read at a symbolic index built after the check
   const Term j = tm.declare("j", bv32);
   EXPECT_EQ(m.uint64_value(a[j]), 0u); // j completes to 0, a[0] is unobserved

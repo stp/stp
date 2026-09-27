@@ -87,7 +87,7 @@ Kind kind_of(ManagerImpl* m, const ASTNode& n)
   switch (n.GetKind())
   {
     case SYMBOL:
-      if (m->const_array_default.count(n) != 0)
+      if (m->is_const_array(n))
         return Kind::CONST_ARRAY;
       return Kind::CONSTANT;
     case BVCONST:
@@ -216,9 +216,8 @@ View view_of(ManagerImpl* m, const ASTNode& n)
   {
     case SYMBOL:
     {
-      auto it = m->const_array_default.find(n);
-      if (it != m->const_array_default.end())
-        v.children.push_back(it->second);
+      if (m->is_const_array(n))
+        v.children.push_back(m->const_array_default(n));
       return v;
     }
     case NAND:
@@ -813,7 +812,7 @@ bool Term::is_const() const noexcept
   if (is_null())
     return false;
   const ASTNode n = detail::node_of(*this);
-  return (n.GetKind() == SYMBOL && mgr_->const_array_default.count(n) == 0) ||
+  return (n.GetKind() == SYMBOL && !mgr_->is_const_array(n)) ||
          n.GetKind() == PARAMBOOL;
 }
 
@@ -828,7 +827,7 @@ std::optional<std::string> Term::symbol() const
     return it->second;
   if (const UFDecl* d = m->decl_of(n))
     return d->name();
-  if (m->const_array_default.count(n) != 0)
+  if (m->is_const_array(n))
     return std::nullopt;
   return std::string(n.GetName());
 }

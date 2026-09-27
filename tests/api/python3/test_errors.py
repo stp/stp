@@ -126,9 +126,8 @@ def test_no_model_and_state_errors():
 
 
 def test_unsupported_and_parse_errors():
-    A = ArraySort(BitVecSort(32), BitVecSort(8))
     with pytest.raises(Unsupported) as e:
-        Array("a", BitVecSort(32), BitVecSort(8)) == K(A, 0)
+        Real("p") * Real("q")  # non-linear
     assert e.value.code == ErrorCode.UNSUPPORTED and isinstance(e.value, NotImplementedError)
     s = Solver()
     with pytest.raises(ParseError) as e:

@@ -112,8 +112,6 @@ ManagerImpl::~ManagerImpl()
   // Every node the API tables hold must be released before the manager's
   // unique tables go: clear the tables first.
   exposed_ids.clear();
-  const_array_default.clear();
-  const_arrays.clear();
   fun_sort_of_identity.clear();
   names_by_node.clear();
   symbols.clear();
@@ -600,6 +598,16 @@ Term make_term(ManagerImpl* m, const ASTNode& n)
 Sort make_sort(ManagerImpl* m, std::uint32_t index)
 {
   return Sort(m, index);
+}
+
+bool ManagerImpl::is_const_array(const ASTNode& n) const
+{
+  return bm->isConstArray(n);
+}
+
+const ASTNode& ManagerImpl::const_array_default(const ASTNode& n) const
+{
+  return bm->constArrayDefault(n);
 }
 
 std::string quote_symbol(const std::string& name)
@@ -1102,7 +1110,7 @@ void TermManager::bind_symbol(std::string_view name, const Term& t)
   // The table maps names to symbols (declared or fresh); a compound term has
   // no place in it -- the parser's frames and the declaration printers walk
   // the table expecting symbols.
-  if (node.GetKind() != SYMBOL || m->const_array_default.count(node) != 0)
+  if (node.GetKind() != SYMBOL || m->is_const_array(node))
     detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::bind_symbol",
                  "bind_symbol takes a symbol (a declared or fresh constant), not a compound term",
                  1, {t});

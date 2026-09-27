@@ -39,7 +39,7 @@ def test_version_and_capabilities():
     assert "Version(" in repr(v)
     caps = capabilities()
     assert isinstance(caps, dict) and caps["api.version"] == "3.0.0-alpha"
-    assert caps["array.const-equality"] is False and isinstance(caps["sat.backends"], (list, str))
+    assert caps["array.const-equality"] is True and isinstance(caps["sat.backends"], (list, str))
     assert stp.capability("api.version") == "3.0.0-alpha" and stp.capability("no.such.key") is None
     backends = sat_backends()
     assert backends and all(has_sat_backend(b) for b in backends) and not has_sat_backend("no-such-backend")

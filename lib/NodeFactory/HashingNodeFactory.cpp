@@ -153,6 +153,15 @@ HashingNodeFactory::~HashingNodeFactory()
 ASTNode HashingNodeFactory::CreateNode(const Kind kind,
                                        const ASTChildren back_children)
 {
+  // A read of a constant array is its default. Every construction path
+  // ends here -- the frontends, the API, the rewrites, the array
+  // transformer, the extensionality checker's witness and instantiation
+  // reads -- so no read of a constant array survives, and nothing
+  // downstream has to know that the symbol is not a free array.
+  if (kind == READ && back_children.size() == 2 && bm.hasConstArrays() &&
+      bm.isConstArray(back_children[0]))
+    return bm.constArrayDefault(back_children[0]);
+
   if (kind == DISTINCT)
   {
     if (back_children.size() < 2)
@@ -275,6 +284,28 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
         right_sort.kind() != SourceSort::Kind::Array ||
         left_sort != right_sort)
       FatalError("array-equality: operands must have identical source sorts");
+
+    // Two different constant arrays are equal exactly when their defaults
+    // are (an index sort is never empty), which is a scalar question the
+    // ordinary machinery decides; floating-point cells compare as values,
+    // as the checker compares them. A reflexive one is left as ARRAY_EQ
+    // like every other reflexive array equality (lowering folds it), so
+    // that the term stays recoverable from the node.
+    if (bm.isConstArray(back_children[0]) &&
+        bm.isConstArray(back_children[1]) &&
+        !(back_children[0] == back_children[1]))
+    {
+      const ASTNode& d1 = bm.constArrayDefault(back_children[0]);
+      const ASTNode& d2 = bm.constArrayDefault(back_children[1]);
+      const bool floats =
+          left_sort.element().kind() == SourceSort::Kind::FloatingPoint;
+      // Interned constants: two nodes are two values for every sort whose
+      // equality is bit equality (a float's is not: NaN has many
+      // packings, so the comparison is built instead).
+      if (!floats && d1.isConstant() && d2.isConstant())
+        return bm.ASTFalse;
+      return CreateNode(floats ? FP_SMT_EQ : EQ, d1, d2);
+    }
 
     if (array_eq_from_source)
       return CreateNode(ARRAY_EQ, back_children);

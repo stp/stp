@@ -159,10 +159,12 @@ Recorded precisely as found; none blocked the layer. Reproductions are in
    `UNSUPPORTED` ("converting a Real to a float needs a rounding-mode value, not
    a symbolic mode"). `kinds.toml` documents the Real-value requirement only.
    Not a defect of the code, a gap in the table's note.
-4. **Equality over a constant array is `UNSUPPORTED`** (documented in README.md
-   and `capabilities()["array.const-equality"] = "false"`), which also refuses
-   `store(k, i, v) = k`. Recorded here because it shapes the C tests: array
-   results are read back through `select`, never through `=`.
+4. **Equality over a constant array was `UNSUPPORTED`** (`capabilities()
+   ["array.const-equality"]` said `false`), which also refused
+   `store(k, i, v) = k`. FIXED: constant arrays are the engine's, with
+   equality, distinct, ite and store chains over them decided and models
+   completed with the default (`c3-const-arrays.cpp`); the older C tests still
+   read array results back through `select`, which remains correct.
 5. **The SMT2 parser exit()s on an operand-count violation** -- SERIOUS, FIXED:
    the grammar unwinds to the parse entry, and every refusal of the frontend
    (a sort error, a wrong arity, a constant that does not fit) is a `PARSE`

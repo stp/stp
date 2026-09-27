@@ -122,7 +122,7 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
     }
     if (key.GetKind() != SYMBOL || bm->FoundIntroducedSymbolSet(key))
       continue;
-    if (mgr->const_array_default.count(key) != 0 || mgr->decl_of(key) != nullptr)
+    if (mgr->is_const_array(key) || mgr->decl_of(key) != nullptr)
       continue;
     const SourceSort ss = key.GetSourceSort();
     if (!ss.isKnown() || ss.kind() == SourceSort::Kind::Real)
@@ -140,6 +140,22 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
       snap->scalars[key] = value;
       snap->core.push_back(key);
     }
+  }
+
+  // A declared array the solve equated with a constant array (directly or
+  // through a store chain, an ite, or a chain of equalities) may have no
+  // observed cell at all; its completion is still that constant's default,
+  // and the snapshot has to say so.
+  for (const std::string& name : mgr->symbol_order)
+  {
+    auto sit = mgr->symbols.find(name);
+    if (sit == mgr->symbols.end() || sit->second.is_function)
+      continue;
+    const ASTNode& node = sit->second.node;
+    ASTNode completion;
+    if (node.GetType() == ARRAY_TYPE && !mgr->is_const_array(node) &&
+        ce->arrayCompletion(node, completion))
+      arrays_seen.insert(node);
   }
 
   for (const ASTNode& array : arrays_seen)
@@ -160,7 +176,13 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
               [](const std::pair<ASTNode, ASTNode>& x, const std::pair<ASTNode, ASTNode>& y) {
                 return index_before(x.first, y.first);
               });
-    cells.fill = fill_value(mgr, cells.sort, fill_ones, fn);
+    // The unobserved cells: the default of the constant array the checker
+    // connected this array to, else the option's fill.
+    ASTNode completion;
+    if (ce->arrayCompletion(array, completion))
+      cells.fill = lift(mgr, completion, as.element());
+    else
+      cells.fill = fill_value(mgr, cells.sort, fill_ones, fn);
     snap->arrays[array] = cells;
     snap->core.push_back(array);
   }
@@ -300,12 +322,12 @@ ASTNode Evaluator::eval(const ASTNode& n)
       break;
     case SYMBOL:
     {
-      if (n.GetType() == ARRAY_TYPE || m_->const_array_default.count(n) != 0 ||
+      if (n.GetType() == ARRAY_TYPE || m_->is_const_array(n) ||
           m_->decl_of(n) != nullptr)
       {
         // arrays and functions stay symbolic; reads and applications resolve
         // them -- but one the model never assigned is a completion
-        if (!complete_ && m_->const_array_default.count(n) == 0 &&
+        if (!complete_ && !m_->is_const_array(n) &&
             s_.arrays.count(n) == 0 && s_.functions.count(n) == 0)
           incomplete_ = true;
         out = n;
@@ -393,9 +415,8 @@ ASTNode Evaluator::eval_read(const ASTNode& array, const ASTNode& index)
   {
     case SYMBOL:
     {
-      auto cit = m_->const_array_default.find(array);
-      if (cit != m_->const_array_default.end())
-        return eval(cit->second);
+      if (m_->is_const_array(array))
+        return eval(m_->const_array_default(array));
       auto it = s_.arrays.find(array);
       if (it != s_.arrays.end())
       {
@@ -501,10 +522,10 @@ bool Evaluator::arrays_equal(const ASTNode& a, const ASTNode& b)
   auto fa = s_.arrays.find(base_a);
   auto fb = s_.arrays.find(base_b);
   const ASTNode fill_a = fa != s_.arrays.end() ? fa->second.fill
-                         : m_->const_array_default.count(base_a) ? eval(m_->const_array_default.at(base_a))
+                         : m_->is_const_array(base_a) ? eval(m_->const_array_default(base_a))
                                                                   : fill_value(m_, m_->sort_of_node(base_a, fn_), s_.fill_ones, fn_);
   const ASTNode fill_b = fb != s_.arrays.end() ? fb->second.fill
-                         : m_->const_array_default.count(base_b) ? eval(m_->const_array_default.at(base_b))
+                         : m_->is_const_array(base_b) ? eval(m_->const_array_default(base_b))
                                                                   : fill_value(m_, m_->sort_of_node(base_b, fn_), s_.fill_ones, fn_);
   return fill_a == fill_b;
 }
@@ -719,8 +740,8 @@ ArrayValue Model::array_value(const Term& t) const
   auto fit = s.arrays.find(base);
   if (fit != s.arrays.end())
     impl->cells.fill = fit->second.fill;
-  else if (s.mgr->const_array_default.count(base) != 0)
-    impl->cells.fill = ev.evaluate(s.mgr->const_array_default.at(base));
+  else if (s.mgr->is_const_array(base))
+    impl->cells.fill = ev.evaluate(s.mgr->const_array_default(base));
   else
     impl->cells.fill = detail::fill_value(s.mgr, impl->cells.sort, s.fill_ones, "Model::array_value");
   return ArrayValue(impl);

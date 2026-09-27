@@ -393,7 +393,7 @@ class AbsRefine_CounterExample::EvaluationDriver
     return owner.ArraysEqualUsingModel(left, right);
   }
 
-  ASTNode defaultCellValue(const ASTNode& arrayTerm) const
+  ASTNode defaultCellValue(const ASTNode& arrayTerm)
   {
     return owner.defaultCellValue(arrayTerm);
   }
@@ -1924,12 +1924,44 @@ AbsRefine_CounterExample::completeRoundingMode(const ASTNode& carrier) const
 // is RoundingMode, whose one-hot encoding leaves all-zero denoting
 // nothing at all; the value is a don't-care, so what matters is that
 // every site takes it from here and none of them invents its own.
-ASTNode
-AbsRefine_CounterExample::defaultCellValue(const ASTNode& arrayTerm) const
+ASTNode AbsRefine_CounterExample::defaultCellValue(const ASTNode& arrayTerm)
 {
+  ASTNode completed;
+  if (arrayCompletion(arrayTerm, completed))
+    return completed;
   if (bm->arrayHasRmElement(arrayTerm))
     return defaultRoundingMode();
   return bm->CreateZeroConst(arrayTerm.GetValueWidth());
+}
+
+void AbsRefine_CounterExample::setArrayCompletions(
+    const std::map<ASTNode, ASTNode>& completions)
+{
+  arrayCompletions = completions;
+}
+
+// See the header. The base the array term is built over -- a write chain's
+// unobserved cells are its base's, a substituted symbol's are its
+// definition's, an if-then-else's are the selected branch's -- is a
+// constant array (its default, evaluated under the model like any other
+// term) or an array the checker connected to one (the published
+// completion); anything else has no completion of its own.
+bool AbsRefine_CounterExample::arrayCompletion(const ASTNode& array,
+                                               ASTNode& out)
+{
+  const ASTNode base = BaseUnderModel(array);
+  if (bm->isConstArray(base))
+  {
+    out = plainBitVectorConstant(
+        bm, TermToConstTermUsingModel(bm->constArrayDefault(base), false));
+    return true;
+  }
+  const std::map<ASTNode, ASTNode>::const_iterator it =
+      arrayCompletions.find(base);
+  if (it == arrayCompletions.end())
+    return false;
+  out = it->second;
+  return true;
 }
 
 // See the header. This is the walk the read path already performs for
@@ -2107,7 +2139,60 @@ bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
             ReadUsingModel(lowered_left, *it, cells),
             ReadUsingModel(lowered_right, *it, cells), elementSort))
       return false;
+
+  // Every other cell holds each side's completion, which differ when one
+  // side is built over a constant array and the other is not, or over
+  // constant arrays with different defaults. Such a cell exists unless
+  // the indexes above exhaust the index sort.
+  const unsigned iw = lowered_left.GetIndexWidth();
+  const bool otherCellExists =
+      iw >= 64 || (uint64_t(1) << iw) > indexes.size();
+  if (otherCellExists &&
+      constantsDenoteDifferentSourceValues(
+          defaultCellValue(BaseUnderModel(lowered_left)),
+          defaultCellValue(BaseUnderModel(lowered_right)), elementSort))
+    return false;
   return true;
+}
+
+// The array a term is built over once the model has decided its
+// if-then-elses and its writes are peeled: what its unobserved cells
+// complete with is that array's completion.
+ASTNode AbsRefine_CounterExample::BaseUnderModel(const ASTNode& arrayTerm)
+{
+  ASTNode level = arrayTerm;
+  while (true)
+  {
+    if (WRITE == level.GetKind())
+    {
+      level = level[0];
+      continue;
+    }
+    if (ITE == level.GetKind() && ARRAY_TYPE == level.GetType())
+    {
+      const ASTNode cond = ComputeFormulaUsingModel(level[0]);
+      if (ASTTrue == cond)
+        level = level[1];
+      else if (ASTFalse == cond)
+        level = level[2];
+      else
+        FatalError("BaseUnderModel: an array if-then-else condition has no "
+                   "truth value in the model",
+                   level[0]);
+      continue;
+    }
+    if (SYMBOL == level.GetKind())
+    {
+      const ASTNodeMap::const_iterator sub = CounterExampleMap.find(level);
+      if (sub != CounterExampleMap.end() &&
+          ARRAY_TYPE == sub->second.GetType())
+      {
+        level = sub->second;
+        continue;
+      }
+    }
+    return level;
+  }
 }
 
 // See the header.
@@ -3168,6 +3253,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
       bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
       CounterExampleMap.clear();
       ComputeFormulaMap.clear();
+      arrayCompletions.clear();
       ConstructCounterExample(SatSolver, tosat->SATVar_to_SymbolIndexMap(),
                               ufActive);
       const UFCandidateOutcome early = ufTheoryAdapter->checkCandidate(*this);
@@ -3272,6 +3358,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
+    arrayCompletions.clear();
 
     // By reference: the map holds an entry for every symbol ever bit-blasted,
     // and copying it here cost that much again on every refinement round.

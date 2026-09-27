@@ -589,6 +589,11 @@ private:
   // Set of new symbols introduced that replace the array read terms
   ASTNodeSet Introduced_SymbolsSet;
 
+  // Constant arrays (see CreateConstArray): symbol -> default, and the
+  // interning key (array sort text, default) -> symbol.
+  ASTNodeMap constArrayDefaults;
+  std::map<std::pair<std::string, ASTNode>, ASTNode> constArraysByKey;
+
   CBV CreateBVConstVal;
 
   // Name -> symbols declared under it, in declaration order.
@@ -728,6 +733,32 @@ public:
   // it answers. The solver itself continues to evaluate plain bitvectors.
   ASTNode LiftSourceValue(const ASTNode& carrier,
                           const SourceSort& source_sort);
+
+  // ---- constant arrays ----
+  //
+  // A constant array is an array symbol whose every cell holds one term, its
+  // default: what SMT-LIB writes ((as const (Array I E)) v). The symbol is
+  // introduced (never declared by a printer, never assigned by a model) and
+  // registered here with its default; creating one interns by (array sort,
+  // default), so the same request gives the same symbol however it arrives.
+  //
+  // The registry is what gives the symbol its meaning. Every construction
+  // path ends in HashingNodeFactory::CreateNode, which folds a read of a
+  // constant array to its default, so no read of one survives -- not the
+  // frontends', not a rewrite's, not the array transformer's, not the
+  // extensionality checker's witness and instantiation reads. That checker
+  // treats a constant array as one whose every access carries the default
+  // (ExtChecker rule K) and completes the arrays it equates with the default
+  // as their unobserved-cell value; the SMT-LIB printers write the symbol
+  // back in the as-const spelling.
+  DLL_PUBLIC ASTNode CreateConstArray(const SourceSort& array_sort,
+                                      const ASTNode& default_value);
+  DLL_PUBLIC bool isConstArray(const ASTNode& n) const;
+  // Whether any constant array exists: passes that would walk a formula
+  // looking for one skip the walk when none does.
+  bool hasConstArrays() const { return !constArrayDefaults.empty(); }
+  // The default of a registered constant array; fatal for anything else.
+  DLL_PUBLIC const ASTNode& constArrayDefault(const ASTNode& n) const;
 
   // Create a source-language leaf atomically. Its complete sort participates
   // in hash-consing and cannot subsequently be changed by width setters.

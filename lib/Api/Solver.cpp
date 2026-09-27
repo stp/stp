@@ -1695,7 +1695,7 @@ std::string Solver::to_smt2(bool with_check_sat) const
     // identity node is one of them and the function is the user's
     if (bm->FoundIntroducedSymbolSet(sym) && m->decl_of(sym) == nullptr)
       continue;
-    if (m->const_array_default.count(sym) != 0)
+    if (m->is_const_array(sym))
       continue;
     std::string name;
     auto it = m->names_by_node.find(sym);

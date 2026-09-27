@@ -93,7 +93,7 @@ std::map<std::string, std::string> capabilities()
   }
   c["array.element-sorts"] = "bv,fp,rm,uninterpreted";
   c["array.index-sorts"] = "bv,fp,rm,uninterpreted";
-  c["array.const-equality"] = "false";
+  c["array.const-equality"] = "true";
   c["lra"] = "true";
   c["real.nonlinear"] = "false";
 #ifdef STP_HAVE_HIGHS

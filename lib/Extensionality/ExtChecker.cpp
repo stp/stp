@@ -28,8 +28,10 @@ THE SOFTWARE.
 // overview of the rules and data model.
 
 #include "stp/Extensionality/ExtChecker.h"
+#include "stp/STPManager/STPManager.h"
 #include <algorithm>
 #include <deque>
+#include <set>
 #include <unordered_map>
 #include <utility>
 
@@ -75,6 +77,17 @@ struct CheckerState
   std::deque<PairKey> worklist;
   ExtCheckResult result;
   size_t materializedGuardCount;
+  // The accesses rule I mints for a constant array over a tiny index
+  // sort (see check); numbered after the graph's own, and never part of
+  // the frozen graph.
+  std::vector<ExtAccess> synthetic;
+
+  const ExtAccess& access(size_t id) const
+  {
+    return id < graph.accesses.size()
+               ? graph.accesses[id]
+               : synthetic[id - graph.accesses.size()];
+  }
 
   CheckerState(const ExtGraph& g, ExtModelView& m, bool ev)
       : graph(g), model(m), recordEvents(ev), materializedGuardCount(0)
@@ -83,12 +96,12 @@ struct CheckerState
 
   ASTNode accessIndex(size_t id)
   {
-    return model.bvValue(graph.accesses[id].indexName);
+    return model.bvValue(access(id).indexName);
   }
 
   ASTNode accessValue(size_t id)
   {
-    return model.bvValue(graph.accesses[id].valueName);
+    return model.bvValue(access(id).valueName);
   }
 
   void event(ExtEvent::Kind kind, const char* rule, const ASTNode& source,
@@ -184,6 +197,39 @@ struct CheckerState
 
     const ASTNode idx = accessIndex(accessId);
     const ASTNode val = accessValue(accessId);
+
+    // Rule K: every cell of a constant array holds its default, so an
+    // access arriving there must carry it. A disagreement is a conflict
+    // whose lemma is the arriving path's guards implying that the access
+    // value equals the default; as with rule C, the arrival is recorded
+    // as seen and goes no further. An agreeing arrival is inserted as
+    // usual, so rule C compares later arrivals at this index against a
+    // representative that holds the default.
+    {
+      const std::map<ASTNode, ExtConstArray>::const_iterator kit =
+          graph.constArrays.find(destination);
+      if (kit != graph.constArrays.end() &&
+          model.bvValue(kit->second.defaultName) != val)
+      {
+        ExtConflict c;
+        c.shape = ExtConflict::CONST_DEFAULT;
+        c.commonArray = destination;
+        c.leftAccess = accessId;
+        c.rightAccess = accessId;
+        c.indexValue = idx;
+        c.leftValue = model.bvValue(kit->second.defaultName);
+        c.rightValue = val;
+        c.rightGuards = materializeGuards(candidatePath);
+        c.constTermA = kit->second.defaultTerm;
+        c.constNameA = kit->second.defaultName;
+        result.stats["conflicts"]++;
+        result.stats["rule_K"]++;
+        event(ExtEvent::CONFLICT, rule, source, destination, accessId);
+        result.conflicts.push_back(std::move(c));
+        paths[key] = candidatePath;
+        return;
+      }
+    }
 
     RhoIndexMap& byIndex = rhoByIndex[destination];
     const std::pair<RhoIndexMap::iterator, bool> representative =
@@ -386,10 +432,52 @@ void validateAbstractLemma(const ExtConflict& c, ExtModelView& model)
 // built once over the original terms (the theory lemma) and once over
 // abstraction variables and scalar names (the refinement actually
 // encoded into the SAT solver).
-void buildLemmas(ExtConflict& c, const ExtGraph& graph, ExtModelView& model)
+// The two constant-array shapes (see ExtConflict::Shape) have no index
+// equality and one path: rule K's lemma is the arriving path's guards
+// implying value(access) = default; rule K''s is the connecting path's
+// guards implying default = default.
+void buildLemmas(ExtConflict& c, const ExtGraph& graph,
+                 const std::vector<ExtAccess>& synthetic, ExtModelView& model)
 {
-  const ExtAccess& left = graph.accesses[c.leftAccess];
-  const ExtAccess& right = graph.accesses[c.rightAccess];
+  const auto access = [&](size_t id) -> const ExtAccess& {
+    return id < graph.accesses.size() ? graph.accesses[id]
+                                      : synthetic[id - graph.accesses.size()];
+  };
+
+  if (c.shape == ExtConflict::CONST_DEFAULT)
+  {
+    const ExtAccess& right = access(c.rightAccess);
+    std::vector<ExtLemmaAtom> atoms;
+    guardsToAtoms(c.rightGuards, true, atoms);
+    c.abstractPremise = canonicalAtoms(atoms);
+    c.abstractConclusionA = right.valueName;
+    c.abstractConclusionB = c.constNameA;
+    atoms.clear();
+    guardsToAtoms(c.rightGuards, false, atoms);
+    c.theoryPremise = canonicalAtoms(atoms);
+    c.theoryConclusionA = right.valueTerm;
+    c.theoryConclusionB = c.constTermA;
+    validateAbstractLemma(c, model);
+    return;
+  }
+  if (c.shape == ExtConflict::CONST_PAIR)
+  {
+    std::vector<ExtLemmaAtom> atoms;
+    guardsToAtoms(c.leftGuards, true, atoms);
+    c.abstractPremise = canonicalAtoms(atoms);
+    c.abstractConclusionA = c.constNameA;
+    c.abstractConclusionB = c.constNameB;
+    atoms.clear();
+    guardsToAtoms(c.leftGuards, false, atoms);
+    c.theoryPremise = canonicalAtoms(atoms);
+    c.theoryConclusionA = c.constTermA;
+    c.theoryConclusionB = c.constTermB;
+    validateAbstractLemma(c, model);
+    return;
+  }
+
+  const ExtAccess& left = access(c.leftAccess);
+  const ExtAccess& right = access(c.rightAccess);
 
   {
     std::vector<ExtLemmaAtom> atoms;
@@ -424,6 +512,138 @@ void buildLemmas(ExtConflict& c, const ExtGraph& graph, ExtModelView& model)
   validateAbstractLemma(c, model);
 }
 
+// An index sort with no more values than the graph has writes: a path
+// between two constant arrays could then address every cell, so rule K'
+// (which needs an index no write on the path touches) does not apply, and
+// the cells of such an array are made explicit instead.
+bool tinyIndexDomain(unsigned indexWidth, size_t writeCount)
+{
+  return indexWidth < 64 && (uint64_t(1) << indexWidth) <= writeCount;
+}
+
+// The arrays a candidate connects, for rule K' and the completion: a
+// write and its base agree everywhere but at the write's index, the two
+// sides of an equality sigma assigns true everywhere, an if-then-else and
+// the branch sigma selects everywhere. Edges carry the guard a lemma
+// premise states for crossing them (none for a write) and whether they
+// cross a write.
+struct ComponentEdge
+{
+  ASTNode to;
+  bool guarded = false;
+  bool crossesWrite = false;
+  ExtGuard guard;
+};
+
+struct ComponentGraph
+{
+  std::map<ASTNode, std::vector<ComponentEdge>> adjacency;
+
+  ComponentGraph(const ExtGraph& graph, ExtModelView& model)
+  {
+    for (std::map<ASTNode, ExtWriteNode>::const_iterator it =
+             graph.writes.begin();
+         it != graph.writes.end(); ++it)
+    {
+      ComponentEdge down, up;
+      down.to = it->second.base;
+      down.crossesWrite = true;
+      up.to = it->second.write;
+      up.crossesWrite = true;
+      adjacency[it->second.write].push_back(down);
+      adjacency[it->second.base].push_back(up);
+    }
+    for (size_t i = 0; i < graph.eqEdges.size(); i++)
+    {
+      const ExtEqEdge& e = graph.eqEdges[i];
+      if (!model.boolValue(e.proxy))
+        continue;
+      ComponentEdge edge;
+      edge.guarded = true;
+      edge.guard.kind = ExtGuard::EQ_PROXY;
+      edge.guard.theoryA = e.left;
+      edge.guard.theoryB = e.right;
+      edge.guard.absA = e.proxy;
+      edge.guard.eqRecord = e.record;
+      edge.to = e.right;
+      adjacency[e.left].push_back(edge);
+      edge.to = e.left;
+      adjacency[e.right].push_back(edge);
+    }
+    for (std::map<ASTNode, ExtIteNode>::const_iterator it = graph.ites.begin();
+         it != graph.ites.end(); ++it)
+    {
+      const ExtIteNode& t = it->second;
+      const bool cond = model.boolValue(t.condName);
+      ComponentEdge edge;
+      edge.guarded = true;
+      edge.guard.kind = cond ? ExtGuard::ITE_COND_POS : ExtGuard::ITE_COND_NEG;
+      edge.guard.theoryA = t.condTerm;
+      edge.guard.absA = t.condName;
+      const ASTNode branch = cond ? t.thn : t.els;
+      edge.to = branch;
+      adjacency[t.ite].push_back(edge);
+      edge.to = t.ite;
+      adjacency[branch].push_back(edge);
+    }
+  }
+
+  // Breadth-first from `from`, in adjacency order: every node reached,
+  // and for each the edge it was reached through, keyed by the node.
+  void component(const ASTNode& from, std::vector<ASTNode>& reached,
+                 std::map<ASTNode, std::pair<ASTNode, ComponentEdge>>& via)
+  {
+    reached.clear();
+    via.clear();
+    std::deque<ASTNode> queue;
+    std::set<ASTNode> seen;
+    queue.push_back(from);
+    seen.insert(from);
+    while (!queue.empty())
+    {
+      const ASTNode current = queue.front();
+      queue.pop_front();
+      reached.push_back(current);
+      const std::map<ASTNode, std::vector<ComponentEdge>>::const_iterator
+          it = adjacency.find(current);
+      if (it == adjacency.end())
+        continue;
+      for (size_t i = 0; i < it->second.size(); i++)
+      {
+        const ComponentEdge& e = it->second[i];
+        if (!seen.insert(e.to).second)
+          continue;
+        via[e.to] = std::make_pair(current, e);
+        queue.push_back(e.to);
+      }
+    }
+  }
+
+  // The guards of the path `via` recorded from the search's origin to
+  // `to`, origin first, and the number of writes it crosses.
+  static void pathGuards(
+      const std::map<ASTNode, std::pair<ASTNode, ComponentEdge>>& via,
+      const ASTNode& to, std::vector<ExtGuard>& guards, size_t& writes)
+  {
+    guards.clear();
+    writes = 0;
+    ASTNode current = to;
+    while (true)
+    {
+      const std::map<ASTNode, std::pair<ASTNode, ComponentEdge>>::
+          const_iterator it = via.find(current);
+      if (it == via.end())
+        break;
+      if (it->second.second.guarded)
+        guards.push_back(it->second.second.guard);
+      if (it->second.second.crossesWrite)
+        writes++;
+      current = it->second.first;
+    }
+    std::reverse(guards.begin(), guards.end());
+  }
+};
+
 } // namespace
 
 ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
@@ -438,6 +658,38 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     const ExtAccess& a = graph.accesses[i];
     const char* rule = a.isWrite ? "I_WRITE" : "I_READ";
     st.insert(a.site, a.id, NULL, rule, ASTNode());
+  }
+
+  // Rule I for a constant array over a tiny index sort (see
+  // tinyIndexDomain): one synthetic access per index value, carrying the
+  // default, seeded at the array. Every cell of such an array is then an
+  // ordinary access the other rules propagate, so rules K and C decide
+  // between two constant arrays what rule K' below decides for the
+  // larger sorts. The index terms are the plain constants, which the
+  // model view answers directly; minting them in the host manager
+  // creates no term of the query.
+  for (std::map<ASTNode, ExtConstArray>::const_iterator it =
+           graph.constArrays.begin();
+       it != graph.constArrays.end(); ++it)
+  {
+    const unsigned w = it->second.array.GetIndexWidth();
+    if (!tinyIndexDomain(w, graph.writes.size()))
+      continue;
+    STPMgr* bm = it->second.array.GetNodeManager();
+    const uint64_t count = uint64_t(1) << w;
+    for (uint64_t k = 0; k < count; k++)
+    {
+      ExtAccess a;
+      a.id = graph.accesses.size() + st.synthetic.size();
+      a.isWrite = false;
+      a.site = it->second.array;
+      a.indexTerm = bm->CreateBVConst(w, k);
+      a.indexName = a.indexTerm;
+      a.valueTerm = it->second.defaultTerm;
+      a.valueName = it->second.defaultName;
+      st.synthetic.push_back(a);
+      st.insert(it->second.array, a.id, NULL, "I_CONST", ASTNode());
+    }
   }
 
   // Fixed-point computation over a FIFO work list (the "working queue
@@ -482,9 +734,9 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
       {
         ExtGuard g;
         g.kind = ExtGuard::INDEX_NE;
-        g.theoryA = graph.accesses[accessId].indexTerm;
+        g.theoryA = st.access(accessId).indexTerm;
         g.theoryB = w.indexTerm;
-        g.absA = graph.accesses[accessId].indexName;
+        g.absA = st.access(accessId).indexName;
         g.absB = w.indexName;
         g.eqRecord = 0;
         st.insert(w.base, accessId, &g, "D_WRITE", source);
@@ -508,9 +760,9 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
           {
             ExtGuard g;
             g.kind = ExtGuard::INDEX_NE;
-            g.theoryA = graph.accesses[accessId].indexTerm;
+            g.theoryA = st.access(accessId).indexTerm;
             g.theoryB = w.indexTerm;
-            g.absA = graph.accesses[accessId].indexName;
+            g.absA = st.access(accessId).indexName;
             g.absB = w.indexName;
             g.eqRecord = 0;
             st.insert(w.write, accessId, &g, "U_WRITE", source);
@@ -609,7 +861,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
   if (!st.result.conflicts.empty())
   {
     for (size_t i = 0; i < st.result.conflicts.size(); i++)
-      buildLemmas(st.result.conflicts[i], graph, model);
+      buildLemmas(st.result.conflicts[i], graph, st.synthetic, model);
     st.result.conflict = st.result.conflicts[0];
     st.result.status = ExtCheckResult::CONFLICT;
     st.finishProofDiagnostics();
@@ -631,6 +883,83 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     {
       st.result.status = ExtCheckResult::WITNESS_VIOLATION;
       st.result.violatedRecord = w.record;
+      st.finishProofDiagnostics();
+      return std::move(st.result);
+    }
+  }
+
+  // Rule K' and the completion. The arrays the candidate connects (see
+  // ComponentGraph) hold one value at every cell no access observes. Two
+  // constant arrays in one component with different defaults contradict
+  // that: they agree at every index no write on the path between them
+  // addresses, and an index sort with more values than the graph has
+  // writes always has such an index (the others were made explicit
+  // above), so the path's guards imply the two defaults are equal -- a
+  // lemma the candidate falsifies. A component with one default hands it
+  // to every array in it as the value of its unobserved cells: the
+  // completion the model publishes, without which an array equated with
+  // a constant array would print with the ordinary zero fill and the
+  // printed model would not satisfy the equality.
+  if (!graph.constArrays.empty())
+  {
+    ComponentGraph components(graph, model);
+    std::set<ASTNode> placed;
+    std::vector<ASTNode> reached;
+    std::map<ASTNode, std::pair<ASTNode, ComponentEdge>> via;
+    for (std::map<ASTNode, ExtConstArray>::const_iterator it =
+             graph.constArrays.begin();
+         it != graph.constArrays.end(); ++it)
+    {
+      if (placed.find(it->first) != placed.end())
+        continue;
+      components.component(it->first, reached, via);
+      const ASTNode origin = model.bvValue(it->second.defaultName);
+      const unsigned w = it->second.array.GetIndexWidth();
+      const bool explicitCells = tinyIndexDomain(w, graph.writes.size());
+      for (size_t i = 0; i < reached.size(); i++)
+      {
+        const std::map<ASTNode, ExtConstArray>::const_iterator other =
+            graph.constArrays.find(reached[i]);
+        if (other == graph.constArrays.end())
+          continue;
+        placed.insert(reached[i]);
+        if (explicitCells || reached[i] == it->first ||
+            model.bvValue(other->second.defaultName) == origin)
+          continue;
+        ExtConflict c;
+        c.shape = ExtConflict::CONST_PAIR;
+        c.commonArray = reached[i];
+        c.leftAccess = 0;
+        c.rightAccess = 0;
+        c.leftValue = origin;
+        c.rightValue = model.bvValue(other->second.defaultName);
+        size_t writesCrossed = 0;
+        ComponentGraph::pathGuards(via, reached[i], c.leftGuards,
+                                   writesCrossed);
+        if (tinyIndexDomain(w, writesCrossed))
+          FatalError("array-equality: rule K' met a path with more writes "
+                     "than the index sort has values",
+                     reached[i]);
+        c.constTermA = it->second.defaultTerm;
+        c.constNameA = it->second.defaultName;
+        c.constTermB = other->second.defaultTerm;
+        c.constNameB = other->second.defaultName;
+        st.result.stats["conflicts"]++;
+        st.result.stats["rule_K_prime"]++;
+        st.event(ExtEvent::CONFLICT, "K_PRIME", it->first, reached[i], 0);
+        st.result.conflicts.push_back(std::move(c));
+      }
+      if (st.result.conflicts.empty())
+        for (size_t i = 0; i < reached.size(); i++)
+          st.result.completion[reached[i]] = origin;
+    }
+    if (!st.result.conflicts.empty())
+    {
+      for (size_t i = 0; i < st.result.conflicts.size(); i++)
+        buildLemmas(st.result.conflicts[i], graph, st.synthetic, model);
+      st.result.conflict = st.result.conflicts[0];
+      st.result.status = ExtCheckResult::CONFLICT;
+      st.result.completion.clear();
       st.finishProofDiagnostics();
       return std::move(st.result);
     }

@@ -549,6 +549,9 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
  /* Types for QF_BV and QF_ABV. */
 "BitVec"        { return BITVEC_TOK;}
 "Array"         { return ARRAY_TOK;}
+ /* The one qualified identifier the grammar admits, ((as const S) v).
+  * "as" is reserved in SMT-LIB 2, so no input can mean a symbol by it. */
+"as"            { return AS_TOK;}
 "Bool"          { return BOOL_TOK;}
 
  /* Types for QF_FP and QF_BVFP. These and every other floating-point
