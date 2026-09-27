@@ -428,6 +428,29 @@ bool isCommutative(const Kind k)
   }
 }
 
+// While set, FatalError throws EngineFatal instead of ending the process;
+// see the declaration in AST.h for who sets it and why.
+static THREAD_LOCAL_IE bool fatal_error_throws = false;
+
+bool FatalErrorThrows()
+{
+  return fatal_error_throws;
+}
+
+void SetFatalErrorThrows(bool on)
+{
+  fatal_error_throws = on;
+}
+
+void ReportFatalError(const char* str)
+{
+  cerr << "Fatal Error: " << str << endl;
+  if (vc_error_hdlr)
+  {
+    vc_error_hdlr(str);
+  }
+}
+
 ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)
 {
   if (a.GetKind() != UNDEFINED)
@@ -444,16 +467,23 @@ ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)
   {
     vc_error_hdlr(str);
   }
+  if (fatal_error_throws)
+  {
+    // the node is part of the message: some callers pass an empty text
+    std::ostringstream what;
+    what << str;
+    if (a.GetKind() != UNDEFINED)
+      what << (*str ? " " : "") << a;
+    throw EngineFatal(what.str());
+  }
   abort();
 }
 
 ATTR_NORETURN void FatalError(const char* str)
 {
-  cerr << "Fatal Error: " << str << endl;
-  if (vc_error_hdlr)
-  {
-    vc_error_hdlr(str);
-  }
+  ReportFatalError(str);
+  if (fatal_error_throws)
+    throw EngineFatal(str);
   abort();
 }
 

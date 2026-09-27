@@ -95,6 +95,8 @@ SolverImpl::SolverImpl(ManagerImpl* m, const Options& o) : mgr(m)
   mgr->retain();
   options = *o.impl();
   bool registered = false;
+  // the engine is built inside an engine scope: a failure there is INTERNAL
+  detail::engine_call(mgr, "Solver", [&] {
   try
   {
     options.resolve("Solver");
@@ -132,6 +134,7 @@ SolverImpl::SolverImpl(ManagerImpl* m, const Options& o) : mgr(m)
     mgr->release();
     throw;
   }
+  });
   constructed = true;
 }
 
@@ -252,8 +255,7 @@ void SolverImpl::reapply_engine_defaults()
 void SolverImpl::apply_options(const char* fn)
 {
   EngineTarget t{mgr->bm->UserFlags, mgr, this};
-  apply_all_options(t, options);
-  (void)fn;
+  engine_call(mgr, fn, [&] { apply_all_options(t, options); });
 }
 
 bool SolverImpl::option_window_open(const OptionSpec& spec) const
@@ -270,7 +272,7 @@ bool SolverImpl::option_window_open(const OptionSpec& spec) const
 void SolverImpl::ensure_snapshot()
 {
   if (model_pending && produce_models)
-    model = take_snapshot(Verdict::SAT);
+    model = engine_call(mgr, "Solver::model", [&] { return take_snapshot(Verdict::SAT); });
   model_pending = false;
 }
 
@@ -375,7 +377,16 @@ bool is_uf_application(const ASTNode& n)
 Result SolverImpl::run_check(const char* fn, const std::vector<ASTNode>& assumptions,
                              const std::optional<CheckBudget>& budget)
 {
-  enter(fn);
+  check_alive(fn);
+  return engine_call(mgr, fn, [&] {
+    activate();
+    return run_check_impl(fn, assumptions, budget);
+  });
+}
+
+Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& assumptions,
+                                  const std::optional<CheckBudget>& budget)
+{
   ensure_snapshot();
   options.resolve(fn);
   apply_options(fn);
@@ -539,6 +550,10 @@ Result SolverImpl::run_check(const char* fn, const std::vector<ASTNode>& assumpt
       out = stp->TopLevelSTP(input, query);
     }
   }
+  catch (const stp::EngineFatal&)
+  {
+    throw; // INTERNAL, and the manager is poisoned (run_check)
+  }
   catch (const std::exception& e)
   {
     failure = e.what();
@@ -614,6 +629,7 @@ void SolverImpl::rebuild_engine()
   candidate.reset();
   model_pending = false;
   have_last = false;
+  engine_call(mgr, "Solver::reset", [&] {
   while (mgr->bm->getAssertLevel() > 0)
     mgr->bm->Pop();
   stp->deleteObjects();
@@ -624,6 +640,7 @@ void SolverImpl::rebuild_engine()
   checks = 0;
   constructed = false;
   reapply_engine_defaults();
+  });
   constructed = true;
 }
 
@@ -711,7 +728,9 @@ void apply_one(SolverImpl* s, std::string_view name)
   const detail::OptionSpec* spec = detail::find_option(name);
   detail::EngineTarget t{s->mgr->bm->UserFlags, s->mgr, s};
   const std::size_t index = detail::option_index(spec);
-  detail::apply_option_to_engine(t, index, *spec, s->options.resolved(index));
+  detail::engine_call(s->mgr, "SolverOptions::set", [&] {
+    detail::apply_option_to_engine(t, index, *spec, s->options.resolved(index));
+  });
 }
 } // namespace
 
@@ -926,23 +945,30 @@ void Solver::assert_formula(const Term& t)
 {
   SolverImpl* s = live(*this, "Solver::assert_formula");
   const ASTNode n = own_bool(s, t, "Solver::assert_formula", 0);
-  try
-  {
-    s->mgr->bm->AddAssert(n);
-  }
-  catch (const std::exception& failure)
-  {
-    detail::fail(ErrorCode::UNSUPPORTED, "Solver::assert_formula",
-                 std::string("the engine refused the assertion: ") + failure.what(), 0, {t});
-  }
-  if (s->stp->Ctr_Example != nullptr && s->stp->Ctr_Example->getUFTheoryAdapter() != nullptr)
-    s->stp->Ctr_Example->getUFTheoryAdapter()->invalidateCertifiedModel();
+  detail::engine_call(s->mgr, "Solver::assert_formula", [&] {
+    try
+    {
+      s->mgr->bm->AddAssert(n);
+    }
+    catch (const stp::EngineFatal&)
+    {
+      throw;
+    }
+    catch (const std::exception& failure)
+    {
+      detail::fail(ErrorCode::UNSUPPORTED, "Solver::assert_formula",
+                   std::string("the engine refused the assertion: ") + failure.what(), 0, {t});
+    }
+    if (s->stp->Ctr_Example != nullptr && s->stp->Ctr_Example->getUFTheoryAdapter() != nullptr)
+      s->stp->Ctr_Example->getUFTheoryAdapter()->invalidateCertifiedModel();
+  });
 }
 
 void Solver::push(std::uint32_t n)
 {
   SolverImpl* s = live(*this, "Solver::push");
   s->ensure_snapshot();
+  detail::engine_call(s->mgr, "Solver::push", [&] {
   for (std::uint32_t i = 0; i < n; ++i)
   {
     if (s->mgr->bm->UserFlags.incremental_mode != UserDefinedFlags::IncrementalMode::OFF)
@@ -952,12 +978,17 @@ void Solver::push(std::uint32_t n)
     {
       s->mgr->bm->Push();
     }
+    catch (const stp::EngineFatal&)
+    {
+      throw;
+    }
     catch (const std::exception& failure)
     {
       detail::fail(ErrorCode::UNSUPPORTED, "Solver::push",
                    std::string("the engine refused the push: ") + failure.what());
     }
   }
+  });
 }
 
 void Solver::pop(std::uint32_t n)
@@ -969,11 +1000,16 @@ void Solver::pop(std::uint32_t n)
                      std::to_string(level()),
                  0);
   s->ensure_snapshot();
+  detail::engine_call(s->mgr, "Solver::pop", [&] {
   for (std::uint32_t i = 0; i < n; ++i)
   {
     try
     {
       s->mgr->bm->Pop();
+    }
+    catch (const stp::EngineFatal&)
+    {
+      throw;
     }
     catch (const std::exception& failure)
     {
@@ -983,6 +1019,7 @@ void Solver::pop(std::uint32_t n)
     if (s->stp->Ctr_Example != nullptr && s->stp->Ctr_Example->getUFTheoryAdapter() != nullptr)
       s->stp->Ctr_Example->getUFTheoryAdapter()->invalidateCertifiedModel();
   }
+  });
 }
 
 std::uint32_t Solver::level() const noexcept
@@ -1017,14 +1054,16 @@ void Solver::reset_assertions()
   SolverImpl* s = live(*this, "Solver::reset_assertions");
   s->ensure_snapshot();
   STPMgr* bm = s->mgr->bm;
-  while (bm->getAssertLevel() > 0)
-    bm->Pop();
-  bm->Push();
-  s->stp->ClearAllTables();
-  s->stp->resetIncrementalSolver();
-  s->stp->discardRealSession();
-  s->stp->queryAnswered = false;
-  bm->clearUnknown();
+  detail::engine_call(s->mgr, "Solver::reset_assertions", [&] {
+    while (bm->getAssertLevel() > 0)
+      bm->Pop();
+    bm->Push();
+    s->stp->ClearAllTables();
+    s->stp->resetIncrementalSolver();
+    s->stp->discardRealSession();
+    s->stp->queryAnswered = false;
+    bm->clearUnknown();
+  });
   s->have_last = false;
   s->model.reset();
   s->candidate.reset();
@@ -1171,6 +1210,10 @@ void run_parser(SolverImpl* s, std::string_view text, Format format, ParseMode m
   STPMgr* bm = s->mgr->bm;
   s->ensure_snapshot();
   std::lock_guard<std::mutex> hold(detail::parser_mutex());
+  // The frontend's own refusals unwind to the parse entry and come back as a
+  // failed parse (PARSE below, with the stack put back); an engine failure
+  // inside the script is caught where the parser is called.
+  detail::EngineScope engine_scope;
   const std::vector<ASTNode> before = detail::flat_assertions(bm);
   const std::string script(text);
   // The frontend asserts and pushes as it goes, so a script that fails part
@@ -1266,9 +1309,30 @@ void run_parser(SolverImpl* s, std::string_view text, Format format, ParseMode m
       // between scans; a parse error's line is relative to this script.
       smt2lineno = 1;
       SMT2ScanString(script.c_str());
-      status = SMT2Parse();
+      try
+      {
+        status = SMT2Parse();
+      }
+      catch (const stp::EngineFatal& e)
+      {
+        // The engine failed inside the script (a check it ran, a node it
+        // built), not the grammar: the manager's state is suspect, so this
+        // is INTERNAL and the manager is poisoned, with the stack put back
+        // for what it is worth.
+        smt2lex_destroy();
+        bm->UserFlags.smtlib2_parser_flag = saved_smt2;
+        pi.retainUFDeclarations(false);
+        restore_stack();
+        detail::fail_engine(s->mgr, fn, e.what());
+      }
       smt2lex_destroy();
       bm->UserFlags.smtlib2_parser_flag = saved_smt2;
+      // A command the frontend answered with (error ...) and then skipped (an
+      // ill-typed extract, say) leaves the parse "successful" with the
+      // command's assertion silently dropped. STP's error behaviour is
+      // immediate-exit; for the API that is a failed parse, stack put back.
+      if (status == 0 && !pi.last_error_message.empty())
+        status = 1;
       if (status != 0)
       {
         // the interface's teardown deactivates what the failed script declared
@@ -1284,17 +1348,33 @@ void run_parser(SolverImpl* s, std::string_view text, Format format, ParseMode m
     case Format::CVC:
     {
       ASTVec out;
-      if (format == Format::SMTLIB1)
+      // These grammars refuse a malformed input through FatalError itself
+      // (a zero-width bit-vector, too few operands), which is the parse's
+      // own refusal here, not an engine failure: a failed parse, like a
+      // syntax error.
+      try
       {
-        SMTScanString(script.c_str());
-        status = SMTParse(&out);
-        smtlex_destroy();
+        if (format == Format::SMTLIB1)
+        {
+          SMTScanString(script.c_str());
+          status = SMTParse(&out);
+          smtlex_destroy();
+        }
+        else
+        {
+          CVCScanString(script.c_str());
+          status = CVCParse(&out);
+          cvclex_destroy();
+        }
       }
-      else
+      catch (const stp::EngineFatal& e)
       {
-        CVCScanString(script.c_str());
-        status = CVCParse(&out);
-        cvclex_destroy();
+        if (format == Format::SMTLIB1)
+          smtlex_destroy();
+        else
+          cvclex_destroy();
+        status = 1;
+        pi.last_error_message = e.what();
       }
       if (status != 0)
       {
@@ -1396,6 +1476,7 @@ Term Solver::parse_term(std::string_view text) const
   STPMgr* bm = s->mgr->bm;
   std::lock_guard<std::mutex> hold(detail::parser_mutex());
   s->ensure_snapshot();
+  detail::EngineScope engine_scope; // as in run_parser
   // One attempt: parse `script` on a scratch level without folding and hand
   // back the node it asserted (null on a parse failure, with `error` set).
   // `quiet` keeps the frontend's (error ...) echo off stdout for a
@@ -1441,7 +1522,18 @@ Term Solver::parse_term(std::string_view text) const
       restore.saved_cout = std::cout.rdbuf(sink.rdbuf());
     smt2lineno = 1;
     SMT2ScanString(script.c_str());
-    const int status = SMT2Parse();
+    int status = 0;
+    try
+    {
+      status = SMT2Parse();
+    }
+    catch (const stp::EngineFatal& e)
+    {
+      // an engine failure, not the grammar's refusal: INTERNAL, manager poisoned
+      smt2lex_destroy();
+      bm->UserFlags.smtlib2_parser_flag = saved_smt2;
+      detail::fail_engine(s->mgr, "Solver::parse_term", e.what());
+    }
     smt2lex_destroy();
     bm->UserFlags.smtlib2_parser_flag = saved_smt2;
     if (restore.saved_cout != nullptr)
@@ -1449,6 +1541,9 @@ Term Solver::parse_term(std::string_view text) const
       std::cout.rdbuf(restore.saved_cout);
       restore.saved_cout = nullptr;
     }
+    // an (error ...) response the frontend recovered from is a failure here (see run_parser)
+    if (status == 0 && !pi.last_error_message.empty())
+      status = 1;
     if (status != 0)
     {
       error = pi.last_error_message.empty() ? "syntax error" : pi.last_error_message;
@@ -1635,9 +1730,10 @@ std::string Solver::to_string(Format f) const
       std::vector<ASTNode> symbols;
       bool has_fp = false, has_array = false, has_uf = false, has_real = false;
       collect_symbols(roots, symbols, has_fp, has_array, has_uf, has_real);
-      if (has_fp || has_real)
+      if (has_fp || has_real || has_uf)
         detail::fail(ErrorCode::UNSUPPORTED, "Solver::to_string",
-                     "the CVC presentation language has no floating-point or Real syntax");
+                     "the CVC presentation language has no floating-point, Real or "
+                     "uninterpreted-function syntax");
       ASTNodeSet declared;
       for (const ASTNode& sym : symbols)
       {
@@ -1663,7 +1759,7 @@ std::string Solver::to_string(Format f) const
       for (const ASTNode& a : roots)
       {
         os << "ASSERT(";
-        printer::PL_Print(os, a, bm);
+        detail::engine_call(m, "Solver::to_string", [&] { printer::PL_Print(os, a, bm); });
         os << ");\n";
       }
       os << "QUERY(FALSE);\n";
@@ -1675,10 +1771,12 @@ std::string Solver::to_string(Format f) const
       ASTNode all = roots.empty() ? bm->ASTTrue
                     : roots.size() == 1 ? roots[0]
                                         : bm->hashingNodeFactory->CreateNode(AND, ASTVec(roots.begin(), roots.end()));
-      if (f == Format::DOT)
-        printer::Dot_Print(os, all);
-      else
-        printer::GDL_Print(os, all);
+      detail::engine_call(m, "Solver::to_string", [&] {
+        if (f == Format::DOT)
+          printer::Dot_Print(os, all);
+        else
+          printer::GDL_Print(os, all);
+      });
       return os.str();
     }
     case Format::SMTLIB1:

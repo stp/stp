@@ -355,6 +355,24 @@ def test_parse_smt2_string():
     s.close()
 
 
+def test_frontend_refusals_are_parse_errors():
+    """A script the frontend refuses (a wrong arity, a sort error, a constant that does not
+    fit, a rejected command) is a ParseError with the solver as it was, not the end of the
+    process."""
+    tm = TermManager()
+    s = Solver(tm)
+    s.from_string("(declare-fun f ((_ BitVec 8)) (_ BitVec 8)) (declare-fun x () (_ BitVec 8)) "
+                  "(assert (= (f x) x))")
+    for script in ["(assert (= (f x x) x))", "(assert (= x #b1))", "(assert (= x (_ bv300 8)))",
+                   "(declare-fun z () (_ BitVec 0))", "(set-option :produce-models maybe)",
+                   "(assert (= x ((_ extract 9 2) x)))", "(assert (= x (bvadd x)))"]:
+        with pytest.raises(ParseError):
+            s.from_string(script)
+        assert len(s.assertions()) == 1
+    assert s.check() == sat
+    s.close()
+
+
 def test_stp_decorator_and_current_solver():
     @stp.stp
     def constraints(a, b=32):  # 2.x: a default gives the width of the fresh symbol

@@ -297,9 +297,57 @@ spellings with no CLI form (`--produce-models`, `--sat-backend`,
 `--random-seed`, `--model-array-fill`, `--logic`, `--simplify`,
 `--default-rounding-mode`, `--stop-after-cnf`), which are new in 3.x.
 
+### 29. The frontend's refusals ended the process (A and F)
+
+Symptom: a sort error inside a script (`(= x #b1)` over an 8-bit `x`, a
+Boolean where a bit-vector was expected, an ill-formatted float operation),
+a wrong arity or argument sort of a declared function, a redeclaration, an
+unsupported function sort, an invalid declaration name, `fp.to_real`, the
+one-argument `to_fp` of a literal, a Boolean option given `maybe`,
+`:global-declarations` set after a declaration, a sort name defined twice, a
+reserved `@` name, a `(pop)` with nothing pushed, a zero width, too few
+operands, and `(_ bv300 8)` all reached `FatalError` from `fatal_yyerror`,
+`Cpp_interface::refuseCurrentCommand`, `badBooleanOptionValue`, the four
+frontend sites named, or the engine's constant constructor, and the process
+ended. Fix, in the engine: each reports as before and then throws
+`ParseAbandon` (the base of `DeclassifiedNameAbandon`) to `SMT2Parse()`, which
+answers failure, so the parse ends as a whole and no later command runs; the
+command line is unchanged (the `(error ...)` response, the "Fatal Error:"
+line on stderr, and the registered handler, whose `exit(-1)` ends the run
+with status 255 as it always did), and its lit tests pass unchanged. The
+`(_ bvN w)` rule checks that N fits w bits before the constructor sees it.
+Under the API the parse comes back as `PARSE` with the stack put back, as a
+syntax error always did. A command the frontend answers with `(error ...)`
+and then skips (an ill-typed `extract`) used to leave the parse "successful"
+with the assertion silently dropped: for the API that is a failed parse too.
+The engine's death test pinning the abort
+(`UninterpretedFunctionsFrontend.MalformedParserApplicationRefusesTheWholeCommand`)
+pins the new contract: failure, the diagnostic on every channel, nothing on
+the assertion stack. `Parsing.function_misuse_in_a_script_is_a_parse_error`
+is enabled and `Parsing.frontend_refusals_are_parse_errors` covers the list.
+
+### 30. An engine `FatalError` under the API ended the process
+
+Symptom: an engine invariant reached through any API call (`Term::to_string`
+of a Real term in the CVC format, say) called `FatalError`, which
+`abort()`ed. Fix: `FatalError` throws `stp::EngineFatal` while the thread's
+`FatalErrorThrows()` flag is set (else it ends the process as before: the
+command line and the 2.x C interface never set it). The API sets it around
+every engine-reaching entry (`EngineScope`/`engine_call` in `Internal.h`:
+construction, `simplify`, declare, the solver's construction, assert, push,
+pop, checks, parses, models, printing, options) and turns the exception into
+`INTERNAL`, poisoning the manager: every later call on it, its solvers,
+models and terms is `STATE` naming the failure. The C and Python layers
+inherit it (the C boundary also nets an `EngineFatal` no hub converted).
+The CVC printer's gaps (a float, a Real, an application) are refused as
+`UNSUPPORTED` before the printer, in `Term::to_string` and
+`Solver::to_string`; after that no public entry reaches a `FatalError` with
+valid input, so `api3-engine-failure.cpp` exercises the seam through the
+internal header.
+
 ## Open
 
-### A. A sort error inside a parsed script still aborts
+### A. A sort error inside a parsed script still aborts (FIXED, see 29)
 
 `fatal_yyerror` in `lib/Parser/smt2.y` (for example "bitvector operator
 requires bitvector operands", "expected a rounding mode") calls
@@ -347,7 +395,7 @@ A parse error that becomes a `PARSE` exception is also printed on stdout by
 the frontend, which the header's "nothing prints on its own" excludes. The
 tests capture stdout around the calls that provoke it.
 
-### F. Five script errors end the process instead of the parse
+### F. Five script errors end the process instead of the parse (FIXED, see 29)
 
 `Cpp_interface::refuseCurrentCommand` -- reached by redeclaring a function,
 applying one to the wrong number or sort of arguments, an unsupported UF

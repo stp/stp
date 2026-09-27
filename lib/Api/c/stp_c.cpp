@@ -171,6 +171,22 @@ void report_code(CManager* cm, ErrorRecord* rec, const char* fn, ErrorCode code,
   deliver(cm, cur);
 }
 
+void poison_on_engine_failure(CManager* cm, const char* fn, const char* what) noexcept
+{
+  if (cm == nullptr || cm->impl == nullptr || cm->impl->poisoned)
+    return;
+  try
+  {
+    cm->impl->poison_message = std::string("an engine failure in ") + (fn ? fn : "") + " (" +
+                               what + ") may have left its state inconsistent";
+  }
+  catch (...)
+  {
+    // out of memory: the flag alone still refuses every later call
+  }
+  cm->impl->poisoned = true;
+}
+
 // ============================================================ managers
 
 namespace

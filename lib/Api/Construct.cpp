@@ -155,6 +155,10 @@ ASTNode real_term(const Ctx& c, Kind_t ek, const ASTVec& kids)
   {
     return c.bm()->CreateRealTerm(ek, kids);
   }
+  catch (const stp::EngineFatal&)
+  {
+    throw;
+  }
   catch (const std::exception& failure)
   {
     c.unsupported(std::string("Real arithmetic: ") + failure.what());
@@ -166,6 +170,10 @@ ASTNode real_pred(const Ctx& c, Kind_t ek, const ASTNode& a, const ASTNode& b)
   try
   {
     return c.bm()->CreateRealPredicate(ek, a, b);
+  }
+  catch (const stp::EngineFatal&)
+  {
+    throw;
   }
   catch (const std::exception& failure)
   {
@@ -323,9 +331,23 @@ bool ManagerImpl::const_arrays_involved(const ASTNode& array) const
   }
 }
 
+ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vector<ASTNode>& args,
+                        const std::vector<std::uint32_t>& idx,
+                        std::optional<std::uint32_t> result_sort);
+
+// Every construction funnels through here, inside an engine scope: the
+// factories' rewrite rules are engine code, and an invariant they trip is
+// INTERNAL and poisons the manager rather than ending the process.
 ASTNode build_term(ManagerImpl* m, const char* fn, Kind k, const std::vector<ASTNode>& args,
                    const std::vector<std::uint32_t>& idx,
                    std::optional<std::uint32_t> result_sort)
+{
+  return engine_call(m, fn, [&] { return build_term_impl(m, fn, k, args, idx, result_sort); });
+}
+
+ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vector<ASTNode>& args,
+                        const std::vector<std::uint32_t>& idx,
+                        std::optional<std::uint32_t> result_sort)
 {
   const KindSpec& spec = kind_spec(k);
   const int n = static_cast<int>(args.size());

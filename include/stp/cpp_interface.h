@@ -260,7 +260,8 @@ private:
   // Report (set-option :<option> <value>) where the option's argument is a
   // <b_value> and the value is neither true nor false. Malformed rather than
   // unsupported, so it is an error response and not "unsupported"; STP's
-  // :error-behavior is immediate-exit, so it does not return.
+  // :error-behavior is immediate-exit, so it does not return: the parse
+  // ends (endParseWithDiagnostic).
   ATTR_NORETURN void badBooleanOptionValue(const std::string& option,
                                            const std::string& value);
   void addFrame();
@@ -577,9 +578,15 @@ public:
   // with immediate-exit, so an error it recovered from was a false claim --
   // and, where the discarded command was an assert, a claim that cost a
   // conjunct: the assertion went missing and the next check-sat answered
-  // the query that was left.
+  // the query that was left. "Out" is the end of the parse as a whole, not
+  // of the process: the parse unwinds to SMT2Parse() (ParseAbandon) and no
+  // later command runs; the command line then exits with the diagnostic.
   DLL_PUBLIC ATTR_NORETURN void refuseCurrentCommand(
       const std::string& diagnostic);
+  // Inside a command: report through the command line's fatal channels
+  // unless the 3.x API is the caller, then throw ParseAbandon. Outside one
+  // (no parse to abandon): FatalError, as before.
+  ATTR_NORETURN void endParseWithDiagnostic(const std::string& diagnostic);
   DLL_PUBLIC void finishCurrentCommand();
   bool currentCommandRejected() const { return current_command_rejected; }
 

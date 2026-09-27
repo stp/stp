@@ -266,6 +266,16 @@ Evaluator::Evaluator(const ModelSnapshot& s, const char* fn, bool complete)
 {
 }
 
+ASTNode Evaluator::evaluate(const ASTNode& n)
+{
+  return engine_call(m_, fn_, [&] { return eval(n); });
+}
+
+ASTNode Evaluator::read(const ASTNode& array, const ASTNode& index)
+{
+  return engine_call(m_, fn_, [&] { return eval_read(array, index); });
+}
+
 ASTNode Evaluator::eval(const ASTNode& n)
 {
   auto it = memo_.find(n);
@@ -455,12 +465,12 @@ void collect_indices(Evaluator& ev, const ModelSnapshot& s, ManagerImpl* m, cons
     switch (n.GetKind())
     {
       case WRITE:
-        indices.insert(ev.eval(n[1]));
+        indices.insert(ev.evaluate(n[1]));
         n = n[0];
         continue;
       case ITE:
       {
-        const ASTNode c = ev.eval(n[0]);
+        const ASTNode c = ev.evaluate(n[0]);
         n = (c == m->bm->ASTTrue) ? n[1] : n[2];
         continue;
       }
@@ -637,7 +647,7 @@ ASTNode own_node(const ModelSnapshot& s, const Term& t, const char* fn)
 Term eval_term(const ModelSnapshot& s, const Term& t, const char* fn)
 {
   detail::Evaluator ev(s, fn, true);
-  return detail::make_term(s.mgr, ev.eval(own_node(s, t, fn)));
+  return detail::make_term(s.mgr, ev.evaluate(own_node(s, t, fn)));
 }
 } // namespace
 
@@ -655,7 +665,7 @@ std::optional<Term> Model::try_value(const Term& t) const
 {
   const ModelSnapshot& s = snap_of(*this, "Model::try_value");
   detail::Evaluator ev(s, "Model::try_value", false);
-  const ASTNode v = ev.eval(own_node(s, t, "Model::try_value"));
+  const ASTNode v = ev.evaluate(own_node(s, t, "Model::try_value"));
   if (ev.incomplete())
     return std::nullopt;
   return detail::make_term(s.mgr, v);
@@ -668,7 +678,7 @@ std::vector<Term> Model::values(const std::vector<Term>& ts) const
   std::vector<Term> out;
   out.reserve(ts.size());
   for (const Term& t : ts)
-    out.push_back(detail::make_term(s.mgr, ev.eval(own_node(s, t, "Model::values"))));
+    out.push_back(detail::make_term(s.mgr, ev.evaluate(own_node(s, t, "Model::values"))));
   return out;
 }
 
@@ -701,7 +711,7 @@ ArrayValue Model::array_value(const Term& t) const
   impl->cells.array = n;
   impl->cells.sort = s.mgr->sort_of_node(n, "Model::array_value");
   for (const ASTNode& i : indices)
-    impl->cells.entries.emplace_back(i, ev.eval_read_public(n, i));
+    impl->cells.entries.emplace_back(i, ev.read(n, i));
   std::sort(impl->cells.entries.begin(), impl->cells.entries.end(),
             [](const std::pair<ASTNode, ASTNode>& x, const std::pair<ASTNode, ASTNode>& y) {
               return detail::index_before(x.first, y.first);
@@ -710,7 +720,7 @@ ArrayValue Model::array_value(const Term& t) const
   if (fit != s.arrays.end())
     impl->cells.fill = fit->second.fill;
   else if (s.mgr->const_array_default.count(base) != 0)
-    impl->cells.fill = ev.eval(s.mgr->const_array_default.at(base));
+    impl->cells.fill = ev.evaluate(s.mgr->const_array_default.at(base));
   else
     impl->cells.fill = detail::fill_value(s.mgr, impl->cells.sort, s.fill_ones, "Model::array_value");
   return ArrayValue(impl);
@@ -766,7 +776,7 @@ void Model::array_bytes(const Term& array, std::uint64_t first, std::size_t coun
   for (std::size_t i = 0; i < count; ++i)
   {
     const ASTNode index = s.mgr->bv_const(ir.a, first + i);
-    const ASTNode v = ev.eval_read_public(n, index);
+    const ASTNode v = ev.read(n, index);
     const std::string bits = detail::bv_bits_of(v);
     for (std::size_t b = 0; b < bytes_per; ++b)
     {

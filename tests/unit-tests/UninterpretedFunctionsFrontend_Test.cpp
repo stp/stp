@@ -283,14 +283,19 @@ TEST(UninterpretedFunctionsFrontend,
 {
   // The first assertion has a valid application followed by one with the
   // wrong arity, and the command is refused as a unit -- it does not come
-  // back. Recovering from it used to cost the assertion the application sat
-  // in: the command was discarded whole, the conjunct went with it, and the
-  // next check-sat answered the query that was left.
+  // back, and neither does anything after it: the parse ends there, as a
+  // whole. Recovering from the command alone used to cost the assertion the
+  // application sat in: the command was discarded whole, the conjunct went
+  // with it, and the next check-sat answered the query that was left. Ending
+  // the parse keeps that promise without ending the process: SMT2Parse
+  // answers failure (the command line then exits with the diagnostic, a
+  // library caller reports a parse error), the (error ...) response carries
+  // the diagnostic, the command line's "Fatal Error:" channel on stderr
+  // carries it too, and nothing from the refused command or the one after it
+  // reaches the assertion stack.
   //
-  // What the recovering version could also check here -- that neither the
-  // valid prefix nor a parser-side carrier was registered -- is no longer
-  // observable in-process, and is covered a layer down by
-  // FailedApplicationsRegisterNothing and
+  // That neither the valid prefix nor a parser-side carrier was registered
+  // is covered a layer down by FailedApplicationsRegisterNothing and
   // UnsupportedDirectSignaturesMutateNoRegistry, which ask the registry
   // directly.
   const char* const input = R"(
@@ -300,20 +305,35 @@ TEST(UninterpretedFunctionsFrontend,
     (assert (and (= (f x) x) (= (f x x) x)))
     (assert (= x #x00))
   )";
-  EXPECT_DEATH(
-      {
-        STPMgr manager;
-        Cpp_interface interface(manager, manager.defaultNodeFactory);
-        // Set in the forked child, so the parent's parser globals are
-        // untouched and need no saving.
-        GlobalParserBM = &manager;
-        GlobalParserInterface = &interface;
-        interface.startup();
-        manager.UserFlags.enable_uninterpreted_functions = true;
-        SMT2ScanString(input);
-        SMT2Parse();
-      },
-      "f expects 1 argument but was applied to 2");
+  STPMgr manager;
+  Cpp_interface interface(manager, manager.defaultNodeFactory);
+  STPMgr* const savedManager = GlobalParserBM;
+  Cpp_interface* const savedInterface = GlobalParserInterface;
+  GlobalParserBM = &manager;
+  GlobalParserInterface = &interface;
+  interface.startup();
+  manager.UserFlags.enable_uninterpreted_functions = true;
+
+  testing::internal::CaptureStdout();
+  testing::internal::CaptureStderr();
+  SMT2ScanString(input);
+  const int status = SMT2Parse();
+  smt2lex_destroy();
+  const std::string out = testing::internal::GetCapturedStdout();
+  const std::string err = testing::internal::GetCapturedStderr();
+  const ASTVec assertions = manager.GetAsserts();
+
+  GlobalParserBM = savedManager;
+  GlobalParserInterface = savedInterface;
+
+  EXPECT_NE(0, status);
+  const char* const diagnostic = "f expects 1 argument but was applied to 2";
+  EXPECT_NE(std::string::npos, out.find(diagnostic)) << out;
+  EXPECT_NE(std::string::npos, out.find("(error \"")) << out;
+  EXPECT_NE(std::string::npos, err.find("Fatal Error: ")) << err;
+  EXPECT_NE(std::string::npos, err.find(diagnostic)) << err;
+  EXPECT_NE(std::string::npos, interface.last_error_message.find(diagnostic));
+  EXPECT_EQ(0u, assertions.size());
 }
 
 TEST(UninterpretedFunctionsFrontend,

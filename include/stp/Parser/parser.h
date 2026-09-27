@@ -100,15 +100,25 @@ int SMT2DeclassifiedNameLine();
 const std::string& SMT2DeclassifiedNameText();
 void SMT2ConsumeDeclassifiedName();
 
-// Thrown when the parse fails downstream of a declassified declare-fun name
-// somewhere bison cannot unwind by itself -- a fatal sort rule, an illegal
-// character in the lexer. The pinned response is the name-position error
-// ALONE, so the failure in progress must not add its own message or its own
-// exit path. Caught in SMT2Parse(), which answers 1 exactly as an ordinary
-// abandoned parse does. (A bison syntax error downstream of the name needs
-// no throw: yyerror prints the name-position error and returns, and bison's
-// own abort reclaims its stack.)
-struct DeclassifiedNameAbandon
+// Thrown by the SMT-LIB 2 frontend's own refusals -- fatal_yyerror in the
+// grammar, Cpp_interface::refuseCurrentCommand and badBooleanOptionValue --
+// to abandon the parse as a whole once the (error ...) response is out: no
+// later command of the script runs. Caught in SMT2Parse(), which answers 1
+// exactly as an ordinary abandoned parse does; the caller decides what a
+// failed parse means (the command line exits with the diagnostic, the 3.x
+// API reports a PARSE error with its assertion stack put back).
+struct ParseAbandon
+{
+};
+
+// The same, when the parse fails downstream of a declassified declare-fun
+// name somewhere bison cannot unwind by itself -- a fatal sort rule, an
+// illegal character in the lexer. The pinned response is the name-position
+// error ALONE, so the failure in progress must not add its own message or
+// its own exit path. (A bison syntax error downstream of the name needs no
+// throw: yyerror prints the name-position error and returns, and bison's own
+// abort reclaims its stack.)
+struct DeclassifiedNameAbandon : ParseAbandon
 {
 };
 

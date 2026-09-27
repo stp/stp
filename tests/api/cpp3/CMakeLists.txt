@@ -40,6 +40,7 @@ AddSTPGTest(api3-solvers.cpp)
 AddSTPGTest(api3-models.cpp)
 AddSTPGTest(api3-parsing.cpp)
 AddSTPGTest(api3-errors.cpp)
+AddSTPGTest(api3-engine-failure.cpp)
 AddSTPGTest(api3-rosetta.cpp)
 
 # Every spelling tools/stp accepts must be a registry spelling (options.toml),

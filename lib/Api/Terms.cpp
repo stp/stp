@@ -357,7 +357,10 @@ RationalValue rational_of(const ASTNode& c)
 
 namespace
 {
-bool contains_fp(const ASTNode& root)
+// What the CVC presentation language cannot spell: a float, a Real, an
+// application of a declared function. Its printer treats those as fatal, so
+// they are refused here first.
+bool contains_cvc_unprintable(const ASTNode& root)
 {
   ASTNodeSet seen;
   std::vector<ASTNode> stack{root};
@@ -367,8 +370,7 @@ bool contains_fp(const ASTNode& root)
     stack.pop_back();
     if (!seen.insert(n).second)
       continue;
-    const SourceSort ss = n.GetSourceSort();
-    if (ss.usesFloatingPointTheory())
+    if (n.GetSourceSort().usesFloatingPointTheory() || n.isRealTerm() || n.GetKind() == UF_APPLY)
       return true;
     for (const ASTNode& c : n.GetChildren())
       stack.push_back(c);
@@ -530,6 +532,7 @@ private:
 
 std::string print_term(ManagerImpl* m, const ASTNode& n, Format f, bool share)
 {
+  m->check_alive("Term::to_string");
   std::ostringstream os;
   // The unshared SMT-LIB form is the API's own rendering.
   if ((f == Format::AUTO || f == Format::SMTLIB2) && !share)
@@ -552,31 +555,35 @@ std::string print_term(ManagerImpl* m, const ASTNode& n, Format f, bool share)
   if (n.GetKind() == SYMBOL && (f == Format::AUTO || f == Format::SMTLIB2))
     if (const UFDecl* d = m->decl_of(n))
       return quote_symbol(d->name());
-  switch (f)
-  {
-    case Format::AUTO:
-    case Format::SMTLIB2:
-      if (share)
-        printer::SMTLIB2_PrintTerm(os, m->bm, n);
-      else
-        printer::SMTLIB2_Print1(os, n, 0, false);
-      break;
-    case Format::CVC:
-      if (contains_fp(n))
-        fail(ErrorCode::UNSUPPORTED, "Term::to_string",
-             "the CVC presentation language has no floating-point syntax");
-      printer::PL_Print(os, n, m->bm);
-      break;
-    case Format::DOT:
-      printer::Dot_Print(os, n);
-      break;
-    case Format::GDL:
-      printer::GDL_Print(os, n);
-      break;
-    case Format::SMTLIB1:
-      fail(ErrorCode::UNSUPPORTED, "Term::to_string", "there is no SMT-LIB 1 printer");
-  }
-  return os.str();
+  // the engine's printers, inside an engine scope
+  return engine_call(m, "Term::to_string", [&]() -> std::string {
+    switch (f)
+    {
+      case Format::AUTO:
+      case Format::SMTLIB2:
+        if (share)
+          printer::SMTLIB2_PrintTerm(os, m->bm, n);
+        else
+          printer::SMTLIB2_Print1(os, n, 0, false);
+        break;
+      case Format::CVC:
+        if (contains_cvc_unprintable(n))
+          fail(ErrorCode::UNSUPPORTED, "Term::to_string",
+               "the CVC presentation language has no floating-point, Real or "
+               "uninterpreted-function syntax");
+        printer::PL_Print(os, n, m->bm);
+        break;
+      case Format::DOT:
+        printer::Dot_Print(os, n);
+        break;
+      case Format::GDL:
+        printer::GDL_Print(os, n);
+        break;
+      case Format::SMTLIB1:
+        fail(ErrorCode::UNSUPPORTED, "Term::to_string", "there is no SMT-LIB 1 printer");
+    }
+    return os.str();
+  });
 }
 
 // ------------------------------------------------------------ rebuilding

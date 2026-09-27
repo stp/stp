@@ -92,6 +92,9 @@ struct NullArgument
 void report(CManager* cm, ErrorRecord* rec, const char* fn, const Error& e) noexcept;
 void report_code(CManager* cm, ErrorRecord* rec, const char* fn, ErrorCode code,
                  const char* what, int arg = -1) noexcept;
+// Marks the manager poisoned after an engine failure no C++ hub converted, as
+// the hubs do (stp_c.cpp, where CManager is complete).
+void poison_on_engine_failure(CManager* cm, const char* fn, const char* what) noexcept;
 
 // The exception boundary. Every extern "C" body runs inside one of these; the
 // return value on failure is the caller's failure value (NULL, STP_ERROR,
@@ -114,6 +117,13 @@ R guarded(CManager* cm, ErrorRecord* rec, const char* fn, R fail_value, F&& f) n
   catch (const std::bad_alloc&)
   {
     report_code(cm, rec, fn, ErrorCode::RESOURCE, "out of memory");
+  }
+  catch (const stp::EngineFatal& e)
+  {
+    // An engine failure that no C++ hub converted (they all do; this is the
+    // net under them): INTERNAL, and the manager is poisoned as they would.
+    poison_on_engine_failure(cm, fn, e.what());
+    report_code(cm, rec, fn, ErrorCode::INTERNAL, e.what());
   }
   catch (const std::exception& e)
   {

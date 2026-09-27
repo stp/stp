@@ -510,11 +510,10 @@ TEST(Parsing, functions_declared_by_scripts)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
-// FINDINGS.md F: the frontend refuses these commands by ending the process
-// (Cpp_interface::refuseCurrentCommand calls FatalError, which the engine's
-// own UninterpretedFunctionsFrontend_Test pins), so the API cannot yet report
-// them as PARSE errors. Enabled once that refusal unwinds to the parse.
-TEST(Parsing, DISABLED_function_misuse_in_a_script_is_a_parse_error)
+// FINDINGS.md F: the frontend refuses these commands by ending the parse as
+// a whole (Cpp_interface::refuseCurrentCommand unwinds to SMT2Parse, which
+// answers failure), and the API reports PARSE with the solver as it was.
+TEST(Parsing, function_misuse_in_a_script_is_a_parse_error)
 {
   TermManager tm;
   Solver s(tm);
@@ -528,6 +527,64 @@ TEST(Parsing, DISABLED_function_misuse_in_a_script_is_a_parse_error)
   API3_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2("(assert (= (f #b1) x))\n"));
   EXPECT_EQ(s.assertions().size(), 1u);
   EXPECT_TRUE(s.check_sat().is_sat());
+}
+
+// FINDINGS.md A and F: every one of these once ended the process (the
+// grammar's fatal_yyerror, the frontend's refusals, a constant the engine's
+// constructor would not take). Each is PARSE now, with the solver as it was
+// -- its level, its assertions -- and usable afterwards.
+TEST(Parsing, frontend_refusals_are_parse_errors)
+{
+  TermManager tm;
+  Solver s(tm);
+  s.parse_smt2("(declare-fun x () (_ BitVec 8))\n(declare-fun y () (_ FloatingPoint 8 24))\n"
+               "(assert (= x #x01))\n");
+  s.push();
+  const char* const scripts[] = {
+      "(assert (= x #b1))",                                         // width mismatch
+      "(assert (= x (bvadd x true)))",                              // Bool where BitVec
+      "(assert (and x true))",                                      // BitVec where Bool
+      "(declare-fun x () (_ BitVec 4))",                            // redeclaration
+      "(declare-fun g ((Array (_ BitVec 8) (_ BitVec 8))) (_ BitVec 8))", // an unsupported UF sort
+      "(declare-fun bvadd () (_ BitVec 8))",                        // a theory name
+      "(assert (= (fp.to_real y) 1.0))",                            // fp.to_real
+      "(assert (= y ((_ to_fp 8 24) 1.5)))",                        // one-argument to_fp of a literal
+      "(set-option :produce-models maybe)",                         // a Boolean option's value
+      "(set-option :global-declarations true)",                     // an option that must come first
+      "(assert (= x (bvadd x)))",                                   // too few operands
+      "(declare-fun z () (_ BitVec 0))",                            // a zero width
+      "(assert (= x (_ bv300 8)))",                                 // a constant that does not fit
+      "(assert (= x (_ bv0 0)))",                                   // a constant of width zero
+      "(assert (= x ((_ extract 9 2) x)))",                         // an extract the frontend rejects and skips
+      "(declare-fun r () Real)\n(assert (= r (/ 1 0)))",            // Real division by zero
+      "(declare-fun @x () (_ BitVec 8))",                           // a reserved name
+      "(define-sort F () (_ FloatingPoint 8 24))\n(define-sort F () (_ FloatingPoint 11 53))", // a sort alias defined twice
+      "(declare-sort T 0)\n(declare-sort T 0)",                     // a sort declared twice
+      "(declare-sort T 0)\n(declare-fun t () T)\n(assert (= t t))\n(assert (= x (bvadd t x)))", // a declared sort where a bit-vector is expected
+      "(set-logic ALL)",                                            // a logic STP does not decide
+  };
+  for (const char* script : scripts)
+  {
+    const std::optional<RecoverableError> err = API3_ERROR_OF(s.parse_smt2(script));
+    ASSERT_TRUE(err.has_value()) << script;
+    EXPECT_EQ(err->code(), ErrorCode::PARSE) << script << "\n" << err->what();
+    EXPECT_EQ(s.level(), 1u) << script;
+    EXPECT_EQ(s.assertions().size(), 1u) << script;
+  }
+  s.pop();
+  EXPECT_EQ(s.level(), 0u);
+  // a (pop) with nothing pushed at all
+  API3_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2("(pop 1)"));
+  EXPECT_EQ(s.level(), 0u);
+  EXPECT_EQ(s.assertions().size(), 1u);
+  EXPECT_TRUE(s.check_sat().is_sat());
+  EXPECT_FALSE(tm.symbol("z").has_value());
+  EXPECT_FALSE(tm.symbol("g").has_value());
+  // the same refusals through parse_term
+  API3_EXPECT_ERROR(ErrorCode::PARSE, (void)s.parse_term("(bvadd x)"));
+  API3_EXPECT_ERROR(ErrorCode::PARSE, (void)s.parse_term("(_ bv300 8)"));
+  API3_EXPECT_ERROR(ErrorCode::PARSE, (void)s.parse_term("((_ extract 9 2) x)"));
+  EXPECT_EQ(s.assertions().size(), 1u);
 }
 
 TEST(Parsing, content_a_switched_off_theory_cannot_decide)

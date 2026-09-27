@@ -201,7 +201,12 @@ noted, or were done with throw-away programs against `build-py/lib/libstp.so`.
    was fixed (CONSTANTBV keeps its constants in thread-locals, and the
    manager constructor now boots the library on every thread that creates a
    manager) and passes now.
-2. **The CVC parser aborts on a syntax error** -- SERIOUS. `lib/Parser/cvc.y`
+2. **The CVC parser aborts on a syntax error** -- SERIOUS, FIXED: the CVC and
+   SMT-LIB 1 grammars report and return, the SMT-LIB 2 grammar's fatal paths
+   named below (`set-logic ALL`, `declare-sort` without a UF logic, the arity
+   underflow, and every other refusal of the frontend) are `ParseError` now,
+   and an engine failure inside any call is `InternalError` with the manager
+   poisoned. As found: `lib/Parser/cvc.y`
    `yyerror` (line 58) calls `FatalError`, so `stp_solver_parse(text,
    STP_FORMAT_CVC)` of malformed input (an input without a `QUERY`, a typo)
    terminates the process (`Fatal Error: CVC syntax error: line 1: syntax

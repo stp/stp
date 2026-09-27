@@ -64,7 +64,24 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   (`retainUFDeclarations`), enables every theory's keywords without a set-logic
   (`all_theory_tokens`) and captures the frontend's stdout answers for the
   diagnostic of a PARSE error. CVC and SMT-LIB 1 syntax errors are recoverable
-  (their `yyerror` no longer aborts; the CLI still exits with the message).
+  (their `yyerror` no longer aborts; the CLI still exits with the message). The
+  SMT-LIB 2 frontend's own refusals (a sort error, a wrong arity, a
+  redeclaration, a constant that does not fit its width, an option value it
+  cannot read) unwind to the parse entry with `ParseAbandon` and are PARSE
+  errors with the stack put back; a command the frontend answers with
+  `(error ...)` and then skips makes the parse fail too, since STP's error
+  behaviour is immediate-exit and a silently dropped assertion is worse than
+  a refused script. The command line keeps every channel it had (the response,
+  the "Fatal Error:" line, the handler) and exits non-zero.
+- Errors: the library never calls `exit()` or `abort()`. A misuse is a
+  recoverable error that leaves every object as it was. An engine failure --
+  `FatalError` reached inside any API call -- throws `stp::EngineFatal`
+  because every engine-reaching entry runs inside an `EngineScope`
+  (`engine_call` in Internal.h); the hub reports it as INTERNAL and poisons the
+  manager, whose state the failure may have left inconsistent: every later
+  call on it, its solvers, models and terms is refused with STATE naming the
+  failure. The command line and the 2.x C interface never set the flag, so
+  `FatalError` ends the process for them as it always has.
 - The values of the partial floating-point operations (`fp.min`/`fp.max` on the two
   zeros, `fp.to_ubv`/`fp.to_sbv` out of range) are taken from the solve for every
   such node in the checked formula; a node built afterwards evaluates with a zero

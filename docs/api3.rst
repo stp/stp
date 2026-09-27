@@ -53,8 +53,12 @@ Objects
 
 Errors are exceptions in C++ and Python and a per-manager error record in C.
 Every precondition is checked in every build type; a recoverable error leaves
-every object as it was. The library never calls ``exit()`` or ``abort()`` on a
-misuse.
+every object as it was. The library never calls ``exit()`` or ``abort()``: a
+script the frontend refuses (a sort error, a wrong arity, a constant that
+does not fit its width) is a ``PARSE`` error with the solver as it was, and an
+engine failure inside any call is ``INTERNAL`` and poisons the manager, after
+which every call on it, its solvers, models and terms is refused with
+``STATE`` naming the failure.
 
 C++
 ---

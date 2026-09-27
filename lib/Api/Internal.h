@@ -92,6 +92,36 @@ struct ErrorDetails
                              const std::string& what);
 [[noreturn]] void fail_internal(const char* fn, const std::string& what);
 [[noreturn]] void fail_resource(const char* fn, const char* what);
+
+// Every entry that reaches the engine runs inside one of these: while it is
+// alive the engine's FatalError throws stp::EngineFatal instead of ending the
+// process (lib/AST/ASTmisc.cpp). engine_call turns that exception into an
+// INTERNAL error after poisoning the manager, whose state the failure may
+// have left inconsistent: every later call on it, its solvers, models and
+// terms is refused with STATE naming the failure. The flag is per thread and
+// nests (a scope restores what it found).
+struct EngineScope
+{
+  bool saved;
+  EngineScope() noexcept : saved(stp::FatalErrorThrows()) { stp::SetFatalErrorThrows(true); }
+  ~EngineScope() { stp::SetFatalErrorThrows(saved); }
+  EngineScope(const EngineScope&) = delete;
+  EngineScope& operator=(const EngineScope&) = delete;
+};
+[[noreturn]] void fail_engine(ManagerImpl* m, const char* fn, const std::string& what);
+template <class F>
+auto engine_call(ManagerImpl* m, const char* fn, F&& f) -> decltype(f())
+{
+  EngineScope scope;
+  try
+  {
+    return f();
+  }
+  catch (const stp::EngineFatal& e)
+  {
+    fail_engine(m, fn, e.what());
+  }
+}
 const char* error_template(ErrorCode code);
 bool error_recoverable(ErrorCode code);
 
@@ -399,6 +429,10 @@ public:
   {
     return eval_read(array, index);
   }
+  // The entry points: eval and eval_read inside an engine scope (the constant
+  // evaluator the folds reach is engine code).
+  ASTNode evaluate(const ASTNode& n);
+  ASTNode read(const ASTNode& array, const ASTNode& index);
 
 private:
   ASTNode eval_read(const ASTNode& array, const ASTNode& index);
@@ -471,6 +505,8 @@ struct SolverImpl
   std::shared_ptr<const ModelSnapshot> take_snapshot(Verdict v);
   Result run_check(const char* fn, const std::vector<ASTNode>& assumptions,
                    const std::optional<CheckBudget>& budget);
+  Result run_check_impl(const char* fn, const std::vector<ASTNode>& assumptions,
+                        const std::optional<CheckBudget>& budget);
   static bool poll_stop(void* opaque);
   void rebuild_engine();
 };

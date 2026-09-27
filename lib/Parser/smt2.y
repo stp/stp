@@ -346,7 +346,16 @@ namespace stp
       throw stp::DeclassifiedNameAbandon();
     }
     yyerror(s);
-    stp::FatalError(smt2_diagnostic(s).c_str());
+    // The grammar's own refusal ends the parse, not the process: unwind to
+    // SMT2Parse(), which answers failure, and the caller decides -- the
+    // command line exits with the diagnostic, a library caller gets a parse
+    // error with its assertion stack put back. The command line's other
+    // channels (the "Fatal Error:" line on stderr and the registered
+    // handler) keep their report; under the 3.x API the diagnostic is the
+    // error's own text, and those channels stay quiet.
+    if (!stp::FatalErrorThrows())
+      stp::ReportFatalError(smt2_diagnostic(s).c_str());
+    throw stp::ParseAbandon();
   }
 
   // STP's lowering layer intentionally treats a float's packed
@@ -476,6 +485,24 @@ namespace stp
                       : " (unknown; " + std::string(
                             stp::UFSignature::supportedSortsPhrase()) + ")";
     return diagnostic;
+  }
+
+  // Whether the decimal `digits` of (_ bvN w) fits `width` bits. The value is
+  // built at a width that always holds it (four bits per digit), and its
+  // highest set bit compared against the width; the engine's constructor
+  // treats an overflow as fatal, so the grammar asks first.
+  static bool decimalFitsWidth(const std::string& digits, unsigned width)
+  {
+    unsigned wide = 4u * static_cast<unsigned>(digits.size()) + 4u;
+    if (wide < width)
+      wide = width;
+    stp::CBV bv = CONSTANTBV::BitVector_Create(wide, true);
+    const CONSTANTBV::ErrCode code =
+        CONSTANTBV::BitVector_from_Dec(bv, (unsigned char*)digits.c_str());
+    const bool fits = code == CONSTANTBV::ErrCode_Ok &&
+                      CONSTANTBV::Set_Max(bv) < static_cast<signed long>(width);
+    CONSTANTBV::BitVector_Destroy(bv);
+    return fits;
   }
 
   static ASTNode* applyParsedUF(const stp::UFDecl* declaration,
@@ -1202,7 +1229,7 @@ namespace stp
     {
       return stp::GlobalParserInterface->applyFunction(f, params);
     }
-    catch (const stp::DeclassifiedNameAbandon&)
+    catch (const stp::ParseAbandon&)
     {
       throw;
     }
@@ -4206,6 +4233,21 @@ TERMID_TOK
 }
 | UNDERSCORE_TOK BVCONST_DECIMAL_TOK NUMERAL_TOK
 {
+  // (_ bvN w): w is positive and N fits w bits, and saying so is the
+  // parser's job (the engine's constructor treats either as fatal).
+  if ($3 == 0)
+  {
+    delete $2;
+    fatal_yyerror("bit-vectors must be of positive length");
+  }
+  if (!decimalFitsWidth(*$2, $3))
+  {
+    const std::string diagnostic = "(_ bv" + *$2 + " " + std::to_string($3) +
+                                   "): the value does not fit in " +
+                                   std::to_string($3) + " bits";
+    delete $2;
+    fatal_yyerror(diagnostic.c_str());
+  }
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$2, 10, $3));
   $$->SetValueWidth($3);
   delete $2;
@@ -4351,7 +4393,7 @@ namespace stp {
     {
       result = smt2parse();
     }
-    catch (const stp::DeclassifiedNameAbandon&)
+    catch (const stp::ParseAbandon&)
     {
       result = 1;
     }

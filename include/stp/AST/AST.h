@@ -29,12 +29,33 @@ THE SOFTWARE.
 #include "UsefulDefs.h"
 #include "stp/Util/Attributes.h"
 #include <ankerl/unordered_dense.h>
+#include <stdexcept>
+#include <string>
 
 namespace stp
 {
 DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str, const ASTNode& a,
                                          int w = 0);
 DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str);
+
+// What FatalError throws instead of ending the process while
+// FatalErrorThrows() is set. The 3.x API sets it for the duration of every
+// call that reaches the engine (lib/Api/Internal.h, EngineScope), turns the
+// exception into an INTERNAL error and poisons the manager whose state the
+// failure may have left inconsistent. The command line and the 2.x C
+// interface leave it clear, and FatalError ends the process for them as it
+// always has. The flag is per thread.
+struct EngineFatal : std::runtime_error
+{
+  explicit EngineFatal(const std::string& what) : std::runtime_error(what) {}
+};
+DLL_PUBLIC bool FatalErrorThrows();
+DLL_PUBLIC void SetFatalErrorThrows(bool on);
+// FatalError's report without its exit: the "Fatal Error:" line on stderr
+// and the callback vc_registerErrorHandler installed. The parsers use it
+// for a refusal that ends the parse rather than the process, so that the
+// command line's diagnostic channels keep every line they carried.
+DLL_PUBLIC void ReportFatalError(const char* str);
 void SortByExprNum(ASTVec& c);
 void SortByArith(ASTVec& c);
 bool arithless(const ASTNode& n1, const ASTNode& n2);

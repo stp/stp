@@ -182,6 +182,30 @@ TEST(c3_roundtrip, a_failed_parse_fails_the_solver_and_keeps_the_stack)
   stp_solver_clear_error(a.s);
 }
 
+TEST(c3_roundtrip, a_refused_command_is_a_parse_error)
+{
+  // The frontend's own refusals (a wrong arity here, a sort error, a
+  // constant that does not fit) end the parse, not the process: PARSE, the
+  // stack as it was, the solver usable once its failed state is cleared.
+  Session a;
+  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(a.s,
+                                          "(declare-fun f ((_ BitVec 8)) (_ BitVec 8))"
+                                          "(declare-fun x () (_ BitVec 8))(assert (= (f x) x))",
+                                          STP_PARSE_DECLARE_AND_ASSERT))
+      << pending(a.tm);
+  for (const char* script : {"(assert (= (f x x) x))", "(assert (= x #b1))", "(assert (= x (_ bv300 8)))",
+                             "(declare-fun z () (_ BitVec 0))"})
+  {
+    EXPECT_EQ(STP_ERROR, stp_solver_parse_smt2(a.s, script, STP_PARSE_DECLARE_AND_ASSERT)) << script;
+    ASSERT_NE(nullptr, stp_tm_error(a.tm)) << script;
+    EXPECT_EQ(STP_ERR_PARSE, stp_tm_error(a.tm)->code) << script;
+    stp_tm_clear_error(a.tm);
+    stp_solver_clear_error(a.s);
+    EXPECT_EQ(1u, stp_solver_num_assertions(a.s)) << script;
+  }
+  EXPECT_EQ(STP_SAT, a.check());
+}
+
 TEST(c3_roundtrip, cvc_and_dot_and_model_printing)
 {
   Session a;

@@ -133,6 +133,19 @@ void ManagerImpl::check_alive(const char* fn) const
     fail(ErrorCode::STATE, fn, "the term manager is poisoned: " + poison_message);
 }
 
+void fail_engine(ManagerImpl* m, const char* fn, const std::string& what)
+{
+  const std::string where = fn ? fn : "";
+  if (m != nullptr && !m->poisoned)
+  {
+    m->poisoned = true;
+    m->poison_message =
+        "an engine failure in " + where + " (" + what + ") may have left its state inconsistent";
+  }
+  fail_internal(fn, "the engine failed: " + what +
+                        "; the term manager is poisoned and refuses every later call");
+}
+
 NodeFactory* ManagerImpl::folding_factory()
 {
   if (folding_factory_ == nullptr)
@@ -545,6 +558,10 @@ ASTNode ManagerImpl::real_const(const char* fn, const std::string& text)
     if (slash != std::string::npos)
       return bm->CreateRealConst(text.substr(0, slash), text.substr(slash + 1));
     return bm->CreateRealConst(text);
+  }
+  catch (const stp::EngineFatal&)
+  {
+    throw;
   }
   catch (const std::exception& failure)
   {
@@ -1029,7 +1046,9 @@ Term TermManager::declare(std::string_view name, const Sort& sort)
   if (sort.impl_manager() != m)
     detail::fail(ErrorCode::FOREIGN_MANAGER, "TermManager::declare",
                  "the sort belongs to another term manager", 1);
-  return m->declare("TermManager::declare", std::string(name), sort.impl_index(), false);
+  return detail::engine_call(m, "TermManager::declare", [&] {
+    return m->declare("TermManager::declare", std::string(name), sort.impl_index(), false);
+  });
 }
 Term TermManager::mk_fresh(const Sort& sort, std::string_view prefix)
 {
@@ -1039,7 +1058,9 @@ Term TermManager::mk_fresh(const Sort& sort, std::string_view prefix)
   if (sort.impl_manager() != m)
     detail::fail(ErrorCode::FOREIGN_MANAGER, "TermManager::mk_fresh",
                  "the sort belongs to another term manager", 0);
-  return m->declare("TermManager::mk_fresh", m->fresh_name(prefix), sort.impl_index(), true);
+  return detail::engine_call(m, "TermManager::mk_fresh", [&] {
+    return m->declare("TermManager::mk_fresh", m->fresh_name(prefix), sort.impl_index(), true);
+  });
 }
 std::optional<Term> TermManager::symbol(std::string_view name) const
 {
@@ -1450,31 +1471,41 @@ Term TermManager::mk_fp_pos_zero(const Sort& fp)
 {
   ManagerImpl* m = live(*this, "TermManager::mk_fp_pos_zero");
   const detail::SortRec& r = fp_rec(m, fp, "TermManager::mk_fp_pos_zero", 0);
-  return detail::make_term(m, m->bm->CreateFPSpecialConst(FPSpecial::PlusZero, r.a, r.b));
+  return detail::make_term(m, detail::engine_call(m, "TermManager::mk_fp_pos_zero", [&] {
+    return m->bm->CreateFPSpecialConst(FPSpecial::PlusZero, r.a, r.b);
+  }));
 }
 Term TermManager::mk_fp_neg_zero(const Sort& fp)
 {
   ManagerImpl* m = live(*this, "TermManager::mk_fp_neg_zero");
   const detail::SortRec& r = fp_rec(m, fp, "TermManager::mk_fp_neg_zero", 0);
-  return detail::make_term(m, m->bm->CreateFPSpecialConst(FPSpecial::MinusZero, r.a, r.b));
+  return detail::make_term(m, detail::engine_call(m, "TermManager::mk_fp_neg_zero", [&] {
+    return m->bm->CreateFPSpecialConst(FPSpecial::MinusZero, r.a, r.b);
+  }));
 }
 Term TermManager::mk_fp_pos_inf(const Sort& fp)
 {
   ManagerImpl* m = live(*this, "TermManager::mk_fp_pos_inf");
   const detail::SortRec& r = fp_rec(m, fp, "TermManager::mk_fp_pos_inf", 0);
-  return detail::make_term(m, m->bm->CreateFPSpecialConst(FPSpecial::PlusInfinity, r.a, r.b));
+  return detail::make_term(m, detail::engine_call(m, "TermManager::mk_fp_pos_inf", [&] {
+    return m->bm->CreateFPSpecialConst(FPSpecial::PlusInfinity, r.a, r.b);
+  }));
 }
 Term TermManager::mk_fp_neg_inf(const Sort& fp)
 {
   ManagerImpl* m = live(*this, "TermManager::mk_fp_neg_inf");
   const detail::SortRec& r = fp_rec(m, fp, "TermManager::mk_fp_neg_inf", 0);
-  return detail::make_term(m, m->bm->CreateFPSpecialConst(FPSpecial::MinusInfinity, r.a, r.b));
+  return detail::make_term(m, detail::engine_call(m, "TermManager::mk_fp_neg_inf", [&] {
+    return m->bm->CreateFPSpecialConst(FPSpecial::MinusInfinity, r.a, r.b);
+  }));
 }
 Term TermManager::mk_fp_nan(const Sort& fp)
 {
   ManagerImpl* m = live(*this, "TermManager::mk_fp_nan");
   const detail::SortRec& r = fp_rec(m, fp, "TermManager::mk_fp_nan", 0);
-  return detail::make_term(m, m->bm->CreateFPSpecialConst(FPSpecial::NaN, r.a, r.b));
+  return detail::make_term(m, detail::engine_call(m, "TermManager::mk_fp_nan", [&] {
+    return m->bm->CreateFPSpecialConst(FPSpecial::NaN, r.a, r.b);
+  }));
 }
 
 namespace
@@ -1737,6 +1768,7 @@ Term TermManager::simplify(const Term& t) const
   if (t.impl_manager() != m)
     detail::fail(ErrorCode::FOREIGN_MANAGER, "TermManager::simplify",
                  "the term belongs to another term manager", 0, {t});
+  return detail::engine_call(m, "TermManager::simplify", [&]() -> Term {
   // Rebuild bottom-up through the folding factory; a memo bounds the work by
   // the DAG size.
   std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher> memo;
@@ -1811,6 +1843,7 @@ Term TermManager::simplify(const Term& t) const
     }
   }
   return detail::make_term(m, out);
+  });
 }
 
 } // namespace api

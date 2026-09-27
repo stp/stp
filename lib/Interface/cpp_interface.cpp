@@ -288,7 +288,11 @@ void Cpp_interface::addSortAlias(const std::string& name,
 {
   // SMT-LIB does not allow redefining a sort name.
   if (sort_aliases.find(name) != sort_aliases.end())
-    FatalError("the sort name is already defined");
+  {
+    const std::string msg = "the sort name is already defined: " + name;
+    rejectCurrentCommand(msg);
+    endParseWithDiagnostic(msg);
+  }
   sort_aliases[name] = sort;
   frames.back()->addSortAlias(name);
   session_touched = true;
@@ -371,8 +375,13 @@ ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
   // place it has to be said. Symbols STP mints for itself go to the manager
   // directly and are unaffected.
   if (STPMgr::isReservedSymbolName(name))
-    FatalError("a symbol name beginning with '@' or '.' is reserved for "
-               "solver use and cannot be declared");
+  {
+    const std::string msg = std::string("a symbol name beginning with '@' or '.' is reserved for "
+                                        "solver use and cannot be declared: ") +
+                            name;
+    rejectCurrentCommand(msg);
+    endParseWithDiagnostic(msg);
+  }
 
   return bm.CreateSourceSymbol(name, source_sort);
 }
@@ -761,8 +770,24 @@ void Cpp_interface::refuseCurrentCommand(const std::string& diagnostic)
   rejectCurrentCommand(diagnostic);
   // Reducing the rest of the command first would only build carriers for a
   // session that is over, so the report above is the last thing printed on
-  // stdout and FatalError takes it from here.
-  FatalError(diagnostic.c_str());
+  // stdout, and the parse ends here as a whole. Inside a command that means
+  // unwinding to SMT2Parse(), which answers failure -- the command line
+  // exits with the diagnostic, a library caller gets a parse error with its
+  // assertion stack put back. Outside one there is no parse to abandon, and
+  // FatalError takes it as before.
+  endParseWithDiagnostic(diagnostic);
+}
+
+void Cpp_interface::endParseWithDiagnostic(const std::string& diagnostic)
+{
+  if (!current_command_active)
+    FatalError(diagnostic.c_str());
+  // The command line's other channels ("Fatal Error:" on stderr, the
+  // registered handler) keep their report; under the 3.x API the diagnostic
+  // is the parse error's own text.
+  if (!FatalErrorThrows())
+    ReportFatalError(diagnostic.c_str());
+  throw ParseAbandon();
 }
 
 void Cpp_interface::finishCurrentCommand()
@@ -911,7 +936,12 @@ void Cpp_interface::pop()
   if (frames.size() == 0)
     FatalError("Popping from an empty stack.");
   if (frames.size() == 1)
-    FatalError("Can't pop away the default base element.");
+  {
+    // a (pop) with nothing pushed: the script's error, not the process's end
+    const std::string msg = "Can't pop away the default base element.";
+    rejectCurrentCommand(msg);
+    endParseWithDiagnostic(msg);
+  }
 
   model_valid = false;
   lastCheckWasAssuming = false;
@@ -1331,8 +1361,8 @@ void Cpp_interface::badBooleanOptionValue(const std::string& option,
 {
   const std::string msg = "set-option :" + option +
                           " takes true or false, but was given: " + value;
-  error(msg);
-  FatalError(msg.c_str());
+  rejectCurrentCommand(msg);
+  endParseWithDiagnostic(msg);
 }
 
 void Cpp_interface::setOption(std::string option, std::string value)
@@ -1396,8 +1426,8 @@ void Cpp_interface::setOption(std::string option, std::string value)
     {
       const std::string msg = "set-option :global-declarations must come "
                               "before anything is declared or asserted";
-      error(msg);
-      FatalError(msg.c_str());
+      rejectCurrentCommand(msg);
+      endParseWithDiagnostic(msg);
     }
 
     if (value == "true")

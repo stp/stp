@@ -163,7 +163,11 @@ Recorded precisely as found; none blocked the layer. Reproductions are in
    and `capabilities()["array.const-equality"] = "false"`), which also refuses
    `store(k, i, v) = k`. Recorded here because it shapes the C tests: array
    results are read back through `select`, never through `=`.
-5. **The SMT2 parser exit()s on an operand-count violation** -- SERIOUS. Feeding
+5. **The SMT2 parser exit()s on an operand-count violation** -- SERIOUS, FIXED:
+   the grammar unwinds to the parse entry, and every refusal of the frontend
+   (a sort error, a wrong arity, a constant that does not fit) is a `PARSE`
+   error now; an engine failure inside any call is `INTERNAL` and poisons the
+   manager (lib/Api/README.md, "Errors"). As found: feeding
    `Solver::parse_term` (or `parse_smt2`) a term that applies an n-ary
    bit-vector operator to too few operands -- e.g. `(bvadd x)` -- prints
    `syntax error: ... Must be >=2 operands` and terminates the process with
@@ -178,7 +182,9 @@ Recorded precisely as found; none blocked the layer. Reproductions are in
    call the recoverable parse-error path rather than `FatalError`/`exit`. Until
    the C++ side is fixed the C tests avoid arity-underflow inputs; a client that
    parses untrusted SMT can still be killed by one.
-6. **`bind_symbol` of a compound term poisons every later parse** -- SERIOUS.
+6. **`bind_symbol` of a compound term poisons every later parse** -- SERIOUS,
+   FIXED (`bind_symbol` takes a symbol only; and a `FatalError` reached
+   through a parse is an `INTERNAL` error rather than an abort). As found:
    `TermManager::bind_symbol` (`lib/Api/Manager.cpp:1052`) accepts any term and
    pushes its name onto `symbol_order`, but `seed_parser_symbols`
    (`lib/Api/Solver.cpp`) walks `symbol_order` before every parse and calls
