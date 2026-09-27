@@ -1,0 +1,207 @@
+#********************************************************************
+# AUTHORS: Andrew Teylu
+#
+# BEGIN DATE: September, 2026
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#********************************************************************
+# errors.toml -- the STP 3.x error-code table (design sketch; see DESIGN.md §7).
+#
+# Generates: enum class stp::ErrorCode (stp.hpp), enum stp_error_code (stp.h), stp.ErrorCode and the
+# exception class mapping (stp.pyi / the Cython translator), the docs table, and the per-code
+# "no trace" test list (DESIGN.md §13: one test per recoverable code asserts that a refused call
+# left the manager, the solver, the assertion stack and every model unchanged).
+#
+# Fields
+#   name         the enumerator (pinned by `value`; append only)
+#   value        the pinned integer shared by C, C++ and Python
+#   recoverable  true: the call had no effect. false: the object is poisoned (DESIGN.md §7.1)
+#   python       the Python exception class and its built-in mix-in(s), for the translator
+#   message      the message template the STP_CHECK builder fills; {fn} {arg} {sort} {expected} are placeholders
+#   fields       which structured fields the record carries (argument_index, terms, sorts, option)
+
+[[error]]
+name = "INVALID_ARGUMENT"
+value = 1
+recoverable = true
+python = "ArgumentError(Error, ValueError)"
+message = "invalid call to '{fn}': argument {arg} ({what})"
+fields = ["argument_index", "terms"]
+
+[[error]]
+name = "SORT_MISMATCH"
+value = 2
+recoverable = true
+python = "SortMismatch(ArgumentError, TypeError)"
+message = "invalid call to '{fn}': argument {arg} has sort {sort}, expected {expected}"
+fields = ["argument_index", "terms", "sorts"]
+
+[[error]]
+name = "ARITY"
+value = 3
+recoverable = true
+python = "ArgumentError(Error, ValueError)"
+message = "invalid call to '{fn}': {kind} takes {expected} arguments, {n} given"
+fields = ["argument_index"]
+
+[[error]]
+name = "INDEX_OUT_OF_RANGE"
+value = 4
+recoverable = true
+python = "ArgumentError(Error, ValueError)"   # also IndexError semantics for child(i)/entry(i); the translator raises IndexError for those two
+message = "invalid call to '{fn}': index {arg} out of range [{lo}, {hi}]"
+fields = ["argument_index"]
+
+[[error]]
+name = "VALUE_OUT_OF_RANGE"
+value = 5
+recoverable = true
+python = "ArgumentError(Error, ValueError)"
+message = "invalid call to '{fn}': value {what} does not fit {sort} (use mk_bv_wrapped / wrap=True to wrap)"
+fields = ["argument_index", "sorts"]
+
+[[error]]
+name = "DOES_NOT_FIT"
+value = 6
+recoverable = true
+python = "DoesNotFit(Error, OverflowError)"
+message = "'{fn}': the value of {sort} does not fit {expected}; use the string, limb or bytes reader"
+fields = ["terms", "sorts"]
+
+[[error]]
+name = "NOT_A_VALUE"
+value = 7
+recoverable = true
+python = "NotAValue(Error, TypeError)"
+message = "'{fn}': the term is not a value (kind {kind}); evaluate it in a model first"
+fields = ["terms"]
+
+[[error]]
+name = "NO_MODEL"
+value = 8
+recoverable = true
+python = "NoModel(Error)"
+message = "'{fn}': no model: the last check answered {result}"
+fields = []
+
+[[error]]
+name = "FOREIGN_MANAGER"
+value = 9
+recoverable = true
+python = "SortMismatch(ArgumentError, TypeError)"
+message = "invalid call to '{fn}': argument {arg} belongs to another term manager"
+fields = ["argument_index", "terms"]
+
+[[error]]
+name = "NULL_HANDLE"
+value = 10
+recoverable = true
+python = "ArgumentError(Error, ValueError)"   # unreachable from Python
+message = "invalid call to '{fn}': argument {arg} is NULL"
+fields = ["argument_index"]
+# C only, and only for required NON-term arguments (a NULL manager, solver, options, model, or out-pointer).
+# A NULL term or sort argument propagates silently (DESIGN.md §7.3) and never records this code.
+
+[[error]]
+name = "UNSUPPORTED"
+value = 11
+recoverable = true
+python = "Unsupported(Error, NotImplementedError)"
+message = "'{fn}': {what} is not supported by this build/engine ({capability} = {value})"
+fields = ["terms", "sorts"]
+
+[[error]]
+name = "OPTION_UNKNOWN"
+value = 12
+recoverable = true
+python = "UnknownOption(OptionError, KeyError)"
+message = "unknown option '{option}'"
+fields = ["option"]
+
+[[error]]
+name = "OPTION_VALUE"
+value = 13
+recoverable = true
+python = "OptionError(Error, ValueError)"
+message = "option '{option}': invalid value {what}; expected {expected}"
+fields = ["option"]
+
+[[error]]
+name = "OPTION_TIMING"
+value = 14
+recoverable = true
+python = "OptionError(Error, ValueError)"
+message = "option '{option}' can only be set {when} (settable = {settable})"
+fields = ["option"]
+
+[[error]]
+name = "OPTION_CONFLICT"
+value = 15
+recoverable = true
+python = "OptionError(Error, ValueError)"
+message = "option '{option}' cannot be combined with '{other}'"
+fields = ["option"]
+
+[[error]]
+name = "OPTION_UNAVAILABLE"
+value = 16
+recoverable = true
+python = "OptionError(Error, ValueError)"
+message = "option '{option}' = {what} needs a build with {requires}; this build has {have}"
+fields = ["option"]
+
+[[error]]
+name = "PARSE"
+value = 17
+recoverable = true
+python = "ParseError(Error, ValueError)"   # carries .lineno/.offset (and .line/.column aliases); not a SyntaxError subclass (constructor constraints)
+message = "parse error at {lineno}:{offset}: {what}"
+fields = []
+
+[[error]]
+name = "IO"
+value = 18
+recoverable = true
+python = "IOError(Error, OSError)"
+message = "'{fn}': cannot {what} '{path}': {errno_text}"
+fields = []
+
+[[error]]
+name = "STATE"
+value = 19
+recoverable = true
+python = "StateError(Error, RuntimeError)"
+message = "'{fn}': {what}"   # e.g. "pop below level 0", "no unsat assumptions: the last check was sat", "object poisoned by INTERNAL: ...", "closed"
+fields = []
+
+[[error]]
+name = "RESOURCE"
+value = 100
+recoverable = false
+python = "ResourceError(Error, MemoryError)"
+message = "resource failure in '{fn}': {what}"   # the message is a pre-allocated static string per site: nothing allocates on this path
+fields = []
+
+[[error]]
+name = "INTERNAL"
+value = 101
+recoverable = false
+python = "InternalError(Error)"
+message = "internal error in '{fn}' at {file}:{line}: {what}; please report it"   # pre-allocated per site
+fields = []

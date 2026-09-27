@@ -22,6 +22,12 @@ option(TEST_C_API "Enable tests that test STP's public C API" ON)
 
 if(TEST_C_API)
     add_subdirectory(C)
+    # the 3.x C API
+    add_subdirectory(c3)
+endif()
+option(TEST_CPP3_API "Enable tests that test STP's 3.x C++ API" ON)
+if(TEST_CPP3_API)
+    add_subdirectory(cpp3)
 endif()
 
 if(ENABLE_PYTHON_INTERFACE)

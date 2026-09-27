@@ -61,6 +61,7 @@ add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
 add_subdirectory(Interface)
+add_subdirectory(Api)
 add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(ToSat)
@@ -92,6 +93,7 @@ set(stp_lib_targets
     constantbv
     cinterface
     cppinterface
+    stpapi
     parser
     printer
     util
@@ -163,12 +165,13 @@ endif()
 target_include_directories(stp INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
+    $<BUILD_INTERFACE:${STP_API_GEN_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 # Set the public header so it will be installed
 set_target_properties(stp PROPERTIES
-    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp;${PROJECT_SOURCE_DIR}/include/stp/uf.hpp"
+    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp;${PROJECT_SOURCE_DIR}/include/stp/uf.hpp;${PROJECT_SOURCE_DIR}/include/stp/stp.hpp;${PROJECT_SOURCE_DIR}/include/stp/stp.h"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )
@@ -371,4 +374,9 @@ install(TARGETS stp
     # and left the headers behind -- and DESTDIR staging wrote them outside the
     # staging root.
     PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/stp"
+)
+# The 3.x API's generated headers (enums, named constructors, version).
+install(DIRECTORY "${STP_API_GEN_DIR}/include/stp/api"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/stp"
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
 )

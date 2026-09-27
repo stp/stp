@@ -1,0 +1,421 @@
+#********************************************************************
+# AUTHORS: Andrew Teylu
+#
+# BEGIN DATE: September, 2026
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#********************************************************************
+# statistics.toml -- the STP 3.x statistics table (design sketch; see DESIGN.md §6.1 and stp.hpp Statistics).
+#
+# Generates: the name table behind Statistics::get / stp_statistics_* / stp.Statistics, the tier query,
+# and the docs. Names are dotted, stable strings; the 2.x `stp_counter_t` ordinals map onto the
+# `bv.*`, `uf.*` and `fp.*` entries below (the `legacy` field). Statistics are never printed by the
+# library: the CLI's -s/-t output is produced from this snapshot by tools/stp.
+#
+# Fields: name, type (uint64 | double | string), tier (stable | expert | diagnostic), legacy (2.x counter), help.
+
+# ---------------------------------------------------------------- times (what -t printed)
+[[stat]]
+name = "time.total_ms"
+type = "double"
+tier = "stable"
+help = "wall-clock time of the last check, including preprocessing"
+
+[[stat]]
+name = "time.simplify_ms"
+type = "double"
+tier = "stable"
+help = "simplification and substitution"
+
+[[stat]]
+name = "time.bitblast_ms"
+type = "double"
+tier = "stable"
+help = "bit-blasting (AIG construction)"
+
+[[stat]]
+name = "time.cnf_ms"
+type = "double"
+tier = "stable"
+help = "CNF generation"
+
+[[stat]]
+name = "time.sat_ms"
+type = "double"
+tier = "stable"
+help = "time inside the SAT backend, summed over refinement rounds"
+
+# ---------------------------------------------------------------- sat / cnf (what -s printed, and the backend's own numbers)
+[[stat]]
+name = "sat.backend"
+type = "string"
+tier = "stable"
+help = "the backend that ran: cryptominisat | cadical | minisat | simplifying-minisat"
+
+[[stat]]
+name = "sat.calls"
+type = "uint64"
+tier = "stable"
+help = "number of SAT solver invocations in the last check (refinement rounds + 1)"
+
+[[stat]]
+name = "sat.conflicts"
+type = "uint64"
+tier = "stable"
+help = "conflicts consumed by the last check, summed over invocations (the quantity max-num-confl bounds)"
+
+[[stat]]
+name = "sat.decisions"
+type = "uint64"
+tier = "stable"
+help = "decisions, summed"
+
+[[stat]]
+name = "sat.propagations"
+type = "uint64"
+tier = "expert"
+help = "propagations, summed"
+
+[[stat]]
+name = "cnf.variables"
+type = "uint64"
+tier = "stable"
+help = "CNF variables of the last encoding"
+
+[[stat]]
+name = "cnf.clauses"
+type = "uint64"
+tier = "stable"
+help = "CNF clauses of the last encoding"
+
+[[stat]]
+name = "aig.nodes"
+type = "uint64"
+tier = "expert"
+help = "AND nodes after bit-blasting (the quantity aig-node-budget bounds)"
+
+[[stat]]
+name = "checks.total"
+type = "uint64"
+tier = "stable"
+help = "checks answered by this solver so far"
+
+[[stat]]
+name = "checks.bitblasted"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_QUERIES_BITBLASTED"
+help = "checks that reached bit-blasting (the rest were decided by preprocessing)"
+
+# ---------------------------------------------------------------- bit-vector abstraction (2.x counters, renamed)
+[[stat]]
+name = "bv.candidates.eq"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_CANDIDATES_EQ"
+help = ""
+[[stat]]
+name = "bv.candidates.compare"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_CANDIDATES_COMPARE"
+help = ""
+[[stat]]
+name = "bv.candidates.ite"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_CANDIDATES_ITE"
+help = ""
+[[stat]]
+name = "bv.candidates.plus"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_CANDIDATES_PLUS"
+help = ""
+[[stat]]
+name = "bv.candidates.mult"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_CANDIDATES_MULT"
+help = ""
+[[stat]]
+name = "bv.candidates.divmod"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_CANDIDATES_DIVMOD"
+help = ""
+[[stat]]
+name = "bv.abstracted.eq"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_ABSTRACTED_EQ"
+help = ""
+[[stat]]
+name = "bv.abstracted.compare"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_ABSTRACTED_COMPARE"
+help = ""
+[[stat]]
+name = "bv.abstracted.ite"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_ABSTRACTED_ITE"
+help = ""
+[[stat]]
+name = "bv.abstracted.plus"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_ABSTRACTED_PLUS"
+help = ""
+[[stat]]
+name = "bv.abstracted.mult"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_ABSTRACTED_MULT"
+help = ""
+[[stat]]
+name = "bv.abstracted.divmod"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_ABSTRACTED_DIVMOD"
+help = ""
+[[stat]]
+name = "bv.refinement_rounds"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_REFINEMENT_ROUNDS"
+help = ""
+[[stat]]
+name = "bv.blocking_lemmas"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_BLOCKING_LEMMAS"
+help = ""
+[[stat]]
+name = "bv.schema_lemmas"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_SCHEMA_LEMMAS"
+help = ""
+[[stat]]
+name = "bv.exact.escalations"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_EXACT_ESCALATIONS"
+help = ""
+[[stat]]
+name = "bv.exact.escalations_mult"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_EXACT_ESCALATIONS_MULT"
+help = ""
+[[stat]]
+name = "bv.exact.escalations_divmod"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_EXACT_ESCALATIONS_DIVMOD"
+help = ""
+[[stat]]
+name = "bv.exact.clauses"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_EXACT_CLAUSES"
+help = ""
+[[stat]]
+name = "bv.exact.variables"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_EXACT_VARIABLES"
+help = ""
+[[stat]]
+name = "bv.exact.microseconds"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_EXACT_MICROSECONDS"
+help = ""
+[[stat]]
+name = "bv.schema.clauses"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_SCHEMA_CLAUSES"
+help = ""
+[[stat]]
+name = "bv.schema.variables"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_SCHEMA_VARIABLES"
+help = ""
+[[stat]]
+name = "bv.schema.microseconds"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_BV_SCHEMA_MICROSECONDS"
+help = ""
+[[stat]]
+name = "bv.schema_group.lemmas"
+type = "string"
+tier = "expert"
+legacy = "vc_getSchemaGroupCounter / vc_schemaGroupName"
+help = "per-group lemma counts as 'group=count,...' (15 groups); also available per group as bv.schema_group.<name>.lemmas"
+
+# ---------------------------------------------------------------- uninterpreted functions
+[[stat]]
+name = "uf.applications_lowered"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_UF_APPLICATIONS_LOWERED"
+help = ""
+[[stat]]
+name = "uf.constraints_installed"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_UF_CONSTRAINTS_INSTALLED"
+help = ""
+
+# ---------------------------------------------------------------- floating-point abstraction
+[[stat]]
+name = "fp.candidates"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_CANDIDATES"
+help = ""
+[[stat]]
+name = "fp.abstracted"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_ABSTRACTED"
+help = ""
+[[stat]]
+name = "fp.shared"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_SHARED"
+help = ""
+[[stat]]
+name = "fp.chained"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_CHAINED"
+help = ""
+[[stat]]
+name = "fp.rule_lemmas"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_RULE_LEMMAS"
+help = ""
+[[stat]]
+name = "fp.cross_rules"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_CROSS_RULES"
+help = ""
+[[stat]]
+name = "fp.checks"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_CHECKS"
+help = ""
+[[stat]]
+name = "fp.skipped_checks"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_SKIPPED_CHECKS"
+help = ""
+[[stat]]
+name = "fp.inconsistent"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_INCONSISTENT"
+help = ""
+[[stat]]
+name = "fp.value_lemmas"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_VALUE_LEMMAS"
+help = ""
+[[stat]]
+name = "fp.box_lemmas"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_BOX_LEMMAS"
+help = ""
+[[stat]]
+name = "fp.shape_lemmas"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_SHAPE_LEMMAS"
+help = ""
+[[stat]]
+name = "fp.relational_lemmas"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_RELATIONAL_LEMMAS"
+help = ""
+[[stat]]
+name = "fp.releases"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_RELEASES"
+help = ""
+[[stat]]
+name = "fp.refinement_rounds"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_REFINEMENT_ROUNDS"
+help = ""
+[[stat]]
+name = "fp.restarts"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_RESTARTS"
+help = ""
+[[stat]]
+name = "fp.repairs"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_REPAIRS"
+help = ""
+[[stat]]
+name = "fp.lemma_microseconds"
+type = "uint64"
+tier = "expert"
+legacy = "STP_COUNTER_FP_LEMMA_MICROSECONDS"
+help = ""
+
+# ---------------------------------------------------------------- incremental driver and LRA (diagnostic; names to be filled from the engine's counters)
+[[stat]]
+name = "incremental.engaged"
+type = "string"
+tier = "diagnostic"
+help = "whether the incremental driver was in use for the last check: true | false"
+
+[[stat]]
+name = "incremental.reencodes"
+type = "uint64"
+tier = "diagnostic"
+help = "re-encodings performed by the driver"
+
+[[stat]]
+name = "lra.rows"
+type = "uint64"
+tier = "diagnostic"
+help = "rows in the last LRA tableau"
+
+# 45 legacy counters + 5 times + 10 sat/cnf/aig/checks + 3 incremental/lra examples. Nothing here is printed by the library.

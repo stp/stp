@@ -1,0 +1,3012 @@
+#********************************************************************
+# AUTHORS: Andrew Teylu
+#
+# BEGIN DATE: September, 2026
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#********************************************************************
+# options.toml -- the STP 3.x option registry (design sketch; see DESIGN.md §8).
+#
+# This file is the single source for options. It generates:
+#   - enum class stp::Option / enum stp_option (the "stable" tier only) and the by-name tables for every tier;
+#   - Options::set/get/info/names/help in C++, the stp_options_* functions in C, Solver.set(**kw) / Options in Python;
+#   - the CLI11 table of tools/stp (every entry's --name, aliases and short form), and its --help text;
+#   - the option reference page of the docs;
+#   - the parity test: every entry is set through the CLI and through each API, and Options::resolved() is compared.
+#
+# Provenance of this sketch: the 230 [[option]] entries below were generated from the parity audit's master table
+# (../survey/stp-options-parity.md, rows 4-250 minus the frontend rows, the four backend flags and --exit-after-CNF, which
+# became aliases), so name, aliases, short
+# form, type, default, help and the legacy letter/ordinal come from the audit. Three fields are ASSIGNED BY RULE and
+# must be reviewed per entry before implementation:
+#   tier      stable | expert | experimental | diagnostic   (rule: an explicit stable list; print-*/verify-* diagnostic;
+#             bb.*, fp-domain-*, most lra-* sub-knobs and the finer refinement knobs experimental; the rest expert)
+#   settable  anytime | before-first-check | construction   (rule: sat-backend/threads construction; simplification,
+#             bit-blasting, cnf, incremental, lra and structural entries before-first-check; limits, model, output and
+#             refinement tuning anytime -- the KLEE FP fork changes refinement knobs between checks)
+#   category  by name prefix
+# Exclusions (the CLI's 37 pairs: 6 vanish inside the sat-backend enum, 3 become threads' `requires`, 4 belong to the frontend rows,
+# 24 are `excludes` below), implications (`implied_by`/`follows`/`implies`) and build requirements were transcribed from tools/stp/main.cpp.
+#
+# Schema
+#   name        the canonical key: every language and the CLI (--name) use it; lower-case, hyphenated
+#   aliases     other CLI spellings accepted for compatibility (2.x underscores etc.)
+#   short       single-letter CLI form
+#   type        bool | int | uint | mode | enum | set | string | path | duration
+#               mode is the one tri-state auto|on|off (replaces the three 2.x ordinal encodings)
+#               set is a set of names (replaces bitmasks); the CLI accepts a comma list, "all" and "none"
+#               duration is milliseconds in every API; on the CLI a bare number means seconds (2.x compatibility,
+#               fractional allowed) and a suffixed value (500ms, 2s, 1m) is exact
+#   default     the value when unset; "none" for duration means no limit
+#   range       { min, max } for int/uint
+#   values      enum/set members
+#   sentinel    the documented meaning of a special value (e.g. "-1 = no limit"); every sentinel is explicit
+#   tier        stable | expert | experimental | diagnostic (DESIGN.md §8.1)
+#   settable    anytime | before-first-check | construction; a late set is a recoverable OPTION_TIMING error
+#   scope       solver | manager
+#   category    grouping for help and docs
+#   implied_by  { other-option = value }: the value this entry takes when unset and the other option is true
+#   follows     "other-option": when unset, takes the value given to the named option (composite switches)
+#   negation    the --no-<name> CLI spelling that sets a bool entry to false
+#   latched_by  "other-option": while that bool option is true, this entry behaves as before-first-check
+#   latch_note  why an entry is before-first-check (the engine site that latches it)
+#   implies     for composite switches: what setting this entry writes elsewhere
+#   excludes    entries that may not be set together (checked at resolve(), OPTION_CONFLICT)
+#   requires    { build = "cadical" | "highs" | "highs-cut-log" | "cryptominisat" | "minisat", option = "...", value = "..." }:
+#               OPTION_UNAVAILABLE in other builds; OPTION_CONFLICT when the named option does not hold the value; info().supported = false
+#   legacy      { letter, iface_flag, cli_unit }: the 2.x spellings, for MIGRATION.md and the porting guide
+#   help        one line, shown by --help and info()
+
+# ============================================================================ new in 3.x
+
+[[option]]
+name = "produce-models"
+type = "bool"
+default = true
+tier = "stable"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "produce_models" }
+category = "model"
+legacy = { letter = "c", note = "2.x: 'c' requested a counterexample without checking it; 'd' checked it and was forced on for every C VC" }
+help = "build a model on sat so that Solver::model() is available; off saves the model construction for truth-only clients"
+
+[[option]]
+name = "sat-backend"
+type = "enum"
+default = "auto"
+values = ["auto", "cryptominisat", "cadical", "minisat", "simplifying-minisat"]
+tier = "stable"
+settable = "construction"
+scope = "solver"
+engine = { custom = "sat_backend" }
+category = "sat"
+requires = { build = "the named backend; auto picks the first available of cryptominisat, cadical, minisat" }
+legacy = { iface_flag = "CMS4 / CADICAL / MS / SMS / MSP", note = "and vc_useCryptominisat/vc_useCadical/vc_useMinisat/vc_useSimplifyingMinisat; the four CLI flags become the aliases below" }
+help = "the SAT backend; selecting one this build lacks is a recoverable OPTION_UNAVAILABLE at set time, never exit(-1) at solve time"
+
+[[option]]
+name = "random-seed"
+type = "uint"
+default = 0
+tier = "stable"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "random_seed" }
+category = "sat"
+help = "seed for every randomised component (SAT backend, phase and decision heuristics); 2.x had none in the CLI or the API (survey R22)"
+
+[[option]]
+name = "model-array-fill"
+type = "enum"
+default = "zero"
+values = ["zero", "ones"]
+tier = "stable"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "model_array_fill" }
+category = "model"
+help = "the element every reader and printer reports for an array cell the model never observed: zero (SMT-LIB (as const) printing) or ones (2.x's read completion without 'x', which KLEE's .ktest bytes depend on)"
+
+[[option]]
+name = "stop-after-cnf"
+aliases = ["exit-after-CNF"]
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "stop_after_cnf" }
+category = "cnf"
+help = "stop the check after CNF generation and return unknown(STOPPED_AFTER_CNF); 2.x's --exit-after-CNF called exit(0) inside the library"
+
+[[option]]
+name = "logic"
+type = "string"
+default = ""
+tier = "stable"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "logic" }
+category = "frontend"
+implies = "QF_UF*/QF_AUF* -> uninterpreted-functions=on; QF_AX -> array-equality=on; QF_BV/QF_ABV -> the 32-check engagement policy; QF_LRA -> every check Real-active (2.x set-logic side effects, now visible through Options::resolved)"
+help = "the SMT-LIB logic; the same entry (set-logic) writes when a script is parsed"
+
+[[option]]
+name = "simplify"
+type = "bool"
+default = true
+tier = "stable"
+settable = "construction"
+scope = "manager"
+engine = { custom = "manager_simplify" }
+category = "manager"
+help = "construction-time folding by the term manager (the normal form in kinds.toml); false builds terms faithfully"
+
+[[option]]
+name = "default-rounding-mode"
+type = "enum"
+default = "RNE"
+values = ["RNE", "RNA", "RTP", "RTN", "RTZ"]
+tier = "stable"
+settable = "anytime"
+scope = "manager"
+engine = { custom = "manager_default_rounding_mode" }
+category = "manager"
+help = "the rounding mode FP operators use when none is given (C++ and Python operator sugar); the printer always prints it"
+
+# ============================================================================ CLI aliases that map to a value of another entry
+# (kept so that 2.x command lines keep working; the generated CLI accepts them and warns once)
+
+[[alias]]
+name = "cadical"
+of = "sat-backend"
+value = "cadical"
+
+[[alias]]
+name = "cryptominisat"
+of = "sat-backend"
+value = "cryptominisat"
+
+[[alias]]
+name = "minisat"
+of = "sat-backend"
+value = "minisat"
+
+[[alias]]
+name = "simplifying-minisat"
+of = "sat-backend"
+value = "simplifying-minisat"
+
+# ============================================================================ frontend-only registrations and their API meaning
+# These are not solver options. They exist on the CLI (generated from this section) and each names the API call that
+# gives a library client the same capability (DESIGN.md §8.3). This is what makes the CLI a strict subset of the API.
+
+[[frontend]]
+cli = "<file>"
+api = "Solver::parse_file(path, Format::AUTO)"
+
+[[frontend]]
+cli = "--help, -h"
+api = "Options::help(); stp::capabilities()"
+
+[[frontend]]
+cli = "--version"
+api = "stp::version(); stp::sat_backends() (with per-backend versions in capabilities())"
+
+[[frontend]]
+cli = "--CVC | --SMTLIB1, -m | --SMTLIB2"
+api = "the Format argument of Solver::parse / parse_file"
+
+[[frontend]]
+cli = "--parse-only"
+api = "ParseMode::DECLARE_AND_ASSERT (the default): a script's check-sat is not executed"
+excludes = ["--output-CNF", "--exit-after-CNF"]
+
+[[frontend]]
+cli = "--interactive"
+api = "CLI only: a REPL that feeds lines to Solver::parse_smt2(text, ParseMode::EXECUTE)"
+excludes = ["--CVC", "--SMTLIB1"]
+
+[[frontend]]
+cli = "--print-stpinput, -b | --print-back-CVC | --print-back-SMTLIB2 | --print-back-GDL | --print-back-dot"
+api = "Solver::to_string(Format::CVC | SMTLIB2 | GDL | DOT); Solver::to_smt2()"
+
+[[frontend]]
+cli = "--print-output, -n"
+api = "the Result / Entailment object"
+
+[[frontend]]
+cli = "--output-CNF"
+api = "Solver::write_cnf(std::ostream&); nothing is written to the working directory"
+
+# ============================================================================ in-band SMT-LIB 2 keys and environment taps (SURVEY §6.1 "Beyond argv")
+# (set-option :produce-models b) writes the registry entry produce-models. The other 2.x in-band keys are parser
+# state, not solver options: :print-success, :global-declarations, :produce-unsat-assumptions and
+# :diagnostic-output-channel are handled by the SMT-LIB 2 frontend of Solver::parse_smt2 (ParseMode::EXECUTE) and
+# by tools/stp; an unknown key answers `unsupported`, as SMT-LIB requires. The 2.x environment taps STP_DIVMAP,
+# STP_SHIFT_ANNOTATE and STP_MULT_ANNOTATE are removed in 3.x (they were latched process-wide diagnostics);
+# their output, if still wanted, becomes diagnostic-tier options writing to the diagnostic sink.
+
+# ============================================================================ generated entries (230)
+# Accounting of the 250 CLI registrations: 230 entries here + 4 backend-flag aliases + exit-after-CNF (an alias of the new
+# stop-after-cnf) + 15 frontend rows (9 [[frontend]] entries) = 250 spellings; the other 7 new entries have no 2.x spelling.
+[[option]]
+name = "disable-simplifications"
+type = "bool"
+default = false
+tier = "stable"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "disable_simplifications" }
+category = "simplification"
+implies = { "switch-word" = true, "disable-opt-inc" = true, "disable-cbitp" = true, "disable-equality" = true, "unconstrained-variable-elimination" = false, "flattening" = false, "rewriting" = false, "split-extracts" = false, "ite-context-simplifications" = false, "use-intervals" = false, "pure-literals" = false, "common-subsum" = false, "common-factor" = false, "pair-extract" = false, "merge-same" = false, "distinct-ordering" = false, "linear-form" = false }
+excludes = ["switch-word", "disable-opt-inc", "disable-cbitp", "disable-equality", "unconstrained-variable-elimination", "flattening", "rewriting", "split-extracts", "ite-context-simplifications", "use-intervals", "pure-literals", "common-subsum", "common-factor", "pair-extract", "merge-same", "distinct-ordering", "linear-form"]
+help = "clear 17 simplification switches"
+
+[[option]]
+name = "switch-word"
+short = "w"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "switch_word" }
+category = "simplification"
+legacy = { letter = "w" }
+help = "switch off the word-level solver"
+
+[[option]]
+name = "disable-opt-inc"
+short = "a"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "disable_opt_inc" }
+category = "simplification"
+legacy = { letter = "a" }
+help = "disable the rewriting simplifier"
+
+[[option]]
+name = "disable-cbitp"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "disable_cbitp" }
+category = "simplification"
+help = "disable constant-bit propagation"
+
+[[option]]
+name = "disable-equality"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "disable_equality" }
+category = "simplification"
+help = "disable equality propagation"
+
+[[option]]
+name = "size-reducing-only"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "size_reducing_only" }
+category = "simplification"
+excludes = ["simplify-to-constants-only", "ite-context-simplifications", "difficulty-reversion"]
+implies = { "simplify-to-constants-only" = true, "ite-context-simplifications" = false, "difficulty-reversion" = false }
+help = "size-reducing simplifications only"
+
+[[option]]
+name = "unconstrained-variable-elimination"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "enable_unconstrained" }
+category = "simplification"
+help = "eliminate unconstrained variables"
+
+[[option]]
+name = "unconstrained-image-vars"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "unconstrained_image_vars" }
+category = "simplification"
+help = "Unconstrained elimination replaces a shared term of an unconstrained variable (zero-extension, constant shift, modulus, ...) by a fresh variable constrained to the term's image"
+
+[[option]]
+name = "aig-rewrite-passes"
+type = "int"
+default = 0
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "AIG_rewrites_iterations" }
+category = "simplification"
+help = "AIG rewriting iterations"
+
+[[option]]
+name = "flattening"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_flatten" }
+category = "simplification"
+help = "sharing-aware flattening of n-ary nodes"
+
+[[option]]
+name = "rewriting"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_sharing_aware_rewriting" }
+category = "simplification"
+help = "sharing-aware rewriting"
+
+[[option]]
+name = "mulo-recognition"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "mulo_recognition" }
+category = "simplification"
+help = "rewrite double-width overflow idioms to predicates"
+
+[[option]]
+name = "split-extracts"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_split_extracts" }
+category = "simplification"
+help = "new variables for some extracts"
+
+[[option]]
+name = "ite-context-simplifications"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_ite_context" }
+category = "simplification"
+help = "ITE-context simplification"
+
+[[option]]
+name = "aig-core-simplification"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_aig_core_simplify" }
+category = "simplification"
+help = "simplify the propositional core with AIGs"
+
+[[option]]
+name = "use-intervals"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_use_intervals" }
+category = "simplification"
+help = "interval-analysis simplification"
+
+[[option]]
+name = "interval-sets"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_interval_sets" }
+category = "simplification"
+help = "Refine interval analysis with sets of disjoint intervals (needs --use-intervals)"
+
+[[option]]
+name = "pure-literals"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "enable_pure_literals" }
+category = "simplification"
+help = "replace pure literals"
+
+[[option]]
+name = "common-subsum"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_common_subsum" }
+category = "simplification"
+help = "factor shared AC sub-terms"
+
+[[option]]
+name = "common-subsum-budget"
+type = "int"
+default = 16000000
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "common_subsum_budget" }
+category = "simplification"
+help = "work budget of --common-subsum"
+
+[[option]]
+name = "common-factor"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_common_factor" }
+category = "simplification"
+help = "factor a common product factor out of sums"
+
+[[option]]
+name = "linear-form"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_linear_form" }
+category = "simplification"
+help = "canonical linear-combination rewriting"
+
+[[option]]
+name = "linear-form-addend-limit"
+type = "int"
+default = 64
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "linear_form_addend_limit" }
+category = "simplification"
+help = "atom cap for --linear-form"
+
+[[option]]
+name = "pair-extract"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_pair_extract" }
+category = "simplification"
+help = "OR-merge bit-disjoint bvadd addends"
+
+[[option]]
+name = "merge-same"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_merge_same" }
+category = "simplification"
+help = "Boolean merge of top-level conjuncts"
+
+[[option]]
+name = "size-reducing-fixed-point-limit"
+type = "int"
+default = 0
+sentinel = "-1 = always"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "size_reducing_fixed_point" }
+category = "simplification"
+help = "node threshold for fixed-point size-reducing passes"
+
+[[option]]
+name = "simplify-to-constants-only"
+aliases = ["simply_to_constants_only"]
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "simplify_to_constants_only" }
+category = "simplification"
+help = "only to-constant size-increasing simplifications"
+
+[[option]]
+name = "difficulty-reversion"
+aliases = ["difficulty_reversion"]
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "difficulty_reversion" }
+category = "simplification"
+help = "undo unhelpful size-increasing simplifications"
+
+[[option]]
+name = "distinct-ordering"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "distinct_ordering" }
+category = "simplification"
+legacy = { iface_flag = "DISTINCT_ORDERING" }
+help = "rewrite isolated distinct to a strict chain"
+
+[[option]]
+name = "cadical-elim"
+type = "int"
+default = -1
+range = { min = -1, max = 1 }
+sentinel = "-1 = unset: CaDiCaL's own default applies"
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "cadical_options_elim" }
+category = "sat"
+requires = { build = "cadical" }
+help = "CaDiCaL variable-elimination override"
+
+[[option]]
+name = "cadical-elimmineff"
+type = "int"
+default = -1
+range = { min = -1 }
+sentinel = "-1 = unset: CaDiCaL's own default applies"
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "cadical_options_elimmineff" }
+category = "sat"
+requires = { build = "cadical" }
+help = "CaDiCaL min elimination effort"
+
+[[option]]
+name = "cadical-elimmaxeff"
+type = "int"
+default = -1
+range = { min = -1 }
+sentinel = "-1 = unset: CaDiCaL's own default applies"
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "cadical_options_elimmaxeff" }
+category = "sat"
+requires = { build = "cadical" }
+help = "CaDiCaL max elimination effort"
+
+[[option]]
+name = "cadical-factor"
+type = "mode"
+default = "on"
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "cadical_factor" }
+category = "sat"
+requires = { build = "cadical" }
+help = "CaDiCaL bounded variable addition"
+
+[[option]]
+name = "incremental-inprobing"
+type = "mode"
+default = "auto"
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "incremental_inprobing" }
+category = "incremental"
+help = "retire inprobing on the persistent solver"
+
+[[option]]
+name = "refinement-trail-reuse"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "refinement_trail_reuse" }
+category = "sat"
+legacy = { iface_flag = "REFINEMENT_TRAIL_REUSE" }
+requires = { build = "cadical" }
+help = "keep the SAT trail across refinement rounds"
+
+[[option]]
+name = "threads"
+type = "int"
+default = 1
+tier = "stable"
+settable = "construction"
+scope = "solver"
+engine = { custom = "threads" }
+category = "sat"
+# > 1 forfeits the fork-safety guarantee (DESIGN.md §9)
+requires = { build = "cryptominisat", option = "sat-backend", value = "cryptominisat" }   # 2.x: --threads excluded every other backend flag
+help = "CryptoMiniSat thread count"
+
+[[option]]
+name = "search-bias"
+type = "enum"
+default = "none"
+values = ["sat", "unsat", "none"]
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "search_bias" }
+category = "sat"
+help = "tune SAT search towards one answer"
+
+[[option]]
+name = "ackermanize"
+short = "r"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "ackermannisation" }
+category = "refinement.uf"
+legacy = { letter = "r" }
+help = "eager array Ackermannisation"
+
+[[option]]
+name = "array-equality"
+type = "mode"
+default = "auto"
+tier = "stable"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "enable_array_equality" }
+category = "arrays"
+# 2.x: a flag that had to precede construction and could not be cleared. 3.x: extensional array equality and UF
+# applications are always constructible; this entry only forces the theory machinery on/off, and auto engages it
+# when the assertions contain array equalities / UF applications
+legacy = { letter = "x" }
+help = "extensional arrays (lemmas on demand)"
+
+[[option]]
+name = "lazy-write-reads"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "lazy_write_reads" }
+category = "arrays"
+help = "abstract reads over long write chains"
+
+[[option]]
+name = "lazy-write-reads-depth"
+type = "int"
+default = 2
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "lazy_write_reads_depth" }
+category = "arrays"
+help = "eager write levels before abstraction"
+
+[[option]]
+name = "lra-theory-propagation"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_theory_propagation" }
+category = "lra"
+legacy = { iface_flag = "LRA_THEORY_PROPAGATION" }
+help = "LRA theory propagator inside SAT search"
+
+[[option]]
+name = "lra-float-driver"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_float_driver" }
+category = "lra"
+legacy = { iface_flag = "LRA_FLOAT_DRIVER" }
+help = "double-precision simplex drives partial checks"
+
+[[option]]
+name = "lra-float-reroute"
+type = "uint"
+default = 4
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_float_reroute" }
+category = "lra"
+help = "fill multiple that reroutes to the exact driver"
+
+[[option]]
+name = "lra-float-reroute-floor"
+type = "uint"
+default = 500000
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_float_reroute_floor" }
+category = "lra"
+help = "absolute floor for the reroute"
+
+[[option]]
+name = "lra-extension-mode"
+type = "uint"
+default = 0
+range = { min = 0, max = 3 }
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_extension_mode" }
+category = "lra"
+help = "arithmetic extension handling"
+
+[[option]]
+name = "lra-row-order"
+type = "uint"
+default = 0
+range = { min = 0, max = 3 }
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_row_order" }
+category = "lra"
+help = "row insertion order"
+
+[[option]]
+name = "lra-extension-restart-float-basis"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_extension_restart_float_basis" }
+category = "lra"
+help = "restart advisory basis after extensions"
+
+[[option]]
+name = "lra-extension-restart-sat"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_extension_restart_sat" }
+category = "lra"
+help = "fresh CaDiCaL search after extensions"
+
+[[option]]
+name = "lra-presolve-unconstrained"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_presolve_unconstrained" }
+category = "lra"
+legacy = { iface_flag = "LRA_PRESOLVE_UNCONSTRAINED" }
+help = "fold single-use pure-polarity Real atoms"
+
+[[option]]
+name = "lra-presolve-monotone"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_presolve_monotone" }
+category = "lra"
+help = "monotone Real-variable elimination"
+
+[[option]]
+name = "lra-presolve-monotone-work"
+type = "uint"
+default = 1000000
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_presolve_monotone_work" }
+category = "lra"
+help = "work cap of monotone presolve"
+
+[[option]]
+name = "lra-presolve-propagate"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_presolve_propagate" }
+category = "lra"
+legacy = { iface_flag = "LRA_PRESOLVE_PROPAGATE" }
+help = "propagate top-level truths before registration"
+
+[[option]]
+name = "lra-presolve-rows"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_presolve_rows" }
+category = "lra"
+legacy = { iface_flag = "LRA_PRESOLVE_ROWS" }
+help = "drop implied same-polynomial rows"
+
+[[option]]
+name = "lra-presolve-bounds"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_presolve_bounds" }
+category = "lra"
+legacy = { iface_flag = "LRA_PRESOLVE_BOUNDS" }
+help = "derive/propagate Real bounds"
+
+[[option]]
+name = "lra-presolve-subst"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_presolve_subst" }
+category = "lra"
+legacy = { iface_flag = "LRA_PRESOLVE_SUBST" }
+help = "substitute top-level Real definitions"
+
+[[option]]
+name = "lra-presolve-rounds"
+type = "uint"
+default = 1
+range = { min = 1, max = 8 }
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_presolve_rounds" }
+category = "lra"
+help = "presolve rounds"
+
+[[option]]
+name = "lra-presolve-subst-growth"
+type = "uint"
+default = 0
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_presolve_subst_growth" }
+category = "lra"
+help = "substitution growth guard"
+
+[[option]]
+name = "lra-presolve-subst-work"
+type = "uint"
+default = 1000000
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_presolve_subst_work" }
+category = "lra"
+help = "substitution work guard"
+
+[[option]]
+name = "lra-direct-bounds"
+type = "uint"
+default = 0
+range = { min = 0, max = 2 }
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_direct_bounds" }
+category = "lra"
+help = "exact bounds without auxiliary rows"
+
+[[option]]
+name = "lra-singleton-ordering"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_singleton_ordering" }
+category = "lra"
+help = "SAT ordering clauses over scaled bounds"
+
+[[option]]
+name = "lra-highs-replay"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_highs_replay" }
+category = "lra"
+requires = { build = "highs" }
+help = "HiGHS binary-branch replay (needs HiGHS build)"
+
+[[option]]
+name = "lra-highs-replay-nodes"
+type = "uint"
+default = 128
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_highs_replay_nodes" }
+category = "lra"
+requires = { build = "highs" }
+help = "replay node cap"
+
+[[option]]
+name = "lra-highs-cuts"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_highs_cuts" }
+category = "lra"
+requires = { build = "highs-cut-log" }   # -DENABLE_HIGHS_CUT_LOG=ON plus the HiGHS root-cut patch
+help = "exact root cuts (needs HiGHS cut-log build)"
+
+[[option]]
+name = "lra-highs-cut-limit"
+type = "uint"
+default = 64
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_highs_cut_limit" }
+category = "lra"
+requires = { build = "highs" }
+help = "certified cut cap"
+
+[[option]]
+name = "lra-highs-mip"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_highs_mip" }
+category = "lra"
+requires = { build = "highs" }
+help = "HiGHS MIP model proposals"
+
+[[option]]
+name = "lra-highs-lp"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_highs_lp" }
+category = "lra"
+requires = { build = "highs" }
+help = "HiGHS LP bases/rays with exact certification"
+
+[[option]]
+name = "lra-highs-seconds"
+type = "uint"
+default = 5
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_highs_seconds" }
+category = "lra"
+requires = { build = "highs" }
+help = "HiGHS proposal time budget"
+
+[[option]]
+name = "lra-relu-bounds"
+type = "mode"
+default = "auto"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_bounds" }
+category = "lra"
+help = "ReLU bound propagation"
+
+[[option]]
+name = "lra-relu-lp"
+type = "mode"
+default = "auto"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_lp" }
+category = "lra"
+help = "ReLU LP bound optimisation"
+
+[[option]]
+name = "lra-relu-auto-seconds"
+type = "uint"
+default = 1
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_auto_seconds" }
+category = "lra"
+help = "auto ReLU LP budget"
+
+[[option]]
+name = "lra-relu-cases"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_cases" }
+category = "lra"
+help = "refute ReLU property alternatives"
+
+[[option]]
+name = "lra-relu-cases-seconds"
+type = "uint"
+default = 60
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_cases_seconds" }
+category = "lra"
+help = "ReLU-cases budget"
+
+[[option]]
+name = "lra-relu-lp-rounds"
+type = "uint"
+default = 8
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_lp_rounds" }
+category = "lra"
+help = "ReLU LP rounds"
+
+[[option]]
+name = "lra-relu-lp-seconds"
+type = "uint"
+default = 60
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_lp_seconds" }
+category = "lra"
+help = "ReLU LP budget"
+
+[[option]]
+name = "lra-relu-lp-call-seconds"
+type = "uint"
+default = 2
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_lp_call_seconds" }
+category = "lra"
+help = "per-LP budget"
+
+[[option]]
+name = "lra-relu-branch"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_branch" }
+category = "lra"
+help = "relaxation-guided ReLU phase search"
+
+[[option]]
+name = "lra-relu-property-branches"
+type = "bool"
+default = true
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_property_branches" }
+category = "lra"
+help = "property alternatives in phase search"
+
+[[option]]
+name = "lra-dense-recovery"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_dense_recovery" }
+category = "lra"
+help = "density-aware budgets and basis recovery"
+
+[[option]]
+name = "lra-model-reconstruction"
+type = "mode"
+default = "auto"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_model_reconstruction" }
+category = "lra"
+help = "reconstruct eliminated affine definitions"
+
+[[option]]
+name = "lra-relu-branch-nodes"
+type = "uint"
+default = 128
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_branch_nodes" }
+category = "lra"
+help = "phase-search node cap"
+
+[[option]]
+name = "lra-relu-branch-seconds"
+type = "uint"
+default = 60
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_relu_branch_seconds" }
+category = "lra"
+help = "phase-search budget"
+
+[[option]]
+name = "lra-replay-screen"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_replay_screen" }
+category = "lra"
+help = "float network replay screen"
+
+[[option]]
+name = "lra-boolean-bounds"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_boolean_bounds" }
+category = "lra"
+help = "interval hulls across Boolean alternatives"
+
+[[option]]
+name = "lra-lp-screen"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_lp_screen" }
+category = "lra"
+help = "skip unpromising LP certificates"
+
+[[option]]
+name = "lra-lp-partial"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_lp_partial" }
+category = "lra"
+help = "check proposals from unfinished LPs"
+
+[[option]]
+name = "lra-incremental-session"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "lra_incremental_session" }
+category = "lra"
+legacy = { iface_flag = "LRA_INCREMENTAL_SESSION" }
+help = "persistent Real session across check-sats"
+
+[[option]]
+name = "lra-conflict-recovery"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_conflict_recovery" }
+category = "lra"
+help = "recover float conflict weights exactly"
+
+[[option]]
+name = "lra-early-conflicts"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_early_conflicts" }
+category = "lra"
+help = "detect conflicts before repair pivots"
+
+[[option]]
+name = "lra-first-search"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_first_search" }
+category = "lra"
+help = "connect arithmetic before first SAT search"
+
+[[option]]
+name = "lra-separate-model-values"
+type = "mode"
+default = "auto"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_separate_model_values" }
+category = "lra"
+help = "break accidental model-value coincidences"
+
+[[option]]
+name = "lra-persistent-state"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "lra_persistent_state" }
+category = "lra"
+help = "keep registrations/bases across checks"
+
+[[option]]
+name = "lra-soi"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_soi" }
+category = "lra"
+help = "sum-of-infeasibilities repair"
+
+[[option]]
+name = "lra-float-dormant-rows"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_float_dormant_rows" }
+category = "lra"
+help = "dormant float-tier rows"
+
+[[option]]
+name = "lra-float-dormant-min-cells"
+type = "int"
+default = 0
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_float_dormant_min_cells" }
+category = "lra"
+help = "min row width for dormancy"
+
+[[option]]
+name = "lra-float-promotion-budget"
+type = "int"
+default = 4
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_float_promotion_budget" }
+category = "lra"
+help = "fresh float tiers per solve"
+
+[[option]]
+name = "lra-decision-polarity"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_decision_polarity" }
+category = "lra"
+help = "advise arithmetic decision polarity"
+
+[[option]]
+name = "lra-verify-canonical"
+type = "bool"
+default = false
+tier = "diagnostic"
+settable = "construction"
+scope = "solver"
+engine = { field = "lra_verify_canonical" }
+category = "lra"
+# 2.x: a process-wide atomic; 3.x: per solver (engine change, DESIGN.md §13 stage 2)
+legacy = { iface_flag = "LRA_VERIFY_CANONICAL" }
+help = "self-check canonical form of exact rationals"
+
+[[option]]
+name = "lra-verify-conflicts"
+type = "bool"
+default = false
+tier = "diagnostic"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_verify_conflicts" }
+category = "lra"
+legacy = { iface_flag = "LRA_VERIFY_CONFLICTS" }
+help = "self-check every LRA conflict certificate"
+
+[[option]]
+name = "bv-eq-abstraction"
+type = "bool"
+default = false
+tier = "stable"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bv_eq_abstraction" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_EQ_ABSTRACTION" }
+latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
+help = "abstract wide BV equalities (CEGAR)"
+
+[[option]]
+name = "bv-eq-abstraction-constant-side"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bv_eq_abstraction_constant_side" }
+category = "refinement.bv"
+latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
+help = "also abstract equalities against constants"
+
+[[option]]
+name = "bv-abstraction-width"
+type = "uint"
+default = 64
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bv_abstraction_width" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_ABSTRACTION_WIDTH" }
+latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
+help = "width floor for both BV abstractions"
+
+[[option]]
+name = "bv-eq-refine-width"
+type = "uint"
+default = 0
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "bv_eq_refine_width" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_EQ_REFINE_WIDTH" }
+help = "initial equality-refinement prefix"
+
+[[option]]
+name = "bv-term-abstraction"
+type = "bool"
+default = false
+tier = "stable"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bv_term_abstraction" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION" }
+latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
+help = "abstract wide mul/div/mod (CEGAR)"
+
+[[option]]
+name = "bv-term-abstraction-ite"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bv_term_abstraction_ite" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_ITE" }
+latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
+help = "also abstract wide ITE"
+
+[[option]]
+name = "bv-term-abstraction-plus"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bv_term_abstraction_plus" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_PLUS" }
+latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
+help = "also abstract wide BVPLUS"
+
+[[option]]
+name = "bv-term-abstraction-compare"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bv_term_abstraction_compare" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_COMPARE" }
+latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
+help = "also abstract wide comparisons"
+
+[[option]]
+name = "array-index-hints"
+type = "enum"
+default = "off"
+values = ["off", "phase", "decide"]
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "array_index_hints" }
+category = "arrays"
+help = "seed array read indices apart"
+
+[[option]]
+name = "congruence-candidates"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "enable_congruence_candidates" }
+category = "refinement.uf"
+help = "prove/assert same-operator equalities"
+
+[[option]]
+name = "congruence-candidate-limit"
+type = "int"
+default = 64
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "congruence_candidate_limit" }
+category = "refinement.uf"
+help = "candidate cap"
+
+[[option]]
+name = "congruence-candidate-conflicts"
+type = "int"
+default = 20000
+sentinel = "<0 = unbounded"
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "congruence_candidate_conflicts" }
+category = "refinement.uf"
+help = "per-candidate conflict budget"
+
+[[option]]
+name = "skeleton-preproc"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "skeleton_preproc" }
+category = "refinement.uf"
+help = "assert what the Boolean skeleton forces"
+
+[[option]]
+name = "embedded-constraints"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "embedded_constraints" }
+category = "refinement.uf"
+help = "replace embedded assertions"
+
+[[option]]
+name = "bv-term-abstraction-mult"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bv_term_abstraction_mult" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_MULT" }
+latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
+help = "scope: BVMULT (and DIV/MOD unless named)"
+
+[[option]]
+name = "bv-term-abstraction-divmod"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bv_term_abstraction_divmod" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_DIVMOD" }
+follows = "bv-term-abstraction-mult"   # when unset, takes the value given to bv-term-abstraction-mult (main.cpp:1807-1811)
+latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
+help = "scope: BVDIV/BVMOD"
+
+[[option]]
+name = "bv-term-abstraction-schemas"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "bv_term_abstraction_schemas" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_SCHEMAS" }
+help = "algebraic schema refinement"
+
+[[option]]
+name = "bv-term-abstraction-schema-groups"
+type = "set"
+default = ["base", "urem", "mul-ref3"]
+sentinel = "default = the qualified profile (BV_SCHEMA_GROUP_QUALIFIED); udiv/mul6/quotient-one/divrem-identity are aliases for group subsets; all/none must stand alone"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "bv_term_abstraction_schema_groups" }
+category = "refinement.bv"
+values = ["base", "udiv15", "udiv-observed", "udiv-tail", "urem", "quotient-one-quot", "quotient-one-rem", "quotient-thresholds", "divisor-magnitude", "divrem-full", "mul8", "mul-ref3", "mul-tail", "add", "low-prefix", "all", "none", "udiv", "mul6", "quotient-one", "divrem-identity"]
+help = "schema families allowed"
+
+[[option]]
+name = "bv-term-abstraction-rounds"
+type = "uint"
+default = 32
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "bv_term_abstraction_rounds" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_ROUNDS" }
+help = "blocking-lemma ceiling before exact encoding"
+
+[[option]]
+name = "bv-term-abstraction-profile"
+type = "enum"
+default = "none"
+values = ["none", "qualified", "broad", "aggressive"]
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "bv_term_abstraction_profile" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_PROFILE" }
+sentinel = "unset = no profile: the schema-groups and rounds entries apply"
+excludes = ["bv-term-abstraction-schema-groups", "bv-term-abstraction-rounds"]
+help = "atomic schema-mask + rounds pair"
+
+[[option]]
+name = "bv-term-abstraction-value-divisor"
+type = "uint"
+default = 0
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "bv_term_abstraction_value_divisor" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_VALUE_DIVISOR" }
+help = "width-scaled allowance divisor"
+
+[[option]]
+name = "bv-term-abstraction-constant-operands"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bv_term_abstraction_constant_operands" }
+category = "refinement.bv"
+latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
+help = "abstract ops with a constant operand"
+
+[[option]]
+name = "bv-term-abstraction-constant-operand-limit"
+type = "uint"
+default = 1
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "bv_term_abstraction_constant_operand_limit" }
+category = "refinement.bv"
+help = "round cap for constant-operand records"
+
+[[option]]
+name = "bv-term-abstraction-divmod-value-limit"
+type = "uint"
+default = 0
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "bv_term_abstraction_divmod_value_limit" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT" }
+help = "extra DIV/MOD value-blocking cap"
+
+[[option]]
+name = "bv-term-abstraction-inc-bitblast"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "bv_term_abstraction_inc_bitblast" }
+category = "refinement.bv"
+legacy = { iface_flag = "BV_TERM_ABSTRACTION_INC_BITBLAST" }
+help = "piecewise BVMULT escalation"
+
+[[option]]
+name = "incremental-piece-rewriting"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "incremental_piece_rewriting" }
+category = "incremental"
+legacy = { iface_flag = "INCREMENTAL_PIECE_REWRITING" }
+help = "batch rewriting on incremental pieces"
+
+[[option]]
+name = "incremental-scoped-preprocessing"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "incremental_scoped_preprocessing" }
+category = "incremental"
+legacy = { iface_flag = "INCREMENTAL_SCOPED_PREPROCESSING" }
+help = "exact-stack preprocessing on every check"
+
+[[option]]
+name = "uninterpreted-functions"
+type = "mode"
+default = "auto"
+tier = "stable"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "enable_uninterpreted_functions" }
+category = "refinement.uf"
+# 2.x: a flag that had to precede construction and could not be cleared. 3.x: extensional array equality and UF
+# applications are always constructible; this entry only forces the theory machinery on/off, and auto engages it
+# when the assertions contain array equalities / UF applications
+legacy = { letter = "u" }
+help = "decide UFs by dynamic Ackermann"
+
+[[option]]
+name = "uf-lemmas-per-round"
+type = "uint"
+default = 0
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_lemmas_per_round" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_LEMMAS_PER_ROUND" }
+sentinel = "0 = unlimited"
+help = "congruence lemmas per refuted candidate"
+
+[[option]]
+name = "uf-ackermann"
+type = "mode"
+default = "auto"
+tier = "stable"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "uf_ackermann" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_ACKERMANN" }
+help = "eager congruence before first solve"
+
+[[option]]
+name = "uf-ackermann-budget"
+type = "uint"
+default = 256
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_eager_budget" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_ACKERMANN_BUDGET" }
+help = "budget of --uf-ackermann=auto"
+
+[[option]]
+name = "uf-lazy-in-place"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_lazy_in_place" }
+category = "refinement.uf"
+help = "extend running solve in place"
+
+[[option]]
+name = "uf-lazy-full-expansion-pairs"
+type = "uint"
+default = 256
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_lazy_full_expansion_pairs" }
+category = "refinement.uf"
+help = "full-Ackermannisation pair cap"
+
+[[option]]
+name = "uf-lazy-round-limit"
+type = "uint"
+default = 8
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_lazy_round_limit" }
+category = "refinement.uf"
+help = "lazy rounds before stating all pairs"
+
+[[option]]
+name = "uf-congruence-closure"
+type = "mode"
+default = "auto"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_congruence_closure" }
+category = "refinement.uf"
+help = "escalate stuck functions to closure"
+
+[[option]]
+name = "uf-congruence-closure-min-apps"
+type = "uint"
+default = 400
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_congruence_closure_min_apps" }
+category = "refinement.uf"
+help = "auto threshold of the closure"
+
+[[option]]
+name = "array-ackermann-budget"
+type = "uint"
+default = 4000
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "array_eager_budget" }
+category = "arrays"
+help = "eager array-equality comparison budget"
+
+[[option]]
+name = "uf-phase-hints"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_phase_hints" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_PHASE_HINTS" }
+help = "spread first-candidate UF scalars"
+
+[[option]]
+name = "uf-check-during-bv-refinement"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_check_during_bv_refinement" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_CHECK_DURING_BV_REFINEMENT" }
+help = "congruence check during BV refinement"
+
+[[option]]
+name = "uf-sort-width"
+type = "uint"
+default = 16
+range = { min = 1, max = 1024 }
+tier = "stable"
+settable = "construction"
+scope = "manager"
+engine = { custom = "manager_uf_sort_width" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_SORT_WIDTH" }
+help = "carrier width of declared (uninterpreted) sorts; fixed when a sort is declared, hence a manager option given at TermManager construction (2.x fixed it at the first declare-sort)"
+
+[[option]]
+name = "uf-narrow-results"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_narrow_results" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_NARROW_RESULTS" }
+help = "narrow equality-only UF results"
+
+[[option]]
+name = "uf-propagate-equalities"
+type = "mode"
+default = "auto"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_propagate_equalities" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_PROPAGATE_EQUALITIES" }
+help = "rewrite under top-level equalities pre-lowering"
+
+[[option]]
+name = "uf-skeleton-preproc"
+type = "mode"
+default = "auto"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_skeleton_preproc" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_SKELETON_PREPROC" }
+help = "skeleton facts for the pass above"
+
+[[option]]
+name = "uf-bv-term-abstraction"
+type = "mode"
+default = "auto"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "uf_bv_term_abstraction" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_BV_TERM_ABSTRACTION" }
+help = "BV term abstraction for UF solves"
+
+[[option]]
+name = "uf-quotient-threshold-schemas"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_quotient_threshold_schemas" }
+category = "refinement.uf"
+help = "admit quotient-threshold schemas for UF solves"
+
+[[option]]
+name = "uf-inject-args"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_inject_args" }
+category = "refinement.uf"
+legacy = { iface_flag = "UF_EQUALITY_INJECTIVITY" }
+help = "retractable UF injectivity assumption"
+
+[[option]]
+name = "bb.umulo-schulte"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "umulo_schulte" }
+category = "bitblast"
+help = "Schulte unsigned-overflow detector"
+
+[[option]]
+name = "bb.smulo-schulte"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "smulo_schulte" }
+category = "bitblast"
+help = "Schulte signed-overflow detector"
+
+[[option]]
+name = "bb.div-lemmas"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "division_lemmas" }
+category = "bitblast"
+help = "divider order-law side constraints"
+
+[[option]]
+name = "bb.div-v5"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "division_variant_5" }
+category = "bitblast"
+help = "division encoding variant 5"
+
+[[option]]
+name = "bb.div-by-const"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "division_by_constant" }
+category = "bitblast"
+help = "division by constant via defining relation"
+
+[[option]]
+name = "bb.div-by-const-width"
+type = "uint"
+default = 64
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "division_by_constant_width" }
+category = "bitblast"
+help = "width from which --bb.div-by-const applies"
+
+[[option]]
+name = "bb.div-by-mult"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "division_by_multiplication" }
+category = "bitblast"
+help = "division via x = y*q + r"
+
+[[option]]
+name = "bb.div-v1"
+type = "bool"
+default = true
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "division_variant_1" }
+category = "bitblast"
+help = "division encoding variant 1"
+
+[[option]]
+name = "bb.div-v2"
+type = "bool"
+default = true
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "division_variant_2" }
+category = "bitblast"
+help = "division encoding variant 2"
+
+[[option]]
+name = "bb.div-v3"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "division_variant_3" }
+category = "bitblast"
+help = "division encoding variant 3"
+
+[[option]]
+name = "bb.div-v4"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "division_variant_4" }
+category = "bitblast"
+help = "division encoding variant 4"
+
+[[option]]
+name = "bb.shift-variant"
+type = "int"
+default = 0
+sentinel = "0..4"
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "shift_variant" }
+category = "bitblast"
+help = "symbolic shift encoding"
+
+[[option]]
+name = "bb.shift-onehot-minw"
+type = "int"
+default = 33
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "shift_onehot_min_width" }
+category = "bitblast"
+help = "min width for selector shifts"
+
+[[option]]
+name = "bb.shift-onehot-maxw"
+type = "int"
+default = 64
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "shift_onehot_max_width" }
+category = "bitblast"
+help = "max width for selector shifts"
+
+[[option]]
+name = "bb.add-v1"
+type = "bool"
+default = true
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "adder_variant" }
+category = "bitblast"
+help = "addition encoding variant 1"
+
+[[option]]
+name = "bb.add-v2"
+type = "bool"
+default = true
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bvplus_variant" }
+category = "bitblast"
+help = "addition encoding variant 2"
+
+[[option]]
+name = "bb.vle-v1"
+type = "bool"
+default = true
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bbbvle_variant" }
+category = "bitblast"
+help = "comparison encoding variant 1"
+
+[[option]]
+name = "bb.mult-variant"
+type = "int"
+default = 27
+sentinel = "an enumerated set of circuit variants (BitBlaster.cpp); the registry validates membership at set time instead of the 2.x FatalError at blast time"
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "multiplication_variant" }
+category = "bitblast"
+help = "multiplier encoding"
+
+[[option]]
+name = "bb.mult-lemmas"
+type = "int"
+default = 0
+sentinel = "0/3/4"
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "multiplication_lemmas" }
+category = "bitblast"
+help = "low-bit residue implicates per multiply"
+
+[[option]]
+name = "bb.mult-v2"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "upper_multiplication_bound" }
+category = "bitblast"
+help = "multiplication variant 2"
+
+[[option]]
+name = "bb.conjoin-constant"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "conjoin_to_top" }
+category = "bitblast"
+help = "assert CBP-constant AIG nodes"
+
+[[option]]
+name = "bb.fp-native-cmp"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_cmp" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "native FP predicates"
+
+[[option]]
+name = "bb.fp-add-variant"
+type = "int"
+default = 2
+sentinel = "1/2"
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_add_variant" }
+category = "bitblast"
+help = "native fp.add frame"
+
+[[option]]
+name = "bb.fp-normalise-lemma"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_normalise_lemma" }
+category = "bitblast"
+help = "normaliser top-bit lemma"
+
+[[option]]
+name = "bb.fp-native-arith"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_arith" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "native fp.add/fp.mul, and also gates the native FP-to-FP `to_fp` conversion (lib/FloatBlaster/FloatBlast.cpp:369-371, 551)"
+
+[[option]]
+name = "bb.fp-native-all"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_all" }
+category = "bitblast"
+help = "baseline for 9 native FP switches; named op wins"
+
+[[option]]
+name = "bb.fp-native-minmax"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_minmax" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "native fp.min/max"
+
+[[option]]
+name = "bb.fp-native-pack"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_pack" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "native fp.to_ieee_bv"
+
+[[option]]
+name = "bb.fp-native-round"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_round" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "native fp.roundToIntegral"
+
+[[option]]
+name = "bb.fp-native-sqrt"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_sqrt" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "native fp.sqrt"
+
+[[option]]
+name = "bb.fp-native-fma"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_fma" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "native fp.fma"
+
+[[option]]
+name = "bb.fp-native-conv"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_conv" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "native BV<->FP conversions"
+
+[[option]]
+name = "bb.fp-native-rem"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_rem" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "native fp.rem"
+
+[[option]]
+name = "bb.fp-native-div"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_div" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "native fp.div"
+
+[[option]]
+name = "bb.fp-native-add-iszero"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_add_iszero" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "direct isZero(fp.add) encoding"
+
+[[option]]
+name = "fp-abstraction-incremental"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_abstraction_incremental" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_INCREMENTAL" }
+help = "host FP abstraction in incremental driver"
+
+[[option]]
+name = "fp-abstraction-active-closure"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_active_closure" }
+category = "fp-abstraction"
+help = "check only active-unit records"
+
+[[option]]
+name = "fp-abstraction"
+type = "bool"
+default = false
+tier = "stable"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION" }
+latched_by = "fp-abstraction-incremental"   # when that entry is true the FP abstraction is hosted by the incremental driver and this entry behaves as before-first-check (STP.cpp:181-190)
+help = "FP operation abstraction/refinement"
+
+[[option]]
+name = "fp-abstraction-ops"
+type = "set"
+default = ["mul", "div", "sqrt", "fma"]
+sentinel = "default = FP_ABSTRACT_DEFAULT (mul, div, sqrt, fma); the 2.x magic 0 is gone"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "fp_abstraction_ops" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_OPS" }
+values = ["mul", "div", "sqrt", "add", "sub", "fma", "rem", "rti", "to_sbv", "to_ubv", "default", "all", "none"]
+help = "operations to abstract"
+
+[[option]]
+name = "fp-abstraction-chain-ops"
+type = "set"
+default = []
+sentinel = "empty = none"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "fp_abstraction_chain_ops" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_CHAIN_OPS" }
+values = ["mul", "div", "sqrt", "add", "sub", "fma", "rem", "rti", "to_sbv", "to_ubv", "default", "all", "none"]
+help = "ops abstracted only as chain links"
+
+[[option]]
+name = "fp-abstraction-width"
+type = "uint"
+default = 16
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_width" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_WIDTH" }
+help = "packed-width floor"
+
+[[option]]
+name = "fp-abstraction-tiers"
+type = "uint"
+default = 3
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_tiers" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_TIERS" }
+help = "highest rule tier"
+
+[[option]]
+name = "fp-abstraction-values"
+type = "uint"
+default = 4
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_values" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_VALUES" }
+help = "value lemmas before release"
+
+[[option]]
+name = "fp-abstraction-shape"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_shape" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_SHAPE" }
+help = "exactness lemmas before value lemmas"
+
+[[option]]
+name = "fp-abstraction-relational"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_relational" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_RELATIONAL" }
+help = "pairwise monotonicity lemmas"
+
+[[option]]
+name = "fp-abstraction-relational-last-width"
+type = "uint"
+default = 128
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_relational_last_width" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_RELATIONAL_LAST_WIDTH" }
+help = "width deferring monotonicity lemmas"
+
+[[option]]
+name = "fp-abstraction-box-lemmas"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_box_lemmas" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_BOX_LEMMAS" }
+help = "operand-box prefix constraints"
+
+[[option]]
+name = "fp-abstraction-phase-hints"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_phase_hints" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_PHASE_HINTS" }
+help = "phase hints after refuted candidate"
+
+[[option]]
+name = "fp-abstraction-repair"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_repair" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_REPAIR" }
+help = "replay formula to accept a candidate"
+
+[[option]]
+name = "fp-abstraction-restart-limit"
+type = "uint"
+default = 4
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_restart_limit" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_RESTART_LIMIT" }
+help = "pipeline restarts per query"
+
+[[option]]
+name = "fp-abstraction-significand-bits"
+type = "uint"
+default = 8
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_significand_bits" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_SIGNIFICAND_BITS" }
+help = "band significand bits"
+
+[[option]]
+name = "fp-abstraction-significand-bits-wide"
+type = "uint"
+default = 16
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_significand_bits_wide" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_SIGNIFICAND_BITS_WIDE" }
+help = "band bits at >=128"
+
+[[option]]
+name = "fp-abstraction-restart-width"
+type = "uint"
+default = 0
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_restart_width" }
+category = "fp-abstraction"
+implied_by = { "bv-term-abstraction" = 128 }
+legacy = { iface_flag = "FP_ABSTRACTION_RESTART_WIDTH" }
+help = "width at which release restarts pipeline"
+
+[[option]]
+name = "fp-abstraction-constant-operands"
+type = "mode"
+default = "auto"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "fp_abstraction_constant_operands" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_CONSTANT_OPERANDS" }
+help = "abstract ops with a constant FP operand"
+
+[[option]]
+name = "fp-abstraction-decline-pinned"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_decline_pinned" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_DECLINE_PINNED" }
+help = "leave pinned-result ops exact"
+
+[[option]]
+name = "fp-abstraction-budget"
+type = "uint"
+default = 0
+sentinel = "seconds"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "fp_abstraction_budget" }
+category = "fp-abstraction"
+legacy = { iface_flag = "FP_ABSTRACTION_BUDGET" }
+help = "wall-clock release budget"
+
+[[option]]
+name = "bb.fp-native-domain"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_domain" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "omit impossible NaN/inf cases from native circuits"
+
+[[option]]
+name = "bb.fp-native-known-sign"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_native_known_sign" }
+category = "bitblast"
+follows = "bb.fp-native-all"   # when unset, takes the value given to bb.fp-native-all (main.cpp:1792-1795)
+help = "known-sign native add/mul specialisation"
+
+[[option]]
+name = "fp-domain-simplify"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_domain_simplify" }
+category = "bitblast"
+help = "FP domain prepass"
+
+[[option]]
+name = "fp-domain-derived-bounds"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_domain_derived_bounds" }
+category = "bitblast"
+help = "derived FP symbol bounds"
+
+[[option]]
+name = "fp-domain-extremal-selectors"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_domain_extremal_selectors" }
+category = "bitblast"
+help = "extremal {0,1} selector replacement"
+
+[[option]]
+name = "fp-domain-sound-zero-facts"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_domain_sound_zero_facts" }
+category = "bitblast"
+help = "sound zero facts from boxed rows"
+
+[[option]]
+name = "fp-domain-row-bounds"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_domain_row_bounds" }
+category = "bitblast"
+help = "row-level FP zero refutation"
+
+[[option]]
+name = "bb.simplify-during-bb"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "simplify_during_BB_flag" }
+category = "bitblast"
+excludes = ["disable-opt-inc", "disable-simplifications"]
+help = "re-simplify terms whose children blast constant"
+
+[[option]]
+name = "aig-node-budget"
+type = "int"
+default = -1
+sentinel = "-1 = no limit; larger than INT_MAX is OPTION_VALUE (the budget could never fire)"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "aig_node_budget" }
+category = "limits"
+legacy = { iface_flag = "AIG_NODE_BUDGET" }
+range = { min = -1, max = 2147483647 }
+help = "AND-gate cap on batch bit-blast"
+
+[[option]]
+name = "print-counterex"
+short = "p"
+type = "bool"
+default = false
+tier = "diagnostic"
+settable = "anytime"
+scope = "solver"
+engine = { field = "print_counterexample_flag" }
+category = "output"
+legacy = { letter = "p" }
+help = "print counterexample; also counts as a model request, so a model is constructed (UDF:1845-1849)"
+
+[[option]]
+name = "print-counterexbin"
+short = "y"
+type = "bool"
+default = false
+tier = "diagnostic"
+settable = "anytime"
+scope = "solver"
+engine = { field = "print_binary_flag" }
+category = "output"
+legacy = { letter = "y" }
+help = "print counterexample in binary"
+
+[[option]]
+name = "print-arrayval"
+short = "q"
+type = "bool"
+default = false
+tier = "diagnostic"
+settable = "anytime"
+scope = "solver"
+engine = { field = "print_arrayval_declaredorder_flag" }
+category = "output"
+legacy = { letter = "q" }
+help = "print array values in declared order"
+
+[[option]]
+name = "print-functionstat"
+short = "s"
+type = "bool"
+default = false
+tier = "diagnostic"
+settable = "anytime"
+scope = "solver"
+engine = { field = "stats_flag" }
+category = "output"
+legacy = { letter = "s" }
+help = "print function statistics"
+
+[[option]]
+name = "print-quickstat"
+short = "t"
+type = "bool"
+default = false
+tier = "diagnostic"
+settable = "anytime"
+scope = "solver"
+engine = { field = "quick_statistics_flag" }
+category = "output"
+legacy = { letter = "t" }
+help = "print quick statistics"
+
+[[option]]
+name = "print-nodes"
+short = "v"
+type = "bool"
+default = false
+tier = "diagnostic"
+settable = "anytime"
+scope = "solver"
+engine = { field = "print_nodes_flag" }
+category = "output"
+legacy = { letter = "v" }
+help = "print nodes"
+
+[[option]]
+name = "cnf-auto-threshold"
+type = "uint"
+default = 200000
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "cnf_auto_threshold" }
+category = "cnf"
+legacy = { iface_flag = "CNF_AUTO_THRESHOLD" }
+help = "AND-node threshold of cnf auto"
+
+[[option]]
+name = "cnf-generation-effort"
+type = "enum"
+default = "auto"
+values = ["auto", "very-low", "low", "medium", "high", "very-high", "new-very-low", "new-low", "new-medium", "new-high", "gia-low", "gia-high", "gia-very-high"]
+tier = "stable"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "cnf_generation_effort" }
+category = "cnf"
+legacy = { iface_flag = "CNF_GENERATION_EFFORT" }
+help = "CNF generator rung"
+
+[[option]]
+name = "cnf-link-shared-cells"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "cnf_link_shared_cells" }
+category = "cnf"
+help = "new-* CNF rungs: keep a comparator cell propagation-complete when its exclusive-or is shared, with a linking block beside the exclusive-or's own clauses instead of the per-gate encoding"
+
+[[option]]
+name = "cnf-complete-ite"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "cnf_complete_ite" }
+category = "cnf"
+help = "new-* CNF rungs: encode a recovered if-then-else with all six prime implicates, adding the two that let agreeing arms decide the output while the condition is unset"
+
+[[option]]
+name = "incremental"
+type = "mode"
+default = "auto"
+tier = "stable"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "incremental_mode" }
+category = "incremental"
+legacy = { letter = "i", note = "2.x had only ON" }
+help = "incremental driver mode: auto engages at incremental-auto-engage-at, on always, off never"
+
+[[option]]
+name = "incremental-auto-engage-at"
+type = "int"
+default = -1
+range = { min = -1 }
+sentinel = "-1 = the engine default (3 checks); 0 = never; n = engage at the n-th check"
+tier = "stable"
+settable = "anytime"
+scope = "solver"
+engine = { field = "incremental_auto_engage_at" }
+category = "incremental"
+legacy = { iface_flag = "INCREMENTAL_AUTO_ENGAGE_AT" }
+help = "solve ordinal of automatic engagement"
+
+[[option]]
+name = "incremental-profile"
+type = "bool"
+default = false
+tier = "diagnostic"
+settable = "anytime"
+scope = "solver"
+engine = { field = "incremental_profile" }
+category = "incremental"
+help = "per-check incremental profile to stderr"
+
+[[option]]
+name = "incremental-core-only"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "incremental_core_only" }
+category = "incremental"
+help = "minimal persistent core only"
+
+[[option]]
+name = "incremental-cbp-reset"
+type = "bool"
+default = false
+tier = "diagnostic"
+settable = "anytime"
+scope = "solver"
+engine = { field = "incremental_cbp_reset" }
+category = "incremental"
+help = "reset+re-feed instead of CBP rollback"
+
+[[option]]
+name = "incremental-cbp-bootstrap-limit"
+type = "int"
+default = 100000
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "incremental_cbp_bootstrap_limit" }
+category = "incremental"
+help = "defer CBP bootstrap above this"
+
+[[option]]
+name = "incremental-cbp-feed-cap"
+type = "int"
+default = 200000
+range = { min = 1 }
+sentinel = "M:2239-2243"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "incremental_cbp_feed_cap" }
+category = "incremental"
+help = "CBP retained-node cap"
+
+[[option]]
+name = "incremental-base-resimplify-limit"
+type = "int"
+default = 100000
+range = { min = 0 }
+sentinel = "0 = never re-simplify the base"
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "incremental_base_resimplify_limit" }
+category = "incremental"
+help = "skip base resimplify above this"
+
+[[option]]
+name = "incremental-reencode-limit"
+type = "int"
+default = 1000000
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "incremental_reencode_limit" }
+category = "incremental"
+help = "SAT-size rebuild trigger"
+
+[[option]]
+name = "incremental-semantic-cache-limit"
+type = "int"
+default = 1000000
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "incremental_semantic_cache_limit" }
+category = "incremental"
+help = "semantic-cache rotation trigger"
+
+[[option]]
+name = "incremental-promote-units"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "incremental_promote_units" }
+category = "incremental"
+negation = "no-incremental-promote-units"
+help = "promote stable levels to units"
+
+[[option]]
+name = "max-num-confl"
+aliases = ["max_num_confl"]
+short = "g"
+type = "int"
+default = -1
+range = { min = -1 }
+sentinel = "-1 = no limit"
+tier = "stable"
+settable = "anytime"
+scope = "solver"
+engine = { field = "timeout_max_conflicts" }
+category = "limits"
+help = "SAT conflict budget"
+
+[[option]]
+name = "max-time"
+aliases = ["max_time"]
+short = "k"
+type = "duration"
+default = "none"
+sentinel = "none = no limit; the CLI reads a bare number as seconds (legacy), the APIs take milliseconds; Python also accepts z3py's `timeout` keyword as an alias"
+tier = "stable"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "max_time" }
+category = "limits"
+legacy = { cli_unit = "seconds" }
+help = "whole-query wall-clock budget (s)"
+
+[[option]]
+name = "check-sanity"
+short = "d"
+type = "bool"
+default = false
+tier = "stable"
+settable = "anytime"
+scope = "solver"
+engine = { field = "check_counterexample_flag" }
+category = "model"
+# 2.x forced this on for every C VC; 3.x: one default (off) through every door
+legacy = { letter = "d" }
+help = "construct and check the counterexample"

@@ -1,0 +1,1022 @@
+#********************************************************************
+# AUTHORS: Andrew Teylu
+#
+# BEGIN DATE: September, 2026
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#********************************************************************
+# kinds.toml -- the single kind table for STP 3.x.
+#
+# Generates: enum class stp::Kind (stp.hpp), enum stp_kind (stp.h), stp.Kind (Python),
+# the type checker's arity/signature table, the SMT-LIB printer and parser spelling
+# tables, the named constructors in every language (C: stp_<name>, C++: stp::<name>,
+# Python: the z3py-style names in `py`), and the kind reference page of the docs.
+#
+# Fields
+#   name     the 3.x enumerator (pinned by position; append only)
+#   smtlib   the SMT-LIB 2 spelling the printer emits and the parser accepts
+#   c        the named C++ constructor in namespace stp (omitted where a dedicated mk_* function creates it); the C name is
+#            stp_ + the same spelling minus any trailing underscore (not_ -> stp_not, and_ -> stp_and, bvadd -> stp_bvadd)
+#   py       the Python name(s); operators are listed for information
+#   arity    "0", "1", "2", "3", "4", "n>=1", "n>=2"
+#   indices  number of integer indices, in SMT-LIB order
+#   sig      signature pattern: sort variables in [] (n = width, e/s = FP format, I/E array sorts, T any, D.. domain, C codomain)
+#   folds    the manager's construction-time rewrites when simplify = true (representative; the full list is generated
+#            from the simplifying factory's rule table)
+#   engine   "supported" (default), or the engine limit that makes construction an UNSUPPORTED error
+#
+# Signature notation: "(A, B) -> R". "BV[n]" is a bit-vector of width n; "FP[e,s]" a float of the given
+# format; "RM" a rounding mode; "Array[I,E]"; "Fun[D..,C]".
+
+# ---------------------------------------------------------------- core
+[[kind]]
+name = "VALUE"
+smtlib = "<literal>"
+py = "BoolVal BitVecVal FPVal RNE.. RealVal (and model values)"
+arity = "0"
+indices = 0
+sig = "() -> T"
+c = ""   # created by mk_true/mk_bv/mk_fp/mk_rm/mk_real...
+
+[[kind]]
+name = "CONSTANT"
+smtlib = "<symbol>"
+py = "Bool BitVec FP Real Array Function Const"
+arity = "0"
+indices = 0
+sig = "() -> T"
+c = ""   # created by declare (named) or mk_fresh (anonymous)
+
+[[kind]]
+name = "ITE"
+smtlib = "ite"
+c = "ite"
+py = "If"
+arity = "3"
+indices = 0
+sig = "(Bool, T, T) -> T"
+folds = ["ite(true,a,b)->a", "ite(false,a,b)->b", "ite(c,a,a)->a", "ite(c,true,false)->c"]
+
+[[kind]]
+name = "EQUAL"
+smtlib = "="
+c = "eq"
+py = "== (all sorts; on FP this is SMT '=', not fp.eq)"
+arity = "2"
+indices = 0
+sig = "(T, T) -> Bool"
+folds = ["=(t,t)->true", "=(v1,v2)->false for distinct values"]
+engine = "on arrays: extensional equality (the 2.x 'x' feature, always on)"
+
+[[kind]]
+name = "DISTINCT"
+smtlib = "distinct"
+c = "distinct"
+py = "Distinct, != (binary)"
+arity = "n>=2"
+indices = 0
+sig = "(T, T, ...) -> Bool"
+
+[[kind]]
+name = "APPLY"
+smtlib = "<application>"
+c = "apply"
+py = "f(x, y)"
+arity = "n>=2"
+indices = 0
+sig = "(Fun[D..,C], D..) -> C"
+
+# ---------------------------------------------------------------- Bool
+[[kind]]
+name = "NOT"
+smtlib = "not"
+c = "not_"
+py = "Not"
+arity = "1"
+indices = 0
+sig = "(Bool) -> Bool"
+folds = ["not(not(a))->a", "not(true)->false"]
+
+[[kind]]
+name = "AND"
+smtlib = "and"
+c = "and_"
+py = "And"
+arity = "n>=1"
+indices = 0
+sig = "(Bool, ...) -> Bool"
+folds = ["flattened; constants absorbed; and(a)->a"]
+
+[[kind]]
+name = "OR"
+smtlib = "or"
+c = "or_"
+py = "Or"
+arity = "n>=1"
+indices = 0
+sig = "(Bool, ...) -> Bool"
+folds = ["flattened; constants absorbed; or(a)->a"]
+
+[[kind]]
+name = "XOR"
+smtlib = "xor"
+c = "xor_"
+py = "Xor"
+arity = "n>=2"
+indices = 0
+sig = "(Bool, ...) -> Bool"
+
+[[kind]]
+name = "IMPLIES"
+smtlib = "=>"
+c = "implies"
+py = "Implies"
+arity = "2"
+indices = 0
+sig = "(Bool, Bool) -> Bool"
+
+# ---------------------------------------------------------------- BV bitwise
+[[kind]]
+name = "BV_NOT"
+smtlib = "bvnot"
+c = "bvnot"
+py = "~"
+arity = "1"
+indices = 0
+sig = "(BV[n]) -> BV[n]"
+
+[[kind]]
+name = "BV_AND"
+smtlib = "bvand"
+c = "bvand"
+py = "&"
+arity = "n>=2"
+indices = 0
+sig = "(BV[n], BV[n], ...) -> BV[n]"
+
+[[kind]]
+name = "BV_OR"
+smtlib = "bvor"
+c = "bvor"
+py = "|"
+arity = "n>=2"
+indices = 0
+sig = "(BV[n], BV[n], ...) -> BV[n]"
+
+[[kind]]
+name = "BV_XOR"
+smtlib = "bvxor"
+c = "bvxor"
+py = "^"
+arity = "n>=2"
+indices = 0
+sig = "(BV[n], BV[n], ...) -> BV[n]"
+
+[[kind]]
+name = "BV_NAND"
+smtlib = "bvnand"
+c = "bvnand"
+py = "BVNand"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+folds = ["bvnand(a,b)->bvnot(bvand(a,b))"]
+
+[[kind]]
+name = "BV_NOR"
+smtlib = "bvnor"
+c = "bvnor"
+py = "BVNor"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+folds = ["bvnor(a,b)->bvnot(bvor(a,b))"]
+
+[[kind]]
+name = "BV_XNOR"
+smtlib = "bvxnor"
+c = "bvxnor"
+py = "BVXnor"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+folds = ["bvxnor(a,b)->bvnot(bvxor(a,b))"]
+
+# ---------------------------------------------------------------- BV arithmetic
+[[kind]]
+name = "BV_NEG"
+smtlib = "bvneg"
+c = "bvneg"
+py = "- (unary)"
+arity = "1"
+indices = 0
+sig = "(BV[n]) -> BV[n]"
+
+[[kind]]
+name = "BV_ADD"
+smtlib = "bvadd"
+c = "bvadd"
+py = "+"
+arity = "n>=2"
+indices = 0
+sig = "(BV[n], BV[n], ...) -> BV[n]"
+folds = ["flattened; constant operands summed"]
+
+[[kind]]
+name = "BV_SUB"
+smtlib = "bvsub"
+c = "bvsub"
+py = "-"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+
+[[kind]]
+name = "BV_MUL"
+smtlib = "bvmul"
+c = "bvmul"
+py = "*"
+arity = "n>=2"
+indices = 0
+sig = "(BV[n], BV[n], ...) -> BV[n]"
+
+[[kind]]
+name = "BV_UDIV"
+smtlib = "bvudiv"
+c = "bvudiv"
+py = "UDiv"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+engine = "total: x/0 = all ones (SMT-LIB)"
+
+[[kind]]
+name = "BV_UREM"
+smtlib = "bvurem"
+c = "bvurem"
+py = "URem"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+engine = "total: x%0 = x (SMT-LIB)"
+
+[[kind]]
+name = "BV_SDIV"
+smtlib = "bvsdiv"
+c = "bvsdiv"
+py = "SDiv"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+
+[[kind]]
+name = "BV_SREM"
+smtlib = "bvsrem"
+c = "bvsrem"
+py = "SRem"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+
+[[kind]]
+name = "BV_SMOD"
+smtlib = "bvsmod"
+c = "bvsmod"
+py = "SMod"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+
+# ---------------------------------------------------------------- BV shifts
+[[kind]]
+name = "BV_SHL"
+smtlib = "bvshl"
+c = "bvshl"
+py = "<<"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+engine = "over-shift yields 0 (SMT-LIB)"
+
+[[kind]]
+name = "BV_LSHR"
+smtlib = "bvlshr"
+c = "bvlshr"
+py = "LShR"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+
+[[kind]]
+name = "BV_ASHR"
+smtlib = "bvashr"
+c = "bvashr"
+py = ">>"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[n]"
+engine = "over-shift sign-fills (SMT-LIB)"
+
+# ---------------------------------------------------------------- BV structure
+[[kind]]
+name = "BV_CONCAT"
+smtlib = "concat"
+c = "concat"
+py = "Concat"
+arity = "n>=2"
+indices = 0
+sig = "(BV[a], BV[b], ...) -> BV[a+b+...]"
+folds = ["adjacent extracts of one term merge"]
+
+[[kind]]
+name = "BV_EXTRACT"
+smtlib = "(_ extract hi lo)"
+c = "extract"
+py = "Extract(hi, lo, x)"
+arity = "1"
+indices = 2
+sig = "(BV[n]) -> BV[hi-lo+1]   with n > hi >= lo"
+
+[[kind]]
+name = "BV_ZERO_EXTEND"
+smtlib = "(_ zero_extend k)"
+c = "zero_extend"
+py = "ZeroExt(k, x)"
+arity = "1"
+indices = 1
+sig = "(BV[n]) -> BV[n+k]"
+folds = ["k = 0 -> x"]
+
+[[kind]]
+name = "BV_SIGN_EXTEND"
+smtlib = "(_ sign_extend k)"
+c = "sign_extend"
+py = "SignExt(k, x)"
+arity = "1"
+indices = 1
+sig = "(BV[n]) -> BV[n+k]"
+folds = ["k = 0 -> x"]
+
+[[kind]]
+name = "BV_REPEAT"
+smtlib = "(_ repeat k)"
+c = "repeat"
+py = "RepeatBV(k, x)"
+arity = "1"
+indices = 1
+sig = "(BV[n]) -> BV[n*k]   with k >= 1"
+folds = ["lowered to concat"]
+
+[[kind]]
+name = "BV_ROTATE_LEFT"
+smtlib = "(_ rotate_left k)"
+c = "rotate_left"
+py = "RotateLeft(k, x)"
+arity = "1"
+indices = 1
+sig = "(BV[n]) -> BV[n]"
+folds = ["lowered to concat of extracts"]
+
+[[kind]]
+name = "BV_ROTATE_RIGHT"
+smtlib = "(_ rotate_right k)"
+c = "rotate_right"
+py = "RotateRight(k, x)"
+arity = "1"
+indices = 1
+sig = "(BV[n]) -> BV[n]"
+folds = ["lowered to concat of extracts"]
+
+# ---------------------------------------------------------------- BV comparison
+[[kind]]
+name = "BV_COMP"
+smtlib = "bvcomp"
+c = "bvcomp"
+py = "BVComp"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> BV[1]"
+folds = ["lowered to ite(=(a,b), #b1, #b0)"]
+
+[[kind]]
+name = "BV_ULT"
+smtlib = "bvult"
+c = "bvult"
+py = "ULT"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_ULE"
+smtlib = "bvule"
+c = "bvule"
+py = "ULE"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_UGT"
+smtlib = "bvugt"
+c = "bvugt"
+py = "UGT"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_UGE"
+smtlib = "bvuge"
+c = "bvuge"
+py = "UGE"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_SLT"
+smtlib = "bvslt"
+c = "bvslt"
+py = "<"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_SLE"
+smtlib = "bvsle"
+c = "bvsle"
+py = "<="
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_SGT"
+smtlib = "bvsgt"
+c = "bvsgt"
+py = ">"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_SGE"
+smtlib = "bvsge"
+c = "bvsge"
+py = ">="
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+# ---------------------------------------------------------------- BV overflow predicates
+[[kind]]
+name = "BV_UADDO"
+smtlib = "bvuaddo"
+c = "bvuaddo"
+py = "bvuaddo, BVAddNoOverflow(a, b, signed=False) (negated)"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_SADDO"
+smtlib = "bvsaddo"
+c = "bvsaddo"
+py = "bvsaddo"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_UMULO"
+smtlib = "bvumulo"
+c = "bvumulo"
+py = "bvumulo"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_SMULO"
+smtlib = "bvsmulo"
+c = "bvsmulo"
+py = "bvsmulo"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_USUBO"
+smtlib = "bvusubo"
+c = "bvusubo"
+py = "bvusubo"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_SSUBO"
+smtlib = "bvssubo"
+c = "bvssubo"
+py = "bvssubo"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+
+[[kind]]
+name = "BV_NEGO"
+smtlib = "bvnego"
+c = "bvnego"
+py = "bvnego"
+arity = "1"
+indices = 0
+sig = "(BV[n]) -> Bool"
+engine = "new in 3.0 (the parser already had it)"
+
+[[kind]]
+name = "BV_SDIVO"
+smtlib = "bvsdivo"
+c = "bvsdivo"
+py = "bvsdivo"
+arity = "2"
+indices = 0
+sig = "(BV[n], BV[n]) -> Bool"
+engine = "new in 3.0 (the parser already had it)"
+
+# ---------------------------------------------------------------- BV reductions (Z3 spellings)
+[[kind]]
+name = "BV_REDAND"
+smtlib = "bvredand"
+c = "bvredand"
+py = "BVRedAnd"
+arity = "1"
+indices = 0
+sig = "(BV[n]) -> BV[1]"
+folds = ["lowered to ite(=(x, ones), #b1, #b0)"]
+engine = "new in 3.0"
+
+[[kind]]
+name = "BV_REDOR"
+smtlib = "bvredor"
+c = "bvredor"
+py = "BVRedOr"
+arity = "1"
+indices = 0
+sig = "(BV[n]) -> BV[1]"
+folds = ["lowered to ite(=(x, zero), #b0, #b1)"]
+engine = "new in 3.0"
+
+# ---------------------------------------------------------------- arrays
+[[kind]]
+name = "SELECT"
+smtlib = "select"
+c = "select"
+py = "Select, a[i]"
+arity = "2"
+indices = 0
+sig = "(Array[I,E], I) -> E"
+folds = ["select(store(a,i,v), i)->v when i is syntactically equal", "select(const_array(v), i)->v"]
+
+[[kind]]
+name = "STORE"
+smtlib = "store"
+c = "store"
+py = "Store"
+arity = "3"
+indices = 0
+sig = "(Array[I,E], I, E) -> Array[I,E]"
+
+[[kind]]
+name = "CONST_ARRAY"
+smtlib = "((as const (Array I E)) v)"
+c = ""   # created by declare (named) or mk_fresh (anonymous)_array(sort, element)
+py = "K(ArraySort(I, E), v)"
+arity = "1"
+indices = 0
+sig = "(E) -> Array[I,E]   (the array sort is an argument of mk_const_array)"
+engine = "new in 3.0; any element term"
+
+# ---------------------------------------------------------------- FP arithmetic
+[[kind]]
+name = "FP_ABS"
+smtlib = "fp.abs"
+c = "fp_abs"
+py = "fpAbs"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_NEG"
+smtlib = "fp.neg"
+c = "fp_neg"
+py = "fpNeg, - (unary)"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_ADD"
+smtlib = "fp.add"
+c = "fp_add"
+py = "fpAdd(rm, a, b), + (manager default mode)"
+arity = "3"
+indices = 0
+sig = "(RM, FP[e,s], FP[e,s]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_SUB"
+smtlib = "fp.sub"
+c = "fp_sub"
+py = "fpSub, -"
+arity = "3"
+indices = 0
+sig = "(RM, FP[e,s], FP[e,s]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_MUL"
+smtlib = "fp.mul"
+c = "fp_mul"
+py = "fpMul, *"
+arity = "3"
+indices = 0
+sig = "(RM, FP[e,s], FP[e,s]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_DIV"
+smtlib = "fp.div"
+c = "fp_div"
+py = "fpDiv, /"
+arity = "3"
+indices = 0
+sig = "(RM, FP[e,s], FP[e,s]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_FMA"
+smtlib = "fp.fma"
+c = "fp_fma"
+py = "fpFMA"
+arity = "4"
+indices = 0
+sig = "(RM, FP[e,s], FP[e,s], FP[e,s]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_SQRT"
+smtlib = "fp.sqrt"
+c = "fp_sqrt"
+py = "fpSqrt"
+arity = "2"
+indices = 0
+sig = "(RM, FP[e,s]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_REM"
+smtlib = "fp.rem"
+c = "fp_rem"
+py = "fpRem"
+arity = "2"
+indices = 0
+sig = "(FP[e,s], FP[e,s]) -> FP[e,s]"
+engine = "UNSUPPORTED when 2^e + s - 4 > 2304 (capabilities: fp.rem.limit)"
+
+[[kind]]
+name = "FP_RTI"
+smtlib = "fp.roundToIntegral"
+c = "fp_rti"
+py = "fpRoundToIntegral"
+arity = "2"
+indices = 0
+sig = "(RM, FP[e,s]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_MIN"
+smtlib = "fp.min"
+c = "fp_min"
+py = "fpMin"
+arity = "2"
+indices = 0
+sig = "(FP[e,s], FP[e,s]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_MAX"
+smtlib = "fp.max"
+c = "fp_max"
+py = "fpMax"
+arity = "2"
+indices = 0
+sig = "(FP[e,s], FP[e,s]) -> FP[e,s]"
+
+# ---------------------------------------------------------------- FP comparison
+[[kind]]
+name = "FP_EQ"
+smtlib = "fp.eq"
+c = "fp_eq"
+py = "fpEQ"
+arity = "2"
+indices = 0
+sig = "(FP[e,s], FP[e,s]) -> Bool"
+
+[[kind]]
+name = "FP_LT"
+smtlib = "fp.lt"
+c = "fp_lt"
+py = "fpLT, <"
+arity = "2"
+indices = 0
+sig = "(FP[e,s], FP[e,s]) -> Bool"
+
+[[kind]]
+name = "FP_LEQ"
+smtlib = "fp.leq"
+c = "fp_leq"
+py = "fpLEQ, <="
+arity = "2"
+indices = 0
+sig = "(FP[e,s], FP[e,s]) -> Bool"
+
+[[kind]]
+name = "FP_GT"
+smtlib = "fp.gt"
+c = "fp_gt"
+py = "fpGT, >"
+arity = "2"
+indices = 0
+sig = "(FP[e,s], FP[e,s]) -> Bool"
+
+[[kind]]
+name = "FP_GEQ"
+smtlib = "fp.geq"
+c = "fp_geq"
+py = "fpGEQ, >="
+arity = "2"
+indices = 0
+sig = "(FP[e,s], FP[e,s]) -> Bool"
+
+# ---------------------------------------------------------------- FP classification
+[[kind]]
+name = "FP_IS_NORMAL"
+smtlib = "fp.isNormal"
+c = "fp_is_normal"
+py = "fpIsNormal"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> Bool"
+
+[[kind]]
+name = "FP_IS_SUBNORMAL"
+smtlib = "fp.isSubnormal"
+c = "fp_is_subnormal"
+py = "fpIsSubnormal"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> Bool"
+
+[[kind]]
+name = "FP_IS_ZERO"
+smtlib = "fp.isZero"
+c = "fp_is_zero"
+py = "fpIsZero"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> Bool"
+
+[[kind]]
+name = "FP_IS_INF"
+smtlib = "fp.isInfinite"
+c = "fp_is_inf"
+py = "fpIsInf"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> Bool"
+
+[[kind]]
+name = "FP_IS_NAN"
+smtlib = "fp.isNaN"
+c = "fp_is_nan"
+py = "fpIsNaN"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> Bool"
+
+[[kind]]
+name = "FP_IS_NEG"
+smtlib = "fp.isNegative"
+c = "fp_is_neg"
+py = "fpIsNegative"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> Bool"
+
+[[kind]]
+name = "FP_IS_POS"
+smtlib = "fp.isPositive"
+c = "fp_is_pos"
+py = "fpIsPositive"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> Bool"
+
+# ---------------------------------------------------------------- FP construction and conversion
+[[kind]]
+name = "FP_FP"
+smtlib = "fp"
+c = "mk_fp"
+py = "fpFP(sign, exp, sig)"
+arity = "3"
+indices = 0
+sig = "(BV[1], BV[e], BV[s-1]) -> FP[e,s]"
+engine = "new in 3.0; symbolic operands allowed"
+
+[[kind]]
+name = "FP_TO_FP_FROM_BV"
+smtlib = "(_ to_fp e s)"
+c = "to_fp_from_bits"
+py = "fpBVToFP(bv, sort)"
+arity = "1"
+indices = 2
+sig = "(BV[e+s]) -> FP[e,s]"
+engine = "the reinterpretation; NaN patterns intern as the canonical NaN"
+
+[[kind]]
+name = "FP_TO_FP_FROM_FP"
+smtlib = "(_ to_fp e s)"
+c = "to_fp"
+py = "fpToFP(rm, x, sort), fpFPToFP"
+arity = "2"
+indices = 2
+sig = "(RM, FP[e2,s2]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_TO_FP_FROM_SBV"
+smtlib = "(_ to_fp e s)"
+c = "to_fp"
+py = "fpSignedToFP(rm, bv, sort)"
+arity = "2"
+indices = 2
+sig = "(RM, BV[n]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_TO_FP_FROM_UBV"
+smtlib = "(_ to_fp_unsigned e s)"
+c = "to_fp_unsigned"
+py = "fpUnsignedToFP(rm, bv, sort)"
+arity = "2"
+indices = 2
+sig = "(RM, BV[n]) -> FP[e,s]"
+
+[[kind]]
+name = "FP_TO_FP_FROM_REAL"
+smtlib = "(_ to_fp e s)"
+c = "to_fp"
+py = "fpRealToFP(rm, r, sort)"
+arity = "2"
+indices = 2
+sig = "(RM, Real) -> FP[e,s]"
+engine = "both the rounding mode and the Real argument must be VALUEs (folded exactly via LibBF at construction); UNSUPPORTED otherwise"
+
+[[kind]]
+name = "FP_TO_UBV"
+smtlib = "(_ fp.to_ubv m)"
+c = "fp_to_ubv"
+py = "fpToUBV(rm, x, m)"
+arity = "2"
+indices = 1
+sig = "(RM, FP[e,s]) -> BV[m]"
+engine = "out-of-range and NaN inputs are unspecified by SMT-LIB; the value the engine returns is to be read from FloatBlaster/symfpu and published (unverified in this sketch)"
+
+[[kind]]
+name = "FP_TO_SBV"
+smtlib = "(_ fp.to_sbv m)"
+c = "fp_to_sbv"
+py = "fpToSBV(rm, x, m)"
+arity = "2"
+indices = 1
+sig = "(RM, FP[e,s]) -> BV[m]"
+engine = "as FP_TO_UBV"
+
+[[kind]]
+name = "FP_TO_REAL"
+smtlib = "fp.to_real"
+c = "fp_to_real"
+py = "fpToReal"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> Real"
+engine = "3.1: UNSUPPORTED in 3.0 (capabilities: kind.FP_TO_REAL = false)"
+
+[[kind]]
+name = "FP_TO_IEEE_BV"
+smtlib = "fp.to_ieee_bv"
+c = "fp_to_ieee_bv"
+py = "fpToIEEEBV"
+arity = "1"
+indices = 0
+sig = "(FP[e,s]) -> BV[e+s]"
+engine = "STP/Z3 extension; every NaN yields the canonical pattern"
+
+# ---------------------------------------------------------------- Real (linear)
+[[kind]]
+name = "REAL_ADD"
+smtlib = "+"
+c = "real_add"
+py = "+"
+arity = "n>=2"
+indices = 0
+sig = "(Real, Real, ...) -> Real"
+
+[[kind]]
+name = "REAL_SUB"
+smtlib = "-"
+c = "real_sub"
+py = "-"
+arity = "2"
+indices = 0
+sig = "(Real, Real) -> Real"
+
+[[kind]]
+name = "REAL_NEG"
+smtlib = "-"
+c = "real_neg"
+py = "- (unary)"
+arity = "1"
+indices = 0
+sig = "(Real) -> Real"
+
+[[kind]]
+name = "REAL_MUL"
+smtlib = "*"
+c = "real_mul"
+py = "*"
+arity = "2"
+indices = 0
+sig = "(Real, Real) -> Real"
+engine = "linear: at least one operand must be a VALUE; UNSUPPORTED otherwise (capabilities: real.nonlinear = false)"
+
+[[kind]]
+name = "REAL_DIV"
+smtlib = "/"
+c = "real_div"
+py = "/"
+arity = "2"
+indices = 0
+sig = "(Real, Real) -> Real"
+engine = "the divisor must be a non-zero VALUE; UNSUPPORTED otherwise"
+
+[[kind]]
+name = "REAL_LT"
+smtlib = "<"
+c = "real_lt"
+py = "<"
+arity = "2"
+indices = 0
+sig = "(Real, Real) -> Bool"
+
+[[kind]]
+name = "REAL_LE"
+smtlib = "<="
+c = "real_le"
+py = "<="
+arity = "2"
+indices = 0
+sig = "(Real, Real) -> Bool"
+
+[[kind]]
+name = "REAL_GT"
+smtlib = ">"
+c = "real_gt"
+py = ">"
+arity = "2"
+indices = 0
+sig = "(Real, Real) -> Bool"
+
+[[kind]]
+name = "REAL_GE"
+smtlib = ">="
+c = "real_ge"
+py = ">="
+arity = "2"
+indices = 0
+sig = "(Real, Real) -> Bool"
+
+# 102 kinds. Not public (2.x internals that stay inside the engine): PARAMBOOL, BOOLEXTRACT, IFF,
+# NAND/NOR on Bool, the width-carrying shift kinds, BVSX/BVZX-to-width, ARRAY_EQ (it is EQUAL on
+# arrays), FP_SMT_EQ (it is EQUAL on FP), UF_APPLY (it is APPLY), REAL_CONST/BVCONST (VALUE),
+# the sort kinds ARRAY/BITVECTOR/BOOLEAN/FLOATINGPOINT/ROUNDINGMODE (they are SortKind).
