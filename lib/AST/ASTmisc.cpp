@@ -442,6 +442,30 @@ void SetFatalErrorThrows(bool on)
   fatal_error_throws = on;
 }
 
+// Who is told of this thread's fatal errors besides vc_error_hdlr; see the
+// declaration in AST.h.
+static THREAD_LOCAL_IE FatalErrorObserver fatal_error_observer = nullptr;
+static THREAD_LOCAL_IE void* fatal_error_observer_opaque = nullptr;
+
+void SetFatalErrorObserver(FatalErrorObserver observer, void* opaque)
+{
+  fatal_error_observer = observer;
+  fatal_error_observer_opaque = opaque;
+}
+
+FatalErrorObserver GetFatalErrorObserver(void** opaque)
+{
+  if (opaque != nullptr)
+    *opaque = fatal_error_observer_opaque;
+  return fatal_error_observer;
+}
+
+static void notifyFatalErrorObserver(const char* str)
+{
+  if (fatal_error_observer != nullptr)
+    fatal_error_observer(str, fatal_error_observer_opaque);
+}
+
 void ReportFatalError(const char* str)
 {
   cerr << "Fatal Error: " << str << endl;
@@ -449,6 +473,7 @@ void ReportFatalError(const char* str)
   {
     vc_error_hdlr(str);
   }
+  notifyFatalErrorObserver(str);
 }
 
 ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)
@@ -467,6 +492,7 @@ ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)
   {
     vc_error_hdlr(str);
   }
+  notifyFatalErrorObserver(str);
   if (fatal_error_throws)
   {
     // the node is part of the message: some callers pass an empty text

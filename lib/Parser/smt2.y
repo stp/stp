@@ -4466,6 +4466,7 @@ namespace stp {
     SMT2SetRealTokens(GlobalParserInterface->all_theory_tokens);
     SMT2ResetCommandLexerState();
     int result;
+    bool ended = false;
     try
     {
       result = smt2parse();
@@ -4474,7 +4475,14 @@ namespace stp {
     {
       result = 1;
     }
-    if (result != 0)
+    catch (const stp::ScriptEnded&)
+    {
+      // The run ended at a check's first CNF: the script did what it was
+      // asked, and the check-sat that ended it is not finished.
+      result = 0;
+      ended = true;
+    }
+    if (result != 0 || ended)
       GlobalParserInterface->abortCurrentCommand();
     SMT2ResetCommandLexerState();
     return result;

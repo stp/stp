@@ -387,6 +387,43 @@ namespace stp
   {
     return realTokensActive ? token : lookup(smt2text);
   }
+  // Where the input comes from when it is not the FILE* (setSMT2Reader in
+  // parser.h): the 3.x API reads a caller's stream through one. Without a
+  // reader the lexer reads its FILE* as flex always has -- flex's own
+  // YY_INPUT, spelled out because defining the macro replaces it.
+  static stp::ParserReader smt2Reader = NULL;
+  static void* smt2ReaderOpaque = NULL;
+#define YY_INPUT(buf, result, max_size)                                        \
+  if (smt2Reader != NULL)                                                      \
+    result = static_cast<int>(                                                 \
+        smt2Reader((buf), static_cast<size_t>(max_size), smt2ReaderOpaque));   \
+  else if (YY_CURRENT_BUFFER_LVALUE->yy_is_interactive)                        \
+  {                                                                            \
+    int c = '*';                                                               \
+    int n;                                                                     \
+    for (n = 0; n < max_size && (c = getc(yyin)) != EOF && c != '\n'; ++n)     \
+      buf[n] = (char)c;                                                        \
+    if (c == '\n')                                                             \
+      buf[n++] = (char)c;                                                      \
+    if (c == EOF && ferror(yyin))                                              \
+      YY_FATAL_ERROR("input in flex scanner failed");                          \
+    result = n;                                                                \
+  }                                                                            \
+  else                                                                         \
+  {                                                                            \
+    errno = 0;                                                                 \
+    while ((result = (int)fread(buf, 1, (yy_size_t)max_size, yyin)) == 0 &&    \
+           ferror(yyin))                                                       \
+    {                                                                          \
+      if (errno != EINTR)                                                      \
+      {                                                                        \
+        YY_FATAL_ERROR("input in flex scanner failed");                        \
+        break;                                                                 \
+      }                                                                        \
+      errno = 0;                                                               \
+      clearerr(yyin);                                                          \
+    }                                                                          \
+  }
 %}
 
 %x  COMMENT
@@ -730,6 +767,11 @@ namespace stp {
 
   void setSMT2In(FILE* file) {
     smt2in = file;
+  }
+
+  void setSMT2Reader(ParserReader reader, void* opaque) {
+    smt2Reader = reader;
+    smt2ReaderOpaque = opaque;
   }
 
   void setSMT2Interactive(bool enable) {

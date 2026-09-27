@@ -43,7 +43,9 @@ THE SOFTWARE.
 #include "stp/config.h"
 #include <ankerl/unordered_dense.h>
 #include <cstdint>
+#include <functional>
 #include <set>
+#include <string>
 
 namespace stp
 {
@@ -78,6 +80,17 @@ enum class FPSpecial
   MinusInfinity,
   PlusZero,
   MinusZero,
+};
+
+// How a CNF a check hands to the SAT solver relates to the query: the whole
+// of it; partial, array read refinement adding its congruence axioms as the
+// search asks for them; or an over-approximation, the bit-vector
+// abstractions having replaced operations with free inputs.
+enum class CnfExtent
+{
+  Whole,
+  Partial,
+  OverApproximation,
 };
 
 /*
@@ -675,6 +688,17 @@ public:
   // Where the 3.x API's Solver::write_cnf receives the DIMACS of the first
   // CNF a check generates; NULL otherwise. Borrowed for the one check.
   std::ostream* cnf_sink = nullptr;
+
+  // What the 3.x API's CNF sink receives: the DIMACS of every CNF a check
+  // hands to the SAT solver, and how that CNF relates to the query. Empty:
+  // no CNF is written out.
+  std::function<void(const std::string& dimacs, CnfExtent scope)> cnf_listener;
+
+  // Set when a check ended the run at its first CNF (exit_after_CNF under
+  // the 3.x API, where the command line exited): what unwinds from there
+  // prints nothing more, and an executed script ends with it. Cleared by
+  // whoever starts the next run.
+  bool run_ended_after_cnf = false;
 
   /****************************************************************
    * Public Member Functions                                      *

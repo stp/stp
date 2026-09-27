@@ -1800,7 +1800,7 @@ void AbsRefine_CounterExample::CheckCounterExample(
   // this root aligned with solve-boundary array-equality lowering; rebuilding
   // the check from the manager's parsed assertions would lose both facts.
   if (bm->UserFlags.stats_flag)
-    printf("checking counterexample\n");
+    std::cout << "checking counterexample\n";
 
   if (debug_counterexample)
     cerr << "checking " << checked_input;

@@ -258,6 +258,15 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
     }
   }
 
+  if (bm->cnf_listener)
+  {
+    std::ostringstream dimacs;
+    cnf.writeDimacs(dimacs);
+    bm->cnf_listener(dimacs.str(), arrayRefinement ? CnfExtent::Partial
+                                   : abstracted    ? CnfExtent::OverApproximation
+                                                   : CnfExtent::Whole);
+  }
+
   if (bm->cnf_sink != nullptr)
     cnf.writeDimacs(*bm->cnf_sink);
 
@@ -292,6 +301,17 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
       sayWhyPartial("that CNF");
     }
 
+    // Under the 3.x API the run ends here, not the process: the check stops
+    // as stop_after_cnf does, and what unwinds from here says nothing more
+    // (run_ended_after_cnf), so that the output is what exiting here gave.
+    if (FatalErrorThrows())
+    {
+      bm->run_ended_after_cnf = true;
+      bm->noteUnknown(UnknownReason::StoppedAfterCnf,
+                      "the run ended after generating the first CNF");
+      throw PreparationInterrupted(PreparationStage::Boundary,
+                                   std::chrono::steady_clock::now());
+    }
     exit(0);
   }
 }

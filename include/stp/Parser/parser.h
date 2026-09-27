@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Util/Attributes.h"
+#include <cstddef>
 #include <cstdio>
 #include <string>
 
@@ -51,6 +52,15 @@ DLL_PUBLIC void setSMT2In(FILE* file);
 // Whether the SMT-LIB2 lexer reads a character at a time. Needed when stp
 // is driven interactively over a pipe, where block reads would deadlock.
 DLL_PUBLIC void setSMT2Interactive(bool enable);
+
+// Where a lexer reads its input instead of its FILE*: a reader fills up to
+// `max` bytes of `buf` and answers how many, 0 at the end of the input. The
+// 3.x API reads a caller's stream through one. A null reader restores the
+// FILE*.
+typedef std::size_t (*ParserReader)(char* buf, std::size_t max, void* opaque);
+DLL_PUBLIC void setSMT2Reader(ParserReader reader, void* opaque);
+DLL_PUBLIC void setCVCReader(ParserReader reader, void* opaque);
+DLL_PUBLIC void setSMTReader(ParserReader reader, void* opaque);
 
 // Whether the SMT-LIB2 lexer recognises the floating-point keywords.
 // SMT-LIB reserves theory names per-logic, so they are live only under an
@@ -117,6 +127,14 @@ struct ParseAbandon
 // throw: yyerror prints the name-position error and returns, and bison's own
 // abort reclaims its stack.)
 struct DeclassifiedNameAbandon : ParseAbandon
+{
+};
+
+// Thrown by the SMT-LIB 2 frontend's check-sat when the run ended at the
+// check's first CNF (UserDefinedFlags::exit_after_CNF): the script ends
+// there, with no answer printed and no later command run. Caught in
+// SMT2Parse(), which answers 0 -- the script did what it was asked to.
+struct ScriptEnded
 {
 };
 

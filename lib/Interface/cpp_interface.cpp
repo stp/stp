@@ -1244,6 +1244,15 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
       }
     }
 
+    // The run ended at this check's first CNF: so does the script, with no
+    // answer and nothing else said (see ScriptEnded). The Parsing bracket is
+    // put back as the end of this function puts it back.
+    if (bm.run_ended_after_cnf)
+    {
+      bm.GetRunTimes()->start(RunTimes::Parsing);
+      throw ScriptEnded();
+    }
+
     // Store away the answer. It may also be unknown or an error.
     last_run = Entry(last_result);
     last_run.node_number = assertionsSMT2.back().GetNodeNum();

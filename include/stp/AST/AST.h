@@ -51,11 +51,19 @@ struct EngineFatal : std::runtime_error
 };
 DLL_PUBLIC bool FatalErrorThrows();
 DLL_PUBLIC void SetFatalErrorThrows(bool on);
-// FatalError's report without its exit: the "Fatal Error:" line on stderr
-// and the callback vc_registerErrorHandler installed. The parsers use it
-// for a refusal that ends the parse rather than the process, so that the
-// command line's diagnostic channels keep every line they carried.
+// FatalError's report without its exit: the "Fatal Error:" line on stderr,
+// the callback vc_registerErrorHandler installed and the observer below. The
+// parsers use it for a refusal that ends the parse rather than the process,
+// so that the command line's diagnostic channels keep every line they
+// carried.
 DLL_PUBLIC void ReportFatalError(const char* str);
+// Told of every fatal error this thread reports (FatalError and
+// ReportFatalError), with the same text as the vc_registerErrorHandler
+// callback and after it, before anything unwinds: the 3.x API's
+// Solver::set_fatal_error_handler. Null clears. Per thread.
+typedef void (*FatalErrorObserver)(const char* str, void* opaque);
+DLL_PUBLIC void SetFatalErrorObserver(FatalErrorObserver observer, void* opaque);
+DLL_PUBLIC FatalErrorObserver GetFatalErrorObserver(void** opaque);
 void SortByExprNum(ASTVec& c);
 void SortByArith(ASTVec& c);
 bool arithless(const ASTNode& n1, const ASTNode& n2);

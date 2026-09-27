@@ -323,7 +323,10 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     // its reason; an interrupt with no reason of its own is the deadline.
     if (bm->getUnknownReason() == UnknownReason::None)
       bm->noteUnknown(UnknownReason::Timeout);
-    if (bm->UserFlags.stats_flag)
+    // A run that ended at its first CNF reports nothing past that point.
+    if (bm->run_ended_after_cnf)
+      timing_report.cancel();
+    else if (bm->UserFlags.stats_flag)
     {
       const auto finished = std::chrono::steady_clock::now();
       std::cerr << "Preparation timeout: stage=" << preparationStageName(stopped.stage)
