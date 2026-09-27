@@ -6136,17 +6136,24 @@ BitBlaster<BBNode, BBNodeManagerT>::fpNativeRoundedRange(
   if (!fpNativeMaxFiniteValue(sort, maxFinite))
     return out;
 
-  if (lower < -maxFinite || upper > maxFinite)
-    return out;
-
   const unsigned eb = sort.exponentWidth();
   const unsigned sb = sort.significandWidth();
   const int bias = static_cast<int>((1u << (eb - 1)) - 1);
   const int maxExp = static_cast<int>((1u << eb) - 2) - bias;
   const long double maxUlp =
       std::ldexp(1.0L, maxExp - static_cast<int>(sb - 1));
-  const long double lo = std::max(-maxFinite, lower - maxUlp);
-  const long double hi = std::min(maxFinite, upper + maxUlp);
+
+  // The endpoints were computed on the host, which may have rounded away a
+  // tiny operand: DBL_MAX + min-subnormal is DBL_MAX in long double. Under
+  // RTP any excess over maxFinite rounds to +oo, so finiteness needs the
+  // host error and one target ulp of clearance from maxFinite.
+  const long double margin =
+      maxUlp + maxFinite * std::numeric_limits<long double>::epsilon();
+  if (lower - margin < -maxFinite || upper + margin > maxFinite)
+    return out;
+
+  const long double lo = std::max(-maxFinite, lower - margin);
+  const long double hi = std::min(maxFinite, upper + margin);
 
   out.known = true;
   out.lower = lo;
@@ -6199,6 +6206,28 @@ BitBlaster<BBNode, BBNodeManagerT>::fpNativeExactRoundedRange(
   }
   else
     return out;
+
+  // A known interval tells BBfpRound the exact result cannot overflow, so
+  // it leaves out saturation. A fixed mode can round an overflow to the
+  // largest finite value (RTZ, or a directed mode toward zero), which is
+  // finite but still needs saturating, so the outward roundings must be
+  // finite too.
+  if (fixed)
+  {
+    std::string value;
+    for (const EndpointPair& input : lowerInputs)
+      if (!fpNativeExactBinaryEndpoint(
+              sort, kind, input.first, input.second,
+              static_cast<unsigned>(symbolic_fp::ROUND_TOWARD_NEGATIVE),
+              value))
+        return out;
+    for (const EndpointPair& input : upperInputs)
+      if (!fpNativeExactBinaryEndpoint(
+              sort, kind, input.first, input.second,
+              static_cast<unsigned>(symbolic_fp::ROUND_TOWARD_POSITIVE),
+              value))
+        return out;
+  }
 
   std::string lower;
   for (const EndpointPair& input : lowerInputs)

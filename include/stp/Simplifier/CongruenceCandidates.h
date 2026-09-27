@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 namespace stp
@@ -90,6 +91,11 @@ class CongruenceCandidates
   // division or a product shares a circuit, where an extract shares
   // wiring.
   static bool worthMerging(Kind k);
+
+  // Node number to whether the term's cone is free of array and
+  // floating-point terms, which the sub-solve cannot blast.
+  std::unordered_map<uint64_t, bool> blastableMemo;
+  bool blastable(const ASTNode& n);
 
   void collect(const ASTNode& n);
 

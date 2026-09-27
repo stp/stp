@@ -463,17 +463,11 @@ declare -a g_simplify=(
 # of the same operator, so it is the n-ary entry (2/17) and the two UF ones
 # (7/26 and 8/20) that reach it, and nothing on the plain entries.
 #
-# KNOWN TO ABORT, deliberately left drawing anyway. On a query with arrays:
-#
-#   Fatal Error: BBTerm: Illegal kind to BBTerm  (READ (WRITE ...) ...)
-#
-# 4 files in 30 on the QF_AUFBV entry and 1 in 30 on the deep-write-chain
-# QF_ABV one, on the option alone with nothing else set -- exit 255, no
-# answer, where the default answers fine. Every one of those files is saved
-# as a mismatch, so an iteration drawing this entry with an array logic fills
-# FAIL_DIR with hundreds of copies of the one bug. Triage by grepping
-# what-happened.txt for the option name; what is left is everything else.
-# Drop this entry back to a comment if that gets in the way of a hunt.
+# It used to abort on array logics ("BBTerm: Illegal kind to BBTerm" on a
+# READ) and on floating-point ones: the pass now leaves out any term whose
+# cone holds an array or floating-point operation, which its sub-solve
+# cannot blast. Since then 345 files across the array, UF, FP and n-ary
+# entries agree with the checker.
 #
 # Its two budgets get no entry: a generated query offers fewer candidates
 # than --congruence-candidate-limit's 64 and settles each inside
