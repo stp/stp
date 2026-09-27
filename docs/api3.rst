@@ -201,9 +201,10 @@ Limits of the alpha
 -------------------
 
 CryptoMiniSat is interrupted between its solver calls only; ``fp.to_real``
-converts a float value exactly and refuses a symbolic float (the engine has no
-such conversion); ``unsat_assumptions`` after a batch check reports every
-assumption. ``capabilities()`` states each of these.
+takes formats whose exponent has at most 16 bits (the exact arithmetic's number
+limits), and a symbolic Real converts to a float only as a value;
+``unsat_assumptions`` after a batch check reports every assumption.
+``capabilities()`` states each of these.
 
 Several solvers, several threads
 --------------------------------

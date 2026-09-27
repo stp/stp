@@ -84,6 +84,10 @@ bool is_fp_node(const ASTNode& n)
 
 Kind kind_of(ManagerImpl* m, const ASTNode& n)
 {
+  // A conversion to a Real is an encoding over its operand's bits, whose
+  // root names the operand (STPMgr::CreateFpToReal).
+  if (n.GetKind() == ITE && !m->bm->FpToRealOperand(n).IsNull())
+    return Kind::FP_TO_REAL;
   switch (n.GetKind())
   {
     case SYMBOL:
@@ -211,6 +215,11 @@ View view_of(ManagerImpl* m, const ASTNode& n)
 {
   View v;
   v.kind = kind_of(m, n);
+  if (v.kind == Kind::FP_TO_REAL)
+  {
+    v.children.push_back(m->bm->FpToRealOperand(n));
+    return v;
+  }
   const ASTChildren kids = n.GetChildren();
   switch (n.GetKind())
   {
@@ -1051,7 +1060,16 @@ Term Term::substitute(const std::vector<std::pair<Term, Term>>& map) const
     if (it != memo.end())
       return it->second;
     ASTNode out = n;
-    if (n.Degree() > 0)
+    const ASTNode operand = n.GetKind() == ITE ? m->bm->FpToRealOperand(n) : ASTNode();
+    if (!operand.IsNull())
+    {
+      // a conversion is rebuilt from its operand, by the construction itself
+      const ASTNode replaced = walk(operand);
+      if (!(replaced == operand))
+        out = detail::build_term(m, "Term::substitute", Kind::FP_TO_REAL, {replaced}, {},
+                                 std::nullopt);
+    }
+    else if (n.Degree() > 0)
     {
       ASTVec kids;
       bool changed = false;

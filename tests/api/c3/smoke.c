@@ -461,17 +461,41 @@ static void floats(void)
   r2fp = stp_to_fp_rm(tm, f32, STP_RM_RNE, stp_mk_real_str(tm, "1/4"));
   CHECK(r2fp != NULL && stp_term_fp_to_double(r2fp, &d) == STP_OK && d == 0.25);
   {
-    /* a float value converts exactly to a Real value; a symbolic float has no
-       engine conversion */
+    /* a float value converts exactly to a Real value; a symbolic float
+       converts to a Real term the solver decides */
     stp_term r1 = stp_fp_to_real(tm, one);
+    stp_term rx = stp_fp_to_real(tm, x);
+    stp_term child = NULL;
     stp_sort_kind sk;
+    stp_kind rk;
+    size_t nk = 0;
     char* num;
+    char* text;
     CHECK(r1 != NULL && stp_sort_get_kind(stp_term_sort(r1), &sk) == STP_OK && sk == STP_SORT_REAL);
     num = stp_term_real_numerator(r1);
     CHECK(num != NULL && strcmp(num, "1") == 0);
     stp_free(num);
-    CHECK(stp_fp_to_real(tm, x) == NULL);
-    expect_error(tm, STP_ERR_UNSUPPORTED);
+    CHECK(rx != NULL && stp_term_get_kind(rx, &rk) == STP_OK && rk == STP_KIND_FP_TO_REAL);
+    CHECK(stp_term_num_children(rx, &nk) == STP_OK && nk == 1);
+    child = stp_term_child(rx, 0);
+    CHECK(child == x);
+    text = stp_term_str(rx);
+    CHECK(text != NULL && strcmp(text, "(fp.to_real fx)") == 0);
+    stp_free(text);
+    /* the conversion is exact: -5/2 is -2.5 and nothing else that is normal
+       (NaN and the infinities convert to values of their own choosing) */
+    CHECK(stp_solver_reset_assertions(s) == STP_OK);
+    CHECK(stp_solver_assert(s, stp_eq(tm, rx, stp_mk_real_str(tm, "-5/2"))) == STP_OK);
+    CHECK(stp_solver_assert(s, stp_fp_is_normal(tm, x)) == STP_OK);
+    CHECK(stp_solver_check_sat(s, &r) == STP_OK && r.kind == STP_SAT);
+    m = stp_solver_model(s);
+    CHECK(stp_model_fp_to_double(m, x, &d) == STP_OK && d == -2.5);
+    num = stp_term_real_numerator(stp_model_value(m, rx));
+    CHECK(num != NULL && strcmp(num, "-5") == 0);
+    stp_free(num);
+    stp_model_release(m);
+    CHECK(stp_solver_assert(s, stp_not(tm, stp_fp_eq(tm, x, stp_mk_fp_double(tm, f32, STP_RM_RNE, -2.5)))) == STP_OK);
+    CHECK(stp_solver_check_sat(s, &r) == STP_OK && r.kind == STP_UNSAT);
   }
 
   stp_solver_delete(s);

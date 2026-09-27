@@ -433,6 +433,8 @@ public:
   DLL_PUBLIC ASTNode CreateRealTerm(Kind kind, const ASTVec& children);
   DLL_PUBLIC ASTNode CreateRealPredicate(Kind kind, const ASTNode& lhs,
                                          const ASTNode& rhs);
+  // fp.to_real: STPMgr::CreateFpToReal, which the 3.x API shares.
+  DLL_PUBLIC ASTNode CreateFpToReal(const ASTNode& x);
   DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
                                         const SourceSort& source_sort);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);

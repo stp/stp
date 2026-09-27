@@ -32,6 +32,7 @@ add_test(NAME api3-smoke COMMAND api3-smoke)
 # The GoogleTest suites, one per area of the header. Every file includes
 # api3_common.hpp from this directory.
 AddSTPGTest(api3-kinds.cpp)
+AddSTPGTest(api3-fp-to-real.cpp)
 AddSTPGTest(api3-sorts.cpp)
 AddSTPGTest(api3-values.cpp)
 AddSTPGTest(api3-options.cpp)

@@ -291,6 +291,15 @@ ExactRational RealModel::evaluateTermUncached(const ASTNode& term) const
     case SYMBOL:
     {
       const ExactRational* value = findSymbol(term);
+      // fp.to_real's constant for NaN or an infinity of some format, which the
+      // solve never saw -- a get-value can build a conversion the assertions
+      // did not have. Nothing constrains it, so it is what an unvalued
+      // required symbol is: zero.
+      if (value == nullptr && term.GetNodeManager()->IsFpToRealSpecial(term))
+      {
+        NumberOperationScope operation(budget_);
+        return ExactRational(std::int64_t{0});
+      }
       if (value == nullptr)
         throw std::runtime_error("exact Real model has no value for symbol");
       NumberOperationScope operation(budget_);

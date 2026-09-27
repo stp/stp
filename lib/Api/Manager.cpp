@@ -1785,7 +1785,16 @@ Term TermManager::simplify(const Term& t) const
     if (it != memo.end())
       return it->second;
     ASTNode out = n;
-    if (n.Degree() > 0 && n.GetKind() != UF_APPLY && !n.isRealTerm())
+    const ASTNode operand = n.GetKind() == ITE ? m->bm->FpToRealOperand(n) : ASTNode();
+    if (!operand.IsNull())
+    {
+      // A conversion is rebuilt from its simplified operand by the
+      // construction itself, which folds a float value to its Real value.
+      const ASTNode simplified = rebuild(operand);
+      if (!(simplified == operand))
+        out = m->bm->CreateFpToReal(simplified);
+    }
+    else if (n.Degree() > 0 && n.GetKind() != UF_APPLY && !n.isRealTerm())
     {
       ASTVec kids;
       bool changed = false;

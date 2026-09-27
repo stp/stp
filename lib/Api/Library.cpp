@@ -102,7 +102,7 @@ std::map<std::string, std::string> capabilities()
   c["highs"] = "false";
 #endif
   c["fp.rem.limit"] = "2^eb+sb-4<=2304";
-  c["kind.FP_TO_REAL"] = "values-only";
+  c["kind.FP_TO_REAL"] = "true";
   c["kind.FP_TO_FP_FROM_REAL"] = "values-only";
   c["cores.assertions"] = "false";
   c["cores.assumptions"] = "true";

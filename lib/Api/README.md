@@ -43,6 +43,17 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   an array it equates with a constant array with that default; the model printers
   and `Model::array_value` take the completion from the engine. The API asks
   `is_const_array` / `const_array_default` on the manager.
+- `fp.to_real` is the engine's (`STPMgr::CreateFpToReal`, lib/STPManager/FpToReal.cpp),
+  shared with the SMT-LIB 2 frontend: a float value folds to its exact Real value;
+  a symbolic float is an exact linear encoding over its bits, the exponent applied
+  one bit at a time with constant factors, so the term has `eb + sb + 3`
+  if-then-elses whatever the format. NaN, +oo and -oo of each format select a Real
+  constant of their own. The encoding's root names the operand
+  (`FpToRealOperand`), which is how `kind()`, `simplify`, `substitute`, the model
+  evaluator and the printers treat it as `(fp.to_real x)`. At solve time
+  `LinkFpToReal` adds, for each comparison of a conversion against a constant or
+  against a conversion of the same format, the floating-point comparison it is
+  for finite operands, so the SAT search sees it while choosing the bits.
 - Array equality is built as the engine's opaque `ARRAY_EQ` (through the factory,
   which needs `enable_array_equality`); construction switches the flag on unless the
   `array-equality` option was set to `off`.

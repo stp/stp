@@ -253,6 +253,14 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
         if (!value.IsNull() && value.isConstant())
           snap->scalars[n] = lift(mgr, value, n.GetSourceSort());
       }
+      // fp.to_real's constant for NaN or an infinity: the solve's choice,
+      // which the exact model holds (never in the core: no one declared it)
+      if (k == SYMBOL && bm->IsFpToRealSpecial(n))
+      {
+        ASTNode value;
+        if (bm->HasRealModelValue(n) && bm->RealModelValueNode(n, value) && !value.IsNull())
+          snap->scalars[n] = value;
+      }
       for (const ASTNode& c : n.GetChildren())
         stack.push_back(c);
     }
@@ -310,6 +318,36 @@ ASTNode Evaluator::eval(const ASTNode& n)
   {
     memo_.emplace(n, assigned->second);
     return assigned->second;
+  }
+  // A conversion to a Real: its operand's value, converted. A finite value
+  // converts exactly; NaN and the infinities select their format's constant,
+  // which is the solve's choice when the solve saw it and a completion
+  // otherwise.
+  if (n.GetKind() == ITE)
+  {
+    const ASTNode operand = m_->bm->FpToRealOperand(n);
+    if (!operand.IsNull())
+    {
+      const SourceSort ss = operand.GetSourceSort();
+      const ASTNode value = eval(operand);
+      if (value.GetKind() != BVCONST)
+        fail_internal(fn_, "a floating-point operand did not evaluate to a value");
+      ASTNode out = m_->bm->FpToRealOfValue(value, ss.exponentWidth(), ss.significandWidth());
+      if (out.GetKind() == SYMBOL)
+      {
+        auto special = s_.scalars.find(out);
+        if (special != s_.scalars.end())
+          out = special->second;
+        else
+        {
+          if (!complete_)
+            incomplete_ = true;
+          out = m_->bm->CreateRealConst("0");
+        }
+      }
+      memo_.emplace(n, out);
+      return out;
+    }
   }
   ASTNode out;
   switch (n.GetKind())

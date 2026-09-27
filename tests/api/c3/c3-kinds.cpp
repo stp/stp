@@ -212,6 +212,7 @@ TEST(c3_kinds, every_kind_has_its_structure_under_simplify_off)
       {STP_KIND_FP_TO_UBV, {s.rmv, s.f1}, {8}, nullptr, STP_KIND_FP_TO_UBV, 2},
       {STP_KIND_FP_TO_SBV, {s.rmv, s.f1}, {8}, nullptr, STP_KIND_FP_TO_SBV, 2},
       {STP_KIND_FP_TO_IEEE_BV, {s.f1}, {}, nullptr, STP_KIND_FP_TO_IEEE_BV, 1},
+      {STP_KIND_FP_TO_REAL, {s.f1}, {}, nullptr, STP_KIND_FP_TO_REAL, 1},
       {STP_KIND_REAL_ADD, {s.r1, s.r2}, {}, nullptr, STP_KIND_REAL_ADD, 2},
       {STP_KIND_REAL_SUB, {s.r1, s.r2}, {}, nullptr, STP_KIND_REAL_SUB, 2},
       {STP_KIND_REAL_NEG, {s.r1}, {}, nullptr, STP_KIND_REAL_NEG, 1},
@@ -274,16 +275,12 @@ TEST(c3_kinds, every_kind_has_its_structure_under_simplify_off)
   }
 
   // the kinds no mk_term builds
-  covered[STP_KIND_VALUE] = covered[STP_KIND_CONSTANT] = covered[STP_KIND_FP_TO_REAL] = true;
+  covered[STP_KIND_VALUE] = covered[STP_KIND_CONSTANT] = true;
   EXPECT_EQ(nullptr, stp_mk_term(tm, STP_KIND_VALUE, 0, nullptr));
   EXPECT_NE(nullptr, stp_tm_error(tm));
   stp_tm_clear_error(tm);
   EXPECT_EQ(nullptr, stp_mk_term(tm, STP_KIND_CONSTANT, 0, nullptr));
   EXPECT_NE(nullptr, stp_tm_error(tm));
-  stp_tm_clear_error(tm);
-  EXPECT_EQ(nullptr, stp_mk_term1(tm, STP_KIND_FP_TO_REAL, s.f1));
-  ASSERT_NE(nullptr, stp_tm_error(tm));
-  EXPECT_EQ(STP_ERR_UNSUPPORTED, stp_tm_error(tm)->code);
   stp_tm_clear_error(tm);
   EXPECT_EQ(nullptr, stp_mk_term1(tm, STP_NUM_KINDS, s.f1));
   ASSERT_NE(nullptr, stp_tm_error(tm));

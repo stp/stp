@@ -102,6 +102,23 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 
   // otherwise print it normally
   const Kind kind = n.GetKind();
+
+  // A conversion prints as the operation it is, not as its encoding over the
+  // operand's bits (see STPMgr::CreateFpToReal).
+  if (kind == ITE)
+  {
+    STPMgr* manager = n.GetNodeManager();
+    const ASTNode operand =
+        manager == NULL ? ASTNode() : manager->FpToRealOperand(n);
+    if (!operand.IsNull())
+    {
+      os << "(fp.to_real ";
+      SMTLIB_Print1(os, operand, 0, letize);
+      os << ")";
+      return;
+    }
+  }
+
   const ASTChildren c = n.GetChildren();
   switch (kind)
   {
@@ -475,7 +492,19 @@ void LetizeNode(const ASTNode& n, LetizeState& st, STPMgr* stp)
   if (n.isAtom())
     return;
 
-  const ASTChildren c = n.GetChildren();
+  // A conversion prints as (fp.to_real operand), so its operand is the one
+  // child the printing sees; its encoding's nodes are never printed and must
+  // not be named.
+  ASTVec conversion_operand;
+  if (n.GetKind() == ITE && n.GetNodeManager() != NULL)
+  {
+    const ASTNode operand = n.GetNodeManager()->FpToRealOperand(n);
+    if (!operand.IsNull())
+      conversion_operand.push_back(operand);
+  }
+  const ASTChildren c = conversion_operand.empty()
+                            ? n.GetChildren()
+                            : ASTChildren(conversion_operand);
   for (auto it = c.begin(), itend = c.end(); it != itend;
        it++)
   {

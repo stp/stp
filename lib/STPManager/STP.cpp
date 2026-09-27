@@ -918,6 +918,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
               actual.GetSourceSort().kind() == SourceSort::Kind::Real)
             spreadSymbols.push_back(actual);
       ASTNode lra_input = original_input;
+      // Before presolve, which may settle the operand's NaN and infinity
+      // tests from the assertions and so dissolve the conversion's root,
+      // where the link is read from (see STPMgr::LinkFpToReal).
+      if (bm->HasFpToReal())
+        lra_input = bm->LinkFpToReal(lra_input);
       lra::LraReconstruction reconstruction;
       // Storage is available to query-local AUTO selection, and to the model
       // commit, which checks its model against the `original` recorded here
@@ -946,7 +951,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
           bm->UserFlags.lra_presolve_propagate ||
           bm->UserFlags.lra_presolve_unconstrained ||
           bm->UserFlags.lra_presolve_monotone)
-        lra_input = lra::presolveForSolve(*bm, original_input, &NewSolver,
+        lra_input = lra::presolveForSolve(*bm, lra_input, &NewSolver,
                                           reconstruction_ptr, highs_enabled);
       if (NewSolver.timeLimitExpired())
       {

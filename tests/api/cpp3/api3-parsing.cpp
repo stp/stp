@@ -547,7 +547,8 @@ TEST(Parsing, frontend_refusals_are_parse_errors)
       "(declare-fun x () (_ BitVec 4))",                            // redeclaration
       "(declare-fun g ((Array (_ BitVec 8) (_ BitVec 8))) (_ BitVec 8))", // an unsupported UF sort
       "(declare-fun bvadd () (_ BitVec 8))",                        // a theory name
-      "(assert (= (fp.to_real y) 1.0))",                            // fp.to_real
+      "(assert (= (fp.to_real x) (fp.to_real y)))",                 // fp.to_real of a bit-vector
+      "(declare-fun rr () Real)\n(assert (= y ((_ to_fp 8 24) RNE rr)))", // to_fp of a symbolic Real
       "(assert (= y ((_ to_fp 8 24) 1.5)))",                        // one-argument to_fp of a literal
       "(set-option :produce-models maybe)",                         // a Boolean option's value
       "(set-option :global-declarations true)",                     // an option that must come first

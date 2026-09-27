@@ -369,10 +369,11 @@ TEST_F(Kinds, floating_point_conversions)
   view(both(fp_to_ieee_bv(fx), Kind::FP_TO_IEEE_BV, {fx}), Kind::FP_TO_IEEE_BV, 1, {}, bv32);
   EXPECT_EQ(fp_to_ieee_bv(dx).sort().bv_size(), 64u);
   EXPECT_EQ(fp_to_ieee_bv(fx).str(), "(fp.to_ieee_bv fx)");
-  // a symbolic float has no engine conversion to a Real; a float value
-  // converts exactly, whatever the simplify setting
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, fp_to_real(fx));
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, tm.mk_term(Kind::FP_TO_REAL, {fx}));
+  // a symbolic float converts to a Real term that shows as the conversion;
+  // a float value converts exactly, whatever the simplify setting
+  view(both(fp_to_real(fx), Kind::FP_TO_REAL, {fx}), Kind::FP_TO_REAL, 1, {}, R);
+  EXPECT_TRUE(fp_to_real(fx).child(0).same_as(fx));
+  EXPECT_EQ(fp_to_real(fx).str(), "(fp.to_real fx)");
   const Sort f32v = tm.mk_fp32_sort();
   EXPECT_TRUE(fp_to_real(tm.mk_fp(f32v, RoundingMode::RNE, 1.5)).same_as(tm.mk_real(3, 2)));
   EXPECT_TRUE(fp_to_real(tm.mk_fp(f32v, RoundingMode::RNE, -2.5)).same_as(tm.mk_real(-5, 2)));
@@ -381,8 +382,11 @@ TEST_F(Kinds, floating_point_conversions)
   // the smallest subnormal of binary32 is 2^-149
   EXPECT_EQ(fp_to_real(tm.mk_fp_from_bits(f32v, tm.mk_bv(32, 1))).to_rational().denominator,
             "713623846352979940529142984724747568191373312");
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, fp_to_real(tm.mk_fp_nan(f32v)));
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, fp_to_real(tm.mk_fp_pos_inf(f32v)));
+  // NaN and the infinities have no specified value: the conversion stays a
+  // term, one per format and special value
+  view(fp_to_real(tm.mk_fp_nan(f32v)), Kind::FP_TO_REAL, 1, {}, R);
+  EXPECT_FALSE(fp_to_real(tm.mk_fp_pos_inf(f32v)).is_value());
+  EXPECT_TRUE(fp_to_real(tm.mk_fp_neg_inf(f32v)).child(0).same_as(tm.mk_fp_neg_inf(f32v)));
 }
 
 TEST_F(Kinds, reals)
@@ -550,7 +554,6 @@ TEST_F(Kinds, index_out_of_range)
 TEST_F(Kinds, unsupported)
 {
   const Term k = tm.mk_const_array(A, tm.mk_bv(8, 9));
-  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED, fp_to_real(fx));
   // equality over constant arrays is supported (api3-const-arrays.cpp)
   EXPECT_EQ(eq(k, ar).kind(), Kind::EQUAL);
   EXPECT_EQ((store(k, x, y) == ar).kind(), Kind::EQUAL);
@@ -570,7 +573,7 @@ TEST_F(Kinds, unsupported)
   API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED,
                     fp_rem(tm.declare("w1", wide), tm.declare("w2", wide)));
   EXPECT_EQ(fp_rem(tm.declare("d1", f64), tm.declare("d2", f64)).kind(), Kind::FP_REM);
-  EXPECT_EQ(capabilities()["kind.FP_TO_REAL"], "values-only");
+  EXPECT_EQ(capabilities()["kind.FP_TO_REAL"], "true");
   EXPECT_EQ(capabilities()["real.nonlinear"], "false");
   EXPECT_EQ(capabilities()["array.const-equality"], "true");
 }

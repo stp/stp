@@ -1312,6 +1312,9 @@ STPMgr::~STPMgr()
   constArrayDefaults.clear();
   constArraysByKey.clear();
   uf_injectivity_guard = ASTNode();
+  DestroyFpToRealState(fp_to_real_state);
+  fp_to_real_state = nullptr;
+  fp_to_real_special_ids.clear();
 
   Introduced_SymbolsSet.clear();
   _symbol_unique_table.clear();

@@ -360,6 +360,11 @@ ASTNode Cpp_interface::CreateRealPredicate(Kind kind, const ASTNode& lhs,
   return bm.CreateRealPredicate(kind, lhs, rhs);
 }
 
+ASTNode Cpp_interface::CreateFpToReal(const ASTNode& x)
+{
+  return bm.CreateFpToReal(x);
+}
+
 
 ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
                                           const SourceSort& source_sort)

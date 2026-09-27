@@ -64,6 +64,9 @@ class ASTUninterpretedConst;
 class ASTRealConst;
 class LraAstState;
 class FpAbstraction;
+struct FpToRealFormat;
+struct FpToRealState;
+void DestroyFpToRealState(FpToRealState* state);
 
 // The five SMT-LIB floating-point special values. Their nodes are ordinary
 // packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
@@ -624,6 +627,12 @@ private:
   // See introducedSymbol.
   std::map<std::string, ASTNode> _introduced_by_name;
 
+  // fp.to_real's constants per format (FpToReal.cpp), made on first use, and
+  // the node numbers of its NaN and infinity constants among them.
+  FpToRealState* fp_to_real_state = nullptr;
+  std::unordered_set<uint64_t> fp_to_real_special_ids;
+  FpToRealFormat& FpToRealFormatFor(unsigned exp_width, unsigned sig_width);
+
 public:
   bool LookupSymbol(const char* const name);
   bool LookupSymbol(const char* const name, ASTNode& output);
@@ -728,6 +737,38 @@ public:
   DLL_PUBLIC ASTNode CreateRealTerm(Kind kind, const ASTVec& children);
   DLL_PUBLIC ASTNode CreateRealPredicate(Kind kind, const ASTNode& lhs,
                                          const ASTNode& rhs);
+
+  // fp.to_real (FpToReal.cpp): the exact Real value of the float `x`. A float
+  // value folds to its Real value, zero of either sign to 0. SMT-LIB leaves
+  // fp.to_real of NaN and of the infinities unspecified, but it is still a
+  // function: NaN, +oo and -oo of each format map to three Real constants of
+  // that format, made once and reused. Anything else is an exact linear
+  // encoding over the float's bits, whose root names `x` (FpToRealOperand).
+  // Throws std::invalid_argument when `x` is not a float, and the exact
+  // arithmetic's own exception when a format's constants exceed its number
+  // limits (an exponent of 17 bits or more).
+  DLL_PUBLIC ASTNode CreateFpToReal(const ASTNode& x);
+  // fp.to_real at a float value of format (exp_width, sig_width): a
+  // REAL_CONST, or the format's constant for NaN, +oo or -oo. For evaluators,
+  // whose values do not always carry their format.
+  DLL_PUBLIC ASTNode FpToRealOfValue(const ASTNode& value, unsigned exp_width,
+                                     unsigned sig_width);
+  // The float `n` converts, when `n` is a conversion CreateFpToReal built or a
+  // rebuilding of one; otherwise a null node.
+  DLL_PUBLIC ASTNode FpToRealOperand(const ASTNode& n) const;
+  // Whether `n` is one of the constants standing for fp.to_real of NaN, +oo or
+  // -oo. Inline, for the exact Real model: nothing constrains such a constant
+  // that the solve never saw, and it evaluates to zero there.
+  bool IsFpToRealSpecial(const ASTNode& n) const
+  {
+    return !fp_to_real_special_ids.empty() && n.GetKind() == SYMBOL &&
+           fp_to_real_special_ids.count(n.GetNodeNum()) != 0;
+  }
+  bool HasFpToReal() const noexcept { return fp_to_real_state != nullptr; }
+  // `input` with the facts that tie each comparison of a conversion against a
+  // constant, or against a conversion of the same format, to the floating-point
+  // comparison it is for finite operands. Valid facts, for the SAT search.
+  ASTNode LinkFpToReal(const ASTNode& input);
 
   // Restore a model carrier value to the immutable sort of the source term
   // it answers. The solver itself continues to evaluate plain bitvectors.

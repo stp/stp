@@ -771,19 +771,23 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
     case Kind::FP_TO_REAL:
     {
       c.expect_fp(0);
-      const SortRec& r = c.rec(0);
-      // A float value converts exactly (every finite float is a dyadic
-      // rational); the engine has no conversion from a symbolic float to a
-      // Real, so that operand is refused. Folded whatever the manager's
-      // simplify setting: there is no node to build otherwise.
-      if (kids[0].GetKind() != BVCONST)
-        c.unsupported("fp.to_real needs a float value; the engine has no conversion from a "
-                      "symbolic float to a Real (capabilities: kind.FP_TO_REAL = values-only)");
-      const FloatValue v = fp_value_of(kids[0], r.a, r.b);
-      const std::optional<RationalValue> q = v.to_rational();
-      if (!q)
-        c.unsupported("fp.to_real of NaN or of an infinity has no specified value");
-      return c.m->real_const(c.fn, q->numerator + "/" + q->denominator);
+      // The engine's one construction, which the SMT-LIB 2 frontend shares: a
+      // float value folds to its exact Real value whatever the manager's
+      // simplify setting; NaN and the infinities select a Real constant of
+      // their own per format; anything else is the exact encoding, which
+      // kind() and the printers read back as (fp.to_real x).
+      try
+      {
+        return c.bm()->CreateFpToReal(kids[0]);
+      }
+      catch (const stp::EngineFatal&)
+      {
+        throw;
+      }
+      catch (const std::exception& failure)
+      {
+        c.unsupported(failure.what());
+      }
     }
     case Kind::FP_TO_IEEE_BV:
     {

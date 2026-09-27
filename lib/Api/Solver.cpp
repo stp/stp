@@ -1653,7 +1653,11 @@ std::string Solver::to_smt2(bool with_check_sat) const
   std::string logic = s->logic;
   if (logic.empty())
   {
-    if (has_real)
+    if (has_real && has_fp)
+      // the LRA variants of the floating-point logics (fp.to_real, a Real
+      // literal under to_fp): the widest one the content needs
+      logic = std::string("QF_") + (has_array ? "A" : "") + (has_uf ? "UF" : "") + "BVFPLRA";
+    else if (has_real)
       logic = has_uf ? "QF_UFLRA" : "QF_LRA";
     else
     {

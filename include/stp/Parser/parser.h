@@ -59,10 +59,8 @@ DLL_PUBLIC void setSMT2Interactive(bool enable);
 // starts each script with them off; the set-logic action flips them.
 void SMT2SetFloatTokens(bool enable);
 
-// Mathematical-Real theory names are live only under QF_LRA, QF_UFLRA and
-// QF_AUFLRA.
-// This gate is deliberately independent of the legacy floating-point *LRA
-// logic names, whose established meaning does not include a Real AST carrier.
+// Mathematical-Real theory names are live only under the Real logics: QF_LRA,
+// QF_UFLRA, QF_AUFLRA and the LRA variants of the floating-point logics.
 void SMT2SetRealTokens(bool enable);
 
 // The same question, for the one place that cannot be answered by the lexer

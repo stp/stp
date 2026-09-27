@@ -686,9 +686,21 @@ private:
     return atom;
   }
 
+  /* Naming a comparison's if-then-elses rebuilds it through the default
+   * factory, which settles one whose two sides became the same name --
+   * (= t t) over a Real ite t, built by a factory that left it alone -- to
+   * true. A settled comparison is a constant one; it has no relation left to
+   * normalize. */
+  bool settled(const ASTNode& lifted) const
+  {
+    return lifted == manager_.ASTTrue || lifted == manager_.ASTFalse;
+  }
+
   ASTNode ordinary(const ASTNode& source)
   {
     const ASTNode lifted = liftRealTermItes(source);
+    if (settled(lifted))
+      return lifted;
     NormalizedPredicate normalized =
         normalizePredicateImpl(lifted, registry_, metrics_, poll_);
     if (normalized.is_constant)
@@ -700,6 +712,8 @@ private:
   ASTNode equality(const ASTNode& source)
   {
     const ASTNode lifted = liftRealTermItes(source);
+    if (settled(lifted))
+      return lifted;
     NormalizedPredicate normalized =
         normalizePredicateImpl(lifted, registry_, metrics_, poll_);
     if (normalized.is_constant)
@@ -729,6 +743,8 @@ private:
   ASTNode disequality(const ASTNode& equality_source)
   {
     const ASTNode lifted = liftRealTermItes(equality_source);
+    if (settled(lifted))
+      return lifted == manager_.ASTTrue ? manager_.ASTFalse : manager_.ASTTrue;
     NormalizedPredicate normalized =
         normalizePredicateImpl(lifted, registry_, metrics_, poll_);
     if (normalized.is_constant)

@@ -1101,6 +1101,37 @@ namespace stp
     return n;
   }
 
+  // (fp.to_real f) -- the exact Real value of a float, through the engine's
+  // one construction (STPMgr::CreateFpToReal), which the 3.x API shares.
+  ASTNode* createFpToReal(ASTNode* expr)
+  {
+    if (expr->GetSourceSort().kind() !=
+        stp::SourceSort::Kind::FloatingPoint)
+    {
+      delete expr;
+      fatal_yyerror("fp.to_real takes a floating-point operand.");
+      return nullptr;
+    }
+    try
+    {
+      ASTNode value = stp::GlobalParserInterface->CreateFpToReal(*expr);
+      delete expr;
+      return stp::GlobalParserInterface->newNode(value);
+    }
+    catch (const stp::ParseAbandon&)
+    {
+      throw;
+    }
+    catch (const std::exception& failure)
+    {
+      const std::string diagnostic =
+          std::string("fp.to_real: ") + failure.what();
+      delete expr;
+      fatal_yyerror(diagnostic.c_str());
+    }
+    return nullptr;
+  }
+
   // ((_ to_fp e s) bv) -- reinterpret a bitvector's bits as a float.
   ASTNode* createFPFromBits(unsigned int exp_width, unsigned int sig_width,
                             ASTNode* bits)
@@ -1559,9 +1590,14 @@ namespace stp
     // The rm-taking form of to_fp covers three different operations,
     // distinguished by the source's sort: reformatting a float, converting a
     // signed integer held in a bitvector, and converting a real. The first
-    // two are handled; a real cannot be represented here, and STP has no
-    // real sort to reach this rule with anyway.
+    // two are handled here, and a Real constant above; a symbolic Real has
+    // no conversion.
     const stp::SourceSort::Kind source_kind = expr->GetSourceSort().kind();
+    if (source_kind == stp::SourceSort::Kind::Real)
+    {
+      fatal_yyerror("to_fp of a symbolic Real is not supported: only a Real "
+                    "constant converts to a float");
+    }
     if (source_kind != stp::SourceSort::Kind::FloatingPoint &&
         source_kind != stp::SourceSort::Kind::BitVector)
     {
@@ -1867,8 +1903,9 @@ namespace stp
 %token FLOAT64_TOK
 %token FLOAT128_TOK
 
-/* Mathematical Real linear operations, live only under QF_LRA, QF_UFLRA and
-   QF_AUFLRA. */
+/* Mathematical Real linear operations, live only under the Real logics:
+   QF_LRA, QF_UFLRA, QF_AUFLRA and the LRA variants of the floating-point
+   logics. */
 %token REAL_ADD_TOK REAL_SUB_TOK REAL_MUL_TOK REAL_DIV_TOK
 %token REAL_LT_TOK REAL_LE_TOK REAL_GT_TOK REAL_GE_TOK
 
@@ -2252,13 +2289,14 @@ cmdi:
 |
      LOGIC_TOK STRING_TOK
     {
-      // The *FPLRA logics are the FP logics plus a theory of reals. The
-      // SMT-LIB frontend does not enable its Real theory under these names,
-      // so the grammar admits a real only as the literal argument of to_fp --
-      // which is the only way these benchmarks use one.
-      // Anything more (a Real declaration, arithmetic over reals) has no
-      // production and is a syntax error, so accepting the name here cannot
-      // answer a query STP could not decide.
+      // The *FPLRA logics are the FP logics plus the theory of reals, and
+      // they open both theories' keywords: Real declarations and linear
+      // arithmetic, fp.to_real, and a Real constant under to_fp, which the
+      // Real keywords lex as a Real term and createFPToFP folds exactly as
+      // the literal forms are. Only a symbolic Real under to_fp is refused.
+      // A numeral inside an indexed identifier stays an index (the lexer
+      // tracks "(_ ... )"), so (_ BitVec 8) and ((_ to_fp 8 24) RNE 1) read
+      // as they do in the FP logics.
       // A logic containing UF enables the SMT-LIB UF frontend. The command
       // line flag remains useful for inputs whose declared logic omits UF,
       // but a correctly classified input must not need a second, nonstandard
@@ -2296,9 +2334,18 @@ cmdi:
             0 == strcmp($2->c_str(),"QF_BVFPLRA") ||
             0 == strcmp($2->c_str(),"QF_ABVFPLRA") ||
             uf_fp_logic;
+      const bool fp_lra_logic =
+            0 == strcmp($2->c_str(),"QF_FPLRA") ||
+            0 == strcmp($2->c_str(),"QF_BVFPLRA") ||
+            0 == strcmp($2->c_str(),"QF_ABVFPLRA") ||
+            0 == strcmp($2->c_str(),"QF_UFFPLRA") ||
+            0 == strcmp($2->c_str(),"QF_UFBVFPLRA") ||
+            0 == strcmp($2->c_str(),"QF_AUFBVFPLRA") ||
+            0 == strcmp($2->c_str(),"QF_UFABVFPLRA");
       const bool real_logic = 0 == strcmp($2->c_str(),"QF_LRA") ||
                          0 == strcmp($2->c_str(),"QF_UFLRA") ||
-                         0 == strcmp($2->c_str(),"QF_AUFLRA");
+                         0 == strcmp($2->c_str(),"QF_AUFLRA") ||
+                         fp_lra_logic;
       const bool supported_logic =
             0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
@@ -3805,9 +3852,7 @@ an_fp_term:
 }
 | LPAREN_TOK FP_TO_REAL_TOK an_term RPAREN_TOK
 {
-  $$ = nullptr;
-  delete $3;
-  fatal_yyerror("fp.to_real is not supported: STP has no theory of reals");
+  $$ = createFpToReal($3);
 }
 | UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
 {
