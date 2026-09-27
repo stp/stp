@@ -1033,6 +1033,16 @@ bool custom_lra_decision_polarity(EngineTarget& t, const OptionSpec&, const Opti
   t.flags.lra_decision_polarity_explicit = t.explicit_value;
   return true;
 }
+bool custom_lra_verify_canonical(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.lra_verify_canonical = as_bool(v);
+  // The number layer's switch is process-wide and on unless told otherwise:
+  // only an explicit setting moves it, and it has to be set before the
+  // first exact value is built (hence settable at construction only).
+  if (t.explicit_value && t.mgr != nullptr)
+    t.mgr->bm->SetLraCanonicalVerification(t.flags.lra_verify_canonical);
+  return true;
+}
 bool custom_incremental_mode(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.incremental_mode = as_mode<Flags::IncrementalMode>(v);

@@ -44,6 +44,7 @@ AddSTPGTest(api3-errors.cpp)
 AddSTPGTest(api3-engine-failure.cpp)
 AddSTPGTest(api3-rosetta.cpp)
 AddSTPGTest(api3-const-arrays.cpp)
+AddSTPGTest(api3-runs.cpp)
 
 # The 2.x C API's suites, rewritten against this API: libstp carries no 2.x
 # code, and tests/api/compat2 keeps a few of the originals to test libstp2. A

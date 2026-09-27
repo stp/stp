@@ -36,6 +36,7 @@ THE SOFTWARE.
 #include "stp/stp.hpp"
 
 #include "NodeAccess.h"
+#include "Registry.h"
 #include "stp/AST/AST.h"
 #include "stp/AST/SourceSort.h"
 #include "stp/STPManager/STP.h"
@@ -110,10 +111,50 @@ struct EngineScope
   EngineScope& operator=(const EngineScope&) = delete;
 };
 [[noreturn]] DLL_PUBLIC void fail_engine(ManagerImpl* m, const char* fn, const std::string& what);
+
+// ---------------------------------------------------------------- output
+
+// Where the text the engine writes while it works goes. The engine prints to
+// std::cout (responses, answers, what the printing options print) and to
+// std::cerr (statistics, warnings, "Fatal Error:" reports); while a route is
+// alive on a thread, that thread's writes to either stream go to the route's
+// sinks instead of the process's streams, and a null or empty sink drops
+// them. An empty chunk to `out` is a flush: the text so far is complete.
+// Output.cpp installs the streams' dispatching buffers the first time a route
+// is made; a thread with no route writes to the process's streams as before.
+struct OutputSinks
+{
+  const std::function<void(std::string_view)>* out = nullptr;
+  const std::function<void(std::string_view)>* err = nullptr;
+  // Told of a fatal error the engine reports, before anything unwinds
+  // (Solver::set_fatal_error_handler).
+  const std::function<void(std::string_view)>* fatal = nullptr;
+};
+// Every write dropped: what an API call that is no solver's work routes to.
+extern const OutputSinks kNoOutput;
+const OutputSinks* current_output_route() noexcept;
+class OutputRoute
+{
+public:
+  explicit OutputRoute(const OutputSinks* sinks);
+  ~OutputRoute();
+  OutputRoute(const OutputRoute&) = delete;
+  OutputRoute& operator=(const OutputRoute&) = delete;
+
+private:
+  const OutputSinks* saved_;
+  stp::FatalErrorObserver saved_observer_;
+  void* saved_opaque_;
+};
+
 template <class F>
 auto engine_call(ManagerImpl* m, const char* fn, F&& f) -> decltype(f())
 {
   EngineScope scope;
+  // Engine work that is no solver's (a solver's entry routes to its own
+  // sinks before it gets here) prints nowhere.
+  const OutputSinks* route = current_output_route();
+  OutputRoute quiet(route != nullptr ? route : &kNoOutput);
   try
   {
     return f();
@@ -273,109 +314,20 @@ struct ManagerImpl
   ASTNode real_const(const char* fn, const std::string& text);
   ASTNode default_value(std::uint32_t sort, const char* fn);
 
-  // the node factory the API builds with (simplifying or hashing)
-  NodeFactory* factory() const { return bm->defaultNodeFactory; }
-  NodeFactory* folding_factory(); // always the simplifying one, for evaluation
-  NodeFactory* folding_factory_ = nullptr;
+  // The node factory the API builds with: the simplifying one, or the
+  // hashing one when the manager was made with simplify = false. The
+  // engine's own factory (bm->defaultNodeFactory) folds either way: the
+  // switch is about the terms a caller builds and a script declares, not
+  // about the terms the solver makes as it goes.
+  NodeFactory* factory() const { return build_factory_; }
+  NodeFactory* folding_factory() const { return bm->defaultNodeFactory; } // for evaluation
+  NodeFactory* build_factory_ = nullptr;
 };
 
 // ---------------------------------------------------------------- options
 
-enum class OptType : std::uint8_t
-{
-  BOOL,
-  INT,
-  UINT,
-  MODE,
-  ENUM,
-  SET,
-  STRING,
-  PATH,
-  DURATION
-};
-
-struct OptionSpec
-{
-  const char* name;
-  const char* python_key;
-  OptType type;
-  const char* default_text;
-  bool has_min;
-  std::int64_t min;
-  bool has_max;
-  std::int64_t max;
-  const char* const* values;
-  std::size_t num_values;
-  Tier tier;
-  Settable settable;
-  OptionScope scope;
-  const char* category;
-  const char* help;
-  const char* const* aliases;
-  std::size_t num_aliases;
-  const char* short_flag;
-  const char* negation;
-  const char* follows;
-  const char* implied_by_option;
-  const char* implied_by_value;
-  const char* const* excludes;
-  std::size_t num_excludes;
-  const char* const* implies; // name, value pairs
-  std::size_t num_implies;
-  const char* implies_note;
-  const char* requires_build;
-  const char* requires_option;
-  const char* requires_value;
-  const char* latched_by;
-  const char* sentinel;
-  const char* legacy_letter;
-  const char* legacy_iface;
-  const char* legacy_cli_unit;
-  const char* engine;
-  bool has_engine;
-  const char* cli_form;      // "value" | "flag" | "none": how tools/stp registers the entry
-  const char* cli_bad_value; // tools/stp's line for a refused value ({name} {value} {member} {expected}), or nullptr
-  bool has_cli_range;        // a value window the command line checks itself, narrower than the range
-  std::int64_t cli_min;
-  std::int64_t cli_max;
-  const char* cli_below_min; // tools/stp's line for a number below `min` ({name}), or nullptr
-  const char* cli_above_max; // ... above `max`
-  bool cli_take_last;        // a repeated spelling takes its last value (bool and lenient mode entries always do)
-  bool cli_empty_unset;      // an empty value on the command line leaves the entry unset
-};
-
-DLL_PUBLIC const OptionSpec* option_specs(std::size_t& count);
-
-// The command-line data of tools/stp that is not a per-entry column
-// (lib/Api/gen/cli_table.inc, from the [[cli_group]], [[category]], [[alias]]
-// and [[frontend]] sections of options.toml).
-struct CliCategory
-{
-  const char* category; // an OptionSpec::category value
-  const char* group;    // the --help group its entries join
-};
-struct CliAlias
-{
-  const char* name;  // the bare flag, without the leading --
-  const char* of;    // the entry it sets
-  const char* value; // to this value
-  const char* help;
-};
-struct CliFrontend
-{
-  const char* key;       // what tools/stp binds the registration to
-  const char* spellings; // CLI11's name list ("--SMTLIB1,-m")
-  const char* kind;      // positional | help | flag | bool-option
-  const char* group;     // nullptr for the positional
-  const char* help;
-  const char* api;       // the API call with the same effect
-  const char* const* excludes; // spellings, nullptr-terminated
-  std::size_t num_excludes;
-};
-DLL_PUBLIC const char* const* cli_groups(std::size_t& count); // in --help order
-DLL_PUBLIC const CliCategory* cli_categories(std::size_t& count);
-DLL_PUBLIC const CliAlias* cli_aliases(std::size_t& count);
-DLL_PUBLIC const CliFrontend* cli_frontend(std::size_t& count);
+// The registry's tables (OptionSpec and the command line's rows) are in
+// Registry.h, which the stp binary reads too.
 
 // The engine's default of every field-mapped entry, rendered as the registry
 // spells a value, so a test can hold the two sets of defaults together.
@@ -385,26 +337,15 @@ struct DefaultCheck
   std::string (*engine_default)(const UserDefinedFlags&);
 };
 DLL_PUBLIC const DefaultCheck* option_default_checks(std::size_t& count);
-// What the engine field of each numeric field-mapped entry can hold.
-struct FieldRange
-{
-  const char* name;
-  std::int64_t min;
-  std::uint64_t max;
-};
-DLL_PUBLIC const FieldRange* option_field_ranges(std::size_t& count);
 inline std::string flag_text(bool b) { return b ? "true" : "false"; }
 template <class I, std::enable_if_t<std::is_integral<I>::value && !std::is_same<I, bool>::value, int> = 0>
 std::string flag_text(I i) { return std::to_string(i); }
 template <class E, std::enable_if_t<std::is_enum<E>::value, int> = 0>
 std::string flag_text(E e) { return e == E::ON ? "on" : e == E::OFF ? "off" : "auto"; }
-DLL_PUBLIC const OptionSpec* find_option(std::string_view name); // name or alias; nullptr if unknown
-DLL_PUBLIC std::size_t option_index(const OptionSpec* spec);
 OptionValue parse_option_text(const OptionSpec& spec, std::string_view text);
 std::string option_text(const OptionSpec& spec, const OptionValue& v);
 OptionValue option_default(const OptionSpec& spec);
 void validate_option_value(const OptionSpec& spec, const OptionValue& v);
-DLL_PUBLIC bool option_build_supported(const OptionSpec& spec);
 
 // The registry is also the stp binary's command line (tools/stp/main.cpp):
 // what it calls is exported like the engine entry points it uses.
@@ -544,7 +485,22 @@ struct SolverImpl
   bool terminator_fired = false;
   bool interrupt_consumed = false;
 
+  // What the engine prints while it works for this solver (OutputSinks), the
+  // handler told of its fatal errors, and the CNF sink.
+  std::function<void(std::string_view)> output_sink;
   std::function<void(std::string_view)> diagnostic_sink;
+  std::function<void(std::string_view)> fatal_handler;
+  std::function<void(std::string_view, CnfScope)> cnf_sink;
+  const OutputSinks route_sinks{&output_sink, &diagnostic_sink, &fatal_handler};
+
+  // The last CVC or SMT-LIB 1 input's question, as its parser returned it
+  // (the conjunction of its assertions, and its query), and the conjunction
+  // of the two that input_to_string prints, built once: a node made again
+  // after the first was released would be numbered afresh.
+  ASTNode input_asserts;
+  ASTNode input_query;
+  ASTNode input_question;
+  bool have_input_question = false;
 
   // C layer: the failed state
   std::shared_ptr<const ErrorDetails> failed;
@@ -581,6 +537,7 @@ struct SolverImpl
                         const std::optional<CheckBudget>& budget);
   static bool poll_stop(void* opaque);
   void rebuild_engine();
+  void forget_input_question(); // the nodes go before the manager can
 };
 
 // ---------------------------------------------------------------- kinds

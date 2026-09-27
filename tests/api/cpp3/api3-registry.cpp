@@ -209,3 +209,40 @@ TEST(Registry, reapplied_defaults_are_not_requests)
   EXPECT_TRUE(flags.bv_term_abstraction_rounds_explicit);
   EXPECT_FALSE(flags.bv_term_abstraction_divmod_explicit);
 }
+
+// An entry reset on a live solver goes back to its default, and a default is
+// no request: the engine's marker follows (a check refuses an explicit
+// arithmetic decision polarity it cannot honour, and must not refuse the
+// default one after a reset).
+TEST(Registry, a_reset_entry_is_no_request)
+{
+  stp::api::TermManager tm;
+  stp::api::Solver s(tm);
+  const stp::UserDefinedFlags& flags = tm.impl()->bm->UserFlags;
+  s.options().set_bool("lra-decision-polarity", true);
+  EXPECT_TRUE(flags.lra_decision_polarity_explicit);
+  s.options().reset("lra-decision-polarity");
+  EXPECT_FALSE(flags.lra_decision_polarity_explicit);
+  EXPECT_TRUE(flags.lra_decision_polarity);
+}
+
+// --exit-after-CNF is the solver's end-after-cnf, which has no spelling of its
+// own; the row the binary registers names the entry it sets.
+TEST(Registry, the_frontend_rows_name_their_entries)
+{
+  const reg::OptionSpec* end = reg::find_option("end-after-cnf");
+  ASSERT_NE(end, nullptr);
+  EXPECT_STREQ(end->cli_form, "none");
+  EXPECT_STREQ(end->engine, "exit_after_CNF");
+  std::size_t n = 0;
+  const reg::CliFrontend* rows = reg::cli_frontend(n);
+  bool found = false;
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    if (std::strcmp(rows[i].key, "exit-after-cnf") != 0)
+      continue;
+    found = true;
+    EXPECT_NE(std::string(rows[i].api).find("end-after-cnf"), std::string::npos) << rows[i].api;
+  }
+  EXPECT_TRUE(found);
+}

@@ -41,6 +41,21 @@ from ._terms import (TermManager, main_tm, _tm, SortKind, RoundingMode, UnknownR
                      ExprRef, BoolRef, BitVecRef, ArrayRef, ArrayNumRef, FuncRef, FuncInterp, SortRef,
                      _coerce_arg, _flatten_bools, _format_code, _is_int, BitVec, Not, And, BoolVal)
 
+_PARSE_MODES = {
+    "declare-and-assert": _core.PARSE_DECLARE_AND_ASSERT,
+    "execute": _core.PARSE_EXECUTE,
+    "parse-only": _core.PARSE_ONLY,
+}
+
+
+def _parse_mode(name):
+    try:
+        return _PARSE_MODES[str(name).lower()]
+    except KeyError:
+        raise ArgumentError("unknown parse mode %r; expected one of %s" % (name, ", ".join(sorted(_PARSE_MODES))),
+                            code=ErrorCode.INVALID_ARGUMENT) from None
+
+
 # ---------------------------------------------------------------- options
 
 _SETTABLE_NAMES = {
@@ -777,21 +792,33 @@ class Solver(_core.SolverHandle):
         _core.SolverHandle.set_terminator(self, fn)
 
     # ------------------------------------------------------------ scripts and printing
-    def from_string(self, text, format="smtlib2", execute=False):
+    def from_string(self, text, format="smtlib2", mode="declare-and-assert"):
         """Parse text into this solver (declarations, assertions, push/pop, options). A ParseError
-        leaves the solver unchanged. execute=True also runs check-sat and writes get-model
-        responses to the diagnostic sink (SMT-LIB 2 only)."""
+        leaves the solver unchanged. The mode is "declare-and-assert" (nothing is decided),
+        "execute" (the input runs as the stp command line runs it: an SMT-LIB 2 script's
+        commands answer, a CVC or SMT-LIB 1 query is decided and answered, to the output sink)
+        or "parse-only" (read as the command line's --parse-only reads it)."""
         code = _format_code(format)
-        if code in (_core.FORMAT_SMTLIB2, _core.FORMAT_AUTO):
-            self.parse_smt2(text, execute)
-        else:
-            if execute:
-                raise ArgumentError("execute=True is only meaningful for SMT-LIB 2 scripts",
-                                    code=ErrorCode.INVALID_ARGUMENT)
+        m = _parse_mode(mode)
+        if m == _core.PARSE_DECLARE_AND_ASSERT and code not in (_core.FORMAT_SMTLIB2, _core.FORMAT_AUTO):
             self.parse(text, code)
+        elif code in (_core.FORMAT_SMTLIB2, _core.FORMAT_AUTO):
+            self.parse_smt2(text, m)
+        else:
+            self.parse_source(text, code, m)
+
+    def from_stream(self, stream, format="smtlib2", mode="execute"):
+        """Parse a readable stream as its data arrives (a binary stream's read1, else a line at a
+        time), as the stp command line reads its input; the modes are from_string's."""
+        self.parse_source(stream, _format_code(format), _parse_mode(mode))
 
     def from_file(self, path, format="auto"):
         self.parse_file(os.fspath(path), _format_code(format))
+
+    def input_to_string(self, format="cvc"):
+        """The last CVC or SMT-LIB 1 input's question, as the stp command line's --print-back
+        options print it: "cvc", "smtlib2", "gdl" or "dot"."""
+        return _core.SolverHandle.input_to_string(self, _format_code(format))
 
     def to_smt2(self, with_check_sat=False):
         return _core.SolverHandle.to_smt2(self, with_check_sat)

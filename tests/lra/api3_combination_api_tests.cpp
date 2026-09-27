@@ -29,8 +29,7 @@ THE SOFTWARE.
 // Real stage, and independent managers, interleaved and on threads.
 //
 // A plain executable: every case runs in order and the first failed check
-// ends the run with a non-zero exit. A check the 3.x API cannot make yet is
-// reported as an API gap and skipped, not failed.
+// ends the run with a non-zero exit.
 
 #include <stp/stp.hpp>
 
@@ -49,19 +48,10 @@ using namespace stp;
 namespace
 {
 
-unsigned skipped_checks = 0;
-
 void require(bool condition, const char* detail)
 {
   if (!condition)
     throw std::runtime_error(detail);
-}
-
-// A check that needs something the 3.x API does not provide yet.
-void apiGap(const char* where, const char* what)
-{
-  ++skipped_checks;
-  std::cerr << "SKIP " << where << ": API gap: " << what << '\n';
 }
 
 Term realSymbol(TermManager& tm, const char* name)
@@ -238,16 +228,6 @@ void legacyArrayReadAfterLraStage()
           "legacy array-read refinement after LRA stage was not UNSAT");
   require(hasNoModel(s), "legacy array refinement retained a staged Real model");
 
-  if (diagnostics.empty())
-  {
-    apiGap("legacy-array-read-after-lra-stage",
-           "print-functionstat's output (the coordinator's metrics) is "
-           "written to the process's stdout/stderr and never reaches "
-           "Solver::set_diagnostic_sink, and no statistic carries the legacy "
-           "refinement count, so the fixture's multiple candidate rounds "
-           "cannot be confirmed");
-    return;
-  }
   const long long refinements =
       traceCounter(diagnostics, "legacy_refinements");
   require(refinements >= 0, "legacy coordinator diagnostics were not emitted");
@@ -325,10 +305,7 @@ int main()
     legacyArrayReadAfterLraStage();
     interleavedManagers();
     concurrentManagers();
-    std::cout << "PASS combination-api";
-    if (skipped_checks != 0)
-      std::cout << " (" << skipped_checks << " check(s) skipped: API gap)";
-    std::cout << '\n';
+    std::cout << "PASS combination-api\n";
     return 0;
   }
   catch (const std::exception& failure)

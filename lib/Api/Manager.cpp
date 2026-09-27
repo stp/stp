@@ -75,11 +75,18 @@ void boot_constant_bv()
 
 ManagerImpl::ManagerImpl(const TermManager::Config& cfg) : config(cfg)
 {
+  // The engine prints nothing of its own while a manager is built; the
+  // first route also puts the dispatching buffers in front of std::cout and
+  // std::cerr, before any parse swaps std::cout's buffer for its own.
+  OutputRoute quiet(&kNoOutput);
   boot_constant_bv();
   id = g_manager_ids.fetch_add(1);
   bm = new STPMgr();
-  if (config.simplify)
-    bm->defaultNodeFactory = new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm);
+  // The engine builds through the simplifying factory whatever the manager's
+  // simplify switch says; the switch picks the factory the API's own
+  // construction and the parsers use (ManagerImpl::factory).
+  bm->defaultNodeFactory = new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm);
+  build_factory_ = config.simplify ? bm->defaultNodeFactory : bm->hashingNodeFactory;
   bm->UserFlags.uf_sort_width = config.uf_sort_width;
   // The counterexample construction of the engine is on by default for the
   // API: a model is what produce-models (default true) promises.
@@ -109,6 +116,7 @@ ManagerImpl::ManagerImpl(const TermManager::Config& cfg) : config(cfg)
 
 ManagerImpl::~ManagerImpl()
 {
+  OutputRoute quiet(&kNoOutput);
   // Every node the API tables hold must be released before the manager's
   // unique tables go: clear the tables first.
   exposed_ids.clear();
@@ -117,8 +125,6 @@ ManagerImpl::~ManagerImpl()
   symbols.clear();
   c_scopes.clear();
   c_error.reset();
-  if (folding_factory_ != nullptr && folding_factory_ != bm->defaultNodeFactory)
-    delete folding_factory_;
   if (bm->defaultNodeFactory != bm->hashingNodeFactory)
     delete bm->defaultNodeFactory;
   delete bm;
@@ -142,18 +148,6 @@ void fail_engine(ManagerImpl* m, const char* fn, const std::string& what)
   }
   fail_internal(fn, "the engine failed: " + what +
                         "; the term manager is poisoned and refuses every later call");
-}
-
-NodeFactory* ManagerImpl::folding_factory()
-{
-  if (folding_factory_ == nullptr)
-  {
-    if (bm->defaultNodeFactory != bm->hashingNodeFactory)
-      folding_factory_ = bm->defaultNodeFactory;
-    else
-      folding_factory_ = new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm);
-  }
-  return folding_factory_;
 }
 
 // ------------------------------------------------------------ sorts

@@ -135,6 +135,9 @@ TEST(Parsing, execute_mode_runs_the_script)
 {
   TermManager tm;
   Solver s(tm);
+  // the answers go to the output sink, and nothing to the process's stdout
+  std::string out;
+  s.set_output_sink([&out](std::string_view chunk) { out.append(chunk); });
   testing::internal::CaptureStdout();
   s.parse_smt2("(declare-fun a () (_ BitVec 8))\n"
                "(assert (= a #x2a))\n"
@@ -142,7 +145,8 @@ TEST(Parsing, execute_mode_runs_the_script)
                "(get-value (a))\n"
                "(get-model)\n",
                ParseMode::EXECUTE);
-  const std::string out = testing::internal::GetCapturedStdout();
+  EXPECT_TRUE(testing::internal::GetCapturedStdout().empty());
+  EXPECT_EQ(out.rfind("sat\n", 0), 0u) << out; // check-sat answered first
   EXPECT_NE(out.find("#x2A"), std::string::npos) << out; // get-value answered
   EXPECT_NE(out.find("define-fun"), std::string::npos) << out; // get-model printed
   EXPECT_EQ(s.assertions().size(), 1u);

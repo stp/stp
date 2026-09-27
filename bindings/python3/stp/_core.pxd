@@ -101,6 +101,11 @@ cdef extern from "stp/stp.h":
     ctypedef enum stp_parse_mode:
         STP_PARSE_DECLARE_AND_ASSERT
         STP_PARSE_EXECUTE
+        STP_PARSE_ONLY
+    ctypedef enum stp_cnf_scope:
+        STP_CNF_WHOLE
+        STP_CNF_PARTIAL
+        STP_CNF_OVER_APPROXIMATION
     ctypedef enum stp_tier:
         STP_TIER_STABLE
         STP_TIER_EXPERT
@@ -415,6 +420,16 @@ cdef extern from "stp/stp.h":
     ctypedef void (*stp_text_sink)(const char* text, size_t len, void* user) noexcept
     stp_status stp_solver_write_cnf(stp_solver, stp_text_sink, void* user) nogil
     void stp_solver_set_diagnostic_sink(stp_solver, stp_text_sink, void* user)
+    ctypedef size_t (*stp_text_source)(char* buf, size_t max, void* user) noexcept
+    stp_status stp_solver_parse_source(stp_solver, stp_text_source, void* user, stp_format,
+                                       stp_parse_mode) nogil
+    char* stp_solver_input_to_string(stp_solver, stp_format)
+    void stp_solver_set_output_sink(stp_solver, stp_text_sink, void* user)
+    ctypedef void (*stp_fatal_error_handler)(const char* message, void* user) noexcept
+    void stp_solver_set_fatal_error_handler(stp_solver, stp_fatal_error_handler, void* user)
+    ctypedef void (*stp_cnf_sink)(const char* dimacs, size_t len, stp_cnf_scope scope,
+                                  void* user) noexcept
+    void stp_solver_set_cnf_sink(stp_solver, stp_cnf_sink, void* user)
 
     # ------------------------------------------------------------ model
     stp_model stp_model_copy(stp_model)
@@ -501,6 +516,9 @@ cdef class SolverHandle:
     cdef size_t _key
     cdef object _terminator
     cdef object _sink
+    cdef object _out_sink
+    cdef object _fatal_handler
+    cdef object _cnf_sink
     cdef object _callback_error
     cdef object __weakref__
     cdef int _fail_mutate(self, const char* fn) except -1

@@ -787,11 +787,10 @@ void Cpp_interface::endParseWithDiagnostic(const std::string& diagnostic)
 {
   if (!current_command_active)
     FatalError(diagnostic.c_str());
-  // The command line's other channels ("Fatal Error:" on stderr, the
-  // registered handler) keep their report; under the 3.x API the diagnostic
-  // is the parse error's own text.
-  if (!FatalErrorThrows())
-    ReportFatalError(diagnostic.c_str());
+  // The other channels ("Fatal Error:" on stderr, the registered handler and
+  // observer) keep their report; under the 3.x API the diagnostic is also
+  // the parse error's own text.
+  ReportFatalError(diagnostic.c_str());
   throw ParseAbandon();
 }
 

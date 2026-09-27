@@ -39,7 +39,7 @@ core hands out is already of the right Python class.
 
 from libc.stdint cimport uint8_t, uint32_t, uint64_t, int64_t, UINT64_MAX, INT64_MIN
 from libc.stdlib cimport malloc, free
-from libc.string cimport strlen
+from libc.string cimport memcpy, strlen
 from libc.signal cimport signal, sighandler_t, SIGINT, SIG_ERR
 from cpython.bytes cimport PyBytes_FromStringAndSize
 from cpython.exc cimport PyErr_CheckSignals, PyErr_SetInterrupt
@@ -1506,6 +1506,99 @@ cdef void _sink_cb(const char* text, size_t n, void* user) noexcept with gil:
         traceback.print_exc()
 
 
+cdef void _out_sink_cb(const char* text, size_t n, void* user) noexcept with gil:
+    cdef SolverHandle s = <SolverHandle>user
+    try:
+        if s._out_sink is not None:
+            s._out_sink(PyBytes_FromStringAndSize(text, n).decode("utf-8", "replace"))
+    except BaseException:
+        traceback.print_exc()
+
+
+cdef void _fatal_cb(const char* message, void* user) noexcept with gil:
+    cdef SolverHandle s = <SolverHandle>user
+    try:
+        if s._fatal_handler is not None:
+            s._fatal_handler(PyBytes_FromStringAndSize(message, strlen(message))
+                             .decode("utf-8", "replace"))
+    except BaseException:
+        traceback.print_exc()
+
+
+_CNF_SCOPES = {STP_CNF_WHOLE: "whole", STP_CNF_PARTIAL: "partial",
+               STP_CNF_OVER_APPROXIMATION: "over-approximation"}
+
+
+cdef void _cnf_cb(const char* dimacs, size_t n, stp_cnf_scope scope, void* user) noexcept with gil:
+    cdef SolverHandle s = <SolverHandle>user
+    try:
+        if s._cnf_sink is not None:
+            s._cnf_sink(PyBytes_FromStringAndSize(dimacs, n), _CNF_SCOPES.get(<int>scope, "whole"))
+    except BaseException:
+        traceback.print_exc()
+
+
+# A parse's input: text already in memory, read without the GIL ...
+ctypedef struct _TextSource:
+    const char* data
+    size_t size
+    size_t offset
+
+
+cdef size_t _text_source_cb(char* buf, size_t max, void* user) noexcept nogil:
+    cdef _TextSource* src = <_TextSource*>user
+    cdef size_t k = src.size - src.offset
+    if k > max:
+        k = max
+    memcpy(buf, src.data + src.offset, k)
+    src.offset += k
+    return k
+
+
+# ... or a stream, read as its data arrives: read1 where the stream has it (a binary stream
+# hands out what it holds), a line at a time otherwise (a text stream such as sys.stdin), so a
+# script arriving over a pipe is run command by command.
+cdef class _StreamSource:
+    cdef object _read
+    cdef bint _lines
+    cdef bytes _pending
+    cdef object error
+
+    def __cinit__(self, stream):
+        if hasattr(stream, "read1"):
+            self._read, self._lines = stream.read1, False
+        elif hasattr(stream, "readline"):
+            self._read, self._lines = stream.readline, True
+        elif hasattr(stream, "read"):
+            self._read, self._lines = stream.read, False
+        else:
+            raise TypeError("expected a str, bytes or a readable stream, got %s"
+                            % type(stream).__name__)
+        self._pending = b""
+        self.error = None
+
+
+cdef size_t _stream_source_cb(char* buf, size_t max, void* user) noexcept with gil:
+    cdef _StreamSource src = <_StreamSource>user
+    cdef object chunk
+    cdef size_t k
+    try:
+        if not src._pending:
+            chunk = src._read() if src._lines else src._read(max)
+            if isinstance(chunk, str):
+                chunk = (<str>chunk).encode("utf-8")
+            if not chunk:
+                return 0
+            src._pending = bytes(chunk)
+        k = min(<size_t>len(src._pending), max)
+        memcpy(buf, <const char*>src._pending, k)
+        src._pending = src._pending[k:]
+        return k
+    except BaseException as e:
+        src.error = e
+        return <size_t>-1
+
+
 cdef void _collect_cb(const char* text, size_t n, void* user) noexcept with gil:
     try:
         (<list>user).append(PyBytes_FromStringAndSize(text, n))
@@ -1524,6 +1617,9 @@ cdef class SolverHandle:
         self._m = None
         self._terminator = None
         self._sink = None
+        self._out_sink = None
+        self._fatal_handler = None
+        self._cnf_sink = None
         self._callback_error = None
 
     def __init__(self, Manager tm not None, OptionsHandle options=None):
@@ -1574,6 +1670,9 @@ cdef class SolverHandle:
             self._s = NULL
             self._terminator = None
             self._sink = None
+            self._out_sink = None
+            self._fatal_handler = None
+            self._cnf_sink = None
 
     @property
     def closed(self):
@@ -1942,20 +2041,65 @@ cdef class SolverHandle:
             return None
         return self._m._wrap(h)
 
-    def parse_smt2(self, text, execute=False):
+    def parse_smt2(self, text, mode=None):
         self._live()
         cdef bytes b = _b(text)
         cdef const char* p = b
-        cdef stp_parse_mode mode = STP_PARSE_EXECUTE if execute else STP_PARSE_DECLARE_AND_ASSERT
+        cdef stp_parse_mode m = STP_PARSE_DECLARE_AND_ASSERT
+        if mode is not None:
+            m = <stp_parse_mode><int>mode
         cdef stp_status st
         _set_busy(self._m, True)
         try:
             with nogil:
-                st = stp_solver_parse_smt2(self._s, p, mode)
+                st = stp_solver_parse_smt2(self._s, p, m)
         finally:
             _set_busy(self._m, False)
         if st != STP_OK:
             self._fail_mutate("stp_solver_parse_smt2")
+
+    def parse_source(self, source, int format, int mode):
+        """Parse `source` (a str, bytes, or a readable stream) in any mode."""
+        self._live()
+        cdef stp_format f = <stp_format>format
+        cdef stp_parse_mode m = <stp_parse_mode>mode
+        cdef stp_status st
+        cdef bytes b
+        cdef _TextSource text
+        cdef _StreamSource stream = None
+        if isinstance(source, (str, bytes)):
+            b = _b(source)
+            text.data = b
+            text.size = len(b)
+            text.offset = 0
+        else:
+            stream = _StreamSource(source)
+        _set_busy(self._m, True)
+        try:
+            if stream is None:
+                with nogil:
+                    st = stp_solver_parse_source(self._s, _text_source_cb, &text, f, m)
+            else:
+                with nogil:
+                    st = stp_solver_parse_source(self._s, _stream_source_cb, <void*>stream, f, m)
+        finally:
+            _set_busy(self._m, False)
+        if st != STP_OK:
+            if stream is not None and stream.error is not None:
+                # the stream's own exception says more than the IO error it became
+                try:
+                    self._fail_mutate("stp_solver_parse_source")
+                except Error:
+                    pass
+                raise stream.error
+            self._fail_mutate("stp_solver_parse_source")
+
+    def input_to_string(self, int format):
+        self._live()
+        cdef char* p = stp_solver_input_to_string(self._s, <stp_format>format)
+        if p == NULL:
+            self._m._fail("stp_solver_input_to_string")
+        return _take(p)
 
     def parse(self, text, int format):
         self._live()
@@ -2034,6 +2178,36 @@ cdef class SolverHandle:
             stp_solver_set_diagnostic_sink(self._s, NULL, NULL)
         else:
             stp_solver_set_diagnostic_sink(self._s, _sink_cb, <void*>self)
+
+    def set_output_sink(self, fn):
+        self._live()
+        if fn is not None and not callable(fn):
+            raise TypeError("the output sink must be callable or None")
+        self._out_sink = fn
+        if fn is None:
+            stp_solver_set_output_sink(self._s, NULL, NULL)
+        else:
+            stp_solver_set_output_sink(self._s, _out_sink_cb, <void*>self)
+
+    def set_fatal_error_handler(self, fn):
+        self._live()
+        if fn is not None and not callable(fn):
+            raise TypeError("the fatal error handler must be callable or None")
+        self._fatal_handler = fn
+        if fn is None:
+            stp_solver_set_fatal_error_handler(self._s, NULL, NULL)
+        else:
+            stp_solver_set_fatal_error_handler(self._s, _fatal_cb, <void*>self)
+
+    def set_cnf_sink(self, fn):
+        self._live()
+        if fn is not None and not callable(fn):
+            raise TypeError("the CNF sink must be callable or None")
+        self._cnf_sink = fn
+        if fn is None:
+            stp_solver_set_cnf_sink(self._s, NULL, NULL)
+        else:
+            stp_solver_set_cnf_sink(self._s, _cnf_cb, <void*>self)
 
 
 # ----------------------------------------------------------------- Model
@@ -2524,6 +2698,9 @@ FORMAT_SMTLIB1 = <int>STP_FORMAT_SMTLIB1
 FORMAT_CVC = <int>STP_FORMAT_CVC
 FORMAT_DOT = <int>STP_FORMAT_DOT
 FORMAT_GDL = <int>STP_FORMAT_GDL
+PARSE_DECLARE_AND_ASSERT = <int>STP_PARSE_DECLARE_AND_ASSERT
+PARSE_EXECUTE = <int>STP_PARSE_EXECUTE
+PARSE_ONLY = <int>STP_PARSE_ONLY
 FP_NORMAL = <int>STP_FP_NORMAL
 FP_SUBNORMAL = <int>STP_FP_SUBNORMAL
 FP_ZERO = <int>STP_FP_ZERO

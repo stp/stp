@@ -123,7 +123,7 @@ struct VCImpl
   bool exprdelete = true; // EXPRDELETE: checker-owned handles exist
   bool tracking = false;  // the 'u' live-handle registry is on
   bool flag_x = false, flag_u = false, flag_m = false, flag_n = false,
-       flag_p = false, flag_diag = false;
+       flag_p = false;
   bool divmod_explicit = false; // BV_TERM_ABSTRACTION_DIVMOD was named
   int uf_sort_width = 16;       // recorded only (see NOTES.md)
 

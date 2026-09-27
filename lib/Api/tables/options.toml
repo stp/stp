@@ -149,6 +149,19 @@ category = "cnf"
 help = "stop the check after CNF generation and answer unknown (STOPPED_AFTER_CNF)"
 
 [[option]]
+name = "end-after-cnf"
+type = "bool"
+cli_form = "none"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "exit_after_CNF" }
+category = "cnf"
+# tools/stp's --exit-after-CNF (a frontend row) sets this entry: the run ends where 2.x's process exited
+help = "end the run at the first CNF a check generates: the check stops there and says nothing more (print-quickstat's report and a partial CNF's warning come first), and an input read with ParseMode::EXECUTE ends with it; a check answers unknown (STOPPED_AFTER_CNF)"
+
+[[option]]
 name = "logic"
 type = "string"
 default = ""
@@ -317,7 +330,7 @@ key = "file"
 cli = "file"
 kind = "positional"
 help = "input file"
-api = "Solver::parse_file(path, Format::AUTO)"
+api = "Solver::parse(std::istream&, Format, ParseMode::EXECUTE) over the file (standard input without one), in the format --CVC, --SMTLIB1 or --SMTLIB2 names or else the file's extension: .cvc, .smt, and SMT-LIB 2 for .smt2 and anything else"
 
 [[frontend]]
 key = "help"
@@ -365,7 +378,7 @@ cli = "--print-stpinput,-b"
 kind = "flag"
 group = "Printing options"
 help = "print STP input back to cout"
-api = "Solver::to_string(Format::CVC | SMTLIB2 | GDL | DOT); Solver::to_smt2()"
+api = "Solver::input_to_string(Format::CVC), or Format::SMTLIB2 for an SMT-LIB 1 input"
 
 [[frontend]]
 key = "print-back-cvc"
@@ -373,7 +386,7 @@ cli = "--print-back-CVC"
 kind = "flag"
 group = "Printing options"
 help = "print input in CVC format, then exit"
-api = "Solver::to_string(Format::CVC)"
+api = "Solver::input_to_string(Format::CVC)"
 
 [[frontend]]
 key = "print-back-smtlib2"
@@ -381,7 +394,7 @@ cli = "--print-back-SMTLIB2"
 kind = "flag"
 group = "Printing options"
 help = "print input in SMT-LIB2 format, then exit"
-api = "Solver::to_smt2()"
+api = "Solver::input_to_string(Format::SMTLIB2)"
 
 [[frontend]]
 key = "print-back-gdl"
@@ -389,7 +402,7 @@ cli = "--print-back-GDL"
 kind = "flag"
 group = "Printing options"
 help = "print AiSee's graph format, then exit"
-api = "Solver::to_string(Format::GDL)"
+api = "Solver::input_to_string(Format::GDL)"
 
 [[frontend]]
 key = "print-back-dot"
@@ -397,7 +410,7 @@ cli = "--print-back-dot"
 kind = "flag"
 group = "Printing options"
 help = "print dotty/neato's graph format, then exit"
-api = "Solver::to_string(Format::DOT)"
+api = "Solver::input_to_string(Format::DOT)"
 
 [[frontend]]
 key = "print-output"
@@ -413,7 +426,7 @@ cli = "--output-CNF"
 kind = "flag"
 group = "Output options"
 help = "Save the CNF into output_[0..n].cnf. NOTE: variables cannot be mapped back, and problems solved by the preprocessing simplifier alone will not generate any CNF as the SAT solver is never invoked"
-api = "Solver::write_cnf(std::ostream&); nothing is written to the working directory"
+api = "Solver::set_cnf_sink: every CNF reaches the caller, which writes the files; the library writes nothing to the working directory"
 
 [[frontend]]
 key = "exit-after-cnf"
@@ -421,7 +434,7 @@ cli = "--exit-after-CNF"
 kind = "flag"
 group = "Miscellaneous options"
 help = "exit after the CNF has been generated"
-api = "Options stop-after-cnf: the check answers unknown(STOPPED_AFTER_CNF) instead of the process exiting"
+api = "Options end-after-cnf: the run ends at the first CNF instead of the process exiting"
 
 [[frontend]]
 key = "parse-only"
@@ -429,7 +442,7 @@ cli = "--parse-only"
 kind = "flag"
 group = "Miscellaneous options"
 help = "exit after parsing the input, without solving"
-api = "ParseMode::DECLARE_AND_ASSERT (the default): a script's check-sat is not executed"
+api = "ParseMode::PARSE_ONLY: the input is read and nothing is decided"
 excludes = ["--output-CNF", "--exit-after-CNF"]
 
 [[frontend]]
@@ -438,7 +451,7 @@ cli = "--interactive"
 kind = "bool-option"
 group = "Miscellaneous options"
 help = "read the input a character at a time, as needed when driving stp interactively over a pipe. Off reads in blocks, which is faster. Default: on when reading from stdin, off when reading from a file. SMT-LIB2 only."
-api = "CLI only: a REPL that feeds lines to Solver::parse_smt2(text, ParseMode::EXECUTE)"
+api = "CLI only: how the binary reads standard input for Solver::parse(std::istream&, ...)"
 excludes = ["--CVC", "--SMTLIB1"]
 
 # ============================================================================ in-band SMT-LIB 2 keys and environment taps
@@ -1603,9 +1616,10 @@ default = false
 tier = "diagnostic"
 settable = "construction"
 scope = "solver"
-engine = { field = "lra_verify_canonical" }
+engine = { custom = "lra_verify_canonical" }
 category = "lra"
-# 2.x: a process-wide atomic; 3.x: per solver (an engine change)
+# 2.x: a process-wide atomic, and so is the number layer's switch this sets
+# when the entry is set explicitly (the library's own default keeps the check)
 legacy = { iface_flag = "LRA_VERIFY_CANONICAL" }
 help = "re-derive the canonical form of exact rationals whose construction already proves it"
 

@@ -1820,10 +1820,13 @@ public:
   // share. LassoRanker alone went 186 to 218. So: VERY_LOW.
   bool cnf_auto_real_path = false;
 
+  // End the run at the first CNF a check generates (--exit-after-CNF; the
+  // 3.x API's end-after-cnf): the process exits there, or under the API the
+  // check stops and nothing more is said (STPMgr::run_ended_after_cnf).
   bool exit_after_CNF = false;
 
-  // The 3.x API's form of exit_after_CNF: abandon the check after its first
-  // CNF with unknown(StoppedAfterCnf) instead of calling exit(0).
+  // Abandon the check after its first CNF with unknown(StoppedAfterCnf), and
+  // go on with whatever comes next (the 3.x API's stop-after-cnf).
   bool stop_after_cnf = false;
 
   // Stop after parsing the input, skipping any check-sat commands.

@@ -40,14 +40,16 @@ TEST(push_no_pop, one)
 {
   TermManager tm;
   // 2.x set 'n', 'd' and 'p'. 'n' printed each verdict, which 3.x returns as a
-  // value; 'd' is check-sanity, and 'p' is print-counterex, a diagnostic-tier
-  // option, which writes to the solver's diagnostic sink.
+  // value; 'd' is check-sanity, and 'p' is print-counterex, a printing option,
+  // which writes to the solver's output sink.
   Options o;
   o.set_bool("check-sanity", true);
   o.set_bool("print-counterex", true);
   std::optional<Solver> s(std::in_place, tm, o);
-  std::string diagnostics;
+  std::string printed, diagnostics;
+  s->set_output_sink([&printed](std::string_view text) { printed.append(text); });
   s->set_diagnostic_sink([&diagnostics](std::string_view text) { diagnostics.append(text); });
+  testing::internal::CaptureStdout();
 
   const Sort bv8 = tm.mk_bv_sort(8);
 
@@ -81,10 +83,15 @@ TEST(push_no_pop, one)
   EXPECT_EQ(s->level(), 1u);
   s.reset();
 
-  // print-counterex should have written the first entailment's counterexample
-  // (a's nonzero value) to the sink, and nothing to stdout.
-  GTEST_SKIP() << "API gap: print-counterex (a diagnostic-tier option) prints the "
-                  "counterexample to stdout from the engine; the sink given to "
-                  "Solver::set_diagnostic_sink is stored and never called, so it stays "
-                  "empty and the library prints on its own";
+  // print-counterex wrote the first entailment's counterexample to the output
+  // sink, once (the second entailment held), and the library wrote nothing to
+  // stdout.
+  EXPECT_EQ(testing::internal::GetCapturedStdout(), "");
+  const std::string prefix = "ASSERT( a = 0x";
+  ASSERT_EQ(printed.rfind(prefix, 0), 0u) << printed;
+  EXPECT_EQ(printed.find("ASSERT", prefix.size()), std::string::npos) << printed;
+  EXPECT_EQ(std::stoul(printed.substr(prefix.size(), 2), nullptr, 16),
+            counterexample.uint64_value(a))
+      << printed;
+  EXPECT_EQ(diagnostics, "");
 }

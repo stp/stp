@@ -453,7 +453,7 @@ stp_term stp_solver_symbol(stp_solver s, const char* name)
 stp_status stp_solver_parse_smt2(stp_solver s, const char* script, stp_parse_mode mode)
 {
   return solver_write(s, "stp_solver_parse_smt2", [&](CSolver* cs) {
-    if (static_cast<unsigned>(mode) > static_cast<unsigned>(STP_PARSE_EXECUTE))
+    if (static_cast<unsigned>(mode) > static_cast<unsigned>(STP_PARSE_ONLY))
       fail(ErrorCode::INVALID_ARGUMENT, "stp_solver_parse_smt2", "not a parse mode", 2);
     cs->solver.parse_smt2(str_arg(script, "stp_solver_parse_smt2", 1), static_cast<ParseMode>(mode));
   });
@@ -516,6 +516,110 @@ void stp_solver_set_diagnostic_sink(stp_solver s, stp_text_sink sink, void* user
       cs->solver.set_diagnostic_sink([sink, user](std::string_view sv) {
         const std::string text(sv); // NUL-terminated for the C side
         sink(text.c_str(), text.size(), user);
+      });
+    return STP_OK;
+  });
+}
+
+namespace
+{
+// A stp_text_source behind the std::istream Solver::parse reads: one call
+// per refill. A failed source fails the stream, which fails the parse (IO).
+class SourceBuf final : public std::streambuf
+{
+public:
+  SourceBuf(stp_text_source source, void* user) : source_(source), user_(user) {}
+
+protected:
+  int_type underflow() override
+  {
+    if (gptr() < egptr())
+      return traits_type::to_int_type(*gptr());
+    if (done_)
+      return traits_type::eof();
+    std::size_t n = source_(buf_, sizeof buf_, user_);
+    if (n == static_cast<std::size_t>(-1))
+    {
+      done_ = true;
+      throw std::ios_base::failure("the text source failed");
+    }
+    if (n == 0)
+    {
+      done_ = true;
+      return traits_type::eof();
+    }
+    if (n > sizeof buf_)
+      n = sizeof buf_;
+    setg(buf_, buf_, buf_ + n);
+    return traits_type::to_int_type(*gptr());
+  }
+
+private:
+  stp_text_source source_;
+  void* user_;
+  char buf_[4096];
+  bool done_ = false;
+};
+} // namespace
+
+stp_status stp_solver_parse_source(stp_solver s, stp_text_source source, void* user,
+                                   stp_format f, stp_parse_mode mode)
+{
+  return solver_write(s, "stp_solver_parse_source", [&](CSolver* cs) {
+    if (source == nullptr)
+      fail(ErrorCode::NULL_HANDLE, "stp_solver_parse_source", "the source is null", 1);
+    if (static_cast<unsigned>(mode) > static_cast<unsigned>(STP_PARSE_ONLY))
+      fail(ErrorCode::INVALID_ARGUMENT, "stp_solver_parse_source", "not a parse mode", 4);
+    SourceBuf buf(source, user);
+    std::istream in(&buf);
+    cs->solver.parse(in, format_arg(f, "stp_solver_parse_source", 3), static_cast<ParseMode>(mode));
+  });
+}
+
+char* stp_solver_input_to_string(stp_solver s, stp_format f)
+{
+  return solver_read<char*>(s, "stp_solver_input_to_string", nullptr, [&](CSolver* cs) {
+    return dup_string(cs->solver.input_to_string(format_arg(f, "stp_solver_input_to_string", 1)));
+  });
+}
+
+void stp_solver_set_output_sink(stp_solver s, stp_text_sink sink, void* user)
+{
+  solver_read<stp_status>(s, "stp_solver_set_output_sink", STP_ERROR, [&](CSolver* cs) {
+    if (sink == nullptr)
+      cs->solver.set_output_sink(nullptr);
+    else
+      cs->solver.set_output_sink([sink, user](std::string_view sv) {
+        const std::string text(sv); // NUL-terminated for the C side; empty: a flush
+        sink(text.c_str(), text.size(), user);
+      });
+    return STP_OK;
+  });
+}
+
+void stp_solver_set_fatal_error_handler(stp_solver s, stp_fatal_error_handler handler, void* user)
+{
+  solver_read<stp_status>(s, "stp_solver_set_fatal_error_handler", STP_ERROR, [&](CSolver* cs) {
+    if (handler == nullptr)
+      cs->solver.set_fatal_error_handler(nullptr);
+    else
+      cs->solver.set_fatal_error_handler([handler, user](std::string_view sv) {
+        const std::string text(sv);
+        handler(text.c_str(), user);
+      });
+    return STP_OK;
+  });
+}
+
+void stp_solver_set_cnf_sink(stp_solver s, stp_cnf_sink sink, void* user)
+{
+  solver_read<stp_status>(s, "stp_solver_set_cnf_sink", STP_ERROR, [&](CSolver* cs) {
+    if (sink == nullptr)
+      cs->solver.set_cnf_sink(nullptr);
+    else
+      cs->solver.set_cnf_sink([sink, user](std::string_view dimacs, CnfScope scope) {
+        const std::string text(dimacs);
+        sink(text.c_str(), text.size(), static_cast<stp_cnf_scope>(scope), user);
       });
     return STP_OK;
   });

@@ -255,14 +255,94 @@ def test_scripts_and_printing(tmp_path):
     with pytest.raises(ArgumentError):
         s4.from_string("(assert true)", format="pdf")
     s4.close()
-    # execute mode writes get-model responses to the diagnostic sink
+    # execute mode answers to the output sink; a diagnostic sink takes the rest
     s5 = Solver(TermManager())
-    out = []
-    s5.set_diagnostic_sink(out.append)
-    s5.from_string("(declare-fun z () Bool) (assert z) (check-sat) (get-model)", execute=True)
+    out, err = [], []
+    s5.set_output_sink(out.append)
+    s5.set_diagnostic_sink(err.append)
+    s5.from_string("(declare-fun z () Bool) (assert z) (check-sat) (get-model)", mode="execute")
+    assert "".join(out).startswith("sat\n") and "define-fun" in "".join(out)
     assert s5.check() == sat
+    s5.set_output_sink(None)
     s5.set_diagnostic_sink(None)
+    with pytest.raises(ArgumentError):
+        s5.from_string("(assert true)", mode="run")
     s5.close()
+    s.close()
+
+
+def test_inputs_run_as_the_command_line_runs_them():
+    # a CVC query decided and answered, in the command line's words
+    s = Solver(TermManager())
+    out = []
+    s.set_output_sink(out.append)
+    s.from_string("x : BITVECTOR(8);\nASSERT(x = 0hex05);\nQUERY(x = 0hex05);\n", format="cvc",
+                  mode="execute")
+    assert "".join(out) == "Valid.\n"
+    # parse-only decides nothing, and the input prints back
+    s2 = Solver(TermManager())
+    out2 = []
+    s2.set_output_sink(out2.append)
+    s2.from_string("x : BITVECTOR(8);\nASSERT(x = 0hex05);\nQUERY(x = 0hex06);\n", format="cvc",
+                   mode="parse-only")
+    assert "".join(out2) == ""
+    assert "QUERY" in s2.input_to_string() and "BITVECTOR(8)" in s2.input_to_string("cvc")
+    assert "(declare-fun" in s2.input_to_string("smtlib2")
+    assert s2.input_to_string("gdl").startswith("graph: {")
+    with pytest.raises(ArgumentError):
+        s2.input_to_string("pdf")
+    s2.close()
+    # no CVC or SMT-LIB 1 input yet: nothing to print back
+    s3 = Solver(TermManager())
+    with pytest.raises(StateError):
+        s3.input_to_string()
+    s3.close()
+    s.close()
+
+
+def test_a_stream_is_run_as_it_arrives():
+    script = "(declare-fun a () (_ BitVec 8))\n(assert (= a #x07))\n(check-sat)\n(echo \"done\")\n"
+    for stream in (io.BytesIO(script.encode()), io.StringIO(script)):
+        s = Solver(TermManager())
+        out = []
+        s.set_output_sink(out.append)
+        s.from_stream(stream)
+        assert "".join(out) == 'sat\n"done"\n'
+        s.close()
+
+    # the stream's own exception fails the parse, and the solver is as it was
+    class Broken(io.RawIOBase):
+        def readable(self):
+            return True
+
+        def readline(self, size=-1):
+            raise OSError("the pipe broke")
+
+    s = Solver(TermManager())
+    with pytest.raises(OSError, match="the pipe broke"):
+        s.from_stream(Broken(), mode="declare-and-assert")
+    assert len(s.assertions()) == 0 and s.check() == sat
+    s.close()
+
+
+def test_the_cnf_sink_and_the_fatal_error_handler():
+    tm = TermManager()
+    x, y = BitVecs("x y", 16, tm=tm)
+    s = Solver(tm)
+    cnfs = []
+    s.set_cnf_sink(lambda dimacs, scope: cnfs.append((dimacs, scope)))
+    s.add(x * y == 143, UGT(x, 1), UGT(y, 1), ULT(x, 200), ULT(y, 200))
+    assert s.check() == sat
+    assert cnfs and b"p cnf " in cnfs[0][0] and cnfs[0][1] == "whole"
+    s.set_cnf_sink(None)
+    # the handler hears of a fatal error before the call fails
+    heard = []
+    s.set_fatal_error_handler(heard.append)
+    with pytest.raises(ParseError):
+        s.from_string("z : BITVECTOR(0);\nQUERY(TRUE);\n", format="cvc", mode="execute")
+    assert heard == ["parsing: bit-vectors must be of positive length"]
+    s.set_fatal_error_handler(None)
+    assert s.check() == sat
     s.close()
 
 

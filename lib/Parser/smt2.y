@@ -349,12 +349,11 @@ namespace stp
     // The grammar's own refusal ends the parse, not the process: unwind to
     // SMT2Parse(), which answers failure, and the caller decides -- the
     // command line exits with the diagnostic, a library caller gets a parse
-    // error with its assertion stack put back. The command line's other
-    // channels (the "Fatal Error:" line on stderr and the registered
-    // handler) keep their report; under the 3.x API the diagnostic is the
-    // error's own text, and those channels stay quiet.
-    if (!stp::FatalErrorThrows())
-      stp::ReportFatalError(smt2_diagnostic(s).c_str());
+    // error with its assertion stack put back. The other channels (the
+    // "Fatal Error:" line on stderr, the registered handler and observer)
+    // keep their report; under the 3.x API the diagnostic is also the
+    // error's own text.
+    stp::ReportFatalError(smt2_diagnostic(s).c_str());
     throw stp::ParseAbandon();
   }
 

@@ -85,12 +85,17 @@ std::map<std::string, std::string> capabilities()
   for (const std::string& b : sat_backends())
     backends += (backends.empty() ? "" : ",") + b;
   c["sat.backends"] = backends;
+  std::string versions;
   for (const std::string& entry : compiledSolverVersions())
   {
     const std::size_t space = entry.find(' ');
     if (space != std::string::npos)
       c["sat.backend." + entry.substr(0, space) + ".version"] = entry.substr(space + 1);
+    versions += (versions.empty() ? "" : ", ") + entry;
   }
+  // Every backend with its version, in the build's own order and words, as
+  // `stp --version` lists them.
+  c["sat.versions"] = versions;
   c["array.element-sorts"] = "bv,fp,rm,uninterpreted";
   c["array.index-sorts"] = "bv,fp,rm,uninterpreted";
   c["array.const-equality"] = "true";

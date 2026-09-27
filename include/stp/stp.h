@@ -210,8 +210,17 @@ typedef enum stp_parse_mode
 {
   STP_PARSE_DECLARE_AND_ASSERT = 0,
   STP_PARSE_EXECUTE,
+  STP_PARSE_ONLY,
   STP_PARSE_MAX_ENUM = 0x7fffffff
 } stp_parse_mode;
+
+typedef enum stp_cnf_scope
+{
+  STP_CNF_WHOLE = 0,
+  STP_CNF_PARTIAL,
+  STP_CNF_OVER_APPROXIMATION,
+  STP_CNF_SCOPE_MAX_ENUM = 0x7fffffff
+} stp_cnf_scope;
 
 typedef enum stp_tier
 {
@@ -655,7 +664,18 @@ STP_API char* stp_solver_to_smt2(stp_solver, bool with_check_sat);
 STP_API char* stp_solver_to_string(stp_solver, stp_format); /* SMTLIB2, CVC, DOT, GDL */
 typedef void (*stp_text_sink)(const char* text, size_t len, void* user);
 STP_API stp_status stp_solver_write_cnf(stp_solver, stp_text_sink, void* user); /* encodes up to CNF without solving, delivered as DIMACS in one call; UNSUPPORTED for Real content */
-STP_API void stp_solver_set_diagnostic_sink(stp_solver, stp_text_sink, void* user); /* where diagnostic-tier options write; NULL: nowhere */
+STP_API void stp_solver_set_diagnostic_sink(stp_solver, stp_text_sink, void* user); /* where diagnostic-tier options write, "Fatal Error:" reports included; NULL: nowhere */
+/* the input read as far as the parser needs it: the source fills up to max bytes and returns
+ * how many, 0 at the end and (size_t)-1 if reading failed (the parse then fails with IO);
+ * AUTO reads SMT-LIB 2 */
+typedef size_t (*stp_text_source)(char* buf, size_t max, void* user);
+STP_API stp_status stp_solver_parse_source(stp_solver, stp_text_source, void* user, stp_format, stp_parse_mode);
+STP_API char* stp_solver_input_to_string(stp_solver, stp_format); /* the last CVC or SMT-LIB 1 input, as stp's --print-back options print it: CVC, SMTLIB2, GDL or DOT; STATE if there was none */
+STP_API void stp_solver_set_output_sink(stp_solver, stp_text_sink, void* user); /* the responses of an EXECUTE or PARSE_ONLY input and what the printing options print; a call with len 0 asks for a flush; NULL: nowhere. A SAT backend's own report (print-functionstat) comes here from CryptoMiniSat only: CaDiCaL and MiniSat write theirs to stdout themselves */
+typedef void (*stp_fatal_error_handler)(const char* message, void* user);
+STP_API void stp_solver_set_fatal_error_handler(stp_solver, stp_fatal_error_handler, void* user); /* told of an engine fatal error in this solver's work before anything unwinds; may end the process; must not call the library; NULL: none */
+typedef void (*stp_cnf_sink)(const char* dimacs, size_t len, stp_cnf_scope scope, void* user);
+STP_API void stp_solver_set_cnf_sink(stp_solver, stp_cnf_sink, void* user); /* every CNF a check hands to the SAT solver, as DIMACS; NULL: none */
 
 /* ------------------------------------------------------------------ model (a detached snapshot) */
 STP_API stp_model stp_model_copy(stp_model);

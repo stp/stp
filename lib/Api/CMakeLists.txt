@@ -76,6 +76,7 @@ add_library(stpapi OBJECT
     Solver.cpp
     Model.cpp
     Library.cpp
+    Output.cpp
     c/stp_c.cpp
     c/stp_c_options.cpp
     c/stp_c_solver.cpp

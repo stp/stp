@@ -184,6 +184,42 @@ and literals are strict (``BitVecVal(256, 8)`` raises; ``wrap=True`` wraps).
 Options are keyword arguments with ``-`` and ``.`` spelled ``_``:
 ``Solver(max_time='2s', bb_div_v3=False)``.
 
+Running an input as ``stp`` does
+--------------------------------
+
+``Solver::parse`` and ``parse_smt2`` take a ``ParseMode``. ``DECLARE_AND_ASSERT``,
+the default, adds an input's declarations and assertions to the solver and
+decides nothing: the solver's own ``check_sat`` answers its question.
+``EXECUTE`` runs the input as the ``stp`` binary does: an SMT-LIB 2 script's
+commands answer as they are read, and a CVC or SMT-LIB 1 query is decided and
+answered in that language's words. ``PARSE_ONLY`` reads it as ``--parse-only``
+does. An input can also come from a ``std::istream``, read as its data
+arrives, so a script driven over a pipe is answered command by command (in C
+a ``stp_text_source`` callback, in Python ``Solver.from_stream``).
+
+STP writes nothing to the process's streams. The answers, and what the
+printing options print, go to the solver's output sink, where an empty chunk
+asks for a flush; statistics, warnings and a fatal error's report go to its
+diagnostic sink; without a sink the text is dropped. The one exception is a
+SAT backend's own report, which ``print-functionstat`` switches on: CaDiCaL
+and MiniSat print theirs to standard output themselves (CryptoMiniSat's
+reaches the output sink). Three more hooks complete
+what a command line needs: the CNF sink receives every CNF a check hands to the
+SAT solver, with whether it is the whole query, partial (array read refinement
+adds its axioms as the search asks for them) or an over-approximation (the
+bit-vector abstractions); the fatal error handler hears of an engine fatal
+error before anything unwinds, and may end the process; and
+``input_to_string`` prints the last CVC or SMT-LIB 1 input back in the forms of
+the ``--print-back`` options. The option ``end-after-cnf`` ends a run at its
+first CNF, as ``--exit-after-CNF`` does. ``tools/stp/run.cpp``, the binary's
+own use of these calls, is a complete example.
+
+.. code-block:: python
+
+   s = Solver()
+   s.set_output_sink(sys.stdout.write)
+   s.from_string("x : BITVECTOR(8); QUERY(x = x);", format="cvc", mode="execute")   # Valid.
+
 .. _api3-compat:
 
 Compatibility with 2.x

@@ -104,9 +104,19 @@ bool vc_is_live(VCImpl* vc)
   return g_live_vcs.count(vc) != 0;
 }
 
+// What the engine prints goes where 2.x's engine printed it: its output to
+// stdout (an empty chunk is its flush), its diagnostics to stderr.
 void stdout_sink(const char* text, std::size_t len, void*)
 {
-  std::fwrite(text, 1, len, stdout);
+  if (len == 0)
+    std::fflush(stdout);
+  else
+    std::fwrite(text, 1, len, stdout);
+}
+
+void stderr_sink(const char* text, std::size_t len, void*)
+{
+  std::fwrite(text, 1, len, stderr);
 }
 
 } // namespace
@@ -403,8 +413,10 @@ namespace
 
 void install_sink(VCImpl* vc)
 {
-  if (vc->solver != nullptr && vc->flag_diag)
-    stp_solver_set_diagnostic_sink(vc->solver, stdout_sink, nullptr);
+  if (vc->solver == nullptr)
+    return;
+  stp_solver_set_output_sink(vc->solver, stdout_sink, nullptr);
+  stp_solver_set_diagnostic_sink(vc->solver, stderr_sink, nullptr);
 }
 
 // A new solver over the option record, with the assertion stack replayed.
@@ -801,22 +813,16 @@ void process_argument(const char ch, VC vcp)
       vc->flag_p = true;
       break;
     case 'q':
-      vc->flag_diag = true;
       set_option(vc, "print-arrayval", "true", "flag 'q'");
-      install_sink(vc);
       break;
     case 'r':
       set_option(vc, "ackermanize", "true", "flag 'r'");
       break;
     case 's':
-      vc->flag_diag = true;
       set_option(vc, "print-functionstat", "true", "flag 's'");
-      install_sink(vc);
       break;
     case 't':
-      vc->flag_diag = true;
       set_option(vc, "print-quickstat", "true", "flag 't'");
-      install_sink(vc);
       break;
     case 'u':
       vc->flag_u = true;
@@ -824,9 +830,7 @@ void process_argument(const char ch, VC vcp)
       enable_tracking(vc);
       break;
     case 'v':
-      vc->flag_diag = true;
       set_option(vc, "print-nodes", "true", "flag 'v'");
-      install_sink(vc);
       break;
     case 'w':
       set_option(vc, "switch-word", "true", "flag 'w'");
@@ -839,9 +843,7 @@ void process_argument(const char ch, VC vcp)
       set_option(vc, "model-array-fill", "zero", "flag 'x'");
       break;
     case 'y':
-      vc->flag_diag = true;
       set_option(vc, "print-counterexbin", "true", "flag 'y'");
-      install_sink(vc);
       break;
     default:
       fatal(std::string("CInterface: process_argument: unrecognised flag '") + ch + "'");

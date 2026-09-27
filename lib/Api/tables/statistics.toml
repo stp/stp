@@ -25,8 +25,8 @@
 #
 # Generates: the name table behind Statistics::get / stp_statistics_* / stp.Statistics, the tier query,
 # and the docs. Names are dotted, stable strings; the 2.x `stp_counter_t` ordinals map onto the
-# `bv.*`, `uf.*` and `fp.*` entries below (the `legacy` field). Statistics are never printed by the
-# library: the CLI's -s/-t output is produced from this snapshot by tools/stp.
+# `bv.*`, `uf.*` and `fp.*` entries below (the `legacy` field). This is the snapshot a caller reads;
+# the reports the printing options ask for (the command line's -s and -t) go to the solver's sinks.
 #
 # Fields: name, type (uint64 | double | string), tier (stable | expert | diagnostic), legacy (2.x counter), help.
 

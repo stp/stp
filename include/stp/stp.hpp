@@ -179,10 +179,34 @@ enum class Format : std::uint8_t
   DOT,
   GDL
 };
+/// How a parse treats its input.
+///   DECLARE_AND_ASSERT: the input's declarations, assertions and scopes
+///     take effect, silently; check-sat is not executed, and a CVC or
+///     SMT-LIB 1 query is asserted negated, so that check_sat() answers it.
+///   EXECUTE: the input runs as the stp command line runs it, answering to
+///     the output sink: every SMT-LIB 2 command, under the script's own
+///     set-logic; a CVC or SMT-LIB 1 input's query decided and answered
+///     ("Valid."/"Invalid.", "sat"/"unsat"). Those checks are the input's,
+///     not the solver's: they leave no result or model behind.
+///   PARSE_ONLY: EXECUTE without the deciding (the command line's
+///     --parse-only): check-sat is skipped, and a CVC or SMT-LIB 1 query is
+///     left undecided and unasserted.
 enum class ParseMode : std::uint8_t
 {
   DECLARE_AND_ASSERT = 0,
-  EXECUTE
+  EXECUTE,
+  PARSE_ONLY
+};
+/// How a CNF a check hands to the SAT solver relates to the query
+/// (Solver::set_cnf_sink): the whole query; partial, array read refinement
+/// adding its congruence axioms as the search asks for them; or an
+/// over-approximation, the bit-vector abstractions having replaced
+/// operations with free inputs.
+enum class CnfScope : std::uint8_t
+{
+  WHOLE = 0,
+  PARTIAL,
+  OVER_APPROXIMATION
 };
 enum class Tier : std::uint8_t
 {
@@ -1095,14 +1119,43 @@ public:
   void parse_smt2(std::string_view script, ParseMode = ParseMode::DECLARE_AND_ASSERT);
   void parse(std::string_view text, Format); ///< SMTLIB2, SMTLIB1 or CVC
   void parse_file(std::string_view path, Format = Format::AUTO); ///< AUTO picks by extension
+  /// Reads the input from a stream as far as the parser needs it, taking what
+  /// the stream holds after at most one refill: a script driven over a pipe
+  /// is answered command by command. AUTO reads SMT-LIB 2. IO if the stream
+  /// fails, which ends the parse there.
+  void parse(std::istream& in, Format, ParseMode = ParseMode::DECLARE_AND_ASSERT);
   Term parse_term(std::string_view smt2_term) const; ///< over the manager's name table
 
   std::string to_smt2(bool with_check_sat = false) const;
   std::string to_string(Format) const; ///< SMTLIB2, CVC, DOT, GDL
+  /// The last CVC or SMT-LIB 1 input this solver read, as the stp command
+  /// line's --print-back options print it: the input's question (its
+  /// assertions and its negated query) in CVC (after the declarations and
+  /// assertions), SMTLIB2, GDL or DOT. STATE if there was no such input.
+  std::string input_to_string(Format) const;
   void write_cnf(std::ostream&) const; ///< DIMACS of the current assertions
 
-  /// Where diagnostic-tier options write. Default: nowhere.
+  /// Where diagnostic-tier options write: statistics, warnings and the other
+  /// text the engine prints for people rather than programs, "Fatal Error:"
+  /// reports included. Default: nowhere.
   void set_diagnostic_sink(std::function<void(std::string_view)>);
+  /// Where the solver's printed output goes: the responses of an input read
+  /// with ParseMode::EXECUTE or PARSE_ONLY, and what the printing options
+  /// print. Default: nowhere. An empty chunk asks the sink to flush: the text
+  /// so far is complete. A SAT backend's own report, which print-functionstat
+  /// switches on, reaches this sink from CryptoMiniSat only: CaDiCaL and
+  /// MiniSat write theirs to standard output themselves.
+  void set_output_sink(std::function<void(std::string_view)>);
+  /// Called with the engine's report of a fatal error in this solver's work
+  /// (an internal failure, or a refusal that ends a parse) where it happens,
+  /// before anything unwinds; the report also reaches the diagnostic sink as
+  /// "Fatal Error: ...". The handler may end the process; if it returns, the
+  /// call fails as it otherwise would. It must not call the library.
+  /// Default: none.
+  void set_fatal_error_handler(std::function<void(std::string_view)>);
+  /// Every CNF a check hands to the SAT solver, as DIMACS, and how it relates
+  /// to the query; a check can hand over several (refinement). Default: none.
+  void set_cnf_sink(std::function<void(std::string_view dimacs, CnfScope)>);
 
   // internal
   detail::SolverImpl* impl() const noexcept { return impl_; }
