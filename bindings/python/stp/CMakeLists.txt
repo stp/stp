@@ -28,7 +28,14 @@
 # get_property(STP_LIB_LOCATION TARGET stp PROPERTY LOCATION)
 # file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>)
 
-get_target_property(LIBSTP_BASENAME stp OUTPUT_NAME)
+# The ctypes package loads one shared library by name and expects the 2.x C
+# API in it: libstp while that API is compiled into libstp, libstp2 when
+# STP_LEGACY_C_INTERFACE is off (libstp2 pulls libstp in as a dependency).
+if(STP_LEGACY_C_INTERFACE)
+    get_target_property(LIBSTP_BASENAME stp OUTPUT_NAME)
+else()
+    get_target_property(LIBSTP_BASENAME stp2 OUTPUT_NAME)
+endif()
 set(LIBSTP_FILENAME "${CMAKE_SHARED_LIBRARY_PREFIX}${LIBSTP_BASENAME}${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
 #

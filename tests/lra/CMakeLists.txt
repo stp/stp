@@ -487,7 +487,7 @@ endif()
 add_executable(stp_lra_combination_api_tests
   combination_api_tests.cpp)
 target_link_libraries(stp_lra_combination_api_tests PRIVATE
-  stp Threads::Threads)
+  ${STP_LEGACY_C_LINK} stp Threads::Threads)
 set_property(TARGET stp_lra_combination_api_tests
   PROPERTY INCLUDE_DIRECTORIES
   "${PROJECT_BINARY_DIR}/include"
@@ -508,7 +508,7 @@ set_tests_properties(lra_combination_api PROPERTIES
 add_executable(stp_lra_real_capability_api_tests
   real_capability_api_tests.cpp)
 target_link_libraries(stp_lra_real_capability_api_tests PRIVATE
-  stp Threads::Threads)
+  ${STP_LEGACY_C_LINK} stp Threads::Threads)
 set_property(TARGET stp_lra_real_capability_api_tests
   PROPERTY INCLUDE_DIRECTORIES
   "${PROJECT_BINARY_DIR}/include"
@@ -895,7 +895,7 @@ set_tests_properties(lra_frontend_internal_print_barrier PROPERTIES
 )
 
 add_executable(stp_lra_real_c_api_smoke real_c_api_smoke.c)
-target_link_libraries(stp_lra_real_c_api_smoke PRIVATE stp)
+target_link_libraries(stp_lra_real_c_api_smoke PRIVATE ${STP_LEGACY_C_LINK} stp)
 set_property(TARGET stp_lra_real_c_api_smoke PROPERTY INCLUDE_DIRECTORIES
   "${PROJECT_BINARY_DIR}/include"
   "${PROJECT_SOURCE_DIR}/include"
@@ -906,7 +906,7 @@ set_target_properties(stp_lra_real_c_api_smoke PROPERTIES
   C_EXTENSIONS OFF
 )
 add_executable(stp_lra_real_c_api_undeleted_expr real_c_api_undeleted_expr.c)
-target_link_libraries(stp_lra_real_c_api_undeleted_expr PRIVATE stp)
+target_link_libraries(stp_lra_real_c_api_undeleted_expr PRIVATE ${STP_LEGACY_C_LINK} stp)
 set_property(TARGET stp_lra_real_c_api_undeleted_expr PROPERTY INCLUDE_DIRECTORIES
   "${PROJECT_BINARY_DIR}/include"
   "${PROJECT_SOURCE_DIR}/include"

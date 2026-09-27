@@ -20,21 +20,29 @@
 
 
 # FIXME: Merge into one library
-add_library(cinterface OBJECT
-    c_interface.cpp
-)
+#
+# The 2.x C API objects are only built while libstp is the library that
+# carries that API; with STP_LEGACY_C_INTERFACE off the entry points come from
+# libstp2 (lib/Compat2) instead, and compiling this file would only produce a
+# second, unlinked definition of every one of them.
+if(STP_LEGACY_C_INTERFACE)
+    add_library(cinterface OBJECT
+        c_interface.cpp
+    )
+    add_dependencies(cinterface ASTKind_header)
+    # Reaches the exact-rational header, which includes <imrat.h>. For IMath's
+    # INTERFACE_INCLUDE_DIRECTORIES; see the note in
+    # lib/AbsRefineCounterExample/CMakeLists.txt.
+    target_link_libraries(cinterface PRIVATE IMath)
+endif()
 
 add_library(cppinterface OBJECT
     cpp_interface.cpp
 )
 
-add_dependencies(cinterface ASTKind_header)
 add_dependencies(cppinterface ASTKind_header)
 
-# Both reach the exact-rational header, which includes <imrat.h>. For IMath's
-# INTERFACE_INCLUDE_DIRECTORIES; see the note in
-# lib/AbsRefineCounterExample/CMakeLists.txt.
-target_link_libraries(cinterface PRIVATE IMath)
+# As for cinterface above.
 target_link_libraries(cppinterface PRIVATE IMath)
 
 # FIXME: Remove this

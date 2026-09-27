@@ -56,4 +56,15 @@ set(STP_EXECUTABLE stp)
 set(STP_STATIC_LIBRARY stp)
 set(STP_SHARED_LIBRARY stp)
 
+# Where the 2.x C API (stp/c_interface.h) lives: inside libstp when this is
+# ON, otherwise only in libstp2, the compatibility library exported beside it
+# as the target stp2 (present in both cases). A consumer of that API links
+# ${STP_C_INTERFACE_LIBRARY}.
+set(STP_LEGACY_C_INTERFACE @STP_LEGACY_C_INTERFACE@)
+if(STP_LEGACY_C_INTERFACE)
+  set(STP_C_INTERFACE_LIBRARY stp)
+else()
+  set(STP_C_INTERFACE_LIBRARY stp2)
+endif()
+
 # Note version variables are implicitly set by STPConfigVersion.cmake

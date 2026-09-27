@@ -82,8 +82,12 @@ function(AddSTPGTest sourcefile)
     # SymFPU is not named here: stp carries it as a BUILD_INTERFACE
     # requirement, because the internal header that reaches it can be included
     # from anywhere in the tree.
+    #
+    # STP_LEGACY_C_LINK is libstp2 when the 2.x C API is not part of libstp
+    # (STP_LEGACY_C_INTERFACE=OFF) and empty otherwise: the tests of that API
+    # link whichever library provides it, ahead of stp.
     target_link_libraries(${testname}
-        ${test_allocator} stp ${GTEST_BOTH_LIBRARIES} ${test_backends}
+        ${test_allocator} ${STP_LEGACY_C_LINK} stp ${GTEST_BOTH_LIBRARIES} ${test_backends}
     )
 
     # Add dependency so that building the testsuite

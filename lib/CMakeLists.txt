@@ -91,7 +91,6 @@ set(stp_lib_targets
     floatblaster
     simplifier
     constantbv
-    cinterface
     cppinterface
     stpapi
     parser
@@ -100,6 +99,13 @@ set(stp_lib_targets
     nodefactories
     ${PLATFORM_COMPAT_LIBRARIES}
 )
+
+# The 2.x C API objects go into libstp only while it is the library that
+# carries that API (see STP_LEGACY_C_INTERFACE in the top-level CMakeLists);
+# cppinterface stays either way, because the parsers and the 3.x API use it.
+if(STP_LEGACY_C_INTERFACE)
+    list(APPEND stp_lib_targets cinterface)
+endif()
 
 # ABC's headers reach further than the sources that name it: stp/ToSat/BBNodeAIG.h
 # includes aig/aig/aig.h, and that header is pulled in from most of the tree --
@@ -380,3 +386,7 @@ install(DIRECTORY "${STP_API_GEN_DIR}/include/stp/api"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/stp"
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
 )
+
+# libstp2: the 2.x C API re-implemented over the 3.x C API. After the stp
+# target, which it links.
+add_subdirectory(Compat2)
