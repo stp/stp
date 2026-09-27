@@ -202,9 +202,15 @@ jobs:
         # Cloned here rather than through the build's own CaDiCaL: the point
         # of this leg is that there are two distinct CaDiCaLs about, and one
         # of them has to be somewhere the build did not put it.
+        #
+        # Outside deps/, which the dependency cache saves at the end of the
+        # job: a clone there went into the cache on a miss, and every later
+        # run that hit that entry failed here with "destination path
+        # 'deps/cadical' already exists".
+        alongside="$RUNNER_TEMP/cadical-alongside"
         git clone --depth 1 --branch rel-3.0.1 \
-          https://github.com/arminbiere/cadical deps/cadical
-        ( cd deps/cadical && ./configure -fPIC && make -j"$(nproc)" )
+          https://github.com/arminbiere/cadical "$alongside"
+        ( cd "$alongside" && ./configure -fPIC && make -j"$(nproc)" )
 
         # CADICAL_DIR has to outrank the CaDiCaL in deps/install. find_library
         # reaches CMAKE_PREFIX_PATH before HINTS, and CMakeLists puts
@@ -214,11 +220,11 @@ jobs:
           -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
           -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
           -DUSE_CADICAL:BOOL=ON \
-          -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
+          -DCADICAL_DIR:PATH="$alongside" \
           -DUSE_CRYPTOMINISAT:STRING=OFF
         picked=$(sed -n 's/^CADICAL_LIBRARY:FILEPATH=//p' build-cadical-pick/CMakeCache.txt)
         echo "CADICAL_LIBRARY=$picked"
-        if [ "$picked" != "$GITHUB_WORKSPACE/deps/cadical/build/libcadical.a" ]; then
+        if [ "$picked" != "$alongside/build/libcadical.a" ]; then
           echo "::error::CADICAL_LIBRARY resolved to '$picked', not the CADICAL_DIR copy"
           exit 1
         fi
@@ -234,7 +240,7 @@ jobs:
              -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
              -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
              -DUSE_CADICAL:BOOL=ON \
-             -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
+             -DCADICAL_DIR:PATH="$alongside" \
              -DUSE_CRYPTOMINISAT:STRING=ON
         if ! grep -q "^USE_CRYPTOMINISAT:STRING=ON" build-cadical-cms/CMakeCache.txt; then
           echo "::error::CryptoMiniSat was dropped from a build that asked for it alongside CaDiCaL"
@@ -251,7 +257,7 @@ jobs:
         # And the CaDiCaL it uses is still the CADICAL_DIR one, not something
         # CryptoMiniSat dragged in.
         picked=$(sed -n 's/^CADICAL_LIBRARY:FILEPATH=//p' build-cadical-cms/CMakeCache.txt)
-        if [ "$picked" != "$GITHUB_WORKSPACE/deps/cadical/build/libcadical.a" ]; then
+        if [ "$picked" != "$alongside/build/libcadical.a" ]; then
           echo "::error::with CryptoMiniSat on, CADICAL_LIBRARY resolved to '$picked'"
           exit 1
         fi
