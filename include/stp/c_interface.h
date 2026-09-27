@@ -2689,6 +2689,31 @@ DLL_PUBLIC int vc_isBool(Expr e);
 DLL_PUBLIC void
 vc_registerErrorHandler(void (*error_hdlr)(const char* err_msg));
 
+//! What happens after the handler has been told about a fatal misuse.
+//!
+//! STP_ON_ERROR_ABORT is the historical behaviour and the default: the
+//! handler is called, the message is printed, and the process is aborted,
+//! so that a caller which assumes every returned handle is valid (as the
+//! clients written for this API do) never runs on past a misuse.
+//! STP_ON_ERROR_RETURN makes the misused call return instead -- NULL for a
+//! function that returns a handle, 0 or 2 for the numeric ones, nothing for
+//! a void one -- after the handler has been called, and the checker stays
+//! usable. Nonfatal diagnostics (a model read with no model behind it, a UF
+//! validation failure, a refused flag value) reach the handler and return
+//! under either policy, as they always did.
+//!
+//! The policy is process-global, like the handler. The 2.x implementation
+//! compiled into libstp accepts the setting but can only honour ABORT, since
+//! its fatal path ends the process before it could return; libstp2, the
+//! implementation of this header over STP's 3.x API, honours both.
+enum stp_error_policy_t
+{
+  STP_ON_ERROR_ABORT = 0,
+  STP_ON_ERROR_RETURN = 1
+};
+
+DLL_PUBLIC void vc_setErrorPolicy(enum stp_error_policy_t policy);
+
 //! \brief Returns the hash of the given query state.
 //!
 DLL_PUBLIC int vc_getHashQueryStateToBuffer(VC vc, Expr query);

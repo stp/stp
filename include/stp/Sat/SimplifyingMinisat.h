@@ -46,6 +46,7 @@ public:
 
   bool simplify() override; // Removes already satisfied clauses.
 
+  void setSeed(uint64_t seed) override;
   void setMaxConflicts(int64_t max_confl) override;
 
   void setVerbosity(int v) override;

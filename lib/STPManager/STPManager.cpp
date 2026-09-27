@@ -629,6 +629,32 @@ ASTNode STPMgr::CreateRMConst(unsigned mode)
   return ASTNode(LookupOrCreateRMConst(temp));
 }
 
+ASTNode STPMgr::CreateUninterpretedConst(const ASTNode& carrier,
+                                         const SourceSort& sort)
+{
+  if (sort.kind() != SourceSort::Kind::Uninterpreted)
+    FatalError("CreateUninterpretedConst requires a declared sort");
+  if (carrier.GetKind() != BVCONST || carrier.GetValueWidth() != sort.packedWidth())
+    FatalError("CreateUninterpretedConst: the carrier must be a constant of "
+               "the sort's carrier width: ",
+               carrier);
+  ASTBVConst* src = static_cast<ASTBVConst*>(carrier._int_node_ptr);
+  ASTUninterpretedConst temp(this, src->GetBVConst(), sort);
+  return ASTNode(LookupOrCreateUninterpretedConst(temp));
+}
+
+ASTUninterpretedConst*
+STPMgr::LookupOrCreateUninterpretedConst(ASTUninterpretedConst& s)
+{
+  const ASTBVConstSet::const_iterator it = _bvconst_unique_table.find(&s);
+  if (it != _bvconst_unique_table.end())
+    return static_cast<ASTUninterpretedConst*>(*it);
+
+  ASTUninterpretedConst* copy = new ASTUninterpretedConst(s);
+  _bvconst_unique_table.insert(copy);
+  return copy;
+}
+
 ASTRMConst* STPMgr::LookupOrCreateRMConst(ASTRMConst& s)
 {
   const ASTBVConstSet::const_iterator it = _bvconst_unique_table.find(&s);

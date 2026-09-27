@@ -510,3 +510,8 @@ uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_
 
 
 } //end namespace stp
+
+void stp::CryptoMiniSat5::setSeed(uint64_t seed)
+{
+  s->set_seed(static_cast<uint32_t>(seed));
+}

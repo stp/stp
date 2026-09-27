@@ -436,6 +436,9 @@ public:
   // searching. It does not mean "unlimited".
   // ---------------------------------------------------------------------
 
+  // Seed the backend's randomised choices; backends without one ignore it.
+  virtual void setSeed(uint64_t /*seed*/) {}
+
   virtual void setMaxConflicts(int64_t /*max_confl*/)
   {
     std::cerr
@@ -482,8 +485,23 @@ public:
   // limit has been set.
   bool timeLimitExpired() const
   {
+    if (stop_poll != nullptr && stop_poll(stop_poll_opaque))
+      return true;
     return deadline_set && std::chrono::steady_clock::now() >= deadline;
   }
+
+  // An external stop request, consulted wherever the deadline is (the
+  // interruptible backends poll timeLimitExpired() from their terminators).
+  // Borrowed; NULL clears it.
+  void setStopPoll(bool (*poll)(void*), void* opaque)
+  {
+    stop_poll = poll;
+    stop_poll_opaque = opaque;
+  }
+  // Whether a stop request can arrive: a backend whose terminator only runs
+  // under a deadline has to connect it for this as well, or an interrupt
+  // without a time budget is never seen mid-search.
+  bool hasStopPoll() const { return stop_poll != nullptr; }
 
   // Time left on the query's budget, in seconds; never negative. Only
   // meaningful when hasTimeLimit(). Backends that take a duration rather
@@ -618,6 +636,8 @@ private:
   std::chrono::steady_clock::time_point deadline;
   bool deadline_set = false;
   bool theory_reroute_requested = false;
+  bool (*stop_poll)(void*) = nullptr;
+  void* stop_poll_opaque = nullptr;
 };
 }
 #endif

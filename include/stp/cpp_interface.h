@@ -129,6 +129,7 @@ class Cpp_interface
   std::map<std::string, SourceSort> sort_aliases;
   bool print_success;
   bool ignoreCheckSatRequest;
+  bool retain_uf_declarations; // see retainUFDeclarations
 
   // Used to cache prior queries.
   struct Entry
@@ -189,6 +190,10 @@ private:
     void addTemporarySymbol(const ASTNode& symbol);
     void clearTemporarySymbols();
     void addUFDeclaration(const UFDecl* declaration);
+    // Forget the uninterpreted-function declarations made in this frame
+    // without deactivating them: they belong to whoever keeps the manager
+    // beyond this interface (see Cpp_interface::retainUFDeclarations).
+    void releaseUFDeclarations();
     bool removeSymbol(const ASTNode& symbol);
     bool lookupSymbol(std::string_view name, ASTNode& output) const;
     bool lookupTemporarySymbol(std::string_view name, ASTNode& output) const;
@@ -354,6 +359,17 @@ private:
   // rewrite-rule tools set GlobalParserBM once and then build and destroy
   // several interfaces over the same manager.
   bool set_global_parser_bm;
+
+public:
+  // The text of the last (error ...) response, for embedders that drive the
+  // parser and need the diagnostic rather than the stdout line.
+  std::string last_error_message;
+  // When set, SMT2Parse() starts with the floating-point and Real keywords
+  // enabled instead of waiting for a set-logic that names them; the 3.x API
+  // parses fragments with no logic in front of them.
+  bool all_theory_tokens = false;
+
+private:
 
 public:
   std::unique_ptr<LetMgr> letMgr;
@@ -580,6 +596,24 @@ public:
   DLL_PUBLIC void resetAssertions();
   DLL_PUBLIC void pop();
   DLL_PUBLIC void push();
+
+  // Give the interface a frame and a result-cache entry for every assertion
+  // level the manager already holds beyond the base, so that a script may
+  // pop a level that was pushed before this interface existed. The 3.x API
+  // constructs one interface per parse call over a stack it shares with the
+  // caller; without this a (pop) in the script hits the base-frame guard.
+  DLL_PUBLIC void adoptAssertLevels();
+
+  // Whether the uninterpreted functions still declared when this interface
+  // cleans up (end of script, (exit), destruction) stay active in the
+  // manager's UF context. Off, a frame deactivates its declarations as it
+  // goes, which is what the CLI wants: its interface lives as long as the
+  // manager. The 3.x API turns it on, since it makes one interface per parse
+  // call over a manager that lives on together with the terms applying those
+  // functions: a declaration the script made and did not pop is the
+  // manager's afterwards, as one made through the API is. A (pop) in the
+  // script still deactivates what its level declared.
+  DLL_PUBLIC void retainUFDeclarations(bool retain);
   DLL_PUBLIC void popToFirstLevel(); // We can't pop off the zeroeth level
 
   // Useful when printing back, so that you can parse, but ignore the request.

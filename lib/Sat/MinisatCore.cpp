@@ -210,3 +210,8 @@ bool MinisatCore::simplify()
   return s->simplify();
 }
 }
+
+void stp::MinisatCore::setSeed(uint64_t seed)
+{
+  s->random_seed = static_cast<double>(seed);
+}

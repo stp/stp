@@ -238,10 +238,11 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   QueryTimingReport timing_report(bm->query_timing,
       bm->UserFlags.stats_flag ? &timing : nullptr, std::cerr);
   const auto deadline = started +
-      std::chrono::seconds(bm->UserFlags.timeout_max_time >= 0
-                               ? bm->UserFlags.timeout_max_time : 0);
+      (bm->UserFlags.hasQueryTimeLimit()
+           ? bm->UserFlags.queryTimeLimit()
+           : std::chrono::steady_clock::duration(0));
   const PreparationControl preparation(
-      bm->UserFlags.timeout_max_time >= 0
+      bm->UserFlags.hasQueryTimeLimit()
           ? deadline : PreparationControl::Clock::time_point::max(),
       bm->preparation_control);
   const PreparationScope preparation_scope(bm->preparation_control, preparation);
@@ -318,7 +319,10 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     bm->clearInjectivityAssumed();
     skeletonAsked = false;
     bm->soft_timeout_expired = true;
-    bm->noteUnknown(UnknownReason::Timeout);
+    // A stage that had already said why it stopped (stop-after-cnf) keeps
+    // its reason; an interrupt with no reason of its own is the deadline.
+    if (bm->getUnknownReason() == UnknownReason::None)
+      bm->noteUnknown(UnknownReason::Timeout);
     if (bm->UserFlags.stats_flag)
     {
       const auto finished = std::chrono::steady_clock::now();
@@ -403,7 +407,7 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   // succeeds.
   bm->InvalidateRealModel();
   bm->checkPreparation(PreparationStage::Boundary);
-  if (bm->UserFlags.timeout_max_time >= 0 &&
+  if (bm->UserFlags.hasQueryTimeLimit() &&
       std::chrono::steady_clock::now() >= deadline)
   {
     bm->soft_timeout_expired = true;

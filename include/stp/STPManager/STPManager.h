@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "stp/Util/QueryTiming.h"
 #include "stp/AST/ASTFPConst.h"
 #include "stp/AST/ASTRMConst.h"
+#include "stp/AST/ASTUninterpretedConst.h"
 #include "stp/AST/ASTInterior.h"
 #include "stp/AST/ASTNode.h"
 #include "stp/AST/ASTSymbol.h"
@@ -59,6 +60,7 @@ ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
 }
 class ExtensionalityContext;
 class UFContext;
+class ASTUninterpretedConst;
 class ASTRealConst;
 class LraAstState;
 class FpAbstraction;
@@ -576,6 +578,8 @@ private:
 
   ASTFPConst* LookupOrCreateFPConst(ASTFPConst& s);
   ASTRMConst* LookupOrCreateRMConst(ASTRMConst& s);
+  ASTUninterpretedConst* LookupOrCreateUninterpretedConst(
+      ASTUninterpretedConst& s);
 
   // Cache of zero/one/max BVConsts of different widths.
   ASTVec zeroes;
@@ -654,6 +658,10 @@ public:
   // The value to append to the filename when saving the CNF.
   unsigned int CNFFileNameCounter;
 
+  // Where the 3.x API's Solver::write_cnf receives the DIMACS of the first
+  // CNF a check generates; NULL otherwise. Borrowed for the one check.
+  std::ostream* cnf_sink = nullptr;
+
   /****************************************************************
    * Public Member Functions                                      *
    ****************************************************************/
@@ -701,6 +709,10 @@ public:
   DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode& bvconst,
                                    unsigned exp_width, unsigned sig_width);
   DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
+  // The element of a declared sort whose carrier pattern is `carrier` (a
+  // BVCONST of the sort's carrier width), as a value of that sort.
+  DLL_PUBLIC ASTNode CreateUninterpretedConst(const ASTNode& carrier,
+                                              const SourceSort& sort);
 
   // Exact Real construction. Text is parsed only by the private
   // ExactRational implementation; no binary floating representation enters

@@ -70,6 +70,7 @@ public:
   void unsatAssumptions(const vec_literals& assumps,
                         std::vector<int>& out) override;
 
+  void setSeed(uint64_t seed) override;
   void setMaxConflicts(int64_t max_confl) override;
 
   bool simplify() override; // Removes already satisfied clauses.

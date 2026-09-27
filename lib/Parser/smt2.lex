@@ -73,6 +73,11 @@
   static thread_local bool floatTokensActive = false;
   static thread_local bool realTokensActive = false;
 
+  // Inside an indexed identifier -- between "(_" and its ")" -- a numeral
+  // is an index, a width or a count, never a Real literal, whatever the
+  // Real gate says. Set by the "_" rule, cleared by the next ")".
+  static thread_local bool indexedIdentifierOpen = false;
+
   // The most recent floating-point name that the gate above handed back as an
   // ordinary identifier without finding a declaration for it. A missing
   // set-logic surfaces far from its cause -- the grammar just trips over an
@@ -167,6 +172,7 @@ namespace stp
 
   void SMT2ResetCommandLexerState()
   {
+    indexedIdentifierOpen = false;
     ufDeclarationNamePending = false;
     functionParameterNamePending = false;
     declassifiedNamePending = false;
@@ -403,7 +409,7 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
     exact, while every other use of a numeral is a syntax error rather than
     the silently wrapped value strtoul would hand back. */
 {DIGIT}+               {
-                         if (realTokensActive)
+                         if (realTokensActive && !indexedIdentifierOpen)
                          {
                            smt2lval.str = new std::string(smt2text);
                            return REAL_NUMERAL_TOK;
@@ -444,8 +450,8 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
  /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
 "("             { return LPAREN_TOK; }
-")"             { return RPAREN_TOK; }
-"_"             { return UNDERSCORE_TOK; }
+")"             { indexedIdentifierOpen = false; return RPAREN_TOK; }
+"_"             { indexedIdentifierOpen = true; return UNDERSCORE_TOK; }
 "!"             { return EXCLAIMATION_MARK_TOK; }
 ":"             { return COLON_TOK; }
 

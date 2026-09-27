@@ -71,6 +71,7 @@ void Cpp_interface::init()
 
   print_success = false;
   ignoreCheckSatRequest = false;
+  retain_uf_declarations = false;
   produce_models = false;
   session_touched = false;
   model_valid = false;
@@ -708,6 +709,7 @@ void Cpp_interface::success()
 //TODO escape string.
 void Cpp_interface::error(std::string msg)
 {
+  last_error_message = msg;
   cout << "(error \"" << msg << "\")" << endl;
   flush(cout);
 }
@@ -968,6 +970,21 @@ void Cpp_interface::push()
 
   addFrame();
   checkInvariant();
+}
+
+void Cpp_interface::adoptAssertLevels()
+{
+  while (frames.size() < bm.getAssertLevel())
+  {
+    cache.push_back(Entry(SOLVER_UNDECIDED));
+    addFrame();
+  }
+  checkInvariant();
+}
+
+void Cpp_interface::retainUFDeclarations(bool retain)
+{
+  retain_uf_declarations = retain;
 }
 
 void Cpp_interface::popAssumptionFrame()
@@ -1287,6 +1304,12 @@ void Cpp_interface::cleanUp()
   functions.clear();
   for (SolverFrame* frame : frames)
     frame->getFunctions().clear();
+
+  // The manager outlives this interface and keeps the functions the script
+  // declared (retainUFDeclarations): the frames must not deactivate them.
+  if (retain_uf_declarations)
+    for (SolverFrame* frame : frames)
+      frame->releaseUFDeclarations();
 
   while (frames.size() > 0)
   {
@@ -1610,6 +1633,7 @@ void Cpp_interface::getInfo(std::string flag)
       case UnknownReason::CarrierExhausted:
       case UnknownReason::AssumedInjectivity:
       case UnknownReason::AIGBudget:
+      case UnknownReason::StoppedAfterCnf:
       case UnknownReason::Incomplete:
         // The predefined SMT-LIB spelling, followed by what was incomplete:
         // the flag admits an s-expression, and a bare "incomplete" tells a
@@ -2146,6 +2170,11 @@ void Cpp_interface::SolverFrame::addUFDeclaration(const UFDecl* declaration)
 {
   assert(declaration != NULL);
   _scoped_uf_declarations.push_back(declaration);
+}
+
+void Cpp_interface::SolverFrame::releaseUFDeclarations()
+{
+  _scoped_uf_declarations.clear();
 }
 
 void Cpp_interface::SolverFrame::addSymbol(const ASTNode& symbol)

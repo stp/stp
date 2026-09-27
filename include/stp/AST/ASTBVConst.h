@@ -38,6 +38,7 @@ class ASTBVConst : public ASTInternal
   friend class ASTNode;
   friend class ASTFPConst;
   friend class ASTRMConst;
+  friend class ASTUninterpretedConst;
 
 private:
   // CBV is actually an unsigned*. The bitvector constant is

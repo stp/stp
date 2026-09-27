@@ -437,8 +437,12 @@ namespace stp
   {
     if (c->size() < 2)
     {
+      // Abandon the command the way fatal_yyerror's declassified path does:
+      // SMT2Parse() turns the unwind into a failed parse, so a library caller
+      // (the 3.x API's parse_term) sees a PARSE error rather than exit(1).
       yyerror("Must be >=2 operands.");
-      exit(1);
+      delete c;
+      throw stp::DeclassifiedNameAbandon();
     }
    ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(k, *c));
    delete c;
@@ -1497,10 +1501,31 @@ namespace stp
     return n;
   }
 
+  ASTNode* createFPFromReal(unsigned int exp_width, unsigned int sig_width,
+                            ASTNode* rm, ParsedRealConstant* real);
+
   // ((_ to_fp e s) rm f) -- reformat a float under a rounding mode.
   ASTNode* createFPToFP(unsigned int exp_width, unsigned int sig_width,
                         ASTNode* rm, ASTNode* expr)
   {
+    // With the Real keywords live (a Real logic, or a parse the API opened
+    // for every theory) a real literal is lexed as a Real term and folded to
+    // a Real constant, so it arrives here rather than through
+    // an_real_constant: hand it to the from-Real conversion.
+    if (expr->GetKind() == stp::REAL_CONST)
+    {
+      std::string num = expr->GetRealNumerator();
+      const std::string den = expr->GetRealDenominator();
+      const bool negative = !num.empty() && num[0] == '-';
+      if (negative)
+        num.erase(0, 1);
+      ParsedRealConstant* real = new ParsedRealConstant{
+          new std::string(num), den == "1" ? nullptr : new std::string(den),
+          negative};
+      delete expr;
+      return createFPFromReal(exp_width, sig_width, rm, real);
+    }
+
     checkFpFormatWidths(exp_width, sig_width);
     checkRoundingMode(rm);
 
@@ -1543,8 +1568,10 @@ namespace stp
         
     if (c->size() < 2)
     {
+      // see createNode: unwind to SMT2Parse() rather than exit(1)
       yyerror("Must be >=2 operands");
-      exit(1);
+      delete c;
+      throw stp::DeclassifiedNameAbandon();
     }
     checkBitVectorTerms(*c);
     const unsigned int width = (*c)[0].GetValueWidth();
@@ -2187,9 +2214,11 @@ cmdi:
      RESET_TOK
     {
        stp::GlobalParserInterface->reset();
-       // reset clears the logic, and with it all theory keyword gates.
-       stp::SMT2SetFloatTokens(false);
-       stp::SMT2SetRealTokens(false);
+       // reset clears the logic, and with it the theory keyword gates a
+       // set-logic opened; the gates a caller opened for the whole parse
+       // (all_theory_tokens) stay open.
+       stp::SMT2SetFloatTokens(stp::GlobalParserInterface->all_theory_tokens);
+       stp::SMT2SetRealTokens(stp::GlobalParserInterface->all_theory_tokens);
        stp::GlobalParserInterface->success();
     }
 |
@@ -4314,8 +4343,8 @@ namespace stp {
     GlobalParserInterface->letMgr->frameMode = true;
     // Each SMT2Parse is one script: the floating-point keywords start
     // disabled and turn on at an FP set-logic.
-    SMT2SetFloatTokens(false);
-    SMT2SetRealTokens(false);
+    SMT2SetFloatTokens(GlobalParserInterface->all_theory_tokens);
+    SMT2SetRealTokens(GlobalParserInterface->all_theory_tokens);
     SMT2ResetCommandLexerState();
     int result;
     try

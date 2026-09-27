@@ -55,10 +55,14 @@ THE SOFTWARE.
     return o.str();
   }
 
+  // Print the diagnostic and let bison abandon the parse: CVCParse() then
+  // returns nonzero. The command line exits on that; the 2.x C API turns it
+  // into its fatal error; the 3.x API reports a recoverable PARSE error.
   int yyerror(const char *s) {
     const std::string msg = cvc_diagnostic(s);
     cout << msg << endl;
-    FatalError(msg.c_str());
+    if (GlobalParserInterface != NULL)
+      GlobalParserInterface->last_error_message = msg;
     return YY_EXIT_FAILURE;
   }
   int yyerror(void* /*AssertsQuery*/, const char* s) { return yyerror(s); }

@@ -281,9 +281,11 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
     }
     break;
     case FP_TO_IEEE_BV:
-      FatalError("SMTLIB2: a float-to-IEEE-bits node (an API-only operation) "
-                 "has no SMT-LIB spelling",
-                 n);
+      // The Z3/STP extension spelling (kinds.toml); the 3.x API builds
+      // these and prints them, and a printer must not abort on a term.
+      os << "(fp.to_ieee_bv ";
+      SMTLIB_Print1(os, c[0], 0, letize);
+      os << ")";
       break;
     default:
     {

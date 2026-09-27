@@ -63,10 +63,12 @@
     return o.str();
   }
 
+  // As in cvc.y: print, record, and let the parse return failure.
   int yyerror(const char *s) {
     const std::string msg = smt_diagnostic(s);
     cout << msg << endl;
-    FatalError(msg.c_str());
+    if (GlobalParserInterface != NULL)
+      GlobalParserInterface->last_error_message = msg;
     return 1;
   }
   int yyerror(void* /*AssertsQuery*/, const char* s) { return yyerror(s); }

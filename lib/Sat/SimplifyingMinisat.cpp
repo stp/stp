@@ -172,3 +172,8 @@ void SimplifyingMinisat::setFrozen(uint32_t x)
   s->setFrozen(x, true);
 }
 }
+
+void stp::SimplifyingMinisat::setSeed(uint64_t seed)
+{
+  s->random_seed = static_cast<double>(seed);
+}

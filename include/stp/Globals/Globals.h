@@ -127,7 +127,10 @@ enum class UnknownReason
   AssumedInjectivity,
   // --aig-node-budget stopped bit-blasting before the AIG exhausted memory.
   // Raise that budget; the accompanying sentence says what it stopped at.
-  AIGBudget
+  AIGBudget,
+  // The 3.x API's stop-after-cnf option: the query was abandoned, as asked,
+  // once its CNF had been generated (and written to the manager's cnf_sink).
+  StoppedAfterCnf
 };
 
 // Empty vector. Useful commonly used ASTNodes

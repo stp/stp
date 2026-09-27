@@ -194,9 +194,11 @@ bool Cadical::solveInternal(bool& timeout_expired)
     s->limit("conflicts", budget);
   }
 
-  // The Terminator reads the query's deadline from the base class, so this
-  // only needs connecting -- there is nothing to re-arm.
-  if (hasTimeLimit())
+  // The Terminator reads the query's deadline and the external stop request
+  // from the base class, so this only needs connecting -- there is nothing
+  // to re-arm. An interrupt can arrive with no time budget at all, so the
+  // stop poll connects it too.
+  if (hasTimeLimit() || hasStopPoll())
   {
     s->connect_terminator(&time_limit);
   }
@@ -910,3 +912,8 @@ int Cadical::PropagatorBridge::cb_add_external_clause_lit()
 }
 
 } //end namespace stp
+
+void stp::Cadical::setSeed(uint64_t seed)
+{
+  s->set("seed", static_cast<int>(seed % 2000000000u));
+}

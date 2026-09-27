@@ -1388,6 +1388,8 @@ enum reason_unknown_t vc_getReasonUnknown(VC vc)
       return REASON_UNKNOWN_ASSUMED_INJECTIVITY;
     case stp::UnknownReason::AIGBudget:
       return REASON_UNKNOWN_AIG_BUDGET;
+    case stp::UnknownReason::StoppedAfterCnf:
+      return REASON_UNKNOWN_INCOMPLETE;
     case stp::UnknownReason::None:
       break;
   }
@@ -4466,18 +4468,22 @@ Expr vc_parseExpr(VC vc, const char* infile)
     cvcin = NULL;
     stp::GlobalSTP = stp_i;
     stp::GlobalParserBM = b;
-    smtparse((void*)AssertsQuery);
+    const int parsed = smtparse((void*)AssertsQuery);
     stp::GlobalSTP = NULL;
     stp::GlobalParserBM = NULL;
+    if (parsed != 0)
+      stp::FatalError("CInterface: vc_parseExpr: the SMT-LIB1 input did not parse");
   }
   else
   {
     stp::GlobalSTP = stp_i;
     stp::GlobalParserBM = b;
     stp::GlobalParserInterface->letMgr->frameMode = false;
-    cvcparse((void*)AssertsQuery);
+    const int parsed = cvcparse((void*)AssertsQuery);
     stp::GlobalSTP = NULL;
     stp::GlobalParserBM = NULL;
+    if (parsed != 0)
+      stp::FatalError("CInterface: vc_parseExpr: the CVC input did not parse");
   }
 
   stp::ASTNode asserts = (*(stp::ASTVec*)AssertsQuery)[0];
@@ -4537,6 +4543,21 @@ Expr getChild(Expr e, int i)
 void vc_registerErrorHandler(void (*error_hdlr)(const char* err_msg))
 {
   stp::vc_error_hdlr = error_hdlr;
+}
+
+// Accepted so that a client written against the header links and runs against
+// either provider of it, but only ABORT can be honoured here: every fatal path
+// in this file is stp::FatalError, which ends the process. libstp2 (the same
+// header over the 3.x API, lib/Compat2) is the implementation that returns.
+static enum stp_error_policy_t c_interface_error_policy = STP_ON_ERROR_ABORT;
+
+void vc_setErrorPolicy(enum stp_error_policy_t policy)
+{
+  c_interface_error_policy = policy;
+  if (policy == STP_ON_ERROR_RETURN)
+    reportCAPIError("vc_setErrorPolicy: STP_ON_ERROR_RETURN is not honoured by "
+                    "the 2.x implementation inside libstp; a fatal misuse still "
+                    "aborts (link libstp2 for a returning implementation)");
 }
 
 int vc_getHashQueryStateToBuffer(VC vc, Expr query)
@@ -4915,7 +4936,8 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
     stp::GlobalSTP = stp_i;
     stp::GlobalParserBM = b;
     stp::SMTScanString(s);
-    smtparse((void*)&AssertsQuery);
+    if (smtparse((void*)&AssertsQuery) != 0)
+      stp::FatalError("CInterface: vc_parseMemExpr: the SMT-LIB1 input did not parse");
     stp::GlobalSTP = NULL;
     stp::GlobalParserBM = NULL;
   }
@@ -4924,7 +4946,8 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
     stp::GlobalSTP = stp_i;
     stp::GlobalParserBM = b;
     stp::CVCScanString(s);
-    cvcparse((void*)&AssertsQuery);
+    if (cvcparse((void*)&AssertsQuery) != 0)
+      stp::FatalError("CInterface: vc_parseMemExpr: the CVC input did not parse");
     stp::GlobalSTP = NULL;
     stp::GlobalParserBM = NULL;
   }

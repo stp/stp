@@ -258,6 +258,22 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
     }
   }
 
+  if (bm->cnf_sink != nullptr)
+    cnf.writeDimacs(*bm->cnf_sink);
+
+  if (bm->UserFlags.stop_after_cnf)
+  {
+    // Abandon the check the way a preparation deadline does: TopLevelSTP
+    // catches this, clears the tables and reports the reason noted here.
+    bm->noteUnknown(UnknownReason::StoppedAfterCnf,
+                    needAbsRef ? "stopped after generating the first CNF, "
+                                 "which is partial (array or arithmetic "
+                                 "refinement was still to come)"
+                               : "stopped after generating the CNF");
+    throw PreparationInterrupted(PreparationStage::Boundary,
+                                 std::chrono::steady_clock::now());
+  }
+
   if (bm->UserFlags.exit_after_CNF)
   {
     if (bm->UserFlags.quick_statistics_flag)

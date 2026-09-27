@@ -152,6 +152,8 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
       break;
   };
 
+  if (flags.random_seed != 0)
+    newS->setSeed(flags.random_seed);
   return newS;
 }
 
@@ -196,8 +198,8 @@ bool enableBVAIfWanted(SATSolver& s, const UserDefinedFlags& flags,
 void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags)
 {
   const auto deadline = std::chrono::steady_clock::now() +
-      std::chrono::seconds(flags.timeout_max_time >= 0
-                               ? flags.timeout_max_time : 0);
+      (flags.hasQueryTimeLimit() ? flags.queryTimeLimit()
+                                 : std::chrono::steady_clock::duration(0));
   applySolveBudgets(s, flags, deadline);
 }
 
@@ -206,7 +208,10 @@ void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags,
 {
   if (flags.timeout_max_conflicts >= 0)
     s.setMaxConflicts(flags.timeout_max_conflicts);
-  if (flags.timeout_max_time >= 0)
+  if (flags.hasQueryTimeLimit())
     s.setDeadline(deadline);
+  // The external stop request rides with the flags so that every backend a
+  // query creates -- the first and any replacement -- polls the same hook.
+  s.setStopPoll(flags.stop_poll, flags.stop_poll_opaque);
 }
 }

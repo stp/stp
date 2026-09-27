@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/Sat/CadicalOptions.h"
 #include "stp/config.h"
 
+#include <chrono>
 #include <cstdint>
 #include <iosfwd>
 #include <string>
@@ -1821,6 +1822,10 @@ public:
 
   bool exit_after_CNF = false;
 
+  // The 3.x API's form of exit_after_CNF: abandon the check after its first
+  // CNF with unknown(StoppedAfterCnf) instead of calling exit(0).
+  bool stop_after_cnf = false;
+
   // Stop after parsing the input, skipping any check-sat commands.
   bool parse_only = false;
 
@@ -1834,7 +1839,35 @@ public:
 
   int64_t timeout_max_conflicts = -1;
   int num_solver_threads = 1;
+
+  // Seed for the SAT backend's randomised choices; 0 leaves each backend at
+  // its own default. Set by the 3.x API's random-seed option.
+  uint64_t random_seed = 0;
   int64_t timeout_max_time = -1; // seconds
+
+  // A millisecond budget which, when it is >= 0, takes precedence over
+  // timeout_max_time. The 3.x API sets this one: its budgets are
+  // milliseconds, and 0 means "give up at once".
+  int64_t timeout_max_time_ms = -1;
+
+  // An external stop request, polled wherever the deadline is polled (the
+  // SAT backends' terminators and the preparation stages). The 3.x API's
+  // interrupt() and Terminator arrive through it. Borrowed, never owned;
+  // copied along with the flags.
+  bool (*stop_poll)(void*) = nullptr;
+  void* stop_poll_opaque = nullptr;
+
+  bool hasQueryTimeLimit() const
+  {
+    return timeout_max_time_ms >= 0 || timeout_max_time >= 0;
+  }
+  // The budget as a duration; only meaningful when hasQueryTimeLimit().
+  std::chrono::steady_clock::duration queryTimeLimit() const
+  {
+    if (timeout_max_time_ms >= 0)
+      return std::chrono::milliseconds(timeout_max_time_ms);
+    return std::chrono::seconds(timeout_max_time >= 0 ? timeout_max_time : 0);
+  }
 
   // check the counterexample against the original input to STP
   bool check_counterexample_flag = false;
