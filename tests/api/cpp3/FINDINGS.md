@@ -487,12 +487,13 @@ the process.
 - **`unsat_assumptions()` after a batch (non-incremental) check** returns every
   assumption, not the failed subset; the subset is reported when the
   incremental driver ran the check (`incremental = on`, or auto-engaged).
-- **A Real-valued function application has no model value.** The snapshot
-  skips functions with a Real codomain or domain (the UF checker hands their
-  results to the exact model, which the snapshot cannot carry), so
-  `Model::try_value(h(x))` is empty and `value` completes to `0`; the sorts
-  test records it. `real_value` of such an application is therefore the
-  completion, not the solver's answer.
+- **A function over Reals is tabled from the exact model.** The certified UF
+  seed carries bit-level values only, so the snapshot records the value of
+  each application of such a function in the checked formula (the exact
+  model's, for a Real result) and tables it by its arguments' values; an
+  application the check never saw completes to the codomain's default. A Real
+  argument with a bit-vector result under a comparison is refused by the
+  engine at assertion (`UNSUPPORTED`).
 - **The literal FP converters need at least 3 exponent bits**: `mk_fp(sort,
   rm, double)` and the text form raise `UNSUPPORTED` for `(_ FloatingPoint 2
   s)`; `mk_fp_from_bits` still builds those values.

@@ -416,4 +416,56 @@ TEST(Threads, a_manager_created_on_another_thread_works_there)
   EXPECT_EQ(s.model().uint64_value(*tm.symbol("x")), 1u);
 }
 
+// A literal beside a float is converted under the operation's rounding mode,
+// which the operation checks: a term that is not a mode is refused there, at
+// argument 0, and never read as one.
+TEST(Errors, a_literal_mode_is_checked_by_its_operation)
+{
+  TermManager tm, other;
+  const Term x = tm.declare("x", tm.mk_fp32_sort());
+  for (const Term& mode : {tm.mk_bv(5, 0), tm.mk_bv(8, 0), tm.mk_bv(5, 1), tm.mk_true(),
+                           tm.declare("m", tm.mk_bv_sort(5)), x})
+  {
+    const std::optional<RecoverableError> e = API3_ERROR_OF(fp_add(mode, x, 1.0));
+    ASSERT_TRUE(e.has_value()) << mode;
+    EXPECT_EQ(e->code(), ErrorCode::SORT_MISMATCH) << mode;
+    EXPECT_EQ(e->argument_index(), std::optional<int>(0)) << mode;
+  }
+  API3_EXPECT_ERROR(ErrorCode::NULL_HANDLE, fp_add(Term(), x, 1.0));
+  API3_EXPECT_ERROR(ErrorCode::FOREIGN_MANAGER, fp_add(other.mk_rm(RoundingMode::RTZ), x, 1.0));
+  // a mode value is honoured: 0.1 converts down under RTZ and up under RTP
+  const Term zero = tm.mk_fp(tm.mk_fp32_sort(), RoundingMode::RNE, 0.0);
+  EXPECT_FALSE(tm.simplify(fp_add(tm.mk_rm(RoundingMode::RTZ), zero, 0.1))
+                   .same_as(tm.simplify(fp_add(tm.mk_rm(RoundingMode::RTP), zero, 0.1))));
+}
+
+// The engine keeps a width in 32 bits: a result wider than 2^32 - 1 bits is
+// refused rather than wrapped.
+TEST(Errors, widths_that_do_not_fit_are_refused)
+{
+  TermManager tm;
+  const Term a = tm.declare("a", tm.mk_bv_sort(6));
+  API3_EXPECT_ERROR(ErrorCode::INDEX_OUT_OF_RANGE, zero_extend(0xfffffffeu, a));
+  API3_EXPECT_ERROR(ErrorCode::INDEX_OUT_OF_RANGE, sign_extend(0xfffffffeu, a));
+  API3_EXPECT_ERROR(ErrorCode::INDEX_OUT_OF_RANGE, repeat(0x80000000u, a));
+  const Term wide = tm.declare("wide", tm.mk_bv_sort(0xffffffffu));
+  API3_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, concat(wide, a));
+  API3_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.mk_fp_sort(0xfffffffeu, 3));
+  // up to the limit is fine
+  EXPECT_EQ(zero_extend(0xffffffffu - 6, a).sort().bv_size(), 0xffffffffu);
+}
+
+// A check's time budget is a duration: a negative one is refused, and the
+// solver is left as it was.
+TEST(Errors, a_negative_time_budget_is_refused)
+{
+  TermManager tm;
+  Solver s(tm);
+  s.add(tm.declare("b", tm.mk_bool_sort()));
+  CheckBudget budget;
+  budget.time = std::chrono::milliseconds(-1);
+  API3_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s.check_sat({}, budget));
+  EXPECT_TRUE(s.check_sat().is_sat());
+}
+
 } // namespace

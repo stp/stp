@@ -30,8 +30,10 @@ THE SOFTWARE.
 
 #include "stp_c_internal.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <mutex>
 
 namespace stp
@@ -411,7 +413,9 @@ std::optional<CheckBudget> budget_arg(const stp_budget* b)
     return std::nullopt;
   CheckBudget out;
   if (b->has_time)
-    out.time = std::chrono::milliseconds(static_cast<std::int64_t>(b->time_ms));
+    // beyond the largest duration is no limit a check could reach
+    out.time = std::chrono::milliseconds(static_cast<std::int64_t>(
+        std::min<std::uint64_t>(b->time_ms, std::numeric_limits<std::int64_t>::max())));
   if (b->has_conflicts)
     out.conflicts = b->conflicts;
   return out;
@@ -582,6 +586,23 @@ stp_sort sort_sort(stp_sort s, const char* fn, F&& f) noexcept
   CSort* cs = csort(s);
   return guarded<stp_sort>(cs->cm, nullptr, fn, nullptr,
                            [&] { return export_sort(cs->cm, f(Sort(cs->cm->impl, cs->index))); });
+}
+
+// A named constructor (gen/kind_ctors_c.inc): the checks of stp_mk_term under
+// the constructor's own name, with an operand's error at its operand
+// position, where the core reports a sort mismatch too.
+stp_term named_ctor(stp_tm tm, const char* fn, stp_kind kind, std::size_t n,
+                    const stp_term* args) noexcept
+{
+  return make(tm, fn, [&](CManager* cm) {
+    if (n > 0 && args == nullptr)
+      detail::fail(ErrorCode::NULL_HANDLE, fn, "the operand array is null");
+    std::vector<Term> operands;
+    operands.reserve(n);
+    for (std::size_t i = 0; i < n; ++i)
+      operands.push_back(term_arg(cm, args[i], fn, static_cast<int>(i)));
+    return tmh(cm).mk_term(kind_arg(kind, fn, -1), operands);
+  });
 }
 } // namespace
 
@@ -1462,7 +1483,7 @@ stp_term stp_mk_term2_indexed2(stp_tm tm, stp_kind kind, stp_term a, stp_term b,
 
 // ============================================================ named constructors
 
-// the generated per-kind constructors, over stp_mk_term / stp_mk_term2
+// the generated per-kind constructors, over named_ctor
 #include "gen/kind_ctors_c.inc"
 
 stp_term stp_extract(stp_tm tm, uint32_t hi, uint32_t lo, stp_term t)

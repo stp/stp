@@ -47,6 +47,9 @@ namespace detail
 namespace
 {
 
+// The engine keeps a bit-vector's width in 32 bits.
+constexpr std::uint64_t kMaxBvWidth = 0xffffffffu;
+
 struct Ctx
 {
   ManagerImpl* m;
@@ -458,8 +461,13 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
     // ------------------------------------------------------------ BV structure
     case Kind::BV_CONCAT:
     {
+      std::uint64_t total = 0;
       for (std::size_t i = 0; i < args.size(); ++i)
-        c.expect_bv(i);
+        total += c.expect_bv(i);
+      if (total > kMaxBvWidth)
+        fail(ErrorCode::INVALID_ARGUMENT, fn,
+             "concat gives a width of " + std::to_string(total) + ", beyond the largest, " +
+                 std::to_string(kMaxBvWidth));
       ASTNode out = args[0];
       for (std::size_t i = 1; i < args.size(); ++i)
         out = concat2(c, out, args[i]);
@@ -482,14 +490,24 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
       const std::uint32_t w = c.expect_bv(0);
       if (idx[0] == 0)
         return args[0];
+      if (std::uint64_t(w) + idx[0] > kMaxBvWidth)
+        fail(ErrorCode::INDEX_OUT_OF_RANGE, fn,
+             "extending a width of " + std::to_string(w) + " by " + std::to_string(idx[0]) +
+                 " bits goes beyond the largest width, " + std::to_string(kMaxBvWidth),
+             std::nullopt, {c.term(0)});
       const std::uint32_t nw = w + idx[0];
       return c.bv_term(k == Kind::BV_ZERO_EXTEND ? BVZX : BVSX, nw, {args[0], c.c32(nw)});
     }
     case Kind::BV_REPEAT:
     {
-      c.expect_bv(0);
+      const std::uint32_t w = c.expect_bv(0);
       if (idx[0] == 0)
         fail(ErrorCode::INDEX_OUT_OF_RANGE, fn, "repeat needs k >= 1", std::nullopt, {c.term(0)});
+      if (std::uint64_t(w) * idx[0] > kMaxBvWidth)
+        fail(ErrorCode::INDEX_OUT_OF_RANGE, fn,
+             "repeating a width of " + std::to_string(w) + " " + std::to_string(idx[0]) +
+                 " times goes beyond the largest width, " + std::to_string(kMaxBvWidth),
+             std::nullopt, {c.term(0)});
       ASTNode out = args[0];
       for (std::uint32_t i = 1; i < idx[0]; ++i)
         out = concat2(c, out, args[0]);
@@ -724,6 +742,10 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
         fail(ErrorCode::SORT_MISMATCH, fn,
              "fp needs an exponent of at least 2 bits and a significand of at least 1 bit",
              1, {c.term(1), c.term(2)});
+      if (1 + std::uint64_t(ew) + mw > kMaxBvWidth)
+        fail(ErrorCode::INVALID_ARGUMENT, fn,
+             "fp gives a width of " + std::to_string(1 + std::uint64_t(ew) + mw) +
+                 ", beyond the largest, " + std::to_string(kMaxBvWidth));
       const ASTNode bits = concat2(c, concat2(c, args[0], args[1]), args[2]);
       return to_fp_node(c, FP_TOFP, ew, mw + 1, nullptr, bits);
     }
@@ -732,6 +754,11 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
       const std::uint32_t w = c.expect_bv(0);
       if (idx[0] < 2 || idx[1] < 2)
         fail(ErrorCode::INDEX_OUT_OF_RANGE, fn, "a floating-point format needs e >= 2 and s >= 2");
+      if (std::uint64_t(idx[0]) + idx[1] > kMaxBvWidth)
+        fail(ErrorCode::INDEX_OUT_OF_RANGE, fn,
+             "a floating-point format of " + std::to_string(idx[0]) + " + " +
+                 std::to_string(idx[1]) + " bits goes beyond the largest width, " +
+                 std::to_string(kMaxBvWidth));
       if (w != idx[0] + idx[1])
         c.mismatch(0, "a bit-vector of " + std::to_string(idx[0] + idx[1]) + " bits");
       return to_fp_node(c, FP_TOFP, idx[0], idx[1], nullptr, args[0]);
@@ -744,6 +771,11 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
       c.expect_rm(0);
       if (idx[0] < 2 || idx[1] < 2)
         fail(ErrorCode::INDEX_OUT_OF_RANGE, fn, "a floating-point format needs e >= 2 and s >= 2");
+      if (std::uint64_t(idx[0]) + idx[1] > kMaxBvWidth)
+        fail(ErrorCode::INDEX_OUT_OF_RANGE, fn,
+             "a floating-point format of " + std::to_string(idx[0]) + " + " +
+                 std::to_string(idx[1]) + " bits goes beyond the largest width, " +
+                 std::to_string(kMaxBvWidth));
       if (k == Kind::FP_TO_FP_FROM_FP)
       {
         c.expect_fp(1);
@@ -952,7 +984,15 @@ ASTNode fp_literal_from_rational(ManagerImpl* m, const char* fn, const SortRec& 
                                  const ASTNode* rm)
 {
   unsigned mode = rm_encoding(m->config.default_rounding_mode);
-  if (rm != nullptr)
+  // The literal is an operand of an operation that takes `rm` too, and that
+  // operation checks it: a mode that is not a RoundingMode term of this
+  // manager (a null term, a bit-vector, another manager's term) is refused
+  // there, naming its argument. Until then it must not be read as a mode --
+  // a bit-vector's bits need not be one of the five encodings -- so the
+  // literal takes the default.
+  const bool usable = rm != nullptr && rm->IsOwnedBy(m->bm) &&
+                      rm->GetSourceSort().kind() == SourceSort::Kind::RoundingMode;
+  if (usable)
   {
     if (rm->GetKind() != BVCONST)
       fail(ErrorCode::UNSUPPORTED, fn,

@@ -715,4 +715,41 @@ TEST(Parsing, term_printing)
   API3_EXPECT_ERROR(ErrorCode::NULL_HANDLE, Term().str());
 }
 
+// A CVC or SMT-LIB 1 query is a validity question: a query that is, or folds
+// to, TRUE is valid, so the solver it was parsed into is unsatisfiable.
+TEST(Parsing, a_true_query_is_valid)
+{
+  for (const char* text :
+       {"QUERY(TRUE);\n", "x : BITVECTOR(2);\nQUERY(BVMOD(2, 0bin10, 0bin10) = 0bin00);\n"})
+  {
+    TermManager tm;
+    Solver s(tm);
+    s.parse(text, Format::CVC);
+    EXPECT_TRUE(s.check_sat().is_unsat()) << text;
+  }
+  TermManager tm;
+  Solver s(tm);
+  s.parse("QUERY(FALSE);\n", Format::CVC); // just the assertions, of which there are none
+  EXPECT_TRUE(s.check_sat().is_sat());
+}
+
+// A declaration no assertion mentions is still the script's, for a later script
+// or term to use; one made under a push that the script popped is not.
+TEST(Parsing, unused_declarations_are_kept)
+{
+  TermManager tm;
+  Solver s(tm);
+  s.parse_smt2("(declare-fun x () (_ BitVec 8))\n(push 1)\n(declare-fun gone () Bool)\n(pop 1)\n");
+  ASSERT_TRUE(s.symbol("x").has_value());
+  EXPECT_FALSE(s.symbol("gone").has_value());
+  s.parse_smt2("(assert (= x #x01))\n");
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.model().uint64_value(*s.symbol("x")), 1u);
+  EXPECT_TRUE(s.parse_term("x").same_as(*s.symbol("x")));
+  s.parse("y : BITVECTOR(4);\nQUERY(FALSE);\n", Format::CVC);
+  EXPECT_TRUE(s.symbol("y").has_value());
+  s.parse("(benchmark b :logic QF_BV :extrafuns ((z BitVec[4])) :formula true)\n", Format::SMTLIB1);
+  EXPECT_TRUE(s.symbol("z").has_value());
+}
+
 } // namespace

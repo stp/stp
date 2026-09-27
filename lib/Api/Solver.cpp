@@ -107,6 +107,7 @@ SolverImpl::SolverImpl(ManagerImpl* m, const Options& o) : mgr(m)
     stp = new STP(mgr->bm);
     mgr->solvers.push_back(this);
     registered = true;
+    mgr->bm->UserFlags.coverage = coverage; // a new solver has counted nothing
     mgr->active = this;
     mgr->bm->Push(); // the base level
     reapply_engine_defaults();
@@ -238,6 +239,7 @@ void SolverImpl::activate()
          std::string("the engine refused to reinstall the assertion stack: ") + e.what());
   }
   shelf.clear();
+  bm->UserFlags.coverage = coverage;
   mgr->active = this;
   reapply_engine_defaults();
 }
@@ -253,6 +255,10 @@ void SolverImpl::deactivate()
     shelf.emplace_back(level->begin(), level->end());
   while (bm->getAssertLevel() > 0)
     bm->Pop();
+  bm->publishFpCoverage(); // the floating-point counts not yet folded in are this solver's
+  coverage = bm->UserFlags.coverage;
+  backend_when_shelved = bm->UserFlags.solver_to_use;
+  shelved_backend_known = true;
   bm->UserFlags.stop_poll = nullptr;
   bm->UserFlags.stop_poll_opaque = nullptr;
   mgr->active = nullptr;
@@ -410,6 +416,10 @@ Result SolverImpl::run_check(const char* fn, const std::vector<ASTNode>& assumpt
 Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& assumptions,
                                   const std::optional<CheckBudget>& budget)
 {
+  if (budget.has_value() && budget->time.has_value() && budget->time->count() < 0)
+    fail(ErrorCode::INVALID_ARGUMENT, fn,
+         "a check's time budget cannot be negative (0ms gives up at once; leave the field "
+         "empty for no limit)");
   ensure_snapshot();
   options.resolve(fn);
   apply_options(fn);
@@ -476,7 +486,7 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
   if (budget.has_value())
   {
     if (budget->time.has_value())
-      flags.timeout_max_time_ms = budget->time->count() < 0 ? 0 : budget->time->count();
+      flags.timeout_max_time_ms = budget->time->count();
     if (budget->conflicts.has_value())
       flags.timeout_max_conflicts = static_cast<std::int64_t>(*budget->conflicts);
   }
@@ -1267,7 +1277,12 @@ void run_parser(SolverImpl* s, std::string_view text, Format format, ParseMode m
   bool keep_uf = false;
   bool array_equality = false;
   {
+  // What an SMT-LIB 2 script declared, kept past its end (see the adoption).
+  // Declared before the interface, which may tear its frames down again as it
+  // is destroyed, and detached from it once read.
+  ASTVec declared_at_end;
   Cpp_interface pi(*bm, bm->defaultNodeFactory);
+  pi.keepDeclaredSymbolsAtCleanup(&declared_at_end);
   GlobalParserInterface = &pi;
   GlobalSTP = s->stp;
   GlobalParserBM = bm;
@@ -1410,9 +1425,10 @@ void run_parser(SolverImpl* s, std::string_view text, Format format, ParseMode m
       }
       // the parser asserted the assumptions itself; the query becomes an
       // assertion of its negation, so that check_sat answers the file's
-      // question (QUERY(FALSE), the CVC spelling of "just the assertions",
-      // negates to true and adds nothing)
-      if (out.size() >= 2 && !out[1].IsNull() && out[1].GetKind() != TRUE)
+      // question: unsat is "valid". QUERY(FALSE), the CVC spelling of "just
+      // the assertions", negates to true and adds nothing; a query that is or
+      // folds to TRUE negates to false, which is asserted.
+      if (out.size() >= 2 && !out[1].IsNull())
       {
         const ASTNode negated = bm->defaultNodeFactory->CreateNode(NOT, out[1]);
         if (negated.GetKind() != TRUE)
@@ -1432,6 +1448,13 @@ void run_parser(SolverImpl* s, std::string_view text, Format format, ParseMode m
   if (UFContext* ctx = bm->getUFContextIfAny())
     for (const UFDecl* d : ctx->activeDeclarations())
       roots.push_back(d->identityNode());
+  // and the ones no assertion mentions: a script may declare a symbol for a
+  // later script, a parse_term or a model read to use (an SMT-LIB 2 script's
+  // end has torn its frames down, keeping their symbols in declared_at_end)
+  for (const ASTNode& declared : pi.getDeclaredSymbols())
+    roots.push_back(declared);
+  pi.keepDeclaredSymbolsAtCleanup(nullptr);
+  roots.insert(roots.end(), declared_at_end.begin(), declared_at_end.end());
   array_equality = detail::any_node(roots, detail::is_array_equality);
   if (array_equality && s->mgr->array_equality_off)
   {
@@ -1876,8 +1899,11 @@ Statistics Solver::statistics() const
 {
   SolverImpl* s = live(*this, "Solver::statistics");
   STPMgr* bm = s->mgr->bm;
-  bm->publishFpCoverage();
-  const UserDefinedFlags::EncodingCoverage& c = bm->UserFlags.coverage;
+  // the engine holds the active solver's counts; another solver's are its own
+  const bool active = s->mgr->active == s;
+  if (active)
+    bm->publishFpCoverage();
+  const UserDefinedFlags::EncodingCoverage& c = active ? bm->UserFlags.coverage : s->coverage;
   typedef UserDefinedFlags UF;
   std::map<std::string, StatisticValue> e;
   e["time.total_ms"] =
@@ -1885,7 +1911,7 @@ Statistics Solver::statistics() const
   e["checks.total"] = static_cast<std::uint64_t>(s->checks);
   e["checks.bitblasted"] = static_cast<std::uint64_t>(c.queries_bitblasted);
   const char* backend = "minisat";
-  switch (bm->UserFlags.solver_to_use)
+  switch (active || !s->shelved_backend_known ? bm->UserFlags.solver_to_use : s->backend_when_shelved)
   {
     case UF::CRYPTOMINISAT5_SOLVER: backend = "cryptominisat"; break;
     case UF::CADICAL_SOLVER: backend = "cadical"; break;

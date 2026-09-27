@@ -401,6 +401,11 @@ Term ManagerImpl::declare(const char* fn, const std::string& name, std::uint32_t
     return make_term(this, existing->node);
   }
   const SortRec& r = sorts[sort];
+  // Recording a symbol can change the engine's model tables (a Real symbol
+  // resets the exact Real model), so a model the active solver has not been
+  // asked for yet is taken first, while the tables still hold it.
+  if (active != nullptr)
+    active->ensure_snapshot();
   SymbolRec rec;
   rec.sort = sort;
   rec.anonymous = anonymous;
@@ -972,6 +977,10 @@ Sort TermManager::mk_fp_sort(std::uint32_t e, std::uint32_t s)
     detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::mk_fp_sort",
                  "a floating-point sort needs at least 2 exponent and 2 significand bits",
                  e < 2 ? 0 : 1);
+  if (std::uint64_t(e) + s > 0xffffffffu) // the engine keeps a width in 32 bits
+    detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::mk_fp_sort",
+                 "a floating-point sort of " + std::to_string(e) + " + " + std::to_string(s) +
+                     " bits is wider than the largest width, 4294967295");
   return Sort(m, m->fp_sort(e, s));
 }
 Sort TermManager::mk_fp16_sort() { return mk_fp_sort(5, 11); }

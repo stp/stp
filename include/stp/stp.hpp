@@ -39,9 +39,9 @@ THE SOFTWARE.
 //   - Terms, sorts and models are values: copying is O(1), destruction order is
 //     free. A TermManager lives while anything that came from it lives.
 //   - Threads: a manager and the solvers and models over it are used by one
-//     thread at a time (this alpha additionally pins them to the thread that
-//     created the manager). Solver::interrupt() is the one call safe from any
-//     thread and from a signal handler.
+//     thread at a time, whichever thread that is; independent managers run
+//     concurrently. Solver::interrupt() is the one call safe from any thread
+//     and from a signal handler.
 //   - Term == Term and Term != Term BUILD terms (SMT-LIB '=' and 'distinct').
 //     Term has no conversion to bool, so `if (a == b)` does not compile; the
 //     structural test is a.same_as(b). std::equal_to<Term> is structural and
@@ -901,7 +901,7 @@ private:
 /// Per-check overrides of the persistent max-time / max-num-confl options.
 struct CheckBudget
 {
-  std::optional<std::chrono::milliseconds> time; ///< 0ms means: give up at once
+  std::optional<std::chrono::milliseconds> time; ///< 0ms: give up at once; negative: INVALID_ARGUMENT
   std::optional<std::uint64_t> conflicts;
 };
 

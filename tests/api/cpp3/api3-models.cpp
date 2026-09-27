@@ -498,4 +498,55 @@ TEST_F(Models, no_model_states)
   EXPECT_EQ(s.model().uint64_value(x), 3u);
 }
 
+// A function over Reals is tabled from the exact model: an application the
+// check saw has the solver's value, an equal argument gives the same value,
+// any other completes to 0, and the printed model is well formed and names
+// none of the solver's own symbols.
+TEST_F(Models, functions_over_reals)
+{
+  const Term g = tm.declare("g", tm.mk_fun_sort({R}, R));
+  const Term k = tm.declare("k", tm.mk_fun_sort({bv8}, R));
+  const Term r = tm.declare("r", R);
+  s.add(g(r) == tm.mk_real("-5/2"));
+  s.add(g(g(r)) == tm.mk_real(9));
+  s.add(r == tm.mk_real("3/4"));
+  s.add(k(x) == tm.mk_real("7/2"));
+  s.add(x == 3);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model m = s.model();
+  EXPECT_EQ(m.real_value(g(r)).str(), "-5/2");
+  EXPECT_TRUE(m.try_value(g(r)).has_value());
+  EXPECT_EQ(m.real_value(g(tm.mk_real("3/4"))).str(), "-5/2");
+  EXPECT_EQ(m.real_value(g(tm.mk_real("-5/2"))).str(), "9");
+  EXPECT_EQ(m.real_value(g(tm.mk_real(1))).str(), "0");
+  EXPECT_FALSE(m.try_value(g(tm.mk_real(1))).has_value());
+  EXPECT_EQ(m.real_value(k(tm.mk_bv(8, 3))).str(), "7/2");
+  for (const Term& a : s.assertions())
+    EXPECT_TRUE(m.value(a).same_as(tm.mk_true())) << a;
+  const std::string text = m.to_smt2();
+  EXPECT_NE(text.find("(define-fun g ((x!0 Real)) Real (ite"), std::string::npos) << text;
+  EXPECT_EQ(text.find('@'), std::string::npos) << text;
+}
+
+// A function over Reals that no assertion applies does not stop the model.
+TEST_F(Models, an_unapplied_function_over_reals)
+{
+  tm.declare("unused", tm.mk_fun_sort({R}, R));
+  s.add(x == 1);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.model().uint64_value(x), 1u);
+}
+
+// A model not yet read survives a Real declaration made after the check.
+TEST_F(Models, a_real_declared_after_the_check)
+{
+  const Term r = tm.declare("r4", R);
+  s.add(r == tm.mk_real("4/3"));
+  ASSERT_TRUE(s.check_sat().is_sat());
+  tm.declare("later", R);
+  const Model m = s.model();
+  EXPECT_EQ(m.real_value(r).str(), "4/3");
+  EXPECT_TRUE(m.in_core(r));
+}
+
 } // namespace

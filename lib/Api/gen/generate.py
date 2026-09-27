@@ -539,18 +539,22 @@ class Emitter:
             lo, hi = arity_bounds(k['arity'])
             operands, _ = parse_sig(k['sig'])
             rm_first = bool(operands) and operands[0] == 'RM'
+            # Each goes through named_ctor (lib/Api/c/stp_c.cpp) under its own
+            # name, so that an error record names the function the caller called.
+            pair = 'stp_term %s(stp_tm tm, stp_term a, stp_term b) { const stp_term args[] = {a, b}; return named_ctor(tm, "%s", %s, 2, args); }'
+            array = 'stp_term %s(stp_tm tm, size_t n, const stp_term* args) { return named_ctor(tm, "%s", %s, n, args); }'
             if hi == -1:
                 if k['name'] in self.COUNT_FIRST:
-                    lines.append('stp_term %s(stp_tm tm, size_t n, const stp_term* args) { return stp_mk_term(tm, %s, n, args); }' % (c, kind))
-                    lines.append('stp_term %s2(stp_tm tm, stp_term a, stp_term b) { return stp_mk_term2(tm, %s, a, b); }' % (c, kind))
+                    lines.append(array % (c, c, kind))
+                    lines.append(pair % (c + '2', c + '2', kind))
                 else:
-                    lines.append('stp_term %s(stp_tm tm, stp_term a, stp_term b) { return stp_mk_term2(tm, %s, a, b); }' % (c, kind))
-                    lines.append('stp_term %s_n(stp_tm tm, size_t n, const stp_term* args) { return stp_mk_term(tm, %s, n, args); }' % (c, kind))
+                    lines.append(pair % (c, c, kind))
+                    lines.append(array % (c + '_n', c + '_n', kind))
             else:
                 names = ['rm' if (i == 0 and rm_first) else 'abcd'[i - (1 if rm_first else 0)] for i in range(lo)]
                 params = ', '.join('stp_term %s' % n for n in names)
-                lines.append('stp_term %s(stp_tm tm, %s) { const stp_term args[] = {%s}; return stp_mk_term(tm, %s, %d, args); }' % (
-                    c, params, ', '.join(names), kind, lo))
+                lines.append('stp_term %s(stp_tm tm, %s) { const stp_term args[] = {%s}; return named_ctor(tm, "%s", %s, %d, args); }' % (
+                    c, params, ', '.join(names), c, kind, lo))
         self.write('lib/Api/gen/kind_ctors_c.inc', '\n'.join(lines) + '\n')
 
     # ----------------------------------------------------------------- options

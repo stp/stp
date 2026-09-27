@@ -241,9 +241,11 @@ TEST(Sorts, function_sorts)
   s.add(real_gt(app, 2));
   s.add(x == 1);
   ASSERT_TRUE(s.check_sat().is_sat());
-  // a Real-valued application has no table in the snapshot (FINDINGS.md,
-  // design points): the model reports it as incomplete rather than wrong
-  EXPECT_FALSE(s.model().try_value(app).has_value());
+  // a Real-valued application is tabled from the exact model: the solver's
+  // own answer, which satisfies the assertion it was checked with
+  const std::optional<Term> v = s.model().try_value(app);
+  ASSERT_TRUE(v.has_value());
+  EXPECT_TRUE(s.model().value(real_gt(app, 2)).same_as(tm.mk_true()));
   EXPECT_EQ(s.model().uint64_value(x), 1u);
 }
 

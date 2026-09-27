@@ -1346,6 +1346,11 @@ void Cpp_interface::cleanUp()
     for (SolverFrame* frame : frames)
       frame->releaseUFDeclarations();
 
+  // What the frames declare is what the script left in scope, which a caller
+  // may have asked to keep (keepDeclaredSymbolsAtCleanup).
+  if (symbols_at_cleanup != nullptr)
+    *symbols_at_cleanup = getDeclaredSymbols();
+
   while (frames.size() > 0)
   {
     removeFrame();
@@ -2294,6 +2299,14 @@ void Cpp_interface::SolverFrame::adoptDeclarations(SolverFrame& donor)
                                  donor._scoped_uf_declarations.begin(),
                                  donor._scoped_uf_declarations.end());
   donor._scoped_uf_declarations.clear();
+}
+
+ASTVec Cpp_interface::getDeclaredSymbols() const
+{
+  ASTVec out;
+  for (const SolverFrame* frame : frames)
+    out.insert(out.end(), frame->getSymbols().begin(), frame->getSymbols().end());
+  return out;
 }
 
 bool Cpp_interface::SolverFrame::lookupSymbol(std::string_view name,

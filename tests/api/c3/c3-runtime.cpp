@@ -161,7 +161,8 @@ TEST(c3_runtime, the_manager_outlives_every_release_order)
   const stp_error* e = stp_tm_error(t1);
   ASSERT_NE(nullptr, e);
   EXPECT_EQ(STP_ERR_FOREIGN_MANAGER, e->code);
-  EXPECT_EQ(3, e->argument_index);
+  EXPECT_STREQ("stp_bvadd", e->function); // the constructor called, at its operand
+  EXPECT_EQ(1, e->argument_index);
   EXPECT_EQ(1u, stp_tm_error_num_terms(t1));
   EXPECT_EQ(q, stp_tm_error_term(t1, 0));
   stp_tm_clear_error(t1);

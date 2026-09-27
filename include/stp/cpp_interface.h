@@ -183,7 +183,8 @@ private:
     // Obtain the functions for the current frame
     vector<std::string>& getFunctions();
 
-    // Obtain the symbols for the current frame
+    // Obtain the symbols declared in this frame
+    const ASTVec& getSymbols() const { return _scoped_symbols; }
 
     void addSortAlias(const std::string& name);
     void addSymbol(const ASTNode& symbol);
@@ -231,6 +232,19 @@ private:
 
   // Obtain the symbols/functions for the current frame
   vector<std::string>& getCurrentFunctions();
+
+public:
+  // Every symbol a parse declared that is still in scope: the symbols of each
+  // live frame, the base frame first. A symbol declared under a (push) that
+  // was popped again is not among them.
+  ASTVec getDeclaredSymbols() const;
+  // The end of an SMT-LIB 2 script tears the frames down (cleanUp) and with
+  // them their references; a caller that wants the symbols they held then
+  // passes a vector for cleanUp to fill first (nullptr: none).
+  void keepDeclaredSymbolsAtCleanup(ASTVec* sink) { symbols_at_cleanup = sink; }
+
+private:
+  ASTVec* symbols_at_cleanup = nullptr;
 
   // What the most recent check-sat charged to each pipeline stage: the
   // difference between two readings of the manager's run times taken around

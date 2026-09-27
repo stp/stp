@@ -69,9 +69,8 @@ THE SOFTWARE.
  *     stp_set_internal_error_policy(STP_ABORT) or STP_ABORT_ON_INTERNAL_ERROR=1 in the
  *     environment restores an abort, for debugging.
  *   - Thread contract: a manager and the solvers/models over it are used by one thread at a
- *     time, and in this alpha by the thread that created the manager; independent managers
- *     are concurrent; stp_solver_interrupt is the one call safe from any thread and from a
- *     signal handler.
+ *     time, whichever thread that is; independent managers are concurrent;
+ *     stp_solver_interrupt is the one call safe from any thread and from a signal handler.
  *   - Public struct layouts, versioned by STP_API_VERSION: stp_result, stp_entailment,
  *     stp_budget, stp_error, stp_float_value, stp_version. Every other type is opaque.
  */

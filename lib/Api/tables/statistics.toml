@@ -402,9 +402,9 @@ help = ""
 # ---------------------------------------------------------------- incremental driver and LRA (diagnostic; names to be filled from the engine's counters)
 [[stat]]
 name = "incremental.engaged"
-type = "string"
+type = "uint64"
 tier = "diagnostic"
-help = "whether the incremental driver was in use for the last check: true | false"
+help = "1 when the incremental driver was in use for the last check, 0 otherwise"
 
 [[stat]]
 name = "incremental.reencodes"

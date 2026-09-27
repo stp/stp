@@ -63,6 +63,18 @@ ModelSnapshot::~ModelSnapshot()
     mgr->release();
 }
 
+// A function over Reals, in its codomain or an argument: its values are not
+// bit-carried, so the certified seed cannot table it.
+bool involves_real(const UFSignature& sig)
+{
+  if (sig.codomain().kind() == SourceSort::Kind::Real)
+    return true;
+  for (const SourceSort& d : sig.domain())
+    if (d.kind() == SourceSort::Kind::Real)
+      return true;
+  return false;
+}
+
 bool index_before(const ASTNode& a, const ASTNode& b)
 {
   return CONSTANTBV::BitVector_Lexicompare(a.GetBVConst(), b.GetBVConst()) < 0;
@@ -195,7 +207,14 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
     seed = adapter->certifiedModelSeed();
   else if (UFContext* ctx = bm->getUFContextIfAny())
   {
-    fallback = UFModel::defaultSeed(ctx->activeDeclarations());
+    // the vacuous seed of each function whose values are bit-carried; one
+    // over Reals gets its table from the exact model below (a Real has no
+    // bit-level default to seed it with)
+    std::vector<const UFDecl*> seeded;
+    for (const UFDecl* d : ctx->activeDeclarations())
+      if (d != nullptr && !involves_real(d->signature()))
+        seeded.push_back(d);
+    fallback = UFModel::defaultSeed(seeded);
     seed = &fallback;
   }
   if (seed != nullptr)
@@ -205,13 +224,8 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
       if (f.declaration == nullptr)
         continue;
       const UFSignature& sig = f.declaration->signature();
-      if (sig.codomain().kind() == SourceSort::Kind::Real)
-        continue; // the exact model answers those applications; no table
-      bool real_arg = false;
-      for (const SourceSort& d : sig.domain())
-        real_arg = real_arg || d.kind() == SourceSort::Kind::Real;
-      if (real_arg)
-        continue;
+      if (involves_real(sig))
+        continue; // tabled from the exact model below
       FunctionCases fc;
       fc.identity = f.declaration->identityNode();
       fc.sort = mgr->sort_of_node(fc.identity, fn);
@@ -270,12 +284,96 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
   // valued as a whole; only the symbols are the core)
   for (const ASTNode& sym : bm->AllRealSymbols())
   {
+    // The solver's own symbols (a lowered application's result, say) and a
+    // function's identity are not entries of the model.
+    if (sym.GetKind() == SYMBOL &&
+        (bm->FoundIntroducedSymbolSet(sym) || mgr->decl_of(sym) != nullptr ||
+         STPMgr::isReservedSymbolName(sym.GetName())))
+      continue;
     ASTNode value;
     if (bm->HasRealModelValue(sym) && bm->RealModelValueNode(sym, value) && !value.IsNull())
     {
       snap->scalars[sym] = value;
       if (sym.GetKind() == SYMBOL)
         snap->core.push_back(sym);
+    }
+  }
+
+  // Functions over Reals. The certified seed above carries bit-level values
+  // only, so a function with a Real codomain or a Real argument is tabled
+  // from its applications in the checked formula: each one's value (the
+  // exact model's, for a Real result) is recorded as a value of the
+  // application itself, and then, keyed by its arguments' values, as a case
+  // of the function, which is how an application built later is answered;
+  // any other application completes to the codomain's default.
+  {
+    std::map<ASTNode, std::vector<ASTNode>> applications; // identity -> applications
+    std::vector<ASTNode> roots = bm->GetAsserts();
+    roots.insert(roots.end(), last_assumptions.begin(), last_assumptions.end());
+    ASTNodeSet seen;
+    std::vector<ASTNode> stack(roots.begin(), roots.end());
+    while (!stack.empty())
+    {
+      const ASTNode n = stack.back();
+      stack.pop_back();
+      if (n.IsNull() || !seen.insert(n).second)
+        continue;
+      if (n.GetKind() == UF_APPLY)
+        if (const UFDecl* d = mgr->decl_of(n[0]))
+          if (involves_real(d->signature()))
+            applications[n[0]].push_back(n);
+      for (const ASTNode& c : n.GetChildren())
+        stack.push_back(c);
+    }
+    std::vector<ASTNode> valued;
+    for (const auto& entry : applications)
+      for (const ASTNode& app : entry.second)
+      {
+        const SourceSort codomain = mgr->decl_of(entry.first)->signature().codomain();
+        ASTNode value;
+        if (codomain.kind() == SourceSort::Kind::Real)
+        {
+          if (!bm->HasRealModelValue(app) || !bm->RealModelValueNode(app, value))
+            value = ASTNode();
+        }
+        else
+          value = lift(mgr, ce->GetCounterExample(app), codomain);
+        if (!value.IsNull() && value.isConstant())
+        {
+          snap->scalars[app] = value;
+          valued.push_back(app);
+        }
+      }
+    if (!applications.empty())
+    {
+      // arguments through the snapshot as it now stands, where a nested
+      // application already has its value
+      Evaluator ev(*snap, fn, /*complete=*/true);
+      for (const auto& entry : applications)
+      {
+        FunctionCases fc;
+        fc.identity = entry.first;
+        fc.sort = mgr->sort_of_node(fc.identity, fn);
+        const std::uint32_t codomain = mgr->rec(fc.sort).codomain;
+        fc.else_value = mgr->default_value(codomain, fn);
+        for (const ASTNode& app : entry.second)
+        {
+          auto vit = snap->scalars.find(app);
+          if (vit == snap->scalars.end())
+            continue;
+          std::vector<ASTNode> args;
+          for (std::size_t i = 1; i < app.Degree(); ++i)
+            args.push_back(ev.evaluate(app[i]));
+          bool known = false;
+          for (const auto& c : fc.cases)
+            known = known || c.first == args;
+          if (!known)
+            fc.cases.emplace_back(std::move(args), vit->second);
+        }
+        if (!fc.cases.empty())
+          snap->core.push_back(fc.identity);
+        snap->functions[fc.identity] = std::move(fc);
+      }
     }
   }
 

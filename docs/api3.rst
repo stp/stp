@@ -210,7 +210,7 @@ Several solvers, several threads
 --------------------------------
 
 Any number of solvers may be live over one manager, each with its own
-assertion stack, options and models; switching between them replays the
+assertion stack, options, models and statistics; switching between them replays the
 assertion stack, which is the one cost. A manager and everything created from
 it may be used from any thread, one call at a time: the caller serialises, and
 ``interrupt()`` is the one call that may overlap a running check.

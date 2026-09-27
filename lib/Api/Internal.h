@@ -541,6 +541,12 @@ struct SolverImpl
   // levels (the base level first) live here; while this one is active they
   // are the engine's own stack.
   std::vector<std::vector<ASTNode>> shelf;
+  // The same for the engine's counters (UserDefinedFlags::coverage, one per
+  // manager): this solver's while another is active, so that each solver's
+  // statistics count its own checks.
+  UserDefinedFlags::EncodingCoverage coverage{};
+  UserDefinedFlags::SATSolvers backend_when_shelved = UserDefinedFlags::MINISAT_SOLVER;
+  bool shelved_backend_known = false;
 
   SolverImpl(ManagerImpl* m, const Options& o);
   ~SolverImpl();

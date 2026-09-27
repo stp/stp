@@ -308,4 +308,26 @@ TEST_F(SolversTest, every_theory_survives_the_shelf)
   EXPECT_TRUE(b.check_sat().is_sat());
 }
 
+// Statistics are each solver's own: the engine's counters follow the active
+// solver, so a new solver has counted nothing and one solver's checks do not
+// show in another's.
+TEST_F(SolversTest, statistics_are_each_solvers_own)
+{
+  Solver a(tm);
+  a.add(bvmul(x, y) == tm.mk_bv(8, 35));
+  a.add(bvugt(x, 1));
+  a.add(bvugt(y, 1));
+  ASSERT_TRUE(a.check_sat().is_sat());
+  const std::uint64_t bitblasted = a.statistics().uint64("checks.bitblasted");
+  EXPECT_GE(bitblasted, 1u);
+  Solver b(tm);
+  EXPECT_EQ(b.statistics().uint64("checks.bitblasted"), 0u);
+  EXPECT_EQ(b.statistics().uint64("checks.total"), 0u);
+  b.add(bvmul(x, x) == tm.mk_bv(8, 49));
+  ASSERT_TRUE(b.check_sat().is_sat());
+  EXPECT_EQ(a.statistics().uint64("checks.bitblasted"), bitblasted);
+  EXPECT_EQ(a.statistics().uint64("checks.total"), 1u);
+  EXPECT_EQ(b.statistics().uint64("checks.total"), 1u);
+}
+
 } // namespace
