@@ -45,10 +45,11 @@ AddSTPGTest(api3-engine-failure.cpp)
 AddSTPGTest(api3-rosetta.cpp)
 AddSTPGTest(api3-const-arrays.cpp)
 
-# The 2.x C API's suites, rewritten against this API. A suite that checks an
-# internal property (a flag reaching the engine, what the extensionality
-# checker holds) reaches the engine through api3_engine.hpp, which reads
-# lib/Api/Internal.h.
+# The 2.x C API's suites, rewritten against this API: libstp carries no 2.x
+# code, and tests/api/compat2 keeps a few of the originals to test libstp2. A
+# suite that checks an internal property (a flag reaching the engine, what the
+# extensionality checker holds) reaches the engine through api3_engine.hpp,
+# which reads lib/Api/Internal.h.
 set(API3_REWRITTEN_SUITES
     array-cvcl-02
     array-equality-retired-after-pop

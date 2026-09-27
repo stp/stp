@@ -64,7 +64,7 @@ add_test (
   NAME python-pip-install
   COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pip_install_test.py
           ${PROJECT_SOURCE_DIR}/bindings/python
-          $<TARGET_FILE:stp>
+          $<TARGET_FILE:stp2>
           ${CMAKE_CURRENT_BINARY_DIR}/pip-install
 )
 set_tests_properties(python-pip-install PROPERTIES SKIP_RETURN_CODE 77)

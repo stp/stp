@@ -5,9 +5,10 @@ STP 3.x replaces the ``vc_*`` interface of ``c_interface.h`` with one API
 designed together for three languages: ``<stp/stp.hpp>`` for C++17,
 ``<stp/stp.h>`` for C, and the ``stp`` Python package (a Cython module under a
 z3py-style shell). The three surfaces share one object model and one option
-registry, so a program reads the same way in each. The 2.x interface survives as
-``libstp2``, a compatibility library implemented over the C API (see
-:ref:`api3-compat`).
+registry, so a program reads the same way in each. ``libstp`` carries this API
+alone, and STP's own command line, bindings and tests are written against it.
+The 2.x interface survives as ``libstp2``, a separate compatibility library
+implemented over the C API (see :ref:`api3-compat`).
 
 Objects
 -------
@@ -133,7 +134,7 @@ record so a chain of constructions can be checked once.
 
    #include <stp/stp.h>
 
-   stp_tm tm = stp_tm_new();
+   stp_tm tm = stp_tm_new(NULL);
    stp_sort bv32 = stp_mk_bv_sort(tm, 32);
    stp_term x = stp_declare(tm, "x", bv32);
    stp_term c = stp_eq(tm, stp_bvmul(tm, x, stp_mk_bv_uint64(tm, 32, 3)),
@@ -188,8 +189,12 @@ Options are keyword arguments with ``-`` and ``.`` spelled ``_``:
 Compatibility with 2.x
 ----------------------
 
-``libstp2`` implements ``c_interface.h`` over ``stp.h``: KLEE and other 2.x
-clients link it unchanged (``-lstp2`` instead of ``-lstp``). It reproduces the
+``libstp2`` implements ``c_interface.h`` over ``stp.h``, and is the only
+library that provides it: KLEE and other 2.x clients link it unchanged
+(``-lstp2`` instead of ``-lstp``; with CMake, the target ``stp2``, which the
+package's ``STP_C_INTERFACE_LIBRARY``, ``STP_SHARED_LIBRARY`` and
+``STP_STATIC_LIBRARY`` variables name). The header-only ``fp.hpp`` and
+``uf.hpp`` over ``c_interface.h`` come with it. It reproduces the
 2.x ownership modes, the error handler and the model-lifetime rules, with two
 documented exceptions: reading a counterexample after a VALID answer returns
 ``NULL`` with a diagnostic instead of an invented value, and an unmatched

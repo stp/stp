@@ -23,10 +23,11 @@
 # nothing of the engine directly: the point of the library is that the public
 # 3.x C surface suffices to carry the 2.x one. See NOTES.md in this directory.
 #
-# Built in every configuration. With STP_LEGACY_C_INTERFACE=ON libstp carries
-# the same entry points itself and the two must not both be linked into one
-# program; with it OFF this is the only provider, and the 2.x tests, tools and
-# the ctypes Python package use it (see STP_LEGACY_C_LINK).
+# The only provider of the 2.x C API: libstp carries the 3.x API alone. The
+# 2.x headers (c_interface.h, and the header-only fp.hpp and uf.hpp over it)
+# are installed with this library, and the in-tree 2.x clients (the libstp2
+# tests in tests/api/compat2, extdiff, the handle-churn benchmark and the
+# ctypes Python package) link it.
 add_library(stp2
     c_interface2.cpp
     c_interface2_terms.cpp
@@ -38,6 +39,7 @@ target_compile_features(stp2 PRIVATE cxx_std_17)
 # the note in lib/CMakeLists.txt; inert outside MSVC).
 target_compile_definitions(stp2 PRIVATE STP_EXPORTS)
 set_target_properties(stp2 PROPERTIES
+    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp;${PROJECT_SOURCE_DIR}/include/stp/uf.hpp"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )
@@ -57,4 +59,5 @@ install(TARGETS stp2
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     RUNTIME DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/stp"
 )

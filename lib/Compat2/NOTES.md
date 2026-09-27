@@ -19,36 +19,29 @@ fare against it, and every 3.x defect met on the way.
 
 ## 1. Build and packaging
 
-- `STP_LEGACY_C_INTERFACE` (top-level `CMakeLists.txt`, default `ON`) decides
-  which library carries the 2.x C API. `ON` is today's tree: the `cinterface`
-  object library (`lib/Interface/c_interface.cpp`) goes into `libstp`. `OFF`
-  leaves it out of `libstp` and out of the build, and `libstp2` is the only
-  provider. `libstp2` itself is built in both configurations. `cppinterface`
-  stays in `libstp` either way (the parsers and the 3.x API use it).
-- `STP_LEGACY_C_LINK` is `stp2` when the option is `OFF` and empty otherwise.
-  It is placed ahead of `stp` on the link line of every in-tree consumer of the
-  2.x API: the gtest suites (`cmake/modules/AddSTPGTest.cmake`), the LRA C-API
-  targets (`tests/lra/CMakeLists.txt`), `tools/extdiff` and
-  `tools/c_handle_churn_benchmark`.
-- The ctypes Python package loads one shared library by name:
-  `bindings/python/stp/CMakeLists.txt` takes `LIBSTP_BASENAME` from the `stp2`
-  target when the option is `OFF`, so `library_path.py` names `libstp2.so`
-  (which pulls `libstp.so` in as a dependency).
-- `STPConfig.cmake` exports `STP_LEGACY_C_INTERFACE` and
-  `STP_C_INTERFACE_LIBRARY` (`stp` or `stp2`) for out-of-tree consumers, and
-  `export(TARGETS stp stp2 ...)` writes both into `STPTargets.cmake`. `stp2` is
-  installed into `${CMAKE_INSTALL_LIBDIR}` with `INSTALL_RPATH "$ORIGIN"`, so
-  an installed tree finds `libstp` next to it wherever it is moved. On Windows
-  the output name is `stp2win`, mirroring `stpwin`.
-- With the option `ON`, `libstp` and `libstp2` define the same 236 symbols.
-  They must not both be linked into one program; nothing diagnoses it (the
-  first definition in link order wins).
+- `libstp2` is the only provider of the 2.x C API: `libstp` carries the 3.x
+  API alone (with the engine's C++ interface, `cppinterface`, which the
+  parsers and the 3.x API use). The 2.x headers, `c_interface.h` and the
+  header-only `fp.hpp` and `uf.hpp` over it, are installed with `stp2`.
+- The in-tree 2.x clients link `stp2`: the libstp2 test suites
+  (`tests/api/compat2`), the two C tests of Real arithmetic
+  (`tests/lra/real_c_api_smoke.c`, `real_c_api_undeleted_expr.c`), the
+  install-test consumers of `c_interface.h` and `uf.hpp`, `tools/extdiff`
+  (deliberately 2.x: the same source builds against the pre-feature baseline)
+  and `tools/c_handle_churn_benchmark`. The ctypes Python package
+  (`bindings/python`) loads `libstp2` by name through `library_path.py` (it
+  pulls `libstp` in as a dependency); it is built for its tests only, and the
+  installed `stp` Python package is the 3.x one.
+- `STPConfig.cmake` sets `STP_C_INTERFACE_LIBRARY` to `stp2`, and names `stp2`
+  in the older `STP_SHARED_LIBRARY` and `STP_STATIC_LIBRARY` too, since whoever
+  reads those is a 2.x client; `export(TARGETS stp stp2 ...)` writes both
+  targets into `STPTargets.cmake`. `stp2` is installed into
+  `${CMAKE_INSTALL_LIBDIR}` with `INSTALL_RPATH "$ORIGIN"`, so an installed
+  tree finds `libstp` next to it wherever it is moved. On Windows the output
+  name is `stp2win`, mirroring `stpwin`.
 - `include/stp/c_interface.h` gained one addition, the only header change:
   `enum stp_error_policy_t { STP_ON_ERROR_ABORT, STP_ON_ERROR_RETURN }` and
-  `vc_setErrorPolicy()`. The 2.x implementation in `lib/Interface/c_interface.cpp`
-  accepts the call, stores the value and reports through its error path that
-  `STP_ON_ERROR_RETURN` is not honoured there (its fatal path cannot return);
-  `libstp2` honours both.
+  `vc_setErrorPolicy()`, both honoured.
 
 ## 2. Shape
 
@@ -307,6 +300,15 @@ Everything else is a direct mapping.
 
 ## 5. Test results
 
+What follows is the qualification of `libstp2` against the whole 2.x test
+suite, run on 2026-09-27 before those suites were rewritten against the 3.x
+API (they are now in `tests/api/cpp3`); it is the record of what `libstp2`
+reproduces and why the rest cannot be. At the time the 2.x implementation
+could still be compiled into `libstp`, which the control runs below used; the
+option that chose between the two, `STP_LEGACY_C_INTERFACE`, is gone, and
+"option OFF" below is today's only configuration. The suites that still run
+against `libstp2` are listed at the end of this section.
+
 Configuration: `-DSTP_LEGACY_C_INTERFACE=OFF -DENABLE_TESTING=ON
 -DTEST_CPP3_API=OFF -DUSE_CADICAL=ON` (CryptoMiniSat available, MiniSat off),
 RelWithDebInfo, in `build-stp2`; the control tree `build-stp2-on` is the same
@@ -465,6 +467,19 @@ compiled by hand against `libstp2` and exit 0.
 
 Under the option `ON` nothing changed: 79/79 binaries and 2/2 Python suites,
 as before this work.
+
+### What runs against libstp2 now
+
+- `tests/api/compat2`: eleven of the 2.x gtest suites, unchanged (the handle
+  lifecycle, counterexamples, push and pop, parsing, `Expr` ownership, the
+  counter enum's ABI, floating point and `fp.hpp`, uninterpreted functions,
+  arrays, and the reason a query had no answer), each linked to `stp2`.
+- `tests/lra`: `lra_c_api_smoke` and `lra_c_api_undeleted_expr`, the C tests of
+  the Real extension.
+- `tests/api/python`: the ctypes package's suites (`python-interface-tests`,
+  `python-allocator-tests`), loading `libstp2`.
+- `tests/api/install`: the C and C++ (`uf.hpp`) consumers of an installed
+  `c_interface.h`, linking `${STP_C_INTERFACE_LIBRARY}`.
 
 ## 6. 3.x defects met
 

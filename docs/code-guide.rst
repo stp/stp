@@ -7,8 +7,14 @@ component of STP. The headers that go with them live under
 
 -  ``AbsRefineCounterExample``: Functions related to abstraction
    refinement and counterexample construction.
+-  ``Api``: The public API, ``stp/stp.hpp`` and ``stp/stp.h`` (see
+   :doc:`api3`): the C++ implementation, the C layer over it under
+   ``c/``, and the tables under ``tables/`` from which every language's
+   kinds, options, errors and statistics are generated (``gen/``).
 -  ``AST``: Implements the abstract syntax tree for parsed solver
    inputs.
+-  ``Compat2``: ``libstp2``, the 2.x C interface (``stp/c_interface.h``)
+   re-implemented over the C API, for clients that have not moved to it.
 -  ``Extensionality``: The decision procedure for equalities between
    whole arrays, described in :doc:`array-extensionality`.
 -  ``FloatBlaster``: Bit-blasting of the floating-point theories, built
@@ -18,10 +24,8 @@ component of STP. The headers that go with them live under
 -  ``Incremental``: The driver for incremental solving -- ``push``,
    ``pop`` and repeated ``check-sat`` against a solver kept alive between
    queries. See :doc:`incremental-solving`.
--  ``Interface``: Defines the C interface (``stp/c_interface.h``) for
-   parsing input files, constructing expressions, executing queries,
-   etc., and the C++ interface (``stp/cpp_interface.h``) for invoking
-   STP.
+-  ``Interface``: The engine's C++ interface (``stp/cpp_interface.h``),
+   through which the parsers and the API build terms and run queries.
 -  ``NodeFactory``: Creates AST nodes. Which factory a client asks for
    decides how much work happens as nodes are built, from hash consing
    alone up to the rewriting done by ``SimplifyingNodeFactory``.
@@ -92,9 +96,11 @@ The executables are built from ``tools/``; :doc:`command-line` and
 :doc:`tools` describe how to run them.
 
 -  ``stp``: The main command-line solver.
--  ``extdiff``: Built alongside it, unconditionally. A C API driver the
+-  ``extdiff``: Built alongside it, unconditionally. A driver the
    baseline-differential test compiles against two trees and runs on the
-   same queries, comparing what each reports.
+   same queries, comparing what each reports. It is written against the
+   2.x C interface, so that the same source builds against an older STP,
+   and links ``libstp2``.
 -  ``test_fpbackend`` and ``test_fprewrites``: Floating-point checkers,
    built when either ``ENABLE_TESTING`` or ``BUILD_EXTRA_TOOLS`` is on;
    they are registered as tests. ``c_handle_churn_benchmark``, which

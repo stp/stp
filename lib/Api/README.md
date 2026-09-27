@@ -107,8 +107,10 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   (`engine_call` in Internal.h); the hub reports it as INTERNAL and poisons the
   manager, whose state the failure may have left inconsistent: every later
   call on it, its solvers, models and terms is refused with STATE naming the
-  failure. The command line and the 2.x C interface never set the flag, so
-  `FatalError` ends the process for them as it always has.
+  failure. The command line never sets the flag, so `FatalError` ends the
+  process for it as it always has. libstp2, the 2.x C interface over the C
+  API, reports such a failure through the 2.x error handler and then aborts,
+  as 2.x did, unless `vc_setErrorPolicy` asked for `STP_ON_ERROR_RETURN`.
 - The values of the partial floating-point operations (`fp.min`/`fp.max` on the two
   zeros, `fp.to_ubv`/`fp.to_sbv` out of range) are taken from the solve for every
   such node in the checked formula; a node built afterwards evaluates with a zero
@@ -144,7 +146,7 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
 |---|---|
 | `include/stp/stp.h`, `c/` | the C API and its runtime (`c/NOTES.md`) |
 | `bindings/python3/` | the Cython module `stp._core` and the z3py-style shell (`NOTES.md` there) |
-| `lib/Compat2/` | `libstp2`: `c_interface.h` re-implemented over `stp.h` (`NOTES.md` there; `STP_LEGACY_C_INTERFACE` selects which library carries the 2.x API) |
+| `lib/Compat2/` | `libstp2`: `c_interface.h` re-implemented over `stp.h`, the only provider of the 2.x API (`NOTES.md` there) |
 | `tests/api/cpp3`, `tests/api/c3`, `tests/api/python3` | the suites; `FINDINGS.md` in cpp3 lists every defect met and its state |
 
 ## Building and testing

@@ -589,7 +589,7 @@ enum ifaceflag_t
   //! Appended rather than filed next to CNF_GENERATION_EFFORT: these are
   //! integers callers compile into their binaries before loading a newer
   //! libstp, so the published prefix has to stay put -- the same rule
-  //! tests/api/C/counter-enum-abi.cpp keeps for stp_counter_t.
+  //! tests/api/compat2/counter-enum-abi.cpp keeps for stp_counter_t.
   //!
   CNF_AUTO_THRESHOLD,
 

@@ -28,8 +28,9 @@ THE SOFTWARE.
 // model reads, the printers, the parsers, uninterpreted functions and the
 // introspection entry points; c_interface2_terms.cpp holds the constructors.
 //
-// The behaviour reproduced is that of lib/Interface/c_interface.cpp, the 2.x
-// implementation over the engine; NOTES.md records where the two differ.
+// The behaviour reproduced is that of STP 2.x's own implementation of the
+// header over the engine (lib/Interface/c_interface.cpp, removed once this
+// library replaced it); NOTES.md records where the two differ.
 
 #include "Compat2.h"
 

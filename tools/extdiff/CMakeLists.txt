@@ -33,9 +33,10 @@ if(BUILD_EXECUTABLES)
         INSTALL_RPATH_USE_LINK_PATH TRUE
     )
 
-    # extdiff is written against the 2.x C API: STP_LEGACY_C_LINK is libstp2
-    # when that API is not part of libstp, and empty otherwise.
+    # extdiff is written against the 2.x C API, deliberately (the same source
+    # builds against the pre-feature baseline), so it links libstp2, the
+    # library that provides that API.
     target_link_libraries(extdiff-bin
-        ${STP_LEGACY_C_LINK} stp
+        stp2
     )
 endif()

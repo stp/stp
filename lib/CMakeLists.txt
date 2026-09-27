@@ -100,13 +100,6 @@ set(stp_lib_targets
     ${PLATFORM_COMPAT_LIBRARIES}
 )
 
-# The 2.x C API objects go into libstp only while it is the library that
-# carries that API (see STP_LEGACY_C_INTERFACE in the top-level CMakeLists);
-# cppinterface stays either way, because the parsers and the 3.x API use it.
-if(STP_LEGACY_C_INTERFACE)
-    list(APPEND stp_lib_targets cinterface)
-endif()
-
 # ABC's headers reach further than the sources that name it: stp/ToSat/BBNodeAIG.h
 # includes aig/aig/aig.h, and that header is pulled in from most of the tree --
 # Globals.cpp, ASTNode.cpp, HashingNodeFactory.cpp and so on. So every object
@@ -159,8 +152,9 @@ add_library(stp
 # must never become part of the link interface.
 #
 # STP_SHARED_LIB is the opposite: consumers need it too. A client compiling
-# against the installed c_interface.h must see STP_SHARED_LIB (so DLL_PUBLIC is
-# a __declspec) with STP_EXPORTS unset (so it resolves to dllimport). Putting it
+# against the installed stp.h or stp.hpp (or libstp2's c_interface.h) must see
+# STP_SHARED_LIB (so the export macros are a __declspec) with STP_EXPORTS unset
+# (so they resolve to dllimport). Putting it
 # in the INTERFACE requirements records it in the exported STPTargets.cmake, so
 # anything that links the imported stp target picks it up automatically, and
 # in-tree consumers (tools/, bindings/, tests/) get it for free.
@@ -177,7 +171,7 @@ target_include_directories(stp INTERFACE
 
 # Set the public header so it will be installed
 set_target_properties(stp PROPERTIES
-    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp;${PROJECT_SOURCE_DIR}/include/stp/uf.hpp;${PROJECT_SOURCE_DIR}/include/stp/stp.hpp;${PROJECT_SOURCE_DIR}/include/stp/stp.h"
+    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/stp.hpp;${PROJECT_SOURCE_DIR}/include/stp/stp.h"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )
@@ -315,8 +309,8 @@ target_link_libraries(stp
 # names without complaint, so naming them here left the build-tree
 # STPTargets.cmake asking a consumer for -lSymFPU -lABC.
 #
-# An installed STP needs neither -- c_interface.h, fp.hpp and uf.hpp include
-# neither library. SYSTEM keeps the warning suppression both find modules set.
+# An installed STP needs neither -- no installed header includes either
+# library. SYSTEM keeps the warning suppression both find modules set.
 # Only the include directory travels this way: ABC's archive is named on stp's
 # own link line above, and the tests that call into ABC directly link it
 # themselves because a shared libstp localises its symbols.

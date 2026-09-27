@@ -154,28 +154,13 @@ endif()
 add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 
 # -----------------------------------------------------------------------------
-# Where the 2.x C API (include/stp/c_interface.h) comes from.
-#
-# ON, the default: lib/Interface/c_interface.cpp is compiled into libstp, as it
-# always has been. OFF: those objects are left out of libstp, and the 2.x entry
-# points come from libstp2 (lib/Compat2), a separate shared library that
-# re-implements every function of c_interface.h over the 3.x C API in
-# include/stp/stp.h. libstp2 is built and installed in both configurations;
-# the option decides which library the 2.x tests link, and which the ctypes
-# Python package loads.
+# libstp is the 3.x API (include/stp/stp.hpp, include/stp/stp.h) over the
+# engine; STP's own tools, bindings and tests are written against it. The 2.x
+# C API (include/stp/c_interface.h, and the header-only fp.hpp and uf.hpp over
+# it) is provided by libstp2 alone (lib/Compat2): a separate library that
+# re-implements every function of c_interface.h over the 3.x C API, for
+# clients that have not moved. A 2.x client links stp2, which brings in stp.
 # -----------------------------------------------------------------------------
-option(STP_LEGACY_C_INTERFACE
-    "Compile the 2.x C API (c_interface.h) into libstp itself; OFF makes libstp2 the only provider"
-    ON)
-add_feature_info(LegacyCInterface STP_LEGACY_C_INTERFACE
-    "The 2.x C API is part of libstp (OFF: provided by libstp2 only)")
-# The library a 2.x C API consumer inside this tree links besides (or ahead
-# of) stp: nothing extra while libstp carries the API, libstp2 otherwise.
-if(STP_LEGACY_C_INTERFACE)
-    set(STP_LEGACY_C_LINK "")
-else()
-    set(STP_LEGACY_C_LINK stp2)
-endif()
 
 # Settings below that have to hold across the whole link, not just STP's
 # own objects, are collected here as well as applied. A dependency STP

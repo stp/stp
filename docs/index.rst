@@ -394,70 +394,58 @@ Python usage
     s.check()          # True
     s.model()          # {'a': 5, 'b': 6, 'c': 11}
 
-C library usage
-===============
+Library usage
+=============
 
 When STP is built it generates the ``libstp`` library -- shared by
 default, or static if you configured with ``STATICCOMPILE=ON`` -- which
-can be used with one of two header files, depending on the preferred
-language:
+carries STP's API for three languages, described in :doc:`api3`:
 
--  ``include/stp/c_interface.h`` for a C interface to STP
--  ``include/stp/fp.hpp`` for the floating-point helpers
+-  ``include/stp/stp.hpp`` for C++17
+-  ``include/stp/stp.h`` for C
+-  the ``stp`` Python package
 
-An example C header usage can be as simple as:
+A C program can be as simple as:
 
 .. code-block:: c
 
-    #include "stp/c_interface.h"
-    #include <assert.h>
+    #include <stp/stp.h>
+    #include <stdio.h>
 
-    int main(int argc, char **argv) {
-      VC vc = vc_createValidityChecker();
-      vc_setInterfaceFlags(vc, EXPRDELETE, 0);
+    int main(void)
+    {
+      stp_tm tm = stp_tm_new(NULL);
+      stp_sort bv32 = stp_mk_bv_sort(tm, 32);
 
-      Type bv32 = vc_bvType(vc, 32);
+      // a 32-bit variable c and the constants 5 and 6
+      stp_term c = stp_declare(tm, "c", bv32);
+      stp_term a = stp_mk_bv_uint64(tm, 32, 5);
+      stp_term b = stp_mk_bv_uint64(tm, 32, 6);
 
-      // ask for a counterexample to be built, so it can be printed below
-      vc_setFlags(vc, 'c');
+      // Is a + b != c always true? Look for a model of its negation.
+      stp_solver s = stp_solver_new(tm, NULL);
+      stp_solver_assert(s, stp_eq(tm, stp_bvadd(tm, a, b), c));
+      stp_result r;
+      if (stp_solver_check_sat(s, &r) == STP_OK && r.kind == STP_SAT)
+      {
+        // No: c = 11 is a counterexample.
+        stp_model m = stp_solver_model(s);
+        uint64_t v;
+        stp_model_uint64(m, c, &v);
+        printf("c = %llu\n", (unsigned long long)v);
+        stp_model_release(m);
+      }
 
-      // 32-bit variable 'c'
-      Expr c = vc_varExpr(vc, "c", bv32);
-
-      // 32 bit constant value 5
-      Expr a = vc_bvConstExprFromInt(vc, 32, 5);
-
-      // 32 bit constant value 6
-      Expr b = vc_bvConstExprFromInt(vc, 32, 6);
-
-      // a+b!=c
-      Expr xp1 = vc_bvPlusExpr(vc, 32, a, b);
-      Expr eq = vc_eqExpr(vc, xp1, c);
-      Expr eq2 = vc_notExpr(vc, eq);
-
-      //Is a+b!=c always correct?
-      int ret = vc_query(vc, eq2);
-
-      //No, c=a+b is a counterexample. vc_query returns 0 for INVALID.
-      assert(ret == 0);
-
-      //print c = 11 counterexample
-      vc_printCounterExample(vc);
-
-      // Delete caller-owned children while their VC is still live.
-      vc_DeleteExpr(eq2);
-      vc_DeleteExpr(eq);
-      vc_DeleteExpr(xp1);
-      vc_DeleteExpr(b);
-      vc_DeleteExpr(a);
-      vc_DeleteExpr(c);
-      vc_DeleteExpr(bv32);
-
-      // Destroying the VC invalidates every remaining child handle.
-      vc_Destroy(vc);
-
+      stp_solver_delete(s);
+      stp_tm_release_all(tm);
+      stp_tm_release(tm);
       return 0;
     }
+
+Programs written against STP's 2.x C interface (``include/stp/c_interface.h``,
+and the header-only ``fp.hpp`` and ``uf.hpp`` over it) link ``libstp2``
+instead: a separate compatibility library that implements that interface over
+the new one (see :ref:`api3-compat`).
 
 If your project uses CMake, an installed STP is found with
 ``find_package()`` in config mode. The imported ``stp`` target carries the
@@ -471,15 +459,15 @@ include directories, so nothing else has to be set:
     find_package(STP REQUIRED)
 
     add_executable(my-tool main.c)
-    target_link_libraries(my-tool stp)
+    target_link_libraries(my-tool stp)  # a 2.x client links stp2
 
 Point ``CMAKE_PREFIX_PATH`` at the installation prefix, or set ``STP_DIR`` to
 the directory holding ``STPConfig.cmake`` -- under ``lib/cmake/STP/`` in the
 installation. A build tree is not a supported substitute: its exported targets
 name STP's own dependency targets, which only exist inside STP's build.
 
-A worked consumer of both interfaces, built and run against a staged
-installation by the test suite, is in |installtest|_.
+Worked consumers of the C and C++ API, and of ``libstp2``, built and run
+against a staged installation by the test suite, are in |installtest|_.
 
 .. |queryfiles| replace:: ``tests/query-files``
 .. _queryfiles: https://github.com/stp/stp/tree/master/tests/query-files

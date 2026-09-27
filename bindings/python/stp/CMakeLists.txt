@@ -29,13 +29,9 @@
 # file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>)
 
 # The ctypes package loads one shared library by name and expects the 2.x C
-# API in it: libstp while that API is compiled into libstp, libstp2 when
-# STP_LEGACY_C_INTERFACE is off (libstp2 pulls libstp in as a dependency).
-if(STP_LEGACY_C_INTERFACE)
-    get_target_property(LIBSTP_BASENAME stp OUTPUT_NAME)
-else()
-    get_target_property(LIBSTP_BASENAME stp2 OUTPUT_NAME)
-endif()
+# API in it: libstp2, the library that provides that API (it pulls libstp in
+# as a dependency).
+get_target_property(LIBSTP_BASENAME stp2 OUTPUT_NAME)
 set(LIBSTP_FILENAME "${CMAKE_SHARED_LIBRARY_PREFIX}${LIBSTP_BASENAME}${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
 #
@@ -63,5 +59,5 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/__init__.py
 # -----------------------------------------------------------------------------
 # Not installed: the installed `stp` Python package is the 3.x one
 # (bindings/python3). This 2.x package stays in the build tree, where its tests
-# (tests/api/python) run it.
+# (tests/api/python) run it against libstp2.
 # -----------------------------------------------------------------------------

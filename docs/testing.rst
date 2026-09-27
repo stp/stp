@@ -12,11 +12,13 @@ STP currently supports the following types of tests
    `OutputCheck <https://github.com/stp/OutputCheck>`__ tools. We refer
    to these as query file tests. They live in ``tests/query-files``.
 -  Tests that call STP's API. Those under ``tests/unit-tests`` exercise
-   STP's internals and those under ``tests/api/C`` and ``tests/api/CPP``
-   exercise the public C and C++ APIs, all using the
+   STP's internals, those under ``tests/api/cpp3`` and ``tests/api/c3``
+   exercise the C++ and C API, and those under ``tests/api/compat2``
+   exercise ``libstp2``, the 2.x C interface over the C API, all using the
    `GoogleTest <https://google.github.io/googletest/>`__ framework. The
-   Python API tests under ``tests/api/python`` are plain Python scripts
-   registered directly with CTest.
+   Python tests are registered directly with CTest: ``tests/api/python3``
+   (pytest) for the ``stp`` package, ``tests/api/python`` for the 2.x
+   ctypes package over ``libstp2``.
 
 Both kinds are registered with CTest, so ``ctest`` (or ``make test``)
 runs everything.
@@ -104,9 +106,9 @@ The flags come from ``VALGRIND_ARGS``, which defaults to
 ``--error-exitcode=1 --leak-check=full --errors-for-leak-kinds=none
 --track-origins=yes``. Memory errors -- invalid accesses, uninitialised
 values -- therefore fail a test, while leaks are reported in the output
-without failing it. That split is deliberate: the tests under
-``tests/api/C`` build ``Expr`` handles through the C API and mostly never
-call ``vc_DeleteExpr``, so about thirty of them leak a few bytes each by
+without failing it. That split is deliberate: the ``libstp2`` tests under
+``tests/api/compat2`` build ``Expr`` handles through the 2.x C interface
+and mostly never call ``vc_DeleteExpr``, so they leak a few bytes each by
 construction, and two of the unit tests drop what
 ``NodeDomainAnalysis::harmonise`` and ``FixedBits::GetMinBVConst`` hand
 back. To make leaks fail as well, override the list -- remembering that
@@ -236,7 +238,7 @@ Unit tests
 The unit tests are built as standalone executables so individual tests
 can be executed by just running their executables, which live in the
 build directory under the same path they have in the source tree --
-``tests/unit-tests`` and ``tests/api/C``. Because they are GoogleTest
+``tests/unit-tests`` and ``tests/api/cpp3``. Because they are GoogleTest
 binaries they take the usual flags, e.g. ``--gtest_filter=...`` to run a
 subset of the cases in one executable.
 

@@ -157,12 +157,13 @@ class Sort(object):
         return self.kind
 
 
+# The 2.x C API this package calls is libstp2's, not libstp's.
 if os.name == 'nt':
-    _SEARCH_VAR, _LIB_NAMES = 'PATH', ('stpwin.dll',)
+    _SEARCH_VAR, _LIB_NAMES = 'PATH', ('stp2win.dll',)
 elif sys.platform == 'darwin':
-    _SEARCH_VAR, _LIB_NAMES = 'DYLD_LIBRARY_PATH', ('libstp.dylib',)
+    _SEARCH_VAR, _LIB_NAMES = 'DYLD_LIBRARY_PATH', ('libstp2.dylib',)
 else:
-    _SEARCH_VAR, _LIB_NAMES = 'LD_LIBRARY_PATH', ('libstp.so',)
+    _SEARCH_VAR, _LIB_NAMES = 'LD_LIBRARY_PATH', ('libstp2.so',)
 
 
 def _load_library():
@@ -171,7 +172,7 @@ def _load_library():
     # none for a pip install -- then the library search path variable, and
     # last the platform's own search. The variable is walked here rather than
     # left to find_library, which on Linux consults the ldconfig cache first
-    # and so prefers any system-wide libstp to the one the variable names.
+    # and so prefers any system-wide libstp2 to the one the variable names.
     explicit = os.environ.get('STP_LIBRARY')
     if explicit:
         return cdll.LoadLibrary(explicit)
@@ -186,11 +187,11 @@ def _load_library():
             if directory and os.path.exists(path):
                 return cdll.LoadLibrary(path)
 
-    name = ctypes.util.find_library('stpwin' if os.name == 'nt' else 'stp')
+    name = ctypes.util.find_library('stp2win' if os.name == 'nt' else 'stp2')
     if name:
         return cdll.LoadLibrary(name)
 
-    raise Exception('Unable to locate the libstp shared object; set '
+    raise Exception('Unable to locate the libstp2 shared object; set '
                     'STP_LIBRARY to its path, or put its directory on the '
                     'library search path')
 
