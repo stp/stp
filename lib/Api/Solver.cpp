@@ -146,18 +146,35 @@ SolverImpl::~SolverImpl()
   last_failed_assumptions.clear();
   if (stp != nullptr)
   {
-    if (mgr->active == this)
+    // Engine work in a destructor, which cannot report a failure: an engine
+    // failure here poisons the manager (every later call on it is STATE), the
+    // engine object is left alone, and the teardown goes on.
+    detail::EngineScope scope;
+    try
     {
-      // The engine's stack is this solver's: leave it empty for the next
-      // solver to be used, which installs its own levels.
-      while (mgr->bm->getAssertLevel() > 0)
-        mgr->bm->Pop();
-      mgr->active = nullptr;
-      mgr->bm->UserFlags.stop_poll = nullptr;
-      mgr->bm->UserFlags.stop_poll_opaque = nullptr;
+      if (mgr->active == this)
+      {
+        // The engine's stack is this solver's: leave it empty for the next
+        // solver to be used, which installs its own levels.
+        mgr->active = nullptr;
+        mgr->bm->UserFlags.stop_poll = nullptr;
+        mgr->bm->UserFlags.stop_poll_opaque = nullptr;
+        while (mgr->bm->getAssertLevel() > 0)
+          mgr->bm->Pop();
+      }
+      stp->deleteObjects();
+      delete stp;
     }
-    stp->deleteObjects();
-    delete stp;
+    catch (const stp::EngineFatal& e)
+    {
+      if (!mgr->poisoned)
+      {
+        mgr->poisoned = true;
+        mgr->poison_message = std::string("an engine failure while destroying a solver (") +
+                              e.what() + ") may have left its state inconsistent";
+      }
+    }
+    stp = nullptr;
   }
   shelf.clear();
   auto it = std::find(mgr->solvers.begin(), mgr->solvers.end(), this);
@@ -174,7 +191,9 @@ void SolverImpl::check_alive(const char* fn) const
 void SolverImpl::enter(const char* fn)
 {
   check_alive(fn);
-  activate();
+  // Activation replays the assertion stack and re-applies the options: engine
+  // work, so an engine failure there is INTERNAL and poisons the manager.
+  engine_call(mgr, fn, [&] { activate(); });
 }
 
 std::size_t SolverImpl::level_count() const
@@ -204,6 +223,10 @@ void SolverImpl::activate()
       for (const ASTNode& a : level)
         bm->AddAssert(a);
     }
+  }
+  catch (const stp::EngineFatal&)
+  {
+    throw; // the caller's engine_call poisons the manager
   }
   catch (const std::exception& e)
   {
