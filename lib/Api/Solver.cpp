@@ -625,7 +625,6 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
   bm->clearUnknown();
 
   SOLVER_RETURN_TYPE out = SOLVER_UNDECIDED;
-  std::string failure;
   last_incremental = false;
   try
   {
@@ -690,10 +689,23 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
   {
     throw; // INTERNAL, and the manager is poisoned (run_check)
   }
+  catch (const PreparationInterrupted&)
+  {
+    // the engine's own give-up (a deadline, stop-after-cnf), whose reason it
+    // noted: this check has no answer
+    out = SOLVER_UNDECIDED;
+  }
   catch (const std::exception& e)
   {
-    failure = e.what();
-    out = SOLVER_UNDECIDED;
+    // Anything else that unwound through the engine -- a backend refusing
+    // its configuration, a callback's exception, an allocation failing --
+    // left its tables in no known state: INTERNAL, or RESOURCE for
+    // std::bad_alloc, and the manager poisoned, as for an engine failure.
+    fail_foreign(mgr, fn, e);
+  }
+  catch (...)
+  {
+    fail_engine(mgr, fn, "an exception that is not a std::exception unwound through the check");
   }
   last_wall = std::chrono::steady_clock::now() - started;
 
@@ -743,11 +755,6 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
       {
         reason = UnknownReason::INTERRUPTED;
         detail.clear();
-      }
-      else if (!failure.empty())
-      {
-        reason = UnknownReason::INCOMPLETE;
-        detail = failure;
       }
       r = Result(Verdict::UNKNOWN, reason, reason_sentence(reason, detail));
       // a candidate model the engine left behind

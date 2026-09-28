@@ -1055,7 +1055,10 @@ private:
   std::map<std::string, StatisticValue> entries_;
 };
 
-/// Polled by every backend and by preprocessing at the same points as interrupt().
+/// Polled by every backend and by preprocessing at the same points as
+/// interrupt(). It must not throw: an exception from it unwinds through the
+/// engine, which is an engine failure (INTERNAL, RESOURCE for std::bad_alloc)
+/// that poisons the manager.
 class STP_API_EXPORT Terminator
 {
 public:

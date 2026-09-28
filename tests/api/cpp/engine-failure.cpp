@@ -191,4 +191,63 @@ TEST(EngineFailure, a_foreign_exception_is_an_engine_failure)
   }
 }
 
+// An exception thrown by a terminator unwinds through the engine: whatever it
+// is, the check is an engine failure -- INTERNAL, or RESOURCE for
+// std::bad_alloc -- and the manager is poisoned, as for any exception that
+// unwinds through the engine. The check used to answer unknown (incomplete)
+// with the manager usable, and an exception that is not a std::exception
+// left check_sat as it was thrown.
+TEST(EngineFailure, an_exception_through_a_check_is_an_engine_failure)
+{
+  struct Throwing : Terminator
+  {
+    std::function<void()> thrower;
+    int polls = 0;
+    bool terminate() override
+    {
+      if (++polls == 10)
+        thrower();
+      return false;
+    }
+  };
+  const std::vector<std::pair<ErrorCode, std::function<void()>>> cases{
+      {ErrorCode::RESOURCE, [] { throw std::bad_alloc(); }},
+      {ErrorCode::INTERNAL, [] { throw std::runtime_error("a callback failed"); }},
+      {ErrorCode::INTERNAL, [] { throw 42; }},
+  };
+  for (const auto& c : cases)
+  {
+    TermManager tm;
+    Solver s(tm);
+    // a 24-bit factoring that polls the terminator some hundred times
+    const Term x = tm.declare("x", tm.mk_bv_sort(24)), y = tm.declare("y", tm.mk_bv_sort(24));
+    s.add(x * y == tm.mk_bv(24, (1u << 23) - 1));
+    s.add(bvugt(x, tm.mk_bv(24, 1)));
+    s.add(bvugt(y, tm.mk_bv(24, 1)));
+    s.add(bvult(x, tm.mk_bv(24, 1u << 12)));
+    s.add(bvult(y, tm.mk_bv(24, 1u << 12)));
+    Throwing t;
+    t.thrower = c.second;
+    s.set_terminator(&t);
+    try
+    {
+      (void)s.check_sat();
+      FAIL() << "the check answered";
+    }
+    catch (const Error& e)
+    {
+      EXPECT_EQ(e.code(), c.first) << e.what();
+    }
+    try
+    {
+      (void)tm.mk_bv(8, 1);
+      FAIL() << "the manager is usable";
+    }
+    catch (const Error& e)
+    {
+      EXPECT_EQ(e.code(), ErrorCode::STATE) << e.what();
+    }
+  }
+}
+
 } // namespace
