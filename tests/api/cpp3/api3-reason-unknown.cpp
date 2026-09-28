@@ -116,6 +116,31 @@ TEST(reason_unknown, AnAnsweredQueryHasNoReason)
   EXPECT_EQ("", r.reason_message());
 }
 
+// ... and a later check that gives up for another reason reports that one.
+// Within a check the engine keeps the first reason it records (a solve may
+// note a spent budget on every refinement round), so the solver clears the
+// record at the start of every check; without that, the conflict budget of
+// the first check below would also answer for the second one's clock, as it
+// did in the 2.x C API (issue #1144).
+TEST(reason_unknown, ALaterUnknownReportsItsOwnReason)
+{
+  const std::optional<Options> o = cadical();
+  if (!o)
+    GTEST_SKIP() << "CaDiCaL backend not compiled in";
+  TermManager tm;
+  Solver s(tm, *o);
+  assert_factoring(tm, s);
+
+  const Result counted = s.check_sat({}, CheckBudget{std::nullopt, std::uint64_t(0)});
+  ASSERT_TRUE(counted.is_unknown());
+  ASSERT_EQ(UnknownReason::CONFLICT_LIMIT, counted.reason());
+
+  const Result timed = s.check_sat({}, CheckBudget{0ms, std::nullopt});
+  EXPECT_TRUE(timed.is_unknown());
+  EXPECT_EQ(UnknownReason::TIMEOUT, timed.reason());
+  EXPECT_NE(std::string::npos, timed.reason_message().find("time budget")) << timed.reason_message();
+}
+
 // The two the SAT solver enforces keep the verdict they had. They share it, so
 // the verdict alone cannot separate them -- which is what the reason is for:
 // the clock may pass with more time on the same machine, the conflict budget
