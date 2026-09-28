@@ -860,6 +860,45 @@ TEST(Parsing, a_failed_script_leaves_the_stack_as_it_was)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
+// A script's (reset) begins a new session for the script, but the manager's
+// symbols outlive it: a Real the API declared, or made with mk_fresh, is
+// still one afterwards and a model reads its value, not 0 -- in this solver,
+// in another one of the manager, and after a script that resets and then
+// fails. (reset-assertions) is the control.
+TEST(Parsing, a_script_reset_leaves_the_managers_reals_alone)
+{
+  for (const char* script : {"(reset)", "(reset) (assert (bogus))", "(reset-assertions)"})
+  {
+    TermManager tm;
+    const Term r = tm.declare("r", tm.mk_real_sort());
+    const Term t = tm.mk_fresh(tm.mk_real_sort(), "t");
+    const std::vector<Term> cs{real_gt(r, tm.mk_real(1)), real_lt(r, tm.mk_real(3)),
+                               t == real_add(r, tm.mk_real(1))};
+    Solver s(tm);
+    for (const Term& c : cs)
+      s.add(c);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    if (std::string(script).find("bogus") != std::string::npos)
+      API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2(script));
+    else
+      s.parse_smt2(script);
+    if (s.assertions().empty())
+      for (const Term& c : cs)
+        s.add(c);
+    ASSERT_TRUE(s.check_sat().is_sat()) << script;
+    const Model m = s.model();
+    for (const Term& c : cs)
+      EXPECT_TRUE(m.bool_value(c)) << script << ": " << c;
+    Solver other(tm);
+    for (const Term& c : cs)
+      other.add(c);
+    ASSERT_TRUE(other.check_sat().is_sat()) << script;
+    const Model n = other.model();
+    for (const Term& c : cs)
+      EXPECT_TRUE(n.bool_value(c)) << script << ": " << c;
+  }
+}
+
 // A printed script names a logic that admits what it declares: a declared
 // sort needs a UF logic as much as a function does, and an array beside a
 // Real needs QF_AUFLRA, since QF_UFLRA has no arrays. STP reads the script

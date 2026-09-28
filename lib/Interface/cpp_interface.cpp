@@ -872,6 +872,8 @@ void Cpp_interface::reset()
   // manager but cannot leak an old model or registry identity into this
   // fresh public context.
   bm.ResetLraStateForPublicReset();
+  if (after_public_reset)
+    after_public_reset();
 
   checkInvariant();
 

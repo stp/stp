@@ -181,7 +181,6 @@ private:
 
   ASTRealConst* LookupOrCreateRealConst(ASTRealConst& value);
   void EraseRealConst(ASTRealConst* value);
-  void RecordRealSymbol(const ASTNode& symbol);
   void RegisterLraAssertion(const ASTNode& assertion);
   void PushLraAssertionFrame();
   void PopLraAssertionFrame();
@@ -877,6 +876,12 @@ public:
   DLL_PUBLIC void noteFloatingPoint();
   DLL_PUBLIC void noteReal();
   bool HasSeenRealSyntax() const noexcept { return has_real; }
+  // Record a manager-owned Real symbol as a current Real declaration, whose
+  // value the exact model then carries; recording one twice is a no-op.
+  // CreateSourceSymbol does it for every Real symbol it makes; a caller whose
+  // symbols outlive a public reset (ResetLraStateForPublicReset) does it
+  // again afterwards.
+  void RecordRealSymbol(const ASTNode& symbol);
 
   // Exact model access never exposes the private arithmetic type.  Returned
   // strings own their bytes and remain valid independently of subsequent

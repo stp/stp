@@ -1572,6 +1572,26 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   Cpp_interface pi(*bm, &checker);
   pi.keepDeclaredSymbolsAtCleanup(&declared_at_end);
   pi.keepSortAliasesAtCleanup(&sorts_at_end);
+  // A script's (reset) empties the manager's Real registries, which the
+  // manager's own Real symbols -- declared, made with mk_fresh, adopted from
+  // an earlier script -- outlive: each is recorded again there, or every
+  // later model reads it as 0. A script that fails after its (reset) keeps
+  // them the same way.
+  pi.onPublicReset([bm, mgr = s->mgr] {
+    bool any = false;
+    for (const auto& entry : mgr->symbols)
+    {
+      const ASTNode& n = entry.second.node;
+      if (!entry.second.is_function && n.GetKind() == SYMBOL &&
+          n.GetSourceSort().kind() == SourceSort::Kind::Real)
+      {
+        bm->RecordRealSymbol(n);
+        any = true;
+      }
+    }
+    if (any)
+      bm->noteReal();
+  });
   GlobalParserInterface = &pi;
   GlobalSTP = s->stp;
   GlobalParserBM = bm;

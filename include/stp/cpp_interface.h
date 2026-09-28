@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include "stp/config.h"
 #include <ankerl/unordered_dense.h>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -254,10 +255,16 @@ public:
   {
     return sort_aliases;
   }
+  // reset() empties the manager's Real registries along with the script's
+  // declarations (ResetLraStateForPublicReset). A caller whose own symbols
+  // outlive the script -- the API's, whose name table is the manager's --
+  // records them again in `hook`, which reset() runs right after that.
+  void onPublicReset(std::function<void()> hook) { after_public_reset = std::move(hook); }
 
 private:
   ASTVec* symbols_at_cleanup = nullptr;
   std::map<std::string, SourceSort>* sorts_at_cleanup = nullptr;
+  std::function<void()> after_public_reset;
 
   // What the most recent check-sat charged to each pipeline stage: the
   // difference between two readings of the manager's run times taken around
