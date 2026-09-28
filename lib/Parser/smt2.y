@@ -4090,12 +4090,14 @@ TERMID_TOK
 | LPAREN_TOK UNDERSCORE_TOK BVEXTRACT_TOK  NUMERAL_TOK  NUMERAL_TOK RPAREN_TOK an_term
 {
   checkBitVectorTerm(*$7);
+  // Bounds outside the operand end the parse: going on, the extract was
+  // built anyway and folded, reading past a constant's bits.
   int width = $4 - $5 + 1;
   if (width < 0)
-    yyerror("Negative width in extract");
+    fatal_yyerror("Negative width in extract");
 
   if((unsigned)$4 >= $7->GetValueWidth())
-    yyerror("Parsing: Wrong width in BVEXTRACT\n");
+    fatal_yyerror("Parsing: Wrong width in BVEXTRACT");
 
   ASTNode hi  =  stp::GlobalParserInterface->CreateBVConst(32, $4);
   ASTNode low =  stp::GlobalParserInterface->CreateBVConst(32, $5);

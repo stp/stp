@@ -931,7 +931,8 @@ TEST(Parsing, parse_term_refuses_an_ill_sorted_term)
   tm.declare("x", tm.mk_bv_sort(8));
   tm.declare("y", tm.mk_bv_sort(16));
   for (const char* text : {"(bvadd x y)", "(bvult x y)", "(bvcomp x y)", "(bvnand x y)",
-                           "(concat x (bvsub y x))", "(let ((q x) (q x)) q)"})
+                           "(concat x (bvsub y x))", "((_ extract 9 0) x)",
+                           "(let ((q x) (q x)) q)"})
   {
     SCOPED_TRACE(text);
     API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_term(text));

@@ -555,7 +555,7 @@ TEST(Errors, input_mistakes_are_recoverable)
                   }});
   // parse_term over an ill-sorted term, and a script's width mismatches the
   // type checker never saw (the grammar refuses them)
-  for (const char* text : {"(bvadd x y)", "(bvult x y)"})
+  for (const char* text : {"(bvadd x y)", "(bvult x y)", "((_ extract 9 0) x)"})
     rows.push_back({std::string("parse_term ") + text, ErrorCode::PARSE,
                     [text](TermManager& tm, Solver& s) {
                       tm.declare("x", tm.mk_bv_sort(8));
