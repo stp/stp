@@ -31,7 +31,11 @@ THE SOFTWARE.
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <future>
+#include <iostream>
 #include <sstream>
+#include <streambuf>
+#include <thread>
 
 using namespace stp;
 
@@ -833,6 +837,45 @@ TEST(Parsing, a_printed_script_names_a_logic_that_admits_it)
               s.add(real_gt(tm.declare("x", tm.mk_real_sort()), half(tm)));
             }),
             "(set-logic QF_LRA)");
+}
+
+// A parse keeps the frontends' answers for its diagnostics by routing the
+// calling thread's output, not by taking std::cout from the process: what
+// another thread prints while a parse is under way reaches stdout.
+TEST(Parsing, a_parse_leaves_other_threads_output_alone)
+{
+  // input that holds the parse inside the frontend until released
+  struct Held : std::streambuf
+  {
+    std::promise<void> entered, released;
+    std::future<void> go = released.get_future();
+    bool done = false;
+    char script[19] = "(set-logic QF_BV)\n";
+    int_type underflow() override
+    {
+      if (done)
+        return traits_type::eof();
+      done = true;
+      entered.set_value();
+      go.wait();
+      setg(script, script, script + 18);
+      return traits_type::to_int_type(*gptr());
+    }
+  } held;
+  std::future<void> inside = held.entered.get_future();
+  TermManager tm;
+  Solver s(tm);
+  testing::internal::CaptureStdout();
+  std::thread parser([&] {
+    std::istream in(&held);
+    s.parse(in, Format::SMTLIB2);
+  });
+  inside.wait();
+  std::cout << "printed during the parse" << std::endl;
+  held.released.set_value();
+  parser.join();
+  const std::string out = testing::internal::GetCapturedStdout();
+  EXPECT_NE(std::string::npos, out.find("printed during the parse")) << out;
 }
 
 } // namespace

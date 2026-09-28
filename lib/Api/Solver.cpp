@@ -50,9 +50,11 @@ THE SOFTWARE.
 #include <iostream>
 #include <istream>
 #include <mutex>
+#include <optional>
 #include <ostream>
 #include <set>
 #include <sstream>
+#include <string_view>
 
 extern int smt2lineno;
 
@@ -70,28 +72,39 @@ std::mutex& parser_mutex()
 }
 
 // The frontends answer on stdout ((error ...), unsupported, success); a parse
-// driven by the API keeps that text for its diagnostics instead.
-struct CoutCapture
+// driven by the API keeps that text for its diagnostics instead. The capture
+// is a route of the calling thread's, so no other thread's output is taken
+// with it; what goes to std::cerr, and a fatal error, go where they went
+// without it.
+class CoutCapture
 {
-  std::streambuf* saved = nullptr;
-  std::ostringstream buf;
+public:
   explicit CoutCapture(bool on)
   {
-    if (on)
-      saved = std::cout.rdbuf(buf.rdbuf());
-  }
-  ~CoutCapture()
-  {
-    if (saved != nullptr)
-      std::cout.rdbuf(saved);
+    if (!on)
+      return;
+    const OutputSinks* outer = current_output_route();
+    sinks_.out = &append_;
+    sinks_.err = outer != nullptr ? outer->err : &to_cerr_;
+    sinks_.fatal = outer != nullptr ? outer->fatal : nullptr;
+    route_.emplace(&sinks_);
   }
   std::string text() const
   {
-    std::string t = buf.str();
+    std::string t = buf_;
     while (!t.empty() && (t.back() == '\n' || t.back() == ' '))
       t.pop_back();
     return t;
   }
+
+private:
+  std::string buf_;
+  const std::function<void(std::string_view)> append_ = [this](std::string_view s) {
+    buf_.append(s);
+  };
+  const std::function<void(std::string_view)> to_cerr_ = [](std::string_view s) { std::cerr << s; };
+  OutputSinks sinks_;
+  std::optional<OutputRoute> route_;
 };
 
 // What the engine checks of the entries only once they are applied: the
@@ -1882,19 +1895,16 @@ Term Solver::parse_term(std::string_view text) const
   detail::EngineScope engine_scope; // as in run_parser
   // One attempt: parse `script` on a scratch level without folding and hand
   // back the node it asserted (null on a parse failure, with `error` set).
-  // `quiet` keeps the frontend's (error ...) echo off stdout for a
-  // speculative attempt.
-  auto attempt = [&](const std::string& script, bool quiet, std::string& error) -> ASTNode {
+  // The frontend's (error ...) echo goes nowhere, with all else this thread
+  // prints (the route above).
+  auto attempt = [&](const std::string& script, std::string& error) -> ASTNode {
     bm->Push();
     struct Restore
     {
       STPMgr* bm;
-      std::streambuf* saved_cout;
       bool uf_before, ax_before;
       ~Restore()
       {
-        if (saved_cout != nullptr)
-          std::cout.rdbuf(saved_cout);
         GlobalParserInterface = nullptr;
         GlobalSTP = nullptr;
         if (bm->getAssertLevel() > 1)
@@ -1902,7 +1912,7 @@ Term Solver::parse_term(std::string_view text) const
         bm->UserFlags.enable_uninterpreted_functions = uf_before;
         bm->UserFlags.enable_array_equality = ax_before;
       }
-    } restore{bm, nullptr, bm->UserFlags.enable_uninterpreted_functions,
+    } restore{bm, bm->UserFlags.enable_uninterpreted_functions,
               bm->UserFlags.enable_array_equality};
     // the grammar and the factory admit an application and an array
     // equality only while these are on (see run_parser)
@@ -1913,16 +1923,12 @@ Term Solver::parse_term(std::string_view text) const
     GlobalSTP = s->stp;
     GlobalParserBM = bm;
     seed_parser_symbols(pi, s->mgr);
-  pi.all_theory_tokens = true;
-  detail::CoutCapture capture(true);
+    pi.all_theory_tokens = true;
     pi.adoptAssertLevels();
     const bool saved_smt2 = bm->UserFlags.smtlib2_parser_flag;
     bm->UserFlags.smtlib2_parser_flag = true;
     pi.ignoreCheckSat();
     pi.setPrintSuccess(false);
-    std::ostringstream sink;
-    if (quiet)
-      restore.saved_cout = std::cout.rdbuf(sink.rdbuf());
     smt2lineno = 1;
     SMT2ScanString(script.c_str());
     int status = 0;
@@ -1945,11 +1951,6 @@ Term Solver::parse_term(std::string_view text) const
     }
     smt2lex_destroy();
     bm->UserFlags.smtlib2_parser_flag = saved_smt2;
-    if (restore.saved_cout != nullptr)
-    {
-      std::cout.rdbuf(restore.saved_cout);
-      restore.saved_cout = nullptr;
-    }
     // an (error ...) response the frontend recovered from is a failure here (see run_parser)
     if (status == 0 && !pi.last_error_message.empty())
       status = 1;
@@ -1970,11 +1971,11 @@ Term Solver::parse_term(std::string_view text) const
   // A Boolean term is asserted as it stands. Any other sort goes through
   // "(= t t)", whose first operand is t (a Boolean t cannot: the factory
   // makes one operand of the two, and the grammar refuses that).
-  ASTNode t = attempt("(assert " + std::string(text) + ")", true, error);
+  ASTNode t = attempt("(assert " + std::string(text) + ")", error);
   if (t.IsNull())
   {
     const ASTNode eq =
-        attempt("(assert (= " + std::string(text) + " " + std::string(text) + "))", false, error);
+        attempt("(assert (= " + std::string(text) + " " + std::string(text) + "))", error);
     if (eq.IsNull())
       detail::fail_parse("Solver::parse_term", smt2lineno, 0, error);
     if (eq.Degree() != 2)
