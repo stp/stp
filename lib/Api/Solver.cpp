@@ -1451,21 +1451,41 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   detail::EngineScope engine_scope;
   const std::vector<ASTNode> before = detail::flat_assertions(bm);
   const std::string script = source.stream == nullptr ? std::string(source.text) : std::string();
-  // The frontend asserts and pushes as it goes, so a script that fails part
-  // way has already changed the stack; its shape is recorded here and put
-  // back before the failure is reported, which is what makes PARSE
-  // recoverable.
-  const std::size_t levels_before = bm->getAssertLevel();
-  std::vector<std::size_t> sizes_before;
+  // The frontend asserts, pushes and pops as it goes, so a script that fails
+  // part way has already changed the stack; the stack is recorded here, level
+  // for level, and put back before the failure is reported, which is what
+  // makes PARSE recoverable. A script that only added is cut back; one that
+  // popped a level, or conjoined one (a check-sat does), has the stack
+  // rebuilt as a solver's shelved stack is reinstalled (activate), which
+  // re-enters each level's frame as well as its formulas.
+  std::vector<ASTVec> stack_before;
   for (const ASTVec* level : bm->AssertLevels())
-    sizes_before.push_back(level->size());
+    stack_before.push_back(*level);
   auto restore_stack = [&] {
-    while (bm->getAssertLevel() > levels_before)
+    bool only_added = bm->getAssertLevel() >= stack_before.size();
+    for (std::size_t i = 0; i < stack_before.size() && only_added; ++i)
+    {
+      const ASTVec& now = *bm->AssertLevels()[i];
+      only_added = now.size() >= stack_before[i].size() &&
+                   std::equal(stack_before[i].begin(), stack_before[i].end(), now.begin());
+    }
+    if (only_added)
+    {
+      while (bm->getAssertLevel() > stack_before.size())
+        bm->Pop();
+      for (std::size_t i = 0; i < stack_before.size(); ++i)
+        bm->AssertLevels()[i]->resize(stack_before[i].size());
+      return;
+    }
+    s->stp->ClearAllTables();
+    while (bm->getAssertLevel() > 0)
       bm->Pop();
-    const std::vector<ASTVec*>& levels = bm->AssertLevels();
-    for (std::size_t i = 0; i < levels.size() && i < sizes_before.size(); ++i)
-      if (levels[i]->size() > sizes_before[i])
-        levels[i]->resize(sizes_before[i]);
+    for (const ASTVec& level : stack_before)
+    {
+      bm->Push();
+      for (const ASTNode& a : level)
+        bm->AddAssert(a);
+    }
   };
 
   std::set<const UFDecl*> active_before;

@@ -760,6 +760,32 @@ TEST(Parsing, unused_declarations_are_kept)
   EXPECT_TRUE(s.symbol("z").has_value());
 }
 
+// A failed parse leaves the stack as it found it, whatever the script did to
+// it first: popped a level, pushed one, conjoined the levels on a check-sat,
+// or popped past the base.
+TEST(Parsing, a_failed_script_leaves_the_stack_as_it_was)
+{
+  TermManager tm;
+  Solver s(tm);
+  const Term a = tm.declare("a", tm.mk_bool_sort());
+  tm.declare("b", tm.mk_bool_sort());
+  s.add(a);
+  s.push();
+  s.add(tm.mk_false());
+  ASSERT_TRUE(s.check_sat().is_unsat());
+  for (const char* script : {"(pop 1) (assert missing)", "(push 1) (assert b) (assert missing)",
+                             "(assert b) (check-sat) (assert missing)", "(pop 1) (pop 1)"})
+  {
+    API3_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2(script));
+    EXPECT_EQ(s.level(), 1u) << script;
+    ASSERT_EQ(s.assertions().size(), 2u) << script;
+    EXPECT_TRUE(s.assertions()[0].same_as(a)) << script;
+    EXPECT_TRUE(s.check_sat().is_unsat()) << script;
+  }
+  s.pop();
+  EXPECT_TRUE(s.check_sat().is_sat());
+}
+
 // A printed script names a logic that admits what it declares: a declared
 // sort needs a UF logic as much as a function does, and an array beside a
 // Real needs QF_AUFLRA, since QF_UFLRA has no arrays. STP reads the script
