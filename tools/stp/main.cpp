@@ -413,7 +413,10 @@ void ExtraMain::create_options()
                      "measured on bitvector-only problems). Needs a CaDiCaL "
                      "3.x build; otherwise an explicit request is declined "
                      "with a warning")
-          ->group(solver_group);
+          ->group(solver_group)
+          // The query-files-cadical-factor-off sweep prepends
+          // --cadical-factor=off; a test's own setting wins.
+          ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
   incremental_inprobing_option =
       app.add_option(
              "--incremental-inprobing", incremental_inprobing,
@@ -519,7 +522,8 @@ void ExtraMain::create_options()
            "while keeping assignments and IDs (experimental)", refinement_group);
   bool_arg("--lra-extension-restart-sat", bm->UserFlags.lra_extension_restart_sat,
            "copy the current Boolean formula into a fresh CaDiCaL search "
-           "after permanent arithmetic extensions (experimental)", refinement_group);
+           "after permanent arithmetic extensions (experimental; needs "
+           "--cadical, turns the factor off)", refinement_group);
   bool_arg("--lra-presolve-unconstrained",
            bm->UserFlags.lra_presolve_unconstrained,
            "fold single-use pure-polarity Real atoms, conjoining the "
@@ -2134,6 +2138,80 @@ int ExtraMain::parse_options(int argc, char** argv)
     }
   }
 #endif
+
+  // Checked by value, not presence: a control at 0 is the batch default and
+  // combines with anything. LraCoordinator refuses the same combinations for
+  // library callers, but only once a Real query reaches it.
+  {
+    const UserDefinedFlags& uf = bm->UserFlags;
+    std::vector<std::string> controls;
+    if (uf.lra_extension_mode != 0)
+      controls.push_back("--lra-extension-mode=" +
+                         std::to_string(uf.lra_extension_mode));
+    if (uf.lra_row_order != 0)
+      controls.push_back("--lra-row-order=" +
+                         std::to_string(uf.lra_row_order));
+    if (uf.lra_extension_restart_float_basis)
+      controls.push_back("--lra-extension-restart-float-basis=1");
+    if (uf.lra_extension_restart_sat)
+      controls.push_back("--lra-extension-restart-sat=1");
+    std::vector<std::string> sessions;
+    if (uf.lra_incremental_session)
+      sessions.push_back("--lra-incremental-session=1");
+    if (uf.lra_persistent_state)
+      sessions.push_back("--lra-persistent-state=1");
+    if (!controls.empty() && !sessions.empty())
+    {
+      auto join = [](const std::vector<std::string>& names) {
+        std::string joined;
+        for (const std::string& name : names)
+          joined += (joined.empty() ? "" : ", ") + name;
+        return joined;
+      };
+      cerr << "ERROR: " << join(controls) << " cannot be combined with "
+           << join(sessions)
+           << ": the LRA extension controls apply to batch solves only"
+           << endl;
+      std::exit(-1);
+    }
+
+    if (uf.lra_extension_restart_sat &&
+        uf.solver_to_use != UserDefinedFlags::CADICAL_SOLVER)
+    {
+#ifdef USE_CADICAL
+      cerr << "ERROR: --lra-extension-restart-sat=1 requires --cadical" << endl;
+#else
+      cerr << "ERROR: --lra-extension-restart-sat=1 requires a build with "
+              "CaDiCaL"
+           << endl;
+#endif
+      std::exit(-1);
+    }
+
+#ifdef STP_CADICAL_HAS_FACTOR
+    // Only an explicit 'on': the unnamed default and 'auto' are turned off
+    // for it (STP.cpp).
+    if (uf.lra_extension_restart_sat && uf.cadical_factor_explicit &&
+        uf.cadical_factor == UserDefinedFlags::BVAMode::ON)
+    {
+      cerr << "ERROR: --lra-extension-restart-sat=1 requires "
+              "--cadical-factor=off"
+           << endl;
+      std::exit(-1);
+    }
+#endif
+
+    // The decision hints hold CaDiCaL's propagator slot, which a search
+    // reset cannot carry over.
+    if (uf.lra_extension_restart_sat &&
+        uf.array_index_hints == UserDefinedFlags::ArrayIndexHints::DECIDE)
+    {
+      cerr << "ERROR: --lra-extension-restart-sat=1 cannot be combined with "
+              "--array-index-hints=decide"
+           << endl;
+      std::exit(-1);
+    }
+  }
 
   if (fp_constant_operands_option->count())
   {

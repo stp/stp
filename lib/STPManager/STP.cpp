@@ -1212,6 +1212,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   if (lraActive && !bm->UserFlags.cadical_factor_explicit &&
       bvaMode == UserDefinedFlags::BVAMode::ON)
     bvaMode = UserDefinedFlags::BVAMode::AUTO;
+  // CaDiCaL cannot reset its search once factor is on. An explicit 'on' is
+  // refused at the command line.
+  if (lraActive && bm->UserFlags.lra_extension_restart_sat &&
+      bvaMode == UserDefinedFlags::BVAMode::AUTO)
+    bvaMode = UserDefinedFlags::BVAMode::OFF;
 
   enableBVAIfWanted(
       NewSolver, bm->UserFlags,
