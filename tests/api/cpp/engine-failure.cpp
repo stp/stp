@@ -85,10 +85,17 @@ TEST(EngineFailure, an_engine_failure_is_internal_and_poisons_the_manager)
   const Term f = tm.declare("f", tm.mk_fp32_sort());
   const Term rtz = tm.mk_rm(RoundingMode::RTZ);
   const Term b = x == 1;
+  const Term arr = tm.declare("arr", tm.mk_array_sort(tm.mk_bv_sort(8), tm.mk_bv_sort(8)));
+  const Term g = tm.declare("g", tm.mk_fun_sort({tm.mk_bv_sort(8)}, tm.mk_bv_sort(8)));
+  const Term zero = tm.mk_bv(8, 0);
   Solver s(tm);
   s.add(x == 1);
+  s.add(arr[zero] == x);
+  s.add(g(x) == x);
   ASSERT_TRUE(s.check_sat().is_sat());
   const Model m = s.model();
+  const ArrayValue av = m.array_value(arr);
+  const FunctionValue fv = m.function_value(g);
 
   bool caught = false;
   try
@@ -122,6 +129,14 @@ TEST(EngineFailure, an_engine_failure_is_internal_and_poisons_the_manager)
       [&] { (void)fp_add(RoundingMode::RNE, f, f); },
       [&] { (void)bit(x, 0); },
       [&] { (void)bool_to_bv1(b); },
+      // the values a model handed out before the failure
+      [&] { (void)av.entries(); },
+      [&] { (void)av.at(zero); },
+      [&] { (void)av.default_value(); },
+      [&] { (void)av.as_term(); },
+      [&] { (void)fv.entries(); },
+      [&] { (void)fv.apply({zero}); },
+      [&] { (void)fv.else_value(); },
   };
   for (const auto& call : later)
   {

@@ -1770,8 +1770,7 @@ void vc_getCounterExampleArray(VC vcp, Expr e, Expr** indices, Expr** values, in
   for (std::size_t i = 0; i < n; ++i)
   {
     stp_term index = nullptr, element = nullptr;
-    bool observed = false;
-    if (stp_array_value_entry(av, i, &index, &element, &observed) != STP_OK)
+    if (stp_array_value_entry(av, i, &index, &element) != STP_OK)
     {
       take_error(vc);
       continue;
@@ -2607,8 +2606,7 @@ void print_counterexample_lines(VCImpl* vc, std::ostream& os)
         for (std::size_t j = 0; j < m; ++j)
         {
           stp_term index = nullptr, element = nullptr;
-          bool observed = false;
-          if (stp_array_value_entry(av, j, &index, &element, &observed) != STP_OK)
+          if (stp_array_value_entry(av, j, &index, &element) != STP_OK)
             continue;
           os << "ASSERT( " << name << "[" << cvc_value_text(vc, index) << "] = "
              << cvc_value_text(vc, element) << " );\n";
@@ -2677,8 +2675,7 @@ void print_counterexample_smt2(VCImpl* vc, std::ostream& os)
         for (std::size_t j = m; j-- > 0;)
         {
           stp_term value = nullptr;
-          bool observed = false;
-          if (stp_fun_value_entry(fv, j, args.data(), &value, &observed) != STP_OK)
+          if (stp_fun_value_entry(fv, j, args.data(), &value) != STP_OK)
             continue;
           std::string guard;
           for (std::uint32_t k = 0; k < arity; ++k)
@@ -3478,8 +3475,7 @@ Expr uf_value(VCImpl* vc, Expr application, const char* who)
     for (std::size_t j = 0; j < m && result == nullptr; ++j)
     {
       stp_term value = nullptr;
-      bool observed = false;
-      if (stp_fun_value_entry(fv, j, args.data(), &value, &observed) != STP_OK)
+      if (stp_fun_value_entry(fv, j, args.data(), &value) != STP_OK)
       {
         take_error(vc);
         continue;

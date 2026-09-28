@@ -1163,7 +1163,11 @@ ArrayValue& ArrayValue::operator=(const ArrayValue&) noexcept = default;
 ArrayValue::~ArrayValue() = default;
 
 Sort ArrayValue::sort() const { return Sort(impl_->snap->mgr, impl_->cells.sort); }
-Term ArrayValue::default_value() const { return detail::make_term(impl_->snap->mgr, impl_->cells.fill); }
+Term ArrayValue::default_value() const
+{
+  impl_->snap->mgr->check_alive("ArrayValue::default_value");
+  return detail::make_term(impl_->snap->mgr, impl_->cells.fill);
+}
 std::size_t ArrayValue::size() const { return impl_->cells.entries.size(); }
 ArrayValue::Entry ArrayValue::entry(std::size_t i) const
 {
@@ -1173,8 +1177,9 @@ ArrayValue::Entry ArrayValue::entry(std::size_t i) const
                      std::to_string(impl_->cells.entries.size()) + ")",
                  0);
   ManagerImpl* m = impl_->snap->mgr;
+  m->check_alive("ArrayValue::entry");
   return Entry{detail::make_term(m, impl_->cells.entries[i].first),
-               detail::make_term(m, impl_->cells.entries[i].second), true};
+               detail::make_term(m, impl_->cells.entries[i].second)};
 }
 std::vector<ArrayValue::Entry> ArrayValue::entries() const
 {
@@ -1185,12 +1190,22 @@ std::vector<ArrayValue::Entry> ArrayValue::entries() const
 }
 Term ArrayValue::at(const Term& index) const
 {
+  const char* fn = "ArrayValue::at";
   ManagerImpl* m = impl_->snap->mgr;
+  m->check_alive(fn);
   if (index.is_null())
-    detail::fail(ErrorCode::NULL_HANDLE, "ArrayValue::at", "the index is null", 0);
+    detail::fail(ErrorCode::NULL_HANDLE, fn, "the index is null", 0);
+  if (index.impl_manager() != m)
+    detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the index belongs to another term manager", 0,
+                 {index});
   const ASTNode i = detail::node_of(index);
   if (!i.isConstant())
-    detail::fail(ErrorCode::NOT_A_VALUE, "ArrayValue::at", "the index must be a value", 0, {index});
+    detail::fail(ErrorCode::NOT_A_VALUE, fn, "the index must be a value", 0, {index});
+  // an index of another sort names no cell: refused, where it answered the default
+  const std::uint32_t expected = m->rec(impl_->cells.sort).index;
+  if (m->sort_of_node(i, fn) != expected)
+    detail::fail(ErrorCode::SORT_MISMATCH, fn, "the index is not of the array's index sort", 0,
+                 {index}, {index.sort(), Sort(m, expected)});
   for (const auto& e : impl_->cells.entries)
     if (e.first == i)
       return detail::make_term(m, e.second);
@@ -1199,6 +1214,7 @@ Term ArrayValue::at(const Term& index) const
 Term ArrayValue::as_term() const
 {
   ManagerImpl* m = impl_->snap->mgr;
+  m->check_alive("ArrayValue::as_term");
   TermManager tm(m);
   Term out = tm.mk_const_array(sort(), default_value());
   for (const auto& e : impl_->cells.entries)
@@ -1223,11 +1239,11 @@ FunctionValue::Entry FunctionValue::entry(std::size_t i) const
                      std::to_string(impl_->cases.cases.size()) + ")",
                  0);
   ManagerImpl* m = impl_->snap->mgr;
+  m->check_alive("FunctionValue::entry");
   Entry e;
   for (const ASTNode& a : impl_->cases.cases[i].first)
     e.args.push_back(detail::make_term(m, a));
   e.value = detail::make_term(m, impl_->cases.cases[i].second);
-  e.observed = true;
   return e;
 }
 std::vector<FunctionValue::Entry> FunctionValue::entries() const
@@ -1237,19 +1253,37 @@ std::vector<FunctionValue::Entry> FunctionValue::entries() const
     out.push_back(entry(i));
   return out;
 }
-Term FunctionValue::else_value() const { return detail::make_term(impl_->snap->mgr, impl_->cases.else_value); }
+Term FunctionValue::else_value() const
+{
+  impl_->snap->mgr->check_alive("FunctionValue::else_value");
+  return detail::make_term(impl_->snap->mgr, impl_->cases.else_value);
+}
 Term FunctionValue::apply(const std::vector<Term>& args) const
 {
+  const char* fn = "FunctionValue::apply";
   ManagerImpl* m = impl_->snap->mgr;
+  m->check_alive(fn);
+  // the function's own arity and domain: arguments that fit no case of it
+  // used to answer the else value
+  const detail::SortRec& r = m->rec(impl_->cases.sort);
+  if (args.size() != r.domain.size())
+    detail::fail(ErrorCode::ARITY, fn,
+                 "the function takes " + std::to_string(r.domain.size()) + " arguments");
   std::vector<ASTNode> nodes;
   for (std::size_t i = 0; i < args.size(); ++i)
   {
     if (args[i].is_null())
-      detail::fail(ErrorCode::NULL_HANDLE, "FunctionValue::apply", "an argument is null", static_cast<int>(i));
+      detail::fail(ErrorCode::NULL_HANDLE, fn, "an argument is null", static_cast<int>(i));
+    if (args[i].impl_manager() != m)
+      detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the argument belongs to another term manager",
+                   static_cast<int>(i), {args[i]});
     nodes.push_back(detail::node_of(args[i]));
     if (!nodes.back().isConstant())
-      detail::fail(ErrorCode::NOT_A_VALUE, "FunctionValue::apply", "the arguments must be values",
+      detail::fail(ErrorCode::NOT_A_VALUE, fn, "the arguments must be values",
                    static_cast<int>(i), {args[i]});
+    if (m->sort_of_node(nodes.back(), fn) != r.domain[i])
+      detail::fail(ErrorCode::SORT_MISMATCH, fn, "the argument is not of the function's domain sort",
+                   static_cast<int>(i), {args[i]}, {args[i].sort(), Sort(m, r.domain[i])});
   }
   for (const auto& c : impl_->cases.cases)
   {
@@ -1266,6 +1300,7 @@ Term FunctionValue::apply(const std::vector<Term>& args) const
 Term FunctionValue::as_ite_term(const std::vector<Term>& formals) const
 {
   ManagerImpl* m = impl_->snap->mgr;
+  m->check_alive("FunctionValue::as_ite_term");
   const detail::SortRec& r = m->rec(impl_->cases.sort);
   if (formals.size() != r.domain.size())
     detail::fail(ErrorCode::ARITY, "FunctionValue::as_ite_term",

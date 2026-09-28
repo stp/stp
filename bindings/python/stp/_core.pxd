@@ -456,7 +456,7 @@ cdef extern from "stp/stp.h":
     stp_sort stp_array_value_sort(stp_array_value)
     stp_term stp_array_value_default(stp_array_value)
     size_t stp_array_value_size(stp_array_value)
-    stp_status stp_array_value_entry(stp_array_value, size_t i, stp_term* index, stp_term* element, cbool* observed)
+    stp_status stp_array_value_entry(stp_array_value, size_t i, stp_term* index, stp_term* element)
     stp_term stp_array_value_at(stp_array_value, stp_term index_value)
     stp_term stp_array_value_as_term(stp_array_value)
     void stp_fun_value_release(stp_fun_value)
@@ -464,7 +464,7 @@ cdef extern from "stp/stp.h":
     uint32_t stp_fun_value_arity(stp_fun_value)
     stp_term stp_fun_value_else(stp_fun_value)
     size_t stp_fun_value_size(stp_fun_value)
-    stp_status stp_fun_value_entry(stp_fun_value, size_t i, stp_term* args_out, stp_term* value, cbool* observed)
+    stp_status stp_fun_value_entry(stp_fun_value, size_t i, stp_term* args_out, stp_term* value)
     stp_term stp_fun_value_apply(stp_fun_value, size_t n, const stp_term* arg_values)
     stp_term stp_fun_value_as_ite(stp_fun_value, size_t n, const stp_term* formals)
 

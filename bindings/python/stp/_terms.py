@@ -1147,13 +1147,13 @@ class ArrayNumRef(ArrayRef):
         return self._av.default_value()
 
     def items(self):
-        return [(idx, el) for idx, el, _ in self._entries()]
+        return [(idx, el) for idx, el in self._entries()]
 
     def keys(self):
-        return [idx for idx, _, _ in self._entries()]
+        return [idx for idx, _ in self._entries()]
 
     def values(self):
-        return [el for _, el, _ in self._entries()]
+        return [el for _, el in self._entries()]
 
     def _entries(self):
         return [self._av.entry(i) for i in range(self._av.size())]
@@ -1175,19 +1175,10 @@ class ArrayNumRef(ArrayRef):
         v = self._index_value(i)
         if v is None:
             return False
-        return any(idx.same(v) for idx, _, _ in self._entries())
+        return any(idx.same(v) for idx, _ in self._entries())
 
     def __iter__(self):
         return iter(self.keys())
-
-    def observed(self, i):
-        v = self._index_value(i)
-        if v is None:
-            return False
-        for idx, _, obs in self._entries():
-            if idx.same(v):
-                return obs
-        return False
 
     def as_bytes(self, first_index, count):
         """A dense read of `count` elements from `first_index`, little-endian bytes per element;
@@ -1235,10 +1226,9 @@ class FuncRef(ExprRef):
 class FuncEntry:
     """One case of a function interpretation: (arg values...) -> value."""
 
-    def __init__(self, args, value, observed):
+    def __init__(self, args, value):
         self._args = tuple(args)
         self._value = value
-        self._observed = observed
 
     def num_args(self):
         return len(self._args)
@@ -1248,9 +1238,6 @@ class FuncEntry:
 
     def value(self):
         return self._value
-
-    def observed(self):
-        return self._observed
 
     def as_tuple(self):
         return (self._args, self._value)
@@ -1273,8 +1260,8 @@ class FuncInterp(_core.FunValueHandle):
         return self.size()
 
     def entry(self, i):
-        args, value, observed = _core.FunValueHandle.entry(self, i)
-        return FuncEntry(args, value, observed)
+        args, value = _core.FunValueHandle.entry(self, i)
+        return FuncEntry(args, value)
 
     def entries(self):
         return [self.entry(i).as_tuple() for i in range(self.size())]

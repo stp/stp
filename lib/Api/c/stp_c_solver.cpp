@@ -895,8 +895,7 @@ size_t stp_array_value_size(stp_array_value v)
                             [](CArrayValue* av) { return av->value.size(); });
 }
 
-stp_status stp_array_value_entry(stp_array_value v, size_t i, stp_term* index, stp_term* element,
-                                 bool* observed)
+stp_status stp_array_value_entry(stp_array_value v, size_t i, stp_term* index, stp_term* element)
 {
   return array_call<stp_status>(v, "stp_array_value_entry", STP_ERROR, [&](CArrayValue* av) {
     out_arg(index, "stp_array_value_entry", 2);
@@ -913,8 +912,6 @@ stp_status stp_array_value_entry(stp_array_value v, size_t i, stp_term* index, s
       throw;
     }
     *index = idx;
-    if (observed != nullptr)
-      *observed = e.observed;
     return STP_OK;
   });
 }
@@ -967,8 +964,7 @@ size_t stp_fun_value_size(stp_fun_value v)
   return fun_call<size_t>(v, "stp_fun_value_size", 0, [](CFunValue* fv) { return fv->value.size(); });
 }
 
-stp_status stp_fun_value_entry(stp_fun_value v, size_t i, stp_term* args_out, stp_term* value,
-                               bool* observed)
+stp_status stp_fun_value_entry(stp_fun_value v, size_t i, stp_term* args_out, stp_term* value)
 {
   return fun_call<stp_status>(v, "stp_fun_value_entry", STP_ERROR, [&](CFunValue* fv) {
     out_arg(args_out, "stp_fun_value_entry", 2);
@@ -987,8 +983,6 @@ stp_status stp_fun_value_entry(stp_fun_value v, size_t i, stp_term* args_out, st
         unexport_last(fv->cm, args_out[done]);
       throw;
     }
-    if (observed != nullptr)
-      *observed = e.observed;
     return STP_OK;
   });
 }

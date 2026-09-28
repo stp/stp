@@ -106,7 +106,7 @@ that depart from z3py or from a literal reading of the C API.
    of that sort). There is no `stp_model_*` constructor from values. What is
    not preserved: array defaults and function `else` values other than the
    sort default (they come from the solver's fill rule, which for STP is the
-   sort default unless `model-array-fill = ones`), and the `observed` flags.
+   sort default unless `model-array-fill = ones`).
    The model is built on `tm` (a private manager when `tm` is `None`) by a
    scratch solver of its own, and the solvers already live over `tm` are
    untouched; lookups translate their key by name, so `m2[x]` works whichever

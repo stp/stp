@@ -169,7 +169,7 @@ TEST_F(Models, array_values)
   EXPECT_TRUE(av.sort() == A);
   EXPECT_GE(av.size(), 4u);
   EXPECT_EQ(av.entries().size(), av.size());
-  // ascending by unsigned index, every entry observed and a value
+  // ascending by unsigned index, every entry a value
   std::uint64_t last = 0;
   bool first = true;
   std::set<std::uint64_t> indices;
@@ -177,7 +177,6 @@ TEST_F(Models, array_values)
   {
     EXPECT_TRUE(e.index.is_value());
     EXPECT_TRUE(e.element.is_value());
-    EXPECT_TRUE(e.observed);
     EXPECT_TRUE(e.index.sort() == bv32);
     EXPECT_TRUE(e.element.sort() == bv8);
     const std::uint64_t idx = e.index.to_uint64();
@@ -310,7 +309,6 @@ TEST_F(Models, function_values)
     EXPECT_TRUE(e.args[0].is_value());
     EXPECT_TRUE(e.args[1].is_value());
     EXPECT_TRUE(e.value.is_value());
-    EXPECT_TRUE(e.observed);
     EXPECT_TRUE(fv.apply(e.args).same_as(e.value));
   }
   EXPECT_EQ(fv.apply({tm.mk_bv(8, 1), tm.mk_bv(8, 2)}).to_uint64(), 3u);
@@ -451,6 +449,27 @@ TEST_F(Models, arrays_and_a_function_under_the_incremental_driver)
   for (const Term& a : s.assertions())
     EXPECT_TRUE(m.bool_value(a)) << a;
   EXPECT_NO_THROW(s.push());
+}
+
+// A value object answers only about its own sort: an index or argument of
+// another sort, of another manager or of the wrong arity used to answer the
+// default.
+TEST_F(Models, value_objects_check_their_arguments)
+{
+  s.add(a[I(1)] == 10);
+  s.add(f(tm.mk_bv(8, 1), tm.mk_bv(8, 2)) == 3);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model m = s.model();
+  const ArrayValue av = m.array_value(a);
+  const FunctionValue fv = m.function_value(f);
+  EXPECT_EQ(av.at(I(1)).to_uint64(), 10u);
+  API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, av.at(tm.mk_bv(8, 1)));
+  EXPECT_EQ(fv.apply({tm.mk_bv(8, 1), tm.mk_bv(8, 2)}).to_uint64(), 3u);
+  API_EXPECT_ERROR(ErrorCode::ARITY, fv.apply({tm.mk_bv(8, 1)}));
+  API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, fv.apply({tm.mk_bv(8, 1), tm.mk_bv(16, 2)}));
+  TermManager other;
+  API_EXPECT_ERROR(ErrorCode::FOREIGN_MANAGER, av.at(other.mk_bv(32, 1)));
+  API_EXPECT_ERROR(ErrorCode::FOREIGN_MANAGER, fv.apply({other.mk_bv(8, 1), tm.mk_bv(8, 2)}));
 }
 
 TEST_F(Models, core_and_text)

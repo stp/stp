@@ -2425,16 +2425,15 @@ cdef class ArrayValueHandle:
         return stp_array_value_size(self._h)
 
     def entry(self, i):
-        """(index, element, observed)"""
+        """(index, element)"""
         self._m._check()
         cdef stp_term idx = NULL, el = NULL
-        cdef cbool obs = 0
         cdef size_t n = stp_array_value_size(self._h)
         if not isinstance(i, int) or i < 0 or <size_t>i >= n:
             raise IndexError("entry %r out of range for an array value with %d entries" % (i, n))
-        if stp_array_value_entry(self._h, <size_t>i, &idx, &el, &obs) != STP_OK:
+        if stp_array_value_entry(self._h, <size_t>i, &idx, &el) != STP_OK:
             self._m._fail("stp_array_value_entry")
-        return (self._m._wrap(idx), self._m._wrap(el), bool(obs))
+        return (self._m._wrap(idx), self._m._wrap(el))
 
     def at(self, Term index_value not None):
         self._m._check()
@@ -2491,25 +2490,24 @@ cdef class FunValueHandle:
         return stp_fun_value_size(self._h)
 
     def entry(self, i):
-        """((arg values...), value, observed)"""
+        """((arg values...), value)"""
         self._m._check()
         cdef size_t n = stp_fun_value_size(self._h), k
         cdef uint32_t arity = stp_fun_value_arity(self._h)
         cdef stp_term* args
         cdef stp_term val = NULL
-        cdef cbool obs = 0
         if not isinstance(i, int) or i < 0 or <size_t>i >= n:
             raise IndexError("entry %r out of range for a function value with %d entries" % (i, n))
         args = <stp_term*>malloc((arity if arity > 0 else 1) * sizeof(stp_term))
         if args == NULL:
             raise MemoryError()
         try:
-            if stp_fun_value_entry(self._h, <size_t>i, args, &val, &obs) != STP_OK:
+            if stp_fun_value_entry(self._h, <size_t>i, args, &val) != STP_OK:
                 self._m._fail("stp_fun_value_entry")
             avs = tuple(self._m._wrap(args[k]) for k in range(arity))
         finally:
             free(args)
-        return (avs, self._m._wrap(val), bool(obs))
+        return (avs, self._m._wrap(val))
 
     def apply(self, list arg_values not None):
         self._m._check()

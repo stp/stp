@@ -117,7 +117,7 @@ def test_array_values():
     assert d[5] == 42 and d[6] == 43 and d[100] == 7 and len(v) == len(items) and len(v) >= 3
     assert [k.as_long() for k in v.keys()] == [k.as_long() for k, _ in items] and list(v) == v.keys()
     assert v[5].as_long() == 42 and v[BitVecVal(6, 32)].as_long() == 43 and v[7].as_long() == 0
-    assert 5 in v and 7 not in v and BitVecVal(100, 32) in v and v.observed(5) in (True, False)
+    assert 5 in v and 7 not in v and BitVecVal(100, 32) in v
     assert v[i].kind() in (Kind.SELECT, Kind.ITE)  # a symbolic index selects (the engine expands a select over a constant array)
     assert v.as_bytes(4, 4) == b"\x00\x2a\x2b\x00" and m.array_bytes(a, 4, 4) == b"\x00\x2a\x2b\x00"
     assert v.as_bytes(99, 2) == b"\x00\x07" and v.as_bytes(100, 1) == b"\x07"

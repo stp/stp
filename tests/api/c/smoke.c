@@ -309,7 +309,6 @@ static void arrays(void)
   uint8_t bytes[4] = {0, 0, 0, 0};
   const uint8_t data[3] = {1, 2, 3};
   stp_term index, element;
-  bool observed = false;
 
   stp_tm_scope_push(tm);
   CHECK(arr != NULL && stp_sort_array_index(arr) == bv32 && stp_sort_array_element(arr) == bv8);
@@ -331,7 +330,7 @@ static void arrays(void)
   CHECK(stp_model_uint64(m, stp_select(tm, a, stp_mk_bv_uint64(tm, 32, 5)), &v) == STP_OK && v == 42);
   av = stp_model_array_value(m, a);
   CHECK(av != NULL && stp_array_value_size(av) >= 1);
-  CHECK(stp_array_value_entry(av, 0, &index, &element, &observed) == STP_OK);
+  CHECK(stp_array_value_entry(av, 0, &index, &element) == STP_OK);
   CHECK(index != NULL && element != NULL && stp_term_is_value(index) && stp_term_is_value(element));
   CHECK(stp_array_value_default(av) != NULL);
   CHECK(stp_array_value_as_term(av) != NULL);

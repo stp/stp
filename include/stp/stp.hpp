@@ -934,18 +934,18 @@ struct CheckBudget
 class STP_API_EXPORT ArrayValue
 {
 public:
+  /// A cell the model records; every other cell holds default_value().
   struct Entry
   {
     Term index;
     Term element;
-    bool observed;
   };
   Sort sort() const;
   Term default_value() const; ///< a VALUE term of the element sort
   std::size_t size() const; ///< explicit entries
   Entry entry(std::size_t i) const; ///< ascending by unsigned index value
   std::vector<Entry> entries() const;
-  Term at(const Term& index_value) const; ///< the element, default if absent
+  Term at(const Term& index_value) const; ///< the element, default if absent; SORT_MISMATCH off the index sort
   Term as_term() const; ///< store chain over (as const ...); re-assertable
 
   // internal
@@ -961,11 +961,11 @@ private:
 class STP_API_EXPORT FunctionValue
 {
 public:
+  /// An application the model records; every other one is else_value().
   struct Entry
   {
     std::vector<Term> args;
     Term value;
-    bool observed;
   };
   Sort sort() const;
   std::size_t size() const;

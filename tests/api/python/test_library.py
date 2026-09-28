@@ -72,7 +72,7 @@ def test_sort_and_entry_base_classes():
     entry = s.model()[f].entry(0)
     assert isinstance(entry, FuncEntry) and entry.num_args() == 1 and entry.value().as_long() == 3
     assert entry.arg_value(0).as_long() == 1 and entry.as_tuple() == ((entry.arg_value(0),), entry.value())
-    assert entry.observed() in (True, False) and "3" in repr(entry)
+    assert "3" in repr(entry)
     s.close()
 
 

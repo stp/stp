@@ -714,7 +714,7 @@ STP_API void stp_array_value_release(stp_array_value);
 STP_API stp_sort stp_array_value_sort(stp_array_value);
 STP_API stp_term stp_array_value_default(stp_array_value); /* a VALUE of the element sort */
 STP_API size_t stp_array_value_size(stp_array_value);      /* explicit entries */
-STP_API stp_status stp_array_value_entry(stp_array_value, size_t i, stp_term* index, stp_term* element, bool* observed); /* +1 each; ascending by unsigned index value */
+STP_API stp_status stp_array_value_entry(stp_array_value, size_t i, stp_term* index, stp_term* element); /* +1 each; ascending by unsigned index value; a cell the model records, every other one holds the default */
 STP_API stp_term stp_array_value_at(stp_array_value, stp_term index_value); /* the element, default if absent */
 STP_API stp_term stp_array_value_as_term(stp_array_value); /* store chain over (as const ...); re-assertable */
 /* function values */
@@ -723,7 +723,7 @@ STP_API stp_sort stp_fun_value_sort(stp_fun_value);
 STP_API uint32_t stp_fun_value_arity(stp_fun_value);
 STP_API stp_term stp_fun_value_else(stp_fun_value); /* always ground: a VALUE of the codomain */
 STP_API size_t stp_fun_value_size(stp_fun_value);
-STP_API stp_status stp_fun_value_entry(stp_fun_value, size_t i, stp_term* args_out /* arity slots */, stp_term* value, bool* observed);
+STP_API stp_status stp_fun_value_entry(stp_fun_value, size_t i, stp_term* args_out /* arity slots */, stp_term* value); /* an application the model records */
 STP_API stp_term stp_fun_value_apply(stp_fun_value, size_t n, const stp_term* arg_values);
 STP_API stp_term stp_fun_value_as_ite(stp_fun_value, size_t n, const stp_term* formals);
 
