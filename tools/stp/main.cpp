@@ -266,6 +266,14 @@ void ExtraMain::create_options()
            bm->UserFlags.enable_unconstrained,
            "Unconstrained variables are eliminated.", simp_group);
 
+  bool_arg("--unconstrained-image-vars",
+           bm->UserFlags.unconstrained_image_vars,
+           "Unconstrained elimination replaces a shared term of an "
+           "unconstrained variable (zero-extension, constant shift, "
+           "modulus, ...) by a fresh variable constrained to the term's "
+           "image",
+           simp_group);
+
   int64_arg("--aig-rewrite-passes", bm->UserFlags.AIG_rewrites_iterations,
             "Iterations of AIG rewriting to perform", simp_group);
 

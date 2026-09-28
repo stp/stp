@@ -214,6 +214,10 @@ public:
   bool propagate_equalities = true; // Remove equalities.
   bool bitConstantProp_flag = true; // Constant bit propagation enabled.
   bool enable_unconstrained = true;
+  // Unconstrained elimination also replaces a shared single-step term of
+  // an unconstrained variable (zero_extend x, x mod c, ...) by a fresh
+  // variable constrained to the term's image.
+  bool unconstrained_image_vars = false;
   bool enable_flatten = true;
   bool enable_ite_context = false;
   bool enable_aig_core_simplify = false;
