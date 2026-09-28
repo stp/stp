@@ -60,8 +60,8 @@ enum inputStatus
 };
 
 // return types for the GetType() function in ASTNode class.
-// FLOATINGPOINT_TYPE is appended after UNKNOWN_TYPE, not slotted in sort
-// order: the order the 2.x C API's type_t was published in.
+// FLOATINGPOINT_TYPE follows UNKNOWN_TYPE rather than sort order: it was
+// added last, and nothing compares these values.
 // Source-only sorts such as RoundingMode are intentionally absent here:
 // GetType() describes the carrier used by the bit-vector pipeline.
 enum types

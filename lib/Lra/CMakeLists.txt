@@ -9,9 +9,9 @@ set_property(DIRECTORY PROPERTY COMPILE_DEFINITIONS "")
 # Whether assertions are live is a whole-project decision, not a component
 # one.  The empty interface above is about solver backends and include paths;
 # it also dropped the root's -DNDEBUG, which left this directory's asserts
-# firing in a Release build that had asked for none -- so a 2.x C API caller
-# who leaked a Real Expr got SIGABRT out of libstp where the same bit-vector
-# mistake was only a leak.  Re-apply the project's choice.
+# firing in a Release build that had asked for none -- so a caller's mistake
+# that is only a leak elsewhere aborted the process in here.  Re-apply the
+# project's choice.
 if(NOT ENABLE_ASSERTIONS)
     set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS NDEBUG)
 endif()

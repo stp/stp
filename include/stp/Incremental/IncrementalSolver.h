@@ -81,10 +81,9 @@ public:
   IncrementalSolver& operator=(const IncrementalSolver&) = delete;
 
   // Should a session that did NOT explicitly ask for the driver be using it
-  // by now? One policy, for every frontend: the SMT-LIB2 reader and the 2.x
-  // C API disagreed for as long as each carried its own copy, and the C
-  // API's copy was a literal that `--incremental-auto-engage-at` could not
-  // reach, so the documented override was inert for embedders.
+  // by now? One policy, for every frontend: the SMT-LIB2 reader and the API
+  // both ask here, so they cannot drift apart, and
+  // `--incremental-auto-engage-at` reaches every one of them.
   //
   // `configuredThreshold` is UserDefinedFlags::incremental_auto_engage_at:
   // negative selects the measured per-logic default, 0 disables automatic
@@ -114,9 +113,9 @@ public:
   // they left. The difference is a session fact only a frontend can see, and
   // the ways it comes apart are reachable: resetAssertions() destroys the
   // driver without resetting the frontend's counter, and a canHandle()
-  // refusal bumps the counter without engaging. (A third, the 2.x C API's
-  // 'i' flag arriving after batch queries, is gone: the API's incremental
-  // option can only be set before the first check.)
+  // refusal bumps the counter without engaging. (The incremental option
+  // switched on after batch queries cannot be a third: it can only be set
+  // before the first check.)
   //
   // `solvesRun` is checks already made, as above; the first check asks with 0.
   static bool forcedFirstSolve(bool forcedFromStart, size_t solvesRun);

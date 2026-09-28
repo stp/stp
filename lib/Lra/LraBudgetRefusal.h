@@ -14,13 +14,12 @@ namespace stp::lra
  * records which layer noticed, which matters for a diagnostic and not at all
  * for what the caller should do.
  *
- * One definition, because it was previously written twice and the two copies
- * disagreed: STP.cpp knew all four, the 2.x C interface two, so a
+ * One definition, because two copies can disagree: when they did, a
  * RegistryFailure or SolveContextFailure carrying ResourceLimit was a budget
  * refusal at the top of the solver and a fatal error one layer down -- the
  * same condition on either side of an internal boundary deciding whether an
  * embedder got a status or lost its process.  Adding a fifth failure class
- * now updates every caller at once.
+ * updates every caller at once.
  *
  * Declared without the failure headers so that callers outside lib/Lra need
  * no part of its private include path; the four classes are matched in

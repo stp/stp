@@ -972,7 +972,7 @@ bool custom_model_array_fill(EngineTarget& t, const OptionSpec&, const OptionVal
 }
 bool custom_logic(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
-  // The 2.x set-logic side effects, now visible through Options::resolved:
+  // set-logic's side effects, visible through Options::resolved:
   // the UF logics switch the UF machinery on, QF_AX and the AUF logics the
   // extensional arrays.
   const std::string& logic = as_str(v);
@@ -1012,8 +1012,8 @@ bool custom_manager_uf_sort_width(EngineTarget& t, const OptionSpec& spec, const
   fail_option(ErrorCode::OPTION_VALUE, spec.name,
               "manager-scoped: pass it to TermManager's constructor, not to a solver");
 }
-// Three switches whose 2.x frontends also recorded that the caller named them
-// (the *_explicit flags the engine consults). A default re-applied by
+// Three switches for which the engine also needs to know that the caller named
+// them (the *_explicit flags it consults). A default re-applied by
 // apply_all_options is not a request (EngineTarget::explicit_value).
 bool custom_bv_term_abstraction_rounds(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {

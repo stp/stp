@@ -121,7 +121,7 @@ type = "uint64"
 tier = "expert"
 help = "checks that reached bit-blasting (the rest were decided by preprocessing)"
 
-# ---------------------------------------------------------------- bit-vector abstraction (2.x counters, renamed)
+# ---------------------------------------------------------------- bit-vector abstraction
 [[stat]]
 name = "bv.candidates.eq"
 type = "uint64"

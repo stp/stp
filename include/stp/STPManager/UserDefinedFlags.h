@@ -1723,9 +1723,9 @@ public:
     CNF_EFFORT_VERY_HIGH,
     CNF_EFFORT_AUTO,
     // The in-house Tseitin writer, over the in-house AIG. Below very-low on
-    // the scale and last in the enum, which are different facts: the ordinals
-    // were the 2.x C interface's contract (libstp2 keeps it, by name), so new
-    // rungs have gone on the end however little effort they spend.
+    // the scale and last in the enum, which are different facts: new rungs go
+    // on the end however little effort they spend, so that no value already
+    // given out moves.
     CNF_EFFORT_NEW_VERY_LOW,
     CNF_EFFORT_NEW_LOW,
     CNF_EFFORT_NEW_MEDIUM,

@@ -134,7 +134,7 @@ enum class SortKind : std::uint8_t
   UNINTERPRETED
 };
 
-/// Contiguous; the one-hot carrier of 2.x is internal.
+/// Contiguous; the engine's one-hot carrier is internal.
 enum class RoundingMode : std::uint8_t
 {
   RNE = 0,

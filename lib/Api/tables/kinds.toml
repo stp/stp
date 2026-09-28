@@ -82,7 +82,7 @@ arity = "2"
 indices = 0
 sig = "(T, T) -> Bool"
 folds = ["=(t,t)->true", "=(v1,v2)->false for distinct values"]
-engine = "on arrays: extensional equality (the 2.x 'x' feature, always on)"
+engine = "on arrays: extensional equality, which the array-equality option decides (auto engages it when an array equality is asserted)"
 
 [[kind]]
 name = "DISTINCT"
@@ -1016,7 +1016,6 @@ arity = "2"
 indices = 0
 sig = "(Real, Real) -> Bool"
 
-# 102 kinds. Not public (2.x internals that stay inside the engine): PARAMBOOL, BOOLEXTRACT, IFF,
+# 102 kinds. Not public (engine kinds that stay inside the engine): PARAMBOOL, BOOLEXTRACT, IFF,
 # NAND/NOR on Bool, the width-carrying shift kinds, BVSX/BVZX-to-width, ARRAY_EQ (it is EQUAL on
-# arrays), FP_SMT_EQ (it is EQUAL on FP), UF_APPLY (it is APPLY), REAL_CONST/BVCONST (VALUE),
-# the sort kinds ARRAY/BITVECTOR/BOOLEAN/FLOATINGPOINT/ROUNDINGMODE (they are SortKind).
+# arrays), FP_SMT_EQ (it is EQUAL on FP), UF_APPLY (it is APPLY), REAL_CONST/BVCONST (VALUE).

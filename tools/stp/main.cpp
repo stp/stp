@@ -78,8 +78,8 @@ namespace reg = stp::api::detail;
 //     file's extension), the print-back flags, --print-output, --output-CNF,
 //     --exit-after-CNF (the solver's end-after-cnf), --parse-only and
 //     --interactive;
-//   - the reading of --max-time as a whole number of seconds (2.x
-//     compatibility; the registry's duration type wants a unit);
+//   - the reading of --max-time as a whole number of seconds (as the command
+//     line always read it; the registry's duration type wants a unit);
 //   - the wording of a refused value, kept to what the binary always said
 //     ("--max-time must be -1 (no limit) or greater", "--search-bias must be
 //     one of ..."), built from the row's range and values, or spelled out by
@@ -581,9 +581,10 @@ std::string CommandLine::entry_text(const Entry& e, std::string& refusal)
         return e.b ? "on" : "off";
       return e.s;
     case reg::OptType::DURATION:
-      // 2.x compatibility: a whole number of seconds, -1 no limit. -1 is the
-      // only negative value with a meaning; anything more negative than that
-      // is a mistake, and silently treating it as unlimited hides it.
+      // As the command line always read it: a whole number of seconds, -1 no
+      // limit. -1 is the only negative value with a meaning; anything more
+      // negative than that is a mistake, and silently treating it as
+      // unlimited hides it.
       if (e.i == -1)
         return "none";
       if (e.i < -1)

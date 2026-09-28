@@ -37,7 +37,7 @@ THE SOFTWARE.
 #endif
 
 // The DLL_PUBLIC / DLL_LOCAL block below is duplicated verbatim in
-// lib/Compat2/include/stp/c_interface.h, the 2.x header libstp2 installs, and
+// lib/Compat2/include/stp/c_interface.h, which libstp2 installs, and
 // deliberately so: this header ships nowhere, so an installed header cannot
 // include it. Do not "deduplicate" the two -- that would leave the installed
 // header with no definition of DLL_PUBLIC. Keep them in sync instead.

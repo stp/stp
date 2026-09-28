@@ -37,13 +37,13 @@
 #
 # Schema
 #   name        the canonical key: every language and the CLI (--name) use it; lower-case, hyphenated
-#   aliases     other CLI spellings accepted for compatibility (2.x underscores etc.)
+#   aliases     other CLI spellings accepted for compatibility (the underscore spellings, etc.)
 #   short       single-letter CLI form
 #   type        bool | int | uint | mode | enum | set | string | path | duration
-#               mode is the one tri-state auto|on|off (replaces the three 2.x ordinal encodings); it also takes
+#               mode is the one tri-state auto|on|off; it also takes
 #               1/true and 0/false in any case, unless the row lists `values`, which are then its only spellings
 #               set is a set of names (replaces bitmasks); the CLI accepts a comma list, "all" and "none"
-#               duration is milliseconds in every API; on the CLI a bare number means seconds (2.x compatibility)
+#               duration is milliseconds in every API; on the CLI a bare number means seconds, as it always did
 #   default     the value when unset; "none" for duration means no limit; an enum whose default is "" takes ""
 #               (no choice made) besides its values
 #   range       { min, max } for int/uint; an entry that reaches a 32-bit engine field says so here, so that no
@@ -142,7 +142,7 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "stop_after_cnf" }
 category = "cnf"
-# 2.x's --exit-after-CNF called exit(0) inside the library; tools/stp keeps that spelling as a frontend row
+# not tools/stp's --exit-after-CNF: that spelling is a frontend row, and it sets end-after-cnf
 help = "stop the check after CNF generation and answer unknown (STOPPED_AFTER_CNF)"
 
 [[option]]
@@ -155,7 +155,7 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "exit_after_CNF" }
 category = "cnf"
-# tools/stp's --exit-after-CNF (a frontend row) sets this entry: the run ends where 2.x's process exited
+# tools/stp's --exit-after-CNF (a frontend row) sets this entry: the run ends where the command line always stopped
 help = "end the run at the first CNF a check generates: the check stops there and says nothing more (print-quickstat's report and a partial CNF's warning come first), and an input read with ParseMode::EXECUTE ends with it; a check answers unknown (STOPPED_AFTER_CNF)"
 
 [[option]]
@@ -167,7 +167,7 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "logic" }
 category = "frontend"
-implies = "QF_UF*/QF_AUF* -> uninterpreted-functions=on; QF_AX -> array-equality=on; QF_BV/QF_ABV -> the 32-check engagement policy; QF_LRA -> every check Real-active (2.x set-logic side effects, now visible through Options::resolved)"
+implies = "QF_UF*/QF_AUF* -> uninterpreted-functions=on; QF_AX -> array-equality=on; QF_BV/QF_ABV -> the 32-check engagement policy; QF_LRA -> every check Real-active (set-logic's side effects, visible through Options::resolved)"
 help = "the SMT-LIB logic; the same entry (set-logic) writes when a script is parsed"
 
 [[option]]
@@ -289,7 +289,7 @@ name = "manager"
 group = "Miscellaneous options"
 
 # ============================================================================ CLI aliases that map to a value of another entry
-# (kept so that 2.x command lines keep working: each is a bare flag of tools/stp that sets `of` to `value`; the
+# (kept so that existing command lines keep working: each is a bare flag of tools/stp that sets `of` to `value`; the
 # flags of one entry exclude each other on the command line)
 
 [[alias]]
@@ -452,12 +452,12 @@ api = "CLI only: how the binary reads standard input for Solver::parse(std::istr
 excludes = ["--CVC", "--SMTLIB1"]
 
 # ============================================================================ in-band SMT-LIB 2 keys and environment taps
-# (set-option :produce-models b) writes the registry entry produce-models. The other 2.x in-band keys are parser
+# (set-option :produce-models b) writes the registry entry produce-models. The other in-band keys are parser
 # state, not solver options: :print-success, :global-declarations, :produce-unsat-assumptions and
 # :diagnostic-output-channel are handled by the SMT-LIB 2 frontend of Solver::parse_smt2 (ParseMode::EXECUTE) and
-# by tools/stp; an unknown key answers `unsupported`, as SMT-LIB requires. The 2.x environment taps STP_DIVMAP,
-# STP_SHIFT_ANNOTATE and STP_MULT_ANNOTATE are removed in 3.x (they were latched process-wide diagnostics);
-# their output, if still wanted, becomes diagnostic-tier options writing to the diagnostic sink.
+# by tools/stp; an unknown key answers `unsupported`, as SMT-LIB requires. The environment taps STP_DIVMAP,
+# STP_SHIFT_ANNOTATE and STP_MULT_ANNOTATE are not options: they are process-wide diagnostics the engine reads
+# from the environment and writes to the files they name.
 
 # ============================================================================ generated entries
 [[option]]
@@ -888,7 +888,7 @@ scope = "solver"
 engine = { custom = "threads" }
 category = "sat"
 # > 1 forfeits the fork-safety guarantee
-requires = { build = "cryptominisat", option = "sat-backend", value = "cryptominisat" }   # 2.x: --threads excluded every other backend flag
+requires = { build = "cryptominisat", option = "sat-backend", value = "cryptominisat" }   # on the command line, --threads excludes every other backend flag
 help = "Number of threads for cryptominisat"
 
 [[option]]
@@ -926,9 +926,8 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "enable_array_equality" }
 category = "arrays"
-# 2.x: a flag that had to precede construction and could not be cleared. 3.x: extensional array equality and UF
-# applications are always constructible; this entry only forces the theory machinery on/off, and auto engages it
-# when the assertions contain array equalities / UF applications
+# Array equalities and UF applications are always constructible; this entry only forces the theory machinery on
+# or off, and auto engages it when the assertions contain array equalities / UF applications
 help = "decide whole-array equality/disequality (extensional arrays) by lemmas on demand"
 
 [[option]]
@@ -1599,8 +1598,8 @@ settable = "construction"
 scope = "solver"
 engine = { custom = "lra_verify_canonical" }
 category = "lra"
-# 2.x: a process-wide atomic, and so is the number layer's switch this sets
-# when the entry is set explicitly (the library's own default keeps the check)
+# a process-wide switch of the number layer, set only when the entry is set
+# explicitly (the library's own default keeps the check)
 help = "re-derive the canonical form of exact rationals whose construction already proves it"
 
 [[option]]
@@ -1947,9 +1946,8 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "enable_uninterpreted_functions" }
 category = "refinement.uf"
-# 2.x: a flag that had to precede construction and could not be cleared. 3.x: extensional array equality and UF
-# applications are always constructible; this entry only forces the theory machinery on/off, and auto engages it
-# when the assertions contain array equalities / UF applications
+# Array equalities and UF applications are always constructible; this entry only forces the theory machinery on
+# or off, and auto engages it when the assertions contain array equalities / UF applications
 help = "decide uninterpreted functions over Bool, bit-vector, RoundingMode and floating-point sorts by dynamic Ackermann refinement, including when the input logic omits UF"
 
 [[option]]
@@ -3216,5 +3214,5 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "check_counterexample_flag" }
 category = "model"
-# 2.x forced this on for every C VC; 3.x: one default (off) through every door
+# one default (off) through every door
 help = "construct counterexample and check it"
