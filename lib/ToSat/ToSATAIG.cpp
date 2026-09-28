@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/ToSat/ShiftPrimes.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
@@ -804,6 +805,13 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
   // restores an eliminated variable on contact or never eliminates one --
   // makeBackend refuses the simplifying MiniSat outright.
   abstraction_.freezeVariables(satSolver, nodeToSATVar);
+
+  // The floating-point abstraction's lemmas and exact releases are spliced
+  // onto its proxies' and surrogates' variables in later solve calls.
+  const FpAbstraction* fp = bm->getFpAbstractionIfAny();
+  if (fp != NULL && fp->active())
+    for (const ASTNode& symbol : fp->protectedSymbols())
+      freezeLeaf(symbol);
 
   // Give every checker-visible scalar one complete mapping in this backend.
   // Connected bits retain their CNF variables; missing/disconnected bits get
