@@ -1786,8 +1786,12 @@ set(CONF_INCLUDE_DIRS "${PROJECT_BINARY_DIR}/include")
 configure_file(STPConfig.cmake.in
   "${PROJECT_BINARY_DIR}/${STP_CONFIG_FILENAME}" @ONLY
 )
-configure_file(STPConfigVersion.cmake.in
-  "${PROJECT_BINARY_DIR}/${STP_CONFIG_VERSION_FILENAME}" @ONLY
+# STP is API-compatible only within one major.minor.
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+  "${PROJECT_BINARY_DIR}/${STP_CONFIG_VERSION_FILENAME}"
+  VERSION "${PROJECT_VERSION}"
+  COMPATIBILITY SameMinorVersion
 )
 
 # No export(PACKAGE STP) here. Under CMP0090, NEW since the 3.18 baseline, it
