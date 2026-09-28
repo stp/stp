@@ -488,11 +488,15 @@ SAT search history independently of one another. All four default to
   does not undo preprocessing or replay the original clause order. Solve
   assumptions are reapplied normally and the query deadline is retained.
 
-Nondefault controls require batch solving. Combining one with a session
-option is rejected when the solve starts, and the query reports an error.
-SAT search reset requires CaDiCaL with factoring disabled
-(``--cadical-factor=off``). The controls still use exact model and conflict
-checking. ``context_reuses``, ``arithmetic_state_resets``,
+Nondefault controls require batch solving. The command line refuses one
+combined with a session option; a library caller that sets both gets an
+error when a Real query is solved. SAT search reset requires CaDiCaL
+(``--cadical``) with factoring disabled, so an explicit
+``--cadical-factor=on`` is refused alongside it, and the default or ``auto``
+is turned off for it. ``--array-index-hints=decide`` holds the backend's
+propagator slot, which the reset cannot carry, and is refused alongside it
+too. The controls still use exact model and conflict checking.
+``context_reuses``, ``arithmetic_state_resets``,
 ``float_basis_resets`` and ``sat_search_resets`` show which paths ran.
 ``total_exact_pivots``, ``total_float_checks``, ``total_float_pivots``,
 ``total_float_check_ns`` and ``total_float_sync_ns`` include retired
