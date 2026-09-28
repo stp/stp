@@ -380,6 +380,14 @@ install(DIRECTORY "${STP_API_GEN_DIR}/include/stp/api"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/stp"
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
 )
+# And the generated sources of the Python package, which a pip install of
+# bindings/python3 against this installation compiles in, so that the package
+# it builds agrees with this libstp (bindings/python3/setup.py). Installed
+# whether or not this build makes the package itself.
+install(FILES "${STP_API_GEN_DIR}/python/_gen_enums.pxi"
+              "${STP_API_GEN_DIR}/python/_gen_kinds.py"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/stp/api/python"
+)
 
 # libstp2: the 2.x C API re-implemented over the 3.x C API. After the stp
 # target, which it links.

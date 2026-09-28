@@ -151,7 +151,11 @@ not offer, and every defect of the C or C++ layers met on the way.
     (`_gen_kinds.py` is generated without the property).
 17. **Installation:** this package is the installed `stp` (the 2.x ctypes
     package, which has the same name, is built for its libstp2 tests only).
-    Not done: wheels, doctests, a generated `.pyi` stub.
+    pip also installs it on its own against an installed STP
+    (`pyproject.toml`, `setup.py`; `README.md` says how): the install ships
+    the generated `_gen_enums.pxi` and `_gen_kinds.py` in
+    `include/stp/api/python` for that build. Not done: wheels, doctests, a
+    generated `.pyi` stub.
 
 ## C API gaps met while building this
 

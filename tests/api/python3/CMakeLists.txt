@@ -21,6 +21,23 @@
 # THE SOFTWARE.
 
 # -----------------------------------------------------------------------------
+# The package installed by pip on its own, against a DESTDIR-staged
+# installation of this build (pip_install_test.py). Skipped when the
+# interpreter cannot build it offline.
+# -----------------------------------------------------------------------------
+
+add_test(
+    NAME python3-pip-install
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pip_install_test.py
+            ${PROJECT_SOURCE_DIR}/bindings/python3 ${CMAKE_COMMAND}
+            ${PROJECT_BINARY_DIR} ${CMAKE_INSTALL_PREFIX}
+            ${CMAKE_CURRENT_BINARY_DIR}/pip-install $<CONFIG>)
+set_tests_properties(python3-pip-install PROPERTIES
+    SKIP_RETURN_CODE 77
+    LABELS "python3;api3"
+    TIMEOUT 900)
+
+# -----------------------------------------------------------------------------
 # The pytest suite of the 3.x Python API, run against the package assembled in
 # <build>/bindings/python3 (PYTHONPATH). Registered only when the interpreter
 # can import pytest; the suite itself lives in this source directory.

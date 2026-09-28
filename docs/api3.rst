@@ -184,6 +184,12 @@ and literals are strict (``BitVecVal(256, 8)`` raises; ``wrap=True`` wraps).
 Options are keyword arguments with ``-`` and ``.`` spelled ``_``:
 ``Solver(max_time='2s', bb_div_v3=False)``.
 
+The package installs with STP when it is built with ``ENABLE_PYTHON3_API``
+(the default when the interpreter can import Cython), or on its own, once per
+interpreter, against an STP that is already installed:
+``python3 -m pip install ./bindings/python3`` compiles its extension there.
+``bindings/python3/README.md`` says how that finds the installation.
+
 Running an input as ``stp`` does
 --------------------------------
 

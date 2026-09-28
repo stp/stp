@@ -762,6 +762,23 @@ jobs:
         "
         echo "ok: pip-installed python module solves a query"
 
+        # And the 3.x package the same way, compiled by pip against this
+        # installation (pip fetches Cython); its extension records the
+        # library directory as its rpath, so nothing needs setting to run it.
+        python3 -m venv "$RUNNER_TEMP/venv3"
+        STP_PREFIX="$prefix" "$RUNNER_TEMP/venv3/bin/python" -m pip install \
+          --disable-pip-version-check ./bindings/python3
+        "$RUNNER_TEMP/venv3/bin/python" -c "
+        from stp import BitVec, Solver, unsat
+        x = BitVec('x', 8)
+        s = Solver()
+        s.add(x + x != 2 * x)
+        assert s.check() == unsat, 'pip-installed 3.x python module gave the wrong answer'
+        "
+        core=$("$RUNNER_TEMP/venv3/bin/python" -c "import stp._core; print(stp._core.__file__)")
+        ldd "$core" | grep -q "=> $prefix/lib/libstp"
+        echo "ok: pip-installed 3.x python module solves a query"
+
         # And again from a different directory, which is what a packager
         # staging into a temporary root or anyone unpacking a tarball
         # elsewhere ends up with. This is what an absolute install RPATH
