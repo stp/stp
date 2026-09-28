@@ -174,6 +174,61 @@ TEST(ConstArrays, store_chains_over_different_constants)
   }
 }
 
+// Writes naming every value of the index sort leave no cell for the bases'
+// defaults to decide, so the model evaluates the equality of two such chains
+// from the written cells alone.
+TEST(ConstArrays, writes_naming_every_index_decide_equality_in_the_model)
+{
+  TermManager::Config config;
+  config.uf_sort_width = 1; // a declared sort of two elements
+  TermManager tm(config);
+  Sort bv1 = tm.mk_bv_sort(1);
+  Term zero = tm.mk_bv(1, 0), one = tm.mk_bv(1, 1);
+  // zero written at each index over an all-ones base, equated with all zeros
+  auto over = [&](const Sort& index, const std::vector<Term>& indexes) {
+    Sort A = tm.mk_array_sort(index, bv1);
+    Term chain = tm.mk_const_array(A, one);
+    for (const Term& i : indexes)
+      chain = store(chain, i, zero);
+    return tm.mk_const_array(A, zero) == chain;
+  };
+  {
+    // the solve and the model agree
+    Term e = over(bv1, {zero, one});
+    Solver s(tm);
+    s.add(e);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_TRUE(s.model().bool_value(e));
+  }
+
+  Sort rm = tm.mk_rm_sort(), f22 = tm.mk_fp_sort(2, 2), S = tm.declare_sort("S");
+  std::vector<Term> modes;
+  for (RoundingMode r : {RoundingMode::RNE, RoundingMode::RNA, RoundingMode::RTP,
+                         RoundingMode::RTN, RoundingMode::RTZ})
+    modes.push_back(tm.mk_rm(r));
+  // the sixteen patterns of Float(2,2): its fifteen values, NaN twice
+  std::vector<Term> floats;
+  for (unsigned bits = 0; bits < 16; ++bits)
+    floats.push_back(tm.mk_fp_from_bits(f22, tm.mk_bv(4, bits)));
+  // -0 is a value of its own, whatever +0 holds
+  std::vector<Term> all_but_negative_zero = floats;
+  all_but_negative_zero.erase(all_but_negative_zero.begin() + 8);
+  Term u = tm.declare("u", S), v = tm.declare("v", S);
+
+  Solver s(tm);
+  s.add(u != v);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model m = s.model();
+  EXPECT_TRUE(m.bool_value(over(bv1, {zero, one})));
+  EXPECT_FALSE(m.bool_value(over(bv1, {one})));
+  EXPECT_TRUE(m.bool_value(over(rm, modes)));
+  EXPECT_FALSE(m.bool_value(over(rm, std::vector<Term>(modes.begin(), modes.end() - 1))));
+  EXPECT_TRUE(m.bool_value(over(f22, floats)));
+  EXPECT_FALSE(m.bool_value(over(f22, all_but_negative_zero)));
+  EXPECT_TRUE(m.bool_value(over(S, {u, v})));
+  EXPECT_FALSE(m.bool_value(over(S, {u})));
+}
+
 TEST(ConstArrays, equality_between_constant_arrays_is_equality_of_defaults)
 {
   Arrays f;

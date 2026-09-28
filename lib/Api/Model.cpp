@@ -40,6 +40,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFRefinement.h"
 
 #include <algorithm>
+#include <limits>
 #include <ostream>
 #include <set>
 #include <sstream>
@@ -690,6 +691,32 @@ void collect_indices(Evaluator& ev, const ModelSnapshot& s, ManagerImpl* m, cons
       indices.insert(e.first);
 }
 
+// Whether `count` distinct indexes are every value of the array sort's index
+// sort, leaving no cell for a fill to decide. Values are interned canonically
+// (a float format's NaNs are one node, its two zeros are two), so distinct
+// nodes are distinct values; a declared sort has an element per pattern of its
+// carrier.
+bool covers_index_sort(ManagerImpl* m, std::uint32_t array_sort, std::size_t count)
+{
+  const SortRec& i = m->rec(m->rec(array_sort).index);
+  constexpr unsigned digits = std::numeric_limits<std::size_t>::digits;
+  switch (i.kind)
+  {
+    case SortKind::BV:
+      return i.a < digits && count == (std::size_t{1} << i.a);
+    case SortKind::UNINTERPRETED:
+      return i.b < digits && count == (std::size_t{1} << i.b);
+    case SortKind::RM:
+      return count == 5;
+    case SortKind::FP:
+      // every pattern but the 2^sb - 2 NaNs, and the one NaN
+      return i.a + i.b < digits &&
+             count == (std::size_t{1} << (i.a + i.b)) - (std::size_t{1} << i.b) + 3;
+    default:
+      return false;
+  }
+}
+
 bool Evaluator::arrays_equal(const ASTNode& a, const ASTNode& b)
 {
   std::set<ASTNode> indices;
@@ -699,8 +726,9 @@ bool Evaluator::arrays_equal(const ASTNode& a, const ASTNode& b)
   for (const ASTNode& i : indices)
     if (!(eval_read(a, i) == eval_read(b, i)))
       return false;
-  // the unobserved cells: equal fills, or the same base
-  if (base_a == base_b)
+  // the unobserved cells, if the writes leave any: equal fills, or the same
+  // base
+  if (base_a == base_b || covers_index_sort(m_, m_->sort_of_node(a, fn_), indices.size()))
     return true;
   auto fa = s_.arrays.find(base_a);
   auto fb = s_.arrays.find(base_b);
