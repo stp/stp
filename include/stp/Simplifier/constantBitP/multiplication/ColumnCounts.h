@@ -27,14 +27,11 @@ THE SOFTWARE.
 
 #include "stp/Util/BitOps.h"
 #include <cstdint>
-#include <iostream>
 
 namespace simplifier
 {
 namespace constantBitP
 {
-
-extern std::ostream& log;
 
 struct ColumnCounts
 {
@@ -45,22 +42,14 @@ struct ColumnCounts
   unsigned int bitWidth;
   const FixedBits& output;
 
-  // With initialise false the caller provides already-set-up column arrays
-  // (e.g. restored from a saved copy).
+  // The caller provides already-set-up column arrays (e.g. restored from a
+  // saved copy).
   ColumnCounts(signed _columnH[], signed _columnL[], signed _sumH[],
-               signed _sumL[], unsigned _bitWidth, FixedBits& output_,
-               bool initialise = true)
+               signed _sumL[], unsigned _bitWidth, FixedBits& output_)
       : columnH(_columnH), columnL(_columnL), sumH(_sumH), sumL(_sumL),
         output(output_)
   {
-    // setup the low and highs.
     bitWidth = _bitWidth;
-    if (initialise)
-      for (unsigned i = 0; i < bitWidth; i++)
-      {
-        columnL[i] = 0;
-        columnH[i] = i + 1;
-      }
   }
 
   // Halve a sum bound. They are always non-negative, so this is /2 without
@@ -110,42 +99,11 @@ struct ColumnCounts
     return NO_CHANGE;
   }
 
-  void print(std::string message)
-  {
-    log << message << std::endl;
-    log << " columnL:";
-    for (unsigned i = 0; i < bitWidth; i++)
-    {
-      log << columnL[bitWidth - 1 - i] << " ";
-    }
-    log << std::endl;
-    log << " columnH:";
-    for (unsigned i = 0; i < bitWidth; i++)
-    {
-      log << columnH[bitWidth - 1 - i] << " ";
-    }
-    log << std::endl;
-    log << " sumL:   ";
-
-    for (unsigned i = 0; i < bitWidth; i++)
-    {
-      log << sumL[bitWidth - 1 - i] << " ";
-    }
-    log << std::endl;
-    log << " sumH:   ";
-    for (unsigned i = 0; i < bitWidth; i++)
-    {
-      log << sumH[bitWidth - 1 - i] << " ";
-    }
-    log << std::endl;
-  }
-
   Result snapTo(int i)
   {
     Result r = NO_CHANGE;
     if (output.isFixed(i))
     {
-      // bool changed = false;
       int expected = output.getValue(i) ? 1 : 0;
 
       // output is true. So the maximum and minimum can only be even.

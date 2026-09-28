@@ -57,8 +57,13 @@ class DLL_PUBLIC SimplifyingNodeFactory : public NodeFactory
 {
 
 public:
-  virtual ASTNode CreateNode(const Kind kind, const ASTVec& children) override;
-  virtual ASTNode CreateTerm(const Kind kind, const unsigned int width, const ASTVec& children) override;
+  using NodeFactory::CreateArrayTerm;
+  using NodeFactory::CreateNode;
+  using NodeFactory::CreateTerm;
+
+  virtual ASTNode CreateNode(Kind kind, ASTChildren children) override;
+  virtual ASTNode CreateTerm(Kind kind, unsigned int width,
+                             ASTChildren children) override;
   virtual std::string getName() override { return "simplifying"; }
 
   SimplifyingNodeFactory(NodeFactory& raw_, STPMgr& bm_)
@@ -70,8 +75,8 @@ public:
   SimplifyingNodeFactory& operator=(const SimplifyingNodeFactory&) = delete;
 
   static ASTNode convertKnownShiftAmount(const Kind k,
-                                            const ASTVec& children, STPMgr& bm,
-                                            NodeFactory* nf);
+                                         ASTChildren children, STPMgr& bm,
+                                         NodeFactory* nf);
 private:
   NodeFactory& hashing;
 
@@ -79,32 +84,105 @@ private:
   const ASTNode& ASTFalse;
   const ASTNode& ASTUndefined;
 
-  ASTNode CreateSimpleFormITE(const ASTVec& children);
-  ASTNode CreateSimpleXor(const ASTVec& children);
+  ASTNode CreateSimpleFormITE(ASTChildren children);
 
-  ASTNode CreateSimpleAndOr(bool IsAnd, const ASTVec& children);
+  // What a condition known to hold (or known not to) says about another
+  // test: 1 that it holds, -1 that it does not, 0 nothing.
+  int decides(const ASTNode& cond, bool holds, const ASTNode& other);
+
+  // `n` with the occurrences of `t` it reaches within `budget` interior
+  // nodes replaced by `k`. Builds nothing along a path with no `t` under it,
+  // and running out of budget only leaves occurrences in place: every
+  // occurrence equals `k` where this is used, so replacing any subset of
+  // them preserves the meaning.
+  ASTNode substituteConstant(const ASTNode& n, const ASTNode& t,
+                             const ASTNode& k, int& budget);
+
+  // A branch of an if-then-else knows its own condition. `branch` with the
+  // tests that condition decides taken out, or Null when it decides none of
+  // them. Never builds a node the branch did not already contain, so it
+  // cannot cost sharing: dropping one of three or more conjuncts, which
+  // would, is left to the sharing-aware Rewriting pass.
+  ASTNode decideBranch(const ASTNode& cond, bool holds, const ASTNode& branch);
+  ASTNode CreateSimpleXor(ASTChildren children);
+
+  ASTNode CreateSimpleAndOr(bool IsAnd, ASTChildren children);
   ASTNode CreateSimpleAndOr(bool IsAnd, const ASTNode& form1, const ASTNode& form2);
-  ASTNode handle_2_children(bool IsAnd, const ASTVec& children);
+  ASTNode handle_2_children(bool IsAnd, ASTChildren children);
 
   ASTNode CreateSimpleNot(const ASTNode& form);
-  ASTNode CreateSimpleNot(const ASTVec& children);
+  ASTNode CreateSimpleNot(ASTChildren children);
 
-  ASTNode CreateSimpleEQ(const ASTVec& children);
+  ASTNode CreateSimpleEQ(ASTChildren children);
+  ASTNode CreateSimpleEQConstConcat(const ASTNode& constant,
+                                    const ASTNode& concat);
 
+  ASTNode chaseRead(ASTChildren children, unsigned int width);
 
-  ASTNode chaseRead(const ASTVec& children, unsigned int width);
+  // Push an extract down through the operators it passes through, in a loop.
+  // Null if none of them applies.
+  ASTNode narrowExtract(unsigned width, ASTChildren children);
+
+  ASTNode simplifyArrayEquality(const ASTNode& a, const ASTNode& b);
+
+  // A = write(A, i, v) becomes select(A, i) = v; Null otherwise.
+  ASTNode selfStoreEquality(const ASTNode& a, const ASTNode& b);
 
   ASTNode plusRules(const ASTNode& n0, const ASTNode& n1);
 
+  // Rebuild a remainder from the dividend and the "- b * (a / b)" product
+  // that a plus was given. Null if the two do not have that shape.
+  ASTNode remainderFromDivision(const ASTNode& a, const ASTNode& product);
+
+  // One pass of the above over a sum's operands, replacing every dividend
+  // and product pair it finds. True if it folded anything.
+  bool foldRemainders(ASTVec& children);
+
   //Helper functions
-  bool children_all_constants(const ASTVec& children) const;
+  bool children_all_constants(ASTChildren children) const;
   ASTNode get_smallest_number(const unsigned width);
   ASTNode get_largest_number(const unsigned width);
-  ASTNode handle_bvxor(unsigned int width, const ASTVec& input_children);
-  ASTNode handle_bvand(unsigned int width, const ASTVec& children);
-  ASTNode create_gt_node(const ASTVec& children);
+  ASTNode handle_bvxor(unsigned int width, ASTChildren input_children);
+  ASTNode handle_bvand(unsigned int width, ASTChildren children);
+  ASTNode create_gt_node(ASTChildren children);
 
-  ASTNode plusRules(const ASTVec& oldChildren);
+  // abs/neg of a constant float: clear (flip=false) or flip (flip=true) the
+  // sign bit, keeping the rest of the packed bits and the format.
+  ASTNode foldFPSign(const ASTNode& fpConst, bool flip);
+
+  // The special constants of a format, for rules whose result is not one of
+  // the operands: interning canonicalises the NaN.
+  ASTNode makeFPNaN(unsigned eb, unsigned sb);
+  ASTNode makeFPZero(unsigned eb, unsigned sb, bool negative);
+
+  // The neighbouring value of a non-NaN float constant in its own format
+  // (up = the next value above). Null for NaN.
+  ASTNode fpConstAdjacent(const ASTNode& fpConst, bool up);
+
+  // The wide constant rounded into (te, ts) toward +oo (up) or -oo, or
+  // Null. Assertion builds and the DirectedNarrowing unit test hold the
+  // result to the directed rounding's defining property.
+  ASTNode narrowFPConstDirected(const ASTNode& c, unsigned te, unsigned ts,
+                                bool up);
+
+  // fp.gt / fp.geq over an exactly-widened operand: drop the widening(s),
+  // moving a constant other side into the operand's format. Null when the
+  // rule does not apply.
+  ASTNode narrowWidenedFPComparison(Kind kind, const ASTNode& a,
+                                    const ASTNode& b);
+
+  // The narrow value that widens exactly to the constant, or Null when
+  // none exists; decided from the packed bits alone.
+  ASTNode fpConstNarrowExact(const ASTNode& c, unsigned te, unsigned ts);
+
+  // fp.eq / = over an exactly-widened operand: compare the operands, or
+  // the operand against the constant's exact preimage; false against a
+  // constant nothing widens onto. Null when the rule does not apply.
+  ASTNode narrowWidenedFPEquality(Kind kind, const ASTNode& a,
+                                  const ASTNode& b);
+
+  ASTNode plusRules(ASTChildren oldChildren);
+  ASTNode multRules(ASTChildren oldChildren);
 
 };
 

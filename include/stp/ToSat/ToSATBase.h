@@ -28,8 +28,54 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 
+#include <cassert>
+#include <functional>
+#include <string>
+
 namespace stp
 {
+class SATSolver;
+
+// The bit-vector abstraction checker has three materially different answers.
+// A zero refinement count is not enough to distinguish a faithful candidate
+// from one whose mandatory exact encoding could not be built, so callers must
+// branch on this status before publishing a SAT model.
+struct AbstractionRefinementResult
+{
+  enum class Status
+  {
+    Faithful,
+    Refined,
+    Unknown
+  };
+
+  Status status;
+  unsigned refined;
+
+  static AbstractionRefinementResult faithful()
+  {
+    return {Status::Faithful, 0};
+  }
+
+  static AbstractionRefinementResult progress(unsigned count)
+  {
+    assert(count > 0);
+    return {Status::Refined, count};
+  }
+
+  // A refinement may have installed clauses for earlier records before a
+  // later mandatory circuit exhausts the budget. They remain useful and are
+  // counted even though this candidate cannot be decided.
+  static AbstractionRefinementResult unknown(unsigned count = 0)
+  {
+    return {Status::Unknown, count};
+  }
+
+  bool isFaithful() const { return status == Status::Faithful; }
+  bool madeProgress() const { return status == Status::Refined; }
+  bool isUnknown() const { return status == Status::Unknown; }
+};
+
 class DLL_PUBLIC ToSATBase // not copyable
 {
 protected:
@@ -37,6 +83,7 @@ protected:
 
   // Ptr to STPManager
   STPMgr* bm;
+  std::function<bool()> before_search_;
 
 public:
   typedef std::unordered_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
@@ -61,9 +108,66 @@ public:
   virtual bool CallSAT(SATSolver& SatSolver, const ASTNode& input,
                        bool doesAbsRef) = 0;
 
+  // Runs after CNF installation and activation binding, before entering
+  // SAT search. The caller owns the callback's lifetime and clears it
+  // after CallSAT. A false result is an internal failure, never UNSAT.
+  void setBeforeSearch(std::function<bool()> callback)
+  {
+    before_search_ = std::move(callback);
+  }
+  void clearBeforeSearch() noexcept { before_search_ = nullptr; }
+
   virtual ASTNodeToSATVar& SATVar_to_SymbolIndexMap() = 0;
 
+  // The lowering may have replaced a bit-vector operation by a free
+  // Boolean or a free vector of bits -- an over-approximation which is
+  // only a faithful encoding once refinement has pinned it to the
+  // operands it stands for. A candidate that contradicts one of those
+  // abstractions is not an assignment of the query at all, so it must be
+  // ruled out before anything downstream reads it: the theory checkers
+  // and the model evaluator are entitled to assume the bit-vector layer
+  // means what it says, and report a candidate that does not as an
+  // internal error.
+  //
+  // Faithful means that the candidate may pass to the next checker. Refined
+  // means clauses were added and the search must run again. Unknown means a
+  // mandatory refinement could not be encoded within its resource budget;
+  // it must never be mistaken for the old zero-refinements fixed point.
+  virtual AbstractionRefinementResult
+  refineAbstractions(SATSolver& /*SatSolver*/)
+  {
+    return AbstractionRefinementResult::faithful();
+  }
+
+  // Total across the session, so a driver can tell whether the round it
+  // just ran refined anything without owning the abstraction tables.
+  virtual uint64_t abstractionRefinements() const { return 0; }
+
+  // Whether any abstraction is in play, so a driver can tell ahead of
+  // refineAbstractions whether a candidate may yet be refuted by one.
+  virtual bool hasAbstractions() const { return false; }
+
   virtual void ClearAllTables(void) = 0;
+
+
+  // The LRA full-lazy batch coordinator keeps the submitted CNF behind one
+  // internal activation literal.  Solving under that literal releases the
+  // assertion assignment before a verified theory clause is inserted, while
+  // retaining exactly the same logical problem for every refinement round.
+  virtual bool setRequiredSolveAssumptions(const ASTVec& /*symbols*/)
+  {
+    return false;
+  }
+  virtual bool setRequiredSolveAssumption(const ASTNode& /*symbol*/)
+  {
+    return false;
+  }
+  virtual bool hasInternalSolveFailure() const { return false; }
+  virtual const std::string& internalSolveFailureDetail() const
+  {
+    static const std::string empty;
+    return empty;
+  }
 };
 }
 

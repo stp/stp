@@ -76,10 +76,12 @@ private:
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
 
   // Memo table for simplifcation. Key is unsimplified node, and
-  // value is simplified node.
-  ASTNodeMap* SimplifyMap;
-  ASTNodeMap* SimplifyNegMap;
-  ASTNodeMap MultInverseMap;
+  // value is simplified node. Flat maps: probed and written once per node
+  // visit across the whole recursive simplifier, never iterated except to
+  // filter constants (order-independent).
+  DenseNodeMap* SimplifyMap;
+  DenseNodeMap* SimplifyNegMap;
+  DenseNodeMap MultInverseMap;
 
   NodeFactory* nf;
 
@@ -91,8 +93,8 @@ public:
   {
     nf = _bm->defaultNodeFactory;
 
-    SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
-    SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+    SimplifyMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
+    SimplifyNegMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
 
     ASTTrue = nf->getTrue();
     ASTFalse = nf->getFalse();
@@ -104,6 +106,12 @@ public:
     delete SimplifyMap;
     delete SimplifyNegMap;
   }
+
+  // One-shot, equivalence-preserving simplification over a throwaway
+  // substitution map, so nothing can couple across calls. The
+  // constructor demands a SubstitutionMap, which had three callers
+  // hand-rolling the empty-map pairing to get exactly this.
+  static ASTNode simplifyAlone(STPMgr* bm, const ASTNode& n);
 
   Simplifier(Simplifier const&) = delete;
   Simplifier& operator=(Simplifier const&) = delete;
@@ -125,8 +133,8 @@ public:
   bool UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1);
 
   DLL_PUBLIC ASTNode applySubstitutionMap(const ASTNode& n);
-  DLL_PUBLIC ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);
-  ASTNode applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache);
+  ASTNode applySubstitutionMapUntilArrays(const ASTNode& n,
+                                          DenseNodeMap& cache);
 
   
   #ifdef _MSC_VER
@@ -175,9 +183,9 @@ public:
     return substitutionMap.hasUnappliedSubstitutions();
   }
 
-  ASTNodeMap* Return_SolverMap() 
-  { 
-    return substitutionMap.Return_SolverMap(); 
+  DenseNodeMap* Return_SolverMap()
+  {
+    return substitutionMap.Return_SolverMap();
   }
 
   void haveAppliedSubstitutionMap()
@@ -208,8 +216,20 @@ public:
   }
 
 private:
+  class SimplifyDriver;
 
-  void checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited);
+  enum class SimplifyJob
+  {
+    Formula,
+    Term,
+    Array
+  };
+
+  // Formulae, bit-vector/floating-point terms, and the array terms reached by
+  // READ all share one continuation stack. A generated rewrite is scheduled
+  // on that stack just like an input child, so neither input depth nor rewrite
+  // depth becomes C++ call depth.
+  ASTNode simplifyNode(const ASTNode& n, bool pushNeg, SimplifyJob job);
 
   ASTNode makeTower(const Kind k, const ASTVec& children);
 
@@ -223,50 +243,27 @@ private:
 
   bool hasBeenSimplified(const ASTNode& n);
 
-  ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyAtomicFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode ITEOpt_InEqs(const ASTNode& in1);
+  ASTNode ITEOpt_InEqs(const ASTNode& in1, ASTNode& conditionToNegate);
 
   ASTNode PullUpITE(const ASTNode& in);
-
-  ASTNode CreateSimplifiedFormulaITE(const ASTNode& in0, const ASTNode& in1,
-                                     const ASTNode& in2);
 
   ASTNode CreateSimplifiedINEQ(const Kind k, const ASTNode& a0,
                                const ASTNode& a1, bool pushNeg);
 
-  ASTNode SimplifyNotFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyAndOrFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyXorFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyNandFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyNorFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyImpliesFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyIffFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyIteFormula(const ASTNode& a, bool pushNeg);
+  // SimplifyFormula's head: the answers it gives without dispatching at all,
+  // plus the PullUpITE'd node the dispatch would run on. True when `out` is
+  // the answer.
+  bool formulaShortcut(const ASTNode& b, bool pushNeg, ASTNode& a,
+                       ASTNode& out);
 
   ASTNode CombineLikeTerms(const ASTNode& a);
   ASTNode CombineLikeTerms(const ASTVec& a);
 
-  ASTNode LhsMinusRhs(const ASTNode& eq);
+  ASTNode LhsMinusRhsTerm(const ASTNode& eq,
+                          const ASTNode& simplifiedNegatedRhs);
 
   ASTNode DistributeMultOverPlus(const ASTNode& a,
                                  bool startdistribution = false);
-
-  // Replaces WRITE(Arr,i,val) with ITE(j=i, val, READ(Arr,j))
-  ASTNode RemoveWrites_TopLevel(const ASTNode& term);
-  ASTNode RemoveWrites(const ASTNode& term);
-  ASTNode SimplifyWrites_InPlace(const ASTNode& term);
-
-  ASTNode SimplifyArrayTerm(const ASTNode& term);
 
 };
 } // end of namespace

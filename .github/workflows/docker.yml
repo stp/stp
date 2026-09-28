@@ -1,0 +1,89 @@
+name: Docker image
+
+# Nothing built the Dockerfile until this existed, so it could only be found
+# broken by someone following the README. It had been unbuildable since
+# e10a6b39 taught CMakeLists to install LICENSE and LICENSE_COMPONENTS, which
+# .dockerignore was keeping out of the build context, and its CryptoMiniSat
+# pin had drifted four minor releases onto a flag that release had removed.
+#
+# It is a full static build of STP and its solvers, so it runs only when the
+# recipe or the dependency machinery it drives changes, and on merges to
+# master. workflow_dispatch adds a button for any branch.
+#
+# The two path lists are duplicated because GitHub Actions rejects YAML
+# anchors; keep them in step.
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'scripts/deps/**'
+      - '.github/workflows/docker.yml'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'scripts/deps/**'
+      - '.github/workflows/docker.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  image:
+    name: Dockerfile
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Build the image
+      run: docker build --tag stp-image .
+
+    # The image is a single static binary on scratch, with stp as its
+    # entrypoint reading a problem on standard input. That is the form the
+    # README documents, so it is the form worth checking -- and a solver
+    # library that ended up shared rather than linked in would leave a binary
+    # that cannot start, which nothing before this point would notice.
+    - name: Solve on standard input
+      run: |
+        printf '%s\n' \
+          '(set-logic QF_BV)' \
+          '(declare-fun x () (_ BitVec 8))' \
+          '(assert (= (bvadd x x) (bvmul (_ bv2 8) x)))' \
+          '(check-sat)' \
+          '(exit)' > query.smt2
+        docker run --rm -i stp-image < query.smt2 | tee /dev/stderr | grep -qx sat
+        echo "ok: default backend"
+
+    # Every backend the image is configured with, so that "it is compiled in"
+    # is established by running it rather than by the configure line saying so.
+    # This is what tells us CaDiCaL is present at all: it is resolved to the
+    # copy CryptoMiniSat installed, and a mismatch there is a link-time or
+    # run-time problem, not a configure-time one.
+    - name: Solve with each backend
+      run: |
+        for backend in --cadical --cryptominisat --minisat; do
+          docker run --rm -i --entrypoint /stp stp-image --SMTLIB2 "$backend" \
+            < query.smt2 | tee /dev/stderr | grep -qx sat
+          echo "ok: $backend"
+        done
+
+    # MIT and BSD components require their notices to accompany the binary,
+    # and on a scratch image these two files are the only place they can be.
+    # Keeping them out of the build context is what broke the build before.
+    - name: Check the licence notices are in the image
+      run: |
+        docker create --name notices stp-image
+        docker cp notices:/share/doc/STP ./image-notices
+        docker rm notices
+        test -s image-notices/LICENSE
+        test -s image-notices/LICENSE_COMPONENTS
+        echo "ok: LICENSE and LICENSE_COMPONENTS ship with the binary"

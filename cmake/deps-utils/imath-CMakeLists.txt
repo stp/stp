@@ -1,0 +1,58 @@
+# Build system for IMath, injected by cmake/FindIMath.cmake.
+#
+# IMath ships with a hand-written makefile that also builds its test suite,
+# examples and a bundled Python binding, none of which STP uses. Two
+# translation units is little enough that supplying a CMakeLists is easier
+# than driving that makefile, and it makes IMath build the same way
+# everywhere.
+cmake_minimum_required(VERSION 3.18)
+project(imath C)
+
+add_library(imath STATIC imath.c imrat.c)
+
+# STP accounts for every arbitrary-precision allocation against a per-query
+# budget, and treats refusal as a typed outcome rather than a crash. The hook
+# header force-included here redirects malloc/realloc/free in these two
+# translation units only; nothing else in the process is affected. STP passes
+# its path because the header is STP's, not IMath's.
+if(NOT STP_IMATH_ALLOC_HOOKS_HEADER)
+    message(FATAL_ERROR
+            "STP_IMATH_ALLOC_HOOKS_HEADER must name STP's allocation-hook "
+            "header: IMath is built for STP's budgeted allocator, not as a "
+            "general-purpose copy.")
+endif()
+target_compile_definitions(imath PRIVATE STP_LRA_IMATH_INTERCEPT_ALLOCATIONS)
+if(MSVC)
+    target_compile_options(imath PRIVATE
+                           "/FI${STP_IMATH_ALLOC_HOOKS_HEADER}")
+else()
+    target_compile_options(imath PRIVATE
+                           "-include${STP_IMATH_ALLOC_HOOKS_HEADER}")
+endif()
+
+# IMath asserts internally that allocation succeeded. Refusal is recoverable
+# for STP, so those assertions must not fire; the enclosing STP assertion
+# policy is unaffected because it applies to STP's own targets.
+target_compile_definitions(imath PRIVATE NDEBUG)
+
+# libimath.a is linked into libstp.so, and none of its symbols are STP's to
+# export.
+set_target_properties(imath PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    C_STANDARD 99
+    C_STANDARD_REQUIRED ON
+    C_EXTENSIONS OFF
+    C_VISIBILITY_PRESET hidden
+)
+
+# A section per function and per data object, so that the --gc-sections on
+# libstp can drop what STP never calls -- the same treatment ABC gets.
+if(NOT MSVC)
+    target_compile_options(imath PRIVATE -ffunction-sections -fdata-sections)
+endif()
+
+include(GNUInstallDirs)
+install(TARGETS imath ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(FILES imath.h imrat.h DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+
+# EOF

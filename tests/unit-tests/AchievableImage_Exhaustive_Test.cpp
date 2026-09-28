@@ -587,6 +587,35 @@ TEST(AchievableImage_Exhaustive, hint_backprop_through_shifted_window)
   EXPECT_LE(evalChain64(steps, d.witnessFalse.GetUnsignedConst()), K);
 }
 
+TEST(AchievableImage_Exhaustive, hint_backprop_square_of_all_ones)
+{
+  // (= (bvmul t t) 0xFFFFFFFFFFFFFFFF) back-propagates all-ones into
+  // the squaring step, whose heuristic preimage is the integer square
+  // root. At exactly 2^64-1 the Newton seed overflowed to zero and the
+  // first iteration divided by it -- SIGFPE, before any decision was
+  // even attempted. (e.g. (= (bvmul (bvlshr x 1) (bvlshr x 1)) ~0)
+  // killed the solver during RemoveUnconstrained.)
+  Ctx c;
+  const unsigned w = 64;
+  const uint64_t root = 0xFFFFFFFFull;   // floor(sqrt(2^64-1)) == 2^32-1
+  const uint64_t square = root * root;   // 0xFFFFFFFE00000001
+
+  const std::vector<GroundStep> steps = {c.same(BVMULT, w)};
+  AchievableImage img(c.mgr, w);
+  img.addHintChain(steps, c.konst(0xFFFFFFFFFFFFFFFFull, w));
+  for (const GroundStep& s : steps)
+    ASSERT_TRUE(img.apply(s));
+
+  // The recovered hint seeds the samples, so the value it squares to is
+  // achievable -- which is what makes the root observable from outside.
+  AchievableImage::Decision d = img.decide(EQ, true, c.konst(square, w));
+  ASSERT_TRUE(d.collapse);
+  EXPECT_EQ(d.witnessTrue, c.konst(root, w));
+
+  // All-ones itself is 3 mod 4, so it is no square: nothing to collapse.
+  EXPECT_FALSE(img.decide(EQ, true, c.konst(0xFFFFFFFFFFFFFFFFull, w)).collapse);
+}
+
 TEST(AchievableImage_Exhaustive, wide_chain_width128)
 {
   // ((x mod 100) + 7) >u 50 at width 128: stays exact, collapses, and

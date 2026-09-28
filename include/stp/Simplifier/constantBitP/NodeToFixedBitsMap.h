@@ -31,7 +31,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-#include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <ankerl/unordered_dense.h>
 
 namespace simplifier
 {

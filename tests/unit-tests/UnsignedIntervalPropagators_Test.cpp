@@ -46,7 +46,7 @@ struct Context
   SimplifyingNodeFactory snf;
   stp::UnsignedIntervalAnalysis analysis;
 
-  Context() : snf(*(mgr.hashingNodeFactory), mgr), analysis(mgr)
+  Context() : snf(*(mgr.hashingNodeFactory), mgr)
   {
     mgr.defaultNodeFactory = &snf;
   }

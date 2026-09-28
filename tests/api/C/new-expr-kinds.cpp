@@ -400,10 +400,11 @@ TEST(new_expr_kinds, boolean_nor)
 /////////////////////////////////////////////////////////////////////////////
 
 /*
- * getExprKind() casts STP's internal Kind straight to exprkind_t, so the enum
- * in c_interface.h has to stay ordered exactly like lib/AST/ASTKind.kinds.
- * These kinds were listed in the enum long before anything could build them,
- * so nothing has been holding that correspondence in place for them.
+ * The legacy Kind prefix is aligned with exprkind_t, while internal-only
+ * kinds are explicitly mapped to their public representation by
+ * getExprKind(). These kinds were listed in the public enum long before
+ * anything could build them, so nothing had been holding that prefix
+ * correspondence in place for them.
  *
  * Only the kinds that survive construction can be checked this way; see below
  * for the ones the node factory rewrites.

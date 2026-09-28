@@ -22,7 +22,10 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/Simplifier/Flatten.h"
 #include <gtest/gtest.h>
+#include <algorithm>
+#include <random>
 #include <stdio.h>
+#include <unordered_set>
 
 
   const std::string start_input = R"(
@@ -64,19 +67,50 @@ struct Context
     stp::GlobalParserInterface = &interface;
    }
    
-   ASTNode process(std::string input)
+   ASTNode parseRaw(std::string input)
    {
-      stp::SMT2ScanString((start_input + input).c_str());
+      stp::SMT2ScanString(input.c_str());
       stp::SMT2Parse();
       // TODO assert it was parsed properly.
       smt2lex_destroy();
-      ASTNode n = mgr.CreateNode(stp::AND, mgr.GetAsserts());
+      return mgr.CreateNode(stp::AND, mgr.GetAsserts());
+   }
+
+   ASTNode parse(std::string input)
+   {
+      return parseRaw(start_input + input);
+   }
+
+   ASTNode process(std::string input)
+   {
+      ASTNode n = parse(input);
       std::cerr << "Pre flatten " << n;
       n = flatten.topLevel(n);
       std::cerr << "Post flatten "<< n;
       return n;
     }
 };
+
+// Whether some node of kind k has a child of kind k.
+static bool hasSameKindEdge(const ASTNode& n, stp::Kind k)
+{
+  std::unordered_set<uint64_t> visited;
+  ASTVec stack{n};
+  while (!stack.empty())
+  {
+    const ASTNode node = stack.back();
+    stack.pop_back();
+    if (!visited.insert(node.GetNodeNum()).second)
+      continue;
+    for (const ASTNode& c : node.GetChildren())
+    {
+      if (node.GetKind() == k && c.GetKind() == k)
+        return true;
+      stack.push_back(c);
+    }
+  }
+  return false;
+}
 
 TEST(Flatten_Test , __LINE__)
 {
@@ -87,6 +121,23 @@ TEST(Flatten_Test , __LINE__)
   Context c;
   ASTNode n = c.process(input);
   ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+// Multiplication chains flatten too: the two groupings become one wide
+// product each, and the same node.
+TEST(Flatten_Test, __LINE__)
+{
+  const std::string input = R"(
+        (assert (=
+                  (bvmul v0 (bvmul v1 v2))
+                  (bvmul (bvmul v0 v1) v2)
+                )
+        )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
 }
 
 TEST(Flatten_Test, __LINE__)
@@ -127,6 +178,27 @@ TEST(Flatten_Test, DISABLED__LINE__)
 
 
 
+// The three conjuncts contain one another: expanding the chainable
+// equalities makes each later assertion an AND wrapping the previous one.
+// Merging them into the top-level conjunction sends only already-seen
+// entries through the AND/OR duplicate filter, so the rebuilt AND has
+// fewer children than the original's degree -- which is fine, and used to
+// trip an over-strong assert. Found by murxla.
+TEST(Flatten_Test, __LINE__)
+{
+  const std::string input = R"(
+    (assert (= true a (= b a)))
+    (assert (and (= true a (= b a)) a))
+    (assert (= (and (= true a (= b a)) a) true a))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASTNode a = c.mgr.LookupOrCreateSymbol("a");
+  ASTNode b = c.mgr.LookupOrCreateSymbol("b");
+  ASSERT_EQ(n, c.mgr.CreateNode(stp::AND, a, b));
+}
+
 TEST(Flatten_Test, __LINE__)
 {
   const std::string input = R"(
@@ -153,11 +225,325 @@ TEST(Flatten_Test, __LINE__)
 TEST(Flatten_Test, __LINE__)
 {
   const std::string input = R"(
-    (assert (= (bvadd v0 (bvadd v1 v0) v1 v0 ) 
+    (assert (= (bvadd v0 (bvadd v1 v0) v1 v0 )
                (bvadd v0 v0 (bvadd v1 v0 v1) )))
     )";
 
   Context c;
   ASTNode n = c.process(input);
   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+struct KindCase
+{
+  const char* name;
+  stp::Kind kind; // the kind whose nesting the input produces
+  std::string input;
+};
+
+// Every associative+commutative kind flattens an unshared same-kind child:
+// the two groupings meet at the same wide node, so the equality folds to
+// true when the parent is rebuilt.
+//
+// bvor is checked as BVAND because the simplifying factory lowers BVOR to
+// BVNOT/BVAND at creation; the nested chain it leaves behind is a BVAND one.
+TEST(Flatten_Test, EachKindFlattensAnUnsharedChild)
+{
+  const std::vector<KindCase> cases = {
+      {"and", stp::AND,
+       "(assert (= (and a (and b c)) (and (and a b) c)))"},
+      {"or", stp::OR,
+       "(assert (= (or a (or b c)) (or (or a b) c)))"},
+      {"xor", stp::XOR,
+       "(assert (= (xor a (xor b c)) (xor (xor a b) c)))"},
+      {"bvand", stp::BVAND,
+       "(assert (= (bvand v0 (bvand v1 v2)) (bvand (bvand v0 v1) v2)))"},
+      {"bvor", stp::BVAND,
+       "(assert (= (bvor v0 (bvor v1 v2)) (bvor (bvor v0 v1) v2)))"},
+      {"bvxor", stp::BVXOR,
+       "(assert (= (bvxor v0 (bvxor v1 v2)) (bvxor (bvxor v0 v1) v2)))"},
+      {"bvadd", stp::BVPLUS,
+       "(assert (= (bvadd v0 (bvadd v1 v2)) (bvadd (bvadd v0 v1) v2)))"},
+      {"bvmul", stp::BVMULT,
+       "(assert (= (bvmul v0 (bvmul v1 v2)) (bvmul (bvmul v0 v1) v2)))"},
+  };
+
+  for (const auto& tc : cases)
+  {
+    SCOPED_TRACE(tc.name);
+    Context c;
+    ASTNode pre = c.parse(tc.input);
+    // The factory must not have flattened at creation, or this proves nothing.
+    ASSERT_TRUE(hasSameKindEdge(pre, tc.kind));
+    ASSERT_NE(pre, c.mgr.ASTTrue);
+    ASTNode post = c.flatten.topLevel(pre);
+    EXPECT_EQ(post, c.mgr.ASTTrue);
+  }
+}
+
+// A same-kind child with two parents stays nested: merging it into one
+// parent would leave the other still referencing it, growing the DAG.
+// The second assertion is the second parent.
+TEST(Flatten_Test, NoKindFlattensASharedChild)
+{
+  const std::vector<KindCase> cases = {
+      // The nested ANDs sit under ORs: conjuncts of the top-level AND
+      // flatten irrespective of sharing, which is not what's under test.
+      {"and", stp::AND,
+       "(declare-fun d () Bool)(declare-fun e () Bool)"
+       "(assert (or b (and d (and a c))))"
+       "(assert (or e (and a c)))"},
+      {"or", stp::OR,
+       "(declare-fun d () Bool)"
+       "(assert (or b (or a c)))"
+       "(assert (or d (or a c)))"},
+      {"xor", stp::XOR,
+       "(declare-fun d () Bool)"
+       "(assert (xor b (xor a c)))"
+       "(assert (xor d (xor a c)))"},
+      {"bvand", stp::BVAND,
+       "(assert (= v3 (bvand v2 (bvand v0 v1))))"
+       "(assert (= v4 (bvand v0 v1)))"},
+      {"bvor", stp::BVAND,
+       "(assert (= v3 (bvor v2 (bvor v0 v1))))"
+       "(assert (= v4 (bvor v0 v1)))"},
+      {"bvxor", stp::BVXOR,
+       "(assert (= v3 (bvxor v2 (bvxor v0 v1))))"
+       "(assert (= v4 (bvxor v0 v1)))"},
+      {"bvadd", stp::BVPLUS,
+       "(assert (= v3 (bvadd v2 (bvadd v0 v1))))"
+       "(assert (= v4 (bvadd v0 v1)))"},
+      {"bvmul", stp::BVMULT,
+       "(assert (= v3 (bvmul v2 (bvmul v0 v1))))"
+       "(assert (= v4 (bvmul v0 v1)))"},
+  };
+
+  for (const auto& tc : cases)
+  {
+    SCOPED_TRACE(tc.name);
+    Context c;
+    ASTNode pre = c.parse(tc.input);
+    ASSERT_TRUE(hasSameKindEdge(pre, tc.kind));
+    ASTNode post = c.flatten.topLevel(pre);
+    EXPECT_EQ(post, pre);
+  }
+}
+
+// Conjuncts of the top-level AND flatten even when shared: the child node
+// survives under its other parent, so nothing is duplicated.
+TEST(Flatten_Test, TopLevelAndFlattensASharedConjunct)
+{
+  const std::string input = R"(
+    (declare-fun d () Bool)
+    (assert (and a b))
+    (assert (or d (and a b)))
+    )";
+
+  Context c;
+  ASTNode pre = c.parse(input);
+  ASSERT_TRUE(hasSameKindEdge(pre, stp::AND));
+  ASTNode post = c.flatten.topLevel(pre);
+
+  ASTNode a = c.mgr.LookupOrCreateSymbol("a");
+  ASTNode b = c.mgr.LookupOrCreateSymbol("b");
+  ASTNode d = c.mgr.LookupOrCreateSymbol("d");
+  ASTNode inner = c.mgr.CreateNode(stp::AND, a, b);
+  ASTNode expected =
+      c.mgr.CreateNode(stp::AND, a, b, c.mgr.CreateNode(stp::OR, d, inner));
+  EXPECT_EQ(post, expected);
+}
+
+// A node with 257 parents is shared however the count is stored: with the
+// old uint8_t counter the reference count wrapped to 1 and the node was
+// flattened into its first parent.
+TEST(Flatten_Test, ManyParentsIsStillShared)
+{
+  Context c;
+  const unsigned width = 20;
+  ASTNode v0 = c.mgr.CreateSymbol("m_v0", 0, width);
+  ASTNode v1 = c.mgr.CreateSymbol("m_v1", 0, width);
+  ASTNode shared = c.mgr.CreateTerm(stp::BVPLUS, width, v0, v1);
+
+  ASTVec conjuncts;
+  for (unsigned i = 0; i < 257; i++)
+  {
+    const std::string u_name = "m_u" + std::to_string(i);
+    const std::string w_name = "m_w" + std::to_string(i);
+    ASTNode u = c.mgr.CreateSymbol(u_name.c_str(), 0, width);
+    ASTNode w = c.mgr.CreateSymbol(w_name.c_str(), 0, width);
+    ASTNode parent = c.mgr.CreateTerm(stp::BVPLUS, width, u, shared);
+    conjuncts.push_back(c.mgr.CreateNode(stp::EQ, w, parent));
+  }
+  ASTNode pre = c.mgr.CreateNode(stp::AND, conjuncts);
+  ASSERT_TRUE(hasSameKindEdge(pre, stp::BVPLUS));
+  ASTNode post = c.flatten.topLevel(pre);
+  EXPECT_EQ(post, pre);
+}
+
+// A NOT among XOR operands is pulled above the XOR: the factory strips it
+// at creation and accumulates the parity, and flattening then widens the
+// stripped chain. Both groupings must meet at the same NOT(XOR(a,b,c)).
+TEST(Flatten_Test, XorFlattensThroughAPulledUpNot)
+{
+  const std::string input = R"(
+    (assert (= (xor a (not (xor b c))) (not (xor (xor a b) c))))
+    )";
+
+  Context c;
+  ASTNode pre = c.parse(input);
+  ASSERT_TRUE(hasSameKindEdge(pre, stp::XOR));
+  ASSERT_NE(pre, c.mgr.ASTTrue);
+  ASTNode post = c.flatten.topLevel(pre);
+  EXPECT_EQ(post, c.mgr.ASTTrue);
+}
+
+// The BVNOT analogue, odd parity: one BVNOT below meets one written above.
+TEST(Flatten_Test, BvxorFlattensThroughAPulledUpBvnot)
+{
+  const std::string input = R"(
+    (assert (= (bvxor v0 (bvnot (bvxor v1 v2)))
+               (bvnot (bvxor (bvxor v0 v1) v2))))
+    )";
+
+  Context c;
+  ASTNode pre = c.parse(input);
+  ASSERT_TRUE(hasSameKindEdge(pre, stp::BVXOR));
+  ASSERT_NE(pre, c.mgr.ASTTrue);
+  ASTNode post = c.flatten.topLevel(pre);
+  EXPECT_EQ(post, c.mgr.ASTTrue);
+}
+
+// Even parity: two pulled-up BVNOTs cancel and no BVNOT survives.
+TEST(Flatten_Test, TwoPulledUpBvnotsCancel)
+{
+  const std::string input = R"(
+    (assert (= (bvxor (bvnot v0) (bvnot (bvxor v1 v2)))
+               (bvxor v0 v1 v2)))
+    )";
+
+  Context c;
+  ASTNode pre = c.parse(input);
+  ASSERT_NE(pre, c.mgr.ASTTrue);
+  ASTNode post = c.flatten.topLevel(pre);
+  EXPECT_EQ(post, c.mgr.ASTTrue);
+}
+
+// Pulling the BVNOT up must not defeat the sharing rule: the xor chain the
+// strip exposes is still shared, so it stays nested.
+TEST(Flatten_Test, SharedChildExposedByBvnotStripStaysShared)
+{
+  const std::string input = R"(
+    (assert (= v3 (bvxor v2 (bvnot (bvxor v0 v1)))))
+    (assert (= v4 (bvxor v0 v1)))
+    )";
+
+  Context c;
+  ASTNode pre = c.parse(input);
+  ASSERT_TRUE(hasSameKindEdge(pre, stp::BVXOR));
+  ASTNode post = c.flatten.topLevel(pre);
+  EXPECT_EQ(post, pre);
+}
+
+// Random unshared xor trees with random negations sprinkled through them
+// must always come back completely flat: one xor over exactly the leaf
+// symbols, under at most one top negation whose presence matches the
+// parity of the negations inserted. The factory strips each negation at
+// creation and Flatten merges every unshared same-kind child, so any
+// survivor -- a nested xor, or a negation among the operands -- is a hole
+// in one of the two.
+//
+// Fixed seeds: the trees vary, the test does not.
+static void checkRandomXorTreesFlatten(bool boolean)
+{
+  const stp::Kind xorKind = boolean ? stp::XOR : stp::BVXOR;
+  const unsigned width = boolean ? 0 : 20;
+
+  for (uint32_t seed = 0; seed < 32; seed++)
+  {
+    SCOPED_TRACE(seed);
+    std::mt19937 rng(seed);
+    Context c;
+
+    auto negate = [&](const ASTNode& n) {
+      return boolean ? c.mgr.CreateNode(stp::NOT, n)
+                     : c.mgr.CreateTerm(stp::BVNOT, width, n);
+    };
+    auto join = [&](const ASTNode& a, const ASTNode& b) {
+      return boolean ? c.mgr.CreateNode(xorKind, a, b)
+                     : c.mgr.CreateTerm(xorKind, width, a, b);
+    };
+
+    const unsigned leaves = 2 + rng() % 12;
+    unsigned negations = 0;
+    ASTVec pool;
+    for (unsigned i = 0; i < leaves; i++)
+    {
+      const std::string name = "r" + std::to_string(i);
+      pool.push_back(c.mgr.CreateSymbol(name.c_str(), 0, width));
+    }
+
+    // Combine two random entries at a time, so every internal node is used
+    // exactly once: nothing is shared and everything may flatten.
+    while (pool.size() > 1)
+    {
+      ASTNode a = pool[rng() % pool.size()];
+      pool.erase(std::find(pool.begin(), pool.end(), a));
+      ASTNode b = pool[rng() % pool.size()];
+      pool.erase(std::find(pool.begin(), pool.end(), b));
+
+      if (rng() % 2)
+      {
+        a = negate(a);
+        negations++;
+      }
+      ASTNode combined = join(a, b);
+      if (rng() % 2)
+      {
+        combined = negate(combined);
+        negations++;
+      }
+      pool.push_back(combined);
+    }
+
+    ASTNode flat = c.flatten.topLevel(pool[0]);
+
+    if (negations % 2 == 1)
+    {
+      ASSERT_EQ(flat.GetKind(), boolean ? stp::NOT : stp::BVNOT);
+      flat = flat[0];
+    }
+    ASSERT_EQ(flat.GetKind(), xorKind);
+    ASSERT_EQ(flat.Degree(), leaves);
+    for (const ASTNode& child : flat.GetChildren())
+      EXPECT_EQ(child.GetKind(), stp::SYMBOL);
+  }
+}
+
+TEST(Flatten_Test, RandomXorTreesWithNotsFlattenCompletely)
+{
+  checkRandomXorTreesFlatten(true);
+}
+
+TEST(Flatten_Test, RandomBvxorTreesWithBvnotsFlattenCompletely)
+{
+  checkRandomXorTreesFlatten(false);
+}
+
+// FP arithmetic is commutative but not associative under rounding, so no
+// FP kind may flatten. FP_ADD also carries its rounding mode as a child.
+TEST(Flatten_Test, FpAddChainIsLeftAlone)
+{
+  const std::string input = R"(
+    (set-logic QF_FP)
+    (declare-fun f0 () (_ FloatingPoint 8 24))
+    (declare-fun f1 () (_ FloatingPoint 8 24))
+    (declare-fun f2 () (_ FloatingPoint 8 24))
+    (assert (fp.eq (fp.add RNE f0 (fp.add RNE f1 f2)) f0))
+    )";
+
+  Context c;
+  ASTNode pre = c.parseRaw(input);
+  ASSERT_TRUE(hasSameKindEdge(pre, stp::FP_ADD));
+  ASTNode post = c.flatten.topLevel(pre);
+  EXPECT_EQ(post, pre);
 }

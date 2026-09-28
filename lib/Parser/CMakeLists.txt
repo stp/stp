@@ -23,22 +23,37 @@ include(CheckIncludeFile)
 set(SOURCES LetMgr.cpp)
 set(TOLEX cvc smt2 smt)
 
+# Whether the header exists is a question for the preprocessor, so the probe is
+# kept away from the linker -- see stp_probe_without_linking() in the top-level
+# CMakeLists.txt. Answered wrongly, flex is handed --nounistd and emits a
+# scanner that calls isatty() without declaring it.
+stp_probe_without_linking()
 check_include_file("unistd.h" HAVE_UNISTD_H)
+stp_probe_with_linking_again()
 if (HAVE_UNISTD_H)
   set(FLEX_COMPATIBILITY_ARGS "")
 else()
   set(FLEX_COMPATIBILITY_ARGS "--nounistd")
 endif()
 
+# Every grammar pins its conflict count with %expect (smt2.y at zero), so a
+# change that adds a conflict fails the build loudly.
+set(BISON_WARNING_FLAGS "")
+mark_as_advanced(BISON_WARNING_FLAGS)
+
 foreach(_file ${TOLEX})
     add_custom_command(
         OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.h ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
 
-        COMMAND ${BISON_EXECUTABLE} --debug -v -b ${CMAKE_CURRENT_BINARY_DIR}/parse${_file} -d -Dapi.prefix={${_file}} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
+        COMMAND ${BISON_EXECUTABLE} ${BISON_WARNING_FLAGS} --debug -v -b ${CMAKE_CURRENT_BINARY_DIR}/parse${_file} -d -Dapi.prefix={${_file}} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.y
 
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.c ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.c ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp
 
-        COMMAND ${FLEX_EXECUTABLE} ${FLEX_COMPATIBILITY_ARGS} -Ce --header-file=${CMAKE_CURRENT_BINARY_DIR}/${_file}_flex_header.h -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp --prefix=${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
+        # -Cf, not -Ce: an uncompressed scanner table indexes one array per
+        # character, where the compressed one walks equivalence-class and
+        # default-state tables per character. The tables are larger and the
+        # tokens are identical.
+        COMMAND ${FLEX_EXECUTABLE} ${FLEX_COMPATIBILITY_ARGS} -Cf -8 --header-file=${CMAKE_CURRENT_BINARY_DIR}/${_file}_flex_header.h -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp --prefix=${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
 
         DEPENDS ${_file}.lex ${_file}.y ASTKind_header
     )
@@ -51,6 +66,14 @@ foreach(_file ${TOLEX})
         ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp
     )
+    # api.prefix renames what a grammar exports, not the types it declares,
+    # so three grammars in one program leave three different `union yyalloc`
+    # and `yysymbol_kind_t` for LTO to report as ODR violations. Neither name
+    # reaches parse${_file}.tab.h, so the rename stays in this one file.
+    set_source_files_properties(parse${_file}.tab.cpp
+        PROPERTIES COMPILE_DEFINITIONS
+        "yyalloc=${_file}_yyalloc;yysymbol_kind_t=${_file}_yysymbol_kind_t")
+
     if (NOT MSVC)
         set_source_files_properties(lex${_file}.cpp
             PROPERTIES COMPILE_FLAGS

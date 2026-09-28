@@ -88,7 +88,6 @@ Result bvSubtractBothWays(vector<FixedBits*>& children, FixedBits& output)
 
 /////////////// ADDITION>
 
-const bool add_debug_messages = false;
 
 // For a given number of children. The maximum size of the carry in for
 // addition.
@@ -144,8 +143,6 @@ Result fixIfCanForAddition(vector<FixedBits*>& children, const int index,
   assert(inflowMax <= maxCarryIn);
   assert(sum <= (signed)children.size() + maxCarryIn);
 
-  if (add_debug_messages)
-    cerr << "fixIfCanForAddition " << index << " " << sum << endl;
 
   int unfixed = 0;
   int ones = 0;
@@ -225,27 +222,29 @@ void initialiseColumnCounts(int columnL[], int columnH[], const int bitWidth,
     columnH[i] = numberOfChildren;
   }
 
-  // Set the column totals.
-  for (int i = 0; i < bitWidth; i++)
+  // Set the column totals. Walk a child's fixed bits a word at a time,
+  // visiting only the bits that are actually fixed: on wide sums most
+  // addends are entirely unfixed, and those cost nothing here.
+  const unsigned words = ((unsigned)bitWidth + 63) / 64;
+  for (int j = 0; j < numberOfChildren; j++)
   {
-    for (int j = 0; j < numberOfChildren; j++)
+    const FixedBits& child = *children[j];
+    for (unsigned w = 0; w < words; w++)
     {
-      if (children[j]->isFixed(i))
+      uint64_t fixed, ones;
+      child.fillPackedWord(w, fixed, ones);
+      const unsigned base = w * 64;
+      while (fixed != 0)
       {
-        if (children[j]->getValue(i))
-          columnL[i]++;
+        const unsigned bit = ::stp::countTrailingZeroes64(fixed);
+        fixed &= fixed - 1;
+        if ((ones >> bit) & 1)
+          columnL[base + bit]++;
         else
-          columnH[i]--;
+          columnH[base + bit]--;
       }
     }
   }
-}
-
-void printArray(int f[], int width)
-{
-  for (int i = width - 1; i >= 0; i--)
-    std::cerr << f[i] << " ";
-  std::cerr << std::endl;
 }
 
 void setValue(FixedBits& a, const int i, bool v)
@@ -491,18 +490,6 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
       }
     }
 
-    if (add_debug_messages)
-    {
-      std::cerr << "bottom" << std::endl;
-      cerr << "columnL:";
-      printArray(columnL, bitWidth);
-      cerr << "columnH:";
-      printArray(columnH, bitWidth);
-      cerr << "sumL:";
-      printArray(sumL, bitWidth);
-      cerr << "sumH:";
-      printArray(sumH, bitWidth);
-    }
 
     for (unsigned column = 0; column < bitWidth; column++)
     {

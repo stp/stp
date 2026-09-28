@@ -42,13 +42,19 @@ public:
   }
   virtual ~TypeChecker(){};
 
-  stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
-                          const stp::ASTVec& children);
-  stp::ASTNode CreateNode(stp::Kind kind, const stp::ASTVec& children);
-  stp::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
-                               unsigned int width, const ASTVec& children);
+  using NodeFactory::CreateArrayTerm;
+  using NodeFactory::CreateNode;
+  using NodeFactory::CreateTerm;
 
-  virtual std::string getName() { return "type checking"; }
+  stp::ASTNode CreateTerm(stp::Kind kind, unsigned int width,
+                          stp::ASTChildren children) override;
+  stp::ASTNode CreateNode(stp::Kind kind,
+                          stp::ASTChildren children) override;
+  stp::ASTNode CreateArrayTerm(Kind kind, unsigned int index,
+                               unsigned int width,
+                               stp::ASTChildren children) override;
+
+  std::string getName() override { return "type checking"; }
 };
 
 #endif /* TYPECHECKER_H_ */

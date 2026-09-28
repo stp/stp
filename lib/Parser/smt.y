@@ -37,6 +37,8 @@
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
+#include <sstream>
+#include <string>
 
   using namespace stp;
   using std::cout;
@@ -51,10 +53,20 @@
   extern int smtlineno;
   extern int smtlex(void);
 
+  // Built once: printed for the user and handed to the error handler,
+  // which used to receive the empty string. See the note in smt2.y.
+  static std::string smt_diagnostic(const char *s)
+  {
+    std::ostringstream o;
+    o << "syntax error: line " << smtlineno << ": " << s
+      << "  token: " << smttext;
+    return o.str();
+  }
+
   int yyerror(const char *s) {
-    cout << "syntax error: line " << smtlineno << "\n" << s << endl;
-    cout << "  token: " << smttext << endl;
-    FatalError("");
+    const std::string msg = smt_diagnostic(s);
+    cout << msg << endl;
+    FatalError(msg.c_str());
     return 1;
   }
   int yyerror(void* /*AssertsQuery*/, const char* s) { return yyerror(s); }
@@ -68,12 +80,12 @@
 
 %parse-param {void* AssertsQuery}
 
+/* Pinned conflict count (see smt2.y). */
+%expect 72
+
 %union {  
   // FIXME: Why is this not an UNSIGNED int?
   int uintval;                  /* for numerals in types. */
-
-  // for BV32 BVCONST 
-  unsigned long long ullval;
 
   struct {
     //stores the indexwidth and valuewidth
@@ -124,12 +136,9 @@
 %token OR_TOK
 %token XOR_TOK
 %token IFF_TOK
-%token EXISTS_TOK
-%token FORALL_TOK
 %token LET_TOK
 %token FLET_TOK
 %token NOTES_TOK
-%token CVC_COMMAND_TOK
 %token SORTS_TOK
 %token FUNS_TOK
 %token PREDS_TOK
@@ -156,16 +165,10 @@
 %token DOLLAR_TOK
 %token QUESTION_TOK
 %token DISTINCT_TOK
-%token SEMICOLON_TOK
-%token EOF_TOK
 %token EQ_TOK
  /*BV SPECIFIC TOKENS*/
 %token NAND_TOK
 %token NOR_TOK
-%token NEQ_TOK
-%token ASSIGN_TOK
-%token BV_TOK
-%token BOOLEAN_TOK
 %token BVLEFTSHIFT_1_TOK
 %token BVRIGHTSHIFT_1_TOK
 %token BVARITHRIGHTSHIFT_TOK
@@ -250,7 +253,6 @@ LPAREN_TOK BENCHMARK_TOK bench_name bench_attributes RPAREN_TOK
   }
   delete $3; //discard the benchmarkname.
 }
-/*   | EOF_TOK */
 /*     { */
 /*     } */
 ;
@@ -491,24 +493,10 @@ TRUE_TOK
   using namespace stp;
 
   ASTVec terms = *$3;
-  ASTVec forms;
+  if (terms.size() < 2)
+    FatalError("too few arguments to distinct");
 
-  for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
-      it!=itend; it++) {
-    for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-      ASTNode n = (GlobalParserInterface->nf->CreateNode(NOT, GlobalParserInterface->CreateNode(EQ, *it, *it2)));
-
-          
-      forms.push_back(n); 
-    }
-  }
-
-  if(forms.size() == 0) 
-    FatalError("empty distinct");
- 
-  $$ = (forms.size() == 1) ?
-    new ASTNode(forms[0]) :
-    new ASTNode(GlobalParserInterface->CreateNode(AND, forms));
+  $$ = new ASTNode(GlobalParserInterface->CreateNode(DISTINCT, terms));
 
   delete $3;
 }
@@ -1055,7 +1043,7 @@ BITVEC_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
     $$.valuewidth = length;
   }
   else {
-    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    FatalError("parsing: bit-vectors must be of positive length");
   }
 }
 | ARRAY_TOK LBRACKET_TOK NUMERAL_TOK COLON_TOK NUMERAL_TOK RBRACKET_TOK
@@ -1066,14 +1054,14 @@ BITVEC_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
     $$.indexwidth = $3;
   }
   else {
-    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    FatalError("parsing: bit-vectors must be of positive length");
   }
 
   if(value_len > 0) {
     $$.valuewidth = $5;
   }
   else {
-    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    FatalError("parsing: bit-vectors must be of positive length");
   }
 }
 ;

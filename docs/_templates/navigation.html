@@ -1,0 +1,20 @@
+{#- Alabaster's navigation.html, with the landing page added as the first item
+    of the menu. The theme builds the menu from the toctrees in index.rst, and
+    a document cannot appear in its own toctree, so the link is written out
+    here. custom.css closes the gap between the two lists so they read as
+    one. -#}
+<ul class="nav-overview">
+    <li class="toctree-l1">
+        <a class="reference internal{% if pagename == master_doc %} current{% endif %}"
+           href="{{ pathto(master_doc) }}">{{ _('Overview') }}</a>
+    </li>
+</ul>
+{{ toctree(includehidden=theme_sidebar_includehidden, collapse=theme_sidebar_collapse) }}
+{% if theme_extra_nav_links %}
+<hr />
+<ul>
+    {% for text, uri in theme_extra_nav_links.items() %}
+    <li class="toctree-l1"><a href="{{ uri }}">{{ text }}</a></li>
+    {% endfor %}
+</ul>
+{% endif %}

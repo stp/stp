@@ -24,3 +24,15 @@ add_library(abstractionrefinement OBJECT
     ArrayTransformer.cpp
 )
 add_dependencies(abstractionrefinement ASTKind_header)
+
+# LraCoordinator is a private libstp seam.  Its exact-core types stay
+# uninstalled and are visible only to the object target that drives the
+# same-candidate state machine.
+target_include_directories(abstractionrefinement PRIVATE
+    "${PROJECT_SOURCE_DIR}/lib/Lra")
+# ExactRational.h, reached through that seam, includes <imrat.h>. Linking
+# IMath here is for its INTERFACE_INCLUDE_DIRECTORIES: an OBJECT library
+# links nothing, and libstp carries the archive itself. Without it this
+# target compiles only while some other dependency happens to have installed
+# its headers into the same directory IMath's are in.
+target_link_libraries(abstractionrefinement PRIVATE IMath)

@@ -1,0 +1,42 @@
+; RUN: %solver --fp-abstraction=true --fp-abstraction-ops=rti %s | %OutputCheck %s
+;
+; Sixteen roundings in a chain of bounds, and a claim that the last is below
+; the first: rounding to an integer is monotone in every mode, and one
+; monotonicity lemma per violated pair decides it. The exact encoding is
+; sixteen binary64 rounding circuits and takes 14 s on the same query.
+; CHECK: ^unsat
+(set-logic QF_FP)
+(declare-const x0 (_ FloatingPoint 11 53))
+(declare-const x1 (_ FloatingPoint 11 53))
+(declare-const x2 (_ FloatingPoint 11 53))
+(declare-const x3 (_ FloatingPoint 11 53))
+(declare-const x4 (_ FloatingPoint 11 53))
+(declare-const x5 (_ FloatingPoint 11 53))
+(declare-const x6 (_ FloatingPoint 11 53))
+(declare-const x7 (_ FloatingPoint 11 53))
+(declare-const x8 (_ FloatingPoint 11 53))
+(declare-const x9 (_ FloatingPoint 11 53))
+(declare-const x10 (_ FloatingPoint 11 53))
+(declare-const x11 (_ FloatingPoint 11 53))
+(declare-const x12 (_ FloatingPoint 11 53))
+(declare-const x13 (_ FloatingPoint 11 53))
+(declare-const x14 (_ FloatingPoint 11 53))
+(declare-const x15 (_ FloatingPoint 11 53))
+(assert (fp.leq x0 x1))
+(assert (fp.leq x1 x2))
+(assert (fp.leq x2 x3))
+(assert (fp.leq x3 x4))
+(assert (fp.leq x4 x5))
+(assert (fp.leq x5 x6))
+(assert (fp.leq x6 x7))
+(assert (fp.leq x7 x8))
+(assert (fp.leq x8 x9))
+(assert (fp.leq x9 x10))
+(assert (fp.leq x10 x11))
+(assert (fp.leq x11 x12))
+(assert (fp.leq x12 x13))
+(assert (fp.leq x13 x14))
+(assert (fp.leq x14 x15))
+(assert (not (fp.isNaN (fp.roundToIntegral RNE x0))))
+(assert (fp.lt (fp.roundToIntegral RNE x15) (fp.roundToIntegral RNE x0)))
+(check-sat)

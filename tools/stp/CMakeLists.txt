@@ -21,11 +21,15 @@
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
-if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
+if(BUILD_EXECUTABLES)
     add_executable(stp-bin
         main.cpp
         main_common.cpp
     )
+    # main_common.cpp reaches the generated ASTKind.h through NodeFactory.h,
+    # so name the generator here or a parallel build can compile this TU
+    # before ASTKind.h exists.
+    add_dependencies(stp-bin ASTKind_header)
 
     set_target_properties(stp-bin PROPERTIES
         OUTPUT_NAME stp
@@ -37,10 +41,16 @@ if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
     # malloc for the whole process, and an embedder of libstp gets to keep
     # whatever allocator it chose. Listing it first keeps its definitions ahead
     # of libc for static archives.
+    #
+    # CLI11 is header-only and used by main.cpp alone, so all it contributes is
+    # an include directory; nothing of it is linked. It is named here rather
+    # than in a second target_link_libraries() call because CMake refuses to
+    # mix the plain and keyword signatures on one target, and this one is
+    # plain.
     target_link_libraries(stp-bin
         ${STP_ALLOCATOR_LIBRARY}
         stp
-        Boost::program_options
+        CLI11
     )
 
     install(TARGETS stp-bin

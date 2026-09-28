@@ -21,10 +21,10 @@ TEST(failing_solvermap, one)
 
   vc_assertFormula(vc,
                    vc_bvGtExpr(vc, AplusB, vc_bv32ConstExprFromInt(vc, 100)));
-  assert(0 == vc_query(vc, falseExpr));
+  ASSERT_EQ(0, vc_query(vc, falseExpr));
   vc_assertFormula(
       vc, vc_bvGtExpr(vc, AplusBplus42, vc_bv32ConstExprFromInt(vc, 5)));
-  assert(0 == vc_query(vc, falseExpr));
+  ASSERT_EQ(0, vc_query(vc, falseExpr));
 
   vc_Destroy(vc);
 }

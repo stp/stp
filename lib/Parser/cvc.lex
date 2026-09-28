@@ -25,7 +25,6 @@
 %option noyymore
 %option yylineno
 %x    COMMENT
-%x    STRING_LITERAL
 LETTER    ([a-zA-Z])
 HEX       ([0-9a-fA-F])
 BITS      ([0-1])

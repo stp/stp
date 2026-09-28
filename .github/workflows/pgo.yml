@@ -1,0 +1,127 @@
+# The profile-guided build, once a night.
+#
+# Not on pull requests. What this protects is machinery rather than STP's own
+# behaviour -- that the LTO and profile flags still reach every translation
+# unit including the dependencies', that ExternalProject still lets the second
+# pass recompile what the first one instrumented, that llvm-profdata still
+# reads what this clang wrote -- and that rots on the scale of a CMake release
+# or a runner image moving its compiler, not on the scale of a commit. A
+# nightly notices within a day; a per-pull-request job would cost the whole
+# two-pass build every time and notice nothing sooner.
+#
+# It cannot tell you the optimisation is still worth having. A shared runner
+# is nowhere near quiet enough to resolve the few per cent this is for --
+# measuring it took pinned cores, interleaved configurations and a best-of-N,
+# and cross-run drift was larger than the effect even then. A green tick here
+# means the build works and the answers are right, and nothing about speed.
+#
+# The first run of this is the night after it lands on master, and there is no
+# way to bring that forward: GitHub registers a workflow from the default
+# branch alone, so schedule does not fire for a branch and workflow_dispatch
+# cannot reach one either -- dispatching it answers "workflow pgo.yml not found
+# on the default branch". Until then it is verified by running
+# scripts/pgo-build.sh by hand, which is the whole of what this job does.
+# workflow_dispatch is here for re-running it on demand once it has landed.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+name: PGO
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  pgo:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: clang
+            cc: clang
+            cxx: clang++
+          - name: gcc
+            cc: gcc
+            cxx: g++
+    name: ${{ matrix.name }} (lto+pgo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    # llvm for llvm-profdata, which merges the raw counters clang writes, and
+    # lld because clang cannot link the instrumented build without it: the
+    # counters live in sections that do not exist until the ThinLTO backend
+    # has run, and GNU ld resolves __start___llvm_prf_* before that, so every
+    # unit test -- whose inputs are all bytecode -- fails to link.
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          clang \
+          cmake \
+          flex \
+          git \
+          lld \
+          llvm \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    # No ccache and no dependency cache, deliberately. The second pass
+    # compiles with -fprofile-use, whose cache key includes the profile, and
+    # the profile changes with almost any edit to the tree -- so a compiler
+    # cache would mostly miss while still competing for the repository's cache
+    # budget. The dependencies cannot be shared either: they are compiled with
+    # the profile too, which is why pgo-build.sh keeps them inside the build
+    # directory and rebuilds them between the passes. A cold build is also the
+    # more honest test of the thing being tested.
+    - name: Build, train, and build again
+      run: |
+        CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} \
+          ./scripts/pgo-build.sh release --lto --ninja --auto-download --testing
+
+    # A pass that quietly dropped a flag would build, test and pass while
+    # checking nothing -- which is not hypothetical: check_cxx_compiler_flag()
+    # reports -flto=thin as unsupported, because it puts the flag on the
+    # compile line and not on the link, and the first end-to-end build of this
+    # was silently PGO-only for that reason. Confirm both flags reached STP's
+    # own translation units and a dependency's before trusting the tests.
+    - name: The build really is optimised
+      run: |
+        set -u
+        stp_flags=$(python3 -c '
+        import json, sys
+        for e in json.load(open("build/compile_commands.json")):
+            if e["file"].endswith("ASTNode.cpp"):
+                print(e["command"]); break
+        else:
+            sys.exit("ASTNode.cpp is not in compile_commands.json")
+        ')
+        dep_flags=$(sed -n 's/^CMAKE_CXX_FLAGS:STRING=//p' \
+                      build/deps/src/CaDiCaL-EP-build/CMakeCache.txt)
+        for what in "STP:$stp_flags" "CaDiCaL:$dep_flags"; do
+          who=${what%%:*}
+          flags=${what#*:}
+          echo "$who: $flags"
+          case $flags in
+            *-flto*) ;;
+            *) echo "::error::$who was compiled without LTO"; exit 1;;
+          esac
+          case $flags in
+            *-fprofile-use*) ;;
+            *) echo "::error::$who was compiled without the profile"; exit 1;;
+          esac
+        done
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build

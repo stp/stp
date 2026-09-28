@@ -1,0 +1,70 @@
+# Build system for CaDiCaL, injected by cmake/FindCaDiCaL.cmake.
+#
+# CaDiCaL ships a shell `configure` that writes a makefile. Driving that means
+# a POSIX shell, sed and make have to exist and be reachable, and
+# ExternalProject invokes its steps through cmd.exe on Windows, which can run
+# none of them -- "inappropriate file type or format" is what a Windows job
+# gets for its trouble. cvc5 sidesteps the same problem by copying makefile.in
+# and sed-ing the placeholders, which works for it because it only ever targets
+# Windows by cross-compiling from Linux, so those tools are always the host's.
+# STP's MinGW job runs natively.
+#
+# Ninety-three source files and one generated header is little enough that
+# describing the build here is easier than driving that one, and it makes
+# CaDiCaL build the way every other dependency does: with the compiler,
+# launcher and toolchain file the parent build is already using.
+cmake_minimum_required(VERSION 3.18)
+project(cadical C CXX)
+
+include(CheckSymbolExists)
+include(GNUInstallDirs)
+
+# Everything except the two programs. `cadical` is the command-line solver and
+# `mobical` its model-based tester; STP links neither, and mobical does not
+# compile under MinGW at all -- which is why the hand-written CI step this
+# replaces asked for the `cadical` target by name rather than the default.
+file(GLOB CADICAL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+list(FILTER CADICAL_SOURCES EXCLUDE REGEX "/(cadical|mobical)\\.cpp$")
+
+# Kitten, the sub-solver CaDiCaL embeds for its sweeping and vivification, is
+# C rather than C++ -- src/kitten.c, which the makefile compiles with $(CC).
+# Miss it and the C++ half links with four undefined kitten_ symbols.
+file(GLOB CADICAL_C_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+list(APPEND CADICAL_SOURCES ${CADICAL_C_SOURCES})
+
+# src/version.cpp includes build.hpp, which `configure` would have written.
+# Generated here from what CMake already knows, rather than defining NBUILD and
+# letting CaDiCaL guess: the version is the tag the parent pinned, so it may as
+# well be accurate.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/build.hpp"
+"#define VERSION \"${CADICAL_VERSION}\"\n"
+"#define IDENTIFIER \"${CADICAL_IDENTIFIER}\"\n"
+"#define SHORTID \"${CADICAL_IDENTIFIER}\"\n"
+"#define COMPILER \"${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}\"\n"
+"#define FLAGS \"${CMAKE_CXX_FLAGS}\"\n"
+"#define DATE \"built as part of STP\"\n")
+
+add_library(cadical STATIC ${CADICAL_SOURCES})
+target_include_directories(cadical PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}")
+set_target_properties(cadical PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_compile_features(cadical PRIVATE cxx_std_11)
+target_compile_definitions(cadical PRIVATE NDEBUG)
+
+# The two probes CaDiCaL's configure makes. Without them it calls functions
+# that a platform may not have -- getc_unlocked is absent on Windows, and
+# closefrom on rather more.
+check_symbol_exists(getc_unlocked "cstdio" HAVE_GETC_UNLOCKED)
+if(NOT HAVE_GETC_UNLOCKED)
+    target_compile_definitions(cadical PRIVATE NUNLOCKED)
+endif()
+check_symbol_exists(closefrom "fcntl.h" HAVE_CLOSEFROM)
+if(NOT HAVE_CLOSEFROM)
+    target_compile_definitions(cadical PRIVATE NCLOSEFROM)
+endif()
+
+install(TARGETS cadical ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/cadical.hpp"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cadical")
+
+# EOF

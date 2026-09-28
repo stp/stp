@@ -17,7 +17,8 @@ It covers the three abstract domains STP propagates over:
 
 ## Building and running
 
-It is one of the extra tools:
+It is one of the extra tools, and it needs a build with CryptoMiniSat --
+without one the target is not created at all and the configure step says so:
 
 ```sh
 cmake -DBUILD_EXTRA_TOOLS=ON -DCMAKE_BUILD_TYPE=Release ..
@@ -33,6 +34,10 @@ Build Release. A Debug build measures the assertions, not the propagators.
 # One question, quickly.
 ./propagator_bench --domains cbitp --ops bvsgt --widths 64 --probs 50 \
                    --directions bottom-up
+
+# Is the propagator deducing more than the bit-blasted encoding would?
+./propagator_bench --domains cbitp --widths 16 --probs 50 --no-precision \
+                   --bcp-check 200
 ```
 
 `--list` shows the operations and which domains implement them, `--help` the
@@ -40,7 +45,10 @@ rest of the options.
 
 ## What a row means
 
-> cbitp, bvsgt, bottom-up, 64 bit, 50% fixed: 40.7M ops/sec, 0.19 bits, precise
+Output is a fixed-width table with the columns `op`, `direction`, `width`,
+`input`, `ops/sec`, `ns/call`, `bits`, `precise` and `detail`. Reading one row:
+`cbitp` on `bvsgt`, seeded `bottom-up`, at 64 bits with 50% of the input bits
+fixed, deducing 0.19 bits per call.
 
 * **direction** is what was *seeded*, not what the code can deduce. The
   constant-bit transfer functions all propagate in both directions; the
@@ -88,9 +96,79 @@ caps how long a row may spend on it. This one is `cbitp` only, and skips
 `extract` and the two extends, whose structural children can't be turned into
 plain SAT variables.
 
-A row is `yes` only when both checks that ran agree, `no` when either found
-something more to deduce, and `unsound` when a real solution was excluded --
-which would be a bug in the propagator, not a precision result.
+A row is `yes` only when the exhaustive check ran and found nothing more to
+deduce, and any SAT check that also ran agreed; `no` when either found
+something more to deduce; and `unsound` when a real solution was excluded --
+which would be a bug in the propagator, not a precision result. Without the
+exhaustive check the column is `?`, whatever the SAT check said, because a
+sampled check cannot establish precision on its own.
+
+## Against the bit-blasted encoding
+
+The precision verdict asks whether a *better* propagator could exist.
+`--bcp-check N` asks the other question: whether this one is worth running at
+all. STP bit-blasts to CNF and calls a SAT solver anyway, so a word-level
+propagator only earns its keep by fixing bits that boolean constraint
+propagation over the same circuit would not have fixed on its own.
+
+The check encodes `op(children) = result` once per row, then per case asserts
+the known bits as unit clauses and counts what comes out fixed at decision
+level zero:
+
+```
+bvsrem  both-ways 16  50% fixed  ... vs bit-blasted: 0.69 vs 2.56 bits (3.7x)
+bvand   both-ways 16  50% fixed  ... vs bit-blasted: 6.95 vs 6.95 bits (1.0x)
+```
+
+The multiplier is the propagator's bits over unit propagation's. `1.0x` means
+the SAT solver would have found exactly the same bits without it, and most
+operations report it: the bitwise ones, `eq`, `ite`, `concat`, `extract` and
+both extends are identical, and `bvudiv` and `bvmul` are within a rounding
+error. The signed division family is the one real margin -- `bvsrem` 3.7x,
+`bvsmod` 3.5x, `bvsdiv` 2.6x -- with addition and the shifts at 1.1x to 1.35x.
+`all new` is printed when unit propagation deduced nothing at all, so there is
+no ratio to take.
+
+`--cnf` picks how that CNF is generated -- `simple` (plain Tseitin), or the
+five `cnf_effort` levels `very-low`, `low`, `medium` (STP's default), `high`,
+`very-high`. The row reports the clause and variable counts, so the size of
+the encoding and its propagation strength can be read together. For `bvand`
+the setting changes the size by up to 2.1x and the deduced bits hardly at
+all.
+
+### Is the encoding arc-consistent?
+
+`--bcp-check` samples, and every case it draws is built from a solution, so it
+never asks whether propagation *detects a contradiction*. `--bcp-exhaustive W`
+does both halves at a small width: every combination of fixed and unfixed bits
+over the varying children and the result, contradictory ones included, against
+a brute-forced ideal.
+
+```
+bvand   ... encoding arc-consistent w=4: yes (531441/531441 cases, 336960 contradictory)
+bvadd   ... encoding arc-consistent w=3: NO (18851/19683 cases, 820 incomplete, 12 MISSED CONFLICTS)
+```
+
+`yes` requires all three: nothing left underived, no contradiction missed, and
+nothing fixed that the ideal does not fix. Width 4 is 3^12 cases and takes
+about 45 seconds; each step costs a fresh solver and a CNF load, so the cost
+is 3^(children+result bits).
+
+Operations whose bits are independent -- `bvand`, `bvor`, `bvxor`, `bvnot` --
+come out arc-consistent under every `--cnf` setting. Ones with a carry chain
+or a global relation -- `bvadd`, `bvmul`, `bvudiv`, `bvult` -- do not, which
+is where the propagator earns its keep. `concat` and the two extends
+need an even width, so choose W accordingly; `extract` only needs at least 2.
+
+Both options need a CryptoMiniSat build (`-DUSE_CRYPTOMINISAT=ON`); they are
+refused otherwise rather than quietly reporting nothing. It is much slower
+per case than the propagator it measures -- a fresh solver and a full CNF
+load each time -- so `--bcp-budget` caps it, and the reported per-case cost
+in the `ns/call` column is the propagator's, never this.
+
+Read the ratios at `--probs 50`. At 95% only a handful of bits per case are
+unknown, so unit propagation's side of the comparison is a very small number
+and the ratio swings widely with the seed.
 
 ## Caveats worth knowing before quoting a number
 

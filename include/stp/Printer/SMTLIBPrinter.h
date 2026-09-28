@@ -41,17 +41,17 @@ extern THREAD_LOCAL_IE vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
 // correctly print shared subterms inside the LET itself
 extern THREAD_LOCAL_IE stp::ASTNodeMap NodeLetVarMap1;
 
-std::string functionToSMTLIBName(const Kind k, bool smtlib1);
+std::string functionToSMTLIBName(const Kind k);
 
-void LetizeNode(const ASTNode& n, stp::ASTNodeSet& PLPrintNodeSet, bool smtlib1,
-                STPMgr*);
+// Prints one node in SMT-LIB2 syntax.
+void SMTLIB_Print1(ostream& os, const stp::ASTNode n, int indentation,
+                   bool letize);
 
 ostream& SMTLIB_Print(ostream& os, STPMgr*, const ASTNode n,
-                      const int indentation,
-                      void (*SMTLIB_Print1)(ostream&, const ASTNode, int, bool),
-                      bool smtlib1);
+                      const int indentation);
 
-bool containsAnyArrayOps(const ASTNode& n);
+// Prints one term on one line, sharing repeated subterms through `let`.
+ostream& SMTLIB_PrintTerm(ostream& os, STPMgr*, const ASTNode n);
 }
 
 #endif

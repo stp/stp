@@ -1,11 +1,18 @@
 name: "CodeQL"
 
+# Weekly, not per-change. The C++ half builds STP with every backend, the unit
+# tests and the extra tools, then analyses the result, which made it the
+# longest job on every pull request -- for findings that are about the state of
+# the tree rather than about the change under review, and that are read in the
+# code scanning tab rather than in the pull request. Alerts are dated by the
+# scan that found them, so a week's lag is visible rather than silent.
+#
+# Not on the hour: GitHub delays scheduled runs when the minute is congested,
+# and midnight UTC is the worst of them.
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 1'
+    - cron: '37 3 * * 1'
 
 jobs:
   analyze:
@@ -13,28 +20,23 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      # required for all workflows
+      actions: read
+      contents: read
       security-events: write
 
     strategy:
       fail-fast: false
       matrix:
-        # Override automatic language detection by changing the below list
-        # Supported options are ['csharp', 'cpp', 'go', 'java', 'javascript', 'python']
-        language: ['cpp']
+        language: ['cpp', 'python']
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
-      with:
-        submodules: 'true'
 
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4
-      with:
-        languages: ${{ matrix.language }}
-
+    # libgmp-dev is CryptoMiniSat's, which the build builds and this
+    # job links; STP itself does not use GMP.
     - name: Packages
+      if: matrix.language == 'cpp'
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -43,18 +45,157 @@ jobs:
           cmake \
           flex \
           git \
-          libboost-program-options-dev \
+          libgmp-dev \
+          python3 \
+          python3-pip \
+          python3-setuptools \
           zlib1g-dev
+        # ENABLE_TESTING is a hard configure error without lit, even though
+        # this job only builds the tests and never runs them.
+        sudo pip3 install -U lit
 
-    - name: Dependencies
-      run: ./scripts/deps/setup-minisat.sh
+    # The solver libraries are built before CodeQL is initialized, so
+    # their compilation is not traced into the database. Everything the
+    # build fetches for itself -- LibBF, ABC and SymFPU among them -- is
+    # compiled during the traced build instead, so it *is* traced, and,
+    # being third-party, filtered out of the results below. gtest is the
+    # same story by another route: tests/CMakeLists.txt compiles it as
+    # part of the STP build.
 
+    # The Python that ships is generated. bindings/python/stp/*.py.in become
+    # build/bindings/python/stp/*.py through configure_file, so a checkout
+    # contains no copy of them and the analysis saw only docs/conf.py, the AST
+    # kind generator and the fuzz scripts -- about 2500 lines, none of which
+    # ship -- while missing the ~1900-line ctypes module that users import.
+    # It had never produced an alert.
+    #
+    # configure_file runs at configure time, so this needs no compilation.
+    # bison and flex are here because find_package(... REQUIRED) for them runs
+    # before CMake reaches anything Python-related.
+    - name: Generate the Python bindings
+      if: matrix.language == 'python'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bison cmake flex python3
+        cmake -S . -B build \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DPYTHON_EXECUTABLE:PATH="$(which python3)"
+        # The point of the step; a silent skip would leave the analysis
+        # looking healthy while covering nothing that ships.
+        test -s build/bindings/python/stp/stp.py
+        echo "ok: generated $(wc -l < build/bindings/python/stp/stp.py) lines of bindings"
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: ${{ matrix.language }}
+
+    # CodeQL only sees C++ code that is actually compiled, so every optional
+    # component is switched on: all three backends, the unit tests and the
+    # extra tools. MiniSat is deliberately included even though the build
+    # and test jobs confine it to the dedicated minisat-only legs -- this is
+    # the analysis job, and dropping the backend here would leave its
+    # wrappers unanalysed anywhere.
+    #
     - name: Build
+      if: matrix.language == 'cpp'
       run: |
         mkdir build
         cd build
-        cmake -DNOCRYPTOMINISAT:BOOL=ON ..
+        cmake \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+          -DUSE_MINISAT:BOOL=ON \
+          -DUSE_CRYPTOMINISAT:STRING=ON \
+          -DUSE_CADICAL:BOOL=ON \
+          -DENABLE_TESTING:BOOL=ON \
+          -DBUILD_EXTRA_TOOLS:BOOL=ON \
+          -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
+          ..
         make -j"$(nproc)"
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:${{ matrix.language }}"
+        output: sarif-results
+        upload: failure-only
+
+    # A CodeQL config's paths-ignore only filters interpreted languages, so
+    # third-party code the build compiles has to be dropped from the
+    # SARIF instead. The patterns cover both trees it can land in: what
+    # ExternalProject unpacks, and what FetchContent populates.
+    - name: Filter out third-party code
+      uses: advanced-security/filter-sarif@v1
+      with:
+        patterns: |
+          -deps/**
+          # Where the build unpacks what it fetches, SymFPU among it.
+          -**/deps/src/**
+          -**/_deps/**
+        input: sarif-results/${{ matrix.language }}.sarif
+        output: sarif-results/${{ matrix.language }}.sarif
+
+    - name: Upload results
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        category: "/language:${{ matrix.language }}"
+        sarif_file: sarif-results/${{ matrix.language }}.sarif
+        # So the alerts are queryable by the step below rather than still
+        # being processed when it looks.
+        wait-for-processing: true
+
+    # A scan that finds something still exits 0: upload is failure-only, so
+    # findings do not fail the analysis, and the run is green either way. On a
+    # weekly schedule there is no pull request to annotate and nothing that
+    # says so out loud -- the alerts appear in the Security tab and wait to be
+    # noticed. Fail the job instead, so a new finding arrives as a broken
+    # scheduled run, which GitHub mails to whoever last edited the cron.
+    #
+    # Dismissed alerts are not open, so anything already triaged does not hold
+    # this red; only something new does.
+    - name: Report any open alerts
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        case "${{ matrix.language }}" in
+          cpp)    prefix=cpp/ ;;
+          python) prefix=py/  ;;
+          *)      echo "no rule-id prefix known for ${{ matrix.language }}"; exit 1 ;;
+        esac
+
+        # The upload waits for processing, but the alerts API can still lag it.
+        # Retrying is not optional: if every attempt failed and this treated
+        # that as "nothing found", the step would be silent in exactly the case
+        # it exists for.
+        body=""
+        for attempt in 1 2 3 4 5; do
+          if body=$(gh api \
+              "repos/${{ github.repository }}/code-scanning/alerts?state=open&per_page=100&ref=${{ github.ref }}"); then
+            break
+          fi
+          body=""
+          sleep 15
+        done
+        if [ -z "$body" ]; then
+          echo "Could not read the code scanning alerts API; not treating that as a clean scan."
+          exit 1
+        fi
+
+        open=$(printf '%s' "$body" | jq -r \
+          "[.[] | select(.rule.id | startswith(\"$prefix\"))]
+           | .[]
+           | \"  \(.rule.security_severity_level // .rule.severity)  \(.rule.id)\n      \(.most_recent_instance.location.path):\(.most_recent_instance.location.start_line)\"")
+
+        if [ -n "$open" ]; then
+          echo "Open ${{ matrix.language }} alerts on ${{ github.ref }}:"
+          echo "$open"
+          echo
+          echo "Fix them, or dismiss with a reason in the Security tab; a dismissed"
+          echo "alert does not count as open and will not keep this job red."
+          exit 1
+        fi
+        echo "ok: no open ${{ matrix.language }} alerts"

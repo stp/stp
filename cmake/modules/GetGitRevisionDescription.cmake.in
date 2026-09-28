@@ -31,8 +31,9 @@ if(HEAD_CONTENTS MATCHES "ref")
 		endif()
 	endif()
 else()
-	# detached HEAD
-	configure_file("@GIT_DIR@/HEAD" "@GIT_DATA@/head-ref" COPYONLY)
+	# detached HEAD; @HEAD_FILE@ is the copy of this checkout's own HEAD --
+	# in a linked worktree @GIT_DIR@/HEAD belongs to another checkout
+	configure_file("@HEAD_FILE@" "@GIT_DATA@/head-ref" COPYONLY)
 endif()
 
 if(NOT HEAD_HASH)

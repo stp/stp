@@ -34,7 +34,6 @@ namespace stp
 {
 class ASTNode;
 class STPMgr;
-typedef vector<ASTNode> ASTVec;
 
 /******************************************************************
  * Internal representation of an interior ASTNode.Generally, these*
@@ -44,14 +43,13 @@ class ASTInterior : public ASTInternal
 {
 
   friend class STPMgr;
-  friend class ASTNodeHasher;
-  friend class ASTNodeEqual;
-  friend stp::ASTNode
-  HashingNodeFactory::CreateNode(const Kind kind,
-                                 const stp::ASTVec& back_children);
+  friend stp::ASTNode HashingNodeFactory::CreateNode(
+      Kind kind, stp::ASTChildren back_children);
 
-  // The vector of children
-  ASTVec _children;
+  // The children are stored in a flexible array immediately after this
+  // object -- node and children are one allocation, made by create(). This
+  // is just the count; childrenPtr() locates the array.
+  uint32_t _num_children;
 
   // Lazily computed by ASTInteriorHasher; 0 means not yet computed.
   // Stays valid because the kind and children never change once set up,
@@ -59,13 +57,86 @@ class ASTInterior : public ASTInternal
   // unique table.
   mutable size_t _cached_hash = 0;
 
+  uint32_t _value_width;
+  uint32_t _index_width;
+
+  uint32_t _sig_width;
+  uint32_t _exp_width;
+
+  // Derived, and memoised on first request; see ASTInternal::cachedSourceSort.
+  // Points into the manager's intern pool, so it neither owns nor allocates.
+  //
+  // A width setter drops it, because the derivation reads the widths and
+  // legacy callers still set them after the node is built -- but only when the
+  // width actually changes. The node factories re-assert a node's widths on
+  // every hash-cons *hit* (HashingNodeFactory::CreateTerm), so invalidating
+  // unconditionally would throw the memo away on each of the DAG's incoming
+  // edges and leave the recomputation exactly as it was.
+  mutable const SourceSort* _source_sort_cache;
+
+  // The children live immediately after the object in the same allocation.
+  ASTNode* childrenPtr() { return reinterpret_cast<ASTNode*>(this + 1); }
+  const ASTNode* childrenPtr() const
+  {
+    return reinterpret_cast<const ASTNode*>(this + 1);
+  }
+
+  // Nodes are variable-sized (they carry their children inline), so they are
+  // only ever built by create(); ordinary new/delete would size them wrong.
+  static void* operator new(std::size_t) = delete;
+
+  // Sets the header fields only; create() placement-constructs the children
+  // into the tail afterwards (and fixes up a NOT node's number).
+  ASTInterior(STPMgr* mgr, Kind kind, uint32_t num_children)
+      : ASTInternal(mgr, kind), _num_children(num_children), _value_width(0),
+        _index_width(0), _sig_width(0), _exp_width(0), _source_sort_cache(NULL)
+  {
+    is_simplified = false;
+  }
+
+public:
+  // A non-owning search key for the unique table: lets us probe with a
+  // (kind, borrowed children) pair without building a whole node. Enabled by
+  // the transparent hasher/equality below.
+  struct Probe
+  {
+    Kind kind;
+    ASTChildren children;
+  };
+
+  // Build a node whose children are allocated inline with it, in one block.
+  static ASTInterior* create(STPMgr* mgr, Kind kind, ASTChildren children);
+
+  // Frees the single (over-sized) allocation. Paired with the raw
+  // ::operator new done inside create().
+  static void operator delete(void* p) { ::operator delete(p); }
+
+  ASTInterior(const ASTInterior&) = delete;
+  ASTInterior& operator=(const ASTInterior&) = delete;
+
+  virtual ~ASTInterior();
+
+  virtual ASTChildren GetChildren() const
+  {
+    return ASTChildren(childrenPtr(), _num_children);
+  }
+
+  bool isSimplified() const { return is_simplified; }
+
+  void hasBeenSimplified() const { is_simplified = true; }
+
   /******************************************************************
    * Hasher for ASTInterior pointer nodes                           *
    ******************************************************************/
   class ASTInteriorHasher
   {
   public:
+    using is_transparent = void; // enable heterogeneous (Probe) lookup
     size_t operator()(const ASTInterior* int_node_ptr) const;
+    size_t operator()(const Probe& probe) const;
+
+  private:
+    static size_t hashKindChildren(Kind kind, const ASTChildren& ch);
   };
 
   /******************************************************************
@@ -74,18 +145,30 @@ class ASTInterior : public ASTInternal
   class ASTInteriorEqual
   {
   public:
-    bool operator()(const ASTInterior* int_node_ptr1,
-                    const ASTInterior* int_node_ptr2) const;
+    using is_transparent = void;
+    bool operator()(const ASTInterior* n1, const ASTInterior* n2) const
+    {
+      return *n1 == *n2;
+    }
+    bool operator()(const Probe& probe, const ASTInterior* n) const
+    {
+      return probe.kind == n->GetKind() && probe.children == n->GetChildren();
+    }
+    bool operator()(const ASTInterior* n, const Probe& probe) const
+    {
+      return operator()(probe, n);
+    }
   };
 
   // Used in Equality class for hash tables
   friend bool operator==(const ASTInterior& int_node1,
                          const ASTInterior& int_node2)
   {
-    return ((int_node1._kind == int_node2._kind) &&
-            (int_node1._children == int_node2._children));
+    return int_node1.GetKind() == int_node2.GetKind() &&
+           int_node1.GetChildren() == int_node2.GetChildren();
   }
 
+private:
   // Call this when deleting a node that has been stored in the
   // the unique table
   virtual void CleanUp();
@@ -95,79 +178,67 @@ class ASTInterior : public ASTInternal
   // compilers will accept)
   virtual void nodeprint(ostream& os, bool c_friendly = false);
 
-  uint32_t _value_width;
-  uint32_t _index_width;
-
-  virtual void setIndexWidth(uint32_t i) { _index_width = i; }
+  virtual void setIndexWidth(uint32_t i)
+  {
+    if (_index_width == i)
+      return;
+    _index_width = i;
+    _source_sort_cache = NULL;
+  }
   virtual uint32_t getIndexWidth() const { return _index_width; }
 
-  virtual void setValueWidth(uint32_t v) { _value_width = v; }
+  virtual void setValueWidth(uint32_t v)
+  {
+    if (_value_width == v)
+      return;
+    _value_width = v;
+    _source_sort_cache = NULL;
+  }
   virtual uint32_t getValueWidth() const { return _value_width; }
 
-public:
-  ASTInterior(STPMgr* mgr, Kind kind, const ASTVec& children)
-      : ASTInternal(mgr, kind), _children(children), _value_width(0),
-        _index_width(0)
+  virtual void setSigWidth(uint32_t sw)
   {
-    is_simplified = false;
-    if (kind == NOT)
-      node_uid = children[0].GetNodeNum() + 1;
+    if (_sig_width == sw)
+      return;
+    _sig_width = sw;
+    _source_sort_cache = NULL;
   }
+  virtual uint32_t getSigWidth() const { return _sig_width; }
 
-  // As above, but takes ownership of an already-owned children vector,
-  // avoiding a copy when the caller has a temporary to give up.
-  ASTInterior(STPMgr* mgr, Kind kind, ASTVec&& children)
-      : ASTInternal(mgr, kind), _children(std::move(children)), _value_width(0),
-        _index_width(0)
+  virtual void setExpWidth(uint32_t ew)
   {
-    is_simplified = false;
-    if (kind == NOT)
-      node_uid = _children[0].GetNodeNum() + 1;
+    if (_exp_width == ew)
+      return;
+    _exp_width = ew;
+    _source_sort_cache = NULL;
   }
+  virtual uint32_t getExpWidth() const { return _exp_width; }
 
-  // This copies the contents of the child nodes
-  // array, along with everything else. Assigning the smart pointer,
-  // ASTNode, does NOT invoke this.
-  ASTInterior(const ASTInterior& int_node)
-      : ASTInternal(int_node), _children(int_node._children),
-        _value_width(int_node._value_width), _index_width(int_node._index_width)
+  virtual const SourceSort* cachedSourceSort() const
   {
-    is_simplified = false;
+    return _source_sort_cache;
   }
-
-  // Steals the children of a probe node that was built on the stack to
-  // search the unique table, keeping its node number and cached hash.
-  ASTInterior(ASTInterior&& int_node)
-      : ASTInternal(int_node), _children(std::move(int_node._children)),
-        _cached_hash(int_node._cached_hash), _value_width(int_node._value_width),
-        _index_width(int_node._index_width)
+  virtual void setCachedSourceSort(const SourceSort* s) const
   {
-    is_simplified = false;
+    _source_sort_cache = s;
   }
-
-  ASTInterior& operator=(const ASTInterior& other) = delete;
-
-  virtual ~ASTInterior();
-
-  virtual ASTChildren GetChildren() const { return _children; }
-
-  bool isSimplified() const { return is_simplified; }
-
-  void hasBeenSimplified() const { is_simplified = true; }
 };
+
+static_assert(sizeof(ASTInterior) % alignof(ASTNode) == 0,
+              "children are tail-allocated after ASTInterior and must stay "
+              "aligned");
 
 // Defined out of line because they dereference ASTInterior, which is still
 // incomplete inside the nested class bodies above.  They must stay in the
 // header: they key STPMgr's interior unique table, so they run on every
 // hash-cons probe, and being inline keeps that path free of a call.
-inline size_t
-ASTInterior::ASTInteriorHasher::operator()(const ASTInterior* int_node_ptr) const
-{
-  if (int_node_ptr->_cached_hash != 0)
-    return int_node_ptr->_cached_hash;
 
-  size_t hashval = ((size_t)int_node_ptr->GetKind());
-  const ASTChildren ch = int_node_ptr->GetChildren();
+// Shared hash of a (kind, children) pair -- the single source of truth so the
+// pointer and Probe overloads agree bit-for-bit.
+inline size_t ASTInterior::ASTInteriorHasher::hashKindChildren(
+    Kind kind, const ASTChildren& ch)
+{
+  size_t hashval = ((size_t)kind);
   auto iend = ch.end();
   for (auto i = ch.begin(); i != iend; i++)
   {
@@ -182,15 +253,24 @@ ASTInterior::ASTInteriorHasher::operator()(const ASTInterior* int_node_ptr) cons
 
   if (hashval == 0)
     hashval = 1; // 0 marks the hash as not yet computed.
-  int_node_ptr->_cached_hash = hashval;
   return hashval;
 }
 
-inline bool
-ASTInterior::ASTInteriorEqual::operator()(const ASTInterior* int_node_ptr1,
-                                          const ASTInterior* int_node_ptr2) const
+inline size_t
+ASTInterior::ASTInteriorHasher::operator()(const ASTInterior* int_node_ptr) const
 {
-  return (*int_node_ptr1 == *int_node_ptr2);
+  if (int_node_ptr->_cached_hash != 0)
+    return int_node_ptr->_cached_hash;
+
+  int_node_ptr->_cached_hash =
+      hashKindChildren(int_node_ptr->GetKind(), int_node_ptr->GetChildren());
+  return int_node_ptr->_cached_hash;
+}
+
+// Transparent overload: hash a borrowed (kind, children) probe the same way.
+inline size_t ASTInterior::ASTInteriorHasher::operator()(const Probe& probe) const
+{
+  return hashKindChildren(probe.kind, probe.children);
 }
 
 } // end of namespace stp

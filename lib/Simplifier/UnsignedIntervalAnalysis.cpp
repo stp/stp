@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Util/BitOps.h"
+#include "stp/Util/CBVOps.h"
 #include <iostream>
 #include <map>
 
@@ -42,8 +43,6 @@ using std::map;
 
 namespace stp
 {
-
-  using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 
   void UnsignedIntervalAnalysis::stats()
   {
@@ -83,32 +82,8 @@ namespace stp
     // untouched and its chunks below are all-zero against an upper
     // bound or all-one against a lower bound. ----
 
-    // The 64 bits of x starting at any bit offset, as a machine word.
-    // Chunk_Read clamps at the vector's width and reads zero past it, so
-    // no guards are needed. Two 32-bit reads because Chunk_Read is
-    // capped at the bits of an unsigned long, which isn't 64 everywhere.
-    uint64_t chunkAt(const CBV x, unsigned offset)
-    {
-      uint64_t r = CONSTANTBV::BitVector_Chunk_Read(x, 32, offset);
-      r |= (uint64_t)CONSTANTBV::BitVector_Chunk_Read(x, 32, offset + 32)
-           << 32;
-      return r;
-    }
-
-    // Bits [64k, 64k+63] of x as a machine word.
-    uint64_t chunk64(const CBV x, unsigned k)
-    {
-      return chunkAt(x, 64 * k);
-    }
-
-    // The inverse of chunk64. The value's bits above the vector's width
-    // must be zero.
-    void setChunk64(CBV x, unsigned k, uint64_t value)
-    {
-      const unsigned offset = 64 * k;
-      CONSTANTBV::BitVector_Chunk_Store(x, 32, offset, value);
-      CONSTANTBV::BitVector_Chunk_Store(x, 32, offset + 32, value >> 32);
-    }
+    // chunkAt / chunk64 / setChunk64, which the drivers below run over,
+    // are shared: see Util/CBVOps.h.
 
     // Which operand a chunk kernel changed.
     enum class Changed
@@ -753,25 +728,21 @@ namespace stp
     // ---- Helpers for the multiplication bounds. The bitvectors in this
     // group share one width, chosen wide enough that nothing overflows. ----
 
-    CBV zeroOf(unsigned width)
-    {
-      return CONSTANTBV::BitVector_Create(width, true);
-    }
-
     // A fresh copy of x at a bigger width.
     CBV widenTo(const CBV x, unsigned width)
     {
       assert(width >= bits_(x));
-      CBV r = zeroOf(width);
+      CBV r = mkZero(width);
       CONSTANTBV::BitVector_Interval_Copy(r, x, 0, 0, bits_(x));
       return r;
     }
 
     CBV mulFresh(const CBV x, const CBV y)
     {
-      CBV r = zeroOf(bits_(x));
+      CBV r = mkZero(bits_(x));
       CBV tmp = CONSTANTBV::BitVector_Clone(x); // Mul_Pos destroys this one.
-      CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Mul_Pos(r, tmp, y, true);
+      [[maybe_unused]] CONSTANTBV::ErrCode e =
+          CONSTANTBV::BitVector_Mul_Pos(r, tmp, y, true);
       assert(0 == e);
       CONSTANTBV::BitVector_Destroy(tmp);
       return r;
@@ -789,19 +760,7 @@ namespace stp
     static const unsigned wordPathMaxWidth = 32;
 #endif
 
-    // The low (up to 64) bits of x as a machine word.
-    uint64_t low64(const CBV x)
-    {
-      return chunk64(x, 0);
-    }
-
-    // A fresh CBV holding a machine word. Needs value < 2^width.
-    CBV cbvFromU64(unsigned width, uint64_t value)
-    {
-      CBV r = CONSTANTBV::BitVector_Create(width, true);
-      setChunk64(r, 0, value);
-      return r;
-    }
+    // low64 and cbvFromU64 are shared: see Util/CBVOps.h.
 
     // The minimum of (a*i + b) mod m over 0 <= i < n; requires n >= 1,
     // a < m and b < m, with m <= 2^wordPathMaxWidth so nothing here can
@@ -948,8 +907,8 @@ namespace stp
 
         if (known)
         {
-          resultMin = zeroOf(width);
-          resultMax = zeroOf(width);
+          resultMin = mkZero(width);
+          resultMax = mkZero(width);
           for (unsigned i = 0; i < width; i++)
           {
             if ((apMin >> i) & 1)
@@ -984,8 +943,8 @@ namespace stp
         // Every product sits between the bound products, which agree above
         // the width, so the low bits run between the bounds' low bits
         // without wrapping: exact.
-        resultMin = zeroOf(width);
-        resultMax = zeroOf(width);
+        resultMin = mkZero(width);
+        resultMax = mkZero(width);
         for (unsigned i = 0; i < width; i++)
         {
           if (CONSTANTBV::BitVector_bit_test(lowProduct, i))
@@ -1027,7 +986,7 @@ namespace stp
 
     if (emptyCBV.find(width) == emptyCBV.end())
     {
-      emptyCBV[width] = CONSTANTBV::BitVector_Create(width, true);
+      emptyCBV[width] = mkZero(width);
     }
     
     assert(CONSTANTBV::BitVector_is_empty(emptyCBV[width]));  
@@ -1041,41 +1000,12 @@ namespace stp
 
     if (emptyIntervals.find(width) == emptyIntervals.end())
     {
-      stp::CBV min = CONSTANTBV::BitVector_Create(width, true);
-      stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
-      CONSTANTBV::BitVector_Fill(max);
-      emptyIntervals[width] = new UnsignedInterval(min,max);
+      emptyIntervals[width] = new UnsignedInterval(mkZero(width), allOnes(width));
     }
 
     UnsignedInterval* r = emptyIntervals[width];
     assert(r->isComplete());
     return r;
-  }
-
-  // Replace some of the things that unsigned intervals can figure out for us.
-  ASTNode UnsignedIntervalAnalysis::topLevel(const ASTNode& top)
-  {
-    propagatorNotImplemented = 0;
-    iterations=0;
-
-    bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
-
-    NodeToUnsignedIntervalMap visited;
-    visit(top, visited);
-
-    if (bm.UserFlags.stats_flag)
-      stats();
-
-    StrengthReduction sr(bm.defaultNodeFactory, &bm.UserFlags);
-    ASTNode result = sr.topLevel(top, visited);
-
-    // The intervals are only read during strength reduction, delete them now.
-    for (const auto& pair : visited)
-      delete pair.second;
-
-    bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
-
-    return result;
   }
 
   UnsignedInterval* UnsignedIntervalAnalysis::dispatchToTransferFunctions(const ASTNode&n, const vector<const UnsignedInterval*>& _children)
@@ -1365,7 +1295,7 @@ namespace stp
         // divisor. Division by zero gives all ones, so this lower bound
         // holds even if the divisor might be zero.
         CBV dividend = CONSTANTBV::BitVector_Clone(top->minV);
-        CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
+        [[maybe_unused]] CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
             result->minV, dividend, c1->maxV, remainder);
         assert(0 == e);
         CONSTANTBV::BitVector_Destroy(dividend);
@@ -1472,8 +1402,9 @@ namespace stp
             CBV quotientMax = CONSTANTBV::BitVector_Create(width, true);
 
             CBV dividend = CONSTANTBV::BitVector_Clone(children[0]->minV);
-            CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
-                quotientMin, dividend, divisor, remainderMin);
+            [[maybe_unused]] CONSTANTBV::ErrCode e =
+                CONSTANTBV::BitVector_Div_Pos(quotientMin, dividend, divisor,
+                                              remainderMin);
             assert(0 == e);
             CONSTANTBV::BitVector_Destroy(dividend);
 
@@ -2116,49 +2047,10 @@ namespace stp
     return result;
   }
 
-  UnsignedInterval* UnsignedIntervalAnalysis::visit(const ASTNode& n,
-                          NodeToUnsignedIntervalMap& visited)
+  UnsignedIntervalAnalysis::UnsignedIntervalAnalysis()
   {
-    {
-      NodeToUnsignedIntervalMap::iterator it;
-      if ((it = visited.find(n)) != visited.end())
-        return it->second;
-    }
-
-    if (n.GetKind() == SYMBOL || n.GetKind() == WRITE || n.GetKind() == READ)
-    {
-      // Never know anything about these.
-      visited.insert({n, NULL});
-      return NULL;
-    }
-
-    const auto number_children = n.Degree();
-    vector<const UnsignedInterval*> children;
-
-    children.reserve(number_children);
-
-    for (unsigned i = 0; i < number_children; i++)
-    {
-      UnsignedInterval* r = visit(n[i], visited);
-      if (r != NULL)
-      {
-        assert(!r->isComplete());
-      }
-      children.push_back(r);
-    }
-
-    UnsignedInterval* result = dispatchToTransferFunctions(n,children);
-
-    // result will often be null (which we take to mean the maximum range).
-    visited.insert({n, result});
-    return result;
-  }
-
-  UnsignedIntervalAnalysis::UnsignedIntervalAnalysis(STPMgr& _bm) : bm(_bm)
-  {
-    littleZero = getEmptyCBV(1);
-    littleOne = CONSTANTBV::BitVector_Create(1, true);
-    CONSTANTBV::BitVector_Fill(littleOne);
+    littleZero = getEmptyCBV(1); // owned by emptyCBV, not by us.
+    littleOne = mkOne(1);
   }
 
   UnsignedIntervalAnalysis::~UnsignedIntervalAnalysis()
