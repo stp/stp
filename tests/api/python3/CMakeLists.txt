@@ -43,6 +43,24 @@ set_tests_properties(python3-pip-install PROPERTIES
 # can import pytest; the suite itself lives in this source directory.
 # -----------------------------------------------------------------------------
 
+# libstp and the allocator, as a process that loads the package sees them: no
+# allocator inside libstp, and a preloaded one serving it (a unittest script,
+# so it needs no pytest). Its arguments are libstp's path, the preloadable
+# allocator's (empty when none was built) and the allocator's name.
+if (STP_ALLOCATOR_PRELOADABLE AND TARGET ${STP_ALLOCATOR_PRELOADABLE})
+    set(_stp_py3_preloadable "$<TARGET_FILE:${STP_ALLOCATOR_PRELOADABLE}>")
+else()
+    set(_stp_py3_preloadable "")
+endif()
+add_test(
+    NAME python3-allocator-tests
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/allocator_tests.py
+            $<TARGET_FILE:stp> "${_stp_py3_preloadable}" "${STP_ALLOCATOR}"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(python3-allocator-tests PROPERTIES
+    ENVIRONMENT "PYTHONPATH=${STP_PY3_PYTHONPATH};PYTHONDONTWRITEBYTECODE=1"
+    LABELS "python3;api3")
+
 execute_process(
     COMMAND ${PYTHON_EXECUTABLE} -c "import pytest; print(pytest.__version__)"
     RESULT_VARIABLE _stp_py3_pytest_rc

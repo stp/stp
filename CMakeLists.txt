@@ -149,7 +149,6 @@ option(BUILD_SHARED_LIBS "Build the shared library" ON)
 option(STATICCOMPILE "Compile static library and executable" OFF)
 if (STATICCOMPILE)
     set(BUILD_SHARED_LIBS OFF)
-    set(ENABLE_PYTHON_INTERFACE OFF)
 endif()
 add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 
@@ -1134,8 +1133,8 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
     # The static library is what the executables link: it keeps them
     # self-contained, with nothing extra to install or ship. The shared one is
     # built too but not installed - it is there to be LD_PRELOADed by processes
-    # that embed libstp rather than run the stp binary, the Python (ctypes)
-    # interface being the one in tree. See tests/api/python/allocator_tests.py.
+    # that embed libstp rather than run the stp binary, the Python package
+    # being the one in tree. See tests/api/python3/allocator_tests.py.
     set(MI_BUILD_SHARED ON  CACHE BOOL "" FORCE)
     set(MI_BUILD_OBJECT OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
@@ -1600,8 +1599,9 @@ if(DEFINED CMAKE_CONFIGURATION_TYPES)
   # Placing the binaries in ${CMAKE_*_OUTPUT_DIRECTORY} without regard to
   # the debug/release/... configuration. This is needed for build systems
   # where files for multiple configurations are kept within the same build
-  # directory (eg. MSBuild), since some targets (e.g. python-interface-tests)
-  # require the path to the stp library to be given in a configuration file.
+  # directory (eg. MSBuild), since some tests (e.g. the query-file tests, whose
+  # lit configuration names the directory the stp binary is in) are given a
+  # built target's path in a configuration file.
   # Note: the paths could be determined in a cleaner fashion by using generator
   # expressions, which were used up to commit 1af1f5. However, that solution
   # was not feasible, since CMake versions provided by recent Debian versions
@@ -1676,17 +1676,6 @@ else()
         "STP requires a Python 3 interpreter to generate lib/AST/ASTKind.{h,cpp}. "
         "Install python3, or point -DPYTHON_EXECUTABLE=<path> at one.")
 endif()
-
-# The Python bindings are a separate, optional matter: they additionally need
-# a shared library to bind against.
-if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
-    if(BUILD_SHARED_LIBS)
-        set(ENABLE_PYTHON_INTERFACE ON)
-    else()
-        set(ENABLE_PYTHON_INTERFACE OFF)
-    endif()
-endif()
-add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interface")
 
 # -----------------------------------------------------------------------------
 # Compile all subdirs

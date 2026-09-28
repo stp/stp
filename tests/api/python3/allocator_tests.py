@@ -1,39 +1,42 @@
-"""
-AUTHORS: Trevor Hansen
+# AUTHORS: Andrew Teylu
+#
+# BEGIN DATE: September, 2026
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-
-Allocator behaviour of the Python (ctypes) interface.
+"""Allocator behaviour of the stp Python package.
 
 The stp executables link a fast allocator statically, which interposes malloc
-for the whole process. The Python interface is different: it dlopen()s libstp
-into an interpreter that has already been allocating with the C library, so the
-allocator has to be chosen for the process rather than baked into the library.
-
-These tests pin both halves of that contract:
+for the whole process. The Python package is different: its extension loads
+libstp into an interpreter that has already been allocating with the C
+library, so the allocator has to be chosen for the process rather than baked
+into the library. These tests pin both halves of that contract:
 
   * libstp must not embed an allocator of its own. If it did, memory could be
     allocated by libstp's allocator and freed by the interpreter's (or the
     reverse) and the mixed heaps would eventually corrupt.
-  * When an allocator *is* preloaded into the interpreter, libstp's allocations
-    must actually go through it, and results must be unchanged.
-"""
+  * When an allocator *is* preloaded into the interpreter, libstp's
+    allocations must actually go through it, and results must be unchanged.
+
+A unittest script, run by ctest as python3-allocator-tests with libstp's path,
+the preloadable allocator's path (empty when none was built) and the
+allocator's name as its arguments, and the package on PYTHONPATH."""
 
 import os
 import re
@@ -41,73 +44,51 @@ import subprocess
 import sys
 import unittest
 
-sys.path.insert(0, "@PYTHON_INTERFACE_DIR@")
+LIBSTP, PRELOADABLE_ALLOCATOR, ALLOCATOR_NAME = sys.argv[1:4]
+del sys.argv[1:4]
 
-import stp
-# The package already knows where it loaded libstp from; reuse that rather than
-# second-guessing the library name and layout.
-from stp.library_path import PATHS
-
-LIBSTP = next((p for p in PATHS if os.path.exists(p)), None)
-PRELOADABLE_ALLOCATOR = "@STP_PRELOADABLE_ALLOCATOR@"
-ALLOCATOR_NAME = "@STP_ALLOCATOR@"
-
-# Symbols an allocator would define if one were linked into libstp:
-# malloc/free/realloc/calloc plus operator new / operator delete.
 ALLOCATOR_SYMBOLS = {
     "malloc", "free", "realloc", "calloc",
     "_Znwm", "_Znam", "_ZdlPv", "_ZdaPv",
 }
 
-# A tiny query with a known unique answer, used to prove the solver still
-# produces correct results under whichever allocator is in play.
 SOLVE_SNIPPET = """
-import sys
-sys.path.insert(0, {interface!r})
-import stp
-s = stp.Solver()
-a = s.bitvec('a', 8)
-b = s.bitvec('b', 8)
-s.add(a + b == 10)
-s.add(a == 3)
-assert s.check(), "expected sat"
-print("RESULT", s.model()['b'])
+from stp import BitVecs, Solver, sat
+a, b = BitVecs("a b", 8)
+s = Solver()
+s.add(a + b == 10, a == 3)
+assert s.check() == sat, "expected sat"
+print("RESULT", s.model()[b].as_long())
 """
 
 
 def _solve_in_child(env):
-    """Run a solve in a fresh interpreter and return (stdout, stderr)."""
-    code = SOLVE_SNIPPET.format(interface="@PYTHON_INTERFACE_DIR@")
-    child = subprocess.run(
-        [sys.executable, "-c", code],
+    return subprocess.run(
+        [sys.executable, "-c", SOLVE_SNIPPET],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=dict(os.environ, **env), universal_newlines=True,
     )
-    return child
 
 
 class TestPythonAllocator(unittest.TestCase):
-    def test_bindings_solve_correctly(self):
-        """The in-process ctypes interface works under the configured build."""
-        s = stp.Solver()
-        a = s.bitvec('a', 8)
-        b = s.bitvec('b', 8)
-        s.add(a + b == 10)
-        s.add(a == 3)
-        self.assertTrue(s.check())
-        self.assertEqual(s.model()['b'], 7)
+    def test_the_package_solves_correctly(self):
+        """The package works in-process under the configured build."""
+        from stp import BitVecs, Solver, sat
+        a, b = BitVecs("a b", 8)
+        s = Solver()
+        s.add(a + b == 10, a == 3)
+        self.assertEqual(s.check(), sat)
+        self.assertEqual(s.model()[b].as_long(), 7)
 
     def test_libstp_does_not_embed_an_allocator(self):
         """libstp must leave the allocator to the process that loads it.
 
         The allocator is linked into the stp executables, never into the
-        library. Linking it here instead would give a ctypes user two heaps in
+        library. Linking it here instead would give a Python user two heaps in
         one process.
         """
         if not sys.platform.startswith("linux"):
             self.skipTest("symbol inspection is Linux-specific")
-        if not LIBSTP:
-            self.skipTest("could not locate libstp on any of %s" % PATHS)
         try:
             out = subprocess.check_output(
                 ["nm", "-D", "--defined-only", LIBSTP], universal_newlines=True)
@@ -125,7 +106,7 @@ class TestPythonAllocator(unittest.TestCase):
         self.assertEqual(
             clash, set(),
             "libstp defines allocator symbols %s. The allocator belongs on the "
-            "executables (STP_ALLOCATOR_LIBRARY), not on the library: a ctypes "
+            "executables (STP_ALLOCATOR_LIBRARY), not on the library: a Python "
             "process would end up allocating with one heap and freeing with "
             "another." % sorted(clash))
 

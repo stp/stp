@@ -28,10 +28,8 @@ fare against it, and every 3.x defect met on the way.
   (`tests/lra/real_c_api_smoke.c`, `real_c_api_undeleted_expr.c`), the
   install-test consumers of `c_interface.h` and `uf.hpp`, `tools/extdiff`
   (deliberately 2.x: the same source builds against the pre-feature baseline)
-  and `tools/c_handle_churn_benchmark`. The ctypes Python package
-  (`bindings/python`) loads `libstp2` by name through `library_path.py` (it
-  pulls `libstp` in as a dependency); it is built for its tests only, and the
-  installed `stp` Python package is the 3.x one.
+  and `tools/c_handle_churn_benchmark`. The 2.x ctypes Python package is gone;
+  the `stp` Python package is the 3.x one.
 - `STPConfig.cmake` sets `STP_C_INTERFACE_LIBRARY` to `stp2`, and names `stp2`
   in the older `STP_SHARED_LIBRARY` and `STP_STATIC_LIBRARY` too, since whoever
   reads those is a 2.x client; `export(TARGETS stp stp2 ...)` writes both
@@ -479,8 +477,6 @@ as before this work.
   arrays, and the reason a query had no answer), each linked to `stp2`.
 - `tests/lra`: `lra_c_api_smoke` and `lra_c_api_undeleted_expr`, the C tests of
   the Real extension.
-- `tests/api/python`: the ctypes package's suites (`python-interface-tests`,
-  `python-allocator-tests`), loading `libstp2`.
 - `tests/api/install`: the C and C++ (`uf.hpp`) consumers of an installed
   `c_interface.h`, linking `${STP_C_INTERFACE_LIBRARY}`.
 

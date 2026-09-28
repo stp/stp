@@ -26,8 +26,7 @@
 # The only provider of the 2.x C API: libstp carries the 3.x API alone. The
 # 2.x headers (c_interface.h, and the header-only fp.hpp and uf.hpp over it)
 # are installed with this library, and the in-tree 2.x clients (the libstp2
-# tests in tests/api/compat2, extdiff, the handle-churn benchmark and the
-# ctypes Python package) link it.
+# tests in tests/api/compat2, extdiff and the handle-churn benchmark) link it.
 add_library(stp2
     c_interface2.cpp
     c_interface2_terms.cpp

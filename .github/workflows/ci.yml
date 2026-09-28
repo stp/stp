@@ -262,15 +262,17 @@ jobs:
           exit 1
         fi
 
-    # The bindings walk the CPython AST, whose node types drift between
-    # releases: 3.14 removed NodeVisitor's visit_Num fallback, so every
-    # numeric literal in an @stp-decorated function began reaching
-    # ASTtoSTP.generic_visit and raising "Constant is not yet supported!".
-    # Nothing above catches that -- the build configures against whatever
-    # python3 the runner ships, which trails the newest release -- so run
-    # the binding tests once more against the newest one. stp.py is copied
-    # into the build tree unchanged, so the interpreter can be swapped
-    # under the same build tree; no second build is needed.
+    # The Python package's @stp decorator walks the CPython AST, whose node
+    # types drift between releases: 3.14 removed NodeVisitor's visit_Num
+    # fallback, which once left every numeric literal in a decorated
+    # function unhandled. Nothing above catches that -- the build configures
+    # against whatever python3 the runner ships, which trails the newest
+    # release -- so the package is built once more against the newest one
+    # and its tests run there. Its extension is compiled for one interpreter,
+    # hence the second build directory; the compiler cache makes libstp's
+    # half of it cheap. python3-pip-install is left out: it installs the
+    # whole build, and this directory builds only the package; the CaDiCaL
+    # jobs pip-install the package into a fresh environment instead.
     #
     # Bump the version when a newer Python is released. The point is to be
     # a step ahead of what the distributions ship, not to pin one version
@@ -283,21 +285,14 @@ jobs:
       with:
         python-version: '3.14'
 
-    - name: Python bindings against the newest Python
+    - name: The Python package against the newest Python
       if: matrix.name == 'gcc'
       run: |
         python3 --version
-        python3 tests.py
-        python3 allocator_tests.py
-        # The pip install of bindings/python, which ctest skips when the
-        # interpreter's setuptools is too old or absent -- as it is from
-        # Python 3.12 on, until installed.
-        python3 -m pip install --disable-pip-version-check setuptools
-        python3 "$GITHUB_WORKSPACE/tests/api/python/pip_install_test.py" \
-          "$GITHUB_WORKSPACE/bindings/python" \
-          "$GITHUB_WORKSPACE/build/lib/libstp.so" \
-          "$RUNNER_TEMP/pip-install"
-      working-directory: build/tests/api/python
+        python3 -m pip install --quiet cython pytest
+        ${{ matrix.env }} cmake -S . -B build-newest-python -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DENABLE_PYTHON3_API:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja
+        cmake --build build-newest-python --target stp_python3 --parallel "$(nproc)"
+        ctest --test-dir build-newest-python -R '^python3-' -E '^python3-pip-install$' --output-on-failure
 
     # The three legs of this matrix configure identically and differ only in
     # compiler and optimisation level, which makes them the pairs worth
@@ -476,11 +471,11 @@ jobs:
     # the CNF that every query is decided from is built.
     #
     # -shared-libsan puts the sanitizer runtime in a shared object that
-    # libstp.so then records as a dependency, which is what lets the Python
-    # bindings dlopen it. With clang's default static runtime that dlopen
-    # fails outright -- "undefined symbol: __ubsan_handle_type_mismatch_v1" --
-    # and python-interface-tests is lost. Nothing then puts that shared object
-    # on the loader's path, hence the -rpath: clang adds none of its own, so
+    # libstp.so then records as a dependency, which is what lets a process
+    # that dlopens libstp (the Python package's extension, say) load it. With
+    # clang's default static runtime that dlopen fails outright -- "undefined
+    # symbol: __ubsan_handle_type_mismatch_v1". Nothing then puts that shared
+    # object on the loader's path, hence the -rpath: clang adds none of its own, so
     # without it every binary this job builds fails to start. The directory
     # comes from -print-file-name rather than -print-runtime-dir because the
     # two disagree on some distributions, and it is the one that answers where
@@ -745,39 +740,23 @@ jobs:
         "
         echo "ok: installed python module solves a query"
 
-        # The 2.x ctypes package, installed by pip into a fresh environment
-        # as a packager building it once per Python would, finding the
-        # library through the search path rather than a recorded location.
-        python3 -m venv "$RUNNER_TEMP/venv"
-        "$RUNNER_TEMP/venv/bin/python" -m pip install \
-          --disable-pip-version-check ./bindings/python
-        LD_LIBRARY_PATH="$prefix/lib" "$RUNNER_TEMP/venv/bin/python" -c "
-        import os, stp
-        s = stp.Solver()
-        x = s.bitvec('x', width=8)
-        s.add(x + x != 2 * x)
-        assert s.check() is False, 'pip-installed python module gave the wrong answer'
-        loaded = os.path.dirname(stp.get_lib()._name)
-        assert loaded == '$prefix/lib', 'loaded libstp from ' + loaded
-        "
-        echo "ok: pip-installed python module solves a query"
-
-        # And the 3.x package the same way, compiled by pip against this
-        # installation (pip fetches Cython); its extension records the
+        # The same package installed by pip into a fresh environment, as a
+        # packager building it once per Python would: compiled against this
+        # installation (pip fetches Cython), with its extension recording the
         # library directory as its rpath, so nothing needs setting to run it.
-        python3 -m venv "$RUNNER_TEMP/venv3"
-        STP_PREFIX="$prefix" "$RUNNER_TEMP/venv3/bin/python" -m pip install \
+        python3 -m venv "$RUNNER_TEMP/venv"
+        STP_PREFIX="$prefix" "$RUNNER_TEMP/venv/bin/python" -m pip install \
           --disable-pip-version-check ./bindings/python3
-        "$RUNNER_TEMP/venv3/bin/python" -c "
+        "$RUNNER_TEMP/venv/bin/python" -c "
         from stp import BitVec, Solver, unsat
         x = BitVec('x', 8)
         s = Solver()
         s.add(x + x != 2 * x)
-        assert s.check() == unsat, 'pip-installed 3.x python module gave the wrong answer'
+        assert s.check() == unsat, 'pip-installed python module gave the wrong answer'
         "
-        core=$("$RUNNER_TEMP/venv3/bin/python" -c "import stp._core; print(stp._core.__file__)")
+        core=$("$RUNNER_TEMP/venv/bin/python" -c "import stp._core; print(stp._core.__file__)")
         ldd "$core" | grep -q "=> $prefix/lib/libstp"
-        echo "ok: pip-installed 3.x python module solves a query"
+        echo "ok: pip-installed python module solves a query"
 
         # And again from a different directory, which is what a packager
         # staging into a temporary root or anyone unpacking a tarball
@@ -1476,7 +1455,6 @@ jobs:
         -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
         -DENABLE_AUTO_DOWNLOAD=ON
         -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DUSE_CRYPTOMINISAT=OFF -DUSE_CADICAL=OFF
-        -DENABLE_PYTHON_INTERFACE=OFF
         "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR"
         "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY"
         .
@@ -1650,7 +1628,7 @@ jobs:
     # LibBF a CMakeLists, so the UCRT64 gcc compiles it like everything else.
 
     - name: Configure
-      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_PYTHON_INTERFACE:BOOL=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
+      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
 
     # CaDiCaL above is built by its own makefile and so is not cached; ABC and
     # STP are, which is the bulk of this step. The stats are printed so a run

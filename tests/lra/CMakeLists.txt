@@ -969,12 +969,12 @@ set_tests_properties(lra_cpp_api_smoke PROPERTIES
   LABELS "lra;api;model;context"
 )
 
-if(ENABLE_PYTHON_INTERFACE)
+if(ENABLE_PYTHON3_API)
   add_test(NAME lra_python_api_smoke
     COMMAND "${CMAKE_COMMAND}" -E env
-      "PYTHONPATH=${PROJECT_BINARY_DIR}/bindings/python"
+      "PYTHONPATH=${STP_PY3_PYTHONPATH}"
       "${PYTHON_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/real_python_api_smoke.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/api3_real_python_api_smoke.py"
   )
   set_tests_properties(lra_python_api_smoke PROPERTIES
     LABELS "lra;api;python;model;context"

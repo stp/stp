@@ -16,9 +16,9 @@ STP currently supports the following types of tests
    exercise the C++ and C API, and those under ``tests/api/compat2``
    exercise ``libstp2``, the 2.x C interface over the C API, all using the
    `GoogleTest <https://google.github.io/googletest/>`__ framework. The
-   Python tests are registered directly with CTest: ``tests/api/python3``
-   (pytest) for the ``stp`` package, ``tests/api/python`` for the 2.x
-   ctypes package over ``libstp2``.
+   Python tests of the ``stp`` package, in ``tests/api/python3``, are
+   registered directly with CTest: its pytest suite, and the allocator
+   checks of a process that loads the package.
 
 Both kinds are registered with CTest, so ``ctest`` (or ``make test``)
 runs everything.
@@ -83,8 +83,8 @@ file becomes its own executable and its own CTest test, named after the
 source file with ``Tests-gtest`` appended -- so
 ``tests/unit-tests/SimplifyFormula_Test.cpp`` is run by the CTest test
 ``SimplifyFormula_TestTests-gtest``. The tests that are not GoogleTest
-are named individually: ``python-interface-tests``,
-``python-allocator-tests``, ``test_fpbackend`` and ``test_fprewrites``.
+are named individually, such as ``python3-api-tests``,
+``python3-allocator-tests``, ``test_fpbackend`` and ``test_fprewrites``.
 
 .. _valgrind:
 
@@ -174,9 +174,9 @@ first, and set ``UBSAN_OPTIONS=print_stacktrace=1`` for a stack trace with
 each one.
 
 The rest is plumbing. ``-shared-libsan`` and the matching ``-rpath`` are what
-let ``python-interface-tests`` work: the bindings dlopen ``libstp.so``, which
-fails against clang's default static runtime with "undefined symbol:
-``__ubsan_handle_type_mismatch_v1``". ``STP_ALLOCATOR=system`` keeps the
+let a process load ``libstp.so`` with ``dlopen`` (the Python package's
+extension does), which fails against clang's default static runtime with
+"undefined symbol: ``__ubsan_handle_type_mismatch_v1``". ``STP_ALLOCATOR=system`` keeps the
 vendored mimalloc, which replaces ``malloc`` wholesale, out of the picture.
 
 CI runs this configuration on every pull request, as the ``clang (ubsan)``

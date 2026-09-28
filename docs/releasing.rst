@@ -10,21 +10,19 @@ Only the bump is done by hand. Pushing the tag runs
 ``.github/workflows/release.yml``, which checks the version, builds the
 binary and opens the release as a draft:
 
-#. Edit the version in the four files below, and commit to master.
+#. Edit the version in the three files below, and commit to master.
 #. ``git tag 2.4.2 && git push origin 2.4.2``.
 #. Read the draft the workflow leaves behind, then publish it.
 
 Where the version lives
 -----------------------
 
-Four files carry it, all edited by hand:
+Three files carry it, all edited by hand:
 
 -  ``CMakeLists.txt`` -- ``set(STP_FULL_VERSION "2.4.1")``
 -  ``docs/conf.py`` -- ``release = '2.4.1'``
--  ``bindings/python/pyproject.toml`` -- ``version = "2.4.1"``, the
-   version of the Python bindings when they are installed with pip
--  ``bindings/python3/pyproject.toml`` -- ``version = "2.4.1"``, the same
-   for the 3.x Python package
+-  ``bindings/python3/pyproject.toml`` -- ``version = "2.4.1"``, the
+   version of the Python package when it is installed with pip
 
 Everything else derives from ``STP_FULL_VERSION``: ``include/stp/config.h``,
 ``STPConfigVersion.cmake``, the ``stp.1`` man page, the ``SOVERSION`` of
@@ -72,7 +70,7 @@ them, so pushing a branch tag will not cut a release.
 That is the whole procedure. Three jobs follow:
 
 ``check version``
-   Fails unless all four version files equal the tag, before anything is
+   Fails unless all three version files equal the tag, before anything is
    built. If it fails, fix the version, delete and re-push the tag.
 
 ``linux-amd64``

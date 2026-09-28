@@ -39,6 +39,7 @@ import stp
 from stp import _core
 
 
+@pytest.mark.mid_search
 def test_interrupt_from_another_thread(hard):
     fired = []
 
@@ -70,6 +71,7 @@ def test_pending_interrupt(hard):
     assert not hard.interrupt_pending()
 
 
+@pytest.mark.mid_search
 def test_sigint_on_main_thread(hard):
     assert threading.current_thread() is threading.main_thread()
     before = signal.getsignal(signal.SIGINT)
@@ -206,6 +208,7 @@ def test_release_from_another_thread_while_idle(fresh_manager):
     s.close()
 
 
+@pytest.mark.mid_search
 def test_release_during_a_check_is_deferred(hard):
     tm = hard.manager()
     holder = [BitVec("dropped_during_check", 8, tm=tm) + 1]

@@ -383,16 +383,13 @@ Python usage
 
 .. code-block:: python
 
-    import stp
-    s = stp.Solver()
-    a = s.bitvec('a', 32)
-    b = s.bitvec('b', 32)
-    c = s.bitvec('c', 32)
-    s.add(a == 5)
-    s.add(b == 6)
-    s.add(a + b == c)
-    s.check()          # True
-    s.model()          # {'a': 5, 'b': 6, 'c': 11}
+    from stp import *
+
+    a, b, c = BitVecs('a b c', 32)
+    s = Solver()
+    s.add(a == 5, b == 6, a + b == c)
+    print(s.check())   # sat
+    print(s.model())   # [a = 5, b = 6, c = 11]
 
 Library usage
 =============

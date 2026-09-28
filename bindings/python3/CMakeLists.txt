@@ -137,8 +137,7 @@ add_custom_target(stp_python3 ALL DEPENDS ${_stp_py3_copied} stp_py3_core)
 set(STP_PY3_PYTHONPATH ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "PYTHONPATH of the built 3.x Python package")
 
 # --- installation -----------------------------------------------------------
-# This is the installed `stp` Python package (the 2.x ctypes package in
-# bindings/python is built for its tests only). PYTHON_LIB_INSTALL_DIR is
+# This is the installed `stp` Python package. PYTHON_LIB_INSTALL_DIR is
 # relative to the install prefix, so the package goes wherever the rest of STP
 # goes, --prefix included: to the interpreter's platform site-packages when
 # that lies inside the prefix (the default /usr/local install), so `import stp`

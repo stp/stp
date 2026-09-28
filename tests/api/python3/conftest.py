@@ -38,11 +38,38 @@ def fresh_manager():
     yield tm
 
 
+def interruptible_backend():
+    """A backend that stops mid-search when interrupted, CaDiCaL or MiniSat, or None.
+    CryptoMiniSat is interrupted between its solver calls only (the capability
+    interrupt.cryptominisat), so a build with no other backend cannot stop a check that is
+    already searching."""
+    for name in ("cadical", "minisat"):
+        if stp.has_sat_backend(name):
+            return name
+    return None
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "mid_search: interrupts a check while it searches; needs a backend that stops")
+
+
+def pytest_collection_modifyitems(config, items):
+    if interruptible_backend() is not None:
+        return
+    skip = pytest.mark.skip(reason="no backend of this build can be interrupted mid-search")
+    for item in items:
+        if "mid_search" in item.keywords:
+            item.add_marker(skip)
+
+
 def hard_solver(**options):
     """A solver on the default manager holding an unsat problem no backend finishes quickly:
-    zext(x) * zext(y) == a 64-bit prime at 128 bits with neither factor 1 and x < y."""
-    if stp.has_sat_backend("cadical"):
-        options.setdefault("sat_backend", "cadical")
+    zext(x) * zext(y) == a 64-bit prime at 128 bits with neither factor 1 and x < y. It runs
+    on a backend that can be interrupted mid-search when the build has one."""
+    backend = interruptible_backend()
+    if backend is not None:
+        options.setdefault("sat_backend", backend)
     options.setdefault("max_time", 120000)
     s = stp.Solver(**options)
     x, y = stp.BitVecs("hx hy", 64)

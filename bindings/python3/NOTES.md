@@ -149,13 +149,12 @@ not offer, and every defect of the C or C++ layers met on the way.
     `solver_scope(s)` to be active (`StateError` otherwise).
 16. **`Kind.smtlib`** is attached to the generated enum at import
     (`_gen_kinds.py` is generated without the property).
-17. **Installation:** this package is the installed `stp` (the 2.x ctypes
-    package, which has the same name, is built for its libstp2 tests only).
-    pip also installs it on its own against an installed STP
-    (`pyproject.toml`, `setup.py`; `README.md` says how): the install ships
-    the generated `_gen_enums.pxi` and `_gen_kinds.py` in
-    `include/stp/api/python` for that build. Not done: wheels, doctests, a
-    generated `.pyi` stub.
+17. **Installation:** this package is the installed `stp`, and STP's only
+    Python package (the 2.x ctypes one is gone). pip also installs it on its
+    own against an installed STP (`pyproject.toml`, `setup.py`; `README.md`
+    says how): the install ships the generated `_gen_enums.pxi` and
+    `_gen_kinds.py` in `include/stp/api/python` for that build. Not done:
+    wheels, doctests, a generated `.pyi` stub.
 
 ## C API gaps met while building this
 

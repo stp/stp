@@ -31,13 +31,6 @@ if(TEST_CPP3_API)
     add_subdirectory(cpp3)
 endif()
 
-if(ENABLE_PYTHON_INTERFACE)
-    option(TEST_PYTHON_API "Enable tests that test STP's public Python API" ON)
-endif()
-
-if(TEST_PYTHON_API)
-    add_subdirectory(python)
-endif()
 # the 3.x Python API (pytest over the package built in bindings/python3)
 if(ENABLE_PYTHON3_API)
     add_subdirectory(python3)

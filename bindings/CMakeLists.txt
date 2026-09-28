@@ -18,8 +18,5 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-if(ENABLE_PYTHON_INTERFACE)
-    add_subdirectory(python)
-endif()
 # the 3.x Python API (Cython over <stp/stp.h>); guards itself with ENABLE_PYTHON3_API
 add_subdirectory(python3)
