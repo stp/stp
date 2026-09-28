@@ -612,6 +612,14 @@ declare -a g_simplify=(
 "--unconstrained-variable-elimination=0"
 "--aig-rewrite-passes=1"
 
+# Replaces a shared one-step term of an unconstrained variable by a fresh
+# variable constrained to the term's image. It needs that term shared, which
+# FuzzSMT rarely writes: the CNF changed on 5/96 QF_BV files, 4/96 wide
+# QF_BV, 5/136 QF_ABV and 5/146 QF_BVFP, and 0 on the n-ary and QF_UFBV
+# entries. Here rather than a group of its own so it is never drawn beside
+# --disable-simplifications or the entry above, which leave it inert.
+"--unconstrained-image-vars=1"
+
 # Canonical linear combinations. Only the n-ary entry builds a term worth
 # re-spelling: 5/17 there against 0 on both plain entries and 0 on the wide
 # one. The addend limit is what stops a constant being distributed over a
@@ -1204,6 +1212,13 @@ declare -a g_cnf=(
 "--cnf-generation-effort=gia-very-high"
 # The other way to reach very-low: the threshold auto drops to it above.
 "--cnf-auto-threshold=0"
+# Two writer options only the new-* rungs read, so each rides on one. On
+# 19 QF_BV, 14 n-ary, 15 wide and 25 QF_UFBV files emitting a CNF:
+# --cnf-link-shared-cells changed 5, 4, 4 and 23 of them under new-high,
+# and --cnf-complete-ite 7, 6, 6 and 23 under new-medium. Under new-high
+# --cnf-complete-ite changed none, so it does not ride on that rung.
+"--cnf-generation-effort=new-high --cnf-link-shared-cells=1"
+"--cnf-generation-effort=new-medium --cnf-complete-ite=1"
 )
 
 declare -a g_solver=(
