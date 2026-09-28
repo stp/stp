@@ -43,6 +43,8 @@ class RemoveUnconstrained
 {
   STPMgr& bm;
 
+  ASTNode freshLike(const ASTNode& like, const std::string& prefix);
+
   ASTNode replaceParentWithFresh(MutableASTNode& mute,
                                  vector<MutableASTNode*>& variables);
 
