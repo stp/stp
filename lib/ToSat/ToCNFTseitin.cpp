@@ -60,7 +60,7 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
   std::vector<uint32_t> nodeVar;
   cnf = aig::deriveTseitin(mgr.mgr, 0, recover,
                            (annPath || multPath) ? &nodeVar : nullptr,
-                           uf.cnf_link_shared_cells);
+                           uf.cnf_link_shared_cells, uf.cnf_complete_ite);
 
   // The literal id of one bit in writeDimacs numbering: t/f for a
   // constant, 0 for a bit no variable reached, negative for a complement.

@@ -1558,6 +1558,12 @@ void ExtraMain::create_options()
            "exclusive-or's own clauses instead of the per-gate encoding",
            misc_group);
 
+  bool_arg("--cnf-complete-ite", bm->UserFlags.cnf_complete_ite,
+           "new-* CNF rungs: encode a recovered if-then-else with all six "
+           "prime implicates, adding the two that let agreeing arms decide "
+           "the output while the condition is unset",
+           misc_group);
+
   app.add_flag("--exit-after-CNF", bm->UserFlags.exit_after_CNF,
                "exit after the CNF has been generated")
       ->group(misc_group);

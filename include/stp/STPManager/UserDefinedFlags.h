@@ -1784,6 +1784,11 @@ public:
   // propagation-complete, rather than the per-gate encoding.
   bool cnf_link_shared_cells = false;
 
+  // The new-* CNF writer's recovered ITEs: add the two prime implicates that
+  // skip the condition, so agreeing arms decide the output while it is
+  // unset. Off by default: it grows the CNF where multiplexers dominate.
+  bool cnf_complete_ite = false;
+
   // Whether AUTO should read the threshold the Real path's way. Set for an
   // active Real solve, and for nothing else; the bit-vector choice at either
   // end of the threshold is untouched.

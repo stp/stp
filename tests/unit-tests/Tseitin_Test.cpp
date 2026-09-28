@@ -195,11 +195,12 @@ void buildRandom(aig::Manager& m, std::mt19937& rng, unsigned nCi,
 // Exhaustive over the CIs: every clause holds under the circuit's own values,
 // and BCP from the CIs reproduces every one of them.
 void checkExact(const aig::Manager& m, unsigned namedOutputs,
-                aig::Recover recover, bool linkShared = false)
+                aig::Recover recover, bool linkShared = false,
+                bool completeIte = false)
 {
-  const aig::Cone cone(m, namedOutputs, recover, linkShared);
-  const CNF cnf =
-      aig::deriveTseitin(m, namedOutputs, recover, nullptr, linkShared);
+  const aig::Cone cone(m, namedOutputs, recover, linkShared, completeIte);
+  const CNF cnf = aig::deriveTseitin(m, namedOutputs, recover, nullptr,
+                                     linkShared, completeIte);
   const Layout l = layoutOf(m, cone);
 
   ASSERT_EQ(cnf.varCount(), l.nVars);
@@ -291,6 +292,10 @@ TEST(Tseitin, NamedOutputsEncodeTheCircuitExactly)
     ASSERT_NO_FATAL_FAILURE(checkExact(m, m.outputCount(),
                                        aig::Recover::PatternsAndAnds, true))
         << seed;
+    ASSERT_NO_FATAL_FAILURE(checkExact(m, m.outputCount(),
+                                       aig::Recover::PatternsAndAnds, true,
+                                       true))
+        << seed;
   }
 }
 
@@ -309,6 +314,9 @@ TEST(Tseitin, AssertedOutputIsUnsatWhereTheCircuitIsFalse)
 
     ASSERT_NO_FATAL_FAILURE(checkExact(m, 0, aig::Recover::PatternsAndAnds)) << seed;
     ASSERT_NO_FATAL_FAILURE(checkExact(m, 0, aig::Recover::Nothing)) << seed;
+    ASSERT_NO_FATAL_FAILURE(checkExact(m, 0, aig::Recover::PatternsAndAnds,
+                                       false, true))
+        << seed;
   }
 }
 
@@ -329,10 +337,10 @@ TEST(Tseitin, MixedAssertedAndNamedOutputs)
 }
 
 // The saving the matcher exists for, on the smallest circuit that has one.
-// A MUX is three AND nodes; encoded as an ITE it is one variable and the
-// relation's six prime implicates, and its two intermediates disappear
-// entirely.
-TEST(Tseitin, MuxCostsSixClausesInsteadOfNine)
+// A MUX is three AND nodes; encoded as an ITE it is one variable and four
+// clauses -- six, the relation's prime implicates, under completeIte -- and
+// its two intermediates disappear entirely.
+TEST(Tseitin, MuxCostsFourOrSixClausesInsteadOfNine)
 {
   aig::Manager m;
   const aig::Lit c = m.createCi(), t = m.createCi(), e = m.createCi();
@@ -341,15 +349,21 @@ TEST(Tseitin, MuxCostsSixClausesInsteadOfNine)
 
   const CNF plain = aig::deriveTseitin(m, 1, aig::Recover::Nothing);
   const CNF folded = aig::deriveTseitin(m, 1, aig::Recover::PatternsAndAnds);
+  const CNF complete = aig::deriveTseitin(m, 1, aig::Recover::PatternsAndAnds,
+                                          nullptr, false, true);
 
   // Three ANDs at 3 clauses / 7 literals each, plus the named output's two.
   EXPECT_EQ(plain.clauseCount(), 11u);
   EXPECT_EQ(plain.literalCount(), 25u);
   EXPECT_EQ(plain.varCount(), 1u + 3u + 1u + 3u);
 
-  EXPECT_EQ(folded.clauseCount(), 8u);
-  EXPECT_EQ(folded.literalCount(), 22u);
+  EXPECT_EQ(folded.clauseCount(), 6u);
+  EXPECT_EQ(folded.literalCount(), 16u);
   EXPECT_EQ(folded.varCount(), 1u + 3u + 1u + 1u);
+
+  EXPECT_EQ(complete.clauseCount(), 8u);
+  EXPECT_EQ(complete.literalCount(), 22u);
+  EXPECT_EQ(complete.varCount(), 1u + 3u + 1u + 1u);
 }
 
 // A MUX selecting between an arm and an operand of its own exclusive-or
