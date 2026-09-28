@@ -2915,7 +2915,18 @@ bool split_cvc_query(const std::string& text, std::string& without, std::string&
   }
   if (query_at == std::string::npos)
     return false;
-  const std::size_t end = text.find(';', query_at);
+  // its terminator: the first ';' after it outside a comment
+  std::size_t end = std::string::npos;
+  in_comment = false;
+  for (std::size_t i = query_at + 5; i < text.size() && end == std::string::npos; ++i)
+  {
+    if (in_comment)
+      in_comment = text[i] != '\n';
+    else if (text[i] == '%')
+      in_comment = true;
+    else if (text[i] == ';')
+      end = i;
+  }
   if (end == std::string::npos)
     return false;
   query = text.substr(query_at + 5, end - (query_at + 5));

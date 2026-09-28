@@ -82,6 +82,22 @@ TEST(libstp2_fidelity, a_false_query_parses_as_false)
   }
 }
 
+// A ';' in a comment inside the QUERY statement does not end it.
+TEST(libstp2_fidelity, a_comment_in_a_query_is_skipped)
+{
+  VC vc = vc_createValidityChecker();
+  Expr query = nullptr, asserts = nullptr;
+  ASSERT_EQ(1, vc_parseMemExpr(vc,
+                               "x : BITVECTOR(8); ASSERT(x = 0hex01); "
+                               "QUERY x = % ; a comment\n 0hex02;",
+                               &query, &asserts));
+  EXPECT_NE(std::string::npos, text_of(query).find("0x02")) << text_of(query);
+  EXPECT_EQ(0, vc_query(vc, query));
+  vc_DeleteExpr(query);
+  vc_DeleteExpr(asserts);
+  vc_Destroy(vc);
+}
+
 // vc_paramBoolExpr names its variable after the application as 2.x printed
 // it, so a one-bit and a four-bit parameter of one value name two variables.
 TEST(libstp2_fidelity, parameters_of_two_widths_name_two_variables)
