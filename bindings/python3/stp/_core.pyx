@@ -2344,6 +2344,11 @@ cdef class ModelHandle:
         if w == 0 or w % 8 != 0:
             raise ArgumentError("array_bytes needs a BV-indexed array whose element width is a multiple of 8",
                                 code=ErrorCode.INVALID_ARGUMENT, function="stp_model_array_bytes")
+        # A bytes object holds at most sys.maxsize bytes. Past that the size_t
+        # product below wraps, and the call would write beyond the allocation.
+        if count * (w // 8) > sys.maxsize:
+            raise DoesNotFit("array_bytes: %d elements of %d bytes do not fit a bytes object" % (count, w // 8),
+                             code=ErrorCode.DOES_NOT_FIT, function="stp_model_array_bytes")
         cdef bytes out = PyBytes_FromStringAndSize(NULL, n * (w // 8))
         if stp_model_array_bytes(self._h, t._h, <uint64_t>first_index, n, <uint8_t*><char*>out) != STP_OK:
             self._m._fail("stp_model_array_bytes")

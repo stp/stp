@@ -142,6 +142,12 @@ def test_array_values():
     words = Array("words", BitVecSort(8), BitVecSort(16))
     m4 = _model(words[0] == 0x1234)
     assert m4.array_bytes(words, 0, 2) == b"\x34\x12\x00\x00" and m4[words].as_bytes(0, 1) == b"\x34\x12"
+    # a count whose bytes no bytes object can hold is refused before anything is written
+    huge = Array("huge", BitVecSort(64), BitVecSort(64))
+    m5 = _model(huge[0] == 1)
+    for count in (2**61, 2**60):
+        with pytest.raises(OverflowError):
+            m5.array_bytes(huge, 0, count)
 
 
 def test_function_values():
