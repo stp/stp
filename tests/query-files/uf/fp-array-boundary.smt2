@@ -1,8 +1,8 @@
-; RUN: %solver --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
-; RUN: %solver --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
+; RUN: %solver --incremental=off %s 2>&1 | %OutputCheck %s
+; RUN: %solver --incremental=on %s 2>&1 | %OutputCheck %s
 ; CHECK: ^unsat
 ;
-(set-logic QF_ABVFP)
+(set-logic QF_AUFBVFP)
 (declare-fun f (Bool (_ BitVec 8) (_ BitVec 8)) (_ BitVec 4))
 (declare-const a (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-const i (_ BitVec 4))

@@ -313,10 +313,24 @@ size_t applyAxiomsToSolver(ToSATBase::ASTNodeToSATVar& satVar,
     return emitted;
   }
 
+  // A symbol that reached no SAT variable (an index used only under reads)
+  // gets fresh variables here, as the batch path's getSatVariables() would
+  // give it; the binding is then fixed for the rest of the check.
+  auto bindUnblastedSymbol = [&](const ASTNode& leaf) {
+    if (leaf.GetKind() != SYMBOL || satVar.find(leaf) != satVar.end())
+      return;
+    vector<unsigned> fresh;
+    getSatVariables(leaf, fresh, SatSolver, satVar);
+  };
+
   size_t emitted = 0;
   for (size_t i = 0; i < toBe.size(); i++)
   {
     const AxiomToBe& a = toBe[i];
+    bindUnblastedSymbol(a.index0);
+    bindUnblastedSymbol(a.index1);
+    bindUnblastedSymbol(a.value0);
+    bindUnblastedSymbol(a.value1);
     if (!progress->claim(a.index0, a.index1, a.value0, a.value1, satVar))
       continue;
     applyAxiomToSAT(SatSolver, toBe[i], satVar);

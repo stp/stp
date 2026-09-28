@@ -372,7 +372,8 @@ namespace stp
     return fallback;
   }
 
-  // Mathematical Real names are keywords only in QF_LRA and QF_UFLRA.
+  // Mathematical Real names are keywords only in QF_LRA, QF_UFLRA and
+  // QF_AUFLRA.
   // Outside those logics they retain the ordinary identifier behavior
   // required by the existing BV/FP grammars (notably '-' and '/' in to_fp
   // literals).

@@ -1,4 +1,4 @@
-(set-logic QF_UFABVFP)
+(set-logic QF_AUFBVFP)
 (declare-fun ok-rm (RoundingMode) Bool)
 (declare-fun ok-fp ((_ FloatingPoint 8 24)) Bool)
 (declare-fun p (Bool (_ BitVec 8)) Bool)
