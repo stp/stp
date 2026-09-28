@@ -88,6 +88,32 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.py
 # FIXME: the concrete binary filename should be obtained via generator
 #         expressions, but they can't be used for now due to bugs in older
 #         versions of CMake
+get_filename_component(STP_PYTHON_PACKAGE_INSTALL_DIR
+                       "${PYTHON_LIB_INSTALL_DIR}/stp" ABSOLUTE)
+if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
+  set(STP_LIBRARY_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}")
+else()
+  set(STP_LIBRARY_INSTALL_DIR
+      "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+endif()
+if(IS_ABSOLUTE "${CMAKE_INSTALL_BINDIR}")
+  set(STP_RUNTIME_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}")
+else()
+  set(STP_RUNTIME_INSTALL_DIR
+      "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}")
+endif()
+get_filename_component(STP_LIBRARY_INSTALL_DIR
+                       "${STP_LIBRARY_INSTALL_DIR}" ABSOLUTE)
+get_filename_component(STP_RUNTIME_INSTALL_DIR
+                       "${STP_RUNTIME_INSTALL_DIR}" ABSOLUTE)
+file(RELATIVE_PATH STP_PYTHON_TO_INSTALL_LIBDIR
+     "${STP_PYTHON_PACKAGE_INSTALL_DIR}" "${STP_LIBRARY_INSTALL_DIR}")
+file(RELATIVE_PATH STP_PYTHON_TO_INSTALL_BINDIR
+     "${STP_PYTHON_PACKAGE_INSTALL_DIR}" "${STP_RUNTIME_INSTALL_DIR}")
+file(TO_CMAKE_PATH "${STP_PYTHON_TO_INSTALL_LIBDIR}"
+     STP_PYTHON_TO_INSTALL_LIBDIR)
+file(TO_CMAKE_PATH "${STP_PYTHON_TO_INSTALL_BINDIR}"
+     STP_PYTHON_TO_INSTALL_BINDIR)
 configure_file(library_path.py.in_install "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py" @ONLY)
 
 install(FILES "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/library_path.py"

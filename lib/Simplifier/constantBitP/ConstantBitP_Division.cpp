@@ -26,8 +26,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include "stp/Util/BitOps.h"
 #include <cstdint>
-#include <set>
 #include <stdexcept>
 
 namespace simplifier
@@ -35,11 +35,7 @@ namespace simplifier
 namespace constantBitP
 {
 using std::endl;
-using std::pair;
-using std::set;
 
-const bool debug_division = false;
-extern std::ostream& log;
 
 using stp::STPMgr;
 
@@ -61,45 +57,6 @@ enum Operation
 // a/b and a%b. a=bq +r. Where b!=0 implies r<b. Multiplication and addition
 // don't overflow.
 
-// returning true = conflict.
-// Fix value of a to b.
-bool fix(FixedBits& a, const FixedBits& b, const int i)
-{
-  if (!b.isFixed(i))
-    return false;
-
-  if (a.isFixed(i) && b.isFixed(i) && (a.getValue(i) ^ b.getValue(i)))
-    return true;
-
-  if (!a.isFixed(i) && b.isFixed(i))
-  {
-    a.setFixed(i, true);
-    a.setValue(i, b.getValue(i));
-    return false;
-  }
-
-  return false;
-}
-
-FixedBits cbvToFixedBits(stp::CBV low, unsigned width)
-{
-  FixedBits lowBits(width, false);
-  for (int i = width - 1; i >= 0; i--)
-  {
-    if (CONSTANTBV::BitVector_bit_test(low, i))
-    {
-      lowBits.setFixed(i, true);
-      lowBits.setValue(i, true);
-    }
-    else
-    {
-      lowBits.setFixed(i, true);
-      lowBits.setValue(i, false);
-    }
-  }
-  return lowBits;
-}
-
 namespace
 {
 // Bits of word w with global index below `bound`.
@@ -111,6 +68,28 @@ inline uint64_t rangeBelow(unsigned w, unsigned bound)
   if (base >= bound)
     return 0;
   return ((uint64_t)1 << (bound - base)) - 1;
+}
+
+// Fix into `a` the fixed low bits of the (at least as wide) `b` that `a`
+// lacks. True if a bit is fixed to different values in the two.
+bool fixFromLow(FixedBits& a, const FixedBits& b)
+{
+  assert(b.getWidth() >= a.getWidth());
+  const unsigned width = a.getWidth();
+  bool conflict = false;
+  for (unsigned w = 0; w * 64 < width; w++)
+  {
+    const uint64_t mask = rangeBelow(w, width);
+    uint64_t fa, va, fb, vb;
+    a.fillPackedWord(w, fa, va);
+    b.fillPackedWord(w, fb, vb);
+    if (fa & fb & (va ^ vb) & mask)
+      conflict = true;
+    const uint64_t add = fb & ~fa & mask;
+    if (add != 0)
+      a.fixWordBits(w, add, vb);
+  }
+  return conflict;
 }
 }
 
@@ -180,7 +159,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       const bool under2 = d1 < borrow;
       borrow = (under1 || under2) ? 1 : 0;
       if (d != 0)
-        bitLen = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+        bitLen = w * 64 + 64 - (unsigned)::stp::countLeadingZeroes64(d);
     }
     for (unsigned w = 0; w < words; w++)
     {
@@ -192,7 +171,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       maxAdm[w] &= ~forced0;
       while (forced0)
       {
-        const unsigned bit = __builtin_ctzll(forced0);
+        const unsigned bit = ::stp::countTrailingZeroes64(forced0);
         forced0 &= forced0 - 1;
         b.setFixed(w * 64 + bit, true);
         b.setValue(w * 64 + bit, false);
@@ -221,7 +200,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       const bool under2 = d1 < borrow;
       borrow = (under1 || under2) ? 1 : 0;
       if (d != 0)
-        bitLen = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+        bitLen = w * 64 + 64 - (unsigned)::stp::countLeadingZeroes64(d);
     }
     for (unsigned w = 0; w < words; w++)
     {
@@ -233,7 +212,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       bV[w] |= forced1;
       while (forced1)
       {
-        const unsigned bit = __builtin_ctzll(forced1);
+        const unsigned bit = ::stp::countTrailingZeroes64(forced1);
         forced1 &= forced1 - 1;
         b.setFixed(w * 64 + bit, true);
         b.setValue(w * 64 + bit, true);
@@ -249,7 +228,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       const uint64_t d = (lowW[w] ^ highW[w]) & rangeBelow(w, width);
       if (d != 0)
       {
-        firstDiffer = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+        firstDiffer = w * 64 + 64 - (unsigned)::stp::countLeadingZeroes64(d);
         break;
       }
     }
@@ -265,7 +244,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       changed |= newFix != 0;
       while (newFix)
       {
-        const unsigned bit = __builtin_ctzll(newFix);
+        const unsigned bit = ::stp::countTrailingZeroes64(newFix);
         newFix &= newFix - 1;
         b.setFixed(w * 64 + bit, true);
         b.setValue(w * 64 + bit, (lowW[w] >> bit) & 1);
@@ -280,9 +259,13 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
                                        FixedBits& output, STPMgr* bm,
                                        WhatIsOutput whatIs);
 
+// `divisorNonzero` lets a caller assert b >= 1 from outside the bits: the
+// zero-divisor case split runs this engine on its b != 0 branch with states
+// whose bits still admit zero.
 Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
                                       FixedBits& output, STPMgr* bm,
-                                      WhatIsOutput whatIs)
+                                      WhatIsOutput whatIs,
+                                      bool divisorNonzero = false)
 {
   assert(output.getWidth() == children[0]->getWidth());
   assert(output.getWidth() == children[1]->getWidth());
@@ -298,67 +281,65 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
   const unsigned width = a.getWidth();
 
-  stp::CBV minTop = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV maxTop = CONSTANTBV::BitVector_Create(width, true);
+  // One allocation for all fifteen scratch vectors.
+  stp::CBV* pool = CONSTANTBV::BitVector_Create_List(width, true, 15);
 
+  stp::CBV minTop = pool[0];
+  stp::CBV maxTop = pool[1];
   setUnsignedMinMax(a, minTop, maxTop);
 
-  stp::CBV minBottom = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV maxBottom = CONSTANTBV::BitVector_Create(width, true);
-
+  stp::CBV minBottom = pool[2];
+  stp::CBV maxBottom = pool[3];
   setUnsignedMinMax(b, minBottom, maxBottom);
+  if (divisorNonzero && CONSTANTBV::BitVector_is_empty(minBottom))
+  {
+    CONSTANTBV::BitVector_increment(minBottom);
+    if (CONSTANTBV::BitVector_Lexicompare(minBottom, maxBottom) > 0)
+    {
+      // The divisor is fixed to zero, so the caller's b != 0 branch holds
+      // no state at all. Without this exit the loop below divides by
+      // maxBottom, which is zero.
+      CONSTANTBV::BitVector_Destroy_List(pool, 15);
+      return CONFLICT;
+    }
+  }
 
-  stp::CBV minQuotient = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV maxQuotient = CONSTANTBV::BitVector_Create(width, true);
-
-  stp::CBV minRemainder = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV maxRemainder = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV minQuotient = pool[4];
+  stp::CBV maxQuotient = pool[5];
+  stp::CBV minRemainder = pool[6];
+  stp::CBV maxRemainder = pool[7];
 
   if (whatIs == QUOTIENT_IS_OUTPUT)
   {
     setUnsignedMinMax(output, minQuotient, maxQuotient);
-
-    for (unsigned i = 0; i < width; i++)
-      CONSTANTBV::BitVector_Bit_On(maxRemainder, i);
+    CONSTANTBV::BitVector_Fill(maxRemainder);
   }
   else
   {
     setUnsignedMinMax(output, minRemainder, maxRemainder);
-
-    for (unsigned i = 0; i < width; i++)
-      CONSTANTBV::BitVector_Bit_On(maxQuotient, i);
+    CONSTANTBV::BitVector_Fill(maxQuotient);
   }
 
-  // need to clean up these at end.
-  stp::CBV one = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV one = pool[8];
   CONSTANTBV::BitVector_increment(one);
 
-  stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV max = pool[9];
   CONSTANTBV::BitVector_Fill(max);
 
   // quotient and remainder.
-  stp::CBV q = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV r = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV q = pool[10];
+  stp::CBV r = pool[11];
   // misc.
-  stp::CBV copy = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV copy2 = CONSTANTBV::BitVector_Create(width, true);
-  stp::CBV multR = CONSTANTBV::BitVector_Create(width, true);
+  stp::CBV copy = pool[12];
+  stp::CBV copy2 = pool[13];
+  stp::CBV multR = pool[14];
 
-  if (debug_division)
-  {
-    log << "--" << endl;
-    log << "initial" << endl;
-    log << "a:[" << *minTop << "," << *maxTop << "]";
-    log << " / b:[" << *minBottom << "," << *maxBottom << "] = ";
-    log << "[" << *minQuotient << "," << *maxQuotient << "]";
-    log << " rem [" << *minRemainder << "," << *maxRemainder << "]";
-    log << endl;
-  }
 
   // If a bit is changed, then we fixed point again.
   bool bitEverChanged = false;
   bool bitJustChanged = true;
   Result result = NO_CHANGE;
+  bool stopRefinement = false;
 
   // We loop. There are 6 cases.
   while (bitJustChanged)
@@ -367,7 +348,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
     bool changed = true;
 
-    int iteration = 0;
     while (changed)
     {
       changed = false;
@@ -383,13 +363,16 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
         if (CONSTANTBV::BitVector_Lexicompare(minBottom, maxBottom) > 0)
         {
           result = CONFLICT;
-          goto end;
+          stopRefinement = true;
+          break;
         }
       }
 
       if (CONSTANTBV::BitVector_is_empty(minBottom))
       {
-        goto end; // Possible division by zero. Hard to work with..
+        // Possible division by zero. Hard to work with.
+        stopRefinement = true;
+        break;
       }
 
       bool carry_1 = false;
@@ -401,13 +384,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
         if (CONSTANTBV::BitVector_Lexicompare(minQuotient, q) < 0)
         {
-          if (debug_division)
-          {
-            log << "1 minQ) " << *minTop;
-            log << " / " << *maxBottom;
-            log << " = " << *q;
-            log << " r " << *r << endl;
-          }
 
           // min quotient is bigger. Bring in.
           CONSTANTBV::BitVector_Copy(minQuotient, q);
@@ -425,13 +401,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
       if (CONSTANTBV::BitVector_Lexicompare(maxQuotient, q) > 0)
       {
-        if (debug_division)
-        {
-          log << "2 maxQ) " << *maxTop;
-          log << " / " << *minBottom;
-          log << " = " << *q;
-          log << " r " << *r << endl;
-        }
 
         CONSTANTBV::BitVector_Copy(maxQuotient,
                                    q); // copy the reduced value in.
@@ -456,12 +425,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       if (e == CONSTANTBV::ErrCode_Ok &&
           CONSTANTBV::BitVector_Lexicompare(maxTop, multR) > 0)
       {
-        if (debug_division)
-        {
-          log << "3 maxT) " << *maxQuotient;
-          log << " * " << *maxBottom;
-          log << " = " << *multR << endl;
-        }
         CONSTANTBV::BitVector_Copy(maxTop, multR);
         changed = true;
       }
@@ -477,12 +440,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       if (e == CONSTANTBV::ErrCode_Ok &&
           CONSTANTBV::BitVector_Lexicompare(minTop, multR) < 0)
       {
-        if (debug_division)
-        {
-          log << "4 minT) " << *minQuotient;
-          log << " * " << *minBottom;
-          log << " = " << *multR << endl;
-        }
         CONSTANTBV::BitVector_Copy(minTop, multR);
         changed = true;
       }
@@ -497,13 +454,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
         if (CONSTANTBV::BitVector_Lexicompare(maxBottom, q) > 0)
         {
-          if (debug_division)
-          {
-            log << "5 maxB) " << *maxTop;
-            log << " / " << *minQuotient;
-            log << " = " << *q;
-            log << " r " << *r << endl;
-          }
 
           // min quotient is bigger. Bring in.
           CONSTANTBV::BitVector_Copy(maxBottom, q);
@@ -534,12 +484,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
             if (!carry && (CONSTANTBV::BitVector_Lexicompare(minBottom, q) < 0))
             {
 
-              if (debug_division)
-              {
-                log << "6 min_3_B) ";
-                log << "minBottom" << *minBottom << " ";
-                log << "q" << *q << endl;
-              }
 
               // min quotient is bigger. Bring in.
               CONSTANTBV::BitVector_Copy(minBottom, q);
@@ -552,40 +496,17 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       // Don't know why we don't need to check the intervals on the others?
       if (CONSTANTBV::BitVector_Lexicompare(minQuotient, maxQuotient) > 0)
       {
-        if (debug_division)
-        {
-          log << "conflict" << endl;
-          log << "a:[" << *minTop << "," << *maxTop << "]";
-          log << " / b:[" << *minBottom << "," << *maxBottom << "] = ";
-          log << "[" << *minQuotient << "," << *maxQuotient << "]";
-          log << endl;
-        }
 
         result = CONFLICT;
-        goto end;
+        stopRefinement = true;
+        break;
       }
 
-      if (debug_division)
-      {
-        log << "intermediate" << endl;
-        log << "a:[" << *minTop << "," << *maxTop << "]";
-        log << " / b:[" << *minBottom << "," << *maxBottom << "] = ";
-        log << "[" << *minQuotient << "," << *maxQuotient << "]";
-        log << endl;
-      }
-      iteration++;
-      // if (iteration==2 && changed)
-      // exit(1);
     }
 
-    if (debug_division)
-    {
-      log << "final" << endl;
-      log << "a:[" << *minTop << "," << *maxTop << "]";
-      log << " / b:[" << *minBottom << "," << *maxBottom << "] = ";
-      log << "[" << *minQuotient << "," << *maxQuotient << "]";
-      log << endl;
-    }
+    if (stopRefinement)
+      break;
+
 
     {
       Result r1 = fix(a, minTop, maxTop);
@@ -610,7 +531,7 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       if (r1 == CONFLICT || r2 == CONFLICT || r3 == CONFLICT)
       {
         result = CONFLICT;
-        goto end;
+        break;
       }
       assert(result != CONFLICT);
 
@@ -664,25 +585,7 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
     }
   }
 
-end:
-  // Destroy range variables.
-  CONSTANTBV::BitVector_Destroy(minTop);
-  CONSTANTBV::BitVector_Destroy(maxTop);
-  CONSTANTBV::BitVector_Destroy(minBottom);
-  CONSTANTBV::BitVector_Destroy(maxBottom);
-  CONSTANTBV::BitVector_Destroy(minQuotient);
-  CONSTANTBV::BitVector_Destroy(maxQuotient);
-  CONSTANTBV::BitVector_Destroy(minRemainder);
-  CONSTANTBV::BitVector_Destroy(maxRemainder);
-
-  // Destroy helpers.
-  CONSTANTBV::BitVector_Destroy(copy);
-  CONSTANTBV::BitVector_Destroy(copy2);
-  CONSTANTBV::BitVector_Destroy(multR);
-  CONSTANTBV::BitVector_Destroy(q);
-  CONSTANTBV::BitVector_Destroy(r);
-  CONSTANTBV::BitVector_Destroy(one);
-  CONSTANTBV::BitVector_Destroy(max);
+  CONSTANTBV::BitVector_Destroy_List(pool, 15);
 
   if (result == CONFLICT)
     return CONFLICT;
@@ -716,7 +619,10 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   a.copyIn(*children[0]);
   b.copyIn(*children[1]);
 
-  assert(!b.containsZero());
+  // b's bits may still admit zero: the constraint set below contains r < b,
+  // which excludes b = 0 on its own, so this engine always reasons under the
+  // divisor-nonzero branch of the relation. The zero-divisor case split in
+  // bvUnsignedModulusBothWays relies on exactly that.
 
   if (whatIs == QUOTIENT_IS_OUTPUT)
     q.copyIn(output);
@@ -729,24 +635,21 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   // change detection for the dependency-driven loop below.
   unsigned bCount, rCount, timesCount;
 
-  // Times and plus must not overflow.
-  for (unsigned i = (unsigned)output.getWidth(); i < newWidth; i++)
+  // Times and plus must not overflow: everything is zero extended, so the
+  // top halves are all fixed zeroes.
   {
-    // No overflow.
-    times.setFixed(i, true);
-    times.setValue(i, false);
-
-    // Everything is zero extended.
-    a.setFixed(i, true);
-    a.setValue(i, false);
-    b.setFixed(i, true);
-    b.setValue(i, false);
-
-    // Multiplication must not overflow.
-    r.setFixed(i, true);
-    r.setValue(i, false);
-    q.setFixed(i, true);
-    q.setValue(i, false);
+    const unsigned from = (unsigned)output.getWidth();
+    const unsigned words = (newWidth + 63) / 64;
+    FixedBits* widened[] = {&times, &a, &b, &r, &q};
+    for (unsigned w = from / 64; w < words; w++)
+    {
+      const uint64_t high =
+          rangeBelow(w, newWidth) & ~rangeBelow(w, from);
+      if (high == 0)
+        continue;
+      for (FixedBits* x : widened)
+        x->fixWordBits(w, high, 0);
+    }
   }
 
   // True bit.
@@ -774,11 +677,6 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   bool ltDirty = true, multDirty = true, addDirty = true;
   while (ltDirty || multDirty || addDirty)
   {
-    if (debug_division)
-    {
-      log << "p1:" << a << "/" << b << "=" << q << "rem(" << r << ")" << endl;
-      log << "times" << times << endl;
-    }
 
     if (ltDirty)
     {
@@ -824,21 +722,10 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   }
 
   bool conflict = false;
-  for (unsigned i = 0; i < output.getWidth(); i++)
-  {
-    if (whatIs == QUOTIENT_IS_OUTPUT)
-      conflict |= fix(output, q, i);
-    else if (whatIs == REMAINDER_IS_OUTPUT)
-      conflict |= fix(output, r, i);
-    else
-      throw std::runtime_error("sdjjfas");
+  conflict |= fixFromLow(output, (whatIs == QUOTIENT_IS_OUTPUT) ? q : r);
+  conflict |= fixFromLow(*children[0], a);
+  conflict |= fixFromLow(*children[1], b);
 
-    conflict |= fix(*children[0], a, i);
-    conflict |= fix(*children[1], b, i);
-  }
-
-  if (debug_division)
-    cerr << endl;
 
   if (conflict)
     return CONFLICT;
@@ -846,8 +733,29 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   return NOT_IMPLEMENTED;
 }
 
-Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
-                                 FixedBits& output, STPMgr* bm)
+// Fix into `dst` every newly fixed bit of `src`, a state derived from dst
+// by propagation. `conflict` is raised when the two disagree on a fixed
+// bit: impossible for distinct operands, but the operands may be one
+// aliased object -- x udiv x reaches here with children[0] and children[1]
+// the same FixedBits -- and then the two branch copies can force one bit
+// each way, which says the combined state has no solution at all.
+static bool adoptFixings(FixedBits& dst, const FixedBits& src, bool& conflict)
+{
+  bool changed = false;
+  for (unsigned i = 0; i < dst.getWidth(); i++)
+    if (src.isFixed(i) && !dst.isFixed(i))
+    {
+      dst.setFixed(i, true);
+      dst.setValue(i, src.getValue(i));
+      changed = true;
+    }
+    else if (src.isFixed(i) && dst.getValue(i) != src.getValue(i))
+      conflict = true;
+  return changed;
+}
+
+static Result bvUnsignedModulusOnce(vector<FixedBits*>& children,
+                                    FixedBits& output, STPMgr* bm)
 {
 
   Result r1 = NO_CHANGE;
@@ -860,28 +768,83 @@ Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
   r1 = bvLessThanEqualsBothWays(v, truN);
 
   if (children[1]->containsZero())
-    return r1;
+  {
+    // Case split on the divisor. The b = 0 branch forces r = a bit for bit;
+    // the b != 0 branch is the a = q*b + r, r < b engine, whose r < b
+    // constraint assumes exactly that branch. What both force is forced; a
+    // dead branch decides the divisor.
+    FixedBits& a = *children[0];
+    FixedBits& b = *children[1];
+    const unsigned width = output.getWidth();
 
-  if (debug_division)
-    log << *(children[0]) << "bvmod" << *(children[1]) << "=" << output << endl;
+    bool zeroBranchOk = true;
+    for (unsigned i = 0; i < width && zeroBranchOk; i++)
+      zeroBranchOk = !(a.isFixed(i) && output.isFixed(i) &&
+                       a.getValue(i) != output.getValue(i));
+
+    FixedBits aB(a), bB(b), oB(output);
+    vector<FixedBits*> copies;
+    copies.push_back(&aB);
+    copies.push_back(&bB);
+    const Result rB =
+        bvUnsignedQuotientAndRemainder(copies, oB, bm, REMAINDER_IS_OUTPUT);
+
+    if (!zeroBranchOk && rB == CONFLICT)
+      return CONFLICT;
+
+    bool changed = false;
+    const auto fixTo = [&changed](FixedBits& f, unsigned i, bool value) {
+      if (!f.isFixed(i))
+      {
+        f.setFixed(i, true);
+        f.setValue(i, value);
+        changed = true;
+      }
+    };
+    if (!zeroBranchOk)
+    {
+      // The remainder differs from the dividend, so the divisor is not zero.
+      bool aliasConflict = false;
+      changed |= adoptFixings(a, aB, aliasConflict);
+      changed |= adoptFixings(b, bB, aliasConflict);
+      changed |= adoptFixings(output, oB, aliasConflict);
+      if (aliasConflict)
+        return CONFLICT;
+    }
+    else if (rB == CONFLICT)
+    {
+      // No solution has a nonzero divisor: b = 0 and r = a, both ways.
+      for (unsigned i = 0; i < width; i++)
+      {
+        fixTo(b, i, false);
+        if (a.isFixed(i))
+          fixTo(output, i, a.getValue(i));
+        if (output.isFixed(i))
+          fixTo(a, i, output.getValue(i));
+      }
+    }
+    else
+    {
+      // Join. The zero branch forces b = 0, r_i = a_i where a_i is fixed,
+      // and a_i = r_i where r_i is fixed; a bit survives when the nonzero
+      // branch fixed it to the same value.
+      for (unsigned i = 0; i < width; i++)
+      {
+        if (bB.isFixed(i) && !bB.getValue(i))
+          fixTo(b, i, false);
+        if (a.isFixed(i) && oB.isFixed(i) &&
+            a.getValue(i) == oB.getValue(i))
+          fixTo(output, i, a.getValue(i));
+        if (output.isFixed(i) && aB.isFixed(i) &&
+            output.getValue(i) == aB.getValue(i))
+          fixTo(a, i, output.getValue(i));
+      }
+    }
+    return merge(changed ? CHANGED : NO_CHANGE, r1);
+  }
 
   Result r =
       bvUnsignedQuotientAndRemainder(children, output, bm, REMAINDER_IS_OUTPUT);
-
-  // Doesn't even do constant propagation.
-  // <10>bvmod<11>=<-->
-  if (r != CONFLICT && children[0]->isTotallyFixed() &&
-      children[1]->isTotallyFixed() && !output.isTotallyFixed())
-  {
-
-    if (debug_division)
-    {
-      log << "Not even constant prop!" << *(children[0]) << "bvmod"
-          << *(children[1]) << "=" << output << endl;
-    }
-
-    // assert(output.isTotallyFixed());
-  }
 
   // bvUnsignedQuotientAndRemainder can fix bits yet report NOT_IMPLEMENTED,
   // so never let a NO_CHANGE from the comparison above win over it: the
@@ -889,38 +852,171 @@ Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
   return merge(r, r1);
 }
 
-Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
-                                  FixedBits& output, STPMgr* bm)
+static Result bvUnsignedDivisionOnce(vector<FixedBits*>& children,
+                                     FixedBits& output, STPMgr* bm)
 {
   Result r0 = NO_CHANGE;
 
   if (children[1]->containsZero())
-    return r0; // TODO fix so we learn something if we might be dividing by zero..
-
-  // Enforce that the output must be less than the numerator.
-  for (int i = children[0]->getWidth() - 1; i >= 0; i--)
   {
-    if (children[0]->isFixedToZero(i))
+    // Case split on the divisor. The b = 0 branch is exact on its own:
+    // b = 0, q all ones, the dividend free. The b != 0 branch reruns this
+    // function on copies whose interval engine is seeded past zero. What
+    // both branches force is forced; a dead branch decides the divisor.
+    FixedBits& b = *children[1];
+    const unsigned width = output.getWidth();
+
+    bool zeroBranchOk = true;
+    for (unsigned i = 0; i < width && zeroBranchOk; i++)
+      zeroBranchOk = !(output.isFixed(i) && !output.getValue(i));
+
+    FixedBits aB(*children[0]), bB(b), oB(output);
+    vector<FixedBits*> copies;
+    copies.push_back(&aB);
+    copies.push_back(&bB);
+    const Result rB =
+        bvUnsignedQuotientAndRemainder(copies, oB, bm, QUOTIENT_IS_OUTPUT,
+                                       /*divisorNonzero=*/true);
+
+    if (!zeroBranchOk && rB == CONFLICT)
+      return CONFLICT;
+
+    bool changed = false;
+    bool aliasConflict = false;
+    if (!zeroBranchOk)
     {
-      if (output.isFixedToOne(i))
+      // The quotient cannot be all ones, so the divisor is not zero.
+      changed |= adoptFixings(*children[0], aB, aliasConflict);
+      changed |= adoptFixings(b, bB, aliasConflict);
+      changed |= adoptFixings(output, oB, aliasConflict);
+      if (aliasConflict)
         return CONFLICT;
-      else if (!output.isFixed(i))
+    }
+    else if (rB == CONFLICT)
+    {
+      // No solution has a nonzero divisor: b = 0 and q = all ones.
+      for (unsigned i = 0; i < width; i++)
       {
-        output.setFixed(i, true);
-        output.setValue(i, false);
-        r0 = CHANGED;
+        if (!b.isFixed(i))
+        {
+          b.setFixed(i, true);
+          b.setValue(i, false);
+          changed = true;
+        }
+        if (!output.isFixed(i))
+        {
+          output.setFixed(i, true);
+          output.setValue(i, true);
+          changed = true;
+        }
       }
     }
     else
     {
-      break;
+      // Join: the zero branch forces b = 0 and q = 1, so a bit survives
+      // exactly when the nonzero branch fixed it to the same value. The
+      // dividend is free in the zero branch, so nothing of it survives.
+      for (unsigned i = 0; i < width; i++)
+      {
+        if (!b.isFixed(i) && bB.isFixed(i) && !bB.getValue(i))
+        {
+          b.setFixed(i, true);
+          b.setValue(i, false);
+          changed = true;
+        }
+        if (!output.isFixed(i) && oB.isFixed(i) && oB.getValue(i))
+        {
+          output.setFixed(i, true);
+          output.setValue(i, true);
+          changed = true;
+        }
+      }
     }
+    return changed ? CHANGED : NO_CHANGE;
+  }
+
+  // Enforce that the output must be less than the numerator: the
+  // numerator's leading fixed zeroes are the quotient's too.
+  {
+    const unsigned width = children[0]->getWidth();
+    const unsigned from = children[0]->topmostPossibleLeadingOne() + 1;
+    const unsigned words = (width + 63) / 64;
+    // The bit-at-a-time original fixed from the top down and reported a
+    // conflict at the first output bit fixed to one, leaving the bits
+    // above it fixed.
+    unsigned conflictAt = width;
+    for (int w = (int)words - 1; w >= (int)(from / 64) && w >= 0; w--)
+    {
+      const uint64_t range = rangeBelow(w, width) & ~rangeBelow(w, from);
+      uint64_t fo, vo;
+      output.fillPackedWord(w, fo, vo);
+      const uint64_t ones = vo & range;
+      const uint64_t add =
+          ~fo & range &
+          (ones != 0 ? ~rangeBelow(w, w * 64 + 64 - ::stp::countLeadingZeroes64(ones))
+                     : ~(uint64_t)0);
+      if (add != 0)
+      {
+        output.fixWordBits(w, add, 0);
+        r0 = CHANGED;
+      }
+      if (ones != 0)
+      {
+        conflictAt = w * 64 + 63 - ::stp::countLeadingZeroes64(ones);
+        break;
+      }
+    }
+    if (conflictAt != width)
+      return CONFLICT;
   }
 
   Result r =
       bvUnsignedQuotientAndRemainder(children, output, bm, QUOTIENT_IS_OUTPUT);
 
   return merge(r0, r);
+}
+
+
+// The case split above is not idempotent: a pass can decide the divisor and
+// leave the ordinary engine, on the next entry, with more to derive. Run to
+// a fixed point so one call settles -- fixing is monotone, so the count of
+// fixed bits bounds the passes.
+Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
+                                  FixedBits& output, STPMgr* bm)
+{
+  Result overall = NO_CHANGE;
+  while (true)
+  {
+    const unsigned before = children[0]->countFixed() +
+                            children[1]->countFixed() + output.countFixed();
+    const Result r = bvUnsignedDivisionOnce(children, output, bm);
+    if (r == CONFLICT)
+      return CONFLICT;
+    overall = merge(overall, r);
+    if (children[0]->countFixed() + children[1]->countFixed() +
+            output.countFixed() ==
+        before)
+      return overall;
+  }
+}
+
+Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
+                                 FixedBits& output, STPMgr* bm)
+{
+  Result overall = NO_CHANGE;
+  while (true)
+  {
+    const unsigned before = children[0]->countFixed() +
+                            children[1]->countFixed() + output.countFixed();
+    const Result r = bvUnsignedModulusOnce(children, output, bm);
+    if (r == CONFLICT)
+      return CONFLICT;
+    overall = merge(overall, r);
+    if (children[0]->countFixed() + children[1]->countFixed() +
+            output.countFixed() ==
+        before)
+      return overall;
+  }
 }
 
 bool canBe(const FixedBits& b, int index, bool value)
@@ -980,18 +1076,6 @@ struct Data
     tempB.setValue(signBit, bTop);
   }
 
-  void print()
-  {
-    cerr << "Working: ";
-    cerr << workingA << "/";
-    cerr << workingB << "=";
-    cerr << workingOutput << endl;
-
-    cerr << "Temps:    ";
-    cerr << tempA << "/";
-    cerr << tempB << "=";
-    cerr << tempOutput << endl;
-  }
 };
 
 Result negate(FixedBits& input, FixedBits& output)
@@ -1043,13 +1127,6 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
 
   while (true)
   {
-    if (debug_division)
-    {
-      cerr << "start:";
-      cerr << a << "/";
-      cerr << b << "=";
-      cerr << output << endl;
-    }
 
     bool first = true;
 
@@ -1062,8 +1139,6 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
       r = tf(tempChildren, tempOutput, bm);
       if (r != CONFLICT)
       {
-        if (debug_division)
-          cerr << "case A" << endl;
         data.process(first);
       }
     }
@@ -1111,12 +1186,10 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
             negChildren.push_back(&tempA);
             // cerr << negA << " " << tempA << endl;
             r = bvUnaryMinusBothWays(negChildren, negA);
-            // data.print();
+
             if (r != CONFLICT)
             {
 
-              if (debug_division)
-                cerr << "case B" << endl;
 
               data.process(first);
             }
@@ -1177,8 +1250,6 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
             r = bvUnaryMinusBothWays(negChildren, negB);
             if (r != CONFLICT)
             {
-              if (debug_division)
-                cerr << "case C" << endl;
 
               data.process(first);
             }
@@ -1231,7 +1302,7 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
           negChildren.clear();
           negChildren.push_back(&tempA);
           r = bvUnaryMinusBothWays(negChildren, negA);
-          // data.print();
+
           if (r != CONFLICT)
           {
             if (op == SIGNED_REMAINDER)
@@ -1243,8 +1314,6 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
 
             if (r != CONFLICT)
             {
-              if (debug_division)
-                cerr << "case D" << endl;
 
               data.process(first);
             }
@@ -1366,14 +1435,15 @@ static Result bvSignedModulusStructural(vector<FixedBits*>& children,
   {
     if (!fixBitTo(output, sign, false))
       return CONFLICT;
-    int highest = -1; // highest divisor bit that might be one.
-    for (int i = (int)sign - 1; i >= 0; i--)
+    // highest divisor bit that might be one; `sign` means there is none.
+    unsigned highest = sign;
+    for (unsigned i = sign; i-- > 0;)
       if (!b.isFixedToZero(i))
       {
         highest = i;
         break;
       }
-    assert(highest >= 0); // b is non-zero with a zero sign bit.
+    assert(highest < sign); // b is non-zero with a zero sign bit.
     // divisor <= 2^(highest+1)-1, so result <= 2^(highest+1)-2: the bits
     // above `highest` are zero.
     for (unsigned i = highest + 1; i < sign; i++)
@@ -1675,19 +1745,39 @@ Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
     return NO_CHANGE;
   }
 
-  const Result r0 = bvSignedModulusStructural(children, output, bm);
-  if (CONFLICT == r0)
-    return CONFLICT;
+  // Iterate the two passes to an internal fixed point. A single decompose
+  // pass can fix operand bits whose consequences only a re-run sees: an
+  // output fixed to a value no divisor admits first forces the dividend,
+  // and only the next pass notices the contradiction. propagate() gives
+  // each node exactly one call, so a state this function would itself
+  // refute must not survive the return. Terminates because a CHANGED pass
+  // fixes at least one more bit, bounded by 3 * width.
+  bool changed = false;
+  while (true)
+  {
+    const Result r0 = bvSignedModulusStructural(children, output, bm);
+    if (CONFLICT == r0)
+      return CONFLICT;
 
-  // The sign-case decomposition is expensive and deduces little when the
-  // divisor may be zero; bail out early like the other signed operations.
-  if (children[1]->containsZero())
-    return r0;
+    // The sign-case decomposition is expensive and deduces little when the
+    // divisor may be zero; skip it like the other signed operations.
+    if (children[1]->containsZero())
+    {
+      if (r0 != CHANGED)
+        break;
+      changed = true;
+      continue;
+    }
 
-  const Result r1 = bvSignedModulusDecompose(children, output, bm);
-  if (CONFLICT == r1)
-    return CONFLICT;
-  return merge(r0, r1);
+    const Result r1 = bvSignedModulusDecompose(children, output, bm);
+    if (CONFLICT == r1)
+      return CONFLICT;
+
+    if (r0 != CHANGED && r1 != CHANGED)
+      break;
+    changed = true;
+  }
+  return changed ? CHANGED : NO_CHANGE;
 }
 
 Result bvSignedRemainderBothWays(vector<FixedBits*>& children,

@@ -60,7 +60,7 @@ class UnsignedIntervalSetAnalysis
 public:
   UnsignedIntervalSetAnalysis(STPMgr& _bm,
                               unsigned cap_ = UnsignedIntervalSet::DEFAULT_CAP)
-      : bm(_bm), ia(_bm), cap(cap_)
+      : bm(_bm), cap(cap_)
   {
   }
 

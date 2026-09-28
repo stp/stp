@@ -30,13 +30,25 @@ THE SOFTWARE.
   This implements sharing aware rewrites. It's different to other simplifiers in STP, which apply
   the rewrites then check later if it's better, and revert if not. This one is like hill climbing.
 
-  Some rules in here don't need to be sharing aware and can be moved into the node factory
+  Rules that are both sharing-independent and size-neutral belong in the
+  SimplifyingNodeFactory instead, where they apply on every node creation.
+
+  Every rule here should leave the node count the same or smaller, using the
+  share count to prove that the nodes it replaces really die. The one
+  deliberate exception is the comparison-vs-plus splitting rules, which add
+  a single node in exchange for eliminating a plus from under a comparison --
+  a large win on the difficulty score.
 */
 
 
 
 #include "stp/Simplifier/Rewriting.h"
+#include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/SubstitutionMap.h"
+#include "stp/Util/DagWalk.h"
 #include <list>
+#include <deque>
+#include <vector>
 
 namespace stp
 {
@@ -63,77 +75,29 @@ namespace stp
   }
 
   // counter is 1 if the node has one reference in the tree.
+  //
+  // The walk is iterative because the input decides how deep it goes, and
+  // deep inputs exist: a call per level of the DAG exhausts the stack. The
+  // continuation stack holds pointers into each node's own child storage,
+  // which the node above keeps alive for the whole walk. It stores suspended
+  // ancestors, not every sibling in a wide frontier.
   void Rewriting::buildShareCount(const ASTNode& n)
   {
-    if (n.Degree() == 0)
-      return;
+    walkPreOrder(n, [&](const ASTNode& current) {
+      if (current.Degree() == 0)
+        return false;
 
-    if (shareCount[n.GetNodeNum()]++ > 0) // 0 first time, 1 second time.
-      return;
-  
-    for (const auto& c: n.GetChildren())
-        buildShareCount(c);
+      if (shareCount[current.GetNodeNum()]++ > 0) // 0 first time, 1 second.
+        return false;
+      return true;
+    });
   }
 
-  // true if popCount == 1.
-  bool singleOne(const ASTNode& n)
+  // Every sharing-aware rule, in order, applied to one node. Each rule
+  // sees what the rules before it produced. Nothing here descends into
+  // the DAG: the caller decides what to do with a node that changed.
+  ASTNode Rewriting::applyRules(ASTNode c)
   {
-      unsigned found = 0;
-      assert(n.GetKind() == BVCONST);
-      for (unsigned i = 0; i < n.GetValueWidth(); i++)
-        if (CONSTANTBV::BitVector_bit_test(n.GetBVConst(),i))
-          found++;
-      return (found == 1);
-  }
-
-
-  ASTNode Rewriting::rewrite(const ASTNode& n)
-  {
-    if (n.Degree() == 0)
-      return n;
-
-    if (fromTo.find(n.GetNodeNum()) != fromTo.end())
-      return fromTo[n.GetNodeNum()];
-
-    ASTNode result =n;
-
-    const ASTVec& children = n.GetChildren();
-    ASTVec newChildren;
-
-    // Copy on write.
-    bool changed =false;
-    auto fill = [&](const ASTNode& find)
-    {
-      newChildren.reserve(children.size());
-      const auto findIt = std::find(children.begin(), children.end(), find);
-      assert(findIt != children.end());
-      newChildren.insert(newChildren.end(), children.begin(), findIt);
-      changed=true;
-    };
-
-
-    for (auto c: children)
-    {
-     const ASTNode begin = c;
-     
-     c = rewrite(c);
-
-     const ASTNode start = c;
-
-     if (
-        c.GetKind() == EQ 
-        && c[0].GetKind() == BVCONST 
-        && c[1].GetKind() == BVPLUS  
-        && c[1].Degree() == 2
-        && c[1][0].GetKind() == BVCONST  
-        )
-     {
-          // combine constants on the lhs. Note because the plus is two arity, we don't consider sharing.
-          const auto width  =  c[0].GetValueWidth();
-          auto lhs = nf->CreateTerm(BVUMINUS, width, c[1][0]);
-          lhs = nf->CreateTerm(BVPLUS, width, lhs, c[0]);
-          c = nf->CreateNode(EQ, lhs, c[1][1]);             
-     }
 
      if (
         c.GetKind() == EQ 
@@ -173,58 +137,13 @@ namespace stp
           c = nf->CreateTerm(ITE, width, c[0][0], first, second);
      }
 
-     if (c.GetKind() == stp::BVCONCAT 
-         && c[0].GetKind() == BVCONCAT
-         && c[1].GetKind() == BVCONST 
-         && c[0][1].GetKind() == BVCONST 
-         )
-     {
-        // combine the concats with constants
-
-          const auto width  =  c.GetValueWidth();
-          const auto constants  =  nf->CreateTerm(BVCONCAT, c[0][1].GetValueWidth() + c[1].GetValueWidth() , c[0][1], c[1]);
-          c = nf->CreateTerm(BVCONCAT, width, c[0][0], constants);
-     }
-
-     if (c.GetKind() == stp::BVCONCAT 
-         && c[1].GetKind() == BVCONCAT
-         && c[0].GetKind() == BVCONST 
-         && c[1][0].GetKind() == BVCONST 
-         )
-     {
-        // combine the concats with constants
-
-          const auto width  =  c.GetValueWidth();
-          const auto constants  =  nf->CreateTerm(BVCONCAT, c[0].GetValueWidth() + c[1][0].GetValueWidth() , c[0], c[1][0]);
-          c = nf->CreateTerm(BVCONCAT, width, constants, c[1][1]);
-     }
-
-    if (c.GetKind() == BVEXTRACT
-        && c[0].GetKind() == BVMULT
-        && c[0].Degree() == 2
-        && c[0][0].GetKind() == BVCONST 
-        && singleOne(c[0][0])
-         )
-       {
-        // Push the extract through the multiplcation when the multiplication is the same as a left shift
-       
-         // Position of the single one.
-          unsigned position = 0;
-          while (!CONSTANTBV::BitVector_bit_test(c[0][0].GetBVConst(),position))
-            position++;
-
-          const auto zero = stpMgr->CreateZeroConst(position);
-          const auto concat =  nf->CreateTerm(BVCONCAT, c[0].GetValueWidth() + position, c[0][1], zero );
-          c = nf->CreateTerm(BVEXTRACT, c.GetValueWidth(), concat, c[1], c[2] );
-       }
-
       if (c.GetKind() == BVPLUS
         && c.Degree() == 2
         && c[0].GetKind() == BVCONST
         && c[1].GetKind() == ITE
         && c[1][1].GetKind() == BVCONST
         && c[1][2].GetKind() == BVCONST
-        && shareCount[c.GetNodeNum()] <= 1
+        && shareCount[c[1].GetNodeNum()] <= 1
        )
        {
         // Push the addition through the ITE.
@@ -252,18 +171,7 @@ namespace stp
           c = nf->CreateTerm(ITE, width, c[0][0], first, second);
        }
 
-      if ( 
-        c.GetKind() == BVEXTRACT
-        && c[0].GetKind() == BVNOT
-       )
-       {
-          // pull up bvnot
-           const auto width = c.GetValueWidth();
-           const auto extract = nf->CreateTerm(BVEXTRACT, width, c[0][0], c[1], c[2]);
-           c = nf->CreateTerm(BVNOT, width, extract);
-       }
-
-      if ( 
+      if (
         c.GetKind() == BVEXTRACT
         && c[0].GetKind() == BVXOR
         && c[0][0].GetKind() == BVCONST
@@ -306,11 +214,11 @@ namespace stp
        )
        {
 
-        for (int matching =0 ; matching < c[1][0].Degree(); matching++)
+        for (size_t matching =0 ; matching < c[1][0].Degree(); matching++)
           if (c[1][0][matching] == c[0])
           {
             ASTVec others;
-            for (int i =0 ; i < c[1][0].Degree(); i++)
+            for (size_t i =0 ; i < c[1][0].Degree(); i++)
               if (i != matching)
                 others.push_back(c[1][0][i]);
 
@@ -323,45 +231,27 @@ namespace stp
         }
 
       /*
-      (EQ 
-          7446:0b0
-          14748:(BVEXTRACT 
-            14712:(BVPLUS 
-              14710:0xFFFFFFAB
-              8816:(BVCONCAT 
-                7538:0x000000
-                1252:x7169))
-            8110:0x0000001F
-            8110:0x0000001F)))
-      */
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind() == BVCONST
-        && c[0].GetValueWidth() ==1
-        && c[1].GetKind() == BVEXTRACT
-        && c[1][1].GetUnsignedConst() == c[1][0].GetValueWidth() -1
-       )
-       {
-          if (c[0] == stpMgr->CreateZeroConst(1))
-            c = nf->CreateNode(BVSGE, c[1][0], nf->CreateZeroConst(c[1][0].GetValueWidth()));
-          else
-            c = nf->CreateNode(BVSLT, c[1][0], nf->CreateZeroConst(c[1][0].GetValueWidth()));
-
-       }
-
-      /*
-         (BVSGT 
+         (BVSGT
           7570:0x00000000
-          457798:(BVPLUS 
+          457798:(BVPLUS
             7820:0xFFFFFFD7
             [457708])))
+
+         These three comparison-splitting rules are the pass's one deliberate
+         exception to never increasing the node count: they add one node (two
+         comparisons and a connective replace one comparison), but eliminate
+         a plus from under the comparison, which is a large win on the
+         difficulty score (a comparison costs 6*width, a plus 11*width). The
+         single-use guard on the plus is what secures that win: if the plus
+         survived for another use, the extra comparison would be a pure loss.
       */
-      if ( 
+      if (
         c.GetKind() == BVSGT
         && c[0].GetKind() == BVCONST
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() ==2
         && c[1][0].GetKind() == BVCONST
+        && shareCount[c[1].GetNodeNum()] <= 1
        )
        {
           const auto width = c[0].GetValueWidth();
@@ -394,10 +284,11 @@ namespace stp
           */
        if (
           c.GetKind() == BVGT
-          && c[1].GetKind() == BVPLUS 
+          && c[1].GetKind() == BVPLUS
           && c[1].Degree() == 2
-          && c[0].isConstant() 
+          && c[0].isConstant()
           && c[1][0].isConstant()
+          && shareCount[c[1].GetNodeNum()] <= 1
           )
           {
             auto replacement = nf->CreateTerm(BVPLUS, c[0].GetValueWidth(), c[0], nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]));
@@ -424,10 +315,11 @@ namespace stp
 */
        if (
           c.GetKind() == BVGT
-          && c[0].GetKind() == BVPLUS 
+          && c[0].GetKind() == BVPLUS
           && c[0].Degree() == 2
-          && c[0][0].isConstant() 
+          && c[0][0].isConstant()
           && c[1].isConstant()
+          && shareCount[c[0].GetNodeNum()] <= 1
           )
           {
             auto replacement = nf->CreateTerm(BVPLUS, c[1].GetValueWidth(), c[1], nf->CreateTerm(BVUMINUS, c[1].GetValueWidth(), c[0][0]));
@@ -447,37 +339,6 @@ namespace stp
 
 
 
-      /*
-        1352830:(BVGT 
-          1280904:0x00000055
-          8816:(BVCONCAT 
-            7538:0x000000
-            1252:x7169))
-      */
-      if ( 
-        c.GetKind() == BVGT
-        && c[0].GetKind() == BVCONST
-        && c[1].GetKind() == BVCONCAT
-        && c[1][0].GetKind() == BVCONST
-       )
-       {
-           auto extract = nf->CreateTerm(BVEXTRACT, 
-                                              c[1][0].GetValueWidth(), 
-                                              c[0], 
-                                              stpMgr->CreateBVConst(32, c[0].GetValueWidth() -1), 
-                                              stpMgr->CreateBVConst(32, c[1][1].GetValueWidth()));
-          const auto eq = nf->CreateNode(EQ, extract, c[1][0]);
-          if (eq == stpMgr->ASTTrue)
-          {
-           auto extract = nf->CreateTerm(BVEXTRACT, 
-                                              c[1][1].GetValueWidth(), 
-                                              c[0], 
-                                              stpMgr->CreateBVConst(32, c[1][1].GetValueWidth() -1), 
-                                              stpMgr->CreateBVConst(32, 0) );
-          c = nf->CreateNode(BVGT, extract, c[1][1]);
-          }
-       }
-
 /*
         1146098:(BVAND 
           1021514:0xFFFF80861DA6915D
@@ -486,8 +347,9 @@ namespace stp
             35090:0xFFFFFFFFFFFFFFFE
             7186:0xFFFFFFFFFFFFFFFF))))))
             */
-      if ( 
+      if (
         c.GetKind() == BVAND
+        && c.Degree() == 2
         && c[0].GetKind() == BVCONST
         && c[1].GetKind() == ITE
         && c[1][1].GetKind() == BVCONST
@@ -535,82 +397,41 @@ namespace stp
                 89066:0x00007F79E2596EA3
                 34042:0x00007F79E2596EA2))))
         */
-      if ( 
+      /*
+        0 = (a + b)  -->  (bvuminus a) = b.
+
+        The single-use guard on the plus keeps this non-increasing: the plus
+        dies and one bvuminus is born. The node factory then often folds the
+        bvuminus away: a bvuminus operand cancels, two bvuminuses cancel
+        across the equality, and a single-use ITE of constants absorbs it (the
+        rule above), which is what the examples show. e.g.
+
+        1149196:(EQ
+          6780:0x0000000000000000
+          1149194:(BVPLUS
+            1149154:(ITE
+              1149092:(EQ
+                3678:file_file_smt2_1287
+                1090576:0x2B)
+              118964:0x00007F79E2596EA5
+              118918:0x00007F79E2596EA4)
+            1149190:(ITE
+              [1149092]
+              1024228:0xFFFF80861DA6915B
+              1145390:0xFFFF80861DA6915C)))
+      */
+      if (
         c.GetKind() == EQ
         && c[0].GetKind() == BVCONST
         && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() == 2
-        && c[1][0].GetKind() == BVUMINUS
         && shareCount[c[1].GetNodeNum()] <= 1
        )
        {
-        c = nf->CreateNode(EQ, c[1][0][0], c[1][1]);
-       }
-      
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind() == BVCONST
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
-        && c[1].GetKind() == BVPLUS
-        && c[1].Degree() == 2
-        && c[1][1].GetKind() == BVUMINUS
-        && shareCount[c[1].GetNodeNum()] <= 1
-       )
-       {
-        c = nf->CreateNode(EQ, c[1][1][0], c[1][0]);
-       }
-
-/*
-1085202:(EQ 
-    6528:0b0
-    1085200:(BVAND 
-    */
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind() == BVCONST
-        && c[0].GetValueWidth() ==1
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
-        && c[1].GetKind() == BVAND
-        && shareCount[c[1].GetNodeNum()] <= 1
-       )
-       {
-          ASTVec children;
-          for (const auto& node : c[1])
-            children.push_back(nf->CreateNode(EQ, c[0],node));
-          c = nf->CreateNode(OR, children);
-       }
-/*
-  1149196:(EQ 
-    6780:0x0000000000000000
-    1149194:(BVPLUS 
-      1149154:(ITE 
-        1149092:(EQ 
-          3678:file_file_smt2_1287
-          1090576:0x2B)
-        118964:0x00007F79E2596EA5
-        118918:0x00007F79E2596EA4)
-      1149190:(ITE 
-        [1149092]
-        1024228:0xFFFF80861DA6915B
-        1145390:0xFFFF80861DA6915C)))
-*/
-      if ( 
-        c.GetKind() == EQ
-        && c[0].GetKind()  == BVCONST
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
-
-        && c[1].GetKind() == BVPLUS
-        && c[1].Degree() == 2
-        && c[1][0].GetKind() == ITE
-        && c[1][0][1].GetKind() == BVCONST
-        && c[1][0][2].GetKind() == BVCONST
-        && shareCount[c[0].GetNodeNum()] <= 1
-       )
-       {
-          const auto uminus = nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]);
-          c = nf->CreateNode(EQ, uminus, c[1][1]);
-
+        const auto uminus =
+            nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]);
+        c = nf->CreateNode(EQ, uminus, c[1][1]);
        }
 
    /*
@@ -656,78 +477,6 @@ namespace stp
           c = nf->CreateNode(ITE, c[1][0], ite1, ite2);
        }
       
-      /*
-  2180186:(XOR 
-    363814:var_5736
-    (OR 
-          363815:(NOT 363814:var_5736)
-          378221:(NOT 378220:var_8137))))
-      */
-      if ( 
-        c.GetKind() == XOR
-        && c.Degree() ==2
-        && c[1].GetKind() == OR
-        && c[1].Degree() ==2
-        && c[1][0].GetKind() == NOT
-        && c[1][0][0] == c[0]
-        )
-        {
-          c = nf->CreateNode(OR, nf->CreateNode(NOT, c[1][1]), c[1][0]);
-        }
-
-/*
-            5254:(BVMULT 
-              1970:0x0100
-              5242:(BVCONCAT 
-                1402:0x00
-                1296:T1@2147)))))
-*/
-    if (c.GetKind() == BVMULT
-        && c[0].GetKind() == BVCONST 
-        && singleOne(c[0])
-        && c[1].GetKind() == BVCONCAT
-        && c[1][0].GetKind() == BVCONST
-        )
-       {
-         // Position of the single one.
-          unsigned position = 0;
-          while (!CONSTANTBV::BitVector_bit_test(c[0].GetBVConst(),position))
-            position++;
-
-          if (position == c[1][0].GetValueWidth())
-            c = nf->CreateTerm(BVCONCAT, c.GetValueWidth(), c[1][1], nf->CreateZeroConst(c[1][0].GetValueWidth()));
-       }
-
-/*
-117334:(BVOR 
-      1434:0x0000
-      2594:(BVCONCAT 
-        1402:0x00
-        384:T1@362))))
-*/
-    if (c.GetKind() == BVOR
-        && c[0].GetKind() == BVCONST 
-        && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())        
-        )
-          c = c[1];
-  
-/*
-126402:(BVGT 
-      126400:0x00000017
-      126384:(BVUMINUS 
-        [126340]))
-        */
-    if (c.GetKind() == BVGT
-        && c[0].GetKind() == BVCONST 
-        && c[1].GetKind() == BVUMINUS
-        && shareCount[c[1].GetNodeNum()] <= 1
-        )
-        {
-          const auto width = c[1].GetValueWidth();
-          const auto eq = nf->CreateNode(EQ, c[1][0], nf->CreateZeroConst(width));
-          c = nf->CreateNode(OR, eq, nf->CreateNode(BVLT, nf->CreateTerm(BVUMINUS, width, c[0]), c[1][0]));
-        }
-
 /*
         136180:(BVPLUS 
           136158:(BVPLUS 
@@ -737,17 +486,18 @@ namespace stp
             108086:0x00000096
         */
     if (c.GetKind() == BVPLUS
+        && c.Degree() == 2
         && c[0].GetKind() == BVPLUS
         && c[0].Degree() == 2
         && c[0][0].GetKind() == BVCONST
-        
+
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() == 2
         && c[1][0].GetKind() == BVCONST
-        
+
         && shareCount[c[0].GetNodeNum()] <= 1
         && shareCount[c[1].GetNodeNum()] <= 1
-       
+
         )
         {
           const auto width = c[0].GetValueWidth();
@@ -784,33 +534,136 @@ namespace stp
         }
 
 /*
-  136896:(OR 
-    [127666]
-    127713:(NOT 127712:(OR 
-      [127666]
-      ...)))
-        */
-    if (c.GetKind() == OR
-        && c[0].Degree() == 2
-        && c[1].GetKind() == NOT
-        && c[1][0].GetKind() == OR
-        && c[1][0].Degree() == 2
-        && c[0] == c[1][0][0]
-        )
-        {
-          c = nf->CreateNode(OR, c[0], nf->CreateNode(NOT, c[1][0][1] ));
-        }
+  (c1 * x) = c0        -->  x = (c1^-1 * c0),        for odd c1.
+  (c1 * x) = (c2 * y)  -->  x = ((c1^-1 * c2) * y),  for odd c1.
+
+  Multiplication by an odd constant is a bijection mod 2^w, so multiplying
+  both sides by the inverse preserves the equality. The multiplication on
+  the c1 side disappears outright.
+*/
+    if (c.GetKind() == EQ)
+      for (unsigned i = 0; i < 2; i++)
+      {
+        const ASTNode& mult = c[i];
+        const ASTNode& other = c[1 - i];
+
+        if (mult.GetKind() != BVMULT || mult.Degree() != 2 ||
+            mult[0].GetKind() != BVCONST ||
+            !CONSTANTBV::BitVector_bit_test(mult[0].GetBVConst(), 0) ||
+            shareCount[mult.GetNodeNum()] > 1)
+          continue;
+
+        const bool otherIsConst = other.GetKind() == BVCONST;
+        // The other side's multiplication dies too (it's rebuilt with a
+        // different constant), so it must also be unshared.
+        const bool otherIsMult =
+            other.GetKind() == BVMULT && other.Degree() == 2 &&
+            other[0].GetKind() == BVCONST &&
+            shareCount[other.GetNodeNum()] <= 1;
+
+        if (!otherIsConst && !otherIsMult)
+          continue;
+
+        const auto width = mult.GetValueWidth();
+        SubstitutionMap subMap(stpMgr);
+        Simplifier simplifier(stpMgr, &subMap);
+        const ASTNode inverse = simplifier.MultiplicativeInverse(mult[0]);
+
+        ASTNode rhs;
+        if (otherIsConst)
+          rhs = nf->CreateTerm(BVMULT, width, inverse, other);
+        else
+          rhs = nf->CreateTerm(
+              BVMULT, width,
+              nf->CreateTerm(BVMULT, width, inverse, other[0]), other[1]);
+
+        c = nf->CreateNode(EQ, mult[1], rhs);
+        break;
+      }
 
 /*
-(EQ 
-  62:(BVMULT 
+  (a + x + y) = (a + z)  -->  (x + y) = z
+
+  Addition is cancellative mod 2^w, so addends common to both sides drop
+  with no overflow condition. Each match cancels one occurrence per side.
+*/
+    if (c.GetKind() == EQ
+        && c[0].GetKind() == BVPLUS
+        && c[1].GetKind() == BVPLUS
+        && shareCount[c[0].GetNodeNum()] <= 1
+        && shareCount[c[1].GetNodeNum()] <= 1)
+    {
+      const ASTChildren ch0 = c[0].GetChildren();
+      const ASTChildren ch1 = c[1].GetChildren();
+      ASTVec v0(ch0.begin(), ch0.end());
+      ASTVec v1(ch1.begin(), ch1.end());
+      bool cancelled = false;
+
+      for (auto it = v0.begin(); it != v0.end();)
+      {
+        const auto match = std::find(v1.begin(), v1.end(), *it);
+        if (match != v1.end())
+        {
+          v1.erase(match);
+          it = v0.erase(it);
+          cancelled = true;
+        }
+        else
+          ++it;
+      }
+
+      if (cancelled)
+      {
+        const auto width = c[0].GetValueWidth();
+        auto rebuild = [&](const ASTVec& v) {
+          if (v.empty())
+            return nf->CreateZeroConst(width);
+          if (v.size() == 1)
+            return v[0];
+          return nf->CreateTerm(BVPLUS, width, v);
+        };
+        c = nf->CreateNode(EQ, rebuild(v0), rebuild(v1));
+      }
+    }
+
+/*
+  (a * b) + (a * d)  -->  a * (b + d)
+
+  Multiplication distributes over addition, so a shared factor pulls out
+  and two multiplications become one.
+*/
+    if (c.GetKind() == BVPLUS
+        && c.Degree() == 2
+        && c[0].GetKind() == BVMULT
+        && c[0].Degree() == 2
+        && c[1].GetKind() == BVMULT
+        && c[1].Degree() == 2
+        && shareCount[c[0].GetNodeNum()] <= 1
+        && shareCount[c[1].GetNodeNum()] <= 1)
+    {
+      bool fired = false;
+      for (unsigned i = 0; i < 2 && !fired; i++)
+        for (unsigned j = 0; j < 2 && !fired; j++)
+          if (c[0][i] == c[1][j])
+          {
+            const auto width = c.GetValueWidth();
+            const auto sum =
+                nf->CreateTerm(BVPLUS, width, c[0][1 - i], c[1][1 - j]);
+            c = nf->CreateTerm(BVMULT, width, c[0][i], sum);
+            fired = true;
+          }
+    }
+
+/*
+(EQ
+  62:(BVMULT
     48:t
-    60:(BVPLUS 
+    60:(BVPLUS
       42:s
       58:...)
-  76:(BVMULT 
+  76:(BVMULT
     42:s
-    74:(BVPLUS 
+    74:(BVPLUS
       48:t
       72:...))
   */
@@ -839,30 +692,316 @@ namespace stp
           c = nf->CreateNode(EQ, left,right);
         }
 
-       if (start != c)
+/*
+  An if-then-else with an if-then-else one level down that chooses the same
+  value: the two multiplexers become one, selected by a connective. With the
+  inner one on the else side,
+
+    ITE(c, t, ITE(d, t, b))  -->  ITE(c OR d,     t, b)
+    ITE(c, t, ITE(d, a, t))  -->  ITE(c OR NOT d, t, a)
+
+  and on the then side, where the outer's else branch is what repeats,
+
+    ITE(c, ITE(d, a, e), e)  -->  ITE(c AND d,     a, e)
+    ITE(c, ITE(d, e, b), e)  -->  ITE(c AND NOT d, b, e)
+
+  Bit-blasting a w-bit multiplexer costs 3w AND gates and the connective costs
+  one, so this trades the whole width for a single gate. The two negated forms
+  additionally build a NOT, which is a complemented edge in the AIG and so
+  costs nothing there -- the pass's only rules that add an AST node without
+  adding bit-blasted difficulty.
+
+  All four need the inner multiplexer to die with the rewrite. Where it is
+  shared it stays, the merged node is built beside it, and the rewrite is a
+  straight loss -- hence the share count. Symbolic execution emits these:
+  a branch that leaves part of the state alone reaches the same value under
+  several guards.
+*/
+      if (
+        c.GetKind() == ITE
+        && c[2].GetKind() == ITE
+        && (c[2][1] == c[1] || c[2][2] == c[1])
+        && shareCount[c[2].GetNodeNum()] <= 1
+       )
        {
-          c = rewrite(c);
-          removed++;
+          // Which branch of the inner if-then-else repeats the outer's then.
+          const bool repeatedOnThen = (c[2][1] == c[1]);
+
+          const auto inner =
+              repeatedOnThen ? c[2][0] : nf->CreateNode(NOT, c[2][0]);
+          const auto cond = nf->CreateNode(OR, c[0], inner);
+          const auto other = repeatedOnThen ? c[2][2] : c[2][1];
+
+          if (c.GetType() == BOOLEAN_TYPE)
+            c = nf->CreateNode(ITE, cond, c[1], other);
+          else
+            c = nf->CreateArrayTerm(ITE, c.GetIndexWidth(), c.GetValueWidth(),
+                                    cond, c[1], other);
        }
-       // TODO should probably update the sharecount.
-       if (begin!=c && !changed)
-          fill(begin);
-        if (changed)   
-          newChildren.push_back(c);
-    }    
 
-    if (newChildren.size() > 0)
+      if (
+        c.GetKind() == ITE
+        && c[1].GetKind() == ITE
+        && (c[1][1] == c[2] || c[1][2] == c[2])
+        && shareCount[c[1].GetNodeNum()] <= 1
+       )
+       {
+          // Which branch of the inner if-then-else repeats the outer's else.
+          const bool repeatedOnThen = (c[1][1] == c[2]);
+
+          const auto inner =
+              repeatedOnThen ? nf->CreateNode(NOT, c[1][0]) : c[1][0];
+          const auto cond = nf->CreateNode(AND, c[0], inner);
+          const auto other = repeatedOnThen ? c[1][2] : c[1][1];
+
+          if (c.GetType() == BOOLEAN_TYPE)
+            c = nf->CreateNode(ITE, cond, other, c[2]);
+          else
+            c = nf->CreateArrayTerm(ITE, c.GetIndexWidth(), c.GetValueWidth(),
+                                    cond, other, c[2]);
+       }
+
+/*
+  A branch of an if-then-else knows its own condition, so a test the
+  condition decides can go. The SimplifyingNodeFactory already takes every
+  such test that costs nothing to remove -- a branch of a nested
+  multiplexer, or a conjunction that collapses to a constant or to its one
+  surviving conjunct. What is left for here is the case that rebuilds:
+
+    ITE(c, OR(c1, x, y), d)  -->  ITE(c, OR(x, y), d)   when c refutes c1
+
+  where the disjunction has three or more children, so dropping one builds a
+  node the branch did not contain. That is a loss unless the disjunction died
+  with it, which is what the share count decides.
+*/
+    if (c.GetKind() == ITE)
+      for (unsigned branch = 1; branch <= 2; branch++)
+      {
+        if (c.GetKind() != ITE)
+          continue;
+
+        const ASTNode inner = c[branch];
+        if ((inner.GetKind() != AND && inner.GetKind() != OR) ||
+            inner.Degree() < 3 || shareCount[inner.GetNodeNum()] > 1)
+          continue;
+
+        const ASTNode cond = c[0];
+        const ASTNode known = (branch == 1) ? cond : nf->CreateNode(NOT, cond);
+        const bool isAnd = (inner.GetKind() == AND);
+
+        // Whether `known` and `cond` can hold together. Delegated to the
+        // factory: conjoining them reaches every contradiction AND already
+        // folds, at the price of building the conjunction.
+        auto refutes = [&](const ASTNode& test) {
+          return nf->CreateNode(AND, known, test) == stpMgr->ASTFalse;
+        };
+
+        ASTVec kept;
+        bool annihilated = false;
+        for (const ASTNode& child : inner.GetChildren())
+        {
+          // A decided child is either the node's annihilator, which settles
+          // the branch, or its identity, which just goes.
+          if (refutes(isAnd ? child : nf->CreateNode(NOT, child)))
+          {
+            annihilated = true;
+            break;
+          }
+          if (!refutes(isAnd ? nf->CreateNode(NOT, child) : child))
+            kept.push_back(child);
+        }
+
+        if (!annihilated && kept.size() == inner.Degree())
+          continue;
+
+        // The collapsing cases are the factory's, but its test is the cheap
+        // syntactic one, so a branch it could not fold still lands here.
+        ASTNode replacement;
+        if (annihilated)
+          replacement = isAnd ? stpMgr->ASTFalse : stpMgr->ASTTrue;
+        else if (kept.empty())
+          replacement = isAnd ? stpMgr->ASTTrue : stpMgr->ASTFalse;
+        else if (kept.size() == 1)
+          replacement = kept[0];
+        else
+          replacement = nf->CreateNode(inner.GetKind(), kept);
+        const ASTNode thenBranch = (branch == 1) ? replacement : c[1];
+        const ASTNode elseBranch = (branch == 1) ? c[2] : replacement;
+
+        if (c.GetType() == BOOLEAN_TYPE)
+          c = nf->CreateNode(ITE, cond, thenBranch, elseBranch);
+        else
+          c = nf->CreateArrayTerm(ITE, c.GetIndexWidth(), c.GetValueWidth(),
+                                  cond, thenBranch, elseBranch);
+      }
+
+    return c;
+  }
+
+  // A leaf, or a node already rewritten: answered without a frame, exactly
+  // as the recursive version answered it without a call.
+  bool Rewriting::alreadyKnown(const ASTNode& n, ASTNode& answer)
+  {
+    if (n.Degree() == 0)
     {
-      assert(newChildren.size() == children.size());
-
-      if (n.GetType() == BOOLEAN_TYPE)
-        result = nf->CreateNode(n.GetKind(), newChildren);
-      else
-        result = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),n.GetValueWidth(), newChildren);
+      answer = n;
+      return true;
     }
 
-    //TODO is this right? We've replaced the children, but never this node?
-    fromTo.insert({n.GetNodeNum(),result});
-    return result;
+    const auto it = fromTo.find(n.GetNodeNum());
+    if (it != fromTo.end())
+    {
+      answer = it->second;
+      return true;
+    }
+    return false;
+  }
+
+  // One node's progress through its children. `phase` says what a value
+  // arriving from below is: the recursive rewrite() had two call sites per
+  // child -- the child itself, and again on whatever the rules made of it
+  // -- and a frame has to know which one it is waiting for.
+  struct Rewriting::Frame
+  {
+    ASTNode n;
+    ASTChildren children;
+    ASTVec newChildren; // copy on write: empty until a child changes.
+    bool changed = false;
+    unsigned i = 0; // the child being worked on
+
+    ASTNode begin; // that child as it was before anything ran on it
+    ASTNode start; // and as it was after rewriting, before the rules
+
+    enum Phase
+    {
+      Fresh,
+      AwaitingChild,
+      AwaitingTransformed
+    };
+    Phase phase = Fresh;
+
+    Frame(const ASTNode& n_) : n(n_), children(n_.GetChildren()) {}
+  };
+
+  ASTNode Rewriting::rewrite(const ASTNode& n)
+  {
+    ASTNode result;
+    if (alreadyKnown(n, result))
+      return result;
+
+    // A deque, so descending into a child never moves the frames above it:
+    // `current` stays valid across a push.
+    std::deque<Frame> stack;
+    stack.emplace_back(n);
+
+    // Copy on write.
+    auto fill = [](Frame& f, const ASTNode& find)
+    {
+      f.newChildren.reserve(f.children.size());
+      const auto findIt =
+          std::find(f.children.begin(), f.children.end(), find);
+      assert(findIt != f.children.end());
+      f.newChildren.insert(f.newChildren.end(), f.children.begin(), findIt);
+      f.changed = true;
+    };
+
+    // The tail of the recursive version's loop body: `c` is the child in
+    // its final form.
+    auto finishChild = [&fill](Frame& f, const ASTNode& c)
+    {
+      // TODO should probably update the sharecount.
+      if (f.begin != c && !f.changed)
+        fill(f, f.begin);
+      if (f.changed)
+        f.newChildren.push_back(c);
+      f.i++;
+    };
+
+    // With the child rewritten, run the rules over it. A rule that fires
+    // sends its result back through the walk, which is the second of the
+    // two call sites; true means this frame has descended for that.
+    auto afterRewrite = [&](Frame& f, const ASTNode& rewritten) -> bool
+    {
+      f.start = rewritten;
+      const ASTNode c = applyRules(rewritten);
+
+      if (f.start == c)
+      {
+        finishChild(f, c);
+        return false;
+      }
+
+      ASTNode known;
+      if (alreadyKnown(c, known))
+      {
+        removed++;
+        finishChild(f, known);
+        return false;
+      }
+
+      f.phase = Frame::AwaitingTransformed;
+      stack.emplace_back(c);
+      return true;
+    };
+
+    while (true)
+    {
+      Frame& current = stack.back();
+      bool descended = false;
+
+      // Take delivery of the child this frame descended for.
+      if (current.phase == Frame::AwaitingChild)
+      {
+        current.phase = Frame::Fresh;
+        descended = afterRewrite(current, result);
+      }
+      else if (current.phase == Frame::AwaitingTransformed)
+      {
+        current.phase = Frame::Fresh;
+        removed++;
+        finishChild(current, result);
+      }
+
+      while (!descended && current.i < current.children.size())
+      {
+        current.begin = current.children[current.i];
+
+        ASTNode known;
+        if (alreadyKnown(current.begin, known))
+        {
+          descended = afterRewrite(current, known);
+          continue;
+        }
+
+        current.phase = Frame::AwaitingChild;
+        stack.emplace_back(current.begin);
+        descended = true;
+      }
+
+      if (descended)
+        continue;
+
+      Frame& done = stack.back();
+      result = done.n;
+
+      if (done.newChildren.size() > 0)
+      {
+        assert(done.newChildren.size() == done.children.size());
+
+        if (done.n.GetType() == BOOLEAN_TYPE)
+          result = nf->CreateNode(done.n.GetKind(), done.newChildren);
+        else
+          result = nf->CreateArrayTerm(done.n.GetKind(), done.n.GetIndexWidth(),
+                                       done.n.GetValueWidth(),
+                                       done.newChildren);
+      }
+
+      //TODO is this right? We've replaced the children, but never this node?
+      fromTo.insert({done.n.GetNodeNum(), result});
+
+      stack.pop_back();
+      if (stack.empty())
+        return result;
+    }
   }
 }

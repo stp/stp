@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef MISC_H
 #define MISC_H
 
+#include "VariableAssignment.h"
 #include "stp/AST/AST.h"
 
 extern const int bits;

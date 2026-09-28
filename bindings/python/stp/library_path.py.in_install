@@ -27,7 +27,22 @@
 # a good idea.
 
 # Search paths for the stp shared library
+import os
+
+_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Relative to this package first, so an installation that was moved, staged
+# under a different root, or relocated into a wheel or image still resolves.
+# Then the configured absolute locations, which is what answers the case where
+# the package and the library do not share a prefix -- a system site-packages
+# directory alongside a --prefix install -- and the relative route therefore
+# points out of one tree and into another.
 PATHS = [
+    os.path.normpath(os.path.join(
+        _PACKAGE_DIR, '@STP_PYTHON_TO_INSTALL_LIBDIR@',
+        '@LIBSTP_FILENAME@')),
+    os.path.normpath(os.path.join(
+        _PACKAGE_DIR, '@STP_PYTHON_TO_INSTALL_BINDIR@',
+        '@LIBSTP_FILENAME@')),
     '@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_LIBDIR@/@LIBSTP_FILENAME@',
-    '@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_BINDIR@/@LIBSTP_FILENAME@'
+    '@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_BINDIR@/@LIBSTP_FILENAME@',
 ]

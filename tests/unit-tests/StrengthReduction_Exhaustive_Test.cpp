@@ -281,7 +281,7 @@ TEST(StrengthReduction_Exhaustive_Test, sgt_to_ugt_via_fixedbits)
     ASSERT_FALSE(c.present(stp::BVSGT, result));
     ASSERT_TRUE(c.present(stp::BVGT, result));
 
-    auto consistent = [sign, width](unsigned v) {
+    auto consistent = [sign](unsigned v) {
       return ((v >> (width - 1)) & 1) == sign;
     };
     c.checkEquivalent(n, result, x, y, width, consistent, consistent);
@@ -347,10 +347,10 @@ TEST(StrengthReduction_Exhaustive_Test, sdiv_to_udiv_via_fixedbits)
 
       c.checkEquivalent(
           n, result, x, y, width,
-          [xSign, width](unsigned v) {
+          [xSign](unsigned v) {
             return ((v >> (width - 1)) & 1) == xSign;
           },
-          [ySign, width](unsigned v) {
+          [ySign](unsigned v) {
             return ((v >> (width - 1)) & 1) == ySign;
           });
     }
@@ -384,10 +384,10 @@ TEST(StrengthReduction_Exhaustive_Test, srem_to_urem_via_fixedbits)
 
       c.checkEquivalent(
           n, result, x, y, width,
-          [xSign, width](unsigned v) {
+          [xSign](unsigned v) {
             return ((v >> (width - 1)) & 1) == xSign;
           },
-          [ySign, width](unsigned v) {
+          [ySign](unsigned v) {
             return ((v >> (width - 1)) & 1) == ySign;
           });
     }
@@ -424,7 +424,7 @@ TEST(StrengthReduction_Exhaustive_Test, sge_to_uge_via_fixedbits)
     ASSERT_FALSE(c.present(stp::BVSGT, result));
     ASSERT_TRUE(c.present(stp::BVGT, result));
 
-    auto consistent = [sign, width](unsigned v) {
+    auto consistent = [sign](unsigned v) {
       return ((v >> (width - 1)) & 1) == sign;
     };
     c.checkEquivalent(n, result, x, y, width, consistent, consistent);
@@ -461,10 +461,10 @@ TEST(StrengthReduction_Exhaustive_Test, smod_to_urem_via_fixedbits)
 
       c.checkEquivalent(
           n, result, x, y, width,
-          [xSign, width](unsigned v) {
+          [xSign](unsigned v) {
             return ((v >> (width - 1)) & 1) == xSign;
           },
-          [ySign, width](unsigned v) {
+          [ySign](unsigned v) {
             return ((v >> (width - 1)) & 1) == ySign;
           });
     }
@@ -497,6 +497,157 @@ TEST(StrengthReduction_Exhaustive_Test, smod_to_urem_via_intervals)
   c.checkEquivalent(
       n, result, x, y, width, [](unsigned v) { return v <= 3; },
       [](unsigned v) { return v <= 3; });
+}
+
+// bvsaddo folds to false when the fixed sign bits differ: signed add
+// overflow requires the operands to share a sign. Equivalent for every
+// assignment with those opposite signs.
+TEST(StrengthReduction_Exhaustive_Test, saddo_false_via_opposite_signs)
+{
+  const unsigned width = 3;
+
+  for (unsigned xSign = 0; xSign <= 1; xSign++)
+  {
+    const unsigned ySign = 1 - xSign;
+
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n = c.nf->CreateNode(stp::BVSADDO, x, y);
+    ASSERT_EQ(n.GetKind(), stp::BVSADDO);
+
+    FixedBits xBits = msbFixed(width, xSign == 1);
+    FixedBits yBits = msbFixed(width, ySign == 1);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, c.mgr.ASTFalse);
+
+    c.checkEquivalent(
+        n, result, x, y, width,
+        [xSign](unsigned v) { return ((v >> (width - 1)) & 1) == xSign; },
+        [ySign](unsigned v) { return ((v >> (width - 1)) & 1) == ySign; });
+  }
+}
+
+// bvsaddo is left alone when the signs agree: overflow is possible there,
+// so no reduction is justified.
+TEST(StrengthReduction_Exhaustive_Test, saddo_unchanged_when_signs_agree)
+{
+  const unsigned width = 3;
+
+  for (unsigned sign = 0; sign <= 1; sign++)
+  {
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n = c.nf->CreateNode(stp::BVSADDO, x, y);
+    ASSERT_EQ(n.GetKind(), stp::BVSADDO);
+
+    FixedBits xBits = msbFixed(width, sign == 1);
+    FixedBits yBits = msbFixed(width, sign == 1);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, n);
+  }
+}
+
+// bvssubo folds to false when the fixed sign bits agree: signed sub
+// overflow requires the operands to differ in sign. Equivalent for every
+// assignment with those equal signs.
+TEST(StrengthReduction_Exhaustive_Test, ssubo_false_via_equal_signs)
+{
+  const unsigned width = 3;
+
+  for (unsigned sign = 0; sign <= 1; sign++)
+  {
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n = c.nf->CreateNode(stp::BVSSUBO, x, y);
+    ASSERT_EQ(n.GetKind(), stp::BVSSUBO);
+
+    FixedBits xBits = msbFixed(width, sign == 1);
+    FixedBits yBits = msbFixed(width, sign == 1);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, c.mgr.ASTFalse);
+
+    auto consistent = [sign](unsigned v) {
+      return ((v >> (width - 1)) & 1) == sign;
+    };
+    c.checkEquivalent(n, result, x, y, width, consistent, consistent);
+  }
+}
+
+// bvssubo is left alone when the signs differ: overflow is possible there,
+// so no reduction is justified.
+TEST(StrengthReduction_Exhaustive_Test, ssubo_unchanged_when_signs_differ)
+{
+  const unsigned width = 3;
+
+  for (unsigned xSign = 0; xSign <= 1; xSign++)
+  {
+    const unsigned ySign = 1 - xSign;
+
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n = c.nf->CreateNode(stp::BVSSUBO, x, y);
+    ASSERT_EQ(n.GetKind(), stp::BVSSUBO);
+
+    FixedBits xBits = msbFixed(width, xSign == 1);
+    FixedBits yBits = msbFixed(width, ySign == 1);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, n);
+  }
+}
+
+// Neither overflow predicate reduces when a sign bit is unknown.
+TEST(StrengthReduction_Exhaustive_Test, signed_overflow_unchanged_when_sign_unknown)
+{
+  const unsigned width = 3;
+
+  for (const stp::Kind kind : {stp::BVSADDO, stp::BVSSUBO})
+  {
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n = c.nf->CreateNode(kind, x, y);
+    ASSERT_EQ(n.GetKind(), kind);
+
+    // x's sign bit is fixed, y's is not.
+    FixedBits xBits = msbFixed(width, true);
+    FixedBits yBits(width, false);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, n);
+  }
 }
 
 // bvadd reduces to bvor when the fixed bits show the operands can't both
@@ -691,5 +842,379 @@ TEST(StrengthReduction_Exhaustive_Test, bvsx_to_ones_concat_via_fixedbits)
     assignment.insert({x, c.constant(width, xv)});
     stp::ASTNodeMap copy = assignment;
     ASSERT_EQ(c.eval(n, assignment), c.eval(result, copy));
+  }
+}
+
+// A division whose dividend has fixed leading zero bits narrows to the
+// remaining width, guarded on the divisor's leading bits. The divisor
+// must be provably non-zero.
+TEST(StrengthReduction_Exhaustive_Test, div_narrowed_via_fixedbits)
+{
+  const unsigned width = 4;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVDIV, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVDIV);
+
+  // x: the top two bits are fixed zero. y: the lowest bit is fixed one.
+  FixedBits xBits(width, false);
+  xBits.setFixed(3, true);
+  xBits.setValue(3, false);
+  xBits.setFixed(2, true);
+  xBits.setValue(2, false);
+  FixedBits yBits(width, false);
+  yBits.setFixed(0, true);
+  yBits.setValue(0, true);
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result.GetKind(), stp::ITE);
+  ASSERT_FALSE(c.present(stp::BVDIV, result[2]));
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v < 4; },
+      [](unsigned v) { return (v & 1) == 1; });
+}
+
+// The remainder version narrows without needing a non-zero divisor: a
+// remainder by zero is the dividend, which the untaken branch recreates.
+TEST(StrengthReduction_Exhaustive_Test, mod_narrowed_via_fixedbits)
+{
+  const unsigned width = 4;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVMOD, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVMOD);
+
+  FixedBits xBits(width, false);
+  xBits.setFixed(3, true);
+  xBits.setValue(3, false);
+  xBits.setFixed(2, true);
+  xBits.setValue(2, false);
+  FixedBits yBits(width, false);
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result.GetKind(), stp::ITE);
+  ASSERT_EQ(result[2], x);
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v < 4; },
+      [](unsigned) { return true; });
+}
+
+// Division is left alone when the divisor might be zero.
+TEST(StrengthReduction_Exhaustive_Test, div_not_narrowed_when_divisor_may_be_zero)
+{
+  const unsigned width = 4;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVDIV, width, x, y);
+
+  FixedBits xBits(width, false);
+  xBits.setFixed(3, true);
+  xBits.setValue(3, false);
+  FixedBits yBits(width, false);
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result, n);
+}
+
+// A remainder whose dividend's interval sits below the divisor's is the
+// dividend.
+TEST(StrengthReduction_Exhaustive_Test, mod_below_divisor_via_intervals)
+{
+  const unsigned width = 4;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVMOD, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVMOD);
+
+  stp::UnsignedInterval xInterval(makeCBV(width, 0), makeCBV(width, 4));
+  stp::UnsignedInterval yInterval(makeCBV(width, 5), makeCBV(width, 15));
+
+  stp::NodeToUnsignedIntervalMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xInterval});
+  map.insert({y, &yInterval});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result, x);
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v <= 4; },
+      [](unsigned v) { return v >= 5; });
+}
+
+// Fix the bit range [from, to] of "bits" to zero.
+static void fixZero(FixedBits& bits, unsigned from, unsigned to)
+{
+  for (unsigned i = from; i <= to; i++)
+  {
+    bits.setFixed(i, true);
+    bits.setValue(i, false);
+  }
+}
+
+// A multiplication whose operands have fixed leading zeros narrows to
+// the width the product can occupy.
+TEST(StrengthReduction_Exhaustive_Test, mult_narrowed_via_fixedbits)
+{
+  const unsigned width = 6;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVMULT, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVMULT);
+
+  FixedBits xBits(width, false);
+  fixZero(xBits, 2, 5); // x < 4
+  FixedBits yBits(width, false);
+  fixZero(yBits, 3, 5); // y < 8
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result.GetKind(), stp::BVCONCAT);
+  ASSERT_EQ(result[1].GetKind(), stp::BVMULT);
+  ASSERT_EQ(result[1].GetValueWidth(), 5u);
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v < 4; },
+      [](unsigned v) { return v < 8; });
+}
+
+// An addition whose operands have fixed leading zeros narrows to the
+// width the sum can occupy.
+TEST(StrengthReduction_Exhaustive_Test, plus_narrowed_via_fixedbits)
+{
+  const unsigned width = 6;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVPLUS, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVPLUS);
+
+  FixedBits xBits(width, false);
+  fixZero(xBits, 3, 5); // x < 8
+  FixedBits yBits(width, false);
+  fixZero(yBits, 3, 5); // y < 8
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result.GetKind(), stp::BVCONCAT);
+  ASSERT_EQ(result[1].GetKind(), stp::BVPLUS);
+  ASSERT_EQ(result[1].GetValueWidth(), 4u);
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return v < 8; },
+      [](unsigned v) { return v < 8; });
+}
+
+// When an addition's operands split at a bit boundary, the adder is
+// just wiring: the high part concatenated onto the low part.
+TEST(StrengthReduction_Exhaustive_Test, plus_to_concat_via_fixedbits)
+{
+  const unsigned width = 6;
+
+  Context c;
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode n = c.nf->CreateTerm(stp::BVPLUS, width, x, y);
+  ASSERT_EQ(n.GetKind(), stp::BVPLUS);
+
+  FixedBits xBits(width, false);
+  fixZero(xBits, 0, 2); // x's low three bits are zero.
+  FixedBits yBits(width, false);
+  fixZero(yBits, 3, 5); // y < 8
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({x, &xBits});
+  map.insert({y, &yBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_EQ(result.GetKind(), stp::BVCONCAT);
+  ASSERT_FALSE(c.present(stp::BVPLUS, result));
+  ASSERT_FALSE(c.present(stp::BVNOT, result));
+
+  c.checkEquivalent(
+      n, result, x, y, width, [](unsigned v) { return (v & 7) == 0; },
+      [](unsigned v) { return v < 8; });
+}
+
+// (a * x) = (a * y) --> x = y once a's lowest bit is fixed to one:
+// multiplication by an odd factor is a bijection mod 2^w, so the factor
+// cancels with no overflow condition. Equivalent for every odd a.
+TEST(StrengthReduction_Exhaustive_Test, eq_mult_cancelled_via_odd_fixedbit)
+{
+  const unsigned width = 3;
+
+  Context c;
+  ASTNode a = c.symbol("a", width);
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode m0 = c.nf->CreateTerm(stp::BVMULT, width, a, x);
+  ASTNode m1 = c.nf->CreateTerm(stp::BVMULT, width, a, y);
+  ASTNode n = c.nf->CreateNode(stp::EQ, m0, m1);
+  ASSERT_EQ(n.GetKind(), stp::EQ);
+
+  FixedBits aBits(width, false);
+  aBits.setFixed(0, true);
+  aBits.setValue(0, true);
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({m0, nullptr});
+  map.insert({m1, nullptr});
+  map.insert({a, &aBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_FALSE(c.present(stp::BVMULT, result));
+
+  for (unsigned av = 1; av < (1u << width); av += 2)
+    for (unsigned xv = 0; xv < (1u << width); xv++)
+      for (unsigned yv = 0; yv < (1u << width); yv++)
+      {
+        stp::ASTNodeMap assignment;
+        assignment.insert({a, c.constant(width, av)});
+        assignment.insert({x, c.constant(width, xv)});
+        assignment.insert({y, c.constant(width, yv)});
+        ASSERT_EQ(c.eval(n, assignment), c.eval(result, assignment))
+            << "differ on a=" << av << " x=" << xv << " y=" << yv;
+      }
+}
+
+// (a * x) = (a * y) --> x = y when a's interval excludes zero and the
+// operands' interval maxima prove neither product can wrap: overflow-free
+// products are integer products, and a non-zero common factor cancels.
+// Equivalent for every assignment inside the intervals.
+TEST(StrengthReduction_Exhaustive_Test, eq_mult_cancelled_via_intervals)
+{
+  const unsigned width = 4;
+
+  Context c;
+  ASTNode a = c.symbol("a", width);
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode m0 = c.nf->CreateTerm(stp::BVMULT, width, a, x);
+  ASTNode m1 = c.nf->CreateTerm(stp::BVMULT, width, a, y);
+  ASTNode n = c.nf->CreateNode(stp::EQ, m0, m1);
+  ASSERT_EQ(n.GetKind(), stp::EQ);
+
+  stp::UnsignedInterval aInterval(makeCBV(width, 1), makeCBV(width, 2));
+  stp::UnsignedInterval xInterval(makeCBV(width, 0), makeCBV(width, 3));
+  stp::UnsignedInterval yInterval(makeCBV(width, 0), makeCBV(width, 3));
+
+  stp::NodeToUnsignedIntervalMap map;
+  map.insert({n, nullptr});
+  map.insert({m0, nullptr});
+  map.insert({m1, nullptr});
+  map.insert({a, &aInterval});
+  map.insert({x, &xInterval});
+  map.insert({y, &yInterval});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_FALSE(c.present(stp::BVMULT, result));
+
+  for (unsigned av = 1; av <= 2; av++)
+    for (unsigned xv = 0; xv <= 3; xv++)
+      for (unsigned yv = 0; yv <= 3; yv++)
+      {
+        stp::ASTNodeMap assignment;
+        assignment.insert({a, c.constant(width, av)});
+        assignment.insert({x, c.constant(width, xv)});
+        assignment.insert({y, c.constant(width, yv)});
+        ASSERT_EQ(c.eval(n, assignment), c.eval(result, assignment))
+            << "differ on a=" << av << " x=" << xv << " y=" << yv;
+      }
+}
+
+// The interval cancellation must NOT fire when the shared factor may be
+// zero, or when a product may wrap.
+TEST(StrengthReduction_Exhaustive_Test, eq_mult_not_cancelled_without_proof)
+{
+  const unsigned width = 4;
+
+  // Shared factor may be zero.
+  {
+    Context c;
+    ASTNode a = c.symbol("a", width);
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode m0 = c.nf->CreateTerm(stp::BVMULT, width, a, x);
+    ASTNode m1 = c.nf->CreateTerm(stp::BVMULT, width, a, y);
+    ASTNode n = c.nf->CreateNode(stp::EQ, m0, m1);
+
+    stp::UnsignedInterval aInterval(makeCBV(width, 0), makeCBV(width, 2));
+    stp::UnsignedInterval xInterval(makeCBV(width, 0), makeCBV(width, 3));
+    stp::UnsignedInterval yInterval(makeCBV(width, 0), makeCBV(width, 3));
+
+    stp::NodeToUnsignedIntervalMap map;
+    map.insert({n, nullptr});
+    map.insert({m0, nullptr});
+    map.insert({m1, nullptr});
+    map.insert({a, &aInterval});
+    map.insert({x, &xInterval});
+    map.insert({y, &yInterval});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, n);
+  }
+
+  // Products may wrap: 6 * 3 exceeds 4 bits.
+  {
+    Context c;
+    ASTNode a = c.symbol("a", width);
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode m0 = c.nf->CreateTerm(stp::BVMULT, width, a, x);
+    ASTNode m1 = c.nf->CreateTerm(stp::BVMULT, width, a, y);
+    ASTNode n = c.nf->CreateNode(stp::EQ, m0, m1);
+
+    stp::UnsignedInterval aInterval(makeCBV(width, 1), makeCBV(width, 6));
+    stp::UnsignedInterval xInterval(makeCBV(width, 0), makeCBV(width, 3));
+    stp::UnsignedInterval yInterval(makeCBV(width, 0), makeCBV(width, 3));
+
+    stp::NodeToUnsignedIntervalMap map;
+    map.insert({n, nullptr});
+    map.insert({m0, nullptr});
+    map.insert({m1, nullptr});
+    map.insert({a, &aInterval});
+    map.insert({x, &xInterval});
+    map.insert({y, &yInterval});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, n);
   }
 }

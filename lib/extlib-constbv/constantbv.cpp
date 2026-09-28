@@ -69,24 +69,24 @@ namespace CONSTANTBV {
 
   /* FIXME: use a thread-safe Singleton pattern instead */
 
-  static THREAD_LOCAL unsigned int BITS; /* = # of bits in machine word (must be power of 2) */
-  static THREAD_LOCAL unsigned int MODMASK; /* = BITS - 1 (mask for calculating modulo BITS) */
-  static THREAD_LOCAL unsigned int LOGBITS; /* = ld(BITS) (logarithmus dualis) */
-  static THREAD_LOCAL unsigned int FACTOR; /* = ld(BITS / 8) (ld of # of bytes) */
+  static THREAD_LOCAL_IE unsigned int BITS; /* = # of bits in machine word (must be power of 2) */
+  static THREAD_LOCAL_IE unsigned int MODMASK; /* = BITS - 1 (mask for calculating modulo BITS) */
+  static THREAD_LOCAL_IE unsigned int LOGBITS; /* = ld(BITS) (logarithmus dualis) */
+  static THREAD_LOCAL_IE unsigned int FACTOR; /* = ld(BITS / 8) (ld of # of bytes) */
 
-  static THREAD_LOCAL unsigned int LSB = 1; /* = mask for least significant bit */
-  static THREAD_LOCAL unsigned int MSB; /* = mask for most significant bit */
+  static THREAD_LOCAL_IE unsigned int LSB = 1; /* = mask for least significant bit */
+  static THREAD_LOCAL_IE unsigned int MSB; /* = mask for most significant bit */
 
-  static THREAD_LOCAL unsigned int LONGBITS; /* = # of bits in unsigned long */
+  static THREAD_LOCAL_IE unsigned int LONGBITS; /* = # of bits in unsigned long */
 
-  static THREAD_LOCAL unsigned int LOG10; /* = logarithm to base 10 of BITS - 1 */
-  static THREAD_LOCAL unsigned int EXP10; /* = largest possible power of 10 in signed int */
+  static THREAD_LOCAL_IE unsigned int LOG10; /* = logarithm to base 10 of BITS - 1 */
+  static THREAD_LOCAL_IE unsigned int EXP10; /* = largest possible power of 10 in signed int */
 
   /********************************************************************/
   /* global bit mask table for fast access (set by "BitVector_Boot"): */
   /********************************************************************/
 
-  static THREAD_LOCAL unsigned int BITMASKTAB[sizeof(unsigned int) << 3];
+  static THREAD_LOCAL_IE unsigned int BITMASKTAB[sizeof(unsigned int) << 3];
 
   /*****************************/
   /* global macro definitions: */
@@ -316,6 +316,12 @@ namespace CONSTANTBV {
 
     return(ErrCode_Ok);
   }
+
+  /* Creating a bit vector before "BitVector_Boot" has set the constants
+     above computes an undersized allocation and corrupts the heap, so
+     run it when the library is loaded rather than trusting every caller
+     to get there first. */
+  [[maybe_unused]] static const ErrCode boot_at_load = BitVector_Boot();
 
   unsigned int BitVector_Size(unsigned int bits) {          /* bit vector size (# of words)  */
     unsigned int size;
@@ -1508,7 +1514,7 @@ namespace CONSTANTBV {
         while (size-- > 0)
           {
             value = *addr++;
-            long int count = BITS;
+            unsigned int count = BITS;
             if (count > length) count = length;
             while (count-- > 0)
               {
@@ -1676,8 +1682,87 @@ namespace CONSTANTBV {
     return(result);
   }
 
+  /* Fast path for BitVector_from_Dec: Horner evaluation with a word-level
+     multiply-accumulate. The digits are processed most-significant-first in
+     chunks of up to LOG10 digits: value = value * 10^chunklen + chunk. Each
+     step costs one pass over the words, instead of the shift-and-add
+     multiplies of the general path. Requires word * chunkbase + carry to fit
+     into an unsigned long long, i.e. 2 * BITS bits (the caller checks).
+     Reports ErrCode_Ovfl as soon as the accumulated value no longer fits in
+     the vector, and ErrCode_Pars on the first non-digit. */
+  static ErrCode BitVector_from_Dec_wordwise(unsigned int *  addr,
+                                             unsigned char * string)
+  {
+    unsigned int  bits = bits_(addr);
+    unsigned int  mask = mask_(addr);
+    unsigned int  size = size_(addr);
+    unsigned int  length;
+    unsigned int  chunk;
+    unsigned int  chunkbase;
+    unsigned int  count;
+    unsigned int  i;
+    unsigned long long product;
+    unsigned long long carry;
+    boolean minus;
+    int     digit;
+
+    if (bits == 0) return(ErrCode_Ok);
+    length = strlen((char *) string);
+    if (length == 0) return(ErrCode_Pars);
+    digit = (int) *string;
+    if ((minus = (digit == (int) '-')) ||
+        (digit == (int) '+'))
+      {
+        string++;
+        if (--length == 0) return(ErrCode_Pars);
+      }
+    BitVector_Empty(addr);
+    while (length > 0)
+      {
+        count = length % LOG10;
+        if (count == 0) count = LOG10;
+        chunk = 0;
+        chunkbase = 1;
+        while (count-- > 0)
+          {
+            digit = (int) *string++; length--;
+            /* separate because isdigit() is likely a macro! */
+            if (isdigit(digit) != 0)
+              {
+                chunk = (chunk * 10) +
+                        ((unsigned int) digit - (unsigned int) '0');
+                chunkbase *= 10;
+              }
+            else return(ErrCode_Pars);
+          }
+        /* addr = addr * chunkbase + chunk; carry stays below chunkbase,
+           so product < 2^BITS * chunkbase + chunkbase <= 2^(2*BITS). */
+        carry = (unsigned long long) chunk;
+        for ( i = 0; i < size; i++ )
+          {
+            product = ((unsigned long long) *(addr+i)) * chunkbase + carry;
+            *(addr+i) = (unsigned int) product;
+            carry = product >> BITS;
+          }
+        if ((carry != 0) || ((*(addr+size-1) & ~ mask) != 0))
+          return(ErrCode_Ovfl);
+      }
+    if (minus)
+      {
+        BitVector_Negate(addr,addr);
+        if ((*(addr + size - 1) & mask & ~ (mask >> 1)) == 0)
+          return(ErrCode_Ovfl);
+      }
+    return(ErrCode_Ok);
+  }
+
   ErrCode BitVector_from_Dec(unsigned int *  addr, unsigned char * string)
   {
+    if ((BITS << 1) <= (unsigned int) (sizeof(unsigned long long) << 3))
+      {
+        return(BitVector_from_Dec_wordwise(addr,string));
+      }
+
     ErrCode error = ErrCode_Ok;
     unsigned int  bits = bits_(addr);
     unsigned int  mask = mask_(addr);

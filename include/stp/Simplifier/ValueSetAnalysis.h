@@ -35,14 +35,13 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/ValueSet.h"
+#include <cstdint>
 
 namespace stp
 {
 
 class ValueSetAnalysis
 {
-  STPMgr& bm;
-
   unsigned propagated = 0;
   unsigned widened = 0;
 
@@ -50,12 +49,54 @@ class ValueSetAnalysis
   static const size_t PRODUCT_CAP =
       ValueSet::MAX_ELEMENTS * ValueSet::MAX_ELEMENTS;
 
+  // An unknown child of at most this many bits is cheap enough to stand in
+  // for by listing every value it could take.
+  static const unsigned SMALL_WIDTH = 6;
+
+  // What an unknown operand does to the result after the fact. The bitwise
+  // operations are handled by running the known children through the
+  // operation's identity and then expanding: anding against an unknown can
+  // clear any subset of the bits that are set, oring can set any subset of
+  // the bits that are clear.
+  enum class Expand
+  {
+    None,
+    Submask,
+    Supermask
+  };
+
   ValueSet* fresh(const ASTNode& n) const;
-  ASTNode toNode(const ASTNode& child, const CBV member);
-  static CBV toCBV(const ASTNode& evaluated);
+
+  // The analysis proper, written once over a representation of a value
+  // given as the template argument. The two of them (in the .cpp) hold a
+  // value as a CONSTANTBV bit-vector of any width, and natively in a
+  // uint64_t; a node is analysed with the second whenever it and all its
+  // children fit in 64 bits, which is nearly always, leaving the first
+  // handling only the wide nodes.
+  template <class Rep>
+  ValueSet* product(const ASTNode& n, const vector<const ValueSet*>& children);
+
+  // Values that stand in for an unknown child: evaluating over them gives
+  // exactly the results the child's whole width would give. False when
+  // there are too many of them, or the operation says nothing anyway.
+  template <class Rep>
+  bool standIns(const ASTNode& n, size_t index,
+                const vector<const ValueSet*>& children, unsigned width,
+                vector<typename Rep::Value>& out, Expand& expand);
+  template <class Rep>
+  bool shiftStandIns(const ASTNode& n, size_t index,
+                     const vector<const ValueSet*>& children,
+                     vector<typename Rep::Value>& out);
+
+  // What an unknown operand of a bitwise operation turns the values
+  // evaluated so far into, in place on the sorted array of them. False
+  // when the expansion is bigger than a set can hold.
+  template <class Rep>
+  static bool expand(typename Rep::Value* values, size_t& size, unsigned width,
+                     Expand how);
 
 public:
-  ValueSetAnalysis(STPMgr& _bm) : bm(_bm) {}
+  ValueSetAnalysis(STPMgr&) {}
 
   ValueSetAnalysis(const ValueSetAnalysis&) = delete;
   ValueSetAnalysis& operator=(const ValueSetAnalysis&) = delete;

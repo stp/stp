@@ -1,0 +1,5 @@
+(set-logic QF_UFBV)
+(declare-const s (_ BitVec 8))
+(declare-fun s ((_ BitVec 8)) (_ BitVec 8))
+(check-sat)
+(echo "REACHED-END")

@@ -23,8 +23,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-#include "stp/Simplifier/constantBitP/MersenneTwister.h"
 #include <gtest/gtest.h>
+#include <random>
 #include <stdio.h>
 
 
@@ -117,7 +117,7 @@ TEST(NodeDomainAnalysis_Test, 1)
 TEST(NodeDomainAnalysis_Test, 2)
 {
   Context c;
-  MTRand rand(10U);
+  std::mt19937 rand(10U);
 
   for (int i = 0; i < 100; i++)
   {
@@ -284,7 +284,9 @@ static void checkIdempotent(Context& c, stp::FixedBits*& bits,
 
   ASSERT_EQ(bitsAfterFirst == nullptr, bits == nullptr) << msg;
   if (bits != nullptr)
+  {
     ASSERT_TRUE(stp::FixedBits::equals(*bitsAfterFirst, *bits)) << msg;
+  }
 
   ASSERT_EQ(minAfterFirst == nullptr, interval == nullptr) << msg;
   if (interval != nullptr)
@@ -348,6 +350,97 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_exhaustive)
             ASSERT_EQ(memberBefore[v], contains(bits, interval, width, v))
                 << "value " << v << " input: " << input << ", output: "
                 << describe(bits, interval);
+
+          delete bits;
+          delete interval;
+        }
+    }
+  }
+}
+
+// Every fixed-bits pattern crossed with every interval that shares at
+// least one value with it. Checks that harmonise tightens fully: the
+// interval's bounds become the least and greatest shared values, and a
+// bit ends up fixed exactly when every shared value agrees on it.
+TEST(NodeDomainAnalysis_Test, harmonise_tightens_maximally_exhaustive)
+{
+  boot();
+  Context c;
+
+  for (unsigned width = 1; width <= 5; width++)
+  {
+    unsigned configs = 1;
+    for (unsigned i = 0; i < width; i++)
+      configs *= 3;
+    const unsigned values = 1u << width;
+
+    for (unsigned config = 0; config < configs; config++)
+    {
+      const stp::FixedBits pattern = bitsFromTernary(width, config);
+
+      for (unsigned lo = 0; lo < values; lo++)
+        for (unsigned hi = lo; hi < values; hi++)
+        {
+          // The shared values, and per bit whether they all agree.
+          unsigned smallest = 0, largest = 0;
+          bool any = false;
+          std::vector<bool> agree(width), agreedValue(width);
+          for (unsigned v = lo; v <= hi; v++)
+          {
+            if (!bitsContain(pattern, v))
+              continue;
+            if (!any)
+            {
+              smallest = v;
+              for (unsigned i = 0; i < width; i++)
+              {
+                agree[i] = true;
+                agreedValue[i] = ((v >> i) & 1) != 0;
+              }
+            }
+            else
+              for (unsigned i = 0; i < width; i++)
+                if (agree[i] && agreedValue[i] != (((v >> i) & 1) != 0))
+                  agree[i] = false;
+            largest = v;
+            any = true;
+          }
+          if (!any)
+            continue; // harmonise requires the domains to intersect.
+
+          stp::FixedBits* bits = new stp::FixedBits(pattern);
+          stp::UnsignedInterval* interval = new stp::UnsignedInterval(
+              cbvFromUnsigned(width, lo), cbvFromUnsigned(width, hi));
+
+          const std::string input = describe(bits, interval);
+
+          c.domain.harmonise(bits, interval);
+
+          const std::string msg =
+              "input: " + input + ", output: " + describe(bits, interval);
+
+          ASSERT_NE(interval, nullptr) << msg;
+          stp::CBV expectedMin = cbvFromUnsigned(width, smallest);
+          stp::CBV expectedMax = cbvFromUnsigned(width, largest);
+          ASSERT_EQ(
+              0, CONSTANTBV::BitVector_Lexicompare(interval->minV, expectedMin))
+              << msg;
+          ASSERT_EQ(
+              0, CONSTANTBV::BitVector_Lexicompare(interval->maxV, expectedMax))
+              << msg;
+          CONSTANTBV::BitVector_Destroy(expectedMin);
+          CONSTANTBV::BitVector_Destroy(expectedMax);
+
+          for (unsigned i = 0; i < width; i++)
+          {
+            const bool fixed = bits != nullptr && bits->isFixed(i);
+            ASSERT_EQ(agree[i], fixed) << "bit " << i << " " << msg;
+            if (fixed)
+            {
+              ASSERT_EQ(agreedValue[i], bits->getValue(i))
+                  << "bit " << i << " " << msg;
+            }
+          }
 
           delete bits;
           delete interval;
@@ -525,11 +618,11 @@ TEST(NodeDomainAnalysis_Test, harmonise_perfectly_tight)
                            << " e.g. " << example;
 }
 
-static stp::CBV randomCBV(unsigned width, MTRand& rand)
+static stp::CBV randomCBV(unsigned width, std::mt19937& rand)
 {
   stp::CBV result = CONSTANTBV::BitVector_Create(width, true);
   for (unsigned i = 0; i < width; i++)
-    if (rand.randInt() & 1)
+    if (rand() & 1)
       CONSTANTBV::BitVector_Bit_On(result, i);
   return result;
 }
@@ -539,7 +632,7 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_random)
 {
   boot();
   Context c;
-  MTRand rand(10U);
+  std::mt19937 rand(10U);
 
   const unsigned widths[] = {8, 20, 33, 64, 100};
 
@@ -547,7 +640,7 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_random)
     for (unsigned iteration = 0; iteration < 500; iteration++)
     {
       stp::FixedBits* bits = new stp::FixedBits(
-          stp::FixedBits::createRandom(width, rand.randInt() % 101, rand));
+          stp::FixedBits::createRandom(width, rand() % 101, rand));
 
       // A random member of the fixed bits, so the interval built around
       // it is guaranteed to intersect them.
@@ -555,7 +648,7 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_random)
       for (unsigned i = 0; i < width; i++)
       {
         const bool bit =
-            bits->isFixed(i) ? bits->getValue(i) : ((rand.randInt() & 1) != 0);
+            bits->isFixed(i) ? bits->getValue(i) : ((rand() & 1) != 0);
         if (bit)
           CONSTANTBV::BitVector_Bit_On(member, i);
       }
@@ -583,3 +676,152 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_random)
     }
 }
 
+
+// ---------------------------------------------------------------------
+// Fixed-point tests: after buildMap, re-running the (both-ways) bit
+// transfer function of every node in the formula, starting from the
+// cached results, must change nothing - neither the node's own bits nor
+// its children's. A single children-first pass computes everything the
+// transfer functions can deduce bottom-up: with no assumption on the
+// top node, an operator's output carries no information beyond its
+// children, so nothing can flow back down. These tests guard the
+// skip-list in buildMap: zero-extension must run even when its
+// expression child is unknown, while extract and sign-extension really
+// derive nothing there.
+
+#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
+#include "stp/Simplifier/constantBitP/MultiplicationStats.h"
+
+// The cached bits, copied into a mutable FixedBits; totally unfixed
+// bits of the right shape when the analysis cached nothing.
+static stp::FixedBits* materialise(Context& c, const ASTNode& n)
+{
+  const auto& map = *c.domain.getCbitMap();
+  const auto it = map.find(n);
+  const stp::FixedBits* cached = (it == map.end()) ? nullptr : it->second;
+
+  const unsigned width = (n.GetValueWidth() > 0) ? n.GetValueWidth() : 1;
+  stp::FixedBits* result =
+      new stp::FixedBits(width, n.GetType() == stp::BOOLEAN_TYPE);
+  if (cached != nullptr)
+    *result = *cached;
+  return result;
+}
+
+static void checkNodeAtFixedPoint(Context& c, const ASTNode& n,
+                                  stp::ASTNodeSet& visited)
+{
+  if (!visited.insert(n).second)
+    return;
+
+  for (const auto& child : n)
+    checkNodeAtFixedPoint(c, child, visited);
+  if (::testing::Test::HasFatalFailure())
+    return;
+
+  const stp::Kind k = n.GetKind();
+  if (k == stp::SYMBOL || k == stp::READ || k == stp::WRITE)
+    return;
+
+  if (n.isConstant())
+  {
+    stp::FixedBits* bits = materialise(c, n);
+    EXPECT_TRUE(bits->isTotallyFixed()) << "constant not fixed: " << n;
+    delete bits;
+    return;
+  }
+
+  // Working copies of the cached state, and snapshots to compare against.
+  stp::FixedBits* output = materialise(c, n);
+  const stp::FixedBits before_output(*output);
+
+  std::vector<stp::FixedBits*> children;
+  std::vector<stp::FixedBits*> before_children;
+  for (const auto& child : n)
+  {
+    children.push_back(materialise(c, child));
+    before_children.push_back(new stp::FixedBits(*children.back()));
+  }
+
+  simplifier::constantBitP::MultiplicationStatsMap msm;
+  const simplifier::constantBitP::Result result =
+      simplifier::constantBitP::ConstantBitPropagation::
+          dispatchToTransferFunctions(&c.mgr, k, children, *output, n, &msm);
+
+  EXPECT_NE(simplifier::constantBitP::CONFLICT, result)
+      << "conflict bottom-up: " << n;
+
+  EXPECT_TRUE(stp::FixedBits::equals(before_output, *output))
+      << "not at fixed point, output of node " << n.GetNodeNum() << " ("
+      << k << ") improved from " << before_output << " to " << *output;
+
+  for (size_t i = 0; i < children.size(); i++)
+    EXPECT_TRUE(stp::FixedBits::equals(*before_children[i], *children[i]))
+        << "not at fixed point, child " << i << " of node "
+        << n.GetNodeNum() << " (" << k << ") improved from "
+        << *before_children[i] << " to " << *children[i];
+
+  delete output;
+  for (size_t i = 0; i < children.size(); i++)
+  {
+    delete children[i];
+    delete before_children[i];
+  }
+}
+
+// Zero-extension must fix its high bits even though the child is
+// unknown. It was previously skipped along with extract and bvsx, so
+// the high zeros were missing from the domain. Note the nodes are built
+// with the hashing node factory: the simplifying factory rewrites
+// zero_extend into a concat with a zero constant, which was why the
+// skip went unnoticed.
+TEST(NodeDomainAnalysis_FixedPoint, zero_extend_raw_node)
+{
+  CONSTANTBV::BitVector_Boot(); // idempotent; needed if this test runs first
+  Context c;
+  NodeFactory* hf = c.mgr.hashingNodeFactory;
+
+  const ASTNode x = c.mgr.CreateSymbol("zx_input", 0, 8);
+  const ASTNode zx =
+      hf->CreateTerm(stp::BVZX, 20, x, c.mgr.CreateBVConst(32, 20));
+  const ASTNode out = c.mgr.CreateSymbol("zx_output", 0, 20);
+  const ASTNode top = hf->CreateNode(stp::EQ, zx, out);
+
+  c.domain.topLevel(top);
+  stp::ASTNodeSet visited;
+  checkNodeAtFixedPoint(c, top, visited);
+
+  // The forced facts must actually be present: everything above the
+  // extended-from width is zero.
+  const auto it = c.domain.getCbitMap()->find(zx);
+  ASSERT_TRUE(it != c.domain.getCbitMap()->end());
+  ASSERT_TRUE(it->second != nullptr) << "zero-extension derived nothing";
+  for (unsigned i = 8; i < 20; i++)
+    EXPECT_TRUE(it->second->isFixedToZero(i)) << "bit " << i;
+}
+
+// Sign-extension and extract of an unknown child really can derive
+// nothing (the remaining skips in buildMap): the checker proves
+// re-running their transfer functions fixes no bits.
+TEST(NodeDomainAnalysis_FixedPoint, sign_extend_and_extract_raw_nodes)
+{
+  CONSTANTBV::BitVector_Boot(); // idempotent; needed if this test runs first
+  Context c;
+  NodeFactory* hf = c.mgr.hashingNodeFactory;
+
+  const ASTNode x = c.mgr.CreateSymbol("sx_input", 0, 8);
+  const ASTNode sx =
+      hf->CreateTerm(stp::BVSX, 20, x, c.mgr.CreateBVConst(32, 20));
+  const ASTNode ex = hf->CreateTerm(stp::BVEXTRACT, 4, x,
+                                    c.mgr.CreateBVConst(32, 6),
+                                    c.mgr.CreateBVConst(32, 3));
+  const ASTNode out = c.mgr.CreateSymbol("sx_output", 0, 20);
+  const ASTNode out4 = c.mgr.CreateSymbol("ex_output", 0, 4);
+  const ASTNode top = hf->CreateNode(
+      stp::AND, hf->CreateNode(stp::EQ, sx, out),
+      hf->CreateNode(stp::EQ, ex, out4));
+
+  c.domain.topLevel(top);
+  stp::ASTNodeSet visited;
+  checkNodeAtFixedPoint(c, top, visited);
+}

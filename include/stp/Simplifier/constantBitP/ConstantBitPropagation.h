@@ -70,16 +70,30 @@ class ConstantBitPropagation
 
   bool topFixed;
 
-  // A vector that's reused.
+  // Vectors that are reused.
   vector<unsigned> previousChildrenFixedCount;
+  vector<FixedBits*> childrenBits;
 
-  void printNodeWithFixings();
 
   FixedBits* getUpdatedFixedBits(const ASTNode& n);
 
-  FixedBits* getCurrentFixedBits(const ASTNode& n);
+  // get the current value from the map. If no value is in the map. Make a new
+  // value. Almost all calls hit in the map, so that path is inlined here, and
+  // only the cold creation path is out of line.
+  FixedBits* getCurrentFixedBits(const ASTNode& n)
+  {
+    assert(NULL != fixedMap);
 
-  void scheduleDown(const ASTNode& n);
+    const NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it =
+        fixedMap->map->find(n);
+    if (it != fixedMap->map->end())
+      return it->second;
+
+    return createFixedBits(n);
+  }
+
+  FixedBits* createFixedBits(const ASTNode& n);
+
 
 public:
   NodeToFixedBitsMap* fixedMap;
@@ -126,7 +140,15 @@ public:
 
   stp::ASTNodeMap getAllFixed();
 
-  ASTNode bitsToNode(const ASTNode& node, const FixedBits& bits);
+  // Static, so the incremental engine converts its fixings through the
+  // same code on its own factory.
+  static ASTNode bitsToNode(NodeFactory* nf, const ASTNode& node,
+                            const FixedBits& bits);
+
+  // A fresh FixedBits for `n`, seeded from a syntactic constant where the
+  // node is one; no map is touched. The batch table and the incremental
+  // engine's trailed table both create their entries through this.
+  static FixedBits* makeInitialFixedBits(const ASTNode& n);
 
   void initWorkList(const ASTNode n) { workList->initWorkList(n); }
 

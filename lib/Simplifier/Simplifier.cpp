@@ -23,13 +23,19 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/MultiplyOverflowIdiom.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
+#include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdint>
+#include <deque>
 
 namespace stp
 {
-using std::endl;
 using std::cerr;
+using std::endl;
 
 
 // If enabled, simplifyTerm will simplify all the arguments to a function before
@@ -65,37 +71,16 @@ bool isPropositionToTerm(const ASTNode& n)
   return true;
 }
 
-bool Simplifier::CheckMap(ASTNodeMap* VarConstMap, const ASTNode& key,
-                          ASTNode& output)
-{
-  if (NULL == VarConstMap)
-  {
-    return false;
-  }
-  ASTNodeMap::iterator it;
-  if ((it = VarConstMap->find(key)) != VarConstMap->end())
-  {
-    output = it->second;
-    return true;
-  }
-  return false;
-}
-
 bool Simplifier::CheckSimplifyMap(const ASTNode& key, ASTNode& output,
-                                  bool pushNeg, ASTNodeMap* VarConstMap)
+                                  bool pushNeg)
 {
-  if (NULL != VarConstMap)
-  {
-    return false;
-  }
-
   if (!pushNeg && key.isSimplfied())
   {
     output = key;
     return true;
   }
 
-  ASTNodeMap::iterator it, itend;
+  DenseNodeMap::iterator it, itend;
   it = pushNeg ? SimplifyNegMap->find(key) : SimplifyMap->find(key);
   itend = pushNeg ? SimplifyNegMap->end() : SimplifyMap->end();
 
@@ -120,12 +105,8 @@ bool Simplifier::CheckSimplifyMap(const ASTNode& key, ASTNode& output,
 }
 
 void Simplifier::UpdateSimplifyMap(const ASTNode& key, const ASTNode& value,
-                                   bool pushNeg, ASTNodeMap* VarConstMap)
+                                   bool pushNeg)
 {
-  if (NULL != VarConstMap)
-  {
-    return;
-  }
   assert(!value.IsNull());
 
   // Don't add leaves. Leaves are easy to recalculate, no need
@@ -166,12 +147,7 @@ ASTNode Simplifier::applySubstitutionMapAtTopLevel(const ASTNode& topLevel)
   return substitutionMap.applySubstitutionMapAtTopLevel(topLevel);
 }
 
-ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n)
-{
-  return substitutionMap.applySubstitutionMapUntilArrays(n);
-}
-
-ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache)
+ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n, DenseNodeMap& cache)
 {
   return substitutionMap.applySubstitutionMapUntilArrays(n,cache);
 }
@@ -194,8 +170,8 @@ bool Simplifier::UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1)
 
 bool Simplifier::CheckMultInverseMap(const ASTNode& key, ASTNode& output)
 {
-  ASTNodeMap::iterator it;
-  if ((it = MultInverseMap.find(key)) != MultInverseMap.end())
+  const auto it = MultInverseMap.find(key);
+  if (it != MultInverseMap.end())
   {
     output = it->second;
     return true;
@@ -208,94 +184,15 @@ void Simplifier::UpdateMultInverseMap(const ASTNode& key, const ASTNode& value)
   MultInverseMap[key] = value;
 }
 
-// Check if key, or NOT(key) is found in the alwaysTrueSet.
-bool Simplifier::CheckAlwaysTrueFormSet(const ASTNode& key, bool& result)
-{
-  std::unordered_set<int>::const_iterator it_end_2 = AlwaysTrueHashSet.end();
-  std::unordered_set<int>::const_iterator it2 =
-      AlwaysTrueHashSet.find(key.GetNodeNum());
-
-  if (it2 != it_end_2)
-  {
-    result = true; // The key should be replaced by TRUE.
-    return true;
-  }
-
-  int toSearch;
-  if (key.GetKind() == NOT)
-    toSearch = key.GetNodeNum() - 1;
-  else
-    toSearch = key.GetNodeNum() + 1;
-
-  it2 = AlwaysTrueHashSet.find(toSearch);
-  if (it2 != it_end_2)
-  {
-    result = false;
-    return true;
-  }
-
-  return false;
-}
-
-void Simplifier::UpdateAlwaysTrueFormSet(const ASTNode& /*key*/)
-{
-  // The always true/ always false relies on the top level constraint not being
-  // removed.
-  // however with bb equivalence checking, AIGs can figure out that the outer
-  // constraint
-  // is unncessary because it's enforced by the implicit constraint---removing
-  // it. That
-  // leaves just one instance of the constraint, so it we replace it with
-  // true/false
-  // the constraint is lost. This is subsumed by constant bit propagation, so I
-  // suspect
-  // it's not a big loss.
-
-  /*if (false)//(!nf->UserFlags.isSet("bb-equiv", "1"))
-    AlwaysTrueHashSet.insert(key.GetNodeNum());*/
-}
-
-ASTNode Simplifier::SimplifyFormula_NoRemoveWrites(const ASTNode& b,
-                                                   bool pushNeg,
-                                                   ASTNodeMap* VarConstMap)
-{
-  ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
-  return out;
-}
-
-// I like simplify to have been run on all the nodes.
-void Simplifier::checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited)
-{
-  if (n.isConstant() || (n.GetKind() == SYMBOL))
-    return;
-
-  if (visited.find(n) != visited.end())
-    return;
-
-  if (SimplifyMap->find(n) == SimplifyMap->end())
-  {
-    cerr << "not found";
-    cerr << n;
-    assert(false);
-  }
-
-  for (size_t i = 0; i < n.Degree(); i++)
-  {
-    checkIfInSimplifyMap(n[i], visited);
-  }
-
-  visited.insert(n);
-}
-
-ASTNodeMap Simplifier::FindConsts_TopLevel(const ASTNode& b, bool pushNeg,ASTNodeMap* VarConstMap)
+ASTNodeMap Simplifier::FindConsts_TopLevel(const ASTNode& b, bool pushNeg)
 {
   assert(_bm->UserFlags.optimize_flag);
   _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
-  ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
+  ASTNode out = SimplifyFormula(b, pushNeg);
 
   ASTNodeMap constants;
   
-  for (const auto e: *SimplifyMap)
+  for (const auto& e: *SimplifyMap)
   {
     if (e.second.isConstant())
     {
@@ -311,14 +208,18 @@ ASTNodeMap Simplifier::FindConsts_TopLevel(const ASTNode& b, bool pushNeg,ASTNod
 
 // The SimplifyMaps on entry to the topLevel functions may contain
 // useful entries.  E.g. The BVSolver may call SimplifyTerm()
-ASTNode Simplifier::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg,
-                                             ASTNodeMap* VarConstMap)
+ASTNode Simplifier::simplifyAlone(STPMgr* bm, const ASTNode& n)
+{
+  SubstitutionMap localSm(bm);
+  Simplifier localSimp(bm, &localSm);
+  return localSimp.SimplifyFormula_TopLevel(n, false);
+}
+
+ASTNode Simplifier::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg)
 {
   assert(_bm->UserFlags.optimize_flag);
   _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
-  ASTNode out = SimplifyFormula(b, pushNeg, VarConstMap);
-  ASTNodeSet visited;
-  // checkIfInSimplifyMap(out,visited);
+  ASTNode out = SimplifyFormula(b, pushNeg);
   ResetSimplifyMaps();
   _bm->GetRunTimes()->stop(RunTimes::SimplifyTopLevel);
   return out;
@@ -334,234 +235,56 @@ ASTNode Simplifier::SimplifyTerm_TopLevel(const ASTNode& b)
   return out;
 }
 
-ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg,
-                                    ASTNodeMap* VarConstMap)
+bool Simplifier::formulaShortcut(const ASTNode& b, bool pushNeg, ASTNode& a,
+                                 ASTNode& out)
 {
   assert(_bm->UserFlags.optimize_flag);
   assert(BOOLEAN_TYPE == b.GetType());
 
   if (b.isConstant())
   {
-    if (!pushNeg)
-      return b;
-    else
-    {
-      if (ASTTrue == b)
-        return ASTFalse;
-      else
-        return ASTTrue;
-    }
+    out = pushNeg ? nf->CreateNode(NOT, b) : b;
+    return true;
   }
 
-  ASTNode output;
-  if (CheckSimplifyMap(b, output, pushNeg, VarConstMap))
-    return output;
+  if (CheckSimplifyMap(b, out, pushNeg))
+    return true;
 
-  Kind kind = b.GetKind();
-
-  ASTNode a = b;
-  ASTVec ca = a.GetChildren();
-  if (!(IMPLIES == kind || ITE == kind || PARAMBOOL == kind || isAtomic(kind)))
-  {
-    SortByArith(ca);
-    if (ca != a.GetChildren())
-      a = nf->CreateNode(kind, ca);
-  }
-
-  a = PullUpITE(a);
-  kind = a.GetKind(); // pullUpITE can change the Kind of the node.
-
-  switch (kind)
-  {
-    case AND:
-    case OR:
-      output = SimplifyAndOrFormula(a, pushNeg, VarConstMap);
-      break;
-    case NOT:
-      output = SimplifyNotFormula(a, pushNeg, VarConstMap);
-      break;
-    case XOR:
-      output = SimplifyXorFormula(a, pushNeg, VarConstMap);
-      break;
-    case NAND:
-      output = SimplifyNandFormula(a, pushNeg, VarConstMap);
-      break;
-    case NOR:
-      output = SimplifyNorFormula(a, pushNeg, VarConstMap);
-      break;
-    case IFF:
-      output = SimplifyIffFormula(a, pushNeg, VarConstMap);
-      break;
-    case IMPLIES:
-      output = SimplifyImpliesFormula(a, pushNeg, VarConstMap);
-      break;
-    case ITE:
-      output = SimplifyIteFormula(a, pushNeg, VarConstMap);
-      break;
-    default:
-      // kind can be EQ,NEQ,BVLT,BVLE,... or a propositional variable
-      output = SimplifyAtomicFormula(a, pushNeg, VarConstMap);
-      break;
-  }
-
-  UpdateSimplifyMap(b, output, pushNeg, VarConstMap);
-  UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-
-  ASTNode input_with_not = pushNeg ? nf->CreateNode(NOT, a) : a;
-  if (input_with_not != output)
-  {
-    return SimplifyFormula(output, false, VarConstMap);
-  }
-  return output;
+  // pullUpITE can change the Kind of the node.
+  a = PullUpITE(b);
+  return false;
 }
 
-ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
-                                          ASTNodeMap* VarConstMap)
+// A concat's leading constant, if it has one. Keep the answer itself rather
+// than only its width: callers inspect several bits, and chasing the first
+// child from the root again for every bit makes that quadratic in a deep
+// concat's depth and its constant prefix width.
+const ASTNode* mostSignificantConstant(const ASTNode& n)
 {
-  //     if (!optimize_flag)
-  //       return a;
-
-  ASTNode output;
-  if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
-  {
-    return output;
-  }
-
-  ASTNode left, right;
-  if (a.Degree() == 2)
-  {
-    left = SimplifyTerm(a[0], VarConstMap);
-    right = SimplifyTerm(a[1], VarConstMap);
-  }
-
-  Kind kind = a.GetKind();
-  switch (kind)
-  {
-    case TRUE:
-      output = pushNeg ? ASTFalse : ASTTrue;
-      break;
-    case FALSE:
-      output = pushNeg ? ASTTrue : ASTFalse;
-      break;
-    case SYMBOL:
-      if (!InsideSubstitutionMap(a, output))
-      {
-        output = a;
-      }
-      output = pushNeg ? nf->CreateNode(NOT, output) : output;
-      break;
-    case PARAMBOOL:
-    {
-      ASTNode term = SimplifyTerm(a[1], VarConstMap);
-      output = nf->CreateNode(PARAMBOOL, a[0], term);
-      output = pushNeg ? nf->CreateNode(NOT, output) : output;
-      break;
-    }
-    case BOOLEXTRACT:
-    {
-      ASTNode term = SimplifyTerm(a[0], VarConstMap);
-      ASTNode thebit = a[1];
-      ASTNode zero = nf->CreateZeroConst(1);
-      ASTNode one = nf->CreateOneConst(1);
-      ASTNode getthebit = SimplifyTerm(
-          nf->CreateTerm(BVEXTRACT, 1, term, thebit, thebit), VarConstMap);
-      if (getthebit == zero)
-        output = pushNeg ? ASTTrue : ASTFalse;
-      else if (getthebit == one)
-        output = pushNeg ? ASTFalse : ASTTrue;
-      else
-      {
-        output = nf->CreateNode(BOOLEXTRACT, term, thebit);
-        output = pushNeg ? nf->CreateNode(NOT, output) : output;
-      }
-      break;
-    }
-    case EQ:
-    {
-      output = CreateSimplifiedEQ(left, right);
-      output = LhsMinusRhs(output);
-      output = ITEOpt_InEqs(output);
-      if (output == ASTTrue)
-        output = pushNeg ? ASTFalse : ASTTrue;
-      else if (output == ASTFalse)
-        output = pushNeg ? ASTTrue : ASTFalse;
-      else
-        output = pushNeg ? nf->CreateNode(NOT, output) : output;
-      break;
-    }
-    case BVLT:
-    case BVLE:
-    case BVGT:
-    case BVGE:
-    case BVSLT:
-    case BVSLE:
-    case BVSGT:
-    case BVSGE:
-    {
-      output = CreateSimplifiedINEQ(kind, left, right, pushNeg);
-      break;
-    }
-    case BVUADDO:
-    case BVSADDO:
-    case BVUMULO:
-    case BVSMULO:
-    case BVUSUBO:
-    case BVSSUBO:
-    {
-      // Overflow predicates are not inequalities; just rebuild with the
-      // simplified children (constant children are folded by the node
-      // factory) and honour pushNeg.
-      output = nf->CreateNode(kind, left, right);
-      output = pushNeg ? nf->CreateNode(NOT, output) : output;
-      break;
-    }
-    default:
-      FatalError("SimplifyAtomicFormula: "
-                 "NO atomic formula of the kind: ",
-                 ASTUndefined, kind);
-      break;
-  }
-
-  // memoize
-  UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-  return output;
+  const ASTNode* current = &n;
+  while (current->GetKind() == BVCONCAT)
+    current = &(*current)[0];
+  return current->isConstant() ? current : NULL;
 }
 
-// number of constant bits in the most significant places.
-unsigned mostSignificantConstants(const ASTNode& n)
+unsigned getConstantBit(const ASTNode& constant, const unsigned i)
 {
-  if (n.isConstant())
-    return n.GetValueWidth();
-  if (n.GetKind() == BVCONCAT)
-    return mostSignificantConstants(n[0]);
-  return 0;
-}
-
-unsigned getConstantBit(const ASTNode& n, const int i)
-{
-  if (n.GetKind() == BVCONST)
-  {
-    assert((int)n.GetValueWidth() >= i + 1);
-    return CONSTANTBV::BitVector_bit_test(n.GetBVConst(),
-                                          n.GetValueWidth() - 1 - i)
-               ? 1
-               : 0;
-  }
-  if (n.GetKind() == BVCONCAT)
-    return getConstantBit(n[0], i);
-
-  assert(false);
-  abort();
+  assert(constant.GetKind() == BVCONST && i < constant.GetValueWidth());
+  return CONSTANTBV::BitVector_bit_test(
+             constant.GetBVConst(), constant.GetValueWidth() - 1 - i)
+             ? 1
+             : 0;
 }
 
 unsigned numberOfLeadingZeroes(const ASTNode& n)
 {
-  unsigned c = mostSignificantConstants(n);
-  if (c == 0)
+  const ASTNode* constant = mostSignificantConstant(n);
+  if (constant == NULL)
     return 0;
 
+  const unsigned c = constant->GetValueWidth();
   for (unsigned i = 0; i < c; i++)
-    if (getConstantBit(n, i) != 0)
+    if (getConstantBit(*constant, i) != 0)
       return i;
   return c;
 }
@@ -612,57 +335,11 @@ ASTNode Simplifier::CreateSimplifiedINEQ(const Kind k_i, const ASTNode& left_i,
       return pushNeg ? ASTFalse : ASTTrue;
   }
 
+  // NB. Comparisons that differing leading constant bits decide are
+  // resolved by strength reduction: the fixed-bit transfer functions for
+  // concat and the comparisons subsume that reasoning.
+
   const unsigned len = left.GetValueWidth();
-
-  if (true)
-  {
-
-    const int constStart = std::min(mostSignificantConstants(left),
-                                    mostSignificantConstants(right));
-    int comparator = 0;
-
-    for (int i = 0; i < constStart; i++)
-    {
-      const int a = getConstantBit(left, i);
-      const int b = getConstantBit(right, i);
-      assert(a == 1 || a == 0);
-      assert(b == 1 || b == 0);
-
-      if (a < b)
-      {
-        comparator = -1;
-        break;
-      }
-      else if (a > b)
-      {
-        comparator = +1;
-        break;
-      }
-    }
-
-    if (comparator != 0 && (k == BVGT || k == BVGE))
-    {
-      ASTNode status = (comparator == 1) ? ASTTrue : ASTFalse;
-      return pushNeg ? nf->CreateNode(NOT, status) : status;
-    }
-
-    if (comparator != 0 && (k == BVSGT || k == BVSGE))
-    {
-      // one is bigger than the other.
-      int sign_a = getConstantBit(left, 0);
-      int sign_b = getConstantBit(right, 0);
-      if (sign_a < sign_b)
-      {
-        comparator = 1; // a > b.
-      }
-      if (sign_a > sign_b)
-        comparator = -1;
-
-      ASTNode status = (comparator == 1) ? ASTTrue : ASTFalse;
-      return pushNeg ? nf->CreateNode(NOT, status) : status;
-    }
-
-  }
 
   const ASTNode unsigned_min = nf->CreateZeroConst(len);
   const ASTNode one = nf->CreateOneConst(len);
@@ -765,6 +442,16 @@ ASTNode Simplifier::PullUpITE(const ASTNode& in)
     result = nf->CreateTerm(ITE, in.GetValueWidth(), in[0][0], l1, l2);
   }
 
+  // A rebuilt node cannot lose the input's floating-point format. The
+  // interesting case is not a float operation (those derive their format
+  // from their children) but a plain bitvector node carrying a format
+  // *stamp*: the canonicalised index of a float-indexed array is a
+  // bitvector circuit stamped with the index's format (see FpTotalise),
+  // and pulling an if-then-else out of, say, its concatenation must
+  // keep the stamp or the node changes type. No-op for everything else.
+  result = FloatBlaster::withFormat(_bm, result, in.GetExpWidth(),
+                                    in.GetSigWidth());
+
   assert(result.GetType() == in.GetType());
   assert(result.GetValueWidth() == in.GetValueWidth());
   assert(result.GetIndexWidth() == in.GetIndexWidth());
@@ -774,7 +461,7 @@ ASTNode Simplifier::PullUpITE(const ASTNode& in)
 }
 
 // takes care of some simple ITE Optimizations in the context of equations
-ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
+ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNode& conditionToNegate)
 {
   CountersAndStats("ITEOpts_InEqs", _bm);
 
@@ -800,8 +487,9 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
   }
   else if (BVCONST == k1 && BVCONST == k2)
   {
-    assert(in1 != in2);
-    output = ASTFalse;
+    // Distinct constant nodes may still spell one value (a float
+    // constant interns apart from the plain constant with its bits).
+    output = constantsSameBits(in1, in2) ? ASTTrue : ASTFalse;
   }
   else if (ITE == k1 && BVCONST == in1[1].GetKind() &&
            BVCONST == in1[2].GetKind() && BVCONST == k2)
@@ -816,16 +504,20 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
     // c = ITE(cond,d,c) <=> NOT(cond)
     //
     // similarly ITE(cond,d,c) = d <=> NOT(cond)
+    // The "other branch differs" side conditions compare values, not
+    // nodes: with both branches spelling one value the equality holds
+    // whatever the condition, and folding to the condition would be
+    // wrong.
     ASTNode cond = in1[0];
-    if (in1[1] == in2 && (in2 != in1[2]))
+    if (in1[1] == in2 && constantsDenoteDifferentValues(in2, in1[2]))
     {
       // ITE(cond, c, d) = c <=> cond
       output = cond;
     }
-    else if (in1[2] == in2 && (in2 != in1[1]))
+    else if (in1[2] == in2 && constantsDenoteDifferentValues(in2, in1[1]))
     {
-      cond = SimplifyFormula(cond, true, VarConstMap);
-      output = cond;
+      conditionToNegate = cond;
+      return ASTUndefined;
     }
     else
     {
@@ -837,15 +529,15 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
            BVCONST == in2[2].GetKind() && BVCONST == k1)
   {
     ASTNode cond = in2[0];
-    if (in2[1] == in1 && (in1 != in2[2]))
+    if (in2[1] == in1 && constantsDenoteDifferentValues(in1, in2[2]))
     {
       // ITE(cond, c, d) = c <=> cond
       output = cond;
     }
-    else if (in2[2] == in1 && (in1 != in2[1]))
+    else if (in2[2] == in1 && constantsDenoteDifferentValues(in1, in2[1]))
     {
-      cond = SimplifyFormula(cond, true, VarConstMap);
-      output = cond;
+      conditionToNegate = cond;
+      return ASTUndefined;
     }
     else
     {
@@ -859,7 +551,7 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
     output = nf->CreateNode(EQ, in1, in2);
   }
 
-  UpdateSimplifyMap(in, output, false, VarConstMap);
+  UpdateSimplifyMap(in, output, false);
   return output;
 }
 
@@ -875,21 +567,34 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
     // terms are syntactically the same
     return ASTTrue;
 
-  // here the terms are definitely not syntactically equal but may be
-  // semantically equal.
+  if (_bm->UserFlags.mulo_recognition)
+  {
+    ASTNode rewritten;
+    if (multiplyOverflowIdiom(nf, in1, in2, rewritten) ||
+        multiplyOverflowIdiom(nf, in2, in1, rewritten))
+      return rewritten;
+  }
+
+  // Two constant nodes still may be semantically equal: a float constant
+  // interns apart from the plain constant with its bits, so compare the
+  // bits, not the identities.
   if (BVCONST == k1 && BVCONST == k2)
-    return ASTFalse;
+    return constantsSameBits(in1, in2) ? ASTTrue : ASTFalse;
 
   // Check if some of the leading constant bits are different. Fancier code
   // would check
   // each bit, not just the leading bits.
-  const int constStart =
-      std::min(mostSignificantConstants(in1), mostSignificantConstants(in2));
+  const ASTNode* leading1 = mostSignificantConstant(in1);
+  const ASTNode* leading2 = mostSignificantConstant(in2);
+  const unsigned constStart =
+      leading1 == NULL || leading2 == NULL
+          ? 0
+          : std::min(leading1->GetValueWidth(), leading2->GetValueWidth());
 
-  for (int i = 0; i < constStart; i++)
+  for (unsigned i = 0; i < constStart; i++)
   {
-    const int a = getConstantBit(in1, i);
-    const int b = getConstantBit(in2, i);
+    const unsigned a = getConstantBit(*leading1, i);
+    const unsigned b = getConstantBit(*leading2, i);
     assert(a == 1 || a == 0);
     assert(b == 1 || b == 0);
 
@@ -900,7 +605,7 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   // The above loop has determined that the leading bits are the same.
   if (constStart > 0)
   {
-    int newWidth = in1.GetValueWidth() - constStart;
+    const unsigned newWidth = in1.GetValueWidth() - constStart;
     ASTNode zero = nf->CreateZeroConst(32);
 
     ASTNode lhs = nf->CreateTerm(BVEXTRACT, newWidth, in1,
@@ -919,8 +624,11 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   if (k1 == BVCONCAT && k2 == BVCONCAT &&
       in1[0].GetValueWidth() == in2[0].GetValueWidth())
   {
-    return nf->CreateNode(AND, nf->CreateNode(EQ, in1[0], in2[0]),
-                          nf->CreateNode(EQ, in1[1], in2[1]));
+    // Named variables, so that the nodes aren't built in whatever order the
+    // compiler picks to evaluate the arguments in.
+    const ASTNode topEq = nf->CreateNode(EQ, in1[0], in2[0]);
+    const ASTNode bottomEq = nf->CreateNode(EQ, in1[1], in2[1]);
+    return nf->CreateNode(AND, topEq, bottomEq);
   }
 
   // If the rhs is a concat, and the lhs is a constant. Split.
@@ -939,8 +647,9 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
     assert(BVTypeCheck(top));
     assert(BVTypeCheck(bottom));
 
-    ASTNode r = nf->CreateNode(AND, nf->CreateNode(EQ, top, in2[0]),
-                               nf->CreateNode(EQ, bottom, in2[1]));
+    const ASTNode topEq = nf->CreateNode(EQ, top, in2[0]);
+    const ASTNode bottomEq = nf->CreateNode(EQ, bottom, in2[1]);
+    ASTNode r = nf->CreateNode(AND, topEq, bottomEq);
 
     return r;
   }
@@ -998,526 +707,1310 @@ ASTNode Simplifier::CreateSimplifiedTermITE(const ASTNode& in0,
   if (t1 == t2)
     return t1;
 
-  bool result;
-  if (CheckAlwaysTrueFormSet(t0, result))
-  {
-    if (result)
-      return t1;
-    else
-      return t2;
-  }
-
   return nf->CreateArrayTerm(ITE, t1.GetIndexWidth(), t1.GetValueWidth(), t0,
                              t1, t2);
 }
 
-ASTNode Simplifier::CreateSimplifiedFormulaITE(const ASTNode& in0,
-                                               const ASTNode& in1,
-                                               const ASTNode& in2)
+// Every connective is where a formula nests: each operand is simplified by
+// coming back through here, so a formula nested as deeply as the input runs
+// the stack out. The frames live on the heap instead.
+//
+// The AND/OR spine was walked this way already, on the argument that the
+// other kinds "nest through each other rather than through a spine, and
+// nothing has been seen to reach a depth that matters". Something has: a
+// query built from 8,000 nested fp.add operations lowers to NOT and
+// if-then-else nested that deeply, and it died in exactly those two arms --
+// below the ~9,300 of the deepest input we have. So all of them are one walk
+// now. See DeepDag_Test.cpp.
+ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg)
 {
-  const ASTNode& t0 = in0;
-  const ASTNode& t1 = in1;
-  const ASTNode& t2 = in2;
-  CountersAndStats("CreateSimplifiedFormulaITE", _bm);
-
-  if (_bm->UserFlags.optimize_flag)
-  {
-    if (t0 == ASTTrue)
-      return t1;
-    if (t0 == ASTFalse)
-      return t2;
-    if (t1 == t2)
-      return t1;
-
-    bool result;
-    if (CheckAlwaysTrueFormSet(t0, result))
-    {
-      if (result)
-        return t1;
-      else
-        return t2;
-    }
-  }
-  ASTNode result = nf->CreateNode(ITE, t0, t1, t2);
-  assert(BVTypeCheck(result));
-  return result;
+  return simplifyNode(b, pushNeg, SimplifyJob::Formula);
 }
 
-ASTNode Simplifier::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg,
-                                         ASTNodeMap* VarConstMap)
+class Simplifier::SimplifyDriver
 {
-  ASTNode output;
-  // cerr << "input:\n" << a << endl;
+  Simplifier& owner;
+  NodeFactory* const nf;
+  STPMgr* const _bm;
+  ASTNode& ASTTrue;
+  ASTNode& ASTFalse;
+  ASTNode& ASTUndefined;
 
-  if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
-    return output;
-
-  const Kind k = a.GetKind();
-  ASTVec c = FlattenKind(k, a.GetChildren());
-  SortByArith(c);
-
-  const bool isAnd = (k == AND) ? true : false;
-
-  const ASTNode annihilator =
-      isAnd ? (pushNeg ? ASTTrue : ASTFalse) : (pushNeg ? ASTFalse : ASTTrue);
-
-  const ASTNode identity =
-      isAnd ? (pushNeg ? ASTFalse : ASTTrue) : (pushNeg ? ASTTrue : ASTFalse);
-
-  ASTVec outvec;
-  outvec.reserve(c.size());
-
-  // do the work
-  ASTVec::const_iterator next_it;
-  for (ASTVec::const_iterator i = c.begin(), iend = c.end(); i != iend; i++)
+  bool formulaShortcut(const ASTNode& b, const bool pushNeg, ASTNode& a,
+                       ASTNode& out)
   {
-    next_it = i + 1;
-    bool nextexists = (next_it < iend);
+    return owner.formulaShortcut(b, pushNeg, a, out);
+  }
 
-    const ASTNode aaa = SimplifyFormula(*i, pushNeg, VarConstMap);
-    if (annihilator == aaa)
+  bool CheckSimplifyMap(const ASTNode& key, ASTNode& output, const bool pushNeg)
+  {
+    return owner.CheckSimplifyMap(key, output, pushNeg);
+  }
+
+  void UpdateSimplifyMap(const ASTNode& key, const ASTNode& value,
+                         const bool pushNeg)
+  {
+    owner.UpdateSimplifyMap(key, value, pushNeg);
+  }
+
+  bool InsideSubstitutionMap(const ASTNode& key, ASTNode& output)
+  {
+    return owner.InsideSubstitutionMap(key, output);
+  }
+
+  ASTNode ITEOpt_InEqs(const ASTNode& input, ASTNode& conditionToNegate)
+  {
+    return owner.ITEOpt_InEqs(input, conditionToNegate);
+  }
+
+  ASTNode LhsMinusRhsTerm(const ASTNode& equality,
+                          const ASTNode& simplifiedNegatedRhs)
+  {
+    return owner.LhsMinusRhsTerm(equality, simplifiedNegatedRhs);
+  }
+
+  ASTNode CreateSimplifiedEQ(const ASTNode& left, const ASTNode& right)
+  {
+    return owner.CreateSimplifiedEQ(left, right);
+  }
+
+  ASTNode CreateSimplifiedINEQ(const Kind kind, const ASTNode& left,
+                               const ASTNode& right, const bool pushNeg)
+  {
+    return owner.CreateSimplifiedINEQ(kind, left, right, pushNeg);
+  }
+
+  ASTNode CreateSimplifiedTermITE(const ASTNode& condition,
+                                  const ASTNode& thenValue,
+                                  const ASTNode& elseValue)
+  {
+    return owner.CreateSimplifiedTermITE(condition, thenValue, elseValue);
+  }
+
+  ASTNode BVConstEvaluator(const ASTNode& node)
+  {
+    return owner.BVConstEvaluator(node);
+  }
+
+  ASTNode PullUpITE(const ASTNode& node) { return owner.PullUpITE(node); }
+
+  bool hasBeenSimplified(const ASTNode& node)
+  {
+    return owner.hasBeenSimplified(node);
+  }
+
+  ASTNode simplify_term_switch(const ASTNode& actualInput, ASTNode& input,
+                               ASTNode& output, const Kind kind,
+                               const unsigned valueWidth)
+  {
+    return owner.simplify_term_switch(actualInput, input, output, kind,
+                                      valueWidth);
+  }
+
+  // What one node is part-way through. `b` is the node as it arrived and `a`
+  // as PullUpITE left it; both are recorded against the answer, as
+  // SimplifyFormula and simplifyNonAndOr each did.
+  //
+  // `pushNeg` is per frame, where the AND/OR-only driver took one for the
+  // whole walk. That arm does hand its own negation to every operand, but the
+  // others choose per operand: NAND and NOR push it into both, IMPLIES and
+  // IFF into one, and a NOT counts the run of NOTs above it and starts again
+  // from the parity of that count.
+  //
+  // Each arm of the switch below is one of the functions this replaced, and
+  // each phase is a point where that function called SimplifyFormula and has
+  // to be able to stop:
+  //
+  //     AND, OR              SimplifyAndOrFormula
+  //     NOT                  SimplifyNotFormula
+  //     XOR                  SimplifyXorFormula
+  //     NAND, NOR, IMPLIES   SimplifyNandFormula, SimplifyNorFormula,
+  //                          SimplifyImpliesFormula
+  //     IFF                  SimplifyIffFormula
+  //     ITE                  SimplifyIteFormula
+  //     default              SimplifyAtomicFormula
+  //
+  // An arm reads the same way as the function did if `finish` is read as its
+  // `return`, and `requestFormula` as the call it made just above one. Nothing
+  // else of those functions moved: the head each shared is formulaShortcut
+  // plus the map test before a frame is pushed, and the tail each shared is
+  // `finish`.
+  struct Frame
+  {
+    enum Job : uint8_t
     {
-      // memoize
-      UpdateSimplifyMap(*i, annihilator, pushNeg, VarConstMap);
-      UpdateSimplifyMap(a, annihilator, pushNeg, VarConstMap);
-      // cerr << "annihilator1: output:\n" << annihilator << endl;
-      return annihilator;
-    }
-    ASTNode bbb;
-    if (nextexists)
+      FormulaJob,
+      AtomicJob,
+      TermJob,
+      ArrayJob
+    };
+
+    // A resume point belongs to exactly one job. Keeping these as distinct
+    // types makes it impossible to suspend (say) a term frame at a formula
+    // continuation by mistake.
+    enum class FormulaPhase : uint8_t
     {
-      bbb = SimplifyFormula(*next_it, pushNeg, VarConstMap);
-    }
-    if (nextexists && bbb == aaa)
+      Start,
+      AfterAndOrOperand,
+      AfterNotBody,
+      AfterXorOperand,
+      AfterBinaryLeft,
+      AfterBinaryRight,
+      AfterIffRight,
+      AfterIffLeft,
+      AfterIffFold,
+      AfterIteCondition,
+      AfterIteThen,
+      AfterIteElse,
+      AfterIteFold,
+      AfterAtomic
+    };
+
+    enum class AtomicPhase : uint8_t
     {
-      // skip the duplicate aaa. *next_it will be included
-    }
-    else if (nextexists && ((bbb.GetKind() == NOT && bbb[0] == aaa)))
+      Prepared,
+      AfterLeftOperand,
+      AfterRightOperand,
+      AfterBoolExtract,
+      AfterFpOperand,
+      AfterNegatedEqualityRhs,
+      AfterCombinedEquality,
+      AfterIteCondition
+    };
+
+    enum class TermPhase : uint8_t
     {
-      // memoize
-      UpdateSimplifyMap(a, annihilator, pushNeg, VarConstMap);
-      // cerr << "annihilator2: output:\n" << annihilator << endl;
-      return annihilator;
-    }
-    else if (identity == aaa)
+      Prepared,
+      PreparedSubstitution,
+      AfterSubstitution,
+      AfterOperand,
+      AfterPullUpIte,
+      AfterRetry,
+      AfterOutput,
+      AfterReadArray
+    };
+
+    enum class ArrayPhase : uint8_t
     {
-      // //drop identites
+      Prepared,
+      AfterCondition,
+      AfterThen,
+      AfterElse,
+      AfterBase,
+      AfterIndex,
+      AfterValue
+    };
+
+    // Put the reference-counted and aligned state first. The scalar state is
+    // packed at the tail so a frame does not acquire padding between every
+    // phase discriminator and node.
+    ASTNode b;
+    ASTNode a;
+
+    // AND, OR and XOR collect their operands.
+    ASTVec outvec;
+
+    // The operands an arm has to keep across a suspension: what a NOT has
+    // under it, the two sides of a binary connective, the three of an
+    // if-then-else.
+    ASTNode t0, t1, t2;
+
+    // Term jobs simplify their selected operands in `outvec` itself. `output`
+    // is also scratch storage for atomic jobs and for the AND/OR annihilator;
+    // those jobs are mutually exclusive, so carrying another ASTNode in every
+    // frame would only make the explicit stack larger.
+    ASTNode output;
+    size_t i = 0;
+
+    // Formula jobs use the kind while term jobs use the width. A frame can
+    // never be both, so keeping separate words only enlarged every frame.
+    union
+    {
+      Kind outKind;
+      unsigned valueWidth;
+    };
+
+    Job job = FormulaJob;
+    union
+    {
+      FormulaPhase formulaPhase;
+      AtomicPhase atomicPhase;
+      TermPhase termPhase;
+      ArrayPhase arrayPhase;
+    };
+    bool pushNeg = false;
+
+    Frame() : outKind(UNDEFINED), formulaPhase(FormulaPhase::Start) {}
+
+    Frame(ASTNode input, ASTNode dispatch, const bool neg,
+          const FormulaPhase phase)
+        : b(std::move(input)), a(std::move(dispatch)), outKind(UNDEFINED),
+          job(FormulaJob), formulaPhase(phase), pushNeg(neg)
+    {
     }
+
+    Frame(ASTNode input, const bool neg, const AtomicPhase phase)
+        : b(std::move(input)), outKind(UNDEFINED), job(AtomicJob),
+          atomicPhase(phase), pushNeg(neg)
+    {
+    }
+
+    Frame(ASTNode input, const TermPhase phase)
+        : b(std::move(input)), outKind(UNDEFINED), job(TermJob),
+          termPhase(phase)
+    {
+    }
+
+    Frame(ASTNode input, const ArrayPhase phase)
+        : b(std::move(input)), outKind(UNDEFINED), job(ArrayJob),
+          arrayPhase(phase)
+    {
+    }
+
+    void resumeAt(const FormulaPhase phase)
+    {
+      assert(job == FormulaJob);
+      formulaPhase = phase;
+    }
+    void resumeAt(const AtomicPhase phase)
+    {
+      assert(job == AtomicJob);
+      atomicPhase = phase;
+    }
+    void resumeAt(const TermPhase phase)
+    {
+      assert(job == TermJob);
+      termPhase = phase;
+    }
+    void resumeAt(const ArrayPhase phase)
+    {
+      assert(job == ArrayJob);
+      arrayPhase = phase;
+    }
+  };
+
+  static_assert(sizeof(Frame) <= 88,
+                "simplifier continuation frame unexpectedly grew");
+
+  ASTNode result;
+  std::vector<Frame> stack;
+
+  enum class StepResult
+  {
+    Finished,
+    Pushed,
+    Redispatch,
+    Yield
+  };
+
+  // The head of SimplifyFormula: the answers it gives before dispatching to
+  // an arm at all. `a` is left holding the node PullUpITE produced, which is
+  // what the arm runs on. True when `result` is the answer.
+  bool prepareFormula(const ASTNode& n, const bool neg, ASTNode& a)
+  {
+    ASTNode out;
+    if (formulaShortcut(n, neg, a, out))
+    {
+      result = out;
+      return true;
+    }
+
+    // Every arm began by asking the map about the node PullUpITE produced.
+    // formulaShortcut already asked when PullUpITE left the node unchanged.
+    ASTNode cached;
+    if (a != n && CheckSimplifyMap(a, cached, neg))
+    {
+      // `a` is the key that answered, so only the node as it arrived still
+      // needs recording.
+      UpdateSimplifyMap(n, cached, neg);
+      result = cached;
+      return true;
+    }
+    return false;
+  }
+
+  // Ask for the simplification of `n` under `neg`, and set this frame's
+  // continuation to `resume`.
+  //
+  // The head runs here rather than in the frame below because most of the
+  // time it answers: the operands of a DAG are mostly nodes the walk has
+  // already simplified, and a memo hit does not need a frame to return
+  // through. Return Pushed only when a child frame was added. An immediate
+  // answer stays in `result` and returns Redispatch, which the job-local loop
+  // consumes without a control-flow jump or an outer worklist dispatch.
+  // `n` can name storage in the current frame (for example f.output or
+  // f.t0). Construct the child before growing the vector so it owns those
+  // references before a reallocation can move the parent.
+  // Keep the four child heads separate. Their job is known at every request
+  // site; making it a run-time argument forced this hot path through a
+  // four-way discriminator even though only one arm could ever apply.
+  template <typename ResumePhase>
+  StepResult requestFormula(Frame& f, const ResumePhase resume,
+                            const ASTNode& n, const bool neg)
+  {
+    f.resumeAt(resume);
+    ASTNode a;
+    if (prepareFormula(n, neg, a))
+      return StepResult::Redispatch;
+    stack.emplace_back(n, std::move(a), neg, Frame::FormulaPhase::Start);
+    return StepResult::Pushed;
+  }
+
+  template <typename ResumePhase>
+  StepResult requestTerm(Frame& f, const ResumePhase resume, const ASTNode& n)
+  {
+    f.resumeAt(resume);
+    if (n.isConstant())
+    {
+      result = n;
+      return StepResult::Redispatch;
+    }
+
+    ASTNode substitutionImage;
+    Frame::TermPhase start;
+    if (InsideSubstitutionMap(n, substitutionImage))
+      start = Frame::TermPhase::PreparedSubstitution;
+    else if (CheckSimplifyMap(n, result, false))
+      return StepResult::Redispatch;
     else
+      start = Frame::TermPhase::Prepared;
+
+    stack.emplace_back(n, start);
+    if (start == Frame::TermPhase::PreparedSubstitution)
+      stack.back().output = std::move(substitutionImage);
+    return StepResult::Pushed;
+  }
+
+  template <typename ResumePhase>
+  StepResult requestArray(Frame& f, const ResumePhase resume, const ASTNode& n)
+  {
+    f.resumeAt(resume);
+    if (n.GetKind() == SYMBOL)
     {
-      outvec.push_back(aaa);
+      result = n;
+      return StepResult::Redispatch;
     }
+    if (CheckSimplifyMap(n, result, false))
+      return StepResult::Redispatch;
+    stack.emplace_back(n, Frame::ArrayPhase::Prepared);
+    return StepResult::Pushed;
   }
 
-  switch (outvec.size())
+  template <typename ResumePhase>
+  StepResult requestAtomic(Frame& f, const ResumePhase resume, const ASTNode& n,
+                           const bool neg)
   {
-    case 0:
+    f.resumeAt(resume);
+    stack.emplace_back(n, neg, Frame::AtomicPhase::Prepared);
+    return StepResult::Pushed;
+  }
+
+  // Keep each job's phase dispatcher in its own function. Formula and term
+  // jobs dominate ordinary simplification; folding the atomic and array
+  // state machines into the same large body evicts their hot code even when
+  // those jobs are not running.
+  StepResult stepAtomic(Frame& f)
+  {
+    assert(f.job == Frame::AtomicJob);
+    // The one request site, requestAtomic, always starts an atomic frame
+    // prechecked: the formula head that scheduled it has already probed the
+    // map for this node under this polarity.
     {
-      // only identities were dropped
-      output = identity;
-      break;
-    }
-    case 1:
-    {
-      output = outvec[0];
-      break;
-    }
-    default:
-    {
-      output = (isAnd) ? (pushNeg ? nf->CreateNode(OR, outvec)
-                                  : nf->CreateNode(AND, outvec))
-                       : (pushNeg ? nf->CreateNode(AND, outvec)
-                                  : nf->CreateNode(OR, outvec));
-      break;
-    }
-  }
-
-  // memoize
-  UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-  // cerr << "output:\n" << output << endl;
-  return output;
-}
-
-ASTNode Simplifier::SimplifyNotFormula(const ASTNode& a, bool pushNeg,
-                                       ASTNodeMap* VarConstMap)
-{
-  ASTNode output;
-  if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
-    return output;
-
-  if (!(a.Degree() == 1 && NOT == a.GetKind()))
-    FatalError("SimplifyNotFormula: input vector with more than 1 node",
-               ASTUndefined);
-
-  // if pushNeg is set then there is NOT on top
-  unsigned int NotCount = pushNeg ? 1 : 0;
-  ASTNode o = a;
-  // count the number of NOTs in 'a'
-  while (NOT == o.GetKind())
-  {
-    o = o[0];
-    NotCount++;
-  }
-
-  // pushnegation if there are odd number of NOTs
-  bool pn = (NotCount % 2 == 0) ? false : true;
-
-  bool alwaysTrue = false;
-  if (CheckAlwaysTrueFormSet(o, alwaysTrue))
-  {
-    if (alwaysTrue)
-      return (pn ? ASTFalse : ASTTrue);
-
-    // We don't do the false case because it is sometimes
-    // called at the top level.
-  }
-
-  if (CheckSimplifyMap(o, output, pn))
-  {
-    return output;
-  }
-
-  if (ASTTrue == o)
-  {
-    output = pn ? ASTFalse : ASTTrue;
-  }
-  else if (ASTFalse == o)
-  {
-    output = pn ? ASTTrue : ASTFalse;
-  }
-  else
-  {
-    output = SimplifyFormula(o, pn, VarConstMap);
-  }
-  // memoize
-  UpdateSimplifyMap(o, output, pn, VarConstMap);
-  UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-  return output;
-}
-
-ASTNode Simplifier::SimplifyXorFormula(const ASTNode& a, bool pushNeg,
-                                       ASTNodeMap* VarConstMap)
-{
-  ASTNode output;
-  if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
-    return output;
-
-  assert(a.GetChildren().size() > 0);
-
-  if (a.GetChildren().size() == 1)
-  {
-    output = a[0];
-  }
-  else if (a.GetChildren().size() == 2)
-  {
-    ASTNode a0 = SimplifyFormula(a[0], false, VarConstMap);
-    ASTNode a1 = SimplifyFormula(a[1], false, VarConstMap);
-    if (pushNeg)
-      a0 = nf->CreateNode(NOT, a0);
-    output = nf->CreateNode(XOR, a0, a1);
-
-    if (a0 == a1)
-      output = ASTFalse;
-    else if ((a0 == ASTTrue && a1 == ASTFalse) ||
-             (a0 == ASTFalse && a1 == ASTTrue))
-      output = ASTTrue;
-  }
-  else
-  {
-    ASTVec newC;
-    for (size_t i = 0; i < a.GetChildren().size(); i++)
-    {
-      newC.push_back(SimplifyFormula(a[i], false, VarConstMap));
-    }
-    if (pushNeg)
-      newC[0] = nf->CreateNode(NOT, newC[0]);
-
-    output = nf->CreateNode(XOR, newC);
-  }
-
-  // memoize
-  UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-  return output;
-}
-
-ASTNode Simplifier::SimplifyNandFormula(const ASTNode& a, bool pushNeg,
-                                        ASTNodeMap* VarConstMap)
-{
-  ASTNode output, a0, a1;
-  if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
-    return output;
-
-  // the two NOTs cancel out
-  if (pushNeg)
-  {
-    a0 = SimplifyFormula(a[0], false, VarConstMap);
-    a1 = SimplifyFormula(a[1], false, VarConstMap);
-    output = nf->CreateNode(AND, a0, a1);
-  }
-  else
-  {
-    // push the NOT implicit in the NAND
-    a0 = SimplifyFormula(a[0], true, VarConstMap);
-    a1 = SimplifyFormula(a[1], true, VarConstMap);
-    output = nf->CreateNode(OR, a0, a1);
-  }
-
-  // memoize
-  UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-  return output;
-}
-
-ASTNode Simplifier::SimplifyNorFormula(const ASTNode& a, bool pushNeg,
-                                       ASTNodeMap* VarConstMap)
-{
-  ASTNode output, a0, a1;
-  if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
-    return output;
-
-  // the two NOTs cancel out
-  if (pushNeg)
-  {
-    a0 = SimplifyFormula(a[0], false);
-    a1 = SimplifyFormula(a[1], false, VarConstMap);
-    output = nf->CreateNode(OR, a0, a1);
-  }
-  else
-  {
-    // push the NOT implicit in the NAND
-    a0 = SimplifyFormula(a[0], true, VarConstMap);
-    a1 = SimplifyFormula(a[1], true, VarConstMap);
-    output = nf->CreateNode(AND, a0, a1);
-  }
-
-  // memoize
-  UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-  return output;
-}
-
-ASTNode Simplifier::SimplifyImpliesFormula(const ASTNode& a, bool pushNeg,
-                                           ASTNodeMap* VarConstMap)
-{
-  ASTNode output;
-  if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
-    return output;
-
-  if (!(a.Degree() == 2 && IMPLIES == a.GetKind()))
-    FatalError("SimplifyImpliesFormula: vector with wrong num of nodes",
-               ASTUndefined);
-
-  ASTNode c0, c1;
-  if (pushNeg)
-  {
-    c0 = SimplifyFormula(a[0], false, VarConstMap);
-    c1 = SimplifyFormula(a[1], true, VarConstMap);
-    output = nf->CreateNode(AND, c0, c1);
-  }
-  else
-  {
-    c0 = SimplifyFormula(a[0], false, VarConstMap);
-    c1 = SimplifyFormula(a[1], false, VarConstMap);
-    bool atResult;
-    if (ASTFalse == c0)
-    {
-      output = ASTTrue;
-    }
-    else if (ASTTrue == c0)
-    {
-      output = c1;
-    }
-    else if (c0 == c1)
-    {
-      output = ASTTrue;
-    }
-    else if (CheckAlwaysTrueFormSet(c0, atResult))
-    {
-      // c0 AND (~c0 OR c1) <==> c1
-      //(~c0 AND (~c0 OR c1)) <==> TRUE
-      //(c0 AND ~c0->c1) <==> TRUE
-      //(~c1 AND c0->c1) <==> (~c1 AND ~c1->~c0) <==> ~c0
-      //(c1 AND c0->~c1) <==> (c1 AND c1->~c0) <==> ~c0
-
-      if (atResult)
-        output = c1;
-      else
-        output = ASTTrue;
-    }
-    else if (CheckAlwaysTrueFormSet(c1, atResult))
-    {
-      if (atResult)
-        output = ASTTrue;
-      else
-        output = nf->CreateNode(NOT, c0);
-    }
-    else
-    {
-      if (NOT == c0.GetKind())
+      auto finishAtomic = [&](const ASTNode& output)
       {
-        output = nf->CreateNode(OR, c0[0], c1);
-      }
-      else
+        UpdateSimplifyMap(f.b, output, f.pushNeg);
+        result = output;
+        return StepResult::Finished;
+      };
+
+      auto finishEquality = [&](ASTNode output)
       {
-        output = nf->CreateNode(OR, nf->CreateNode(NOT, c0), c1);
+        if (output == ASTTrue)
+          output = f.pushNeg ? ASTFalse : ASTTrue;
+        else if (output == ASTFalse)
+          output = f.pushNeg ? ASTTrue : ASTFalse;
+        else if (f.pushNeg)
+          output = nf->CreateNode(NOT, output);
+        return finishAtomic(output);
+      };
+
+      auto optimizeAndFinishEquality = [&](ASTNode output)
+      {
+        const ASTNode input = output;
+        ASTNode conditionToNegate;
+        output = ITEOpt_InEqs(output, conditionToNegate);
+        if (!conditionToNegate.IsNull())
+        {
+          // ITEOpt_InEqs used to call SimplifyFormula before recording this
+          // intermediate equality. Keep the key across that suspension so
+          // the resumed job preserves the same memoisation edge.
+          f.output = input;
+          // This rare helper is itself a continuation boundary. Preserve its
+          // historical outer-loop resume for both an immediate answer and a
+          // pushed child; the common request sites below fuse their immediate
+          // answers directly.
+          const StepResult requested =
+              requestFormula(f, Frame::AtomicPhase::AfterIteCondition,
+                             conditionToNegate, true);
+          return requested == StepResult::Redispatch ? StepResult::Yield
+                                                     : requested;
+        }
+        return finishEquality(output);
+      };
+
+      if (f.atomicPhase == Frame::AtomicPhase::Prepared)
+      {
+        // Keep the original atomic-formula order: every binary predicate
+        // simplifies both operands before dispatch, including BOOLEXTRACT.
+        if (f.b.Degree() == 2)
+          return requestTerm(f, Frame::AtomicPhase::AfterLeftOperand, f.b[0]);
       }
+      else if (f.atomicPhase == Frame::AtomicPhase::AfterLeftOperand)
+      {
+        f.t0 = result;
+        return requestTerm(f, Frame::AtomicPhase::AfterRightOperand, f.b[1]);
+      }
+      else if (f.atomicPhase == Frame::AtomicPhase::AfterRightOperand)
+      {
+        f.t1 = result;
+      }
+      else if (f.atomicPhase == Frame::AtomicPhase::AfterBoolExtract)
+      {
+        const ASTNode zero = nf->CreateZeroConst(1);
+        const ASTNode one = nf->CreateOneConst(1);
+        ASTNode output;
+        if (result == zero)
+          output = f.pushNeg ? ASTTrue : ASTFalse;
+        else if (result == one)
+          output = f.pushNeg ? ASTFalse : ASTTrue;
+        else
+        {
+          output = nf->CreateNode(BOOLEXTRACT, f.t0, f.b[1]);
+          if (f.pushNeg)
+            output = nf->CreateNode(NOT, output);
+        }
+        return finishAtomic(output);
+      }
+      else if (f.atomicPhase == Frame::AtomicPhase::AfterFpOperand)
+      {
+        f.outvec.push_back(result);
+        ++f.i;
+      }
+
+      if (f.atomicPhase == Frame::AtomicPhase::AfterNegatedEqualityRhs)
+      {
+        const ASTNode combined = LhsMinusRhsTerm(f.output, result);
+        return requestTerm(f, Frame::AtomicPhase::AfterCombinedEquality,
+                           combined);
+      }
+
+      ASTNode output;
+      const Kind kind = f.b.GetKind();
+      if (f.atomicPhase == Frame::AtomicPhase::AfterIteCondition)
+      {
+        UpdateSimplifyMap(f.output, result, false);
+        return finishEquality(result);
+      }
+      if (f.atomicPhase == Frame::AtomicPhase::AfterCombinedEquality)
+      {
+        output = CreateSimplifiedEQ(
+            result, nf->CreateZeroConst(result.GetValueWidth()));
+        return optimizeAndFinishEquality(output);
+      }
+
+      switch (kind)
+      {
+        case TRUE:
+          output = f.pushNeg ? ASTFalse : ASTTrue;
+          break;
+        case FALSE:
+          output = f.pushNeg ? ASTTrue : ASTFalse;
+          break;
+        case SYMBOL:
+          if (!InsideSubstitutionMap(f.b, output))
+            output = f.b;
+          if (f.pushNeg)
+            output = nf->CreateNode(NOT, output);
+          break;
+        case BOOLEXTRACT:
+        {
+          const ASTNode getthebit =
+              nf->CreateTerm(BVEXTRACT, 1, f.t0, f.b[1], f.b[1]);
+          return requestTerm(f, Frame::AtomicPhase::AfterBoolExtract,
+                             getthebit);
+        }
+        case EQ:
+        {
+          output = CreateSimplifiedEQ(f.t0, f.t1);
+          ASTNode cached;
+          if (CheckSimplifyMap(output, cached, false))
+            output = cached;
+          else if (output.GetKind() == EQ)
+          {
+            const Kind lhsKind = output[0].GetKind();
+            const Kind rhsKind = output[1].GetKind();
+            if (lhsKind == BVPLUS || rhsKind == BVPLUS ||
+                (lhsKind == BVMULT && rhsKind == BVMULT))
+            {
+              f.output = output;
+              const ASTNode rhs = (lhsKind != BVPLUS && rhsKind == BVPLUS)
+                                      ? output[0]
+                                      : output[1];
+              const ASTNode negated =
+                  nf->CreateTerm(BVUMINUS, rhs.GetValueWidth(), rhs);
+              return requestTerm(f, Frame::AtomicPhase::AfterNegatedEqualityRhs,
+                                 negated);
+            }
+          }
+          return optimizeAndFinishEquality(output);
+        }
+        case BVLT:
+        case BVLE:
+        case BVGT:
+        case BVGE:
+        case BVSLT:
+        case BVSLE:
+        case BVSGT:
+        case BVSGE:
+          output = CreateSimplifiedINEQ(kind, f.t0, f.t1, f.pushNeg);
+          break;
+        case BVUADDO:
+        case BVSADDO:
+        case BVUMULO:
+        case BVSMULO:
+        case BVUSUBO:
+        case BVSSUBO:
+          output = nf->CreateNode(kind, f.t0, f.t1);
+          if (f.pushNeg)
+            output = nf->CreateNode(NOT, output);
+          break;
+        case FP_LEQ:
+        case FP_LT:
+        case FP_GEQ:
+        case FP_GT:
+        case FP_EQ:
+        case FP_ISNORMAL:
+        case FP_ISSUBNORMAL:
+        case FP_ISZERO:
+        case FP_ISINFINITE:
+        case FP_ISNAN:
+        case FP_ISNEGATIVE:
+        case FP_ISPOSITIVE:
+        case FP_SMT_EQ:
+          if (f.outvec.empty())
+            f.outvec.reserve(f.b.Degree());
+          if (f.outvec.empty() && f.b.Degree() == 2)
+          {
+            f.outvec.push_back(f.t0);
+            f.outvec.push_back(f.t1);
+            f.i = 2;
+          }
+          while (f.i < f.b.Degree())
+          {
+            const StepResult requested =
+                requestTerm(f, Frame::AtomicPhase::AfterFpOperand, f.b[f.i]);
+            if (requested == StepResult::Pushed)
+              return requested;
+            assert(requested == StepResult::Redispatch);
+            f.outvec.push_back(result);
+            ++f.i;
+          }
+          output = nf->CreateNode(kind, f.outvec);
+          if (f.pushNeg)
+            output = nf->CreateNode(NOT, output);
+          break;
+        default:
+          FatalError("SimplifyAtomicFormula: NO atomic formula of the kind: ",
+                     ASTUndefined, kind);
+      }
+
+      return finishAtomic(output);
     }
   }
 
-  // memoize
-  UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-  return output;
-}
+  StepResult stepArray(Frame& f)
+  {
+    assert(f.job == Frame::ArrayJob);
+    {
+      auto finishArray = [&](const ASTNode& output)
+      {
+        UpdateSimplifyMap(f.b, output, false);
+        assert(f.b.GetIndexWidth() == output.GetIndexWidth());
+        assert(BVTypeCheck(output));
+        result = output;
+        return StepResult::Finished;
+      };
 
-ASTNode Simplifier::SimplifyIffFormula(const ASTNode& a, bool pushNeg,
-                                       ASTNodeMap* VarConstMap)
+      const unsigned iw = f.b.GetIndexWidth();
+      assert(iw > 0);
+
+      if (f.arrayPhase == Frame::ArrayPhase::Prepared)
+      {
+        if (f.b.GetKind() == ITE)
+          return requestFormula(f, Frame::ArrayPhase::AfterCondition, f.b[0],
+                                false);
+        if (f.b.GetKind() == WRITE)
+          return requestArray(f, Frame::ArrayPhase::AfterBase, f.b[0]);
+
+        FatalError("SimplifyArrayTerm: unexpected array term", f.b);
+      }
+
+      if (f.b.GetKind() == ITE)
+      {
+        if (f.arrayPhase == Frame::ArrayPhase::AfterCondition)
+        {
+          f.t0 = result;
+          return requestArray(f, Frame::ArrayPhase::AfterThen, f.b[1]);
+        }
+        if (f.arrayPhase == Frame::ArrayPhase::AfterThen)
+        {
+          f.t1 = result;
+          return requestArray(f, Frame::ArrayPhase::AfterElse, f.b[2]);
+        }
+
+        f.t2 = result;
+        return finishArray(CreateSimplifiedTermITE(f.t0, f.t1, f.t2));
+      }
+
+      if (f.arrayPhase == Frame::ArrayPhase::AfterBase)
+      {
+        f.t0 = result;
+        return requestTerm(f, Frame::ArrayPhase::AfterIndex, f.b[1]);
+      }
+      if (f.arrayPhase == Frame::ArrayPhase::AfterIndex)
+      {
+        f.t1 = result;
+        return requestTerm(f, Frame::ArrayPhase::AfterValue, f.b[2]);
+      }
+
+      f.t2 = result;
+      return finishArray(nf->CreateArrayTerm(WRITE, iw, f.b.GetValueWidth(),
+                                             f.t0, f.t1, f.t2));
+    }
+  }
+
+  StepResult stepTerm(Frame& f)
+  {
+    assert(f.job == Frame::TermJob);
+    {
+      auto finishTerm = [&](const ASTNode& output)
+      {
+        result = output;
+        return StepResult::Finished;
+      };
+
+      auto finishTermTail = [&](const ASTNode& output)
+      {
+        if (!f.t2.IsNull())
+          UpdateSimplifyMap(f.t2, output, false);
+        if (f.a != f.t2)
+          UpdateSimplifyMap(f.a, output, false);
+        if (f.b != f.a && f.b != f.t2)
+          UpdateSimplifyMap(f.b, output, false);
+
+        assert(!output.IsNull());
+        assert(f.a.GetValueWidth() == output.GetValueWidth());
+        assert(f.a.GetIndexWidth() == output.GetIndexWidth());
+        assert(hasBeenSimplified(output));
+#ifndef NDEBUG
+        for (size_t i = 0; i < output.Degree(); ++i)
+        {
+          if (output[i].GetType() != ARRAY_TYPE &&
+              !hasBeenSimplified(output[i]))
+          {
+            std::cerr << output << i;
+            assert(false);
+          }
+        }
+#endif
+        result = output;
+        return StepResult::Finished;
+      };
+
+      if (f.termPhase == Frame::TermPhase::AfterSubstitution)
+        return finishTerm(result);
+      if (f.termPhase == Frame::TermPhase::AfterPullUpIte ||
+          f.termPhase == Frame::TermPhase::AfterRetry)
+      {
+        UpdateSimplifyMap(f.b, result, false);
+        if (f.a != f.b)
+          UpdateSimplifyMap(f.a, result, false);
+        return finishTerm(result);
+      }
+      if (f.termPhase == Frame::TermPhase::AfterOutput)
+        return finishTermTail(result);
+
+      if (f.termPhase == Frame::TermPhase::Prepared ||
+          f.termPhase == Frame::TermPhase::PreparedSubstitution)
+      {
+        assert(_bm->UserFlags.optimize_flag);
+
+        f.a = f.b;
+        const ASTNode substitutionImage = f.output;
+        f.output = f.a;
+        assert(BVTypeCheck(f.a));
+
+        if (f.termPhase == Frame::TermPhase::PreparedSubstitution)
+          return requestTerm(f, Frame::TermPhase::AfterSubstitution,
+                             substitutionImage);
+        const Kind k = f.a.GetKind();
+        if (!is_Term_kind(k))
+          FatalError("SimplifyTerm: You have input a Non-term", f.a);
+
+        f.valueWidth = f.a.GetValueWidth();
+        if (k != SYMBOL)
+        {
+          if (k == BVAND || k == BVOR || k == BVPLUS || k == BVMULT)
+            f.outvec = FlattenKind(k, f.b.GetChildren(), 15);
+          else
+            f.outvec = toASTVec(f.b.GetChildren());
+        }
+      }
+      else if (f.termPhase == Frame::TermPhase::AfterOperand)
+      {
+        f.outvec[f.i] = result;
+        ++f.i;
+      }
+
+      // Simplify the selected operands left-to-right. Array operands are
+      // deliberately carried through here; READ schedules its array as an
+      // ArrayJob below, matching the old split between the two functions.
+      while (f.a.GetKind() != SYMBOL && f.i < f.outvec.size())
+      {
+        const ASTNode& operand = f.outvec[f.i];
+        if (operand.GetType() == BITVECTOR_TYPE ||
+            operand.GetType() == FLOATINGPOINT_TYPE)
+        {
+          const StepResult requested =
+              requestTerm(f, Frame::TermPhase::AfterOperand, operand);
+          if (requested == StepResult::Pushed)
+            return requested;
+          assert(requested == StepResult::Redispatch);
+          f.outvec[f.i] = result;
+          ++f.i;
+          continue;
+        }
+        if (operand.GetType() == BOOLEAN_TYPE)
+        {
+          const StepResult requested =
+              requestFormula(f, Frame::TermPhase::AfterOperand, operand, false);
+          if (requested == StepResult::Pushed)
+            return requested;
+          assert(requested == StepResult::Redispatch);
+          f.outvec[f.i] = result;
+          ++f.i;
+          continue;
+        }
+        ++f.i;
+      }
+
+      if (f.a.GetKind() != SYMBOL &&
+          f.termPhase != Frame::TermPhase::AfterReadArray)
+      {
+        assert(!f.outvec.empty());
+        if (ASTChildren(f.outvec) != f.b.GetChildren())
+        {
+          f.output = nf->CreateArrayTerm(f.a.GetKind(), f.b.GetIndexWidth(),
+                                         f.valueWidth, f.outvec);
+          f.output = FloatBlaster::withFormat(_bm, f.output, f.b.GetExpWidth(),
+                                              f.b.GetSigWidth());
+        }
+        else
+          f.output = f.b;
+
+        if (f.a != f.output)
+        {
+          UpdateSimplifyMap(f.a, f.output, false);
+          f.a = f.output;
+        }
+
+        const ASTChildren children = f.a.GetChildren();
+        const Kind k = f.a.GetKind();
+        if (k != stp::UNDEFINED && k != stp::SYMBOL)
+        {
+          bool allConstant = true;
+          for (const ASTNode& child : children)
+          {
+            if (!child.isConstant())
+            {
+              allConstant = false;
+              break;
+            }
+          }
+          if (allConstant)
+          {
+            const ASTNode c = BVConstEvaluator(f.a);
+            assert(c.isConstant());
+            UpdateSimplifyMap(f.a, c, false);
+            return finishTerm(c);
+          }
+        }
+
+        const ASTNode pulledUp = PullUpITE(f.a);
+        if (pulledUp != f.a)
+          return requestTerm(f, Frame::TermPhase::AfterPullUpIte, pulledUp);
+
+        bool notSimplified = false;
+        for (size_t i = 0; i < f.a.Degree(); ++i)
+        {
+          if (f.a[i].GetType() != ARRAY_TYPE && !hasBeenSimplified(f.a[i]))
+          {
+            notSimplified = true;
+            break;
+          }
+        }
+        if (notSimplified)
+          return requestTerm(f, Frame::TermPhase::AfterRetry, f.a);
+      }
+
+      if (f.a.GetKind() == READ &&
+          f.termPhase != Frame::TermPhase::AfterReadArray)
+        return requestArray(f, Frame::TermPhase::AfterReadArray, f.a[0]);
+
+      if (f.a.GetKind() == READ &&
+          f.termPhase == Frame::TermPhase::AfterReadArray && result != f.a[0])
+      {
+        // Preserve the pre-rebuild READ as a memo key. The recursive version
+        // returned through that invocation after simplifying the array.
+        f.t2 = f.a;
+        ASTVec children = toASTVec(f.a.GetChildren());
+        children[0] = result;
+        f.a = nf->CreateArrayTerm(READ, f.a.GetIndexWidth(), f.valueWidth,
+                                  children);
+        f.output = f.a;
+      }
+
+      // The kind switch and its helpers perform one rewrite step. If that
+      // manufactures a different term, schedule the candidate as another
+      // term job below. This is the common replacement for every former
+      // helper-to-SimplifyTerm call, including terms that did not exist in
+      // the input DAG.
+      ASTNode ret =
+          simplify_term_switch(f.b, f.a, f.output, f.a.GetKind(), f.valueWidth);
+      if (ret != ASTUndefined)
+        return finishTerm(ret);
+
+      assert(!f.output.IsNull());
+      if (f.a != f.output)
+        return requestTerm(f, Frame::TermPhase::AfterOutput, f.output);
+      return finishTermTail(f.output);
+    }
+  }
+
+  StepResult stepFormula(Frame& f)
+  {
+    assert(f.job == Frame::FormulaJob);
+    // The formula arms implemented in this frame share their memoisation
+    // tail: record the PullUpITE result and, when distinct, the input. The
+    // separately scheduled AtomicJob owns its own first entry and bypasses
+    // this tail when it returns below.
+    auto finish = [&](const ASTNode& output)
+    {
+      UpdateSimplifyMap(f.a, output, f.pushNeg);
+      if (f.b != f.a)
+        UpdateSimplifyMap(f.b, output, f.pushNeg);
+      result = output;
+      return StepResult::Finished;
+    };
+
+    // `f.a` is set by the head, which ran before this frame was pushed.
+    const Kind k = f.a.GetKind();
+    switch (k)
+    {
+      case AND:
+      case OR:
+      {
+        auto takeChild = [&](const ASTNode& child)
+        {
+          if (child == f.output)
+            return false;
+
+          // A child that simplified to the output connective (typically via
+          // De Morgan) would otherwise leave a nested same-kind node, which
+          // the factory does not flatten. Splice its already-simplified
+          // operands in so the result stays flat -- without this
+          // SimplifyFormula is not idempotent.
+          if (child.GetKind() == f.outKind)
+            f.outvec.insert(f.outvec.end(), child.begin(), child.end());
+          else
+            f.outvec.push_back(child);
+          ++f.i;
+          return true;
+        };
+
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
+        {
+          const bool isAnd = (k == AND);
+          // Under pushNeg we are simplifying NOT(a): De Morgan flips the
+          // connective, and a child that simplifies to the annihilator
+          // collapses the whole node.
+          f.output = isAnd ? (f.pushNeg ? ASTTrue : ASTFalse)
+                           : (f.pushNeg ? ASTFalse : ASTTrue);
+          f.outKind = (isAnd == !f.pushNeg) ? AND : OR;
+          f.outvec.reserve(f.a.Degree());
+        }
+        else
+        {
+          if (!takeChild(result))
+            return finish(f.output);
+        }
+
+        while (f.i < f.a.Degree())
+        {
+          const StepResult requested = requestFormula(
+              f, Frame::FormulaPhase::AfterAndOrOperand, f.a[f.i], f.pushNeg);
+          if (requested == StepResult::Pushed)
+            return requested;
+          assert(requested == StepResult::Redispatch);
+          if (!takeChild(result))
+            return finish(f.output);
+        }
+
+        // Hand the simplified children to the node factory. CreateSimpleAndOr
+        // sorts them, drops identities, removes duplicates, detects
+        // complements and unwraps singletons -- so none of that is repeated
+        // here.
+        return finish(nf->CreateNode(f.outKind, f.outvec));
+      }
+
+      case NOT:
+      {
+        if (f.formulaPhase == Frame::FormulaPhase::AfterNotBody)
+          return finish(result);
+
+        if (!(f.a.Degree() == 1 && NOT == f.a.GetKind()))
+          FatalError("SimplifyNotFormula: input vector with more than 1 node",
+                     ASTUndefined);
+
+        // if pushNeg is set then there is NOT on top
+        unsigned int NotCount = f.pushNeg ? 1 : 0;
+        ASTNode o = f.a;
+        // count the number of NOTs in 'a'
+        while (NOT == o.GetKind())
+        {
+          o = o[0];
+          NotCount++;
+        }
+
+        // pushnegation if there are odd number of NOTs
+        const bool pn = (NotCount % 2 == 0) ? false : true;
+
+        // `requestFormula` owns the child shortcut and memo probe. If it schedules a
+        // child frame, that frame records `o`; if it answers immediately,
+        // the entry either already exists or `o` is a leaf that is never
+        // memoised. The returning NOT frame therefore only records itself.
+        return requestFormula(f, Frame::FormulaPhase::AfterNotBody, o, pn);
+      }
+
+      case XOR:
+      {
+        assert(f.a.Degree() > 0);
+
+        if (f.a.Degree() == 1)
+          return finish(f.a[0]);
+
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
+          f.outvec.reserve(f.a.Degree());
+
+        if (f.formulaPhase == Frame::FormulaPhase::AfterXorOperand)
+        {
+          f.outvec.push_back(result);
+          ++f.i;
+        }
+
+        while (f.i < f.a.Degree())
+        {
+          const StepResult requested = requestFormula(
+              f, Frame::FormulaPhase::AfterXorOperand, f.a[f.i], false);
+          if (requested == StepResult::Pushed)
+            return requested;
+          assert(requested == StepResult::Redispatch);
+          f.outvec.push_back(result);
+          ++f.i;
+        }
+
+        if (f.pushNeg)
+          f.outvec[0] = nf->CreateNode(NOT, f.outvec[0]);
+
+        if (f.a.Degree() == 2)
+        {
+          ASTNode output = nf->CreateNode(XOR, f.outvec[0], f.outvec[1]);
+          if (f.outvec[0] == f.outvec[1])
+            output = ASTFalse;
+          else if ((f.outvec[0] == ASTTrue && f.outvec[1] == ASTFalse) ||
+                   (f.outvec[0] == ASTFalse && f.outvec[1] == ASTTrue))
+            output = ASTTrue;
+          return finish(output);
+        }
+
+        return finish(nf->CreateNode(XOR, f.outvec));
+      }
+
+      case NAND:
+      case NOR:
+      case IMPLIES:
+      {
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
+        {
+          if (k == IMPLIES && !(f.a.Degree() == 2))
+            FatalError("SimplifyImpliesFormula: vector with wrong num of nodes",
+                       ASTUndefined);
+
+          // NAND and NOR are a negated AND/OR, so the negation they carry
+          // goes into both operands and cancels with the caller's. IMPLIES
+          // negates only its consequent, and only when it is itself negated.
+          return requestFormula(f, Frame::FormulaPhase::AfterBinaryLeft, f.a[0],
+                                (k == IMPLIES) ? false : !f.pushNeg);
+        }
+
+        if (f.formulaPhase == Frame::FormulaPhase::AfterBinaryLeft)
+        {
+          f.t0 = result;
+          return requestFormula(f, Frame::FormulaPhase::AfterBinaryRight,
+                                f.a[1],
+                                (k == IMPLIES) ? f.pushNeg : !f.pushNeg);
+        }
+
+        f.t1 = result;
+
+        if (k == NAND)
+          return finish(nf->CreateNode(f.pushNeg ? AND : OR, f.t0, f.t1));
+        if (k == NOR)
+          return finish(nf->CreateNode(f.pushNeg ? OR : AND, f.t0, f.t1));
+
+        if (f.pushNeg)
+          return finish(nf->CreateNode(AND, f.t0, f.t1));
+        if (ASTFalse == f.t0)
+          return finish(ASTTrue);
+        if (ASTTrue == f.t0)
+          return finish(f.t1);
+        if (f.t0 == f.t1)
+          return finish(ASTTrue);
+        if (NOT == f.t0.GetKind())
+          return finish(nf->CreateNode(OR, f.t0[0], f.t1));
+        return finish(nf->CreateNode(OR, nf->CreateNode(NOT, f.t0), f.t1));
+      }
+
+      case IFF:
+      {
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
+        {
+          if (!(f.a.Degree() == 2))
+            FatalError("SimplifyIffFormula: vector with wrong num of nodes",
+                       ASTUndefined);
+
+          // The second operand first, as it was.
+          return requestFormula(f, Frame::FormulaPhase::AfterIffRight, f.a[1],
+                                false);
+        }
+
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIffRight)
+        {
+          f.t1 = result;
+          return requestFormula(f, Frame::FormulaPhase::AfterIffLeft, f.a[0],
+                                f.pushNeg);
+        }
+
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIffLeft)
+        {
+          f.t0 = result;
+
+          if (ASTTrue == f.t0)
+            return finish(f.t1);
+          if (ASTFalse == f.t0)
+            return requestFormula(f, Frame::FormulaPhase::AfterIffFold, f.t1,
+                                  true);
+          if (ASTTrue == f.t1)
+            return finish(f.t0);
+          if (ASTFalse == f.t1)
+            return requestFormula(f, Frame::FormulaPhase::AfterIffFold, f.t0,
+                                  true);
+          if (f.t0 == f.t1)
+            return finish(ASTTrue);
+          if ((NOT == f.t0.GetKind() && f.t0[0] == f.t1) ||
+              (NOT == f.t1.GetKind() && f.t0 == f.t1[0]))
+            return finish(ASTFalse);
+          return finish(nf->CreateNode(XOR, nf->CreateNode(NOT, f.t0), f.t1));
+        }
+
+        return finish(result); // Frame::FormulaPhase::AfterIffFold
+      }
+
+      case ITE:
+      {
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
+        {
+          if (!(f.a.Degree() == 3))
+            FatalError("SimplifyIteFormula: vector with wrong num of nodes",
+                       ASTUndefined);
+
+          return requestFormula(f, Frame::FormulaPhase::AfterIteCondition,
+                                f.a[0], false);
+        }
+
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIteCondition)
+        {
+          f.t0 = result;
+          return requestFormula(f, Frame::FormulaPhase::AfterIteThen, f.a[1],
+                                f.pushNeg);
+        }
+
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIteThen)
+        {
+          f.t1 = result;
+          return requestFormula(f, Frame::FormulaPhase::AfterIteElse, f.a[2],
+                                f.pushNeg);
+        }
+
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIteElse)
+        {
+          f.t2 = result;
+
+          // Every structural fold here -- constant condition, equal branches,
+          // a constant branch collapsing to AND/OR -- is done by the
+          // simplifying node factory when the ITE node is (re)created, so we
+          // just hand it the simplified children. The one exception is
+          // ITE(c, false, true): the factory would only give a shallow
+          // NOT(c), whereas pushing the negation into c exposes more
+          // simplifications.
+          if (ASTTrue == f.t0)
+            return finish(f.t1);
+          if (ASTFalse == f.t0)
+            return finish(f.t2);
+          if (ASTFalse == f.t1 && ASTTrue == f.t2)
+            return requestFormula(f, Frame::FormulaPhase::AfterIteFold, f.t0,
+                                  true);
+          return finish(nf->CreateNode(ITE, f.t0, f.t1, f.t2));
+        }
+
+        return finish(result); // Frame::FormulaPhase::AfterIteFold
+      }
+
+      default:
+        // Atomic predicates do not stop the walk: their term operands and any
+        // terms they manufacture are jobs on this same continuation stack.
+        if (f.formulaPhase == Frame::FormulaPhase::AfterAtomic)
+        {
+          // AtomicJob has already recorded `f.a`. Only the pre-PullUpITE key
+          // can remain for this formula frame to record.
+          if (f.b != f.a)
+            UpdateSimplifyMap(f.b, result, f.pushNeg);
+          return StepResult::Finished;
+        }
+        return requestAtomic(f, Frame::FormulaPhase::AfterAtomic, f.a,
+                             f.pushNeg);
+    }
+  }
+
+public:
+  explicit SimplifyDriver(Simplifier& owner)
+      : owner(owner), nf(owner.nf), _bm(owner._bm), ASTTrue(owner.ASTTrue),
+        ASTFalse(owner.ASTFalse), ASTUndefined(owner.ASTUndefined)
+  {
+  }
+
+  ASTNode run(const ASTNode& b, const bool pushNeg, const SimplifyJob rootJob)
+  {
+    result = ASTNode();
+    stack.clear();
+
+    // Answer root-level leaves and memo hits before constructing the vector.
+    // A vector allocation is unnecessary for the overwhelmingly common leaf
+    // and memo-hit cases.
+    Frame top;
+    top.b = b;
+    top.pushNeg = pushNeg;
+    if (rootJob == SimplifyJob::Formula)
+    {
+      top.job = Frame::FormulaJob;
+      if (prepareFormula(b, pushNeg, top.a))
+        return result;
+    }
+    else if (rootJob == SimplifyJob::Term)
+    {
+      assert(_bm->UserFlags.optimize_flag);
+      top.job = Frame::TermJob;
+
+      // A substitution frame is transparent: follow its image without
+      // memoising the substituted key until a real term frame is needed.
+      ASTNode root = b;
+      ASTNode substitutionImage;
+      while (true)
+      {
+        if (root.isConstant())
+          return root;
+        if (InsideSubstitutionMap(root, substitutionImage))
+        {
+          root = substitutionImage;
+          continue;
+        }
+        if (CheckSimplifyMap(root, result, false))
+          return result;
+        break;
+      }
+
+      top.b = root;
+      top.termPhase = Frame::TermPhase::Prepared;
+    }
+    else
+    {
+      assert(b.GetIndexWidth() > 0);
+      top.job = Frame::ArrayJob;
+      if (CheckSimplifyMap(b, result, false))
+        return result;
+      if (b.GetKind() == SYMBOL)
+        return b;
+      top.arrayPhase = Frame::ArrayPhase::Prepared;
+    }
+
+    // A child request is the only operation that can grow the vector, and
+    // every caller returns from its step immediately afterwards, so no Frame
+    // reference survives a move.
+    stack.push_back(std::move(top));
+
+    while (true)
+    {
+      Frame& current = stack.back();
+      StepResult stepResult = StepResult::Finished;
+      switch (current.job)
+      {
+        case Frame::FormulaJob:
+          do
+            stepResult = stepFormula(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+        case Frame::AtomicJob:
+          do
+            stepResult = stepAtomic(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+        case Frame::TermJob:
+          do
+            stepResult = stepTerm(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+        case Frame::ArrayJob:
+          do
+            stepResult = stepArray(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+      }
+
+      if (stepResult == StepResult::Pushed || stepResult == StepResult::Yield)
+        continue;
+      assert(stepResult == StepResult::Finished);
+
+      stack.pop_back();
+      if (stack.empty())
+        return result;
+    }
+  }
+};
+
+ASTNode Simplifier::simplifyNode(const ASTNode& b, const bool pushNeg,
+                                 const SimplifyJob rootJob)
 {
-  ASTNode output;
-  if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
-    return output;
-
-  if (!(a.Degree() == 2 && IFF == a.GetKind()))
-    FatalError("SimplifyIffFormula: vector with wrong num of nodes",
-               ASTUndefined);
-
-  ASTNode c0 = a[0];
-  ASTNode c1 = SimplifyFormula(a[1], false, VarConstMap);
-
-  if (pushNeg)
-    c0 = SimplifyFormula(c0, true, VarConstMap);
-  else
-    c0 = SimplifyFormula(c0, false, VarConstMap);
-
-  bool alwaysResult;
-
-  if (ASTTrue == c0)
-  {
-    output = c1;
-  }
-  else if (ASTFalse == c0)
-  {
-    output = SimplifyFormula(c1, true, VarConstMap);
-  }
-  else if (ASTTrue == c1)
-  {
-    output = c0;
-  }
-  else if (ASTFalse == c1)
-  {
-    output = SimplifyFormula(c0, true, VarConstMap);
-  }
-  else if (c0 == c1)
-  {
-    output = ASTTrue;
-  }
-  else if ((NOT == c0.GetKind() && c0[0] == c1) ||
-           (NOT == c1.GetKind() && c0 == c1[0]))
-  {
-    output = ASTFalse;
-  }
-  else if (CheckAlwaysTrueFormSet(c0, alwaysResult))
-  {
-    if (alwaysResult)
-      output = c1;
-    else
-      output = nf->CreateNode(NOT, c1);
-  }
-  else if (CheckAlwaysTrueFormSet(c1, alwaysResult))
-  {
-    if (alwaysResult)
-      output = c0;
-    else
-      output = nf->CreateNode(NOT, c0);
-  }
-  else
-  {
-    output = nf->CreateNode(XOR, nf->CreateNode(NOT, c0), c1);
-  }
-
-  // memoize
-  UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-  return output;
-}
-
-ASTNode Simplifier::SimplifyIteFormula(const ASTNode& b, bool pushNeg,
-                                       ASTNodeMap* VarConstMap)
-{
-  //    if (!optimize_flag)
-  //       return b;
-
-  ASTNode output;
-  if (CheckSimplifyMap(b, output, pushNeg, VarConstMap))
-    return output;
-
-  if (!(b.Degree() == 3 && ITE == b.GetKind()))
-    FatalError("SimplifyIteFormula: vector with wrong num of nodes",
-               ASTUndefined);
-
-  ASTNode a = b;
-  ASTNode t0 = SimplifyFormula(a[0], false, VarConstMap);
-  ASTNode t1, t2;
-  if (pushNeg)
-  {
-    t1 = SimplifyFormula(a[1], true, VarConstMap);
-    t2 = SimplifyFormula(a[2], true, VarConstMap);
-  }
-  else
-  {
-    t1 = SimplifyFormula(a[1], false, VarConstMap);
-    t2 = SimplifyFormula(a[2], false, VarConstMap);
-  }
-
-  bool alwaysTrue;
-
-  if (ASTTrue == t0)
-  {
-    output = t1;
-  }
-  else if (ASTFalse == t0)
-  {
-    output = t2;
-  }
-  else if (t1 == t2)
-  {
-    output = t1;
-  }
-  else if (ASTTrue == t1 && ASTFalse == t2)
-  {
-    output = t0;
-  }
-  else if (ASTFalse == t1 && ASTTrue == t2)
-  {
-    output = SimplifyFormula(t0, true, VarConstMap);
-  }
-  else if (ASTTrue == t1)
-  {
-    output = nf->CreateNode(OR, t0, t2);
-  }
-  else if (ASTFalse == t1)
-  {
-    output = nf->CreateNode(AND, nf->CreateNode(NOT, t0), t2);
-  }
-  else if (ASTTrue == t2)
-  {
-    output = nf->CreateNode(OR, nf->CreateNode(NOT, t0), t1);
-  }
-  else if (ASTFalse == t2)
-  {
-    output = nf->CreateNode(AND, t0, t1);
-  }
-  else if (CheckAlwaysTrueFormSet(t0, alwaysTrue))
-  {
-    if (alwaysTrue)
-      output = t1;
-    else
-      output = t2;
-  }
-  else
-  {
-    output = nf->CreateNode(ITE, t0, t1, t2);
-  }
-
-  // memoize
-  UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-  return output;
+  return SimplifyDriver(*this).run(b, pushNeg, rootJob);
 }
 
 ASTNode Simplifier::makeTower(const Kind k, const stp::ASTVec& children)
@@ -1569,9 +2062,9 @@ bool Simplifier::hasBeenSimplified(const ASTNode& n)
   if (n.GetKind() == SYMBOL)
     return true;
 
-  ASTNodeMap::const_iterator it;
   // If it's in the simplification map, it has been simplified.
-  if ((it = SimplifyMap->find(n)) == SimplifyMap->end())
+  const auto it = SimplifyMap->find(n);
+  if (it == SimplifyMap->end())
     return false;
 
   return (it->second == n);
@@ -1583,7 +2076,7 @@ ASTNode Simplifier::pullUpBVSX(ASTNode output)
   assert(output.GetChildren().size() == 2);
   assert(output[0].GetKind() == BVSX);
   assert(output[1].GetKind() == BVSX);
-  const Kind k = output.GetKind();
+  [[maybe_unused]] const Kind k = output.GetKind();
 
   assert(BVMULT == k || SBVDIV == k || BVPLUS == k);
   const int inputValueWidth = output.GetValueWidth();
@@ -1611,11 +2104,9 @@ ASTNode Simplifier::pullUpBVSX(ASTNode output)
     ASTNode newA = nf->CreateTerm(BVEXTRACT, maxLength, output.GetChildren()[0],
                                   nf->CreateBVConst(32, maxLength - 1),
                                   nf->CreateZeroConst(32));
-    newA = SimplifyTerm(newA);
     ASTNode newB = nf->CreateTerm(BVEXTRACT, maxLength, output.GetChildren()[1],
                                   nf->CreateBVConst(32, maxLength - 1),
                                   nf->CreateZeroConst(32));
-    newB = SimplifyTerm(newB);
 
     ASTNode mult = nf->CreateTerm(output.GetKind(), maxLength, newA, newB);
     output = nf->CreateTerm(BVSX, inputValueWidth, mult,
@@ -1624,193 +2115,13 @@ ASTNode Simplifier::pullUpBVSX(ASTNode output)
   return output;
 }
 
-// This function simplifies terms based on their kind
-ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
-                                 ASTNodeMap* VarConstMap)
+ASTNode Simplifier::SimplifyTerm(const ASTNode& inputterm)
 {
-  assert(_bm->UserFlags.optimize_flag);
-
-  if (actualInputterm.isConstant())
-    return actualInputterm;
-
-  ASTNode inputterm(actualInputterm); // mutable local copy.
-
-  // cout << "SimplifyTerm: input: " << actualInputterm << endl;
-  // if (!optimize_flag)
-  //       {
-  //         return inputterm;
-  //       }
-
-  ASTNode output = inputterm;
-  assert(BVTypeCheck(inputterm));
-
-  //########################################
-  //########################################
-
-  if (InsideSubstitutionMap(inputterm, output))
-  {
-    // cout << "SolverMap:" << inputterm << " output: " << output << endl;
-    return SimplifyTerm(output, VarConstMap);
-  }
-
-  if (CheckSimplifyMap(inputterm, output, false, VarConstMap))
-  {
-    // cerr << "SimplifierMap:" << inputterm << " output: " <<
-    // output << endl;
-    return output;
-  }
-  //########################################
-  //########################################
-
-  Kind k = inputterm.GetKind();
-  if (!is_Term_kind(k))
-  {
-    FatalError("SimplifyTerm: You have input a Non-term", inputterm);
-  }
-
-  const unsigned int inputValueWidth = inputterm.GetValueWidth();
-
-  {
-    assert(k != BVCONST);
-    if (k != SYMBOL) // const and symbols need to be created specially.
-    {
-      ASTVec v;
-      ASTVec toProcess = actualInputterm.GetChildren();
-      if (actualInputterm.GetKind() == BVAND ||
-          actualInputterm.GetKind() == BVOR ||
-          actualInputterm.GetKind() == BVPLUS)
-      {
-        // If we didn't flatten these, then we'd start flattening each of these
-        // from the bottom up. Potentially creating tons of the nodes along the
-        // way.
-
-        toProcess = FlattenKind(actualInputterm.GetKind(), toProcess,15);
-      }
-
-      v.reserve(toProcess.size());
-      for (unsigned i = 0; i < toProcess.size(); i++)
-      {
-        if (toProcess[i].GetType() == BITVECTOR_TYPE)
-          v.push_back(SimplifyTerm(toProcess[i], VarConstMap));
-        else if (toProcess[i].GetType() == BOOLEAN_TYPE)
-          v.push_back(SimplifyFormula(toProcess[i], VarConstMap));
-        else
-          v.push_back(toProcess[i]);
-      }
-
-      assert(v.size() > 0);
-      if (v != actualInputterm.GetChildren()) // short-cut.
-      {
-        output = nf->CreateArrayTerm(k, actualInputterm.GetIndexWidth(),
-                                     inputValueWidth, v);
-      }
-      else
-        output = actualInputterm;
-
-      if (inputterm != output)
-      {
-        UpdateSimplifyMap(inputterm, output, false);
-        inputterm = output;
-      }
-    }
-
-    const ASTVec& children = inputterm.GetChildren();
-    k = inputterm.GetKind();
-
-    // Perform constant propagation if possible.
-    // This should do nothing if the simplifyingnodefactory is used.
-    if (k != stp::UNDEFINED && k != stp::SYMBOL)
-    {
-      bool allConstant = true;
-
-      for (unsigned i = 0; i < children.size(); i++)
-        if (!children[i].isConstant())
-        {
-          allConstant = false;
-          break;
-        }
-
-      if (allConstant)
-      {
-        const ASTNode& c = BVConstEvaluator(inputterm);
-        assert(c.isConstant());
-        UpdateSimplifyMap(inputterm, c, false, VarConstMap);
-        return c;
-      }
-    }
-  }
-
-  {
-    ASTNode pulledUp = PullUpITE(inputterm);
-    if (pulledUp != inputterm)
-    {
-      ASTNode r = SimplifyTerm(pulledUp);
-      UpdateSimplifyMap(actualInputterm, r, false, NULL);
-      UpdateSimplifyMap(inputterm, r, false, NULL);
-      return r;
-    }
-  }
-
-  // Check that each of the bit-vector operands is simplified.
-  // I haven't measured if this is worth the expense.
-  {
-    bool notSimplified = false;
-    for (size_t i = 0; i < inputterm.Degree(); i++)
-      if (inputterm[i].GetType() != ARRAY_TYPE)
-        if (!hasBeenSimplified(inputterm[i]))
-        {
-          notSimplified = true;
-          break;
-        }
-    if (notSimplified)
-    {
-      ASTNode r = SimplifyTerm(inputterm);
-      UpdateSimplifyMap(actualInputterm, r, false, NULL);
-      UpdateSimplifyMap(inputterm, r, false, NULL);
-      return r;
-    }
-  }
-
-  ASTNode ret = simplify_term_switch(actualInputterm, inputterm, output,
-                                     VarConstMap, k, inputValueWidth);
-  if (ret != ASTUndefined)
-  {
-    return ret;
-  }
-  assert(!output.IsNull());
-
-  if (inputterm != output)
-    output = SimplifyTerm(output);
-  // memoize
-  UpdateSimplifyMap(inputterm, output, false, VarConstMap);
-  UpdateSimplifyMap(actualInputterm, output, false, VarConstMap);
-
-  // cerr << "SimplifyTerm: output" << output << endl;
-
-  assert(!output.IsNull());
-  assert(inputterm.GetValueWidth() == output.GetValueWidth());
-  assert(inputterm.GetIndexWidth() == output.GetIndexWidth());
-  assert(hasBeenSimplified(output));
-
-#ifndef NDEBUG
-  for (size_t i = 0; i < output.Degree(); i++)
-  {
-    if (output[i].GetType() != ARRAY_TYPE)
-      if (!hasBeenSimplified(output[i]))
-      {
-        std::cerr << output;
-        std::cerr << i;
-        assert(false);
-      }
-  }
-#endif
-
-  return output;
+  return simplifyNode(inputterm, false, SimplifyJob::Term);
 }
 
 ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
-                                         ASTNode& inputterm, ASTNode& output,
-                                         ASTNodeMap* VarConstMap, Kind k,
+                                         ASTNode& inputterm, ASTNode& output, Kind k,
                                          const unsigned int inputValueWidth)
 {
   switch (k)
@@ -1820,40 +2131,22 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       break;
 
     case SYMBOL:
-      if (CheckMap(VarConstMap, inputterm, output))
-      {
-        return output;
-      }
       if (InsideSubstitutionMap(inputterm, output))
-      {
-        return SimplifyTerm(output, VarConstMap);
-      }
+        break;
       output = inputterm;
       break;
 
     case BVMULT:
-    if (inputterm.Degree() == 2 && inputterm[1].GetKind() == BVLEFTSHIFT)
-    {
-      ASTNode replacement = nf->CreateTerm(BVMULT, inputValueWidth, {inputterm[0], inputterm[1][0]});
-      replacement = nf->CreateTerm(BVLEFTSHIFT, inputValueWidth, {replacement, inputterm[1][1]});
-      return SimplifyTerm(replacement, VarConstMap);
-    }
-
-    if (inputterm.Degree() == 2 && inputterm[0].GetKind() == BVLEFTSHIFT)
-    {
-      ASTNode replacement = nf->CreateTerm(BVMULT, inputValueWidth, {inputterm[1], inputterm[0][0]});
-      replacement = nf->CreateTerm(BVLEFTSHIFT, inputValueWidth, {replacement, inputterm[0][1]});
-      return SimplifyTerm(replacement, VarConstMap);
-    }
-
+    // nb. (t * (u << s)) == ((t * u) << s) is done by the simplifying node
+    // factory.
 
     // fall-through
     case BVPLUS:
     {
       if (BVPLUS == k && inputterm.Degree() == 2 && inputterm[1].GetKind() == BVLEFTSHIFT && inputterm[0] == inputterm[1][1])
       {
-        ASTNode replacement = nf->CreateTerm(BVOR, inputValueWidth, inputterm.GetChildren());
-        return SimplifyTerm(replacement, VarConstMap);
+        output = nf->CreateTerm(BVOR, inputValueWidth, toASTVec(inputterm.GetChildren()));
+        break;
       }
 
 
@@ -1936,9 +2229,17 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           }
           else if (BVMULT == k)
           {
-
             SortByArith(nonconstkids);
-            if (k == BVMULT && nonconstkids.size() > 2)
+
+            // DistributeMultOverPlus only understands two-operand
+            // multiplies, so a wide product with a sum inside is still
+            // towered down for it. Otherwise the product stays n-ary.
+            bool anyPlus = false;
+            for (const ASTNode& kid : nonconstkids)
+              if (BVPLUS == kid.GetKind())
+                anyPlus = true;
+
+            if (nonconstkids.size() > 2 && anyPlus)
               output = makeTower(k, nonconstkids);
             else
               output = nf->CreateTerm(k, inputValueWidth, nonconstkids);
@@ -1965,7 +2266,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       // propagate bvuminus upwards through multiplies.
       if (BVMULT == output.GetKind())
       {
-        ASTVec d = output.GetChildren();
+        ASTVec d = toASTVec(output.GetChildren());
         int uminus = 0;
         for (unsigned i = 0; i < d.size(); i++)
         {
@@ -1993,13 +2294,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       {
         output = pullUpBVSX(output);
       }
-      else if (BVMULT == output.GetKind())
+      else if (BVMULT == output.GetKind() || BVPLUS == output.GetKind())
       {
-        output = makeTower(BVMULT, output.GetChildren());
-      }
-      else if (BVPLUS == output.GetKind())
-      {
-        ASTVec d = output.GetChildren();
+        ASTVec d = toASTVec(output.GetChildren());
         SortByArith(d);
         output = nf->CreateTerm(output.GetKind(), output.GetValueWidth(), d);
       }
@@ -2007,24 +2304,10 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     }
 
     case BVSUB:
-    {
-      assert(inputterm.Degree() == 2);
-
-      const ASTNode& a0 = inputterm[0];
-      const ASTNode& a1 = inputterm[1];
-
-      if (a0 == a1)
-        output = nf->CreateZeroConst(inputValueWidth);
-      else
-      {
-        // covert x-y into x+(-y) and simplify. this transformation
-        // triggers more simplifications
-        //
-        output = nf->CreateTerm(BVPLUS, inputValueWidth, a0,
-                                nf->CreateTerm(BVUMINUS, inputValueWidth, a1));
-      }
+      // nb. (x - x) == 0, (x - 0) == x, and (x - y) == x + (-y) are done by
+      // the simplifying node factory.
+      output = inputterm;
       break;
-    }
 
     case BVUMINUS:
     {
@@ -2036,21 +2319,19 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       const ASTNode& a0 = inputterm[0];
       const Kind k1 = a0.GetKind();
-      const ASTNode one = nf->CreateOneConst(inputValueWidth);
       assert(k1 != BVCONST);
       switch (k1)
       {
-        case BVUMINUS:
-          output = a0[0];
-          break;
-        case BVNOT:
-        {
-          output = nf->CreateTerm(BVPLUS, inputValueWidth, a0[0], one);
-          break;
-        }
+        // nb. -(-x) == x and -(~x) == x + 1 are done by the simplifying node
+        // factory, so those children never reach here.
         case BVMULT:
         {
-          if (BVUMINUS == a0[0].GetKind())
+          if (a0.Degree() != 2)
+          {
+            // The rewrites below rebuild from the first two operands only.
+            output = inputterm;
+          }
+          else if (BVUMINUS == a0[0].GetKind())
           {
             output = nf->CreateTerm(BVMULT, inputValueWidth, a0[0][0], a0[1]);
           }
@@ -2067,9 +2348,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
             // process -3*x, but not -(3*x).
             if (BVCONST == a0[0].GetKind())
             {
-              ASTNode a00 =
-                  SimplifyTerm(nf->CreateTerm(BVUMINUS, inputValueWidth, a0[0]),
-                               VarConstMap);
+              ASTNode a00 =nf->CreateTerm(BVUMINUS, inputValueWidth, a0[0]);
               output = nf->CreateTerm(BVMULT, inputValueWidth, a00, a0[1]);
             }
             else
@@ -2084,40 +2363,25 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           //
           // BVUMINUS(a1x1 + a2x2 + ...) <=> BVPLUS(BVUMINUS(a1x1) +
           // BVUMINUS(a2x2) + ...
-          const ASTVec& c = a0.GetChildren();
+          const ASTChildren c = a0.GetChildren();
           ASTVec o;
-          for (ASTVec::const_iterator it = c.begin(), itend = c.end();
+          for (auto it = c.begin(), itend = c.end();
                it != itend; it++)
           {
             // Simplify(BVUMINUS(a1x1))
-            ASTNode aaa = SimplifyTerm(
-                nf->CreateTerm(BVUMINUS, inputValueWidth, *it), VarConstMap);
+            ASTNode aaa =
+                nf->CreateTerm(BVUMINUS, inputValueWidth, *it);
             o.push_back(aaa);
           }
 
           output = nf->CreateTerm(BVPLUS, inputValueWidth, o);
           break;
         }
-        case BVSUB:
-        {
-          // BVUMINUS(BVSUB(x,y)) <=> BVSUB(y,x)
-          output = nf->CreateTerm(BVSUB, inputValueWidth, a0[1], a0[0]);
-          break;
-        }
-        case BVAND:
-          if (a0.Degree() == 2 && (a0[1].GetKind() == BVUMINUS) &&
-              a0[1][0] == a0[0])
-          {
-            output = nf->CreateTerm(BVOR, inputValueWidth, a0[0], a0[1]);
-          }
-          break;
-        case BVOR:
-          if (a0.Degree() == 2 && (a0[1].GetKind() == BVUMINUS) &&
-              a0[1][0] == a0[0])
-          {
-            output = nf->CreateTerm(BVAND, inputValueWidth, a0[0], a0[1]);
-          }
-          break;
+        // nb. BVUMINUS(BVSUB(x,y)) does not occur: BVSUB is lowered to a
+        // BVPLUS by the simplifying node factory.
+        // nb. -(x & -x) == x | -x is done by the simplifying node factory.
+        // (The -(x | -x) case here was dead: BVOR is lowered to ~(~x & ~y) at
+        // creation, so no BVOR node ever reaches this switch.)
         case BVLEFTSHIFT:
           if (a0[0].GetKind() == BVCONST)
             output = nf->CreateTerm(
@@ -2128,10 +2392,10 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           // BVUMINUS(ITE(c,t1,t2)) <==> ITE(c,BVUMINUS(t1),BVUMINUS(t2))
           ASTNode c = a0[0];
-          ASTNode t1 = SimplifyTerm(
-              nf->CreateTerm(BVUMINUS, inputValueWidth, a0[1]), VarConstMap);
-          ASTNode t2 = SimplifyTerm(
-              nf->CreateTerm(BVUMINUS, inputValueWidth, a0[2]), VarConstMap);
+          ASTNode t1 =
+              nf->CreateTerm(BVUMINUS, inputValueWidth, a0[1]);
+          ASTNode t2 =
+              nf->CreateTerm(BVUMINUS, inputValueWidth, a0[2]);
           output = CreateSimplifiedTermITE(c, t1, t2);
           break;
         }
@@ -2175,18 +2439,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       switch (k1)
       {
-        case BVEXTRACT:
-        {
-          const unsigned innerLow = a0[2].GetUnsignedConst();
-          // const unsigned innerHigh = a0[1].GetUnsignedConst();
-
-          output = nf->CreateTerm(BVEXTRACT, inputValueWidth, a0[0],
-                                  nf->CreateBVConst(32, i_val + innerLow),
-                                  nf->CreateBVConst(32, j_val + innerLow));
-          assert(BVTypeCheck(output));
-          break;
-        }
-
+        // nb. an extract over an extract is merged by the simplifying node
+        // factory.
         case BVCONCAT:
         {
           // assumes concatenation is binary
@@ -2221,11 +2475,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
             // (t@u)[i:j] <==> t[i-len_u:0] @ u[len_u-1:j]
             i = nf->CreateBVConst(32, i_val - len_u);
             ASTNode m = nf->CreateBVConst(32, len_u - 1);
-            t = SimplifyTerm(
-                nf->CreateTerm(BVEXTRACT, i_val - len_u + 1, t, i, zero),
-                VarConstMap);
-            u = SimplifyTerm(nf->CreateTerm(BVEXTRACT, len_u - j_val, u, m, j),
-                             VarConstMap);
+            t =
+                nf->CreateTerm(BVEXTRACT, i_val - len_u + 1, t, i, zero);
+            u =nf->CreateTerm(BVEXTRACT, len_u - j_val, u, m, j);
             output = nf->CreateTerm(BVCONCAT, inputValueWidth, t, u);
           }
           break;
@@ -2235,15 +2487,13 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           // (BVMULT(n,t,u))[i:j] <==> BVMULT(i+1,t[i:0],u[i:0])[i:j]
           // similar rule for BVPLUS
-          ASTVec c = a0.GetChildren();
+          const ASTChildren c = a0.GetChildren();
           ASTVec o;
-          for (ASTVec::iterator jt = c.begin(), jtend = c.end(); jt != jtend;
+          for (auto jt = c.begin(), jtend = c.end(); jt != jtend;
                jt++)
           {
             ASTNode aaa = *jt;
-            aaa =
-                SimplifyTerm(nf->CreateTerm(BVEXTRACT, i_val + 1, aaa, i, zero),
-                             VarConstMap);
+            aaa =nf->CreateTerm(BVEXTRACT, i_val + 1, aaa, i, zero);
             o.push_back(aaa);
           }
           output = nf->CreateTerm(a0.GetKind(), i_val + 1, o);
@@ -2255,80 +2505,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           break;
         }
 
-// This can increase the number of nodes exponentially.
-// If turned on bitrev2048 will blow out main memory, with
-// this disabled it takes 12MB.
-#if 0
-
-          case BVAND:
-          case BVOR:
-          case BVXOR:
-            {
-              assert(a0.Degree() == 2);
-
-              //assumes these operators are binary
-              //
-              // (t op u)[i:j] <==> t[i:j] op u[i:j]
-              ASTNode t = a0[0];
-              ASTNode u = a0[1];
-              t =
-              SimplifyTerm(nf->CreateTerm(BVEXTRACT,
-                      a_len, t, i, j),
-                  VarConstMap);
-              u =
-              SimplifyTerm(nf->CreateTerm(BVEXTRACT,
-                      a_len, u, i, j),
-                  VarConstMap);
-              BVTypeCheck(t);
-              BVTypeCheck(u);
-              //output = nf->CreateTerm(k1, a_len, t, u);
-
-              output = inputterm;
-              break;
-            }
-#endif
-        case BVNOT:
-        {
-          // (~t)[i:j] <==> ~(t[i:j])
-          ASTNode t = a0[0];
-          t = SimplifyTerm(nf->CreateTerm(BVEXTRACT, inputValueWidth, t, i, j),
-                           VarConstMap);
-          output = nf->CreateTerm(BVNOT, inputValueWidth, t);
-          break;
-        }
-        // case BVSX:{ //(BVSX(t,n)[i:j] <==> BVSX(t,i+1), if n
-        //        >= i+1 and j=0 ASTNode t = a0[0]; unsigned int
-        //        bvsx_len = a0.GetValueWidth(); if(bvsx_len <
-        //        a_len) { FatalError("SimplifyTerm: BVEXTRACT
-        //        over BVSX:" "the length of BVSX term must be
-        //        greater than extract-len",inputterm); } if(j
-        //        != zero) { output =
-        //        nf->CreateTerm(BVEXTRACT,a_len,a0,i,j); }
-        //        else { output =
-        //        nf->CreateTerm(BVSX,a_len,t,
-        //                        nf->CreateBVConst(32,a_len));
-        //        } break; }
-
-        /*
-         * On deeply nested ITES, this can cause an exponential number
-         * of nodes to be produced. Especially if there are different
-         * extracts over the same node.
-         *
-         case ITE:
-         {
-         const ASTNode& t0 = a0[0];
-         ASTNode t1 =
-         SimplifyTerm(nf->CreateTerm(BVEXTRACT,
-         a_len, a0[1], i, j),
-         VarConstMap);
-         ASTNode t2 =
-         SimplifyTerm(nf->CreateTerm(BVEXTRACT,
-         a_len, a0[2], i, j),
-         VarConstMap);
-         output = CreateSimplifiedTermITE(t0, t1, t2);
-         break;
-         }
-         */
+        // nb. (~t)[i:j] == ~(t[i:j]) is done by the simplifying node factory.
         default:
         {
           output = inputterm;
@@ -2352,10 +2529,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         case ITE:
           if (a0[1].isConstant() && a0[2].isConstant())
           {
-            ASTNode t =
-                SimplifyTerm(nf->CreateTerm(BVNOT, inputValueWidth, a0[1]));
-            ASTNode f =
-                SimplifyTerm(nf->CreateTerm(BVNOT, inputValueWidth, a0[2]));
+            ASTNode t =nf->CreateTerm(BVNOT, inputValueWidth, a0[1]);
+            ASTNode f =nf->CreateTerm(BVNOT, inputValueWidth, a0[2]);
             output = nf->CreateTerm(ITE, inputValueWidth, a0[0],
                                     BVConstEvaluator(t), BVConstEvaluator(f));
             break;
@@ -2387,19 +2562,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         break;
       }
 
-      // If the msb is known. Then puts 0's or the 1's infront.
-      if (mostSignificantConstants(a0) > 0)
-      {
-        if (getConstantBit(a0, 0) == 0)
-          output = nf->CreateTerm(
-              BVCONCAT, inputValueWidth,
-              nf->CreateZeroConst(inputValueWidth - a0.GetValueWidth()), a0);
-        else
-          output = nf->CreateTerm(
-              BVCONCAT, inputValueWidth,
-              nf->CreateMaxConst(inputValueWidth - a0.GetValueWidth()), a0);
-        break;
-      }
+      // nb. A BVSX whose argument's most significant bit is known is
+      // replaced by a concat by strength reduction.
 
       assert(a0.GetKind() != BVCONST);
 
@@ -2413,10 +2577,10 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         case BVAND:
         case BVOR:
         {
-          const ASTVec& c = a0.GetChildren();
+          const ASTChildren c = a0.GetChildren();
           ASTVec newChildren;
           newChildren.reserve(c.size());
-          for (ASTVec::const_iterator it = c.begin(), itend = c.end();
+          for (auto it = c.begin(), itend = c.end();
                it != itend; it++)
           {
             newChildren.push_back(
@@ -2429,9 +2593,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           // BVSX(m,BVPLUS(n,BVSX(t1),BVSX(t2))) <==>
           // BVPLUS(m,BVSX(m,t1),BVSX(m,t2))
-          const ASTVec& c = a0.GetChildren();
+          const ASTChildren c = a0.GetChildren();
           bool returnflag = false;
-          for (ASTVec::const_iterator it = c.begin(), itend = c.end();
+          for (auto it = c.begin(), itend = c.end();
                it != itend; it++)
           {
             if (BVSX != it->GetKind())
@@ -2444,34 +2608,26 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           {
             ASTVec o;
             o.reserve(c.size());
-            for (ASTVec::const_iterator it = c.begin(), itend = c.end();
+            for (auto it = c.begin(), itend = c.end();
                  it != itend; it++)
             {
-              ASTNode aaa = SimplifyTerm(
-                  nf->CreateTerm(BVSX, inputValueWidth, *it, a1), VarConstMap);
+              ASTNode aaa =
+                  nf->CreateTerm(BVSX, inputValueWidth, *it, a1);
               o.push_back(aaa);
             }
             output = nf->CreateTerm(a0.GetKind(), inputValueWidth, o);
           }
           break;
         }
-        case BVSX:
-        {
-          // if you have BVSX(m,BVSX(n,a)) then you can drop the inner
-          // BVSX provided m is greater than n.
-          a0 = a0[0];
-          assert(hasBeenSimplified(a0));
-
-          output = nf->CreateTerm(BVSX, inputValueWidth, a0, a1);
-          break;
-        }
+        // BVSX(m,BVSX(n,a)) is collapsed to BVSX(m,a) by the
+        // simplifying node factory.
         case ITE:
         {
           const ASTNode& cond = a0[0];
-          ASTNode thenpart = SimplifyTerm(
-              nf->CreateTerm(BVSX, inputValueWidth, a0[1], a1), VarConstMap);
-          ASTNode elsepart = SimplifyTerm(
-              nf->CreateTerm(BVSX, inputValueWidth, a0[2], a1), VarConstMap);
+          ASTNode thenpart =
+              nf->CreateTerm(BVSX, inputValueWidth, a0[1], a1);
+          ASTNode elsepart =
+              nf->CreateTerm(BVSX, inputValueWidth, a0[2], a1);
           output = CreateSimplifiedTermITE(cond, thenpart, elsepart);
           break;
         }
@@ -2483,16 +2639,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     }
 
     case BVZX:
-    {
-      // a0 is the expr which is being zero-extended
-      ASTNode a0 = inputterm[0];
-
-      if (a0.GetValueWidth() == inputValueWidth)
-        output = a0; // nothing to zero-extend
-      else
-        output = inputterm;
+      // nb. BVZX is always lowered to a concat with zero (or its child when
+      // the widths match) by the simplifying node factory, so it never
+      // reaches here.
+      output = inputterm;
       break;
-    }
 
     case BVAND:
     case BVOR:
@@ -2503,12 +2654,14 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           inputterm[1].GetKind() == BVCONCAT &&
           inputterm[0][0].GetValueWidth() == inputterm[1][0].GetValueWidth())
       {
-        output =
-            nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(),
-                           nf->CreateTerm(k, inputterm[0][0].GetValueWidth(),
-                                          inputterm[0][0], inputterm[1][0]),
-                           nf->CreateTerm(k, inputterm[0][1].GetValueWidth(),
-                                          inputterm[0][1], inputterm[1][1]));
+        const ASTNode top =
+            nf->CreateTerm(k, inputterm[0][0].GetValueWidth(),
+                           inputterm[0][0], inputterm[1][0]);
+        const ASTNode bottom =
+            nf->CreateTerm(k, inputterm[0][1].GetValueWidth(),
+                           inputterm[0][1], inputterm[1][1]);
+        output = nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(), top,
+                                bottom);
         break;
       }
 
@@ -2530,8 +2683,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           output = annihilator;
           // memoize
-          UpdateSimplifyMap(inputterm, output, false, VarConstMap);
-          UpdateSimplifyMap(actualInputterm, output, false, VarConstMap);
+          UpdateSimplifyMap(inputterm, output, false);
+          if (actualInputterm != inputterm)
+            UpdateSimplifyMap(actualInputterm, output, false);
           // cerr << "output of SimplifyTerm: " << output << endl;
           return output;
         }
@@ -2546,8 +2700,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         if (o.size() > 0 && aaa.GetKind() == BVNOT && o.back() == aaa[0])
         {
           output = annihilator;
-          UpdateSimplifyMap(inputterm, output, false, VarConstMap);
-          UpdateSimplifyMap(actualInputterm, output, false, VarConstMap);
+          UpdateSimplifyMap(inputterm, output, false);
+          if (actualInputterm != inputterm)
+            UpdateSimplifyMap(actualInputterm, output, false);
           return output;
         }
 
@@ -2596,7 +2751,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       {
         assert(output.Degree() != 0);
         bool allconv = true;
-        for (ASTVec::const_iterator it = output.begin(), itend = output.end();
+        for (auto it = output.begin(), itend = output.end();
              it != itend; it++)
         {
           if (!isPropositionToTerm(*it))
@@ -2609,7 +2764,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           const ASTNode zero = nf->CreateZeroConst(1);
           ASTVec children;
-          for (ASTVec::const_iterator it = output.begin(), itend = output.end();
+          for (auto it = output.begin(), itend = output.end();
                it != itend; it++)
           {
             const ASTNode& n = *it;
@@ -2633,18 +2788,20 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           // i contains the number of leading zeroes.
           if (i < output.GetValueWidth())
-            output = nf->CreateTerm(
-                BVCONCAT, output.GetValueWidth(), nf->CreateZeroConst(i),
-                nf->CreateTerm(
-                    BVAND, output.GetValueWidth() - i,
-                    nf->CreateTerm(
-                        BVEXTRACT, output.GetValueWidth() - i, output[0],
-                        nf->CreateBVConst(32, output.GetValueWidth() - i - 1),
-                        nf->CreateBVConst(32, 0)),
-                    nf->CreateTerm(
-                        BVEXTRACT, output.GetValueWidth() - i, output[1],
-                        nf->CreateBVConst(32, output.GetValueWidth() - i - 1),
-                        nf->CreateBVConst(32, 0))));
+          {
+            const unsigned rest = output.GetValueWidth() - i;
+            const ASTNode lhs =
+                nf->CreateTerm(BVEXTRACT, rest, output[0],
+                               nf->CreateBVConst(32, rest - 1),
+                               nf->CreateBVConst(32, 0));
+            const ASTNode rhs =
+                nf->CreateTerm(BVEXTRACT, rest, output[1],
+                               nf->CreateBVConst(32, rest - 1),
+                               nf->CreateBVConst(32, 0));
+            output = nf->CreateTerm(BVCONCAT, output.GetValueWidth(),
+                                    nf->CreateZeroConst(i),
+                                    nf->CreateTerm(BVAND, rest, lhs, rhs));
+          }
 
           assert(BVTypeCheck(output));
         }
@@ -2697,31 +2854,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       const ASTNode& t = inputterm[0];
       const ASTNode& u = inputterm[1];
 
-      const Kind tkind = t.GetKind();
-      const Kind ukind = u.GetKind();
+      assert(BVCONST != t.GetKind() || BVCONST != u.GetKind());
 
-      assert(BVCONST != tkind || BVCONST != ukind);
-
-      if (BVEXTRACT == tkind && BVEXTRACT == ukind && t[0] == u[0])
-      {
-        // to handle the case x[m:n]@x[n-1:k] <==> x[m:k]
-        const ASTNode& t_hi = t[1];
-        const ASTNode& t_low = t[2];
-        const ASTNode& u_hi = u[1];
-        const ASTNode& u_low = u[2];
-        ASTNode c = BVConstEvaluator(
-            nf->CreateTerm(BVPLUS, 32, u_hi, nf->CreateOneConst(32)));
-        if (t_low == c)
-        {
-          output =
-              nf->CreateTerm(BVEXTRACT, inputValueWidth, t[0], t_hi, u_low);
-        }
-        else
-        {
-          output = nf->CreateTerm(BVCONCAT, inputValueWidth, t, u);
-        }
-      }
-      else if (t.GetKind() == BVCONCAT && t[0].GetKind() != BVCONCAT)
+      // nb. x[m:n]@x[n-1:k] <==> x[m:k] is done by the simplifying node
+      // factory.
+      if (t.GetKind() == BVCONCAT && t[0].GetKind() != BVCONCAT)
       {
 
         /// This makes the left hand child of every concat not a concat.
@@ -2740,157 +2877,27 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
     case BVLEFTSHIFT:
     case BVRIGHTSHIFT:
-    { // If the shift amount is known. Then replace it by an extract.
-      const ASTNode a = inputterm[0];
-      const ASTNode b = inputterm[1];
-
-      const unsigned int width = a.GetValueWidth();
-      if (BVCONST == b.GetKind()) // known shift amount.
-      {
-        output = SimplifyingNodeFactory::convertKnownShiftAmount(k, inputterm.GetChildren(), *_bm, nf);
-      }
-      else if (a == nf->CreateZeroConst(width))
-      {
-        output = nf->CreateZeroConst(width);
-      }
-      else
-      {
-        output = inputterm;
-      }
+      // nb. A known shift amount is lowered to an extract, and a zero shiftee
+      // is folded to zero, by the simplifying node factory.
+      output = inputterm;
       break;
-    }
-
-    case BVDIV:
-    {
-      if (inputterm[1] == nf->CreateOneConst(inputValueWidth))
-      {
-        output = inputterm[0];
-        break;
-      }
-      unsigned int nlz = numberOfLeadingZeroes(inputterm[0]);
-      nlz = std::min(inputValueWidth - 1, nlz);
-
-      // We can't do this if the second operand might be zero.
-      ASTNode eq = nf->CreateNode(EQ, inputterm[1],
-                                  nf->CreateZeroConst(inputValueWidth));
-      if (nlz > 0 && eq == ASTFalse)
-      {
-        int rest = inputValueWidth - nlz;
-        ASTNode low = nf->CreateBVConst(32, rest);
-        ASTNode high = nf->CreateBVConst(32, inputValueWidth - 1);
-
-        ASTNode cond = nf->CreateNode(
-            EQ, nf->CreateZeroConst(nlz),
-            nf->CreateTerm(BVEXTRACT, nlz, inputterm[1], high, low));
-
-        ASTNode top = nf->CreateTerm(BVEXTRACT, rest, inputterm[0],
-                                     nf->CreateBVConst(32, rest - 1),
-                                     nf->CreateZeroConst(32));
-        ASTNode bottom = nf->CreateTerm(BVEXTRACT, rest, inputterm[1],
-                                        nf->CreateBVConst(32, rest - 1),
-                                        nf->CreateZeroConst(32));
-
-        ASTNode div = nf->CreateTerm(BVDIV, rest, top, bottom);
-        div = nf->CreateTerm(BVCONCAT, inputValueWidth,
-                             nf->CreateZeroConst(inputValueWidth - rest), div);
-
-        output = nf->CreateTerm(ITE, inputValueWidth, cond, div,
-                                nf->CreateZeroConst(inputValueWidth));
-        break;
-      }
-
-      ASTNode lessThan = SimplifyFormula(
-          nf->CreateNode(BVLT, inputterm[0], inputterm[1]), false, NULL);
-      if (lessThan == ASTTrue)
-      {
-        output = nf->CreateZeroConst(inputValueWidth);
-      }
-      else
-      {
-        output = inputterm;
-      }
-      break;
-    }
-
-    case BVMOD:
-    {
-      if (inputterm[0] == inputterm[1])
-      {
-        output = nf->CreateZeroConst(inputValueWidth);
-        break;
-      }
-      if (inputterm[1] == nf->CreateOneConst(inputValueWidth))
-      {
-        output = nf->CreateZeroConst(inputValueWidth);
-        break;
-      }
-
-      unsigned int nlz = numberOfLeadingZeroes(inputterm[0]);
-      if (nlz > 0)
-      {
-        nlz = std::min(inputValueWidth - 1, nlz);
-        int rest = inputValueWidth - nlz;
-        ASTNode low = nf->CreateBVConst(32, rest);
-        ASTNode high = nf->CreateBVConst(32, inputValueWidth - 1);
-
-        ASTNode cond = nf->CreateNode(
-            EQ, nf->CreateZeroConst(nlz),
-            nf->CreateTerm(BVEXTRACT, nlz, inputterm[1], high, low));
-
-        ASTNode top = nf->CreateTerm(BVEXTRACT, rest, inputterm[0],
-                                     nf->CreateBVConst(32, rest - 1),
-                                     nf->CreateZeroConst(32));
-        ASTNode bottom = nf->CreateTerm(BVEXTRACT, rest, inputterm[1],
-                                        nf->CreateBVConst(32, rest - 1),
-                                        nf->CreateZeroConst(32));
-
-        // nb. This differs from the bvdiv case.
-        ASTNode div = nf->CreateTerm(BVMOD, rest, top, bottom);
-        div = nf->CreateTerm(BVCONCAT, inputValueWidth,
-                             nf->CreateZeroConst(inputValueWidth - rest), div);
-
-        // nb. This differs from the bvdiv case.
-        output = nf->CreateTerm(ITE, inputValueWidth, cond, div, inputterm[0]);
-        break;
-      }
-
-      ASTNode lessThan = SimplifyFormula(
-          nf->CreateNode(BVLT, inputterm[0], inputterm[1]), false, NULL);
-
-      if (lessThan == ASTTrue)
-      {
-        output = inputterm[0];
-      }
-      else
-      {
-        output = inputterm;
-      }
-      break;
-    }
 
     case BVXOR:
     {
-      if (inputterm.Degree() == 2 && inputterm[0] == inputterm[1])
-      {
-        output = nf->CreateZeroConst(inputterm.GetValueWidth());
-        break;
-      }
+      // nb. (x ^ x) == 0 and (0 ^ x) == x are done by the simplifying node
+      // factory.
       if (inputterm.Degree() == 2 && inputterm[0].GetKind() == BVCONCAT &&
           inputterm[1].GetKind() == BVCONCAT &&
           inputterm[0][0].GetValueWidth() == inputterm[1][0].GetValueWidth())
       {
-        output =
-            nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(),
-                           nf->CreateTerm(k, inputterm[0][0].GetValueWidth(),
-                                          inputterm[0][0], inputterm[1][0]),
-                           nf->CreateTerm(k, inputterm[0][1].GetValueWidth(),
-                                          inputterm[0][1], inputterm[1][1]));
-        break;
-      }
-      if (inputterm.Degree() == 2 &&
-          inputterm[0] == nf->CreateZeroConst(inputterm.GetValueWidth()))
-      {
-        output = inputterm[1];
+        const ASTNode top =
+            nf->CreateTerm(k, inputterm[0][0].GetValueWidth(),
+                           inputterm[0][0], inputterm[1][0]);
+        const ASTNode bottom =
+            nf->CreateTerm(k, inputterm[0][1].GetValueWidth(),
+                           inputterm[0][1], inputterm[1][1]);
+        output = nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(), top,
+                                bottom);
         break;
       }
     }
@@ -2902,6 +2909,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     case BVNAND:
     case BVNOR:
     case BVSRSHIFT:
+    // nb. Divisions and remainders with leading-zero dividends are
+    // narrowed, and those whose dividend is below the divisor are
+    // resolved, by strength reduction.
+    case BVDIV:
+    case BVMOD:
     {
       output = inputterm;
       break;
@@ -2911,8 +2923,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     {
       ASTNode out1;
 
-      ASTNode array_term = SimplifyArrayTerm(inputterm[0], VarConstMap);
-      ASTNode read_index = SimplifyTerm(inputterm[1], VarConstMap);
+      const
+
+      ASTNode array_term =inputterm[0];
+      const
+      ASTNode read_index =inputterm[1];
 
       if (SYMBOL == array_term.GetKind())
       {
@@ -2928,7 +2943,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           out1 = nf->CreateTerm(READ, inputterm.GetValueWidth(), array_term[0],
                                 read_index);
-          out1 = SimplifyTerm(out1, VarConstMap);
         }
         else
         {
@@ -2936,21 +2950,29 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
                                 read_index);
         }
       }
-      else if (ITE == array_term.GetKind())
+      else if (ITE == array_term.GetKind() &&
+               !(_bm->getExtensionalityIfAny() != NULL &&
+                 _bm->getExtensionalityIfAny()->activeInSolve()))
       {
         // Pushes the READ through ITES, which is potentially exponential.
         // At present, because there's no write refinement or similar, the
         // array transformer is going to do this later anyway. So, we do it
         // here. But it's ugggglly.
 
-        ASTNode cond = SimplifyFormula(inputterm[0][0], false, VarConstMap);
+        ASTNode cond = array_term[0];
         ASTNode read1 =
-            nf->CreateTerm(READ, inputValueWidth, inputterm[0][1], read_index);
+            nf->CreateTerm(READ, inputValueWidth, array_term[1], read_index);
         ASTNode read2 =
-            nf->CreateTerm(READ, inputValueWidth, inputterm[0][2], read_index);
-        read1 = SimplifyTerm(read1, VarConstMap);
-        read2 = SimplifyTerm(read2, VarConstMap);
+            nf->CreateTerm(READ, inputValueWidth, array_term[2], read_index);
         out1 = CreateSimplifiedTermITE(cond, read1, read2);
+      }
+      else if (ITE == array_term.GetKind())
+      {
+        // Array equality is running: leave the read on the if-then-else.
+        // Distributing it would put the reads on the branches, where the
+        // consistency checker's T rules cannot see them, and would push a
+        // witness anchor into a shape operand recovery does not accept.
+        out1 = nf->CreateTerm(READ, inputValueWidth, array_term, read_index);
       }
       else
       {
@@ -2958,13 +2980,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       }
 
       assert(!out1.IsNull());
-
-// process only if not  in the substitution map. simplifymap
-// has been checked already
-#if 0
-        if (!InsideSubstitutionMap(out1, out1) && out1.GetKind() == READ && WRITE == out1[0].GetKind())
-          out1 = RemoveWrites_TopLevel(out1);
-#endif
 
       // it is possible that after all the procesing the READ term
       // reduces to READ(Symbol,const) and hence we should check the
@@ -2998,13 +3013,55 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       break;
     }
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_SIGNED:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
+    {
+      // Rebuild with the same kind and arity. Only the float operands are
+      // simplified: the other children -- the rounding mode of the arithmetic
+      // operations, and to_fp's format arguments -- are constants the blaster
+      // reads directly, so simplifying them buys nothing and risks rewriting
+      // them into a form it does not recognise.
+      //
+      // Nothing here lowers anything. A floating-point operation simplifies
+      // to a floating-point operation, with its format derived from its kind
+      // and children as always; FloatBlast replaces the whole layer with bits
+      // in one pass, before the formula ever reaches this code. Blasting from
+      // inside simplification meant rebuilding an FP_ADD over bitvector
+      // children -- a node that does not type check, and which only passed
+      // because a float format was stamped onto it and its blasted children.
+      // Nodes are hash-consed, so that stamp landed on whatever else denoted
+      // the same bits.
+      // The generic operand phase of the job already simplified every float
+      // child. Non-float metadata children were carried through unchanged.
+      ASTVec simplified = toASTVec(inputterm.GetChildren());
+
+      // The factory may fold the operation as it rebuilds it (abs/neg of a
+      // constant, x*1.0, x/1.0), which is the whole point of going back
+      // through it; whatever comes back is what this term simplifies to.
+      output = nf->CreateTerm(k, inputValueWidth, simplified);
+      break;
+    }
+
     case WRITE:
     default:
       FatalError("SimplifyTerm: Control should never reach here:", inputterm,
                  k);
-      assert(false);
-      exit(-1);
-      break;
   }
 
   return ASTUndefined;
@@ -3026,7 +3083,7 @@ ASTNode Simplifier::CombineLikeTerms(const ASTNode& a)
     return output;
   }
 
-  return CombineLikeTerms(a.GetChildren());
+  return CombineLikeTerms(toASTVec(a.GetChildren()));
 }
 
 ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
@@ -3055,15 +3112,15 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
     {
       vars_to_consts[aaa].push_back(one);
     }
-    else if (BVMULT == aaa.GetKind() && BVUMINUS == aaa[0].GetKind() &&
-             BVCONST == aaa[0][0].GetKind())
+    else if (BVMULT == aaa.GetKind() && 2 == aaa.Degree() &&
+             BVUMINUS == aaa[0].GetKind() && BVCONST == aaa[0][0].GetKind())
     {
       //(BVUMINUS(c))*(y) <==> compute(BVUMINUS(c))*y
       ASTNode compute_const = BVConstEvaluator(aaa[0]);
       vars_to_consts[aaa[1]].push_back(compute_const);
     }
-    else if (BVMULT == aaa.GetKind() && BVUMINUS == aaa[1].GetKind() &&
-             BVCONST == aaa[0].GetKind())
+    else if (BVMULT == aaa.GetKind() && 2 == aaa.Degree() &&
+             BVUMINUS == aaa[1].GetKind() && BVCONST == aaa[0].GetKind())
     {
       // c*(BVUMINUS(y)) <==> compute(BVUMINUS(c))*y
       ASTNode cccc = BVConstEvaluator(nf->CreateTerm(BVUMINUS, len, aaa[0]));
@@ -3071,22 +3128,33 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
     }
     else if (BVMULT == aaa.GetKind() && BVCONST == aaa[0].GetKind())
     {
-      // assumes that BVMULT is binary
-      vars_to_consts[aaa[1]].push_back(aaa[0]);
+      if (2 == aaa.Degree())
+      {
+        vars_to_consts[aaa[1]].push_back(aaa[0]);
+      }
+      else
+      {
+        // Wider multiply: the constant is the coefficient, the product of
+        // the remaining operands is the variable part.
+        ASTVec rest(aaa.begin() + 1, aaa.end());
+        vars_to_consts[nf->CreateTerm(BVMULT, len, rest)].push_back(aaa[0]);
+      }
     }
-    else if (BVMULT == aaa.GetKind() && BVUMINUS == aaa[0].GetKind())
+    else if (BVMULT == aaa.GetKind() && 2 == aaa.Degree() &&
+             BVUMINUS == aaa[0].GetKind())
     {
       //(-1*x)*(y) <==> -1*(xy)
       ASTNode cccc = nf->CreateTerm(BVMULT, len, aaa[0][0], aaa[1]);
-      ASTVec cNodes = cccc.GetChildren();
+      ASTVec cNodes = toASTVec(cccc.GetChildren());
       SortByArith(cNodes);
       vars_to_consts[cccc].push_back(max);
     }
-    else if (BVMULT == aaa.GetKind() && BVUMINUS == aaa[1].GetKind())
+    else if (BVMULT == aaa.GetKind() && 2 == aaa.Degree() &&
+             BVUMINUS == aaa[1].GetKind())
     {
       // x*(-1*y) <==> -1*(xy)
       ASTNode cccc = nf->CreateTerm(BVMULT, len, aaa[0], aaa[1][0]);
-      ASTVec cNodes = cccc.GetChildren();
+      ASTVec cNodes = toASTVec(cccc.GetChildren());
       SortByArith(cNodes);
       vars_to_consts[cccc].push_back(max);
     }
@@ -3131,8 +3199,8 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
       monom = it->first;
     else
     {
-      monom = SimplifyTerm(nf->CreateTerm(BVMULT, constant.GetValueWidth(),
-                                          constant, it->first));
+      monom =nf->CreateTerm(BVMULT, constant.GetValueWidth(),
+                                          constant, it->first);
     }
     if (zero != monom)
     {
@@ -3175,88 +3243,43 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
 // assumes that lhs and rhs have already been simplified. although
 // this assumption is not needed for correctness, it is essential for
 // performance. The function also assumes that lhs is a BVPLUS
-ASTNode Simplifier::LhsMinusRhs(const ASTNode& eq)
+ASTNode Simplifier::LhsMinusRhsTerm(const ASTNode& eq,
+                                    const ASTNode& simplifiedNegatedRhs)
 {
-  // if input is not an equality, simply return it
-  if (EQ != eq.GetKind())
-    return eq;
+  assert ( eq.GetKind() == EQ);
 
   ASTNode lhs = eq[0];
-  ASTNode rhs = eq[1];
-  const Kind k_lhs = lhs.GetKind();
-  const Kind k_rhs = rhs.GetKind();
-  // either the lhs has to be a BVPLUS or the rhs has to be a
-  // BVPLUS
-  if (!(BVPLUS == k_lhs || BVPLUS == k_rhs ||
-        (BVMULT == k_lhs && BVMULT == k_rhs)))
-  {
-    return eq;
-  }
+  const Kind lhsKind = lhs.GetKind();
+  const Kind rhsKind = eq[1].GetKind();
+  if (lhsKind !=BVPLUS && rhsKind == BVPLUS)
+    lhs = eq[1];
 
-  ASTNode output;
-  if (CheckSimplifyMap(eq, output, false))
-  {
-    // check memo table
-    // cerr << "output of SimplifyTerm Cache: " << output << endl;
-    return output;
-  }
+  const ASTNode&
+    rhs = simplifiedNegatedRhs;
+  const
 
-  // if the lhs is not a BVPLUS, but the rhs is a BVPLUS, then swap
-  // the lhs and rhs
-  // bool swap_flag = false;
-  if (BVPLUS != k_lhs && BVPLUS == k_rhs)
-  {
-    ASTNode swap = lhs;
-    lhs = rhs;
-    rhs = swap;
-    // swap_flag = true;
-  }
+  unsigned len = lhs.GetValueWidth();
 
-  unsigned int len = lhs.GetValueWidth();
-  ASTNode zero = nf->CreateZeroConst(len);
-  // right is -1*(rhs): Simplify(-1*rhs)
-  rhs = SimplifyTerm(nf->CreateTerm(BVUMINUS, len, rhs));
-
-  ASTVec lvec = lhs.GetChildren();
-  ASTVec rvec = rhs.GetChildren();
-  ASTNode lhsplusrhs;
-  if (BVPLUS != lhs.GetKind() && BVPLUS != rhs.GetKind())
+  ASTVec lhsChildren = toASTVec(lhs.GetChildren());
+  const ASTChildren rhsChildren = rhs.GetChildren();
+  ASTNode sum;
+  if ( lhs.GetKind() != BVPLUS && rhs.GetKind() != BVPLUS)
+    sum = nf->CreateTerm(BVPLUS, len, lhs, rhs);
+  else if ( lhs.GetKind() == BVPLUS && rhs.GetKind() == BVPLUS)
   {
-    lhsplusrhs = nf->CreateTerm(BVPLUS, len, lhs, rhs);
+    lhsChildren.insert(lhsChildren.end(), rhsChildren.begin(),
+                       rhsChildren.end());
+    sum = nf->CreateTerm(BVPLUS, len, lhsChildren);
   }
-  else if (BVPLUS == lhs.GetKind() && BVPLUS == rhs.GetKind())
+  else if ( lhs.GetKind() == BVPLUS)
   {
-    // combine the childnodes of the left and the right
-    lvec.insert(lvec.end(), rvec.begin(), rvec.end());
-    lhsplusrhs = nf->CreateTerm(BVPLUS, len, lvec);
-  }
-  else if (BVPLUS == lhs.GetKind() && BVPLUS != rhs.GetKind())
-  {
-    lvec.push_back(rhs);
-    lhsplusrhs = nf->CreateTerm(BVPLUS, len, lvec);
+    lhsChildren.push_back(rhs);
+    sum = nf->CreateTerm(BVPLUS, len, lhsChildren);
   }
   else
-  {
-    lhsplusrhs = nf->CreateTerm(BVPLUS, len, lhs, rhs);
-  }
+    sum = nf->CreateTerm(BVPLUS, len, lhs, rhs);
 
-  // combine like terms
-  output = CombineLikeTerms(lhsplusrhs);
-  output = SimplifyTerm(output);
-  //
-  // Now make output into: lhs-rhs = 0
-  output = CreateSimplifiedEQ(output, zero);
-  // sort if BVPLUS
-  if (BVPLUS == output.GetKind())
-  {
-    ASTVec outv = output.GetChildren();
-    SortByArith(outv);
-    output = nf->CreateTerm(BVPLUS, len, outv);
-  }
-
-  // memoize
-  // UpdateSimplifyMap(eq,output,false);
-  return output;
+  return CombineLikeTerms(sum);
 }
 
 // THis function accepts a BVMULT(t1,t2) and distributes the mult
@@ -3276,7 +3299,8 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
   if (BVMULT != k)
     return a;
 
-  assert(a.Degree() == 2);
+  if (a.Degree() != 2)
+    return a;
 
   ASTNode left = a[0];
   ASTNode right = a[1];
@@ -3331,7 +3355,7 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
 
   // by this point we are gauranteed that right is a BVPLUS, but left
   // may not be
-  ASTVec rightnodes = right.GetChildren();
+  const ASTChildren rightnodes = right.GetChildren();
   ASTVec outputvec;
   unsigned len = a.GetValueWidth();
   ASTNode zero = nf->CreateZeroConst(len);
@@ -3350,27 +3374,27 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
     }
     else
     {
-      for (ASTVec::iterator j = rightnodes.begin(), jend = rightnodes.end();
+      for (auto j = rightnodes.begin(), jend = rightnodes.end();
            j != jend; j++)
       {
-        ASTNode out = SimplifyTerm(nf->CreateTerm(BVMULT, len, left, *j));
+        ASTNode out =nf->CreateTerm(BVMULT, len, left, *j);
         outputvec.push_back(out);
       }
     }
   }
   else
   {
-    ASTVec leftnodes = left.GetChildren();
+    const ASTChildren leftnodes = left.GetChildren();
     // (x1 + x2 + ... + xm)*(y1 + y2 + ...+ yn) <==> x1*y1 + x1*y2 +
     // ... + x2*y1 + ... + xm*yn
-    for (ASTVec::iterator i = leftnodes.begin(), iend = leftnodes.end();
+    for (auto i = leftnodes.begin(), iend = leftnodes.end();
          i != iend; i++)
     {
       ASTNode multiplier = *i;
-      for (ASTVec::iterator j = rightnodes.begin(), jend = rightnodes.end();
+      for (auto j = rightnodes.begin(), jend = rightnodes.end();
            j != jend; j++)
       {
-        ASTNode out = SimplifyTerm(nf->CreateTerm(BVMULT, len, multiplier, *j));
+        ASTNode out =nf->CreateTerm(BVMULT, len, multiplier, *j);
         outputvec.push_back(out);
       }
     }
@@ -3380,60 +3404,12 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
   if (outputvec.size() > 1)
   {
     output = CombineLikeTerms(nf->CreateTerm(BVPLUS, len, outputvec));
-    output = SimplifyTerm(output);
   }
   else
-    output = SimplifyTerm(outputvec[0]);
+    output =outputvec[0];
 
   // memoize
   // UpdateSimplifyMap(a,output,false);
-  return output;
-}
-
-// recursively simplify things that are of type array.
-ASTNode Simplifier::SimplifyArrayTerm(const ASTNode& term,
-                                      ASTNodeMap* VarConstMap)
-{
-
-  const unsigned iw = term.GetIndexWidth();
-  assert(iw > 0);
-
-  ASTNode output;
-  if (CheckSimplifyMap(term, output, false))
-  {
-    return output;
-  }
-
-  switch (term.GetKind())
-  {
-    case SYMBOL:
-      return term;
-    case ITE:
-    {
-      output = CreateSimplifiedTermITE(SimplifyFormula(term[0], VarConstMap),
-                                       SimplifyArrayTerm(term[1], VarConstMap),
-                                       SimplifyArrayTerm(term[2], VarConstMap));
-      assert(output.GetIndexWidth() == iw);
-    }
-    break;
-    case WRITE:
-    {
-      ASTNode array = SimplifyArrayTerm(term[0], VarConstMap);
-      ASTNode idx = SimplifyTerm(term[1]);
-      ASTNode val = SimplifyTerm(term[2]);
-
-      output =
-          nf->CreateArrayTerm(WRITE, iw, term.GetValueWidth(), array, idx, val);
-    }
-
-    break;
-    default:
-      FatalError("2313456331");
-  }
-
-  UpdateSimplifyMap(term, output, false);
-  assert(term.GetIndexWidth() == output.GetIndexWidth());
-  assert(BVTypeCheck(output));
   return output;
 }
 
@@ -3562,13 +3538,16 @@ void Simplifier::ResetSimplifyMaps()
   // deletes the contents.  The destructor seems to clear everything
   // anyway.
 
+  // (With the dense maps the delete/new and clear() are both cheap -- one
+  // vector teardown -- but the delete also returns the memory.)
+
   // SimplifyMap->clear();
   delete SimplifyMap;
-  SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+  SimplifyMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
 
   // SimplifyNegMap->clear();
   delete SimplifyNegMap;
-  SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+  SimplifyNegMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
 }
 
 void Simplifier::printCacheStatus()
@@ -3577,17 +3556,9 @@ void Simplifier::printCacheStatus()
        << SimplifyMap->bucket_count() << endl;
   cerr << "SimplifyNegMap:" << SimplifyNegMap->size() << ":"
        << SimplifyNegMap->bucket_count() << endl;
-  cerr << "AlwaysTrueFormSet" << AlwaysTrueHashSet.size() << ":"
-       << AlwaysTrueHashSet.bucket_count() << endl;
   cerr << "MultInverseMap" << MultInverseMap.size() << ":"
        << MultInverseMap.bucket_count() << endl;
 
-#if 0
-    cerr << "ReadOverWrite_NewName_Map" << ReadOverWrite_NewName_Map->size() << ":"
-        << ReadOverWrite_NewName_Map->bucket_count() << endl;
-    cerr << "NewName_ReadOverWrite_Map" << NewName_ReadOverWrite_Map.size() << ":"
-        << NewName_ReadOverWrite_Map.bucket_count() << endl;
-#endif
   cerr << "substn_map" << substitutionMap.Return_SolverMap()->size() << ":"
        << substitutionMap.Return_SolverMap()->bucket_count() << endl;
 }
@@ -3608,4 +3579,4 @@ ASTNode Simplifier::BVConstEvaluator(const ASTNode& t)
 }
 
 
-} // end of namespace
+} // namespace stp

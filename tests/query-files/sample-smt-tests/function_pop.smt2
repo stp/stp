@@ -1,4 +1,4 @@
-; RUN: %solver %s | %OutputCheck %s
+; RUN: not %solver %s | %OutputCheck %s
 ; Checks that popping a frame containing a function invalidates all symbols correctly
 (push 1)
 (declare-fun x!2 () Bool)

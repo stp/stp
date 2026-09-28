@@ -111,7 +111,8 @@ public:
                       signed* sumL_, signed* sumH_)
       : x(1, false), y(1, false), r(1, false)
   {
-    bitWidth = bitWidth_;
+    assert(bitWidth_ >= 0);
+    bitWidth = static_cast<unsigned>(bitWidth_);
     columnL = new signed[bitWidth];
     columnH = new signed[bitWidth];
     sumL = new signed[bitWidth];
@@ -165,19 +166,6 @@ class MultiplicationStatsMap
 public:
   typedef std::map<stp::ASTNode, MultiplicationStats> NodeToStats;
   NodeToStats map;
-
-  void print()
-  {
-    std::cout << "Size:" << map.size() << endl;
-
-    simplifier::constantBitP::MultiplicationStatsMap::NodeToStats::iterator it;
-
-    for (it = map.begin(); it != map.end(); it++)
-    {
-      std::cout << it->first;
-      it->second.print();
-    }
-  }
 };
 }
 }

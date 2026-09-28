@@ -36,6 +36,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/UnsignedIntervalSet.h"
 #include "stp/Simplifier/UnsignedIntervalSetAnalysis.h"
 #include "stp/Simplifier/ValueSetAnalysis.h"
+#include "stp/Util/DagWalk.h"
 #include <iostream>
 #include <unordered_map>
 
@@ -43,14 +44,37 @@ namespace stp
 {
 using simplifier::constantBitP::FixedBits;
 
-using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
-using NodeToFixedBitsMap = std::unordered_map<const ASTNode, FixedBits*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
-using NodeToUnsignedIntervalSetMap = std::unordered_map<const ASTNode, UnsignedIntervalSet*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
-using NodeToValueSetMap = std::unordered_map<const ASTNode, ValueSet*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+// Flat hash maps: buildMap probes and inserts these once per node, and
+// StrengthReduction probes them several times per node visited. They are
+// never iterated except by the destructor (order-independent deletes). Keys
+// are plain ASTNode (not const) because a dense map moves its elements; the
+// pointed-to domain objects live on the heap and are unaffected by moves.
+// NodeToUnsignedIntervalMap is defined in UnsignedIntervalAnalysis.h.
+using NodeToFixedBitsMap =
+    ankerl::unordered_dense::map<ASTNode, FixedBits*, ASTNode::ASTNodeHasher,
+                                 ASTNode::ASTNodeEqual>;
+using NodeToUnsignedIntervalSetMap =
+    ankerl::unordered_dense::map<ASTNode, UnsignedIntervalSet*,
+                                 ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+using NodeToValueSetMap =
+    ankerl::unordered_dense::map<ASTNode, ValueSet*, ASTNode::ASTNodeHasher,
+                                 ASTNode::ASTNodeEqual>;
 
 class NodeDomainAnalysis
 {
   STPMgr& bm;
+
+  // Shallow inputs keep buildMap's ordinary recursive path: walking the DAG
+  // once to prime a memo costs more than the stack it saves there. Once the
+  // prefix reaches this budget, primeMaps fills the suffix bottom-up and the
+  // bounded prefix unwinds normally.
+  static constexpr size_t unprimedDepthLimit = 512;
+  size_t unprimedDepth = 0;
+
+  // Debug-only: verify that the deliberately recursive prefix is bounded and
+  // priming answers every call made below it.
+  PrimeAudit mapAudit{"NodeDomainAnalysis::buildMap",
+                      unprimedDepthLimit + 8};
 
   // Cache read-only empty objects of different sizes.
   FixedBits* emptyBoolean;
@@ -89,9 +113,12 @@ public:
     ValueSet* set;
   };
 
+private:
+  DomainInfo buildMap(const ASTNode& n, bool knownMissing);
+
+public:
   NodeDomainAnalysis(STPMgr* _bm)
-      : bm(*_bm), intervalAnalysis(*_bm), setAnalysis(*_bm),
-        valueSetAnalysis(*_bm)
+      : bm(*_bm), setAnalysis(*_bm), valueSetAnalysis(*_bm)
   {
     emptyBoolean = new FixedBits(1, true);
   }
@@ -148,6 +175,13 @@ public:
    }
 
   DomainInfo buildMap(const ASTNode& n);
+
+  // buildMap reaches a node's children by calling itself, so a deeply nested
+  // input exhausts the stack. Once the shallow recursion budget above is
+  // exhausted, fill the remaining maps from the bottom up, and those calls
+  // answer from the map instead. See DeepDag_Test.cpp.
+  void primeMaps(const ASTNode& n);
+  bool priming = false;
 
   void topLevel(const ASTNode& top)
   {

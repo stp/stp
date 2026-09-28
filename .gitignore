@@ -9,3 +9,11 @@ docs/_build
 .DS_Store
 .direnv
 build
+
+# Local build trees, dependency clones and crash dumps (root only: scripts/deps
+# is tracked)
+/build-*/
+/core.*
+/deps/
+/.cache/
+venv

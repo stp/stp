@@ -24,17 +24,14 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include <cstdint>
+#include <vector>
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include "stp/Util/BitOps.h"
 
 namespace simplifier
 {
 namespace constantBitP
 {
-
-namespace stp
-{
-typedef unsigned int* CBV;
-}
 
 // Misc (easy) transfer functions.
 // Trevor Hansen. BSD License.
@@ -45,133 +42,131 @@ typedef unsigned int* CBV;
 
 // if a==b then fix the result to true.
 // if a!=b then fix the result to false.
+// The four bit-loops of the general version become bitwise operations on
+// the packed fixedness/value words. Each branch reads just the words it
+// needs straight from the children — no staging buffers.
 Result bvEqualsBothWays(FixedBits& a, FixedBits& b, FixedBits& output)
 {
   assert(a.getWidth() == b.getWidth());
   assert(1 == output.getWidth());
 
-  const int childWidth = a.getWidth();
-
-  Result r = NO_CHANGE;
-
-  bool allSame = true;
-  bool definatelyFalse = false;
-
-  for (int i = 0; i < childWidth; i++)
-  {
-    // if both fixed
-    if (a.isFixed(i) && b.isFixed(i))
-    {
-      // And have different values.
-      if (a.getValue(i) != b.getValue(i))
-      {
-        definatelyFalse = true;
-        break;
-      }
-      else
-      {
-        allSame &= true;
-        continue;
-      }
-    }
-    allSame &= false;
-  }
-
-  if (definatelyFalse)
+  // A bit fixed on both sides but to different values fully determines the
+  // propagation: the children are unequal, and no child bit can be derived.
+  if (a.disagrees(b))
   {
     if (output.isFixed(0) && output.getValue(0))
-    {
       return CONFLICT;
-    }
-    else if (!output.isFixed(0))
+    if (!output.isFixed(0))
     {
       output.setFixed(0, true);
       output.setValue(0, false);
-      r = CHANGED;
+      return CHANGED;
     }
+    return NO_CHANGE;
   }
-  else if (allSame)
+
+  const unsigned width = a.getWidth();
+  const unsigned words = (width + 63) / 64;
+  // The packed words are zero above the width, so ~fixed needs masking in
+  // the final word.
+  const uint64_t topMask =
+      (width % 64 == 0) ? ~0ULL : ((1ULL << (width % 64)) - 1);
+
+  bool changed = false;
+
+  // With no disagreement, the children are equal iff everything is fixed.
+  bool allFixed = true;
+  for (unsigned w = 0; w < words && allFixed; w++)
+  {
+    const uint64_t mask = (w == words - 1) ? topMask : ~0ULL;
+    uint64_t fa, va, fb, vb;
+    a.fillPackedWord(w, fa, va);
+    b.fillPackedWord(w, fb, vb);
+    allFixed = (fa & fb & mask) == mask;
+  }
+
+  if (allFixed)
   {
     if (output.isFixed(0) && !output.getValue(0))
-    {
       return CONFLICT;
-    }
-    else if (!output.isFixed(0))
+    if (!output.isFixed(0))
     {
       output.setFixed(0, true);
       output.setValue(0, true);
-      r = CHANGED;
+      changed = true;
     }
   }
 
   if (output.isFixed(0) && output.getValue(0)) // all should be the same.
   {
-    for (int i = 0; i < childWidth; i++)
+    for (unsigned w = 0; w < words; w++)
     {
-      if (a.isFixed(i) && b.isFixed(i))
+      uint64_t fa, va, fb, vb;
+      a.fillPackedWord(w, fa, va);
+      b.fillPackedWord(w, fb, vb);
+
+      const uint64_t onlyA = fa & ~fb;
+      if (onlyA != 0)
       {
-        if (a.getValue(i) != b.getValue(i))
-        {
-          return CONFLICT;
-        }
+        b.fixWordBits(w, onlyA, va);
+        changed = true;
       }
-      else if (a.isFixed(i) != b.isFixed(i)) // both same but only one is fixed.
+
+      const uint64_t onlyB = fb & ~fa;
+      if (onlyB != 0)
       {
-        if (a.isFixed(i))
-        {
-          b.setFixed(i, true);
-          b.setValue(i, a.getValue(i));
-          r = CHANGED;
-        }
-        else
-        {
-          a.setFixed(i, true);
-          a.setValue(i, b.getValue(i));
-          r = CHANGED;
-        }
+        a.fixWordBits(w, onlyB, vb);
+        changed = true;
       }
     }
   }
 
-  // if the result is fixed to false, there is a single unspecied value, and all
-  // the rest are the same. Fix it to the opposite.
+  // If the result is fixed to false, there is a single unspecified value, and
+  // all the rest are the same, fix it to the opposite.
   if (output.isFixed(0) && !output.getValue(0))
   {
-    int unknown = 0;
-
-    for (int i = 0; i < childWidth && unknown < 2; i++)
+    unsigned unknowns = 0;
+    for (unsigned w = 0; w < words && unknowns < 2; w++)
     {
-      if (!a.isFixed(i))
-        unknown++;
-      if (!b.isFixed(i))
-        unknown++;
-      else if (a.isFixed(i) && b.isFixed(i) && a.getValue(i) != b.getValue(i))
-      {
-        unknown = 10; // hack, don't do the next loop.
-        break;
-      }
+      const uint64_t mask = (w == words - 1) ? topMask : ~0ULL;
+      uint64_t fa, va, fb, vb;
+      a.fillPackedWord(w, fa, va);
+      b.fillPackedWord(w, fb, vb);
+      unknowns += ::stp::popCount64(~fa & mask) +
+                  ::stp::popCount64(~fb & mask);
     }
 
-    if (1 == unknown)
+    if (unknowns == 1)
     {
-      for (int i = 0; i < childWidth; i++)
+      for (unsigned w = 0; w < words; w++)
       {
-        if (!a.isFixed(i))
+        const uint64_t mask = (w == words - 1) ? topMask : ~0ULL;
+        uint64_t fa, va, fb, vb;
+        a.fillPackedWord(w, fa, va);
+        b.fillPackedWord(w, fb, vb);
+        const uint64_t unknownA = ~fa & mask;
+        const uint64_t unknownB = ~fb & mask;
+        if (unknownA != 0)
         {
-          a.setFixed(i, true);
-          a.setValue(i, !b.getValue(i));
-          r = CHANGED;
+          const unsigned bit = ::stp::countTrailingZeroes64(unknownA);
+          a.setFixed(w * 64 + bit, true);
+          a.setValue(w * 64 + bit, !((vb >> bit) & 1));
+          changed = true;
+          break;
         }
-        if (!b.isFixed(i))
+        if (unknownB != 0)
         {
-          b.setFixed(i, true);
-          b.setValue(i, !a.getValue(i));
-          r = CHANGED;
+          const unsigned bit = ::stp::countTrailingZeroes64(unknownB);
+          b.setFixed(w * 64 + bit, true);
+          b.setValue(w * 64 + bit, !((va >> bit) & 1));
+          changed = true;
+          break;
         }
       }
     }
   }
-  return r;
+
+  return changed ? CHANGED : NO_CHANGE;
 }
 
 Result bvEqualsBothWays(vector<FixedBits*>& children, FixedBits& result)
@@ -259,14 +254,14 @@ Result bvSignExtendBothWays(vector<FixedBits*>& children, FixedBits& output)
 
 Result bvExtractBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
-  const size_t numberOfChildren = children.size();
+  [[maybe_unused]] const size_t numberOfChildren = children.size();
   const unsigned outputBitWidth = output.getWidth();
 
   Result result = NO_CHANGE;
 
   assert(3 == numberOfChildren);
 
-  unsigned top = children[1]->getUnsignedValue();
+  [[maybe_unused]] unsigned top = children[1]->getUnsignedValue();
   unsigned bottom = children[2]->getUnsignedValue();
 
   FixedBits& input = *(children[0]);
@@ -373,21 +368,21 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
     const unsigned base = w * 64;
 
     if (knownOne)
-      hi = std::min(hi, base + (unsigned)__builtin_ctzll(knownOne));
+      hi = std::min(hi, base + (unsigned)::stp::countTrailingZeroes64(knownOne));
     if (diff)
     {
-      const unsigned i = base + (unsigned)__builtin_ctzll(diff);
+      const unsigned i = base + (unsigned)::stp::countTrailingZeroes64(diff);
       if (i == 0)
         return CONFLICT; // bit zero is always shared.
       hi = std::min(hi, i - 1);
     }
     if (ones2)
     {
-      lo = std::max(lo, base + 63 - (unsigned)__builtin_clzll(ones2));
-      hi = std::min(hi, base + (unsigned)__builtin_ctzll(ones2));
+      lo = std::max(lo, base + 63 - (unsigned)::stp::countLeadingZeroes64(ones2));
+      hi = std::min(hi, base + (unsigned)::stp::countTrailingZeroes64(ones2));
     }
     if (zeros2)
-      lo = std::max(lo, base + 64 - (unsigned)__builtin_clzll(zeros2));
+      lo = std::max(lo, base + 64 - (unsigned)::stp::countLeadingZeroes64(zeros2));
   }
 
   if (lo > hi)
@@ -407,10 +402,10 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
     feas &= bitsBelowWord(w, width);
     if (feas)
     {
-      const unsigned first = w * 64 + (unsigned)__builtin_ctzll(feas);
+      const unsigned first = w * 64 + (unsigned)::stp::countTrailingZeroes64(feas);
       if (L == none)
         L = first;
-      H = w * 64 + 63 - (unsigned)__builtin_clzll(feas);
+      H = w * 64 + 63 - (unsigned)::stp::countLeadingZeroes64(feas);
     }
   }
   const bool widthFeasible = hi == width;
@@ -431,14 +426,14 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
     changed |= (newX | newY) != 0;
     while (newX)
     {
-      const unsigned b = __builtin_ctzll(newX);
+      const unsigned b = ::stp::countTrailingZeroes64(newX);
       newX &= newX - 1;
       x.setFixed(w * 64 + b, true);
       x.setValue(w * 64 + b, false);
     }
     while (newY)
     {
-      const unsigned b = __builtin_ctzll(newY);
+      const unsigned b = ::stp::countTrailingZeroes64(newY);
       newY &= newY - 1;
       y.setFixed(w * 64 + b, true);
       y.setValue(w * 64 + b, false);
@@ -537,14 +532,14 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
       changed |= (fromX | fromY) != 0;
       while (fromX)
       {
-        const unsigned b = __builtin_ctzll(fromX);
+        const unsigned b = ::stp::countTrailingZeroes64(fromX);
         fromX &= fromX - 1;
         y.setFixed(w * 64 + b, true);
         y.setValue(w * 64 + b, !((xV[w] >> b) & 1));
       }
       while (fromY)
       {
-        const unsigned b = __builtin_ctzll(fromY);
+        const unsigned b = ::stp::countTrailingZeroes64(fromY);
         fromY &= fromY - 1;
         x.setFixed(w * 64 + b, true);
         x.setValue(w * 64 + b, !((yV[w] >> b) & 1));
@@ -555,7 +550,8 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
   return changed ? CHANGED : NO_CHANGE;
 }
 
-Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output)
+// One sweep, least significant operand first.
+static Result concatOnePass(vector<FixedBits*>& children, FixedBits& output)
 {
   Result r = NO_CHANGE;
   const size_t numberOfChildren = children.size();
@@ -589,6 +585,23 @@ Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output)
     }
   }
   return r;
+}
+
+Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output)
+{
+  const Result first = concatOnePass(children, output);
+
+  // When operands alias, one sweep is not enough: a bit written into the
+  // shared FixedBits through a low operand is not read back out through a
+  // high one until the next sweep. Two sweeps are always enough, though.
+  //
+  if (NO_CHANGE == first || CONFLICT == first || !operandsAlias(children))
+    return first;
+
+  // Merged, not just returned: the second sweep reports NO_CHANGE whenever it
+  // adds nothing, and returning that would tell propagate() nothing happened
+  // when the first sweep had already moved bits.
+  return merge(first, concatOnePass(children, output));
 }
 
 // If the guard is fixed, make equal the appropriate input and output.
@@ -682,8 +695,6 @@ Result bvITEBothWays(vector<FixedBits*>& children, FixedBits& output)
     }
   }
 
-  if (result == CONFLICT)
-    return CONFLICT;
   if (changed)
     return CHANGED;
 

@@ -23,8 +23,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-#include "stp/Simplifier/constantBitP/MersenneTwister.h"
 #include <gtest/gtest.h>
+#include <random>
 
 
   const std::string start_input = R"(
@@ -121,7 +121,7 @@ TEST(NodeDomainAnalysis_Test, __LINE__)
 TEST(NodeDomainAnalysis_Test, __LINE__)
 {
   Context c;
-  MTRand rand(10U);
+  std::mt19937 rand(10U);
 
   for (int i = 0; i < 100; i++)
   {

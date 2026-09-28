@@ -126,7 +126,7 @@ private:
     for (size_t i = 0; i < functions.size(); i++)
     {
       assert(functions[i].GetType() == stp::BITVECTOR_TYPE);
-      assert(functions[i].GetValueWidth() == bits);
+      assert(functions[i].GetValueWidth() == (unsigned)bits);
       assert(BVTypeCheckRecursive(functions[i]));
     }
   }

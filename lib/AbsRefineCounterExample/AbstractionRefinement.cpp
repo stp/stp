@@ -24,6 +24,8 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/AbsRefineCounterExample/ArrayReadRefinementProgress.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/STPManager/STPManager.h"
 #include <cassert>
 #include <math.h>
@@ -33,23 +35,84 @@ namespace stp
 using std::pair;
 using std::map;
 
+void ArrayReadRefinementProgress::verifyStableBinding(
+    const ASTNode& leaf,
+    const ToSATBase::ASTNodeToSATVar& currentBindings)
+{
+  if (leaf.isConstant())
+    return;
+
+  ToSATBase::ASTNodeToSATVar::const_iterator current =
+      currentBindings.find(leaf);
+  if (current == currentBindings.end() ||
+      current->second.size() != leaf.GetValueWidth())
+    FatalError("Incremental array refinement has no stable SAT binding for "
+               "an axiom leaf: ",
+               leaf);
+  for (size_t i = 0; i < current->second.size(); ++i)
+    if (current->second[i] == ~((unsigned)0))
+      FatalError("Incremental array refinement has an incomplete SAT binding "
+                 "for an axiom leaf: ",
+                 leaf);
+
+  std::map<ASTNode, std::vector<unsigned>, ExprLess>::const_iterator prior =
+      stableBindings.find(leaf);
+  if (prior == stableBindings.end())
+  {
+    stableBindings.insert(std::make_pair(leaf, current->second));
+    return;
+  }
+  if (prior->second != current->second)
+    FatalError("Incremental array refinement changed an axiom leaf's SAT "
+               "binding inside one check-sat: ",
+               leaf);
+}
+
+bool ArrayReadRefinementProgress::claim(
+    const ASTNode& index0, const ASTNode& index1, const ASTNode& value0,
+    const ASTNode& value1,
+    const ToSATBase::ASTNodeToSATVar& currentBindings)
+{
+  verifyStableBinding(index0, currentBindings);
+  verifyStableBinding(index1, currentBindings);
+  verifyStableBinding(value0, currentBindings);
+  verifyStableBinding(value1, currentBindings);
+
+  const AxiomKey key = {{index0, index1, value0, value1}};
+  return emitted.insert(key).second;
+}
+
 /******************************************************************
  * Abstraction Refinement related functions
  ******************************************************************/
-
-enum Polarity
-{
-  LEFT_ONLY,
-  RIGHT_ONLY,
-  BOTH
-};
 
 void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
                      SATSolver& SatSolver, ToSATBase::ASTNodeToSATVar& satVar)
 {
   ToSATBase::ASTNodeToSATVar::iterator it = satVar.find(a);
   if (it != satVar.end())
+  {
     v_a = it->second;
+
+    // ToCNFAIG::fill_node_to_var() writes ~0u for a bit of a symbol that
+    // reached no SAT variable, and the same value arrives from a CNF
+    // generator that left an object's variable number at -1. getEquals()
+    // indexes this vector straight into mkLit(), where the sentinel wraps
+    // into a variable far past the solver's range: MiniSat then indexes
+    // its assignment array out of bounds, and Cadical is handed a literal
+    // beyond max_var.
+    //
+    // There is no safe recovery. Allocating a fresh variable for the
+    // missing bit -- what the branch below does for a symbol that was
+    // never bit-blasted at all -- would carry no connection to the term
+    // the axiom is about, so the congruence clause could fail to rule out
+    // the candidate model it was built from. The array-equality encoder
+    // rejects the same shape for the same reason; see
+    // ExtensionalityContext::checkPreencodedBV().
+    for (size_t i = 0, size = v_a.size(); i < size; ++i)
+      if (v_a[i] == ~((unsigned)0))
+        FatalError("An array axiom leaf has a bit with no SAT variable: ", a);
+  }
   else if (!a.isConstant())
   {
     assert(a.GetKind() == SYMBOL);
@@ -70,13 +133,11 @@ void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
 // (which it returns).
 // Because it's used to create array axionms (a=b)-> (c=d), it can be
 // used to only add one of the two polarities.
-Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
-                       ToSATBase::ASTNodeToSATVar& satVar,
-                       Polarity polary = BOTH)
+uint32_t getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
+                   ToSATBase::ASTNodeToSATVar& satVar, Polarity polary)
 {
   const unsigned width = a.GetValueWidth();
   assert(width == b.GetValueWidth());
-  assert(!a.isConstant() || !b.isConstant());
 
   vector<unsigned> v_a;
   vector<unsigned> v_b;
@@ -95,7 +156,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
     {
       SATSolver::vec_literals s;
 
-      if (polary != RIGHT_ONLY)
+      if (polary != Polarity::RIGHT_ONLY)
       {
         int nv0 = SatSolver.newVar();
         s.push(SATSolver::mkLit(v_a[i], true));
@@ -113,7 +174,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
         all.push(SATSolver::mkLit(nv0, true));
       }
 
-      if (polary != LEFT_ONLY)
+      if (polary != Polarity::LEFT_ONLY)
       {
         s.push(SATSolver::mkLit(v_a[i], true));
         s.push(SATSolver::mkLit(v_b[i], false));
@@ -149,7 +210,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
     CBV v = constant.GetBVConst();
     for (unsigned i = 0; i < width; i++)
     {
-      if (polary != RIGHT_ONLY)
+      if (polary != Polarity::RIGHT_ONLY)
       {
         if (CONSTANTBV::BitVector_bit_test(v, i))
           all.push(SATSolver::mkLit(vec[i], true));
@@ -157,7 +218,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
           all.push(SATSolver::mkLit(vec[i], false));
       }
 
-      if (polary != LEFT_ONLY)
+      if (polary != Polarity::LEFT_ONLY)
       {
         SATSolver::vec_literals p;
         p.push(SATSolver::mkLit(result, true));
@@ -171,6 +232,19 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
     }
     if (all.size() > 1)
       SatSolver.addClause(all);
+    return result;
+  }
+  else if (a.isConstant() && b.isConstant())
+  {
+    // A congruence axiom between two constant indexes (reachable when
+    // both spell one value under different constant nodes -- a float
+    // constant interns apart from the plain constant with its bits):
+    // the equality's truth is just their bits; pin a fresh variable to
+    // it.
+    const int result = SatSolver.newVar();
+    SATSolver::vec_literals unit;
+    unit.push(SATSolver::mkLit(result, !constantsSameBits(a, b)));
+    SatSolver.addClause(unit);
     return result;
   }
   else
@@ -209,35 +283,47 @@ struct AxiomToBe
   }
   ASTNode index0, index1;
   ASTNode value0, value1;
-
-  int numberOfConstants() const
-  {
-    return ((index0.isConstant() ? 1 : 0) + (index1.isConstant() ? 1 : 0) +
-            (index0.isConstant() ? 1 : 0) + (index1.isConstant() ? 1 : 0));
-  }
 };
 
 void applyAxiomToSAT(SATSolver& SatSolver, AxiomToBe& toBe,
                      ToSATBase::ASTNodeToSATVar& satVar)
 {
-  Minisat::Var a =
-      getEquals(SatSolver, toBe.index0, toBe.index1, satVar, LEFT_ONLY);
-  Minisat::Var b =
-      getEquals(SatSolver, toBe.value0, toBe.value1, satVar, RIGHT_ONLY);
+  uint32_t a = getEquals(SatSolver, toBe.index0, toBe.index1, satVar,
+                         Polarity::LEFT_ONLY);
+  uint32_t b = getEquals(SatSolver, toBe.value0, toBe.value1, satVar,
+                         Polarity::RIGHT_ONLY);
   SATSolver::vec_literals satSolverClause;
   satSolverClause.push(SATSolver::mkLit(a, true));
   satSolverClause.push(SATSolver::mkLit(b, false));
   SatSolver.addClause(satSolverClause);
 }
 
-void applyAxiomsToSolver(ToSATBase::ASTNodeToSATVar& satVar,
-                         vector<AxiomToBe>& toBe, SATSolver& SatSolver)
+size_t applyAxiomsToSolver(ToSATBase::ASTNodeToSATVar& satVar,
+                           vector<AxiomToBe>& toBe, SATSolver& SatSolver,
+                           ArrayReadRefinementProgress* progress)
 {
+  // Preserve the batch path exactly: no memo allocation, node retention or
+  // binding copies when the caller did not request transactional progress.
+  if (progress == NULL)
+  {
+    const size_t emitted = toBe.size();
+    for (size_t i = 0; i < toBe.size(); i++)
+      applyAxiomToSAT(SatSolver, toBe[i], satVar);
+    toBe.clear();
+    return emitted;
+  }
+
+  size_t emitted = 0;
   for (size_t i = 0; i < toBe.size(); i++)
   {
+    const AxiomToBe& a = toBe[i];
+    if (!progress->claim(a.index0, a.index1, a.value0, a.value1, satVar))
+      continue;
     applyAxiomToSAT(SatSolver, toBe[i], satVar);
+    ++emitted;
   }
   toBe.clear();
+  return emitted;
 }
 
 bool sortBySize(const pair<ASTNode, ArrayTransformer::arrTypeMap>& a,
@@ -256,14 +342,231 @@ bool sortByIndexConstants(const pair<ASTNode, ArrayTransformer::ArrayRead>& a,
   return aCount > bCount;
 }
 
-bool sortbyConstants(const AxiomToBe& a, const AxiomToBe& b)
+// Path lemmas for one round over the abstracted write-chain reads
+// (ArrayTransformer::chainReads). A row's meaning is the first-match walk
+// down its levels; the lemma for a match at level k is the clause
+//
+//   (i_1 = j) or ... or (i_{k-1} = j) or not(i_k = j) or (R = v_k)
+//
+// and the fall-through lemma replaces the final two literals with the
+// base-read equality. Everything is stated over the anchors the transform
+// bound, so the equalities encode directly against live SAT variables; a
+// guard equality is used in both polarities across a row's clauses, so its
+// comparison circuit is built once per row with Polarity::BOTH and reused.
+// With emitAll false only the clause the current model violates is added
+// (absent, or the model could not violate it); emitAll true adds a row's
+// whole case split, which pins R completely.
+size_t AbsRefine_CounterExample::emitChainReadLemmas(
+    SATSolver& SatSolver, ToSATBase* tosat, bool emitAll,
+    ArrayReadRefinementProgress* progress, ChainLemmaState* state)
 {
-  return a.numberOfConstants() > b.numberOfConstants();
+  const ArrayTransformer::ChainReadsMap& chains = ArrayTransform->chainReads;
+  if (chains.empty())
+    return 0;
+
+  ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
+  size_t emitted = 0;
+
+  for (ArrayTransformer::ChainReadsMap::const_iterator cit = chains.begin();
+       cit != chains.end(); cit++)
+  {
+    for (ArrayTransformer::ChainIndexMap::const_iterator rit =
+             cit->second.begin();
+         rit != cit->second.end(); rit++)
+    {
+      const ArrayTransformer::ChainRow& row = rit->second;
+      const size_t nLevels = row.levels.size();
+
+      // The position the model resolves the read at: the first level whose
+      // index matches, or nLevels for the fall-through.
+      size_t resolved = nLevels;
+      ASTNode expected;
+      if (!emitAll)
+      {
+        const ASTNode jVal = TermToConstTermUsingModel(row.indexAnchor);
+        for (size_t k = 0; k < nLevels; k++)
+        {
+          if (TermToConstTermUsingModel(row.levels[k].indexAnchor) == jVal)
+          {
+            resolved = k;
+            expected = TermToConstTermUsingModel(row.levels[k].valueAnchor);
+            break;
+          }
+        }
+        if (resolved == nLevels)
+        {
+          if (row.baseReadSymbol.IsNull())
+            continue; // a sure-hit tail: some level always matches
+          expected = TermToConstTermUsingModel(row.baseReadSymbol);
+        }
+        if (TermToConstTermUsingModel(row.symbol) == expected)
+          continue;
+      }
+
+      // Guard equality variables, cached across this check's rounds so a
+      // deep row does not rebuild its comparison circuits every round.
+      std::vector<int64_t>& guardVar = state->guards[row.symbol];
+      if (guardVar.empty())
+        guardVar.assign(nLevels, -1);
+      const auto guard = [&](size_t m) {
+        if (guardVar[m] < 0)
+        {
+          guardVar[m] = getEquals(SatSolver, row.levels[m].indexAnchor,
+                                  row.indexAnchor, satVar, Polarity::BOTH);
+          // The lemma for level k names every guard below it, so a guard
+          // minted in one round is written into clauses in later rounds,
+          // with the backend's own simplification running in between. A
+          // guard the simplifying MiniSat has eliminated by then is one it
+          // cannot take a clause over (SimpSolver::addClause_ asserts on
+          // exactly that), so keep the cached guards, as the anchors the
+          // lemmas are written over already are, and as the array-equality
+          // encoder keeps its cached equality literals.
+          SatSolver.setFrozen((uint32_t)guardVar[m]);
+        }
+        return (uint32_t)guardVar[m];
+      };
+
+      const auto emitAt = [&](size_t k) {
+        // Claimed under a key no congruence axiom can produce: the chain
+        // read's own symbol leads it.
+        const ASTNode& valueSide =
+            (k < nLevels) ? row.levels[k].valueAnchor : row.baseReadSymbol;
+        if (progress != NULL &&
+            !progress->claim(row.symbol,
+                             (k < nLevels) ? row.levels[k].indexAnchor
+                                           : row.indexAnchor,
+                             valueSide, row.symbol, satVar))
+          return;
+        SATSolver::vec_literals clause;
+        for (size_t m = 0; m < k && m < nLevels; m++)
+          clause.push(SATSolver::mkLit(guard(m), false));
+        if (k < nLevels)
+          clause.push(SATSolver::mkLit(guard(k), true));
+        const uint32_t valueEq = getEquals(SatSolver, row.symbol, valueSide,
+                                           satVar, Polarity::RIGHT_ONLY);
+        clause.push(SATSolver::mkLit(valueEq, false));
+        SatSolver.addClause(clause);
+        emitted++;
+      };
+
+      // The whole prefix up to the resolution point is emitted at once: a
+      // later round can then only be violated deeper (or at the model's
+      // next resolution point), so a row's rounds are bounded by how deep
+      // the models actually reach, not by one level per round.
+      size_t& frontier = state->frontiers[row.symbol];
+      const size_t last = emitAll ? nLevels : resolved;
+      for (size_t k = frontier; k <= last && k < nLevels; k++)
+        emitAt(k);
+      if (last == nLevels && !row.baseReadSymbol.IsNull())
+        emitAt(nLevels);
+      if (last + 1 > frontier)
+        frontier = last + 1;
+    }
+  }
+  return emitted;
+}
+
+bool AbsRefine_CounterExample::AddArrayReadRefinementForCandidate(
+    SATSolver& SatSolver, ToSATBase* tosat,
+    ArrayReadRefinementProgress* progress)
+{
+  bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+  std::vector<AxiomToBe> remaining;
+
+  std::vector<std::pair<ASTNode, ArrayTransformer::arrTypeMap>> arrays;
+  arrays.insert(arrays.begin(), ArrayTransform->arrayToIndexToRead.begin(),
+                ArrayTransform->arrayToIndexToRead.end());
+  sort(arrays.begin(), arrays.end(), sortBySize);
+
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL && ext->activeInSolve())
+  {
+    bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+    return false;
+  }
+
+  for (const auto& array : arrays)
+  {
+    const std::map<ASTNode, ArrayTransformer::ArrayRead>& mapper =
+        array.second;
+    std::vector<std::pair<ASTNode, ArrayTransformer::ArrayRead>> reads(
+        mapper.begin(), mapper.end());
+    sort(reads.begin(), reads.end(), sortByIndexConstants);
+
+    ASTVec indexes;
+    ASTVec index_symbols;
+    ASTVec read_symbols;
+    std::vector<Kind> index_kinds;
+    ASTVec concrete_indexes;
+    ASTVec concrete_values;
+    indexes.reserve(reads.size());
+    index_symbols.reserve(reads.size());
+    read_symbols.reserve(reads.size());
+    index_kinds.reserve(reads.size());
+    concrete_indexes.reserve(reads.size());
+    concrete_values.reserve(reads.size());
+    for (const auto& read : reads)
+    {
+      indexes.push_back(read.first);
+      index_symbols.push_back(read.second.index_symbol);
+      read_symbols.push_back(read.second.symbol);
+      index_kinds.push_back(read.first.GetKind());
+      concrete_indexes.push_back(TermToConstTermUsingModel(read.first));
+      concrete_values.push_back(
+          TermToConstTermUsingModel(read.second.symbol));
+    }
+
+    for (std::size_t i = 0; i < indexes.size(); ++i)
+    {
+      std::vector<AxiomToBe> false_axioms;
+      for (std::size_t j = i + 1; j < indexes.size(); ++j)
+      {
+        if (indexes[i].GetKind() == BVCONST &&
+            index_kinds[j] == BVCONST &&
+            constantsDenoteDifferentValues(indexes[i], indexes[j]))
+          continue;
+        if (ASTFalse == simp->CreateSimplifiedEQ(indexes[i], indexes[j]))
+          continue;
+
+        AxiomToBe axiom(index_symbols[i], index_symbols[j], read_symbols[i],
+                        read_symbols[j]);
+        if (concrete_indexes[i] == concrete_indexes[j] &&
+            concrete_values[i] != concrete_values[j])
+          false_axioms.push_back(axiom);
+        else
+          remaining.push_back(axiom);
+      }
+
+      if (!false_axioms.empty())
+      {
+        ToSATBase::ASTNodeToSATVar& satVar =
+            tosat->SATVar_to_SymbolIndexMap();
+        const std::size_t emitted =
+            applyAxiomsToSolver(satVar, false_axioms, SatSolver, progress);
+        bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+        return emitted != 0;
+      }
+    }
+  }
+
+  if (!remaining.empty())
+  {
+    ToSATBase::ASTNodeToSATVar& satVar =
+        tosat->SATVar_to_SymbolIndexMap();
+    const std::size_t emitted =
+        applyAxiomsToSolver(satVar, remaining, SatSolver, progress);
+    bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+    return emitted != 0;
+  }
+
+  bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+  return false;
 }
 
 SOLVER_RETURN_TYPE
 AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
-    SATSolver& SatSolver, const ASTNode& original_input, ToSATBase* tosat)
+    SATSolver& SatSolver, const ASTNode& original_input, ToSATBase* tosat,
+    ArrayReadRefinementProgress* progress)
 {
   vector<AxiomToBe> RemainingAxiomsVec;
   vector<AxiomToBe> FalseAxiomsVec;
@@ -277,6 +580,30 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
                       ArrayTransform->arrayToIndexToRead.begin(),
                       ArrayTransform->arrayToIndexToRead.end());
   sort(arrayToIndex.begin(), arrayToIndex.end(), sortBySize);
+
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  const bool extActive = ext != NULL && ext->activeInSolve();
+  if (extActive)
+    FatalError("array-equality: legacy array-read refinement was invoked "
+               "during a solve owned by the extensionality checker");
+
+  // The abstracted write-chain reads first: each round adds the one path
+  // lemma per row that the current model violates, and the loop runs the
+  // rows dry before the congruence axioms below are considered.
+  ChainLemmaState chainState;
+  for (;;)
+  {
+    const size_t chainEmitted =
+        emitChainReadLemmas(SatSolver, tosat, false, progress, &chainState);
+    if (chainEmitted == 0)
+      break;
+    bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+    const SOLVER_RETURN_TYPE res2 = CallSAT_ResultCheck(
+        SatSolver, ASTTrue, original_input, original_input, tosat, true);
+    if (SOLVER_UNDECIDED != res2)
+      return res2;
+    bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+  }
 
   // In these loops we try to construct Leibnitz axioms and add it to
   // the solve(). We add only those axioms that are false in the
@@ -348,11 +675,12 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
       {
         const ASTNode& index_j = listOfIndices[j];
 
-        // If the index is a constant, and different, then there's no reason to
-        // check.
-        // Sometimes we get the same index stored multiple times in the array.
-        // Not sure why...
-        if (BVCONST == iKind && jKind[j] == BVCONST && index_i != index_j)
+        // If the indexes are constants of different values, the cells are
+        // distinct and no congruence is needed. Compare bits, not nodes:
+        // a float constant interns apart from the plain constant with its
+        // bits, and skipping such a pair drops a needed axiom for good.
+        if (BVCONST == iKind && jKind[j] == BVCONST &&
+            constantsDenoteDifferentValues(index_i, index_j))
           continue;
 
         if (ASTFalse == simp->CreateSimplifiedEQ(index_i, index_j))
@@ -375,21 +703,24 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
       if (FalseAxiomsVec.size() > 0)
       {
         ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
-        applyAxiomsToSolver(satVar, FalseAxiomsVec, SatSolver);
+        const size_t emitted = applyAxiomsToSolver(
+            satVar, FalseAxiomsVec, SatSolver, progress);
 
-        SOLVER_RETURN_TYPE res2;
-        bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-        res2 = CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat,
-                                   true);
+        if (emitted > 0)
+        {
+          SOLVER_RETURN_TYPE res2;
+          bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+          res2 = CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
+                                     original_input, tosat, true);
 
-        if (SOLVER_UNDECIDED != res2)
-          return res2;
-        bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+          if (SOLVER_UNDECIDED != res2)
+            return res2;
+          bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+        }
       }
     }
   }
-#if 1
-  if (RemainingAxiomsVec.size() > 0)
+  if (RemainingAxiomsVec.size() > 0 || !ArrayTransform->chainReads.empty())
   {
     if (bm->UserFlags.stats_flag)
     {
@@ -397,145 +728,23 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
                 << " read axioms " << std::endl;
     }
     ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
-    applyAxiomsToSolver(satVar, RemainingAxiomsVec, SatSolver);
+    size_t emitted = applyAxiomsToSolver(
+        satVar, RemainingAxiomsVec, SatSolver, progress);
+    // The model-guided rounds above ran the rows dry against one model;
+    // adding every remaining path lemma pins the chain reads completely,
+    // so the final call cannot come back undecided for their sake.
+    emitted += emitChainReadLemmas(SatSolver, tosat, true, progress,
+                                   &chainState);
 
     bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-    return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat, true);
+    if (emitted > 0)
+      return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
+                                 original_input, tosat, true);
+    return SOLVER_UNDECIDED;
   }
-// For difficult problems, I suspec this is a better way to do it.
-// However because it can cause an extra three SAT solver calls, it slows down
-// easy problems.
-#else
-  if (RemainingAxiomsVec.size() > 0)
-  {
-    // Add the axioms in order of how many constants there are in each.
-
-    ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
-    sort(RemainingAxiomsVec.begin(), RemainingAxiomsVec.end(), sortbyConstants);
-    int current_position = 0;
-    for (int n_const = 4; n_const >= 0; n_const--)
-    {
-      bool added = false;
-      while (current_position < RemainingAxiomsVec.size() &&
-             RemainingAxiomsVec[current_position].numberOfConstants() ==
-                 n_const)
-      {
-        AxiomToBe& toBe = RemainingAxiomsVec[current_position];
-        applyAxiomToSAT(SatSolver, toBe, satVar);
-        current_position++;
-        added = true;
-      }
-      if (!added)
-        continue;
-      bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-      SOLVER_RETURN_TYPE res2;
-      res2 =
-          CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat, true);
-      if (SOLVER_UNDECIDED != res2)
-        return res2;
-
-      bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
-    }
-    assert(current_position == RemainingAxiomsVec.size());
-    RemainingAxiomsVec.clear();
-    assert(SOLVER_UNDECIDED == CallSAT_ResultCheck(SatSolver, ASTTrue,
-                                                   original_input, tosat,
-                                                   true));
-  }
-#endif
 
   bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
   return SOLVER_UNDECIDED;
-}
-
-// This is another way of performing Ackermannisation.
-void AbsRefine_CounterExample::applyAllCongruenceConstraints(
-    SATSolver& SatSolver, ToSATBase* tosat)
-{
-  // if (bm->UserFlags.stats_flag)
-  std::cerr << "~CNF~" << std::endl;
-
-  vector<pair<ASTNode, ArrayTransformer::arrTypeMap>> arrayToIndex;
-  arrayToIndex.insert(arrayToIndex.begin(),
-                      ArrayTransform->arrayToIndexToRead.begin(),
-                      ArrayTransform->arrayToIndexToRead.end());
-
-  ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
-
-  // for each array, fetch its list of indices seen so far
-  for (vector<pair<ASTNode, ArrayTransformer::arrTypeMap>>::const_iterator
-           iset = arrayToIndex.begin(),
-           iset_end = arrayToIndex.end();
-       iset != iset_end; iset++)
-  {
-    // const ASTNode& ArrName = iset->first;
-    const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
-
-    vector<ASTNode> listOfIndices;
-    listOfIndices.reserve(mapper.size());
-
-    // Make a vector of the read symbols.
-    ASTVec read_node_symbols;
-    read_node_symbols.reserve(listOfIndices.size());
-
-    vector<Kind> jKind;
-    jKind.reserve(mapper.size());
-
-    ASTVec index_symbols;
-    index_symbols.reserve(mapper.size());
-
-    for (map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it =
-             mapper.begin();
-         it != mapper.end(); it++)
-    {
-      const ASTNode& the_index = it->first;
-      listOfIndices.push_back(the_index);
-
-      ASTNode arrsym = it->second.symbol;
-      read_node_symbols.push_back(arrsym);
-
-      index_symbols.push_back(it->second.index_symbol);
-
-      assert(read_node_symbols[0].GetValueWidth() == arrsym.GetValueWidth());
-      assert(listOfIndices[0].GetValueWidth() == the_index.GetValueWidth());
-
-      jKind.push_back(the_index.GetKind());
-    }
-
-    assert(listOfIndices.size() == mapper.size());
-
-    // loop over the list of indices for the array and create LA,
-    // and add to inputAlreadyInSAT
-    for (size_t i = 0; i < listOfIndices.size(); i++)
-    {
-      const ASTNode& index_i = listOfIndices[i];
-      const Kind iKind = index_i.GetKind();
-
-      // Create all distinct pairs of indexes.
-      for (size_t j = i + 1; j < listOfIndices.size(); j++)
-      {
-        const ASTNode& index_j = listOfIndices[j];
-
-        // If the index is a constant, and different, then there's no reason to
-        // check.
-        // Sometimes we get the same index stored multiple times in the array.
-        // Not sure why...
-        if (BVCONST == iKind && jKind[j] == BVCONST && index_i != index_j)
-          continue;
-
-        if (ASTFalse == simp->CreateSimplifiedEQ(index_i, index_j))
-          continue; // shortcut.
-
-        if (index_i == index_j)
-          std::cerr << "EQUAL";
-
-        AxiomToBe o(index_symbols[i], index_symbols[j], read_node_symbols[i],
-                    read_node_symbols[j]);
-
-        applyAxiomToSAT(SatSolver, o, satVar);
-      }
-    }
-  }
 }
 
 } // end of namespace stp

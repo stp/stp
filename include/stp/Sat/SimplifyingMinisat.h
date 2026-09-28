@@ -42,31 +42,39 @@ public:
   SimplifyingMinisat();
   ~SimplifyingMinisat();
 
-  bool addClause(const vec_literals& ps); // Add a clause to the solver.
+  bool okay() const override; // FALSE means solver is in a conflicting state
 
-  bool okay() const; // FALSE means solver is in a conflicting state
+  bool simplify() override; // Removes already satisfied clauses.
 
-  bool solve(bool& timeout_expired); // Search without assumptions.
+  void setMaxConflicts(int64_t max_confl) override;
 
-  bool simplify(); // Removes already satisfied clauses.
+  void setVerbosity(int v) override;
 
-  virtual void setMaxConflicts(int64_t max_confl);
+  uint8_t modelValue(uint32_t x) const override;
 
-  void setVerbosity(int v);
+  uint32_t newVar() override;
 
-  virtual uint8_t modelValue(uint32_t x) const;
+  uint32_t nVars() const override;
 
-  virtual uint32_t newVar();
+  void printStats() const override;
 
-  unsigned long nVars() const;
+  lbool true_literal() const override { return ((uint8_t)0); }
+  lbool false_literal() const override { return ((uint8_t)1); }
+  lbool undef_literal() const override { return ((uint8_t)2); }
 
-  void printStats() const;
+  void setFrozen(uint32_t x) override;
 
-  virtual lbool true_literal() { return ((uint8_t)0); }
-  virtual lbool false_literal() { return ((uint8_t)1); }
-  virtual lbool undef_literal() { return ((uint8_t)2); }
+  // As in MinisatCore. SimpSolver freezes the assumption variables for the
+  // duration of a solve itself, so elimination never removes one.
+  bool supportsAssumptions() const override { return true; }
+  void unsatAssumptions(const vec_literals& assumps,
+                        std::vector<int>& out) override;
 
-  virtual void setFrozen(uint32_t x);
+protected:
+  bool addClauseInternal(const vec_literals& ps) override;
+  bool solveInternal(bool& timeout_expired) override;
+  bool solveWithAssumptionsInternal(const vec_literals& assumps,
+                                    bool& timeout_expired) override;
 };
 }
 

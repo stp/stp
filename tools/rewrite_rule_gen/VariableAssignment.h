@@ -25,6 +25,8 @@ THE SOFTWARE.
 #ifndef VARIABLEASSIGNMENT_H_
 #define VARIABLEASSIGNMENT_H_
 
+#include "stp/AST/AST.h"
+
 // A pair of constants of the same bit-width assigned to v and w..
 
 struct VariableAssignment

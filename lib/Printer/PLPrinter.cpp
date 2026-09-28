@@ -82,7 +82,10 @@ string functionToCVCName(const Kind k)
     case BVNOT:
       return "~";
     case EQ:
+    case ARRAY_EQ:
       return "=";
+    case DISTINCT:
+      return "DISTINCT";
     case BVCONCAT:
       return "@";
     case BVOR:
@@ -127,7 +130,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
 
   // otherwise print it normally
   const Kind kind = n.GetKind();
-  const ASTVec& c = n.GetChildren();
+  const ASTChildren c = n.GetChildren();
   switch (kind)
   {
     case BOOLEXTRACT:
@@ -239,8 +242,26 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
       os << ")" << endl;
       break;
 
-    case BVMULT: // variable arity, function name at front, size next, comma
-                 // separated.
+    case BVMULT:
+      // The CVC grammar only accepts two-operand BVMULT, so a wider product
+      // is printed as a chain of binary applications it can read back.
+      if (c.size() > 2)
+      {
+        string close = "";
+        for (size_t i = 0; i + 1 < c.size(); i++)
+        {
+          os << functionToCVCName(kind) << "(" << n.GetValueWidth() << ", "
+             << endl;
+          PL_Print1(os, c[i], indentation, letize, bm);
+          os << ", " << endl;
+          close += ")";
+        }
+        PL_Print1(os, c[c.size() - 1], indentation, letize, bm);
+        os << close << endl;
+        break;
+      }
+      [[fallthrough]];
+    // variable arity, function name at front, size next, comma separated.
     case BVSUB:
     case BVPLUS:
     case SBVDIV:
@@ -250,7 +271,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
     case BVMOD:
       os << functionToCVCName(kind) << "(";
       os << n.GetValueWidth();
-      for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
+      for (auto it = c.begin(), itend = c.end(); it != itend;
            it++)
       {
         os << ", " << endl;
@@ -268,13 +289,6 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
       PL_Print1(os, c[2], indentation, letize, bm);
       os << endl << "ENDIF";
       break;
-    case PARAMBOOL:
-      PL_Print1(os, c[0], indentation, letize, bm);
-      os << "(";
-      PL_Print1(os, c[1], indentation, letize, bm);
-      os << ")";
-      break;
-
     case BVLT: // two arity, prefixed function name.
     case BVLE:
     case BVGT:
@@ -305,6 +319,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
     case BVOR:
     case BVAND:
     case EQ:
+    case ARRAY_EQ:
     case IFF:
     case IMPLIES:
       assert(2 == c.size());
@@ -317,8 +332,8 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
     {
       os << "(";
       PL_Print1(os, c[0], indentation, letize, bm);
-      ASTVec::const_iterator it = c.begin();
-      ASTVec::const_iterator itend = c.end();
+      auto it = c.begin();
+      auto itend = c.end();
 
       it++;
       for (; it != itend; it++)
@@ -338,6 +353,18 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
       os << n.GetValueWidth();
       os << ")" << endl;
       break;
+    case DISTINCT:
+    {
+      os << "DISTINCT(";
+      for (size_t i = 0; i < c.size(); ++i)
+      {
+        if (i != 0)
+          os << ", ";
+        PL_Print1(os, c[i], indentation, letize, bm);
+      }
+      os << ")";
+      break;
+    }
     default:
       // remember to use LispPrinter here. Otherwise this function will
       // go into an infinite loop. Recall that "<<" is overloaded to
@@ -359,6 +386,18 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
 // 2. once is replaced with the corresponding let variable.
 ostream& PL_Print(ostream& os, const ASTNode& n, STPMgr* bm, int indentation)
 {
+  // The presentation language has no floating-point syntax, so there is
+  // nothing correct to emit. Without this the walk reached an FP kind it has
+  // no case for and died with "printing not implemented for this kind", from
+  // inside a printer, naming a kind number. Refuse where the caller can see
+  // why, and say what to use instead.
+  if (containsFloatingPointTheory(n, bm))
+  {
+    FatalError("PL_Print: the presentation language has no floating-point "
+               "syntax; print this with SMTLIB2_PrintBack (vc_printSMTLIB2 "
+               "from the C interface)");
+  }
+
   // Clear the PrintMap
   bm->PLPrintNodeSet.clear();
   bm->NodeLetVarMap.clear();
@@ -366,7 +405,11 @@ ostream& PL_Print(ostream& os, const ASTNode& n, STPMgr* bm, int indentation)
   bm->NodeLetVarMap1.clear();
 
   // pass 1: letize the node
-  n.LetizeNode(bm);
+  {
+    LetizeState st = {bm->PLPrintNodeSet, bm->NodeLetVarMap, bm->NodeLetVarVec,
+                      "let_k_"};
+    LetizeNode(n, st, bm);
+  }
 
   // pass 2:
   //

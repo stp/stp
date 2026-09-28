@@ -19,9 +19,13 @@
 # THE SOFTWARE.
 
 add_library(simplifier OBJECT
+    AchievableImage.cpp
     BVSolver.cpp
+    EmbeddedConstraints.cpp
+    SkeletonPreproc.cpp
     consteval.cpp
     PropagateEqualities.cpp
+    DistinctOrdering.cpp
     RemoveUnconstrained.cpp
     Simplifier.cpp
     SubstitutionMap.cpp
@@ -30,11 +34,16 @@ add_library(simplifier OBJECT
     UseITEContext.cpp
     FindPureLiterals.cpp
     StrengthReduction.cpp
+    MultiplyOverflowIdiom.cpp
     AIGSimplifyPropositionalCore.cpp
     UnsignedIntervalAnalysis.cpp
     UnsignedIntervalSetAnalysis.cpp
     ValueSetAnalysis.cpp
     Flatten.cpp
+    LinearForm.cpp
+    CongruenceCandidates.cpp
+    CommonSubSum.cpp
+    CommonFactor.cpp
     NodeDomainAnalysis.cpp
     SplitExtracts.cpp
     Rewriting.cpp

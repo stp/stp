@@ -74,7 +74,7 @@ void handleQuery(VC handle, Expr queryExpr)
       printf("Could not answer query\n");
       break;
     case 3:
-      printf("Timeout.\n");
+      printf("Could not answer query (UNKNOWN).\n");
       break;
     default:
       printf("Unhandled error\n");

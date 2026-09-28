@@ -1,0 +1,37 @@
+# Build system for LibBF, injected by cmake/FindLibBF.cmake.
+#
+# LibBF ships as loose C files with a hand-written makefile that also builds
+# its tests, benchmarks and calculator demo, none of which STP uses -- and that
+# makefile knows nothing of MSVC, cross-compilation or a compiler launcher. Two
+# translation units is little enough that supplying a CMakeLists is easier than
+# driving that makefile, and it makes LibBF build the same way everywhere: the
+# separate `cl` recipe the Windows CI job used to carry is exactly this.
+cmake_minimum_required(VERSION 3.18)
+project(libbf C)
+
+add_library(bf STATIC libbf.c cutils.c)
+
+# libbf.a is linked into libstp.so. The parent build already passes
+# CMAKE_POSITION_INDEPENDENT_CODE, but say it here too so this stays correct if
+# it is ever configured on its own.
+set_target_properties(bf PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# LibBF is C11, and MSVC compiles .c as C89-with-extensions unless told
+# otherwise. C_STANDARD covers every other compiler; MSVC's mapping of it needs
+# a newer cmake_minimum_required than this sets, so name the flag directly.
+set_target_properties(bf PROPERTIES C_STANDARD 11)
+if(MSVC)
+    target_compile_options(bf PRIVATE /std:c11)
+endif()
+
+# A section per function and per data object, so that the --gc-sections on
+# libstp can drop what STP never calls -- the same treatment ABC gets.
+if(NOT MSVC)
+    target_compile_options(bf PRIVATE -ffunction-sections -fdata-sections)
+endif()
+
+include(GNUInstallDirs)
+install(TARGETS bf ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(FILES libbf.h cutils.h DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+
+# EOF

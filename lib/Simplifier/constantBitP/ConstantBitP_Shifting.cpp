@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include "stp/Util/BitOps.h"
 // FIXME: External library
 #include "extlib-constbv/constantbv.h"
 
@@ -44,7 +45,6 @@ namespace simplifier
 namespace constantBitP
 {
 
-const bool debug_shift = false;
 
 namespace
 {
@@ -63,17 +63,7 @@ struct PackedBits
   explicit PackedBits(const FixedBits& b) : words((b.getWidth() + 63) / 64)
   {
     allocate();
-    for (unsigned j = 0; j < 2 * words; j++)
-      fixed[j] = 0; // zeroes both halves; value follows fixed.
-
-    const unsigned width = b.getWidth();
-    for (unsigned i = 0; i < width; i++)
-      if (b.isFixed(i))
-      {
-        fixed[i >> 6] |= (uint64_t)1 << (i & 63);
-        if (b.getValue(i))
-          value[i >> 6] |= (uint64_t)1 << (i & 63);
-      }
+    b.fillPackedWords(fixed, value);
   }
 
   PackedBits(const PackedBits& o) : words(o.words)
@@ -238,7 +228,7 @@ Result applyShiftUnion(const unsigned bitWidth, PackedBits& packedShift,
                          PackedBits::widthMask(j, bitWidth);
       while (pending)
       {
-        const unsigned b = __builtin_ctzll(pending);
+        const unsigned b = ::stp::countTrailingZeroes64(pending);
         pending &= pending - 1;
         const uint64_t bit = (uint64_t)1 << b;
 
@@ -290,8 +280,8 @@ Result applyShiftUnion(const unsigned bitWidth, PackedBits& packedShift,
 }
 
 // Whether the concrete shift amount i is admitted by the fixed bits of the
-// shift operand. Equivalent to FixedBits::unsignedHolds(i) for i < 2^64,
-// given anyHighFixedOne = "some bit above word zero is fixed to one".
+// shift operand (for i < 2^64), given anyHighFixedOne = "some bit above
+// word zero is fixed to one".
 inline bool shiftHolds(const PackedBits& shift, bool anyHighFixedOne,
                        uint64_t i)
 {
@@ -338,9 +328,68 @@ inline bool rightShiftDisagrees(const PackedBits& op, const PackedBits& out,
 }
 }
 
+namespace
+{
+inline uint64_t bitReverse64(uint64_t x)
+{
+  x = ::stp::byteSwap64(x);
+  x = ((x & 0x0F0F0F0F0F0F0F0FULL) << 4) | ((x >> 4) & 0x0F0F0F0F0F0F0F0FULL);
+  x = ((x & 0x3333333333333333ULL) << 2) | ((x >> 2) & 0x3333333333333333ULL);
+  x = ((x & 0x5555555555555555ULL) << 1) | ((x >> 1) & 0x5555555555555555ULL);
+  return x;
+}
+
+// The packed words of `src` with the bit order reversed over its width:
+// reverse the word order and each word, giving the reverse of the padded
+// words*64-bit value, then shift out the padding. Each output array needs
+// `words` words.
+void packReversed(const FixedBits& src, uint64_t* rf, uint64_t* rv)
+{
+  const unsigned width = src.getWidth();
+  const unsigned words = (width + 63) / 64;
+  const unsigned pad = words * 64 - width;
+
+  uint64_t* f = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  uint64_t* v = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  src.fillPackedWords(f, v);
+
+  for (unsigned j = 0; j < words; j++)
+  {
+    uint64_t lowF = bitReverse64(f[words - 1 - j]);
+    uint64_t lowV = bitReverse64(v[words - 1 - j]);
+    if (pad != 0)
+    {
+      const uint64_t highF = (j + 1 < words) ? bitReverse64(f[words - 2 - j]) : 0;
+      const uint64_t highV = (j + 1 < words) ? bitReverse64(v[words - 2 - j]) : 0;
+      lowF = (lowF >> pad) | (highF << (64 - pad));
+      lowV = (lowV >> pad) | (highV << (64 - pad));
+    }
+    rf[j] = lowF;
+    rv[j] = lowV;
+  }
+}
+
+// Fix in `dst` the reversed bits of `revSrc` that `dst` does not have yet.
+void mergeReversed(const FixedBits& revSrc, FixedBits& dst)
+{
+  const unsigned words = (dst.getWidth() + 63) / 64;
+  uint64_t* rf = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  uint64_t* rv = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  packReversed(revSrc, rf, rv);
+
+  for (unsigned j = 0; j < words; j++)
+  {
+    uint64_t df, dv;
+    dst.fillPackedWord(j, df, dv);
+    const uint64_t add = rf[j] & ~df;
+    if (add != 0)
+      dst.fixWordBits(j, add, rv[j]);
+  }
+}
+}
+
 Result bvRightShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
-  Result result = NO_CHANGE;
   const unsigned bitWidth = output.getWidth();
 
   assert(2 == children.size());
@@ -348,49 +397,35 @@ Result bvRightShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
   FixedBits& op = *children[0];
   FixedBits& shift = *children[1];
 
-  FixedBits outputReverse(bitWidth, false);
+  // Reversing the operand and the output turns the right shift into a
+  // left shift.
+  const unsigned words = (bitWidth + 63) / 64;
+  uint64_t* rf = (uint64_t*)alloca(sizeof(uint64_t) * words);
+  uint64_t* rv = (uint64_t*)alloca(sizeof(uint64_t) * words);
+
   FixedBits opReverse(bitWidth, false);
+  packReversed(op, rf, rv);
+  for (unsigned j = 0; j < words; j++)
+    if (rf[j] != 0)
+      opReverse.fixWordBits(j, rf[j], rv[j]);
 
-  // Reverse the output and the input.
-  for (unsigned i = 0; i < bitWidth; i++)
-  {
-    if (op.isFixed(i))
-    {
-      opReverse.setFixed(bitWidth - 1 - i, true);
-      opReverse.setValue(bitWidth - 1 - i, op.getValue(i));
-    }
-
-    if (output.isFixed(i))
-    {
-      outputReverse.setFixed(bitWidth - 1 - i, true);
-      outputReverse.setValue(bitWidth - 1 - i, output.getValue(i));
-    }
-  }
+  FixedBits outputReverse(bitWidth, false);
+  packReversed(output, rf, rv);
+  for (unsigned j = 0; j < words; j++)
+    if (rf[j] != 0)
+      outputReverse.fixWordBits(j, rf[j], rv[j]);
 
   vector<FixedBits*> args;
   args.push_back(&opReverse);
   args.push_back(&shift); // shift is unmodified.
-  result = bvLeftShiftBothWays(args, outputReverse);
+  const Result result = bvLeftShiftBothWays(args, outputReverse);
 
   if (CONFLICT == result)
     return CONFLICT;
 
-  // Now write the reversed values back.
-  // Reverse the output and the input.
-  for (unsigned i = 0; i < bitWidth; i++)
-  {
-    if (opReverse.isFixed(i) && !op.isFixed(bitWidth - 1 - i))
-    {
-      op.setFixed(bitWidth - 1 - i, true);
-      op.setValue(bitWidth - 1 - i, opReverse.getValue(i));
-    }
-
-    if (outputReverse.isFixed(i) && !output.isFixed(bitWidth - 1 - i))
-    {
-      output.setFixed(bitWidth - 1 - i, true);
-      output.setValue(bitWidth - 1 - i, outputReverse.getValue(i));
-    }
-  }
+  // Write the reversed deductions back.
+  mergeReversed(opReverse, op);
+  mergeReversed(outputReverse, output);
 
   return result;
 }
@@ -432,9 +467,8 @@ static unsigned getMaxShiftFromValueViaAlternation(const unsigned bitWidth,
   return maxShiftFromValue;
 }
 
-// The range of the values the fixed bits admit, clamped as the original
-// FixedBits::getUnsignedMinMax: anything reaching past the low 32 bits
-// saturates to UINT_MAX.
+// The range of the values the fixed bits admit: anything reaching past
+// the low 32 bits saturates to UINT_MAX.
 static void packedUnsignedMinMax(const PackedBits& b, unsigned bitWidth,
                                  unsigned& min, unsigned& max)
 {
@@ -528,17 +562,9 @@ static Result ashrCore(const unsigned bitWidth, PackedBits& packedOp,
     {
       nOfPossibleShifts++;
       maxShiftFromShift = i;
-      if (debug_shift)
-      {
-        std::cerr << "Possible Shift:" << i << std::endl;
-      }
     }
   }
 
-  if (debug_shift)
-  {
-    std::cerr << "Number of possible shifts:" << nOfPossibleShifts << endl;
-  }
 
   // If it's empty. It's a conflict.
   if (0 == nOfPossibleShifts)
@@ -666,14 +692,9 @@ static void writeBack(FixedBits& to, const PackedBits& from,
 {
   for (unsigned j = 0; j < from.words; j++)
   {
-    uint64_t pending = from.fixed[j] & ~originalFixed[j];
-    while (pending)
-    {
-      const unsigned b = __builtin_ctzll(pending);
-      pending &= pending - 1;
-      to.setFixed(j * 64 + b, true);
-      to.setValue(j * 64 + b, (from.value[j] >> b) & 1);
-    }
+    const uint64_t add = from.fixed[j] & ~originalFixed[j];
+    if (add != 0)
+      to.fixWordBits(j, add, from.value[j]);
   }
 }
 
@@ -793,7 +814,7 @@ static Result shlCore(const unsigned bitWidth, PackedBits& packedOp,
   {
     const uint64_t ones = packedOut.fixed[j] & packedOut.value[j];
     if (ones != 0)
-      positionOfFirstOne = j * 64 + __builtin_ctzll(ones);
+      positionOfFirstOne = j * 64 + ::stp::countTrailingZeroes64(ones);
   }
 
   if (positionOfFirstOne >= 0)
@@ -977,7 +998,7 @@ static Result shlCore(const unsigned bitWidth, PackedBits& packedOp,
   return NOT_IMPLEMENTED;
 }
 
-Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
+static Result leftShiftOnePass(vector<FixedBits*>& children, FixedBits& output)
 {
   const unsigned bitWidth = output.getWidth();
   assert(2 == children.size());
@@ -1010,6 +1031,42 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
   writeBack(shift, packedShift, origShift);
   writeBack(output, packedOut, origOut);
   return result;
+}
+
+Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
+{
+  Result r = leftShiftOnePass(children, output);
+
+  // Same shape as bvConcatBothWays: nothing derived or a conflict means a
+  // second pass would see exactly what this one did, and distinct operands
+  // never need one. NB the NO_CHANGE arm is inert here - shlCore ends in an
+  // unconditional `return NOT_IMPLEMENTED`, so this function never reports
+  // NO_CHANGE and the alias check runs on every call. It is two pointer
+  // compares, and the arm starts working the moment shlCore reports honestly.
+  if (NO_CHANGE == r || CONFLICT == r || !operandsAlias(children))
+    return r;
+
+  // x << x. shlCore snapshots the value and the amount into separate
+  // PackedBits and writes both back into the one FixedBits, so a bit it
+  // derives for the amount is not read as part of the value until the next
+  // call - and narrowing either one narrows the other again. Unlike concat
+  // there is no two-pass argument to lean on: random sweeps reach six passes
+  // by width 31, so iterate until nothing new is fixed.
+  unsigned fixed = totalFixedBits(children, output);
+  while (true)
+  {
+    const Result pass = leftShiftOnePass(children, output);
+
+    r = merge(r, pass);
+    if (NO_CHANGE == pass || CONFLICT == pass)
+      return r;
+
+    const unsigned now = totalFixedBits(children, output);
+    assert(now >= fixed); // Bits are only ever fixed, never unfixed.
+    if (now == fixed)
+      return r;
+    fixed = now;
+  }
 }
 }
 }

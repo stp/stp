@@ -25,9 +25,37 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
+#include "stp/Util/DagWalk.h"
 
 namespace stp
 {
+  namespace
+  {
+    // Keep the recursion counter balanced across buildMap's early returns.
+    class UnprimedDepth
+    {
+      size_t& depth;
+      const bool active;
+
+    public:
+      UnprimedDepth(size_t& depth_, const bool active_)
+          : depth(depth_), active(active_)
+      {
+        if (active)
+          ++depth;
+      }
+
+      UnprimedDepth(const UnprimedDepth&) = delete;
+      UnprimedDepth& operator=(const UnprimedDepth&) = delete;
+
+      ~UnprimedDepth()
+      {
+        if (active)
+          --depth;
+      }
+    };
+  }
+
 
   // True if the two domains have an intersection, i.e. share >=1 value.
   bool intersects(FixedBits * bits, UnsignedInterval * interval)
@@ -186,18 +214,6 @@ namespace stp
     return result;
   }
 
-  // Whether some value matches the fixed bits and lies within [min, max].
-  static bool hasMemberInRange(const FixedBits& bits, const CBV min,
-                               const CBV max)
-  {
-    CBV smallest = minAbove(bits, min);
-    if (smallest == nullptr)
-      return false;
-    const bool result = CONSTANTBV::BitVector_Lexicompare(smallest, max) <= 0;
-    CONSTANTBV::BitVector_Destroy(smallest);
-    return result;
-  }
-
   // Trim each domain to exactly the values the two domains share: the
   // interval becomes [min, max] of the shared values, and a bit is fixed
   // whenever every shared value agrees on it. Assumes the domains share
@@ -250,33 +266,32 @@ namespace stp
           bits = new FixedBits(interval->getWidth(),false); /// TODO do we really need to know if it's boolean??
         }
 
-        // Fix each bit that all the shared values agree on. The interval
-        // is already exactly the range of the shared values, so a bit
-        // can take a polarity iff fixing it that way leaves a value
-        // matching the fixed bits inside the interval.
-        const unsigned width = bits->getWidth();
-        for (unsigned i = 0; i < width; i++)
+        // Fix each bit that all the shared values agree on. The bounds
+        // are now the least and greatest shared values, so above their
+        // highest differing bit every shared value matches their common
+        // prefix. At that bit the bounds themselves witness both
+        // polarities, and below it nothing is forced: the prefix
+        // followed by a zero there and ones at every unfixed bit stays
+        // between the bounds, as does the prefix followed by a one
+        // there and zeroes at every unfixed bit.
+        const int width = bits->getWidth();
+        int split = -1;
+        for (int i = width - 1; i >= 0; i--)
+          if (CONSTANTBV::BitVector_bit_test(interval->minV, i) !=
+              CONSTANTBV::BitVector_bit_test(interval->maxV, i))
+          {
+            split = i;
+            break;
+          }
+
+        for (int i = width - 1; i > split; i--)
         {
           if (bits->isFixed(i))
             continue;
-
           bits->setFixed(i, true);
-          bits->setValue(i, false);
-          const bool canBeZero =
-              hasMemberInRange(*bits, interval->minV, interval->maxV);
-          bits->setValue(i, true);
-          const bool canBeOne =
-              hasMemberInRange(*bits, interval->minV, interval->maxV);
-
-          assert(canBeZero || canBeOne); // the domains share a value.
-
-          if (canBeZero == canBeOne)
-            bits->setFixed(i, false);
-          else
-          {
-            bits->setValue(i, canBeOne);
-            tighten++;
-          }
+          bits->setValue(i,
+                         CONSTANTBV::BitVector_bit_test(interval->minV, i));
+          tighten++;
         }
       }
 
@@ -423,8 +438,36 @@ namespace stp
     assert(intersects(interval, set));
   }
 
+  // Every node below `n` before `n` itself, in the order buildMap would have
+  // reached them: children left to right, the node last. It looks at every
+  // child of every node it visits and has no early exit, so nothing is
+  // computed here that it would not have computed anyway.
+  void NodeDomainAnalysis::primeMaps(const ASTNode& n)
+  {
+    primeMemo(
+        n,
+        [this](const ASTNode& node)
+        {
+          if (toFixedBits.find(node) != toFixedBits.end())
+            return Walk::Skip; // buildMap would answer from the map.
+          return node.Degree() == 0 ? Walk::Visit : Walk::Descend;
+        },
+        [this](const ASTNode& node, PrimeMemoReady) { buildMap(node, true); });
+  }
+
   NodeDomainAnalysis::DomainInfo NodeDomainAnalysis::buildMap(const ASTNode& n)
   {
+    return buildMap(n, false);
+  }
+
+  NodeDomainAnalysis::DomainInfo
+  NodeDomainAnalysis::buildMap(const ASTNode& n, const bool knownMissing)
+  {
+    PrimeAudit::Running running(mapAudit, n);
+
+    // primeMaps' classifier already established the miss. Domain analysis of
+    // a descendant only records that descendant, never an ancestor.
+    if (!knownMissing)
     {
       auto it = toFixedBits.find(n);
       if (it != toFixedBits.end())
@@ -437,6 +480,26 @@ namespace stp
     }
 
     const auto number_children = n.Degree();
+
+    if (!priming && number_children > 0 &&
+        unprimedDepth >= unprimedDepthLimit)
+    {
+      priming = true;
+      primeMaps(n);
+      priming = false;
+
+      auto it = toFixedBits.find(n);
+      if (it != toFixedBits.end())
+      {
+        auto it0 = toIntervals.find(n);
+        auto itIS = toIntervalSets.find(n);
+        auto it1 = toValueSets.find(n);
+        return {it->second, it0->second, itIS->second, it1->second};
+      }
+    }
+
+    // Leaves do not recurse, so they consume no part of the depth budget.
+    UnprimedDepth depth(unprimedDepth, !priming && number_children > 0);
 
     vector<FixedBits*> children_bits;
     children_bits.reserve(number_children);
@@ -468,14 +531,19 @@ namespace stp
 
     const bool nullChildZero = (number_children > 0) && (children_bits[0] == nullptr && children_intervals[0] == nullptr);
 
-    // We need to know something about the children if we want to know something about the parent.
-    // extract, bvsx, and bvzx all have constants as children.
-    if ((n.GetKind() == READ) 
-      ||(n.GetKind() == WRITE) 
-      ||(number_children > 0 && nothingKnown) 
-      ||(n.GetKind() == BVEXTRACT && nullChildZero) 
-      ||(n.GetKind() == BVSX && nullChildZero) 
-      ||(n.GetKind() == BVZX && nullChildZero) 
+    // We need to know something about the children if we want to know
+    // something about the parent. Extract, bvsx and bvzx have constant
+    // index/width children, so they never hit the nothing-known case and
+    // are skipped separately - except bvzx, the only one of them whose
+    // output has forced bits when the expression child is unknown (the
+    // zero-extension's high bits are always zero). For bvsx the high
+    // bits merely equal the child's unknown top bit, which none of the
+    // domains can represent.
+    if ((n.GetKind() == READ)
+      ||(n.GetKind() == WRITE)
+      ||(number_children > 0 && nothingKnown)
+      ||(n.GetKind() == BVEXTRACT && nullChildZero)
+      ||(n.GetKind() == BVSX && nullChildZero)
       ||(n.GetKind() == SYMBOL))
     {
       toFixedBits.insert({n, nullptr});
@@ -609,10 +677,11 @@ namespace stp
       assert(emptyBoolean->isTotallyUnfixed());
       return emptyBoolean;
     }
-    if (emptyBitVector.find(n.GetValueWidth()) == emptyBitVector.end())
-      emptyBitVector[n.GetValueWidth()] = fresh(n);
+    auto it = emptyBitVector.find(n.GetValueWidth());
+    if (it == emptyBitVector.end())
+      it = emptyBitVector.emplace(n.GetValueWidth(), fresh(n)).first;
 
-    FixedBits* r = emptyBitVector[n.GetValueWidth()];
+    FixedBits* r = it->second;
     assert(r->isTotallyUnfixed());
     return r;
   }

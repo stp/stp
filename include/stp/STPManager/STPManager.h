@@ -26,6 +26,10 @@ THE SOFTWARE.
 #define STPMGR_H
 
 #include "stp/AST/ASTBVConst.h"
+#include "stp/Util/PreparationControl.h"
+#include "stp/Util/QueryTiming.h"
+#include "stp/AST/ASTFPConst.h"
+#include "stp/AST/ASTRMConst.h"
 #include "stp/AST/ASTInterior.h"
 #include "stp/AST/ASTNode.h"
 #include "stp/AST/ASTSymbol.h"
@@ -35,45 +39,138 @@ THE SOFTWARE.
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Util/Attributes.h"
+#include "stp/config.h"
+#include <ankerl/unordered_dense.h>
+#include <cstdint>
+#include <set>
 
 namespace stp
 {
+namespace lra {
+class Frontend;
+class PreregistrationBuilder;
+class LraAtomRegistry;
+class LraCoordinator;
+class RealModel;
+struct LraReconstruction;
+ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
+                         SATSolver* solver, LraReconstruction* reconstruction,
+                         bool highs_enabled);
+}
+class ExtensionalityContext;
+class UFContext;
+class ASTRealConst;
+class LraAstState;
+class FpAbstraction;
+
+// The five SMT-LIB floating-point special values. Their nodes are ordinary
+// packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
+// special-value node would hash-cons every format's NaN to one mutable node.
+enum class FPSpecial
+{
+  NaN,
+  PlusInfinity,
+  MinusInfinity,
+  PlusZero,
+  MinusZero,
+};
+
 /*
  * STP Node Manager. Tools for managing AST nodes.
  */
 class STPMgr
 {
+  friend class Cpp_interface;
+  friend class STP;
+  friend ASTNode lra::presolveForSolve(STPMgr& manager, const ASTNode& input,
+                                       SATSolver* solver,
+                                       lra::LraReconstruction* reconstruction,
+                                       bool highs_enabled);
   friend class ASTNode;
   friend class ASTInterior;
   friend class ASTBVConst;
+  friend class ASTRealConst;
   friend class ASTSymbol;
-  friend ASTNode HashingNodeFactory::CreateNode(const Kind kind,
-                                                const ASTVec& back_children);
+  friend class lra::Frontend;
+  friend class lra::PreregistrationBuilder;
+  friend class lra::LraAtomRegistry;
+  friend class lra::LraCoordinator;
+  friend class lra::RealModel;
+  friend ASTNode HashingNodeFactory::CreateNode(
+      Kind kind, ASTChildren back_children);
 
 private:
   // Typedef for unique Interior node table.
-  typedef std::unordered_set<ASTInterior*, ASTInterior::ASTInteriorHasher,
-                             ASTInterior::ASTInteriorEqual>
+  typedef ankerl::unordered_dense::set<ASTInterior*,
+                                       ASTInterior::ASTInteriorHasher,
+                                       ASTInterior::ASTInteriorEqual>
       ASTInteriorSet;
 
   // Typedef for unique Symbol node (leaf) table.
-  typedef std::unordered_set<ASTSymbol*, ASTSymbol::ASTSymbolHasher,
-                             ASTSymbol::ASTSymbolEqual>
+  typedef ankerl::unordered_dense::set<ASTSymbol*,
+                                       ASTSymbol::ASTSymbolHasher,
+                                       ASTSymbol::ASTSymbolEqual>
       ASTSymbolSet;
 
   // Typedef for unique BVConst node (leaf) table.
-  typedef std::unordered_set<ASTBVConst*, ASTBVConst::ASTBVConstHasher,
-                             ASTBVConst::ASTBVConstEqual>
+  typedef ankerl::unordered_dense::set<ASTBVConst*,
+                                       ASTBVConst::ASTBVConstHasher,
+                                       ASTBVConst::ASTBVConstEqual>
       ASTBVConstSet;
 
   // Unique node tables that enables common subexpression sharing
   ASTInteriorSet _interior_unique_table;
 
+  // Interior nodes whose last reference has gone while another one was
+  // already being deleted. Releasing a node releases its children, so
+  // deleting the root of a deeply nested DAG would otherwise nest one
+  // destructor per level and run off the stack; ASTInterior::CleanUp drains
+  // this instead. See DeepDag_Test.cpp.
+  std::vector<ASTInterior*> _pending_deletion;
+  uint8_t _interior_deletion_depth = 0;
+
   // Table for variable names, let names etc.
   ASTSymbolSet _symbol_unique_table;
 
+  ExtensionalityContext* extensionality = nullptr;
+  UFContext* uninterpretedFunctions = nullptr;
+  // The floating-point abstraction of the solve in progress, if one is
+  // active: owned by STP for exactly one batch solve, and consulted by the
+  // preprocessing passes that must not touch its symbols.
+  FpAbstraction* fpAbstraction = nullptr;
+  // Every FpAbstraction constructed under this manager and not yet
+  // destroyed; see registerFpAbstraction below.
+  std::set<FpAbstraction*> liveFpAbstractions;
+
+  // Why the last solve had no answer, and the sentence to give a caller who
+  // asks. Recorded rather than derived because the reasons are produced in
+  // different places -- a spent search budget wherever the solver was asked
+  // to run, an abandoned encoding before it ever was -- and only one of them
+  // has anything to say beyond its name. The SMT-LIB frontend clears this at
+  // the top of every check-sat and on reset / reset-assertions. SMT-LIB reads
+  // it through (get-info :reason-unknown), and the C API through
+  // vc_getReasonUnknown.
+  UnknownReason unknown_reason = UnknownReason::None;
+  std::string unknown_detail;
+
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
+
+  // Created only by the private LRA frontend, on the first Real
+  // construction.  The incomplete type keeps ExactRational, IMath, frontend
+  // IDs, and their allocation policy out of every installed header.
+  LraAstState* lra_ast_state = nullptr;
+
+  ASTRealConst* LookupOrCreateRealConst(ASTRealConst& value);
+  void EraseRealConst(ASTRealConst* value);
+  void RecordRealSymbol(const ASTNode& symbol);
+  void RegisterLraAssertion(const ASTNode& assertion);
+  void PushLraAssertionFrame();
+  void PopLraAssertionFrame();
+  void DestroyLraAtomRegistry();
+  void DestroyLraAstState();
+  void ResetLraStateForPublicReset();
+  void InstallRealModel(lra::RealModel* model);
 
   uint8_t last_iteration;
 
@@ -81,10 +178,321 @@ public:
   HashingNodeFactory* hashingNodeFactory;
   NodeFactory* defaultNodeFactory;
 
+  // State of the array-equality (extensional arrays) decision procedure:
+  // solve-local equality records, the complete per-solve array graph, and
+  // pending refinement. Created lazily when a completed solve root containing
+  // an opaque equality first reaches lowering.
+  DLL_PUBLIC ExtensionalityContext* getExtensionality();
+  ExtensionalityContext* getExtensionalityIfAny() const
+  {
+    return extensionality;
+  }
+
+  // Hides the context from a nested solve of a query of its own. The
+  // records, lowerings and graph describe the enclosing solve, and the
+  // nested solve's model satisfies none of their constraints.
+  class DetachedExtensionality
+  {
+    STPMgr* manager;
+    ExtensionalityContext* saved;
+
+  public:
+    explicit DetachedExtensionality(STPMgr* m)
+        : manager(m), saved(m->extensionality)
+    {
+      manager->extensionality = nullptr;
+    }
+    ~DetachedExtensionality()
+    {
+      assert(manager->extensionality == nullptr);
+      manager->extensionality = saved;
+    }
+    DetachedExtensionality(const DetachedExtensionality&) = delete;
+    DetachedExtensionality& operator=(const DetachedExtensionality&) = delete;
+  };
+
+  // Manager-lifetime UF declarations and durable applications. Solve-local
+  // lowering/checker/model state is owned below this context and reset at the
+  // completed-root boundary.
+  DLL_PUBLIC UFContext* getUFContext();
+  UFContext* getUFContextIfAny() const { return uninterpretedFunctions; }
+
+  // The active floating-point abstraction, or NULL. Set by STP for the
+  // duration of a batch solve that abstracted something.
+  FpAbstraction* getFpAbstractionIfAny() const { return fpAbstraction; }
+  void setFpAbstraction(FpAbstraction* abstraction)
+  {
+    fpAbstraction = abstraction;
+  }
+
+  // Every FpAbstraction alive under this manager, whether or not it is the
+  // one the pointer above names: the pointer is the *active* instance and is
+  // cleared and re-published around batch warm-ups and fallbacks, while a
+  // reader of the session's coverage counters needs whatever exists right
+  // now. An instance registers itself here on construction and folds its
+  // totals into UserFlags.coverage on destruction; publishFpCoverage() folds
+  // in what the live ones have accumulated since they last published, so
+  // vc_getCounter answers mid-session as well as after teardown. There are
+  // at most a handful: one per batch solve or restart, one per encoding
+  // epoch under --fp-abstraction-incremental.
+  void registerFpAbstraction(FpAbstraction* abstraction)
+  {
+    liveFpAbstractions.insert(abstraction);
+  }
+  void unregisterFpAbstraction(FpAbstraction* abstraction)
+  {
+    liveFpAbstractions.erase(abstraction);
+  }
+  DLL_PUBLIC void publishFpCoverage();
+
   // frequently used nodes
   ASTNode ASTFalse, ASTTrue, ASTUndefined;
 
   bool soft_timeout_expired;
+
+  // Borrowed only within a PreparationScope. Public queries install their
+  // original deadline here and restore an optional outer observer on exit.
+  const PreparationControl* preparation_control = nullptr;
+  // Borrowed by the current public query; null unless statistics are enabled.
+  QueryTiming* query_timing = nullptr;
+  void checkPreparation(PreparationStage stage) const
+  {
+    if (preparation_control)
+      preparation_control->check(stage);
+  }
+
+  // Fitted estimate of the AND nodes bit-blasting the formula will build,
+  // recorded by the top level from the difficulty score it computes anyway.
+  // The blasting managers use it to size their node and hash storage once
+  // instead of growing by doubling. 0 means no estimate; the score errs
+  // high, by up to about 2x on the hard set.
+  int64_t expected_blast_ands = 0;
+
+  // One named element of a declared sort: the sort, the name the model gives
+  // it, and the carrier pattern it stands for.
+  struct UninterpretedElement
+  {
+    SourceSort sort;
+    std::string name;
+    ASTNode carrier;
+  };
+
+  // See uninterpretedElementName. Public because it is model state, not
+  // solver state, and the printers are its only readers.
+  std::vector<UninterpretedElement> uninterpreted_elements;
+  std::vector<SourceSort> uninterpreted_sorts_printed;
+
+  void noteUnknown(UnknownReason reason, const std::string& detail = "")
+  {
+    assert(reason != UnknownReason::None);
+    unknown_reason = reason;
+    unknown_detail = detail;
+  }
+
+  UnknownReason getUnknownReason() const { return unknown_reason; }
+
+  const std::string& getUnknownReasonDetail() const { return unknown_detail; }
+
+  // Called by whoever just watched this solver give up. Two budgets share the
+  // no-answer exit and they are not the same claim to a caller: the wall
+  // clock may succeed with more time on the same machine, while the conflict
+  // budget is deterministic and will not. The solver is asked which it was
+  // rather than guessed at from the flags -- a zero-second limit and no limit
+  // at all look identical from there, and the first is a clock expiry.
+  //
+  // Lives here rather than in one driver so that every driver answers the
+  // question the same way, and so that the rule below is stated once. An
+  // earlier reason wins: a solve is free to call this on each refinement
+  // round, and a round that gave up for a reason of its own has already said
+  // what that was.
+  void noteBudgetExhausted(const SATSolver& solver)
+  {
+    if (unknown_reason != UnknownReason::None)
+      return;
+    noteUnknown(solver.timeLimitExpired() ? UnknownReason::Timeout
+                                          : UnknownReason::ConflictBudget);
+  }
+
+  // Record an AIG cap at the point where the gate count is still available.
+  // This is shared by the initial batch blast and by a transient exact
+  // refinement blast; both abandon the query through the same unknown path.
+  void noteAIGBudgetExhausted(int nodeCount);
+
+  void clearUnknown()
+  {
+    unknown_reason = UnknownReason::None;
+    unknown_detail.clear();
+  }
+
+  // The verdict deliberately says only that there was no answer; the reason
+  // is a separate, mandatory part of that result. Keeping the invariant at
+  // the point an unknown is returned prevents a new producer from silently
+  // resurrecting an unexplained timeout-shaped result.
+  SOLVER_RETURN_TYPE unknownResult() const
+  {
+    if (unknown_reason == UnknownReason::None)
+      FatalError("solver returned SOLVER_UNKNOWN without recording why");
+    return SOLVER_UNKNOWN;
+  }
+
+  // How much injectivity --uf-inject-args put into the encoding this solve is
+  // about to run over, recorded by UF lowering. Zero whenever the flag is off,
+  // and also whenever it is on but no declaration qualified -- an encoding
+  // nothing was assumed about is an encoding whose unsat means what it says.
+  uint64_t uf_injectivity_assumed = 0;
+  uint64_t uf_injectivity_declarations = 0;
+  // The activation symbol those implications sit behind, when there is one.
+  // A driver that can assume it holds the assumption retractably and never
+  // has to withhold anything; one that cannot is back to the rule below.
+  ASTNode uf_injectivity_guard;
+
+  void noteInjectivityAssumed(uint64_t implications, uint64_t declarations,
+                              const ASTNode& guard)
+  {
+    uf_injectivity_assumed += implications;
+    uf_injectivity_declarations += declarations;
+    if (!guard.IsNull())
+      uf_injectivity_guard = guard;
+  }
+
+  // Called at the top of a solve, by the driver that is about to build the
+  // encoding. The record describes one solve's encoding, not the session.
+  void clearInjectivityAssumed()
+  {
+    uf_injectivity_assumed = 0;
+    uf_injectivity_declarations = 0;
+    uf_injectivity_guard = ASTNode();
+  }
+
+  // One driver's hold on the injectivity assumption for one encoding: the
+  // literal it assumes, and whether this solve has already given it up.
+  struct InjectivityAssumption
+  {
+    // ~0u until a driver has resolved the guard symbol to a SAT variable;
+    // a guard that never reached one is simply never assumed, and then the
+    // implications behind it are vacuous, which is the safe direction.
+    unsigned variable = ~((unsigned)0);
+    bool assumed = false;
+    bool retracted = false;
+
+    bool holding() const { return assumed && !retracted; }
+
+    // Push the guard, positively, as the LAST assumption -- which is what
+    // makes retracting it a pop. A guard with no variable, or one already
+    // given up on this solve, adds nothing and leaves the implications
+    // behind it vacuous.
+    void assumeInto(SATSolver::vec_literals& assumps)
+    {
+      if (variable == ~((unsigned)0) || retracted)
+        return;
+      assumps.push(SATSolver::mkLit(variable, false));
+      assumed = true;
+    }
+  };
+
+  // Solve, and take the assumption back if the refutation rested on it.
+  //
+  // The assumption is an under-approximation, so its `sat` is a real model of
+  // the query and needs nothing done to it. Its `unsat` is a refutation of the
+  // query strengthened by injectivity, which is two different things depending
+  // on whether the strengthening was used:
+  //
+  //   - the guard is not among the failed assumptions: the refutation rests
+  //     only on the query, on congruence (which the query entails) and on the
+  //     naming definitions (a conservative extension). It is a refutation of
+  //     the query. Report it, and drop the record so nothing withholds it.
+  //   - the guard is among them: it may be an artefact. Withdraw the guard --
+  //     which the solver then satisfies by making it false, so every
+  //     implication behind it goes vacuous -- and search again. The second
+  //     answer is about the query alone, whichever way it goes.
+  //
+  // Two searches at most, on one encoding, with every clause retained. A
+  // backend that cannot answer which assumptions failed reports all of them,
+  // which costs the first case and leaves the second correct.
+  //
+  // `assumps` must carry the guard literal LAST, because retracting is a pop.
+  bool solveRetractingInjectivity(SATSolver& solver,
+                                  SATSolver::vec_literals& assumps,
+                                  InjectivityAssumption& state)
+  {
+    const bool holding = state.holding();
+    bool sat = assumps.size() > 0
+                   ? solver.solveWithAssumptions(assumps, soft_timeout_expired)
+                   : solver.solve(soft_timeout_expired);
+    if (sat || !holding || soft_timeout_expired)
+      return sat;
+
+    std::vector<int> failed;
+    solver.unsatAssumptions(assumps, failed);
+    const uint32_t guardLit = SATSolver::mkLit(state.variable, false).x;
+    bool guardFailed = false;
+    for (size_t i = 0; i < failed.size(); ++i)
+      guardFailed = guardFailed || (uint32_t)failed[i] == guardLit;
+
+    if (!guardFailed)
+    {
+      // A refutation that never needed the assumption. The query is
+      // unsatisfiable on its own account.
+      if (UserFlags.stats_flag)
+        std::cerr << "UF: injectivity assumption not in the refutation, "
+                  << "unsat stands" << std::endl;
+      uf_injectivity_assumed = 0;
+      return false;
+    }
+
+    if (UserFlags.stats_flag)
+      std::cerr << "UF: refutation used the injectivity assumption, "
+                << "retracting " << uf_injectivity_assumed
+                << " implication(s) and re-solving" << std::endl;
+    state.retracted = true;
+    assert(assumps.size() > 0);
+    assumps.pop();
+    uf_injectivity_assumed = 0;
+    return assumps.size() > 0
+               ? solver.solveWithAssumptions(assumps, soft_timeout_expired)
+               : solver.solve(soft_timeout_expired);
+  }
+
+  // The floor: what a driver leaves with when it holds an unsat and nobody has
+  // established whose refutation it is. Both shipped drivers do establish that
+  // -- solveRetractingInjectivity asks the search, and each driver runs the
+  // query again without the flag when the search never got to be asked -- so
+  // this is unreachable through them. It stays because it is the rule that
+  // says what uf_injectivity_assumed MEANS, and because a driver that forgets
+  // to close the question should report no answer rather than a refutation it
+  // cannot attribute.
+  //
+  // Congruence is entailed by the query, so every other constraint UF lowering
+  // installs preserves both answers. The converse implication --uf-inject-args
+  // installs is not: it asserts that a declaration is injective, which the
+  // caller never wrote, and it can only remove models. That makes the two
+  // answers unequal in standing. `sat` is sound whatever was assumed -- a model
+  // of the strengthened formula is a model of the query, conjuncts having only
+  // been added -- and is kept. `unsat` refutes the query with injectivity on
+  // top of it, which is not the query, and nothing in the output would tell
+  // that from a refutation. So it is withheld, exactly as an unsat reached over
+  // a carrier too narrow for the query is withheld.
+  //
+  // Lives here rather than in one driver so that the batch pipeline and the
+  // incremental driver answer the question the same way, and so that the rule
+  // is stated once.
+  SOLVER_RETURN_TYPE withholdAssumedUnsat(SOLVER_RETURN_TYPE result)
+  {
+    if (result != SOLVER_UNSATISFIABLE || uf_injectivity_assumed == 0)
+      return result;
+    noteUnknown(UnknownReason::AssumedInjectivity,
+                "--uf-inject-args assumed " +
+                    std::to_string(uf_injectivity_declarations) +
+                    " uninterpreted function(s) injective, adding " +
+                    std::to_string(uf_injectivity_assumed) +
+                    " implication(s) the query does not entail, so this unsat "
+                    "may be an artefact of that assumption rather than a "
+                    "refutation; re-run without --uf-inject-args to decide the "
+                    "query");
+    // SOLVER_UNKNOWN says only that there is no answer; the cause was
+    // recorded just above for the reason API.
+    return unknownResult();
+  }
 
   // No nodes should already have the iteration number that is returned from
   // here. This never returns zero.
@@ -124,6 +532,7 @@ public:
   }
 
   size_t getAssertLevel() { return _asserts.size(); }
+  const vector<ASTVec*>& AssertLevels() const noexcept { return _asserts; }
 
 private:
   // Stack of Logical Context. each entry in the stack is a logical
@@ -132,6 +541,7 @@ private:
   // assertions in that logical context. Logical contexts are
   // created by PUSH/POP
   vector<ASTVec*> _asserts;
+  size_t lra_refused_depth = 0;
 
   // Memo table that tracks terms already seen
   ASTNodeMap TermsAlreadySeenMap;
@@ -149,25 +559,23 @@ private:
    * Private Member Functions                                     *
    ****************************************************************/
 
-  // Destructively appends back_child nodes to front_child nodes.
-  // If back_child nodes is NULL, no appending is done.  back_child
-  // nodes are not modified.  Then it returns the hashed copy of the
-  // node, which is created if necessary.
-  ASTInterior* CreateInteriorNode(Kind kind, ASTInterior* new_node,
-                                  const ASTVec& back_children = _empty_ASTVec);
-
-  // Create unique ASTInterior node.
-  ASTInterior* LookupOrCreateInterior(ASTInterior* n);
+  // Look up a unique interior node by (kind, children), creating it -- as a
+  // single tail-allocated block -- only on a miss. Probes with a non-owning
+  // key, so a cache hit builds nothing.
+  ASTInterior* LookupOrCreateInterior(Kind kind, ASTChildren children);
 
   // Create unique ASTSymbol node.
   ASTSymbol* LookupOrCreateSymbol(ASTSymbol& s);
-
-  // Called whenever we want to make sure that the Symbol is
-  // declared during semantic analysis
-  bool LookupSymbol(ASTSymbol& s);
+  ASTNode CreateInternalSourceSymbol(const char* name,
+                                     const SourceSort& source_sort);
+  ASTNode CreateFreshInternalSourceVariable(const SourceSort& source_sort,
+                                            const std::string& prefix);
 
   // Called by ASTNode constructors to uniqueify ASTBVConst
   ASTBVConst* LookupOrCreateBVConst(ASTBVConst& s);
+
+  ASTFPConst* LookupOrCreateFPConst(ASTFPConst& s);
+  ASTRMConst* LookupOrCreateRMConst(ASTRMConst& s);
 
   // Cache of zero/one/max BVConsts of different widths.
   ASTVec zeroes;
@@ -179,9 +587,57 @@ private:
 
   CBV CreateBVConstVal;
 
+  // Name -> symbols declared under it, in declaration order.
+  //
+  // A symbol's source sort is part of its identity, so the unique table is
+  // keyed on (name, sort) and a name-only probe cannot be built for it. That
+  // is what turned the two name lookups below into a scan of every symbol --
+  // and they are not rare: LookupOrCreateSymbol(name) is how every internally
+  // minted symbol is made (ArrayTransformer's per-abstracted-read variable,
+  // RemoveUnconstrained's per-unconstrained-parent variable), so the scan made
+  // symbol creation quadratic on problems with no floating point in them.
+  //
+  // This index answers those lookups in constant time. Entries are appended
+  // where the unique table is inserted into and removed where a symbol is
+  // cleaned up, so the two stay in step; the vector is for the case the sorted
+  // key admits and the old name-keyed one could not -- one name at two sorts.
+  typedef ankerl::unordered_dense::map<std::string, std::vector<ASTSymbol*>>
+      SymbolNameIndex;
+  SymbolNameIndex _symbol_name_index;
+
+  // Distinct source sorts, interned so a derived one can be memoised on the
+  // node as a pointer. std::unordered_set rather than a dense map because the
+  // addresses have to stay put as it grows.
+  std::unordered_set<SourceSort, SourceSort::Hasher> _source_sort_pool;
+
+  // The symbols STP introduces under a name of its own choosing, so that the
+  // name identifies the object without being looked up in the symbol table.
+  // See introducedSymbol.
+  std::map<std::string, ASTNode> _introduced_by_name;
+
 public:
   bool LookupSymbol(const char* const name);
   bool LookupSymbol(const char* const name, ASTNode& output);
+
+  // Intern `sort` and return its stable address, for ASTInternal's source-sort
+  // memo. Unknown interns like anything else, so the memo needs no separate
+  // negative sentinel.
+  const SourceSort* internSourceSort(const SourceSort& sort)
+  {
+    return &*_source_sort_pool.insert(sort).first;
+  }
+
+  // How many times a source sort has actually been derived, as opposed to
+  // answered from a node's memo. Counted so that the memo is directly
+  // testable: a derivation walks children, so "once per node" versus "once
+  // per path" is the whole difference, and it cannot be read off a result
+  // that is correct either way.
+  uint64_t source_sort_derivations = 0;
+
+  // Record/forget a symbol in the name index. Called only from the unique
+  // table's insertion point and from ASTSymbol::CleanUp.
+  void indexSymbolName(ASTSymbol* symbol);
+  void unindexSymbolName(ASTSymbol* symbol);
 
   /****************************************************************
    * Public Flags                                                 *
@@ -239,8 +695,228 @@ public:
   DLL_PUBLIC ASTNode CreateBVConst(CBV bv, unsigned width);
   ASTNode CreateBVConst(const char* strval, int base);
   ASTNode CreateBVConst(std::string strval, int base, int bit_width);
-  ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
+  ASTNode CreateBVConst(unsigned int width, uint64_t bvconst);
   ASTNode charToASTNode(unsigned char* strval, int base, int bit_width);
+
+  DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode& bvconst,
+                                   unsigned exp_width, unsigned sig_width);
+  DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
+
+  // Exact Real construction. Text is parsed only by the private
+  // ExactRational implementation; no binary floating representation enters
+  // this boundary. The two-string form requires integer decimal components.
+  DLL_PUBLIC ASTNode CreateRealConst(const std::string& decimal_or_fraction);
+  DLL_PUBLIC ASTNode CreateRealConst(const std::string& numerator,
+                                     const std::string& denominator);
+  DLL_PUBLIC ASTNode CreateRealTerm(Kind kind, const ASTVec& children);
+  DLL_PUBLIC ASTNode CreateRealPredicate(Kind kind, const ASTNode& lhs,
+                                         const ASTNode& rhs);
+
+  // Restore a model carrier value to the immutable sort of the source term
+  // it answers. The solver itself continues to evaluate plain bitvectors.
+  ASTNode LiftSourceValue(const ASTNode& carrier,
+                          const SourceSort& source_sort);
+
+  // Create a source-language leaf atomically. Its complete sort participates
+  // in hash-consing and cannot subsequently be changed by width setters.
+  DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
+                                        const SourceSort& source_sort);
+
+  // Conservative manager-lifetime hint: whether a floating-point node has
+  // ever been created. Set by the format funnels (CreateFPConst,
+  // ASTNode::SetExpWidth and FloatBlaster::withFormat, all through
+  // noteFloatingPoint). False is a cheap proof that no query needs FP
+  // lowering; true is not query state -- an unused term or a popped scope may
+  // have set it -- so positive decisions must also inspect the current DAG.
+  bool has_floating_point = false;
+
+  // The same hint for the floating-point *theory* rather than for floats: a
+  // RoundingMode symbol, constant or array element carries no format, so it
+  // never reaches noteFloatingPoint, yet it still needs FpTotalise to pin it
+  // to the five legal encodings. TopLevelSTP's theory test is the one place
+  // that needs the broader question, and without this latch it had no cheap
+  // negative and walked the DAG of every pure bit-vector query.
+  bool has_floating_point_theory = false;
+
+  // Like the FP latches, false is a cheap manager-lifetime proof. Positive
+  // query decisions still inspect the current assertion DAG because Real
+  // declarations and popped terms may outlive their active use.
+  bool has_real = false;
+
+  void noteFloatingPointTheory() { has_floating_point_theory = true; }
+
+  // Conservative manager-lifetime hint, like the two floating-point latches
+  // above: false proves no DISTINCT node can occur in a query and avoids a
+  // completed-DAG walk on the overwhelmingly common negative path. The
+  // hashing factory is the construction funnel and sets it for every durable
+  // node. True is deliberately not query state -- a popped or otherwise
+  // unused expression may have set it -- so lowering still inspects the
+  // current roots.
+  bool has_distinct = false;
+
+  void noteDistinct() { has_distinct = true; }
+
+  // Record that a float of a real format has been built. Every float's format
+  // arrives through one of the funnels above, so calling this there is what
+  // makes the fast-negative hint complete -- and it must be called whether or
+  // not the format then needs storing on a node, since a node that derives its
+  // format from its kind and children may later occur in a query.
+  DLL_PUBLIC void noteFloatingPoint();
+  DLL_PUBLIC void noteReal();
+  bool HasSeenRealSyntax() const noexcept { return has_real; }
+
+  // Exact model access never exposes the private arithmetic type.  Returned
+  // strings own their bytes and remain valid independently of subsequent
+  // model invalidation.
+  // Publish the model values of Real-sorted uninterpreted-function
+  // applications, so a caller can read one back against the application node
+  // it holds rather than against the lowering's private result symbol. No-op
+  // without a current Real model. See RealModel::defineApplicationValues.
+  DLL_PUBLIC void PublishRealApplicationValues(const ASTNodeMap& handle_to_result);
+  // The current Real model's value for `term`, as an interned REAL_CONST.
+  // False when there is no model or it does not value the term, leaving
+  // `value` untouched.
+  DLL_PUBLIC bool RealModelValueNode(const ASTNode& term, ASTNode& value);
+  // Lend the current Real model somewhere to decide the Boolean condition of
+  // a Real ite, for as long as that model lives. The model holds the Real
+  // variables and nothing else, so such a condition is not its to answer;
+  // whoever holds a model of the Booleans supplies this. No-op without a
+  // model. See RealModel::setConditionOracle.
+  DLL_PUBLIC void SetRealConditionOracle(
+      const std::function<bool(const ASTNode&)>& oracle);
+  // Value-based keys for non-Real arguments of Real-valued applications.
+  // Install with the condition oracle before publishing application values.
+  DLL_PUBLIC void SetRealScalarKeyOracle(
+      const std::function<std::string(const ASTNode&)>& oracle);
+  // Whether the current Real model decides `predicate` -- one of REAL_LT,
+  // REAL_LE, REAL_GT, REAL_GE or an EQ over two Real operands -- and if so
+  // its value. False without a model, or for anything else, leaving `value`
+  // untouched: the caller then still has its own error to report.
+  //
+  // `condition_oracle`, when given, is how a Real ite inside `predicate`
+  // resolves its Boolean condition: this model holds the Real variables and
+  // nothing else, so a condition over Boolean ones is not its to answer. The
+  // caller that has a model of those lends it one, as the exact verifier
+  // does. Without it such a predicate is simply not decided.
+  DLL_PUBLIC bool EvaluateRealPredicate(
+      const ASTNode& predicate, bool& value,
+      const std::function<bool(const ASTNode&)>& condition_oracle =
+          std::function<bool(const ASTNode&)>()) const noexcept;
+  DLL_PUBLIC bool HasRealModelValue(const ASTNode& term) const noexcept;
+  DLL_PUBLIC std::string GetRealModelValue(const ASTNode& term) const;
+  DLL_PUBLIC std::string GetRealModelNumerator(const ASTNode& term) const;
+  DLL_PUBLIC std::string GetRealModelDenominator(const ASTNode& term) const;
+  DLL_PUBLIC std::string GetRealModelSMTLIB(const ASTNode& term) const;
+  DLL_PUBLIC bool HasRealModel() const noexcept;
+  DLL_PUBLIC void PrintRealModelSMTLIB2(std::ostream& out,
+                                        const ASTVec& visible_symbols) const;
+  void InvalidateRealModel() noexcept;
+
+  // A Real assertion the exact-arithmetic budget refused is not in _asserts,
+  // so a later query would be answered without it -- soundly wrong rather
+  // than merely incomplete. Record the depth it was refused at; every query
+  // at or below that depth must answer "unknown" instead, and popping back
+  // past it clears the debt.
+  void NoteRealAssertionRefused() noexcept;
+  bool RealAssertionRefused() const noexcept
+  {
+    return lra_refused_depth != 0;
+  }
+  ASTVec AllRealSymbols() const;
+
+  /* Whether exact rationals re-derive a canonical form their construction
+   * already proves. A self-check on the number layer: budgets do it unless
+   * told otherwise, so every test and every API caller keeps it, and the
+   * command-line solver turns it off from its own flag. Must be set before
+   * the first exact value is built. */
+  DLL_PUBLIC void SetLraCanonicalVerification(bool enabled) noexcept;
+
+  bool isRoundingModeSymbol(const ASTNode& n) const
+  {
+    return n.GetKind() == SYMBOL &&
+           n.GetSourceSort().kind() == SourceSort::Kind::RoundingMode;
+  }
+
+  // The five-way one-hot validity constraint for a RoundingMode symbol:
+  // (or (= s RNE) ... (= s RNA)). Every path that introduces a
+  // RoundingMode variable must assert this: the sort has exactly five values,
+  // while the 5-bit carrier has thirty-two.
+  ASTNode roundingModeValidConstraint(const ASTNode& s);
+
+  // Whether `n` denotes a value of SMT-LIB's RoundingMode source sort.
+  //
+  // Everything that takes a rounding mode must ask this rather than test the
+  // carrier's width. The sort has five values and the carrier thirty-two, and
+  // symfpu's roundingDecision falls through to truncate-with-overflow-to-max
+  // when every mode equality is false -- a sixth, non-IEEE mode. Accepting a
+  // bare (_ BitVec 5) there let an input compute under it.
+  bool isRoundingModeSortedTerm(const ASTNode& n) const;
+
+  // Whether `n` denotes a value of a sort introduced by (declare-sort S 0).
+  // Named alongside the RoundingMode predicate above so the places that have
+  // to discriminate on a source sort stay findable from one another.
+  bool isUninterpretedSortedTerm(const ASTNode& n) const;
+
+  // ── Model vocabulary for declared sorts ───────────────────────────
+  //
+  // An element of a sort introduced by declare-sort has no literal. Its
+  // carrier pattern is not one: printing #x0000 for it would name a
+  // bit-vector, which is the sort the whole representation exists to say it
+  // is not. SMT-LIB's answer, and every solver's, is to give the elements
+  // names and let distinct names denote distinct elements -- so a model
+  // declares the sort, declares one constant per element it mentions, and
+  // refers to those.
+  //
+  // Names are handed out per sort in first-request order, so the same solve
+  // always prints the same model and two solves of the same query agree.
+  // Reset with the counterexample.
+  std::string uninterpretedElementName(const SourceSort& sort,
+                                       const ASTNode& carrier);
+
+  // Every (sort, element name, carrier) the model has named so far, in the
+  // order the names were issued. What the model's preamble is printed from.
+  const std::vector<UninterpretedElement>& uninterpretedElements() const
+  {
+    return uninterpreted_elements;
+  }
+
+  // Declared sorts the model has printed anywhere, element or not. A sort can
+  // reach the text through a function signature alone -- a predicate over an
+  // opaque sort is the commonest such shape -- and a model that used the sort
+  // without declaring it cannot be read back.
+  void noteUninterpretedSortPrinted(const SourceSort& sort)
+  {
+    if (sort.kind() != SourceSort::Kind::Uninterpreted)
+      return;
+    for (const SourceSort& seen : uninterpreted_sorts_printed)
+      if (seen == sort)
+        return;
+    uninterpreted_sorts_printed.push_back(sort);
+  }
+  const std::vector<SourceSort>& uninterpretedSortsPrinted() const
+  {
+    return uninterpreted_sorts_printed;
+  }
+
+  void clearUninterpretedElements()
+  {
+    uninterpreted_elements.clear();
+    uninterpreted_sorts_printed.clear();
+  }
+
+  DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
+                                          unsigned sig_width);
+
+  // The declared symbol under an array term. Complete index/element sorts
+  // live immutably on source symbols; WRITE and ITE derive them.
+  // Null when no symbol is underneath.
+  ASTNode arrayBaseSymbol(const ASTNode& arr) const;
+
+  // Compatibility queries over the immutable SourceSort representation.
+  bool arrayHasFpIndex(const ASTNode& arr, unsigned& exp_width,
+                       unsigned& sig_width) const;
+  bool arrayHasRmIndex(const ASTNode& arr) const;
+  bool arrayHasRmElement(const ASTNode& arr) const;
 
   /****************************************************************
    * Create Node functions                                        *
@@ -329,6 +1005,9 @@ public:
 
   void Pop(void);
   void Push(void);
+  // Internal check-sat-assuming pop variant for the SMT-LIB rule that the
+  // accepted model remains readable after its call-local frame closes.
+  void PopPreservingRealModel(void);
 
   // Queries aren't maintained on a stack.
   // Used by CVC & C-interface.
@@ -353,6 +1032,11 @@ public:
   // Used just via the C-interface.
   // Note, not maintained properly wrt push/pops
   vector<stp::ASTNode> decls;
+
+  // C API declarations have manager lifetime and no lexical binding frame.
+  // Keep their printed names unambiguous even if the caller clears the list
+  // used only for printing declarations.
+  std::map<std::string, SourceSort> c_api_source_sorts;
 
   // Nodes seen so far
   ASTNodeSet PLPrintNodeSet;
@@ -389,10 +1073,82 @@ public:
     sprintf(d, "@%s_%d", prefix.c_str(), _symbol_count++);
     assert(!LookupSymbol(d));
 
-    ASTNode CurrentSymbol = CreateSymbol(d, indexWidth, valueWidth);
+    ASTNode CurrentSymbol =
+        CreateSymbol(d, static_cast<unsigned int>(indexWidth),
+                     static_cast<unsigned int>(valueWidth));
     Introduced_SymbolsSet.insert(CurrentSymbol);
     return CurrentSymbol;
   }
+
+  ASTNode CreateFreshSourceVariable(const SourceSort& source_sort,
+                                    std::string prefix)
+  {
+    char* d = (char*)alloca(sizeof(char) * (32 + prefix.length()));
+    sprintf(d, "@%s_%d", prefix.c_str(), _symbol_count++);
+    ASTNode current = CreateSourceSymbol(d, source_sort);
+    Introduced_SymbolsSet.insert(current);
+    return current;
+  }
+
+  // Deterministic siblings of CreateFreshVariable: the name is a function
+  // of the node(s) the variable stands for, so re-deriving the same thing
+  // -- in a later solve, or a later incremental round -- yields the SAME
+  // variable instead of a fresh one. Get-or-create by construction, since
+  // symbols are hash-consed by (name, widths).
+  //
+  // PRECONDITION, and it is the caller's: keep `key` alive for as long as the
+  // name derived from it means anything. Node numbers are unique among LIVE
+  // nodes, not for the manager's lifetime -- the ASTNode GC frees unreferenced
+  // interior nodes and re-mints their numbers -- so a key that dies can have
+  // its number handed to an unrelated node, and the next derivation under that
+  // number returns a variable already standing for something else. Nothing
+  // here can check it: the node is gone by the time it would matter.
+  //
+  // Callers whose key is a live map key hold it by construction. The one that
+  // does not is the incremental driver's per-round spine, which pins the raw,
+  // prepared and lowered forms in `exactStackKeepAlive` for exactly this
+  // reason. A new caller deriving a name from a node it does not otherwise
+  // retain owes the same pin.
+  //
+  // The "_k" spelling keeps this namespace disjoint from the counter-named
+  // variables, whose suffix is digits only.
+  ASTNode CreateDeterministicVariable(int indexWidth, int valueWidth,
+                                      const std::string& prefix,
+                                      const ASTNode& key)
+  {
+    char* d = (char*)alloca(sizeof(char) * (48 + prefix.length()));
+    sprintf(d, "@%s_k%lu", prefix.c_str(),
+            (unsigned long)key.GetNodeNum());
+    ASTNode current =
+        CreateSymbol(d, static_cast<unsigned int>(indexWidth),
+                     static_cast<unsigned int>(valueWidth));
+    Introduced_SymbolsSet.insert(current);
+    return current;
+  }
+
+  ASTNode CreateDeterministicVariable(int indexWidth, int valueWidth,
+                                      const std::string& prefix,
+                                      const ASTNode& key,
+                                      const ASTNode& key2)
+  {
+    char* d = (char*)alloca(sizeof(char) * (64 + prefix.length()));
+    sprintf(d, "@%s_k%lu_k%lu", prefix.c_str(),
+            (unsigned long)key.GetNodeNum(),
+            (unsigned long)key2.GetNodeNum());
+    ASTNode current =
+        CreateSymbol(d, static_cast<unsigned int>(indexWidth),
+                     static_cast<unsigned int>(valueWidth));
+    Introduced_SymbolsSet.insert(current);
+    return current;
+  }
+
+  // SourceSort-preserving deterministic scalar allocation. UF lowering runs
+  // before FP/array carrier erasure and must retain Bool versus nonzero BV as
+  // immutable symbol identity, including for a Boolean whose carrier width is
+  // historically zero.
+  ASTNode CreateDeterministicSourceVariable(const SourceSort& sourceSort,
+                                            const std::string& prefix,
+                                            const ASTNode& key);
 
   bool FoundIntroducedSymbolSet(const ASTNode& in)
   {
@@ -401,6 +1157,65 @@ public:
       return true;
     }
     return false;
+  }
+
+  // Whether `name` is in the namespace SMT-LIB 2 reserves for solver use.
+  //
+  // STP relies on that reservation rather than merely respecting it:
+  // CreateFreshVariable mints '@'-prefixed names, and so do the objects
+  // supplying the unspecified results of the partial floating-point
+  // operations. The public boundaries refuse to declare such a name, which is
+  // what makes the reliance sound -- see Cpp_interface::CreateSourceSymbol and
+  // createPublicSourceSymbol.
+  static bool isReservedSymbolName(const char* name)
+  {
+    return name != NULL && (name[0] == '@' || name[0] == '.');
+  }
+
+  // Record a symbol STP introduced rather than the user declaring it, so the
+  // counterexample printers leave it out. CreateFreshVariable does this for
+  // the names it mints; this is the way in for an introduced symbol whose
+  // *name* is load-bearing and so cannot be minted there -- the arrays and
+  // free bits supplying the unspecified results of the partial floating-point
+  // operations, whose identity is their name (see
+  // FloatBlaster::unspecifiedValue and FloatBlaster::unspecifiedCells).
+  void noteIntroducedSymbol(const ASTNode& in)
+  {
+    Introduced_SymbolsSet.insert(in);
+  }
+
+  // The one symbol STP introduces under `name`, minted on first request.
+  //
+  // Identity is the name here on purpose: the solve and the two counterexample
+  // re-derivations each rebuild these independently and have to arrive at the
+  // same object, which a minted-per-call fresh variable cannot give them.
+  //
+  // That identity used to be nothing but the name, handed to a lookup that
+  // matches on name alone and returns the first symbol declared under it at
+  // *any* sort -- and whose width setters are then silent no-ops. A user
+  // declaration at the matching sort therefore *became* the object: pinning a
+  // cell of fp.min's choice map decided the solver's "unspecified" answer, the
+  // user's own symbol vanished from the model, and a declaration at a
+  // different sort aborted on a width assert. The '@' prefix was the whole
+  // defence, and nothing enforced it.
+  //
+  // Now the map is the identity: after the first call the name is never looked
+  // up again, and the first call refuses rather than adopts a name already
+  // taken. The public boundaries make that refusal unreachable by rejecting
+  // reserved names outright, so it is a backstop and not an expected error.
+  DLL_PUBLIC ASTNode introducedSymbol(const std::string& name,
+                                      unsigned index_width,
+                                      unsigned value_width);
+
+  // Whether a counterexample entry belongs to an introduced symbol. Entries
+  // for an introduced *array* are keyed on the read rather than on the array
+  // itself, so look through one: testing the key alone let every read of an
+  // introduced array print.
+  bool isIntroducedCounterExampleEntry(const ASTNode& in)
+  {
+    return FoundIntroducedSymbolSet(in) ||
+           (in.GetKind() == READ && in.Degree() > 0 &&
+            FoundIntroducedSymbolSet(in[0]));
   }
 
   bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
@@ -424,8 +1239,10 @@ public:
 
   DLL_PUBLIC ~STPMgr();
 
-  // Used just via the C-Interface, to allow some nodes to be automaticaly deleted.
-  vector<stp::ASTNode*> persist;
+  // The C interface's checker-owned wrappers, released by vc_Destroy. A hash
+  // set so that vc_DeleteExpr can forget a wrapper the caller released in
+  // constant time; the order they are released in does not matter.
+  ankerl::unordered_dense::set<stp::ASTNode*> persist;
 
   void print_stats() const
   {

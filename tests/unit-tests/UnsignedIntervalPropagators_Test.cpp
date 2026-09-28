@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UnsignedInterval.h"
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -45,28 +46,28 @@ struct Context
   SimplifyingNodeFactory snf;
   stp::UnsignedIntervalAnalysis analysis;
 
-  Context() : snf(*(mgr.hashingNodeFactory), mgr), analysis(mgr)
+  Context() : snf(*(mgr.hashingNodeFactory), mgr)
   {
     mgr.defaultNodeFactory = &snf;
   }
 };
 
-stp::CBV makeCBV(unsigned width, unsigned value)
+stp::CBV makeCBV(unsigned width, uint64_t value)
 {
   stp::CBV r = CONSTANTBV::BitVector_Create(width, true);
-  for (unsigned i = 0; i < width && i < 8 * sizeof(unsigned); i++)
+  for (unsigned i = 0; i < width && i < 64; i++)
     if ((value >> i) & 1)
       CONSTANTBV::BitVector_Bit_On(r, i);
   return r;
 }
 
-stp::UnsignedInterval* makeInterval(unsigned width, unsigned min, unsigned max)
+stp::UnsignedInterval* makeInterval(unsigned width, uint64_t min, uint64_t max)
 {
   return new stp::UnsignedInterval(makeCBV(width, min), makeCBV(width, max));
 }
 
 void expectInterval(const stp::UnsignedInterval* result, unsigned width,
-                    unsigned min, unsigned max)
+                    uint64_t min, uint64_t max)
 {
   ASSERT_NE(result, nullptr);
   stp::CBV expectedMin = makeCBV(width, min);
@@ -429,6 +430,56 @@ TEST(UnsignedIntervalPropagators, MultExactForWrappingConstantMultiplier)
       c.analysis.dispatchToTransferFunctions(n, children);
 
   expectInterval(result, width, 1, 255);
+  cleanup(children, result);
+}
+
+// Multiplying [1, 2^64-3] by the all-ones constant: the products form the
+// progression with step 2^64-1, whose minimum minlin() chases level by
+// level. A step above half the modulus once degenerated into a subtractive
+// walk of ~2^64 iterations, so this test hung; walked backwards the answer
+// is immediate. The products are the negations -1*x, exactly [3, 2^64-1].
+TEST(UnsignedIntervalPropagators, MultByAllOnesConstantTerminates)
+{
+  const unsigned w = 64;
+  const uint64_t allOnes = ~(uint64_t)0;
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, w);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, w);
+  stp::ASTNode n = makeTerm(c, stp::BVMULT, w, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(w, allOnes, allOnes), makeInterval(w, 1, allOnes - 2)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+#ifdef __SIZEOF_INT128__
+  expectInterval(result, w, 3, allOnes);
+#else
+  // Without a 128-bit type width 64 takes the bignum fallback, which
+  // gives up on wrapping products; termination is still checked.
+  if (result != nullptr)
+    expectInterval(result, w, 3, allOnes);
+#endif
+  cleanup(children, result);
+}
+
+// The same shape at width 32 stays on the word-level path on every
+// target: the products are the negations -1*x, exactly [3, 2^32-1].
+TEST(UnsignedIntervalPropagators, MultByAllOnesConstantWord)
+{
+  const unsigned w = 32;
+  const uint64_t allOnes = 0xffffffffu;
+  Context c;
+  stp::ASTNode x = c.mgr.CreateSymbol("x", 0, w);
+  stp::ASTNode y = c.mgr.CreateSymbol("y", 0, w);
+  stp::ASTNode n = makeTerm(c, stp::BVMULT, w, x, y);
+
+  std::vector<const stp::UnsignedInterval*> children = {
+      makeInterval(w, allOnes, allOnes), makeInterval(w, 1, allOnes - 2)};
+  stp::UnsignedInterval* result =
+      c.analysis.dispatchToTransferFunctions(n, children);
+
+  expectInterval(result, w, 3, allOnes);
   cleanup(children, result);
 }
 

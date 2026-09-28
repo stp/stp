@@ -24,8 +24,12 @@ THE SOFTWARE.
 #ifndef ASTINTERNAL_H
 #define ASTINTERNAL_H
 
-#include "stp/AST/ASTNode.h"
+// NB: deliberately do NOT include ASTNode.h here. ASTInternal only needs
+// ASTVec and a forward declaration of ASTNode (both from UsefulDefs.h);
+// including ASTNode.h would create a circular include that forces the hot
+// ASTNode accessors (GetKind/GetNodeNum/...) to be defined out-of-line.
 #include "stp/AST/UsefulDefs.h"
+#include "stp/AST/SourceSort.h"
 #include <iostream>
 
 using std::ostream;
@@ -74,7 +78,7 @@ protected:
   // the are NOTs of.
   //
   uint64_t node_uid;
-  static THREAD_LOCAL uint64_t node_uid_cntr;
+  static THREAD_LOCAL_IE uint64_t node_uid_cntr;
 
   // reference counting for garbage collection
   uint32_t _ref_count;
@@ -91,6 +95,41 @@ protected:
 
   virtual void setValueWidth(uint32_t) = 0;
   virtual uint32_t getValueWidth() const = 0;
+
+  virtual void setExpWidth(uint32_t) = 0;
+  virtual uint32_t getExpWidth() const = 0;
+
+  virtual void setSigWidth(uint32_t) = 0;
+  virtual uint32_t getSigWidth() const = 0;
+
+  // Source-language identity carried by leaves. Interior-node sorts are
+  // derived by ASTNode::GetSourceSort from their operator and children.
+  virtual SourceSort getDeclaredSourceSort() const
+  {
+    return SourceSort::unknown();
+  }
+
+  // Memo for the *derived* source sort, on the nodes that derive one.
+  //
+  // ASTNode::GetSourceSort walks children for READ, WRITE and ITE -- and for
+  // ITE it walks both branches -- so without a memo a shared-branch ITE DAG
+  // costs Theta(2^depth) per query and a store chain costs Theta(depth), on a
+  // graph of linear size. The front ends ask once per node they build, and
+  // containsFloatingPointTheory asks once per node of every query, so the
+  // recomputation is not incidental. This is the same treatment cacheFPFormat
+  // already gives the floating-point format, for the same reason, and it is
+  // sound for the same reason: the derivation reads only the node's kind,
+  // children and widths.
+  //
+  // The pointer is into the manager's intern pool, so a cached answer costs
+  // eight bytes and no allocation, and Unknown interns like any other sort --
+  // a non-null pointer to an Unknown sort is the negative cache.
+  //
+  // Only ASTInterior can hold one. Leaves either carry a declared sort or
+  // derive theirs from widths that legacy callers still set after
+  // construction, and both are already O(1).
+  virtual const SourceSort* cachedSourceSort() const { return NULL; }
+  virtual void setCachedSourceSort(const SourceSort*) const {}
 
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
@@ -115,9 +154,6 @@ protected:
    * Protected Member Functions                                   *
    ****************************************************************/
 
-  // Copying assign operator.  Also copies contents of children.
-  ASTInternal& operator=(const ASTInternal& int_node);
-
   // Cleanup function for removing from hash table
   virtual void CleanUp() = 0;
 
@@ -127,11 +163,12 @@ protected:
   // is for printing hex. numbers that C compilers will accept
   virtual void nodeprint(ostream& os, bool /*c_friendly*/) { os << "*"; };
 
-  // Treat the result as const pleases
-  virtual Kind GetKind() const { return _kind; }
+  // Treat the result as const pleases.
+  // Non-virtual: no subclass overrides it, so this is just a field read.
+  Kind GetKind() const { return _kind; }
 
   // Get the child nodes of this node
-  virtual ASTVec const& GetChildren() const = 0;
+  virtual ASTChildren GetChildren() const = 0;
 
 public:
   // Constructor (kind only, empty children, int nodenum)
@@ -166,7 +203,7 @@ public:
     }
   }
 
-  unsigned GetNodeNum() const { return node_uid; }
+  uint64_t GetNodeNum() const { return node_uid; }
 
   virtual bool isSimplified() const { return false; }
 

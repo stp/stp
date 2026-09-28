@@ -1,8 +1,7 @@
-; RUN: %solver %s 2>&1 | %OutputCheck %s
+; RUN: not %solver %s 2>&1 | %OutputCheck %s
 (set-logic QF_BV)
 
-; CHECK-NOT:"sat"
-; Should fail because binds "a" twice in the same let.
-;(assert (not (let ((a false) (a false)) a)))
-
+; Should fail because "a" is bound twice in the same let.
+(assert (not (let ((a false) (a false)) a)))
+; CHECK: Let already created:a
 (check-sat)

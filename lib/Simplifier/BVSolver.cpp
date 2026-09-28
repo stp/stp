@@ -53,8 +53,30 @@ THE SOFTWARE.
 // 4. Outside the solver, Substitute and Re-normalize the input DAG
 namespace stp
 {
-const bool flatten_ands = true;
-const bool debug_bvsolver = false;
+
+// Whether eliminating `var` in favour of `value` keeps the floating-point
+// format `var` carries.
+//
+// A float's format is per-node state that only a leaf, a floating-point-kind
+// node or an array can hold (see ASTNode::canStoreFPFormat), so an ordinary
+// bitvector term -- everything this file builds to replace a variable with --
+// answers (0, 0) whatever it denotes. The floating-point layer is still
+// unlowered while the solver runs: FloatBlast comes after the size-reducing
+// passes, and it reads an operation's format off its operands, because by
+// then they are the only thing that still says what sort they are (see
+// ASTNode::deriveFPFormat). So a float-typed variable rewritten into a
+// concatenation leaves fp.isZero and friends blasting against a format of
+// (0, 0) -- a packed width of zero against a 64-bit operand.
+//
+// Non-floats compare (0, 0) against (0, 0), so this is only ever a question
+// about floats. The same invariant UpdateSubstitutionMap asserts; the
+// solver map's own entry point does not check, so the check has to happen
+// here, before the equation that justifies the entry is discarded.
+static bool keepsFPFormat(const ASTNode& var, const ASTNode& value)
+{
+  return var.GetExpWidth() == value.GetExpWidth() &&
+         var.GetSigWidth() == value.GetSigWidth();
+}
 
 // The simplify functions can increase the size of the DAG,
 // so we have the option to disable simplifications.
@@ -64,7 +86,7 @@ ASTNode BVSolver::simplifyNode(const ASTNode n)
     return n;
 
   if (n.GetType() == BOOLEAN_TYPE)
-    return _simp->SimplifyFormula(n, false, NULL);
+    return _simp->SimplifyFormula(n, false);
   else
     return _simp->SimplifyTerm(n);
 }
@@ -190,7 +212,8 @@ ASTNode BVSolver::ChooseMonom(const ASTNode& eq, ASTNode& modifiedlhs,
       const ASTNode& monom = *it;
       ASTNode var = (BVMULT == monom.GetKind()) ? monom[1] : ASTUndefined;
 
-      if (BVMULT == monom.GetKind() && BVCONST == monom[0].GetKind() &&
+      if (BVMULT == monom.GetKind() && 2 == monom.Degree() &&
+          BVCONST == monom[0].GetKind() &&
           _simp->BVConstIsOdd(monom[0]) && !chosen_symbol &&
           checked.find(var) == checked.end() &&
           ((SYMBOL == var.GetKind() && !vars.VarSeenInTerm(var, rhs)) ||
@@ -234,12 +257,6 @@ ASTNode BVSolver::ChooseMonom(const ASTNode& eq, ASTNode& modifiedlhs,
   modifiedlhs =
       (o.size() > 1) ? _bm->CreateTerm(BVPLUS, lhs.GetValueWidth(), o) : o[0];
 
-  if (debug_bvsolver)
-  {
-    std::cerr << "Initial:" << eq;
-    std::cerr << "Chosen Monomial:" << outmonom;
-    std::cerr << "Output LHS:" << modifiedlhs;
-  }
 
   // can be SYMBOL or (BVUMINUS SYMBOL) or (BVMULT ODD_BVCONST SYMBOL) or
   // (BVMULT ODD_BVCONST (EXTRACT SYMBOL BV_CONST ZERO)) or
@@ -270,6 +287,11 @@ ASTNode BVSolver::substitute(const ASTNode& eq, const ASTNode& lhs,
         return eq;
       }
 
+      // The right-hand side stands in for the variable everywhere, so it has
+      // to be the same sort of thing -- as a float too, not just as bits.
+      if (!keepsFPFormat(lhs, rhs))
+        return eq;
+
       if (!_simp->UpdateSolverMap(lhs, rhs))
       {
         return eq;
@@ -289,7 +311,11 @@ ASTNode BVSolver::substitute(const ASTNode& eq, const ASTNode& lhs,
         return eq;
       }
 
-      if (vars.VarSeenInTerm(lhs[0], rhs))
+      // Solving here renames the whole variable, not just the bits the
+      // extract names: below it becomes a concatenation, which carries no
+      // floating-point format at all. So a float-typed variable is left
+      // alone, extract equation and all. See keepsFPFormat.
+      if (lhs[0].GetExpWidth() != 0)
       {
         return eq;
       }
@@ -320,6 +346,11 @@ ASTNode BVSolver::substitute(const ASTNode& eq, const ASTNode& lhs,
       // the input is of the form a*x = t. If 'a' is odd, then compute
       // its multiplicative inverse a^-1, multiply 't' with it, and
       // update the solver map
+      if (lhs.Degree() != 2)
+      {
+        return eq;
+      }
+
       if (BVCONST != lhs[0].GetKind())
       {
         return eq;
@@ -332,6 +363,15 @@ ASTNode BVSolver::substitute(const ASTNode& eq, const ASTNode& lhs,
       }
 
       bool ChosenVar_Is_Extract = (BVEXTRACT == lhs[1].GetKind());
+
+      // The variable becomes a multiple of the right-hand side, or a
+      // concatenation ending in one. Both are bitvector terms with no
+      // floating-point format to carry, so a float-typed variable is left
+      // alone. See keepsFPFormat.
+      if ((ChosenVar_Is_Extract ? lhs[1][0] : lhs[1]).GetExpWidth() != 0)
+      {
+        return eq;
+      }
 
       // if coeff is even, then we know that all the coeffs in the eqn
       // are even. Simply return the eqn
@@ -502,7 +542,7 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
     return input;
   }
 
-  if (flatten_ands && AND == k)
+  if (AND == k)
   {
     ASTVec c = FlattenKind(AND, input.GetChildren());
     input = _bm->CreateNode(AND, c);
@@ -527,11 +567,11 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
   if (EQ == k)
     c.push_back(input);
   else
-    c = input.GetChildren();
+    c = toASTVec(input.GetChildren());
 
   ASTVec eveneqns;
   bool any_solved = false;
-  ASTNodeMap cache;
+  DenseNodeMap cache;
   for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
   {
     /*
@@ -648,9 +688,9 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
   }
   //Now, LHS is BVPLUS and RHS is ZERO
 
-  const ASTVec& lhs_c = lhs.GetChildren();
+  const ASTChildren lhs_c = lhs.GetChildren();
   ASTNode savetheconst = rhs;
-  for (ASTVec::const_iterator it = lhs_c.begin(), itend = lhs_c.end();
+  for (auto it = lhs_c.begin(), itend = lhs_c.end();
        it != itend; it++)
   {
     const ASTNode aaa = *it;
@@ -672,7 +712,7 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
       continue;
     }
 
-    if (!(BVMULT == itk && BVCONST == aaa[0].GetKind() &&
+    if (!(BVMULT == itk && 2 == aaa.Degree() && BVCONST == aaa[0].GetKind() &&
           SYMBOL == aaa[1].GetKind() && !_simp->BVConstIsOdd(aaa[0])))
     {
       // If the monomials of the lhs are NOT of the form 'a*x' where
@@ -718,7 +758,7 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
   }
   else
   {
-    input_c = input.GetChildren();
+    input_c = toASTVec(input.GetChildren());
   }
 
   // power_of_2 holds the exponent of 2 in the coeff
@@ -744,14 +784,14 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
       return input;
     }
 
-    const ASTVec& lhs_c = lhs.GetChildren();
-    for (ASTVec::const_iterator it = lhs_c.begin(), itend = lhs_c.end();
+    const ASTChildren lhs_c = lhs.GetChildren();
+    for (auto it = lhs_c.begin(), itend = lhs_c.end();
          it != itend; it++)
     {
       const ASTNode aaa = *it;
       const Kind itk = aaa.GetKind();
       if (!(BVCONST == itk && !_simp->BVConstIsOdd(aaa)) &&
-          !(BVMULT == itk && BVCONST == aaa[0].GetKind() &&
+          !(BVMULT == itk && 2 == aaa.Degree() && BVCONST == aaa[0].GetKind() &&
             SYMBOL == aaa[1].GetKind() && !_simp->BVConstIsOdd(aaa[0])))
       {
         // If the monomials of the lhs are NOT of the form 'a*x' or 'a'
@@ -797,8 +837,6 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
     }
 
     unsigned len = lhs.GetValueWidth();
-    ASTNode hi = _bm->CreateBVConst(32, len - 1);
-    ASTNode low = _bm->CreateBVConst(32, len - power_of_2);
     ASTNode low_minus_one = _bm->CreateBVConst(32, len - power_of_2 - 1);
     ASTNode low_zero = _bm->CreateZeroConst(32);
     unsigned newlen = len - power_of_2;
@@ -811,9 +849,9 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
       two =
           _simp->BVConstEvaluator(_bm->CreateTerm(BVMULT, len, two_const, two));
     }
-    const ASTVec& lhs_c = lhs.GetChildren();
+    const ASTChildren lhs_c = lhs.GetChildren();
     ASTVec lhs_out;
-    for (ASTVec::const_iterator it = lhs_c.begin(), itend = lhs_c.end();
+    for (auto it = lhs_c.begin(), itend = lhs_c.end();
          it != itend; it++)
     {
       ASTNode aaa = *it;

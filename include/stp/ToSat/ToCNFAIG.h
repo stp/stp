@@ -27,30 +27,53 @@ THE SOFTWARE.
 
 // From ABC
 #include "aig/aig/aig.h"
+#include "aig/gia/gia.h"
+#include "aig/gia/giaAig.h"
 #include "sat/cnf/cnf.h"
 #include "opt/dar/dar.h"
 
+#include <functional>
+
+#include "stp/AIG/CNF.h"
+#include "stp/ToSat/AbcCnfAdopt.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToSATBase.h"
 
 namespace stp
 {
-class ASTtoCNF;
-
 class ToCNFAIG // not copyable
 {
   UserDefinedFlags& uf;
+  bool allowAuto = true;
 
   void dag_aware_aig_rewrite(const bool needAbsRef, BBNodeManagerAIG& mgr);
 
-  void fill_node_to_var(Cnf_Dat_t* cnfData,
+  CNF derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
+                    unsigned namedOutputs);
+
+  void fill_node_to_var(const CNF& cnf,
                         ToSATBase::ASTNodeToSATVar& nodeToVars,
                         BBNodeManagerAIG& mgr);
 
 public:
-  ToCNFAIG(UserDefinedFlags& _uf) : uf(_uf) {}
+  // allowAuto: whether CNF_EFFORT_AUTO may decide from the AIG size here.
+  //
+  // It is off for exact refinement. AUTO was calibrated on whole-query
+  // conversion, where the CNF is built once and thrown away, so trading
+  // clauses for generation time is free. Refinement encodes into a live
+  // solver, where the clauses stay: a 64-bit BVMULT clears the threshold and
+  // AUTO would leave about 20% more clauses in the solver for the rest of the
+  // search. An explicitly chosen level still reaches both paths.
+  ToCNFAIG(UserDefinedFlags& _uf, bool _allowAuto = true)
+      : uf(_uf), allowAuto(_allowAuto) {}
 
-  void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
+  // Turn an AIG into CNF with the configured generator. `namedOutputs` is
+  // the number of trailing combinational outputs that need variables instead
+  // of being asserted; passing every output is how a fragment such as
+  // BVExactEncoder obtains values to splice into an existing solver.
+  CNF derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs = 0);
+
+  void toCNF(const BBNodeAIG& top, CNF& cnf,
              ToSATBase::ASTNodeToSATVar& nodeToVars, bool needAbsRef,
              BBNodeManagerAIG& _mgr);
 };

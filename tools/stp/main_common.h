@@ -44,7 +44,10 @@ public:
   Main();
   virtual ~Main();
   int main(int argc, char** argv);
-  void parse_file(ASTVec* AssertsQuery);
+  // Nonzero when the parser gave up on the input: bison's own status, or 1
+  // for the abandon SMT2Parse() catches. The command line turns it into an
+  // exit status; nothing else in the tool reads it.
+  int parse_file(ASTVec* AssertsQuery);
   void print_back(ASTNode& query, ASTNode& asserts);
   void read_file();
   void printVersionInfo();

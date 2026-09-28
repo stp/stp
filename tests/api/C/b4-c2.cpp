@@ -2553,7 +2553,7 @@ TEST(b4_c2, one)
 #if 0
   {
     char* cc;
-    unsigned long len;
+    size_t len;
     vc_printQueryStateToBuffer(vc, e5286031, &cc, &len, 1);
     std::cout << cc << std::endl;
   }

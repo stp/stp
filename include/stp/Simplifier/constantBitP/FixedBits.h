@@ -28,14 +28,13 @@ THE SOFTWARE.
 #include <cstdint>
 #include <cstring>
 #include "stp/Util/Attributes.h"
-#include <stp/Util/Attributes.h>
+#include "stp/Util/BitOps.h"
 
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <random>
 #include <vector>
-
-class MTRand;
 
 namespace stp
 {
@@ -54,23 +53,51 @@ namespace constantBitP
 #define CONSTANTBITP_UTILITY_XSTR(s) CONSTANTBITP_UTILITY_STR(s)
 #define LOCATION __FILE__ ":" CONSTANTBITP_UTILITY_XSTR(__LINE__) ": "
 
-static THREAD_LOCAL int staticUniqueId = 1;
-
 // Bits can be fixed, or unfixed. Fixed bits are fixed to either zero or one.
 // Unfixed bits are marked as '*' when using operator[]
 class FixedBits
 {
 private:
-  bool* fixed;
-  bool* values;
+  // Packed LSB-first: bit i of fixedW_[i/64] says whether bit i is fixed;
+  // the same bit of valueW_ is its value. Value bits are only meaningful
+  // where the fixed bit is set (they go stale when a bit is unfixed), so
+  // every multi-bit reader masks the value words with the fixedness words.
+  // Bits at or above the width in the fixedness words are always zero.
+  // Widths of 64 or less live inside the object; wider ones in one heap
+  // block holding the fixedness words followed by the value words.
+  uint64_t* fixedW_;
+  uint64_t* valueW_;
+  uint64_t inlineStorage[2];
   unsigned width;
   bool representsBoolean;
 
-  DLL_PUBLIC void init(const FixedBits& copy);
-  int uniqueId;
+  unsigned numWords() const { return (width + 63) / 64; }
 
-  bool unsignedHolds_new(unsigned val);
-  bool unsignedHolds_old(unsigned val);
+  bool onHeap() const { return width > 64; }
+
+  // Set in the final fixedness word: the bits below the width.
+  uint64_t topMask() const
+  {
+    return (width % 64 == 0) ? ~0ULL : ((1ULL << (width % 64)) - 1);
+  }
+
+  // Points fixedW_/valueW_ at storage for the current width. The contents
+  // are uninitialised.
+  void allocate()
+  {
+    if (width <= 64)
+    {
+      fixedW_ = &inlineStorage[0];
+      valueW_ = &inlineStorage[1];
+    }
+    else
+    {
+      fixedW_ = new uint64_t[2 * numWords()];
+      valueW_ = fixedW_ + numWords();
+    }
+  }
+
+  DLL_PUBLIC void init(const FixedBits& copy);
 
 public:
   DLL_PUBLIC FixedBits(unsigned n, bool isBoolean);
@@ -79,20 +106,14 @@ public:
   {
     assert(this != &copy);
     init(copy);
-    uniqueId = staticUniqueId++;
   }
 
   bool isBoolean() const { return representsBoolean; }
 
   ~FixedBits()
   {
-    delete[] fixed;
-    delete[] values;
-  }
-
-  bool operator<=(const FixedBits& copy) const
-  {
-    return uniqueId <= copy.uniqueId;
+    if (onHeap())
+      delete[] fixedW_;
   }
 
   char operator[](const unsigned n) const
@@ -106,16 +127,13 @@ public:
       return '0';
   }
 
-  // Equality when I was a java programmer sorry!~.
-  bool operator==(const FixedBits& other) const { return this == &(other); }
-
   FixedBits& operator=(const FixedBits& copy)
   {
     if (this == &copy)
       return *this;
 
-    delete[] fixed;
-    delete[] values;
+    if (onHeap())
+      delete[] fixedW_;
     init(copy);
     return *this;
   }
@@ -130,15 +148,7 @@ public:
   {
     assert(isTotallyFixed());
     assert(getWidth() <= 32);
-    unsigned result = 0;
-
-    for (unsigned i = 0; i < width; i++)
-    {
-      if (getValue(i))
-        result += (1u << i);
-    }
-
-    return result;
+    return (unsigned)(valueW_[0] & topMask());
   }
 
   // True if all bits are fixed (irrespective of what value they are fixed to).
@@ -149,171 +159,133 @@ public:
   void setValue(unsigned n, bool value)
   {
     assert(((char)value) == 0 || (char)value == 1);
-    assert(n < width && fixed[n]);
-    values[n] = value;
+    assert(n < width && isFixed(n));
+    const uint64_t bit = 1ULL << (n & 63);
+    if (value)
+      valueW_[n >> 6] |= bit;
+    else
+      valueW_[n >> 6] &= ~bit;
   }
 
   bool getValue(unsigned n) const
   {
-    assert(n < width && fixed[n]);
-    return values[n];
+    assert(n < width && isFixed(n));
+    return (valueW_[n >> 6] >> (n & 63)) & 1;
   }
 
-  // returns -1 if it's zero.
+private:
+  // Bits of word w that could possibly be one: unfixed, or fixed to one.
+  uint64_t possibleOnes(unsigned w) const
+  {
+    const uint64_t mask = (w == numWords() - 1) ? topMask() : ~0ULL;
+    return (~fixedW_[w] & mask) | (fixedW_[w] & valueW_[w]);
+  }
+
+  // Position of the lowest set bit at or above the width if none is set.
+  unsigned lowestSet(uint64_t (FixedBits::*wordFn)(unsigned) const) const
+  {
+    for (unsigned w = 0; w < numWords(); w++)
+    {
+      const uint64_t t = (this->*wordFn)(w);
+      if (t != 0)
+        return w * 64 + ::stp::countTrailingZeroes64(t);
+    }
+    return width;
+  }
+
+  uint64_t fixedOnes(unsigned w) const { return fixedW_[w] & valueW_[w]; }
+
+  uint64_t unfixedBits(unsigned w) const
+  {
+    const uint64_t mask = (w == numWords() - 1) ? topMask() : ~0ULL;
+    return ~fixedW_[w] & mask;
+  }
+
+public:
+  // returns -1 if it's zero. Signed for that sentinel: check for it before
+  // using the result as a bit position, which is unsigned.
   int topmostPossibleLeadingOne()
   {
-    int i;
-    for (i = (int)getWidth() - 1; i >= 0; i--)
+    for (int w = (int)numWords() - 1; w >= 0; w--)
     {
-      if (!isFixed(i) || getValue(i))
-        break;
+      const uint64_t t = possibleOnes(static_cast<unsigned>(w));
+      if (t != 0)
+        return w * 64 + 63 - static_cast<int>(::stp::countLeadingZeroes64(t));
     }
-    return i;
+    return -1;
   }
 
   unsigned minimum_trailingOne()
   {
-    unsigned i = 0;
-    for (; i < getWidth(); i++)
-    {
-      if (!isFixed(i) || getValue(i))
-        break;
-    }
-    return i;
+    return lowestSet(&FixedBits::possibleOnes);
   }
 
-  unsigned maximum_trailingOne()
-  {
-    unsigned i = 0;
-    for (; i < getWidth(); i++)
-    {
-      if (isFixed(i) && getValue(i))
-        break;
-    }
-    return i;
-  }
+  unsigned maximum_trailingOne() { return lowestSet(&FixedBits::fixedOnes); }
 
   unsigned minimum_numberOfTrailingZeroes()
   {
-    unsigned i = 0;
-    for (; i < getWidth(); i++)
-    {
-      if (!isFixed(i) || getValue(i))
-        break;
-    }
-    return i;
-  }
-
-  unsigned maximum_numberOfTrailingZeroes()
-  {
-    unsigned i = 0;
-    for (; i < getWidth(); i++)
-    {
-      if (isFixed(i) && getValue(i))
-        break;
-    }
-    return i;
+    return lowestSet(&FixedBits::possibleOnes);
   }
 
   // Returns the position of the first non-fixed value.
   unsigned leastUnfixed() const
   {
-    unsigned i = 0;
-    for (; i < getWidth(); i++)
-    {
-      if (!isFixed(i))
-        break;
-    }
-    return i;
-  }
-
-  int mostUnfixed() const
-  {
-    int i = (int)getWidth() - 1;
-    for (; i >= 0; i--)
-    {
-      if (!isFixed(i))
-        break;
-    }
-    return i;
+    return lowestSet(&FixedBits::unfixedBits);
   }
 
   // is this bit fixed to zero?
-  bool isFixedToZero(int n) const { return isFixed(n) && !getValue(n); }
+  bool isFixedToZero(unsigned n) const { return isFixed(n) && !getValue(n); }
 
   // is this bit fixed to one?
-  bool isFixedToOne(int n) const { return isFixed(n) && getValue(n); }
+  bool isFixedToOne(unsigned n) const { return isFixed(n) && getValue(n); }
 
   // is this bit fixed to either zero or one?
   bool isFixed(unsigned n) const
   {
     assert(n < width);
-    return fixed[n];
+    return (fixedW_[n >> 6] >> (n & 63)) & 1;
   }
 
   // set bit n to either fixed or unfixed.
   void setFixed(unsigned n, bool value)
   {
     assert(n < width);
-    fixed[n] = value;
-  }
-
-  // Whether the set of values contains this one.
-  bool unsignedHolds(unsigned val);
-
-  void replaceWithContents(const FixedBits& a)
-  {
-    assert(getWidth() >= a.getWidth());
-
-    for (unsigned i = 0; i < a.getWidth(); i++)
-    {
-      if (a.isFixed(i))
-      {
-        setFixed(i, true);
-        setValue(i, a.getValue(i));
-      }
-      else
-      {
-        setFixed(i, false);
-      }
-    }
+    const uint64_t bit = 1ULL << (n & 63);
+    if (value)
+      fixedW_[n >> 6] |= bit;
+    else
+      fixedW_[n >> 6] &= ~bit;
   }
 
   void copyIn(const FixedBits& a)
   {
-    unsigned to = std::min(getWidth(), a.getWidth());
-    for (unsigned i = 0; i < to; i++)
+    const unsigned to = std::min(getWidth(), a.getWidth());
+    for (unsigned w = 0; w * 64 < to; w++)
     {
-      assert(!isFixed(i));
-      if (a.isFixed(i))
-      {
-        setFixed(i, true);
-        setValue(i, a.getValue(i));
-      }
+      const uint64_t mask =
+          (to - w * 64 >= 64) ? ~0ULL : ((1ULL << (to - w * 64)) - 1);
+      uint64_t af, av;
+      a.fillPackedWord(w, af, av);
+      assert((fixedW_[w] & mask) == 0);
+      const uint64_t add = af & mask;
+      if (add != 0)
+        fixWordBits(w, add, av);
     }
   }
 
-  // todo merger with unsignedHolds()
   bool containsZero() const
   {
-    for (unsigned i = 0; i < getWidth(); i++)
-    {
-      if (isFixed(i) && getValue(i))
+    for (unsigned w = 0; w < numWords(); w++)
+      if (fixedOnes(w) != 0)
         return false;
-    }
-
     return true;
   }
 
   unsigned countFixed() const
   {
     unsigned result = 0;
-    for (unsigned i = 0; i < width; i++)
-    {
-      if (isFixed(i))
-        result++;
-    }
-
+    for (unsigned w = 0; w < numWords(); w++)
+      result += ::stp::popCount64(fixedW_[w]);
     return result;
   }
 
@@ -325,8 +297,6 @@ public:
   // Result needs to be explicitly deleted.
   stp::CBV GetBVConst(unsigned to, unsigned from) const;
 
-  void getUnsignedMinMax(unsigned& minShift, unsigned& maxShift) const;
-
   // Writes ceil(width/8) bytes into each buffer: bit i of minBuf is set
   // for a fixed one, and maxBuf additionally has every unfixed bit. Bits
   // beyond the width (in the final byte) may be set in maxBuf; the
@@ -334,63 +304,64 @@ public:
   void fillUnsignedMinMaxBuffers(unsigned char* minBuf,
                                  unsigned char* maxBuf) const
   {
-    static_assert(sizeof(bool) == 1, "bools are loaded eight at a time");
     const unsigned bytes = (width + 7) / 8;
     for (unsigned byte = 0; byte < bytes; byte++)
     {
-      const unsigned base = byte * 8;
-      const unsigned n = width - base >= 8 ? 8 : width - base;
-      uint64_t f = 0, v = 0;
-      memcpy(&f, fixed + base, n);
-      memcpy(&v, values + base, n);
-      // The bools are 0x00/0x01 bytes; gather each byte's low bit.
-      const uint64_t ones = 0x0101010101010101ULL;
-      const uint64_t gather = 0x0102040810204080ULL;
-      const uint64_t mn = f & v;
-      const uint64_t mx = (f ^ ones) | mn; // unfixed or fixed one.
-      minBuf[byte] = (unsigned char)((mn * gather) >> 56);
-      maxBuf[byte] = (unsigned char)((mx * gather) >> 56);
+      const unsigned w = byte / 8;
+      const unsigned shift = (byte % 8) * 8;
+      const uint64_t mn = fixedW_[w] & valueW_[w];
+      const uint64_t mx = mn | ~fixedW_[w]; // unfixed or fixed one.
+      minBuf[byte] = (unsigned char)(mn >> shift);
+      maxBuf[byte] = (unsigned char)(mx >> shift);
     }
   }
 
-  // Packs the fixedness flags and the fixed-one values into words,
-  // LSB-first: bit i of fixedW[i/64] is isFixed(i), bit i of valueW is a
-  // fixed one. Each array needs ceil(width/64) words.
+  // True if some bit is fixed in both, but to different values.
+  bool disagrees(const FixedBits& other) const
+  {
+    assert(other.width == width);
+    for (unsigned w = 0; w < numWords(); w++)
+      if ((fixedW_[w] & other.fixedW_[w] & (valueW_[w] ^ other.valueW_[w])) !=
+          0)
+        return true;
+    return false;
+  }
+
+  // Fix the bits of `add` in word w, each to the corresponding bit of
+  // `vals`. Other bits are untouched.
+  void fixWordBits(unsigned w, uint64_t add, uint64_t vals)
+  {
+    assert(w < numWords());
+    assert((add & ~((w == numWords() - 1) ? topMask() : ~0ULL)) == 0);
+    fixedW_[w] |= add;
+    valueW_[w] = (valueW_[w] & ~add) | (vals & add);
+  }
+
+  // Packs one 64-bit chunk — bits [w*64, min(width, (w+1)*64)) — of the
+  // fixedness flags and the fixed-one values, LSB-first: bit i of fixedW
+  // is isFixed(w*64+i), bit i of valueW is a fixed one there.
+  void fillPackedWord(unsigned w, uint64_t& fixedW, uint64_t& valueW) const
+  {
+    fixedW = fixedW_[w];
+    valueW = fixedW_[w] & valueW_[w];
+  }
+
+  // As above over the whole width. Each array needs ceil(width/64) words.
   void fillPackedWords(uint64_t* fixedW,
                        uint64_t* valueW) const
   {
-    static_assert(sizeof(bool) == 1, "bools are loaded eight at a time");
-    const uint64_t gather = 0x0102040810204080ULL;
-    const unsigned words = (width + 63) / 64;
-    for (unsigned w = 0; w < words; w++)
-    {
-      uint64_t fw = 0, vw = 0;
-      const unsigned base = w * 64;
-      const unsigned limit = width - base >= 64 ? 64 : width - base;
-      for (unsigned b = 0; b < limit; b += 8)
-      {
-        const unsigned n = limit - b >= 8 ? 8 : limit - b;
-        uint64_t f = 0, v = 0;
-        memcpy(&f, fixed + base + b, n);
-        memcpy(&v, values + base + b, n);
-        fw |= ((f * gather) >> 56) << b;
-        vw |= (((f & v) * gather) >> 56) << b;
-      }
-      fixedW[w] = fw;
-      valueW[w] = vw;
-    }
+    for (unsigned w = 0; w < numWords(); w++)
+      fillPackedWord(w, fixedW[w], valueW[w]);
   }
 
   void mergeIn(const FixedBits& a)
   {
     assert(a.getWidth() == getWidth());
-    for (unsigned i = 0; i < width; i++)
+    for (unsigned w = 0; w < numWords(); w++)
     {
-      if (a.isFixed(i) && !isFixed(i))
-      {
-        setFixed(i, true);
-        setValue(i, a.getValue(i));
-      }
+      const uint64_t add = a.fixedW_[w] & ~fixedW_[w];
+      fixedW_[w] |= add;
+      valueW_[w] = (valueW_[w] & ~add) | (a.valueW_[w] & add);
     }
   }
 
@@ -402,9 +373,7 @@ public:
 
   DLL_PUBLIC static FixedBits createRandom(const unsigned length,
                                 const unsigned probabilityOfSetting,
-                                MTRand& rand);
-
-  DLL_PUBLIC void fromUnsigned(unsigned val);
+                                std::mt19937& rand);
 
   static FixedBits fromUnsignedInt(unsigned width, unsigned val);
 

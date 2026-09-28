@@ -48,8 +48,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UnsignedInterval.h"
-#include "stp/Simplifier/constantBitP/MersenneTwister.h"
 #include <gtest/gtest.h>
+#include <random>
 #include <vector>
 
 namespace
@@ -71,7 +71,7 @@ struct Context
   SimplifyingNodeFactory snf;
   stp::UnsignedIntervalAnalysis analysis;
 
-  Context() : snf(*(mgr.hashingNodeFactory), mgr), analysis(mgr)
+  Context() : snf(*(mgr.hashingNodeFactory), mgr)
   {
     mgr.defaultNodeFactory = &snf;
   }
@@ -344,6 +344,69 @@ TEST(UnsignedIntervalExhaustive, Mult)
     checkBinary(stp::BVMULT, w, OVERAPPROXIMATES);
 }
 
+// Three children: the transfer function folds the product pairwise -- exact
+// for two operands, sound beyond. Every interval triple must respect the
+// brute-force hull.
+TEST(UnsignedIntervalExhaustive, MultTernary)
+{
+  Context c;
+  const unsigned w = 2;
+  const uint64_t N = 1ull << w;
+
+  stp::ASTVec symbols;
+  symbols.push_back(c.mgr.CreateSymbol("x", 0, w));
+  symbols.push_back(c.mgr.CreateSymbol("y", 0, w));
+  symbols.push_back(c.mgr.CreateSymbol("z", 0, w));
+  const stp::ASTNode n =
+      c.mgr.hashingNodeFactory->CreateTerm(stp::BVMULT, w, symbols);
+
+  struct Choice
+  {
+    bool isNull;
+    uint64_t lo, hi;
+  };
+  std::vector<Choice> choices;
+  choices.push_back({true, 0, N - 1});
+  for (uint64_t lo = 0; lo < N; lo++)
+    for (uint64_t hi = lo; hi < N; hi++)
+      choices.push_back({false, lo, hi});
+
+  for (const Choice& c0 : choices)
+    for (const Choice& c1 : choices)
+      for (const Choice& c2 : choices)
+      {
+        uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
+        for (uint64_t a = c0.lo; a <= c0.hi; a++)
+          for (uint64_t b = c1.lo; b <= c1.hi; b++)
+            for (uint64_t d = c2.lo; d <= c2.hi; d++)
+            {
+              const uint64_t v = (a * b * d) & (N - 1);
+              bruteMin = std::min(bruteMin, v);
+              bruteMax = std::max(bruteMax, v);
+            }
+
+        std::vector<const stp::UnsignedInterval*> children = {
+            c0.isNull ? nullptr : makeInterval(w, c0.lo, c0.hi),
+            c1.isNull ? nullptr : makeInterval(w, c1.lo, c1.hi),
+            c2.isNull ? nullptr : makeInterval(w, c2.lo, c2.hi)};
+        stp::UnsignedInterval* result =
+            c.analysis.dispatchToTransferFunctions(n, children);
+
+        const bool good = checkAgainstHull(stp::BVMULT, w, result, w, bruteMin,
+                                           bruteMax, OVERAPPROXIMATES);
+        cleanup(children, result);
+        if (!good)
+        {
+          ADD_FAILURE() << "triple ["
+                        << c0.lo << "," << c0.hi << "]["
+                        << c1.lo << "," << c1.hi << "]["
+                        << c2.lo << "," << c2.hi << "] (null flags "
+                        << c0.isNull << c1.isNull << c2.isNull << ")";
+          return;
+        }
+      }
+}
+
 // The constant-multiplier multiplication path finds the extremes of an
 // arithmetic progression mod 2^width by a binary search over a Euclidean
 // counting function. The exhaustive widths only reach shallow recursions,
@@ -352,7 +415,7 @@ TEST(UnsignedIntervalExhaustive, Mult)
 TEST(UnsignedIntervalExhaustive, MultConstantOperandRandomised)
 {
   Context c;
-  MTRand rand(12345U);
+  std::mt19937 rand(12345U);
 
   const unsigned w = 16;
   const uint64_t N = 1ull << w;
@@ -365,11 +428,11 @@ TEST(UnsignedIntervalExhaustive, MultConstantOperandRandomised)
 
   for (unsigned iteration = 0; iteration < 300; iteration++)
   {
-    uint64_t lo = rand.randInt() % N;
-    uint64_t hi = rand.randInt() % N;
+    uint64_t lo = rand() % N;
+    uint64_t hi = rand() % N;
     if (lo > hi)
       std::swap(lo, hi);
-    const uint64_t multiplier = rand.randInt() % N;
+    const uint64_t multiplier = rand() % N;
 
     uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
     for (uint64_t x = lo; x <= hi; x++)
@@ -455,6 +518,75 @@ TEST(UnsignedIntervalExhaustive, Eq)
 {
   for (unsigned w = 1; w <= 4; w++)
     checkPredicate(stp::EQ, w, EXACT);
+}
+
+// The unsigned overflow predicates are exact: the outcome is monotone in the
+// operand box, and an unknown operand is treated as the full range, so the
+// attained extremes decide the hull for every combination (including the cases
+// where only one operand is known, e.g. a * 0 or a + 0).
+TEST(UnsignedIntervalExhaustive, Bvuaddo)
+{
+  for (unsigned w = 1; w <= 4; w++)
+    checkPredicate(stp::BVUADDO, w, EXACT);
+}
+
+TEST(UnsignedIntervalExhaustive, Bvumulo)
+{
+  for (unsigned w = 1; w <= 4; w++)
+    checkPredicate(stp::BVUMULO, w, EXACT);
+}
+
+TEST(UnsignedIntervalExhaustive, Bvusubo)
+{
+  for (unsigned w = 1; w <= 4; w++)
+    checkPredicate(stp::BVUSUBO, w, EXACT);
+}
+
+// Confirms the transfer functions actually fire (produce a constant verdict)
+// at a realistic width where brute force is impossible, in both the "always"
+// and "never" directions.
+TEST(UnsignedIntervalExhaustive, OverflowFires)
+{
+  Context c;
+
+  const auto predicate = [&](stp::Kind k) {
+    stp::ASTVec symbols;
+    symbols.push_back(c.mgr.CreateSymbol("x", 0, 32));
+    symbols.push_back(c.mgr.CreateSymbol("y", 0, 32));
+    return c.mgr.hashingNodeFactory->CreateNode(k, symbols);
+  };
+
+  // Returns 0 (false), 1 (true), or -1 (unknown / no constant computed).
+  const auto run = [&](stp::Kind k, uint64_t aLo, uint64_t aHi, uint64_t bLo,
+                       uint64_t bHi) -> int {
+    const stp::ASTNode n = predicate(k);
+    std::vector<const stp::UnsignedInterval*> children = {
+        makeInterval(32, aLo, aHi), makeInterval(32, bLo, bHi)};
+    stp::UnsignedInterval* result =
+        c.analysis.dispatchToTransferFunctions(n, children);
+    int verdict = -1;
+    if (result != nullptr && result->isConstant())
+      verdict = (int)cbvValue(result->minV, 1);
+    cleanup(children, result);
+    return verdict;
+  };
+
+  // Add: x in [0,100] plus 5 can never carry out of 32 bits -> always false.
+  EXPECT_EQ(run(stp::BVUADDO, 0, 100, 5, 5), 0);
+  // Add: both operands at least 2^31 always carry -> always true.
+  EXPECT_EQ(run(stp::BVUADDO, (1ull << 31), (1ull << 31), (1ull << 31),
+                (1ull << 31) + 10),
+            1);
+  // Mul: small * small can't reach 2^32 -> always false.
+  EXPECT_EQ(run(stp::BVUMULO, 0, 100, 0, 100), 0);
+  // Mul: both operands at least 2^16 reach 2^32 -> always true.
+  EXPECT_EQ(run(stp::BVUMULO, (1ull << 16), (1ull << 20), (1ull << 16),
+                (1ull << 20)),
+            1);
+  // Sub: max(a) < min(b) means a <u b always borrows -> always true.
+  EXPECT_EQ(run(stp::BVUSUBO, 0, 10, 20, 30), 1);
+  // Sub: min(a) >= max(b) never borrows -> always false.
+  EXPECT_EQ(run(stp::BVUSUBO, 20, 30, 0, 10), 0);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvnot)

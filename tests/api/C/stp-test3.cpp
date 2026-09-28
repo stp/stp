@@ -26,6 +26,10 @@ THE SOFTWARE.
 #include <gtest/gtest.h>
 #include <stdio.h>
 
+// Every solver flavour exercised here is a MiniSat: selecting one in a build
+// without the backend is an abort at solve time, so the whole file is gated.
+#ifdef USE_MINISAT
+
 void go(enum ifaceflag_t f)
 {
   VC vc;
@@ -61,3 +65,5 @@ TEST(stp_test, MSP)
 {
   go(MSP);
 }
+
+#endif // USE_MINISAT

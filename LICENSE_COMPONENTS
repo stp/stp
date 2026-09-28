@@ -3,8 +3,45 @@ STP imports code from the following libraries:
 	* CVC's SMT-LIB Parser  Copyright (C) 2004 by the Board of Trustees
 		of Leland Stanford Junior University and by New York University.
 	* ABC Copyright (c) The Regents of the University of California.
-	* Windows msc99hdr Copyright (c) 2006-2008 Alexander Chemeris
-		Copyright (c) 2000 Jeroen Ruigrok van der Werven <asmodai@FreeBSD.org>
+	* mimalloc Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen.
+	* SymFPU copyright (C) by the authors from 2018.
+	* LibBF Copyright (c) 2017-2025 Fabrice Bellard (folds the real
+		literals in floating-point input).
+	* ankerl::unordered_dense Copyright (c) 2022-2024 Martin Leitner-Ankerl.
+	* CLI11 Copyright (c) 2017-2026 University of Cincinnati (only compiled
+		into the stp command-line tool, not into the library).
+	* IMath Copyright (c) 2002-2009 Michael J. Fromberger. Not imported:
+		cmake/FindIMath.cmake fetches v1.35 commit
+		a4de3dea7e65e2374a91d9938e292b887896fd24 and builds `imath.c` and
+		`imrat.c` from it, statically, into `libstp`. STP applies one pinned
+		patch, kept beside that module, which renames IMath's GMP-shaped
+		private type and makes its tuning globals immutable.
+
+STP is built against a SAT solver, which it does not import but does link.
+Which solvers are present depends on the build configuration, and a static
+build puts their code inside the binary, so the released binaries carry them:
+	* CryptoMiniSat Copyright (C) 2009-2020 Authors of CryptoMiniSat. The
+		released binaries are built against it.
+	* CaDiCaL Copyright (c) 2016-2026 by the authors listed below, and
+		CadiBack Copyright (c) 2023 Armin Biere. CryptoMiniSat 5.14 builds
+		both and bundles them into its own library, so they are present
+		whenever CryptoMiniSat is, as well as when CaDiCaL is selected
+		directly with -DUSE_CADICAL=ON.
+	* MiniSat Copyright (c) 2003-2010 Niklas Een, Niklas Sorensson, when
+		selected with -DUSE_MINISAT=ON.
+
+STP can also be built against HiGHS, an LP and MIP solver that it likewise
+links but does not import:
+	* HiGHS Copyright (c) 2024 HiGHS, when built with -DENABLE_HIGHS=ON.
+		What STP builds itself is release 1.12.0, to which, with
+		-DENABLE_HIGHS_CUT_LOG=ON, it first applies
+		cmake/deps-utils/highs-root-cut-log.patch: a callback reporting how
+		HiGHS derived the cuts it adds at the root of a MIP search. The
+		patched files stay under HiGHS's licence.
+
+Our build system includes third-party CMake modules (these are not compiled
+into STP, but they are distributed with it):
+	* GetGitRevisionDescription.cmake Copyright Iowa State University 2009-2010.
 
 For testing purposes we also use (but do not compile STP with):
 	* llvm-lit Copyright (c) 2003-2014 University of Illinois at Urbana-Champaign.
@@ -14,6 +51,30 @@ For testing purposes we also use (but do not compile STP with):
 
 Individual licenses are listed below
 ================================================================================
+
+IMath
+	IMath is Copyright © 2002-2009 Michael J. Fromberger
+	You may use it subject to the following Licensing Terms:
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy of
+	this software and associated documentation files (the "Software"), to deal in
+	the Software without restriction, including without limitation the rights to
+	use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+	of the Software, and to permit persons to whom the Software is furnished to do
+	so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+The notice above is reproduced from the fetched source's LICENSE.
 
 Bit::Vector
 	This package with all its parts is
@@ -31,6 +92,13 @@ Bit::Vector
 
 	Please refer to the files "Artistic.txt", "GNU_GPL.txt" and
 	"GNU_LGPL.txt" in this distribution, respectively, for details!
+
+	[STP note: only the C library at the core of the module is imported, as
+	lib/extlib-constbv. The three license files named above are part of the
+	original Bit::Vector distribution and are not reproduced here; see
+	https://dev.perl.org/licenses/ for the Artistic License and the GNU
+	General Public License, and https://www.gnu.org/licenses/lgpl-2.0.html
+	for the GNU Library General Public License.]
 
 CVC's SMT-LIB Parser
 	\file smtlib.y
@@ -72,75 +140,340 @@ ABC
 	AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATION TO PROVIDE MAINTENANCE,
 	SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 
-Windows msc99hdr
-	Copyright (c) 2006-2008 Alexander Chemeris
-	Copyright (c) 2000 Jeroen Ruigrok van der Werven <asmodai@FreeBSD.org>
+mimalloc
+	MIT License
 
-	Redistribution and use in source and binary forms, with or without
-	modification, are permitted provided that the following conditions are met:
+	Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen
 
-		1. Redistributions of source code must retain the above copyright notice,
-			this list of conditions and the following disclaimer.
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
 
-		2. Redistributions in binary form must reproduce the above copyright
-			notice, this list of conditions and the following disclaimer in the
-			documentation and/or other materials provided with the distribution.
-
-		3. The name of the author may be used to endorse or promote products
-			derived from this software without specific prior written permission.
-
-	THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
-	WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-	MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
-	EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-	PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
-	OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
-	WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-	OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-	ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-LLVM integration tester (llvm-lit)
-	University of Illinois/NCSA
-	Open Source License
-
-	Copyright (c) 2003-2014 University of Illinois at Urbana-Champaign.
-	All rights reserved.
-
-	Developed by:
-
-		LLVM Team
-
-		University of Illinois at Urbana-Champaign
-
-		http://llvm.org
-
-	Permission is hereby granted, free of charge, to any person obtaining a copy of
-	this software and associated documentation files (the "Software"), to deal with
-	the Software without restriction, including without limitation the rights to
-	use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
-	of the Software, and to permit persons to whom the Software is furnished to do
-	so, subject to the following conditions:
-
-		* Redistributions of source code must retain the above copyright notice,
-			this list of conditions and the following disclaimers.
-
-		* Redistributions in binary form must reproduce the above copyright notice,
-			this list of conditions and the following disclaimers in the
-			documentation and/or other materials provided with the distribution.
-
-		* Neither the names of the LLVM Team, University of Illinois at
-			Urbana-Champaign, nor the names of its contributors may be used to
-			endorse or promote products derived from this Software without specific
-			prior written permission.
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
 
 	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-	FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-	CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
+
+SymFPU
+	SymFPU is available under a choice of two licenses, GPL V3 or BSD
+	3-Clause; STP uses it under the BSD 3-Clause license, reproduced here.
+
+	SymFPU is copyright (C) by the authors from 2018
+
+	Redistribution and use in source and binary forms, with or without
+	modification, are permitted provided that the following conditions are
+	met:
+
+	    (1) Redistributions of source code must retain the above copyright
+	        notice, this list of conditions and the following disclaimer.
+
+	    (2) Redistributions in binary form must reproduce the above copyright
+	        notice, this list of conditions and the following disclaimer in
+	        the documentation and/or other materials provided with the
+	        distribution.
+
+	    (3) The name of the author may not be used to
+	        endorse or promote products derived from this software without
+	        specific prior written permission.
+
+	THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+	IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+	WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+	DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+	INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+	(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+	SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+	IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+	POSSIBILITY OF SUCH DAMAGE.
+
+LibBF
+	MIT License
+
+	STP builds the library proper out of a mirror of the upstream release
+	tarballs (https://github.com/stp/libbf), fetched at a pinned commit. It
+	is two pairs of files, carrying a copyright line each:
+
+	libbf.c and libbf.h: Copyright (c) 2017-2025 Fabrice Bellard
+	cutils.c and cutils.h: Copyright (c) 2017 Fabrice Bellard
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+ankerl::unordered_dense
+	Licensed under the MIT License <http://opensource.org/licenses/MIT>.
+	SPDX-License-Identifier: MIT
+	Copyright (c) 2022-2024 Martin Leitner-Ankerl <martin.ankerl@gmail.com>
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+CLI11
+	CLI11 2.7.2 Copyright (c) 2017-2026 University of Cincinnati, developed by Henry
+	Schreiner under NSF AWARD 1414736. All rights reserved.
+
+	Redistribution and use in source and binary forms of CLI11, with or without
+	modification, are permitted provided that the following conditions are met:
+
+	1. Redistributions of source code must retain the above copyright notice, this
+	   list of conditions and the following disclaimer.
+	2. Redistributions in binary form must reproduce the above copyright notice,
+	   this list of conditions and the following disclaimer in the documentation
+	   and/or other materials provided with the distribution.
+	3. Neither the name of the copyright holder nor the names of its contributors
+	   may be used to endorse or promote products derived from this software without
+	   specific prior written permission.
+
+	THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+	ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+	WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+	DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+	ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+	(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+	ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+	(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+	SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+CryptoMiniSat
+	Copyright (C) 2009-2020 Authors of CryptoMiniSat, see AUTHORS file
+	All rights reserved.
+
+	The general priciple of the licensing is as follows. Everything that's
+	needed to run/build/install/link the system is MIT licensed. This allows
+	easy distribution and running of the system everywhere. Files that
+	have no copyright header are also MIT licensed. Note that in case you
+	compile with Bliss, then Bliss's GPL license affects the final executable
+	and library.
+
+	Everything else that's not needed to run/build/install/link is usually GPLv2
+	licensed or compatible (see the copyright headers.)
+
+	[STP note: STP links the CryptoMiniSat library, which is the MIT licensed
+	part, and STP does not build it with Bliss. The MIT
+	terms are reproduced here; for the GPLv2 text covering the parts STP does
+	not link, see the LICENSE.txt of a CryptoMiniSat checkout.]
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in
+	all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	THE SOFTWARE.
+
+CaDiCaL
+	MIT License
+
+	Copyright (c) 2016-2021 Armin Biere, Johannes Kepler University Linz, Austria
+	Copyright (c) 2020-2021 Mathias Fleury, Johannes Kepler University Linz, Austria
+	Copyright (c) 2020-2021 Nils Froleyks, Johannes Kepler University Linz, Austria
+	Copyright (c) 2022-2026 Katalin Fazekas, Vienna University of Technology, Austria
+	Copyright (c) 2021-2026 Armin Biere, University of Freiburg, Germany
+	Copyright (c) 2021-2026 Mathias Fleury, University of Freiburg, Germany
+	Copyright (c) 2023-2026 Florian Pollitt, University of Freiburg, Germany
+	Copyright (c) 2024-2026 Tobias Faller, University of Freiburg, Germany
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+CadiBack
+	MIT License
+
+	Copyright (c) 2023 Armin Biere
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+MiniSat
+	MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
+	           Copyright (c) 2007-2010  Niklas Sorensson
+
+	Permission is hereby granted, free of charge, to any person obtaining a
+	copy of this software and associated documentation files (the
+	"Software"), to deal in the Software without restriction, including
+	without limitation the rights to use, copy, modify, merge, publish,
+	distribute, sublicense, and/or sell copies of the Software, and to
+	permit persons to whom the Software is furnished to do so, subject to
+	the following conditions:
+
+	The above copyright notice and this permission notice shall be included
+	in all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+	NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+	LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+	OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+	WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+HiGHS
+	MIT License
+
+	Copyright (c) 2024 HiGHS
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+	[STP note: reproduced from the LICENSE.txt of HiGHS release 1.12.0.]
+
+GetGitRevisionDescription.cmake (cmake/modules)
+	Original Author:
+	2009-2010 Ryan Pavlik <rpavlik@iastate.edu> <abiryan@ryand.net>
+	Iowa State University HCI Graduate Program/VRAC
+
+	Copyright Iowa State University 2009-2010.
+	Distributed under the Boost Software License, Version 1.0.
+
+	Permission is hereby granted, free of charge, to any person or organization
+	obtaining a copy of the software and accompanying documentation covered by
+	this license (the "Software") to use, reproduce, display, distribute,
+	execute, and transmit the Software, and to prepare derivative works of the
+	Software, and to permit third-parties to whom the Software is furnished to
+	do so, all subject to the following:
+
+	The copyright notices in the Software and this entire statement, including
+	the above license grant, this restriction and the following disclaimer,
+	must be included in all copies of the Software, in whole or in part, and
+	all derivative works of the Software, unless such copies or derivative
+	works are solely in the form of machine-executable object code generated by
+	a source language processor.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
+	SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
+	FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
+	ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+	DEALINGS IN THE SOFTWARE.
+
+LLVM integration tester (llvm-lit)
+	The LLVM Project, of which lit is part, is under the Apache License v2.0
+	with LLVM Exceptions. The Apache License v2.0 runs to some two hundred
+	lines and is not reproduced here; it is at
+	http://www.apache.org/licenses/LICENSE-2.0 and in the LICENSE.TXT that
+	ships inside a lit installation. The exceptions LLVM adds to it are:
+
+	---- LLVM Exceptions to the Apache 2.0 License ----
+
+	As an exception, if, as a result of your compiling your source code, portions
+	of this Software are embedded into an Object form of such source code, you
+	may redistribute such embedded portions in such Object form without complying
+	with the conditions of Sections 4(a), 4(b) and 4(d) of the License.
+
+	In addition, if you combine or link compiled forms of this Software with
+	software that is licensed under the GPLv2 ("Combined Software") and if a
+	court of competent jurisdiction determines that the patent provision (Section
+	3), the indemnity provision (Section 9) or other Section of the License
+	conflicts with the conditions of the GPLv2, you may retroactively and
+	prospectively choose to deem waived or otherwise exclude such Section(s) of
+	the License, but only in their entirety and only with respect to the Combined
+	Software.
+
+	[STP note: lit is installed separately, with e.g. `pip install lit`, and is
+	run to drive the test suites. No part of it is compiled into or distributed
+	with STP, so these terms are recorded for completeness rather than to meet
+	a redistribution condition. LLVM relicensed in 2019, from the University of
+	Illinois/NCSA Open Source License to the above; lit releases predating that
+	carry the NCSA terms, which LLVM still reproduces in its LICENSE.TXT under
+	the heading "Legacy LLVM License". This entry was checked against lit
+	16.0.6.]
 
 OutputCheck
 	Copyright (c) 2014, Daniel Liew All rights reserved.

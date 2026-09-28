@@ -34,6 +34,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/StrengthReduction.h"
+#include "stp/Util/BitOps.h"
+#include "stp/Util/CBVOps.h"
 #include <iostream>
 #include <map>
 
@@ -41,8 +43,6 @@ using std::map;
 
 namespace stp
 {
-
-  using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 
   void UnsignedIntervalAnalysis::stats()
   {
@@ -82,32 +82,8 @@ namespace stp
     // untouched and its chunks below are all-zero against an upper
     // bound or all-one against a lower bound. ----
 
-    // The 64 bits of x starting at any bit offset, as a machine word.
-    // Chunk_Read clamps at the vector's width and reads zero past it, so
-    // no guards are needed. Two 32-bit reads because Chunk_Read is
-    // capped at the bits of an unsigned long, which isn't 64 everywhere.
-    uint64_t chunkAt(const CBV x, unsigned offset)
-    {
-      uint64_t r = CONSTANTBV::BitVector_Chunk_Read(x, 32, offset);
-      r |= (uint64_t)CONSTANTBV::BitVector_Chunk_Read(x, 32, offset + 32)
-           << 32;
-      return r;
-    }
-
-    // Bits [64k, 64k+63] of x as a machine word.
-    uint64_t chunk64(const CBV x, unsigned k)
-    {
-      return chunkAt(x, 64 * k);
-    }
-
-    // The inverse of chunk64. The value's bits above the vector's width
-    // must be zero.
-    void setChunk64(CBV x, unsigned k, uint64_t value)
-    {
-      const unsigned offset = 64 * k;
-      CONSTANTBV::BitVector_Chunk_Store(x, 32, offset, value);
-      CONSTANTBV::BitVector_Chunk_Store(x, 32, offset + 32, value >> 32);
-    }
+    // chunkAt / chunk64 / setChunk64, which the drivers below run over,
+    // are shared: see Util/CBVOps.h.
 
     // Which operand a chunk kernel changed.
     enum class Changed
@@ -251,7 +227,7 @@ namespace stp
       uint64_t candidates = (a ^ c) & chunkMask;
       while (candidates != 0)
       {
-        const uint64_t m = (uint64_t)1 << (63 - __builtin_clzll(candidates));
+        const uint64_t m = (uint64_t)1 << (63 - ::stp::countLeadingZeroes64(candidates));
         if (c & m) // and not a: raising a can cancel c's bit
         {
           const uint64_t raised = (a | m) & ~(m - 1);
@@ -290,7 +266,7 @@ namespace stp
       uint64_t candidates = b & d & chunkMask;
       while (candidates != 0)
       {
-        const uint64_t m = (uint64_t)1 << (63 - __builtin_clzll(candidates));
+        const uint64_t m = (uint64_t)1 << (63 - ::stp::countLeadingZeroes64(candidates));
         uint64_t lowered = (b & ~m) | (m - 1);
         if (lowered >= aEff)
         {
@@ -752,69 +728,74 @@ namespace stp
     // ---- Helpers for the multiplication bounds. The bitvectors in this
     // group share one width, chosen wide enough that nothing overflows. ----
 
-    CBV zeroOf(unsigned width)
-    {
-      return CONSTANTBV::BitVector_Create(width, true);
-    }
-
     // A fresh copy of x at a bigger width.
     CBV widenTo(const CBV x, unsigned width)
     {
       assert(width >= bits_(x));
-      CBV r = zeroOf(width);
+      CBV r = mkZero(width);
       CONSTANTBV::BitVector_Interval_Copy(r, x, 0, 0, bits_(x));
       return r;
     }
 
     CBV mulFresh(const CBV x, const CBV y)
     {
-      CBV r = zeroOf(bits_(x));
+      CBV r = mkZero(bits_(x));
       CBV tmp = CONSTANTBV::BitVector_Clone(x); // Mul_Pos destroys this one.
-      CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Mul_Pos(r, tmp, y, true);
+      [[maybe_unused]] CONSTANTBV::ErrCode e =
+          CONSTANTBV::BitVector_Mul_Pos(r, tmp, y, true);
       assert(0 == e);
       CONSTANTBV::BitVector_Destroy(tmp);
       return r;
     }
 
-    typedef unsigned __int128 uint128;
+#ifdef __SIZEOF_INT128__
+    // A type wide enough to hold the product of two word-path values.
+    __extension__ typedef unsigned __int128 uwide;
+    static const unsigned wordPathMaxWidth = 64;
+#else
+    // No 128-bit type (e.g. 32-bit targets), so the word-level path
+    // runs at half scale; wider multiplications use the bignum
+    // fallback instead.
+    typedef uint64_t uwide;
+    static const unsigned wordPathMaxWidth = 32;
+#endif
 
-    // The low (up to 64) bits of x as a machine word.
-    uint64_t low64(const CBV x)
-    {
-      return chunk64(x, 0);
-    }
-
-    // A fresh CBV holding a machine word. Needs value < 2^width.
-    CBV cbvFromU64(unsigned width, uint64_t value)
-    {
-      CBV r = CONSTANTBV::BitVector_Create(width, true);
-      setChunk64(r, 0, value);
-      return r;
-    }
+    // low64 and cbvFromU64 are shared: see Util/CBVOps.h.
 
     // The minimum of (a*i + b) mod m over 0 <= i < n; requires n >= 1,
-    // a < m and b < m, with m <= 2^64 so nothing here can overflow.
+    // a < m and b < m, with m <= 2^wordPathMaxWidth so nothing here can
+    // overflow.
     // Between wraps the values only grow, so the minimum is b or a
     // post-wrap residue; the residues just after each wrap follow the
     // progression b1 + j*((-m) mod a) inside [0, a), which the loop
-    // chases Euclid-style: O(log m) iterations.
-    uint128 minlin(uint128 n, uint128 m, uint128 a, uint128 b)
+    // chases Euclid-style. A step above m/2 first flips to the same
+    // progression walked backwards, so the modulus at least halves
+    // every level: O(log m) iterations.
+    uwide minlin(uwide n, uwide m, uwide a, uwide b)
     {
-      uint128 best = b;
+      uwide best = b;
       while (true)
       {
         if (b < best)
           best = b; // the value at i = 0 of this level
         if (a == 0 || n == 1)
           return best;
-        const uint128 firstWrap = (m - b + a - 1) / a;
+        if (a > m / 2)
+        {
+          // The same value set, traversed from its last element with
+          // the complementary step.
+          b = (b + (n - 1) * a) % m;
+          a = m - a;
+          continue;
+        }
+        const uwide firstWrap = (m - b + a - 1) / a;
         if (firstWrap >= n)
           return best; // never wraps, so the values only grow from b
-        const uint128 wraps = (b + (n - 1) * a) / m;
-        const uint128 afterWrap = b + firstWrap * a - m; // in [0, a)
+        const uwide wraps = (b + (n - 1) * a) / m;
+        const uwide afterWrap = b + firstWrap * a - m; // in [0, a)
         n = wraps;
         b = afterWrap;
-        const uint128 step = (a - m % a) % a;
+        const uwide step = (a - m % a) % a;
         m = a;
         a = step;
       }
@@ -822,7 +803,7 @@ namespace stp
 
     // The maximum, by reflection: max(v) = m-1 - min(m-1-v), and
     // m-1-(a*i+b) mod m is the progression ((m-a)*i + (m-1-b)) mod m.
-    uint128 maxlin(uint128 n, uint128 m, uint128 a, uint128 b)
+    uwide maxlin(uwide n, uwide m, uwide a, uwide b)
     {
       return m - 1 - minlin(n, m, (m - a) % m, m - 1 - b);
     }
@@ -830,8 +811,8 @@ namespace stp
     // The exact bounds of the progression start, start + step, ...
     // (count terms, mod m), where m is a power of two, step < m and
     // start < m.
-    void progressionHull(uint128 start, uint128 step, uint128 count,
-                         uint128 m, uint128& mn, uint128& mx)
+    void progressionHull(uwide start, uwide step, uwide count,
+                         uwide m, uwide& mn, uwide& mx)
     {
       if (step == 0)
       {
@@ -841,7 +822,7 @@ namespace stp
       // The progression repeats with period m / gcd; a count covering a
       // full period hits exactly the residues congruent to start modulo
       // the gcd.
-      const uint128 gcd = (uint128)1 << __builtin_ctzll((uint64_t)step);
+      const uwide gcd = (uwide)1 << ::stp::countTrailingZeroes64((uint64_t)step);
       if (count >= m / gcd)
       {
         mn = start & (gcd - 1);
@@ -862,23 +843,23 @@ namespace stp
     // written into resultMin/resultMax; both stay null if nothing is
     // known. Exact when the bound products land in the same 2^width block,
     // and when either operand has at most smallSideLimit values (at
-    // widths up to 64).
+    // widths up to wordPathMaxWidth).
     void multiplyPair(const CBV a, const CBV b, const CBV c, const CBV d,
                       unsigned width, CBV& resultMin, CBV& resultMax)
     {
       resultMin = nullptr;
       resultMax = nullptr;
 
-      if (width <= 64)
+      if (width <= wordPathMaxWidth)
       {
         const uint64_t aV = low64(a), bV = low64(b);
         const uint64_t cV = low64(c), dV = low64(d);
-        const uint128 m = (uint128)1 << width;
+        const uwide m = (uwide)1 << width;
 
-        const uint128 lowProduct = (uint128)aV * cV;
-        const uint128 highProduct = (uint128)bV * dV;
+        const uwide lowProduct = (uwide)aV * cV;
+        const uwide highProduct = (uwide)bV * dV;
 
-        uint128 apMin, apMax;
+        uwide apMin, apMax;
         bool known = false;
 
         if ((lowProduct >> width) == (highProduct >> width))
@@ -900,8 +881,8 @@ namespace stp
           const uint64_t fixedLo = xSmall ? aV : cV;
           const uint64_t fixedHi = xSmall ? bV : dV;
           const uint64_t movingLo = xSmall ? cV : aV;
-          const uint128 movingCount =
-              (uint128)(xSmall ? dV - cV : bV - aV) + 1;
+          const uwide movingCount =
+              (uwide)(xSmall ? dV - cV : bV - aV) + 1;
 
           if (fixedHi - fixedLo < smallSideLimit)
           {
@@ -909,8 +890,8 @@ namespace stp
             apMax = 0;
             for (uint64_t v = fixedLo;; v++)
             {
-              uint128 pmn, pmx;
-              progressionHull(((uint128)v * movingLo) & (m - 1), v,
+              uwide pmn, pmx;
+              progressionHull(((uwide)v * movingLo) & (m - 1), v,
                               movingCount, m, pmn, pmx);
               if (pmn < apMin)
                 apMin = pmn;
@@ -926,8 +907,8 @@ namespace stp
 
         if (known)
         {
-          resultMin = zeroOf(width);
-          resultMax = zeroOf(width);
+          resultMin = mkZero(width);
+          resultMax = mkZero(width);
           for (unsigned i = 0; i < width; i++)
           {
             if ((apMin >> i) & 1)
@@ -939,7 +920,7 @@ namespace stp
         return;
       }
 
-      // Bignum fallback for widths over 64: the same-block case only.
+      // Bignum fallback for wider values: the same-block case only.
       // Wide enough for the bound products.
       const unsigned wide = 2 * width + 2;
 
@@ -962,8 +943,8 @@ namespace stp
         // Every product sits between the bound products, which agree above
         // the width, so the low bits run between the bounds' low bits
         // without wrapping: exact.
-        resultMin = zeroOf(width);
-        resultMax = zeroOf(width);
+        resultMin = mkZero(width);
+        resultMax = mkZero(width);
         for (unsigned i = 0; i < width; i++)
         {
           if (CONSTANTBV::BitVector_bit_test(lowProduct, i))
@@ -1005,7 +986,7 @@ namespace stp
 
     if (emptyCBV.find(width) == emptyCBV.end())
     {
-      emptyCBV[width] = CONSTANTBV::BitVector_Create(width, true);
+      emptyCBV[width] = mkZero(width);
     }
     
     assert(CONSTANTBV::BitVector_is_empty(emptyCBV[width]));  
@@ -1019,41 +1000,12 @@ namespace stp
 
     if (emptyIntervals.find(width) == emptyIntervals.end())
     {
-      stp::CBV min = CONSTANTBV::BitVector_Create(width, true);
-      stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
-      CONSTANTBV::BitVector_Fill(max);
-      emptyIntervals[width] = new UnsignedInterval(min,max);
+      emptyIntervals[width] = new UnsignedInterval(mkZero(width), allOnes(width));
     }
 
     UnsignedInterval* r = emptyIntervals[width];
     assert(r->isComplete());
     return r;
-  }
-
-  // Replace some of the things that unsigned intervals can figure out for us.
-  ASTNode UnsignedIntervalAnalysis::topLevel(const ASTNode& top)
-  {
-    propagatorNotImplemented = 0;
-    iterations=0;
-
-    bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
-
-    NodeToUnsignedIntervalMap visited;
-    visit(top, visited);
-
-    if (bm.UserFlags.stats_flag)
-      stats();
-
-    StrengthReduction sr(bm.defaultNodeFactory, &bm.UserFlags);
-    ASTNode result = sr.topLevel(top, visited);
-
-    // The intervals are only read during strength reduction, delete them now.
-    for (const auto& pair : visited)
-      delete pair.second;
-
-    bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
-
-    return result;
   }
 
   UnsignedInterval* UnsignedIntervalAnalysis::dispatchToTransferFunctions(const ASTNode&n, const vector<const UnsignedInterval*>& _children)
@@ -1182,6 +1134,123 @@ namespace stp
         }
         break;
 
+      // Unsigned overflow predicates. These are boolean (Form) nodes, so the
+      // operand width is read from the children, not from 'width' (which is 0
+      // for a boolean node). Only the three UNSIGNED predicates are handled:
+      // the unsigned interval domain carries no signed-range information, so it
+      // cannot soundly decide BVSADDO/BVSMULO/BVSSUBO.
+
+      case BVUSUBO:
+        // Unsigned subtraction overflows (borrows) iff a <u b, mirroring
+        // BVGT(b, a). The comparison of the attained unsigned extremes decides
+        // it for every point in the operand box. An unknown operand is the
+        // full range [0, 2^w-1] (substituted above), so this stays exact even
+        // when only one side pins the result (e.g. a - 0 never borrows).
+        {
+          const UnsignedInterval* a = children[0];
+          const UnsignedInterval* b = children[1];
+
+          if (CONSTANTBV::BitVector_Lexicompare(a->maxV, b->minV) < 0)
+            // even the largest a is below the smallest b: always borrows.
+            result = createInterval(littleOne, littleOne);
+          else if (CONSTANTBV::BitVector_Lexicompare(a->minV, b->maxV) >= 0)
+            // even the smallest a is at least the largest b: never borrows.
+            result = createInterval(littleZero, littleZero);
+        }
+        break;
+
+      case BVUADDO:
+        // Unsigned add overflows iff a + b >= 2^w, i.e. the width-w addition
+        // carries out. The integer sum ranges over [minV+minV, maxV+maxV], so
+        // if the maxes don't carry no point overflows, and if the mins carry
+        // every point overflows. An unknown operand is the full range (see
+        // above), so a + 0 is still resolved to "never overflows".
+        {
+          const unsigned w = children[0]->getWidth();
+          CBV tmp = CONSTANTBV::BitVector_Create(w, true);
+
+          bool carryMax = false;
+          CONSTANTBV::BitVector_add(tmp, children[0]->maxV, children[1]->maxV,
+                                    &carryMax);
+          bool carryMin = false;
+          CONSTANTBV::BitVector_add(tmp, children[0]->minV, children[1]->minV,
+                                    &carryMin);
+          CONSTANTBV::BitVector_Destroy(tmp);
+
+          if (!carryMax)
+            result = createInterval(littleZero, littleZero);
+          else if (carryMin)
+            result = createInterval(littleOne, littleOne);
+        }
+        break;
+
+      case BVUMULO:
+        // Unsigned multiply overflows iff a * b >= 2^w. The product is monotone
+        // in both operands, so it ranges over [minV*minV, maxV*maxV]: if the
+        // max-product doesn't overflow no point does, and if the min-product
+        // overflows every point does. An unknown operand is the full range
+        // (see above), so e.g. a * 0 resolves to "never overflows".
+        //
+        // Whether one product X*Y overflows is decided by a leading-zeros
+        // screen first (Hacker's Delight 2-13). With bit-lengths bx and by
+        // (highest set bit + 1) we have 2^(bx+by-2) <= X*Y < 2^(bx+by), so:
+        //   bx == 0 or by == 0  -> product is 0, no overflow
+        //   bx + by <= w        -> largest possible product < 2^w, no overflow
+        //   bx + by >= w + 2    -> smallest possible product >= 2^w, overflow
+        //   bx + by == w + 1    -> ambiguous; fall back to an exact multiply.
+        // The screen decides every case where the operands aren't both close to
+        // a power-of-two boundary (in particular all the fully-/half-unknown
+        // cases), so the expensive multiply is rarely reached.
+        {
+          const unsigned w = children[0]->getWidth();
+          const unsigned ew = 2 * w + 1;
+
+          // Exact fallback: zero-extend both operands into 2w+1 bits (so the
+          // signed BitVector_Multiply computes the unsigned product) and test
+          // for a set bit at index >= w.
+          auto exactOverflows = [&](CBV a, CBV b) -> bool {
+            CBV a2 = CONSTANTBV::BitVector_Create(ew, true);
+            CBV b2 = CONSTANTBV::BitVector_Create(ew, true);
+            CBV prod = CONSTANTBV::BitVector_Create(ew, true);
+            CONSTANTBV::BitVector_Interval_Copy(a2, a, 0, 0, w);
+            CONSTANTBV::BitVector_Interval_Copy(b2, b, 0, 0, w);
+            CONSTANTBV::BitVector_Multiply(prod, a2, b2);
+            bool of = false;
+            for (unsigned i = w; i < ew && !of; i++)
+              if (CONSTANTBV::BitVector_bit_test(prod, i))
+                of = true;
+            CONSTANTBV::BitVector_Destroy(a2);
+            CONSTANTBV::BitVector_Destroy(b2);
+            CONSTANTBV::BitVector_Destroy(prod);
+            return of;
+          };
+
+          auto productOverflows = [&](CBV a, CBV b) -> bool {
+            // Set_Max is the highest set bit's index, or negative if the value
+            // is zero; bit-length is that index + 1.
+            const signed long topA = CONSTANTBV::Set_Max(a);
+            const signed long topB = CONSTANTBV::Set_Max(b);
+            if (topA <= 0 || topB <= 0)
+              // a or b is 0 or 1 (Set_Max < 0 means 0, == 0 means 1), so the
+              // product is 0 or the other operand, which is below 2^w. This
+              // also keeps 1 * (full-width) out of the ambiguous band below.
+              return false;
+            const unsigned long bitsSum =
+                (unsigned long)topA + (unsigned long)topB + 2; // bx + by
+            if (bitsSum <= w)
+              return false;
+            if (bitsSum >= (unsigned long)w + 2)
+              return true;
+            return exactOverflows(a, b); // bx + by == w + 1
+          };
+
+          if (!productOverflows(children[0]->maxV, children[1]->maxV))
+            result = createInterval(littleZero, littleZero);
+          else if (productOverflows(children[0]->minV, children[1]->minV))
+            result = createInterval(littleOne, littleOne);
+        }
+        break;
+
       case BVDIV:
       {
         const UnsignedInterval* top = children[0];
@@ -1226,7 +1295,7 @@ namespace stp
         // divisor. Division by zero gives all ones, so this lower bound
         // holds even if the divisor might be zero.
         CBV dividend = CONSTANTBV::BitVector_Clone(top->minV);
-        CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
+        [[maybe_unused]] CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
             result->minV, dividend, c1->maxV, remainder);
         assert(0 == e);
         CONSTANTBV::BitVector_Destroy(dividend);
@@ -1333,8 +1402,9 @@ namespace stp
             CBV quotientMax = CONSTANTBV::BitVector_Create(width, true);
 
             CBV dividend = CONSTANTBV::BitVector_Clone(children[0]->minV);
-            CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
-                quotientMin, dividend, divisor, remainderMin);
+            [[maybe_unused]] CONSTANTBV::ErrCode e =
+                CONSTANTBV::BitVector_Div_Pos(quotientMin, dividend, divisor,
+                                              remainderMin);
             assert(0 == e);
             CONSTANTBV::BitVector_Destroy(dividend);
 
@@ -1741,7 +1811,7 @@ namespace stp
         {
           const uint64_t diff = chunk64(c0->minV, k) ^ chunk64(c0->maxV, k);
           if (diff != 0)
-            highestDiff = 64 * k + 63 - __builtin_clzll(diff);
+            highestDiff = 64 * k + 63 - ::stp::countLeadingZeroes64(diff);
         }
 
         // Four chunk buffers; on the stack for widths up to 1024.
@@ -1878,19 +1948,28 @@ namespace stp
           uint64_t* mnSum = buf;
           uint64_t* mxSum = buf + K;
 
-          uint128 mnCarry = 0, mxCarry = 0;
+          // The carry out of a chunk is the number of times its 64-bit
+          // sum wrapped; counting the wraps keeps the totals exact
+          // without needing an integer type wider than the chunks.
+          uint64_t mnCarry = 0, mxCarry = 0;
           for (unsigned k = 0; k < K; k++)
           {
-            uint128 mns = mnCarry, mxs = mxCarry;
+            uint64_t mns = mnCarry, mxs = mxCarry;
+            mnCarry = 0;
+            mxCarry = 0;
             for (unsigned i = 0; i < children.size(); i++)
             {
-              mns += chunk64(children[i]->minV, k);
-              mxs += chunk64(children[i]->maxV, k);
+              const uint64_t mnc = chunk64(children[i]->minV, k);
+              const uint64_t mxc = chunk64(children[i]->maxV, k);
+              mns += mnc;
+              if (mns < mnc)
+                mnCarry++;
+              mxs += mxc;
+              if (mxs < mxc)
+                mxCarry++;
             }
-            mnSum[k] = (uint64_t)mns;
-            mxSum[k] = (uint64_t)mxs;
-            mnCarry = mns >> 64;
-            mxCarry = mxs >> 64;
+            mnSum[k] = mns;
+            mxSum[k] = mxs;
           }
 
           // The totals share a block exactly when they agree above the
@@ -1968,49 +2047,10 @@ namespace stp
     return result;
   }
 
-  UnsignedInterval* UnsignedIntervalAnalysis::visit(const ASTNode& n,
-                          NodeToUnsignedIntervalMap& visited)
+  UnsignedIntervalAnalysis::UnsignedIntervalAnalysis()
   {
-    {
-      NodeToUnsignedIntervalMap::iterator it;
-      if ((it = visited.find(n)) != visited.end())
-        return it->second;
-    }
-
-    if (n.GetKind() == SYMBOL || n.GetKind() == WRITE || n.GetKind() == READ)
-    {
-      // Never know anything about these.
-      visited.insert({n, NULL});
-      return NULL;
-    }
-
-    const auto number_children = n.Degree();
-    vector<const UnsignedInterval*> children;
-
-    children.reserve(number_children);
-
-    for (unsigned i = 0; i < number_children; i++)
-    {
-      UnsignedInterval* r = visit(n[i], visited);
-      if (r != NULL)
-      {
-        assert(!r->isComplete());
-      }
-      children.push_back(r);
-    }
-
-    UnsignedInterval* result = dispatchToTransferFunctions(n,children);
-
-    // result will often be null (which we take to mean the maximum range).
-    visited.insert({n, result});
-    return result;
-  }
-
-  UnsignedIntervalAnalysis::UnsignedIntervalAnalysis(STPMgr& _bm) : bm(_bm)
-  {
-    littleZero = getEmptyCBV(1);
-    littleOne = CONSTANTBV::BitVector_Create(1, true);
-    CONSTANTBV::BitVector_Fill(littleOne);
+    littleZero = getEmptyCBV(1); // owned by emptyCBV, not by us.
+    littleOne = mkOne(1);
   }
 
   UnsignedIntervalAnalysis::~UnsignedIntervalAnalysis()

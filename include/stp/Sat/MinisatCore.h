@@ -31,9 +31,12 @@ THE SOFTWARE.
 
 #include "SATSolver.h"
 
+#include <memory>
+
 namespace Minisat
 {
 class Solver;
+class Terminator;
 }
 
 namespace stp
@@ -48,42 +51,67 @@ namespace stp
 {
   Minisat::Solver* s;
 
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  // Polled by MiniSat wherever its own budgets are, so that the deadline
+  // SATSolver already owns can stop a search in progress. Held by pointer
+  // because MiniSat's header is not included here.
+  std::unique_ptr<Minisat::Terminator> deadline_terminator;
+#endif
+
 public:
   MinisatCore();
 
   ~MinisatCore();
 
-  bool addClause(const vec_literals& ps); // Add a clause to the solver.
 
-  bool okay() const; // FALSE means solver is in a conflicting state
 
-  bool solve(bool& timeout_expired); // Search without assumptions.
+  bool okay() const override; // FALSE means solver is in a conflicting state
 
-  bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
+  void unsatAssumptions(const vec_literals& assumps,
+                        std::vector<int>& out) override;
 
-  virtual void setMaxConflicts(int64_t max_confl);
+  void setMaxConflicts(int64_t max_confl) override;
 
-  virtual bool simplify(); // Removes already satisfied clauses.
+  bool simplify() override; // Removes already satisfied clauses.
 
-  virtual uint8_t modelValue(uint32_t x) const;
+  uint8_t modelValue(uint32_t x) const override;
 
-  uint8_t value(uint32_t x) const;
+  uint32_t newVar() override;
 
-  virtual uint32_t newVar();
+  void setVerbosity(int v) override;
 
-  void setVerbosity(int v);
+  uint32_t nVars() const override;
 
-  unsigned long nVars() const;
+  void printStats() const override;
 
-  void printStats() const;
+  lbool true_literal() const override { return ((uint8_t)0); }
+  lbool false_literal() const override { return ((uint8_t)1); }
+  lbool undef_literal() const override { return ((uint8_t)2); }
 
-  virtual lbool true_literal() { return ((uint8_t)0); }
-  virtual lbool false_literal() { return ((uint8_t)1); }
-  virtual lbool undef_literal() { return ((uint8_t)2); }
+  bool reportsClauseCount() const override { return true; }
 
-  virtual int nClauses();
+  int nClauses() override;
 
-  //bool unitPropagate(const vec_literals& ps);
+
+  bool supportsAssumptions() const override { return true; }
+
+protected:
+  // MiniSat counts work, not time, so it cannot be handed a deadline the way
+  // CryptoMiniSat can. It can be asked to stop, though, which is enough: the
+  // terminator connected in the constructor reads the budget the base class is
+  // already keeping, and MiniSat polls it on every conflict and every restart.
+  //
+  // A MiniSat without the hook -- a distribution's, or anything older than
+  // stp/minisat 74c4aa2 -- keeps the previous answer, and its budget is only
+  // enforced between calls into the solver.
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  bool canInterruptSearch() const override { return true; }
+#endif
+
+  bool addClauseInternal(const vec_literals& ps) override;
+  bool solveInternal(bool& timeout_expired) override;
+  bool solveWithAssumptionsInternal(const vec_literals& assumps,
+                                    bool& timeout_expired) override;
 };
 }
 
