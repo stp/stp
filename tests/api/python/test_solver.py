@@ -271,6 +271,18 @@ def test_scripts_and_printing(tmp_path):
     s.close()
 
 
+def test_parse_term_runs_no_command():
+    # the text goes inside a command of its own; a ')' in it once closed that
+    # command and ran what followed against the solver
+    s = Solver()
+    s.add(BoolVal(False))
+    for text in ("true) (reset-assertions) (assert true", "true) (pop 1) (assert false", "true false"):
+        with pytest.raises(ParseError):
+            s.parse_term(text)
+    assert len(s.assertions()) == 1 and s.check() == unsat
+    s.close()
+
+
 def test_inputs_run_as_the_command_line_runs_them():
     # a CVC query decided and answered, in the command line's words
     s = Solver(TermManager())

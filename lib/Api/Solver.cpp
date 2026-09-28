@@ -1903,9 +1903,98 @@ void Solver::parse_file(std::string_view path, Format format)
              ParseMode::DECLARE_AND_ASSERT, "Solver::parse_file");
 }
 
+namespace
+{
+// Whether `text` is one SMT-LIB 2 term as the lexer (smt2.lex) reads it: an
+// atom or one parenthesised expression, with nothing but whitespace and
+// comments around it. A string literal ("" is its only escape), a quoted
+// symbol (|...|, no bar inside) and a comment (; to the end of the line) are
+// read as units, since any of them may hold a parenthesis. parse_term puts
+// the text inside a command of its own, so this is what keeps a ')' in it
+// from closing that command and running whatever follows.
+bool is_one_smt2_term(std::string_view text)
+{
+  const std::size_t n = text.size();
+  std::size_t i = 0;
+  int depth = 0;
+  bool started = false, finished = false;
+  const auto delimits = [](char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '(' || c == ')' ||
+           c == ';' || c == '"' || c == '|';
+  };
+  while (i < n)
+  {
+    const char c = text[i];
+    if (c == ';')
+    {
+      while (i < n && text[i] != '\n')
+        ++i;
+      continue;
+    }
+    if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
+    {
+      ++i;
+      continue;
+    }
+    if (finished)
+      return false; // something after the term
+    started = true;
+    if (c == '(')
+    {
+      ++depth;
+      ++i;
+      continue;
+    }
+    if (c == ')')
+    {
+      if (depth == 0)
+        return false;
+      --depth;
+      ++i;
+    }
+    else if (c == '"')
+    {
+      for (++i;; ++i)
+      {
+        if (i >= n)
+          return false; // unterminated
+        if (text[i] == '"')
+        {
+          if (i + 1 < n && text[i + 1] == '"')
+          {
+            ++i; // the escaped quote
+            continue;
+          }
+          ++i;
+          break;
+        }
+      }
+    }
+    else if (c == '|')
+    {
+      const std::size_t close = text.find('|', i + 1);
+      if (close == std::string_view::npos)
+        return false;
+      i = close + 1;
+    }
+    else
+      while (i < n && !delimits(text[i]))
+        ++i;
+    if (depth == 0)
+      finished = true;
+  }
+  return started && depth == 0;
+}
+} // namespace
+
 Term Solver::parse_term(std::string_view text) const
 {
   SolverImpl* s = live(*this, "Solver::parse_term");
+  // One term and nothing else, before anything is parsed: the text goes
+  // inside "(assert ...)", and a ')' in it would close that command and run
+  // what followed against this solver ("true) (reset-assertions) ...").
+  if (!is_one_smt2_term(text))
+    detail::fail_parse("Solver::parse_term", 1, 0, "the text is not exactly one term");
   STPMgr* bm = s->mgr->bm;
   detail::OutputRoute route(&detail::kNoOutput);
   std::lock_guard<std::mutex> hold(detail::parser_mutex());
@@ -1917,6 +2006,7 @@ Term Solver::parse_term(std::string_view text) const
   // prints (the route above).
   auto attempt = [&](const std::string& script, std::string& error) -> ASTNode {
     bm->Push();
+    const auto pushed = bm->getAssertLevel();
     struct Restore
     {
       STPMgr* bm;
@@ -1977,10 +2067,12 @@ Term Solver::parse_term(std::string_view text) const
       error = pi.last_error_message.empty() ? "syntax error" : pi.last_error_message;
       return ASTNode();
     }
+    // One assertion on the level pushed for it, as one term makes; the
+    // check before parsing is what guarantees it.
     const ASTVec& top = *bm->AssertLevels().back();
-    if (top.empty())
+    if (bm->getAssertLevel() != pushed || top.size() != 1)
     {
-      error = "the text is not a term";
+      error = "the text is not exactly one term";
       return ASTNode();
     }
     return top.back();
@@ -1989,11 +2081,13 @@ Term Solver::parse_term(std::string_view text) const
   // A Boolean term is asserted as it stands. Any other sort goes through
   // "(= t t)", whose first operand is t (a Boolean t cannot: the factory
   // makes one operand of the two, and the grammar refuses that).
-  ASTNode t = attempt("(assert " + std::string(text) + ")", error);
+  // (Each copy of the text ends its line, so that a comment closing it
+  // cannot swallow the parentheses after it.)
+  ASTNode t = attempt("(assert " + std::string(text) + "\n)", error);
   if (t.IsNull())
   {
     const ASTNode eq =
-        attempt("(assert (= " + std::string(text) + " " + std::string(text) + "))", error);
+        attempt("(assert (= " + std::string(text) + "\n " + std::string(text) + "\n))", error);
     if (eq.IsNull())
       detail::fail_parse("Solver::parse_term", smt2lineno, 0, error);
     if (eq.Degree() != 2)

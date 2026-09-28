@@ -268,6 +268,41 @@ TEST(Parsing, parse_file_by_extension)
   EXPECT_EQ(s2.assertions().size(), 1u);
 }
 
+// parse_term puts the text inside a command of its own, and a ')' in it used
+// to close that command and run what followed against the solver: "true)
+// (reset-assertions) (assert true" emptied an unsat solver, and "true) (pop 1)
+// (assert false" left false on the base level of an empty one. The text must
+// be exactly one term, and the solver is as it was whatever it holds.
+TEST(Parsing, parse_term_parses_one_term_and_runs_nothing)
+{
+  TermManager tm;
+  const Term px = tm.declare("px", tm.mk_bv_sort(8));
+  Solver s(tm);
+  s.add(tm.mk_false());
+  ASSERT_TRUE(s.check_sat().is_unsat());
+  for (const char* text : {"true) (reset-assertions) (assert true", "true) (pop 1) (assert false",
+                           "true (assert false)", "(bvadd px #x01) px", ")", "(bvadd px",
+                           "|px", "\"a)b", "; nothing but a comment"})
+    API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_term(text));
+  EXPECT_EQ(s.assertions().size(), 1u);
+  EXPECT_EQ(s.level(), 0u);
+  EXPECT_TRUE(s.check_sat().is_unsat());
+
+  Solver empty(tm);
+  API_EXPECT_ERROR(ErrorCode::PARSE, empty.parse_term("true) (pop 1) (assert false"));
+  EXPECT_TRUE(empty.assertions().empty());
+  EXPECT_TRUE(empty.check_sat().is_sat());
+
+  // what one term may hold: comments, a trailing one included, and a quoted
+  // symbol with a parenthesis in its name
+  const Term odd = tm.declare("a)b", tm.mk_bv_sort(8));
+  EXPECT_TRUE(s.parse_term("|a)b|").same_as(odd));
+  EXPECT_TRUE(s.parse_term("(bvadd px ; an operand\n #x01) ; the end")
+                  .same_as(bvadd(px, tm.mk_bv(8, 1))));
+  EXPECT_TRUE(s.parse_term("  px\n").same_as(px));
+  EXPECT_EQ(s.assertions().size(), 1u);
+}
+
 TEST(Parsing, parse_term)
 {
   TermManager tm;
