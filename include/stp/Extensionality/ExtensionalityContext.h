@@ -207,6 +207,12 @@ public:
     return !records.empty() || !currentLowerings.empty();
   }
 
+  // Whether this solve lowered any array equality. Unlike active(), it
+  // stays true after the eager arm retires the records: the proxies it
+  // leaves behind are still SAT variables, and the model still answers
+  // each equality through its lowering.
+  bool lowersAnyEquality() const { return !currentLowerings.empty(); }
+
   const std::vector<Record>& getRecords() const { return records; }
   size_t getActiveRecordCount() const { return activeRecordIds.size(); }
 

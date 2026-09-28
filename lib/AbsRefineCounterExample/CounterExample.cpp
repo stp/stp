@@ -3412,9 +3412,11 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
         // evaluation of the original formula there and cannot certify a
         // candidate whose surrogates are wrong -- it accepted one that
         // equated an array to a store of a product the exact product
-        // refuted.
+        // refuted. Nor after the eager arm decided the equalities: it
+        // retires the records, so the checker is not active, but each
+        // proxy is still the SAT solver's answer under the surrogates.
         if (bm->UserFlags.fp_abstraction_repair && fpRepairAllowed &&
-            !extActive)
+            !extActive && !(ext != NULL && ext->lowersAnyEquality()))
           orig_result = ComputeFormulaUsingModel(original_input);
         if (orig_result == ASTTrue)
         {
