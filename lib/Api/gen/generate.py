@@ -646,9 +646,8 @@ class Emitter:
             for key, val in implied_by.items():
                 ib_opt, ib_val = key, ('true' if val is True else 'false' if val is False else str(val))
             req = o.get('requires', {})
-            legacy = o.get('legacy', {})
             engine = o.get('engine', {})
-            rows.append('  { %s, %s, OptType::%s, %s, %s, %s, %s, %s, kOptValues%d, %d, Tier::%s, Settable::%s, OptionScope::%s, %s, %s, kOptAliases%d, %d, %s, %s, %s, %s, %s, kOptExcludes%d, %d, kOptImplies%d, %d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s },' % (
+            rows.append('  { %s, %s, OptType::%s, %s, %s, %s, %s, %s, kOptValues%d, %d, Tier::%s, Settable::%s, OptionScope::%s, %s, %s, kOptAliases%d, %d, %s, %s, %s, %s, %s, kOptExcludes%d, %d, kOptImplies%d, %d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s },' % (
                 cstr(o['name']), cstr(self.python_key(o['name'])), o['type'].upper(), cstr(self.default_text(o)),
                 'true' if 'min' in rng else 'false', c_i64(rng.get('min', 0)),
                 'true' if 'max' in rng else 'false', c_i64(rng.get('max', 0)),
@@ -662,7 +661,6 @@ class Emitter:
                 cstr(implies_note or None),
                 cstr(req.get('build')), cstr(req.get('option')), cstr(req.get('value')),
                 cstr(o.get('latched_by')), cstr(o.get('sentinel')),
-                cstr(legacy.get('letter')), cstr(legacy.get('iface_flag')), cstr(legacy.get('cli_unit')),
                 cstr(engine.get('field') or engine.get('custom') or engine.get('none')),
                 'true' if 'engine' in o else 'false',
                 cstr(o.get('cli_form', 'value')), cstr(o.get('cli_bad_value')),
@@ -816,8 +814,8 @@ class Emitter:
     def emit_stat_table(self):
         lines = [HEADER]
         for s in self.stats:
-            lines.append('  { %s, StatType::%s, Tier::%s, %s, %s },' % (
-                cstr(s['name']), s['type'].upper(), s['tier'].upper(), cstr(s.get('legacy')), cstr(s['help'])))
+            lines.append('  { %s, StatType::%s, Tier::%s, %s },' % (
+                cstr(s['name']), s['type'].upper(), s['tier'].upper(), cstr(s['help'])))
         self.write('lib/Api/gen/stat_table.inc', '\n'.join(lines) + '\n')
 
     # ----------------------------------------------------------------- python

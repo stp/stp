@@ -63,7 +63,6 @@
 #   excludes    entries that may not be set together (checked at resolve(), OPTION_CONFLICT)
 #   requires    { build = "cadical" | "highs" | "highs-cut-log" | "cryptominisat" | "minisat", option = "...", value = "..." }:
 #               OPTION_UNAVAILABLE in other builds; OPTION_CONFLICT when the named option does not hold the value; info().supported = false
-#   legacy      { letter, iface_flag, cli_unit }: the 2.x spellings, for porting 2.x code
 #   cli_form    how tools/stp registers the entry: value (the default: --name VALUE, or --name=VALUE), flag (a bare
 #               --name, with an optional =VALUE; a mode flag reads bare as on) or none (API only, not on the CLI)
 #   cli_bad_value  the line tools/stp prints for a value it refuses, where it differs from the generic
@@ -94,7 +93,6 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "produce_models" }
 category = "model"
-legacy = { letter = "c", note = "2.x: 'c' requested a counterexample without checking it; 'd' checked it and was forced on for every C VC" }
 help = "build a model on sat so that Solver::model() is available; off saves the model construction for truth-only clients"
 
 [[option]]
@@ -108,7 +106,6 @@ scope = "solver"
 engine = { custom = "sat_backend" }
 category = "sat"
 requires = { build = "the named backend; auto picks the first available of cryptominisat, cadical, minisat" }
-legacy = { iface_flag = "CMS4 / CADICAL / MS / SMS / MSP", note = "and vc_useCryptominisat/vc_useCadical/vc_useMinisat/vc_useSimplifyingMinisat; the four CLI flags become the aliases below" }
 help = "the SAT backend; selecting one this build lacks is a recoverable OPTION_UNAVAILABLE at set time, never exit(-1) at solve time"
 
 [[option]]
@@ -133,7 +130,7 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "model_array_fill" }
 category = "model"
-help = "the element every reader and printer reports for an array cell the model never observed: zero (SMT-LIB (as const) printing) or ones (2.x's read completion without 'x', which KLEE's .ktest bytes depend on)"
+help = "the element every reader and printer reports for an array cell the model never observed: zero (SMT-LIB (as const) printing) or ones (every bit set, the completion KLEE's .ktest bytes depend on)"
 
 [[option]]
 name = "stop-after-cnf"
@@ -462,9 +459,7 @@ excludes = ["--CVC", "--SMTLIB1"]
 # STP_SHIFT_ANNOTATE and STP_MULT_ANNOTATE are removed in 3.x (they were latched process-wide diagnostics);
 # their output, if still wanted, becomes diagnostic-tier options writing to the diagnostic sink.
 
-# ============================================================================ generated entries (230)
-# Accounting of the 2.x CLI registrations: 230 entries here + 4 backend-flag aliases + the [[frontend]] rows (exit-after-CNF
-# among them: 2.x exited the process, 3.x's stop-after-cnf answers unknown); the other new entries have no 2.x spelling.
+# ============================================================================ generated entries
 [[option]]
 name = "disable-simplifications"
 type = "bool"
@@ -490,7 +485,6 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "switch_word" }
 category = "simplification"
-legacy = { letter = "w" }
 help = "switch off wordlevel solver"
 
 [[option]]
@@ -504,7 +498,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "disable_opt_inc" }
 category = "simplification"
-legacy = { letter = "a" }
 help = "disable rewriting simplifier"
 
 [[option]]
@@ -799,7 +792,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "distinct_ordering" }
 category = "simplification"
-legacy = { iface_flag = "DISTINCT_ORDERING" }
 help = "replace a (distinct ...) over variables that occur nowhere else with a strict chain, which fixes one of the n! equivalent orderings the bit-blaster would otherwise search. Incremental solves keep the rewrite behind a retractable root assumption"
 
 [[option]]
@@ -882,7 +874,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "refinement_trail_reuse" }
 category = "sat"
-legacy = { iface_flag = "REFINEMENT_TRAIL_REUSE" }
 requires = { build = "cadical" }
 help = "keep cadical's search trail between the solve calls of a refinement loop (array reads, bit-vector abstractions, uninterpreted functions) instead of restarting each round from the root"
 
@@ -923,7 +914,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "ackermannisation" }
 category = "refinement.uf"
-legacy = { letter = "r" }
 help = "eagerly encode array-read axioms (Ackermannistaion)"
 
 [[option]]
@@ -939,7 +929,6 @@ category = "arrays"
 # 2.x: a flag that had to precede construction and could not be cleared. 3.x: extensional array equality and UF
 # applications are always constructible; this entry only forces the theory machinery on/off, and auto engages it
 # when the assertions contain array equalities / UF applications
-legacy = { letter = "x" }
 help = "decide whole-array equality/disequality (extensional arrays) by lemmas on demand"
 
 [[option]]
@@ -973,7 +962,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_theory_propagation" }
 category = "lra"
-legacy = { iface_flag = "LRA_THEORY_PROPAGATION" }
 help = "let the LRA theory take part in the SAT search, on a backend that hosts a propagator (CaDiCaL, CryptoMiniSat)"
 
 [[option]]
@@ -985,7 +973,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_float_driver" }
 category = "lra"
-legacy = { iface_flag = "LRA_FLOAT_DRIVER" }
 help = "drive partial theory checks with a double-precision simplex, conflicts and models re-derived exactly (under --lra-theory-propagation)"
 
 [[option]]
@@ -1067,7 +1054,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_presolve_unconstrained" }
 category = "lra"
-legacy = { iface_flag = "LRA_PRESOLVE_UNCONSTRAINED" }
 help = "fold single-use pure-polarity Real atoms, conjoining the witness equality that realises them"
 
 [[option]]
@@ -1101,7 +1087,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_presolve_propagate" }
 category = "lra"
-legacy = { iface_flag = "LRA_PRESOLVE_PROPAGATE" }
 help = "propagate top-level truths through the Boolean structure before registration"
 
 [[option]]
@@ -1113,7 +1098,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_presolve_rows" }
 category = "lra"
-legacy = { iface_flag = "LRA_PRESOLVE_ROWS" }
 help = "drop Real inequalities implied by a stronger same-polynomial sibling; refute contradictory pairs"
 
 [[option]]
@@ -1125,7 +1109,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_presolve_bounds" }
 category = "lra"
-legacy = { iface_flag = "LRA_PRESOLVE_BOUNDS" }
 help = "derive and propagate Real variable bounds before registration; fix met bounds, refute contradictory ones"
 
 [[option]]
@@ -1137,7 +1120,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_presolve_subst" }
 category = "lra"
-legacy = { iface_flag = "LRA_PRESOLVE_SUBST" }
 help = "substitute top-level Real definitions (x = t) through the query before registration, keeping the definitions conjoined"
 
 [[option]]
@@ -1496,7 +1478,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "lra_incremental_session" }
 category = "lra"
-legacy = { iface_flag = "LRA_INCREMENTAL_SESSION" }
 help = "keep a Real solve's coordinator, CNF and SAT solver across the check-sats of a pushing session on Boolean and Real terms; the exact core is still rebuilt when the stack changes (experimental; off by default)"
 
 [[option]]
@@ -1620,7 +1601,6 @@ engine = { custom = "lra_verify_canonical" }
 category = "lra"
 # 2.x: a process-wide atomic, and so is the number layer's switch this sets
 # when the entry is set explicitly (the library's own default keeps the check)
-legacy = { iface_flag = "LRA_VERIFY_CANONICAL" }
 help = "re-derive the canonical form of exact rationals whose construction already proves it"
 
 [[option]]
@@ -1632,7 +1612,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_verify_conflicts" }
 category = "lra"
-legacy = { iface_flag = "LRA_VERIFY_CONFLICTS" }
 help = "independently re-derive every LRA conflict certificate before trusting it"
 
 [[option]]
@@ -1644,7 +1623,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "bv_eq_abstraction" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_EQ_ABSTRACTION" }
 latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
 help = "replace wide BV equalities -- whatever their operands; the bit-blaster proxies non-input ones -- with fresh Boolean variables during bit-blasting, refining lazily via CEGAR"
 
@@ -1670,7 +1648,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "bv_abstraction_width" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_ABSTRACTION_WIDTH" }
 latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
 help = "minimum operand width at which --bv-eq-abstraction and --bv-term-abstraction abstract an operation"
 
@@ -1684,7 +1661,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "bv_eq_refine_width" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_EQ_REFINE_WIDTH" }
 help = "initial prefix width for lazy BV equality refinement (0 = full)"
 
 [[option]]
@@ -1696,7 +1672,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "bv_term_abstraction" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION" }
 latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
 help = "abstract wide BVMULT, BVDIV and BVMOD during bit-blasting, refining lazily via CEGAR; the three options below add the cheaper kinds"
 
@@ -1709,7 +1684,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "bv_term_abstraction_ite" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_ITE" }
 latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
 help = "also abstract wide if-then-else (off: it is noise on bit-vector workloads and the whole benefit on floating-point ones)"
 
@@ -1722,7 +1696,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "bv_term_abstraction_plus" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_PLUS" }
 latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
 help = "also abstract wide BVPLUS (off, for the same reason)"
 
@@ -1735,7 +1708,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "bv_term_abstraction_compare" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_COMPARE" }
 latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
 help = "also abstract wide inequalities (off, for the same reason)"
 
@@ -1817,7 +1789,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "bv_term_abstraction_mult" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_MULT" }
 latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
 help = "scope for BVMULT, and for BVDIV and BVMOD unless the separate DIV/MOD option is also given, which overrides them in either order"
 
@@ -1830,7 +1801,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "bv_term_abstraction_divmod" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_DIVMOD" }
 follows = "bv-term-abstraction-mult"   # when unset, takes the value given to bv-term-abstraction-mult (main.cpp:1807-1811)
 latch_note = "a blast-time switch: under the incremental driver a change would reach only pieces encoded afterwards, so it is frozen at the first check (mixing would be sound but silent)"
 help = "independently override whether BVDIV and BVMOD are abstracted; turning it off leaves division and remainder encoded exactly from the start"
@@ -1844,7 +1814,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "bv_term_abstraction_schemas" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_SCHEMAS" }
 help = "refine abstracted BVPLUS, BVMULT, BVDIV and BVMOD operations with algebraic facts that hold for every pair of operands before their operation-specific fallback"
 
 [[option]]
@@ -1870,7 +1839,6 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "bv_term_abstraction_rounds" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_ROUNDS" }
 help = "ceiling on the blocking lemmas one abstracted BVMULT/BVDIV/BVMOD may take before its refinement encodes the operation exactly instead of enumerating further operand pairs (0: never; enumerate without limit)"
 
 [[option]]
@@ -1883,7 +1851,6 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "bv_term_abstraction_profile" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_PROFILE" }
 sentinel = "unset = no profile: the schema-groups and rounds entries apply"
 excludes = ["bv-term-abstraction-schema-groups", "bv-term-abstraction-rounds"]
 cli_bad_value = "ERROR: --{name}: unknown BV term-abstraction profile '{value}'; expected qualified, broad, or aggressive"
@@ -1899,7 +1866,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "bv_term_abstraction_value_divisor" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_VALUE_DIVISOR" }
 help = "scale that allowance with the operand width, as width/divisor floored at one and capped by the ceiling above; a blocking lemma rules out one pair of operand values, so what one is worth falls away as the operands widen (0, the default: do not scale, which measured no slower and no faster)"
 
 [[option]]
@@ -1936,7 +1902,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "bv_term_abstraction_divmod_value_limit" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT" }
 help = "independent cap on BVDIV/BVMOD value-pair blocking after the round ceiling and optional width scaling; unlike --rounds this changes neither the algebraic-schema budget nor BVMULT (0, the default: no additional cap)"
 
 [[option]]
@@ -1948,7 +1913,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "bv_term_abstraction_inc_bitblast" }
 category = "refinement.bv"
-legacy = { iface_flag = "BV_TERM_ABSTRACTION_INC_BITBLAST" }
 help = "escalate an abstracted BVMULT a piece at a time: encode the bits up to and a little past the lowest one the candidate got wrong, rather than the whole width at once"
 
 [[option]]
@@ -1960,7 +1924,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "incremental_piece_rewriting" }
 category = "incremental"
-legacy = { iface_flag = "INCREMENTAL_PIECE_REWRITING" }
 help = "run the batch pipeline's rewriting passes -- strength reduction over a derived interval domain, and common sub-sum extraction -- on each piece the incremental driver prepares; each is a function of its piece alone, so the result caches and the encoding built from it stays valid"
 
 [[option]]
@@ -1972,7 +1935,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "incremental_scoped_preprocessing" }
 category = "incremental"
-legacy = { iface_flag = "INCREMENTAL_SCOPED_PREPROCESSING" }
 help = "offer the whole active stack to the exact-stack preprocessor on every incremental check rather than only on a forced first engagement, and offer it stacks carrying array reads and floating point rather than plain bit-vectors alone"
 
 [[option]]
@@ -1988,7 +1950,6 @@ category = "refinement.uf"
 # 2.x: a flag that had to precede construction and could not be cleared. 3.x: extensional array equality and UF
 # applications are always constructible; this entry only forces the theory machinery on/off, and auto engages it
 # when the assertions contain array equalities / UF applications
-legacy = { letter = "u" }
 help = "decide uninterpreted functions over Bool, bit-vector, RoundingMode and floating-point sorts by dynamic Ackermann refinement, including when the input logic omits UF"
 
 [[option]]
@@ -2001,7 +1962,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_lemmas_per_round" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_LEMMAS_PER_ROUND" }
 sentinel = "0 = unlimited"
 help = "how many congruence lemmas one refuted candidate may install (0: every conflict it exposes; 1: one conflict per round)"
 
@@ -2015,7 +1975,6 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "uf_ackermann" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_ACKERMANN" }
 help = "whether to install a function's pairwise congruence constraints before the first solve: 'on' (every declaration), 'off' (none, so a candidate has to earn each lemma), or 'auto' (the default: the declarations whose pair count fits the budget, cheapest first)"
 
 [[option]]
@@ -2028,7 +1987,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_eager_budget" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_ACKERMANN_BUDGET" }
 help = "how many congruence constraints --uf-ackermann=auto may install up front"
 
 [[option]]
@@ -2110,7 +2068,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_phase_hints" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_PHASE_HINTS" }
 help = "bias the first candidate so the congruence checker's scalars start out pairwise different (advisory; affects search order only)"
 
 [[option]]
@@ -2122,7 +2079,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_check_during_bv_refinement" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_CHECK_DURING_BV_REFINEMENT" }
 help = "run the congruence checker on a candidate the bit-vector abstraction has just refined as well, so its lemmas go in beside the abstraction's rather than after the abstraction is faithful"
 
 [[option]]
@@ -2135,7 +2091,6 @@ settable = "construction"
 scope = "manager"
 engine = { custom = "manager_uf_sort_width" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_SORT_WIDTH" }
 help = "bit-vector width given to a sort introduced by (declare-sort S 0); it bounds how many elements of that sort a query can tell apart, so a larger value is always sound and only a smaller one is not"
 
 [[option]]
@@ -2147,7 +2102,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_narrow_results" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_NARROW_RESULTS" }
 help = "narrow UF result sorts whose applications are used only for equality to ceil(log2(N+1)) bits, cutting the AIG cost of each congruence constraint from O(width) to O(log N)"
 
 [[option]]
@@ -2159,7 +2113,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_propagate_equalities" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_PROPAGATE_EQUALITIES" }
 help = "before lowering, rewrite the query under its own top-level equalities with applications still in place, so that `x = y` merges (f x) and (f y) into one application and `a = (f y)` or `(f 3) = 0` reach the terms built on a or (f 3); auto runs it unless the query has Real content, where it measures as a loss"
 
 [[option]]
@@ -2171,7 +2124,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_skeleton_preproc" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_SKELETON_PREPROC" }
 help = "let --uf-propagate-equalities also read the facts the query's Boolean skeleton forces, so an equality stated under an implication the structure resolves still crosses the applications; one SAT call over the skeleton per UF solve, and auto follows the pass it feeds"
 
 [[option]]
@@ -2184,7 +2136,6 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "uf_bv_term_abstraction" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_BV_TERM_ABSTRACTION" }
 help = "whether a solve with uninterpreted functions abstracts its wide multiplications, divisions and remainders as --bv-term-abstraction does: 'auto' (the default) does so when the query holds one at or above --bv-abstraction-width, 'on' and 'off' decide it for every UF solve"
 
 [[option]]
@@ -2207,7 +2158,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_inject_args" }
 category = "refinement.uf"
-legacy = { iface_flag = "UF_EQUALITY_INJECTIVITY" }
 help = "assume equality-only UF declarations are injective and encode it, giving the SAT solver bidirectional propagation between argument and result equalities. The assumption is not entailed by the query, so it is installed retractably: a refutation that used it is taken back and the query decided without it. Verdicts are unchanged; what this buys is faster model-finding on a query whose functions are injective anyway, and it costs a second search on one that is not"
 
 [[option]]
@@ -2403,7 +2353,7 @@ help = "comparison encoding variant 1"
 name = "bb.mult-variant"
 type = "int"
 default = 27
-sentinel = "an enumerated set of circuit variants (BitBlaster.cpp); the registry validates membership at set time instead of the 2.x FatalError at blast time"
+sentinel = "an enumerated set of circuit variants (BitBlaster.cpp); the registry validates membership at set time rather than failing at blast time"
 tier = "expert"
 settable = "before-first-check"
 scope = "solver"
@@ -2618,7 +2568,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "fp_abstraction_incremental" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_INCREMENTAL" }
 help = "host the abstraction inside the incremental driver as well; a hosted session expands arrays eagerly (--ackermanize)"
 
 [[option]]
@@ -2641,7 +2590,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION" }
 latched_by = "fp-abstraction-incremental"   # when that entry is true the FP abstraction is hosted by the incremental driver and this entry behaves as before-first-check (STP.cpp:181-190)
 help = "abstract selected floating-point operations to same-sort surrogates constrained by exact class/sign, order, exponent-band and identity rules; check candidates against the exact evaluator and release the exact encoding only after a bounded number of value lemmas (batch solves only, unless --fp-abstraction-incremental)"
 
@@ -2649,13 +2597,12 @@ help = "abstract selected floating-point operations to same-sort surrogates cons
 name = "fp-abstraction-ops"
 type = "set"
 default = ["mul", "div", "sqrt", "fma"]
-sentinel = "default = FP_ABSTRACT_DEFAULT (mul, div, sqrt, fma); the 2.x magic 0 is gone"
+sentinel = "default = FP_ABSTRACT_DEFAULT (mul, div, sqrt, fma)"
 tier = "expert"
 settable = "anytime"
 scope = "solver"
 engine = { custom = "fp_abstraction_ops" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_OPS" }
 values = ["mul", "div", "sqrt", "add", "sub", "fma", "rem", "rti", "to_sbv", "to_ubv", "default", "all", "none"]
 cli_bad_value = "ERROR: --{name}: unknown operation in '{value}' (expected mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, to_ubv, default or all)"
 cli_empty = "unset"
@@ -2671,7 +2618,6 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "fp_abstraction_chain_ops" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_CHAIN_OPS" }
 values = ["mul", "div", "sqrt", "add", "sub", "fma", "rem", "rti", "to_sbv", "to_ubv", "default", "all", "none"]
 cli_bad_value = "ERROR: --{name}: unknown operation in '{value}' (expected mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, to_ubv, default, all or none)"
 cli_empty = "unset"
@@ -2687,7 +2633,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_width" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_WIDTH" }
 help = "minimum packed width (exponent plus significand bits) at which an operation is abstracted"
 
 [[option]]
@@ -2700,7 +2645,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_tiers" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_TIERS" }
 help = "highest rule tier emitted with a surrogate: 0 the exact class/sign shell, 1 adds order facts, 2 adds exponent bands and overflow selection, 3 adds identities"
 
 [[option]]
@@ -2713,7 +2657,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_values" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_VALUES" }
 help = "value lemmas one abstracted operation may take before its exact encoding is released"
 
 [[option]]
@@ -2725,7 +2668,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_shape" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_SHAPE" }
 help = "spend model-instantiated trailing-exponent (exactness) lemmas before value lemmas"
 
 [[option]]
@@ -2737,7 +2679,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_relational" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_RELATIONAL" }
 help = "emit pairwise monotonicity lemmas between abstracted operations that share an operand, for the pair a candidate violates"
 
 [[option]]
@@ -2750,7 +2691,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_relational_last_width" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_RELATIONAL_LAST_WIDTH" }
 help = "packed width at or above which a monotonicity lemma is stated only once the record's value budget is spent, instead of before its first value lemma: keeps wide witness hunts from stalling under many pairwise facts, at the cost of the narrow ones the facts carry; 0 never, 128 by default"
 
 [[option]]
@@ -2762,7 +2702,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_box_lemmas" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_BOX_LEMMAS" }
 help = "add an operand-box result-prefix constraint beside value lemmas for mul/div/sqrt/add/sub/fma/rti, when monotone corner bounds establish it (excludes remainder and integer conversions)"
 
 [[option]]
@@ -2774,7 +2713,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_phase_hints" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_PHASE_HINTS" }
 help = "after a refuted candidate, suggest to the SAT solver the operand values it tried and the exact result for them, so the next candidate keeps the operands and is consistent at once when nothing else forbids it"
 
 [[option]]
@@ -2786,7 +2724,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_repair" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_REPAIR" }
 help = "before refining a candidate the abstraction refuted, replay the original formula under it and accept the candidate as a model when the formula holds for its values of the original symbols"
 
 [[option]]
@@ -2799,7 +2736,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_restart_limit" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_RESTART_LIMIT" }
 help = "how many times one query may run the pipeline again to release operations exactly; past it, and whenever a run abstracted no fewer operations than the run before it, releases are spliced instead"
 
 [[option]]
@@ -2812,7 +2748,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_significand_bits" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_SIGNIFICAND_BITS" }
 help = "significand bits of the reduced-precision bands emitted with an abstracted multiplication, division or square root: the operands truncated to this many bits bound the result through a small multiplier; 0 emits none"
 
 [[option]]
@@ -2825,7 +2760,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_significand_bits_wide" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_SIGNIFICAND_BITS_WIDE" }
 help = "the same at packed widths of 128 bits and above; 0 uses --fp-abstraction-significand-bits everywhere"
 
 [[option]]
@@ -2839,7 +2773,6 @@ scope = "solver"
 engine = { field = "fp_abstraction_restart_width" }
 category = "fp-abstraction"
 implied_by = { "bv-term-abstraction" = 128 }
-legacy = { iface_flag = "FP_ABSTRACTION_RESTART_WIDTH" }
 help = "packed width at or above which releasing a multiplication, division, square root, fma or remainder exactly runs the whole pipeline again with it lowered exactly, so that the bit-vector abstraction can see its circuit, instead of splicing the circuit into the running solver; 0 never restarts, and is the default unless --bv-term-abstraction is on, which sets 128"
 
 [[option]]
@@ -2852,7 +2785,6 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "fp_abstraction_constant_operands" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_CONSTANT_OPERANDS" }
 help = "whether an operation one of whose float operands is a constant is abstracted: 'auto' (the default) does so when the configuration abstracts an operation of two operands it does not know or one whose operand is another abstracted operation, 'on' and 'off' decide it for every query. Declined, such an operation is lowered exactly, since a constant's circuit is small and propagates where the abstraction would have the solver search -- which wins on queries that only scale their unknowns and loses on those that compute with them"
 
 [[option]]
@@ -2865,7 +2797,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_decline_pinned" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_DECLINE_PINNED" }
 help = "leave exact any operation whose result the query equates directly with a constant or a conversion -- the witness-hunt signature, where the solve must produce the exact value anyway and a surrogate only defers the circuit"
 
 [[option]]
@@ -2879,7 +2810,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "fp_abstraction_budget" }
 category = "fp-abstraction"
-legacy = { iface_flag = "FP_ABSTRACTION_BUDGET" }
 help = "wall-clock seconds after which a batch refinement releases every remaining record exactly, spliced in place, bounding a loss near the budget instead of the timeout; 0 never"
 
 [[option]]
@@ -2981,7 +2911,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "aig_node_budget" }
 category = "limits"
-legacy = { iface_flag = "AIG_NODE_BUDGET" }
 range = { min = -1, max = 2147483647 }
 cli_above_max = "ERROR: --{name} must be at most 2147483647; larger caps can never be reached"
 help = "Number of AIG AND gates after which one query's bit-blast gives up. -1 means never, 0 means give up without blasting. Exceeding it abandons the query through the soft-timeout path, so the answer is the one --max-time gives -- \"unknown\" in SMT-LIB mode, with (get-info :reason-unknown) naming this budget, and \"Unknown.\" in the CVC language. Batch solves only: the incremental encoder's AIG outlives the check that grew it and is never capped, so engaging it with a budget set warns once instead. Bounds the blast, not the process -- CNF conversion and the SAT search allocate on top of it"
@@ -2997,7 +2926,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "print_counterexample_flag" }
 category = "output"
-legacy = { letter = "p" }
 help = "print counterexample"
 
 [[option]]
@@ -3011,7 +2939,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "print_binary_flag" }
 category = "output"
-legacy = { letter = "y" }
 help = "print counterexample in binary"
 
 [[option]]
@@ -3025,7 +2952,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "print_arrayval_declaredorder_flag" }
 category = "output"
-legacy = { letter = "q" }
 help = "print arrayval declared order"
 
 [[option]]
@@ -3039,7 +2965,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "stats_flag" }
 category = "output"
-legacy = { letter = "s" }
 help = "print function statistics"
 
 [[option]]
@@ -3053,7 +2978,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "quick_statistics_flag" }
 category = "output"
-legacy = { letter = "t" }
 help = "print quick statistics"
 
 [[option]]
@@ -3067,7 +2991,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "print_nodes_flag" }
 category = "output"
-legacy = { letter = "v" }
 help = "print nodes "
 
 [[option]]
@@ -3080,7 +3003,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "cnf_auto_threshold" }
 category = "cnf"
-legacy = { iface_flag = "CNF_AUTO_THRESHOLD" }
 help = "AND-node count at or above which --cnf-generation-effort auto stops minimising: it picks new-medium there and gia-low below, or on the estimate-less fallback drops medium to very-low"
 
 [[option]]
@@ -3093,7 +3015,6 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "cnf_generation_effort" }
 category = "cnf"
-legacy = { iface_flag = "CNF_GENERATION_EFFORT" }
 cli_bad_value = "Unknown --cnf-generation-effort value '{value}'. Expected one of: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, new-high, gia-low, gia-high, gia-very-high."
 help = "effort spent minimising the CNF: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, new-high. Higher is slower to generate but yields a smaller CNF; auto picks gia-low or, for large estimated blasts, new-medium, since minimising a large one costs more than the solver saves - falling back to the very-low/medium choice under array refinement, on solvers other than cadical, or with no estimate recorded. The new-* rungs blast through STP's own AIG instead of ABC's and write the CNF directly: new-very-low is plain Tseitin, new-low recovers XOR and if-then-else, new-medium also collapses n-ary ANDs and ORs. The gia-* rungs are low, high and very-high again, reaching the same generator over a Gia the blaster built rather than one converted from an ABC AIG"
 
@@ -3130,7 +3051,6 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "incremental_mode" }
 category = "incremental"
-legacy = { letter = "i", note = "2.x had only ON" }
 help = "whether to solve incrementally -- keeping the SAT solver and the bit-blasted encoding across (check-sat) commands, asserting retractable formulas as SAT assumptions: 'on' (from the first solve, pushes or no pushes), 'off' (never, not even for an input that pushes), or 'auto' (the default: an input that pushes switches it on for itself). A bare --incremental means 'on'; a value must be attached with '=' rather than spelled as a separate argument. SMT-LIB2 only."
 
 [[option]]
@@ -3145,7 +3065,6 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "incremental_auto_engage_at" }
 category = "incremental"
-legacy = { iface_flag = "INCREMENTAL_AUTO_ENGAGE_AT" }
 help = "real-solve ordinal at which an automatically incremental SMT-LIB session engages the persistent driver; -1 uses the theory default (QF_BV/QF_ABV: 32, others: 3), 1 engages on the first solve, and 0 never engages automatically (--incremental=on still engages at 1, and --incremental=off engages never)"
 
 [[option]]
@@ -3278,13 +3197,12 @@ aliases = ["max_time"]
 short = "k"
 type = "duration"
 default = "none"
-sentinel = "none = no limit; the CLI reads a bare number as seconds (legacy), the APIs take milliseconds; Python also accepts z3py's `timeout` keyword as an alias"
+sentinel = "none = no limit; the CLI reads a bare number as seconds, as it always has, the APIs take milliseconds; Python also accepts z3py's `timeout` keyword as an alias"
 tier = "stable"
 settable = "anytime"
 scope = "solver"
 engine = { custom = "max_time" }
 category = "limits"
-legacy = { cli_unit = "seconds" }
 help = "Number of seconds after which the SAT solver gives up. The budget is for the whole query, not for each call into the SAT solver. -1 means never, 0 means give up without searching."
 
 [[option]]
@@ -3299,5 +3217,4 @@ scope = "solver"
 engine = { field = "check_counterexample_flag" }
 category = "model"
 # 2.x forced this on for every C VC; 3.x: one default (off) through every door
-legacy = { letter = "d" }
 help = "construct counterexample and check it"

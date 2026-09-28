@@ -2381,7 +2381,6 @@ struct StatSpec
     STRING
   } type;
   Tier tier;
-  const char* legacy;
   const char* help;
 };
 using StatType = StatSpec::StatType;
@@ -2397,8 +2396,7 @@ const StatSpec* stat_spec(std::string_view name)
   // bv.schema_group.<group>.lemmas, one per schema group: the table's
   // bv.schema_group.lemmas entry describes the family
   static const StatSpec kGroupLemmas{"bv.schema_group.<group>.lemmas", StatType::UINT64,
-                                     Tier::EXPERT, "vc_getSchemaGroupCounter",
-                                     "the lemmas of one schema group"};
+                                     Tier::EXPERT, "the lemmas of one schema group"};
   const std::string_view prefix = "bv.schema_group.", suffix = ".lemmas";
   if (name.size() > prefix.size() + suffix.size() && name.substr(0, prefix.size()) == prefix &&
       name.substr(name.size() - suffix.size()) == suffix)

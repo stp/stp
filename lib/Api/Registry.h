@@ -93,9 +93,6 @@ struct OptionSpec
   const char* requires_value;
   const char* latched_by;
   const char* sentinel;
-  const char* legacy_letter;
-  const char* legacy_iface;
-  const char* legacy_cli_unit;
   const char* engine;
   bool has_engine;
   const char* cli_form;      // "value" | "flag" | "none": how tools/stp registers the entry
