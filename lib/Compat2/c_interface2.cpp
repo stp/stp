@@ -1482,7 +1482,22 @@ void vc_assertFormula(VC vcp, Expr e)
     return;
   if (stp_solver_assert(s, t) != STP_OK)
   {
-    fatal("CInterface: vc_assertFormula: " + take_error(vc));
+    stp_error_code code;
+    const std::string why = take_error(vc, &code);
+    // The engine refused the assertion (UNSUPPORTED: the exact-arithmetic
+    // budget, say) and holds the stack as it was. 2.x reported that without
+    // ending the process, and a caller that ignores the report must still not
+    // get an answer to a query missing the assertion: every query at this
+    // depth answers unknown until a pop leaves it.
+    if (code == STP_ERR_UNSUPPORTED)
+    {
+      const std::size_t depth = vc->levels.size();
+      if (vc->refused_depth == 0 || depth < vc->refused_depth)
+        vc->refused_depth = depth;
+      report("vc_assertFormula: " + why);
+      return;
+    }
+    fatal("CInterface: vc_assertFormula: " + why);
     return;
   }
   vc->levels.back().push_back(stp_term_copy(t));
@@ -1533,6 +1548,8 @@ void vc_pop(VC vcp)
   for (stp_term t : vc->levels.back())
     stp_term_release(t);
   vc->levels.pop_back();
+  if (vc->refused_depth > vc->levels.size())
+    vc->refused_depth = 0; // the refused assertion's level is gone
   // The BV model is deliberately retained (see vc_pop's header comment); a
   // certified UF map is keyed by the solved stack and is not, and neither is
   // the exact Real model.
@@ -1608,6 +1625,18 @@ int vc_query_with_timeout(VC vcp, Expr e, int timeout_max_conflicts, int timeout
   if (vc->last_query != nullptr)
     stp_term_release(vc->last_query);
   vc->last_query = stp_term_copy(q);
+
+  // An assertion the engine refused is missing from the context (see
+  // vc_assertFormula): there is no query here to answer, only one to decline.
+  if (vc->refused_depth != 0)
+  {
+    vc->reason = REASON_UNKNOWN_INCOMPLETE;
+    vc->reason_detail = "an assertion was refused (see vc_assertFormula), so this query is "
+                        "missing one of its constraints and cannot be decided";
+    if (vc->flag_n)
+      std::cout << "Unknown." << std::endl;
+    return 3;
+  }
 
   stp_budget budget;
   budget.has_time = timeout_max_time >= 0;

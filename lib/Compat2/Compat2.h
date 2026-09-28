@@ -105,6 +105,11 @@ struct VCImpl
   // changes, and so that the printers see what was asserted rather than what
   // the engine has since conjoined.
   std::vector<std::vector<stp_term>> levels{std::vector<stp_term>()};
+  // The shallowest depth (levels.size()) at which the engine refused an
+  // assertion (the exact-arithmetic budget, say), or 0. A query at that depth
+  // or deeper is missing one of its constraints, so it answers unknown, as
+  // 2.x's did; a pop back above the depth clears it.
+  std::size_t refused_depth = 0;
 
   std::unordered_set<Handle*> persist;                 // checker-owned handles
   std::unordered_map<UFDeclHandle, UFDeclRec> ufs;    // this checker's UFs

@@ -262,7 +262,12 @@ fare against it, and every 3.x defect met on the way.
     these functions and works unchanged (`fp-cpp-wrapper` passes).
 18. **Real.** All 21 `vc_real*`/`vc_getRealModel*`/`vc_hasReal*` functions are
     the 3.x Real constructors and readers; a `RESOURCE` refusal of a literal is
-    a nonfatal `NULL`, any other refusal is fatal, as 2.x had it.
+    a nonfatal `NULL`, any other refusal is fatal, as 2.x had it. An assertion
+    the engine refuses (`UNSUPPORTED` from `stp_solver_assert`: the
+    exact-arithmetic budget, at preregistration) is reported through the
+    handler and left out, and, as in 2.x, every query at that depth or deeper
+    answers 3 with `REASON_UNKNOWN_INCOMPLETE` until a `vc_pop` leaves the
+    depth (`reason-unknown` tests it).
 19. **Array equality.** `vc_eqExpr` over two arrays without `'x'` is the 2.x
     fatal "STP cannot decide equality between whole array terms without
     --array-equality ...", raised at construction (3.x would build the term

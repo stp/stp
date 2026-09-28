@@ -257,3 +257,70 @@ TEST(reason_unknown, AnUnsatisfiableQueryKeepsItsRefutationUnderTheAssumption)
   EXPECT_EQ(REASON_UNKNOWN_NONE, vc_getReasonUnknown(vc));
   vc_Destroy(vc);
 }
+
+// An assertion the engine refuses -- here the exact-arithmetic budget, which
+// every constant below stays inside while the linear form they fold into does
+// not -- is reported and left out, and the checker goes on. A query is then
+// missing one of its constraints, so it must not be answered: it comes back 3,
+// with the reason INCOMPLETE, until a pop leaves the level the refusal was
+// made at. The shape is a murxla trace reduced by delta debugging.
+namespace
+{
+int refusals_reported = 0;
+void count_diagnostic(const char*)
+{
+  ++refusals_reported;
+}
+
+Expr refusedComparison(VC vc)
+{
+  auto neg = [vc](Expr e) { return vc_realUMinusExpr(vc, e); };
+  auto add = [vc](Expr l, Expr r) { return vc_realPlusExpr(vc, l, r); };
+  auto sub = [vc](Expr l, Expr r) { return vc_realMinusExpr(vc, l, r); };
+  auto mul = [vc](Expr l, Expr r) { return vc_realMultExpr(vc, l, r); };
+  Expr c = vc_realConstExprFromStr(vc, "85540413.44455765206262857018");
+  Expr n0 = neg(c);
+  Expr p1 = mul(c, n0);
+  Expr p2 = mul(mul(p1, mul(p1, p1)), p1);
+  Expr s3 = add(p2, n0);
+  Expr p4 = mul(mul(s3, p2), sub(s3, c));
+  Expr p5 = mul(mul(p4, p4), p4);
+  Expr d6 = sub(p5, n0);
+  Expr a7 = add(p5, n0);
+  Expr lhs = sub(neg(sub(d6, n0)), n0);
+  Expr rhs = mul(mul(a7, sub(mul(neg(a7), n0), n0)), a7);
+  Expr big = mul(mul(mul(lhs, rhs), d6), add(n0, p5));
+  return big == nullptr ? nullptr : vc_realLtExpr(vc, big, big);
+}
+} // namespace
+
+TEST(reason_unknown, ARefusedAssertionLeavesTheQueryUnanswered)
+{
+  VC vc = vc_createValidityChecker();
+  Expr x = vc_varExpr(vc, "x", vc_realType(vc));
+  vc_assertFormula(vc, vc_eqExpr(vc, x, vc_realConstExprFromStr(vc, "1")));
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_push(vc);
+  Expr refused = refusedComparison(vc);
+  ASSERT_NE(refused, nullptr) << "every constructor should have stayed inside the budget";
+  refusals_reported = 0;
+  vc_registerErrorHandler(count_diagnostic);
+  vc_assertFormula(vc, refused);
+  vc_registerErrorHandler(nullptr);
+  EXPECT_EQ(1, refusals_reported) << "the refusal is reported, not fatal";
+
+  EXPECT_EQ(3, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(REASON_UNKNOWN_INCOMPLETE, vc_getReasonUnknown(vc));
+  // a deeper level is missing the assertion too
+  vc_push(vc);
+  EXPECT_EQ(3, vc_query(vc, vc_falseExpr(vc)));
+  vc_pop(vc);
+  EXPECT_EQ(3, vc_query(vc, vc_falseExpr(vc)));
+
+  // the pop that leaves the level the refusal was made at answers again
+  vc_pop(vc);
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(REASON_UNKNOWN_NONE, vc_getReasonUnknown(vc));
+  vc_Destroy(vc);
+}
