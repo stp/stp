@@ -174,6 +174,16 @@ def cstr(s):
     return '"' + str(s).replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n') + '"'
 
 
+def c_i64(v):
+    """A std::int64_t initializer that every compiler reads as written. MSVC
+    types an unsuffixed 2147483648 as unsigned long, so -2147483648 would be
+    +2147483648 there; the suffix makes every literal a long long."""
+    v = int(v)
+    if v == -2 ** 63:
+        return '(-9223372036854775807LL - 1)'
+    return '%dLL' % v
+
+
 def c_name(cpp):
     """The C spelling of a C++ named constructor: stp_ + name minus a trailing underscore."""
     return 'stp_' + cpp.rstrip('_')
@@ -640,8 +650,8 @@ class Emitter:
             engine = o.get('engine', {})
             rows.append('  { %s, %s, OptType::%s, %s, %s, %s, %s, %s, kOptValues%d, %d, Tier::%s, Settable::%s, OptionScope::%s, %s, %s, kOptAliases%d, %d, %s, %s, %s, %s, %s, kOptExcludes%d, %d, kOptImplies%d, %d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s },' % (
                 cstr(o['name']), cstr(self.python_key(o['name'])), o['type'].upper(), cstr(self.default_text(o)),
-                'true' if 'min' in rng else 'false', str(rng.get('min', 0)),
-                'true' if 'max' in rng else 'false', str(rng.get('max', 0)),
+                'true' if 'min' in rng else 'false', c_i64(rng.get('min', 0)),
+                'true' if 'max' in rng else 'false', c_i64(rng.get('max', 0)),
                 i, len(values),
                 o['tier'].upper(), o['settable'].upper().replace('-', '_'), o['scope'].upper(),
                 cstr(o['category']), cstr(o['help']),
@@ -657,7 +667,7 @@ class Emitter:
                 'true' if 'engine' in o else 'false',
                 cstr(o.get('cli_form', 'value')), cstr(o.get('cli_bad_value')),
                 'true' if 'cli_range' in o else 'false',
-                str(o.get('cli_range', {}).get('min', 0)), str(o.get('cli_range', {}).get('max', 0)),
+                c_i64(o.get('cli_range', {}).get('min', 0)), c_i64(o.get('cli_range', {}).get('max', 0)),
                 cstr(o.get('cli_below_min')), cstr(o.get('cli_above_max')),
                 'true' if o.get('cli_take_last', False) else 'false',
                 'true' if o.get('cli_empty') == 'unset' else 'false'))
