@@ -1,0 +1,10 @@
+% RUN: not %solver %s 2>&1 | %OutputCheck %s
+%
+% Operands of different widths end the parse. The grammar reported the
+% mismatch and then built the AND anyway, and the query was answered over a
+% formula no one wrote.
+x : BITVECTOR(8);
+ASSERT((x & 0hex001) = 0hex01);
+QUERY(FALSE);
+% CHECK-L: CVC syntax error: line 7: Width mismatch in AND
+% CHECK-NOT: Valid.

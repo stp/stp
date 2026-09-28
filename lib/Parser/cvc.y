@@ -66,6 +66,19 @@ THE SOFTWARE.
     return YY_EXIT_FAILURE;
   }
   int yyerror(void* /*AssertsQuery*/, const char* s) { return yyerror(s); }
+
+  // A semantic error found inside an action. yyerror only reports: after one
+  // of bison's own syntax errors bison abandons the parse itself, but an
+  // action that called it carried on and built a node from what it had just
+  // rejected -- an unresolved name taken for a node, operands of different
+  // widths -- so an action that rejects its input stops the parse here, and
+  // CVCParse reports the failure.
+#define CVC_REJECT(msg)                                                        \
+  do                                                                           \
+  {                                                                            \
+    yyerror(msg);                                                              \
+    YYABORT;                                                                   \
+  } while (0)
   
   %}
 
@@ -256,7 +269,7 @@ other_cmd       :
   ASTVec aaa = GlobalParserInterface->GetAsserts();
   if(aaa.size() == 0)
     {
-      yyerror("GetAsserts() call: no assertions");
+      CVC_REJECT("GetAsserts() call: no assertions");
     }
 
   ASTNode asserts = 
@@ -339,9 +352,9 @@ VarDecl         :      FORM_IDs ':' Type
   //do type checking. if doesn't pass then abort
   BVTypeCheck(*$5);
   if($3.indexwidth != $5->GetIndexWidth())
-    yyerror("LET Expr: type check fail");
+    CVC_REJECT("LET Expr: type check fail");
   if($3.valuewidth != $5->GetValueWidth())
-    yyerror("LET Expr: type check fail");
+    CVC_REJECT("LET Expr: type check fail");
                          
   for(vector<char*>::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {                         
     GlobalParserInterface->letMgr->LetExprMgr(*i,*$5);
@@ -354,9 +367,9 @@ VarDecl         :      FORM_IDs ':' Type
   //do type checking. if doesn't pass then abort
   BVTypeCheck(*$5);
   if($3.indexwidth != $5->GetIndexWidth())
-    yyerror("LET Expr: type check fail");
+    CVC_REJECT("LET Expr: type check fail");
   if($3.valuewidth != $5->GetValueWidth())
-    yyerror("LET Expr: type check fail");
+    CVC_REJECT("LET Expr: type check fail");
                          
   for(vector<char*>::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {                         
     GlobalParserInterface->letMgr->LetExprMgr(*i,*$5);
@@ -423,9 +436,9 @@ IfExpr          :      IF_TOK Formula THEN_TOK Expr ElseRestExpr
 {
   unsigned int width = $4->GetValueWidth();
   if (width != $5->GetValueWidth())
-    yyerror("Width mismatch in IF-THEN-ELSE");
+    CVC_REJECT("Width mismatch in IF-THEN-ELSE");
   if($4->GetIndexWidth() != $5->GetIndexWidth())
-    yyerror("Width mismatch in IF-THEN-ELSE");
+    CVC_REJECT("Width mismatch in IF-THEN-ELSE");
 
   BVTypeCheck(*$2);
   BVTypeCheck(*$4);
@@ -442,9 +455,9 @@ ElseRestExpr    :      ELSE_TOK Expr ENDIF_TOK  { $$ = $2; }
 {
   unsigned int width = $2->GetValueWidth();
   if (width != $4->GetValueWidth() || width != $5->GetValueWidth())
-    yyerror("Width mismatch in IF-THEN-ELSE");
+    CVC_REJECT("Width mismatch in IF-THEN-ELSE");
   if ($2->GetIndexWidth() != $4->GetValueWidth() || $2->GetIndexWidth() != $5->GetValueWidth())
-    yyerror("Width mismatch in IF-THEN-ELSE");
+    CVC_REJECT("Width mismatch in IF-THEN-ELSE");
 
   BVTypeCheck(*$2);
   BVTypeCheck(*$4);
@@ -468,7 +481,7 @@ Formula         :     '(' Formula ')'
 |      FORMID_TOK '(' Expr ')'
 {
   if (stp::BVCONST != $3->GetKind())
-    yyerror("the argument of a parameterised boolean must be a constant");
+    CVC_REJECT("the argument of a parameterised boolean must be a constant");
   $$ = new ASTNode(GlobalParserInterface->CreateParameterisedBooleanVar(*$1,*$3));
   delete $1;
   delete $3;
@@ -477,7 +490,7 @@ Formula         :     '(' Formula ')'
 {
   unsigned int width = $3->GetValueWidth();
   if(width <= (unsigned)$5)
-    yyerror("BOOLEXTRACT: trying to boolextract a bit which is beyond range");
+    CVC_REJECT("BOOLEXTRACT: trying to boolextract a bit which is beyond range");
                          
   ASTNode bit = GlobalParserInterface->CreateBVConst(32, $5);
   ASTNode * out = new ASTNode(GlobalParserInterface->nf->CreateNode(BOOLEXTRACT,*$3,bit));
@@ -644,7 +657,7 @@ ElseRestForm    :      ELSE_TOK Formula ENDIF_TOK  { $$ = $2; }
 } | STRING_TOK
 {
    cerr << "Unresolved symbol:" << $1 << endl;
-   yyerror("bad symbol");
+   CVC_REJECT("bad symbol");
 }
 ;
 
@@ -721,10 +734,10 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 {
   int width = $3 - $5 + 1;
   if (width < 0)
-    yyerror("Negative width in extract");
+    CVC_REJECT("Negative width in extract");
                          
   if((unsigned)$3 >= $1->GetValueWidth())
-    yyerror("Parsing: Wrong width in BVEXTRACT\n");
+    CVC_REJECT("Parsing: Wrong width in BVEXTRACT\n");
 
   ASTNode hi  =  GlobalParserInterface->CreateBVConst(32, $3);
   ASTNode low =  GlobalParserInterface->CreateBVConst(32, $5);
@@ -743,7 +756,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 {
   unsigned int width = $1->GetValueWidth();
   if (width != $3->GetValueWidth()) {
-    yyerror("Width mismatch in AND");
+    CVC_REJECT("Width mismatch in AND");
   }
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVAND, width, *$1, *$3));
   $$ = n;
@@ -754,7 +767,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 {
   unsigned int width = $1->GetValueWidth();
   if (width != $3->GetValueWidth()) {
-    yyerror("Width mismatch in OR");
+    CVC_REJECT("Width mismatch in OR");
   }
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVOR, width, *$1, *$3)); 
   $$ = n;
@@ -765,7 +778,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 {
   unsigned int width = $3->GetValueWidth();
   if (width != $5->GetValueWidth()) {
-    yyerror("Width mismatch in XOR");
+    CVC_REJECT("Width mismatch in XOR");
   }
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVXOR, width, *$3, *$5));
   $$ = n;
@@ -776,7 +789,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 {
   unsigned int width = $3->GetValueWidth();
   if (width != $5->GetValueWidth()) {
-    yyerror("Width mismatch in NAND");
+    CVC_REJECT("Width mismatch in NAND");
   }
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNAND, width, *$3, *$5));
   $$ = n;
@@ -788,7 +801,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 {
   unsigned int width = $3->GetValueWidth();
   if (width != $5->GetValueWidth()) {
-    yyerror("Width mismatch in NOR");
+    CVC_REJECT("Width mismatch in NOR");
   }
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNOR, width, *$3, *$5));
   $$ = n;
@@ -800,7 +813,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 {
   unsigned int width = $3->GetValueWidth();
   if (width != $5->GetValueWidth()) {
-    yyerror("Width mismatch in NOR");
+    CVC_REJECT("Width mismatch in NOR");
   }
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVXNOR, width, *$3, *$5));
   $$ = n;
@@ -1005,7 +1018,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 } | STRING_TOK
 {
    cerr << "Unresolved symbol:" << $1 << endl;
-   yyerror("bad symbol");
+   CVC_REJECT("bad symbol");
 }
 ;
 
@@ -1085,9 +1098,9 @@ LetDecl         :       STRING_TOK '=' Expr
   BVTypeCheck(*$5);
                           
   if($3.indexwidth != $5->GetIndexWidth())
-    yyerror("LET Expr: type check fail");
+    CVC_REJECT("LET Expr: type check fail");
   if($3.valuewidth != $5->GetValueWidth())
-    yyerror("LET Expr: type check fail");
+    CVC_REJECT("LET Expr: type check fail");
 
   GlobalParserInterface->letMgr->LetExprMgr($1,*$5);
   free( $1);
@@ -1109,9 +1122,9 @@ LetDecl         :       STRING_TOK '=' Expr
   BVTypeCheck(*$5);
 
   if($3.indexwidth != $5->GetIndexWidth())
-    yyerror("LET Expr: type check fail");
+    CVC_REJECT("LET Expr: type check fail");
   if($3.valuewidth != $5->GetValueWidth())
-    yyerror("LET Expr: type check fail");
+    CVC_REJECT("LET Expr: type check fail");
 
   //Do LET-expr management
   GlobalParserInterface->letMgr->LetExprMgr($1,*$5);

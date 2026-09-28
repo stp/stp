@@ -362,3 +362,41 @@ TEST(libstp2_fidelity, a_table_indexed_by_a_symbolic_byte_has_a_counterexample)
     vc_Destroy(vc);
   }
 }
+
+// A CVC text that a grammar action rejects -- an unresolved name, operands of
+// two widths -- is a failed parse reported through the handler. The action
+// went on building from what it had rejected: the unresolved name crashed
+// the process without reaching the handler under either error policy, and
+// the width mismatch parsed "successfully" into a formula no one wrote.
+// (2.x called the handler and aborted; STP_ON_ERROR_RETURN returns instead.)
+namespace
+{
+int parse_errors = 0;
+void count_parse_error(const char*)
+{
+  ++parse_errors;
+}
+} // namespace
+
+TEST(libstp2_fidelity, a_rejected_cvc_text_is_a_failed_parse)
+{
+  vc_registerErrorHandler(count_parse_error);
+  vc_setErrorPolicy(STP_ON_ERROR_RETURN);
+  for (const char* text : {"x : BITVECTOR(8); ASSERT(y = 0hex01); QUERY(x = x);",
+                           "x : BITVECTOR(8); ASSERT((x & 0hex001) = 0hex01); QUERY(FALSE);",
+                           "x : BITVECTOR(8); ASSERT((x | 0hex001) = 0hex000); QUERY(FALSE);"})
+  {
+    VC vc = vc_createValidityChecker();
+    Expr query = nullptr, asserts = nullptr;
+    parse_errors = 0;
+    EXPECT_NE(1, vc_parseMemExpr(vc, text, &query, &asserts)) << text;
+    EXPECT_EQ(1, parse_errors) << text;
+    // the checker is usable afterwards
+    Expr z = vc_varExpr(vc, "z", vc_bvType(vc, 8));
+    vc_assertFormula(vc, vc_eqExpr(vc, z, vc_bvConstExprFromInt(vc, 8, 7)));
+    EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))) << text;
+    vc_Destroy(vc);
+  }
+  vc_setErrorPolicy(STP_ON_ERROR_ABORT);
+  vc_registerErrorHandler(nullptr);
+}

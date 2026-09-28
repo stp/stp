@@ -860,6 +860,39 @@ TEST(Parsing, a_failed_script_leaves_the_stack_as_it_was)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
+// A CVC or SMT-LIB 1 input that a grammar action rejects ends the parse. The
+// actions reported the error and went on building from what they had just
+// rejected: an unresolved name crashed the process, and a width mismatch
+// asserted a formula no one wrote. Each is PARSE, with the solver as it was.
+TEST(Parsing, a_rejected_cvc_or_smtlib1_input_ends_the_parse)
+{
+  const std::vector<std::pair<Format, const char*>> inputs{
+      {Format::CVC, "x : BITVECTOR(8);\nASSERT(y = 0hex01);\nQUERY(x = x);\n"},
+      {Format::CVC, "x : BITVECTOR(8);\nASSERT(x = y);\nQUERY(FALSE);\n"},
+      {Format::CVC, "x : BITVECTOR(8);\nASSERT((x & 0hex001) = 0hex01);\nQUERY(FALSE);\n"},
+      {Format::CVC, "x : BITVECTOR(8);\nASSERT((x | 0hex001) = 0hex000);\nQUERY(FALSE);\n"},
+      {Format::CVC, "x : BITVECTOR(8);\ny : BITVECTOR(4);\n"
+                    "ASSERT((IF x = 0hex00 THEN x ELSE y ENDIF) = 0hex05);\nQUERY(FALSE);\n"},
+      {Format::CVC, "x : BITVECTOR(8);\nASSERT(x[2:5] = 0bin0);\nQUERY(FALSE);\n"},
+      {Format::SMTLIB1, "(benchmark b :logic QF_BV :extrafuns ((x BitVec[8]))\n"
+                        " :formula (= (rotate_left[9] x) bv1[8]))\n"},
+      {Format::SMTLIB1, "(benchmark b :logic QF_LIA :extrafuns ((x BitVec[8]))\n"
+                        " :formula (= x bv1[8]))\n"},
+  };
+  for (const auto& input : inputs)
+  {
+    TermManager tm;
+    Solver s(tm);
+    const Term p = tm.declare("p", tm.mk_bool_sort());
+    s.add(p);
+    API_EXPECT_ERROR(ErrorCode::PARSE, s.parse(input.second, input.first));
+    ASSERT_EQ(s.assertions().size(), 1u) << input.second;
+    EXPECT_TRUE(s.assertions()[0].same_as(p)) << input.second;
+    EXPECT_TRUE(s.check_sat().is_sat()) << input.second;
+    EXPECT_NO_THROW(tm.mk_bv(8, 1)) << input.second;
+  }
+}
+
 // A script's (reset) begins a new session for the script, but the manager's
 // symbols outlive it: a Real the API declared, or made with mk_fresh, is
 // still one afterwards and a model reads its value, not 0 -- in this solver,

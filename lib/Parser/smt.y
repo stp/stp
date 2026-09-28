@@ -73,6 +73,19 @@
   }
   int yyerror(void* /*AssertsQuery*/, const char* s) { return yyerror(s); }
 
+  // A semantic error found inside an action. yyerror only reports: after one
+  // of bison's own syntax errors bison abandons the parse itself, but an
+  // action that called it carried on and built a node from what it had just
+  // rejected -- an unresolved name taken for a node, operands of different
+  // widths -- so an action that rejects its input stops the parse here, and
+  // SMTParse reports the failure.
+#define SMT_REJECT(msg)                                                        \
+  do                                                                           \
+  {                                                                            \
+    yyerror(msg);                                                              \
+    YYABORT;                                                                   \
+  } while (0)
+
   ASTNode query;
 #define YYLTYPE_IS_TRIVIAL 1
 #define YYMAXDEPTH 104857600
@@ -313,7 +326,7 @@ COLON_TOK ASSUMPTION_TOK an_formula
         0 == strcmp($3->c_str(),"QF_BV") ||
         //0 == strcmp($3->c_str(),"QF_UF") ||
         0 == strcmp($3->c_str(),"QF_AUFBV"))) {
-    yyerror("Wrong input logic:");
+    SMT_REJECT("Wrong input logic:");
   }
   delete $3;
   $$ = NULL;
@@ -724,10 +737,10 @@ BITCONST_TOK { $$ = $1; }
 {
   int width = $3 - $5 + 1;
   if (width < 0)
-    yyerror("Negative width in extract");
+    SMT_REJECT("Negative width in extract");
       
   if((unsigned)$3 >= $7->GetValueWidth())
-    yyerror("Parsing: Wrong width in BVEXTRACT\n");                      
+    SMT_REJECT("Parsing: Wrong width in BVEXTRACT\n");
       
   ASTNode hi  =  GlobalParserInterface->CreateBVConst(32, $3);
   ASTNode low =  GlobalParserInterface->CreateBVConst(32, $5);
@@ -961,7 +974,7 @@ BITCONST_TOK { $$ = $1; }
   else
     {
       n = NULL; // remove gcc warning.
-      yyerror("Rotate must be strictly less than the width.");
+      SMT_REJECT("Rotate must be strictly less than the width.");
     }
       
   $$ = n;
@@ -992,7 +1005,7 @@ BITCONST_TOK { $$ = $1; }
   else
     {
       n = NULL; // remove gcc warning.
-      yyerror("Rotate must be strictly less than the width.");
+      SMT_REJECT("Rotate must be strictly less than the width.");
     }
       
   $$ = n;

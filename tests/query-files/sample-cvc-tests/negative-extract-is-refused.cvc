@@ -1,0 +1,8 @@
+% RUN: not %solver %s 2>&1 | %OutputCheck %s
+%
+% An extract whose high bit is below its low bit has a negative width.
+x : BITVECTOR(8);
+ASSERT(x[2:5] = 0bin0);
+QUERY(FALSE);
+% CHECK-L: CVC syntax error: line 5: Negative width in extract
+% CHECK-NOT: Valid.
