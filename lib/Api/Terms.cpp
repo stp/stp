@@ -792,17 +792,17 @@ std::uint64_t Term::id() const noexcept
   if (is_null())
     return 0;
   const ASTNode n = detail::node_of(*this);
-  const std::uint64_t id = n.GetNodeNum();
   try
   {
-    mgr_->exposed_ids.emplace(id, n);
+    // weakly: the node's last release withdraws the id
+    mgr_->bm->ExposeNode(n);
   }
   catch (...)
   {
     // out of memory registering the id: the id is still correct, only
     // term_from_id may not resolve it
   }
-  return id;
+  return n.GetNodeNum();
 }
 
 TermManager Term::manager() const

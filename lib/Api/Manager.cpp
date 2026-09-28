@@ -122,7 +122,6 @@ ManagerImpl::~ManagerImpl()
   OutputRoute quiet(&kNoOutput);
   // Every node the API tables hold must be released before the manager's
   // unique tables go: clear the tables first.
-  exposed_ids.clear();
   fun_sort_of_identity.clear();
   names_by_node.clear();
   symbols.clear();
@@ -1183,13 +1182,13 @@ void TermManager::bind_symbol(std::string_view name, const Term& t)
 Term TermManager::term_from_id(std::uint64_t id) const
 {
   ManagerImpl* m = live(*this, "TermManager::term_from_id");
-  auto it = m->exposed_ids.find(id);
-  if (it == m->exposed_ids.end())
+  const ASTNode n = m->bm->ExposedNode(id);
+  if (n.IsNull())
     detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::term_from_id",
                  "no live term has id " + std::to_string(id) +
                      " (only ids obtained from Term::id() resolve)",
                  0);
-  return detail::make_term(m, it->second);
+  return detail::make_term(m, n);
 }
 
 // -- values

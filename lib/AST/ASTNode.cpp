@@ -736,4 +736,9 @@ void ASTNode::hasBeenSimplfied() const
   _int_node_ptr->hasBeenSimplified();
 }
 
+
+void ASTInternal::WithdrawExposedId()
+{
+  nodeManager->WithdrawExposedNode(node_uid);
+}
 } //end of namespace

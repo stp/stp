@@ -425,6 +425,15 @@ TEST(Symbols, term_from_id)
   EXPECT_EQ(e->code(), ErrorCode::INVALID_ARGUMENT);
   // ids are stable across handles of the same node
   EXPECT_EQ((x + 1).id(), id);
+  // an id resolves while a term of its node lives, and not after: handing
+  // one out never kept the node alive
+  std::uint64_t gone = 0;
+  {
+    const Term t = bvmul(x, tm.mk_bv(8, 123));
+    gone = t.id();
+    EXPECT_TRUE(tm.term_from_id(gone).same_as(t));
+  }
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.term_from_id(gone));
 }
 
 TEST(Symbols, managers_are_shared_handles)

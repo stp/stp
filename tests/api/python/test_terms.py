@@ -73,6 +73,12 @@ def test_name_table_and_symbols(fresh_manager):
     assert tm.term_from_id(x.id) is x
     with pytest.raises(ArgumentError):
         tm.term_from_id(1 << 62)
+    # an id does not keep its term: once the last wrapper goes, it resolves no more
+    t = x * 123
+    tid = t.id
+    del t
+    with pytest.raises(ArgumentError):
+        tm.term_from_id(tid)
     S = tm.declare_sort("S")
     assert S in tm.declared_sorts() and DeclareSort("S") is S
     T = tm.mk_fresh_sort("T")

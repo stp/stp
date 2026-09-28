@@ -42,6 +42,7 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 #include "stp/config.h"
 #include <ankerl/unordered_dense.h>
+#include <unordered_map>
 #include <cstdint>
 #include <functional>
 #include <set>
@@ -173,6 +174,11 @@ private:
 
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
+
+  // See ExposeNode. Off while the manager is destroyed, whose nodes go
+  // without withdrawing their ids one by one.
+  std::unordered_map<uint64_t, ASTInternal*> exposed_nodes;
+  bool exposed_nodes_live = true;
 
   // Created only by the private LRA frontend, on the first Real
   // construction.  The incomplete type keeps ExactRational, IMath, frontend
@@ -876,6 +882,15 @@ public:
   DLL_PUBLIC void noteFloatingPoint();
   DLL_PUBLIC void noteReal();
   bool HasSeenRealSyntax() const noexcept { return has_real; }
+
+  // The ids the 3.x API hands out (Term::id), to their nodes. Held weakly: a
+  // node's last release withdraws its id (ASTInternal::exposed), so an id
+  // resolves exactly while some reference to its node lives, and handing one
+  // out never keeps a node alive.
+  DLL_PUBLIC void ExposeNode(const ASTNode& n);
+  // The live node with id `id`, or a null node.
+  DLL_PUBLIC ASTNode ExposedNode(uint64_t id) const;
+  void WithdrawExposedNode(uint64_t id);
   // The node factory's refusals of a whole-array equality (= or distinct
   // over arrays) built while array equality is switched off
   // (UserFlags::enable_array_equality), counted: a caller reading a script

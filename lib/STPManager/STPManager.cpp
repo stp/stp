@@ -1267,8 +1267,30 @@ UFContext* STPMgr::getUFContext()
   return uninterpretedFunctions;
 }
 
+void STPMgr::ExposeNode(const ASTNode& n)
+{
+  if (n.IsNull() || !exposed_nodes_live)
+    return;
+  exposed_nodes.emplace(n.GetNodeNum(), n._int_node_ptr);
+  n._int_node_ptr->exposed = true;
+}
+
+ASTNode STPMgr::ExposedNode(uint64_t id) const
+{
+  const auto it = exposed_nodes.find(id);
+  return it == exposed_nodes.end() ? ASTNode() : ASTNode(it->second);
+}
+
+void STPMgr::WithdrawExposedNode(uint64_t id)
+{
+  if (exposed_nodes_live)
+    exposed_nodes.erase(id);
+}
+
 STPMgr::~STPMgr()
 {
+  exposed_nodes_live = false;
+  exposed_nodes.clear();
   ClearAllTables();
 
   delete extensionality;

@@ -38,6 +38,7 @@ THE SOFTWARE.
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <vector>
 
 using namespace stp;
 
@@ -114,9 +115,11 @@ TEST(PersistDelete, DeletedSlotDoesNotAliasALaterWrapper)
   }
 
   std::map<std::uint64_t, std::uint64_t> value_of_id;
+  std::vector<Term> held; // an id resolves while a term of its node lives
   for (unsigned i = 0; i < 1000; ++i)
   {
     const Term c = tm.mk_bv(8, i & 0xffu);
+    held.push_back(c);
     const auto entry = value_of_id.emplace(c.id(), c.to_uint64()).first;
     EXPECT_EQ(entry->second, i & 0xffu) << "id " << c.id() << " names two values";
   }

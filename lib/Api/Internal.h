@@ -265,7 +265,6 @@ struct ManagerImpl
   std::uint64_t fresh_counter = 0;
 
   // ids handed out by Term::id(), for term_from_id
-  std::unordered_map<std::uint64_t, ASTNode> exposed_ids;
 
   // constant arrays are the engine's (STPMgr::CreateConstArray registers the
   // symbol with its default, and the hashing factory folds every read of
