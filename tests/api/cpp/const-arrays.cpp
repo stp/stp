@@ -607,3 +607,67 @@ TEST(ConstArrays, an_operand_that_folds_into_a_constant_array)
   u.add(ite(tm.mk_true(), K(0), K(1)) != K(0));
   EXPECT_TRUE(u.check_sat().is_unsat());
 }
+
+// Default options: three checks, then an equality whose if-then-else operand
+// turns into its constant-array branch once p holds. The fourth check engages
+// the incremental driver, which made the equality's records before the
+// operand simplified; the operand was reported lost, an internal error that
+// poisoned the manager.
+TEST(ConstArrays, an_operand_that_folds_under_the_incremental_driver)
+{
+  TermManager tm;
+  const Sort b8 = tm.mk_bv_sort(8), b3 = tm.mk_bv_sort(3);
+  const Sort A = tm.mk_array_sort(b8, b3);
+  const Term a = tm.declare("a", A), i = tm.declare("i", b8), x = tm.declare("x", b8);
+  const Term p = tm.declare("p", tm.mk_bool_sort());
+  const Term c = tm.mk_const_array(A, tm.mk_bv(3, 2));
+  Solver s(tm);
+  for (std::uint64_t k = 0; k < 3; ++k)
+  {
+    s.push();
+    s.add(x == k);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    s.pop();
+  }
+  const Term eq = ite(p, c, a) == store(a, i, tm.mk_bv(3, 2));
+  s.add(eq);
+  s.add(p);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.statistics().uint64("incremental.engaged"), 1u);
+  const Model m = s.model();
+  EXPECT_TRUE(m.bool_value(eq));
+  EXPECT_TRUE(m.bool_value(p));
+  // every cell but i is the default: store(a, i, 2) leaves a[i] free
+  s.add(a[i + 1] != 2);
+  EXPECT_TRUE(s.check_sat().is_unsat());
+}
+
+// The simplifier writes that a one-bit value is #b1 as (not (= #b0 v)). An
+// equality operand that folds to the all-ones array left its witness name in
+// that form, and the recovery read the equation inside the NOT as a fact:
+// the operand became the all-zeros array, and the store of #b0 below made
+// the equality look satisfiable with p false.
+TEST(ConstArrays, a_one_bit_operand_folded_to_all_ones)
+{
+  TermManager tm;
+  const Sort b2 = tm.mk_bv_sort(2), b1 = tm.mk_bv_sort(1);
+  const Sort A = tm.mk_array_sort(b2, b1);
+  const Term a = tm.declare("a", A), b = tm.declare("b", A);
+  const Term e = tm.declare("e", b1);
+  const Term p = tm.declare("p", tm.mk_bool_sort());
+  const Term ones = tm.mk_const_array(A, tm.mk_bv(1, 1));
+  const Term eq = ite(e == 1, ones, a) == ite(p, b, store(b, tm.mk_bv(2, 1), tm.mk_bv(1, 0)));
+  for (const char* incremental : {"off", "on"})
+  {
+    Options options;
+    options.set("incremental", incremental);
+    Solver s(tm, options);
+    s.add(e == 1);
+    s.add(eq);
+    ASSERT_TRUE(s.check_sat().is_sat()) << incremental;
+    EXPECT_TRUE(s.model().bool_value(p)) << incremental;
+    EXPECT_TRUE(s.model().bool_value(eq)) << incremental;
+    s.add(!p);
+    EXPECT_TRUE(s.check_sat().is_unsat()) << incremental;
+  }
+}

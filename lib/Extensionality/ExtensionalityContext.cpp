@@ -1266,23 +1266,10 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
     {
       const ASTNode& s = n[side];
       const ASTNode& other = n[1 - side];
-      if (s.GetKind() != SYMBOL || witnessNames.find(s) == witnessNames.end())
+      if (s.GetKind() != SYMBOL ||
+          witnessNames.find(s) == witnessNames.end() ||
+          !(other.GetKind() == READ || other.GetKind() == ITE))
         continue;
-      if (other.GetKind() != READ && other.GetKind() != ITE)
-      {
-        // A value: kept apart, for a name whose anchor is gone (below).
-        // Bit propagation also leaves one beside an intact anchor when it
-        // fixes a name, so it is never an anchor itself.
-        if (bm->firstFreeSymbol(other).IsNull())
-        {
-          const std::map<ASTNode, ASTNode>::const_iterator f =
-              foldedRhs.find(s);
-          if (f != foldedRhs.end() && !(f->second == other))
-            foldedConflict.insert(s);
-          foldedRhs[s] = other;
-        }
-        continue;
-      }
       const std::map<ASTNode, ASTNode>::const_iterator prev = anchorRhs.find(s);
       if (prev != anchorRhs.end() && !(prev->second == other))
         FatalError("array-equality: a witness read's defining equation "
@@ -1291,6 +1278,57 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
                    "determined",
                    s);
       anchorRhs[s] = other;
+    }
+  }
+
+  // The value a name is equated with (see the recovery of a folded operand
+  // below), taken from the top-level conjuncts alone: nested in the formula,
+  // an equation of that shape says nothing about the name by itself. That
+  // includes the negated form -- the simplifier writes that a one-bit name
+  // is #b1 as (not (= #b0 name)), and the equation inside the NOT says the
+  // opposite of the fact -- so a negated equation settles a one-bit name
+  // alone, as the other value. Bit propagation also states a value beside
+  // an intact anchor when it fixes a name, so a value is never an anchor.
+  {
+    std::vector<ASTNode> conjuncts(1, root);
+    for (size_t k = 0; k < conjuncts.size(); k++)
+    {
+      const ASTNode c = conjuncts[k];
+      if (c.GetKind() == AND)
+      {
+        conjuncts.insert(conjuncts.end(), c.GetChildren().begin(),
+                         c.GetChildren().end());
+        continue;
+      }
+      const bool negated = c.GetKind() == NOT;
+      const ASTNode eq = negated ? c[0] : c;
+      if (eq.GetKind() != EQ || eq.Degree() != 2)
+        continue;
+      for (int side = 0; side < 2; side++)
+      {
+        const ASTNode& s = eq[side];
+        const ASTNode& other = eq[1 - side];
+        if (s.GetKind() != SYMBOL ||
+            witnessNames.find(s) == witnessNames.end() ||
+            other.GetKind() == READ || other.GetKind() == ITE ||
+            !bm->firstFreeSymbol(other).IsNull())
+          continue;
+        // Kept in the plain spelling: a floating-point constant and the
+        // plain constant with its bits intern apart, and two spellings of
+        // one value are one fact, not two.
+        ASTNode value =
+            other.GetKind() == BVCONST ? plainBitVectorConstant(bm, other) : other;
+        if (negated)
+        {
+          if (s.GetValueWidth() != 1 || other.GetKind() != BVCONST)
+            continue;
+          value = bm->CreateBVConst(1, other.GetUnsignedConst() == 0 ? 1 : 0);
+        }
+        const std::map<ASTNode, ASTNode>::const_iterator f = foldedRhs.find(s);
+        if (f != foldedRhs.end() && !(f->second == value))
+          foldedConflict.insert(s);
+        foldedRhs[s] = value;
+      }
     }
   }
 
@@ -1371,7 +1409,19 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
         sort = SourceSort::array(
             SourceSort::bitVector(construction.GetIndexWidth()),
             SourceSort::bitVector(construction.GetValueWidth()));
-      return bm->CreateConstArray(sort, value);
+      // The value is spelled as the name is, in plain bits; the default is
+      // spelled at the element's sort.
+      ASTNode spelled = value;
+      if (value.GetKind() == BVCONST)
+      {
+        const SourceSort element = sort.element();
+        if (element.kind() == SourceSort::Kind::FloatingPoint ||
+            element.kind() == SourceSort::Kind::RoundingMode)
+          spelled = bm->LiftSourceValue(value, element);
+        else if (element.kind() == SourceSort::Kind::Uninterpreted)
+          spelled = bm->CreateUninterpretedConst(value, element);
+      }
+      return bm->CreateConstArray(sort, spelled);
     };
     r.canonicalLeft =
         constL ? r.constructionLeft

@@ -1,4 +1,5 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
+; RUN: %solver --array-equality --incremental=on %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
 ; An array equal to an if-then-else whose selected branch is a constant array.
 (set-logic QF_ABV)

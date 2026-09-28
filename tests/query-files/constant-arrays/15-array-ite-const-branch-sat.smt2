@@ -1,4 +1,5 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
+; RUN: %solver --array-equality --incremental=on %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 8) (_ BitVec 8)))
