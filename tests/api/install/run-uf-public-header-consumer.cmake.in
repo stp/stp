@@ -34,26 +34,29 @@ elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
   # libraries moved and the headers went to the configured prefix instead.
   set(prefix_dir "${scratch_dir}/prefix")
   file(MAKE_DIRECTORY "${prefix_dir}")
-  file(MAKE_DIRECTORY "${stage_dir}")
-  # DESTDIR prepends the whole prefix, leading slash and all.
-  string(REGEX REPLACE "^/+" "" _staged_prefix_rel "${prefix_dir}")
-  set(staged_prefix_dir "${stage_dir}/${_staged_prefix_rel}")
 
   set(install_command
       "@CMAKE_COMMAND@" --install "${stp_build_dir}" --prefix "${prefix_dir}")
   if(DEFINED STP_TEST_CONFIG AND NOT STP_TEST_CONFIG STREQUAL "")
     list(APPEND install_command --config "${STP_TEST_CONFIG}")
   endif()
-  # DESTDIR as well, and not to weaken the check. --prefix only redirects
-  # destinations written relative to the prefix, and the Python bindings are
-  # deliberately not: PYTHON_LIB_INSTALL_DIR is the interpreter's
-  # site-packages, outside any prefix. Without a staging root that write needs
-  # root and the install dies there, before reaching anything this is about.
-  # Under DESTDIR it lands harmlessly beside the prefix instead, and what is
-  # asserted below is unchanged: the C and C++ package has to appear under the
-  # prefix that was asked for.
+  # A plain --prefix install, as a user without root runs it. Only a Python
+  # destination configured as an absolute path escapes the prefix; stage that
+  # case under DESTDIR so the write outside the prefix cannot need root.
+  set(python_lib_install_dir "@PYTHON_LIB_INSTALL_DIR@")
+  set(python_enabled "@ENABLE_PYTHON_INTERFACE@")
+  if(python_enabled AND IS_ABSOLUTE "${python_lib_install_dir}")
+    file(MAKE_DIRECTORY "${stage_dir}")
+    # DESTDIR prepends the whole prefix, leading slash and all.
+    string(REGEX REPLACE "^/+" "" _staged_prefix_rel "${prefix_dir}")
+    set(staged_prefix_dir "${stage_dir}/${_staged_prefix_rel}")
+    set(install_command "@CMAKE_COMMAND@" -E env "DESTDIR=${stage_dir}"
+        ${install_command})
+  else()
+    set(staged_prefix_dir "${prefix_dir}")
+  endif()
   execute_process(
-    COMMAND "@CMAKE_COMMAND@" -E env "DESTDIR=${stage_dir}" ${install_command}
+    COMMAND ${install_command}
     RESULT_VARIABLE install_result
     OUTPUT_VARIABLE install_stdout
     ERROR_VARIABLE install_stderr
@@ -76,6 +79,12 @@ elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
     message(FATAL_ERROR
       "cmake --install --prefix put no c_interface.h under ${staged_prefix_dir}; "
       "an install DESTINATION is still absolute and ignored the new prefix")
+  endif()
+  if(python_enabled AND NOT IS_ABSOLUTE "${python_lib_install_dir}"
+     AND NOT EXISTS "${prefix_dir}/${python_lib_install_dir}/stp/library_path.py")
+    message(FATAL_ERROR
+      "cmake --install --prefix put no stp/library_path.py under "
+      "${prefix_dir}/${python_lib_install_dir}")
   endif()
   list(GET _found_config 0 _found_config)
   get_filename_component(stp_cmake_dir "${_found_config}" DIRECTORY)
