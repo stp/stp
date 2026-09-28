@@ -22,9 +22,8 @@ unsupported, and which 2.x suites run against it.
   API alone (with the engine's C++ interface, `cppinterface`, which the
   parsers and the 3.x API use). The 2.x headers, `c_interface.h` and the
   header-only `fp.hpp` and `uf.hpp` over it, are installed with `stp2`.
-- The in-tree 2.x clients link `stp2`: the libstp2 test suites
-  (`tests/api/compat2`), the two C tests of Real arithmetic
-  (`tests/lra/real_c_api_smoke.c`, `real_c_api_undeleted_expr.c`), the
+- The in-tree 2.x clients link `stp2`: the libstp2 tests
+  (`tests/api/compat2`, the C tests of Real arithmetic among them), the
   install-test consumers of `c_interface.h` and `uf.hpp`, `tools/extdiff`
   (deliberately 2.x: the same source builds against the pre-feature baseline)
   and `tools/c_handle_churn_benchmark`. The 2.x ctypes Python package is gone;
@@ -306,9 +305,9 @@ Everything else is a direct mapping.
 - `tests/api/compat2`: eleven of the 2.x gtest suites, unchanged (the handle
   lifecycle, counterexamples, push and pop, parsing, `Expr` ownership, the
   counter enum's ABI, floating point and `fp.hpp`, uninterpreted functions,
-  arrays, and the reason a query had no answer), each linked to `stp2`.
-- `tests/lra`: `lra_c_api_smoke` and `lra_c_api_undeleted_expr`, the C tests of
-  the Real extension.
+  arrays, and the reason a query had no answer), each linked to `stp2`; and
+  the C tests of the Real extension, `lra_c_api_smoke`,
+  `lra_c_api_undeleted_expr` and `lra_c_api_negative`.
 - `tests/api/install`: the C and C++ (`uf.hpp`) consumers of an installed
   `c_interface.h`, linking `${STP_C_INTERFACE_LIBRARY}`.
 

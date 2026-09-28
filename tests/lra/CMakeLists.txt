@@ -852,38 +852,8 @@ set_tests_properties(lra_frontend_internal_print_barrier PROPERTIES
   LABELS "lra;frontend;negative;printer"
 )
 
-add_executable(stp_lra_real_c_api_smoke real_c_api_smoke.c)
-target_link_libraries(stp_lra_real_c_api_smoke PRIVATE stp2)
-set_property(TARGET stp_lra_real_c_api_smoke PROPERTY INCLUDE_DIRECTORIES
-  "${PROJECT_BINARY_DIR}/include"
-  "${PROJECT_SOURCE_DIR}/include"
-)
-set_target_properties(stp_lra_real_c_api_smoke PROPERTIES
-  C_STANDARD 99
-  C_STANDARD_REQUIRED ON
-  C_EXTENSIONS OFF
-)
-add_executable(stp_lra_real_c_api_undeleted_expr real_c_api_undeleted_expr.c)
-target_link_libraries(stp_lra_real_c_api_undeleted_expr PRIVATE stp2)
-set_property(TARGET stp_lra_real_c_api_undeleted_expr PROPERTY INCLUDE_DIRECTORIES
-  "${PROJECT_BINARY_DIR}/include"
-  "${PROJECT_SOURCE_DIR}/include"
-)
-set_target_properties(stp_lra_real_c_api_undeleted_expr PROPERTIES
-  C_STANDARD 99
-  C_STANDARD_REQUIRED ON
-  C_EXTENSIONS OFF
-)
-add_test(NAME lra_c_api_undeleted_expr
-         COMMAND stp_lra_real_c_api_undeleted_expr)
-
-add_test(NAME lra_c_api_smoke COMMAND stp_lra_real_c_api_smoke)
-set_tests_properties(lra_c_api_smoke PROPERTIES
-  LABELS "lra;api;model"
-)
-
-# The API tests above rewritten against the 3.x API (C++ and C). The originals
-# stay as tests of libstp2, the 2.x C API over the 3.x one.
+# The Real extension's API tests, against the 3.x API (C++ and C). Its tests of
+# libstp2, the 2.x C API over the 3.x one, are in tests/api/compat2.
 foreach(api3_test combination_api real_capability_api)
   add_executable(stp_lra_api3_${api3_test}_tests api3_${api3_test}_tests.cpp)
   target_link_libraries(stp_lra_api3_${api3_test}_tests PRIVATE stp Threads::Threads)
@@ -923,14 +893,6 @@ set_target_properties(stp_lra_api3_real_c_api_smoke PROPERTIES
 add_test(NAME lra_api3_c_api_smoke COMMAND stp_lra_api3_real_c_api_smoke)
 set_tests_properties(lra_api3_c_api_smoke PROPERTIES
   LABELS "lra;api;model"
-)
-
-add_test(NAME lra_c_api_negative
-  COMMAND "${PYTHON_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/real_c_api_negative_runner.py"
-    "$<TARGET_FILE:stp_lra_real_c_api_smoke>")
-set_tests_properties(lra_c_api_negative PROPERTIES
-  LABELS "lra;api;negative"
 )
 
 add_executable(stp_lra_real_cpp_api_smoke real_cpp_api_smoke.cpp)
