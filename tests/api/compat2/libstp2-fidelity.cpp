@@ -63,4 +63,21 @@ TEST(libstp2_fidelity, a_parsed_query_that_is_not_valid_stays_so)
   vc_Destroy(vc);
 }
 
+// vc_paramBoolExpr names its variable after the application as 2.x printed
+// it, so a one-bit and a four-bit parameter of one value name two variables.
+TEST(libstp2_fidelity, parameters_of_two_widths_name_two_variables)
+{
+  VC vc = vc_createValidityChecker();
+  Expr p = vc_varExpr1(vc, "p", 0, 0);
+  Expr one_bit = vc_paramBoolExpr(vc, p, vc_bvConstExprFromInt(vc, 1, 1));
+  Expr four_bit = vc_paramBoolExpr(vc, p, vc_bvConstExprFromInt(vc, 4, 1));
+  EXPECT_EQ("p (0b1 ) ", text_of(one_bit));
+  EXPECT_EQ("p (0x1 ) ", text_of(four_bit));
+  EXPECT_EQ(0, vc_query(vc, vc_iffExpr(vc, one_bit, four_bit)));
+  // the same parameter names the same variable
+  Expr again = vc_paramBoolExpr(vc, p, vc_bvConstExprFromInt(vc, 1, 1));
+  EXPECT_EQ(1, vc_query(vc, vc_iffExpr(vc, one_bit, again)));
+  vc_Destroy(vc);
+}
+
 } // namespace

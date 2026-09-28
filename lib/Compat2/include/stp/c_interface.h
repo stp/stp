@@ -1629,7 +1629,8 @@ DLL_PUBLIC Expr vc_iteExpr(VC vc, Expr conditional, Expr thenExpr,
 DLL_PUBLIC Expr vc_boolToBVExpr(VC vc, Expr form);
 
 //! \brief Creates a boolean variable named after the application of the
-//!        given boolean variable expression to the parameter, e.g. "p(0x3)".
+//!        given boolean variable expression to the parameter, each printed
+//!        in the presentation language: "p (0x3 )" for a four-bit 3.
 //!        Two applications denote the same variable exactly when the names
 //!        match. The parameter must be a constant bit-vector expression.
 //!

@@ -371,20 +371,20 @@ Expr vc_paramBoolExpr(VC vcp, Expr boolvar, Expr parameter)
     fatal("vc_paramBoolExpr: the parameter must be a constant bit-vector");
     return nullptr;
   }
-  // A Boolean variable named after the application, "p(0x03)": the same
-  // parameter names the same variable.
-  char* base = stp_term_symbol(c);
-  char* hex = stp_term_to_bv_string(t, 16, true);
-  if (base == nullptr || hex == nullptr)
+  // A Boolean variable named after the application as 2.x printed it, each
+  // operand in the presentation language: "p (0b1 )" and "p (0x1 )", a
+  // one-bit parameter's and a four-bit one's, are two variables.
+  char* var_text = stp_term_to_string(c, STP_FORMAT_CVC, false);
+  char* param_text = var_text != nullptr ? stp_term_to_string(t, STP_FORMAT_CVC, false) : nullptr;
+  if (param_text == nullptr)
   {
-    stp_free(base);
-    stp_free(hex);
-    fatal("vc_paramBoolExpr: the first operand must be a Boolean variable");
+    stp_free(var_text);
+    fatal(message("vc_paramBoolExpr", (": " + take_error(vc)).c_str()));
     return nullptr;
   }
-  const std::string name = std::string(base) + "(0x" + hex + ")";
-  stp_free(base);
-  stp_free(hex);
+  const std::string name = std::string(var_text) + "(" + param_text + ")";
+  stp_free(var_text);
+  stp_free(param_text);
   return declare(vc, "vc_paramBoolExpr", name.c_str(), stp_mk_bool_sort(vc->tm));
 }
 
