@@ -899,11 +899,10 @@ class Model(_core.ModelHandle):
             if not self.in_core(t):
                 raise KeyError("function %s is not in the model" % (t.decl_name() or t.sexpr()))
             return self.fun_value(t)
+        # the mapping rule: stp_model_try_value refuses every term whose value would need
+        # completion, and the KeyError names the symbols outside the core, if that is why
         v = self.try_value(t)
-        # stp_model_try_value refuses a scalar symbol outside the core but completes an array
-        # symbol and an application of an unseen function (NOTES.md); the mapping rule is
-        # enforced here for every shape (a core symbol or a value takes the fast path).
-        if v is None or (not t.is_value() and not (t.is_const() and self.in_core(t)) and self._missing(t)):
+        if v is None:
             missing = self._missing(t)
             if missing:
                 raise KeyError("symbol%s %s not in the model (m.eval(t) completes)" %

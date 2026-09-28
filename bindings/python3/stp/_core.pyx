@@ -192,8 +192,6 @@ _CLASS_BY_CODE = {
 }
 
 _PARSE_POS = re.compile(r"parse error at (\d+):(\d+)")
-_DOUBLE_SPACE = re.compile(r" {2,}")
-_OPEN_SPACE = re.compile(r"\( ")
 
 
 cdef inline object _s(const char* p):
@@ -1115,17 +1113,11 @@ cdef class Term:
         return _take(p)
 
     def sexpr(self):
-        """SMT-LIB 2, untruncated. The engine's printer puts a space before every constant
-        (" #x00", "(bvadd  #x01 x)"); the runs are collapsed here."""
+        """SMT-LIB 2, untruncated."""
         cdef char* p = stp_term_str(self._h)
         if p == NULL:
             self._m._fail("stp_term_str")
-        s = _take(p)
-        if "  " in s:
-            s = _DOUBLE_SPACE.sub(" ", s)
-        if "( " in s:
-            s = _OPEN_SPACE.sub("(", s)
-        return s.strip()
+        return _take(p)
 
     def to_string(self, int format, share_subterms=False):
         cdef char* p = stp_term_to_string(self._h, <stp_format>format, 1 if share_subterms else 0)

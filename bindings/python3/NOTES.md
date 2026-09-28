@@ -84,9 +84,9 @@ not offer, and every defect of the C or C++ layers met on the way.
    `Select(v, i)` over the value's store chain on a constant array, and stays
    a `SELECT` (only a read of the constant array itself folds, to its default,
    `lib/Api/README.md`).
-3. **`Model.__getitem__` enforces the no-completion rule itself** for compound
-   terms and array symbols, because `stp_model_try_value` completes them (C++
-   defect 6 below); a core symbol or a value takes the fast path.
+3. **`Model.__getitem__` never completes**: it is `stp_model_try_value`, which
+   refuses every term whose value would need completion, and its `KeyError`
+   names the symbols outside the core (`m.eval(t)` completes).
 4. **`Model.eval(t, model_completion=False)`** substitutes the core's *scalar
    and array* values and leaves applications of function symbols in place: no
    term stands for a function value.
@@ -118,8 +118,8 @@ not offer, and every defect of the C or C++ layers met on the way.
    `fpToSBV` of a value still raises: evaluate it in a model.
 8. **`str(term)`** is a best-effort infix rendering (values as Python
    literals, symbols by name, `If`, `Extract`, `f(x)`, `a[i]`, ...); `repr`
-   is SMT-LIB 2 with the printer's double spaces collapsed (C NOTES defect 2).
-   `to_string("smtlib2")` is `sexpr()`.
+   is the SMT-LIB 2 text of `stp_term_str`. `to_string("smtlib2")` is
+   `sexpr()`.
 9. **`RotateLeft(a, b)` / `RotateRight(a, b)` with a term amount** are built
    from shifts (the kind table has no term-amount rotate); with an int amount
    the indexed kind is built, which the engine represents as a concatenation

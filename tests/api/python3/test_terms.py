@@ -572,6 +572,9 @@ def test_introspection_and_printing():
         t.arg(2)
     assert repr(t) in ("(bvadd x (bvmul #x03 y))", "(bvadd (bvmul #x03 y) x)")
     assert t.sexpr() == repr(t) and "  " not in repr(t)
+    # the text is the printer's own: a quoted name keeps its spaces
+    odd = BitVec("odd  name", 8)
+    assert repr(odd) == "|odd  name|" and repr(odd + 1) in ("(bvadd |odd  name| #x01)", "(bvadd #x01 |odd  name|)")
     assert str(t) in ("x + (3 * y)", "(3 * y) + x")
     assert str(x == 7) == "x == 7" and str(If(Bool("p"), x, y)) == "If(p, x, y)"
     assert str(Extract(3, 0, x)) == "Extract(3, 0, x)" and str(ULT(x, y)) in ("ULT(x, y)", "UGT(y, x)")
