@@ -24,8 +24,8 @@ THE SOFTWARE.
 // soundness -- the set always contains every value ever inserted.
 
 #include "stp/Simplifier/UnsignedIntervalSet.h"
-#include "stp/Simplifier/constantBitP/MersenneTwister.h"
 #include <gtest/gtest.h>
+#include <random>
 #include <set>
 #include <vector>
 
@@ -189,7 +189,7 @@ TEST(UnsignedIntervalSet, randomSoundness)
 {
   const unsigned width = 6;
   const uint64_t N = 1ull << width;
-  MTRand rand(1u);
+  std::mt19937 rand(1u);
 
   for (unsigned cap = 1; cap <= 5; cap++)
   {
@@ -198,11 +198,11 @@ TEST(UnsignedIntervalSet, randomSoundness)
       stp::UnsignedIntervalSet s(width, cap);
       std::set<uint64_t> inserted;
 
-      const unsigned inserts = 1 + (rand.randInt() % 8);
+      const unsigned inserts = 1 + (rand() % 8);
       for (unsigned k = 0; k < inserts; k++)
       {
-        uint64_t lo = rand.randInt() % N;
-        uint64_t hi = rand.randInt() % N;
+        uint64_t lo = rand() % N;
+        uint64_t hi = rand() % N;
         if (lo > hi)
           std::swap(lo, hi);
         add(s, width, lo, hi);

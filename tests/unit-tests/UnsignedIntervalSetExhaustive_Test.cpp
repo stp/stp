@@ -61,7 +61,7 @@ struct Context
   stp::UnsignedIntervalSetAnalysis setA;
 
   Context(unsigned cap)
-      : snf(*(mgr.hashingNodeFactory), mgr), single(mgr), setA(mgr, cap)
+      : snf(*(mgr.hashingNodeFactory), mgr), single(), setA(cap)
   {
     mgr.defaultNodeFactory = &snf;
   }
