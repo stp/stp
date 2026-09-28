@@ -138,14 +138,21 @@ public:
   // linkShared: a comparator cell over an exclusive-or something else also
   // reads emits the linking block beside the live exclusive-or instead of
   // falling back to the per-gate encoding.
+  //
+  // completeIte: a patterned ITE also gets the two prime implicates that
+  // skip the condition.
   Cone(const Manager& m, unsigned namedOutputs = 0,
-       Recover recover = Recover::PatternsAndAnds, bool linkShared = false);
+       Recover recover = Recover::PatternsAndAnds, bool linkShared = false,
+       bool completeIte = false);
 
   // In the cone, so it gets a variable and its defining clauses.
   bool live(Node n) const { return (live_[n >> 6] >> (n & 63)) & 1u; }
 
-  // Encoded as one four-clause ITE over its grandchildren rather than as
-  // three ANDs. Its two fanin nodes are then not live at all.
+  // Encoded as one ITE block over its grandchildren rather than as three
+  // ANDs: the four clauses that mention the condition, or under
+  // completeIte the relation's six prime implicates (still four when the
+  // arms share a node and it is an exclusive-or). Its two fanin nodes are
+  // then not live at all.
   bool patterned(Node n) const
   {
     return (pattern_[n >> 6] >> (n & 63)) & 1u;
@@ -245,6 +252,7 @@ public:
 
   // Outputs at or above this index are named; the ones below are asserted.
   uint32_t firstNamedOutput() const { return firstNamed_; }
+  bool completeIte() const { return completeIte_; }
 
 private:
   void setLive(Node n) { live_[n >> 6] |= 1ull << (n & 63); }
@@ -285,6 +293,7 @@ private:
   uint32_t nCi_ = 0;
   uint32_t nNamed_ = 0;
   uint32_t firstNamed_ = 0;
+  bool completeIte_ = false;
 };
 
 // Pass B: emit. Ascending is automatically topological, so a fanin's variable
@@ -489,6 +498,14 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink,
       sink.clause(px, lc ^ 1, lt ^ 1);
       sink.clause(nx, lc, le);
       sink.clause(px, lc, le ^ 1);
+      if (cone.completeIte() && nodeOf(t) != nodeOf(e))
+      {
+        // The two prime implicates that skip the condition: agreeing arms
+        // decide the output while `c` is still unset. For an exclusive-or
+        // the arms share a node and both clauses are tautologies.
+        sink.clause(nx, lt, le);
+        sink.clause(px, lt ^ 1, le ^ 1);
+      }
     }
     else
     {
@@ -549,7 +566,7 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink,
 CNF deriveTseitin(const Manager& m, unsigned namedOutputs = 0,
                   Recover recover = Recover::PatternsAndAnds,
                   std::vector<uint32_t>* nodeVarOut = nullptr,
-                  bool linkShared = false);
+                  bool linkShared = false, bool completeIte = false);
 
 } // namespace aig
 } // namespace stp

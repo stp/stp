@@ -776,7 +776,8 @@ bool Cone::tryCell(const Manager& m, Node n, const std::vector<uint8_t>& refs)
 }
 
 Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover,
-           bool linkShared)
+           bool linkShared, bool completeIte)
+    : completeIte_(completeIte)
 {
   const uint32_t nCo = m.outputCount();
   assert(namedOutputs <= nCo);
@@ -1085,8 +1086,16 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover,
     }
     if (patterned(n))
     {
-      nClauses_ += 4;
-      nLiterals_ += 12;
+      Lit c, t, e;
+      const bool matched = matchIte(m, n, c, t, e);
+      assert(matched);
+      (void)matched;
+      // Under completeIte a genuine ITE carries the two condition-free prime
+      // implicates too; an exclusive-or's arms share a node, so for it they
+      // are tautologies.
+      const bool extra = completeIte && nodeOf(t) != nodeOf(e);
+      nClauses_ += extra ? 6 : 4;
+      nLiterals_ += extra ? 18 : 12;
       continue;
     }
     leaves.clear();
@@ -1129,9 +1138,10 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover,
 }
 
 CNF deriveTseitin(const Manager& m, unsigned namedOutputs, Recover recover,
-                  std::vector<uint32_t>* nodeVarOut, bool linkShared)
+                  std::vector<uint32_t>* nodeVarOut, bool linkShared,
+                  bool completeIte)
 {
-  const Cone cone(m, namedOutputs, recover, linkShared);
+  const Cone cone(m, namedOutputs, recover, linkShared, completeIte);
   CNF cnf;
   writeTseitin(m, cone, cnf, nodeVarOut);
   return cnf;
