@@ -73,24 +73,23 @@ model commands then decline rather than answer from a stack that no longer
 exists: ``get-value`` replies ``unsupported``, while ``get-model`` prints
 nothing at all.
 
-The C API takes the same route: a session becomes incremental at its
-first ``vc_push`` (or from the first query with ``vc_setFlags(vc, 'i')``),
-and from the third solve on, ``vc_query`` runs on the persistent driver. The
-native API has no SMT-LIB2 ``set-logic`` declaration, so it retains that
-theory-neutral threshold.
-``vc_query`` decides *asserts AND NOT query*, and the negated query is
-appended as one more retractable level -- an assumption for exactly that
-call, retracted by construction. The API's historical model contract is
-untouched: the counterexample belongs to the last ``vc_query`` and
-deliberately survives the idiomatic push/query/pop bracket (see the
-documentation at those declarations); the driver fills the same
-counterexample tables the batch path does. The Python bindings sit on the
-C API and inherit all of this. ``vc_setFlags(vc, 'i')`` is the C API's
-``--incremental=on``; its ``--incremental=off`` is
-``vc_setInterfaceFlags(vc, INCREMENTAL_AUTO_ENGAGE_AT, 0)`` without ``'i'``,
-since a native session has no other way to engage. A C++ embedder can also
-set ``UserFlags.incremental_mode`` directly, and ``IncrementalMode::OFF``
-there additionally stops ``vc_push`` from making the session incremental.
+The API (:doc:`api3`) takes the same route: a solver becomes incremental at
+its first ``push``, and from its third check on, ``check_sat`` runs on the
+persistent driver. The API has no SMT-LIB2 ``set-logic`` declaration, so it
+keeps that theory-neutral threshold, which the
+``incremental-auto-engage-at`` option moves. The ``incremental`` option is
+the command line's ``--incremental``: ``on`` engages the driver from the
+first check, and ``off`` never engages it, not even after a ``push``.
+A check under assumptions appends them as one more retractable level -- an
+assumption for exactly that call, retracted by construction -- and
+``entails(q)`` is a check under the assumption *NOT q*. The driver fills the
+same counterexample tables the batch path does, and a ``Model`` is a detached
+snapshot of them that survives later assertions, pushes and pops. The C API
+and the Python package are the same objects and inherit all of this.
+``libstp2`` keeps the 2.x C API's spelling and contract on top: a session
+becomes incremental at its first ``vc_push`` or with
+``vc_setFlags(vc, 'i')``, and the counterexample belongs to the last
+``vc_query``.
 
 The whole input language is covered. Plain bit-vector assertions take the
 lean path described below; arrays, ``--ackermanize``, floating point and
@@ -703,10 +702,11 @@ be used for quantitative timing conclusions.
 ``--incremental-profile`` enables a lower-noise profile for each invocation of
 the incremental driver. Pair it with ``--incremental=on`` to route the first
 check through that driver; the profile flag observes incremental work but does
-not itself change solver engagement. This is currently a command-line
-diagnostic rather than a C API option. Each invocation writes four keyed
+not itself change solver engagement. Each invocation writes four keyed
 records to stderr (the per-check phase, work, and CBP/backend records followed
-by additive session totals), while SMT-LIB answers remain on stdout.
+by additive session totals), while SMT-LIB answers remain on stdout. Through
+the API it is the diagnostic-tier ``incremental-profile`` option, and the
+records go to the solver's diagnostic sink.
 
 The profile reports stack and cache work, including CBP divergences,
 rollbacks, discarded levels and state entries, fresh and re-fed levels, their

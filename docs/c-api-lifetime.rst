@@ -1,10 +1,11 @@
-Legacy C API handle lifetime
-============================
+2.x C API handle lifetime
+=========================
 
-The C API exposes ``VC``, ``Expr``, ``Type``, and
-``WholeCounterExample`` as legacy opaque raw pointers.  Their supported
-lifetime is owner-dominant: a manager-dependent child handle is supported
-only while both of these conditions hold:
+``libstp2`` provides the 2.x C API (``c_interface.h``) and keeps its handle
+contract, which this page states.  The API exposes ``VC``, ``Expr``,
+``Type``, and ``WholeCounterExample`` as opaque raw pointers.  Their
+supported lifetime is owner-dominant: a manager-dependent child handle is
+supported only while both of these conditions hold:
 
 * its owning ``VC`` is live; and
 * the child has not been explicitly deleted.
@@ -59,7 +60,7 @@ Invalidated raw pointers
 ------------------------
 
 Using or deleting a child after explicit deletion or after destruction of its
-owning ``VC`` is outside the supported raw C API contract.  The same is true
+owning ``VC`` is outside the supported contract.  The same is true
 of reusing or destroying an already destroyed owner.  These calls may reach
 reclaimed storage.  STP does not promise safe execution, deterministic
 diagnosis, an error message, a return value, or process continuation for an
@@ -82,21 +83,20 @@ return they do not alias manager storage, remain valid after ``vc_Destroy``,
 and must be released once with ``vc_deleteString``.  This exception does not
 make the ``Expr`` used to request the value independent.
 
-Managed interfaces and concurrency
-----------------------------------
+The 3.x API and concurrency
+---------------------------
 
-Python's managed ``Solver`` and expression wrappers provide a stronger close
-contract: they register native children, delete them before the checker, make
-close idempotent, and reject closed-wrapper access before invoking the raw C
-API.  The C++ API follows ordinary ``ASTNode`` and manager scoped-lifetime
-ordering and same-manager rules.  Neither behavior implies a raw C
-dangling-pointer diagnostic guarantee.
+The 3.x API (:doc:`api3`) has a lifetime model of its own, in which terms and
+solvers keep their term manager alive; ``stp.h`` states the rules for C
+handles.  None of it extends to ``libstp2``'s raw pointers, and none of it
+implies a dangling-pointer diagnostic for them.
 
-Independent live managers may be used on separate threads under the existing
-STP concurrency controls.  Concurrent use and deletion of the same child,
-concurrent use and destruction of its owner, repeated concurrent destruction,
-and unload or fork with outstanding handles are unsupported.
+Independent live checkers may be used on separate threads.  Concurrent use and
+deletion of the same child, concurrent use and destruction of its owner,
+repeated concurrent destruction, and unload or fork with outstanding handles
+are unsupported.
 
-This is a clarification of the existing legacy contract, not checked-handle
-hardening.  No registry, tombstone, generation, owner control block, checked
-handle, or use-after-free defence is provided.
+This is the 2.x contract, not checked-handle hardening.  Apart from the
+registry the uninterpreted-function entry points consult once ``'u'`` is set,
+no tombstone, generation, owner control block, checked handle, or
+use-after-free defence is provided.

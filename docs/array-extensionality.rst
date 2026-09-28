@@ -25,18 +25,20 @@ Command line::
 
     stp --array-equality file.smt2
 
-C API: call ``vc_setFlag(vc, 'x')`` before constructing any equality
-between whole arrays.
-The option controls whether construction of the dedicated opaque
-``ARRAY_EQ`` node is permitted; its abstraction is deferred until the
-completed query reaches the solver.
+API (:doc:`api3`): the ``array-equality`` option. Its default, ``auto``,
+lets an equality between whole arrays built through the API engage the
+procedure by itself; ``on`` forces the procedure on, as
+``--array-equality`` does, and is what a script read through the API
+needs; ``off`` refuses such an equality at construction with
+``UNSUPPORTED``. An equality that is built is the dedicated opaque
+``ARRAY_EQ`` node, and its abstraction is deferred until the completed
+query reaches the solver.
 
-Python API: create the solver with ``stp.Solver(array_equality=True)``.
-Arrays are built with ``Solver.array(name, index_width, value_width)``,
-read with ``a[i]``, written with ``a.store(i, v)``, and compared whole
-with ``==``/``!=``; ``ArrayExpr.model()`` returns an array's entries in
-a satisfying assignment, in ascending index order. Comparing whole
-arrays on a solver created without the option raises ``RuntimeError``.
+In Python, arrays are the z3py idiom: ``Array(name, index_sort,
+element_sort)``, ``a[i]`` or ``Select(a, i)``, ``Store(a, i, v)``, and
+``==``/``!=`` between whole arrays. ``Solver(array_equality=True)`` sets
+the option to ``on`` and ``False`` to ``off``, under which comparing
+whole arrays raises ``stp.Unsupported``.
 
 With the option enabled:
 
@@ -48,8 +50,9 @@ With the option enabled:
   SMT-LIB2 solver. This form is used whenever the option is on, even for
   a query containing no array equality; only with the option off does
   the pre-feature array printer run;
-* ``vc_getCounterExampleArray`` returns one entry per concrete index in
-  ascending index order;
+* a model's value of an array (``Model::array_value`` in C++,
+  ``stp_model_array_value`` in C, ``m[a]`` in Python) has one entry per
+  concrete index, in ascending index order, over a default element;
 * array-valued ``(get-value ...)`` is rejected as unsupported (use
   ``(get-model)``). This is not conditional on the option: an array has no
   value spelling in a valuation pair either way.
@@ -64,12 +67,12 @@ array terms is now refused rather than warned about. It was never
 decided -- nothing eliminates the array-sorted operands, so the atom
 reached the solver unconstrained and the verdict could be wrong, and a
 build with assertions aborted instead of answering. Both behaviours
-reproduce on STP releases predating this feature. The documented C API
-surface is pinned by an opt-in test
+reproduce on STP releases predating this feature. The 2.x C API surface,
+which ``libstp2`` now provides, is pinned by an opt-in test
 (``default-off-capi-baseline-differential``, enabled with
 ``-DTEST_BASELINE_DIFFERENTIAL=ON``), which builds the upstream commit
 this branch was last merged with from git history and compares every
-observation of an identical C API driver — verdicts, model values, every
+observation of an identical 2.x C API driver — verdicts, model values, every
 counterexample-array entry, stdout, stderr and exit status — across the
 two builds. Holding upstream fixed on both sides is what makes the
 difference attributable to this feature; a baseline frozen further back
@@ -86,8 +89,7 @@ solve now reports ``unknown`` with a timeout reason where it previously
 aborted with an internal error.
 
 Limitations: arrays of arrays are not supported (STP's sort system has
-no nested array sorts), and there is no constant-array
-(``as const``) input syntax.
+no nested array sorts).
 
 How it works
 ------------
