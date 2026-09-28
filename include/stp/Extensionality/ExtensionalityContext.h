@@ -226,6 +226,17 @@ public:
     return protectedSymbols.find(s) != protectedSymbols.end();
   }
 
+  // A read at a witness index: the right-hand side of an anchor equation,
+  // which has to reach locateCanonicalOperands in that equation, since it
+  // is where the current form of an equality operand is read back from.
+  // A pass may pin such a read's value with a fact of its own, but must
+  // not replace the read inside the anchor.
+  bool isWitnessRead(const ASTNode& n) const
+  {
+    return n.GetKind() == READ && n[1].GetKind() == SYMBOL &&
+           isProtected(n[1]);
+  }
+
   // Conservative pre-preprocessing inventory of the array symbols in an
   // active solve. The final graph is built from the whole prepared formula,
   // so this set is a pre/post ownership tripwire: it must anticipate every

@@ -271,6 +271,51 @@ TEST(ConstArrays, writes_naming_every_value_of_a_small_index_sort)
   }
 }
 
+// The disequality of a constant array and a store chain over another one,
+// over index sorts small enough that the solve pins the value of the cell
+// witnessing the difference: sat while a value is left unwritten, unsat once
+// every value is.
+TEST(ConstArrays, disequality_over_a_small_index_sort)
+{
+  TermManager tm;
+  Sort bv1 = tm.mk_bv_sort(1);
+  Term zero = tm.mk_bv(1, 0), one = tm.mk_bv(1, 1);
+  auto differ = [&](const Sort& index, const std::vector<Term>& indexes) {
+    Sort A = tm.mk_array_sort(index, bv1);
+    Term chain = tm.mk_const_array(A, one);
+    for (const Term& i : indexes)
+      chain = store(chain, i, zero);
+    return tm.mk_const_array(A, zero) != chain;
+  };
+  std::vector<Term> modes;
+  for (RoundingMode r : {RoundingMode::RNE, RoundingMode::RNA, RoundingMode::RTP,
+                         RoundingMode::RTN, RoundingMode::RTZ})
+    modes.push_back(tm.mk_rm(r));
+  Sort f22 = tm.mk_fp_sort(2, 2);
+  std::vector<Term> floats;
+  for (unsigned bits = 0; bits < 16; ++bits)
+    floats.push_back(tm.mk_fp_from_bits(f22, tm.mk_bv(4, bits)));
+  std::vector<Term> all_but_negative_zero = floats;
+  all_but_negative_zero.erase(all_but_negative_zero.begin() + 8);
+  for (const Term& unwritten :
+       {differ(bv1, {zero}),
+        differ(tm.mk_rm_sort(), std::vector<Term>(modes.begin(), modes.end() - 1)),
+        differ(f22, all_but_negative_zero)})
+  {
+    Solver s(tm);
+    s.add(unwritten);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_TRUE(s.model().bool_value(unwritten));
+  }
+  for (const Term& written :
+       {differ(bv1, {zero, one}), differ(tm.mk_rm_sort(), modes), differ(f22, floats)})
+  {
+    Solver s(tm);
+    s.add(written);
+    EXPECT_TRUE(s.check_sat().is_unsat());
+  }
+}
+
 TEST(ConstArrays, equality_between_constant_arrays_is_equality_of_defaults)
 {
   Arrays f;

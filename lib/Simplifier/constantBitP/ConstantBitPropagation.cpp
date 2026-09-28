@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 // FIXME: External library
 #include "extlib-constbv/constantbv.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
@@ -229,6 +230,9 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
     return nf->getFalse();
 
   ASTVec toConjoin;
+  ExtensionalityContext* ext = mgr->getExtensionalityIfAny();
+  if (ext != NULL && !ext->activeInSolve())
+    ext = NULL;
 
   // For each entirely fixed node: replace the node by its constant inside
   // "top", and conjoin a fact that pins the node down, so the constraint
@@ -302,7 +306,12 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
       assert(node.GetType() == BOOLEAN_TYPE ||
              ((unsigned)bits.getWidth()) == node.GetValueWidth());
 
-      fromTo.insert(make_pair(node, constNode));
+      // A witness read of the array-equality procedure stays where it is,
+      // pinned by its fact alone: replaced inside its anchor equation, it
+      // would leave "name = constant" behind, and the procedure reads the
+      // equality operand back from the anchor.
+      if (ext == NULL || !ext->isWitnessRead(node))
+        fromTo.insert(make_pair(node, constNode));
       facts.push_back({node, constNode});
     }
   }
