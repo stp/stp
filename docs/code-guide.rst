@@ -15,6 +15,9 @@ component of STP. The headers that go with them live under
    inputs.
 -  ``Compat2``: ``libstp2``, the 2.x C interface (``stp/c_interface.h``)
    re-implemented over the C API, for clients that have not moved to it.
+   Its headers, ``c_interface.h`` and the header-only ``fp.hpp`` and
+   ``uf.hpp`` over it, are its own, in ``lib/Compat2/include/stp/``;
+   installed, they sit beside the rest.
 -  ``Extensionality``: The decision procedure for equalities between
    whole arrays, described in :doc:`array-extensionality`.
 -  ``FloatBlaster``: Bit-blasting of the floating-point theories, built

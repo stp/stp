@@ -18,27 +18,34 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# libstp2: every function of include/stp/c_interface.h (the 2.x C API),
+# libstp2: every function of stp/c_interface.h (the 2.x C API),
 # re-implemented over the 3.x C API of include/stp/stp.h. It links libstp and
 # nothing of the engine directly: the point of the library is that the public
 # 3.x C surface suffices to carry the 2.x one. See NOTES.md in this directory.
 #
 # The only provider of the 2.x C API: libstp carries the 3.x API alone. The
 # 2.x headers (c_interface.h, and the header-only fp.hpp and uf.hpp over it)
-# are installed with this library, and the in-tree 2.x clients (the libstp2
-# tests in tests/api/compat2, extdiff and the handle-churn benchmark) link it.
+# live in include/stp here and are installed with this library, beside the
+# 3.x ones; the in-tree 2.x clients (the libstp2 tests in tests/api/compat2,
+# extdiff and the handle-churn benchmark) link it, which puts them on their
+# include path.
 add_library(stp2
     c_interface2.cpp
     c_interface2_terms.cpp
 )
 add_dependencies(stp2 stp_api_tables)
 target_link_libraries(stp2 PUBLIC stp)
+# Installed, the headers sit in stp's include directory, which linking stp
+# already gives a consumer.
+target_include_directories(stp2 PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 target_compile_features(stp2 PRIVATE cxx_std_17)
 # The build-of-the-library side of the DLL_PUBLIC switch in c_interface.h (see
 # the note in lib/CMakeLists.txt; inert outside MSVC).
 target_compile_definitions(stp2 PRIVATE STP_EXPORTS)
 set_target_properties(stp2 PROPERTIES
-    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp;${PROJECT_SOURCE_DIR}/include/stp/uf.hpp"
+    PUBLIC_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/include/stp/c_interface.h;${CMAKE_CURRENT_SOURCE_DIR}/include/stp/fp.hpp;${CMAKE_CURRENT_SOURCE_DIR}/include/stp/uf.hpp"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )

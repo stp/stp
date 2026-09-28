@@ -19,9 +19,9 @@
 # THE SOFTWARE.
 
 # Symbol visibility, see the DLL_PUBLIC block in include/stp/Util/Attributes.h
-# (duplicated in include/stp/c_interface.h). Both macros only ever do anything
-# under MSVC; the GNU/clang branch of that block tests neither of them, so on
-# every non-MSVC build these definitions are inert.
+# (duplicated in lib/Compat2/include/stp/c_interface.h). Both macros only ever
+# do anything under MSVC; the GNU/clang branch of that block tests neither of
+# them, so on every non-MSVC build these definitions are inert.
 #
 # STP_EXPORTS means "this translation unit is part of libstp", as opposed to a
 # client compiling against the installed headers. It must reach every source

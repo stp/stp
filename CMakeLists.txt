@@ -155,10 +155,11 @@ add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 # -----------------------------------------------------------------------------
 # libstp is the 3.x API (include/stp/stp.hpp, include/stp/stp.h) over the
 # engine; STP's own tools, bindings and tests are written against it. The 2.x
-# C API (include/stp/c_interface.h, and the header-only fp.hpp and uf.hpp over
-# it) is provided by libstp2 alone (lib/Compat2): a separate library that
-# re-implements every function of c_interface.h over the 3.x C API, for
-# clients that have not moved. A 2.x client links stp2, which brings in stp.
+# C API (stp/c_interface.h, and the header-only fp.hpp and uf.hpp over it, all
+# in lib/Compat2/include) is provided by libstp2 alone (lib/Compat2): a
+# separate library that re-implements every function of c_interface.h over
+# the 3.x C API, for clients that have not moved. A 2.x client links stp2,
+# which brings in stp.
 # -----------------------------------------------------------------------------
 
 # Settings below that have to hold across the whole link, not just STP's

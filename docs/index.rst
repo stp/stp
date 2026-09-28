@@ -439,7 +439,7 @@ A C program can be as simple as:
       return 0;
     }
 
-Programs written against STP's 2.x C interface (``include/stp/c_interface.h``,
+Programs written against STP's 2.x C interface (``stp/c_interface.h``,
 and the header-only ``fp.hpp`` and ``uf.hpp`` over it) link ``libstp2``
 instead: a separate compatibility library that implements that interface over
 the new one (see :ref:`api3-compat`).

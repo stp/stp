@@ -1,7 +1,7 @@
 # libstp2: the 2.x C API implemented over the 3.x C API
 
 `lib/Compat2` builds `libstp2`, a shared library that exports every one of the
-236 functions of `include/stp/c_interface.h` (STP's 2.x C API) and implements
+236 functions of `stp/c_interface.h` (STP's 2.x C API) and implements
 each of them over `include/stp/stp.h` (the 3.x C API) alone. It includes no
 engine header and no `stp.hpp`; the one symbol it names beyond `stp.h` is the
 workaround in defect 1 below. This file records how each 2.x behaviour is
@@ -37,7 +37,7 @@ fare against it, and every 3.x defect met on the way.
   `${CMAKE_INSTALL_LIBDIR}` with `INSTALL_RPATH "$ORIGIN"`, so an installed
   tree finds `libstp` next to it wherever it is moved. On Windows the output
   name is `stp2win`, mirroring `stpwin`.
-- `include/stp/c_interface.h` gained one addition, the only header change:
+- `stp/c_interface.h` gained one addition, the only header change:
   `enum stp_error_policy_t { STP_ON_ERROR_ABORT, STP_ON_ERROR_RETURN }` and
   `vc_setErrorPolicy()`, both honoured.
 
@@ -256,7 +256,7 @@ fare against it, and every 3.x defect met on the way.
     native bits; the four `vc_fpToFP*` forms and the two `vc_fpToBV*` forms are
     the 3.x conversions; `vc_fpRemExpr` reports 3.x's UNSUPPORTED refusal for
     a format its circuit cannot unroll with the 2.x wording. Every FP
-    constructor is checker-owned. `include/stp/fp.hpp` is header-only over
+    constructor is checker-owned. `stp/fp.hpp` is header-only over
     these functions and works unchanged (`fp-cpp-wrapper` passes).
 18. **Real.** All 21 `vc_real*`/`vc_getRealModel*`/`vc_hasReal*` functions are
     the 3.x Real constructors and readers, and a constructor's refusal is fatal
@@ -464,8 +464,8 @@ null checker.
 the solve's choice for every partial floating-point operation in the checked
 formula, and the whole binary passes.
 
-The facades: `fp-cpp-wrapper` (all cases over `include/stp/fp.hpp`) passes;
-the two installed-header consumers of `include/stp/uf.hpp` and the C API
+The facades: `fp-cpp-wrapper` (all cases over `stp/fp.hpp`) passes;
+the two installed-header consumers of `stp/uf.hpp` and the C API
 (`tests/api/install/uf-public-header-consumer/main.cpp`, `main.c`) were
 compiled by hand against `libstp2` and exit 0.
 
