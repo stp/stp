@@ -92,7 +92,7 @@ Give ``stp`` a problem file, or pipe one to it, and it prints the answer:
 
 :doc:`command-line` covers the rest: the input formats, what STP prints
 and its exit status, driving it over a pipe, choosing the SAT solver,
-time limits, statistics, writing CNF and converting between formats.
+time and conflict limits, statistics, writing CNF and converting between formats.
 
 .. toctree::
    :hidden:

@@ -105,9 +105,9 @@ The executables are built from ``tools/``; :doc:`command-line` and
    ``rewrite_rule_gen`` searches for bitvector ones; and
    ``propagator_bench`` times the propagators, checks how much they deduce,
    and with ``--bcp-check`` compares that against what unit propagation on
-   the bit-blasted encoding deduces on its own. ``propagator_bench``
-   additionally needs a build with CryptoMiniSat and is skipped without
-   one.
+   the bit-blasted encoding deduces on its own. ``propagator_bench`` and
+   ``rewrite_rule_gen`` additionally need a build with CryptoMiniSat and
+   are skipped without one.
 
 The Python bindings are in ``bindings/python``, and the tests are in
 ``tests/`` (see :doc:`testing`).
