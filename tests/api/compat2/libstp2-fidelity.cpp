@@ -206,6 +206,36 @@ TEST(libstp2_fidelity, a_whole_counterexample_holds_what_was_evaluated_before_it
   vc_Destroy(vc);
 }
 
+// A read went its own way in 2.x's evaluation: past the last write it read
+// the base at the index's value, and kept that read; over an if-then-else it
+// read the branch the model selects, and kept that read but not the read
+// over the if-then-else. A snapshot answers for exactly those.
+TEST(libstp2_fidelity, a_whole_counterexample_holds_the_reads_an_evaluation_made)
+{
+  VC vc = vc_createValidityChecker();
+  Expr a = vc_varExpr1(vc, "a", 8, 8), b = vc_varExpr1(vc, "b", 8, 8);
+  Expr i = vc_varExpr1(vc, "i", 0, 8), p = vc_varExpr1(vc, "p", 0, 0);
+  Expr one = vc_bvConstExprFromInt(vc, 8, 1), two = vc_bvConstExprFromInt(vc, 8, 2);
+  vc_assertFormula(vc, vc_eqExpr(vc, i, two));
+  vc_assertFormula(vc, p);
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  Expr past_the_write = vc_readExpr(vc, vc_writeExpr(vc, a, one, vc_bvConstExprFromInt(vc, 8, 7)), i);
+  Expr over_the_ite = vc_readExpr(vc, vc_iteExpr(vc, p, a, b), i);
+  vc_DeleteExpr(vc_getCounterExample(vc, past_the_write));
+  vc_DeleteExpr(vc_getCounterExample(vc, over_the_ite));
+  WholeCounterExample m = vc_getWholeCounterExample(vc);
+  std::vector<Expr> read;
+  for (Expr e : {past_the_write, vc_readExpr(vc, a, two), over_the_ite})
+    read.push_back(vc_getTermFromCounterExample(vc, e, m));
+  EXPECT_EQ(BVCONST, getExprKind(read[0]));
+  EXPECT_EQ(BVCONST, getExprKind(read[1])) << text_of(read[1]); // the base read built
+  EXPECT_EQ(READ, getExprKind(read[2])) << text_of(read[2]);    // not kept
+  for (Expr e : read)
+    vc_DeleteExpr(e);
+  vc_deleteWholeCounterExample(m);
+  vc_Destroy(vc);
+}
+
 // A Real term's counterexample value is the exact Real model's, and an
 // assertion, a parsed one included, or a declaration since the query leaves
 // that model none.

@@ -1843,31 +1843,47 @@ std::optional<bool> holds(VCImpl* vc, stp_term c)
 // Records in `w` the terms 2.x's counterexample map held beyond the symbols
 // and the array cells: each term vc_getCounterExample evaluated against the
 // model, and every term that evaluation visited -- all operands, but of an
-// if-then-else only the branch the model selects, and of a read its index and
-// the writes it looks through, down to the one holding its cell -- stopping
-// at a floating-point operation, which 2.x evaluated whole through its
-// encoding. The map held no array and no Real term.
+// if-then-else only the branch the model selects, stopping at a
+// floating-point operation, which 2.x evaluated whole through its encoding.
+// A read went its own way. Its index was evaluated, and then: over writes,
+// their indexes down to the write holding the read's cell and that write's
+// value, or, past the last write, the read of the base at the index's value,
+// which the evaluation built and kept; over an if-then-else, the read of the
+// branch the model selects, built likewise and kept -- but not the read over
+// the if-then-else itself. The map held no array and no Real term.
 void record_terms(VCImpl* vc, WholeCE* w)
 {
-  std::unordered_set<std::uint64_t>& out = w->recorded;
+  std::unordered_set<std::uint64_t> visited;
   std::vector<stp_term> pending;
   for (stp_term t : vc->evaluated)
     pending.push_back(stp_term_copy(t));
+  const auto keep = [w](stp_term t) {
+    if (w->recorded.insert(stp_term_id(t)).second)
+      w->held.push_back(stp_term_copy(t));
+  };
+  // the read of `array` at the value `at` (one reference), as 2.x built it
+  const auto read_at = [vc](stp_term array, stp_term at) {
+    stp_term r = stp_select(vc->tm, array, at);
+    if (r == nullptr)
+      take_error(vc);
+    return r;
+  };
   while (!pending.empty())
   {
     stp_term n = pending.back();
     pending.pop_back();
     const stp_sort sort = stp_term_sort(n);
     stp_kind k = STP_KIND_VALUE;
-    if (is_real(sort) || is_array(sort) || !out.insert(stp_term_id(n)).second)
+    if (is_real(sort) || is_array(sort) || !visited.insert(stp_term_id(n)).second ||
+        stp_term_get_kind(n, &k) != STP_OK)
     {
       stp_term_release(n);
       continue;
     }
-    w->held.push_back(stp_term_copy(n));
-    if (stp_term_get_kind(n, &k) != STP_OK || k == STP_KIND_VALUE || k == STP_KIND_CONSTANT ||
+    if (k == STP_KIND_VALUE || k == STP_KIND_CONSTANT ||
         (k >= STP_KIND_FP_ABS && k <= STP_KIND_FP_TO_IEEE_BV))
     {
+      keep(n);
       stp_term_release(n);
       continue;
     }
@@ -1875,6 +1891,7 @@ void record_terms(VCImpl* vc, WholeCE* w)
     stp_term_num_children(n, &count);
     if (k == STP_KIND_ITE)
     {
+      keep(n);
       stp_term condition = stp_term_child(n, 0);
       const std::optional<bool> taken = holds(vc, condition);
       pending.push_back(condition);
@@ -1885,56 +1902,63 @@ void record_terms(VCImpl* vc, WholeCE* w)
     {
       stp_term array = stp_term_child(n, 0);
       stp_term index = stp_term_child(n, 1);
+      stp_kind ak = STP_KIND_VALUE;
+      stp_term_get_kind(array, &ak);
       if (is_fp(stp_sort_array_index(stp_term_sort(array))))
       {
         // an access at a float index went through the encoding too
+        keep(n);
         stp_term_release(index);
         stp_term_release(array);
         stp_term_release(n);
         continue;
       }
+      if (ak != STP_KIND_ITE)
+        keep(n);
       stp_term at = stp_model_value(vc->model, index);
       if (at == nullptr)
         take_error(vc);
       pending.push_back(index);
-      while (at != nullptr)
+      if (at != nullptr && ak == STP_KIND_ITE)
       {
-        stp_kind ak;
-        if (stp_term_get_kind(array, &ak) != STP_OK)
-          break;
-        if (ak == STP_KIND_STORE)
+        stp_term condition = stp_term_child(array, 0);
+        const std::optional<bool> taken = holds(vc, condition);
+        pending.push_back(condition);
+        if (taken.has_value())
         {
-          stp_term written_at = stp_term_child(array, 1);
+          stp_term branch = stp_term_child(array, *taken ? 1 : 2);
+          if (stp_term r = read_at(branch, at))
+            pending.push_back(r);
+          stp_term_release(branch);
+        }
+      }
+      else if (at != nullptr && ak == STP_KIND_STORE)
+      {
+        stp_term cursor = stp_term_copy(array);
+        bool hit = false;
+        stp_kind ck;
+        while (!hit && stp_term_get_kind(cursor, &ck) == STP_OK && ck == STP_KIND_STORE)
+        {
+          stp_term written_at = stp_term_child(cursor, 1);
           stp_term value = stp_model_value(vc->model, written_at);
-          const bool hit = value != nullptr && stp_term_same(value, at);
+          hit = value != nullptr && stp_term_same(value, at);
           if (value != nullptr)
             stp_term_release(value);
           else
             take_error(vc);
           pending.push_back(written_at);
-          if (hit)
+          if (!hit)
           {
-            pending.push_back(stp_term_child(array, 2));
-            break;
+            stp_term base = stp_term_child(cursor, 0);
+            stp_term_release(cursor);
+            cursor = base;
           }
         }
-        else if (ak == STP_KIND_ITE)
-        {
-          stp_term condition = stp_term_child(array, 0);
-          const std::optional<bool> taken = holds(vc, condition);
-          pending.push_back(condition);
-          if (!taken.has_value())
-            break;
-          stp_term branch = stp_term_child(array, *taken ? 1 : 2);
-          stp_term_release(array);
-          array = branch;
-          continue;
-        }
-        else
-          break;
-        stp_term base = stp_term_child(array, 0);
-        stp_term_release(array);
-        array = base;
+        if (hit)
+          pending.push_back(stp_term_child(cursor, 2)); // the write holding the cell
+        else if (stp_term r = read_at(cursor, at))
+          pending.push_back(r); // past the last write
+        stp_term_release(cursor);
       }
       if (at != nullptr)
         stp_term_release(at);
@@ -1942,6 +1966,7 @@ void record_terms(VCImpl* vc, WholeCE* w)
     }
     else if (k == STP_KIND_EQUAL && count > 0)
     {
+      keep(n);
       // = over floats is a floating-point operation as well
       stp_term first = stp_term_child(n, 0);
       const bool floats = is_fp(stp_term_sort(first));
@@ -1950,8 +1975,11 @@ void record_terms(VCImpl* vc, WholeCE* w)
         pending.push_back(stp_term_child(n, i));
     }
     else
+    {
+      keep(n);
       for (std::size_t i = 0; i < count; ++i)
         pending.push_back(stp_term_child(n, i));
+    }
     stp_term_release(n);
   }
 }

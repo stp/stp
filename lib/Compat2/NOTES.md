@@ -64,11 +64,14 @@ unsupported, and which 2.x suites run against it.
   a symbol's value (`stp_model_value`, completing one the solve left out), a
   term `vc_getCounterExample` evaluated before the snapshot was taken or
   visited evaluating one (every operand, but only the branch the model
-  selects of an if-then-else and the writes a read looks through down to its
-  cell, and nothing below a floating-point operation), a read of an array
-  symbol at a value where the model has that cell (`stp_model_try_value`),
-  and every other term handed straight back unevaluated, a term built after
-  the check included.
+  selects of an if-then-else, and nothing below a floating-point operation;
+  a read visits the writes it looks through down to its cell and, past the
+  last one, the read of the base at the index's value, and a read over an
+  if-then-else is answered by the read of the selected branch rather than
+  kept itself), a read of an array symbol at a value where the model has
+  that cell (`stp_model_try_value`), and every other term handed straight
+  back unevaluated, a term built after the check included. 2.x read a query
+  with an array equality differently, and that variant is not reproduced.
 - **Process state**: the error handler and the error policy (both global, as
   2.x's handler was), the set of live `VC`s (so a stale `VC` is refused rather
   than dereferenced), the `'u'` handle registry, the UF owner table; one mutex
