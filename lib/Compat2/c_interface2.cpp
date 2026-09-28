@@ -43,6 +43,7 @@ THE SOFTWARE.
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <sstream>
 
 #ifdef _WIN32
@@ -468,6 +469,10 @@ void discard_model(VCImpl* vc)
     vc->model = nullptr;
   }
   vc->uf_certified = false;
+  for (stp_term t : vc->evaluated)
+    stp_term_release(t);
+  vc->evaluated.clear();
+  vc->evaluated_ids.clear();
 }
 
 Expr fp_result(VCImpl* vc, stp_term t)
@@ -1343,6 +1348,8 @@ void vc_Destroy(VC vcp)
   {
     if (w->model != nullptr)
       stp_model_release(w->model);
+    for (stp_term t : w->held)
+      stp_term_release(t);
     delete w;
   }
   vc->whole_ces.clear();
@@ -1723,6 +1730,10 @@ Expr vc_getCounterExample(VC vcp, Expr e)
     report("vc_getCounterExample: " + take_error(vc));
     return nullptr;
   }
+  // A whole counterexample taken later answers for it (see record_terms);
+  // 2.x kept no Real term in its map.
+  if (!is_real(stp_term_sort(t)) && vc->evaluated_ids.insert(stp_term_id(t)).second)
+    vc->evaluated.push_back(stp_term_copy(t));
   return wrap(vc, v, false);
 }
 
@@ -1794,23 +1805,11 @@ int vc_counterexample_size(VC vcp)
   return static_cast<int>(stp_model_num_symbols(vc->model));
 }
 
-WholeCounterExample vc_getWholeCounterExample(VC vcp)
-{
-  VCImpl* vc = vcimpl(vcp, "vc_getWholeCounterExample");
-  if (vc == nullptr)
-    return nullptr;
-  WholeCE* w = new WholeCE;
-  w->vc = vc;
-  w->model = vc->model != nullptr ? stp_model_copy(vc->model) : nullptr;
-  vc->whole_ces.insert(w);
-  return w;
-}
-
 namespace
 {
 
-// A read of an array symbol at a value: the one compound term 2.x's whole
-// counterexample could hold.
+// A read of an array symbol at a value: a compound term 2.x's whole
+// counterexample held whenever the model had that cell.
 bool is_symbol_read(stp_term t)
 {
   stp_kind k;
@@ -1824,7 +1823,154 @@ bool is_symbol_read(stp_term t)
   return out;
 }
 
+// Whether condition `c` holds in the checker's model; nothing when the model
+// cannot say.
+std::optional<bool> holds(VCImpl* vc, stp_term c)
+{
+  stp_term v = stp_model_value(vc->model, c);
+  bool out = false;
+  const bool known = v != nullptr && stp_term_to_bool(v, &out) == STP_OK;
+  if (v != nullptr)
+    stp_term_release(v);
+  if (!known)
+  {
+    take_error(vc);
+    return std::nullopt;
+  }
+  return out;
+}
+
+// Records in `w` the terms 2.x's counterexample map held beyond the symbols
+// and the array cells: each term vc_getCounterExample evaluated against the
+// model, and every term that evaluation visited -- all operands, but of an
+// if-then-else only the branch the model selects, and of a read its index and
+// the writes it looks through, down to the one holding its cell -- stopping
+// at a floating-point operation, which 2.x evaluated whole through its
+// encoding. The map held no array and no Real term.
+void record_terms(VCImpl* vc, WholeCE* w)
+{
+  std::unordered_set<std::uint64_t>& out = w->recorded;
+  std::vector<stp_term> pending;
+  for (stp_term t : vc->evaluated)
+    pending.push_back(stp_term_copy(t));
+  while (!pending.empty())
+  {
+    stp_term n = pending.back();
+    pending.pop_back();
+    const stp_sort sort = stp_term_sort(n);
+    stp_kind k = STP_KIND_VALUE;
+    if (is_real(sort) || is_array(sort) || !out.insert(stp_term_id(n)).second)
+    {
+      stp_term_release(n);
+      continue;
+    }
+    w->held.push_back(stp_term_copy(n));
+    if (stp_term_get_kind(n, &k) != STP_OK || k == STP_KIND_VALUE || k == STP_KIND_CONSTANT ||
+        (k >= STP_KIND_FP_ABS && k <= STP_KIND_FP_TO_IEEE_BV))
+    {
+      stp_term_release(n);
+      continue;
+    }
+    std::size_t count = 0;
+    stp_term_num_children(n, &count);
+    if (k == STP_KIND_ITE)
+    {
+      stp_term condition = stp_term_child(n, 0);
+      const std::optional<bool> taken = holds(vc, condition);
+      pending.push_back(condition);
+      if (taken.has_value())
+        pending.push_back(stp_term_child(n, *taken ? 1 : 2));
+    }
+    else if (k == STP_KIND_SELECT)
+    {
+      stp_term array = stp_term_child(n, 0);
+      stp_term index = stp_term_child(n, 1);
+      if (is_fp(stp_sort_array_index(stp_term_sort(array))))
+      {
+        // an access at a float index went through the encoding too
+        stp_term_release(index);
+        stp_term_release(array);
+        stp_term_release(n);
+        continue;
+      }
+      stp_term at = stp_model_value(vc->model, index);
+      if (at == nullptr)
+        take_error(vc);
+      pending.push_back(index);
+      while (at != nullptr)
+      {
+        stp_kind ak;
+        if (stp_term_get_kind(array, &ak) != STP_OK)
+          break;
+        if (ak == STP_KIND_STORE)
+        {
+          stp_term written_at = stp_term_child(array, 1);
+          stp_term value = stp_model_value(vc->model, written_at);
+          const bool hit = value != nullptr && stp_term_same(value, at);
+          if (value != nullptr)
+            stp_term_release(value);
+          else
+            take_error(vc);
+          pending.push_back(written_at);
+          if (hit)
+          {
+            pending.push_back(stp_term_child(array, 2));
+            break;
+          }
+        }
+        else if (ak == STP_KIND_ITE)
+        {
+          stp_term condition = stp_term_child(array, 0);
+          const std::optional<bool> taken = holds(vc, condition);
+          pending.push_back(condition);
+          if (!taken.has_value())
+            break;
+          stp_term branch = stp_term_child(array, *taken ? 1 : 2);
+          stp_term_release(array);
+          array = branch;
+          continue;
+        }
+        else
+          break;
+        stp_term base = stp_term_child(array, 0);
+        stp_term_release(array);
+        array = base;
+      }
+      if (at != nullptr)
+        stp_term_release(at);
+      stp_term_release(array);
+    }
+    else if (k == STP_KIND_EQUAL && count > 0)
+    {
+      // = over floats is a floating-point operation as well
+      stp_term first = stp_term_child(n, 0);
+      const bool floats = is_fp(stp_term_sort(first));
+      stp_term_release(first);
+      for (std::size_t i = 0; !floats && i < count; ++i)
+        pending.push_back(stp_term_child(n, i));
+    }
+    else
+      for (std::size_t i = 0; i < count; ++i)
+        pending.push_back(stp_term_child(n, i));
+    stp_term_release(n);
+  }
+}
+
 } // namespace
+
+WholeCounterExample vc_getWholeCounterExample(VC vcp)
+{
+  VCImpl* vc = vcimpl(vcp, "vc_getWholeCounterExample");
+  if (vc == nullptr)
+    return nullptr;
+  WholeCE* w = new WholeCE;
+  w->vc = vc;
+  w->model = vc->model != nullptr ? stp_model_copy(vc->model) : nullptr;
+  if (w->model != nullptr)
+    record_terms(vc, w);
+  vc->whole_ces.insert(w);
+  return w;
+}
 
 Expr vc_getTermFromCounterExample(VC vcp, Expr e, WholeCounterExample cc)
 {
@@ -1842,17 +1988,19 @@ Expr vc_getTermFromCounterExample(VC vcp, Expr e, WholeCounterExample cc)
     return nullptr;
   }
   // 2.x read its map: a symbol's value, completed as zero or false if the
-  // solve left the symbol out, and a recorded read of an array symbol at a
-  // value; any other term, one built after the check say, came straight
-  // back, and so does a read the model has no cell for.
-  if (!symbol && !is_symbol_read(t))
+  // solve left the symbol out, a term vc_getCounterExample had evaluated (or
+  // visited evaluating another) before the snapshot, and a recorded read of
+  // an array symbol at a value; any other term, one built after the check
+  // say, came straight back, and so does a read the model has no cell for.
+  const bool recorded = w != nullptr && w->recorded.count(stp_term_id(t)) != 0;
+  if (!symbol && !recorded && !is_symbol_read(t))
     return wrap(vc, stp_term_copy(t), false);
   if (w == nullptr || w->model == nullptr)
   {
     report("vc_getTermFromCounterExample: the snapshot holds no model");
     return nullptr;
   }
-  if (!symbol)
+  if (!symbol && !recorded)
   {
     stp_term v = stp_model_try_value(w->model, t); // NULL, no error, for no cell
     return wrap(vc, v != nullptr ? v : stp_term_copy(t), false);
@@ -1875,6 +2023,8 @@ void vc_deleteWholeCounterExample(WholeCounterExample cc)
     w->vc->whole_ces.erase(w);
   if (w->model != nullptr)
     stp_model_release(w->model);
+  for (stp_term t : w->held)
+    stp_term_release(t);
   delete w;
 }
 

@@ -33,6 +33,7 @@ THE SOFTWARE.
 
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -132,6 +133,40 @@ TEST(libstp2_fidelity, a_whole_counterexample_hands_back_what_it_does_not_record
   vc_registerErrorHandler(nullptr);
   EXPECT_NE(std::string::npos, g_fatal.find("propositional variables")) << g_fatal;
   for (Expr e : {x_value, y_value, cell, no_cell, sum})
+    vc_DeleteExpr(e);
+  vc_deleteWholeCounterExample(m);
+  vc_Destroy(vc);
+}
+
+// A whole counterexample also answers for what vc_getCounterExample
+// evaluated before it was taken, as 2.x's map had kept it: the term and the
+// terms the evaluation visited on the way -- of an if-then-else only the
+// branch the model selects -- but not a term read after the snapshot.
+TEST(libstp2_fidelity, a_whole_counterexample_holds_what_was_evaluated_before_it)
+{
+  VC vc = vc_createValidityChecker();
+  Expr x = vc_varExpr1(vc, "x", 0, 8);
+  Expr seven = vc_bvConstExprFromInt(vc, 8, 7);
+  Expr two = vc_bvConstExprFromInt(vc, 8, 2);
+  vc_assertFormula(vc, vc_eqExpr(vc, x, seven));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  Expr sum = vc_bvPlusExpr(vc, 8, x, two);
+  Expr product = vc_bvMultExpr(vc, 8, sum, two);
+  Expr untaken = vc_bvPlusExpr(vc, 8, x, vc_bvConstExprFromInt(vc, 8, 5));
+  Expr choice = vc_iteExpr(vc, vc_eqExpr(vc, x, seven), product, untaken);
+  Expr later = vc_bvPlusExpr(vc, 8, x, vc_bvConstExprFromInt(vc, 8, 3));
+  vc_DeleteExpr(vc_getCounterExample(vc, choice));
+  WholeCounterExample m = vc_getWholeCounterExample(vc);
+  vc_DeleteExpr(vc_getCounterExample(vc, later));
+  std::vector<Expr> read;
+  for (Expr e : {choice, product, sum, untaken, later})
+    read.push_back(vc_getTermFromCounterExample(vc, e, m));
+  EXPECT_EQ(18, getBVInt(read[0]));
+  EXPECT_EQ(18, getBVInt(read[1]));
+  EXPECT_EQ(9, getBVInt(read[2]));
+  EXPECT_EQ(BVPLUS, getExprKind(read[3]));
+  EXPECT_EQ(BVPLUS, getExprKind(read[4]));
+  for (Expr e : read)
     vc_DeleteExpr(e);
   vc_deleteWholeCounterExample(m);
   vc_Destroy(vc);

@@ -85,11 +85,16 @@ struct UFDeclRec
 };
 
 // vc_getWholeCounterExample's handle: a detached copy of the model there was
-// when it was taken (NULL when there was none).
+// when it was taken (NULL when there was none), and the terms 2.x's
+// counterexample map held then beyond the symbols and array cells (see
+// VCImpl::evaluated), by id and held (one reference each), as the map held
+// them.
 struct WholeCE
 {
   VCImpl* vc = nullptr;
   stp_model model = nullptr;
+  std::unordered_set<std::uint64_t> recorded;
+  std::vector<stp_term> held;
 };
 
 struct VCImpl
@@ -117,6 +122,12 @@ struct VCImpl
 
   stp_model model = nullptr; // the model of the last INVALID query, or NULL
   bool uf_certified = false; // that model may answer UF application reads
+  // The terms vc_getCounterExample has evaluated against that model (one
+  // reference each). 2.x's counterexample map kept every term such an
+  // evaluation visited, and a whole counterexample copied the map, so what a
+  // snapshot answers for is worked out from these when one is taken.
+  std::vector<stp_term> evaluated;
+  std::unordered_set<std::uint64_t> evaluated_ids;
   // 2.x's exact Real model is current only until the checker changes: a
   // declaration (of any sort), an assertion, a push or a pop invalidates it
   // until the next INVALID query republishes it. The bit-vector
