@@ -15,12 +15,13 @@
 ;   a power of two       a = 2^k -> t = b << k
 ;   its negation         a = -2^k -> t = (-b) << k
 ;
-; This query needs two of them. 0xfff0 is not a square modulo 2^64: it is
-; divisible by 16 but not by 32, so any root is 4y with y odd, and an odd
-; square is 1 modulo 8 where 0xfff0/16 is 7. Nothing in the preprocessor sees
-; that -- constant bit propagation settles the easier "an even factor cannot
-; give an odd product" before a single gate is built, so that query would
-; prove nothing here -- and the multiply is written as a product of two
+; This query needs two of them. 0x1c00 is not a square modulo 2^64: it is
+; divisible by 2^10 but not by 2^11, so any root is 32y with y odd, and an odd
+; square is 1 modulo 8 where 0x1c00/2^10 is 7. Nothing in the preprocessor
+; sees that -- constant bit propagation is exact on a product's low eight
+; bits, so a non-square whose odd part starts there (0xfff0, say) is refuted
+; before a single gate is built, but here those bits are all zero -- and the
+; multiply is written as a product of two
 ; variables held equal rather than as a square, so what reaches the
 ; abstraction is an ordinary BVMULT.
 ;
@@ -57,6 +58,6 @@
 (set-logic QF_BV)
 (declare-fun x () (_ BitVec 64))
 (declare-fun y () (_ BitVec 64))
-(assert (= (bvmul x y) #x000000000000fff0))
+(assert (= (bvmul x y) #x0000000000001c00))
 (assert (= x y))
 (check-sat)
