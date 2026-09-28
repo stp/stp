@@ -588,3 +588,22 @@ TEST(ConstArrays, reads_fold_in_every_construction_mode)
   EXPECT_EQ(st.kind(), Kind::STORE);
   EXPECT_EQ(st[i].kind(), Kind::SELECT);
 }
+
+// An operand preprocessing turns into a constant array has its witness read
+// folded to the default, and the operand is that constant array. Built
+// without folding, ite(true, K(0), K(1)) != K(1) was reported lost: an
+// internal error that poisoned the manager.
+TEST(ConstArrays, an_operand_that_folds_into_a_constant_array)
+{
+  TermManager tm = api_test::raw_manager();
+  const Sort b2 = tm.mk_bv_sort(2), A = tm.mk_array_sort(b2, b2);
+  const auto K = [&](std::uint64_t v) { return tm.mk_const_array(A, tm.mk_bv(2, v)); };
+  const Term e = ite(tm.mk_true(), K(0), K(1)) != K(1);
+  Solver s(tm);
+  s.add(e);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_TRUE(s.model().bool_value(e));
+  Solver u(tm);
+  u.add(ite(tm.mk_true(), K(0), K(1)) != K(0));
+  EXPECT_TRUE(u.check_sat().is_unsat());
+}

@@ -1200,6 +1200,10 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   // would pick a different operand from run to run and certify the
   // candidate against the wrong arrays. Refuse instead.
   std::map<ASTNode, ASTNode> anchorRhs;
+  // name symbol -> a value it is equated with, and the names equated with
+  // two (see the recovery of a folded operand below)
+  std::map<ASTNode, ASTNode> foldedRhs;
+  std::set<ASTNode> foldedConflict;
   ASTNodeSet visited;
   collectDag(root, visited);
 
@@ -1262,10 +1266,23 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
     {
       const ASTNode& s = n[side];
       const ASTNode& other = n[1 - side];
-      if (s.GetKind() != SYMBOL ||
-          witnessNames.find(s) == witnessNames.end() ||
-          !(other.GetKind() == READ || other.GetKind() == ITE))
+      if (s.GetKind() != SYMBOL || witnessNames.find(s) == witnessNames.end())
         continue;
+      if (other.GetKind() != READ && other.GetKind() != ITE)
+      {
+        // A value: kept apart, for a name whose anchor is gone (below).
+        // Bit propagation also leaves one beside an intact anchor when it
+        // fixes a name, so it is never an anchor itself.
+        if (bm->firstFreeSymbol(other).IsNull())
+        {
+          const std::map<ASTNode, ASTNode>::const_iterator f =
+              foldedRhs.find(s);
+          if (f != foldedRhs.end() && !(f->second == other))
+            foldedConflict.insert(s);
+          foldedRhs[s] = other;
+        }
+        continue;
+      }
       const std::map<ASTNode, ASTNode>::const_iterator prev = anchorRhs.find(s);
       if (prev != anchorRhs.end() && !(prev->second == other))
         FatalError("array-equality: a witness read's defining equation "
@@ -1277,6 +1294,14 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
     }
   }
 
+  // Every witness read left in the prepared formula, by its index.
+  std::map<ASTNode, ASTNodeSet> witnessReads;
+  for (ASTNodeSet::const_iterator it = visited.begin(); it != visited.end();
+       ++it)
+    if (it->GetKind() == READ &&
+        witnessIndexes.find((*it)[1]) != witnessIndexes.end())
+      witnessReads[(*it)[1]].insert(*it);
+
   for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
     Record& r = records[activeRecordIds[i]];
@@ -1287,18 +1312,77 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
     const bool constR = bm->isConstArray(r.constructionRight);
     std::map<ASTNode, ASTNode>::const_iterator lit = anchorRhs.find(r.nameL);
     std::map<ASTNode, ASTNode>::const_iterator rit = anchorRhs.find(r.nameR);
-    if ((!constL && lit == anchorRhs.end()) ||
-        (!constR && rit == anchorRhs.end()))
+
+    // Nor has an operand preprocessing turned into a constant array -- an
+    // if-then-else whose condition folded, a store of the default value: its
+    // witness read folded to that array's default, leaving "name = value".
+    // A value says so only once no read over the record's index is left
+    // that no anchor holds -- then this side's read is gone, and only a
+    // read of an operand every cell of which is the value folds so, the
+    // index being a protected symbol no pass can give a value. (Otherwise
+    // the value is a fact bit propagation derived about one cell, or the
+    // anchor was rewritten some other way, and the operand stays lost.)
+    const auto foldedValue = [&](const ASTNode& name) -> ASTNode {
+      const std::map<ASTNode, ASTNode>::const_iterator f = foldedRhs.find(name);
+      if (f == foldedRhs.end() || foldedConflict.count(name) != 0)
+        return ASTNode();
+      ASTNodeSet held;
+      for (const ASTNode& anchoredName : {r.nameL, r.nameR})
+      {
+        const std::map<ASTNode, ASTNode>::const_iterator a =
+            anchorRhs.find(anchoredName);
+        if (a == anchorRhs.end())
+          continue;
+        ASTNodeSet seen;
+        std::vector<ASTNode> pending(1, a->second);
+        while (!pending.empty())
+        {
+          const ASTNode n = pending.back();
+          pending.pop_back();
+          if (!seen.insert(n).second)
+            continue;
+          if (n.GetKind() == READ && n[1] == r.lambda)
+            held.insert(n);
+          for (const ASTNode& c : n.GetChildren())
+            pending.push_back(c);
+        }
+      }
+      for (const ASTNode& read : witnessReads[r.lambda])
+        if (held.find(read) == held.end())
+          return ASTNode();
+      return f->second;
+    };
+    const ASTNode foldL = (!constL && lit == anchorRhs.end())
+                              ? foldedValue(r.nameL)
+                              : ASTNode();
+    const ASTNode foldR = (!constR && rit == anchorRhs.end())
+                              ? foldedValue(r.nameR)
+                              : ASTNode();
+    if ((!constL && lit == anchorRhs.end() && foldL.IsNull()) ||
+        (!constR && rit == anchorRhs.end() && foldR.IsNull()))
       FatalError("array-equality: a witness-read defining equation was "
                  "lost during preprocessing, so the current form of an "
                  "equality operand cannot be recovered",
                  r.proxy);
+    const auto constantArrayOf = [&](const ASTNode& construction,
+                                     const ASTNode& value) {
+      SourceSort sort = construction.GetSourceSort();
+      if (sort.kind() != SourceSort::Kind::Array)
+        sort = SourceSort::array(
+            SourceSort::bitVector(construction.GetIndexWidth()),
+            SourceSort::bitVector(construction.GetValueWidth()));
+      return bm->CreateConstArray(sort, value);
+    };
     r.canonicalLeft =
         constL ? r.constructionLeft
-               : recoverAnchoredOperand(lit->second, r.lambda, r.proxy);
+        : !foldL.IsNull()
+            ? constantArrayOf(r.constructionLeft, foldL)
+            : recoverAnchoredOperand(lit->second, r.lambda, r.proxy);
     r.canonicalRight =
         constR ? r.constructionRight
-               : recoverAnchoredOperand(rit->second, r.lambda, r.proxy);
+        : !foldR.IsNull()
+            ? constantArrayOf(r.constructionRight, foldR)
+            : recoverAnchoredOperand(rit->second, r.lambda, r.proxy);
   }
 }
 
