@@ -1442,19 +1442,16 @@ Expr vc_fpToIEEEBV(VC vcp, Expr f)
 namespace
 {
 
-// A Real constructor's refusal: the exact-arithmetic budget is a nonfatal
-// NULL, as 2.x documented; anything else is the caller's mistake and fatal.
+// A Real constructor's refusal is fatal, as every constructor's is (NULL
+// under STP_ON_ERROR_RETURN). 2.x returned a nonfatal NULL for a literal or
+// term beyond the exact-arithmetic budget; the 3.x API refuses those as
+// UNSUPPORTED, as it does any other operation it cannot represent, so they
+// are not told apart here (NOTES.md, item 18).
 Expr real_built(VCImpl* vc, stp_term t, const char* who)
 {
   if (t != nullptr)
     return wrap(vc, t, false);
-  stp_error_code code;
-  const std::string err = take_error(vc, &code);
-  if (code == STP_ERR_RESOURCE)
-  {
-    report(std::string(who) + " exceeded the exact-arithmetic budget: " + err);
-    return nullptr;
-  }
+  const std::string err = take_error(vc, nullptr);
   fatal(std::string("CInterface: ") + who + " failed: " + err);
   return nullptr;
 }

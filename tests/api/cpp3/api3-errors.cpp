@@ -455,6 +455,24 @@ TEST(Errors, widths_that_do_not_fit_are_refused)
   EXPECT_EQ(zero_extend(0xffffffffu - 6, a).sort().bv_size(), 0xffffffffu);
 }
 
+// A Real literal too large for the exact arithmetic is well formed, and is
+// refused as Real arithmetic beyond the budget is, not as a malformed
+// literal; the manager is usable afterwards either way.
+TEST(Errors, a_real_literal_beyond_the_budget_is_unsupported)
+{
+  TermManager tm;
+  // 10^30000 needs far more bits than an exact operand may have
+  const std::string huge = "1" + std::string(30000, '0');
+  const std::optional<RecoverableError> refused = api3::catch_error([&] { (void)tm.mk_real(huge); });
+  ASSERT_TRUE(refused.has_value());
+  EXPECT_EQ(refused->code(), ErrorCode::UNSUPPORTED) << refused->what();
+  EXPECT_NE(std::string(refused->what()).find("exceeds the exact-arithmetic budget"),
+            std::string::npos)
+      << refused->what();
+  API3_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.mk_real("1/x"));
+  EXPECT_TRUE(tm.mk_real("3/2").is_value());
+}
+
 // A check's time budget is a duration: a negative one is refused, and the
 // solver is left as it was.
 TEST(Errors, a_negative_time_budget_is_refused)

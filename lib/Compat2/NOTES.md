@@ -259,13 +259,16 @@ fare against it, and every 3.x defect met on the way.
     constructor is checker-owned. `include/stp/fp.hpp` is header-only over
     these functions and works unchanged (`fp-cpp-wrapper` passes).
 18. **Real.** All 21 `vc_real*`/`vc_getRealModel*`/`vc_hasReal*` functions are
-    the 3.x Real constructors and readers; a `RESOURCE` refusal of a literal is
-    a nonfatal `NULL`, any other refusal is fatal, as 2.x had it. An assertion
-    the engine refuses (`UNSUPPORTED` from `stp_solver_assert`: the
-    exact-arithmetic budget, at preregistration) is reported through the
-    handler and left out, and, as in 2.x, every query at that depth or deeper
-    answers 3 with `REASON_UNKNOWN_INCOMPLETE` until a `vc_pop` leaves the
-    depth (`reason-unknown` tests it).
+    the 3.x Real constructors and readers, and a constructor's refusal is fatal
+    (`NULL` under `STP_ON_ERROR_RETURN`). That differs from 2.x in one case: a
+    literal or term beyond the exact-arithmetic budget, which 2.x returned as
+    a nonfatal `NULL`, is refused by the 3.x API as `UNSUPPORTED`, as any
+    other operation it cannot represent is, and libstp2 does not tell the two
+    apart. An assertion the engine refuses (`UNSUPPORTED` from
+    `stp_solver_assert`: the exact-arithmetic budget, at preregistration) is
+    reported through the handler and left out, and, as in 2.x, every query at
+    that depth or deeper answers 3 with `REASON_UNKNOWN_INCOMPLETE` until a
+    `vc_pop` leaves the depth (`reason-unknown` tests it).
 19. **Array equality.** `vc_eqExpr` over two arrays without `'x'` is the 2.x
     fatal "STP cannot decide equality between whole array terms without
     --array-equality ...", raised at construction (3.x would build the term

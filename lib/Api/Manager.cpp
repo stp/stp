@@ -28,6 +28,8 @@ THE SOFTWARE.
 #include "Internal.h"
 #include "NodeAccess.h"
 
+#include "Lra/LraBudgetRefusal.h"
+
 #include "stp/FloatBlaster/DecimalLiteral.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
@@ -591,6 +593,11 @@ ASTNode ManagerImpl::real_const(const char* fn, const std::string& text)
   }
   catch (const std::exception& failure)
   {
+    // A literal too large for the exact arithmetic is well formed, and is
+    // refused as Real arithmetic beyond the budget is.
+    if (stp::lra::gaveUpOnABudget(failure))
+      fail(ErrorCode::UNSUPPORTED, fn,
+           "'" + text + "' exceeds the exact-arithmetic budget: " + failure.what());
     fail(ErrorCode::INVALID_ARGUMENT, fn,
          "'" + text + "' is not a real literal: " + failure.what());
   }
