@@ -178,6 +178,47 @@ TEST(c3_runtime, the_manager_outlives_every_release_order)
   stp_tm_release(t2);
 }
 
+// A FOREIGN_MANAGER error names the other manager's term, and the reference
+// stp_tm_error_term hands out is that manager's: released through it, and
+// keeping it alive past every other handle of it.
+TEST(c3_runtime, a_foreign_error_term_is_its_own_managers_reference)
+{
+  stp_tm a = stp_tm_new(nullptr);
+  stp_tm b = stp_tm_new(nullptr);
+  stp_term y = stp_declare(b, "y", stp_mk_bv_sort(b, 8));
+  // (a) the handle is y's, and each reference is given back once
+  EXPECT_EQ(nullptr, stp_tm_simplify(a, y));
+  stp_term err = stp_tm_error_term(a, 0);
+  EXPECT_EQ(y, err);
+  EXPECT_EQ(STP_ERR_FOREIGN_MANAGER, code_of(a));
+  EXPECT_EQ(STP_OK, stp_term_release(err));
+  EXPECT_EQ(nullptr, stp_tm_error(b));
+  // (b) it outlives the other manager's handle and its own term
+  EXPECT_EQ(nullptr, stp_tm_simplify(a, y));
+  err = stp_tm_error_term(a, 0);
+  stp_tm_clear_error(a);
+  EXPECT_EQ(STP_OK, stp_term_release(y));
+  stp_tm_release(b);
+  EXPECT_EQ("y", symbol_text(err));
+  EXPECT_EQ(STP_OK, stp_term_release(err)); // the other manager dies here
+  // (c) asked for after every handle of the other manager is gone: the
+  // record kept that manager alive, and the reference holds it in turn
+  b = stp_tm_new(nullptr);
+  y = stp_declare(b, "y", stp_mk_bv_sort(b, 8));
+  const uint64_t b_id = stp_tm_id(b);
+  EXPECT_EQ(nullptr, stp_tm_simplify(a, y));
+  EXPECT_EQ(STP_OK, stp_term_release(y));
+  stp_tm_release(b);
+  err = stp_tm_error_term(a, 0);
+  stp_tm_clear_error(a);
+  EXPECT_EQ("y", symbol_text(err));
+  stp_tm owner = stp_term_manager(err);
+  EXPECT_EQ(b_id, stp_tm_id(owner));
+  stp_tm_release(owner);
+  EXPECT_EQ(STP_OK, stp_term_release(err));
+  stp_tm_release(a);
+}
+
 TEST(c3_runtime, null_propagation_records_nothing)
 {
   stp_tm tm = stp_tm_new(nullptr);

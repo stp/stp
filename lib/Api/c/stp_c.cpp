@@ -896,7 +896,20 @@ stp_term stp_tm_error_term(stp_tm tm, size_t i)
            "index " + std::to_string(i) + " out of range [0, " +
                std::to_string(cm->error.pending ? cm->error.terms.size() : 0) + ")",
            1);
-    return export_term(cm, cm->error.terms[i]);
+    // A FOREIGN_MANAGER error names the other manager's term, and the
+    // reference is that manager's: it keeps that manager alive and is given
+    // back through it. Every handle of the other manager may be gone by now
+    // (the record's term holds the manager itself); it then gets a C manager
+    // anew, for the reference to hold.
+    const Term& t = cm->error.terms[i];
+    if (CManager* owner = cm_of_node(detail::internal_of(t)))
+      return export_term(owner, t);
+    struct Drop
+    {
+      CManager* cm;
+      ~Drop() { cm_release(cm); }
+    } revived{cm_new(TermManager(t.impl_manager()))};
+    return export_term(revived.cm, t);
   });
 }
 

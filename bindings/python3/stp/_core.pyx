@@ -211,6 +211,33 @@ cdef inline object _take(char* p):
         stp_free(p)
 
 
+# Every live Manager by manager id: a call can hand back another manager's
+# term (a FOREIGN_MANAGER error names it), and the term is that manager's.
+_MANAGERS = weakref.WeakValueDictionary()
+
+
+cdef Manager _manager_of(stp_term t, Manager m):
+    """The Manager of the manager `t` belongs to; `m` for its own terms."""
+    cdef stp_tm tm = stp_term_manager(t)  # +1
+    cdef Manager owner
+    if tm == NULL:
+        return m
+    try:
+        if stp_tm_id(tm) == stp_tm_id(m._tm):
+            return m
+        owner = _MANAGERS.get(stp_tm_id(tm))
+        if owner is None:
+            # every wrapper of it is gone: a new one takes the reference
+            owner = type(m).__new__(type(m))
+            owner._tm = tm
+            tm = NULL
+            _MANAGERS[stp_tm_id(owner._tm)] = owner
+        return owner
+    finally:
+        if tm != NULL:
+            stp_tm_release(tm)
+
+
 cdef object _exc_from(const stp_error* e, Manager m, bint with_terms):
     cls = _CLASS_BY_CODE.get(<int>e.code, InternalError)
     msg = _s(e.message) or _s(stp_error_code_name(e.code)) or "error"
@@ -231,7 +258,7 @@ cdef object _exc_from(const stp_error* e, Manager m, bint with_terms):
         for i in range(n):
             t = stp_tm_error_term(m._tm, i)
             if t != NULL:
-                ts.append(m._wrap(t))
+                ts.append(_manager_of(t, m)._wrap(t))
         exc.terms = tuple(ts)
     if cls is ParseError:
         mo = _PARSE_POS.search(msg)
@@ -437,6 +464,7 @@ cdef class Manager:
             self._tm = stp_tm_new_with(bool(simplify), <stp_rm>default_rounding_mode, <uint32_t>uf_sort_width)
         if self._tm == NULL:
             _raise_thread_local("stp_tm_new")
+        _MANAGERS[stp_tm_id(self._tm)] = self
 
     def __dealloc__(self):
         if self._tm != NULL:

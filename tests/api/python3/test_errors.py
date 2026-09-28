@@ -68,6 +68,17 @@ def test_sort_mismatch_fields():
         u + v
 
 
+def test_a_foreign_term_is_its_own_managers():
+    a, b = TermManager(), TermManager()
+    y = BitVec("y", 8, tm=b)
+    with pytest.raises(SortMismatch) as e:
+        a.simplify_term(y)
+    err = e.value
+    assert err.code == ErrorCode.FOREIGN_MANAGER
+    # the one wrapper of the other manager's node, not a new one of a's
+    assert len(err.terms) == 1 and err.terms[0] is y
+    assert err.terms[0]._manager() is b
+
 def test_argument_errors():
     with pytest.raises(ArgumentError) as e:
         BitVecVal(300, 8)

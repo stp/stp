@@ -36,7 +36,9 @@ that depart from z3py or from a literal reading of the C API.
   the `stp_array_value` handle.
 - **Errors.** After a failing call the manager's record is read, turned into
   the exception class of its code (the table of `errors.toml`), decorated with `.code`, `.recoverable`, `.function` (the C
-  function), `.argument_index`, `.option` and `.terms`, and cleared. Calls with
+  function), `.argument_index`, `.option` and `.terms` (each in its own
+  manager's wrapper: a FOREIGN_MANAGER error names the other manager's term),
+  and cleared. Calls with
   no manager read `stp_last_error()`. A failed *mutation* of a solver also
   leaves the solver's failed state at once (`stp_solver_clear_error`): a raised
   exception cannot be ignored, so Python needs no failed state. `ParseError.lineno/offset` are parsed from the message
