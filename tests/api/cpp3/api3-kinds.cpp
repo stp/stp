@@ -435,6 +435,27 @@ TEST_F(Kinds, rebuild_round_trip)
       f(bvadd(x, y), select(store(ar, x, y), z))));
 }
 
+// substitute replaces in the tree kind(), children() and indices() show, and
+// builds what changed through the constructors: an index is not a child to
+// replace, a constant array's default is one, and a replacement the
+// constructors refuse is refused as they refuse it, recoverably.
+TEST_F(Kinds, substitute_replaces_in_the_public_tree)
+{
+  const Term low = extract(7, 0, b32);
+  EXPECT_TRUE(low.substitute({{tm.mk_bv(32, 7), tm.mk_bv(32, 3)}}).same_as(low));
+
+  const Term k = tm.mk_const_array(A, x);
+  const Term k42 = k.substitute({{x, tm.mk_bv(8, 42)}});
+  EXPECT_TRUE(k42.same_as(tm.mk_const_array(A, tm.mk_bv(8, 42)))) << k42;
+  EXPECT_TRUE(select(k42, y).same_as(tm.mk_bv(8, 42)));
+
+  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED,
+                    real_div(rx, tm.mk_real(2)).substitute({{tm.mk_real(2), tm.mk_real(0)}}));
+  API3_EXPECT_ERROR(ErrorCode::UNSUPPORTED,
+                    real_mul(tm.mk_real(3), rx).substitute({{tm.mk_real(3), ry}}));
+  EXPECT_TRUE(bvadd(x, y).substitute({{y, z}}).same_as(bvadd(x, z)));
+}
+
 // ---------------------------------------------------------------- sort checks
 
 TEST_F(Kinds, sort_mismatch_names_the_argument)

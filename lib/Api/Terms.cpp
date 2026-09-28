@@ -1055,36 +1055,65 @@ Term Term::substitute(const std::vector<std::pair<Term, Term>>& map) const
                    {from, to}, {from.sort(), to.sort()});
     memo[detail::node_of(from)] = detail::node_of(to);
   }
-  std::function<ASTNode(const ASTNode&)> walk = [&](const ASTNode& n) -> ASTNode {
-    auto it = memo.find(n);
-    if (it != memo.end())
-      return it->second;
-    ASTNode out = n;
-    const ASTNode operand = n.GetKind() == ITE ? m->bm->FpToRealOperand(n) : ASTNode();
-    if (!operand.IsNull())
+  // The tree replaced in is the public one: each node is taken apart as
+  // kind(), children() and indices() show it and, when a child changed, is
+  // built again by the constructors. So a substitution meets the checks that
+  // building the term by hand does (a Real division by zero is UNSUPPORTED,
+  // not the engine's fatal error), a constant array's default is replaced in
+  // as the child it is, and what the engine keeps as a child but the public
+  // tree does not show -- an extract's bounds, say -- is never touched.
+  // Bottom up with a stack of its own, so that depth costs no recursion.
+  struct Frame
+  {
+    ASTNode node;
+    detail::View view;
+    bool expanded;
+  };
+  const ASTNode root = detail::node_of(*this);
+  detail::engine_call(m, "Term::substitute", [&] {
+    std::vector<Frame> stack;
+    stack.push_back({root, {}, false});
+    while (!stack.empty())
     {
-      // a conversion is rebuilt from its operand, by the construction itself
-      const ASTNode replaced = walk(operand);
-      if (!(replaced == operand))
-        out = detail::build_term(m, "Term::substitute", Kind::FP_TO_REAL, {replaced}, {},
-                                 std::nullopt);
-    }
-    else if (n.Degree() > 0)
-    {
-      ASTVec kids;
-      bool changed = false;
-      for (const ASTNode& c : n.GetChildren())
+      if (memo.count(stack.back().node) != 0)
       {
-        kids.push_back(walk(c));
+        stack.pop_back();
+        continue;
+      }
+      if (!stack.back().expanded)
+      {
+        Frame& f = stack.back();
+        f.view = detail::view_of(m, f.node);
+        f.expanded = true;
+        const std::vector<ASTNode> kids = f.view.children; // f dies with the pushes below
+        for (auto it = kids.rbegin(); it != kids.rend(); ++it)
+          if (memo.count(*it) == 0)
+            stack.push_back({*it, {}, false});
+        continue;
+      }
+      const Frame f = stack.back();
+      stack.pop_back();
+      std::vector<ASTNode> kids;
+      kids.reserve(f.view.children.size());
+      bool changed = false;
+      for (const ASTNode& c : f.view.children)
+      {
+        kids.push_back(memo.at(c));
         changed = changed || !(kids.back() == c);
       }
+      ASTNode out = f.node;
       if (changed)
-        out = detail::rebuild_node(m, m->factory(), n, kids);
+      {
+        const std::optional<std::uint32_t> sort =
+            f.view.kind == Kind::CONST_ARRAY
+                ? std::optional<std::uint32_t>(m->sort_of_node(f.node, "Term::substitute"))
+                : std::nullopt;
+        out = detail::build_term(m, "Term::substitute", f.view.kind, kids, f.view.indices, sort);
+      }
+      memo.emplace(f.node, out);
     }
-    memo.emplace(n, out);
-    return out;
-  };
-  return detail::make_term(m, walk(detail::node_of(*this)));
+  });
+  return detail::make_term(m, memo.at(root));
 }
 
 std::string Term::str() const
