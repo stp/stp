@@ -630,6 +630,88 @@ TEST_F(SolverTest, write_cnf)
   EXPECT_EQ(fresh.assertions().size(), 3u);
 }
 
+// write_cnf is the batch pipeline's first CNF, whatever `incremental` says
+// (incremental=on once routed the export to the driver, which solved the
+// query and wrote a placeholder claiming it was decided before any CNF), and
+// it says how that CNF relates to the assertions.
+TEST_F(SolverTest, write_cnf_is_the_batch_cnf_and_says_its_scope)
+{
+  const auto mul_problem = [](TermManager& t, Solver& sv) {
+    const Term p = t.declare("p", t.mk_bv_sort(32)), q = t.declare("q", t.mk_bv_sort(32));
+    sv.add(bvmul(p, q) == t.mk_bv(32, 0x12345679));
+    sv.add(bvugt(p, 1));
+    sv.add(bvugt(q, 1));
+    sv.add(bvult(p, 0x10000));
+    sv.add(bvult(q, 0x10000));
+  };
+  for (const char* mode : {"on", "auto", "off"})
+  {
+    TermManager t;
+    Options o;
+    o.set_str("incremental", mode);
+    Solver sv(t, o);
+    mul_problem(t, sv);
+    std::ostringstream cnf;
+    EXPECT_EQ(sv.write_cnf(cnf), CnfScope::WHOLE) << mode;
+    EXPECT_EQ(cnf.str().find("decided before CNF generation"), std::string::npos) << mode;
+    EXPECT_NE(cnf.str().find("p cnf "), std::string::npos) << mode;
+  }
+  // an abstraction over-approximates
+  {
+    TermManager t;
+    Options o;
+    o.set_args({"--bv-term-abstraction"});
+    Solver sv(t, o);
+    mul_problem(t, sv);
+    std::ostringstream cnf;
+    EXPECT_EQ(sv.write_cnf(cnf), CnfScope::OVER_APPROXIMATION);
+  }
+  // the trivial forms are the whole query
+  std::ostringstream none;
+  EXPECT_EQ(s.write_cnf(none), CnfScope::WHOLE);
+}
+
+// The export is not a check: the CNF sink, which sees the CNFs checks hand to
+// the SAT solver, does not see it; a pending interrupt stays pending for the
+// next check; and the count of solves that engages the incremental driver is
+// the checks', not the exports'.
+TEST_F(SolverTest, write_cnf_is_not_a_check)
+{
+  int sunk = 0;
+  s.set_cnf_sink([&](std::string_view, CnfScope) { ++sunk; });
+  s.add(bvmul(x, y) == 6);
+  s.add(bvugt(x, 1));
+  s.add(bvugt(y, 1));
+  std::ostringstream cnf;
+  s.write_cnf(cnf);
+  EXPECT_EQ(sunk, 0);
+  EXPECT_NE(cnf.str().find("p cnf "), std::string::npos);
+
+  s.interrupt();
+  std::ostringstream again;
+  s.write_cnf(again);
+  EXPECT_EQ(again.str(), cnf.str());
+  EXPECT_TRUE(s.interrupt_pending());
+  const Result r = s.check_sat();
+  EXPECT_EQ(r.reason(), UnknownReason::INTERRUPTED);
+  EXPECT_FALSE(s.interrupt_pending());
+
+  // after a push the driver engages at the third check (the default
+  // incremental-auto-engage-at); exports in between do not bring it forward
+  s.push();
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.statistics().uint64("incremental.engaged"), 0u);
+  for (int i = 0; i < 3; ++i)
+  {
+    std::ostringstream more;
+    s.write_cnf(more);
+  }
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.statistics().uint64("incremental.engaged"), 0u);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.statistics().uint64("incremental.engaged"), 1u);
+}
+
 TEST_F(SolverTest, moved_from_solvers)
 {
   EXPECT_EQ(capabilities()["solvers-per-manager"], "unbounded");

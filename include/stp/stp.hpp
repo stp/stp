@@ -200,9 +200,10 @@ enum class ParseMode : std::uint8_t
   PARSE_ONLY
 };
 /// How a CNF a check hands to the SAT solver relates to the query
-/// (Solver::set_cnf_sink): the whole query; partial, array read refinement
-/// adding its congruence axioms as the search asks for them; or an
-/// over-approximation, the bit-vector abstractions having replaced
+/// (Solver::set_cnf_sink, Solver::write_cnf): the whole query; partial, a
+/// refinement still to come (array reads, uninterpreted functions, Real
+/// arithmetic, the floating-point abstraction) adding what the search asks
+/// for; or an over-approximation, the bit-vector abstractions having replaced
 /// operations with free inputs.
 enum class CnfScope : std::uint8_t
 {
@@ -1144,7 +1145,14 @@ public:
   /// assertions and its negated query) in CVC (after the declarations and
   /// assertions), SMTLIB2, GDL or DOT. STATE if there was no such input.
   std::string input_to_string(Format) const;
-  void write_cnf(std::ostream&) const; ///< DIMACS of the current assertions
+  /// DIMACS of the current assertions: the batch pipeline encodes them up to
+  /// its first CNF without solving, whatever `incremental` says, and the
+  /// scope says how that CNF relates to them. Not a check: the last check's
+  /// result, model and failed assumptions stay, a pending interrupt stays
+  /// pending, and the CNF sink does not see it. STATE when an interrupt or a
+  /// budget stops it first; UNSUPPORTED when the pipeline ends before a CNF
+  /// for another reason.
+  CnfScope write_cnf(std::ostream&) const;
 
   /// Where diagnostic-tier options write: statistics, warnings and the other
   /// text the engine prints for people rather than programs, "Fatal Error:"

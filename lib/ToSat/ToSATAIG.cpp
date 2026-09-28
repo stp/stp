@@ -251,9 +251,6 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
                                                    : CnfExtent::Whole);
   }
 
-  if (bm->cnf_sink != nullptr)
-    cnf.writeDimacs(*bm->cnf_sink);
-
   if (bm->UserFlags.stop_after_cnf)
   {
     // Abandon the check the way a preparation deadline does: TopLevelSTP

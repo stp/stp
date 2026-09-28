@@ -663,7 +663,12 @@ STP_API stp_term stp_solver_parse_term(stp_solver, const char* smt2_term); /* ov
 STP_API char* stp_solver_to_smt2(stp_solver, bool with_check_sat);
 STP_API char* stp_solver_to_string(stp_solver, stp_format); /* SMTLIB2, CVC, DOT, GDL */
 typedef void (*stp_text_sink)(const char* text, size_t len, void* user);
-STP_API stp_status stp_solver_write_cnf(stp_solver, stp_text_sink, void* user); /* encodes up to CNF without solving, delivered as DIMACS in one call; UNSUPPORTED for Real content */
+/* the batch pipeline encodes the assertions up to its first CNF without solving (whatever
+ * incremental says), delivered as DIMACS in one call; *scope (NULL: not wanted) says how the CNF
+ * relates to them. Not a check: the last check's result, model and failed assumptions stay, a
+ * pending interrupt stays pending, the CNF sink does not see it. STATE when an interrupt or a
+ * budget stops it first; UNSUPPORTED when the pipeline ends before a CNF for another reason */
+STP_API stp_status stp_solver_write_cnf(stp_solver, stp_text_sink, void* user, stp_cnf_scope* scope);
 STP_API void stp_solver_set_diagnostic_sink(stp_solver, stp_text_sink, void* user); /* where diagnostic-tier options write, "Fatal Error:" reports included; NULL: nowhere */
 /* the input read as far as the parser needs it: the source fills up to max bytes and returns
  * how many, 0 at the end and (size_t)-1 if reading failed (the parse then fails with IO);

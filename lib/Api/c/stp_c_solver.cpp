@@ -494,14 +494,16 @@ char* stp_solver_to_string(stp_solver s, stp_format f)
   });
 }
 
-stp_status stp_solver_write_cnf(stp_solver s, stp_text_sink sink, void* user)
+stp_status stp_solver_write_cnf(stp_solver s, stp_text_sink sink, void* user, stp_cnf_scope* scope)
 {
   return solver_check<stp_status>(s, "stp_solver_write_cnf", STP_ERROR, [&](CSolver* cs) {
     if (sink == nullptr)
       fail(ErrorCode::NULL_HANDLE, "stp_solver_write_cnf", "the sink is null", 1);
     std::ostringstream os;
-    cs->solver.write_cnf(os);
+    const CnfScope c = cs->solver.write_cnf(os);
     const std::string text = os.str();
+    if (scope != nullptr)
+      *scope = static_cast<stp_cnf_scope>(c);
     sink(text.c_str(), text.size(), user);
     return STP_OK;
   });

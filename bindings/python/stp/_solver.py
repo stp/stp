@@ -840,8 +840,11 @@ class Solver(_core.SolverHandle):
         return _core.SolverHandle.to_string(self, _format_code(format))
 
     def write_cnf(self, path_or_file):
-        """Encode the assertions up to CNF without solving and write the DIMACS text."""
-        data = _core.SolverHandle.write_cnf(self)
+        """Encode the assertions up to CNF without solving and write the DIMACS text. Returns how
+        the CNF relates to them: "whole", "partial" (a refinement still to come) or
+        "over-approximation" (a bit-vector abstraction). Not a check: the last check's result
+        and model stay."""
+        data, scope = _core.SolverHandle.write_cnf(self)
         if isinstance(path_or_file, (str, bytes, os.PathLike)):
             with open(path_or_file, "wb") as f:
                 f.write(data)
@@ -854,10 +857,11 @@ class Solver(_core.SolverHandle):
                 path_or_file.write(data.decode("utf-8", "replace"))
         else:
             raise TypeError("write_cnf takes a path or a file object")
+        return scope
 
     def dimacs(self):
         """The DIMACS text as a str."""
-        return _core.SolverHandle.write_cnf(self).decode("utf-8", "replace")
+        return _core.SolverHandle.write_cnf(self)[0].decode("utf-8", "replace")
 
     def __repr__(self):
         if self.closed:

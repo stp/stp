@@ -2209,20 +2209,22 @@ cdef class SolverHandle:
         return _take(p)
 
     def write_cnf(self):
-        """The DIMACS text of the assertions (encoded up to CNF without solving), as bytes."""
+        """(DIMACS bytes, scope): the assertions encoded up to CNF without solving, and how the
+        CNF relates to them ("whole", "partial" or "over-approximation")."""
         self._live()
         cdef list chunks = []
         cdef void* user = <void*>chunks
         cdef stp_status st
+        cdef stp_cnf_scope scope = STP_CNF_WHOLE
         _set_busy(self._m, True)
         try:
             with nogil:
-                st = stp_solver_write_cnf(self._s, _collect_cb, user)
+                st = stp_solver_write_cnf(self._s, _collect_cb, user, &scope)
         finally:
             _set_busy(self._m, False)
         if st != STP_OK:
             self._m._fail("stp_solver_write_cnf")
-        return b"".join(chunks)
+        return b"".join(chunks), _CNF_SCOPES.get(<int>scope, "whole")
 
     def set_diagnostic_sink(self, fn):
         self._live()

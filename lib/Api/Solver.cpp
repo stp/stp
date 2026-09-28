@@ -639,7 +639,7 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
     active_real = active_real || !bm->AllRealSymbols().empty();
 
     const bool use_incremental =
-        !active_real && stp->sessionIncremental &&
+        !batch_only && !active_real && stp->sessionIncremental &&
         (stp->incrementalFromStart ||
          IncrementalSolver::automaticEngagementReady(flags.incremental_auto_engage_at, false,
                                                      stp->incrementalSolvesRun));
@@ -2439,16 +2439,18 @@ std::string Solver::to_string(Format f) const
   detail::fail(ErrorCode::UNSUPPORTED, "Solver::to_string", "there is no SMT-LIB 1 printer");
 }
 
-void Solver::write_cnf(std::ostream& os) const
+CnfScope Solver::write_cnf(std::ostream& os) const
 {
   SolverImpl* s = live(*this, "Solver::write_cnf");
   STPMgr* bm = s->mgr->bm;
-  // Run the pipeline up to the first CNF with the sink installed; the check
-  // itself is abandoned with STOPPED_AFTER_CNF. What the last check left is
-  // the caller's and is put back however the export ends: its result, its
-  // assumptions and the failed ones, its model -- snapshotted first, since
-  // the export's pipeline refills the tables a pending model is read from --
-  // and the candidate.
+  // Run the batch pipeline up to its first CNF; the check itself is
+  // abandoned with STOPPED_AFTER_CNF. The export is not a
+  // check: what the last check left is the caller's and is put back however
+  // the export ends -- its result, its assumptions and the failed ones, its
+  // model (snapshotted first, since the export's pipeline refills the tables
+  // a pending model is read from), the candidate, and the count of solves
+  // that engages the incremental driver -- and an interrupt pending when it
+  // starts is left for the next check.
   if (s->model_pending)
     s->ensure_snapshot();
   struct LastCheck
@@ -2461,6 +2463,8 @@ void Solver::write_cnf(std::ostream& os) const
     std::chrono::steady_clock::duration wall;
     bool incremental;
     std::size_t checks;
+    std::size_t solves_run;
+    bool interrupt;
     ~LastCheck()
     {
       s->last = last;
@@ -2473,6 +2477,9 @@ void Solver::write_cnf(std::ostream& os) const
       s->last_wall = wall;
       s->last_incremental = incremental;
       s->checks = checks;
+      s->stp->incrementalSolvesRun = solves_run;
+      if (interrupt)
+        s->interrupt.store(true);
     }
   } kept{s,
          s->last,
@@ -2483,39 +2490,54 @@ void Solver::write_cnf(std::ostream& os) const
          s->candidate,
          s->last_wall,
          s->last_incremental,
-         s->checks};
-  const bool saved_incremental = s->stp->sessionIncremental;
-  const bool saved_stop = bm->UserFlags.stop_after_cnf;
-  std::ostringstream buffer;
-  bm->cnf_sink = &buffer;
-  bm->UserFlags.stop_after_cnf = true;
-  s->stp->sessionIncremental = false; // the batch pipeline is where the CNF is written
+         s->checks,
+         s->stp->incrementalSolvesRun,
+         s->interrupt.exchange(false)};
+  // The first CNF and its scope -- how it relates to the assertions -- come
+  // from the listener the engine tells of every CNF, which is the export's
+  // for the call: the solver's own sink sees the CNFs checks hand to the SAT
+  // solver, and this one is not handed over.
+  std::string cnf;
+  std::optional<CnfScope> scope;
   struct Restore
   {
     SolverImpl* s;
     STPMgr* bm;
-    bool incremental, stop;
+    bool stop;
+    std::function<void(std::string_view, CnfScope)> sink;
     ~Restore()
     {
-      bm->cnf_sink = nullptr;
       bm->UserFlags.stop_after_cnf = stop;
-      s->stp->sessionIncremental = incremental;
+      s->batch_only = false;
+      s->cnf_sink = std::move(sink);
     }
-  } restore{s, bm, saved_incremental, saved_stop};
+  } restore{s, bm, bm->UserFlags.stop_after_cnf, std::move(s->cnf_sink)};
+  s->cnf_sink = [&cnf, &scope](std::string_view dimacs, CnfScope c) {
+    if (scope.has_value())
+      return;
+    cnf.assign(dimacs);
+    scope = c;
+  };
+  bm->UserFlags.stop_after_cnf = true;
+  s->batch_only = true; // the batch pipeline is where the CNF is written
   Result r = s->run_check("Solver::write_cnf", {}, std::nullopt);
-  const std::string cnf = buffer.str();
-  if (cnf.empty())
+  if (!scope.has_value())
   {
     if (r.is_unsat())
       os << "c decided before CNF generation: unsat\np cnf 1 2\n1 0\n-1 0\n";
     else if (r.is_sat())
       os << "c decided before CNF generation: sat\np cnf 0 0\n";
+    else if (r.reason() == UnknownReason::INTERRUPTED || r.reason() == UnknownReason::TIMEOUT ||
+             r.reason() == UnknownReason::RESOURCE_LIMIT)
+      detail::fail(ErrorCode::STATE, "Solver::write_cnf",
+                   "the export stopped before its CNF: " + r.reason_message());
     else
       detail::fail(ErrorCode::UNSUPPORTED, "Solver::write_cnf",
                    "the problem has no CNF form: " + r.reason_message());
-    return;
+    return CnfScope::WHOLE;
   }
   os << cnf;
+  return *scope;
 }
 
 void Solver::set_diagnostic_sink(std::function<void(std::string_view)> sink)

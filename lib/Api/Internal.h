@@ -529,6 +529,7 @@ struct SolverImpl
   std::shared_ptr<const ModelSnapshot> candidate;
   std::chrono::steady_clock::duration last_wall{0};
   bool last_incremental = false;
+  bool batch_only = false; // write_cnf: the batch pipeline, whatever `incremental` says
 
   // interrupts
   std::atomic<bool> interrupt{false};

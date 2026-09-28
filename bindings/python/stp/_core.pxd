@@ -418,7 +418,7 @@ cdef extern from "stp/stp.h":
     char* stp_solver_to_smt2(stp_solver, bint with_check_sat)
     char* stp_solver_to_string(stp_solver, stp_format)
     ctypedef void (*stp_text_sink)(const char* text, size_t len, void* user) noexcept
-    stp_status stp_solver_write_cnf(stp_solver, stp_text_sink, void* user) nogil
+    stp_status stp_solver_write_cnf(stp_solver, stp_text_sink, void* user, stp_cnf_scope* scope) nogil
     void stp_solver_set_diagnostic_sink(stp_solver, stp_text_sink, void* user)
     ctypedef size_t (*stp_text_source)(char* buf, size_t max, void* user) noexcept
     stp_status stp_solver_parse_source(stp_solver, stp_text_source, void* user, stp_format,

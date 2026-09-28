@@ -695,10 +695,6 @@ public:
   // count is used in the creation of new variables
   unsigned int _symbol_count;
 
-  // Where the 3.x API's Solver::write_cnf receives the DIMACS of the first
-  // CNF a check generates; NULL otherwise. Borrowed for the one check.
-  std::ostream* cnf_sink = nullptr;
-
   // What the 3.x API's CNF sink receives: the DIMACS of every CNF a check
   // hands to the SAT solver, and how that CNF relates to the query. Empty:
   // no CNF is written out.

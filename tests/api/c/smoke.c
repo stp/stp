@@ -786,7 +786,10 @@ static void options_and_limits(void)
   CHECK(stp_statistics_name(st, 0) != NULL);
   CHECK(stp_statistics_tier("checks.total") == STP_TIER_STABLE);
   stp_statistics_release(st);
-  CHECK(stp_solver_write_cnf(s, cnf_sink, &seen) == STP_OK && seen == 1);
+  stp_cnf_scope scope = STP_CNF_PARTIAL;
+  CHECK(stp_solver_write_cnf(s, cnf_sink, &seen, &scope) == STP_OK && seen == 1 && scope == STP_CNF_WHOLE);
+  seen = 0;
+  CHECK(stp_solver_write_cnf(s, cnf_sink, &seen, NULL) == STP_OK && seen == 1);
 
   /* the thread-local record for calls with no object */
   CHECK(stp_tm_new_with(true, (stp_rm)99, 16) == NULL);

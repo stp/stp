@@ -405,7 +405,7 @@ def test_write_cnf(tmp_path):
     s = Solver()
     s.add(x + y == 3, ULT(x, y))
     path = tmp_path / "out.cnf"
-    s.write_cnf(path)
+    assert s.write_cnf(path) == "whole"
     data = path.read_text()
     assert "p cnf" in data
     buf = io.StringIO()
@@ -417,6 +417,15 @@ def test_write_cnf(tmp_path):
     assert s.check() == sat  # writing the CNF leaves the solver usable
     with pytest.raises(TypeError):
         s.write_cnf(3)
+    # not a check: a pending interrupt is left for the next one
+    s.interrupt()
+    assert s.dimacs() == data and s.interrupt_pending()
+    assert s.check() == unknown and not s.interrupt_pending()
+    s.close()
+    # the batch pipeline's CNF, whatever incremental says
+    s = Solver(incremental="on")
+    s.add(x * y == 6, UGT(x, 1), UGT(y, 1))
+    assert "decided before" not in s.dimacs() and "p cnf" in s.dimacs()
     s.close()
 
 
