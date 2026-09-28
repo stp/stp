@@ -1660,16 +1660,10 @@ LraCandidateAdapter::syncFloatTrailIntoExact() noexcept
             context_.invalidate("synced conflict failed verification");
             return SyncOutcome::Failed;
           }
-          /* The conflicting assert records nothing -- the core refuses it
-           * before pushing -- so the batch covers entries only up to it.
-           * A batch whose very first assert conflicted holds no bound at
-           * all: its checkpoint aliases the previous batch's (two pushes
-           * with no bound between them share a checkpoint), so the record
-           * is dropped rather than left to misresolve a later unwind. */
-          if (i == from)
-            sync_batches_.pop_back();
-          else
-            sync_batches_.back().to = i + 1;
+          /* Keep the record even when the first assert conflicted: its
+           * push is a level of its own, and popping it on backtrack is what
+           * takes the core out of Conflict. */
+          sync_batches_.back().to = i + 1;
           ++context_.metrics_.float_replay_conflicts;
           return SyncOutcome::ConflictStaged;
         }
