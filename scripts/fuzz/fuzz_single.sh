@@ -392,7 +392,7 @@ rm -f probe.smt2
 # entirely.
 
 declare -a OPTION_GROUPS=(simplify mult div shift bitblast abstract array uf
-                          fp cnf solver bias misc)
+                          fp fpabs cnf solver bias misc)
 
 # A group named here is drawn only when the iteration's logic matches the
 # pattern, which is how options that do nothing outside one theory stay out of
@@ -400,6 +400,7 @@ declare -a OPTION_GROUPS=(simplify mult div shift bitblast abstract array uf
 # logic name.
 declare -A GROUP_LOGIC_FILTER=(
 [fp]='*FP*'
+[fpabs]='*FP*'
 [array]='*A*'
 [uf]='*UF*'
 )
@@ -814,6 +815,62 @@ declare -a g_fp=(
 # adding.
 )
 
+# Floating-point abstraction, the CEGAR path that replaces an operation with a
+# surrogate of its own sort and refines it against the exact evaluator. Off by
+# default, so every entry turns it on; drawn only for the FP logics, where it
+# abstracts something on 61 of 80 plain floating-point files and 48 of 60
+# floating-point-array ones. A group of its own rather than part of the fp
+# group, so that it is drawn together with the native-circuit opt-outs.
+#
+# The counts below are files whose "FpAbstraction:" counters under `stp -s`
+# moved against --fp-abstraction=1 alone, out of 80 plain and 60 array files.
+# Which operations are abstracted, and how: all of them 60/48, chains of
+# add/sub/rem 26/15, a width floor above binary32 56/34, the lower rule tiers
+# 55/42, no reduced-precision bands 54/41 and none at binary128 6/6, and the
+# two ways of overriding the constant-operand heuristic, off 48/28 and on 8/8.
+# Declining pinned operations 47/30, and model repair off 21/10.
+#
+# Refinement is where generated queries seldom go -- 11 of the 140 took a
+# value lemma -- so the entries that steer it bite on those files only:
+# releasing at the first refuted candidate 2/9, releasing by restart rather
+# than splicing 2/9 on top of that, box lemmas 1/8.
+#
+# The incremental entry only means something when the misc group draws
+# --incremental=on, which it does one iteration in two; there it changes the
+# whole -s output on 38 of 40 and 26 of 30 files. --incremental cannot be
+# named here as well: the two groups are drawn together.
+declare -a g_fpabs=(
+""
+"--fp-abstraction=1"
+"--fp-abstraction=1 --fp-abstraction-ops=all"
+"--fp-abstraction=1 --fp-abstraction-chain-ops=add,sub,rem"
+"--fp-abstraction=1 --fp-abstraction-width=64"
+"--fp-abstraction=1 --fp-abstraction-tiers=0"
+"--fp-abstraction=1 --fp-abstraction-tiers=1"
+"--fp-abstraction=1 --fp-abstraction-significand-bits=0"
+"--fp-abstraction=1 --fp-abstraction-significand-bits-wide=0"
+"--fp-abstraction=1 --fp-abstraction-constant-operands=off"
+"--fp-abstraction=1 --fp-abstraction-constant-operands=on"
+"--fp-abstraction=1 --fp-abstraction-decline-pinned"
+"--fp-abstraction=1 --fp-abstraction-repair=0"
+"--fp-abstraction=1 --fp-abstraction-values=0"
+"--fp-abstraction=1 --fp-abstraction-values=0 --fp-abstraction-restart-width=16"
+"--fp-abstraction=1 --fp-abstraction-box-lemmas=1"
+"--fp-abstraction=1 --fp-abstraction-incremental=1"
+
+# Not here, each measured on the same 140 files:
+#   --fp-abstraction-shape=0, --fp-abstraction-relational=0 and
+#   --fp-abstraction-relational-last-width=16 steer lemmas a generated query
+#                          hardly asks for: one file took a shape lemma and
+#                          none a relational one, and the counters did not
+#                          move under any of the three.
+#   --fp-abstraction-phase-hints=1  moved no counter, CaDiCaL's conflict and
+#                          decision counts included.
+#   --fp-abstraction-restart-limit=0  releases by splicing, which is what the
+#                          entry without a restart width already does:
+#                          identical to it on all 140.
+)
+
 # CNF generation. One option selects between three encoders, so the rungs
 # belong in one group: very-low..very-high minimise ABC's AIG, the new-*
 # rungs blast through STP's own AIG and write the CNF from it directly, and
@@ -892,7 +949,9 @@ declare -a g_bias=(
 #
 # Sharing this group with --interactive makes one iteration in two an
 # incremental one. Giving these entries a group of their own would raise
-# that, at the cost of every other iteration carrying the driver too.
+# that, at the cost of every other iteration carrying the driver too. The
+# fpabs group's --fp-abstraction-incremental relies on this group: it acts
+# only in an iteration that has drawn the driver.
 declare -a g_misc=(
 ""
 "--interactive=1"
@@ -1006,6 +1065,42 @@ declare -a NOT_FUZZED=(
 --uninterpreted-functions --uf-propagate-equalities --uf-narrow-results
 --uf-skeleton-preproc --uf-inject-args --uf-sort-width
 --congruence-candidate-limit --congruence-candidate-conflicts
+# CaDiCaL's variable elimination settings. They need --cadical, but paired
+# with it every one of elim=0, mineff=maxeff=0 and a raised minimum left
+# the conflict, decision and propagation counts identical on all 108
+# bit-vector, UF and floating-point files answered.
+--cadical-elim --cadical-elimmineff --cadical-elimmaxeff
+# Wall-clock: whether the budget fires depends on how loaded the machine is,
+# so a mismatch drawn with it would not reproduce.
+--fp-abstraction-budget
+# Linear real arithmetic, and the UF options that only act on functions over
+# Real (the lazy congruence rounds print nothing on any QF_UFBV file). No
+# logic entry generates reals: the default checker has none, and the probe
+# above stops the whole run when the checker cannot answer a logic. Fuzzing
+# these needs QF_LRA and QF_UFLRA entries run against a checker that has
+# reals, and a group for them.
+--uf-lazy-in-place --uf-lazy-full-expansion-pairs --uf-lazy-round-limit
+--uf-congruence-closure --uf-congruence-closure-min-apps
+--lra-boolean-bounds --lra-conflict-recovery --lra-decision-polarity
+--lra-dense-recovery --lra-direct-bounds --lra-early-conflicts
+--lra-extension-mode --lra-extension-restart-float-basis
+--lra-extension-restart-sat --lra-first-search
+--lra-float-dormant-min-cells --lra-float-dormant-rows --lra-float-driver
+--lra-float-promotion-budget --lra-float-reroute --lra-float-reroute-floor
+--lra-highs-cut-limit --lra-highs-cuts --lra-highs-lp --lra-highs-mip
+--lra-highs-replay --lra-highs-replay-nodes --lra-highs-seconds
+--lra-incremental-session --lra-lp-partial --lra-lp-screen
+--lra-model-reconstruction --lra-persistent-state --lra-presolve-bounds
+--lra-presolve-monotone --lra-presolve-monotone-work
+--lra-presolve-propagate --lra-presolve-rounds --lra-presolve-rows
+--lra-presolve-subst --lra-presolve-subst-growth --lra-presolve-subst-work
+--lra-presolve-unconstrained --lra-relu-auto-seconds --lra-relu-bounds
+--lra-relu-branch --lra-relu-branch-nodes --lra-relu-branch-seconds
+--lra-relu-cases --lra-relu-cases-seconds --lra-relu-lp
+--lra-relu-lp-call-seconds --lra-relu-lp-rounds --lra-relu-lp-seconds
+--lra-relu-property-branches --lra-replay-screen --lra-row-order
+--lra-separate-model-values --lra-singleton-ordering --lra-soi
+--lra-theory-propagation --lra-verify-canonical --lra-verify-conflicts
 # Only act from the second (check-sat) onwards. A generated file has one, so
 # fuzzing these needs the files rewritten into push/pop sessions, which this
 # script does not do.
@@ -1015,6 +1110,10 @@ declare -a NOT_FUZZED=(
 --incremental-semantic-cache-limit --incremental-promote-units
 --incremental-piece-rewriting --incremental-scoped-preprocessing
 --incremental-inprobing
+# Narrows the checks to the pieces a session's current solve asserts; with
+# one (check-sat) every piece is asserted, and the whole -s output was
+# identical on all 70 floating-point files measured.
+--fp-abstraction-active-closure
 )
 
 # $supported is the wrong list to check against: it harvests every
