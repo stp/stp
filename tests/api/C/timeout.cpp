@@ -80,9 +80,6 @@ void test_timeout(bool test_with_time, uint32_t max_value, bool use_cms)
 
     std::cout << query << std::endl;
 
-    // FIXME: Actually test something
-    // ASSERT_TRUE(false && "FIXME: Actually test something");
-
     vc_DeleteExpr(c);
     vc_Destroy(vc);
   }

@@ -42,8 +42,9 @@ TEST(push_no_pop, one)
 
   Expr a_eq_0 = vc_eqExpr(vc, a, ct_0);
 
+  // Nothing asserted yet, so a = 0 is not valid.
   int query = vc_query(vc, a_eq_0);
-  printf("query = %d\n", query);
+  EXPECT_EQ(0, query);
 
   Expr a_neq_0 = vc_notExpr(vc, a_eq_0);
   vc_assertFormula(vc, a_eq_0);
@@ -51,9 +52,9 @@ TEST(push_no_pop, one)
 
   Expr queryexp = vc_eqExpr(vc, a, vc_bvConstExprFromInt(vc, 8, 0));
 
+  // Asserted below the push, which is never popped.
   query = vc_query(vc, queryexp);
-  vc_printCounterExample(vc);
-  printf("query = %d\n", query);
+  EXPECT_EQ(1, query);
 
   vc_DeleteExpr(queryexp);
   vc_DeleteExpr(a_neq_0);
@@ -61,7 +62,4 @@ TEST(push_no_pop, one)
   vc_DeleteExpr(a);
 
   vc_Destroy(vc);
-
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }

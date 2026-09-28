@@ -38,17 +38,19 @@ TEST(parse_string, CVC)
 
   const char* s = "QUERY BVMOD(2,0bin10,0bin10) = 0bin00;\n";
 
-  vc_parseMemExpr(vc, s, &q, &asserts);
+  ASSERT_EQ(1, vc_parseMemExpr(vc, s, &q, &asserts));
 
   vc_printExpr(vc, q);
   vc_printExpr(vc, asserts);
   printf("\n");
 
+  vc_assertFormula(vc, asserts);
+  // 2 mod 2 = 0 holds.
+  EXPECT_EQ(1, vc_query(vc, q));
+
   vc_DeleteExpr(q);
   vc_DeleteExpr(asserts);
   vc_Destroy(vc);
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 
 TEST(parse_string, SMT)
@@ -68,15 +70,17 @@ TEST(parse_string, SMT)
                   ":extrafuns ((y32 BitVec[32]))\n"
                   ":assumption true\n)\n";
 
-  vc_parseMemExpr(vc, s, &q, &asserts);
+  ASSERT_EQ(1, vc_parseMemExpr(vc, s, &q, &asserts));
 
   vc_printExpr(vc, q);
   vc_printExpr(vc, asserts);
   printf("\n");
 
+  vc_assertFormula(vc, asserts);
+  // No formula, so the query is FALSE and the assumptions are satisfiable.
+  EXPECT_EQ(0, vc_query(vc, q));
+
   vc_DeleteExpr(q);
   vc_DeleteExpr(asserts);
   vc_Destroy(vc);
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }

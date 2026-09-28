@@ -57,6 +57,4 @@ TEST(multiple_queries, one)
   ASSERT_FALSE(query);
 
   vc_Destroy(vc);
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }

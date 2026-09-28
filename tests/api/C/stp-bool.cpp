@@ -29,9 +29,11 @@ THE SOFTWARE.
 TEST(stp_bool, one)
 {
   VC vc = vc_createValidityChecker();
-  (void)vc_boolType(vc);
+  Expr p = vc_varExpr(vc, "p", vc_boolType(vc));
+  EXPECT_EQ(BOOLEAN_TYPE, getType(p));
+
+  EXPECT_EQ(1, vc_query(vc, vc_orExpr(vc, p, vc_notExpr(vc, p))));
+  EXPECT_EQ(0, vc_query(vc, p));
 
   vc_Destroy(vc);
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }
