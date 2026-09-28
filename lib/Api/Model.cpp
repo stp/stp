@@ -106,6 +106,29 @@ ASTNode lift(ManagerImpl* m, const ASTNode& carrier, const SourceSort& sort)
   return carrier;
 }
 
+// The key of a partial floating-point operation `n` whose operands have the
+// values `kids` (PartialChoiceKey).
+PartialChoiceKey partial_choice_key(const ASTNode& n, const ASTVec& kids)
+{
+  PartialChoiceKey key;
+  key.kind = n.GetKind();
+  for (std::size_t i = 0; i < kids.size(); ++i)
+  {
+    const SourceSort ss = n[i].GetSourceSort();
+    if (ss.kind() != SourceSort::Kind::FloatingPoint)
+    {
+      key.operands.push_back(kids[i]);
+      continue;
+    }
+    key.formats.push_back(ss.exponentWidth());
+    key.formats.push_back(ss.significandWidth());
+    const bool nan = fp_value_of(kids[i], ss.exponentWidth(), ss.significandWidth()).cls ==
+                     FloatValue::Class::NOT_A_NUMBER;
+    key.operands.push_back(nan ? ASTNode() : kids[i]);
+  }
+  return key;
+}
+
 std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
 {
   auto snap = std::make_shared<ModelSnapshot>();
@@ -249,6 +272,7 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
   // fp.to_ubv/fp.to_sbv on NaN, infinities and out-of-range values) take the
   // choice the solve's encoding made; a later evaluation cannot know it, so
   // the value of every such node in the checked formula is recorded now.
+  std::vector<ASTNode> partials;
   {
     std::vector<ASTNode> roots = bm->GetAsserts();
     roots.insert(roots.end(), last_assumptions.begin(), last_assumptions.end());
@@ -265,7 +289,10 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
       {
         const ASTNode value = ce->GetCounterExample(n);
         if (!value.IsNull() && value.isConstant())
+        {
           snap->scalars[n] = lift(mgr, value, n.GetSourceSort());
+          partials.push_back(n);
+        }
       }
       // fp.to_real's constant for NaN or an infinity: the solve's choice,
       // which the exact model holds (never in the core: no one declared it)
@@ -374,6 +401,22 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
           snap->core.push_back(fc.identity);
         snap->functions[fc.identity] = std::move(fc);
       }
+    }
+  }
+
+  // Each partial operation's choice again, keyed by its operands' values
+  // through the snapshot as it now stands: these operations are functions, so
+  // an application the check never saw, over values one it did see had,
+  // takes that one's choice rather than a completion.
+  if (!partials.empty())
+  {
+    Evaluator ev(*snap, fn, /*complete=*/true);
+    for (const ASTNode& n : partials)
+    {
+      ASTVec kids;
+      for (const ASTNode& c : n.GetChildren())
+        kids.push_back(ev.evaluate(c));
+      snap->partial_choices.emplace(partial_choice_key(n, kids), snap->scalars[n]);
     }
   }
 
@@ -739,34 +782,52 @@ ASTNode Evaluator::fold(const ASTNode& n, const ASTVec& kids)
       return holds ? m_->bm->ASTTrue : m_->bm->ASTFalse;
     }
   }
+  const auto fold_total = [&](const ASTVec& total) -> ASTNode {
+    const ASTNode out = rebuild_node(m_, m_->folding_factory(), n, total);
+    if (out.isConstant())
+      return out;
+    if (out.GetExpWidth() != 0 || n.GetType() == BOOLEAN_TYPE)
+    {
+      const ASTNode folded = literal_fp::tryEvaluateFpConstant(m_->bm, out);
+      if (!folded.IsNull() && folded.isConstant())
+        return folded;
+    }
+    if (out.isRealTerm())
+      fail_internal(fn_, "a Real term did not fold to a value");
+    const ASTNode evaluated = NonMemberBVConstEvaluator(m_->bm, out);
+    if (evaluated.isConstant())
+      return lift(m_, evaluated, n.GetSourceSort());
+    fail_internal(fn_, "cannot evaluate a term of kind " + std::to_string(static_cast<int>(n.GetKind())));
+  };
   // The partial floating-point operations reach the blaster only in the
   // total form FpTotalise gives them at solve time: one extra child that
   // carries the unspecified choice (which zero fp.min/fp.max return for
   // (+0, -0); the result of fp.to_ubv/fp.to_sbv on NaN, an infinity or an
-  // out-of-range value). Evaluation supplies a constant zero choice, so the
-  // engine's own folding answers every specified case and the unspecified
-  // ones evaluate to that choice instead of aborting in the blaster.
-  ASTVec total = kids;
+  // out-of-range value). Folded under two different choices, a specified
+  // case answers the same both times, and the engine's own folding is its
+  // value; an unspecified one gives back each choice.
   const Kind_t nk = n.GetKind();
-  if ((nk == FP_MIN || nk == FP_MAX) && kids.size() == 2)
-    total.push_back(m_->bm->CreateZeroConst(1));
-  else if ((nk == FP_TO_UBV || nk == FP_TO_SBV) && kids.size() == 3)
-    total.push_back(m_->bm->CreateZeroConst(n.GetValueWidth()));
-  ASTNode out = rebuild_node(m_, m_->folding_factory(), n, total);
-  if (out.isConstant())
-    return out;
-  if (out.GetExpWidth() != 0 || n.GetType() == BOOLEAN_TYPE)
-  {
-    const ASTNode folded = literal_fp::tryEvaluateFpConstant(m_->bm, out);
-    if (!folded.IsNull() && folded.isConstant())
-      return folded;
-  }
-  if (out.isRealTerm())
-    fail_internal(fn_, "a Real term did not fold to a value");
-  const ASTNode evaluated = NonMemberBVConstEvaluator(m_->bm, out);
-  if (evaluated.isConstant())
-    return lift(m_, evaluated, n.GetSourceSort());
-  fail_internal(fn_, "cannot evaluate a term of kind " + std::to_string(static_cast<int>(n.GetKind())));
+  const bool min_max = (nk == FP_MIN || nk == FP_MAX) && kids.size() == 2;
+  const bool to_bv = (nk == FP_TO_UBV || nk == FP_TO_SBV) && kids.size() == 3;
+  if (!min_max && !to_bv)
+    return fold_total(kids);
+  const unsigned width = min_max ? 1 : n.GetValueWidth();
+  ASTVec with_zero = kids, with_ones = kids;
+  with_zero.push_back(m_->bm->CreateZeroConst(width));
+  with_ones.push_back(m_->bm->CreateMaxConst(width));
+  const ASTNode zero_choice = fold_total(with_zero);
+  if (zero_choice == fold_total(with_ones))
+    return zero_choice;
+  // Unspecified: the solve's choice for these operand values, if the check met
+  // them. Otherwise any value is a model's to choose, and the zero choice is
+  // this evaluation's -- a completion, so not one simplify() or try_value()
+  // may make.
+  const auto chosen = s_.partial_choices.find(partial_choice_key(n, kids));
+  if (chosen != s_.partial_choices.end())
+    return chosen->second;
+  if (!complete_)
+    incomplete_ = true;
+  return zero_choice;
 }
 
 } // namespace detail

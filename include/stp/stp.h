@@ -513,7 +513,7 @@ STP_API char* stp_term_symbol(stp_term);  /* NULL, no error, if anonymous or not
 STP_API char* stp_term_str(stp_term);     /* SMT-LIB 2, untruncated; works while an error is pending */
 STP_API char* stp_term_to_string(stp_term, stp_format, bool share_subterms);
 STP_API stp_term stp_term_substitute(stp_term, size_t n, const stp_term* from, const stp_term* to);
-STP_API stp_term stp_tm_simplify(stp_tm, stp_term); /* local rewrites only; touches no solver */
+STP_API stp_term stp_tm_simplify(stp_tm, stp_term); /* local rewrites only; touches no solver; an unspecified floating-point case (fp.min of +0 and -0, fp.to_ubv of NaN, ...) stays as it is */
 STP_API bool stp_term_same(stp_term, stp_term); /* structural: the same node (== on the handles) */
 /* readers: NOT_A_VALUE unless the term is a value; SORT_MISMATCH on the wrong sort; DOES_NOT_FIT where stated */
 STP_API stp_status stp_term_to_bool(stp_term, bool* out);

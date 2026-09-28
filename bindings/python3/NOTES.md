@@ -113,7 +113,9 @@ that depart from z3py or from a literal reading of the C API.
    `stp_tm_simplify`, so the answer never depends on the manager's `simplify`
    setting, and a Python evaluator decides `distinct` and `=`, the Bool
    connectives, `ite` and the Real relations over values should the fold leave
-   one of them alone. Any other term raises `TypeError`.
+   one of them alone. Any other term raises `TypeError`, as does one whose
+   value an unspecified floating-point case decides (`fpMin` of the two zeros,
+   `fpToUBV` of NaN, ...), which is a check's to choose.
 8. **`str(term)`** is a best-effort infix rendering (values as Python
    literals, symbols by name, `If`, `Extract`, `f(x)`, `a[i]`, ...); `repr`
    is the SMT-LIB 2 text of `stp_term_str`. `to_string("smtlib2")` is

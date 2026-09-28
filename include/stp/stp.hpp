@@ -585,7 +585,7 @@ public:
   Term mk_term(Kind, std::initializer_list<Term> args,
                std::initializer_list<std::uint32_t> indices = {});
 
-  Term simplify(const Term&) const; ///< local rewrites only; touches no solver
+  Term simplify(const Term&) const; ///< local rewrites only; touches no solver; an unspecified floating-point case (fp.min of +0 and -0, fp.to_ubv of NaN, ...) stays as it is
 
   // internal
   explicit TermManager(detail::ManagerImpl*) noexcept; ///< retains

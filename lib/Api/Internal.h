@@ -418,12 +418,44 @@ struct FunctionCases
   ASTNode else_value;
 };
 
+// What the result of a partial floating-point operation in an unspecified case
+// is a function of, as the solve indexes its choice (FpTotalise): the kind,
+// the operands' values and each float operand's format. Every NaN is one
+// value, so a NaN operand is the null node.
+struct PartialChoiceKey
+{
+  Kind_t kind;
+  std::vector<ASTNode> operands;
+  std::vector<std::uint32_t> formats; // exponent and significand width per float operand
+  bool operator==(const PartialChoiceKey& o) const
+  {
+    return kind == o.kind && operands == o.operands && formats == o.formats;
+  }
+};
+
+struct PartialChoiceKeyHash
+{
+  std::size_t operator()(const PartialChoiceKey& k) const
+  {
+    std::size_t h = static_cast<std::size_t>(k.kind);
+    for (const ASTNode& o : k.operands)
+      h = h * 31 + (o.IsNull() ? 0 : o.Hash());
+    for (const std::uint32_t f : k.formats)
+      h = h * 31 + f;
+    return h;
+  }
+};
+
 struct ModelSnapshot
 {
   ManagerImpl* mgr = nullptr; // retained
   std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher> scalars; // symbol -> VALUE
   std::unordered_map<ASTNode, ArrayCells, ASTNode::ASTNodeHasher> arrays;
   std::unordered_map<ASTNode, FunctionCases, ASTNode::ASTNodeHasher> functions;
+  // The solve's choice in each unspecified case of a partial floating-point
+  // operation in the checked formula, by operand values: an application the
+  // check never saw, over the same values, takes the same choice.
+  std::unordered_map<PartialChoiceKey, ASTNode, PartialChoiceKeyHash> partial_choices;
   std::vector<ASTNode> core; // symbols the solver assigned, in name order
   bool fill_ones = false;
   Verdict verdict = Verdict::UNKNOWN; // SAT for a real model, UNKNOWN for a candidate

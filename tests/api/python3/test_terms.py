@@ -275,6 +275,13 @@ def test_equality_builds_terms():
     with pytest.raises(TypeError):
         bool(x == y)
     assert bool(BitVecVal(3, 8) == 3) is True and bool(BitVecVal(3, 8) == 4) is False
+    # a ground conversion folds; an unspecified case does not: which zero fp.min(+0, -0) is,
+    # or what fp.to_ubv of NaN is, is a check's to choose
+    assert bool(fpToSBV(RTZ(), FPVal(2.5, Float16()), BitVecSort(8)) == 2) is True
+    with pytest.raises(TypeError):
+        bool(fpMin(fpPlusZero(Float16()), fpMinusZero(Float16())) == fpPlusZero(Float16()))
+    with pytest.raises(TypeError):
+        bool(fpToUBV(RTZ(), fpNaN(Float16()), BitVecSort(8)) == 5)
     with pytest.raises(TypeError):
         bool(x)
     assert x in [x]  # identity short-circuits the list search
