@@ -549,4 +549,19 @@ TEST_F(Models, a_real_declared_after_the_check)
   EXPECT_TRUE(m.in_core(r));
 }
 
+// Nor an assertion made after it: the model is the check's, whatever the
+// assertion does to the engine's exact Real model or its function values.
+TEST_F(Models, an_assertion_made_after_the_check)
+{
+  const Term r = tm.declare("r5", R);
+  const Term f = tm.declare("f5", tm.mk_fun_sort({bv8}, bv8));
+  s.add(r == tm.mk_real("5"));
+  s.add(f(x) == tm.mk_bv(8, 3));
+  ASSERT_TRUE(s.check_sat().is_sat());
+  s.add(r == tm.mk_real("7"));
+  const Model m = s.model();
+  EXPECT_EQ(m.real_value(r).str(), "5");
+  EXPECT_EQ(m.uint64_value(f(x)), 3u);
+}
+
 } // namespace

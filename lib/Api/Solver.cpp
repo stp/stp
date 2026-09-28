@@ -1083,6 +1083,9 @@ void Solver::assert_formula(const Term& t)
   SolverImpl* s = live(*this, "Solver::assert_formula");
   detail::OutputRoute route(&s->route_sinks);
   const ASTNode n = own_bool(s, t, "Solver::assert_formula", 0);
+  // The last check's model is taken while the engine still holds it: the
+  // assertion resets the exact Real model, and the certified UF model below.
+  s->ensure_snapshot();
   detail::engine_call(s->mgr, "Solver::assert_formula", [&] {
     try
     {
