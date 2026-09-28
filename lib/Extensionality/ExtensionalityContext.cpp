@@ -117,6 +117,20 @@ ASTNode canonicalQuietNaN(STPMgr* bm, unsigned eb, unsigned sb)
   return bm->CreateBVConst(bits, w);
 }
 
+// isPackedNaN on a constant.
+bool isPackedNaNConst(const ASTNode& x, unsigned eb, unsigned sb)
+{
+  assert(x.GetKind() == BVCONST && x.GetValueWidth() == eb + sb);
+  const CBV bits = x.GetBVConst();
+  for (unsigned i = sb - 1; i < eb + sb - 1; i++)
+    if (!CONSTANTBV::BitVector_bit_test(bits, i))
+      return false;
+  for (unsigned i = 0; i < sb - 1; i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, i))
+      return true;
+  return false;
+}
+
 // Collect every node beneath (and including) n. The input chooses the DAG's
 // depth, so retain suspended ancestors on the heap rather than recursing once
 // per level.
@@ -1902,7 +1916,17 @@ bool ExtensionalityContext::namesAgreeWithCandidate(
         FatalError("array-equality: an access value has no concrete value in "
                    "the certified model",
                    a.valueTerm);
-      if (view.bvValue(a.valueName) != termValue)
+      // A float value's packed bits keep a NaN payload where the
+      // evaluator returns the canonical NaN; both are the one NaN value.
+      const ASTNode nameValue = view.bvValue(a.valueName);
+      const SourceSort sort = a.valueTerm.GetSourceSort();
+      const bool bothNaN =
+          sort.kind() == SourceSort::Kind::FloatingPoint &&
+          isPackedNaNConst(nameValue, sort.exponentWidth(),
+                           sort.significandWidth()) &&
+          isPackedNaNConst(termValue, sort.exponentWidth(),
+                           sort.significandWidth());
+      if (nameValue != termValue && !bothNaN)
         return false;
     }
   }
