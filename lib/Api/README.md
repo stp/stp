@@ -40,7 +40,10 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   (`ManagerImpl::factory`); the engine's own `defaultNodeFactory` folds either way.
 - Constant arrays are the engine's: `STPMgr::CreateConstArray` registers an
   introduced array symbol with its default, interned by sort and default, so a
-  script's `((as const S) v)` and `mk_const_array` give one term. The hashing
+  script's `((as const S) v)` and `mk_const_array` give one term. The default is
+  a value (`STPMgr::firstFreeSymbol` finds no symbol in it): the registry is out
+  of the preprocessing passes' sight, so a variable in a default could be
+  eliminated while the array still named it. The hashing
   factory folds every read of one to the default in both construction modes, and
   the extensionality checker decides equality, distinct, ite and store chains
   over them (rules K and K' in `lib/Extensionality/ExtChecker.cpp`), completing

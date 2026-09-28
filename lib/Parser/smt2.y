@@ -4017,6 +4017,19 @@ TERMID_TOK
     fatal_yyerror("the default of a constant array must have the array's "
                   "element sort");
   }
+  // Only a value (STPMgr::CreateConstArray says why).
+  const ASTNode free_symbol = stp::GlobalParserBM->firstFreeSymbol(value);
+  if (!free_symbol.IsNull())
+  {
+    const std::string message =
+        std::string("the default of a constant array must be a value, and "
+                    "this one depends on ") +
+        free_symbol.GetName();
+    delete $3;
+    delete $4;
+    stp::GlobalParserInterface->deleteNode($6);
+    fatal_yyerror(message.c_str());
+  }
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserBM->CreateConstArray(array_sort, value));
   delete $3;

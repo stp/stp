@@ -57,7 +57,7 @@ std::string pending(stp_tm tm)
 struct Symbols
 {
   stp_sort boolean, bv1, bv8, bv23, bv32, f32, f64, rm, real, arr, fun, S;
-  stp_term b1, b2, x, y, s1, m23, w32, f1, f2, f3, d1, rmv, r1, r2, rval, rne, a, fn;
+  stp_term b1, b2, x, y, s1, m23, w32, f1, f2, f3, d1, rmv, r1, r2, rval, rne, a, fn, c9;
   void declare(stp_tm tm)
   {
     boolean = stp_mk_bool_sort(tm);
@@ -91,6 +91,7 @@ struct Symbols
     rne = stp_mk_rm(tm, STP_RM_RNE);
     a = stp_declare(tm, "a", arr);
     fn = stp_declare(tm, "fn", fun);
+    c9 = stp_mk_bv_uint64(tm, 8, 9); // a value, as a constant array's default must be
   }
 };
 
@@ -177,7 +178,7 @@ TEST(c_kinds, every_kind_has_its_structure_under_simplify_off)
       {STP_KIND_BV_REDOR, {s.x}, {}, nullptr, STP_KIND_ITE, 3},
       {STP_KIND_SELECT, {s.a, s.x}, {}, nullptr, STP_KIND_SELECT, 2},
       {STP_KIND_STORE, {s.a, s.x, s.y}, {}, nullptr, STP_KIND_STORE, 3},
-      {STP_KIND_CONST_ARRAY, {s.x}, {}, s.arr, STP_KIND_CONST_ARRAY, 1},
+      {STP_KIND_CONST_ARRAY, {s.c9}, {}, s.arr, STP_KIND_CONST_ARRAY, 1},
       {STP_KIND_FP_ABS, {s.f1}, {}, nullptr, STP_KIND_FP_ABS, 1},
       {STP_KIND_FP_NEG, {s.f1}, {}, nullptr, STP_KIND_FP_NEG, 1},
       {STP_KIND_FP_ADD, {s.rmv, s.f1, s.f2}, {}, nullptr, STP_KIND_FP_ADD, 3},

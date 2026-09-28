@@ -290,9 +290,10 @@ TEST_F(Kinds, arrays)
   const Term af = tm.declare("af", AF);
   view(select(af, fx), Kind::SELECT, 2, {}, f32);
   view(store(af, fx, fy), Kind::STORE, 3, {}, AF);
-  const Term kf = tm.mk_const_array(AF, fx);
+  const Term half = tm.mk_fp(f32, RoundingMode::RNE, 0.5);
+  const Term kf = tm.mk_const_array(AF, half);
   view(kf, Kind::CONST_ARRAY, 1, {}, AF);
-  EXPECT_TRUE(select(kf, fy).same_as(fx));
+  EXPECT_TRUE(select(kf, fy).same_as(half));
 }
 
 TEST_F(Kinds, floating_point_arithmetic)
@@ -444,10 +445,12 @@ TEST_F(Kinds, substitute_replaces_in_the_public_tree)
   const Term low = extract(7, 0, b32);
   EXPECT_TRUE(low.substitute({{tm.mk_bv(32, 7), tm.mk_bv(32, 3)}}).same_as(low));
 
-  const Term k = tm.mk_const_array(A, x);
-  const Term k42 = k.substitute({{x, tm.mk_bv(8, 42)}});
+  const Term k = tm.mk_const_array(A, tm.mk_bv(8, 7));
+  const Term k42 = k.substitute({{tm.mk_bv(8, 7), tm.mk_bv(8, 42)}});
   EXPECT_TRUE(k42.same_as(tm.mk_const_array(A, tm.mk_bv(8, 42)))) << k42;
   EXPECT_TRUE(select(k42, y).same_as(tm.mk_bv(8, 42)));
+  // a default is a value, so a variable put into one is refused
+  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, k.substitute({{tm.mk_bv(8, 7), x}}));
 
   API_EXPECT_ERROR(ErrorCode::UNSUPPORTED,
                    real_div(rx, tm.mk_real(2)).substitute({{tm.mk_real(2), tm.mk_real(0)}}));

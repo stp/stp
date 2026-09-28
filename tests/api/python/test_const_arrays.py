@@ -96,10 +96,24 @@ def test_constant_arrays_against_each_other():
     s.add(Distinct(c1, c2))
     assert s.check() == sat
     s.close()
-    v, w = BitVecs("ca_v ca_w", 8)
+
+
+def test_a_default_must_be_a_value():
+    # the engine keeps a default beside the array's symbol, where no
+    # preprocessing pass sees it, so only a value may be one
+    v = BitVec("ca_v", 8)
+    with pytest.raises(Unsupported):
+        K(_a8(), v)
+    with pytest.raises(Unsupported):
+        K(_a8(), v + 1)
+    with pytest.raises(Unsupported):
+        K(BitVecSort(8), v)  # z3py's form
     s = Solver()
-    s.add(K(_a8(), v) == K(_a8(), w), v != w)
-    assert s.check() == unsat
+    with pytest.raises(ParseError):
+        s.from_string("(declare-fun ca_z () (_ BitVec 8)) (assert (= ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x00) "
+                      "(store ((as const (Array (_ BitVec 8) (_ BitVec 8))) ca_z) #x00 #x00)))")
+    assert s.assertions() == []
+    assert K(_a8(), BitVecVal(1, 8) + 2).eq(K(_a8(), 3))  # a ground term is a value
     s.close()
 
 

@@ -282,6 +282,10 @@ Limits of the alpha
    ``parse_term`` do not see it.
 -  A value of a declared sort prints as ``S!k``, which the parser does not
    read back.
+-  A constant array's default must be a value, a term with no symbol in it:
+   ``mk_const_array`` over a variable, or over a term that contains one, is
+   ``UNSUPPORTED``, and so is a script's ``((as const S) v)`` (a ``PARSE``
+   error). An array of a declared sort's values takes one a model gave.
 -  A constant array indexed by a declared sort: a refutation that counts the
    sort's elements by its carrier (two constant arrays with different
    defaults, one reaching the other through writes) is answered unknown

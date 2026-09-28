@@ -638,6 +638,11 @@ ASTNode STPMgr::CreateConstArray(const SourceSort& array_sort,
       default_value.GetType() == BOOLEAN_TYPE)
     FatalError("CreateConstArray: the default must be a scalar term",
                default_value);
+  const ASTNode free_symbol = firstFreeSymbol(default_value);
+  if (!free_symbol.IsNull())
+    FatalError("CreateConstArray: the default must be a value, and it "
+               "depends on this symbol",
+               free_symbol);
   if (default_value.GetSTPMgr() != this)
     FatalError("CreateConstArray: the default belongs to another manager",
                default_value);
@@ -668,6 +673,25 @@ bool STPMgr::isConstArray(const ASTNode& n) const
 {
   return n.GetKind() == SYMBOL &&
          constArrayDefaults.find(n) != constArrayDefaults.end();
+}
+
+ASTNode STPMgr::firstFreeSymbol(const ASTNode& t) const
+{
+  ASTNodeSet visited;
+  std::vector<ASTNode> pending(1, t);
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (!visited.insert(n).second)
+      continue;
+    // a constant array is a value (its own default was checked)
+    if (n.GetKind() == SYMBOL && !isConstArray(n))
+      return n;
+    for (const ASTNode& child : n.GetChildren())
+      pending.push_back(child);
+  }
+  return ASTNode();
 }
 
 const ASTNode& STPMgr::constArrayDefault(const ASTNode& n) const

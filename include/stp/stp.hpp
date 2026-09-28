@@ -574,7 +574,7 @@ public:
   Term mk_real(std::int64_t numerator, std::int64_t denominator); ///< INVALID_ARGUMENT if 0
   Term mk_real(std::string_view literal); ///< "-3/7", "0.25", "12"
 
-  Term mk_const_array(const Sort& array_sort, const Term& element); ///< any element term
+  Term mk_const_array(const Sort& array_sort, const Term& element); ///< element: a value (no symbol in it), UNSUPPORTED otherwise
 
   // -- the generic constructor; indices in SMT-LIB order. result_sort is
   //    required for CONST_ARRAY and ignored otherwise, so a walker can rebuild

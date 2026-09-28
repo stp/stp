@@ -808,8 +808,21 @@ public:
   // (ExtChecker rule K) and completes the arrays it equates with the default
   // as their unobserved-cell value; the SMT-LIB printers write the symbol
   // back in the as-const spelling.
+  //
+  // The default must be a value: a term with no symbol in it but other
+  // constant arrays (firstFreeSymbol). The registry is out of every
+  // preprocessing pass's sight, so a variable in a default would be
+  // eliminated there while the registry still named it; the passes treat a
+  // constant array as a value for that reason (PropagateEqualities,
+  // RemoveUnconstrained). The API and the SMT-LIB parser refuse anything
+  // else recoverably before they get here; here it is fatal.
   DLL_PUBLIC ASTNode CreateConstArray(const SourceSort& array_sort,
                                       const ASTNode& default_value);
+  // The first symbol found in `t` other than a constant array -- a variable,
+  // the function of an application, a symbol the engine introduced -- or a
+  // null node when there is none, which is what makes `t` a constant array's
+  // admissible default.
+  DLL_PUBLIC ASTNode firstFreeSymbol(const ASTNode& t) const;
   DLL_PUBLIC bool isConstArray(const ASTNode& n) const;
   // Whether any constant array exists: passes that would walk a formula
   // looking for one skip the walk when none does.

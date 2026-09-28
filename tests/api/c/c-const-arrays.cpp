@@ -170,3 +170,20 @@ TEST(c_const_arrays, spelling_and_parsing)
   stp_tm_clear_error(f.tm);
   stp_solver_delete(s);
 }
+
+// A constant array's default is a value: one over a symbol is refused, and the
+// manager goes on building.
+TEST(c_const_arrays, a_default_must_be_a_value)
+{
+  Fixture f;
+  stp_term z = stp_declare(f.tm, "z", f.bv8);
+  EXPECT_EQ(nullptr, stp_mk_const_array(f.tm, f.A, z));
+  const stp_error* e = stp_tm_error(f.tm);
+  ASSERT_NE(nullptr, e);
+  EXPECT_EQ(STP_ERR_UNSUPPORTED, e->code);
+  EXPECT_TRUE(e->recoverable);
+  stp_tm_clear_error(f.tm);
+  stp_term k3 = stp_mk_const_array(f.tm, f.A, f.idx(3));
+  ASSERT_NE(nullptr, k3);
+  EXPECT_EQ(nullptr, stp_tm_error(f.tm));
+}

@@ -443,7 +443,7 @@ STP_API stp_term stp_mk_rm(stp_tm, stp_rm);
 STP_API stp_term stp_mk_real_int64(stp_tm, int64_t);
 STP_API stp_term stp_mk_real_fraction(stp_tm, int64_t numerator, int64_t denominator); /* INVALID_ARGUMENT if 0 */
 STP_API stp_term stp_mk_real_str(stp_tm, const char* literal); /* "-3/7", "0.25", "12" */
-STP_API stp_term stp_mk_const_array(stp_tm, stp_sort array_sort, stp_term element); /* any element term */
+STP_API stp_term stp_mk_const_array(stp_tm, stp_sort array_sort, stp_term element); /* element: a value (no symbol in it), UNSUPPORTED otherwise */
 STP_API stp_term stp_array_from_bytes(stp_tm, size_t n, const uint8_t* bytes, uint32_t index_width); /* sugar: store chain over (as const ... 0) */
 
 /* ------------------------------------------------------------------ generic construction */
