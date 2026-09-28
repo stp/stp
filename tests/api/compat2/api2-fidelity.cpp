@@ -314,3 +314,51 @@ TEST(libstp2_fidelity, a_cvc_text_hands_back_every_assertion)
   vc_DeleteExpr(asserts);
   vc_Destroy(vc);
 }
+
+// KLEE's commonest shape: a constant table of 256 or more entries, flushed as
+// a write chain, indexed by one symbolic byte of an input that is read once.
+// Unconstrained-variable elimination substitutes the input by a write over a
+// fresh array, and the model of every invalid query refused that entry
+// fatally, so KLEE's read of the byte met the error handler. 2.x answered it,
+// and so does libstp2: input[0] = 0 is the only index whose entry is 0.
+// vc_getCounterExampleArray, which died on that entry in 2.x too, now hands
+// the input's cell back.
+TEST(libstp2_fidelity, a_table_indexed_by_a_symbolic_byte_has_a_counterexample)
+{
+  for (int n : {256, 300, 1000})
+  {
+    VC vc = vc_createValidityChecker();
+    vc_setInterfaceFlags(vc, EXPRDELETE, 0);
+    Type i32 = vc_bvType(vc, 32), i8 = vc_bvType(vc, 8);
+    Type at = vc_arrayType(vc, i32, i8);
+    Expr input = vc_varExpr(vc, "input", at);
+    Expr table = vc_varExpr(vc, "table", at);
+    for (int i = 0; i < n; ++i)
+      table = vc_writeExpr(vc, table, vc_bvConstExprFromInt(vc, 32, i),
+                           vc_bvConstExprFromInt(vc, 8, (i * 7) & 0xff));
+    Expr byte = vc_readExpr(vc, input, vc_bvConstExprFromInt(vc, 32, 0));
+    Expr lookup =
+        vc_readExpr(vc, table, vc_bvConcatExpr(vc, vc_bvConstExprFromLL(vc, 24, 0), byte));
+    vc_push(vc);
+    vc_assertFormula(vc, vc_eqExpr(vc, lookup, vc_bvConstExprFromInt(vc, 8, 0)));
+    EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))) << n;
+    Expr value = vc_getCounterExample(vc, byte);
+    ASSERT_NE(nullptr, value) << n;
+    EXPECT_EQ(0u, getBVUnsigned(value)) << n;
+    Expr* indices = nullptr;
+    Expr* values = nullptr;
+    int size = 0;
+    vc_getCounterExampleArray(vc, input, &indices, &values, &size);
+    bool found = false;
+    for (int k = 0; k < size; ++k)
+      if (getBVUnsigned(indices[k]) == 0)
+      {
+        found = true;
+        EXPECT_EQ(0u, getBVUnsigned(values[k])) << n;
+      }
+    EXPECT_TRUE(found) << n;
+    vc_deleteCounterExampleArray(indices, values, size);
+    vc_pop(vc);
+    vc_Destroy(vc);
+  }
+}

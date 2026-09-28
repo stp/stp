@@ -148,7 +148,12 @@ unsupported, and which 2.x suites run against it.
    diagnostic.
 6. **Array cells.** `model-array-fill` is `ones` for every checker (2.x
    completed an unobserved cell to `0xFF`) and `zero` once `'x'` is set (2.x
-   completed to `0x00` with it).
+   completed to `0x00` with it). An array that unconstrained-variable
+   elimination substituted by a write over a fresh array -- an input read
+   once, as KLEE's table lookups by a symbolic byte read it -- has the cells
+   its definition gives; 2.x's `vc_getCounterExampleArray` died on that
+   substitution ("entry in counterexample is an arraytype"), and libstp2
+   answers it.
 7. **Letters** (`vc_setFlag`, `vc_setFlags`, `process_argument`): `'a'`
    disable-opt-inc, `'c'` produce-models, `'d'` produce-models + check-sanity
    (on for every checker, as 2.x forced it), `'i'` incremental=on, `'r'`

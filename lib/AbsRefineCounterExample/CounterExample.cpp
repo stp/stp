@@ -2354,54 +2354,13 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
     return entries;
   }
 
-  // With array equality disabled, keep the pre-extension extraction
-  // path -- including its unordered traversal -- byte for byte. The
-  // deterministic sorted path below applies only when the extension is
-  // enabled.
-  if (!bm->UserFlags.enable_array_equality)
-  {
-    // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
-    // changes it. Which breaks the iterator otherwise.
-    const ASTNodeMap c(CounterExampleMap);
-
-    ASTNodeMap::const_iterator it = c.begin();
-    ASTNodeMap::const_iterator itend = c.end();
-    for (; it != itend; it++)
-    {
-      const ASTNode& f = it->first;
-      const ASTNode& se = it->second;
-
-      if (ARRAY_TYPE == se.GetType())
-      {
-        FatalError("TermToConstTermUsingModel: "
-                   "entry in counterexample is an arraytype. bogus:",
-                   se);
-      }
-
-      // skip over introduced variables, and over the reads of an introduced
-      // array -- those entries are keyed on the read, not on the array
-      if (bm->isIntroducedCounterExampleEntry(f))
-      {
-        continue;
-      }
-      if (f.GetKind() == READ && f[0] == e && f[0].GetKind() == SYMBOL &&
-          f[1].GetKind() == BVCONST)
-      {
-        ASTNode rhs;
-        if (BITVECTOR_TYPE == se.GetType() || FLOATINGPOINT_TYPE == se.GetType())
-        {
-          rhs = TermToConstTermUsingModel(se, false);
-        }
-        else
-        {
-          rhs = ComputeFormulaUsingModel(se);
-        }
-        assert(rhs.isConstant());
-        entries.push_back(std::make_pair(f[1], rhs));
-      }
-    }
-  }
-  else if (e.GetKind() == SYMBOL)
+  // One path whatever the array-equality switch. The extraction kept for
+  // the switch's off state refused any array-typed entry anywhere in the
+  // counterexample, and unconstrained-variable elimination leaves one for
+  // every array it substitutes: a KLEE table indexed by a byte of an input
+  // read once was enough. GetSortedArrayModelEntries derives such an array's
+  // cells from its definition instead.
+  if (e.GetKind() == SYMBOL)
   {
     entries = GetSortedArrayModelEntries(e);
   }
@@ -2410,8 +2369,8 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
   // GetCounterExample re-stamps its result: an index that is a bare
   // bit-vector is not accepted back as an index of a float-indexed array,
   // and a bare element cannot be equated with a read of a float-element
-  // one. Done here rather than in either extraction path, so the model
-  // printer keeps seeing GetSortedArrayModelEntries' raw constants.
+  // one. Done here rather than in the extraction, so the model printer
+  // keeps seeing GetSortedArrayModelEntries' raw constants.
   const SourceSort array_sort = e.GetSourceSort();
   assert(array_sort.kind() == SourceSort::Kind::Array);
   for (std::pair<ASTNode, ASTNode>& entry : entries)

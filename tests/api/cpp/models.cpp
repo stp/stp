@@ -403,6 +403,56 @@ TEST_F(Models, functions_over_declared_sorts)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
+// A table of 256 constants written over an array, looked up at a byte read
+// once from another array: unconstrained-variable elimination substitutes the
+// input array by a write over a fresh array, and taking the model refused
+// that entry (INTERNAL, the manager poisoned).
+TEST_F(Models, an_array_substituted_by_elimination)
+{
+  const Term input = tm.declare("input", A);
+  Term table = tm.declare("table", A);
+  for (std::uint64_t i = 0; i < 256; ++i)
+    table = store(table, I(i), tm.mk_bv(8, (i * 7) & 0xff));
+  const Term byte = input[I(0)];
+  const Term lookup = table[concat(tm.mk_bv(24, 0), byte)];
+  s.add(lookup == 0);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model m = s.model();
+  EXPECT_TRUE(m.bool_value(lookup == 0));
+  EXPECT_EQ(m.uint64_value(byte), 0u);
+  EXPECT_EQ(m.array_value(input).at(I(0)).to_uint64(), 0u);
+  EXPECT_TRUE(m.in_core(input));
+}
+
+// Default options, arrays and a function: the fourth check engages the
+// incremental driver, whose model maps an array to a write over an array
+// unconstrained-variable elimination made. The model is read, not refused,
+// and every assertion holds in it.
+TEST_F(Models, arrays_and_a_function_under_the_incremental_driver)
+{
+  const Sort b4 = tm.mk_bv_sort(4);
+  const Sort arr = tm.mk_array_sort(b4, bv8);
+  const Term z = tm.declare("z", bv8);
+  const Term i = tm.declare("i", b4), j = tm.declare("j", b4);
+  const Term p = tm.declare("p", arr), q = tm.declare("q", arr);
+  const Term g = tm.declare("g", tm.mk_fun_sort({bv8}, bv8));
+  s.push();
+  s.add(!(z == p[i]));
+  s.push();
+  s.add(i == j);
+  const Term m1 = tm.mk_bv(8, 0xd8) ^ x;
+  s.add(ite(bvugt(m1, g(y)), g(y), m1) == q[i]);
+  for (int k = 0; k < 3; ++k)
+    ASSERT_TRUE(s.check_sat().is_sat()) << k;
+  const Term lo = concat(tm.mk_bv(7, 0), extract(7, 7, y));
+  s.add(store(p, j, p[i])[i] == ite(bvugt(x, lo), lo, x));
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model m = s.model();
+  for (const Term& a : s.assertions())
+    EXPECT_TRUE(m.bool_value(a)) << a;
+  EXPECT_NO_THROW(s.push());
+}
+
 TEST_F(Models, core_and_text)
 {
   s.add(x == 5);

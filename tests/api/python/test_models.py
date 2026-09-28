@@ -184,6 +184,21 @@ def test_function_values():
     assert f in m.decls() and "f" in str(m)
 
 
+def test_array_substituted_by_elimination():
+    # a table of 256 constants looked up at a byte read once: elimination
+    # substitutes the input by a write over a fresh array, which the model
+    # used to refuse
+    inp = Array("input", BitVecSort(32), BitVecSort(8))
+    table = Array("table", BitVecSort(32), BitVecSort(8))
+    for i in range(256):
+        table = Store(table, BitVecVal(i, 32), BitVecVal((i * 7) & 0xFF, 8))
+    byte = inp[BitVecVal(0, 32)]
+    lookup = table[Concat(BitVecVal(0, 24), byte)]
+    m = _model(lookup == 0)
+    assert m.eval(lookup == 0) is BoolVal(True) and m.eval(byte).as_long() == 0
+    assert m[inp][0].as_long() == 0
+
+
 def test_uninterpreted_values():
     S = DeclareSort("S")
     p, q, r = Consts("p q r", S)
