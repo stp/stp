@@ -2006,35 +2006,6 @@ void Cpp_interface::getValue(const ASTVec& v)
   cout << os.str() << std::endl;
 }
 
-namespace
-{
-// Whether any top-level conjunct of `a` is in `failed`. The driver reports
-// failed conjuncts of the assumptions LEVEL, and an assumption that is
-// itself a conjunction was split before it was assumed, so membership is
-// judged against its flattened conjuncts.
-bool assumptionFailed(const ASTNode& a, const ASTNodeSet& failed,
-                      const ASTNode& trueNode)
-{
-  std::vector<ASTNode> pending(1, a);
-  while (!pending.empty())
-  {
-    const ASTNode n = pending.back();
-    pending.pop_back();
-    if (n == trueNode)
-      continue;
-    if (n.GetKind() == AND)
-    {
-      for (const ASTNode& c : n)
-        pending.push_back(c);
-      continue;
-    }
-    if (failed.count(n))
-      return true;
-  }
-  return false;
-}
-} // namespace
-
 void Cpp_interface::getUnsatAssumptions()
 {
   const EngineWork work(engine_work_failed);
@@ -2047,70 +2018,30 @@ void Cpp_interface::getUnsatAssumptions()
     return;
   }
 
-  // Per-assumption granularity from the driver when it ran the solve; the
-  // full assumption set is always a correct core, and covers the batch
-  // first solve and the extensionality rounds.
-  std::vector<ASTNode> failed;
-  bool granular = false;
+  // Per-assumption granularity from the driver when it ran the solve
+  // (IncrementalSolver::lastUnsatAssumptionIndices); the full assumption set
+  // is always a correct core, and covers the batch first solve and the
+  // extensionality rounds.
+  std::vector<size_t> used;
+  bool fromDriver = false;
   if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
   {
     IncrementalSolver* inc = GlobalSTP->getIncrementalSolver();
-    if (inc->lastSolveWasUnsat() &&
-        inc->lastUnsatHasAssumptionGranularity())
+    if (inc->lastSolveWasUnsat())
     {
-      failed = inc->lastUnsatAssumptionConjuncts();
-      granular = true;
+      used = inc->lastUnsatAssumptionIndices(lastAssumptionTerms);
+      fromDriver = true;
     }
   }
-  const ASTNodeSet failedSet(failed.begin(), failed.end());
-
-  ASTVec semanticAssumptions;
-  const ASTVec* assumptionsForMatching = &lastAssumptionTerms;
-  if (granular && bm.has_distinct)
-  {
-    semanticAssumptions.reserve(lastAssumptionTerms.size());
-    for (const ASTNode& a : lastAssumptionTerms)
-      semanticAssumptions.push_back(lowerDistinct(&bm, a));
-    assumptionsForMatching = &semanticAssumptions;
-  }
-
-  // Ordinarily each failed driver conjunct is exactly one flattened conjunct
-  // of a lowered source assumption. The simplifying factory may instead
-  // collapse the assumptions level as a whole (for example, p and (not p))
-  // before the driver assigns its per-conjunct literals. If a reported
-  // conjunct cannot be mapped back, falling back to the full source set is a
-  // correct core; silently dropping it can produce an empty, invalid one.
-  bool completeMapping = true;
-  if (granular)
-  {
-    for (const ASTNode& failedConjunct : failedSet)
-    {
-      const ASTNodeSet singleton{failedConjunct};
-      bool found = false;
-      for (const ASTNode& a : *assumptionsForMatching)
-      {
-        if (assumptionFailed(a, singleton, bm.ASTTrue))
-        {
-          found = true;
-          break;
-        }
-      }
-      if (!found)
-      {
-        completeMapping = false;
-        break;
-      }
-    }
-  }
+  if (!fromDriver)
+    for (size_t i = 0; i < lastAssumptionTerms.size(); ++i)
+      used.push_back(i);
 
   std::ostringstream os;
   os << "(";
   bool first = true;
-  for (size_t i = 0; i < lastAssumptionTerms.size(); ++i)
+  for (size_t i : used)
   {
-    if (granular && completeMapping &&
-        !assumptionFailed((*assumptionsForMatching)[i], failedSet, bm.ASTTrue))
-      continue;
     if (!first)
       os << " ";
     first = false;

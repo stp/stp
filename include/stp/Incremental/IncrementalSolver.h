@@ -172,6 +172,15 @@ public:
   bool lastSolveWasUnsat() const;
   bool lastUnsatHasAssumptionGranularity() const;
   std::vector<ASTNode> lastUnsatAssumptionConjuncts() const;
+  // Which of `assumptions` -- the terms the last level was built from -- the
+  // last unsat answer used, by index: those with a top-level conjunct among
+  // the failed ones, each assumption's distinct lowered as the level's was.
+  // Every index when there is no granularity, and also when a failed
+  // conjunct maps back to no assumption (the factory may collapse the level
+  // as a whole: p and (not p) become false) -- the whole set is always a
+  // correct core, where dropping the unmapped conjunct can leave an empty,
+  // invalid one.
+  std::vector<size_t> lastUnsatAssumptionIndices(const ASTVec& assumptions) const;
   std::vector<size_t> lastUnsatCoreLevels() const;
 
   // A sat answer defers counterexample construction unless something

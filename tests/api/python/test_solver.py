@@ -580,3 +580,18 @@ def test_a_solver_whose_options_were_touched_is_freed_at_once():
             view.get("max-time")
     finally:
         gc.enable()
+
+
+def test_every_unsat_core_rechecks_unsat():
+    # under the default options the driver engages after a push, and its
+    # failed conjuncts map back to whole assumptions
+    p, q, r = Bools("p q r")
+    s = Solver()
+    s.add(Or(Not(p), Not(q)))
+    s.push()
+    for _ in range(4):
+        for assumptions in ([r, And(p, q)], [p, Not(p)], [r, Not(r), q]):
+            assert s.check(*assumptions) == unsat
+            core = s.unsat_core()
+            assert len(core) > 0 and s.check(*core) == unsat
+    s.close()

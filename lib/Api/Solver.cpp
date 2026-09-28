@@ -735,13 +735,14 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
         }
       }
       r = Result(Verdict::UNSAT, UnknownReason::NONE, "");
-      if (last_incremental && stp->hasIncrementalSolver() &&
-          stp->getIncrementalSolver()->lastUnsatHasAssumptionGranularity())
+      // the driver's failed conjuncts, mapped back to the assumptions as the
+      // SMT-LIB frontend maps them (flattened, distinct lowered, the whole
+      // set when one does not map); the batch pipeline reports none
+      if (last_incremental && stp->hasIncrementalSolver())
       {
-        const std::vector<ASTNode> failed = stp->getIncrementalSolver()->lastUnsatAssumptionConjuncts();
-        for (const ASTNode& a : assumptions)
-          if (std::find(failed.begin(), failed.end(), a) != failed.end())
-            last_failed_assumptions.push_back(a);
+        const ASTVec terms(assumptions.begin(), assumptions.end());
+        for (std::size_t i : stp->getIncrementalSolver()->lastUnsatAssumptionIndices(terms))
+          last_failed_assumptions.push_back(assumptions[i]);
       }
       else
         last_failed_assumptions = assumptions;

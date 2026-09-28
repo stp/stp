@@ -83,6 +83,78 @@ bool IncrementalSolver::lastUnsatHasAssumptionGranularity() const
          impl->lastLevelIndividual;
 }
 
+namespace
+{
+// Whether any top-level conjunct of `a` is in `failed`. The driver reports
+// failed conjuncts of the assumptions LEVEL, and an assumption that is
+// itself a conjunction was split before it was assumed, so membership is
+// judged against its flattened conjuncts.
+bool assumptionFailed(const ASTNode& a, const ASTNodeSet& failed,
+                      const ASTNode& trueNode)
+{
+  std::vector<ASTNode> pending(1, a);
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (n == trueNode)
+      continue;
+    if (n.GetKind() == AND)
+    {
+      for (const ASTNode& c : n)
+        pending.push_back(c);
+      continue;
+    }
+    if (failed.count(n))
+      return true;
+  }
+  return false;
+}
+} // namespace
+
+std::vector<size_t>
+IncrementalSolver::lastUnsatAssumptionIndices(const ASTVec& assumptions) const
+{
+  std::vector<size_t> all(assumptions.size());
+  for (size_t i = 0; i < all.size(); ++i)
+    all[i] = i;
+  if (!lastUnsatHasAssumptionGranularity())
+    return all;
+  const std::vector<ASTNode> failed = lastUnsatAssumptionConjuncts();
+  const ASTNodeSet failedSet(failed.begin(), failed.end());
+  STPMgr* bm = impl->bm;
+
+  ASTVec semantic;
+  const ASTVec* matching = &assumptions;
+  if (bm->has_distinct)
+  {
+    semantic.reserve(assumptions.size());
+    for (const ASTNode& a : assumptions)
+      semantic.push_back(lowerDistinct(bm, a));
+    matching = &semantic;
+  }
+
+  for (const ASTNode& failedConjunct : failedSet)
+  {
+    const ASTNodeSet singleton{failedConjunct};
+    bool found = false;
+    for (const ASTNode& a : *matching)
+      if (assumptionFailed(a, singleton, bm->ASTTrue))
+      {
+        found = true;
+        break;
+      }
+    if (!found)
+      return all;
+  }
+
+  std::vector<size_t> used;
+  for (size_t i = 0; i < matching->size(); ++i)
+    if (assumptionFailed((*matching)[i], failedSet, bm->ASTTrue))
+      used.push_back(i);
+  return used;
+}
+
 std::vector<ASTNode> IncrementalSolver::lastUnsatAssumptionConjuncts() const
 {
   std::vector<ASTNode> out;

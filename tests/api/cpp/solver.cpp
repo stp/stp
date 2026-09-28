@@ -197,6 +197,43 @@ TEST_F(SolverTest, unsat_assumptions_subset_under_the_incremental_driver)
   EXPECT_TRUE(inc.model().bool_value(q));
 }
 
+// Every core the driver's answer gives is a core: it rechecks unsat. The
+// driver reports failed conjuncts of the assumption level, flattened and
+// with distinct lowered, and the solver kept an assumption only if that
+// exact node failed -- a conjunction, a distinct, or a pair the factory
+// collapsed (p and not p) was dropped, and the core came out empty or
+// satisfiable. Under the default options that happens once the driver
+// engages by itself, after a push.
+TEST_F(SolverTest, every_unsat_core_rechecks_unsat)
+{
+  for (const char* incremental : {"on", "auto", "off"})
+  {
+    TermManager t2;
+    Options o;
+    o.set_str("incremental", incremental);
+    Solver s2(t2, o);
+    const Sort B = t2.mk_bool_sort(), bv8 = t2.mk_bv_sort(8);
+    const Term p = t2.declare("p", B), q = t2.declare("q", B), r = t2.declare("r", B);
+    const Term a = t2.declare("a", bv8), b = t2.declare("b", bv8), c = t2.declare("c", bv8);
+    s2.add(!p || !q);
+    s2.push();
+    s2.add(a == b);
+    const std::vector<std::vector<Term>> sets{{r, p && q},
+                                              {p, !p},
+                                              {r, !r, q},
+                                              {t2.mk_term(Kind::DISTINCT, {a, b, c})},
+                                              {q, distinct(a, b), r}};
+    for (int round = 0; round < 4; ++round) // the driver engages under auto on its own
+      for (const std::vector<Term>& assumptions : sets)
+      {
+        ASSERT_TRUE(s2.check_sat(assumptions).is_unsat()) << incremental;
+        const std::vector<Term> core = s2.unsat_assumptions();
+        EXPECT_FALSE(core.empty()) << incremental << " round " << round;
+        EXPECT_TRUE(s2.check_sat(core).is_unsat()) << incremental << " round " << round;
+      }
+  }
+}
+
 TEST_F(SolverTest, entails)
 {
   s.add(bvult(x, 10));
