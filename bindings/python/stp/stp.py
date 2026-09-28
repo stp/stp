@@ -26,12 +26,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import ast
+import ctypes.util
 from ctypes import cdll, POINTER, CFUNCTYPE, byref, string_at
 from ctypes import c_char, c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_size_t, c_bool
 from ctypes import c_double, c_float
 import inspect
 import os.path
 import struct
+import sys
 
 from .library_path import PATHS
 
@@ -155,14 +157,45 @@ class Sort(object):
         return self.kind
 
 
-for path in PATHS:
-    if not os.path.exists(path):
-        continue
-
-    _lib = cdll.LoadLibrary(path)
-    break
+if os.name == 'nt':
+    _SEARCH_VAR, _LIB_NAMES = 'PATH', ('stpwin.dll',)
+elif sys.platform == 'darwin':
+    _SEARCH_VAR, _LIB_NAMES = 'DYLD_LIBRARY_PATH', ('libstp.dylib',)
 else:
-    raise Exception('Unable to locate the libstp shared object')
+    _SEARCH_VAR, _LIB_NAMES = 'LD_LIBRARY_PATH', ('libstp.so',)
+
+
+def _load_library():
+    # STP_LIBRARY names the library outright. Otherwise the locations
+    # library_path.py lists -- the ones a CMake build or install recorded,
+    # none for a pip install -- then the library search path variable, and
+    # last the platform's own search. The variable is walked here rather than
+    # left to find_library, which on Linux consults the ldconfig cache first
+    # and so prefers any system-wide libstp to the one the variable names.
+    explicit = os.environ.get('STP_LIBRARY')
+    if explicit:
+        return cdll.LoadLibrary(explicit)
+
+    for path in PATHS:
+        if os.path.exists(path):
+            return cdll.LoadLibrary(path)
+
+    for directory in os.environ.get(_SEARCH_VAR, '').split(os.pathsep):
+        for lib_name in _LIB_NAMES:
+            path = os.path.join(directory, lib_name)
+            if directory and os.path.exists(path):
+                return cdll.LoadLibrary(path)
+
+    name = ctypes.util.find_library('stpwin' if os.name == 'nt' else 'stp')
+    if name:
+        return cdll.LoadLibrary(name)
+
+    raise Exception('Unable to locate the libstp shared object; set '
+                    'STP_LIBRARY to its path, or put its directory on the '
+                    'library search path')
+
+
+_lib = _load_library()
 
 
 def _set_func(name, restype, *argtypes):

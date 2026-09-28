@@ -268,8 +268,8 @@ jobs:
     # ASTtoSTP.generic_visit and raising "Constant is not yet supported!".
     # Nothing above catches that -- the build configures against whatever
     # python3 the runner ships, which trails the newest release -- so run
-    # the binding tests once more against the newest one. stp.py.in has no
-    # configure-time substitutions, so the interpreter can be swapped
+    # the binding tests once more against the newest one. stp.py is copied
+    # into the build tree unchanged, so the interpreter can be swapped
     # under the same build tree; no second build is needed.
     #
     # Bump the version when a newer Python is released. The point is to be
@@ -289,6 +289,14 @@ jobs:
         python3 --version
         python3 tests.py
         python3 allocator_tests.py
+        # The pip install of bindings/python, which ctest skips when the
+        # interpreter's setuptools is too old or absent -- as it is from
+        # Python 3.12 on, until installed.
+        python3 -m pip install --disable-pip-version-check setuptools
+        python3 "$GITHUB_WORKSPACE/tests/api/python/pip_install_test.py" \
+          "$GITHUB_WORKSPACE/bindings/python" \
+          "$GITHUB_WORKSPACE/build/lib/libstp.so" \
+          "$RUNNER_TEMP/pip-install"
       working-directory: build/tests/api/python
 
     # The three legs of this matrix configure identically and differ only in
@@ -733,6 +741,23 @@ jobs:
         assert s.check() is False, 'installed python module gave the wrong answer'
         "
         echo "ok: installed python module solves a query"
+
+        # The same package installed by pip into a fresh environment, as a
+        # packager building it once per Python would, finding the library
+        # through the search path rather than a recorded location.
+        python3 -m venv "$RUNNER_TEMP/venv"
+        "$RUNNER_TEMP/venv/bin/python" -m pip install \
+          --disable-pip-version-check ./bindings/python
+        LD_LIBRARY_PATH="$prefix/lib" "$RUNNER_TEMP/venv/bin/python" -c "
+        import os, stp
+        s = stp.Solver()
+        x = s.bitvec('x', width=8)
+        s.add(x + x != 2 * x)
+        assert s.check() is False, 'pip-installed python module gave the wrong answer'
+        loaded = os.path.dirname(stp.get_lib()._name)
+        assert loaded == '$prefix/lib', 'loaded libstp from ' + loaded
+        "
+        echo "ok: pip-installed python module solves a query"
 
         # And again from a different directory, which is what a packager
         # staging into a temporary root or anyone unpacking a tarball
