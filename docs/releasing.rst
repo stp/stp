@@ -21,7 +21,7 @@ Three files carry it, all edited by hand:
 
 -  ``CMakeLists.txt`` -- ``set(STP_FULL_VERSION "2.4.1")``
 -  ``docs/conf.py`` -- ``release = '2.4.1'``
--  ``bindings/python3/pyproject.toml`` -- ``version = "2.4.1"``, the
+-  ``bindings/python/pyproject.toml`` -- ``version = "2.4.1"``, the
    version of the Python package when it is installed with pip
 
 Everything else derives from ``STP_FULL_VERSION``: ``include/stp/config.h``,

@@ -1,6 +1,6 @@
 # The Python layer: implementation notes
 
-`bindings/python3/stp` is the Python API, a z3py-style package over the C API
+`bindings/python/stp` is the Python API, a z3py-style package over the C API
 `<stp/stp.h>`. This file records how the layer is built and the decisions
 that depart from z3py or from a literal reading of the C API.
 
@@ -15,7 +15,7 @@ that depart from z3py or from a literal reading of the C API.
 | `stp/_pretty.py` | `str(term)`: the infix rendering |
 | `stp/_smt2.py` | pickling and `translate()` of sorts, terms and models; the s-expression reader behind `Model.from_smt2` |
 | `stp/__init__.py` | the public names, `__all__`, `version()`, `capabilities()` |
-| `CMakeLists.txt` | `ENABLE_PYTHON3_API` (ON when `PYTHON_EXECUTABLE` can import Cython); cythonises at build time, builds `_core` with `Python3_add_library`, assembles the package in `<build>/bindings/python3/stp/` |
+| `CMakeLists.txt` | `ENABLE_PYTHON_API` (ON when `PYTHON_EXECUTABLE` can import Cython); cythonises at build time, builds `_core` with `Python3_add_library`, assembles the package in `<build>/bindings/python/stp/` |
 | `../../tests/api/python/` | the pytest suite, registered as the CTest entry `python-api-tests` (labels `python`, `api`) |
 
 ## How the layer is built

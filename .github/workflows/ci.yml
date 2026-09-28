@@ -290,8 +290,8 @@ jobs:
       run: |
         python3 --version
         python3 -m pip install --quiet cython pytest
-        ${{ matrix.env }} cmake -S . -B build-newest-python -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DENABLE_PYTHON3_API:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja
-        cmake --build build-newest-python --target stp_python3 --parallel "$(nproc)"
+        ${{ matrix.env }} cmake -S . -B build-newest-python -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DENABLE_PYTHON_API:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja
+        cmake --build build-newest-python --target stp_python --parallel "$(nproc)"
         ctest --test-dir build-newest-python -R '^python-' -E '^python-pip-install$' --output-on-failure
 
     # The three legs of this matrix configure identically and differ only in
@@ -746,7 +746,7 @@ jobs:
         # library directory as its rpath, so nothing needs setting to run it.
         python3 -m venv "$RUNNER_TEMP/venv"
         STP_PREFIX="$prefix" "$RUNNER_TEMP/venv/bin/python" -m pip install \
-          --disable-pip-version-check ./bindings/python3
+          --disable-pip-version-check ./bindings/python
         "$RUNNER_TEMP/venv/bin/python" -c "
         from stp import BitVec, Solver, unsat
         x = BitVec('x', 8)

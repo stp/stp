@@ -44,7 +44,7 @@ elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
   # destination configured as an absolute path escapes the prefix; stage that
   # case under DESTDIR so the write outside the prefix cannot need root.
   set(python_lib_install_dir "@PYTHON_LIB_INSTALL_DIR@")
-  set(python_enabled "@ENABLE_PYTHON3_API@")
+  set(python_enabled "@ENABLE_PYTHON_API@")
   if(python_enabled AND IS_ABSOLUTE "${python_lib_install_dir}")
     file(MAKE_DIRECTORY "${stage_dir}")
     # DESTDIR prepends the whole prefix, leading slash and all.

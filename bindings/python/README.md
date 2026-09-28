@@ -6,7 +6,7 @@ z3py-style shell over the compiled module `stp._core`, which calls STP's C API
 
 ## Two ways to install it
 
-**With STP's CMake build.** Configure STP with `-DENABLE_PYTHON3_API=ON` (the
+**With STP's CMake build.** Configure STP with `-DENABLE_PYTHON_API=ON` (the
 default when the interpreter can import Cython), and `cmake --install`
 installs the package under the install prefix. `PYTHON_LIB_INSTALL_DIR`
 chooses the directory, relative to the prefix unless it is absolute.
@@ -14,7 +14,7 @@ chooses the directory, relative to the prefix unless it is absolute.
 **With pip, against an STP that is already installed.** Install STP first (a
 shared-library build, the default), then, once per Python interpreter:
 
-    python3 -m pip install ./bindings/python3
+    python3 -m pip install ./bindings/python
 
 This compiles the package's extension against the installed STP, so it needs
 a C compiler and the interpreter's development headers; pip fetches Cython.

@@ -62,7 +62,7 @@ jobs:
     # same story by another route: tests/CMakeLists.txt compiles it as
     # part of the STP build.
 
-    # The Python package's modules are sources (bindings/python3/stp/*.py),
+    # The Python package's modules are sources (bindings/python/stp/*.py),
     # so the Python analysis sees what ships without a build.
 
     - name: Initialize CodeQL

@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""Builds stp._core for ``python3 -m pip install ./bindings/python3``.
+"""Builds stp._core for ``python3 -m pip install ./bindings/python``.
 
 The extension is compiled against an STP that is already installed: its
 headers, the generated sources its install ships for this build in
@@ -40,7 +40,7 @@ if sys.platform == "darwin":
     LIBRARY = "libstp.dylib"
 elif os.name == "nt":
     sys.exit("pip cannot build the stp package on Windows; build STP with "
-             "-DENABLE_PYTHON3_API=ON instead")
+             "-DENABLE_PYTHON_API=ON instead")
 else:
     LIBRARY = "libstp.so"
 

@@ -29,7 +29,7 @@
 add_test(
     NAME python-pip-install
     COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pip_install_test.py
-            ${PROJECT_SOURCE_DIR}/bindings/python3 ${CMAKE_COMMAND}
+            ${PROJECT_SOURCE_DIR}/bindings/python ${CMAKE_COMMAND}
             ${PROJECT_BINARY_DIR} ${CMAKE_INSTALL_PREFIX}
             ${CMAKE_CURRENT_BINARY_DIR}/pip-install $<CONFIG>)
 set_tests_properties(python-pip-install PROPERTIES
@@ -39,7 +39,7 @@ set_tests_properties(python-pip-install PROPERTIES
 
 # -----------------------------------------------------------------------------
 # The pytest suite of the 3.x Python API, run against the package assembled in
-# <build>/bindings/python3 (PYTHONPATH). Registered only when the interpreter
+# <build>/bindings/python (PYTHONPATH). Registered only when the interpreter
 # can import pytest; the suite itself lives in this source directory.
 # -----------------------------------------------------------------------------
 
@@ -48,37 +48,37 @@ set_tests_properties(python-pip-install PROPERTIES
 # so it needs no pytest). Its arguments are libstp's path, the preloadable
 # allocator's (empty when none was built) and the allocator's name.
 if (STP_ALLOCATOR_PRELOADABLE AND TARGET ${STP_ALLOCATOR_PRELOADABLE})
-    set(_stp_py3_preloadable "$<TARGET_FILE:${STP_ALLOCATOR_PRELOADABLE}>")
+    set(_stp_py_preloadable "$<TARGET_FILE:${STP_ALLOCATOR_PRELOADABLE}>")
 else()
-    set(_stp_py3_preloadable "")
+    set(_stp_py_preloadable "")
 endif()
 add_test(
     NAME python-allocator-tests
     COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/allocator_tests.py
-            $<TARGET_FILE:stp> "${_stp_py3_preloadable}" "${STP_ALLOCATOR}"
+            $<TARGET_FILE:stp> "${_stp_py_preloadable}" "${STP_ALLOCATOR}"
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(python-allocator-tests PROPERTIES
-    ENVIRONMENT "PYTHONPATH=${STP_PY3_PYTHONPATH};PYTHONDONTWRITEBYTECODE=1"
+    ENVIRONMENT "PYTHONPATH=${STP_PY_PYTHONPATH};PYTHONDONTWRITEBYTECODE=1"
     LABELS "python;api")
 
 execute_process(
     COMMAND ${PYTHON_EXECUTABLE} -c "import pytest; print(pytest.__version__)"
-    RESULT_VARIABLE _stp_py3_pytest_rc
-    OUTPUT_VARIABLE _stp_py3_pytest_version
+    RESULT_VARIABLE _stp_py_pytest_rc
+    OUTPUT_VARIABLE _stp_py_pytest_version
     OUTPUT_STRIP_TRAILING_WHITESPACE
     ERROR_QUIET)
 
-if(NOT _stp_py3_pytest_rc EQUAL 0)
+if(NOT _stp_py_pytest_rc EQUAL 0)
     message(STATUS "python-api-tests: ${PYTHON_EXECUTABLE} cannot import pytest; the 3.x Python tests are not registered")
     return()
 endif()
-message(STATUS "python-api-tests: pytest ${_stp_py3_pytest_version}")
+message(STATUS "python-api-tests: pytest ${_stp_py_pytest_version}")
 
 add_test(
     NAME python-api-tests
     COMMAND ${PYTHON_EXECUTABLE} -m pytest -q -p no:cacheprovider ${CMAKE_CURRENT_SOURCE_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(python-api-tests PROPERTIES
-    ENVIRONMENT "PYTHONPATH=${STP_PY3_PYTHONPATH};PYTHONDONTWRITEBYTECODE=1"
+    ENVIRONMENT "PYTHONPATH=${STP_PY_PYTHONPATH};PYTHONDONTWRITEBYTECODE=1"
     LABELS "python;api"
     TIMEOUT 900)

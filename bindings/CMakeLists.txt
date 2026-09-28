@@ -18,5 +18,5 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# the 3.x Python API (Cython over <stp/stp.h>); guards itself with ENABLE_PYTHON3_API
-add_subdirectory(python3)
+# the 3.x Python API (Cython over <stp/stp.h>); guards itself with ENABLE_PYTHON_API
+add_subdirectory(python)

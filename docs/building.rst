@@ -305,12 +305,12 @@ These apply to all generators:
    ``-DENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release`` silently produced
    a build without them; it now produces an asserting Release build
 -  ``ENABLE_TESTING`` -- enable running the tests
--  ``ENABLE_PYTHON3_API`` -- build the ``stp`` Python package. On by
+-  ``ENABLE_PYTHON_API`` -- build the ``stp`` Python package. On by
    default when ``PYTHON_EXECUTABLE`` can import Cython and the libraries
    are shared; asking for it without Cython is an error. The package can
    also be installed on its own, once per interpreter, with
-   ``python3 -m pip install ./bindings/python3`` against an STP that is
-   already installed; ``bindings/python3/README.md`` says how that finds it
+   ``python3 -m pip install ./bindings/python`` against an STP that is
+   already installed; ``bindings/python/README.md`` says how that finds it
 -  ``PYTHON_EXECUTABLE`` -- which Python 3 to use, when more than one is
    installed
 -  ``SANITIZE`` -- use Clang's sanitization checks. It sets C++ flags only,

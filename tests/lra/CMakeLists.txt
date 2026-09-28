@@ -931,10 +931,10 @@ set_tests_properties(lra_cpp_api_smoke PROPERTIES
   LABELS "lra;api;model;context"
 )
 
-if(ENABLE_PYTHON3_API)
+if(ENABLE_PYTHON_API)
   add_test(NAME lra_python_api_smoke
     COMMAND "${CMAKE_COMMAND}" -E env
-      "PYTHONPATH=${STP_PY3_PYTHONPATH}"
+      "PYTHONPATH=${STP_PY_PYTHONPATH}"
       "${PYTHON_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/real_python_api_smoke.py"
   )

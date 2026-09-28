@@ -180,13 +180,13 @@ frontend).
 | path | contents |
 |---|---|
 | `include/stp/stp.h`, `c/` | the C API and its runtime (`c/NOTES.md`) |
-| `bindings/python3/` | the Cython module `stp._core` and the z3py-style shell (`NOTES.md` there) |
+| `bindings/python/` | the Cython module `stp._core` and the z3py-style shell (`NOTES.md` there) |
 | `lib/Compat2/` | `libstp2`: `c_interface.h` re-implemented over `stp.h`, the only provider of the 2.x API (`NOTES.md` there) |
 | `tests/api/cpp`, `tests/api/c`, `tests/api/python` | the suites; the limits they pin are listed in `docs/api3.rst` |
 
 ## Building and testing
 
 The C++ and C layers are part of `libstp`; nothing extra to enable. The Python
-layer needs Cython importable by `PYTHON_EXECUTABLE` (`ENABLE_PYTHON3_API` turns
+layer needs Cython importable by `PYTHON_EXECUTABLE` (`ENABLE_PYTHON_API` turns
 itself off otherwise). `ctest -L api` runs the suites, `libstp2`'s (labelled
 `api2`) with them; `tests/api/cpp/smoke.cpp` is the end-to-end check.

@@ -24,7 +24,7 @@
 
 Every test gets a fresh default TermManager, so symbol names never clash between
 tests and the alpha's one-live-solver-per-manager rule never bites across tests.
-Run with PYTHONPATH=<build>/bindings/python3 (what the CTest entry does)."""
+Run with PYTHONPATH=<build>/bindings/python (what the CTest entry does)."""
 
 import pytest
 

@@ -20,10 +20,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""pip-install bindings/python3 on its own, against a staged installation of
+"""pip-install bindings/python on its own, against a staged installation of
 this build, and import it.
 
-Usage: pip_install_test.py <bindings/python3> <cmake> <build dir> <install prefix> <scratch dir> [<config>]
+Usage: pip_install_test.py <bindings/python> <cmake> <build dir> <install prefix> <scratch dir> [<config>]
 
 Exits 77, which ctest reports as skipped, on Windows, where pip does not
 build the package, and when this interpreter cannot build it offline: no

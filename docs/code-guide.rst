@@ -118,5 +118,5 @@ The executables are built from ``tools/``; :doc:`command-line` and
    ``rewrite_rule_gen`` additionally need a build with CryptoMiniSat and
    are skipped without one.
 
-The Python package is in ``bindings/python3``, and the tests are in
+The Python package is in ``bindings/python``, and the tests are in
 ``tests/`` (see :doc:`testing`).

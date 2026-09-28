@@ -1,6 +1,6 @@
 # The Python package on its own, against an STP that is already installed:
 #
-#   python3 -m pip install ./bindings/python3
+#   python3 -m pip install ./bindings/python
 #
 # setup.py compiles the extension stp._core against the installation's headers
 # and links its libstp, so this needs a C compiler and the interpreter's

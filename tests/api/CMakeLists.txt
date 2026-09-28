@@ -31,8 +31,8 @@ if(TEST_CPP_API)
     add_subdirectory(cpp)
 endif()
 
-# the 3.x Python API (pytest over the package built in bindings/python3)
-if(ENABLE_PYTHON3_API)
+# the 3.x Python API (pytest over the package built in bindings/python)
+if(ENABLE_PYTHON_API)
     add_subdirectory(python)
 endif()
 

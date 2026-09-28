@@ -63,7 +63,7 @@ jobs:
       run: |
         cmake_version=$(sed -n 's/^set(STP_FULL_VERSION "\([^"]*\)").*/\1/p' CMakeLists.txt)
         docs_version=$(sed -n "s/^release = '\([^']*\)'.*/\1/p" docs/conf.py)
-        python_version=$(sed -n 's/^version = "\([^"]*\)".*/\1/p' bindings/python3/pyproject.toml)
+        python_version=$(sed -n 's/^version = "\([^"]*\)".*/\1/p' bindings/python/pyproject.toml)
 
         if [ "$REF_TYPE" = tag ]; then
           tag="$GITHUB_REF_NAME"
@@ -87,7 +87,7 @@ jobs:
           fail=1
         fi
         if [ "$python_version" != "$tag" ]; then
-          echo "::error::version in bindings/python3/pyproject.toml is '$python_version', expected '$tag'"
+          echo "::error::version in bindings/python/pyproject.toml is '$python_version', expected '$tag'"
           fail=1
         fi
         [ "$fail" = 0 ] || exit 1
