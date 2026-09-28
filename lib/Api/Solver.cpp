@@ -761,11 +761,14 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
       if (stp->Ctr_Example != nullptr && stp->Ctr_Example->CounterExampleSize() > 0 &&
           produce_models)
       {
+        // A candidate the API cannot read (its own refusal) is no candidate;
+        // an engine failure while it is taken is one like any other --
+        // INTERNAL, the manager poisoned -- not a missing candidate.
         try
         {
           candidate = take_snapshot(Verdict::UNKNOWN);
         }
-        catch (...)
+        catch (const Error&)
         {
           candidate.reset();
         }
