@@ -45,6 +45,11 @@ if(NOT MSVC)
 endif()
 add_test(NAME c-noexcept COMMAND c-noexcept)
 
+# C handles released by a global object's destructor, at exit
+add_executable(c-static-release static-release.cpp)
+target_link_libraries(c-static-release stp)
+add_test(NAME c-static-release COMMAND c-static-release)
+
 AddSTPGTest(c-kinds.cpp)
 AddSTPGTest(c-roundtrip.cpp)
 AddSTPGTest(c-runtime.cpp)

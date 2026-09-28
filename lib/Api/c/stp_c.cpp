@@ -201,10 +201,14 @@ struct Registry
   std::mutex mu;
   std::unordered_map<STPMgr*, CManager*> by_bm;
 };
+// Immortal, like the strings below: a program may release its handles from
+// the destructor of a global or static object, which runs after statics
+// constructed later -- this one included, on its first use in main -- have
+// been destroyed.
 Registry& registry()
 {
-  static Registry r;
-  return r;
+  static Registry* const r = new Registry;
+  return *r;
 }
 
 void destroy(CManager* cm) noexcept
@@ -517,16 +521,19 @@ stp_term term_term(stp_term t, const char* fn, F&& f) noexcept
 }
 
 // The static spellings of the library-level tables.
+// Immortal: stp.h hands these out as never freed, and a caller may read them
+// from a static destructor (see registry).
 const std::vector<std::string>& backend_names()
 {
-  static const std::vector<std::string> names = sat_backends();
-  return names;
+  static const std::vector<std::string>* const names =
+      new std::vector<std::string>(sat_backends());
+  return *names;
 }
 
 const Version& cached_version()
 {
-  static const Version v = version();
-  return v;
+  static const Version* const v = new Version(version());
+  return *v;
 }
 
 void copy_limbs(const std::vector<std::uint64_t>& limbs, std::size_t n, std::uint64_t* out,
