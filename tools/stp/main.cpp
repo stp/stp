@@ -1552,6 +1552,12 @@ void ExtraMain::create_options()
       ->capture_default_str()
       ->group(misc_group);
 
+  bool_arg("--cnf-link-shared-cells", bm->UserFlags.cnf_link_shared_cells,
+           "new-* CNF rungs: keep a comparator cell propagation-complete "
+           "when its exclusive-or is shared, with a linking block beside the "
+           "exclusive-or's own clauses instead of the per-gate encoding",
+           misc_group);
+
   app.add_flag("--exit-after-CNF", bm->UserFlags.exit_after_CNF,
                "exit after the CNF has been generated")
       ->group(misc_group);

@@ -1779,6 +1779,11 @@ public:
   // CNF_AUTO_THRESHOLD interface flag.
   unsigned cnf_auto_threshold = 200000;
 
+  // The new-* CNF writer's comparator cells over an exclusive-or something
+  // else also reads: emit the linking block that keeps the window
+  // propagation-complete, rather than the per-gate encoding.
+  bool cnf_link_shared_cells = false;
+
   // Whether AUTO should read the threshold the Real path's way. Set for an
   // active Real solve, and for nothing else; the bit-vector choice at either
   // end of the threshold is untouched.

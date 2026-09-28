@@ -195,10 +195,11 @@ void buildRandom(aig::Manager& m, std::mt19937& rng, unsigned nCi,
 // Exhaustive over the CIs: every clause holds under the circuit's own values,
 // and BCP from the CIs reproduces every one of them.
 void checkExact(const aig::Manager& m, unsigned namedOutputs,
-                aig::Recover recover)
+                aig::Recover recover, bool linkShared = false)
 {
-  const aig::Cone cone(m, namedOutputs, recover);
-  const CNF cnf = aig::deriveTseitin(m, namedOutputs, recover);
+  const aig::Cone cone(m, namedOutputs, recover, linkShared);
+  const CNF cnf =
+      aig::deriveTseitin(m, namedOutputs, recover, nullptr, linkShared);
   const Layout l = layoutOf(m, cone);
 
   ASSERT_EQ(cnf.varCount(), l.nVars);
@@ -287,6 +288,9 @@ TEST(Tseitin, NamedOutputsEncodeTheCircuitExactly)
 
     ASSERT_NO_FATAL_FAILURE(checkExact(m, m.outputCount(), aig::Recover::PatternsAndAnds)) << seed;
     ASSERT_NO_FATAL_FAILURE(checkExact(m, m.outputCount(), aig::Recover::Nothing)) << seed;
+    ASSERT_NO_FATAL_FAILURE(checkExact(m, m.outputCount(),
+                                       aig::Recover::PatternsAndAnds, true))
+        << seed;
   }
 }
 
@@ -404,7 +408,8 @@ TEST(Tseitin, SharedCarryHalfAdderLinks)
 }
 
 // The guard on both collapses: an exclusive-or something else also reads
-// keeps its variable, and the cell must fall back to the ordinary pattern.
+// keeps its variable, and without linkShared the cell falls back to the
+// ordinary pattern.
 TEST(Tseitin, SharedConditionDeclinesTheMajorityBlock)
 {
   aig::Manager m;
@@ -420,6 +425,69 @@ TEST(Tseitin, SharedConditionDeclinesTheMajorityBlock)
   EXPECT_EQ(folded.varCount(), 1u + 3u + 2u + 2u);
 
   ASSERT_NO_FATAL_FAILURE(checkExact(m, 2, aig::Recover::PatternsAndAnds));
+}
+
+// Under linkShared a shared condition does not weaken the cell: the
+// exclusive-or keeps its variable and its own four clauses for the other
+// reader, and the cell emits the ten linking clauses that keep the window
+// propagation-complete with the equality inside it.
+TEST(Tseitin, SharedConditionEmitsTheLinkBlock)
+{
+  aig::Manager m;
+  const aig::Lit l = m.createCi(), r = m.createCi(), prev = m.createCi();
+  const aig::Lit eq = aig::neg(m.Xor(r, l));
+  m.createOutput(m.Mux(eq, prev, r));
+  m.createOutput(eq);
+
+  const CNF folded = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds,
+                                        nullptr, true);
+  // The link block, the exclusive-or's own block, and two tie clauses per
+  // named output.
+  EXPECT_EQ(folded.clauseCount(), 10u + 4u + 4u);
+  EXPECT_EQ(folded.literalCount(), 30u + 12u + 8u);
+  EXPECT_EQ(folded.varCount(), 1u + 3u + 2u + 2u);
+
+  ASSERT_NO_FATAL_FAILURE(
+      checkExact(m, 2, aig::Recover::PatternsAndAnds, true));
+}
+
+// The bottom cell under the same sharing and linkShared: five linking clauses beside the
+// exclusive-or's four.
+TEST(Tseitin, SharedXorConjunctionEmitsTheLinkBlock)
+{
+  aig::Manager m;
+  const aig::Lit a = m.createCi(), b = m.createCi();
+  const aig::Lit x = m.Xor(a, b);
+  m.createOutput(m.And(x, a)); // = a & !b
+  m.createOutput(x);
+
+  const CNF folded = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds,
+                                        nullptr, true);
+  EXPECT_EQ(folded.clauseCount(), 5u + 4u + 4u);
+  EXPECT_EQ(folded.literalCount(), 12u + 12u + 8u);
+  EXPECT_EQ(folded.varCount(), 1u + 2u + 2u + 2u);
+
+  ASSERT_NO_FATAL_FAILURE(
+      checkExact(m, 2, aig::Recover::PatternsAndAnds, true));
+}
+
+// The agreeing-arm variant: out = e ? a : z, the arm on the equal branch
+// being an operand of the exclusive-or.
+TEST(Tseitin, SharedConditionAgreeingArmLinks)
+{
+  aig::Manager m;
+  const aig::Lit a = m.createCi(), b = m.createCi(), z = m.createCi();
+  const aig::Lit eq = aig::neg(m.Xor(a, b));
+  m.createOutput(m.Mux(eq, a, z));
+  m.createOutput(eq);
+
+  const CNF folded = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds,
+                                        nullptr, true);
+  EXPECT_EQ(folded.clauseCount(), 10u + 4u + 4u);
+  EXPECT_EQ(folded.varCount(), 1u + 3u + 2u + 2u);
+
+  ASSERT_NO_FATAL_FAILURE(
+      checkExact(m, 2, aig::Recover::PatternsAndAnds, true));
 }
 
 // Exclusive-or is the same shape with a second complementary pair, and gets
@@ -550,6 +618,39 @@ TEST(Tseitin, MatchingNeverCostsAnything)
   }
   EXPECT_GT(savedClauses, 0u);
   EXPECT_GT(savedLiterals, 0u);
+  EXPECT_GT(savedVars, 0u);
+}
+
+// Under linkShared, matching never costs a variable, and pays for itself
+// overall. It can cost a few clauses on one circuit: every cell sharing one
+// exclusive-or adds its linking clauses beside the exclusive-or's own, which
+// passes plain Tseitin's count from the third sharer on -- bought
+// deliberately, for propagation completeness under sharing.
+TEST(Tseitin, LinkedMatchingNeverCostsVariablesAndSavesOverall)
+{
+  int64_t savedClauses = 0, savedLiterals = 0;
+  uint64_t savedVars = 0;
+  for (unsigned seed = 0; seed < 200; seed++)
+  {
+    std::mt19937 rng(seed);
+    aig::Manager m;
+    std::vector<aig::Lit> pool;
+    buildRandom(m, rng, 6, 80, pool);
+    for (unsigned i = 0; i < 2; i++)
+      m.createOutput(pool[rng() % pool.size()]);
+
+    const CNF plain = aig::deriveTseitin(m, 0, aig::Recover::Nothing);
+    const CNF folded = aig::deriveTseitin(m, 0, aig::Recover::PatternsAndAnds,
+                                          nullptr, true);
+    ASSERT_LE(folded.varCount(), plain.varCount()) << seed;
+    savedClauses += static_cast<int64_t>(plain.clauseCount()) -
+                    static_cast<int64_t>(folded.clauseCount());
+    savedLiterals += static_cast<int64_t>(plain.literalCount()) -
+                     static_cast<int64_t>(folded.literalCount());
+    savedVars += plain.varCount() - folded.varCount();
+  }
+  EXPECT_GT(savedClauses, 0);
+  EXPECT_GT(savedLiterals, 0);
   EXPECT_GT(savedVars, 0u);
 }
 

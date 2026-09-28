@@ -256,7 +256,9 @@ says so: ``--ackermanize`` completes it for arrays.
 ``--exit-after-CNF`` exits, with no answer, once the first CNF is built;
 the two options together turn a single-check problem into DIMACS.
 ``--cnf-generation-effort`` trades the time spent minimising the CNF
-against its size.
+against its size. ``--cnf-link-shared-cells`` makes the ``new-*`` rungs
+keep a comparator cell propagation-complete when its exclusive-or has
+another reader, at the price of a few more clauses.
 
 Converting between formats
 --------------------------
