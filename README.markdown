@@ -79,6 +79,9 @@ stp myproblem.smt2
 ```
 
 STP also reads from standard input, as in the Docker example above.
+[Running STP](https://stp.github.io/stp/command-line.html) describes the
+command line: input formats, output and exit status, choosing a SAT solver,
+limits, statistics, and writing CNF.
 
 Overflowing a 32-bit integer using the Python interface:
 
