@@ -176,6 +176,22 @@ declare -a LOGIC_SETS=(
 # The same with arrays in the query as well, so array read refinement and UF
 # congruence refinement run in the one solve.
 "QF_AUFBV -mf 2 -Mf 4 -mp 1 -Mp 3 -ref 3 -mr 4 -Mr 12 -mw 2 -Mw 8"
+# Bit-vectors and floating point with no arrays in the way, so the
+# conversions between the two theories are what the query is about. -mconv
+# is how many conversions FuzzSMT writes in each direction; at 2..6 fp.to_ubv
+# appears in 91 files of 100 against 80 at the default 1..4, and a rounding
+# to_fp from a bit-vector in 99.
+"QF_BVFP -mconv 2 -Mconv 6"
+# All of it at once: arrays whose index and element sorts are drawn from the
+# bit-vector and floating-point sorts, uninterpreted functions, and the
+# conversions. FuzzSMT declares the functions over bit-vectors only, but it
+# applies them to terms converted out of floating point, and 85 files in 100
+# have an application whose argument depends on a floating-point term. The
+# counts follow the QF_AUFBV entry, without its -ref 3, which here takes the
+# checker's timeouts from 13 files in 100 to 20. --array-equality because
+# FuzzSMT compares whole arrays by default in this logic: without it STP
+# refuses 69 files in 100.
+"QF_AUFBVFP -mf 2 -Mf 4 -mp 1 -Mp 3 -mr 4 -Mr 12 -mw 2 -Mw 8 | --array-equality"
 )
 
 # LOGICS overrides the list, LOGIC gives a single entry. Split on both newlines
