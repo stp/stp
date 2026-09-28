@@ -288,6 +288,18 @@ def test_dimacs_leaves_the_last_check_as_it_was():
     s.close()
 
 
+def test_declared_sorts_carry_across_parses():
+    s = Solver()
+    s.from_string("(declare-sort PS 0) (declare-fun pa () PS)")
+    s.from_string("(declare-fun pb () PS) (assert (distinct pa pb))")  # once "unknown sort"
+    assert s.check() == sat
+    s2 = Solver()
+    s2.from_string("(declare-sort PU 0)")
+    assert "PU" in [d.name() for d in s2.manager().declared_sorts()]
+    s.close()
+    s2.close()
+
+
 def test_parse_term_runs_no_command():
     # the text goes inside a command of its own; a ')' in it once closed that
     # command and ran what followed against the solver

@@ -1368,6 +1368,13 @@ Format guess_format(std::string_view path)
 // name in the UF context and need no seeding.
 void seed_parser_symbols(Cpp_interface& pi, ManagerImpl* m)
 {
+  // The manager's declared sorts, whichever door declared them: a script
+  // names one as it names a declared symbol.
+  for (std::uint32_t index : m->declared_sort_order)
+  {
+    const detail::SortRec& r = m->rec(index);
+    pi.addSortAlias(r.name, r.source);
+  }
   for (const std::string& name : m->symbol_order)
   {
     const detail::SymbolRec& rec = m->symbols.at(name);
@@ -1559,10 +1566,12 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   // Declared before the interface, which may tear its frames down again as it
   // is destroyed, and detached from it once read.
   ASTVec declared_at_end;
+  std::map<std::string, SourceSort> sorts_at_end;
   // The command line's parse: the manager's factory behind the type checker.
   ::TypeChecker checker(*s->mgr->factory(), *bm);
   Cpp_interface pi(*bm, &checker);
   pi.keepDeclaredSymbolsAtCleanup(&declared_at_end);
+  pi.keepSortAliasesAtCleanup(&sorts_at_end);
   GlobalParserInterface = &pi;
   GlobalSTP = s->stp;
   GlobalParserBM = bm;
@@ -1795,6 +1804,13 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
     roots.push_back(declared);
   pi.keepDeclaredSymbolsAtCleanup(nullptr);
   roots.insert(roots.end(), declared_at_end.begin(), declared_at_end.end());
+  // and the sorts it declared, which the manager keeps whether or not a
+  // symbol of one survives (sort_of_source adopts each by its engine id)
+  pi.keepSortAliasesAtCleanup(nullptr);
+  sorts_at_end.insert(pi.sortAliases().begin(), pi.sortAliases().end());
+  for (const auto& alias : sorts_at_end)
+    if (alias.second.kind() == SourceSort::Kind::Uninterpreted)
+      s->mgr->sort_of_source(alias.second, fn);
   array_equality = detail::any_node(roots, detail::is_array_equality);
   if (!runs && array_equality && s->mgr->array_equality_off)
   {

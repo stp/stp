@@ -303,6 +303,41 @@ TEST(Parsing, parse_term_parses_one_term_and_runs_nothing)
   EXPECT_EQ(s.assertions().size(), 1u);
 }
 
+// A declared sort is the manager's, as a declared symbol is. A later script
+// names it whichever door declared it -- a script or the API -- and a script
+// that declares only the sort still leaves it to the manager. The second
+// parse below once failed with "unknown sort".
+TEST(Parsing, declared_sorts_carry_across_parses)
+{
+  TermManager tm;
+  Solver s(tm);
+  s.parse_smt2("(declare-sort S 0) (declare-fun a () S)");
+  s.parse_smt2("(declare-fun b () S) (assert (distinct a b))");
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const std::optional<Term> a = tm.symbol("a"), b = tm.symbol("b");
+  ASSERT_TRUE(a.has_value() && b.has_value());
+  EXPECT_TRUE(a->sort() == b->sort());
+  EXPECT_TRUE(s.parse_term("(= a b)").same_as(*a == *b));
+
+  const Sort T = tm.declare_sort("T");
+  s.parse_smt2("(declare-fun c () T)");
+  ASSERT_TRUE(tm.symbol("c").has_value());
+  EXPECT_TRUE(tm.symbol("c")->sort() == T);
+
+  Solver s2(tm);
+  s2.parse_smt2("(declare-sort U 0)");
+  std::vector<std::string> names;
+  for (const Sort& d : tm.declared_sorts())
+    names.push_back(d.name());
+  EXPECT_EQ(names, (std::vector<std::string>{"S", "T", "U"}));
+  s2.parse_smt2("(declare-fun u () U)");
+  ASSERT_TRUE(tm.symbol("u").has_value());
+  EXPECT_EQ(tm.symbol("u")->sort().name(), "U");
+
+  // a known sort declared again is a PARSE error, as SMT-LIB has it
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2("(declare-sort S 0)"));
+}
+
 TEST(Parsing, parse_term)
 {
   TermManager tm;

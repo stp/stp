@@ -242,9 +242,22 @@ public:
   // them their references; a caller that wants the symbols they held then
   // passes a vector for cleanUp to fill first (nullptr: none).
   void keepDeclaredSymbolsAtCleanup(ASTVec* sink) { symbols_at_cleanup = sink; }
+  // The same for the sort names in scope (sortAliases), which cleanUp copies
+  // into `sink` before the frames drop them.
+  void keepSortAliasesAtCleanup(std::map<std::string, SourceSort>* sink)
+  {
+    sorts_at_cleanup = sink;
+  }
+  // Every sort name in scope and its sort: define-sort's aliases and
+  // declare-sort's sorts, a caller's seeded ones among them.
+  const std::map<std::string, SourceSort>& sortAliases() const
+  {
+    return sort_aliases;
+  }
 
 private:
   ASTVec* symbols_at_cleanup = nullptr;
+  std::map<std::string, SourceSort>* sorts_at_cleanup = nullptr;
 
   // What the most recent check-sat charged to each pipeline stage: the
   // difference between two readings of the manager's run times taken around

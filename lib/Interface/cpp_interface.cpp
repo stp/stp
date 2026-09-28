@@ -1353,6 +1353,8 @@ void Cpp_interface::cleanUp()
   // may have asked to keep (keepDeclaredSymbolsAtCleanup).
   if (symbols_at_cleanup != nullptr)
     *symbols_at_cleanup = getDeclaredSymbols();
+  if (sorts_at_cleanup != nullptr)
+    *sorts_at_cleanup = sort_aliases;
 
   while (frames.size() > 0)
   {
