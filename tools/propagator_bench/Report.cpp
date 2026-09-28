@@ -97,6 +97,68 @@ string precisionDetail(const Row& r)
     if (r.sat.unsound > 0)
       o << " (" << r.sat.unsound << " UNSOUND)";
   }
+  if (r.bcp.ran && r.bcp.cases > 0)
+  {
+    o << "; vs bit-blasted: " << fixed(r.bcp.bcpBits, 2) << " vs "
+      << fixed(r.bcp.cbitpBits, 2) << " bits (";
+    if (r.bcp.bcpBits <= 0 && r.bcp.cbitpBits > 0)
+      o << "all new";
+    else
+      o << fixed(r.bcp.ratio(), 1) << "x";
+    o << ", " << r.bcp.cases << " cases, " << r.bcp.clauses << " clauses/"
+      << r.bcp.variables << " vars)";
+  }
+  if (r.bcpExhaustive.ran && r.bcpExhaustive.cases > 0)
+  {
+    const BcpExhaustive& e = r.bcpExhaustive;
+    o << "; encoding arc-consistent w=" << e.width << ": "
+      << (e.arcConsistent() ? "yes" : "NO") << " (" << e.complete << "/"
+      << e.cases << " cases, " << e.contradictory << " contradictory";
+    if (e.incomplete > 0)
+      o << ", " << e.incomplete << " incomplete";
+    if (e.missedConflict > 0)
+      o << ", " << e.missedConflict << " MISSED CONFLICTS";
+    if (e.unsound > 0)
+      o << ", " << e.unsound << " UNSOUND";
+    o << ")";
+  }
+  if (r.consistency.ran)
+  {
+    const ConsistencyCheck& k = r.consistency;
+    o << "; consistency w=" << k.width << " (" << k.clauses << " clauses/"
+      << k.variables << " vars, " << k.ioVars << " io): URC "
+      << (k.urc() ? "yes" : "NO");
+    if (k.urcMissed > 0)
+    {
+      unsigned worst = 0;
+      for (size_t u = 0; u < k.urcMissedByUnset.size(); u++)
+        if (k.urcMissedByUnset[u] > 0)
+        {
+          worst = (unsigned)u;
+          break;
+        }
+      o << " (" << k.urcMissed << "/" << k.ioContradictory
+        << " conflicts missed, some with only " << worst << " unset)";
+    }
+    o << ", GAC " << (k.gac() ? "yes" : "NO");
+    if (k.gacDerivable > 0)
+      o << " (" << fixed(100.0 * k.gacDerived / k.gacDerivable, 1)
+        << "% of implied literals over " << k.ioCases << " cases)";
+    o << ", PC ";
+    if (!k.pcRan)
+      o << "not checked";
+    else
+    {
+      o << (k.pc() ? "yes" : "NO") << " ("
+        << (k.pcExhaustive ? "exhaustive" : "sampled") << ", ";
+      if (k.pcDerivable > 0)
+        o << fixed(100.0 * k.pcDerived / k.pcDerivable, 1) << "% of literals, ";
+      o << k.pcMissedConflict << "/" << k.pcContradictory
+        << " conflicts missed)";
+    }
+    if (k.unsound > 0)
+      o << ", " << k.unsound << " UNSOUND";
+  }
   if (r.witnessUnsound > 0)
     o << "; " << r.witnessUnsound << " timed cases lost their solution";
   if (r.conflicts > 0)
@@ -126,6 +188,9 @@ string configSummary(const Config& c)
     << "s budget each, arity " << c.arity << ", seed " << c.seed;
   if (c.satCases > 0)
     o << ", " << c.satCases << " SAT-checked cases per row";
+  if (c.bcpCases > 0)
+    o << ", " << c.bcpCases << " cases per row against the bit-blasted "
+      << "encoding (CNF: " << (c.cnf.empty() ? "medium" : c.cnf) << ")";
   return o.str();
 }
 
@@ -180,7 +245,14 @@ void writeCsv(const Config& cfg, const vector<Row>& rows, const string& path)
        "bits_gained_per_call,calls,conflicts,maximally_precise,"
        "exhaustive_width,exhaustive_cases,exhaustive_precise,"
        "exhaustive_unsound,exhaustive_missed_conflicts,deducible_bits,"
-       "gained_bits,sat_cases,sat_precise,sat_unsound\n";
+       "gained_bits,sat_cases,sat_precise,sat_unsound,"
+       "bcp_cases,bcp_bits,bcp_cbitp_bits,bcp_clauses,bcp_vars,"
+       "cons_width,cons_clauses,cons_literals,cons_vars,cons_io_vars,"
+       "cons_urc,cons_gac,cons_pc,cons_io_cases,cons_io_contradictory,"
+       "cons_urc_missed,cons_urc_missed_min_unset,cons_gac_incomplete,"
+       "cons_gac_derivable,cons_gac_derived,cons_pc_mode,cons_pc_cases,"
+       "cons_pc_contradictory,cons_pc_missed_conflicts,cons_pc_incomplete,"
+       "cons_pc_derivable,cons_pc_derived,cons_unsound\n";
   for (const Row& r : rows)
   {
     f << name(r.domain) << "," << r.op << "," << name(r.direction) << ","
@@ -191,7 +263,27 @@ void writeCsv(const Config& cfg, const vector<Row>& rows, const string& path)
       << "," << r.precision.precise << "," << r.precision.unsound << ","
       << r.precision.missedConflict << "," << r.precision.derivable << ","
       << r.precision.gained << "," << r.sat.cases << "," << r.sat.precise
-      << "," << r.sat.unsound << "\n";
+      << "," << r.sat.unsound << "," << r.bcp.cases << ","
+      << fixed(r.bcp.bcpBits, 4) << "," << fixed(r.bcp.cbitpBits, 4) << ","
+      << r.bcp.clauses << "," << r.bcp.variables;
+
+    const ConsistencyCheck& k = r.consistency;
+    int minUnset = -1;
+    for (size_t u = 0; u < k.urcMissedByUnset.size() && minUnset < 0; u++)
+      if (k.urcMissedByUnset[u] > 0)
+        minUnset = (int)u;
+    f << "," << (k.ran ? k.width : 0) << "," << k.clauses << "," << k.literals
+      << "," << k.variables << "," << k.ioVars << ","
+      << (!k.ran ? "" : k.urc() ? "yes" : "no") << ","
+      << (!k.ran ? "" : k.gac() ? "yes" : "no") << ","
+      << (!k.pcRan ? "" : k.pc() ? "yes" : "no") << "," << k.ioCases << ","
+      << k.ioContradictory << "," << k.urcMissed << "," << minUnset << ","
+      << k.gacIncomplete << "," << k.gacDerivable << "," << k.gacDerived
+      << ","
+      << (!k.pcRan ? "" : k.pcExhaustive ? "exhaustive" : "sampled") << ","
+      << k.pcCases << "," << k.pcContradictory << "," << k.pcMissedConflict
+      << "," << k.pcIncomplete << "," << k.pcDerivable << "," << k.pcDerived
+      << "," << k.unsound << "\n";
   }
   (void)cfg;
   std::cout << "wrote " << path << std::endl;
@@ -266,6 +358,13 @@ void writeHtml(const Config& cfg, const vector<Row>& rows, const string& path)
     f << " and spot-checked at the benchmarked width against the SAT-based "
          "maximally precise propagator";
   f << ".</p>\n";
+  if (cfg.bcpCases > 0)
+    f << "<p class=\"note\"><em>vs bit-blasted</em> is the other comparison: "
+         "how many bits unit propagation over the CNF encoding of the same "
+         "operation fixes, against how many the transfer function fixes, on "
+         "the same cases. STP bit-blasts and calls a SAT solver anyway, so "
+         "the multiplier is what the word-level propagator adds over what "
+         "the solver would have found without it.</p>\n";
 
   for (Domain d : {Domain::Cbitp, Domain::Interval, Domain::ValueSet})
   {

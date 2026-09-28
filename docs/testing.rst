@@ -1,5 +1,8 @@
+Testing
+=======
+
 Introduction
-============
+------------
 
 STP currently supports the following types of tests
 
@@ -8,119 +11,50 @@ STP currently supports the following types of tests
    `lit <https://pypi.org/project/lit/>`__ and
    `OutputCheck <https://github.com/stp/OutputCheck>`__ tools. We refer
    to these as query file tests. They live in ``tests/query-files``.
--  Tests that call STP's API and check the results with the
-   `GoogleTest <https://google.github.io/googletest/>`__ framework.
-   Those under ``tests/unit-tests`` exercise STP's internals; those
-   under ``tests/api`` exercise the public C, C++ and Python APIs.
+-  Tests that call STP's API. Those under ``tests/unit-tests`` exercise
+   STP's internals and those under ``tests/api/C`` and ``tests/api/CPP``
+   exercise the public C and C++ APIs, all using the
+   `GoogleTest <https://google.github.io/googletest/>`__ framework. The
+   Python API tests under ``tests/api/python`` are plain Python scripts
+   registered directly with CTest.
 
 Both kinds are registered with CTest, so ``ctest`` (or ``make test``)
 runs everything.
 
 Getting started
-===============
+---------------
 
-We depend on a few external tools for testing. You need python3, and you
-need GoogleTest and OutputCheck, which are downloaded into ``deps/`` by
-the setup scripts (they used to be git submodules, they are not any
-more):
+We depend on a few external tools for testing: python3, GoogleTest,
+OutputCheck, and `lit <https://pypi.org/project/lit/>`__, which drives
+most of the suite. With ``-DENABLE_AUTO_DOWNLOAD=ON`` the build supplies
+all of them -- GoogleTest and OutputCheck are fetched at pinned
+revisions, and lit is installed into a virtual environment under the
+build directory, so nothing is added to the system interpreter.
 
-::
-
-    $ cd /path/to/stp
-    $ ./scripts/deps/setup-gtest.sh
-    $ ./scripts/deps/setup-outputcheck.sh
-
-You also need the lit tool, which is available from
-`PyPI <https://pypi.org/project/lit/>`__:
-
-::
-
-    $ pip install lit
+Each can be supplied instead: ``-DGTEST_DIR``, ``-DOUTPUTCHECK_DIR`` and
+``-DLIT_TOOL`` point at existing copies, and an installed lit on
+``PATH`` is found without any flag.
 
 Installing lit without root access
-----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you don't want to install lit system-wide you can put it in a virtual
-environment:
+This is what ``-DENABLE_AUTO_DOWNLOAD=ON`` does for you: it creates
+``venv/`` under the build directory, installs lit into it, and uses it
+from there. Nothing is added to the system interpreter, and nothing has
+to be activated in your shell -- the build records the absolute path.
+
+To use an environment of your own instead, create it and point
+``-DLIT_TOOL`` at the lit inside it:
 
 ::
 
     $ python3 -m venv venv
-    $ . venv/bin/activate
-    (venv) $ pip install lit
+    $ venv/bin/pip install lit
+    $ cmake -S . -B build -DLIT_TOOL="$(pwd)/venv/bin/lit" ...
 
-Note how the shell prompt changes when the ``venv/bin/activate`` script
-is executed from your shell. This is a hint that you are now using the
-python virtual environment named ``venv``.
-
-If you do this you need to make sure CMake picks up the python executable
-in your virtual environment and not the system python executable. If you
-have never executed CMake previously then configuring from a shell where
-the environment is activated is enough -- CMake will find that python.
-
-If you have configured previously (e.g. because you built STP with
-testing disabled) then, from a shell with the environment activated, run
-``make edit_cache`` in the build directory (``ninja edit_cache`` for
-ninja) and either
-
--  Delete the ``PYTHON_EXECUTABLE`` cache variable and then configure. If
-   all goes well you will see ``PYTHON_EXECUTABLE`` reappear, set to the
-   full path of your virtual environment python. Once you have
-   configured successfully you should regenerate the build system (i.e.
-   press the generate button).
-
-OR
-
--  Set the ``PYTHON_EXECUTABLE`` cache variable manually to the path of
-   your virtual environment python and then configure and generate.
-
-The same applies to ``LIT_TOOL``, which CMake sets to the first ``lit``
-it finds in ``PATH``.
-
-CMake options
--------------
-
-There are various CMake options that allow control over testing. You can
-easily configure these by…
-
--  When configuring for the first time use the ``cmake-gui`` or
-   ``ccmake`` tool.
--  If you've already configured/built previously by running
-   ``make edit_cache`` or ``ninja edit_cache`` in the build directory
-   (this assumes you used the ``cmake-gui`` or ``ccmake`` tool when you
-   first built).
-
-At the time of writing the following options are available
-
--  ``ENABLE_TESTING`` - If enabled other testing options will be
-   available. Note that testing needs a shared library build, so it is
-   forced off when ``STATICCOMPILE`` is on.
--  ``LIT_TOOL`` - Path to the ``lit`` executable (you shouldn't need to
-   modify this normally)
--  ``LIT_ARGS`` - Arguments passed to ``lit`` when CTest invokes it,
-   ``-s`` by default. Set it to e.g. ``-v`` to see the output of failing
-   tests.
--  ``PYTHON_EXECUTABLE`` - Path to the python executable to use for
-   testing programs. If you used a virtual environment to install
-   ``lit`` you should ensure that this CMake variable is set to the
-   virtual environment's python executable. This will happen
-   automatically if you activated the environment before configuring.
--  ``TEST_QUERY_FILES`` - If enabled the query file tests under
-   ``tests/query-files`` will become available for testing.
--  ``TEST_UNITS`` - If enabled the unit tests under ``tests/unit-tests``
-   will become available for building/testing.
--  ``TEST_APIS`` - If enabled the tests under ``tests/api`` will become
-   available.
--  ``TEST_C_API`` - If enabled the C API unit tests will be available
-   for building/testing.
--  ``USE_VALGRIND`` - If enabled, every GoogleTest executable is run under
-   valgrind's memcheck rather than directly, and memory errors fail the
-   test. See :ref:`valgrind` below.
--  ``VALGRIND_ARGS`` - The flags CTest passes to valgrind. See
-   :ref:`valgrind`.
--  ``VALGRIND_TEST_TIMEOUT`` - Per-test CTest timeout in seconds when
-   ``USE_VALGRIND`` is on, three hours by default. The default timeout is
-   not enough for the exhaustive tests once valgrind's slowdown is applied.
+Naming the path directly is what avoids the older advice about making
+CMake pick up the right interpreter: ``LIT_TOOL`` is absolute, so which
+python is on ``PATH`` when you configure no longer matters.
 
 Running tests
 -------------
@@ -146,12 +80,14 @@ The query file tests appear as a single CTest test named
 file becomes its own executable and its own CTest test, named after the
 source file with ``Tests-gtest`` appended -- so
 ``tests/unit-tests/SimplifyFormula_Test.cpp`` is run by the CTest test
-``SimplifyFormula_TestTests-gtest``.
+``SimplifyFormula_TestTests-gtest``. The tests that are not GoogleTest
+are named individually: ``python-interface-tests``,
+``python-allocator-tests``, ``test_fpbackend`` and ``test_fprewrites``.
 
 .. _valgrind:
 
 Running the tests under valgrind
---------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Configure with ``USE_VALGRIND`` and every GoogleTest executable is run
 through valgrind's memcheck rather than being run directly, so ``ctest``
@@ -193,6 +129,57 @@ individual allocations. Configure with ``-DSTP_ALLOCATOR=system`` if you
 want to run the binary itself under valgrind, and use lit's own ``--vg``
 flag for that.
 
+.. _ubsan:
+
+Running the tests under UndefinedBehaviorSanitizer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Undefined behaviour does not announce itself. A build that executes it
+answers exactly like a build that does not, right up until an optimiser or a
+target decides otherwise, so it has to be looked for on purpose. Clang's
+UndefinedBehaviorSanitizer compiles in the checks the language leaves to the
+implementation -- signed overflow, out-of-range shifts, misaligned accesses --
+and reports them as they happen.
+
+::
+
+    $ rtdir=$(dirname "$(clang -print-file-name=libclang_rt.ubsan_standalone-x86_64.so)")
+    $ cmake -S . -B build-ubsan -G Ninja \
+        -DENABLE_TESTING=ON -DPYTHON_EXECUTABLE="$(which python3)" \
+        -DSTP_ALLOCATOR=system \
+        -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+        -DCMAKE_C_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+        -DCMAKE_CXX_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+        -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=undefined -shared-libsan -Wl,-rpath,$rtdir" \
+        -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=undefined -shared-libsan -Wl,-rpath,$rtdir"
+    $ cmake --build build-ubsan
+    $ ctest --test-dir build-ubsan -j8
+
+``CMAKE_C_FLAGS`` matters as much as the C++ one: ABC, the vendored library
+that turns each query's AIG into CNF, is C, and is where the undefined
+behaviour found so far has been. This is not what the ``SANITIZE``
+configuration variable does -- that one sets C++ flags only, and turns on the
+address and integer sanitizers as well.
+
+``-fno-sanitize-recover=all`` makes a failing check abort rather than print
+and carry on, which is what turns undefined behaviour into a failing test.
+``UBSAN_OPTIONS=halt_on_error=1`` would do the same thing for a run that
+remembers to set it -- lit does forward that variable to the query file tests
+-- but compiling it in makes it a property of the binary, so it holds however
+the binary is reached, including through the Python bindings. Leave the flag
+off when you would rather collect every report from a run than stop at the
+first, and set ``UBSAN_OPTIONS=print_stacktrace=1`` for a stack trace with
+each one.
+
+The rest is plumbing. ``-shared-libsan`` and the matching ``-rpath`` are what
+let ``python-interface-tests`` work: the bindings dlopen ``libstp.so``, which
+fails against clang's default static runtime with "undefined symbol:
+``__ubsan_handle_type_mismatch_v1``". ``STP_ALLOCATOR=system`` keeps the
+vendored mimalloc, which replaces ``malloc`` wholesale, out of the picture.
+
+CI runs this configuration on every pull request, as the ``clang (ubsan)``
+job in ``.github/workflows/ci.yml``.
+
 Notes for Query file tests
 --------------------------
 
@@ -230,8 +217,6 @@ OutputCheck.
 Individual tests
 ----------------
 
-.. _query-file-tests-1:
-
 Query file tests
 ~~~~~~~~~~~~~~~~
 
@@ -258,8 +243,6 @@ subset of the cases in one executable.
 Writing tests
 -------------
 
-.. _query-file-tests-2:
-
 Query file tests
 ~~~~~~~~~~~~~~~~
 
@@ -269,8 +252,6 @@ testing <https://llvm.org/docs/TestingGuide.html#writing-new-regression-tests>`_
 and
 `OutputCheck <https://github.com/stp/OutputCheck/blob/master/README.md>`__
 documentation.
-
-.. _unit-tests-1:
 
 Unit tests
 ~~~~~~~~~~

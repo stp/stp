@@ -26,17 +26,15 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 
 stp::ASTNode TypeChecker::CreateTerm(stp::Kind kind, unsigned int width,
-                                     const stp::ASTVec& children)
+                                     stp::ASTChildren children)
 {
   stp::ASTNode r = f.CreateTerm(kind, width, children);
   BVTypeCheck(r);
   return r;
 }
 
-// virtual stp::ASTNode CreateNode(stp::Kind kind, const stp::ASTVec&
-// children);
 stp::ASTNode TypeChecker::CreateNode(stp::Kind kind,
-                                     const stp::ASTVec& children)
+                                     stp::ASTChildren children)
 {
   stp::ASTNode r = f.CreateNode(kind, children);
   BVTypeCheck(r);
@@ -45,7 +43,7 @@ stp::ASTNode TypeChecker::CreateNode(stp::Kind kind,
 
 stp::ASTNode TypeChecker::CreateArrayTerm(Kind kind, unsigned int index,
                                           unsigned int width,
-                                          const stp::ASTVec& children)
+                                          stp::ASTChildren children)
 {
   ASTNode r = f.CreateTerm(kind, width, children);
   r.SetIndexWidth(index);

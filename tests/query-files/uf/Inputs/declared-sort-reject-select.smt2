@@ -1,0 +1,6 @@
+(set-logic QF_AUFBV)
+(declare-sort S 0)
+(declare-const s S)
+(declare-const A (Array (_ BitVec 16) (_ BitVec 8)))
+(assert (= (select A s) #x00))
+(check-sat)

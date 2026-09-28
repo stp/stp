@@ -94,6 +94,8 @@ const vector<OpSpec>& allOps()
       {BVPLUS, "bvadd", Shape::Nary, true, true},
       {BVSUB, "bvsub", Shape::Nary, false, true},
       {BVUMINUS, "bvneg", Shape::Unary, false, true},
+      // bvmul stays two-operand here: the cbitp transfer function bails
+      // out (NO_CHANGE) on wider multiplies.
       {BVMULT, "bvmul", Shape::Nary, false, true},
       {BVDIV, "bvudiv", Shape::Nary, false, true},
       {BVMOD, "bvurem", Shape::Nary, false, true},
@@ -407,21 +409,21 @@ FixedBits concreteOf(const ChildSpec& spec, uint64_t v)
   return bits;
 }
 
-FixedBits randomConcrete(const ChildSpec& spec, MTRand& rand)
+FixedBits randomConcrete(const ChildSpec& spec, std::mt19937& rand)
 {
   FixedBits bits(spec.width, spec.isBoolean);
   for (unsigned i = 0; i < spec.width; i++)
   {
     bits.setFixed(i, true);
-    bits.setValue(i, (rand.randInt() % 2) == 1);
+    bits.setValue(i, (rand() % 2) == 1);
   }
   return bits;
 }
 
-void unfixTo(FixedBits& bits, unsigned percent, MTRand& rand)
+void unfixTo(FixedBits& bits, unsigned percent, std::mt19937& rand)
 {
   for (unsigned i = 0; i < bits.getWidth(); i++)
-    if (rand.randInt() % 100 >= percent)
+    if (rand() % 100 >= percent)
       bits.setFixed(i, false);
 }
 

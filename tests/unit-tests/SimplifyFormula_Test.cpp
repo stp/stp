@@ -93,6 +93,30 @@ struct Context
   {
     return hf->CreateNode(OR, a, b);
   }
+  ASTNode Xor(const ASTNode& a, const ASTNode& b)
+  {
+    return hf->CreateNode(XOR, a, b);
+  }
+  ASTNode Nand(const ASTNode& a, const ASTNode& b)
+  {
+    return hf->CreateNode(NAND, a, b);
+  }
+  ASTNode Nor(const ASTNode& a, const ASTNode& b)
+  {
+    return hf->CreateNode(NOR, a, b);
+  }
+  ASTNode Iff(const ASTNode& a, const ASTNode& b)
+  {
+    return hf->CreateNode(IFF, a, b);
+  }
+  ASTNode Implies(const ASTNode& a, const ASTNode& b)
+  {
+    return hf->CreateNode(IMPLIES, a, b);
+  }
+  ASTNode Ite(const ASTNode& a, const ASTNode& b, const ASTNode& d)
+  {
+    return hf->CreateNode(ITE, a, b, d);
+  }
 
   // Run the real top-level formula simplifier.
   ASTNode run(const ASTNode& f)
@@ -100,6 +124,16 @@ struct Context
     SubstitutionMap sm(&mgr);
     Simplifier simp(&mgr, &sm);
     return simp.SimplifyFormula_TopLevel(f, false);
+  }
+
+  // ... and with the negation the caller wants pushed inwards. Half of the
+  // pass's memo key, and the half every arm chooses per operand: this is the
+  // entry the arms below are exercised through in both polarities.
+  ASTNode runNeg(const ASTNode& f)
+  {
+    SubstitutionMap sm(&mgr);
+    Simplifier simp(&mgr, &sm);
+    return simp.SimplifyFormula_TopLevel(f, true);
   }
 
   // A firing check: the pass must both produce `expected` AND change the
@@ -150,6 +184,30 @@ struct Context
           if (evalBool(ch, asgn))
             return true;
         return false;
+      case NAND:
+        for (const auto& ch : n)
+          if (!evalBool(ch, asgn))
+            return true;
+        return false;
+      case NOR:
+        for (const auto& ch : n)
+          if (evalBool(ch, asgn))
+            return false;
+        return true;
+      case XOR:
+      {
+        bool odd = false;
+        for (const auto& ch : n)
+          odd ^= evalBool(ch, asgn);
+        return odd;
+      }
+      case IFF:
+        return evalBool(n[0], asgn) == evalBool(n[1], asgn);
+      case IMPLIES:
+        return !evalBool(n[0], asgn) || evalBool(n[1], asgn);
+      case ITE:
+        return evalBool(n[0], asgn) ? evalBool(n[1], asgn)
+                                    : evalBool(n[2], asgn);
       default:
         ADD_FAILURE() << "evalBool: unexpected kind in boolean formula: " << n;
         return false;
@@ -164,8 +222,8 @@ struct Context
     std::vector<ASTNode> syms(symSet.begin(), symSet.end());
     ASSERT_LE(syms.size(), 16u) << "too many variables to enumerate";
 
-    const unsigned long combos = 1UL << syms.size();
-    for (unsigned long c = 0; c < combos; c++)
+    const uint64_t combos = UINT64_C(1) << syms.size();
+    for (uint64_t c = 0; c < combos; c++)
     {
       std::map<ASTNode, bool> asgn;
       for (size_t i = 0; i < syms.size(); i++)
@@ -177,6 +235,30 @@ struct Context
   }
 
   void checkSound(const ASTNode& f) { checkEquivalent(f, run(f)); }
+
+  // Under pushNeg the pass is simplifying NOT(f), so the answer must mean the
+  // opposite of the input at every assignment.
+  void checkSoundNegated(const ASTNode& f)
+  {
+    const ASTNode out = runNeg(f);
+
+    ASTNodeSet symSet;
+    collectSymbols(f, symSet);
+    collectSymbols(out, symSet);
+    std::vector<ASTNode> syms(symSet.begin(), symSet.end());
+    ASSERT_LE(syms.size(), 16u) << "too many variables to enumerate";
+
+    const uint64_t combos = UINT64_C(1) << syms.size();
+    for (uint64_t c = 0; c < combos; c++)
+    {
+      std::map<ASTNode, bool> asgn;
+      for (size_t i = 0; i < syms.size(); i++)
+        asgn[syms[i]] = ((c >> i) & 1) != 0;
+      ASSERT_EQ(!evalBool(f, asgn), evalBool(out, asgn))
+          << "pushNeg answer is not the negation, at assignment " << c
+          << "\nbefore: " << f << "\nafter:  " << out;
+    }
+  }
 
   void checkIdempotent(const ASTNode& f)
   {
@@ -555,6 +637,323 @@ TEST(SimplifyAndOr, deep_omit_one_demorgan)
   ASTNode out = c.run(top);
   ASSERT_EQ(out.GetKind(), AND);
   EXPECT_EQ(out.Degree(), static_cast<size_t>(numVars));
+}
+
+/*===========================================================================
+ * ARM TESTS
+ *
+ * SimplifyFormula used to dispatch to eight functions; each is now an arm of
+ * one state machine, and the points where an arm used to call SimplifyFormula
+ * are phases it has to resume at. The tests above reach two of those arms
+ * (AND/OR and NOT); a fold that lost its resumption point in any of the other
+ * six -- IFF's re-simplification of the side a constant left, ITE's of the
+ * condition under (ite c false true) -- is invisible from here.
+ *
+ * So one test per arm, and each arm under both polarities, since pushNeg is
+ * half the memo key and each arm chooses what to hand its operands.
+ *=========================================================================*/
+
+// IMPLIES, both polarities: SimplifyImpliesFormula.
+TEST(SimplifyArms, implies_false_antecedent_is_true)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Implies(c.mgr.ASTFalse, x), c.mgr.ASTTrue);
+}
+
+TEST(SimplifyArms, implies_true_antecedent_is_consequent)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Implies(c.mgr.ASTTrue, x), x);
+}
+
+TEST(SimplifyArms, implies_same_is_true)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Implies(x, x), c.mgr.ASTTrue);
+}
+
+TEST(SimplifyArms, implies_negated_antecedent_becomes_or)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  ASTNode input = c.Implies(c.Not(a), b);
+  ASTNode out = c.run(input);
+  EXPECT_EQ(out.GetKind(), OR) << "the NOT was not absorbed: " << out;
+  EXPECT_NE(out, input);
+  c.checkEquivalent(input, out);
+}
+
+TEST(SimplifyArms, implies_pushneg_is_a_conjunction)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  ASTNode input = c.Implies(a, b);
+  ASTNode out = c.runNeg(input);
+  EXPECT_EQ(out.GetKind(), AND) << "NOT(a=>b) should be a conjunction: " << out;
+  c.checkSoundNegated(input);
+}
+
+// IFF, including the fold that re-simplifies the surviving side negated.
+TEST(SimplifyArms, iff_true_left_is_right)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Iff(c.mgr.ASTTrue, x), x);
+}
+
+TEST(SimplifyArms, iff_true_right_is_left)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Iff(x, c.mgr.ASTTrue), x);
+}
+
+TEST(SimplifyArms, iff_false_left_negates_right)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Iff(c.mgr.ASTFalse, x), c.Not(x));
+}
+
+TEST(SimplifyArms, iff_false_right_negates_left)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Iff(x, c.mgr.ASTFalse), c.Not(x));
+}
+
+// The fold is a second walk over the side that survived. Where that side is a
+// compound the arm has already simplified at the opposite polarity, the walk
+// answers from CheckSimplifyMap's second lookup -- the one that negates a
+// pushNeg=false answer -- so what comes back is the negation wrapped around
+// it rather than the De Morgan'd form. Recorded rather than asserted as
+// desirable: the memo and that lookup are older than this state machine, and
+// the arm behaved this way when it was SimplifyIffFormula.
+TEST(SimplifyArms, iff_false_side_negates_the_survivor)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  ASTNode input = c.Iff(c.mgr.ASTFalse, c.And(a, b));
+  ASTNode out = c.run(input);
+  EXPECT_EQ(out.GetKind(), NOT) << "the survivor was not negated: " << out;
+  c.checkEquivalent(input, out);
+}
+
+TEST(SimplifyArms, iff_same_is_true)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Iff(x, x), c.mgr.ASTTrue);
+}
+
+TEST(SimplifyArms, iff_complement_is_false)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Iff(c.Not(x), x), c.mgr.ASTFalse);
+}
+
+TEST(SimplifyArms, iff_pushneg_sound)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  c.checkSoundNegated(c.Iff(a, b));
+}
+
+// The formula if-then-else, including its own fold.
+TEST(SimplifyArms, ite_true_condition_is_then)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  c.checkFires(c.Ite(c.mgr.ASTTrue, a, b), a);
+}
+
+TEST(SimplifyArms, ite_false_condition_is_else)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  c.checkFires(c.Ite(c.mgr.ASTFalse, a, b), b);
+}
+
+TEST(SimplifyArms, ite_false_true_branches_negate_condition)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Ite(x, c.mgr.ASTFalse, c.mgr.ASTTrue), c.Not(x));
+}
+
+// ... by walking the condition again under pushNeg, which is why the arm
+// folds rather than letting the factory build the NOT. A condition the arm
+// has already simplified at pushNeg=false comes back through the same
+// negating lookup as the IFF fold above, so the arm's comment about exposing
+// more simplifications holds for a condition it has not seen before and not
+// for one it has.
+TEST(SimplifyArms, ite_false_true_negates_the_condition)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  ASTNode input = c.Ite(c.And(a, b), c.mgr.ASTFalse, c.mgr.ASTTrue);
+  ASTNode out = c.run(input);
+  EXPECT_EQ(out.GetKind(), NOT) << "the condition was not negated: " << out;
+  c.checkEquivalent(input, out);
+}
+
+TEST(SimplifyArms, ite_pushneg_sound)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean(), d = c.boolean();
+  c.checkSoundNegated(c.Ite(a, b, d));
+}
+
+// XOR: SimplifyXorFormula, which under pushNeg negates its first operand.
+TEST(SimplifyArms, xor_same_is_false)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Xor(x, x), c.mgr.ASTFalse);
+}
+
+TEST(SimplifyArms, xor_true_false_is_true)
+{
+  Context c;
+  c.checkFires(c.Xor(c.mgr.ASTTrue, c.mgr.ASTFalse), c.mgr.ASTTrue);
+}
+
+TEST(SimplifyArms, xor_pushneg_sound)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  c.checkSoundNegated(c.Xor(a, b));
+}
+
+TEST(SimplifyArms, xor_nary_preserves_all_operands)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean(), d = c.boolean();
+  ASTNode input = c.hf->CreateNode(XOR, ASTVec{a, b, d});
+  ASTNode out = c.run(input);
+
+  EXPECT_EQ(XOR, out.GetKind());
+  EXPECT_EQ(3U, out.Degree());
+  c.checkEquivalent(input, out);
+  c.checkSoundNegated(input);
+}
+
+// NAND and NOR, whose implicit negation cancels with the caller's.
+TEST(SimplifyArms, nand_of_true_is_the_negated_other)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Nand(c.mgr.ASTTrue, x), c.Not(x));
+}
+
+TEST(SimplifyArms, nor_of_false_is_the_negated_other)
+{
+  Context c;
+  ASTNode x = c.boolean();
+  c.checkFires(c.Nor(c.mgr.ASTFalse, x), c.Not(x));
+}
+
+TEST(SimplifyArms, nand_pushneg_is_the_conjunction)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  ASTNode out = c.runNeg(c.Nand(a, b));
+  EXPECT_EQ(out.GetKind(), AND) << "NOT(nand) should be the AND: " << out;
+  c.checkSoundNegated(c.Nand(a, b));
+}
+
+TEST(SimplifyArms, nor_pushneg_is_the_disjunction)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  ASTNode out = c.runNeg(c.Nor(a, b));
+  EXPECT_EQ(out.GetKind(), OR) << "NOT(nor) should be the OR: " << out;
+  c.checkSoundNegated(c.Nor(a, b));
+}
+
+// NOT: the arm counts the run above it and starts again from the parity.
+TEST(SimplifyArms, not_run_of_three_is_one)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  ASTNode input = c.Not(c.Not(c.Not(c.And(a, b))));
+  ASTNode out = c.run(input);
+  EXPECT_EQ(out.GetKind(), OR) << "odd parity should De Morgan: " << out;
+  c.checkEquivalent(input, out);
+}
+
+TEST(SimplifyArms, not_run_of_four_is_none)
+{
+  Context c;
+  ASTNode a = c.boolean(), b = c.boolean();
+  ASTNode input = c.Not(c.Not(c.Not(c.Not(c.And(a, b)))));
+  ASTNode out = c.run(input);
+  EXPECT_EQ(out.GetKind(), AND) << "even parity should not De Morgan: " << out;
+  c.checkEquivalent(input, out);
+}
+
+// Every arm, both polarities, on formulas that mix them.
+struct AllKindsFuzzer
+{
+  Context& c;
+  std::mt19937 rng;
+  std::vector<ASTNode> vars;
+
+  AllKindsFuzzer(Context& ctx, unsigned seed, unsigned numVars)
+      : c(ctx), rng(seed)
+  {
+    for (unsigned i = 0; i < numVars; i++)
+      vars.push_back(c.boolean());
+  }
+
+  ASTNode gen(unsigned depth)
+  {
+    std::uniform_int_distribution<int> pick(0, depth == 0 ? 2 : 11);
+    switch (pick(rng))
+    {
+      case 0:
+        return vars[std::uniform_int_distribution<size_t>(0, vars.size() - 1)(
+            rng)];
+      case 1:
+        return c.mgr.ASTTrue;
+      case 2:
+        return c.mgr.ASTFalse;
+      case 3:
+        return c.Not(gen(depth - 1));
+      case 4:
+        return c.And(gen(depth - 1), gen(depth - 1));
+      case 5:
+        return c.Or(gen(depth - 1), gen(depth - 1));
+      case 6:
+        return c.Xor(gen(depth - 1), gen(depth - 1));
+      case 7:
+        return c.Nand(gen(depth - 1), gen(depth - 1));
+      case 8:
+        return c.Nor(gen(depth - 1), gen(depth - 1));
+      case 9:
+        return c.Iff(gen(depth - 1), gen(depth - 1));
+      case 10:
+        return c.Implies(gen(depth - 1), gen(depth - 1));
+      default:
+        return c.Ite(gen(depth - 1), gen(depth - 1), gen(depth - 1));
+    }
+  }
+};
+
+TEST(SimplifyArms, fuzz_every_connective_sound_in_both_polarities)
+{
+  Context c;
+  AllKindsFuzzer f(c, /*seed=*/0x5EED, /*numVars=*/4);
+  for (int i = 0; i < 400; i++)
+  {
+    ASTNode formula = f.gen(/*depth=*/3);
+    c.checkSound(formula);
+    c.checkSoundNegated(formula);
+  }
 }
 
 } // namespace

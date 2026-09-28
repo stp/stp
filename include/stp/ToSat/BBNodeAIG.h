@@ -110,12 +110,16 @@ public:
   bool operator==(const BBNodeAIG& other) const { return n == other.n; }
   bool operator!=(const BBNodeAIG& other) const { return !(n == other.n); }
 
-
   /*
   Negative AIG nodes are indicated by being odd.
   Each AIG node has a unique id.
   The negative, and non-negative of the same node, have the same ID.
-  We use this in a set, so we need the negative and non-negative to evaluate as different.  
+  We use this in a set, so we need the negative and non-negative to evaluate as different.
+
+  Not dead: mult_Booth sorts each column of partial products with it
+  (BitBlaster.cpp, "sort(t_products[i]...")), so this ordering decides which
+  products are combined first and therefore reaches the CNF. Any change to it
+  is a change to the emitted formula, not a refactor.
   */
   bool operator<(const BBNodeAIG& other) const 
   { 
@@ -125,17 +129,28 @@ public:
     return Aig_Regular(n)->Id < Aig_Regular(other.n)->Id; 
   }
 
+
+
   void print() const { print(n); }
 };
 }
 
 namespace std {
+    // The AIG literal: 2*id + complement. Hashing the id alone put x and !x
+    // in the same bucket, which they never are under operator==, so every
+    // set holding both ran at twice the collision rate it needed.
+    //
+    // This is only a hash-quality change. It used to decide the iteration
+    // order of BBNodeSet, and that order reached the emitted CNF -- but
+    // BBNodeSet is insertion-ordered now, so nothing observable depends on
+    // the bucket layout any more.
     template <>
         class hash<stp::BBNodeAIG>{
         public :
             size_t operator()(const stp::BBNodeAIG & node ) const
             {
-                return Aig_Regular(node.n)->Id ;
+                return 2 * (size_t)Aig_Regular(node.n)->Id +
+                       (Aig_IsComplement(node.n) ? 1 : 0);
             }
     };
 }

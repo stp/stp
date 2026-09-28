@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Andrew V. Jones
+ * AUTHORS: Vijay Ganesh, Andrew Teylu
  *
  * BEGIN DATE: November, 2005
  *
@@ -24,10 +24,156 @@ THE SOFTWARE.
 #ifndef UDEFFLAGS_H
 #define UDEFFLAGS_H
 
-#include "stp/Sat/SearchBias.h"
+#include "stp/Util/Attributes.h"
+#include "stp/Sat/CadicalOptions.h"
+#include "stp/config.h"
+
+#include <cstdint>
+#include <iosfwd>
+#include <string>
 
 namespace stp
 {
+
+// The complete enum remains in its established SAT header.  An opaque scoped
+// enum is sufficient for neutral manager configuration and keeps AST/frontend
+// targets from acquiring a SAT-header dependency.
+enum class SearchBias;
+
+// Independently selectable families of algebraic facts used by BV term
+// abstraction. The ordinal is also the coverage-counter index; the mask
+// spelling keeps the command-line and C interfaces compact without turning
+// every individual lemma into a permanent public option.
+//
+// The groups are disjoint: every fact the refiner can offer has exactly one
+// owner here, so a mask with one bit set selects precisely that family and
+// the per-group counters partition the schema total. In operation order,
+// with each operation's mechanisms after its registries.
+enum class BVSchemaGroup : unsigned
+{
+  // The schemas an enabled abstraction inherits: the seven division facts
+  // that were already qualified, the divisor-value and bound schemas, and
+  // multiplication's parity, trailing-zero and power-of-two schemas.
+  BASE = 0,
+
+  // Unsigned division.
+  UDIV15,         // the highest-firing single fact outside BASE
+  UDIV_OBSERVED,  // the ranked facts that fired on the qualification corpus
+  UDIV_TAIL,      // the rest of the registry, which did not
+
+  // Unsigned remainder.
+  UREM,
+
+  // Division and remainder mechanisms, rather than registry entries.
+  QUOTIENT_ONE_QUOT,
+  QUOTIENT_ONE_REM,
+  QUOTIENT_THRESHOLDS,
+  DIVISOR_MAGNITUDE,
+  DIVREM_FULL,
+
+  // Multiplication.
+  MUL8,
+  MUL_REF3,
+  MUL_TAIL,
+
+  // Addition. Measured, and deliberately not adopted: over 497 queries
+  // chosen because they abstract a wide addition -- this family's best case
+  // -- enabling it installed 30,519 lemmas and cost 19.9% and seven solves
+  // against the inherited mask, regressing 162 queries and improving 15. It
+  // stays selectable so that result stays reproducible, and stays out of
+  // every profile.
+  ADD,
+  // The exact low-prefix mechanism addition and multiplication share. On the
+  // same 497 queries it fired 9,525 times and moved nothing: +0.4%, with the
+  // solved and timeout counts identical to the inherited mask.
+  LOW_PREFIX,
+
+  COUNT
+};
+
+constexpr unsigned BV_SCHEMA_GROUP_COUNT =
+    static_cast<unsigned>(BVSchemaGroup::COUNT);
+
+constexpr uint32_t bvSchemaGroupBit(BVSchemaGroup group)
+{
+  return uint32_t{1} << static_cast<unsigned>(group);
+}
+
+constexpr uint32_t BV_SCHEMA_GROUP_ALL =
+    (uint32_t{1} << BV_SCHEMA_GROUP_COUNT) - 1;
+
+// The mask an explicitly enabled abstraction inherits, and the only one the
+// corpus qualification actually justified: the established schemas, plus the
+// two families that were measured to decide queries on their own -- the UREM
+// registry, which turns the wide remainder cases from a two-gigabyte external
+// timeout into fractions of a second, and MulRef3, which takes one 512-bit
+// rewrite candidate from 3.66s/766MB to 0.12s/65MB. Every broader profile
+// below is an experiment that has to be asked for.
+constexpr uint32_t BV_SCHEMA_GROUP_QUALIFIED =
+    bvSchemaGroupBit(BVSchemaGroup::BASE) |
+    bvSchemaGroupBit(BVSchemaGroup::UREM) |
+    bvSchemaGroupBit(BVSchemaGroup::MUL_REF3);
+
+// The complete observed single-record catalogue. Every schema here states a
+// fact about one division, remainder, multiplication or addition on its own;
+// the one relation that spans a quotient and its remainder together builds a
+// full-width multiplier and stays out, in AGGRESSIVE below.
+constexpr uint32_t BV_SCHEMA_GROUP_BROAD =
+    bvSchemaGroupBit(BVSchemaGroup::BASE) |
+    bvSchemaGroupBit(BVSchemaGroup::UDIV15) |
+    bvSchemaGroupBit(BVSchemaGroup::UDIV_OBSERVED) |
+    bvSchemaGroupBit(BVSchemaGroup::UREM) |
+    bvSchemaGroupBit(BVSchemaGroup::MUL8) |
+    bvSchemaGroupBit(BVSchemaGroup::MUL_REF3) |
+    bvSchemaGroupBit(BVSchemaGroup::QUOTIENT_ONE_REM) |
+    bvSchemaGroupBit(BVSchemaGroup::QUOTIENT_ONE_QUOT) |
+    bvSchemaGroupBit(BVSchemaGroup::DIVISOR_MAGNITUDE);
+
+// The same catalogue plus the full-width modular identity, which ties a
+// quotient and its remainder to the dividend they came from. It reduces
+// blocking and exact escalation the most aggressively of any profile and is
+// still the slowest of them, because the identity builds a full-width
+// multiplier; it exists to make that trade reproducible.
+constexpr uint32_t BV_SCHEMA_GROUP_AGGRESSIVE =
+    BV_SCHEMA_GROUP_BROAD | bvSchemaGroupBit(BVSchemaGroup::DIVREM_FULL);
+
+constexpr unsigned BV_TERM_ABSTRACTION_QUALIFIED_ROUNDS = 32;
+constexpr unsigned BV_TERM_ABSTRACTION_BROAD_ROUNDS = 16;
+constexpr unsigned BV_TERM_ABSTRACTION_AGGRESSIVE_ROUNDS = 16;
+
+// These defaults matter only after a caller explicitly turns BV term
+// abstraction on. The global feature switch remains off.
+constexpr uint32_t BV_SCHEMA_GROUP_DEFAULT = BV_SCHEMA_GROUP_QUALIFIED;
+constexpr unsigned BV_TERM_ABSTRACTION_DEFAULT_ROUNDS =
+    BV_TERM_ABSTRACTION_QUALIFIED_ROUNDS;
+
+constexpr bool bvSchemaGroupEnabled(uint32_t mask, BVSchemaGroup group)
+{
+  return (mask & bvSchemaGroupBit(group)) != 0;
+}
+
+DLL_PUBLIC const char* bvSchemaGroupName(BVSchemaGroup group);
+
+// Parse the comma-separated CLI spelling. `all` and `none` are aliases for
+// the complete and empty masks and must stand alone. The output mask is left
+// unchanged on error, with a diagnostic returned through `error`.
+DLL_PUBLIC bool parseBVSchemaGroups(const std::string& text, uint32_t& mask,
+                                    std::string& error);
+DLL_PUBLIC std::string formatBVSchemaGroups(uint32_t mask);
+
+// Parse one of the named mask/round pairs. Both outputs are left
+// unchanged on error, so callers cannot accidentally apply half a profile.
+DLL_PUBLIC bool parseBVTermAbstractionProfile(const std::string& text,
+                                              uint32_t& mask, unsigned& rounds,
+                                              std::string& error);
+
+struct UserDefinedFlags;
+
+// Print the abstraction coverage, refinement and exact-escalation counters
+// reported by `-t`. The same reporter is used after an ordinary solve and by
+// --exit-after-CNF once bit-blasting has populated the coverage counters.
+DLL_PUBLIC void printAbstractionCoverage(const UserDefinedFlags& uf,
+                                         std::ostream& out);
 
 /******************************************************************
  * Struct UserDefFlags:
@@ -42,6 +188,15 @@ struct UserDefinedFlags
   UserDefinedFlags& operator=(UserDefinedFlags const&) = delete;
 
 public:
+  // A three-valued option: forced off, forced on, or resolved per query.
+  // AUTO is decided from the query in front of the pass and is never written
+  // back, so a decision made for one check cannot leak into the next. ON
+  // means what an explicit request has always meant: run regardless.
+  //
+  // Used by the UF pre-lowering options and by the arithmetic ones, so it is
+  // declared here rather than beside either group.
+  enum class OptionMode { OFF, ON, AUTO };
+
   /* Parsing options */
   bool smtlib1_parser_flag = false;
   bool smtlib2_parser_flag = false;
@@ -59,17 +214,69 @@ public:
   bool propagate_equalities = true; // Remove equalities.
   bool bitConstantProp_flag = true; // Constant bit propagation enabled.
   bool enable_unconstrained = true;
-  bool enable_flatten = false;
+  bool enable_flatten = true;
   bool enable_ite_context = false;
   bool enable_aig_core_simplify = false;
   bool enable_use_intervals = true;
+  // Bounded disjoint-interval-set domain; needs enable_use_intervals.
+  bool enable_interval_sets = false;
   bool enable_pure_literals = true;
   bool enable_split_extracts = true;
   bool enable_sharing_aware_rewriting = true;
   bool enable_merge_same = false;
+  bool enable_pair_extract = true;
+  bool enable_common_subsum = true;
+
+  // Take a factor several of a sum's products have in common out of the
+  // sum, so one multiplication is built where there were several. See
+  // CommonFactor.h.
+  bool enable_common_factor = true;
+
+  // One canonical spelling for every linear combination of bit-vector
+  // terms, so that two equal combinations are the same node and share the
+  // circuit built on top of them. See LinearForm.h.
+  //
+  // Off by default. Over a thousand QF_BV, QF_ABV and QF_UFBV files from
+  // the SMT-LIB corpus, at a ten second cap and with each arm run on each
+  // file in turn so both see the same machine, it settles 4 files the
+  // exact encoding does not and loses 26 that it does. What it is for is
+  // the shape where the win is large -- translation validation, where the
+  // same combination is built twice from the two programs being compared.
+  bool enable_linear_form = false;
+
+  // How many atoms a combination may hold before it keeps the spelling it
+  // arrived with. Distributing a constant over a sum writes one multiply
+  // per addend, so this bounds the growth one node can cause; the
+  // combinations this pass exists for hold a handful of atoms.
+  int64_t linear_form_addend_limit = 64;
+
+  // Prove equalities between terms the query applies the same operator to,
+  // and assert the ones that hold, so that the applications collapse into
+  // one. See CongruenceCandidates.h.
+  bool enable_congruence_candidates = false;
+
+  // How many candidate equalities may be put to the solver. Each is its own
+  // small query, so this is what the pass costs when it finds nothing.
+  int64_t congruence_candidate_limit = 64;
+
+  // Conflicts one candidate may take before it is dropped undecided. A
+  // candidate that needs more than this to settle is not one whose proof
+  // was going to pay for itself. Negative removes the budget.
+  int64_t congruence_candidate_conflicts = 20000;
+
+  // Tally operations -- one increment or decrement of a pair's holder
+  // count -- common sub-term extraction may spend per operator before it
+  // stops. Building the tally and repairing it after each extraction are
+  // made of these, so this is the pass's running time in the unit that runs
+  // out: on a staircase of flattened gates, each conjunction a prefix of the
+  // next, the greedy loop otherwise re-nests the chain at the cube of its
+  // length (forty seconds on the pouring.2 CTI queries of the Goel
+  // hardware benchmarks, for a circuit the bit-blaster then built
+  // identically). Sixteen million is under a second, and two orders of
+  // magnitude above what the extraction spends where it pays off.
+  int64_t common_subsum_budget = 16000000;
 
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
-  int64_t bitblast_simplification = 0;
   int64_t size_reducing_fixed_point = 0;
   
 
@@ -81,6 +288,420 @@ public:
 
   // eagerly write through the array's function congruence axioms.
   bool ackermannisation = false;
+
+  // Abstract a read over a long write chain to a fresh variable constrained
+  // by refinement lemmas, instead of expanding the full if-then-else chain.
+  // The depth is how many may-alias write levels a read still expands
+  // eagerly before the rest of its chain is abstracted.
+  bool lazy_write_reads = true;
+  int64_t lazy_write_reads_depth = 2;
+
+  // Incremental solving (docs/incremental-solving.rst): keep one SAT solver
+  // and one bit-blast/CNF encoding alive across (check-sat) calls, asserting
+  // retractable formulas as SAT assumptions instead of re-solving from
+  // scratch.
+  //
+  // AUTO -- the default -- lets the session switch itself on at its first
+  // (push), subject to the engagement threshold below; sessions that never
+  // push are untouched. ON engages the driver from the first solve, whether
+  // or not the input ever pushes. OFF keeps every solve on the batch
+  // pipeline, a pushing input included; the frontend's per-level verdict
+  // cache, which is not the driver, keeps working either way.
+  enum class IncrementalMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  IncrementalMode incremental_mode = IncrementalMode::AUTO;
+
+  // The real-solve ordinal at which an automatically incremental SMT-LIB
+  // session starts using the persistent driver. -1 selects the measured
+  // per-logic policy (QF_BV/QF_ABV: 32; other/unknown logics: 3), 1 engages
+  // on the first solve, and 0 disables automatic driver engagement without
+  // disabling the frontend's per-level verdict cache. --incremental=on always
+  // engages from the first solve and ignores this threshold, and
+  // --incremental=off never engages whatever it is set to.
+  int64_t incremental_auto_engage_at = -1;
+
+  // Emit fine-grained per-check and cumulative measurements for the
+  // incremental driver. Kept separate from the general -s diagnostics so
+  // profiling is not distorted by verbose pass/backend output.
+  bool incremental_profile = false;
+
+  // Run only the persistent assumption/refinement core. This disables the
+  // fitted cross-level preprocessing, promotion, first-solve shortcuts and
+  // adaptive backend policies, but deliberately keeps memory-relief epoch
+  // rotation and every theory-correctness mechanism.
+  bool incremental_core_only = false;
+
+  // Diagnostic oracle for the CBP level trail: discard the engine on every
+  // stack divergence and re-feed the surviving prefix, as the pre-trail
+  // implementation did. This is intentionally off in normal solving.
+  bool incremental_cbp_reset = false;
+
+  // Explicit --incremental starts before there is any persistent state to
+  // reuse. On a very large first stack, building the cross-level CBP engine
+  // can cost more than the only solve; defer that bootstrap until a later
+  // real check. 0 disables the deferral.
+  int64_t incremental_cbp_bootstrap_limit = 100000;
+
+  // How many DAG nodes the cross-level CBP engine may retain for the live
+  // stack before it stops accepting levels. Charged against what the engine
+  // actually holds -- levels share subgraphs by identity, so this is the
+  // union over live levels, not the sum of their sizes. The default is the
+  // measured policy; the override exists so the cap can be reached in a
+  // test without a hundred-thousand-node file.
+  int64_t incremental_cbp_feed_cap = 200000;
+
+  // A relief rebuild re-derives the whole base semantically -- equality
+  // propagation, substitution and constant-bit propagation over every base
+  // conjunct at once -- before re-encoding it. That is worth doing on a base
+  // the pass can actually digest and is unbounded work on one it cannot, so
+  // it is skipped once the base passes this many DAG nodes; the raw base is
+  // re-encoded instead, exactly as it is for array bases and for the three
+  // rebuild reasons that are not about size. 0 skips it always.
+  int64_t incremental_base_resimplify_limit = 100000;
+
+  // The persistent encoding grows monotonically within an epoch; when the
+  // solver's variable count passes this limit AND most encodings belong to
+  // popped, never-returning content, the complete semantic/AIG/SAT encoding
+  // epoch is rotated and reconstructed from the live stack. 0 disables this
+  // SAT-size trigger; the independent semantic-cache trigger below may still
+  // rotate.
+  int64_t incremental_reencode_limit = 1000000;
+
+  // Approximate DAG-node charge at which the driver exactly compares the
+  // union pinned by semantic caches with the latest live stack. If dead
+  // cached structure is at least four times the peak live union, rotate the
+  // complete semantic/AIG epoch. Separate from the SAT-variable threshold so
+  // diagnostic SAT limits do not turn into unrelated semantic policy knobs.
+  // 0 disables semantic-cache-triggered relief.
+  int64_t incremental_semantic_cache_limit = 1000000;
+
+  // Promote a pushed level that has sat identical at the same depth for
+  // many consecutive solves to permanent unit clauses: its assumption
+  // disappears and its clauses join root-level preprocessing. A later
+  // retraction of a promoted level restarts the solver, with the
+  // stability threshold doubling on each such demotion.
+  bool incremental_promote_units = true;
+
+  // Decide whole-array equality/disequality (the extensional theory of
+  // arrays) with the lemmas-on-demand procedure of Brummayer & Biere
+  // (JSAT 2010). Runtime semantic option; it must be set before a
+  // whole-array equality is constructed. Construction preserves an opaque
+  // ARRAY_EQ, which is lowered only after the complete query is assembled.
+  bool enable_array_equality = false;
+
+  // Decide nonzero-arity uninterpreted functions over Bool, BitVec, declared
+  // sorts, RoundingMode and FloatingPoint using dynamic Ackermann refinement.
+  // An SMT-LIB logic containing UF enables it; this runtime option also lets
+  // callers enable the theory for inputs whose declared logic omits UF.
+  bool enable_uninterpreted_functions = false;
+
+  // How many congruence lemmas one refuted candidate may install before the
+  // solver is asked again; 0 is unlimited. Every conflict a candidate exposes
+  // is refuted by that same assignment, so installing several together trades
+  // clauses for whole SAT calls.
+  //
+  // Unlimited, which is what Bitwuzla does. The cap used to be 8, chosen on
+  // synthetic collision and pigeonhole families of 30..100 applications
+  // where it beat 1/2/4/16/32/unlimited and unlimited was the worst: there,
+  // draining every conflict installs most of the quadratic congruence
+  // encoding a round at a time. The corpus does not have that shape. On the
+  // 42 hardest Certora queries (256-bit contract verification, a few dozen
+  // applications per declaration, wide arithmetic abstracted), every round
+  // is a SAT call over a million-clause instance and what a candidate
+  // exposes is a handful of conflicts, so the cap only added rounds: at 60s,
+  // 8 solved 28 of the 42, 16 and unlimited solved 30, and with the
+  // quotient-threshold schemas below unlimited solved 34. Setting 1
+  // restricts each candidate to one installed congruence lemma.
+  //
+  // A cap that doubles after each refuted candidate was tried against a
+  // fixed one -- small while a candidate is still cheap to replace, growing
+  // as the rounds show it is not -- and landed within noise, in opposite
+  // directions on two corpus sweeps. That was measured while the fixed cap
+  // was still 8; against unlimited there is nothing left for a schedule to
+  // withhold.
+  unsigned uf_lemmas_per_round = 0;
+
+  // Whether to install a declaration's pairwise congruence constraints before
+  // the first solve instead of waiting for a candidate to earn them.
+  //
+  // AUTO -- the default -- selects declarations whose pair count the policy
+  // predicts is worth encoding up front, cheapest first, until the budget
+  // below is spent. ON selects every declaration whatever the count. OFF
+  // installs no congruence clause before the first solve, so a refuted
+  // candidate has to earn each one. The dynamic checker runs in every mode,
+  // so an eagerly encoded declaration that still produced a conflict would
+  // be caught rather than silently answered.
+  enum class UFEagerMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  UFEagerMode uf_eager_mode = UFEagerMode::AUTO;
+
+  // The AUTO budget, in congruence constraints. A declaration costs
+  // C(v, 2) + c*v, where c counts its applications whose actuals are all
+  // constants: two such applications either are the same hash-consed handle
+  // or differ in some position, so they never need a constraint between them.
+  //
+  // Swept over 363 QF_UFBV benchmarks (every seventh of the local corpus,
+  // 30s each, settings interleaved so none sits systematically early in the
+  // schedule). Solved, of 363:
+  //
+  //   off  253 | 128  268 | 256  281 | 512  271 | 1536  247 | 4096  250
+  //
+  // The curve is unimodal: a little eager congruence beats none by a wide
+  // margin, and a lot is worse than none, because the declarations a large
+  // budget buys are the expensive ones whose pairs mostly go unused. Rerun
+  // at 256 against 4096 it is 287 against 251 solved, 39 files gained
+  // against 3 lost, and 16% less wall clock, with no verdict disagreeing.
+  //
+  // The counterweight, recorded because it is the evidence the previous
+  // value was chosen on: a synthetic family of n applications that all
+  // collide wants every one of its C(n, 2) pairs, so 256 declines it and it
+  // slows down several-fold. Nothing in the tree pins that family, and the
+  // corpus is what the default should serve; --uf-ackermann-budget restores
+  // the old behaviour for a query known to be that shape.
+  unsigned uf_eager_budget = 256;
+
+  // How many rounds a lazily-decided declaration may keep breaking congruence
+  // before the rest of its relation is stated in one go. Each lazy round is
+  // a whole re-solve, so a declaration that breaks again and again is paying
+  // that price for a few pairs at a time; past this many rounds it is cheaper
+  // to state every pair it has left, which is what eager would have done from
+  // the start, and be done.
+  unsigned uf_lazy_round_limit = 8;
+  // Cap on the pair count at which a persistently-breaking declaration is
+  // fully Ackermannised (fullLazyCongruence). The fallback exists to finish
+  // a small function in one round rather than many, but on a large function
+  // it emits n(n-1)/2 congruence clauses -- 154,307 on one cpachecker file --
+  // and stalls the SAT solver. The ongoing lazy loop is O(n) per round
+  // (star+chain) and terminates via the earned-set dedup, so a large function
+  // is better left lazy. Measured over the multi-query benchmarks, gating
+  // this way is +29 files / -11% PAR2 / 0 losses. Full-expand only when
+  // n(n-1)/2 does not exceed this; 0 never full-expands, a very large value
+  // always full-expands.
+  unsigned uf_lazy_full_expansion_pairs = 256;
+
+  // Whether a large declaration that keeps breaking congruence escalates to a
+  // transitive closure over the committed model instead of staying purely
+  // lazy. The default path groups a declaration's applications by the model
+  // value of their argument tuple, so it relates only applications whose
+  // arguments the model already made equal; a nested (f (g a)) and (f (g b))
+  // stay unrelated until a later round has forced (g a) = (g b), so every
+  // layer of nesting costs a round. On a large function that keeps breaking,
+  // that is thousands of rounds -- fullLazyCongruence would end it in one but
+  // is gated off for large n (see uf_lazy_full_expansion_pairs), so it stays
+  // lazy and spins.
+  //
+  // ON fills exactly that gap: once such a declaration has broken
+  // uf_lazy_round_limit rounds and is too large to Ackermannise, the closure
+  // states the congruences a nested equality will break next round -- the
+  // pairs the lazy path would re-discover one round at a time. Every lemma is
+  // the same congruence axiom the default path states, so it cannot change an
+  // answer; it trades stating a pair now for a re-solve later. Measured
+  // unconditionally (from the first round, every declaration) it is a net loss
+  // -- the predictive lemmas perturb the SAT search on files that do not need
+  // them -- which is why it is gated behind the round limit and the size gate.
+  //
+  // ON escalates every large stuck declaration (past uf_lazy_full_expansion_
+  // pairs). AUTO is more selective: it escalates only declarations with at
+  // least uf_congruence_closure_min_apps applications, the range where the
+  // closure measured a robust win. A corpus characterisation found the files
+  // it helps carry one UF function of 475-1118 applications, while healthy
+  // files sit at a median of 33; escalating on everything past ~23 (the ON
+  // gate) is what made ON marginal. See congruenceClosureLemmasFromModel.
+  //
+  // AUTO by default. Measured over the multi-query corpus it fires on only the
+  // ~3% of files with a >= min_apps function and provably touches nothing else:
+  // the rescues it produces carry a 475- or 1118-application function, while
+  // every near-timeout file that moved in a run had under 400 -- run-to-run
+  // boundary noise the closure never ran on. So it is a small clean positive
+  // (a couple of robustly rescued files, no answer disagreement, PAR-2 within
+  // noise), which is why it is on at AUTO rather than left off.
+  OptionMode uf_congruence_closure = OptionMode::AUTO;
+  // In AUTO, the least applications a declaration must have before its
+  // congruence is escalated to the closure. Set from the characterisation
+  // above: the robust winners start around here, and the corpus's healthy
+  // files are far smaller, so this is what keeps AUTO off the medium functions
+  // ON fires on. Ignored under ON (which escalates every large one) and OFF.
+  unsigned uf_congruence_closure_min_apps = 400;
+
+  // Whether a lazy round extends the running solve in place -- registering
+  // the lemma's atoms, rebuilding the exact core, encoding the lemma into the
+  // SAT solver that has been running all along -- or starts a new solve over
+  // the query and everything earned so far. In place keeps every clause the
+  // SAT solver has learned and every no-good the arithmetic has derived; off
+  // is the fallback the solve takes anyway when the theory propagator holds
+  // its context, kept selectable so that it stays tested.
+  bool uf_lazy_in_place = true;
+
+  // How many index comparisons the eager array-equality arm may introduce
+  // before the solve is left to refinement. Counted by
+  // arrayCongruenceEstimate, which charges only the comparisons that survive
+  // constant folding, so a query whose indexes are mostly literals is judged
+  // on the work it actually causes rather than on how many reads it happens
+  // to contain.
+  //
+  // 4000 admits the whole array-equality band that measurement says is worth
+  // taking -- the store-permutation queries that pay for the arm score up to
+  // 1830 -- with room above it. The value is a ceiling on a cost, not a
+  // target: nothing is gained by being nearer it. --ackermanize is a request
+  // and ignores this; 0 refuses every unasked selection.
+  unsigned array_eager_budget = 4000;
+
+  // Whether to bias the first candidate so that the scalars the congruence
+  // checker reads start out pairwise different.
+  //
+  // The checker's work is driven by collisions: two applications whose
+  // argument tuples read the same value and whose results do not. A solver
+  // left to its own default phase has no reason to spread unconstrained
+  // arguments out, so the first candidate collides on many of them at once
+  // and each collision costs a lemma and a round. A phase hint is advisory --
+  // it moves the search order and nothing else -- so biasing those scalars
+  // apart can only change how quickly an answer is found, never which answer.
+  //
+  // On by default. Measured with the rest of the current UF defaults on the
+  // Certora corpus at 30s: 51 of the 79-file regression sample solved with
+  // the hints against 49 without (three gained, one lost), and 35 of the 42
+  // hardest files at 60s against 34, with the total time down by a tenth
+  // in both.
+  bool uf_phase_hints = true;
+
+  // Ask the congruence checker about a candidate the bit-vector abstraction
+  // has just refined, rather than only about a faithful one, so that the
+  // congruence lemmas the candidate exposes go in beside the abstraction's
+  // clauses. See CallSAT_ResultCheck.
+  bool uf_check_during_bv_refinement = true;
+
+  // The carrier width given to a sort introduced by (declare-sort S 0).
+  //
+  // An uninterpreted sort has no operations but equality, so a query
+  // mentioning k terms of that sort is satisfiable exactly when it is
+  // satisfiable over a domain of k elements. Any carrier with at least k
+  // values therefore answers it, and a carrier with more values than the
+  // query can distinguish costs only the bits nothing constrains -- so
+  // over-approximating is sound and only under-approximating is not.
+  //
+  // The width has to be fixed when the sort is declared, before any term of
+  // it exists, so it cannot be derived from k. 16 bits admits 65536 distinct
+  // elements, which is far beyond the number of terms of a single
+  // uninterpreted sort in practice; raise it if a query ever needs more.
+  unsigned uf_sort_width = 16;
+
+  // Narrow the result sort of a UF declaration whose applications are used
+  // only for equality comparisons (both sides of the same declaration).
+  // Reducing a 256-bit result to ceil(log2(N+1)) bits cuts the number of
+  // AIG nodes per congruence constraint from ~511 to a handful. The
+  // analysis is conservative: any non-equality use disqualifies the
+  // declaration. Enabled by default; set to false if it causes trouble.
+  bool uf_narrow_results = true;
+
+  // Before lowering replaces each application by a fresh symbol, read the
+  // equalities the query states at the top level and rewrite the rest of it
+  // under them, applications included: `x = 5` sends `(f x)` to `(f 5)`,
+  // `a = (f y)` sends every `a` to `(f y)`, `(f 3) = 0` sends every other
+  // `(f 3)` to 0. Lowering then protects the scalars it introduces from the
+  // simplifier, so this is the one point where such a fact can cross an
+  // application; see UFPreLowering. Verdict-preserving: the defining
+  // conjunct is kept, so no model is lost or invented.
+  //
+  // AUTO runs it unless the query has Real content. The pass was written
+  // for and measured on QF_UFBV, where it is a large win; on the Real path
+  // it is a consistent loss -- across QF_UFLRA families it costs between a
+  // third and a half of the runtime of the files slow enough to measure,
+  // and solves fewer of them -- because those queries reach an answer
+  // through refinement rounds the rewriting does not shorten. ON forces it
+  // on a Real query anyway; OFF is the way to measure without it.
+  // See OptionMode above for what AUTO promises.
+  OptionMode uf_propagate_equalities = OptionMode::AUTO;
+
+  // Whether the pass above first asks the Boolean skeleton what it forces
+  // (see SkeletonPreproc) and reads those facts too. A query that states
+  // `x = 5` only under an implication its structure resolves is common in
+  // the UF corpus -- every top-level assertion of a verification query is a
+  // guarded implication -- and without this the fact never reaches (f x).
+  // Distinct from --skeleton-preproc, which runs after lowering and cannot
+  // cross an application; this one is on by default for exactly that reason,
+  // and costs one SAT call over the skeleton per UF solve.
+  //
+  // AUTO follows the same rule as the pass it feeds, and for the same
+  // measurements: on unless the query has Real content. Asking the skeleton
+  // is only useful if the facts it returns are then propagated, so leaving
+  // this ON while the pass above resolves to off buys a SAT call and
+  // nothing else.
+  OptionMode uf_skeleton_preproc = OptionMode::AUTO;
+
+  // Whether a solve with uninterpreted functions abstracts its wide
+  // multiplications, divisions and remainders (see --bv-term-abstraction)
+  // without being asked to by name.
+  //
+  // AUTO -- the default -- turns the abstraction on for a UF solve whose
+  // root holds a BVMULT, BVDIV or BVMOD at or above --bv-abstraction-width,
+  // and leaves every other solve exactly as the general flag says. ON and
+  // OFF decide it for every UF solve. The general flag is off by default
+  // because on plain bit-vector workloads the abstraction was measured as a
+  // wash; the UF corpus is a different population -- 256-bit contract
+  // verification queries with a handful of products and quotients each,
+  // most of which the search never needs exactly -- and there it is the
+  // difference between finishing and not: with it Bitwuzla, which abstracts
+  // these operations unconditionally, decides
+  // QF_UFBV/20241113-Certora/0884 in 3s, and without it in 96s.
+  enum class UFAbstractionMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  UFAbstractionMode uf_bv_term_abstraction = UFAbstractionMode::AUTO;
+
+  // When the policy above abstracts, it also admits the quotient-threshold
+  // schemas (--bv-term-abstraction-schema-groups quotient-thresholds) for
+  // that solve, unless the groups were named on the command line. The
+  // Certora queries compare quotients against thresholds far more often than
+  // they divide by a power of two or by zero, which is what the base group's
+  // division facts cover; with the base group alone the refinement spends
+  // its rounds on value lemmas and then encodes the divider exactly.
+  // Measured on the 42 hardest such queries at 60s: 28 solved with the base
+  // group, 30 with this one added, and 34 with the lemma cap above lifted as
+  // well. Off, the policy leaves the groups exactly as configured.
+  bool uf_quotient_threshold_schemas = true;
+
+  // For declarations whose results appear only in equality contexts, add
+  // the reverse implication (= result_i result_j) => (= arg_i arg_j) in
+  // the eager congruence encoding. This asserts injectivity, giving the
+  // SAT solver bidirectional propagation between argument and result
+  // equalities.
+  //
+  // Congruence itself is entailed by the query; its converse is not. So this
+  // is the one thing the lowering installs that changes what the encoding
+  // means: it describes the query with injectivity conjoined. Only models are
+  // lost by that, so a `sat` found over it is a model of the query and needs
+  // nothing done to it, while an `unsat` refutes the strengthened query and
+  // may be the assumption's rather than the query's.
+  //
+  // So it is installed behind one activation symbol and assumed rather than
+  // asserted: a refutation that used the assumption is taken back and the
+  // query decided without it, which makes the flag verdict-preserving. See
+  // STPMgr::solveRetractingInjectivity for the rule and STP::TopLevelSTP for
+  // the case it cannot cover. Off by default, and not free: what it buys is
+  // faster model-finding on a query whose functions are injective anyway, and
+  // it costs a second search on one that is not.
+  bool uf_inject_args = false;
+
+  // Replace a (distinct x1 ... xn) whose operands are variables occurring
+  // nowhere else with the strict chain x1 < x2 < ... < xn. Every permutation
+  // of such operands maps the formula to itself, so fixing one of the n!
+  // orderings loses no answer, and n-1 comparisons replace n(n-1)/2
+  // disequalities that a bit-blaster would otherwise have to order for
+  // itself. Batch pipeline only: the guard is re-checked against each
+  // solve's own formula, so a later assert that mentions an operand simply
+  // stops the rewrite from applying on the next solve.
+  bool distinct_ordering = true;
 
   // construct the counterexample in terms of original variable based
   // on the counterexample returned by SAT solver
@@ -96,9 +717,7 @@ public:
 
   // print the input back
   bool print_STPinput_back_flag = false;
-  bool print_STPinput_back_C_flag = false;
   bool print_STPinput_back_SMTLIB2_flag = false;
-  bool print_STPinput_back_SMTLIB1_flag = false;
   bool print_STPinput_back_CVC_flag = false;
   bool print_STPinput_back_dot_flag = false;
   bool print_STPinput_back_GDL_flag = false;
@@ -107,21 +726,976 @@ public:
 
   // output flags
   bool output_CNF_flag = false;
-  bool output_bench_flag = false;
 
   /* Bitblasting options */
 
+  // Hard cap on the AND gates the batch bit-blaster may build for one query.
+  // -1 (the default) is no limit and leaves the blaster exactly as it was;
+  // 0 gives up before the first gate. That is the same -1/0 convention
+  // `--max-num-confl` and `--max-time` use, and deliberately so: a reader
+  // who transfers their intuition here must not get the opposite of what
+  // they asked for. Exceeding the cap abandons the query through the
+  // soft-timeout path, so the answer is the same one a `--max-time` expiry
+  // gives -- `unknown` on stdout in SMT-LIB mode (`Unknown.` in the CVC
+  // language) with exit status 0, and SOLVER_UNKNOWN from the library.
+  // (get-info :reason-unknown) is what tells this budget from the clock.
+  //
+  // The cap governs the transient AIGs a solve builds -- the batch bit-blast
+  // in ToSATAIG::bitblast(), the optional `--aig-core-simplification` pass
+  // (which simply keeps its input when the cap fires), and the exact AIG used
+  // when a bit-vector abstraction gives up. It is NOT enforced on the
+  // incremental driver's persistent encoder, whose AIG outlives the check
+  // that grew it and cannot be abandoned mid-blast; engaging that driver with
+  // a budget set warns once on stderr rather than pretending the cap is in
+  // force.
+  //
+  // It bounds the blast, not the process: CNF conversion (Aig_ManDupDfs plus
+  // DAG-aware rewriting) and the SAT search itself allocate on top of it.
+  int64_t aig_node_budget = -1;
+
+  bool bv_eq_abstraction = false;
+  // Whether an equality one side of which the blast knows entirely is
+  // abstracted along with the rest (off). A comparison against a constant
+  // is one AND over the term's bits, which the solver propagates through;
+  // a record of it is a free Boolean the congruence refinement has to pin
+  // one round at a time, and buys nothing for the exact form it defers.
+  // On the QF_FP flux-balance benchmarks, whose mass-balance rows are
+  // 128-bit sums equated with zero, leaving those equalities to their
+  // comparators solves one more of 275 and takes a sixth less time over
+  // the queries both settings decide; on floating-point queries raised by
+  // symbolic execution of numerical libraries it is worth three solves of
+  // 1,241 and 7% of the PAR2.
+  bool bv_eq_abstraction_constant_side = false;
+
+  // Let the LRA theory drive the SAT search instead of judging complete
+  // models after it, where the backend can host a theory propagator.
+  // On by default: with the backend checking the tableau on partial
+  // assignments, the search learns a cross-row conflict where it arises
+  // rather than after a whole model has been built on top of it. Measured on
+  // the SMT-LIB QF_LRA and QF_UFLRA sets at twenty seconds: 938 to 1018 and
+  // 1234 to 1240 solved, no answer changed. CaDiCaL and CryptoMiniSat host
+  // the propagator; MiniSat, which hosts none, a CryptoMiniSat without the
+  // IPASIR-UP interface, or one asked for more than one thread runs the
+  // full-lazy loop regardless.
+  bool lra_theory_propagation = true;
+
+  // Drive the propagator's partial checks with a double-precision simplex
+  // (the engine's advisory floating-point tier), the exact core consulted
+  // only to re-derive its conflicts and to judge complete assignments. Every
+  // certificate and every model stays exact. On by default (medians of
+  // three over 3,037 QF_LRA and QF_UFLRA files, no answer disagreement):
+  // +38 QF_LRA files at 20 s, QF_UFLRA level, the typical file a quarter
+  // faster. =0 selects the exact core alone.
+  bool lra_float_driver = true;
+  // When the float tier's live tableau grows past this multiple of its
+  // pristine (as-built) nonzero count, the current query is re-solved on the
+  // exact driver from its start. A handful of cpachecker `cilled` files
+  // rebuild the incremental float tableau every round until its fill reaches
+  // tens of times pristine and it does not terminate, while the exact driver
+  // settles each in under a second; degrading a check mid-solve cannot help,
+  // because the giant tableau is already built. The exact core certifies every
+  // float result, so the reroute is verdict-preserving by construction -- it
+  // only changes the runtime. A healthy incremental solve stays near 1.3x, so
+  // a multiple well above that separates the pathology cleanly. 0 disables the
+  // reroute. On at 4 since it measured no harm at 30 s and a clean gain at
+  // 120 s: over the whole multi-query corpus at 30 s it is +1 solved / PAR-2
+  // within noise / no answer disagreement, and on a harder subset at 120 s
+  // it is +5 solved (43->48) / PAR-2 -15.4% / no disagreement. Paired with
+  // the floor below, which is what keeps it from firing on small healthy
+  // problems. Set by --lra-float-reroute.
+  unsigned lra_float_reroute = 4;
+  // Absolute floor, in live nonzeros, the tableau must also exceed before a
+  // reroute fires. The fill ratio alone is a poor detector: a small healthy
+  // problem easily exceeds any multiple of its tiny pristine count -- a corpus
+  // scan found 134 files tripping ratio 8, of which 131 solved on the float
+  // driver anyway, all with live fill under 400K, while the genuine blow-ups
+  // reach millions. The floor tells the two apart, so a query reroutes only
+  // when its tableau is both growing pathologically (the ratio) and large in
+  // absolute terms (this). 0 means no floor. Default 500,000: the false
+  // positives above sat under 400K live nonzeros, the genuine blow-ups reach
+  // millions, so this sits cleanly between them. Set by
+  // --lra-float-reroute-floor.
+  unsigned lra_float_reroute_floor = 500000;
+  // Runtime latch, not a user setting: once a query has rerouted, the exact
+  // driver is kept for the rest of the session (the file has shown itself
+  // pathological for the float tier). The coordinator reads it alongside
+  // lra_float_driver when it chooses the driver. Reset per top-level solve is
+  // deliberately not done -- an incremental session that blew up once stays on
+  // the exact driver.
+  bool lra_force_exact_driver = false;
+  // Experimental controls for permanent arithmetic extensions. Zero chooses
+  // (retain under lra_persistent_state, reconstruct otherwise), one retains
+  // the context, two reconstructs it, and three retains IDs/registration order
+  // but resets arithmetic search state.
+  unsigned lra_extension_mode = 0;
+  // Arithmetic row insertion only; Boolean atoms and source order are unchanged.
+  // 0: registry order, 1: reverse, 2: sparse first, 3: dense first.
+  unsigned lra_row_order = 0;
+  bool lra_extension_restart_float_basis = false;
+  bool lra_extension_restart_sat = false;
+  // Reconstruct rejected floating-point conflict weights on their support.
+  bool lra_conflict_recovery = true;
+  // Scan affected substitution rows for blocked repairs before pivoting.
+  bool lra_early_conflicts = false;
+  // Bind and connect arithmetic after CNF generation, before the first search.
+  bool lra_first_search = false;
+  // Advise only the sign of SAT's selected decision variable, with no extra
+  // checks. On by default when theory propagation and the backend's advisor
+  // API are available. False restores the backend's own decision polarity.
+  bool lra_decision_polarity = true;
+  // An explicit request must report missing prerequisites instead of silently
+  // falling back. The CLI records whether the option was supplied; library
+  // callers can set this alongside lra_decision_polarity to require support.
+  bool lra_decision_polarity_explicit = false;
+  // Bounded sum-of-infeasibilities line search, with ordinary repair fallback.
+  bool lra_soi = false;
+  // Keep float-tier rows whose basic variable has no asserted bound out of
+  // the substitution tableau's column lists until their first bound, the
+  // exact tier's dormancy discipline.  Off by default.
+  bool lra_float_dormant_rows = false;
+  // With dormancy on, only rows at least this wide (cells at the time the
+  // decision is made: structural nonzeros for original rows) start dormant.
+  // Narrow rows are cheap to keep live and cost a normalisation to wake for
+  // no saving; the expensive rows to rewrite are the wide ones.  0 = every
+  // row.  The in-solver analogue of the abstraction's min-terms threshold.
+  std::int64_t lra_float_dormant_min_cells = 0;
+  // Fresh factorized float tiers a single solve may build after the double
+  // tier trips its infinitesimal cap.  A tier that trips on its own first
+  // check has no pivot history to blame, and another identical one cannot
+  // end differently; unbounded, one solve was measured building 18,094 of
+  // them.  Past the budget the solve degrades to exact partial checks.
+  // 0 = unbounded.
+  std::int64_t lra_float_promotion_budget = 4;
+  // Whether a satisfying assignment has accidental value coincidences broken
+  // before it is published. Two variables sharing a value by chance are one
+  // pair the lazy congruence round has to constrain and one round to state
+  // it, for a query that never asked them to be equal; separating them
+  // inside the slack the asserted bounds leave removes the pair instead.
+  //
+  // AUTO runs it when the query has a declaration whose congruence is
+  // decided from model values, which is the only reader a coincidence can
+  // mislead. Measured over the non-incremental benchmarks at three-run
+  // medians: on QF_UFLRA it is worth two solves and 11.8% of PAR2; on QF_LRA,
+  // which has no such reader, it gains nothing, costs two files and half a
+  // percent of PAR2. A flat default either way takes one of those.
+  OptionMode lra_separate_model_values = OptionMode::AUTO;
+
+  // Keep the coordinator, CNF and SAT solver of a Real solve alive across
+  // check-sats instead of rebuilding them per check (a pushed level becomes
+  // an extension frame retracted on pop). Off by default: the session is
+  // sound but not yet faster -- it still rebuilds the exact core per
+  // extension and accumulates clauses across checks, so on the many-check
+  // QF_LRA incremental files it engages on it is slower than the batch path,
+  // and the UF-heavy sets it would most help are declined for now.
+  bool lra_incremental_session = false;
+  // Extend arithmetic registrations and preserve bases inside a Real session.
+  // Also selects that session and its before-search binding hook.
+  bool lra_persistent_state = false;
+
+  // Recognize asserted direct-OR ReLUs, propagate exact intervals through
+  // affected definitions and eliminate phases proved by those intervals.
+  OptionMode lra_relu_bounds = OptionMode::AUTO;
+  // Original-row LP proposals, accepted only by exact model/ray checks.
+  bool lra_highs_lp = false;
+  // Off by default. Attempted on queries with an asserted exact binary domain,
+  // it measured as paying for itself nowhere: over the whole corpus
+  // all-HiGHS-on was the worst of five settings and HiGHS-off marginally the
+  // best, and on ONNX network queries where MIP applies, mip-on and mip-off
+  // solved the same 6 of 20 in identical time, no file differing. General LP,
+  // cuts and replay are opt-in as well. Enable with --lra-highs-mip=1. ReLU LP
+  // (lra_relu_lp) stays AUTO and query-gated.
+  bool lra_highs_mip = false;
+  bool lra_highs_cuts = false;
+  unsigned lra_highs_cut_limit = 64;
+  bool lra_highs_replay = false;
+  unsigned lra_highs_replay_nodes = 128;
+  unsigned lra_highs_seconds = 5;
+  // Check bounded property alternatives in their own input boxes, preserving
+  // correlations through affine portions of the asserted ReLU graph.
+  bool lra_relu_cases = false;
+  unsigned lra_relu_cases_seconds = 60;
+  // Selective LP objectives; accepted bounds always pass exact residual checks.
+  // Implies ReLU recognition. Requires an ENABLE_HIGHS build.
+  OptionMode lra_relu_lp = OptionMode::AUTO;
+  // AUTO tries at most 16 LP objectives/probes without tightening rounds.
+  // Its deadline is also capped by the explicit LP and query deadlines.
+  unsigned lra_relu_auto_seconds = 1;
+  unsigned lra_relu_lp_rounds = 8;
+  unsigned lra_relu_lp_seconds = 60;
+  unsigned lra_relu_lp_call_seconds = 2;
+  // Bounded phase search guided by the relaxation, with conditional exact
+  // refutations returned as clauses. Independent of LP bound tightening.
+  bool lra_relu_branch = false;
+  bool lra_relu_property_branches = true;
+  unsigned lra_relu_branch_nodes = 128;
+  unsigned lra_relu_branch_seconds = 60;
+  bool lra_dense_recovery = false;
+  // AUTO enables reconstruction only for eligible ReLU LP/branch proposals;
+  // ON also enables affine definition elimination on ordinary LRA queries.
+  OptionMode lra_model_reconstruction = OptionMode::AUTO;
+  bool lra_replay_screen = true;
+  bool lra_boolean_bounds = true;
+  bool lra_lp_screen = true;
+  bool lra_lp_partial = true;
+
+  // Presolve stage one: a top-level Real conjunct EQ(x, t), x not in t,
+  // defines x. Substitute the definition through the rest of the query and
+  // keep it conjoined, so the definition holds one row while every other
+  // predicate stops mentioning x. The cross-predicate simplification the
+  // bit-vector pipeline gets from PropagateEqualities and the Real path
+  // bypasses. On by default.
+  bool lra_presolve_subst = true;
+  // Optional query-wide substitution guards. Growth counts newly reached AST
+  // nodes plus child links, including tentative rewrites later discarded.
+  // Zero growth disables both guards and preserves the unbounded baseline.
+  std::uint64_t lra_presolve_subst_growth = 0;
+  std::uint64_t lra_presolve_subst_work = 1000000;
+
+  // Presolve stage two: bounds. Unit conjuncts feed a per-variable bound
+  // table, one propagation round derives bounds through multi-variable
+  // rows, a variable whose bounds meet non-strictly is fixed and
+  // substituted (its defining equality kept conjoined), and contradictory
+  // bounds prove the query infeasible outright. The Real analogue of the
+  // bit-vector interval analysis. On by default: suite-wide it gained 42
+  // files and lost 19, with no verdict changed.
+  bool lra_presolve_bounds = true;
+
+  // Presolve stage three: rows. Top-level inequalities over the same
+  // canonical polynomial meet in one group; a conjunct implied by a
+  // stronger sibling is dropped (the sibling stays, so the implication
+  // survives in the query) and contradictory group bounds refute the query
+  // outright. On by default.
+  bool lra_presolve_rows = true;
+
+  // Presolve: propagate top-level truths under the Boolean structure --
+  // every occurrence of a conjunct (or its negation) below other conjuncts
+  // is replaced by its truth value, factory folding the constants exposed,
+  // to a small fixed point. On by default after a suite-wide validation.
+  bool lra_presolve_propagate = true;
+
+  // Presolve: a Real variable occurring in exactly one atom at a pure
+  // polarity leaves that atom free over the reals; it folds to its
+  // polarity's truth and the witness equality realising it is conjoined,
+  // keeping the model complete and handing the Gaussian stage a solved
+  // definition to dissolve. On by default after a suite-wide validation.
+  bool lra_presolve_unconstrained = true;
+
+  // Experimental multi-atom monotone elimination with exact model replay.
+  // Its local worklist is independent of ordinary presolve repetition.
+  bool lra_presolve_monotone = false;
+  std::uint64_t lra_presolve_monotone_work = 1000000;
+
+  // Ordinary presolve rounds, including the first (experimental above 1).
+  // The implementation caps this at 8 for API callers as well as the CLI.
+  unsigned lra_presolve_rounds = 1;
+
+  // Exact-core singleton bounds without auxiliary rows: 0 off, 1 only +1
+  // identities, 2 arbitrary nonzero coefficients. Float keeps its own rows.
+  unsigned lra_direct_bounds = 0;
+
+  // Order all scaled singleton predicates by their structural variable at
+  // the SAT boundary, independently of exact-core direct-bound selection.
+  bool lra_singleton_ordering = false;
+
+  // Re-derive every LRA conflict certificate independently before trusting
+  // it. A self-check, not a solving step: off unless asked for.
+  bool lra_verify_conflicts = false;
+
+  /* Re-derive the canonical form of every exact rational whose construction
+   * already proves it canonical. A self-check on the number layer, not a step
+   * towards an answer. The command-line solver applies this flag, so there
+   * it is off unless asked for; a library caller that never sets
+   * LRA_VERIFY_CANONICAL keeps the budgets' own default, which is on, as the
+   * tests do (see STPMgr::SetLraCanonicalVerification). */
+  bool lra_verify_canonical = false;
+  // One width floor for both abstraction families: equalities and the
+  // abstracted terms (comparisons, ITE, BVPLUS, BVMULT, BVDIV, BVMOD)
+  // all abstract only at or above this operand width.
+  unsigned bv_abstraction_width = 64;
+  unsigned bv_eq_refine_width = 0;
+  bool bv_term_abstraction = false;
+  // BVMULT is one of the operations whose fallback rules out one pair of
+  // operand values at a time. Keep its scope independent of division: the
+  // circuit costs and the workloads which benefit from abstracting them are
+  // materially different.
+  bool bv_term_abstraction_mult = true;
+  // BVDIV and BVMOD share an implementation and a refinement catalogue, but
+  // no longer share BVMULT's scope switch. A caller can therefore leave the
+  // expensive dividers abstract while encoding multiplication exactly, or
+  // vice versa. Both switches default on, preserving the historical scope.
+  bool bv_term_abstraction_divmod = true;
+  // Interface bookkeeping rather than a solver knob: whether a caller named
+  // the DIV/MOD scope itself.
+  //
+  // The older switch above it covered all three nonlinear operations, and
+  // still does when it is the only one given. Once DIV/MOD has been set
+  // explicitly it wins, whichever order the two arrive in -- which is what
+  // the command line does through CLI11's occurrence count, and what the C
+  // interface does through this flag. Without it the C interface would be
+  // last-writer-wins while the command line was not, and the same pair of
+  // settings would mean two different things depending on which one a caller
+  // reached for.
+  bool bv_term_abstraction_divmod_explicit = false;
+
+  // Which of the other abstractable kinds --bv-term-abstraction takes.
+  //
+  // It used to take all of them, and the reason to doubt that looked
+  // strong: an ITE, an addition and a comparison each bit-blast in a number
+  // of gates linear in the width, where a multiplication is quadratic and a
+  // division worse, so abstracting a linear operation saves little and costs
+  // a free variable the refinement then has to pin down. On one 256-bit
+  // industrial query the blaster was handed 82 comparisons, 79 if-then-elses
+  // and 15 additions against 2 multiplications and 6 divisions: 184 free
+  // variables to avoid encoding 8 operations.
+  //
+  // There, turning the three off changed nothing: the refinement ran 35
+  // rounds either way -- the same rounds, over the same 8 arithmetic
+  // abstractions -- and over 400 files of the same family it solved 245
+  // against 247, inside the run-to-run spread. Over 329 SMT-LIB QF_BV
+  // files the abstraction engages on, the same: 204 solved against 203,
+  // PAR2 within half a percent.
+  //
+  // Inside a floating-point circuit it is not nothing. SymFPU lowers one
+  // binary128 operation to hundreds of 106- to 229-bit if-then-elses,
+  // adders and comparisons around one or two multiplications or divisions:
+  // on a KLEE query of 25 such operations the blaster abstracted 348 ITEs,
+  // 30 additions and 4 comparisons against 4 multiplications and 6
+  // dividers, every round refined some 230 of them, and the solve took 34 s
+  // where the arithmetic alone takes 3.4 s and, with the value lemma below
+  // written compactly, 0.4 s. Bitwuzla's abstraction, which this is
+  // measured against, abstracts multiplication, division and remainder
+  // only. Off by default therefore: what the three buy on bit-vector
+  // workloads is noise, and what they cost on floating-point ones is the
+  // whole benefit.
+  bool bv_term_abstraction_ite = false;
+  bool bv_term_abstraction_plus = false;
+  bool bv_term_abstraction_compare = false;
+
+  // Ask the propositional structure what it settles before solving
+  // properly; see SkeletonPreproc. Off by default: what it costs is a SAT
+  // call over a formula the size of the query's Boolean skeleton, and what
+  // it buys depends entirely on whether that structure decides anything.
+  bool skeleton_preproc = false;
+
+  // Replace an assertion where it appears inside another assertion; see
+  // EmbeddedConstraints. Off by default while it is measured.
+  bool embedded_constraints = false;
+  // The ceiling on how many times one of those three may be blocked before
+  // its refinement stops enumerating and encodes the operation exactly
+  // instead. Measured: through about thirty rounds the abstraction is still
+  // two to four times faster than not abstracting, by sixty it is
+  // break-even, and past that it collapses -- a 64-bit factorisation spent
+  // 5816 rounds and ninety seconds on a query the unabstracted solve
+  // answers in five hundredths of one. Zero never escalates, which is what
+  // this was before.
+  //
+  // Thirty-two, because that is what the inherited mask was measured at:
+  // sixteen and thirty-two tied over 287 natural division/remainder
+  // consumers, and sixteen additionally failed to terminate within the
+  // external guard on one 512-bit case that thirty-two answered. The broad
+  // experimental profiles pair their catalogue with sixteen, and select both
+  // as one atomic decision.
+  //
+  // A ceiling and no longer the allowance itself: see the divisor below, and
+  // valueLemmaAllowance() for how the two compose.
+  unsigned bv_term_abstraction_rounds = BV_TERM_ABSTRACTION_DEFAULT_ROUNDS;
+  // Interface bookkeeping rather than a solver knob: whether a caller named
+  // the round ceiling itself, in the same shape and for the same reason as
+  // bv_term_abstraction_divmod_explicit above.
+  //
+  // A profile is an atomic mask/round pair, so applying one writes this field
+  // as well as the schema mask -- which means a caller who set the ceiling and
+  // then chose a profile silently lost the ceiling, while one who did the two
+  // the other way round kept it. The command line cannot reach that, because
+  // CLI11 refuses --bv-term-abstraction-profile alongside
+  // --bv-term-abstraction-rounds outright; only the C interface can, where a
+  // configuration is a sequence of calls rather than one line. Once the
+  // ceiling is named it survives a profile, whichever order the two arrive in.
+  bool bv_term_abstraction_rounds_explicit = false;
+  // Optionally make that a rate instead: `width / this`, floored at one and
+  // capped by the ceiling above. The argument for it is that a blocking
+  // lemma rules out one pair of operand values, so what one is worth falls
+  // away as the operands widen -- one of 2^16 pairs at eight bits, one of
+  // 2^106 at fifty-three -- and a flat allowance therefore means something
+  // quite different at either end. A divisor of eight puts a 53-bit
+  // multiply at six attempts and a 64-bit one at eight.
+  //
+  // Zero, which leaves the flat ceiling as the allowance, because the
+  // argument did not survive measurement. Over 39 floating-point queries,
+  // three interleaved repetitions, at two abstraction widths -- where the
+  // rate gives an allowance of four and of three against the flat
+  // thirty-two, an eight- to tenfold difference in what is spent:
+  //
+  //   width 33   flat 65.5s (52-66)   rate 60.7s (55-63)
+  //   width 24   flat 112.4s (105-116) rate 110.1s (105-130)
+  //
+  // Ranges overlap at both, and at 33 the sign flips between repetitions.
+  // That is not a result, and a default should not move without one.
+  //
+  // The likeliest reason it does not matter is the escalation this shares a
+  // budget with: once giving up is cheap -- see BVExactEncoder, which is
+  // what made the abstraction usable at all -- *when* you give up stops
+  // being worth tuning. The corpus is also all binary32, so the widths the
+  // rate is really aimed at are not in it; someone with 53- or 64-bit
+  // operands may find otherwise, which is why the flag stays.
+  unsigned bv_term_abstraction_value_divisor = 0;
+  // An independent cap on BVDIV/BVMOD value-pair blocking, after the round
+  // ceiling and optional width scaling above have been applied. This
+  // separates the experiment callers actually want to run -- four, eight,
+  // sixteen or thirty-two divider candidates -- from both multiplication and
+  // `bv_term_abstraction_rounds`, which also bounds algebraic-schema
+  // refinement. Zero means no additional cap, preserving every established
+  // profile and the default allowance exactly.
+  //
+  // This is a measurement control, not a recommended policy. On a broad
+  // 417-query floating-point-heavy population, 4 and 8 were clear regressions
+  // and 16 was slower in three interleaved runs. Records frequently settled
+  // after 16 bad candidates but before the old allowance, so repetition count
+  // by itself could not identify when paying for an exact divider would help.
+  unsigned bv_term_abstraction_divmod_value_limit = 0;
+  // A record one of whose operands the blast knew entirely -- a
+  // multiplication by a constant, a division or remainder by one -- has an
+  // exact encoding that is a constant's shift-and-add, tens of thousands of
+  // clauses at 256 bits where a symbolic operand costs half a million. The
+  // value-blocking allowance above was sized for the symbolic case, and on
+  // the Certora queries it spent thirty-two rounds ruling out one dividend
+  // at a time before building an encoding that was cheap all along. Such a
+  // record's allowance is capped here; zero leaves it uncapped.
+  unsigned bv_term_abstraction_constant_operand_limit = 1;
+  // Whether such an operation is abstracted at all (on). Declined, a
+  // multiplication one of whose operands the blast knows entirely, or a
+  // division or remainder by such a divisor, is lowered exactly from the
+  // start: the constant's shift-and-add propagates from the other operand,
+  // where a record costs a refinement round per candidate before it
+  // escalates to that same circuit.
+  //
+  // Measured, declining loses: on the 1,029 queries of
+  // QF_UFBV/20241113-Certora, where such a record is a 256-bit product by
+  // ten billion, it solves 893 against 906 at 60 s, with 41 queries running
+  // more than twice as slow against 23 faster; on two corpora of
+  // floating-point queries it is level. What decides it is the fraction of
+  // these operations a search needs exactly: declining builds every one of
+  // them up front, where a record escalates to the same circuit only when a
+  // candidate is refuted, and a query holding hundreds of them mostly never
+  // does. So the records stay and the cap above governs them, and the knob
+  // is for a query whose wide arithmetic is all by constants and all of it
+  // needed -- flux-balance models are the shape, where declining is worth
+  // five solves of 275.
+  bool bv_term_abstraction_constant_operands = true;
+  // Escalate an abstracted BVMULT a piece at a time rather than all at once:
+  // encode only the bits up to and a little past the lowest one the
+  // candidate got wrong, and come back for more if that does not settle the
+  // query. The low bits of a truncated product depend only on the low bits
+  // of its operands, which is what makes the partial encoding a theorem
+  // rather than a guess -- and is why it is BVMULT alone. A quotient's low
+  // bits depend on the whole of both operands.
+  //
+  // Off by default: its benefit has not been measured, and each partial
+  // encoding repeats the work for all lower bits.
+  bool bv_term_abstraction_inc_bitblast = false;
+
+  // Offer the whole active stack to the exact-stack preprocessor on every
+  // check, not only on an explicitly forced first engagement, and offer it
+  // stacks carrying plain array reads and floating point rather than plain
+  // bit-vectors alone.
+  //
+  // What this is for: the per-level route encodes each level as it arrives
+  // and never simplifies across the stack, so the SAT solver is handed a
+  // formula nobody has been over. Measured on one floating-point query, the
+  // batch pipeline spends 13ms in the simplifier, constant-bit propagation,
+  // unconstrained removal, pure literals and strength reduction, and the
+  // search then costs 10.1s; the per-level incremental route skips all five
+  // and the same search costs 31.1s. Thirteen milliseconds is worth
+  // twenty-one seconds.
+  //
+  // It is safe to offer speculatively. The trial preprocesses into an
+  // assumption-scoped block, adopts it only when the complete DAG at least
+  // halves, and otherwise returns before committing a clause or a model
+  // definition, leaving the caller to continue down the ordinary path.
+  //
+  // Off, because what it buys is not one-signed. Over five KLEE sessions
+  // driven incrementally from the third query, solver seconds:
+  //
+  //                             batch   per-level   with this
+  //   sqr_longdouble-noflow      14.5        46.9        17.2
+  //   sparse_matrices_klee_bug    8.7        53.9        38.4
+  //   libmatheval_sym_f           7.3        42.9        40.7
+  //   vectors_klee                9.3        31.6        47.0
+  //   vectors_klee_bug            8.9        28.5        38.8
+  //
+  // It nearly closes the gap on the first, narrows it on the next two, and
+  // opens it further on the last two -- and never reaches the batch column,
+  // because the block is re-encoded per check where the batch pipeline pays
+  // for its encoding once. Which of those a session gets is not predictable
+  // from anything visible up front, so this is an interface rather than a
+  // new default.
+  //
+  // What it is NOT is a fix for assumptions being weaker than units. That
+  // was the other suspect and it is not the cause: the same query asserted
+  // at base level and inside a pushed scope costs the same to within noise
+  // (1.47s against 1.11s on one, 0.22s against 0.19s on another), while both
+  // sit two to three times above the batch pipeline. The gap is the missing
+  // simplification and nothing else.
+  bool incremental_scoped_preprocessing = false;
+
+  // Run the rewriting passes the batch pipeline runs -- strength reduction
+  // over a derived interval domain, and common sub-sum extraction -- on each
+  // piece the incremental driver prepares.
+  //
+  // The driver trades whole-formula simplification for a retained encoding,
+  // and those two only conflict because what it retains is the encoding of
+  // unsimplified terms. These passes do not force the trade: each is a
+  // function of the piece it is handed and of nothing else, so a rewritten
+  // piece is equivalent to the piece whatever the rest of the stack says now
+  // or asserts later. The result caches beside the rest of preparePiece's
+  // work and the encoding built from it stays valid for the session.
+  //
+  // Unconstrained-variable elimination is deliberately not among them: that
+  // one needs to know what the rest of the formula does NOT contain, and a
+  // later assertion can make it false.
+  //
+  // Off, and the reason is the interesting part: the retainable
+  // simplification is not the valuable simplification. This buys 8% on one
+  // standalone query (1.02s to 0.94s against a batch 0.41s) and nothing at
+  // all on the workload it was written for -- four KLEE sessions driven
+  // incrementally, solver seconds, plain against with:
+  //
+  //   sort_smallest_klee        13.1   13.7
+  //   count_klee                 2.6    2.7
+  //   sort_smallest_klee_bug    17.7   17.7
+  //   sparse_matrices_klee_bug  46.5   48.3
+  //
+  // Nor is the rest of the gap conjuncts being prepared in isolation:
+  // handing the driver the whole stack as a single conjunct, so that its own
+  // simplification sees everything at once, changes nothing (1.04s against
+  // 1.06s) while the batch pipeline is still 2.4x faster on the same
+  // formula.
+  //
+  // What is left is constant-bit propagation over the whole formula,
+  // unconstrained-variable elimination, pure literals and bit-vector
+  // solving -- every one of them a pass whose conclusions depend on what the
+  // formula does NOT contain, and every one therefore invalidated by the
+  // next assertion. The driver trades simplification for a retained
+  // encoding because for this class of pass the trade is forced. Choosing
+  // per session which side of it to be on is the remedy that works.
+  bool incremental_piece_rewriting = false;
+  // Refine abstracted BVPLUS, BVMULT, BVDIV and BVMOD operations with
+  // algebraic facts about every pair of operands whenever the candidate
+  // contradicts one. Off restores the former operation-specific fallback:
+  // exact addition, or one value-pair blocking lemma for multiplication,
+  // division and remainder.
+  bool bv_term_abstraction_schemas = true;
+
+  // Which schema families the master switch above may offer. The default is
+  // `qualified`, the only mask the corpus qualification justified; the broad
+  // profiles are experiments a caller asks for, `all` reproduces the complete
+  // experimental stack, and an empty mask leaves the operation-specific
+  // fallback exactly as the master switch being off does.
+  uint32_t bv_term_abstraction_schema_groups = BV_SCHEMA_GROUP_DEFAULT;
+  // Interface bookkeeping, the twin of bv_term_abstraction_rounds_explicit
+  // above and for the same reason.
+  //
+  // A profile is an atomic mask/round pair, and the ceiling half has been the
+  // caller's once they name it since the ordering was fixed. The mask half was
+  // left last-writer-wins, so the two halves of one pair resolved by opposite
+  // rules: naming a ceiling and then choosing a profile kept the ceiling,
+  // naming a group list and then choosing a profile lost the list. Whichever
+  // rule is right, they should be the same rule, and first-wins is the one
+  // that treats a caller's explicit choice as a choice -- which is what
+  // vc_setSchemaGroups is: a list of families spelled out by name.
+  bool bv_term_abstraction_schema_groups_explicit = false;
+
   // You can select these with any combination you want of true & false.
+  // Variants 1-3 modify the recursive divider. Variant 4 replaces it with a
+  // two-stage shift/subtract circuit that per step computes the borrow
+  // chain once and reuses those carries for the conditional subtraction,
+  // where the recursive circuit pays a full subtractor, a comparison and
+  // up to three multiplexer layers per unrolled level: at 226 bits the
+  // same division falls from 1,015,894 AIG nodes to 458,106, which is what
+  // Bitwuzla's divider costs, and the two-copy fp.div micro query solves
+  // three times faster. It is nonetheless off by default: over 311 KLEE
+  // binary128 queries the smaller circuit solved 287 against 289 with the
+  // recursive one, and on an escalated 256-bit refutation it turns a 39 s
+  // proof into minutes -- the borrow chain hides the word-level slices a
+  // CDCL refutation of a whole division leans on. Fewer gates is not
+  // always an easier formula; the circuit stays selectable for the
+  // workloads it does win.
   bool division_variant_1 = true;
   bool division_variant_2 = true;
   bool division_variant_3 = false;
+  bool division_variant_4 = false;
+  // Variant 5 replaces the divider with restoring long division whose
+  // quotient bit comes from a dedicated comparator per row, the divisor
+  // gated bitwise by that answer instead of restored through multiplexers.
+  bool division_variant_5 = false;
+  // Assert the order laws of each divider as side constraints: b!=0 -> r<b,
+  // r<=a, b!=0 -> q<=a, the b=0 clamps and the b=1 identities. They are
+  // consequences of the circuit that its unit propagation provably cannot
+  // rederive (2026-09-03 division-encoding study).
+  bool division_lemmas = false;
+  // Encode division and remainder through their defining relation instead
+  // of a divider circuit: fresh variables q and r, the constraint
+  // x = y*q + r carried at double width so nothing wraps, and r < y
+  // wherever the divisor is nonzero. The circuit computes nothing; every
+  // quotient bit is the SAT solver's to find.
+  bool division_by_multiplication = false;
+
+  // Encode a division or remainder by a constant through the defining
+  // relation, x = c*q + r with r < c, where the product is the constant's
+  // shift-and-add over the fresh quotient. The restoring divider prunes
+  // against a constant divisor only within each level, so at 256 bits a
+  // 34-bit constant still costs it 510,000 clauses; the relation is a row
+  // per set divisor bit, 22,000 clauses for the same operation. Below the
+  // width the divider is small either way and is left alone.
+  bool division_by_constant = true;
+  unsigned division_by_constant_width = 64;
+  // Measurement arm: encode division and remainder as a free result
+  // constrained only by the term abstraction's schema registry, asserted
+  // eagerly, so the lemmas' propagation can be graded on its own. The
+  // registry deliberately lacks the basic bounds the refiner supplies by
+  // other mechanisms, so this is the lemmas alone, not the abstraction.
+  bool division_abstraction_encoding = false;
+  int division_abstraction_only_lemma = -1; // one registry entry alone
+  unsigned division_abstraction_prefix = 0; // first N entries; 0 = all
   bool adder_variant = true;
   bool bbbvle_variant =true;
   bool upper_multiplication_bound = false;
   bool bvplus_variant = true;
   bool conjoin_to_top = false;
 
-  int64_t multiplication_variant = 1;
+  // Bit-blast the floating-point predicates -- comparisons, equalities and
+  // classifications -- over already-packed operands natively (over the IEEE
+  // bits) instead of via the SymFPU unpacking circuits.
+  bool fp_native_cmp = true;
+
+  // Bit-blast fp.mul under surviving native predicates with the hand-written
+  // packed-operand circuit (BBfpMul) instead of the SymFPU unpacking
+  // circuits.
+  bool fp_native_arith = true;
+
+  // Bit-blast fp.div with the hand-written packed-operand circuit (BBfpDiv)
+  // instead of SymFPU's. Separate from fp_native_arith because the two
+  // answer different questions: SymFPU's multiplier is near-tight, so
+  // native add/mul trades a small circuit win for the word-level
+  // simplifier's much larger one, while SymFPU's divider is a restoring
+  // shift-subtract array and the native one states the defining relation
+  // instead.
+  //
+  // Off by default because a defining relation splits the two answers: it
+  // refutes far faster than the array -- the hard set's unsatisfiable
+  // division queries go from 29 solved to 41 -- and searches far slower,
+  // because nothing computes a witness forward. Satisfiable division files
+  // regress up to 23x with it on, and against a constant divisor the
+  // relation is the larger formula as well: a fresh quotient, a remainder
+  // and the comparator that bounds it, where a restoring array folds one
+  // comparison per step.
+  bool fp_native_div = false;
+
+  // The remaining operations, each with its own switch so its circuit can
+  // be measured against SymFPU's on its own.
+  bool fp_native_minmax = true;   // fp.min, fp.max
+  bool fp_native_pack = true;     // fp.to_ieee_bv
+  bool fp_native_round = true;    // fp.roundToIntegral
+  // fp.sqrt, on since the relation stopped being the pathological case it
+  // was: two roots of one operand under two rounding modes once minted two
+  // relations and searched (x, q1, r1, q2, r2), which is exponential in the
+  // significand and is what kept this off. With one relation per operand
+  // the corpus is level on total time and 4.5x faster at the median on the
+  // files where the encoding decides anything, on a formula a tenth the
+  // size at float64. Unlike division it is never the larger formula on a
+  // whole operand class, because a root has one operand and no constant
+  // divisor to fold against.
+  bool fp_native_sqrt = true;
+  bool fp_native_fma = true;      // fp.fma
+  bool fp_native_conv = true;     // to_fp from a bit-vector, fp.to_ubv/sbv
+  bool fp_native_rem = true;      // fp.rem
+
+  // Where --bb.fp-native-all lands. It sets every switch above rather than
+  // holding a state of its own, so nothing reads this except the code that
+  // applies it; the switches are what the blaster asks.
+  bool fp_native_all = false;
+
+  // Set every native floating-point circuit at once. What
+  // --bb.fp-native-all reaches from the command line, and what a caller
+  // building a manager directly needs to select one encoding or the other.
+  void setNativeFloatingPoint(bool on)
+  {
+    fp_native_all = on;
+    fp_native_arith = on;
+    fp_native_div = on;
+    fp_native_minmax = on;
+    fp_native_pack = on;
+    fp_native_round = on;
+    fp_native_sqrt = on;
+    fp_native_fma = on;
+    fp_native_conv = on;
+    fp_native_rem = on;
+  }
+
+  // Frame width for the native fp.add datapath.
+  //   1  the alignment frame holds a whole significand below the larger
+  //      operand, so nothing shifted for alignment ever leaves it.
+  //   2  the frame holds only a guard, a round and a sticky position below,
+  //      and alignment past that goes to the sticky bit as it already does
+  //      past the clamp. Halves the width the cancellation shift and its
+  //      leading-zero count run over. The default: never the larger of the
+  //      two on the hard floating-point set, and two more files solved
+  //      there.
+  int64_t fp_add_variant = 2;
+
+  // Assert what normalising by a leading-zero count means -- the top bit of
+  // the shifted vector is set exactly when the input is nonzero. Two clauses
+  // beside each of the native circuits' normalising shifters, which reach
+  // the same fact only once every stage select has resolved.
+  bool fp_normalise_lemma = true;
+
+  // Recognise fp.isZero(fp.add ...) and encode the observed zero-result
+  // condition directly instead of constructing and packing every result bit.
+  // Enabled by default, but only active when native arithmetic is selected.
+  bool fp_native_add_iszero = true;
+
+  // Native floating-point abstraction/refinement (FpAbstraction): replace
+  // selected floating-point operations by same-sort surrogates constrained
+  // by exact class/sign, order, exponent-band and identity rules, check
+  // candidates against the literal SymFPU backend, and release the exact
+  // encoding only after a bounded number of value lemmas. Off by default;
+  // batch solves only.
+  bool fp_abstraction = false;
+  // Which operations are abstracted: a mask of FpAbstractionOps. Multiply,
+  // divide and square root -- the three whose exact circuits are an order
+  // of magnitude above their rules from binary32 up -- and the fused
+  // multiply-add, which compiled numerical code contracts a*b+c into and
+  // which measured as a gain on every corpus of such code.
+  unsigned fp_abstraction_ops = 39; // FP_ABSTRACT_DEFAULT
+  // Which operations are abstracted only as links in a chain: an
+  // application of one of these kinds is abstracted when one of its
+  // operands is the result of an application already abstracted, and
+  // encoded exactly otherwise. None by default. Tried for the fma: it
+  // takes the fmas over abstracted products (the running sums of SUNDIALS'
+  // norms, every one of that corpus's gains) and misses the accumulations
+  // over inputs that feed a quotient at the top (LAPACK's solves, where
+  // abstracting every fma gains), so the fma went into the default set
+  // instead. The policy is kept for sums, which the same corpora suggest
+  // reward abstraction only beside a product they share an operand with.
+  unsigned fp_abstraction_chain_ops = 0;
+  // Minimum packed width (eb + sb) at which an operation is abstracted. At
+  // binary16 a multiplier is barely larger than its rules.
+  unsigned fp_abstraction_width = 16;
+  // Highest rule tier emitted with a surrogate: 0 class/sign shell, 1 +order,
+  // 2 +exponent bands and overflow, 3 +identities.
+  unsigned fp_abstraction_tiers = 3;
+  // Value lemmas (one candidate operand tuple ruled out each) a record may
+  // take before its exact encoding is released.
+  unsigned fp_abstraction_values = 4;
+  // Model-instantiated trailing-exponent (exactness) lemmas before a value
+  // lemma is spent.
+  bool fp_abstraction_shape = true;
+  // Pairwise monotonicity lemmas between records of one operator that share
+  // an operand, emitted only for the pair a candidate violates.
+  bool fp_abstraction_relational = true;
+  // At and above this packed width, emit them only once a record's value
+  // budget is spent, rather than before the first value lemma; 0 never
+  // does. A monotonicity fact is a pair of comparators over the format:
+  // stated first they carry the binary32 and binary64 witness hunts of the
+  // SMT-LIB corpus (griggio's sin and sqrt loops, 7-70 facts and no circuit
+  // built), stated last at binary128 they keep the LAPACK triangular
+  // solves from stalling under eight wide comparator pairs in one round
+  // (six timeouts to 3-9 s). See docs/fp-abstraction.rst for the numbers.
+  unsigned fp_abstraction_relational_last_width = 128;
+  // After a refuted candidate, suggest to the SAT solver's decision
+  // heuristic the operand values it just tried and, for the surrogate, the
+  // exact result for them: pure search advice, so the next candidate keeps
+  // the operands and is consistent at once when nothing else forbids it.
+  bool fp_abstraction_phase_hints = false;
+  // Host the abstraction inside the incremental driver too. OFF: the
+  // driver encodes floating point exactly (--fp-abstraction then applies
+  // to batch solves only). Opt-in: a hosted session takes the eager array
+  // expansion (STP::getIncrementalSolver), and a check the replay still
+  // rejects once every record is released is answered unknown.
+  bool fp_abstraction_incremental = false;
+  // Under the incremental driver, read only the records of the active
+  // encoding units at each candidate check -- the active closure: the
+  // records the asserted pieces mention, their inner records,
+  // proxy definitions and cross-rule partners, recorded per unit as it is
+  // encoded. OFF: every record of the epoch is read, including those of
+  // popped pieces, whose proxies are then unconstrained (sound, and the
+  // measured baseline).
+  bool fp_abstraction_active_closure = false;
+  // Add an operand-box prefix constraint beside each value lemma for
+  // mul/div/sqrt/add/sub/fma/rti, on the fixed-sign domains where corner
+  // results bound the interior. Remainder and conversions are excluded.
+  bool fp_abstraction_box_lemmas = false;
+  // Packed width at or above which a released wide-significand operation
+  // (mul, div, sqrt, fma, rem) is lowered by running the pipeline again
+  // rather than spliced into the running solver; 0 never restarts. The
+  // restart exists to let the bit-vector abstraction see the released
+  // circuit; without it the run loses more (its learnt clauses, and at 128
+  // bits a multi-second exact solve per restart) than constant-bit
+  // propagation and the simplifier win back, so the command line sets 128
+  // only when --bv-term-abstraction is on.
+  unsigned fp_abstraction_restart_width = 0;
+  // How many such runs one query may take; past it, releases are spliced.
+  unsigned fp_abstraction_restart_limit = 4;
+  // Significand bits of the reduced-precision bands emitted with the rules
+  // of an abstracted mul, div or sqrt: a k-bit truncation of each operand
+  // bounds the result through a k x k multiplier; 0 emits none.
+  unsigned fp_abstraction_significand_bits = 8;
+  // The same at packed widths of 128 bits and above, where a 16 x 16 band
+  // is still a fraction of a percent of the exact multiplier and turns the
+  // deep satisfiable paths that an 8-bit band leaves to their value lemmas;
+  // 0 uses the narrow setting everywhere.
+  unsigned fp_abstraction_significand_bits_wide = 16;
+  // Before refining a candidate the abstraction refuted, replay the
+  // original formula under it: a candidate whose surrogates are wrong but
+  // whose values for the original symbols satisfy the formula is a model.
+  bool fp_abstraction_repair = true;
+  // Decline to abstract an operation whose result the query itself pins:
+  // a direct equality between the operation and a constant or a
+  // conversion. That is the witness-hunt signature -- such a solve must
+  // produce the operation's exact value anyway, so a surrogate only
+  // defers the circuit through refinement rounds.
+  bool fp_abstraction_decline_pinned = false;
+  // Whether an operation with a constant float operand is abstracted. Off,
+  // such an operation is lowered exactly: a multiplication by a constant is
+  // a shift-and-add network the blast prunes to the constant's set bits,
+  // which the SAT solver propagates through, where the abstraction puts a
+  // free result and rules it has to search under. On the converted
+  // flux-balance QF_FP queries, where every multiplication is by a
+  // coefficient, abstracting them turned two-second solves into timeouts.
+  // Whether an operation with a constant float operand is abstracted.
+  // Declined, such an operation is lowered exactly: a multiplication by a
+  // constant is a shift-and-add network the blast prunes to the constant's
+  // set bits, which the SAT solver propagates through, where the
+  // abstraction puts a free result and rules it has to search under.
+  // Measured both ways, the two corpora disagree. On the converted
+  // flux-balance QF_FP queries every multiplication is by a coefficient and
+  // abstracting them turns two-second solves into timeouts: declining them
+  // solves four more of 275. On the KLEE corpus a product by a constant is
+  // a step of a Horner polynomial in library code, which is where the layer
+  // earns its keep: declining them costs fourteen solves of 1,241 hard
+  // queries and a tenth of the PAR2.
+  //
+  // What separates the two is visible in the query. AUTO abstracts them
+  // when the configuration abstracts some operation at least two of whose
+  // float operands are not constants -- a product of unknowns, whose result
+  // feeds the next operation and which the rules carry -- and declines them
+  // when it does not, the query then being linear over its coefficients.
+  // Decided once, on the prepared formula, for the batch pipeline; a piece
+  // the incremental driver hands over is not the session, so there AUTO
+  // abstracts.
+  enum class FpConstantOperandMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  FpConstantOperandMode fp_abstraction_constant_operands =
+      FpConstantOperandMode::AUTO;
+  // Wall-clock seconds after which a batch refinement releases every
+  // remaining record, spliced in place: past the budget the solve is the
+  // exact encoding plus whatever the rules already added, so a loss on a
+  // witness hunt is bounded near the budget instead of the timeout. 0
+  // never fires. Batch only: the incremental driver's checks have their
+  // own timing discipline.
+  unsigned fp_abstraction_budget = 0;
+
+  // Mine simple top-level finite box bounds and use them to omit NaN/infinity
+  // cases from native packed-field circuits when those cases are already
+  // impossible. This does not enable the separate domain prepass or its
+  // known-sign arithmetic specialization.
+  bool fp_native_domain = true;
+
+  // Experimental native-domain arithmetic specialization. A known finite
+  // semantic sign removes fp.add's opposite-sign cancellation datapath and
+  // fp.mul's sign-dependent rounding, while explicit muxes retain signed zero.
+  bool fp_native_known_sign = false;
+
+  // Experimental floating-point domain prepass. It mines simple boxed
+  // variable bounds from ordered FP comparisons and uses them to discharge
+  // non-box ordered comparisons and zero-sum rows whose interval/domain facts
+  // decide them.
+  bool fp_domain_simplify = false;
+
+  // Decision-only extension of the FP domain prepass. Derive symbol endpoints
+  // from top-level symbol/expression inequalities and from a narrowly
+  // recognised zero-result addition. The derived facts may discharge
+  // comparisons or expose contradictory boxes, but are not emitted as
+  // additional constraints. Enabled by default; retain the flag for ablation.
+  bool fp_domain_derived_bounds = true;
+
+  // Propagation through an objective over semantic {0, 1} floating-point
+  // selector symbols. Replace the objective only when interval exclusion
+  // proves each selected endpoint necessary and their conjunction sufficient.
+  // Exact extrema are the primary case. Enabled by default; retain the flag
+  // so its solver effects can be ablated independently.
+  bool fp_domain_extremal_selectors = true;
+
+  // Sound zero-fact extraction for boxed nonnegative FP symbols. It only
+  // derives zero facts from same-sign rows whose terms are +/- one boxed
+  // symbol. Two-term differences may propagate an already-established zero,
+  // but terms are never algebraically cancelled through a rounded row. Zero
+  // is encoded as zero magnitude bits so +0/-0 remain distinct. Enabled by
+  // default; this does not enable the general floating-point domain rewrite
+  // prepass.
+  bool fp_domain_sound_zero_facts = true;
+
+  // Sound row-level FP zero refutation. It recognises linear FP expressions
+  // over boxed finite variables and rewrites a zero-row to false only when a
+  // conservative target-format interval, evaluated in the original AST
+  // association with rounding at every operation, excludes zero.
+  bool fp_domain_row_bounds = false;
+
+  // Unsigned multiplication encoding; tools/stp/main.cpp lists the values.
+  // 27: a constant multiplier's runs of ones Booth-recoded and summed by
+  // the column network, a constant with no such run on carry-save rows,
+  // and a symbolic pair on ripple rows from the operand in canonical
+  // order with its runs of identical symbolic bits -- a sign extension's
+  // replicated sign bit -- Booth-recoded too. Ripple rows are what the
+  // unsigned multiplication overflow family needs (10-30x over carry-save
+  // rows) and carry-save rows what a divide-by-constant magic multiply
+  // needs (3x); against carry-save rows for both (25) the hard set solves
+  // the same count 6% faster and the fast tier one file more (2026-09-15
+  // multiplication report).
+  int64_t multiplication_variant = 27;
+  // Conjoin to every multiply the prime implicates of the k-bit
+  // multiplication relation that its circuit cannot rederive by unit
+  // propagation: the odd-residue and 2-adic laws over the low k bits
+  // (2026-09-02 multiplication-encoding study). 0 = none, 3 = the six
+  // clauses that make the 3-bit relation refutation-complete, 4 = the 88
+  // that do the same for 4 bits. Sound at any width, since the low k
+  // product bits depend only on the low k operand bits.
+  int64_t multiplication_lemmas = 0;
+  // Unsigned multiplication overflow as Schulte's detector: a*b >= 2^w
+  // whenever bits i of a and j of b are both set with i + j >= w, else
+  // the product fits in w+1 bits and overflow is bit w of the (w+1)-wide
+  // product. Off: the 2w-wide product's high half ORed.
+  bool umulo_schulte = true;
+  // Signed multiplication overflow the same way: a bit that differs from
+  // the sign is significant and puts |a| at or above 2^i; two significant
+  // bits with i + j >= w-1 overflow, and otherwise |a*b| <= 2^w and the
+  // product fits in w bits iff the top three bits of its (w+2)-wide form
+  // agree. Off: the 2w-wide product tested against its sign extension.
+  bool smulo_schulte = true;
+  // Rewrite the double-width spellings of those checks -- the high half
+  // of a multiply of zero-extended operands compared with zero, the high
+  // bits of a multiply of sign-extended operands all zero or all one, or
+  // either product equal to the extension of its own low half -- into the
+  // predicates, so they reach the detectors above.
+  bool mulo_recognition = true;
+
+  // Symbolic-amount shift encoding. 0 is the barrel shifter. 1 to 4 all
+  // propagate more of what the shift relation entails -- at 64 bits the
+  // barrel derives 72.9% of the entailed literals against variant 3's
+  // 98.7% -- and all of them measured slower than the barrel on the
+  // benchmarks tried, so they stay off.
+  int64_t shift_variant = 0;
+
+  // Width window the selector-based shift variants (1 to 3) apply to.
+  // Below the floor the barrel is already close to arc consistent; above
+  // the ceiling the selector encodings are O(w^2) gates and blow up --
+  // 8.8x the clauses and 11.6x the wall past 256 bits.
+  int64_t shift_onehot_min_width = 33;
+  int64_t shift_onehot_max_width = 64;
 
   // If the bit-blaster discovers new constants, should the term simplifier be
   // re-run.
@@ -140,16 +1714,96 @@ public:
   // LOW, HIGH and VERY_HIGH use ABC's newer Mf_ManGenerateCnf() at LUT sizes
   // 3, 6 and 8; its cost grows steeply with LUT size for little further gain
   // past 6.
+  //
+  // AUTO resolves from the difficulty score when the top level recorded one
+  // (see ToSATAIG::bitblast): GIA_LOW below the threshold, NEW_MEDIUM at or
+  // above it, because minimising the CNF is itself work and on a large blast
+  // it is most of the work, while no measurement has found the smaller
+  // formula buying solve time. Where no estimate exists, under array
+  // refinement, or on a SAT backend other than CaDiCaL, it falls back to
+  // the older choice between VERY_LOW and MEDIUM from the built AIG's size.
   enum CNFEffort
   {
     CNF_EFFORT_VERY_LOW = 0,
     CNF_EFFORT_LOW,
     CNF_EFFORT_MEDIUM,
     CNF_EFFORT_HIGH,
-    CNF_EFFORT_VERY_HIGH
+    CNF_EFFORT_VERY_HIGH,
+    CNF_EFFORT_AUTO,
+    // The in-house Tseitin writer, over the in-house AIG. Below very-low on
+    // the scale and last in the enum, which are different facts: the ordinals
+    // are the C interface's contract, so a new rung goes on the end however
+    // little effort it spends.
+    CNF_EFFORT_NEW_VERY_LOW,
+    CNF_EFFORT_NEW_LOW,
+    CNF_EFFORT_NEW_MEDIUM,
+
+    // Mf_ManGenerateCnf again -- the same generator low, high and very-high
+    // reach -- but over a Gia the blaster built itself rather than one
+    // converted from an ABC Aig. Same LUT sizes, 3, 6 and 8, so gia-low
+    // against low is a comparison of the two backends and nothing else.
+    CNF_EFFORT_GIA_LOW,
+    CNF_EFFORT_GIA_HIGH,
+    CNF_EFFORT_GIA_VERY_HIGH,
+
+    // new-medium's recovery plus prime-implicate blocks for private cones.
+    // On the end, as the note above requires, however much effort it spends.
+    CNF_EFFORT_NEW_HIGH
   };
 
-  enum CNFEffort cnf_effort = CNF_EFFORT_MEDIUM;
+  // Whether a level blasts through the Gia backend rather than ABC's Aig.
+  static bool isGiaEffort(enum CNFEffort e)
+  {
+    return e == CNF_EFFORT_GIA_LOW || e == CNF_EFFORT_GIA_HIGH ||
+           e == CNF_EFFORT_GIA_VERY_HIGH;
+  }
+
+  enum CNFEffort cnf_effort = CNF_EFFORT_AUTO;
+
+  // AND-node count at or above which AUTO stops paying for CNF
+  // minimisation: against the recorded estimate it selects NEW_MEDIUM
+  // there, and on the estimate-less fallback it drops MEDIUM to VERY_LOW.
+  //
+  // High on purpose. Over a floating-point corpus, timed net of the ~9.5ms a
+  // process spends starting before it solves anything, VERY_LOW is the better
+  // choice at almost every size -- so the honest reading is that the crossover
+  // is a property of the workload rather than a constant, and that this
+  // heuristic should only override the effort where the evidence is
+  // unambiguous. At 200k it switches the queries whose circuits are large
+  // enough for minimising to be most of their cost -- six of the measured set,
+  // every one a gain, geometric mean 0.45 -- and leaves everything else alone.
+  //
+  // A lower threshold measured better on totals and worse on regressions: at
+  // 32k, fifteen gains against three losses. A caller who has measured their
+  // own workload can move it, from the command line or through the
+  // CNF_AUTO_THRESHOLD interface flag.
+  unsigned cnf_auto_threshold = 200000;
+
+  // Whether AUTO should read the threshold the Real path's way. Set for an
+  // active Real solve, and for nothing else; the bit-vector choice at either
+  // end of the threshold is untouched.
+  //
+  // Both bit-vector answers are wrong for the shape the Real path hands over
+  // -- a wide, shallow conjunction of small clauses over opaque atoms, one
+  // per Real predicate -- and they are wrong in opposite directions, which is
+  // why this is a different reading of the threshold rather than a different
+  // constant for it.
+  //
+  // Above the threshold, Cnf_DeriveFast is the slowest generator there is on
+  // this shape: on a 1.4M-node LassoRanker skeleton its leaf collection ran
+  // for a minute where cut enumeration at LUT size 3 took a second or two
+  // (with a one-second search budget, 86 s against 22.5 s; 90.6 s against
+  // 27.4 s on another; 5.4 s against 3.7 s at 240k nodes). That is what this
+  // flag was introduced for and it still holds: LOW.
+  //
+  // Below it -- where 523 of 547 measured Real queries land -- MEDIUM was
+  // paying ABC's cut enumeration and area-flow mapping to minimise a CNF the
+  // solver disposes of cheaply either way. Over all 3 037 QF_LRA and QF_UFLRA
+  // files, one binary, the efforts forced in turn and run back to back,
+  // VERY_LOW solved 2 680 against MEDIUM-below-threshold's 2 651 and LOW
+  // everywhere's 2 640, at a 0.939 geometric mean of CPU on the files they
+  // share. LassoRanker alone went 186 to 218. So: VERY_LOW.
+  bool cnf_auto_real_path = false;
 
   bool exit_after_CNF = false;
 
@@ -170,8 +1824,43 @@ public:
 
   // check the counterexample against the original input to STP
   bool check_counterexample_flag = false;
+
+  // SMT-LIB (set-option :produce-models true): models must be readable
+  // after sat answers. An input to the construct_counterexample_flag
+  // derivations, deliberately separate from check_counterexample_flag --
+  // asking for models is not asking for them to be verified, and
+  // construction itself may be deferred to the first read.
+  bool produce_models = false;
+
+  // The C API's 'c'/'d' flags ask for a counterexample directly, with no
+  // other trace of the request. Held here so the derivation below can be
+  // recomputed per query rather than merely widened: a flag that only ever
+  // gains value latches, and callers read it as "a model was asked for".
+  bool request_counterexample = false;
+
   //This is derived from other settings.
   bool construct_counterexample_flag = false;
+
+  // The caller-facing reasons a satisfiable answer must retain a readable
+  // model. Theory refinement is an internal consumer and is deliberately a
+  // separate input to modelConstructionRequired() below.
+  bool callerRequestedModel() const
+  {
+    return check_counterexample_flag || print_counterexample_flag ||
+           produce_models || request_counterexample;
+  }
+
+  // Derive the per-query construction flag from its actual inputs rather than
+  // widening the previous query's value. Debug builds always construct so the
+  // solver's internal model checks keep their established coverage.
+  bool modelConstructionRequired(bool internalConsumer = false) const
+  {
+    bool required = callerRequestedModel() || internalConsumer;
+#ifndef NDEBUG
+    required = true;
+#endif
+    return required;
+  }
 
 
   // Available back-end SAT solvers.
@@ -180,7 +1869,6 @@ public:
     MINISAT_SOLVER = 0,
     SIMPLIFYING_MINISAT_SOLVER,
     CRYPTOMINISAT5_SOLVER,
-    RISS_SOLVER,
     CADICAL_SOLVER
   };
 
@@ -188,14 +1876,123 @@ public:
 
   // Which answer to tune the SAT search towards. NONE, the default, leaves
   // every backend at its own settings, so the option is opt-in.
-  SearchBias search_bias = SearchBias::NONE;
+  SearchBias search_bias = static_cast<SearchBias>(0);
+
+  CadicalOptions cadical_options;
+
+  // Whether CaDiCaL may use bounded variable addition (its "factor"
+  // technique). ON is the default: measured on QF_BV, where the AUTO
+  // heuristic below never fires, it is worth a 0.76-0.80 geometric mean of
+  // wall clock on hard instances (>10 s, 259 files, three rounds) and -12.5%
+  // total wall over 42k easy ones, with no answer disagreements.
+  //
+  // AUTO enables it only for problems that still contain array operations
+  // after simplification. That was the default when the flag landed, fitted
+  // on QF_ABV alone: BVA is a large win on some array-refinement families
+  // (wchains: up to 5x) and a loss on countbitstable, whose arrays are
+  // Ackermannised away, so testing for surviving arrays separated the two.
+  // It is kept as an explicit choice because it is the only way back to that
+  // behaviour; on QF_BV it is equivalent to OFF.
+  //
+  // An active Real solve that did not name the flag reads ON as AUTO. Both
+  // measurements above are bit-vector ones, and on the Real path's Boolean
+  // skeleton factoring loses: see the demotion in TopLevelSTPAux for the
+  // numbers. Naming --cadical-factor overrides that, as it overrides
+  // everything else here.
+  enum class BVAMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  BVAMode cadical_factor = BVAMode::ON;
+
+  // Whether ON above came from the command line rather than from the default.
+  // A backend with no BVA declines the request, and that is worth a warning
+  // only when a user actually asked for it -- otherwise every solve on a
+  // pre-3.0 CaDiCaL build would carry one.
+  bool cadical_factor_explicit = false;
+
+  // Whether the incremental driver may retire CaDiCaL's probe-based
+  // inprocessing mid-session. Inprobing re-runs over the whole
+  // persistent encoding at every solve; on many-solve sessions that
+  // recurring cost dominates what it earns (measured 2x on generated
+  // variant-push corpora), while few-solve sessions genuinely profit
+  // from it. AUTO -- the default -- retires it once a session has shown
+  // enough solves, via one bounded solver rebuild; ON never retires;
+  // OFF retires from the first driver solve.
+  BVAMode incremental_inprobing = BVAMode::AUTO;
+
+  // Whether the batch pipeline's refinement loop may keep CaDiCaL's search
+  // trail from one of its solve calls to the next (SATSolver::TrailReuse::
+  // ALL, CaDiCaL's ilb=2). Without it every refinement round backtracks to
+  // the root and repeats the pre-search phases -- the preprocessing rounds,
+  // lucky phases, local search -- before it searches again; with it a
+  // round unwinds the trail only as far as the lemma that refutes the last
+  // candidate reaches. On by default. Measured over the QF_ABV corpus
+  // (15148 files, 20 s cap): 4797 queries engage the loop, no verdict
+  // moved, two fewer timeouts. The 57 of them above a second, re-run three
+  // times each and compared by medians: a 0.875 geometric mean of wall
+  // clock, 0.80 above two seconds and 0.73 above five; neutral below ten
+  // thousand variables (0.996) and 0.81-0.83 above it -- the class where
+  // the incremental driver's own gate switches reuse off, which is why
+  // there is no size gate here. A solve that is never asked twice is
+  // unaffected whatever this says.
+  //
+  // Turning CaDiCaL's lucky phases off is the obvious second cut, and it is
+  // not here because it was measured and did nothing. A refinement query is
+  // many-solve, so its per-call whole-assignment probe looks like a
+  // recurring tax by the same argument that retires the probe on the
+  // incremental driver's persistent solver -- but on a refinement-heavy
+  // uninterpreted-function query, one whose rounds a kept trail alone takes
+  // from 915 to 338, switching it off changed nothing measurable. What a
+  // round pays for is the re-descent itself, not a phase in front of it.
+  // (Measured on the pipeline as it stood before the uninterpreted-function
+  // work that followed, so the round counts are not today's; what they rule
+  // out does not depend on them.)
+  bool refinement_trail_reuse = true;
+
+  // How the batch pipeline seeds the free indices of an array's reads so
+  // that the first candidate does not land several of them on one value.
+  // Read refinement's cost is collisions -- two reads of one array whose
+  // indices take the same value while their values differ -- each paid
+  // for with a congruence lemma and another solve, and the backend's
+  // default phase makes the collisions at once. PHASE counts the symbolic
+  // indices of each array off against an increasing value (skipping the
+  // values its constant indices take) and suggests those bits, the way
+  // --uf-phase-hints seeds the checker's scalars. DECIDE additionally asks
+  // the backend to decide those bits first, before anything else can pull
+  // the indices together, which CaDiCaL does through its external
+  // propagator; a backend without one gets the phases. Search advice
+  // either way: no verdict can move.
+  //
+  // Off by default. Measured over the QF_ABV corpus (15148 files, 20 s
+  // cap, one run each): no verdict moved under either mode; the 1160
+  // queries that refine take 8866 solves without hints and 9598 with
+  // decisions overall, but 378 against 208 on the 27 that take over a
+  // second, and 185 against 96 above two seconds -- the collisions the
+  // hints exist to avoid do go away. Wall clock does not follow: PAR2 is
+  // level under phases and worse under decisions (timeouts 44 to 48), a
+  // 0.93 geometric mean above a second bought by two 10x wins
+  // (brummayerbiere2/countbitstableuninit1024, 14.3 s to 1.2 s over 66
+  // rounds down to 4) against two 2-5x losses (the dwp_formulas
+  // try5_small_difret pair), and a connected propagator switches off
+  // CaDiCaL's lucky-phase probing and keeps every hinted variable out of
+  // elimination for the whole solve. The mechanism is kept for the
+  // workloads it wins on and for what it says about the rest.
+  enum class ArrayIndexHints
+  {
+    OFF = 0,
+    PHASE,
+    DECIDE
+  };
+  ArrayIndexHints array_index_hints = ArrayIndexHints::OFF;
 
   bool get_print_output_at_all() const
   {
-    return print_STPinput_back_flag || print_STPinput_back_C_flag ||
-           print_STPinput_back_SMTLIB2_flag ||
-           print_STPinput_back_SMTLIB1_flag || print_STPinput_back_CVC_flag ||
-           print_STPinput_back_dot_flag || print_STPinput_back_GDL_flag;
+    return print_STPinput_back_flag || print_STPinput_back_SMTLIB2_flag ||
+           print_STPinput_back_CVC_flag || print_STPinput_back_dot_flag ||
+           print_STPinput_back_GDL_flag;
   }
 
   void disableSimplifications()
@@ -211,10 +2008,18 @@ public:
     enable_split_extracts = false;
     enable_sharing_aware_rewriting = false;
     enable_merge_same = false;
+    enable_pair_extract = false;
+    enable_common_subsum = false;
+    enable_common_factor = false;
+    enable_linear_form = false;
     enable_ite_context = false;
+    distinct_ordering = false;
 
-    bitblast_simplification = 0;
-    simple_cnf=true;
+    // simple_cnf is deliberately not set here. It used to be, which made
+    // "skip the word-level simplifications" silently also mean "use the
+    // worst CNF generator" -- Cnf_DeriveSimple, at about 1.9x the clauses
+    // of the cheapest real rung. The two are separate decisions; the CNF
+    // rung stays whatever --cnf-generation-effort says.
   }
 
   void disableSizeIncreasingSimplifications()
@@ -227,20 +2032,164 @@ public:
      difficulty_reversion = false;
   }
 
+  // What the encoding options above actually did, as against what they were
+  // allowed to do. Not settings: a caller that turns an abstraction on wants
+  // to know it engaged, and a flag that reached no eligible operation and a
+  // flag that is broken both abstract nothing -- only the candidate count
+  // tells them apart. Cumulative over the manager's lifetime, and read
+  // through vc_getCounter.
+  //
+  // Lives here rather than in STPMgr because the bit-blaster holds only these
+  // flags, and the sites that would have to be counted are all inside it.
+  struct EncodingCoverage
+  {
+    // One per abstractable node kind, indexed by AbstractionKind below.
+    static const unsigned KINDS = 6;
+    // Operations reaching the bit-blaster at or above bv_abstraction_width:
+    // what the abstraction could have taken, whether or not it was on.
+    uint64_t bv_candidates[KINDS] = {};
+    // ... and what it did take.
+    uint64_t bv_abstracted[KINDS] = {};
+    // Refinement passes that installed something, and individual blocking
+    // lemmas they installed. A pass can install more than one lemma.
+    uint64_t bv_refinement_rounds = 0;
+    uint64_t bv_blocking_lemmas = 0;
+    // Algebraic schema lemmas installed over abstracted arithmetic. Counted
+    // apart from the blocking lemmas above because the two are not
+    // interchangeable: the same number of each says very different things
+    // about how a query was decided.
+    uint64_t bv_schema_lemmas = 0;
+    // Value-pair refinement which reached its allowance and installed the
+    // operation's exact circuit. Split by the only two operation families
+    // which use that path so a corpus can distinguish a divider problem from
+    // a multiplier one without scraping diagnostic prose.
+    uint64_t bv_exact_escalations = 0;
+    uint64_t bv_exact_escalations_mult = 0;
+    uint64_t bv_exact_escalations_divmod = 0;
+    // What the refinement's FULL-WIDTH installs cost: an escalation, and the
+    // paired DIV/REM recomposition, whose multiplier is as wide as one. The
+    // counts above say how often a refinement was abandoned; these say what
+    // was handed to the solver when it was. Publishing the totals makes the
+    // question answerable from ordinary statistics and the C API rather than
+    // only from the per-record fields the benchmark harness reads.
+    //
+    // Equal escalation counts can hide very different trades: an exact
+    // multiplier is affordable where an exact divider may not be. Clauses and
+    // variables come from the solver's own totals across the encode rather
+    // than a circuit estimate, and microseconds measure only that encode.
+    //
+    // Wider than the escalations, because the paired identity costs as much as
+    // one without any abstraction being given up -- it is why the aggressive
+    // profile is the slowest, and leaving it out would have hidden the trade
+    // these were added to expose. It is counted here and not in the escalation
+    // counts above, which mean something narrower: a refinement that gave up
+    // and said what the operation is.
+    //
+    // What is NOT here is the algebraic schemas, which have their own totals
+    // below. They are the thing the profiles vary, so putting them in one
+    // bucket with the full-width installs would make exactly the comparison
+    // these exist for unreadable.
+    uint64_t bv_exact_clauses = 0;
+    uint64_t bv_exact_variables = 0;
+    uint64_t bv_exact_microseconds = 0;
+    // What the algebraic schemas cost, on the same terms.
+    //
+    // bv_schema_lemmas counts how many were installed, and one lemma is not
+    // one price: the hand-written bounds are a comparison chain, the exact
+    // prefixes are three columns of a multiplier, and a registry fact like
+    // UDIV15 is three barrel shifters spliced through BVExactEncoder -- at
+    // 256 bits, 229,374 clauses for that one fact, and 2,376,088 for the whole
+    // UDIV registry. A profile is a choice of which schema families to enable,
+    // so a schema total that does not say what they cost cannot answer the
+    // question the profiles were built to ask, and for a while this one
+    // reported nothing at all: the four registry splices went through the same
+    // encoder as an escalation and were counted as neither.
+    //
+    // Written at every schema install, whichever mechanism installs it -- the
+    // clause emitters in the refiner and the circuit splices alike -- because
+    // which of the two a family happens to use is not something a reader
+    // comparing profiles should have to know.
+    //
+    // Value-pair blocking lemmas are in neither total. They are W clauses over
+    // known vectors, so reportRecords derives their cost from the round count
+    // rather than measuring it.
+    uint64_t bv_schema_clauses = 0;
+    uint64_t bv_schema_variables = 0;
+    uint64_t bv_schema_microseconds = 0;
+    // The same total partitioned by BVSchemaGroup, so a mixed run can be
+    // attributed without parsing diagnostic text. Every schema increment
+    // must increment exactly one entry here as well.
+    uint64_t bv_schema_group_lemmas[BV_SCHEMA_GROUP_COUNT] = {};
+    // Uninterpreted-function applications the lowering decided, and the
+    // constraints it installed for them.
+    uint64_t uf_applications_lowered = 0;
+    uint64_t uf_constraints_installed = 0;
+    // What the floating-point abstraction did, accumulated from every
+    // FpAbstraction the session builds: one per batch solve, one more per
+    // restart, and one per encoding epoch when the incremental driver hosts
+    // it. The instance's own FpAbstractionStatistics is per-instance and
+    // dies with it -- that is what --stats reports -- so the totals a
+    // session-long reader needs (a fuzzing campaign asking whether the
+    // abstraction engaged at all, above all) are folded in here as each
+    // instance is destroyed. Field for field the same quantities, so the
+    // two can be compared without a translation table.
+    uint64_t fp_candidates = 0;
+    uint64_t fp_abstracted = 0;
+    uint64_t fp_shared = 0;
+    uint64_t fp_chained = 0;
+    uint64_t fp_rule_lemmas = 0;
+    uint64_t fp_cross_rules = 0;
+    uint64_t fp_checks = 0;
+    uint64_t fp_skipped_checks = 0;
+    uint64_t fp_inconsistent = 0;
+    uint64_t fp_value_lemmas = 0;
+    uint64_t fp_box_lemmas = 0;
+    uint64_t fp_shape_lemmas = 0;
+    uint64_t fp_relational_lemmas = 0;
+    uint64_t fp_releases = 0;
+    uint64_t fp_refinement_rounds = 0;
+    // The restart count an instance carries is the number of runs BEFORE
+    // it, so a chain of n+1 instances reports 0,1,...,n and only the last
+    // is the query's total. Accumulating the differences rather than the
+    // values keeps this a count of restarts rather than a triangular
+    // number; see FpAbstraction's destructor.
+    uint64_t fp_restarts = 0;
+    uint64_t fp_repairs = 0;
+    uint64_t fp_lemma_microseconds = 0;
+    // Queries that reached bit-blasting at all: the denominator, without
+    // which a zero above cannot be told from a query the simplifier settled.
+    uint64_t queries_bitblasted = 0;
+  };
+
+  enum AbstractionKind
+  {
+    ABSTRACT_EQ = 0,
+    ABSTRACT_COMPARE,
+    ABSTRACT_ITE,
+    ABSTRACT_PLUS,
+    ABSTRACT_MULT,
+    ABSTRACT_DIVMOD
+  };
+
+  EncodingCoverage coverage;
+
   UserDefinedFlags()
   {
-#ifdef USE_CADICAL
+    // The backend a query gets when no --cryptominisat/--cadical/--minisat
+    // was given. The order of preference is CryptoMiniSat, CaDiCaL,
+    // MiniSat, and the first of those this build compiled in wins.
+    // CryptoMiniSat leads because a build that went to the trouble of
+    // linking it meant to use it; CaDiCaL follows because it is the only
+    // backend on by default, so it is what a stock build solves with.
+    // MiniSat is the last resort and is not guarded: CMakeLists.txt refuses
+    // a build with no backend at all, so the fall-through is only reached
+    // when MiniSat is the one that is there.
+#if STP_BUILD_WITH_CRYPTOMINISAT
+    solver_to_use = CRYPTOMINISAT5_SOLVER;
+#elif STP_BUILD_WITH_CADICAL
     solver_to_use = CADICAL_SOLVER;
 #else
-#ifdef USE_CRYPTOMINISAT
-    solver_to_use = CRYPTOMINISAT5_SOLVER;
-#else
-#ifdef USE_RISS
-    solver_to_use = RISS_SOLVER;
-#else
     solver_to_use = MINISAT_SOLVER;
-#endif
-#endif
 #endif
   }
 };

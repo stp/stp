@@ -22,7 +22,11 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Flatten.h"
+#include "stp/Util/DagWalk.h"
+#include <deque>
+#include <limits>
 #include <list>
+#include <vector>
 
 namespace stp
 {
@@ -54,105 +58,260 @@ namespace stp
   }
 
   // counter is 1 if the node has one reference in the tree.
+  //
+  // Iterative for the same reason as Rewriting::buildShareCount, which this
+  // mirrors: the input decides the depth, so a call per level of the DAG
+  // exhausts the stack. The continuation walk holds only suspended ancestors
+  // rather than every sibling in a wide frontier.
   void Flatten::buildShareCount(const ASTNode& n)
   {
-    if (n.Degree() == 0)
-      return;
+    walkPreOrder(n, [&](const ASTNode& current) {
+      if (current.Degree() == 0)
+        return false;
 
-    if (shareCount[n.GetNodeNum()]++ > 0) // 0 first time, 1 second time.
-      return;
-  
-    for (const auto& c: n.GetChildren())
-        buildShareCount(c);
+      if (shareCount[current.GetNodeNum()]++ > 0) // 0 first time, 1 second.
+        return false;
+      return true;
+    });
   }
+
+  // A leaf, or a node already flattened: answered without a frame, exactly
+  // as the recursive version answered it without a call.
+  bool Flatten::alreadyKnown(const ASTNode& n, ASTNode& answer)
+  {
+    if (n.Degree() == 0)
+    {
+      answer = n;
+      return true;
+    }
+
+    const auto it = fromTo.find(n.GetNodeNum());
+    if (it != fromTo.end())
+    {
+      answer = it->second;
+      return true;
+    }
+    return false;
+  }
+
+  // The walk one node is part-way through. Everything here was a local of
+  // the recursive flatten(); it lives on the heap because the input decides
+  // how many of them are live at once.
+  struct Flatten::Frame
+  {
+    ASTNode n;
+    Kind k;
+    bool top;
+    bool flattenable;
+    bool changed = false;
+
+    ASTChildren children;
+    unsigned it0 = 0; // original children consumed
+    unsigned i = 0;   // position in nextChildren
+
+    // The vectors and set are only needed after this node changes. Keeping
+    // an index here makes the common unchanged frame small; flatten() lends
+    // the actual storage from a LIFO scratch pool.
+    static constexpr unsigned noScratch =
+        std::numeric_limits<unsigned>::max();
+    unsigned scratch = noScratch;
+
+    // Set while this node waits for a child's flatten() to come back.
+    ASTNode pending;
+    bool waiting = false;
+
+    Frame(const ASTNode& n_, bool top_)
+        : n(n_), k(n_.GetKind()), top(top_),
+          flattenable(OR == k || AND == k || XOR == k || BVXOR == k ||
+                      BVOR == k || BVAND == k || BVPLUS == k || BVMULT == k),
+          children(n_.GetChildren())
+    {
+    }
+  };
 
   ASTNode Flatten::flatten(const ASTNode& n, bool top)
   {
-    if (n.Degree() == 0)
-      return n;
+    static_assert(sizeof(Frame) <= 80,
+                  "Flatten frames must stay cheap at deep DAG depths");
 
-    if (fromTo.find(n.GetNodeNum()) != fromTo.end())
-      return fromTo[n.GetNodeNum()];
+    ASTNode result;
+    if (alreadyKnown(n, result))
+      return result;
 
-    const Kind k = n.GetKind();
+    // A deque, so that descending into a child never moves the frames
+    // above it: `current` below stays valid across a push.
+    std::deque<Frame> stack;
+    stack.emplace_back(n, top);
 
-    ASTNode result =n;
-
-    bool changed =false;
-    
-    //TODO STP doesn't currerntly handle >2 arity BVMULT.
-    const bool flattenable = (OR==k || AND==k || XOR==k || BVXOR==k ||  BVOR==k || BVAND==k || BVPLUS==k);
-
-    std::unordered_set<uint64_t> seen;
-
-    ASTVec newChildren;
-
-    const ASTChildren children = n.GetChildren();
-    auto it0 = children.begin();
-
-    ASTVec nextChildren;
-    unsigned i = 0;
-
-    // Copy on write.
-    auto fill = [&]
+    struct Scratch
     {
-      assert(0 ==i);
+      ASTVec newChildren;
+      ASTVec nextChildren;
+      std::unordered_set<uint64_t> seen;
+      // Entries merged into this frame instead of kept as children; balances
+      // the rebuild bookkeeping check below.
+      size_t flattenedIn = 0;
 
-      newChildren.reserve(children.size());
-      newChildren.insert(newChildren.end(), children.begin(), it0-1);
-      changed=true;
+      void clear()
+      {
+        newChildren.clear();
+        nextChildren.clear();
+        seen.clear();
+        flattenedIn = 0;
+      }
     };
 
-    while (it0 != children.end() || i < nextChildren.size())
+    // Scratch slots are acquired and released in traversal order: an active
+    // child's slot is always above its parent's. Reusing them retains vector
+    // and hash-table capacity without carrying that state in every frame.
+    std::vector<Scratch> scratches;
+    unsigned scratchesInUse = 0;
+
+    auto scratchFor = [&](Frame& f) -> Scratch&
     {
-      const ASTNode c = (it0 != children.end())? *it0++: nextChildren[i++];
-
-      if (flattenable && c.GetKind() == k && (top || shareCount[c.GetNodeNum()] == 1))
+      if (f.scratch == Frame::noScratch)
       {
-         assert(c.Degree() > 1);
-         if (!changed)
-            fill();
+        assert(scratchesInUse <= scratches.size());
+        assert(scratchesInUse < Frame::noScratch);
+        f.scratch = scratchesInUse++;
+        if (f.scratch == scratches.size())
+          scratches.emplace_back();
+      }
+      return scratches[f.scratch];
+    };
 
-         if (top)
+    auto releaseScratch = [&](Frame& f)
+    {
+      if (f.scratch == Frame::noScratch)
+        return;
+      assert(f.scratch + 1 == scratchesInUse);
+      scratches[f.scratch].clear();
+      --scratchesInUse;
+    };
+
+    // Copy on write.
+    auto fill = [&](Frame& f)
+    {
+      assert(0 == f.i);
+
+      Scratch& scratch = scratchFor(f);
+      scratch.newChildren.reserve(f.children.size());
+      scratch.newChildren.insert(scratch.newChildren.end(),
+                                 f.children.begin(),
+                                 f.children.begin() + (f.it0 - 1));
+      f.changed = true;
+    };
+
+    while (true)
+    {
+      Frame& current = stack.back();
+
+      // Pick up the child this frame descended for. `result` is what its
+      // flatten() returned.
+      if (current.waiting)
+      {
+        if (result != current.pending && !current.changed)
+          fill(current);
+        if (current.changed)
+          scratches[current.scratch].newChildren.push_back(result);
+        current.waiting = false;
+      }
+
+      bool descended = false;
+
+      while (current.it0 < current.children.size() ||
+             (current.scratch != Frame::noScratch &&
+              current.i < scratches[current.scratch].nextChildren.size()))
+      {
+        // By value: the flattening branch below appends to nextChildren,
+        // which can move what a reference into it points at.
+        const ASTNode c = (current.it0 < current.children.size())
+                              ? current.children[current.it0++]
+                              : scratches[current.scratch]
+                                    .nextChildren[current.i++];
+
+        if (current.flattenable && c.GetKind() == current.k &&
+            (current.top || shareCount[c.GetNodeNum()] == 1))
+        {
+          assert(c.Degree() > 1);
+          if (!current.changed)
+            fill(current);
+          Scratch& scratch = scratches[current.scratch];
+
+          if (current.top)
             top_removed++;
-         else
-           removed++;
+          else
+            removed++;
+          scratch.flattenedIn++;
 
-         for (const auto&e: c.GetChildren())
-         {
-            if (BVAND == k || AND == k || BVOR == k || OR == k)
+          for (const auto& e : c.GetChildren())
+          {
+            if (BVAND == current.k || AND == current.k || BVOR == current.k ||
+                OR == current.k)
             {
-              if (!seen.insert(e.GetNodeNum()).second)
-                continue; 
+              if (!scratch.seen.insert(e.GetNodeNum()).second)
+                continue;
             }
-            nextChildren.push_back(e);
-         }
-        shareCount[c.GetNodeNum()]--;
+            scratch.nextChildren.push_back(e);
+          }
+          shareCount[c.GetNodeNum()]--;
+        }
+        else
+        {
+          ASTNode r;
+          if (alreadyKnown(c, r))
+          {
+            if (r != c && !current.changed)
+              fill(current);
+            if (current.changed)
+              scratches[current.scratch].newChildren.push_back(r);
+            continue;
+          }
+
+          // Where the recursive version called flatten(c). Nothing above
+          // may be read after the push.
+          current.pending = c;
+          current.waiting = true;
+          stack.emplace_back(c, false);
+          descended = true;
+          break;
+        }
       }
-      else
+
+      if (descended)
+        continue;
+
+      Frame& done = stack.back();
+      result = done.n;
+
+      if (done.changed)
       {
-        const auto r = flatten(c);
-        if (r!=c && !changed)
-          fill();
-        if (changed)   
-          newChildren.push_back(r);
+        Scratch& scratch = scratches[done.scratch];
+        // Every consumed entry either landed in newChildren or was flattened
+        // in, adding its children to nextChildren minus what the AND/OR
+        // duplicate filter dropped. The filter means newChildren can end up
+        // *smaller* than the original degree, so the check is this balance,
+        // not `Degree() <= newChildren.size()`.
+        assert(scratch.newChildren.size() + scratch.flattenedIn ==
+               done.n.Degree() + scratch.nextChildren.size());
+
+        if (done.n.GetType() == BOOLEAN_TYPE)
+          result = nf->CreateNode(done.k, scratch.newChildren);
+        else
+          result = nf->CreateArrayTerm(done.k, done.n.GetIndexWidth(),
+                                       done.n.GetValueWidth(),
+                                       scratch.newChildren);
+
+        shareCount[result.GetNodeNum()]++; // I'm guessing it's unusal, but we might make a node we already have.
       }
-    }    
 
-    if (changed)
-    {
-      assert(n.Degree() <= newChildren.size());
+      if (shareCount[done.n.GetNodeNum()] > 1)
+        fromTo.insert({done.n.GetNodeNum(), result});
 
-      if (n.GetType() == BOOLEAN_TYPE)
-        result = nf->CreateNode(k, newChildren);
-      else
-        result = nf->CreateArrayTerm(k, n.GetIndexWidth(),n.GetValueWidth(), newChildren);
-
-      shareCount[result.GetNodeNum()]++; // I'm guessing it's unusal, but we might make a node we already have.
+      releaseScratch(done);
+      stack.pop_back();
+      if (stack.empty())
+        return result;
     }
-
-    if (shareCount[n.GetNodeNum()] > 1)
-      fromTo.insert({n.GetNodeNum(),result});
-    return result;
   }
 }
