@@ -1472,9 +1472,11 @@ if (BUILD_MANPAGE)
         ARGS  --name="Simple Theorem Prover SMT solver" --version-string=${STP_FULL_VERSION} --help-option="--help" $<TARGET_FILE:stp-bin> -o ${CMAKE_CURRENT_BINARY_DIR}/stp.1
     )
 
+    # Relative, so that an install relocated with --prefix takes the page
+    # along; an absolute destination is fixed when the cache is written.
     INSTALL(
         FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.1
-        DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man1)
+        DESTINATION man/man1)
     message(STATUS "Manpage will be created and installed")
 endif()
 add_feature_info(Manpage BUILD_MANPAGE "Builds and installs the stp(1) manpage")
