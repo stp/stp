@@ -1628,14 +1628,17 @@ def Implies(a, b):
 
 
 def If(c, t, e):
-    tm, cs = _bools([c], "If")
+    # the condition's manager, or under a Python bool the branches'
+    first = _term_of([c, t, e], "If")
+    tm = first._manager() if first is not None else main_tm()
+    c = _coerce_arg(tm.bool_sort(), c)
     if isinstance(t, ExprRef):
         e = _coerce_arg(t.sort(), e)
     elif isinstance(e, ExprRef):
         t = _coerce_arg(e.sort(), t)
     else:
         raise TypeError("If: at least one branch must be a term (both are Python literals)")
-    return tm.mk_term(Kind.ITE, [cs[0], t, e])
+    return tm.mk_term(Kind.ITE, [c, t, e])
 
 
 def Distinct(*args):

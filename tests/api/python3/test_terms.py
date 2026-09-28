@@ -299,6 +299,8 @@ def test_equality_builds_terms():
     z = BitVec("z", 8, tm=other)
     with pytest.raises(SortMismatch):
         x == z
+    # a Python bool condition is built in the branches' manager
+    assert If(True, z, 0)._manager() is other and simplify(If(False, 0, z)) is z
 
 
 def test_bv_operators():
