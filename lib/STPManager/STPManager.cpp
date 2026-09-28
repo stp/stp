@@ -657,10 +657,8 @@ ASTNode STPMgr::CreateConstArray(const SourceSort& array_sort,
                "sort",
                default_value);
 
-  const std::pair<std::string, ASTNode> key(sourceSortToSMTLib(array_sort),
-                                            default_value);
-  const std::map<std::pair<std::string, ASTNode>, ASTNode>::const_iterator
-      it = constArraysByKey.find(key);
+  const std::pair<SourceSort, ASTNode> key(array_sort, default_value);
+  const auto it = constArraysByKey.find(key);
   if (it != constArraysByKey.end())
     return it->second;
   const ASTNode symbol = CreateFreshSourceVariable(array_sort, "constarray");

@@ -611,7 +611,17 @@ private:
   // Constant arrays (see CreateConstArray): symbol -> default, and the
   // interning key (array sort text, default) -> symbol.
   ASTNodeMap constArrayDefaults;
-  std::map<std::pair<std::string, ASTNode>, ASTNode> constArraysByKey;
+  // Keyed by the sort itself, not its text: two declared sorts can be
+  // spelled alike (one popped, one declared after it) and are two sorts.
+  struct ConstArrayKeyHash
+  {
+    size_t operator()(const std::pair<SourceSort, ASTNode>& k) const
+    {
+      return SourceSort::Hasher()(k.first) * 31 + k.second.Hash();
+    }
+  };
+  std::unordered_map<std::pair<SourceSort, ASTNode>, ASTNode, ConstArrayKeyHash>
+      constArraysByKey;
 
   CBV CreateBVConstVal;
 
