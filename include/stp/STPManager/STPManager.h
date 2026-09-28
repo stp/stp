@@ -26,6 +26,8 @@ THE SOFTWARE.
 #define STPMGR_H
 
 #include "stp/AST/ASTBVConst.h"
+#include "stp/Util/PreparationControl.h"
+#include "stp/Util/QueryTiming.h"
 #include "stp/AST/ASTFPConst.h"
 #include "stp/AST/ASTRMConst.h"
 #include "stp/AST/ASTInterior.h"
@@ -37,13 +39,29 @@ THE SOFTWARE.
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Util/Attributes.h"
+#include "stp/config.h"
 #include <ankerl/unordered_dense.h>
 #include <cstdint>
+#include <set>
 
 namespace stp
 {
+namespace lra {
+class Frontend;
+class PreregistrationBuilder;
+class LraAtomRegistry;
+class LraCoordinator;
+class RealModel;
+struct LraReconstruction;
+ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
+                         SATSolver* solver, LraReconstruction* reconstruction,
+                         bool highs_enabled);
+}
 class ExtensionalityContext;
 class UFContext;
+class ASTRealConst;
+class LraAstState;
+class FpAbstraction;
 
 // The five SMT-LIB floating-point special values. Their nodes are ordinary
 // packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
@@ -62,10 +80,22 @@ enum class FPSpecial
  */
 class STPMgr
 {
+  friend class Cpp_interface;
+  friend class STP;
+  friend ASTNode lra::presolveForSolve(STPMgr& manager, const ASTNode& input,
+                                       SATSolver* solver,
+                                       lra::LraReconstruction* reconstruction,
+                                       bool highs_enabled);
   friend class ASTNode;
   friend class ASTInterior;
   friend class ASTBVConst;
+  friend class ASTRealConst;
   friend class ASTSymbol;
+  friend class lra::Frontend;
+  friend class lra::PreregistrationBuilder;
+  friend class lra::LraAtomRegistry;
+  friend class lra::LraCoordinator;
+  friend class lra::RealModel;
   friend ASTNode HashingNodeFactory::CreateNode(
       Kind kind, ASTChildren back_children);
 
@@ -104,6 +134,13 @@ private:
 
   ExtensionalityContext* extensionality = nullptr;
   UFContext* uninterpretedFunctions = nullptr;
+  // The floating-point abstraction of the solve in progress, if one is
+  // active: owned by STP for exactly one batch solve, and consulted by the
+  // preprocessing passes that must not touch its symbols.
+  FpAbstraction* fpAbstraction = nullptr;
+  // Every FpAbstraction constructed under this manager and not yet
+  // destroyed; see registerFpAbstraction below.
+  std::set<FpAbstraction*> liveFpAbstractions;
 
   // Why the last solve had no answer, and the sentence to give a caller who
   // asks. Recorded rather than derived because the reasons are produced in
@@ -118,6 +155,22 @@ private:
 
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
+
+  // Created only by the private LRA frontend, on the first Real
+  // construction.  The incomplete type keeps ExactRational, IMath, frontend
+  // IDs, and their allocation policy out of every installed header.
+  LraAstState* lra_ast_state = nullptr;
+
+  ASTRealConst* LookupOrCreateRealConst(ASTRealConst& value);
+  void EraseRealConst(ASTRealConst* value);
+  void RecordRealSymbol(const ASTNode& symbol);
+  void RegisterLraAssertion(const ASTNode& assertion);
+  void PushLraAssertionFrame();
+  void PopLraAssertionFrame();
+  void DestroyLraAtomRegistry();
+  void DestroyLraAstState();
+  void ResetLraStateForPublicReset();
+  void InstallRealModel(lra::RealModel* model);
 
   uint8_t last_iteration;
 
@@ -135,16 +188,78 @@ public:
     return extensionality;
   }
 
+  // Hides the context from a nested solve of a query of its own. The
+  // records, lowerings and graph describe the enclosing solve, and the
+  // nested solve's model satisfies none of their constraints.
+  class DetachedExtensionality
+  {
+    STPMgr* manager;
+    ExtensionalityContext* saved;
+
+  public:
+    explicit DetachedExtensionality(STPMgr* m)
+        : manager(m), saved(m->extensionality)
+    {
+      manager->extensionality = nullptr;
+    }
+    ~DetachedExtensionality()
+    {
+      assert(manager->extensionality == nullptr);
+      manager->extensionality = saved;
+    }
+    DetachedExtensionality(const DetachedExtensionality&) = delete;
+    DetachedExtensionality& operator=(const DetachedExtensionality&) = delete;
+  };
+
   // Manager-lifetime UF declarations and durable applications. Solve-local
   // lowering/checker/model state is owned below this context and reset at the
   // completed-root boundary.
   DLL_PUBLIC UFContext* getUFContext();
   UFContext* getUFContextIfAny() const { return uninterpretedFunctions; }
 
+  // The active floating-point abstraction, or NULL. Set by STP for the
+  // duration of a batch solve that abstracted something.
+  FpAbstraction* getFpAbstractionIfAny() const { return fpAbstraction; }
+  void setFpAbstraction(FpAbstraction* abstraction)
+  {
+    fpAbstraction = abstraction;
+  }
+
+  // Every FpAbstraction alive under this manager, whether or not it is the
+  // one the pointer above names: the pointer is the *active* instance and is
+  // cleared and re-published around batch warm-ups and fallbacks, while a
+  // reader of the session's coverage counters needs whatever exists right
+  // now. An instance registers itself here on construction and folds its
+  // totals into UserFlags.coverage on destruction; publishFpCoverage() folds
+  // in what the live ones have accumulated since they last published, so
+  // vc_getCounter answers mid-session as well as after teardown. There are
+  // at most a handful: one per batch solve or restart, one per encoding
+  // epoch under --fp-abstraction-incremental.
+  void registerFpAbstraction(FpAbstraction* abstraction)
+  {
+    liveFpAbstractions.insert(abstraction);
+  }
+  void unregisterFpAbstraction(FpAbstraction* abstraction)
+  {
+    liveFpAbstractions.erase(abstraction);
+  }
+  DLL_PUBLIC void publishFpCoverage();
+
   // frequently used nodes
   ASTNode ASTFalse, ASTTrue, ASTUndefined;
 
   bool soft_timeout_expired;
+
+  // Borrowed only within a PreparationScope. Public queries install their
+  // original deadline here and restore an optional outer observer on exit.
+  const PreparationControl* preparation_control = nullptr;
+  // Borrowed by the current public query; null unless statistics are enabled.
+  QueryTiming* query_timing = nullptr;
+  void checkPreparation(PreparationStage stage) const
+  {
+    if (preparation_control)
+      preparation_control->check(stage);
+  }
 
   // Fitted estimate of the AND nodes bit-blasting the formula will build,
   // recorded by the top level from the difficulty score it computes anyway.
@@ -417,6 +532,7 @@ public:
   }
 
   size_t getAssertLevel() { return _asserts.size(); }
+  const vector<ASTVec*>& AssertLevels() const noexcept { return _asserts; }
 
 private:
   // Stack of Logical Context. each entry in the stack is a logical
@@ -425,6 +541,7 @@ private:
   // assertions in that logical context. Logical contexts are
   // created by PUSH/POP
   vector<ASTVec*> _asserts;
+  size_t lra_refused_depth = 0;
 
   // Memo table that tracks terms already seen
   ASTNodeMap TermsAlreadySeenMap;
@@ -449,6 +566,10 @@ private:
 
   // Create unique ASTSymbol node.
   ASTSymbol* LookupOrCreateSymbol(ASTSymbol& s);
+  ASTNode CreateInternalSourceSymbol(const char* name,
+                                     const SourceSort& source_sort);
+  ASTNode CreateFreshInternalSourceVariable(const SourceSort& source_sort,
+                                            const std::string& prefix);
 
   // Called by ASTNode constructors to uniqueify ASTBVConst
   ASTBVConst* LookupOrCreateBVConst(ASTBVConst& s);
@@ -581,6 +702,16 @@ public:
                                    unsigned exp_width, unsigned sig_width);
   DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
 
+  // Exact Real construction. Text is parsed only by the private
+  // ExactRational implementation; no binary floating representation enters
+  // this boundary. The two-string form requires integer decimal components.
+  DLL_PUBLIC ASTNode CreateRealConst(const std::string& decimal_or_fraction);
+  DLL_PUBLIC ASTNode CreateRealConst(const std::string& numerator,
+                                     const std::string& denominator);
+  DLL_PUBLIC ASTNode CreateRealTerm(Kind kind, const ASTVec& children);
+  DLL_PUBLIC ASTNode CreateRealPredicate(Kind kind, const ASTNode& lhs,
+                                         const ASTNode& rhs);
+
   // Restore a model carrier value to the immutable sort of the source term
   // it answers. The solver itself continues to evaluate plain bitvectors.
   ASTNode LiftSourceValue(const ASTNode& carrier,
@@ -607,6 +738,11 @@ public:
   // negative and walked the DAG of every pure bit-vector query.
   bool has_floating_point_theory = false;
 
+  // Like the FP latches, false is a cheap manager-lifetime proof. Positive
+  // query decisions still inspect the current assertion DAG because Real
+  // declarations and popped terms may outlive their active use.
+  bool has_real = false;
+
   void noteFloatingPointTheory() { has_floating_point_theory = true; }
 
   // Conservative manager-lifetime hint, like the two floating-point latches
@@ -626,6 +762,74 @@ public:
   // not the format then needs storing on a node, since a node that derives its
   // format from its kind and children may later occur in a query.
   DLL_PUBLIC void noteFloatingPoint();
+  DLL_PUBLIC void noteReal();
+  bool HasSeenRealSyntax() const noexcept { return has_real; }
+
+  // Exact model access never exposes the private arithmetic type.  Returned
+  // strings own their bytes and remain valid independently of subsequent
+  // model invalidation.
+  // Publish the model values of Real-sorted uninterpreted-function
+  // applications, so a caller can read one back against the application node
+  // it holds rather than against the lowering's private result symbol. No-op
+  // without a current Real model. See RealModel::defineApplicationValues.
+  DLL_PUBLIC void PublishRealApplicationValues(const ASTNodeMap& handle_to_result);
+  // The current Real model's value for `term`, as an interned REAL_CONST.
+  // False when there is no model or it does not value the term, leaving
+  // `value` untouched.
+  DLL_PUBLIC bool RealModelValueNode(const ASTNode& term, ASTNode& value);
+  // Lend the current Real model somewhere to decide the Boolean condition of
+  // a Real ite, for as long as that model lives. The model holds the Real
+  // variables and nothing else, so such a condition is not its to answer;
+  // whoever holds a model of the Booleans supplies this. No-op without a
+  // model. See RealModel::setConditionOracle.
+  DLL_PUBLIC void SetRealConditionOracle(
+      const std::function<bool(const ASTNode&)>& oracle);
+  // Value-based keys for non-Real arguments of Real-valued applications.
+  // Install with the condition oracle before publishing application values.
+  DLL_PUBLIC void SetRealScalarKeyOracle(
+      const std::function<std::string(const ASTNode&)>& oracle);
+  // Whether the current Real model decides `predicate` -- one of REAL_LT,
+  // REAL_LE, REAL_GT, REAL_GE or an EQ over two Real operands -- and if so
+  // its value. False without a model, or for anything else, leaving `value`
+  // untouched: the caller then still has its own error to report.
+  //
+  // `condition_oracle`, when given, is how a Real ite inside `predicate`
+  // resolves its Boolean condition: this model holds the Real variables and
+  // nothing else, so a condition over Boolean ones is not its to answer. The
+  // caller that has a model of those lends it one, as the exact verifier
+  // does. Without it such a predicate is simply not decided.
+  DLL_PUBLIC bool EvaluateRealPredicate(
+      const ASTNode& predicate, bool& value,
+      const std::function<bool(const ASTNode&)>& condition_oracle =
+          std::function<bool(const ASTNode&)>()) const noexcept;
+  DLL_PUBLIC bool HasRealModelValue(const ASTNode& term) const noexcept;
+  DLL_PUBLIC std::string GetRealModelValue(const ASTNode& term) const;
+  DLL_PUBLIC std::string GetRealModelNumerator(const ASTNode& term) const;
+  DLL_PUBLIC std::string GetRealModelDenominator(const ASTNode& term) const;
+  DLL_PUBLIC std::string GetRealModelSMTLIB(const ASTNode& term) const;
+  DLL_PUBLIC bool HasRealModel() const noexcept;
+  DLL_PUBLIC void PrintRealModelSMTLIB2(std::ostream& out,
+                                        const ASTVec& visible_symbols) const;
+  void InvalidateRealModel() noexcept;
+
+  // A Real assertion the exact-arithmetic budget refused is not in _asserts,
+  // so a later query would be answered without it -- soundly wrong rather
+  // than merely incomplete. Record the depth it was refused at; every query
+  // at or below that depth must answer "unknown" instead, and popping back
+  // past it clears the debt.
+  void NoteRealAssertionRefused() noexcept;
+  bool RealAssertionRefused() const noexcept
+  {
+    return lra_refused_depth != 0;
+  }
+  ASTVec AllRealSymbols() const;
+
+  /* Whether exact rationals re-derive a canonical form their construction
+   * already proves. A self-check on the number layer: budgets do it unless
+   * told otherwise, so every test and every API caller keeps it, and the
+   * command-line solver turns it off from its own flag. Must be set before
+   * the first exact value is built. */
+  DLL_PUBLIC void SetLraCanonicalVerification(bool enabled) noexcept;
 
   bool isRoundingModeSymbol(const ASTNode& n) const
   {
@@ -801,6 +1005,9 @@ public:
 
   void Pop(void);
   void Push(void);
+  // Internal check-sat-assuming pop variant for the SMT-LIB rule that the
+  // accepted model remains readable after its call-local frame closes.
+  void PopPreservingRealModel(void);
 
   // Queries aren't maintained on a stack.
   // Used by CVC & C-interface.
@@ -866,7 +1073,9 @@ public:
     sprintf(d, "@%s_%d", prefix.c_str(), _symbol_count++);
     assert(!LookupSymbol(d));
 
-    ASTNode CurrentSymbol = CreateSymbol(d, indexWidth, valueWidth);
+    ASTNode CurrentSymbol =
+        CreateSymbol(d, static_cast<unsigned int>(indexWidth),
+                     static_cast<unsigned int>(valueWidth));
     Introduced_SymbolsSet.insert(CurrentSymbol);
     return CurrentSymbol;
   }
@@ -910,7 +1119,9 @@ public:
     char* d = (char*)alloca(sizeof(char) * (48 + prefix.length()));
     sprintf(d, "@%s_k%lu", prefix.c_str(),
             (unsigned long)key.GetNodeNum());
-    ASTNode current = CreateSymbol(d, indexWidth, valueWidth);
+    ASTNode current =
+        CreateSymbol(d, static_cast<unsigned int>(indexWidth),
+                     static_cast<unsigned int>(valueWidth));
     Introduced_SymbolsSet.insert(current);
     return current;
   }
@@ -924,7 +1135,9 @@ public:
     sprintf(d, "@%s_k%lu_k%lu", prefix.c_str(),
             (unsigned long)key.GetNodeNum(),
             (unsigned long)key2.GetNodeNum());
-    ASTNode current = CreateSymbol(d, indexWidth, valueWidth);
+    ASTNode current =
+        CreateSymbol(d, static_cast<unsigned int>(indexWidth),
+                     static_cast<unsigned int>(valueWidth));
     Introduced_SymbolsSet.insert(current);
     return current;
   }
@@ -1026,8 +1239,10 @@ public:
 
   DLL_PUBLIC ~STPMgr();
 
-  // Used just via the C-Interface, to allow some nodes to be automaticaly deleted.
-  vector<stp::ASTNode*> persist;
+  // The C interface's checker-owned wrappers, released by vc_Destroy. A hash
+  // set so that vc_DeleteExpr can forget a wrapper the caller released in
+  // constant time; the order they are released in does not matter.
+  ankerl::unordered_dense::set<stp::ASTNode*> persist;
 
   void print_stats() const
   {

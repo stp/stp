@@ -167,19 +167,42 @@ public:
     return enableBVAInternal();
   }
 
-  // Ask the backend to reuse the solver trail across incremental solve
-  // calls when consecutive assumption sequences share a prefix, instead of
-  // re-deciding and re-propagating from the root every call (CaDiCaL's
-  // incremental lazy backtracking). Only correct to rely on when the
-  // caller keeps its assumption order prefix-stable across calls, which
-  // the incremental driver does: assumptions are emitted in assertion
-  // stack order and push/pop only ever change the suffix. FALSE means the
-  // backend has no such mechanism -- a performance hint declined, not an
-  // error.
-  bool enableTrailReuse()
+  // How much of its search trail a backend may keep from one solve call to
+  // the next, instead of re-deciding and re-propagating from the root every
+  // call (CaDiCaL's incremental lazy backtracking).
+  //
+  //   ASSUMPTIONS  keep the part of the trail that consecutive assumption
+  //                sequences share, and nothing else: a call that carries
+  //                no assumptions starts from the root. What the
+  //                incremental driver asks for. Only worth anything to a
+  //                caller whose assumption order is prefix-stable across
+  //                calls, which that driver's is: assumptions are emitted
+  //                in assertion stack order, and push/pop only ever change
+  //                the suffix.
+  //
+  //   ALL          keep the whole trail, assumptions or none. A clause
+  //                added between calls then unwinds the trail only to just
+  //                below the level at which it is falsified, rather than
+  //                to the root, and a search that resumes above the root
+  //                skips the pre-search phases a fresh descent repeats
+  //                every call (the preprocessing rounds, lucky phases,
+  //                local search). What a refinement loop wants: it adds
+  //                the few clauses that refute the last candidate and asks
+  //                the same backend again, with no assumptions at all, so
+  //                ASSUMPTIONS would keep nothing for it.
+  enum class TrailReuse
+  {
+    ASSUMPTIONS,
+    ALL
+  };
+
+  // Ask the backend for that much trail reuse. FALSE means the backend has
+  // no such mechanism, or not that much of one -- a performance hint
+  // declined, not an error.
+  bool enableTrailReuse(TrailReuse scope = TrailReuse::ASSUMPTIONS)
   {
     assertConfigurable("enableTrailReuse");
-    return enableTrailReuseInternal();
+    return enableTrailReuseInternal(scope);
   }
 
   // Whether this backend can turn probe-based inprocessing off, and the
@@ -205,6 +228,8 @@ public:
   // and learned-clause shrinking taxes every conflict of a many-solve
   // session. Both measured as steady per-solve losses on the sessions
   // that retire inprobing, and their removal composes with it.
+  // An explicit request to keep CaDiCaL elimination enabled takes precedence:
+  // this returns false but can still retire shrinking.
   bool disableEliminationAndShrinking()
   {
     assertConfigurable("disableEliminationAndShrinking");
@@ -234,7 +259,7 @@ public:
   {
     out.clear();
     for (int i = 0; i < assumps.size(); i++)
-      out.push_back(assumps[i].x);
+      out.push_back(static_cast<int>(assumps[i].x));
   }
 
   // Run whatever simplification the backend can do without being asked to
@@ -273,6 +298,86 @@ public:
     (void)value;
   }
 
+  // ---------------------------------------------------------------------
+  // Theory propagation.
+  //
+  // A theory that takes part in the search rather than judging it after the
+  // fact. The backend reports assignments of the variables it was told to
+  // observe and reports movement between decision levels; the propagator
+  // answers with conflicts it has derived, and passes final judgement on a
+  // complete assignment before the backend calls it a model.
+  //
+  // This is what separates checking a candidate from steering the search
+  // that produces one. A backend with no such interface says so, and the
+  // caller keeps whatever candidate loop it already had -- so this is an
+  // optional capability, not a contract every backend has to meet.
+  // ---------------------------------------------------------------------
+  class TheoryPropagator
+  {
+  public:
+    virtual ~TheoryPropagator() {}
+
+    // The backend has just assigned these observed literals, in order.
+    virtual void notifyAssigned(const std::vector<Lit>& literals) = 0;
+
+    // The backend opened a new decision level, or backtracked to `level`.
+    virtual void notifyNewLevel() = 0;
+    virtual void notifyBacktrack(size_t level) = 0;
+
+    // Every observed variable is assigned. True accepts the assignment as a
+    // model; false rejects it, and the propagator must then have a clause.
+    virtual bool checkFoundModel() = 0;
+
+    // Take the pending clause, if there is one. Clears it.
+    virtual bool takeClause(std::vector<Lit>& clause) = 0;
+    // The next literal the theory implies under the current assignment, if
+    // it has one. The backend assigns it, and asks reasonFor() only if it
+    // ever needs to know why -- in conflict analysis -- which is what makes
+    // this cheaper than handing the implication over as a clause.
+    virtual bool propagate(Lit& /*literal*/) { return false; }
+    // The clause behind a literal handed out by propagate(): that literal
+    // first, then the negations of what it follows from. It is a fact of
+    // the theory, true under every assignment, so the backend may keep it
+    // or forget it as it likes. False only if the literal is unknown.
+    virtual bool reasonFor(Lit /*literal*/, std::vector<Lit>& /*clause*/)
+    {
+      return false;
+    }
+
+    // Optional sign advice for the backend's already-selected decision
+    // variable. No variable selection, solver mutation, or extra search.
+    virtual bool wantsDecisionPolarity() const { return false; }
+    virtual bool decisionPolarity(uint32_t /*variable*/, bool& /*value*/)
+    {
+      return false;
+    }
+
+    // Once this is true the propagator has failed and no verdict from this
+    // solve can be trusted. The backend stops asking.
+    virtual bool failed() const = 0;
+  };
+
+  // Whether this backend can host a TheoryPropagator at all.
+  virtual bool supportsTheoryPropagator() const { return false; }
+  virtual bool supportsDecisionPolarity() const { return false; }
+
+  // Connect one, naming every variable it needs to be told about. False if
+  // the backend cannot. The propagator must outlive the connection.
+  virtual bool connectTheoryPropagator(TheoryPropagator* /*propagator*/,
+                                       const std::vector<uint32_t>& /*observed*/)
+  {
+    return false;
+  }
+
+  virtual void disconnectTheoryPropagator() {}
+
+  // Notice, before a query's first solve, that a TheoryPropagator will be
+  // connected once the CNF exists. A backend that would otherwise rewrite
+  // its variables in ways that make them unobservable later -- CryptoMiniSat
+  // replaces equivalent literals -- keeps them observable from here on.
+  // Idempotent, and a no-op for a backend that needs no notice.
+  virtual void expectTheoryPropagator() {}
+
   // Bring every variable created so far to the backend's attention.
   //
   // A backend may declare variables lazily -- CaDiCaL's factoring layer
@@ -283,6 +388,44 @@ public:
   // much for a hint to do; a caller that knows it is between construction and
   // the first solve can ask for it explicitly here instead.
   virtual void declarePendingVariables() {}
+
+  // Experimental ablation between solves: retain the formula's model set and
+  // external variable identities, but discard search history. The caller
+  // must disconnect its theory propagator and reapply solve assumptions.
+  virtual bool supportsSearchReset() const { return false; }
+  virtual bool resetSearch() { return false; }
+
+  // A decision hint: decide this variable, to this value, before the
+  // backend's own heuristic chooses. Stronger than suggestPhase, which only
+  // says which value to try once the heuristic reaches the variable.
+  struct DecisionHint
+  {
+    uint32_t var;
+    bool value;
+  };
+
+  // Ask the backend to make these decisions first, in this order, each at
+  // the first decision point at which its variable is still open, and once
+  // only: after that the value persists as whatever the backend saves of a
+  // phase, which its search may overrule. Search advice, like
+  // suggestPhase: a hint cannot change a verdict, only which model is
+  // reached first and by what route.
+  // What it is for is a group of bit-vectors the encoding leaves free but
+  // that refinement makes pay for landing on one value -- the indices of an
+  // array's reads -- which a counting value per vector, decided before
+  // anything else can pull them together, keeps apart.
+  //
+  // Only accepted before the first search, on a backend with the mechanism:
+  // CaDiCaL's external propagator observes the hinted variables, and a
+  // variable may only be observed while inprocessing has not yet touched
+  // it, which before the first search is every variable. FALSE means the
+  // backend has no such mechanism or the moment has passed -- a performance
+  // hint declined, not an error -- and a caller may fall back to
+  // suggestPhase. Every hinted variable must already exist (newVar).
+  virtual bool preferDecisions(const std::vector<DecisionHint>& /*hints*/)
+  {
+    return false;
+  }
 
   // ---------------------------------------------------------------------
   // Resource budgets.
@@ -313,9 +456,15 @@ public:
   virtual void setMaxTime(int64_t max_time) // seconds
   {
     assert(max_time >= 0);
+    setDeadline(std::chrono::steady_clock::now() +
+                std::chrono::seconds(max_time));
+  }
 
-    deadline = std::chrono::steady_clock::now() +
-               std::chrono::seconds(max_time);
+  // Replacement backends inherit the query's original deadline, including
+  // fractional seconds already spent in preprocessing or another driver.
+  void setDeadline(std::chrono::steady_clock::time_point query_deadline)
+  {
+    deadline = query_deadline;
     deadline_set = true;
 
     if (!canInterruptSearch())
@@ -350,11 +499,34 @@ public:
     return remaining.count() > 0.0 ? remaining.count() : 0.0;
   }
 
+  // A theory propagator asks the search to stop and be redone differently --
+  // today only the LRA float tier, when its tableau has blown up and the exact
+  // driver would settle the same query in a fraction of the time. Expiring the
+  // deadline is what actually ends the search: the backends already poll it
+  // through the same Terminator the time budget uses, so nothing new has to
+  // interrupt CaDiCaL mid-search. The flag is the record the caller reads once
+  // the search returns, to tell this abort apart from a real timeout and redo
+  // the solve rather than report unknown. The redo runs on a fresh solver,
+  // which starts with the flag clear.
+  void requestTheoryReroute()
+  {
+    theory_reroute_requested = true;
+    deadline = std::chrono::steady_clock::now();
+    deadline_set = true;
+  }
+  bool theoryRerouteRequested() const { return theory_reroute_requested; }
+
   virtual uint8_t modelValue(uint32_t x) const = 0;
 
   virtual uint32_t newVar() = 0;
 
   virtual uint32_t nVars() const = 0;
+
+  // Validate this backend's live variable domain without exposing its
+  // numbering convention. Most STP backends use [0,nVars()); CaDiCaL's
+  // public literals are one-based. The LRA coordinator and adapter check the
+  // variables they bind against it.
+  virtual bool validVariable(uint32_t x) const { return x < nVars(); }
 
   virtual void printStats() const = 0;
 
@@ -409,7 +581,10 @@ protected:
   // technique -- a performance hint declined, not an error.
   virtual bool setSearchBiasInternal(SearchBias /*bias*/) { return false; }
   virtual bool enableBVAInternal() { return false; }
-  virtual bool enableTrailReuseInternal() { return false; }
+  virtual bool enableTrailReuseInternal(TrailReuse /*scope*/)
+  {
+    return false;
+  }
   virtual bool disableInprobingInternal() { return false; }
   virtual bool disableEliminationAndShrinkingInternal() { return false; }
   virtual bool disableLuckyPhasesInternal() { return false; }
@@ -442,6 +617,7 @@ private:
   uint64_t submitted_clauses = 0;
   std::chrono::steady_clock::time_point deadline;
   bool deadline_set = false;
+  bool theory_reroute_requested = false;
 };
 }
 #endif

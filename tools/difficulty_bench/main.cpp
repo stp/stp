@@ -191,6 +191,26 @@ ASTNode constantWithBits(unsigned w, unsigned stride)
   return mgr->CreateBVConst(cbv, w);
 }
 
+// A constant whose bits [from, from + length) are set.
+ASTNode constantWithRun(unsigned w, unsigned from, unsigned length)
+{
+  CBV cbv = CONSTANTBV::BitVector_Create(w, true);
+  for (unsigned i = from; i < w && i < from + length; i++)
+    CONSTANTBV::BitVector_Bit_On(cbv, i);
+  return mgr->CreateBVConst(cbv, w);
+}
+
+// A constant of runs of `ones` set bits separated by `zeros` clear bits,
+// from bit 0 up.
+ASTNode constantWithRuns(unsigned w, unsigned ones, unsigned zeros)
+{
+  CBV cbv = CONSTANTBV::BitVector_Create(w, true);
+  for (unsigned i = 0; i < w; i++)
+    if (i % (ones + zeros) < ones)
+      CONSTANTBV::BitVector_Bit_On(cbv, i);
+  return mgr->CreateBVConst(cbv, w);
+}
+
 void bitvectorSweep(const vector<unsigned>& widths, unsigned arity)
 {
   struct NAry { const char* name; Kind kind; };
@@ -242,6 +262,31 @@ void bitvectorSweep(const vector<unsigned>& widths, unsigned arity)
     measure("bvadd-const", w, mgr->CreateTerm(BVPLUS, w, c, fresh(w)));
     measure("bvsub-const", w, mgr->CreateTerm(BVSUB, w, fresh(w), c));
     measure("bvmul-const", w, mgr->CreateTerm(BVMULT, w, c, fresh(w)));
+    // Constants the multiplier Booth-recodes: a run of ones is two rows
+    // (subtract at its foot, add above its head) however long it is, so
+    // the set-bit count says nothing about these. The stride constant
+    // above has no run of three and takes the plain rows.
+    measure("bvmul-const-run", w,
+            mgr->CreateTerm(BVMULT, w, constantWithRun(w, 1, w - 3),
+                            fresh(w)));
+    measure("bvmul-const-ones", w,
+            mgr->CreateTerm(BVMULT, w, constantWithRun(w, 0, w), fresh(w)));
+    measure("bvmul-const-runs3", w,
+            mgr->CreateTerm(BVMULT, w, constantWithRuns(w, 3, 1), fresh(w)));
+    measure("bvmul-const-runs2", w,
+            mgr->CreateTerm(BVMULT, w, constantWithRuns(w, 2, 2), fresh(w)));
+    // A run reaching the top bit recodes to a lone subtract; a set bit under
+    // a run puts an add below the subtract.
+    measure("bvmul-const-runtop", w,
+            mgr->CreateTerm(BVMULT, w, constantWithRun(w, w / 2, w), fresh(w)));
+    {
+      CBV cbv = CONSTANTBV::BitVector_Create(w, true);
+      CONSTANTBV::BitVector_Bit_On(cbv, 0);
+      for (unsigned i = w / 4; i < 3 * w / 4; i++)
+        CONSTANTBV::BitVector_Bit_On(cbv, i);
+      measure("bvmul-const-bitrun", w,
+              mgr->CreateTerm(BVMULT, w, mgr->CreateBVConst(cbv, w), fresh(w)));
+    }
     measure("bvudiv-const", w, mgr->CreateTerm(BVDIV, w, fresh(w), c));
     measure("const-bvudiv", w, mgr->CreateTerm(BVDIV, w, c, fresh(w)));
     measure("bvshl-const", w, mgr->CreateTerm(BVLEFTSHIFT, w, fresh(w), c));
@@ -395,6 +440,7 @@ void usage()
          "nodes the bit-blaster really builds for one operation.\n\n"
          "  --widths LIST   bit-vector widths (default 8,16,32,64,128)\n"
          "  --arity N       operands for the n-ary operations (default 2)\n"
+         "  --mult-variant N  bit-blast multiplies as --bb.mult-variant N\n"
          "  --no-bv         skip the bit-vector operations\n"
          "  --no-fp         skip the floating-point operations\n"
          "  --csv           machine-readable output\n"
@@ -408,6 +454,7 @@ int main(int argc, char** argv)
   vector<unsigned> widths = {8, 16, 32, 64, 128};
   unsigned arity = 2;
   bool doBv = true, doFp = true;
+  int64_t multVariant = -1;
 
   for (int i = 1; i < argc; i++)
   {
@@ -427,6 +474,8 @@ int main(int argc, char** argv)
       widths = parseWidths(argv[++i]);
     else if (a == "--arity" && i + 1 < argc)
       arity = (unsigned)strtoul(argv[++i], NULL, 10);
+    else if (a == "--mult-variant" && i + 1 < argc)
+      multVariant = strtoll(argv[++i], NULL, 10);
     else
     {
       printf("unrecognised argument: %s\n", a.c_str());
@@ -437,6 +486,8 @@ int main(int argc, char** argv)
 
   STPMgr localMgr;
   mgr = &localMgr;
+  if (multVariant >= 0)
+    mgr->UserFlags.multiplication_variant = multVariant;
   SubstitutionMap substitutions(mgr);
   Simplifier localSimp(mgr, &substitutions);
   simp = &localSimp;

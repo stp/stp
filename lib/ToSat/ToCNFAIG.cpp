@@ -203,14 +203,33 @@ CNF ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs)
   else if (effort == UserDefinedFlags::CNF_EFFORT_AUTO)
   {
     const unsigned nodes = (unsigned)Aig_ManNodeNum(mgr.aigMgr);
-    effort = nodes >= uf.cnf_auto_threshold
-                 ? UserDefinedFlags::CNF_EFFORT_VERY_LOW
-                 : UserDefinedFlags::CNF_EFFORT_MEDIUM;
+    if (uf.cnf_auto_real_path)
+    {
+      // The Real path's own fit, at both ends of the threshold. Neither of
+      // the bit-vector choices suits the shape it hands over -- a wide,
+      // shallow conjunction of small clauses over one opaque atom per Real
+      // predicate. Minimising that buys a CNF the solver was going to
+      // dispose of cheaply anyway, and below the threshold, which is where
+      // 523 of 547 measured Real queries land, MEDIUM was simply paying
+      // ABC's cut enumeration and area-flow mapping for it. Above the
+      // threshold the other end still holds: Cnf_DeriveFast's leaf
+      // collection is the slowest generator there by a wide margin, which
+      // is what this flag was introduced for.
+      effort = nodes < uf.cnf_auto_threshold
+                   ? UserDefinedFlags::CNF_EFFORT_VERY_LOW
+                   : UserDefinedFlags::CNF_EFFORT_LOW;
+    }
+    else if (nodes < uf.cnf_auto_threshold)
+      effort = UserDefinedFlags::CNF_EFFORT_MEDIUM;
+    else
+      effort = UserDefinedFlags::CNF_EFFORT_VERY_LOW;
     if (uf.stats_flag)
       std::cerr << "cnf-auto: " << nodes << " AIG nodes, chose "
                 << (effort == UserDefinedFlags::CNF_EFFORT_VERY_LOW
                         ? "very-low"
-                        : "medium")
+                        : effort == UserDefinedFlags::CNF_EFFORT_LOW
+                              ? "low"
+                              : "medium")
                 << std::endl;
   }
 
@@ -247,6 +266,7 @@ CNF ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs)
     case UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW:
     case UserDefinedFlags::CNF_EFFORT_NEW_LOW:
     case UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM:
+    case UserDefinedFlags::CNF_EFFORT_NEW_HIGH:
       return fromAig(Cnf_DeriveFast(mgr.aigMgr, (int)namedOutputs));
 
     case UserDefinedFlags::CNF_EFFORT_GIA_LOW:
@@ -283,12 +303,14 @@ void ToCNFAIG::fill_node_to_var(const CNF& cnf,
                                 ToSATBase::ASTNodeToSATVar& nodeToVars,
                                 BBNodeManagerAIG& mgr)
 {
+  PreparationPoller poll(mgr.preparationControl(), PreparationStage::CNFConversion);
   BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
   assert(nodeToVars.size() == 0);
 
   // Each symbol maps to a vector of CNF variables.
   for (it = mgr.symbolToBBNode.begin(); it != mgr.symbolToBBNode.end(); it++)
   {
+    poll();
     const ASTNode& n = it->first;
     const vector<BBNodeAIG>& b = it->second;
     assert(nodeToVars.find(n) == nodeToVars.end());
@@ -300,6 +322,7 @@ void ToCNFAIG::fill_node_to_var(const CNF& cnf,
 
     for (unsigned i = 0; i < b.size(); i++)
     {
+      poll();
       if (!b[i].IsNull())
       {
         // 0 is CNF's "no variable"; ~0u is this map's, and the two have to be

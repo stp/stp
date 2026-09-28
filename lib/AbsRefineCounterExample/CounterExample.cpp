@@ -23,9 +23,11 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "Lra/LraCoordinator.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
 #include "stp/Simplifier/DistinctOrdering.h"
@@ -40,6 +42,14 @@ const bool debug_counterexample = false;
 namespace stp
 {
 using std::cout;
+
+namespace lra {
+ASTNode evaluateAgainstCounterexample(
+    AbsRefine_CounterExample& counterexample, const ASTNode& formula)
+{
+  return counterexample.QueryFormulaAgainstModel(formula);
+}
+} // namespace lra
 
 // Whether `n` is an access over an array whose declared index sort is
 // floating-point -- the question FpTotalise::visit asks before canonicalising
@@ -768,6 +778,40 @@ class AbsRefine_CounterExample::EvaluationDriver
         // Has been simplified out. Can take any value.
         return finish(ASTFalse);
       }
+      case REAL_LT:
+      case REAL_LE:
+      case REAL_GT:
+      case REAL_GE:
+      {
+        // A Real predicate is not evaluated by resolving its operands to
+        // constant nodes the way the bit-vector and float ones below are:
+        // its operands are exact rationals the arithmetic holds, with no
+        // node to fold them to. The model that does hold them answers
+        // directly.
+        //
+        // Reached whenever a model is read back from a query with Real
+        // syntax in it: the counterexample check walks the whole formula,
+        // and until now this switch had no Real arm at all, so it declared
+        // every such predicate unimplemented and took the process down.
+        // A Real ite inside the predicate has a Boolean condition, which the
+        // Real model does not hold. This walk does: lend it the counterexample
+        // for the duration, which is the same thing the exact verifier does
+        // with the same model. evaluate() builds a fresh driver per call, so
+        // the nested query does not disturb this one.
+        const auto condition_oracle = [this, &owner = owner](const ASTNode& condition) {
+          const ASTNode decided = owner.ModelValueOfFormula(condition);
+          if (decided == bm->ASTTrue) return true;
+          if (decided == bm->ASTFalse) return false;
+          throw std::runtime_error(
+              "Real ite condition did not evaluate to a Boolean constant");
+        };
+        bool decided = false;
+        if (bm->EvaluateRealPredicate(form, decided, condition_oracle))
+          return finish(decided ? ASTTrue : ASTFalse);
+        FatalError(" ComputeFormulaUsingModel: "
+                   "the exact Real model does not decide this predicate",
+                   form);
+      }
       case DISTINCT:
       {
         if (f.formulaPhase == Frame::FormulaPhase::AfterDistinctLowering)
@@ -820,6 +864,29 @@ class AbsRefine_CounterExample::EvaluationDriver
             bm->CreateNode(BOOLEXTRACT, result, form[1])));
       }
       case EQ:
+        // An equality over two Real operands belongs with the Real
+        // predicates above, not with the bit-vector comparisons it is
+        // grouped with here, for the same reason: there is nothing to fold
+        // its operands to. Every other equality falls through unchanged.
+        if (form.Degree() == 2 &&
+            form[0].GetSourceSort().kind() == SourceSort::Kind::Real &&
+            form[1].GetSourceSort().kind() == SourceSort::Kind::Real)
+        {
+          const auto condition_oracle = [this, &owner = owner](const ASTNode& condition) {
+            const ASTNode decided = owner.ModelValueOfFormula(condition);
+            if (decided == bm->ASTTrue) return true;
+            if (decided == bm->ASTFalse) return false;
+            throw std::runtime_error(
+                "Real ite condition did not evaluate to a Boolean constant");
+          };
+          bool decided = false;
+          if (bm->EvaluateRealPredicate(form, decided, condition_oracle))
+            return finish(decided ? ASTTrue : ASTFalse);
+          FatalError(" ComputeFormulaUsingModel: "
+                     "the exact Real model does not decide this equality",
+                     form);
+        }
+        [[fallthrough]];
       case BVLT:
       case BVLE:
       case BVGT:
@@ -986,10 +1053,8 @@ class AbsRefine_CounterExample::EvaluationDriver
         std::string diagnostic;
         if (!UFModel::evaluateApplicationInTerm(bm, owner.getUFTheoryAdapter(),
                                                 form, f.parts, value,
-                                                diagnostic))
-          FatalError(
-              (" ComputeFormulaUsingModel: " + diagnostic + ": ").c_str(),
-              form);
+                                                diagnostic, &owner))
+          throw std::runtime_error("ComputeFormulaUsingModel: " + diagnostic);
         return finish(value);
       }
       default:
@@ -1096,6 +1161,35 @@ class AbsRefine_CounterExample::EvaluationDriver
 
     if (f.termPhase == Frame::TermPhase::AfterDefinition)
       return StepResult::Finished;
+
+    // A Real term is answered by the Real model and by nothing below: it has
+    // no carrier, so every arm of the switch that reaches for a width or a
+    // zero constant is fatal on one -- which is what a Real symbol used as an
+    // uninterpreted function's argument met, the walk descending into the
+    // application to resolve its arguments.
+    //
+    // The counterpart of the Real arms in stepFormula. Deliberately not
+    // routed through finish(), which asserts a BVCONST, and deliberately not
+    // memoised into CounterExampleMap: that map is read as bit patterns, and
+    // the Real model is the stable authority for these anyway.
+    if (term.GetSourceSort().kind() == SourceSort::Kind::Real)
+    {
+      // A scalar-only UF solve need not install an arithmetic model. Exact
+      // constants still denote themselves when used as function arguments.
+      if (k == REAL_CONST)
+      {
+        result = term;
+        return StepResult::Finished;
+      }
+      ASTNode value;
+      if (bm->RealModelValueNode(term, value))
+      {
+        result = value;
+        return StepResult::Finished;
+      }
+      throw std::runtime_error("TermToConstTermUsingModel: "
+                               "the exact Real model does not value this term");
+    }
 
     switch (k)
     {
@@ -1432,9 +1526,8 @@ class AbsRefine_CounterExample::EvaluationDriver
         std::string diagnostic;
         if (!UFModel::evaluateApplicationInTerm(bm, owner.getUFTheoryAdapter(),
                                                 term, f.parts, value,
-                                                diagnostic))
-          FatalError(("TermToConstTermUsingModel: " + diagnostic + ": ").c_str(),
-                     term);
+                                                diagnostic, &owner))
+          throw std::runtime_error("TermToConstTermUsingModel: " + diagnostic);
         return finish(value);
       }
       default:
@@ -2334,6 +2427,11 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
 
     if (f.GetKind() == SYMBOL)
     {
+      // The solve-independent RealModel printer owns exact Real definitions;
+      // this legacy counterexample channel has only packed SAT values and
+      // must neither approximate nor attempt to reinterpret them.
+      if (f.GetSourceSort().kind() == SourceSort::Kind::Real)
+        return;
       os << "(define-fun ";
       os << "|";
       f.nodeprint(os);
@@ -2963,52 +3061,212 @@ void AbsRefine_CounterExample::CopySolverMap_To_CounterExample(void)
   }
 }
 
+namespace
+{
+/* A coordinator that is no longer usable stopped for one of two reasons,
+ * and the verdict differs: a budget that refused is a query this solve
+ * could not finish and carries a reason, while a broken coordinator is a
+ * fault of ours and keeps SOLVER_ERROR. `ready()` is false for both, so
+ * every site that turns it into a verdict has to ask which. */
+SOLVER_RETURN_TYPE lraStopped(STPMgr* bm, lra::LraCoordinator* coordinator,
+                              const char* where)
+{
+  if (coordinator == NULL || !coordinator->gaveUp())
+    return SOLVER_ERROR;
+  bm->noteUnknown(UnknownReason::Incomplete,
+                  !coordinator->failureDetail().empty()
+                      ? std::string(where) + ": " + coordinator->failureDetail()
+                      : std::string(where) +
+                            ": the exact linear arithmetic solver ran out of "
+                            "budget");
+  return bm->unknownResult();
+}
+} // namespace
+
 SOLVER_RETURN_TYPE
 AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
                                               const ASTNode& modified_input,
                                               const ASTNode& original_input,
                                               const ASTNode& submitted_input,
-                                              ToSATBase* tosat, bool refinement)
+                                              ToSATBase* tosat, bool refinement
+                                              , lra::LraCoordinator* lra_coordinator
+                                              )
 {
+  if (lra_coordinator != NULL && !lra_coordinator->beforeSolverCall())
+    return lraStopped(bm, lra_coordinator, "preparing the arithmetic solve");
+  struct SearchHookScope
+  {
+    ToSATBase* tosat;
+    ~SearchHookScope() { tosat->clearBeforeSearch(); }
+  } search_hook_scope{tosat};
+  if (lra_coordinator != NULL &&
+      (bm->UserFlags.lra_first_search || bm->UserFlags.lra_persistent_state))
+    tosat->setBeforeSearch([lra_coordinator, tosat]() {
+      return lra_coordinator->afterCnf(*tosat);
+    });
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
   const bool ufActive =
       ufTheoryAdapter != NULL && ufTheoryAdapter->active();
 
+  if (lra_coordinator != NULL && tosat->hasInternalSolveFailure())
+  {
+    lra_coordinator->failClosed(tosat->internalSolveFailureDetail());
+    ClearAllTables();
+    return SOLVER_ERROR;
+  }
+
   if (bm->soft_timeout_expired)
+  {
+    if (lra_coordinator != NULL)
+    {
+      lra_coordinator->failClosed("public timeout before candidate certification");
+      ClearAllTables();
+    }
     return bm->unknownResult();
+  }
 
   if (!sat)
   {
     if (ufActive)
       ufTheoryAdapter->invalidateCertifiedModel();
+    if (lra_coordinator != NULL)
+    {
+      bm->InvalidateRealModel();
+      ClearAllTables();
+    }
     return SOLVER_VALID;
   }
   else if (SatSolver.okay())
   {
-    // Before anything else looks at this candidate. The bit-vector
-    // abstractions are an over-approximation: an abstracted equality or
-    // operation is a free Boolean, or a free vector of bits, until
-    // refinement pins it to the operands it stands for, and a candidate
-    // which gives it a value the operands do not justify is not an
-    // assignment of the query. Both theory checkers and the model
-    // evaluation below treat exactly that as an internal error -- they
-    // are entitled to, since every other producer of a candidate hands
-    // them a faithful bit-vector layer -- so the abstraction has to be
-    // the first refinement owner consulted, not a later one in the
-    // driver's loop. It is also the only one whose progress does not
-    // depend on a constructed counterexample: it reads the SAT model
-    // directly, which is what lets it run ahead of the shortcut below
-    // and keeps a query that asked for no model from being answered
-    // from an unrefined abstraction.
+    // The congruence checker, ahead of the abstraction refinement, when
+    // there is an abstraction that may refute this candidate. The
+    // refinement is an over-approximation's: an abstracted operation is a
+    // free vector of bits until refinement pins it to its operands, and a
+    // candidate that gives it a value the operands do not justify is not
+    // an assignment of the query -- which is why the refinement is
+    // consulted before any model is read from the candidate, below.
+    // Congruence asks nothing of the arithmetic between the application
+    // scalars, though, only for their values: equal arguments implying
+    // equal results is a theorem whatever values it is instantiated on, so
+    // the checker's lemmas are as sound on such a candidate as on a faithful
+    // one. Asked now, the congruence lemmas this candidate exposes go in
+    // beside the abstraction's clauses and the next candidate answers to
+    // both, as it does in a solver that consults every theory each round.
+    // Left to wait for a faithful candidate they arrived only after the
+    // abstraction had spent its rounds on candidates they would have refuted
+    // outright: on 0884 of the Certora queries, thirty-seven solver calls
+    // and sixty-seven value-blocking lemmas became three calls and one. It
+    // runs first because the refinement writes clauses, which takes the
+    // solver out of the state its model can be read in. Whatever it
+    // certifies is withdrawn if the refinement then refutes the candidate,
+    // since a model over an unfaithful layer is no model; a faithful
+    // candidate is asked again below, in its turn after the array checker,
+    // exactly as before.
+    if (ufActive && bm->UserFlags.uf_check_during_bv_refinement &&
+        tosat->hasAbstractions())
+    {
+      bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
+      CounterExampleMap.clear();
+      ComputeFormulaMap.clear();
+      ConstructCounterExample(SatSolver, tosat->SATVar_to_SymbolIndexMap(),
+                              ufActive);
+      const UFCandidateOutcome early = ufTheoryAdapter->checkCandidate(*this);
+      bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+      if (early == UFCandidateOutcome::InternalError)
+        FatalError(("UFCHK internal error: " + ufTheoryAdapter->diagnostic())
+                       .c_str());
+      if (early == UFCandidateOutcome::Conflict &&
+          !ufTheoryAdapter->hasPendingLemma())
+        FatalError("UFCHK reported a conflict without a pending lemma");
+    }
+
+    // Before anything else reads a model from this candidate. Both theory
+    // checkers' certification and the model evaluation below treat an
+    // unfaithful bit-vector layer as an internal error -- they are entitled
+    // to, since every other producer of a candidate hands them a faithful
+    // one -- so the abstraction has to be the first refinement owner
+    // consulted, not a later one in the driver's loop. It is also the only
+    // one whose progress does not depend on a constructed counterexample:
+    // it reads the SAT model directly, which is what lets it run ahead of
+    // the shortcut below and keeps a query that asked for no model from
+    // being answered from an unrefined abstraction.
     const AbstractionRefinementResult bvRefinement =
         tosat->refineAbstractions(SatSolver);
     if (bvRefinement.isUnknown())
       return bm->unknownResult();
     if (bvRefinement.madeProgress())
+    {
+      if (ufActive)
+      {
+        if (ufTheoryAdapter->hasPendingLemma())
+        {
+          if (bm->UserFlags.stats_flag)
+            std::cerr << "Theory coordination: BV abstraction refined; UFCHK "
+                         "conflict on the same candidate"
+                      << std::endl;
+        }
+        else
+          ufTheoryAdapter->invalidateCertifiedModel();
+      }
       return SOLVER_UNDECIDED;
+    }
     assert(bvRefinement.isFaithful());
 
-    if (!bm->UserFlags.construct_counterexample_flag && !ufActive)
+    if (lra_coordinator != NULL)
+    {
+      const lra::CoordinatorCandidateOutcome lra_outcome =
+          lra_coordinator->checkCompleteCandidate(*tosat);
+      switch (lra_outcome)
+      {
+        case lra::CoordinatorCandidateOutcome::ConflictPending:
+          // The outer owner encodes exactly this verified no-good and
+          // re-solves the same SATSolver.  Array and ordinary checkers do not
+          // inspect a candidate already rejected by LRA.
+          ClearAllTables();
+          return SOLVER_UNDECIDED;
+        case lra::CoordinatorCandidateOutcome::ModelStaged:
+          break;
+        case lra::CoordinatorCandidateOutcome::Interrupted:
+          bm->soft_timeout_expired = true;
+          ClearAllTables();
+          bm->noteUnknown(
+              SatSolver.timeLimitExpired() ? UnknownReason::Timeout
+                                           : UnknownReason::Incomplete,
+              "exact LRA candidate checking was interrupted");
+          return bm->unknownResult();
+        case lra::CoordinatorCandidateOutcome::ResourceLimit:
+          /* The candidate check stopped without deciding. That is a query
+           * this solve cannot answer, not a call it should refuse: the
+           * no-answer verdict carries a reason, whereas SOLVER_ERROR carries
+           * none and reaches a C caller as a raw -100 on a boundary
+           * documented to answer 0, 1, 2 or 3. */
+          ClearAllTables();
+          bm->noteUnknown(
+              UnknownReason::Incomplete,
+              !lra_coordinator->failureDetail().empty()
+                  ? lra_coordinator->failureDetail()
+                  : !lra_coordinator->resourceLimitDetail().empty()
+                        ? "the exact linear arithmetic solver could not "
+                          "decide this query within its resource budget: " +
+                              lra_coordinator->resourceLimitDetail()
+                        : std::string("the exact linear arithmetic "
+                                      "candidate check reached no "
+                                      "verdict"));
+          return bm->unknownResult();
+        case lra::CoordinatorCandidateOutcome::InternalNoResult:
+          /* Kept as an error on purpose: this one says the coordinator found
+           * its own state wrong, which is a bug here and worth reporting as
+           * one rather than dressing up as a query we could not decide. */
+          ClearAllTables();
+          return SOLVER_ERROR;
+      }
+    }
+    const bool fpActive = fpAbstraction != NULL && fpAbstraction->active();
+    if (!bm->UserFlags.construct_counterexample_flag
+        && !ufActive
+        && lra_coordinator == NULL
+        && !fpActive
+        )
       return SOLVER_INVALID;
 
     bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
@@ -3020,7 +3278,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     // ConstructCounterExample only ever iterates it.
     const ToSATBase::ASTNodeToSATVar& satVarToSymbol =
         tosat->SATVar_to_SymbolIndexMap();
-    ConstructCounterExample(SatSolver, satVarToSymbol, ufActive);
+    ConstructCounterExample(SatSolver, satVarToSymbol, ufActive || fpActive);
     if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
     {
       ToSATBase::ASTNodeToSATVar m = tosat->SATVar_to_SymbolIndexMap();
@@ -3062,6 +3320,11 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     // completed model, which this candidate deliberately is not.
     if (extOutcome == ExtensionalityContext::EXT_CONFLICT)
     {
+      if (lra_coordinator != NULL)
+      {
+        lra_coordinator->noteArrayOutcome(false);
+        ClearAllTables();
+      }
       if (!ext->hasPendingLemma())
         FatalError("array-equality: a checker conflict has no pending lemma");
       if (bm->UserFlags.stats_flag)
@@ -3074,6 +3337,25 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     if (extActive && extOutcome != ExtensionalityContext::EXT_CONSISTENT)
       FatalError("array-equality: the checker could neither certify nor "
                  "refute a materialized candidate");
+    if (lra_coordinator != NULL && extActive)
+    {
+      lra_coordinator->noteArrayOutcome(true);
+      if (!lra_coordinator->ready())
+      {
+        bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+        return lraStopped(bm, lra_coordinator, "recording an array outcome");
+      }
+    }
+    if (lra_coordinator != NULL && !extActive)
+    {
+      lra_coordinator->noteArrayNotApplicable();
+      if (!lra_coordinator->ready())
+      {
+        bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+        ClearAllTables();
+        return lraStopped(bm, lra_coordinator, "recording an array outcome");
+      }
+    }
 
     // Theory ownership remains disjoint. The coordinator invokes UFCHK only
     // after EXTCHK accepted this exact candidate, and a UF conflict ends the
@@ -3099,8 +3381,66 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     if (ufActive && ufOutcome != UFCandidateOutcome::Consistent)
       FatalError("UFCHK could neither certify nor refute an active candidate");
 
+    // The floating-point abstraction, after every lower-level owner has
+    // accepted the candidate: the bit-vector abstraction is faithful, and
+    // any array or UF producer of an operand has been certified, so the
+    // operand values the exact evaluator reads are the candidate's. A
+    // disagreement leaves a lemma pending and ends the round before the
+    // ordinary replay, which would otherwise re-evaluate the original
+    // operation the surrogate stood for and reject the candidate without
+    // anything to refine.
+    ASTNode orig_result;
+    if (fpAbstraction != NULL && fpAbstraction->active())
+    {
+      const FpAbstraction::Outcome fpOutcome =
+          fpAbstraction->checkCandidate(*this);
+      if (fpOutcome == FpAbstraction::Outcome::Conflict ||
+          fpOutcome == FpAbstraction::Outcome::Restart)
+      {
+        if (fpOutcome == FpAbstraction::Outcome::Conflict &&
+            !fpAbstraction->hasPendingLemma())
+          FatalError("FPCHK reported a conflict without a pending lemma");
+        // The surrogates are wrong; the candidate's values for the
+        // original symbols may nevertheless satisfy the original formula,
+        // which mentions no surrogate and evaluates every operation
+        // exactly. When they do, the candidate is a model and nothing
+        // needs refining: the ordinary replay, run before the lemmas
+        // rather than after them. Not under an active array equality: the
+        // replay decides such an equality by its lowering, and a read of
+        // an owned array from the contents the checker certified, both
+        // relative to the surrogates' values, so it is not an exact
+        // evaluation of the original formula there and cannot certify a
+        // candidate whose surrogates are wrong -- it accepted one that
+        // equated an array to a store of a product the exact product
+        // refuted.
+        if (bm->UserFlags.fp_abstraction_repair && fpRepairAllowed &&
+            !extActive)
+          orig_result = ComputeFormulaUsingModel(original_input);
+        if (orig_result == ASTTrue)
+        {
+          fpAbstraction->acceptRepairedCandidate();
+          if (bm->UserFlags.stats_flag)
+            std::cerr << "Theory coordination: FPCHK refuted the candidate; "
+                         "the original formula holds under it anyway"
+                      << std::endl;
+        }
+        else
+        {
+          if (bm->UserFlags.stats_flag)
+            std::cerr << "Theory coordination: FPCHK "
+                      << (fpOutcome == FpAbstraction::Outcome::Restart
+                              ? "release by restart"
+                              : "conflict")
+                      << "; ordinary replay skipped" << std::endl;
+          bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+          return SOLVER_UNDECIDED;
+        }
+      }
+    }
+
     // check if the counterexample is good or not
-    ASTNode orig_result = ComputeFormulaUsingModel(original_input);
+    if (orig_result.IsNull())
+      orig_result = ComputeFormulaUsingModel(original_input);
     if (!(ASTTrue == orig_result || ASTFalse == orig_result))
       FatalError("TopLevelSat: Original input must compute to "
                  "true or false against model");
@@ -3126,6 +3466,19 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
         ufTheoryAdapter->invalidateCertifiedModel();
         FatalError(("UF public-model replay failed: " + diagnostic).c_str());
       }
+    }
+
+    if (lra_coordinator != NULL)
+    {
+      lra_coordinator->noteOrdinaryOutcome(ASTTrue == orig_result);
+      if (!lra_coordinator->ready())
+      {
+        ClearAllTables();
+        return lraStopped(bm, lra_coordinator,
+                          "recording an ordinary refinement outcome");
+      }
+      if (ASTFalse == orig_result)
+        return SOLVER_UNDECIDED;
     }
 
     switch (ExtensionalityContext::decideCertification(
@@ -3157,6 +3510,33 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
           PrintCounterExample(SatSolver.okay());
           PrintCounterExample_InOrder(SatSolver.okay());
         }
+        if (lra_coordinator != NULL)
+        {
+          const lra::CommitOutcome committed =
+              lra_coordinator->verifyAndCommit(*this);
+          if (committed == lra::CommitOutcome::ResourceLimit)
+          {
+            /* The same reading the candidate check's resource limit gets
+             * above: a query this solve could not finish carries a reason,
+             * where SOLVER_ERROR carries none and reaches a C caller as a
+             * raw -100. */
+            ClearAllTables();
+            bm->noteUnknown(
+                UnknownReason::Incomplete,
+                !lra_coordinator->resourceLimitDetail().empty()
+                    ? "the exact linear arithmetic solver could not publish "
+                      "this query's model within its resource budget: " +
+                          lra_coordinator->resourceLimitDetail()
+                    : std::string("the exact linear arithmetic model "
+                                  "publication reached no verdict"));
+            return bm->unknownResult();
+          }
+          if (committed != lra::CommitOutcome::Committed)
+          {
+            ClearAllTables();
+            return SOLVER_ERROR;
+          }
+        }
         return SOLVER_INVALID;
       }
 
@@ -3178,6 +3558,11 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
   {
     // Control should never reach here
     // PrintOutput(true);
+    if (lra_coordinator != NULL)
+    {
+      lra_coordinator->failClosed("SAT solver became not-okay after a satisfiable result");
+      ClearAllTables();
+    }
     return SOLVER_ERROR;
   }
 }

@@ -36,6 +36,23 @@ void ToSATBase::PrintOutput(STPMgr* bm, SOLVER_RETURN_TYPE ret)
   if (ret == SOLVER_UNDECIDED)
     FatalError("SOLVER_UNDECIDED escaped the solver's refinement loop");
 
+  // A solver fault must stop before the Boolean verdict mapping below,
+  // where every result other than SOLVER_VALID would be printed as sat.
+  // Report it through the normal error path so the CLI also exits nonzero.
+  if (ret == SOLVER_ERROR)
+  {
+    bm->ValidFlag = false;
+    if (bm->UserFlags.print_output_flag)
+    {
+      if (bm->UserFlags.smtlib1_parser_flag ||
+          bm->UserFlags.smtlib2_parser_flag)
+        cout << "(error \"solver returned SOLVER_ERROR\")" << endl;
+      else
+        cout << "Error." << endl;
+    }
+    FatalError("solver returned SOLVER_ERROR");
+  }
+
   if (ret == SOLVER_UNKNOWN)
   {
     // The verdict says only that there is no answer. Which reason it was is

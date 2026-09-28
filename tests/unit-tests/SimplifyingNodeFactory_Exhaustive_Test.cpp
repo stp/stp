@@ -1270,4 +1270,179 @@ TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_arity_survives)
   c.checkTerm(BVMULT, 3, ch, false);
 }
 
+/* A branch of an if-then-else knows its own condition, so a test the
+   condition decides goes. y=2 rules out y=1, which no match on the two
+   conditions can see. Nothing is built that the branch did not contain, so
+   these cost no sharing and belong here rather than in the Rewriting pass. */
+TEST(SimplifyingNodeFactory_Exhaustive, ite_condition_refutes_nested_ite)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode isOne = c.hf->CreateNode(EQ, y, c.konst(1, 3));
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(ITE, isOne, p, q);
+  c.checkNode(ITE, {isTwo, inner, r});
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive, ite_condition_entails_nested_ite)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode notOne =
+      c.hf->CreateNode(NOT, c.hf->CreateNode(EQ, y, c.konst(1, 3)));
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(ITE, notOne, p, q);
+  c.checkNode(ITE, {isTwo, inner, r});
+}
+
+/* The same over terms, where the branches are bitvectors. */
+TEST(SimplifyingNodeFactory_Exhaustive, ite_term_condition_refutes_nested_ite)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode isOne = c.hf->CreateNode(EQ, y, c.konst(1, 3));
+  ASTNode a = c.bv(3), b = c.bv(3), d = c.bv(3);
+  ASTNode inner = c.hf->CreateTerm(ITE, 3, isOne, a, b);
+  c.checkTerm(ITE, 3, {isTwo, inner, d});
+}
+
+/* The else branch knows the negated condition, which decides a repeat of the
+   condition itself but says nothing about any other value the term takes. */
+TEST(SimplifyingNodeFactory_Exhaustive, ite_else_branch_knows_the_negation)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(ITE, isTwo, p, q);
+  c.checkNode(ITE, {isTwo, r, inner});
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive, ite_else_branch_learns_no_other_value)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode isOne = c.hf->CreateNode(EQ, y, c.konst(1, 3));
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(ITE, isOne, p, q);
+  c.checkNode(ITE, {isTwo, r, inner}, false);
+}
+
+/* Boolean normalisation turns most nested conditionals into a conjunction or
+   a disjunction before anything else sees them, so those carry the rule too.
+   Only the collapsing cases are taken here: a two-child node leaves its one
+   survivor, and a decided annihilator settles the branch outright. */
+TEST(SimplifyingNodeFactory_Exhaustive, ite_condition_refutes_a_disjunct)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode isOne = c.hf->CreateNode(EQ, y, c.konst(1, 3));
+  ASTNode p = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(OR, isOne, p);
+  c.checkNode(ITE, {isTwo, inner, r});
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive, ite_condition_refutes_a_conjunct)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode isOne = c.hf->CreateNode(EQ, y, c.konst(1, 3));
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(AND, isOne, p, q);
+  c.checkNode(ITE, {isTwo, inner, r});
+}
+
+/* Dropping one of three or more children rebuilds the node, which is a loss
+   when the node is shared, so the factory leaves it alone. */
+TEST(SimplifyingNodeFactory_Exhaustive, ite_wide_disjunction_is_left_alone)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode isOne = c.hf->CreateNode(EQ, y, c.konst(1, 3));
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(OR, isOne, p, q);
+  c.checkNode(ITE, {isTwo, inner, r}, false);
+}
+
+
+/* Beyond matching the two conditions: the branch pins the term, so putting
+   the constant through the nested test decides anything that is a function
+   of it. Only the verdict is kept -- the substituted structure is thrown
+   away -- so this builds nothing and costs no sharing either. */
+TEST(SimplifyingNodeFactory_Exhaustive, ite_condition_folds_a_nested_test_true)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  // bvand(y, 6) < 4 is true at y = 2, and neither true nor false in general.
+  ASTNode test = c.hf->CreateNode(
+      BVLT, c.hf->CreateTerm(BVAND, 3, y, c.konst(6, 3)), c.konst(4, 3));
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(ITE, test, p, q);
+  c.checkNode(ITE, {isTwo, inner, r});
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive, ite_condition_folds_a_nested_test_false)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  // bvand(y, 6) < 2 is false at y = 2.
+  ASTNode test = c.hf->CreateNode(
+      BVLT, c.hf->CreateTerm(BVAND, 3, y, c.konst(6, 3)), c.konst(2, 3));
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(ITE, test, p, q);
+  c.checkNode(ITE, {isTwo, inner, r});
+}
+
+/* The same over a disjunct, where a test that folds to true settles the
+   whole branch. */
+TEST(SimplifyingNodeFactory_Exhaustive, ite_condition_folds_a_disjunct)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode test = c.hf->CreateNode(
+      BVLT, c.hf->CreateTerm(BVAND, 3, y, c.konst(6, 3)), c.konst(4, 3));
+  ASTNode p = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(OR, test, p);
+  c.checkNode(ITE, {isTwo, inner, r});
+}
+
+/* A test mentioning another symbol does not fold, so nothing is taken and
+   the substituted nodes are dropped. */
+TEST(SimplifyingNodeFactory_Exhaustive, ite_condition_leaves_an_open_test)
+{
+  Context c;
+  ASTNode y = c.bv(3), z = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode test = c.hf->CreateNode(
+      BVLT, c.hf->CreateTerm(BVAND, 3, y, c.konst(6, 3)), z);
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(ITE, test, p, q);
+  c.checkNode(ITE, {isTwo, inner, r}, false);
+}
+
+/* The else branch knows only that the term is not that constant, which pins
+   nothing, so there is nothing to put through the test. */
+TEST(SimplifyingNodeFactory_Exhaustive, ite_else_branch_has_nothing_to_substitute)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode test = c.hf->CreateNode(
+      BVLT, c.hf->CreateTerm(BVAND, 3, y, c.konst(6, 3)), c.konst(4, 3));
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(ITE, test, p, q);
+  c.checkNode(ITE, {isTwo, r, inner}, false);
+}
+
+
 } // namespace

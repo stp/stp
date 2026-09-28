@@ -604,4 +604,25 @@ TEST(Rewriting_Exhaustive, ite_chain_both_sides)
   c.checkEquivalent(top, c.run(top));
 }
 
+/* Every decision that costs nothing is the SimplifyingNodeFactory's; what
+   reaches this pass is the one that rebuilds. Dropping one child of a wider
+   disjunction builds a node the branch did not contain, so the shared copy
+   must survive and the node count must not rise. */
+TEST(Rewriting_Exhaustive, ite_shared_disjunction_is_not_rebuilt)
+{
+  Context c;
+  ASTNode y = c.bv(3);
+  ASTNode isTwo = c.hf->CreateNode(EQ, y, c.konst(2, 3));
+  ASTNode isOne = c.hf->CreateNode(EQ, y, c.konst(1, 3));
+  ASTNode p = c.boolean(), q = c.boolean(), r = c.boolean();
+  ASTNode inner = c.hf->CreateNode(OR, isOne, p, q);
+  ASTNode top = c.hf->CreateNode(
+      AND, c.hf->CreateNode(ITE, isTwo, inner, r), inner);
+
+  ASTNode after = c.run(top);
+  EXPECT_LE(c.mgr.NodeSize(after), c.mgr.NodeSize(top)) << after;
+  c.checkEquivalent(top, after);
+}
+
+
 } // namespace

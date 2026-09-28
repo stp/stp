@@ -1065,3 +1065,119 @@ TEST(SimplifyingNodeFactory_Test, bvand_nested_and_without_its_negation)
   ASSERT_NE(n, c.mgr.ASTTrue);
   ASSERT_NE(n, c.mgr.ASTFalse);
 }
+
+/* A branch of an if-then-else knows its own condition. Boolean ITEs used to
+   miss this: only the term version folded a nested test on the condition. */
+TEST(SimplifyingNodeFactory_Test, boolean_ite_nested_on_same_condition_then)
+{
+  const std::string input = R"(
+    (assert (= (ite a (ite a b c) (not b)) (ite a b (not b))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, boolean_ite_nested_on_same_condition_else)
+{
+  const std::string input = R"(
+    (assert (= (ite a (not b) (ite a b c)) (ite a (not b) c)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+/* Two equalities pinning one term to different constants can't both hold. */
+TEST(SimplifyingNodeFactory_Test, and_of_distinct_constant_equalities)
+{
+  const std::string input = R"(
+    (assert (and (= v0 (_ bv2 20)) (= v0 (_ bv1 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+TEST(SimplifyingNodeFactory_Test, or_of_negated_distinct_constant_equalities)
+{
+  const std::string input = R"(
+    (assert (= (or (not (= v0 (_ bv2 20))) (not (= v0 (_ bv1 20)))) true) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+/* The second literal may sit one level down in a same-kind child, which
+   contributes its own children conjunctively. */
+TEST(SimplifyingNodeFactory_Test, and_of_distinct_constant_equalities_nested)
+{
+  const std::string input = R"(
+    (assert (and (and (= v0 (_ bv2 20)) a) (= v0 (_ bv1 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+/* Same bits, two nodes: a rounding-mode literal interns apart from the plain
+   bitvector constant carrying it, so the two equalities below agree. A rule
+   that read "different constant nodes" as "different values" made this
+   unsatisfiable -- caught by the Python API's rounding-mode UF test. */
+TEST(SimplifyingNodeFactory_Test, rounding_mode_literal_agrees_with_its_carrier)
+{
+  Context c;
+  const ASTNode t = c.mgr.CreateSymbol("rm-term", 0, 5);
+  const ASTNode rm = c.mgr.CreateRMConst(1);
+  const ASTNode bits = c.mgr.CreateBVConst(5, 1);
+
+  ASSERT_NE(rm, bits);
+  ASSERT_TRUE(stp::constantsSameBits(rm, bits));
+
+  NodeFactory& f = c.snf;
+  const ASTNode conj = f.CreateNode(stp::AND, f.CreateNode(stp::EQ, t, rm),
+                                    f.CreateNode(stp::EQ, t, bits));
+  EXPECT_NE(conj, c.mgr.ASTFalse);
+}
+
+TEST(SimplifyingNodeFactory_Test, pinned_condition_rebuilds_real_ite)
+{
+  // Mixed Real/BV construction is supported by the API. Substituting a
+  // pinned BV value into a nested Real ite must preserve its widthless sort.
+  for (bool constant : {false, true})
+  {
+    Context c;
+    NodeFactory& f = c.snf;
+    NodeFactory& h = *c.mgr.hashingNodeFactory;
+    const ASTNode b = c.mgr.CreateSymbol("mixed-b", 0, 2);
+    const ASTNode condition = f.CreateNode(
+        stp::EQ, b, c.mgr.CreateBVConst(2, 1));
+    const ASTNode x = constant
+        ? c.mgr.CreateRealConst("-1/3")
+        : c.mgr.CreateSourceSymbol("mixed-x", stp::SourceSort::real());
+    const ASTNode term = c.mgr.CreateRealTerm(
+        stp::ITE, ASTVec{condition, x, c.mgr.CreateRealConst("1")});
+    const ASTNode test = c.mgr.CreateRealPredicate(
+        stp::REAL_LT, term, c.mgr.CreateRealConst("0"));
+    const ASTNode p = c.mgr.CreateSymbol("mixed-p", 0, 0);
+    const ASTNode q = c.mgr.CreateSymbol("mixed-q", 0, 0);
+    const ASTNode r = c.mgr.CreateSymbol("mixed-r", 0, 0);
+    const ASTNode inner = h.CreateNode(stp::ITE, test, p, q);
+    const ASTNode original = h.CreateNode(stp::ITE, condition, inner, r);
+    const ASTNode simplified = f.CreateNode(stp::ITE, condition, inner, r);
+    // Real comparisons may be left to the arithmetic frontend. If the
+    // constant case is decided here, only the true arm is justified; an
+    // open comparison must keep its original guard.
+    if (constant)
+      EXPECT_TRUE(simplified == original ||
+                  simplified == f.CreateNode(stp::ITE, condition, p, r));
+    else
+      EXPECT_EQ(original, simplified);
+  }
+}

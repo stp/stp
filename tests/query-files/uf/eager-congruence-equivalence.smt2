@@ -1,10 +1,13 @@
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --incremental=off %s 2>&1 | %OutputCheck --check-prefix=DYNAMIC %s
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --incremental=on %s 2>&1 | %OutputCheck --check-prefix=DYNAMIC %s
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=auto --incremental=off %s 2>&1 | %OutputCheck --check-prefix=EAGER %s
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=auto --incremental=on %s 2>&1 | %OutputCheck --check-prefix=EAGER %s
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=on --incremental=off %s 2>&1 | %OutputCheck --check-prefix=EAGER %s
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=on --incremental=on %s 2>&1 | %OutputCheck --check-prefix=EAGER %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=off --incremental=off %s 2>&1 | %OutputCheck --check-prefix=DYNAMIC %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=off --incremental=on %s 2>&1 | %OutputCheck --check-prefix=DYNAMIC %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=auto --incremental=off %s 2>&1 | %OutputCheck --check-prefix=EAGER %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=auto --incremental=on %s 2>&1 | %OutputCheck --check-prefix=EAGER %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=on --incremental=off %s 2>&1 | %OutputCheck --check-prefix=EAGER %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=on --incremental=on %s 2>&1 | %OutputCheck --check-prefix=EAGER %s
 ; RUN: %solver --uninterpreted-functions --uf-ackermann-budget=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=ANSWER %s
+; --uf-propagate-equalities=0: this test exercises the refinement loop on a
+; top-level equality, which the pre-lowering pass would otherwise settle before
+; any lemma is needed.
 ;
 ; DYNAMIC: UF: installed congruence lemma 1 for f
 ; DYNAMIC: ^unsat$

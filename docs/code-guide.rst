@@ -47,11 +47,16 @@ own targets; the other two are small enough to be carried in the tree:
 
 -  ABC: The `ABC <https://github.com/berkeley-abc/abc>`__ package, used to
    build AIGs and convert them to CNF. Fetched from
-   `stp/abc <https://github.com/stp/abc>`__ rather than from ABC itself. That fork keeps two branches: ``master`` mirrors upstream
-   untouched, and ``stp`` -- the branch ``ABC_GIT_TAG`` in the top-level
-   ``CMakeLists.txt`` pins a commit of -- carries our changes as commits on
-   top of the upstream revision we have taken. Bumping ABC means rebasing
-   ``stp`` onto a newer ``master`` in that repository, then moving that pin.
+   `stp/abc <https://github.com/stp/abc>`__ rather than from ABC itself. In
+   that fork ``master`` mirrors upstream untouched and our changes sit as
+   commits on top of an upstream revision we have taken. There are two lines
+   of those: ``stp``, which is where they are reviewed and which sits on a
+   recent upstream, and the line ``ABC_GIT_TAG`` in ``cmake/FindABC.cmake``
+   pins, which carries the same set on the older upstream the pin has followed
+   so far. A change to ABC goes onto both, and each bump of the pin is held by
+   a tag named ``stp-at-<upstream>-pr<NNNN>``. Moving the pin onto ``stp``
+   would bump the upstream base along with it; bumping that base is its own
+   piece of work, and means rebasing ``stp`` onto a newer ``master`` first.
 
    To work on the fork, clone it, build ``libabc-pic`` in it, and configure
    with ``-DABC_DIR=<clone>``: the build then uses that copy and fetches
@@ -83,23 +88,26 @@ for STP's own build to reach into, which is what keeps ABC and mimalloc
 here. STP's four local fixes to SymFPU live in ``cmake/deps-utils/symfpu``
 and are applied to the copy the build fetches.
 
-The executables are built from ``tools/``:
+The executables are built from ``tools/``; :doc:`command-line` and
+:doc:`tools` describe how to run them.
 
 -  ``stp``: The main command-line solver.
--  ``extdiff``: Built alongside it, unconditionally. Compares two STP
-   binaries on the same query, which the baseline-differential test uses.
+-  ``extdiff``: Built alongside it, unconditionally. A C API driver the
+   baseline-differential test compiles against two trees and runs on the
+   same queries, comparing what each reports.
 -  ``test_fpbackend`` and ``test_fprewrites``: Floating-point checkers,
    built when either ``ENABLE_TESTING`` or ``BUILD_EXTRA_TOOLS`` is on;
-   they are registered as tests.
+   they are registered as tests. ``c_handle_churn_benchmark``, which
+   times C API handle creation, is built under the same condition.
 -  The rest are development aids, built only when ``BUILD_EXTRA_TOOLS``
    is enabled: ``difficulty_bench`` measures the difficulty scorer against
    AIG sizes; ``fp_rewrite_gen`` searches for floating-point rewrite rules;
    ``rewrite_rule_gen`` searches for bitvector ones; and
    ``propagator_bench`` times the propagators, checks how much they deduce,
    and with ``--bcp-check`` compares that against what unit propagation on
-   the bit-blasted encoding deduces on its own. ``propagator_bench``
-   additionally needs a build with CryptoMiniSat and is skipped without
-   one.
+   the bit-blasted encoding deduces on its own. ``propagator_bench`` and
+   ``rewrite_rule_gen`` additionally need a build with CryptoMiniSat and
+   are skipped without one.
 
 The Python bindings are in ``bindings/python``, and the tests are in
 ``tests/`` (see :doc:`testing`).

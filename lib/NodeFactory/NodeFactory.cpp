@@ -218,3 +218,25 @@ ASTNode NodeFactory::CreateFPConst(const stp::ASTNode& bvconst,
 {
   return bm.CreateFPConst(bvconst, exp_width, sig_width);
 }
+
+ASTNode NodeFactory::CreateRealConst(const std::string& decimal_or_fraction)
+{
+  return bm.CreateRealConst(decimal_or_fraction);
+}
+
+ASTNode NodeFactory::CreateRealConst(const std::string& numerator,
+                                     const std::string& denominator)
+{
+  return bm.CreateRealConst(numerator, denominator);
+}
+
+ASTNode NodeFactory::CreateRealTerm(Kind kind, const ASTVec& children)
+{
+  return bm.CreateRealTerm(kind, children);
+}
+
+ASTNode NodeFactory::CreateRealPredicate(Kind kind, const ASTNode& lhs,
+                                         const ASTNode& rhs)
+{
+  return bm.CreateRealPredicate(kind, lhs, rhs);
+}

@@ -10,17 +10,19 @@ Only the bump is done by hand. Pushing the tag runs
 ``.github/workflows/release.yml``, which checks the version, builds the
 binary and opens the release as a draft:
 
-#. Edit the version in the two files below, and commit to master.
+#. Edit the version in the three files below, and commit to master.
 #. ``git tag 2.4.2 && git push origin 2.4.2``.
 #. Read the draft the workflow leaves behind, then publish it.
 
 Where the version lives
 -----------------------
 
-Two files carry it, both edited by hand:
+Three files carry it, all edited by hand:
 
 -  ``CMakeLists.txt`` -- ``set(STP_FULL_VERSION "2.4.1")``
 -  ``docs/conf.py`` -- ``release = '2.4.1'``
+-  ``bindings/python/pyproject.toml`` -- ``version = "2.4.1"``, the
+   version of the Python bindings when they are installed with pip
 
 Everything else derives from ``STP_FULL_VERSION``: ``include/stp/config.h``,
 ``STPConfigVersion.cmake``, the ``stp.1`` man page, the ``SOVERSION`` of
@@ -68,7 +70,7 @@ them, so pushing a branch tag will not cut a release.
 That is the whole procedure. Three jobs follow:
 
 ``check version``
-   Fails unless both version files equal the tag, before anything is
+   Fails unless all three version files equal the tag, before anything is
    built. If it fails, fix the version, delete and re-push the tag.
 
 ``linux-amd64``
@@ -133,7 +135,7 @@ The solver
 ~~~~~~~~~~
 
 Which solver a binary uses with no flag given is decided at compile time:
-``UserDefinedFlags``'s constructor picks CaDiCaL, then CryptoMiniSat, then
+``UserDefinedFlags``'s constructor picks CryptoMiniSat, then CaDiCaL, then
 MiniSat, by whichever ``USE_*`` macro is defined. Linking CryptoMiniSat in
 is therefore the whole of what makes this a CryptoMiniSat release; there is
 no flag for users to remember.
@@ -166,7 +168,8 @@ Pinned revisions
 ~~~~~~~~~~~~~~~~
 
 The release links CryptoMiniSat, pinned by commit in
-``cmake/FindCryptoMiniSat.cmake``, and minisat, pinned by commit since
+``cmake/FindCryptoMiniSat.cmake`` at a commit of ``stp/cryptominisat``
+with the IPASIR-UP interface, and minisat, pinned by commit since
 ``stp/minisat`` carries only upstream's 2.0 and 2.2.x tags. This matters
 more here than in CI, because the workflow restores a dependency cache
 rather than rebuilding: an unpinned dependency would mean linking against

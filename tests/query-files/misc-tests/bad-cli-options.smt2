@@ -91,6 +91,9 @@
 ; ... and one it agrees with: the request still had no bearing on the run.
 ; RUN: not %solver --disable-simplifications --disable-cbitp %s 2>&1 | %OutputCheck %s --check-prefix=DISABLEDSIMP
 
+; The newest member of the suite is in the list like the rest of it.
+; RUN: not %solver --disable-simplifications --common-factor=1 %s 2>&1 | %OutputCheck %s --check-prefix=DISABLEDSIMP
+
 ; --size-reducing-only likewise overrides what it forces.
 ; RUN: not %solver --size-reducing-only --difficulty-reversion=true %s 2>&1 | %OutputCheck %s --check-prefix=SIZEREDUCING
 ; SIZEREDUCING-NOT: terminate called

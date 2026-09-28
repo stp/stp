@@ -29,6 +29,11 @@ add_library(incremental OBJECT
     IncrementalSolver.cpp
 )
 
+# Reaches the exact-rational header, which includes <imrat.h>. For IMath's
+# INTERFACE_INCLUDE_DIRECTORIES; see the note in
+# lib/AbsRefineCounterExample/CMakeLists.txt.
+target_link_libraries(incremental PRIVATE IMath)
+
 # The AST headers this pulls in include the generated ASTKind.h; without the
 # explicit dependency a fresh build directory can race the generator.
 add_dependencies(incremental ASTKind_header)

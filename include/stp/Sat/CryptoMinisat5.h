@@ -29,6 +29,7 @@ THE SOFTWARE.
 #define CRYPTOMINISAT5_H_
 
 #include "stp/Sat/SATSolver.h"
+#include <memory>
 #include <string>
 #include <unordered_set>
 
@@ -47,8 +48,32 @@ namespace stp
 
 {
   CMSat::SATSolver* s;
+#ifdef STP_CRYPTOMINISAT_HAS_UP
+  // How many threads the solver was asked for. A propagator can be hosted
+  // by a single-threaded solver only: CryptoMiniSat attaches it to one of
+  // its threads, and a model another thread found would bypass the theory.
+  int num_threads;
+  // The IPASIR-UP side of SATSolver::TheoryPropagator, defined in
+  // CryptoMinisat5.cpp with the CryptoMiniSat headers, which this header
+  // deliberately does not include.
+  class PropagatorBridge;
+  std::unique_ptr<PropagatorBridge> propagator_bridge;
+#endif
 
 public:
+  // Only a CryptoMiniSat with the IPASIR-UP interface can host a propagator
+  // (cmake/FindCryptoMiniSat.cmake decides). Without it the SATSolver
+  // defaults stand: nothing is hosted, and expectTheoryPropagator() does
+  // nothing.
+#ifdef STP_CRYPTOMINISAT_HAS_UP
+  bool supportsTheoryPropagator() const override { return num_threads == 1; }
+  bool connectTheoryPropagator(
+      SATSolver::TheoryPropagator* propagator,
+      const std::vector<uint32_t>& observed) override;
+  void disconnectTheoryPropagator() override;
+  void expectTheoryPropagator() override;
+#endif
+
   // The version of the CryptoMiniSat that is actually linked. Kept here, and
   // not read from CMSat::SATSolver directly at the call site, so that
   // cryptominisat.h is needed by this wrapper's own translation unit and by

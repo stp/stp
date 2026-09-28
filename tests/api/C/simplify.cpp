@@ -22,9 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
-/* g++ -I/home/vganesh/stp/c_interface simplify.c -L/home/vganesh/stp/lib -lstp
- * -g */
-
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/c_interface.h"
@@ -49,9 +46,12 @@ TEST(simplify, one)
   Expr cast_32_to_8 = vc_bvExtract(vc, a_of_0, 7, 0);
   Expr cast_8_to_32 = vc_bvSignExtend(vc, cast_32_to_8, 32);
   vc_printExpr(vc, cast_8_to_32);
+
+  // The low byte of the concatenation is a[0].
+  Expr expected = vc_bvSignExtend(
+      vc, vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 32, 0)), 32);
+  EXPECT_EQ(1, vc_query(vc, vc_eqExpr(vc, cast_8_to_32, expected)));
   vc_Destroy(vc);
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 
 TEST(simplify, two)
@@ -74,11 +74,15 @@ TEST(simplify, two)
     Expr cast_32_to_8 = vc_bvExtract(vc, a_of_0, 7, 0);
     Expr cast_8_to_32 = vc_bvSignExtend(vc, cast_32_to_8, 32);
     vc_printExpr(vc, cast_8_to_32);
-    cast_8_to_32 = vc_simplify(vc, cast_8_to_32);
+    Expr simplified = vc_simplify(vc, cast_8_to_32);
+    EXPECT_EQ(32, getVWidth(simplified));
+    EXPECT_EQ(1, vc_query(vc, vc_eqExpr(vc, simplified, cast_8_to_32)));
+
+    Expr expected = vc_bvSignExtend(
+        vc, vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 32, 0)), 32);
+    EXPECT_EQ(1, vc_query(vc, vc_eqExpr(vc, simplified, expected)));
     vc_Destroy(vc);
   }
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }
 
 TEST(simplify, native_distinct_is_lowered_before_preprocessing)

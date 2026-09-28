@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "IncrementalSolverImpl.h"
+#include "Lra/LraFrontend.h"
 
 namespace stp
 {
@@ -167,6 +168,13 @@ bool IncrementalSolver::Impl::tryExactStackRoute(
     bool firstForcedIncrementalSolve, const ASTNode& assumptionScopedRoot,
     size_t orderedDistincts, SOLVER_RETURN_TYPE& result)
 {
+  // The public router normally excludes these inputs through canHandle().
+  // Keep the private exact-stack seam fail-closed as well: neither an array
+  // equality nor the speculative plain-BV shortcut may become a second Real
+  // solve path if a future caller reaches this method directly.
+  for (const ASTNode& assertion : assertionsSMT2)
+    if (lra::Frontend::containsRealSyntax(assertion))
+      return false;
   UserDefinedFlags& uf = bm->UserFlags;
 
   // DISTINCT ordering is an equisatisfiable whole-formula rewrite, not a

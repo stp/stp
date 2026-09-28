@@ -277,7 +277,11 @@ ASTNode UFContext::apply(const UFDecl* decl, const ASTVec& actuals,
 
   const SourceSort& resultSort = decl->signature().codomain();
   ASTNode result;
-  if (resultSort.kind() == SourceSort::Kind::Bool)
+  // Neither a Bool nor a Real carries a packed width, so both take the
+  // width-free constructor. Asking a Real for one is a fatal error, not a
+  // zero.
+  if (resultSort.kind() == SourceSort::Kind::Bool ||
+      resultSort.kind() == SourceSort::Kind::Real)
     result = manager_->defaultNodeFactory->CreateNode(UF_APPLY, children);
   else
     result = manager_->defaultNodeFactory->CreateTerm(

@@ -277,6 +277,12 @@ UFCandidateOutcome checkOneCandidate(
   // omitted from the finite table's one representative per concrete tuple.
   for (const LoweredApplicationRecord& record : state.view->applications)
   {
+    // A Real result has no value in this candidate to preserve: the SAT model
+    // it came from says nothing about an exact rational. Its interpretation
+    // is whatever the arithmetic settled on, and congruence over it was
+    // already stated as equality constraints rather than checked here.
+    if (record.resultSymbol.GetSourceSort().kind() == SourceSort::Kind::Real)
+      continue;
     UFConcreteValue value;
     if (!candidate.read(record.resultSymbol,
                         record.resultSymbol.GetSourceSort(),
@@ -744,8 +750,16 @@ bool lookupCertified(const MutableAdapterState& state,
 {
   if (!state.certified)
     return false;
-  const std::map<ASTNode, UFConcreteValue>::const_iterator found =
+  std::map<ASTNode, UFConcreteValue>::const_iterator found =
       state.handleValues.find(durableHandle);
+  // A handle pre-lowering rewrote was certified under its image.
+  if (found == state.handleValues.end() && state.view != NULL)
+  {
+    const ASTNodeMap::const_iterator alias =
+        state.view->handleAliases.find(durableHandle);
+    if (alias != state.view->handleAliases.end())
+      found = state.handleValues.find(alias->second);
+  }
   if (found == state.handleValues.end())
     return false;
   value = found->second;

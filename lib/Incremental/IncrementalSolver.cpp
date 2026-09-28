@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "IncrementalSolverImpl.h"
 #include "stp/Simplifier/DistinctOrdering.h"
+#include "Lra/LraFrontend.h"
 
 namespace stp
 {
@@ -139,6 +140,14 @@ IncrementalSolver::~IncrementalSolver()
   // model is read (and model_valid already refuses stale reads).
   if (impl->fpCtx)
     impl->ce->setFpEncodingContext(NULL);
+  if (impl->fpAbs)
+  {
+    if (impl->bm->UserFlags.stats_flag)
+      impl->fpAbs->reportStatistics(std::cerr);
+    if (impl->bm->getFpAbstractionIfAny() == impl->fpAbs.get())
+      impl->bm->setFpAbstraction(NULL);
+    impl->ce->setFpAbstraction(NULL);
+  }
 
   // Withdraw what this driver seeded into the batch Simplifier's SolverMap.
   // That channel is shared and is never cleared between solves -- the batch
@@ -196,11 +205,16 @@ bool IncrementalSolver::automaticEngagementReady(int64_t configuredThreshold,
 
 bool IncrementalSolver::canHandle(const ASTVec& assertionsSMT2)
 {
+  // STP deliberately rebuilds one exact core per public check; active Real
+  // formulas therefore use the unified batch/full-lazy coordinator rather
+  // than either persistent incremental implementation.
+  for (const ASTNode& assertion : assertionsSMT2)
+    if (lra::Frontend::containsRealSyntax(assertion))
+      return false;
   // Every construct the SMT-LIB frontend can produce is covered: plain
   // bit-vectors, arrays (lazy or --ackermanize), floating point, and
   // whole-array equality. The method remains the seam for any future
   // exclusion.
-  (void)assertionsSMT2;
   return true;
 }
 
@@ -328,6 +342,14 @@ void IncrementalSolver::buildPendingModel()
 {
   STPMgr* bm = impl->bm;
   bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
+  // As at every other construct site: under eager Ackermannisation the
+  // rows must be re-materialised or unwritten cells answer with the
+  // invented completion. Scoped to epochs hosting the floating-point
+  // abstraction for the same reason as the plain exact-stack site: on
+  // array-equality rounds these tables belong to the pointwise
+  // instantiation scheme, not the driver's Ackermannised pairs.
+  if (bm->UserFlags.ackermannisation && impl->fpAbstractionInst() != NULL)
+    impl->seedActiveReads(impl->scopes.activeSemanticKeys());
   impl->ce->ClearCounterExampleMap();
   impl->ce->ClearComputeFormulaMap();
 
@@ -336,6 +358,7 @@ void IncrementalSolver::buildPendingModel()
   // itself (the plain exact-stack route does not); lowered floating-point
   // terms evaluate through the context that lowered them.
   impl->publishFpContext();
+  impl->publishFpAbstraction();
 
   ToSATBase::ASTNodeToSATVar symbolMap;
   impl->buildSymbolMap(symbolMap);
@@ -431,6 +454,12 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // blaster made are this driver's to refine. Taken across here, once all
   // of this call's encoding is done and before any search.
   impl->syncAbstractions();
+  impl->syncFpAbstraction();
+  if (impl->fpAbs)
+  {
+    impl->fpAbs->beginQuery();
+    impl->armFpActiveClosure(NULL);
+  }
 
   const ASTVec& activeEncodedKeys = impl->scopes.activeSemanticKeys();
   impl->hintRetractedLevels(assumptions);
@@ -536,6 +565,11 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // that lowered them. Batch fallback rounds install their own per solve;
   // this keeps the driver's rounds coherent the same way.
   impl->publishFpContext();
+  impl->publishFpAbstraction();
+  // The replay is not the certifier while read refinement runs around the
+  // candidate; see setFpRepairAllowed. The written-out route below keeps
+  // its own repair inside fpRefineCandidate.
+  impl->ce->setFpRepairAllowed(!needRefinement);
 
   // Budgets are per check-sat, as solve_by_sat_solver arms them per query.
   applySolveBudgets(*impl->solver, uf);
@@ -588,6 +622,17 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
       if (refinedNow != abstractionsRefined)
       {
         abstractionsRefined = refinedNow;
+        res = impl->ce->CallSAT_ResultCheck(*impl->solver, bm->ASTTrue,
+                                            activeConjunction,
+                                            activeConjunction, adapter, true);
+        continue;
+      }
+      if (impl->fpAbs && impl->fpAbs->hasPendingLemma())
+      {
+        // FPCHK inside the call above refuted the candidate and the
+        // repair declined it; its lemmas are permanent facts of the
+        // epoch, spliced and searched again.
+        impl->encodeFpLemmas();
         res = impl->ce->CallSAT_ResultCheck(*impl->solver, bm->ASTTrue,
                                             activeConjunction,
                                             activeConjunction, adapter, true);
@@ -670,8 +715,16 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
       break;
     }
     if (refinement.isFaithful())
-      break;
-    assert(refinement.madeProgress());
+    {
+      // The floating-point records, once the bit-vector ones are
+      // faithful -- the order CallSAT_ResultCheck gives the owners. An
+      // accepted or repaired candidate ends the loop; a refuted one has
+      // its lemmas spliced and is searched again.
+      if (!impl->fpRefineCandidate(assertionsSMT2))
+        break;
+    }
+    else
+      assert(refinement.madeProgress());
 
     bm->GetRunTimes()->start(RunTimes::Solving);
     if (impl->profile.enabled)

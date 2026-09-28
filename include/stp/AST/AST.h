@@ -67,7 +67,19 @@ bool isCommutative(const Kind k);
 // the C++ call stack. Use for solve-boundary barriers whose answer cannot be
 // taken from a manager-lifetime "has ever seen" hint.
 bool containsKind(const ASTNode& n, Kind kind);
+bool containsRealSort(const ASTNode& n);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
+// Rebuild one node over replacement children, restoring whatever the original
+// carried. Three sorts answer differently and every generic tree walk in the
+// tree has to get all three right: a Boolean has no widths, a mathematical
+// Real has none either -- and asking one for a value width is a fatal error
+// rather than a zero -- while a bit-vector or array term has to have both put
+// back. Written once here because it has been written wrong separately in
+// four passes: substitution, distinct lowering, uninterpreted-function
+// lowering, and the term rebuild each rediscovered the Real case as a crash.
+// Returns the original node unchanged when no child moved.
+ASTNode rebuildNodeWithChildren(STPMgr* stp, const ASTNode& original,
+                                const ASTVec& children);
 // Query-local source-theory checks. The first asks whether FP lowering is
 // needed; the second also includes RoundingMode-only syntax for printing.
 bool containsFloatingPoint(const ASTNode& n, STPMgr* stp);

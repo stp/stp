@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFDecl.h"
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Util/Attributes.h"
+#include "stp/config.h"
 #include <ankerl/unordered_dense.h>
 #include <cstdint>
 #include <map>
@@ -326,6 +327,9 @@ private:
   bool incremental_from_start;
   bool session_incremental;
   bool delayed_bv_auto_engagement;
+  // True only for the mathematical SMT-LIB QF_LRA logic.  The established
+  // QF_FPLRA-family names remain floating-point modes and never set it.
+  bool lra_logic;
   size_t solves_run;
 
   // The most recent check-sat-assuming: its assumption terms, its verdict,
@@ -408,6 +412,10 @@ public:
   DLL_PUBLIC ASTNode CreateBVConst(unsigned int width,
                                    uint64_t bvconst);
   DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
+  DLL_PUBLIC ASTNode CreateRealConst(const std::string& exact_text);
+  DLL_PUBLIC ASTNode CreateRealTerm(Kind kind, const ASTVec& children);
+  DLL_PUBLIC ASTNode CreateRealPredicate(Kind kind, const ASTNode& lhs,
+                                         const ASTNode& rhs);
   DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
                                         const SourceSort& source_sort);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);

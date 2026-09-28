@@ -42,6 +42,18 @@ namespace stp
 //     asserted at the top level, where the ordinary simplifier can act on
 //     it and the bit-blaster is spared deriving it;
 //
+//   * a connective the skeleton forces is a fact about the structure the
+//     query forces -- a disjunction, an equivalence, a conditional that
+//     holds however its atoms come out -- and the same applies to it. Only
+//     the ones the fixed atoms do not already settle are worth saying:
+//     when every input of a conjunction is forced true the conjunction adds
+//     nothing to them, and a conjunct of the query is already at the top
+//     level. What remains is a fact that was buried -- a disjunction
+//     reached only through an equivalence, say -- and surfacing it is what
+//     lets EmbeddedConstraints replace its other occurrences and
+//     PropagateEqualities substitute an equivalence with a symbol on one
+//     side;
+//
 //   * a skeleton with no model at all means the query has none either.
 //
 // Neither direction can be run backwards. The skeleton is weaker than the
@@ -63,6 +75,11 @@ class DLL_PUBLIC SkeletonPreproc
       atomToVar;
   std::vector<ASTNode> varToAtom;
 
+  // The way back from a connective's Tseitin output variable. Kept by
+  // variable number, like varToAtom, so that the facts come out in one
+  // order however the hash table iterates.
+  std::vector<ASTNode> varToConnective;
+
   // Tseitin output for a subformula, as a literal in the 2*var+sign
   // encoding the SAT layer uses.
   std::unordered_map<ASTNode, int, ASTNode::ASTNodeHasher,
@@ -72,9 +89,11 @@ class DLL_PUBLIC SkeletonPreproc
 public:
   explicit SkeletonPreproc(STPMgr* bm_) : bm(bm_) {}
 
-  // The facts the skeleton forces, as top-level formulas: an atom, or its
-  // negation. `unsat` comes back true when the skeleton has no model, in
-  // which case the query has none and the returned vector is empty.
+  // The facts the skeleton forces, as top-level formulas: an atom or its
+  // negation, then a connective the skeleton fixes but whose fixed inputs
+  // do not settle and which is not already a conjunct of the query, or
+  // its negation. `unsat` comes back true when the skeleton has no model,
+  // in which case the query has none and the returned vector is empty.
   //
   // An empty vector with `unsat` false means the structure decides nothing,
   // which is the common case for a query whose difficulty is arithmetic.
@@ -85,6 +104,18 @@ public:
   // bit-vectors has bit-vector children and so becomes an atom, which is
   // the whole of the abstraction.
   static bool isConnective(const ASTNode& n);
+
+private:
+  // What the backend fixed a literal to at the root: 1 true, -1 false, 0
+  // not fixed. The literal's own sign applied, so a negated literal of a
+  // variable fixed true reads as false.
+  int valueOf(SATSolver& solver, int lit) const;
+
+  // What a connective's fixed inputs settle its output to, by the truth
+  // table alone: 1, -1, or 0 when they leave it open. An output the
+  // backend fixed to what this says is implied by facts already reported,
+  // and is not reported again.
+  int settledByInputs(SATSolver& solver, const ASTNode& node) const;
 };
 
 } // namespace stp

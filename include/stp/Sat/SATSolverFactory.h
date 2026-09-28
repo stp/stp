@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define SATSOLVERFACTORY_H_
 
 #include "stp/Util/Attributes.h"
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -54,6 +55,11 @@ DLL_PUBLIC std::vector<std::string> compiledSolverVersions();
 // returned solver.
 SATSolver* createSATSolver(const UserDefinedFlags& flags);
 
+// Validate explicit CaDiCaL controls before parsing/solving, even if the
+// query will simplify without constructing a SAT backend. Throws
+// std::invalid_argument for a different backend or an unsupported value.
+DLL_PUBLIC void validateCadicalOptions(const UserDefinedFlags& flags);
+
 // The configuration-window plumbing shared by the batch pipeline and the
 // incremental driver; each used to carry its own copy, warning strings
 // included.
@@ -76,6 +82,11 @@ bool enableBVAIfWanted(SATSolver& s, const UserDefinedFlags& flags,
 // backends are only ever handed a value >= 0 and cannot each decide what,
 // say, zero means.
 void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags);
+
+// Internal retries share the deadline captured at the public query boundary.
+// Conflict budgets retain their existing per-arming behaviour.
+void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags,
+                       std::chrono::steady_clock::time_point deadline);
 }
 
 #endif

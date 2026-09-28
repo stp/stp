@@ -834,6 +834,24 @@ class DLL_PUBLIC BVAbstractionRefiner
   // anything, and a counter that went backwards would read as no progress.
   uint64_t refinements_ = 0;
 
+  // The candidate assignment this round is refining, copied out of the
+  // solver before any clause goes in so that both refinement passes read
+  // the same one. Indexed by SAT variable; 1 where the candidate said true.
+  std::vector<uint8_t> candidateBits_;
+  void captureCandidate(SATSolver& solver,
+                        const ToSATBase::ASTNodeToSATVar& nodeToSATVar);
+
+public:
+  // A variable the solver never issued reads false, which is what asking
+  // the solver for it did: the record it belongs to carries ~0u, and the
+  // scan that meets one reports the abstraction unusable rather than
+  // deciding anything from the value.
+  bool candidateTrue(unsigned var) const
+  {
+    return var < candidateBits_.size() && candidateBits_[var] != 0;
+  }
+
+private:
   unsigned refineEqualities(SATSolver& solver,
                             const ToSATBase::ASTNodeToSATVar& nodeToSATVar,
                             const std::vector<size_t>* selected);

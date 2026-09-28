@@ -503,6 +503,356 @@ ConsistencyCheck consistencyCheck(STPMgr* mgr, const OpSpec& op,
   return res;
 }
 
+namespace
+{
+
+// One side of the duel's tallies, split by whether the divisor-position
+// child can still be zero (where the division transfer functions bail out).
+struct DuelCounts
+{
+  uint64_t cases = 0;
+  uint64_t contradictory = 0;
+  uint64_t confBoth = 0, confUpOnly = 0, confCbpOnly = 0, confNeither = 0;
+  uint64_t implied = 0, upDerived = 0, cbpDerived = 0, bothDerived = 0;
+  uint64_t caseUpStronger = 0, caseCbpStronger = 0, caseEqual = 0,
+           caseIncomparable = 0;
+  uint64_t cbpUnsound = 0, upUnsound = 0;
+  uint64_t cbpIters = 0, cbpCalls = 0;
+};
+
+void printDuel(const char* label, const DuelCounts& c)
+{
+  std::cout << "duel[" << label << "] cases=" << c.cases
+            << " contradictory=" << c.contradictory << "\n"
+            << "  conflicts: both=" << c.confBoth
+            << " up-only=" << c.confUpOnly << " cbp-only=" << c.confCbpOnly
+            << " neither=" << c.confNeither << "\n"
+            << "  implied literals: total=" << c.implied
+            << " up=" << c.upDerived << " cbp=" << c.cbpDerived
+            << " both=" << c.bothDerived << "\n"
+            << "  consistent cases: up-stronger=" << c.caseUpStronger
+            << " cbp-stronger=" << c.caseCbpStronger
+            << " equal=" << c.caseEqual
+            << " incomparable=" << c.caseIncomparable << "\n"
+            << "  unsound: up=" << c.upUnsound << " cbp=" << c.cbpUnsound
+            << "; cbp transfer calls/case="
+            << (c.cases ? (double)c.cbpIters / c.cases : 0) << "\n";
+}
+
+} // namespace
+
+bool duelCheck(STPMgr* mgr, const OpSpec& op, const Config& cfg)
+{
+  const unsigned width = cfg.duelWidth;
+  const Layout l = layoutFor(op, width, cfg.arity);
+  if (!l.ok || l.packedBits() > 20)
+    return false;
+
+  BcpEncoding* enc = makeBcpEncoding(mgr, op, l);
+  if (enc == NULL)
+    return false;
+
+  vector<vector<int>> clauses;
+  vector<vector<unsigned>> io;
+  unsigned nVars = 0;
+  const bool got = bcpMaterial(enc, clauses, io, nVars);
+  destroyBcpEncoding(enc);
+  if (!got || io.empty())
+    return false;
+
+  UpEngine up;
+  up.init(clauses, nVars);
+  if (up.baseConflict)
+    return false;
+
+  vector<unsigned> inputBits;
+  for (size_t s = 0; s + 1 < io.size(); s++)
+    for (unsigned v : io[s])
+      if (v != BCP_NOT_ENCODED)
+        inputBits.push_back(v);
+  if (inputBits.size() > 20)
+    return false;
+
+  Table t;
+  {
+    t.words = Table::MAX_ROWS / 64;
+    t.colTrue.assign(nVars, vector<uint64_t>(t.words, 0));
+    const uint64_t patterns = 1ull << inputBits.size();
+    for (uint64_t p = 0; p < patterns; p++)
+    {
+      bool okPattern = true;
+      for (size_t i = 0; i < inputBits.size() && okPattern; i++)
+        okPattern = up.assign(inputBits[i], (p >> i) & 1);
+      if (okPattern)
+        okPattern = up.propagate(up.base);
+      if (okPattern && !enumerate(up, t))
+      {
+        up.undoTo(up.base);
+        return false;
+      }
+      up.undoTo(up.base);
+    }
+    t.words = std::max((t.nRows + 63) / 64, 1u);
+    for (vector<uint64_t>& col : t.colTrue)
+      col.resize(t.words);
+    t.full.assign(t.words, 0);
+    for (unsigned r = 0; r < t.nRows; r++)
+      t.full[r >> 6] |= 1ull << (r & 63);
+  }
+  if (t.nRows == 0)
+    return false;
+
+  // The I/O scope, with each variable's position: which io symbol, which bit.
+  vector<unsigned> ioScope;
+  vector<std::pair<unsigned, unsigned>> ioPos;
+  {
+    vector<bool> seen(nVars, false);
+    for (unsigned s = 0; s < io.size(); s++)
+      for (unsigned b = 0; b < io[s].size(); b++)
+      {
+        const unsigned v = io[s][b];
+        if (v != BCP_NOT_ENCODED && !seen[v])
+        {
+          seen[v] = true;
+          ioScope.push_back(v);
+          ioPos.push_back({s, b});
+        }
+      }
+  }
+  const unsigned K = (unsigned)ioScope.size();
+  if (pow3Capped(K, cfg.consistencyCap) > cfg.consistencyCap)
+    return false;
+
+  const vector<unsigned> varying = l.varying();
+  // io symbol s < io.size()-1 is varying child varying[s]; the last is the
+  // result. The duel's split watches the second varying child, the divisor
+  // position of the division operations.
+  const unsigned divisorSym = varying.size() > 1 ? 1u : 0u;
+
+  std::ofstream dump;
+  uint64_t dumpBudget[3] = {200000, 200000, 200000};
+  if (!cfg.duelDump.empty())
+    dump.open(cfg.duelDump.c_str());
+
+  DuelCounts counts[2]; // [divisor can be zero]
+  vector<int8_t> digits(K, -1);
+  vector<FixedBits> chTemplate;
+  for (const ChildSpec& spec : l.children)
+    chTemplate.push_back(spec.isConstant
+                             ? concreteOf(spec, spec.value)
+                             : FixedBits(spec.width, spec.isBoolean));
+
+  static thread_local vector<uint64_t> mask;
+  bool done = false;
+  while (!done)
+  {
+    // Divisor-can-be-zero: no digit of the divisor symbol is fixed to one.
+    bool divisorZeroPossible = true;
+    for (unsigned i = 0; i < K && divisorZeroPossible; i++)
+      if (ioPos[i].first == divisorSym && digits[i] > 0)
+        divisorZeroPossible = false;
+    DuelCounts& c = counts[divisorZeroPossible ? 1 : 0];
+    c.cases++;
+
+    // Exact: the rows this case admits.
+    mask.assign(t.full.begin(), t.full.end());
+    for (unsigned i = 0; i < K; i++)
+    {
+      if (digits[i] == 0)
+        continue;
+      const vector<uint64_t>& col = t.colTrue[ioScope[i]];
+      for (unsigned w = 0; w < t.words; w++)
+        mask[w] &= (digits[i] > 0) ? col[w] : (t.full[w] & ~col[w]);
+    }
+    bool any = false;
+    for (unsigned w = 0; w < t.words && !any; w++)
+      any = mask[w] != 0;
+
+    // Unit propagation.
+    const size_t mark = up.trail.size();
+    bool upConflict = false;
+    for (unsigned i = 0; i < K && !upConflict; i++)
+      if (digits[i] != 0)
+        upConflict = !up.assign(ioScope[i], digits[i] > 0);
+    if (!upConflict)
+      upConflict = !up.propagate(mark);
+
+    // The constant-bit transfer, run to a fixed point.
+    vector<FixedBits> ch(chTemplate);
+    FixedBits out(l.outWidth, l.outIsBoolean);
+    for (unsigned i = 0; i < K; i++)
+    {
+      if (digits[i] == 0)
+        continue;
+      const unsigned s = ioPos[i].first, b = ioPos[i].second;
+      FixedBits& f = (s + 1 == io.size()) ? out : ch[varying[s]];
+      f.setFixed(b, true);
+      f.setValue(b, digits[i] > 0);
+    }
+    vector<FixedBits*> ptrs;
+    for (FixedBits& f : ch)
+      ptrs.push_back(&f);
+    bool cbpConflict = false;
+    for (unsigned iter = 0; iter < 64; iter++)
+    {
+      unsigned before = out.countFixed();
+      for (const FixedBits& f : ch)
+        before += f.countFixed();
+      c.cbpIters++;
+      if (cbitpTransfer(mgr, op.kind, ptrs, out) ==
+          simplifier::constantBitP::CONFLICT)
+      {
+        cbpConflict = true;
+        break;
+      }
+      unsigned after = out.countFixed();
+      for (const FixedBits& f : ch)
+        after += f.countFixed();
+      if (after == before)
+        break;
+    }
+
+    if (!any)
+    {
+      c.contradictory++;
+      if (upConflict && cbpConflict)
+        c.confBoth++;
+      else if (upConflict)
+        c.confUpOnly++;
+      else if (cbpConflict)
+        c.confCbpOnly++;
+      else
+        c.confNeither++;
+      if (dump.is_open() && !(upConflict && cbpConflict))
+      {
+        const int slot = upConflict ? 0 : (cbpConflict ? 1 : 2);
+        if (dumpBudget[slot] > 0)
+        {
+          dumpBudget[slot]--;
+          dump << (slot == 0 ? "conf-up-only"
+                             : (slot == 1 ? "conf-cbp-only" : "conf-neither"))
+               << " ";
+          for (unsigned i = 0; i < K; i++)
+            dump << (digits[i] == 0 ? '*' : (digits[i] > 0 ? '1' : '0'));
+          dump << "\n";
+        }
+      }
+    }
+    else
+    {
+      if (upConflict)
+        c.upUnsound++;
+      bool cbpBad = cbpConflict;
+      uint64_t upSet = 0, cbpSet = 0;
+      unsigned impliedHere = 0;
+      for (unsigned i = 0; i < K; i++)
+      {
+        if (digits[i] != 0)
+          continue;
+        const vector<uint64_t>& col = t.colTrue[ioScope[i]];
+        bool alwaysTrue = true, alwaysFalse = true;
+        for (unsigned w = 0; w < t.words && (alwaysTrue || alwaysFalse); w++)
+        {
+          if (mask[w] & ~col[w])
+            alwaysTrue = false;
+          if (mask[w] & col[w])
+            alwaysFalse = false;
+        }
+        const int8_t upGot = upConflict ? 0 : up.val[ioScope[i]];
+        const unsigned s = ioPos[i].first, b = ioPos[i].second;
+        const FixedBits& f = (s + 1 == io.size()) ? out : ch[varying[s]];
+        const int cbpGot =
+            (cbpConflict || !f.isFixed(b)) ? 0 : (f.getValue(b) ? 1 : -1);
+        if (alwaysTrue || alwaysFalse)
+        {
+          impliedHere++;
+          c.implied++;
+          const int8_t want = alwaysTrue ? 1 : -1;
+          if (upGot == want)
+          {
+            c.upDerived++;
+            upSet |= 1ull << i;
+          }
+          else if (upGot != 0)
+            c.upUnsound++;
+          if (cbpGot == want)
+          {
+            c.cbpDerived++;
+            cbpSet |= 1ull << i;
+          }
+          else if (cbpGot != 0)
+            cbpBad = true;
+          if (upGot == want && cbpGot == want)
+            c.bothDerived++;
+        }
+        else
+        {
+          if (upGot != 0)
+            c.upUnsound++;
+          if (cbpGot != 0)
+            cbpBad = true;
+        }
+      }
+      if (cbpBad)
+        c.cbpUnsound++;
+      (void)impliedHere;
+      const bool upGeq = (cbpSet & ~upSet) == 0;
+      const bool cbpGeq = (upSet & ~cbpSet) == 0;
+      if (upGeq && cbpGeq)
+        c.caseEqual++;
+      else if (upGeq)
+        c.caseUpStronger++;
+      else if (cbpGeq)
+        c.caseCbpStronger++;
+      else
+        c.caseIncomparable++;
+    }
+
+    up.undoTo(mark);
+
+    done = true;
+    for (unsigned i = 0; i < K; i++)
+    {
+      if (++digits[i] <= 1)
+      {
+        done = false;
+        break;
+      }
+      digits[i] = -1;
+    }
+  }
+
+  std::cout << "duel " << op.name << " w=" << width << " cnf="
+            << (cfg.cnf.empty() ? "medium" : cfg.cnf) << " clauses="
+            << clauses.size() << " io=" << K << "\n";
+  printDuel("divisor-nonzero", counts[0]);
+  printDuel("divisor-can-be-zero", counts[1]);
+  DuelCounts total;
+  for (int z = 0; z < 2; z++)
+  {
+    const DuelCounts& c = counts[z];
+    total.cases += c.cases;
+    total.contradictory += c.contradictory;
+    total.confBoth += c.confBoth;
+    total.confUpOnly += c.confUpOnly;
+    total.confCbpOnly += c.confCbpOnly;
+    total.confNeither += c.confNeither;
+    total.implied += c.implied;
+    total.upDerived += c.upDerived;
+    total.cbpDerived += c.cbpDerived;
+    total.bothDerived += c.bothDerived;
+    total.caseUpStronger += c.caseUpStronger;
+    total.caseCbpStronger += c.caseCbpStronger;
+    total.caseEqual += c.caseEqual;
+    total.caseIncomparable += c.caseIncomparable;
+    total.cbpUnsound += c.cbpUnsound;
+    total.upUnsound += c.upUnsound;
+    total.cbpIters += c.cbpIters;
+  }
+  printDuel("total", total);
+  return true;
+}
+
 bool dumpEncoding(STPMgr* mgr, const OpSpec& op, const Config& cfg,
                   const string& path)
 {

@@ -80,6 +80,27 @@ you have built but not installed, static builds, and Windows.
    architecture
 
 
+Command-line usage
+==================
+
+Give ``stp`` a problem file, or pipe one to it, and it prints the answer:
+
+.. code-block:: bash
+
+    stp problem.smt2
+    stp < problem.smt2
+
+:doc:`command-line` covers the rest: the input formats, what STP prints
+and its exit status, driving it over a pipe, choosing the SAT solver,
+time and conflict limits, statistics, writing CNF and converting between formats.
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   command-line
+
+
 SMT-LIB2 input language
 =======================
 
@@ -99,8 +120,11 @@ page <https://smt-lib.org/>`__.
 
    c-api-lifetime
    array-extensionality
+   uninterpreted-functions
    incremental-solving
    bv-abstraction
+   fp-abstraction
+   linear-real-arithmetic
 
 Header
 ------
@@ -131,6 +155,10 @@ these, and rejects any other name:
      - uninterpreted functions and uninterpreted sorts
    * - ``QF_UFBV``, ``QF_AUFBV``
      - bitvectors and uninterpreted functions, optionally with arrays
+   * - ``QF_LRA``
+     - linear real arithmetic (see :doc:`linear-real-arithmetic`)
+   * - ``QF_UFLRA``
+     - linear real arithmetic and uninterpreted functions
    * - ``QF_FP``
      - floating-point
    * - ``QF_BVFP``
@@ -468,6 +496,7 @@ installation by the test suite, is in |installtest|_.
 
    code-guide
    testing
+   tools
    releasing
 
 

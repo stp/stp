@@ -17,3 +17,6 @@ build
 /deps/
 /.cache/
 venv
+
+# pip building bindings/python in place
+*.egg-info

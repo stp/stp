@@ -81,6 +81,13 @@ bool matchJointCell(const Manager& m, Node n, Lit& a, Lit& b, Lit& e,
                     Lit& other, bool& tSide);
 bool matchXorAndJoint(const Manager& m, Node n, Lit& a, Lit& b, Lit& e);
 
+// The blaster's shared half adder: an exclusive-or whose interior
+// conjunction is itself the live carry. `carryQ` names which interior the
+// cone chose; (a, b) are that interior's own fanins, so n = a xor b and
+// carry = a & b hold structurally with no polarity cases.
+bool matchHalfAdder(const Manager& m, Node n, bool carryQ, Lit& a, Lit& b,
+                    Node& carry);
+
 // The leaves of the maximal AND rooted at `n`, appended to `into`.
 //
 // An AIG has no OR node: `a | b` is `!(!a & !b)`, one AND with the
@@ -99,13 +106,14 @@ void collectAndLeaves(const Manager& m, Node n, const std::vector<uint64_t>& abs
                       std::vector<Lit>& into, std::vector<Lit>& stack);
 
 // What the writer recovers from the AIG before emitting. Each rung adds to
-// the one above it, and each is a strict size reduction -- see the report in
-// bench-hard for what each is worth.
+// the one above it, and each is a strict size reduction.
 enum class Recover
 {
-  Nothing,        // plain Tseitin: three clauses for every AND node
-  Patterns,       // + XOR, if-then-else and full adders
-  PatternsAndAnds // + maximal n-ary ANDs, and so n-ary ORs, collapsed
+  Nothing,         // plain Tseitin: three clauses for every AND node
+  Patterns,        // + XOR, if-then-else and full adders
+  PatternsAndAnds, // + maximal n-ary ANDs, and so n-ary ORs, collapsed
+  Cells            // + every private cone of up to five leaves as the
+                   //   prime implicates of the function it computes
 };
 
 // Which nodes the CNF will talk about, and how many clauses that will take.
@@ -126,8 +134,12 @@ public:
   // variable of their own instead of being asserted. That is the split
   // Cnf_DeriveSimple takes, and the two callers want its ends: a formula
   // asserts its single output, a fragment names all of them.
+  //
+  // linkShared: a comparator cell over an exclusive-or something else also
+  // reads emits the linking block beside the live exclusive-or instead of
+  // falling back to the per-gate encoding.
   Cone(const Manager& m, unsigned namedOutputs = 0,
-       Recover recover = Recover::PatternsAndAnds);
+       Recover recover = Recover::PatternsAndAnds, bool linkShared = false);
 
   // In the cone, so it gets a variable and its defining clauses.
   bool live(Node n) const { return (live_[n >> 6] >> (n & 63)) & 1u; }
@@ -166,6 +178,19 @@ public:
     return (xorAndLink_[n >> 6] >> (n & 63)) & 1u;
   }
 
+  // A shared half adder's sum: the carry interior keeps its own gate, and
+  // the sum emits the four linking clauses that make the window over
+  // (a, b, sum, carry) propagation-complete. haCarryQ says which interior
+  // is the carry.
+  bool halfAdderSum(Node n) const
+  {
+    return (halfAdder_[n >> 6] >> (n & 63)) & 1u;
+  }
+  bool haCarryQ(Node n) const
+  {
+    return (haCarryQ_[n >> 6] >> (n & 63)) & 1u;
+  }
+
   // A recovered full adder: sum and carry defined together by one fourteen-
   // clause block over the operands -- the minimum propagation-complete
   // clause set for the relation, which the per-gate encodings are not. The
@@ -176,6 +201,20 @@ public:
     Lit a, b, c; // the operand literals
     Node sum;
   };
+  // A private cone -- up to five leaves, every interior node referenced
+  // only from inside it -- encoded as the prime implicates of the function
+  // its root computes over the leaves: one propagation-complete block, no
+  // variables for the interior. A clause literal is (index, negated) where
+  // index k = leaves.size() names the root.
+  struct Cell
+  {
+    std::vector<Node> leaves;
+    std::vector<std::vector<int8_t>> clauses; // entries: index*2 + negated
+    uint64_t literals = 0;
+  };
+  bool cellRoot(Node n) const { return (cell_[n >> 6] >> (n & 63)) & 1u; }
+  const Cell& cellAt(Node n) const { return cells_.at(n); }
+
   bool faSum(Node n) const { return (faSum_[n >> 6] >> (n & 63)) & 1u; }
   bool faCarry(Node n) const { return (faCarry_[n >> 6] >> (n & 63)) & 1u; }
   const FullAdder& faAt(Node carry) const { return fas_.at(carry); }
@@ -214,11 +253,17 @@ private:
   void setMajorityLink(Node n) { majorityLink_[n >> 6] |= 1ull << (n & 63); }
   void setXorAnd(Node n) { xorAnd_[n >> 6] |= 1ull << (n & 63); }
   void setXorAndLink(Node n) { xorAndLink_[n >> 6] |= 1ull << (n & 63); }
+  void setHalfAdder(Node n) { halfAdder_[n >> 6] |= 1ull << (n & 63); }
+  void setHaCarryQ(Node n) { haCarryQ_[n >> 6] |= 1ull << (n & 63); }
   void setAbsorbed(Node n) { absorbed_[n >> 6] |= 1ull << (n & 63); }
   void setFaSum(Node n) { faSum_[n >> 6] |= 1ull << (n & 63); }
   void setFaCarry(Node n) { faCarry_[n >> 6] |= 1ull << (n & 63); }
   void clearFa(Node carry);
   void findFullAdders(const Manager& m, const std::vector<uint8_t>& refs);
+  void setCell(Node n) { cell_[n >> 6] |= 1ull << (n & 63); }
+  bool tryCell(const Manager& m, Node n, const std::vector<uint8_t>& refs);
+  std::vector<uint64_t> cell_;
+  std::unordered_map<Node, Cell> cells_;
 
   std::vector<uint64_t> live_;
   std::vector<uint64_t> pattern_;
@@ -226,6 +271,8 @@ private:
   std::vector<uint64_t> majorityLink_;
   std::vector<uint64_t> xorAnd_;
   std::vector<uint64_t> xorAndLink_;
+  std::vector<uint64_t> halfAdder_;
+  std::vector<uint64_t> haCarryQ_;
   std::vector<uint64_t> absorbed_;
   std::vector<uint64_t> faSum_;
   std::vector<uint64_t> faCarry_;
@@ -247,7 +294,8 @@ private:
 // DIMACS writer or one that feeds a live solver costs no indirection when it
 // arrives.
 template <class Sink>
-void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
+void writeTseitin(const Manager& m, const Cone& cone, Sink& sink,
+                  std::vector<uint32_t>* nodeVarOut = nullptr)
 {
   const uint32_t nCi = m.ciCount();
   const uint32_t nCo = m.outputCount();
@@ -323,6 +371,30 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
       continue;
     }
 
+    if (cone.cellRoot(n))
+    {
+      const Cone::Cell& cell = cone.cellAt(n);
+      const size_t k = cell.leaves.size();
+      for (const std::vector<int8_t>& cl : cell.clauses)
+      {
+        clause.clear();
+        for (const int8_t e : cl)
+        {
+          const unsigned idx = static_cast<unsigned>(e) >> 1;
+          const int negated = e & 1;
+          if (idx == k)
+            clause.push_back(negated ? nx : px);
+          else
+          {
+            assert(var[cell.leaves[idx]] != 0);
+            clause.push_back(static_cast<int>(2 * var[cell.leaves[idx]]) |
+                             negated);
+          }
+        }
+        sink.clause(clause.data(), clause.size());
+      }
+      continue;
+    }
     if (cone.majorityCell(n))
     {
       Lit x, y, z;
@@ -391,6 +463,21 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
       sink.clause(la, lb ^ 1, px);
       sink.clause(la, le, px);
     }
+    else if (cone.halfAdderSum(n))
+    {
+      Lit a, b;
+      Node carry;
+      const bool matched =
+          matchHalfAdder(m, n, cone.haCarryQ(n), a, b, carry);
+      assert(matched);
+      (void)matched;
+      const int la = cnfLit(a), lb = cnfLit(b);
+      const int tv = static_cast<int>(2 * var[carry]);
+      sink.clause(nx, tv ^ 1);
+      sink.clause(la ^ 1, px, tv);
+      sink.clause(la, lb ^ 1, px);
+      sink.clause(la, lb, nx);
+    }
     else if (cone.patterned(n))
     {
       Lit c, t, e;
@@ -454,11 +541,15 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
     }
   }
   sink.end();
+  if (nodeVarOut)
+    *nodeVarOut = var;
 }
 
 // Both passes, into a materialised CNF.
 CNF deriveTseitin(const Manager& m, unsigned namedOutputs = 0,
-                  Recover recover = Recover::PatternsAndAnds);
+                  Recover recover = Recover::PatternsAndAnds,
+                  std::vector<uint32_t>* nodeVarOut = nullptr,
+                  bool linkShared = false);
 
 } // namespace aig
 } // namespace stp

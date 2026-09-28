@@ -123,6 +123,32 @@ void usage()
       << "  --bb.add-v2 0|1     UserDefinedFlags::bvplus_variant: 1 pairwise\n"
       << "                      ripple chains (default), 0 the addition\n"
       << "                      network\n"
+      << "  --bb.mult-lemmas K  UserDefinedFlags::multiplication_lemmas\n"
+      << "  --bb.mult-v N       UserDefinedFlags::multiplication_variant:\n"
+      << "                      1 shift-add ripple (default), 3 Booth +\n"
+      << "                      addition network, 4 sorter, 6/7/8/9/13\n"
+      << "                      network variants, 15 radix-4 Booth\n"
+      << "  --bb.div-v1 0|1     UserDefinedFlags::division_variant_1..4;\n"
+      << "  --bb.div-v2 0|1     v1..v3 toggle pieces of the recursive\n"
+      << "  --bb.div-v3 0|1     divider (defaults 1,1,0), v4 selects the\n"
+      << "  --bb.div-v4 0|1     two-stage shift/subtract divider (default 0)\n"
+      << "  --bb.div-v5 0|1     comparator-quotient restoring divider\n"
+      << "                      (default 0)\n"
+      << "  --bb.div-lemmas 0|1 assert each divider's order laws as side\n"
+      << "                      constraints (default 0)\n"
+      << "  --bb.div-mult 0|1   encode division through its defining\n"
+      << "                      relation x = y*q + r on fresh q, r instead\n"
+      << "                      of a divider circuit (default 0)\n"
+      << "  --bb.div-abs 0|1    encode division as a free result under the\n"
+      << "                      term abstraction's schema registry, asserted\n"
+      << "                      eagerly (default 0)\n"
+      << "  --bb.div-abs-only K assert only registry entry K\n"
+      << "  --bb.div-abs-prefix N  assert only the first N entries\n"
+      << "  --duel W            exhaustive per-state head-to-head at width W:\n"
+      << "                      unit propagation on the encoding vs the\n"
+      << "                      constant-bit transfer function, refereed by\n"
+      << "                      the exact relation; needs --ops\n"
+      << "  --duel-dump FILE    write the asymmetric duel cases to FILE\n"
       << "  --no-shift-bias     draw shift amounts uniformly, instead of\n"
       << "                      half of them from [0, width)\n"
       << "  --seed N            random seed (default 42)\n"
@@ -251,6 +277,34 @@ int main(int argc, char** argv)
     { cfg.adderVariant = atoi(value.c_str()); i++; }
     else if (arg == "--bb.add-v2")
     { cfg.bvplusVariant = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.mult-v")
+    { cfg.multVariant = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.mult-lemmas")
+    { cfg.multLemmas = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-v1")
+    { cfg.divVariant1 = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-v2")
+    { cfg.divVariant2 = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-v3")
+    { cfg.divVariant3 = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-v4")
+    { cfg.divVariant4 = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-v5")
+    { cfg.divVariant5 = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-lemmas")
+    { cfg.divLemmas = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-mult")
+    { cfg.divByMult = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-abs")
+    { cfg.divAbs = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-abs-only")
+    { cfg.divAbsOnly = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.div-abs-prefix")
+    { cfg.divAbsPrefix = atoi(value.c_str()); i++; }
+    else if (arg == "--duel")
+    { cfg.duelWidth = atoi(value.c_str()); i++; }
+    else if (arg == "--duel-dump")
+    { cfg.duelDump = value; i++; }
     else if (arg == "--cnf") { cfg.cnf = value; i++; }
     else if (arg == "--seed") { cfg.seed = atoi(value.c_str()); i++; }
     else if (arg == "--html") { cfg.html = value; i++; }
@@ -309,6 +363,8 @@ int main(int argc, char** argv)
       uf.cnf_effort = UF::CNF_EFFORT_NEW_LOW;
     else if (cfg.cnf == "new-medium")
       uf.cnf_effort = UF::CNF_EFFORT_NEW_MEDIUM;
+    else if (cfg.cnf == "new-high")
+      uf.cnf_effort = UF::CNF_EFFORT_NEW_HIGH;
     else if (cfg.cnf == "gia-low")
       uf.cnf_effort = UF::CNF_EFFORT_GIA_LOW;
     else if (cfg.cnf == "gia-high")
@@ -329,6 +385,48 @@ int main(int argc, char** argv)
     mgr->UserFlags.adder_variant = cfg.adderVariant != 0;
   if (cfg.bvplusVariant >= 0)
     mgr->UserFlags.bvplus_variant = cfg.bvplusVariant != 0;
+  if (cfg.multVariant >= 0)
+    mgr->UserFlags.multiplication_variant = cfg.multVariant;
+  if (cfg.multLemmas >= 0)
+    mgr->UserFlags.multiplication_lemmas = cfg.multLemmas;
+  if (cfg.divVariant1 >= 0)
+    mgr->UserFlags.division_variant_1 = cfg.divVariant1 != 0;
+  if (cfg.divVariant2 >= 0)
+    mgr->UserFlags.division_variant_2 = cfg.divVariant2 != 0;
+  if (cfg.divVariant3 >= 0)
+    mgr->UserFlags.division_variant_3 = cfg.divVariant3 != 0;
+  if (cfg.divVariant4 >= 0)
+    mgr->UserFlags.division_variant_4 = cfg.divVariant4 != 0;
+  if (cfg.divVariant5 >= 0)
+    mgr->UserFlags.division_variant_5 = cfg.divVariant5 != 0;
+  if (cfg.divLemmas >= 0)
+    mgr->UserFlags.division_lemmas = cfg.divLemmas != 0;
+  if (cfg.divByMult >= 0)
+    mgr->UserFlags.division_by_multiplication = cfg.divByMult != 0;
+  if (cfg.divAbs >= 0)
+    mgr->UserFlags.division_abstraction_encoding = cfg.divAbs != 0;
+  if (cfg.divAbsOnly >= 0)
+    mgr->UserFlags.division_abstraction_only_lemma = cfg.divAbsOnly;
+  if (cfg.divAbsPrefix >= 0)
+    mgr->UserFlags.division_abstraction_prefix = (unsigned)cfg.divAbsPrefix;
+
+  if (cfg.duelWidth > 0)
+  {
+    if (cfg.ops.empty() || !bcpAvailable())
+    {
+      std::cerr << "propagator_bench: --duel needs --ops and a CryptoMiniSat "
+                   "build\n";
+      return 1;
+    }
+    for (const string& o : cfg.ops)
+      if (!duelCheck(mgr, *findOp(o), cfg))
+      {
+        std::cerr << "propagator_bench: duel could not run for " << o
+                  << " at width " << cfg.duelWidth << "\n";
+        return 1;
+      }
+    return 0;
+  }
 
   if (!cfg.dumpCnf.empty())
   {

@@ -1,4 +1,7 @@
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --incremental=off %s 2>&1 | %OutputCheck %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=off --incremental=off %s 2>&1 | %OutputCheck %s
+; --uf-propagate-equalities=0: this test exercises the refinement loop on a
+; top-level equality, which the pre-lowering pass would otherwise settle before
+; any lemma is needed.
 ; CHECK: ^UF: installed congruence lemma 1 for f \(query local\)$
 ; CHECK: ^unsat$
 ; CHECK-NOT: installed congruence lemma 2

@@ -201,6 +201,14 @@ set(stp_link_libs ${MINISAT_LIBRARIES} ${ABC_LIBRARY})
 # compiles against the header (lib/FloatBlaster).
 set(stp_link_libs ${stp_link_libs} ${LIBBF_LIBRARY})
 
+# IMath, the arbitrary-precision integer and rational library, is required for
+# the same reason and named the same way: by resolved path, so no unavailable
+# private target reaches STPTargets.cmake.
+set(stp_link_libs ${stp_link_libs} ${IMATH_LIBRARY})
+if(ENABLE_HIGHS)
+    set(stp_link_libs ${stp_link_libs} ${HIGHS_LIBRARY})
+endif()
+
 # RunTimes reads the process's peak memory through GetProcessMemoryInfo,
 # which lives in psapi. ABC's sclLiberty.c calls PathMatchSpec from
 # shlwapi; MSVC picks that library up through ABC's #pragma comment(lib),
@@ -304,9 +312,34 @@ target_link_libraries(stp
 # own link line above, and the tests that call into ABC directly link it
 # themselves because a shared libstp localises its symbols.
 target_include_directories(stp SYSTEM INTERFACE
+    $<BUILD_INTERFACE:${STP_UNORDERED_DENSE_INCLUDE_DIR}>
     $<BUILD_INTERFACE:${SYMFPU_INCLUDE_DIRS}>
     $<BUILD_INTERFACE:${ABC_INCLUDE_DIR}>
 )
+
+# Focused private tests need ordinary STP manager/factory objects but must not
+# depend on non-public symbols being exported from a shared libstp. Reuse the
+# already compiled host object graph in an uninstalled static archive and let
+# the tests add the independently reviewed archives themselves. This target is
+# absent from every export and package.
+if(ENABLE_TESTING)
+    add_library(stp_lra_focused_host STATIC EXCLUDE_FROM_ALL
+        ${stp_lib_objects}
+    )
+    set_target_properties(stp_lra_focused_host PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        C_VISIBILITY_PRESET hidden
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+    )
+    target_link_libraries(stp_lra_focused_host PRIVATE ${stp_link_libs})
+    # stp_link_libs names HiGHS by path, which orders nothing, and none of
+    # these objects compiles against it. A test linking this archive could
+    # otherwise reach the link step while HiGHS-EP is still building.
+    if(ENABLE_HIGHS)
+        add_dependencies(stp_lra_focused_host HiGHS)
+    endif()
+endif()
 
 # ABC is interconnected enough that satisfying our ~30 entry points transitively
 # drags in most of the archive, including its vendored zlib and bzlib (gzopen,

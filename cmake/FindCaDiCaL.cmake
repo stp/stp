@@ -24,6 +24,7 @@
 #   CADICAL_VERSION      what was found, or "unknown"
 #   CADICAL_HAS_FACTOR   bounded variable addition is available
 #   CADICAL_HAS_INPROBING  the "inprobing" option is available
+#   CADICAL_HAS_DECISION_POLARITY  decision-time polarity advice is available
 #
 # CADICAL_DIR names a CaDiCaL checkout -- the directory holding src/cadical.hpp
 # with build/libcadical.a beneath it -- and is rung 0 of the ladder in
@@ -126,9 +127,9 @@ if(NOT CaDiCaL_FOUND_SYSTEM)
         ${STP_EP_COMMON_CONFIG}
         GIT_REPOSITORY https://github.com/arminbiere/cadical
         GIT_TAG ${CaDiCaL_TAG}
-        PATCH_COMMAND ${CMAKE_COMMAND} -E copy
-                      "${CMAKE_CURRENT_LIST_DIR}/deps-utils/cadical-CMakeLists.txt"
-                      <SOURCE_DIR>/CMakeLists.txt
+        PATCH_COMMAND ${CMAKE_COMMAND} "-DSOURCE_DIR=<SOURCE_DIR>"
+                      "-DCADICAL_VERSION=${CADICAL_VERSION}"
+                      -P "${CMAKE_CURRENT_LIST_DIR}/deps-utils/patch-cadical.cmake"
         CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
                    -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
                    -DCMAKE_INSTALL_LIBDIR=lib
@@ -143,6 +144,31 @@ if(NOT CaDiCaL_FOUND_SYSTEM)
 endif()
 
 set(CaDiCaL_FOUND TRUE)
+
+# This is an STP extension, not a version-derived upstream capability. Link
+# a probe so a new header paired with an old archive cannot silently turn
+# requested polarity advice into a no-op. Bundled builds apply the patch, which
+# is written against the 3.x line -- deps-utils/patch-cadical.cmake leaves a
+# 2.x CaDiCaL without it, from the same CADICAL_VERSION as this test.
+if(CaDiCaL_FOUND_SYSTEM)
+    set(_polarity_src "${PROJECT_BINARY_DIR}/CaDiCaL_polarity.cpp")
+    file(WRITE "${_polarity_src}"
+         "#include <cadical/cadical.hpp>\n"
+         "int main() { CaDiCaL::Solver s; s.disconnect_decision_polarity_advisor(); }\n")
+    set(_polarity_libraries ${CADICAL_LIBRARY})
+    if(WIN32)
+        list(APPEND _polarity_libraries psapi)
+    endif()
+    try_compile(CADICAL_HAS_DECISION_POLARITY
+                "${PROJECT_BINARY_DIR}/CaDiCaL_polarity_probe" "${_polarity_src}"
+                CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${CADICAL_INCLUDE_DIR}"
+                LINK_LIBRARIES ${_polarity_libraries})
+elseif(CADICAL_VERSION VERSION_GREATER_EQUAL "3.0.0")
+    set(CADICAL_HAS_DECISION_POLARITY ON)
+else()
+    set(CADICAL_HAS_DECISION_POLARITY OFF)
+endif()
+message(STATUS "CaDiCaL decision-time polarity advice: ${CADICAL_HAS_DECISION_POLARITY}")
 
 # Bounded variable addition (--cadical-factor) needs the declare_more_variables
 # API. That appeared in CaDiCaL 2.2.0, but the 2.2 line shipped it with

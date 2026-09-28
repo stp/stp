@@ -290,6 +290,29 @@ bool constantsSameSourceValue(const ASTNode& a, const ASTNode& b,
   return packedConstantIsNaN(a, eb, sb) && packedConstantIsNaN(b, eb, sb);
 }
 
+ASTNode rebuildNodeWithChildren(STPMgr* stp, const ASTNode& original,
+                                const ASTVec& children)
+{
+  if (children.size() != original.Degree())
+    FatalError("rebuildNodeWithChildren: child count does not match the node",
+               original);
+
+  bool changed = false;
+  for (size_t i = 0; i < children.size() && !changed; ++i)
+    changed = children[i] != original[i];
+  if (!changed)
+    return original;
+
+  NodeFactory* const factory = stp->defaultNodeFactory;
+  // A Real is asked before anything else: GetValueWidth() on one is fatal, so
+  // the test that would route it cannot be a width comparison.
+  if (original.isRealTerm() || original.GetType() == BOOLEAN_TYPE ||
+      original.GetValueWidth() == 0)
+    return factory->CreateNode(original.GetKind(), children);
+  return factory->CreateArrayTerm(original.GetKind(), original.GetIndexWidth(),
+                                  original.GetValueWidth(), children);
+}
+
 bool containsKind(const ASTNode& root, Kind kind)
 {
   ASTNodeSet visited;
@@ -308,6 +331,29 @@ bool containsKind(const ASTNode& root, Kind kind)
   return false;
 }
 
+// True if any node in the DAG carries mathematical Real sort.
+//
+// Not expressible as containsKind: Real content is a sort worn by symbols,
+// constants, applications and ites alike, not one kind they all share, and
+// the Real arithmetic kinds appear only where arithmetic is written out.
+bool containsRealSort(const ASTNode& root)
+{
+  ASTNodeSet visited;
+  ASTVec pending(1, root);
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!visited.insert(node).second)
+      continue;
+    if (node.GetSourceSort().kind() == SourceSort::Kind::Real)
+      return true;
+    for (unsigned i = 0; i < node.Degree(); ++i)
+      pending.push_back(node[i]);
+  }
+  return false;
+}
+
 // True if any descendants are arrays.
 bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 {
@@ -315,6 +361,10 @@ bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
   NodeIterator ni(n, mgr->ASTUndefined, *mgr);
   ASTNode current;
   while ((current = ni.next()) != ni.end())
+    // Active Real syntax is eliminated before this legacy walk.  Preserve
+    // the constant-time packed-width test: deriving a source sort here can
+    // recurse through a deep term DAG, violating STP's stack-safe traversal
+    // contract.
     if (current.GetIndexWidth() > 0)
       return true;
 
@@ -359,6 +409,8 @@ bool isCommutative(const Kind k)
     case BVXNOR:
     case BVPLUS:
     case BVMULT:
+    case REAL_ADD:
+    case REAL_MUL:
     case EQ:
     case ARRAY_EQ:
     case AND:
@@ -724,8 +776,7 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       }
       // A float-codomain application derives its format from the same
       // declaration identity its sort comes from, so it types as a float
-      // rather than as its packed carrier. Every other admitted sort has a
-      // bit-vector carrier of the packed width.
+      // rather than as its packed carrier.
       else if (sort.kind() == SourceSort::Kind::FloatingPoint)
       {
         if (n.GetType() != FLOATINGPOINT_TYPE ||
@@ -733,9 +784,64 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
             n.GetSigWidth() != sort.significandWidth())
           FatalError("BVTypeCheck: float UF_APPLY has the wrong format", n);
       }
+      // A Real-codomain application has no carrier at all -- no packed width
+      // and no byte pattern -- so UFContext::apply builds it with the
+      // width-free constructor, exactly as it does a Bool, and asking it for
+      // a value width is itself a fatal error. Its congruence is decided from
+      // the arithmetic's exact model values rather than by comparing
+      // carriers; see UFSignature::isSupportedSort, which admits the sort
+      // this arm types.
+      else if (sort.kind() == SourceSort::Kind::Real)
+      {
+        if (n.GetType() != REAL_TYPE)
+          FatalError("BVTypeCheck: Real UF_APPLY has a non-Real carrier", n);
+      }
+      // Every remaining admitted sort has a bit-vector carrier of the packed
+      // width.
       else if (n.GetType() != BITVECTOR_TYPE ||
                n.GetValueWidth() != sort.packedWidth())
         FatalError("BVTypeCheck: UF_APPLY has the wrong carrier width", n);
+      break;
+    }
+    case REAL_CONST:
+      if (n.Degree() != 0 || n.GetType() != REAL_TYPE ||
+          n.GetSourceSort().kind() != SourceSort::Kind::Real)
+        FatalError("Real constant has an invalid exact source sort", n);
+      break;
+
+    case REAL_ADD:
+    case REAL_SUB:
+    case REAL_NEG:
+    case REAL_MUL:
+    case REAL_DIV:
+    {
+      const bool arity_ok =
+          (k == REAL_ADD && n.Degree() >= 2) ||
+          (k == REAL_SUB && n.Degree() >= 1) ||
+          (k == REAL_NEG && n.Degree() == 1) ||
+          ((k == REAL_MUL || k == REAL_DIV) && n.Degree() == 2);
+      if (!arity_ok)
+        FatalError("Real arithmetic operator has invalid arity", n);
+      for (const ASTNode& child : v)
+        if (child.GetSourceSort().kind() != SourceSort::Kind::Real)
+          FatalError("Real arithmetic operator received a non-Real operand",
+                     n);
+      // Two concrete operands make a concrete product, which the node
+      // factory folds rather than building, so what is left to refuse here
+      // is the nonlinear case: neither operand concrete.  Stated the same
+      // way in HashingNodeFactory and in STPMgr::CreateRealTerm.
+      if (k == REAL_MUL && n[0].GetKind() != REAL_CONST &&
+          n[1].GetKind() != REAL_CONST)
+        FatalError("Real multiplication requires an exact concrete "
+                   "coefficient",
+                   n);
+      if (k == REAL_DIV)
+      {
+        if (n[1].GetKind() != REAL_CONST)
+          FatalError("Real division requires an exact concrete divisor", n);
+        if (n[1].GetRealCanonical() == "0")
+          FatalError("Real division by exact zero", n);
+      }
       break;
     }
 
@@ -748,6 +854,21 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case ITE:
       if (n.Degree() != 3)
         FatalError("BVTypeCheck: should have exactly 3 args\n", n);
+      // A Real ite is well typed when both branches are Real and the
+      // condition is Boolean. The width checks below are about bit-vector
+      // carriers and have nothing to say about it, so this returns here
+      // rather than falling into them. The frontend names the value and
+      // states what it stands for on each branch before the simplex sees
+      // anything.
+      if (n[1].GetSourceSort().kind() == SourceSort::Kind::Real ||
+          n[2].GetSourceSort().kind() == SourceSort::Kind::Real)
+      {
+        if (n[1].GetSourceSort() != n[2].GetSourceSort())
+          FatalError("Real-term ite branches must both have Real sort", n);
+        if (BOOLEAN_TYPE != n[0].GetType())
+          FatalError("Real-term ite condition must be Boolean", n);
+        break;
+      }
       // At this internal checker boundary a lowered float branch and its
       // packed-bit circuit are one class. Public construction has already
       // required the source-level branches to have exactly the same sort.
@@ -1241,6 +1362,15 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
 
+      if (n[0].GetSourceSort().kind() == SourceSort::Kind::Real ||
+          n[1].GetSourceSort().kind() == SourceSort::Kind::Real)
+      {
+        if (n[0].GetSourceSort() != SourceSort::real() ||
+            n[1].GetSourceSort() != SourceSort::real())
+          FatalError("Real equality requires two Real operands", n);
+        break;
+      }
+
       // The widths must always match. A blasted float keeps its bitvector
       // shape, so a float-stamped node may be equated with a plain bitvector
       // of the same width -- but two nodes that BOTH claim to be floats must
@@ -1263,6 +1393,16 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         FatalError(
             "BVTypeCheck: terms in atomic formulas must be of equal length", n);
       }
+      break;
+
+    case REAL_LT:
+    case REAL_LE:
+    case REAL_GT:
+    case REAL_GE:
+      if (n.Degree() != 2 ||
+          n[0].GetSourceSort().kind() != SourceSort::Kind::Real ||
+          n[1].GetSourceSort().kind() != SourceSort::Kind::Real)
+        FatalError("Real comparison requires exactly two Real operands", n);
       break;
 
     case ARRAY_EQ:

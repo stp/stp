@@ -131,6 +131,8 @@ TEST(cnf_effort_flag, EveryLevelIsReachable)
   vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 11);
   EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_GIA_VERY_HIGH,
             flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 12);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_NEW_HIGH, flags(vc).cnf_effort);
 
   vc_Destroy(vc);
 }
@@ -149,7 +151,7 @@ TEST(cnf_effort_flag, OutOfRangeIsRefusedAndLeavesTheLevelAlone)
   EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_HIGH, flags(vc).cnf_effort);
 
   // One past the last enumerator.
-  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 12);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 13);
   EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_HIGH, flags(vc).cnf_effort);
   vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, -1);
   EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_HIGH, flags(vc).cnf_effort);
@@ -161,12 +163,12 @@ TEST(cnf_effort_flag, OutOfRangeIsRefusedAndLeavesTheLevelAlone)
 
 // The level reaches the solve, and every one of them answers the same
 // question the same way. A level that changed a verdict would be a bug in
-// the generator, not a setting -- and since six of the twelve pick a whole
+// the generator, not a setting -- and since seven of the thirteen pick a whole
 // bit-blasting backend rather than an effort, this is where a backend that
 // encoded the query wrongly would be caught.
 TEST(cnf_effort_flag, EveryLevelDecidesTheSameQuery)
 {
-  for (int effort = 0; effort <= 11; ++effort)
+  for (int effort = 0; effort <= 12; ++effort)
   {
     VC vc = vc_createValidityChecker();
     vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, effort);

@@ -1063,6 +1063,9 @@ if (USE_CADICAL)
     if (CADICAL_HAS_FACTOR)
         add_definitions(-DSTP_CADICAL_HAS_FACTOR)
     endif()
+    if (CADICAL_HAS_DECISION_POLARITY)
+        add_definitions(-DSTP_CADICAL_HAS_DECISION_POLARITY)
+    endif()
 endif()
 
 # -----------------------------------------------------------------------------
@@ -1249,6 +1252,9 @@ if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
   # the oldest release anything in this repository builds -- the Dockerfiles do
   # -- and every method lib/Sat/CryptoMinisat5.cpp calls exists in it. Nothing
   # here builds anything older, so nothing here can say an older one works.
+  # The propagator bridge in that file is the exception: it is compiled only
+  # against a CryptoMiniSat that has the interface (CRYPTOMINISAT_HAS_UP, from
+  # cmake/FindCryptoMiniSat.cmake).
   if (CMS_EXPLICITLY_REQUESTED)
       find_package(CryptoMiniSat 5.11 REQUIRED)
   else()
@@ -1261,6 +1267,9 @@ if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
     add_definitions(-DUSE_CRYPTOMINISAT)
     set(STP_BUILD_WITH_CRYPTOMINISAT ON)
     set(USE_CRYPTOMINISAT ON)
+    if (CRYPTOMINISAT_HAS_UP)
+      add_definitions(-DSTP_CRYPTOMINISAT_HAS_UP)
+    endif()
   else()
     set(USE_CRYPTOMINISAT OFF)
   endif()
@@ -1347,8 +1356,13 @@ if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadic
                     "STP's (${CADICAL_LIBRARY}). Say "
                     "-DUSE_CRYPTOMINISAT=ON to make this an error instead, "
                     "and see the ways out that it lists.")
+                # config.h picks the default backend from
+                # STP_BUILD_WITH_CRYPTOMINISAT, so it goes with the rest.
                 remove_definitions(-DUSE_CRYPTOMINISAT)
+                remove_definitions(-DSTP_CRYPTOMINISAT_HAS_UP)
+                set(STP_BUILD_WITH_CRYPTOMINISAT OFF)
                 set(USE_CRYPTOMINISAT OFF)
+                set(CRYPTOMINISAT_HAS_UP FALSE)
             else()
                 message(FATAL_ERROR
                     "A static CryptoMiniSat cannot be combined with a second "
@@ -1536,6 +1550,16 @@ find_package(SymFPU REQUIRED)
 # with -DENABLE_AUTO_DOWNLOAD=ON it does not have to be installed: see
 # cmake/FindLibBF.cmake.
 find_package(LibBF REQUIRED)
+find_package(IMath REQUIRED)
+option(ENABLE_HIGHS "Enable optional HiGHS LP/MIP proposals with exact certification" OFF)
+option(ENABLE_HIGHS_CUT_LOG "Enable the optional HiGHS 1.12.0 root-cut recipe patch" OFF)
+if(ENABLE_HIGHS_CUT_LOG AND NOT ENABLE_HIGHS)
+  message(FATAL_ERROR "ENABLE_HIGHS_CUT_LOG requires ENABLE_HIGHS")
+endif()
+if(ENABLE_HIGHS)
+  find_package(HiGHS REQUIRED)
+endif()
+add_feature_info(HiGHS ENABLE_HIGHS "Advisory LP proposals with STP exact certification")
 
 # The shared dependency directory, if there is one, now holds whatever this
 # configure decided to build. Check it was not filled by an incompatible build.
@@ -1662,6 +1686,23 @@ add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interfa
 message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
 
 add_subdirectory(lib)
+add_subdirectory(lib/Lra)
+# Embed the complete private LRA implementation into libstp without a
+# static-library dependency in its build or install export interface.
+target_sources(stp PRIVATE $<TARGET_OBJECTS:stp_lra_product_objects>)
+add_dependencies(stp stp_lra_product_objects)
+# GCC 11's libstdc++ gives some weak std::vector instantiations default
+# visibility even when their template argument is a hidden LRA type.  Keep
+# that compiler-owned spelling from disclosing the private Tableau ABI.
+# Other public STP symbols retain their existing annotations and exports.
+if(BUILD_SHARED_LIBS AND UNIX AND NOT APPLE)
+  set(stp_lra_private_map
+    "${CMAKE_CURRENT_SOURCE_DIR}/lib/Lra/stp_lra_private.map")
+  target_link_options(stp PRIVATE
+    "LINKER:--version-script=${stp_lra_private_map}")
+  set_property(TARGET stp APPEND PROPERTY LINK_DEPENDS
+    "${stp_lra_private_map}")
+endif()
 
 # Only tools/stp/main.cpp includes CLI11, so it is looked for only when there
 # is a binary to build.
@@ -1669,6 +1710,12 @@ if (BUILD_EXECUTABLES)
     find_package(CLI11 REQUIRED)
 endif()
 add_subdirectory(tools)
+if(ENABLE_HIGHS AND TARGET stp-bin)
+  target_compile_definitions(stp-bin PRIVATE STP_HAVE_HIGHS)
+  if(ENABLE_HIGHS_CUT_LOG)
+    target_compile_definitions(stp-bin PRIVATE STP_HAVE_HIGHS_CUT_LOG)
+  endif()
+endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/STPExecutableTargetGuard.cmake")
 stp_resolve_option_target_availability(
   TARGET stp-bin
@@ -1739,8 +1786,12 @@ set(CONF_INCLUDE_DIRS "${PROJECT_BINARY_DIR}/include")
 configure_file(STPConfig.cmake.in
   "${PROJECT_BINARY_DIR}/${STP_CONFIG_FILENAME}" @ONLY
 )
-configure_file(STPConfigVersion.cmake.in
-  "${PROJECT_BINARY_DIR}/${STP_CONFIG_VERSION_FILENAME}" @ONLY
+# STP is API-compatible only within one major.minor.
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+  "${PROJECT_BINARY_DIR}/${STP_CONFIG_VERSION_FILENAME}"
+  VERSION "${PROJECT_VERSION}"
+  COMPATIBILITY SameMinorVersion
 )
 
 # No export(PACKAGE STP) here. Under CMP0090, NEW since the 3.18 baseline, it

@@ -64,6 +64,7 @@ namespace stp
 
 class Simplifier;
 class SubstitutionMap;
+class ToSATBase;
 
 class DLL_PUBLIC BVExactEncoder
 {
@@ -144,6 +145,24 @@ public:
                       const std::vector<unsigned>& xVars,
                       const std::vector<unsigned>& sVars,
                       const std::vector<unsigned>& resultVars);
+
+  // A formula over symbols the solver already carries, asserted.
+  //
+  // The same splice as the lemmas above, generalised: `formula` is any
+  // Boolean node the bit-blaster accepts (floating-point predicates over
+  // packed views included, so callers lower first), and every SYMBOL leaf in
+  // it is connected to the SAT variables `tosat` recorded for it. A symbol
+  // the solver never saw -- one that occurred only inside something the
+  // abstraction replaced -- is genuinely free, and is given fresh frozen
+  // variables that are recorded in the map so a later model reads it back.
+  // A symbol the solver saw but left some bit of without a variable is an
+  // integration error and is refused: the formula would otherwise be
+  // weakened, not asserted.
+  //
+  // The floating-point abstraction's refinement lemmas and exact releases
+  // arrive here (FpAbstraction::encodePendingLemmas).
+  void assertFormula(SATSolver& solver, ToSATBase& tosat,
+                     const ASTNode& formula);
 
   // Splice x = q*s+r over the four live vectors belonging to a paired BVDIV
   // and BVMOD abstraction. Arithmetic is truncated to `width`, so this is a

@@ -10,14 +10,20 @@
 #ifndef STP_SOURCESORT_H
 #define STP_SOURCESORT_H
 
+#include "stp/config.h"
 #include <cassert>
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <stdexcept>
+#include <ostream>
 #include <unordered_set>
 
 namespace stp
 {
+
+class SourceSort;
+std::string uninterpretedSortName(unsigned id);
 
 class SourceSort final
 {
@@ -33,7 +39,10 @@ public:
     // A sort introduced by (declare-sort S 0). Appended, never inserted: two
     // lemma-key comparators order by this ordinal and hash() mixes it, so
     // moving an existing enumerator renumbers nodes and reorders keys.
-    Uninterpreted
+    Uninterpreted,
+    // Appended after Uninterpreted so every earlier ordinal remains stable
+    // while the exact Real frontend remains source-distinct.
+    Real
   };
 
 private:
@@ -99,8 +108,13 @@ public:
     return SourceSort(Kind::Uninterpreted, id, width);
   }
 
+  static SourceSort real() { return SourceSort(Kind::Real); }
+
   static SourceSort array(const SourceSort& index, const SourceSort& element)
   {
+    if (index.kind() == Kind::Real || element.kind() == Kind::Real)
+      throw std::invalid_argument(
+          "mathematical Real array indices/elements are not supported");
     assert(index.isScalar() && element.isScalar());
     // A declared sort is represented by its finite bit-vector carrier below
     // the source boundary, so it is just as usable as the other scalar sorts
@@ -113,6 +127,9 @@ public:
   bool isKnown() const { return kind_ != Kind::Unknown; }
   bool isScalar() const
   {
+    // Real intentionally stays outside this legacy array-scalar predicate.
+    // Array constructors therefore reject Real indices and elements
+    // instead of silently giving them a nonexistent packed representation.
     return kind_ == Kind::BitVector || kind_ == Kind::FloatingPoint ||
            kind_ == Kind::RoundingMode || kind_ == Kind::Uninterpreted;
   }
@@ -177,6 +194,8 @@ public:
         return 5;
       case Kind::Uninterpreted:
         return second_;
+      case Kind::Real:
+        throw std::logic_error("mathematical Real has no packed width");
       default:
         assert(false && "packedWidth is defined only for scalar sorts");
         return 0;
@@ -222,6 +241,40 @@ public:
       h = h * 1315423911u + element().hash();
     }
     return h;
+  }
+
+  std::string name() const
+  {
+    switch (kind_)
+    {
+      case Kind::Unknown:
+        return "Unknown";
+      case Kind::Bool:
+        return "Bool";
+      case Kind::BitVector:
+        return "(_ BitVec " + std::to_string(first_) + ")";
+      case Kind::FloatingPoint:
+        return "(_ FloatingPoint " + std::to_string(first_) + " " +
+               std::to_string(second_) + ")";
+      case Kind::RoundingMode:
+        return "RoundingMode";
+      case Kind::Array:
+        return "(Array " + index().name() + " " + element().name() + ")";
+      case Kind::Uninterpreted:
+      {
+        const std::string declared = uninterpretedSortName(first_);
+        return declared.empty() ? "<unknown-uninterpreted-sort>" : declared;
+      }
+      case Kind::Real:
+        return "Real";
+    }
+    assert(false && "exhaustive SourceSort::Kind switch");
+    return "Unknown";
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const SourceSort& sort)
+  {
+    return os << sort.name();
   }
 
   // For the manager's intern pool, which is what lets a derived sort be

@@ -566,3 +566,137 @@ TEST(CommonSubSum_Test, duplicate_arrival_collapses_soundly)
     ASSERT_EQ(p.Degree(), 2u);
   EXPECT_EQ(nodesWithParents(nodes, 1), 1);
 }
+
+// The leaves of an addition tree, so a rewrite can be checked against the
+// operands it was handed whatever nesting it chose.
+static void flattenPlusLeaves(const ASTNode& n, std::multiset<std::string>& out)
+{
+  if (n.GetKind() != stp::BVPLUS)
+  {
+    out.insert(n.GetName());
+    return;
+  }
+  for (const ASTNode& c : n.GetChildren())
+    flattenPlusLeaves(c, out);
+}
+
+// The addition under each product of the staircase below, keyed by the
+// product's first operand, so the sums can be found again after a rewrite.
+static std::map<std::string, ASTNode> sumsByMultiplier(const ASTNode& n)
+{
+  std::set<ASTNode> products, visited;
+  collectKindNodes(n, stp::BVMULT, products, visited);
+  std::map<std::string, ASTNode> found;
+  for (const ASTNode& p : products)
+    for (const ASTNode& c : p.GetChildren())
+      if (c.GetKind() == stp::BVPLUS)
+        found[p[0].GetName()] = c;
+  return found;
+}
+
+// Five additions, each a prefix of the next -- the shape a flattened chain
+// of gates has -- multiplied by distinct variables so that none is solved
+// away before the pass sees it.
+static const std::string staircase = R"(
+    (declare-fun v4 () (_ BitVec 20))
+    (declare-fun v5 () (_ BitVec 20))
+    (declare-fun v6 () (_ BitVec 20))
+    (declare-fun m3 () (_ BitVec 20))
+    (declare-fun m4 () (_ BitVec 20))
+    (declare-fun m5 () (_ BitVec 20))
+    (declare-fun m6 () (_ BitVec 20))
+    (declare-fun m7 () (_ BitVec 20))
+    (assert (= (bvmul m3 (bvadd v0 v1 v2)) (_ bv3 20)))
+    (assert (= (bvmul m4 (bvadd v0 v1 v2 v3)) (_ bv4 20)))
+    (assert (= (bvmul m5 (bvadd v0 v1 v2 v3 v4)) (_ bv5 20)))
+    (assert (= (bvmul m6 (bvadd v0 v1 v2 v3 v4 v5)) (_ bv6 20)))
+    (assert (= (bvmul m7 (bvadd v0 v1 v2 v3 v4 v5 v6)) (_ bv7 20)))
+    )";
+
+static void expectStaircaseValuesKept(const ASTNode& n)
+{
+  const std::map<std::string, ASTNode> sums = sumsByMultiplier(n);
+  ASSERT_EQ(sums.size(), 5u);
+  const char* vars[] = {"v0", "v1", "v2", "v3", "v4", "v5", "v6"};
+  for (int k = 3; k <= 7; k++)
+  {
+    std::multiset<std::string> expected(vars, vars + k);
+    std::multiset<std::string> leaves;
+    const auto it = sums.find("m" + std::to_string(k));
+    ASSERT_NE(it, sums.end());
+    flattenPlusLeaves(it->second, leaves);
+    EXPECT_EQ(leaves, expected) << "sum " << k;
+  }
+}
+
+// Within the budget the staircase is nested back into its chain: the
+// narrowest addition is left whole, and every wider one becomes the one
+// below it plus its own last operand.
+TEST(CommonSubSum_Test, staircase_is_nested_into_its_chain)
+{
+  Context c;
+  ASTNode n = c.process(staircase);
+
+  EXPECT_FALSE(c.subSum.stoppedEarly());
+  EXPECT_GT(c.subSum.tallyOperations(), 0);
+  expectStaircaseValuesKept(n);
+
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(n, plusNodes, visited);
+  ASSERT_EQ(plusNodes.size(), 5u);
+  std::multiset<unsigned> degrees;
+  for (const ASTNode& s : plusNodes)
+    degrees.insert(s.Degree());
+  EXPECT_EQ(degrees, (std::multiset<unsigned>{2, 2, 2, 2, 3}));
+  EXPECT_EQ(nodesWithParents(plusNodes, 1), 4);
+  EXPECT_EQ(nodesWithParents(plusNodes, 0), 1);
+}
+
+// A budget the tally's build cannot finish within refuses the build rather
+// than spending it on a tally that would be thrown away: no round runs, the
+// pass reports itself truncated, and what the co-traveller step extracted
+// on its own is all that changes.
+TEST(CommonSubSum_Test, build_beyond_the_budget_is_not_begun)
+{
+  Context c;
+  c.mgr.UserFlags.common_subsum_budget = 10;
+  ASTNode n = c.process(staircase);
+
+  EXPECT_TRUE(c.subSum.stoppedEarly());
+  EXPECT_EQ(c.subSum.tallyOperations(), 0);
+  expectStaircaseValuesKept(n);
+
+  // The three operands every addition holds became one chunk, the
+  // narrowest addition itself; the wider additions were not nested further.
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(n, plusNodes, visited);
+  ASSERT_EQ(plusNodes.size(), 5u);
+  std::multiset<unsigned> degrees;
+  for (const ASTNode& s : plusNodes)
+    degrees.insert(s.Degree());
+  EXPECT_EQ(degrees, (std::multiset<unsigned>{2, 3, 3, 4, 5}));
+}
+
+// A budget that runs out part-way through a round leaves every addition
+// it had already rewritten regrouped and the rest as they were: a partial
+// extraction, value for value the same query.
+TEST(CommonSubSum_Test, budget_exhausted_mid_round_keeps_values)
+{
+  Context c;
+  c.mgr.UserFlags.common_subsum_budget = 24;
+  ASTNode n = c.process(staircase);
+
+  EXPECT_TRUE(c.subSum.stoppedEarly());
+  EXPECT_GT(c.subSum.tallyOperations(), 24);
+  expectStaircaseValuesKept(n);
+
+  // Fewer additions than the full run leaves, and not the chain either.
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(n, plusNodes, visited);
+  ASSERT_EQ(plusNodes.size(), 5u);
+  std::multiset<unsigned> degrees;
+  for (const ASTNode& s : plusNodes)
+    degrees.insert(s.Degree());
+  EXPECT_NE(degrees, (std::multiset<unsigned>{2, 2, 2, 2, 3}));
+  EXPECT_NE(degrees, (std::multiset<unsigned>{2, 3, 3, 4, 5}));
+}

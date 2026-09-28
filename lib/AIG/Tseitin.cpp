@@ -23,6 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AIG/Tseitin.h"
+#include <algorithm>
+#include <unordered_map>
 
 #include <limits>
 #include <stdexcept>
@@ -388,6 +390,20 @@ bool matchXorAndJoint(const Manager& m, Node n, Lit& a, Lit& b, Lit& e)
   return false;
 }
 
+bool matchHalfAdder(const Manager& m, Node n, bool carryQ, Lit& a, Lit& b,
+                    Node& carry)
+{
+  Node p, q;
+  if (!xorShape(m, n, p, q))
+    return false;
+  // n computes the exclusive-or of either interior's fanins; the carry is
+  // the interior the caller says is live, and it conjoins those fanins.
+  carry = carryQ ? q : p;
+  a = m.fanin0(carry);
+  b = m.fanin1(carry);
+  return true;
+}
+
 void collectAndLeaves(const Manager& m, Node n,
                       const std::vector<uint64_t>& absorbed,
                       std::vector<Lit>& into, std::vector<Lit>& stack)
@@ -522,7 +538,245 @@ void Cone::findFullAdders(const Manager& m, const std::vector<uint8_t>& refs)
   }
 }
 
-Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
+
+// The prime implicates of a function of k <= 5 inputs, over the k inputs and
+// the output: every clause implied by output == f(inputs) with no implied
+// proper subclause. Aux-free, so the set is propagation-complete for the
+// cell. Cached by truth table.
+namespace
+{
+struct CellKey
+{
+  uint32_t table;
+  uint8_t k;
+  bool operator==(const CellKey& o) const
+  {
+    return table == o.table && k == o.k;
+  }
+};
+struct CellKeyHash
+{
+  size_t operator()(const CellKey& c) const
+  {
+    return (static_cast<size_t>(c.table) * 1000003u) ^ c.k;
+  }
+};
+
+const std::vector<std::vector<int8_t>>& primeImplicates(uint32_t table,
+                                                        unsigned k)
+{
+  static std::unordered_map<CellKey, std::vector<std::vector<int8_t>>,
+                            CellKeyHash>
+      cache;
+  const CellKey key{table, static_cast<uint8_t>(k)};
+  auto it = cache.find(key);
+  if (it != cache.end())
+    return it->second;
+
+  const unsigned nv = k + 1;
+  unsigned nCand = 1;
+  for (unsigned i = 0; i < nv; i++)
+    nCand *= 3;
+  // Candidate clause c (base-3 digits: 0 absent, 1 positive, 2 negative).
+  // A model is a row r (leaf bits) with output bit f(r); the clause is
+  // implied iff no model falsifies every literal.
+  std::vector<uint8_t> implied(nCand, 0);
+  std::vector<uint8_t> digits(nv);
+  for (unsigned c = 1; c < nCand; c++)
+  {
+    unsigned x = c;
+    for (unsigned i = 0; i < nv; i++)
+    {
+      digits[i] = x % 3;
+      x /= 3;
+    }
+    bool falsified = false;
+    for (unsigned r = 0; r < (1u << k) && !falsified; r++)
+    {
+      bool allFalse = true;
+      for (unsigned i = 0; i < nv && allFalse; i++)
+      {
+        if (digits[i] == 0)
+          continue;
+        const bool val = i < k ? ((r >> i) & 1u) : ((table >> r) & 1u);
+        const bool litTrue = digits[i] == 1 ? val : !val;
+        if (litTrue)
+          allFalse = false;
+      }
+      if (allFalse)
+        falsified = true;
+    }
+    implied[c] = falsified ? 0 : 1;
+  }
+  std::vector<std::vector<int8_t>> primes;
+  for (unsigned c = 1; c < nCand; c++)
+  {
+    if (!implied[c])
+      continue;
+    unsigned x = c, pow3 = 1;
+    bool prime = true;
+    for (unsigned i = 0; i < nv && prime; i++)
+    {
+      const unsigned d = x % 3;
+      x /= 3;
+      if (d != 0 && implied[c - d * pow3])
+        prime = false; // dropping literal i keeps it implied
+      pow3 *= 3;
+    }
+    if (!prime)
+      continue;
+    std::vector<int8_t> cl;
+    x = c;
+    for (unsigned i = 0; i < nv; i++)
+    {
+      const unsigned d = x % 3;
+      x /= 3;
+      if (d)
+        cl.push_back(static_cast<int8_t>(i * 2 + (d == 2 ? 1 : 0)));
+    }
+    primes.push_back(cl);
+  }
+  return cache.emplace(key, std::move(primes)).first->second;
+}
+} // namespace
+
+// Grow the largest private cone under n that keeps at most five leaves:
+// a leaf is expanded when every reference to it comes from inside the cone
+// (its saturating count is below three and equals the count seen here),
+// it is an AND, and it is not a recovered full adder's root. Interior nodes
+// of an accepted cell get no variables; the block over the leaves and the
+// root replaces their gates. Refused when the cone is a single gate or its
+// implicate set is bigger than four clauses per gate replaced.
+bool Cone::tryCell(const Manager& m, Node n, const std::vector<uint8_t>& refs)
+{
+  const unsigned K = 5;
+  if (!m.isAnd(n) || faSum(n) || faCarry(n))
+    return false;
+  std::vector<Node> interior{n};
+  std::vector<Node> leaves;
+  std::vector<std::pair<Node, uint8_t>> internal; // internal reference counts
+  const auto bumpInternal = [&](Node x) {
+    for (auto& e : internal)
+      if (e.first == x)
+      {
+        e.second++;
+        return;
+      }
+    internal.push_back({x, 1});
+  };
+  const auto internalRefs = [&](Node x) -> unsigned {
+    for (const auto& e : internal)
+      if (e.first == x)
+        return e.second;
+    return 0;
+  };
+  const auto addLeaf = [&](Node x) {
+    for (const Node l : leaves)
+      if (l == x)
+        return;
+    leaves.push_back(x);
+  };
+  for (const Lit f : {m.fanin0(n), m.fanin1(n)})
+  {
+    bumpInternal(nodeOf(f));
+    addLeaf(nodeOf(f));
+  }
+  const auto expandable = [&](Node x) {
+    return m.isAnd(x) && !faSum(x) && !faCarry(x) && refs[x] < 3 &&
+           refs[x] == internalRefs(x) && interior.size() < 12;
+  };
+  // Expand leaves whose fanins are already leaves first (no growth), then
+  // any other private leaf while the leaf budget allows.
+  bool progress = true;
+  while (progress)
+  {
+    progress = false;
+    for (size_t i = 0; i < leaves.size(); i++)
+    {
+      const Node x = leaves[i];
+      if (!expandable(x))
+        continue;
+      const Node a = nodeOf(m.fanin0(x)), b = nodeOf(m.fanin1(x));
+      unsigned growth = 0;
+      bool aLeaf = false, bLeaf = false;
+      for (const Node l : leaves)
+      {
+        if (l == a)
+          aLeaf = true;
+        if (l == b)
+          bLeaf = true;
+      }
+      if (!aLeaf)
+        growth++;
+      if (!bLeaf && b != a)
+        growth++;
+      if (leaves.size() - 1 + growth > K)
+        continue;
+      leaves.erase(leaves.begin() + i);
+      interior.push_back(x);
+      bumpInternal(a);
+      bumpInternal(b);
+      addLeaf(a);
+      addLeaf(b);
+      progress = true;
+      break;
+    }
+  }
+  if (interior.size() < 2 || leaves.size() > K)
+    return false;
+  // Truth table of the root over the leaves; interior nodes evaluate in
+  // increasing id order, which is fanin order.
+  std::vector<Node> order(interior);
+  std::sort(order.begin(), order.end());
+  const unsigned k = static_cast<unsigned>(leaves.size());
+  uint32_t table = 0;
+  std::vector<std::pair<Node, bool>> vals;
+  for (unsigned r = 0; r < (1u << k); r++)
+  {
+    vals.clear();
+    for (unsigned i = 0; i < k; i++)
+      vals.push_back({leaves[i], ((r >> i) & 1u) != 0});
+    // Every fanin of an interior node is either a leaf or an interior node
+    // of lower id, and `order` is ascending, so each lookup is already in
+    // `vals`. A miss would mean the cone is not closed, which would encode
+    // the wrong function -- refuse the cell rather than trust it.
+    bool closed = true;
+    const auto value = [&](Lit l) -> bool {
+      const Node x = nodeOf(l);
+      for (const auto& e : vals)
+        if (e.first == x)
+          return e.second != isNeg(l);
+      closed = false;
+      return false;
+    };
+    for (const Node x : order)
+    {
+      const bool a = value(m.fanin0(x));
+      const bool b = value(m.fanin1(x));
+      vals.push_back({x, a && b});
+    }
+    if (!closed)
+      return false;
+    if (vals.back().second)
+      table |= 1u << r;
+  }
+  const std::vector<std::vector<int8_t>>& primes = primeImplicates(table, k);
+  if (primes.size() > 4 * interior.size() + 2)
+    return false;
+  Cell cell;
+  cell.leaves = leaves;
+  cell.clauses = primes;
+  for (const auto& cl : primes)
+    cell.literals += cl.size();
+  cells_[n] = std::move(cell);
+  setCell(n);
+  for (const Node l : leaves)
+    setLive(l);
+  return true;
+}
+
+Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover,
+           bool linkShared)
 {
   const uint32_t nCo = m.outputCount();
   assert(namedOutputs <= nCo);
@@ -539,6 +793,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   majorityLink_.assign(words, 0);
   xorAnd_.assign(words, 0);
   xorAndLink_.assign(words, 0);
+  halfAdder_.assign(words, 0);
+  haCarryQ_.assign(words, 0);
   absorbed_.assign(words, 0);
   faSum_.assign(words, 0);
   faCarry_.assign(words, 0);
@@ -559,7 +815,10 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   // an exact count of two from "more" -- and gone when this constructor
   // returns.
   const bool matchPatterns = recover != Recover::Nothing;
-  const bool collapseAnds = recover == Recover::PatternsAndAnds;
+  const bool collapseAnds = recover == Recover::PatternsAndAnds ||
+                            recover == Recover::Cells;
+  const bool cells = recover == Recover::Cells;
+  cell_.assign(words, 0);
 
   std::vector<uint8_t> refs;
   if (matchPatterns)
@@ -604,20 +863,31 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   // An AND reading an exclusive-or against one of the exclusive-or's own
   // operands is a two-literal conjunction over the operands. The
   // comparators' borrow chains bottom out in exactly this gate. A private
-  // exclusive-or dies with it; a shared one stays, and the gate emits the
-  // linking clauses instead.
+  // exclusive-or dies with it; under linkShared a shared one stays, and the
+  // gate emits the linking clauses instead.
   const auto xorAndMatch = [&](Node x, Lit& g, Lit& h, Node& xn) {
     if (!matchPatterns || !m.isAnd(x) || faMember(x) ||
         !matchXorAnd(m, x, g, h))
       return false;
     const Lit f0 = m.fanin0(x);
     xn = nodeOf(g == f0 ? m.fanin1(x) : f0);
-    return !faMember(xn);
+    return !faMember(xn) && (linkShared || refs[xn] == 1);
   };
   const auto wouldXorAnd = [&](Node x) {
     Lit g, h;
     Node xn;
     return xorAndMatch(x, g, h, xn);
+  };
+
+  // An exclusive-or whose interior conjunction is itself read elsewhere is
+  // the blaster's shared half adder: sum and carry over the same operands.
+  // The increment chains bvneg and constant addends fold into are made of
+  // exactly this pair, and it is what the private-interior patterns decline.
+  const auto wouldHalfAdder = [&](Node x) {
+    Node p, q;
+    return matchPatterns && m.isAnd(x) && !faMember(x) &&
+           xorShape(m, x, p, q) &&
+           ((refs[p] > 1 && !faMember(p)) || (refs[q] > 1 && !faMember(q)));
   };
 
   for (Node n = static_cast<Node>(nNodes); n-- > 1;)
@@ -651,6 +921,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       clearFa(carry);
     }
 
+    if (cells && tryCell(m, n, refs))
+      continue;
     Lit c, t, e;
     if (wouldPattern(n))
     {
@@ -663,8 +935,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       {
         // A private exclusive-or condition (its two references are the
         // cell's own) dies with the cell: the majority block replaces both
-        // gates. A shared one keeps its variable and its own definition,
-        // and the cell instead adds the linking clauses that keep the
+        // gates. Under linkShared a shared one keeps its variable and its
+        // own definition, and the cell instead adds the linking clauses that keep the
         // window propagation-complete with the equality inside it.
         Lit x, y, z;
         if (refs[cn] == 2 && matchMajority(m, n, x, y, z))
@@ -677,7 +949,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
         }
         Lit a, b, e2, other;
         bool tSide;
-        if (refs[cn] > 2 && matchJointCell(m, n, a, b, e2, other, tSide))
+        if (linkShared && refs[cn] > 2 &&
+            matchJointCell(m, n, a, b, e2, other, tSide))
         {
           setMajorityLink(n);
           setLive(nodeOf(a));
@@ -692,6 +965,27 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       setLive(nodeOf(c));
       setLive(nodeOf(t));
       setLive(nodeOf(e));
+      continue;
+    }
+
+    if (!absorbed(n) && wouldHalfAdder(n))
+    {
+      Node p, q;
+      const bool shape = xorShape(m, n, p, q);
+      assert(shape);
+      (void)shape;
+      // The carry keeps its own gate for its consumers; the sum adds the
+      // four linking clauses that make the (a, b, sum, carry) window
+      // propagation-complete. The other interior dies unless someone else
+      // holds it.
+      const bool pShared = refs[p] > 1 && !faMember(p);
+      const Node carry = pShared ? p : q;
+      setHalfAdder(n);
+      if (!pShared)
+        setHaCarryQ(n);
+      setLive(nodeOf(m.fanin0(carry)));
+      setLive(nodeOf(m.fanin1(carry)));
+      setLive(carry);
       continue;
     }
 
@@ -729,7 +1023,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       const Node x = nodeOf(f);
       setLive(x);
       if (collapseAnds && !isNeg(f) && m.isAnd(x) && refs[x] == 1 &&
-          !faMember(x) && !wouldPattern(x) && !wouldXorAnd(x))
+          !faMember(x) && !wouldPattern(x) && !wouldXorAnd(x) &&
+          !wouldHalfAdder(x))
         setAbsorbed(x);
     }
   }
@@ -749,6 +1044,13 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
     {
       nClauses_ += 14;
       nLiterals_ += 44;
+      continue;
+    }
+    if (cellRoot(n))
+    {
+      const Cell& cell = cells_.at(n);
+      nClauses_ += cell.clauses.size();
+      nLiterals_ += cell.literals;
       continue;
     }
     if (majorityCell(n))
@@ -773,6 +1075,12 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
     {
       nClauses_ += 5;
       nLiterals_ += 12;
+      continue;
+    }
+    if (halfAdderSum(n))
+    {
+      nClauses_ += 4;
+      nLiterals_ += 11;
       continue;
     }
     if (patterned(n))
@@ -820,11 +1128,12 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   nVars_ = static_cast<uint32_t>(vars);
 }
 
-CNF deriveTseitin(const Manager& m, unsigned namedOutputs, Recover recover)
+CNF deriveTseitin(const Manager& m, unsigned namedOutputs, Recover recover,
+                  std::vector<uint32_t>* nodeVarOut, bool linkShared)
 {
-  const Cone cone(m, namedOutputs, recover);
+  const Cone cone(m, namedOutputs, recover, linkShared);
   CNF cnf;
-  writeTseitin(m, cone, cnf);
+  writeTseitin(m, cone, cnf, nodeVarOut);
   return cnf;
 }
 

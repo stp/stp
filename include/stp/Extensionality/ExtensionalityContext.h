@@ -146,7 +146,11 @@ public:
     explicit SolveScope(ExtensionalityContext* c) : ctx(c)
     {
       if (ctx != NULL)
+      {
         ctx->solveInProgress = true;
+        if (ctx->active())
+          ctx->solvesOwned++;
+      }
     }
     ~SolveScope()
     {
@@ -562,6 +566,14 @@ public:
   // are what a decision about capping a round would have to be made on.
   int lemmaRounds;
   int lemmasInLargestRound;
+
+  // Solves the checker owned, cumulative like the rest. What decides
+  // whether the counters are reported at all: a session in which the
+  // checker never owned a solve has nothing to say, while one it did --
+  // even one that needed no round, which a seeding that keeps every read
+  // apart makes ordinary -- reports its zeros rather than leaving them to
+  // be inferred from silence.
+  int solvesOwned;
 
   // Print the four counters above under -s / --print-functionstat. Both
   // the batch pipeline and the incremental driver call this where they

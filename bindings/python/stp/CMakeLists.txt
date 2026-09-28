@@ -45,23 +45,24 @@ endif()
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/library_path.py.in
                ${CMAKE_CURRENT_BINARY_DIR}/library_path.py @ONLY)
 
-# Copy rest of files to build directory
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/stp.py.in
-              ${CMAKE_CURRENT_BINARY_DIR}/stp.py)
+# The rest of the package is plain Python, shared with the pip install
+# (bindings/python/pyproject.toml); only library_path.py is generated.
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/stp.py
+               ${CMAKE_CURRENT_BINARY_DIR}/stp.py COPYONLY)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/__init__.py.in
-                ${CMAKE_CURRENT_BINARY_DIR}/__init__.py)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/__init__.py
+               ${CMAKE_CURRENT_BINARY_DIR}/__init__.py COPYONLY)
 
 # -----------------------------------------------------------------------------
 # Handle installation
 # -----------------------------------------------------------------------------
 
-# Try to guess the right place by asking the current python interpreter for its
-# Python library directory
+# The interpreter's own site-packages, and where the same interpreter would put
+# packages under an arbitrary prefix, relative to that prefix.
 execute_process(COMMAND ${PYTHON_EXECUTABLE} -c
-                        "import sys; import sysconfig; print(sysconfig.get_path('purelib', vars={'base': sys.base_prefix}))"
+                        "import os, sys, sysconfig; scheme = 'nt' if os.name == 'nt' else 'posix_prefix'; print(sysconfig.get_path('purelib', vars={'base': sys.base_prefix})); print(os.path.relpath(sysconfig.get_path('purelib', scheme, vars={'base': '/p', 'platbase': '/p'}), '/p'))"
                  RESULT_VARIABLE RETURN_CODE
-                 OUTPUT_VARIABLE PYTHON_LIB_DIR_DETECTED
+                 OUTPUT_VARIABLE PYTHON_LIB_DIRS
                  OUTPUT_STRIP_TRAILING_WHITESPACE
                )
 
@@ -69,13 +70,43 @@ if (${RETURN_CODE} GREATER 0)
     message(FATAL_ERROR "Failed to determine python site package directory")
 endif()
 
-# Provide an option so users can override what we detected earlier
-set(PYTHON_LIB_INSTALL_DIR "${PYTHON_LIB_DIR_DETECTED}" CACHE PATH "Installation directory for stp python package")
+string(REPLACE "\n" ";" PYTHON_LIB_DIRS "${PYTHON_LIB_DIRS}")
+list(GET PYTHON_LIB_DIRS 0 PYTHON_LIB_DIR_DETECTED)
+list(GET PYTHON_LIB_DIRS 1 PYTHON_LIB_DIR_UNDER_PREFIX)
+file(TO_CMAKE_PATH "${PYTHON_LIB_DIR_DETECTED}" PYTHON_LIB_DIR_DETECTED)
+file(TO_CMAKE_PATH "${PYTHON_LIB_DIR_UNDER_PREFIX}" PYTHON_LIB_DIR_UNDER_PREFIX)
 
-if (EXISTS "${PYTHON_LIB_INSTALL_DIR}")
-    message(STATUS "Detected python site package directory ${PYTHON_LIB_INSTALL_DIR}")
+# Relative to the install prefix, so the package goes wherever the rest of STP
+# goes, --prefix included. The interpreter's site-packages when it lies inside
+# the prefix (the default /usr/local install), so `import stp` works unaided;
+# otherwise the prefix's own site-packages, which needs PYTHONPATH.
+get_filename_component(_stp_prefix "${CMAKE_INSTALL_PREFIX}" ABSOLUTE)
+file(RELATIVE_PATH _stp_detected_rel "${_stp_prefix}" "${PYTHON_LIB_DIR_DETECTED}")
+if(IS_ABSOLUTE "${_stp_detected_rel}" OR _stp_detected_rel MATCHES "^\\.\\.(/|$)")
+    set(_stp_python_default "${PYTHON_LIB_DIR_UNDER_PREFIX}")
 else()
-    message(FATAL_ERROR "Reported python site package directory '${PYTHON_LIB_INSTALL_DIR}' does not exist")
+    set(_stp_python_default "${_stp_detected_rel}")
+endif()
+
+# STRING, not PATH: CMake makes a relative PATH given with -D absolute against
+# the build directory.
+set(PYTHON_LIB_INSTALL_DIR "${_stp_python_default}" CACHE STRING
+    "Installation directory for stp python package, relative to CMAKE_INSTALL_PREFIX unless absolute")
+
+if(IS_ABSOLUTE "${PYTHON_LIB_INSTALL_DIR}")
+    if(NOT EXISTS "${PYTHON_LIB_INSTALL_DIR}")
+        message(FATAL_ERROR "Python site package directory '${PYTHON_LIB_INSTALL_DIR}' does not exist")
+    endif()
+    set(STP_PYTHON_LIB_INSTALL_ABSOLUTE "${PYTHON_LIB_INSTALL_DIR}")
+else()
+    set(STP_PYTHON_LIB_INSTALL_ABSOLUTE
+        "${CMAKE_INSTALL_PREFIX}/${PYTHON_LIB_INSTALL_DIR}")
+endif()
+message(STATUS "Python package installs to ${STP_PYTHON_LIB_INSTALL_ABSOLUTE}")
+get_filename_component(_stp_python_install_abs
+                       "${STP_PYTHON_LIB_INSTALL_ABSOLUTE}" ABSOLUTE)
+if(NOT _stp_python_install_abs STREQUAL PYTHON_LIB_DIR_DETECTED)
+    message(STATUS "  outside ${PYTHON_EXECUTABLE}'s site-packages; add it to PYTHONPATH to import stp")
 endif()
 
 # Install main files
@@ -89,7 +120,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.py
 #         expressions, but they can't be used for now due to bugs in older
 #         versions of CMake
 get_filename_component(STP_PYTHON_PACKAGE_INSTALL_DIR
-                       "${PYTHON_LIB_INSTALL_DIR}/stp" ABSOLUTE)
+                       "${STP_PYTHON_LIB_INSTALL_ABSOLUTE}/stp" ABSOLUTE)
 if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
   set(STP_LIBRARY_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}")
 else()

@@ -5,10 +5,10 @@
 ; and a packed-operand path when native arithmetic is selected; disabling it
 ; checks the ordinary full-addition SymFPU circuit independently.
 ;
-; RUN: %solver --disable-equality --unconstrained-variable-elimination=0 -s %s 2>&1 | %OutputCheck --check-prefix=DIRECT %s
-; RUN: %solver --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-cmp=false -s %s 2>&1 | %OutputCheck --check-prefix=REFERENCE %s
-; RUN: %solver --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-cmp=false --bb.fp-native-add-iszero=0 %s | %OutputCheck --check-prefix=RESULT %s
-; RUN: %solver --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-arith=1 -s %s 2>&1 | %OutputCheck --check-prefix=NATIVE %s
+; RUN: %solver --bb.fp-native-all=false --disable-equality --unconstrained-variable-elimination=0 -s %s 2>&1 | %OutputCheck --check-prefix=DIRECT %s
+; RUN: %solver --bb.fp-native-all=false --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-cmp=false -s %s 2>&1 | %OutputCheck --check-prefix=REFERENCE %s
+; RUN: %solver --bb.fp-native-all=false --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-cmp=false --bb.fp-native-add-iszero=0 %s | %OutputCheck --check-prefix=RESULT %s
+; RUN: %solver --bb.fp-native-all=false --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-arith=1 -s %s 2>&1 | %OutputCheck --check-prefix=NATIVE %s
 ;
 ; DIRECT: FloatBlast: 0 SymFPU operations, 2 unpacks, 0 packs, 1 direct add-isZero predicates
 ; DIRECT: ^unsat

@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/StrengthReduction.h"
+#include "stp/Simplifier/MultiplyOverflowIdiom.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Util/CBVOps.h"
 #include "stp/Util/DagWalk.h"
@@ -313,6 +314,24 @@ namespace stp
     return newN;
   }
 
+  // n, an equality, is a double-width spelling of a multiplication overflow
+  // check; out is its predicate form. A sign extension this pass has already
+  // turned into a zero extension is accepted where the fixed bits show the
+  // extended term's top bit is zero.
+  static bool overflowIdiom(NodeFactory* nf, const ASTNode& n,
+                            const NodeToFixedBitsMap& visited, ASTNode& out)
+  {
+    const auto topBitKnownZero = [&visited](const ASTNode& t) {
+      const auto it = visited.find(t);
+      if (it == visited.end() || it->second == nullptr)
+        return false;
+      const unsigned top = t.GetValueWidth() - 1;
+      return it->second->isFixed(top) && !it->second->getValue(top);
+    };
+    return multiplyOverflowIdiom(nf, n[0], n[1], out, topBitKnownZero) ||
+           multiplyOverflowIdiom(nf, n[1], n[0], out, topBitKnownZero);
+  }
+
   ASTNode StrengthReduction::strengthReduction(const ASTNode& n, const NodeToFixedBitsMap& visited)
   {
     const Kind kind = n.GetKind();
@@ -341,6 +360,14 @@ namespace stp
       }
 
       replaceWithConstant++;
+    }
+    else if (kind == EQ && uf->mulo_recognition &&
+             overflowIdiom(nf, n, visited, newN))
+    {
+      // The double-width spelling of a multiplication overflow check
+      // becomes the predicate here, inside the size-reducing stage, so the
+      // difficulty reversion cannot undo it later.
+      replaceWithSimpler++;
     }
     else if (kind == BVSGT || kind == BVSGE || kind == SBVDIV ||
              kind == SBVMOD || kind == SBVREM || kind == BVSADDO ||

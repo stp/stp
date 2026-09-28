@@ -89,6 +89,28 @@ branch the pin names -- adds STP's MSVC portability changes on top. Moving
 to a newer release means importing its tarball there and rebasing ``stp``
 onto it, then moving the pin here.
 
+`IMath <https://github.com/creachadair/imath>`__, the arbitrary-precision
+integer and rational arithmetic under STP's exact linear real arithmetic, is
+required too and is not vendored either. STP builds it from a pinned commit
+of release 1.35, against STP's own allocation hooks, and with one patch, kept
+in ``cmake/deps-utils``, that renames IMath's GMP-shaped private type --
+which would otherwise collide with a real GMP in the same link -- and makes
+its tuning globals immutable. STP's sources name the renamed type, so an
+unpatched copy does not compile against them, and that is why an installed
+IMath -- a distribution's, say -- is never looked for. That leaves two ways
+to get it, tried in this order:
+
+-  ``-DIMATH_DIR=<path>`` naming a prefix that holds ``include/imrat.h``
+   and ``lib/`` with the ``imath`` library, as an earlier build installs
+   them. Without it ``deps/imath`` is searched, as ``deps/libbf`` is for
+   LibBF, and an ``STP_DEP_DIR`` that an earlier build filled is searched
+   as well
+-  ``-DENABLE_AUTO_DOWNLOAD=ON``, which clones
+   `creachadair/imath <https://github.com/creachadair/imath>`__ at the
+   pinned commit, applies the patch, and builds it as part of this build
+
+Without either, configuration fails and says so.
+
 SAT backends
 ------------
 
@@ -113,23 +135,39 @@ CryptoMiniSat a configuration error, and ``-DUSE_CRYPTOMINISAT=OFF``
 never looks for one, which is what pins a build's set of backends to the
 flags that produced it. With ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do: STP clones and
 builds `stp/cryptominisat <https://github.com/stp/cryptominisat>`__ at a
-pinned commit, as it does for its other dependencies. An installed one is
-found and preferred, including one installed into ``deps/install``:
+pinned commit, as it does for its other dependencies. That commit, on the
+fork's ``stp-ipasir-up`` branch, is release 5.14.7 with the ``NOCADICAL``
+option and the IPASIR-UP propagator interface the linear-arithmetic theory
+drives. A CryptoMiniSat without the interface -- a release, or your
+distribution's -- still builds STP;
+the arithmetic theory then runs in the full-lazy loop on it.
+Configure warns when the copy it found lacks the interface, because
+CryptoMiniSat is then still the default backend: ``--cadical`` restores the
+propagator for a run, and the pinned fork restores it for the build, named
+with ``-Dcryptominisat5_DIR`` or built by STP once no other copy is found.
+Configure answers the question by compiling against the copy it found;
+``-DCRYPTOMINISAT_HAS_UP=ON`` or ``OFF`` answers it instead, and ``OFF``
+accepts a copy without the interface without the warning. An installed one
+is found and preferred, including one installed into ``deps/install``:
 
 .. code-block:: bash
 
-    git clone https://github.com/msoos/cryptominisat
+    git clone https://github.com/stp/cryptominisat
     cd cryptominisat
+    git checkout e06847e1006f06ec630a62349d930e5ead54def6
     mkdir build && cd build
-    cmake ..
+    cmake .. -DNOCADICAL=ON -DBUILD_SHARED_LIBS=OFF -DSTATIC_BINARY=OFF \
+             -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     cmake --build . -j$(nproc)
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
 
-It is the one dependency STP does not build for you: it reaches the build
-as a CMake package rather than as a header and a library, and an
-ExternalProject would write that package only after the configure that
-has to read it. Install it, or run the script.
+The commit to check out is the one ``cmake/FindCryptoMiniSat.cmake`` pins,
+and the flags are among those it builds that commit with. ``-DNOCADICAL=ON``
+is the one that matters (see below); the others make a static,
+position-independent library, which links into a shared ``libstp`` and a
+static one alike. Moving the pin in that file is what moves it for the
+auto-download too.
 
 CaDiCaL is compiled in by default, is what a build without
 CryptoMiniSat solves with, and is worth having on hard bitvector
@@ -210,6 +248,10 @@ distribution's minisat package works too, as does one built by hand:
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
 
+MiniSat hosts no theory propagator: on it the arithmetic theory runs
+in the full-lazy loop, judging complete assignments rather than working
+inside the search.
+
 Every dependency is fetched and built by the build itself under
 ``-DENABLE_AUTO_DOWNLOAD=ON``; none of them needs a script beforehand.
 
@@ -264,7 +306,10 @@ These apply to all generators:
    a build without them; it now produces an asserting Release build
 -  ``ENABLE_TESTING`` -- enable running the tests
 -  ``ENABLE_PYTHON_INTERFACE`` -- build the Python interface (Python 3
-   only)
+   only). The bindings can also be installed on their own, once per
+   interpreter, with ``python3 -m pip install ./bindings/python`` against
+   an STP that is already installed; ``bindings/python/README.md`` says how
+   they find ``libstp``
 -  ``PYTHON_EXECUTABLE`` -- which Python 3 to use, when more than one is
    installed
 -  ``SANITIZE`` -- use Clang's sanitization checks. It sets C++ flags only,
@@ -306,6 +351,22 @@ These apply to all generators:
 -  ``CLI11_DIR`` -- build against an existing CLI11 rather than fetching
    one
 -  ``LIBBF_DIR`` -- where to find an already-built LibBF
+-  ``IMATH_DIR`` -- where to find an already-built, STP-patched IMath
+   (see above)
+-  ``ENABLE_HIGHS`` -- link `HiGHS <https://highs.dev>`__ into ``libstp``
+   as an advisory LP and MIP engine for the linear-arithmetic searches that
+   can use one: the ``--lra-highs-*`` options, and the ReLU bound
+   optimisation and phase search. STP certifies exactly whatever it takes
+   from HiGHS. Off by default. An installed HiGHS is used if one is found;
+   otherwise ``ENABLE_AUTO_DOWNLOAD`` builds release 1.12.0
+-  ``ENABLE_HIGHS_CUT_LOG`` -- with ``ENABLE_HIGHS``, build HiGHS with
+   ``cmake/deps-utils/highs-root-cut-log.patch``, which has it report how
+   it derived the cuts it adds at the root of a MIP search, so that
+   ``--lra-highs-cuts`` can rebuild them exactly. Off by default. An
+   installed HiGHS has to have been built with that patch
+-  ``HIGHS_DIR`` -- the prefix of an installed HiGHS to use, rather than
+   searching for one. ``STP_DEPS_LOCAL_ONLY`` skips that search, as it does
+   for the dependencies it names
 -  ``ENABLE_AUTO_DOWNLOAD`` -- download and build dependencies that were
    not found, rather than failing. Off by default: a build that reaches
    the network should be asked to
@@ -318,10 +379,12 @@ These apply to all generators:
    configuration stops -- ``configure.sh --local-deps`` turns both on.
 
    A ``-D<X>_DIR`` naming a copy is unaffected: that is an answer rather
-   than a search, and the build uses what it was given. LibBF is the one
-   to know about, because the ``deps/libbf`` it falls back on when
-   ``LIBBF_DIR`` says nothing *is* a search, and is skipped along with the
-   rest; pass ``-DLIBBF_DIR=<path>`` to use a LibBF there anyway.
+   than a search, and the build uses what it was given. LibBF and IMath
+   are the ones to know about, because the ``deps/libbf`` and
+   ``deps/imath`` they fall back on when ``LIBBF_DIR`` or ``IMATH_DIR``
+   says nothing *are* a search, and are skipped along with the rest; pass
+   ``-DLIBBF_DIR=<path>`` or ``-DIMATH_DIR=<path>`` to use a copy there
+   anyway.
    CryptoMiniSat is the exception, being the one dependency STP cannot
    build: under this option it is used only if ``cryptominisat5_DIR``
    names one, and ``-DUSE_CRYPTOMINISAT=ON`` without that is a
@@ -678,7 +741,7 @@ Windows at all -- upstream supports MinGW there, and STP does not package
 it -- so both configure with ``-DUSE_CRYPTOMINISAT=OFF``.
 
 Everything else is fetched. ``-DENABLE_AUTO_DOWNLOAD=ON`` builds ABC,
-LibBF, SymFPU, CLI11 and the SAT backend as part of the build, with its
+LibBF, IMath, SymFPU, CLI11 and the SAT backend as part of the build, with its
 compiler and its flags, so the toolchain, flex, bison and -- for MiniSat
 -- a zlib are all that has to be installed beforehand.
 

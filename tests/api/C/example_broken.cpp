@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <stp/c_interface.h>
 
-void handleQuery(VC handle, Expr queryExpr);
+int handleQuery(VC handle, Expr queryExpr);
 
 TEST(examplebroken, one)
 {
@@ -35,20 +35,20 @@ TEST(examplebroken, one)
   // We are asking STP: ∀ x. true → ( x + x = 2*x )
   // This should be VALID.
   printf("######First Query\n");
-  handleQuery(handle, equality);
+  EXPECT_EQ(1, handleQuery(handle, equality));
 
   // We are asking STP: ∀ x. true → ( x + x = 2 )
   // This should be INVALID.
   printf("######Second Query\n");
   // Create bool expression x + x = 2
   Expr badEquality = vc_eqExpr(handle, xPlusx, two);
-  handleQuery(handle, badEquality);
+  EXPECT_EQ(0, handleQuery(handle, badEquality));
 
   // Clean up
   vc_Destroy(handle);
 }
 
-void handleQuery(VC handle, Expr queryExpr)
+int handleQuery(VC handle, Expr queryExpr)
 {
   // Print the assertions
   printf("Assertions:\n");
@@ -80,4 +80,5 @@ void handleQuery(VC handle, Expr queryExpr)
       printf("Unhandled error\n");
   }
   printf("\n\n");
+  return result;
 }

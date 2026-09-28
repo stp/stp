@@ -148,6 +148,12 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                         BBNodeSet& support, const ASTNode& n);
   void mult_allPairs(const BBNodeVec& x, const BBNodeVec& y,
                      BBNodeSet& support, vector<list<BBNode>>& products);
+  BBNodeVec mult_csaRuns(const BBNodeVec& x, const BBNodeVec& y,
+                         BBNodeSet& support, const ASTNode& n);
+  BBNodeVec mult_normalRuns(const BBNodeVec& x, const BBNodeVec& y,
+                            BBNodeSet& support, const ASTNode& n);
+  void BBPlus2From(BBNodeVec& sum, const BBNodeVec& y, int from, BBNode cin);
+
   void mult_Booth(const BBNodeVec& x_i, const BBNodeVec& y_i,
                   BBNodeSet& support, const stp::ASTNode& xN,
                   const stp::ASTNode& yN, vector<list<BBNode>>& products,
@@ -159,6 +165,16 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                            const ASTNode& n);
   BBNodeVec mult_normal(const BBNodeVec& x, const BBNodeVec& y,
                              BBNodeSet& support, const ASTNode& n);
+  BBNodeVec mult_csaRows(const BBNodeVec& x, const BBNodeVec& y,
+                         BBNodeSet& support, const ASTNode& n);
+  BBNodeVec mult_dadda(vector<list<BBNode>>& products, BBNodeSet& support,
+                       const ASTNode& n);
+  void mult_radix4_hard(const BBNodeVec& x, const BBNodeVec& y,
+                        vector<list<BBNode>>& products, const ASTNode& n);
+  BBNodeVec BBMultVariant(const BBNodeVec& x, const BBNodeVec& y,
+                          BBNodeSet& support, const ASTNode& n);
+  void multLemmaBlock(const BBNodeVec& x, const BBNodeVec& y,
+                      const BBNodeVec& p, BBNodeSet& support);
 
   BBNodeVec batcher(const BBNodeVec& in);
   BBNodeVec mergeSorted(const BBNodeVec& in1,
@@ -232,6 +248,48 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   void BBDivMod(const BBNodeVec& y, const BBNodeVec& x,
                 BBNodeVec& q, BBNodeVec& r, unsigned int rwidth,
                 BBNodeSet& support);
+
+  // Division through its defining relation: fresh q and r constrained by
+  // x = y*q + r at double width, plus r < y wherever y is nonzero.
+  void BBDivByMult(const BBNodeVec& x, const BBNodeVec& y, BBNodeVec& q,
+                   BBNodeVec& r, BBNodeSet& support);
+
+  // Division by a constant through the same relation, with the product a
+  // shift-and-add of the fresh quotient over the constant's set bits. The
+  // divisor must be entirely constant and nonzero.
+  void BBDivByConstant(const BBNodeVec& x, const BBNodeVec& y, BBNodeVec& q,
+                       BBNodeVec& r, BBNodeSet& support);
+
+  // One (q, r) pair per operand pair: BVDIV and BVMOD of the same operands
+  // must name the same fresh variables, which strashing cannot arrange.
+  // The pair is only as good as the relation asserted over it, which is
+  // conjoined into the root the pair was minted under, so the memo lives
+  // for one top-level BBForm: a blaster that outlives a root, as the
+  // incremental driver's does, starts the next one afresh.
+  std::unordered_map<ASTNode, std::pair<BBNodeVec, BBNodeVec>,
+                     ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+      divByMultMemo;
+
+  // The rounding-mode independent half of a native square root: the
+  // relation's own (q, r) and everything the rounder is handed. FP_SQRT's
+  // memo key is the whole node, rounding mode included, so two roots of one
+  // operand under two modes mint two relations and leave the search ranging
+  // over (x, q1, r1, q2, r2) instead of (x, q, r). Everything up to
+  // BBfpRoundPack is a function of the operand alone, so it is keyed on the
+  // operand; like divByMultMemo the pair is only as good as the relation
+  // conjoined into the root it was minted under, so it lives for one root.
+  struct SqrtPreRound
+  {
+    BBNode sign, isZero, isInf, isNaN;
+    BBNodeVec rsig; // the unrounded significand, sb bits
+    BBNodeVec be;   // the biased result exponent, E bits
+    BBNode guard, sticky;
+  };
+  std::unordered_map<ASTNode, SqrtPreRound, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      sqrtPreRoundMemo;
+  SqrtPreRound BBfpSqrtPreRound(const ASTNode& operand, unsigned sb,
+                                unsigned eb, unsigned E, BBNodeSet& support);
 
   // Return formula for majority function of three formulas.
   BBNode Majority(const BBNode& a, const BBNode& b, const BBNode& c);
@@ -324,12 +382,28 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   bool fpNativeKnownFiniteNonnegative(const ASTNode& n);
   bool fpNativeKnownFiniteNonpositive(const ASTNode& n);
 
-  // bit blast fp.mul / fp.add / float-to-float to_fp over packed operands:
-  // hand-written unpack/compute/round/pack circuits, no SymFPU
+  // bit blast fp.mul / fp.add / fp.div / float-to-float to_fp over packed
+  // operands: hand-written unpack/compute/round/pack circuits, no SymFPU
   // (--bb.fp-native-arith)
+  // The significand product of fp.mul and fp.fma, handed to the ordinary
+  // bit-vector multiplier so that it inherits its variants -- the recoding
+  // of constant runs above all, which a floating-point multiply by a
+  // literal needs exactly as much as a bit-vector one does.
+  BBNodeVec BBfpSignificandProduct(const BBNodeVec& a, const BBNodeVec& b,
+                                   BBNodeSet& support);
+
   BBNodeVec BBfpMul(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpAdd(const ASTNode& term, BBNodeSet& support);
   BBNode BBfpAddIsZero(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpDiv(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpMinMax(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpSqrt(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpRoundToIntegral(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpFma(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpFromBV(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpToBV(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpRem(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpToIeeeBV(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
 
   // Kept separate from the native-domain profiling counters so the stacked
@@ -345,6 +419,11 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
     BBNode sign, isZero, isInf, isNaN;
     BBNodeVec msig; // sb bits, hidden bit at msig[sb-1]
     BBNodeVec eUnb; // E bits, signed, unbiased (subnormals read exp as 1)
+    // The same exponent still biased, when the record came straight from
+    // the rounder and packing can use it without adding the bias back. The
+    // two directions cancel, and a record that has crossed a circuit
+    // boundary leaves this empty.
+    BBNodeVec eBiased;
   };
   FpOperand BBfpUnpack(const BBNodeVec& p, unsigned sb, unsigned w,
                        unsigned E, BBNodeSet& support,
@@ -362,20 +441,86 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
                           unsigned sb, unsigned eb, BBNodeSet& support,
                           bool resultKnownFinite = false);
 
+  // The same rounding, stopping before the bits are assembled. The record
+  // it returns is in BBfpUnpack's conventions -- hidden bit explicit,
+  // subnormals reading their exponent as one -- so a consumer cannot tell
+  // whether it came from a circuit or from splitting a packed operand.
+  FpOperand BBfpRound(const BBNodeVec& rm, const BBNode& sgn,
+                      const BBNodeVec& rsig, const BBNode& guard,
+                      const BBNode& sticky, const BBNodeVec& be, unsigned sb,
+                      unsigned eb, BBNodeSet& support,
+                      bool resultKnownFinite = false);
+
+  // Lay a record out as IEEE bits.
+  BBNodeVec BBfpPack(const FpOperand& value, unsigned sb, unsigned eb);
+
+  // The operand record for a floating-point node: a native operation's own
+  // rounded record when there is one, and otherwise its packed bits split.
+  FpOperand BBfpOperand(const ASTNode& n, unsigned sb, unsigned w, unsigned E,
+                        BBNodeSet& support, bool knownFinite = false,
+                        bool knownZeroMagnitude = false);
+
+  // Store a circuit's rounded result for a later consumer. The fields are
+  // first made to agree with what unpacking its own packed form would give,
+  // which keeps the stored exponent inside the format's range and is what
+  // lets the accessor resize it freely.
+  void BBfpRememberRecord(const ASTNode& n, FpOperand value, unsigned sb,
+                          unsigned eb);
+
+  // Sign-extend or truncate a signed exponent to `width`. Truncation is only
+  // used on a rounded exponent, which is inside the format's range.
+  BBNodeVec BBfpResizeExponent(const BBNodeVec& e, unsigned width);
+
+  // Rounded records of native operations, keyed by node, held at the
+  // narrowest exponent width any circuit uses.
+  std::unordered_map<ASTNode, FpOperand, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      fpUnpackedMemo;
+
   // Width of the internal signed exponent for format (eb, sb): eb+2
   // widened until the subnormal shift distance (up to bias + 2sb + 3,
   // counting fp.add's alignment headroom) cannot overflow it.
   static unsigned BBfpExpWidth(unsigned eb, unsigned sb);
 
+  // Division needs a wider exponent datapath than the other operations.
+  // Both operands are normalised before the divide, so each exponent moves
+  // by up to sb-1, and the difference of two such exponents spans about
+  // three biases rather than one. The result saturates, but the saturation
+  // test in BBfpRoundPack only fires if the exponent it reads has not
+  // wrapped.
+  static unsigned BBfpDivExpWidth(unsigned eb, unsigned sb);
+
+  // The fused multiply-add needs a wider one still. Its adder frame is
+  // about 4sb bits, so the leading-zero count it subtracts from the
+  // exponent is that large, on top of a product exponent already spanning
+  // two biases.
+  static unsigned BBfpFmaExpWidth(unsigned eb, unsigned sb);
+
+  // Converting an n-bit integer needs room for an exponent as large as n.
+  static unsigned BBfpConvExpWidth(unsigned eb, unsigned sb, unsigned n);
+
   // Helpers for the native floating-point arithmetic circuits.
   // Count of leading zeros of v (from the MSB down) as an unsigned binary
   // vector of `countWidth` bits; an all-zero v counts v.size().
   BBNodeVec BBfpCLZ(const BBNodeVec& v, unsigned countWidth);
+
+  // State to the solver what normalising by a leading-zero count means: the
+  // top bit of the result is set exactly when the input is nonzero.
+  void BBfpNormaliseLemma(const BBNodeVec& v, const BBNodeVec& r,
+                          unsigned countWidth, BBNodeSet& support);
   // Right shift v by `amt`, ORing every shifted-out bit into `sticky`.
   BBNodeVec BBfpShiftRightSticky(const BBNodeVec& v, const BBNodeVec& amt,
                                  BBNode& sticky);
   // v + inc (a single carry-in bit), one bit wider than v.
   BBNodeVec BBfpIncrement(const BBNodeVec& v, const BBNode& inc);
+  // The sign-magnitude sort key: flip every magnitude bit under a set sign
+  // and invert the sign, so unsigned comparison of two keys is the floats'
+  // total order. Distinguishes -0 from +0, which callers handle separately.
+  BBNodeVec BBfpOrderKey(const BBNodeVec& p, unsigned width);
+  // The canonical quiet NaN of format (eb, sb): exponent all ones, only the
+  // top stored significand bit set, sign clear. The value every native
+  // circuit and the SymFPU encoding both produce.
+  BBNodeVec BBfpCanonicalNaN(unsigned sb, unsigned eb);
 
   // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
   // BVUMULO, BVSMULO, BVUSUBO, BVSSUBO.
@@ -474,6 +619,23 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   size_t fpNativeZeroAddFastPaths = 0;
   size_t fpNativeZeroMulFastPaths = 0;
   size_t fpNativeZeroToFpFastPaths = 0;
+  size_t fpNativeDivRelations = 0;
+  // Roots that reused an earlier root's relation rather than minting one.
+  size_t fpNativeSqrtPreRoundReuses = 0;
+  // Fresh inputs minted for a defining relation under the current root.
+  // The variables mean nothing without the relation asserted beside them,
+  // and that relation goes into one root's support -- see BBForm.
+  size_t relationalFreshInputs = 0;
+  ASTNode lastBlastedRoot;
+  BBNode freshRelationalInput()
+  {
+    ++relationalFreshInputs;
+    return nf->CreateFreshInput();
+  }
+  size_t fpNativeRecordReuses = 0;
+  size_t fpNativeRecordClassifications = 0;
+  // One placeholder multiply node per width, for BBfpSignificandProduct.
+  std::map<unsigned, ASTNode> fpSignificandProductShape;
   size_t fpNativeKnownPositiveAddPaths = 0;
   size_t fpNativeKnownNegativeAddPaths = 0;
   size_t fpNativeKnownPositiveMulPaths = 0;
@@ -669,6 +831,29 @@ private:
   std::vector<BBNode> sideConstraints_;
 
 public:
+  // One narrow shift whose exact prime implicates are to be added as raw
+  // clauses. They have to reach the solver as clauses, not as circuit:
+  // routed through the AIG each prime becomes an OR tree and costs about
+  // 18 clauses and 4 fresh variables instead of one clause and none,
+  // which throws away the only thing that makes the prime list
+  // attractive. So the bits are named by combinational inputs here and
+  // the clauses are emitted after CNF conversion, once those inputs have
+  // SAT variables.
+  struct ShiftPrimeBlock
+  {
+    int op;                       // 0 shl, 1 lshr, 2 ashr
+    unsigned width;
+    std::vector<BBNode> bits;     // a, then s, then r -- all CIs
+  };
+  const std::vector<ShiftPrimeBlock>& shiftPrimeBlocks() const
+  {
+    return shiftPrimeBlocks_;
+  }
+
+private:
+  std::vector<ShiftPrimeBlock> shiftPrimeBlocks_;
+
+public:
   const std::vector<RawBVTermAbstraction>& abstractedTerms() const
   {
     return abstractedTerms_;
@@ -835,6 +1020,10 @@ public:
     fpNativeZeroAddFastPaths = 0;
     fpNativeZeroMulFastPaths = 0;
     fpNativeZeroToFpFastPaths = 0;
+    fpNativeDivRelations = 0;
+    fpNativeSqrtPreRoundReuses = 0;
+    fpNativeRecordReuses = 0;
+    fpNativeRecordClassifications = 0;
     fpNativeKnownPositiveAddPaths = 0;
     fpNativeKnownNegativeAddPaths = 0;
     fpNativeKnownPositiveMulPaths = 0;

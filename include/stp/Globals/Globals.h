@@ -71,7 +71,10 @@ enum types
   BITVECTOR_TYPE,
   ARRAY_TYPE,
   UNKNOWN_TYPE,
-  FLOATINGPOINT_TYPE
+  FLOATINGPOINT_TYPE,
+  // Mathematical Real.  STP supports only exact linear rational terms; this
+  // is not the floating-point carrier and it deliberately has no bit width.
+  REAL_TYPE
 };
 
 enum SOLVER_RETURN_TYPE

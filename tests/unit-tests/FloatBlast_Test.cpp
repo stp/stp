@@ -130,7 +130,7 @@ TEST(FloatBlast, shared_chain_stays_unpacked_until_a_carrier_boundary)
       mgr.CreateTerm(FP_MUL, 16, ASTVec{rounding_mode, sum, sum});
   const ASTNode predicate = mgr.CreateNode(FP_ISZERO, product);
 
-  FloatBlast lower(&mgr);
+  FloatBlast lower(&mgr, true /*lowerEverything*/);
   const ASTNode lowered_predicate = lower.topLevel(predicate);
 
   EXPECT_FALSE(containsFloatingPointKind(lowered_predicate));
@@ -169,7 +169,7 @@ TEST(FloatBlast, add_iszero_omits_only_the_observed_outer_addition)
       mgr.CreateTerm(FP_ADD, 16, ASTVec{rounding_mode, inner, z});
   const ASTNode predicate = mgr.CreateNode(FP_ISZERO, outer);
 
-  FloatBlast direct(&mgr);
+  FloatBlast direct(&mgr, true /*lowerEverything*/);
   const ASTNode direct_result = direct.topLevel(predicate);
 
   EXPECT_FALSE(containsFloatingPointKind(direct_result));
@@ -181,7 +181,7 @@ TEST(FloatBlast, add_iszero_omits_only_the_observed_outer_addition)
   // Disabling the predicate specialization restores the ordinary SymFPU
   // construction of both rounded additions.
   mgr.UserFlags.fp_native_add_iszero = false;
-  FloatBlast generic(&mgr);
+  FloatBlast generic(&mgr, true /*lowerEverything*/);
   const ASTNode generic_result = generic.topLevel(predicate);
 
   EXPECT_FALSE(containsFloatingPointKind(generic_result));
@@ -208,7 +208,7 @@ TEST(FloatBlast, format_conversion_feeds_the_next_operation_unpacked)
   const ASTNode negated = mgr.CreateTerm(FP_NEG, 32, converted);
   const ASTNode predicate = mgr.CreateNode(FP_ISNORMAL, negated);
 
-  FloatBlast lower(&mgr);
+  FloatBlast lower(&mgr, true /*lowerEverything*/);
   const ASTNode lowered = lower.topLevel(predicate);
 
   EXPECT_FALSE(containsFloatingPointKind(lowered));
@@ -238,13 +238,51 @@ TEST(FloatBlast, reinterpret_cache_distinguishes_equal_width_formats)
   const ASTNode both =
       mgr.CreateNode(AND, binary16_normal, exponent8_normal);
 
-  FloatBlast lower(&mgr);
+  FloatBlast lower(&mgr, true /*lowerEverything*/);
   const ASTNode lowered = lower.topLevel(both);
 
   EXPECT_FALSE(containsFloatingPointKind(lowered));
   EXPECT_EQ(2u, lower.statistics().unpack_builds);
   EXPECT_EQ(2u, lower.statistics().unpacked_operation_builds);
   EXPECT_EQ(0u, lower.statistics().pack_builds);
+}
+
+TEST(FloatBlast, predicate_over_reinterpretation_stays_native)
+{
+  STPMgr mgr;
+  const ASTNode bits =
+      mgr.CreateSourceSymbol("bits", SourceSort::bitVector(16));
+  const ASTNode binary16 = mgr.CreateTerm(
+      FP_TOFP, 16,
+      ASTVec{mgr.CreateBVConst(32, 5), mgr.CreateBVConst(32, 11), bits});
+  const ASTNode exponent8 = mgr.CreateTerm(
+      FP_TOFP, 16,
+      ASTVec{mgr.CreateBVConst(32, 8), mgr.CreateBVConst(32, 8), bits});
+
+  // The packed bits of ((_ to_fp eb sb) bits) are `bits`; a class predicate
+  // or comparison over the view is decided on those bits directly, as it is
+  // for a float symbol, so no SymFPU decode is built and the predicate
+  // survives lowering as a native leaf. The two views remain two nodes: the
+  // format is in the predicate's operand, not in the cache alone.
+  const ASTNode both =
+      mgr.CreateNode(AND, mgr.CreateNode(FP_ISNORMAL, binary16),
+                     mgr.CreateNode(FP_ISNORMAL, exponent8));
+
+  FloatBlast lower(&mgr);
+  const ASTNode lowered = lower.topLevel(both);
+
+  EXPECT_TRUE(containsFloatingPointKind(lowered));
+  EXPECT_EQ(0u, lower.statistics().unpack_builds);
+  EXPECT_EQ(0u, lower.statistics().pack_builds);
+  ASSERT_EQ(AND, lowered.GetKind());
+  ASSERT_EQ(2u, lowered.Degree());
+  EXPECT_NE(lowered[0], lowered[1]);
+  for (unsigned i = 0; i < 2; ++i)
+  {
+    EXPECT_EQ(FP_ISNORMAL, lowered[i].GetKind());
+    EXPECT_EQ(FP_TOFP, lowered[i][0].GetKind());
+    EXPECT_EQ(bits, lowered[i][0][2]);
+  }
 }
 
 TEST(FloatBlast, totalisation_defers_canonical_boundaries_to_lowering)
@@ -269,7 +307,7 @@ TEST(FloatBlast, totalisation_defers_canonical_boundaries_to_lowering)
   EXPECT_EQ(2u, countKind(prepared, FP_TO_IEEE_BV));
   EXPECT_EQ(prepared, totalise.topLevel(prepared));
 
-  FloatBlast lower(&mgr);
+  FloatBlast lower(&mgr, true /*lowerEverything*/);
   const ASTNode lowered = lower.topLevel(prepared);
 
   EXPECT_FALSE(containsFloatingPointKind(lowered));
@@ -370,7 +408,7 @@ TEST(FloatBlast, every_floating_point_kind_is_lowered)
 
   for (const auto& c : cases)
   {
-    FloatBlast lower(&mgr);
+    FloatBlast lower(&mgr, true /*lowerEverything*/);
     const ASTNode lowered = lower.topLevel(c.second);
     EXPECT_FALSE(containsFloatingPointKind(lowered))
         << _kind_names[c.first] << " was not lowered";
@@ -398,7 +436,7 @@ TEST(FloatBlast, native_comparison_survives_for_leaf_operands)
       mgr.CreateTerm(FP_ADD, 32, ASTVec{rne(mgr), x, y});
 
   auto lowered = [&mgr](const ASTNode& n) {
-    FloatBlast lower(&mgr);
+    FloatBlast lower(&mgr, true /*lowerEverything*/);
     return lower.topLevel(n);
   };
 
@@ -490,7 +528,7 @@ TEST(FloatBlast, native_comparison_survives_for_ite_operands)
   const ASTNode sum = mgr.CreateTerm(FP_ADD, 32, ASTVec{rne(mgr), x, y});
 
   auto lowered = [&mgr](const ASTNode& n) {
-    FloatBlast lower(&mgr);
+    FloatBlast lower(&mgr, true /*lowerEverything*/);
     return lower.topLevel(n);
   };
 
@@ -556,7 +594,7 @@ TEST(FloatBlast, native_comparison_survives_for_read_operands)
   const ASTNode sum = mgr.CreateTerm(FP_ADD, 32, ASTVec{rne(mgr), x, y});
 
   auto lowered = [&mgr](const ASTNode& n) {
-    FloatBlast lower(&mgr);
+    FloatBlast lower(&mgr, true /*lowerEverything*/);
     return lower.topLevel(n);
   };
 
@@ -752,7 +790,7 @@ TEST(FloatBlast, uf_application_is_an_opaque_carrier)
   const ASTNode sum = mgr.CreateTerm(
       FP_ADD, 16, ASTVec{rne(mgr), magnitude, applied});
 
-  FloatBlast lower(&mgr);
+  FloatBlast lower(&mgr, true /*lowerEverything*/);
   const ASTNode lowered = lower.topLevel(sum);
 
   // The application survives as itself -- same node, same actual, still at
@@ -784,7 +822,7 @@ TEST(FloatBlast, uf_application_is_an_opaque_carrier)
   const ASTNode leafSum = mgr.CreateTerm(
       FP_ADD, 16, ASTVec{rne(mgr), x, leafApplied});
 
-  FloatBlast leafLower(&mgr);
+  FloatBlast leafLower(&mgr, true /*lowerEverything*/);
   const ASTNode leafLowered = leafLower.topLevel(leafSum);
   const ASTNode leafSurvivor = soleNodeOfKind(leafLowered, UF_APPLY);
   ASSERT_FALSE(leafSurvivor.IsNull());
@@ -826,7 +864,7 @@ TEST(FloatBlast, uf_application_with_a_non_float_result_is_opaque_too)
   const ASTNode sum =
       mgr.CreateTerm(FP_ADD, 16, ASTVec{rne(mgr), magnitude, mux});
 
-  FloatBlast lower(&mgr);
+  FloatBlast lower(&mgr, true /*lowerEverything*/);
   const ASTNode lowered = lower.topLevel(sum);
 
   // Both applications survive as the nodes that were built, actuals and all.

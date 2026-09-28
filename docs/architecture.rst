@@ -251,7 +251,7 @@ runs them.
    </div>
    <div class="pipe-detail" id="stage-fp-lower">
    <h4>Floating-point lowering</h4>
-   <p>Floating-point operations become circuits over packed bits. This sits after the size-reducing passes rather than before them because those passes want to see a float symbol rather than its exposed bits, unconstrained elimination in particular. Symbols, constants and reads keep their sort metadata so that a model can be reconstructed afterwards. The only floating-point operations that survive are the predicates, which the bit-blaster encodes natively over the packed bits.</p>
+   <p>Floating-point operations become circuits over packed bits. This sits after the size-reducing passes rather than before them because those passes want to see a float symbol rather than its exposed bits, unconstrained elimination in particular. Symbols, constants and reads keep their sort metadata so that a model can be reconstructed afterwards. The predicates always survive to the bit-blaster, which encodes them natively over the packed bits. Every other operation has a native circuit too, each behind its own <code>--bb.fp-native-*</code> switch and off by default; <code>--bb.fp-native-all</code> turns on the lot, which lowers most floating-point queries without building a SymFPU circuit at all.</p>
    </div>
    <div class="pipe-detail" id="stage-simplify">
    <h4>Simplify and solve</h4>

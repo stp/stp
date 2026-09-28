@@ -65,10 +65,9 @@ extern "C" {
 // fail at link time. A shared build gets dllexport while the library is being
 // compiled and dllimport for everyone else.
 //
-// The mechanism is currently dormant -- no shared MSVC build of STP is produced
-// (the only Windows CI job is STATICCOMPILE=ON, which forces BUILD_SHARED_LIBS
-// OFF), so neither __declspec arm is ever taken. It is kept correct so that
-// enabling a Windows DLL build later works.
+// The shared MSVC x64 product workflow is defined to exercise these
+// declarations. Static builds define neither macro and therefore retain the
+// empty expansion above.
 #if defined(STP_SHARED_LIB) && defined(STP_EXPORTS)
 // This is visible when building the STP library as a DLL.
 #define DLL_PUBLIC __declspec(dllexport)
@@ -112,6 +111,45 @@ typedef void* WholeCounterExample;
 //! cast, or free them. Destroying the owning VC retires its registry entry, so
 //! a stale or cross-context identity can be rejected without dereferencing it.
 typedef uint64_t UFDeclHandle;
+
+/////////////////////////////////////////////////////////////////////////////
+/// LEGACY RAW C-HANDLE LIFETIME CONTRACT
+///
+/// VC is the owning validity-checker handle.  Expr, Type,
+/// WholeCounterExample, and the expressions contained in counterexample
+/// arrays are manager-dependent child handles.  A child is supported only
+/// while its owning VC is live and the child has not been explicitly deleted.
+/// Destroying a VC invalidates every manager-dependent child.  Explicitly
+/// deleting a child invalidates that child immediately.
+///
+/// Delete caller-owned children and counterexample arrays before vc_Destroy.
+/// Do not use or delete a raw child after its owner has been destroyed, and do
+/// not reuse or delete a child after explicit deletion.  Such calls pass a
+/// dangling raw pointer and are outside the supported C API contract.  STP
+/// does not promise safe execution, deterministic diagnosis, an error message,
+/// a return value, or process continuation for them.
+///
+/// Lifetime and deletion rights follow ownership, not the numeric pointer
+/// value.  Copying a void* token does not copy ownership, extend lifetime,
+/// create another deletion right, make a child independent of its VC, or make
+/// a stale value valid again if an allocator later reuses the address.
+///
+/// Separately allocated returned values are exceptions only where documented.
+/// In particular, exact Real model strings are independently caller-owned and
+/// remain valid after VC destruction until released with vc_deleteString.
+///
+/// Managed Python wrappers reject access after close before calling this raw
+/// API.  The C++ interface follows ordinary manager/scoped-lifetime and
+/// same-manager rules.  Those stronger managed behaviors do not promise raw-C
+/// dangling-pointer diagnostics.
+///
+/// Independent live managers may be used on separate threads under STP's
+/// documented concurrency controls.  Concurrent use and deletion of the same
+/// child, or concurrent use and destruction of its owner, are unsupported.
+///
+/// This documents the legacy lifetime contract.  It does not provide a handle registry,
+/// tombstones, generations, checked handles, or use-after-free hardening.
+/////////////////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
 /// START API
@@ -194,12 +232,17 @@ enum ifaceflag_t
   //!
   //! This is set to true by default.
   //!
-  //! Affected methods are:
-  //!  - vc_arrayType
-  //!  - vc_boolType
-  //!  - vc_bvType
-  //!  - vc_bv32Type
-  //!  - vc_vcConstExprFromInt
+  //! The checker then owns, and vc_Destroy releases, the handles returned by
+  //!  - every Type constructor: vc_boolType, vc_bvType, vc_bv32Type,
+  //!    vc_arrayType, vc_fpType, vc_fpRoundingModeType and vc_getType;
+  //!  - vc_bvConstExprFromInt and vc_bv32ConstExprFromInt;
+  //!  - vc_fpRoundingMode and every other vc_fp* constant, operation,
+  //!    predicate and conversion, except vc_fpRoundingModeVar, which is a
+  //!    variable like any vc_varExpr.
+  //!
+  //! Every other handle is caller-owned and released only by vc_DeleteExpr.
+  //! A checker-owned handle may be passed to vc_DeleteExpr early as well; the
+  //! checker then forgets it. With the flag off, every handle is caller-owned.
   //!
   //! Changing this flag while STP is running may result in undefined behaviour.
   //!
@@ -297,7 +340,7 @@ enum ifaceflag_t
   UF_EQUALITY_INJECTIVITY,
 
   //! How many congruence lemmas one refuted candidate may install during
-  //! uninterpreted-function refinement (default 8).
+  //! uninterpreted-function refinement (default 0, unlimited).
   //!
   //! `param_value` is that count: zero installs every conflict the candidate
   //! exposes, and one restricts each candidate to a single installed lemma.
@@ -330,7 +373,7 @@ enum ifaceflag_t
   //! Bias the first candidate so the congruence checker's scalars start out
   //! pairwise different.
   //!
-  //! `param_value` nonzero enables, zero disables (the default). This is the
+  //! `param_value` nonzero enables (the default), zero disables. This is the
   //! C API's way to reach --uf-phase-hints. It is advisory and affects search
   //! order only, so it cannot change an answer.
   //!
@@ -597,7 +640,366 @@ enum ifaceflag_t
   //!
   BV_TERM_ABSTRACTION_PLUS,
   BV_TERM_ABSTRACTION_ITE,
-  BV_TERM_ABSTRACTION_COMPARE
+  BV_TERM_ABSTRACTION_COMPARE,
+
+  //! Before lowering, rewrite the query under its own top-level equalities
+  //! with applications still in place, so that `x = y` merges (f x) and
+  //! (f y) into one application and a fact such as `a = (f y)` reaches the
+  //! terms built on a.
+  //!
+  //! `param_value` nonzero forces it on, zero disables; left unset, it runs
+  //! unless the query has Real content. This is the C API's way to reach
+  //! --uf-propagate-equalities. Verdict-preserving: the defining equality is
+  //! kept, so no model is lost or invented. Appended to preserve every
+  //! published ordinal.
+  //!
+  UF_PROPAGATE_EQUALITIES,
+
+  //! Whether UF_PROPAGATE_EQUALITIES also reads the facts the query's
+  //! Boolean skeleton forces, so that an equality stated under an
+  //! implication the structure resolves still crosses the applications.
+  //!
+  //! `param_value` nonzero forces it on, zero disables; left unset, it runs
+  //! unless the query has Real content. This is the C API's way to reach
+  //! --uf-skeleton-preproc. Appended to preserve every published ordinal.
+  //!
+  UF_SKELETON_PREPROC,
+
+  //! Whether a solve with uninterpreted functions abstracts its wide
+  //! multiplications, divisions and remainders as BV_TERM_ABSTRACTION does.
+  //!
+  //! `param_value` 0 is off for every UF solve, 1 is on for every UF solve,
+  //! and 2 (the default) is automatic: on for a UF solve whose query holds
+  //! such an operation at or above BV_ABSTRACTION_WIDTH. This is the C API's
+  //! way to reach --uf-bv-term-abstraction. Appended to preserve every
+  //! published ordinal.
+  //!
+  UF_BV_TERM_ABSTRACTION,
+
+  //! Whether the congruence checker is asked about a candidate the
+  //! bit-vector abstraction has just refined as well as about a faithful
+  //! one, so that the congruence lemmas the candidate exposes go in beside
+  //! the abstraction's clauses rather than after the abstraction is
+  //! faithful.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --uf-check-during-bv-refinement. Appended to
+  //! preserve every published ordinal.
+  //!
+  UF_CHECK_DURING_BV_REFINEMENT,
+
+  //! Whether the batch pipeline's refinement loop keeps the SAT solver's
+  //! search trail from one of its solve calls to the next, so that a round
+  //! resumes where the last one stopped instead of re-deciding every
+  //! variable from the root before it reaches the clauses that refuted the
+  //! last candidate.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --refinement-trail-reuse, and covers every loop the
+  //! batch pipeline refines -- array reads, the bit-vector abstractions and
+  //! uninterpreted functions. It changes the search order only, so it cannot
+  //! change an answer; a backend without the mechanism declines it, and a
+  //! solve that is never asked twice is unaffected either way. Appended to
+  //! preserve every published ordinal.
+  //!
+  REFINEMENT_TRAIL_REUSE,
+
+  //! Decide selected floating-point operations by abstraction and
+  //! refinement instead of building their circuits up front.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is
+  //! the C API's way to reach --fp-abstraction, and on its own it reaches
+  //! the batch pipeline only. The incremental driver hosts the abstraction
+  //! for a whole encoding epoch -- records and everything refinement
+  //! teaches them persisting across the session's queries -- but only when
+  //! FP_ABSTRACTION_INCREMENTAL is set as well, exactly as the command line
+  //! requires --fp-abstraction-incremental beside --fp-abstraction.
+  //!
+  FP_ABSTRACTION,
+
+  //! Which floating-point operations FP_ABSTRACTION may abstract.
+  //!
+  //! `param_value` is a bitmask: 1 fp.mul, 2 fp.div, 4 fp.sqrt, 8 fp.add,
+  //! 16 fp.sub, 32 fp.fma, 64 fp.rem, 128 fp.roundToIntegral, 256
+  //! fp.to_sbv, 512 fp.to_ubv -- the same mask --fp-abstraction-ops builds,
+  //! and the default is mul|div|sqrt|fma (39). Zero restores that default;
+  //! a negative value is refused with a nonfatal diagnostic.
+  //!
+  FP_ABSTRACTION_OPS,
+
+  //! Host FP_ABSTRACTION inside the incremental driver as well as the batch
+  //! pipeline.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is
+  //! the C API's way to reach --fp-abstraction-incremental. It does nothing
+  //! on its own: FP_ABSTRACTION is what turns the abstraction on, and this
+  //! decides whether the driver hosts it or encodes every floating-point
+  //! operation exactly. An abstracted session takes the eager array
+  //! expansion, decided once when the driver is created, so set this before
+  //! the session's first query.
+  //!
+  FP_ABSTRACTION_INCREMENTAL,
+
+  //! The operations abstracted only as links in a chain: an application of
+  //! one of these is abstracted when one of its operands is the result of
+  //! an application already abstracted, and encoded exactly otherwise.
+  //!
+  //! `param_value` is a mask over the FP_ABSTRACTION_OPS bits; zero (the
+  //! default) names none, and an operation in both masks is abstracted
+  //! wherever it stands. A negative value is refused with a nonfatal
+  //! diagnostic. This is the C API's way to reach
+  //! --fp-abstraction-chain-ops.
+  //!
+  FP_ABSTRACTION_CHAIN_OPS,
+
+  //! The floor on the packed width -- exponent plus significand bits --
+  //! below which an operation is encoded exactly whatever else is set
+  //! (default 16, so binary16 is the narrowest format touched).
+  //!
+  //! `param_value` is that width; one abstracts every admitted operation at
+  //! every format. A negative value is refused with a nonfatal diagnostic
+  //! and leaves the width unchanged, because the flag it sets is unsigned
+  //! and would otherwise wrap to a width nothing can reach. This is the C
+  //! API's way to reach --fp-abstraction-width.
+  //!
+  FP_ABSTRACTION_WIDTH,
+
+  //! The highest rule tier emitted with a surrogate (default 3).
+  //!
+  //! `param_value` is that tier: 0 the exact class-and-sign shell alone, 1
+  //! adds the order facts, 2 the exponent bands and overflow selection, 3
+  //! the identities. Lower tiers are cheaper and prune less; every tier is
+  //! sound. A negative value is refused with a nonfatal diagnostic. This is
+  //! the C API's way to reach --fp-abstraction-tiers.
+  //!
+  FP_ABSTRACTION_TIERS,
+
+  //! How many value lemmas one abstracted operation may take before its
+  //! exact encoding is released (default 4).
+  //!
+  //! `param_value` is that count. A negative value is refused with a
+  //! nonfatal diagnostic. This is the C API's way to reach
+  //! --fp-abstraction-values.
+  //!
+  FP_ABSTRACTION_VALUES,
+
+  //! Spend model-instantiated trailing-exponent (exactness) lemmas before
+  //! value lemmas.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is
+  //! the C API's way to reach --fp-abstraction-shape.
+  //!
+  FP_ABSTRACTION_SHAPE,
+
+  //! Emit pairwise monotonicity lemmas between abstracted operations that
+  //! share an operand, for the pair a candidate violates.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is
+  //! the C API's way to reach --fp-abstraction-relational.
+  //!
+  FP_ABSTRACTION_RELATIONAL,
+
+  //! The packed width at or above which a monotonicity lemma is stated only
+  //! once the record's value budget is spent, instead of before its first
+  //! value lemma (default 128).
+  //!
+  //! `param_value` is that width; zero never defers, so every order is
+  //! stated up front at every width. A negative value is refused with a
+  //! nonfatal diagnostic. This is the C API's way to reach
+  //! --fp-abstraction-relational-last-width.
+  //!
+  FP_ABSTRACTION_RELATIONAL_LAST_WIDTH,
+
+  //! State each value lemma over the widest box of operand tuples -- the
+  //! candidate's sign, exponent and top fraction bits -- whose results
+  //! still share a prefix, rather than over one tuple.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is
+  //! the C API's way to reach --fp-abstraction-box-lemmas.
+  //!
+  FP_ABSTRACTION_BOX_LEMMAS,
+
+  //! After a refuted candidate, suggest to the SAT solver's decision
+  //! heuristic the operand values it tried and the exact result for them.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is
+  //! the C API's way to reach --fp-abstraction-phase-hints.
+  //!
+  FP_ABSTRACTION_PHASE_HINTS,
+
+  //! Before refining a candidate the abstraction refuted, replay the
+  //! original formula under it and accept the candidate as a model when the
+  //! formula holds for its values of the original symbols.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is
+  //! the C API's way to reach --fp-abstraction-repair.
+  //!
+  FP_ABSTRACTION_REPAIR,
+
+  //! How many times one query may run the pipeline again to release
+  //! operations exactly (default 4).
+  //!
+  //! `param_value` is that limit; past it, and whenever a run abstracted no
+  //! fewer operations than the run before it, releases are spliced instead.
+  //! A negative value is refused with a nonfatal diagnostic. Restarts are
+  //! a batch-pipeline notion: the incremental driver always splices, so
+  //! this does nothing under FP_ABSTRACTION_INCREMENTAL. This is the C
+  //! API's way to reach --fp-abstraction-restart-limit.
+  //!
+  FP_ABSTRACTION_RESTART_LIMIT,
+
+  //! The packed width at or above which releasing a multiplication,
+  //! division, square root, fma or remainder exactly runs the whole
+  //! pipeline again with it lowered exactly, so that the bit-vector
+  //! abstraction can see its circuit, instead of splicing the circuit into
+  //! the running solver.
+  //!
+  //! `param_value` is that width; zero never restarts and is the default.
+  //! Note that the command line raises that default to 128 when
+  //! --bv-term-abstraction is on, and this flag does not: a C caller that
+  //! wants the interaction asks for it by name. A negative value is refused
+  //! with a nonfatal diagnostic. This is the C API's way to reach
+  //! --fp-abstraction-restart-width.
+  //!
+  FP_ABSTRACTION_RESTART_WIDTH,
+
+  //! The significand bits of the reduced-precision bands emitted with an
+  //! abstracted multiplication, division or square root (default 8).
+  //!
+  //! `param_value` is that count; zero emits no bands. A negative value is
+  //! refused with a nonfatal diagnostic. This is the C API's way to reach
+  //! --fp-abstraction-significand-bits.
+  //!
+  FP_ABSTRACTION_SIGNIFICAND_BITS,
+
+  //! The same at packed widths of 128 bits and above (default 16).
+  //!
+  //! `param_value` is that count; zero uses FP_ABSTRACTION_SIGNIFICAND_BITS
+  //! everywhere. A negative value is refused with a nonfatal diagnostic.
+  //! This is the C API's way to reach
+  //! --fp-abstraction-significand-bits-wide.
+  //!
+  FP_ABSTRACTION_SIGNIFICAND_BITS_WIDE,
+
+  //! Leave exact any operation whose result the query equates directly with
+  //! a constant or a conversion -- the witness-hunt signature, where the
+  //! solve must produce the exact value anyway and a surrogate only defers
+  //! the circuit.
+  //!
+  //! `param_value` nonzero declines those, zero abstracts them (the
+  //! default). This is a *decline*: setting it turns the abstraction off
+  //! for a shape, not on. This is the C API's way to reach
+  //! --fp-abstraction-decline-pinned.
+  //!
+  FP_ABSTRACTION_DECLINE_PINNED,
+
+  //! Wall-clock seconds after which a batch refinement releases every
+  //! remaining record exactly, spliced in place, bounding a loss near the
+  //! budget instead of the timeout.
+  //!
+  //! `param_value` is that many seconds; zero never gives up and is the
+  //! default. A negative value is refused with a nonfatal diagnostic. This
+  //! is the C API's way to reach --fp-abstraction-budget.
+  //!
+  FP_ABSTRACTION_BUDGET,
+
+  //! Whether an operation one of whose float operands is a constant is
+  //! abstracted. Declined, such an operation goes to the exact lowering,
+  //! whose circuit for a constant is small and propagates, where the
+  //! abstraction has the solver search under rules for a free result.
+  //! Which is faster depends on the query: on linear arithmetic over
+  //! coefficients the exact lowering wins, on the polynomials of library
+  //! code the abstraction does.
+  //!
+  //! `param_value` 0 declines them for every query, 1 abstracts them for
+  //! every query, and 2 (the default) is automatic: abstracted when the
+  //! configuration abstracts an operation at least two of whose float
+  //! operands are not constants. This is the C API's way to reach
+  //! --fp-abstraction-constant-operands. Appended to preserve every
+  //! published ordinal.
+  //!
+  FP_ABSTRACTION_CONSTANT_OPERANDS,
+
+  // The exact linear Real controls. Each sets the same UserFlags field its
+  // --lra-... command-line option writes, so a C API client reaches the
+  // same settings as a query read from a file. Appended, like everything
+  // above, to preserve every published ordinal.
+  //
+  // They matter to a caller for the same reason the bit-vector abstraction
+  // controls do: every one of them is meant to preserve the verdict, so a
+  // client that can vary them can compare a varied run against a plain one
+  // and see a soundness fault as a disagreement rather than waiting for a
+  // crash. `param_value` is nonzero for on and zero for off throughout.
+
+  //! Let the theory take part in the SAT search: check the tableau on partial
+  //! assignments and return a cross-row conflict as a clause where it arises,
+  //! rather than after a whole model has been built on top of it. On by
+  //! default; a backend without a propagator runs the full-lazy loop
+  //! regardless. --lra-theory-propagation.
+  LRA_THEORY_PROPAGATION,
+
+  //! Check each exact conflict as it is produced. A debugging aid: it can
+  //! only turn a wrong answer into a diagnosed one. --lra-verify-conflicts.
+  LRA_VERIFY_CONFLICTS,
+
+  //! Check that every exact rational stays canonical. As above: paid for in
+  //! time, and it decides nothing. Unlike the flags around it this one is
+  //! not per validity checker: it sets a default for the whole process,
+  //! which each exact-arithmetic budget reads once, when it is created. So
+  //! it reaches every checker, on any thread, that creates a budget
+  //! afterwards, and a checker's own Real terms only if it is set before
+  //! that checker builds its first one. On by default for a library caller;
+  //! the command-line solver turns it off unless --lra-verify-canonical asks
+  //! for it.
+  LRA_VERIFY_CANONICAL,
+
+  //! Presolve stage one: substitute a top-level Real definition EQ(x, t)
+  //! through the rest of the query, and solve the remaining top-level linear
+  //! equalities by Gaussian elimination. --lra-presolve-subst.
+  LRA_PRESOLVE_SUBST,
+
+  //! Presolve stage two: fold unit conjuncts into per-variable bounds.
+  //! --lra-presolve-bounds.
+  LRA_PRESOLVE_BOUNDS,
+
+  //! Presolve stage three: drop a top-level inequality implied by a stronger
+  //! one over the same polynomial, and refute contradictory ones.
+  //! --lra-presolve-rows.
+  LRA_PRESOLVE_ROWS,
+
+  //! Presolve stage four: propagate the top-level truths under the Boolean
+  //! structure. --lra-presolve-propagate.
+  LRA_PRESOLVE_PROPAGATE,
+
+  //! Presolve stage five: fold single-use pure-polarity atoms, with witness
+  //! equalities. --lra-presolve-unconstrained.
+  LRA_PRESOLVE_UNCONSTRAINED,
+
+  //! Drive the propagator's partial checks with a double-precision simplex,
+  //! consulting the exact core only to re-derive that engine's conflicts and
+  //! to judge a complete assignment. Every certificate and every model stays
+  //! exact, so this is meant to change how long an answer takes and not which
+  //! answer it is. On by default; 0 selects the exact core alone.
+  //! --lra-float-driver.
+  LRA_FLOAT_DRIVER,
+
+  //! Keep one Real solve across the check-sats of an incremental SMT-LIB2
+  //! session instead of starting a new one per check. The coordinator, the
+  //! CNF and the SAT solver persist, with their learned clauses, atom
+  //! bindings and registrations; a pushed level is added under an activation
+  //! of its own and a popped one is retracted. The exact core is not kept: it
+  //! is rebuilt at every check whose assertion stack has changed since the
+  //! last one. The session engages from the first push, or from the first
+  //! check under --incremental=on, and only on stacks of Boolean and Real
+  //! terms: uninterpreted functions, bit-vectors, arrays, floating point,
+  //! DISTINCT and check-sat-assuming all go to the batch path, as does any
+  //! check the session cannot take. A check that spends its time or conflict
+  //! budget answers unknown, and the next check starts a new session. Only
+  //! the SMT-LIB2 check-sat (Cpp_interface::checkSat) reaches that session;
+  //! vc_query and vc_query_with_timeout solve each query on its own, so this
+  //! flag has no effect on them. Off by default: sound, but not yet faster.
+  //! --lra-incremental-session.
+  LRA_INCREMENTAL_SESSION
 
 };
 
@@ -636,6 +1038,75 @@ DLL_PUBLIC VC vc_createValidityCheckerReuse(void* _bm);
 //! \brief Returns the boolean type for the given validity checker.
 //!
 DLL_PUBLIC Type vc_boolType(VC vc);
+
+//! Mathematical Real type.
+DLL_PUBLIC Type vc_realType(VC vc);
+
+//! Exact Real constants.  The first form accepts an integer, finite decimal,
+//! or canonical n/d text.  The second accepts owned decimal components and
+//! canonicalizes the sign and gcd exactly.
+DLL_PUBLIC Expr vc_realConstExprFromStr(VC vc, const char* exact_text);
+DLL_PUBLIC Expr vc_realConstExpr(VC vc, const char* numerator,
+                                 const char* denominator);
+
+//! Every constructor below, and the two above, answers NULL when the exact
+//! arithmetic budget refuses the work -- reporting through the handler
+//! vc_registerErrorHandler installs, as the other nonfatal refusals in this
+//! interface do.
+//!
+//! It is not a misuse and it is not predictable from the operands. The limits
+//! are fixed (64 KiBit per operand and per result) and exact arithmetic over
+//! folded constants grows superexponentially: a 48-digit constant cubed, then
+//! raised to the fifth, then squared, crosses the line while every individual
+//! step looks unremarkable. A caller that meets it should build something
+//! smaller. Ill-formed input -- a null operand, an operand from another
+//! checker, a product of two unknowns -- remains fatal, because that is a bug
+//! in the caller rather than a limit it ran into.
+//!
+//! Exact linear Real construction.  Multiplication requires exactly one
+//! concrete constant operand; division requires a concrete nonzero divisor.
+DLL_PUBLIC Expr vc_realPlusExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realMinusExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realUMinusExpr(VC vc, Expr operand);
+DLL_PUBLIC Expr vc_realMultExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realDivExpr(VC vc, Expr numerator, Expr denominator);
+DLL_PUBLIC Expr vc_realLtExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realLeExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realGtExpr(VC vc, Expr left, Expr right);
+DLL_PUBLIC Expr vc_realGeExpr(VC vc, Expr left, Expr right);
+
+
+//! Construction and semantic capability are reported separately. A
+//! build reports the exact linear QF_LRA fragment through both calls.
+DLL_PUBLIC int vc_hasRealConstruction(void);
+DLL_PUBLIC int vc_hasQFLRA(void);
+
+//! Whether vc_iteExpr accepts Real branches, i.e. whether an if-then-else
+//! selecting between two Real terms on a Boolean condition can be built
+//! through this interface. A construction capability, reported separately
+//! from vc_hasRealConstruction.
+DLL_PUBLIC int vc_hasRealIte(void);
+
+//! Whether the exact linear QF_UFLRA fragment is decided through this
+//! interface: Real is admissible in a vc_declareUninterpretedFunction
+//! signature, and applications at that sort are decided by congruence over
+//! the arithmetic's exact model values rather than by comparing packed
+//! carriers.
+//! Separate from vc_hasQFLRA because the two fragments moved independently.
+DLL_PUBLIC int vc_hasQFUFLRA(void);
+
+//! Exact model access.  Each returned string is independently allocated by
+//! STP and must be released with vc_deleteString.  No pointer aliases the
+//! manager's private model or arithmetic representation.  After a successful
+//! return the string remains caller-owned independently of the VC lifetime.
+DLL_PUBLIC int vc_hasRealModel(VC vc);
+DLL_PUBLIC int vc_hasRealModelValue(VC vc, Expr term);
+DLL_PUBLIC char* vc_getRealModelValue(VC vc, Expr term);
+DLL_PUBLIC char* vc_getRealModelNumerator(VC vc, Expr term);
+DLL_PUBLIC char* vc_getRealModelDenominator(VC vc, Expr term);
+DLL_PUBLIC char* vc_getRealModelSMTLIBValue(VC vc, Expr term);
+DLL_PUBLIC char* vc_getRealModelSMTLIB2(VC vc);
+DLL_PUBLIC void vc_deleteString(char* value);
 
 //! \brief Returns an array type with the given index type and data type
 //!        for the given validity checker.
@@ -902,7 +1373,69 @@ enum stp_counter_t
   //! one exact divider it would be invisible.
   STP_COUNTER_BV_SCHEMA_CLAUSES,
   STP_COUNTER_BV_SCHEMA_VARIABLES,
-  STP_COUNTER_BV_SCHEMA_MICROSECONDS
+  STP_COUNTER_BV_SCHEMA_MICROSECONDS,
+
+  //! What FP_ABSTRACTION did, on the same terms as the bit-vector counters
+  //! above: CANDIDATES is every application of an admitted kind the
+  //! abstraction was offered, ABSTRACTED the ones it took. Zero of both
+  //! means the query built no floating-point operation of an admitted kind
+  //! at or above FP_ABSTRACTION_WIDTH -- which is a different thing from
+  //! the abstraction being off, and the pair is what tells them apart.
+  //!
+  //! Accumulated across every instance the session builds: one per batch
+  //! solve, one more per restart, and one per encoding epoch under
+  //! FP_ABSTRACTION_INCREMENTAL. Like every counter here they only ever
+  //! rise.
+  STP_COUNTER_FP_CANDIDATES,
+  STP_COUNTER_FP_ABSTRACTED,
+
+  //! Occurrences that reused an existing record rather than minting one (an
+  //! operation is abstracted once per distinct application), and records
+  //! admitted as links in a chain by FP_ABSTRACTION_CHAIN_OPS rather than
+  //! outright by FP_ABSTRACTION_OPS.
+  STP_COUNTER_FP_SHARED,
+  STP_COUNTER_FP_CHAINED,
+
+  //! Rule conjuncts emitted with the surrogates at abstraction time, and
+  //! the ones relating records of different operations. These are what the
+  //! abstraction is for -- a query decided by the rules alone never
+  //! releases a circuit -- so a run with abstractions and no rule lemmas is
+  //! a tier setting, not a quiet corpus.
+  STP_COUNTER_FP_RULE_LEMMAS,
+  STP_COUNTER_FP_CROSS_RULES,
+
+  //! Record checks against a candidate, the ones a host's filter excluded
+  //! before evaluating, and the ones whose candidate disagreed with the
+  //! exact result.
+  STP_COUNTER_FP_CHECKS,
+  STP_COUNTER_FP_SKIPPED_CHECKS,
+  STP_COUNTER_FP_INCONSISTENT,
+
+  //! The refinement lemmas an inconsistent candidate earned, by kind. BOX
+  //! counts the value lemmas of them that FP_ABSTRACTION_BOX_LEMMAS widened
+  //! to a box of operand tuples, so it is a subset of VALUE and not a
+  //! separate total.
+  STP_COUNTER_FP_VALUE_LEMMAS,
+  STP_COUNTER_FP_BOX_LEMMAS,
+  STP_COUNTER_FP_SHAPE_LEMMAS,
+  STP_COUNTER_FP_RELATIONAL_LEMMAS,
+
+  //! Exact encodings released -- an operation that spent its value budget
+  //! and got its circuit after all -- and refinement rounds that encoded
+  //! one or more floating-point lemmas. A run whose releases approach its
+  //! abstractions decided almost nothing by the rules.
+  STP_COUNTER_FP_RELEASES,
+  STP_COUNTER_FP_REFINEMENT_ROUNDS,
+
+  //! Pipeline runs a query made past its first to release operations
+  //! exactly (FP_ABSTRACTION_RESTART_WIDTH), and refuted candidates the
+  //! replay accepted as models anyway (FP_ABSTRACTION_REPAIR).
+  STP_COUNTER_FP_RESTARTS,
+  STP_COUNTER_FP_REPAIRS,
+
+  //! Wall-clock microseconds spent lowering and splicing floating-point
+  //! lemmas, on the same terms as the bit-vector encode totals above.
+  STP_COUNTER_FP_LEMMA_MICROSECONDS
 };
 
 //! \brief Reads one of the counters above.
@@ -1336,6 +1869,8 @@ DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 //!
 //! It is the caller's responsibility to free the memory afterwards;
 //! vc_deleteCounterExampleArray does so with the allocator that made it.
+//! The buffers and all contained Expr handles must be deleted while the
+//! producing VC is still live.
 //!
 DLL_PUBLIC void vc_getCounterExampleArray(VC vc, Expr e, Expr** outIndices,
                                           Expr** outValues, int* outSize);
@@ -1347,6 +1882,8 @@ DLL_PUBLIC void vc_getCounterExampleArray(VC vc, Expr e, Expr** outIndices,
 //! library, so allocation and deallocation always use the same
 //! allocator even when the embedding process links a different one.
 //! With a size of zero nothing was allocated and nothing is freed.
+//! This cleanup must run before destruction of the VC that produced the
+//! buffers; the call immediately invalidates the buffers and their entries.
 //!
 DLL_PUBLIC void vc_deleteCounterExampleArray(Expr* indices, Expr* values,
                                              int size);
@@ -2161,21 +2698,33 @@ DLL_PUBLIC int vc_getHashQueryStateToBuffer(VC vc, Expr query);
 //! Removes all associated expressions with it if 'EXPRDELETE' was set to 'true'
 //! via 'vc_setInterfaceFlags' during the process.
 //!
+//! This call immediately invalidates the VC and every manager-dependent child,
+//! whether or not the numeric pointer values are retained.  Delete any
+//! caller-owned children and counterexample arrays first.  Passing the VC or
+//! any invalidated child to a later C API call is outside the supported
+//! contract and has no deterministic-diagnostic guarantee.
+//!
 DLL_PUBLIC void vc_Destroy(VC vc);
 
 //! \brief Destroy the given expression, freeing its associated memory.
 //!
-//! Only for expressions the caller owns. Do NOT pass expressions returned by
-//! the vc_fp* constructors (or the type/true/false constructors): those are
-//! owned by the checker and freed by vc_Destroy -- deleting one here frees
-//! it twice. Exception: after vc_setFlag(vc, 'u') has enabled UF handle
-//! tracking, wrappers constructed subsequently are tracked and may be released
-//! explicitly; vc_declareUninterpretedFunction documents this for its borrowed
-//! Type arguments.
+//! Every Expr and Type is a separately allocated wrapper. A caller-owned
+//! wrapper (variables, vc_trueExpr and vc_falseExpr, the vc_bvConstExprFrom*
+//! constants other than FromInt, every bit-vector, Boolean and array
+//! operation, counterexample values) is released only here. A checker-owned
+//! wrapper (see EXPRDELETE) is released by vc_Destroy; passing it here first
+//! is allowed and makes the checker forget it, so nothing is freed twice.
+//!
+//! The owning VC must still be live.  This call immediately invalidates the
+//! raw handle; reusing it or deleting it again is outside the supported
+//! contract.  Copying the pointer does not create another deletion right.
 //!
 DLL_PUBLIC void vc_DeleteExpr(Expr e);
 
 //! \brief Returns the whole counterexample from the given validity checker.
+//!
+//! The returned handle is a child of vc and is valid only while vc remains
+//! live and until vc_deleteWholeCounterExample is called.
 //!
 DLL_PUBLIC WholeCounterExample vc_getWholeCounterExample(VC vc);
 
@@ -2191,6 +2740,9 @@ DLL_PUBLIC Expr vc_getTermFromCounterExample(VC vc, Expr e,
                                              WholeCounterExample c);
 
 //! \brief Destroys the given whole counter example, freeing all of its associated memory.
+//!
+//! The producing VC must still be live.  This call immediately invalidates
+//! the handle; later use or deletion is outside the supported contract.
 //!
 DLL_PUBLIC void vc_deleteWholeCounterExample(WholeCounterExample cc);
 
@@ -2302,6 +2854,16 @@ enum exprkind_t
   UF_APPLY = FP_SMT_EQ + 2,
   //! Native variadic SMT-LIB distinct predicate.
   DISTINCT = UF_APPLY + 1,
+  REAL_CONST = DISTINCT + 1,
+  REAL_ADD,
+  REAL_SUB,
+  REAL_NEG,
+  REAL_MUL,
+  REAL_DIV,
+  REAL_LT,
+  REAL_LE,
+  REAL_GT,
+  REAL_GE,
 };
 
 //! \brief Returns the expression-kind of the given expression.
@@ -2329,7 +2891,8 @@ enum type_t
   ARRAY_TYPE,
   UNKNOWN_TYPE,
   FLOATINGPOINT_TYPE,
-  ROUNDINGMODE_TYPE
+  ROUNDINGMODE_TYPE,
+  REAL_TYPE
 };
 
 //! \brief Returns the type-kind of the given expression.

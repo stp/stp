@@ -4,7 +4,7 @@
 ; path. Structural equality detects signed-zero disagreements; NaN payloads
 ; are deliberately ignored.
 ;
-; RUN: %solver --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-arith=true -s %s 2>&1 | %OutputCheck %s
+; RUN: %solver --bb.fp-native-all=false --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-arith=true -s %s 2>&1 | %OutputCheck %s
 ;
 ; CHECK: FloatBlast: 2 SymFPU operations, 4 unpacks
 ; CHECK: ^unsat

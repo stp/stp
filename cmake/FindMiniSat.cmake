@@ -234,7 +234,9 @@ set_target_properties(MiniSat PROPERTIES
 # behaviour where it is absent.
 if(NOT DEFINED MINISAT_HAS_TERMINATOR)
     if(MiniSat_FOUND_SYSTEM)
-        # Somebody else's MiniSat: ask it.
+        # Somebody else's MiniSat: ask it. Use the imported target so its
+        # system-header treatment and transitive link dependencies also apply
+        # to the probe. Dependency warnings under WERROR are not missing APIs.
         set(_term_src "${PROJECT_BINARY_DIR}/MiniSat_terminator.cpp")
         file(WRITE "${_term_src}"
              "#include <minisat/core/Solver.h>\n"
@@ -242,8 +244,7 @@ if(NOT DEFINED MINISAT_HAS_TERMINATOR)
              "int main() { Minisat::Solver s; T t; s.connectTerminator(&t); return 0; }\n")
         try_compile(MINISAT_HAS_TERMINATOR
                     "${PROJECT_BINARY_DIR}" "${_term_src}"
-                    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MINISAT_INCLUDE_DIR}"
-                    LINK_LIBRARIES ${MINISAT_LIBRARY} ZLIB::ZLIB)
+                    LINK_LIBRARIES MiniSat)
     else()
         # One this build is about to fetch at MiniSat_VERSION, which carries the
         # hook. It cannot be probed: the ExternalProject builds during the build

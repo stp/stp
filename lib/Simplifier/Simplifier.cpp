@@ -23,8 +23,10 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/MultiplyOverflowIdiom.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -564,6 +566,14 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   if (in1 == in2)
     // terms are syntactically the same
     return ASTTrue;
+
+  if (_bm->UserFlags.mulo_recognition)
+  {
+    ASTNode rewritten;
+    if (multiplyOverflowIdiom(nf, in1, in2, rewritten) ||
+        multiplyOverflowIdiom(nf, in2, in1, rewritten))
+      return rewritten;
+  }
 
   // Two constant nodes still may be semantically equal: a float constant
   // interns apart from the plain constant with its bits, so compare the

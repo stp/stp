@@ -33,6 +33,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
+#include "stp/Simplifier/UnsignedIntervalSet.h"
+#include "stp/Simplifier/UnsignedIntervalSetAnalysis.h"
 #include "stp/Simplifier/ValueSetAnalysis.h"
 #include "stp/Util/DagWalk.h"
 #include <iostream>
@@ -51,6 +53,9 @@ using simplifier::constantBitP::FixedBits;
 using NodeToFixedBitsMap =
     ankerl::unordered_dense::map<ASTNode, FixedBits*, ASTNode::ASTNodeHasher,
                                  ASTNode::ASTNodeEqual>;
+using NodeToUnsignedIntervalSetMap =
+    ankerl::unordered_dense::map<ASTNode, UnsignedIntervalSet*,
+                                 ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 using NodeToValueSetMap =
     ankerl::unordered_dense::map<ASTNode, ValueSet*, ASTNode::ASTNodeHasher,
                                  ASTNode::ASTNodeEqual>;
@@ -86,9 +91,11 @@ class NodeDomainAnalysis
   
   NodeToFixedBitsMap toFixedBits;
   NodeToUnsignedIntervalMap toIntervals;
+  NodeToUnsignedIntervalSetMap toIntervalSets;
   NodeToValueSetMap toValueSets;
 
   UnsignedIntervalAnalysis intervalAnalysis;
+  UnsignedIntervalSetAnalysis setAnalysis;
   ValueSetAnalysis valueSetAnalysis;
 
   unsigned tighten = 0;
@@ -102,6 +109,7 @@ public:
   {
     FixedBits* bits;
     UnsignedInterval* interval;
+    UnsignedIntervalSet* intervalSet;
     ValueSet* set;
   };
 
@@ -135,6 +143,10 @@ public:
       if (it.second != NULL)
         delete it.second;
 
+    for (auto it : toIntervalSets)
+      if (it.second != NULL)
+        delete it.second;
+
     for (auto it : toValueSets)
       if (it.second != NULL)
         delete it.second;
@@ -145,6 +157,11 @@ public:
    NodeToUnsignedIntervalMap* getIntervalMap()
    {
       return &toIntervals;
+   }
+
+   NodeToUnsignedIntervalSetMap* getIntervalSetMap()
+   {
+      return &toIntervalSets;
    }
 
    NodeToFixedBitsMap* getCbitMap()
@@ -172,6 +189,7 @@ public:
     buildMap(top);
     bm.GetRunTimes()->stop(RunTimes::NodeDomainAnalysis);
     assert(toIntervals.size() == toFixedBits.size());
+    assert(toIntervalSets.size() == toFixedBits.size());
     assert(toValueSets.size() == toFixedBits.size());
   }
 

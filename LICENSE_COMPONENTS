@@ -10,6 +10,12 @@ STP imports code from the following libraries:
 	* ankerl::unordered_dense Copyright (c) 2022-2024 Martin Leitner-Ankerl.
 	* CLI11 Copyright (c) 2017-2026 University of Cincinnati (only compiled
 		into the stp command-line tool, not into the library).
+	* IMath Copyright (c) 2002-2009 Michael J. Fromberger. Not imported:
+		cmake/FindIMath.cmake fetches v1.35 commit
+		a4de3dea7e65e2374a91d9938e292b887896fd24 and builds `imath.c` and
+		`imrat.c` from it, statically, into `libstp`. STP applies one pinned
+		patch, kept beside that module, which renames IMath's GMP-shaped
+		private type and makes its tuning globals immutable.
 
 STP is built against a SAT solver, which it does not import but does link.
 Which solvers are present depends on the build configuration, and a static
@@ -24,6 +30,15 @@ build puts their code inside the binary, so the released binaries carry them:
 	* MiniSat Copyright (c) 2003-2010 Niklas Een, Niklas Sorensson, when
 		selected with -DUSE_MINISAT=ON.
 
+STP can also be built against HiGHS, an LP and MIP solver that it likewise
+links but does not import:
+	* HiGHS Copyright (c) 2024 HiGHS, when built with -DENABLE_HIGHS=ON.
+		What STP builds itself is release 1.12.0, to which, with
+		-DENABLE_HIGHS_CUT_LOG=ON, it first applies
+		cmake/deps-utils/highs-root-cut-log.patch: a callback reporting how
+		HiGHS derived the cuts it adds at the root of a MIP search. The
+		patched files stay under HiGHS's licence.
+
 Our build system includes third-party CMake modules (these are not compiled
 into STP, but they are distributed with it):
 	* GetGitRevisionDescription.cmake Copyright Iowa State University 2009-2010.
@@ -36,6 +51,30 @@ For testing purposes we also use (but do not compile STP with):
 
 Individual licenses are listed below
 ================================================================================
+
+IMath
+	IMath is Copyright © 2002-2009 Michael J. Fromberger
+	You may use it subject to the following Licensing Terms:
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy of
+	this software and associated documentation files (the "Software"), to deal in
+	the Software without restriction, including without limitation the rights to
+	use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+	of the Software, and to permit persons to whom the Software is furnished to do
+	so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+The notice above is reproduced from the fetched source's LICENSE.
 
 Bit::Vector
 	This package with all its parts is
@@ -348,6 +387,31 @@ MiniSat
 	LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 	OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 	WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+HiGHS
+	MIT License
+
+	Copyright (c) 2024 HiGHS
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+	[STP note: reproduced from the LICENSE.txt of HiGHS release 1.12.0.]
 
 GetGitRevisionDescription.cmake (cmake/modules)
 	Original Author:

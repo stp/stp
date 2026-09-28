@@ -23,20 +23,22 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/DifficultyScore.h"
+#include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTKind.h"
 #include "stp/Util/NodeIterator.h"
 #include <algorithm>
 #include <cstdint>
 #include <list>
+#include <vector>
 
 /* Estimates how many AIG AND-nodes the bit-blaster will build for a formula.
  *
  * Every number below was measured, not guessed: each operation was built over
  * fresh symbols, bit-blasted on its own with BBNodeManagerAIG, and the
- * resulting AND-node count fitted against the bit-width. See
- * bench-hard/reports/2026-08-06-difficulty-scorer-vs-aig-size.md for the
- * sweep, the fits and the residuals.
+ * resulting AND-node count fitted against the bit-width. tools/difficulty_bench
+ * runs that sweep and prints the estimate against the measured count, which is
+ * how the fits are rechecked when the blaster changes.
  *
  * Two properties of the estimate are deliberate.
  *
@@ -54,10 +56,12 @@ THE SOFTWARE.
  * and the old scorer costed them all at the symbolic price. That mattered:
  * simplifications that fold a constant into an operation looked neutral.
  *
- * The costs model the default bit-blaster settings (in particular
- * multiplication_variant 1, which is a shift-and-add array rather than a
- * Booth-recoded one). UserDefinedFlags is not reachable from here, so a
- * non-default backend configuration is scored as though it were the default.
+ * The costs model the default bit-blaster settings. The two choices that
+ * move a score by more than the fit's own error are read off the flags:
+ * whether a wide division by a constant takes the defining relation, and
+ * which multiplication variant is in force, since the Booth recoding the
+ * default applies to a constant multiplier prices runs of ones, not set
+ * bits. Every other backend option is scored as though it were the default.
  */
 
 namespace stp
@@ -109,17 +113,131 @@ int64_t addCost(const ASTNode& b, int64_t w, bool subtract)
   return std::max<int64_t>(0, score);
 }
 
-// One binary multiply of width w.
+// The Booth digits of a constant multiplier, recoded as the bit-blaster's
+// convert() recodes them: a run of three or more ones, or of two or more
+// reaching the top bit, becomes -1 at its lowest bit and +1 just above it,
+// and a +1 above the top bit falls off. The head of one run can land on the
+// foot of the next, which then recodes as one longer run. Fills the digit
+// positions in ascending order and says whether any run was recoded, which
+// is what decides whether the blaster takes the Booth path at all.
+bool boothDigits(const ASTNode& constant, int64_t w,
+                 std::vector<int64_t>& positions, bool& lowestIsSubtract)
+{
+  const CBV cbv = constant.GetBVConst();
+  std::vector<int8_t> digit(static_cast<size_t>(w), 0);
+  for (int64_t i = 0; i < w; i++)
+    if (CONSTANTBV::BitVector_bit_test(cbv, static_cast<unsigned>(i)))
+      digit[i] = 1;
+
+  bool recoded = false;
+  int64_t lastOne = -1;
+  for (int64_t i = 0; i < w; i++)
+  {
+    if (digit[i] == 1 && lastOne == -1)
+      lastOne = i;
+    if (digit[i] != 1 && lastOne != -1 && i - lastOne >= 3)
+    {
+      digit[lastOne] = -1;
+      for (int64_t j = lastOne + 1; j < i; j++)
+        digit[j] = 0;
+      digit[i] = 1;
+      lastOne = i;
+      recoded = true;
+    }
+    else if (digit[i] != 1)
+      lastOne = -1;
+  }
+  if (lastOne != -1 && w - lastOne > 1)
+  {
+    digit[lastOne] = -1;
+    for (int64_t j = lastOne + 1; j < w; j++)
+      digit[j] = 0;
+    recoded = true;
+  }
+
+  positions.clear();
+  lowestIsSubtract = false;
+  for (int64_t i = 0; i < w; i++)
+    if (digit[i] != 0)
+    {
+      if (positions.empty())
+        lowestIsSubtract = digit[i] < 0;
+      positions.push_back(i);
+    }
+  return recoded;
+}
+
+// Whether the multiplication variant in force Booth-recodes a constant
+// multiplier (14, 16 and the combined 21, 22, 23 and 25), and whether it
+// sums the set-bit rows of a constant it declines as carry-save rows (17,
+// 22 and 25) rather than ripple rows.
+bool variantRecodesConstants(const UserDefinedFlags* flags)
+{
+  if (flags == NULL)
+    return true;
+  const int64_t v = flags->multiplication_variant;
+  return v == 14 || v == 16 || v == 21 || v == 22 || v == 23 || v == 25 ||
+         v == 26 || v == 27;
+}
+
+bool variantUsesCarrySaveRows(const UserDefinedFlags* flags)
+{
+  if (flags == NULL)
+    return true;
+  const int64_t v = flags->multiplication_variant;
+  return v == 17 || v == 22 || v == 25 || v == 27;
+}
+
+// Whether the variant Booth-recodes a multiplier's runs of identical
+// symbolic bits (25), which halves a product whose multiplier is a sign
+// extension -- the signed overflow predicate's operands among them.
+bool variantRecodesSymbolicRuns(const UserDefinedFlags* flags)
+{
+  if (flags == NULL)
+    return true;
+  const int64_t v = flags->multiplication_variant;
+  return v == 25 || v == 26 || v == 27;
+}
+
+// The symbolic pair's rows are carry-saved (27 carry-saves a constant's
+// rows only).
+static bool symbolicRowsAreCarrySave(const UserDefinedFlags* flags)
+{
+  const int64_t v = flags->multiplication_variant;
+  return v == 17 || v == 22 || v == 25;
+}
+
+// One binary multiply of width w. Every constant here was fitted to
+// tools/difficulty_bench, which prints the estimate beside the built count.
 //
-// The default bit-blaster walks the bits of the first operand, and for each
-// set bit adds the other operand shifted left by that bit's position. The
-// lowest set bit seeds the accumulator for free; every later set bit i pays
-// for an add over the (w-i) columns above it, 11(w-i)-7 nodes. With a
-// constant operand only its set bits are built, which is why multiplying by
-// a constant with few -- or high -- set bits is so much cheaper than the
-// symbolic case. Each add is 7(w-i)-4 with the shared full adder, and the
-// series sums to about 4(w-1)^2 in the symmetric case.
-int64_t multiplyCost(const ASTNode& b, int64_t w)
+// A symbolic pair is one partial-product row per multiplier bit -- an AND
+// gate per bit of the other operand -- and an adder per row above the
+// first. Carry-save rows and ripple rows hash to the same AIG for a lone
+// multiply, and the series sums to about 4(w-1)^2.
+//
+// With a constant operand only the rows the constant needs are built, and
+// each is free: AND with a known bit is the bit itself or nothing. What
+// costs is summing them, and which rows exist is the variant's choice.
+//
+// The default Booth-recodes the constant: a run of ones becomes a
+// subtract at its foot and an add above its head, so 2^k-1 costs two rows
+// however large k is, where the shift-and-add array costs k. The rows go
+// through the column network, which spends about six gates per column
+// above the lowest row for every further row. A lowest row that is a
+// subtract is the complement of the other operand plus one, and its
+// increment chain is three gates per column.
+//
+// A constant with no run of three keeps its set bits as rows. Under ripple
+// rows (variant 1; the column-network variants spend about the same) each
+// row above the lowest is a ripple adder over the columns above it,
+// 7(w-p)-4 with the shared full adder. Under carry-save rows the second row
+// is a half-adder
+// chain, each later row a full adder per column plus a half adder over the
+// carries it passes, and one ripple adder over the carry vector closes the
+// sum; on a wide constant that is up to two thirds more than the ripple
+// rows.
+int64_t multiplyCost(const ASTNode& b, int64_t w,
+                     const UserDefinedFlags* flags)
 {
   const ASTNode* constant = NULL;
   if (b.Degree() == 2)
@@ -133,19 +251,43 @@ int64_t multiplyCost(const ASTNode& b, int64_t w)
   if (constant == NULL)
     return 4 * (w - 1) * (w - 1) + 1;
 
-  const CBV cbv = constant->GetBVConst();
-  int64_t score = 0;
-  bool seenLowestSetBit = false;
-  for (int64_t i = 0; i < w; i++)
+  std::vector<int64_t> rows;
+  bool lowestIsSubtract = false;
+  const bool booth = variantRecodesConstants(flags) &&
+                     boothDigits(*constant, w, rows, lowestIsSubtract);
+  if (!booth)
   {
-    if (!CONSTANTBV::BitVector_bit_test(cbv, static_cast<unsigned>(i)))
-      continue;
-    if (!seenLowestSetBit)
-    {
-      seenLowestSetBit = true;
-      continue;
-    }
-    score += 7 * (w - i) - 4;
+    rows.clear();
+    const CBV cbv = constant->GetBVConst();
+    for (int64_t i = 0; i < w; i++)
+      if (CONSTANTBV::BitVector_bit_test(cbv, static_cast<unsigned>(i)))
+        rows.push_back(i);
+  }
+  if (rows.empty())
+    return 0;
+  if (rows.size() < 2)
+    return (booth && lowestIsSubtract) ? 3 * (w - rows[0] - 1) : 0;
+
+  int64_t score = 0;
+  if (booth)
+  {
+    if (lowestIsSubtract)
+      score += 3 * (w - rows[0] - 1);
+    for (size_t k = 1; k < rows.size(); k++)
+      score += 6 * (w - rows[k]) - 4;
+  }
+  else if (variantUsesCarrySaveRows(flags))
+  {
+    const int64_t second = rows[1];
+    score += 3 * (w - second);
+    score += std::max<int64_t>(0, 7 * (w - second - 1) - 4);
+    for (size_t k = 2; k < rows.size(); k++)
+      score += 7 * (w - rows[k]) + 3 * (rows[k] - second - 1);
+  }
+  else
+  {
+    for (size_t k = 1; k < rows.size(); k++)
+      score += 7 * (w - rows[k]) - 4;
   }
   return score;
 }
@@ -197,6 +339,44 @@ int64_t constantDivisionCost(bool dividendIsConstant,
   score = score * (2 * w - highest) / w;
   score = score * (w - lowest) / w;
   return score;
+}
+
+// A division or remainder by a constant from --bb.div-by-const-width is its
+// defining relation over the constant's shift-and-add rather than a divider:
+// a shifted copy of the fresh quotient per set divisor bit, summed at width
+// w+1 by full adders of seven nodes a bit, the remainder added the same way,
+// the sum's equality with the dividend, and the remainder's comparison with
+// the divisor over the divisor's span. At 64 bits by a constant of three set
+// bits the divider estimate above is 22,883 nodes and the relation builds
+// 2,562.
+int64_t constantDivisorRelationCost(const ASTNode& constant, int64_t w)
+{
+  const CBV cbv = constant.GetBVConst();
+  int64_t setBits = 0;
+  int64_t span = 0;
+  for (int64_t i = 0; i < w; i++)
+    if (CONSTANTBV::BitVector_bit_test(cbv, static_cast<unsigned>(i)))
+    {
+      setBits++;
+      span = i + 1;
+    }
+  return 7 * (w + 1) * setBits + 4 * w + 3 * span;
+}
+
+// Whether the blaster takes the relation for this divisor: the flag, the
+// width, and a divisor that is not zero -- a zero constant stays with the
+// divider, whose totalisation it needs.
+bool divisorTakesRelation(const UserDefinedFlags* flags,
+                          const ASTNode& divisor, int64_t w)
+{
+  if (flags == NULL || !flags->division_by_constant ||
+      w < static_cast<int64_t>(flags->division_by_constant_width))
+    return false;
+  const CBV cbv = divisor.GetBVConst();
+  for (int64_t i = 0; i < w; i++)
+    if (CONSTANTBV::BitVector_bit_test(cbv, static_cast<unsigned>(i)))
+      return true;
+  return false;
 }
 
 // The exponent and significand widths of a floating-point node. Lowering
@@ -364,7 +544,7 @@ int64_t fpEval(const ASTNode& b, const Kind k)
 
 } // namespace
 
-int64_t eval(const ASTNode& b)
+int64_t eval(const ASTNode& b, const UserDefinedFlags* flags)
 {
   const Kind k = b.GetKind();
 
@@ -454,28 +634,36 @@ int64_t eval(const ASTNode& b)
 
     case BVMULT:
       if (degree == 2)
-        return multiplyCost(b, lw);
+        return multiplyCost(b, lw, flags);
       // The bit-blaster lowers a wider multiply to a tree of binary ones.
-      return static_cast<int64_t>(degree - 1) * multiplyCost(b, lw);
+      return static_cast<int64_t>(degree - 1) * multiplyCost(b, lw, flags);
 
     case BVDIV:
     case BVMOD:
       // Restoring long division: a subtract and a select per quotient bit,
-      // over a remainder as wide as the dividend.
+      // over a remainder as wide as the dividend -- or, by a constant wide
+      // enough, the relation over the constant's shift-and-add.
       if (b[0].isConstant())
         return constantDivisionCost(true, b[0], lw);
       if (b[1].isConstant())
-        return constantDivisionCost(false, b[1], lw);
+        return divisorTakesRelation(flags, b[1], lw)
+                   ? constantDivisorRelationCost(b[1], lw)
+                   : constantDivisionCost(false, b[1], lw);
       return 20 * (lw - 1) * (lw - 1) + 29 * lw;
 
     case SBVDIV:
     case SBVREM:
     case SBVMOD:
-      // The unsigned circuit plus the sign fixups on either side of it.
+      // The unsigned circuit plus the sign fixups on either side of it. The
+      // magnitude of a constant divisor is a constant, so it takes the
+      // relation as the unsigned case does.
       if (b[0].isConstant())
         return constantDivisionCost(true, b[0], lw) + 12 * lw;
       if (b[1].isConstant())
-        return constantDivisionCost(false, b[1], lw) + 12 * lw;
+        return (divisorTakesRelation(flags, b[1], lw)
+                    ? constantDivisorRelationCost(b[1], lw)
+                    : constantDivisionCost(false, b[1], lw)) +
+               12 * lw;
       return 20 * (lw - 1) * (lw - 1) + 50 * lw;
 
     case BVLEFTSHIFT:
@@ -539,16 +727,33 @@ int64_t eval(const ASTNode& b)
       return 11 * ow + 3;
     }
 
+    // The multiply-overflow predicates blast a product of the operands
+    // extended to twice the width, so a zero extension's rows cost half a
+    // symbolic multiply and a sign extension's, which the row recoding of
+    // variant 25 turns into the low rows plus one, about the same; without
+    // that recoding the sign-extended product is the full double-width
+    // array. Fitted at 8 to 128 bits within 5%.
     case BVUMULO:
     {
       const int64_t ow = std::max(1u, b[0].GetValueWidth());
-      return 12 * (ow - 1) * (ow - 1) + 7 * ow;
+      // Schulte's detector: a (w+1)-wide product plus the leading-ones
+      // unit; else the 2w-wide product's high half.
+      if (flags == NULL || flags->umulo_schulte)
+        return std::max<int64_t>(1, 4 * ow * ow + 4 * ow - 12);
+      return 8 * (ow - 1) * (ow - 1) + 6 * ow;
     }
 
     case BVSMULO:
     {
       const int64_t ow = std::max(1u, b[0].GetValueWidth());
-      return 23 * (ow - 1) * (ow - 1) + 21 * ow;
+      // The detector: a (w+2)-wide product of sign-extended operands plus
+      // the significance unit.
+      if (flags == NULL || flags->smulo_schulte)
+        return std::max<int64_t>(1, (9 * ow * ow + 30 * ow - 60) / 2);
+      if (variantRecodesSymbolicRuns(flags))
+        return 8 * (ow - 1) * (ow - 1) +
+               (symbolicRowsAreCarrySave(flags) ? 19 : 11) * (ow - 1);
+      return 23 * (ow - 1) * (ow - 1) / 2 + 15 * ow;
     }
 
     // Boolean connectives, one AIG node per binary combination.
@@ -588,7 +793,7 @@ int64_t DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
   while ((current = ni.next()) != ni.end())
     {
       evalCount++;
-      result += eval(current);
+      result += eval(current, &mgr->UserFlags);
     }
 
   cache.insert(std::make_pair(top.GetNodeNum(), result));

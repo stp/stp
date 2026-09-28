@@ -26,8 +26,10 @@ THE SOFTWARE.
 #define STP_H
 
 #include "stp/AST/AST.h"
+#include "stp/UninterpretedFunctions/UFLowering.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/STPManager/STPManager.h"
@@ -37,10 +39,14 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/Simplifier/NodeDomainAnalysis.h"
+#include <chrono>
 #include <memory>
+#include <set>
 
 namespace stp
 {
+class FpAbstraction;
+struct RealSessionState;
 class IncrementalSolver;
 class LoweredApplicationView;
 class UFBatchAdapter;
@@ -81,7 +87,9 @@ class STP
   SOLVER_RETURN_TYPE solve_by_sat_solver(SATSolver* newS,
                                          ASTNode original_input,
                                          const ASTNodeMap&
-                                             arrayEqualityRewrites);
+                                             arrayEqualityRewrites,
+                                         std::chrono::steady_clock::time_point
+                                             deadline);
 
   SATSolver* get_new_sat_solver();
 
@@ -89,10 +97,23 @@ class STP
   // alive after TopLevelSTP returns so model queries use that exact encoding.
   std::unique_ptr<FpEncodingContext> fpEncodingContext;
 
+  // The floating-point abstraction of the most recent batch solve
+  // (--fp-abstraction): its records, protected symbols and statistics. Kept
+  // with the model like the encoding context; rebuilt for every solve.
+  std::unique_ptr<FpAbstraction> fpAbstraction;
+  // Applications released by restart in earlier runs of the current query
+  // (FpAbstraction::restartRequested): lowered exactly by every later run.
+  // Reset at the start of each TopLevelSTP.
+  std::set<ASTNode> fpAbstractionExact;
+  uint64_t fpAbstractionRestarts = 0;
+  size_t fpAbstractionPreviouslyAbstracted = 0;
+
   // Public and semantic UF roots for the most recent fresh-query solve. The
   // value remains alive with the model, while batchUFAdapter owns the
   // query-local SAT/checker mutation.
   std::unique_ptr<LoweredApplicationView> batchUFView;
+  // The lazy congruence rounds of the query in progress; see TopLevelSTPAux.
+  LazyCongruenceState lazyCongruence;
   std::unique_ptr<UFBatchAdapter> batchUFAdapter;
   uint64_t batchUFScopeGeneration = 0;
 
@@ -108,6 +129,7 @@ public:
   // use and destroyed by reset/reset-assertions. NULL while no incremental
   // session is active; the batch pipeline never touches it.
   IncrementalSolver* incrementalSolver = nullptr;
+  RealSessionState* realSession = nullptr;
 
   // The C API's engagement bookkeeping, mirroring the SMT-LIB2 frontend's:
   // the driver engages from the second solve of a session (the first,
@@ -139,6 +161,22 @@ public:
 
   DLL_PUBLIC IncrementalSolver* getIncrementalSolver();
   DLL_PUBLIC void resetIncrementalSolver();
+  DLL_PUBLIC bool realSessionCanHandle(const ASTVec& assertions) const;
+  DLL_PUBLIC SOLVER_RETURN_TYPE checkSatRealSession(
+      const std::vector<ASTVec*>& levels, bool& handled);
+  DLL_PUBLIC void discardRealSession();
+private:
+  // The LRA-only solve loop the session runs: one SAT solve (blasting
+  // `modified_input`, or nothing when it is TRUE), then draining the
+  // coordinator's pending theory clauses until it decides. No UF or array
+  // refinement -- the session declines both. `first` blasts the base's
+  // skeleton; later checks pass TRUE because the solver already holds
+  // everything.
+  SOLVER_RETURN_TYPE lraSessionSolve(SATSolver& solver, ToSATAIG& tosat,
+                                     lra::LraCoordinator& coordinator,
+                                     const ASTNode& modified_input, bool first);
+  ASTNode CreateFreshSessionActivation();
+public:
   bool hasIncrementalSolver() const { return incrementalSolver != nullptr; }
 
 public:
@@ -153,13 +191,18 @@ public:
   // NB doesn't delete the STPMgr.
   void deleteObjects()
   {
+    discardRealSession();
     resetIncrementalSolver();
 
     if (Ctr_Example != NULL)
     {
       Ctr_Example->setFpEncodingContext(NULL);
+      Ctr_Example->setFpAbstraction(NULL);
       Ctr_Example->setUFTheoryAdapter(NULL);
     }
+    if (bm != NULL)
+      bm->setFpAbstraction(NULL);
+    fpAbstraction.reset();
     fpEncodingContext.reset();
 
     delete Ctr_Example;
@@ -184,7 +227,9 @@ public:
   // TopLevelSTP calls it a second time when the first run reached an unsat
   // nobody could attribute -- see the comment there.
   SOLVER_RETURN_TYPE topLevelSTPOnce(const ASTNode& inputasserts,
-                                     const ASTNode& query);
+                                     const ASTNode& query,
+                                     std::chrono::steady_clock::time_point
+                                         deadline);
 
   DLL_PUBLIC SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts,
                                             const ASTNode& query);

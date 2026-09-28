@@ -36,8 +36,17 @@ namespace
 const size_t PAIR_ENTRY_LIMIT = 4000000;
 
 // Each round removes at least one adder, so this only bounds pathological
-// inputs, not ordinary ones.
+// inputs, not ordinary ones. What each round costs is bounded separately,
+// by the tally budget.
 const long ROUND_LIMIT = 2000;
+
+// The tally operations one addition takes to build: every pair of its
+// eligible operands is bumped once.
+long buildCost(const std::vector<uint64_t>& eligible)
+{
+  const long k = (long)eligible.size();
+  return k * (k - 1) / 2;
+}
 
 bool byNodeNum(const ASTNode& a, const ASTNode& b)
 {
@@ -263,6 +272,9 @@ bool CommonSubSum::bump(uint64_t a, uint64_t b)
 {
   const NodePair key = (a < b) ? packPair(a, b) : packPair(b, a);
 
+  if (++tallyOps > budget)
+    return false;
+
   // Checked only at the cap, so the ordinary path pays one lookup, not two.
   if (occurrences.size() >= PAIR_ENTRY_LIMIT &&
       occurrences.find(key) == occurrences.end())
@@ -282,6 +294,7 @@ void CommonSubSum::drop(uint64_t a, uint64_t b)
   const NodePair key = (a < b) ? packPair(a, b) : packPair(b, a);
   const auto it = occurrences.find(key);
 
+  tallyOps++;
   assert(it != occurrences.end() && it->second > 0);
   if (it != occurrences.end() && --it->second == 0)
     occurrences.erase(it);
@@ -359,10 +372,13 @@ bool CommonSubSum::promote(const ASTNode& n)
   if (!shareable.insert(num).second)
     return true;
 
+  std::vector<uint32_t> holders;
+  holdersListed(num, holders);
+
   std::vector<uint64_t> eligible;
-  for (const auto& sum : sums)
+  for (const uint32_t i : holders)
   {
-    const ASTVec& v = sum.ops;
+    const ASTVec& v = sums[i].ops;
     if (!std::binary_search(v.begin(), v.end(), n, byNodeNum))
       continue;
 
@@ -375,9 +391,55 @@ bool CommonSubSum::promote(const ASTNode& n)
   return true;
 }
 
+// The holder lists, from the operand lists as they stand once the
+// co-travelling groups have been taken out. An operand repeated in one
+// addition is listed under it once, as it is tallied once.
+void CommonSubSum::indexHolders()
+{
+  holdersOf.clear();
+  for (uint32_t i = 0; i < sums.size(); i++)
+  {
+    const ASTVec& v = sums[i].ops;
+    for (size_t j = 0; j < v.size(); j++)
+      if (j == 0 || v[j] != v[j - 1])
+        holdersOf[v[j].GetNodeNum()].push_back(i);
+  }
+}
+
+// The additions listed under an operand, ascending and each once, so that
+// a walk over them visits what the scan of every addition visited, in the
+// order it did.
+void CommonSubSum::holdersListed(uint64_t num,
+                                 std::vector<uint32_t>& out) const
+{
+  out.clear();
+  const auto it = holdersOf.find(num);
+  if (it == holdersOf.end())
+    return;
+  out = it->second;
+  std::sort(out.begin(), out.end());
+  out.erase(std::unique(out.begin(), out.end()), out.end());
+}
+
 // The tally over every addition, built once. Later rounds patch it.
 bool CommonSubSum::buildOccurrences()
 {
+  // A build is all or nothing: a tally that stops part-way is discarded,
+  // so one the budget cannot cover is not started. What it will cost is
+  // known exactly beforehand -- an addition's contribution is fixed by its
+  // eligible operands, plus the phantom bump of each realized pair.
+  long cost = 0;
+  std::vector<uint64_t> eligible;
+  for (const auto& sum : sums)
+  {
+    eligibleOf(sum.ops, eligible);
+    cost += buildCost(eligible);
+    if (sum.ops.size() == 2 && sum.ops[0] != sum.ops[1])
+      cost++;
+    if (cost > budget)
+      return false;
+  }
+
   // The realized phantom bumps land in the tally here and are heapified
   // with everything else below.
   tallying = true;
@@ -470,14 +532,28 @@ bool CommonSubSum::extractOnePair()
     return false;
   }
 
+  // Every holder of the pair is listed under both operands, so the shorter
+  // list is walked and each entry checked against the operand list itself
+  // -- which also drops the entries gone stale.
   std::vector<uint32_t> hits;
-  for (uint32_t i = 0; i < sums.size(); i++)
   {
-    const ASTVec& v = sums[i].ops;
-    if (v.size() >= 3 &&
-        std::binary_search(v.begin(), v.end(), first, byNodeNum) &&
-        std::binary_search(v.begin(), v.end(), second, byNodeNum))
-      hits.push_back(i);
+    const auto ha = holdersOf.find(bestPair >> 32);
+    const auto hb = holdersOf.find(bestPair & 0xffffffffu);
+    if (ha != holdersOf.end() && hb != holdersOf.end())
+    {
+      const std::vector<uint32_t>& shorter =
+          (ha->second.size() <= hb->second.size()) ? ha->second : hb->second;
+      for (const uint32_t i : shorter)
+      {
+        const ASTVec& v = sums[i].ops;
+        if (v.size() >= 3 &&
+            std::binary_search(v.begin(), v.end(), first, byNodeNum) &&
+            std::binary_search(v.begin(), v.end(), second, byNodeNum))
+          hits.push_back(i);
+      }
+      std::sort(hits.begin(), hits.end());
+      hits.erase(std::unique(hits.begin(), hits.end()), hits.end());
+    }
   }
 
   long applied = 0;
@@ -513,6 +589,7 @@ bool CommonSubSum::extractOnePair()
     // is patched; every other pair's tally is still right.
     const bool room = repair(v, scratch);
     v.swap(scratch);
+    holdersOf[shared.GetNodeNum()].push_back(sum);
     applied++;
     if (!room)
     {
@@ -601,10 +678,13 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
   saved = 0;
   chunked = 0;
   truncated = false;
+  tallyOps = 0;
+  budget = stpMgr->UserFlags.common_subsum_budget;
   sums.clear();
   sumIndex.clear();
   byNum.clear();
   occurrences.clear();
+  holdersOf.clear();
   shareable.clear();
   realized.clear();
   candidates = decltype(candidates)();
@@ -635,6 +715,7 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
       sumIndex[sums[i].num] = i;
 
     extractCoTravellers();
+    indexHolders();
     markShareable();
 
     // A pair needs two shareable operands, so fewer than two shareable
@@ -678,12 +759,14 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
   if (stpMgr->UserFlags.stats_flag)
     std::cerr << "{CommonSubSum} " << _kind_names[kind]
               << " applications saved:" << saved << " Chunks:" << chunked
-              << " Truncated:" << (truncated ? 1 : 0) << std::endl;
+              << " Truncated:" << (truncated ? 1 : 0)
+              << " Tally:" << tallyOps << std::endl;
 
   sums.clear();
   sumIndex.clear();
   byNum.clear();
   occurrences.clear();
+  holdersOf.clear();
   shareable.clear();
   realized.clear();
   candidates = decltype(candidates)();

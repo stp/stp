@@ -262,18 +262,33 @@ TEST(UninterpretedFunctionsCAPI, ValuesOfTermsContainingApplications)
   EXPECT_EQ(1, vc_isBool(value));
   vc_DeleteExpr(value);
 
-  // Congruence across the certified/uncertified boundary: f(7) was never
-  // reached, but it shares f(x)'s argument tuple and must share its value.
-  // Completing with an arbitrary constant instead would break this.
+  // Congruence across the certified/uncertified boundary: f(7) shares f(x)'s
+  // argument tuple and must share its value. Completing with an arbitrary
+  // constant instead would break this. (Pre-lowering in fact rewrites f(x)
+  // to f(7) under x = 7, so today it is f(7) the solve certifies and f(x)
+  // that is read through the alias; either way both read as 3.)
   Expr uncertifiedSum = vc_bvPlusExpr(vc, 8, fSeven, one);
   value = vc_getCounterExample(vc, uncertifiedSum);
   ASSERT_NE(nullptr, value);
   EXPECT_EQ(4u, getBVUnsigned(value));
   vc_DeleteExpr(value);
 
+  // The original handle keeps its public value across the rewrite.
+  value = vc_getUninterpretedFunctionValue(vc, fx);
+  ASSERT_NE(nullptr, value);
+  EXPECT_EQ(3u, getBVUnsigned(value));
+  vc_DeleteExpr(value);
+
   // The root accessor keeps its strict contract: an application the solve
-  // never reached still has no public value of its own.
-  EXPECT_EQ(nullptr, vc_getUninterpretedFunctionValue(vc, fSeven));
+  // never reached -- not as itself and not as anything it was rewritten to
+  // -- still has no public value of its own.
+  Expr eight = vc_bvConstExprFromInt(vc, 8, 8);
+  const Expr atEight[] = {eight};
+  Expr fEight = vc_applyUninterpretedFunction(vc, f, atEight, 1);
+  ASSERT_NE(nullptr, fEight);
+  EXPECT_EQ(nullptr, vc_getUninterpretedFunctionValue(vc, fEight));
+  vc_DeleteExpr(fEight);
+  vc_DeleteExpr(eight);
 
   vc_DeleteExpr(uncertifiedSum);
   vc_DeleteExpr(predicate);

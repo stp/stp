@@ -182,7 +182,7 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
     : lemmasEmitted(0), lemmaAtomsFolded(0), lemmaRounds(0),
-      lemmasInLargestRound(0), bm(bm_), solveInProgress(false),
+      lemmasInLargestRound(0), solvesOwned(0), bm(bm_), solveInProgress(false),
       registrySealed(false),
       arrayGraphIsFrozen(false), graphBound(false),
       readTransformInProgress(false), readTransformComplete(false),
@@ -1995,7 +1995,7 @@ void ExtensionalityContext::encodePendingLemmas(SATSolver& solver,
 // than only where it ended up.
 void ExtensionalityContext::reportLemmaStats() const
 {
-  if (!bm->UserFlags.stats_flag || lemmaRounds == 0)
+  if (!bm->UserFlags.stats_flag || solvesOwned == 0)
     return;
   std::cerr << "Array equality: " << lemmasEmitted << " lemmas, "
             << lemmaRounds << " rounds, largest " << lemmasInLargestRound

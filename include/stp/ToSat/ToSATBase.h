@@ -29,9 +29,13 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 
 #include <cassert>
+#include <functional>
+#include <string>
 
 namespace stp
 {
+class SATSolver;
+
 // The bit-vector abstraction checker has three materially different answers.
 // A zero refinement count is not enough to distinguish a faithful candidate
 // from one whose mandatory exact encoding could not be built, so callers must
@@ -79,6 +83,7 @@ protected:
 
   // Ptr to STPManager
   STPMgr* bm;
+  std::function<bool()> before_search_;
 
 public:
   typedef std::unordered_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
@@ -102,6 +107,15 @@ public:
   // Bitblasts, CNF conversion and calls toSATandSolve()
   virtual bool CallSAT(SATSolver& SatSolver, const ASTNode& input,
                        bool doesAbsRef) = 0;
+
+  // Runs after CNF installation and activation binding, before entering
+  // SAT search. The caller owns the callback's lifetime and clears it
+  // after CallSAT. A false result is an internal failure, never UNSAT.
+  void setBeforeSearch(std::function<bool()> callback)
+  {
+    before_search_ = std::move(callback);
+  }
+  void clearBeforeSearch() noexcept { before_search_ = nullptr; }
 
   virtual ASTNodeToSATVar& SATVar_to_SymbolIndexMap() = 0;
 
@@ -129,7 +143,31 @@ public:
   // just ran refined anything without owning the abstraction tables.
   virtual uint64_t abstractionRefinements() const { return 0; }
 
+  // Whether any abstraction is in play, so a driver can tell ahead of
+  // refineAbstractions whether a candidate may yet be refuted by one.
+  virtual bool hasAbstractions() const { return false; }
+
   virtual void ClearAllTables(void) = 0;
+
+
+  // The LRA full-lazy batch coordinator keeps the submitted CNF behind one
+  // internal activation literal.  Solving under that literal releases the
+  // assertion assignment before a verified theory clause is inserted, while
+  // retaining exactly the same logical problem for every refinement round.
+  virtual bool setRequiredSolveAssumptions(const ASTVec& /*symbols*/)
+  {
+    return false;
+  }
+  virtual bool setRequiredSolveAssumption(const ASTNode& /*symbol*/)
+  {
+    return false;
+  }
+  virtual bool hasInternalSolveFailure() const { return false; }
+  virtual const std::string& internalSolveFailureDetail() const
+  {
+    static const std::string empty;
+    return empty;
+  }
 };
 }
 

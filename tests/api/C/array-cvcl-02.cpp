@@ -47,7 +47,8 @@ TEST(array_cvcl02, one)
 
   vc_assertFormula(vc, in_bounds);
   vc_assertFormula(vc, a_of_i_eq_11);
-  vc_query(vc, vc_falseExpr(vc));
+  // Satisfiable: the top 32 bits force i = 0, the low 32 force a[0] = 11.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
 
   Expr pre = vc_bvConstExprFromInt(vc, 24, 0);
   int j;
@@ -57,11 +58,13 @@ TEST(array_cvcl02, one)
     Expr index = vc_bvConcatExpr(vc, pre, exprj);
     index = vc_simplify(vc, index);
     Expr a_of_j = vc_readExpr(vc, cvcl_array, index);
-    (void)vc_getCounterExample(vc, a_of_j);
+    Expr value = vc_getCounterExample(vc, a_of_j);
+    ASSERT_EQ(32, getVWidth(value));
+    if (j == 0)
+    {
+      EXPECT_EQ(11u, getBVUnsigned(value));
+    }
   }
+  EXPECT_EQ(0u, getBVUnsigned(vc_getCounterExample(vc, i)));
   vc_Destroy(vc);
-  // vc_printCounterExample(vc);
-
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }

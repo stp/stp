@@ -1,7 +1,10 @@
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --incremental=off %s 2>&1 | %OutputCheck --check-prefix=BATCH %s
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --incremental=on %s 2>&1 | %OutputCheck --check-prefix=BATCH %s
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --uf-lemmas-per-round=1 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=SINGLE %s
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --uf-lemmas-per-round=1 --incremental=on %s 2>&1 | %OutputCheck --check-prefix=SINGLE %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=off --incremental=off %s 2>&1 | %OutputCheck --check-prefix=BATCH %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=off --incremental=on %s 2>&1 | %OutputCheck --check-prefix=BATCH %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=off --uf-lemmas-per-round=1 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=SINGLE %s
+; RUN: %solver --uf-propagate-equalities=0 -s --uninterpreted-functions --uf-ackermann=off --uf-lemmas-per-round=1 --incremental=on %s 2>&1 | %OutputCheck --check-prefix=SINGLE %s
+; --uf-propagate-equalities=0: this test exercises the refinement loop on a
+; top-level equality, which the pre-lowering pass would otherwise settle before
+; any lemma is needed.
 ;
 ; BATCH: UF: installed congruence lemma 1 for f
 ; BATCH: UF: installed congruence lemma 2 for f

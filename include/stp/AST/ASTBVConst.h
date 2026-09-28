@@ -135,7 +135,8 @@ inline size_t
 ASTBVConst::ASTBVConstHasher::operator()(const ASTBVConst* bvc) const
 {
   return CONSTANTBV::BitVector_Hash(bvc->_bvconst) ^
-         (bvc->getDeclaredSourceSort().hash() * 0x9e3779b97f4a7c15ULL);
+         static_cast<size_t>(bvc->getDeclaredSourceSort().hash() *
+                             0x9e3779b97f4a7c15ULL);
 }
 
 inline bool

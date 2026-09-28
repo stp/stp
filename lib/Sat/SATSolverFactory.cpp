@@ -43,6 +43,8 @@ THE SOFTWARE.
 
 #include <cstdlib>
 #include <iostream>
+#include <memory>
+#include <stdexcept>
 
 namespace stp
 {
@@ -94,6 +96,15 @@ std::vector<std::string> compiledSolverVersions()
 
 SATSolver* createSATSolver(const UserDefinedFlags& flags)
 {
+  if (flags.cadical_options.hasOverrides())
+  {
+    if (flags.solver_to_use != UserDefinedFlags::CADICAL_SOLVER)
+      throw std::invalid_argument(
+          "CaDiCaL elimination options require the CaDiCaL backend (--cadical)");
+#ifndef USE_CADICAL
+    throw std::invalid_argument("CaDiCaL support was not enabled at configure time");
+#endif
+  }
   SATSolver* newS = NULL;
   switch (flags.solver_to_use)
   {
@@ -128,7 +139,7 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
 
     case UserDefinedFlags::CADICAL_SOLVER:
 #ifdef USE_CADICAL
-      newS = new Cadical();
+      newS = new Cadical(flags.cadical_options);
       break;
 #else
       std::cerr << "Cadical support was not enabled at configure time."
@@ -142,6 +153,14 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
   };
 
   return newS;
+}
+
+void validateCadicalOptions(const UserDefinedFlags& flags)
+{
+  if (flags.cadical_options.hasOverrides())
+  {
+    std::unique_ptr<SATSolver> probe(createSATSolver(flags));
+  }
 }
 
 void applySearchBias(SATSolver& s, const UserDefinedFlags& flags, bool warn)
@@ -176,9 +195,18 @@ bool enableBVAIfWanted(SATSolver& s, const UserDefinedFlags& flags,
 
 void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags)
 {
+  const auto deadline = std::chrono::steady_clock::now() +
+      std::chrono::seconds(flags.timeout_max_time >= 0
+                               ? flags.timeout_max_time : 0);
+  applySolveBudgets(s, flags, deadline);
+}
+
+void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags,
+                       std::chrono::steady_clock::time_point deadline)
+{
   if (flags.timeout_max_conflicts >= 0)
     s.setMaxConflicts(flags.timeout_max_conflicts);
   if (flags.timeout_max_time >= 0)
-    s.setMaxTime(flags.timeout_max_time);
+    s.setDeadline(deadline);
 }
 }

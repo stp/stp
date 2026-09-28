@@ -1312,9 +1312,20 @@ class TestSTP(unittest.TestCase):
         is ever asserted into that frame -- what it is for is vc_push, which
         is what marks a C API session incremental, so after the first few
         checks the persistent driver decides the query where the batch
-        pipeline used to. A zero time budget is where that becomes visible:
-        the driver reports the budget it was given, while the batch pipeline
-        settles this instance by substitution without consulting the clock.
+        pipeline used to. A zero conflict budget is where that becomes
+        visible: the batch pipeline settles this instance by substitution and
+        never calls the SAT solver the budget applies to, while the driver
+        hands the query to the SAT solver, which gives up before it searches.
+        So the answers start out decided and turn unknown once the driver
+        takes over; unknown from the first check on would say nothing about
+        the frame.
+
+        CryptoMiniSat and MiniSat stop at a zero conflict budget before their
+        first decision. CaDiCaL does not: the budget does not bound the cheap
+        assignments it tries before its search, and one of them satisfies
+        this instance, so its answers stay decided with or without the frame.
+        The test therefore runs on CryptoMiniSat or MiniSat, and is skipped
+        in a build that has neither.
 
         A solver built with uninterpreted_functions=True is the one solver
         that gets no frame, because vc_pop would discard the certified model
@@ -1322,10 +1333,15 @@ class TestSTP(unittest.TestCase):
         behaviour it has always had, which is what this pins.
         """
         s = self.s
+        if not (s.useCryptominisat() or s.useMinisat()):
+            self.skipTest('needs CryptoMiniSat or MiniSat: CaDiCaL settles '
+                          'this instance without spending a conflict, so a '
+                          'zero conflict budget cannot show the frame')
         x = s.bitvec('x', 8)
         s.add(x == 5)
-        answers = [s.check_with_timeout(max_time=0) for _ in range(8)]
+        answers = [s.check_with_timeout(max_conflicts=0) for _ in range(8)]
         self.assertIn(3, answers)
+        self.assertIn(0, answers[:answers.index(3)])
 
     def test_no_limit_reaches_the_solver(self):
         """

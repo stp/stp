@@ -1,0 +1,141 @@
+diff --git a/imath.c b/imath.c
+index 310b9885..95d81984 100644
+--- a/imath.c
++++ b/imath.c
+@@ -133 +133 @@ static inline mp_size MAX(mp_size A, mp_size B) { return (B > A ? B : A); }
+-/* Declare a block of N temporary mpz_t values.
++/* Declare a block of N temporary imath_int_value values.
+@@ -140 +140 @@ static inline mp_size MAX(mp_size A, mp_size B) { return (B > A ? B : A); }
+-    mpz_t value[(N)];                     \
++    imath_int_value value[(N)];                     \
+@@ -198,6 +198 @@ static inline bool ADD_WILL_OVERFLOW(mp_word W, mp_word V) {
+-static mp_size default_precision = 8;
+-
+-void mp_int_default_precision(mp_size size) {
+-  assert(size > 0);
+-  default_precision = size;
+-}
++static const mp_size default_precision = 8;
+@@ -206,6 +201 @@ void mp_int_default_precision(mp_size size) {
+-static mp_size multiply_threshold = 32;
+-
+-void mp_int_multiply_threshold(mp_size thresh) {
+-  assert(thresh >= sizeof(mp_word));
+-  multiply_threshold = thresh;
+-}
++static const mp_size multiply_threshold = 32;
+@@ -381 +371 @@ mp_int mp_int_alloc(void) {
+-  mp_int out = malloc(sizeof(mpz_t));
++  mp_int out = malloc(sizeof(imath_int_value));
+@@ -430 +420 @@ mp_result mp_int_init_value(mp_int z, mp_small value) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -438 +428 @@ mp_result mp_int_init_uvalue(mp_int z, mp_usmall uvalue) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -446 +436 @@ mp_result mp_int_set_value(mp_int z, mp_small value) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -454 +444 @@ mp_result mp_int_set_uvalue(mp_int z, mp_usmall uvalue) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -500 +490 @@ void mp_int_swap(mp_int a, mp_int c) {
+-    mpz_t tmp = *a;
++    imath_int_value tmp = *a;
+@@ -597 +587 @@ mp_result mp_int_add_value(mp_int a, mp_small value, mp_int c) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -659 +649 @@ mp_result mp_int_sub_value(mp_int a, mp_small value, mp_int c) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -718 +708 @@ mp_result mp_int_mul_value(mp_int a, mp_small value, mp_int c) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -879 +869 @@ mp_result mp_int_div_value(mp_int a, mp_small value, mp_int q, mp_small* r) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -1073 +1063 @@ mp_result mp_int_exptmod_evalue(mp_int a, mp_small value, mp_int m, mp_int c) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -1082 +1072 @@ mp_result mp_int_exptmod_bvalue(mp_small value, mp_int b, mp_int m, mp_int c) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -1456 +1446 @@ mp_result mp_int_to_string(mp_int z, mp_size radix, char* str, int limit) {
+-    mpz_t tmp;
++    imath_int_value tmp;
+@@ -1803 +1793 @@ static int s_uvcmp(mp_int a, mp_usmall uv) {
+-  mpz_t vtmp;
++  imath_int_value vtmp;
+@@ -2576 +2566 @@ static mp_result s_udiv_knuth(mp_int u, mp_int v) {
+-  mpz_t r;
++  imath_int_value r;
+diff --git a/imath.h b/imath.h
+index e12b0333..adb2de3d 100644
+--- a/imath.h
++++ b/imath.h
+@@ -64 +64 @@ typedef struct {
+-} mpz_t, *mp_int;
++} imath_int_value, *mp_int;
+@@ -90,11 +89,0 @@ extern const mp_result MP_MINERR;
+-/** Sets the default number of digits allocated to an `mp_int` constructed by
+-    `mp_int_init_size()` with `prec == 0`. Allocations are rounded up to
+-    multiples of this value. `MP_DEFAULT_PREC` is the default value. Requires
+-    `ndigits > 0`. */
+-void mp_int_default_precision(mp_size ndigits);
+-
+-/** Sets the number of digits below which multiplication will use the standard
+-    quadratic "schoolbook" multiplication algorithm rather than Karatsuba-Ofman.
+-    Requires `ndigits >= sizeof(mp_word)`. */
+-void mp_int_multiply_threshold(mp_size ndigits);
+-
+@@ -117 +106 @@ mp_result mp_int_init(mp_int z);
+-/** Allocates a fresh zero-valued `mpz_t` on the heap, returning NULL in case
++/** Allocates a fresh zero-valued `imath_int_value` on the heap, returning NULL in case
+diff --git a/imrat.c b/imrat.c
+index 706e5412..2455af33 100644
+--- a/imrat.c
++++ b/imrat.c
+@@ -273 +273 @@ mp_result mp_rat_div(mp_rat a, mp_rat b, mp_rat c) {
+-    mpz_t tmp;
++    imath_int_value tmp;
+@@ -306 +306 @@ mp_result mp_rat_add_int(mp_rat a, mp_int b, mp_rat c) {
+-  mpz_t tmp;
++  imath_int_value tmp;
+@@ -330 +330 @@ mp_result mp_rat_sub_int(mp_rat a, mp_int b, mp_rat c) {
+-  mpz_t tmp;
++  imath_int_value tmp;
+@@ -425 +425 @@ mp_result mp_rat_decompose(mp_rat r, mp_int ipart, mp_rat fpart) {
+-  mpz_t temp[3];
++  imath_int_value temp[3];
+@@ -486 +486 @@ int mp_rat_compare_unsigned(mp_rat a, mp_rat b) {
+-    mpz_t temp[2];
++    imath_int_value temp[2];
+@@ -513 +513 @@ int mp_rat_compare_value(mp_rat r, mp_small n, mp_small d) {
+-  mpq_t tmp;
++  imath_rat_value tmp;
+@@ -574 +574 @@ mp_result mp_rat_to_decimal(mp_rat r, mp_size radix, mp_size prec,
+-  mpz_t temp[3];
++  imath_int_value temp[3];
+@@ -845 +845 @@ mp_result mp_rat_read_cdecimal(mp_rat r, mp_size radix, const char* str,
+-    mpz_t frac;
++    imath_int_value frac;
+@@ -934 +934 @@ static mp_result s_rat_reduce(mp_rat r) {
+-  mpz_t gcd;
++  imath_int_value gcd;
+@@ -989 +989 @@ static mp_result s_rat_combine(mp_rat a, mp_rat b, mp_rat c,
+-    mpz_t temp[2];
++    imath_int_value temp[2];
+diff --git a/imrat.h b/imrat.h
+index b74227f7..abb653f0 100644
+--- a/imrat.h
++++ b/imrat.h
+@@ -39,3 +39,3 @@ typedef struct {
+-  mpz_t   num;    /* Numerator         */
+-  mpz_t   den;    /* Denominator, <> 0 */
+-} mpq_t, *mp_rat;
++  imath_int_value   num;    /* Numerator         */
++  imath_int_value   den;    /* Denominator, <> 0 */
++} imath_rat_value, *mp_rat;
+@@ -61 +61 @@ mp_result mp_rat_init(mp_rat r);
+-/** Allocates a fresh zero-valued `mpq_t` on the heap, returning NULL in case
++/** Allocates a fresh zero-valued `imath_rat_value` on the heap, returning NULL in case

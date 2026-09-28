@@ -58,13 +58,13 @@ if(NOT SymFPU_FOUND_SYSTEM)
     endif()
 
     # stp/symfpu is a fork laid out like the ABC one: main tracks upstream and
-    # the `stp` branch, which this pins a commit of, carries STP's four
+    # the `stp` branch, which this pins a commit of, carries STP's seven
     # correctness fixes as commits. They used to be patch files applied at
     # configure time; as commits each one names what it fixes, and a bump is a
     # rebase in that repository where a conflict says which change upstream has
     # met.
-    set(SymFPU_COMMIT "d358a6defeace0cd44695e7d922fc62c2f8b8ee8")
-    set(SymFPU_CHECKSUM "2557cc598ebde7e6d673cbb7f48a6f0928a18e38bbd3a5b00d126c0f45ba79f1")
+    set(SymFPU_COMMIT "e457a07735f0d1f56cb543a3b3ff8f28551c02db")
+    set(SymFPU_CHECKSUM "f147b4b16cdab398bd3588d75e0fe524f7af0cf675997a62e7e1aff65e868ee4")
 
     ExternalProject_Add(
         SymFPU-EP

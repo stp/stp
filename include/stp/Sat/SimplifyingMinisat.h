@@ -64,9 +64,17 @@ public:
 
   void setFrozen(uint32_t x) override;
 
+  // As in MinisatCore. SimpSolver freezes the assumption variables for the
+  // duration of a solve itself, so elimination never removes one.
+  bool supportsAssumptions() const override { return true; }
+  void unsatAssumptions(const vec_literals& assumps,
+                        std::vector<int>& out) override;
+
 protected:
   bool addClauseInternal(const vec_literals& ps) override;
   bool solveInternal(bool& timeout_expired) override;
+  bool solveWithAssumptionsInternal(const vec_literals& assumps,
+                                    bool& timeout_expired) override;
 };
 }
 

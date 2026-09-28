@@ -2564,6 +2564,4 @@ TEST(b4_c2, one)
   vc_pop(vc);
 
   vc_Destroy(vc);
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }

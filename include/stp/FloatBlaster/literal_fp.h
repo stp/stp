@@ -33,8 +33,9 @@ THE SOFTWARE.
 // The semantics source is shared by construction: both backends
 // instantiate the identical symfpu::core templates. The Kind-to-operation
 // driver (tryEvaluateFpConstant) is the only per-kind code, and it is
-// pinned to the circuit path by an exhaustive per-kind differential in
-// FpConstantFold_Test.
+// pinned to the circuit path by a per-kind differential in
+// FpConstantFold_Test, exhaustive at the narrowest formats over every
+// instance this backend answers.
 
 #include "stp/AST/AST.h"
 
@@ -55,11 +56,12 @@ namespace literal_fp
 // not cover the kind or format, in which case the caller falls back to
 // building and collapsing the circuit.
 //
-// Deliberately not covered: fp.min/fp.max/fp.to_ubv/fp.to_sbv (their
-// unspecified cases route through FpTotalise's machinery) and
-// fp.roundToIntegral (kept on the circuit path so its symfpu guard-bug
-// refusals stay identical). Unsupported formats return null for the same
-// refusal-parity reason.
+// Deliberately not covered: fp.min/fp.max, whose unspecified cases route
+// through FpTotalise's machinery. fp.to_ubv and fp.to_sbv are covered in
+// their totalised four-child form, and only where the answer follows from
+// the operand's class and exponent or symfpu's literal backend cannot trap
+// (the narrow rounding boundary returns null, see the .cpp). Unsupported
+// formats return null for the same refusal-parity reason.
 ASTNode tryEvaluateFpConstant(STPMgr* bm, const ASTNode& n);
 
 } // namespace literal_fp

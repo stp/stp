@@ -124,6 +124,8 @@ std::string sourceSortToSMTLib(const SourceSort& sort)
       // this function.
       return needsQuoting(name) ? "|" + name + "|" : name;
     }
+    case SourceSort::Kind::Real:
+      return "Real";
     case SourceSort::Kind::Unknown:
       return "Unknown";
   }

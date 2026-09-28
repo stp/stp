@@ -60,6 +60,7 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Printer/printers.h"
+#include "stp/Simplifier/CommonFactor.h"
 #include "stp/Simplifier/CommonSubSum.h"
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
@@ -1092,6 +1093,10 @@ bool simplifyInternallyGeneratedFpTermOk(Context& c, unsigned exponentWidth)
   const ASTNode source = c.hf->CreateNode(FP_ISNAN, remainder);
   c.roots.push_back(source);
 
+  // The generated circuit this exercises is SymFPU's; the native circuits
+  // leave the source operation for the bit-blaster and lower nothing here.
+  c.mgr.UserFlags.setNativeFloatingPoint(false);
+
   FpEncodingContext encoding(&c.mgr);
   const ASTNode prepared = encoding.prepare(source);
   const ASTNode lowered = encoding.lowerPrepared(prepared);
@@ -1612,6 +1617,16 @@ bool commonSubSumOk(Context& c, unsigned depth)
   CommonSubSum css(&c.mgr, c.nf, BVPLUS);
   ASTNode g = f;
   return css.topLevel(g).GetKind() != UNDEFINED;
+}
+
+// CommonFactor::topLevel, whose walk over the input and rebuild of it are
+// one loop on the heap.
+bool commonFactorOk(Context& c, unsigned depth)
+{
+  const ASTNode f = c.formula(c.chain(BVPLUS, depth));
+  c.roots.push_back(f);
+  CommonFactor cf(&c.mgr, c.nf);
+  return cf.topLevel(f).GetKind() != UNDEFINED;
 }
 
 // ArrayTransformer, whose three functions -- TransformFormula,
@@ -2867,6 +2882,7 @@ TEST(DeepDag, deep_abstraction_side_constraints)
 }
 
 TEST(DeepDag, deep_common_sub_sum)              { EXPECT_STACK_SAFE(commonSubSumOk, 20000); }
+TEST(DeepDag, deep_common_factor)               { EXPECT_STACK_SAFE(commonFactorOk, 20000); }
 TEST(DeepDag, deep_work_list)          { EXPECT_STACK_SAFE(workListOk, 20000); }
 TEST(DeepDag, deep_remove_unconstrained) { EXPECT_STACK_SAFE(removeUnconstrainedOk, 20000); }
 TEST(DeepDag, deep_simplify_term)      { EXPECT_STACK_SAFE(simplifyTermOk, 20000); }

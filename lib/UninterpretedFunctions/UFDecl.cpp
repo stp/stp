@@ -29,8 +29,9 @@ namespace stp
 
 const char* UFSignature::supportedSortsPhrase()
 {
-  return "only Bool, RoundingMode, FloatingPoint, nonzero-width bit-vector "
-         "sorts and sorts introduced by declare-sort are supported";
+  return "only Bool, RoundingMode, FloatingPoint, Real, nonzero-width "
+         "bit-vector sorts and sorts introduced by declare-sort are "
+         "supported";
 }
 
 bool UFSignature::isSupportedSort(const SourceSort& sort)
@@ -54,9 +55,16 @@ bool UFSignature::isSupportedSort(const SourceSort& sort)
   // pinned to the legal ones, while a declared sort is unbounded and has more
   // elements than any carrier -- which is why there is no pin to write here
   // and why the carrier's capacity is a separate problem.
+  // Real is in RoundingMode's camp on the question that matters here --
+  // equality on the sort is the equality the core has to respect -- but it
+  // reaches that answer without a carrier at all. It has no packed width and
+  // no byte pattern, so it is never compared by its bits: the congruence
+  // relation over Real applications is decided from the exact values the
+  // arithmetic's model holds. See lazyCongruenceLemmasFromModel.
   if (sort.kind() == SourceSort::Kind::Bool ||
       sort.kind() == SourceSort::Kind::RoundingMode ||
       sort.kind() == SourceSort::Kind::FloatingPoint ||
+      sort.kind() == SourceSort::Kind::Real ||
       sort.kind() == SourceSort::Kind::Uninterpreted)
     return true;
   return sort.kind() == SourceSort::Kind::BitVector &&
@@ -79,6 +87,7 @@ SourceSort UFSignature::loweringSort(const SourceSort& sort)
 bool UFSignature::validate(const std::vector<SourceSort>& domain,
                            const SourceSort& codomain, std::string* error)
 {
+
   if (domain.empty())
   {
     if (error != NULL)
