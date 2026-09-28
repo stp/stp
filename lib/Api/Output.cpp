@@ -37,8 +37,10 @@ THE SOFTWARE.
 #include "Internal.h"
 
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <streambuf>
+#include <utility>
 
 namespace stp
 {
@@ -126,14 +128,34 @@ private:
   bool diagnostic_;
 };
 
+// A dispatching buffer in front of the stream's current one, unless one is
+// there already. An application may swap the stream's buffer after the
+// library first ran -- a scoped redirection of std::cout, say -- and the
+// engine's output would then reach that buffer rather than the solver's
+// sinks; so every route checks, and puts a dispatching buffer in front of
+// the new one, which unrouted writes still reach. One per buffer seen,
+// reused, and never freed: the streams may write through them until the
+// process ends.
+void ensure_dispatch(std::ostream& stream, bool diagnostic)
+{
+  if (dynamic_cast<DispatchBuf*>(stream.rdbuf()) != nullptr)
+    return;
+  static std::mutex lock;
+  static auto* const made = new std::map<std::pair<std::streambuf*, bool>, DispatchBuf*>();
+  std::lock_guard<std::mutex> hold(lock);
+  std::streambuf* const current = stream.rdbuf();
+  if (dynamic_cast<DispatchBuf*>(current) != nullptr)
+    return;
+  DispatchBuf*& wrapper = (*made)[std::make_pair(current, diagnostic)];
+  if (wrapper == nullptr)
+    wrapper = new DispatchBuf(current, diagnostic);
+  stream.rdbuf(wrapper);
+}
+
 void install_dispatch()
 {
-  static std::once_flag once;
-  std::call_once(once, [] {
-    // Never freed: the streams write through them until the process ends.
-    std::cout.rdbuf(new DispatchBuf(std::cout.rdbuf(), false));
-    std::cerr.rdbuf(new DispatchBuf(std::cerr.rdbuf(), true));
-  });
+  ensure_dispatch(std::cout, false);
+  ensure_dispatch(std::cerr, true);
 }
 
 void observe_fatal(const char* str, void* opaque)

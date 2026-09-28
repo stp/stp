@@ -339,6 +339,26 @@ TEST(Runs, the_engine_prints_nowhere_but_the_sinks)
   EXPECT_NE(testing::internal::GetCapturedStderr().find("Difficulty Initially"), std::string::npos);
 }
 
+// An application that redirects std::cout after the library first ran --
+// a scoped redirection -- keeps its redirection for its own writes, and the
+// engine's output still reaches the solver's sink: it used to reach the
+// application's buffer instead.
+TEST(Runs, the_sinks_survive_a_redirected_stdout)
+{
+  TermManager tm;
+  Solver s(tm);
+  std::string sink;
+  s.set_output_sink([&](std::string_view text) { sink.append(text); });
+  std::ostringstream captured;
+  std::streambuf* const saved = std::cout.rdbuf(captured.rdbuf());
+  s.parse_smt2("(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #xc8))(check-sat)",
+               ParseMode::EXECUTE);
+  std::cout << "the application's own line\n";
+  std::cout.rdbuf(saved);
+  EXPECT_EQ(sink, "sat\n");
+  EXPECT_EQ(captured.str(), "the application's own line\n");
+}
+
 TEST(Runs, every_cnf_reaches_the_cnf_sink)
 {
   TermManager tm;
