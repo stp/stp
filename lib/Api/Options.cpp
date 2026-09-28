@@ -494,6 +494,53 @@ OptionsImpl::OptionsImpl()
 
 namespace
 {
+// A solver resolves every entry at every check (apply_all_options), so what
+// resolved() and the default test need from the table is looked up once: the
+// entry each one follows or is implied by, the composite switches whose
+// `implies` name it (in the order resolved() consults them), and its default
+// value, with whether that value prints as the row's default text.
+struct ResolutionIndex
+{
+  static constexpr std::size_t none = static_cast<std::size_t>(-1);
+  std::vector<std::size_t> follows;
+  std::vector<std::size_t> implied_by;
+  std::vector<std::vector<std::pair<std::size_t, const char*>>> composites;
+  std::vector<OptionValue> defaults;
+  std::vector<bool> default_prints_as_default;
+};
+
+const ResolutionIndex& resolution_index()
+{
+  static const ResolutionIndex index = [] {
+    ResolutionIndex r;
+    r.follows.assign(kNumOptionSpecs, ResolutionIndex::none);
+    r.implied_by.assign(kNumOptionSpecs, ResolutionIndex::none);
+    r.composites.resize(kNumOptionSpecs);
+    for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
+    {
+      const OptionSpec& spec = kOptionSpecs[i];
+      if (spec.follows != nullptr)
+        if (const OptionSpec* other = find_option(spec.follows))
+          r.follows[i] = option_index(other);
+      if (spec.implied_by_option != nullptr)
+        if (const OptionSpec* other = find_option(spec.implied_by_option))
+          r.implied_by[i] = option_index(other);
+      r.defaults.push_back(option_default(spec));
+      r.default_prints_as_default.push_back(option_text(spec, r.defaults.back()) == spec.default_text);
+    }
+    for (std::size_t j = 0; j < kNumOptionSpecs; ++j)
+      for (std::size_t p = 0; p < kOptionSpecs[j].num_implies; ++p)
+        for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
+          if (std::strcmp(kOptionSpecs[j].implies[2 * p], kOptionSpecs[i].name) == 0)
+            r.composites[i].emplace_back(j, kOptionSpecs[j].implies[2 * p + 1]);
+    return r;
+  }();
+  return index;
+}
+} // namespace
+
+namespace
+{
 const OptionSpec& spec_of(std::string_view name)
 {
   const OptionSpec* s = find_option(name);
@@ -704,33 +751,25 @@ OptionValue OptionsImpl::resolved(std::size_t index) const
   const OptionSpec& spec = kOptionSpecs[index];
   if (is_set[index])
     return values[index];
-  if (spec.follows != nullptr)
+  const ResolutionIndex& r = resolution_index();
+  const std::size_t follows = r.follows[index];
+  if (follows != ResolutionIndex::none && is_set[follows])
+    return values[follows];
+  if (r.implied_by[index] != ResolutionIndex::none)
   {
-    const OptionSpec* other = find_option(spec.follows);
-    if (other != nullptr && is_set[option_index(other)])
-      return values[option_index(other)];
-  }
-  if (spec.implied_by_option != nullptr)
-  {
-    const OptionSpec* other = find_option(spec.implied_by_option);
-    if (other != nullptr)
-    {
-      const OptionValue ov = resolved(option_index(other));
-      if (ov.index() == 0 && std::get<bool>(ov))
-        return parse_option_text(spec, spec.implied_by_value);
-    }
+    const OptionValue ov = resolved(r.implied_by[index]);
+    if (ov.index() == 0 && std::get<bool>(ov))
+      return parse_option_text(spec, spec.implied_by_value);
   }
   // composite switches: an entry named in another set entry's `implies`
-  for (std::size_t j = 0; j < kNumOptionSpecs; ++j)
+  for (const auto& [j, value] : r.composites[index])
   {
-    if (!is_set[j] || kOptionSpecs[j].num_implies == 0)
+    if (!is_set[j])
       continue;
     const OptionValue& jv = values[j];
     if (jv.index() != 0 || !std::get<bool>(jv))
       continue;
-    for (std::size_t p = 0; p < kOptionSpecs[j].num_implies; ++p)
-      if (std::strcmp(kOptionSpecs[j].implies[2 * p], spec.name) == 0)
-        return parse_option_text(spec, kOptionSpecs[j].implies[2 * p + 1]);
+    return parse_option_text(spec, value);
   }
   return values[index];
 }
@@ -1273,6 +1312,7 @@ bool apply_option_to_engine(EngineTarget& t, std::size_t index, const OptionSpec
 
 void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
 {
+  const ResolutionIndex& index = resolution_index();
   // What the engine holds for the solver, entry by entry: an unset entry at
   // its default is skipped unless the solver's last application left the
   // engine elsewhere (it followed another entry, or was set and reset).
@@ -1289,7 +1329,11 @@ void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
       continue;
     }
     const OptionValue r = o.resolved(i);
-    const bool at_default = !o.is_set[i] && option_text(spec, r) == spec.default_text;
+    // printing a value is the test; an entry holding its default value (most
+    // of them) prints as the default printed, which is known
+    const bool at_default =
+        !o.is_set[i] && (r == index.defaults[i] ? static_cast<bool>(index.default_prints_as_default[i])
+                                                : option_text(spec, r) == spec.default_text);
     if (!force_all && at_default && !(off_default != nullptr && (*off_default)[i]))
       continue;
     // a default that the build cannot honour (a backend it lacks) stays unapplied
