@@ -560,3 +560,23 @@ def test_close_and_lifetime():
     gc.collect()
     s3 = Solver()  # a collected solver frees its slot too
     s3.close()
+
+
+def test_a_solver_whose_options_were_touched_is_freed_at_once():
+    # the cached options view holds the solver weakly: a strong reference back
+    # made the solver cyclic garbage, freed only by the collector
+    import gc
+    import weakref
+    gc.disable()
+    try:
+        s = Solver()
+        s.set(max_time=1000)
+        view = s.options
+        assert view.get("max-time") is not None
+        r = weakref.ref(s)
+        del s
+        assert r() is None
+        with pytest.raises(StateError):
+            view.get("max-time")
+    finally:
+        gc.enable()

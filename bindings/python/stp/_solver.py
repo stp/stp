@@ -32,6 +32,7 @@ import io
 import os
 import sys
 import threading
+import weakref
 
 from . import _core
 from ._core import (Error, ArgumentError, SortMismatch, NotAValue, NoModel, Unsupported, OptionError,
@@ -133,12 +134,21 @@ def _duration_ms(text):
 class _LiveBackend:
     """The live options of a solver, with the same method names as a standalone
     OptionsHandle. It calls the core's methods explicitly: the Solver subclass overrides
-    set_args, reset and others with the solver-level meanings."""
+    set_args, reset and others with the solver-level meanings. The solver is held weakly:
+    the solver caches this view, and a strong reference back made every solver whose
+    options were touched cyclic garbage, freed only by the collector."""
 
-    __slots__ = ("_s",)
+    __slots__ = ("_ref",)
 
     def __init__(self, solver):
-        self._s = solver
+        self._ref = weakref.ref(solver)
+
+    @property
+    def _s(self):
+        solver = self._ref()
+        if solver is None:
+            raise _core.StateError("the solver is gone")
+        return solver
 
     def set_str(self, n, v):
         return _core.SolverHandle.set_str(self._s, n, v)

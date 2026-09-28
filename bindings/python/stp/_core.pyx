@@ -297,6 +297,7 @@ cdef enum:
     DEFER_STATS = 4
     DEFER_SOLVER = 5
     DEFER_TM = 6
+    DEFER_BOX = 7
 
 _deferred = []
 _deferred_lock = threading.Lock()
@@ -335,6 +336,8 @@ cdef void _release_kind(int kind, void* h):
         stp_solver_delete(<stp_solver>h)
     elif kind == DEFER_TM:
         stp_tm_release(<stp_tm>h)
+    elif kind == DEFER_BOX:
+        free(h)
 
 
 cdef void _drain_idle():
@@ -1507,7 +1510,11 @@ def option_info(name):
 # ----------------------------------------------------------------- callbacks
 
 cdef cbool _terminator_cb(void* user) noexcept with gil:
-    cdef SolverHandle s = <SolverHandle>user
+    cdef CallbackBox* box = <CallbackBox*>user
+    cdef SolverHandle s
+    if box.owner == NULL:
+        return 0
+    s = <SolverHandle>box.owner
     try:
         if s._terminator is None:
             return 0
@@ -1518,7 +1525,11 @@ cdef cbool _terminator_cb(void* user) noexcept with gil:
 
 
 cdef void _sink_cb(const char* text, size_t n, void* user) noexcept with gil:
-    cdef SolverHandle s = <SolverHandle>user
+    cdef CallbackBox* box = <CallbackBox*>user
+    cdef SolverHandle s
+    if box.owner == NULL:
+        return
+    s = <SolverHandle>box.owner
     try:
         if s._sink is not None:
             s._sink(PyBytes_FromStringAndSize(text, n).decode("utf-8", "replace"))
@@ -1527,7 +1538,11 @@ cdef void _sink_cb(const char* text, size_t n, void* user) noexcept with gil:
 
 
 cdef void _out_sink_cb(const char* text, size_t n, void* user) noexcept with gil:
-    cdef SolverHandle s = <SolverHandle>user
+    cdef CallbackBox* box = <CallbackBox*>user
+    cdef SolverHandle s
+    if box.owner == NULL:
+        return
+    s = <SolverHandle>box.owner
     try:
         if s._out_sink is not None:
             s._out_sink(PyBytes_FromStringAndSize(text, n).decode("utf-8", "replace"))
@@ -1536,7 +1551,11 @@ cdef void _out_sink_cb(const char* text, size_t n, void* user) noexcept with gil
 
 
 cdef void _fatal_cb(const char* message, void* user) noexcept with gil:
-    cdef SolverHandle s = <SolverHandle>user
+    cdef CallbackBox* box = <CallbackBox*>user
+    cdef SolverHandle s
+    if box.owner == NULL:
+        return
+    s = <SolverHandle>box.owner
     try:
         if s._fatal_handler is not None:
             s._fatal_handler(PyBytes_FromStringAndSize(message, strlen(message))
@@ -1550,7 +1569,11 @@ _CNF_SCOPES = {STP_CNF_WHOLE: "whole", STP_CNF_PARTIAL: "partial",
 
 
 cdef void _cnf_cb(const char* dimacs, size_t n, stp_cnf_scope scope, void* user) noexcept with gil:
-    cdef SolverHandle s = <SolverHandle>user
+    cdef CallbackBox* box = <CallbackBox*>user
+    cdef SolverHandle s
+    if box.owner == NULL:
+        return
+    s = <SolverHandle>box.owner
     try:
         if s._cnf_sink is not None:
             s._cnf_sink(PyBytes_FromStringAndSize(dimacs, n), _CNF_SCOPES.get(<int>scope, "whole"))
@@ -1634,6 +1657,10 @@ cdef class SolverHandle:
 
     def __cinit__(self, *args, **kwargs):
         self._s = NULL
+        self._box = <CallbackBox*>malloc(sizeof(CallbackBox))
+        if self._box == NULL:
+            raise MemoryError()
+        self._box.owner = <void*>self
         self._m = None
         self._terminator = None
         self._sink = None
@@ -1654,13 +1681,21 @@ cdef class SolverHandle:
 
     def __dealloc__(self):
         cdef Manager m
+        if self._box != NULL:
+            self._box.owner = NULL  # a callback from here on finds no solver
         if self._s != NULL:
             m = self._m
             if m is not None and not m._busy:
                 stp_solver_delete(self._s)
+                free(self._box)
             else:
+                # the box outlives the deferred delete, which may still call back
                 _defer(self._key, DEFER_SOLVER, <void*>self._s)
+                _defer(self._key, DEFER_BOX, <void*>self._box)
             self._s = NULL
+        else:
+            free(self._box)
+        self._box = NULL
 
     cdef int _live(self) except -1:
         if self._s == NULL:
@@ -2035,7 +2070,7 @@ cdef class SolverHandle:
             if stp_solver_set_terminator(self._s, NULL, NULL) != STP_OK:
                 self._m._fail("stp_solver_set_terminator")
         else:
-            if stp_solver_set_terminator(self._s, _terminator_cb, <void*>self) != STP_OK:
+            if stp_solver_set_terminator(self._s, _terminator_cb, <void*>self._box) != STP_OK:
                 self._m._fail("stp_solver_set_terminator")
 
     def statistics(self):
@@ -2197,7 +2232,7 @@ cdef class SolverHandle:
         if fn is None:
             stp_solver_set_diagnostic_sink(self._s, NULL, NULL)
         else:
-            stp_solver_set_diagnostic_sink(self._s, _sink_cb, <void*>self)
+            stp_solver_set_diagnostic_sink(self._s, _sink_cb, <void*>self._box)
 
     def set_output_sink(self, fn):
         self._live()
@@ -2207,7 +2242,7 @@ cdef class SolverHandle:
         if fn is None:
             stp_solver_set_output_sink(self._s, NULL, NULL)
         else:
-            stp_solver_set_output_sink(self._s, _out_sink_cb, <void*>self)
+            stp_solver_set_output_sink(self._s, _out_sink_cb, <void*>self._box)
 
     def set_fatal_error_handler(self, fn):
         self._live()
@@ -2217,7 +2252,7 @@ cdef class SolverHandle:
         if fn is None:
             stp_solver_set_fatal_error_handler(self._s, NULL, NULL)
         else:
-            stp_solver_set_fatal_error_handler(self._s, _fatal_cb, <void*>self)
+            stp_solver_set_fatal_error_handler(self._s, _fatal_cb, <void*>self._box)
 
     def set_cnf_sink(self, fn):
         self._live()
@@ -2227,7 +2262,7 @@ cdef class SolverHandle:
         if fn is None:
             stp_solver_set_cnf_sink(self._s, NULL, NULL)
         else:
-            stp_solver_set_cnf_sink(self._s, _cnf_cb, <void*>self)
+            stp_solver_set_cnf_sink(self._s, _cnf_cb, <void*>self._box)
 
 
 # ----------------------------------------------------------------- Model

@@ -510,8 +510,15 @@ cdef class OptionsHandle:
     cdef stp_options _o
     cdef int _fail(self, const char* fn) except -1
 
+# What a solver's C callbacks are given as their user data: the SolverHandle,
+# borrowed, until it is deallocated -- a delete the manager's busy state defers
+# may still call back after that, and must find nothing.
+cdef struct CallbackBox:
+    void* owner
+
 cdef class SolverHandle:
     cdef stp_solver _s
+    cdef CallbackBox* _box
     cdef Manager _m
     cdef size_t _key
     cdef object _terminator
