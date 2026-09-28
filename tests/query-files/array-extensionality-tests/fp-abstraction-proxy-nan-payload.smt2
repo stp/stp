@@ -1,3 +1,4 @@
+; REQUIRES: cadical
 ; RUN: %solver -d --cadical --array-equality --fp-abstraction=1 --uf-bv-term-abstraction=on --bv-abstraction-width=8 --size-reducing-only --array-ackermann-budget=0 %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; Reduced from a fuzzer failure. The floating-point abstraction replaces v
