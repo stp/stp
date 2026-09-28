@@ -51,6 +51,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/Extensionality/ExtChecker.h"
+#include "stp/Globals/Globals.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/ToSat/ToSATBase.h"
 #include <map>
@@ -445,6 +446,18 @@ public:
 
   bool hasPendingLemma() const { return pendingLemmaValid; }
 
+  // How many lemmas this solve encoded that count a declared sort's elements
+  // by the patterns of its carrier (ExtConflict::countsDeclaredSort). An
+  // unsat that had them in the solver may be an artefact of that count
+  // rather than a refutation, and the drivers withhold it.
+  size_t declaredSortLemmasEncoded() const { return declaredSortLemmas; }
+
+  // A driver's answer with that taken into account: an unsat is withheld
+  // (unknown, with the reason recorded) when `counted` says a lemma counting
+  // a declared sort by its carrier was in the solver.
+  SOLVER_RETURN_TYPE withholdDeclaredSortUnsat(SOLVER_RETURN_TYPE result,
+                                               bool counted) const;
+
   // Encode every pending lemma into the persistent incremental SAT
   // solver, then clear them. The lemma premise/conclusion atoms are
   // reified over the SAT variables of already-encoded symbols -- the
@@ -702,6 +715,9 @@ private:
 
   bool pendingLemmaValid;
   std::vector<ExtConflict> pendingLemmas;
+  // The lemmas this solve encoded that count a declared sort by its carrier
+  // (see declaredSortLemmasEncoded).
+  size_t declaredSortLemmas = 0;
 
   // Encode one lemma as the clause guard OR NOT p1 OR ... OR NOT pk OR
   // conclusion (guard per encodePendingLemmas, absent when -1); the

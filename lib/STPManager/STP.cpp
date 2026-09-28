@@ -2078,6 +2078,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
         ext->reportLemmaStats();
       reportBVAbstractionRecords();
       CountersAndStats("print_func_stats", bm);
+      if (ext != NULL)
+        res = ext->withholdDeclaredSortUnsat(res,
+                                             ext->declaredSortLemmasEncoded() != 0);
       return res;
     }
 

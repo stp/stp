@@ -90,6 +90,16 @@ struct CheckerState
                : synthetic[id - graph.accesses.size()];
   }
 
+  // An explicit cell of a declared sort's constant array: its index is a
+  // carrier pattern, which no term need name (see
+  // ExtConflict::countsDeclaredSort).
+  bool declaredCell(size_t id) const
+  {
+    return id >= graph.accesses.size() &&
+           access(id).site.GetSourceSort().index().kind() ==
+               SourceSort::Kind::Uninterpreted;
+  }
+
   CheckerState(const ExtGraph& g, ExtModelView& m, bool ev)
       : graph(g), model(m), recordEvents(ev), materializedGuardCount(0)
   {
@@ -223,6 +233,7 @@ struct CheckerState
         c.rightGuards = materializeGuards(candidatePath);
         c.constTermA = kit->second.defaultTerm;
         c.constNameA = kit->second.defaultName;
+        c.countsDeclaredSort = declaredCell(accessId);
         result.stats["conflicts"]++;
         result.stats["rule_K"]++;
         event(ExtEvent::CONFLICT, rule, source, destination, accessId);
@@ -254,6 +265,7 @@ struct CheckerState
                      destination);
         c.leftGuards = materializeGuards(otherPath->second);
         c.rightGuards = materializeGuards(candidatePath);
+        c.countsDeclaredSort = declaredCell(otherId) && declaredCell(accessId);
         result.stats["conflicts"]++;
         event(ExtEvent::CONFLICT, rule, source, destination, accessId);
         result.conflicts.push_back(std::move(c));
@@ -996,6 +1008,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
         c.constNameA = it->second.defaultName;
         c.constTermB = other->second.defaultTerm;
         c.constNameB = other->second.defaultName;
+        c.countsDeclaredSort = index.kind() == SourceSort::Kind::Uninterpreted;
         st.result.stats["conflicts"]++;
         st.result.stats["rule_K_prime"]++;
         st.event(ExtEvent::CONFLICT, "K_PRIME", it->first, reached[i], 0);

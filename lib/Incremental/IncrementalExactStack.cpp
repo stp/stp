@@ -861,6 +861,13 @@ IncrementalSolver::Impl::exactStackCheckSat(
                     addMass(permanentUnitMass, theoryMass));
   stageSemanticLiveStack(assertionsSMT2, ASTVec(1, inputToSat));
 
+  // An unsat a lemma counting a declared sort by its carrier may have reached
+  // (see declaredSortBlocks) is withheld before anything can record it.
+  if (ext != NULL && ext->declaredSortLemmasEncoded() != 0)
+    declaredSortBlocks.insert(blockLit);
+  if (ext != NULL)
+    res = ext->withholdDeclaredSortUnsat(res, declaredSortBlocks.count(blockLit) != 0);
+
   // The whole round rode one block literal, so an unsat answer has no
   // per-level or per-assumption granularity: the core is everything.
   if (res == SOLVER_UNSATISFIABLE)

@@ -371,6 +371,14 @@ struct ExtConflict
   Shape shape = CONGRUENCE;
   ASTNode constTermA, constTermB; // the defaults, theory layer
   ASTNode constNameA, constNameB; // the defaults, abstract layer
+
+  // Whether the lemma counts a declared sort's elements by the patterns of
+  // its carrier: rule K' over a declared index sort takes some element no
+  // write names to exist, and a conflict among explicit cells of a declared
+  // sort's constant arrays takes a carrier pattern no term names to be an
+  // element. A model may give a declared sort fewer elements than that, so a
+  // refutation that used such a lemma is not one.
+  bool countsDeclaredSort = false;
 };
 
 struct ExtEvent

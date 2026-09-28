@@ -316,6 +316,34 @@ TEST(ConstArrays, disequality_over_a_small_index_sort)
   }
 }
 
+// A model may give a declared sort fewer elements than its carrier has
+// patterns: two writes can cover the sort, so an equality of constant arrays
+// with different defaults through them is not refuted -- while a read at a
+// term's index, which names an element, still refutes.
+TEST(ConstArrays, a_declared_index_sort_is_not_counted_by_its_carrier)
+{
+  TermManager tm;
+  Sort S = tm.declare_sort("S");
+  Sort A = tm.mk_array_sort(S, tm.mk_bv_sort(1));
+  Term u = tm.declare("u", S), v = tm.declare("v", S);
+  Term zero = tm.mk_bv(1, 0), one = tm.mk_bv(1, 1);
+  {
+    Solver s(tm);
+    s.add(u != v);
+    s.add(tm.mk_const_array(A, zero) == store(store(tm.mk_const_array(A, one), u, zero), v, zero));
+    const Result r = s.check_sat();
+    EXPECT_TRUE(r.is_unknown());
+    EXPECT_EQ(r.reason(), UnknownReason::INCOMPLETE);
+  }
+  {
+    Solver s(tm);
+    Term a = tm.declare("a", A);
+    s.add(a == tm.mk_const_array(A, zero));
+    s.add(a[u] == one);
+    EXPECT_TRUE(s.check_sat().is_unsat());
+  }
+}
+
 TEST(ConstArrays, equality_between_constant_arrays_is_equality_of_defaults)
 {
   Arrays f;

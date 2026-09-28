@@ -282,6 +282,11 @@ Limits of the alpha
    ``parse_term`` do not see it.
 -  A value of a declared sort prints as ``S!k``, which the parser does not
    read back.
+-  A constant array indexed by a declared sort: a refutation that counts the
+   sort's elements by its carrier (two constant arrays with different
+   defaults, one reaching the other through writes) is answered unknown
+   (``INCOMPLETE``), since a model may give the sort just the elements the
+   writes name.
 -  A function over Reals is modelled from the applications the check saw; one
    it never saw completes to the codomain's default. A Real argument with a
    bit-vector result under a comparison is refused at assertion.

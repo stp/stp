@@ -849,6 +849,7 @@ void ExtensionalityContext::beginSolve()
   readTransformComplete = false;
   pendingLemmaValid = false;
   pendingLemmas.clear();
+  declaredSortLemmas = 0;
   eqLitCache.clear();
   lastObserved.clear();
 }
@@ -2107,9 +2108,31 @@ void ExtensionalityContext::encodePendingLemmas(SATSolver& solver,
   if ((int)pendingLemmas.size() > lemmasInLargestRound)
     lemmasInLargestRound = (int)pendingLemmas.size();
   for (size_t i = 0; i < pendingLemmas.size(); i++)
+  {
     encodeOneLemma(pendingLemmas[i], solver, tosat, guardLit);
+    if (pendingLemmas[i].countsDeclaredSort)
+      declaredSortLemmas++;
+  }
   pendingLemmas.clear();
   pendingLemmaValid = false;
+}
+
+// See the header. SMT-LIB lets a model give a declared sort any positive
+// number of elements, so a refutation that took its carrier's every pattern
+// to be one, or took one no write names to exist, refuted only the models of
+// that size.
+SOLVER_RETURN_TYPE
+ExtensionalityContext::withholdDeclaredSortUnsat(SOLVER_RETURN_TYPE result,
+                                                 bool counted) const
+{
+  if (result != SOLVER_UNSATISFIABLE || !counted)
+    return result;
+  bm->noteUnknown(UnknownReason::Incomplete,
+                  "array-equality: a lemma about a constant array indexed by a "
+                  "declared sort counted the sort's elements by the patterns "
+                  "of its carrier, which a model need not have, so this unsat "
+                  "may be an artefact of that count rather than a refutation");
+  return bm->unknownResult();
 }
 
 // See the header. Every figure is cumulative over the context lifetime -- a
