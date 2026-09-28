@@ -2,7 +2,7 @@
 
 The Python API of [STP](https://github.com/stp/stp): the `stp` package, a
 z3py-style shell over the compiled module `stp._core`, which calls STP's C API
-(`<stp/stp.h>`). `docs/api3.rst` in the STP tree is the guide to it.
+(`<stp/stp.h>`). `docs/api.rst` in the STP tree is the guide to it.
 
 ## Two ways to install it
 

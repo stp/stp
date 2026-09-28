@@ -8,7 +8,7 @@ component of STP. The headers that go with them live under
 -  ``AbsRefineCounterExample``: Functions related to abstraction
    refinement and counterexample construction.
 -  ``Api``: The public API, ``stp/stp.hpp`` and ``stp/stp.h`` (see
-   :doc:`api3`): the C++ implementation, the C layer over it under
+   :doc:`api`): the C++ implementation, the C layer over it under
    ``c/``, and the tables under ``tables/`` from which every language's
    kinds, options, errors and statistics are generated (``gen/``).
 -  ``AST``: Implements the abstract syntax tree for parsed solver

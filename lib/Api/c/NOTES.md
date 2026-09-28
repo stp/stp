@@ -81,7 +81,7 @@ leaves to the implementation.
 
 1. **`STP_API`** follows the engine's `DLL_PUBLIC` convention: on Windows it
    is a `__declspec` only when libstp is a DLL (`STP_SHARED_LIB`), `dllexport`
-   while the API's own objects are compiled (`STP_API3_BUILDING`, not
+   while the API's own objects are compiled (`STP_API_BUILDING`, not
    `STP_EXPORTS`, which libstp2 defines too) and `dllimport` otherwise.
 2. **The enums** `stp_kind`, `stp_error_code` and `stp_option` come from the
    generated headers `<stp/api/gen/{kinds,errors,options}.h>` instead of being

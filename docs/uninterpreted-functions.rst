@@ -4,7 +4,7 @@ Uninterpreted functions
 A ``declare-fun`` with a nonempty domain declares an uninterpreted function,
 and any logic whose name contains ``UF`` enables the support; the
 ``--uninterpreted-functions`` option enables it for an input whose logic
-omits it. Through the API (:doc:`api3`) the ``uninterpreted-functions``
+omits it. Through the API (:doc:`api`) the ``uninterpreted-functions``
 option's default, ``auto``, engages it whenever the assertions contain an
 application. Arguments and results may be ``Bool``, bit-vectors, declared
 sorts, ``RoundingMode``, floating-point sorts or ``Real``. Array sorts are

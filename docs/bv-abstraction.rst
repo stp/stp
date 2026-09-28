@@ -355,7 +355,7 @@ distribution that an aggregate hides.
 Bit-blasting is where those counters are filled, so it is a cheap way to find
 which files in a corpus contain arithmetic wide enough to abstract at all.
 
-Everything above is also readable through the API (:doc:`api3`): a solver's
+Everything above is also readable through the API (:doc:`api`): a solver's
 statistics carry the totals under ``bv.`` (``bv.candidates.*``,
 ``bv.abstracted.*`` and the rest) and the per-family breakdown as
 ``bv.schema_group.<group>.lemmas``, and the ``bv-term-abstraction*`` options

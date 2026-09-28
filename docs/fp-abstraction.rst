@@ -587,7 +587,7 @@ end in the test suite.
 Through the API
 ---------------
 
-Every option above is an option of the API (:doc:`api3`) under the same
+Every option above is an option of the API (:doc:`api`) under the same
 name without the leading dashes, with the same defaults, set in the
 ``Options`` a solver is made with or on the solver itself. The operation
 sets take the names the command line does (``set_names`` takes them as a

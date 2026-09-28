@@ -30,7 +30,7 @@ THE SOFTWARE.
 //
 // Where kind() reports a lowered form even under simplify = false the
 // expectation is marked "lowered:" (the engine has no node of its own for
-// them; docs/api3.rst lists this among the limits).
+// them; docs/api.rst lists this among the limits).
 
 #include "api_common.hpp"
 

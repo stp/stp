@@ -8,7 +8,7 @@ z3py-style shell). The three surfaces share one object model and one option
 registry, so a program reads the same way in each. ``libstp`` carries this API
 alone, and STP's own command line, bindings and tests are written against it.
 The 2.x interface survives as ``libstp2``, a separate compatibility library
-implemented over the C API (see :ref:`api3-compat`).
+implemented over the C API (see :ref:`api-compat`).
 
 Objects
 -------
@@ -226,7 +226,7 @@ own use of these calls, is a complete example.
    s.set_output_sink(sys.stdout.write)
    s.from_string("x : BITVECTOR(8); QUERY(x = x);", format="cvc", mode="execute")   # Valid.
 
-.. _api3-compat:
+.. _api-compat:
 
 Compatibility with 2.x
 ----------------------

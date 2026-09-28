@@ -58,7 +58,7 @@ the literal argument of ``to_fp``. In ``QF_UFLRA`` a function may take and
 return Reals. How its congruence is decided is described in
 :doc:`uninterpreted-functions`, under "Real positions".
 
-The C++, C and Python APIs (:doc:`api3`) build the same terms. In C++
+The C++, C and Python APIs (:doc:`api`) build the same terms. In C++
 the sort is ``TermManager::mk_real_sort`` and a constant ``mk_real``, from
 an integer, a numerator and denominator, or a literal such as ``"-3/7"``
 or ``"0.25"``; the arithmetic is the ordinary operators and the

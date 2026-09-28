@@ -94,14 +94,14 @@ extern "C" {
 /* Export macro, with the engine's convention (DLL_PUBLIC in
  * stp/Util/Attributes.h): on Windows a __declspec only when libstp is a DLL
  * (STP_SHARED_LIB, which STP's CMake package gives its consumers), dllexport
- * while the API itself is compiled (STP_API3_BUILDING) and dllimport
+ * while the API itself is compiled (STP_API_BUILDING) and dllimport
  * otherwise; nothing for a static libstp or when STP_STATIC is defined.
  * Elsewhere, default visibility. */
 #ifndef STP_API
 #if defined(_WIN32) || defined(__CYGWIN__)
 #if defined(STP_STATIC) || !defined(STP_SHARED_LIB)
 #define STP_API
-#elif defined(STP_API3_BUILDING)
+#elif defined(STP_API_BUILDING)
 #define STP_API __declspec(dllexport)
 #else
 #define STP_API __declspec(dllimport)

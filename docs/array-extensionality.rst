@@ -25,7 +25,7 @@ Command line::
 
     stp --array-equality file.smt2
 
-API (:doc:`api3`): the ``array-equality`` option. Its default, ``auto``,
+API (:doc:`api`): the ``array-equality`` option. Its default, ``auto``,
 lets an equality between whole arrays built through the API engage the
 procedure by itself; ``on`` forces the procedure on, as
 ``--array-equality`` does, and is what a script read through the API

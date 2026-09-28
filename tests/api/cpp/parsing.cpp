@@ -99,7 +99,7 @@ TEST(Parsing, smt2_declare_and_assert)
   EXPECT_EQ(tm.symbols().size(), 3u);
   EXPECT_EQ(s.assertions().size(), 5u);
   // a script's check-sat is ignored in this mode, but the frontend conjoins
-  // the level's assertions on the way (a limit docs/api3.rst lists)
+  // the level's assertions on the way (a limit docs/api.rst lists)
   testing::internal::CaptureStdout();
   s.parse_smt2("(check-sat)\n");
   EXPECT_TRUE(testing::internal::GetCapturedStdout().empty());
@@ -156,7 +156,7 @@ TEST(Parsing, execute_mode_runs_the_script)
   EXPECT_NE(out.find("define-fun"), std::string::npos) << out; // get-model printed
   EXPECT_EQ(s.assertions().size(), 1u);
   // the script's check is the frontend's, and leaves the API no model (a
-  // limit docs/api3.rst lists); the API's own check starts afresh and agrees
+  // limit docs/api.rst lists); the API's own check starts afresh and agrees
   API_EXPECT_ERROR(ErrorCode::NO_MODEL, s.model());
   EXPECT_TRUE(s.check_sat().is_sat());
   EXPECT_EQ(s.model().uint64_value(*tm.symbol("a")), 42u);

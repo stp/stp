@@ -86,7 +86,7 @@ add_dependencies(stpapi ASTKind_header stp_api_tables)
 # declarations are dllexport while libstp is a DLL (see STP_API in stp.h).
 # Not STP_EXPORTS, which libstp2 defines too and would then export libstp's
 # functions as its own.
-target_compile_definitions(stpapi PRIVATE STP_API3_BUILDING)
+target_compile_definitions(stpapi PRIVATE STP_API_BUILDING)
 # The option registry and capabilities() answer for the build they are in:
 # the same HiGHS macros the LRA objects and the stp binary see.
 if(ENABLE_HIGHS)

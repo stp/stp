@@ -86,7 +86,7 @@ make the ``Expr`` used to request the value independent.
 The 3.x API and concurrency
 ---------------------------
 
-The 3.x API (:doc:`api3`) has a lifetime model of its own, in which terms and
+The 3.x API (:doc:`api`) has a lifetime model of its own, in which terms and
 solvers keep their term manager alive; ``stp.h`` states the rules for C
 handles.  None of it extends to ``libstp2``'s raw pointers, and none of it
 implies a dangling-pointer diagnostic for them.

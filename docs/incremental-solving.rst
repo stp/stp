@@ -73,7 +73,7 @@ model commands then decline rather than answer from a stack that no longer
 exists: ``get-value`` replies ``unsupported``, while ``get-model`` prints
 nothing at all.
 
-The API (:doc:`api3`) takes the same route: a solver becomes incremental at
+The API (:doc:`api`) takes the same route: a solver becomes incremental at
 its first ``push``, and from its third check on, ``check_sat`` runs on the
 persistent driver. The API has no SMT-LIB2 ``set-logic`` declaration, so it
 keeps that theory-neutral threshold, which the

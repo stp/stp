@@ -118,7 +118,7 @@ page <https://smt-lib.org/>`__.
    :hidden:
    :maxdepth: 1
 
-   api3
+   api
    c-api-lifetime
    array-extensionality
    uninterpreted-functions
@@ -396,7 +396,7 @@ Library usage
 
 When STP is built it generates the ``libstp`` library -- shared by
 default, or static if you configured with ``STATICCOMPILE=ON`` -- which
-carries STP's API for three languages, described in :doc:`api3`:
+carries STP's API for three languages, described in :doc:`api`:
 
 -  ``include/stp/stp.hpp`` for C++17
 -  ``include/stp/stp.h`` for C
@@ -442,7 +442,7 @@ A C program can be as simple as:
 Programs written against STP's 2.x C interface (``stp/c_interface.h``,
 and the header-only ``fp.hpp`` and ``uf.hpp`` over it) link ``libstp2``
 instead: a separate compatibility library that implements that interface over
-the new one (see :ref:`api3-compat`).
+the new one (see :ref:`api-compat`).
 
 If your project uses CMake, an installed STP is found with
 ``find_package()`` in config mode. The imported ``stp`` target carries the
