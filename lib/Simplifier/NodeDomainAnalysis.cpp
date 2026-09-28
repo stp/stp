@@ -473,8 +473,9 @@ namespace stp
       if (it != toFixedBits.end())
       {
         auto it0 = toIntervals.find(n);
+        auto itIS = toIntervalSets.find(n);
         auto it1 = toValueSets.find(n);
-        return {it->second, it0->second, it1->second};
+        return {it->second, it0->second, itIS->second, it1->second};
       }
     }
 
@@ -491,8 +492,9 @@ namespace stp
       if (it != toFixedBits.end())
       {
         auto it0 = toIntervals.find(n);
+        auto itIS = toIntervalSets.find(n);
         auto it1 = toValueSets.find(n);
-        return {it->second, it0->second, it1->second};
+        return {it->second, it0->second, itIS->second, it1->second};
       }
     }
 
@@ -505,6 +507,9 @@ namespace stp
     vector<const UnsignedInterval*> children_intervals;
     children_intervals.reserve(number_children);
 
+    vector<const UnsignedIntervalSet*> children_intervalSets;
+    children_intervalSets.reserve(number_children);
+
     vector<const ValueSet*> children_sets;
     children_sets.reserve(number_children);
 
@@ -514,11 +519,13 @@ namespace stp
     {
       auto ret = buildMap(n[i]);
 
-      if (ret.bits != nullptr || ret.interval != nullptr || ret.set != nullptr)
+      if (ret.bits != nullptr || ret.interval != nullptr ||
+          ret.intervalSet != nullptr || ret.set != nullptr)
         nothingKnown = false;
 
       children_bits.push_back(ret.bits);
       children_intervals.push_back(ret.interval);
+      children_intervalSets.push_back(ret.intervalSet);
       children_sets.push_back(ret.set);
     }
 
@@ -541,9 +548,10 @@ namespace stp
     {
       toFixedBits.insert({n, nullptr});
       toIntervals.insert({n, nullptr});
+      toIntervalSets.insert({n, nullptr});
       toValueSets.insert({n, nullptr});
 
-      return {nullptr, nullptr, nullptr};
+      return {nullptr, nullptr, nullptr, nullptr};
     }
 
     FixedBits* result_bits = fresh(n);
@@ -608,6 +616,28 @@ namespace stp
       result_interval = nullptr;
     }
 
+    // The interval-set transfer runs the single-interval transfer functions
+    // over the cross-product of the children's disjoint pieces. Its hull
+    // refines (never loosens) the plain single-interval result, so fold it
+    // into the interval before the domains are harmonised together.
+    UnsignedIntervalSet* result_intervalSet = nullptr;
+    if (bm.UserFlags.enable_interval_sets)
+    {
+      result_intervalSet = setAnalysis.transfer(n, children_intervalSets);
+      UnsignedInterval* hull = result_intervalSet->hull(); // null if complete
+      if (hull != nullptr)
+      {
+        if (result_interval == nullptr)
+          result_interval = hull; // take ownership
+        else
+        {
+          result_interval->replaceMinIfTightens(hull->minV);
+          result_interval->replaceMaxIfTightens(hull->maxV);
+          delete hull;
+        }
+      }
+    }
+
     ValueSet* result_set =
         valueSetAnalysis.dispatchToTransferFunctions(n, children_sets);
 
@@ -619,8 +649,15 @@ namespace stp
               n.GetValueWidth() > 0 ? n.GetValueWidth() : 1,
               BOOLEAN_TYPE == n.GetType());
 
+    // Keep the stored interval-set within the harmonised interval so the two
+    // agree.
+    if (result_intervalSet != nullptr && result_interval != nullptr)
+      result_intervalSet->intersectInterval(result_interval->minV,
+                                            result_interval->maxV);
+
     toFixedBits.insert({n, result_bits});
     toIntervals.insert({n, result_interval});
+    toIntervalSets.insert({n, result_intervalSet});
     toValueSets.insert({n, result_set});
 
     if (n.isConstant())
@@ -630,7 +667,7 @@ namespace stp
       assert(result_set != nullptr && result_set->isConstant());
     }
 
-    return {result_bits, result_interval, result_set};
+    return {result_bits, result_interval, result_intervalSet, result_set};
   }
 
   // When we call the transfer functions, we can't send nulls, send unfixed instead.

@@ -133,7 +133,7 @@ The solver
 ~~~~~~~~~~
 
 Which solver a binary uses with no flag given is decided at compile time:
-``UserDefinedFlags``'s constructor picks CaDiCaL, then CryptoMiniSat, then
+``UserDefinedFlags``'s constructor picks CryptoMiniSat, then CaDiCaL, then
 MiniSat, by whichever ``USE_*`` macro is defined. Linking CryptoMiniSat in
 is therefore the whole of what makes this a CryptoMiniSat release; there is
 no flag for users to remember.

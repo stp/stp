@@ -37,6 +37,7 @@ add_library(simplifier OBJECT
     MultiplyOverflowIdiom.cpp
     AIGSimplifyPropositionalCore.cpp
     UnsignedIntervalAnalysis.cpp
+    UnsignedIntervalSetAnalysis.cpp
     ValueSetAnalysis.cpp
     Flatten.cpp
     LinearForm.cpp
