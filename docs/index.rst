@@ -80,6 +80,27 @@ you have built but not installed, static builds, and Windows.
    architecture
 
 
+Command-line usage
+==================
+
+Give ``stp`` a problem file, or pipe one to it, and it prints the answer:
+
+.. code-block:: bash
+
+    stp problem.smt2
+    stp < problem.smt2
+
+:doc:`command-line` covers the rest: the input formats, what STP prints
+and its exit status, driving it over a pipe, choosing the SAT solver,
+time and conflict limits, statistics, writing CNF and converting between formats.
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   command-line
+
+
 SMT-LIB2 input language
 =======================
 
@@ -475,6 +496,7 @@ installation by the test suite, is in |installtest|_.
 
    code-guide
    testing
+   tools
    releasing
 
 

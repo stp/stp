@@ -79,6 +79,9 @@ stp myproblem.smt2
 ```
 
 STP also reads from standard input, as in the Docker example above.
+[Running STP](https://stp.github.io/stp/command-line.html) describes the
+command line: input formats, output and exit status, choosing a SAT solver,
+limits, statistics, and writing CNF.
 
 Overflowing a 32-bit integer using the Python interface:
 
@@ -103,7 +106,8 @@ STP works. Its sources are in [`docs/`](docs), and
 ## Contributing
 
 [Source code layout](https://stp.github.io/stp/code-guide.html) describes what lives
-where, and [Testing](https://stp.github.io/stp/testing.html) how to build and run the
-test suite. STP is written by
+where, [Testing](https://stp.github.io/stp/testing.html) how to build and run the
+test suite, and [Developer tools](https://stp.github.io/stp/tools.html) the programs
+under `tools/` other than `stp`. STP is written by
 [many people](https://stp.github.io/stp/#history-and-authors), who work on it in
 their own time, or because it helps with their work or study.
