@@ -51,9 +51,8 @@ THE SOFTWARE.
 //
 // The functions checked only for soundness (OVERAPPROXIMATES rather than
 // MAX_PRECISE below) are the five division operations. Multiplication is
-// maximally precise up to width 8 (the exact low-bits solve covers the
-// whole relation there) and is checked as MAX_PRECISE at width 3; above
-// width 8 only its low 8 bits carry that guarantee.
+// maximally precise up to width 14 and is checked as MAX_PRECISE at width
+// 3; above width 14 only its low 8 bits carry that guarantee.
 //
 // Every operator is checked twice: once with a distinct FixedBits per
 // operand, and once ALIASED, with one FixedBits shared between several

@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "stp/Util/BitOps.h"
 #include <cstdint>
 #include <cstring>
+#include <memory>
 // Multiply.
 
 using namespace stp;
@@ -1958,6 +1959,23 @@ static void emitAll(const OddSet& set, unsigned shift, unsigned k,
     }
 }
 
+// logGroupExactPass's working sets, ~84KB. Per thread, since concurrent
+// solver instances each run the pass, and on the heap, since that much
+// thread_local storage exhausts the static TLS a dlopen'd libstp gets.
+struct LogScratch
+{
+  OddSet Xs[LOG_MAX_WIDTH], Ys[LOG_MAX_WIDTH], Os[LOG_MAX_WIDTH];
+  OddSet xFilt[LOG_MAX_WIDTH], yFilt[LOG_MAX_WIDTH], oFilt[LOG_MAX_WIDTH];
+};
+
+static LogScratch& logScratch()
+{
+  static thread_local std::unique_ptr<LogScratch> scratch;
+  if (!scratch)
+    scratch.reset(new LogScratch);
+  return *scratch;
+}
+
 // The exact full-width join for k <= LOG_MAX_WIDTH via the group
 // decomposition. Values fit one word (k <= 14).
 Result logGroupExactPass(FixedBits& x, FixedBits& y, FixedBits& output,
@@ -2002,7 +2020,10 @@ Result logGroupExactPass(FixedBits& x, FixedBits& y, FixedBits& output,
   y.fillPackedWord(0, yF, yV);
   output.fillPackedWord(0, oF, oV);
 
-  static OddSet Xs[LOG_MAX_WIDTH], Ys[LOG_MAX_WIDTH], Os[LOG_MAX_WIDTH];
+  LogScratch& scratch = logScratch();
+  auto& Xs = scratch.Xs;
+  auto& Ys = scratch.Ys;
+  auto& Os = scratch.Os;
   for (unsigned s = 0; s < k; s++)
   {
     Xs[s].clear(k - s);
@@ -2094,8 +2115,9 @@ Result logGroupExactPass(FixedBits& x, FixedBits& y, FixedBits& output,
   // Per-stratum survivor filters, unioned across partner strata; the
   // final emission intersects each stratum with its filter once. The
   // fullness flags let saturated pairs skip their correlations entirely.
-  static OddSet xFilt[LOG_MAX_WIDTH], yFilt[LOG_MAX_WIDTH],
-      oFilt[LOG_MAX_WIDTH];
+  auto& xFilt = scratch.xFilt;
+  auto& yFilt = scratch.yFilt;
+  auto& oFilt = scratch.oFilt;
   bool xFull[LOG_MAX_WIDTH], yFull[LOG_MAX_WIDTH], oFull[LOG_MAX_WIDTH];
   for (unsigned s = 0; s < k; s++)
   {

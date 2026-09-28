@@ -76,13 +76,13 @@ void assertFactorisation(VC vc)
 
 // An unsatisfiable one that still has to be bit-blasted to be refuted.
 //
-// 0xfff0 is not a square modulo 2^64: it is divisible by 16 but not by 32,
-// so any root is 4y with y odd, and an odd square is 1 modulo 8 while
-// 0xfff0/16 is 7. Nothing in the preprocessor sees that -- constant bit
-// propagation settles the easier "an even factor cannot give an odd product"
-// before a single gate is built, which makes that query useless here -- so
-// this one reaches the abstraction and is decided by the lemmas the
-// refinement installs.
+// 0x1c00 is not a square modulo 2^64: it is divisible by 2^10 but not by
+// 2^11, so any root is 32y with y odd, and an odd square is 1 modulo 8 while
+// 0x1c00/2^10 is 7. Nothing in the preprocessor sees that -- constant bit
+// propagation is exact on a product's low eight bits, so it refutes a
+// non-square whose odd part starts there (0xfff0, say) before a single gate
+// is built, but here those bits are all zero -- so this one reaches the
+// abstraction and is decided by the lemmas the refinement installs.
 //
 // Written as a product of two variables with an equality between them rather
 // than as a square, so that what is abstracted is an ordinary BVMULT.
@@ -91,7 +91,7 @@ void assertANonSquare(VC vc)
   Expr x = var(vc, "x");
   Expr y = var(vc, "y");
   vc_assertFormula(vc, vc_eqExpr(vc, vc_bvMultExpr(vc, 64, x, y),
-                                 vc_bvConstExprFromInt(vc, 64, 0xfff0)));
+                                 vc_bvConstExprFromInt(vc, 64, 0x1c00)));
   vc_assertFormula(vc, vc_eqExpr(vc, x, y));
 }
 
