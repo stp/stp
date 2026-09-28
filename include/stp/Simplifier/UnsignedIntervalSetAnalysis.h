@@ -49,7 +49,6 @@ namespace stp
 
 class UnsignedIntervalSetAnalysis
 {
-  STPMgr& bm;
   UnsignedIntervalAnalysis ia; // supplies the per-interval transfer functions
   unsigned cap;
 
@@ -58,9 +57,9 @@ class UnsignedIntervalSetAnalysis
   static bool splitChild(Kind k, unsigned i);
 
 public:
-  UnsignedIntervalSetAnalysis(STPMgr& _bm,
-                              unsigned cap_ = UnsignedIntervalSet::DEFAULT_CAP)
-      : bm(_bm), cap(cap_)
+  explicit UnsignedIntervalSetAnalysis(
+      unsigned cap_ = UnsignedIntervalSet::DEFAULT_CAP)
+      : cap(cap_)
   {
   }
 
