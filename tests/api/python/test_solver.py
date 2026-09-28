@@ -271,6 +271,23 @@ def test_scripts_and_printing(tmp_path):
     s.close()
 
 
+def test_dimacs_leaves_the_last_check_as_it_was():
+    # the export runs a check of its own; the model not yet read, and an
+    # unsat check's failed assumptions, are still the caller's afterwards
+    s = Solver()
+    x = BitVec("dx", 8)
+    s.add(x == 7)
+    assert s.check() == sat
+    s.dimacs()
+    assert s.model()[x].as_long() == 7
+    b = Bool("db")
+    assert s.check(b, Not(b)) == unsat
+    assert len(s.unsat_core()) == 2
+    s.dimacs()
+    assert len(s.unsat_core()) == 2
+    s.close()
+
+
 def test_parse_term_runs_no_command():
     # the text goes inside a command of its own; a ')' in it once closed that
     # command and ran what followed against the solver

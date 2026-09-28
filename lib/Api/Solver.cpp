@@ -2319,16 +2319,48 @@ void Solver::write_cnf(std::ostream& os) const
   SolverImpl* s = live(*this, "Solver::write_cnf");
   STPMgr* bm = s->mgr->bm;
   // Run the pipeline up to the first CNF with the sink installed; the check
-  // itself is abandoned with STOPPED_AFTER_CNF and leaves the last result and
-  // model as they were.
-  const Result saved_last = s->last;
-  const bool saved_have = s->have_last;
-  auto saved_model = s->model;
-  auto saved_candidate = s->candidate;
-  const bool saved_pending = s->model_pending;
+  // itself is abandoned with STOPPED_AFTER_CNF. What the last check left is
+  // the caller's and is put back however the export ends: its result, its
+  // assumptions and the failed ones, its model -- snapshotted first, since
+  // the export's pipeline refills the tables a pending model is read from --
+  // and the candidate.
+  if (s->model_pending)
+    s->ensure_snapshot();
+  struct LastCheck
+  {
+    SolverImpl* s;
+    Result last;
+    bool have_last;
+    std::vector<ASTNode> assumptions, failed;
+    std::shared_ptr<const detail::ModelSnapshot> model, candidate;
+    std::chrono::steady_clock::duration wall;
+    bool incremental;
+    std::size_t checks;
+    ~LastCheck()
+    {
+      s->last = last;
+      s->have_last = have_last;
+      s->last_assumptions = std::move(assumptions);
+      s->last_failed_assumptions = std::move(failed);
+      s->model_pending = false;
+      s->model = std::move(model);
+      s->candidate = std::move(candidate);
+      s->last_wall = wall;
+      s->last_incremental = incremental;
+      s->checks = checks;
+    }
+  } kept{s,
+         s->last,
+         s->have_last,
+         s->last_assumptions,
+         s->last_failed_assumptions,
+         s->model,
+         s->candidate,
+         s->last_wall,
+         s->last_incremental,
+         s->checks};
   const bool saved_incremental = s->stp->sessionIncremental;
   const bool saved_stop = bm->UserFlags.stop_after_cnf;
-  const std::size_t saved_checks = s->checks;
   std::ostringstream buffer;
   bm->cnf_sink = &buffer;
   bm->UserFlags.stop_after_cnf = true;
@@ -2345,15 +2377,7 @@ void Solver::write_cnf(std::ostream& os) const
       s->stp->sessionIncremental = incremental;
     }
   } restore{s, bm, saved_incremental, saved_stop};
-  if (saved_pending)
-    s->ensure_snapshot();
   Result r = s->run_check("Solver::write_cnf", {}, std::nullopt);
-  s->last = saved_last;
-  s->have_last = saved_have;
-  s->model = saved_model;
-  s->candidate = saved_candidate;
-  s->model_pending = false;
-  s->checks = saved_checks;
   const std::string cnf = buffer.str();
   if (cnf.empty())
   {

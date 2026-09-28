@@ -506,6 +506,26 @@ TEST_F(SolverTest, statistics)
   EXPECT_EQ(empty.str("sat.backend"), "");
 }
 
+// write_cnf runs a check of its own. What the last check left is the caller's
+// and stays: a model not read before the export was lost (the export saved
+// the model before snapshotting it, so it saved nothing), and an unsat check's
+// failed assumptions came back empty.
+TEST_F(SolverTest, write_cnf_leaves_the_last_check_as_it_was)
+{
+  s.add(x == tm.mk_bv(8, 7));
+  ASSERT_TRUE(s.check_sat().is_sat());
+  std::ostringstream first;
+  s.write_cnf(first);
+  EXPECT_EQ(s.model().uint64_value(x), 7u);
+
+  ASSERT_TRUE(s.check_sat({b, not_(b)}).is_unsat());
+  ASSERT_EQ(s.unsat_assumptions().size(), 2u);
+  std::ostringstream second;
+  s.write_cnf(second);
+  EXPECT_EQ(s.unsat_assumptions().size(), 2u);
+  API_EXPECT_ERROR(ErrorCode::NO_MODEL, s.model());
+}
+
 TEST_F(SolverTest, write_cnf)
 {
   // trivial forms
