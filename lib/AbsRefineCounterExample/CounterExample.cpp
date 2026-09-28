@@ -2227,131 +2227,161 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
                              expr.GetSourceSort());
 }
 
-// The observed (index, value) entries of one array symbol, evaluated to
-// constants, one entry per concrete index, in ascending unsigned index
-// order -- so the programmatic model API is deterministic and agrees
-// with the printed model. The CounterExampleMap is keyed by hash-consed
-// READ(array, index) nodes, so one index can only carry one entry;
-// conflicting duplicates would mean a broken model and fail loudly.
-vector<std::pair<ASTNode, ASTNode>>
-AbsRefine_CounterExample::GetSortedArrayModelEntries(const ASTNode& arraySym)
+// The observed (index, value) entries of each array symbol asked about,
+// evaluated to constants, one entry per concrete index, in ascending
+// unsigned index order -- so the programmatic model API is deterministic
+// and agrees with the printed model. The CounterExampleMap is keyed by
+// hash-consed READ(array, index) nodes, so one index can only carry one
+// entry; conflicting duplicates would mean a broken model and fail loudly.
+//
+// One walk over the counterexample serves every array asked about: a model
+// of many arrays read a few cells each would otherwise walk the whole map
+// once per array.
+std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>>
+AbsRefine_CounterExample::GetSortedArrayModelEntries(
+    const vector<ASTNode>& arraySyms)
 {
-  vector<std::pair<ASTNode, ASTNode>> entries;
+  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>> result;
+  const auto byIndex = [](const std::pair<ASTNode, ASTNode>& x,
+                          const std::pair<ASTNode, ASTNode>& y) {
+    return CONSTANTBV::BitVector_Lexicompare(x.first.GetBVConst(),
+                                             y.first.GetBVConst()) < 0;
+  };
 
-  // A symbol equality propagation substituted away has no reads of its
-  // own in the model; it holds exactly what its definition holds. Derive
-  // its entries from the definition: every cell the model records
-  // against the definition's base arrays, plus every index one of its
-  // writes covers. Equality propagation only substitutes plain
-  // bitvector-sorted arrays, so indexes and cells are plain constants
-  // here.
+  // A symbol equality propagation or unconstrained-variable elimination
+  // substituted away has no reads of its own in the model; it holds exactly
+  // what its definition holds. Derive its entries from the definition: every
+  // cell the model records against the definition's base arrays, plus every
+  // index one of its writes covers. Only plain bitvector-sorted arrays are
+  // substituted, so indexes and cells are plain constants here.
+  std::map<ASTNode, std::pair<ASTNode, ASTNodeSet>> substituted;
+  ASTNodeSet reached; // the array nodes of every definition
+  ASTNodeSet own;     // the arrays whose cells are their own reads
+  for (const ASTNode& arraySym : arraySyms)
   {
     const ASTNodeMap::const_iterator sub = CounterExampleMap.find(arraySym);
     if (sub != CounterExampleMap.end() &&
         ARRAY_TYPE == sub->second.GetType())
     {
-      const ASTNode definition = sub->second;
-      ASTNodeSet arrays;
-      CollectArrayNodes(definition, arrays);
-      ModelCells cells;
-      CollectModelCells(arrays, cells);
-
+      std::pair<ASTNode, ASTNodeSet>& definition = substituted[arraySym];
+      definition.first = sub->second;
+      CollectArrayNodes(definition.first, definition.second);
+      reached.insert(definition.second.begin(), definition.second.end());
+    }
+    else
+      own.insert(arraySym);
+  }
+  if (!substituted.empty())
+  {
+    ModelCells cells;
+    CollectModelCells(reached, cells);
+    for (const auto& entry : substituted)
+    {
+      const ASTNode& definition = entry.second.first;
       std::set<ASTNode> indexes;
-      for (ModelCells::const_iterator it = cells.begin(); it != cells.end();
-           ++it)
-        indexes.insert(it->first.second);
-      for (ASTNodeSet::const_iterator it = arrays.begin();
-           it != arrays.end(); ++it)
-        if (WRITE == it->GetKind())
-          indexes.insert(TermToConstTermUsingModel((*it)[1], false));
-
-      for (std::set<ASTNode>::const_iterator it = indexes.begin();
-           it != indexes.end(); ++it)
+      for (const ASTNode& n : entry.second.second)
+      {
+        // The cells recorded against n. ModelCells orders on the array node
+        // first, and the null node sorts before every index.
+        for (ModelCells::const_iterator it =
+                 cells.lower_bound(std::make_pair(n, ASTNode()));
+             it != cells.end() && it->first.first == n; ++it)
+          indexes.insert(it->first.second);
+        if (WRITE == n.GetKind())
+          indexes.insert(TermToConstTermUsingModel(n[1], false));
+      }
+      vector<std::pair<ASTNode, ASTNode>>& entries = result[entry.first];
+      for (const ASTNode& index : indexes)
         entries.push_back(
-            std::make_pair(*it, ReadUsingModel(definition, *it, cells)));
-
-      std::sort(entries.begin(), entries.end(),
-                [](const std::pair<ASTNode, ASTNode>& x,
-                   const std::pair<ASTNode, ASTNode>& y) {
-                  return CONSTANTBV::BitVector_Lexicompare(
-                             x.first.GetBVConst(), y.first.GetBVConst()) < 0;
-                });
-      return entries;
+            std::make_pair(index, ReadUsingModel(definition, index, cells)));
+      std::sort(entries.begin(), entries.end(), byIndex);
     }
   }
+  if (own.empty())
+    return result;
 
-  // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
-  // changes it. Which breaks the iterator otherwise.
-  const ASTNodeMap c(CounterExampleMap);
+  // The other arrays' reads, taken out of the map before any is evaluated:
+  // TermToConstTermUsingModel adds to the map, which breaks an iterator
+  // over it.
+  vector<std::pair<ASTNode, ASTNode>> reads;
+  for (const auto& e : CounterExampleMap)
+    if (e.first.GetKind() == READ && e.first[1].GetKind() == BVCONST &&
+        own.find(e.first[0]) != own.end())
+      reads.push_back(e);
 
-  // The element sort decides when two recorded values for one cell are
-  // really two values: NaN has many packings and one meaning.
-  const SourceSort arraySort = arraySym.GetSourceSort();
-  const SourceSort elementSort =
-      arraySort.kind() == SourceSort::Kind::Array ? arraySort.element()
-                                                  : SourceSort::unknown();
-
-  std::map<ASTNode, ASTNode> byIndex;
-  for (const auto& e : c)
+  std::map<ASTNode, std::map<ASTNode, ASTNode>> cellsOf;
+  for (const auto& e : reads)
   {
     const ASTNode& f = e.first;
-    if (f.GetKind() == READ && f[0] == arraySym && f[1].GetKind() == BVCONST)
+    ASTNode rhs;
+    if (BITVECTOR_TYPE == e.second.GetType() ||
+        FLOATINGPOINT_TYPE == e.second.GetType())
     {
-      ASTNode rhs;
-      if (BITVECTOR_TYPE == e.second.GetType() ||
-          FLOATINGPOINT_TYPE == e.second.GetType())
-      {
-        rhs = TermToConstTermUsingModel(e.second, false);
-      }
-      else
-      {
-        rhs = ComputeFormulaUsingModel(e.second);
-      }
-      assert(rhs.isConstant());
-      // Key on the plain spelling of the index, not on the node. A
-      // rounding-mode or float constant interns apart from the plain
-      // constant with its bits, so one cell can be recorded under two
-      // index nodes -- and keying on the node makes that one cell two
-      // entries, which the printer then emits as two stores of the same
-      // value to the same index.
-      auto ins = byIndex.insert(
-          std::make_pair(plainBitVectorConstant(bm, f[1]), rhs));
-      if (!ins.second && constantsDenoteDifferentSourceValues(
-                             ins.first->second, rhs, elementSort))
-        FatalError("GetSortedArrayModelEntries: conflicting model values "
-                   "for one concrete array index",
-                   f);
+      rhs = TermToConstTermUsingModel(e.second, false);
     }
+    else
+    {
+      rhs = ComputeFormulaUsingModel(e.second);
+    }
+    assert(rhs.isConstant());
+    // The element sort decides when two recorded values for one cell are
+    // really two values: NaN has many packings and one meaning.
+    const SourceSort arraySort = f[0].GetSourceSort();
+    const SourceSort elementSort =
+        arraySort.kind() == SourceSort::Kind::Array ? arraySort.element()
+                                                    : SourceSort::unknown();
+    // Key on the plain spelling of the index, not on the node. A
+    // rounding-mode or float constant interns apart from the plain
+    // constant with its bits, so one cell can be recorded under two
+    // index nodes -- and keying on the node makes that one cell two
+    // entries, which the printer then emits as two stores of the same
+    // value to the same index.
+    auto ins = cellsOf[f[0]].insert(
+        std::make_pair(plainBitVectorConstant(bm, f[1]), rhs));
+    if (!ins.second && constantsDenoteDifferentSourceValues(
+                           ins.first->second, rhs, elementSort))
+      FatalError("GetSortedArrayModelEntries: conflicting model values "
+                 "for one concrete array index",
+                 f);
   }
-
-  entries.assign(byIndex.begin(), byIndex.end());
-  std::sort(entries.begin(), entries.end(),
-            [](const std::pair<ASTNode, ASTNode>& x,
-               const std::pair<ASTNode, ASTNode>& y) {
-              return CONSTANTBV::BitVector_Lexicompare(
-                         x.first.GetBVConst(), y.first.GetBVConst()) < 0;
-            });
-  return entries;
+  for (const auto& c : cellsOf)
+  {
+    vector<std::pair<ASTNode, ASTNode>>& entries = result[c.first];
+    entries.assign(c.second.begin(), c.second.end());
+    std::sort(entries.begin(), entries.end(), byIndex);
+  }
+  return result;
 }
 
-// FUNCTION: queries the counterexample, and returns the number of array
-// locations for e
 vector<std::pair<ASTNode, ASTNode>>
-AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
+AbsRefine_CounterExample::GetSortedArrayModelEntries(const ASTNode& arraySym)
 {
-  vector<std::pair<ASTNode, ASTNode>> entries;
+  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>> all =
+      GetSortedArrayModelEntries(vector<ASTNode>(1, arraySym));
+  const auto it = all.find(arraySym);
+  return it == all.end() ? vector<std::pair<ASTNode, ASTNode>>()
+                         : std::move(it->second);
+}
+
+// FUNCTION: queries the counterexample, and returns the array locations
+// recorded for each array asked about
+std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>>
+AbsRefine_CounterExample::GetCounterExampleArrays(bool t,
+                                                  const vector<ASTNode>& arrays)
+{
+  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>> result;
 
   // input is valid, no counterexample to print
   if (bm->ValidFlag)
   {
-    return entries;
+    return result;
   }
 
   // t is true if SAT solver generated a counterexample, else it is
   // false
   if (!t)
   {
-    return entries;
+    return result;
   }
 
   // One path whatever the array-equality switch. The extraction kept for
@@ -2360,10 +2390,11 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
   // every array it substitutes: a KLEE table indexed by a byte of an input
   // read once was enough. GetSortedArrayModelEntries derives such an array's
   // cells from its definition instead.
-  if (e.GetKind() == SYMBOL)
-  {
-    entries = GetSortedArrayModelEntries(e);
-  }
+  vector<ASTNode> symbols;
+  for (const ASTNode& e : arrays)
+    if (e.GetKind() == SYMBOL)
+      symbols.push_back(e);
+  result = GetSortedArrayModelEntries(symbols);
 
   // Hand the pairs back at the array's declared sorts, for the reason
   // GetCounterExample re-stamps its result: an index that is a bare
@@ -2371,15 +2402,27 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
   // and a bare element cannot be equated with a read of a float-element
   // one. Done here rather than in the extraction, so the model printer
   // keeps seeing GetSortedArrayModelEntries' raw constants.
-  const SourceSort array_sort = e.GetSourceSort();
-  assert(array_sort.kind() == SourceSort::Kind::Array);
-  for (std::pair<ASTNode, ASTNode>& entry : entries)
+  for (auto& r : result)
   {
-    entry.first = bm->LiftSourceValue(entry.first, array_sort.index());
-    entry.second = bm->LiftSourceValue(entry.second, array_sort.element());
+    const SourceSort array_sort = r.first.GetSourceSort();
+    assert(array_sort.kind() == SourceSort::Kind::Array);
+    for (std::pair<ASTNode, ASTNode>& entry : r.second)
+    {
+      entry.first = bm->LiftSourceValue(entry.first, array_sort.index());
+      entry.second = bm->LiftSourceValue(entry.second, array_sort.element());
+    }
   }
+  return result;
+}
 
-  return entries;
+vector<std::pair<ASTNode, ASTNode>>
+AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
+{
+  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>> all =
+      GetCounterExampleArrays(t, vector<ASTNode>(1, e));
+  const auto it = all.find(e);
+  return it == all.end() ? vector<std::pair<ASTNode, ASTNode>>()
+                         : std::move(it->second);
 }
 
 // TODO move to printer file.

@@ -307,6 +307,10 @@ public:
   // queries the counterexample, and returns a vector of index-value pairs for e
   vector<std::pair<ASTNode, ASTNode>> GetCounterExampleArray(bool t,
                                                              const ASTNode& e);
+  // The same for every array symbol in `arrays` at once, keyed by the array:
+  // one walk over the counterexample however many arrays there are.
+  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>>
+  GetCounterExampleArrays(bool t, const vector<ASTNode>& arrays);
 
   // The observed (index, value) model entries of one array symbol,
   // deduplicated per concrete index and sorted in ascending unsigned
@@ -315,6 +319,10 @@ public:
   // observations.
   vector<std::pair<ASTNode, ASTNode>>
   GetSortedArrayModelEntries(const ASTNode& arraySym);
+  // The same for every array symbol in `arraySyms`, keyed by the array
+  // (one with no entries has none), from one walk over the counterexample.
+  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>>
+  GetSortedArrayModelEntries(const vector<ASTNode>& arraySyms);
 
   int CounterExampleSize(void) const
   {

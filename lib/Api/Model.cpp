@@ -198,20 +198,24 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
       arrays_seen.insert(node);
   }
 
+  // every array's cells from one walk over the counterexample
+  const std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> recorded =
+      ce->GetCounterExampleArrays(ce->CounterExampleSize() != 0,
+                                  std::vector<ASTNode>(arrays_seen.begin(), arrays_seen.end()));
   for (const ASTNode& array : arrays_seen)
   {
     ArrayCells cells;
     cells.array = array;
     cells.sort = mgr->sort_of_node(array, fn);
     const SourceSort as = array.GetSourceSort();
-    const std::vector<std::pair<ASTNode, ASTNode>> entries =
-        ce->GetCounterExampleArray(ce->CounterExampleSize() != 0, array);
-    for (const auto& e : entries)
-    {
-      if (!e.first.isConstant() || !e.second.isConstant())
-        continue;
-      cells.entries.emplace_back(lift(mgr, e.first, as.index()), lift(mgr, e.second, as.element()));
-    }
+    const auto rit = recorded.find(array);
+    if (rit != recorded.end())
+      for (const auto& e : rit->second)
+      {
+        if (!e.first.isConstant() || !e.second.isConstant())
+          continue;
+        cells.entries.emplace_back(lift(mgr, e.first, as.index()), lift(mgr, e.second, as.element()));
+      }
     std::sort(cells.entries.begin(), cells.entries.end(),
               [](const std::pair<ASTNode, ASTNode>& x, const std::pair<ASTNode, ASTNode>& y) {
                 return index_before(x.first, y.first);
