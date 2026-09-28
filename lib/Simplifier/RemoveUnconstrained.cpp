@@ -193,6 +193,21 @@ static bool narrowingAbsorbsDivisorGrid(unsigned se, unsigned ss,
   return emax_s >= 2 * emax_t + ts + 1;
 }
 
+// A fresh symbol that can stand in for `like`. Widths alone name a
+// bit-vector sort; a declared sort, or an array over one, has to be
+// carried explicitly or a later array equality between the stand-in and
+// a source term sees two different sorts.
+ASTNode RemoveUnconstrained::freshLike(const ASTNode& like,
+                                       const std::string& prefix)
+{
+  const SourceSort sort = like.GetSourceSort();
+  if (sort.kind() == SourceSort::Kind::Uninterpreted ||
+      sort.kind() == SourceSort::Kind::Array)
+    return bm.CreateFreshSourceVariable(sort, prefix);
+  return bm.CreateFreshVariable(like.GetIndexWidth(), like.GetValueWidth(),
+                                prefix);
+}
+
 ASTNode
 RemoveUnconstrained::replaceParentWithFresh(MutableASTNode& mute,
                                             vector<MutableASTNode*>& variables)
@@ -201,8 +216,7 @@ RemoveUnconstrained::replaceParentWithFresh(MutableASTNode& mute,
   // An array-sorted parent (a write, or an if-then-else over arrays)
   // needs an array-sorted stand-in; the index width is zero for
   // everything else, so this is the ordinary case too.
-  ASTNode v = bm.CreateFreshVariable(parent.GetIndexWidth(),
-                                     parent.GetValueWidth(), "unconstrained");
+  ASTNode v = freshLike(parent, "unconstrained");
   // A float-valued parent's stand-in must carry the format too, or the
   // blaster later meets a formatless bitvector where a float belongs.
   v.SetExpWidth(parent.GetExpWidth());
@@ -1920,8 +1934,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         // agreeing with v at i and free elsewhere, which is exactly a
         // write of v into a second fresh array.
         ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-        ASTNode rest = bm.CreateFreshVariable(
-            var.GetIndexWidth(), var.GetValueWidth(), "unconstrained_array");
+        ASTNode rest = freshLike(var, "unconstrained_array");
         replace(var, nf->CreateArrayTerm(WRITE, var.GetIndexWidth(),
                                          var.GetValueWidth(), rest,
                                          mutable_children[1]->toASTNode(&bm),
