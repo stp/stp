@@ -121,8 +121,9 @@ that depart from z3py or from a literal reading of the C API.
    is the SMT-LIB 2 text of `stp_term_str`. `to_string("smtlib2")` is
    `sexpr()`.
 9. **`RotateLeft(a, b)` / `RotateRight(a, b)` with a term amount** are built
-   from shifts (the kind table has no term-amount rotate); with an int amount
-   the indexed kind is built, which the engine represents as a concatenation
+   from shifts (the kind table has no term-amount rotate), the amount taken
+   modulo the size as an int amount is; with an int amount the indexed kind
+   is built, which the engine represents as a concatenation
    of extracts (the public view of `RotateLeft(x, 3).kind()` is `BV_CONCAT`).
 10. **`Solver(tm, options, **kw)`** also accepts a `dict` for `options`;
     `Solver.dimacs()` (the DIMACS text as a `str`) and `Solver.last_result()`

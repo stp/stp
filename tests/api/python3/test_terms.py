@@ -349,6 +349,14 @@ def test_bv_structure_builders():
     assert simplify(RotateRight(BitVecVal(0x81, 8), 1)).as_long() == 0xC0
     assert simplify(RotateLeft(BitVecVal(0x81, 8), BitVecVal(1, 8))).as_long() == 0x03
     assert simplify(RotateRight(BitVecVal(0x81, 8), BitVecVal(1, 8))).as_long() == 0xC0
+    # a term amount is taken modulo the size, as an int amount is
+    for k in range(0, 20):
+        for rotate in (RotateLeft, RotateRight):
+            assert simplify(rotate(BitVecVal(0x81, 8), BitVecVal(k, 8))).as_long() == \
+                simplify(rotate(BitVecVal(0x81, 8), k)).as_long(), (rotate.__name__, k)
+    s = Solver()
+    s.add(RotateLeft(y, BitVecVal(9, 8)) != RotateLeft(y, 1))
+    assert s.check() == unsat
     assert bool(simplify(Bit(BitVecVal(4, 8), 2))) and not bool(simplify(Bit(BitVecVal(4, 8), 1)))
     assert simplify(BoolToBV1(BoolVal(True))).as_long() == 1 and bool(simplify(BV1ToBool(BitVecVal(1, 1))))
     assert simplify(BVComp(BitVecVal(3, 8), 3)).as_long() == 1 and simplify(BVComp(x, x)).as_long() == 1

@@ -1809,13 +1809,16 @@ RepeatBV = RepeatBitVec
 
 def RotateLeft(a, b):
     """z3py order: the term first; an int amount is the indexed kind, a term amount is
-    (a << b) | LShR(a, size - b)."""
+    taken modulo the size, as an int amount is: (a << r) | LShR(a, size - r) with
+    r = URem(b, size)."""
     _bv1(a, "RotateLeft")
     if _is_int(b):
         return a._manager().mk_term(Kind.BV_ROTATE_LEFT, [a], (b % a.size() if a.size() else 0,))
     b = _coerce_arg(a.sort(), b)
     n = a.size()
-    return (a << b) | LShR(a, BitVecVal(n, n, wrap=True, tm=a._manager()) - b)
+    size = BitVecVal(n, n, wrap=True, tm=a._manager())
+    r = URem(b, size)
+    return (a << r) | LShR(a, size - r)
 
 
 def RotateRight(a, b):
@@ -1824,7 +1827,9 @@ def RotateRight(a, b):
         return a._manager().mk_term(Kind.BV_ROTATE_RIGHT, [a], (b % a.size() if a.size() else 0,))
     b = _coerce_arg(a.sort(), b)
     n = a.size()
-    return LShR(a, b) | (a << (BitVecVal(n, n, wrap=True, tm=a._manager()) - b))
+    size = BitVecVal(n, n, wrap=True, tm=a._manager())
+    r = URem(b, size)
+    return LShR(a, r) | (a << (size - r))
 
 
 def BVComp(a, b):
