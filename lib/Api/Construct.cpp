@@ -691,8 +691,10 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
     {
       c.expect_all_fp_same(0);
       const SortRec& r = c.rec(0);
-      // fp.rem's circuit unrolls one divide step per representable exponent
-      if (r.a >= 12 && ((std::uint64_t(1) << r.a) + r.b - 4) > 2304)
+      // fp.rem's circuit unrolls one divide step per representable exponent;
+      // the engine's own bound, so that a format it would refuse at the
+      // check is refused here
+      if (!FloatBlaster::remSupported(r.a, r.b))
         c.unsupported("fp.rem is not supported for this format (capabilities: fp.rem.limit)");
       return c.fp_term(FP_REM, 0, kids);
     }

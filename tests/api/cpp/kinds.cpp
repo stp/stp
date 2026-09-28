@@ -598,6 +598,13 @@ TEST_F(Kinds, unsupported)
   API_EXPECT_ERROR(ErrorCode::UNSUPPORTED,
                    fp_rem(tm.declare("w1", wide), tm.declare("w2", wide)));
   EXPECT_EQ(fp_rem(tm.declare("d1", f64), tm.declare("d2", f64)).kind(), Kind::FP_REM);
+  // the engine's own bound, 2^e + s - 4 <= 2304, for every exponent width:
+  // Float(11, 300) passed the construction check and was refused by the
+  // engine at the check, an internal error that poisoned the manager
+  const Sort over = tm.mk_fp_sort(11, 300), at = tm.mk_fp_sort(11, 260);
+  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED,
+                   fp_rem(tm.declare("o1", over), tm.declare("o2", over)));
+  EXPECT_EQ(fp_rem(tm.declare("a1", at), tm.declare("a2", at)).kind(), Kind::FP_REM);
   EXPECT_EQ(capabilities()["kind.FP_TO_REAL"], "true");
   EXPECT_EQ(capabilities()["real.nonlinear"], "false");
   EXPECT_EQ(capabilities()["array.const-equality"], "true");
