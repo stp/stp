@@ -1632,6 +1632,23 @@ while (true)
         *) continue;;
       esac
 
+      # STP declining is not STP being wrong. "unknown" is the answer it owes
+      # whenever a sound one is out of reach: --uf-sort-width gives a declared
+      # sort a carrier that many bits wide, and a query able to name more
+      # elements of the sort than the carrier holds makes either answer a
+      # guess, so STP says so instead. QF_AX at width 8 does that often --
+      # 25 files in one hour against z3's unsat -- and every one landed in
+      # FAIL_DIR, burying the real finds among them.
+      #
+      # Only a clean exit earns the pass. An "unknown" printed on the way out
+      # of a crash leaves a non-zero status, and is still reported.
+      if [ "$stp_rc" -eq 0 ]; then
+        read -r stp_answer < second.txt || stp_answer=""
+        if [ "$stp_answer" = unknown ]; then
+          continue
+        fi
+      fi
+
       if cmp -s first.txt second.txt; then
         continue
       fi
