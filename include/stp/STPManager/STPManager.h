@@ -876,6 +876,11 @@ public:
   DLL_PUBLIC void noteFloatingPoint();
   DLL_PUBLIC void noteReal();
   bool HasSeenRealSyntax() const noexcept { return has_real; }
+  // The node factory's refusals of a whole-array equality (= or distinct
+  // over arrays) built while array equality is switched off
+  // (UserFlags::enable_array_equality), counted: a caller reading a script
+  // tells that refusal apart from the script's other failures by it.
+  unsigned array_equality_refusals = 0;
   // Record a manager-owned Real symbol as a current Real declaration, whose
   // value the exact model then carries; recording one twice is a no-op.
   // CreateSourceSymbol does it for every Real symbol it makes; a caller whose

@@ -893,6 +893,33 @@ TEST(Parsing, a_rejected_cvc_or_smtlib1_input_ends_the_parse)
   }
 }
 
+// A run reads a script as the command line does: an equality between whole
+// arrays is decided with array-equality = on, and refused otherwise -- as
+// the UNSUPPORTED the API's own reading gives under off, where the refusal
+// used to poison the manager as an engine failure.
+TEST(Parsing, a_run_decides_whole_array_equality_only_when_switched_on)
+{
+  const char* script = "(set-logic QF_ABV)(declare-fun a () (Array (_ BitVec 8) (_ BitVec 8)))"
+                       "(declare-fun b () (Array (_ BitVec 8) (_ BitVec 8)))"
+                       "(assert (= a b))(check-sat)";
+  {
+    TermManager tm;
+    Solver s(tm);
+    API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.parse_smt2(script, ParseMode::EXECUTE));
+    EXPECT_TRUE(s.assertions().empty());
+    EXPECT_NO_THROW(tm.mk_bv(8, 1));
+    EXPECT_TRUE(s.check_sat().is_sat());
+  }
+  TermManager tm;
+  Options options;
+  options.set("array-equality", "on");
+  Solver s(tm, options);
+  std::string out;
+  s.set_output_sink([&](std::string_view text) { out.append(text); });
+  s.parse_smt2(script, ParseMode::EXECUTE);
+  EXPECT_EQ(out, "sat\n");
+}
+
 // A script's (reset) begins a new session for the script, but the manager's
 // symbols outlive it: a Real the API declared, or made with mk_fresh, is
 // still one afterwards and a model reads its value, not 0 -- in this solver,

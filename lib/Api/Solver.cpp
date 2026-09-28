@@ -1529,6 +1529,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
     }
   };
 
+  const unsigned array_equality_refusals = bm->array_equality_refusals;
   std::set<const UFDecl*> active_before;
   if (UFContext* ctx = bm->getUFContextIfAny())
     for (const UFDecl* d : ctx->activeDeclarations())
@@ -1706,6 +1707,14 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
         // the interface's teardown deactivates what the failed script declared
         pi.retainUFDeclarations(false);
         restore_stack();
+        // A run reads the script as the command line does, where an equality
+        // between whole arrays needs array-equality = on (--array-equality):
+        // refused, it is the UNSUPPORTED the API's own reading gives under
+        // off, not a malformed script.
+        if (runs && bm->array_equality_refusals != array_equality_refusals)
+          detail::fail(ErrorCode::UNSUPPORTED, fn,
+                       "the script compares arrays for equality, which a run decides "
+                       "only with array-equality = on");
         detail::fail_parse(fn, smt2lineno, 0,
                            pi.last_error_message.empty() ? "syntax error"
                                                          : pi.last_error_message);

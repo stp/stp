@@ -187,7 +187,9 @@ enum class Format : std::uint8_t
 ///     the output sink: every SMT-LIB 2 command, under the script's own
 ///     set-logic; a CVC or SMT-LIB 1 input's query decided and answered
 ///     ("Valid."/"Invalid.", "sat"/"unsat"). Those checks are the input's,
-///     not the solver's: they leave no result or model behind.
+///     not the solver's: they leave no result or model behind. As on the
+///     command line, an equality between whole arrays needs
+///     array-equality = on there (UNSUPPORTED otherwise).
 ///   PARSE_ONLY: EXECUTE without the deciding (the command line's
 ///     --parse-only): check-sat is skipped, and a CVC or SMT-LIB 1 query is
 ///     left undecided and unasserted.
