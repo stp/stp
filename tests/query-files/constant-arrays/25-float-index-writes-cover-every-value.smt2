@@ -1,4 +1,5 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
+; RUN: %solver --array-equality -d %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; Float(2,2) has fifteen values: its sixteen patterns less the second NaN,
 ; NaN being one value. Writes at all sixteen patterns cover every cell.

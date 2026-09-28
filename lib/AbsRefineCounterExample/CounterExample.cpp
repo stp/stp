@@ -2144,10 +2144,17 @@ bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
   // Every other cell holds each side's completion, which differ when one
   // side is built over a constant array and the other is not, or over
   // constant arrays with different defaults. Such a cell exists unless
-  // the indexes above exhaust the index sort.
+  // the indexes above exhaust the index sort's values -- five for a
+  // rounding mode, one NaN per float format -- counted as the array-equality
+  // checker counts them (ExtChecker::indexValueCount), not as the
+  // carrier's bit patterns, which would count a rounding-mode index 32 ways.
   const unsigned iw = lowered_left.GetIndexWidth();
+  const SourceSort leftSort = left.GetSourceSort();
+  const SourceSort indexSort = leftSort.kind() == SourceSort::Kind::Array
+                                   ? leftSort.index()
+                                   : SourceSort::bitVector(iw);
   const bool otherCellExists =
-      iw >= 64 || (uint64_t(1) << iw) > indexes.size();
+      ExtChecker::indexValueCount(indexSort, iw) > indexes.size();
   if (otherCellExists &&
       constantsDenoteDifferentSourceValues(
           defaultCellValue(BaseUnderModel(lowered_left)),

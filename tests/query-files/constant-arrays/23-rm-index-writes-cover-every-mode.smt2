@@ -1,4 +1,5 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
+; RUN: %solver --array-equality -d %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; A rounding-mode index sort has five values, however many patterns its
 ; carrier has: writes at all five cover every cell, so a store chain over one
