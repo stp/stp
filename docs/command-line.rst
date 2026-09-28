@@ -9,7 +9,9 @@ standard input, and writes the answer to standard output:
 
     stp [options] [input-file]
 
-``stp --help`` lists every option with its default, grouped as below;
+``stp --help`` lists every option with its default, grouped as below,
+and ``man stp`` shows the same list where the manpage was installed -- on
+Linux, a build makes it whenever ``help2man`` is available.
 ``stp --version`` prints the version, the commit it was built from, the
 build configuration and the SAT solvers compiled in.
 
@@ -287,8 +289,5 @@ term, and each has a page of its own:
 Other programs
 --------------
 
-The other programs under ``tools/`` in the source tree -- rule
-generators, propagator and difficulty benchmarks, and API test drivers --
-are for working on STP, and none of them is installed. Apart from
-``extdiff``, which the test scripts use, they are built only with
-``-DBUILD_EXTRA_TOOLS=ON`` or ``-DENABLE_TESTING=ON``.
+The other programs under ``tools/`` in the source tree are for working on
+STP, and none of them is installed: :doc:`tools` describes them.

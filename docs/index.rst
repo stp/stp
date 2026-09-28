@@ -496,6 +496,7 @@ installation by the test suite, is in |installtest|_.
 
    code-guide
    testing
+   tools
    releasing
 
 

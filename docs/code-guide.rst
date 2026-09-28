@@ -88,14 +88,17 @@ for STP's own build to reach into, which is what keeps ABC and mimalloc
 here. STP's four local fixes to SymFPU live in ``cmake/deps-utils/symfpu``
 and are applied to the copy the build fetches.
 
-The executables are built from ``tools/``:
+The executables are built from ``tools/``; :doc:`command-line` and
+:doc:`tools` describe how to run them.
 
 -  ``stp``: The main command-line solver.
--  ``extdiff``: Built alongside it, unconditionally. Compares two STP
-   binaries on the same query, which the baseline-differential test uses.
+-  ``extdiff``: Built alongside it, unconditionally. A C API driver the
+   baseline-differential test compiles against two trees and runs on the
+   same queries, comparing what each reports.
 -  ``test_fpbackend`` and ``test_fprewrites``: Floating-point checkers,
    built when either ``ENABLE_TESTING`` or ``BUILD_EXTRA_TOOLS`` is on;
-   they are registered as tests.
+   they are registered as tests. ``c_handle_churn_benchmark``, which
+   times C API handle creation, is built under the same condition.
 -  The rest are development aids, built only when ``BUILD_EXTRA_TOOLS``
    is enabled: ``difficulty_bench`` measures the difficulty scorer against
    AIG sizes; ``fp_rewrite_gen`` searches for floating-point rewrite rules;
