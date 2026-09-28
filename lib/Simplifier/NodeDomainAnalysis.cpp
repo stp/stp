@@ -620,9 +620,10 @@ namespace stp
     // over the cross-product of the children's disjoint pieces. Its hull
     // refines (never loosens) the plain single-interval result, so fold it
     // into the interval before the domains are harmonised together.
-    UnsignedIntervalSet* result_intervalSet =
-        setAnalysis.transfer(n, children_intervalSets);
+    UnsignedIntervalSet* result_intervalSet = nullptr;
+    if (bm.UserFlags.enable_interval_sets)
     {
+      result_intervalSet = setAnalysis.transfer(n, children_intervalSets);
       UnsignedInterval* hull = result_intervalSet->hull(); // null if complete
       if (hull != nullptr)
       {
@@ -650,7 +651,7 @@ namespace stp
 
     // Keep the stored interval-set within the harmonised interval so the two
     // agree.
-    if (result_interval != nullptr)
+    if (result_intervalSet != nullptr && result_interval != nullptr)
       result_intervalSet->intersectInterval(result_interval->minV,
                                             result_interval->maxV);
 

@@ -297,6 +297,11 @@ void ExtraMain::create_options()
   bool_arg("--use-intervals", bm->UserFlags.enable_use_intervals,
            "Simplify with interval analysis", simp_group);
 
+  bool_arg("--interval-sets", bm->UserFlags.enable_interval_sets,
+           "Refine interval analysis with sets of disjoint intervals "
+           "(needs --use-intervals)",
+           simp_group);
+
   bool_arg("--pure-literals", bm->UserFlags.enable_pure_literals,
            "Pure literals are replaced.", simp_group);
 

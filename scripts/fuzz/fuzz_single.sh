@@ -419,6 +419,7 @@ declare -a g_simplify=(
 "--flattening=0"
 "--ite-context-simplifications=1"
 "--merge-same=1"
+"--interval-sets=1"
 "--simplify-to-constants-only=1"
 "--size-reducing-fixed-point-limit=-1"
 "--aig-core-simplification=1"

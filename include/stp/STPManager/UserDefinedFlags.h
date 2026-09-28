@@ -218,6 +218,8 @@ public:
   bool enable_ite_context = false;
   bool enable_aig_core_simplify = false;
   bool enable_use_intervals = true;
+  // Bounded disjoint-interval-set domain; needs enable_use_intervals.
+  bool enable_interval_sets = false;
   bool enable_pure_literals = true;
   bool enable_split_extracts = true;
   bool enable_sharing_aware_rewriting = true;
