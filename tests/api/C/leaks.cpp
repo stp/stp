@@ -26,11 +26,9 @@ THE SOFTWARE.
 #include <gtest/gtest.h>
 #include <stdio.h>
 
-// This test needs to be run under valgrind
-// Should we have a test suite just for leaks
-// that requires valgrind?
-
 // FIXME: Needs better name
+// No assertions: this only creates and deletes handles, for a leak checker.
+// USE_VALGRIND reports leaks without failing; VALGRIND_ARGS says how to.
 TEST(Leaks, leak)
 {
   for (int i = 0; i < 10; i++)
@@ -166,7 +164,7 @@ TEST(Leaks, boolean)
 
   Expr equiv = vc_iffExpr(vc, not_x_and_y, not_x_or_not_y);
 
-  printf("%d\n", vc_query(vc, equiv));
+  EXPECT_EQ(1, vc_query(vc, equiv));
 
   vc_DeleteExpr(equiv);
   vc_DeleteExpr(not_x_or_not_y);
@@ -193,6 +191,7 @@ TEST(Leaks, sqaures)
     Expr product = vc_bvMultExpr(vc, 64, arg, arg);
     Expr simp = vc_simplify(vc, product);
     unsigned long long j = getBVUnsignedLongLong(simp);
+    EXPECT_EQ((unsigned long long)i * i, j);
     vc_DeleteExpr(arg);
     vc_DeleteExpr(product);
     vc_DeleteExpr(simp);

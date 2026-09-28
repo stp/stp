@@ -27,6 +27,17 @@ THE SOFTWARE.
 #include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string>
+
+// exprString's buffer is ours to free.
+static std::string toString(Expr e)
+{
+  char* s = exprString(e);
+  std::string result(s);
+  free(s);
+  return result;
+}
 
 TEST(multiprint, one)
 {
@@ -40,10 +51,12 @@ TEST(multiprint, one)
   Expr ct_3 = vc_bvConstExprFromStr(vc, "00000000000000000000000000000011");
   vc_printExpr(vc, ct_3);
   printf("\n");
+  EXPECT_EQ("0x00000003 ", toString(ct_3));
 
   ct_3 = vc_bvConstExprFromInt(vc, 32, 5);
   vc_printExpr(vc, ct_3);
   printf("\n");
+  EXPECT_EQ("0x00000005 ", toString(ct_3));
 
   vc_Destroy(vc);
 
@@ -54,13 +67,12 @@ TEST(multiprint, one)
   ct_3 = vc_bvConstExprFromStr(vc2, "00000000000000000000000000000011");
   vc_printExpr(vc2, ct_3);
   printf("\n");
+  EXPECT_EQ("0x00000003 ", toString(ct_3));
 
   ct_3 = vc_bvConstExprFromInt(vc2, 32, 5);
   vc_printExpr(vc2, ct_3);
   printf("\n");
+  EXPECT_EQ("0x00000005 ", toString(ct_3));
 
   vc_Destroy(vc2);
-
-  // FIXME: Actually test something
-  // ASSERT_TRUE(false && "FIXME: Actually test something");
 }
