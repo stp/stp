@@ -2886,38 +2886,50 @@ namespace
 // the query on its own inside a push/pop bracket. FALSE is the query whose
 // negation asserts nothing: "QUERY TRUE;" asserted FALSE, and every query
 // after it was valid.
+// A character the CVC lexer continues an identifier with: a letter, a digit,
+// or one of its OPCHAR class, ' ? _ $.
+bool cvc_name_char(char c)
+{
+  return std::isalnum(static_cast<unsigned char>(c)) || c == '\'' || c == '?' || c == '_' ||
+         c == '$';
+}
+
 bool split_cvc_query(const std::string& text, std::string& without, std::string& query)
 {
+  // The QUERY statement, found as the lexer finds its keyword: a word is the
+  // longest run of name characters from a letter (or from '_' followed by
+  // one), and only a word spelled exactly QUERY is the keyword -- x$QUERY
+  // and QUERY' are names. Comments run from '%' to the end of the line.
   std::size_t query_at = std::string::npos;
-  bool in_comment = false;
-  for (std::size_t i = 0; i < text.size(); ++i)
+  for (std::size_t i = 0; i < text.size();)
   {
     const char c = text[i];
-    if (in_comment)
-    {
-      if (c == '\n')
-        in_comment = false;
-      continue;
-    }
     if (c == '%')
     {
-      in_comment = true;
+      i = text.find('\n', i);
+      if (i == std::string::npos)
+        break;
       continue;
     }
-    if (text.compare(i, 5, "QUERY") == 0)
+    const bool word = std::isalpha(static_cast<unsigned char>(c)) ||
+                      (c == '_' && i + 1 < text.size() && cvc_name_char(text[i + 1]));
+    if (word || std::isdigit(static_cast<unsigned char>(c)))
     {
-      const bool starts = i == 0 || !(std::isalnum(static_cast<unsigned char>(text[i - 1])) || text[i - 1] == '_');
-      const bool ends = i + 5 >= text.size() ||
-                        !(std::isalnum(static_cast<unsigned char>(text[i + 5])) || text[i + 5] == '_');
-      if (starts && ends)
+      std::size_t end = i + 1;
+      while (end < text.size() && cvc_name_char(text[end]))
+        ++end;
+      if (word && end - i == 5 && text.compare(i, 5, "QUERY") == 0)
         query_at = i;
+      i = end;
+      continue;
     }
+    ++i;
   }
   if (query_at == std::string::npos)
     return false;
   // its terminator: the first ';' after it outside a comment
   std::size_t end = std::string::npos;
-  in_comment = false;
+  bool in_comment = false;
   for (std::size_t i = query_at + 5; i < text.size() && end == std::string::npos; ++i)
   {
     if (in_comment)

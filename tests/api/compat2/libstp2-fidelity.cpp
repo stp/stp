@@ -98,6 +98,24 @@ TEST(libstp2_fidelity, a_comment_in_a_query_is_skipped)
   vc_Destroy(vc);
 }
 
+// A name the lexer reads whole is not the QUERY keyword, whatever it contains.
+TEST(libstp2_fidelity, a_name_containing_query_is_a_name)
+{
+  for (const char* name : {"x$QUERY", "x?QUERY", "QUERY'", "_QUERY"})
+  {
+    const std::string text = std::string(name) + " : BOOLEAN; ASSERT(NOT " + name + "); QUERY " +
+                             name + ";";
+    VC vc = vc_createValidityChecker();
+    Expr query = nullptr, asserts = nullptr;
+    ASSERT_EQ(1, vc_parseMemExpr(vc, text.c_str(), &query, &asserts)) << text;
+    EXPECT_NE(std::string::npos, text_of(query).find(name)) << text_of(query);
+    EXPECT_EQ(0, vc_query(vc, query)) << text;
+    vc_DeleteExpr(query);
+    vc_DeleteExpr(asserts);
+    vc_Destroy(vc);
+  }
+}
+
 // vc_paramBoolExpr names its variable after the application as 2.x printed
 // it, so a one-bit and a four-bit parameter of one value name two variables.
 TEST(libstp2_fidelity, parameters_of_two_widths_name_two_variables)
