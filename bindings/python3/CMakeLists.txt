@@ -136,6 +136,61 @@ add_custom_target(stp_python3 ALL DEPENDS ${_stp_py3_copied} stp_py3_core)
 # The build-tree package directory, for the tests (tests/api/python3).
 set(STP_PY3_PYTHONPATH ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "PYTHONPATH of the built 3.x Python package")
 
-# Installation is deliberately not wired up yet: the 2.x ctypes package
-# (bindings/python) installs under the same name `stp`, and which of the two
-# an installed tree should carry is a packaging decision (see NOTES.md).
+# --- installation -----------------------------------------------------------
+# This is the installed `stp` Python package (the 2.x ctypes package in
+# bindings/python is built for its tests only). PYTHON_LIB_INSTALL_DIR is
+# relative to the install prefix, so the package goes wherever the rest of STP
+# goes, --prefix included: to the interpreter's platform site-packages when
+# that lies inside the prefix (the default /usr/local install), so `import stp`
+# works unaided, and otherwise to the prefix's own, which needs PYTHONPATH. An
+# explicit value, relative or absolute, wins. The extension finds libstp
+# through an rpath to the library's install directory.
+execute_process(
+    COMMAND ${PYTHON_EXECUTABLE} -c
+            "import os, sys, sysconfig; scheme = 'nt' if os.name == 'nt' else 'posix_prefix'; print(sysconfig.get_path('platlib', vars={'base': sys.base_prefix, 'platbase': sys.base_prefix})); print(os.path.relpath(sysconfig.get_path('platlib', scheme, vars={'base': '/p', 'platbase': '/p'}), '/p'))"
+    RESULT_VARIABLE _stp_py3_site_rc
+    OUTPUT_VARIABLE _stp_py3_site_dirs
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(NOT _stp_py3_site_rc EQUAL 0 OR _stp_py3_site_dirs STREQUAL "")
+    message(FATAL_ERROR "Failed to determine the Python site-packages directory of ${PYTHON_EXECUTABLE}")
+endif()
+string(REPLACE "\n" ";" _stp_py3_site_dirs "${_stp_py3_site_dirs}")
+list(GET _stp_py3_site_dirs 0 _stp_py3_site_detected)
+list(GET _stp_py3_site_dirs 1 _stp_py3_site_under_prefix)
+file(TO_CMAKE_PATH "${_stp_py3_site_detected}" _stp_py3_site_detected)
+file(TO_CMAKE_PATH "${_stp_py3_site_under_prefix}" _stp_py3_site_under_prefix)
+
+get_filename_component(_stp_py3_prefix "${CMAKE_INSTALL_PREFIX}" ABSOLUTE)
+file(RELATIVE_PATH _stp_py3_site_rel "${_stp_py3_prefix}" "${_stp_py3_site_detected}")
+if(IS_ABSOLUTE "${_stp_py3_site_rel}" OR _stp_py3_site_rel MATCHES "^\\.\\.(/|$)")
+    set(_stp_py3_site_default "${_stp_py3_site_under_prefix}")
+else()
+    set(_stp_py3_site_default "${_stp_py3_site_rel}")
+endif()
+
+# STRING, not PATH: CMake makes a relative PATH given with -D absolute against
+# the build directory.
+set(PYTHON_LIB_INSTALL_DIR "${_stp_py3_site_default}" CACHE STRING
+    "Installation directory for the stp Python package, relative to CMAKE_INSTALL_PREFIX unless absolute")
+if(IS_ABSOLUTE "${PYTHON_LIB_INSTALL_DIR}")
+    if(NOT EXISTS "${PYTHON_LIB_INSTALL_DIR}")
+        message(FATAL_ERROR "Python site package directory '${PYTHON_LIB_INSTALL_DIR}' does not exist")
+    endif()
+    set(_stp_py3_install_abs "${PYTHON_LIB_INSTALL_DIR}")
+else()
+    set(_stp_py3_install_abs "${CMAKE_INSTALL_PREFIX}/${PYTHON_LIB_INSTALL_DIR}")
+endif()
+message(STATUS "Python package installs to ${_stp_py3_install_abs}")
+get_filename_component(_stp_py3_install_abs "${_stp_py3_install_abs}" ABSOLUTE)
+if(NOT _stp_py3_install_abs STREQUAL _stp_py3_site_detected)
+    message(STATUS "  outside ${PYTHON_EXECUTABLE}'s site-packages; add it to PYTHONPATH to import stp")
+endif()
+
+if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
+    set(_stp_py3_libdir "${CMAKE_INSTALL_LIBDIR}")
+else()
+    set(_stp_py3_libdir "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+endif()
+set_target_properties(stp_py3_core PROPERTIES INSTALL_RPATH "${_stp_py3_libdir}")
+install(TARGETS stp_py3_core LIBRARY DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp")
+install(FILES ${_stp_py3_copied} DESTINATION "${PYTHON_LIB_INSTALL_DIR}/stp")

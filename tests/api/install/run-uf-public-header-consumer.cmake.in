@@ -44,7 +44,7 @@ elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
   # destination configured as an absolute path escapes the prefix; stage that
   # case under DESTDIR so the write outside the prefix cannot need root.
   set(python_lib_install_dir "@PYTHON_LIB_INSTALL_DIR@")
-  set(python_enabled "@ENABLE_PYTHON_INTERFACE@")
+  set(python_enabled "@ENABLE_PYTHON3_API@")
   if(python_enabled AND IS_ABSOLUTE "${python_lib_install_dir}")
     file(MAKE_DIRECTORY "${stage_dir}")
     # DESTDIR prepends the whole prefix, leading slash and all.
@@ -81,9 +81,9 @@ elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
       "an install DESTINATION is still absolute and ignored the new prefix")
   endif()
   if(python_enabled AND NOT IS_ABSOLUTE "${python_lib_install_dir}"
-     AND NOT EXISTS "${prefix_dir}/${python_lib_install_dir}/stp/library_path.py")
+     AND NOT EXISTS "${prefix_dir}/${python_lib_install_dir}/stp/__init__.py")
     message(FATAL_ERROR
-      "cmake --install --prefix put no stp/library_path.py under "
+      "cmake --install --prefix put no stp/__init__.py under "
       "${prefix_dir}/${python_lib_install_dir}")
   endif()
   list(GET _found_config 0 _found_config)

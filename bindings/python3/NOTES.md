@@ -149,9 +149,9 @@ not offer, and every defect of the C or C++ layers met on the way.
     `solver_scope(s)` to be active (`StateError` otherwise).
 16. **`Kind.smtlib`** is attached to the generated enum at import
     (`_gen_kinds.py` is generated without the property).
-17. **Not done:** installation (the 2.x ctypes package installs under the same
-    name `stp`; which one an installed tree carries is a packaging decision),
-    wheels, doctests, a generated `.pyi` stub.
+17. **Installation:** this package is the installed `stp` (the 2.x ctypes
+    package, which has the same name, is built for its libstp2 tests only).
+    Not done: wheels, doctests, a generated `.pyi` stub.
 
 ## C API gaps met while building this
 
