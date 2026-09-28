@@ -27,7 +27,7 @@ leaves to the implementation.
   handles, every unscoped term reference, every open scope, every solver, model,
   array-value and function-value handle. It holds one `ManagerImpl` reference for
   its whole life, so anything reachable from a C handle keeps the manager alive,
-  in any release order (tested in `c3-runtime.cpp`). The hooks `ManagerImpl`
+  in any release order (tested in `c-runtime.cpp`). The hooks `ManagerImpl`
   carries for the C layer (`c_error`, `c_error_callback`, `c_error_user`,
   `c_scopes`) and `SolverImpl::failed` are therefore **unused**; nothing in
   `Internal.h` was changed.

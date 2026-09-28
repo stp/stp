@@ -79,8 +79,8 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   `Solver::parse(std::istream&, Format, ParseMode::EXECUTE)` (or `PARSE_ONLY`)
   and puts the sinks' text on stdout and stderr. The `--help` groups come from
   the `[[cli_group]]` and `[[category]]` sections; `option_defaults.inc` lets
-  `api3-registry` hold the table's defaults to `UserDefinedFlags`, and
-  `api3-cli-help` reads the built binary's `--help` back against the table.
+  `registry` hold the table's defaults to `UserDefinedFlags`, and
+  `cli-help` reads the built binary's `--help` back against the table.
   What stays hand-written in main.cpp is listed in its header comment.
 - `Term::str()` (the unshared SMT-LIB form) is the API's own printer (`Smt2Printer`
   in Terms.cpp): declared names quoted only where SMT-LIB requires (non-simple
@@ -182,11 +182,11 @@ frontend).
 | `include/stp/stp.h`, `c/` | the C API and its runtime (`c/NOTES.md`) |
 | `bindings/python3/` | the Cython module `stp._core` and the z3py-style shell (`NOTES.md` there) |
 | `lib/Compat2/` | `libstp2`: `c_interface.h` re-implemented over `stp.h`, the only provider of the 2.x API (`NOTES.md` there) |
-| `tests/api/cpp3`, `tests/api/c3`, `tests/api/python3` | the suites; the limits they pin are listed in `docs/api3.rst` |
+| `tests/api/cpp`, `tests/api/c`, `tests/api/python` | the suites; the limits they pin are listed in `docs/api3.rst` |
 
 ## Building and testing
 
 The C++ and C layers are part of `libstp`; nothing extra to enable. The Python
 layer needs Cython importable by `PYTHON_EXECUTABLE` (`ENABLE_PYTHON3_API` turns
-itself off otherwise). `ctest -R 'api3|c3|python3'` runs the 3.x suites;
-`tests/api/cpp3/smoke.cpp` is the end-to-end check.
+itself off otherwise). `ctest -L api` runs the suites, `libstp2`'s (labelled
+`api2`) with them; `tests/api/cpp/smoke.cpp` is the end-to-end check.

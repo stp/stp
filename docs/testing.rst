@@ -12,11 +12,11 @@ STP currently supports the following types of tests
    `OutputCheck <https://github.com/stp/OutputCheck>`__ tools. We refer
    to these as query file tests. They live in ``tests/query-files``.
 -  Tests that call STP's API. Those under ``tests/unit-tests`` exercise
-   STP's internals, those under ``tests/api/cpp3`` and ``tests/api/c3``
+   STP's internals, those under ``tests/api/cpp`` and ``tests/api/c``
    exercise the C++ and C API, and those under ``tests/api/compat2``
    exercise ``libstp2``, the 2.x C interface over the C API, all using the
    `GoogleTest <https://google.github.io/googletest/>`__ framework. The
-   Python tests of the ``stp`` package, in ``tests/api/python3``, are
+   Python tests of the ``stp`` package, in ``tests/api/python``, are
    registered directly with CTest: its pytest suite, and the allocator
    checks of a process that loads the package.
 
@@ -83,8 +83,12 @@ file becomes its own executable and its own CTest test, named after the
 source file with ``Tests-gtest`` appended -- so
 ``tests/unit-tests/SimplifyFormula_Test.cpp`` is run by the CTest test
 ``SimplifyFormula_TestTests-gtest``. The tests that are not GoogleTest
-are named individually, such as ``python3-api-tests``,
-``python3-allocator-tests``, ``test_fpbackend`` and ``test_fprewrites``.
+are named individually, such as ``python-api-tests``,
+``python-allocator-tests``, ``test_fpbackend`` and ``test_fprewrites``.
+The API's tests carry the label ``api``, and those of ``libstp2`` (in
+``tests/api/compat2``, their files named ``api2-*``) the label ``api2``.
+``ctest -L`` takes a regular expression, so ``ctest -L api`` runs both
+and ``ctest -L api2`` only ``libstp2``'s.
 
 .. _valgrind:
 
@@ -238,7 +242,7 @@ Unit tests
 The unit tests are built as standalone executables so individual tests
 can be executed by just running their executables, which live in the
 build directory under the same path they have in the source tree --
-``tests/unit-tests`` and ``tests/api/cpp3``. Because they are GoogleTest
+``tests/unit-tests`` and ``tests/api/cpp``. Because they are GoogleTest
 binaries they take the usual flags, e.g. ``--gtest_filter=...`` to run a
 subset of the cases in one executable.
 

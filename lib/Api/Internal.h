@@ -362,7 +362,7 @@ std::string option_text(const OptionSpec& spec, const OptionValue& v);
 OptionValue option_default(const OptionSpec& spec);
 void validate_option_value(const OptionSpec& spec, const OptionValue& v);
 
-// Exported for the api3-registry suite, which applies the registry to a
+// Exported for the registry suite, which applies the registry to a
 // bare UserDefinedFlags.
 struct DLL_PUBLIC OptionsImpl
 {

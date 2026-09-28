@@ -71,7 +71,7 @@ elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
   # the files went instead of restating where they were meant to go.
   file(GLOB_RECURSE _found_config "${staged_prefix_dir}/*/STPConfig.cmake")
   file(GLOB_RECURSE _found_header "${staged_prefix_dir}/*/c_interface.h")
-  file(GLOB_RECURSE _found_api3_header "${staged_prefix_dir}/*/stp/stp.h")
+  file(GLOB_RECURSE _found_api_header "${staged_prefix_dir}/*/stp/stp.h")
   if(NOT _found_config)
     message(FATAL_ERROR
       "cmake --install --prefix put no STPConfig.cmake under ${staged_prefix_dir}")
@@ -81,7 +81,7 @@ elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
       "cmake --install --prefix put no c_interface.h under ${staged_prefix_dir}; "
       "an install DESTINATION is still absolute and ignored the new prefix")
   endif()
-  if(NOT _found_api3_header)
+  if(NOT _found_api_header)
     message(FATAL_ERROR
       "cmake --install --prefix put no stp/stp.h under ${staged_prefix_dir}")
   endif()

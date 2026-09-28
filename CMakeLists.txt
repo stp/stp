@@ -1135,7 +1135,7 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
     # self-contained, with nothing extra to install or ship. The shared one is
     # built too but not installed - it is there to be LD_PRELOADed by processes
     # that embed libstp rather than run the stp binary, the Python package
-    # being the one in tree. See tests/api/python3/allocator_tests.py.
+    # being the one in tree. See tests/api/python/allocator_tests.py.
     set(MI_BUILD_SHARED ON  CACHE BOOL "" FORCE)
     set(MI_BUILD_OBJECT OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_TESTS  OFF CACHE BOOL "" FORCE)

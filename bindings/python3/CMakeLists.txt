@@ -133,7 +133,7 @@ list(APPEND _stp_py3_copied ${STP_PY3_PACKAGE_DIR}/_gen_kinds.py)
 
 add_custom_target(stp_python3 ALL DEPENDS ${_stp_py3_copied} stp_py3_core)
 
-# The build-tree package directory, for the tests (tests/api/python3).
+# The build-tree package directory, for the tests (tests/api/python).
 set(STP_PY3_PYTHONPATH ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "PYTHONPATH of the built 3.x Python package")
 
 # --- installation -----------------------------------------------------------

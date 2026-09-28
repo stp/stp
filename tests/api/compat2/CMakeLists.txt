@@ -24,71 +24,77 @@
 # counterexamples, push and pop, parsing, Expr ownership, the counter enum's
 # ABI, floating point and the header-only fp.hpp over it, uninterpreted
 # functions, arrays and the reason a query had no answer. Every 2.x suite,
-# these included, is also rewritten against the 3.x API in tests/api/cpp3.
+# these included, is also rewritten against the 3.x API in tests/api/cpp.
 # (These are .cpp files because GTest needs C++.)
 # -----------------------------------------------------------------------------
-AddSTPGTest(interface-check.cpp)
-target_link_libraries(interface-checkTests stp2)
-AddSTPGTest(stp-counterex.cpp)
-target_link_libraries(stp-counterexTests stp2)
-AddSTPGTest(push-pop.cpp)
-target_link_libraries(push-popTests stp2)
-AddSTPGTest(parsestring-using-cinterface.cpp)
-target_link_libraries(parsestring-using-cinterfaceTests stp2)
-AddSTPGTest(persist-delete.cpp)
-target_link_libraries(persist-deleteTests stp2)
-AddSTPGTest(counter-enum-abi.cpp)
-target_link_libraries(counter-enum-abiTests stp2)
-AddSTPGTest(fp-arithmetic.cpp)
-target_link_libraries(fp-arithmeticTests stp2)
-AddSTPGTest(fp-cpp-wrapper.cpp)
-target_link_libraries(fp-cpp-wrapperTests stp2)
-AddSTPGTest(uninterpreted-functions-api.cpp)
-target_link_libraries(uninterpreted-functions-apiTests stp2)
-AddSTPGTest(stp-array-model.cpp)
-target_link_libraries(stp-array-modelTests stp2)
-AddSTPGTest(reason-unknown.cpp)
-target_link_libraries(reason-unknownTests stp2)
-AddSTPGTest(libstp2-fidelity.cpp)
-target_link_libraries(libstp2-fidelityTests stp2)
+AddSTPGTest(api2-interface-check.cpp)
+target_link_libraries(api2-interface-checkTests stp2)
+AddSTPGTest(api2-stp-counterex.cpp)
+target_link_libraries(api2-stp-counterexTests stp2)
+AddSTPGTest(api2-push-pop.cpp)
+target_link_libraries(api2-push-popTests stp2)
+AddSTPGTest(api2-parsestring-using-cinterface.cpp)
+target_link_libraries(api2-parsestring-using-cinterfaceTests stp2)
+AddSTPGTest(api2-persist-delete.cpp)
+target_link_libraries(api2-persist-deleteTests stp2)
+AddSTPGTest(api2-counter-enum-abi.cpp)
+target_link_libraries(api2-counter-enum-abiTests stp2)
+AddSTPGTest(api2-fp-arithmetic.cpp)
+target_link_libraries(api2-fp-arithmeticTests stp2)
+AddSTPGTest(api2-fp-cpp-wrapper.cpp)
+target_link_libraries(api2-fp-cpp-wrapperTests stp2)
+AddSTPGTest(api2-uninterpreted-functions-api.cpp)
+target_link_libraries(api2-uninterpreted-functions-apiTests stp2)
+AddSTPGTest(api2-stp-array-model.cpp)
+target_link_libraries(api2-stp-array-modelTests stp2)
+AddSTPGTest(api2-reason-unknown.cpp)
+target_link_libraries(api2-reason-unknownTests stp2)
+AddSTPGTest(api2-fidelity.cpp)
+target_link_libraries(api2-fidelityTests stp2)
 
 # The Real extension through libstp2, in C: constructors, queries, the exact
-# model and its printers (lra_c_api_smoke); Real handles never given to
+# model and its printers (lra_api2_c_api_smoke); Real handles never given to
 # vc_DeleteExpr, which must not take the process down
-# (lra_c_api_undeleted_expr); and the fatal contracts with their exact
-# diagnostics, each in a process of its own (lra_c_api_negative).
-add_executable(stp_lra_real_c_api_smoke real_c_api_smoke.c)
-target_link_libraries(stp_lra_real_c_api_smoke PRIVATE stp2)
-set_property(TARGET stp_lra_real_c_api_smoke PROPERTY INCLUDE_DIRECTORIES
+# (lra_api2_c_api_undeleted_expr); and the fatal contracts with their exact
+# diagnostics, each in a process of its own (lra_api2_c_api_negative).
+add_executable(stp_lra_api2_real_c_api_smoke api2_real_c_api_smoke.c)
+target_link_libraries(stp_lra_api2_real_c_api_smoke PRIVATE stp2)
+set_property(TARGET stp_lra_api2_real_c_api_smoke PROPERTY INCLUDE_DIRECTORIES
   "${PROJECT_BINARY_DIR}/include"
   "${PROJECT_SOURCE_DIR}/include"
 )
-set_target_properties(stp_lra_real_c_api_smoke PROPERTIES
+set_target_properties(stp_lra_api2_real_c_api_smoke PROPERTIES
   C_STANDARD 99
   C_STANDARD_REQUIRED ON
   C_EXTENSIONS OFF
 )
-add_executable(stp_lra_real_c_api_undeleted_expr real_c_api_undeleted_expr.c)
-target_link_libraries(stp_lra_real_c_api_undeleted_expr PRIVATE stp2)
-set_property(TARGET stp_lra_real_c_api_undeleted_expr PROPERTY INCLUDE_DIRECTORIES
+add_executable(stp_lra_api2_real_c_api_undeleted_expr api2_real_c_api_undeleted_expr.c)
+target_link_libraries(stp_lra_api2_real_c_api_undeleted_expr PRIVATE stp2)
+set_property(TARGET stp_lra_api2_real_c_api_undeleted_expr PROPERTY INCLUDE_DIRECTORIES
   "${PROJECT_BINARY_DIR}/include"
   "${PROJECT_SOURCE_DIR}/include"
 )
-set_target_properties(stp_lra_real_c_api_undeleted_expr PROPERTIES
+set_target_properties(stp_lra_api2_real_c_api_undeleted_expr PROPERTIES
   C_STANDARD 99
   C_STANDARD_REQUIRED ON
   C_EXTENSIONS OFF
 )
-add_test(NAME lra_c_api_undeleted_expr COMMAND stp_lra_real_c_api_undeleted_expr)
-add_test(NAME lra_c_api_smoke COMMAND stp_lra_real_c_api_smoke)
-set_tests_properties(lra_c_api_smoke PROPERTIES
-  LABELS "lra;api;model"
+add_test(NAME lra_api2_c_api_undeleted_expr COMMAND stp_lra_api2_real_c_api_undeleted_expr)
+add_test(NAME lra_api2_c_api_smoke COMMAND stp_lra_api2_real_c_api_smoke)
+set_tests_properties(lra_api2_c_api_smoke PROPERTIES
+  LABELS "lra;model"
 )
 
-add_test(NAME lra_c_api_negative
+add_test(NAME lra_api2_c_api_negative
   COMMAND "${PYTHON_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/real_c_api_negative_runner.py"
-    "$<TARGET_FILE:stp_lra_real_c_api_smoke>")
-set_tests_properties(lra_c_api_negative PROPERTIES
-  LABELS "lra;api;negative"
+    "${CMAKE_CURRENT_SOURCE_DIR}/api2_real_c_api_negative_runner.py"
+    "$<TARGET_FILE:stp_lra_api2_real_c_api_smoke>")
+set_tests_properties(lra_api2_c_api_negative PROPERTIES
+  LABELS "lra;negative"
 )
+
+# Every test here carries the label api2, so that ctest -L api2 runs the 2.x
+# API's suites (and ctest -L api, whose argument is a regular expression, the
+# suites of both APIs).
+get_property(_api2_tests DIRECTORY PROPERTY TESTS)
+set_property(TEST ${_api2_tests} APPEND PROPERTY LABELS api2)

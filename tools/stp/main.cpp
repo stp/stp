@@ -348,7 +348,7 @@ void CommandLine::register_entry(std::size_t index, const std::string& group)
       {
         // A value-taking Boolean: accepts 1/0, true/false, on/off, as
         // '--flattening false' or '--flattening=false'. The captured default
-        // is the registry's, which the api3 suite holds to the engine's.
+        // is the registry's, which the registry suite holds to the engine's.
         e.b = dflt == "true";
         opt = app.add_option(names, e.b, help)->capture_default_str();
       }

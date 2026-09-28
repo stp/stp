@@ -22,18 +22,18 @@ option(TEST_C_API "Enable tests that test STP's public C APIs" ON)
 
 if(TEST_C_API)
     # the 3.x C API
-    add_subdirectory(c3)
+    add_subdirectory(c)
     # libstp2: the 2.x C API over the 3.x one
     add_subdirectory(compat2)
 endif()
-option(TEST_CPP3_API "Enable tests that test STP's 3.x C++ API" ON)
-if(TEST_CPP3_API)
-    add_subdirectory(cpp3)
+option(TEST_CPP_API "Enable tests that test STP's 3.x C++ API" ON)
+if(TEST_CPP_API)
+    add_subdirectory(cpp)
 endif()
 
 # the 3.x Python API (pytest over the package built in bindings/python3)
 if(ENABLE_PYTHON3_API)
-    add_subdirectory(python3)
+    add_subdirectory(python)
 endif()
 
 # Exercise the installed package as an external UF C++ consumer. DESTDIR is

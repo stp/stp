@@ -13,7 +13,7 @@
 ;              || GetKind() == FLOATINGPOINT || GetIndexWidth() > 0'
 ;
 ; aborting in builds with assertions on input that needs no floating-point
-; reasoning to answer. See tests/api/cpp3/api3-fp-lowered-ite-fold.cpp for the
+; reasoning to answer. See tests/api/cpp/fp-lowered-ite-fold.cpp for the
 ; API's half of the same bug, and for what the term means once the fold is
 ; allowed to drop the format.
 ;

@@ -317,7 +317,7 @@ Everything else is a direct mapping.
   lifecycle, counterexamples, push and pop, parsing, `Expr` ownership, the
   counter enum's ABI, floating point and `fp.hpp`, uninterpreted functions,
   arrays, and the reason a query had no answer), each linked to `stp2`;
-  `libstp2-fidelity`, the 2.x behaviours `libstp2` once got wrong, each
+  `api2-fidelity`, the 2.x behaviours `libstp2` once got wrong, each
   checked against what 2.x did; and the C tests of the Real extension,
   `lra_c_api_smoke`, `lra_c_api_undeleted_expr` and `lra_c_api_negative`.
 - `tests/api/install`: the C and C++ (`uf.hpp`) consumers of an installed

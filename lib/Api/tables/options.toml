@@ -28,7 +28,7 @@
 #   - Options::set/get/info/names/help in C++, the stp_options_* functions in C, Solver.set(**kw) / Options in Python;
 #   - the CLI table of tools/stp (every entry's --name, aliases, short form and CLI form), its --help groups and text;
 #   - the option reference page of the docs;
-#   - the checks api3-registry (the table's defaults against the engine's) and api3-cli-help (the built binary's --help).
+#   - the checks registry (the table's defaults against the engine's) and cli-help (the built binary's --help).
 #
 # The entries began as a transcription of the command line tools/stp/main.cpp registered by hand;
 # the binary now registers its command line from this table.
