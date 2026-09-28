@@ -1160,11 +1160,12 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
 // arm above folds by lowering the operation and then evaluating the circuit
 // it gets back. A single Float(3,4) fp.add does not finish.
 //
-// It has not bitten because the CLI and the C API both install the
-// simplifying factory, which folds as it builds -- so lowerOperation hands
-// back a BVCONST that is already the answer and the evaluation below is a
-// no-op. That is a property of the caller's configuration, not of this
-// module, and STPMgr's own constructor installs the hashing factory instead.
+// It has not bitten because the API installs the simplifying factory as the
+// engine's (the stp binary included), which folds as it builds -- so
+// lowerOperation hands back a BVCONST that is already the answer and the
+// evaluation below is a no-op. That is a property of the caller's
+// configuration, not of this module, and STPMgr's own constructor installs
+// the hashing factory instead.
 //
 // Children are evaluated here rather than left to the kind-and-children
 // overload, which does the same thing one level down but has no memo to

@@ -200,9 +200,9 @@ bool CongruenceCandidates::proves(const ASTNode& equality)
   // that is what the budget is for -- and the flag and reason it raises on
   // its way out would otherwise be read by the main query as its own, which
   // turns a query STP can answer into an unknown. The current query is
-  // manager-wide for the same reason: the C interface reads it back. Put
-  // back on every exit, including a cancelled preparation unwinding out of
-  // the sub-solve.
+  // manager-wide too: the sub-solve runs with none, and the caller's is put
+  // back. All of it is put back on every exit, including a cancelled
+  // preparation unwinding out of the sub-solve.
   struct RestoreManager
   {
     STPMgr* manager;

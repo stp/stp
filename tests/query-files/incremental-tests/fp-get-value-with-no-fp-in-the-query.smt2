@@ -16,8 +16,8 @@
 ; that had in fact been solved was answered as though it had not.
 ;
 ; The two RUN lines are the same question put to the two drivers, and the
-; point is that they answer it the same way. Filed from the C API, where the
-; abort was unconditional; it reaches the same place from here.
+; point is that they answer it the same way. Filed from the 2.x C API, where
+; the abort was unconditional; it reaches the same place from here.
 ;
 ; RUN: %solver --incremental=on %s 2>&1 | %OutputCheck --check-prefix=CHECK %s
 ; RUN: %solver --incremental=off %s 2>&1 | %OutputCheck --check-prefix=CHECK %s

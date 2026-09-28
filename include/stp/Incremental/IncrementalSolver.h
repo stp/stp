@@ -81,10 +81,10 @@ public:
   IncrementalSolver& operator=(const IncrementalSolver&) = delete;
 
   // Should a session that did NOT explicitly ask for the driver be using it
-  // by now? One policy, for every frontend: the SMT-LIB2 reader and the C
-  // API disagreed for as long as each carried its own copy, and the C API's
-  // copy was a literal that `--incremental-auto-engage-at` could not reach,
-  // so the documented override was inert for embedders.
+  // by now? One policy, for every frontend: the SMT-LIB2 reader and the 2.x
+  // C API disagreed for as long as each carried its own copy, and the C
+  // API's copy was a literal that `--incremental-auto-engage-at` could not
+  // reach, so the documented override was inert for embedders.
   //
   // `configuredThreshold` is UserDefinedFlags::incremental_auto_engage_at:
   // negative selects the measured per-logic default, 0 disables automatic
@@ -92,29 +92,31 @@ public:
   // is how many real checks this session has already made, so the Nth check
   // asks with N-1. `delayedBvLogic` selects the longer default: pure
   // QF_BV/QF_ABV repay the driver's persistent encoding later than other
-  // logics do, and a caller that cannot know its logic -- the C API has no
-  // set-logic -- passes false and gets the shorter one.
+  // logics do, and a caller that cannot know its logic -- the API's own
+  // checks, which have no set-logic -- passes false and gets the shorter one.
   //
-  // Explicit forcing (--incremental, vc_setFlags 'i') bypasses this
-  // entirely; that is the caller's decision, not this policy's.
+  // Explicit forcing (--incremental, the API's incremental option) bypasses
+  // this entirely; that is the caller's decision, not this policy's.
   static bool automaticEngagementReady(int64_t configuredThreshold,
                                        bool delayedBvLogic, size_t solvesRun);
 
   // Whether this solve is a forced FIRST engagement: the session explicitly
-  // asked for the driver (--incremental, vc_setFlags 'i') AND has made no
-  // real check yet. Four policies in the driver key on it -- a speculative
-  // whole-stack block, a skipped constant-bit bootstrap, a pure-literal pass
-  // over a base-only stack, and the scoped-preprocessing gate.
+  // asked for the driver (--incremental, the API's incremental option) AND
+  // has made no real check yet. Four policies in the driver key on it -- a
+  // speculative whole-stack block, a skipped constant-bit bootstrap, a
+  // pure-literal pass over a base-only stack, and the scoped-preprocessing
+  // gate.
   //
   // Deliberately NOT derivable inside the driver as `engagedSolves == 0`.
   // That says only "this driver object has not solved before", which is also
   // true of the automatic path's first engaged solve -- and THAT solve has
   // had batch-preprocessed predecessors, so it must keep the search shape
   // they left. The difference is a session fact only a frontend can see, and
-  // the three ways it comes apart are all reachable: resetAssertions()
-  // destroys the driver without resetting the frontend's counter, the C API's
-  // 'i' flag can arrive after batch queries have already run, and a
-  // canHandle() refusal bumps the counter without engaging.
+  // the ways it comes apart are reachable: resetAssertions() destroys the
+  // driver without resetting the frontend's counter, and a canHandle()
+  // refusal bumps the counter without engaging. (A third, the 2.x C API's
+  // 'i' flag arriving after batch queries, is gone: the API's incremental
+  // option can only be set before the first check.)
   //
   // `solvesRun` is checks already made, as above; the first check asks with 0.
   static bool forcedFirstSolve(bool forcedFromStart, size_t solvesRun);
@@ -177,7 +179,7 @@ public:
   // reads the model at solve time: the SAT model stays live until the
   // next solve or clause addition, and the driver touches neither
   // between user commands. The model readers (get-value, get-model, the
-  // C API's counterexample calls) call this first; answers nobody
+  // API's model) call this first; answers nobody
   // samples never pay for construction. Idempotent and cheap when
   // nothing is pending.
   void materializePendingModel();

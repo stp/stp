@@ -171,9 +171,9 @@ For running an input as the command line does: a lexer reads through a
 `ParserReader` when one is set (`setSMT2Reader`, `setCVCReader`,
 `setSMTReader`); `SetFatalErrorObserver` tells a per-thread observer of every
 fatal error before anything unwinds; `STPMgr::cnf_listener` receives every CNF
-with its `CnfExtent`; and under `FatalErrorThrows`, `exit_after_CNF` ends the
-run rather than the process (`STPMgr::run_ended_after_cnf`, and `ScriptEnded`
-in the SMT-LIB 2 frontend).
+with its `CnfExtent`; and `exit_after_CNF` ends the run rather than the
+process (`STPMgr::run_ended_after_cnf`, and `ScriptEnded` in the SMT-LIB 2
+frontend).
 
 ## The other layers
 

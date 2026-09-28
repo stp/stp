@@ -442,8 +442,7 @@ void SetFatalErrorThrows(bool on)
   fatal_error_throws = on;
 }
 
-// Who is told of this thread's fatal errors besides vc_error_hdlr; see the
-// declaration in AST.h.
+// Who is told of this thread's fatal errors; see the declaration in AST.h.
 static THREAD_LOCAL_IE FatalErrorObserver fatal_error_observer = nullptr;
 static THREAD_LOCAL_IE void* fatal_error_observer_opaque = nullptr;
 
@@ -469,10 +468,6 @@ static void notifyFatalErrorObserver(const char* str)
 void ReportFatalError(const char* str)
 {
   cerr << "Fatal Error: " << str << endl;
-  if (vc_error_hdlr)
-  {
-    vc_error_hdlr(str);
-  }
   notifyFatalErrorObserver(str);
 }
 
@@ -487,10 +482,6 @@ ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)
   {
     cerr << "Fatal Error: " << str << endl;
     cerr << w << endl;
-  }
-  if (vc_error_hdlr)
-  {
-    vc_error_hdlr(str);
   }
   notifyFatalErrorObserver(str);
   if (fatal_error_throws)
@@ -558,7 +549,7 @@ void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
 
 // A float is carried internally as its packed bits, so after FloatBlast a
 // float-typed leaf may stand in a bitvector circuit -- but this is not public
-// subtyping. The parser and C API reject BV operations over FP terms; this
+// subtyping. The parsers and the API reject BV operations over FP terms; this
 // predicate exists for lowered and model-evaluation nodes built inside STP.
 // A leaf's format is declared (a symbol) or
 // fixed when it is made (an ASTFPConst, which interns apart from the plain

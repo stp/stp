@@ -378,8 +378,8 @@ public:
   const FpAbstractionStatistics& statistics() const { return stats_; }
 
   // Fold everything this instance has counted since it last published into
-  // the manager's session-long EncodingCoverage, which is what the C
-  // interface's vc_getCounter reads. Called from the destructor, so a
+  // the manager's session-long EncodingCoverage, which is what the API's
+  // Solver::statistics reads. Called from the destructor, so a
   // session's totals are complete however an instance ended, and from
   // STPMgr::publishFpCoverage, so a reader that asks mid-session -- a
   // fuzzing campaign dumping coverage before it destroys the checker -- sees

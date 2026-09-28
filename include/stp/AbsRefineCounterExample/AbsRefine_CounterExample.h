@@ -243,7 +243,6 @@ public:
 
   // Prints the counterexample to stdout
   void PrintCounterExample(bool t, std::ostream& os = std::cout);
-  void PrintCounterExampleSMTLIB2(std::ostream& os);
   void PrintFullCounterExampleSMTLIB2(std::ostream& os);
   void outputLine(std::ostream& os, const ASTNode &f, ASTNode se);
   
@@ -515,53 +514,5 @@ public:
   ~AbsRefine_CounterExample() { ClearAllTables(); }
 };
 
-class CompleteCounterExample // not copyable
-{
-  ASTNodeMap counterexample;
-  STPMgr* bv;
-
-public:
-  CompleteCounterExample(ASTNodeMap a, STPMgr* beev)
-      : counterexample(a), bv(beev)
-  {
-  }
-  ASTNode GetCounterExample(ASTNode e)
-  {
-    if (BOOLEAN_TYPE == e.GetType() && SYMBOL != e.GetKind())
-    {
-      FatalError("You must input a term or propositional variables\n", e);
-    }
-    if (counterexample.find(e) != counterexample.end())
-    {
-      // The map is the raw model, holding the plain bitvector constants that
-      // model evaluation works in. A value handed out carries the sort of
-      // what was asked for, as from
-      // AbsRefine_CounterExample::GetCounterExample -- so a float term's
-      // value can be equated with the term again.
-      return bv->LiftSourceValue(counterexample[e], e.GetSourceSort());
-    }
-    else
-    {
-      if (SYMBOL == e.GetKind() && BOOLEAN_TYPE == e.GetType())
-      {
-        return bv->CreateNode(stp::FALSE);
-      }
-
-      if (SYMBOL == e.GetKind())
-      {
-        // Simplified out, so it can take any value. RoundingMode has only five
-        // values in its 5-bit carrier, so use a legal deterministic default;
-        // ordinary bitvectors and floats retain the all-zero completion.
-        ASTNode z = bv->isRoundingModeSortedTerm(e)
-                        ? bv->CreateBVConst(
-                              5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
-                        : bv->CreateZeroConst(e.GetValueWidth());
-        return bv->LiftSourceValue(z, e.GetSourceSort());
-      }
-
-      return e;
-    }
-  }
-};
 } // end of namespace
 #endif

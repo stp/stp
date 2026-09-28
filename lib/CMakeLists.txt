@@ -114,18 +114,10 @@ foreach(_stp_obj_lib ${stp_lib_targets})
     endif()
 endforeach()
 
-# Create list of objects and gather list of
-# associated public headers.
+# The objects libstp is made of.
 set(stp_lib_objects "")
-set(stp_public_headers "")
 foreach(target ${stp_lib_targets})
     list(APPEND stp_lib_objects $<TARGET_OBJECTS:${target}>)
-
-    get_target_property(TARGETS_PUBLIC_HEADERS ${target} PUBLIC_HEADER)
-    if (EXISTS "${TARGETS_PUBLIC_HEADERS}")
-        list(APPEND stp_public_headers "${TARGETS_PUBLIC_HEADERS}")
-        message("Adding public header(s) ${TARGETS_PUBLIC_HEADERS} to target stp")
-    endif()
 endforeach()
 
 

@@ -1034,7 +1034,6 @@ namespace stp
     switch (n.GetKind())
     {
       case BVCONST:
-      case BITVECTOR:
       {
         // the CBV doesn't leak. it is a copy of the cbv inside the node.
         CBV cbv = n.GetBVConst();

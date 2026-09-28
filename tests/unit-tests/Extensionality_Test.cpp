@@ -2874,14 +2874,13 @@ TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
 // them left STP's passes held off the array graph after the solve that
 // owned it had returned.
 //
-// active() has to outlive its solve: (get-model),
-// vc_getCounterExampleArray and term evaluation all read the frozen
-// graph and the certified observations once TopLevelSTPAux has
-// returned, and only the next beginSolve() clears it.
-// activeInSolve() must not, or an assertion arriving for the next query
-// -- or a direct vc_simplify -- is still denied ordinary substitution
-// and read-over-if-then-else distribution on account of a solve that
-// has already finished.
+// active() has to outlive its solve: (get-model), the API's model
+// snapshot and term evaluation all read the frozen graph and the
+// certified observations once TopLevelSTPAux has returned, and only the
+// next beginSolve() clears it. activeInSolve() must not, or an assertion
+// arriving for the next query is still denied ordinary substitution and
+// read-over-if-then-else distribution on account of a solve that has
+// already finished.
 TEST_F(ExtPrepareTest, OwnershipGatesPassesOnlyInsideTheSolveWindow)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -3480,10 +3479,11 @@ TEST_F(ExtModelEqualityTest, FollowsTheSelectedIfThenElseBranch)
 // evaluating the read completes a cell nobody recorded exactly as the
 // contents comparison completes it.
 //
-// Evaluation used to invent all-ones for such a cell, while the printer,
-// vc_getCounterExampleArray and the comparison below all fill it with
-// zero. store(a, i, 0) = a then read false through its lowering and true
-// through the contents, and the audit killed a satisfiable query.
+// Evaluation used to invent all-ones for such a cell, while the printer
+// and the comparison below fill it with zero (as the 2.x C API's array
+// counterexample did). store(a, i, 0) = a then read false through its
+// lowering and true through the contents, and the audit killed a
+// satisfiable query.
 TEST_F(ExtModelEqualityTest, LoweringOfAWriteChainAgreesWithTheContents)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;

@@ -218,9 +218,8 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
   // total CNF, and that is a different encoding rather than the same one
   // finished.
   //
-  // Said at both exits. --output-CNF writes the file whether or not
-  // --exit-after-CNF is given, and it used to write an over-approximate one
-  // with no warning at all.
+  // Said when the run ends at its first CNF; the stp binary says the same of
+  // the files --output-CNF writes from the CNF sink (tools/stp/run.cpp).
   const bool abstracted = bm->UserFlags.bv_eq_abstraction ||
                           bm->UserFlags.bv_term_abstraction;
   const bool arrayRefinement = needAbsRef && !abstracted;
@@ -242,21 +241,6 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
   if (bm->UserFlags.stats_flag)
     cerr << "cnf: " << cnf.clauseCount() << " clauses, " << cnf.varCount() - 1
          << " variables, " << cnf.literalCount() << " literals" << endl;
-
-  if (bm->UserFlags.output_CNF_flag)
-  {
-    std::stringstream fileName;
-    fileName << "output_" << bm->CNFFileNameCounter++ << ".cnf";
-    std::ofstream out(fileName.str().c_str());
-    if (!out)
-      cerr << "Warning: could not open " << fileName.str() << " for writing."
-           << endl;
-    else
-    {
-      cnf.writeDimacs(out);
-      sayWhyPartial("the CNF written by --output-CNF");
-    }
-  }
 
   if (bm->cnf_listener)
   {
@@ -301,18 +285,14 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
       sayWhyPartial("that CNF");
     }
 
-    // Under the 3.x API the run ends here, not the process: the check stops
-    // as stop_after_cnf does, and what unwinds from here says nothing more
-    // (run_ended_after_cnf), so that the output is what exiting here gave.
-    if (FatalErrorThrows())
-    {
-      bm->run_ended_after_cnf = true;
-      bm->noteUnknown(UnknownReason::StoppedAfterCnf,
-                      "the run ended after generating the first CNF");
-      throw PreparationInterrupted(PreparationStage::Boundary,
-                                   std::chrono::steady_clock::now());
-    }
-    exit(0);
+    // The run ends here: the check stops as stop_after_cnf does, and what
+    // unwinds from here says nothing more (run_ended_after_cnf), so that the
+    // output is what the stp binary once gave by exiting here.
+    bm->run_ended_after_cnf = true;
+    bm->noteUnknown(UnknownReason::StoppedAfterCnf,
+                    "the run ended after generating the first CNF");
+    throw PreparationInterrupted(PreparationStage::Boundary,
+                                 std::chrono::steady_clock::now());
   }
 }
 

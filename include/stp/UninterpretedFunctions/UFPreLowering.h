@@ -131,7 +131,7 @@ public:
   // the original root that the rewrite turned into a different application:
   // (f x) under x = 7 becomes (f 7), and it is (f 7) that lowering sees and
   // the solve certifies. A caller holding the original handle -- get-value,
-  // the C API's value accessor -- reads it through this map.
+  // the API's model -- reads it through this map.
   ASTNode propagate(const ASTNode& root, UFPreLoweringStats* stats = NULL,
                     bool skeleton = false, ASTNodeMap* handleAliases = NULL);
 

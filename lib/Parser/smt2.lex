@@ -761,10 +761,6 @@ namespace stp {
     smt2_scan_string(yy_str);
   }
 
-  FILE* getSMT2In() {
-    return smt2in;
-  }
-
   void setSMT2In(FILE* file) {
     smt2in = file;
   }
@@ -772,11 +768,5 @@ namespace stp {
   void setSMT2Reader(ParserReader reader, void* opaque) {
     smt2Reader = reader;
     smt2ReaderOpaque = opaque;
-  }
-
-  void setSMT2Interactive(bool enable) {
-    if (smt2in == NULL)
-      smt2in = stdin;
-    yy_set_interactive(enable ? 1 : 0);
   }
 }

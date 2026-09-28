@@ -106,9 +106,6 @@ STP::~STP()
 void STP::ClearAllTables(void)
 {
   QueryPhaseScope cleanup(bm->query_timing, QueryPhase::QueryCleanup);
-  // The counterexample goes with them, so there is no longer a model to read.
-  // Whoever decides the next query says so again.
-  queryAnswered = false;
 
   if (simp != NULL)
     simp->ClearAllTables();
@@ -289,10 +286,10 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     bm->UserFlags.uf_inject_args = false;
     // A second run of the pipeline is a second solve, and every solve reaches
     // topLevelSTPOnce over tables nobody has written yet: the SMT-LIB2 frontend
-    // clears them in Cpp_interface::resetSolver, the C API in vc_query, and the
-    // single-query tool has never run anything. This one is reached from inside
-    // the driver, so nothing did it here, and the run inherits the first run's
-    // substitution map, array-transform tables and bit-blasting cache.
+    // clears them in Cpp_interface::resetSolver, and the API before each of
+    // its checks. This one is reached from inside the driver, so nothing did
+    // it here, and the run inherits the first run's substitution map,
+    // array-transform tables and bit-blasting cache.
     //
     // The substitution map is the one that bites rather than merely wastes:
     // RemoveUnconstrained's array rules meet a symbol the first run already
@@ -1237,9 +1234,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       true);
 
   // Recomputed per query, never latched: every input is available here,
-  // including the C API's direct request, so a query that happens to need a
-  // candidate model cannot leave construction switched on for the rest of
-  // the session.
+  // including a direct request for a counterexample, so a query that happens
+  // to need a candidate model cannot leave construction switched on for the
+  // rest of the session.
   bm->UserFlags.construct_counterexample_flag =
       lraActive ||
       bm->UserFlags.modelConstructionRequired(

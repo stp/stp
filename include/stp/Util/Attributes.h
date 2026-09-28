@@ -37,10 +37,10 @@ THE SOFTWARE.
 #endif
 
 // The DLL_PUBLIC / DLL_LOCAL block below is duplicated verbatim in
-// include/stp/c_interface.h, and deliberately so: c_interface.h is the only
-// header STP installs, and this header ships nowhere, so the public C header
-// cannot include it. Do not "deduplicate" the two -- that would leave the
-// installed header with no definition of DLL_PUBLIC. Keep them in sync instead.
+// include/stp/c_interface.h, the 2.x header libstp2 installs, and
+// deliberately so: this header ships nowhere, so an installed header cannot
+// include it. Do not "deduplicate" the two -- that would leave the installed
+// header with no definition of DLL_PUBLIC. Keep them in sync instead.
 #if defined(_MSC_VER)
 // MSVC symbol visibility. Two macros drive it, both set by lib/CMakeLists.txt:
 //

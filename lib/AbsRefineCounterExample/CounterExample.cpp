@@ -1458,7 +1458,8 @@ class AbsRefine_CounterExample::EvaluationDriver
             // of the model already uses needs no bookkeeping at all.
             //
             // Gated on the option: with it off the counterexample map, and
-            // so vc_getCounterExampleArray, must stay exactly as before.
+            // so the model the API reads from it, must stay exactly as
+            // before.
             return finish(defaultCellValue(arrName));
           }
 
@@ -1841,10 +1842,10 @@ void AbsRefine_CounterExample::CheckCounterExample(
 // Asking the model a question must not change it. Evaluation memoises,
 // and where it cannot account for a read it invents a value and records
 // it -- so a question would otherwise leave cells behind that the model
-// printer and vc_getCounterExampleArray then report as part of the
-// answer. Both public query entry points roll the model back to what it
-// was; the invented values are deterministic, so anything that needs
-// one again gets the same one.
+// printer and the API's model then report as part of the answer. Both
+// public query entry points roll the model back to what it was; the
+// invented values are deterministic, so anything that needs one again gets
+// the same one.
 namespace
 {
 class ModelQuery
@@ -2880,38 +2881,6 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
         os, UFModel::defaultSeed(
                 bm->getUFContextIfAny()->activeDeclarations()));
 
-  os.flush();
-}
-
-// Just uses the symbols from the counter example, might not be every symbol defined in the problem.
-void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
-{
-  // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
-  // changes it. Which breaks the iterator otherwise.
-  const ASTNodeMap c(CounterExampleMap);
-
-  ASTNodeMap::const_iterator it = c.begin();
-  ASTNodeMap::const_iterator itend = c.end();
-  for (; it != itend; it++)
-  {
-    const ASTNode& f = it->first;
-    const ASTNode& se = it->second;
-    outputLine(os, f,se);
-
-  }
-  if (ufTheoryAdapter != NULL && ufTheoryAdapter->hasCertifiedModel())
-  {
-    const UFFunctionModelSeedSet* seed =
-        ufTheoryAdapter->certifiedModelSeed();
-    if (seed == NULL)
-      FatalError("certified UF adapter has no model seed");
-    UFModel::printSMTLIB2(os, *seed);
-  }
-  else if (bm->UserFlags.enable_uninterpreted_functions &&
-           bm->getUFContextIfAny() != NULL)
-    UFModel::printSMTLIB2(
-        os, UFModel::defaultSeed(
-                bm->getUFContextIfAny()->activeDeclarations()));
   os.flush();
 }
 

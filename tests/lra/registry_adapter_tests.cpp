@@ -1677,9 +1677,9 @@ void equalitySnapshotRejection()
 } // namespace
 
 // Every layer that does exact arithmetic while building the LRA problem
-// refuses in its own currency, and the top of the solver and the C interface
-// each decided for themselves which currencies counted.  They disagreed:
-// STP.cpp knew all four, c_interface.cpp knew NumberFailure and
+// refuses in its own currency, and the top of the solver and the 2.x C
+// interface each decided for themselves which currencies counted.  They
+// disagreed: STP.cpp knew all four, the C interface knew NumberFailure and
 // FrontendFailure only, so a RegistryFailure or SolveContextFailure carrying
 // ResourceLimit was a budget refusal at one layer and a fatal error -- an
 // aborted host process -- one layer down.  One predicate now answers for all

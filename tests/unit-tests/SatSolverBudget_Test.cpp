@@ -60,7 +60,7 @@ protected:
 TEST(SatSolverBudget, ReplacementBackendCannotRearmAnExpiredQuery)
 {
   stp::UserDefinedFlags flags;
-  flags.timeout_max_time = 60;
+  flags.timeout_max_time_ms = 60000;
   flags.timeout_max_conflicts = 37;
   const auto deadline = std::chrono::steady_clock::now();
   // The first attempt has spent the time (possibly before SAT was entered).
@@ -80,7 +80,7 @@ TEST(SatSolverBudget, ReplacementBackendCannotRearmAnExpiredQuery)
 TEST(SatSolverBudget, RerouteDoesNotExpireTheOwningQueryOrRoundUpItsRemainder)
 {
   stp::UserDefinedFlags flags;
-  flags.timeout_max_time = 60;
+  flags.timeout_max_time_ms = 60000;
   const auto deadline = std::chrono::steady_clock::now() +
                         std::chrono::milliseconds(500);
   CountingSolver first;
@@ -104,16 +104,16 @@ TEST(SatSolverBudget, PublicBatchQueriesStartFreshAfterTimeout)
 {
   stp::STPMgr manager;
   stp::STP solver(&manager);
-  manager.UserFlags.timeout_max_time = 0;
+  manager.UserFlags.timeout_max_time_ms = 0;
   EXPECT_EQ(stp::SOLVER_UNKNOWN,
             solver.TopLevelSTP(manager.ASTTrue, manager.ASTFalse));
   EXPECT_EQ(stp::UnknownReason::Timeout, manager.getUnknownReason());
 
-  for (int64_t budget : {60, -1})
+  for (int64_t budget : {60000, -1})
   {
     manager.ClearAllTables();
     solver.ClearAllTables();
-    manager.UserFlags.timeout_max_time = budget;
+    manager.UserFlags.timeout_max_time_ms = budget;
     EXPECT_EQ(stp::SOLVER_SATISFIABLE,
               solver.TopLevelSTP(manager.ASTTrue, manager.ASTFalse));
     EXPECT_EQ(stp::UnknownReason::None, manager.getUnknownReason());

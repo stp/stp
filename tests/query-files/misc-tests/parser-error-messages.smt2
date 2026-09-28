@@ -10,12 +10,12 @@
 ;            inside it, splitting a single-line response across two lines.
 ;   stderr   FatalError's own line. It was handed the empty string, so it
 ;            printed "Fatal Error: " and nothing after it.
-;   handler  the callback a library caller installs with
-;            vc_registerErrorHandler, which is how an embedder learns that
-;            parsing failed. It received the same empty string, so it
-;            learned nothing about why. The command line installs one that
-;            prints "STP Error: ", which is what makes that path checkable
-;            from here rather than only from C.
+;   handler  the fatal error handler a library caller installs on a solver
+;            (Solver::set_fatal_error_handler), which is how an embedder
+;            learns that parsing failed. It received the same empty string,
+;            so it learned nothing about why. The stp binary installs one
+;            that prints "STP Error: ", which is what makes that path
+;            checkable from here rather than only from the API.
 ;
 ; Pinning text after each label is the whole point: a blank message is what
 ; the bug looked like, and only a positive match rules it out. The line

@@ -77,18 +77,20 @@ LraAstState::~LraAstState()
   real_symbol_ids.clear();
   real_symbols.clear();
 
-  // Every reference this state owned is gone, so anything still interned in
-  // real_constants is a constant a caller still holds an Expr for.  Forgetting
-  // to release an Expr is a leak c_interface.h documents and a bit-vector
-  // constant survives, because those are owned by the manager's tables and go
-  // when the manager does.  A Real constant is refcount-owned and interns
-  // itself here, so the same mistake used to leave this set holding raw
-  // pointers that nothing would ever free -- and, while assertions reached
-  // this directory, took the host process down with it.
+  // Every reference this state owned is gone, and the manager released its
+  // own tables before calling here, so anything still interned in
+  // real_constants is a constant something outside the manager still refers
+  // to.  Through the API nothing can, since every handle keeps its manager
+  // alive; this is the backstop.  A bit-vector constant held that way is
+  // still freed, because those are owned by the manager's tables and go when
+  // the manager does.  A Real constant is refcount-owned and interns itself
+  // here, so the same situation used to leave this set holding raw pointers
+  // that nothing would ever free -- and, while assertions reached this
+  // directory, took the host process down with it.
   //
-  // Free them, which makes the Real path behave like the bit-vector one: a
-  // caller who leaks an Expr leaks nothing past vc_Destroy, and a caller who
-  // uses one afterwards was already using a dangling handle.
+  // Free them, which makes the Real path behave like the bit-vector one:
+  // nothing outlives the manager, and whatever uses one afterwards was
+  // already holding a dangling reference.
   //
   // The table is moved out first.  Deleting through ASTRealConst::CleanUp
   // would call EraseRealConst and mutate the container being walked; these

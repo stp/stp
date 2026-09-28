@@ -201,10 +201,6 @@ namespace stp {
     cvc_scan_string(yy_str);
   }
 
-  FILE* getCVCIn() {
-    return cvcin;
-  }
-
   void setCVCReader(ParserReader reader, void* opaque) {
     cvcReader = reader;
     cvcReaderOpaque = opaque;

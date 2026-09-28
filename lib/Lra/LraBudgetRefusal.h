@@ -15,7 +15,7 @@ namespace stp::lra
  * for what the caller should do.
  *
  * One definition, because it was previously written twice and the two copies
- * disagreed: STP.cpp knew all four, c_interface.cpp knew two, so a
+ * disagreed: STP.cpp knew all four, the 2.x C interface two, so a
  * RegistryFailure or SolveContextFailure carrying ResourceLimit was a budget
  * refusal at the top of the solver and a fatal error one layer down -- the
  * same condition on either side of an internal boundary deciding whether an

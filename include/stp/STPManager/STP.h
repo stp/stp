@@ -131,33 +131,20 @@ public:
   IncrementalSolver* incrementalSolver = nullptr;
   RealSessionState* realSession = nullptr;
 
-  // The C API's engagement bookkeeping, mirroring the SMT-LIB2 frontend's:
-  // the driver engages from the second solve of a session (the first,
-  // largest all-new formula gets the batch pipeline's whole-formula
-  // simplification), unless vc_setFlags 'i' asked for it from the start.
-  // The SMT-LIB2 frontend keeps its own copies in Cpp_interface.
+  // The API's engagement bookkeeping (lib/Api/Solver.cpp), mirroring the
+  // SMT-LIB2 frontend's: once a push has made the session incremental, the
+  // driver engages at the check incremental-auto-engage-at names -- the
+  // third by default, as the API has no set-logic to choose a per-logic
+  // default by -- so the first checks, the largest all-new formulas, get the
+  // batch pipeline's whole-formula simplification; incremental=on engages it
+  // from the start. The SMT-LIB2 frontend keeps its own copies in
+  // Cpp_interface.
   bool incrementalFromStart = false;
-  // Session state, turned on by the first vc_push unless the caller asked for
+  // Session state, turned on by the first push unless the caller asked for
   // IncrementalMode::OFF. Separate from UserFlags.incremental_mode, which
   // stays the caller's request.
   bool sessionIncremental = false;
   size_t incrementalSolvesRun = 0;
-
-  // Whether a query has been decided and its counterexample tables have not
-  // been discarded since -- that is, whether there is a model to read at all.
-  //
-  // The C API's contract in as much state as it needs: a counterexample
-  // describes the last query, survives vc_pop, and is discarded by the next
-  // vc_push or vc_query. ClearAllTables is where that discarding happens, so
-  // that is where this is cleared; vc_query_with_timeout sets it again when
-  // the query comes back decided, and leaves it clear when the answer was a
-  // unknown or an error, because neither leaves a model behind.
-  //
-  // The SMT-LIB2 frontend has always kept the equivalent (model_valid) and
-  // answers "unsupported" without it. Nothing on the C API side did, so a
-  // model query with no solve behind it read an empty counterexample map
-  // instead of being refused.
-  bool queryAnswered = false;
 
   DLL_PUBLIC IncrementalSolver* getIncrementalSolver();
   DLL_PUBLIC void resetIncrementalSolver();

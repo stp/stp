@@ -179,8 +179,8 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
     if (sort.kind() == SourceSort::Kind::Array &&
         !bm.UserFlags.enable_array_equality)
       FatalError("STP cannot decide equality between whole array terms "
-                 "without --array-equality (the C API's vc_setFlag(vc, "
-                 "'x'), or Solver(array_equality=True) in Python).");
+                 "without --array-equality (the array-equality option in "
+                 "the API).");
 
     bm.noteDistinct();
   }
@@ -266,8 +266,8 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
 
     if (array_eq_from_source && !bm.UserFlags.enable_array_equality)
       FatalError("STP cannot decide equality between whole array terms "
-                 "without --array-equality (the C API's vc_setFlag(vc, "
-                 "'x'), or Solver(array_equality=True) in Python).");
+                 "without --array-equality (the array-equality option in "
+                 "the API).");
 
     if (back_children[0].GetType() != ARRAY_TYPE ||
         back_children[1].GetType() != ARRAY_TYPE ||

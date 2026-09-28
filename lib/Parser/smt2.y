@@ -83,8 +83,8 @@ namespace stp
   using std::endl;
 
   using stp::UNDEFINED;    //!< An undefined expression.
-  using stp::SYMBOL;       //!< Named expression (or variable), i.e. created via 'vc_varExpr'.
-  using stp::BVCONST;      //!< Bitvector constant expression, i.e. created via 'vc_bvConstExprFromInt'.
+  using stp::SYMBOL;       //!< Named expression (or variable)
+  using stp::BVCONST;      //!< Bitvector constant expression
   using stp::BVNOT;        //!< Bitvector bitwise-not
   using stp::BVCONCAT;     //!< Bitvector concatenation
   using stp::BVOR;         //!< Bitvector bitwise-or
@@ -93,7 +93,7 @@ namespace stp
   using stp::BVNAND;       //!< Bitvector bitwise not-and; OR nand (TODO: does this still exist?)
   using stp::BVNOR;        //!< Bitvector bitwise not-or; OR nor (TODO: does this still exist?)
   using stp::BVXNOR;       //!< Bitvector bitwise not-xor; OR xnor (TODO: does this still exist?)
-  using stp::BVEXTRACT;    //!< Bitvector extraction, i.e. via 'vc_bvExtract'.
+  using stp::BVEXTRACT;    //!< Bitvector extraction
   using stp::BVLEFTSHIFT;  //!< Bitvector left-shift
   using stp::BVRIGHTSHIFT; //!< Bitvector right-right
   using stp::BVSRSHIFT;    //!< Bitvector signed right-shift
@@ -137,9 +137,6 @@ namespace stp
   using stp::IMPLIES;      //!< Implication boolean expression
   using stp::READ;         //!< Array read expression
   using stp::WRITE;        //!< Array write expression
-  using stp::ARRAY;        //!< Array creation expression
-  using stp::BITVECTOR;    //!< Bitvector creation expression
-  using stp::BOOLEAN;      //!< Boolean creation expression
 
   using stp::FP_ABS;
   using stp::FP_NEG;
@@ -219,11 +216,10 @@ namespace stp
   }
 
   // The diagnostic, built once. It is the body of the SMT-LIB (error ...)
-  // response on stdout and also what the fatal path hands to the error
-  // handler -- which used to receive the empty string, so a caller that
-  // registered one through vc_registerErrorHandler learned that parsing
-  // had failed but never why, and the command line printed two labelled
-  // blank lines after a perfectly good response.
+  // response on stdout and also what the fatal path reports -- which used
+  // to be the empty string, so a caller told of the failure learned that
+  // parsing had failed but never why, and the command line printed two
+  // labelled blank lines after a perfectly good response.
   static std::string smt2_diagnostic(const char *s)
   {
     std::ostringstream o;
@@ -350,9 +346,8 @@ namespace stp
     // SMT2Parse(), which answers failure, and the caller decides -- the
     // command line exits with the diagnostic, a library caller gets a parse
     // error with its assertion stack put back. The other channels (the
-    // "Fatal Error:" line on stderr, the registered handler and observer)
-    // keep their report; under the 3.x API the diagnostic is also the
-    // error's own text.
+    // "Fatal Error:" line on stderr and the observer) keep their report;
+    // under the 3.x API the diagnostic is also the error's own text.
     stp::ReportFatalError(smt2_diagnostic(s).c_str());
     throw stp::ParseAbandon();
   }
@@ -1205,11 +1200,10 @@ namespace stp
       /* SMT-LIB declares * and / :left-assoc, so (* a b c) is (* (* a b) c).
        * CreateRealTerm takes + and - at any arity but these two only in
        * pairs, so fold them here rather than refuse a query the standard
-       * allows -- the C interface folds them the same way, so a file could
-       * not state what a client could. Folding left is also what keeps a
-       * product legal: the constants meet each other before any symbol does,
-       * and every binary node then has the concrete operand the linear
-       * fragment asks for. ITE is not associative and is left alone. */
+       * allows. Folding left is also what keeps a product legal: the
+       * constants meet each other before any symbol does, and every binary
+       * node then has the concrete operand the linear fragment asks for.
+       * ITE is not associative and is left alone. */
       if ((kind == stp::REAL_MUL || kind == stp::REAL_DIV)
           && children->size() > 2)
       {
@@ -1313,8 +1307,7 @@ namespace stp
   static ASTNode* createExactRealPredicate(Kind kind, ASTVec* operands)
   {
     /* SMT-LIB declares <, <=, > and >= over Reals :chainable, so (> a b c) is
-     * (and (> a b) (> b c)) and any arity of two or more is well formed, as
-     * it is through the C interface, which chains these itself. */
+     * (and (> a b) (> b c)) and any arity of two or more is well formed. */
     if (operands->size() < 2)
     {
       const std::string diagnostic =

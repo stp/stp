@@ -139,16 +139,6 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
       PL_Print1(os, c[1], indentation, letize, bm);
       os << "}";
       break;
-    case BITVECTOR:
-      os << "BITVECTOR(";
-      unsigned char* str;
-      str = CONSTANTBV::BitVector_to_Hex(c[0].GetBVConst());
-      os << str << ")";
-      CONSTANTBV::BitVector_Dispose(str);
-      break;
-    case BOOLEAN:
-      os << "BOOLEAN";
-      break;
     case FALSE:
     case TRUE:
       os << kind;
@@ -394,8 +384,8 @@ ostream& PL_Print(ostream& os, const ASTNode& n, STPMgr* bm, int indentation)
   if (containsFloatingPointTheory(n, bm))
   {
     FatalError("PL_Print: the presentation language has no floating-point "
-               "syntax; print this with SMTLIB2_PrintBack (vc_printSMTLIB2 "
-               "from the C interface)");
+               "syntax; print this as SMT-LIB 2 instead (SMTLIB2_PrintBack, "
+               "or Format::SMTLIB2 through the API)");
   }
 
   // Clear the PrintMap

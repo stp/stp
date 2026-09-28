@@ -13,9 +13,9 @@
 ;
 ; Reduced by delta debugging from a murxla trace. The verdict alone does not
 ; witness the fix: the SMT-LIB printer already mapped SOLVER_ERROR to unknown,
-; so it is the reason that has to be asked for. Through the C interface the
-; same answer used to arrive as a raw -100, on a boundary documented to answer
-; 0, 1, 2 or 3.
+; so it is the reason that has to be asked for. Through the 2.x C interface
+; the same answer used to arrive as a raw -100, on a boundary documented to
+; answer 0, 1, 2 or 3.
 ; CHECK-NEXT: ^unknown$
 ; CHECK-NEXT-L: (:reason-unknown (incomplete "the exact linear arithmetic solver could not decide this query within its resource budget: exact assertion reached a resource limit"))
 ; Monotone elimination avoids the large core row and reconstructs a checked model.

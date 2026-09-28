@@ -90,11 +90,11 @@ namespace stp
 //    from all five (see topLevel).
 //
 //    Conjoined at solve time rather than asserted at creation, so every
-//    route here -- parser or C API, before or after push/pop/
+//    route here -- parser or API, before or after push/pop/
 //    reset-assertions -- is covered. The symbols are also pinned where they
 //    are declared, which is the right thing whenever that assertion
 //    survives; it is not what makes them safe. Assertions are levelled and
-//    the nodes are not, so a symbol built inside a vc_push/vc_pop bracket
+//    the nodes are not, so a symbol built inside a push/pop bracket
 //    outlives the constraint that was supposed to hold it.
 class FpTotalise // not copyable
 {

@@ -115,8 +115,8 @@ Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
 
 // Every writer of the parser globals borrows: whoever sets one clears it
 // again. GlobalParserInterface is cleared whichever constructor ran, because
-// the callers that assign it directly (the C interface's parse entry points)
-// point it at a stack local of theirs, which is this object. The guard keeps
+// the callers that assign it directly (the API's parse entries) point it at
+// a stack local of theirs, which is this object. The guard keeps
 // an interface that has since been superseded from clearing a pointer that
 // now belongs to a live one.
 Cpp_interface::~Cpp_interface()
@@ -688,7 +688,7 @@ void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
 // SMT-LIB's RoundingMode sort has exactly five values; the 5-bit carrier has
 // 32. Pin a declared RoundingMode symbol to the five one-hot encodings.
 // Asserted (rather than built into the blaster) so that every route to a
-// query -- check-sat here, or a C-API query over a parsed file -- sees it.
+// query -- check-sat here, or an API check over a parsed script -- sees it.
 //
 // This is the pin for the level the symbol is declared at, not the guarantee:
 // an assertion belongs to a level and the symbol node does not, so FpTotalise
@@ -787,9 +787,9 @@ void Cpp_interface::endParseWithDiagnostic(const std::string& diagnostic)
 {
   if (!current_command_active)
     FatalError(diagnostic.c_str());
-  // The other channels ("Fatal Error:" on stderr, the registered handler and
-  // observer) keep their report; under the 3.x API the diagnostic is also
-  // the parse error's own text.
+  // The other channels ("Fatal Error:" on stderr and the observer) keep
+  // their report; under the 3.x API the diagnostic is also the parse error's
+  // own text.
   ReportFatalError(diagnostic.c_str());
   throw ParseAbandon();
 }
@@ -1170,7 +1170,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   {
     resetSolver();
 
-    // The policy itself lives on the driver, so this frontend and the C API
+    // The policy itself lives on the driver, so this frontend and the API
     // cannot drift apart again; --incremental=on overrides it, and
     // --incremental=off has already kept session_incremental false.
     const bool autoEngaged = IncrementalSolver::automaticEngagementReady(

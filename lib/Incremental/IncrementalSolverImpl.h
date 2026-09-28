@@ -2619,7 +2619,7 @@ struct IncrementalSolver::Impl
   // arrayEqualityIsModelDecidable gives. Installing only when this epoch
   // happened to lower a float makes NULL mean two things at once, and the
   // model machinery has no way to tell them apart. It read the second as the
-  // first, and took abort() out of a legal C API call over a float term the
+  // first, and took abort() out of a legal API call over a float term the
   // assertion stack never mentioned -- which is answerable, and which the
   // batch driver answers, from the context it builds per solve whether or not
   // that solve had a float anywhere in it (STP.cpp, TopLevelSTP).

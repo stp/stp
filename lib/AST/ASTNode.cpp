@@ -104,13 +104,10 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
   switch (n.GetKind())
   {
     // to_fp names its target format in its first two children, rather than
-    // inheriting one from an operand. So does the C API's floating-point
-    // *type* node (vc_fpType) -- covering it here is what makes
-    // vc_getExpWidth/vc_getSigWidth work on a type, as documented.
+    // inheriting one from an operand.
     case FP_TOFP:
     case FP_TOFP_SIGNED:
     case FP_TOFP_UNSIGNED:
-    case FLOATINGPOINT:
     {
       if (n.Degree() < 2 || !n[0].isConstant() || !n[1].isConstant())
         return false;
@@ -412,8 +409,7 @@ unsigned int ASTNode::GetExpWidth() const
 // ASTNode::deriveFPFormat and FloatBlast).
 bool ASTNode::canStoreFPFormat() const
 {
-  return Degree() == 0 || is_FP_kind(GetKind()) || GetKind() == FLOATINGPOINT ||
-         GetIndexWidth() > 0;
+  return Degree() == 0 || is_FP_kind(GetKind()) || GetIndexWidth() > 0;
 }
 
 void ASTNode::SetExpWidth(unsigned int _ew) const
@@ -511,11 +507,6 @@ static void sourceSortOperands(const ASTNode& n, size_t& from, size_t& to)
 
   switch (n.GetKind())
   {
-    case ARRAY:
-      if (n.Degree() == 2)
-        to = 2;
-      break;
-
     case READ:
     case WRITE:
       to = (n.Degree() >= 1) ? 1 : 0;
@@ -605,24 +596,9 @@ SourceSort ASTNode::deriveSourceSort() const
   if (GetKind() == UF_APPLY && Degree() >= 1)
     return (*this)[0].GetSourceSort();
 
-  // API type nodes denote the corresponding source sort even though they
-  // are not themselves value-bearing terms.
+  // The Real kinds name their sort.
   switch (GetKind())
   {
-    case BOOLEAN:
-      return SourceSort::boolean();
-    case BITVECTOR:
-      if (Degree() == 1 && (*this)[0].GetKind() == BVCONST)
-        return SourceSort::bitVector((*this)[0].GetUnsignedConst());
-      break;
-    case FLOATINGPOINT:
-      if (Degree() == 2 && (*this)[0].GetKind() == BVCONST &&
-          (*this)[1].GetKind() == BVCONST)
-        return SourceSort::floatingPoint((*this)[0].GetUnsignedConst(),
-                                         (*this)[1].GetUnsignedConst());
-      break;
-    case ROUNDINGMODE:
-      return SourceSort::roundingMode();
     case REAL_CONST:
     case REAL_ADD:
     case REAL_SUB:
@@ -635,15 +611,6 @@ SourceSort ASTNode::deriveSourceSort() const
     case REAL_GT:
     case REAL_GE:
       return SourceSort::boolean();
-    case ARRAY:
-      if (Degree() == 2)
-      {
-        const SourceSort index = (*this)[0].GetSourceSort();
-        const SourceSort element = (*this)[1].GetSourceSort();
-        if (index.isScalar() && element.isScalar())
-          return SourceSort::array(index, element);
-      }
-      break;
     default:
       break;
   }

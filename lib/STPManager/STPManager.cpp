@@ -1079,13 +1079,6 @@ void STPMgr::Push(void)
   }
 }
 
-void STPMgr::NoteRealAssertionRefused() noexcept
-{
-  const size_t depth = _asserts.size();
-  if (lra_refused_depth == 0 || depth < lra_refused_depth)
-    lra_refused_depth = depth;
-}
-
 void STPMgr::Pop(void)
 {
   InvalidateRealModel();
@@ -1096,8 +1089,6 @@ void STPMgr::Pop(void)
   ASTVec* c = _asserts.back();
   delete c;
   _asserts.pop_back();
-  if (lra_refused_depth != 0 && _asserts.size() < lra_refused_depth)
-    lra_refused_depth = 0;
 }
 
 void STPMgr::PopPreservingRealModel(void)
@@ -1109,8 +1100,6 @@ void STPMgr::PopPreservingRealModel(void)
   ASTVec* c = _asserts.back();
   delete c;
   _asserts.pop_back();
-  if (lra_refused_depth != 0 && _asserts.size() < lra_refused_depth)
-    lra_refused_depth = 0;
 }
 
 //BUG this is most probably wrongly handled. It gets propagated and messed up

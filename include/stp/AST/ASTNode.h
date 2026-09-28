@@ -40,9 +40,6 @@ namespace stp
 namespace lra {
 class Frontend;
 }
-namespace detail {
-class CInterfaceNodeAccess;
-}
 namespace api {
 namespace detail {
 class NodeAccess;
@@ -64,7 +61,6 @@ class ASTNode
   friend class ASTInterior;
   friend class UFContext;
   friend class lra::Frontend;
-  friend class detail::CInterfaceNodeAccess;
   // The 3.x API keeps its terms as raw ASTInternal pointers behind an opaque
   // handle and wraps them back into nodes through this one access class.
   friend class api::detail::NodeAccess;

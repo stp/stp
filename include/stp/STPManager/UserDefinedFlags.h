@@ -43,8 +43,8 @@ enum class SearchBias;
 
 // Independently selectable families of algebraic facts used by BV term
 // abstraction. The ordinal is also the coverage-counter index; the mask
-// spelling keeps the command-line and C interfaces compact without turning
-// every individual lemma into a permanent public option.
+// spelling keeps the command line and the API compact without turning every
+// individual lemma into a permanent public option.
 //
 // The groups are disjoint: every fact the refiner can offer has exactly one
 // owner here, so a mask with one bit set selects precisely that family and
@@ -201,9 +201,6 @@ public:
   /* Parsing options */
   bool smtlib1_parser_flag = false;
   bool smtlib2_parser_flag = false;
-
-  /* collect and delete objects via interface. */
-  bool cinterface_exprdelete_on_flag = true;
 
   /* Output details of how the solving went*/
   bool stats_flag = false;
@@ -720,17 +717,7 @@ public:
   // flag to decide whether to print "valid/invalid" or not
   bool print_output_flag = false;
 
-  // print the input back
-  bool print_STPinput_back_flag = false;
-  bool print_STPinput_back_SMTLIB2_flag = false;
-  bool print_STPinput_back_CVC_flag = false;
-  bool print_STPinput_back_dot_flag = false;
-  bool print_STPinput_back_GDL_flag = false;
-
   bool print_nodes_flag = false;
-
-  // output flags
-  bool output_CNF_flag = false;
 
   /* Bitblasting options */
 
@@ -1034,12 +1021,11 @@ public:
   //
   // The older switch above it covered all three nonlinear operations, and
   // still does when it is the only one given. Once DIV/MOD has been set
-  // explicitly it wins, whichever order the two arrive in -- which is what
-  // the command line does through CLI11's occurrence count, and what the C
-  // interface does through this flag. Without it the C interface would be
-  // last-writer-wins while the command line was not, and the same pair of
-  // settings would mean two different things depending on which one a caller
-  // reached for.
+  // explicitly it wins, whichever order the two arrive in: the option
+  // registry's applier sets this flag for an explicit setting, for the
+  // command line and the API alike. Without it a sequence of API calls would
+  // be last-writer-wins, and the same pair of settings would mean two
+  // different things depending on which one a caller reached for.
   bool bv_term_abstraction_divmod_explicit = false;
 
   // Which of the other abstractable kinds --bv-term-abstraction takes.
@@ -1113,7 +1099,7 @@ public:
   // then chose a profile silently lost the ceiling, while one who did the two
   // the other way round kept it. The command line cannot reach that, because
   // CLI11 refuses --bv-term-abstraction-profile alongside
-  // --bv-term-abstraction-rounds outright; only the C interface can, where a
+  // --bv-term-abstraction-rounds outright; only the API can, where a
   // configuration is a sequence of calls rather than one line. Once the
   // ceiling is named it survives a profile, whichever order the two arrive in.
   bool bv_term_abstraction_rounds_explicit = false;
@@ -1307,7 +1293,8 @@ public:
   // naming a group list and then choosing a profile lost the list. Whichever
   // rule is right, they should be the same rule, and first-wins is the one
   // that treats a caller's explicit choice as a choice -- which is what
-  // vc_setSchemaGroups is: a list of families spelled out by name.
+  // setting bv-term-abstraction-schema-groups is: a list of families spelled
+  // out by name.
   bool bv_term_abstraction_schema_groups_explicit = false;
 
   // You can select these with any combination you want of true & false.
@@ -1737,8 +1724,8 @@ public:
     CNF_EFFORT_AUTO,
     // The in-house Tseitin writer, over the in-house AIG. Below very-low on
     // the scale and last in the enum, which are different facts: the ordinals
-    // are the C interface's contract, so a new rung goes on the end however
-    // little effort it spends.
+    // were the 2.x C interface's contract (libstp2 keeps it, by name), so new
+    // rungs have gone on the end however little effort they spend.
     CNF_EFFORT_NEW_VERY_LOW,
     CNF_EFFORT_NEW_LOW,
     CNF_EFFORT_NEW_MEDIUM,
@@ -1820,23 +1807,14 @@ public:
   // share. LassoRanker alone went 186 to 218. So: VERY_LOW.
   bool cnf_auto_real_path = false;
 
-  // End the run at the first CNF a check generates (--exit-after-CNF; the
-  // 3.x API's end-after-cnf): the process exits there, or under the API the
-  // check stops and nothing more is said (STPMgr::run_ended_after_cnf).
+  // End the run at the first CNF a check generates (the 3.x API's
+  // end-after-cnf, the stp binary's --exit-after-CNF): the check stops and
+  // nothing more is said (STPMgr::run_ended_after_cnf).
   bool exit_after_CNF = false;
 
   // Abandon the check after its first CNF with unknown(StoppedAfterCnf), and
   // go on with whatever comes next (the 3.x API's stop-after-cnf).
   bool stop_after_cnf = false;
-
-  // Stop after parsing the input, skipping any check-sat commands.
-  bool parse_only = false;
-
-  // Whether the SMT-LIB2 lexer reads a character at a time, as needed when
-  // stp is driven interactively over a pipe, rather than in blocks.
-  // -1: character at a time for stdin, blocks for files. 0: blocks. 1:
-  // character at a time.
-  int64_t interactive_read = -1;
 
   /* SAT solving options */
 
@@ -1846,11 +1824,9 @@ public:
   // Seed for the SAT backend's randomised choices; 0 leaves each backend at
   // its own default. Set by the 3.x API's random-seed option.
   uint64_t random_seed = 0;
-  int64_t timeout_max_time = -1; // seconds
 
-  // A millisecond budget which, when it is >= 0, takes precedence over
-  // timeout_max_time. The 3.x API sets this one: its budgets are
-  // milliseconds, and 0 means "give up at once".
+  // The query's time budget in milliseconds, -1 for none; 0 gives up at
+  // once. The 3.x API's max-time option and per-check budgets set it.
   int64_t timeout_max_time_ms = -1;
 
   // An external stop request, polled wherever the deadline is polled (the
@@ -1860,16 +1836,12 @@ public:
   bool (*stop_poll)(void*) = nullptr;
   void* stop_poll_opaque = nullptr;
 
-  bool hasQueryTimeLimit() const
-  {
-    return timeout_max_time_ms >= 0 || timeout_max_time >= 0;
-  }
+  bool hasQueryTimeLimit() const { return timeout_max_time_ms >= 0; }
   // The budget as a duration; only meaningful when hasQueryTimeLimit().
   std::chrono::steady_clock::duration queryTimeLimit() const
   {
-    if (timeout_max_time_ms >= 0)
-      return std::chrono::milliseconds(timeout_max_time_ms);
-    return std::chrono::seconds(timeout_max_time >= 0 ? timeout_max_time : 0);
+    return std::chrono::milliseconds(
+        timeout_max_time_ms >= 0 ? timeout_max_time_ms : 0);
   }
 
   // check the counterexample against the original input to STP
@@ -1882,10 +1854,12 @@ public:
   // construction itself may be deferred to the first read.
   bool produce_models = false;
 
-  // The C API's 'c'/'d' flags ask for a counterexample directly, with no
-  // other trace of the request. Held here so the derivation below can be
-  // recomputed per query rather than merely widened: a flag that only ever
-  // gains value latches, and callers read it as "a model was asked for".
+  // A counterexample asked for directly, with no other trace of the request:
+  // the API's produce-models option (on by default) sets it, since the model
+  // it promises is built from the counterexample. Held here so the
+  // derivation below can be recomputed per query rather than merely widened:
+  // a flag that only ever gains value latches, and callers read it as "a
+  // model was asked for".
   bool request_counterexample = false;
 
   //This is derived from other settings.
@@ -2038,13 +2012,6 @@ public:
   };
   ArrayIndexHints array_index_hints = ArrayIndexHints::OFF;
 
-  bool get_print_output_at_all() const
-  {
-    return print_STPinput_back_flag || print_STPinput_back_SMTLIB2_flag ||
-           print_STPinput_back_CVC_flag || print_STPinput_back_dot_flag ||
-           print_STPinput_back_GDL_flag;
-  }
-
   void disableSimplifications()
   {
     optimize_flag = false;
@@ -2086,8 +2053,8 @@ public:
   // allowed to do. Not settings: a caller that turns an abstraction on wants
   // to know it engaged, and a flag that reached no eligible operation and a
   // flag that is broken both abstract nothing -- only the candidate count
-  // tells them apart. Cumulative over the manager's lifetime, and read
-  // through vc_getCounter.
+  // tells them apart. Cumulative, and read through Solver::statistics (the
+  // API keeps one set per solver).
   //
   // Lives here rather than in STPMgr because the bit-blaster holds only these
   // flags, and the sites that would have to be counted are all inside it.
@@ -2120,7 +2087,7 @@ public:
     // paired DIV/REM recomposition, whose multiplier is as wide as one. The
     // counts above say how often a refinement was abandoned; these say what
     // was handed to the solver when it was. Publishing the totals makes the
-    // question answerable from ordinary statistics and the C API rather than
+    // question answerable from the statistics the API publishes rather than
     // only from the per-record fields the benchmark harness reads.
     //
     // Equal escalation counts can hide very different trades: an exact

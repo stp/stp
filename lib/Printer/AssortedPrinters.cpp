@@ -84,7 +84,7 @@ void STPMgr::printVarDeclsToStream(ostream& os, ASTNodeSet& ListOfDeclaredVars)
         os << " : BOOLEAN;" << endl;
         break;
       default:
-        stp::FatalError("vc_printDeclsToStream: Unsupported type", a);
+        stp::FatalError("printVarDeclsToStream: Unsupported type", a);
         break;
     }
   }

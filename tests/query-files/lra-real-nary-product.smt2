@@ -4,7 +4,7 @@
 ; CreateRealTerm takes + and - at any arity but these two only in pairs, and
 ; the reader handed the whole list over unfolded, so a three-factor product
 ; was refused as "invalid arithmetic arity" -- a file could not state what the
-; C interface, which folds, accepted happily.
+; 2.x C interface, which folded, accepted happily.
 ;
 ; Folding left is also what keeps the product inside the linear fragment: the
 ; two constants meet each other before the symbol does, so every binary node

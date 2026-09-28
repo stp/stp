@@ -56,8 +56,8 @@ THE SOFTWARE.
   }
 
   // Print the diagnostic and let bison abandon the parse: CVCParse() then
-  // returns nonzero. The command line exits on that; the 2.x C API turns it
-  // into its fatal error; the 3.x API reports a recoverable PARSE error.
+  // returns nonzero. The 3.x API reports that as a recoverable PARSE error,
+  // and the stp binary exits on it.
   int yyerror(const char *s) {
     const std::string msg = cvc_diagnostic(s);
     cout << msg << endl;

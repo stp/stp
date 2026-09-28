@@ -103,9 +103,10 @@ TEST(BVSchemaGroups, rejected_lists_are_atomic)
 // No public API has schema-group constants: a client names groups in the
 // bv-term-abstraction-schema-groups option (the 2.x C API: vc_setSchemaGroups,
 // and vc_schemaGroupName to read one back), so the two vocabularies being the
-// same one is the contract, and this is it at the level both are built on. Checking it by round-trip rather than
-// against a written-out table means a family added tomorrow is covered
-// without anyone remembering to come back here.
+// same one is the contract, and this is it at the level both are built on.
+// Checking it by round-trip rather than against a written-out table means a
+// family added tomorrow is covered without anyone remembering to come back
+// here.
 TEST(BVSchemaGroups, every_group_name_round_trips_through_the_parser)
 {
   for (unsigned i = 0; i < BV_SCHEMA_GROUP_COUNT; ++i)

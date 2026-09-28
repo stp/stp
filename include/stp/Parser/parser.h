@@ -38,20 +38,14 @@ namespace stp
 {
 // external parser table for declared symbols.
 
-// Symbols in generated  files used by tools/stp
+// The generated lexers' input, which the 3.x API's parse entries set
+// (lib/Api/Solver.cpp): a string, or a FILE*, or a reader (below).
 void SMTScanString(const char* yy_str);
 void SMT2ScanString(const char* yy_str);
 void CVCScanString(const char* yy_str);
-DLL_PUBLIC FILE* getCVCIn();
-DLL_PUBLIC FILE* getSMTIn();
-DLL_PUBLIC FILE* getSMT2In();
 DLL_PUBLIC void setCVCIn(FILE* file);
 DLL_PUBLIC void setSMTIn(FILE* file);
 DLL_PUBLIC void setSMT2In(FILE* file);
-
-// Whether the SMT-LIB2 lexer reads a character at a time. Needed when stp
-// is driven interactively over a pipe, where block reads would deadlock.
-DLL_PUBLIC void setSMT2Interactive(bool enable);
 
 // Where a lexer reads its input instead of its FILE*: a reader fills up to
 // `max` bytes of `buf` and answers how many, 0 at the end of the input. The

@@ -50,14 +50,9 @@ using namespace stp;
 static void outputBitVec(const ASTNode n, ostream& os)
 {
   const Kind k = n.GetKind();
-  const ASTChildren c = n.GetChildren();
   ASTNode op;
 
-  if (BITVECTOR == k)
-  {
-    op = c[0];
-  }
-  else if (BVCONST == k)
+  if (BVCONST == k)
   {
     op = n;
   }
@@ -86,7 +81,6 @@ static void printNodeLabel(ostream& os, const ASTNode& n)
       n.nodeprint(os);
       break;
 
-    case BITVECTOR:
     case BVCONST:
       outputBitVec(n, os);
       break;

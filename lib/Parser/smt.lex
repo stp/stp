@@ -291,10 +291,6 @@ namespace stp {
     smt_scan_string(yy_str);
   }
 
-  FILE* getSMTIn() {
-    return smtin;
-  }
-
   void setSMTReader(ParserReader reader, void* opaque) {
     smtReader = reader;
     smtReaderOpaque = opaque;

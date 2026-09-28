@@ -688,12 +688,10 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
   {
     case SOLVER_INVALID:
       r = Result(Verdict::SAT, UnknownReason::NONE, "");
-      stp->queryAnswered = true;
       model_pending = true;
       break;
     case SOLVER_VALID:
       r = Result(Verdict::UNSAT, UnknownReason::NONE, "");
-      stp->queryAnswered = true;
       if (last_incremental && stp->hasIncrementalSolver() &&
           stp->getIncrementalSolver()->lastUnsatHasAssumptionGranularity())
       {
@@ -707,7 +705,6 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
       break;
     default:
     {
-      stp->queryAnswered = false;
       UnknownReason reason = map_reason(bm->getUnknownReason());
       std::string detail = bm->getUnknownReasonDetail();
       if (interrupt_consumed || terminator_fired)
@@ -1204,7 +1201,6 @@ void Solver::reset_assertions()
     s->stp->ClearAllTables();
     s->stp->resetIncrementalSolver();
     s->stp->discardRealSession();
-    s->stp->queryAnswered = false;
     bm->clearUnknown();
   });
   s->have_last = false;

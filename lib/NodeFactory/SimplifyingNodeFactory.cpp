@@ -843,11 +843,8 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
       if (child.GetSTPMgr() != &bm)
         stp::FatalError(
             "Real operation received an operand owned by another manager");
-  if (!has_real_operand &&
-      kind != stp::UNDEFINED && kind != stp::BOOLEAN &&
-      kind != stp::BITVECTOR && kind != stp::ARRAY &&
-      kind != stp::FLOATINGPOINT && kind != stp::ROUNDINGMODE &&
-      kind != stp::DISTINCT && children_all_constants(children))
+  if (!has_real_operand && kind != stp::UNDEFINED && kind != stp::DISTINCT &&
+      children_all_constants(children))
   {
     const ASTNode& hash = hashing.CreateNode(kind, children);
     const ASTNode& c = NonMemberBVConstEvaluator(&bm, hash);

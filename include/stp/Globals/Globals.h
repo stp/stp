@@ -61,8 +61,7 @@ enum inputStatus
 
 // return types for the GetType() function in ASTNode class.
 // FLOATINGPOINT_TYPE is appended after UNKNOWN_TYPE, not slotted in sort
-// order. The legacy prefix of the C API's type_t mirrors these values
-// numerically, preserving values compiled into pre-floating-point clients.
+// order: the order the 2.x C API's type_t was published in.
 // Source-only sorts such as RoundingMode are intentionally absent here:
 // GetType() describes the carrier used by the bit-vector pipeline.
 enum types
@@ -113,7 +112,7 @@ enum class UnknownReason
   // appended rather than inserted so that nothing already reporting
   // Incomplete moves. SMT-LIB2 spells all of them the same, as (incomplete
   // "..."), since the sentence already says which; they are separate values
-  // because a caller holding only the value -- vc_getReasonUnknown -- has
+  // because a caller holding only the value -- the API's UnknownReason -- has
   // nothing to read the sentence for, and the action differs.
   Incomplete,
   // A declared sort's carrier was too narrow for the query, so an unsat that

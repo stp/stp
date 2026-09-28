@@ -177,7 +177,7 @@ public:
   // The same ownership, restricted to the solve that established it.
   //
   // active() deliberately outlives its solve: the model surfaces --
-  // (get-model), vc_getCounterExampleArray, term evaluation through the
+  // (get-model), the API's model snapshot, term evaluation through the
   // counterexample -- read the frozen graph and the certified
   // observations after TopLevelSTPAux has returned, and they must keep
   // seeing them until the next solve calls beginSolve(). Only
@@ -188,8 +188,8 @@ public:
   // the array graph. Those have to stand back only while the solve that
   // owns the graph is running; anything that reaches the simplifier, the
   // substitution map or unconstrained-variable removal outside that
-  // window -- a direct vc_simplify, an assertion arriving for the next
-  // query -- is ordinary work and should get ordinary treatment.
+  // window -- an assertion arriving for the next query, say -- is
+  // ordinary work and should get ordinary treatment.
   // SolveScope marks the window, and every pass gate tests this instead.
   bool activeInSolve() const { return solveInProgress && active(); }
 

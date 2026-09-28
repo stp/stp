@@ -398,9 +398,9 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // for symbols this round never encoded. active() deliberately outlives the
   // solve that set it -- the model surfaces read the frozen graph after the
   // solve returns -- so only the next round can retire it, and the SMT-LIB2
-  // pop is the only caller that does so itself: the C API's vc_pop
-  // deliberately clears nothing (its model outlives the bracket), and
-  // check-sat-assuming's frame pop keeps the model too.
+  // pop is the only caller that does so itself: the API's pop clears nothing
+  // (it takes its model's snapshot first), and check-sat-assuming's frame
+  // pop keeps the model too.
   //
   // This is ahead of the routing because every route materializes candidates.
   // The exact-stack route begins a solve of its own only for an
@@ -553,8 +553,8 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   }
   const bool needRefinement = activeHasArrays && !uf.ackermannisation;
 
-  // Derived afresh from the genuine inputs -- including the C API's direct
-  // request, which now has its own field -- so that a check needing a
+  // Derived afresh from the genuine inputs -- including a direct request for
+  // a counterexample, which has its own field -- so that a check needing a
   // candidate model for refinement cannot leave construction switched on
   // for every later check, and with it the frontend's shortcut for a
   // repeated query whose model nobody wants.

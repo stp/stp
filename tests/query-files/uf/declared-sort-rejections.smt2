@@ -14,8 +14,8 @@
 ;
 ; One block per position because each aborts, so each needs its own run. The
 ; last two are the pair that matter most: an array's index and element sorts
-; are where the comment at the C API's array builder says a raw index alongside
-; canonicalised ones would break the array's congruence.
+; are where a raw index alongside canonicalised ones would break the array's
+; congruence.
 ;
 ; RUN: not %solver --uninterpreted-functions %S/Inputs/declared-sort-reject-eq.smt2 2>&1 | %OutputCheck --check-prefix=SORTS %s
 ; RUN: not %solver --uninterpreted-functions %S/Inputs/declared-sort-reject-eq-bv.smt2 2>&1 | %OutputCheck --check-prefix=SORTS %s

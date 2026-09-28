@@ -1,7 +1,7 @@
 ; ede9d4bd taught both counterexample walks to evaluate a term that *contains*
-; an application. That reached the C API, which evaluates whatever term it is
-; handed, but not (get-value ...), whose own argument filter still demanded a
-; bare symbol or a bare application. The evaluator could answer these; the
+; an application. That reached the 2.x C API, which evaluated whatever term it
+; was handed, but not (get-value ...), whose own argument filter still demanded
+; a bare symbol or a bare application. The evaluator could answer these; the
 ; command would not ask. Now it does.
 ;
 ; The last row is the one worth having: f(#x07) is a durable node the solve

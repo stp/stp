@@ -1380,7 +1380,6 @@ void load_new_rules(const string fileName = "rules_new.smt2")
 
   TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
   Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
-  mgr->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
   GlobalParserInterface = &piTypeCheckDefault;
 
   // This file I/O code: 1) Is terrible  2) I'm in a big rush so just getting it

@@ -469,14 +469,9 @@ void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
 void outputBitVecSMTLIB2(const ASTNode n, ostream& os)
 {
   const Kind k = n.GetKind();
-  const ASTChildren c = n.GetChildren();
   ASTNode op;
 
-  if (BITVECTOR == k)
-  {
-    op = c[0];
-  }
-  else if (BVCONST == k)
+  if (BVCONST == k)
   {
     op = n;
   }

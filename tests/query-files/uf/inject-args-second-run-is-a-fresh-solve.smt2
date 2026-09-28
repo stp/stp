@@ -8,13 +8,12 @@
 ; STP::TopLevelSTP decides the query a second time with the flag off.
 ;
 ; Every other route into the pipeline clears the solver's tables on the way in:
-; the SMT-LIB2 frontend in Cpp_interface::resetSolver, the C API in vc_query,
-; the single-query tool by never having run anything before. That second run is
-; reached from inside the driver, so nothing cleared them for it, and it
-; inherited the first run's substitution map. RemoveUnconstrained's array rules
-; then reached a symbol the first run had already substituted and called
-; UpdateSubstitutionMapFewChecks, whose whole contract is that its caller has
-; established the symbol is not in the map:
+; the SMT-LIB2 frontend in Cpp_interface::resetSolver, and the API before each
+; of its checks. That second run is reached from inside the driver, so nothing
+; cleared them for it, and it inherited the first run's substitution map.
+; RemoveUnconstrained's array rules then reached a symbol the first run had
+; already substituted and called UpdateSubstitutionMapFewChecks, whose whole
+; contract is that its caller has established the symbol is not in the map:
 ;
 ;   Assertion `!InsideSubstitutionMap(e0) && "e0 MUST NOT be in the SolverMap"'
 ;

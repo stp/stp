@@ -166,8 +166,8 @@ private:
   // to run, an abandoned encoding before it ever was -- and only one of them
   // has anything to say beyond its name. The SMT-LIB frontend clears this at
   // the top of every check-sat and on reset / reset-assertions. SMT-LIB reads
-  // it through (get-info :reason-unknown), and the C API through
-  // vc_getReasonUnknown.
+  // it through (get-info :reason-unknown), and the API through a check's
+  // Result.
   UnknownReason unknown_reason = UnknownReason::None;
   std::string unknown_detail;
 
@@ -250,7 +250,7 @@ public:
   // now. An instance registers itself here on construction and folds its
   // totals into UserFlags.coverage on destruction; publishFpCoverage() folds
   // in what the live ones have accumulated since they last published, so
-  // vc_getCounter answers mid-session as well as after teardown. There are
+  // Solver::statistics answers mid-session as well as after teardown. There are
   // at most a handful: one per batch solve or restart, one per encoding
   // epoch under --fp-abstraction-incremental.
   void registerFpAbstraction(FpAbstraction* abstraction)
@@ -559,7 +559,6 @@ private:
   // assertions in that logical context. Logical contexts are
   // created by PUSH/POP
   vector<ASTVec*> _asserts;
-  size_t lra_refused_depth = 0;
 
   // Memo table that tracks terms already seen
   ASTNodeMap TermsAlreadySeenMap;
@@ -682,9 +681,6 @@ public:
   // count is used in the creation of new variables
   unsigned int _symbol_count;
 
-  // The value to append to the filename when saving the CNF.
-  unsigned int CNFFileNameCounter;
-
   // Where the 3.x API's Solver::write_cnf receives the DIMACS of the first
   // CNF a check generates; NULL otherwise. Borrowed for the one check.
   std::ostream* cnf_sink = nullptr;
@@ -694,10 +690,9 @@ public:
   // no CNF is written out.
   std::function<void(const std::string& dimacs, CnfExtent scope)> cnf_listener;
 
-  // Set when a check ended the run at its first CNF (exit_after_CNF under
-  // the 3.x API, where the command line exited): what unwinds from there
-  // prints nothing more, and an executed script ends with it. Cleared by
-  // whoever starts the next run.
+  // Set when a check ended the run at its first CNF (exit_after_CNF): what
+  // unwinds from there prints nothing more, and an executed script ends with
+  // it. Cleared by whoever starts the next run.
   bool run_ended_after_cnf = false;
 
   /****************************************************************
@@ -705,8 +700,7 @@ public:
    ****************************************************************/
 
   DLL_PUBLIC STPMgr()
-      : last_iteration(0), soft_timeout_expired(false), _symbol_count(0),
-        CNFFileNameCounter(0)
+      : last_iteration(0), soft_timeout_expired(false), _symbol_count(0)
   {
     ValidFlag = false;
 
@@ -920,16 +914,6 @@ public:
                                         const ASTVec& visible_symbols) const;
   void InvalidateRealModel() noexcept;
 
-  // A Real assertion the exact-arithmetic budget refused is not in _asserts,
-  // so a later query would be answered without it -- soundly wrong rather
-  // than merely incomplete. Record the depth it was refused at; every query
-  // at or below that depth must answer "unknown" instead, and popping back
-  // past it clears the debt.
-  void NoteRealAssertionRefused() noexcept;
-  bool RealAssertionRefused() const noexcept
-  {
-    return lra_refused_depth != 0;
-  }
   ASTVec AllRealSymbols() const;
 
   /* Whether exact rationals re-derive a canonical form their construction
@@ -1117,8 +1101,8 @@ public:
   // accepted model remains readable after its call-local frame closes.
   void PopPreservingRealModel(void);
 
-  // Queries aren't maintained on a stack.
-  // Used by CVC & C-interface.
+  // Queries aren't maintained on a stack. Set by the CVC parser's QUERY and
+  // by the API before each check; setting one discards the Real model.
   const ASTNode GetQuery();
   void SetQuery(const ASTNode& q);
 
@@ -1135,16 +1119,6 @@ public:
   // For printing purposes
   // Used just by the CVC parser.
   ASTVec ListOfDeclaredVars;
-
-  // For printing purposes
-  // Used just via the C-interface.
-  // Note, not maintained properly wrt push/pops
-  vector<stp::ASTNode> decls;
-
-  // C API declarations have manager lifetime and no lexical binding frame.
-  // Keep their printed names unambiguous even if the caller clears the list
-  // used only for printing declarations.
-  std::map<std::string, SourceSort> c_api_source_sorts;
 
   // Nodes seen so far
   ASTNodeSet PLPrintNodeSet;
@@ -1346,11 +1320,6 @@ public:
   }
 
   DLL_PUBLIC ~STPMgr();
-
-  // The C interface's checker-owned wrappers, released by vc_Destroy. A hash
-  // set so that vc_DeleteExpr can forget a wrapper the caller released in
-  // constant time; the order they are released in does not matter.
-  ankerl::unordered_dense::set<stp::ASTNode*> persist;
 
   void print_stats() const
   {

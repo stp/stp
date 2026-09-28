@@ -497,7 +497,7 @@ FixedBits* ConstantBitPropagation::makeInitialFixedBits(const ASTNode& n)
 
   FixedBits* output = new FixedBits(bw, (BOOLEAN_TYPE == n.GetType()));
 
-  if (BVCONST == n.GetKind() || BITVECTOR == n.GetKind())
+  if (BVCONST == n.GetKind())
   {
     // the CBV doesn't leak. it is a copy of the cbv inside the node.
     CBV cbv = n.GetBVConst();

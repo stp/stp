@@ -1013,8 +1013,8 @@ bool custom_manager_uf_sort_width(EngineTarget& t, const OptionSpec& spec, const
               "manager-scoped: pass it to TermManager's constructor, not to a solver");
 }
 // Three switches whose 2.x frontends also recorded that the caller named them
-// (the *_explicit flags the engine and the C interface consult). A default
-// re-applied by apply_all_options is not a request (EngineTarget::explicit_value).
+// (the *_explicit flags the engine consults). A default re-applied by
+// apply_all_options is not a request (EngineTarget::explicit_value).
 bool custom_bv_term_abstraction_rounds(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.bv_term_abstraction_rounds = static_cast<unsigned>(as_int(v));

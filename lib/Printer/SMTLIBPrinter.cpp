@@ -125,7 +125,6 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
     case REAL_CONST:
       n.nodeprint(os);
       break;
-    case BITVECTOR:
     case BVCONST:
       // A rounding mode and a float are both stored as packed bits but
       // denote neither: print them by mode name and in (fp ...) syntax
