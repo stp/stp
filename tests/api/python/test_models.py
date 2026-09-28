@@ -195,6 +195,23 @@ def test_uninterpreted_values():
     assert isinstance(m.eval(t), UninterpretedNumRef)
 
 
+def test_functions_over_declared_sorts():
+    U = DeclareSort("U")
+    u, v = Consts("u v", U)
+    k = Function("k", U, U)
+    h = Function("h", U, BitVecSort(4))
+    m = _model(u == k(k(u)), u != k(u), h(u) == 5, h(v) == 9)
+    assert m.eval(u == k(k(u))) is BoolVal(True) and m.eval(u != k(u)) is BoolVal(True)
+    assert m.eval(h(u)).as_long() == 5 and m.eval(h(v)).as_long() == 9
+    ku = m.eval(k(u))
+    assert isinstance(ku, UninterpretedNumRef) and ku.sort() is U
+    ki = m[k]
+    assert all(args[0].sort() is U and val.sort() is U for args, val in ki.entries())
+    assert ki.else_value().sort() is U
+    assert all(args[0].sort() is U for args, _ in m[h].entries())
+    assert "#x" not in [line for line in m.to_smt2().splitlines() if "define-fun k " in line][0]
+
+
 def test_model_printing():
     x, y = BitVecs("x y", 8)
     a = FP("a", Float32())

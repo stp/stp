@@ -355,6 +355,54 @@ TEST_F(Models, function_values)
   EXPECT_NE(text.find("(ite (and (= x!0"), std::string::npos);
 }
 
+TEST_F(Models, functions_over_declared_sorts)
+{
+  // k : S -> S and h : S -> BV4 are tabled over elements of S, not over the
+  // bit-vectors that carry them in the solver
+  const Term u = tm.declare("u", S), v = tm.declare("v", S);
+  const Term k = tm.declare("k", tm.mk_fun_sort({S}, S));
+  const Term h = tm.declare("h", tm.mk_fun_sort({S}, tm.mk_bv_sort(4)));
+  s.add(u == k(k(u)));
+  s.add(u != k(u));
+  s.add(h(u) == tm.mk_bv(4, 5));
+  s.add(h(v) == tm.mk_bv(4, 9));
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model m = s.model();
+  EXPECT_TRUE(m.bool_value(u == k(k(u))));
+  EXPECT_TRUE(m.bool_value(u != k(u)));
+  EXPECT_EQ(m.uint64_value(h(u)), 5u);
+  EXPECT_EQ(m.uint64_value(h(v)), 9u);
+  EXPECT_TRUE(m.value(k(u)).is_value());
+  EXPECT_TRUE(m.value(k(u)).sort() == S);
+  EXPECT_TRUE(m.value(k(k(u))).same_as(m.value(u)));
+  const FunctionValue kv = m.function_value(k);
+  EXPECT_GE(kv.size(), 2u);
+  for (const FunctionValue::Entry& e : kv.entries())
+  {
+    ASSERT_EQ(e.args.size(), 1u);
+    EXPECT_TRUE(e.args[0].sort() == S);
+    EXPECT_TRUE(e.value.sort() == S);
+    EXPECT_TRUE(kv.apply(e.args).same_as(e.value));
+  }
+  EXPECT_TRUE(kv.else_value().sort() == S);
+  EXPECT_TRUE(kv.apply({m.value(u)}).same_as(m.value(k(u))));
+  const FunctionValue hv = m.function_value(h);
+  for (const FunctionValue::Entry& e : hv.entries())
+    EXPECT_TRUE(e.args[0].sort() == S);
+  EXPECT_EQ(hv.apply({m.value(u)}).to_uint64(), 5u);
+  EXPECT_EQ(hv.apply({m.value(v)}).to_uint64(), 9u);
+  // the text names the elements, never a carrier's bits
+  const std::string text = m.to_smt2();
+  const std::size_t kdef = text.find("(define-fun k ((x!0 S)) S (ite (= x!0 S!");
+  ASSERT_NE(kdef, std::string::npos);
+  EXPECT_EQ(text.substr(kdef, text.find('\n', kdef) - kdef).find("#x"), std::string::npos);
+  // the values re-assert consistently
+  s.add(k(u) == m.value(k(u)));
+  s.add(u == m.value(u));
+  s.add(v == m.value(v));
+  EXPECT_TRUE(s.check_sat().is_sat());
+}
+
 TEST_F(Models, core_and_text)
 {
   s.add(x == 5);

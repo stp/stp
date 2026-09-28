@@ -254,6 +254,9 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
       const UFSignature& sig = f.declaration->signature();
       if (involves_real(sig))
         continue; // tabled from the exact model below
+      // concreteValue hands an element of a declared sort back as its
+      // carrier's bits; the snapshot holds every other value of that sort as
+      // the element itself, so it is lifted here like the rest.
       FunctionCases fc;
       fc.identity = f.declaration->identityNode();
       fc.sort = mgr->sort_of_node(fc.identity, fn);
@@ -261,10 +264,14 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
       {
         std::vector<ASTNode> args;
         for (std::size_t i = 0; i < c.arguments.size() && i < sig.domain().size(); ++i)
-          args.push_back(UFModel::concreteValue(bm, c.arguments[i], sig.domain()[i]));
-        fc.cases.emplace_back(std::move(args), UFModel::concreteValue(bm, c.result, sig.codomain()));
+          args.push_back(lift(mgr, UFModel::concreteValue(bm, c.arguments[i], sig.domain()[i]),
+                              sig.domain()[i]));
+        fc.cases.emplace_back(std::move(args),
+                              lift(mgr, UFModel::concreteValue(bm, c.result, sig.codomain()),
+                                   sig.codomain()));
       }
-      fc.else_value = UFModel::concreteValue(bm, f.defaultValue, sig.codomain());
+      fc.else_value = lift(mgr, UFModel::concreteValue(bm, f.defaultValue, sig.codomain()),
+                           sig.codomain());
       snap->functions[fc.identity] = fc;
       // The core is what the solver assigned: a function it never saw has
       // only the vacuous seed, and completion gives the same answer.
