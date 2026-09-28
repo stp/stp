@@ -1689,6 +1689,22 @@ Expr vc_getCounterExample(VC vcp, Expr e)
   stp_term t = term_of(e, "vc_getCounterExample");
   if (t == nullptr)
     return nullptr;
+  // A Real term is answered by the exact Real model alone, as in 2.x, and an
+  // assertion or a declaration since the query leaves that model none.
+  if (is_real(stp_term_sort(t)))
+  {
+    if (!stp_term_is_value(t) && vc->model == nullptr)
+    {
+      report("vc_getCounterExample: no model to read -- no query has been answered "
+             "since the last vc_push or vc_query");
+      return nullptr;
+    }
+    if (vc_hasRealModelValue(vcp, e) != 1)
+    {
+      report("vc_getCounterExample: the exact Real model has no value for this term");
+      return nullptr;
+    }
+  }
   // A constant already is its own value: no query is needed behind it.
   if (stp_term_is_value(t))
     return wrap(vc, stp_term_copy(t), false);
