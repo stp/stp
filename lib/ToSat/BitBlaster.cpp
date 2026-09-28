@@ -1115,7 +1115,12 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
     auto it = simplify_during_bb(term, support);
     if (it != BBTermMemo.end())
     {
-      return it->second;
+      // Memoise the node asked for as well as its rewrite. Otherwise every
+      // later call on it misses, priming cannot answer it, and a chain of
+      // rewritten nodes is re-derived per call: stack depth and time
+      // exponential in its length.
+      BBNodeVec result = it->second;
+      return (BBTermMemo[_term] = std::move(result));
     }
   }
 
@@ -2070,6 +2075,8 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
     check(result, term);
 
   updateTerm(term, result, support);
+  if (term != _term) // simplify_during_bb rewrote it; see above.
+    BBTermMemo[_term] = result;
   return (BBTermMemo[term] = result);
 }
 
