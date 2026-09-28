@@ -1102,19 +1102,6 @@ void STPMgr::PopPreservingRealModel(void)
   _asserts.pop_back();
 }
 
-//BUG this is most probably wrongly handled. It gets propagated and messed up
-//with the state. On the next query, this mixed state then causes trouble
-void STPMgr::SetQuery(const ASTNode& q)
-{
-  InvalidateRealModel();
-  _current_query = q;
-}
-
-const ASTNode STPMgr::GetQuery()
-{
-  return _current_query;
-}
-
 // return a vector of the levels.
 // before returning any vector with >1 nodes is turned into a conjunct.
 const ASTVec STPMgr::getVectorOfAsserts()
@@ -1276,7 +1263,6 @@ STPMgr::~STPMgr()
   ASTFalse = ASTNode(0);
   ASTTrue = ASTNode(0);
   ASTUndefined = ASTNode(0);
-  _current_query = ASTNode(0);
   // dummy_node = ASTNode(0);
 
   zeroes.clear();

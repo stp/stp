@@ -703,7 +703,6 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
   ASTNode query2 = nf->CreateNode(NOT, query);
 
   assert(!ss->reportsClauseCount() || ss->nClauses() == 0);
-  mgr->SetQuery(mgr->ASTUndefined);
 
   // A negative budget means "no limit", which is spelled by not configuring
   // one: the SAT solvers are only ever handed a value >= 0.

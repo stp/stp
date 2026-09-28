@@ -566,7 +566,6 @@ private:
   // The query for the current logical context. BUG probably wrongly handled
   // and gets mixed up with the state, which it shouldn't (otherwise, next
   // query will be affected)
-  ASTNode _current_query;
 
   // Ptr to class that reports on the running time of various parts
   // of the code
@@ -712,7 +711,6 @@ public:
     ASTTrue = CreateNode(TRUE);
     ASTUndefined = CreateNode(UNDEFINED);
     runTimes = new RunTimes();
-    _current_query = ASTUndefined;
     CreateBVConstVal = NULL;
   }
 
@@ -1100,11 +1098,6 @@ public:
   // Internal check-sat-assuming pop variant for the SMT-LIB rule that the
   // accepted model remains readable after its call-local frame closes.
   void PopPreservingRealModel(void);
-
-  // Queries aren't maintained on a stack. Set by the CVC parser's QUERY and
-  // by the API before each check; setting one discards the Real model.
-  const ASTNode GetQuery();
-  void SetQuery(const ASTNode& q);
 
   const ASTVec GetAsserts();
   const ASTVec getVectorOfAsserts();

@@ -250,11 +250,6 @@ void Cpp_interface::AddAssert(const ASTNode& assert)
   lastCheckWasAssuming = false;
 }
 
-void Cpp_interface::SetQuery(const ASTNode& q)
-{
-  bm.SetQuery(q);
-}
-
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTVec& children)
 {
   return nf->CreateNode(kind, children);

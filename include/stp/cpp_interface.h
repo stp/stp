@@ -404,7 +404,6 @@ public:
   DLL_PUBLIC UserDefinedFlags& getUserFlags();
 
   DLL_PUBLIC void AddAssert(const ASTNode& assert);
-  DLL_PUBLIC void SetQuery(const ASTNode& q);
 
   // NODES//
   DLL_PUBLIC ASTNode CreateNode(stp::Kind kind,

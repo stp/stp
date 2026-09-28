@@ -606,7 +606,8 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
   const CheckRun run(this);
 
   const auto started = std::chrono::steady_clock::now();
-  bm->SetQuery(query);
+  // The last check's Real model does not describe this one.
+  bm->InvalidateRealModel();
   stp->ClearAllTables();
   bm->clearUnknown();
 

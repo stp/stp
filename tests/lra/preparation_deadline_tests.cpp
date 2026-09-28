@@ -468,26 +468,27 @@ void congruenceCandidateRecovery(PreparationStage stage)
           EQ,
           manager.CreateTerm(BVPLUS, 8, manager.CreateTerm(BVMULT, 8, x, z), c),
           manager.CreateBVConst(8, 2)));
-  // A candidate's sub-solve runs with the manager's query set aside, which
-  // is what places the stop inside one rather than in the main encoding.
+  // The candidates are proved while the query is preprocessed, and the main
+  // path says Encoding before it blasts anything, so the stage coming round
+  // before any Encoding is inside a candidate's sub-solve.
   struct StopInCandidate
   {
-    STPMgr& manager;
     PreparationStage stage;
+    bool encoded = false;
     bool stopped = false;
     static bool observe(void* opaque, PreparationStage stage)
     {
       auto& self = *static_cast<StopInCandidate*>(opaque);
-      if (stage != self.stage ||
-          self.manager.GetQuery() != self.manager.ASTUndefined)
+      if (stage == PreparationStage::Encoding)
+        self.encoded = true;
+      if (self.encoded || self.stopped || stage != self.stage)
         return false;
       self.stopped = true;
       return true;
     }
-  } stop{manager, stage};
+  } stop{stage};
   const PreparationControl control(PreparationControl::Clock::time_point::max(),
                                     nullptr, StopInCandidate::observe, &stop);
-  manager.SetQuery(manager.ASTFalse);
   {
     PreparationScope scope(manager.preparation_control, control);
     require(engine.TopLevelSTP(formula, manager.ASTFalse) == SOLVER_UNKNOWN &&
@@ -495,8 +496,6 @@ void congruenceCandidateRecovery(PreparationStage stage)
             "cancelled candidate sub-solve lost its timeout outcome");
   }
   require(stop.stopped, "no candidate sub-solve reached the stage");
-  require(manager.GetQuery() == manager.ASTFalse,
-          "cancelled candidate sub-solve did not restore the query");
   manager.GetRunTimes()->print();
   require(engine.TopLevelSTP(formula, manager.ASTFalse) == SOLVER_SATISFIABLE &&
               manager.getUnknownReason() == UnknownReason::None,
