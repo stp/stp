@@ -80,4 +80,43 @@ TEST(libstp2_fidelity, parameters_of_two_widths_name_two_variables)
   vc_Destroy(vc);
 }
 
+std::string g_fatal;
+
+// A whole counterexample answers for a symbol and for a cell of an array
+// symbol the model has, as 2.x's map did, and hands any other term back as
+// it is: a term built after the check is not evaluated against it.
+TEST(libstp2_fidelity, a_whole_counterexample_hands_back_what_it_does_not_record)
+{
+  VC vc = vc_createValidityChecker();
+  Expr x = vc_varExpr1(vc, "x", 0, 8);
+  Expr y = vc_varExpr1(vc, "y", 0, 8);
+  Expr a = vc_varExpr1(vc, "a", 8, 8);
+  vc_assertFormula(vc, vc_eqExpr(vc, x, vc_bvConstExprFromInt(vc, 8, 7)));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 8, 3)),
+                                 vc_bvConstExprFromInt(vc, 8, 9)));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  WholeCounterExample m = vc_getWholeCounterExample(vc);
+  Expr x_value = vc_getTermFromCounterExample(vc, x, m);
+  Expr y_value = vc_getTermFromCounterExample(vc, y, m); // left out: zero
+  Expr cell = vc_getTermFromCounterExample(vc, vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 8, 3)), m);
+  Expr no_cell = vc_getTermFromCounterExample(vc, vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 8, 4)), m);
+  Expr sum = vc_getTermFromCounterExample(vc, vc_bvPlusExpr(vc, 8, x, vc_bvConstExprFromInt(vc, 8, 1)), m);
+  EXPECT_EQ(7, getBVInt(x_value));
+  EXPECT_EQ(0, getBVInt(y_value));
+  EXPECT_EQ(9, getBVInt(cell));
+  EXPECT_EQ(READ, getExprKind(no_cell));
+  EXPECT_EQ(BVPLUS, getExprKind(sum));
+  // a Boolean that is not a variable is refused, as 2.x refused it
+  vc_registerErrorHandler([](const char* msg) { g_fatal = msg; });
+  vc_setErrorPolicy(STP_ON_ERROR_RETURN);
+  EXPECT_EQ(nullptr, vc_getTermFromCounterExample(vc, vc_eqExpr(vc, x, y), m));
+  vc_setErrorPolicy(STP_ON_ERROR_ABORT);
+  vc_registerErrorHandler(nullptr);
+  EXPECT_NE(std::string::npos, g_fatal.find("propositional variables")) << g_fatal;
+  for (Expr e : {x_value, y_value, cell, no_cell, sum})
+    vc_DeleteExpr(e);
+  vc_deleteWholeCounterExample(m);
+  vc_Destroy(vc);
+}
+
 } // namespace

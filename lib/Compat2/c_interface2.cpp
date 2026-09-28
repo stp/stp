@@ -1790,6 +1790,26 @@ WholeCounterExample vc_getWholeCounterExample(VC vcp)
   return w;
 }
 
+namespace
+{
+
+// A read of an array symbol at a value: the one compound term 2.x's whole
+// counterexample could hold.
+bool is_symbol_read(stp_term t)
+{
+  stp_kind k;
+  if (stp_term_get_kind(t, &k) != STP_OK || k != STP_KIND_SELECT)
+    return false;
+  stp_term array = stp_term_child(t, 0);
+  stp_term index = stp_term_child(t, 1);
+  const bool out = stp_term_is_const(array) && stp_term_is_value(index);
+  stp_term_release(array);
+  stp_term_release(index);
+  return out;
+}
+
+} // namespace
+
 Expr vc_getTermFromCounterExample(VC vcp, Expr e, WholeCounterExample cc)
 {
   VCImpl* vc = vcimpl(vcp, "vc_getTermFromCounterExample");
@@ -1799,17 +1819,31 @@ Expr vc_getTermFromCounterExample(VC vcp, Expr e, WholeCounterExample cc)
   stp_term t = term_of(e, "vc_getTermFromCounterExample");
   if (t == nullptr)
     return nullptr;
-  if (stp_term_is_value(t))
+  const bool symbol = stp_term_is_const(t);
+  if (!symbol && is_bool(stp_term_sort(t)))
+  {
+    fatal("vc_getTermFromCounterExample: You must input a term or propositional variables");
+    return nullptr;
+  }
+  // 2.x read its map: a symbol's value, completed as zero or false if the
+  // solve left the symbol out, and a recorded read of an array symbol at a
+  // value; any other term, one built after the check say, came straight
+  // back, and so does a read the model has no cell for.
+  if (!symbol && !is_symbol_read(t))
     return wrap(vc, stp_term_copy(t), false);
   if (w == nullptr || w->model == nullptr)
   {
     report("vc_getTermFromCounterExample: the snapshot holds no model");
     return nullptr;
   }
+  if (!symbol)
+  {
+    stp_term v = stp_model_try_value(w->model, t); // NULL, no error, for no cell
+    return wrap(vc, v != nullptr ? v : stp_term_copy(t), false);
+  }
   stp_term v = stp_model_value(w->model, t);
   if (v == nullptr)
   {
-    // 2.x handed an unrecorded term straight back
     take_error(vc);
     return wrap(vc, stp_term_copy(t), false);
   }

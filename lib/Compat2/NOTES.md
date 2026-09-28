@@ -60,9 +60,11 @@ unsupported, and which 2.x suites run against it.
   refused without being dereferenced; the per-`VC` record holds the 3.x
   function term, the domain and codomain sorts and the name.
 - **A `WholeCounterExample`** is a detached 3.x model snapshot (`stp_model`)
-  plus its `VC`; `vc_getTermFromCounterExample` reads it with
-  `stp_model_try_value`, which is what "the whole counterexample has no entry
-  for this term" meant in 2.x.
+  plus its `VC`; `vc_getTermFromCounterExample` reads it as 2.x read its map:
+  a symbol's value (`stp_model_value`, completing one the solve left out), a
+  read of an array symbol at a value where the model has that cell
+  (`stp_model_try_value`), and every other term handed straight back
+  unevaluated, a term built after the check included.
 - **Process state**: the error handler and the error policy (both global, as
   2.x's handler was), the set of live `VC`s (so a stale `VC` is refused rather
   than dereferenced), the `'u'` handle registry, the UF owner table; one mutex
