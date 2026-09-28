@@ -330,4 +330,19 @@ TEST_F(SolversTest, statistics_are_each_solvers_own)
   EXPECT_EQ(b.statistics().uint64("checks.total"), 1u);
 }
 
+// A reference to a solver's live options outlives the solver's move: the
+// moved-from view is refused as every entry of the moved-from solver is,
+// where it dereferenced null.
+TEST_F(SolversTest, the_options_of_a_moved_from_solver)
+{
+  Solver a(tm);
+  SolverOptions& o = a.options();
+  Solver b(std::move(a));
+  API_EXPECT_ERROR(ErrorCode::STATE, (void)o.get_bool("produce-models"));
+  API_EXPECT_ERROR(ErrorCode::STATE, o.set_bool("produce-models", false));
+  API_EXPECT_ERROR(ErrorCode::STATE, (void)o.copy());
+  API_EXPECT_ERROR(ErrorCode::STATE, o.reset_all());
+  EXPECT_TRUE(b.options().get_bool("produce-models"));
+}
+
 } // namespace

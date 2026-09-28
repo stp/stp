@@ -869,9 +869,18 @@ SolverOptions::SolverOptions(detail::SolverImpl* s) noexcept : solver_(s) {}
 
 namespace
 {
+// The solver behind a live options view, which the solver's move leaves
+// without one: refused as every entry of a moved-from solver is.
+SolverImpl* viewed(SolverImpl* s, const char* fn)
+{
+  if (s == nullptr)
+    detail::fail(ErrorCode::STATE, fn, "the solver was moved from");
+  return s;
+}
+
 void live_write(SolverImpl* s, std::string_view name, const char* fn)
 {
-  s->enter(fn);
+  viewed(s, fn)->enter(fn);
   const detail::OptionSpec* spec = detail::find_option(name);
   if (spec == nullptr)
     detail::fail_option(ErrorCode::OPTION_UNKNOWN, std::string(name), "unknown option");
@@ -912,49 +921,49 @@ void apply_one(SolverImpl* s, std::string_view name)
 Options SolverOptions::copy() const
 {
   Options o;
-  *o.impl() = solver_->options;
+  *o.impl() = viewed(solver_, "SolverOptions::copy")->options;
   return o;
 }
 void SolverOptions::set(std::string_view name, std::string_view value)
 {
   live_write(solver_, name, "SolverOptions::set");
-  solver_->options.set_text("SolverOptions::set", name, value);
+  viewed(solver_, "SolverOptions::set")->options.set_text("SolverOptions::set", name, value);
   apply_one(solver_, name);
 }
 void SolverOptions::set_bool(std::string_view name, bool v)
 {
   live_write(solver_, name, "SolverOptions::set_bool");
-  solver_->options.set("SolverOptions::set_bool", name, v, detail::OptType::BOOL);
+  viewed(solver_, "SolverOptions::set_bool")->options.set("SolverOptions::set_bool", name, v, detail::OptType::BOOL);
   apply_one(solver_, name);
 }
 void SolverOptions::set_int(std::string_view name, std::int64_t v)
 {
   live_write(solver_, name, "SolverOptions::set_int");
-  solver_->options.set("SolverOptions::set_int", name, v, detail::OptType::INT);
+  viewed(solver_, "SolverOptions::set_int")->options.set("SolverOptions::set_int", name, v, detail::OptType::INT);
   apply_one(solver_, name);
 }
 void SolverOptions::set_uint(std::string_view name, std::uint64_t v)
 {
   live_write(solver_, name, "SolverOptions::set_uint");
-  solver_->options.set("SolverOptions::set_uint", name, v, detail::OptType::UINT);
+  viewed(solver_, "SolverOptions::set_uint")->options.set("SolverOptions::set_uint", name, v, detail::OptType::UINT);
   apply_one(solver_, name);
 }
 void SolverOptions::set_str(std::string_view name, std::string_view v)
 {
   live_write(solver_, name, "SolverOptions::set_str");
-  solver_->options.set("SolverOptions::set_str", name, std::string(v), detail::OptType::STRING);
+  viewed(solver_, "SolverOptions::set_str")->options.set("SolverOptions::set_str", name, std::string(v), detail::OptType::STRING);
   apply_one(solver_, name);
 }
 void SolverOptions::set_names(std::string_view name, const std::vector<std::string>& v)
 {
   live_write(solver_, name, "SolverOptions::set_names");
-  solver_->options.set("SolverOptions::set_names", name, v, detail::OptType::SET);
+  viewed(solver_, "SolverOptions::set_names")->options.set("SolverOptions::set_names", name, v, detail::OptType::SET);
   apply_one(solver_, name);
 }
 void SolverOptions::set_duration(std::string_view name, std::chrono::milliseconds v)
 {
   live_write(solver_, name, "SolverOptions::set_duration");
-  solver_->options.set("SolverOptions::set_duration", name, static_cast<std::int64_t>(v.count()),
+  viewed(solver_, "SolverOptions::set_duration")->options.set("SolverOptions::set_duration", name, static_cast<std::int64_t>(v.count()),
                        detail::OptType::DURATION);
   apply_one(solver_, name);
 }
@@ -965,17 +974,17 @@ void SolverOptions::set_str(Option o, std::string_view v) { set_str(Options::nam
 void SolverOptions::set_duration(Option o, std::chrono::milliseconds v) { set_duration(Options::name_of(o), v); }
 void SolverOptions::set_args(const std::vector<std::string>& argv)
 {
-  solver_->enter("SolverOptions::set_args");
+  viewed(solver_, "SolverOptions::set_args")->enter("SolverOptions::set_args");
   // parse into a copy first so that a bad list changes nothing
-  detail::OptionsImpl copy = solver_->options;
+  detail::OptionsImpl copy = viewed(solver_, "SolverOptions::set_args")->options;
   copy.set_args("SolverOptions::set_args", argv);
   std::size_t n = 0;
   const detail::OptionSpec* specs = detail::option_specs(n);
   for (std::size_t i = 0; i < n; ++i)
-    if (copy.is_set[i] && !(solver_->options.is_set[i] && solver_->options.values[i] == copy.values[i]))
+    if (copy.is_set[i] && !(viewed(solver_, "SolverOptions::set_args")->options.is_set[i] && viewed(solver_, "SolverOptions::set_args")->options.values[i] == copy.values[i]))
       live_write(solver_, specs[i].name, "SolverOptions::set_args");
-  solver_->options = copy;
-  solver_->apply_options("SolverOptions::set_args");
+  viewed(solver_, "SolverOptions::set_args")->options = copy;
+  viewed(solver_, "SolverOptions::set_args")->apply_options("SolverOptions::set_args");
 }
 void SolverOptions::set_args(int argc, const char* const* argv)
 {
@@ -984,45 +993,45 @@ void SolverOptions::set_args(int argc, const char* const* argv)
     v.emplace_back(argv[i]);
   set_args(v);
 }
-OptionValue SolverOptions::get(std::string_view name) const { return solver_->options.get("SolverOptions::get", name, detail::OptType::PATH); }
-bool SolverOptions::get_bool(std::string_view name) const { return std::get<bool>(solver_->options.get("SolverOptions::get_bool", name, detail::OptType::BOOL)); }
+OptionValue SolverOptions::get(std::string_view name) const { return viewed(solver_, "SolverOptions::get")->options.get("SolverOptions::get", name, detail::OptType::PATH); }
+bool SolverOptions::get_bool(std::string_view name) const { return std::get<bool>(viewed(solver_, "SolverOptions::get_bool")->options.get("SolverOptions::get_bool", name, detail::OptType::BOOL)); }
 std::int64_t SolverOptions::get_int(std::string_view name) const
 {
-  const OptionValue& v = solver_->options.get("SolverOptions::get_int", name, detail::OptType::INT);
+  const OptionValue& v = viewed(solver_, "SolverOptions::get_int")->options.get("SolverOptions::get_int", name, detail::OptType::INT);
   return v.index() == 2 ? static_cast<std::int64_t>(std::get<std::uint64_t>(v)) : std::get<std::int64_t>(v);
 }
 std::uint64_t SolverOptions::get_uint(std::string_view name) const
 {
-  const OptionValue& v = solver_->options.get("SolverOptions::get_uint", name, detail::OptType::UINT);
+  const OptionValue& v = viewed(solver_, "SolverOptions::get_uint")->options.get("SolverOptions::get_uint", name, detail::OptType::UINT);
   return v.index() == 1 ? static_cast<std::uint64_t>(std::get<std::int64_t>(v)) : std::get<std::uint64_t>(v);
 }
-std::string SolverOptions::get_str(std::string_view name) const { return std::get<std::string>(solver_->options.get("SolverOptions::get_str", name, detail::OptType::STRING)); }
-std::vector<std::string> SolverOptions::get_names(std::string_view name) const { return std::get<std::vector<std::string>>(solver_->options.get("SolverOptions::get_names", name, detail::OptType::SET)); }
-std::chrono::milliseconds SolverOptions::get_duration(std::string_view name) const { return std::chrono::milliseconds(std::get<std::int64_t>(solver_->options.get("SolverOptions::get_duration", name, detail::OptType::DURATION))); }
+std::string SolverOptions::get_str(std::string_view name) const { return std::get<std::string>(viewed(solver_, "SolverOptions::get_str")->options.get("SolverOptions::get_str", name, detail::OptType::STRING)); }
+std::vector<std::string> SolverOptions::get_names(std::string_view name) const { return std::get<std::vector<std::string>>(viewed(solver_, "SolverOptions::get_names")->options.get("SolverOptions::get_names", name, detail::OptType::SET)); }
+std::chrono::milliseconds SolverOptions::get_duration(std::string_view name) const { return std::chrono::milliseconds(std::get<std::int64_t>(viewed(solver_, "SolverOptions::get_duration")->options.get("SolverOptions::get_duration", name, detail::OptType::DURATION))); }
 OptionValue SolverOptions::resolved(std::string_view name) const
 {
   const detail::OptionSpec* s = detail::find_option(name);
   if (s == nullptr)
     detail::fail_option(ErrorCode::OPTION_UNKNOWN, std::string(name), "unknown option");
-  return solver_->options.resolved(detail::option_index(s));
+  return viewed(solver_, "SolverOptions::resolved")->options.resolved(detail::option_index(s));
 }
-bool SolverOptions::is_set(std::string_view name) const { return solver_->options.info(name).is_set; }
+bool SolverOptions::is_set(std::string_view name) const { return viewed(solver_, "SolverOptions::is_set")->options.info(name).is_set; }
 void SolverOptions::reset(std::string_view name)
 {
   live_write(solver_, name, "SolverOptions::reset");
-  solver_->options.reset(name);
+  viewed(solver_, "SolverOptions::reset")->options.reset(name);
   apply_one(solver_, name);
 }
 void SolverOptions::reset_all()
 {
-  solver_->enter("SolverOptions::reset_all");
-  solver_->options.reset_all();
-  solver_->apply_options("SolverOptions::reset_all");
+  viewed(solver_, "SolverOptions::reset_all")->enter("SolverOptions::reset_all");
+  viewed(solver_, "SolverOptions::reset_all")->options.reset_all();
+  viewed(solver_, "SolverOptions::reset_all")->apply_options("SolverOptions::reset_all");
 }
-OptionInfo SolverOptions::info(std::string_view name) const { return solver_->options.info(name); }
-std::vector<std::string> SolverOptions::names(std::optional<Tier> tier) const { return solver_->options.names(tier); }
-std::string SolverOptions::help(std::optional<Tier> tier) const { return solver_->options.help(tier); }
-void SolverOptions::resolve() const { solver_->options.resolve("SolverOptions::resolve"); }
+OptionInfo SolverOptions::info(std::string_view name) const { return viewed(solver_, "SolverOptions::info")->options.info(name); }
+std::vector<std::string> SolverOptions::names(std::optional<Tier> tier) const { return viewed(solver_, "SolverOptions::names")->options.names(tier); }
+std::string SolverOptions::help(std::optional<Tier> tier) const { return viewed(solver_, "SolverOptions::help")->options.help(tier); }
+void SolverOptions::resolve() const { viewed(solver_, "SolverOptions::resolve")->options.resolve("SolverOptions::resolve"); }
 
 // ============================================================ Solver
 
