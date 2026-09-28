@@ -359,6 +359,25 @@ TEST(Runs, the_sinks_survive_a_redirected_stdout)
   EXPECT_EQ(captured.str(), "the application's own line\n");
 }
 
+// end-after-cnf ends a run at a check's first CNF. A check-sat-assuming's
+// frame comes off even so: the assumptions used to stay asserted on a level
+// of their own, and a later check against them answered unsat wrongly.
+TEST(Runs, a_run_ended_in_check_sat_assuming_keeps_no_assumptions)
+{
+  TermManager tm;
+  Options o;
+  o.set_bool("end-after-cnf", true);
+  Solver s(tm, o);
+  s.parse_smt2("(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(declare-fun y () (_ BitVec 8))"
+               "(assert (= (bvmul x y) #x8f))(check-sat-assuming ((bvugt x #x05)))",
+               ParseMode::EXECUTE);
+  EXPECT_EQ(s.level(), 0u);
+  EXPECT_EQ(s.assertions().size(), 1u);
+  s.options().set_bool("end-after-cnf", false);
+  s.add(bvule(*tm.symbol("x"), tm.mk_bv(8, 5))); // x = 1, y = #x8f
+  EXPECT_TRUE(s.check_sat().is_sat());
+}
+
 TEST(Runs, every_cnf_reaches_the_cnf_sink)
 {
   TermManager tm;

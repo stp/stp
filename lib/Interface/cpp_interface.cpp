@@ -1078,6 +1078,26 @@ void Cpp_interface::checkSatAssuming(const ASTVec& assumptions)
   // propagates to the levels beneath, so the verdict cache keeps working
   // across this the same way it does for user levels.
   push();
+  // The frame is the assumptions' own, and comes off however the check ends:
+  // a run that ends at the check's first CNF (ScriptEnded) used to leave the
+  // assumptions asserted on a level of their own.
+  struct PopOnUnwind
+  {
+    Cpp_interface* self;
+    bool armed;
+    ~PopOnUnwind()
+    {
+      if (!armed)
+        return;
+      try
+      {
+        self->popAssumptionFrame();
+      }
+      catch (...)
+      {
+      }
+    }
+  } pop_on_unwind{this, true};
 
   for (const ASTNode& a : assumptions)
     AddAssert(a);
@@ -1085,6 +1105,7 @@ void Cpp_interface::checkSatAssuming(const ASTVec& assumptions)
   // The assumptions ride as the last level, assumed one conjunct each so
   // an unsat answer can name exactly the assumptions it used.
   checkSat(getAssertVector(), true);
+  pop_on_unwind.armed = false;
 
   // Remember the round for get-unsat-assumptions; the verdict is read
   // before the frame pop erases its cache entry.
