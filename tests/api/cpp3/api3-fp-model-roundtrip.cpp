@@ -50,6 +50,7 @@ THE SOFTWARE.
 #include "api3_common.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 using namespace stp;
@@ -344,4 +345,26 @@ TEST(fp_model_roundtrip, an_unseen_application_takes_the_choice_its_operand_valu
   zeros.add(fp_min(p, q) == tm.mk_fp_pos_zero(f));
   ASSERT_TRUE(zeros.check_sat().is_sat());
   EXPECT_EQ(packed(zeros.model().value(fp_min(r, t))), 0u);
+}
+
+// A model keeps its manager alive, so it may be the last thing holding it:
+// then destroying the model frees the manager, and every engine node the model
+// kept -- the partial operations' choices among them -- has to be let go
+// before that. (A node let go afterwards touches freed memory, which a run
+// under valgrind or a sanitizer reports.)
+TEST(fp_model_roundtrip, a_model_that_outlives_its_manager_is_destroyed_cleanly)
+{
+  std::optional<Model> model;
+  {
+    TermManager tm;
+    Solver s(tm, self_checking());
+    const Term x = tm.declare("x", tm.mk_fp32_sort());
+    const Term conversion = fp_to_ubv(8, RoundingMode::RNE, x);
+    s.add(fp_is_nan(x));
+    s.add(conversion == tm.mk_bv(8, 42));
+    ASSERT_TRUE(s.check_sat().is_sat());
+    model = s.model();
+    EXPECT_EQ(model->uint64_value(conversion), 42u);
+  }
+  model.reset();
 }
