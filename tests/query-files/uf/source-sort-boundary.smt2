@@ -27,6 +27,6 @@
 ;
 ; One rejection per input: a refused declaration ends the run, so the four
 ; cannot share a file.
-(set-logic QF_UFABVFP)
+(set-logic QF_AUFBVFP)
 (declare-fun bad-array ((Array (_ BitVec 8) (_ BitVec 8))) Bool)
 (check-sat)

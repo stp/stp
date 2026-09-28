@@ -8,7 +8,7 @@
 ; CHECK: ^unsat
 ; CHECK-NOT: unsupported domain sort
 ; CHECK-NOT: unsupported result sort
-(set-logic QF_UFABVFP)
+(set-logic QF_AUFBVFP)
 (declare-fun ok-fp ((_ BitVec 8)) (_ FloatingPoint 8 24))
 (declare-fun ok-rm (RoundingMode) RoundingMode)
 (assert (distinct (ok-rm RNE) (ok-rm RNE)))

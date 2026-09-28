@@ -6,7 +6,7 @@
 ; progress transaction, which must bind such an index as the batch path does
 ; rather than fail on the missing binding. Width 2 leaves 4 values for 14
 ; indices, so the congruence axioms over those indices are live.
-(set-logic QF_UFLRA)
+(set-logic QF_AUFLRA)
 (declare-sort U 0)
 (declare-fun a () (Array U U))
 (declare-fun x () Real)

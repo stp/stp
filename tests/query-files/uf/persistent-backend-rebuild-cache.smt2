@@ -11,7 +11,7 @@
 ; rotating the semantic/AIG epoch.  All blocks remain satisfiable because
 ; the UF checker may choose bx and by to be distinct.
 ; REQUIRES: cadical-inprobing
-; RUN: %solver --cadical --uninterpreted-functions --incremental=auto -s %s 2>&1 | %OutputCheck %s
+; RUN: %solver --cadical --incremental=auto -s %s 2>&1 | %OutputCheck %s
 ; CHECK: ^sat
 ; CHECK: ^sat
 ; CHECK: trail reuse retired
@@ -28,7 +28,7 @@
 ; CHECK: ^sat
 ; CHECK: ^sat
 ; CHECK: ^sat
-(set-logic QF_ABVFP)
+(set-logic QF_UFBVFP)
 (declare-fun f () Float32)
 (declare-fun g () Float32)
 (declare-fun y () (_ BitVec 8))

@@ -5,7 +5,7 @@
 ; the introduced READ straight into the bit-blaster (a crash), and would
 ; skip read congruence between unspecified results (a wrong answer).
 ; RUN: %solver --incremental %s | %OutputCheck %s
-(set-logic QF_FP)
+(set-logic QF_BVFP)
 (declare-fun f () (_ FloatingPoint 8 24))
 (declare-fun g () (_ FloatingPoint 8 24))
 ; the crash shape: to_ubv of a NaN constant, no arrays anywhere in sight

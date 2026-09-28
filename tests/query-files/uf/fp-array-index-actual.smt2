@@ -14,7 +14,7 @@
 ; CHECK: ^sat
 ; CHECK: REACHED-END
 ;
-(set-logic QF_UFABVFP)
+(set-logic QF_AUFBVFP)
 (declare-fun f ((_ FloatingPoint 8 24)) (_ BitVec 4))
 (declare-const a (Array (_ FloatingPoint 8 24) (_ BitVec 8)))
 (declare-const u (_ FloatingPoint 8 24))

@@ -28,7 +28,7 @@
 ; FACTOR-NOT: ^(sat|unsat|unknown)$
 ; HINTS: ^ERROR: --lra-extension-restart-sat=1 cannot be combined with --array-index-hints=decide$
 ; HINTS-NOT: ^(sat|unsat|unknown)$
-(set-logic QF_UFLRA)
+(set-logic QF_AUFLRA)
 (declare-sort U 0)
 (declare-fun a () (Array U U))
 (declare-fun f (Real) Real)
