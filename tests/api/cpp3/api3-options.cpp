@@ -345,7 +345,7 @@ TEST(Options, aliases_shorts_and_negations_through_set_args)
     }
     if (info.type == "bool")
     {
-      // --name=false and --no-name (accepted for every bool: FINDINGS.md)
+      // --name=false and --no-name (set_args accepts --no- for every bool)
       Options o;
       o.set_args({"--" + name + "=false"});
       EXPECT_FALSE(o.get_bool(name)) << name;
@@ -653,7 +653,7 @@ TEST(Options, unavailable_in_this_build)
   for (const char* b : {"cryptominisat", "cadical", "minisat", "simplifying-minisat"})
   {
     Options o;
-    o.set_str("sat-backend", b); // the registry accepts every member (FINDINGS.md)
+    o.set_str("sat-backend", b); // every member is accepted here; one the build lacks is refused by Solver
     if (has_sat_backend(b))
     {
       Solver s(tm, o);

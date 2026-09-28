@@ -553,8 +553,8 @@ TEST_F(SolverTest, write_cnf)
   EXPECT_EQ(s.level(), 0u);
   EXPECT_TRUE(s.check_sat().is_sat());
   // stop-after-cnf as an option answers unknown(STOPPED_AFTER_CNF) on the
-  // batch pipeline (a session the pushes made incremental is not stopped:
-  // FINDINGS.md, design points)
+  // batch pipeline (a session the pushes made incremental is not stopped: a
+  // limit docs/api3.rst lists)
   TermManager t2;
   Solver fresh(t2);
   const Term p = t2.declare("p", t2.mk_bv_sort(8)), q = t2.declare("q", t2.mk_bv_sort(8));

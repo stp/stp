@@ -237,21 +237,61 @@ library that provides it: KLEE and other 2.x clients link it unchanged
 package's ``STP_C_INTERFACE_LIBRARY``, ``STP_SHARED_LIBRARY`` and
 ``STP_STATIC_LIBRARY`` variables name). The header-only ``fp.hpp`` and
 ``uf.hpp`` over ``c_interface.h`` come with it. It reproduces the
-2.x ownership modes, the error handler and the model-lifetime rules, with two
+2.x ownership modes, the error handler and the model-lifetime rules, with three
 documented exceptions: reading a counterexample after a VALID answer returns
-``NULL`` with a diagnostic instead of an invented value, and an unmatched
-``vc_pop`` is an error instead of deleting the base assertions.
+``NULL`` with a diagnostic instead of an invented value, an unmatched
+``vc_pop`` is an error instead of deleting the base assertions, and a Real
+constant or term beyond the exact-arithmetic budget is a fatal refusal, as any
+constructor's is, where 2.x returned ``NULL``.
 ``lib/Compat2/NOTES.md`` records how each 2.x function, option letter and
 ``ifaceflag_t`` ordinal maps onto the 3.x API.
 
 Limits of the alpha
 -------------------
 
-CryptoMiniSat is interrupted between its solver calls only; ``fp.to_real``
-takes formats whose exponent has at most 16 bits (the exact arithmetic's number
-limits), and a symbolic Real converts to a float only as a value;
-``unsat_assumptions`` after a batch check reports every assumption.
-``capabilities()`` states each of these.
+-  CryptoMiniSat is interrupted between its solver calls only.
+-  ``fp.to_real`` takes formats whose exponent has at most 16 bits (the exact
+   arithmetic's number limits), and a Real converts to a float only when it
+   and the rounding mode are both values.
+-  The float literal constructors (``mk_fp`` from a ``double`` or from text)
+   need an exponent of at least 3 bits; ``mk_fp_from_bits`` builds a value of
+   any format.
+-  Arrays hold bit-vectors, floats, rounding modes and values of declared
+   sorts, not Booleans.
+-  ``unsat_assumptions`` after a batch check reports every assumption; the
+   failed subset comes from a check the incremental driver ran.
+-  ``stop-after-cnf`` stops the batch pipeline only: once pushes have made the
+   session incremental, a check the incremental driver runs is answered.
+-  Under ``simplify = false`` a few kinds still come back lowered, having no
+   engine node of their own: ``BV_NAND``, ``BV_NOR`` and ``BV_XNOR`` as
+   ``BV_NOT`` over the operation, ``BV_REPEAT`` and the rotations as
+   concatenations, ``BV_COMP``, ``BV_REDAND`` and ``BV_REDOR`` as an ``ITE``
+   over an equality, and ``DISTINCT`` over floats, Reals or arrays as the
+   negation of an equality or a conjunction of them, among others.
+-  A script run with ``ParseMode::EXECUTE`` answers its ``(check-sat)``
+   inside the frontend, where the answer is printed; ``model()`` and
+   ``unsat_assumptions()`` do not see it. In either mode a script's
+   ``(check-sat)`` leaves each assertion level as one conjunction in
+   ``assertions()``.
+-  A function a script declares belongs to the manager, as a declared
+   constant does: it survives an API ``pop()`` of the level it was declared
+   in, and a later script over the same manager uses the name rather than
+   declaring it again (a second declaration is a ``PARSE`` error, as SMT-LIB
+   has it; ``declare`` is the idempotent door). A ``define-fun`` name lasts
+   only for the script that defines it: ``symbol()``, a later script and
+   ``parse_term`` do not see it.
+-  A value of a declared sort prints as ``S!k``, which the parser does not
+   read back.
+-  A function over Reals is modelled from the applications the check saw; one
+   it never saw completes to the codomain's default. A Real argument with a
+   bit-vector result under a comparison is refused at assertion.
+-  An option's exclusions are checked when a solver is made, whenever both
+   entries are set, whatever their values; ``set_args`` accepts ``--no-name``
+   for every Boolean option.
+
+``capabilities()`` reports the ones that depend on the build or the sort:
+``interrupt.cryptominisat``, ``array.element-sorts`` and
+``kind.FP_TO_FP_FROM_REAL``.
 
 Several solvers, several threads
 --------------------------------

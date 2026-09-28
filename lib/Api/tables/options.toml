@@ -106,7 +106,7 @@ scope = "solver"
 engine = { custom = "sat_backend" }
 category = "sat"
 requires = { build = "the named backend; auto picks the first available of cryptominisat, cadical, minisat" }
-help = "the SAT backend; selecting one this build lacks is a recoverable OPTION_UNAVAILABLE at set time, never exit(-1) at solve time"
+help = "the SAT backend; one this build lacks is a recoverable OPTION_UNAVAILABLE when a solver is made with it, never exit(-1) at solve time"
 
 [[option]]
 name = "random-seed"

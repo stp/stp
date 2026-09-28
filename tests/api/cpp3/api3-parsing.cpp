@@ -94,7 +94,7 @@ TEST(Parsing, smt2_declare_and_assert)
   EXPECT_EQ(tm.symbols().size(), 3u);
   EXPECT_EQ(s.assertions().size(), 5u);
   // a script's check-sat is ignored in this mode, but the frontend conjoins
-  // the level's assertions on the way (FINDINGS.md, design points)
+  // the level's assertions on the way (a limit docs/api3.rst lists)
   testing::internal::CaptureStdout();
   s.parse_smt2("(check-sat)\n");
   EXPECT_TRUE(testing::internal::GetCapturedStdout().empty());
@@ -150,8 +150,8 @@ TEST(Parsing, execute_mode_runs_the_script)
   EXPECT_NE(out.find("#x2A"), std::string::npos) << out; // get-value answered
   EXPECT_NE(out.find("define-fun"), std::string::npos) << out; // get-model printed
   EXPECT_EQ(s.assertions().size(), 1u);
-  // the script's check is the frontend's (FINDINGS.md, design points); the
-  // API's own check starts afresh and agrees
+  // the script's check is the frontend's, and leaves the API no model (a
+  // limit docs/api3.rst lists); the API's own check starts afresh and agrees
   API3_EXPECT_ERROR(ErrorCode::NO_MODEL, s.model());
   EXPECT_TRUE(s.check_sat().is_sat());
   EXPECT_EQ(s.model().uint64_value(*tm.symbol("a")), 42u);
@@ -206,8 +206,7 @@ TEST(Parsing, smtlib1_and_cvc)
   s3.parse("cx : BITVECTOR(8);\nASSERT(cx = 0hex2a);\nQUERY(cx = 0hex2a);\n", Format::CVC);
   EXPECT_TRUE(s3.check_sat().is_unsat());
   // QUERY(FALSE) is the CVC spelling of "only assertions" (the grammar
-  // requires a QUERY; a text without one is a syntax error, which the CVC
-  // grammar reports by aborting: FINDINGS.md, open item D)
+  // requires a QUERY; a text without one is a syntax error, a PARSE error)
   TermManager t4;
   Solver s4(t4);
   s4.parse("cx : BITVECTOR(8);\nASSERT(cx = 0hex2a);\nQUERY(FALSE);\n", Format::CVC);
@@ -218,7 +217,11 @@ TEST(Parsing, smtlib1_and_cvc)
   EXPECT_EQ(s4.assertions().size(), 2u);
   API3_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s4.parse("(assert true)", Format::DOT));
   API3_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s4.parse("(assert true)", Format::GDL));
-  // (a malformed SMT-LIB 1 or CVC text aborts in the engine: FINDINGS.md, open item D)
+  // a malformed CVC or SMT-LIB 1 text is a PARSE error, the solver as it was
+  API3_EXPECT_ERROR(ErrorCode::PARSE, s4.parse("cy : BITVECTOR(8);\nASSERT(cy = ;\n", Format::CVC));
+  API3_EXPECT_ERROR(ErrorCode::PARSE,
+                    s4.parse("(benchmark b :extrafuns ((z BitVec[8])) :formula (= z", Format::SMTLIB1));
+  EXPECT_EQ(s4.assertions().size(), 2u);
 }
 
 TEST(Parsing, parse_file_by_extension)
@@ -514,9 +517,9 @@ TEST(Parsing, functions_declared_by_scripts)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
-// FINDINGS.md F: the frontend refuses these commands by ending the parse as
-// a whole (Cpp_interface::refuseCurrentCommand unwinds to SMT2Parse, which
-// answers failure), and the API reports PARSE with the solver as it was.
+// The frontend refuses these commands by ending the parse as a whole
+// (Cpp_interface::refuseCurrentCommand unwinds to SMT2Parse, which answers
+// failure), and the API reports PARSE with the solver as it was.
 TEST(Parsing, function_misuse_in_a_script_is_a_parse_error)
 {
   TermManager tm;
@@ -533,10 +536,10 @@ TEST(Parsing, function_misuse_in_a_script_is_a_parse_error)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
-// FINDINGS.md A and F: every one of these once ended the process (the
-// grammar's fatal_yyerror, the frontend's refusals, a constant the engine's
-// constructor would not take). Each is PARSE now, with the solver as it was
-// -- its level, its assertions -- and usable afterwards.
+// Every one of these once ended the process (the grammar's fatal_yyerror, the
+// frontend's refusals, a constant the engine's constructor would not take).
+// Each is PARSE now, with the solver as it was -- its level, its assertions --
+// and usable afterwards.
 TEST(Parsing, frontend_refusals_are_parse_errors)
 {
   TermManager tm;

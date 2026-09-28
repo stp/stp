@@ -182,7 +182,7 @@ frontend).
 | `include/stp/stp.h`, `c/` | the C API and its runtime (`c/NOTES.md`) |
 | `bindings/python3/` | the Cython module `stp._core` and the z3py-style shell (`NOTES.md` there) |
 | `lib/Compat2/` | `libstp2`: `c_interface.h` re-implemented over `stp.h`, the only provider of the 2.x API (`NOTES.md` there) |
-| `tests/api/cpp3`, `tests/api/c3`, `tests/api/python3` | the suites; `FINDINGS.md` in cpp3 lists every defect met and its state |
+| `tests/api/cpp3`, `tests/api/c3`, `tests/api/python3` | the suites; the limits they pin are listed in `docs/api3.rst` |
 
 ## Building and testing
 

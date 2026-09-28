@@ -29,7 +29,8 @@ THE SOFTWARE.
 // mis-sorted, mis-counted, mis-indexed or unsupported.
 //
 // Where kind() reports a lowered form even under simplify = false the
-// expectation is marked "lowered:" (FINDINGS.md, design points).
+// expectation is marked "lowered:" (the engine has no node of its own for
+// them; docs/api3.rst lists this among the limits).
 
 #include "api3_common.hpp"
 
