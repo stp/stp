@@ -398,6 +398,13 @@ void validate_option_value(const OptionSpec& spec, const OptionValue& v)
         fail_option(ErrorCode::OPTION_VALUE, spec.name,
                     "value " + std::to_string(i) + " is above the maximum " +
                         std::to_string(spec.max));
+      // A numeric row that lists its values -- an engine setting that only
+      // some numbers name, as bb.mult-variant's circuits -- takes those
+      // alone, so that another is refused here rather than by the engine
+      // part way through a check.
+      if (spec.num_values > 0 && !in_values(spec, std::to_string(i)))
+        fail_option(ErrorCode::OPTION_VALUE, spec.name,
+                    "value " + std::to_string(i) + " is not one of " + values_text(spec));
       return;
     }
     case OptType::ENUM:

@@ -525,6 +525,10 @@ TEST(Errors, input_mistakes_are_recoverable)
     rows.push_back({std::string("a run's ") + eq + " under array-equality = auto",
                     ErrorCode::UNSUPPORTED,
                     script(ab + "(assert " + eq + ")(check-sat)", ParseMode::EXECUTE)});
+  // a multiplier variant that names no circuit, refused as it is set
+  for (std::int64_t v : {0, 2, 10, 24, 99, -1, 2147483647})
+    rows.push_back({"bb.mult-variant = " + std::to_string(v), ErrorCode::OPTION_VALUE,
+                    [v](TermManager&, Solver& s) { s.options().set_int("bb.mult-variant", v); }});
   for (const Row& row : rows)
   {
     SCOPED_TRACE(row.what);

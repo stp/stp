@@ -257,6 +257,8 @@ class Emitter:
             if o['type'] == 'mode' and 'values' in o:
                 if not set(o['values']) <= {'on', 'off', 'auto'} or o['default'] not in o['values']:
                     raise SystemExit('options.toml: %s: a mode lists spellings among on, off and auto, its default included' % o['name'])
+            if o['type'] in ('int', 'uint') and 'values' in o and str(o['default']) not in o['values']:
+                raise SystemExit('options.toml: %s: default %r is not one of its values' % (o['name'], o['default']))
             if o['type'] == 'set' and any(m not in o['values'] for m in o['default']):
                 raise SystemExit('options.toml: %s: default %r has a member outside its values' % (o['name'], o['default']))
             for ex in o.get('excludes', []):
