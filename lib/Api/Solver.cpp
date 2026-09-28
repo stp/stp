@@ -216,8 +216,10 @@ SolverImpl::~SolverImpl()
       stp->deleteObjects();
       delete stp;
     }
-    catch (const stp::EngineFatal& e)
+    catch (const std::exception& e)
     {
+      // EngineFatal, or anything else the engine threw: a destructor cannot
+      // report it, so the manager refuses every later call instead
       if (!mgr->poisoned)
       {
         mgr->poisoned = true;
@@ -1601,6 +1603,15 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
         restore_stack();
         detail::fail(ErrorCode::IO, fn, "reading the input failed");
       }
+      catch (const std::exception& e)
+      {
+        // anything else the engine threw inside the script, reported as
+        // engine_call reports it, with the stack put back
+        smt2lex_destroy();
+        pi.retainUFDeclarations(false);
+        restore_stack();
+        detail::fail_foreign(s->mgr, fn, e);
+      }
       smt2lex_destroy();
       // A command the frontend answered with (error ...) and then skipped (an
       // ill-typed extract, say) leaves the parse "successful" with the
@@ -1668,6 +1679,16 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
         pi.retainUFDeclarations(false);
         restore_stack();
         detail::fail(ErrorCode::IO, fn, "reading the input failed");
+      }
+      catch (const std::exception& e)
+      {
+        if (format == Format::SMTLIB1)
+          smtlex_destroy();
+        else
+          cvclex_destroy();
+        pi.retainUFDeclarations(false);
+        restore_stack();
+        detail::fail_foreign(s->mgr, fn, e);
       }
       if (status != 0)
       {
@@ -1791,6 +1812,10 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   {
     detail::fail_engine(s->mgr, fn, e.what());
   }
+  catch (const std::exception& e)
+  {
+    detail::fail_foreign(s->mgr, fn, e);
+  }
 }
 } // namespace
 
@@ -1891,6 +1916,12 @@ Term Solver::parse_term(std::string_view text) const
       smt2lex_destroy();
       bm->UserFlags.smtlib2_parser_flag = saved_smt2;
       detail::fail_engine(s->mgr, "Solver::parse_term", e.what());
+    }
+    catch (const std::exception& e)
+    {
+      smt2lex_destroy();
+      bm->UserFlags.smtlib2_parser_flag = saved_smt2;
+      detail::fail_foreign(s->mgr, "Solver::parse_term", e);
     }
     smt2lex_destroy();
     bm->UserFlags.smtlib2_parser_flag = saved_smt2;

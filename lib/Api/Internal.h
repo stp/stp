@@ -45,6 +45,7 @@ THE SOFTWARE.
 
 #include <atomic>
 #include <chrono>
+#include <exception>
 #include <functional>
 #include <map>
 #include <memory>
@@ -111,6 +112,10 @@ struct EngineScope
   EngineScope& operator=(const EngineScope&) = delete;
 };
 [[noreturn]] DLL_PUBLIC void fail_engine(ManagerImpl* m, const char* fn, const std::string& what);
+// Anything else the engine threw (neither EngineFatal nor one of the API's
+// own errors) unwound through the engine as a failure does, and is one:
+// INTERNAL, or RESOURCE for bad_alloc, and the manager is poisoned.
+[[noreturn]] DLL_PUBLIC void fail_foreign(ManagerImpl* m, const char* fn, const std::exception& e);
 // INVALID_ARGUMENT unless `width` is in the uf-sort-width entry's range.
 void check_uf_sort_width(std::uint64_t width, const char* fn, std::optional<int> arg);
 
@@ -164,6 +169,14 @@ auto engine_call(ManagerImpl* m, const char* fn, F&& f) -> decltype(f())
   catch (const stp::EngineFatal& e)
   {
     fail_engine(m, fn, e.what());
+  }
+  catch (const Error&)
+  {
+    throw; // the call's own refusal
+  }
+  catch (const std::exception& e)
+  {
+    fail_foreign(m, fn, e);
   }
 }
 const char* error_template(ErrorCode code);

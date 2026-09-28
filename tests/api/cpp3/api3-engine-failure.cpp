@@ -36,7 +36,11 @@ THE SOFTWARE.
 #include <gtest/gtest.h>
 
 #include <functional>
+#include <new>
+#include <optional>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace stp::api;
@@ -128,6 +132,53 @@ TEST(EngineFailure, an_engine_failure_is_internal_and_poisons_the_manager)
   Solver t(fresh);
   t.add(fresh.declare("z", fresh.mk_bv_sort(4)) == 3);
   EXPECT_TRUE(t.check_sat().is_sat());
+}
+
+// Anything else the engine throws unwinds through it as a failure does, and
+// is one: INTERNAL, or RESOURCE for std::bad_alloc, with the manager
+// poisoned. The API's own refusals raised inside an engine call pass through
+// as they are.
+TEST(EngineFailure, a_foreign_exception_is_an_engine_failure)
+{
+  const auto error_of = [](TermManager& tm, const std::function<void()>& engine_work) {
+    try
+    {
+      detail::engine_call(tm.impl(), "EngineFailure", engine_work);
+    }
+    catch (const Error& e)
+    {
+      return std::make_pair(std::optional<ErrorCode>(e.code()), std::string(e.what()));
+    }
+    return std::make_pair(std::optional<ErrorCode>(), std::string("no error"));
+  };
+  {
+    TermManager tm;
+    const auto [code, what] =
+        error_of(tm, [] { throw std::invalid_argument("simulated foreign failure"); });
+    EXPECT_EQ(code, ErrorCode::INTERNAL);
+    EXPECT_NE(what.find("simulated foreign failure"), std::string::npos) << what;
+    try
+    {
+      (void)tm.mk_bv_sort(16);
+      FAIL() << "a call on the poisoned manager succeeded";
+    }
+    catch (const Error& e)
+    {
+      EXPECT_EQ(e.code(), ErrorCode::STATE) << e.what();
+    }
+  }
+  {
+    TermManager tm;
+    const auto [code, what] = error_of(tm, [] { throw std::bad_alloc(); });
+    EXPECT_EQ(code, ErrorCode::RESOURCE) << what;
+    EXPECT_THROW((void)tm.mk_bv_sort(16), Error);
+  }
+  {
+    TermManager tm;
+    const auto [code, what] = error_of(tm, [&tm] { (void)tm.mk_bv_sort(0); });
+    EXPECT_EQ(code, ErrorCode::INVALID_ARGUMENT) << what;
+    EXPECT_EQ(tm.mk_bv_sort(16).bv_size(), 16u); // not poisoned
+  }
 }
 
 } // namespace

@@ -119,7 +119,10 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   (`engine_call` in Internal.h); the hub reports it as INTERNAL and poisons the
   manager, whose state the failure may have left inconsistent: every later
   call on it, its solvers, models and terms is refused with STATE naming the
-  failure. `FatalError` and `ReportFatalError` tell the engine's per-thread
+  failure. Any other exception that unwinds through the engine (a
+  `std::exception` it or a caller's callback threw) is such a failure too
+  (`fail_foreign`): INTERNAL, or RESOURCE for `std::bad_alloc`, and the
+  manager is poisoned. `FatalError` and `ReportFatalError` tell the engine's per-thread
   observer first, which a solver's route points at its fatal error handler:
   the `stp` binary prints "STP Error:" there and exits, before anything
   unwinds, as it always did. libstp2, the 2.x C interface over the C API,

@@ -40,6 +40,7 @@ THE SOFTWARE.
 #include <cmath>
 #include <cstring>
 #include <mutex>
+#include <new>
 #include <ostream>
 #include <unordered_set>
 
@@ -137,7 +138,9 @@ void ManagerImpl::check_alive(const char* fn) const
     fail(ErrorCode::STATE, fn, "the term manager is poisoned: " + poison_message);
 }
 
-void fail_engine(ManagerImpl* m, const char* fn, const std::string& what)
+namespace
+{
+void poison(ManagerImpl* m, const char* fn, const std::string& what)
 {
   const std::string where = fn ? fn : "";
   if (m != nullptr && !m->poisoned)
@@ -146,8 +149,22 @@ void fail_engine(ManagerImpl* m, const char* fn, const std::string& what)
     m->poison_message =
         "an engine failure in " + where + " (" + what + ") may have left its state inconsistent";
   }
+}
+} // namespace
+
+void fail_engine(ManagerImpl* m, const char* fn, const std::string& what)
+{
+  poison(m, fn, what);
   fail_internal(fn, "the engine failed: " + what +
                         "; the term manager is poisoned and refuses every later call");
+}
+
+void fail_foreign(ManagerImpl* m, const char* fn, const std::exception& e)
+{
+  if (dynamic_cast<const std::bad_alloc*>(&e) == nullptr)
+    fail_engine(m, fn, e.what());
+  poison(m, fn, "out of memory");
+  fail_resource(fn, "out of memory; the term manager is poisoned and refuses every later call");
 }
 
 void check_uf_sort_width(std::uint64_t width, const char* fn, std::optional<int> arg)

@@ -40,6 +40,7 @@ THE SOFTWARE.
 
 #include <cerrno>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -1074,10 +1075,22 @@ void CommandLine::make_solver()
 
 int main(int argc, char** argv)
 {
-  CommandLine command_line;
-  command_line.create_options();
-  const int ret = command_line.parse_options(argc, argv);
-  if (ret != 0)
-    return ret;
-  return stp_cli::run(command_line.invocation, std::move(command_line.solver));
+  // Every error the library reports arrives as a stp::Error that the command
+  // line handles where it happens; anything else is reported, as a fatal
+  // error is, rather than left to end the process with no word.
+  try
+  {
+    CommandLine command_line;
+    command_line.create_options();
+    const int ret = command_line.parse_options(argc, argv);
+    if (ret != 0)
+      return ret;
+    return stp_cli::run(command_line.invocation, std::move(command_line.solver));
+  }
+  catch (const std::exception& e)
+  {
+    std::fflush(stdout);
+    std::cerr << "STP Error: " << e.what() << std::endl;
+    return -1;
+  }
 }
