@@ -153,7 +153,11 @@ unsupported, and which 2.x suites run against it.
    once, as KLEE's table lookups by a symbolic byte read it -- has the cells
    its definition gives; 2.x's `vc_getCounterExampleArray` died on that
    substitution ("entry in counterexample is an arraytype"), and libstp2
-   answers it.
+   answers it. `vc_getCounterExample` of an array-sorted term (and
+   `vc_getTermFromCounterExample` of an array symbol) is its value as a term,
+   the constant array of the fill under a write per cell; 2.x died there
+   ("LiftSourceValue: cannot lift this source sort", or an assertion on a
+   write).
 7. **Letters** (`vc_setFlag`, `vc_setFlags`, `process_argument`): `'a'`
    disable-opt-inc, `'c'` produce-models, `'d'` produce-models + check-sanity
    (on for every checker, as 2.x forced it), `'i'` incremental=on, `'r'`

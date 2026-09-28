@@ -681,8 +681,11 @@ STP_API void stp_solver_set_cnf_sink(stp_solver, stp_cnf_sink, void* user); /* e
 STP_API stp_model stp_model_copy(stp_model);
 STP_API void stp_model_release(stp_model);
 STP_API stp_tm stp_model_manager(stp_model); /* +1 handle */
-STP_API stp_term stp_model_value(stp_model, stp_term);     /* a VALUE of the term's sort; symbols outside the core are completed */
-STP_API stp_term stp_model_try_value(stp_model, stp_term); /* NULL, no error, if completion would be needed */
+/* a VALUE of the term's sort; symbols outside the core are completed. An array's value is the
+ * constant array of its default under a store per cell (stp_array_value_as_term); a function has
+ * none (SORT_MISMATCH: read it with stp_model_fun_value) */
+STP_API stp_term stp_model_value(stp_model, stp_term);
+STP_API stp_term stp_model_try_value(stp_model, stp_term); /* NULL, no error, if completion would be needed; an array whose base is in the core, default included, needs none */
 STP_API stp_status stp_model_values(stp_model, size_t n, const stp_term* in, stp_term* out); /* batch, all or nothing; on STP_OK every out[i] is +1 */
 STP_API stp_status stp_model_bool(stp_model, stp_term, bool* out);
 STP_API stp_status stp_model_uint64(stp_model, stp_term, uint64_t* out); /* DOES_NOT_FIT */

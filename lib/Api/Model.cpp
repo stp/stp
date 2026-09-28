@@ -905,10 +905,67 @@ ASTNode own_node(const ModelSnapshot& s, const Term& t, const char* fn)
   return detail::node_of(t);
 }
 
-Term eval_term(const ModelSnapshot& s, const Term& t, const char* fn)
+// The value of array term `n`: its cells and its default. `determined`, when
+// given, says whether the value needs no completion: every symbol it reads is
+// in the core, and its base is an array the model assigned (default included)
+// or a constant array.
+std::shared_ptr<detail::ValueImpl> array_value_of(const std::shared_ptr<const ModelSnapshot>& snap,
+                                                  const ASTNode& n, const char* fn, bool complete,
+                                                  bool* determined)
 {
-  detail::Evaluator ev(s, fn, true);
-  return detail::make_term(s.mgr, ev.evaluate(own_node(s, t, fn)));
+  const ModelSnapshot& s = *snap;
+  auto impl = std::make_shared<detail::ValueImpl>();
+  impl->snap = snap;
+  impl->key = n;
+  impl->is_array = true;
+  detail::Evaluator ev(s, fn, complete);
+  std::set<ASTNode> indices;
+  ASTNode base;
+  detail::collect_indices(ev, s, s.mgr, n, indices, base);
+  impl->cells.array = n;
+  impl->cells.sort = s.mgr->sort_of_node(n, fn);
+  for (const ASTNode& i : indices)
+    impl->cells.entries.emplace_back(i, ev.read(n, i));
+  std::sort(impl->cells.entries.begin(), impl->cells.entries.end(),
+            [](const std::pair<ASTNode, ASTNode>& x, const std::pair<ASTNode, ASTNode>& y) {
+              return detail::index_before(x.first, y.first);
+            });
+  bool assigned = true;
+  auto fit = s.arrays.find(base);
+  if (fit != s.arrays.end())
+    impl->cells.fill = fit->second.fill;
+  else if (s.mgr->is_const_array(base))
+    impl->cells.fill = ev.evaluate(s.mgr->const_array_default(base));
+  else
+  {
+    impl->cells.fill = detail::fill_value(s.mgr, impl->cells.sort, s.fill_ones, fn);
+    assigned = false;
+  }
+  if (determined != nullptr)
+    *determined = assigned && !ev.incomplete();
+  return impl;
+}
+
+// A function has no value term: its value is a table (function_value).
+void refuse_function(const ModelSnapshot& s, const ASTNode& n, const Term& t, const char* fn)
+{
+  if (s.mgr->rec(s.mgr->sort_of_node(n, fn)).kind == SortKind::FUN)
+    detail::fail(ErrorCode::SORT_MISMATCH, fn,
+                 "a function has no value term; read its table with Model::function_value", 0,
+                 {t}, {t.sort()});
+}
+
+Term value_term(const std::shared_ptr<const ModelSnapshot>& snap, detail::Evaluator& ev,
+                const Term& t, const char* fn)
+{
+  const ModelSnapshot& s = *snap;
+  const ASTNode n = own_node(s, t, fn);
+  refuse_function(s, n, t, fn);
+  // An array's value is a constant array under a chain of stores; the
+  // evaluator hands an array term back as it stands.
+  if (n.GetSourceSort().kind() == SourceSort::Kind::Array)
+    return ArrayValue(array_value_of(snap, n, fn, true, nullptr)).as_term();
+  return detail::make_term(s.mgr, ev.evaluate(n));
 }
 } // namespace
 
@@ -919,14 +976,27 @@ TermManager Model::manager() const
 
 Term Model::value(const Term& t) const
 {
-  return eval_term(snap_of(*this, "Model::value"), t, "Model::value");
+  const ModelSnapshot& s = snap_of(*this, "Model::value");
+  detail::Evaluator ev(s, "Model::value", true);
+  return value_term(snap_, ev, t, "Model::value");
 }
 
 std::optional<Term> Model::try_value(const Term& t) const
 {
-  const ModelSnapshot& s = snap_of(*this, "Model::try_value");
-  detail::Evaluator ev(s, "Model::try_value", false);
-  const ASTNode v = ev.evaluate(own_node(s, t, "Model::try_value"));
+  const char* fn = "Model::try_value";
+  const ModelSnapshot& s = snap_of(*this, fn);
+  const ASTNode n = own_node(s, t, fn);
+  refuse_function(s, n, t, fn);
+  if (n.GetSourceSort().kind() == SourceSort::Kind::Array)
+  {
+    bool determined = false;
+    const ArrayValue av(array_value_of(snap_, n, fn, false, &determined));
+    if (!determined)
+      return std::nullopt;
+    return av.as_term();
+  }
+  detail::Evaluator ev(s, fn, false);
+  const ASTNode v = ev.evaluate(n);
   if (ev.incomplete())
     return std::nullopt;
   return detail::make_term(s.mgr, v);
@@ -939,7 +1009,7 @@ std::vector<Term> Model::values(const std::vector<Term>& ts) const
   std::vector<Term> out;
   out.reserve(ts.size());
   for (const Term& t : ts)
-    out.push_back(detail::make_term(s.mgr, ev.evaluate(own_node(s, t, "Model::values"))));
+    out.push_back(value_term(snap_, ev, t, "Model::values"));
   return out;
 }
 
@@ -961,30 +1031,7 @@ ArrayValue Model::array_value(const Term& t) const
   if (n.GetSourceSort().kind() != SourceSort::Kind::Array)
     detail::fail(ErrorCode::SORT_MISMATCH, "Model::array_value", "expected an array term", 0, {t},
                  {t.sort()});
-  auto impl = std::make_shared<detail::ValueImpl>();
-  impl->snap = snap_;
-  impl->key = n;
-  impl->is_array = true;
-  detail::Evaluator ev(s, "Model::array_value", true);
-  std::set<ASTNode> indices;
-  ASTNode base;
-  detail::collect_indices(ev, s, s.mgr, n, indices, base);
-  impl->cells.array = n;
-  impl->cells.sort = s.mgr->sort_of_node(n, "Model::array_value");
-  for (const ASTNode& i : indices)
-    impl->cells.entries.emplace_back(i, ev.read(n, i));
-  std::sort(impl->cells.entries.begin(), impl->cells.entries.end(),
-            [](const std::pair<ASTNode, ASTNode>& x, const std::pair<ASTNode, ASTNode>& y) {
-              return detail::index_before(x.first, y.first);
-            });
-  auto fit = s.arrays.find(base);
-  if (fit != s.arrays.end())
-    impl->cells.fill = fit->second.fill;
-  else if (s.mgr->is_const_array(base))
-    impl->cells.fill = ev.evaluate(s.mgr->const_array_default(base));
-  else
-    impl->cells.fill = detail::fill_value(s.mgr, impl->cells.sort, s.fill_ones, "Model::array_value");
-  return ArrayValue(impl);
+  return ArrayValue(array_value_of(snap_, n, "Model::array_value", true, nullptr));
 }
 
 FunctionValue Model::function_value(const Term& t) const

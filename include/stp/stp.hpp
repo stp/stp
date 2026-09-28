@@ -995,9 +995,14 @@ public:
 
   /// A VALUE of the term's sort; any term of this manager, built before or
   /// after the check; symbols outside the core are COMPLETED with their sort's
-  /// default.
+  /// default. An array's value is a term with no symbol in it: the constant
+  /// array of its default under a store per cell (array_value(t).as_term()).
+  /// A function has no value term: SORT_MISMATCH, read it with
+  /// function_value.
   Term value(const Term&) const;
-  std::optional<Term> try_value(const Term&) const; ///< nullopt instead of completing
+  /// nullopt instead of completing; an array is complete when its base is an
+  /// array in the core (default included) or a constant array
+  std::optional<Term> try_value(const Term&) const;
   std::vector<Term> values(const std::vector<Term>&) const; ///< batch (completing)
 
   bool bool_value(const Term&) const;

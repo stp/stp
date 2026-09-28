@@ -155,6 +155,85 @@ TEST_F(Models, completion_versus_try_value)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
+// Whether `t` holds no declared symbol: the shape of a value term.
+bool symbol_free(const Term& t)
+{
+  if (t.is_const())
+    return false;
+  for (const Term& c : t.children())
+    if (!symbol_free(c))
+      return false;
+  return true;
+}
+
+// An array's value is a term with no symbol in it, the constant array of its
+// default under a store per cell: array_value(t).as_term(). A function has no
+// value term. try_value completes nothing: an array needs its base in the core
+// (or a constant array) and every symbol it reads there.
+TEST_F(Models, the_value_of_an_array_or_a_function_term)
+{
+  const Term i = tm.declare("i", bv32), j = tm.declare("j", bv32);
+  const Term b = tm.declare("b", A), c = tm.declare("c", tm.mk_bool_sort());
+  s.add(a[I(1)] == 10);
+  s.add(a[i] == 7);
+  s.add(i == 200);
+  s.add(c);
+  s.add(f(x, x) == 3);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model m = s.model();
+
+  const Term va = m.value(a);
+  EXPECT_TRUE(va.same_as(m.array_value(a).as_term()));
+  EXPECT_TRUE(va.sort() == A);
+  EXPECT_TRUE(symbol_free(va));
+  EXPECT_EQ(m.uint64_value(va[I(1)]), 10u);
+  EXPECT_EQ(m.uint64_value(va[I(200)]), 7u);
+  // a store over it, an ite of arrays: evaluated, not handed back
+  const Term st = store(a, i, tm.mk_bv(8, 9));
+  const Term vst = m.value(st);
+  EXPECT_TRUE(vst.same_as(m.array_value(st).as_term()));
+  EXPECT_TRUE(symbol_free(vst));
+  EXPECT_EQ(m.uint64_value(vst[I(200)]), 9u);
+  EXPECT_EQ(m.uint64_value(vst[I(1)]), 10u);
+  const Term it = ite(c, st, b);
+  EXPECT_TRUE(m.value(it).same_as(vst));
+  // the batch reader alike
+  const std::vector<Term> vs = m.values({a, st, x});
+  ASSERT_EQ(vs.size(), 3u);
+  EXPECT_TRUE(vs[0].same_as(va));
+  EXPECT_TRUE(vs[1].same_as(vst));
+  // a value term asserts back
+  s.add(a == va);
+  EXPECT_TRUE(s.check_sat().is_sat());
+
+  // try_value: arrays of the core, and what reads only the core, are values
+  ASSERT_TRUE(m.try_value(a).has_value());
+  EXPECT_TRUE(m.try_value(a)->same_as(va));
+  ASSERT_TRUE(m.try_value(it).has_value());
+  EXPECT_TRUE(m.try_value(it)->same_as(vst));
+  // but not an array outside the core, nor a store at a symbol outside it
+  EXPECT_FALSE(m.in_core(b));
+  EXPECT_FALSE(m.try_value(b).has_value());
+  EXPECT_TRUE(symbol_free(m.value(b)));
+  EXPECT_FALSE(m.try_value(store(a, j, tm.mk_bv(8, 1))).has_value());
+  EXPECT_FALSE(m.try_value(ite(c, b, a)).has_value());
+  // a constant array is its own base
+  const Term k = tm.mk_const_array(A, tm.mk_bv(8, 4));
+  ASSERT_TRUE(m.try_value(store(k, i, x)).has_value());
+
+  // a function: SORT_MISMATCH from each reader, pointing at function_value
+  for (auto read : {+[](const Model& mm, const Term& t) { (void)mm.value(t); },
+                    +[](const Model& mm, const Term& t) { (void)mm.try_value(t); },
+                    +[](const Model& mm, const Term& t) { (void)mm.values({t}); }})
+  {
+    auto e = API_ERROR_OF(read(m, f));
+    ASSERT_TRUE(e.has_value());
+    EXPECT_EQ(e->code(), ErrorCode::SORT_MISMATCH);
+    EXPECT_NE(std::string(e->what()).find("function_value"), std::string::npos) << e->what();
+  }
+  EXPECT_EQ(m.function_value(f).size(), 1u);
+}
+
 TEST_F(Models, array_values)
 {
   const Term i = tm.declare("i", bv32);

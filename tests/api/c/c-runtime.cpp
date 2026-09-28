@@ -451,6 +451,49 @@ TEST(c_runtime, batch_values_substitution_and_children)
   stp_tm_release(tm);
 }
 
+// An array's value is its array value's term; a function has none.
+TEST(c_runtime, the_value_of_an_array_or_a_function)
+{
+  stp_tm tm = stp_tm_new(nullptr);
+  stp_tm_scope_push(tm);
+  stp_sort bv8 = stp_mk_bv_sort(tm, 8);
+  stp_sort as = stp_mk_array_sort(tm, bv8, bv8);
+  stp_term a = stp_declare(tm, "a", as), b = stp_declare(tm, "b", as);
+  stp_term f = stp_declare(tm, "f", stp_mk_fun_sort(tm, 1, &bv8, bv8));
+  stp_term one = stp_mk_bv_uint64(tm, 8, 1), two = stp_mk_bv_uint64(tm, 8, 2);
+  stp_solver s = stp_solver_new(tm, nullptr);
+  ASSERT_EQ(STP_OK, stp_solver_assert(s, stp_eq(tm, stp_select(tm, a, one), two)));
+  ASSERT_EQ(STP_OK, stp_solver_assert(s, stp_eq(tm, stp_apply(tm, f, one), two)));
+  stp_result r;
+  ASSERT_EQ(STP_OK, stp_solver_check_sat(s, &r));
+  stp_model m = stp_solver_model(s);
+  stp_array_value av = stp_model_array_value(m, a);
+  ASSERT_NE(nullptr, av);
+  stp_term va = stp_model_value(m, a);
+  ASSERT_NE(nullptr, va);
+  EXPECT_EQ(stp_array_value_as_term(av), va);
+  EXPECT_EQ(va, stp_model_try_value(m, a));
+  EXPECT_FALSE(stp_term_is_const(va));
+  // b is outside the core: value completes it, try_value does not
+  EXPECT_NE(nullptr, stp_model_value(m, b));
+  EXPECT_EQ(nullptr, stp_model_try_value(m, b));
+  EXPECT_EQ(nullptr, stp_tm_error(tm));
+  // a function: SORT_MISMATCH
+  EXPECT_EQ(nullptr, stp_model_value(m, f));
+  ASSERT_NE(nullptr, stp_tm_error(tm));
+  EXPECT_EQ(STP_ERR_SORT_MISMATCH, stp_tm_error(tm)->code);
+  stp_tm_clear_error(tm);
+  EXPECT_EQ(nullptr, stp_model_try_value(m, f));
+  ASSERT_NE(nullptr, stp_tm_error(tm));
+  EXPECT_EQ(STP_ERR_SORT_MISMATCH, stp_tm_error(tm)->code);
+  stp_tm_clear_error(tm);
+  stp_array_value_release(av);
+  stp_model_release(m);
+  stp_solver_delete(s);
+  stp_tm_scope_pop(tm);
+  stp_tm_release(tm);
+}
+
 TEST(c_runtime, error_callback_sees_every_error_and_the_record_keeps_the_first)
 {
   stp_tm tm = stp_tm_new(nullptr);

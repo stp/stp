@@ -103,6 +103,30 @@ def test_completion_versus_lookup():
     assert m.eval(arr)[3].as_long() == 0 and m.eval(arr).default.as_long() == 0
 
 
+def test_array_and_function_terms_in_the_value_readers():
+    a = Array("a", BitVecSort(32), BitVecSort(8))
+    b = Array("b", BitVecSort(32), BitVecSort(8))
+    i, j = BitVecs("i j", 32)
+    f = Function("f", BitVecSort(8), BitVecSort(8))
+    x = BitVec("x", 8)
+    m = _model(a[5] == 42, a[i] == 7, i == 100, f(x) == 3)
+    # an array's value is a term with no symbol in it
+    va = m.values([a])[0]
+    assert isinstance(va, ArrayRef) and not va.is_const() and va.id == m[a].id
+    assert m.eval(va[5]).as_long() == 42 and m.eval(va[100]).as_long() == 7
+    # the mapping rule: a store at a symbol of the core is a value, one at a symbol outside it is not
+    assert m[Store(a, i, 9)][100].as_long() == 9 and m[Store(a, i, 9)][5].as_long() == 42
+    with pytest.raises(KeyError) as e:
+        m[Store(a, j, 9)]
+    assert "j" in str(e.value)
+    with pytest.raises(KeyError):
+        m[b]
+    # a function has no value term
+    with pytest.raises(SortMismatch):
+        m.values([f])
+    assert m[f] is not None and m.eval(f) is not None
+
+
 def test_array_values():
     A = ArraySort(BitVecSort(32), BitVecSort(8))
     a = Array("a", BitVecSort(32), BitVecSort(8))

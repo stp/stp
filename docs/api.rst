@@ -39,7 +39,9 @@ Objects
   A detached snapshot: it survives every later assertion, push or pop, and it
   evaluates any term of its manager, including terms built after the check.
   Symbols the solver never assigned are completed with their sort's default;
-  ``try_value`` refuses to complete instead.
+  ``try_value`` refuses to complete instead. An array's value is a term, the
+  constant array of its default under a store per cell; a function has no
+  value term, and ``function_value`` reads its table.
 
 ``Options``
   The whole option registry of the ``stp`` binary, settable by name with the

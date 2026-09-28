@@ -936,10 +936,9 @@ class Model(_core.ModelHandle):
         if isinstance(t, FuncRef):
             return self.fun_value(t)
         if model_completion:
-            v = self.value(t)
             if isinstance(t, ArrayRef):
                 return ArrayNumRef._from_value(self.array_value(t))
-            return v
+            return self.value(t)
         pairs = []
         seen = set()
         stack = [t]
