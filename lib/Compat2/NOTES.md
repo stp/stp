@@ -3,9 +3,9 @@
 `lib/Compat2` builds `libstp2`, a shared library that exports every one of the
 236 functions of `stp/c_interface.h` (STP's 2.x C API) and implements
 each of them over `include/stp/stp.h` (the 3.x C API) alone. It includes no
-engine header and no `stp.hpp`; the one symbol it names beyond `stp.h` is the
-workaround in defect 1 below. This file records how each 2.x behaviour is
-reproduced, what is approximate or unsupported, how the 2.x acceptance suites
+engine header and no `stp.hpp`, and names no symbol beyond `stp.h`. This file
+records how each 2.x behaviour is reproduced, what is approximate or
+unsupported, how the 2.x acceptance suites
 fare against it, and every 3.x defect met on the way.
 
 ## Files
@@ -551,12 +551,9 @@ as before this work.
   rather than a permissive one: the UF suites test the strict rule.
 - Whole-array equality without `'x'` is refused at construction, as in 2.x,
   although the 3.x API would build it.
-- The per-thread boot of the constant bit-vector library (defect 1).
 
 ## 8. Follow-ups
 
-- Remove the `BitVector_Boot` declaration and `boot_constant_bv_on_this_thread`
-  once 3.x boots the library per thread.
 - If the 3.x model carries the totalisation choice of a partial floating-point
   operation, `fp_model_roundtrip.partial_choice_uses_current_solve_encoding`
   passes with no change to the shim.

@@ -53,17 +53,6 @@ THE SOFTWARE.
 #define compat2_write write
 #endif
 
-// Workaround for a 3.x defect (NOTES.md, "3.x defects"): the constant
-// bit-vector library keeps its machine constants in thread-local storage, and
-// lib/Api/Manager.cpp boots it through a process-wide std::call_once, so a
-// manager created on any thread but the first one to create a manager runs
-// with zeroed constants; its first constant then under-allocates and corrupts
-// the heap. 2.x booted the library on every vc_createValidityChecker, which is
-// what made checkers on several threads work; the shim does the same, once per
-// thread. This is the one symbol used beyond stp.h; it is the library's own
-// C-linkage entry point, and the declaration goes away with the defect.
-extern "C" int BitVector_Boot(void);
-
 namespace compat2
 {
 
@@ -71,18 +60,6 @@ namespace compat2
 
 namespace
 {
-thread_local bool t_constant_bv_booted = false;
-
-void boot_constant_bv_on_this_thread()
-{
-  if (t_constant_bv_booted)
-    return;
-  if (BitVector_Boot() != 0)
-    fatal("vc_createValidityChecker: the constant bit-vector library failed to boot");
-  t_constant_bv_booted = true;
-}
-
-
 void (*g_handler)(const char*) = nullptr;
 std::atomic<int> g_policy{STP_ON_ERROR_ABORT};
 
@@ -1297,7 +1274,6 @@ const char* vc_schemaGroupName(unsigned group)
 
 VC vc_createValidityChecker(void)
 {
-  boot_constant_bv_on_this_thread();
   stp_tm tm = stp_tm_new(nullptr);
   if (tm == nullptr)
   {
