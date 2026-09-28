@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <sstream>
 
 using namespace stp;
@@ -435,7 +436,7 @@ TEST(Parsing, smt2_text_round_trips_through_a_fresh_solver)
   s4.add(fp_is_normal(fx));
   s4.add(distinct(p, q));
   const std::string fp_text = s4.to_smt2(true);
-  EXPECT_NE(fp_text.find("(set-logic QF_BVFP)"), std::string::npos);
+  EXPECT_NE(fp_text.find("(set-logic QF_UFBVFP)"), std::string::npos); // the declared sort is UF's
   EXPECT_NE(fp_text.find("(declare-sort S 0)"), std::string::npos);
   EXPECT_NE(fp_text.find("(declare-fun fx () (_ FloatingPoint 8 24))"), std::string::npos);
   EXPECT_NE(fp_text.find("(declare-fun rm () RoundingMode)"), std::string::npos);
@@ -757,6 +758,55 @@ TEST(Parsing, unused_declarations_are_kept)
   EXPECT_TRUE(s.symbol("y").has_value());
   s.parse("(benchmark b :logic QF_BV :extrafuns ((z BitVec[4])) :formula true)\n", Format::SMTLIB1);
   EXPECT_TRUE(s.symbol("z").has_value());
+}
+
+// A printed script names a logic that admits what it declares: a declared
+// sort needs a UF logic as much as a function does, and an array beside a
+// Real needs QF_AUFLRA, since QF_UFLRA has no arrays. STP reads the script
+// back whatever logic it names; another reader need not.
+TEST(Parsing, a_printed_script_names_a_logic_that_admits_it)
+{
+  const auto printed = [](const std::function<void(TermManager&, Solver&)>& build) {
+    TermManager tm;
+    Solver s(tm);
+    build(tm, s);
+    const std::string text = s.to_smt2(true);
+    TermManager again;
+    Solver back(again);
+    back.parse_smt2(text);
+    EXPECT_TRUE(back.check_sat().is_sat()) << text;
+    return text.substr(0, text.find('\n'));
+  };
+  const auto half = [](TermManager& tm) { return tm.mk_real("1/2"); };
+  EXPECT_EQ(printed([&](TermManager& tm, Solver& s) {
+              const Sort u = tm.declare_sort("U");
+              const Term a = tm.declare("a", tm.mk_array_sort(u, u));
+              s.add(select(a, tm.declare("i", u)) != select(a, tm.declare("j", u)));
+              s.add(real_gt(tm.declare("x", tm.mk_real_sort()), half(tm)));
+            }),
+            "(set-logic QF_AUFLRA)");
+  EXPECT_EQ(printed([&](TermManager& tm, Solver& s) {
+              const Sort bv8 = tm.mk_bv_sort(8);
+              s.add(select(tm.declare("a", tm.mk_array_sort(bv8, bv8)), tm.mk_bv(8, 1)) == tm.mk_bv(8, 3));
+              s.add(real_gt(tm.declare("x", tm.mk_real_sort()), half(tm)));
+            }),
+            "(set-logic QF_AUFLRA)");
+  EXPECT_EQ(printed([&](TermManager& tm, Solver& s) {
+              const Sort u = tm.declare_sort("U");
+              s.add(tm.declare("u", u) != tm.declare("v", u));
+              s.add(real_gt(tm.declare("x", tm.mk_real_sort()), half(tm)));
+            }),
+            "(set-logic QF_UFLRA)");
+  EXPECT_EQ(printed([&](TermManager& tm, Solver& s) {
+              const Sort u = tm.declare_sort("U");
+              s.add(tm.declare("u", u) != tm.declare("v", u));
+              s.add(bvugt(tm.declare("y", tm.mk_bv_sort(8)), tm.mk_bv(8, 3)));
+            }),
+            "(set-logic QF_UFBV)");
+  EXPECT_EQ(printed([&](TermManager& tm, Solver& s) {
+              s.add(real_gt(tm.declare("x", tm.mk_real_sort()), half(tm)));
+            }),
+            "(set-logic QF_LRA)");
 }
 
 } // namespace

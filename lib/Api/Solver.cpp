@@ -1990,7 +1990,8 @@ void collect_symbols(const std::vector<ASTNode>& roots, std::vector<ASTNode>& sy
       has_array = true;
     if (ss.kind() == SourceSort::Kind::Real || n.isRealTerm())
       has_real = true;
-    if (n.GetKind() == UF_APPLY)
+    // a declared sort needs a UF logic as much as a function does
+    if (n.GetKind() == UF_APPLY || ss.kind() == SourceSort::Kind::Uninterpreted)
       has_uf = true;
     if (n.GetKind() == SYMBOL)
       symbols.push_back(n);
@@ -2021,7 +2022,8 @@ std::string Solver::to_smt2(bool with_check_sat) const
       // literal under to_fp): the widest one the content needs
       logic = std::string("QF_") + (has_array ? "A" : "") + (has_uf ? "UF" : "") + "BVFPLRA";
     else if (has_real)
-      logic = has_uf ? "QF_UFLRA" : "QF_LRA";
+      // QF_UFLRA has no arrays: an array beside a Real is QF_AUFLRA's
+      logic = has_array ? "QF_AUFLRA" : has_uf ? "QF_UFLRA" : "QF_LRA";
     else
     {
       logic = "QF_";
