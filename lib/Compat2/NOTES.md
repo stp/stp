@@ -219,8 +219,9 @@ unsupported, and which 2.x suites run against it.
     (`stp_solver_parse` semantics). To give 2.x's `vc_parseExpr`/
     `vc_parseMemExpr` their `asserts` and `query` back, the shim splits the
     text: the script is parsed with its `QUERY` statement replaced by
-    `QUERY TRUE;`, then `QUERY <f>;` alone is parsed inside a push/pop and the
-    assertion it added is negated back into the query term. With `'m'` the
+    `QUERY FALSE;` (whose negation asserts nothing), then `QUERY <f>;` alone
+    is parsed inside a push/pop and the assertion it added is negated back
+    into the query term. With `'m'` the
     text is SMT-LIB 1: everything is asserted and the query is `FALSE`, as the
     2.x parser had done. `vc_parseExpr` returns the conjunction of the asserts
     with the negated query, as 2.x did; a file that cannot be opened is the 2.x
@@ -294,7 +295,7 @@ unsupported, and which 2.x suites run against it.
 | `vc_printVarDecls` | symbols of float, rounding-mode and Real sorts are skipped (the presentation language cannot spell them; 2.x printed nothing usable for them either). |
 | `vc_getCounterExample` after a VALID answer | `NULL` plus a diagnostic instead of 2.x's invented value (deliberate). |
 | `vc_pop` at the base level | fatal instead of 2.x's deletion of the base assertions (deliberate). |
-| `vc_parseExpr` / `vc_parseMemExpr` | reproduced by the split described in decision 14; a script with several `QUERY` statements keeps only the last, as 2.x did. |
+| `vc_parseExpr` / `vc_parseMemExpr` | reproduced by the split described in decision 14; a script with several `QUERY` statements is a syntax error, as it was in 2.x (the grammar allows one). |
 | `vc_printSMTLIB2`, `vc_printCounterExampleSMTLIB2`, `vc_getRealModelSMTLIB2` | composed by the shim (decision 12); the text is the 2.x form, not the 3.x printers' form. |
 | `vc_setErrorPolicy` | new, honoured; under `STP_ON_ERROR_RETURN` every fatal path returns its failure value after the handler. |
 
@@ -305,9 +306,10 @@ Everything else is a direct mapping.
 - `tests/api/compat2`: eleven of the 2.x gtest suites, unchanged (the handle
   lifecycle, counterexamples, push and pop, parsing, `Expr` ownership, the
   counter enum's ABI, floating point and `fp.hpp`, uninterpreted functions,
-  arrays, and the reason a query had no answer), each linked to `stp2`; and
-  the C tests of the Real extension, `lra_c_api_smoke`,
-  `lra_c_api_undeleted_expr` and `lra_c_api_negative`.
+  arrays, and the reason a query had no answer), each linked to `stp2`;
+  `libstp2-fidelity`, the 2.x behaviours `libstp2` once got wrong, each
+  checked against what 2.x did; and the C tests of the Real extension,
+  `lra_c_api_smoke`, `lra_c_api_undeleted_expr` and `lra_c_api_negative`.
 - `tests/api/install`: the C and C++ (`uf.hpp`) consumers of an installed
   `c_interface.h`, linking `${STP_C_INTERFACE_LIBRARY}`.
 

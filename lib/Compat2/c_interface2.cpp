@@ -2680,10 +2680,12 @@ namespace
 {
 
 // The QUERY statement of a CVC text: where it starts, its formula, and the
-// text with the statement replaced by "QUERY TRUE;". The 3.x CVC parser
+// text with the statement replaced by "QUERY FALSE;". The 3.x CVC parser
 // asserts the negated query along with the ASSERTs; 2.x asserted the ASSERTs
 // alone and returned the query separately, which this reproduces by parsing
-// the query on its own inside a push/pop bracket.
+// the query on its own inside a push/pop bracket. FALSE is the query whose
+// negation asserts nothing: "QUERY TRUE;" asserted FALSE, and every query
+// after it was valid.
 bool split_cvc_query(const std::string& text, std::string& without, std::string& query)
 {
   std::size_t query_at = std::string::npos;
@@ -2717,7 +2719,7 @@ bool split_cvc_query(const std::string& text, std::string& without, std::string&
   if (end == std::string::npos)
     return false;
   query = text.substr(query_at + 5, end - (query_at + 5));
-  without = text.substr(0, query_at) + "QUERY TRUE;" + text.substr(end + 1);
+  without = text.substr(0, query_at) + "QUERY FALSE;" + text.substr(end + 1);
   return true;
 }
 

@@ -49,6 +49,8 @@ AddSTPGTest(stp-array-model.cpp)
 target_link_libraries(stp-array-modelTests stp2)
 AddSTPGTest(reason-unknown.cpp)
 target_link_libraries(reason-unknownTests stp2)
+AddSTPGTest(libstp2-fidelity.cpp)
+target_link_libraries(libstp2-fidelityTests stp2)
 
 # The Real extension through libstp2, in C: constructors, queries, the exact
 # model and its printers (lra_c_api_smoke); Real handles never given to
