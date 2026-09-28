@@ -231,9 +231,14 @@ unsupported, and which 2.x suites run against it.
     `QUERY FALSE;` (whose negation asserts nothing), then `QUERY <f>;` alone
     is parsed inside a push/pop and the assertion it added is negated back
     into the query term; a query that adds none is `FALSE`, or folds to it,
-    since only a negation folding to `TRUE` is dropped. With `'m'` the
+    since only a negation folding to `TRUE` is dropped. The `asserts` a CVC
+    text hands back are, as 2.x's grammar built them from `GetAsserts()`, the
+    conjunction of every assertion on the stack -- every level, those made
+    before the text among them -- when the text asserted anything, and `TRUE`
+    when it asserted nothing. With `'m'` the
     text is SMT-LIB 1: everything is asserted and the query is `FALSE`, as the
-    2.x parser had done. `vc_parseExpr` returns the conjunction of the asserts
+    2.x parser had done, and the `asserts` are the benchmark's own formulas,
+    as 2.x's `benchmark` rule built them. `vc_parseExpr` returns the conjunction of the asserts
     with the negated query, as 2.x did; a file that cannot be opened is the 2.x
     fatal "Cannot open file", a parse failure is fatal with the 3.x message.
 15. **Kinds and children.** `getExprKind` maps every public 3.x kind to the

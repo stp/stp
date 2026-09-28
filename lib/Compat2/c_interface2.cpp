@@ -3085,8 +3085,21 @@ bool parse_text(VCImpl* vc, const std::string& text, const char* who, stp_term& 
     // dropped the exact Real model even where the text asserted nothing.
     if (ok)
       vc->real_model_stale = true;
+    // And for a text that asserted anything it handed back the conjunction
+    // of every assertion the checker held (GetAsserts: every level, the
+    // base first), the ones made before the text among them; for one that
+    // asserted nothing, TRUE. SMT-LIB 1's grammar hands back the
+    // benchmark's own formulas, which added already is.
+    if (ok && !added.empty())
+    {
+      std::vector<stp_term> stack;
+      for (const std::vector<stp_term>& level : vc->levels)
+        for (stp_term t : level)
+          stack.push_back(t);
+      asserts = conjunction(vc, stack);
+    }
   }
-  if (ok)
+  if (ok && asserts == nullptr)
     asserts = conjunction(vc, added);
   for (stp_term t : added)
     stp_term_release(t);

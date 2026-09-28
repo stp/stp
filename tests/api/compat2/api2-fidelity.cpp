@@ -31,7 +31,9 @@ THE SOFTWARE.
 
 #include <gtest/gtest.h>
 
+#include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -267,3 +269,48 @@ TEST(libstp2_fidelity, a_stale_real_model_has_no_counterexample_value)
 }
 
 } // namespace
+
+// A CVC text that asserts anything hands back, as its assertions, the
+// conjunction of every assertion the checker holds -- 2.x's GetAsserts(), with
+// the ones made before the text and every level's -- and one that asserts
+// nothing hands back TRUE. libstp2 handed back the text's own alone, so with
+// FALSE asserted first "ASSERT TRUE; QUERY FALSE;" came back TRUE where 2.x
+// gave FALSE, and vc_parseExpr's conjunction lost the FALSE too.
+TEST(libstp2_fidelity, a_cvc_text_hands_back_every_assertion)
+{
+  VC vc = vc_createValidityChecker();
+  vc_assertFormula(vc, vc_falseExpr(vc));
+  Expr query = nullptr, asserts = nullptr;
+  ASSERT_EQ(1, vc_parseMemExpr(vc, "ASSERT TRUE; QUERY FALSE;", &query, &asserts));
+  EXPECT_EQ(FALSE, getExprKind(asserts)) << text_of(asserts);
+  vc_DeleteExpr(query);
+  vc_DeleteExpr(asserts);
+  {
+    std::ofstream("api2-fidelity-parse.cvc") << "ASSERT TRUE; QUERY FALSE;\n";
+    Expr parsed = vc_parseExpr(vc, "api2-fidelity-parse.cvc");
+    ASSERT_NE(nullptr, parsed);
+    EXPECT_EQ(FALSE, getExprKind(parsed)) << text_of(parsed);
+    vc_DeleteExpr(parsed);
+    std::remove("api2-fidelity-parse.cvc");
+  }
+  vc_Destroy(vc);
+
+  vc = vc_createValidityChecker();
+  Expr x = vc_varExpr(vc, "x", vc_bvType(vc, 8));
+  vc_assertFormula(vc, vc_eqExpr(vc, x, vc_bvConstExprFromInt(vc, 8, 1)));
+  vc_push(vc);
+  Expr y = vc_varExpr(vc, "y", vc_bvType(vc, 8));
+  vc_assertFormula(vc, vc_eqExpr(vc, y, vc_bvConstExprFromInt(vc, 8, 2)));
+  ASSERT_EQ(1, vc_parseMemExpr(vc, "z : BITVECTOR(8); ASSERT(z = 0hex03); QUERY FALSE;", &query,
+                               &asserts));
+  EXPECT_EQ(AND, getExprKind(asserts)) << text_of(asserts);
+  EXPECT_EQ(3, getDegree(asserts)) << text_of(asserts);
+  vc_DeleteExpr(query);
+  vc_DeleteExpr(asserts);
+  // a text that asserts nothing hands back TRUE, whatever the checker holds
+  ASSERT_EQ(1, vc_parseMemExpr(vc, "QUERY FALSE;", &query, &asserts));
+  EXPECT_EQ(TRUE, getExprKind(asserts)) << text_of(asserts);
+  vc_DeleteExpr(query);
+  vc_DeleteExpr(asserts);
+  vc_Destroy(vc);
+}
