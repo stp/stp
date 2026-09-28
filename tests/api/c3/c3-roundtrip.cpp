@@ -88,7 +88,7 @@ TEST(c3_roundtrip, smt2_script_prints_and_parses_again)
                        "(assert (bvult x #x10))\n"
                        "(assert (= (select m x) y))\n";
   ASSERT_EQ(STP_OK, stp_solver_parse_smt2(a.s, script, STP_PARSE_DECLARE_AND_ASSERT)) << pending(a.tm);
-  // counted before any check: a check may conjoin a level's assertions (see NOTES.md)
+  // a script without a (check-sat) leaves its assertions apart
   EXPECT_EQ(3u, stp_solver_num_assertions(a.s));
   stp_term x = stp_tm_symbol(a.tm, "x");
   ASSERT_NE(nullptr, x);
@@ -96,6 +96,7 @@ TEST(c3_roundtrip, smt2_script_prints_and_parses_again)
   EXPECT_EQ(nullptr, stp_tm_symbol(a.tm, "nope"));
   EXPECT_EQ(nullptr, stp_tm_error(a.tm));
   ASSERT_EQ(STP_SAT, a.check());
+  EXPECT_EQ(3u, stp_solver_num_assertions(a.s)); // and so does a check
   uint64_t xv = 0, yv = 0;
   stp_model m = stp_solver_model(a.s);
   ASSERT_NE(nullptr, m);
@@ -150,12 +151,15 @@ TEST(c3_roundtrip, a_term_prints_and_parses_to_the_same_node)
   ASSERT_NE(nullptr, odd);
   EXPECT_EQ("|odd name|", take(stp_term_str(odd)));
   EXPECT_EQ(odd, stp_solver_parse_term(a.s, "|odd name|"));
-  // a parse error is recorded and does not fail the solver (parse_term builds, it does not assert).
-  // NB: the input avoids the parser's fatal "Must be >=2 operands" path, which exit()s -- see NOTES.md
-  EXPECT_EQ(nullptr, stp_solver_parse_term(a.s, "(bvadd x x x"));
-  ASSERT_NE(nullptr, stp_tm_error(a.tm));
-  EXPECT_EQ(STP_ERR_PARSE, stp_tm_error(a.tm)->code);
-  stp_tm_clear_error(a.tm);
+  // a parse error is recorded and does not fail the solver (parse_term builds, it does not
+  // assert), an operator given too few operands among them
+  for (const char* bad : {"(bvadd x x x", "(bvadd x)"})
+  {
+    EXPECT_EQ(nullptr, stp_solver_parse_term(a.s, bad)) << bad;
+    ASSERT_NE(nullptr, stp_tm_error(a.tm)) << bad;
+    EXPECT_EQ(STP_ERR_PARSE, stp_tm_error(a.tm)->code) << bad;
+    stp_tm_clear_error(a.tm);
+  }
   EXPECT_EQ(nullptr, stp_solver_failed(a.s));
 }
 
@@ -260,15 +264,18 @@ TEST(c3_roundtrip, binding_and_fresh_symbols)
   stp_tm_clear_error(a.tm);
   const std::string fname = take(stp_term_str(fresh)); // the printer quotes it: |tmp!0|
   EXPECT_NE(std::string::npos, fname.find("tmp!")) << fname;
-  // bind_symbol enters an existing symbol under a second name (an alias). NB: binding a
-  // COMPOUND term and then parsing fatally aborts the process -- see NOTES.md -- so this
-  // aliases a genuine symbol, which is bind_symbol's documented purpose.
+  // bind_symbol enters an existing symbol under a second name (an alias)
   ASSERT_EQ(STP_OK, stp_tm_bind_symbol(a.tm, "x_alias", x));
   EXPECT_EQ(x, stp_tm_symbol(a.tm, "x_alias"));
   EXPECT_EQ(STP_OK, stp_tm_bind_symbol(a.tm, "x_alias", x)); // idempotent for the same term
   EXPECT_EQ(STP_ERROR, stp_tm_bind_symbol(a.tm, "x_alias", fresh)); // the name means something else
   EXPECT_EQ(STP_ERR_SORT_MISMATCH, stp_tm_error(a.tm)->code);
   stp_tm_clear_error(a.tm);
+  // a compound term has no place in the table, and the parse below still sees the table whole
+  EXPECT_EQ(STP_ERROR, stp_tm_bind_symbol(a.tm, "x_sum", stp_bvadd(a.tm, x, x)));
+  EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, stp_tm_error(a.tm)->code);
+  stp_tm_clear_error(a.tm);
+  EXPECT_EQ(nullptr, stp_tm_symbol(a.tm, "x_sum"));
   // a script can refer to a symbol the API declared
   ASSERT_EQ(STP_OK, stp_solver_parse_smt2(a.s, "(assert (= x #x07))", STP_PARSE_DECLARE_AND_ASSERT)) << pending(a.tm);
   EXPECT_EQ(STP_SAT, a.check());

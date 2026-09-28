@@ -539,7 +539,7 @@ public:
   std::optional<Term> symbol(std::string_view name) const; ///< name table lookup
   std::vector<Term> symbols() const; ///< every declared symbol, declaration order
   std::vector<Sort> declared_sorts() const; ///< every declared sort, declaration order
-  void bind_symbol(std::string_view name, const Term&); ///< SORT_MISMATCH if taken
+  void bind_symbol(std::string_view name, const Term&); ///< a symbol under a second name: SORT_MISMATCH if taken, INVALID_ARGUMENT for a compound term
   Term term_from_id(std::uint64_t id) const; ///< INVALID_ARGUMENT if no live term has that id
 
   // -- values (strict)

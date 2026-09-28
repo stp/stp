@@ -410,7 +410,7 @@ STP_API stp_tm stp_sort_manager(stp_sort); /* +1 handle */
 STP_API stp_term stp_declare(stp_tm, const char* name, stp_sort); /* the manager's name table: the same (name, sort) gives the same term; SORT_MISMATCH on a clash */
 STP_API stp_term stp_mk_fresh(stp_tm, stp_sort, const char* prefix); /* anonymous, never in the name table; printed as prefix!k; NULL prefix means "" */
 STP_API stp_term stp_tm_symbol(stp_tm, const char* name); /* NULL, no error, if the name is not in the table */
-STP_API stp_status stp_tm_bind_symbol(stp_tm, const char* name, stp_term); /* enter an existing term into the table under this name; SORT_MISMATCH if taken */
+STP_API stp_status stp_tm_bind_symbol(stp_tm, const char* name, stp_term); /* enter an existing symbol into the table under this name; SORT_MISMATCH if taken, INVALID_ARGUMENT for a compound term */
 STP_API size_t stp_tm_num_symbols(stp_tm); /* declared symbols, in declaration order */
 STP_API stp_term stp_tm_symbol_at(stp_tm, size_t i);
 STP_API size_t stp_tm_num_declared_sorts(stp_tm);
