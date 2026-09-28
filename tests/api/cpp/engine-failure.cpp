@@ -82,6 +82,9 @@ TEST(EngineFailure, an_engine_failure_is_internal_and_poisons_the_manager)
 {
   TermManager tm;
   const Term x = tm.declare("x", tm.mk_bv_sort(8));
+  const Term f = tm.declare("f", tm.mk_fp32_sort());
+  const Term rtz = tm.mk_rm(RoundingMode::RTZ);
+  const Term b = x == 1;
   Solver s(tm);
   s.add(x == 1);
   ASSERT_TRUE(s.check_sat().is_sat());
@@ -112,6 +115,13 @@ TEST(EngineFailure, an_engine_failure_is_internal_and_poisons_the_manager)
       [&] { s.add(x == 2); },
       [&] { (void)s.check_sat(); },
       [&] { (void)m.value(x); },
+      // the constructors that reach the engine before a manager check of
+      // their own, which built on the poisoned manager
+      [&] { (void)fp_to_ubv(8, rtz, f); },
+      [&] { (void)fp_to_sbv(8, rtz, f); },
+      [&] { (void)fp_add(RoundingMode::RNE, f, f); },
+      [&] { (void)bit(x, 0); },
+      [&] { (void)bool_to_bv1(b); },
   };
   for (const auto& call : later)
   {

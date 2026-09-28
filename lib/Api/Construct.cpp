@@ -925,6 +925,8 @@ Term rm_term(const Term& like, RoundingMode rm)
 {
   if (like.is_null())
     fail(ErrorCode::NULL_HANDLE, "rounding mode", "the term is null");
+  // an argument list evaluates this before the operation's own checks
+  like.impl_manager()->check_alive("rounding mode");
   return make_term(like.impl_manager(), like.impl_manager()->rm_const(rm));
 }
 
@@ -1318,6 +1320,9 @@ Term rotate_right(std::uint32_t k, const Term& t) { return indexed1(Kind::BV_ROT
 
 Term bit(const Term& bv, std::uint32_t i)
 {
+  if (bv.is_null())
+    detail::fail(ErrorCode::NULL_HANDLE, "bit", "the term is null", 0);
+  bv.impl_manager()->check_alive("bit");
   const Term one = detail::make_term(bv.impl_manager(), bv.impl_manager()->bm->CreateOneConst(1));
   return eq(extract(i, i, bv), one);
 }
@@ -1326,6 +1331,7 @@ Term bool_to_bv1(const Term& b)
   if (b.is_null())
     detail::fail(ErrorCode::NULL_HANDLE, "bool_to_bv1", "the term is null", 0);
   detail::ManagerImpl* m = b.impl_manager();
+  m->check_alive("bool_to_bv1");
   const Term one = detail::make_term(m, m->bm->CreateOneConst(1));
   const Term zero = detail::make_term(m, m->bm->CreateZeroConst(1));
   return ite(b, one, zero);
@@ -1387,6 +1393,7 @@ Term fp_to_ubv(std::uint32_t w, const Term& rm, const Term& f)
   if (rm.is_null() || f.is_null())
     detail::fail(ErrorCode::NULL_HANDLE, "fp_to_ubv", "the term is null", rm.is_null() ? 1 : 2);
   detail::ManagerImpl* m = f.impl_manager();
+  m->check_alive("fp_to_ubv");
   return detail::make_term(m, detail::build_term(m, "fp_to_ubv", Kind::FP_TO_UBV,
                                                  {detail::node_of(rm), detail::node_of(f)}, {w},
                                                  std::nullopt));
@@ -1396,6 +1403,7 @@ Term fp_to_sbv(std::uint32_t w, const Term& rm, const Term& f)
   if (rm.is_null() || f.is_null())
     detail::fail(ErrorCode::NULL_HANDLE, "fp_to_sbv", "the term is null", rm.is_null() ? 1 : 2);
   detail::ManagerImpl* m = f.impl_manager();
+  m->check_alive("fp_to_sbv");
   return detail::make_term(m, detail::build_term(m, "fp_to_sbv", Kind::FP_TO_SBV,
                                                  {detail::node_of(rm), detail::node_of(f)}, {w},
                                                  std::nullopt));

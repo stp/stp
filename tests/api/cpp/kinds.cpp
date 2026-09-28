@@ -612,6 +612,8 @@ TEST_F(Kinds, unsupported)
 
 TEST_F(Kinds, null_and_foreign_arguments)
 {
+  // bit read the manager of a null term before any check of its own
+  API_EXPECT_ERROR(ErrorCode::NULL_HANDLE, bit(Term(), 0));
   auto e = API_ERROR_OF(bvadd(x, Term()));
   ASSERT_TRUE(e.has_value());
   EXPECT_EQ(e->code(), ErrorCode::NULL_HANDLE);

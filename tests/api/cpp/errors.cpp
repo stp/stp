@@ -395,6 +395,37 @@ TEST(Threads, a_manager_handed_from_thread_to_thread)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
+// The constant bit-vector library boots per thread. A thread whose first call
+// was a constructor that builds a rounding-mode constant before its manager
+// check -- an operation given a RoundingMode enum, fp_to_ubv and fp_to_sbv --
+// built on the library's zeroed constants and wrote past a heap block
+// (valgrind and ASan see it; an unchecked build may not).
+TEST(Threads, a_threads_first_call_may_build_a_rounding_mode)
+{
+  TermManager tm;
+  const Sort f32 = tm.mk_fp32_sort();
+  const Term x = tm.declare("x", f32), y = tm.declare("y", f32);
+  const Term rtn = tm.mk_rm(RoundingMode::RTN);
+  const std::vector<std::function<Term()>> firsts{
+      [&] { return fp_add(RoundingMode::RTZ, x, y); },
+      [&] { return fp_to_ubv(8, rtn, x); },
+      [&] { return fp_to_sbv(8, RoundingMode::RTN, x); },
+  };
+  for (const auto& first : firsts)
+  {
+    Term t;
+    std::thread thread([&] { t = first(); });
+    thread.join();
+    ASSERT_FALSE(t.is_null());
+    Solver s(tm);
+    s.add(t == t);
+    EXPECT_TRUE(s.check_sat().is_sat());
+  }
+  Term sum;
+  std::thread([&] { sum = fp_add(RoundingMode::RTZ, x, y); }).join();
+  EXPECT_EQ(sum.child(0).to_rm(), RoundingMode::RTZ);
+}
+
 // A manager created on another thread works there, alongside one live on the
 // main thread (the constant library boots per thread, node ids are
 // process-wide).

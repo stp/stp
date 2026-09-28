@@ -154,9 +154,14 @@ private:
   void* saved_opaque_;
 };
 
+// Boots the constant bit-vector library for the calling thread (see
+// Manager.cpp); every entry that reaches the engine calls it first.
+void boot_constant_bv();
+
 template <class F>
 auto engine_call(ManagerImpl* m, const char* fn, F&& f) -> decltype(f())
 {
+  boot_constant_bv();
   EngineScope scope;
   // Engine work that is no solver's (a solver's entry routes to its own
   // sinks before it gets here) prints nowhere.

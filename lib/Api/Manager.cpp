@@ -56,11 +56,13 @@ namespace detail
 namespace
 {
 std::atomic<std::uint64_t> g_manager_ids{1};
+} // namespace
 
 // CONSTANTBV keeps its constants thread-local, so the boot is per thread: a
 // manager used from a second thread must not run on zeroed constants. Every
-// entry point passes through check_alive, which calls this; the check is one
-// thread-local read once a thread has booted.
+// entry point passes through check_alive or engine_call, which call this, and
+// so does rm_const, which an argument list may evaluate before either; the
+// check is one thread-local read once a thread has booted.
 void boot_constant_bv()
 {
   static thread_local bool booted = false;
@@ -71,8 +73,6 @@ void boot_constant_bv()
     fail_resource("TermManager", "the constant bit-vector library failed to boot");
   booted = true;
 }
-
-} // namespace
 
 // ------------------------------------------------------------ lifecycle
 
@@ -575,6 +575,7 @@ unsigned rm_encoding(RoundingMode rm)
 
 ASTNode ManagerImpl::rm_const(RoundingMode rm)
 {
+  boot_constant_bv();
   return bm->CreateRMConst(rm_encoding(rm));
 }
 
