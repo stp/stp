@@ -23,14 +23,15 @@
 #                 build/stp, build-debug/stp, build-release/stp in the source
 #                 tree, else stp on PATH. A build with assertions enabled finds
 #                 more, which is why the release directory comes last.
-#   CHECKER       Reference solver, invoked as "$CHECKER file.smt2".
-#                 Default: bitwuzla. Anything that prints one sat/unsat line
-#                 per query and understands the bit-vector overflow
-#                 predicates works; z3 5.0.0 and bitwuzla 0.9.1 were both
-#                 checked. This is probed at startup, because a solver that
-#                 gets it wrong turns every file into a bogus mismatch --
-#                 z3 4.8.12 and boolector 3.0.1 both fail it, the latter on
-#                 bvnego.
+#   CHECKER       The default reference solver, invoked as
+#                 "$CHECKER file.smt2" on every logic entry that does not
+#                 name a checker of its own. Default: bitwuzla. Anything
+#                 that prints one sat/unsat line per query and understands
+#                 the bit-vector overflow predicates works; z3 5.0.0 and
+#                 bitwuzla 0.9.1 were both checked. This is probed at
+#                 startup, because a solver that gets it wrong turns every
+#                 file into a bogus mismatch -- z3 4.8.12 and boolector
+#                 3.0.1 both fail it, the latter on bvnego.
 #
 #                 A slow checker costs coverage rather than correctness:
 #                 files it cannot answer inside TIMEOUT are skipped, and the
@@ -40,16 +41,32 @@
 #                 build it answers about 4 in 5 inside 10s where z3 5.0.0
 #                 answers essentially none, so with z3 those crashes would
 #                 be skipped as checker timeouts rather than reported.
+#
+#                 No one checker covers every logic, though: bitwuzla has no
+#                 reals and refuses QF_AX, and on uninterpreted sorts it
+#                 warns and answers "unknown". So the checker is per entry.
+#                 The entries for those logics name z3 themselves (see
+#                 LOGIC_SETS below), and setting CHECKER replaces only the
+#                 default: an entry that names a checker keeps it, because
+#                 it names one exactly where the default cannot answer.
+#
+#                 Every (logic, checker) pair in use is probed at startup
+#                 with a query in that logic. An entry whose checker is
+#                 missing or fails its probe is dropped with a warning and
+#                 the run goes on with the others; only when nothing is
+#                 left does it stop.
 #   FUZZSMT_JAR   fuzzsmt.jar, from the FuzzSMT release of Brummayer and Biere,
 #                 "Fuzzing and Delta-Debugging SMT Solvers" (SMT'09).
 #                 Default: searched for next to the source tree and in $HOME.
 #   LOGICS        Logics to generate, with the FuzzSMT options that go with
-#                 each and, after a '|', the STP options that logic needs.
-#                 One entry per line, or separated by ';'. Overrides the
-#                 built-in list below. For example
+#                 each, after a '|' the STP options that logic needs, and
+#                 after a second '|' the checker for it. One entry per line,
+#                 or separated by ';'. Overrides the built-in list below.
+#                 For example
 #
 #                   LOGICS='QF_BV
-#                           QF_ABV -mxn 1 -Mxn 3 | --array-equality' ./fuzz_single.sh
+#                           QF_ABV -mxn 1 -Mxn 3 | --array-equality
+#                           QF_LRA | | z3' ./fuzz_single.sh
 #
 #                 One entry is drawn at random per iteration. See the comment
 #                 on LOGIC_SETS below for the full syntax.
@@ -81,12 +98,9 @@ if [ ! -x "${STP:-}" ]; then
   exit 1
 fi
 
-# Find the reference solver.
+# The default reference solver. Whether it, or the checker an entry names, can
+# be run at all is settled per entry below, with the probe.
 CHECKER=${CHECKER:-bitwuzla}
-if ! command -v "$CHECKER" > /dev/null && [ ! -x "$CHECKER" ]; then
-  echo "Reference solver '$CHECKER' not found. Set CHECKER=/path/to/solver." >&2
-  exit 1
-fi
 
 # Find the generator.
 if [ -z "${FUZZSMT_JAR:-}" ]; then
@@ -108,7 +122,7 @@ fi
 # What to generate. One entry is drawn at random per iteration, so a run covers
 # several shapes of problem instead of one. An entry is
 #
-#   <logic> [FuzzSMT options] [| STP options]
+#   <logic> [FuzzSMT options] [| STP options [| checker]]
 #
 # The part before the '|' is passed to the generator, with `-g` (unguarded
 # division) and `-bulk-export` appended, so entries need not repeat those. The
@@ -116,6 +130,11 @@ fi
 # below -- that is for options a logic cannot be tested without, not for ones
 # that merely deserve coverage: those belong in a group, where they get
 # combined with everything else.
+#
+# The third part names the reference solver for the entry, where the default
+# CHECKER cannot answer the logic; left out, the entry uses CHECKER. An entry
+# that needs a checker but no STP options leaves the middle part empty:
+# "QF_LRA | | z3".
 #
 # The generator options are per-logic and FuzzSMT does not complain about ones
 # that do not apply -- `QF_BV -mxn 1` is accepted and quietly generates plain
@@ -192,6 +211,36 @@ declare -a LOGIC_SETS=(
 # FuzzSMT compares whole arrays by default in this logic: without it STP
 # refuses 69 files in 100.
 "QF_AUFBVFP -mf 2 -Mf 4 -mp 1 -Mp 3 -mr 4 -Mr 12 -mw 2 -Mw 8 | --array-equality"
+# The logics below are ones the default checker cannot answer, so each names
+# z3. bitwuzla refuses QF_AX and the real logics outright, and on QF_UF it
+# warns about equalities over uninterpreted sorts and answers "unknown".
+#
+# Uninterpreted sorts and functions over them, with nothing else. -ref 2 is
+# what makes FuzzSMT apply a function to arguments that may be equal: at the
+# generator's defaults --uf-ackermann on changes nothing in 60 files, here 19.
+"QF_UF -mv 2 -Mv 4 -ref 2 | | z3"
+# Arrays over two declared sorts, Index and Element. A few more reads and
+# writes than the default: --ackermanize changes 34 files in 60 here against
+# 24.
+"QF_AX -mw 3 -Mw 12 -mr 3 -Mr 12 | | z3"
+# Linear real arithmetic. FuzzSMT writes integer literals where a Real is
+# expected, (> x 1) rather than (> x 1.0); STP reads them as reals, and the
+# checker's startup probe asks for the same. The default -Mv 3 -Mc 3 builds
+# tableaux too small for much of the lra group to act on; at these counts
+# most of the simplex settings change 43 to 55 files in 60. Nearly every file
+# is satisfiable.
+"QF_LRA -mv 2 -Mv 5 -mc 2 -Mc 5 | | z3"
+# The same with every atom asserted at the top level (-bool-and), which is
+# what the presolve wants: definitions to substitute, bounds to derive, rows
+# to drop. On the entry above the bound presolve is the only part that
+# changes more than one file in 60; here all of it does. The price is that
+# nearly every file is unsatisfiable, which the entry above balances.
+"QF_LRA -bool-and | | z3"
+# Uninterpreted functions over Real, decided by lazy congruence rounds. More
+# functions and predicates than the default so that the rounds have
+# something to break: the uflra group's round settings change 28 to 38 files
+# in 60 here against 19 to 25 at the default counts.
+"QF_UFLRA -mf 2 -Mf 4 -mp 1 -Mp 3 | | z3"
 )
 
 # LOGICS overrides the list, LOGIC gives a single entry. Split on both newlines
@@ -249,7 +298,7 @@ rm -f -- *.smt2
 
 echo "workdir: $path"
 echo "stp:     $STP"
-echo "checker: $CHECKER"
+echo "checker: $CHECKER (the default; an entry may name its own)"
 # Deliberately not cleared: it may hold findings from an earlier run that have
 # not been triaged yet, and several workers share it. Say how many are already
 # there so a directory found later is not mistaken for one this run produced.
@@ -271,18 +320,94 @@ if [ -z "$supported" ]; then
   exit 1
 fi
 
+# An entry's parts: generator | STP options | checker. The later ones come out
+# empty when the entry stops short of them, and an empty checker means the
+# default. Trimmed, so "QF_LRA | | z3" names z3 and not " z3".
+parse_entry() {
+  IFS='|' read -r gen logic_opts entry_checker <<< "$1"
+  read -r -a gen_args <<< "$gen"
+  read -r -a logic_args <<< "$logic_opts"
+  read -r entry_checker <<< "$entry_checker"
+  entry_checker=${entry_checker:-$CHECKER}
+}
+
+# The startup probe's query for a logic: something small and satisfiable that
+# uses what the generated files use, so a checker that would choke on them
+# chokes here instead. What FuzzSMT writes that older or narrower solvers
+# trip on:
+#   - the bit-vector overflow predicates. z3 4.8.12 answers the query anyway
+#     and prints an extra (error ...) line, so it neither fails outright nor
+#     gives a usable answer, and every file would land in FAIL_DIR looking
+#     like an STP bug.
+#   - integer literals where a Real is expected, as in (> (+ x y) 1).
+#   - uninterpreted sorts. bitwuzla accepts them, warns, and answers
+#     "unknown" -- which the main loop skips file after file, so the logic
+#     would run for hours and check nothing.
+# A logic with no clause here still gets (assert true), which says at least
+# whether the checker accepts the logic name.
+probe_query() {
+  local logic=$1 sort=""
+  echo "(set-logic $logic)"
+  case $logic in
+    *BV*)
+      sort='(_ BitVec 8)'
+      echo "(declare-fun x () $sort)"
+      echo "(declare-fun y () $sort)"
+      for p in bvnego bvsaddo bvsdivo bvsmulo bvssubo bvuaddo bvumulo bvusubo; do
+        if [ "$p" = bvnego ]; then
+          echo "(assert (or (bvnego x) true))"
+        else
+          echo "(assert (or ($p x y) true))"
+        fi
+      done
+      ;;
+    *LRA*)
+      sort=Real
+      echo "(declare-fun x () Real)"
+      echo "(declare-fun y () Real)"
+      echo "(assert (> (+ x y) 1))"
+      ;;
+    QF_UF|QF_AX)
+      sort=S
+      echo "(declare-sort S 0)"
+      echo "(declare-fun x () S)"
+      echo "(declare-fun y () S)"
+      echo "(assert (distinct x y))"
+      ;;
+    *)
+      echo "(assert true)"
+      ;;
+  esac
+  if [ -n "$sort" ] && [[ $logic == *UF* ]]; then
+    echo "(declare-fun f ($sort) $sort)"
+    echo "(assert (distinct (f x) (f y)))"
+  fi
+  if [ -n "$sort" ] && [[ $logic == QF_A* ]]; then
+    echo "(declare-fun a () (Array $sort $sort))"
+    echo "(assert (= (select (store a x y) x) y))"
+  fi
+  if [[ $logic == *FP* ]]; then
+    echo "(declare-fun z () Float32)"
+    echo "(assert (not (fp.isNaN (fp.add RNE z z))))"
+  fi
+  echo "(check-sat)"
+}
+
 # Check every entry actually generates what it says. A misspelt generator
 # option is rejected outright, but a misspelt *logic* is not: FuzzSMT prints
 # its usage text to stdout and exits 0, so without this the run would happily
 # compare two solvers on a file of banner text. Requiring the emitted header to
 # name the logic we asked for catches both.
+#
+# Then check the entry's checker, once per logic and checker, since what a
+# solver accepts depends on the logic. A failure drops the entry rather than
+# stopping the run: the other logics are still worth fuzzing, and the warning
+# says what was lost.
 echo "logics:"
-declare -A logic_names=()
+declare -A probe_failure=()
 declare -a kept_logics=()
 for entry in "${LOGIC_SETS[@]}"; do
-  # Generator part | STP part; logic_opts comes out empty when there is no '|'.
-  IFS='|' read -r gen logic_opts <<< "$entry"
-  read -r -a gen_args <<< "$gen"
+  parse_entry "$entry"
   gen_out=$(java -jar "$FUZZSMT_JAR" "${gen_args[@]}" -g -seed 1 2>&1)
   gen_rc=$?
   if [ "$gen_rc" -ne 0 ] || ! grep -q "^(set-logic  ${gen_args[0]})$" <<< "$gen_out"; then
@@ -305,56 +430,39 @@ for entry in "${LOGIC_SETS[@]}"; do
     fi
   done
   if [ "$keep" -eq 0 ]; then continue; fi
+
+  key="${gen_args[0]}|$entry_checker"
+  if [ -z "${probe_failure[$key]+set}" ]; then
+    if ! command -v "$entry_checker" > /dev/null && [ ! -x "$entry_checker" ]; then
+      probe_failure[$key]="checker '$entry_checker' not found"
+    else
+      probe_query "${gen_args[0]}" > probe.smt2
+      probe_out=$(timeout 60 "$entry_checker" probe.smt2 2>&1)
+      probe_rc=$?
+      if [ "$probe_rc" -ne 0 ] || [ "$probe_out" != "sat" ]; then
+        probe_failure[$key]="checker '$entry_checker' failed the probe"
+        probe_failure[$key]+=" for ${gen_args[0]} (exit $probe_rc):"
+        probe_failure[$key]+=" $(echo "$probe_out" | head -3 | tr '\n' ' ')"
+      else
+        probe_failure[$key]=""
+      fi
+    fi
+  fi
+  if [ -n "${probe_failure[$key]}" ]; then
+    printf '  %s\n' "$entry  -- SKIPPED, ${probe_failure[$key]}" >&2
+    continue
+  fi
   kept_logics+=("$entry")
-  logic_names[${gen_args[0]}]=1
-  printf '  %s\n' "$entry"
+  printf '  %-72s [%s]\n' "$entry" "$entry_checker"
 done
+rm -f probe.smt2
 LOGIC_SETS=("${kept_logics[@]}")
 if [ "${#LOGIC_SETS[@]}" -eq 0 ]; then
   echo "Every logic was skipped, there is nothing left to generate." >&2
+  echo "A checker has to print exactly 'sat' for its probe query: upgrade it," >&2
+  echo "or set CHECKER, or the entry's own checker, to one that does." >&2
   exit 1
 fi
-
-# FuzzSMT uses the bit-vector overflow predicates, which older solvers do not
-# know. z3 4.8.12 for instance answers the query anyway and prints an extra
-# (error ...) line, so it neither fails outright nor gives a usable answer --
-# every iteration would land in FAIL_DIR looking like an STP bug. Check the
-# checker before trusting a whole run to it. Once per logic, since what a
-# solver accepts depends on it.
-for logic in "${!logic_names[@]}"; do
-  {
-    echo "(set-logic $logic)"
-    # The overflow predicates only exist where bit-vectors do; the other logics
-    # get a trivial query, which still says whether the checker accepts them.
-    case $logic in
-      *BV*)
-        echo "(declare-fun x () (_ BitVec 8))"
-        echo "(declare-fun y () (_ BitVec 8))"
-        for p in bvnego bvsaddo bvsdivo bvsmulo bvssubo bvuaddo bvumulo bvusubo; do
-          if [ "$p" = bvnego ]; then
-            echo "(assert (or (bvnego x) true))"
-          else
-            echo "(assert (or ($p x y) true))"
-          fi
-        done
-        ;;
-      *)
-        echo "(assert true)"
-        ;;
-    esac
-    echo "(check-sat)"
-  } > probe.smt2
-  probe_out=$(timeout 60 "$CHECKER" probe.smt2 2>&1)
-  probe_rc=$?
-  if [ "$probe_rc" -ne 0 ] || [ "$probe_out" != "sat" ]; then
-    echo "Reference solver '$CHECKER' failed the startup probe for $logic (exit $probe_rc):" >&2
-    echo "$probe_out" | sed 's/^/  /' >&2
-    echo "It must print exactly 'sat' for a query using the bit-vector overflow" >&2
-    echo "predicates. Upgrade it, or set CHECKER to one that does." >&2
-    exit 1
-  fi
-done
-rm -f probe.smt2
 
 # Options are grouped by what they affect. Each iteration draws one entry from
 # every group and concatenates the picks, so settings from different groups are
@@ -408,18 +516,56 @@ rm -f probe.smt2
 # entirely.
 
 declare -a OPTION_GROUPS=(simplify mult div shift bitblast abstract array uf
-                          fp fpabs cnf solver bias misc)
+                          ufsort fp fpabs lra uflra cnf solver bias misc)
 
-# A group named here is drawn only when the iteration's logic matches the
-# pattern, which is how options that do nothing outside one theory stay out of
-# the draw everywhere else. The pattern is a shell glob, matched against the
+# A group named here is drawn only for the logics it applies to, which is how
+# options that do nothing outside one theory stay out of the draw everywhere
+# else. The value is a list of shell globs, any one of which may match the
 # logic name.
+#
+# Write each against every logic name in LOGIC_SETS, not against the one the
+# group was written for. '*A*' reads as "has arrays" and was this file's
+# array filter until QF_LRA and QF_UFLRA arrived, both of which it matches;
+# arrays are the logics whose name starts QF_A.
+#
+# The bit-vector groups are drawn wherever bit-vector terms exist, which is
+# more than the logics with BV in their name: floating point is blasted
+# through bit-vector circuits, and QF_UF and QF_AX give each declared sort a
+# bit-vector carrier (--uf-sort-width). Where a group stops is measured, every
+# entry of every group on 20 files of each new logic: the arithmetic groups
+# change nothing on QF_UF, QF_AX or the real logics; the abstraction group
+# changes nothing on the real logics beyond the CNF encoder cnf-auto picks
+# (the cnf group covers that); and neither incremental entry changes anything
+# on them.
 declare -A GROUP_LOGIC_FILTER=(
+[mult]='*BV* *FP*'
+[div]='*BV* *FP*'
+[shift]='*BV* *FP*'
+[bitblast]='*BV* *FP* QF_UF QF_AX'
+[abstract]='*BV* *FP* QF_UF QF_AX'
+[array]='QF_A*'
+[uf]='*UF*BV* QF_UF'
+[ufsort]='QF_UF QF_AX'
 [fp]='*FP*'
 [fpabs]='*FP*'
-[array]='*A*'
-[uf]='*UF*'
+[lra]='*LRA*'
+[uflra]='QF_UFLRA'
+[misc]='*BV* *FP* QF_UF QF_AX'
 )
+
+# Whether group $1 is drawn for logic $2. read rather than a bare for loop, so
+# the patterns are not expanded against the files in the working directory.
+group_applies() {
+  local filter=${GROUP_LOGIC_FILTER[$1]:-} pattern
+  local -a patterns
+  [ -z "$filter" ] && return 0
+  read -r -a patterns <<< "$filter"
+  for pattern in "${patterns[@]}"; do
+    # Unquoted on purpose: it is a pattern.
+    if [[ $2 == $pattern ]]; then return 0; fi
+  done
+  return 1
+}
 
 declare -a g_simplify=(
 ""
@@ -762,22 +908,165 @@ declare -a g_uf=(
 # too -- naming it in both is the one thing the clash check further down
 # refuses. They live in the abstract group instead.
 #
-# Deliberately absent, each measured identical on all 46 files the two UF
-# entries emit a CNF for, with the UF counters `stp -s` prints identical too:
-#   --uf-propagate-equalities=0  the pass substitutes a couple of asserted
-#                                atoms on 6 files in 30 and the CNF comes out
-#                                byte-identical anyway, so turning it off
-#                                only skips work nothing depended on.
+# Not drawn for QF_UFLRA, where every entry but the first measured identical
+# to the default on 120 files: a function over Real is decided by the lazy
+# congruence rounds, not the refinement loop these steer. That logic has the
+# uflra group instead, which carries the one entry that does bite there.
+#
+# Deliberately absent, each measured identical on all 46 files the two
+# bit-vector UF entries emit a CNF for, with the UF counters `stp -s` prints
+# identical too, and again on 120 QF_UF and 120 QF_UFLRA files:
 #   --uf-narrow-results=0        narrows result sorts used only for equality;
-#                                FuzzSMT feeds every application into
-#                                arithmetic as well, so none qualifies.
-#   --uf-skeleton-preproc=0      the skeleton forces nothing on these queries.
-#   --uf-inject-args=1           wants equality-only declarations.
-#   --uf-sort-width              only sizes a sort from (declare-sort S 0),
-#                                which FuzzSMT never writes.
+#                                on the bit-vector entries FuzzSMT feeds every
+#                                application into arithmetic as well, and on
+#                                QF_UF the result sorts are declared ones,
+#                                which --uf-sort-width sizes instead.
+#   --uf-inject-args=1           changes nothing on any of the three logics.
+# --uf-propagate-equalities and --uf-skeleton-preproc do nothing on the
+# bit-vector entries -- the pass substitutes a couple of asserted atoms on 6
+# files in 30 and the CNF comes out byte-identical anyway -- but they bite on
+# QF_UF and QF_UFLRA, so they have entries in the ufsort and uflra groups.
 # Nor --uninterpreted-functions, which decides UF for a logic whose name
 # omits it: FuzzSMT always names the logic correctly, so on the UF entries it
 # asks for what already happens and on the others there is no UF to decide.
+)
+
+# Declared sorts, which only QF_UF and QF_AX have: STP gives each
+# (declare-sort S 0) a bit-vector carrier --uf-sort-width bits wide, 16 by
+# default. A narrower carrier is only sound while the query cannot name more
+# elements of the sort than it holds; below 8 STP notices and answers
+# "unknown" on some files (7 of 120 QF_AX files at 4, 11 at 1), which the
+# fuzzer would save as mismatches, and at 64 the QF_AX solve slows until 33
+# files in 120 time out. 8 changes the output on 98 of 120 QF_UF files and 85
+# of 120 QF_AX ones, and answered every one.
+#
+# Turning --uf-propagate-equalities off is the other setting that does
+# anything on QF_UF, and only just: 5 files in 120. --uf-skeleton-preproc=off
+# changed 2 and has no entry.
+declare -a g_ufsort=(
+""
+"--uf-sort-width=8"
+"--uf-propagate-equalities=off"
+)
+
+# Linear real arithmetic. Drawn for the two real logics only: on the others
+# there is no simplex to steer.
+#
+# Counts are files whose `stp -s` counters (the LRA-METRICS line, the CNF
+# size and CaDiCaL's conflict, decision and propagation counts) moved, out of
+# 60 files of the plain QF_LRA entry, then out of 120 of the -bool-and one
+# where that is the entry that reaches the code. The simplex settings bite
+# on the plain entry: theory propagation off 55, the float driver off 54,
+# forcing the float-to-exact reroute 52, row orders 1 to 3 49, 43 and 48,
+# singleton ordering 53, early conflicts 51, sum-of-infeasibilities repair 50,
+# the first search connected 55, persistent state 55, dormant rows 38 and 28
+# with a cell floor, decision polarity off 49, conflict recovery off 11,
+# bound presolve off 55. The rest of the presolve wants top-level facts, which
+# only the -bool-and entry asserts: unconstrained folding off 3, monotone
+# elimination 4 (and 3 with its work budget at zero), propagation off 16, row
+# dominance off 12, substitution off 22, a growth or work guard on
+# substitution 22 each, eight rounds 3.
+#
+# The two verifiers move no counter by design: they re-derive what the
+# solver already trusts, and abort if the two disagree. They are here for the
+# same reason --bb.div-v2 is in the division group: what is fuzzed is the
+# checking code, and a disagreement is exactly what the fuzzer wants to see.
+declare -a g_lra=(
+""
+"--lra-theory-propagation=0"
+"--lra-float-driver=0"
+"--lra-float-reroute=1 --lra-float-reroute-floor=0"
+"--lra-row-order=1"
+"--lra-row-order=2"
+"--lra-row-order=3"
+"--lra-singleton-ordering=1"
+"--lra-early-conflicts=1"
+"--lra-soi=1"
+"--lra-first-search=1"
+"--lra-persistent-state=1"
+"--lra-float-dormant-rows=1"
+"--lra-float-dormant-rows=1 --lra-float-dormant-min-cells=3"
+"--lra-decision-polarity=0"
+"--lra-conflict-recovery=0"
+"--lra-presolve-bounds=0"
+"--lra-presolve-unconstrained=0"
+"--lra-presolve-monotone=1"
+"--lra-presolve-monotone=1 --lra-presolve-monotone-work=0"
+"--lra-presolve-propagate=0"
+"--lra-presolve-rows=0"
+"--lra-presolve-subst=0"
+"--lra-presolve-subst-growth=1"
+"--lra-presolve-subst-growth=1000000 --lra-presolve-subst-work=0"
+"--lra-presolve-rounds=8"
+"--lra-verify-conflicts=1"
+"--lra-verify-canonical=1"
+
+# Only QF_UFLRA's congruence rounds extend the arithmetic of a solve already
+# under way, so this acts there alone (reusing the extended problem changes
+# 38 files in 60, and nothing on QF_LRA). It lives here anyway because the
+# solver refuses it beside --lra-persistent-state or a --lra-row-order --
+# "LRA extension controls require batch solves" -- and it does so at solve
+# time, as SOLVER_ERROR, not on the command line. Drawn from a group of its
+# own, every such pairing would be saved as a mismatch.
+"--lra-extension-mode=1"
+
+# Not here; see NOT_FUZZED for the list:
+#   the HiGHS options, and the ReLU ones that need it: a build without HiGHS
+#                          (the default) refuses to solve a real query under
+#                          any of them, and the entry probe, which offers
+#                          entries on a bit-vector query, cannot see that.
+#   the other ReLU options, the model reconstruction and screening settings:
+#                          they act on a network of ReLU definitions, which
+#                          FuzzSMT never writes, and moved nothing on 120
+#                          plain QF_LRA files.
+#   --lra-extension-mode=2 and 3, --lra-extension-restart-float-basis:
+#                          on QF_UFLRA, where extensions happen, these moved
+#                          at most 2 files in 60 beyond noise.
+#   --lra-extension-restart-sat  copying the formula into a fresh CaDiCaL
+#                          search moves 38 files in 60 on QF_UFLRA, but it is
+#                          refused at solve time beside --cadical-factor on,
+#                          which the solver group draws ("LRA SAT search reset
+#                          requires CaDiCaL with factoring disabled": 188 of
+#                          300 files), and beside --lra-persistent-state.
+#                          Until the two refusals are made on the command line
+#                          there is no group it can go in.
+#   --lra-incremental-session  acts from the second check onwards, and a
+#                          generated file has one.
+#   --lra-direct-bounds    1 moved 1 file of 240, and 2 answered "unknown" on
+#                          a file the checker and STP's default call sat.
+#   --lra-float-promotion-budget, --lra-dense-recovery, and
+#   --lra-float-reroute=0  never reached: nothing generated trips the float
+#                          tableau's limits.
+#   the budgets in seconds are wall-clock.
+)
+
+# UF over Real, which QF_UFLRA alone has: those functions are decided by lazy
+# congruence rounds rather than by the refinement loop the uf group steers.
+# Counts are files whose counters moved, out of 60 of the QF_UFLRA entry.
+# Keeping the running solve between rounds off 38; the round limit at 0 28,
+# after which every remaining pair is stated at once; the full-expansion cap
+# at 0 5; escalating to the transitive closure 8 on its own and 38 with a
+# round limit that lets functions get stuck. --uf-ackermann on 53, the one
+# uf-group entry that acts here -- off and the refinement knobs do not.
+# Rewriting under top-level equalities, which auto skips when the query has
+# Real content, 6, and 12 with the skeleton's facts as well. Separating
+# model values off 5 of 60 against 2 of noise.
+#
+# --uf-congruence-closure=off and --uf-lazy-full-expansion-pairs=1 are
+# absent: the first is what auto does below --uf-congruence-closure-min-apps,
+# the second measured the same as 0.
+declare -a g_uflra=(
+""
+"--uf-lazy-in-place=0"
+"--uf-lazy-round-limit=0"
+"--uf-lazy-full-expansion-pairs=0"
+"--uf-congruence-closure=on"
+"--uf-lazy-round-limit=1 --uf-lazy-full-expansion-pairs=0 --uf-congruence-closure=on"
+"--uf-lazy-round-limit=1 --uf-lazy-full-expansion-pairs=0 --uf-congruence-closure-min-apps=1"
+"--uf-ackermann on"
+"--uf-propagate-equalities=on"
+"--uf-propagate-equalities=on --uf-skeleton-preproc=on"
+"--lra-separate-model-values=off"
 )
 
 # Floating-point bit-blasting, drawn only for the FP logics: with no FP in the
@@ -1078,8 +1367,7 @@ declare -a NOT_FUZZED=(
 --fp-domain-sound-zero-facts --fp-domain-row-bounds
 --mulo-recognition --distinct-ordering --skeleton-preproc
 --embedded-constraints --common-subsum --common-subsum-budget --switch-word
---uninterpreted-functions --uf-propagate-equalities --uf-narrow-results
---uf-skeleton-preproc --uf-inject-args --uf-sort-width
+--uninterpreted-functions --uf-narrow-results --uf-inject-args
 --congruence-candidate-limit --congruence-candidate-conflicts
 # CaDiCaL's variable elimination settings. They need --cadical, but paired
 # with it every one of elim=0, mineff=maxeff=0 and a raised minimum left
@@ -1089,34 +1377,26 @@ declare -a NOT_FUZZED=(
 # Wall-clock: whether the budget fires depends on how loaded the machine is,
 # so a mismatch drawn with it would not reproduce.
 --fp-abstraction-budget
-# Linear real arithmetic, and the UF options that only act on functions over
-# Real (the lazy congruence rounds print nothing on any QF_UFBV file). No
-# logic entry generates reals: the default checker has none, and the probe
-# above stops the whole run when the checker cannot answer a logic. Fuzzing
-# these needs QF_LRA and QF_UFLRA entries run against a checker that has
-# reals, and a group for them.
---uf-lazy-in-place --uf-lazy-full-expansion-pairs --uf-lazy-round-limit
---uf-congruence-closure --uf-congruence-closure-min-apps
---lra-boolean-bounds --lra-conflict-recovery --lra-decision-polarity
---lra-dense-recovery --lra-direct-bounds --lra-early-conflicts
---lra-extension-mode --lra-extension-restart-float-basis
---lra-extension-restart-sat --lra-first-search
---lra-float-dormant-min-cells --lra-float-dormant-rows --lra-float-driver
---lra-float-promotion-budget --lra-float-reroute --lra-float-reroute-floor
---lra-highs-cut-limit --lra-highs-cuts --lra-highs-lp --lra-highs-mip
---lra-highs-replay --lra-highs-replay-nodes --lra-highs-seconds
---lra-incremental-session --lra-lp-partial --lra-lp-screen
---lra-model-reconstruction --lra-persistent-state --lra-presolve-bounds
---lra-presolve-monotone --lra-presolve-monotone-work
---lra-presolve-propagate --lra-presolve-rounds --lra-presolve-rows
---lra-presolve-subst --lra-presolve-subst-growth --lra-presolve-subst-work
---lra-presolve-unconstrained --lra-relu-auto-seconds --lra-relu-bounds
---lra-relu-branch --lra-relu-branch-nodes --lra-relu-branch-seconds
---lra-relu-cases --lra-relu-cases-seconds --lra-relu-lp
---lra-relu-lp-call-seconds --lra-relu-lp-rounds --lra-relu-lp-seconds
---lra-relu-property-branches --lra-replay-screen --lra-row-order
---lra-separate-model-values --lra-singleton-ordering --lra-soi
---lra-theory-propagation --lra-verify-canonical --lra-verify-conflicts
+# Linear real arithmetic that no generated query reaches; see the comment at
+# the end of the lra group. The HiGHS options, and the two ReLU ones that
+# need it, are refused on a real query by a build without HiGHS, which is the
+# default:
+--lra-highs-replay --lra-highs-replay-nodes --lra-highs-cuts
+--lra-highs-cut-limit --lra-highs-mip --lra-highs-lp --lra-relu-lp
+--lra-relu-branch
+# They act on networks of ReLU definitions, which FuzzSMT does not write:
+--lra-relu-bounds --lra-relu-cases --lra-relu-lp-rounds
+--lra-relu-property-branches --lra-relu-branch-nodes --lra-model-reconstruction
+--lra-replay-screen --lra-boolean-bounds --lra-lp-screen --lra-lp-partial
+# Nothing generated reaches them, or they moved too few files to be worth a
+# draw; --lra-direct-bounds=2 also answers "unknown" on a satisfiable file:
+--lra-dense-recovery --lra-float-promotion-budget --lra-direct-bounds
+--lra-extension-restart-float-basis --lra-incremental-session
+# Refused at solve time beside --cadical-factor on; see the lra group.
+--lra-extension-restart-sat
+# Wall-clock budgets, and inert besides:
+--lra-highs-seconds --lra-relu-auto-seconds --lra-relu-cases-seconds
+--lra-relu-lp-seconds --lra-relu-lp-call-seconds --lra-relu-branch-seconds
 # Only act from the second (check-sat) onwards. A generated file has one, so
 # fuzzing these needs the files rewritten into push/pop sessions, which this
 # script does not do.
@@ -1205,8 +1485,7 @@ printf '  %-10s %2d entries\n' "logics" "${#LOGIC_SETS[@]}"
 declare -A option_group=()
 clashes=0
 for entry in "${LOGIC_SETS[@]}"; do
-  IFS='|' read -r gen logic_opts <<< "$entry"
-  read -r -a gen_args <<< "$gen"
+  parse_entry "$entry"
   option_group=()
   # The logic's own options go on the same command line, so they are part of
   # the check: a group naming --array-equality would collide with the entries
@@ -1215,8 +1494,7 @@ for entry in "${LOGIC_SETS[@]}"; do
     option_group[$opt]="the logic entry"
   done
   for gname in "${OPTION_GROUPS[@]}"; do
-    filter=${GROUP_LOGIC_FILTER[$gname]:-}
-    if [ -n "$filter" ] && [[ ${gen_args[0]} != $filter ]]; then continue; fi
+    group_applies "$gname" "${gen_args[0]}" || continue
     declare -n group="g_$gname"
     # Within a group only one entry is drawn, so a name repeated across that
     # group's entries is fine; sort -u makes this per-group, not per-entry.
@@ -1247,8 +1525,7 @@ for entry in "${LOGIC_SETS[@]}"; do
   read -r -a gen_args <<< "${entry%%|*}"
   per_logic=1
   for gname in "${OPTION_GROUPS[@]}"; do
-    filter=${GROUP_LOGIC_FILTER[$gname]:-}
-    if [ -n "$filter" ] && [[ ${gen_args[0]} != $filter ]]; then continue; fi
+    group_applies "$gname" "${gen_args[0]}" || continue
     declare -n group="g_$gname"
     per_logic=$(( per_logic * ${#group[@]} ))
     unset -n group
@@ -1275,9 +1552,7 @@ while (true)
     # One logic per iteration. Drawn before the options because a group can be
     # restricted to particular logics.
     entry=${LOGIC_SETS[ $RANDOM % ${#LOGIC_SETS[@]} ]}
-    IFS='|' read -r gen logic_opts <<< "$entry"
-    read -r -a gen_args <<< "$gen"
-    read -r -a logic_args <<< "$logic_opts"
+    parse_entry "$entry"
     logic=${gen_args[0]}
 
     # One pick per applicable group, concatenated. Empty picks contribute
@@ -1285,8 +1560,7 @@ while (true)
     # configuration.
     se=""
     for gname in "${OPTION_GROUPS[@]}"; do
-      filter=${GROUP_LOGIC_FILTER[$gname]:-}
-      if [ -n "$filter" ] && [[ $logic != $filter ]]; then continue; fi
+      group_applies "$gname" "$logic" || continue
       declare -n group="g_$gname"
       pick=${group[ $RANDOM % ${#group[@]} ]}
       if [ -n "$pick" ]; then se="${se:+$se }$pick"; fi
@@ -1316,7 +1590,7 @@ while (true)
       # cannot answer inside TIMEOUT is skipped: a timeout says nothing
       # about correctness, and skipping is what keeps a slow checker (or a
       # hard instance) from stalling the run.
-      timeout "$TIMEOUT" "$CHECKER" "$problem" > first.txt 2> first-err.txt &
+      timeout "$TIMEOUT" "$entry_checker" "$problem" > first.txt 2> first-err.txt &
       checker_job=$!
       # $se is deliberately unquoted, some entries are two options. The
       # subshell is where the stack limit checked at startup takes effect;
@@ -1364,7 +1638,7 @@ while (true)
         echo "logic:   $entry"
         echo "options: $se"
         echo "stp:     $STP (exit $stp_rc)"
-        echo "checker: $CHECKER (exit $checker_rc)"
+        echo "checker: $entry_checker (exit $checker_rc)"
       } > "$failure/what-happened.txt"
       echo -n "[mismatch $failure]"
     done
