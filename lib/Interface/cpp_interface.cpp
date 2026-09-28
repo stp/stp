@@ -39,6 +39,7 @@ THE SOFTWARE.
 #include "stp/Util/GitSHA1.h"
 #include "Lra/LraFrontend.h"
 #include <cassert>
+#include <exception>
 #include <limits>
 
 using std::cerr;
@@ -47,6 +48,34 @@ using std::endl;
 
 namespace stp
 {
+
+namespace
+{
+// Opens the engine's own work in a command -- a check, a model read, a push
+// -- and records in engine_work_failed that an exception left it. Only an
+// EngineFatal is ever classified by the record (see engine_work_failed); a
+// ParseAbandon or ScriptEnded unwinding through ends the parse on its own
+// terms, before any EngineFatal could be asked about.
+class EngineWork
+{
+public:
+  explicit EngineWork(bool& failed) noexcept
+      : failed_(failed), uncaught_(std::uncaught_exceptions())
+  {
+  }
+  ~EngineWork()
+  {
+    if (std::uncaught_exceptions() > uncaught_)
+      failed_ = true;
+  }
+  EngineWork(const EngineWork&) = delete;
+  EngineWork& operator=(const EngineWork&) = delete;
+
+private:
+  bool& failed_;
+  const int uncaught_;
+};
+} // namespace
 
 void Cpp_interface::checkInvariant()
 {
@@ -837,6 +866,7 @@ void Cpp_interface::discardExtensionalitySolveState()
 // Can clear away the base frame..
 void Cpp_interface::reset()
 {
+  const EngineWork work(engine_work_failed);
   // reset destroys the current frame and UF context itself, so close its
   // accepted command transaction while both are still alive. The grammar's
   // outer finish becomes a harmless no-op after init().
@@ -897,6 +927,7 @@ void Cpp_interface::popToFirstLevel()
 // re-queries them.
 void Cpp_interface::resetAssertions()
 {
+  const EngineWork work(engine_work_failed);
   // Pop the ordinary levels through the ordinary path so the assertion stack,
   // result cache, declarations and solver tables stay in lockstep.
   while (frames.size() > 1)
@@ -934,6 +965,7 @@ void Cpp_interface::resetAssertions()
 
 void Cpp_interface::pop()
 {
+  const EngineWork work(engine_work_failed);
   if (frames.size() == 0)
     FatalError("Popping from an empty stack.");
   if (frames.size() == 1)
@@ -972,6 +1004,7 @@ void Cpp_interface::pop()
 
 void Cpp_interface::push()
 {
+  const EngineWork work(engine_work_failed);
   // The session is incremental from the first push on (the same trigger z3
   // uses): later check-sats go through the incremental driver where they
   // can. Sessions that never push are untouched by this. This is session
@@ -1033,6 +1066,7 @@ void Cpp_interface::popAssumptionFrame()
 
 void Cpp_interface::checkSatAssuming(const ASTVec& assumptions)
 {
+  const EngineWork work(engine_work_failed);
   // The parser reduces a malformed UF subexpression to a typed carrier so it
   // can reach this outer boundary. Rejection is transactional: in particular
   // do not push, invalidate a model, solve the base stack, or print a verdict.
@@ -1073,6 +1107,7 @@ void Cpp_interface::ignoreCheckSat()
 void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
                              bool fromCheckSatAssuming)
 {
+  const EngineWork work(engine_work_failed);
   if (ignoreCheckSatRequest)
     return;
 
@@ -1586,6 +1621,7 @@ static const char* categoryKeyword(RunTimes::Category c)
 
 void Cpp_interface::getInfo(std::string flag)
 {
+  const EngineWork work(engine_work_failed);
   if (flag == "name")
     cout << "(:name \"STP\")" << endl;
   else if (flag == "version")
@@ -1857,6 +1893,7 @@ void Cpp_interface::getAssertions()
 
 void Cpp_interface::getValue(const ASTVec& v)
 {
+  const EngineWork work(engine_work_failed);
   if (current_command_rejected)
     return;
   bool readable_model = bm.UserFlags.construct_counterexample_flag;
@@ -2000,6 +2037,7 @@ bool assumptionFailed(const ASTNode& a, const ASTNodeSet& failed,
 
 void Cpp_interface::getUnsatAssumptions()
 {
+  const EngineWork work(engine_work_failed);
   // Meaningful right after a check-sat-assuming that answered unsat;
   // anything else gets the empty list, which is the correct core whenever
   // the command is legal at all.
@@ -2085,6 +2123,7 @@ void Cpp_interface::getUnsatAssumptions()
 // Note, doesn't consider that extra assertions might have been applied?
 void Cpp_interface::getModel()
 {
+  const EngineWork work(engine_work_failed);
   bool readable_model = bm.UserFlags.construct_counterexample_flag;
   readable_model = readable_model || bm.HasRealModel();
   if (!readable_model)

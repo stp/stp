@@ -155,6 +155,19 @@ def test_unsupported_and_parse_errors():
     s.close()
 
 
+def test_a_sort_error_in_a_script_is_a_parse_error():
+    # operands of two widths are refused as the term is built: the script's
+    # own failure, which used to poison the default manager for the process
+    x = BitVec("x", 8)
+    s = Solver()
+    s.add(x == 3)
+    with pytest.raises(ParseError):
+        s.from_string("(declare-fun z () (_ BitVec 8))(assert (bvult z #b1))")
+    assert len(s.assertions()) == 1 and s.check() == sat
+    assert (BitVecVal(1, 8) + x).sort() == BitVecSort(8)
+    s.close()
+
+
 def test_option_errors():
     with pytest.raises(UnknownOption) as e:
         Options(no_such_option=1)

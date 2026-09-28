@@ -4480,6 +4480,18 @@ namespace stp {
     {
       result = 1;
     }
+    catch (const stp::EngineFatal& e)
+    {
+      // An engine failure in the engine's own work -- a check the script
+      // ran, a model it read -- is the engine's. Any other came out of
+      // building the script's terms: the type checker refusing operands of
+      // two widths, a let binding one name twice. That is the script's
+      // refusal of itself, a failed parse like any other.
+      if (GlobalParserInterface->engine_work_failed)
+        throw;
+      GlobalParserInterface->last_error_message = e.what();
+      result = 1;
+    }
     catch (const stp::ScriptEnded&)
     {
       // The run ended at a check's first CNF: the script did what it was

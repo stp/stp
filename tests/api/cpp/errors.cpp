@@ -28,6 +28,7 @@ THE SOFTWARE.
 
 #include "api_common.hpp"
 
+#include <functional>
 #include <map>
 #include <set>
 #include <sstream>
@@ -484,6 +485,51 @@ TEST(Errors, a_negative_time_budget_is_refused)
   budget.time = std::chrono::milliseconds(-1);
   API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s.check_sat({}, budget));
   EXPECT_TRUE(s.check_sat().is_sat());
+}
+
+// Every mistake in what a caller hands the library is a recoverable error
+// that leaves the solver as it was and the manager usable -- never an
+// internal error that poisons the manager, never a crash. One row per path
+// by which a mistake reaches the engine.
+TEST(Errors, input_mistakes_are_recoverable)
+{
+  struct Row
+  {
+    std::string what;
+    ErrorCode code;
+    std::function<void(TermManager&, Solver&)> run;
+  };
+  const auto script = [](const std::string& text, ParseMode mode) {
+    return [text, mode](TermManager&, Solver& s) { s.parse_smt2(text, mode); };
+  };
+  std::vector<Row> rows;
+  // operands of two widths: the type checker refuses the node as it is
+  // built, which is the script's refusal of itself
+  const std::string xy = "(declare-fun x () (_ BitVec 8))(declare-fun y () (_ BitVec 4))";
+  for (const char* op : {"bvadd", "bvmul", "bvudiv", "bvurem", "bvsdiv", "bvsrem", "bvsmod",
+                         "bvand", "bvxor", "bvnand", "bvxnor", "bvshl", "bvlshr", "bvashr",
+                         "bvcomp"})
+    for (ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::EXECUTE})
+      rows.push_back({std::string(op) + " over two widths", ErrorCode::PARSE,
+                      script(xy + "(assert (= (" + op + " x y) (" + op + " x y)))", mode)});
+  for (const char* op : {"bvult", "bvslt"})
+    rows.push_back({std::string(op) + " over two widths", ErrorCode::PARSE,
+                    script(xy + "(assert (" + op + " x y))", ParseMode::DECLARE_AND_ASSERT)});
+  rows.push_back({"a let binding one name twice", ErrorCode::PARSE,
+                  script("(assert (let ((q #x01) (q #x02)) (= q q)))", ParseMode::DECLARE_AND_ASSERT)});
+  for (const Row& row : rows)
+  {
+    SCOPED_TRACE(row.what);
+    TermManager tm;
+    Solver s(tm);
+    const Term p = tm.declare("p", tm.mk_bool_sort());
+    s.add(p);
+    API_EXPECT_ERROR(row.code, row.run(tm, s));
+    ASSERT_EQ(s.assertions().size(), 1u);
+    EXPECT_TRUE(s.assertions()[0].same_as(p));
+    EXPECT_TRUE(s.check_sat().is_sat());
+    EXPECT_NO_THROW(tm.mk_bv(8, 1));
+  }
 }
 
 } // namespace

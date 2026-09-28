@@ -399,6 +399,12 @@ public:
   // The text of the last (error ...) response, for embedders that drive the
   // parser and need the diagnostic rather than the stdout line.
   std::string last_error_message;
+  // Whether an exception left the engine's own work in this interface -- a
+  // check-sat, a get-value, a push -- rather than the building of the
+  // script's terms. SMT2Parse() reports an engine failure (EngineFatal) out
+  // of the latter as the script's refusal of itself, a failed parse; one out
+  // of the former is the engine's.
+  bool engine_work_failed = false;
   // When set, SMT2Parse() starts with the floating-point and Real keywords
   // enabled instead of waiting for a set-logic that names them; the 3.x API
   // parses fragments with no logic in front of them.
