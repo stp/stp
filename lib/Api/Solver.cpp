@@ -705,6 +705,23 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
       model_pending = true;
       break;
     case SOLVER_VALID:
+    {
+      // An unsat reached over a carrier too narrow for the query may be an
+      // artefact of the encoding rather than a refutation: withheld, as the
+      // command line withholds it.
+      std::string short_carrier;
+      if (!mgr->sorts_by_engine_id.empty())
+      {
+        ASTVec formulas = bm->GetAsserts();
+        formulas.insert(formulas.end(), assumptions.begin(), assumptions.end());
+        if (declaredSortCarrierMayBeShort(*bm, formulas, "uf-sort-width", short_carrier))
+        {
+          bm->noteUnknown(::stp::UnknownReason::CarrierExhausted, short_carrier);
+          r = Result(Verdict::UNKNOWN, UnknownReason::CARRIER_EXHAUSTED,
+                     reason_sentence(UnknownReason::CARRIER_EXHAUSTED, short_carrier));
+          break;
+        }
+      }
       r = Result(Verdict::UNSAT, UnknownReason::NONE, "");
       if (last_incremental && stp->hasIncrementalSolver() &&
           stp->getIncrementalSolver()->lastUnsatHasAssumptionGranularity())
@@ -717,6 +734,7 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
       else
         last_failed_assumptions = assumptions;
       break;
+    }
     default:
     {
       UnknownReason reason = map_reason(bm->getUnknownReason());

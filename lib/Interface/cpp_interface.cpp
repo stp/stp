@@ -1724,7 +1724,14 @@ bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
                   alias.second.kind() == SourceSort::Kind::Uninterpreted;
   if (!anyDeclared)
     return false;
+  return declaredSortCarrierMayBeShort(bm, assertions, "--uf-sort-width",
+                                       detail);
+}
 
+// See cpp_interface.h.
+bool declaredSortCarrierMayBeShort(const STPMgr& bm, const ASTVec& assertions,
+                                   const char* option, std::string& detail)
+{
   // What counts is a term that could need an element of its own, so two node
   // shapes carrying the sort are excluded and neither is an edge case:
   //
@@ -1820,8 +1827,8 @@ bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
     std::ostringstream message;
     message << "the query needs up to " << entry.second
             << " elements of sort " << uninterpretedSortName(entry.first)
-            << ", and --uf-sort-width=" << width << " tells only " << capacity
-            << " apart; raise --uf-sort-width to at least " << needed;
+            << ", and " << option << "=" << width << " tells only " << capacity
+            << " apart; raise " << option << " to at least " << needed;
     detail = message.str();
     return true;
   }

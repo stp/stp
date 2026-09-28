@@ -672,6 +672,14 @@ public:
   DLL_PUBLIC void getModel();
   DLL_PUBLIC void getValue(const ASTVec& v);
 };
+
+// True when the formulas could need more elements of some declared sort than
+// its carrier tells apart, with a sentence in `detail` saying which and how
+// far to raise `option`, the width's spelling for the caller: an unsat reached
+// then may be an artefact of the encoding rather than a refutation, and the
+// command line and the API both withhold it.
+bool declaredSortCarrierMayBeShort(const STPMgr& bm, const ASTVec& formulas,
+                                   const char* option, std::string& detail);
 }
 
 #endif

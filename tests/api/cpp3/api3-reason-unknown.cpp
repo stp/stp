@@ -39,6 +39,7 @@ THE SOFTWARE.
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 using namespace stp;
 using namespace std::chrono_literals;
@@ -241,6 +242,46 @@ void assert_pigeonhole(TermManager& tm, Solver& s)
   s.add(fa == fb || (fb == fc || fa == fc));
 }
 } // namespace
+
+// A declared sort is unbounded and its carrier is not: five distinct
+// elements over a two-bit carrier are unsatisfiable in the encoding and
+// satisfiable in the theory, so the unsat is withheld, as the command line
+// withholds it, with the width to raise. A sat over a narrow carrier is a
+// genuine model and is kept, and a wider carrier decides the query.
+TEST(reason_unknown, ANarrowCarrierWithholdsAnUnsat)
+{
+  for (std::uint32_t width : {2u, 3u})
+  {
+    TermManager::Config config;
+    config.uf_sort_width = width;
+    TermManager tm(config);
+    const Sort S = tm.declare_sort("S");
+    std::vector<Term> elements;
+    for (int i = 0; i < 5; ++i)
+      elements.push_back(tm.declare("e" + std::to_string(i), S));
+    Solver s(tm, checked());
+    s.add(tm.mk_term(Kind::DISTINCT, elements));
+    const Result r = s.check_sat();
+    if (width == 2)
+    {
+      EXPECT_TRUE(r.is_unknown()) << r;
+      EXPECT_EQ(UnknownReason::CARRIER_EXHAUSTED, r.reason());
+      EXPECT_NE(std::string::npos, r.reason_message().find("raise uf-sort-width to at least 3"))
+          << r.reason_message();
+    }
+    else
+      EXPECT_TRUE(r.is_sat()) << r;
+  }
+  // a query that fits the carrier keeps its refutation
+  TermManager::Config config;
+  config.uf_sort_width = 2;
+  TermManager tm(config);
+  const Sort S = tm.declare_sort("S");
+  const Term u = tm.declare("u", S);
+  Solver s(tm, checked());
+  s.add(u != u);
+  EXPECT_TRUE(s.check_sat().is_unsat());
+}
 
 TEST(reason_unknown, AnAssumedInjectivityIsRetractedRatherThanReported)
 {
