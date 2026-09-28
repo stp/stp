@@ -237,14 +237,14 @@ TEST(libstp2_fidelity, a_whole_counterexample_holds_the_reads_an_evaluation_made
 }
 
 // A Real term's counterexample value is the exact Real model's, and an
-// assertion, a parsed one included, or a declaration since the query leaves
-// that model none.
+// assertion, a parsed one included, a declaration, or a parsed CVC query
+// since the query leaves that model none.
 TEST(libstp2_fidelity, a_stale_real_model_has_no_counterexample_value)
 {
   VC vc = vc_createValidityChecker();
   Expr x = vc_varExpr(vc, "x", vc_realType(vc));
   vc_assertFormula(vc, vc_eqExpr(vc, x, vc_realConstExprFromStr(vc, "1")));
-  for (int stale = 0; stale < 3; ++stale)
+  for (int stale = 0; stale < 4; ++stale)
   {
     ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
     Expr v = vc_getCounterExample(vc, x);
@@ -255,8 +255,10 @@ TEST(libstp2_fidelity, a_stale_real_model_has_no_counterexample_value)
       vc_assertFormula(vc, vc_trueExpr(vc));
     else if (stale == 1)
       vc_varExpr(vc, "y", vc_realType(vc));
-    else
+    else if (stale == 2)
       ASSERT_EQ(1, vc_parseMemExpr(vc, "ASSERT(TRUE); QUERY TRUE;", nullptr, nullptr));
+    else
+      ASSERT_EQ(1, vc_parseMemExpr(vc, "QUERY TRUE;", nullptr, nullptr));
     EXPECT_EQ(0, vc_hasRealModel(vc)) << stale;
     EXPECT_EQ(0, vc_hasRealModelValue(vc, x)) << stale;
     EXPECT_EQ(nullptr, vc_getCounterExample(vc, x)) << stale;
