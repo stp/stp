@@ -306,7 +306,10 @@ These apply to all generators:
    a build without them; it now produces an asserting Release build
 -  ``ENABLE_TESTING`` -- enable running the tests
 -  ``ENABLE_PYTHON_INTERFACE`` -- build the Python interface (Python 3
-   only)
+   only). The bindings can also be installed on their own, once per
+   interpreter, with ``python3 -m pip install ./bindings/python`` against
+   an STP that is already installed; ``bindings/python/README.md`` says how
+   they find ``libstp``
 -  ``PYTHON_EXECUTABLE`` -- which Python 3 to use, when more than one is
    installed
 -  ``SANITIZE`` -- use Clang's sanitization checks. It sets C++ flags only,

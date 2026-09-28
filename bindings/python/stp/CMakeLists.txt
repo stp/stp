@@ -45,12 +45,13 @@ endif()
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/library_path.py.in
                ${CMAKE_CURRENT_BINARY_DIR}/library_path.py @ONLY)
 
-# Copy rest of files to build directory
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/stp.py.in
-              ${CMAKE_CURRENT_BINARY_DIR}/stp.py)
+# The rest of the package is plain Python, shared with the pip install
+# (bindings/python/pyproject.toml); only library_path.py is generated.
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/stp.py
+               ${CMAKE_CURRENT_BINARY_DIR}/stp.py COPYONLY)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/__init__.py.in
-                ${CMAKE_CURRENT_BINARY_DIR}/__init__.py)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/__init__.py
+               ${CMAKE_CURRENT_BINARY_DIR}/__init__.py COPYONLY)
 
 # -----------------------------------------------------------------------------
 # Handle installation
