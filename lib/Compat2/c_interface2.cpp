@@ -2945,6 +2945,13 @@ bool parse_into(VCImpl* vc, const std::string& text, stp_format format, const ch
       added.push_back(t);
       vc->levels.back().push_back(stp_term_copy(t));
     }
+  // As for an assertion vc_assertFormula makes: the exact Real model and a
+  // certified UF reading were the stack's before it.
+  if (after != before)
+  {
+    vc->uf_certified = false;
+    vc->real_model_stale = true;
+  }
   return true;
 }
 
