@@ -325,6 +325,7 @@ TEST_F(SolversTest, statistics_are_each_solvers_own)
   EXPECT_EQ(b.statistics().uint64("checks.total"), 0u);
   b.add(bvmul(x, x) == tm.mk_bv(8, 49));
   ASSERT_TRUE(b.check_sat().is_sat());
+  // read from the shelved solver's own record, without replaying its stack
   EXPECT_EQ(a.statistics().uint64("checks.bitblasted"), bitblasted);
   EXPECT_EQ(a.statistics().uint64("checks.total"), 1u);
   EXPECT_EQ(b.statistics().uint64("checks.total"), 1u);

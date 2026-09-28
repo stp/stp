@@ -2573,7 +2573,12 @@ std::string Solver::input_to_string(Format f) const
 
 Statistics Solver::statistics() const
 {
-  SolverImpl* s = live(*this, "Solver::statistics");
+  // Read without activating: a shelved solver's counts are its own record,
+  // and activating it would replay its whole stack. One never activated has
+  // no record yet, and is activated (its options applied) as before.
+  SolverImpl* s = live_read(*this, "Solver::statistics");
+  if (s->mgr->active != s && !s->shelved_backend_known)
+    s = live(*this, "Solver::statistics");
   STPMgr* bm = s->mgr->bm;
   // the engine holds the active solver's counts; another solver's are its own
   const bool active = s->mgr->active == s;
