@@ -621,18 +621,17 @@ jobs:
         key: ccache-cadical-${{ matrix.cadical_tag }}/${{ github.run_id }}
         restore-keys: ccache-cadical-${{ matrix.cadical_tag }}/
 
-    # CMAKE_INSTALL_PREFIX and PYTHON_LIB_INSTALL_DIR are set so that the
-    # install steps below land in the workspace rather than needing root.
-    # Both have to be settled here rather than at install time: the header
-    # and Python destinations are absolute paths baked into the cache, and
-    # so is the install RPATH this job checks. Neither affects what is built
-    # or tested - the Python tests run out of the build tree.
+    # CMAKE_INSTALL_PREFIX is set so that the install steps below land in the
+    # workspace rather than needing root. It has to be settled here rather
+    # than at install time: the install RPATH this job checks is baked into
+    # the cache. PYTHON_LIB_INSTALL_DIR is left to its default, which follows
+    # the prefix. Neither affects what is built or tested - the Python tests
+    # run out of the build tree.
     - name: Configure
       run: |
         mkdir build
-        mkdir -p "$GITHUB_WORKSPACE/install/pylib"
         cd build
-        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCaDiCaL_TAG:STRING=${{ matrix.cadical_tag }} -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCaDiCaL_TAG:STRING=${{ matrix.cadical_tag }} -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -724,7 +723,9 @@ jobs:
         # build-tree template is a different file, and it is the only one the
         # ctest suite imports, so this is the first time the installed one is
         # loaded at all.
-        PYTHONPATH="$prefix/pylib" python3 -c "
+        pylib=$(python3 -c "import sysconfig; print(sysconfig.get_path('purelib', 'posix_prefix', vars={'base': '$prefix', 'platbase': '$prefix'}))")
+        test -f "$pylib/stp/library_path.py"
+        PYTHONPATH="$pylib" python3 -c "
         import stp
         s = stp.Solver()
         x = s.bitvec('x', width=8)
