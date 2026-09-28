@@ -5,8 +5,7 @@
 each of them over `include/stp/stp.h` (the 3.x C API) alone. It includes no
 engine header and no `stp.hpp`, and names no symbol beyond `stp.h`. This file
 records how each 2.x behaviour is reproduced, what is approximate or
-unsupported, how the 2.x acceptance suites
-fare against it, and every 3.x defect met on the way.
+unsupported, and which 2.x suites run against it.
 
 ## Files
 
@@ -54,11 +53,9 @@ fare against it, and every 3.x defect met on the way.
   retained `stp_term` (or, for a `Type`, an `stp_sort`), the owning `VCImpl`,
   the ownership bit and a cached name. The term is deliberately the first
   member: a 3.x `stp_term` is the engine's `ASTInternal*`, and a 2.x
-  `stp::ASTNode` is exactly one such pointer, so a test that reads
-  `*(stp::ASTNode*)expr` (`GetKind()`, `BVTypeCheck`) sees the right node. That
-  pun is what lets `fp-repeated-solve`, `fp-shared-bv-operand`,
-  `fp-identity-passthrough` and three `array-extensionality` cases pass; it
-  cannot help a test that casts the `VC` to `stp::STP*`.
+  `stp::ASTNode` is exactly one such pointer, so a 2.x client that reads
+  `*(stp::ASTNode*)expr` (`GetKind()`, `BVTypeCheck`) sees the right node.
+  Nothing can help a client that casts the `VC` to `stp::STP*`.
 - **`UFDeclHandle`s** are process-unique 64-bit ids (never reused) in a global
   `id -> owning VC` table, so a handle of a destroyed or foreign checker is
   refused without being dereferenced; the per-`VC` record holds the 3.x
@@ -96,8 +93,8 @@ fare against it, and every 3.x defect met on the way.
   elements must be a positive integer", "stored value sort differs from the
   array's bitvector element sort", the array-equality refusal, and so on).
 - **Threads.** Each `VC` is its own 3.x manager, which 3.x pins to the creating
-  thread, as 2.x did in effect. `vc_createValidityChecker` boots the constant
-  bit-vector library on the calling thread once per thread (defect 1).
+  thread, as 2.x did in effect; checkers on different threads run
+  concurrently, as independent 3.x managers do.
 
 ## 3. Mapping decisions
 
@@ -110,8 +107,8 @@ fare against it, and every 3.x defect met on the way.
    (RESOURCE_LIMIT -> AIG_BUDGET, CONFLICT_LIMIT -> CONFLICT_BUDGET, TIMEOUT,
    CARRIER_EXHAUSTED, ASSUMED_INJECTIVITY, everything else -> INCOMPLETE) and
    `stp_solver_last_reason_message` is the text `vc_getReasonUnknownToBuffer`
-   returns. Both are cleared at every query (2.x's defect D1 is not
-   reproduced).
+   returns. Both are cleared at every query, so a reason never outlives the
+   query that set it.
 3. **Ownership.** Term and type constructors return checker-owned handles:
    with `EXPRDELETE` at its default (1) they are recorded in the checker's
    persist list and freed by `vc_Destroy`, and `vc_DeleteExpr` may free one
@@ -133,7 +130,7 @@ fare against it, and every 3.x defect met on the way.
    returns `NULL` after the diagnostic "no model to read -- no query has been
    answered since the last vc_push or vc_query". A constant is its own value
    and needs no model. A read after a VALID answer is a read with no model
-   (2.x's D2 invented `0`/`false`; not reproduced). The UF rule is the strict
+   (2.x invented `0`/`false` for it; libstp2 does not). The UF rule is the strict
    2.x one: `vc_getUninterpretedFunctionValue` (and `vc_getCounterExample` on
    an application) answers only from the model of the last satisfiable query
    with no assertion, push or pop since ("certified"), and only for an
@@ -209,10 +206,12 @@ fare against it, and every 3.x defect met on the way.
     chosen from the symbols in `e` (QF_BV, QF_ABV, QF_UFBV, QF_AUFBV, QF_BVFP,
     QF_ABVFP, QF_UFBVFP, QF_AUFBVFP, QF_AX, QF_LRA, QF_UFLRA),
     `(set-info :smt-lib-version 2.0)`, `(declare-fun |x| () sort)` per symbol,
-    `(assert e)`, and `(define-fun |x| () sort value)` per model entry (arrays
-    through `stp_array_value_as_term`, functions from the entries of
-    `stp_fun_value`), and the 3.x printers spell names unquoted with a double
-    space after an operator (recorded in `lib/Api/c/NOTES.md`).
+    `(assert e)` with `e` in the shared form 2.x printed (every symbol
+    `|quoted|`, Reals as numerals), and `(define-fun |x| () sort value)` per
+    model entry (arrays through `stp_array_value_as_term`, functions from the
+    entries of `stp_fun_value`). The 3.x script printers write legal SMT-LIB
+    too, but not this text (no `set-info`, and a declaration spells a simple
+    name bare), and 2.x clients compare text.
 13. **Hash.** `vc_getHashQueryStateToBuffer` is `stp_term_hash` of the
     conjunction of the negated query with every assertion on the stack (the
     design suggested a text hash; a hash value was never stable across
@@ -294,185 +293,15 @@ fare against it, and every 3.x defect met on the way.
 | `vc_getHashQueryStateToBuffer` | a different hash function than 2.x's (decision 13); values were never stable across versions. |
 | `exprString` on a float/Real term | the SMT-LIB 2 spelling instead of 2.x's death inside the printer. |
 | `vc_printVarDecls` | symbols of float, rounding-mode and Real sorts are skipped (the presentation language cannot spell them; 2.x printed nothing usable for them either). |
-| `vc_getCounterExample` after a VALID answer | `NULL` plus a diagnostic instead of 2.x's invented value (D2, deliberate). |
-| `vc_pop` at the base level | fatal instead of 2.x's deletion of the base assertions (D10, deliberate). |
+| `vc_getCounterExample` after a VALID answer | `NULL` plus a diagnostic instead of 2.x's invented value (deliberate). |
+| `vc_pop` at the base level | fatal instead of 2.x's deletion of the base assertions (deliberate). |
 | `vc_parseExpr` / `vc_parseMemExpr` | reproduced by the split described in decision 14; a script with several `QUERY` statements keeps only the last, as 2.x did. |
 | `vc_printSMTLIB2`, `vc_printCounterExampleSMTLIB2`, `vc_getRealModelSMTLIB2` | composed by the shim (decision 12); the text is the 2.x form, not the 3.x printers' form. |
 | `vc_setErrorPolicy` | new, honoured; under `STP_ON_ERROR_RETURN` every fatal path returns its failure value after the handler. |
 
 Everything else is a direct mapping.
 
-## 5. Test results
-
-What follows is the qualification of `libstp2` against the whole 2.x test
-suite, run on 2026-09-27 before those suites were rewritten against the 3.x
-API (they are now in `tests/api/cpp3`); it is the record of what `libstp2`
-reproduces and why the rest cannot be. At the time the 2.x implementation
-could still be compiled into `libstp`, which the control runs below used; the
-option that chose between the two, `STP_LEGACY_C_INTERFACE`, is gone, and
-"option OFF" below is today's only configuration. The suites that still run
-against `libstp2` are listed at the end of this section.
-
-Configuration: `-DSTP_LEGACY_C_INTERFACE=OFF -DENABLE_TESTING=ON
--DTEST_CPP3_API=OFF -DUSE_CADICAL=ON` (CryptoMiniSat available, MiniSat off),
-RelWithDebInfo, in `build-stp2`; the control tree `build-stp2-on` is the same
-with the option `ON`. No test source was edited. One test *fixture* was:
-`tests/api/install/uf-public-header-consumer/CMakeLists.txt` links
-`${STP_C_INTERFACE_LIBRARY}` (from `STPConfig.cmake`) instead of `stp`, so the
-installed-package check links the library that actually provides the API.
-
-### ctest, `tests/api/C`, option ON (the 2.x implementation, control)
-
-```
-100% tests passed, 0 tests failed out of 79
-```
-
-`tests/api/python`: `python-interface-tests` and `python-allocator-tests`
-passed (2/2).
-
-### ctest, `tests/api/C`, option OFF (libstp2)
-
-```
-84% tests passed, 13 tests failed out of 79
-```
-
-The 13 failing *binaries* are `fp-abstraction-flags`, `cnf-effort-flag`,
-`incremental-scoped-preprocessing`, `array-extensionality`,
-`incremental-auto-engage`, `push-pop-model`, `refinement-flags`, `simplify`,
-`fp-repeated-solve`, `uninterpreted-functions-handle-safety`,
-`fp-model-roundtrip`, `fp-multi-checker`, `model-read-with-no-solve`.
-(`fp-model-roundtrip` passes since the partial floating-point choice was fixed
-in the 3.x model, D below: 12 binaries and 318 of 366 cases as of 2026-09-27.)
-
-### ctest, `tests/lra`, option OFF (libstp2), 2026-09-27
-
-The 89 LRA tests run against libstp2 as well. Four fidelity gaps their C-API
-acceptance tests exposed were closed the same day: a null or foreign operand
-is refused with 2.x's wording ("received a null Expr", "received an Expr owned
-by a different validity checker") before any sort check, an `ite` whose
-branches disagree on Real is refused as "requires Real operands", the width
-getters (`getVWidth`, `getIWidth`, `vc_getExpWidth`, `vc_getSigWidth`) report
-the engine's fatal messages on a Real instead of answering 0, and
-`vc_printSMTLIB2` prints the body with the engine printer (`|quoted|`
-symbols, Reals as numerals) rather than the 3.x unshared printer. 2.x's rule
-that the exact Real model is current only until the checker changes (a
-declaration of any sort, an assertion, a push or a pop each invalidate it
-until the next INVALID query republishes it) is reproduced by
-`real_model_current`; the bit-vector counterexample keeps its own longer life.
-`lra_c_api_smoke` and `lra_c_api_negative` pass. `lra_real_capability_api`
-fails one case, `real-uf-scalar-model-completion` ("no exact Real model was
-published"): the model value of a Real-valued uninterpreted-function
-application is a 3.x alpha gap (no model table for Real-valued applications,
-`lib/Api/README.md`), so the checker has nothing to publish for it.
-
-Per-case tally of every `tests/api/C` binary on the same day, each case in
-its own process: 401 of 445 cases pass; the 44 that do not are the classes
-below (array-extensionality 15, refinement-flags 13, cnf-effort-flag 4,
-incremental-auto-engage 3, fp-abstraction-flags 2, push-pop-model 2, and one
-each of incremental-scoped-preprocessing, fp-multi-checker,
-model-read-with-no-solve, simplify, uninterpreted-functions-handle-safety).
-`tests/api/python`: `python-interface-tests` (83 cases) and
-`python-allocator-tests` passed (2/2), loading `libstp2.so`.
-
-Running every gtest case of every binary in its own process (a crashing case
-takes its whole binary down under ctest): **317 of 366 cases pass**. The 49
-that do not, with the reason:
-
-**A. The test reaches engine internals through the `VC` handle (45 cases).**
-These cast the `VC` to `stp::STP*` and read or write `->bm->UserFlags`,
-`->bm->getExtensionalityIfAny()`, `->bm->getUFContext()`,
-`->hasIncrementalSolver()`, or build engine nodes on `->bm`. A `VC` from
-libstp2 is a `VCImpl`, so the reads are garbage and the writes crash. No shim
-over the public API can pass them; the property each one checks is not one the
-C API exposes.
-
-- `array-extensionality` (16 of 31; the other 15 pass):
-  `active_checker_owns_complete_array_graph`,
-  `active_equalities_follow_assertions_and_query`,
-  `asserted_ite_condition_folds_before_fe03`, `equality_under_push_pops_away`,
-  `flag_on_without_equalities_is_dormant`,
-  `ite_replacement_survives_a_rewritten_condition`,
-  `lemma_atoms_fold_at_encoding`, `nested_ite_fixed_point_is_stable`,
-  `refinement_on_the_cadical_backend`,
-  `repeated_queries_do_not_leak_ite_records`,
-  `store_chain_equals_base_solved_by_rewrite`,
-  `store_chain_guarded_inner_write`, `store_chain_over_write_base`,
-  `store_chain_shadowed_write_is_unconstrained`,
-  `store_index_read_through_second_array_unsat`,
-  `unlinked_reads_are_owned_by_the_extensionality_checker` (SIGSEGV at
-  `static_cast<stp::STP*>(vc)->bm->UserFlags...` or the
-  `ExtensionalityContext` reads).
-- `refinement-flags` (14 of 16): every case that calls the file's
-  `flags(vc)`/`mutableFlags(vc)` (`((stp::STP*)vc)->bm->UserFlags`):
-  `DefaultsAreTheOnesTheCommandLineDocuments`,
-  `EachFlagReachesTheFieldTheCLIWrites`,
-  `TheDivModScopeResolvesTheSameWayInEitherOrder`,
-  `AProfileDoesNotOverwriteACeilingTheCallerNamed`,
-  `AProfileDoesNotOverwriteAGroupListTheCallerNamed`,
-  `AnUnknownSchemaGroupNameIsRefused`, `InvalidBVProfileIsAtomic`,
-  `EachSchemaGroupIndexReadsItsOwnCounterAndName`,
-  `EverySchemaGroupNameRoundTripsThroughTheSelector`,
-  `ExactCostCountersReachTheCInterface`,
-  `ANegativeUnsignedValueIsRefusedAndLeavesTheFieldAlone`,
-  `TheSortWidthIsRefusedOutsideTheRangeTheCLITakes`,
-  `AnUnknownAckermannModeIsRefused`,
-  `NarrowingChangesNeitherTheAnswerNorTheSortReadBack`. The two cases that
-  stay on the C API (`AnOutOfRangeSchemaGroupIndexIsRefused`,
-  `TheAigBudgetEndsAQueryWithoutAnAnswer`) pass.
-- `cnf-effort-flag` (4 of 5): `TheDefaultIsAuto`,
-  `TheAutoThresholdIsReachableThroughTheCAPI`, `EveryLevelIsReachable`,
-  `OutOfRangeIsRefusedAndLeavesTheLevelAlone` read `flags(vc)`;
-  `EveryLevelDecidesTheSameQuery` passes (every effort level is set through
-  the shim and decides the query).
-- `fp-abstraction-flags` (2 of 4): `EverySetterReachesItsOwnField`,
-  `NegativesAreRefusedAndChangeNothing` read `flags(vc)`; the two counter
-  cases pass.
-- `incremental-scoped-preprocessing` (2 of 3): `ItIsOffByDefault`,
-  `TheFlagReachesTheField`; `TheAnswersDoNotChange` passes.
-- `incremental-auto-engage` (3 of 4): `DefaultKeepsTheFirstTwoQueriesOnBatch`,
-  `ZeroNeverEngages`, `EarlyEngagementDoesNotChangeAnswersOrModels` fail on
-  `engaged(vc)` = `((stp::STP*)vc)->hasIncrementalSolver()`, a garbage read
-  (the answers and models they also check are right);
-  `ThresholdOfOneEngagesOnTheFirstQuery` passes by the luck of that read.
-- `push-pop-model.counterexample_survives_pop_until_next_query`: every model
-  expectation passes; the single failing line is
-  `EXPECT_FALSE(((stp::STP*)vc)->hasIncrementalSolver())`.
-- `simplify.native_distinct_is_lowered_before_preprocessing`: builds a native
-  `DISTINCT` node on `->bm` (the two other cases pass).
-- `fp-repeated-solve.floating_point_activation_is_query_local`: writes
-  `->bm->UserFlags.difficulty_reversion` (the other two pass through the
-  `ASTNode` pun).
-- `uninterpreted-functions-handle-safety.InvalidAndInactiveDeclarationHandlesAreNonfatal`:
-  `->bm->getUFContext()->lookup/deactivate` (the other 10 pass).
-
-**B. `vc_createValidityCheckerReuse` (2 cases).**
-`fp_multi_checker.checker_reuse_over_existing_manager` and
-`push_pop_model.file_printer_materializes_deferred_counterexample` construct an
-`stp::STPMgr` and build a checker around it (the second also writes its
-`UserFlags`). The shim returns `NULL` (see the function table), and the next call aborts on the
-null checker.
-
-**C. A documented 3.x semantic change (1 case).**
-`model_read_with_no_solve.a_valid_query_is_not_the_same_as_no_query` expects
-`vc_getCounterExample` to answer after a VALID query; that is 2.x's D2
-(inventing a value where there is no model), not reproduced by design. The other 12 cases of the binary pass.
-
-**D. A 3.x defect (1 case), FIXED.**
-`fp_model_roundtrip.partial_choice_uses_current_solve_encoding` asserts
-`fp.min(+0, -0) = +0`, gets INVALID, and reads the model value of the
-`fp.min`: the 3.x model said `-0` (defect 2). The model snapshot now records
-the solve's choice for every partial floating-point operation in the checked
-formula, and the whole binary passes.
-
-The facades: `fp-cpp-wrapper` (all cases over `stp/fp.hpp`) passes;
-the two installed-header consumers of `stp/uf.hpp` and the C API
-(`tests/api/install/uf-public-header-consumer/main.cpp`, `main.c`) were
-compiled by hand against `libstp2` and exit 0.
-
-Under the option `ON` nothing changed: 79/79 binaries and 2/2 Python suites,
-as before this work.
-
-### What runs against libstp2 now
+## 5. What runs against libstp2
 
 - `tests/api/compat2`: eleven of the 2.x gtest suites, unchanged (the handle
   lifecycle, counterexamples, push and pop, parsing, `Expr` ownership, the
@@ -483,77 +312,13 @@ as before this work.
 - `tests/api/install`: the C and C++ (`uf.hpp`) consumers of an installed
   `c_interface.h`, linking `${STP_C_INTERFACE_LIBRARY}`.
 
-## 6. 3.x defects met
-
-1. **Two managers on two threads corrupt the heap.**
-   *Files:* `lib/Api/Manager.cpp`, `boot_constant_bv()` (a process-wide
-   `std::call_once` around `CONSTANTBV::BitVector_Boot()`), together with
-   `lib/extlib-constbv/constantbv.cpp`, where every machine constant Boot sets
-   (`BITS`, `LOGBITS`, `MODMASK`, `FACTOR`, `BITMASKTAB`, ...) is
-   `THREAD_LOCAL_IE`. *Symptom:* the first manager created on any thread other
-   than the first booting thread runs with zeroed constants; its first constant
-   (`BitVector_Create(65, ...)` under `STPMgr::CreateBVConst`) computes a
-   65-word size at a 68-byte allocation and zeroes 260 bytes: SIGSEGV inside
-   the allocator, or glibc's `malloc.c: sysmalloc: assertion failed`. A
-   reproducer with nothing but `stp.h` (two threads, each `stp_tm_new`,
-   `stp_mk_fp_sort`, `stp_mk_rm`, a query, release) fails on every run;
-   valgrind reports the invalid writes in `BitVector_Create` called from
-   `stp_mk_rm`. `stp.h`'s thread contract ("independent managers are
-   concurrent") is violated. *Fix in 3.x:* boot per thread (a `thread_local`
-   flag in `boot_constant_bv`, or the boot inside `stp_tm_new` on the calling
-   thread). *Workaround in the shim:* `vc_createValidityChecker` calls the
-   library's C-linkage `BitVector_Boot()` once per thread (a `thread_local`
-   flag), which is what 2.x's `vc_createValidityChecker` always did; the
-   declaration is the one symbol libstp2 uses beyond `stp.h` and goes with the
-   defect. Failing test before the workaround:
-   `fp_multi_checker.concurrent_floating_point_queries`.
-2. **The model of a partial floating-point operation contradicts the solve.**
-   *File:* `lib/Api/Model.cpp`, the evaluator's handling of `FP_MIN`/`FP_MAX`
-   (and `FP_TO_UBV`/`FP_TO_SBV`): it totalises the operation with a constant
-   zero "choice" child before folding. *Symptom:* with `(= (fp.min +0 -0) +0)`
-   asserted and the check `sat`, `stp_model_value` and `stp_model_try_value`
-   of the `fp.min` term give `(fp #b1 #b00000 #b0000000000)`, i.e. `-0`, the
-   opposite of what the solve chose and what the assertion requires. The
-   choice the solve made is not reachable from the model, so the shim cannot
-   repair the value. Failing test:
-   `fp_model_roundtrip.partial_choice_uses_current_solve_encoding`.
-3. **No per-schema-group statistics** (fixed). The 3.x snapshot had
-   `bv.schema_lemmas` only, so `vc_getSchemaGroupCounter` answered 0 for
-   every group; it now publishes `bv.schema_group.<name>.lemmas` per group,
-   which the shim reads unchanged.
-4. **`stp_model_try_value` completes an unobserved function application.**
-   *File:* `lib/Api/Model.cpp` (evaluation of `APPLY`). The header promises
-   `NULL` "if completion would be needed"; for `f(8)` where the solve never
-   observed the tuple `(8)`, it returns the function's default value instead.
-   The shim therefore cannot use `try_value` on the application to tell an
-   observed tuple from a completed one and matches the argument values against
-   `stp_fun_value`'s entries itself (decision 5).
-5. **The 3.x SMT-LIB 2 printers' spelling** (`stp_solver_to_smt2`,
-   `stp_model_to_smt2`, `stp_term_to_string(STP_FORMAT_SMTLIB2)` for a whole
-   script): symbol names unquoted and a double space after an operator
-   (`(bvadd  #x01 ...)`), already recorded in `lib/Api/c/NOTES.md`. Legal
-   SMT-LIB, but not the text the 2.x tests compare against, which is why the
-   shim composes its own (decision 12). The term printer itself does quote
-   (`|x|`).
-6. **`stp_term_get_kind` under the simplifying factory.** Documented in
-   `stp.h` as "guaranteed under simplify = false only", so not a defect, but
-   the reason `getExprKind` is approximate (decision 15): the checker cannot
-   run with `simplify = false` (it is the mode 2.x ran in, and the results the
-   suites expect depend on it).
-
-## 7. Deliberate choices
+## 6. Deliberate choices
 
 - Option timing: a rebuild with stack replay, not a diagnostic (§2 above).
 - `vc_getHashQueryStateToBuffer`: a term hash, not a text hash.
 - `vc_printSMTLIB2` and the model's SMT-LIB 2 text: composed by the shim, not
-  taken from a scratch solver's `to_smt2` (defect 5).
+  taken from a scratch solver's `to_smt2` (decision 12).
 - The UF model rule stays the strict 2.x one (dies on assert, push and pop)
   rather than a permissive one: the UF suites test the strict rule.
 - Whole-array equality without `'x'` is refused at construction, as in 2.x,
   although the 3.x API would build it.
-
-## 8. Follow-ups
-
-- If the 3.x model carries the totalisation choice of a partial floating-point
-  operation, `fp_model_roundtrip.partial_choice_uses_current_solve_encoding`
-  passes with no change to the shim.

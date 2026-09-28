@@ -1508,8 +1508,8 @@ void vc_pop(VC vcp)
     return;
   if (vc->levels.size() <= 1)
   {
-    // 2.x deleted the base assertions here (defect D10); an unmatched pop is
-    // an error in this library.
+    // 2.x deleted the base assertions here; an unmatched pop is an error in
+    // this library.
     fatal("CInterface: vc_pop: no matching vc_push (the assertion stack is at its base level)");
     return;
   }

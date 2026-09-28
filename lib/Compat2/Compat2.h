@@ -59,10 +59,10 @@ struct VCImpl;
 //
 // The term is deliberately the FIRST member and the only one before any
 // padding: a 3.x term handle is the engine's own interned node, and some 2.x
-// clients (the tests among them) read an Expr as a `stp::ASTNode`, which is a
-// single pointer to that same node, to compare two handles' nodes or to
-// type-check them. Keeping the node where an ASTNode keeps it lets that pun
-// go on working against this library.
+// clients read an Expr as a `stp::ASTNode`, which is a single pointer to that
+// same node, to compare two handles' nodes or to type-check them. Keeping the
+// node where an ASTNode keeps it lets that pun go on working against this
+// library.
 struct Handle
 {
   stp_term term = nullptr; // the term (NULL for a Type)

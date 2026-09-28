@@ -900,7 +900,7 @@ py = "fpToUBV(rm, x, m)"
 arity = "2"
 indices = 1
 sig = "(RM, FP[e,s]) -> BV[m]"
-engine = "out-of-range and NaN inputs are unspecified by SMT-LIB; the value the engine returns is to be read from FloatBlaster/symfpu and published (unverified in this sketch)"
+engine = "NaN, infinite and out-of-range inputs are unspecified by SMT-LIB: a check leaves the result free, a function of the inputs, and its model reports the value it chose"
 
 [[kind]]
 name = "FP_TO_SBV"

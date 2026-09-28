@@ -24,8 +24,8 @@
 Model.from_smt2. Terms travel as their public structure (kind, indices, children,
 values, symbol declarations) and are rebuilt through the name table of the target
 manager; the SMT-LIB text of a model is read by a small s-expression reader and the
-values are constructed through the API (the engine's parser cannot read several of the
-value forms its own printer emits, see NOTES.md)."""
+values are constructed through the API (the parser does not read back the S!k spelling
+of a value of a declared sort)."""
 
 import re
 from fractions import Fraction

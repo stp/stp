@@ -62,7 +62,7 @@ def test_sort_and_entry_base_classes():
               ArraySort(BitVecSort(8), BitVecSort(8)), FuncSort(BitVecSort(8), BoolSort()), DeclareSort("S")):
         assert isinstance(s, SortRef) and s.kind() in SortKind and s.manager() is main_tm() and s.id >= 0
         assert re.match(r"\w+\(.*\)|\w+", repr(s))
-    assert BoolSort().id >= 1  # sort ids are 1-based; 0 is never a sort id (C API note 7 in NOTES.md)
+    assert BoolSort().id >= 1  # sort ids are 1-based; 0 is never a sort id
     assert len({s.id for s in (BoolSort(), BitVecSort(8), Float32(), RealSort())}) == 4
     f = Function("f", BitVecSort(8), BitVecSort(8))
     x = BitVec("x", 8)

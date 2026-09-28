@@ -1,8 +1,8 @@
 # The C layer: implementation notes
 
 `include/stp/stp.h` is the C face of the C++ API in `include/stp/stp.hpp`.
-This file records how its runtime is built, the decisions the header leaves
-to the implementation, and what the C++ side did not offer.
+This file records how its runtime is built and the decisions the header
+leaves to the implementation.
 
 ## Files
 
@@ -122,80 +122,3 @@ to the implementation, and what the C++ side did not offer.
     (`std::string_view` from the C++ sink is not); `len` is passed as well.
 14. **`stp_set_internal_error_policy`** takes effect process-wide, exactly as the
     C++ function does (it is the same switch).
-
-## Sketch functions not implemented
-
-None. Every function of the header has a definition, with the signature
-changes listed above (`stp_apply`) and the additions.
-
-## C++-side defects and gaps met while building this
-
-Recorded precisely as found; none blocked the layer. Reproductions are in
-`tests/api/c3/` where noted, or were done with throw-away C programs against
-`build-c/lib/libstp.so`.
-
-1. **`Solver::assertions()` is not stable across checks** (`lib/Api/Solver.cpp`,
-   `Solver::assertions`, reading `bm->AssertLevels()`). After two Boolean
-   assertions at level 0 the first `check_sat` leaves `assertions()` at 2, but
-   the **second** `check_sat` at level 0 (after a push/assert/check/pop) leaves
-   it at 1: `(and a b)`. Likewise `parse_smt2` of a script that ends in
-   `(check-sat)`, even under `ParseMode::DECLARE_AND_ASSERT` (which is supposed
-   to ignore it), yields one conjoined assertion where the same script without
-   the `(check-sat)` yields three. The engine (or `Cpp_interface`'s check-sat
-   path) rewrites the assertion stack in place and the API returns the rewritten
-   stack. The header promises "outermost first" of what was asserted. The C
-   tests therefore only count assertions before the first check.
-2. **Printing of symbols** (`Terms.cpp`, `print_term` -> the engine's SMT-LIB 2
-   printer). Every symbol printed `|quoted|` (`x` printed as `|x|`), although
-   `stp.hpp` says "a symbol prints as its declared name" and `Manager.cpp` has
-   `quote_symbol` that quotes only where needed; and a leading constant got a
-   double space: `(bvadd  #x01 (bvmul |x| |y|))`. FIXED: the unshared form
-   (`stp_term_str`, `share = false`) is now the API's own printer -- bare
-   simple names, bars only where SMT-LIB needs them, single spaces, lowercase
-   hex; the let-sharing form is still the engine's printer and quotes every
-   symbol. The C tests' bar-stripping comparison holds for both.
-3. **`FP_TO_FP_FROM_REAL` needs a rounding-mode value** as well as a Real value
-   (`Construct.cpp`, `fp_from_real_value`): with a symbolic mode it is
-   `UNSUPPORTED` ("converting a Real to a float needs a rounding-mode value, not
-   a symbolic mode"). `kinds.toml` documents the Real-value requirement only.
-   Not a defect of the code, a gap in the table's note.
-4. **Equality over a constant array was `UNSUPPORTED`** (`capabilities()
-   ["array.const-equality"]` said `false`), which also refused
-   `store(k, i, v) = k`. FIXED: constant arrays are the engine's, with
-   equality, distinct, ite and store chains over them decided and models
-   completed with the default (`c3-const-arrays.cpp`); the older C tests still
-   read array results back through `select`, which remains correct.
-5. **The SMT2 parser exit()s on an operand-count violation** -- SERIOUS, FIXED:
-   the grammar unwinds to the parse entry, and every refusal of the frontend
-   (a sort error, a wrong arity, a constant that does not fit) is a `PARSE`
-   error now; an engine failure inside any call is `INTERNAL` and poisons the
-   manager (lib/Api/README.md, "Errors"). As found: feeding
-   `Solver::parse_term` (or `parse_smt2`) a term that applies an n-ary
-   bit-vector operator to too few operands -- e.g. `(bvadd x)` -- prints
-   `syntax error: ... Must be >=2 operands` and terminates the process with
-   `exit(1)`. Every other malformed input (`x y`, an undeclared symbol,
-   `#xGG`, the unbalanced `(bvadd x x x`) instead returns a recoverable `PARSE`
-   error, as it should. The fatal path is uncatchable: the C layer's
-   `try/catch` boundary never runs, and no error is recorded. Reproduced with a
-   9-line C program against `build-c/lib/libstp.so`:
-   `stp_solver_parse_term(s, "(bvadd x")` (whose `(assert (= T T))` wrapper
-   makes the inner `(bvadd x)`). The trigger is the "Must be >=2 operands"
-   semantic action in the SMT-LIB 2 grammar (`lib/Parser/smtlib2.y`), which must
-   call the recoverable parse-error path rather than `FatalError`/`exit`. Until
-   the C++ side is fixed the C tests avoid arity-underflow inputs; a client that
-   parses untrusted SMT can still be killed by one.
-6. **`bind_symbol` of a compound term poisons every later parse** -- SERIOUS,
-   FIXED (`bind_symbol` takes a symbol only; and a `FatalError` reached
-   through a parse is an `INTERNAL` error rather than an abort). As found:
-   `TermManager::bind_symbol` (`lib/Api/Manager.cpp:1052`) accepts any term and
-   pushes its name onto `symbol_order`, but `seed_parser_symbols`
-   (`lib/Api/Solver.cpp`) walks `symbol_order` before every parse and calls
-   `Cpp_interface::addSymbol` on each node, which calls `ASTNode::GetName`.
-   `GetName` on a non-SYMBOL node is a `FatalError` -> `abort()`. So
-   `bind_symbol("s", bvadd(x, y))` succeeds, and the next `parse_smt2` /
-   `parse` / `parse_term` / `parse_file` on that manager aborts the process with
-   SIGABRT (exit 134). Reproduced with a 12-line C program. Either
-   `bind_symbol` should reject a non-symbol term (it is meant to alias a
-   symbol), or `seed_parser_symbols` should seed only nodes
-   whose kind is `SYMBOL`. The C test aliases a genuine symbol, bind_symbol's
-   documented use, and never binds a compound term before a parse.

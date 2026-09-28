@@ -1,9 +1,8 @@
 # The Python layer: implementation notes
 
 `bindings/python3/stp` is the Python API, a z3py-style package over the C API
-`<stp/stp.h>`. This file records how the layer is built, the decisions that
-depart from z3py or from a literal reading of the C API, what the C API did
-not offer, and every defect of the C or C++ layers met on the way.
+`<stp/stp.h>`. This file records how the layer is built and the decisions
+that depart from z3py or from a literal reading of the C API.
 
 ## Files
 
@@ -11,7 +10,7 @@ not offer, and every defect of the C or C++ layers met on the way.
 |---|---|
 | `stp/_core.pxd` | the C API as Cython sees it; includes the generated `_gen_enums.pxi` |
 | `stp/_core.pyx` | the Cython extension `stp._core`: handle classes (`Manager`, `Sort`, `Term`, `OptionsHandle`, `SolverHandle`, `ModelHandle`, `ArrayValueHandle`, `FunValueHandle`, `StatisticsHandle`), the exception hierarchy and the error translator, the deferred-release queue, the GIL-free checks and parsers, the SIGINT bridge, the registry queries |
-| `stp/_terms.py` | `TermManager`, the sort classes, the `ExprRef` family with the operator ledger and literal coercion, every builder of the stub |
+| `stp/_terms.py` | `TermManager`, the sort classes, the `ExprRef` family with the operator ledger and literal coercion, every sort and term builder |
 | `stp/_solver.py` | `Options`/`OptionInfo`, `CheckSatResult`/`EntailmentResult`, `Statistics`, `Solver`, `Model`, `SolverFor`, `solve`, `prove`, `parse_smt2_*`, the current-solver scope and the 2.x `@stp` decorator |
 | `stp/_pretty.py` | `str(term)`: the infix rendering |
 | `stp/_smt2.py` | pickling and `translate()` of sorts, terms and models; the s-expression reader behind `Model.from_smt2` |
@@ -75,10 +74,9 @@ not offer, and every defect of the C or C++ layers met on the way.
 
 ## Decisions of the implementation
 
-1. **The class layer is pure Python.** The plan
-   puts the `ExprRef` family, `Solver`, `Model` and the operators in the
-   Cython extension; here the extension holds the handles and the shell holds
-   the classes. Behaviour is the stub's; the per-term path is Python.
+1. **The class layer is pure Python.** The extension holds the handles and
+   the shell holds the classes (the `ExprRef` family, `Solver`, `Model`, the
+   operators), so the per-term path is Python.
 2. **`Model.__getitem__` on an array value returns an `ArrayNumRef` view**
    built from `stp_model_array_value`; `v[i]` for a symbolic `i` builds
    `Select(v, i)` over the value's store chain on a constant array, and stays
@@ -94,10 +92,10 @@ not offer, and every defect of the C or C++ layers met on the way.
    `(kind, indices, result sort, children)` with values as their printed text
    and symbols as `(name, sort text)`, rebuilt through the target manager's
    name table (`tm.declare` gives the same term for the same name and sort).
-   The parser cannot read several value forms its own printer emits (C++
-   defect 4), so text was not an option. Consequences: an anonymous
-   (`mk_fresh`) symbol and a value of an uninterpreted sort raise
-   `Unsupported` when pickled or translated (they have no name to rebuild by).
+   Text would not do: a value of a declared sort prints as `S!k`, which the
+   parser does not read back. Consequences: an anonymous (`mk_fresh`) symbol
+   and a value of an uninterpreted sort raise `Unsupported` when pickled or
+   translated (they have no name to rebuild by).
 6. **`Model.from_smt2` / `Model.__reduce__` / `Model.translate`** rebuild a
    model by reading the printed `define-fun`s with a small s-expression reader,
    declaring the symbols by name and asking a solver for a model of the
@@ -107,15 +105,15 @@ not offer, and every defect of the C or C++ layers met on the way.
    not preserved: array defaults and function `else` values other than the
    sort default (they come from the solver's fill rule, which for STP is the
    sort default unless `model-array-fill = ones`), and the `observed` flags.
-   The model is built on `tm` when `tm` has no live solver, and on a private
-   manager otherwise (the alpha's one-solver rule, and the live solver carries
-   the user's assertions); lookups translate their key by name, so `m2[x]`
-   works whichever manager `x` belongs to.
-7. **`bool(term)`** first folds with `stp_tm_simplify`; when the rewriter leaves
-   a ground shape alone (C++ defect 3), a Python evaluator decides `distinct`
-   and `=` over values, the Bool connectives and `ite` over values, and the
-   Real relations over values. `bool()` of a ground FP conversion such as
-   `fpToSBV` of a value still raises: evaluate it in a model.
+   The model is built on `tm` (a private manager when `tm` is `None`) by a
+   scratch solver of its own, and the solvers already live over `tm` are
+   untouched; lookups translate their key by name, so `m2[x]` works whichever
+   manager `x` belongs to.
+7. **`bool(term)`** is defined for a ground Bool term only: it folds with
+   `stp_tm_simplify`, so the answer never depends on the manager's `simplify`
+   setting, and a Python evaluator decides `distinct` and `=`, the Bool
+   connectives, `ite` and the Real relations over values should the fold leave
+   one of them alone. Any other term raises `TypeError`.
 8. **`str(term)`** is a best-effort infix rendering (values as Python
    literals, symbols by name, `If`, `Extract`, `f(x)`, `a[i]`, ...); `repr`
    is the SMT-LIB 2 text of `stp_term_str`. `to_string("smtlib2")` is
@@ -127,21 +125,21 @@ not offer, and every defect of the C or C++ layers met on the way.
 10. **`Solver(tm, options, **kw)`** also accepts a `dict` for `options`;
     `Solver.dimacs()` (the DIMACS text as a `str`) and `Solver.last_result()`
     are additions; `Solver.value(t)` is `model()[t]` (KeyError for a symbol
-    outside the core, as the stub says).
-11. **`solve()` and `prove()`** on a manager that already carries its one live
-    solver run in a scratch manager the formulas are translated into;
-    `parse_smt2_string` on such a manager parses under `push`/`pop` of the
-    live solver (its declarations stay in the name table, as they should).
+    outside the core).
+11. **`solve()`, `prove()` and `parse_smt2_string`** each run in a scratch
+    solver of their own on the formulas' manager and close it; the solvers
+    already live there are untouched, and a script's declarations stay in the
+    name table.
 12. **`TermManager(options=...)`** takes the manager-scoped entries from an
     `Options` object (or an `OptionsHandle`); `simplify=`/`default_rounding_mode=`
     override it. `main_tm()` is created lazily under a lock; `set_main_tm`
     replaces it (the test suite does this per test).
-13. **`Statistics`** is registered with `collections.abc.Mapping`; the snapshot
-    holds only the statistics the last check populated (49 of the 63 names),
-    `tier(name)` answers for every table name.
+13. **`Statistics`** is registered with `collections.abc.Mapping` over the
+    snapshot the solver took; `tier(name)` answers for every name of the
+    table.
 14. **`UnknownReason`** members compare equal to their string values and hash
     like them; `CheckSatResult.__eq__` also compares an unknown check result
-    equal to an unknown `EntailmentResult` (the stub's `unknown`).
+    equal to an unknown `EntailmentResult`, so the one `unknown` serves both.
 15. **The `@stp` decorator** keeps the 2.x rules (arguments not supplied become
     32-bit symbols named `<function>_<call>_<arg>`; a default value is the
     width; `assert` adds to the current solver; `return` gives the term) and
@@ -155,111 +153,3 @@ not offer, and every defect of the C or C++ layers met on the way.
     says how): the install ships the generated `_gen_enums.pxi` and
     `_gen_kinds.py` in `include/stp/api/python` for that build. Not done:
     wheels, doctests, a generated `.pyi` stub.
-
-## C API gaps met while building this
-
-1. No way to construct a `stp_model` from values, hence deviation 6.
-2. `stp_statistics_tier` reports an unknown name through the thread-local
-   record, which nothing clears on success; the Python wrapper plants a
-   sentinel error (`stp_option_info_type` of an impossible name) before the
-   call to tell a fresh failure from a stale record.
-3. `stp_solver_num_unsat_assumptions` records `STATE` and returns 0 after a
-   sat/unknown answer (C NOTES deviation 10): the wrapper checks the record
-   after the call.
-4. No term-amount rotate kind (deviation 9).
-5. Every `stp_solver_*` option function lives on the solver handle; the live
-   `Options` view is an adapter over them (no options handle exists for the
-   live view, by design).
-6. `stp_solver_parse_file` reports a missing file as `IO`; a malformed CVC
-   file kills the process instead (C++ defect 2).
-7. `stp_sort_id` returned 0 for the Bool sort (its pool index), the value the
-   header reserves for a NULL handle. FIXED: sort ids are 1-based now, so 0
-   is never a sort id; the Python layer keys its sort cache by the id and
-   exposes it as `SortRef.id`.
-
-## C++-side defects and gaps met while building this
-
-Recorded precisely as found; reproductions are in `tests/api/python3/` where
-noted, or were done with throw-away programs against `build-py/lib/libstp.so`.
-
-1. **Two managers on two threads corrupt the heap** -- SERIOUS, FIXED. After a
-   `stp_tm_new` on one thread, a second `stp_tm_new` on another thread works,
-   `stp_declare` on it works, but its first `stp_mk_bv_uint64` dies inside
-   glibc (`malloc.c: sysmalloc: assertion failed: (old_top == initial_top (av)
-   && old_size == 0) || ...`). It does not matter whether the first manager
-   holds terms, or has already been released (`stp_tm_release_all` +
-   `stp_tm_release` before the second thread starts); only a process in which
-   *no* manager was created on another thread is fine. Same thread, any
-   number of managers: fine. Reproduced with a 20-line C program (pthreads,
-   `stp_tm_new` on `main`, then a worker doing `stp_tm_new` +
-   `stp_mk_bv_uint64(tm2, 8, 3)`), and from Python. The API
-   promises "independent managers are fully concurrent"; this is a
-   thread-local or global in the constant path (`TermManager::mk_bv` ->
-   `ASTBVConst` / the CONSTANTBV library) rather than a data race, since the
-   two threads never run concurrently in the reproduction.
-   `test_threads.py::test_independent_managers_on_two_threads` runs the
-   scenario in a subprocess; it was `xfail(strict=True)` until the engine
-   was fixed (CONSTANTBV keeps its constants in thread-locals, and the
-   manager constructor now boots the library on every thread that creates a
-   manager) and passes now.
-2. **The CVC parser aborts on a syntax error** -- SERIOUS, FIXED: the CVC and
-   SMT-LIB 1 grammars report and return, the SMT-LIB 2 grammar's fatal paths
-   named below (`set-logic ALL`, `declare-sort` without a UF logic, the arity
-   underflow, and every other refusal of the frontend) are `ParseError` now,
-   and an engine failure inside any call is `InternalError` with the manager
-   poisoned. As found: `lib/Parser/cvc.y`
-   `yyerror` (line 58) calls `FatalError`, so `stp_solver_parse(text,
-   STP_FORMAT_CVC)` of malformed input (an input without a `QUERY`, a typo)
-   terminates the process (`Fatal Error: CVC syntax error: line 1: syntax
-   error`); the C layer's boundary never runs and `Solver.from_string(...,
-   format="cvc")` cannot be made safe from Python. The SMT-LIB 2 grammar has
-   the same fatal path for `(set-logic ALL)` ("unsupported logic ... token:
-   ALL" -> abort) and for `(declare-sort T 0)` without a UF logic ("unknown
-   sort (not built in, and not a declared sort)" -> abort), in addition to the
-   arity-underflow case of C NOTES defect 5. The Python tests use well-formed
-   inputs only.
-3. **`TermManager::simplify` leaves ground terms unfolded** (`lib/Api`,
-   `stp_tm_simplify`): `(distinct true false)`, `(not (distinct true false))`,
-   `(< (/ 1 3) (/ 1 2))` and the other Real relations over values,
-   `((_ fp.to_sbv 8) RTZ <value>)`, `fp.to_ubv`, `fp.min`/`fp.max` over
-   values stay as they are, while `(= true false)`, `xor`, Real `=`/`+`/`*`,
-   `fp.add`/`fp.sqrt`/`fp.roundToIntegral`/`fp.eq`/`fp.lt`, `bvult`, `ite`
-   and the bit-vector arithmetic fold. Deviation 7 covers the Bool and Real
-   cases in Python; the FP conversions need a model.
-4. **The SMT-LIB 2 parser did not read the value forms the printers emit.**
-   FIXED except for declared-sort values: an API parse enables every
-   theory's keywords without a `set-logic`, so `(fp #b0 #b... #b...)`,
-   `(_ +zero 8 24)`, `(_ NaN 8 24)`, `RNE`, `fp.add`, `(/ 1 3)`, `(- 3)`,
-   `1.5` and `((as const (Array ...)) v)` all parse. A declared-sort value
-   such as `S!1` still does not, so a model over declared sorts cannot
-   round-trip through the parser (hence deviations 5 and 6).
-5. **Parse errors are echoed to stdout.** Every recoverable `PARSE` error also
-   prints `(error "syntax error: ...")` on the process's stdout, and
-   `(get-model)` in `DECLARE_AND_ASSERT` mode prints `unsupported` there
-   (`lib/Parser/smt2.y`, `Cpp_interface`), where nothing should write to
-   stdout unless a sink says so. FIXED for declare-and-assert parses (the
-   default): the frontend's stdout is captured there and the diagnostic is
-   the error's text; a script run in execute mode still prints its
-   responses, errors included, as the command line does.
-6. **`Model::try_value` completes array symbols and unseen function
-   applications** (`lib/Api/Model.cpp`): for a scalar symbol outside the core
-   it returns nothing (correct), for an array symbol outside the core it
-   returns the symbol itself and for `g(x)` with `g` never seen it returns
-   `#x00`; `in_core` answers false for both. Deviation 3 restores the mapping
-   rule in Python.
-7. **A `define-fun` name is not in the name table**: after
-   `(define-fun dfx () (_ BitVec 8) #x07)` both `stp_tm_symbol(tm, "dfx")` and
-   `stp_solver_symbol(s, "dfx")` return NULL, although the API
-   says symbols a script declares are reachable through `Solver::symbol`.
-   `(declare-fun ...)` names are reachable. Minor.
-8. **Arrays cannot hold Bools**: `stp_mk_array_sort(tm, bv, bool)` is
-   `UNSUPPORTED` ("bit-vectors, floating-point numbers, rounding modes and
-   declared sorts only", `capabilities: array.element-sorts`). Documented by
-   `capabilities()`, recorded here because the stub's `Array(name, index,
-   element)` reads as unrestricted.
-9. C NOTES defects 1 (assertion count after a check), 2 (`|x|` and the double
-   space before constants; fixed since, simple names now print bare), 4
-   (equality over a constant array; fixed since, `test_const_arrays.py`) were
-   met again and shaped the tests: the rosetta R4 `b == c` is now stated directly,
-   assertion counts are checked before checks, printed symbols are compared
-   by name.
