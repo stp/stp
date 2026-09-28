@@ -132,6 +132,7 @@ THE SOFTWARE.
 #define EXTCHECKER_H
 
 #include "stp/AST/AST.h"
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -445,6 +446,14 @@ public:
   // Pure: no SAT access, no term allocation into the host query.
   static ExtCheckResult check(const ExtGraph& graph, ExtModelView& model,
                               bool recordEvents = false);
+
+  // How many values an array index sort of carrier width `width` has, which
+  // is what a constant array's cells are counted in: every pattern of a
+  // bit-vector, or of a declared sort's carrier; the five rounding modes; a
+  // float format's patterns with its NaNs counted once (an index is
+  // canonical, so no other NaN pattern is ever one). Saturates at
+  // UINT64_MAX.
+  static uint64_t indexValueCount(const SourceSort& index, unsigned width);
 };
 
 } // namespace stp

@@ -2447,7 +2447,8 @@ bool ExtensionalityContext::contentsAgree(
     const std::vector<std::pair<ASTNode, ASTNode>>& left,
     const std::vector<std::pair<ASTNode, ASTNode>>& right,
     const ASTNode& absentLeft, const ASTNode& absentRight,
-    unsigned indexWidth, const SourceSort& elementSort)
+    const SourceSort& indexSort, unsigned indexWidth,
+    const SourceSort& elementSort)
 {
   std::map<ASTNode, ASTNode> leftCells, rightCells;
   for (size_t i = 0; i < left.size(); i++)
@@ -2478,9 +2479,9 @@ bool ExtensionalityContext::contentsAgree(
       return false;
   }
   // A cell neither side names holds each side's completion; such a cell
-  // exists unless the observations exhaust the index sort.
+  // exists unless the observations exhaust the index sort's values.
   const bool unnamedCellExists =
-      indexWidth >= 64 || (uint64_t(1) << indexWidth) > named.size();
+      ExtChecker::indexValueCount(indexSort, indexWidth) > named.size();
   if (unnamedCellExists &&
       constantsDenoteDifferentSourceValues(absentLeft, absentRight,
                                            elementSort))
@@ -2540,15 +2541,16 @@ const char* ExtensionalityContext::recheckCertifiedEqualities(
     // is a property of the source sort, not of its carrier. That is
     // also why the defaults above are asked of the construction operands.
     const SourceSort constructionSort = r.constructionLeft.GetSourceSort();
+    const bool arraySort = constructionSort.kind() == SourceSort::Kind::Array;
+    const SourceSort indexSort =
+        arraySort ? constructionSort.index() : SourceSort::unknown();
     const SourceSort elementSort =
-        constructionSort.kind() == SourceSort::Kind::Array
-            ? constructionSort.element()
-            : SourceSort::unknown();
+        arraySort ? constructionSort.element() : SourceSort::unknown();
     const bool agree =
         contentsAgree(obsL == lastObserved.end() ? unobserved : obsL->second,
                       obsR == lastObserved.end() ? unobserved : obsR->second,
-                      absentL, absentR, r.constructionLeft.GetIndexWidth(),
-                      elementSort);
+                      absentL, absentR, indexSort,
+                      r.constructionLeft.GetIndexWidth(), elementSort);
 
     if (agree != (assigned.GetKind() == TRUE))
       return agree ? "array-equality: the model makes an array equality's "

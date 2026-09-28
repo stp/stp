@@ -525,12 +525,14 @@ public:
   // side's unobserved cells hold a constant array's default, the other's
   // do not, or two different defaults. Cells neither side observes then
   // differ whenever such a cell exists, which an index sort with more
-  // values than the two observation lists name always has.
+  // values than the two observation lists name always has; the values are
+  // counted as ExtChecker::indexValueCount counts them.
   static bool contentsAgree(
       const std::vector<std::pair<ASTNode, ASTNode>>& left,
       const std::vector<std::pair<ASTNode, ASTNode>>& right,
       const ASTNode& absentLeft, const ASTNode& absentRight,
-      unsigned indexWidth, const SourceSort& elementSort);
+      const SourceSort& indexSort, unsigned indexWidth,
+      const SourceSort& elementSort);
 
   // Validate one bit-vector lemma leaf: it must be a fixed-width
   // constant, or a SYMBOL whose complete SAT-variable vector was

@@ -28,6 +28,7 @@ THE SOFTWARE.
 // overview of the rules and data model.
 
 #include "stp/Extensionality/ExtChecker.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/STPManager/STPManager.h"
 #include <algorithm>
 #include <deque>
@@ -515,10 +516,45 @@ void buildLemmas(ExtConflict& c, const ExtGraph& graph,
 // An index sort with no more values than the graph has writes: a path
 // between two constant arrays could then address every cell, so rule K'
 // (which needs an index no write on the path touches) does not apply, and
-// the cells of such an array are made explicit instead.
-bool tinyIndexDomain(unsigned indexWidth, size_t writeCount)
+// the cells of such an array are made explicit instead. Values, not the
+// carrier's patterns: a rounding mode's carrier has thirty-two patterns
+// for five modes, and writes at all five leave no cell for K' to find.
+bool tinyIndexDomain(const SourceSort& index, unsigned width,
+                     size_t writeCount)
 {
-  return indexWidth < 64 && (uint64_t(1) << indexWidth) <= writeCount;
+  return ExtChecker::indexValueCount(index, width) <= writeCount;
+}
+
+// Whether pattern k of float format (eb, sb) is a NaN other than the
+// canonical quiet one, a pattern no canonical index takes.
+bool nonCanonicalNaN(uint64_t k, unsigned eb, unsigned sb)
+{
+  const unsigned stored = sb - 1; // the hidden bit is not stored
+  const uint64_t allOnes = (uint64_t(1) << eb) - 1;
+  const uint64_t significand = k & ((uint64_t(1) << stored) - 1);
+  const uint64_t exponent = (k >> stored) & allOnes;
+  const uint64_t canonical = (allOnes << stored) | (uint64_t(1) << (stored - 1));
+  return exponent == allOnes && significand != 0 && k != canonical;
+}
+
+// The carriers of every value of a tiny index sort (see
+// ExtChecker::indexValueCount), in pattern order.
+std::vector<ASTNode> indexValueCarriers(STPMgr* bm, const SourceSort& index,
+                                        unsigned width)
+{
+  std::vector<ASTNode> out;
+  const uint64_t patterns = uint64_t(1) << width;
+  for (uint64_t k = 0; k < patterns; k++)
+  {
+    if (index.kind() == SourceSort::Kind::RoundingMode &&
+        !symbolic_fp::isRoundingModeEncoding(static_cast<unsigned>(k)))
+      continue;
+    if (index.kind() == SourceSort::Kind::FloatingPoint &&
+        nonCanonicalNaN(k, index.exponentWidth(), index.significandWidth()))
+      continue;
+    out.push_back(bm->CreateBVConst(width, k));
+  }
+  return out;
 }
 
 // The arrays a candidate connects, for rule K' and the completion: a
@@ -646,6 +682,20 @@ struct ComponentGraph
 
 } // namespace
 
+uint64_t ExtChecker::indexValueCount(const SourceSort& index, unsigned width)
+{
+  if (index.kind() == SourceSort::Kind::RoundingMode)
+    return 5;
+  if (width >= 64)
+    return UINT64_MAX;
+  const uint64_t patterns = uint64_t(1) << width;
+  if (index.kind() != SourceSort::Kind::FloatingPoint)
+    return patterns;
+  // 2^sb - 2 patterns are NaNs (either sign, any nonzero stored
+  // significand), and they are one value.
+  return patterns - (uint64_t(1) << index.significandWidth()) + 3;
+}
+
 ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
                                  bool recordEvents)
 {
@@ -673,17 +723,17 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
        it != graph.constArrays.end(); ++it)
   {
     const unsigned w = it->second.array.GetIndexWidth();
-    if (!tinyIndexDomain(w, graph.writes.size()))
+    const SourceSort index = it->second.array.GetSourceSort().index();
+    if (!tinyIndexDomain(index, w, graph.writes.size()))
       continue;
     STPMgr* bm = it->second.array.GetNodeManager();
-    const uint64_t count = uint64_t(1) << w;
-    for (uint64_t k = 0; k < count; k++)
+    for (const ASTNode& value : indexValueCarriers(bm, index, w))
     {
       ExtAccess a;
       a.id = graph.accesses.size() + st.synthetic.size();
       a.isWrite = false;
       a.site = it->second.array;
-      a.indexTerm = bm->CreateBVConst(w, k);
+      a.indexTerm = value;
       a.indexName = a.indexTerm;
       a.valueTerm = it->second.defaultTerm;
       a.valueName = it->second.defaultName;
@@ -915,7 +965,9 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
       components.component(it->first, reached, via);
       const ASTNode origin = model.bvValue(it->second.defaultName);
       const unsigned w = it->second.array.GetIndexWidth();
-      const bool explicitCells = tinyIndexDomain(w, graph.writes.size());
+      const SourceSort index = it->second.array.GetSourceSort().index();
+      const bool explicitCells =
+          tinyIndexDomain(index, w, graph.writes.size());
       for (size_t i = 0; i < reached.size(); i++)
       {
         const std::map<ASTNode, ExtConstArray>::const_iterator other =
@@ -936,7 +988,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
         size_t writesCrossed = 0;
         ComponentGraph::pathGuards(via, reached[i], c.leftGuards,
                                    writesCrossed);
-        if (tinyIndexDomain(w, writesCrossed))
+        if (tinyIndexDomain(index, w, writesCrossed))
           FatalError("array-equality: rule K' met a path with more writes "
                      "than the index sort has values",
                      reached[i]);

@@ -3228,6 +3228,57 @@ TEST(ExtCertifiedEqualities, ContentsAgreeQuotientsNaNAtAFloatElementSort)
   EXPECT_TRUE(ExtensionalityContext::contentsAgree(zeroCell, empty, zero, f32));
 }
 
+// An index sort's cells are its values: a rounding mode's carrier has
+// thirty-two patterns for five modes, and a float format's NaN patterns are
+// one value.
+TEST(ExtCertifiedEqualities, IndexValueCountCountsValuesNotPatterns)
+{
+  EXPECT_EQ(ExtChecker::indexValueCount(SourceSort::bitVector(8), 8), 256u);
+  EXPECT_EQ(ExtChecker::indexValueCount(SourceSort::roundingMode(), 5), 5u);
+  EXPECT_EQ(ExtChecker::indexValueCount(SourceSort::floatingPoint(2, 2), 4),
+            15u);
+  EXPECT_EQ(ExtChecker::indexValueCount(SourceSort::floatingPoint(8, 24), 32),
+            (uint64_t(1) << 32) - (uint64_t(1) << 24) + 3);
+  EXPECT_EQ(ExtChecker::indexValueCount(SourceSort::bitVector(64), 64),
+            UINT64_MAX);
+}
+
+// Two arrays completing to different values agree exactly when the
+// observations name every value of the index sort, so that no cell is left
+// for the completions to disagree at.
+TEST(ExtCertifiedEqualities, TwoCompletionsAgreeWhenEveryIndexValueIsNamed)
+{
+  STPMgr mgr;
+  const SourceSort bv1 = SourceSort::bitVector(1);
+  const ASTNode zero = mgr.CreateZeroConst(1);
+  const ASTNode one = mgr.CreateOneConst(1);
+  typedef std::vector<std::pair<ASTNode, ASTNode>> Obs;
+  const Obs empty;
+
+  // zero written at every mode, completing to one, against all zeros
+  const SourceSort rm = SourceSort::roundingMode();
+  Obs modes;
+  for (unsigned mode : {1u, 2u, 4u, 8u, 16u})
+    modes.push_back(std::make_pair(mgr.CreateBVConst(5, mode), zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(modes, empty, one, zero, rm,
+                                                   5, bv1));
+  modes.pop_back();
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(modes, empty, one, zero,
+                                                    rm, 5, bv1));
+
+  // the same over Float(2,2)'s fifteen values: every pattern but the
+  // second NaN, 0xF
+  const SourceSort f22 = SourceSort::floatingPoint(2, 2);
+  Obs floats;
+  for (unsigned bits = 0; bits < 15; bits++)
+    floats.push_back(std::make_pair(mgr.CreateBVConst(4, bits), zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(floats, empty, one, zero,
+                                                   f22, 4, bv1));
+  floats.erase(floats.begin() + 8); // -0
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(floats, empty, one, zero,
+                                                    f22, 4, bv1));
+}
+
 // The rule on its own, at the level the model is read back.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
