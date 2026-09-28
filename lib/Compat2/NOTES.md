@@ -223,7 +223,8 @@ unsupported, and which 2.x suites run against it.
     text: the script is parsed with its `QUERY` statement replaced by
     `QUERY FALSE;` (whose negation asserts nothing), then `QUERY <f>;` alone
     is parsed inside a push/pop and the assertion it added is negated back
-    into the query term. With `'m'` the
+    into the query term; a query that adds none is `FALSE`, or folds to it,
+    since only a negation folding to `TRUE` is dropped. With `'m'` the
     text is SMT-LIB 1: everything is asserted and the query is `FALSE`, as the
     2.x parser had done. `vc_parseExpr` returns the conjunction of the asserts
     with the negated query, as 2.x did; a file that cannot be opened is the 2.x

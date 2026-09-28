@@ -2829,7 +2829,11 @@ stp_term parse_cvc_query(VCImpl* vc, const std::string& query_text, const char* 
       stp_term_release(negated);
   }
   else
-    query = stp_mk_true(vc->tm);
+  {
+    // The negation asserts nothing only when it folds to TRUE: the query is
+    // FALSE, or folds to it.
+    query = stp_mk_false(vc->tm);
+  }
   if (stp_solver_pop(s, 1) != STP_OK)
     take_error(vc);
   return query;

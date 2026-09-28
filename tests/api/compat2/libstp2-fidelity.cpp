@@ -63,6 +63,24 @@ TEST(libstp2_fidelity, a_parsed_query_that_is_not_valid_stays_so)
   vc_Destroy(vc);
 }
 
+// The parser asserts a query's negation, and drops one that folds to TRUE:
+// a query that asserts nothing is FALSE, or folds to it, and parses as FALSE.
+TEST(libstp2_fidelity, a_false_query_parses_as_false)
+{
+  for (const char* text : {"x : BITVECTOR(8); ASSERT(x = 0hex01); QUERY FALSE;",
+                           "x : BITVECTOR(8); ASSERT(x = 0hex01); QUERY x /= x;"})
+  {
+    VC vc = vc_createValidityChecker();
+    Expr query = nullptr, asserts = nullptr;
+    ASSERT_EQ(1, vc_parseMemExpr(vc, text, &query, &asserts)) << text;
+    EXPECT_EQ(FALSE, getExprKind(query)) << text << ": " << text_of(query);
+    EXPECT_EQ(0, vc_query(vc, query)) << text;
+    vc_DeleteExpr(query);
+    vc_DeleteExpr(asserts);
+    vc_Destroy(vc);
+  }
+}
+
 // vc_paramBoolExpr names its variable after the application as 2.x printed
 // it, so a one-bit and a four-bit parameter of one value name two variables.
 TEST(libstp2_fidelity, parameters_of_two_widths_name_two_variables)
