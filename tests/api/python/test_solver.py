@@ -300,6 +300,19 @@ def test_declared_sorts_carry_across_parses():
     s2.close()
 
 
+def test_printed_logic_admits_unused_declarations():
+    # a Real no assertion mentions printed under QF_BV, which the execute
+    # mode refuses
+    s = Solver(TermManager())
+    s.from_string("(declare-fun ux () Real)")
+    text = s.to_smt2()
+    assert text.startswith("(set-logic QF_LRA)")
+    t = Solver(TermManager())
+    t.from_string(text, mode="execute")
+    s.close()
+    t.close()
+
+
 def test_parse_term_runs_no_command():
     # the text goes inside a command of its own; a ')' in it once closed that
     # command and ran what followed against the solver

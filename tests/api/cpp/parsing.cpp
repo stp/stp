@@ -909,6 +909,37 @@ TEST(Parsing, a_printed_script_names_a_logic_that_admits_it)
             "(set-logic QF_LRA)");
 }
 
+// The logic admits the declarations as well as the assertions: a symbol no
+// assertion mentions still names its sort. An unused Real printed as
+// "(set-logic QF_BV) (declare-fun x () Real)", which STP's own EXECUTE mode
+// refuses, and so did an unused float, function or declared sort.
+TEST(Parsing, a_printed_logic_admits_the_unused_declarations)
+{
+  const auto logic_of = [](const std::function<void(TermManager&)>& declare) {
+    TermManager tm;
+    Solver s(tm);
+    declare(tm);
+    const std::string text = s.to_smt2(false);
+    TermManager again;
+    Solver back(again);
+    back.parse_smt2(text, ParseMode::EXECUTE); // which enforces the logic
+    return text.substr(0, text.find('\n'));
+  };
+  EXPECT_EQ(logic_of([](TermManager& tm) { tm.declare("x", tm.mk_real_sort()); }),
+            "(set-logic QF_LRA)");
+  EXPECT_EQ(logic_of([](TermManager& tm) { tm.declare("f", tm.mk_fp32_sort()); }),
+            "(set-logic QF_BVFP)");
+  EXPECT_EQ(logic_of([](TermManager& tm) {
+              tm.declare("g", tm.mk_fun_sort({tm.mk_bv_sort(8)}, tm.mk_bv_sort(8)));
+            }),
+            "(set-logic QF_UFBV)");
+  EXPECT_EQ(logic_of([](TermManager& tm) { tm.declare_sort("U"); }), "(set-logic QF_UFBV)");
+  EXPECT_EQ(logic_of([](TermManager& tm) {
+              tm.declare("a", tm.mk_array_sort(tm.mk_bv_sort(8), tm.mk_fp32_sort()));
+            }),
+            "(set-logic QF_ABVFP)");
+}
+
 // A parse keeps the frontends' answers for its diagnostics by routing the
 // calling thread's output, not by taking std::cout from the process: what
 // another thread prints while a parse is under way reaches stdout.

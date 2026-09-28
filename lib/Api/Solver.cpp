@@ -2165,6 +2165,77 @@ std::string Solver::to_smt2(bool with_check_sat) const
   collect_symbols(roots, symbols, has_fp, has_array, has_uf, has_real);
   for (const std::string& name : m->symbol_order)
     symbols.push_back(m->symbols.at(name).node);
+  // Declarations, in first-seen order without duplicates. They are written
+  // before the logic is chosen, because the logic must admit them as well as
+  // the assertions: a declared symbol no assertion mentions still names its
+  // sort, and a script that declares a Real under QF_BV is refused.
+  std::ostringstream decls;
+  const std::function<void(std::uint32_t)> widen = [&](std::uint32_t sort) {
+    const detail::SortRec& r = m->rec(sort);
+    switch (r.kind)
+    {
+      case SortKind::FP:
+      case SortKind::RM:
+        has_fp = true;
+        break;
+      case SortKind::REAL:
+        has_real = true;
+        break;
+      case SortKind::ARRAY:
+        has_array = true;
+        widen(r.index);
+        widen(r.element);
+        break;
+      case SortKind::UNINTERPRETED:
+        has_uf = true;
+        break;
+      case SortKind::FUN:
+        has_uf = true;
+        for (std::uint32_t d : r.domain)
+          widen(d);
+        widen(r.codomain);
+        break;
+      default:
+        break;
+    }
+  };
+  ASTNodeSet declared;
+  for (std::uint32_t index : m->declared_sort_order)
+  {
+    decls << "(declare-sort " << detail::quote_symbol(m->rec(index).name) << " 0)\n";
+    has_uf = true;
+  }
+  for (const ASTNode& sym : symbols)
+  {
+    if (!declared.insert(sym).second)
+      continue;
+    // the engine's own symbols are not declared, except that a function's
+    // identity node is one of them and the function is the user's
+    if (bm->FoundIntroducedSymbolSet(sym) && m->decl_of(sym) == nullptr)
+      continue;
+    if (m->is_const_array(sym))
+      continue;
+    std::string name;
+    auto it = m->names_by_node.find(sym);
+    if (it != m->names_by_node.end())
+      name = it->second;
+    else if (const UFDecl* d = m->decl_of(sym))
+      name = d->name();
+    else
+      name = sym.GetName();
+    const std::uint32_t sort = m->sort_of_node(sym, "Solver::to_smt2");
+    const detail::SortRec& r = m->rec(sort);
+    widen(sort);
+    if (r.kind == SortKind::FUN)
+    {
+      decls << "(declare-fun " << detail::quote_symbol(name) << " (";
+      for (std::size_t i = 0; i < r.domain.size(); ++i)
+        decls << (i ? " " : "") << m->sort_text(r.domain[i]);
+      decls << ") " << m->sort_text(r.codomain) << ")\n";
+    }
+    else
+      decls << "(declare-fun " << detail::quote_symbol(name) << " () " << m->sort_text(sort) << ")\n";
+  }
   // the logic
   std::string logic = s->logic;
   if (logic.empty())
@@ -2204,40 +2275,7 @@ std::string Solver::to_smt2(bool with_check_sat) const
       else if (name != "logic")
         os << "(set-option :stp." << name << " " << text << ")\n";
     }
-  // declarations, in first-seen order without duplicates
-  ASTNodeSet declared;
-  for (std::uint32_t index : m->declared_sort_order)
-    os << "(declare-sort " << detail::quote_symbol(m->rec(index).name) << " 0)\n";
-  for (const ASTNode& sym : symbols)
-  {
-    if (!declared.insert(sym).second)
-      continue;
-    // the engine's own symbols are not declared, except that a function's
-    // identity node is one of them and the function is the user's
-    if (bm->FoundIntroducedSymbolSet(sym) && m->decl_of(sym) == nullptr)
-      continue;
-    if (m->is_const_array(sym))
-      continue;
-    std::string name;
-    auto it = m->names_by_node.find(sym);
-    if (it != m->names_by_node.end())
-      name = it->second;
-    else if (const UFDecl* d = m->decl_of(sym))
-      name = d->name();
-    else
-      name = sym.GetName();
-    const std::uint32_t sort = m->sort_of_node(sym, "Solver::to_smt2");
-    const detail::SortRec& r = m->rec(sort);
-    if (r.kind == SortKind::FUN)
-    {
-      os << "(declare-fun " << detail::quote_symbol(name) << " (";
-      for (std::size_t i = 0; i < r.domain.size(); ++i)
-        os << (i ? " " : "") << m->sort_text(r.domain[i]);
-      os << ") " << m->sort_text(r.codomain) << ")\n";
-    }
-    else
-      os << "(declare-fun " << detail::quote_symbol(name) << " () " << m->sort_text(sort) << ")\n";
-  }
+  os << decls.str();
   // the assertion stack
   bool first_level = true;
   for (const ASTVec* level : bm->AssertLevels())
