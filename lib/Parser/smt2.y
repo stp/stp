@@ -370,6 +370,27 @@ namespace stp
       checkBitVectorTerm(term);
   }
 
+  // SMT-LIB's bit-vector operators take operands of one width. The node
+  // factory builds over two regardless -- some operators were then answered
+  // under no defined semantics, others aborted the process in a check -- so
+  // the grammar refuses it, as it refuses an operand that is no bit-vector.
+  void checkSameWidth(const ASTNode& a, const ASTNode& b)
+  {
+    if (a.GetValueWidth() != b.GetValueWidth())
+    {
+      const std::string message = "bitvector operands of different widths (" +
+                                  std::to_string(a.GetValueWidth()) + " and " +
+                                  std::to_string(b.GetValueWidth()) + ")";
+      fatal_yyerror(message.c_str());
+    }
+  }
+
+  void checkSameWidths(const ASTVec& terms)
+  {
+    for (size_t i = 1; i < terms.size(); ++i)
+      checkSameWidth(terms[0], terms[i]);
+  }
+
   void checkSameSourceSort(const ASTVec& terms, const char* message)
   {
     if (terms.empty())
@@ -552,6 +573,7 @@ namespace stp
     // production. Boolean connectives use the vector overload.
     checkBitVectorTerm(*c0);
     checkBitVectorTerm(*c1);
+    checkSameWidth(*c0, *c1);
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(k, *c0, *c1));
     delete c0;
     delete c1;
@@ -1629,6 +1651,7 @@ namespace stp
       throw stp::DeclassifiedNameAbandon();
     }
     checkBitVectorTerms(*c);
+    checkSameWidths(*c);
     const unsigned int width = (*c)[0].GetValueWidth();
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(k, width,  *c));
     delete c;
@@ -1639,6 +1662,7 @@ namespace stp
   {
     checkBitVectorTerm(*c0);
     checkBitVectorTerm(*c1);
+    checkSameWidth(*c0, *c1);
     const unsigned int width = c0->GetValueWidth();
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(k, width, *c0, *c1));
     delete c0;
@@ -4178,6 +4202,7 @@ TERMID_TOK
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
+  checkSameWidth(*$2, *$3);
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(ITE, 1,
   stp::GlobalParserInterface->nf->CreateNode(EQ, *$2, *$3),
   stp::GlobalParserInterface->CreateOneConst(1),
@@ -4222,6 +4247,7 @@ TERMID_TOK
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
+  checkSameWidth(*$2, *$3);
   unsigned int width = $2->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, stp::GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3)));
   stp::GlobalParserInterface->deleteNode( $2);
@@ -4231,6 +4257,7 @@ TERMID_TOK
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
+  checkSameWidth(*$2, *$3);
   unsigned int width = $2->GetValueWidth();
   $$= stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, stp::GlobalParserInterface->nf->CreateTerm(BVOR, width, *$2, *$3)));
   stp::GlobalParserInterface->deleteNode( $2);

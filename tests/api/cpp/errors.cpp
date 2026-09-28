@@ -553,6 +553,21 @@ TEST(Errors, input_mistakes_are_recoverable)
                     in.exceptions(std::ios_base::badbit);
                     s.parse(in, Format::SMTLIB2);
                   }});
+  // parse_term over an ill-sorted term, and a script's width mismatches the
+  // type checker never saw (the grammar refuses them)
+  for (const char* text : {"(bvadd x y)", "(bvult x y)"})
+    rows.push_back({std::string("parse_term ") + text, ErrorCode::PARSE,
+                    [text](TermManager& tm, Solver& s) {
+                      tm.declare("x", tm.mk_bv_sort(8));
+                      tm.declare("y", tm.mk_bv_sort(4));
+                      s.parse_term(text);
+                    }});
+  for (const char* op : {"bvsub", "bvor", "bvnor"})
+    rows.push_back({std::string(op) + " over two widths, which built", ErrorCode::PARSE,
+                    script(xy + "(assert (= (" + op + " x y) (" + op + " x y)))",
+                           ParseMode::DECLARE_AND_ASSERT)});
+  rows.push_back({"bvule over two widths, which built", ErrorCode::PARSE,
+                  script(xy + "(assert (bvule x y))", ParseMode::DECLARE_AND_ASSERT)});
   // a multiplier variant that names no circuit, refused as it is set
   for (std::int64_t v : {0, 2, 10, 24, 99, -1, 2147483647})
     rows.push_back({"bb.mult-variant = " + std::to_string(v), ErrorCode::OPTION_VALUE,

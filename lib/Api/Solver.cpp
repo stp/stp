@@ -2090,7 +2090,10 @@ Term Solver::parse_term(std::string_view text) const
     // equality only while these are on (see run_parser)
     bm->UserFlags.enable_uninterpreted_functions = true;
     bm->UserFlags.enable_array_equality = true;
-    Cpp_interface pi(*bm, bm->hashingNodeFactory);
+    // Over the type checker, as run_parser's parse is: without it an
+    // ill-sorted term was handed out, and deciding one could abort.
+    ::TypeChecker checker(*bm->hashingNodeFactory, *bm);
+    Cpp_interface pi(*bm, &checker);
     GlobalParserInterface = &pi;
     GlobalSTP = s->stp;
     GlobalParserBM = bm;

@@ -921,6 +921,26 @@ TEST(Parsing, a_run_decides_whole_array_equality_only_when_switched_on)
   EXPECT_EQ(out, "sat\n");
 }
 
+// parse_term reads its term as a script's terms are read, over the type
+// checker and the grammar's width checks: an ill-sorted term used to be
+// handed out, and deciding one could abort the process.
+TEST(Parsing, parse_term_refuses_an_ill_sorted_term)
+{
+  TermManager tm;
+  Solver s(tm);
+  tm.declare("x", tm.mk_bv_sort(8));
+  tm.declare("y", tm.mk_bv_sort(16));
+  for (const char* text : {"(bvadd x y)", "(bvult x y)", "(bvcomp x y)", "(bvnand x y)",
+                           "(concat x (bvsub y x))", "(let ((q x) (q x)) q)"})
+  {
+    SCOPED_TRACE(text);
+    API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_term(text));
+  }
+  EXPECT_TRUE(s.assertions().empty());
+  EXPECT_TRUE(s.parse_term("(concat x (bvadd y y))").sort() == tm.mk_bv_sort(24));
+  EXPECT_TRUE(s.check_sat().is_sat());
+}
+
 // A stream the caller set to throw: reaching its end ends the input, and a
 // failing buffer is IO. Its exception used to leave the parse as an engine
 // failure, INTERNAL, poisoning the manager.
