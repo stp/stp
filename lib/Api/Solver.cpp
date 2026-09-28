@@ -1406,27 +1406,46 @@ std::size_t read_stream(char* buf, std::size_t max, void* opaque)
   std::istream& in = *static_cast<std::istream*>(opaque);
   if (max == 0)
     return 0;
-  if (std::char_traits<char>::eq_int_type(in.peek(), std::char_traits<char>::eof()))
+  // A stream the caller set to throw (exceptions()) reports by exception
+  // what the state bits report otherwise: one that went bad -- its buffer
+  // failed, whose own exception the stream rethrows -- is the input failing,
+  // IO; one that only reached its end has ended the input.
+  try
   {
-    if (in.bad())
-      throw InputFailed();
-    return 0;
-  }
-  std::streamsize n = in.readsome(buf, static_cast<std::streamsize>(max));
-  if (n <= 0)
-  {
-    // a stream buffer that cannot say how much it holds: one character
-    char c;
-    if (!in.get(c))
+    if (std::char_traits<char>::eq_int_type(in.peek(), std::char_traits<char>::eof()))
     {
       if (in.bad())
         throw InputFailed();
       return 0;
     }
-    buf[0] = c;
-    n = 1;
+    std::streamsize n = in.readsome(buf, static_cast<std::streamsize>(max));
+    if (n <= 0)
+    {
+      // a stream buffer that cannot say how much it holds: one character
+      char c;
+      if (!in.get(c))
+      {
+        if (in.bad())
+          throw InputFailed();
+        return 0;
+      }
+      buf[0] = c;
+      n = 1;
+    }
+    return static_cast<std::size_t>(n);
   }
-  return static_cast<std::size_t>(n);
+  catch (const InputFailed&)
+  {
+    throw;
+  }
+  catch (...)
+  {
+    if (in.bad())
+      throw InputFailed();
+    if (in.eof())
+      return 0;
+    throw;
+  }
 }
 
 // The lexer readers are process globals: set for one parse, then cleared.

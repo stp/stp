@@ -34,6 +34,7 @@ THE SOFTWARE.
 #include <future>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 #include <streambuf>
 #include <thread>
 
@@ -918,6 +919,42 @@ TEST(Parsing, a_run_decides_whole_array_equality_only_when_switched_on)
   s.set_output_sink([&](std::string_view text) { out.append(text); });
   s.parse_smt2(script, ParseMode::EXECUTE);
   EXPECT_EQ(out, "sat\n");
+}
+
+// A stream the caller set to throw: reaching its end ends the input, and a
+// failing buffer is IO. Its exception used to leave the parse as an engine
+// failure, INTERNAL, poisoning the manager.
+TEST(Parsing, a_stream_that_throws)
+{
+  {
+    TermManager tm;
+    Solver s(tm);
+    std::istringstream in("(declare-fun x () (_ BitVec 8))(assert (= x #x01))");
+    in.exceptions(std::ios_base::eofbit | std::ios_base::failbit | std::ios_base::badbit);
+    s.parse(in, Format::SMTLIB2);
+    ASSERT_EQ(s.assertions().size(), 1u);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_EQ(s.model().uint64_value(*s.symbol("x")), 1u);
+  }
+  struct Failing : std::streambuf
+  {
+    int_type underflow() override { throw std::runtime_error("the device went away"); }
+  };
+  for (const bool mask : {true, false})
+  {
+    TermManager tm;
+    Solver s(tm);
+    const Term p = tm.declare("p", tm.mk_bool_sort());
+    s.add(p);
+    Failing buffer;
+    std::istream in(&buffer);
+    if (mask)
+      in.exceptions(std::ios_base::badbit);
+    API_EXPECT_ERROR(ErrorCode::IO, s.parse(in, Format::SMTLIB2));
+    ASSERT_EQ(s.assertions().size(), 1u) << mask;
+    EXPECT_TRUE(s.check_sat().is_sat()) << mask;
+    EXPECT_NO_THROW(tm.mk_bv(8, 1)) << mask;
+  }
 }
 
 // A script's (reset) begins a new session for the script, but the manager's
