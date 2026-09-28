@@ -1016,7 +1016,14 @@ void Model::array_bytes(const Term& array, std::uint64_t first, std::size_t coun
                  {array});
   if (count == 0)
     return;
-  if (ir.a < 64 && (first + count - 1) >> ir.a != 0)
+  // [first, first + count) has to lie in the index sort, which the sum cannot
+  // be trusted to say: it wraps at 2^64. Past 64 bits every such interval fits,
+  // and an index beyond 2^64 - 1 carries into bit 64.
+  const std::uint64_t last = count - 1; // past first
+  const bool fits = ir.a > 64 || (ir.a == 64 ? last <= UINT64_MAX - first
+                                             : first >> ir.a == 0 &&
+                                                   last <= ((std::uint64_t(1) << ir.a) - 1) - first);
+  if (!fits)
     detail::fail(ErrorCode::INVALID_ARGUMENT, "Model::array_bytes",
                  "first_index + count - 1 does not fit the index width", 1);
   if (out == nullptr)
@@ -1025,7 +1032,20 @@ void Model::array_bytes(const Term& array, std::uint64_t first, std::size_t coun
   const std::size_t bytes_per = er.a / 8;
   for (std::size_t i = 0; i < count; ++i)
   {
-    const ASTNode index = s.mgr->bv_const(ir.a, first + i);
+    const std::uint64_t low = first + i;
+    ASTNode index;
+    if (low >= first)
+      index = s.mgr->bv_const(ir.a, low);
+    else
+    {
+      // 2^64 + low, most significant bit first
+      std::string bits(ir.a, '0');
+      bits[ir.a - 65] = '1';
+      for (unsigned k = 0; k < 64; ++k)
+        if ((low >> k) & 1)
+          bits[ir.a - 1 - k] = '1';
+      index = s.mgr->bv_const_bits(ir.a, bits);
+    }
     const ASTNode v = ev.read(n, index);
     const std::string bits = detail::bv_bits_of(v);
     for (std::size_t b = 0; b < bytes_per; ++b)

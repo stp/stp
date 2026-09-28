@@ -702,7 +702,8 @@ STP_API stp_array_value stp_model_array_value(stp_model, stp_term array); /* any
 STP_API stp_fun_value stp_model_fun_value(stp_model, stp_term fun);       /* any function symbol */
 /* dense read of a BV-indexed BV-element array whose element width is a multiple of 8
  * (INVALID_ARGUMENT otherwise): count elements from first_index, little-endian bytes per
- * element, completed by the model's array fill rule */
+ * element, completed by the model's array fill rule; INVALID_ARGUMENT when the elements
+ * leave the index sort */
 STP_API stp_status stp_model_array_bytes(stp_model, stp_term array, uint64_t first_index, size_t count, uint8_t* out);
 STP_API size_t stp_model_num_symbols(stp_model); /* the model core: symbols the solver assigned */
 STP_API stp_term stp_model_symbol(stp_model, size_t i);

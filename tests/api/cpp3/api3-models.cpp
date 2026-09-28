@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 #include "api3_common.hpp"
 
+#include <limits>
 #include <set>
 #include <sstream>
 
@@ -248,6 +249,24 @@ TEST_F(Models, array_values)
   const Term small = tm.declare("small", tm.mk_array_sort(bv8, bv8));
   API3_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, m.array_bytes(small, 250, 10, out));
   m.array_bytes(small, 250, 6, out); // [250, 256) fits
+  // checked without first + count - 1, which wraps at 2^64
+  const std::uint64_t top = std::numeric_limits<std::uint64_t>::max();
+  API3_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, m.array_bytes(small, top, 2, out));
+  const Term word = tm.declare("word", tm.mk_array_sort(tm.mk_bv_sort(64), bv8));
+  API3_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, m.array_bytes(word, top, 2, out));
+  m.array_bytes(word, top, 1, out); // [2^64 - 1, 2^64) fits
+  {
+    // past 64 bits an index beyond 2^64 - 1 carries into bit 64
+    const Sort bv65 = tm.mk_bv_sort(65);
+    Term cells = tm.mk_const_array(tm.mk_array_sort(bv65, bv8), tm.mk_bv(8, 0));
+    cells = store(cells, tm.mk_bv(65, 0), tm.mk_bv(8, 11));
+    cells = store(cells, tm.mk_bv(65, top), tm.mk_bv(8, 22));
+    cells = store(cells, tm.mk_bv(65, "18446744073709551616", 10), tm.mk_bv(8, 33));
+    std::uint8_t across[2] = {0, 0};
+    m.array_bytes(cells, top, 2, across);
+    EXPECT_EQ(across[0], 22u);
+    EXPECT_EQ(across[1], 33u);
+  }
   // wide elements come out little-endian per element
   const Term wide = tm.declare("wide", tm.mk_array_sort(bv8, bv32));
   s.add(wide[tm.mk_bv(8, 0)] == 0x11223344);

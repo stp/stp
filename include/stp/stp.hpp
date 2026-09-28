@@ -1014,6 +1014,7 @@ public:
   /// Dense read of a BV-indexed, BV-element array whose element width is a
   /// multiple of 8: elements [first_index, first_index + count) as
   /// little-endian bytes per element, completed by the model's array fill rule.
+  /// INVALID_ARGUMENT when the interval leaves the index sort.
   void array_bytes(const Term& array, std::uint64_t first_index,
                    std::size_t count, std::uint8_t* out) const;
 
