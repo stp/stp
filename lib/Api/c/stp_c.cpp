@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "stp_c_internal.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
@@ -210,6 +211,9 @@ struct Registry
 {
   std::mutex mu;
   std::unordered_map<STPMgr*, CManager*> by_bm;
+  // Renewed, under mu, by every change to by_bm: a lookup made while it
+  // stands is still true (cm_of_node's per-thread memo).
+  std::atomic<std::uint64_t> epoch{1};
 };
 // Immortal, like the strings below: a program may release its handles from
 // the destructor of a global or static object, which runs after statics
@@ -226,6 +230,7 @@ void destroy(CManager* cm) noexcept
   {
     std::lock_guard<std::mutex> hold(registry().mu);
     registry().by_bm.erase(cm->bm);
+    registry().epoch.fetch_add(1, std::memory_order_acq_rel);
   }
   // refs == 0 means no unscoped reference and no open scope survive, so the
   // journals and the count table are empty; the record's terms and the sort
@@ -247,6 +252,7 @@ CManager* cm_new(const TermManager& tm)
   {
     std::lock_guard<std::mutex> hold(registry().mu);
     registry().by_bm[cm->bm] = cm.get();
+    registry().epoch.fetch_add(1, std::memory_order_acq_rel);
   }
   cm->impl->retain();
   return cm.release();
@@ -269,9 +275,25 @@ CManager* cm_of_node(ASTInternal* p) noexcept
   if (p == nullptr)
     return nullptr;
   STPMgr* bm = detail::NodeAccess::manager_of(p);
-  std::lock_guard<std::mutex> hold(registry().mu);
-  auto it = registry().by_bm.find(bm);
-  return it == registry().by_bm.end() ? nullptr : it->second;
+  // Every call that takes a term asks this, most often of the manager it
+  // asked last: each thread keeps its last answer for as long as the
+  // registry has not changed since. (A caller holds a reference on the
+  // node, so the manager it asks about cannot be the one going away.)
+  struct Memo
+  {
+    STPMgr* bm;
+    CManager* cm;
+    std::uint64_t epoch;
+  };
+  thread_local Memo memo{nullptr, nullptr, 0};
+  Registry& r = registry();
+  if (memo.bm == bm && memo.epoch == r.epoch.load(std::memory_order_acquire))
+    return memo.cm;
+  std::lock_guard<std::mutex> hold(r.mu);
+  auto it = r.by_bm.find(bm);
+  CManager* const cm = it == r.by_bm.end() ? nullptr : it->second;
+  memo = Memo{bm, cm, r.epoch.load(std::memory_order_relaxed)};
+  return cm;
 }
 
 // ============================================================ exports and arguments

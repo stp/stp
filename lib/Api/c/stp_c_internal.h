@@ -39,6 +39,8 @@ THE SOFTWARE.
 #include "../Internal.h"
 #include "stp/stp.h"
 
+#include <ankerl/unordered_dense.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -169,8 +171,10 @@ struct CManager
   detail::ManagerImpl* impl = nullptr; // retained once for the life of this object
   STPMgr* bm = nullptr;                // the registry key (impl->bm), kept for the erase at death
   // rule 3 needs to know whether a handle has an unscoped reference: the
-  // count per node; each count also holds one engine reference
-  std::unordered_map<ASTInternal*, std::uint32_t> unscoped;
+  // count per node; each count also holds one engine reference. Every
+  // unscoped export and release of a term goes through it, hence a table
+  // that stores its entries inline rather than allocating one per node.
+  ankerl::unordered_dense::map<ASTInternal*, std::uint32_t> unscoped;
   // the scope journals; every ASTNode in a journal is one scoped reference
   std::vector<std::vector<ASTNode>> scopes;
   std::vector<std::unique_ptr<CSort>> sorts; // by sort index
