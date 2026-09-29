@@ -169,9 +169,8 @@ protected:
 
   virtual ~ASTInternal() {}
 
-  // Abstract virtual print function for internal node. c_friendly
-  // is for printing hex. numbers that C compilers will accept
-  virtual void nodeprint(ostream& os, bool /*c_friendly*/) { os << "*"; };
+  // Abstract virtual print function for internal node.
+  virtual void nodeprint(ostream& os) { os << "*"; };
 
   // Treat the result as const pleases.
   // Non-virtual: no subclass overrides it, so this is just a field read.

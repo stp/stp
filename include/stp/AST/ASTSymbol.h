@@ -92,9 +92,8 @@ private:
   // Get the name of the symbol
   const char* GetName() const;
 
-  // Print function for symbol -- return name. (c_friendly is for
-  // printing hex. numbers that C compilers will accept)
-  void nodeprint(ostream& os, bool c_friendly = false) override;
+  // Print function for symbol -- return name.
+  void nodeprint(ostream& os) override;
 
   // Call this when deleting a node that has been stored in the the
   // unique table

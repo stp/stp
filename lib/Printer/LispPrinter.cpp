@@ -91,9 +91,9 @@ ostream& Lisp_Print1(ostream& os, const ASTNode& n, int indentation)
       // child 0 is a symbol.  Print without the NodeNum.
       os << current.GetNodeNum() << ":";
 
-      children[0].nodeprint(os, true);
+      children[0].nodeprint(os);
       os << "{";
-      children[1].nodeprint(os, true);
+      children[1].nodeprint(os);
       os << "}";
     }
     else if (kind == NOT)
@@ -109,7 +109,7 @@ ostream& Lisp_Print1(ostream& os, const ASTNode& n, int indentation)
       // Symbol or a kind with no children print as index:NAME if shared,
       // even if they have been printed before.
       os << current.GetNodeNum() << ":";
-      current.nodeprint(os, true);
+      current.nodeprint(os);
     }
     else if (Lisp_AlreadyPrintedSet.find(current) !=
              Lisp_AlreadyPrintedSet.end())

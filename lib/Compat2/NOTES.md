@@ -12,7 +12,7 @@ unsupported, and which 2.x suites run against it.
 | file | contents |
 |---|---|
 | `Compat2.h` | the internals shared by the two translation units: `Handle` (an `Expr`/`Type`), `VCImpl` (a `VC`), the UF declaration record, the helper declarations |
-| `c_interface2.cpp` | process state (handler, policy, registries), handles and ownership, sort helpers, the option letters and ordinals, counters and schema groups, lifecycle, backends, assertions and queries, models and their printers, the presentation-language and SMT-LIB 2 printers, the refused parse functions, uninterpreted functions, introspection, `vc_simplify` |
+| `c_interface2.cpp` | process state (handler, policy, registries), handles and ownership, sort helpers, the option letters and ordinals, counters and schema groups, lifecycle, backends, assertions and queries, models and their printers, the SMT-LIB 2 printers, the refused parse functions, uninterpreted functions, introspection, `vc_simplify` |
 | `c_interface2_terms.cpp` | every term and type constructor: types, symbols, Boolean, arrays, bit-vector constants and operations, floating point, Real |
 | `CMakeLists.txt` | the `stp2` target, versioned like `stp`, installed beside it, exported with it |
 
@@ -109,8 +109,11 @@ unsupported, and which 2.x suites run against it.
 1. **Results.** `vc_query`/`vc_query_with_timeout` map `stp_solver_entails`:
    VALID -> 1, INVALID -> 0 (and the model is cached), UNKNOWN -> 3, any
    failure -> 2 after the diagnostic. Negative budgets other than -1 return 2
-   with a message on stderr, as 2.x did. A query prints `Valid.`/`Invalid.`/
-   `Unknown.` under `'n'` and the counterexample under `'p'`.
+   with a message on stderr, as 2.x did. Under `'n'` a query prints the
+   answer to the check of its negation as `stp` prints it, `unsat`/`sat`/
+   `unknown` (2.x's `Valid.`/`Invalid.`/`Unknown.` were its presentation
+   language's), and under `'p'` the counterexample as
+   `vc_printCounterExample` prints it.
 2. **Reason unknown.** The 3.x reason is mapped to the 2.x enum
    (RESOURCE_LIMIT -> AIG_BUDGET, CONFLICT_LIMIT -> CONFLICT_BUDGET, TIMEOUT,
    CARRIER_EXHAUSTED, ASSUMED_INJECTIVITY, everything else -> INCOMPLETE) and
@@ -166,9 +169,11 @@ unsupported, and which 2.x suites run against it.
    ackermanize, `'u'` uninterpreted-functions=on + the registry, `'w'`
    switch-word, `'x'` array-equality=on + model-array-fill=zero, `'n'` (print the
    answer), `'p'` (print the counterexample) are shim-side switches, `'m'`
-   (2.x's SMT-LIB 1 input) is accepted and does nothing, `'q'`, `'s'`, `'t'`,
-   `'v'`, `'y'` set the corresponding print options and install a stdout
-   diagnostic sink on the solver, `'h'` is fatal (nothing a library can act
+   (2.x's SMT-LIB 1 input), `'q'` (arrays in declared order) and `'y'`
+   (counterexamples in binary) are accepted and do nothing, as what they
+   chose is gone with the presentation language, `'s'`, `'t'` and `'v'` set
+   the corresponding print options and install a stdout diagnostic sink on
+   the solver, `'h'` is fatal (nothing a library can act
    on), and any other letter is fatal as in 2.x. `vc_setFlags`'s
    `num_absrefine` is ignored, as 2.x ignored it.
 8. **Ordinals** (`vc_setInterfaceFlags`): every one of the 70 values of
@@ -204,21 +209,25 @@ unsupported, and which 2.x suites run against it.
     `sat-backend` and rebuilds the solver; `vc_isUsing*` compares the recorded
     name, which starts as the first available of cryptominisat, cadical,
     minisat (the engine's own resolution of "auto").
-11. **Presentation-language printers.** Terms are printed with
-    `stp_term_to_string(STP_FORMAT_CVC)`; the shim composes the surrounding
-    forms 2.x produced: `ASSERT( <term> );` for `vc_printAsserts`,
-    `QUERY(<term>);`, the `x : BITVECTOR(n);` / `ARRAY BITVECTOR(i) OF
-    BITVECTOR(e)` / `BOOLEAN` declarations of `vc_printVarDecls` from
-    `stp_tm_symbols` (with a `vc_clearDecls` watermark; symbols of sorts the
-    language cannot spell are skipped), and the
-    `COUNTEREXAMPLE BEGIN: ... COUNTEREXAMPLE END:` block with `ASSERT( x =
-    0xFF );`, `ASSERT( a[i] = v );` and `<=>` lines for the model. Printing a
-    floating-point or Real term in the presentation language is the 2.x fatal
-    "the presentation language has no floating-point syntax; print this with
-    SMTLIB2_PrintBack (vc_printSMTLIB2 in the C API)"; `exprString` falls back
-    to the SMT-LIB 2 spelling for such a term instead of dying (2.x died inside
-    the printer). `vc_printExprFile`/`vc_printCounterExampleFile` write to the
-    descriptor with `write(2)`.
+11. **The 2.x printers print SMT-LIB 2.** 2.x printed `vc_printExpr` and
+    its relatives in its presentation language (CVC), which STP no longer
+    has. A term is printed with `stp_term_to_string(STP_FORMAT_SMTLIB2,
+    true)`, the engine's shared printer that `vc_printSMTLIB2` asserts with
+    (every symbol `|quoted|`, a repeated subterm bound by a `let`), and the
+    shim composes SMT-LIB 2's forms of what 2.x printed: `(assert <term>)`
+    for `vc_printAsserts`; `(assert (not <query>))` and `(check-sat)` for
+    `vc_printQuery`; a `(declare-fun ...)` per symbol, of every sort, for
+    `vc_printVarDecls`, from `stp_tm_symbols` with a `vc_clearDecls`
+    watermark; and for `vc_printQueryStateToBuffer` a script STP reads
+    back, the logic, those declarations, the assertions, the negated query
+    and `(check-sat)`. `vc_printCounterExample`, its `ToBuffer` and `File`
+    forms, and `'p'` print what `vc_printCounterExampleSMTLIB2` prints (a
+    `(define-fun ...)` per model symbol, decision 12), without 2.x's
+    `COUNTEREXAMPLE BEGIN:`/`END:` lines. `exprString` and `typeString` give
+    the SMT-LIB 2 term and sort. `vc_paramBoolExpr` names its variable
+    `p(#b1)` where 2.x wrote `p (0b1 )`: still one name per variable and
+    parameter width. `vc_printExprFile`/`vc_printCounterExampleFile` write
+    to the descriptor with `write(2)`.
 12. **SMT-LIB 2 printers.** `vc_printSMTLIB2(e)` and
     `vc_printCounterExampleSMTLIB2` are composed by the shim, not by
     `stp_solver_to_smt2`/`stp_model_to_smt2`: the 2.x form is `(set-logic ...)`
@@ -237,10 +246,6 @@ unsupported, and which 2.x suites run against it.
     declarations by the model's order and gives floating-point declarations
     no trailing space; `vc_printCounterExampleSMTLIB2` prints an array as one
     store-chain `define-fun` where 2.x printed a line per cell;
-    `vc_printVarDecls` and `vc_printQueryStateToBuffer` declare
-    `x : BITVECTOR(8);` where 2.x wrote `x  : BITVECTOR(8);`, and
-    `typeString` gives `BITVECTOR(8)` and `BOOLEAN` where 2.x gave
-    `BITVECTOR(00000008) ` and `BOOLEAN ` (and aborted on an array type);
     with simplification asked for, `vc_printAsserts` and
     `vc_printQueryStateToBuffer` print the local simplifier's form, not
     2.x's top-level one; `vc_counterexample_size` counts
@@ -329,8 +334,9 @@ unsupported, and which 2.x suites run against it.
 | `vc_setFlag('h')` | fatal ("help" is not a flag a library can act on); 2.x printed the help and exited. |
 | `getExprKind`, `getDegree`, `getChild` | **approximate**: public kinds and children of the simplified term (decision 15). |
 | `vc_getHashQueryStateToBuffer` | a different hash function than 2.x's (decision 13); values were never stable across versions. |
-| `exprString` on a float/Real term | the SMT-LIB 2 spelling instead of 2.x's death inside the printer. |
-| `vc_printVarDecls` | symbols of float, rounding-mode and Real sorts are skipped (the presentation language cannot spell them; 2.x printed nothing usable for them either). |
+| `vc_printExpr`, `vc_printExprFile`, `vc_printExprToBuffer`, `vc_printAsserts`, `vc_printQuery`, `vc_printQueryStateToBuffer`, `vc_printVarDecls`, `vc_printCounterExample` and its forms, `exprString`, `typeString`, `vc_query` under `'n'` and `'p'` | **SMT-LIB 2** where 2.x printed its presentation language, which STP no longer has (decision 11); a caller that reads this text back parses SMT-LIB 2. |
+| `vc_paramBoolExpr` | names its variable `p(#b1)`, not `p (0b1 )` (decision 11). |
+| `process_argument('q')`, `('y')` | accepted and ignored: their printer is gone (decision 7). |
 | `vc_getCounterExample` after a VALID answer | `NULL` plus a diagnostic instead of 2.x's invented value (deliberate). |
 | `vc_pop` at the base level | fatal instead of 2.x's deletion of the base assertions (deliberate). |
 | `vc_parseExpr` / `vc_parseMemExpr` | **unsupported**: fatal through the handler, as STP no longer reads CVC or SMT-LIB 1 (decision 14). |
@@ -357,6 +363,9 @@ Everything else is a direct mapping.
 - `vc_getHashQueryStateToBuffer`: a term hash, not a text hash.
 - `vc_printSMTLIB2` and the model's SMT-LIB 2 text: composed by the shim, not
   taken from a scratch solver's `to_smt2` (decision 12).
+- The printers 2.x wrote in its presentation language print SMT-LIB 2, and
+  the two parse functions refuse: STP no longer reads or writes CVC
+  (decisions 11 and 14).
 - The UF model rule stays the strict 2.x one (dies on assert, push and pop)
   rather than a permissive one: the UF suites test the strict rule.
 - Whole-array equality without `'x'` is refused at construction, as in 2.x,

@@ -25,7 +25,6 @@ add_library(printer OBJECT
     AssortedPrinters.cpp
     GraphPrinter.cpp
     LispPrinter.cpp
-    PLPrinter.cpp
     SMTLIB2Printer.cpp
     SMTLIBPrinter.cpp
 )

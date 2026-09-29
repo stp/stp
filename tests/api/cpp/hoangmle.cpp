@@ -23,9 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 // hoangmle.cpp -- printing a bit-vector constant that is wider than 64
-// bits and whose width (69) is not a multiple of four: the presentation
-// language (CVC) writes it as a binary literal, with and without shared
-// subterms, and SMT-LIB 2 as #b...
+// bits and whose width (69) is not a multiple of four: SMT-LIB 2 writes it
+// as a binary literal, #b..., with and without shared subterms.
 
 #include "api_common.hpp"
 
@@ -39,12 +38,15 @@ using namespace stp;
 namespace
 {
 
-// The printed text without the blanks and line breaks the printer ends with.
+// The printed text without the blanks and line breaks the printer puts around it.
 std::string trimmed(std::string text)
 {
   while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))
     text.pop_back();
-  return text;
+  std::size_t start = 0;
+  while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])))
+    ++start;
+  return text.substr(start);
 }
 
 TEST(hoangmle, one)
@@ -54,12 +56,12 @@ TEST(hoangmle, one)
       "001111001110010101010100000000000000000000000000000000000000000000000";
   const Term a = tm.mk_bv(static_cast<std::uint32_t>(bits.size()), bits, 2);
   ASSERT_EQ(a.sort().bv_size(), 69u);
-  // what 2.x's vc_printExpr and exprString printed
-  const std::string printed = a.to_string(Format::CVC);
-  const std::string unshared = a.to_string(Format::CVC, false);
+  // the shared and the unshared printer
+  const std::string printed = a.to_string(Format::SMTLIB2);
+  const std::string unshared = a.to_string(Format::SMTLIB2, false);
   std::cout << printed << "\nMy print:\n" << unshared << "\n";
-  EXPECT_EQ(trimmed(printed), "0b" + bits);
-  EXPECT_EQ(trimmed(unshared), "0b" + bits);
+  EXPECT_EQ(trimmed(printed), "#b" + bits);
+  EXPECT_EQ(trimmed(unshared), "#b" + bits);
   EXPECT_EQ(a.str(), "#b" + bits);
   EXPECT_EQ(a.to_bv_string(2), bits);
 }

@@ -74,10 +74,10 @@ TEST(push_pop, two)
   const Term a_eq_0 = a == ct_0;
 
   s.add(a_eq_0);
-  // vc_printAsserts: the assertions in the presentation language
-  const std::string asserts = s.to_string(Format::CVC);
-  EXPECT_NE(asserts.find("a : BITVECTOR(8);"), std::string::npos) << asserts;
-  EXPECT_NE(asserts.find("(a = 0x00"), std::string::npos) << asserts;
+  // vc_printAsserts: the assertions printed
+  const std::string asserts = s.to_smt2();
+  EXPECT_NE(asserts.find("(declare-fun a () (_ BitVec 8))"), std::string::npos) << asserts;
+  EXPECT_NE(asserts.find("#x00"), std::string::npos) << asserts;
   s.push();
 
   const Term queryexp = a == tm.mk_bv(8, 0);

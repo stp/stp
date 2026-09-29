@@ -26,7 +26,7 @@ THE SOFTWARE.
 // (https://github.com/stp/stp/issues/120, reported by
 // https://github.com/quark17): v + 4 = n, v + 4 >= v and 4 = n asserted
 // inside a push are satisfiable, by v = 0 and n = 4. The assertions are
-// printed in the presentation language as they are made.
+// printed as they are made.
 
 #include "api_common.hpp"
 
@@ -74,30 +74,30 @@ TEST(reported_issue_120, one)
   std::cout << "Assert v + 4 = n\n";
   const Term f_add = add_v_4 == n;
   s.add(f_add);
-  std::cout << f_add.to_string(Format::CVC) << "\n------\n";
+  std::cout << f_add.to_string(Format::SMTLIB2) << "\n------\n";
 
   // Assert the bounds constraint
   std::cout << "Assert v + 4 >= v\n";
   s.add(ge);
-  std::cout << ge.to_string(Format::CVC) << "\n------\n";
+  std::cout << ge.to_string(Format::SMTLIB2) << "\n------\n";
 
   // Assert 4 = n
   std::cout << "Assert 4 = n\n";
   const Term f_numeq = ct_4 == n;
   s.add(f_numeq);
-  std::cout << f_numeq.to_string(Format::CVC) << "\n------\n";
+  std::cout << f_numeq.to_string(Format::SMTLIB2) << "\n------\n";
 
   // Check for satisfiability
   std::cout << "Check\n";
-  const std::string asserts = s.to_string(Format::CVC);
+  const std::string asserts = s.to_smt2();
   std::cout << asserts << "\n------\n";
   std::size_t count = 0;
-  for (std::size_t at = asserts.find("ASSERT("); at != std::string::npos;
-       at = asserts.find("ASSERT(", at + 1))
+  for (std::size_t at = asserts.find("(assert "); at != std::string::npos;
+       at = asserts.find("(assert ", at + 1))
     ++count;
   EXPECT_EQ(count, 3u) << asserts;
-  EXPECT_NE(asserts.find("n : BITVECTOR(32);"), std::string::npos) << asserts;
-  EXPECT_NE(asserts.find("v : BITVECTOR(32);"), std::string::npos) << asserts;
+  EXPECT_NE(asserts.find("(declare-fun n () (_ BitVec 32))"), std::string::npos) << asserts;
+  EXPECT_NE(asserts.find("(declare-fun v () (_ BitVec 32))"), std::string::npos) << asserts;
   const Result query = s.check_sat(); // 2.x: vc_query(false) == 0
   ASSERT_TRUE(query.is_sat());
   EXPECT_EQ(s.model().uint64_value(v), 0u);

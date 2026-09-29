@@ -213,7 +213,6 @@ typedef enum stp_format
 {
   STP_FORMAT_AUTO = 0,
   STP_FORMAT_SMTLIB2,
-  STP_FORMAT_CVC,
   STP_FORMAT_DOT,
   STP_FORMAT_GDL,
   STP_FORMAT_MAX_ENUM = 0x7fffffff,
@@ -702,7 +701,7 @@ STP_API stp_status stp_solver_parse(stp_solver, const char* text, stp_format); /
 STP_API stp_status stp_solver_parse_file(stp_solver, const char* path, stp_format); /* SMT-LIB 2: SMTLIB2 or AUTO */
 STP_API stp_term stp_solver_parse_term(stp_solver, const char* smt2_term); /* over the manager's name table */
 STP_API char* stp_solver_to_smt2(stp_solver, bool with_check_sat);
-STP_API char* stp_solver_to_string(stp_solver, stp_format); /* SMTLIB2, CVC, DOT, GDL */
+STP_API char* stp_solver_to_string(stp_solver, stp_format); /* SMTLIB2, DOT, GDL */
 typedef void (*stp_text_sink)(const char* text, size_t len, void* user);
 /* the batch pipeline encodes the assertions up to its first CNF without solving (whatever
  * incremental says), delivered as DIMACS in one call; *scope (NULL: not wanted) says how the CNF

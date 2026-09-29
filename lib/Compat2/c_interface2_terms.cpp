@@ -371,11 +371,11 @@ Expr vc_paramBoolExpr(VC vcp, Expr boolvar, Expr parameter)
     fatal("vc_paramBoolExpr: the parameter must be a constant bit-vector");
     return nullptr;
   }
-  // A Boolean variable named after the application as 2.x printed it, each
-  // operand in the presentation language: "p (0b1 )" and "p (0x1 )", a
-  // one-bit parameter's and a four-bit one's, are two variables.
-  char* var_text = stp_term_to_string(c, STP_FORMAT_CVC, false);
-  char* param_text = var_text != nullptr ? stp_term_to_string(t, STP_FORMAT_CVC, false) : nullptr;
+  // A Boolean variable named after the application, each operand in
+  // SMT-LIB 2: "p(#b1)" and "p(#x1)", a one-bit parameter's and a four-bit
+  // one's, are two variables.
+  char* var_text = stp_term_to_string(c, STP_FORMAT_SMTLIB2, false);
+  char* param_text = var_text != nullptr ? stp_term_to_string(t, STP_FORMAT_SMTLIB2, false) : nullptr;
   if (param_text == nullptr)
   {
     stp_free(var_text);

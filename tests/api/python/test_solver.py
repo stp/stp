@@ -228,8 +228,7 @@ def test_scripts_and_printing(tmp_path):
     text = s.to_smt2()
     assert "(declare-fun a () (_ BitVec 8))" in text and "(assert" in text and "(check-sat)" not in text
     assert "(check-sat)" in s.to_smt2(with_check_sat=True) and s.sexpr() == text
-    cvc = s.to_string("cvc")
-    assert "BITVECTOR(8)" in cvc and "ASSERT" in cvc
+    assert s.to_string("smtlib2") == text
     assert "digraph" in s.to_string("dot") or "->" in s.to_string("dot")
     t = s.parse_term("(bvadd a #x01)")
     assert t.kind() == Kind.BV_ADD and t.arg(0) is a or t.arg(1) is a

@@ -707,11 +707,6 @@ public:
   // construct the counterexample in terms of original variable based
   // on the counterexample returned by SAT solver
   bool print_counterexample_flag = false;
-  bool print_binary_flag = false;
-
-  // if this option is true then print the way dawson wants using a
-  // different printer. do not use this printer.
-  bool print_arrayval_declaredorder_flag = false;
 
   // flag to decide whether to print "valid/invalid" or not
   bool print_output_flag = false;

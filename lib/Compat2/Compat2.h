@@ -214,7 +214,6 @@ std::uint32_t packed_width(stp_sort s);     // BV: width, FP: eb+sb, RM: 5, arra
 std::uint32_t index_width(stp_sort s);      // array: index's packed width, else 0
 bool fp_format(stp_sort s, std::uint32_t& eb, std::uint32_t& sb); // FP, or array of FP
 std::string sort_text(VCImpl* vc, stp_sort s); // SMT-LIB 2 sort text ("(D ..) C" for a function)
-std::string type_text(stp_sort s);             // presentation-language type text
 
 // ------------------------------------------------------------------ solver
 
@@ -228,10 +227,9 @@ void discard_model(VCImpl* vc);
 // A checker-owned RoundingMode / FP result etc.: `persist` says which.
 Expr fp_result(VCImpl* vc, stp_term t);
 
-// The value of a term as text in the presentation language, for the
-// counterexample printers (a float or rounding mode as its packed carrier).
-std::string cvc_value_text(VCImpl* vc, stp_term value);
-std::string cvc_text(VCImpl* vc, stp_term t, const char* who, bool* ok);
+// A term as SMT-LIB 2 text, for the printers; fatal (and *ok false) if the
+// engine cannot print it.
+std::string smt2_text(VCImpl* vc, stp_term t, const char* who, bool* ok);
 
 // The read the UF entry points do (also reached from vc_getCounterExample).
 Expr uf_value(VCImpl* vc, Expr application, const char* who);

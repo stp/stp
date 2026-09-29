@@ -1368,8 +1368,8 @@ declare -a NOT_FUZZED=(
 # the checker gave, so every file would be saved as a mismatch.
 --help --version --parse-only --output-CNF --exit-after-CNF
 --aig-node-budget --max-num-confl --max-time
---print-counterex --print-counterexbin --print-arrayval
---print-functionstat --print-quickstat --print-nodes --print-output
+--print-counterex --print-functionstat --print-quickstat --print-nodes
+--print-output
 # Already fixed by the harness: -d is passed to every STP run, and the input
 # is SMT-LIB2, the only language STP reads.
 --check-sanity --SMTLIB2

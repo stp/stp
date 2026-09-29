@@ -136,7 +136,6 @@ static void bv_basics()
     CHECK(e.code() == ErrorCode::SORT_MISMATCH);
   }
   std::cout << "  smt2:\n" << s.to_smt2(true);
-  std::cout << "  cvc:\n" << s.to_string(Format::CVC);
 }
 
 static void arrays()

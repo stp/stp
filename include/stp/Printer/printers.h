@@ -38,10 +38,9 @@ namespace printer
 using std::ostream;
 
 // State for the letize pass, which walks a node and gives a let variable to
-// every non-atomic subterm that occurs more than once. Each printer keeps its
-// own storage for the result -- the SMT-LIB printers use file-scope
-// thread-locals, the Presentation Language printer uses STPMgr members -- so
-// the pass borrows it rather than owning it.
+// every non-atomic subterm that occurs more than once. The printer keeps the
+// storage for the result, in file-scope thread-locals, so the pass borrows it
+// rather than owning it.
 struct LetizeState
 {
   // Subterms already visited.
@@ -57,10 +56,6 @@ struct LetizeState
 void LetizeNode(const stp::ASTNode& n, LetizeState& st, STPMgr*);
 
 DLL_PUBLIC ostream& Dot_Print(ostream& os, const stp::ASTNode n);
-DLL_PUBLIC ostream& PL_Print(ostream& os, const stp::ASTNode& n, STPMgr* bm,
-                             int indentation = 0);
-DLL_PUBLIC void PL_Print1(ostream& os, const ASTNode& n, int indentation,
-                          bool letize, STPMgr* bm);
 
 ostream& Lisp_Print(ostream& os, const stp::ASTNode& n, int indentation = 0);
 extern THREAD_LOCAL_IE stp::ASTNodeSet Lisp_AlreadyPrintedSet;

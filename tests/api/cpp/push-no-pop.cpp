@@ -84,12 +84,12 @@ TEST(push_no_pop, one)
   s.reset();
 
   // print-counterex wrote the first entailment's counterexample to the output
-  // sink, once (the second entailment held), and the library wrote nothing to
-  // stdout.
+  // sink, in SMT-LIB 2, once (the second entailment held), and the library
+  // wrote nothing to stdout.
   EXPECT_EQ(testing::internal::GetCapturedStdout(), "");
-  const std::string prefix = "ASSERT( a = 0x";
+  const std::string prefix = "(define-fun |a| () (_ BitVec 8) #x";
   ASSERT_EQ(printed.rfind(prefix, 0), 0u) << printed;
-  EXPECT_EQ(printed.find("ASSERT", prefix.size()), std::string::npos) << printed;
+  EXPECT_EQ(printed.find("define-fun", prefix.size()), std::string::npos) << printed;
   EXPECT_EQ(std::stoul(printed.substr(prefix.size(), 2), nullptr, 16),
             counterexample.uint64_value(a))
       << printed;

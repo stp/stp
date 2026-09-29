@@ -88,10 +88,9 @@ private:
   // unique table
   void CleanUp() override;
 
-  // Print function for bvconst -- return _bvconst value in bin
-  // format (c_friendly is for printing hex. numbers that C
-  // compilers will accept)
-  void nodeprint(ostream& os, bool c_friendly = false) override;
+  // Print function for bvconst: the value as C writes it, in hex (0x...)
+  // when its width is a multiple of four, else in binary (0b...)
+  void nodeprint(ostream& os) override;
 
   const static ASTVec astbv_empty_children;
 

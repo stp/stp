@@ -57,7 +57,7 @@ TEST(stp_div, one)
   const Term a_of_0_div_5 = bvudiv(a_of_0, ct_5);
 
   const Term a_of_0_div_5_eq_5 = a_of_0_div_5 == ct_5;
-  std::cout << a_of_0_div_5_eq_5.to_string(Format::CVC) << "\n";
+  std::cout << a_of_0_div_5_eq_5.to_string(Format::SMTLIB2) << "\n";
 
   /* Query 1 */
   s.push();
@@ -67,7 +67,7 @@ TEST(stp_div, one)
   EXPECT_TRUE(query.is_invalid());
 
   s.add(a_of_0_div_5_eq_5);
-  std::cout << a_of_0_div_5_eq_5.to_string(Format::CVC) << "\n";
+  std::cout << a_of_0_div_5_eq_5.to_string(Format::SMTLIB2) << "\n";
 
   /* the assertions' satisfiability (2.x: query(false)) */
   s.push();

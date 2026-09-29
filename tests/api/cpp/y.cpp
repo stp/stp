@@ -48,7 +48,7 @@ TEST(y, one)
                          nresp1 == packet_get_int0,
                          // nresp1 > 0
                          bvugt(nresp1, tm.mk_bv(32, 0))});
-  const std::string query = res.to_string(Format::CVC);
+  const std::string query = res.to_string(Format::SMTLIB2);
   std::cout << query << "\n";
   EXPECT_NE(query.find("nresp1"), std::string::npos) << query;
   EXPECT_NE(query.find("packet_get_int0"), std::string::npos) << query;

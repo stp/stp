@@ -182,7 +182,6 @@ enum class Format : std::uint8_t
 {
   AUTO = 0,
   SMTLIB2,
-  CVC,
   DOT,
   GDL
 };
@@ -429,7 +428,7 @@ public:
 
   Term substitute(const std::vector<std::pair<Term, Term>>& map) const;
   std::string str() const; ///< SMT-LIB 2, untruncated, no let-sharing; any depth
-  /// SMT-LIB 2 with let-sharing, CVC, DOT or GDL through the engine's
+  /// SMT-LIB 2 with let-sharing, DOT or GDL through the engine's
   /// printers, which recurse once per level of the term: one some ten
   /// thousand levels deep can overflow the stack there (str() cannot).
   std::string to_string(Format f, bool share_subterms = true) const;
@@ -1172,9 +1171,7 @@ public:
   /// engine's printers, which recurse once per level of a term (see
   /// Term::to_string).
   std::string to_smt2(bool with_check_sat = false) const;
-  /// SMTLIB2, CVC, DOT, GDL. CVC is UNSUPPORTED for floating point, Reals,
-  /// functions and names its reader cannot spell; an overflow predicate or a
-  /// distinct prints in operators the CVC reader has.
+  /// SMTLIB2 (to_smt2(false)), DOT or GDL.
   std::string to_string(Format) const;
   /// DIMACS of the current assertions: the batch pipeline encodes them up to
   /// its first CNF without solving, whatever `incremental` says, and the

@@ -1156,24 +1156,6 @@ public:
    * Toplevel printing and stats functions                        *
    ****************************************************************/
 
-  // For printing purposes
-  // Used just by the CVC parser.
-  ASTVec ListOfDeclaredVars;
-
-  // Nodes seen so far
-  ASTNodeSet PLPrintNodeSet;
-
-  // Map from ASTNodes to LetVars
-  ASTNodeMap NodeLetVarMap;
-
-  // This is a vector which stores the Node to LetVars pairs. It
-  // allows for sorted printing, as opposed to NodeLetVarMap
-  vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
-
-  // A partial Map from ASTNodes to LetVars. Needed in order to
-  // correctly print shared subterms inside the LET itself
-  ASTNodeMap NodeLetVarMap1;
-
   // prints statistics for the ASTNode.
   void ASTNodeStats(const char* c, const ASTNode& a);
 
@@ -1342,12 +1324,7 @@ public:
   // after SAT solving should be cleaned out.
   void ClearAllTables(void)
   {
-    NodeLetVarMap.clear();
-    NodeLetVarMap1.clear();
-    PLPrintNodeSet.clear();
     TermsAlreadySeenMap.clear();
-    NodeLetVarVec.clear();
-    ListOfDeclaredVars.clear();
   }
 
   DLL_PUBLIC ~STPMgr();

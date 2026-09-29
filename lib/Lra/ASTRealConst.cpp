@@ -82,7 +82,7 @@ void ASTRealConst::CleanUp()
   delete this;
 }
 
-void ASTRealConst::nodeprint(ostream& os, bool /*c_friendly*/)
+void ASTRealConst::nodeprint(ostream& os)
 {
   lra::NumberOperationScope operation(nodeManager->lra_ast_state->number_budget);
   os << smtlibReal(value_);

@@ -687,12 +687,7 @@ TEST(Parsing, other_printers)
   s.add(bvadd(x, y) == 3);
   s.add(arr[x] == y);
   s.add(b);
-  const std::string cvc = s.to_string(Format::CVC);
-  EXPECT_NE(cvc.find("x : BITVECTOR(8);"), std::string::npos);
-  EXPECT_NE(cvc.find("arr : ARRAY BITVECTOR(8) OF BITVECTOR(8);"), std::string::npos);
-  EXPECT_NE(cvc.find("b : BOOLEAN;"), std::string::npos);
-  EXPECT_NE(cvc.find("ASSERT("), std::string::npos);
-  EXPECT_NE(cvc.find("QUERY(FALSE);"), std::string::npos);
+  EXPECT_EQ(s.to_string(Format::SMTLIB2), s.to_smt2());
   const std::string dot = s.to_string(Format::DOT);
   EXPECT_EQ(dot.rfind("digraph G{", 0), 0u);
   EXPECT_NE(dot.find("BVPLUS"), std::string::npos);
@@ -702,17 +697,12 @@ TEST(Parsing, other_printers)
   // an empty solver prints too
   TermManager t3;
   Solver s3(t3);
-  EXPECT_EQ(s3.to_string(Format::CVC), "QUERY(FALSE);\n");
   EXPECT_EQ(s3.to_string(Format::DOT).rfind("digraph G{", 0), 0u);
   EXPECT_NE(s3.to_smt2().find("(set-logic QF_BV)"), std::string::npos);
-  // the CVC language has no floating-point or Real syntax
   s.add(fp_is_nan(tm.declare("fx", tm.mk_fp32_sort())));
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.to_string(Format::CVC));
   EXPECT_NE(s.to_smt2().find("(set-logic QF_ABVFP)"), std::string::npos);
-  TermManager t4;
-  Solver s4(t4);
-  s4.add(real_gt(t4.declare("r", t4.mk_real_sort()), 1));
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s4.to_string(Format::CVC));
+  // a format no printer has
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s.to_string(static_cast<Format>(42)));
 }
 
 TEST(Parsing, term_printing)
@@ -737,12 +727,10 @@ TEST(Parsing, term_printing)
   std::ostringstream os;
   os << prod << " " << Term();
   EXPECT_EQ(os.str(), "(bvmul x y) <null term>");
-  EXPECT_EQ(prod.to_string(Format::CVC).rfind("BVMULT(8,", 0), 0u);
   EXPECT_EQ(prod.to_string(Format::DOT).rfind("digraph G{", 0), 0u);
   EXPECT_EQ(prod.to_string(Format::GDL).rfind("graph: {", 0), 0u);
   const Term fx = tm.declare("fx", tm.mk_fp32_sort());
   EXPECT_EQ(fp_is_nan(fx).str(), "(fp.isNaN fx)");
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, fp_is_nan(fx).to_string(Format::CVC));
   EXPECT_EQ(tm.mk_fp(fx.sort(), RoundingMode::RNE, 1.0).str(), "(fp #b0 #b01111111 #b00000000000000000000000)");
   EXPECT_EQ(to_fp(tm.mk_fp64_sort(), RoundingMode::RTZ, fx).str(), "((_ to_fp 11 53) RTZ fx)");
   EXPECT_EQ(fp_to_ubv(8, RoundingMode::RNE, fx).str(), "((_ fp.to_ubv 8) RNE fx)");

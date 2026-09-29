@@ -368,30 +368,6 @@ std::string sort_text(VCImpl*, stp_sort s)
   return out;
 }
 
-std::string type_text(stp_sort s)
-{
-  std::uint32_t eb = 0, sb = 0;
-  switch (sort_kind(s))
-  {
-    case STP_SORT_BOOL:
-      return "BOOLEAN";
-    case STP_SORT_BV:
-      return "BITVECTOR(" + std::to_string(bv_width(s)) + ")";
-    case STP_SORT_ARRAY:
-      return "ARRAY " + type_text(stp_sort_array_index(s)) + " OF " +
-             type_text(stp_sort_array_element(s));
-    case STP_SORT_FP:
-      fp_format(s, eb, sb);
-      return "FLOATINGPOINT(" + std::to_string(eb) + ", " + std::to_string(sb) + ")";
-    case STP_SORT_RM:
-      return "ROUNDINGMODE";
-    case STP_SORT_REAL:
-      return "REAL";
-    default:
-      return sort_text(nullptr, s);
-  }
-}
-
 // ============================================================ solver
 
 namespace
@@ -621,23 +597,18 @@ bool value_uint64(stp_term t, std::uint64_t& out, const char* who)
   return true;
 }
 
-// ============================================================ presentation-language text
+// ============================================================ SMT-LIB 2 text
 
-std::string cvc_text(VCImpl* vc, stp_term t, const char* who, bool* ok)
+std::string smt2_text(VCImpl* vc, stp_term t, const char* who, bool* ok)
 {
-  char* s = stp_term_to_string(t, STP_FORMAT_CVC, false);
+  // The engine's shared printer, as vc_printSMTLIB2 prints its assertion:
+  // every symbol |quoted|, a repeated subterm bound once by a let.
+  char* s = stp_term_to_string(t, STP_FORMAT_SMTLIB2, true);
   if (s == nullptr)
   {
-    stp_error_code code;
-    const std::string err = take_error(vc, &code);
     if (ok != nullptr)
       *ok = false;
-    if (code == STP_ERR_UNSUPPORTED)
-      fatal(std::string("CInterface: ") + who +
-            ": the presentation language has no floating-point syntax; print "
-            "this with SMTLIB2_PrintBack (vc_printSMTLIB2 in the C API)");
-    else
-      fatal(std::string("CInterface: ") + who + ": " + err);
+    fatal(std::string("CInterface: ") + who + ": " + take_error(vc));
     return std::string();
   }
   if (ok != nullptr)
@@ -660,42 +631,7 @@ std::string trim(std::string s)
   return s.substr(i);
 }
 
-std::string bits_to_cvc(VCImpl* vc, const std::string& bits)
-{
-  // Through the engine's own printer, so a 32-bit value prints 0x0000002A and
-  // a 5-bit one 0b00001 exactly as 2.x printed the packed carrier.
-  stp_term bv = stp_mk_bv_str(vc->tm, static_cast<std::uint32_t>(bits.size()), bits.c_str(), 2);
-  if (bv == nullptr)
-  {
-    take_error(vc);
-    return "0b" + bits;
-  }
-  char* s = stp_term_to_string(bv, STP_FORMAT_CVC, false);
-  std::string out = s != nullptr ? trim(s) : "0b" + bits;
-  stp_free(s);
-  stp_term_release(bv);
-  return out;
-}
-
 } // namespace
-
-std::string cvc_value_text(VCImpl* vc, stp_term value)
-{
-  const stp_sort s = stp_term_sort(value);
-  if (is_bool(s))
-  {
-    bool b = false;
-    stp_term_to_bool(value, &b);
-    return b ? "TRUE" : "FALSE";
-  }
-  std::string bits;
-  if (value_bits(value, bits))
-    return bits_to_cvc(vc, bits);
-  char* t = stp_term_str(value);
-  std::string out = t != nullptr ? trim(t) : "?";
-  stp_free(t);
-  return out;
-}
 
 } // namespace compat2
 
@@ -824,8 +760,7 @@ void process_argument(const char ch, VC vcp)
       vc->flag_p = true;
       break;
     case 'q':
-      set_option(vc, "print-arrayval", "true", "flag 'q'");
-      break;
+      break; // arrays in declared order, printed in the language STP no longer has
     case 'r':
       set_option(vc, "ackermanize", "true", "flag 'r'");
       break;
@@ -854,8 +789,7 @@ void process_argument(const char ch, VC vcp)
       set_option(vc, "model-array-fill", "zero", "flag 'x'");
       break;
     case 'y':
-      set_option(vc, "print-counterexbin", "true", "flag 'y'");
-      break;
+      break; // counterexamples in binary, printed in the language STP no longer has
     default:
       fatal(std::string("CInterface: process_argument: unrecognised flag '") + ch + "'");
       break;
@@ -1622,7 +1556,7 @@ enum reason_unknown_t map_reason(stp_unknown_reason r)
   return REASON_UNKNOWN_INCOMPLETE;
 }
 
-void print_counterexample_lines(VCImpl* vc, std::ostream& os);
+void print_counterexample_smt2(VCImpl* vc, std::ostream& os);
 
 } // namespace
 
@@ -1678,7 +1612,7 @@ int vc_query_with_timeout(VC vcp, Expr e, int timeout_max_conflicts, int timeout
     vc->reason_detail = "an assertion was refused (see vc_assertFormula), so this query is "
                         "missing one of its constraints and cannot be decided";
     if (vc->flag_n)
-      std::cout << "Unknown." << std::endl;
+      std::cout << "unknown" << std::endl;
     return 3;
   }
 
@@ -1729,15 +1663,16 @@ int vc_query_with_timeout(VC vcp, Expr e, int timeout_max_conflicts, int timeout
   }
   if (vc->flag_n)
   {
+    // the answer to the check of the query's negation, as stp prints it
     if (result == 1)
-      std::cout << "Valid." << std::endl;
+      std::cout << "unsat" << std::endl;
     else if (result == 0)
-      std::cout << "Invalid." << std::endl;
+      std::cout << "sat" << std::endl;
     else
-      std::cout << "Unknown." << std::endl;
+      std::cout << "unknown" << std::endl;
   }
   if (vc->flag_p && result == 0)
-    print_counterexample_lines(vc, std::cout);
+    print_counterexample_smt2(vc, std::cout);
   return result;
 }
 
@@ -2401,7 +2336,7 @@ void vc_printExpr(VC vcp, Expr e)
   if (vc == nullptr || t == nullptr)
     return;
   bool ok = false;
-  const std::string s = cvc_text(vc, t, "vc_printExpr", &ok);
+  const std::string s = smt2_text(vc, t, "vc_printExpr", &ok);
   if (ok)
     std::cout << s << std::flush;
 }
@@ -2413,7 +2348,7 @@ void vc_printExprFile(VC vcp, Expr e, int fd)
   if (vc == nullptr || t == nullptr)
     return;
   bool ok = false;
-  const std::string s = cvc_text(vc, t, "vc_printExprFile", &ok);
+  const std::string s = smt2_text(vc, t, "vc_printExprFile", &ok);
   if (!ok)
     return;
   std::size_t done = 0;
@@ -2436,7 +2371,7 @@ void vc_printExprToBuffer(VC vcp, Expr e, char** buf, size_t* len)
     return;
   }
   bool ok = false;
-  to_buffer(cvc_text(vc, t, "vc_printExprToBuffer", &ok), buf, len);
+  to_buffer(smt2_text(vc, t, "vc_printExprToBuffer", &ok), buf, len);
 }
 
 char* exprString(Expr e)
@@ -2448,10 +2383,8 @@ char* exprString(Expr e)
     return strdup("");
   }
   if (h->is_type())
-    return strdup(type_text(h->sort).c_str());
-  // The presentation language where it exists; the SMT-LIB 2 spelling for a
-  // term of a sort it has no syntax for (2.x died inside the printer).
-  char* s = stp_term_to_string(h->term, STP_FORMAT_CVC, false);
+    return strdup(sort_text(h->vc, h->sort).c_str());
+  char* s = stp_term_to_string(h->term, STP_FORMAT_SMTLIB2, true);
   if (s == nullptr)
   {
     take_error(h->vc);
@@ -2470,7 +2403,7 @@ char* typeString(Type t)
     fatal("CInterface: typeString: null type handle");
     return strdup("");
   }
-  return strdup(type_text(h->is_type() ? h->sort : stp_term_sort(h->term)).c_str());
+  return strdup(sort_text(h->vc, h->is_type() ? h->sort : stp_term_sort(h->term)).c_str());
 }
 
 namespace
@@ -2577,23 +2510,26 @@ std::string symbol_name(stp_term t)
   return out;
 }
 
+void print_declaration_smt2(VCImpl* vc, stp_term t, std::ostream& os)
+{
+  const std::string name = symbol_name(t);
+  if (name.empty())
+    return;
+  const stp_sort s = stp_term_sort(t);
+  if (is_fun(s))
+    os << "(declare-fun |" << name << "| " << sort_text(vc, s) << ")\n";
+  else
+    os << "(declare-fun |" << name << "| () " << sort_text(vc, s) << ")\n";
+}
+
 void print_declarations_smt2(VCImpl* vc, const Symbols& syms, std::ostream& os)
 {
   for (stp_term t : syms.list)
-  {
-    const std::string name = symbol_name(t);
-    if (name.empty())
-      continue;
-    const stp_sort s = stp_term_sort(t);
-    if (is_fun(s))
-      os << "(declare-fun |" << name << "| " << sort_text(vc, s) << ")\n";
-    else
-      os << "(declare-fun |" << name << "| () " << sort_text(vc, s) << ")\n";
-  }
+    print_declaration_smt2(vc, t, os);
 }
 
 // The declarations of vc_printVarDecls: the checker's symbols from the
-// clearDecls watermark on, those of the sorts the presentation language has.
+// clearDecls watermark on.
 void print_var_decls(VCImpl* vc, std::ostream& os)
 {
   const std::size_t n = stp_tm_num_symbols(vc->tm);
@@ -2602,25 +2538,7 @@ void print_var_decls(VCImpl* vc, std::ostream& os)
     stp_term t = stp_tm_symbol_at(vc->tm, i);
     if (t == nullptr)
       continue;
-    const std::string name = symbol_name(t);
-    const stp_sort s = stp_term_sort(t);
-    if (!name.empty())
-      switch (sort_kind(s))
-      {
-        case STP_SORT_BV:
-          os << name << " : BITVECTOR(" << bv_width(s) << ");\n";
-          break;
-        case STP_SORT_ARRAY:
-          if (is_bv(stp_sort_array_index(s)) && is_bv(stp_sort_array_element(s)))
-            os << name << " : ARRAY BITVECTOR(" << index_width(s) << ") OF BITVECTOR("
-               << packed_width(s) << ");\n";
-          break;
-        case STP_SORT_BOOL:
-          os << name << " : BOOLEAN;\n";
-          break;
-        default:
-          break; // no presentation-language spelling
-      }
+    print_declaration_smt2(vc, t, os);
     stp_term_release(t);
   }
 }
@@ -2641,64 +2559,14 @@ bool print_asserts(VCImpl* vc, std::ostream& os, int simplify_print)
         }
       }
       bool ok = false;
-      const std::string text = cvc_text(vc, shown, "vc_printAsserts", &ok);
+      const std::string text = smt2_text(vc, shown, "vc_printAsserts", &ok);
       if (shown != t)
         stp_term_release(shown);
       if (!ok)
         return false;
-      os << "ASSERT( " << text << ");\n";
+      os << "(assert " << text << ")\n";
     }
   return true;
-}
-
-// The value of a model-core symbol as a string in the presentation language:
-// one "ASSERT( ... );" line per scalar and per observed array cell.
-void print_counterexample_lines(VCImpl* vc, std::ostream& os)
-{
-  if (vc->model == nullptr)
-    return;
-  const std::size_t n = stp_model_num_symbols(vc->model);
-  for (std::size_t i = 0; i < n; ++i)
-  {
-    stp_term sym = stp_model_symbol(vc->model, i);
-    if (sym == nullptr)
-      continue;
-    const std::string name = symbol_name(sym);
-    const stp_sort s = stp_term_sort(sym);
-    if (name.empty() || is_fun(s) || is_real(s))
-    {
-      stp_term_release(sym);
-      continue;
-    }
-    if (is_array(s))
-    {
-      if (stp_array_value av = stp_model_array_value(vc->model, sym))
-      {
-        const std::size_t m = stp_array_value_size(av);
-        for (std::size_t j = 0; j < m; ++j)
-        {
-          stp_term index = nullptr, element = nullptr;
-          if (stp_array_value_entry(av, j, &index, &element) != STP_OK)
-            continue;
-          os << "ASSERT( " << name << "[" << cvc_value_text(vc, index) << "] = "
-             << cvc_value_text(vc, element) << " );\n";
-          stp_term_release(index);
-          stp_term_release(element);
-        }
-        stp_array_value_release(av);
-      }
-      else
-        take_error(vc);
-    }
-    else if (stp_term v = stp_model_value(vc->model, sym))
-    {
-      os << "ASSERT( " << name << (is_bool(s) ? "<=>" : " = ") << cvc_value_text(vc, v) << " );\n";
-      stp_term_release(v);
-    }
-    else
-      take_error(vc);
-    stp_term_release(sym);
-  }
 }
 
 std::string smt2_value_text(stp_term v)
@@ -2848,15 +2716,16 @@ void vc_printQuery(VC vcp)
   VCImpl* vc = vcimpl(vcp, "vc_printQuery");
   if (vc == nullptr)
     return;
-  std::string text = "TRUE";
+  // the query's question as SMT-LIB 2 asks it: is its negation satisfiable?
+  std::string text = "true";
   if (vc->last_query != nullptr)
   {
     bool ok = false;
-    text = cvc_text(vc, vc->last_query, "vc_printQuery", &ok);
+    text = smt2_text(vc, vc->last_query, "vc_printQuery", &ok);
     if (!ok)
       return;
   }
-  std::cout << "QUERY(" << text << ");" << std::endl;
+  std::cout << "(assert (not " << text << "))\n(check-sat)" << std::endl;
 }
 
 void vc_printQueryStateToBuffer(VC vcp, Expr e, char** buf, size_t* len, int simplify_print)
@@ -2869,11 +2738,17 @@ void vc_printQueryStateToBuffer(VC vcp, Expr e, char** buf, size_t* len, int sim
       to_buffer(std::string(), buf, len);
     return;
   }
+  // a script STP reads back: the logic, the declarations, the assertions,
+  // and the query's negation with the check that asks for it
+  Symbols syms;
+  for (const auto& level : vc->levels)
+    for (stp_term t : level)
+      collect_symbols(t, syms);
+  collect_symbols(q, syms);
   std::ostringstream os;
+  os << "(set-logic " << logic_of(syms) << ")\n";
   print_var_decls(vc, os);
-  os << "%----------------------------------------------------\n";
   print_asserts(vc, os, simplify_print);
-  os << "%----------------------------------------------------\n";
   stp_term shown = q;
   if (simplify_print == 1)
   {
@@ -2885,7 +2760,8 @@ void vc_printQueryStateToBuffer(VC vcp, Expr e, char** buf, size_t* len, int sim
     }
   }
   bool ok = false;
-  os << "QUERY( " << cvc_text(vc, shown, "vc_printQueryStateToBuffer", &ok) << " );\n";
+  os << "(assert (not " << smt2_text(vc, shown, "vc_printQueryStateToBuffer", &ok)
+     << "))\n(check-sat)\n";
   if (shown != q)
     stp_term_release(shown);
   to_buffer(os.str(), buf, len);
@@ -2896,9 +2772,8 @@ void vc_printCounterExample(VC vcp)
   VCImpl* vc = vcimpl(vcp, "vc_printCounterExample");
   if (vc == nullptr)
     return;
-  std::cout << "COUNTEREXAMPLE BEGIN: \n";
-  print_counterexample_lines(vc, std::cout);
-  std::cout << "COUNTEREXAMPLE END: \n" << std::flush;
+  print_counterexample_smt2(vc, std::cout);
+  std::cout << std::flush;
 }
 
 void vc_printCounterExampleFile(VC vcp, int fd)
@@ -2907,9 +2782,7 @@ void vc_printCounterExampleFile(VC vcp, int fd)
   if (vc == nullptr)
     return;
   std::ostringstream os;
-  os << "COUNTEREXAMPLE BEGIN: \n";
-  print_counterexample_lines(vc, os);
-  os << "COUNTEREXAMPLE END: \n";
+  print_counterexample_smt2(vc, os);
   const std::string s = os.str();
   std::size_t done = 0;
   while (done < s.size())
@@ -2927,9 +2800,7 @@ void vc_printCounterExampleToBuffer(VC vcp, char** buf, size_t* len)
   if (vc == nullptr || buf == nullptr)
     return;
   std::ostringstream os;
-  os << "COUNTEREXAMPLE BEGIN: \n";
-  print_counterexample_lines(vc, os);
-  os << "COUNTEREXAMPLE END: \n";
+  print_counterexample_smt2(vc, os);
   to_buffer(os.str(), buf, len);
 }
 

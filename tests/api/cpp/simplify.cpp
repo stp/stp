@@ -71,9 +71,8 @@ TEST(simplify, one)
   const Term cast_32_to_8 = extract(7, 0, a_of_0);
   // 2.x's vc_bvSignExtend extended to a width; 3.x's sign_extend extends by a count
   const Term cast_8_to_32 = sign_extend(24, cast_32_to_8);
-  // vc_printExpr: the presentation language
-  EXPECT_EQ(cast_8_to_32.to_string(Format::CVC).rfind("BVSX(a[0x00000000],32)", 0), 0u)
-      << cast_8_to_32.to_string(Format::CVC);
+  // vc_printExpr: the term printed
+  EXPECT_EQ(cast_8_to_32.str(), "((_ sign_extend 24) (select a #x00000000))");
 
   // The manager folds at construction: the low byte of the reassembled word
   // is the read of a[0], sign-extended.
@@ -98,7 +97,7 @@ TEST(simplify, two)
       a_of_0 = concat(a_of_0, a[tm.mk_bv(32, i)]);
     const Term cast_32_to_8 = extract(7, 0, a_of_0);
     const Term cast_8_to_32 = sign_extend(24, cast_32_to_8);
-    EXPECT_EQ(cast_8_to_32.to_string(Format::CVC).rfind("BVSX(a[0x00000000],32)", 0), 0u);
+    EXPECT_EQ(cast_8_to_32.str(), "((_ sign_extend 24) (select a #x00000000))");
     const Term simplified = tm.simplify(cast_8_to_32);
     // folded at construction already: simplify has nothing left to do
     EXPECT_TRUE(simplified.same_as(cast_8_to_32));

@@ -93,7 +93,7 @@ class Tester:
         # , "--disable-equality", "-r", "--oldstyle-refinement"]
 
         # print options
-        # -p (COUNTEREXAMPLE), -s (STATS), -t (quick stats), -v (notes), -y (counterexample in binary)
+        # -p (COUNTEREXAMPLE), -s (STATS), -t (quick stats), -v (notes)
 
         # output options
         # --output-CNF --exit-after-CNF

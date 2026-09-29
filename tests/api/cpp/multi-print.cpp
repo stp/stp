@@ -39,12 +39,15 @@ using namespace stp;
 namespace
 {
 
-// The printed text without the blanks and line breaks the printer ends with.
+// The printed text without the blanks and line breaks the printer puts around it.
 std::string trimmed(std::string text)
 {
   while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))
     text.pop_back();
-  return text;
+  std::size_t start = 0;
+  while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])))
+    ++start;
+  return text.substr(start);
 }
 
 TEST(multiprint, one)
@@ -57,28 +60,28 @@ TEST(multiprint, one)
   EXPECT_NE(tm2.id(), first_id);
 
   Term ct_3 = tm->mk_bv(32, "00000000000000000000000000000011", 2);
-  std::string printed = ct_3.to_string(Format::CVC);
+  std::string printed = ct_3.to_string(Format::SMTLIB2);
   std::cout << printed << "\n";
-  EXPECT_EQ(trimmed(printed), "0x00000003");
+  EXPECT_EQ(trimmed(printed), "#x00000003");
 
   ct_3 = tm->mk_bv(32, 5);
-  printed = ct_3.to_string(Format::CVC);
+  printed = ct_3.to_string(Format::SMTLIB2);
   std::cout << printed << "\n";
-  EXPECT_EQ(trimmed(printed), "0x00000005");
+  EXPECT_EQ(trimmed(printed), "#x00000005");
 
   // vc_Destroy(vc): the first manager goes once its last handle and term do
   tm.reset();
 
   ct_3 = tm2.mk_bv(32, "00000000000000000000000000000011", 2);
   EXPECT_TRUE(ct_3.manager() == tm2);
-  printed = ct_3.to_string(Format::CVC);
+  printed = ct_3.to_string(Format::SMTLIB2);
   std::cout << printed << "\n";
-  EXPECT_EQ(trimmed(printed), "0x00000003");
+  EXPECT_EQ(trimmed(printed), "#x00000003");
 
   ct_3 = tm2.mk_bv(32, 5);
-  printed = ct_3.to_string(Format::CVC);
+  printed = ct_3.to_string(Format::SMTLIB2);
   std::cout << printed << "\n";
-  EXPECT_EQ(trimmed(printed), "0x00000005");
+  EXPECT_EQ(trimmed(printed), "#x00000005");
 }
 
 } // namespace

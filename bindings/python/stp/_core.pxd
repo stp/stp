@@ -94,7 +94,6 @@ cdef extern from "stp/stp.h":
     ctypedef enum stp_format:
         STP_FORMAT_AUTO
         STP_FORMAT_SMTLIB2
-        STP_FORMAT_CVC
         STP_FORMAT_DOT
         STP_FORMAT_GDL
     ctypedef enum stp_parse_mode:

@@ -287,7 +287,7 @@ Limits of the alpha
    stp/minisat (``capabilities()`` says which, under ``interrupt.minisat``).
 -  The model's evaluator, ``simplify``, ``substitute`` and ``str()`` take a
    term of any depth. The engine's printers -- ``to_string`` with let-sharing,
-   the CVC, DOT and GDL forms, and ``Solver::to_smt2`` and ``to_string`` --
+   the DOT and GDL forms, and ``Solver::to_smt2`` and ``to_string`` --
    recurse once per level of a term, as 2.x's did, and a term some ten
    thousand levels deep can overflow the stack there.
 -  ``fp.to_real`` takes formats whose exponent has at most 16 bits (the exact

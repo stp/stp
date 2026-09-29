@@ -2909,32 +2909,6 @@ category = "output"
 help = "print counterexample"
 
 [[option]]
-name = "print-counterexbin"
-short = "y"
-type = "bool"
-cli_form = "flag"
-default = false
-tier = "diagnostic"
-settable = "anytime"
-scope = "solver"
-engine = { field = "print_binary_flag" }
-category = "output"
-help = "print counterexample in binary"
-
-[[option]]
-name = "print-arrayval"
-short = "q"
-type = "bool"
-cli_form = "flag"
-default = false
-tier = "diagnostic"
-settable = "anytime"
-scope = "solver"
-engine = { field = "print_arrayval_declaredorder_flag" }
-category = "output"
-help = "print arrayval declared order"
-
-[[option]]
 name = "print-functionstat"
 short = "s"
 type = "bool"

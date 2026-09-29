@@ -56,7 +56,6 @@ THE SOFTWARE.
 #include <set>
 #include <sstream>
 #include <string_view>
-#include <unordered_set>
 
 extern int smt2lineno;
 
@@ -2251,138 +2250,6 @@ void collect_symbols(const std::vector<ASTNode>& roots, std::vector<ASTNode>& sy
 }
 } // namespace
 
-namespace
-{
-// The formula as the CVC reader can read it: its grammar has no overflow
-// predicate and no distinct, so each is spelled in operators it has, by the
-// definitions the bit-blaster decides them by. Every other node is kept.
-ASTNode cvc_spelling(ManagerImpl* m, const ASTNode& root, ASTNodeMap& done)
-{
-  STPMgr* bm = m->bm;
-  NodeFactory* f = bm->hashingNodeFactory;
-  const auto c32 = [&](unsigned v) { return bm->CreateBVConst(32, v); };
-  const auto bit = [&](const ASTNode& x, unsigned i) {
-    return f->CreateTerm(BVEXTRACT, 1, x, c32(i), c32(i));
-  };
-  const auto one = bm->CreateOneConst(1);
-  const auto ext = [&](stp::Kind k, const ASTNode& x, unsigned w) {
-    return f->CreateTerm(k, w, x, c32(w));
-  };
-  const auto equal = [&](const ASTNode& a, const ASTNode& b) {
-    return a.GetType() == BOOLEAN_TYPE ? f->CreateNode(IFF, a, b) : f->CreateNode(EQ, a, b);
-  };
-  std::vector<std::pair<ASTNode, bool>> stack{{root, false}};
-  while (!stack.empty())
-  {
-    const ASTNode n = stack.back().first;
-    if (done.count(n) != 0)
-    {
-      stack.pop_back();
-      continue;
-    }
-    if (!stack.back().second)
-    {
-      stack.back().second = true;
-      for (const ASTNode& c : n.GetChildren())
-        if (done.count(c) == 0)
-          stack.emplace_back(c, false);
-      continue;
-    }
-    stack.pop_back();
-    ASTVec kids;
-    bool changed = false;
-    for (const ASTNode& c : n.GetChildren())
-    {
-      kids.push_back(done.at(c));
-      changed = changed || kids.back() != c;
-    }
-    ASTNode out = n;
-    const unsigned w = kids.empty() || kids[0].GetType() != BITVECTOR_TYPE ? 0 : kids[0].GetValueWidth();
-    switch (n.GetKind())
-    {
-      case DISTINCT:
-      {
-        ASTVec pairs;
-        for (std::size_t i = 0; i < kids.size(); ++i)
-          for (std::size_t j = i + 1; j < kids.size(); ++j)
-            pairs.push_back(f->CreateNode(NOT, equal(kids[i], kids[j])));
-        out = pairs.empty() ? bm->ASTTrue : pairs.size() == 1 ? pairs[0] : f->CreateNode(AND, pairs);
-        break;
-      }
-      case BVUADDO: // the carry out of the sum
-        out = f->CreateNode(
-            EQ, bit(f->CreateTerm(BVPLUS, w + 1, ext(BVZX, kids[0], w + 1), ext(BVZX, kids[1], w + 1)), w),
-            one);
-        break;
-      case BVUSUBO: // a borrow
-        out = f->CreateNode(BVLT, kids[0], kids[1]);
-        break;
-      case BVUMULO: // the product's high half
-        out = f->CreateNode(
-            NOT, f->CreateNode(EQ,
-                               f->CreateTerm(BVEXTRACT, w,
-                                             f->CreateTerm(BVMULT, 2 * w, ext(BVZX, kids[0], 2 * w),
-                                                           ext(BVZX, kids[1], 2 * w)),
-                                             c32(2 * w - 1), c32(w)),
-                               bm->CreateZeroConst(w)));
-        break;
-      case BVSADDO: // operands of one sign, a sum of the other
-      case BVSSUBO: // operands of different signs, a difference of the second's
-      {
-        const ASTNode sx = bit(kids[0], w - 1), sy = bit(kids[1], w - 1);
-        const ASTNode r = f->CreateTerm(n.GetKind() == BVSADDO ? BVPLUS : BVSUB, w, kids[0], kids[1]);
-        const ASTNode same = f->CreateNode(EQ, sx, sy);
-        out = f->CreateNode(AND, n.GetKind() == BVSADDO ? same : f->CreateNode(NOT, same),
-                            f->CreateNode(NOT, f->CreateNode(EQ, bit(r, w - 1), sx)));
-        break;
-      }
-      case BVSMULO: // the doubled product's top w + 1 bits are not all one sign
-      {
-        const ASTNode top = f->CreateTerm(
-            BVEXTRACT, w + 1,
-            f->CreateTerm(BVMULT, 2 * w, ext(BVSX, kids[0], 2 * w), ext(BVSX, kids[1], 2 * w)),
-            c32(2 * w - 1), c32(w - 1));
-        out = f->CreateNode(AND, f->CreateNode(NOT, f->CreateNode(EQ, top, bm->CreateZeroConst(w + 1))),
-                            f->CreateNode(NOT, f->CreateNode(EQ, top, bm->CreateMaxConst(w + 1))));
-        break;
-      }
-      default:
-        if (changed)
-          out = detail::rebuild_node(m, f, n, kids);
-        break;
-    }
-    done.emplace(n, out);
-  }
-  return done.at(root);
-}
-
-// A name the CVC reader reads back as that name: a letter, or an underscore
-// and one more character, then letters, digits and ' ? _ $; and none of its
-// keywords (every one of which is in capitals).
-bool cvc_spells(const std::string& name)
-{
-  const auto word = [](char c) {
-    return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '\'' || c == '?' ||
-           c == '_' || c == '$';
-  };
-  if (name.empty() || !(std::isalpha(static_cast<unsigned char>(name[0])) ||
-                        (name[0] == '_' && name.size() > 1)))
-    return false;
-  for (char c : name)
-    if (!word(c))
-      return false;
-  static const std::unordered_set<std::string> keywords = {
-      "AND", "ARRAY", "ASSERT", "BITVECTOR", "BOOLBV", "BOOLEAN", "BOOLEXTRACT", "BV", "BVASHR",
-      "BVDIV", "BVGE", "BVGT", "BVLE", "BVLSHR", "BVLT", "BVMOD", "BVMULT", "BVNAND", "BVNOR",
-      "BVPLUS", "BVSGE", "BVSGT", "BVSHL", "BVSLE", "BVSLT", "BVSUB", "BVSX", "BVUMINUS",
-      "BVXNOR", "BVXOR", "BVZX", "COUNTEREXAMPLE", "COUNTERMODEL", "ELSE", "ELSIF", "END",
-      "ENDIF", "EXCEPT", "FALSE", "IF", "IN", "LET", "NAND", "NOR", "NOT", "OF", "OR", "POP",
-      "PUSH", "QUERY", "SBVDIV", "SBVGE", "SBVGT", "SBVLE", "SBVLT", "SBVMOD", "SBVREM", "SX",
-      "THEN", "TRUE", "WITH", "XOR", "ZX"};
-  return keywords.count(name) == 0;
-}
-} // namespace
-
 std::string Solver::to_smt2(bool with_check_sat) const
 {
   SolverImpl* s = live(*this, "Solver::to_smt2");
@@ -2546,53 +2413,6 @@ std::string Solver::to_string(Format f) const
     case Format::AUTO:
     case Format::SMTLIB2:
       return to_smt2(false);
-    case Format::CVC:
-    {
-      std::vector<ASTNode> symbols;
-      bool has_fp = false, has_array = false, has_uf = false, has_real = false;
-      collect_symbols(roots, symbols, has_fp, has_array, has_uf, has_real);
-      if (has_fp || has_real || has_uf)
-        detail::fail(ErrorCode::UNSUPPORTED, "Solver::to_string",
-                     "the CVC presentation language has no floating-point, Real or "
-                     "uninterpreted-function syntax");
-      ASTNodeSet declared;
-      for (const ASTNode& sym : symbols)
-      {
-        if (!declared.insert(sym).second || bm->FoundIntroducedSymbolSet(sym))
-          continue;
-        if (!cvc_spells(sym.GetName()))
-          detail::fail(ErrorCode::UNSUPPORTED, "Solver::to_string",
-                       "the CVC presentation language cannot spell the name '" +
-                           std::string(sym.GetName()) + "'");
-        const SourceSort ss = sym.GetSourceSort();
-        switch (ss.kind())
-        {
-          case SourceSort::Kind::Bool:
-            os << sym.GetName() << " : BOOLEAN;\n";
-            break;
-          case SourceSort::Kind::BitVector:
-            os << sym.GetName() << " : BITVECTOR(" << ss.bitVectorWidth() << ");\n";
-            break;
-          case SourceSort::Kind::Array:
-            os << sym.GetName() << " : ARRAY BITVECTOR(" << ss.index().packedWidth()
-               << ") OF BITVECTOR(" << ss.element().packedWidth() << ");\n";
-            break;
-          default:
-            break;
-        }
-      }
-      ASTNodeMap spelled;
-      for (const ASTNode& a : roots)
-      {
-        os << "ASSERT(";
-        detail::engine_call(m, "Solver::to_string", [&] {
-          printer::PL_Print(os, cvc_spelling(m, a, spelled), bm);
-        });
-        os << ");\n";
-      }
-      os << "QUERY(FALSE);\n";
-      return os.str();
-    }
     case Format::DOT:
     case Format::GDL:
     {

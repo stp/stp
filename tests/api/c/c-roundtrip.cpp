@@ -207,7 +207,7 @@ TEST(c_roundtrip, a_refused_command_is_a_parse_error)
   EXPECT_EQ(STP_SAT, a.check());
 }
 
-TEST(c_roundtrip, cvc_and_dot_and_model_printing)
+TEST(c_roundtrip, smtlib2_and_dot_and_model_printing)
 {
   Session a;
   ASSERT_EQ(STP_OK, stp_solver_parse(a.s,
@@ -229,8 +229,6 @@ TEST(c_roundtrip, cvc_and_dot_and_model_printing)
       << model;
   stp_model_release(m);
 
-  const std::string cvc = take(stp_solver_to_string(a.s, STP_FORMAT_CVC));
-  EXPECT_NE(std::string::npos, cvc.find("cx : BITVECTOR(8);")) << cvc;
   const std::string smt2 = take(stp_solver_to_string(a.s, STP_FORMAT_SMTLIB2));
   Session b;
   ASSERT_EQ(STP_OK, stp_solver_parse(b.s, smt2.c_str(), STP_FORMAT_SMTLIB2)) << pending(b.tm) << "\n" << smt2;

@@ -38,7 +38,7 @@ class ASTRealConst final : public ASTInternal
   ASTRealConst(const ASTRealConst& other);
 
   void CleanUp() override;
-  void nodeprint(ostream& os, bool c_friendly = false) override;
+  void nodeprint(ostream& os) override;
 
   void setIndexWidth(uint32_t) override;
   uint32_t getIndexWidth() const override { return 0; }

@@ -48,11 +48,6 @@ ostream& ASTNode::LispPrint_indent(ostream& os, int indentation) const
   return printer::Lisp_Print_indent(os, *this, indentation);
 }
 
-ostream& ASTNode::PL_Print(ostream& os, STPMgr* mgr, int indentation) const
-{
-  return printer::PL_Print(os, *this, mgr, indentation);
-}
-
 void lpvec(const ASTVec& vec)
 {
   LispPrintVec(cout, vec, 0);

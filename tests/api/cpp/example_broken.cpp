@@ -44,10 +44,10 @@ namespace
 Entailment handleQuery(Solver& s, const Term& queryExpr, std::ostream& out)
 {
   // Print the assertions
-  out << "Assertions:\n" << s.to_string(Format::CVC);
+  out << "Assertions:\n" << s.to_smt2();
 
   const Entailment result = s.entails(queryExpr);
-  out << "Query:\nQUERY(" << queryExpr.to_string(Format::CVC) << ");\n";
+  out << "Query:\n" << queryExpr.str() << "\n";
   if (result.is_invalid())
   {
     out << "Query is INVALID\n";
@@ -94,7 +94,7 @@ TEST(examplebroken, one)
   const Entailment r1 = handleQuery(s, equality, first);
   std::cout << first.str();
   EXPECT_TRUE(r1.is_valid());
-  EXPECT_NE(first.str().find("ASSERT("), std::string::npos) << first.str();
+  EXPECT_NE(first.str().find("(assert "), std::string::npos) << first.str();
   EXPECT_NE(first.str().find("Query is VALID"), std::string::npos) << first.str();
 
   // We are asking STP: forall x. true -> ( x + x = 2 )

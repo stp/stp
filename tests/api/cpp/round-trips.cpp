@@ -282,18 +282,3 @@ TEST(RoundTrips, a_fresh_sorts_name_is_not_declared_again)
   const Sort named = tm.declare_sort("T");
   EXPECT_EQ(tm.declare_sort("T"), named);
 }
-
-// A name the CVC reader would not read back as that name is refused rather
-// than printed: a space, a leading digit, one of its keywords.
-TEST(RoundTrips, cvc_refuses_a_name_it_cannot_spell)
-{
-  for (const char* name : {"odd name", "1abc", "x!0", "ASSERT", "WITH"})
-  {
-    SCOPED_TRACE(name);
-    TermManager tm;
-    Solver s(tm);
-    s.add(tm.declare(name, tm.mk_bv_sort(8)) == tm.mk_bv(8, 1));
-    API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.to_string(Format::CVC));
-  }
-}
-

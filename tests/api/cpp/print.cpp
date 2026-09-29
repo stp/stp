@@ -23,8 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 // print.cpp -- printing 32-bit constants, one built from a binary
-// string and one from an integer: the presentation language (CVC), which
-// 2.x's vc_printExpr wrote to stdout, and SMT-LIB 2. The library prints
+// string and one from an integer, which 2.x's vc_printExpr wrote to stdout:
+// in SMT-LIB 2, through the shared printer and str(). The library prints
 // nothing itself; the test writes the text out.
 
 #include "api_common.hpp"
@@ -38,12 +38,15 @@ using namespace stp;
 namespace
 {
 
-// The printed text without the blanks and line breaks the printer ends with.
+// The printed text without the blanks and line breaks the printer puts around it.
 std::string trimmed(std::string text)
 {
   while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))
     text.pop_back();
-  return text;
+  std::size_t start = 0;
+  while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])))
+    ++start;
+  return text.substr(start);
 }
 
 TEST(print, one)
@@ -53,15 +56,15 @@ TEST(print, one)
   TermManager tm;
 
   Term ct_3 = tm.mk_bv(32, "00000000000000000000000000000011", 2);
-  std::string printed = ct_3.to_string(Format::CVC);
+  std::string printed = ct_3.to_string(Format::SMTLIB2);
   std::cout << printed << "\n";
-  EXPECT_EQ(trimmed(printed), "0x00000003");
+  EXPECT_EQ(trimmed(printed), "#x00000003");
   EXPECT_EQ(ct_3.str(), "#x00000003");
 
   ct_3 = tm.mk_bv(32, 5);
-  printed = ct_3.to_string(Format::CVC);
+  printed = ct_3.to_string(Format::SMTLIB2);
   std::cout << printed << "\n";
-  EXPECT_EQ(trimmed(printed), "0x00000005");
+  EXPECT_EQ(trimmed(printed), "#x00000005");
   EXPECT_EQ(ct_3.str(), "#x00000005");
 }
 
