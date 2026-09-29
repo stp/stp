@@ -64,6 +64,9 @@ void SMT2SetRealTokens(bool enable);
 // Sort and term symbols live in separate namespaces.
 void SMT2SetSortContext(bool enable);
 void SMT2BeginAttributes();
+void SMT2BeginAnnotation();
+bool SMT2EndAnnotation();
+bool SMT2IsTheorySymbol(const std::string& name);
 void SMT2ResetLexMode();
 
 // The next ordinary identifier is the declaration site of a define-fun

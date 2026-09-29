@@ -2118,6 +2118,9 @@ void Cpp_interface::getAssertions()
 
 void Cpp_interface::getValue(const ASTVec& v)
 {
+  // Inline definitions in the argument may have changed the mode since the
+  // command header was read.
+  requireCommand("get-value");
   const EngineWork work(engine_work_failed);
   if (current_command_rejected)
     return;

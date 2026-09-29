@@ -679,6 +679,12 @@ public:
   DLL_PUBLIC void beginCurrentCommand();
   void enableProtocolChecks(bool enable) { protocol_checks = enable; }
   DLL_PUBLIC void requireCommand(const std::string& command);
+  void noteInlineDefinition()
+  {
+    mode = Mode::Assert;
+    model_valid = false;
+    lastCheckWasAssuming = false;
+  }
   DLL_PUBLIC void unavailableQuery(const std::string& command,
                                    const std::string& option);
   DLL_PUBLIC void abortCurrentCommand();

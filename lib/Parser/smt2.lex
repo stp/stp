@@ -132,6 +132,8 @@
 
   static thread_local bool sortContext = false;
   static thread_local unsigned attributeDepth = 0;
+  struct AnnotationScope { size_t letDepth; bool closed; };
+  static thread_local std::vector<AnnotationScope> annotations;
 
 namespace stp
 {
@@ -162,6 +164,7 @@ namespace stp
   {
     indexedIdentifierOpen = false;
     sortContext = false;
+    annotations.clear();
     ufDeclarationNamePending = false;
     functionParameterNamePending = false;
     declassifiedNamePending = false;
@@ -190,6 +193,147 @@ namespace stp
            unresolvedFpKeyword == text;
   }
 }
+
+  static int theoryToken(const std::string& name)
+  {
+    {
+      static const std::map<std::string, int> names = {
+          {"BitVec", BITVEC_TOK},
+          {"Array", ARRAY_TOK},
+          {"Bool", BOOL_TOK},
+          {"true", TRUE_TOK},
+          {"false", FALSE_TOK},
+          {"not", NOT_TOK},
+          {"and", AND_TOK},
+          {"or", OR_TOK},
+          {"xor", XOR_TOK},
+          {"ite", ITE_TOK},
+          {"=", EQ_TOK},
+          {"=>", IMPLIES_TOK},
+          {"distinct", DISTINCT_TOK},
+          {"bvshl", BVLEFTSHIFT_1_TOK},
+          {"bvlshr", BVRIGHTSHIFT_1_TOK},
+          {"bvashr", BVARITHRIGHTSHIFT_TOK},
+          {"bvadd", BVPLUS_TOK},
+          {"bvsub", BVSUB_TOK},
+          {"bvnot", BVNOT_TOK},
+          {"bvmul", BVMULT_TOK},
+          {"bvudiv", BVDIV_TOK},
+          {"bvsdiv", SBVDIV_TOK},
+          {"bvurem", BVMOD_TOK},
+          {"bvsrem", SBVREM_TOK},
+          {"bvsmod", SBVMOD_TOK},
+          {"bvneg", BVNEG_TOK},
+          {"bvand", BVAND_TOK},
+          {"bvor", BVOR_TOK},
+          {"bvxor", BVXOR_TOK},
+          {"bvnand", BVNAND_TOK},
+          {"bvnor", BVNOR_TOK},
+          {"bvxnor", BVXNOR_TOK},
+          {"concat", BVCONCAT_TOK},
+          {"extract", BVEXTRACT_TOK},
+          {"bvult", BVLT_TOK},
+          {"bvugt", BVGT_TOK},
+          {"bvule", BVLE_TOK},
+          {"bvuge", BVGE_TOK},
+          {"bvslt", BVSLT_TOK},
+          {"bvsgt", BVSGT_TOK},
+          {"bvsle", BVSLE_TOK},
+          {"bvsge", BVSGE_TOK},
+          {"bvcomp", BVCOMP_TOK},
+          {"zero_extend", BVZX_TOK},
+          {"sign_extend", BVSX_TOK},
+          {"repeat", BVREPEAT_TOK},
+          {"rotate_left", BVROTATE_LEFT_TOK},
+          {"rotate_right", BVROTATE_RIGHT_TOK},
+          {"bvnego", BVNEGO_TOK},
+          {"bvuaddo", BVUADDO_TOK},
+          {"bvsaddo", BVSADDO_TOK},
+          {"bvumulo", BVUMULO_TOK},
+          {"bvsmulo", BVSMULO_TOK},
+          {"bvusubo", BVUSUBO_TOK},
+          {"bvssubo", BVSSUBO_TOK},
+          {"bvsdivo", BVSDIVO_TOK},
+          {"select", SELECT_TOK},
+          {"store", STORE_TOK}};
+      const auto found = names.find(name);
+      if (found != names.end()) return found->second;
+    }
+    if (floatTokensActive)
+    {
+      static const std::map<std::string, int> names = {
+          {"FloatingPoint", FLOATINGPOINT_TOK},
+          {"RoundingMode", ROUNDINGMODE_TOK},
+          {"Float16", FLOAT16_TOK},
+          {"Float32", FLOAT32_TOK},
+          {"Float64", FLOAT64_TOK},
+          {"Float128", FLOAT128_TOK},
+          {"fp", FP_TOK},
+          {"to_fp", FP_TOFP_TOK},
+          {"to_fp_unsigned", FP_TOFP_UNSIGNED_TOK},
+          {"fp.to_ubv", FP_TO_UBV_TOK},
+          {"fp.to_sbv", FP_TO_SBV_TOK},
+          {"fp.to_real", FP_TO_REAL_TOK},
+          {"fp.to_ieee_bv", FP_TO_IEEE_BV_TOK},
+          {"fp.abs", FP_ABS_TOK},
+          {"fp.neg", FP_NEG_TOK},
+          {"fp.add", FP_ADD_TOK},
+          {"fp.sub", FP_SUB_TOK},
+          {"fp.mul", FP_MUL_TOK},
+          {"fp.div", FP_DIV_TOK},
+          {"fp.fma", FP_FMA_TOK},
+          {"fp.sqrt", FP_SQRT_TOK},
+          {"fp.rem", FP_REM_TOK},
+          {"fp.roundToIntegral", FP_ROUNDTOINTEGRAL_TOK},
+          {"fp.min", FP_MIN_TOK},
+          {"fp.max", FP_MAX_TOK},
+          {"fp.leq", FP_LEQ_TOK},
+          {"fp.lt", FP_LT_TOK},
+          {"fp.geq", FP_GEQ_TOK},
+          {"fp.gt", FP_GT_TOK},
+          {"fp.eq", FP_EQ_TOK},
+          {"fp.isNormal", FP_ISNORMAL_TOK},
+          {"fp.isSubnormal", FP_ISSUBNORMAL_TOK},
+          {"fp.isZero", FP_ISZERO_TOK},
+          {"fp.isInfinite", FP_ISINFINITE_TOK},
+          {"fp.isNaN", FP_ISNAN_TOK},
+          {"fp.isNegative", FP_ISNEGATIVE_TOK},
+          {"fp.isPositive", FP_ISPOSITIVE_TOK},
+          {"roundTowardZero", FP_RM_ROUNDTOWARDZERO_TOK},
+          {"roundNearestTiesToEven", FP_RM_ROUNDNEARESTTIESTOEVEN_TOK},
+          {"roundNearestTiesToAway", FP_RM_ROUNDNEARESTTIESTOAWAY_TOK},
+          {"roundTowardPositive", FP_RM_ROUNDTOWARDPOSITIVE_TOK},
+          {"roundTowardNegative", FP_RM_ROUNDTOWARDNEGATIVE_TOK},
+          {"RTZ", FP_RM_ROUNDTOWARDZERO_TOK},
+          {"RNE", FP_RM_ROUNDNEARESTTIESTOEVEN_TOK},
+          {"RNA", FP_RM_ROUNDNEARESTTIESTOAWAY_TOK},
+          {"RTP", FP_RM_ROUNDTOWARDPOSITIVE_TOK},
+          {"RTN", FP_RM_ROUNDTOWARDNEGATIVE_TOK},
+          {"NaN", FP_NAN_TOK},
+          {"-oo", FP_NEG_INF_TOK},
+          {"+oo", FP_POS_INF_TOK},
+          {"-zero", FP_NEG_ZERO_TOK},
+          {"+zero", FP_POS_ZERO_TOK}};
+      const auto found = names.find(name);
+      if (found != names.end()) return found->second;
+    }
+    if (realTokensActive)
+    {
+      static const std::map<std::string, int> names = {
+          {"Real", REAL_TOK},
+          {"+", REAL_ADD_TOK},
+          {"-", REAL_SUB_TOK},
+          {"*", REAL_MUL_TOK},
+          {"/", REAL_DIV_TOK},
+          {"<", REAL_LT_TOK},
+          {"<=", REAL_LE_TOK},
+          {">", REAL_GT_TOK},
+          {">=", REAL_GE_TOK}};
+      const auto found = names.find(name);
+      if (found != names.end()) return found->second;
+    }
+    return 0;
+  }
 
   static int classify(char* s);
 
@@ -271,12 +415,19 @@ namespace stp
       {
         nptr = *let;
         found = true;
+        for (auto& annotation : annotations)
+          if (stp::GlobalParserInterface->letMgr->boundOutside(s, annotation.letDepth))
+            annotation.closed = false;
       }
       // Function formals are lexical binders and therefore resolve before
       // all top-level namespaces. Lets remain first because a nested let may
       // shadow a formal in the define-fun body.
       else if (stp::GlobalParserInterface->LookupTemporarySymbol(s, nptr))
+      {
         found = true;
+        for (auto& annotation : annotations)
+          annotation.closed = false;
+      }
     }
     if (!found)
     {
@@ -832,6 +983,21 @@ namespace stp {
 
 namespace stp
 {
+bool SMT2IsTheorySymbol(const std::string& name)
+{
+  return theoryToken(name) != 0;
+}
+void SMT2BeginAnnotation()
+{
+  annotations.push_back({GlobalParserInterface->letMgr->depth(), true});
+}
+bool SMT2EndAnnotation()
+{
+  assert(!annotations.empty());
+  const bool closed = annotations.back().closed;
+  annotations.pop_back();
+  return closed;
+}
 void SMT2BeginAttributes()
 {
   attributeDepth = 0;

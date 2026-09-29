@@ -1670,6 +1670,29 @@
     stp::releaseParserValue(name);
   }
 
+  void annotateTerm(const ASTNode& term,
+                    const std::vector<stp::SMT2Attribute>& attributes)
+  {
+    const bool closed = stp::SMT2EndAnnotation();
+    for (const auto& attribute : attributes)
+    {
+      if (attribute.name != "named")
+        continue;
+      if (attribute.value.kind != stp::SMT2AttributeValue::Kind::Symbol)
+        fatal_yyerror(":named requires a symbol");
+      if (!closed)
+        fatal_yyerror(":named requires a closed term");
+      const std::string& name = attribute.value.text;
+      if (stp::SMT2IsTheorySymbol(name) || stp::STPMgr::isReservedSymbolName(name.c_str()))
+        fatal_yyerror(":named requires a fresh, non-reserved symbol");
+      std::string diagnostic;
+      if (!stp::GlobalParserInterface->validateTopLevelDeclarationName(name, &diagnostic))
+        stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
+      stp::GlobalParserInterface->storeFunction(name, ASTVec(), term);
+      stp::GlobalParserInterface->noteInlineDefinition();
+    }
+  }
+
   void setParsedOption(const stp::SMT2Attribute& attribute)
   {
     using Kind = stp::SMT2AttributeValue::Kind;
@@ -1720,6 +1743,7 @@
 
 %union {
   stp::SMT2Attribute* attribute;
+  std::vector<stp::SMT2Attribute>* attributes;
   stp::SMT2AttributeValue* attribute_value;
   /* Elaborated: the union lands in parsesmt2.tab.h, where only this
      pointer is named; the struct itself lives in the parser prologue. */
@@ -1750,7 +1774,7 @@
    values they own in their grammar actions. Values discarded by Bison during
    recovery or parse abort remain Bison's responsibility; release them here so
    malformed commands do not leak their identifier/string lookahead. */
-%destructor { delete $$; } <str> <attribute> <attribute_value>
+%destructor { delete $$; } <str> <attribute> <attribute_value> <attributes>
 %destructor { delete $$; } <ufsort> <ufsortvec>
 
 /* An exception out of an action or the lexer gets the same cleanup: see
@@ -1766,6 +1790,7 @@
 %type <uintval> an_fp_const command_numeral
 %type <str> sort_parameter_name
 %type <attribute> attribute
+%type <attributes> attributes
 %type <attribute_value> attribute_value
 %type <str> uf_decl_name function_def_name
 %type <ufsortvec> uf_domain_sorts
@@ -2441,6 +2466,28 @@ function_def_name LPAREN_TOK RPAREN_TOK resolved_sort definition_body
   stp::releaseParserValue($1);
   stp::releaseParserValue($4);
   stp::GlobalParserInterface->deleteNode($5);
+}
+;
+
+annotation_open:
+LPAREN_TOK EXCLAIMATION_MARK_TOK { stp::SMT2BeginAnnotation(); }
+;
+
+annotation_attributes:
+%empty { stp::SMT2BeginAttributes(); }
+;
+
+attributes:
+attribute
+{
+  $$ = new std::vector<stp::SMT2Attribute>{*$1};
+  stp::releaseParserValue($1);
+}
+| attributes attribute
+{
+  $$ = $1;
+  $$->push_back(*$2);
+  stp::releaseParserValue($2);
 }
 ;
 
@@ -3159,26 +3206,11 @@ FORMID_TOK
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
 }
-| LPAREN_TOK EXCLAIMATION_MARK_TOK an_formula NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
+| annotation_open an_formula annotation_attributes attributes RPAREN_TOK
 {
-  /*
-    This implements (! <an_formula> :named foo)
-    "foo" is created as a symbol that can be refered to by later commands.
-  */
-
-  // TODO, will fail if name is already defined?
-  ASTNode s(stp::GlobalParserInterface->CreateSourceSymbol(
-      $5->c_str(), stp::SourceSort::boolean()));
-
-  stp::GlobalParserInterface->addSymbol(s);
-
-  ASTNode n = stp::GlobalParserInterface->CreateNode(IFF,s, *$3);
-
-  stp::GlobalParserInterface->AddAssert(n);
-
-  stp::releaseParserValue($5);
-
-  $$ = $3;
+  annotateTerm(*$2, *$4);
+  stp::releaseParserValue($4);
+  $$ = $2;
 }
 ;
 
@@ -4031,25 +4063,11 @@ TERMID_TOK
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::Uninterpreted)
     yyerror("Must be a declared sort");
 }
-| LPAREN_TOK EXCLAIMATION_MARK_TOK an_term NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
+| annotation_open an_term annotation_attributes attributes RPAREN_TOK
 {
-  /* This implements (! <an_term> :named foo) */
-
-  ASTNode s(stp::GlobalParserInterface->CreateSourceSymbol(
-      $5->c_str(), $3->GetSourceSort()));
-  stp::releaseParserValue($5);
-
-  stp::GlobalParserInterface->addSymbol(s);
-
-  const Kind equality =
-      $3->GetSourceSort().kind() == stp::SourceSort::Kind::FloatingPoint
-          ? FP_SMT_EQ
-          : EQ;
-  ASTNode n = stp::GlobalParserInterface->CreateNode(equality, s, *$3);
-
-  stp::GlobalParserInterface->AddAssert(n);
-
-  $$ = $3;
+  annotateTerm(*$2, *$4);
+  stp::releaseParserValue($4);
+  $$ = $2;
 }
 | LPAREN_TOK LET_TOK lets an_term RPAREN_TOK
   {

@@ -229,5 +229,28 @@ class Attributes(unittest.TestCase):
         self.assertEqual(result.stdout, 'sat\n')
 
 
+class NamedTerms(unittest.TestCase):
+    def test_named_definition_in_model_query_changes_the_context(self):
+        result = run('(set-option :produce-models true)(set-logic QF_BV)'
+                     '(check-sat)(get-value ((! true :named label)))')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('get-value is not permitted', result.stdout)
+
+    def test_named_requires_a_fresh_symbol_and_closed_term(self):
+        for source, message in [
+                ('(assert (! true :named "label"))', ':named requires a symbol'),
+                ('(assert (! true :named))', ':named requires a symbol'),
+                ('(assert (! true :named true))', 'fresh, non-reserved symbol'),
+                ('(assert (! true :named @label))', 'fresh, non-reserved symbol'),
+                ('(declare-const label Bool)(assert (! true :named label))', 'already denotes'),
+                ('(assert (! true :named label))(assert (! true :named label))', 'already denotes'),
+                ('(assert (let ((p true)) (! (and p false) :named label)))', 'closed term'),
+                ('(define-fun f ((p Bool)) Bool (! (or p true) :named label))', 'closed term')]:
+            with self.subTest(source=source):
+                result = run('(set-logic QF_BV)' + source)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn(message, result.stdout)
+
+
 if __name__ == '__main__':
     unittest.main()
