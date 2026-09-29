@@ -553,7 +553,23 @@ const UFDecl*
 Cpp_interface::lookupUninterpretedFunction(const std::string& name) const
 {
   const UFContext* context = bm.getUFContextIfAny();
-  return context == NULL ? NULL : context->lookup(name);
+  if (context == NULL)
+    return NULL;
+  if (const UFDecl* declaration = context->lookup(name))
+    return declaration;
+  const auto alias = uninterpreted_function_aliases.find(name);
+  return alias != uninterpreted_function_aliases.end() &&
+                 context->isActive(alias->second)
+             ? alias->second
+             : NULL;
+}
+
+void Cpp_interface::addUninterpretedFunctionAlias(
+    const std::string& name, const UFDecl* declaration)
+{
+  assert(bm.getUFContextIfAny() != NULL &&
+         bm.getUFContextIfAny()->isActive(declaration));
+  uninterpreted_function_aliases.emplace(name, declaration);
 }
 
 ASTNode Cpp_interface::applyUninterpretedFunction(
