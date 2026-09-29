@@ -616,6 +616,12 @@ jobs:
     # would take them all. The Python package is off: an uninstrumented
     # interpreter cannot load an instrumented extension without preloading
     # the runtime, and the ubsan job runs the package's suites.
+    #
+    # -fno-sanitize=vptr: the dynamic-type check's handlers are in the C++
+    # half of the sanitizer runtime, which a C program linked with the static
+    # runtime does not get, so the C test programs would not link against a
+    # libstp that uses them. The ubsan job links the shared runtime, which
+    # has both halves, and keeps the check.
     - name: Configure
       run: |
         mkdir build
@@ -630,10 +636,10 @@ jobs:
           -DENABLE_PYTHON_API:BOOL=OFF \
           -DENABLE_TESTING:BOOL=ON \
           -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
-          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
-          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
-          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
-          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined" \
+          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize=vptr -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize=vptr -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined -fno-sanitize=vptr" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined -fno-sanitize=vptr" \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -G Ninja ..
 
