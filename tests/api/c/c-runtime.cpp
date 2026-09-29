@@ -652,3 +652,34 @@ TEST(c_runtime, a_negative_enum_value_is_refused)
   stp_tm_release_all(tm);
   stp_tm_release(tm);
 }
+
+// A NULL assumption -- most often a lookup that found nothing, which
+// stp_tm_symbol answers with NULL and no record -- failed the check with no
+// error recorded anywhere. It is recorded as the NULL formula of
+// stp_solver_assert and stp_solver_entails is, and the solver is not failed.
+TEST(c_runtime, a_null_assumption_is_an_error_of_the_check)
+{
+  stp_tm tm = stp_tm_new(nullptr);
+  stp_term x = stp_declare(tm, "x", stp_mk_bool_sort(tm));
+  stp_solver s = stp_solver_new(tm, nullptr);
+  const stp_term assumptions[] = {x, stp_tm_symbol(tm, "no_such_name")};
+  ASSERT_EQ(nullptr, assumptions[1]);
+  EXPECT_EQ(nullptr, stp_tm_error(tm));
+  stp_result r;
+  EXPECT_EQ(STP_ERROR, stp_solver_check_sat_assuming(s, 2, assumptions, &r));
+  const stp_error* e = stp_tm_error(tm);
+  ASSERT_NE(nullptr, e);
+  EXPECT_EQ(STP_ERR_NULL_HANDLE, e->code);
+  EXPECT_EQ(2, e->argument_index);
+  EXPECT_NE(std::string::npos, std::string(e->message).find("assumption 1")) << e->message;
+  stp_tm_clear_error(tm);
+  stp_budget b = {false, 0, false, 0};
+  EXPECT_EQ(STP_ERROR, stp_solver_check_sat_budget(s, 2, assumptions, &b, &r));
+  EXPECT_EQ(STP_ERR_NULL_HANDLE, code_of(tm));
+  EXPECT_EQ(nullptr, stp_solver_failed(s));
+  ASSERT_EQ(STP_OK, stp_solver_check_sat_assuming(s, 1, assumptions, &r));
+  EXPECT_EQ(STP_SAT, r.kind);
+  stp_solver_delete(s);
+  stp_tm_release_all(tm);
+  stp_tm_release(tm);
+}

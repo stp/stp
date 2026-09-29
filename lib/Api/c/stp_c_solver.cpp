@@ -312,13 +312,29 @@ stp_status stp_solver_check_sat(stp_solver s, stp_result* out)
   });
 }
 
+// A check's assumptions. A NULL among them is an error of the check, as the
+// formula of stp_solver_assert and stp_solver_entails is, not the unrecorded
+// failure a NULL argument of a constructor propagates: a NULL here is most
+// often a failed lookup (stp_tm_symbol answers NULL for an unknown name).
+namespace
+{
+std::vector<Term> assumption_args(CSolver* cs, size_t n, const stp_term* assumptions,
+                                  const char* fn)
+{
+  for (size_t i = 0; assumptions != nullptr && i < n; ++i)
+    if (assumptions[i] == nullptr)
+      fail(ErrorCode::NULL_HANDLE, fn, "assumption " + std::to_string(i) + " is null", 2);
+  return term_args(cs->cm, n, assumptions, fn, 2);
+}
+} // namespace
+
 stp_status stp_solver_check_sat_assuming(stp_solver s, size_t n, const stp_term* assumptions,
                                          stp_result* out)
 {
   return solver_check<stp_status>(s, "stp_solver_check_sat_assuming", STP_ERROR, [&](CSolver* cs) {
     out_arg(out, "stp_solver_check_sat_assuming", 3);
     const Result r =
-        cs->solver.check_sat(term_args(cs->cm, n, assumptions, "stp_solver_check_sat_assuming", 2));
+        cs->solver.check_sat(assumption_args(cs, n, assumptions, "stp_solver_check_sat_assuming"));
     cs->last_reason = r.reason_message();
     *out = to_c(r);
     return STP_OK;
@@ -331,7 +347,7 @@ stp_status stp_solver_check_sat_budget(stp_solver s, size_t n, const stp_term* a
   return solver_check<stp_status>(s, "stp_solver_check_sat_budget", STP_ERROR, [&](CSolver* cs) {
     out_arg(out, "stp_solver_check_sat_budget", 4);
     const Result r = cs->solver.check_sat(
-        term_args(cs->cm, n, assumptions, "stp_solver_check_sat_budget", 2), budget_arg(budget));
+        assumption_args(cs, n, assumptions, "stp_solver_check_sat_budget"), budget_arg(budget));
     cs->last_reason = r.reason_message();
     *out = to_c(r);
     return STP_OK;
