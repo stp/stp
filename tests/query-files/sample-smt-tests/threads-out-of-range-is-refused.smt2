@@ -1,3 +1,4 @@
+; REQUIRES: cryptominisat
 ; RUN: not %solver --threads 0 %s 2>&1 | %OutputCheck --check-prefix=ZERO %s
 ; RUN: not %solver --threads -1 %s 2>&1 | %OutputCheck --check-prefix=NEGATIVE %s
 ; RUN: not %solver --threads 1025 %s 2>&1 | %OutputCheck --check-prefix=HUGE %s
