@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 #include "api_common.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <limits>
 
@@ -418,6 +419,56 @@ TEST_F(Values, fp_from_decimal_and_rational_text)
   API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, tm.mk_fp(bv8, RoundingMode::RNE, 1.0));
   API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, tm.mk_fp(bv8, RoundingMode::RNE, "1"));
   API_EXPECT_ERROR(ErrorCode::NULL_HANDLE, tm.mk_fp(Sort(), RoundingMode::RNE, 1.0));
+}
+
+// A decimal literal's exponent is read as a bounded integer, and a literal far
+// outside a format decides its value as the format's bound does, without
+// expanding its digits: "12e2147483647" was +0 after a minute and 8 GB (an int
+// overflowed), and "1e100000000" took seconds and hundreds of MB. A Real that
+// far out is refused as past the number limits, with the start of the literal
+// in the message rather than all of it.
+TEST_F(Values, decimal_exponents_far_out)
+{
+  const auto started = std::chrono::steady_clock::now();
+  for (RoundingMode rm : {RoundingMode::RNE, RoundingMode::RNA, RoundingMode::RTP, RoundingMode::RTN,
+                          RoundingMode::RTZ})
+  {
+    // past the largest finite value, as a merely overflowing literal
+    EXPECT_TRUE(tm.mk_fp(f16, rm, "12e2147483647").same_as(tm.mk_fp(f16, rm, "1e6")));
+    EXPECT_TRUE(tm.mk_fp(f16, rm, "-1e100000000").same_as(tm.mk_fp(f16, rm, "-1e6")));
+    EXPECT_TRUE(tm.mk_fp(f16, rm, "1e99999999999999999999999").same_as(tm.mk_fp(f16, rm, "1e6")));
+    // under half the smallest subnormal, as a merely tiny literal
+    EXPECT_TRUE(tm.mk_fp(f16, rm, "1e-100000000").same_as(tm.mk_fp(f16, rm, "1e-12")));
+    EXPECT_TRUE(tm.mk_fp(f16, rm, "-7e-2147483648").same_as(tm.mk_fp(f16, rm, "-1e-12")));
+  }
+  EXPECT_EQ(tm.mk_fp(f16, RoundingMode::RNE, "12e2147483647").to_fp().cls, FloatValue::Class::INF);
+  EXPECT_EQ(tm.mk_fp(f16, RoundingMode::RTZ, "12e2147483647").to_fp().cls, FloatValue::Class::NORMAL);
+  EXPECT_EQ(tm.mk_fp(f16, RoundingMode::RNE, "1e-100000000").to_fp().cls, FloatValue::Class::ZERO);
+  EXPECT_EQ(tm.mk_fp(f16, RoundingMode::RTP, "1e-100000000").to_fp().cls, FloatValue::Class::SUBNORMAL);
+  // inside the format's range the bound changes nothing
+  EXPECT_EQ(*tm.mk_fp(f64, RoundingMode::RNE, "1.5e300").to_fp().to_double(), 1.5e300);
+  EXPECT_EQ(*tm.mk_fp(f64, RoundingMode::RNE, "4.9e-324").to_fp().to_double(), 4.9e-324);
+  EXPECT_EQ(*tm.mk_fp(f32, RoundingMode::RNE, "0.00012e4").to_fp().to_double(), 1.2f);
+  // zero, whatever its exponent
+  EXPECT_EQ(tm.mk_fp(f16, RoundingMode::RNE, "0e999999999999").to_fp().cls, FloatValue::Class::ZERO);
+  EXPECT_TRUE(tm.mk_fp(f16, RoundingMode::RNE, "-0.000e-99999999999").same_as(tm.mk_fp_neg_zero(f16)));
+  // Reals
+  EXPECT_EQ(tm.mk_real("1.5e3").to_rational().str(), "1500");
+  EXPECT_EQ(tm.mk_real("0.00012e4").to_rational().str(), "6/5");
+  EXPECT_EQ(tm.mk_real("0e999999999999").to_rational().str(), "0");
+  auto e = API_ERROR_OF(tm.mk_real("1e10000000"));
+  ASSERT_TRUE(e.has_value());
+  EXPECT_EQ(e->code(), ErrorCode::UNSUPPORTED);
+  const std::string digits = "1" + std::string(30000, '0'); // no exponent, past the limits
+  e = API_ERROR_OF(tm.mk_real(digits));
+  ASSERT_TRUE(e.has_value());
+  EXPECT_EQ(e->code(), ErrorCode::UNSUPPORTED);
+  EXPECT_LT(std::string(e->what()).size(), 400u) << e->what();
+  // an exponent is its digits and nothing else
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.mk_fp(f32, RoundingMode::RNE, "1e5x"));
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.mk_fp(f32, RoundingMode::RNE, "1e 5"));
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.mk_real("1e+"));
+  EXPECT_LT(std::chrono::steady_clock::now() - started, std::chrono::seconds(5));
 }
 
 TEST_F(Values, fp_from_bits_canonicalises_nan)

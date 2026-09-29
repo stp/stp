@@ -56,6 +56,17 @@ namespace detail
 namespace
 {
 std::atomic<std::uint64_t> g_manager_ids{1};
+
+// A literal named in a message: the whole of a short one, the start of a long
+// one.
+std::string literal_for_message(std::string_view text)
+{
+  constexpr std::size_t shown = 64;
+  if (text.size() <= shown)
+    return "'" + std::string(text) + "'";
+  return "'" + std::string(text.substr(0, shown)) + "...' (" + std::to_string(text.size()) +
+         " characters)";
+}
 } // namespace
 
 // CONSTANTBV keeps its constants thread-local, so the boot is per thread: a
@@ -597,9 +608,9 @@ ASTNode ManagerImpl::real_const(const char* fn, const std::string& text)
     // refused as Real arithmetic beyond the budget is.
     if (stp::lra::gaveUpOnABudget(failure))
       fail(ErrorCode::UNSUPPORTED, fn,
-           "'" + text + "' exceeds the exact-arithmetic budget: " + failure.what());
+           literal_for_message(text) + " exceeds the exact-arithmetic budget: " + failure.what());
     fail(ErrorCode::INVALID_ARGUMENT, fn,
-         "'" + text + "' is not a real literal: " + failure.what());
+         literal_for_message(text) + " is not a real literal: " + failure.what());
   }
 }
 
@@ -1586,64 +1597,106 @@ std::string mul_pow2(std::string dec, int k)
   return dec;
 }
 
-// Normalises "-2.5e-3" / "1E5" / "7" into the plain decimal form the
-// literal converter accepts ("-0.0025", "100000", "7").
-bool plain_decimal(std::string_view text, std::string& out)
+// A decimal literal, [+-]digits[.digits][(e|E)[+-]digits]: its sign, its
+// significant digits (none for zero) and where the decimal point falls among
+// them, the value being 0.digits x 10^point. The exponent saturates at
+// +-2^62; the callers bound the point long before that matters.
+struct DecimalLiteral
 {
-  std::string s(text);
   bool negative = false;
-  if (!s.empty() && (s[0] == '-' || s[0] == '+'))
-  {
-    negative = s[0] == '-';
-    s.erase(0, 1);
-  }
-  int exponent = 0;
-  const std::size_t e = s.find_first_of("eE");
-  if (e != std::string::npos)
-  {
-    try
-    {
-      exponent = std::stoi(s.substr(e + 1));
-    }
-    catch (...)
-    {
-      return false;
-    }
-    s.erase(e);
-  }
   std::string digits;
-  int point = -1;
-  for (char c : s)
+  std::int64_t point = 0;
+};
+
+bool parse_decimal(std::string_view text, DecimalLiteral& d)
+{
+  constexpr std::int64_t saturated = std::int64_t{1} << 62;
+  std::size_t i = 0;
+  if (i < text.size() && (text[i] == '-' || text[i] == '+'))
+    d.negative = text[i++] == '-';
+  std::int64_t point = -1;
+  bool any = false;
+  for (; i < text.size() && text[i] != 'e' && text[i] != 'E'; ++i)
   {
+    const char c = text[i];
     if (c == '.')
     {
       if (point >= 0)
         return false;
-      point = static_cast<int>(digits.size());
+      point = static_cast<std::int64_t>(d.digits.size());
     }
     else if (c >= '0' && c <= '9')
-      digits.push_back(c);
+    {
+      any = true;
+      d.digits.push_back(c);
+    }
     else
       return false;
   }
-  if (digits.empty())
+  if (!any)
     return false;
   if (point < 0)
-    point = static_cast<int>(digits.size());
-  point += exponent;
-  if (point <= 0)
-    digits = std::string(static_cast<std::size_t>(-point), '0') + digits, point = 0;
-  else if (point > static_cast<int>(digits.size()))
-    digits += std::string(static_cast<std::size_t>(point) - digits.size(), '0');
-  std::string integer = digits.substr(0, static_cast<std::size_t>(point));
-  std::string fraction = digits.substr(static_cast<std::size_t>(point));
-  if (integer.empty())
-    integer = "0";
-  out = (negative ? "-" : "") + integer;
-  if (!fraction.empty())
-    out += "." + fraction;
+    point = static_cast<std::int64_t>(d.digits.size());
+  std::int64_t exponent = 0;
+  if (i < text.size())
+  {
+    ++i; // the e
+    bool negative_exponent = false;
+    if (i < text.size() && (text[i] == '-' || text[i] == '+'))
+      negative_exponent = text[i++] == '-';
+    if (i == text.size())
+      return false;
+    for (; i < text.size(); ++i)
+    {
+      if (text[i] < '0' || text[i] > '9')
+        return false;
+      exponent = exponent > (saturated - 9) / 10 ? saturated : exponent * 10 + (text[i] - '0');
+    }
+    if (negative_exponent)
+      exponent = -exponent;
+  }
+  // leading zeros move the point, not the value
+  const std::size_t zeros = std::min(d.digits.find_first_not_of('0'), d.digits.size());
+  d.digits.erase(0, zeros);
+  d.point = d.digits.empty() ? 0 : point - static_cast<std::int64_t>(zeros) + exponent;
   return true;
 }
+
+// The plain decimal form the literal converters take: "-0.0025", "100000",
+// "7" ("-0" for a negative zero).
+std::string plain_decimal(const DecimalLiteral& d)
+{
+  const std::string sign = d.negative ? "-" : "";
+  if (d.digits.empty())
+    return sign + "0";
+  const std::int64_t n = static_cast<std::int64_t>(d.digits.size());
+  if (d.point <= 0)
+    return sign + "0." + std::string(static_cast<std::size_t>(-d.point), '0') + d.digits;
+  if (d.point >= n)
+    return sign + d.digits + std::string(static_cast<std::size_t>(d.point - n), '0');
+  return sign + d.digits.substr(0, static_cast<std::size_t>(d.point)) + "." +
+         d.digits.substr(static_cast<std::size_t>(d.point));
+}
+
+// Where a decimal point further out no longer changes a float literal's
+// rounded value: from `hi` up every literal is at least 2^(emax+1), past the
+// largest finite value, and from `lo` down every one lies below half the
+// smallest subnormal; either way it rounds as the bound does, by its sign and
+// the rounding mode alone.
+void decimal_point_bounds(std::uint32_t eb, std::uint32_t sb, std::int64_t& lo, std::int64_t& hi)
+{
+  constexpr long double log10_2 = 0.301029995663981195213738894724493027L;
+  const long double cap = std::ldexp(1.0L, 62);
+  const long double emax = std::ldexp(1.0L, static_cast<int>(std::min<std::uint32_t>(eb, 20000)) - 1) - 1;
+  const long double up = std::ceil((emax + 1) * log10_2) + 2;
+  const long double down = std::ceil((emax + sb - 1) * log10_2) + 2;
+  hi = up >= cap ? static_cast<std::int64_t>(cap) : static_cast<std::int64_t>(up);
+  lo = down >= cap ? -static_cast<std::int64_t>(cap) : -static_cast<std::int64_t>(down);
+}
+
+// The Real arithmetic's number limits are 65536 bits, under 20,000 decimal
+// digits; a literal whose point lies further out is refused unexpanded.
+constexpr std::int64_t real_literal_point_limit = 100000;
 } // namespace
 
 Term TermManager::mk_fp(const Sort& fp, RoundingMode rm, double value)
@@ -1714,13 +1767,16 @@ Term TermManager::mk_fp(const Sort& fp, RoundingMode rm, std::string_view text)
   }
   else
   {
-    std::string plain;
-    if (!plain_decimal(text, plain))
+    DecimalLiteral d;
+    if (!parse_decimal(text, d))
       detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::mk_fp",
-                   "'" + std::string(text) + "' is not a decimal literal", 2);
-    if (plain[0] == '-' && plain.find_first_not_of("0.", 1) == std::string::npos)
+                   detail::literal_for_message(text) + " is not a decimal literal", 2);
+    if (d.negative && d.digits.empty())
       return mk_fp_neg_zero(fp);
-    ok = decimalToPackedFPBits(plain, r.a, r.b, detail::rm_encoding(rm), bits, err);
+    std::int64_t lo, hi;
+    decimal_point_bounds(r.a, r.b, lo, hi);
+    d.point = std::clamp(d.point, lo, hi);
+    ok = decimalToPackedFPBits(plain_decimal(d), r.a, r.b, detail::rm_encoding(rm), bits, err);
   }
   if (!ok)
     detail::fail(ErrorCode::UNSUPPORTED, "TermManager::mk_fp", err, 2, {}, {fp});
@@ -1756,11 +1812,16 @@ Term TermManager::mk_real(std::string_view literal)
   std::string text(literal);
   if (text.find('/') == std::string::npos)
   {
-    std::string plain;
-    if (!plain_decimal(text, plain))
+    DecimalLiteral d;
+    if (!parse_decimal(text, d))
       detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::mk_real",
-                   "'" + text + "' is not a real literal", 0);
-    text = plain;
+                   detail::literal_for_message(text) + " is not a real literal", 0);
+    if (d.point > real_literal_point_limit || d.point < -real_literal_point_limit)
+      detail::fail(ErrorCode::UNSUPPORTED, "TermManager::mk_real",
+                   detail::literal_for_message(text) + " exceeds the exact-arithmetic budget: its " +
+                       "exponent puts it beyond the number limits",
+                   0);
+    text = plain_decimal(d);
   }
   return detail::make_term(m, m->real_const("TermManager::mk_real", text));
 }
