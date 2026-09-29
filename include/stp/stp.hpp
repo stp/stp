@@ -879,6 +879,8 @@ public:
   OptionValue resolved(std::string_view name) const;
   bool is_set(std::string_view name) const;
   void reset(std::string_view name);
+  /// Every entry back to its default, or none: OPTION_TIMING when an entry
+  /// whose window has closed holds anything else.
   void reset_all();
   OptionInfo info(std::string_view name) const;
   std::vector<std::string> names(std::optional<Tier> = std::nullopt) const;

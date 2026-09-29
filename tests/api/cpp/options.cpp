@@ -565,6 +565,10 @@ TEST(Options, timing_windows_on_a_live_solver)
   EXPECT_TRUE(s.check_sat().is_sat());
   // set_args with the value the entry already holds is not a change
   live.set_args({"--random-seed=3"});
+  // reset_all is all or nothing too: random-seed can no longer change
+  API_EXPECT_ERROR(ErrorCode::OPTION_TIMING, live.reset_all());
+  EXPECT_EQ(live.get_uint("random-seed"), 3u);
+  EXPECT_EQ(live.get_int("max-num-confl"), 100);
   // a detached copy carries the live values
   const Options snapshot = live.copy();
   EXPECT_EQ(snapshot.get_uint("random-seed"), 3u);
@@ -963,4 +967,36 @@ TEST(Options, none_is_minus_one_millisecond)
   EXPECT_EQ(o.get_duration("max-time"), std::chrono::milliseconds(-1));
   API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_duration("max-time", std::chrono::milliseconds(-2)));
   EXPECT_EQ(o.get_duration("max-time"), std::chrono::milliseconds(-1));
+}
+
+// reset_all on a live solver resets what can still change; a construction
+// entry that holds its default does not stand in the way.
+TEST(Options, reset_all_on_a_live_solver)
+{
+  TermManager tm;
+  Options o;
+  o.set_int("threads", 1);
+  Solver s(tm, o);
+  const Term x = tm.declare("x", tm.mk_bv_sort(8));
+  s.add(x == 1);
+  s.options().set_int("max-num-confl", 100);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  s.options().reset_all();
+  EXPECT_FALSE(s.options().is_set("max-num-confl"));
+  EXPECT_FALSE(s.options().is_set("threads"));
+  EXPECT_TRUE(s.check_sat().is_sat());
+
+  if (!has_sat_backend("cadical"))
+    return;
+  Options c;
+  c.set_str("sat-backend", "cadical");
+  Solver t(tm, c);
+  t.add(x == 2);
+  ASSERT_TRUE(t.check_sat().is_sat());
+  auto e = API_ERROR_OF(t.options().reset_all());
+  ASSERT_TRUE(e.has_value());
+  EXPECT_EQ(e->code(), ErrorCode::OPTION_TIMING);
+  EXPECT_EQ(e->option(), "sat-backend");
+  EXPECT_EQ(t.options().get_str("sat-backend"), "cadical");
+  EXPECT_TRUE(t.options().is_set("sat-backend"));
 }

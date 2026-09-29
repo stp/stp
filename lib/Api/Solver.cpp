@@ -1025,9 +1025,18 @@ void SolverOptions::reset(std::string_view name)
 }
 void SolverOptions::reset_all()
 {
-  viewed(solver_, "SolverOptions::reset_all")->enter("SolverOptions::reset_all");
-  viewed(solver_, "SolverOptions::reset_all")->options.reset_all();
-  viewed(solver_, "SolverOptions::reset_all")->apply_options("SolverOptions::reset_all");
+  SolverImpl* s = viewed(solver_, "SolverOptions::reset_all");
+  s->enter("SolverOptions::reset_all");
+  // All or nothing, as set_args: an entry whose window has closed refuses
+  // the call unless it already holds its default.
+  std::size_t n = 0;
+  const detail::OptionSpec* specs = detail::option_specs(n);
+  for (std::size_t i = 0; i < n; ++i)
+    if (s->options.is_set[i] &&
+        detail::option_text(specs[i], s->options.values[i]) != specs[i].default_text)
+      live_write(s, specs[i].name, "SolverOptions::reset_all");
+  s->options.reset_all();
+  s->apply_options("SolverOptions::reset_all");
 }
 OptionInfo SolverOptions::info(std::string_view name) const { return viewed(solver_, "SolverOptions::info")->options.info(name); }
 std::vector<std::string> SolverOptions::names(std::optional<Tier> tier) const { return viewed(solver_, "SolverOptions::names")->options.names(tier); }
