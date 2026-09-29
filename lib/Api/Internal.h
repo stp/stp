@@ -43,6 +43,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/STPManager/UserDefinedFlags.h"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <exception>
@@ -551,6 +552,9 @@ struct SolverImpl
   std::shared_ptr<const ModelSnapshot> model;
   std::shared_ptr<const ModelSnapshot> candidate;
   std::chrono::steady_clock::duration last_wall{0};
+  // The last check's time in each phase, from the engine's run-time
+  // categories: simplification, bit-blasting, CNF generation, SAT.
+  std::array<double, 4> last_phase_ms{};
   bool last_incremental = false;
   bool batch_only = false; // write_cnf: the batch pipeline, whatever `incremental` says
 

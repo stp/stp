@@ -60,36 +60,12 @@ type = "double"
 tier = "stable"
 help = "time inside the SAT backend, summed over refinement rounds"
 
-# ---------------------------------------------------------------- sat / cnf (what -s printed, and the backend's own numbers)
+# ---------------------------------------------------------------- sat / cnf
 [[stat]]
 name = "sat.backend"
 type = "string"
 tier = "stable"
 help = "the backend that ran: cryptominisat | cadical | minisat | simplifying-minisat"
-
-[[stat]]
-name = "sat.calls"
-type = "uint64"
-tier = "stable"
-help = "number of SAT solver invocations in the last check (refinement rounds + 1)"
-
-[[stat]]
-name = "sat.conflicts"
-type = "uint64"
-tier = "stable"
-help = "conflicts consumed by the last check, summed over invocations (the quantity max-num-confl bounds)"
-
-[[stat]]
-name = "sat.decisions"
-type = "uint64"
-tier = "stable"
-help = "decisions, summed"
-
-[[stat]]
-name = "sat.propagations"
-type = "uint64"
-tier = "expert"
-help = "propagations, summed"
 
 [[stat]]
 name = "cnf.variables"
@@ -352,22 +328,10 @@ type = "uint64"
 tier = "expert"
 help = ""
 
-# ---------------------------------------------------------------- incremental driver and LRA (diagnostic; names to be filled from the engine's counters)
+# ---------------------------------------------------------------- incremental driver
 [[stat]]
 name = "incremental.engaged"
 type = "uint64"
 tier = "diagnostic"
 help = "1 when the incremental driver was in use for the last check, 0 otherwise"
-
-[[stat]]
-name = "incremental.reencodes"
-type = "uint64"
-tier = "diagnostic"
-help = "re-encodings performed by the driver"
-
-[[stat]]
-name = "lra.rows"
-type = "uint64"
-tier = "diagnostic"
-help = "rows in the last LRA tableau"
 

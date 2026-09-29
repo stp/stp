@@ -2196,6 +2196,12 @@ public:
     // Queries that reached bit-blasting at all: the denominator, without
     // which a zero above cannot be told from a query the simplifier settled.
     uint64_t queries_bitblasted = 0;
+
+    // The sizes of the last encoding, not totals: the AND nodes bit-blasting
+    // built (what aig-node-budget bounds), and the CNF generated from them.
+    uint64_t last_blast_nodes = 0;
+    uint64_t last_cnf_variables = 0;
+    uint64_t last_cnf_clauses = 0;
   };
 
   enum AbstractionKind

@@ -236,6 +236,10 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
            << " that is the whole query." << endl;
   };
 
+  // what Solver::statistics reports as the last encoding's size
+  bm->UserFlags.coverage.last_cnf_variables = cnf.varCount() - 1;
+  bm->UserFlags.coverage.last_cnf_clauses = cnf.clauseCount();
+
   // One line, whichever generator ran, so that a sweep over the levels can be
   // read without knowing which of them prints what.
   if (bm->UserFlags.stats_flag)
@@ -469,6 +473,7 @@ bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
   cb = NULL;
   bb.cb = NULL;
 
+  bm->UserFlags.coverage.last_blast_nodes = static_cast<uint64_t>(mgr.totalNumberOfNodes());
   {
     RunTimes::Scope cnf_runtime(*bm->GetRunTimes(), RunTimes::CNFConversion);
     QueryPhaseScope cnf_time(bm->query_timing, QueryPhase::CNFConversion);

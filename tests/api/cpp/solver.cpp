@@ -523,6 +523,21 @@ TEST_F(SolverTest, statistics)
   const Statistics st = s.statistics();
   EXPECT_EQ(st.uint64("checks.total"), 1u);
   EXPECT_GE(st.real("time.total_ms"), 0.0);
+  // the phases of the check, which the engine times, within its wall time
+  // (the engine counts whole milliseconds), and the size of its encoding
+  double phases = 0;
+  for (const char* phase : {"time.simplify_ms", "time.bitblast_ms", "time.cnf_ms", "time.sat_ms"})
+  {
+    EXPECT_GE(st.real(phase), 0.0) << phase;
+    phases += st.real(phase);
+  }
+  EXPECT_LE(phases, st.real("time.total_ms") + 4.0);
+  EXPECT_GT(st.uint64("aig.nodes"), 0u);
+  EXPECT_GT(st.uint64("cnf.variables"), 0u);
+  EXPECT_GT(st.uint64("cnf.clauses"), 0u);
+  // what no check produces is not a statistic
+  for (const char* gone : {"sat.calls", "sat.conflicts", "lra.rows", "incremental.reencodes"})
+    API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, st.get(gone));
   EXPECT_TRUE(has_sat_backend(st.str("sat.backend")));
   EXPECT_EQ(st.str("checks.total"), "1");
   EXPECT_FALSE(st.entries().empty());

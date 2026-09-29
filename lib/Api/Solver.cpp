@@ -46,6 +46,7 @@ THE SOFTWARE.
 #include "stp/cpp_interface.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <fstream>
 #include <iostream>
@@ -330,6 +331,38 @@ void SolverImpl::deactivate()
   bm->UserFlags.stop_poll_opaque = nullptr;
   mgr->active = nullptr;
 }
+
+namespace
+{
+// The engine's run-time categories (what the command line's -t prints) as
+// the statistics' four phases, by index into SolverImpl::last_phase_ms;
+// parsing, counterexample construction and array refinement are none.
+int phase_of(RunTimes::Category c)
+{
+  switch (c)
+  {
+    case RunTimes::BitBlasting: return 1;
+    case RunTimes::CNFConversion: return 2;
+    case RunTimes::Solving:
+    case RunTimes::SATSimplifying:
+    case RunTimes::SendingToSAT: return 3;
+    case RunTimes::Parsing:
+    case RunTimes::CounterExampleGeneration:
+    case RunTimes::ArrayReadRefinement:
+    case RunTimes::CongruenceCandidates: return -1;
+    default: return 0; // the simplifications and substitutions
+  }
+}
+
+std::array<double, 4> phase_totals(RunTimes& times)
+{
+  std::array<double, 4> out{};
+  for (const RunTimes::CategoryTotal& t : times.totals())
+    if (const int phase = phase_of(t.category); phase >= 0)
+      out[phase] += static_cast<double>(t.time_ms);
+  return out;
+}
+} // namespace
 
 void SolverImpl::reapply_engine_defaults()
 {
@@ -641,6 +674,7 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
   const CheckRun run(this);
 
   const auto started = std::chrono::steady_clock::now();
+  const std::array<double, 4> phases_before = phase_totals(*bm->GetRunTimes());
   // The last check's Real model does not describe this one.
   bm->InvalidateRealModel();
   stp->ClearAllTables();
@@ -730,6 +764,9 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
     fail_engine(mgr, fn, "an exception that is not a std::exception unwound through the check");
   }
   last_wall = std::chrono::steady_clock::now() - started;
+  const std::array<double, 4> phases_after = phase_totals(*bm->GetRunTimes());
+  for (std::size_t i = 0; i < last_phase_ms.size(); ++i)
+    last_phase_ms[i] = phases_after[i] - phases_before[i];
 
   Result r;
   switch (out)
@@ -2738,6 +2775,7 @@ CnfScope Solver::write_cnf(std::ostream& os) const
     std::vector<ASTNode> assumptions, failed;
     std::shared_ptr<const detail::ModelSnapshot> model, candidate;
     std::chrono::steady_clock::duration wall;
+    std::array<double, 4> phase_ms;
     bool incremental;
     std::size_t checks;
     std::size_t solves_run;
@@ -2752,6 +2790,7 @@ CnfScope Solver::write_cnf(std::ostream& os) const
       s->model = std::move(model);
       s->candidate = std::move(candidate);
       s->last_wall = wall;
+      s->last_phase_ms = phase_ms;
       s->last_incremental = incremental;
       s->checks = checks;
       s->stp->incrementalSolvesRun = solves_run;
@@ -2766,6 +2805,7 @@ CnfScope Solver::write_cnf(std::ostream& os) const
          s->model,
          s->candidate,
          s->last_wall,
+         s->last_phase_ms,
          s->last_incremental,
          s->checks,
          s->stp->incrementalSolvesRun,
@@ -2892,6 +2932,13 @@ Statistics Solver::statistics() const
   std::map<std::string, StatisticValue> e;
   e["time.total_ms"] =
       std::chrono::duration<double, std::milli>(s->last_wall).count();
+  e["time.simplify_ms"] = s->last_phase_ms[0];
+  e["time.bitblast_ms"] = s->last_phase_ms[1];
+  e["time.cnf_ms"] = s->last_phase_ms[2];
+  e["time.sat_ms"] = s->last_phase_ms[3];
+  e["cnf.variables"] = static_cast<std::uint64_t>(c.last_cnf_variables);
+  e["cnf.clauses"] = static_cast<std::uint64_t>(c.last_cnf_clauses);
+  e["aig.nodes"] = static_cast<std::uint64_t>(c.last_blast_nodes);
   e["checks.total"] = static_cast<std::uint64_t>(s->checks);
   e["checks.bitblasted"] = static_cast<std::uint64_t>(c.queries_bitblasted);
   const char* backend = "minisat";
