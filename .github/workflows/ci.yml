@@ -608,7 +608,9 @@ jobs:
 
     # STP_ALLOCATOR=system for the reason the ubsan job gives, and one more:
     # AddressSanitizer has to see every allocation to check it, and mimalloc
-    # would take them all.
+    # would take them all. The Python package is off: an uninstrumented
+    # interpreter cannot load an instrumented extension without preloading
+    # the runtime, and the ubsan job runs the package's suites.
     - name: Configure
       run: |
         mkdir build
@@ -620,6 +622,7 @@ jobs:
           -DUSE_CRYPTOMINISAT:STRING=OFF \
           -DUSE_CADICAL:BOOL=ON \
           -DSTP_ALLOCATOR=system \
+          -DENABLE_PYTHON_API:BOOL=OFF \
           -DENABLE_TESTING:BOOL=ON \
           -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
           -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
@@ -651,7 +654,7 @@ jobs:
         fi
 
     - name: Test the API and Real arithmetic, leaks detected
-      run: ASAN_OPTIONS=detect_leaks=1 ctest --parallel "$(nproc)" -L 'api|lra' -LE 'api2|install' --output-on-failure
+      run: ASAN_OPTIONS=detect_leaks=1 ctest --parallel "$(nproc)" -L 'api|lra' -LE 'api2|install|python' --output-on-failure
       working-directory: build
 
     - name: Test libstp2, leaks not detected
