@@ -5,8 +5,8 @@
 ;
 ; RUN WITH: --uninterpreted-functions
 ; EXPECT: unsat, then sat; base declaration survives reset-assertions
-(set-option :global-declarations true)
 (set-logic QF_UFBV)
+(set-option :global-declarations true)
 (declare-fun f ((_ BitVec 4)) (_ BitVec 4))
 (declare-fun x () (_ BitVec 4))
 (assert (distinct (f x) (f x)))

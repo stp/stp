@@ -8,8 +8,8 @@
 ; CHECK: ^sat
 ; CHECK: ^sat
 ; CHECK: ^unsat
-(set-option :global-declarations true)
 (set-logic QF_BVFP)
+(set-option :global-declarations true)
 (declare-const x (_ FloatingPoint 8 24))
 (declare-const w (_ FloatingPoint 11 53))
 (declare-const p (_ FloatingPoint 8 24))

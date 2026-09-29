@@ -15,8 +15,8 @@
 ; CHECK-L: ( |a|  #x2A )
 ;
 ; EXPECT: sat
-(set-option :produce-models true)
 (set-logic QF_UFBV)
+(set-option :produce-models true)
 (declare-fun f ((_ BitVec 8)) (_ BitVec 8))
 (declare-const x (_ BitVec 8))
 (declare-const y (_ BitVec 8))

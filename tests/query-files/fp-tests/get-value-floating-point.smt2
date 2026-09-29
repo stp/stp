@@ -5,8 +5,8 @@
 ; correct; this guards get-value, which used to print the value as a bitvector
 ; literal (e.g. #x30) -- a value of the wrong sort. Values are pinned bit-for-bit
 ; with SMT '=' so the model, and hence the output, is deterministic.
-(set-option :produce-models true)
 (set-logic QF_FP)
+(set-option :produce-models true)
 (declare-fun x () (_ FloatingPoint 3 5))
 (declare-fun y () (_ FloatingPoint 3 5))
 (assert (= x (fp #b0 #b011 #b0000)))

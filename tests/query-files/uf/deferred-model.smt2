@@ -5,8 +5,8 @@
 ; CHECK: \( \(\|f\| \|x\|\)  #x2A \)
 ; CHECK: error "get-value is not permitted
 ;
-(set-option :produce-models true)
 (set-logic QF_UFBV)
+(set-option :produce-models true)
 (declare-fun f ((_ BitVec 8)) (_ BitVec 8))
 (declare-const x (_ BitVec 8))
 (assert (= (f x) #x2a))

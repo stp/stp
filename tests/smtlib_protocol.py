@@ -107,14 +107,42 @@ class CommandModes(unittest.TestCase):
         self.assert_error('(set-logic QF_BV)(set-logic QF_BV)',
                           'set-logic is not permitted')
 
-    def test_start_only_options(self):
-        for option in ['produce-models', 'produce-assertions', 'global-declarations',
-                       'produce-unsat-assumptions', 'produce-proofs', 'random-seed']:
-            value = '0' if option == 'random-seed' else 'true'
-            with self.subTest(option=option):
-                self.assert_error('(set-logic QF_BV)(set-option :' + option +
-                                  ' ' + value + ')', 'set-option :' + option +
-                                  ' is only permitted before set-logic')
+    def test_options_before_or_after_logic(self):
+        options = '''
+(set-option :produce-models true)
+(set-option :produce-assignments true)
+(set-option :produce-assertions true)
+(set-option :global-declarations true)
+(set-option :produce-unsat-assumptions true)
+'''
+        for prefix in [options + '(set-logic QF_BV)',
+                       '(set-logic QF_BV)' + options]:
+            with self.subTest(prefix=prefix):
+                result = run(prefix + '''
+(push 1)
+(declare-const x (_ BitVec 8))
+(pop 1)
+(assert (! (= x #x2a) :named answer))
+(get-assertions)
+(check-sat)
+(get-value (x))
+(get-assignment)
+(check-sat-assuming ((not answer)))
+(get-unsat-assumptions)
+''')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('sat\n', result.stdout)
+                self.assertIn('( |x|  #x2A )', result.stdout)
+                self.assertIn('(|answer| true)', result.stdout)
+                self.assertIn('unsat\n', result.stdout)
+                self.assertIn('(not (= |x|  #x2A))', result.stdout)
+
+    def test_unsupported_options_after_logic_do_not_end_the_script(self):
+        result = run('(set-logic QF_BV)(set-option :produce-proofs true)'
+                     '(set-option :produce-unsat-cores true)'
+                     '(set-option :random-seed 0)(check-sat)')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, 'unsupported\nunsupported\nunsupported\nsat\n')
 
     def test_disabled_queries_are_errors(self):
         for query, option, assertion in [

@@ -21,8 +21,8 @@
 ; CHECK-L: (ite (and (= x0 (fp #b0 #b10000000 #b00000000000000000000000)) (= x1 RNE))  #x1 (ite (and (= x0 (fp #b1 #b10000001 #b01000000000000000000000)) (= x1 RTZ))  #x2  #x0)))
 ; CHECK: REACHED-END
 ;
-(set-option :produce-models true)
 (set-logic QF_UFBVFP)
+(set-option :produce-models true)
 (declare-fun f ((_ FloatingPoint 8 24) RoundingMode) (_ BitVec 4))
 (declare-const u (_ FloatingPoint 8 24))
 (declare-const v (_ FloatingPoint 8 24))

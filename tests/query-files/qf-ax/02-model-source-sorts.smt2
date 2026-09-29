@@ -8,8 +8,8 @@
 ; CHECK: ^\(define-fun \|a\| \(\) \(Array Index Element\) \(store \(\(as const \(Array Index Element\)\) \(as \|@Element![0-9]+\| Element\)\) \(as \|@Index![0-9]+\| Index\) \(as \|@Element![0-9]+\| Element\)\)\)$
 ; CHECK: ^\( \(select \|a\| \|i\|\) \(as \|@Element![0-9]+\| Element\) \)$
 ;
-(set-option :produce-models true)
 (set-logic QF_AX)
+(set-option :produce-models true)
 (declare-sort Index 0)
 (declare-sort Element 0)
 (declare-fun a () (Array Index Element))

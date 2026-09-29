@@ -19,8 +19,8 @@
 ; arithmetic, so they come from the solve rather than from a bound.
 ; Fix r relative to f(q), so the expected values do not depend on which
 ; valid witness a backend chooses for the strict inequality.
-(set-option :produce-models true)
 (set-logic QF_UFLRA)
+(set-option :produce-models true)
 (declare-fun f (Real) Real)
 (declare-fun p () Real)
 (declare-fun q () Real)

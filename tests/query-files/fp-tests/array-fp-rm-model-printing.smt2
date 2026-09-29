@@ -8,8 +8,8 @@
 ; declare-const of an array sort, which used to exist only for declare-fun.
 ; (CHECK-L: these patterns hold regex metacharacters -- | -- so the plain
 ; CHECK form would match vacuously.)
-(set-option :produce-models true)
 (set-logic QF_ABVFP)
+(set-option :produce-models true)
 (declare-fun fe () (Array (_ BitVec 2) (_ FloatingPoint 8 24)))
 (declare-const re (Array (_ BitVec 2) RoundingMode))
 (declare-fun fi () (Array (_ FloatingPoint 8 24) (_ BitVec 8)))

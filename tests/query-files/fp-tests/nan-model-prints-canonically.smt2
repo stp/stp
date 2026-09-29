@@ -9,8 +9,8 @@
 ; get-value and get-model paths and a float-element array cell.
 ; (CHECK-L: these patterns hold regex metacharacters -- | -- so the plain
 ; CHECK form would match vacuously.)
-(set-option :produce-models true)
 (set-logic QF_ABVFP)
+(set-option :produce-models true)
 (declare-const x (_ FloatingPoint 8 24))
 (declare-fun a () (Array (_ BitVec 2) (_ FloatingPoint 8 24)))
 (assert (fp.isNaN x))

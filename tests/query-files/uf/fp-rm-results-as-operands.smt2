@@ -34,8 +34,8 @@
 ; CHECK-L: ( (= RNE (|k|  #xE)) true )
 ; CHECK: REACHED-END
 ;
-(set-option :produce-models true)
 (set-logic QF_UFBVFP)
+(set-option :produce-models true)
 (declare-fun q ((_ BitVec 4)) (_ FloatingPoint 8 24))
 (declare-fun k ((_ BitVec 4)) RoundingMode)
 (declare-const i (_ BitVec 4))

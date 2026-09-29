@@ -26,8 +26,8 @@
 ;
 ; CHECK: ^sat
 ; CHECK: ^\( \(select \|a\| \|i\|\) RNA \)$
-(set-option :produce-models true)
 (set-logic QF_ABVFP)
+(set-option :produce-models true)
 (declare-fun a () (Array RoundingMode RoundingMode))
 (declare-fun i () RoundingMode)
 (assert (not (= (store a i RNE) a)))

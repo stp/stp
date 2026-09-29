@@ -59,8 +59,8 @@
 ; RUN: %solver --array-equality --incremental=on %s 2>&1 | %OutputCheck %s
 ; RUN: %solver --array-equality --incremental=off %s 2>&1 | %OutputCheck %s
 ; RUN: %solver --array-equality --incremental-auto-engage-at 1 %s 2>&1 | %OutputCheck %s
-(set-option :produce-models true)
 (set-logic QF_ABVFP)
+(set-option :produce-models true)
 (declare-const a (Array RoundingMode RoundingMode))
 (declare-const b (Array RoundingMode RoundingMode))
 (declare-const x (_ BitVec 4))

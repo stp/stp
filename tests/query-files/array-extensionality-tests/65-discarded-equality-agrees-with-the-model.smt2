@@ -16,8 +16,8 @@
 ; equality is worth in this model. Asserted by shape rather than by the
 ; exact printed text, because the printer's punctuation is not what this
 ; file is about.
-(set-option :produce-models true)
 (set-logic QF_ABV)
+(set-option :produce-models true)
 (declare-fun a () (Array (_ BitVec 3) (_ BitVec 4)))
 (declare-fun p () (Array (_ BitVec 3) (_ BitVec 4)))
 (declare-fun q () (Array (_ BitVec 3) (_ BitVec 4)))

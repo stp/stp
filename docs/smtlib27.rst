@@ -16,8 +16,9 @@ a complete, standalone SMT-LIB script.
 Writing a script
 ----------------
 
-Options that control the products of solving must precede ``set-logic``.
-For example:
+For portable scripts, place options that control the products of solving
+before ``set-logic``, as the specification prescribes. STP also accepts
+them after ``set-logic``, like cvc5 and Bitwuzla. For example:
 
 .. code-block:: lisp
 

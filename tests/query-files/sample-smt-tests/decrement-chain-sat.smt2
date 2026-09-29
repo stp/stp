@@ -10,8 +10,8 @@
 ; This replaces the sample-cvc a127/a128/a163/a165/a166/a168-a171/a173/a175/
 ; a177-a182 family, which was one formula unrolled to seventeen depths, each
 ; file only checking that the answer was Invalid.
-(set-option :produce-models true)
 (set-logic QF_BV)
+(set-option :produce-models true)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
 (set-info :status sat)

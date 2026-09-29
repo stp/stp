@@ -7,8 +7,8 @@
 ; order, and the equal arrays print byte-identical bodies -- b's
 ; observations arrived purely through propagation across the true
 ; equality.
-(set-option :produce-models true)
 (set-logic QF_ABV)
+(set-option :produce-models true)
 (declare-fun a () (Array (_ BitVec 1) (_ BitVec 1)))
 (declare-fun b () (Array (_ BitVec 1) (_ BitVec 1)))
 (assert (= a b))

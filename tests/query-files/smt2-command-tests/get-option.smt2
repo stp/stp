@@ -1,5 +1,7 @@
 ; get-option reports supported values and defaults for predefined options.
 ; RUN: %solver %s | %OutputCheck %s
+(set-logic QF_BV)
+(declare-fun x () (_ BitVec 4))
 ; CHECK-NEXT: ^false
 (get-option :print-success)
 ; CHECK-NEXT: ^false
@@ -13,8 +15,6 @@
 (get-option :produce-proofs)
 ; CHECK-NEXT: ^unsupported
 (get-option :some-unknown-option)
-(set-logic QF_BV)
-(declare-fun x () (_ BitVec 4))
 (assert (= x #x1))
 ; CHECK-NEXT: ^sat
 (check-sat)

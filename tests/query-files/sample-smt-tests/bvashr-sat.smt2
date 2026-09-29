@@ -7,8 +7,8 @@
 ; shift amount and so checks that the sign bit really is the bit replicated.
 ; Converted from sample-cvc-tests/bvashr-invalid.cvc, which asked for the
 ; result 11 that every shift amount produced and so pinned nothing.
-(set-option :produce-models true)
 (set-logic QF_BV)
+(set-option :produce-models true)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
 (set-info :status sat)

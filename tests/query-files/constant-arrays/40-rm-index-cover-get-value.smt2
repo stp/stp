@@ -5,8 +5,8 @@
 ; so it equals a, the constant array of #b0: the model's evaluation of
 ; (= a b) counted the rounding-mode index's 32 carrier patterns, found an
 ; unwritten one, and said false.
-(set-option :produce-models true)
 (set-logic QF_ABVFP)
+(set-option :produce-models true)
 (declare-fun a () (Array RoundingMode (_ BitVec 1)))
 (declare-fun b () (Array RoundingMode (_ BitVec 1)))
 (assert (= a ((as const (Array RoundingMode (_ BitVec 1))) #b0)))

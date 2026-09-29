@@ -19,8 +19,8 @@
 ; CHECK-L: ( (|d| |i|) (fp #b0 #b01111111111 #b1000000000000000000000000000000000000000000000000000) )
 ; CHECK: REACHED-END
 ;
-(set-option :produce-models true)
 (set-logic QF_AUFBVFP)
+(set-option :produce-models true)
 (declare-fun d ((_ BitVec 4)) (_ FloatingPoint 11 53))
 (declare-fun h ((_ BitVec 4)) (_ FloatingPoint 3 5))
 (declare-fun g ((_ FloatingPoint 3 5)) (_ BitVec 4))

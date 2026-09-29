@@ -21,8 +21,8 @@
 ; the completion every other reader of the model applies -- the printer
 ; here, ReadUsingModel, and the contents comparison the post-solve audit
 ; makes -- without anything having to be recorded to keep them in step.
-(set-option :produce-models true)
 (set-logic QF_ABV)
+(set-option :produce-models true)
 (declare-fun a () (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-fun c () (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-fun b () (Array (_ BitVec 4) (_ BitVec 8)))

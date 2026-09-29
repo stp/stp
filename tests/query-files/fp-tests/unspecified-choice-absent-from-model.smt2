@@ -13,8 +13,8 @@
 ; CHECK-NOT-L: @fp_unspecified
 ; CHECK-L: (define-fun |x| () (_ FloatingPoint 8 24)
 ; CHECK-NOT-L: @fp_unspecified
-(set-option :produce-models true)
 (set-logic QF_FP)
+(set-option :produce-models true)
 (declare-const x (_ FloatingPoint 8 24))
 (assert (fp.isNegative (fp.min (_ +zero 8 24) (_ -zero 8 24))))
 (assert (fp.isPositive (fp.max (_ +zero 8 24) (_ -zero 8 24))))

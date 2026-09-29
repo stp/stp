@@ -8,8 +8,8 @@
 ; UF certification needs an internal candidate in both modes, but that does
 ; not grant permission to publish get-value or get-model results when the
 ; caller left :produce-models disabled.
-(set-option :produce-models false)
 (set-logic QF_UFBV)
+(set-option :produce-models false)
 (declare-fun f ((_ BitVec 8)) (_ BitVec 8))
 (declare-const x (_ BitVec 8))
 (assert (= (f x) #x2a))

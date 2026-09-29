@@ -20,8 +20,8 @@
 ; (distinct a c) is forced false, so its operands must genuinely differ
 ; somewhere in the published model -- which is what the witness index of
 ; preprocessing step 1 supplies.
-(set-option :produce-models true)
 (set-logic QF_ABV)
+(set-option :produce-models true)
 (declare-fun a () (Array (_ BitVec 3) (_ BitVec 4)))
 (declare-fun b () (Array (_ BitVec 3) (_ BitVec 4)))
 (declare-fun c () (Array (_ BitVec 3) (_ BitVec 4)))

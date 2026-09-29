@@ -5,8 +5,8 @@
 ; (which used to leak out, e.g. #b01000). The declaration's one-hot
 ; constraint guarantees the value always names a mode, even for a symbol no
 ; user assertion mentions.
-(set-option :produce-models true)
 (set-logic QF_FP)
+(set-option :produce-models true)
 (declare-const r RoundingMode)
 (declare-fun unused () RoundingMode)
 (assert (= r roundTowardZero))

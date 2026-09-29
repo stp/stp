@@ -53,8 +53,8 @@
 ; CHECK-L: ( |a| (store ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x00) #x00 #x07) )
 ; CHECK: REACHED-END
 ;
-(set-option :produce-models true)
 (set-logic QF_ABVFP)
+(set-option :produce-models true)
 (declare-const x (_ BitVec 8))
 (declare-const p Bool)
 (declare-const a (Array (_ BitVec 8) (_ BitVec 8)))

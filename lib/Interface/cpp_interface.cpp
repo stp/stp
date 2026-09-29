@@ -1638,10 +1638,9 @@ void Cpp_interface::setOption(std::string option, std::string value)
       option == "produce-unsat-assumptions" || option == "produce-unsat-cores";
   if (boolean_option && value != "true" && value != "false")
     badBooleanOptionValue(option, value);
-  const bool start_only = (boolean_option && option != "print-success") ||
-                          option == "random-seed";
-  if (protocol_checks && start_only && mode != Mode::Start)
-    refuseCurrentCommand("set-option :" + option + " is only permitted before set-logic");
+  // Accept production options on either side of set-logic, as cvc5 and
+  // Bitwuzla do. Restrictions needed by an option's implementation belong
+  // in its handler (for example, global-declarations below).
   /*
       :diagnostic-output-channel
       :global-declarations
