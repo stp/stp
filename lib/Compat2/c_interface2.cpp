@@ -1614,8 +1614,9 @@ int vc_query_with_timeout(VC vcp, Expr e, int timeout_max_conflicts, int timeout
     return 2;
   vc->reason = REASON_UNKNOWN_NONE;
   vc->reason_detail.clear();
-  discard_model(vc);
 
+  // The arguments are checked before anything is discarded: a query refused
+  // here leaves the previous model readable, as 2.x did.
   // -1 is the only negative value that means anything ("no limit").
   if (timeout_max_conflicts < -1)
   {
@@ -1636,6 +1637,7 @@ int vc_query_with_timeout(VC vcp, Expr e, int timeout_max_conflicts, int timeout
     fatal("CInterface: Trying to QUERY a NON formula: ");
     return 2;
   }
+  discard_model(vc);
   stp_solver s = ensure_solver(vc);
   if (s == nullptr)
     return 2;

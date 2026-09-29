@@ -534,3 +534,19 @@ TEST(libstp2_fidelity, a_profile_and_an_explicit_half_combine)
     vc_Destroy(vc);
   }
 }
+
+// A vc_query_with_timeout that refuses its budget leaves the previous model
+// readable, as 2.x did: the arguments are checked before the model goes.
+TEST(libstp2_fidelity, a_refused_query_keeps_the_model)
+{
+  VC vc = vc_createValidityChecker();
+  Expr x = vc_varExpr(vc, "x", vc_bvType(vc, 8));
+  vc_assertFormula(vc, vc_eqExpr(vc, x, vc_bvConstExprFromInt(vc, 8, 0xAA)));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(2, vc_query_with_timeout(vc, vc_falseExpr(vc), -5, -1));
+  Expr v = vc_getCounterExample(vc, x);
+  ASSERT_NE(nullptr, v);
+  EXPECT_EQ(0xAAu, getBVUnsigned(v));
+  vc_DeleteExpr(v);
+  vc_Destroy(vc);
+}
