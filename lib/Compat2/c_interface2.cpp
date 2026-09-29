@@ -151,7 +151,16 @@ VCImpl* vcimpl(VC vc, const char* who)
     fatal(std::string("CInterface: ") + who + ": null validity checker");
     return nullptr;
   }
-  return static_cast<VCImpl*>(vc);
+  VCImpl* impl = static_cast<VCImpl*>(vc);
+  // Every entry starts with no error on record: a bookkeeping call whose
+  // failure nothing reported (a model count, a sort read) would otherwise be
+  // the error the next real failure is reported with, the record keeping the
+  // first since its clear.
+  if (stp_tm_error(impl->tm) != nullptr)
+    stp_tm_clear_error(impl->tm);
+  if (stp_last_error() != nullptr)
+    stp_clear_last_error();
+  return impl;
 }
 
 Handle* handle(Expr e)
@@ -1666,11 +1675,16 @@ int vc_query_with_timeout(VC vcp, Expr e, int timeout_max_conflicts, int timeout
       result = 1;
       break;
     case STP_INVALID:
-      result = 0;
+      // produce-models is always on here: a model that cannot be taken is the
+      // query failing, and is reported as its other failures are
       vc->model = stp_solver_model(s);
       if (vc->model == nullptr)
-        take_error(vc); // produce-models off: nothing to read later
-      vc->uf_certified = vc->model != nullptr;
+      {
+        report("vc_query: " + take_error(vc));
+        return 2;
+      }
+      result = 0;
+      vc->uf_certified = true;
       vc->real_model_symbols = stp_tm_num_symbols(vc->tm);
       vc->real_model_stale = false;
       break;
