@@ -55,6 +55,7 @@ namespace
 {
 
 thread_local const OutputSinks* t_route = nullptr;
+thread_local int t_callback_depth = 0;
 
 // A sink that writes to std::cout or std::cerr itself finds no route while it
 // runs, and so reaches the process's stream rather than itself.
@@ -74,6 +75,7 @@ void deliver(const std::function<void(std::string_view)>* sink, std::string_view
   if (sink == nullptr || !*sink)
     return;
   Unrouted unrouted;
+  const InCallback callback;
   try
   {
     (*sink)(text);
@@ -187,6 +189,11 @@ OutputRoute::~OutputRoute()
 {
   t_route = saved_;
   stp::SetFatalErrorObserver(saved_observer_, saved_opaque_);
+}
+
+int& callback_depth() noexcept
+{
+  return t_callback_depth;
 }
 
 } // namespace detail

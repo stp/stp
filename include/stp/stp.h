@@ -69,8 +69,13 @@ THE SOFTWARE.
  *     stp_set_internal_error_policy(STP_ABORT) or STP_ABORT_ON_INTERNAL_ERROR=1 in the
  *     environment restores an abort, for debugging.
  *   - Thread contract: a manager and the solvers/models over it are used by one thread at a
- *     time, whichever thread that is; independent managers are concurrent;
- *     stp_solver_interrupt is the one call safe from any thread and from a signal handler.
+ *     time, whichever thread that is; independent managers are concurrent, except that parses
+ *     take one process-wide lock for their whole length (an EXECUTE input's checks and a text
+ *     source's waits included); stp_solver_interrupt is the one call safe from any thread and
+ *     from a signal handler.
+ *   - Callbacks (the sinks, the terminator, the fatal-error handler, a text source, the error
+ *     callback) must not call the library: every call from one fails with STP_ERR_STATE but
+ *     stp_solver_interrupt, stp_solver_clear_interrupt and stp_solver_interrupt_pending.
  *   - Public struct layouts, versioned by STP_API_VERSION: stp_result, stp_entailment,
  *     stp_budget, stp_error, stp_float_value, stp_version. Every other type is opaque.
  */
@@ -670,18 +675,19 @@ typedef void (*stp_text_sink)(const char* text, size_t len, void* user);
  * pending interrupt stays pending, the CNF sink does not see it. STATE when an interrupt or a
  * budget stops it first; UNSUPPORTED when the pipeline ends before a CNF for another reason */
 STP_API stp_status stp_solver_write_cnf(stp_solver, stp_text_sink, void* user, stp_cnf_scope* scope);
-STP_API void stp_solver_set_diagnostic_sink(stp_solver, stp_text_sink, void* user); /* where diagnostic-tier options write, "Fatal Error:" reports included; NULL: nowhere */
+STP_API void stp_solver_set_diagnostic_sink(stp_solver, stp_text_sink, void* user); /* where diagnostic-tier options write, "Fatal Error:" reports included; NULL: nowhere; must not call the library (STATE) */
 /* the input read as far as the parser needs it: the source fills up to max bytes and returns
  * how many, 0 at the end and (size_t)-1 if reading failed (the parse then fails with IO);
- * AUTO reads SMT-LIB 2 */
+ * AUTO reads SMT-LIB 2. The source must not call the library (STATE), and runs under the
+ * process-wide parser lock */
 typedef size_t (*stp_text_source)(char* buf, size_t max, void* user);
 STP_API stp_status stp_solver_parse_source(stp_solver, stp_text_source, void* user, stp_format, stp_parse_mode);
 STP_API char* stp_solver_input_to_string(stp_solver, stp_format); /* the last CVC or SMT-LIB 1 input, as stp's --print-back options print it: CVC, SMTLIB2, GDL or DOT; STATE if there was none */
-STP_API void stp_solver_set_output_sink(stp_solver, stp_text_sink, void* user); /* the responses of an EXECUTE or PARSE_ONLY input and what the printing options print; a call with len 0 asks for a flush; NULL: nowhere. A SAT backend's own report (print-functionstat) comes here from CryptoMiniSat only: CaDiCaL and MiniSat write theirs to stdout themselves */
+STP_API void stp_solver_set_output_sink(stp_solver, stp_text_sink, void* user); /* the responses of an EXECUTE or PARSE_ONLY input and what the printing options print; a call with len 0 asks for a flush; NULL: nowhere. A SAT backend's own report (print-functionstat) comes here from CryptoMiniSat only: CaDiCaL and MiniSat write theirs to stdout themselves. Must not call the library (STATE) */
 typedef void (*stp_fatal_error_handler)(const char* message, void* user);
 STP_API void stp_solver_set_fatal_error_handler(stp_solver, stp_fatal_error_handler, void* user); /* told of an engine fatal error in this solver's work before anything unwinds; may end the process; must not call the library; NULL: none */
 typedef void (*stp_cnf_sink)(const char* dimacs, size_t len, stp_cnf_scope scope, void* user);
-STP_API void stp_solver_set_cnf_sink(stp_solver, stp_cnf_sink, void* user); /* every CNF a check hands to the SAT solver, as DIMACS; NULL: none */
+STP_API void stp_solver_set_cnf_sink(stp_solver, stp_cnf_sink, void* user); /* every CNF a check hands to the SAT solver, as DIMACS; NULL: none; must not call the library (STATE) */
 
 /* ------------------------------------------------------------------ model (a detached snapshot) */
 STP_API stp_model stp_model_copy(stp_model);

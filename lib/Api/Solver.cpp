@@ -381,7 +381,11 @@ bool SolverImpl::poll_stop(void* opaque)
     s->interrupt_consumed = true;
     return true;
   }
-  if (s->terminator != nullptr && s->terminator->terminate())
+  const auto terminate = [s] {
+    const InCallback callback;
+    return s->terminator->terminate();
+  };
+  if (s->terminator != nullptr && terminate())
   {
     s->terminator_fired = true;
     return true;
@@ -490,6 +494,7 @@ struct CheckRun
         // A sink's exception has nowhere to go inside the engine.
         try
         {
+          const InCallback callback;
           s->cnf_sink(dimacs, scope);
         }
         catch (...)
@@ -1426,6 +1431,8 @@ std::size_t read_stream(char* buf, std::size_t max, void* opaque)
   std::istream& in = *static_cast<std::istream*>(opaque);
   if (max == 0)
     return 0;
+  // the stream's buffer is the caller's code: a text source, a pipe reader
+  const detail::InCallback callback;
   // A stream the caller set to throw (exceptions()) reports by exception
   // what the state bits report otherwise: one that went bad -- its buffer
   // failed, whose own exception the stream rethrows -- is the input failing,

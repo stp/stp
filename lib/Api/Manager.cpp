@@ -146,6 +146,10 @@ ManagerImpl::~ManagerImpl()
 
 void ManagerImpl::check_alive(const char* fn) const
 {
+  if (callback_depth() != 0)
+    fail(ErrorCode::STATE, fn,
+         "called from inside one of the library's callbacks (a sink, the terminator, the "
+         "fatal-error handler, a text source or the error callback), which must not call it");
   boot_constant_bv();
   if (poisoned)
     fail(ErrorCode::STATE, fn, "the term manager is poisoned: " + poison_message);

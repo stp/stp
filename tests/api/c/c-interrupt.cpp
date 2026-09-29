@@ -224,3 +224,43 @@ TEST(c_interrupt, reaches_a_check_the_script_runs)
   stp_solver_delete(s);
   stp_tm_release(tm);
 }
+
+// A C sink that calls back into the library is refused (STP_ERR_STATE) rather
+// than deadlocking on the parser lock.
+TEST(c_interrupt, a_sink_that_parses_is_refused)
+{
+  struct Seen
+  {
+    stp_tm other_tm;
+    stp_solver other;
+    stp_status status = STP_OK;
+    stp_error_code code = STP_ERR_INVALID_ARGUMENT;
+    bool called = false;
+  };
+  stp_tm tm = stp_tm_new(nullptr);
+  stp_tm other_tm = stp_tm_new(nullptr);
+  Seen seen;
+  seen.other_tm = other_tm;
+  seen.other = stp_solver_new(other_tm, nullptr);
+  stp_solver s = stp_solver_new(tm, nullptr);
+  stp_solver_set_output_sink(
+      s,
+      [](const char*, size_t n, void* user) {
+        Seen* w = static_cast<Seen*>(user);
+        if (n == 0 || w->called)
+          return;
+        w->called = true;
+        w->status = stp_solver_parse_smt2(w->other, "(declare-fun q () Bool)", STP_PARSE_DECLARE_AND_ASSERT);
+        if (const stp_error* e = stp_tm_error(w->other_tm))
+          w->code = e->code;
+      },
+      &seen);
+  EXPECT_EQ(STP_OK, stp_solver_parse_smt2(s, "(declare-fun x () Bool) (assert x) (check-sat)", STP_PARSE_EXECUTE));
+  EXPECT_TRUE(seen.called);
+  EXPECT_EQ(STP_ERROR, seen.status);
+  EXPECT_EQ(STP_ERR_STATE, seen.code);
+  stp_solver_delete(seen.other);
+  stp_solver_delete(s);
+  stp_tm_release(other_tm);
+  stp_tm_release(tm);
+}

@@ -103,6 +103,21 @@ struct ErrorDetails
 // have left inconsistent: every later call on it, its solvers, models and
 // terms is refused with STATE naming the failure. The flag is per thread and
 // nests (a scope restores what it found).
+// How many user callbacks -- sinks, the terminator, the fatal-error handler,
+// a text source, the C error callback -- are running on this thread. Every
+// call into the library from one is refused with STATE (check_alive) but
+// interrupt(), clear_interrupt() and interrupt_pending(): the engine is part
+// way through a call beneath it, and a parse holds the process-wide parser
+// lock, so the call would corrupt the one or deadlock on the other.
+DLL_PUBLIC int& callback_depth() noexcept;
+struct InCallback
+{
+  InCallback() noexcept { ++callback_depth(); }
+  ~InCallback() { --callback_depth(); }
+  InCallback(const InCallback&) = delete;
+  InCallback& operator=(const InCallback&) = delete;
+};
+
 struct EngineScope
 {
   bool saved;

@@ -130,7 +130,10 @@ ErrorRecord* target_of(CManager* cm, ErrorRecord* rec) noexcept
 void deliver(CManager* cm, const ErrorRecord& cur) noexcept
 {
   if (cm != nullptr && cm->callback != nullptr)
+  {
+    const detail::InCallback callback;
     cm->callback(&cur.view, cm->callback_user);
+  }
 }
 } // namespace
 

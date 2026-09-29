@@ -40,8 +40,14 @@ THE SOFTWARE.
 //     free. A TermManager lives while anything that came from it lives.
 //   - Threads: a manager and the solvers and models over it are used by one
 //     thread at a time, whichever thread that is; independent managers run
-//     concurrently. Solver::interrupt() is the one call safe from any thread
-//     and from a signal handler.
+//     concurrently, except that parses take one process-wide lock for their
+//     whole length -- a check an EXECUTE input runs, and a wait on the input
+//     stream, included. Solver::interrupt() is the one call safe from any
+//     thread and from a signal handler.
+//   - Callbacks (the sinks, the terminator, the fatal-error handler, the
+//     stream a parse reads) must not call the library: every call from one is
+//     refused with STATE, but interrupt(), clear_interrupt() and
+//     interrupt_pending().
 //   - Term == Term and Term != Term BUILD terms (SMT-LIB '=' and 'distinct').
 //     Term has no conversion to bool, so `if (a == b)` does not compile; the
 //     structural test is a.same_as(b). std::equal_to<Term> is structural and
@@ -1129,7 +1135,7 @@ public:
   void clear_interrupt() noexcept;
   bool interrupt_pending() const noexcept;
   /// Not owned; nullptr clears. A terminator runs inside the check and must
-  /// not call the library, except Solver::interrupt().
+  /// not call the library (STATE), except Solver::interrupt().
   void set_terminator(Terminator*);
   Statistics statistics() const;
 
@@ -1141,7 +1147,8 @@ public:
   /// Reads the input from a stream as far as the parser needs it, taking what
   /// the stream holds after at most one refill: a script driven over a pipe
   /// is answered command by command. AUTO reads SMT-LIB 2. IO if the stream
-  /// fails, which ends the parse there.
+  /// fails, which ends the parse there. The stream's reads run as a callback
+  /// (no library calls) and under the process-wide parser lock.
   void parse(std::istream& in, Format, ParseMode = ParseMode::DECLARE_AND_ASSERT);
   Term parse_term(std::string_view smt2_term) const; ///< over the manager's name table
 
@@ -1165,14 +1172,16 @@ public:
 
   /// Where diagnostic-tier options write: statistics, warnings and the other
   /// text the engine prints for people rather than programs, "Fatal Error:"
-  /// reports included. Default: nowhere.
+  /// reports included. Default: nowhere. A sink must not call the library
+  /// (STATE); nor must any other callback.
   void set_diagnostic_sink(std::function<void(std::string_view)>);
   /// Where the solver's printed output goes: the responses of an input read
   /// with ParseMode::EXECUTE or PARSE_ONLY, and what the printing options
   /// print. Default: nowhere. An empty chunk asks the sink to flush: the text
   /// so far is complete. A SAT backend's own report, which print-functionstat
   /// switches on, reaches this sink from CryptoMiniSat only: CaDiCaL and
-  /// MiniSat write theirs to standard output themselves.
+  /// MiniSat write theirs to standard output themselves. It must not call the
+  /// library (STATE).
   void set_output_sink(std::function<void(std::string_view)>);
   /// Called with the engine's report of a fatal error in this solver's work
   /// (an internal failure, or a refusal that ends a parse) where it happens,
@@ -1183,6 +1192,7 @@ public:
   void set_fatal_error_handler(std::function<void(std::string_view)>);
   /// Every CNF a check hands to the SAT solver, as DIMACS, and how it relates
   /// to the query; a check can hand over several (refinement). Default: none.
+  /// It must not call the library (STATE).
   void set_cnf_sink(std::function<void(std::string_view dimacs, CnfScope)>);
 
   // internal

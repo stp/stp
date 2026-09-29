@@ -644,3 +644,30 @@ def test_interrupt_reaches_a_check_the_script_runs():
     timer.join()
     assert time.monotonic() - t0 < 60 and not s.interrupt_pending()
     s.close()
+
+
+def test_a_callback_that_calls_the_library_is_refused():
+    # a sink that pushed tripped an assertion part way through a check-sat, and one that
+    # parsed deadlocked on the parser lock: every call from a callback raises StateError now,
+    # but interrupt(), clear_interrupt() and interrupt_pending()
+    s = Solver(tm=TermManager())
+    seen = []
+
+    def sink(text):
+        if not text or seen:
+            return
+        for call in (s.push, lambda: s.from_string("(declare-fun z () Bool)")):
+            try:
+                call()
+                seen.append("called")
+            except StateError:
+                seen.append("refused")
+        s.interrupt()
+        s.clear_interrupt()
+        seen.append(s.interrupt_pending())
+
+    s.set_output_sink(sink)
+    s.from_string("(declare-fun x () Bool) (assert x) (check-sat)", mode="execute")
+    assert seen == ["refused", "refused", False]
+    assert s.check() == sat
+    s.close()

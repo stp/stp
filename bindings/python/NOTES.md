@@ -54,8 +54,14 @@ that depart from z3py or from a literal reading of the C API.
   duration of a check: it calls `stp_solver_interrupt` and, after the check,
   Python's own handler is restored and the signal re-delivered
   (`PyErr_SetInterrupt`), so Ctrl-C raises `KeyboardInterrupt` from `check()`
-  and the solver stays usable. A user terminator (`set_terminator`) runs with
-  the GIL; an exception it raises interrupts the check and is re-raised.
+  and the solver stays usable (around a parse that runs its input as well).
+  A user terminator (`set_terminator`) runs with the GIL; an exception it
+  raises interrupts the check and is re-raised. Parses take one process-wide
+  lock for their whole length, so a parse on another manager waits for one
+  that is checking or waiting on its stream. A callback (a sink, the
+  terminator, the stream a parse reads) must not call the library: every call
+  from one raises `StateError`, but `interrupt()`, `clear_interrupt()` and
+  `interrupt_pending()`.
 - **Deferred release.** Node reference counts are plain. A wrapper finalised
   while its manager is inside a check (`Manager.busy`), or after the cyclic
   garbage collector already cleared its manager reference, does not release

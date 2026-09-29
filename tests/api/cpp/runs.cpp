@@ -602,3 +602,56 @@ TEST(Runs, an_exception_in_a_check_the_script_runs_is_internal)
   }
   API_EXPECT_ERROR(ErrorCode::STATE, s.check_sat());
 }
+
+// A callback must not call the library. A sink that pushed tripped an assertion
+// in the frontend part way through its check-sat, and one that parsed
+// deadlocked on the parser lock; every call from a callback is now refused with
+// STATE, but interrupt(), clear_interrupt() and interrupt_pending().
+TEST(Runs, a_callback_that_calls_the_library_is_refused)
+{
+  for (const std::string what : {"push", "parse", "check", "declare", "interrupt"})
+  {
+    TermManager tm;
+    Solver s(tm);
+    std::optional<ErrorCode> refused;
+    bool called = false;
+    s.set_output_sink([&](std::string_view text) {
+      if (text.empty() || called)
+        return;
+      called = true;
+      try
+      {
+        if (what == "push")
+          s.push();
+        else if (what == "parse")
+          s.parse_smt2("(declare-fun z () (_ BitVec 8))");
+        else if (what == "check")
+          (void)s.check_sat();
+        else if (what == "declare")
+          (void)tm.declare("w", tm.mk_bv_sort(8));
+        else
+        {
+          s.interrupt();
+          s.clear_interrupt();
+          (void)s.interrupt_pending();
+        }
+      }
+      catch (const RecoverableError& e)
+      {
+        refused = e.code();
+      }
+    });
+    s.parse_smt2("(declare-fun x () (_ BitVec 8)) (assert (= x #x01)) (check-sat)", ParseMode::EXECUTE);
+    EXPECT_TRUE(called) << what;
+    if (what == "interrupt")
+      EXPECT_FALSE(refused.has_value());
+    else
+    {
+      ASSERT_TRUE(refused.has_value()) << what;
+      EXPECT_EQ(*refused, ErrorCode::STATE) << what;
+    }
+    // the solver goes on
+    EXPECT_EQ(s.level(), 0u) << what;
+    EXPECT_TRUE(s.check_sat().is_sat()) << what;
+  }
+}

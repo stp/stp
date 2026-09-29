@@ -324,3 +324,14 @@ assertion stack, options, models and statistics; switching between them replays 
 assertion stack, which is the one cost. A manager and everything created from
 it may be used from any thread, one call at a time: the caller serialises, and
 ``interrupt()`` is the one call that may overlap a running check.
+
+Independent managers run concurrently, with one exception: the parsers keep
+process-wide state, so every parse takes one lock for its whole length. A
+check that an ``EXECUTE`` input runs, and a wait on the stream or text source
+a parse reads, hold it too, and a parse on another manager waits for them.
+
+A callback -- an output, diagnostic or CNF sink, the terminator, the
+fatal-error handler, the stream a parse reads, C's error callback -- runs in
+the middle of a call, and must not call the library: every call from one is
+refused with ``STATE``, but ``interrupt()``, ``clear_interrupt()`` and
+``interrupt_pending()``.
