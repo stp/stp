@@ -284,7 +284,7 @@ typedef struct stp_entailment
 typedef struct stp_budget
 {
   bool has_time;
-  uint64_t time_ms; /* 0 means: give up at once */
+  uint64_t time_ms; /* 0 means: give up at once; past the clock's range (about 292 years), no limit */
   bool has_conflicts;
   uint64_t conflicts;
 } stp_budget;

@@ -1837,11 +1837,31 @@ public:
   void* stop_poll_opaque = nullptr;
 
   bool hasQueryTimeLimit() const { return timeout_max_time_ms >= 0; }
-  // The budget as a duration; only meaningful when hasQueryTimeLimit().
+  // The budget as a duration; only meaningful when hasQueryTimeLimit(). A
+  // budget past what the clock counts (about 292 years) is its largest
+  // duration, not the product that would wrap.
   std::chrono::steady_clock::duration queryTimeLimit() const
   {
-    return std::chrono::milliseconds(
+    using Duration = std::chrono::steady_clock::duration;
+    const std::chrono::milliseconds ms(
         timeout_max_time_ms >= 0 ? timeout_max_time_ms : 0);
+    if (ms >= std::chrono::duration_cast<std::chrono::milliseconds>(Duration::max()))
+      return Duration::max();
+    return std::chrono::duration_cast<Duration>(ms);
+  }
+  // `started` plus the budget, or the clock's last instant when the sum is
+  // past it; `started` itself without a budget.
+  std::chrono::steady_clock::time_point
+  queryDeadline(std::chrono::steady_clock::time_point started) const
+  {
+    using TimePoint = std::chrono::steady_clock::time_point;
+    if (!hasQueryTimeLimit())
+      return started;
+    const auto limit = queryTimeLimit();
+    if (started.time_since_epoch().count() >= 0 &&
+        limit > TimePoint::max() - started)
+      return TimePoint::max();
+    return started + limit;
   }
 
   // check the counterexample against the original input to STP

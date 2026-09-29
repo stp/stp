@@ -33,6 +33,7 @@ THE SOFTWARE.
 
 #include <atomic>
 #include <cstring>
+#include <initializer_list>
 #include <string>
 #include <thread>
 #include <vector>
@@ -583,6 +584,28 @@ TEST(c_runtime, no_limit_round_trips_through_the_duration_functions)
   stp_solver_delete(s);
   stp_options_delete(o);
   stp_options_delete(o2);
+  stp_tm_release_all(tm);
+  stp_tm_release(tm);
+}
+
+TEST(c_runtime, a_budget_past_the_clocks_range_is_no_limit)
+{
+  stp_tm tm = stp_tm_new(nullptr);
+  stp_term x = stp_declare(tm, "x", stp_mk_bv_sort(tm, 8));
+  stp_solver s = stp_solver_new(tm, nullptr);
+  ASSERT_EQ(STP_OK, stp_solver_assert(s, stp_eq(tm, x, stp_mk_bv_uint64(tm, 8, 3))));
+  for (const uint64_t ms : std::initializer_list<uint64_t>{9223372036854ull, 9223372036854775807ull, STP_DURATION_NONE})
+  {
+    stp_budget b = {true, ms, false, 0};
+    stp_result r;
+    ASSERT_EQ(STP_OK, stp_solver_check_sat_budget(s, 0, nullptr, &b, &r));
+    EXPECT_EQ(STP_SAT, r.kind) << ms;
+  }
+  ASSERT_EQ(STP_OK, stp_solver_set_duration_ms(s, "max-time", 9223372036854775807ull));
+  stp_result r;
+  ASSERT_EQ(STP_OK, stp_solver_check_sat(s, &r));
+  EXPECT_EQ(STP_SAT, r.kind);
+  stp_solver_delete(s);
   stp_tm_release_all(tm);
   stp_tm_release(tm);
 }

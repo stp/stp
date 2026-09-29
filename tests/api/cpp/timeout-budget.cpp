@@ -246,6 +246,41 @@ TEST(timeout_budget, no_limit_still_answers)
   }
 }
 
+// A budget past what the clock counts (about 292 years, up to the largest a
+// caller can spell) is no limit in all but name, not a deadline that wraps
+// into the past; the trivial query is decided before the SAT solver is
+// called, the factoring one by it.
+TEST(timeout_budget, a_budget_past_the_clocks_range_is_no_limit)
+{
+  for (const Backend& backend : backends())
+  {
+    SCOPED_TRACE(backend.name);
+
+    TermManager tm;
+    Solver s(tm, backend_options(backend.name));
+    const Term x = tm.declare("x", tm.mk_bv_sort(8));
+    const Term a = tm.declare("a", tm.mk_bv_sort(32));
+    const Term b = tm.declare("b", tm.mk_bv_sort(32));
+    const Term trivial = x == tm.mk_bv(8, 3);
+    const Term factoring = and_({bvmul(a, b) == tm.mk_bv(32, 60491), bvugt(a, tm.mk_bv(32, 1)),
+                                 bvugt(b, tm.mk_bv(32, 1)), bvult(a, tm.mk_bv(32, 1ULL << 16)),
+                                 bvult(b, tm.mk_bv(32, 1ULL << 16)), bvule(a, b)});
+    for (const Term& query : {trivial, factoring})
+    {
+      for (const std::int64_t ms : {std::int64_t(9223372036854), std::int64_t(9223372036854775),
+                                    std::int64_t(INT64_MAX)})
+        EXPECT_TRUE(s.check_sat({query}, CheckBudget{std::chrono::milliseconds(ms), std::nullopt}).is_sat())
+            << ms << " ms";
+      for (const char* text : {"9223372036854ms", "9223372036854775807ms", "1000000000h"})
+      {
+        s.options().set("max-time", text);
+        EXPECT_TRUE(s.check_sat({query}).is_sat()) << text;
+      }
+      s.options().reset("max-time");
+    }
+  }
+}
+
 // Without a budget argument and with the budget options at their defaults,
 // a check has no limit.
 TEST(timeout_budget, vc_query_is_unlimited)

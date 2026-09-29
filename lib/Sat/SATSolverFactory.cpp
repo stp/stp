@@ -197,10 +197,7 @@ bool enableBVAIfWanted(SATSolver& s, const UserDefinedFlags& flags,
 
 void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags)
 {
-  const auto deadline = std::chrono::steady_clock::now() +
-      (flags.hasQueryTimeLimit() ? flags.queryTimeLimit()
-                                 : std::chrono::steady_clock::duration(0));
-  applySolveBudgets(s, flags, deadline);
+  applySolveBudgets(s, flags, flags.queryDeadline(std::chrono::steady_clock::now()));
 }
 
 void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags,

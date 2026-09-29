@@ -234,10 +234,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   QueryTiming timing(started);
   QueryTimingReport timing_report(bm->query_timing,
       bm->UserFlags.stats_flag ? &timing : nullptr, std::cerr);
-  const auto deadline = started +
-      (bm->UserFlags.hasQueryTimeLimit()
-           ? bm->UserFlags.queryTimeLimit()
-           : std::chrono::steady_clock::duration(0));
+  const auto deadline = bm->UserFlags.queryDeadline(started);
   const PreparationControl preparation(
       bm->UserFlags.hasQueryTimeLimit()
           ? deadline : PreparationControl::Clock::time_point::max(),
