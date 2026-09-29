@@ -25,27 +25,12 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/Globals/Globals.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Util/SymbolName.h"
 #include <algorithm>
-#include <cctype>
 #include <sstream>
 
 namespace stp
 {
-
-namespace
-{
-bool isRenderableExternalName(const std::string& name)
-{
-  // UF models quote every external declaration name. SMT-LIB quoted symbols
-  // have no escape for either delimiter character and admit only printable
-  // characters. Rejecting at declaration keeps every later model operation
-  // total and nonfatal.
-  for (const unsigned char c : name)
-    if (c == '|' || c == '\\' || !std::isprint(c))
-      return false;
-  return true;
-}
-} // namespace
 
 UFContext::UFContext(STPMgr* manager) : manager_(manager)
 {
@@ -84,7 +69,7 @@ UFContext::declareFunction(const std::string& name,
     setError(error, "uninterpreted-function name must not be empty");
     return NULL;
   }
-  if (!isRenderableExternalName(name))
+  if (!isSMTLIBSymbolContent(name))
   {
     setError(error, "uninterpreted-function name is not representable as an "
                     "SMT-LIB2 quoted symbol");

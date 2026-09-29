@@ -67,6 +67,20 @@ engine failure inside any call is ``INTERNAL`` and poisons the manager, after
 which every call on it, its solvers, models and terms is refused with
 ``STATE`` naming the failure.
 
+Names supplied to ``declare``, ``declare_sort`` and ``bind_symbol``, and
+prefixes supplied to ``mk_fresh`` and ``mk_fresh_sort``, must be representable
+as SMT-LIB quoted symbols. Spaces, non-ASCII bytes (including UTF-8), tabs,
+newlines and carriage returns are allowed. NUL, ``|``, backslash, DEL and
+other ASCII control characters are rejected, as are names or prefixes
+beginning with ``@`` or ``.`` (reserved for solver use). Names must be
+nonempty; fresh-name prefixes may be empty. A rejected name gives
+``INVALID_ARGUMENT`` before any declaration or binding is recorded. Python
+raises ``ArgumentError``, except for its existing NUL check, which raises
+``ValueError``. C strings end at their first NUL; C++ counted strings are
+checked in full. Theory-predefined names such as ``true`` and ``bvadd``
+cannot be declared or bound, and predefined sort names such as ``Bool``
+cannot be declared, because quoting does not distinguish them.
+
 C++
 ---
 

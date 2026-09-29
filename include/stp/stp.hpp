@@ -490,6 +490,15 @@ struct STP_API_EXPORT RationalValue
 
 /// A shared handle. Copies share one manager. The manager is destroyed when
 /// the last handle, term, sort, solver and model referring to it is destroyed.
+///
+/// Names passed to declare_sort, declare and bind_symbol, and prefixes
+/// passed to mk_fresh_sort and mk_fresh, must be representable as SMT-LIB
+/// quoted symbols: no NUL, '|', backslash, DEL, or ASCII control characters
+/// other than tab, newline and carriage return. Spaces and non-ASCII bytes
+/// (including UTF-8) are allowed; the printer quotes where needed. Names
+/// and prefixes beginning with '@' or '.' are reserved for solver use.
+/// Violations are INVALID_ARGUMENT before any name is recorded. Names
+/// must be nonempty; fresh-name prefixes may be empty.
 class STP_API_EXPORT TermManager
 {
 public:
@@ -540,11 +549,11 @@ public:
   /// A named symbol, keyed by name in the manager's one name table: the same
   /// name and sort give the same term whether it comes from this call, from
   /// Python's BitVec('x', 32), from a parsed script or from bind_symbol;
-  /// SORT_MISMATCH if the name is already declared at another sort. Any string
-  /// is a legal name, and the printer quotes it where SMT-LIB requires, except
-  /// one that spells a symbol SMT-LIB's theories predefine (true, select,
-  /// bvadd, RNE, +, ...): INVALID_ARGUMENT, since |true| and true are the
-  /// same symbol and no printed script could tell the two apart.
+  /// SORT_MISMATCH if the name is already declared at another sort. In
+  /// addition to the name rules above, a symbol SMT-LIB's theories predefine
+  /// cannot be declared (true, select, bvadd, RNE, +, ...): INVALID_ARGUMENT,
+  /// since |true| and true are the same symbol and no printed script could
+  /// tell the two apart.
   Term declare(std::string_view name, const Sort&);
   /// An anonymous symbol that never enters the name table: fresh on every call,
   /// printed as prefix!k with a manager-unique k.

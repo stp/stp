@@ -89,8 +89,11 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   in Terms.cpp): declared names quoted only where SMT-LIB requires (non-simple
   characters, a leading digit, a reserved word), lowercase hex, `(fp ...)`
   literals, Reals in the engine's numeral spelling (`3`, `(/ 1 2)`, `(- 3)`),
-  `S!k` for elements of declared sorts. A name containing `|` or `\` has no
-  SMT-LIB spelling at all; it is printed quoted and does not parse back. `to_string(SMTLIB2,
+  `S!k` for elements of declared sorts. Declarations, aliases and fresh-name
+  prefixes reject names SMT-LIB cannot quote (NUL, `|`, `\`, DEL and ASCII
+  controls other than tab, newline and carriage return), before interning or
+  generating names. Spaces and non-ASCII bytes, including UTF-8, are allowed;
+  leading `@` and `.` are reserved for solver use. `to_string(SMTLIB2,
   share = true)` is the engine's let-sharing printer, which quotes every symbol.
 - Parsing: each `parse*` call builds a `Cpp_interface` over the manager's
   factory behind a `TypeChecker`, seeds it with the API's symbols

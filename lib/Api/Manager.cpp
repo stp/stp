@@ -36,6 +36,7 @@ THE SOFTWARE.
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/UninterpretedFunctions/UFDecl.h"
+#include "stp/Util/SymbolName.h"
 
 #include <algorithm>
 #include <atomic>
@@ -423,13 +424,6 @@ std::string ManagerImpl::fresh_name(std::string_view prefix)
 Term ManagerImpl::declare(const char* fn, const std::string& name, std::uint32_t sort,
                           bool anonymous)
 {
-  if (name.empty())
-    fail(ErrorCode::INVALID_ARGUMENT, fn, "a symbol needs a name", 0);
-  if (!anonymous && STPMgr::isReservedSymbolName(name.c_str()))
-    fail(ErrorCode::INVALID_ARGUMENT, fn,
-         "names beginning with '@' or '.' are reserved for the solver's own "
-         "symbols (SMT-LIB 2.6, 3.1)",
-         0);
   if (const SymbolRec* existing = find_symbol(name))
   {
     if (existing->anonymous)
@@ -1131,6 +1125,23 @@ Sort TermManager::mk_fun_sort(const std::vector<Sort>& domain, const Sort& codom
 }
 namespace
 {
+void validate_name(std::string_view name, const char* fn, int argument,
+                   bool allow_empty = false)
+{
+  if (name.empty() && !allow_empty)
+    detail::fail(ErrorCode::INVALID_ARGUMENT, fn, "a name is needed", argument);
+  // Check the entire counted name before passing it to a NUL-terminated
+  // engine interface or using it as a prefix in the fresh-name search.
+  if (!isSMTLIBSymbolContent(name))
+    detail::fail(ErrorCode::INVALID_ARGUMENT, fn,
+                 "the name is not representable as an SMT-LIB quoted symbol", argument);
+  if (!name.empty() && (name.front() == '@' || name.front() == '.'))
+    detail::fail(ErrorCode::INVALID_ARGUMENT, fn,
+                 "names beginning with '@' or '.' are reserved for the solver's own "
+                 "symbols (SMT-LIB 2.6, 3.1)",
+                 argument);
+}
+
 void refuse_predefined(ManagerImpl* m, const std::string& name, bool sort, const char* fn)
 {
   if (m->predefined_names_accepted)
@@ -1146,9 +1157,7 @@ void refuse_predefined(ManagerImpl* m, const std::string& name, bool sort, const
 Sort TermManager::declare_sort(std::string_view name)
 {
   ManagerImpl* m = live(*this, "TermManager::declare_sort");
-  if (name.empty())
-    detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::declare_sort",
-                 "a sort needs a name", 0);
+  validate_name(name, "TermManager::declare_sort", 0);
   refuse_predefined(m, std::string(name), true, "TermManager::declare_sort");
   // as declare does for a fresh constant's name
   const auto existing = m->sorts_by_name.find(std::string(name));
@@ -1161,6 +1170,7 @@ Sort TermManager::declare_sort(std::string_view name)
 Sort TermManager::mk_fresh_sort(std::string_view prefix)
 {
   ManagerImpl* m = live(*this, "TermManager::mk_fresh_sort");
+  validate_name(prefix, "TermManager::mk_fresh_sort", 0, /*allow_empty=*/true);
   std::string base(prefix);
   for (;;)
   {
@@ -1175,6 +1185,7 @@ Sort TermManager::mk_fresh_sort(std::string_view prefix)
 Term TermManager::declare(std::string_view name, const Sort& sort)
 {
   ManagerImpl* m = live(*this, "TermManager::declare");
+  validate_name(name, "TermManager::declare", 0);
   refuse_predefined(m, std::string(name), false, "TermManager::declare");
   if (sort.is_null())
     detail::fail(ErrorCode::NULL_HANDLE, "TermManager::declare", "the sort is null", 1);
@@ -1193,6 +1204,7 @@ Term TermManager::mk_fresh(const Sort& sort, std::string_view prefix)
   if (sort.impl_manager() != m)
     detail::fail(ErrorCode::FOREIGN_MANAGER, "TermManager::mk_fresh",
                  "the sort belongs to another term manager", 0);
+  validate_name(prefix, "TermManager::mk_fresh", 1, /*allow_empty=*/true);
   return detail::engine_call(m, "TermManager::mk_fresh", [&] {
     return m->declare("TermManager::mk_fresh", m->fresh_name(prefix), sort.impl_index(), true);
   });
@@ -1231,9 +1243,8 @@ void TermManager::bind_symbol(std::string_view name, const Term& t)
   if (t.impl_manager() != m)
     detail::fail(ErrorCode::FOREIGN_MANAGER, "TermManager::bind_symbol",
                  "the term belongs to another term manager", 1);
+  validate_name(name, "TermManager::bind_symbol", 0);
   const std::string key(name);
-  if (key.empty())
-    detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::bind_symbol", "a name is needed", 0);
   refuse_predefined(m, key, false, "TermManager::bind_symbol");
   const ASTNode node = detail::node_of(t);
   // The table maps names to symbols (declared or fresh); a compound term has

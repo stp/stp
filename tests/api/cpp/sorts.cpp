@@ -274,7 +274,7 @@ TEST(Symbols, declare_is_keyed_by_name)
   // and the table is unchanged by the refusal
   EXPECT_TRUE(tm.symbol("x")->sort() == bv8);
   EXPECT_EQ(tm.symbols().size(), 1u);
-  // names: any string, quoted where SMT-LIB needs it; reserved prefixes refused
+  // names are quoted where SMT-LIB needs it; reserved prefixes are refused
   const Term odd = tm.declare("has space", bv8);
   EXPECT_EQ(odd.str(), "|has space|");
   EXPECT_EQ(odd.symbol(), std::optional<std::string>("has space"));
@@ -406,6 +406,105 @@ TEST(Symbols, declared_and_fresh_sorts)
   EXPECT_EQ(seen.size(), 3u);
   API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, (void)(u1 == tm.declare("v", F2)));
   EXPECT_EQ(tm.uf_sort_width(), 16u);
+}
+
+TEST(Symbols, invalid_names_leave_the_manager_unchanged)
+{
+  TermManager tm;
+  const Sort bv8 = tm.mk_bv_sort(8), fun = tm.mk_fun_sort({bv8}, bv8);
+  const Term x = tm.declare("x", bv8);
+  const Sort S = tm.declare_sort("S");
+  // Counted C++ names must be checked before an engine call truncates them.
+  // With x already interned, an unchecked NUL in a fresh prefix also makes
+  // the search loop forever: every generated name truncates to x.
+  std::vector<std::string> names = {std::string("x\0a", 3), std::string("x\0b", 3),
+                                  std::string("\0", 1), "a|b", "a\\b", "@x", ".x"};
+  for (char c = 1; c < 32; ++c)
+    if (c != '\t' && c != '\n' && c != '\r')
+      names.push_back(std::string("x") + c + "y");
+  names.push_back("x\x7fy");
+  const auto rejected = [](const std::optional<RecoverableError>& e, int argument) {
+    ASSERT_TRUE(e.has_value());
+    EXPECT_EQ(e->code(), ErrorCode::INVALID_ARGUMENT);
+    EXPECT_EQ(e->argument_index(), std::optional<int>(argument));
+  };
+  for (const std::string& name : names)
+  {
+    SCOPED_TRACE(testing::PrintToString(name));
+    rejected(API_ERROR_OF(tm.declare(name, bv8)), 0);
+    rejected(API_ERROR_OF(tm.declare(name, fun)), 0);
+    rejected(API_ERROR_OF(tm.bind_symbol(name, x)), 0);
+    rejected(API_ERROR_OF(tm.declare_sort(name)), 0);
+    rejected(API_ERROR_OF(tm.mk_fresh(bv8, name)), 1);
+    rejected(API_ERROR_OF(tm.mk_fresh(fun, name)), 1);
+    rejected(API_ERROR_OF(tm.mk_fresh_sort(name)), 0);
+    EXPECT_FALSE(tm.symbol(name).has_value());
+    ASSERT_EQ(tm.symbols().size(), 1u);
+    ASSERT_EQ(tm.declared_sorts().size(), 1u);
+    EXPECT_TRUE(tm.symbols()[0].same_as(x));
+    EXPECT_TRUE(tm.declared_sorts()[0] == S);
+  }
+  EXPECT_TRUE(tm.declare("x", bv8).same_as(x));
+  EXPECT_TRUE(tm.declare_sort("S") == S);
+  const Term y = tm.declare("y", bv8);
+  Solver s(tm);
+  s.add(x != y);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_NE(s.model().uint64_value(x), s.model().uint64_value(y));
+}
+
+TEST(Symbols, quoted_names_round_trip)
+{
+  // Legal quoted content includes UTF-8 and SMT-LIB whitespace. Keep the
+  // same policy for constants, functions, sorts, aliases and fresh prefixes.
+  for (const std::string name : {"has space", "tab\tname", "line\nname", "cr\rname",
+                                 "\xcf\x80", "9digits", "let", "paren();\""})
+  {
+    SCOPED_TRACE(testing::PrintToString(name));
+    TermManager tm;
+    const Sort bv8 = tm.mk_bv_sort(8), fun = tm.mk_fun_sort({bv8}, bv8);
+    const Term x = tm.declare(name, bv8), y = tm.mk_fresh(bv8, name);
+    const Term f = tm.declare("fun " + name, fun), g = tm.mk_fresh(fun, name);
+    const Sort S = tm.declare_sort("sort " + name);
+    const Sort fresh_sort = tm.mk_fresh_sort(name);
+    EXPECT_EQ(x.symbol(), std::optional<std::string>(name));
+    EXPECT_EQ(x.str(), "|" + name + "|");
+    EXPECT_EQ(S.str(), "|sort " + name + "|");
+    EXPECT_EQ(fresh_sort.name().rfind(name + "!", 0), 0u);
+    const Term u = tm.declare("u " + name, S), v = tm.declare("v " + name, S);
+    tm.bind_symbol("alias " + name, x);
+    ASSERT_TRUE(tm.symbol("alias " + name).has_value());
+    EXPECT_TRUE(tm.symbol("alias " + name)->same_as(x));
+    Solver s(tm);
+    s.parse_smt2("(assert (= |alias " + name + "| #x01))");
+    s.add(y == 2);
+    s.add(f(x) == 3);
+    s.add(g(x) == 4);
+    s.add(u != v);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_EQ(s.model().uint64_value(x), 1u);
+
+    TermManager copy;
+    Solver parsed(copy);
+    parsed.parse_smt2(s.to_smt2(true));
+    ASSERT_TRUE(parsed.check_sat().is_sat());
+    ASSERT_TRUE(copy.symbol(name).has_value());
+    const Term px = *copy.symbol(name);
+    const auto py = copy.symbol(*y.symbol()), pf = copy.symbol("fun " + name),
+               pg = copy.symbol(*g.symbol()), pu = copy.symbol("u " + name),
+               pv = copy.symbol("v " + name);
+    ASSERT_TRUE(py.has_value());
+    ASSERT_TRUE(pf.has_value());
+    ASSERT_TRUE(pg.has_value());
+    ASSERT_TRUE(pu.has_value());
+    ASSERT_TRUE(pv.has_value());
+    EXPECT_EQ(parsed.model().uint64_value(px), 1u);
+    EXPECT_EQ(parsed.model().uint64_value(*py), 2u);
+    EXPECT_EQ(parsed.model().uint64_value((*pf)(px)), 3u);
+    EXPECT_EQ(parsed.model().uint64_value((*pg)(px)), 4u);
+    EXPECT_EQ(copy.declare_sort("sort " + name).name(), S.name());
+    EXPECT_NE(parsed.model().uninterpreted_index(*pu), parsed.model().uninterpreted_index(*pv));
+  }
 }
 
 TEST(Symbols, term_from_id)
