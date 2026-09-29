@@ -64,18 +64,22 @@ THE SOFTWARE.
 // model snapshot -- a float from the values under it, an array equality cell
 // by cell -- rather than through the engine's readers of the published
 // context, so what every case here pins for the API is the answer, on each
-// route, and its agreement with the batch driver.
+// route, and its agreement with the batch driver. The engine's readers are
+// still what the SMT-LIB 2 frontend's get-value goes through, and the cases
+// that ran the incremental driver ask them directly too (engineReadsFloat,
+// engineCanDecideArrayEquality): the defect itself, which the answers alone
+// would no longer show.
 //
 // Found by a Murxla campaign cross-checking STP against STP under a differing
 // option vector. The float-term arm was reduced from a 143-line trace; the
 // array arm arrived separately out of the same campaign, from a 69-line one.
 
-#include "api_common.hpp"
+#include "api_engine.hpp"
 
 #include <cstdint>
 #include <string>
 
-using namespace stp;
+using namespace stp::api;
 
 namespace
 {
@@ -151,6 +155,24 @@ void buildRoundingModeArrays(TermManager& tm, Term& a, Term& b)
   b = tm.declare("b", arr);
 }
 
+// The engine's own reader of a float's model value, which needs the
+// floating-point encoding context the check published: it refused with "no
+// solve encoding context" when the incremental driver left it unset.
+bool engineReadsFloat(const Solver& s, const Term& f)
+{
+  const stp::ASTNode value =
+      api_test::engine_solver(s).Ctr_Example->GetCounterExample(api_test::engine_node(f));
+  return !value.IsNull() && value.isConstant();
+}
+
+// Whether the engine's model can decide an equality over this array, which
+// for a floating-point-indexed one needs the same published context.
+bool engineCanDecideArrayEquality(const Solver& s, const Term& array)
+{
+  return api_test::engine_solver(s).Ctr_Example->arrayEqualityIsModelDecidable(
+      api_test::engine_node(array));
+}
+
 // Four bits pinned to 3: a real solve with a forced value in it, and nothing
 // in it about an array or a float. The array cases read it back alongside
 // the equality so that they stay anchored to a model that exists and has
@@ -205,6 +227,7 @@ TEST(fp_model_no_fp_in_query, incremental_bitvector_only_stack_answers)
   ASSERT_TRUE(s.check_sat().is_sat());
 
   EXPECT_EQ(packed(s.model(), f), ONE_BITS);
+  EXPECT_TRUE(engineReadsFloat(s, f));
 }
 
 // The same question with the model asked for explicitly (produce-models,
@@ -231,6 +254,7 @@ TEST(fp_model_no_fp_in_query, incremental_eager_model_answers)
     ASSERT_TRUE(s.check_sat().is_sat()) << "check-sanity " << self_check;
 
     EXPECT_EQ(packed(s.model(), f), ONE_BITS) << "check-sanity " << self_check;
+    EXPECT_TRUE(engineReadsFloat(s, f)) << "check-sanity " << self_check;
   }
 }
 
@@ -266,6 +290,7 @@ TEST(fp_model_no_fp_in_query, incremental_exact_stack_route_answers)
   ASSERT_TRUE(s.check_sat().is_sat());
 
   EXPECT_EQ(packed(s.model(), f), ONE_BITS);
+  EXPECT_TRUE(engineReadsFloat(s, f));
 }
 
 // The invariant behind all of the above, asked directly: the two drivers are
@@ -398,6 +423,7 @@ TEST(fp_model_no_fp_in_query, incremental_float_indexed_array_equality_answers)
   const Term value = m.value(a == b);
   ASSERT_TRUE(value.is_value());
   EXPECT_TRUE(value.to_bool());
+  EXPECT_TRUE(engineCanDecideArrayEquality(s, a));
 }
 
 // The campaign's own reproducer, which reaches "the solve never encoded
@@ -431,6 +457,7 @@ TEST(fp_model_no_fp_in_query, incremental_array_equality_mentioned_but_rewritten
   const Term value = m.value(equality);
   ASSERT_TRUE(value.is_value());
   EXPECT_TRUE(value.to_bool());
+  EXPECT_TRUE(engineCanDecideArrayEquality(s, a));
 }
 
 // The invariant the two above are instances of, as the float cases have it:
