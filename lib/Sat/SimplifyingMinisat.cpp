@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #define __STDC_FORMAT_MACROS
 #include "stp/Sat/SimplifyingMinisat.h"
+#include "stp/Sat/MinisatSeed.h"
 #include "minisat/simp/SimpSolver.h"
 #include <iostream>
 
@@ -175,5 +176,5 @@ void SimplifyingMinisat::setFrozen(uint32_t x)
 
 void stp::SimplifyingMinisat::setSeed(uint64_t seed)
 {
-  s->random_seed = static_cast<double>(seed);
+  s->random_seed = minisatSeed(seed);
 }
