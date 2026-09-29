@@ -125,6 +125,20 @@ void write_diagnostic(std::string_view text)
   fatal_exit(message);
 }
 
+// The parser's own diagnostic in a PARSE error's text, which the API wraps
+// as "parse error[ at L:C]: <diagnostic> [PARSE]".
+std::string parser_diagnostic(const stp::Error& e)
+{
+  std::string_view text = e.what();
+  const std::string_view head = "parse error", tail = " [PARSE]";
+  const std::size_t colon = text.find(": ");
+  if (text.substr(0, head.size()) == head && colon != std::string_view::npos)
+    text.remove_prefix(colon + 2);
+  if (text.size() >= tail.size() && text.substr(text.size() - tail.size()) == tail)
+    text.remove_suffix(tail.size());
+  return std::string(text);
+}
+
 // Where --output-CNF writes: output_0.cnf, output_1.cnf, ... in the working
 // directory, one per CNF, with the warning a partial CNF has always carried.
 void write_cnf_file(unsigned& counter, std::string_view dimacs, stp::CnfScope scope)
@@ -239,7 +253,11 @@ int run(const Invocation& in, std::unique_ptr<stp::Solver> owned)
         // remains is the status of the run as a whole. Scripted callers have
         // no other way to tell a rejected input from a solved one, and a
         // script may legitimately have answered several check-sats before
-        // the command that broke -- those answers stand.
+        // the command that broke -- those answers stand. A CVC or SMT-LIB 1
+        // input's refusal was a fatal error, whose two lines follow the
+        // parser's own.
+        if (in.format != stp::Format::SMTLIB2)
+          refuse_fatally(parser_diagnostic(e));
         std::exit(-1);
       default:
         fatal_exit(e.what());

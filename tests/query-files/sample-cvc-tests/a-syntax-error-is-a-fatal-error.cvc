@@ -1,0 +1,10 @@
+% RUN: not %solver %s 2>&1 | %OutputCheck %s
+%
+% A refused CVC input ends the run as a fatal error did: the parser's line,
+% then "Fatal Error:" and "STP Error:" with it, and exit status 255.
+x : BITVECTOR(8);
+ASSERT(x = );
+QUERY(FALSE);
+% CHECK: ^CVC syntax error: line 6: syntax error
+% CHECK-NEXT: ^Fatal Error: CVC syntax error: line 6: syntax error
+% CHECK-NEXT: ^STP Error: CVC syntax error: line 6: syntax error
