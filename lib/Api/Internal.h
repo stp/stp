@@ -655,6 +655,9 @@ struct View
   std::vector<std::uint32_t> indices;
 };
 View view_of(ManagerImpl* m, const ASTNode& n);
+// `n` rebuilt with new children through `f`, keeping its widths and
+// floating-point format (Terms.cpp).
+ASTNode rebuild_node(ManagerImpl* m, NodeFactory* f, const ASTNode& n, const ASTVec& kids);
 
 // Construction over the engine; every precondition checked.
 ASTNode build_term(ManagerImpl* m, const char* fn, Kind k,

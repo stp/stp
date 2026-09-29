@@ -1170,7 +1170,10 @@ public:
   /// engine's printers, which recurse once per level of a term (see
   /// Term::to_string).
   std::string to_smt2(bool with_check_sat = false) const;
-  std::string to_string(Format) const; ///< SMTLIB2, CVC, DOT, GDL
+  /// SMTLIB2, CVC, DOT, GDL. CVC is UNSUPPORTED for floating point, Reals,
+  /// functions and names its reader cannot spell; an overflow predicate or a
+  /// distinct prints in operators the CVC reader has.
+  std::string to_string(Format) const;
   /// The last CVC or SMT-LIB 1 input this solver read, as the stp command
   /// line's --print-back options print it: the input's question (its
   /// assertions and its negated query) in CVC (after the declarations and

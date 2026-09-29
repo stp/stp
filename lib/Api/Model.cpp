@@ -52,8 +52,6 @@ namespace api
 namespace detail
 {
 
-ASTNode rebuild_node(ManagerImpl* m, NodeFactory* f, const ASTNode& n, const ASTVec& kids);
-
 // Every member that holds engine nodes is emptied before the manager is
 // released: the release may be the last one and free the nodes' manager, and
 // a node outliving it would be let go into freed memory.
