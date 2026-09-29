@@ -62,8 +62,8 @@ def run(solver, text, flags):
     return expressions(output), result.stderr
 
 
-PREFIX = """(set-logic QF_LRA)
-(set-option :produce-models true)
+PREFIX = """(set-option :produce-models true)
+(set-logic QF_LRA)
 (declare-const x Real)
 (declare-const y Real)
 (declare-const z Real)

@@ -51,13 +51,13 @@ def main() -> int:
           (assert (< x 1)) (assert (>= x 1)) (check-sat)
         """, ["unsat"], [], []),
         ("strict-open-exact-model", """
-          (set-logic QF_LRA) (set-option :produce-models true)
+          (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const x Real)
           (assert (> x 0)) (assert (< x 1))
           (check-sat) (get-value (x))
         """, ["sat"], ["(|x| (/ 1 4))"], []),
         ("decimal-rational-alias-scale", """
-          (set-logic QF_LRA) (set-option :produce-models true)
+          (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const x Real) (declare-const y Real)
           (assert (= x 0.1250))
           (assert (= y (/ 1 8)))
@@ -67,14 +67,14 @@ def main() -> int:
           (check-sat) (get-value (x y (+ x y)))
         """, ["sat"], ["(|x| (/ 1 8))", "((+ |x| |y|) (/ 1 4))"], []),
         ("free-redundant-duplicate-aliased", """
-          (set-logic QF_LRA) (set-option :produce-models true)
+          (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const x Real) (declare-const free Real)
           (assert (= x 2)) (assert (= x 2))
           (assert (= (+ x x) 4)) (assert (= (* 3 x) 6))
           (check-sat) (get-value (x free))
         """, ["sat"], ["(|x| 2)", "(|free| 0)"], []),
         ("unconstrained-real-only", """
-          (set-logic QF_LRA) (set-option :produce-models true)
+          (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const unconstrained Real)
           (check-sat) (get-value (unconstrained))
         """, ["sat"], ["(|unconstrained| 0)"], []),
@@ -108,12 +108,12 @@ def main() -> int:
           (push 1) (assert (> 0 1)) (check-sat) (pop 1)
         """, ["sat", "unsat"], [], []),
         ("huge-4102-bit-model", f"""
-          (set-logic QF_LRA) (set-option :produce-models true)
+          (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const x Real)
           (assert (= x {huge})) (check-sat) (get-value (x))
         """, ["sat"], [huge], []),
         ("multiple-lra-conflicts-before-model", """
-          (set-logic QF_LRA) (set-option :produce-models true)
+          (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const x Real)
           (assert (or (and (< x 0) (>= x 0))
                       (and (> x 1) (<= x 1))
@@ -128,6 +128,7 @@ def main() -> int:
           (check-sat)
         """, ["unsat"], [], []),
         ("contexts-assumptions-reset", """
+          (set-option :produce-models true)
           (set-logic QF_LRA) (declare-const x Real)
           (assert (= x 1))
           (check-sat) (check-sat)
@@ -144,25 +145,27 @@ def main() -> int:
         """, ["sat", "sat", "unsat", "sat", "unsat", "sat", "sat", "sat"],
         ["(|x| 1)"], []),
         ("scoped-model-printing-full-reset", """
-          (set-logic QF_LRA) (set-option :produce-models true)
+          (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const x Real) (assert (= x 1))
           (push 1) (declare-const scoped Real) (assert (= scoped 2))
           (check-sat) (get-model) (pop 1)
           (check-sat) (get-model)
           (reset)
-          (set-logic QF_LRA) (set-option :produce-models true)
+          (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const fresh Real) (assert (= fresh (/ 3 5)))
           (check-sat) (get-model)
         """, ["sat", "sat", "sat"],
         ["(define-fun |x| () Real 1)",
          "(define-fun |fresh| () Real (/ 3 5))"], []),
         ("mixed-bv-lra", """
+          (set-logic ALL)
           (declare-const x Real) (declare-const b (_ BitVec 4))
           (assert (or (< x 0) (= b #b1010)))
           (assert (not (< x 0))) (assert (= b #b1010))
           (check-sat)
         """, ["sat"], [], []),
         ("mixed-fp-lra", """
+          (set-logic ALL)
           (declare-const x Real)
           (declare-const f (_ FloatingPoint 8 24))
           (assert (= x (/ 3 2)))
@@ -170,6 +173,7 @@ def main() -> int:
           (check-sat)
         """, ["sat"], [], []),
         ("lra-array-both-consistent", """
+          (set-logic ALL)
           (declare-const x Real)
           (declare-const a (Array (_ BitVec 2) (_ BitVec 4)))
           (declare-const b (Array (_ BitVec 2) (_ BitVec 4)))
@@ -177,8 +181,9 @@ def main() -> int:
           (assert (= (select a #b00) #b0011))
           (assert (= (select b #b00) #b0011))
           (check-sat)
-        """, ["sat"], [], ["--array-equality"]),
+        """, ["sat"], [], []),
         ("lra-consistent-array-conflict", """
+          (set-logic ALL)
           (declare-const x Real)
           (declare-const a (Array (_ BitVec 2) (_ BitVec 4)))
           (declare-const b (Array (_ BitVec 2) (_ BitVec 4)))
@@ -186,15 +191,17 @@ def main() -> int:
           (assert (= (select a #b00) #b0011))
           (assert (= (select b #b00) #b0100))
           (check-sat)
-        """, ["unsat"], [], ["--array-equality"]),
+        """, ["unsat"], [], []),
         ("lra-conflict-array-consistent", """
+          (set-logic ALL)
           (declare-const x Real)
           (declare-const a (Array (_ BitVec 2) (_ BitVec 4)))
           (declare-const b (Array (_ BitVec 2) (_ BitVec 4)))
           (assert (< x 0)) (assert (>= x 0)) (assert (= a b))
           (check-sat)
-        """, ["unsat"], [], ["--array-equality"]),
+        """, ["unsat"], [], []),
         ("lra-array-both-conflict", """
+          (set-logic ALL)
           (declare-const x Real)
           (declare-const a (Array (_ BitVec 2) (_ BitVec 4)))
           (declare-const b (Array (_ BitVec 2) (_ BitVec 4)))
@@ -202,8 +209,9 @@ def main() -> int:
           (assert (= (select a #b00) #b0011))
           (assert (= (select b #b00) #b0100))
           (check-sat)
-        """, ["unsat"], [], ["--array-equality"]),
+        """, ["unsat"], [], []),
         ("legacy-array-refinement-after-lra-stage", """
+          (set-logic ALL)
           (declare-const x Real)
           (declare-const a (Array (_ BitVec 4) (_ BitVec 4)))
           (declare-const i (_ BitVec 4)) (declare-const j (_ BitVec 4))
@@ -223,18 +231,6 @@ def main() -> int:
           (check-sat)
         """, ["unsat"], [], []),
     ]
-
-    # For Reals, SMT-LIB advertises only the standard QF_LRA and QF_UFLRA
-    # logics.  The disjoint combinations below are deliberately exercised
-    # through the unrestricted public construction API by the
-    # lra_combination_api test; retaining their inputs here documents that no
-    # invented combined logic is claimed.
-    api_only = {
-        "mixed-bv-lra", "mixed-fp-lra", "lra-array-both-consistent",
-        "lra-consistent-array-conflict", "lra-conflict-array-consistent",
-        "lra-array-both-conflict", "legacy-array-refinement-after-lra-stage",
-    }
-    cases = [case for case in cases if case[0] not in api_only]
 
     results = []
     failures = []
@@ -283,8 +279,8 @@ def main() -> int:
             failures.append({"name": f"propagating:{name}",
                              "output": combined[-4000:]})
 
-    # Reject an invented mixed-logic name explicitly; combined disjoint
-    # construction is available only through the unrestricted public API.
+    # Reject an invented mixed-logic name explicitly; the combinations
+    # above use the standard ALL selection.
     mixed_logic = subprocess.run(
         [str(solver), "--SMTLIB2"],
         input="(set-logic QF_BV_LRA)\n(exit)\n", text=True,

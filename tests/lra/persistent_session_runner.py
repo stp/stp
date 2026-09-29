@@ -25,8 +25,8 @@ def main():
     # The first Real check has an empty base. Variables enter the arithmetic
     # core as they first occur in assertions, after earlier rows have pivoted.
     source = """
-(set-logic QF_LRA)
 (set-option :produce-models true)
+(set-logic QF_LRA)
 (declare-fun x () Real)
 (declare-fun y () Real)
 (declare-fun z () Real)
