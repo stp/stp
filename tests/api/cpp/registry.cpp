@@ -82,8 +82,7 @@ TEST(Registry, ranges_fit_the_engine_fields)
   // two entries whose fields are reached by a hand-written applier
   const reg::OptionSpec* threads = reg::find_option("threads");
   ASSERT_NE(threads, nullptr);
-  EXPECT_TRUE(threads->has_min && threads->min == INT32_MIN && threads->has_max &&
-              threads->max == INT32_MAX);
+  EXPECT_TRUE(threads->has_min && threads->min == 1 && threads->has_max && threads->max == 1024);
   const reg::OptionSpec* rounds = reg::find_option("bv-term-abstraction-rounds");
   ASSERT_NE(rounds, nullptr);
   EXPECT_TRUE(!rounds->has_min && rounds->has_max && rounds->max == UINT32_MAX);

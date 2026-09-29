@@ -717,9 +717,13 @@ TEST(Options, ranges_are_the_engine_fields)
   API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_uint("lra-float-reroute", 4294967296ull));
   API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("bv-term-abstraction-rounds", "4294967296"));
   EXPECT_EQ(o.get_uint("lra-float-reroute"), 4294967295ull);
-  o.set("threads", "-2147483648");
-  API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("threads", "2147483648"));
+  // CryptoMiniSat takes a thread count from 1 (it refuses 0, and a negative
+  // count becomes a huge unsigned one that never finishes starting)
+  o.set("threads", "1024");
+  for (const char* bad : {"0", "-1", "1025", "-2147483648", "2147483647", "2147483648"})
+    API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("threads", bad));
   API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_int("threads", -2147483649ll));
+  EXPECT_EQ(o.get_int("threads"), 1024);
   o.set("lra-presolve-monotone-work", "18446744073709551615");
   EXPECT_EQ(o.get_uint("lra-presolve-monotone-work"), UINT64_MAX);
   o.set_uint("lra-presolve-subst-work", UINT64_MAX);

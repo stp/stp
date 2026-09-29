@@ -881,7 +881,7 @@ help = "keep cadical's search trail between the solve calls of a refinement loop
 name = "threads"
 type = "int"
 default = 1
-range = { min = -2147483648, max = 2147483647 }
+range = { min = 1, max = 1024 }
 tier = "stable"
 settable = "construction"
 scope = "solver"
@@ -889,7 +889,7 @@ engine = { custom = "threads" }
 category = "sat"
 # > 1 forfeits the fork-safety guarantee
 requires = { build = "cryptominisat", option = "sat-backend", value = "cryptominisat" }   # on the command line, --threads excludes every other backend flag
-help = "Number of threads for cryptominisat"
+help = "Number of threads for cryptominisat (1 to 1024)"
 
 [[option]]
 name = "search-bias"
