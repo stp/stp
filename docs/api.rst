@@ -286,7 +286,8 @@ Limits of the alpha
    and the rounding mode are both values. Relating two conversions costs about
    four times more per exponent bit: well under a second at binary64, a minute
    or more at binary128; at 16 bits it exceeds the number limits, and the check
-   answers unknown (``INCOMPLETE``).
+   answers unknown (``INCOMPLETE``). At 16 bits a check over a single
+   conversion can exceed them too, depending on the SAT backend.
 -  The float literal constructors (``mk_fp`` from a ``double`` or from text)
    need an exponent of at least 3 bits; ``mk_fp_from_bits`` builds a value of
    any format.
