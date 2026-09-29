@@ -631,6 +631,27 @@ TEST_F(Values, reals_in_lowest_terms)
 
 // ---------------------------------------------------------------- literal operands
 
+// A Real's double is the exact ratio rounded once, to nearest: finite where
+// the value is, infinite past the range, subnormal or zero below it. (Two
+// separately rounded parts divided rounded twice, and a part past the range
+// gave NaN.)
+TEST_F(Values, a_real_is_rounded_once_to_a_double)
+{
+  const auto dbl = [&](const std::string& text) { return tm.mk_real(text).to_rational().to_double(); };
+  const std::string e399 = "1" + std::string(399, '0'), e401 = "1" + std::string(401, '0');
+  EXPECT_EQ(dbl(e401 + "1/" + e399 + "0"), 100.0); // (10^402 + 1)/10^400: 100 plus far less than an ulp
+  EXPECT_EQ(dbl("1/3" + std::string(330, '0')), 0.0);
+  EXPECT_EQ(dbl("1" + std::string(320, '0') + "/3"), std::numeric_limits<double>::infinity());
+  EXPECT_EQ(dbl("-1" + std::string(320, '0') + "/3"), -std::numeric_limits<double>::infinity());
+  EXPECT_EQ(dbl("244256145482930251/8496936760652861"), 28.746376766509307);
+  EXPECT_EQ(dbl("1/3"), 1.0 / 3.0);
+  EXPECT_EQ(dbl("-2/3"), -2.0 / 3.0);
+  const std::string two1074 = "202402253307310618352495346718917307049556649764142118356901358027430339567995346891960383701437124495187077864316811911389808737385793476867013399940738509921517424276566361364466907742093216341239767678472745068562007483424692698618103355649159556340810056512358769552333414615230502532186327508646006263307707741093494784";
+  EXPECT_EQ(dbl("1/" + two1074), std::numeric_limits<double>::denorm_min());
+  EXPECT_EQ(dbl("1/" + two1074 + "0"), 0.0); // below half the least subnormal
+  EXPECT_EQ(dbl("0"), 0.0);
+}
+
 TEST_F(Values, integer_literals_take_the_terms_sort)
 {
   const Term x = tm.declare("x", bv8);

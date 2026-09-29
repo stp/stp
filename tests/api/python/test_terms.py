@@ -195,6 +195,12 @@ def test_values():
     assert isinstance(third, RatNumRef) and third.as_fraction() == Fraction(1, 3)
     assert third.numerator() == 1 and third.denominator() == 3 and third.numerator_as_long() == 1
     assert third.as_decimal(4) == "0.3333?" and Q(3, 4).as_decimal(3) == "0.750" and float(Q(1, 4)) == 0.25
+    # float() of a Real is correctly rounded, and past the double range raises as float() of an int does
+    with pytest.raises(OverflowError):
+        float(RealVal(10**400))
+    assert float(Q(1, 10**400)) == 0.0 and float(Q(10**400 + 1, 10**400)) == 1.0
+    assert float(Q(2**1100 + 1, 2**100)) == 1.0715086071862673e+301
+    assert float(Q(244256145482930251, 8496936760652861)) == 28.746376766509307
     assert RealVal("0.25").as_fraction() == Fraction(1, 4) and RealVal(7).as_string() == "7"
     assert RealVal(Fraction(-3, 7)).as_string() == "-3/7" and RealVal("-3/7").as_fraction() == Fraction(-3, 7)
     assert RealVal(third) is third

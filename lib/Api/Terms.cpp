@@ -1338,14 +1338,22 @@ std::int64_t RationalValue::den64() const
 
 double RationalValue::to_double() const
 {
-  try
-  {
-    return std::stod(numerator) / std::stod(denominator);
-  }
-  catch (...)
-  {
+  // The exact ratio rounded once to binary64, to nearest with ties to even:
+  // infinite past the format's range, subnormal or zero below it. (Dividing
+  // two separately rounded parts rounded twice, and a part past the range
+  // gave NaN.)
+  const bool negative = !numerator.empty() && numerator[0] == '-';
+  std::string bits, err;
+  if (!rationalToPackedFPBits(negative ? numerator.substr(1) : numerator, denominator, negative,
+                              11, 53, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN, bits, err) ||
+      bits.size() != 64)
     return std::nan("");
-  }
+  std::uint64_t packed = 0;
+  for (const char c : bits)
+    packed = (packed << 1) | (c == '1' ? 1u : 0u);
+  double out;
+  std::memcpy(&out, &packed, sizeof out);
+  return out;
 }
 
 std::string RationalValue::str() const

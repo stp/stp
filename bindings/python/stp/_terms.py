@@ -1140,7 +1140,9 @@ class RatNumRef(RealRef):
         return str(f.numerator) if f.denominator == 1 else "%d/%d" % (f.numerator, f.denominator)
 
     def __float__(self):
-        return self.real_to_double()
+        # correctly rounded, and OverflowError past the double range, as
+        # float() of an int or a Fraction is
+        return float(self.as_fraction())
 
     def is_int(self):
         return self.denominator() == 1
