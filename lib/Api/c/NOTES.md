@@ -54,7 +54,8 @@ leaves to the implementation.
   only).
 - **Where a `NULL` goes**: a `NULL` term or sort propagates silently (the
   converters throw `NullArgument`, which the boundary turns into the failure
-  value with no record). A `NULL` object handle (manager, solver, options,
+  value with no record), except where it is the subject of the call: the
+  formula of an assert or an entailment, an assumption of a check. A `NULL` object handle (manager, solver, options,
   model, value, statistics) is `NULL_HANDLE` in the **thread-local** record
   (`stp_last_error`, which keeps the latest such error until the next one or
   `stp_clear_last_error`); a `NULL` string or out-pointer is `NULL_HANDLE` in the
