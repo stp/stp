@@ -3725,6 +3725,36 @@ exprkind_t getExprKind(Expr e)
   return h->is_type() ? kind_of_sort(h->sort) : kind_of_term(h->term);
 }
 
+namespace
+{
+// 2.x kept an extract's bounds, and a sign extension's result width, as
+// 32-bit constant children after the operand (x[5:2] is x, 5, 2; BVSX(x,16)
+// is x, 16), which tree walkers read through getDegree and getChild; the 3.x
+// terms carry them as indices. These are the children 2.x had beyond the
+// operand, as widths or bounds.
+std::vector<std::uint32_t> index_children(stp_term t)
+{
+  stp_kind k;
+  if (stp_term_get_kind(t, &k) != STP_OK)
+    return {};
+  std::vector<std::uint32_t> out;
+  std::size_t n = 0;
+  if (k == STP_KIND_BV_EXTRACT && stp_term_num_indices(t, &n) == STP_OK && n == 2)
+  {
+    std::uint32_t hi = 0, lo = 0;
+    if (stp_term_index(t, 0, &hi) == STP_OK && stp_term_index(t, 1, &lo) == STP_OK)
+      out = {hi, lo};
+  }
+  else if (k == STP_KIND_BV_SIGN_EXTEND)
+  {
+    std::uint32_t w = 0;
+    if (stp_sort_bv_size(stp_term_sort(t), &w) == STP_OK)
+      out = {w};
+  }
+  return out;
+}
+} // namespace
+
 int getDegree(Expr e)
 {
   Handle* h = handle(e);
@@ -3737,7 +3767,7 @@ int getDegree(Expr e)
     return 0;
   std::size_t n = 0;
   stp_term_num_children(h->term, &n);
-  return static_cast<int>(n);
+  return static_cast<int>(n + index_children(h->term).size());
 }
 
 Expr getChild(Expr e, int i)
@@ -3750,10 +3780,21 @@ Expr getChild(Expr e, int i)
   }
   std::size_t n = 0;
   stp_term_num_children(h->term, &n);
-  if (i < 0 || static_cast<std::size_t>(i) >= n)
+  const std::vector<std::uint32_t> extra = index_children(h->term);
+  if (i < 0 || static_cast<std::size_t>(i) >= n + extra.size())
   {
     fatal("getChild: Error accessing childNode in expression: ");
     return nullptr;
+  }
+  if (static_cast<std::size_t>(i) >= n)
+  {
+    stp_term c = stp_mk_bv_uint64(h->vc->tm, 32, extra[static_cast<std::size_t>(i) - n]);
+    if (c == nullptr)
+    {
+      fatal("getChild: Error accessing childNode in expression: " + take_error(h->vc));
+      return nullptr;
+    }
+    return wrap(h->vc, c, false);
   }
   stp_term c = stp_term_child(h->term, static_cast<std::size_t>(i));
   if (c == nullptr)

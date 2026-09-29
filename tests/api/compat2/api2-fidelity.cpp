@@ -550,3 +550,21 @@ TEST(libstp2_fidelity, a_refused_query_keeps_the_model)
   vc_DeleteExpr(v);
   vc_Destroy(vc);
 }
+
+// 2.x kept an extract's bounds, and a sign extension's result width, as 32-bit
+// constant children after the operand, which tree walkers read through
+// getDegree and getChild.
+TEST(libstp2_fidelity, extract_bounds_are_children)
+{
+  VC vc = vc_createValidityChecker();
+  Expr x = vc_varExpr(vc, "x", vc_bvType(vc, 8));
+  Expr ex = vc_bvExtract(vc, x, 5, 2);
+  ASSERT_EQ(3, getDegree(ex));
+  EXPECT_EQ(5u, getBVUnsigned(getChild(ex, 1)));
+  EXPECT_EQ(2u, getBVUnsigned(getChild(ex, 2)));
+  Expr sx = vc_bvSignExtend(vc, x, 16);
+  ASSERT_EQ(2, getDegree(sx));
+  EXPECT_EQ(16u, getBVUnsigned(getChild(sx, 1)));
+  EXPECT_EQ(32, getBVLength(getChild(sx, 1)));
+  vc_Destroy(vc);
+}
