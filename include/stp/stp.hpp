@@ -397,7 +397,8 @@ public:
   TermManager manager() const;
 
   bool is_value() const noexcept; ///< kind() == VALUE
-  bool is_const() const noexcept; ///< kind() == CONSTANT (a declared symbol)
+  bool is_const() const noexcept; ///< kind() == CONSTANT (including defined functions)
+  bool is_defined_function() const noexcept; ///< a parameterized define-fun handle
   std::optional<std::string> symbol() const; ///< the declared name, if any
 
   // -- typed readers; every one throws NOT_A_VALUE unless is_value(),
@@ -553,13 +554,19 @@ public:
   /// addition to the name rules above, a symbol SMT-LIB's theories predefine
   /// cannot be declared (true, select, bvadd, RNE, +, ...): INVALID_ARGUMENT,
   /// since |true| and true are the same symbol and no printed script could
-  /// tell the two apart.
+  /// tell the two apart. INVALID_ARGUMENT for a name retained by define-fun;
+  /// retrieve it with symbol() instead.
   Term declare(std::string_view name, const Sort&);
   /// An anonymous symbol that never enters the name table: fresh on every call,
   /// printed as prefix!k with a manager-unique k.
   Term mk_fresh(const Sort&, std::string_view prefix = "");
-  std::optional<Term> symbol(std::string_view name) const; ///< name table lookup
-  std::vector<Term> symbols() const; ///< every declared symbol, declaration order
+  /// Name lookup, including retained define-fun names: a nullary definition
+  /// returns its body; a parameterized one returns a callable FUN term whose
+  /// applications expand its body.
+  std::optional<Term> symbol(std::string_view name) const;
+  /// Declared symbols and parameterized definitions, each identity once.
+  /// Nullary definitions name expressions, so are found only with symbol().
+  std::vector<Term> symbols() const;
   std::vector<Sort> declared_sorts() const; ///< every declared sort, declaration order
   void bind_symbol(std::string_view name, const Term&); ///< a symbol under a second name: SORT_MISMATCH if taken, INVALID_ARGUMENT for a compound term or a predefined name
   Term term_from_id(std::uint64_t id) const; ///< INVALID_ARGUMENT if no live term has that id
@@ -996,11 +1003,19 @@ public:
     Term value;
   };
   Sort sort() const;
+  /// True for an uninterpreted function's finite table. A define-fun has a
+  /// symbolic body instead: size, entry, entries and else_value are
+  /// UNSUPPORTED; apply evaluates the body in this snapshot.
+  bool is_tabular() const;
   std::size_t size() const;
   Entry entry(std::size_t i) const;
   std::vector<Entry> entries() const;
   Term else_value() const; ///< always ground: a VALUE of the codomain
   Term apply(const std::vector<Term>& arg_values) const;
+  /// The interpretation over the supplied arguments, with free symbols and
+  /// uninterpreted functions replaced by their snapshot values. A definition
+  /// can produce a general expression rather than an ITE. UNSUPPORTED for
+  /// parameter-dependent partial FP operations; apply still evaluates them.
   Term as_ite_term(const std::vector<Term>& formal_args) const;
 
   // internal
@@ -1157,7 +1172,10 @@ public:
 
   // symbols and scripts (the name table is the manager's)
   std::optional<Term> symbol(std::string_view name) const;
-  /// A script's reset does not discard the manager's declarations or handles.
+  /// Definitions surviving a successful parse belong to the manager too;
+  /// later parses and parse_term can use them. Their names cannot be redefined
+  /// or declared. A script's reset does not discard the manager's retained
+  /// declarations, definitions or handles.
   /// Redeclaring a retained name with a different identity is PARSE, with
   /// the assertion stack restored. In particular, declare-sort creates a
   /// new identity even at the same spelling; use a fresh manager for a new

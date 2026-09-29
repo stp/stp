@@ -908,7 +908,7 @@ class Model(_core.ModelHandle):
     def __getitem__(self, t):
         t = self._key(t)
         if isinstance(t, FuncRef):
-            if not self.in_core(t):
+            if not self.in_core(t) and not t.is_defined_function():
                 raise KeyError("function %s is not in the model" % (t.decl_name() or t.sexpr()))
             return self.fun_value(t)
         # the mapping rule: stp_model_try_value refuses every term whose value would need

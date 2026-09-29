@@ -1024,6 +1024,12 @@ uint32_t stp_fun_value_arity(stp_fun_value v)
                             [](CFunValue* fv) { return fv->value.sort().fun_arity(); });
 }
 
+bool stp_fun_value_is_tabular(stp_fun_value v)
+{
+  return fun_call<bool>(v, "stp_fun_value_is_tabular", false,
+                        [](CFunValue* fv) { return fv->value.is_tabular(); });
+}
+
 stp_term stp_fun_value_else(stp_fun_value v)
 {
   return fun_call<stp_term>(v, "stp_fun_value_else", nullptr,

@@ -2537,6 +2537,17 @@ function_param_open STRING_TOK ROUNDINGMODE_TOK RPAREN_TOK
   stp::releaseParserValue($2);
 }
 |
+function_param_open STRING_TOK an_array_sort RPAREN_TOK
+{
+  // The same sort is already accepted through a define-sort alias. Accept
+  // its inline spelling too, as used when an API definition is exported.
+  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
+      $2->c_str(), $3->sourceSort()));
+  stp::GlobalParserInterface->addTemporarySymbol(*$$);
+  stp::releaseParserValue($2);
+  stp::releaseParserValue($3);
+}
+|
 function_param_open STRING_TOK STRING_TOK RPAREN_TOK
 {
   // A formal whose sort is a name the script introduced. This is how the
@@ -2787,7 +2798,9 @@ function_def_name LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUM
 |
 function_def_name LPAREN_TOK function_params RPAREN_TOK an_array_sort an_term
 {
-  stp::GlobalParserInterface->unsupported();
+  if ($6->GetSourceSort() != $5->sourceSort())
+    fatal_yyerror("define-fun: the body's array sort does not match the declared result sort");
+  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
 
   // Match the other parameterised productions: leaving the parameter
   // symbols interned would let later input resolve them as free variables

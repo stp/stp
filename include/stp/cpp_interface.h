@@ -164,9 +164,10 @@ public:
     ASTNode function;
     std::string name;
   };
+  using FunctionMap = ankerl::unordered_dense::map<std::string, Function>;
 
 private:
-  ankerl::unordered_dense::map<std::string, Function> functions;
+  FunctionMap functions;
   // API aliases borrow context-owned declarations. Like the original API
   // function names, they survive parser frame resets; each new parser
   // interface imports the current bindings from the term manager.
@@ -257,6 +258,12 @@ public:
   {
     sorts_at_cleanup = sink;
   }
+  // Keep live define-funs across a frontend's end-of-script cleanup. Moving
+  // the table avoids copying scripts with many definitions.
+  void keepFunctionsAtCleanup(FunctionMap* sink) { functions_at_cleanup = sink; }
+  const FunctionMap& definedFunctions() const { return functions; }
+  // Import a definition whose private formal identities are already stable.
+  void addFunction(const Function& function);
   // Every sort name in scope and its sort: define-sort's aliases and
   // declare-sort's sorts, a caller's seeded ones among them.
   const std::map<std::string, SourceSort>& sortAliases() const
@@ -279,6 +286,10 @@ public:
   {
     accept_sort_declaration = std::move(hook);
   }
+  void onFunctionDefinition(std::function<bool(const std::string&)> hook)
+  {
+    accept_function_definition = std::move(hook);
+  }
   // Called as each check-sat (or check-sat-assuming) of the input begins:
   // the API marks a new check there, as its own check_sat does. True when the
   // caller holds an interrupt for it: the check answers unknown at once.
@@ -289,9 +300,11 @@ public:
 private:
   ASTVec* symbols_at_cleanup = nullptr;
   std::map<std::string, SourceSort>* sorts_at_cleanup = nullptr;
+  FunctionMap* functions_at_cleanup = nullptr;
   std::function<void()> after_public_reset;
   std::function<bool(const std::string&, const ASTNode&)> accept_symbol_declaration;
   std::function<bool(const std::string&, const SourceSort&)> accept_sort_declaration;
+  std::function<bool(const std::string&)> accept_function_definition;
   void checkSymbolDeclaration(const std::string& name, const ASTNode& symbol);
   std::function<bool()> before_check;
   std::function<void()> after_check;

@@ -304,6 +304,10 @@ def _encode_node(t, index_of):
         return (_TAG_VALUE, sort_text(t.sort()), t.sexpr())
     kind = Kind(t.kind())
     if kind == Kind.CONSTANT:
+        if t.is_defined_function():
+            raise Unsupported("a define-fun handle cannot be rebuilt as an uninterpreted declaration; "
+                              "translate an application or export the solver with to_smt2()",
+                              code=ErrorCode.UNSUPPORTED, function="encode_term")
         name = _sym_name(t)
         if name is None:
             raise Unsupported("the anonymous symbol %s (mk_fresh) is not in the name table and cannot be rebuilt "

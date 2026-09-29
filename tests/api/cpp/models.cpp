@@ -506,6 +506,7 @@ TEST_F(Models, function_values)
   ASSERT_TRUE(s.check_sat().is_sat());
   const Model m = s.model();
   const FunctionValue fv = m.function_value(f);
+  EXPECT_TRUE(fv.is_tabular());
   EXPECT_TRUE(fv.sort() == f.sort());
   EXPECT_GE(fv.size(), 3u);
   EXPECT_EQ(fv.entries().size(), fv.size());
@@ -557,6 +558,112 @@ TEST_F(Models, function_values)
   const std::string text = m.to_smt2();
   EXPECT_NE(text.find("(define-fun f ((x!0 (_ BitVec 8)) (x!1 (_ BitVec 8))) (_ BitVec 8)"), std::string::npos);
   EXPECT_NE(text.find("(ite (and (= x!0"), std::string::npos);
+}
+
+TEST_F(Models, defined_function_interpretations_freeze_globals_and_uf_tables)
+{
+  s.parse_smt2("(define-fun plus_x ((p (_ BitVec 8))) (_ BitVec 8) (bvadd p x)) "
+               "(define-fun via_uf ((p (_ BitVec 8))) (_ BitVec 8) (bvadd (f p x) x)) "
+               "(define-fun read_a ((p (_ BitVec 32))) (_ BitVec 8) (select a p))");
+  const Term plus = *tm.symbol("plus_x"), via = *tm.symbol("via_uf");
+  const Term read = *tm.symbol("read_a");
+  s.add(x == 5);
+  s.add(f(tm.mk_bv(8, 1), x) == 7);
+  s.add(a[I(9)] == 42);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model old = s.model();
+  const FunctionValue pv = old.function_value(plus), fv = old.function_value(via);
+  const FunctionValue av = old.function_value(read);
+  EXPECT_FALSE(pv.is_tabular());
+  EXPECT_TRUE(pv.sort() == plus.sort());
+  EXPECT_EQ(pv.apply({tm.mk_bv(8, 1)}).to_uint64(), 6u);
+  EXPECT_EQ(fv.apply({tm.mk_bv(8, 1)}).to_uint64(), 12u);
+  EXPECT_EQ(av.apply({I(9)}).to_uint64(), 42u);
+  EXPECT_FALSE(old.in_core(plus)); // a definition expands, it is not assigned
+  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, pv.size());
+  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, pv.entry(0));
+  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, pv.entries());
+  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, pv.else_value());
+  API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, old.value(plus));
+  API_EXPECT_ERROR(ErrorCode::NOT_A_VALUE, pv.apply({x}));
+  API_EXPECT_ERROR(ErrorCode::ARITY, pv.apply({}));
+  API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, pv.apply({I(0)}));
+  API_EXPECT_ERROR(ErrorCode::NULL_HANDLE, pv.as_ite_term({Term()}));
+  API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, pv.as_ite_term({I(0)}));
+  TermManager foreign;
+  API_EXPECT_ERROR(ErrorCode::FOREIGN_MANAGER, pv.as_ite_term({foreign.mk_bv(8, 1)}));
+  // Supplied arguments are not themselves frozen: using a global as the
+  // formal below must distinguish its bound occurrence from its free one.
+  const Term pbody = pv.as_ite_term({x}), fbody = fv.as_ite_term({y});
+  const Term index = tm.declare("index", bv32);
+  const Term abody = av.as_ite_term({index});
+  s.reset();
+  s.add(x == 100);
+  s.add(y == 1);
+  s.add(index == 9);
+  s.add(f(y, x) == 99);
+  s.add(a[index] == 99);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model newer = s.model();
+  EXPECT_EQ(newer.uint64_value(pbody), 105u);
+  EXPECT_EQ(newer.uint64_value(fbody), 12u);
+  EXPECT_EQ(newer.uint64_value(abody), 42u);
+  EXPECT_EQ(newer.function_value(plus).apply({tm.mk_bv(8, 1)}).to_uint64(), 101u);
+  EXPECT_EQ(pv.apply({tm.mk_bv(8, 1)}).to_uint64(), 6u);
+  EXPECT_EQ(fv.apply({tm.mk_bv(8, 1)}).to_uint64(), 12u);
+  EXPECT_EQ(av.apply({I(9)}).to_uint64(), 42u);
+  // A definition introduced after the check can still be read in that model.
+  s.parse_smt2("(define-fun later ((p (_ BitVec 8))) (_ BitVec 8) (plus_x p))");
+  EXPECT_EQ(old.function_value(*tm.symbol("later")).apply({tm.mk_bv(8, 1)}).to_uint64(), 6u);
+}
+
+TEST_F(Models, defined_functions_support_array_and_real_arguments_and_results)
+{
+  s.parse_smt2("(define-fun update ((arr (Array (_ BitVec 32) (_ BitVec 8))) "
+                 "(p (_ BitVec 32))) (Array (_ BitVec 32) (_ BitVec 8)) (store arr p #x07)) "
+               "(define-fun double_real ((r Real)) Real (+ r r)) "
+               "(define-fun identity_u ((u S)) S u) "
+               "(define-fun flip ((b Bool)) Bool (not b)) "
+               "(define-fun round ((r RoundingMode)) RoundingMode r) "
+               "(define-fun abs ((f (_ FloatingPoint 8 24))) (_ FloatingPoint 8 24) (fp.abs f))");
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model model = s.model();
+  const Term base = tm.mk_const_array(A, tm.mk_bv(8, 2));
+  const FunctionValue update = model.function_value(*tm.symbol("update"));
+  const Term array = update.apply({base, I(3)});
+  EXPECT_EQ(model.uint64_value(array[I(3)]), 7u);
+  EXPECT_EQ(model.uint64_value(array[I(4)]), 2u);
+  EXPECT_TRUE(update.as_ite_term({a, I(3)}).same_as(store(a, I(3), tm.mk_bv(8, 7))));
+  API_EXPECT_ERROR(ErrorCode::NOT_A_VALUE, update.apply({a, I(3)}));
+  const FunctionValue real = model.function_value(*tm.symbol("double_real"));
+  EXPECT_EQ(real.apply({tm.mk_real("1/3")}).to_rational().str(), "2/3");
+  const Term u = tm.declare("u", S);
+  const Term uv = model.value(u);
+  EXPECT_TRUE(model.function_value(*tm.symbol("identity_u")).apply({uv}).same_as(uv));
+  EXPECT_TRUE(model.function_value(*tm.symbol("flip")).apply({tm.mk_false()}).to_bool());
+  EXPECT_EQ(model.function_value(*tm.symbol("round")).apply({tm.mk_rm(RoundingMode::RTZ)}).to_rm(),
+            RoundingMode::RTZ);
+  EXPECT_EQ(model.function_value(*tm.symbol("abs")).apply({tm.mk_fp(f32, RoundingMode::RNE, -1.5)})
+                .to_fp().to_double(), std::optional<double>(1.5));
+}
+
+TEST_F(Models, defined_functions_evaluate_partial_fp_in_the_saved_model)
+{
+  s.parse_smt2("(define-fun convert ((p (_ FloatingPoint 8 24))) (_ BitVec 8) "
+                "((_ fp.to_ubv 8) RTZ p))");
+  const Term convert = *tm.symbol("convert");
+  const Term nan = tm.mk_fp_nan(f32);
+  s.add(convert(nan) == 42);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const FunctionValue value = s.model().function_value(convert);
+  EXPECT_EQ(value.apply({nan}).to_uint64(), 42u);
+  const Term p = tm.declare("p", f32);
+  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, value.as_ite_term({p}));
+  s.reset();
+  s.add(convert(nan) == 17);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(value.apply({nan}).to_uint64(), 42u);
+  EXPECT_EQ(s.model().function_value(convert).apply({nan}).to_uint64(), 17u);
 }
 
 TEST_F(Models, functions_over_declared_sorts)
