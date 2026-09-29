@@ -407,10 +407,31 @@ void install_sink(VCImpl* vc)
 }
 
 // A new solver over the option record, with the assertion stack replayed.
+// The replaced solver's counts, kept for the checker's later reads.
+void carry_counters(VCImpl* vc)
+{
+  stp_statistics st = stp_solver_statistics(vc->solver);
+  if (st == nullptr)
+  {
+    take_error(vc);
+    return;
+  }
+  for (std::size_t i = 0, n = stp_statistics_size(st); i < n; ++i)
+  {
+    const char* name = stp_statistics_name(st, i);
+    std::uint64_t v = 0;
+    if (name != nullptr && stp_statistics_is_uint64(st, name) &&
+        stp_statistics_uint64(st, name, &v) == STP_OK)
+      vc->counters_before[name] += v;
+  }
+  stp_statistics_release(st);
+}
+
 bool rebuild_solver(VCImpl* vc)
 {
   if (vc->solver != nullptr)
   {
+    carry_counters(vc);
     stp_solver_delete(vc->solver);
     vc->solver = nullptr;
   }
@@ -1241,7 +1262,8 @@ unsigned long long read_statistic(VCImpl* vc, const std::string& name, bool* kno
   else
     take_error(vc);
   stp_statistics_release(st);
-  return v;
+  const auto before = vc->counters_before.find(name);
+  return v + (before != vc->counters_before.end() ? before->second : 0);
 }
 
 } // namespace

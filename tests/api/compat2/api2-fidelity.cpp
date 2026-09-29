@@ -584,3 +584,18 @@ TEST(libstp2_fidelity, print_query_after_a_parse)
   vc_DeleteExpr(pa);
   vc_Destroy(vc);
 }
+
+// Counters live for the checker: a before-first-check option set after a
+// query rebuilds the solver, and the count goes on from where it was.
+TEST(libstp2_fidelity, counters_survive_a_rebuilt_solver)
+{
+  VC vc = vc_createValidityChecker();
+  Type bv8 = vc_bvType(vc, 8);
+  Expr a = vc_varExpr(vc, "a", bv8), b = vc_varExpr(vc, "b", bv8);
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_bvMultExpr(vc, 8, a, b), vc_bvConstExprFromInt(vc, 8, 6)));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  const unsigned long long before = vc_getCounter(vc, STP_COUNTER_QUERIES_BITBLASTED);
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION, 1);
+  EXPECT_EQ(before, vc_getCounter(vc, STP_COUNTER_QUERIES_BITBLASTED));
+  vc_Destroy(vc);
+}

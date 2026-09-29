@@ -45,6 +45,7 @@ THE SOFTWARE.
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -143,6 +144,9 @@ struct VCImpl
   bool divmod_explicit = false; // BV_TERM_ABSTRACTION_DIVMOD was named
   bool rounds_explicit = false; // BV_TERM_ABSTRACTION_ROUNDS was named
   bool groups_explicit = false; // vc_setSchemaGroups was called
+  // The counts of the solvers a rebuild replaced: 2.x's counters live for the
+  // checker, and a statistic read adds them to the live solver's.
+  std::map<std::string, std::uint64_t> counters_before;
   int uf_sort_width = 16;       // recorded only (see NOTES.md)
 
   enum reason_unknown_t reason = REASON_UNKNOWN_NONE;
