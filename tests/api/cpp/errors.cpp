@@ -345,12 +345,16 @@ std::string answers(unsigned seed, int formulas, const char* name, const char* v
 
 // Independent managers on independent threads, under the options whose engine
 // code keeps state for the whole process: the prime-implicate cache of the
-// new-high CNF encoder, written unguarded, and threads crashed or built wrong
-// CNFs. Each thread must answer as one thread does.
+// new-high CNF encoder, and ABC's rewriting library behind AIG rewriting and
+// the propositional-core simplifier. Both were written unguarded, and threads
+// crashed, built wrong CNFs and answered unsat for satisfiable formulas. Each
+// thread must answer as one thread does.
 TEST(Threads, managers_on_threads_share_the_engines_process_wide_state)
 {
   const std::pair<const char*, const char*> settings[] = {
-      {"cnf-generation-effort", "new-high"}};
+      {"cnf-generation-effort", "new-high"},
+      {"aig-core-simplification", "true"},
+      {"aig-rewrite-passes", "2"}};
   for (const auto& setting : settings)
   {
     const char* name = setting.first;

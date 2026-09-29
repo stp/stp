@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define BBNodeManagerAIG_H_
 
 #include <cstdint>
+#include <mutex>
 #include <stdexcept>
 
 #include "BBNodeAIG.h"
@@ -97,9 +98,19 @@ inline Aig_Obj_t* orderedAigMux(Aig_Man_t* p, Aig_Obj_t* pC, Aig_Obj_t* p1,
 // no-op. One owner, started on demand and kept for the process: Dar_LibStart()
 // is already idempotent, so the cost is paid once however many callers there
 // are.
-inline void ensureDarLibrary()
+//
+// The library is also where Dar_ManRewrite() keeps its working state, so a
+// rewrite writes it: two managers rewriting at once on two threads corrupted
+// each other's AIGs. Every rewrite, and the start, goes through one lock, so
+// managers on different threads take turns to rewrite.
+DLL_PUBLIC std::mutex& darLibraryLock();
+
+// Dar_ManRewrite() under the library's lock, the library started first.
+inline void rewriteWithDarLibrary(Aig_Man_t* aig, Dar_RwrPar_t* pars)
 {
+  std::lock_guard<std::mutex> guard(darLibraryLock());
   Dar_LibStart();
+  Dar_ManRewrite(aig, pars);
 }
 
 // Creates AIG nodes with ABC and wraps them in BBNodeAIG's.
