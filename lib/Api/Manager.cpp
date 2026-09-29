@@ -134,6 +134,7 @@ ManagerImpl::~ManagerImpl()
   OutputRoute quiet(&kNoOutput);
   // Every node the API tables hold must be released before the manager's
   // unique tables go: clear the tables first.
+  pending_roots.clear();
   fun_sort_of_identity.clear();
   names_by_node.clear();
   symbols.clear();
@@ -144,7 +145,7 @@ ManagerImpl::~ManagerImpl()
   delete bm;
 }
 
-void ManagerImpl::check_alive(const char* fn) const
+void ManagerImpl::check_alive(const char* fn)
 {
   if (callback_depth() != 0)
     fail(ErrorCode::STATE, fn,
@@ -153,6 +154,8 @@ void ManagerImpl::check_alive(const char* fn) const
   boot_constant_bv();
   if (poisoned)
     fail(ErrorCode::STATE, fn, "the term manager is poisoned: " + poison_message);
+  if (adoption_pending)
+    settle(fn);
 }
 
 namespace

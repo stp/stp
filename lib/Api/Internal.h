@@ -321,8 +321,8 @@ struct ManagerImpl
 
   // Refuses a poisoned manager, and readies the calling thread for the
   // engine (the constant bit-vector library boots per thread): a manager may
-  // be used from any thread, one call at a time.
-  void check_alive(const char* fn) const;
+  // be used from any thread, one call at a time. Settles a pending adoption.
+  void check_alive(const char* fn);
 
   // sorts
   std::uint32_t intern_sort(const std::string& key, SortRec&& rec);
@@ -343,6 +343,16 @@ struct ManagerImpl
   const UFDecl* decl_of(const ASTNode& identity) const;
   std::string fresh_name(std::string_view prefix);
   void adopt_engine_symbols(const std::vector<ASTNode>& roots); // after a parse
+  // What an SMT-LIB 2 script that ran leaves to adopt: the roots of what it
+  // declared and asserted, whose symbols become the manager's and whose
+  // array equalities engage array-equality = auto. Adopted by the next call
+  // on the manager (check_alive) rather than at the end of the parse, so that
+  // a caller that makes none -- the stp binary, whose process ends with its
+  // script -- does not walk everything the script built; nothing reads the
+  // manager in between.
+  std::vector<ASTNode> pending_roots;
+  bool adoption_pending = false;
+  void settle(const char* fn); // defined beside the parse, in Solver.cpp
 
   // values
   ASTNode bv_const(std::uint32_t width, std::uint64_t value);

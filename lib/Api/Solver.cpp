@@ -525,6 +525,24 @@ bool is_uf_application(const ASTNode& n)
 }
 } // namespace
 
+// The adoption a script that ran left for the next call on the manager
+// (ManagerImpl::pending_roots): engine reads, whose failure is the call's.
+void ManagerImpl::settle(const char* fn)
+{
+  adoption_pending = false;
+  const std::vector<ASTNode> roots = std::move(pending_roots);
+  pending_roots.clear();
+  engine_call(this, fn, [&] {
+    if (any_node(roots, is_array_equality))
+    {
+      // what the script's content needs, as at the end of a parse
+      array_equality_seen = true;
+      bm->UserFlags.enable_array_equality = true;
+    }
+    adopt_engine_symbols(roots);
+  });
+}
+
 // What one run of the engine (a check, or an input read with EXECUTE)
 // sets up and takes down: every CNF the engine generates goes to the
 // solver's CNF sink, and the mark of a run that ended at its first CNF
@@ -2052,30 +2070,42 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   for (const auto& alias : sorts_at_end)
     if (alias.second.kind() == SourceSort::Kind::Uninterpreted)
       s->mgr->sort_of_source(alias.second, fn);
-  array_equality = detail::any_node(roots, detail::is_array_equality);
-  if (!runs && array_equality && s->mgr->array_equality_off)
+  if (runs && format == Format::SMTLIB2)
   {
-    // The script is well formed; the switch refuses its content, and the
-    // solver stays as it was: the stack put back, and the functions the
-    // script declared deactivated (the frontend's end-of-script teardown
-    // left them active, for adoption).
-    if (UFContext* ctx = bm->getUFContextIfAny())
-      for (const UFDecl* d : ctx->activeDeclarations())
-        if (active_before.count(d) == 0)
-        {
-          std::string ignored;
-          ctx->deactivate(d, &ignored);
-        }
-    restore_stack();
-    detail::fail(ErrorCode::UNSUPPORTED, fn,
-                 "the script compares arrays for equality, which array-equality = off "
-                 "switched off");
+    // An SMT-LIB 2 script that ran has answered its questions: what is left
+    // is the manager's, and is adopted by the next call on it.
+    s->mgr->pending_roots = std::move(roots);
+    s->mgr->adoption_pending = true;
   }
-  s->mgr->adopt_engine_symbols(roots);
+  else
+  {
+    // A CVC or SMT-LIB 1 question is decided below, and an assertion made
+    // without a run may be refused, so both need the content now.
+    array_equality = detail::any_node(roots, detail::is_array_equality);
+    if (!runs && array_equality && s->mgr->array_equality_off)
+    {
+      // The script is well formed; the switch refuses its content, and the
+      // solver stays as it was: the stack put back, and the functions the
+      // script declared deactivated (the frontend's end-of-script teardown
+      // left them active, for adoption).
+      if (UFContext* ctx = bm->getUFContextIfAny())
+        for (const UFDecl* d : ctx->activeDeclarations())
+          if (active_before.count(d) == 0)
+          {
+            std::string ignored;
+            ctx->deactivate(d, &ignored);
+          }
+      restore_stack();
+      detail::fail(ErrorCode::UNSUPPORTED, fn,
+                   "the script compares arrays for equality, which array-equality = off "
+                   "switched off");
+    }
+    s->mgr->adopt_engine_symbols(roots);
+    if (array_equality)
+      s->mgr->array_equality_seen = true;
+  }
   if (UFContext* ctx = bm->getUFContextIfAny())
     keep_uf = !ctx->activeDeclarations().empty();
-  if (array_equality)
-    s->mgr->array_equality_seen = true;
   }
   // The switches a script's set-logic turns on are turned back when the
   // interface goes (the CLI keeps its interface alive through the solve);
