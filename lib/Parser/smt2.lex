@@ -691,7 +691,9 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
   const std::string name(yytext);
   const bool reserved = name == "!" || name == "_" || name == "as" ||
       name == "let" || name == "exists" || name == "forall" || name == "match" ||
-      name == "par";
+      name == "par" || name == "lambda" || name == "BINARY" ||
+      name == "DECIMAL" || name == "HEXADECIMAL" || name == "NUMERAL" ||
+      name == "STRING";
   smt2lval.attribute_value = new stp::SMT2AttributeValue{
       reserved ? Kind::Reserved : Kind::Symbol, name};
   return ATTRIBUTE_VALUE_TOK;
@@ -786,6 +788,8 @@ bv{DIGIT}+             { return lookup(smt2text); }
                             }
 "declare-sort"            { if (!commandNamePending) return lookup(smt2text);
                             sortContext = true; return commandToken(DECLARE_SORT_TOK);}
+"declare-sort-parameter"  { if (!commandNamePending) return lookup(smt2text);
+                            sortContext = true; return commandToken(DECLARE_SORT_PARAMETER_TOK);}
 "define-fun"              { return commandToken(DEFINE_FUNCTION_TOK); }
 "define-const"            { return commandToken(DEFINE_CONST_TOK); }
 "echo"                    { return commandToken(ECHO_TOK);}
@@ -850,6 +854,9 @@ bv{DIGIT}+             { return lookup(smt2text); }
  /* Syntactically reserved words. Quoted spellings are ordinary symbols. */
 "as"  { qualifiedNamePending = true; return AS_TOK; }
 "let" { return LET_TOK; }
+"lambda"|"exists"|"forall"|"match"|"par"|"BINARY"|"DECIMAL"|"HEXADECIMAL"|"NUMERAL"|"STRING" {
+  return RESERVED_TOK;
+}
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
 \|[^\|\\]*\| { countNewlines(smt2text, smt2leng); return lookup(smt2text); }

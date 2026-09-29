@@ -1984,6 +1984,8 @@
 %token DECLARE_CONST_TOK
 %token DECLARE_FUNCTION_TOK
 %token DECLARE_SORT_TOK
+%token DECLARE_SORT_PARAMETER_TOK
+%token RESERVED_TOK
 %token DEFINE_FUNCTION_TOK
 %token DEFINE_FUN_REC_TOK
 %token DEFINE_FUNS_REC_TOK
@@ -2277,6 +2279,13 @@ cmdi:
                                .uf_sort_width));
          stp::GlobalParserInterface->success();
        }
+       stp::releaseParserValue($2);
+    }
+|
+     DECLARE_SORT_PARAMETER_TOK STRING_TOK
+    {
+       // Global sort parameters require polymorphic declarations and solving.
+       stp::GlobalParserInterface->unsupported();
        stp::releaseParserValue($2);
     }
 |

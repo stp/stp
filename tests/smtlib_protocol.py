@@ -391,6 +391,34 @@ class ErrorResponses(unittest.TestCase):
 
 
 class TheoryBinders(unittest.TestCase):
+    def test_reserved_words_require_quoting_as_symbols(self):
+        for name in ['lambda', 'exists', 'forall', 'match', 'par',
+                     'BINARY', 'DECIMAL', 'HEXADECIMAL', 'NUMERAL', 'STRING']:
+            with self.subTest(name=name):
+                result = run('(set-logic QF_BV)(declare-const ' + name +
+                             ' Bool)(check-sat)')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('(error "', result.stdout)
+                result = run('(set-logic QF_BV)(declare-const |' + name +
+                             '| Bool)(assert |' + name + '|)(check-sat)')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(result.stdout, 'sat\n')
+
+    def test_reserved_words_in_metadata_and_names(self):
+        result = run('(set-info :example (lambda forall par BINARY STRING))'
+                     '(set-logic QF_BV)(assert (! true :named |lambda|))'
+                     '(assert lambda)(check-sat)')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('(error "', result.stdout)
+        result = run('(set-info :example (lambda forall par BINARY STRING))'
+                     '(set-logic QF_BV)(assert (! true :named |lambda|))'
+                     '(assert |lambda|)(check-sat)')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, 'sat\n')
+        result = run('(set-logic QF_BV)(assert (! true :named lambda))')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('(error "', result.stdout)
+
     def test_a_let_binding_has_exactly_one_value(self):
         result = run('(set-logic QF_BV)(assert (let ((x true false)) x))(check-sat)')
         self.assertNotEqual(result.returncode, 0)

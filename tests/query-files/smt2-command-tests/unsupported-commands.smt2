@@ -9,6 +9,8 @@
 (set-option :produce-unsat-cores true)
 (set-option :produce-assignments true)
 (set-logic QF_BV)
+; CHECK-NEXT: ^unsupported$
+(declare-sort-parameter A)
 (declare-fun x () (_ BitVec 4))
 (declare-fun p () Bool)
 (assert (and (= x #x1) (= x #x2)))
