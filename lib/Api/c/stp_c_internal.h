@@ -42,6 +42,7 @@ THE SOFTWARE.
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -194,6 +195,18 @@ struct CSolver
     bool terminate() override { return cb != nullptr && cb(user); }
   } terminator;
   std::string last_reason; // the sentence behind the last result's reason
+  // What stp_solver_assertion and stp_solver_unsat_assumption index: built by
+  // the first read after a call that can change them (every mutating call
+  // and every check drops them), so an enumeration costs one build rather
+  // than one per element.
+  std::optional<std::vector<Term>> assertions;
+  std::optional<std::vector<Term>> unsat_assumptions;
+
+  void drop_views() noexcept
+  {
+    assertions.reset();
+    unsat_assumptions.reset();
+  }
 
   CSolver(CManager* m, const Options& o);
 };
@@ -201,6 +214,7 @@ struct CSolver
 template <class R, class F>
 R solver_mutate(CSolver* cs, const char* fn, R fail_value, F&& f) noexcept
 {
+  cs->drop_views();
   ErrorRecord scratch;
   R r = guarded<R>(cs->cm, &scratch, fn, fail_value, f);
   if (scratch.pending)
@@ -216,6 +230,7 @@ R solver_mutate(CSolver* cs, const char* fn, R fail_value, F&& f) noexcept
 template <class R, class F>
 R solver_checked(CSolver* cs, const char* fn, R fail_value, F&& f) noexcept
 {
+  cs->drop_views();
   if (cs->failed.pending)
   {
     try
@@ -236,6 +251,7 @@ struct CModel
 {
   CManager* cm;
   Model model;
+  std::optional<std::vector<Term>> symbols; // stp_model_symbol's, built once
 };
 
 struct CArrayValue

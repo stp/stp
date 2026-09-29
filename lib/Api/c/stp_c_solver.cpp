@@ -148,7 +148,7 @@ void copy_limbs(const std::vector<std::uint64_t>& limbs, std::size_t n, std::uin
 
 stp_model new_model(CManager* cm, const Model& m)
 {
-  CModel* out = new CModel{cm, m};
+  CModel* out = new CModel{cm, m, std::nullopt};
   cm_retain(cm);
   return reinterpret_cast<stp_model>(out);
 }
@@ -272,16 +272,33 @@ uint32_t stp_solver_level(stp_solver s)
   return s == nullptr ? 0 : csolver(s)->solver.level();
 }
 
+namespace
+{
+const std::vector<Term>& assertions_view(CSolver* cs)
+{
+  if (!cs->assertions)
+    cs->assertions = cs->solver.assertions();
+  return *cs->assertions;
+}
+
+const std::vector<Term>& unsat_assumptions_view(CSolver* cs)
+{
+  if (!cs->unsat_assumptions)
+    cs->unsat_assumptions = cs->solver.unsat_assumptions();
+  return *cs->unsat_assumptions;
+}
+} // namespace
+
 size_t stp_solver_num_assertions(stp_solver s)
 {
   return solver_read<size_t>(s, "stp_solver_num_assertions", 0,
-                             [](CSolver* cs) { return cs->solver.assertions().size(); });
+                             [](CSolver* cs) { return assertions_view(cs).size(); });
 }
 
 stp_term stp_solver_assertion(stp_solver s, size_t i)
 {
   return solver_read<stp_term>(s, "stp_solver_assertion", nullptr, [&](CSolver* cs) {
-    const std::vector<Term> all = cs->solver.assertions();
+    const std::vector<Term>& all = assertions_view(cs);
     if (i >= all.size())
       fail(ErrorCode::INDEX_OUT_OF_RANGE, "stp_solver_assertion",
            "index " + std::to_string(i) + " out of range [0, " + std::to_string(all.size()) + ")",
@@ -378,13 +395,13 @@ char* stp_solver_last_reason_message(stp_solver s)
 size_t stp_solver_num_unsat_assumptions(stp_solver s)
 {
   return solver_read<size_t>(s, "stp_solver_num_unsat_assumptions", 0,
-                             [](CSolver* cs) { return cs->solver.unsat_assumptions().size(); });
+                             [](CSolver* cs) { return unsat_assumptions_view(cs).size(); });
 }
 
 stp_term stp_solver_unsat_assumption(stp_solver s, size_t i)
 {
   return solver_read<stp_term>(s, "stp_solver_unsat_assumption", nullptr, [&](CSolver* cs) {
-    const std::vector<Term> all = cs->solver.unsat_assumptions();
+    const std::vector<Term>& all = unsat_assumptions_view(cs);
     if (i >= all.size())
       fail(ErrorCode::INDEX_OUT_OF_RANGE, "stp_solver_unsat_assumption",
            "index " + std::to_string(i) + " out of range [0, " + std::to_string(all.size()) + ")",
@@ -852,16 +869,26 @@ stp_status stp_model_array_bytes(stp_model m, stp_term array, uint64_t first_ind
   });
 }
 
+namespace
+{
+const std::vector<Term>& model_symbols_view(CModel* cmo)
+{
+  if (!cmo->symbols)
+    cmo->symbols = cmo->model.symbols();
+  return *cmo->symbols;
+}
+} // namespace
+
 size_t stp_model_num_symbols(stp_model m)
 {
   return model_call<size_t>(m, "stp_model_num_symbols", 0,
-                            [](CModel* cmo) { return cmo->model.symbols().size(); });
+                            [](CModel* cmo) { return model_symbols_view(cmo).size(); });
 }
 
 stp_term stp_model_symbol(stp_model m, size_t i)
 {
   return model_call<stp_term>(m, "stp_model_symbol", nullptr, [&](CModel* cmo) {
-    const std::vector<Term> all = cmo->model.symbols();
+    const std::vector<Term>& all = model_symbols_view(cmo);
     if (i >= all.size())
       fail(ErrorCode::INDEX_OUT_OF_RANGE, "stp_model_symbol",
            "index " + std::to_string(i) + " out of range [0, " + std::to_string(all.size()) + ")",

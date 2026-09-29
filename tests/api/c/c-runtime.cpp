@@ -683,3 +683,69 @@ TEST(c_runtime, a_null_assumption_is_an_error_of_the_check)
   stp_tm_release_all(tm);
   stp_tm_release(tm);
 }
+
+// The indexed reads answer for the object as it is now: a solver's
+// assertions after each assert, push, pop, parse and reset, its unsat
+// assumptions after each check, a manager's symbols and declared sorts after
+// each declaration (a bind_symbol alias of a listed symbol adds none), a
+// model's symbols. They used to rebuild the whole collection for every call,
+// so an enumeration of n took time n^2 (16,000 symbols, 16.8 s); they now
+// read the manager's own lists, or a view built once per change.
+TEST(c_runtime, indexed_reads_follow_every_change)
+{
+  stp_tm tm = stp_tm_new(nullptr);
+  stp_sort b = stp_mk_bool_sort(tm);
+  stp_term x = stp_declare(tm, "x", b);
+  stp_term y = stp_declare(tm, "y", b);
+  ASSERT_EQ(2u, stp_tm_num_symbols(tm));
+  EXPECT_EQ(stp_term_id(y), stp_term_id(stp_tm_symbol_at(tm, 1)));
+  ASSERT_EQ(STP_OK, stp_tm_bind_symbol(tm, "also_x", x));
+  EXPECT_EQ(2u, stp_tm_num_symbols(tm));
+  stp_term z = stp_declare(tm, "z", b);
+  ASSERT_EQ(3u, stp_tm_num_symbols(tm));
+  EXPECT_EQ(stp_term_id(z), stp_term_id(stp_tm_symbol_at(tm, 2)));
+  EXPECT_EQ(nullptr, stp_tm_symbol_at(tm, 3));
+  EXPECT_EQ(STP_ERR_INDEX_OUT_OF_RANGE, code_of(tm));
+  EXPECT_EQ(0u, stp_tm_num_declared_sorts(tm));
+  stp_sort u = stp_tm_declare_sort(tm, "U");
+  ASSERT_EQ(1u, stp_tm_num_declared_sorts(tm));
+  EXPECT_EQ(stp_sort_id(u), stp_sort_id(stp_tm_declared_sort_at(tm, 0)));
+
+  stp_solver s = stp_solver_new(tm, nullptr);
+  ASSERT_EQ(STP_OK, stp_solver_assert(s, x));
+  ASSERT_EQ(1u, stp_solver_num_assertions(s));
+  EXPECT_EQ(stp_term_id(x), stp_term_id(stp_solver_assertion(s, 0)));
+  ASSERT_EQ(STP_OK, stp_solver_push(s, 1));
+  ASSERT_EQ(STP_OK, stp_solver_assert(s, y));
+  ASSERT_EQ(2u, stp_solver_num_assertions(s));
+  EXPECT_EQ(stp_term_id(y), stp_term_id(stp_solver_assertion(s, 1)));
+  ASSERT_EQ(STP_OK, stp_solver_pop(s, 1));
+  ASSERT_EQ(1u, stp_solver_num_assertions(s));
+  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(s, "(assert z)", STP_PARSE_DECLARE_AND_ASSERT));
+  ASSERT_EQ(2u, stp_solver_num_assertions(s));
+  EXPECT_EQ(stp_term_id(z), stp_term_id(stp_solver_assertion(s, 1)));
+  ASSERT_EQ(STP_OK, stp_solver_reset_assertions(s));
+  EXPECT_EQ(0u, stp_solver_num_assertions(s));
+
+  const stp_term contradiction[] = {x, stp_not(tm, x)};
+  stp_result r;
+  ASSERT_EQ(STP_OK, stp_solver_check_sat_assuming(s, 2, contradiction, &r));
+  ASSERT_EQ(STP_UNSAT, r.kind);
+  EXPECT_GE(stp_solver_num_unsat_assumptions(s), 1u);
+  ASSERT_EQ(STP_OK, stp_solver_check_sat_assuming(s, 1, contradiction, &r));
+  ASSERT_EQ(STP_SAT, r.kind);
+  EXPECT_EQ(0u, stp_solver_num_unsat_assumptions(s)); // no longer the last answer's
+  EXPECT_EQ(STP_ERR_STATE, code_of(tm));
+  stp_model m = stp_solver_model(s);
+  ASSERT_NE(nullptr, m);
+  const size_t n = stp_model_num_symbols(m);
+  EXPECT_GE(n, 1u);
+  for (size_t i = 0; i < n; ++i)
+    EXPECT_NE(nullptr, stp_model_symbol(m, i));
+  EXPECT_EQ(nullptr, stp_model_symbol(m, n));
+  EXPECT_EQ(STP_ERR_INDEX_OUT_OF_RANGE, code_of(tm));
+  stp_model_release(m);
+  stp_solver_delete(s);
+  stp_tm_release_all(tm);
+  stp_tm_release(tm);
+}

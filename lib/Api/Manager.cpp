@@ -137,6 +137,8 @@ ManagerImpl::~ManagerImpl()
   fun_sort_of_identity.clear();
   names_by_node.clear();
   symbols.clear();
+  symbol_list.clear();
+  symbol_list_members.clear();
   if (bm->defaultNodeFactory != bm->hashingNodeFactory)
     delete bm->defaultNodeFactory;
   delete bm;
@@ -491,8 +493,15 @@ Term ManagerImpl::declare(const char* fn, const std::string& name, std::uint32_t
   symbols.emplace(name, std::move(rec));
   names_by_node.emplace(node, name);
   if (!anonymous)
-    symbol_order.push_back(name);
+    record_symbol_name(name, node);
   return make_term(this, node);
+}
+
+void ManagerImpl::record_symbol_name(const std::string& name, const ASTNode& node)
+{
+  symbol_order.push_back(name);
+  if (symbol_list_members.insert(node).second)
+    symbol_list.push_back(node);
 }
 
 void ManagerImpl::adopt_engine_symbols(const std::vector<ASTNode>& roots)
@@ -529,7 +538,7 @@ void ManagerImpl::adopt_engine_symbols(const std::vector<ASTNode>& roots)
         {
           symbols.emplace(d->name(), std::move(rec));
           names_by_node.emplace(n, d->name());
-          symbol_order.push_back(d->name());
+          record_symbol_name(d->name(), n);
         }
         continue;
       }
@@ -547,7 +556,7 @@ void ManagerImpl::adopt_engine_symbols(const std::vector<ASTNode>& roots)
       rec.sort = sort_of_node(n, "parse");
       symbols.emplace(name, std::move(rec));
       names_by_node.emplace(n, name);
-      symbol_order.push_back(name);
+      record_symbol_name(name, n);
       continue;
     }
     for (const ASTNode& c : n.GetChildren())
@@ -1196,16 +1205,11 @@ std::optional<Term> TermManager::symbol(std::string_view name) const
 std::vector<Term> TermManager::symbols() const
 {
   ManagerImpl* m = live(*this, "TermManager::symbols");
-  std::vector<Term> out;
-  out.reserve(m->symbol_order.size());
   // a symbol once, however many names bind_symbol gave it
-  ASTNodeSet seen;
-  for (const std::string& name : m->symbol_order)
-  {
-    const ASTNode& node = m->symbols.at(name).node;
-    if (seen.insert(node).second)
-      out.push_back(detail::make_term(m, node));
-  }
+  std::vector<Term> out;
+  out.reserve(m->symbol_list.size());
+  for (const ASTNode& node : m->symbol_list)
+    out.push_back(detail::make_term(m, node));
   return out;
 }
 std::vector<Sort> TermManager::declared_sorts() const
@@ -1252,7 +1256,7 @@ void TermManager::bind_symbol(std::string_view name, const Term& t)
   m->symbols.emplace(key, std::move(rec));
   if (m->names_by_node.count(node) == 0)
     m->names_by_node.emplace(node, key);
-  m->symbol_order.push_back(key);
+  m->record_symbol_name(key, node);
 }
 Term TermManager::term_from_id(std::uint64_t id) const
 {

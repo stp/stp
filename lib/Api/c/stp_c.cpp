@@ -1171,19 +1171,24 @@ size_t stp_tm_num_symbols(stp_tm tm)
   if (!need(tm, "stp_tm_num_symbols"))
     return 0;
   CManager* cm = cm_of(tm);
-  return guarded<size_t>(cm, nullptr, "stp_tm_num_symbols", 0,
-                         [&] { return tmh(cm).symbols().size(); });
+  // the manager's own list, rather than TermManager::symbols()'s copy of it:
+  // counting and indexing are then constant time, and enumerating linear
+  return guarded<size_t>(cm, nullptr, "stp_tm_num_symbols", 0, [&] {
+    cm->impl->check_alive("stp_tm_num_symbols");
+    return cm->impl->symbol_list.size();
+  });
 }
 
 stp_term stp_tm_symbol_at(stp_tm tm, size_t i)
 {
   return make(tm, "stp_tm_symbol_at", [&](CManager* cm) {
-    const std::vector<Term> all = tmh(cm).symbols();
+    cm->impl->check_alive("stp_tm_symbol_at");
+    const std::vector<ASTNode>& all = cm->impl->symbol_list;
     if (i >= all.size())
       fail(ErrorCode::INDEX_OUT_OF_RANGE, "stp_tm_symbol_at",
            "index " + std::to_string(i) + " out of range [0, " + std::to_string(all.size()) + ")",
            1);
-    return all[i];
+    return detail::make_term(cm->impl, all[i]);
   });
 }
 
@@ -1192,19 +1197,22 @@ size_t stp_tm_num_declared_sorts(stp_tm tm)
   if (!need(tm, "stp_tm_num_declared_sorts"))
     return 0;
   CManager* cm = cm_of(tm);
-  return guarded<size_t>(cm, nullptr, "stp_tm_num_declared_sorts", 0,
-                         [&] { return tmh(cm).declared_sorts().size(); });
+  return guarded<size_t>(cm, nullptr, "stp_tm_num_declared_sorts", 0, [&] {
+    cm->impl->check_alive("stp_tm_num_declared_sorts");
+    return cm->impl->declared_sort_order.size();
+  });
 }
 
 stp_sort stp_tm_declared_sort_at(stp_tm tm, size_t i)
 {
   return make_sort(tm, "stp_tm_declared_sort_at", [&](CManager* cm) {
-    const std::vector<Sort> all = tmh(cm).declared_sorts();
+    cm->impl->check_alive("stp_tm_declared_sort_at");
+    const std::vector<std::uint32_t>& all = cm->impl->declared_sort_order;
     if (i >= all.size())
       fail(ErrorCode::INDEX_OUT_OF_RANGE, "stp_tm_declared_sort_at",
            "index " + std::to_string(i) + " out of range [0, " + std::to_string(all.size()) + ")",
            1);
-    return all[i];
+    return Sort(cm->impl, all[i]);
   });
 }
 

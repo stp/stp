@@ -276,6 +276,14 @@ struct ManagerImpl
   // symbols: one name table (declared and fresh alike)
   std::unordered_map<std::string, SymbolRec> symbols;
   std::vector<std::string> symbol_order; // declaration order, declared only
+  // symbol_order's distinct symbols, in the same order (a name that
+  // bind_symbol gave a symbol already listed adds nothing): what
+  // TermManager::symbols() returns, kept up as names are recorded, so that
+  // counting or indexing the symbols (the C API's stp_tm_symbol_at) rebuilds
+  // nothing
+  std::vector<ASTNode> symbol_list;
+  ASTNodeSet symbol_list_members;
+  void record_symbol_name(const std::string& name, const ASTNode& node);
   std::unordered_map<ASTNode, std::string, ASTNode::ASTNodeHasher> names_by_node;
   std::unordered_map<ASTNode, std::uint32_t, ASTNode::ASTNodeHasher> fun_sort_of_identity;
   std::uint64_t fresh_counter = 0;
