@@ -100,9 +100,9 @@ unsupported, and which 2.x suites run against it.
   "at least 2 exponent and 2 significand bits", "number of bits in an array's
   elements must be a positive integer", "stored value sort differs from the
   array's bitvector element sort", the array-equality refusal, and so on).
-- **Threads.** Each `VC` is its own 3.x manager, which 3.x pins to the creating
-  thread, as 2.x did in effect; checkers on different threads run
-  concurrently, as independent 3.x managers do.
+- **Threads.** Each `VC` is its own 3.x manager, which 3.x lets any thread
+  use, one call at a time; checkers on different threads run concurrently, as
+  independent 3.x managers do (a parse takes the process-wide parser lock).
 
 ## 3. Mapping decisions
 
@@ -117,11 +117,13 @@ unsupported, and which 2.x suites run against it.
    `stp_solver_last_reason_message` is the text `vc_getReasonUnknownToBuffer`
    returns. Both are cleared at every query, so a reason never outlives the
    query that set it.
-3. **Ownership.** Term and type constructors return checker-owned handles:
+3. **Ownership.** As in 2.x, types, `vc_bvConstExprFromInt` and the
+   floating-point constructors and constants return checker-owned handles:
    with `EXPRDELETE` at its default (1) they are recorded in the checker's
    persist list and freed by `vc_Destroy`, and `vc_DeleteExpr` may free one
    early; with `EXPRDELETE = 0` they are not recorded, and the caller frees or
-   leaks them, the 2.x profile KLEE relies on. Readers return caller-owned
+   leaks them, the 2.x profile KLEE relies on. Every other term constructor
+   returns a caller-owned handle. Readers return caller-owned
    handles that `vc_DeleteExpr` frees: `vc_getCounterExample`,
    `vc_getCounterExampleArray`, `vc_getTermFromCounterExample`,
    `vc_getUninterpretedFunctionValue`, `vc_applyUninterpretedFunction`,
@@ -316,7 +318,8 @@ unsupported, and which 2.x suites run against it.
     --array-equality ...", raised at construction (3.x would build the term
     and decide it whenever `array-equality` is on); with `'x'` it is `stp_eq`,
     an extensional equality.
-20. **Symbol names** are unrestricted (2.x made `@`/`.` prefixes fatal); the
+20. **Symbol names** follow the 3.x rules: a name starting with `@` or `.`
+    is fatal, as in 2.x, and so is the empty name, which 2.x accepted; the
     3.x manager keys symbols by name and sort, so re-declaring a name at
     another sort is the 2.x fatal "cannot be redeclared".
 21. **`vc_Destroy`** frees the persist list and every tracked handle of the

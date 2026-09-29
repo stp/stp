@@ -2699,13 +2699,12 @@ vc_registerErrorHandler(void (*error_hdlr)(const char* err_msg));
 //! STP_ON_ERROR_RETURN makes the misused call return instead -- NULL for a
 //! function that returns a handle, 0 or 2 for the numeric ones, nothing for
 //! a void one -- after the handler has been called, and the checker stays
-//! usable. Nonfatal diagnostics (a model read with no model behind it, a UF
-//! validation failure, a refused flag value) reach the handler and return
-//! under either policy, as they always did.
+//! usable after a misuse; after an internal failure of the engine it refuses
+//! every later call. Nonfatal diagnostics (a model read with no model behind
+//! it, a UF validation failure, a refused flag value) reach the handler and
+//! return under either policy, as they always did.
 //!
-//! The policy is process-global, like the handler. The 2.x implementation
-//! compiled into libstp accepts the setting but can only honour ABORT, since
-//! its fatal path ends the process before it could return; libstp2, the
+//! The policy is process-global, like the handler. libstp2, the
 //! implementation of this header over STP's 3.x API, honours both.
 enum stp_error_policy_t
 {
