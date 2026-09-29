@@ -568,3 +568,19 @@ TEST(libstp2_fidelity, extract_bounds_are_children)
   EXPECT_EQ(32, getBVLength(getChild(sx, 1)));
   vc_Destroy(vc);
 }
+
+// A parsed CVC query becomes the checker's query, which vc_printQuery prints,
+// as 2.x's parser made it with SetQuery.
+TEST(libstp2_fidelity, print_query_after_a_parse)
+{
+  VC vc = vc_createValidityChecker();
+  Expr pq = nullptr, pa = nullptr;
+  ASSERT_EQ(1, vc_parseMemExpr(vc, "p : BITVECTOR(8); QUERY(p = 0hex02);", &pq, &pa));
+  testing::internal::CaptureStdout();
+  vc_printQuery(vc);
+  const std::string printed = testing::internal::GetCapturedStdout();
+  EXPECT_NE(std::string::npos, printed.find("QUERY((p = 0x02")) << printed;
+  vc_DeleteExpr(pq);
+  vc_DeleteExpr(pa);
+  vc_Destroy(vc);
+}

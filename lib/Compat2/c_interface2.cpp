@@ -3120,10 +3120,17 @@ bool parse_text(VCImpl* vc, const std::string& text, const char* who, stp_term& 
     if (ok)
       query = has_query ? parse_cvc_query(vc, qtext, who) : stp_mk_true(vc->tm);
     ok = ok && query != nullptr;
-    // 2.x's CVC parser made every text's QUERY the checker's query, which
-    // dropped the exact Real model even where the text asserted nothing.
+    // 2.x's CVC parser made every text's QUERY the checker's query
+    // (SetQuery), which vc_printQuery prints and which dropped the exact
+    // Real model even where the text asserted nothing.
     if (ok)
       vc->real_model_stale = true;
+    if (ok && has_query)
+    {
+      if (vc->last_query != nullptr)
+        stp_term_release(vc->last_query);
+      vc->last_query = stp_term_copy(query);
+    }
     // And for a text that asserted anything it handed back the conjunction
     // of every assertion the checker held (GetAsserts: every level, the
     // base first), the ones made before the text among them; for one that
