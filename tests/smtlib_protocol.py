@@ -179,13 +179,74 @@ class CommandModes(unittest.TestCase):
 
     def test_model_queries_require_current_sat_context(self):
         for commands in ['', '(assert false)(check-sat)',
-                         '(check-sat)(assert true)', '(check-sat)(push 0)',
+                         '(check-sat)(assert true)', '(check-sat)(push 1)',
+                         '(push 1)(check-sat)(pop 1)',
                          '(check-sat)(declare-const x Bool)',
                          '(check-sat)(reset-assertions)']:
             with self.subTest(commands=commands):
                 self.assert_error('(set-option :produce-models true)'
                                   '(set-logic QF_BV)' + commands + '(get-model)',
                                   'get-model is not permitted')
+
+    def test_definitions_and_empty_stack_operations_preserve_models(self):
+        for middle in ['(push 0)', '(pop 0)', '(define-sort Byte () (_ BitVec 8))',
+                       '(define-fun identity ((p Bool)) Bool p)',
+                       '(define-const same Bool p)']:
+            with self.subTest(middle=middle):
+                result = run('(set-option :produce-models true)(set-logic QF_BV)'
+                             '(declare-const p Bool)(assert p)(check-sat)' +
+                             middle + '(get-model)(get-value (p))')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('(define-fun |p| () Bool true)', result.stdout)
+                self.assertIn('( |p| true )', result.stdout)
+
+    def test_definitions_can_be_evaluated_in_the_existing_model(self):
+        result = run('''
+(set-logic QF_BV)
+(set-option :produce-models true)
+(declare-const x (_ BitVec 8))
+(assert (= x #x2a))
+(check-sat)
+(define-fun next ((v (_ BitVec 8))) (_ BitVec 8) (bvadd v #x01))
+(define-const y (_ BitVec 8) (next x))
+(get-value (y (next x)))
+''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout.count('#x2B'), 2)
+
+    def test_empty_stack_operations_preserve_unsat_assumptions(self):
+        result = run('''
+(set-option :produce-unsat-assumptions true)
+(set-logic QF_BV)
+(declare-const p Bool)
+(check-sat-assuming (p (not p)))
+(push 0)
+(pop 0)
+(define-fun identity ((x Bool)) Bool x)
+(get-unsat-assumptions)
+''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, 'unsat\n(|p| (not |p|))\n')
+
+    def test_definitions_preserve_real_fp_and_uf_models(self):
+        cases = [
+            ('QF_LRA', '(declare-const x Real)(assert (= x (/ 1 3)))',
+             '(define-fun f ((v Real)) Real (+ v 1))',
+             '(= (f x) (/ 4 3))'),
+            ('QF_FP', '(declare-const x Float32)(assert (fp.isNaN x))',
+             '(define-fun f ((v Float32)) Bool (fp.isNaN v))', '(f x)'),
+            ('QF_UFBV', '(declare-const x (_ BitVec 8))'
+             '(declare-fun f ((_ BitVec 8)) (_ BitVec 8))'
+             '(assert (= (f x) #x2a))',
+             '(define-fun g ((v (_ BitVec 8))) (_ BitVec 8) (f v))',
+             '(= (g x) #x2a)')]
+        for logic, declarations, definition, term in cases:
+            with self.subTest(logic=logic):
+                result = run('(set-option :produce-models true)(set-logic ' +
+                             logic + ')' + declarations + '(check-sat)' +
+                             definition + '(get-value (' + term + '))')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn(' true )', result.stdout)
 
     def test_reset_options_and_preserve_reset_assertions_options(self):
         result = run('''
@@ -313,11 +374,15 @@ class Attributes(unittest.TestCase):
 
 
 class NamedTerms(unittest.TestCase):
-    def test_named_definition_in_model_query_changes_the_context(self):
-        result = run('(set-option :produce-models true)(set-logic QF_BV)'
-                     '(check-sat)(get-value ((! true :named label)))')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('get-value is not permitted', result.stdout)
+    def test_named_definition_in_model_query_preserves_the_model(self):
+        result = run('(set-option :produce-models true)'
+                     '(set-option :produce-assignments true)(set-logic QF_BV)'
+                     '(check-sat)(get-value ((! true :named label)))'
+                     '(get-value (label))(get-assignment)')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout,
+                         'sat\n(\n( true true )\n)\n(\n( true true )\n)\n'
+                         '((|label| true))\n')
 
     def test_named_requires_a_fresh_symbol_and_closed_term(self):
         for source, message in [

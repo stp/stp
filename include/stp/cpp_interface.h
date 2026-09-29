@@ -331,6 +331,7 @@ private:
   std::vector<CategoryWork> last_check_work;
 
   void checkInvariant();
+  void checkReservedSymbolName(const char* name);
   void init();
 
   // The manager's run times as they stand, and -- given a reading taken in
@@ -546,6 +547,8 @@ public:
   DLL_PUBLIC ASTNode CreateFpToReal(const ASTNode& x);
   DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
                                         const SourceSort& source_sort);
+  DLL_PUBLIC ASTNode CreateParameterSymbol(const char* name,
+                                           const SourceSort& source_sort);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);
 
   void removeSymbol(ASTNode to_remove);
@@ -686,12 +689,6 @@ public:
   DLL_PUBLIC void beginCurrentCommand();
   void enableProtocolChecks(bool enable) { protocol_checks = enable; }
   DLL_PUBLIC void requireCommand(const std::string& command);
-  void noteInlineDefinition()
-  {
-    mode = Mode::Assert;
-    model_valid = false;
-    lastCheckWasAssuming = false;
-  }
   DLL_PUBLIC void unavailableQuery(const std::string& command,
                                    const std::string& option);
   DLL_PUBLIC void abortCurrentCommand();

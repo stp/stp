@@ -476,8 +476,7 @@ ASTNode Cpp_interface::CreateFpToReal(const ASTNode& x)
 }
 
 
-ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
-                                          const SourceSort& source_sort)
+void Cpp_interface::checkReservedSymbolName(const char* name)
 {
   // SMT-LIB 2 reserves an initial '@' or '.' for the solver, and STP does not
   // merely respect that reservation, it relies on it: CreateFreshVariable
@@ -497,8 +496,23 @@ ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
     rejectCurrentCommand(msg);
     endParseWithDiagnostic(msg);
   }
+}
 
+ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
+                                          const SourceSort& source_sort)
+{
+  checkReservedSymbolName(name);
   return bm.CreateSourceSymbol(name, source_sort);
+}
+
+ASTNode Cpp_interface::CreateParameterSymbol(const char* name,
+                                             const SourceSort& source_sort)
+{
+  checkReservedSymbolName(name);
+  // A formal is local to its definition. Registering it as a public Real
+  // symbol both requests an unnecessary model value and invalidates the
+  // current exact model, even though the assertion context has not changed.
+  return bm.CreateInternalSourceSymbol(name, source_sort);
 }
 
 ASTNode Cpp_interface::LookupOrCreateSymbol(const char* const name)
@@ -530,7 +544,7 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
   ASTNodeMap fromTo;
   for (size_t i = 0, size = params.size(); i < size; ++i)
   {
-    ASTNode p = bm.CreateFreshSourceVariable(
+    ASTNode p = bm.CreateFreshInternalSourceVariable(
         params[i].GetSourceSort(), "STP_INTERNAL_FUNCTION_NAME");
     fromTo.insert(std::make_pair(params[i], p));
     f.params.push_back(p);
@@ -999,9 +1013,8 @@ void Cpp_interface::finishCurrentCommand()
 {
   const std::string& command = current_command_name;
   if (!current_command_rejected && current_command_supported &&
-      (command == "assert" || command == "push" || command == "pop" ||
-       command == "reset-assertions" || command.compare(0, 8, "declare-") == 0 ||
-       command.compare(0, 7, "define-") == 0))
+      (command == "assert" || command == "reset-assertions" ||
+       command.compare(0, 8, "declare-") == 0))
   {
     if (mode != Mode::Start)
       mode = Mode::Assert;
@@ -1159,6 +1172,8 @@ void Cpp_interface::pop()
     endParseWithDiagnostic(msg);
   }
 
+  if (mode != Mode::Start)
+    mode = Mode::Assert;
   model_valid = false;
   lastCheckWasAssuming = false;
 
@@ -1207,6 +1222,8 @@ void Cpp_interface::push()
   else
     cache.push_back(Entry(SOLVER_UNDECIDED));
 
+  if (mode != Mode::Start)
+    mode = Mode::Assert;
   model_valid = false;
   lastCheckWasAssuming = false;
   session_touched = true;
@@ -2138,9 +2155,6 @@ void Cpp_interface::getAssertions()
 
 void Cpp_interface::getValue(const ASTVec& v)
 {
-  // Inline definitions in the argument may have changed the mode since the
-  // command header was read.
-  requireCommand("get-value");
   const EngineWork work(engine_work_failed);
   if (current_command_rejected)
     return;

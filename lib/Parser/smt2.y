@@ -1689,7 +1689,6 @@
       if (!stp::GlobalParserInterface->validateTopLevelDeclarationName(name, &diagnostic))
         stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
       stp::GlobalParserInterface->storeFunction(name, ASTVec(), term, true);
-      stp::GlobalParserInterface->noteInlineDefinition();
     }
   }
 
@@ -2467,7 +2466,7 @@ function_param_open STRING_TOK resolved_sort RPAREN_TOK
 {
   if (stp::SMT2IsTheorySymbol(*$2))
     fatal_yyerror("function parameters cannot shadow theory functions");
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol($2->c_str(), *$3));
+  $$ = new ASTNode(stp::GlobalParserInterface->CreateParameterSymbol($2->c_str(), *$3));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
   stp::releaseParserValue($2);
   stp::releaseParserValue($3);

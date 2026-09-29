@@ -44,9 +44,11 @@ equality automatically; UF logics enable uninterpreted functions. See
 for the linear arithmetic fragment.
 
 A model query requires the relevant option and a current satisfiable
-context. An assertion, declaration, definition, ``push``, ``pop`` or
+context. An assertion, declaration, nonzero ``push`` or ``pop``, or
 ``reset-assertions`` ends that context: check again before querying a
-model. ``reset`` returns to the initial state, including default options
+model. Definitions and zero-level stack operations preserve the model;
+they add no constraints or unconstrained symbols. ``reset`` returns to
+the initial state, including default options
 and output channels. ``reset-assertions`` preserves options and the logic,
 and retains declarations only when ``:global-declarations`` is true.
 
