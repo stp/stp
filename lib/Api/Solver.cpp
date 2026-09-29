@@ -908,22 +908,14 @@ void live_write(SolverImpl* s, std::string_view name, const char* fn)
                             " (settable = " + to_string(spec->settable) + ")");
 }
 
-void apply_one(SolverImpl* s, std::string_view name)
+// A write reaches the engine as an application of the whole set, not of the
+// one entry: the entries a composite switch implies (disable-simplifications,
+// size-reducing-only) or that follow the written one change with it, and an
+// entry going back to its default takes them back to theirs, since the set's
+// application re-applies every entry the last one left off its default.
+void apply_after_write(SolverImpl* s)
 {
-  const detail::OptionSpec* spec = detail::find_option(name);
-  detail::EngineTarget t{s->mgr->bm->UserFlags, s->mgr, s};
-  const std::size_t index = detail::option_index(spec);
-  // a reset entry goes back to its default, which is no request
-  t.explicit_value = s->options.is_set[index];
-  const OptionValue r = s->options.resolved(index);
-  detail::engine_call(s->mgr, "SolverOptions::set", [&] {
-    detail::apply_option_to_engine(t, index, *spec, r);
-  });
-  // the entries that follow this one reach the engine with the next
-  // application of the whole set (apply_all_options)
-  if (index < s->engine_off_default.size())
-    s->engine_off_default[index] =
-        s->options.is_set[index] || detail::option_text(*spec, r) != spec->default_text;
+  s->apply_options("SolverOptions::set");
 }
 } // namespace
 
@@ -937,44 +929,44 @@ void SolverOptions::set(std::string_view name, std::string_view value)
 {
   live_write(solver_, name, "SolverOptions::set");
   viewed(solver_, "SolverOptions::set")->options.set_text("SolverOptions::set", name, value);
-  apply_one(solver_, name);
+  apply_after_write(solver_);
 }
 void SolverOptions::set_bool(std::string_view name, bool v)
 {
   live_write(solver_, name, "SolverOptions::set_bool");
   viewed(solver_, "SolverOptions::set_bool")->options.set("SolverOptions::set_bool", name, v, detail::OptType::BOOL);
-  apply_one(solver_, name);
+  apply_after_write(solver_);
 }
 void SolverOptions::set_int(std::string_view name, std::int64_t v)
 {
   live_write(solver_, name, "SolverOptions::set_int");
   viewed(solver_, "SolverOptions::set_int")->options.set("SolverOptions::set_int", name, v, detail::OptType::INT);
-  apply_one(solver_, name);
+  apply_after_write(solver_);
 }
 void SolverOptions::set_uint(std::string_view name, std::uint64_t v)
 {
   live_write(solver_, name, "SolverOptions::set_uint");
   viewed(solver_, "SolverOptions::set_uint")->options.set("SolverOptions::set_uint", name, v, detail::OptType::UINT);
-  apply_one(solver_, name);
+  apply_after_write(solver_);
 }
 void SolverOptions::set_str(std::string_view name, std::string_view v)
 {
   live_write(solver_, name, "SolverOptions::set_str");
   viewed(solver_, "SolverOptions::set_str")->options.set("SolverOptions::set_str", name, std::string(v), detail::OptType::STRING);
-  apply_one(solver_, name);
+  apply_after_write(solver_);
 }
 void SolverOptions::set_names(std::string_view name, const std::vector<std::string>& v)
 {
   live_write(solver_, name, "SolverOptions::set_names");
   viewed(solver_, "SolverOptions::set_names")->options.set("SolverOptions::set_names", name, v, detail::OptType::SET);
-  apply_one(solver_, name);
+  apply_after_write(solver_);
 }
 void SolverOptions::set_duration(std::string_view name, std::chrono::milliseconds v)
 {
   live_write(solver_, name, "SolverOptions::set_duration");
   viewed(solver_, "SolverOptions::set_duration")->options.set("SolverOptions::set_duration", name, static_cast<std::int64_t>(v.count()),
                        detail::OptType::DURATION);
-  apply_one(solver_, name);
+  apply_after_write(solver_);
 }
 void SolverOptions::set_bool(Option o, bool v) { set_bool(Options::name_of(o), v); }
 void SolverOptions::set_int(Option o, std::int64_t v) { set_int(Options::name_of(o), v); }
@@ -1029,7 +1021,7 @@ void SolverOptions::reset(std::string_view name)
 {
   live_write(solver_, name, "SolverOptions::reset");
   viewed(solver_, "SolverOptions::reset")->options.reset(name);
-  apply_one(solver_, name);
+  apply_after_write(solver_);
 }
 void SolverOptions::reset_all()
 {
@@ -1168,6 +1160,7 @@ void Solver::push(std::uint32_t n)
   detail::engine_call(s->mgr, "Solver::push", [&] {
   for (std::uint32_t i = 0; i < n; ++i)
   {
+    s->pushed = true;
     if (s->mgr->bm->UserFlags.incremental_mode != UserDefinedFlags::IncrementalMode::OFF)
       s->stp->sessionIncremental = true;
     s->stp->ClearAllTables();

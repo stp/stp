@@ -1016,18 +1016,38 @@ bool custom_model_array_fill(EngineTarget& t, const OptionSpec&, const OptionVal
     t.solver->fill_ones = as_str(v) == "ones";
   return true;
 }
+// set-logic's side effects: the UF logics switch the UF machinery on, QF_AX
+// and the AUF logics the extensional arrays, as the content does for the
+// uninterpreted-functions and array-equality entries' `auto`.
+bool logic_selects_uf(const std::string& logic)
+{
+  return logic.rfind("QF_UF", 0) == 0 || logic.rfind("QF_AUF", 0) == 0;
+}
+bool logic_selects_array_equality(const std::string& logic)
+{
+  return logic == "QF_AX" || logic.rfind("QF_AUF", 0) == 0;
+}
+bool custom_enable_uninterpreted_functions(EngineTarget& t, const OptionSpec&, const OptionValue& v);
+bool custom_enable_array_equality(EngineTarget& t, const OptionSpec&, const OptionValue& v);
 bool custom_logic(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
-  // set-logic's side effects, visible through Options::resolved:
-  // the UF logics switch the UF machinery on, QF_AX and the AUF logics the
-  // extensional arrays.
   const std::string& logic = as_str(v);
-  if (t.solver != nullptr)
-    t.solver->logic = logic;
-  if (logic.rfind("QF_UF", 0) == 0 || logic.rfind("QF_AUF", 0) == 0)
-    t.flags.enable_uninterpreted_functions = true;
-  if (logic == "QF_AX" || logic.rfind("QF_AUF", 0) == 0)
-    t.flags.enable_array_equality = true;
+  if (t.solver == nullptr)
+  {
+    if (logic_selects_uf(logic))
+      t.flags.enable_uninterpreted_functions = true;
+    if (logic_selects_array_equality(logic))
+      t.flags.enable_array_equality = true;
+    return true;
+  }
+  // The two entries the logic engages, applied again with the logic in
+  // place: under `auto` they follow it, so another logic, or none, takes
+  // back what this one switched on.
+  t.solver->logic = logic;
+  const OptionSpec* uf = find_option("uninterpreted-functions");
+  custom_enable_uninterpreted_functions(t, *uf, t.solver->options.resolved(option_index(uf)));
+  const OptionSpec* ae = find_option("array-equality");
+  custom_enable_array_equality(t, *ae, t.solver->options.resolved(option_index(ae)));
   return true;
 }
 // The manager-scoped entries belong to TermManager's constructor when a
@@ -1092,11 +1112,16 @@ bool custom_lra_verify_canonical(EngineTarget& t, const OptionSpec&, const Optio
 bool custom_incremental_mode(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.incremental_mode = as_mode<Flags::IncrementalMode>(v);
-  if (t.solver != nullptr && t.solver->stp != nullptr &&
-      t.flags.incremental_mode == Flags::IncrementalMode::ON)
+  // The session follows the mode and the pushes so far, both ways: the entry
+  // can change until the first check, a push can come before it, and `off`
+  // is never, pushes or not.
+  if (t.solver != nullptr && t.solver->stp != nullptr)
   {
-    t.solver->stp->incrementalFromStart = true;
-    t.solver->stp->sessionIncremental = true;
+    const Flags::IncrementalMode mode = t.flags.incremental_mode;
+    t.solver->stp->incrementalFromStart = mode == Flags::IncrementalMode::ON;
+    t.solver->stp->sessionIncremental =
+        mode == Flags::IncrementalMode::ON ||
+        (mode == Flags::IncrementalMode::AUTO && t.solver->pushed);
   }
   return true;
 }
@@ -1140,6 +1165,10 @@ bool custom_size_reducing_only(EngineTarget& t, const OptionSpec&, const OptionV
 {
   if (as_bool(v))
     t.flags.disableSizeIncreasingSimplifications();
+  else
+    // the one field it writes that no entry of its own puts back; the
+    // others are the rows its `implies` names
+    t.flags.array_difficulty_reversion = true;
   return true;
 }
 bool custom_cadical_options_elim(EngineTarget& t, const OptionSpec&, const OptionValue& v)
@@ -1195,8 +1224,10 @@ bool custom_enable_array_equality(EngineTarget& t, const OptionSpec&, const Opti
     t.flags.enable_array_equality = true;
   else if (s == "off")
     t.flags.enable_array_equality = false;
-  else if (t.mgr != nullptr) // auto: engaged by the content, whatever an earlier off left behind
-    t.flags.enable_array_equality = t.mgr->array_equality_seen;
+  else if (t.mgr != nullptr) // auto: engaged by the content or the logic, whatever an earlier off left behind
+    t.flags.enable_array_equality =
+        t.mgr->array_equality_seen ||
+        (t.solver != nullptr && logic_selects_array_equality(t.solver->logic));
   // auto without a manager (the stp binary): the frontend's set-logic decides
   return true;
 }
@@ -1243,10 +1274,12 @@ bool custom_enable_uninterpreted_functions(EngineTarget& t, const OptionSpec&, c
     t.flags.enable_uninterpreted_functions = true;
   else if (s == "off")
     t.flags.enable_uninterpreted_functions = false;
-  else if (t.mgr != nullptr) // auto: engaged by a declaration, whatever an earlier off left behind
+  else if (t.mgr != nullptr) // auto: engaged by a declaration or the logic, whatever an earlier off left behind
   {
     const UFContext* ctx = t.mgr->bm->getUFContextIfAny();
-    t.flags.enable_uninterpreted_functions = ctx != nullptr && !ctx->activeDeclarations().empty();
+    t.flags.enable_uninterpreted_functions =
+        (ctx != nullptr && !ctx->activeDeclarations().empty()) ||
+        (t.solver != nullptr && logic_selects_uf(t.solver->logic));
   }
   // auto without a manager (the stp binary): the frontend's set-logic decides
   return true;

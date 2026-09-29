@@ -545,6 +545,7 @@ struct SolverImpl
   bool produce_models = true;
   bool fill_ones = false; // model-array-fill = ones
   std::string logic;
+  bool pushed = false; // a push has happened: what incremental = auto engages on
 
   // the last check
   Result last;

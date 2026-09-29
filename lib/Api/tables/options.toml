@@ -167,7 +167,7 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "logic" }
 category = "frontend"
-implies = "QF_UF*/QF_AUF* -> uninterpreted-functions=on; QF_AX -> array-equality=on; QF_BV/QF_ABV -> the 32-check engagement policy; QF_LRA -> every check Real-active (set-logic's side effects, visible through Options::resolved)"
+implies = "QF_UF*/QF_AUF* -> the UF machinery on; QF_AX and QF_AUF* -> extensional arrays on; each as the content engages them under the uninterpreted-functions and array-equality entries' auto (their on and off win), and another logic, or none, takes it back. A script's own set-logic acts in the frontend (the QF_BV/QF_ABV engagement policy, QF_LRA's Real checks), not through this entry"
 help = "the SMT-LIB logic; the same entry (set-logic) writes when a script is parsed"
 
 [[option]]
