@@ -48,6 +48,7 @@ AddSTPGTest(runs.cpp)
 AddSTPGTest(deep-terms.cpp)
 AddSTPGTest(option-effects.cpp)
 AddSTPGTest(round-trips.cpp)
+AddSTPGTest(docs-snippets.cpp)
 
 # The 2.x C API's suites, rewritten against this API: libstp carries no 2.x
 # code, and tests/api/compat2 keeps a few of the originals to test libstp2. A

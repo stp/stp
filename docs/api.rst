@@ -96,28 +96,33 @@ Arrays, floating point, uninterpreted functions and Reals use the same shapes:
    Sort arr = tm.mk_array_sort(bv32, tm.mk_bv_sort(8));
    Term a = tm.declare("a", arr), i = tm.declare("i", bv32);
    s.add(a[i] == 42);                 // select; store(a, i, v) for the update
-   s.add(a == store(tm.declare("b", arr), i, tm.mk_bv(8, 1)));   // extensional
+   s.add(a == store(tm.declare("b", arr), i, tm.mk_bv(8, 42)));  // extensional
    s.add(a != tm.mk_const_array(arr, tm.mk_bv(8, 0)));          // ((as const ...) #x00)
 
    Sort f32 = tm.mk_fp32_sort();
    Term fx = tm.declare("fx", f32);
    s.add(fp_add(RoundingMode::RNE, fx, 1.0) == tm.mk_fp(f32, RoundingMode::RNE, 3.0));
-   FloatValue v = s.model().fp_value(fx);     // sign, exponent, significand, class
 
    Term f = tm.declare("f", tm.mk_fun_sort({bv32}, bv32));
    s.add(f(x) == f(y));
-   FunctionValue fv = s.model().function_value(f);
 
    Term r = tm.declare("r", tm.mk_real_sort());
    s.add(real_lt(r + 1, tm.mk_real("3/2")));
-   RationalValue q = s.model().real_value(r);
+
+   if (s.check_sat().is_sat())
+   {
+     Model m = s.model();
+     FloatValue v = m.fp_value(fx);           // sign, exponent, significand, class
+     FunctionValue fv = m.function_value(f);  // entries and a default
+     RationalValue q = m.real_value(r);       // numerator and denominator
+   }
 
 Options are set at construction or on the live solver:
 
 .. code-block:: cpp
 
    Options o;
-   o.set("max-time", "2s");           // the CLI's text form, unit required
+   o.set("max-time", "2s");           // the text form: a duration needs its unit here
    o.set_str("sat-backend", "cadical");
    o.set_args({"--fp-abstraction", "--bb.div-v3=false"});
    Solver s(tm, o);
