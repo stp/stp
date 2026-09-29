@@ -160,6 +160,9 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
 
     # STATIC_BINARY=OFF: that switch is for CryptoMiniSat's own command-line
     # solver, and wants a static gmp and zlib that STP does not need.
+    # CryptoMiniSat uses gmpxx.h's inline arithmetic, backed by libgmp, but
+    # none of libgmpxx's stream helpers. Disable its automatic lookup: a
+    # system libgmpxx may require a newer libstdc++ than this toolchain.
     ExternalProject_Add(
         CryptoMiniSat-EP
         ${STP_EP_COMMON_CONFIG}
@@ -171,6 +174,7 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
                    -DNOCADICAL=ON
                    -DBUILD_SHARED_LIBS=OFF
                    -DSTATIC_BINARY=OFF
+                   -DGMPXX_LIBRARY:FILEPATH=
                    -DENABLE_ASSERTIONS=OFF
                    -DENABLE_TESTING=OFF
         BUILD_BYPRODUCTS <INSTALL_DIR>/lib/${CryptoMiniSat_ARCHIVE}
@@ -186,14 +190,6 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GMP REQUIRED IMPORTED_TARGET gmp)
     find_package(Threads REQUIRED)
-    # gmpxx is a separate archive from gmp and pkg-config does not name it;
-    # CryptoMiniSat's own config finds it the same way and puts it first.
-    find_library(GMPXX_LIBRARY NAMES gmpxx HINTS ${GMP_LIBRARY_DIRS})
-    set(_cms_link "Threads::Threads")
-    if(GMPXX_LIBRARY)
-        list(APPEND _cms_link "${GMPXX_LIBRARY}")
-    endif()
-    list(APPEND _cms_link "PkgConfig::GMP")
 
     # Deliberately no INTERFACE_INCLUDE_DIRECTORIES, so that this target
     # behaves as the packaged one does: it carries the link interface and not
@@ -204,9 +200,8 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
     add_library(cryptominisat5 UNKNOWN IMPORTED GLOBAL)
     set_target_properties(cryptominisat5 PROPERTIES
         IMPORTED_LOCATION "${STP_DEP_DIR}/lib/${CryptoMiniSat_ARCHIVE}"
-        INTERFACE_LINK_LIBRARIES "${_cms_link}"
+        INTERFACE_LINK_LIBRARIES "Threads::Threads;PkgConfig::GMP"
     )
-    unset(_cms_link)
     # The ordering edge. add_dependencies(deps ...) only warms a shared
     # STP_DEP_DIR on request; without this, libstp links against an archive the
     # ExternalProject has not installed yet, which is a race that surfaces as
@@ -236,11 +231,7 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
     # absolute /usr/lib/... here would be written into the installed package as
     # a path that only this machine has. The package's own dependency list is
     # -lgmp and -lz for the same reason.
-    set(CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS "")
-    if(GMPXX_LIBRARY)
-        list(APPEND CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS gmpxx)
-    endif()
-    list(APPEND CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS ${GMP_LIBRARIES} Threads::Threads)
+    set(CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS ${GMP_LIBRARIES} Threads::Threads)
     set(CRYPTOMINISAT5_INCLUDE_DIRS "${STP_DEP_DIR}/include")
 endif()
 
