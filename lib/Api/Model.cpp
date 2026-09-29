@@ -468,18 +468,63 @@ ASTNode Evaluator::read(const ASTNode& array, const ASTNode& index)
   return engine_call(m_, fn_, [&] { return eval_read(array, index); });
 }
 
-ASTNode Evaluator::eval(const ASTNode& n)
+// An explicit stack: a term is valued once everything its value reads is in
+// the memo, so a deep term costs heap rather than the C++ stack. A step that
+// finds inputs without a value names them and is taken again once they have
+// one; a read keeps its place in the chain of writes it walks, and an ite
+// values only the branch its condition picks (the other may need a
+// completion the value does not).
+ASTNode Evaluator::eval(const ASTNode& root)
 {
-  auto it = memo_.find(n);
-  if (it != memo_.end())
+  if (const auto it = memo_.find(root); it != memo_.end())
     return it->second;
+  std::vector<Frame> stack;
+  stack.push_back(Frame{root, ASTNode(), ASTNode(), false});
+  std::vector<ASTNode> needs;
+  while (!stack.empty())
+  {
+    if (memo_.count(stack.back().n) != 0)
+    {
+      stack.pop_back();
+      continue;
+    }
+    needs.clear();
+    ASTNode out;
+    step(stack.back(), needs, out);
+    if (!needs.empty())
+    {
+      for (const ASTNode& need : needs)
+        stack.push_back(Frame{need, ASTNode(), ASTNode(), false});
+      continue;
+    }
+    memo_.emplace(stack.back().n, out);
+    stack.pop_back();
+  }
+  return memo_.at(root);
+}
+
+const ASTNode* Evaluator::valued(const ASTNode& n) const
+{
+  const auto it = memo_.find(n);
+  return it == memo_.end() ? nullptr : &it->second;
+}
+
+void Evaluator::step(Frame& f, std::vector<ASTNode>& needs, ASTNode& out)
+{
+  const ASTNode n = f.n;
+  // every one of `kids` valued, or the missing ones named
+  const auto all_valued = [&](const auto& kids, std::size_t from) {
+    for (std::size_t i = from; i < kids.size(); ++i)
+      if (valued(kids[i]) == nullptr)
+        needs.push_back(kids[i]);
+    return needs.empty();
+  };
   // A term the solver assigned directly: a symbol, or a Real-sorted
   // application the exact model valued as a whole.
-  auto assigned = s_.scalars.find(n);
-  if (assigned != s_.scalars.end())
+  if (const auto assigned = s_.scalars.find(n); assigned != s_.scalars.end())
   {
-    memo_.emplace(n, assigned->second);
-    return assigned->second;
+    out = assigned->second;
+    return;
   }
   // A conversion to a Real: its operand's value, converted. A finite value
   // converts exactly; NaN and the infinities select their format's constant,
@@ -490,11 +535,16 @@ ASTNode Evaluator::eval(const ASTNode& n)
     const ASTNode operand = m_->bm->FpToRealOperand(n);
     if (!operand.IsNull())
     {
-      const SourceSort ss = operand.GetSourceSort();
-      const ASTNode value = eval(operand);
-      if (value.GetKind() != BVCONST)
+      const ASTNode* value = valued(operand);
+      if (value == nullptr)
+      {
+        needs.push_back(operand);
+        return;
+      }
+      if (value->GetKind() != BVCONST)
         fail_internal(fn_, "a floating-point operand did not evaluate to a value");
-      ASTNode out = m_->bm->FpToRealOfValue(value, ss.exponentWidth(), ss.significandWidth());
+      const SourceSort ss = operand.GetSourceSort();
+      out = m_->bm->FpToRealOfValue(*value, ss.exponentWidth(), ss.significandWidth());
       if (out.GetKind() == SYMBOL)
       {
         auto special = s_.scalars.find(out);
@@ -507,11 +557,9 @@ ASTNode Evaluator::eval(const ASTNode& n)
           out = m_->bm->CreateRealConst("0");
         }
       }
-      memo_.emplace(n, out);
-      return out;
+      return;
     }
   }
-  ASTNode out;
   switch (n.GetKind())
   {
     case TRUE:
@@ -519,141 +567,231 @@ ASTNode Evaluator::eval(const ASTNode& n)
     case BVCONST:
     case REAL_CONST:
       out = n;
-      break;
+      return;
     case SYMBOL:
     {
-      if (n.GetType() == ARRAY_TYPE || m_->is_const_array(n) ||
-          m_->decl_of(n) != nullptr)
+      if (n.GetType() == ARRAY_TYPE || m_->is_const_array(n) || m_->decl_of(n) != nullptr)
       {
         // arrays and functions stay symbolic; reads and applications resolve
         // them -- but one the model never assigned is a completion
-        if (!complete_ && !m_->is_const_array(n) &&
-            s_.arrays.count(n) == 0 && s_.functions.count(n) == 0)
+        if (!complete_ && !m_->is_const_array(n) && s_.arrays.count(n) == 0 &&
+            s_.functions.count(n) == 0)
           incomplete_ = true;
         out = n;
-        break;
+        return;
       }
-      auto sit = s_.scalars.find(n);
-      if (sit != s_.scalars.end())
-        out = sit->second;
-      else
-      {
-        if (!complete_)
-          incomplete_ = true;
-        out = m_->default_value(m_->sort_of_node(n, fn_), fn_);
-      }
-      break;
+      if (!complete_)
+        incomplete_ = true;
+      out = m_->default_value(m_->sort_of_node(n, fn_), fn_);
+      return;
     }
     case READ:
-      out = eval_read(n[0], eval(n[1]));
-      break;
+    {
+      if (!f.started)
+      {
+        const ASTNode* index = valued(n[1]);
+        if (index == nullptr)
+        {
+          needs.push_back(n[1]);
+          return;
+        }
+        f.index = *index;
+        f.cursor = n[0];
+        f.started = true;
+      }
+      // down the chain from where the last step stopped
+      for (;;)
+      {
+        const ASTNode array = f.cursor;
+        switch (array.GetKind())
+        {
+          case SYMBOL:
+          {
+            if (m_->is_const_array(array))
+            {
+              const ASTNode fill = m_->const_array_default(array);
+              if (const ASTNode* v = valued(fill))
+                out = *v;
+              else
+                needs.push_back(fill);
+              return;
+            }
+            out = read_symbol(array, f.index);
+            return;
+          }
+          case WRITE:
+          {
+            const ASTNode* at = valued(array[1]);
+            if (at == nullptr)
+            {
+              needs.push_back(array[1]);
+              return;
+            }
+            if (!(*at == f.index))
+            {
+              f.cursor = array[0];
+              continue;
+            }
+            if (const ASTNode* v = valued(array[2]))
+              out = *v;
+            else
+              needs.push_back(array[2]);
+            return;
+          }
+          case ITE:
+          {
+            const ASTNode* c = valued(array[0]);
+            if (c == nullptr)
+            {
+              needs.push_back(array[0]);
+              return;
+            }
+            f.cursor = *c == m_->bm->ASTTrue ? array[1] : array[2];
+            continue;
+          }
+          default:
+            fail_internal(fn_, "a read over an array term that is not a symbol, store or ite");
+        }
+      }
+    }
     case WRITE:
       out = n;
-      break;
+      return;
     case UF_APPLY:
-      out = eval_apply(n);
-      break;
+    {
+      if (!all_valued(n.GetChildren(), 1))
+        return;
+      out = apply_values(n);
+      return;
+    }
     case ARRAY_EQ:
       out = arrays_equal(n[0], n[1]) ? m_->bm->ASTTrue : m_->bm->ASTFalse;
-      break;
+      return;
     case ITE:
     {
-      const ASTNode c = eval(n[0]);
-      if (c == m_->bm->ASTTrue)
-        out = n.GetType() == ARRAY_TYPE ? n[1] : eval(n[1]);
-      else if (c == m_->bm->ASTFalse)
-        out = n.GetType() == ARRAY_TYPE ? n[2] : eval(n[2]);
-      else
+      const ASTNode* c = valued(n[0]);
+      if (c == nullptr)
+      {
+        needs.push_back(n[0]);
+        return;
+      }
+      if (!(*c == m_->bm->ASTTrue) && !(*c == m_->bm->ASTFalse))
         fail_internal(fn_, "an if-then-else condition did not evaluate to a truth value");
-      break;
+      const ASTNode& branch = *c == m_->bm->ASTTrue ? n[1] : n[2];
+      if (n.GetType() == ARRAY_TYPE)
+      {
+        out = branch;
+        return;
+      }
+      if (const ASTNode* v = valued(branch))
+        out = *v;
+      else
+        needs.push_back(branch);
+      return;
     }
     case DISTINCT:
     {
       // Pairwise on the evaluated operands; values intern by value, so two
       // equal values are one node (arrays compare by their cells).
+      const bool arrays = n.GetChildren()[0].GetType() == ARRAY_TYPE;
+      if (!arrays && !all_valued(n.GetChildren(), 0))
+        return;
       ASTVec kids;
       for (const ASTNode& c : n.GetChildren())
-        kids.push_back(n.GetChildren()[0].GetType() == ARRAY_TYPE ? c : eval(c));
+        kids.push_back(arrays ? c : *valued(c));
       bool distinct = true;
       for (std::size_t i = 0; i < kids.size() && distinct; ++i)
         for (std::size_t j = i + 1; j < kids.size() && distinct; ++j)
-          distinct = kids[i].GetType() == ARRAY_TYPE ? !arrays_equal(kids[i], kids[j])
-                                                     : !(kids[i] == kids[j]);
+          distinct = arrays ? !arrays_equal(kids[i], kids[j]) : !(kids[i] == kids[j]);
       out = distinct ? m_->bm->ASTTrue : m_->bm->ASTFalse;
-      break;
+      return;
     }
     case EQ:
       if (n[0].GetType() == ARRAY_TYPE)
       {
         out = arrays_equal(n[0], n[1]) ? m_->bm->ASTTrue : m_->bm->ASTFalse;
-        break;
+        return;
       }
       if (n[0].GetSourceSort().kind() == SourceSort::Kind::Uninterpreted)
       {
         // elements of a declared sort: one value, one node
-        out = eval(n[0]) == eval(n[1]) ? m_->bm->ASTTrue : m_->bm->ASTFalse;
-        break;
+        if (!all_valued(n.GetChildren(), 0))
+          return;
+        out = *valued(n[0]) == *valued(n[1]) ? m_->bm->ASTTrue : m_->bm->ASTFalse;
+        return;
       }
       // fall through
     default:
     {
+      if (!all_valued(n.GetChildren(), 0))
+        return;
       ASTVec kids;
       kids.reserve(n.Degree());
       for (const ASTNode& c : n.GetChildren())
-        kids.push_back(eval(c));
+        kids.push_back(*valued(c));
       out = fold(n, kids);
-      break;
+      return;
     }
   }
-  memo_.emplace(n, out);
-  return out;
 }
 
-ASTNode Evaluator::eval_read(const ASTNode& array, const ASTNode& index)
+// The cell of array symbol `array` at value `index`: an observed cell, else
+// the fill (a completion), else -- an array the model never assigned -- the
+// option's fill (a completion too).
+ASTNode Evaluator::read_symbol(const ASTNode& array, const ASTNode& index)
 {
-  switch (array.GetKind())
+  auto it = s_.arrays.find(array);
+  if (it != s_.arrays.end())
   {
-    case SYMBOL:
-    {
-      if (m_->is_const_array(array))
-        return eval(m_->const_array_default(array));
-      auto it = s_.arrays.find(array);
-      if (it != s_.arrays.end())
-      {
-        for (const auto& e : it->second.entries)
-          if (e.first == index)
-            return e.second;
-        if (!complete_)
-          incomplete_ = true;
-        return it->second.fill;
-      }
-      if (!complete_)
-        incomplete_ = true;
-      return fill_value(m_, m_->sort_of_node(array, fn_), s_.fill_ones, fn_);
-    }
-    case WRITE:
-    {
-      if (eval(array[1]) == index)
-        return eval(array[2]);
-      return eval_read(array[0], index);
-    }
-    case ITE:
-    {
-      const ASTNode c = eval(array[0]);
-      return eval_read(c == m_->bm->ASTTrue ? array[1] : array[2], index);
-    }
-    default:
-      break;
+    for (const auto& e : it->second.entries)
+      if (e.first == index)
+        return e.second;
+    if (!complete_)
+      incomplete_ = true;
+    return it->second.fill;
   }
-  fail_internal(fn_, "a read over an array term that is not a symbol, store or ite");
+  if (!complete_)
+    incomplete_ = true;
+  return fill_value(m_, m_->sort_of_node(array, fn_), s_.fill_ones, fn_);
 }
 
-ASTNode Evaluator::eval_apply(const ASTNode& n)
+// A read at a value, down the chain of writes: each write's index and value,
+// and each ite's condition, valued as the walk reaches them (by eval, whose
+// own stack is explicit).
+ASTNode Evaluator::eval_read(const ASTNode& from, const ASTNode& index)
+{
+  ASTNode array = from;
+  for (;;)
+  {
+    switch (array.GetKind())
+    {
+      case SYMBOL:
+        if (m_->is_const_array(array))
+          return eval(m_->const_array_default(array));
+        return read_symbol(array, index);
+      case WRITE:
+        if (eval(array[1]) == index)
+          return eval(array[2]);
+        array = array[0];
+        continue;
+      case ITE:
+        array = eval(array[0]) == m_->bm->ASTTrue ? array[1] : array[2];
+        continue;
+      default:
+        fail_internal(fn_, "a read over an array term that is not a symbol, store or ite");
+    }
+  }
+}
+
+// An application whose arguments are valued: the case the model lists for
+// those values, else the else branch (a completion), else -- a function the
+// model never assigned -- the codomain's default (a completion too).
+ASTNode Evaluator::apply_values(const ASTNode& n)
 {
   const ASTNode identity = n[0];
   std::vector<ASTNode> args;
   for (std::size_t i = 1; i < n.Degree(); ++i)
-    args.push_back(eval(n[i]));
+    args.push_back(*valued(n[i]));
   auto it = s_.functions.find(identity);
   if (it == s_.functions.end())
   {
@@ -677,34 +815,31 @@ ASTNode Evaluator::eval_apply(const ASTNode& n)
   return it->second.else_value;
 }
 
-void collect_indices(Evaluator& ev, const ModelSnapshot& s, ManagerImpl* m, const ASTNode& array,
-                     std::set<ASTNode>& indices, ASTNode& base)
+// The cells a chain of writes gives array term `array`, walked once from the
+// top: the topmost write to an index is its cell, in the order first met
+// (ites follow the branch their condition picks). `base` is where the chain
+// ends. Linear in the chain; reading each written index from the top again
+// was quadratic.
+void chain_cells(Evaluator& ev, ManagerImpl* m, const ASTNode& array,
+                 std::vector<std::pair<ASTNode, ASTNode>>& cells, ASTNode& base)
 {
+  std::unordered_set<ASTNode, ASTNode::ASTNodeHasher> written;
   ASTNode n = array;
   for (;;)
   {
-    switch (n.GetKind())
+    if (n.GetKind() == WRITE)
     {
-      case WRITE:
-        indices.insert(ev.evaluate(n[1]));
-        n = n[0];
-        continue;
-      case ITE:
-      {
-        const ASTNode c = ev.evaluate(n[0]);
-        n = (c == m->bm->ASTTrue) ? n[1] : n[2];
-        continue;
-      }
-      default:
-        break;
+      const ASTNode index = ev.evaluate(n[1]);
+      if (written.insert(index).second)
+        cells.emplace_back(index, ev.evaluate(n[2]));
+      n = n[0];
     }
-    break;
+    else if (n.GetKind() == ITE)
+      n = ev.evaluate(n[0]) == m->bm->ASTTrue ? n[1] : n[2];
+    else
+      break;
   }
   base = n;
-  auto it = s.arrays.find(n);
-  if (it != s.arrays.end())
-    for (const auto& e : it->second.entries)
-      indices.insert(e.first);
 }
 
 // Whether `count` distinct indexes are every value of the array sort's index
@@ -735,12 +870,31 @@ bool covers_index_sort(ManagerImpl* m, std::uint32_t array_sort, std::size_t cou
 
 bool Evaluator::arrays_equal(const ASTNode& a, const ASTNode& b)
 {
-  std::set<ASTNode> indices;
+  std::vector<std::pair<ASTNode, ASTNode>> cells_a, cells_b;
   ASTNode base_a, base_b;
-  collect_indices(*this, s_, m_, a, indices, base_a);
-  collect_indices(*this, s_, m_, b, indices, base_b);
+  chain_cells(*this, m_, a, cells_a, base_a);
+  chain_cells(*this, m_, b, cells_b, base_b);
+  const std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher> at_a(cells_a.begin(),
+                                                                          cells_a.end());
+  const std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher> at_b(cells_b.begin(),
+                                                                          cells_b.end());
+  // every index either side writes, or its base has a cell at, read on both
+  std::set<ASTNode> indices;
+  for (const auto& c : cells_a)
+    indices.insert(c.first);
+  for (const auto& c : cells_b)
+    indices.insert(c.first);
+  for (const ASTNode& base : {base_a, base_b})
+    if (const auto it = s_.arrays.find(base); it != s_.arrays.end())
+      for (const auto& e : it->second.entries)
+        indices.insert(e.first);
+  const auto cell = [&](const std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher>& at,
+                        const ASTNode& base, const ASTNode& i) {
+    const auto it = at.find(i);
+    return it != at.end() ? it->second : eval_read(base, i);
+  };
   for (const ASTNode& i : indices)
-    if (!(eval_read(a, i) == eval_read(b, i)))
+    if (!(cell(at_a, base_a, i) == cell(at_b, base_b, i)))
       return false;
   // the unobserved cells, if the writes leave any: equal fills, or the same
   // base
@@ -924,13 +1078,20 @@ std::shared_ptr<detail::ValueImpl> array_value_of(const std::shared_ptr<const Mo
   impl->key = n;
   impl->is_array = true;
   detail::Evaluator ev(s, fn, complete);
-  std::set<ASTNode> indices;
   ASTNode base;
-  detail::collect_indices(ev, s, s.mgr, n, indices, base);
+  detail::chain_cells(ev, s.mgr, n, impl->cells.entries, base);
+  // the base's own cells, under the writes
+  if (const auto it = s.arrays.find(base); it != s.arrays.end())
+  {
+    std::unordered_set<ASTNode, ASTNode::ASTNodeHasher> written;
+    for (const auto& c : impl->cells.entries)
+      written.insert(c.first);
+    for (const auto& e : it->second.entries)
+      if (written.count(e.first) == 0)
+        impl->cells.entries.push_back(e);
+  }
   impl->cells.array = n;
   impl->cells.sort = s.mgr->sort_of_node(n, fn);
-  for (const ASTNode& i : indices)
-    impl->cells.entries.emplace_back(i, ev.read(n, i));
   std::sort(impl->cells.entries.begin(), impl->cells.entries.end(),
             [](const std::pair<ASTNode, ASTNode>& x, const std::pair<ASTNode, ASTNode>& y) {
               return detail::index_before(x.first, y.first);

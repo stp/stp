@@ -493,8 +493,20 @@ public:
   ASTNode read(const ASTNode& array, const ASTNode& index);
 
 private:
+  // One term being valued on the explicit stack; a read keeps the read
+  // index's value and its place in the chain it walks.
+  struct Frame
+  {
+    ASTNode n;
+    ASTNode cursor;
+    ASTNode index;
+    bool started;
+  };
+  void step(Frame& f, std::vector<ASTNode>& needs, ASTNode& out);
+  const ASTNode* valued(const ASTNode& n) const;
+  ASTNode read_symbol(const ASTNode& array, const ASTNode& index);
   ASTNode eval_read(const ASTNode& array, const ASTNode& index);
-  ASTNode eval_apply(const ASTNode& n);
+  ASTNode apply_values(const ASTNode& n);
   bool arrays_equal(const ASTNode& a, const ASTNode& b);
   ASTNode fold(const ASTNode& n, const ASTVec& kids);
   const ModelSnapshot& s_;

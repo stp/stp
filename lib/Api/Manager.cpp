@@ -1889,53 +1889,71 @@ Term TermManager::simplify(const Term& t) const
     detail::fail(ErrorCode::FOREIGN_MANAGER, "TermManager::simplify",
                  "the term belongs to another term manager", 0, {t});
   return detail::engine_call(m, "TermManager::simplify", [&]() -> Term {
-  // Rebuild bottom-up through the folding factory; a memo bounds the work by
-  // the DAG size.
+  // Rebuild bottom-up through the folding factory, on an explicit stack (a
+  // deep term costs heap, not the C++ stack); a memo bounds the work by the
+  // DAG size. A conversion to a Real rebuilds from its operand, anything else
+  // the factory takes from its children, and a leaf, an application or a
+  // Real term is kept.
   std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher> memo;
-  std::function<ASTNode(const ASTNode&)> rebuild = [&](const ASTNode& n) -> ASTNode {
-    auto it = memo.find(n);
-    if (it != memo.end())
-      return it->second;
-    ASTNode out = n;
+  const auto inputs = [&](const ASTNode& n) -> ASTVec {
+    const ASTNode operand = n.GetKind() == ITE ? m->bm->FpToRealOperand(n) : ASTNode();
+    if (!operand.IsNull())
+      return ASTVec{operand};
+    if (n.Degree() > 0 && n.GetKind() != UF_APPLY && !n.isRealTerm())
+      return ASTVec(n.GetChildren().begin(), n.GetChildren().end());
+    return ASTVec();
+  };
+  const auto rebuild_one = [&](const ASTNode& n) -> ASTNode {
     const ASTNode operand = n.GetKind() == ITE ? m->bm->FpToRealOperand(n) : ASTNode();
     if (!operand.IsNull())
     {
       // A conversion is rebuilt from its simplified operand by the
       // construction itself, which folds a float value to its Real value.
-      const ASTNode simplified = rebuild(operand);
-      if (!(simplified == operand))
-        out = m->bm->CreateFpToReal(simplified);
+      const ASTNode& simplified = memo.at(operand);
+      return simplified == operand ? n : m->bm->CreateFpToReal(simplified);
     }
-    else if (n.Degree() > 0 && n.GetKind() != UF_APPLY && !n.isRealTerm())
-    {
-      ASTVec kids;
-      bool changed = false;
-      for (const ASTNode& c : n.GetChildren())
-      {
-        kids.push_back(rebuild(c));
-        changed = changed || !(kids.back() == c);
-      }
-      // Always through the folding factory, children changed or not: a
-      // node may have been built without folding (parse_term, or a
-      // non-simplifying manager), and a node that folds no further comes
-      // back as itself from a hash lookup.
-      (void)changed;
-      NodeFactory* f = m->folding_factory();
-      if (n.GetType() == BOOLEAN_TYPE)
-        out = f->CreateNode(n.GetKind(), kids);
-      else if (n.GetType() == ARRAY_TYPE)
-        out = f->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(), kids);
-      else
-      {
-        out = f->CreateTerm(n.GetKind(), n.GetValueWidth(), kids);
-        if (n.GetExpWidth() != 0)
-          out = FloatBlaster::withFormat(m->bm, out, n.GetExpWidth(), n.GetSigWidth());
-      }
-    }
-    memo.emplace(n, out);
+    if (n.Degree() == 0 || n.GetKind() == UF_APPLY || n.isRealTerm())
+      return n;
+    // Always through the folding factory, children changed or not: a node
+    // may have been built without folding (parse_term, or a non-simplifying
+    // manager), and a node that folds no further comes back as itself from a
+    // hash lookup.
+    ASTVec kids;
+    kids.reserve(n.Degree());
+    for (const ASTNode& c : n.GetChildren())
+      kids.push_back(memo.at(c));
+    NodeFactory* f = m->folding_factory();
+    if (n.GetType() == BOOLEAN_TYPE)
+      return f->CreateNode(n.GetKind(), kids);
+    if (n.GetType() == ARRAY_TYPE)
+      return f->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(), kids);
+    ASTNode out = f->CreateTerm(n.GetKind(), n.GetValueWidth(), kids);
+    if (n.GetExpWidth() != 0)
+      out = FloatBlaster::withFormat(m->bm, out, n.GetExpWidth(), n.GetSigWidth());
     return out;
   };
-  ASTNode out = rebuild(detail::node_of(t));
+  const ASTNode root = detail::node_of(t);
+  std::vector<std::pair<ASTNode, bool>> stack{{root, false}};
+  while (!stack.empty())
+  {
+    const auto [n, expanded] = stack.back();
+    if (memo.count(n) != 0)
+    {
+      stack.pop_back();
+      continue;
+    }
+    if (!expanded)
+    {
+      stack.back().second = true;
+      for (const ASTNode& c : inputs(n))
+        if (memo.count(c) == 0)
+          stack.emplace_back(c, false);
+      continue;
+    }
+    stack.pop_back();
+    memo.emplace(n, rebuild_one(n));
+  }
+  ASTNode out = memo.at(root);
   // A closed term (no symbol, no array, no function anywhere in it) is a
   // value: evaluate it through the model evaluator over an empty snapshot,
   // which folds what the factory leaves alone (a ground distinct, a Real
@@ -1943,15 +1961,20 @@ Term TermManager::simplify(const Term& t) const
   // a free symbol is never evaluated: the evaluator completes an absent
   // symbol with its sort's default, which is a model's business and would
   // turn `(= a1 a2)` over two declared arrays into `true` here.
-  std::unordered_set<ASTNode, ASTNode::ASTNodeHasher> seen;
-  std::function<bool(const ASTNode&)> closed = [&](const ASTNode& n) -> bool {
-    if (n.GetKind() == SYMBOL || n.GetKind() == UF_APPLY)
-      return false;
-    if (!seen.insert(n).second)
-      return true;
-    for (const ASTNode& c : n.GetChildren())
-      if (!closed(c))
+  const auto closed = [](const ASTNode& from) {
+    std::unordered_set<ASTNode, ASTNode::ASTNodeHasher> seen;
+    std::vector<ASTNode> todo{from};
+    while (!todo.empty())
+    {
+      const ASTNode n = todo.back();
+      todo.pop_back();
+      if (n.GetKind() == SYMBOL || n.GetKind() == UF_APPLY)
         return false;
+      if (!seen.insert(n).second)
+        continue;
+      for (const ASTNode& c : n.GetChildren())
+        todo.push_back(c);
+    }
     return true;
   };
   if (!out.isConstant() && closed(out))

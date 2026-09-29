@@ -400,3 +400,28 @@ TEST(libstp2_fidelity, a_rejected_cvc_text_is_a_failed_parse)
   vc_setErrorPolicy(STP_ON_ERROR_ABORT);
   vc_registerErrorHandler(nullptr);
 }
+
+// 2.x read the counterexample of a term, and simplified one, at any depth its
+// solve reached; libstp2 overflowed the C++ stack in the model's evaluator
+// from about 40 000 levels and in vc_simplify from 80 000.
+TEST(libstp2_fidelity, a_deep_term_is_read_back_and_simplified)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlags(vc, 'i', 0);
+  Expr chain = vc_varExpr(vc, "x0", vc_boolType(vc));
+  for (int i = 1; i < 100000; ++i)
+  {
+    const std::string name = "x" + std::to_string(i);
+    Expr v = vc_varExpr(vc, name.c_str(), vc_boolType(vc));
+    chain = (i % 2) ? vc_orExpr(vc, v, chain) : vc_andExpr(vc, v, chain);
+  }
+  Expr simplified = vc_simplify(vc, chain);
+  EXPECT_EQ(OR, getExprKind(simplified));
+  vc_DeleteExpr(simplified);
+  vc_assertFormula(vc, chain);
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  Expr value = vc_getCounterExample(vc, chain);
+  EXPECT_EQ(TRUE, getExprKind(value));
+  vc_DeleteExpr(value);
+  vc_Destroy(vc);
+}
