@@ -30,7 +30,8 @@
 # implementation walks, and the Cython enum declarations. The tables are the single
 # source; nothing here is edited by hand.
 #
-#   generate.py --tables DIR --out DIR [--check]
+#   generate.py --tables DIR --out DIR [--check] [--toml-subset]
+#   generate.py --tables DIR --out DIR --self-test
 #
 # Outputs (relative to --out):
 #   include/stp/api/gen/kinds.hpp        enum class Kind, to_string tables are in kind_table.inc
@@ -100,9 +101,9 @@ def _parse_value(text):
         table = {}
         rest = text[1:].strip()
         while not rest.startswith('}'):
-            key, rest = rest.split('=', 1)
+            key, rest = _parse_key(rest)
             value, rest = _parse_value(rest)
-            table[key.strip()] = value
+            table[key] = value
             rest = rest.strip()
             if rest.startswith(','):
                 rest = rest[1:].strip()
@@ -117,6 +118,24 @@ def _parse_value(text):
     if token == 'false':
         return False, rest
     return int(token), rest
+
+
+def _parse_key(text):
+    """A key and its '=': bare (letters, digits, - and _) or quoted, the
+    quotes not part of the key, as TOML reads it. Returns (key, the text
+    after the '=')."""
+    text = text.strip()
+    if text.startswith('"'):
+        key, rest = _parse_value(text)
+    else:
+        m = re.match(r'[A-Za-z0-9_-]+', text)
+        if not m:
+            raise ValueError('cannot parse key: ' + text)
+        key, rest = m.group(0), text[m.end():]
+    rest = rest.strip()
+    if not rest.startswith('='):
+        raise ValueError('expected = after key %r: %s' % (key, text))
+    return key, rest[1:]
 
 
 def _strip_comment(line):
@@ -150,18 +169,20 @@ def _mini_toml(text):
             name = line[1:line.index(']')].strip()
             current = root.setdefault(name, {})
             continue
-        key, value = line.split('=', 1)
+        key, value = _parse_key(line)
         parsed, rest = _parse_value(value)
         if rest:
             raise ValueError('trailing text after value: ' + raw)
-        current[key.strip()] = parsed
+        current[key] = parsed
     return root
 
 
-def load_toml(path):
+def load_toml(path, subset=False):
+    """The table at `path`: through tomllib when the interpreter has it,
+    unless `subset` asks for the subset parser that older ones use."""
     with open(path, 'rb') as f:
         data = f.read()
-    if tomllib is not None:
+    if tomllib is not None and not subset:
         return tomllib.loads(data.decode('utf-8'))
     return _mini_toml(data.decode('utf-8'))
 
@@ -266,6 +287,18 @@ class Emitter:
                     raise SystemExit('options.toml: %s excludes unknown %s' % (o['name'], ex))
             if 'follows' in o and o['follows'] not in onames:
                 raise SystemExit('options.toml: %s follows unknown %s' % (o['name'], o['follows']))
+            # the entries the implications name are looked up by name at run
+            # time, where a misspelt one would silently imply nothing
+            implies = o.get('implies', {})
+            for other in (implies if isinstance(implies, dict) else {}):
+                if other not in onames:
+                    raise SystemExit('options.toml: %s implies unknown %s' % (o['name'], other))
+            for other in o.get('implied_by', {}):
+                if other not in onames:
+                    raise SystemExit('options.toml: %s is implied by unknown %s' % (o['name'], other))
+            required = o.get('requires', {}).get('option')
+            if required is not None and required not in onames:
+                raise SystemExit('options.toml: %s requires unknown %s' % (o['name'], required))
             form = o.get('cli_form', 'value')
             if form not in ('value', 'flag', 'none'):
                 raise SystemExit('options.toml: %s: cli_form %r is not value, flag or none' % (o['name'], form))
@@ -883,9 +916,25 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--check', action='store_true', help='report files that would change; write nothing')
     ap.add_argument('--list-unmapped', action='store_true', help='print the options without an engine mapping')
+    ap.add_argument('--toml-subset', action='store_true',
+                    help='read the tables with the subset parser older interpreters use, even where tomllib exists')
+    ap.add_argument('--self-test', action='store_true',
+                    help='compare what tomllib and the subset parser read from every table; write nothing')
     args = ap.parse_args()
-    tables = {name: load_toml(os.path.join(args.tables, name + '.toml'))
-              for name in ('kinds', 'options', 'errors', 'statistics')}
+    names = ('kinds', 'options', 'errors', 'statistics')
+    if args.self_test:
+        if tomllib is None:
+            print('self-test: this interpreter has no tomllib to compare against')
+            return 0
+        differ = [name for name in names
+                  if load_toml(os.path.join(args.tables, name + '.toml')) !=
+                  load_toml(os.path.join(args.tables, name + '.toml'), subset=True)]
+        if differ:
+            print('the subset parser reads these tables differently from tomllib: ' + ', '.join(differ))
+            return 1
+        return 0
+    tables = {name: load_toml(os.path.join(args.tables, name + '.toml'), subset=args.toml_subset)
+              for name in names}
     em = Emitter(tables, args.out, args.check)
     em.run()
     if args.list_unmapped:

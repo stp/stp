@@ -163,6 +163,18 @@ if(BUILD_EXECUTABLES)
                      --tables ${PROJECT_SOURCE_DIR}/lib/Api/tables)
 endif()
 
+# The table generator reads the tables with tomllib, or, on an interpreter
+# without it (before Python 3.11), with its own subset parser, which must
+# read them as tomllib does and generate the very files this build did.
+add_test(NAME api-generator-self-test
+         COMMAND ${PYTHON_EXECUTABLE} ${PROJECT_SOURCE_DIR}/lib/Api/gen/generate.py
+                 --tables ${PROJECT_SOURCE_DIR}/lib/Api/tables
+                 --out ${PROJECT_BINARY_DIR}/generated --self-test)
+add_test(NAME api-generator-toml-subset
+         COMMAND ${PYTHON_EXECUTABLE} ${PROJECT_SOURCE_DIR}/lib/Api/gen/generate.py
+                 --tables ${PROJECT_SOURCE_DIR}/lib/Api/tables
+                 --out ${PROJECT_BINARY_DIR}/generated --check --toml-subset)
+
 # Every test here carries the label api, as do those of tests/api/c and
 # tests/api/python, so that ctest -L api runs the API's suites.
 get_property(_api_tests DIRECTORY PROPERTY TESTS)
