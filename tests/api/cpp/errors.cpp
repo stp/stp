@@ -30,13 +30,16 @@ THE SOFTWARE.
 
 #include <functional>
 #include <map>
+#include <random>
 #include <set>
 #include <sstream>
 #include <stdexcept>
 #include <streambuf>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 using namespace stp;
 
@@ -295,6 +298,82 @@ TEST(Containers, hash_equal_and_less)
 // A manager and everything created from it may be used from any thread, one
 // call at a time (the caller serialises); only interrupt() may overlap a
 // running check.
+// Random small bit-vector formulas from `seed`, each in a manager of its own
+// under option `name` = `value`: 's', 'u' or '?' per formula, and '!' after an
+// 's' whose model falsifies an assertion.
+std::string answers(unsigned seed, int formulas, const char* name, const char* value)
+{
+  std::mt19937 rng(seed);
+  std::string out;
+  for (int f = 0; f < formulas; ++f)
+  {
+    TermManager tm;
+    Options o;
+    o.set(name, value);
+    Solver s(tm, o);
+    const unsigned w = 6 + rng() % 6;
+    const Sort bv = tm.mk_bv_sort(w);
+    std::vector<Term> vars;
+    for (int i = 0; i < 4; ++i)
+      vars.push_back(tm.declare("v" + std::to_string(i), bv));
+    std::vector<Term> pool = vars;
+    for (int i = 0; i < 12; ++i)
+    {
+      const Term a = pool[rng() % pool.size()], b = pool[rng() % pool.size()];
+      switch (rng() % 6)
+      {
+        case 0: pool.push_back(bvmul(a, b)); break;
+        case 1: pool.push_back(bvadd(a, b)); break;
+        case 2: pool.push_back(bvxor(a, b)); break;
+        case 3: pool.push_back(bvand(a, bvnot(b))); break;
+        case 4: pool.push_back(ite(bvult(a, b), a, b)); break;
+        default: pool.push_back(bvor(bvmul(a, a), b)); break;
+      }
+    }
+    s.add(pool[pool.size() - 1] == pool[pool.size() - 2]);
+    s.add(distinct(vars[0], vars[1]));
+    s.add(bvugt(pool[pool.size() - 3], tm.mk_bv(w, rng() % (1u << w))));
+    const Result r = s.check_sat();
+    out += r.is_sat() ? 's' : r.is_unsat() ? 'u' : '?';
+    if (r.is_sat())
+      for (const Term& a : s.assertions())
+        if (!s.model().bool_value(a))
+          out += '!';
+  }
+  return out;
+}
+
+// Independent managers on independent threads, under the options whose engine
+// code keeps state for the whole process: the prime-implicate cache of the
+// new-high CNF encoder, written unguarded, and threads crashed or built wrong
+// CNFs. Each thread must answer as one thread does.
+TEST(Threads, managers_on_threads_share_the_engines_process_wide_state)
+{
+  const std::pair<const char*, const char*> settings[] = {
+      {"cnf-generation-effort", "new-high"}};
+  for (const auto& setting : settings)
+  {
+    const char* name = setting.first;
+    const char* value = setting.second;
+    const int threads = 8, formulas = 12;
+    std::vector<std::string> expected, got(threads);
+    for (int t = 0; t < threads; ++t)
+      expected.push_back(answers(100 + t, formulas, name, value));
+    std::vector<std::thread> pool;
+    for (int t = 0; t < threads; ++t)
+      pool.emplace_back([&got, t, formulas, name, value] {
+        got[t] = answers(100 + t, formulas, name, value);
+      });
+    for (std::thread& th : pool)
+      th.join();
+    for (int t = 0; t < threads; ++t)
+    {
+      EXPECT_EQ(got[t], expected[t]) << name << " thread " << t;
+      EXPECT_EQ(got[t].find('!'), std::string::npos) << name << " thread " << t;
+    }
+  }
+}
+
 TEST(Threads, a_manager_may_be_used_from_another_thread)
 {
   TermManager tm;
