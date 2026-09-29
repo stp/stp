@@ -609,3 +609,14 @@ TEST(c_runtime, a_budget_past_the_clocks_range_is_no_limit)
   stp_tm_release_all(tm);
   stp_tm_release(tm);
 }
+
+// The error codes are sixteen bits wide: stp_error_code_name wrapped a wider
+// value onto a code, naming 65637 "INTERNAL" and 65553 "PARSE". Every name
+// function answers "?" for a value no enumerator names.
+TEST(c_runtime, an_error_code_past_sixteen_bits_names_nothing)
+{
+  EXPECT_STREQ("PARSE", stp_error_code_name(STP_ERR_PARSE));
+  EXPECT_STREQ("INTERNAL", stp_error_code_name(STP_ERR_INTERNAL));
+  for (const int wide : {65536 + STP_ERR_INTERNAL, 65536 + STP_ERR_PARSE, 0x7fffffff})
+    EXPECT_STREQ("?", stp_error_code_name(static_cast<stp_error_code>(wide))) << wide;
+}

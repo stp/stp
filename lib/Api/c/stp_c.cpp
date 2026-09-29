@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include <cstring>
 #include <limits>
 #include <mutex>
+#include <type_traits>
 
 namespace stp
 {
@@ -738,6 +739,9 @@ const char* stp_unknown_reason_name(stp_unknown_reason r)
 
 const char* stp_error_code_name(stp_error_code c)
 {
+  // ErrorCode is sixteen bits wide, and a wider value would wrap onto a code
+  if (static_cast<unsigned>(c) > std::numeric_limits<std::underlying_type_t<ErrorCode>>::max())
+    return "?";
   return to_string(static_cast<ErrorCode>(c)); // "?" for an unknown code
 }
 
