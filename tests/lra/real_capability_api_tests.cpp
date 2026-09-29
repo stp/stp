@@ -33,8 +33,7 @@ THE SOFTWARE.
 //
 // A plain executable: every case owns its manager and solver, the first
 // failed check ends the run with a non-zero exit, and naming one case on the
-// command line runs only that case. A check the 3.x API cannot make yet is
-// reported as an API gap and skipped, not failed.
+// command line runs only that case.
 
 #include <stp/stp.hpp>
 
@@ -53,19 +52,10 @@ using namespace stp;
 namespace
 {
 
-unsigned skipped_checks = 0;
-
 void require(bool condition, const char* detail)
 {
   if (!condition)
     throw std::runtime_error(detail);
-}
-
-// A check that needs something the 3.x API does not provide yet.
-void apiGap(const char* where, const char* what)
-{
-  ++skipped_checks;
-  std::cerr << "SKIP " << where << ": API gap: " << what << '\n';
 }
 
 // The code of the RecoverableError that f throws; a run that throws nothing
@@ -131,19 +121,18 @@ std::string realModelValue(Checker& owner, const Term& term)
   return owner.s.model().real_value(term).str();
 }
 
-// Whether the model values a Real-valued uninterpreted-function application
-// of its own accord. The 3.x model does not yet: it answers every such
-// application with the codomain's default, 0, as a completion (try_value
-// gives nothing), asserted applications included. A check that needs the
-// value is skipped as an API gap until it does.
-bool realApplicationValued(Checker& owner, const Term& application,
-                           const char* where)
+// The model values a Real-valued uninterpreted-function application the
+// check decided, rather than answering it as a completion with the
+// codomain's default (try_value gives nothing for a completion). These
+// checks were once skipped when it did not; a model that stops valuing one
+// fails them now.
+void requireApplicationValued(Checker& owner, const Term& application,
+                              const char* where)
 {
-  if (owner.s.model().try_value(application).has_value())
-    return true;
-  apiGap(where, "the model has no value for a Real-valued uninterpreted-"
-                "function application (Model::value answers the default 0)");
-  return false;
+  if (!owner.s.model().try_value(application).has_value())
+    throw std::runtime_error(std::string(where) +
+                             ": the model gives the Real-valued application no "
+                             "value of its own");
 }
 
 // 2.x reported four capabilities: Real construction, QF_LRA, the Real-branch
@@ -280,8 +269,7 @@ void realUfScalarModelCompletion()
       // An unobserved tuple is a completion: the codomain's default.
       require(realModelValue(owner, f(third)) == "0",
               "unobserved scalar tuple did not use the default");
-      if (!realApplicationValued(owner, f(y), "real-uf-scalar-model-completion"))
-        continue;
+      requireApplicationValued(owner, f(y), "real-uf-scalar-model-completion");
       require(realModelValue(owner, f(y)) == "4",
               "equal scalar values selected different function results");
       require(realModelValue(owner, f(z)) == "6",
@@ -321,8 +309,7 @@ void realUfFloatingPointModelCompletion()
     owner.s.add(f(negative_zero) == real(owner, "9"));
     require(solve(owner).is_sat(), "mixed FP/Real model was not SAT");
 
-    if (!realApplicationValued(owner, f(y), "real-uf-fp-model-completion"))
-      continue;
+    requireApplicationValued(owner, f(y), "real-uf-fp-model-completion");
     require(realModelValue(owner, f(y)) == "5" &&
                 realModelValue(owner, f(bits(0xffc12345U))) == "5",
             "NaN payloads did not name the same function argument");
@@ -383,8 +370,7 @@ void realUninterpretedFunctionValueIsReadable()
   owner.s.add(fx == real(owner, "-5/2"));
   require(solve(owner).is_sat(), "Real-sorted UF application was not SAT");
 
-  if (!realApplicationValued(owner, fx, "real-uf-value-readable"))
-    return;
+  requireApplicationValued(owner, fx, "real-uf-value-readable");
   const std::string actual = realModelValue(owner, fx);
   if (actual != "-5/2")
     throw std::runtime_error("Real UF application read back as " + actual +
@@ -418,8 +404,7 @@ void realUninterpretedFunctionCongruentValuesAgree()
   owner.s.add(real_gt(fy, real(owner, "0")));
   require(solve(owner).is_sat(), "congruent Real UF applications were not SAT");
 
-  if (!realApplicationValued(owner, fx, "real-uf-congruent-values-agree"))
-    return;
+  requireApplicationValued(owner, fx, "real-uf-congruent-values-agree");
   const std::string left = realModelValue(owner, fx);
   const std::string right = realModelValue(owner, fy);
   if (left != "11/7" || right != "11/7")
@@ -663,9 +648,7 @@ void realUninterpretedFunctionCongruenceOutsideTheFormula()
   // f(y) is in no assertion, so it was never lowered -- but y and x hold the
   // same value here, so it has to answer as f(x) does.
   const Term fy = f(y);
-  if (!realApplicationValued(owner, fy,
-                             "real-uf-congruence-outside-the-formula"))
-    return;
+  requireApplicationValued(owner, fy, "real-uf-congruence-outside-the-formula");
   const std::string actual = realModelValue(owner, fy);
   if (actual != "-9/5")
     throw std::runtime_error("an unlowered congruent application read back as " + actual +
@@ -937,9 +920,6 @@ int main(int argc, char** argv)
     std::cerr << "unknown case: " << only << '\n';
     return 2;
   }
-  std::cout << "PASS real-capability-api (" << ran << " cases";
-  if (skipped_checks != 0)
-    std::cout << ", " << skipped_checks << " check(s) skipped: API gap";
-  std::cout << ")\n";
+  std::cout << "PASS real-capability-api (" << ran << " cases)\n";
   return 0;
 }
