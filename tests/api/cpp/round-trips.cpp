@@ -282,3 +282,111 @@ TEST(RoundTrips, a_fresh_sorts_name_is_not_declared_again)
   const Sort named = tm.declare_sort("T");
   EXPECT_EQ(tm.declare_sort("T"), named);
 }
+
+TEST(RoundTrips, fresh_sorts_are_declared_once_and_keep_distinct_identities)
+{
+  for (const char* prefix : {"U", "sort with space"})
+  {
+    SCOPED_TRACE(prefix);
+    TermManager tm;
+    const Sort u = tm.mk_fresh_sort(prefix), v = tm.mk_fresh_sort(prefix);
+    const Sort unused = tm.mk_fresh_sort("unused");
+    const Term x = tm.declare("x", u), y = tm.declare("y", u);
+    const Term z = tm.declare("z", v), w = tm.declare("w", v);
+    Solver s(tm);
+    s.add(x != y);
+    s.add(z != w);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    const std::string text = s.to_smt2(true);
+    for (const Sort& sort : {u, v})
+    {
+      const std::string declaration = "(declare-sort " + sort.str() + " 0)";
+      const std::size_t at = text.find(declaration);
+      ASSERT_NE(at, std::string::npos) << text;
+      EXPECT_LT(at, text.find("(declare-fun ")) << text;
+      EXPECT_EQ(text.find(declaration, at + declaration.size()), std::string::npos) << text;
+    }
+    EXPECT_EQ(text.find(unused.name()), std::string::npos);
+    // Exporting a fresh sort does not add it to the source manager's named
+    // sorts or make its generated name available to declare_sort.
+    EXPECT_TRUE(tm.declared_sorts().empty());
+    API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.declare_sort(u.name()));
+    TermManager copy;
+    Solver back(copy);
+    back.parse_smt2(text, ParseMode::EXECUTE);
+    ASSERT_TRUE(back.check_sat().is_sat());
+    ASSERT_EQ(copy.declared_sorts().size(), 2u);
+    ASSERT_TRUE(copy.symbol("x").has_value());
+    ASSERT_TRUE(copy.symbol("y").has_value());
+    ASSERT_TRUE(copy.symbol("z").has_value());
+    const Term px = *copy.symbol("x"), py = *copy.symbol("y"), pz = *copy.symbol("z");
+    EXPECT_EQ(px.sort().name(), u.name());
+    EXPECT_EQ(pz.sort().name(), v.name());
+    EXPECT_TRUE(px.sort() != pz.sort());
+    API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, (void)(px == pz));
+    EXPECT_NE(back.model().uninterpreted_index(px), back.model().uninterpreted_index(py));
+    back.add(px == py);
+    EXPECT_TRUE(back.check_sat().is_unsat());
+  }
+}
+
+TEST(RoundTrips, unused_declarations_include_fresh_component_sorts)
+{
+  TermManager tm;
+  const Sort domain = tm.mk_fresh_sort("Domain"), range = tm.mk_fresh_sort("Range");
+  const Sort fun_domain = tm.mk_fresh_sort("Arg"), fun_range = tm.mk_fresh_sort("Result");
+  const Sort named = tm.declare_sort("NamedButUnused");
+  tm.declare("a", tm.mk_array_sort(domain, range));
+  tm.declare("f", tm.mk_fun_sort({domain, domain}, range));
+  tm.declare("g", tm.mk_fun_sort({fun_domain}, fun_range));
+  Solver s(tm);
+  const std::string text = s.to_smt2();
+  EXPECT_NE(text.find("(declare-sort " + named.str() + " 0)"), std::string::npos);
+  EXPECT_EQ(tm.declared_sorts(), (std::vector<Sort>{named}));
+  TermManager copy;
+  Solver back(copy);
+  back.parse_smt2(text, ParseMode::EXECUTE);
+  ASSERT_TRUE(back.check_sat().is_sat());
+  EXPECT_TRUE(back.assertions().empty());
+  ASSERT_EQ(copy.declared_sorts().size(), 5u);
+  ASSERT_TRUE(copy.symbol("a").has_value());
+  ASSERT_TRUE(copy.symbol("f").has_value());
+  ASSERT_TRUE(copy.symbol("g").has_value());
+  const Sort a = copy.symbol("a")->sort(), f = copy.symbol("f")->sort(),
+             g = copy.symbol("g")->sort();
+  EXPECT_EQ(a.array_index().name(), domain.name());
+  EXPECT_EQ(a.array_element().name(), range.name());
+  EXPECT_EQ(f.fun_domain(), (std::vector<Sort>{a.array_index(), a.array_index()}));
+  EXPECT_EQ(f.fun_codomain(), a.array_element());
+  ASSERT_EQ(g.fun_domain().size(), 1u);
+  EXPECT_EQ(g.fun_domain()[0].name(), fun_domain.name());
+  EXPECT_EQ(g.fun_codomain().name(), fun_range.name());
+}
+
+TEST(RoundTrips, fresh_sorts_used_only_in_assertions_are_declared)
+{
+  TermManager tm = api_test::raw_manager();
+  const Sort index = tm.mk_fresh_sort("Index"), bv2 = tm.mk_bv_sort(2);
+  const Sort array = tm.mk_array_sort(index, bv2);
+  const Term zero = tm.mk_const_array(array, tm.mk_bv(2, 0));
+  const Term one = tm.mk_const_array(array, tm.mk_bv(2, 1));
+  const Term choose = tm.declare("choose", tm.mk_bool_sort());
+  Options options;
+  options.set("array-equality", "on");
+  Solver s(tm, options);
+  s.add(ite(choose, zero, one) == zero);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  // The only declared symbol is Boolean. The fresh sort belongs to the
+  // constant arrays in the assertion, which need no symbol declarations.
+  ASSERT_EQ(tm.symbols().size(), 1u);
+  EXPECT_TRUE(tm.declared_sorts().empty());
+  const std::string text = s.to_smt2(true);
+  EXPECT_NE(text.find("(declare-sort " + index.str() + " 0)"), std::string::npos) << text;
+  EXPECT_NE(text.find("(set-logic QF_AUFBV)"), std::string::npos) << text;
+  TermManager copy;
+  Solver back(copy, options);
+  back.parse_smt2(text, ParseMode::EXECUTE);
+  ASSERT_TRUE(back.check_sat().is_sat());
+  ASSERT_TRUE(copy.symbol("choose").has_value());
+  EXPECT_TRUE(back.model().bool_value(*copy.symbol("choose")));
+}

@@ -270,6 +270,33 @@ def test_scripts_and_printing(tmp_path):
     s.close()
 
 
+@pytest.mark.parametrize("prefix", ["U", "sort with space"])
+@pytest.mark.parametrize("with_check_sat", [False, True])
+def test_fresh_sort_export_round_trip(prefix, with_check_sat):
+    tm = TermManager()
+    u, v = tm.mk_fresh_sort(prefix), tm.mk_fresh_sort(prefix)
+    x, y = tm.declare("x", u), tm.declare("y", u)
+    z, w = tm.declare("z", v), tm.declare("w", v)
+    s = Solver(tm)
+    s.add(x != y, z != w)
+    assert s.check() == sat
+    text = s.to_smt2(with_check_sat)
+    assert text.count("(declare-sort ") == 2
+    assert not tm.declared_sorts()
+    copy = TermManager()
+    back = Solver(copy)
+    back.from_string(text, mode="execute")
+    assert back.check() == sat
+    assert len(copy.declared_sorts()) == 2
+    px, py, pz = [copy.symbol(name) for name in ("x", "y", "z")]
+    assert px.sort().name() == u.name() and pz.sort().name() == v.name()
+    assert px.sort() is not pz.sort()
+    with pytest.raises(SortMismatch):
+        px == pz
+    back.add(px == py)
+    assert back.check() == unsat
+
+
 def test_dimacs_leaves_the_last_check_as_it_was():
     # the export runs a check of its own; the model not yet read, and an
     # unsat check's failed assumptions, are still the caller's afterwards

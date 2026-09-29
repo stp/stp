@@ -123,6 +123,29 @@ TEST(c_roundtrip, smt2_script_prints_and_parses_again)
   EXPECT_EQ(nullptr, stp_tm_error(b.tm)) << pending(b.tm);
 }
 
+TEST(c_roundtrip, fresh_sort_declarations_round_trip)
+{
+  Session original;
+  stp_sort sort = stp_mk_fresh_sort(original.tm, "fresh sort");
+  stp_term x = stp_declare(original.tm, "x", sort), y = stp_declare(original.tm, "y", sort);
+  ASSERT_EQ(STP_OK, stp_solver_assert(original.s, stp_not(original.tm, stp_eq(original.tm, x, y))));
+  ASSERT_EQ(STP_SAT, original.check());
+  const std::string text = take(stp_solver_to_smt2(original.s, true));
+  const std::string declaration = "(declare-sort " + take(stp_sort_str(sort)) + " 0)";
+  ASSERT_NE(text.find(declaration), std::string::npos) << text;
+  EXPECT_EQ(0u, stp_tm_num_declared_sorts(original.tm));
+  Session copy;
+  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(copy.s, text.c_str(), STP_PARSE_EXECUTE))
+      << pending(copy.tm) << "\n" << text;
+  ASSERT_EQ(STP_SAT, copy.check());
+  EXPECT_EQ(1u, stp_tm_num_declared_sorts(copy.tm));
+  stp_term px = stp_tm_symbol(copy.tm, "x"), py = stp_tm_symbol(copy.tm, "y");
+  ASSERT_NE(nullptr, px);
+  ASSERT_NE(nullptr, py);
+  ASSERT_EQ(STP_OK, stp_solver_assert(copy.s, stp_eq(copy.tm, px, py)));
+  EXPECT_EQ(STP_UNSAT, copy.check());
+}
+
 TEST(c_roundtrip, a_term_prints_and_parses_to_the_same_node)
 {
   Session a;

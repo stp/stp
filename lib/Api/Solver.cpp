@@ -2222,9 +2222,11 @@ Term Solver::parse_term(std::string_view text) const
 namespace
 {
 void collect_symbols(const std::vector<ASTNode>& roots, std::vector<ASTNode>& symbols,
+                     std::vector<SourceSort>& required_sorts,
                      bool& has_fp, bool& has_array, bool& has_uf, bool& has_real)
 {
   ASTNodeSet seen;
+  std::unordered_set<SourceSort, SourceSort::Hasher> seen_sorts;
   std::vector<ASTNode> stack(roots.begin(), roots.end());
   while (!stack.empty())
   {
@@ -2233,6 +2235,11 @@ void collect_symbols(const std::vector<ASTNode>& roots, std::vector<ASTNode>& sy
     if (n.IsNull() || !seen.insert(n).second)
       continue;
     const SourceSort ss = n.GetSourceSort();
+    // A sort can occur only in an assertion, for example the index sort of
+    // a constant array. Keep these in traversal order for their declarations.
+    if ((ss.kind() == SourceSort::Kind::Array || ss.kind() == SourceSort::Kind::Uninterpreted) &&
+        seen_sorts.insert(ss).second)
+      required_sorts.push_back(ss);
     if (ss.usesFloatingPointTheory())
       has_fp = true;
     if (ss.kind() == SourceSort::Kind::Array)
@@ -2258,8 +2265,9 @@ std::string Solver::to_smt2(bool with_check_sat) const
   std::ostringstream os;
   std::vector<ASTNode> roots = detail::flat_assertions(bm);
   std::vector<ASTNode> symbols;
+  std::vector<SourceSort> required_sorts;
   bool has_fp = false, has_array = false, has_uf = false, has_real = false;
-  collect_symbols(roots, symbols, has_fp, has_array, has_uf, has_real);
+  collect_symbols(roots, symbols, required_sorts, has_fp, has_array, has_uf, has_real);
   for (const std::string& name : m->symbol_order)
     symbols.push_back(m->symbols.at(name).node);
   // Declarations, in first-seen order without duplicates. They are written
@@ -2267,7 +2275,10 @@ std::string Solver::to_smt2(bool with_check_sat) const
   // the assertions: a declared symbol no assertion mentions still names its
   // sort, and a script that declares a Real under QF_BV is refused.
   std::ostringstream decls;
-  const std::function<void(std::uint32_t)> widen = [&](std::uint32_t sort) {
+  std::unordered_set<std::uint32_t> visited_sorts;
+  const std::function<void(std::uint32_t)> visit_sort = [&](std::uint32_t sort) {
+    if (!visited_sorts.insert(sort).second)
+      return;
     const detail::SortRec& r = m->rec(sort);
     switch (r.kind)
     {
@@ -2280,28 +2291,31 @@ std::string Solver::to_smt2(bool with_check_sat) const
         break;
       case SortKind::ARRAY:
         has_array = true;
-        widen(r.index);
-        widen(r.element);
+        visit_sort(r.index);
+        visit_sort(r.element);
         break;
       case SortKind::UNINTERPRETED:
         has_uf = true;
+        decls << "(declare-sort " << detail::quote_symbol(r.name) << " 0)\n";
         break;
       case SortKind::FUN:
         has_uf = true;
         for (std::uint32_t d : r.domain)
-          widen(d);
-        widen(r.codomain);
+          visit_sort(d);
+        visit_sort(r.codomain);
         break;
       default:
         break;
     }
   };
   ASTNodeSet declared;
+  // Preserve explicitly declared sorts, even unused ones, then declare fresh
+  // sorts needed by assertions or symbol signatures. This does not add fresh
+  // sorts to the source manager's declared_sorts() list.
   for (std::uint32_t index : m->declared_sort_order)
-  {
-    decls << "(declare-sort " << detail::quote_symbol(m->rec(index).name) << " 0)\n";
-    has_uf = true;
-  }
+    visit_sort(index);
+  for (const SourceSort& sort : required_sorts)
+    visit_sort(m->sort_of_source(sort, "Solver::to_smt2"));
   for (const ASTNode& sym : symbols)
   {
     if (!declared.insert(sym).second)
@@ -2322,7 +2336,7 @@ std::string Solver::to_smt2(bool with_check_sat) const
       name = sym.GetName();
     const std::uint32_t sort = m->sort_of_node(sym, "Solver::to_smt2");
     const detail::SortRec& r = m->rec(sort);
-    widen(sort);
+    visit_sort(sort);
     if (r.kind == SortKind::FUN)
     {
       decls << "(declare-fun " << detail::quote_symbol(name) << " (";
