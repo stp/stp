@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include <chrono>
 #include <ios>
 #include <sstream>
+#include <stdexcept>
 #include <streambuf>
 #include <thread>
 #include <utility>
@@ -573,4 +574,31 @@ TEST(Runs, interrupt_reaches_a_check_the_script_runs)
   EXPECT_TRUE(quick.interrupt_pending());
   EXPECT_EQ(quick.check_sat().reason(), UnknownReason::INTERRUPTED);
   EXPECT_FALSE(quick.interrupt_pending());
+}
+
+// An exception out of a check the input runs -- here the terminator's, which
+// that check now polls -- is an engine failure like any other: INTERNAL, the
+// manager poisoned. The parse's timer bracket had already been closed by the
+// check, and closing it again crashed.
+TEST(Runs, an_exception_in_a_check_the_script_runs_is_internal)
+{
+  struct Thrower : Terminator
+  {
+    bool terminate() override { throw std::runtime_error("the terminator threw"); }
+  } thrower;
+  TermManager tm;
+  Solver s(tm);
+  s.set_terminator(&thrower);
+  try
+  {
+    s.parse_smt2(std::string(kNeedsCnf) + "(check-sat)\n", ParseMode::EXECUTE);
+    ADD_FAILURE() << "the parse returned";
+  }
+  catch (const UnsafeError& failure)
+  {
+    EXPECT_EQ(failure.code(), ErrorCode::INTERNAL);
+    EXPECT_NE(std::string(failure.what()).find("the terminator threw"), std::string::npos)
+        << failure.what();
+  }
+  API_EXPECT_ERROR(ErrorCode::STATE, s.check_sat());
 }

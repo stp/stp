@@ -1689,20 +1689,29 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   // handing it the file and restarts it afterwards; the bracket has to be
   // balanced here the same way, or the category stack underflows on the
   // first executed check-sat.
+  const std::size_t timer_depth = bm->GetRunTimes()->depth();
   bm->GetRunTimes()->start(RunTimes::Parsing);
   struct Restore
   {
     STPMgr* bm;
+    std::size_t timer_depth;
     bool uf_before, ax_before;
     ~Restore()
     {
-      bm->GetRunTimes()->stop(RunTimes::Parsing);
+      // An exception out of an executed check-sat leaves the bracket open
+      // the other way (the check stopped Parsing, and its own phases never
+      // stopped): the stack is cut back to where the parse found it.
+      RunTimes* times = bm->GetRunTimes();
+      if (times->depth() == timer_depth + 1 && times->innermostIs(RunTimes::Parsing))
+        times->stop(RunTimes::Parsing);
+      else
+        times->unwindTo(timer_depth);
       GlobalParserInterface = nullptr;
       GlobalSTP = nullptr;
       bm->UserFlags.enable_uninterpreted_functions = uf_before;
       bm->UserFlags.enable_array_equality = ax_before;
     }
-  } restore{bm, bm->UserFlags.enable_uninterpreted_functions,
+  } restore{bm, timer_depth, bm->UserFlags.enable_uninterpreted_functions,
             bm->UserFlags.enable_array_equality};
   const ReaderScope reader(format, source.stream);
   seed_parser_symbols(pi, s->mgr);
