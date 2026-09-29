@@ -646,6 +646,7 @@ public:
   DLL_PUBLIC bool arraySortsAgree(const ASTNode& arr, const array_sort& sort);
 
   DLL_PUBLIC void success();
+  DLL_PUBLIC void echo(const std::string& value);
   DLL_PUBLIC void error(std::string msg);
   DLL_PUBLIC void unsupported();
 

@@ -2152,9 +2152,8 @@ cmdi:
 |
      ECHO_TOK STRING_TOK
     {
-      std::cout << "\"" << *$2  << "\"" << endl;
+      stp::GlobalParserInterface->echo(*$2);
       stp::releaseParserValue($2);
-      stp::GlobalParserInterface->success();
     }
 |
      EXIT_TOK

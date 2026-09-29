@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFModel.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "stp/Util/GitSHA1.h"
+#include "stp/Util/SMTLibString.h"
 #include "Lra/LraFrontend.h"
 #include <cassert>
 #include <exception>
@@ -787,11 +788,15 @@ void Cpp_interface::success()
   }
 }
 
-//TODO escape string.
+void Cpp_interface::echo(const std::string& value)
+{
+  cout << quoteSMTLibString(value) << endl;
+}
+
 void Cpp_interface::error(std::string msg)
 {
   last_error_message = msg;
-  cout << "(error \"" << msg << "\")" << endl;
+  cout << "(error " << quoteSMTLibString(msg) << ")" << endl;
   flush(cout);
 }
 
@@ -1796,9 +1801,9 @@ void Cpp_interface::getInfo(std::string flag)
         // caller nothing they can act on. All four share it because the
         // sentence is what says which, and SMT-LIB2 has no spelling that
         // would say it better.
-        cout << "(:reason-unknown (incomplete \""
-             << bm.getUnknownReasonDetail()
-             << "\"))" << endl;
+        cout << "(:reason-unknown (incomplete "
+             << quoteSMTLibString(bm.getUnknownReasonDetail())
+             << "))" << endl;
         break;
       case UnknownReason::None:
         // SOLVER_UNKNOWN cannot reach the frontend without a reason: both
