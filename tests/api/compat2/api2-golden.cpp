@@ -211,7 +211,7 @@ TEST(libstp2_golden, the_buffer_printers_give_2x_text)
   Expr q = vc_eqExpr(vc, x, vc_bvConstExprFromInt(vc, 8, 1));
 
   char* buf = nullptr;
-  unsigned long len = 0;
+  std::size_t len = 0;
   vc_printExprToBuffer(vc, q, &buf, &len);
   EXPECT_EQ(take(buf), "(x = 0x01\n) ");
   EXPECT_EQ(len, 13u); // the terminating NUL counted, as 2.x did
