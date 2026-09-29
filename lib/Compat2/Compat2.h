@@ -141,6 +141,8 @@ struct VCImpl
   bool flag_x = false, flag_u = false, flag_m = false, flag_n = false,
        flag_p = false;
   bool divmod_explicit = false; // BV_TERM_ABSTRACTION_DIVMOD was named
+  bool rounds_explicit = false; // BV_TERM_ABSTRACTION_ROUNDS was named
+  bool groups_explicit = false; // vc_setSchemaGroups was called
   int uf_sort_width = 16;       // recorded only (see NOTES.md)
 
   enum reason_unknown_t reason = REASON_UNKNOWN_NONE;

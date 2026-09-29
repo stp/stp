@@ -938,8 +938,9 @@ void vc_setInterfaceFlags(VC vcp, enum ifaceflag_t f, int v)
         set_option(vc, "bv-term-abstraction-divmod", bool_text(v), "BV_TERM_ABSTRACTION_MULT");
       break;
     case BV_TERM_ABSTRACTION_ROUNDS:
-      if (non_negative(v, "BV_TERM_ABSTRACTION_ROUNDS"))
-        set_option(vc, "bv-term-abstraction-rounds", sv, "BV_TERM_ABSTRACTION_ROUNDS");
+      if (non_negative(v, "BV_TERM_ABSTRACTION_ROUNDS") &&
+          set_option(vc, "bv-term-abstraction-rounds", sv, "BV_TERM_ABSTRACTION_ROUNDS"))
+        vc->rounds_explicit = true;
       break;
     case BV_TERM_ABSTRACTION_SCHEMAS:
       set_option(vc, "bv-term-abstraction-schemas", bool_text(v), "BV_TERM_ABSTRACTION_SCHEMAS");
@@ -972,15 +973,37 @@ void vc_setInterfaceFlags(VC vcp, enum ifaceflag_t f, int v)
       set_option(vc, "bv-term-abstraction-divmod", bool_text(v), "BV_TERM_ABSTRACTION_DIVMOD");
       break;
     case BV_TERM_ABSTRACTION_PROFILE:
+    {
+      // A profile is a schema-group mask and a round ceiling, and a half the
+      // caller named is theirs, in either order (2.x's applyProfileGroups and
+      // applyProfileRounds). The registry's profile entry excludes the other
+      // two outright, as the command line has it, so the halves are applied
+      // here: the groups and rounds of bv-term-abstraction-profile's help.
+      static const char* const kBroad = "base,udiv15,udiv-observed,urem,mul8,mul-ref3,"
+                                        "quotient-one-rem,quotient-one-quot,divisor-magnitude";
+      const char* groups = nullptr;
+      const char* rounds = nullptr;
+      std::string aggressive;
       if (v == STP_BV_TERM_ABSTRACTION_PROFILE_QUALIFIED)
-        set_option(vc, "bv-term-abstraction-profile", "qualified", "BV_TERM_ABSTRACTION_PROFILE");
+        groups = "base,urem,mul-ref3", rounds = "32";
       else if (v == STP_BV_TERM_ABSTRACTION_PROFILE_BROAD)
-        set_option(vc, "bv-term-abstraction-profile", "broad", "BV_TERM_ABSTRACTION_PROFILE");
+        groups = kBroad, rounds = "16";
       else if (v == STP_BV_TERM_ABSTRACTION_PROFILE_AGGRESSIVE)
-        set_option(vc, "bv-term-abstraction-profile", "aggressive", "BV_TERM_ABSTRACTION_PROFILE");
+      {
+        aggressive = std::string(kBroad) + ",divrem-full";
+        groups = aggressive.c_str(), rounds = "16";
+      }
       else
+      {
         report("BV_TERM_ABSTRACTION_PROFILE takes a bv_term_abstraction_profile_t ordinal");
+        break;
+      }
+      if (!vc->groups_explicit)
+        set_option(vc, "bv-term-abstraction-schema-groups", groups, "BV_TERM_ABSTRACTION_PROFILE");
+      if (!vc->rounds_explicit)
+        set_option(vc, "bv-term-abstraction-rounds", rounds, "BV_TERM_ABSTRACTION_PROFILE");
       break;
+    }
     case BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT:
       if (non_negative(v, "BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT"))
         set_option(vc, "bv-term-abstraction-divmod-value-limit", sv, "BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT");
@@ -1247,7 +1270,10 @@ int vc_setSchemaGroups(VC vcp, const char* groups)
     report("vc_setSchemaGroups: empty group list");
     return 0;
   }
-  return set_option(vc, "bv-term-abstraction-schema-groups", groups, "vc_setSchemaGroups") ? 1 : 0;
+  if (!set_option(vc, "bv-term-abstraction-schema-groups", groups, "vc_setSchemaGroups"))
+    return 0;
+  vc->groups_explicit = true;
+  return 1;
 }
 
 unsigned long long vc_getSchemaGroupCounter(VC vcp, unsigned group)

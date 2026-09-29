@@ -486,3 +486,51 @@ TEST(libstp2_fidelity, a_parse_may_declare_a_name_the_checker_has)
   vc_setErrorPolicy(STP_ON_ERROR_ABORT);
   vc_registerErrorHandler(nullptr);
 }
+
+// 2.x applied a term-abstraction profile as its schema groups and its round
+// ceiling, a half the caller named explicitly winning in either order. libstp2
+// set the 3.x profile entry, which excludes the other two, and the checker died
+// at its first assertion with "cannot be combined".
+TEST(libstp2_fidelity, a_profile_and_an_explicit_half_combine)
+{
+  enum class Order
+  {
+    profile_rounds,
+    rounds_profile,
+    groups_profile,
+    profile_after_query
+  };
+  for (Order order : {Order::profile_rounds, Order::rounds_profile, Order::groups_profile,
+                      Order::profile_after_query})
+  {
+    VC vc = vc_createValidityChecker();
+    switch (order)
+    {
+      case Order::profile_rounds:
+        vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION, 1);
+        vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_PROFILE, STP_BV_TERM_ABSTRACTION_PROFILE_AGGRESSIVE);
+        vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_ROUNDS, 3);
+        break;
+      case Order::rounds_profile:
+        vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION, 1);
+        vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_ROUNDS, 3);
+        vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_PROFILE, STP_BV_TERM_ABSTRACTION_PROFILE_AGGRESSIVE);
+        break;
+      case Order::groups_profile:
+        vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION, 1);
+        EXPECT_EQ(1, vc_setSchemaGroups(vc, "base,mul8"));
+        vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_PROFILE, STP_BV_TERM_ABSTRACTION_PROFILE_BROAD);
+        break;
+      case Order::profile_after_query:
+        EXPECT_EQ(1, vc_query(vc, vc_trueExpr(vc)));
+        vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_PROFILE, STP_BV_TERM_ABSTRACTION_PROFILE_AGGRESSIVE);
+        vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_ROUNDS, 3);
+        break;
+    }
+    Type bv8 = vc_bvType(vc, 8);
+    Expr x = vc_varExpr(vc, "x", bv8), y = vc_varExpr(vc, "y", bv8);
+    vc_assertFormula(vc, vc_eqExpr(vc, vc_bvMultExpr(vc, 8, x, y), vc_bvConstExprFromInt(vc, 8, 6)));
+    EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))) << static_cast<int>(order);
+    vc_Destroy(vc);
+  }
+}
