@@ -426,12 +426,6 @@ ASTNode Cpp_interface::LookupOrCreateSymbol(const char* const name)
   return bm.LookupOrCreateSymbol(name);
 }
 
-ASTNode Cpp_interface::CreateParameterisedBooleanVar(const ASTNode& var,
-                                                     const ASTNode& constant)
-{
-  return bm.NewParameterized_BooleanVar(var, constant);
-}
-
 void Cpp_interface::removeSymbol(ASTNode to_remove)
 {
   if (!frames.back()->removeSymbol(to_remove))
@@ -899,12 +893,7 @@ void Cpp_interface::reset()
   popToFirstLevel();
 
   if (frames.size() > 0)
-  {
-    // used just by cvc parser.
-    assert(letMgr->_parser_symbol_table.size() == 0);
-
     removeFrame();
-  }
 
   assert(frames.size() == 0);
 
@@ -1010,8 +999,6 @@ void Cpp_interface::pop()
   discardExtensionalitySolveState();
 
   cache.erase(cache.end() - 1);
-
-  assert(letMgr->_parser_symbol_table.size() == 0);
 
   // Popping a level undoes the assertions made in it either way; what it does
   // to the declarations made in it is what :global-declarations selects
@@ -1430,7 +1417,6 @@ void Cpp_interface::cleanUp()
   if (current_command_active)
     finishCurrentCommand();
 
-  letMgr->cleanupParserSymbolTable();
   cache.clear();
 
   // Every frame is going away, so don't erase the functions from the

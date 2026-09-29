@@ -36,16 +36,15 @@ TEST(SolverOutput_Test, ErrorsAreFatalInEveryOutputMode)
   // The previous error guard depended on whether the manager had seen Real
   // syntax. Error handling must apply to every logic and also to callers
   // that suppress verdict output, which the CLI always enables.
-  for (int mode = 0; mode < 3; ++mode)
+  for (bool smt2 : {false, true})
     for (bool real : {false, true})
       for (bool print : {false, true})
       {
         SCOPED_TRACE(::testing::Message()
-                     << "mode=" << mode << " real=" << real
+                     << "smt2=" << smt2 << " real=" << real
                      << " print=" << print);
         stp::STPMgr manager;
-        manager.UserFlags.smtlib1_parser_flag = mode == 1;
-        manager.UserFlags.smtlib2_parser_flag = mode == 2;
+        manager.UserFlags.smtlib2_parser_flag = smt2;
         manager.UserFlags.print_output_flag = print;
         if (real)
           manager.CreateRealConst("0");
@@ -56,8 +55,8 @@ TEST(SolverOutput_Test, ErrorsAreFatalInEveryOutputMode)
         EXPECT_THROW(stp::ToSATBase::PrintOutput(&manager, stp::SOLVER_ERROR),
                      stp::EngineFatal);
         EXPECT_FALSE(manager.ValidFlag);
-        const char* expected = !print ? "" : mode == 0 ? "Error.\n"
-            : "(error \"solver returned SOLVER_ERROR\")\n";
+        const char* expected =
+            !print ? "" : "(error \"solver returned SOLVER_ERROR\")\n";
         EXPECT_EQ(capture.out.str(), expected);
         EXPECT_EQ(capture.err.str(),
                   "Fatal Error: solver returned SOLVER_ERROR\n");

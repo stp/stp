@@ -242,7 +242,7 @@ def test_scripts_and_printing(tmp_path):
     s2.from_string(s.to_smt2())
     assert len(s2.assertions()) == 2 and s2.check() == sat and s2.model()[BitVec("a", 8, tm=tm2)].as_long() == 7
     s2.close()
-    # from_file with format detection, and the other input languages
+    # from_file, and SMT-LIB 2 as the only input language
     path = tmp_path / "q.smt2"
     path.write_text(s.to_smt2(with_check_sat=True))
     s3 = Solver(TermManager())
@@ -250,8 +250,8 @@ def test_scripts_and_printing(tmp_path):
     assert s3.check() == sat
     s3.close()
     s4 = Solver(TermManager())
-    s4.from_string("x : BITVECTOR(8); ASSERT(x = 0hex05); QUERY(FALSE);", format="cvc")
-    assert s4.check() == sat and s4.model()[s4.symbol("x")].as_long() == 5
+    with pytest.raises(ArgumentError):
+        s4.from_string("(assert true)", format="dot")
     with pytest.raises(ArgumentError):
         s4.from_string("(assert true)", format="pdf")
     s4.close()
@@ -361,31 +361,21 @@ def test_parse_term_runs_no_command():
 
 
 def test_inputs_run_as_the_command_line_runs_them():
-    # a CVC query decided and answered, in the command line's words
+    script = "(declare-fun x () (_ BitVec 8))\n(assert (= x #x05))\n(assert (not (= x #x05)))\n(check-sat)\n"
+    # a script's check decided and answered, in the command line's words
     s = Solver(TermManager())
     out = []
     s.set_output_sink(out.append)
-    s.from_string("x : BITVECTOR(8);\nASSERT(x = 0hex05);\nQUERY(x = 0hex05);\n", format="cvc",
-                  mode="execute")
-    assert "".join(out) == "Valid.\n"
-    # parse-only decides nothing, and the input prints back
+    s.from_string(script, mode="execute")
+    assert "".join(out) == "unsat\n"
+    # parse-only decides nothing
     s2 = Solver(TermManager())
     out2 = []
     s2.set_output_sink(out2.append)
-    s2.from_string("x : BITVECTOR(8);\nASSERT(x = 0hex05);\nQUERY(x = 0hex06);\n", format="cvc",
-                   mode="parse-only")
+    s2.from_string(script, mode="parse-only")
     assert "".join(out2) == ""
-    assert "QUERY" in s2.input_to_string() and "BITVECTOR(8)" in s2.input_to_string("cvc")
-    assert "(declare-fun" in s2.input_to_string("smtlib2")
-    assert s2.input_to_string("gdl").startswith("graph: {")
-    with pytest.raises(ArgumentError):
-        s2.input_to_string("pdf")
+    assert s2.assertions() and s2.check() == unsat
     s2.close()
-    # no CVC or SMT-LIB 1 input yet: nothing to print back
-    s3 = Solver(TermManager())
-    with pytest.raises(StateError):
-        s3.input_to_string()
-    s3.close()
     s.close()
 
 
@@ -428,8 +418,8 @@ def test_the_cnf_sink_and_the_fatal_error_handler():
     heard = []
     s.set_fatal_error_handler(heard.append)
     with pytest.raises(ParseError):
-        s.from_string("z : BITVECTOR(0);\nQUERY(TRUE);\n", format="cvc", mode="execute")
-    assert heard == ["parsing: bit-vectors must be of positive length"]
+        s.from_string("(declare-fun z () (_ BitVec 0))\n", mode="execute")
+    assert len(heard) == 1 and "bit-vectors must be of positive length" in heard[0]
     s.set_fatal_error_handler(None)
     assert s.check() == sat
     s.close()

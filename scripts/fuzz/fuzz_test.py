@@ -93,13 +93,7 @@ class Tester:
         # , "--disable-equality", "-r", "--oldstyle-refinement"]
 
         # print options
-        # --print-back-CVC", "--print-back-SMTLIB2"
-        # --print-back-GDL", "--print-back-dot"
         # -p (COUNTEREXAMPLE), -s (STATS), -t (quick stats), -v (notes), -y (counterexample in binary)
-        # -b (print back input to output)
-
-        # input options
-        # , "--SMTLIB1", "-m", "--SMTLIB2"
 
         # output options
         # --output-CNF --exit-after-CNF

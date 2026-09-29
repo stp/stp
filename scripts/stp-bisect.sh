@@ -61,19 +61,15 @@ done
 
 # Invoke STP
 # Use grep(1) to determine whether the query was satisfiable.
-./stp /dev/stdin <<EOF | grep -q 'Valid.'
-  X : BITVECTOR(31);
-  Y : BITVECTOR(31);
-  QUERY (
-  LET NODE134 =
-  (BVPLUS(32,0bin00000000000000000000000000000001[31:0],(0bin0@Y)[31:0])) IN (
-  LET NODE136 = (SBVLT(NODE134[31:0],
-  0bin00000000000000000000000000000000[31:0])) IN (
-  LET NODE137 = (NOT(NODE136)) IN (
-  LET NODE212 = (SBVLT((0bin0@Y)[31:0], (0bin0@X)[31:0])) IN (
-  LET NODE213 = (NOT(NODE212)) IN (
-  LET NODE214 = (SBVLT((0bin0@X)[31:0], (0bin0@Y)[31:0])) IN (
-  (NODE214 OR NODE213 OR NODE137))))))));
+./stp /dev/stdin <<EOF | grep -q '^unsat'
+  (set-logic QF_BV)
+  (declare-fun X () (_ BitVec 31))
+  (declare-fun Y () (_ BitVec 31))
+  (assert (not (let ((n134 (bvadd #x00000001 (concat #b0 Y))))
+    (or (bvslt (concat #b0 X) (concat #b0 Y))
+        (not (bvslt (concat #b0 Y) (concat #b0 X)))
+        (not (bvslt n134 #x00000000))))))
+  (check-sat)
 EOF
 
 # Return 0 to indicate that this revision is good, 1 for bad.

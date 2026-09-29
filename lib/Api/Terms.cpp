@@ -625,8 +625,6 @@ std::string print_term(ManagerImpl* m, const ASTNode& n, Format f, bool share)
       case Format::GDL:
         printer::GDL_Print(os, n);
         break;
-      case Format::SMTLIB1:
-        fail(ErrorCode::UNSUPPORTED, "Term::to_string", "there is no SMT-LIB 1 printer");
     }
     return os.str();
   });

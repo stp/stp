@@ -33,7 +33,6 @@ THE SOFTWARE.
 
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
 #include <string>
 #include <vector>
 
@@ -46,76 +45,6 @@ std::string text_of(Expr e)
   std::string out = s != nullptr ? s : "";
   std::free(s);
   return out;
-}
-
-// vc_parseMemExpr hands back the ASSERTs and the QUERY apart, asserting only
-// the former. The query here is not valid, so neither it nor FALSE may come
-// out valid after the parse.
-TEST(libstp2_fidelity, a_parsed_query_that_is_not_valid_stays_so)
-{
-  VC vc = vc_createValidityChecker();
-  Expr query = nullptr, asserts = nullptr;
-  ASSERT_EQ(1, vc_parseMemExpr(vc, "x : BITVECTOR(8); ASSERT(x = 0hex01); QUERY x = 0hex02;", &query,
-                               &asserts));
-  EXPECT_NE(std::string::npos, text_of(asserts).find("0x01")) << text_of(asserts);
-  EXPECT_EQ(std::string::npos, text_of(asserts).find("FALSE")) << text_of(asserts);
-  EXPECT_EQ(0, vc_query(vc, query));
-  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
-  vc_DeleteExpr(query);
-  vc_DeleteExpr(asserts);
-  vc_Destroy(vc);
-}
-
-// The parser asserts a query's negation, and drops one that folds to TRUE:
-// a query that asserts nothing is FALSE, or folds to it, and parses as FALSE.
-TEST(libstp2_fidelity, a_false_query_parses_as_false)
-{
-  for (const char* text : {"x : BITVECTOR(8); ASSERT(x = 0hex01); QUERY FALSE;",
-                           "x : BITVECTOR(8); ASSERT(x = 0hex01); QUERY x /= x;"})
-  {
-    VC vc = vc_createValidityChecker();
-    Expr query = nullptr, asserts = nullptr;
-    ASSERT_EQ(1, vc_parseMemExpr(vc, text, &query, &asserts)) << text;
-    EXPECT_EQ(FALSE, getExprKind(query)) << text << ": " << text_of(query);
-    EXPECT_EQ(0, vc_query(vc, query)) << text;
-    vc_DeleteExpr(query);
-    vc_DeleteExpr(asserts);
-    vc_Destroy(vc);
-  }
-}
-
-// A ';' in a comment inside the QUERY statement does not end it.
-TEST(libstp2_fidelity, a_comment_in_a_query_is_skipped)
-{
-  VC vc = vc_createValidityChecker();
-  Expr query = nullptr, asserts = nullptr;
-  ASSERT_EQ(1, vc_parseMemExpr(vc,
-                               "x : BITVECTOR(8); ASSERT(x = 0hex01); "
-                               "QUERY x = % ; a comment\n 0hex02;",
-                               &query, &asserts));
-  EXPECT_NE(std::string::npos, text_of(query).find("0x02")) << text_of(query);
-  EXPECT_EQ(0, vc_query(vc, query));
-  vc_DeleteExpr(query);
-  vc_DeleteExpr(asserts);
-  vc_Destroy(vc);
-}
-
-// A name the lexer reads whole is not the QUERY keyword, whatever it contains.
-TEST(libstp2_fidelity, a_name_containing_query_is_a_name)
-{
-  for (const char* name : {"x$QUERY", "x?QUERY", "QUERY'", "_QUERY"})
-  {
-    const std::string text = std::string(name) + " : BOOLEAN; ASSERT(NOT " + name + "); QUERY " +
-                             name + ";";
-    VC vc = vc_createValidityChecker();
-    Expr query = nullptr, asserts = nullptr;
-    ASSERT_EQ(1, vc_parseMemExpr(vc, text.c_str(), &query, &asserts)) << text;
-    EXPECT_NE(std::string::npos, text_of(query).find(name)) << text_of(query);
-    EXPECT_EQ(0, vc_query(vc, query)) << text;
-    vc_DeleteExpr(query);
-    vc_DeleteExpr(asserts);
-    vc_Destroy(vc);
-  }
 }
 
 // vc_paramBoolExpr names its variable after the application as 2.x printed
@@ -239,14 +168,13 @@ TEST(libstp2_fidelity, a_whole_counterexample_holds_the_reads_an_evaluation_made
 }
 
 // A Real term's counterexample value is the exact Real model's, and an
-// assertion, a parsed one included, a declaration, or a parsed CVC query
-// since the query leaves that model none.
+// assertion or a declaration since the query leaves that model none.
 TEST(libstp2_fidelity, a_stale_real_model_has_no_counterexample_value)
 {
   VC vc = vc_createValidityChecker();
   Expr x = vc_varExpr(vc, "x", vc_realType(vc));
   vc_assertFormula(vc, vc_eqExpr(vc, x, vc_realConstExprFromStr(vc, "1")));
-  for (int stale = 0; stale < 4; ++stale)
+  for (int stale = 0; stale < 2; ++stale)
   {
     ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
     Expr v = vc_getCounterExample(vc, x);
@@ -255,12 +183,8 @@ TEST(libstp2_fidelity, a_stale_real_model_has_no_counterexample_value)
     vc_DeleteExpr(v);
     if (stale == 0)
       vc_assertFormula(vc, vc_trueExpr(vc));
-    else if (stale == 1)
-      vc_varExpr(vc, "y", vc_realType(vc));
-    else if (stale == 2)
-      ASSERT_EQ(1, vc_parseMemExpr(vc, "ASSERT(TRUE); QUERY TRUE;", nullptr, nullptr));
     else
-      ASSERT_EQ(1, vc_parseMemExpr(vc, "QUERY TRUE;", nullptr, nullptr));
+      vc_varExpr(vc, "y", vc_realType(vc));
     EXPECT_EQ(0, vc_hasRealModel(vc)) << stale;
     EXPECT_EQ(0, vc_hasRealModelValue(vc, x)) << stale;
     EXPECT_EQ(nullptr, vc_getCounterExample(vc, x)) << stale;
@@ -269,51 +193,6 @@ TEST(libstp2_fidelity, a_stale_real_model_has_no_counterexample_value)
 }
 
 } // namespace
-
-// A CVC text that asserts anything hands back, as its assertions, the
-// conjunction of every assertion the checker holds -- 2.x's GetAsserts(), with
-// the ones made before the text and every level's -- and one that asserts
-// nothing hands back TRUE. libstp2 handed back the text's own alone, so with
-// FALSE asserted first "ASSERT TRUE; QUERY FALSE;" came back TRUE where 2.x
-// gave FALSE, and vc_parseExpr's conjunction lost the FALSE too.
-TEST(libstp2_fidelity, a_cvc_text_hands_back_every_assertion)
-{
-  VC vc = vc_createValidityChecker();
-  vc_assertFormula(vc, vc_falseExpr(vc));
-  Expr query = nullptr, asserts = nullptr;
-  ASSERT_EQ(1, vc_parseMemExpr(vc, "ASSERT TRUE; QUERY FALSE;", &query, &asserts));
-  EXPECT_EQ(FALSE, getExprKind(asserts)) << text_of(asserts);
-  vc_DeleteExpr(query);
-  vc_DeleteExpr(asserts);
-  {
-    std::ofstream("api2-fidelity-parse.cvc") << "ASSERT TRUE; QUERY FALSE;\n";
-    Expr parsed = vc_parseExpr(vc, "api2-fidelity-parse.cvc");
-    ASSERT_NE(nullptr, parsed);
-    EXPECT_EQ(FALSE, getExprKind(parsed)) << text_of(parsed);
-    vc_DeleteExpr(parsed);
-    std::remove("api2-fidelity-parse.cvc");
-  }
-  vc_Destroy(vc);
-
-  vc = vc_createValidityChecker();
-  Expr x = vc_varExpr(vc, "x", vc_bvType(vc, 8));
-  vc_assertFormula(vc, vc_eqExpr(vc, x, vc_bvConstExprFromInt(vc, 8, 1)));
-  vc_push(vc);
-  Expr y = vc_varExpr(vc, "y", vc_bvType(vc, 8));
-  vc_assertFormula(vc, vc_eqExpr(vc, y, vc_bvConstExprFromInt(vc, 8, 2)));
-  ASSERT_EQ(1, vc_parseMemExpr(vc, "z : BITVECTOR(8); ASSERT(z = 0hex03); QUERY FALSE;", &query,
-                               &asserts));
-  EXPECT_EQ(AND, getExprKind(asserts)) << text_of(asserts);
-  EXPECT_EQ(3, getDegree(asserts)) << text_of(asserts);
-  vc_DeleteExpr(query);
-  vc_DeleteExpr(asserts);
-  // a text that asserts nothing hands back TRUE, whatever the checker holds
-  ASSERT_EQ(1, vc_parseMemExpr(vc, "QUERY FALSE;", &query, &asserts));
-  EXPECT_EQ(TRUE, getExprKind(asserts)) << text_of(asserts);
-  vc_DeleteExpr(query);
-  vc_DeleteExpr(asserts);
-  vc_Destroy(vc);
-}
 
 // KLEE's commonest shape: a constant table of 256 or more entries, flushed as
 // a write chain, indexed by one symbolic byte of an input that is read once.
@@ -363,40 +242,42 @@ TEST(libstp2_fidelity, a_table_indexed_by_a_symbolic_byte_has_a_counterexample)
   }
 }
 
-// A CVC text that a grammar action rejects -- an unresolved name, operands of
-// two widths -- is a failed parse reported through the handler. The action
-// went on building from what it had rejected: the unresolved name crashed
-// the process without reaching the handler under either error policy, and
-// the width mismatch parsed "successfully" into a formula no one wrote.
-// (2.x called the handler and aborted; STP_ON_ERROR_RETURN returns instead.)
+// STP no longer reads CVC or SMT-LIB 1, so the two 2.x parse functions
+// refuse every text through the handler: under STP_ON_ERROR_RETURN they
+// return their failure values, with both of vc_parseMemExpr's results NULL,
+// and the checker is usable afterwards. (2.x called the handler and aborted
+// for a text it could not parse.)
 namespace
 {
 int parse_errors = 0;
-void count_parse_error(const char*)
+std::string parse_error;
+void count_parse_error(const char* msg)
 {
   ++parse_errors;
+  parse_error = msg;
 }
 } // namespace
 
-TEST(libstp2_fidelity, a_rejected_cvc_text_is_a_failed_parse)
+TEST(libstp2_fidelity, a_parse_is_refused_through_the_handler)
 {
   vc_registerErrorHandler(count_parse_error);
   vc_setErrorPolicy(STP_ON_ERROR_RETURN);
-  for (const char* text : {"x : BITVECTOR(8); ASSERT(y = 0hex01); QUERY(x = x);",
-                           "x : BITVECTOR(8); ASSERT((x & 0hex001) = 0hex01); QUERY(FALSE);",
-                           "x : BITVECTOR(8); ASSERT((x | 0hex001) = 0hex000); QUERY(FALSE);"})
-  {
-    VC vc = vc_createValidityChecker();
-    Expr query = nullptr, asserts = nullptr;
-    parse_errors = 0;
-    EXPECT_NE(1, vc_parseMemExpr(vc, text, &query, &asserts)) << text;
-    EXPECT_EQ(1, parse_errors) << text;
-    // the checker is usable afterwards
-    Expr z = vc_varExpr(vc, "z", vc_bvType(vc, 8));
-    vc_assertFormula(vc, vc_eqExpr(vc, z, vc_bvConstExprFromInt(vc, 8, 7)));
-    EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))) << text;
-    vc_Destroy(vc);
-  }
+  VC vc = vc_createValidityChecker();
+  Expr query = vc_trueExpr(vc), asserts = vc_trueExpr(vc);
+  parse_errors = 0;
+  EXPECT_EQ(0, vc_parseMemExpr(vc, "x : BITVECTOR(8); ASSERT(x = 0hex01); QUERY(FALSE);", &query,
+                               &asserts));
+  EXPECT_EQ(1, parse_errors);
+  EXPECT_NE(std::string::npos, parse_error.find("no longer reads CVC or SMT-LIB 1")) << parse_error;
+  EXPECT_EQ(nullptr, query);
+  EXPECT_EQ(nullptr, asserts);
+  EXPECT_EQ(nullptr, vc_parseExpr(vc, "api2-fidelity-parse.cvc"));
+  EXPECT_EQ(2, parse_errors);
+  // the checker is usable afterwards
+  Expr z = vc_varExpr(vc, "z", vc_bvType(vc, 8));
+  vc_assertFormula(vc, vc_eqExpr(vc, z, vc_bvConstExprFromInt(vc, 8, 7)));
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
   vc_setErrorPolicy(STP_ON_ERROR_ABORT);
   vc_registerErrorHandler(nullptr);
 }
@@ -424,67 +305,6 @@ TEST(libstp2_fidelity, a_deep_term_is_read_back_and_simplified)
   EXPECT_EQ(TRUE, getExprKind(value));
   vc_DeleteExpr(value);
   vc_Destroy(vc);
-}
-
-// 2.x gave each vc_parseExpr/vc_parseMemExpr its own declaration scope, so a
-// text declares what it uses and a name the checker already has is simply the
-// same symbol again: the same text parsed twice, a text declaring a symbol
-// vc_varExpr made, an SMT-LIB 1 benchmark parsed twice. libstp2 seeded the
-// checker's names into the parse, and the declaration of one was a syntax
-// error, fatal by default. A re-declaration at another width -- a new symbol
-// in 2.x -- is refused (lib/Compat2/NOTES.md).
-TEST(libstp2_fidelity, a_parse_may_declare_a_name_the_checker_has)
-{
-  VC vc = vc_createValidityChecker();
-  const char* text = "x : BITVECTOR(8); ASSERT(x = 0hex01); QUERY(x = 0hex02);";
-  for (int round = 0; round < 2; ++round)
-  {
-    Expr query = nullptr, asserts = nullptr;
-    ASSERT_EQ(1, vc_parseMemExpr(vc, text, &query, &asserts)) << round;
-    EXPECT_EQ(0, vc_query(vc, query)) << round; // x = 1 makes x = 2 invalid
-    vc_DeleteExpr(query);
-    vc_DeleteExpr(asserts);
-  }
-  vc_Destroy(vc);
-
-  vc = vc_createValidityChecker();
-  Expr x = vc_varExpr(vc, "x", vc_bvType(vc, 8));
-  vc_assertFormula(vc, vc_eqExpr(vc, x, vc_bvConstExprFromInt(vc, 8, 2)));
-  Expr query = nullptr, asserts = nullptr;
-  ASSERT_EQ(1, vc_parseMemExpr(vc, "x : BITVECTOR(8); QUERY(x = 0hex02);", &query, &asserts));
-  EXPECT_EQ(1, vc_query(vc, query)); // the text's x is the checker's
-  vc_DeleteExpr(query);
-  vc_DeleteExpr(asserts);
-  vc_Destroy(vc);
-
-  vc = vc_createValidityChecker();
-  vc_setFlags(vc, 'm', 0); // SMT-LIB 1
-  const char* benchmark = "(benchmark b :logic QF_BV :extrafuns ((y BitVec[8])) "
-                          ":assumption (= y bv3[8]) :formula (= y bv3[8]))";
-  for (int round = 0; round < 2; ++round)
-  {
-    Expr q = nullptr, a = nullptr;
-    EXPECT_EQ(1, vc_parseMemExpr(vc, benchmark, &q, &a)) << round;
-    vc_DeleteExpr(q);
-    vc_DeleteExpr(a);
-  }
-  vc_Destroy(vc);
-
-  // at another width: refused, through the handler
-  vc_registerErrorHandler(count_parse_error);
-  vc_setErrorPolicy(STP_ON_ERROR_RETURN);
-  vc = vc_createValidityChecker();
-  parse_errors = 0;
-  Expr q = nullptr, a = nullptr;
-  ASSERT_EQ(1, vc_parseMemExpr(vc, "x : BITVECTOR(8); QUERY(x = 0hex02);", &q, &a));
-  vc_DeleteExpr(q);
-  vc_DeleteExpr(a);
-  q = a = nullptr;
-  EXPECT_NE(1, vc_parseMemExpr(vc, "x : BITVECTOR(4); QUERY(x = 0hex2);", &q, &a));
-  EXPECT_EQ(1, parse_errors);
-  vc_Destroy(vc);
-  vc_setErrorPolicy(STP_ON_ERROR_ABORT);
-  vc_registerErrorHandler(nullptr);
 }
 
 // 2.x applied a term-abstraction profile as its schema groups and its round
@@ -566,22 +386,6 @@ TEST(libstp2_fidelity, extract_bounds_are_children)
   ASSERT_EQ(2, getDegree(sx));
   EXPECT_EQ(16u, getBVUnsigned(getChild(sx, 1)));
   EXPECT_EQ(32, getBVLength(getChild(sx, 1)));
-  vc_Destroy(vc);
-}
-
-// A parsed CVC query becomes the checker's query, which vc_printQuery prints,
-// as 2.x's parser made it with SetQuery.
-TEST(libstp2_fidelity, print_query_after_a_parse)
-{
-  VC vc = vc_createValidityChecker();
-  Expr pq = nullptr, pa = nullptr;
-  ASSERT_EQ(1, vc_parseMemExpr(vc, "p : BITVECTOR(8); QUERY(p = 0hex02);", &pq, &pa));
-  testing::internal::CaptureStdout();
-  vc_printQuery(vc);
-  const std::string printed = testing::internal::GetCapturedStdout();
-  EXPECT_NE(std::string::npos, printed.find("QUERY((p = 0x02")) << printed;
-  vc_DeleteExpr(pq);
-  vc_DeleteExpr(pa);
   vc_Destroy(vc);
 }
 

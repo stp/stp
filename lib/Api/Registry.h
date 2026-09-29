@@ -131,7 +131,7 @@ struct CliAlias
 struct CliFrontend
 {
   const char* key;       // what tools/stp binds the registration to
-  const char* spellings; // CLI11's name list ("--SMTLIB1,-m")
+  const char* spellings; // CLI11's name list ("--print-counterex,-p")
   const char* kind;      // positional | help | flag | bool-option
   const char* group;     // nullptr for the positional
   const char* help;

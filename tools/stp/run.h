@@ -42,27 +42,14 @@ namespace stp_cli
 struct Invocation
 {
   std::string infile; // empty: standard input
-  // The parser: --CVC, --SMTLIB1 or --SMTLIB2, or else the file's extension.
-  stp::Format format = stp::Format::SMTLIB2;
   std::optional<bool> interactive; // --interactive, when it was given
   bool parse_only = false;
   bool exit_after_cnf = false;
   bool output_cnf = false;
   bool print_output = false; // -n: the answers are printed regardless
-  bool print_stpinput = false; // -b: the input back, in CVC (SMT-LIB 2 for SMT-LIB 1)
-  bool print_back_cvc = false;
-  bool print_back_smtlib2 = false;
-  bool print_back_gdl = false;
-  bool print_back_dot = false;
   // -s: the solver's teardown prints statistics of its own (a Real session's,
   // the floating-point abstraction's), so the run ends with it
   bool statistics = false;
-
-  bool print_back() const
-  {
-    return print_stpinput || print_back_cvc || print_back_smtlib2 || print_back_gdl ||
-           print_back_dot;
-  }
 };
 
 // Reads the input into `solver` and runs it; the process's exit status.

@@ -213,7 +213,6 @@ typedef enum stp_format
 {
   STP_FORMAT_AUTO = 0,
   STP_FORMAT_SMTLIB2,
-  STP_FORMAT_SMTLIB1,
   STP_FORMAT_CVC,
   STP_FORMAT_DOT,
   STP_FORMAT_GDL,
@@ -699,8 +698,8 @@ STP_API stp_statistics stp_solver_statistics(stp_solver); /* a snapshot */
 /* symbols and scripts (the name table is the manager's) */
 STP_API stp_term stp_solver_symbol(stp_solver, const char* name); /* NULL, no error, if unknown */
 STP_API stp_status stp_solver_parse_smt2(stp_solver, const char* script, stp_parse_mode);
-STP_API stp_status stp_solver_parse(stp_solver, const char* text, stp_format); /* SMTLIB2, SMTLIB1 or CVC */
-STP_API stp_status stp_solver_parse_file(stp_solver, const char* path, stp_format); /* AUTO picks by extension */
+STP_API stp_status stp_solver_parse(stp_solver, const char* text, stp_format); /* SMT-LIB 2: SMTLIB2 or AUTO */
+STP_API stp_status stp_solver_parse_file(stp_solver, const char* path, stp_format); /* SMT-LIB 2: SMTLIB2 or AUTO */
 STP_API stp_term stp_solver_parse_term(stp_solver, const char* smt2_term); /* over the manager's name table */
 STP_API char* stp_solver_to_smt2(stp_solver, bool with_check_sat);
 STP_API char* stp_solver_to_string(stp_solver, stp_format); /* SMTLIB2, CVC, DOT, GDL */
@@ -718,7 +717,6 @@ STP_API void stp_solver_set_diagnostic_sink(stp_solver, stp_text_sink, void* use
  * process-wide parser lock */
 typedef size_t (*stp_text_source)(char* buf, size_t max, void* user);
 STP_API stp_status stp_solver_parse_source(stp_solver, stp_text_source, void* user, stp_format, stp_parse_mode);
-STP_API char* stp_solver_input_to_string(stp_solver, stp_format); /* the last CVC or SMT-LIB 1 input, as stp's --print-back options print it: CVC, SMTLIB2, GDL or DOT; STATE if there was none */
 STP_API void stp_solver_set_output_sink(stp_solver, stp_text_sink, void* user); /* the responses of an EXECUTE or PARSE_ONLY input and what the printing options print; a call with len 0 asks for a flush; NULL: nowhere. A SAT backend's own report (print-functionstat) comes here from CryptoMiniSat only: CaDiCaL and MiniSat write theirs to stdout themselves. Must not call the library (STATE) */
 typedef void (*stp_fatal_error_handler)(const char* message, void* user);
 STP_API void stp_solver_set_fatal_error_handler(stp_solver, stp_fatal_error_handler, void* user); /* told of an engine fatal error in this solver's work before anything unwinds; may end the process; must not call the library; NULL: none */

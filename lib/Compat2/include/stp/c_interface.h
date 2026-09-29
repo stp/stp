@@ -174,7 +174,8 @@ DLL_PUBLIC const char* get_compilation_env(void);
 //!  - 'c': Enables construction of counter examples.
 //!  - 'd': Enables construction and checking of counter examples. Superseeds flag 'c'.
 //!  - 'i': Enables incremental solving from the first vc_query on.
-//!  - 'm': Use SMTLib1 parser. Conflicts with using SMTLib2 parser.
+//!  - 'm': Accepted and ignored. It chose the SMT-LIB 1 parser, which STP no
+//!         longer has.
 //!  - 'n': Enables printing of the output. TODO: What is meant with output here?
 //!  - 'p': Enables printing of counter examples.
 //!  - 'q': Enables printing of array values in declared order.
@@ -1662,12 +1663,11 @@ DLL_PUBLIC Expr vc_readExpr(VC vc, Expr array, Expr index);
 //!
 DLL_PUBLIC Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue);
 
-//! \brief Parses the expression stored in the file of the given filepath
-//!        and returns it on success.
+//! \brief Refuses: this parsed a CVC or SMT-LIB 1 file, and STP no longer
+//!        reads either language.
 //!
-//! TODO: What format is expected? SMTLib2?
-//!       Does the user have to deallocate resources for the returned expression?
-//!       Why exactly is this "pretty cool!"?
+//! Reports a fatal error through the error handler and returns NULL. Read an
+//! SMT-LIB 2 script through the 3.x API (stp_solver_parse_file).
 //!
 DLL_PUBLIC Expr vc_parseExpr(VC vc, const char* filepath);
 
@@ -2951,15 +2951,12 @@ DLL_PUBLIC const char* exprName(Expr e);
 //!
 DLL_PUBLIC uint64_t getExprID(Expr ex);
 
-//! \brief Parses the given string in CVC or SMTLib1.0 format and extracts
-//!        query and assertion information into the 'outQuery' and 'outAsserts'
-//!        buffers respectively.
+//! \brief Refuses: this parsed a CVC or SMT-LIB 1 string, and STP no longer
+//!        reads either language.
 //!
-//! It is the caller's responsibility to free the buffer's memory afterwards.
-//!
-//! Note: The user can controle the parsed format via 'process_argument'.
-//!
-//! Returns '1' if parsing was successful.
+//! Sets 'outQuery' and 'outAsserts' to NULL, reports a fatal error through
+//! the error handler and returns 0. Read an SMT-LIB 2 script through the 3.x
+//! API (stp_solver_parse).
 //!
 DLL_PUBLIC int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery,
                                Expr* outAsserts);

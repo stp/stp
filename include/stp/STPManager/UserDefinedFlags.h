@@ -199,7 +199,6 @@ public:
   enum class OptionMode { OFF, ON, AUTO };
 
   /* Parsing options */
-  bool smtlib1_parser_flag = false;
   bool smtlib2_parser_flag = false;
 
   /* Output details of how the solving went*/
@@ -728,8 +727,8 @@ public:
   // who transfers their intuition here must not get the opposite of what
   // they asked for. Exceeding the cap abandons the query through the
   // soft-timeout path, so the answer is the same one a `--max-time` expiry
-  // gives -- `unknown` on stdout in SMT-LIB mode (`Unknown.` in the CVC
-  // language) with exit status 0, and SOLVER_UNKNOWN from the library.
+  // gives -- `unknown` on stdout with exit status 0, and SOLVER_UNKNOWN
+  // from the library.
   // (get-info :reason-unknown) is what tells this budget from the clock.
   //
   // The cap governs the transient AIGs a solve builds -- the batch bit-blast

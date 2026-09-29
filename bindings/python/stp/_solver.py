@@ -808,19 +808,17 @@ class Solver(_core.SolverHandle):
 
     # ------------------------------------------------------------ scripts and printing
     def from_string(self, text, format="smtlib2", mode="declare-and-assert"):
-        """Parse text into this solver (declarations, assertions, push/pop, options). A ParseError
-        leaves the solver unchanged. The mode is "declare-and-assert" (nothing is decided),
-        "execute" (the input runs as the stp command line runs it: an SMT-LIB 2 script's
-        commands answer, a CVC or SMT-LIB 1 query is decided and answered, to the output sink)
-        or "parse-only" (read as the command line's --parse-only reads it)."""
+        """Parse an SMT-LIB 2 script into this solver (declarations, assertions, push/pop,
+        options). A ParseError leaves the solver unchanged. The mode is "declare-and-assert"
+        (nothing is decided), "execute" (the input runs as the stp command line runs it: its
+        commands answer, to the output sink) or "parse-only" (read as the command line's
+        --parse-only reads it)."""
         code = _format_code(format)
         m = _parse_mode(mode)
-        if m == _core.PARSE_DECLARE_AND_ASSERT and code not in (_core.FORMAT_SMTLIB2, _core.FORMAT_AUTO):
-            self.parse(text, code)
-        elif code in (_core.FORMAT_SMTLIB2, _core.FORMAT_AUTO):
+        if code in (_core.FORMAT_SMTLIB2, _core.FORMAT_AUTO):
             self.parse_smt2(text, m)
         else:
-            self.parse_source(text, code, m)
+            self.parse_source(text, code, m)  # refused: STP reads SMT-LIB 2 only
 
     def from_stream(self, stream, format="smtlib2", mode="execute"):
         """Parse a readable stream as its data arrives (a binary stream's read1, else a line at a
@@ -829,11 +827,6 @@ class Solver(_core.SolverHandle):
 
     def from_file(self, path, format="auto"):
         self.parse_file(os.fspath(path), _format_code(format))
-
-    def input_to_string(self, format="cvc"):
-        """The last CVC or SMT-LIB 1 input's question, as the stp command line's --print-back
-        options print it: "cvc", "smtlib2", "gdl" or "dot"."""
-        return _core.SolverHandle.input_to_string(self, _format_code(format))
 
     def to_smt2(self, with_check_sat=False):
         return _core.SolverHandle.to_smt2(self, with_check_sat)

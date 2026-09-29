@@ -40,7 +40,6 @@ THE SOFTWARE.
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <optional>
@@ -817,8 +816,7 @@ void process_argument(const char ch, VC vcp)
       set_option(vc, "incremental", "on", "flag 'i'");
       break;
     case 'm':
-      vc->flag_m = true;
-      break;
+      break; // SMT-LIB 1 input, which the parse functions no longer read
     case 'n':
       vc->flag_n = true;
       break;
@@ -2975,283 +2973,28 @@ int vc_getHashQueryStateToBuffer(VC vcp, Expr query)
 
 // ============================================================ parsing
 
-namespace
-{
-
-// The QUERY statement of a CVC text: where it starts, its formula, and the
-// text with the statement replaced by "QUERY FALSE;". The 3.x CVC parser
-// asserts the negated query along with the ASSERTs; 2.x asserted the ASSERTs
-// alone and returned the query separately, which this reproduces by parsing
-// the query on its own inside a push/pop bracket. FALSE is the query whose
-// negation asserts nothing: "QUERY TRUE;" asserted FALSE, and every query
-// after it was valid.
-// A character the CVC lexer continues an identifier with: a letter, a digit,
-// or one of its OPCHAR class, ' ? _ $.
-bool cvc_name_char(char c)
-{
-  return std::isalnum(static_cast<unsigned char>(c)) || c == '\'' || c == '?' || c == '_' ||
-         c == '$';
-}
-
-bool split_cvc_query(const std::string& text, std::string& without, std::string& query)
-{
-  // The QUERY statement, found as the lexer finds its keyword: a word is the
-  // longest run of name characters from a letter (or from '_' followed by
-  // one), and only a word spelled exactly QUERY is the keyword -- x$QUERY
-  // and QUERY' are names. Comments run from '%' to the end of the line.
-  std::size_t query_at = std::string::npos;
-  for (std::size_t i = 0; i < text.size();)
-  {
-    const char c = text[i];
-    if (c == '%')
-    {
-      i = text.find('\n', i);
-      if (i == std::string::npos)
-        break;
-      continue;
-    }
-    const bool word = std::isalpha(static_cast<unsigned char>(c)) ||
-                      (c == '_' && i + 1 < text.size() && cvc_name_char(text[i + 1]));
-    if (word || std::isdigit(static_cast<unsigned char>(c)))
-    {
-      std::size_t end = i + 1;
-      while (end < text.size() && cvc_name_char(text[end]))
-        ++end;
-      if (word && end - i == 5 && text.compare(i, 5, "QUERY") == 0)
-        query_at = i;
-      i = end;
-      continue;
-    }
-    ++i;
-  }
-  if (query_at == std::string::npos)
-    return false;
-  // its terminator: the first ';' after it outside a comment
-  std::size_t end = std::string::npos;
-  bool in_comment = false;
-  for (std::size_t i = query_at + 5; i < text.size() && end == std::string::npos; ++i)
-  {
-    if (in_comment)
-      in_comment = text[i] != '\n';
-    else if (text[i] == '%')
-      in_comment = true;
-    else if (text[i] == ';')
-      end = i;
-  }
-  if (end == std::string::npos)
-    return false;
-  query = text.substr(query_at + 5, end - (query_at + 5));
-  without = text.substr(0, query_at) + "QUERY FALSE;" + text.substr(end + 1);
-  return true;
-}
-
-// Parses `text`, asserting into the current level, and hands back the
-// formulas the parse added (one reference each) -- also recorded on the
-// stack copy. False after a reported error.
-bool parse_into(VCImpl* vc, const std::string& text, stp_format format, const char* who,
-                std::vector<stp_term>& added)
-{
-  stp_solver s = ensure_solver(vc);
-  if (s == nullptr)
-    return false;
-  const std::size_t before = stp_solver_num_assertions(s);
-  if (stp_solver_parse(s, text.c_str(), format) != STP_OK)
-  {
-    fatal(std::string("CInterface: ") + who + ": " + take_error(vc));
-    return false;
-  }
-  const std::size_t after = stp_solver_num_assertions(s);
-  for (std::size_t i = before; i < after; ++i)
-    if (stp_term t = stp_solver_assertion(s, i))
-    {
-      added.push_back(t);
-      vc->levels.back().push_back(stp_term_copy(t));
-    }
-  // As for an assertion vc_assertFormula makes: the exact Real model and a
-  // certified UF reading were the stack's before it.
-  if (after != before)
-  {
-    vc->uf_certified = false;
-    vc->real_model_stale = true;
-  }
-  return true;
-}
-
-// The query of a CVC text, parsed on its own inside a bracket: the parser
-// asserts its negation, which is read back and negated again.
-stp_term parse_cvc_query(VCImpl* vc, const std::string& query_text, const char* who)
-{
-  stp_solver s = ensure_solver(vc);
-  if (s == nullptr)
-    return nullptr;
-  if (stp_solver_push(s, 1) != STP_OK)
-  {
-    fatal(std::string("CInterface: ") + who + ": " + take_error(vc));
-    return nullptr;
-  }
-  const std::size_t before = stp_solver_num_assertions(s);
-  stp_term query = nullptr;
-  if (stp_solver_parse(s, ("QUERY " + query_text + ";\n").c_str(), STP_FORMAT_CVC) != STP_OK)
-  {
-    const std::string err = take_error(vc);
-    stp_solver_pop(s, 1);
-    take_error(vc);
-    fatal(std::string("CInterface: ") + who + ": " + err);
-    return nullptr;
-  }
-  const std::size_t after = stp_solver_num_assertions(s);
-  if (after > before)
-  {
-    stp_term negated = stp_solver_assertion(s, after - 1);
-    query = negated != nullptr ? stp_not(vc->tm, negated) : nullptr;
-    if (negated != nullptr)
-      stp_term_release(negated);
-  }
-  else
-  {
-    // The negation asserts nothing only when it folds to TRUE: the query is
-    // FALSE, or folds to it.
-    query = stp_mk_false(vc->tm);
-  }
-  if (stp_solver_pop(s, 1) != STP_OK)
-    take_error(vc);
-  return query;
-}
-
-// A conjunction (one reference) of the formulas, TRUE for none.
-stp_term conjunction(VCImpl* vc, const std::vector<stp_term>& parts)
-{
-  if (parts.empty())
-    return stp_mk_true(vc->tm);
-  if (parts.size() == 1)
-    return stp_term_copy(parts[0]);
-  return stp_and(vc->tm, parts.size(), parts.data());
-}
-
-// Parses a whole CVC / SMT-LIB 1 text as the two 2.x entry points do:
-// the ASSERTs are asserted; `asserts` and `query` come back as formulas.
-bool parse_text(VCImpl* vc, const std::string& text, const char* who, stp_term& asserts, stp_term& query)
-{
-  asserts = nullptr;
-  query = nullptr;
-  std::vector<stp_term> added;
-  bool ok;
-  if (vc->flag_m)
-  {
-    // SMT-LIB 1: the assumptions and the formula are asserted alike, as the
-    // parser has done for years; there is no separate query.
-    ok = parse_into(vc, text, STP_FORMAT_SMTLIB1, who, added);
-    if (ok)
-      query = stp_mk_false(vc->tm);
-  }
-  else
-  {
-    std::string without, qtext;
-    const bool has_query = split_cvc_query(text, without, qtext);
-    ok = parse_into(vc, has_query ? without : text, STP_FORMAT_CVC, who, added);
-    if (ok)
-      query = has_query ? parse_cvc_query(vc, qtext, who) : stp_mk_true(vc->tm);
-    ok = ok && query != nullptr;
-    // 2.x's CVC parser made every text's QUERY the checker's query
-    // (SetQuery), which vc_printQuery prints and which dropped the exact
-    // Real model even where the text asserted nothing.
-    if (ok)
-      vc->real_model_stale = true;
-    if (ok && has_query)
-    {
-      if (vc->last_query != nullptr)
-        stp_term_release(vc->last_query);
-      vc->last_query = stp_term_copy(query);
-    }
-    // And for a text that asserted anything it handed back the conjunction
-    // of every assertion the checker held (GetAsserts: every level, the
-    // base first), the ones made before the text among them; for one that
-    // asserted nothing, TRUE. SMT-LIB 1's grammar hands back the
-    // benchmark's own formulas, which added already is.
-    if (ok && !added.empty())
-    {
-      std::vector<stp_term> stack;
-      for (const std::vector<stp_term>& level : vc->levels)
-        for (stp_term t : level)
-          stack.push_back(t);
-      asserts = conjunction(vc, stack);
-    }
-  }
-  if (ok && asserts == nullptr)
-    asserts = conjunction(vc, added);
-  for (stp_term t : added)
-    stp_term_release(t);
-  if (!ok)
-  {
-    if (query != nullptr)
-      stp_term_release(query);
-    query = nullptr;
-    return false;
-  }
-  return true;
-}
-
-} // namespace
-
+// 2.x read CVC or SMT-LIB 1 text here; STP reads neither any more, so both
+// entry points refuse, as 2.x refused a text it could not parse.
 Expr vc_parseExpr(VC vcp, const char* infile)
 {
-  VCImpl* vc = vcimpl(vcp, "vc_parseExpr");
-  if (vc == nullptr)
+  (void)infile;
+  if (vcimpl(vcp, "vc_parseExpr") == nullptr)
     return nullptr;
-  if (infile == nullptr)
-  {
-    fatal("Cannot open file");
-    return nullptr;
-  }
-  std::ifstream in(infile, std::ios::binary);
-  if (!in)
-  {
-    std::fprintf(stderr, "STP: Error: cannot open %s\n", infile);
-    fatal("Cannot open file");
-    return nullptr;
-  }
-  std::stringstream buffer;
-  buffer << in.rdbuf();
-  stp_term asserts = nullptr, query = nullptr;
-  if (!parse_text(vc, buffer.str(), "vc_parseExpr", asserts, query))
-    return nullptr;
-  // 2.x returned the conjunction of the ASSERTs with the negated query.
-  stp_term nq = stp_not(vc->tm, query);
-  stp_term out = nq != nullptr ? stp_and2(vc->tm, asserts, nq) : nullptr;
-  if (nq != nullptr)
-    stp_term_release(nq);
-  stp_term_release(asserts);
-  stp_term_release(query);
-  if (out == nullptr)
-  {
-    fatal("CInterface: vc_parseExpr: " + take_error(vc));
-    return nullptr;
-  }
-  return wrap(vc, out, false);
+  fatal("CInterface: vc_parseExpr: STP no longer reads CVC or SMT-LIB 1 input");
+  return nullptr;
 }
 
 int vc_parseMemExpr(VC vcp, const char* s, Expr* oquery, Expr* oasserts)
 {
-  VCImpl* vc = vcimpl(vcp, "vc_parseMemExpr");
-  if (vc == nullptr)
-    return 0;
-  if (s == nullptr)
-  {
-    fatal("CInterface: vc_parseMemExpr: null text");
-    return 0;
-  }
-  stp_term asserts = nullptr, query = nullptr;
-  if (!parse_text(vc, s, "vc_parseMemExpr", asserts, query))
-    return 0;
+  (void)s;
   if (oquery != nullptr)
-    *oquery = wrap(vc, query, false);
-  else
-    stp_term_release(query);
+    *oquery = nullptr;
   if (oasserts != nullptr)
-    *oasserts = wrap(vc, asserts, false);
-  else
-    stp_term_release(asserts);
-  return 1;
+    *oasserts = nullptr;
+  if (vcimpl(vcp, "vc_parseMemExpr") == nullptr)
+    return 0;
+  fatal("CInterface: vc_parseMemExpr: STP no longer reads CVC or SMT-LIB 1 input");
+  return 0;
 }
 
 // ============================================================ uninterpreted functions

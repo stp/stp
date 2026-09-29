@@ -1234,22 +1234,6 @@ bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
   return false;
 }
 
-ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
-                                            const ASTNode& constant)
-{
-  std::ostringstream outVar;
-  std::ostringstream outNum;
-  // Get the name of Boolean Var
-  var.PL_Print(outVar, this);
-  constant.PL_Print(outNum, this);
-  std::string str(outVar.str());
-  str += "(";
-  str += outNum.str();
-  str += ")";
-  ASTNode CurrentSymbol = CreateSymbol(str.c_str(), 0, 0);
-  return CurrentSymbol;
-}
-
 // If ASTNode remain with references (somewhere), this will segfault.
 ExtensionalityContext* STPMgr::getExtensionality()
 {

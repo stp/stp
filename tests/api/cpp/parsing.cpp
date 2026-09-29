@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// parsing.cpp -- scripts in and text out: parse_smt2 in both modes,
-// the SMT-LIB 1 and CVC parsers, parse_file by extension, parse_term, parse
-// errors that leave the solver as it was, and the printers.
+// parsing.cpp -- scripts in and text out: parse_smt2 in both modes, parse
+// and parse_file, which read SMT-LIB 2 only, parse_term, parse errors that
+// leave the solver as it was, and the printers.
 
 #include "api_common.hpp"
 
@@ -179,94 +179,57 @@ TEST(Parsing, execute_mode_runs_the_script)
   EXPECT_TRUE(s3.check_sat().is_sat());
 }
 
-TEST(Parsing, smtlib1_and_cvc)
+TEST(Parsing, parse_reads_smtlib2_and_nothing_else)
 {
   TermManager tm;
   Solver s(tm);
-  s.parse("(benchmark b\n :logic QF_BV\n :extrafuns ((sx BitVec[8]) (sy BitVec[8]))\n"
-          " :assumption (= sx bv5[8])\n :formula (= sy bv6[8]))\n",
-          Format::SMTLIB1);
-  ASSERT_TRUE(tm.symbol("sx").has_value());
-  ASSERT_TRUE(tm.symbol("sy").has_value());
-  // SMT-LIB 1: the assumption and the formula are both asserted (a benchmark
-  // asks whether their conjunction is satisfiable)
-  EXPECT_GE(s.assertions().size(), 2u);
+  s.parse("(declare-fun cx () (_ BitVec 8))\n(assert (= cx #x2a))\n", Format::SMTLIB2);
+  s.parse("(assert (not (= cx #x2b)))", Format::AUTO);
+  EXPECT_EQ(s.assertions().size(), 2u);
   ASSERT_TRUE(s.check_sat().is_sat());
-  EXPECT_EQ(s.model().uint64_value(*tm.symbol("sx")), 5u);
-  EXPECT_EQ(s.model().uint64_value(*tm.symbol("sy")), 6u);
-  s.add(*tm.symbol("sy") == 7);
-  EXPECT_TRUE(s.check_sat().is_unsat());
-  // CVC: ASSERT is asserted, QUERY becomes the assertion of its negation
-  TermManager t2;
-  Solver s2(t2);
-  s2.parse("cx : BITVECTOR(8);\ncy : BITVECTOR(8);\nASSERT(cx = 0hex2a);\nQUERY(cy = 0hex2b);\n", Format::CVC);
-  ASSERT_TRUE(t2.symbol("cx").has_value());
-  EXPECT_EQ(s2.assertions().size(), 2u);
-  EXPECT_EQ(s2.assertions()[1].kind(), Kind::NOT);
-  ASSERT_TRUE(s2.check_sat().is_sat()); // the query is not entailed: a counterexample
-  EXPECT_EQ(s2.model().uint64_value(*t2.symbol("cx")), 42u);
-  EXPECT_NE(s2.model().uint64_value(*t2.symbol("cy")), 43u);
-  // a valid query gives unsat
-  TermManager t3;
-  Solver s3(t3);
-  s3.parse("cx : BITVECTOR(8);\nASSERT(cx = 0hex2a);\nQUERY(cx = 0hex2a);\n", Format::CVC);
-  EXPECT_TRUE(s3.check_sat().is_unsat());
-  // QUERY(FALSE) is the CVC spelling of "only assertions" (the grammar
-  // requires a QUERY; a text without one is a syntax error, a PARSE error)
-  TermManager t4;
-  Solver s4(t4);
-  s4.parse("cx : BITVECTOR(8);\nASSERT(cx = 0hex2a);\nQUERY(FALSE);\n", Format::CVC);
-  EXPECT_EQ(s4.assertions().size(), 1u);
-  EXPECT_TRUE(s4.check_sat().is_sat());
-  // parse() takes SMTLIB2 too, and nothing else
-  s4.parse("(assert (= cx #x2a))", Format::SMTLIB2);
-  EXPECT_EQ(s4.assertions().size(), 2u);
-  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s4.parse("(assert true)", Format::DOT));
-  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s4.parse("(assert true)", Format::GDL));
-  // a malformed CVC or SMT-LIB 1 text is a PARSE error, the solver as it was
-  API_EXPECT_ERROR(ErrorCode::PARSE, s4.parse("cy : BITVECTOR(8);\nASSERT(cy = ;\n", Format::CVC));
-  API_EXPECT_ERROR(ErrorCode::PARSE,
-                   s4.parse("(benchmark b :extrafuns ((z BitVec[8])) :formula (= z", Format::SMTLIB1));
-  EXPECT_EQ(s4.assertions().size(), 2u);
+  EXPECT_EQ(s.model().uint64_value(*tm.symbol("cx")), 42u);
+  // the printing-only formats are no input languages
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s.parse("(assert true)", Format::DOT));
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s.parse("(assert true)", Format::GDL));
+  // a malformed text is a PARSE error, the solver as it was
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse("(assert (= cx", Format::SMTLIB2));
+  EXPECT_EQ(s.assertions().size(), 2u);
 }
 
-TEST(Parsing, parse_file_by_extension)
+TEST(Parsing, parse_file_reads_smtlib2_whatever_the_extension)
 {
+  // the extensions that once chose the SMT-LIB 1 and CVC parsers read as
+  // SMT-LIB 2 like any other
   const TempFile smt2("api_parse_test.smt2", "(declare-fun fa () (_ BitVec 8))\n(assert (= fa #x11))\n");
-  const TempFile smt("api_parse_test.smt", "(benchmark b :logic QF_BV :extrafuns ((fb BitVec[8])) :formula (= fb bv6[8]))\n");
-  const TempFile cvc("api_parse_test.cvc", "fc : BITVECTOR(8);\nASSERT(fc = 0hex22);\nQUERY(fc = 0hex23);\n");
-  const TempFile stp("api_parse_test.stp", "fd : BITVECTOR(8);\nASSERT(fd = 0hex33);\nQUERY(FALSE);\n");
+  const TempFile smt("api_parse_test.smt", "(declare-fun fb () (_ BitVec 8))\n(assert (= fb #x06))\n");
+  const TempFile cvc("api_parse_test.cvc", "(declare-fun fc () (_ BitVec 8))\n(assert (= fc #x22))\n");
   const TempFile other("api_parse_test.txt", "(declare-fun fe () (_ BitVec 8))\n(assert (= fe #x44))\n");
   TermManager tm;
   Solver s(tm);
   s.parse_file(smt2.path);
   s.parse_file(smt.path);
-  s.parse_file(cvc.path);
-  s.parse_file(stp.path);
-  s.parse_file(other.path); // an unknown extension reads as SMT-LIB 2
-  for (const char* name : {"fa", "fb", "fc", "fd", "fe"})
+  s.parse_file(cvc.path, Format::AUTO);
+  s.parse_file(other.path, Format::SMTLIB2);
+  for (const char* name : {"fa", "fb", "fc", "fe"})
     EXPECT_TRUE(tm.symbol(name).has_value()) << name;
   ASSERT_TRUE(s.check_sat().is_sat());
   const Model m = s.model();
   EXPECT_EQ(m.uint64_value(*tm.symbol("fa")), 0x11u);
-  EXPECT_EQ(m.uint64_value(*tm.symbol("fb")), 6u); // SMT-LIB 1: the formula is asserted
+  EXPECT_EQ(m.uint64_value(*tm.symbol("fb")), 6u);
   EXPECT_EQ(m.uint64_value(*tm.symbol("fc")), 0x22u);
-  EXPECT_EQ(m.uint64_value(*tm.symbol("fd")), 0x33u);
   EXPECT_EQ(m.uint64_value(*tm.symbol("fe")), 0x44u);
-  // an explicit format overrides the extension
+  // CVC text is not SMT-LIB 2, whatever its file is called
   TermManager t2;
   Solver s2(t2);
-  const TempFile cvc_as_txt("api_parse_test2.txt", "fg : BITVECTOR(8);\nASSERT(fg = 0hex55);\nQUERY(FALSE);\n");
-  s2.parse_file(cvc_as_txt.path, Format::CVC);
-  ASSERT_TRUE(s2.check_sat().is_sat());
-  EXPECT_EQ(s2.model().uint64_value(*t2.symbol("fg")), 0x55u);
-  API_EXPECT_ERROR(ErrorCode::PARSE, s2.parse_file(cvc_as_txt.path, Format::SMTLIB2));
+  const TempFile cvc_text("api_parse_test2.cvc", "fg : BITVECTOR(8);\nASSERT(fg = 0hex55);\nQUERY(FALSE);\n");
+  API_EXPECT_ERROR(ErrorCode::PARSE, s2.parse_file(cvc_text.path));
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s2.parse_file(smt2.path, Format::DOT));
   // a missing file is an IO error
   auto e = API_ERROR_OF(s2.parse_file("api_no_such_file.smt2"));
   ASSERT_TRUE(e.has_value());
   EXPECT_EQ(e->code(), ErrorCode::IO);
   EXPECT_EQ(e->function(), "Solver::parse_file");
-  EXPECT_EQ(s2.assertions().size(), 1u);
+  EXPECT_TRUE(s2.assertions().empty());
 }
 
 // parse_term puts the text inside a command of its own, and a ')' in it used
@@ -730,19 +693,12 @@ TEST(Parsing, other_printers)
   EXPECT_NE(cvc.find("b : BOOLEAN;"), std::string::npos);
   EXPECT_NE(cvc.find("ASSERT("), std::string::npos);
   EXPECT_NE(cvc.find("QUERY(FALSE);"), std::string::npos);
-  // the CVC text parses back to the same verdict
-  TermManager t2;
-  Solver s2(t2);
-  s2.parse(cvc, Format::CVC);
-  EXPECT_TRUE(s2.check_sat().is_sat());
-  EXPECT_EQ((s2.model().uint64_value(*t2.symbol("x")) + s2.model().uint64_value(*t2.symbol("y"))) & 0xff, 3u);
   const std::string dot = s.to_string(Format::DOT);
   EXPECT_EQ(dot.rfind("digraph G{", 0), 0u);
   EXPECT_NE(dot.find("BVPLUS"), std::string::npos);
   const std::string gdl = s.to_string(Format::GDL);
   EXPECT_EQ(gdl.rfind("graph: {", 0), 0u);
   EXPECT_NE(gdl.find("BVPLUS"), std::string::npos);
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.to_string(Format::SMTLIB1));
   // an empty solver prints too
   TermManager t3;
   Solver s3(t3);
@@ -784,7 +740,6 @@ TEST(Parsing, term_printing)
   EXPECT_EQ(prod.to_string(Format::CVC).rfind("BVMULT(8,", 0), 0u);
   EXPECT_EQ(prod.to_string(Format::DOT).rfind("digraph G{", 0), 0u);
   EXPECT_EQ(prod.to_string(Format::GDL).rfind("graph: {", 0), 0u);
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, prod.to_string(Format::SMTLIB1));
   const Term fx = tm.declare("fx", tm.mk_fp32_sort());
   EXPECT_EQ(fp_is_nan(fx).str(), "(fp.isNaN fx)");
   API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, fp_is_nan(fx).to_string(Format::CVC));
@@ -797,24 +752,6 @@ TEST(Parsing, term_printing)
   EXPECT_EQ(tm.declare("weird name", bv8).str(), "|weird name|");
   EXPECT_EQ(tm.mk_const_array(tm.mk_array_sort(bv8, bv8), tm.mk_bv(8, 0)).sort().str(), "(Array (_ BitVec 8) (_ BitVec 8))");
   API_EXPECT_ERROR(ErrorCode::NULL_HANDLE, Term().str());
-}
-
-// A CVC or SMT-LIB 1 query is a validity question: a query that is, or folds
-// to, TRUE is valid, so the solver it was parsed into is unsatisfiable.
-TEST(Parsing, a_true_query_is_valid)
-{
-  for (const char* text :
-       {"QUERY(TRUE);\n", "x : BITVECTOR(2);\nQUERY(BVMOD(2, 0bin10, 0bin10) = 0bin00);\n"})
-  {
-    TermManager tm;
-    Solver s(tm);
-    s.parse(text, Format::CVC);
-    EXPECT_TRUE(s.check_sat().is_unsat()) << text;
-  }
-  TermManager tm;
-  Solver s(tm);
-  s.parse("QUERY(FALSE);\n", Format::CVC); // just the assertions, of which there are none
-  EXPECT_TRUE(s.check_sat().is_sat());
 }
 
 // A declaration no assertion mentions is still the script's, for a later script
@@ -830,10 +767,6 @@ TEST(Parsing, unused_declarations_are_kept)
   ASSERT_TRUE(s.check_sat().is_sat());
   EXPECT_EQ(s.model().uint64_value(*s.symbol("x")), 1u);
   EXPECT_TRUE(s.parse_term("x").same_as(*s.symbol("x")));
-  s.parse("y : BITVECTOR(4);\nQUERY(FALSE);\n", Format::CVC);
-  EXPECT_TRUE(s.symbol("y").has_value());
-  s.parse("(benchmark b :logic QF_BV :extrafuns ((z BitVec[4])) :formula true)\n", Format::SMTLIB1);
-  EXPECT_TRUE(s.symbol("z").has_value());
 }
 
 // A failed parse leaves the stack as it found it, whatever the script did to
@@ -860,39 +793,6 @@ TEST(Parsing, a_failed_script_leaves_the_stack_as_it_was)
   }
   s.pop();
   EXPECT_TRUE(s.check_sat().is_sat());
-}
-
-// A CVC or SMT-LIB 1 input that a grammar action rejects ends the parse. The
-// actions reported the error and went on building from what they had just
-// rejected: an unresolved name crashed the process, and a width mismatch
-// asserted a formula no one wrote. Each is PARSE, with the solver as it was.
-TEST(Parsing, a_rejected_cvc_or_smtlib1_input_ends_the_parse)
-{
-  const std::vector<std::pair<Format, const char*>> inputs{
-      {Format::CVC, "x : BITVECTOR(8);\nASSERT(y = 0hex01);\nQUERY(x = x);\n"},
-      {Format::CVC, "x : BITVECTOR(8);\nASSERT(x = y);\nQUERY(FALSE);\n"},
-      {Format::CVC, "x : BITVECTOR(8);\nASSERT((x & 0hex001) = 0hex01);\nQUERY(FALSE);\n"},
-      {Format::CVC, "x : BITVECTOR(8);\nASSERT((x | 0hex001) = 0hex000);\nQUERY(FALSE);\n"},
-      {Format::CVC, "x : BITVECTOR(8);\ny : BITVECTOR(4);\n"
-                    "ASSERT((IF x = 0hex00 THEN x ELSE y ENDIF) = 0hex05);\nQUERY(FALSE);\n"},
-      {Format::CVC, "x : BITVECTOR(8);\nASSERT(x[2:5] = 0bin0);\nQUERY(FALSE);\n"},
-      {Format::SMTLIB1, "(benchmark b :logic QF_BV :extrafuns ((x BitVec[8]))\n"
-                        " :formula (= (rotate_left[9] x) bv1[8]))\n"},
-      {Format::SMTLIB1, "(benchmark b :logic QF_LIA :extrafuns ((x BitVec[8]))\n"
-                        " :formula (= x bv1[8]))\n"},
-  };
-  for (const auto& input : inputs)
-  {
-    TermManager tm;
-    Solver s(tm);
-    const Term p = tm.declare("p", tm.mk_bool_sort());
-    s.add(p);
-    API_EXPECT_ERROR(ErrorCode::PARSE, s.parse(input.second, input.first));
-    ASSERT_EQ(s.assertions().size(), 1u) << input.second;
-    EXPECT_TRUE(s.assertions()[0].same_as(p)) << input.second;
-    EXPECT_TRUE(s.check_sat().is_sat()) << input.second;
-    EXPECT_NO_THROW(tm.mk_bv(8, 1)) << input.second;
-  }
 }
 
 // A run reads a script as the command line does: an equality between whole
@@ -1278,50 +1178,6 @@ TEST(Parsing, a_parse_leaves_other_threads_output_alone)
 
 } // namespace
 
-// A CVC or SMT-LIB 1 input may declare a name the manager already has -- from
-// the caller, or an earlier input -- at the symbol's own type: it is the same
-// symbol. At another type it is refused. Such a declaration was a syntax error.
-TEST(Parsing, a_cvc_or_smtlib1_input_may_declare_a_name_again)
-{
-  TermManager tm;
-  Solver s(tm);
-  const Term x = tm.declare("x", tm.mk_bv_sort(8));
-  s.parse("x : BITVECTOR(8); ASSERT(x = 0hex05); QUERY(FALSE);", Format::CVC);
-  s.parse("x : BITVECTOR(8); p : BOOLEAN; ASSERT(p); QUERY(FALSE);", Format::CVC);
-  s.parse("p : BOOLEAN; ASSERT(p); QUERY(FALSE);", Format::CVC);
-  ASSERT_TRUE(s.check_sat().is_sat());
-  EXPECT_EQ(s.model().uint64_value(x), 5u);
-  auto e = API_ERROR_OF(s.parse("x : BITVECTOR(4); QUERY(FALSE);", Format::CVC));
-  ASSERT_TRUE(e.has_value());
-  EXPECT_EQ(e->code(), ErrorCode::PARSE);
-  EXPECT_NE(std::string(e->what()).find("declared again"), std::string::npos) << e->what();
-  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse("p : BITVECTOR(1); QUERY(FALSE);", Format::CVC));
-  // SMT-LIB 1 likewise
-  const char* benchmark = "(benchmark b :logic QF_BV :extrafuns ((x BitVec[8])) "
-                          ":extrapreds ((q)) :assumption (= x bv5[8]) :formula q)";
-  s.parse(benchmark, Format::SMTLIB1);
-  s.parse(benchmark, Format::SMTLIB1);
-  API_EXPECT_ERROR(ErrorCode::PARSE,
-                   s.parse("(benchmark b :logic QF_BV :extrafuns ((x BitVec[4])) :formula true)",
-                           Format::SMTLIB1));
-  API_EXPECT_ERROR(ErrorCode::PARSE,
-                   s.parse("(benchmark b :logic QF_BV :extrafuns ((q BitVec[1])) :formula true)",
-                           Format::SMTLIB1));
-  EXPECT_TRUE(s.check_sat().is_sat());
-  // but one input declaring a name twice is the syntax error it always was,
-  // a name known before it included
-  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse("x : BITVECTOR(8); x : BITVECTOR(8); QUERY(FALSE);", Format::CVC));
-  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse("y, y : BITVECTOR(8); QUERY(FALSE);", Format::CVC));
-  API_EXPECT_ERROR(ErrorCode::PARSE,
-                   s.parse("(benchmark b :logic QF_BV :extrafuns ((x BitVec[8])) :extrafuns ((x BitVec[8])) "
-                           ":formula true)",
-                           Format::SMTLIB1));
-  API_EXPECT_ERROR(ErrorCode::PARSE,
-                   s.parse("(benchmark b :logic QF_BV :extrafuns ((z BitVec[8]) (z BitVec[8])) :formula true)",
-                           Format::SMTLIB1));
-  EXPECT_TRUE(s.check_sat().is_sat());
-}
-
 // SMT-LIB's <script> is <command>*: blanks and comments alone are a script,
 // read without effect in every mode.
 TEST(Parsing, a_script_with_no_command_is_a_script)
@@ -1392,16 +1248,15 @@ TEST(Parsing, a_parse_abandoned_at_a_let_binder_leaves_the_next_alone)
 
     TermManager other;
     Solver t(other);
-    t.parse("x : BITVECTOR(4);\nASSERT(x = 0hex3);\nQUERY(FALSE);\n", Format::CVC);
+    t.parse_smt2("(declare-fun x () (_ BitVec 4))\n(assert (let ((y x)) (= y #x3)))\n");
     EXPECT_TRUE(t.check_sat().is_sat());
   }
 }
 
 // A parse can end early in several ways: bison's own syntax error, a
 // grammar action that refuses its operands (itself or through a helper), an
-// engine refusal while an action builds a node, and each in all three
-// grammars, at the top of a script or 300 terms deep, where bison has moved
-// its stack to the heap. Every one releases what the parse had read -- the
+// engine refusal while an action builds a node, and each at the top of a
+// script or 300 terms deep, where bison has moved its stack to the heap. Every one releases what the parse had read -- the
 // lookahead, the values waiting on the parser's stack, the operands of the
 // action that refused -- where an exception used to unwind past all of it.
 // The memory checkers see a leak or a double release (this suite runs under
@@ -1415,42 +1270,30 @@ TEST(Parsing, an_abandoned_parse_releases_what_it_read)
   deep += "#b1";
   deep += std::string(300, ')');
   deep += "))\n";
-  const std::vector<std::pair<Format, std::string>> inputs{
-      {Format::SMTLIB2, "(declare-fun a () (_ BitVec 8))\n(assert (and (= a #x01) (= a #b1)))\n"},
-      {Format::SMTLIB2,
-       "(declare-fun a () (_ BitVec 8))\n(assert (or (= a #x01) (= ((_ extract 9 0) a) #x00)))\n"},
-      {Format::SMTLIB2, "(set-option :print-success maybe)\n"},
-      {Format::SMTLIB2, "(declare-fun a () (_ BitVec 8))\n(assert (= a (bvadd a"},
-      {Format::SMTLIB2, deep},
-      {Format::SMTLIB2, "(declare-fun f () (_ FloatingPoint 8 24))\n"
-                        "(assert (fp.lt f (fp.add RNE f (_ bv0 8))))\n"},
-      {Format::SMTLIB2, "(declare-fun f () (_ FloatingPoint 8 24))\n(assert (fp.lt f (fp.to_real f)))\n"},
-      {Format::SMTLIB2, "(declare-fun f () (_ FloatingPoint 8 24))\n"
-                        "(assert (fp.eq f ((_ to_fp 1 1) RNE 1.5)))\n"},
-      {Format::CVC, "x : BITVECTOR(8);\ny : BITVECTOR(4);\nASSERT(BVPLUS(8, x, x) = y);\nQUERY(FALSE);\n"},
-      {Format::CVC, "x, y : BITVECTOR(8);\nASSERT(x = 0hex0"},
-      {Format::CVC, "x : BITVECTOR(8);\nASSERT(x = z);\nQUERY(FALSE);\n"},
-      {Format::CVC, "y : BITVECTOR(0);\n"},
-      {Format::SMTLIB1, "(benchmark b :logic QF_BV :extrafuns ((sx BitVec[8])) :formula (= sx "},
-      {Format::SMTLIB1, "(benchmark b :logic QF_BV :formula (= undefined bv3[8]))\n"},
-      {Format::SMTLIB1, "(benchmark b :logic QF_BV :extrafuns ((x BitVec[8]))\n"
-                        " :formula (= (rotate_left[9] x) bv1[8]))\n"},
+  const std::vector<std::string> inputs{
+      "(declare-fun a () (_ BitVec 8))\n(assert (and (= a #x01) (= a #b1)))\n",
+      "(declare-fun a () (_ BitVec 8))\n(assert (or (= a #x01) (= ((_ extract 9 0) a) #x00)))\n",
+      "(set-option :print-success maybe)\n",
+      "(declare-fun a () (_ BitVec 8))\n(assert (= a (bvadd a",
+      deep,
+      "(declare-fun f () (_ FloatingPoint 8 24))\n(assert (fp.lt f (fp.add RNE f (_ bv0 8))))\n",
+      "(declare-fun f () (_ FloatingPoint 8 24))\n(assert (fp.lt f (fp.to_real f)))\n",
+      "(declare-fun f () (_ FloatingPoint 8 24))\n(assert (fp.eq f ((_ to_fp 1 1) RNE 1.5)))\n",
+      "(declare-fun y () (_ BitVec 0))\n",
+      "(assert (= undefined #x03))\n",
   };
   for (int round = 0; round < 3; ++round)
-    for (const auto& input : inputs)
+    for (const std::string& input : inputs)
     {
-      SCOPED_TRACE(input.second.substr(0, 60));
+      SCOPED_TRACE(input.substr(0, 60));
       TermManager tm;
       Solver s(tm);
-      if (input.first == Format::SMTLIB2)
-        API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2(input.second));
-      else
-        API_EXPECT_ERROR(ErrorCode::PARSE, s.parse(input.second, input.first));
+      API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2(input));
       s.parse_smt2("(declare-fun g () (_ BitVec 8))\n(assert (= g #x05))\n");
       ASSERT_TRUE(s.check_sat().is_sat());
       EXPECT_EQ(s.model().uint64_value(*tm.symbol("g")), 5u);
       Solver t(tm);
-      t.parse("h : BITVECTOR(8);\nASSERT(h = 0hex07);\nQUERY(FALSE);\n", Format::CVC);
+      t.parse("(declare-fun h () (_ BitVec 8))\n(assert (= h #x07))\n", Format::SMTLIB2);
       EXPECT_TRUE(t.check_sat().is_sat());
     }
 }

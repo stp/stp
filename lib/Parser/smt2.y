@@ -4544,7 +4544,6 @@ void reportRedeclaredName()
 
 namespace stp {
   int SMT2Parse() {
-    GlobalParserInterface->letMgr->frameMode = true;
     // Each SMT2Parse is one script: the floating-point keywords start
     // disabled and turn on at an FP set-logic.
     SMT2SetFloatTokens(GlobalParserInterface->all_theory_tokens);

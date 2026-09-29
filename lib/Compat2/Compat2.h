@@ -144,7 +144,7 @@ struct VCImpl
 
   bool exprdelete = true; // EXPRDELETE: checker-owned handles exist
   bool tracking = false;  // the 'u' live-handle registry is on
-  bool flag_x = false, flag_u = false, flag_m = false, flag_n = false,
+  bool flag_x = false, flag_u = false, flag_n = false,
        flag_p = false;
   bool divmod_explicit = false; // BV_TERM_ABSTRACTION_DIVMOD was named
   bool rounds_explicit = false; // BV_TERM_ABSTRACTION_ROUNDS was named

@@ -511,9 +511,8 @@ fi
 # --max-num-confl and --max-time all abandon the query through the soft-timeout
 # path, so STP answers "unknown" where the checker answered sat or unsat and
 # every file is saved as a mismatch. A budget is what -k gives the whole run,
-# not something to draw per iteration. The same goes for the --print-back-*
-# and --parse-only options, which replace the answer with something else
-# entirely.
+# not something to draw per iteration. The same goes for --parse-only, which
+# replaces the answer with something else entirely.
 
 declare -a OPTION_GROUPS=(simplify mult div shift bitblast abstract array uf
                           ufsort fp fpabs lra uflra cnf solver bias misc)
@@ -1369,12 +1368,11 @@ declare -a NOT_FUZZED=(
 # the checker gave, so every file would be saved as a mismatch.
 --help --version --parse-only --output-CNF --exit-after-CNF
 --aig-node-budget --max-num-confl --max-time
---print-stpinput --print-back-CVC --print-back-SMTLIB2 --print-back-GDL
---print-back-dot --print-counterex --print-counterexbin --print-arrayval
+--print-counterex --print-counterexbin --print-arrayval
 --print-functionstat --print-quickstat --print-nodes --print-output
 # Already fixed by the harness: -d is passed to every STP run, and the input
-# is SMT-LIB2 by extension.
---check-sanity --CVC --SMTLIB1 --SMTLIB2
+# is SMT-LIB2, the only language STP reads.
+--check-sanity --SMTLIB2
 # Measured inert on every generated file; see the group comments below for
 # what each would need before it is worth an entry.
 --bb.fp-native-fma --bb.fp-native-known-sign

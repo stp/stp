@@ -2299,13 +2299,6 @@ cdef class SolverHandle:
                 raise stream.error
             self._fail_mutate("stp_solver_parse_source")
 
-    def input_to_string(self, int format):
-        self._live()
-        cdef char* p = stp_solver_input_to_string(self._s, <stp_format>format)
-        if p == NULL:
-            self._m._fail("stp_solver_input_to_string")
-        return _take(p)
-
     def parse(self, text, int format):
         self._live()
         cdef bytes b = _b(text)
@@ -2908,7 +2901,6 @@ VALIDITY_INVALID = <int>STP_INVALID
 VALIDITY_UNKNOWN = <int>STP_UNKNOWN_VALIDITY
 FORMAT_AUTO = <int>STP_FORMAT_AUTO
 FORMAT_SMTLIB2 = <int>STP_FORMAT_SMTLIB2
-FORMAT_SMTLIB1 = <int>STP_FORMAT_SMTLIB1
 FORMAT_CVC = <int>STP_FORMAT_CVC
 FORMAT_DOT = <int>STP_FORMAT_DOT
 FORMAT_GDL = <int>STP_FORMAT_GDL

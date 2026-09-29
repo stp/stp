@@ -22,13 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// parsestring-using-cinterface.cpp -- parsing CVC and SMT-LIB 1 text held
-// in a string.
+// parsestring-using-cinterface.cpp -- parsing SMT-LIB 2 text held in a
+// string.
 //
-// 2.x's vc_parseMemExpr handed back the text's query and its assertions as two
-// expressions, and the cases printed them. 3.x's Solver::parse asserts the
-// assertions, and the query as the assertion of its negation, so that
-// check_sat answers the text's question: unsat when the query is valid.
+// 2.x's vc_parseMemExpr handed back a CVC or SMT-LIB 1 text's query and its
+// assertions as two expressions, and the cases printed them. 3.x's
+// Solver::parse reads SMT-LIB 2 and asserts the assertions, so that
+// check_sat answers the text's question. The two texts 2.x parsed here are
+// kept, in SMT-LIB 2.
 
 #include "api_common.hpp"
 
@@ -36,28 +37,29 @@ THE SOFTWARE.
 
 using namespace stp;
 
-TEST(parse_string, CVC)
+TEST(parse_string, AQueryThatFolds)
 {
   TermManager tm;
   Options o;
   o.set_bool("check-sanity", true); // 'd'
   Solver s(tm, o);
 
-  const char* text = "QUERY BVMOD(2,0bin10,0bin10) = 0bin00;\n";
+  // 2.x's text was the CVC query BVMOD(2,0bin10,0bin10) = 0bin00, whose
+  // negation is asserted here.
+  const char* text = "(assert (not (= (bvurem #b10 #b10) #b00)))\n";
 
-  s.parse(text, Format::CVC);
+  s.parse(text, Format::SMTLIB2);
   EXPECT_EQ(s.level(), 0u);
 
-  // 2.x printed the query and the assertions: TRUE and TRUE, since 2 mod 2 = 0
-  // folds. The query is valid, so its negation -- false -- is the one
-  // assertion, and check_sat answers unsat (stp --CVC says Valid.).
+  // 2 mod 2 = 0 folds, so the negation -- false -- is the one assertion, and
+  // check_sat answers unsat.
   const std::vector<Term> asserted = s.assertions();
   ASSERT_EQ(asserted.size(), 1u);
   EXPECT_TRUE(asserted[0].same_as(tm.mk_false()));
   EXPECT_TRUE(s.check_sat().is_unsat());
 }
 
-TEST(parse_string, SMT)
+TEST(parse_string, Declarations)
 {
   TermManager tm;
   Options o;
@@ -65,25 +67,22 @@ TEST(parse_string, SMT)
   o.set_bool("print-counterex", true); // 'p'
   Solver s(tm, o);
 
-  const char* text = "(benchmark fg.smt\n"
-                     ":logic QF_AUFBV\n"
-                     ":extrafuns ((x_32 BitVec[32]))\n"
-                     ":extrafuns ((y32 BitVec[32]))\n"
-                     ":assumption true\n)\n";
+  // 2.x's text was an SMT-LIB 1 benchmark with these two declarations and
+  // the one assumption.
+  const char* text = "(set-logic QF_AUFBV)\n"
+                     "(declare-fun x_32 () (_ BitVec 32))\n"
+                     "(declare-fun y32 () (_ BitVec 32))\n"
+                     "(assert true)\n";
 
-  // 2.x selected the SMT-LIB 1 parser with 'm'; 3.x takes the format as an
-  // argument.
-  s.parse(text, Format::SMTLIB1);
+  s.parse(text, Format::SMTLIB2);
 
-  // 2.x printed the query and the assertions: FALSE (there is no :formula)
-  // and TRUE. 3.x asserts the assumption, and the query adds nothing: the
-  // assertions are satisfiable.
+  // The assumption is the one assertion: the assertions are satisfiable.
   const std::vector<Term> asserted = s.assertions();
   ASSERT_EQ(asserted.size(), 1u);
   EXPECT_TRUE(asserted[0].same_as(tm.mk_true()));
   EXPECT_TRUE(s.check_sat().is_sat());
 
-  // The benchmark declares x_32 and y32 as 32-bit vectors: they are the
+  // The text declares x_32 and y32 as 32-bit vectors: they are the
   // manager's symbols, which a later parse or parse_term can use.
   const std::optional<Term> x = tm.symbol("x_32"), y = tm.symbol("y32");
   ASSERT_TRUE(x.has_value());

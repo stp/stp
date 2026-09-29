@@ -68,10 +68,6 @@ struct Heard
   }
 };
 
-// x = 5 entails x = 5, and not x = 6.
-const char* const kCvcValid = "x : BITVECTOR(8);\nASSERT(x = 0hex05);\nQUERY(x = 0hex05);\n";
-const char* const kCvcInvalid = "x : BITVECTOR(8);\nASSERT(x = 0hex05);\nQUERY(x = 0hex06);\n";
-
 // A factoring query that preprocessing leaves to the SAT solver.
 const char* const kNeedsCnf = "(declare-fun a () (_ BitVec 8))\n"
                               "(declare-fun b () (_ BitVec 8))\n"
@@ -145,48 +141,27 @@ private:
 
 } // namespace
 
-TEST(Runs, execute_decides_a_cvc_query_and_answers_it)
+TEST(Runs, execute_warns_when_an_answer_contradicts_the_status)
 {
+  const std::string script = "(set-logic QF_BV)\n(declare-fun x () (_ BitVec 8))\n"
+                             "(assert (= x #x05))\n(assert (= x #x06))\n(check-sat)\n";
   TermManager tm;
   Solver s(tm);
   Heard h;
   h.attach(s);
-  std::istringstream in(kCvcInvalid);
-  s.parse(in, Format::CVC, ParseMode::EXECUTE);
-  EXPECT_EQ(h.out, "Invalid.\n");
-  // the input's check leaves no result or model behind; its assertion stays
-  API_EXPECT_ERROR(ErrorCode::NO_MODEL, s.model());
-  EXPECT_EQ(s.assertions().size(), 1u);
-  EXPECT_TRUE(s.check_sat().is_sat());
-
-  TermManager t2;
-  Solver s2(t2);
-  Heard h2;
-  h2.attach(s2);
-  std::istringstream in2(kCvcValid);
-  s2.parse(in2, Format::CVC, ParseMode::EXECUTE);
-  EXPECT_EQ(h2.out, "Valid.\n");
-}
-
-TEST(Runs, execute_decides_an_smtlib1_benchmark_in_its_own_words)
-{
-  const std::string benchmark = "(benchmark b\n :logic QF_BV\n :extrafuns ((x BitVec[8]))\n"
-                                " :assumption (= x bv5[8])\n :formula (= x bv6[8])\n";
-  TermManager tm;
-  Solver s(tm);
-  Heard h;
-  h.attach(s);
-  std::istringstream in(benchmark + " :status unsat)\n");
-  s.parse(in, Format::SMTLIB1, ParseMode::EXECUTE);
+  s.parse_smt2("(set-info :status unsat)\n" + script, ParseMode::EXECUTE);
   EXPECT_EQ(h.out, "unsat\n");
   EXPECT_EQ(h.err, "");
+  // the input's check leaves no result or model behind; its assertions stay
+  API_EXPECT_ERROR(ErrorCode::NO_MODEL, s.model());
+  EXPECT_FALSE(s.assertions().empty());
+  EXPECT_TRUE(s.check_sat().is_unsat());
   // a :status the answer contradicts is a warning on the diagnostic channel
   TermManager t2;
   Solver s2(t2);
   Heard h2;
   h2.attach(s2);
-  std::istringstream in2(benchmark + " :status sat)\n");
-  s2.parse(in2, Format::SMTLIB1, ParseMode::EXECUTE);
+  s2.parse_smt2("(set-info :status sat)\n" + script, ParseMode::EXECUTE);
   EXPECT_EQ(h2.out, "unsat\n");
   EXPECT_NE(h2.err.find("Warning. Expected satisfiable, FOUND unsatisfiable"), std::string::npos)
       << h2.err;
@@ -233,26 +208,6 @@ TEST(Runs, execute_runs_a_script_under_its_own_logic)
   EXPECT_EQ(s2.assertions().size(), 1u);
 }
 
-TEST(Runs, parse_only_leaves_a_cvc_query_undecided)
-{
-  TermManager tm;
-  Solver s(tm);
-  Heard h;
-  h.attach(s);
-  std::istringstream in(kCvcInvalid);
-  s.parse(in, Format::CVC, ParseMode::PARSE_ONLY);
-  EXPECT_EQ(h.out, "");
-  // the assertion, and not the query's negation
-  EXPECT_EQ(s.assertions().size(), 1u);
-  // DECLARE_AND_ASSERT asserts the negation, so that check_sat answers it
-  TermManager t2;
-  Solver s2(t2);
-  std::istringstream in2(kCvcInvalid);
-  s2.parse(in2, Format::CVC);
-  EXPECT_EQ(s2.assertions().size(), 2u);
-  EXPECT_TRUE(s2.check_sat().is_sat());
-}
-
 TEST(Runs, a_stream_is_parsed_as_it_arrives)
 {
   TermManager tm;
@@ -279,35 +234,11 @@ TEST(Runs, a_stream_that_fails_fails_the_parse)
   API_EXPECT_ERROR(ErrorCode::IO, s.parse(in, Format::SMTLIB2, ParseMode::EXECUTE));
   // the parse ended there, with the stack as it was
   EXPECT_TRUE(s.assertions().empty());
-  FailingFeed cvc("x : BITVECTOR(8);\n");
-  std::istream in2(&cvc);
-  API_EXPECT_ERROR(ErrorCode::IO, s.parse(in2, Format::CVC));
   // not a language, or not a mode
   std::istringstream text("(check-sat)");
   API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, s.parse(text, Format::DOT));
   API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT,
                    s.parse(text, Format::SMTLIB2, static_cast<ParseMode>(7)));
-}
-
-TEST(Runs, input_to_string_prints_a_cvc_input_back)
-{
-  TermManager tm(api_test::raw_manager());
-  Solver s(tm);
-  API_EXPECT_ERROR(ErrorCode::STATE, s.input_to_string(Format::CVC));
-  std::istringstream in(kCvcInvalid);
-  s.parse(in, Format::CVC, ParseMode::PARSE_ONLY);
-  const std::string cvc = s.input_to_string(Format::CVC);
-  EXPECT_EQ(cvc.rfind("x  : BITVECTOR(8);\n", 0), 0u) << cvc;
-  EXPECT_NE(cvc.find("ASSERT( (x = 0x05"), std::string::npos) << cvc;
-  EXPECT_NE(cvc.find("QUERY("), std::string::npos) << cvc;
-  const std::string smt2 = s.input_to_string(Format::SMTLIB2);
-  EXPECT_EQ(smt2.rfind("(set-logic QF_BV)\n", 0), 0u) << smt2;
-  EXPECT_NE(smt2.find("(declare-fun |x| () (_ BitVec 8))"), std::string::npos) << smt2;
-  EXPECT_EQ(s.input_to_string(Format::GDL).rfind("graph: {", 0), 0u);
-  EXPECT_EQ(s.input_to_string(Format::DOT).rfind("digraph G{", 0), 0u);
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.input_to_string(Format::SMTLIB1));
-  // printing it back changes nothing of the solver's
-  EXPECT_EQ(s.assertions().size(), 1u);
 }
 
 TEST(Runs, the_engine_prints_nowhere_but_the_sinks)
@@ -467,20 +398,18 @@ TEST(Runs, the_fatal_error_handler_hears_first)
   Solver s(tm);
   Heard h;
   h.attach(s);
-  std::istringstream in("x : BITVECTOR(0);\nQUERY(TRUE);\n");
-  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse(in, Format::CVC, ParseMode::EXECUTE));
-  EXPECT_EQ(h.fatal, "parsing: bit-vectors must be of positive length");
-  EXPECT_NE(h.err.find("Fatal Error: parsing: bit-vectors must be of positive length\n"),
-            std::string::npos)
-      << h.err;
+  std::istringstream in("(declare-fun x () (_ BitVec 0))\n");
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse(in, Format::SMTLIB2, ParseMode::EXECUTE));
+  EXPECT_NE(h.fatal.find("bit-vectors must be of positive length"), std::string::npos) << h.fatal;
+  EXPECT_NE(h.err.find("Fatal Error: " + h.fatal + "\n"), std::string::npos) << h.err;
   // the solver is as it was
   EXPECT_TRUE(s.assertions().empty());
   EXPECT_TRUE(s.check_sat().is_sat());
   // a syntax error is no fatal error
   Heard h2;
   h2.attach(s);
-  std::istringstream no_query("x : BITVECTOR(8);\nASSERT(x = 0hex01);\n");
-  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse(no_query, Format::CVC, ParseMode::EXECUTE));
+  std::istringstream unknown("(declare-fun a () Bool)\n(assert (foo a))\n");
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse(unknown, Format::SMTLIB2, ParseMode::EXECUTE));
   EXPECT_EQ(h2.fatal, "");
 }
 

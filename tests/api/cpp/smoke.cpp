@@ -380,19 +380,10 @@ static void parsing()
   }
   TermManager tm2;
   Solver s2(tm2);
-  s2.parse("cx : BITVECTOR(8);\nASSERT(cx = 0hex2a);\nQUERY(cx = 0hex2b);\n", Format::CVC);
+  s2.parse("(declare-fun cx () (_ BitVec 8))\n(assert (= cx #x2a))\n(assert (not (= cx #x2b)))\n",
+           Format::SMTLIB2);
   CHECK(s2.check_sat().is_sat());
   CHECK(s2.model().uint64_value(*tm2.symbol("cx")) == 42);
-  try
-  {
-    s2.parse("cy : BITVECTOR(8);\nASSERT(cy = = 1);\n", Format::CVC);
-    CHECK(false);
-  }
-  catch (const RecoverableError& e)
-  {
-    CHECK(e.code() == ErrorCode::PARSE);
-    std::cout << "  cvc parse error: " << e.what() << "\n";
-  }
   // floating-point and Real fragments parse without a set-logic in front
   Term fx = tm.declare("pfx", tm.mk_fp32_sort());
   Term fsum = s.parse_term("(fp.add RNE pfx pfx)");

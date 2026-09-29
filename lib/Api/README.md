@@ -100,12 +100,8 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   theory's keywords without a set-logic (`all_theory_tokens`) and captures the
   frontend's stdout answers for the diagnostic of a PARSE error; `EXECUTE` and
   `PARSE_ONLY` read the input as the command line does, under the script's own
-  set-logic, answering to the output sink, and a CVC or SMT-LIB 1 query is
-  decided there as `TopLevelSTP(assertions, query)` and answered by
-  `PrintOutput`. A stream is read through the lexers' reader hook
-  (`setSMT2Reader` and its twins in parser.h), one refill at a time. CVC and
-  SMT-LIB 1 syntax errors are recoverable (their `yyerror` no longer aborts;
-  the CLI still exits with the message). The
+  set-logic, answering to the output sink. A stream is read through the
+  lexer's reader hook (`setSMT2Reader` in parser.h), one refill at a time. The
   SMT-LIB 2 frontend's own refusals (a sort error, a wrong arity, a
   redeclaration, a constant that does not fit its width, an option value it
   cannot read) unwind to the parse entry with `ParseAbandon` and are PARSE
@@ -171,8 +167,7 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
 `keepDeclaredSymbolsAtCleanup` (what a script declared outlives its frames).
 `ASTNode` befriends `api::detail::NodeAccess`.
 For running an input as the command line does: a lexer reads through a
-`ParserReader` when one is set (`setSMT2Reader`, `setCVCReader`,
-`setSMTReader`); `SetFatalErrorObserver` tells a per-thread observer of every
+`ParserReader` when one is set (`setSMT2Reader`); `SetFatalErrorObserver` tells a per-thread observer of every
 fatal error before anything unwinds; `STPMgr::cnf_listener` receives every CNF
 with its `CnfExtent`; and `exit_after_CNF` ends the run rather than the
 process (`STPMgr::run_ended_after_cnf`, and `ScriptEnded` in the SMT-LIB 2

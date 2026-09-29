@@ -182,25 +182,20 @@ enum class Format : std::uint8_t
 {
   AUTO = 0,
   SMTLIB2,
-  SMTLIB1,
   CVC,
   DOT,
   GDL
 };
 /// How a parse treats its input.
 ///   DECLARE_AND_ASSERT: the input's declarations, assertions and scopes
-///     take effect, silently; check-sat is not executed, and a CVC or
-///     SMT-LIB 1 query is asserted negated, so that check_sat() answers it.
+///     take effect, silently; check-sat is not executed.
 ///   EXECUTE: the input runs as the stp command line runs it, answering to
-///     the output sink: every SMT-LIB 2 command, under the script's own
-///     set-logic; a CVC or SMT-LIB 1 input's query decided and answered
-///     ("Valid."/"Invalid.", "sat"/"unsat"). Those checks are the input's,
-///     not the solver's: they leave no result or model behind. As on the
-///     command line, an equality between whole arrays needs
-///     array-equality = on there (UNSUPPORTED otherwise).
+///     the output sink: every command, under the script's own set-logic.
+///     Its checks are the input's, not the solver's: they leave no result
+///     or model behind. As on the command line, an equality between whole
+///     arrays needs array-equality = on there (UNSUPPORTED otherwise).
 ///   PARSE_ONLY: EXECUTE without the deciding (the command line's
-///     --parse-only): check-sat is skipped, and a CVC or SMT-LIB 1 query is
-///     left undecided and unasserted.
+///     --parse-only): check-sat is skipped.
 enum class ParseMode : std::uint8_t
 {
   DECLARE_AND_ASSERT = 0,
@@ -1160,8 +1155,8 @@ public:
   /// new identity even at the same spelling; use a fresh manager for a new
   /// namespace. Ordinary symbols redeclared at the same sort keep their identity.
   void parse_smt2(std::string_view script, ParseMode = ParseMode::DECLARE_AND_ASSERT);
-  void parse(std::string_view text, Format); ///< SMTLIB2, SMTLIB1 or CVC
-  void parse_file(std::string_view path, Format = Format::AUTO); ///< AUTO picks by extension
+  void parse(std::string_view text, Format); ///< SMT-LIB 2: SMTLIB2 or AUTO
+  void parse_file(std::string_view path, Format = Format::AUTO); ///< SMT-LIB 2: SMTLIB2 or AUTO
   /// Reads the input from a stream as far as the parser needs it, taking what
   /// the stream holds after at most one refill: a script driven over a pipe
   /// is answered command by command. AUTO reads SMT-LIB 2. IO if the stream
@@ -1181,11 +1176,6 @@ public:
   /// functions and names its reader cannot spell; an overflow predicate or a
   /// distinct prints in operators the CVC reader has.
   std::string to_string(Format) const;
-  /// The last CVC or SMT-LIB 1 input this solver read, as the stp command
-  /// line's --print-back options print it: the input's question (its
-  /// assertions and its negated query) in CVC (after the declarations and
-  /// assertions), SMTLIB2, GDL or DOT. STATE if there was no such input.
-  std::string input_to_string(Format) const;
   /// DIMACS of the current assertions: the batch pipeline encodes them up to
   /// its first CNF without solving, whatever `incremental` says, and the
   /// scope says how that CNF relates to them. Not a check: the last check's

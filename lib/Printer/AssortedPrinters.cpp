@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/Printer/AssortedPrinters.h"
 #include "stp/Printer/printers.h"
 #include <cstdint>
 
@@ -60,63 +59,4 @@ void lpvec(const ASTVec& vec)
   cout << endl;
 }
 
-void STPMgr::printVarDeclsToStream(ostream& os, ASTNodeSet& ListOfDeclaredVars)
-{
-  for (ASTNodeSet::iterator i = ListOfDeclaredVars.begin(),
-                            iend = ListOfDeclaredVars.end();
-       i != iend; i++)
-  {
-    stp::ASTNode a = *i;
-    switch (a.GetType())
-    {
-      case stp::BITVECTOR_TYPE:
-        a.PL_Print(os, this);
-        os << " : BITVECTOR(" << a.GetValueWidth() << ");" << endl;
-        break;
-      case stp::ARRAY_TYPE:
-        a.PL_Print(os, this);
-        os << " : ARRAY "
-           << "BITVECTOR(" << a.GetIndexWidth() << ") OF ";
-        os << "BITVECTOR(" << a.GetValueWidth() << ");" << endl;
-        break;
-      case stp::BOOLEAN_TYPE:
-        a.PL_Print(os, this);
-        os << " : BOOLEAN;" << endl;
-        break;
-      default:
-        stp::FatalError("printVarDeclsToStream: Unsupported type", a);
-        break;
-    }
-  }
-} // printVarDeclsToStream
-
-void STPMgr::printAssertsToStream(ostream& os)
-{
-  ASTVec v = GetAsserts();
-  for (ASTVec::iterator i = v.begin(), iend = v.end(); i != iend; i++)
-  {
-    ASTNode q = *i;
-    os << "ASSERT( ";
-    q.PL_Print(os, this);
-    os << ");" << endl;
-  }
-}
-
-void print_STPInput_Back(const ASTNode& query, STPMgr* mgr)
-{
-
-  // Determine the symbols in the query and asserts.
-  ASTNodeSet visited;
-  ASTNodeSet symbols;
-  buildListOfSymbols(query, visited, symbols);
-  ASTVec v = mgr->GetAsserts();
-  for (ASTVec::iterator i = v.begin(), iend = v.end(); i != iend; i++)
-    buildListOfSymbols(*i, visited, symbols);
-
-  mgr->printVarDeclsToStream(cout, symbols);
-  mgr->printAssertsToStream(cout);
-  cout << "QUERY(";
-  query.PL_Print(cout, mgr);
-  cout << ");\n";
-}
 } // end of namespace stp

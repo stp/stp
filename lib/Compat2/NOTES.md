@@ -12,7 +12,7 @@ unsupported, and which 2.x suites run against it.
 | file | contents |
 |---|---|
 | `Compat2.h` | the internals shared by the two translation units: `Handle` (an `Expr`/`Type`), `VCImpl` (a `VC`), the UF declaration record, the helper declarations |
-| `c_interface2.cpp` | process state (handler, policy, registries), handles and ownership, sort helpers, the option letters and ordinals, counters and schema groups, lifecycle, backends, assertions and queries, models and their printers, the presentation-language and SMT-LIB 2 printers, parsing, uninterpreted functions, introspection, `vc_simplify` |
+| `c_interface2.cpp` | process state (handler, policy, registries), handles and ownership, sort helpers, the option letters and ordinals, counters and schema groups, lifecycle, backends, assertions and queries, models and their printers, the presentation-language and SMT-LIB 2 printers, the refused parse functions, uninterpreted functions, introspection, `vc_simplify` |
 | `c_interface2_terms.cpp` | every term and type constructor: types, symbols, Boolean, arrays, bit-vector constants and operations, floating point, Real |
 | `CMakeLists.txt` | the `stp2` target, versioned like `stp`, installed beside it, exported with it |
 
@@ -20,7 +20,7 @@ unsupported, and which 2.x suites run against it.
 
 - `libstp2` is the only provider of the 2.x C API: `libstp` carries the 3.x
   API alone (with the engine's C++ interface, `cppinterface`, which the
-  parsers and the 3.x API use). The 2.x headers, `c_interface.h` and the
+  parser and the 3.x API use). The 2.x headers, `c_interface.h` and the
   header-only `fp.hpp` and `uf.hpp` over it, are installed with `stp2`.
 - The in-tree 2.x clients link `stp2`: the libstp2 tests
   (`tests/api/compat2`, the C tests of Real arithmetic among them), the
@@ -102,7 +102,7 @@ unsupported, and which 2.x suites run against it.
   array's bitvector element sort", the array-equality refusal, and so on).
 - **Threads.** Each `VC` is its own 3.x manager, which 3.x lets any thread
   use, one call at a time; checkers on different threads run concurrently, as
-  independent 3.x managers do (a parse takes the process-wide parser lock).
+  independent 3.x managers do.
 
 ## 3. Mapping decisions
 
@@ -127,7 +127,7 @@ unsupported, and which 2.x suites run against it.
    handles that `vc_DeleteExpr` frees: `vc_getCounterExample`,
    `vc_getCounterExampleArray`, `vc_getTermFromCounterExample`,
    `vc_getUninterpretedFunctionValue`, `vc_applyUninterpretedFunction`,
-   `vc_parseExpr`/`vc_parseMemExpr`, `getChild`, `vc_simplify`. A handle is
+   `getChild`, `vc_simplify`. A handle is
    never aliased: the zero shift and the no-op extend return fresh handles.
 4. **The `'u'` registry.** Once `'u'` is set, every handle the checker creates
    is registered (and the checker-owned ones that predate the flag are
@@ -164,9 +164,9 @@ unsupported, and which 2.x suites run against it.
    disable-opt-inc, `'c'` produce-models, `'d'` produce-models + check-sanity
    (on for every checker, as 2.x forced it), `'i'` incremental=on, `'r'`
    ackermanize, `'u'` uninterpreted-functions=on + the registry, `'w'`
-   switch-word, `'x'` array-equality=on + model-array-fill=zero, `'m'`
-   (SMT-LIB 1 input for the parse functions), `'n'` (print the answer), `'p'`
-   (print the counterexample) are shim-side switches, `'q'`, `'s'`, `'t'`,
+   switch-word, `'x'` array-equality=on + model-array-fill=zero, `'n'` (print the
+   answer), `'p'` (print the counterexample) are shim-side switches, `'m'`
+   (2.x's SMT-LIB 1 input) is accepted and does nothing, `'q'`, `'s'`, `'t'`,
    `'v'`, `'y'` set the corresponding print options and install a stdout
    diagnostic sink on the solver, `'h'` is fatal (nothing a library can act
    on), and any other letter is fatal as in 2.x. `vc_setFlags`'s
@@ -254,28 +254,12 @@ unsupported, and which 2.x suites run against it.
     As in 2.x, where the value was the node number of a conjunction built
     for the call and freed on return, two calls over the same state need not
     return the same value.
-14. **Parsing.** 3.x's CVC parser asserts the *negation* of a `QUERY`
-    (`stp_solver_parse` semantics). To give 2.x's `vc_parseExpr`/
-    `vc_parseMemExpr` their `asserts` and `query` back, the shim splits the
-    text: the script is parsed with its `QUERY` statement replaced by
-    `QUERY FALSE;` (whose negation asserts nothing), then `QUERY <f>;` alone
-    is parsed inside a push/pop and the assertion it added is negated back
-    into the query term; a query that adds none is `FALSE`, or folds to it,
-    since only a negation folding to `TRUE` is dropped. The `asserts` a CVC
-    text hands back are, as 2.x's grammar built them from `GetAsserts()`, the
-    conjunction of every assertion on the stack -- every level, those made
-    before the text among them -- when the text asserted anything, and `TRUE`
-    when it asserted nothing. With `'m'` the
-    text is SMT-LIB 1: everything is asserted and the query is `FALSE`, as the
-    2.x parser had done, and the `asserts` are the benchmark's own formulas,
-    as 2.x's `benchmark` rule built them. `vc_parseExpr` returns the conjunction of the asserts
-    with the negated query, as 2.x did; a file that cannot be opened is the 2.x
-    fatal "Cannot open file", a parse failure is fatal with the 3.x message.
-    A text may declare a name the checker already has -- from `vc_varExpr`, or
-    an earlier parse -- at the symbol's own type: it is the same symbol, as it
-    was in 2.x, where every parse had its own declaration scope. 2.x also
-    accepted one at another type, as a new symbol of the same name; a checker
-    has one symbol per name, so libstp2 refuses it (a parse failure).
+14. **Parsing.** `vc_parseExpr` and `vc_parseMemExpr` read CVC or SMT-LIB 1
+    text, and STP reads neither language any more: both are the fatal
+    "STP no longer reads CVC or SMT-LIB 1 input" (through the handler), with
+    NULL, and `vc_parseMemExpr`'s two results NULL, for a caller that
+    continues. Their symbols stay, so a 2.x binary that references them
+    still loads.
 15. **Kinds and children.** `getExprKind` maps every public 3.x kind to the
     nearest `exprkind_t` (a VALUE reports TRUE/FALSE/BVCONST/REAL_CONST, a
     float or rounding-mode constant reports BVCONST as 2.x did, a Boolean
@@ -349,7 +333,7 @@ unsupported, and which 2.x suites run against it.
 | `vc_printVarDecls` | symbols of float, rounding-mode and Real sorts are skipped (the presentation language cannot spell them; 2.x printed nothing usable for them either). |
 | `vc_getCounterExample` after a VALID answer | `NULL` plus a diagnostic instead of 2.x's invented value (deliberate). |
 | `vc_pop` at the base level | fatal instead of 2.x's deletion of the base assertions (deliberate). |
-| `vc_parseExpr` / `vc_parseMemExpr` | reproduced by the split described in decision 14; a script with several `QUERY` statements is a syntax error, as it was in 2.x (the grammar allows one). A re-declaration of a name the checker has at another type is refused, where 2.x made a new symbol (decision 14). |
+| `vc_parseExpr` / `vc_parseMemExpr` | **unsupported**: fatal through the handler, as STP no longer reads CVC or SMT-LIB 1 (decision 14). |
 | `vc_printSMTLIB2`, `vc_printCounterExampleSMTLIB2`, `vc_getRealModelSMTLIB2` | composed by the shim (decision 12); the text has the 2.x shape, not the 3.x printers', with the byte-level differences decision 12 lists. |
 | `vc_setErrorPolicy` | new, honoured; under `STP_ON_ERROR_RETURN` every fatal path returns its failure value after the handler. |
 
@@ -357,8 +341,8 @@ Everything else is a direct mapping.
 
 ## 5. What runs against libstp2
 
-- `tests/api/compat2`: eleven of the 2.x gtest suites, unchanged (the handle
-  lifecycle, counterexamples, push and pop, parsing, `Expr` ownership, the
+- `tests/api/compat2`: ten of the 2.x gtest suites, unchanged (the handle
+  lifecycle, counterexamples, push and pop, `Expr` ownership, the
   counter enum's ABI, floating point and `fp.hpp`, uninterpreted functions,
   arrays, and the reason a query had no answer), each linked to `stp2`;
   `api2-fidelity`, the 2.x behaviours `libstp2` once got wrong, each

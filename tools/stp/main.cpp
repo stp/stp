@@ -74,10 +74,9 @@ namespace reg = stp::api::detail;
 //
 // Hand-written and CLI-only, listed so that nothing else hides here:
 //   - the frontend rows' actions: the positional input file, --help,
-//     --version, the parser selection (--CVC, --SMTLIB1, --SMTLIB2, else the
-//     file's extension), the print-back flags, --print-output, --output-CNF,
-//     --exit-after-CNF (the solver's end-after-cnf), --parse-only and
-//     --interactive;
+//     --version, --SMTLIB2 (accepted, and a no-op: every input is SMT-LIB 2),
+//     --print-output, --output-CNF, --exit-after-CNF (the solver's
+//     end-after-cnf), --parse-only and --interactive;
 //   - the reading of --max-time as a whole number of seconds (as the command
 //     line always read it; the registry's duration type wants a unit);
 //   - the wording of a refused value, kept to what the binary always said
@@ -151,9 +150,7 @@ public:
   stp_cli::Invocation invocation;
   // The frontend rows that are the command line's own.
   bool version = false;
-  bool use_cvc = false;
-  bool use_smtlib1 = false;
-  bool use_smtlib2 = false;
+  bool use_smtlib2 = false; // --SMTLIB2, which names the only input language
   // Tri-state: --interactive is only honoured when it was given, so the
   // value needs its own presence check.
   bool interactive = false;
@@ -176,7 +173,6 @@ public:
   const Entry* entry_named(const char* name) const;
   bool given(const char* name) const;
   void make_solver();
-  void select_parser_by_extension();
 };
 
 // ---------------------------------------------------------------------
@@ -244,10 +240,6 @@ bool* CommandLine::frontend_target(const std::string& key)
 {
   if (key == "version")
     return &version;
-  if (key == "cvc")
-    return &use_cvc;
-  if (key == "smtlib1")
-    return &use_smtlib1;
   if (key == "smtlib2")
     return &use_smtlib2;
   if (key == "interactive")
@@ -256,16 +248,6 @@ bool* CommandLine::frontend_target(const std::string& key)
     return &invocation.parse_only;
   if (key == "exit-after-cnf")
     return &invocation.exit_after_cnf;
-  if (key == "print-stpinput")
-    return &invocation.print_stpinput;
-  if (key == "print-back-cvc")
-    return &invocation.print_back_cvc;
-  if (key == "print-back-smtlib2")
-    return &invocation.print_back_smtlib2;
-  if (key == "print-back-gdl")
-    return &invocation.print_back_gdl;
-  if (key == "print-back-dot")
-    return &invocation.print_back_dot;
   if (key == "print-output")
     return &invocation.print_output;
   if (key == "output-cnf")
@@ -513,8 +495,7 @@ void CommandLine::register_exclusions()
 void CommandLine::create_options()
 {
   app.usage("USAGE: stp [options] <input-file>\n"
-            " where input is SMTLIB1/2 or CVC depending on options and file "
-            "extension");
+            " where input is SMT-LIB2");
 
   std::size_t n = 0;
   const reg::OptionSpec* specs = reg::option_specs(n);
@@ -863,33 +844,6 @@ int CommandLine::parse_options(int argc, char** argv)
   if (interactive_option != nullptr && interactive_option->count())
     invocation.interactive = interactive;
 
-  int selected_type = 0;
-  if (use_cvc)
-  {
-    selected_type++;
-    invocation.format = stp::Format::CVC;
-  }
-
-  if (use_smtlib2)
-  {
-    selected_type++;
-    invocation.format = stp::Format::SMTLIB2;
-  }
-
-  if (use_smtlib1)
-  {
-    selected_type++;
-    invocation.format = stp::Format::SMTLIB1;
-  }
-
-  if (selected_type > 1)
-  {
-    cerr << "ERROR: You have selected more than one parsing option from "
-            "CVC/SMTLIB1/SMTLIB2"
-         << endl;
-    std::exit(-1);
-  }
-
   // The solver applies the options and refuses what the applied options
   // cannot honour (CaDiCaL's knobs, an explicit --lra-decision-polarity
   // without what it needs), in the engine's words.
@@ -1006,12 +960,6 @@ int CommandLine::parse_options(int argc, char** argv)
 
   report(kCheckedLast, std::size(kCheckedLast));
 
-  if (selected_type == 0)
-  {
-    // No parser is explicity requested.
-    select_parser_by_extension();
-  }
-
   if (version)
   {
     stp_cli::print_version();
@@ -1028,22 +976,6 @@ bool CommandLine::given(const char* name) const
   return e != nullptr && e->option != nullptr && e->option->count() > 0;
 }
 
-// The parser a file's extension picks when no flag picked one: .cvc and .smt
-// their own, SMT-LIB 2 for .smt2 and anything else.
-void CommandLine::select_parser_by_extension()
-{
-  const std::string& infile = invocation.infile;
-  if (infile.size() >= 5)
-  {
-    if (!infile.compare(infile.length() - 4, 4, ".cvc"))
-      invocation.format = stp::Format::CVC;
-    if (!infile.compare(infile.length() - 4, 4, ".smt"))
-      invocation.format = stp::Format::SMTLIB1;
-    if (!infile.compare(infile.length() - 5, 5, ".smt2"))
-      invocation.format = stp::Format::SMTLIB2;
-  }
-}
-
 namespace
 {
 std::uint64_t as_uint(const api::OptionValue& v)
@@ -1055,22 +987,16 @@ std::uint64_t as_uint(const api::OptionValue& v)
 } // namespace
 
 // The manager and the solver, from the options. The manager-scoped entries
-// are the manager's: `simplify` (always off for an input printed back, which
-// is read as written) and the uninterpreted sorts' width. The solver copies
-// the rest, resolves and applies them.
+// are the manager's: `simplify` and the uninterpreted sorts' width. The
+// solver copies the rest, resolves and applies them.
 void CommandLine::make_solver()
 {
   stp::TermManager::Config config;
   const api::OptionValue simplify = options.resolved("simplify");
-  config.simplify = (!std::holds_alternative<bool>(simplify) || std::get<bool>(simplify)) &&
-                    !invocation.print_back();
+  config.simplify = !std::holds_alternative<bool>(simplify) || std::get<bool>(simplify);
   config.uf_sort_width = static_cast<std::uint32_t>(as_uint(options.resolved("uf-sort-width")));
   options.reset("simplify");
   options.reset("uf-sort-width");
-  // An input printed back reports no run times; it never did (the read that
-  // prints it back would).
-  if (invocation.print_back() && !invocation.parse_only)
-    options.reset("print-quickstat");
   const api::OptionValue statistics = options.resolved("print-functionstat");
   invocation.statistics = std::holds_alternative<bool>(statistics) && std::get<bool>(statistics);
   manager.emplace(config);

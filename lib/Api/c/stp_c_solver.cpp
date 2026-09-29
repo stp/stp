@@ -654,13 +654,6 @@ stp_status stp_solver_parse_source(stp_solver s, stp_text_source source, void* u
   });
 }
 
-char* stp_solver_input_to_string(stp_solver s, stp_format f)
-{
-  return solver_read<char*>(s, "stp_solver_input_to_string", nullptr, [&](CSolver* cs) {
-    return dup_string(cs->solver.input_to_string(format_arg(f, "stp_solver_input_to_string", 1)));
-  });
-}
-
 void stp_solver_set_output_sink(stp_solver s, stp_text_sink sink, void* user)
 {
   solver_read<stp_status>(s, "stp_solver_set_output_sink", STP_ERROR, [&](CSolver* cs) {

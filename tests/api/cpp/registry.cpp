@@ -140,7 +140,7 @@ TEST(Registry, cli_tables_are_consistent)
 
   std::size_t nf = 0;
   const reg::CliFrontend* front = reg::cli_frontend(nf);
-  EXPECT_GE(nf, 10u);
+  EXPECT_GE(nf, 9u);
   std::set<std::string> keys;
   for (std::size_t r = 0; r < nf; ++r)
   {

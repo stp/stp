@@ -1177,12 +1177,6 @@ public:
   // prints statistics for the ASTNode.
   void ASTNodeStats(const char* c, const ASTNode& a);
 
-  // Print variable to the input stream
-  void printVarDeclsToStream(ostream& os, ASTNodeSet& symbols);
-
-  // Print assertions to the input stream
-  void printAssertsToStream(ostream& os);
-
   // Variables are added automatically to the introduced_symbolset. Variables
   // in the set aren't printed out as part of the counter example.
   ASTNode CreateFreshVariable(int indexWidth, int valueWidth,
@@ -1341,9 +1335,6 @@ public:
   }
 
   bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
-
-  ASTNode NewParameterized_BooleanVar(const ASTNode& var,
-                                      const ASTNode& constant);
 
   void TermsAlreadySeenMap_Clear(void) { TermsAlreadySeenMap.clear(); }
 

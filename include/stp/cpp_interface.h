@@ -503,11 +503,6 @@ public:
                                         const SourceSort& source_sort);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);
 
-  // A boolean variable applied to a constant, e.g. p(0x3), names an
-  // ordinary boolean variable "p(0x3)".
-  DLL_PUBLIC ASTNode CreateParameterisedBooleanVar(const ASTNode& var,
-                                                   const ASTNode& constant);
-
   void removeSymbol(ASTNode to_remove);
 
   // Release query-local generated state whenever assertions/scoped symbols

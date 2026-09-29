@@ -647,17 +647,9 @@ TEST(Errors, input_mistakes_are_recoverable)
     rows.push_back({std::string("a run's ") + eq + " under array-equality = auto",
                     ErrorCode::UNSUPPORTED,
                     script(ab + "(assert " + eq + ")(check-sat)", ParseMode::EXECUTE)});
-  // a CVC or SMT-LIB 1 action that rejects its input ends the parse
-  for (const char* text : {"x : BITVECTOR(8); ASSERT(y = 0hex01); QUERY(x = x);",
-                           "x : BITVECTOR(8); ASSERT((x & 0hex001) = 0hex01); QUERY(FALSE);",
-                           "x : BITVECTOR(8); ASSERT(x[2:5] = 0bin0); QUERY(FALSE);"})
-    rows.push_back({std::string("CVC: ") + text, ErrorCode::PARSE,
-                    [text](TermManager&, Solver& s) { s.parse(text, Format::CVC); }});
-  rows.push_back({"SMT-LIB 1: a rotation by the width", ErrorCode::PARSE, [](TermManager&, Solver& s) {
-                    s.parse("(benchmark b :logic QF_BV :extrafuns ((x BitVec[8]))"
-                            " :formula (= (rotate_left[9] x) bv1[8]))",
-                            Format::SMTLIB1);
-                  }});
+  // a format STP prints but does not read: every parse is SMT-LIB 2
+  rows.push_back({"a parse of DOT", ErrorCode::INVALID_ARGUMENT,
+                  [](TermManager&, Solver& s) { s.parse("digraph {}", Format::DOT); }});
   // fp.rem over a format whose circuit the engine refuses
   rows.push_back({"fp.rem at Float(11, 300)", ErrorCode::UNSUPPORTED, [](TermManager& tm, Solver&) {
                     const Sort f = tm.mk_fp_sort(11, 300);

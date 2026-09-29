@@ -33,7 +33,6 @@ THE SOFTWARE.
 #include "../Lra/LraFrontend.h"
 #include "stp/NodeFactory/TypeChecker.h"
 #include "stp/Parser/parser.h"
-#include "stp/Printer/AssortedPrinters.h"
 #include "stp/Printer/printers.h"
 #include "stp/Sat/SATSolverFactory.h"
 #include "stp/ToSat/ToSATBase.h"
@@ -208,7 +207,6 @@ SolverImpl::~SolverImpl()
   candidate.reset();
   last_assumptions.clear();
   last_failed_assumptions.clear();
-  forget_input_question();
   if (stp != nullptr)
   {
     // Engine work in a destructor, which cannot report a failure: an engine
@@ -867,14 +865,6 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
   return r;
 }
 
-void SolverImpl::forget_input_question()
-{
-  input_asserts = ASTNode();
-  input_query = ASTNode();
-  input_question = ASTNode();
-  have_input_question = false;
-}
-
 void SolverImpl::rebuild_engine()
 {
   // Called through enter(): this solver is the active one.
@@ -882,7 +872,6 @@ void SolverImpl::rebuild_engine()
   candidate.reset();
   model_pending = false;
   have_last = false;
-  forget_input_question();
   engine_call(mgr, "Solver::reset", [&] {
   while (mgr->bm->getAssertLevel() > 0)
     mgr->bm->Pop();
@@ -1456,21 +1445,6 @@ std::optional<Term> Solver::symbol(std::string_view name) const
 
 namespace
 {
-Format guess_format(std::string_view path)
-{
-  const std::size_t dot = path.rfind('.');
-  std::string ext = dot == std::string_view::npos ? "" : std::string(path.substr(dot + 1));
-  for (char& c : ext)
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  if (ext == "smt2")
-    return Format::SMTLIB2;
-  if (ext == "smt")
-    return Format::SMTLIB1;
-  if (ext == "cvc" || ext == "stp")
-    return Format::CVC;
-  return Format::SMTLIB2;
-}
-
 // The grammar resolves names through the parser interface's frames, not the
 // manager: every symbol the API declared has to be introduced to a fresh
 // interface before a script can refer to it. Function symbols are found by
@@ -1532,7 +1506,7 @@ struct InputFailed
 {
 };
 
-// The lexers' reader over a stream (setSMT2Reader and its twins): what the
+// The lexer's reader over a stream (setSMT2Reader): what the
 // stream's buffer holds after at most one refill, so that input arriving
 // over a pipe is parsed as it arrives rather than once a block has filled.
 std::size_t read_stream(char* buf, std::size_t max, void* opaque)
@@ -1584,43 +1558,20 @@ std::size_t read_stream(char* buf, std::size_t max, void* opaque)
   }
 }
 
-// The lexer readers are process globals: set for one parse, then cleared.
+// The lexer's reader is a process global: set for one parse, then cleared.
 struct ReaderScope
 {
-  ReaderScope(Format f, std::istream* in)
+  explicit ReaderScope(std::istream* in)
   {
-    if (in == nullptr)
-      return;
-    if (f == Format::SMTLIB1)
-      setSMTReader(&read_stream, in);
-    else if (f == Format::CVC)
-      setCVCReader(&read_stream, in);
-    else
+    if (in != nullptr)
       setSMT2Reader(&read_stream, in);
   }
-  ~ReaderScope()
-  {
-    setSMTReader(nullptr, nullptr);
-    setCVCReader(nullptr, nullptr);
-    setSMT2Reader(nullptr, nullptr);
-  }
+  ~ReaderScope() { setSMT2Reader(nullptr, nullptr); }
   ReaderScope(const ReaderScope&) = delete;
   ReaderScope& operator=(const ReaderScope&) = delete;
 };
 
-// A CVC or SMT-LIB 1 input's refusal of itself where the command line's
-// FatalError reported it (an input with no query): reported the same way,
-// and a failed parse rather than an engine failure.
-[[noreturn]] void refuse_input(const char* fn, const char* report)
-{
-  stp::ReportFatalError(report);
-  std::string what(report);
-  while (!what.empty() && what.back() == '\n')
-    what.pop_back();
-  detail::fail_parse(fn, 0, 0, what);
-}
-
-// Runs one of the three parsers over the input, asserting into the solver's
+// Runs the SMT-LIB 2 parser over the input, asserting into the solver's
 // stack. DECLARE_AND_ASSERT is the API's own reading of a script: every
 // theory's keywords live, check-sat skipped, the frontend's responses kept
 // for the diagnostics of a failure. EXECUTE and PARSE_ONLY read it as the
@@ -1631,10 +1582,8 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
 {
   STPMgr* bm = s->mgr->bm;
   s->ensure_snapshot();
-  if (format == Format::AUTO)
-    format = Format::SMTLIB2;
-  if (format != Format::SMTLIB2 && format != Format::SMTLIB1 && format != Format::CVC)
-    detail::fail(ErrorCode::INVALID_ARGUMENT, fn, "parse takes SMTLIB2, SMTLIB1 or CVC");
+  if (format != Format::AUTO && format != Format::SMTLIB2)
+    detail::fail(ErrorCode::INVALID_ARGUMENT, fn, "parse reads SMT-LIB 2 only (SMTLIB2 or AUTO)");
   if (mode != ParseMode::DECLARE_AND_ASSERT && mode != ParseMode::EXECUTE &&
       mode != ParseMode::PARSE_ONLY)
     detail::fail(ErrorCode::INVALID_ARGUMENT, fn, "not a parse mode");
@@ -1696,18 +1645,16 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   struct RunFlags
   {
     UserDefinedFlags& flags;
-    bool print_output, smt1, smt2;
+    bool print_output, smt2;
     ~RunFlags()
     {
       flags.print_output_flag = print_output;
-      flags.smtlib1_parser_flag = smt1;
       flags.smtlib2_parser_flag = smt2;
     }
   } run_flags{bm->UserFlags, bm->UserFlags.print_output_flag,
-              bm->UserFlags.smtlib1_parser_flag, bm->UserFlags.smtlib2_parser_flag};
+              bm->UserFlags.smtlib2_parser_flag};
   bm->UserFlags.print_output_flag = runs;
-  bm->UserFlags.smtlib1_parser_flag = format == Format::SMTLIB1;
-  bm->UserFlags.smtlib2_parser_flag = format == Format::SMTLIB2;
+  bm->UserFlags.smtlib2_parser_flag = true;
   const detail::CheckRun run(s);
   input_status = NOT_DECLARED;
 
@@ -1758,7 +1705,6 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   // content needs is switched on again after it.
   bool keep_uf = false;
   bool array_equality = false;
-  ASTVec question; // a CVC or SMT-LIB 1 input's assertions and query
   {
   // What an SMT-LIB 2 script declared, kept past its end (see the adoption).
   // Declared before the interface, which may tear its frames down again as it
@@ -1854,7 +1800,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
     }
   } restore{bm, timer_depth, bm->UserFlags.enable_uninterpreted_functions,
             bm->UserFlags.enable_array_equality};
-  const ReaderScope reader(format, source.stream);
+  const ReaderScope reader(source.stream);
   seed_parser_symbols(pi, s->mgr);
   // No set-logic gates the API's own reading: every theory's keywords are
   // live. A run reads the script as the command line does.
@@ -1874,192 +1820,86 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
 
   int status = 0;
   std::vector<ASTNode> roots;
-  switch (format)
+  // The grammar admits a function declaration with arguments, an
+  // application and a declared sort only while the first switch is on,
+  // and the node factory builds an equality between arrays only while
+  // the second is (the CLI has set-logic, or -u and -x, turn them on).
+  // The API's own reading parses them whatever the logic line says, as
+  // its own construction builds them; the switches' values afterwards are
+  // decided below. A run leaves them to the script and the options.
+  if (!runs)
   {
-    case Format::SMTLIB2:
-    {
-      // The grammar admits a function declaration with arguments, an
-      // application and a declared sort only while the first switch is on,
-      // and the node factory builds an equality between arrays only while
-      // the second is (the CLI has set-logic, or -u and -x, turn them on).
-      // The API's own reading parses them whatever the logic line says, as
-      // its own construction builds them; the switches' values afterwards are
-      // decided below. A run leaves them to the script and the options.
-      if (!runs)
-      {
-        bm->UserFlags.enable_uninterpreted_functions = true;
-        bm->UserFlags.enable_array_equality = true;
-        pi.setPrintSuccess(false);
-      }
-      if (mode != ParseMode::EXECUTE)
-        pi.ignoreCheckSat();
-      // The lexer's line counter is a process global that nothing resets
-      // between scans; a parse error's line is relative to this script.
-      smt2lineno = 1;
-      if (source.stream == nullptr)
-        SMT2ScanString(script.c_str());
-      else
-        setSMT2In(nullptr);
-      try
-      {
-        status = SMT2Parse();
-      }
-      catch (const stp::EngineFatal& e)
-      {
-        // The engine failed inside the script (a check it ran, a node it
-        // built), not the grammar: the manager's state is suspect, so this
-        // is INTERNAL and the manager is poisoned, with the stack put back
-        // for what it is worth.
-        smt2lex_destroy();
-        pi.retainUFDeclarations(false);
-        restore_stack();
-        detail::fail_engine(s->mgr, fn, e.what());
-      }
-      catch (const InputFailed&)
-      {
-        smt2lex_destroy();
-        pi.abortCurrentCommand();
-        pi.retainUFDeclarations(false);
-        restore_stack();
-        detail::fail(ErrorCode::IO, fn, "reading the input failed");
-      }
-      catch (const std::exception& e)
-      {
-        // anything else the engine threw inside the script, reported as
-        // engine_call reports it, with the stack put back
-        smt2lex_destroy();
-        pi.retainUFDeclarations(false);
-        restore_stack();
-        detail::fail_foreign(s->mgr, fn, e);
-      }
-      smt2lex_destroy();
-      // A command the frontend answered with (error ...) and then skipped (an
-      // ill-typed extract, say) leaves the parse "successful" with the
-      // command's assertion silently dropped. STP's error behaviour is
-      // immediate-exit; for the API's own reading that is a failed parse,
-      // stack put back. A run has answered it already, as the command line
-      // does, and fails only where the parser gave up.
-      if (!runs && status == 0 && !pi.last_error_message.empty())
-        status = 1;
-      if (status != 0)
-      {
-        // the interface's teardown deactivates what the failed script declared
-        pi.retainUFDeclarations(false);
-        restore_stack();
-        // A run reads the script as the command line does, where an equality
-        // between whole arrays needs array-equality = on (--array-equality):
-        // refused, it is the UNSUPPORTED the API's own reading gives under
-        // off, not a malformed script.
-        if (runs && bm->array_equality_refusals != array_equality_refusals)
-          detail::fail(ErrorCode::UNSUPPORTED, fn,
-                       "the script compares arrays for equality, which a run decides "
-                       "only with array-equality = on");
-        detail::fail_parse(fn, smt2lineno, 0,
-                           pi.last_error_message.empty()
-                               ? "syntax error"
-                               : explain_redeclaration(pi.last_error_message));
-      }
-      break;
-    }
-    case Format::SMTLIB1:
-    case Format::CVC:
-    {
-      ASTVec out;
-      // As for SMT-LIB 2 above: the API's own reading builds an equality
-      // between arrays whatever the switch says, and decides below.
-      if (!runs)
-        bm->UserFlags.enable_array_equality = true;
-      // These grammars refuse a malformed input through FatalError itself
-      // (a zero-width bit-vector, too few operands), which is the parse's
-      // own refusal here, not an engine failure: a failed parse, like a
-      // syntax error.
-      try
-      {
-        if (format == Format::SMTLIB1)
-        {
-          if (source.stream == nullptr)
-            SMTScanString(script.c_str());
-          else
-            setSMTIn(nullptr);
-          status = SMTParse(&out);
-          smtlex_destroy();
-        }
-        else
-        {
-          if (source.stream == nullptr)
-            CVCScanString(script.c_str());
-          else
-            setCVCIn(nullptr);
-          status = CVCParse(&out);
-          cvclex_destroy();
-        }
-      }
-      catch (const stp::EngineFatal& e)
-      {
-        if (format == Format::SMTLIB1)
-          smtlex_destroy();
-        else
-          cvclex_destroy();
-        status = 1;
-        pi.last_error_message = e.what();
-      }
-      catch (const InputFailed&)
-      {
-        if (format == Format::SMTLIB1)
-          smtlex_destroy();
-        else
-          cvclex_destroy();
-        pi.retainUFDeclarations(false);
-        restore_stack();
-        detail::fail(ErrorCode::IO, fn, "reading the input failed");
-      }
-      catch (const std::exception& e)
-      {
-        if (format == Format::SMTLIB1)
-          smtlex_destroy();
-        else
-          cvclex_destroy();
-        pi.retainUFDeclarations(false);
-        restore_stack();
-        detail::fail_foreign(s->mgr, fn, e);
-      }
-      if (status != 0)
-      {
-        pi.retainUFDeclarations(false);
-        restore_stack();
-        detail::fail_parse(fn, 0, 0,
-                           !pi.last_error_message.empty() ? pi.last_error_message
-                           : !capture.text().empty()      ? capture.text()
-                                                          : std::string("syntax error"));
-      }
-      // The input's question, for input_to_string and for a run to decide.
-      s->forget_input_question();
-      if (out.size() == 2)
-      {
-        s->input_asserts = out[0];
-        s->input_query = out[1];
-        s->have_input_question = true;
-      }
-      if (runs)
-      {
-        question = out;
-        break;
-      }
-      // the parser asserted the assumptions itself; the query becomes an
-      // assertion of its negation, so that check_sat answers the file's
-      // question: unsat is "valid". QUERY(FALSE), the CVC spelling of "just
-      // the assertions", negates to true and adds nothing; a query that is or
-      // folds to TRUE negates to false, which is asserted.
-      if (out.size() >= 2 && !out[1].IsNull())
-      {
-        const ASTNode negated = bm->defaultNodeFactory->CreateNode(NOT, out[1]);
-        if (negated.GetKind() != TRUE)
-          bm->AddAssert(negated);
-      }
-      break;
-    }
-    default:
-      break;
+    bm->UserFlags.enable_uninterpreted_functions = true;
+    bm->UserFlags.enable_array_equality = true;
+    pi.setPrintSuccess(false);
+  }
+  if (mode != ParseMode::EXECUTE)
+    pi.ignoreCheckSat();
+  // The lexer's line counter is a process global that nothing resets
+  // between scans; a parse error's line is relative to this script.
+  smt2lineno = 1;
+  if (source.stream == nullptr)
+    SMT2ScanString(script.c_str());
+  else
+    setSMT2In(nullptr);
+  try
+  {
+    status = SMT2Parse();
+  }
+  catch (const stp::EngineFatal& e)
+  {
+    // The engine failed inside the script (a check it ran, a node it
+    // built), not the grammar: the manager's state is suspect, so this
+    // is INTERNAL and the manager is poisoned, with the stack put back
+    // for what it is worth.
+    smt2lex_destroy();
+    pi.retainUFDeclarations(false);
+    restore_stack();
+    detail::fail_engine(s->mgr, fn, e.what());
+  }
+  catch (const InputFailed&)
+  {
+    smt2lex_destroy();
+    pi.abortCurrentCommand();
+    pi.retainUFDeclarations(false);
+    restore_stack();
+    detail::fail(ErrorCode::IO, fn, "reading the input failed");
+  }
+  catch (const std::exception& e)
+  {
+    // anything else the engine threw inside the script, reported as
+    // engine_call reports it, with the stack put back
+    smt2lex_destroy();
+    pi.retainUFDeclarations(false);
+    restore_stack();
+    detail::fail_foreign(s->mgr, fn, e);
+  }
+  smt2lex_destroy();
+  // A command the frontend answered with (error ...) and then skipped (an
+  // ill-typed extract, say) leaves the parse "successful" with the
+  // command's assertion silently dropped. STP's error behaviour is
+  // immediate-exit; for the API's own reading that is a failed parse,
+  // stack put back. A run has answered it already, as the command line
+  // does, and fails only where the parser gave up.
+  if (!runs && status == 0 && !pi.last_error_message.empty())
+    status = 1;
+  if (status != 0)
+  {
+    // the interface's teardown deactivates what the failed script declared
+    pi.retainUFDeclarations(false);
+    restore_stack();
+    // A run reads the script as the command line does, where an equality
+    // between whole arrays needs array-equality = on (--array-equality):
+    // refused, it is the UNSUPPORTED the API's own reading gives under
+    // off, not a malformed script.
+    if (runs && bm->array_equality_refusals != array_equality_refusals)
+      detail::fail(ErrorCode::UNSUPPORTED, fn,
+                   "the script compares arrays for equality, which a run decides "
+                   "only with array-equality = on");
+    detail::fail_parse(fn, smt2lineno, 0,
+                       pi.last_error_message.empty()
+                           ? "syntax error"
+                           : explain_redeclaration(pi.last_error_message));
   }
   // adopt the symbols the script declared
   const std::vector<ASTNode> after = detail::flat_assertions(bm);
@@ -2084,17 +1924,17 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   for (const auto& alias : sorts_at_end)
     if (alias.second.kind() == SourceSort::Kind::Uninterpreted)
       s->mgr->sort_of_source(alias.second, fn);
-  if (runs && format == Format::SMTLIB2)
+  if (runs)
   {
-    // An SMT-LIB 2 script that ran has answered its questions: what is left
-    // is the manager's, and is adopted by the next call on it.
+    // A script that ran has answered its questions: what is left is the
+    // manager's, and is adopted by the next call on it.
     s->mgr->pending_roots = std::move(roots);
     s->mgr->adoption_pending = true;
   }
   else
   {
-    // A CVC or SMT-LIB 1 question is decided below, and an assertion made
-    // without a run may be refused, so both need the content now.
+    // An assertion made without a run may be refused, so the content is
+    // needed now.
     array_equality = detail::any_node(roots, detail::is_array_equality);
     if (!runs && array_equality && s->mgr->array_equality_off)
     {
@@ -2131,43 +1971,13 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
     bm->UserFlags.enable_array_equality = true;
 
   // What the command line did once the input was read, the Parsing timer
-  // stopped: nothing more for an SMT-LIB 2 script, which ran as it was read;
-  // the timing report for --parse-only; a CVC or SMT-LIB 1 query decided and
-  // answered. A run that ended at its first CNF says nothing more.
+  // stopped: nothing more for a script, which ran as it was read, but the
+  // timing report for --parse-only. A run that ended at its first CNF says
+  // nothing more.
   if (!runs || bm->run_ended_after_cnf)
     return;
-  if (mode == ParseMode::PARSE_ONLY)
-  {
-    if (bm->UserFlags.quick_statistics_flag)
-      bm->GetRunTimes()->print();
-    return;
-  }
-  if (format == Format::SMTLIB2)
-    return;
-  if (question.empty())
-    refuse_input(fn, "Input is Empty. Please enter some asserts and query\n");
-  if (question.size() != 2)
-    refuse_input(fn, "Input must contain a query\n");
-  try
-  {
-    // As before any check: nothing of an earlier one's tables or reason.
-    s->stp->ClearAllTables();
-    bm->clearUnknown();
-    const SOLVER_RETURN_TYPE ret = s->stp->TopLevelSTP(question[0], question[1]);
-    if (bm->run_ended_after_cnf)
-      return;
-    if (bm->UserFlags.quick_statistics_flag)
-      bm->GetRunTimes()->print();
-    ToSATBase::PrintOutput(bm, ret);
-  }
-  catch (const stp::EngineFatal& e)
-  {
-    detail::fail_engine(s->mgr, fn, e.what());
-  }
-  catch (const std::exception& e)
-  {
-    detail::fail_foreign(s->mgr, fn, e);
-  }
+  if (mode == ParseMode::PARSE_ONLY && bm->UserFlags.quick_statistics_flag)
+    bm->GetRunTimes()->print();
 }
 } // namespace
 
@@ -2200,8 +2010,8 @@ void Solver::parse_file(std::string_view path, Format format)
   std::stringstream buffer;
   buffer << in.rdbuf();
   const std::string text = buffer.str();
-  run_parser(s, ParseSource{text, nullptr}, format == Format::AUTO ? guess_format(path) : format,
-             ParseMode::DECLARE_AND_ASSERT, "Solver::parse_file");
+  run_parser(s, ParseSource{text, nullptr}, format, ParseMode::DECLARE_AND_ASSERT,
+             "Solver::parse_file");
 }
 
 namespace
@@ -2797,10 +2607,8 @@ std::string Solver::to_string(Format f) const
       });
       return os.str();
     }
-    case Format::SMTLIB1:
-      break;
   }
-  detail::fail(ErrorCode::UNSUPPORTED, "Solver::to_string", "there is no SMT-LIB 1 printer");
+  detail::fail(ErrorCode::INVALID_ARGUMENT, "Solver::to_string", "not a format");
 }
 
 CnfScope Solver::write_cnf(std::ostream& os) const
@@ -2925,43 +2733,6 @@ void Solver::set_fatal_error_handler(std::function<void(std::string_view)> handl
 void Solver::set_cnf_sink(std::function<void(std::string_view, CnfScope)> sink)
 {
   live_read(*this, "Solver::set_cnf_sink")->cnf_sink = std::move(sink);
-}
-
-std::string Solver::input_to_string(Format f) const
-{
-  SolverImpl* s = live(*this, "Solver::input_to_string");
-  if (f != Format::CVC && f != Format::SMTLIB2 && f != Format::GDL && f != Format::DOT)
-    detail::fail(ErrorCode::UNSUPPORTED, "Solver::input_to_string",
-                 "an input prints back as CVC, SMTLIB2, GDL or DOT");
-  if (!s->have_input_question)
-    detail::fail(ErrorCode::STATE, "Solver::input_to_string",
-                 "this solver has read no CVC or SMT-LIB 1 input");
-  // The engine's print-back printers write to std::cout: the text is kept
-  // here, and the rest of what the engine says goes where the solver's does.
-  std::string text;
-  const std::function<void(std::string_view)> keep = [&text](std::string_view chunk) {
-    text.append(chunk.data(), chunk.size());
-  };
-  const detail::OutputSinks sinks{&keep, &s->diagnostic_sink, &s->fatal_handler};
-  detail::OutputRoute route(&sinks);
-  STPMgr* bm = s->mgr->bm;
-  detail::engine_call(s->mgr, "Solver::input_to_string", [&] {
-    // What the command line printed back: the question, built with the
-    // engine's folding factory, whatever the input was parsed with.
-    if (s->input_question.IsNull())
-      s->input_question =
-          bm->CreateNode(AND, bm->CreateNode(NOT, s->input_query), s->input_asserts);
-    const ASTNode& question = s->input_question;
-    switch (f)
-    {
-      case Format::CVC: print_STPInput_Back(question, bm); break;
-      case Format::SMTLIB2: printer::SMTLIB2_PrintBack(std::cout, question, bm); break;
-      case Format::GDL: printer::GDL_Print(std::cout, question); break;
-      default: printer::Dot_Print(std::cout, question); break;
-    }
-    std::cout.flush();
-  });
-  return text;
 }
 
 Statistics Solver::statistics() const

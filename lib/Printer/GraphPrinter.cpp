@@ -44,9 +44,8 @@ using std::string;
 using std::endl;
 using namespace stp;
 
-// A constant's label: "bv<decimal>[<width>]". This was the SMT-LIB1
-// spelling; it survives here because a graph label wants the value and the
-// width, not a parseable literal.
+// A constant's label: "bv<decimal>[<width>]", because a graph label wants
+// the value and the width, not a parseable literal.
 static void outputBitVec(const ASTNode n, ostream& os)
 {
   const Kind k = n.GetKind();
