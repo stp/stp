@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "Internal.h"
 
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <ostream>
@@ -242,12 +243,13 @@ bool error_recoverable(ErrorCode code)
 
 namespace
 {
-// The policy for the two unsafe codes, process-wide.
-InternalErrorPolicy g_policy = [] {
+// The policy for the two unsafe codes, process-wide: written from any thread,
+// read by every thread that throws.
+std::atomic<InternalErrorPolicy> g_policy{[] {
   const char* env = std::getenv("STP_ABORT_ON_INTERNAL_ERROR");
   return (env != nullptr && std::strcmp(env, "1") == 0) ? InternalErrorPolicy::ABORT
                                                         : InternalErrorPolicy::POISON;
-}();
+}()};
 
 [[noreturn]] void throw_details(std::shared_ptr<ErrorDetails> d)
 {

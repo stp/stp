@@ -2694,13 +2694,12 @@ def statistics_tier(name):
     cdef bytes b = _b(name)
     cdef stp_tier t
     cdef const stp_error* e
-    # An unknown name answers STABLE and records INVALID_ARGUMENT in the thread-local record,
-    # which nothing clears on success: plant a sentinel error first, so that a record that
-    # still shows the sentinel afterwards means the call succeeded.
-    stp_option_info_type(b"\x01stp-python-sentinel\x01")
+    # An unknown name answers STABLE and records INVALID_ARGUMENT in the thread-local record:
+    # cleared first, a record afterwards means the call failed.
+    stp_clear_last_error()
     t = stp_statistics_tier(b)
     e = stp_last_error()
-    if e != NULL and e.code == STP_ERR_INVALID_ARGUMENT:
+    if e != NULL:
         raise _exc_from(e, None, False)
     return <int>t
 

@@ -58,7 +58,8 @@ leaves to the implementation.
   converters throw `NullArgument`, which the boundary turns into the failure
   value with no record). A `NULL` object handle (manager, solver, options,
   model, value, statistics) is `NULL_HANDLE` in the **thread-local** record
-  (`stp_last_error`); a `NULL` string or out-pointer is `NULL_HANDLE` in the
+  (`stp_last_error`, which keeps the latest such error until the next one or
+  `stp_clear_last_error`); a `NULL` string or out-pointer is `NULL_HANDLE` in the
   object's record, with the argument index. `stp_solver_assert(s, NULL)` records
   `NULL_HANDLE` and fails the solver.
 - **The failed state** is `CSolver::failed`, set by `solver_mutate` (assert,

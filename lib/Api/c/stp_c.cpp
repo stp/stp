@@ -692,6 +692,11 @@ const stp_error* stp_last_error(void)
   return r.pending ? &r.view : nullptr;
 }
 
+void stp_clear_last_error(void)
+{
+  thread_error().clear();
+}
+
 void stp_set_internal_error_policy(stp_internal_error_policy p)
 {
   set_internal_error_policy(p == STP_ABORT ? InternalErrorPolicy::ABORT

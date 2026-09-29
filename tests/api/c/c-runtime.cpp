@@ -526,3 +526,25 @@ TEST(c_runtime, error_callback_sees_every_error_and_the_record_keeps_the_first)
   stp_tm_scope_pop(tm);
   stp_tm_release(tm);
 }
+
+// The thread-local record can be cleared, which is what lets a registry query
+// whose every answer is also a valid one report failure: an unknown name's tier
+// is STABLE like a real one's, and an error from any earlier call stayed in the
+// record for good. The message lives until the next object-less error or clear.
+TEST(c_runtime, the_thread_record_is_cleared_to_ask_a_registry_query)
+{
+  EXPECT_EQ(nullptr, stp_tm_new_with(true, STP_RM_RNE, 0)); // leaves an error behind
+  ASSERT_NE(nullptr, stp_last_error());
+  stp_clear_last_error();
+  EXPECT_EQ(nullptr, stp_last_error());
+  EXPECT_EQ(STP_TIER_STABLE, stp_statistics_tier("checks.total"));
+  EXPECT_EQ(nullptr, stp_last_error()); // a real name: no error
+  EXPECT_EQ(STP_TIER_STABLE, stp_statistics_tier("no.such.statistic"));
+  const stp_error* e = stp_last_error();
+  ASSERT_NE(nullptr, e);
+  EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, e->code);
+  const std::string message = e->message;
+  EXPECT_NE(std::string::npos, message.find("no.such.statistic")) << message;
+  stp_clear_last_error();
+  EXPECT_EQ(nullptr, stp_last_error());
+}

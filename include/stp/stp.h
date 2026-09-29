@@ -328,9 +328,13 @@ STP_API bool stp_has_sat_backend(const char* name);
 STP_API size_t stp_num_sat_backends(void);
 STP_API const char* stp_sat_backend_name(size_t i); /* static; NULL when i is out of range */
 STP_API void stp_free(void* p);                     /* the one release function for every returned buffer */
-STP_API const stp_error* stp_last_error(void); /* thread-local: the most recent error of a call that had no
-                                                  object to record into (stp_tm_new, stp_options_new, a NULL
-                                                  object handle, the registry queries); NULL when none yet */
+/* thread-local: the most recent error of a call that had no object to record into (stp_tm_new,
+ * stp_options_new, a NULL object handle, the registry queries); NULL when none since the last
+ * stp_clear_last_error. Its strings live until the next such error on the thread or the clear.
+ * Clear it before a registry query whose every answer is also a valid one
+ * (stp_option_info_tier("typo") is STABLE), and read it after. */
+STP_API const stp_error* stp_last_error(void);
+STP_API void stp_clear_last_error(void);
 STP_API void stp_set_internal_error_policy(stp_internal_error_policy); /* process-wide */
 STP_API stp_internal_error_policy stp_get_internal_error_policy(void);
 STP_API const char* stp_kind_name(stp_kind);     /* "BV_ADD"; "?" out of range */

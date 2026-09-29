@@ -172,6 +172,7 @@ cdef extern from "stp/stp.h":
     const char* stp_sat_backend_name(size_t i)
     void stp_free(void* p)
     const stp_error* stp_last_error()
+    void stp_clear_last_error()
     void stp_set_internal_error_policy(stp_internal_error_policy)
     stp_internal_error_policy stp_get_internal_error_policy()
     const char* stp_kind_name(stp_kind)
