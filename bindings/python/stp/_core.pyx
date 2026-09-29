@@ -461,12 +461,40 @@ def register_value_classes(model=None, array_value=None, fun_value=None, statist
 # ----------------------------------------------------------------- helpers
 
 cdef inline bytes _b(object s):
-    """A str (or bytes) as UTF-8 bytes for a const char* argument."""
+    """A str (or bytes) as UTF-8 bytes for a const char* argument. A NUL in it
+    would end the C string there: "a\\0b" would name "a", a script would stop
+    short, so it is refused."""
+    cdef bytes b
     if isinstance(s, bytes):
-        return <bytes>s
-    if isinstance(s, str):
-        return (<str>s).encode("utf-8")
-    raise TypeError("expected a str, got %s" % type(s).__name__)
+        b = <bytes>s
+    elif isinstance(s, str):
+        b = (<str>s).encode("utf-8")
+    else:
+        raise TypeError("expected a str, got %s" % type(s).__name__)
+    if b"\x00" in b:
+        raise ValueError("a NUL character cannot be passed to STP (it would end the text there)")
+    return b
+
+
+cdef uint64_t _budget(object v, str what) except? 0xFFFFFFFFFFFFFFFF:
+    """A budget as the C layer takes it: none is 0 here (the has_ flag says it is absent), a
+    negative one is refused, and one past uint64 is as far as the C layer counts, which is no
+    limit in all but name."""
+    if v is None:
+        return 0
+    if v < 0:
+        raise ArgumentError("a %s budget cannot be negative (%r)" % (what, v), code=ErrorCode.INVALID_ARGUMENT)
+    return <uint64_t>min(v, 0xFFFFFFFFFFFFFFFF)
+
+
+cdef uint32_t _u32(object v, str what) except? 0xFFFFFFFF:
+    """A Python int for a uint32_t argument; outside 0 to 2^32 - 1 it is the error STP gives
+    a value that does not fit, not Python's OverflowError."""
+    try:
+        return <uint32_t>v
+    except OverflowError:
+        raise ArgumentError("%s %r is outside 0 to 4294967295" % (what, v),
+                            code=ErrorCode.VALUE_OUT_OF_RANGE) from None
 
 
 cdef object _int_from_hex(str digits, bint signed, uint32_t width):
@@ -506,7 +534,7 @@ cdef class Manager:
         else:
             if default_rounding_mode < 0 or default_rounding_mode > <int>STP_RM_RTZ:
                 raise ArgumentError("invalid rounding mode %d" % default_rounding_mode)
-            self._tm = stp_tm_new_with(bool(simplify), <stp_rm>default_rounding_mode, <uint32_t>uf_sort_width)
+            self._tm = stp_tm_new_with(bool(simplify), <stp_rm>default_rounding_mode, _u32(uf_sort_width, "uf_sort_width"))
         if self._tm == NULL:
             _raise_thread_local("stp_tm_new")
         _MANAGERS[stp_tm_id(self._tm)] = self
@@ -613,7 +641,7 @@ cdef class Manager:
                 if idx == NULL:
                     raise MemoryError()
                 for i in range(m):
-                    idx[i] = <uint32_t>indices[i]
+                    idx[i] = _u32(indices[i], "an index")
             h = stp_mk_term_sorted(self._tm, kind, n, arr, m, idx, sort._h if sort is not None else NULL)
         finally:
             free(arr)
@@ -668,7 +696,7 @@ cdef class Manager:
         self._check()
         if not isinstance(width, int) or width < 0 or width > 0xFFFFFFFF:
             raise ArgumentError("a bit-vector width must be a positive int, got %r" % (width,))
-        cdef stp_sort h = stp_mk_bv_sort(self._tm, <uint32_t>width)
+        cdef stp_sort h = stp_mk_bv_sort(self._tm, _u32(width, "a width"))
         if h == NULL:
             self._fail("stp_mk_bv_sort")
         return self._wrap_sort(h)
@@ -678,7 +706,7 @@ cdef class Manager:
         if not isinstance(ebits, int) or not isinstance(sbits, int) or ebits < 0 or sbits < 0 \
                 or ebits > 0xFFFFFFFF or sbits > 0xFFFFFFFF:
             raise ArgumentError("a floating-point format needs two positive ints, got %r, %r" % (ebits, sbits))
-        cdef stp_sort h = stp_mk_fp_sort(self._tm, <uint32_t>ebits, <uint32_t>sbits)
+        cdef stp_sort h = stp_mk_fp_sort(self._tm, _u32(ebits, "an exponent width"), _u32(sbits, "a significand width"))
         if h == NULL:
             self._fail("stp_mk_fp_sort")
         return self._wrap_sort(h)
@@ -818,7 +846,7 @@ cdef class Manager:
         if not isinstance(value, int):
             raise TypeError("a bit-vector literal must be an int, got %s" % type(value).__name__)
         cdef stp_term h
-        cdef uint32_t w = <uint32_t>width
+        cdef uint32_t w = _u32(width, "a width")
         cdef bytes digits
         if 0 <= value <= UINT64_MAX:
             h = stp_mk_bv_uint64(self._tm, w, <uint64_t>value)
@@ -834,7 +862,7 @@ cdef class Manager:
     def mk_bv_str(self, width, digits, base=10):
         self._check()
         cdef bytes b = _b(digits)
-        cdef stp_term h = stp_mk_bv_str(self._tm, <uint32_t>width, b, <int>base)
+        cdef stp_term h = stp_mk_bv_str(self._tm, _u32(width, "a width"), b, <int>base)
         if h == NULL:
             self._fail("stp_mk_bv_str")
         return self._wrap(h)
@@ -842,7 +870,7 @@ cdef class Manager:
     def mk_bv_bytes(self, width, data, little_endian=True):
         self._check()
         cdef bytes b = bytes(data)
-        cdef stp_term h = stp_mk_bv_bytes(self._tm, <uint32_t>width, len(b), <const uint8_t*><char*>b,
+        cdef stp_term h = stp_mk_bv_bytes(self._tm, _u32(width, "a width"), len(b), <const uint8_t*><char*>b,
                                           1 if little_endian else 0)
         if h == NULL:
             self._fail("stp_mk_bv_bytes")
@@ -922,8 +950,11 @@ cdef class Manager:
 
     def array_from_bytes(self, data, index_width=32):
         self._check()
+        if isinstance(data, int):
+            # bytes(3) is three zero bytes, not the byte 3
+            raise TypeError("array_from_bytes takes bytes (or a bytes-like object), not an int")
         cdef bytes b = bytes(data)
-        cdef stp_term h = stp_array_from_bytes(self._tm, len(b), <const uint8_t*><char*>b, <uint32_t>index_width)
+        cdef stp_term h = stp_array_from_bytes(self._tm, len(b), <const uint8_t*><char*>b, _u32(index_width, "an index width"))
         if h == NULL:
             self._fail("stp_array_from_bytes")
         return self._wrap(h)
@@ -1050,7 +1081,7 @@ cdef class Sort:
         return n
 
     def fun_domain(self, i):
-        cdef stp_sort h = stp_sort_fun_domain(self._h, <uint32_t>i)
+        cdef stp_sort h = stp_sort_fun_domain(self._h, _u32(i, "an index"))
         if h == NULL:
             self._m._fail("stp_sort_fun_domain")
         return self._m._wrap_sort(h)
@@ -1967,12 +1998,12 @@ cdef class SolverHandle:
 
     def push(self, n=1):
         self._live()
-        if stp_solver_push(self._s, <uint32_t>n) != STP_OK:
+        if stp_solver_push(self._s, _u32(n, "a level count")) != STP_OK:
             self._fail_mutate("stp_solver_push")
 
     def pop(self, n=1):
         self._live()
-        if stp_solver_pop(self._s, <uint32_t>n) != STP_OK:
+        if stp_solver_pop(self._s, _u32(n, "a level count")) != STP_OK:
             self._fail_mutate("stp_solver_pop")
 
     def level(self):
@@ -2016,9 +2047,9 @@ cdef class SolverHandle:
         cdef bint bridged = 0
         if timeout is not None or conflicts is not None:
             budget.has_time = timeout is not None
-            budget.time_ms = <uint64_t>(timeout if timeout is not None else 0)
+            budget.time_ms = _budget(timeout, "timeout")
             budget.has_conflicts = conflicts is not None
-            budget.conflicts = <uint64_t>(conflicts if conflicts is not None else 0)
+            budget.conflicts = _budget(conflicts, "conflicts")
             bp = &budget
         self._before_call()
         try:
@@ -2048,9 +2079,9 @@ cdef class SolverHandle:
         cdef bint bridged = 0
         if timeout is not None or conflicts is not None:
             budget.has_time = timeout is not None
-            budget.time_ms = <uint64_t>(timeout if timeout is not None else 0)
+            budget.time_ms = _budget(timeout, "timeout")
             budget.has_conflicts = conflicts is not None
-            budget.conflicts = <uint64_t>(conflicts if conflicts is not None else 0)
+            budget.conflicts = _budget(conflicts, "conflicts")
             bp = &budget
         self._before_call()
         bridged = self._sigint_bridge_on()

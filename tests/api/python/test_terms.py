@@ -691,6 +691,46 @@ def test_copies_are_the_values_themselves():
     s.close()
 
 
+def test_input_edge_cases():
+    """What would be silently wrong, or leak a bare Python exception, is refused as STP
+    refuses it."""
+    x = BitVec("x", 8)
+    with pytest.raises(ValueError):
+        BitVec("a\x00b", 8)  # the NUL would have ended the name: "a"
+    with pytest.raises(ValueError):
+        Solver().from_string("(assert true)\x00(assert false)")
+    with pytest.raises(TypeError):
+        ArrayFromBytes(3)  # bytes(3) is three zero bytes, not the byte 3
+    assert ArrayFromBytes(bytearray(b"\x01")).kind() in (Kind.STORE, Kind.CONST_ARRAY)
+    assert Q(1, -2).as_fraction() == Fraction(-1, 2) and Q(-3, -6).as_fraction() == Fraction(1, 2)
+    with pytest.raises(ArgumentError):
+        RealVal("0.1").as_decimal(-1)
+    with pytest.raises(ArgumentError):
+        ZeroExt(-1, x)
+    with pytest.raises(ArgumentError):
+        BitVecSort(2**32)
+    with pytest.raises(OptionError):
+        Options(random_seed=2**64)
+    with pytest.raises(OptionError):
+        Options(max_num_confl=2**70)
+    assert Options(max_time=2**70)["max_time"] == 2**63 - 1  # no limit in all but name
+    s = Solver()
+    s.add(x == 1)
+    assert s.check(timeout=2**70) == sat  # a budget past the clock's range is no limit
+    with pytest.raises(ArgumentError):
+        s.push(2**33)
+    s.close()
+    # a manager takes its entries in the forms a solver does
+    assert not TermManager(options={"simplify": False}).simplify
+    assert not TermManager(options=Options(simplify=False)).simplify
+    assert TermManager(uf_sort_width=8) is not None
+    with pytest.raises(OptionError):
+        TermManager(uf_sort_width=0)
+    live = Solver()
+    TermManager(options=live.options)  # the live view's detached copy
+    live.close()
+
+
 def test_all_exports_exist():
     for name in stp.__all__:
         assert hasattr(stp, name), name

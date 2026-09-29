@@ -133,22 +133,36 @@ def _format_code(name):
 class TermManager(_core.Manager):
     """A term manager: the node factory, the sort pool and the one name table.
 
-    TermManager(simplify=True, default_rounding_mode=RoundingMode.RNE, options=None).
-    `options` supplies the manager-scoped entries (simplify, default-rounding-mode,
-    uf-sort-width) by name; the two keyword arguments override it."""
+    TermManager(simplify=True, default_rounding_mode=RoundingMode.RNE, options=None,
+    uf_sort_width=16). `options` supplies the manager-scoped entries (simplify,
+    default-rounding-mode, uf-sort-width) by name, in any form Solver takes (an Options
+    object, a solver's live options, a dict); the keyword arguments override it."""
 
-    def __init__(self, simplify=None, default_rounding_mode=None, options=None):
-        if options is None:
+    def __init__(self, simplify=None, default_rounding_mode=None, options=None, uf_sort_width=None):
+        if options is None and uf_sort_width is None:
             super().__init__(None, True if simplify is None else bool(simplify),
                              int(_rm_enum(default_rounding_mode)) if default_rounding_mode is not None else _core.RM_RNE,
                              16)
+            return
+        from ._solver import Options
+        if options is None:
+            handle = _core.OptionsHandle()
+        elif isinstance(options, Options):
+            handle = options.copy()._handle  # a detached copy, of a live view too
+        elif isinstance(options, _core.OptionsHandle):
+            handle = options.copy()
+        elif isinstance(options, dict):
+            handle = _core.OptionsHandle()
+            Options._wrap(handle).set(options)
         else:
-            handle = options._handle.copy() if hasattr(options, "_handle") else _core.OptionsHandle(options)
-            if simplify is not None:
-                handle.set_bool("simplify", bool(simplify))
-            if default_rounding_mode is not None:
-                handle.set_str("default-rounding-mode", _rm_enum(default_rounding_mode).name)
-            super().__init__(handle)
+            raise TypeError("options must be an Options object or a dict, got %s" % type(options).__name__)
+        if simplify is not None:
+            handle.set_bool("simplify", bool(simplify))
+        if default_rounding_mode is not None:
+            handle.set_str("default-rounding-mode", _rm_enum(default_rounding_mode).name)
+        if uf_sort_width is not None:
+            Options._wrap(handle).set("uf-sort-width", uf_sort_width)
+        super().__init__(handle)
 
     @property
     def default_rounding_mode(self):
@@ -1138,6 +1152,9 @@ class RatNumRef(RealRef):
     def as_decimal(self, prec):
         """A decimal string with `prec` digits after the point, truncated toward zero (z3py appends
         '?' when the expansion continues)."""
+        if not _is_int(prec) or prec < 0:
+            raise ArgumentError("as_decimal takes a count of digits, 0 or more (got %r)" % (prec,),
+                                code=ErrorCode.INVALID_ARGUMENT)
         f = self.as_fraction()
         neg = f < 0
         f = abs(f)
@@ -1546,6 +1563,8 @@ def RealVal(v, tm=None, ctx=None):
 def Q(numerator, denominator, tm=None, ctx=None):
     if not (_is_int(numerator) and _is_int(denominator)):
         raise TypeError("Q takes two ints")
+    if denominator < 0:  # the sign goes with the numerator: Q(1, -2) is -1/2
+        numerator, denominator = -numerator, -denominator
     return _tm(tm, ctx).mk_real_str("%d/%d" % (numerator, denominator))
 
 
@@ -1572,8 +1591,9 @@ def _wrap_const_array(t):
 
 
 def ArrayFromBytes(data, index_bits=32, tm=None, ctx=None):
-    """A Store chain over K(ArraySort(BitVecSort(index_bits), BitVecSort(8)), 0) holding `data`."""
-    return _tm(tm, ctx).array_from_bytes(bytes(data), index_bits)
+    """A Store chain over K(ArraySort(BitVecSort(index_bits), BitVecSort(8)), 0) holding `data`
+    (bytes or a bytes-like object)."""
+    return _tm(tm, ctx).array_from_bytes(data, index_bits)
 
 
 def Function(name, *domain_then_range):

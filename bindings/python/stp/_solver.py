@@ -286,13 +286,20 @@ class Options:
                 if value < 0:
                     raise OptionError("option '%s': a duration cannot be negative (%d)" % (name, value),
                                       code=ErrorCode.OPTION_VALUE, option=name)
-                b.set_duration_ms(name, value)
+                # past what milliseconds count is no limit in all but name, as the text form reads it
+                b.set_duration_ms(name, min(value, 2**63 - 1))
             elif type_ == "uint":
                 if value < 0:
                     raise OptionError("option '%s': expected a non-negative int, got %d" % (name, value),
                                       code=ErrorCode.OPTION_VALUE, option=name)
+                if value >= 2**64:
+                    raise OptionError("option '%s': %d does not fit 64 bits" % (name, value),
+                                      code=ErrorCode.OPTION_VALUE, option=name)
                 b.set_uint64(name, value)
             else:
+                if not -2**63 <= value < 2**63:
+                    raise OptionError("option '%s': %d does not fit a signed 64-bit int" % (name, value),
+                                      code=ErrorCode.OPTION_VALUE, option=name)
                 b.set_int64(name, value)
         elif isinstance(value, float):
             if type_ == "duration":
