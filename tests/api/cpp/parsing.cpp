@@ -1170,3 +1170,28 @@ TEST(Parsing, a_cvc_or_smtlib1_input_may_declare_a_name_again)
                            Format::SMTLIB1));
   EXPECT_TRUE(s.check_sat().is_sat());
 }
+
+// SMT-LIB's <script> is <command>*: blanks and comments alone are a script,
+// read without effect in every mode.
+TEST(Parsing, a_script_with_no_command_is_a_script)
+{
+  TermManager tm;
+  Solver s(tm);
+  const Term x = tm.declare("x", tm.mk_bv_sort(8));
+  s.add(x == tm.mk_bv(8, 1));
+  std::string out;
+  s.set_output_sink([&](std::string_view text) { out += text; });
+  for (const char* script : {"", "   \n\t", "; only a comment\n", "; one\n; two"})
+    for (const ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::EXECUTE, ParseMode::PARSE_ONLY})
+    {
+      SCOPED_TRACE(script);
+      s.parse_smt2(script, mode);
+      EXPECT_EQ(s.assertions().size(), 1u);
+      EXPECT_EQ(s.level(), 0u);
+    }
+  EXPECT_EQ(out, "");
+  EXPECT_TRUE(s.check_sat().is_sat());
+  // a term is still a term: nothing is not one
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_term(""));
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_term("; a comment"));
+}

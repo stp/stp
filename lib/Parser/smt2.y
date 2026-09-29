@@ -2068,6 +2068,12 @@ cmd: commands END
        stp::GlobalParserInterface->cleanUp();
        YYACCEPT;
 }
+/* SMT-LIB's <script> is <command>*: an input with no command is one too. */
+| END
+{
+       stp::GlobalParserInterface->cleanUp();
+       YYACCEPT;
+}
 ;
 
 command_open:
