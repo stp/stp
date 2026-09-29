@@ -206,5 +206,28 @@ class SortAliases(unittest.TestCase):
         self.assertEqual(result.stdout, 'sat\n')
 
 
+class Attributes(unittest.TestCase):
+    def test_predefined_option_value_types(self):
+        for source, message in [
+                ('(set-option :print-success "true")', 'requires a Boolean symbol'),
+                ('(set-option :produce-models)', 'requires a Boolean symbol'),
+                ('(set-option :regular-output-channel stdout)', 'requires a string'),
+                ('(set-option :random-seed -1)', 'requires a numeral'),
+                ('(set-option :verbosity "0")', 'requires a numeral'),
+                ('(set-info :status "sat")', 'requires sat, unsat, or unknown'),
+                ('(set-info :status SAT)', 'requires sat, unsat, or unknown')]:
+            with self.subTest(source=source):
+                result = run(source)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stdout)
+
+    def test_metadata_does_not_resolve_term_names(self):
+        result = run('(set-logic QF_BV)(declare-const x Bool)'
+                     '(set-info :x x)(set-info :x (x true false Bool))'
+                     '(check-sat)')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, 'sat\n')
+
+
 if __name__ == '__main__':
     unittest.main()

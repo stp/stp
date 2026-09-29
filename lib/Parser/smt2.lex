@@ -39,6 +39,7 @@
 ********************************************************************/
 #include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
+#include "stp/Parser/SMT2Attribute.h"
 #include "parsesmt2.tab.h"
 
 #include <cerrno>
@@ -130,6 +131,7 @@
   static THREAD_LOCAL_IE int skippedDepth = 0;
 
   static thread_local bool sortContext = false;
+  static thread_local unsigned attributeDepth = 0;
 
 namespace stp
 {
@@ -437,6 +439,7 @@ namespace stp
 
 %x  COMMENT
 %x  STRING_LITERAL
+%x  ATTRIBUTE
 %x  SKIP_SEXPR
 
 LETTER  ([a-zA-Z])
@@ -446,6 +449,57 @@ OPCHAR  ([~!@$%^&*\_\-+=<>\.?/])
 ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
 %%
+<ATTRIBUTE>[ \n\t\r]+ { countNewlines(yytext, yyleng); }
+<ATTRIBUTE>";"[^\n]* { }
+<ATTRIBUTE>":"({LETTER}|{OPCHAR}){ANYTHING}* {
+  smt2lval.str = new std::string(smt2text + 1); return ATTRIBUTE_KEYWORD_TOK;
+}
+<ATTRIBUTE>"(" { ++attributeDepth; return LPAREN_TOK; }
+<ATTRIBUTE>")" {
+  if (attributeDepth == 0) BEGIN INITIAL;
+  else --attributeDepth;
+  return RPAREN_TOK;
+}
+<ATTRIBUTE>"\""([^"]|"\"\"")*"\"" {
+  countNewlines(yytext, yyleng);
+  std::string decoded;
+  for (int i = 1; i < yyleng - 1; ++i) {
+    decoded += yytext[i];
+    if (yytext[i] == '"') ++i;
+  }
+  smt2lval.attribute_value = new stp::SMT2AttributeValue{
+      stp::SMT2AttributeValue::Kind::String, decoded};
+  return ATTRIBUTE_VALUE_TOK;
+}
+<ATTRIBUTE>"|"[^|\\]*"|" {
+  countNewlines(yytext, yyleng);
+  smt2lval.attribute_value = new stp::SMT2AttributeValue{
+      stp::SMT2AttributeValue::Kind::Symbol, std::string(yytext + 1, yyleng - 2)};
+  return ATTRIBUTE_VALUE_TOK;
+}
+<ATTRIBUTE>(0|[1-9]{DIGIT}*) {
+  smt2lval.attribute_value = new stp::SMT2AttributeValue{
+      stp::SMT2AttributeValue::Kind::Numeral, yytext};
+  return ATTRIBUTE_VALUE_TOK;
+}
+<ATTRIBUTE>((0|[1-9]{DIGIT}*)"."{DIGIT}+|#b[01]+|#x[0-9a-fA-F]+) {
+  smt2lval.attribute_value = new stp::SMT2AttributeValue{
+      stp::SMT2AttributeValue::Kind::Constant, yytext};
+  return ATTRIBUTE_VALUE_TOK;
+}
+<ATTRIBUTE>({LETTER}|{OPCHAR}){ANYTHING}* {
+  using Kind = stp::SMT2AttributeValue::Kind;
+  const std::string name(yytext);
+  const bool reserved = name == "!" || name == "_" || name == "as" ||
+      name == "let" || name == "exists" || name == "forall" || name == "match" ||
+      name == "par";
+  smt2lval.attribute_value = new stp::SMT2AttributeValue{
+      reserved ? Kind::Reserved : Kind::Symbol, name};
+  return ATTRIBUTE_VALUE_TOK;
+}
+<ATTRIBUTE>. { smt2error("invalid attribute character"); return 0; }
+<ATTRIBUTE><<EOF>> { BEGIN INITIAL; return 0; }
+
 [ \n\t\r\f] { if (*smt2text == '\n') smt2lineno++; /* skip whitespace */ }
 
  /* Numerals are arbitrary precision in the specification, but every numeral
@@ -533,9 +587,9 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "exit"                    { return commandToken(EXIT_TOK);}
 "get-assertions"          { return commandToken(GET_ASSERTIONS_TOK);}
 "get-assignment"          { return commandToken(GET_ASSIGNMENT_TOK);}
-"get-info"                { return commandToken(GET_INFO_TOK);}
+"get-info"                { stp::SMT2BeginAttributes(); return commandToken(GET_INFO_TOK);}
 "get-model"               { return commandToken(GET_MODEL_TOK);}
-"get-option"              { return commandToken(GET_OPTION_TOK);}
+"get-option"              { stp::SMT2BeginAttributes(); return commandToken(GET_OPTION_TOK);}
 "get-proof"               { return commandToken(GET_PROOF_TOK);}
 "get-unsat-assumptions"   { return commandToken(GET_UNSAT_ASSUMPTIONS_TOK);}
 "get-unsat-core"          { return commandToken(GET_UNSAT_CORE_TOK);}
@@ -544,9 +598,9 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "push"                    { return commandToken(PUSH_TOK);}
 "reset"                   { return commandToken(RESET_TOK);}
 "reset-assertions"        { return commandToken(RESET_ASSERTIONS_TOK);}
-"set-info"                { return commandToken(NOTES_TOK);  }
+"set-info"                { stp::SMT2BeginAttributes(); return commandToken(NOTES_TOK);  }
 "set-logic"               { return commandToken(LOGIC_TOK); }
-"set-option"              { return commandToken(SET_OPTION_TOK); }
+"set-option"              { stp::SMT2BeginAttributes(); return commandToken(SET_OPTION_TOK); }
 
  /* Commands STP cannot interpret, but which must still parse so that the
   * rest of the script survives. The standard requires the response
@@ -774,4 +828,17 @@ namespace stp {
     smt2Reader = reader;
     smt2ReaderOpaque = opaque;
   }
+}
+
+namespace stp
+{
+void SMT2BeginAttributes()
+{
+  attributeDepth = 0;
+  BEGIN ATTRIBUTE;
+}
+void SMT2ResetLexMode()
+{
+  BEGIN INITIAL;
+}
 }

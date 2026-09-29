@@ -63,6 +63,8 @@ void SMT2SetRealTokens(bool enable);
 
 // Sort and term symbols live in separate namespaces.
 void SMT2SetSortContext(bool enable);
+void SMT2BeginAttributes();
+void SMT2ResetLexMode();
 
 // The next ordinary identifier is the declaration site of a define-fun
 // formal.  The lexer must return its spelling rather than resolving it in a

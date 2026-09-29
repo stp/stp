@@ -50,6 +50,7 @@
    * <hr>
   ********************************************************************/
 
+#include "stp/Parser/SMT2Attribute.h"
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
@@ -1669,6 +1670,41 @@
     stp::releaseParserValue(name);
   }
 
+  void setParsedOption(const stp::SMT2Attribute& attribute)
+  {
+    using Kind = stp::SMT2AttributeValue::Kind;
+    const std::string& name = attribute.name;
+    const auto& value = attribute.value;
+    const bool boolean = name == "print-success" || name == "global-declarations" ||
+        name == "interactive-mode" || name == "produce-models" ||
+        name == "produce-assertions" || name == "produce-assignments" ||
+        name == "produce-proofs" || name == "produce-unsat-cores" ||
+        name == "produce-unsat-assumptions";
+    if (boolean && value.kind != Kind::Symbol)
+      stp::GlobalParserInterface->refuseCurrentCommand("option :" + name + " requires a Boolean symbol");
+    if ((name == "regular-output-channel" || name == "diagnostic-output-channel") &&
+        value.kind != Kind::String)
+      stp::GlobalParserInterface->refuseCurrentCommand("option :" + name + " requires a string");
+    if ((name == "random-seed" || name == "verbosity" || name == "reproducible-resource-limit") &&
+        value.kind != Kind::Numeral)
+      stp::GlobalParserInterface->refuseCurrentCommand("option :" + name + " requires a numeral");
+    stp::GlobalParserInterface->setOption(name, value.text);
+  }
+
+  void setParsedInfo(const stp::SMT2Attribute& attribute)
+  {
+    if (attribute.name == "status")
+    {
+      const std::string& status = attribute.value.text;
+      if (attribute.value.kind != stp::SMT2AttributeValue::Kind::Symbol ||
+          (status != "sat" && status != "unsat" && status != "unknown"))
+        stp::GlobalParserInterface->refuseCurrentCommand("set-info :status requires sat, unsat, or unknown");
+      stp::input_status = status == "sat" ? stp::TO_BE_SATISFIABLE :
+                          status == "unsat" ? stp::TO_BE_UNSATISFIABLE : stp::TO_BE_UNKNOWN;
+    }
+    stp::GlobalParserInterface->success();
+  }
+
 #define YYLTYPE_IS_TRIVIAL 1
 #define YYMAXDEPTH 104857600
 #define YYERROR_VERBOSE 1
@@ -1683,6 +1719,8 @@
 %expect 0
 
 %union {
+  stp::SMT2Attribute* attribute;
+  stp::SMT2AttributeValue* attribute_value;
   /* Elaborated: the union lands in parsesmt2.tab.h, where only this
      pointer is named; the struct itself lives in the parser prologue. */
   struct ParsedRealConstant* realc;
@@ -1712,7 +1750,7 @@
    values they own in their grammar actions. Values discarded by Bison during
    recovery or parse abort remain Bison's responsibility; release them here so
    malformed commands do not leak their identifier/string lookahead. */
-%destructor { delete $$; } <str>
+%destructor { delete $$; } <str> <attribute> <attribute_value>
 %destructor { delete $$; } <ufsort> <ufsortvec>
 
 /* An exception out of an action or the lexer gets the same cleanup: see
@@ -1721,13 +1759,14 @@
 
 %start cmd
 
-%type <node> status
 %type <vec> an_formulas an_terms function_params an_mixed
 
 %type <node> an_term  an_formula function_param an_const an_fp_term an_fp_predicate an_rounding_mode
 %type <node> definition_body
 %type <uintval> an_fp_const command_numeral
-%type <str> info_flag sort_parameter_name
+%type <str> sort_parameter_name
+%type <attribute> attribute
+%type <attribute_value> attribute_value
 %type <str> uf_decl_name function_def_name
 %type <ufsortvec> uf_domain_sorts
 %type <ufsort> uf_sort uf_codomain_sort
@@ -1747,6 +1786,8 @@
 %destructor { delete $$; } <arr_sort>
 %destructor { destroyParsedRealConstant($$); } <realc>
 
+%token <str> ATTRIBUTE_KEYWORD_TOK
+%token <attribute_value> ATTRIBUTE_VALUE_TOK
 %token <uintval> NUMERAL_TOK
 
  /* A numeral too large for an unsigned, carrying its digits. It is a real
@@ -2088,43 +2129,22 @@ cmdi:
       stp::releaseParserValue($3);
     }
 |
-     SET_OPTION_TOK COLON_TOK STRING_TOK STRING_TOK
+     SET_OPTION_TOK attribute
     {
-       stp::GlobalParserInterface->setOption(*$3,*$4);
-       stp::releaseParserValue($3);
-       stp::releaseParserValue($4);
+      setParsedOption(*$2);
+      stp::releaseParserValue($2);
     }
 |
-     SET_OPTION_TOK COLON_TOK STRING_TOK FALSE_TOK
+     GET_OPTION_TOK ATTRIBUTE_KEYWORD_TOK
     {
-       stp::GlobalParserInterface->setOption(*$3,"false");
-       stp::releaseParserValue($3);
+      stp::GlobalParserInterface->getOption(*$2);
+      stp::releaseParserValue($2);
     }
 |
-     SET_OPTION_TOK COLON_TOK STRING_TOK TRUE_TOK
+     GET_INFO_TOK ATTRIBUTE_KEYWORD_TOK
     {
-       stp::GlobalParserInterface->setOption(*$3,"true");
-       stp::releaseParserValue($3);
-    }
-|
-     /* :random-seed, :verbosity and :reproducible-resource-limit take a
-        numeral. */
-     SET_OPTION_TOK COLON_TOK STRING_TOK command_numeral
-    {
-       stp::GlobalParserInterface->setOption(*$3,std::to_string($4));
-       stp::releaseParserValue($3);
-    }
-|
-     GET_OPTION_TOK COLON_TOK STRING_TOK
-    {
-       stp::GlobalParserInterface->getOption(*$3);
-       stp::releaseParserValue($3);
-    }
-|
-     GET_INFO_TOK info_flag
-    {
-       stp::GlobalParserInterface->getInfo(*$2);
-       stp::releaseParserValue($2);
+      stp::GlobalParserInterface->getInfo(*$2);
+      stp::releaseParserValue($2);
     }
 |
      GET_ASSERTIONS_TOK
@@ -2346,46 +2366,10 @@ cmdi:
       stp::releaseParserValue($2);
     }
 |
-     NOTES_TOK attribute STRING_TOK
-    {
-      stp::releaseParserValue($3);
-      stp::GlobalParserInterface->success();
-    }
-|
-     NOTES_TOK attribute DECIMAL_TOK
-    {
-      stp::releaseParserValue($3);
-      stp::GlobalParserInterface->success();
-    }
-|
-     NOTES_TOK attribute NUMERAL_TOK
-    {
-      stp::GlobalParserInterface->success();
-    }
-|
-     NOTES_TOK attribute REAL_NUMERAL_TOK
-    {
-      stp::releaseParserValue($3);
-      stp::GlobalParserInterface->success();
-    }
-|
-     /* set-info values are not interpreted, so an oversized one is no more
-        of a problem here than an ordinary numeral is. */
-     NOTES_TOK attribute BIG_NUMERAL_TOK
-    {
-      stp::releaseParserValue($3);
-      stp::GlobalParserInterface->success();
-    }
-|
-     NOTES_TOK attribute REAL_DECIMAL_TOK
-    {
-      stp::releaseParserValue($3);
-      stp::GlobalParserInterface->success();
-    }
-|
      NOTES_TOK attribute
     {
-      stp::GlobalParserInterface->success();
+      setParsedInfo(*$2);
+      stp::releaseParserValue($2);
     }
 
 ;
@@ -2460,78 +2444,34 @@ function_def_name LPAREN_TOK RPAREN_TOK resolved_sort definition_body
 }
 ;
 
-status:
-STRING_TOK {
-
-  std::transform($1->begin(), $1->end(), $1->begin(), ::tolower);
-  if (0 == strcmp($1->c_str(), "sat"))
-      stp::input_status = TO_BE_SATISFIABLE;
-  else if (0 == strcmp($1->c_str(), "unsat"))
-    stp::input_status = TO_BE_UNSATISFIABLE;
-  else if (0 == strcmp($1->c_str(), "unknown"))
-      stp::input_status = TO_BE_UNKNOWN;
-  else
-      yyerror($1->c_str());
-  stp::releaseParserValue($1);
-  $$ = NULL;
-}
-;
-
-/* The argument of get-info. The standard flags all arrive as a colon followed
-   by an identifier; the keywords that the lexer gives a token of their own are
-   accepted too, since ⟨info_flag⟩ admits any ⟨keyword⟩. */
-info_flag:
-COLON_TOK STRING_TOK
-{
-  $$ = $2;
-}
-| SOURCE_TOK
-{
-  $$ = new std::string("source");
-}
-| CATEGORY_TOK
-{
-  $$ = new std::string("category");
-}
-| DIFFICULTY_TOK
-{
-  $$ = new std::string("difficulty");
-}
-| VERSION_TOK
-{
-  $$ = new std::string("smt-lib-version");
-}
-| STATUS_TOK
-{
-  $$ = new std::string("status");
-}
-| LICENSE_TOK
-{
-  $$ = new std::string("license");
-}
-;
-
 attribute:
-SOURCE_TOK
-{}
-| CATEGORY_TOK
-{}
-| DIFFICULTY_TOK
-{}
-| VERSION_TOK
-{}
-| STATUS_TOK status
+ATTRIBUTE_KEYWORD_TOK
 {
+  $$ = new stp::SMT2Attribute{*$1, {}};
+  stp::releaseParserValue($1);
+}
+| ATTRIBUTE_KEYWORD_TOK attribute_value
+{
+  if ($2->kind == stp::SMT2AttributeValue::Kind::Reserved)
+    fatal_yyerror("reserved word is not an attribute value outside an s-expression");
+  $$ = new stp::SMT2Attribute{*$1, *$2};
+  stp::releaseParserValue($1);
   stp::releaseParserValue($2);
 }
-| LICENSE_TOK
-{}
-| /* set-info accepts any keyword, not just the handful the lexer gives a
-     token of its own. Benchmarks carry things like :notes freely. */
-  COLON_TOK STRING_TOK
+;
+
+attribute_value:
+ATTRIBUTE_VALUE_TOK { $$ = $1; }
+| LPAREN_TOK sexpr_items RPAREN_TOK
 {
-  stp::releaseParserValue($2);
+  $$ = new stp::SMT2AttributeValue{stp::SMT2AttributeValue::Kind::List, ""};
 }
+;
+
+sexpr_items:
+  %empty
+| sexpr_items attribute_value { stp::releaseParserValue($2); }
+| sexpr_items ATTRIBUTE_KEYWORD_TOK { stp::releaseParserValue($2); }
 ;
 
 an_fp_sort:
@@ -4153,6 +4093,7 @@ namespace stp {
     SMT2SetFloatTokens(GlobalParserInterface->all_theory_tokens);
     SMT2SetRealTokens(GlobalParserInterface->all_theory_tokens);
     SMT2ResetCommandLexerState();
+    SMT2ResetLexMode();
     int result;
     bool ended = false;
     try
