@@ -374,16 +374,22 @@ TEST(Options, aliases_shorts_and_negations_through_set_args)
   o.set_args({"--simply_to_constants_only", "--difficulty_reversion=false"});
   EXPECT_TRUE(o.get_bool("simplify-to-constants-only"));
   EXPECT_FALSE(o.get_bool("difficulty-reversion"));
-  // a bare mode flag means on; a value can follow with = or as the next word
+  // as on the command line: a bare flag-form mode means on and takes a
+  // value only after '='; a value-form mode takes the next word
   o.set_args({"--incremental"});
   EXPECT_EQ(o.get_str("incremental"), "on");
   o.set_args({"--incremental=off"});
   EXPECT_EQ(o.get_str("incremental"), "off");
-  o.set_args({"--incremental", "auto"});
-  EXPECT_EQ(o.get_str("incremental"), "auto");
+  API_EXPECT_ERROR(ErrorCode::OPTION_UNKNOWN, o.set_args({"--incremental", "auto"}));
+  EXPECT_EQ(o.get_str("incremental"), "off");
   o.set_args({"--incremental", "--flattening=false"});
   EXPECT_EQ(o.get_str("incremental"), "on");
   EXPECT_FALSE(o.get_bool("flattening"));
+  o.set_args({"--uf-ackermann", "off"});
+  EXPECT_EQ(o.get_str("uf-ackermann"), "off");
+  o.set_args({"--uf-ackermann=on"});
+  EXPECT_EQ(o.get_str("uf-ackermann"), "on");
+  API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_args({"--uf-ackermann"}));
   // the argc/argv form
   const char* argv[] = {"--random-seed=9", "--produce-models=false"};
   o.set_args(2, argv);
@@ -467,6 +473,12 @@ TEST(Options, bad_values)
   API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("max-time", "-2ms"));
   API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("max-time", "2days"));
   API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("max-time", "ms"));
+  API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("max-time", "1.5.3s")); // not 1.5s
+  API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set("max-time", ".s"));
+  // a negation takes no value, and a mode's value is attached with '='
+  API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_args({"--no-produce-models=true"}));
+  API_EXPECT_ERROR(ErrorCode::OPTION_UNKNOWN, o.set_args({"--incremental", "off"}));
+  EXPECT_FALSE(o.is_set("incremental"));
   API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_duration("max-time", std::chrono::milliseconds(-2)));
   API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_args({"--random-seed"})); // needs a value
   // the accepted edges
@@ -480,6 +492,17 @@ TEST(Options, bad_values)
   EXPECT_EQ(o.get_duration("max-time").count(), 0);
   o.set("max-time", "2h");
   EXPECT_EQ(o.get_duration("max-time").count(), 7200000);
+  o.set("max-time", "0.0004s"); // a budget, however short: not "give up at once"
+  EXPECT_EQ(o.get_duration("max-time").count(), 1);
+  o.set("max-time", ".5s");
+  EXPECT_EQ(o.get_duration("max-time").count(), 500);
+  o.set("max-time", "0s");
+  EXPECT_EQ(o.get_duration("max-time").count(), 0);
+  o.set_args({"--incremental"}); // bare: on
+  EXPECT_EQ(o.get_str("incremental"), "on");
+  o.set_args({"--incremental=off", "--no-produce-models"});
+  EXPECT_EQ(o.get_str("incremental"), "off");
+  EXPECT_FALSE(o.get_bool("produce-models"));
   o.set("random-seed", "0x10");
   EXPECT_EQ(o.get_uint("random-seed"), 16u);
   o.set("produce-models", "off");

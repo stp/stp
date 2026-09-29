@@ -793,7 +793,8 @@ public:
   ~Options();
 
   // by name; the string forms parse the value exactly as the CLI does (a
-  // duration string needs a unit: "500ms", "0.5s")
+  // duration string needs a unit: "500ms", "0.5s"; an integer reads as C
+  // reads it: 0x10 is 16 and 010 is 8)
   void set(std::string_view name, std::string_view value);
   void set_bool(std::string_view name, bool);
   void set_int(std::string_view name, std::int64_t);
@@ -809,7 +810,8 @@ public:
   void set_str(Option, std::string_view);
   void set_duration(Option, std::chrono::milliseconds);
   // CLI syntax. argv is the option list only (no program name). Duration
-  // values here need a unit.
+  // values here need a unit. A flag (a bool, or a mode such as incremental)
+  // takes a value only after '=' (--incremental=off); --no-<bool> takes none.
   void set_args(const std::vector<std::string>& argv);
   void set_args(int argc, const char* const* argv);
 

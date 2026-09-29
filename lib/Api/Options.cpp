@@ -39,6 +39,7 @@ THE SOFTWARE.
 #include <cstring>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_map>
 
 namespace stp
@@ -315,19 +316,28 @@ OptionValue parse_option_text(const OptionSpec& spec, std::string_view raw)
       else
         fail_option(ErrorCode::OPTION_VALUE, spec.name,
                     "invalid duration unit in '" + text + "'; expected ms, s, m or h");
+      // digits with at most one point among them, all of it a number
       double ms = 0;
+      std::size_t used = 0;
       try
       {
-        ms = std::stod(number) * scale;
+        if (std::count(number.begin(), number.end(), '.') > 1)
+          throw std::invalid_argument(number);
+        ms = std::stod(number, &used) * scale;
       }
       catch (const std::exception&) // "." alone, say
       {
+        used = 0;
+      }
+      if (used != number.size())
         fail_option(ErrorCode::OPTION_VALUE, spec.name,
                     "invalid duration '" + text + "'; expected a number with a unit (500ms, 2s, 1m)");
-      }
       // a budget past what milliseconds can count is no limit in all but name
       if (!(ms + 0.5 < 9223372036854775807.0))
         return std::int64_t(INT64_MAX);
+      // and one under half a millisecond is still a budget, not "give up at once"
+      if (ms > 0 && ms + 0.5 < 1)
+        return std::int64_t(1);
       return static_cast<std::int64_t>(ms + 0.5);
     }
   }
@@ -678,6 +688,9 @@ void OptionsImpl::set_args(const char* fn, const std::vector<std::string>& argv)
       fail_option(ErrorCode::OPTION_UNKNOWN, name, "unknown option");
     if (negated)
     {
+      if (has_value)
+        fail_option(ErrorCode::OPTION_VALUE, spec->name,
+                    "--" + name + " takes no value; give --" + spec->name + "=" + value + " instead");
       set(fn, spec->name, false, OptType::BOOL);
       continue;
     }
@@ -688,19 +701,12 @@ void OptionsImpl::set_args(const char* fn, const std::vector<std::string>& argv)
         set(fn, spec->name, true, OptType::BOOL);
         continue;
       }
-      if (spec->type == OptType::MODE)
+      if (spec->type == OptType::MODE && std::strcmp(spec->cli_form, "flag") == 0)
       {
-        // a bare mode flag means on, as the CLI reads --incremental
-        if (i + 1 < argv.size() && argv[i + 1].rfind("-", 0) != 0)
-        {
-          value = argv[++i];
-          has_value = true;
-        }
-        else
-        {
-          set(fn, spec->name, std::string("on"), OptType::STRING);
-          continue;
-        }
+        // a bare flag-form mode means on, and a value is attached with
+        // '=', as the CLI reads --incremental
+        set(fn, spec->name, std::string("on"), OptType::STRING);
+        continue;
       }
       else
       {

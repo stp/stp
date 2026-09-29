@@ -557,7 +557,8 @@ STP_API stp_options stp_options_copy(stp_options);
 STP_API void stp_options_delete(stp_options);
 STP_API const stp_error* stp_options_error(stp_options); /* the object's own sticky record (same shape and rule as the manager's) */
 STP_API void stp_options_clear_error(stp_options);
-/* by name; the string form parses the value exactly as the CLI parses it (durations need a unit: "500ms", "0.5s") */
+/* by name; the string form parses the value exactly as the CLI parses it (durations need a unit: "500ms", "0.5s";
+ * integers read as C reads them: 0x10 is 16, 010 is 8) */
 STP_API stp_status stp_options_set_str(stp_options, const char* name, const char* value);
 STP_API stp_status stp_options_set_bool(stp_options, const char* name, bool);
 STP_API stp_status stp_options_set_int64(stp_options, const char* name, int64_t);
@@ -570,7 +571,8 @@ STP_API stp_status stp_options_set_int64_e(stp_options, stp_option, int64_t);
 STP_API stp_status stp_options_set_uint64_e(stp_options, stp_option, uint64_t);
 STP_API stp_status stp_options_set_str_e(stp_options, stp_option, const char*);
 STP_API stp_status stp_options_set_duration_ms_e(stp_options, stp_option, uint64_t ms);
-/* CLI syntax: argv is the option list only (no program name); the stp binary passes argv + 1 */
+/* CLI syntax: argv is the option list only (no program name); the stp binary passes argv + 1. A flag
+ * (a bool, or a mode such as incremental) takes a value only after '='; --no-<bool> takes none. */
 STP_API stp_status stp_options_set_args(stp_options, int argc, const char* const* argv);
 /* read back */
 STP_API char* stp_options_get_str(stp_options, const char* name); /* the value as the CLI would print it */
