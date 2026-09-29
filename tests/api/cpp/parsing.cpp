@@ -1230,3 +1230,30 @@ TEST(Parsing, a_redeclaration_says_so)
   ASSERT_TRUE(e.has_value());
   EXPECT_EQ(std::string(e->what()).find("is already declared"), std::string::npos) << e->what();
 }
+
+// A parse abandoned between a let's opening parenthesis and its binder left
+// the lexer reading every identifier as an unknown name: the next script on
+// the thread, on any solver, was refused, and a define-fun in it tripped an
+// assertion.
+TEST(Parsing, a_parse_abandoned_at_a_let_binder_leaves_the_next_alone)
+{
+  for (const char* abandoned : {"(declare-fun v () (_ BitVec 4))\n"
+                                "(assert (let ((e1 v)) (let ( ((e2 v))) (= e1 e2))))\n",
+                                "(assert (let (("})
+  {
+    SCOPED_TRACE(abandoned);
+    TermManager tm;
+    Solver s(tm);
+    API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2(abandoned));
+    s.parse_smt2("(declare-fun w () Bool)\n"
+                 "(define-fun both ((a Bool) (b Bool)) Bool (and a b))\n"
+                 "(assert (let ((q w)) (both q w)))\n");
+    EXPECT_TRUE(s.check_sat().is_sat());
+    EXPECT_TRUE(s.model().bool_value(*tm.symbol("w")));
+
+    TermManager other;
+    Solver t(other);
+    t.parse("x : BITVECTOR(4);\nASSERT(x = 0hex3);\nQUERY(FALSE);\n", Format::CVC);
+    EXPECT_TRUE(t.check_sat().is_sat());
+  }
+}

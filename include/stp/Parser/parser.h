@@ -79,9 +79,9 @@ bool SMT2FloatTokensActive();
 void SMT2ExpectFunctionParameterName();
 
 // Clear command-local lexer expectations after parser recovery/abort and
-// before the next top-level command. This includes declaration-name and
-// define-fun-formal latches and the declassified-name record below, none of
-// which may leak across commands.
+// before the next top-level command. This includes declaration-name,
+// define-fun-formal and let-binder latches and the declassified-name record
+// below, none of which may leak across commands.
 void SMT2ResetCommandLexerState();
 
 // The declassified declare-fun name. With uninterpreted functions enabled,

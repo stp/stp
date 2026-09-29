@@ -176,6 +176,10 @@ namespace stp
     ufDeclarationNamePending = false;
     functionParameterNamePending = false;
     declassifiedNamePending = false;
+    // The let rule sets it for its binder and clears it once the binder is
+    // read; a parse abandoned in between left every identifier of the next
+    // parse lexed as an unknown name.
+    stringOnly = false;
   }
 
   bool SMT2DeclassifiedNamePending() { return declassifiedNamePending; }
