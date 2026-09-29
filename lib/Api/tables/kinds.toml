@@ -23,10 +23,10 @@
 #********************************************************************
 # kinds.toml -- the single kind table for STP 3.x.
 #
-# Generates: enum class stp::Kind (stp.hpp), enum stp_kind (stp.h), stp.Kind (Python),
-# the type checker's arity/signature table, the SMT-LIB printer and parser spelling
-# tables, the named constructors in every language (C: stp_<name>, C++: stp::<name>,
-# Python: the z3py-style names in `py`), and the kind reference page of the docs.
+# Generates (lib/Api/gen/generate.py): enum class stp::Kind (stp.hpp), enum stp_kind (stp.h),
+# stp.Kind (Python), the KindSpec rows (arity, signature, the SMT-LIB spelling the API's
+# printer uses), and the named constructors in C (stp_<name>) and C++ (stp::<name>); the
+# Python names in `py` are the hand-written package's.
 #
 # Fields
 #   name     the 3.x enumerator (pinned by position; append only)

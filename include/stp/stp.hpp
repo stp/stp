@@ -34,8 +34,9 @@ THE SOFTWARE.
 //   - Every precondition is checked in every build type and reported by throwing
 //     stp::RecoverableError with a code from stp::ErrorCode. A recoverable error
 //     leaves every object exactly as it was.
-//   - stp::UnsafeError (RESOURCE, INTERNAL) poisons the object it occurred in;
-//     every later call on it throws STATE with the original code in the message.
+//   - stp::UnsafeError (RESOURCE, INTERNAL) from a failure of the engine
+//     poisons the manager it occurred in; every later call on it throws STATE
+//     with the original code in the message.
 //   - Terms, sorts and models are values: copying is O(1), destruction order is
 //     free. A TermManager lives while anything that came from it lives.
 //   - Threads: a manager and the solvers and models over it are used by one
@@ -53,7 +54,8 @@ THE SOFTWARE.
 //     structural test is a.same_as(b). std::equal_to<Term> is structural and
 //     std::less<Term> orders by id, so every standard container works.
 //   - Literal operands: an integer beside a BV or Real term takes that term's
-//     sort and must fit (two's complement range for BV); a floating-point
+//     sort and must fit (for a BV of width w, -2^(w-1) to 2^w - 1: the signed or
+//     the unsigned range, so x8 == 255 and x8 == -1 are the same); a floating-point
 //     number beside an FP term is converted exactly and rounded once under the
 //     call's rounding mode, or the manager's default mode for operators.
 //     Nothing wraps or truncates silently.

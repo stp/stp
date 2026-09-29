@@ -40,7 +40,10 @@ THE SOFTWARE.
  *     (release optional for safety, required for memory). Scopes (stp_tm_scope_push/pop)
  *     release everything exported inside them; the exact rules are at "reclamation".
  *   - Every fallible function either returns a handle (NULL on error) or returns stp_status
- *     (STP_OK / STP_ERROR) with results in out-parameters. Details are in the manager's error
+ *     (STP_OK / STP_ERROR) with results in out-parameters, except the counts and yes/no
+ *     queries (stp_tm_num_symbols, stp_model_in_core, stp_options_is_set, ...), whose 0 or
+ *     false on an error is also an answer: they record the error, which says which it was.
+ *     Details are in the manager's error
  *     record (stp_tm_error): the FIRST error since stp_tm_clear_error is kept, for diagnosis;
  *     it blocks nothing. An installed callback (stp_tm_set_error_callback) sees EVERY error.
  *   - NULL propagation: a NULL term or sort argument makes a constructor or reader return

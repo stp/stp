@@ -474,8 +474,8 @@ TEST(c_kinds, every_kind_computes_its_value)
   v.expect(STP_KIND_BV_SDIVO, {bv(8, 0x80), bv(8, 0xff)}, {}, nullptr, T);
   v.expect(STP_KIND_BV_REDAND, {bv(8, 0xff)}, {}, nullptr, bv(1, 1));
   v.expect(STP_KIND_BV_REDOR, {bv(8, 0)}, {}, nullptr, bv(1, 0));
-  // arrays: equality over a constant array is UNSUPPORTED, so the array kinds are
-  // read back through selects and through the interning of constant arrays
+  // arrays: read back through selects and through the interning of constant
+  // arrays (equality over them is decided too: c-const-arrays.cpp)
   stp_term k9 = stp_mk_const_array(tm, arr, bv(8, 9));
   v.expect(STP_KIND_SELECT, {k9, bv(8, 1)}, {}, nullptr, bv(8, 9));
   stp_term st = stp_mk_term3(tm, STP_KIND_STORE, k9, bv(8, 1), bv(8, 3));

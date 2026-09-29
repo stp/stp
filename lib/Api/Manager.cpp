@@ -137,8 +137,6 @@ ManagerImpl::~ManagerImpl()
   fun_sort_of_identity.clear();
   names_by_node.clear();
   symbols.clear();
-  c_scopes.clear();
-  c_error.reset();
   if (bm->defaultNodeFactory != bm->hashingNodeFactory)
     delete bm->defaultNodeFactory;
   delete bm;

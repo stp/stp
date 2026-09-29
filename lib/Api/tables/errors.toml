@@ -23,10 +23,9 @@
 #********************************************************************
 # errors.toml -- the STP 3.x error-code table.
 #
-# Generates: enum class stp::ErrorCode (stp.hpp), enum stp_error_code (stp.h), stp.ErrorCode and the
-# exception class mapping (the Cython translator), the docs table, and the per-code "no trace"
-# test list (one test per recoverable code asserts that a refused call left the manager, the
-# solver, the assertion stack and every model unchanged).
+# Generates (lib/Api/gen/generate.py): enum class stp::ErrorCode (stp.hpp), enum stp_error_code
+# (stp.h), stp.ErrorCode and the exception class mapping (the Cython translator), and the
+# ErrorSpec rows the implementation reads.
 #
 # Fields
 #   name         the enumerator (pinned by `value`; append only)
@@ -115,8 +114,9 @@ recoverable = true
 python = "ArgumentError(Error, ValueError)"   # unreachable from Python
 message = "invalid call to '{fn}': argument {arg} is NULL"
 fields = ["argument_index"]
-# C only, and only for required NON-term arguments (a NULL manager, solver, options, model, or out-pointer).
-# A NULL term or sort argument propagates silently and never records this code.
+# C: a required NON-term argument (a NULL manager, solver, options, model, or out-pointer); a NULL term or
+# sort argument there propagates silently and records nothing. C++: a null Term or Sort (a default-constructed
+# handle) is this code. Python has no null handle.
 
 [[error]]
 name = "UNSUPPORTED"
@@ -195,7 +195,7 @@ name = "RESOURCE"
 value = 100
 recoverable = false
 python = "ResourceError(Error, MemoryError)"
-message = "resource failure in '{fn}': {what}"   # the message is a pre-allocated static string per site: nothing allocates on this path
+message = "resource failure in '{fn}': {what}"   # an out-of-memory's own record is a static string; building the error for it may still allocate
 fields = []
 
 [[error]]
@@ -203,5 +203,5 @@ name = "INTERNAL"
 value = 101
 recoverable = false
 python = "InternalError(Error)"
-message = "internal error in '{fn}' at {file}:{line}: {what}; please report it"   # pre-allocated per site
+message = "internal error in '{fn}': {what}; please report it"
 fields = []

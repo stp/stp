@@ -27,10 +27,8 @@ leaves to the implementation.
   handles, every unscoped term reference, every open scope, every solver, model,
   array-value and function-value handle. It holds one `ManagerImpl` reference for
   its whole life, so anything reachable from a C handle keeps the manager alive,
-  in any release order (tested in `c-runtime.cpp`). The hooks `ManagerImpl`
-  carries for the C layer (`c_error`, `c_error_callback`, `c_error_user`,
-  `c_scopes`) and `SolverImpl::failed` are therefore **unused**; nothing in
-  `Internal.h` was changed.
+  in any release order (tested in `c-runtime.cpp`). `ManagerImpl` holds
+  nothing of the C layer's.
 - **Two external counts per node** (the header's ownership rules 1-4) without engine
   support: an unscoped reference is one engine `IncRef` plus one entry in
   `CManager::unscoped` (`ASTInternal* -> count`); a scoped reference is an
@@ -106,10 +104,10 @@ leaves to the implementation.
    spelling table is private to `Solver.cpp`.
 7. **`stp_get_version`** strings are static in effect (a function-local cached
    `Version`).
-8. **The error record's `function`** for a named constructor is
-   `stp_mk_term`/`stp_mk_term2`: the generated `kind_ctors_c.inc` routes every
-   named constructor through those two primitives, so that is the C function
-   that refused. The message still names the kind.
+8. **The error record's `function`** for a named constructor is its own name
+   (`stp_bvadd`): the generated `kind_ctors_c.inc` passes it to the one
+   primitive every named constructor goes through (`named_ctor`), so the
+   record names the function the caller called.
 9. **`stp_term_fits_uint64` / `stp_term_fits_int64` / `stp_term_real_fits_int64`**
    answer `false` (no record) for a term that is not a value of the right sort,
    where the C++ methods throw `NOT_A_VALUE`/`SORT_MISMATCH`: a `bool`-returning

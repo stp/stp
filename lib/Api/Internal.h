@@ -298,14 +298,6 @@ struct ManagerImpl
   bool poisoned = false;
   std::string poison_message;
 
-  // the C layer's first-error record and callback (owned here so that the C
-  // runtime needs no table of its own)
-  std::shared_ptr<const ErrorDetails> c_error;
-  void (*c_error_callback)(const void* error, void* user) = nullptr;
-  void* c_error_user = nullptr;
-  // the C layer's scope journal
-  std::vector<std::vector<ASTNode>> c_scopes;
-
   ManagerImpl(const TermManager::Config& cfg);
   ~ManagerImpl();
   ManagerImpl(const ManagerImpl&) = delete;
