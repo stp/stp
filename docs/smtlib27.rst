@@ -69,9 +69,10 @@ Implemented language and protocol features
    * - Terms
      - Simultaneous ``let`` bindings, lexical shadowing of user names,
        sort-qualified identifiers ``(as f Sort)``, general attributes and
-       ``:named`` inline definitions. Theory names cannot be shadowed in
-       their own namespace. A qualification checks the result sort; it
-       does not convert a value.
+       ``:named`` inline definitions. As a compatibility extension, local
+       binders may also shadow theory names; top-level theory names remain
+       protected. A qualification checks the result sort; it does not
+       convert a value.
    * - Operator attributes
      - N-ary Core connectives and equality, including Real equality;
        pairwise ``distinct``; right-associative implication; supported
@@ -79,8 +80,9 @@ Implemented language and protocol features
        minimum arities still apply.
    * - Symbols and strings
      - Quoted and simple spellings identify the same symbol. Reserved
-       words used as names require quoting. Strings escape a double quote
-       by doubling it; backslashes are literal characters.
+       words used as names require quoting, except that the SMT-LIB 2.6
+       identifier ``lambda`` remains accepted. Strings escape a double
+       quote by doubling it; backslashes are literal characters.
    * - Attributes and metadata
      - General attribute values and nested s-expressions are parsed.
        Unknown term attributes and metadata may be ignored; unknown
@@ -104,6 +106,82 @@ Implemented language and protocol features
        ``stdout``, ``stderr`` and append-mode files. Errors produce an
        ``(error "...")`` response and end the script, consistent with
        ``:error-behavior immediate-exit``.
+
+Compatibility with other frontends
+----------------------------------
+
+STP accepts common, unambiguous extensions rather than using the SMT-LIB
+command modes as a strict input validator. The following cases were run
+against cvc5 ``1.3.5.dev+main@1689f13331`` and Bitwuzla
+``0.9.1-dev-main@f0f74238``. The table describes their default frontends;
+cvc5's strict parser was also checked and differs here only by requiring
+an explicit logic. These comparisons inform compatibility choices; the
+2.7 reference remains the language target. In particular, that cvc5 build
+reports that it uses 2.6 semantics when asked for version 2.7.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 20 20
+
+   * - Input
+     - cvc5
+     - Bitwuzla
+     - STP
+   * - ``:produce-models`` after ``set-logic``, before declarations
+     - Accepts
+     - Accepts
+     - Accepts
+   * - No ``set-logic``
+     - Accepts
+     - Accepts
+     - Selects ``ALL``
+   * - Statistics before solving
+     - Accepts
+     - Command unsupported
+     - Accepts
+   * - ``get-assertions`` with ``:produce-assertions false``
+     - Accepts
+     - Command unsupported
+     - Accepts
+   * - Model query after ``define-fun``
+     - Accepts
+     - Accepts
+     - Preserves the model
+   * - Model query after ``push 0`` or ``pop 0``
+     - Accepts
+     - Rejects
+     - Preserves the model
+   * - A local ``let`` variable named ``and``
+     - Accepts
+     - Accepts
+     - Accepts
+   * - ``lambda`` as an ordinary identifier
+     - Accepts
+     - Accepts
+     - Accepts; quotes it in output
+   * - ``get-value`` after adding a contradictory assertion
+     - Returns the prior model's value
+     - Rejects
+     - Rejects
+   * - Model query without model production enabled
+     - Rejects
+     - Rejects
+     - Rejects
+
+Restrictions needed for a reliable answer remain. Assertions, declarations
+and nonzero stack changes invalidate the current model. The existing
+restriction on changing ``:global-declarations`` after declarations or
+assertions prevents changing their scope retroactively. ``:reason-unknown``
+requires an unknown result, as it does in cvc5; Bitwuzla does not implement
+``get-info``.
+
+Malformed option values, incorrect result sorts, malformed ``let`` bindings,
+and non-closed ``:named`` terms still produce errors. The two other solvers
+also reject the first three; cvc5 rejects non-closed named terms. Names
+beginning with ``@`` or ``.`` remain reserved because STP uses them for
+internal symbols and abstract model values. Local shadowing and the legacy
+``lambda`` identifier are extensions; portable 2.7 scripts avoid shadowing
+theory names and quote ``|lambda|``.
 
 Remaining limits and extensions
 ------------------------------

@@ -69,7 +69,6 @@ void SMT2BeginAttributes();
 void SMT2BeginAnnotation();
 bool SMT2EndAnnotation();
 bool SMT2IsTheorySymbol(const std::string& name);
-bool SMT2IsTheorySortSymbol(const std::string& name);
 void SMT2ResetLexMode();
 
 // The next ordinary identifier is the declaration site of a define-fun

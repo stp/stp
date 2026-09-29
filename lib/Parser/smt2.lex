@@ -852,10 +852,12 @@ bv{DIGIT}+             { return lookup(smt2text); }
 
 
 
- /* Syntactically reserved words. Quoted spellings are ordinary symbols. */
+ /* Syntactically reserved words. Quoted spellings are ordinary symbols.
+  * Keep accepting lambda as an SMT-LIB 2.6 identifier, like cvc5 and
+  * Bitwuzla. Higher-order lambda terms are not implemented. */
 "as"  { qualifiedNamePending = true; return AS_TOK; }
 "let" { return LET_TOK; }
-"lambda"|"exists"|"forall"|"match"|"par"|"BINARY"|"DECIMAL"|"HEXADECIMAL"|"NUMERAL"|"STRING" {
+"exists"|"forall"|"match"|"par"|"BINARY"|"DECIMAL"|"HEXADECIMAL"|"NUMERAL"|"STRING" {
   return RESERVED_TOK;
 }
 
@@ -895,10 +897,6 @@ namespace stp
 bool SMT2IsTheorySymbol(const std::string& name)
 {
   return termTheoryToken(name) != 0;
-}
-bool SMT2IsTheorySortSymbol(const std::string& name)
-{
-  return isSortToken(theoryToken(name));
 }
 void SMT2BeginAnnotation()
 {

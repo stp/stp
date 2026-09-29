@@ -539,7 +539,7 @@ class ErrorResponses(unittest.TestCase):
 
 class TheoryBinders(unittest.TestCase):
     def test_reserved_words_require_quoting_as_symbols(self):
-        for name in ['lambda', 'exists', 'forall', 'match', 'par',
+        for name in ['exists', 'forall', 'match', 'par',
                      'BINARY', 'DECIMAL', 'HEXADECIMAL', 'NUMERAL', 'STRING']:
             with self.subTest(name=name):
                 result = run('(set-logic QF_BV)(declare-const ' + name +
@@ -553,16 +553,16 @@ class TheoryBinders(unittest.TestCase):
 
     def test_reserved_words_in_metadata_and_names(self):
         result = run('(set-info :example (lambda forall par BINARY STRING))'
-                     '(set-logic QF_BV)(assert (! true :named |lambda|))'
-                     '(assert lambda)(check-sat)')
+                     '(set-logic QF_BV)(assert (! true :named |forall|))'
+                     '(assert forall)(check-sat)')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('(error "', result.stdout)
         result = run('(set-info :example (lambda forall par BINARY STRING))'
-                     '(set-logic QF_BV)(assert (! true :named |lambda|))'
-                     '(assert |lambda|)(check-sat)')
+                     '(set-logic QF_BV)(assert (! true :named |forall|))'
+                     '(assert |forall|)(check-sat)')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, 'sat\n')
-        result = run('(set-logic QF_BV)(assert (! true :named lambda))')
+        result = run('(set-logic QF_BV)(assert (! true :named forall))')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('(error "', result.stdout)
 
@@ -571,15 +571,29 @@ class TheoryBinders(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('(error "', result.stdout)
 
-    def test_binders_cannot_shadow_theory_symbols(self):
-        for command in ['(define-sort Bad (Bool) Bool)',
-                        '(define-sort Bad (|BitVec|) BitVec)',
-                        '(define-fun bad ((true Bool)) Bool true)',
-                        '(assert (let ((|and| false)) and))']:
-            with self.subTest(command=command):
-                result = run('(set-logic QF_BV)' + command + '(check-sat)')
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn('cannot shadow theory', result.stdout)
+    def test_legacy_lambda_identifier(self):
+        result = run('(set-logic QF_BV)(set-option :produce-models true)'
+                     '(declare-const lambda Bool)(assert |lambda|)'
+                     '(check-sat)(get-value (lambda))')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, 'sat\n(\n( |lambda| true )\n)\n')
+
+    def test_binders_may_shadow_theory_symbols_locally(self):
+        for source in [
+                '(define-sort Id (Bool) Bool)'
+                '(declare-const x (Id (_ BitVec 8)))(assert (= x #x2a))',
+                '(define-sort Id (|BitVec|) BitVec)'
+                '(declare-const x (Id Bool))(assert x)',
+                '(define-fun f ((true Bool)) Bool true)(assert (not (f false)))',
+                '(define-fun f ((and Bool)) Bool and)(assert (not (f false)))',
+                '(assert (let ((|and| false)) (not and)))',
+                '(assert (let ((and false)) (let ((and (not and))) and)))']:
+            with self.subTest(source=source):
+                result = run('(set-logic QF_BV)' + source +
+                             '(declare-const p Bool)(declare-const v (_ BitVec 8))'
+                             '(assert (and p true (= v #x00)))(check-sat)')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(result.stdout, 'sat\n')
 
 
 class InlineDefinitionStorage(unittest.TestCase):

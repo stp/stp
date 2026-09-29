@@ -2464,8 +2464,6 @@ LPAREN_TOK
 function_param:
 function_param_open STRING_TOK resolved_sort RPAREN_TOK
 {
-  if (stp::SMT2IsTheorySymbol(*$2))
-    fatal_yyerror("function parameters cannot shadow theory functions");
   $$ = new ASTNode(stp::GlobalParserInterface->CreateParameterSymbol($2->c_str(), *$3));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
   stp::releaseParserValue($2);
@@ -4066,10 +4064,8 @@ let: LPAREN_TOK
   // Set lexer to only return symbols.
   stringOnly = true;
 } 
-  STRING_TOK 
+  STRING_TOK
 {
-  if (stp::SMT2IsTheorySymbol(*$3))
-    fatal_yyerror("let variables cannot shadow theory functions");
   // Set it back to normal.
   stringOnly = false;
 }
