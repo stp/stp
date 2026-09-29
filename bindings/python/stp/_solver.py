@@ -1013,6 +1013,13 @@ class Model(_core.ModelHandle):
     def __reduce__(self):
         return (Model.from_smt2, (self.to_smt2(),))
 
+    # A model is an immutable snapshot: a copy is the model itself.
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
     @staticmethod
     def from_smt2(text, tm=None):
         """Rebuild a model from the text of to_smt2() on tm (a private TermManager with

@@ -266,6 +266,14 @@ class SortRef(_core.Sort):
         from . import _smt2
         return (_smt2.unpickle_sort, (_smt2.sort_text(self),))
 
+    # A sort is an immutable value of its manager: a copy is the sort itself
+    # (pickling, above, is what moves one to another manager).
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
     def translate(self, tm):
         from . import _smt2
         return _smt2.translate_sort(self, tm)
@@ -646,6 +654,14 @@ class ExprRef(_core.Term):
     def __reduce__(self):
         from . import _smt2
         return _smt2.reduce_term(self)
+
+    # A term is an immutable value of its manager: a copy is the term itself
+    # (pickling, above, is what moves one to another manager).
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
 
     def __iter__(self):
         raise TypeError("terms are not iterable")

@@ -672,6 +672,25 @@ def test_pickle_and_translate():
         pickle.dumps(FreshConst(BitVecSort(8)) + 1)  # anonymous symbols cannot be rebuilt by name
 
 
+def test_copies_are_the_values_themselves():
+    """Terms, sorts and models are immutable values of their manager: copy and deepcopy give
+    the object itself, where the pickling path would have moved it to the default manager."""
+    import copy
+    tm = TermManager()
+    x = BitVec("x", 8, tm=tm)
+    fresh = FreshConst(BitVecSort(8, tm=tm))
+    for v in (x, x + 1, fresh, x.sort(), BitVecSort(8, tm=tm)):
+        assert copy.copy(v) is v and copy.deepcopy(v) is v
+    assert copy.deepcopy([x, fresh])[1] is fresh
+    assert (x + copy.copy(x)).manager() is tm
+    s = Solver(tm=tm)
+    s.add(x == 3)
+    assert s.check() == sat
+    m = s.model()
+    assert copy.copy(m) is m and copy.deepcopy(m) is m
+    s.close()
+
+
 def test_all_exports_exist():
     for name in stp.__all__:
         assert hasattr(stp, name), name
