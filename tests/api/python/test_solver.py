@@ -671,3 +671,40 @@ def test_a_callback_that_calls_the_library_is_refused():
     assert seen == ["refused", "refused", False]
     assert s.check() == sat
     s.close()
+
+
+def test_a_busy_manager_refuses_other_threads_and_close_is_deferred():
+    # A check releases the GIL: another thread building on the same manager entered the engine
+    # under it (heap corruption, a failed assertion), and close() from another thread deleted the
+    # solver under its own running check (a crash). The other thread now gets StateError, and
+    # close() interrupts the check and deletes the solver once it returns.
+    import threading
+    backend = interruptible_backend()
+    if backend is None:
+        pytest.skip("no backend of this build can be interrupted mid-search")
+    tm = TermManager()
+    s = Solver(tm=tm, sat_backend=backend, max_time=120000)
+    x, y = BitVecs("bx by", 64, tm=tm)
+    s.add(ZeroExt(64, x) * ZeroExt(64, y) == 18446744073709551557, x != 1, y != 1, ULT(x, y))
+    seen = []
+
+    def build():
+        time.sleep(0.2)
+        try:
+            BitVec("from_elsewhere", 8, tm=tm)
+            seen.append("built")
+        except StateError:
+            seen.append("refused")
+        s.close()
+        seen.append("closed")
+
+    other = threading.Thread(target=build)
+    other.start()
+    r = s.check()
+    other.join()
+    assert seen == ["refused", "closed"]
+    assert r == unknown and r.reason == UnknownReason.INTERRUPTED
+    assert s.closed
+    BitVec("afterwards", 8, tm=tm)  # the manager is idle again, and usable from any thread
+    stp._core.drain_releases()
+    assert stp._core.pending_releases() == 0

@@ -486,6 +486,7 @@ cdef class Manager:
     cdef stp_tm _tm
     cdef unsigned long _owner   # the creating thread (informational)
     cdef bint _busy
+    cdef unsigned long _busy_thread  # the thread inside the check or parse, while busy
     cdef object _live          # WeakValueDictionary: node id -> wrapper
     cdef dict _sorts           # sort id -> Sort wrapper
     cdef object __weakref__

@@ -45,10 +45,14 @@ that depart from z3py or from a literal reading of the C API.
   (`parse error at L:C`).
 - **Threads.** A `Manager` and everything created from it may be used from
   any thread, one call at a time: the GIL serialises the
-  Python entry points, and the calls that release it
+  Python entry points, and while one of the calls that release it
   (`stp_solver_check_sat_budget`, `stp_solver_entails`, the parsers and
-  `stp_solver_write_cnf`) must not overlap another call on the same manager,
-  which is the caller's business, as it is in C++. `Solver.interrupt()` (which
+  `stp_solver_write_cnf`) runs, a call on the same manager from another
+  thread raises `StateError` (the manager records the thread it is busy on).
+  `Solver.close()` from another thread then interrupts the solver and defers
+  its delete until the call returns, as the garbage collector would. The
+  deferred releases are kept per manager, so a drain looks at the idle
+  managers' only. `Solver.interrupt()` (which
   takes no lock) may be called from any thread at any time and reaches a
   running check. On the main thread a C `SIGINT` handler is installed for the
   duration of a check: it calls `stp_solver_interrupt` and, after the check,

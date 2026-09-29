@@ -299,13 +299,14 @@ cdef enum:
     DEFER_TM = 6
     DEFER_BOX = 7
 
-_deferred = []
+_deferred = {}  # manager key -> [(kind, handle)]: a drain looks at the idle managers' only
 _deferred_lock = threading.Lock()
 _busy_keys = set()  # the managers inside a check or a parse (the GIL is released there)
 
 
 cdef void _set_busy(Manager m, bint flag):
     m._busy = flag
+    m._busy_thread = PyThread_get_thread_ident() if flag else 0
     with _deferred_lock:
         if flag:
             _busy_keys.add(<size_t>m._tm)
@@ -316,7 +317,7 @@ cdef void _set_busy(Manager m, bint flag):
 cdef void _defer(size_t key, int kind, void* h):
     try:
         with _deferred_lock:
-            _deferred.append((key, kind, <size_t>h))
+            _deferred.setdefault(key, []).append((kind, <size_t>h))
     except BaseException:
         pass  # a wrapper dying during interpreter teardown: leak rather than raise
 
@@ -342,22 +343,17 @@ cdef void _release_kind(int kind, void* h):
 
 cdef void _drain_idle():
     cdef list mine = []
-    cdef list keep = []
     with _deferred_lock:
-        for entry in _deferred:
-            if entry[0] in _busy_keys:
-                keep.append(entry)
-            else:
-                mine.append(entry)
-        _deferred[:] = keep
+        for key in [k for k in _deferred if k not in _busy_keys]:
+            mine.extend(_deferred.pop(key))
     for entry in mine:
-        _release_kind(<int>entry[1], <void*><size_t>entry[2])
+        _release_kind(<int>entry[0], <void*><size_t>entry[1])
 
 
 def pending_releases():
     """The number of handles waiting on the deferred-release queue (for tests)."""
     with _deferred_lock:
-        return len(_deferred)
+        return sum(len(v) for v in _deferred.values())
 
 
 def drain_releases():
@@ -480,6 +476,11 @@ cdef class Manager:
     cdef int _check(self) except -1:
         if self._tm == NULL:
             raise StateError("the term manager is not initialised")
+        # A check or a parse releases the GIL: another thread would enter the engine under it.
+        if self._busy and self._busy_thread != PyThread_get_thread_ident():
+            raise StateError("the term manager is inside a check or a parse on another thread; "
+                             "a manager is used by one thread at a time (interrupt() may be called "
+                             "from any)")
         if _deferred:
             _drain_idle()
         return 0
@@ -1718,10 +1719,21 @@ cdef class SolverHandle:
         return self._m
 
     def close(self):
-        """Delete the solver now (idempotent); terms, sorts and models stay valid."""
+        """Delete the solver now (idempotent); terms, sorts and models stay valid. From another
+        thread while its manager is inside a check or a parse: the solver is interrupted and
+        deleted once that returns, as the garbage collector would."""
+        cdef Manager m = self._m
         if self._s != NULL:
-            self._m._check()
-            stp_solver_delete(self._s)
+            if m is not None and m._busy and m._busy_thread != PyThread_get_thread_ident():
+                stp_solver_interrupt(self._s)
+                if self._box != NULL:
+                    self._box.owner = NULL  # a callback from here on finds no solver
+                _defer(self._key, DEFER_SOLVER, <void*>self._s)
+                _defer(self._key, DEFER_BOX, <void*>self._box)
+                self._box = NULL
+            else:
+                m._check()
+                stp_solver_delete(self._s)
             self._s = NULL
             self._terminator = None
             self._sink = None
