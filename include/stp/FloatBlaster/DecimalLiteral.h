@@ -37,9 +37,10 @@ namespace stp
 // does.
 //
 // `decimal` is digits with an optional single '.' and an optional leading
-// '-', no exponent part: "1.5", "-0.1", "7". rounding_mode is one of the
-// five one-hot symbolic_fp::rounding_modes values. The conversion is
-// exactly rounded in the target format under that mode -- IEEE-754
+// '-', and an optional decimal exponent: "1.5", "-0.1", "7e20".
+// rounding_mode is one of the five one-hot symbolic_fp::rounding_modes
+// values. The conversion is exactly rounded in the target format under
+// that mode -- IEEE-754
 // semantics throughout: subnormals, underflow to zero, and per-mode
 // overflow (round-to-nearest overflows to infinity, round-toward-zero to
 // the largest finite value, the directed modes to whichever of the two
@@ -51,7 +52,8 @@ namespace stp
 // On success returns true and fills `bits` with exp_width + sig_width
 // characters of '0'/'1', most significant first: sign, biased exponent,
 // stored significand. On failure -- an exponent width outside what the
-// conversion supports, a malformed literal, or out of memory -- returns
+// conversion supports, a magnitude outside LibBF's working range for a
+// wider format, a malformed literal, or out of memory -- returns
 // false with a diagnostic in `err`.
 bool decimalToPackedFPBits(const std::string& decimal, unsigned exp_width,
                            unsigned sig_width, unsigned rounding_mode,

@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 #include "stp/FloatBlaster/rounding_modes.h"
 
+#include <algorithm>
 #include <cassert>
 #include <sstream>
 
@@ -81,9 +82,9 @@ int bfRounding(unsigned rounding_mode)
 
 // LibBF encodes the exponent-field width in its operation flags, and the
 // encodable range is [BF_EXP_BITS_MIN, BF_EXP_BITS_MAX] -- [3, 61] with
-// 64-bit limbs, [3, 29] with 32-bit ones. SMT-LIB additionally allows
-// exp_width 2, which therefore cannot be folded; every format anyone
-// computes with is far inside the range.
+// 64-bit limbs, [3, 29] with 32-bit ones. Literal conversion uses a working
+// format within that range and can pack its normal values into wider sorts.
+// Packed arithmetic still needs the target format itself to fit LibBF.
 bool checkFormat(unsigned exp_width, unsigned sig_width, std::string& err)
 {
   if (exp_width < BF_EXP_BITS_MIN || exp_width > BF_EXP_BITS_MAX)
@@ -91,8 +92,10 @@ bool checkFormat(unsigned exp_width, unsigned sig_width, std::string& err)
     std::ostringstream os;
     os << "real literals are supported for floating-point exponent widths "
           "from "
-       << BF_EXP_BITS_MIN << " to " << BF_EXP_BITS_MAX
-       << " bits (this format has " << exp_width
+       << BF_EXP_BITS_MIN;
+    if (exp_width > BF_EXP_BITS_MAX)
+      os << " to " << BF_EXP_BITS_MAX;
+    os << " bits (this format has " << exp_width
        << "); write the value as its packed bits instead, e.g. "
           "((_ to_fp 8 24) #x3fc00000) for 1.5";
     err = os.str();
@@ -106,14 +109,47 @@ bool checkFormat(unsigned exp_width, unsigned sig_width, std::string& err)
   return true;
 }
 
+bf_flags_t literalFlags(unsigned exp_width, unsigned rounding_mode)
+{
+  const unsigned working_width =
+      std::min(exp_width, static_cast<unsigned>(BF_EXP_BITS_MAX));
+  // A wider target has no subnormals in LibBF's working exponent range.
+  // Round once at the full precision, and refuse working-range underflow
+  // or overflow below rather than treating it as a target-format boundary.
+  return static_cast<bf_flags_t>(bfRounding(rounding_mode)) |
+         bf_set_exp_bits(static_cast<int>(working_width)) |
+         (exp_width <= BF_EXP_BITS_MAX ? BF_FLAG_SUBNORMAL : 0);
+}
+
+bool checkLiteralRange(unsigned exp_width, int status, const bf_t* value,
+                       bool exact_zero, std::string& err)
+{
+  // LibBF can lose a range flag when it rounds an intermediate infinity
+  // or zero again, so inspect the value as well as the returned status.
+  if (exp_width > BF_EXP_BITS_MAX &&
+      ((status & (BF_ST_OVERFLOW | BF_ST_UNDERFLOW)) != 0 ||
+       value->expn == BF_EXP_INF || (bf_is_zero(value) && !exact_zero)))
+  {
+    err = "real literal is outside LibBF's working exponent range for this "
+          "wide format; write the value as its packed bits instead";
+    return false;
+  }
+  return true;
+}
+
 // True iff the digits spell exactly zero ("0", "0.000", "000.0"): the one
 // input whose float sign SMT-LIB pins (the real zero has no sign, and
-// to_fp of it is +zero), so callers strip a minus when this holds.
+// to_fp of it is +zero), so callers strip a minus when this holds. An
+// exponent does not affect whether the significand is zero.
 bool magnitudeIsZero(const std::string& s)
 {
   for (const char c : s)
+  {
+    if (c == 'e' || c == 'E')
+      break;
     if (c != '0' && c != '.')
       return false;
+  }
   return true;
 }
 
@@ -143,6 +179,28 @@ void packToBits(const bf_t* v, unsigned exp_width, unsigned sig_width,
     // below.
     for (unsigned j = 0; j < exp_width; j++)
       bits[1 + j] = '1';
+  }
+  else if (exp_width > BF_EXP_BITS_MAX)
+  {
+    // Every nonzero result of the wide literal path is normal in the
+    // target. Add its unbiased exponent to the bias (0 followed by ones)
+    // directly in the output field, with sign extension beyond 64 bits.
+    // Neither the bias nor the biased exponent needs to fit a host integer.
+    const int64_t exponent = static_cast<int64_t>(v->expn) - 1;
+    const uint64_t offset = static_cast<uint64_t>(exponent);
+    unsigned carry = 0;
+    for (unsigned j = 0; j < exp_width; ++j)
+    {
+      const unsigned digit = j < 64
+                                 ? static_cast<unsigned>((offset >> j) & 1)
+                                 : exponent < 0;
+      const unsigned sum = (j + 1 < exp_width ? 1 : 0) + digit + carry;
+      bits[exp_width - j] = static_cast<char>('0' + (sum & 1));
+      carry = sum >> 1;
+    }
+    for (unsigned j = 0; j + 1 < sig_width; ++j)
+      if (mantissaBit(v, static_cast<int64_t>(j) + 1))
+        bits[1 + exp_width + j] = '1';
   }
   else
   {
@@ -262,7 +320,8 @@ bool decimalToPackedFPBits(const std::string& decimal, unsigned exp_width,
                            unsigned sig_width, unsigned rounding_mode,
                            std::string& bits, std::string& err)
 {
-  if (!checkFormat(exp_width, sig_width, err))
+  if (!checkFormat(std::min(exp_width, static_cast<unsigned>(BF_EXP_BITS_MAX)),
+                   sig_width, err))
     return false;
 
   // "(- 0.0)" is the real number zero, and SMT-LIB gives the real zero
@@ -284,12 +343,10 @@ bool decimalToPackedFPBits(const std::string& decimal, unsigned exp_width,
   bf_init(&ctx, &v);
 
   // One call does the whole conversion: bf_atof reads the decimal exactly
-  // and rounds once into (exp_width, sig_width) -- precision sig_width,
-  // IEEE exponent range, subnormals on -- under the requested mode. What
-  // remains is pure bit extraction; no rounding happens in STP.
-  const bf_flags_t flags = (bf_flags_t)bfRounding(rounding_mode) |
-                           bf_set_exp_bits((int)exp_width) |
-                           BF_FLAG_SUBNORMAL;
+  // and rounds once to precision sig_width under the requested mode. For
+  // formats within LibBF's range this includes the target's IEEE exponent
+  // limits and subnormals. Wider formats use its working range instead.
+  const bf_flags_t flags = literalFlags(exp_width, rounding_mode);
   const char* next = nullptr;
   const int status =
       bf_atof(&v, input->c_str(), &next, 10, (limb_t)sig_width, flags);
@@ -299,17 +356,15 @@ bool decimalToPackedFPBits(const std::string& decimal, unsigned exp_width,
   {
     err = "out of memory while converting a real literal";
   }
-  else if (next != input->c_str() + input->size() || bf_is_nan(&v))
+  else if (checkLiteralRange(exp_width, status, &v, magnitudeIsZero(*input), err))
   {
-    // The parser only feeds digits, an optional single '.', and an
-    // optional leading '-' through here, so anything bf_atof leaves
-    // unconsumed is a bug, not user input.
-    err = "malformed real literal: '" + decimal + "'";
-  }
-  else
-  {
-    packToBits(&v, exp_width, sig_width, bits);
-    ok = true;
+    if (next != input->c_str() + input->size() || bf_is_nan(&v))
+      err = "malformed real literal: '" + decimal + "'";
+    else
+    {
+      packToBits(&v, exp_width, sig_width, bits);
+      ok = true;
+    }
   }
 
   bf_delete(&v);
@@ -323,7 +378,8 @@ bool rationalToPackedFPBits(const std::string& numerator,
                             unsigned rounding_mode, std::string& bits,
                             std::string& err)
 {
-  if (!checkFormat(exp_width, sig_width, err))
+  if (!checkFormat(std::min(exp_width, static_cast<unsigned>(BF_EXP_BITS_MAX)),
+                   sig_width, err))
     return false;
 
   // The components are numerals or decimals -- digits with at most one
@@ -413,9 +469,7 @@ bool rationalToPackedFPBits(const std::string& numerator,
   }
   else
   {
-    const bf_flags_t flags = (bf_flags_t)bfRounding(rounding_mode) |
-                             bf_set_exp_bits((int)exp_width) |
-                             BF_FLAG_SUBNORMAL;
+    const bf_flags_t flags = literalFlags(exp_width, rounding_mode);
     status = bf_div(&v, &n, &d, (limb_t)sig_width, flags);
     if ((status & BF_ST_MEM_ERROR) != 0)
     {
@@ -427,7 +481,8 @@ bool rationalToPackedFPBits(const std::string& numerator,
       err = "internal error converting (/ " + numerator + " " + denominator +
             ")";
     }
-    else
+    else if (checkLiteralRange(exp_width, status, &v,
+                              magnitudeIsZero(num_digits), err))
     {
       packToBits(&v, exp_width, sig_width, bits);
       ok = true;

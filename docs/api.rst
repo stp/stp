@@ -312,8 +312,16 @@ Limits of the alpha
    answers unknown (``INCOMPLETE``). At 16 bits a check over a single
    conversion can exceed them too, depending on the SAT backend.
 -  The float literal constructors (``mk_fp`` from a ``double`` or from text)
-   need an exponent of at least 3 bits; ``mk_fp_from_bits`` builds a value of
-   any format.
+   and SMT-LIB real-literal conversions need an exponent field of at least
+   3 bits. Wider fields, including those larger than a machine word, accept
+   ordinary values with the requested rounding mode. For fields wider than
+   LibBF supports directly (29 bits with 32-bit limbs, 61 with 64-bit limbs),
+   a nonzero result's unbiased exponent must fit its working normal range:
+   ``2 - 2^28`` through ``2^28 - 1`` with 32-bit limbs, or
+   ``2 - 2^60`` through ``2^60 - 1`` with 64-bit limbs. Magnitudes outside
+   that range are refused; they are not rounded to the narrower working
+   format's zero, infinity or largest finite value. ``mk_fp_from_bits``
+   builds a value of any format without these conversion limits.
 -  Arrays hold bit-vectors, floats, rounding modes and values of declared
    sorts, not Booleans.
 -  ``unsat_assumptions`` after a batch check reports every assumption; the
