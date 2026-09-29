@@ -1677,6 +1677,7 @@ jobs:
         -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DUSE_CRYPTOMINISAT=OFF -DUSE_CADICAL=OFF
         "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR"
         "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY"
+        "-DCMAKE_INSTALL_PREFIX:PATH=$env:GITHUB_WORKSPACE/install"
         .
 
     # No --config: Ninja is single-config, and no --parallel either, since Ninja
@@ -1767,6 +1768,23 @@ jobs:
         "lra refutation exit code: $LASTEXITCODE"
         if ($outlrau.Trim() -ne "unsat") { exit 1 }
 
+    # The library from programs, as a client builds them against the installed
+    # package with the same compiler: the 2.x C API through libstp2, the 3.x C
+    # and C++ APIs, and managers on several threads at once. Nothing else
+    # compiles a program against the API on Windows, or runs one.
+    - name: API consumers
+      run: |
+        cmake --install build
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        cmake -S tests/api/install/uf-public-header-consumer -B consumer -G Ninja `
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl `
+          "-DSTP_DIR:PATH=$env:GITHUB_WORKSPACE/install/CMake"
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        cmake --build consumer
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        ctest --test-dir consumer --output-on-failure
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
   # CaDiCaL on Windows. MSVC cannot compile CaDiCaL, but CaDiCaL's BUILD.md
   # documents a MinGW build, so this leg compiles both CaDiCaL and STP with
   # the MSYS2 UCRT64 toolchain: the Windows counterpart of the Linux cadical
@@ -1848,7 +1866,7 @@ jobs:
     # LibBF a CMakeLists, so the UCRT64 gcc compiles it like everything else.
 
     - name: Configure
-      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
+      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_INSTALL_PREFIX:PATH="$(cygpath -m "$GITHUB_WORKSPACE")/install" .
 
     # CaDiCaL above is built by its own makefile and so is not cached; ABC and
     # STP are, which is the bulk of this step. The stats are printed so a run
@@ -1905,5 +1923,16 @@ jobs:
         out=$("$stp" testlrau.smt2)
         echo "lra refutation output: '$out'"
         [ "$out" = "unsat" ]
+
+    # As in the MSVC job: programs against the installed package, built with
+    # the same compiler, the threaded one included.
+    - name: API consumers
+      run: |
+        cmake --install build
+        prefix="$(cygpath -m "$GITHUB_WORKSPACE")/install"
+        cmake -S tests/api/install/uf-public-header-consumer -B consumer -G Ninja \
+          -DSTP_DIR:PATH="$prefix/CMake"
+        cmake --build consumer
+        ctest --test-dir consumer --output-on-failure
 
 # EOF
