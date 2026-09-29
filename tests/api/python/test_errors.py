@@ -192,3 +192,12 @@ def test_error_code_enum():
     assert UnknownReason.TIMEOUT == "timeout" and UnknownReason("conflict-limit") is UnknownReason.CONFLICT_LIMIT
     assert hash(UnknownReason.TIMEOUT) == hash("timeout") and str(UnknownReason.INTERRUPTED) == "interrupted"
     assert Tier.STABLE == 0 and RoundingMode.RTZ == 4 and SortKind.FUN == 6
+
+
+def test_a_parse_error_carries_its_position():
+    s = Solver()
+    with pytest.raises(ParseError) as e:
+        s.from_string("(declare-fun y () Bool)\n(assert (and y\n  (= y #b1)))\n")
+    err = e.value
+    assert err.line > 1
+    assert ("parse error at %d:%d" % (err.line, err.column)) in str(err)

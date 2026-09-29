@@ -33,6 +33,7 @@ THE SOFTWARE.
 
 #include <atomic>
 #include <climits>
+#include <cstdio>
 #include <cstring>
 #include <initializer_list>
 #include <string>
@@ -745,6 +746,92 @@ TEST(c_runtime, indexed_reads_follow_every_change)
   EXPECT_EQ(nullptr, stp_model_symbol(m, n));
   EXPECT_EQ(STP_ERR_INDEX_OUT_OF_RANGE, code_of(tm));
   stp_model_release(m);
+  stp_solver_delete(s);
+  stp_tm_release_all(tm);
+  stp_tm_release(tm);
+}
+
+// What C++ errors and live options offer, C now has too: an error's sorts, a
+// solver failure's terms and sorts after the manager's record is cleared, a
+// parse error's line and column, the live options' reset_all and resolve,
+// and a length for stp_fun_value_entry's argument buffer.
+TEST(c_runtime, errors_and_live_options_match_the_cpp_api)
+{
+  stp_tm tm = stp_tm_new(nullptr);
+  stp_sort bv8 = stp_mk_bv_sort(tm, 8);
+  stp_term x = stp_declare(tm, "x", bv8);
+  stp_solver s = stp_solver_new(tm, nullptr);
+  EXPECT_EQ(STP_ERROR, stp_solver_assert(s, x)); // not a formula
+  ASSERT_NE(nullptr, stp_tm_error(tm));
+  EXPECT_EQ(STP_ERR_SORT_MISMATCH, stp_tm_error(tm)->code);
+  EXPECT_EQ(0, stp_tm_error(tm)->line);
+  ASSERT_EQ(1u, stp_tm_error_num_sorts(tm));
+  EXPECT_EQ(stp_sort_id(bv8), stp_sort_id(stp_tm_error_sort(tm, 0)));
+  stp_tm_clear_error(tm);
+  EXPECT_EQ(0u, stp_tm_error_num_sorts(tm));
+  ASSERT_NE(nullptr, stp_solver_failed(s));
+  ASSERT_EQ(1u, stp_solver_failed_num_terms(s));
+  EXPECT_EQ(stp_term_id(x), stp_term_id(stp_solver_failed_term(s, 0)));
+  ASSERT_EQ(1u, stp_solver_failed_num_sorts(s));
+  EXPECT_EQ(stp_sort_id(bv8), stp_sort_id(stp_solver_failed_sort(s, 0)));
+  EXPECT_EQ(nullptr, stp_solver_failed_sort(s, 1));
+  EXPECT_EQ(STP_ERR_INDEX_OUT_OF_RANGE, code_of(tm));
+  stp_solver_clear_error(s);
+  EXPECT_EQ(0u, stp_solver_failed_num_terms(s));
+
+  EXPECT_EQ(STP_ERROR, stp_solver_parse_smt2(s, "(declare-fun y () Bool)\n(assert (and y\n  (= y #b1)))\n",
+                                             STP_PARSE_DECLARE_AND_ASSERT));
+  const stp_error* e = stp_tm_error(tm);
+  ASSERT_NE(nullptr, e);
+  EXPECT_EQ(STP_ERR_PARSE, e->code);
+  int line = -1, column = -1;
+  const char* at = std::strstr(e->message, "parse error at ");
+  ASSERT_NE(nullptr, at) << e->message;
+  ASSERT_EQ(2, std::sscanf(at, "parse error at %d:%d", &line, &column)) << e->message;
+  EXPECT_GT(e->line, 0);
+  EXPECT_EQ(line, e->line);
+  EXPECT_EQ(column, e->column);
+  stp_tm_clear_error(tm);
+  stp_solver_clear_error(s);
+
+  ASSERT_EQ(STP_OK, stp_solver_set_bool(s, "end-after-cnf", true));
+  ASSERT_EQ(STP_OK, stp_solver_set_bool(s, "stop-after-cnf", true));
+  EXPECT_EQ(STP_ERROR, stp_solver_resolve_options(s));
+  EXPECT_EQ(STP_ERR_OPTION_CONFLICT, code_of(tm));
+  EXPECT_EQ(nullptr, stp_solver_failed(s)); // a question, not a write
+  ASSERT_EQ(STP_OK, stp_solver_reset_all_options(s));
+  EXPECT_FALSE(stp_solver_option_is_set(s, "end-after-cnf"));
+  EXPECT_FALSE(stp_solver_option_is_set(s, "stop-after-cnf"));
+  EXPECT_EQ(STP_OK, stp_solver_resolve_options(s));
+  ASSERT_EQ(STP_OK, stp_solver_set_uint64(s, "random-seed", 7));
+  stp_result r;
+  ASSERT_EQ(STP_OK, stp_solver_check_sat(s, &r));
+  EXPECT_EQ(STP_ERROR, stp_solver_reset_all_options(s)); // its window has closed: nothing is reset
+  EXPECT_EQ(STP_ERR_OPTION_TIMING, code_of(tm));
+  stp_solver_clear_error(s);
+  uint64_t seed = 0;
+  ASSERT_EQ(STP_OK, stp_solver_get_uint64(s, "random-seed", &seed));
+  EXPECT_EQ(7u, seed);
+
+  stp_sort f_sort = stp_mk_fun_sort(tm, 1, &bv8, bv8);
+  stp_term f = stp_declare(tm, "f", f_sort);
+  stp_solver u = stp_solver_new(tm, nullptr);
+  ASSERT_EQ(STP_OK, stp_solver_assert(u, stp_eq(tm, stp_apply(tm, f, x), stp_mk_bv_uint64(tm, 8, 1))));
+  ASSERT_EQ(STP_OK, stp_solver_check_sat(u, &r));
+  ASSERT_EQ(STP_SAT, r.kind);
+  stp_model m = stp_solver_model(u);
+  stp_fun_value fv = stp_model_fun_value(m, f);
+  ASSERT_NE(nullptr, fv);
+  ASSERT_GE(stp_fun_value_size(fv), 1u);
+  stp_term arg = nullptr, value = nullptr;
+  EXPECT_EQ(STP_ERROR, stp_fun_value_entry(fv, 0, 0, &arg, &value)); // no room for the argument
+  EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, code_of(tm));
+  ASSERT_EQ(STP_OK, stp_fun_value_entry(fv, 0, 1, &arg, &value));
+  EXPECT_NE(nullptr, arg);
+  EXPECT_NE(nullptr, value);
+  stp_fun_value_release(fv);
+  stp_model_release(m);
+  stp_solver_delete(u);
   stp_solver_delete(s);
   stp_tm_release_all(tm);
   stp_tm_release(tm);

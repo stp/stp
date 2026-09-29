@@ -69,12 +69,14 @@ struct ErrorRecord
   std::string message;
   std::string option;
   std::vector<Term> terms;
+  std::vector<Sort> sorts;
   stp_error view{};
 
   void clear() noexcept;
   // Never throws: on allocation failure the view falls back to static text.
   void set(ErrorCode code, const char* fn, const std::string& message, int arg,
-           const std::string& option, const std::vector<Term>& terms) noexcept;
+           const std::string& option, const std::vector<Term>& terms,
+           const std::vector<Sort>& sorts = {}, int line = 0, int column = 0) noexcept;
   void set(const char* fn, const Error& e) noexcept;
   void assign(const ErrorRecord& o) noexcept; // a copy with the view re-pointed
 };

@@ -707,6 +707,20 @@ stp_status stp_solver_reset_option(stp_solver s, const char* name)
                       [&](SolverOptions& op) { op.reset(str_arg(name, "stp_solver_reset_option", 1)); });
 }
 
+stp_status stp_solver_reset_all_options(stp_solver s)
+{
+  return solver_write(s, "stp_solver_reset_all_options", [](SolverOptions& op) { op.reset_all(); });
+}
+
+stp_status stp_solver_resolve_options(stp_solver s)
+{
+  return solver_read<stp_status>(s, "stp_solver_resolve_options", STP_ERROR,
+                                 [](const SolverOptions& op) {
+                                   op.resolve();
+                                   return STP_OK;
+                                 });
+}
+
 stp_options stp_solver_options_copy(stp_solver s)
 {
   return solver_read<stp_options>(s, "stp_solver_options_copy", nullptr, [&](const SolverOptions& op) {

@@ -65,13 +65,15 @@ void ErrorRecord::clear() noexcept
 {
   pending = false;
   terms.clear();
+  sorts.clear();
   message.clear();
   option.clear();
   view = stp_error{};
 }
 
 void ErrorRecord::set(ErrorCode code, const char* fn, const std::string& msg, int arg,
-                      const std::string& opt, const std::vector<Term>& ts) noexcept
+                      const std::string& opt, const std::vector<Term>& ts,
+                      const std::vector<Sort>& ss, int line, int column) noexcept
 {
   // fn is always one of this layer's string literals, so the view can point
   // at it directly and the record holds copies of the message and option only
@@ -80,17 +82,21 @@ void ErrorRecord::set(ErrorCode code, const char* fn, const std::string& msg, in
   view.recoverable = detail::error_recoverable(code);
   view.function = fn ? fn : "";
   view.argument_index = arg;
+  view.line = line;
+  view.column = column;
   try
   {
     message = msg;
     option = opt;
     terms = ts;
+    sorts = ss;
     view.message = message.c_str();
     view.option = option.empty() ? nullptr : option.c_str();
   }
   catch (...)
   {
     terms.clear();
+    sorts.clear();
     view.code = STP_ERR_RESOURCE;
     view.recoverable = false;
     view.message = kOutOfMemory;
@@ -101,14 +107,14 @@ void ErrorRecord::set(ErrorCode code, const char* fn, const std::string& msg, in
 void ErrorRecord::set(const char* fn, const Error& e) noexcept
 {
   set(e.code(), fn, e.what(), e.argument_index().value_or(-1), std::string(e.option()),
-      e.terms());
+      e.terms(), e.sorts(), e.line(), e.column());
 }
 
 void ErrorRecord::assign(const ErrorRecord& o) noexcept
 {
   // o.view.function is one of this layer's literals, so the pointer copies
   set(static_cast<ErrorCode>(o.view.code), o.view.function, o.message, o.view.argument_index,
-      o.option, o.terms);
+      o.option, o.terms, o.sorts, o.view.line, o.view.column);
 }
 
 ErrorRecord& thread_error() noexcept
@@ -923,6 +929,29 @@ stp_term stp_tm_error_term(stp_tm tm, size_t i)
     // Every term a record keeps is its own manager's: a FOREIGN_MANAGER
     // error keeps none.
     return export_term(cm, cm->error.terms[i]);
+  });
+}
+
+size_t stp_tm_error_num_sorts(stp_tm tm)
+{
+  if (tm == nullptr)
+    return 0;
+  CManager* cm = cm_of(tm);
+  return cm->error.pending ? cm->error.sorts.size() : 0;
+}
+
+stp_sort stp_tm_error_sort(stp_tm tm, size_t i)
+{
+  if (!need(tm, "stp_tm_error_sort"))
+    return nullptr;
+  CManager* cm = cm_of(tm);
+  return guarded<stp_sort>(cm, nullptr, "stp_tm_error_sort", nullptr, [&] {
+    if (!cm->error.pending || i >= cm->error.sorts.size())
+      fail(ErrorCode::INDEX_OUT_OF_RANGE, "stp_tm_error_sort",
+           "index " + std::to_string(i) + " out of range [0, " +
+               std::to_string(cm->error.pending ? cm->error.sorts.size() : 0) + ")",
+           1);
+    return export_sort(cm, cm->error.sorts[i]);
   });
 }
 

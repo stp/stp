@@ -196,6 +196,12 @@ class _LiveBackend:
     def reset(self, n):
         return _core.SolverHandle.reset_option(self._s, n)
 
+    def reset_all(self):
+        return _core.SolverHandle.reset_all_options(self._s)
+
+    def resolve(self):
+        return _core.SolverHandle.resolve_options(self._s)
+
     def options_copy(self):
         return _core.SolverHandle.options_copy(self._s)
 
@@ -348,12 +354,7 @@ class Options:
 
     def reset(self, name=None):
         if name is None:
-            if self._solver is not None:
-                for n in _core.option_names(-1):
-                    if self._solver.is_set(n):
-                        self._solver.reset(n)  # _LiveBackend.reset: the option reset
-            else:
-                self._handle.reset_all()
+            self._backend.reset_all()
         else:
             self._backend.reset(_canonical(name))
 
@@ -436,9 +437,7 @@ class Options:
         return _core.option_help(-1 if tier is None else int(tier))
 
     def resolve(self):
-        if self._solver is not None:
-            return  # a solver's options are resolved at construction
-        self._handle.resolve()
+        self._backend.resolve()
 
     def copy(self):
         if self._solver is not None:

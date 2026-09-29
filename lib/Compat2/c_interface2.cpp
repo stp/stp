@@ -2749,7 +2749,7 @@ void print_counterexample_smt2(VCImpl* vc, std::ostream& os)
         for (std::size_t j = m; j-- > 0;)
         {
           stp_term value = nullptr;
-          if (stp_fun_value_entry(fv, j, args.data(), &value) != STP_OK)
+          if (stp_fun_value_entry(fv, j, args.size(), args.data(), &value) != STP_OK)
             continue;
           std::string guard;
           for (std::uint32_t k = 0; k < arity; ++k)
@@ -3556,7 +3556,7 @@ Expr uf_value(VCImpl* vc, Expr application, const char* who)
     for (std::size_t j = 0; j < m && result == nullptr; ++j)
     {
       stp_term value = nullptr;
-      if (stp_fun_value_entry(fv, j, args.data(), &value) != STP_OK)
+      if (stp_fun_value_entry(fv, j, args.size(), args.data(), &value) != STP_OK)
       {
         take_error(vc);
         continue;

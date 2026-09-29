@@ -41,8 +41,8 @@ that depart from z3py or from a literal reading of the C API.
   and cleared. Calls with
   no manager read `stp_last_error()`. A failed *mutation* of a solver also
   leaves the solver's failed state at once (`stp_solver_clear_error`): a raised
-  exception cannot be ignored, so Python needs no failed state. `ParseError.lineno/offset` are parsed from the message
-  (`parse error at L:C`). The IO error class is spelt `stp.IOError`: it is
+  exception cannot be ignored, so Python needs no failed state. `ParseError.lineno/offset` are the record's line
+  and column. The IO error class is spelt `stp.IOError`: it is
   left out of `from stp import *`, which would otherwise shadow the builtin
   `IOError` (an alias of `OSError`) in the importing module.
 - **Threads.** A `Manager` and everything created from it may be used from

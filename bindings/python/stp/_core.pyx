@@ -114,7 +114,6 @@ cdef extern from *:
     int stp_py_sigint_install(stp_solver) noexcept nogil
     void stp_py_sigint_remove() noexcept nogil
 
-import re
 import signal as _pysignal
 import sys
 import threading
@@ -237,7 +236,6 @@ _CLASS_BY_CODE = {
     STP_ERR_INTERNAL: InternalError,
 }
 
-_PARSE_POS = re.compile(r"parse error at (\d+):(\d+)")
 
 
 cdef inline object _s(const char* p):
@@ -307,10 +305,8 @@ cdef object _exc_from(const stp_error* e, Manager m, bint with_terms):
                 ts.append(_manager_of(t, m)._wrap(t))
         exc.terms = tuple(ts)
     if cls is ParseError:
-        mo = _PARSE_POS.search(msg)
-        if mo is not None:
-            exc.lineno = int(mo.group(1))
-            exc.offset = int(mo.group(2))
+        exc.lineno = e.line
+        exc.offset = e.column
     return exc
 
 
@@ -1981,6 +1977,16 @@ cdef class SolverHandle:
         if stp_solver_reset_option(self._s, n) != STP_OK:
             self._fail_mutate("stp_solver_reset_option")
 
+    def reset_all_options(self):
+        self._live()
+        if stp_solver_reset_all_options(self._s) != STP_OK:
+            self._fail_mutate("stp_solver_reset_all_options")
+
+    def resolve_options(self):
+        self._live()
+        if stp_solver_resolve_options(self._s) != STP_OK:
+            self._m._fail("stp_solver_resolve_options")
+
     def options_copy(self):
         self._live()
         cdef stp_options o = stp_solver_options_copy(self._s)
@@ -2688,7 +2694,7 @@ cdef class FunValueHandle:
         if args == NULL:
             raise MemoryError()
         try:
-            if stp_fun_value_entry(self._h, <size_t>i, args, &val) != STP_OK:
+            if stp_fun_value_entry(self._h, <size_t>i, arity, args, &val) != STP_OK:
                 self._m._fail("stp_fun_value_entry")
             avs = tuple(self._m._wrap(args[k]) for k in range(arity))
         finally:

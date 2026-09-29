@@ -231,6 +231,44 @@ const stp_error* stp_solver_failed(stp_solver s)
   return cs->failed.pending ? &cs->failed.view : nullptr;
 }
 
+size_t stp_solver_failed_num_terms(stp_solver s)
+{
+  if (s == nullptr)
+    return 0;
+  CSolver* cs = csolver(s);
+  return cs->failed.pending ? cs->failed.terms.size() : 0;
+}
+
+stp_term stp_solver_failed_term(stp_solver s, size_t i)
+{
+  return solver_read<stp_term>(s, "stp_solver_failed_term", nullptr, [&](CSolver* cs) {
+    const std::size_t n = cs->failed.pending ? cs->failed.terms.size() : 0;
+    if (i >= n)
+      fail(ErrorCode::INDEX_OUT_OF_RANGE, "stp_solver_failed_term",
+           "index " + std::to_string(i) + " out of range [0, " + std::to_string(n) + ")", 1);
+    return export_term(cs->cm, cs->failed.terms[i]);
+  });
+}
+
+size_t stp_solver_failed_num_sorts(stp_solver s)
+{
+  if (s == nullptr)
+    return 0;
+  CSolver* cs = csolver(s);
+  return cs->failed.pending ? cs->failed.sorts.size() : 0;
+}
+
+stp_sort stp_solver_failed_sort(stp_solver s, size_t i)
+{
+  return solver_read<stp_sort>(s, "stp_solver_failed_sort", nullptr, [&](CSolver* cs) {
+    const std::size_t n = cs->failed.pending ? cs->failed.sorts.size() : 0;
+    if (i >= n)
+      fail(ErrorCode::INDEX_OUT_OF_RANGE, "stp_solver_failed_sort",
+           "index " + std::to_string(i) + " out of range [0, " + std::to_string(n) + ")", 1);
+    return export_sort(cs->cm, cs->failed.sorts[i]);
+  });
+}
+
 void stp_solver_clear_error(stp_solver s)
 {
   if (s != nullptr)
@@ -1009,11 +1047,18 @@ size_t stp_fun_value_size(stp_fun_value v)
   return fun_call<size_t>(v, "stp_fun_value_size", 0, [](CFunValue* fv) { return fv->value.size(); });
 }
 
-stp_status stp_fun_value_entry(stp_fun_value v, size_t i, stp_term* args_out, stp_term* value)
+stp_status stp_fun_value_entry(stp_fun_value v, size_t i, size_t n, stp_term* args_out,
+                               stp_term* value)
 {
   return fun_call<stp_status>(v, "stp_fun_value_entry", STP_ERROR, [&](CFunValue* fv) {
-    out_arg(args_out, "stp_fun_value_entry", 2);
-    out_arg(value, "stp_fun_value_entry", 3);
+    out_arg(args_out, "stp_fun_value_entry", 3);
+    out_arg(value, "stp_fun_value_entry", 4);
+    const std::uint32_t arity = fv->value.sort().fun_arity();
+    if (n < arity)
+      fail(ErrorCode::INVALID_ARGUMENT, "stp_fun_value_entry",
+           "the buffer holds " + std::to_string(n) + " arguments, the function takes " +
+               std::to_string(arity),
+           2);
     const FunctionValue::Entry e = fv->value.entry(i);
     std::size_t done = 0;
     try

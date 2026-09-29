@@ -147,6 +147,8 @@ cdef extern from "stp/stp.h":
         const char* function
         int argument_index
         const char* option
+        int line
+        int column
     ctypedef struct stp_float_value:
         uint32_t exp_size
         uint32_t sig_size
@@ -387,6 +389,8 @@ cdef extern from "stp/stp.h":
     char* stp_solver_resolved_str(stp_solver, const char* name)
     bint stp_solver_option_is_set(stp_solver, const char* name)
     stp_status stp_solver_reset_option(stp_solver, const char* name)
+    stp_status stp_solver_reset_all_options(stp_solver)
+    stp_status stp_solver_resolve_options(stp_solver)
     stp_options stp_solver_options_copy(stp_solver)
     stp_status stp_solver_assert(stp_solver, stp_term)
     stp_status stp_solver_push(stp_solver, uint32_t n)
@@ -466,7 +470,7 @@ cdef extern from "stp/stp.h":
     uint32_t stp_fun_value_arity(stp_fun_value)
     stp_term stp_fun_value_else(stp_fun_value)
     size_t stp_fun_value_size(stp_fun_value)
-    stp_status stp_fun_value_entry(stp_fun_value, size_t i, stp_term* args_out, stp_term* value)
+    stp_status stp_fun_value_entry(stp_fun_value, size_t i, size_t n, stp_term* args_out, stp_term* value)
     stp_term stp_fun_value_apply(stp_fun_value, size_t n, const stp_term* arg_values)
     stp_term stp_fun_value_as_ite(stp_fun_value, size_t n, const stp_term* formals)
 

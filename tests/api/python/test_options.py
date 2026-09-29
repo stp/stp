@@ -221,3 +221,27 @@ def test_unavailable_backend():
             Solver(options=o)
         assert e.value.code == ErrorCode.OPTION_UNAVAILABLE and e.value.option == "sat-backend"
         assert missing[0] in str(e.value)
+
+
+def test_a_live_reset_is_all_or_nothing_and_a_live_resolve_asks():
+    # reset() of a solver's live options is the solver's reset_all: every
+    # entry back to its default, or none when one whose window has closed
+    # holds anything else; resolve() finds a conflict the writes allowed
+    s = Solver()
+    o = s.options
+    o["end_after_cnf"] = True
+    o["stop_after_cnf"] = True
+    with pytest.raises(OptionError) as e:
+        o.resolve()
+    assert e.value.code == ErrorCode.OPTION_CONFLICT
+    o.reset()
+    assert not o.is_set("end_after_cnf") and not o.is_set("stop_after_cnf")
+    o.resolve()
+    o["random_seed"] = 7
+    o["max_time"] = 500
+    assert s.check() == sat
+    with pytest.raises(OptionError) as e:
+        o.reset()
+    assert e.value.code == ErrorCode.OPTION_TIMING
+    assert o["random_seed"] == 7 and o["max_time"] == 500
+    s.close()

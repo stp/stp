@@ -316,6 +316,7 @@ typedef struct stp_error
   const char* function; /* the C API function that refused */
   int argument_index;   /* 0-based; -1 if not applicable */
   const char* option;   /* the option name for OPTION_* codes; NULL otherwise */
+  int line, column;     /* PARSE: 1-based line and column of the failure; 0 when unknown or another code */
 } stp_error;
 
 typedef struct stp_float_value
@@ -398,6 +399,8 @@ STP_API void stp_tm_release_all(stp_tm);   /* term references only; solver, mode
 STP_API const stp_error* stp_tm_error(stp_tm); /* NULL when no error is pending; infallible */
 STP_API size_t stp_tm_error_num_terms(stp_tm); /* the terms involved in the recorded error (e.g. both operands) */
 STP_API stp_term stp_tm_error_term(stp_tm, size_t i); /* +1; a FOREIGN_MANAGER error lists no term (it would be another manager's) */
+STP_API size_t stp_tm_error_num_sorts(stp_tm); /* the sorts involved in the recorded error */
+STP_API stp_sort stp_tm_error_sort(stp_tm, size_t i);
 STP_API void stp_tm_clear_error(stp_tm);
 typedef void (*stp_error_callback)(const stp_error*, void* user); /* sees every error; may return; the call still fails; must not call the library; the pointer is valid during the call only */
 STP_API void stp_tm_set_error_callback(stp_tm, stp_error_callback, void* user);
@@ -592,7 +595,7 @@ STP_API stp_status stp_options_set_duration_ms_e(stp_options, stp_option, uint64
  * (a bool, or a mode such as incremental) takes a value only after '='; --no-<bool> takes none. */
 STP_API stp_status stp_options_set_args(stp_options, int argc, const char* const* argv);
 /* read back */
-STP_API char* stp_options_get_str(stp_options, const char* name); /* the value as the CLI would print it */
+STP_API char* stp_options_get_str(stp_options, const char* name); /* the value as the CLI would print it; a set-typed entry's members comma-separated (C++ get_names) */
 STP_API stp_status stp_options_get_bool(stp_options, const char* name, bool* out);
 STP_API stp_status stp_options_get_int64(stp_options, const char* name, int64_t* out);
 STP_API stp_status stp_options_get_uint64(stp_options, const char* name, uint64_t* out);
@@ -630,6 +633,10 @@ STP_API const char* stp_option_info_negation(const char* name); /* "" if none */
 STP_API stp_solver stp_solver_new(stp_tm, stp_options /* NULL: defaults; copied */); /* any number of solvers per manager, each with its own stack, options and models */
 STP_API void stp_solver_delete(stp_solver); /* terms, sorts and models stay valid */
 STP_API const stp_error* stp_solver_failed(stp_solver); /* the failure that put the solver in its failed state; NULL if none; infallible */
+STP_API size_t stp_solver_failed_num_terms(stp_solver); /* the terms and sorts of that failure, as stp_tm_error_term/_sort */
+STP_API stp_term stp_solver_failed_term(stp_solver, size_t i); /* +1 */
+STP_API size_t stp_solver_failed_num_sorts(stp_solver);
+STP_API stp_sort stp_solver_failed_sort(stp_solver, size_t i);
 STP_API void stp_solver_clear_error(stp_solver);        /* leave the failed state */
 STP_API stp_tm stp_solver_manager(stp_solver);          /* +1 handle */
 /* the LIVE options: same names as the stp_options_* setters and getters, on the solver,
@@ -656,6 +663,8 @@ STP_API stp_status stp_solver_get_duration_ms(stp_solver, const char* name, uint
 STP_API char* stp_solver_resolved_str(stp_solver, const char* name);
 STP_API bool stp_solver_option_is_set(stp_solver, const char* name);
 STP_API stp_status stp_solver_reset_option(stp_solver, const char* name);
+STP_API stp_status stp_solver_reset_all_options(stp_solver); /* every entry back to its default, or none: OPTION_TIMING when an entry whose window has closed holds anything else */
+STP_API stp_status stp_solver_resolve_options(stp_solver); /* OPTION_CONFLICT / OPTION_UNAVAILABLE, as a check would find them */
 STP_API stp_options stp_solver_options_copy(stp_solver); /* a detached copy; delete it */
 /* assertions and checks */
 STP_API stp_status stp_solver_assert(stp_solver, stp_term); /* SORT_MISMATCH unless Bool; FOREIGN_MANAGER; a NULL term is NULL_HANDLE and fails the solver */
@@ -765,7 +774,7 @@ STP_API stp_sort stp_fun_value_sort(stp_fun_value);
 STP_API uint32_t stp_fun_value_arity(stp_fun_value);
 STP_API stp_term stp_fun_value_else(stp_fun_value); /* always ground: a VALUE of the codomain */
 STP_API size_t stp_fun_value_size(stp_fun_value);
-STP_API stp_status stp_fun_value_entry(stp_fun_value, size_t i, stp_term* args_out /* arity slots */, stp_term* value); /* an application the model records */
+STP_API stp_status stp_fun_value_entry(stp_fun_value, size_t i, size_t n, stp_term* args_out /* n slots, at least the arity */, stp_term* value); /* an application the model records; INVALID_ARGUMENT if n is below the arity */
 STP_API stp_term stp_fun_value_apply(stp_fun_value, size_t n, const stp_term* arg_values);
 STP_API stp_term stp_fun_value_as_ite(stp_fun_value, size_t n, const stp_term* formals);
 
