@@ -134,8 +134,8 @@ Header
 ------
 
 The SMT-LIB2 format uses a header to tell the solver which type of
-problem is coming. ``set-logic`` is required; ``set-info`` supplies
-metadata, most of which STP ignores:
+problem is coming. If ``set-logic`` is omitted, STP selects ``ALL``;
+``set-info`` supplies metadata, most of which STP ignores:
 
 .. code-block:: lisp
 

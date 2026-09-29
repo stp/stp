@@ -13,7 +13,6 @@
 ; part of, so the operand is a plain array symbol by the time any pass
 ; could push a read through anything. Kept as end-to-end coverage of
 ; the same benchmark shape.
-(set-logic QF_ABV)
 (declare-const __ (_ BitVec 16))
 (declare-const x Bool)
 (declare-fun p () (Array (_ BitVec 5) (_ BitVec 32)))

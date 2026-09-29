@@ -15,7 +15,6 @@
 ; RUN: %solver --incremental %s 2>&1 | %OutputCheck %s
 ; (--incremental keeps this a DRIVER test: the default automatic policy
 ; leaves this two-check session on the batch path.)
-(set-logic QF_ABV)
 (push 1)
 (declare-fun __ADDRESS_OF_d1@ () (_ BitVec 32))
 (declare-fun d1$a@2 () (_ BitVec 32))

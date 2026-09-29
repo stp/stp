@@ -1,10 +1,9 @@
 ; RUN: %solver --unconstrained-variable-elimination=0 %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 
-(set-logic  QF_ABV)
 (push 1)
 (set-info :source | fuzzsmt 0.3 |)
-
+(set-logic  QF_ABV)
 (set-info :status unknown)
 (declare-fun v238684 () (_ BitVec 3))
 (declare-fun v238685 () (_ BitVec 3))

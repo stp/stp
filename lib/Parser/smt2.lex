@@ -780,11 +780,12 @@ bv{DIGIT}+             { return lookup(smt2text); }
 "declare-const"           { return commandToken(DECLARE_CONST_TOK); }
 "declare-fun"             {
                               if (!commandNamePending) return lookup(smt2text);
+                              const int token = commandToken(DECLARE_FUNCTION_TOK);
                               declarationSortsAfterName = true;
                               ufDeclarationNamePending =
                                   stp::GlobalParserInterface->getUserFlags()
                                       .enable_uninterpreted_functions;
-                              return commandToken(DECLARE_FUNCTION_TOK);
+                              return token;
                             }
 "declare-sort"            { if (!commandNamePending) return lookup(smt2text);
                             sortContext = true; return commandToken(DECLARE_SORT_TOK);}

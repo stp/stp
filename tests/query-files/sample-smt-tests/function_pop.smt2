@@ -1,6 +1,5 @@
 ; RUN: not %solver %s | %OutputCheck %s
 ; Checks that popping a frame containing a function invalidates all symbols correctly
-(set-logic QF_BV)
 (push 1)
 (declare-fun x!2 () Bool)
 (define-fun x!3 () Bool (not x!2))

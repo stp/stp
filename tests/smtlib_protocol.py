@@ -98,13 +98,33 @@ class CommandModes(unittest.TestCase):
         self.assertIn('(error "' + message, result.stdout)
         self.assertNotIn('unreachable', result.stdout)
 
-    def test_logic_is_required_and_set_once(self):
-        for command in ['(assert true)', '(declare-const x Bool)',
-                        '(push 1)', '(check-sat)']:
-            with self.subTest(command=command):
-                self.assert_error(command, command[1:].split()[0].rstrip(')') +
-                                  ' is not permitted')
+    def test_logic_may_be_omitted(self):
+        for source in [
+                '(assert true)',
+                '(declare-const p Bool)(assert p)',
+                '(declare-fun x () (_ BitVec 8))(assert (= x #x2a))',
+                '(declare-const x Float32)(assert (fp.isNaN x))',
+                '(declare-const x Real)(assert (= x (/ 1 3)))',
+                '(declare-sort S 0)(declare-const x S)(assert (= x x))',
+                '(declare-fun f (Bool) Bool)(assert (f true))',
+                '(define-sort Byte () (_ BitVec 8))(declare-const x Byte)',
+                '(define-fun f ((x Real)) Real (+ x 1))(assert (= (f 1) 2))',
+                '(declare-const a (Array (_ BitVec 8) (_ BitVec 8)))'
+                '(declare-const b (Array (_ BitVec 8) (_ BitVec 8)))'
+                '(assert (= a b))',
+                '(push 1)(assert false)(pop 1)',
+                '(push 1)(set-logic QF_BV)(pop 1)',
+                '(set-logic QF_BV)(reset)(declare-const x Float32)',
+                '']:
+            with self.subTest(source=source):
+                result = run(source + '(check-sat)')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(result.stdout, 'sat\n')
+
+    def test_logic_cannot_change_after_selection(self):
         self.assert_error('(set-logic QF_BV)(set-logic QF_BV)',
+                          'set-logic is not permitted')
+        self.assert_error('(declare-const x Bool)(set-logic QF_BV)',
                           'set-logic is not permitted')
 
     def test_options_before_or_after_logic(self):

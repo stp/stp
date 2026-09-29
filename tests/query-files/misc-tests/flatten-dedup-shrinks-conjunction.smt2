@@ -9,7 +9,6 @@
 ; assert(Degree() <= newChildren.size()) aborted every assertions-enabled
 ; build on this input; found by murxla. -d checks the model against the
 ; original query, guarding against a conjunct genuinely going missing.
-(set-logic QF_BV)
 (declare-const _x0 Bool)
 (declare-const _x3 Bool)
 (assert (= true _x0 (= _x3 _x0)))

@@ -923,11 +923,20 @@ void Cpp_interface::requireCommand(const std::string& command)
   else if (command == "get-proof" || command == "get-unsat-core" ||
            command == "get-unsat-assumptions")
     allowed = mode == Mode::Unsat;
-  else if (command != "echo" && command != "exit" && command != "reset" &&
-           command != "reset-assertions" && command != "set-option" &&
-           command != "get-option" && command != "set-info" &&
-           command != "get-info")
-    allowed = mode != Mode::Start;
+  else if (mode == Mode::Start &&
+           (command == "assert" || command == "check-sat" ||
+            command == "check-sat-assuming" ||
+            command.compare(0, 8, "declare-") == 0 ||
+            command.compare(0, 7, "define-") == 0))
+  {
+    // Like cvc5 and Bitwuzla, accept scripts that omit set-logic. Select
+    // the supported theories before the lexer reads this command's terms.
+    // Metadata and stack operations alone do not choose a logic.
+    setLogic("ALL");
+    SMT2SetFloatTokens(true);
+    SMT2SetRealTokens(true);
+    SMT2SetBitVectorTokens(true);
+  }
   if (!allowed)
     refuseCurrentCommand(command + " is not permitted in the current solver mode");
 }

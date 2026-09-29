@@ -34,8 +34,10 @@ them after ``set-logic``, like cvc5 and Bitwuzla. For example:
     (get-assignment)
     (exit)
 
-``set-logic`` is required before declarations, assertions and checks, and
-may occur only once between resets. ``ALL`` selects STP's supported
+An explicit ``set-logic`` precedes declarations, assertions and checks,
+and may occur only once between resets. If omitted, STP selects ``ALL``
+when the first such command needs a logic, like the default frontends of
+cvc5 and Bitwuzla. ``ALL`` selects STP's supported
 quantifier-free theories together. Array logics enable extensional array
 equality automatically; UF logics enable uninterpreted functions. See
 :doc:`index` for the accepted logic names and :doc:`linear-real-arithmetic`

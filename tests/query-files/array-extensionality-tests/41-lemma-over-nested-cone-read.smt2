@@ -5,7 +5,6 @@
 ; encodable over that variable even though nothing else carries it
 ; into the bit-blasted formula. The equality itself is false (the two
 ; stores differ at index zero), so the query is unsatisfiable.
-(set-logic QF_ABV)
 (declare-const i (_ BitVec 2))
 (declare-const x (Array (_ BitVec 2) (_ BitVec 2)))
 (declare-const x9 (Array (_ BitVec 2) (_ BitVec 2)))

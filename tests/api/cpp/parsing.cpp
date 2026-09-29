@@ -60,7 +60,7 @@ TEST(Parsing, definitions_survive_separate_calls_and_are_shared_by_the_manager)
   {
     TermManager tm;
     Solver s(tm);
-    s.parse_smt2("(set-logic QF_BV)(declare-const x (_ BitVec 8)) "
+    s.parse_smt2("(declare-const x (_ BitVec 8)) "
                  "(define-fun d () (_ BitVec 8) (bvadd x #x01)) "
                  "(define-fun inc ((a (_ BitVec 8))) (_ BitVec 8) (bvadd a #x01))", mode);
     const Term x = *tm.symbol("x");
@@ -76,7 +76,7 @@ TEST(Parsing, definitions_survive_separate_calls_and_are_shared_by_the_manager)
     EXPECT_TRUE(inc(x).same_as(*tm.symbol("d")));
     EXPECT_EQ(tm.symbols().size(), 2u); // x and inc, not bodies or private formals
     EXPECT_TRUE(s.parse_term("d").same_as(*tm.symbol("d")));
-    s.parse_smt2("(set-logic QF_BV)(assert (= (inc d) #x09))", mode);
+    s.parse_smt2("(assert (= (inc d) #x09))", mode);
     ASSERT_TRUE(s.check_sat().is_sat());
     EXPECT_EQ(s.model().uint64_value(x), 7u);
     Solver other(tm);
@@ -373,7 +373,7 @@ TEST(Parsing, execute_mode_runs_the_script)
   TermManager t3;
   Solver s3(t3);
   testing::internal::CaptureStdout();
-  s3.parse_smt2("(set-logic QF_BV)(declare-fun a () (_ BitVec 8))\n(assert (= a #x2a))\n(push 1)\n(assert (= a #x2b))\n(check-sat)\n(pop 1)\n",
+  s3.parse_smt2("(declare-fun a () (_ BitVec 8))\n(assert (= a #x2a))\n(push 1)\n(assert (= a #x2b))\n(check-sat)\n(pop 1)\n",
                 ParseMode::EXECUTE);
   (void)testing::internal::GetCapturedStdout();
   EXPECT_EQ(s3.level(), 0u);

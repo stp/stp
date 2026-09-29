@@ -1,7 +1,6 @@
 ; RUN: %solver %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 
-(set-logic QF_BV)
 (push 1)
 (set-info :source | fuzzsmt 0.3 |)
 

@@ -1,10 +1,9 @@
 ; RUN: %solver --bb.mult-v2=1 %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 
-(set-logic  QF_ABV)
 (push 1)
 (set-info :source | fuzzsmt 0.3 |)
-
+(set-logic  QF_ABV)
 (set-info :status unknown)
 (declare-fun v20384 () (_ BitVec 5))
 (declare-fun a20385 () (Array (_ BitVec 9) (_ BitVec 14)))
