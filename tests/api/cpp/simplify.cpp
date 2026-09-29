@@ -119,8 +119,8 @@ TEST(simplify, two)
 
 // A native distinct over three symbols, built on the manager's engine as 2.x
 // built it on the checker's. 2.x's vc_simplify had to lower it before its
-// simplifier saw it.
-TEST(simplify, native_distinct_is_lowered_before_preprocessing)
+// simplifier saw it; simplify keeps it, and it is the check that lowers it.
+TEST(simplify, native_distinct_is_kept_and_the_check_lowers_it)
 {
   TermManager tm;
   Options o;
