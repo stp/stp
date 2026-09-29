@@ -407,43 +407,59 @@ class Smt2Printer
 public:
   Smt2Printer(ManagerImpl* m, std::string& out) : m_(m), out_(out) {}
 
-  void print(const ASTNode& n)
+  // On an explicit stack: a deep term costs heap, not the C++ stack. Each
+  // open application is a frame holding its children and the next to print.
+  void print(const ASTNode& root)
   {
-    if (n.isConstant())
+    struct Frame
     {
-      value(n);
-      return;
-    }
-    const View v = view_of(m_, n);
-    switch (v.kind)
-    {
-      case Kind::CONSTANT:
-        out_ += symbol_name(n);
+      std::vector<ASTNode> children;
+      std::size_t next;
+      bool spaced; // a space before each child
+    };
+    std::vector<Frame> stack;
+    // A leaf is printed whole; an application prints its head and opens.
+    const auto open = [&](const ASTNode& n) {
+      if (n.isConstant())
+      {
+        value(n);
         return;
-      case Kind::CONST_ARRAY:
-        out_ += "((as const " + m_->sort_text(m_->sort_of_node(n, "Term::str")) + ") ";
-        print(v.children[0]);
+      }
+      View v = view_of(m_, n);
+      switch (v.kind)
+      {
+        case Kind::CONSTANT:
+          out_ += symbol_name(n);
+          return;
+        case Kind::CONST_ARRAY:
+          out_ += "((as const " + m_->sort_text(m_->sort_of_node(n, "Term::str")) + ") ";
+          stack.push_back(Frame{std::move(v.children), 0, false});
+          return;
+        case Kind::APPLY:
+          out_ += "(" + symbol_name(v.children[0]);
+          stack.push_back(Frame{std::move(v.children), 1, true});
+          return;
+        default:
+          out_ += "(" + head(v);
+          stack.push_back(Frame{std::move(v.children), 0, true});
+          return;
+      }
+    };
+    open(root);
+    while (!stack.empty())
+    {
+      Frame& f = stack.back();
+      if (f.next == f.children.size())
+      {
         out_ += ")";
-        return;
-      case Kind::APPLY:
-        out_ += "(" + symbol_name(v.children[0]);
-        for (std::size_t i = 1; i < v.children.size(); ++i)
-        {
-          out_ += " ";
-          print(v.children[i]);
-        }
-        out_ += ")";
-        return;
-      default:
-        break;
+        stack.pop_back();
+        continue;
+      }
+      const ASTNode child = f.children[f.next++];
+      if (f.spaced)
+        out_ += " ";
+      open(child); // may push, which moves `f`
     }
-    out_ += "(" + head(v);
-    for (const ASTNode& c : v.children)
-    {
-      out_ += " ";
-      print(c);
-    }
-    out_ += ")";
   }
 
 private:

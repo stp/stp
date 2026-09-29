@@ -23,9 +23,10 @@ THE SOFTWARE.
 ********************************************************************/
 
 // deep-terms.cpp -- terms a hundred thousand levels deep through the API's
-// own walks: the model's evaluator, TermManager::simplify and substitute.
-// Each walk keeps its stack on the heap; the evaluator overflowed the C++
-// stack from about 40 000 levels and simplify from 80 000.
+// own walks: the model's evaluator, TermManager::simplify and substitute,
+// Term::str, and repeat. Each walk keeps its stack on the heap; the
+// evaluator overflowed the C++ stack from about 40 000 levels, simplify from
+// 80 000 and str from 15 000, and repeat(k, x) built a chain k deep.
 
 #include "api_common.hpp"
 
@@ -52,10 +53,13 @@ Term boolean_chain(TermManager& tm)
 
 } // namespace
 
-TEST(DeepTerms, a_boolean_chain_is_simplified_and_valued)
+TEST(DeepTerms, a_boolean_chain_is_printed_simplified_and_valued)
 {
   TermManager tm;
   const Term chain = boolean_chain(tm);
+  const std::string text = chain.str();
+  EXPECT_EQ(text.rfind("(or (and (or (and ", 0), 0u) << text.substr(0, 40);
+  EXPECT_EQ(text.substr(text.size() - 8), " p99999)");
   EXPECT_EQ(tm.simplify(chain).kind(), Kind::OR);
   const Term p0 = *tm.symbol("p0");
   EXPECT_EQ(chain.substitute({{p0, tm.mk_true()}}).kind(), Kind::OR);
@@ -70,7 +74,7 @@ TEST(DeepTerms, a_boolean_chain_is_simplified_and_valued)
   EXPECT_TRUE(m.try_value(chain)->to_bool());
 }
 
-TEST(DeepTerms, a_bit_vector_chain_is_simplified_and_valued)
+TEST(DeepTerms, a_bit_vector_chain_is_printed_simplified_and_valued)
 {
   TermManager::Config cfg;
   cfg.simplify = false; // keep every level
@@ -80,6 +84,7 @@ TEST(DeepTerms, a_bit_vector_chain_is_simplified_and_valued)
   Term chain = x;
   for (int i = 1; i < depth; ++i)
     chain = (i % 2) ? bvadd(chain, tm.mk_bv(8, 1)) : bvxor(chain, tm.mk_bv(8, 0x55));
+  EXPECT_EQ(chain.str().rfind("(bvadd #x01 (bvxor #x55 (bvadd #x01 ", 0), 0u);
   // folded all the way down to x and one constant, whatever the shape
   EXPECT_NE(tm.simplify(chain).kind(), Kind::VALUE);
   Solver s(tm);
@@ -112,4 +117,24 @@ TEST(DeepTerms, a_long_store_chain_is_valued)
   EXPECT_EQ(m.uint64_value(select(cells, tm.mk_bv(32, depth - 1))), (depth - 1) & 0xffu);
   EXPECT_EQ(m.array_value(cells).size(), static_cast<std::size_t>(depth));
   EXPECT_EQ(m.value(cells).kind(), Kind::STORE);
+}
+
+TEST(DeepTerms, repeat_is_balanced)
+{
+  TermManager::Config cfg;
+  cfg.simplify = false;
+  TermManager tm(cfg);
+  const Term one = tm.declare("b", tm.mk_bv_sort(1));
+  const Term r = repeat(depth, one);
+  EXPECT_EQ(r.sort().bv_size(), static_cast<std::uint32_t>(depth));
+  // log k levels, so any walk is shallow; the text is the k copies
+  std::size_t levels = 0;
+  for (Term t = r; t.kind() == Kind::BV_CONCAT; t = t.child(0))
+    ++levels;
+  EXPECT_LT(levels, 40u);
+  const std::string text = r.str();
+  std::size_t copies = 0;
+  for (std::size_t at = text.find(" b"); at != std::string::npos; at = text.find(" b", at + 1))
+    ++copies;
+  EXPECT_EQ(copies, static_cast<std::size_t>(depth));
 }

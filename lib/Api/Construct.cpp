@@ -508,9 +508,18 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
              "repeating a width of " + std::to_string(w) + " " + std::to_string(idx[0]) +
                  " times goes beyond the largest width, " + std::to_string(kMaxBvWidth),
              std::nullopt, {c.term(0)});
-      ASTNode out = args[0];
-      for (std::uint32_t i = 1; i < idx[0]; ++i)
-        out = concat2(c, out, args[0]);
+      // By doubling: every part is the same term, so a balanced concatenation
+      // is log k distinct nodes and log k deep, where a chain was k of each.
+      ASTNode out, power = args[0];
+      for (std::uint32_t k = idx[0];;)
+      {
+        if (k & 1)
+          out = out.IsNull() ? power : concat2(c, out, power);
+        k >>= 1;
+        if (k == 0)
+          break;
+        power = concat2(c, power, power);
+      }
       return out;
     }
     case Kind::BV_ROTATE_LEFT:

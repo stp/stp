@@ -423,7 +423,10 @@ public:
   }
 
   Term substitute(const std::vector<std::pair<Term, Term>>& map) const;
-  std::string str() const; ///< SMT-LIB 2, untruncated, no let-sharing
+  std::string str() const; ///< SMT-LIB 2, untruncated, no let-sharing; any depth
+  /// SMT-LIB 2 with let-sharing, CVC, DOT or GDL through the engine's
+  /// printers, which recurse once per level of the term: one some ten
+  /// thousand levels deep can overflow the stack there (str() cannot).
   std::string to_string(Format f, bool share_subterms = true) const;
 
   bool same_as(const Term&) const noexcept; ///< structural: the same node
@@ -1140,6 +1143,8 @@ public:
   void parse(std::istream& in, Format, ParseMode = ParseMode::DECLARE_AND_ASSERT);
   Term parse_term(std::string_view smt2_term) const; ///< over the manager's name table
 
+  /// The assertions through the engine's printers, which recurse once per
+  /// level of a term (see Term::to_string).
   std::string to_smt2(bool with_check_sat = false) const;
   std::string to_string(Format) const; ///< SMTLIB2, CVC, DOT, GDL
   /// The last CVC or SMT-LIB 1 input this solver read, as the stp command
