@@ -508,9 +508,12 @@ TEST_F(Values, fp_to_rational_of_wide_formats)
     const Term v = tm.mk_fp_from_bits(w15, bits);
     EXPECT_EQ(v.to_fp().to_rational()->str(), fp_to_real(v).to_rational().str()) << bits;
   }
-  // a 40-bit exponent: small values are fine, the extremes are refused
+  // a 40-bit exponent: small values are fine, the extremes are refused (1.5
+  // from its bits, the biased exponent 2^39 - 1: a decimal literal needs an
+  // exponent LibBF can encode, at most 29 bits with 32-bit limbs)
   const Sort w40 = tm.mk_fp_sort(40, 4);
-  EXPECT_EQ(tm.mk_fp(w40, RoundingMode::RNE, "1.5").to_fp().to_rational()->str(), "3/2");
+  const Term one_and_a_half = tm.mk_fp_from_bits(w40, "00" + std::string(39, '1') + "100");
+  EXPECT_EQ(one_and_a_half.to_fp().to_rational()->str(), "3/2");
   auto e = API_ERROR_OF(tm.mk_fp_from_bits(w40, "0" + std::string(39, '1') + "0000").to_fp().to_rational());
   ASSERT_TRUE(e.has_value());
   EXPECT_EQ(e->code(), ErrorCode::UNSUPPORTED);
