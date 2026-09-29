@@ -599,3 +599,29 @@ TEST(libstp2_fidelity, counters_survive_a_rebuilt_solver)
   EXPECT_EQ(before, vc_getCounter(vc, STP_COUNTER_QUERIES_BITBLASTED));
   vc_Destroy(vc);
 }
+
+namespace
+{
+int handler_calls = 0;
+void count_handler_calls(const char*)
+{
+  ++handler_calls;
+}
+} // namespace
+
+// Under STP_ON_ERROR_RETURN a misuse reaches the handler once: a null Expr
+// given to vc_printBVBitStringToBuffer was reported by the Expr check and again
+// by the function itself.
+TEST(libstp2_fidelity, a_misuse_is_reported_once)
+{
+  vc_registerErrorHandler(count_handler_calls);
+  vc_setErrorPolicy(STP_ON_ERROR_RETURN);
+  handler_calls = 0;
+  char* buf = nullptr;
+  size_t len = 0;
+  vc_printBVBitStringToBuffer(nullptr, &buf, &len);
+  EXPECT_EQ(1, handler_calls);
+  std::free(buf);
+  vc_setErrorPolicy(STP_ON_ERROR_ABORT);
+  vc_registerErrorHandler(nullptr);
+}

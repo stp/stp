@@ -44,6 +44,12 @@ target_compile_features(stp2 PRIVATE cxx_std_17)
 # The build-of-the-library side of the DLL_PUBLIC switch in c_interface.h (see
 # the note in lib/CMakeLists.txt; inert outside MSVC).
 target_compile_definitions(stp2 PRIVATE STP_EXPORTS)
+# The 2.x C API is the library's whole interface: the functions c_interface.h
+# declares DLL_PUBLIC are exported, and the shim's own helpers are not.
+set_target_properties(stp2 PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+)
 set_target_properties(stp2 PROPERTIES
     PUBLIC_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/include/stp/c_interface.h;${CMAKE_CURRENT_SOURCE_DIR}/include/stp/fp.hpp;${CMAKE_CURRENT_SOURCE_DIR}/include/stp/uf.hpp"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}

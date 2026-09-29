@@ -2364,7 +2364,12 @@ void vc_printBVBitStringToBuffer(Expr e, char** buf, size_t* len)
 {
   stp_term t = term_of(e, "vc_printBVBitStringToBuffer");
   std::string bits;
-  if (t == nullptr || !value_bits(t, bits))
+  if (t == nullptr) // term_of has reported it: the handler hears of it once
+  {
+    to_buffer(std::string(), buf, len);
+    return;
+  }
+  if (!value_bits(t, bits))
   {
     fatal("vc_printBVToBuffer: Attempting to extract bit string from a NON-constant BITVECTOR: ");
     to_buffer(std::string(), buf, len);
