@@ -1060,12 +1060,20 @@ class FPNumRef(FPRef):
 
     def as_fraction(self):
         """The exact rational value (finite values only; NotAValue for NaN and infinities)."""
-        c = self._cls()
+        ebits, sbits, sign, exponent, c, significand = self._fields()
         if c in (_core.FP_NAN, _core.FP_INFINITY):
             raise NotAValue("%s has no rational value" % self.sexpr(), code=ErrorCode.NOT_A_VALUE,
                             function="FPNumRef.as_fraction")
-        num, den = self.fp_to_rational()
-        return Fraction(int(num), int(den))
+        # Decode the binary fields directly. Decimal strings for binary128's
+        # extremes exceed Python's integer-string digit limit.
+        if c == _core.FP_NORMAL:
+            significand |= 1 << (sbits - 1)
+        power = max(exponent, 1) - ((1 << (ebits - 1)) - 1) - (sbits - 1)
+        if sign:
+            significand = -significand
+        if power >= 0:
+            return Fraction(significand << power)
+        return Fraction(significand, 1 << -power)
 
     def as_string(self):
         return self.sexpr()

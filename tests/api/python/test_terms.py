@@ -305,6 +305,19 @@ def test_fp_values():
         FPVal(v, Float64())
 
 
+def test_quad_fraction_extremes_without_integer_string_limit_changes():
+    tm = TermManager()
+    quad = Float128(tm=tm)
+    smallest = fpFromBits(BitVecVal(1, 128, tm=tm), quad)
+    largest_bits = (0x7FFE << 112) | ((1 << 112) - 1)
+    largest = fpFromBits(BitVecVal(largest_bits, 128, tm=tm), quad)
+    assert smallest.as_fraction() == Fraction(1, 1 << 16494)
+    assert largest.as_fraction() == Fraction(((1 << 113) - 1) << 16271)
+    assert fpNeg(smallest).as_fraction() == -smallest.as_fraction()
+    assert fpNeg(largest).as_fraction() == -largest.as_fraction()
+    assert fpMinusZero(quad).as_fraction() == 0
+
+
 def test_literal_strictness():
     with pytest.raises(ArgumentError) as e:
         BitVecVal(256, 8)
