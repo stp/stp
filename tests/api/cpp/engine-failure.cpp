@@ -26,9 +26,12 @@ THE SOFTWARE.
 // engine's FatalError throws stp::EngineFatal inside an engine scope (and
 // ends the process outside one, as it always did); the API's hubs turn the
 // exception into INTERNAL and poison the manager, so that every later call
-// on it, its solvers, models and terms is refused with STATE. No public
-// entry reaches a FatalError with valid input any more, so the seam is
-// exercised through the API's internal header.
+// on it, its solvers, models and terms is refused with STATE. An engine
+// failure on valid input is a defect, and each one found has its regression
+// test beside its fix (a model read after the incremental driver engaged
+// over arrays and a function: models.cpp; a folded array-equality operand:
+// const-arrays.cpp). A defect is nothing to rely on to reach the seam, so it
+// is exercised here through the API's internal header.
 
 #define STP_API_INTERNAL 1
 #include "../../../lib/Api/Internal.h"
