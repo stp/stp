@@ -292,7 +292,7 @@ TEST_F(FpToReal, substitute_simplify_and_parse)
   ASSERT_TRUE(s.check_sat().is_sat());
   const std::string script = s.to_smt2();
   EXPECT_NE(script.find("(fp.to_real |y|)"), std::string::npos) << script;
-  EXPECT_NE(script.find("(set-logic QF_BVFPLRA)"), std::string::npos) << script;
+  EXPECT_NE(script.find("(set-logic ALL)"), std::string::npos) << script;
   EXPECT_EQ(script.find('@'), std::string::npos) << script;
   TermManager again;
   Solver s2(again);

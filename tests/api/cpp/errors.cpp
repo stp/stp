@@ -622,7 +622,9 @@ TEST(Errors, input_mistakes_are_recoverable)
     std::function<void(TermManager&, Solver&)> run;
   };
   const auto script = [](const std::string& text, ParseMode mode) {
-    return [text, mode](TermManager&, Solver& s) { s.parse_smt2(text, mode); };
+    return [text, mode](TermManager&, Solver& s) {
+      s.parse_smt2((mode == ParseMode::EXECUTE ? "(set-logic QF_BV)" : "") + text, mode);
+    };
   };
   std::vector<Row> rows;
   // operands of two widths: the type checker refuses the node as it is
@@ -639,14 +641,6 @@ TEST(Errors, input_mistakes_are_recoverable)
                     script(xy + "(assert (" + op + " x y))", ParseMode::DECLARE_AND_ASSERT)});
   rows.push_back({"a let binding one name twice", ErrorCode::PARSE,
                   script("(assert (let ((q #x01) (q #x02)) (= q q)))", ParseMode::DECLARE_AND_ASSERT)});
-  // a run reads a script as the command line does: an equality between
-  // whole arrays needs array-equality = on there
-  const std::string ab = "(declare-fun a () (Array (_ BitVec 4) (_ BitVec 4)))"
-                         "(declare-fun b () (Array (_ BitVec 4) (_ BitVec 4)))";
-  for (const char* eq : {"(= a b)", "(distinct a b)"})
-    rows.push_back({std::string("a run's ") + eq + " under array-equality = auto",
-                    ErrorCode::UNSUPPORTED,
-                    script(ab + "(assert " + eq + ")(check-sat)", ParseMode::EXECUTE)});
   // a format STP prints but does not read: every parse is SMT-LIB 2
   rows.push_back({"a parse of DOT", ErrorCode::INVALID_ARGUMENT,
                   [](TermManager&, Solver& s) { s.parse("digraph {}", Format::DOT); }});

@@ -118,7 +118,7 @@ TEST(c_runs, a_source_is_read_and_executed)
   Session a;
   Heard h;
   attach(a.s, h);
-  Lines l{{"(declare-fun a () (_ BitVec 8))\n", "(declare-fun b () (_ BitVec 8))\n",
+  Lines l{{"(set-logic QF_BV)\n", "(declare-fun a () (_ BitVec 8))\n", "(declare-fun b () (_ BitVec 8))\n",
            "(assert (= (bvmul a b) #x0f))\n", "(assert (bvugt a #x01))\n",
            "(assert (bvugt b #x01))\n", "(check-sat)\n"}};
   ASSERT_EQ(STP_OK, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_AUTO, STP_PARSE_EXECUTE));
@@ -132,8 +132,8 @@ TEST(c_runs, a_source_is_read_and_executed)
 TEST(c_runs, a_failed_source_is_an_io_error)
 {
   Session a;
-  Lines l{{"(declare-fun a () Bool)\n", "(assert a)\n"}};
-  l.fail_after = 1;
+  Lines l{{"(set-logic QF_BV)\n", "(declare-fun a () Bool)\n", "(assert a)\n"}};
+  l.fail_after = 2;
   EXPECT_EQ(STP_ERROR, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_SMTLIB2, STP_PARSE_EXECUTE));
   EXPECT_EQ(STP_ERR_IO, stp_tm_error(a.tm)->code);
   stp_tm_clear_error(a.tm);
@@ -157,14 +157,14 @@ TEST(c_runs, parse_only_decides_nothing)
   Session a;
   Heard h;
   attach(a.s, h);
-  Lines l{{"(declare-fun x () (_ BitVec 8))\n", "(assert (= x #x05))\n", "(check-sat)\n"}};
+  Lines l{{"(set-logic QF_BV)\n", "(declare-fun x () (_ BitVec 8))\n", "(assert (= x #x05))\n", "(check-sat)\n"}};
   ASSERT_EQ(STP_OK, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_SMTLIB2, STP_PARSE_ONLY));
   EXPECT_EQ("", h.out); // nothing decided
   EXPECT_EQ(1u, stp_solver_num_assertions(a.s));
   // PARSE_ONLY through parse_smt2: the commands run, the check does not
   Heard h2;
   attach(a.s, h2);
-  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(a.s, "(declare-fun p () Bool)(assert p)(check-sat)(echo \"done\")",
+  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(a.s, "(set-logic QF_BV)(declare-fun p () Bool)(assert p)(check-sat)(echo \"done\")",
                                           STP_PARSE_ONLY));
   EXPECT_EQ("\"done\"\n", h2.out);
 }
@@ -174,7 +174,7 @@ TEST(c_runs, execute_answers_a_script_from_a_source)
   Session a;
   Heard h;
   attach(a.s, h);
-  Lines l{{"(declare-fun x () (_ BitVec 8))\n", "(assert (= x #x05))\n", "(assert (not (= x #x05)))\n",
+  Lines l{{"(set-logic QF_BV)\n", "(declare-fun x () (_ BitVec 8))\n", "(assert (= x #x05))\n", "(assert (not (= x #x05)))\n",
            "(check-sat)\n"}};
   ASSERT_EQ(STP_OK, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_SMTLIB2, STP_PARSE_EXECUTE));
   EXPECT_EQ("unsat\n", h.out);
@@ -185,7 +185,7 @@ TEST(c_runs, the_fatal_error_handler_hears_first)
   Session a;
   Heard h;
   attach(a.s, h);
-  Lines l{{"(declare-fun x () (_ BitVec 0))\n"}};
+  Lines l{{"(set-logic QF_BV)\n", "(declare-fun x () (_ BitVec 0))\n"}};
   EXPECT_EQ(STP_ERROR, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_SMTLIB2, STP_PARSE_EXECUTE));
   EXPECT_EQ(STP_ERR_PARSE, stp_tm_error(a.tm)->code);
   stp_tm_clear_error(a.tm);
@@ -194,7 +194,7 @@ TEST(c_runs, the_fatal_error_handler_hears_first)
   EXPECT_NE(std::string::npos, h.err.find("Fatal Error: " + h.fatal)) << h.err;
   // cleared: nobody is told
   stp_solver_set_fatal_error_handler(a.s, nullptr, nullptr);
-  Lines again{{"(declare-fun y () (_ BitVec 0))\n"}};
+  Lines again{{"(set-logic QF_BV)\n", "(declare-fun y () (_ BitVec 0))\n"}};
   h.fatal.clear();
   EXPECT_EQ(STP_ERROR, stp_solver_parse_source(a.s, read_lines, &again, STP_FORMAT_SMTLIB2, STP_PARSE_EXECUTE));
   stp_tm_clear_error(a.tm);
