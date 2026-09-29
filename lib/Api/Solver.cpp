@@ -352,9 +352,24 @@ void SolverImpl::apply_options(const char* fn)
   engine_call(mgr, fn, [&] { apply_all_options(t, options); });
 }
 
+// An entry latched by another behaves as before-first-check while that one
+// is true (fp-abstraction under fp-abstraction-incremental: the driver's
+// session is prepared once).
+Settable SolverImpl::effective_settable(const OptionSpec& spec) const
+{
+  if (spec.latched_by != nullptr && spec.settable == Settable::ANYTIME)
+    if (const OptionSpec* latch = detail::find_option(spec.latched_by))
+    {
+      const OptionValue v = options.resolved(detail::option_index(latch));
+      if (v.index() == 0 && std::get<bool>(v))
+        return Settable::BEFORE_FIRST_CHECK;
+    }
+  return spec.settable;
+}
+
 bool SolverImpl::option_window_open(const OptionSpec& spec) const
 {
-  switch (spec.settable)
+  switch (effective_settable(spec))
   {
     case Settable::ANYTIME: return true;
     case Settable::BEFORE_FIRST_CHECK: return checks == 0;
@@ -900,12 +915,17 @@ void live_write(SolverImpl* s, std::string_view name, const char* fn)
     detail::fail_option(ErrorCode::OPTION_VALUE, spec->name,
                         "manager-scoped: pass it to TermManager's constructor, not to a solver");
   if (!s->option_window_open(*spec))
+  {
+    const Settable window = s->effective_settable(*spec);
     detail::fail_option(ErrorCode::OPTION_TIMING, spec->name,
                         std::string("can only be set ") +
-                            (spec->settable == Settable::CONSTRUCTION
+                            (window == Settable::CONSTRUCTION
                                  ? "at construction (pass it to Solver's constructor)"
                                  : "before the first check") +
-                            " (settable = " + to_string(spec->settable) + ")");
+                            (window != spec->settable
+                                 ? std::string(" while ") + spec->latched_by + " is true"
+                                 : std::string(" (settable = ") + to_string(spec->settable) + ")"));
+  }
 }
 
 // A write reaches the engine as an application of the whole set, not of the

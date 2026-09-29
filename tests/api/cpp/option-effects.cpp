@@ -225,3 +225,25 @@ TEST(OptionEffects, incremental_follows_its_last_value)
   }
   EXPECT_EQ(s.statistics().uint64("incremental.engaged"), 1u);
 }
+
+// The incremental driver under the floating-point abstraction expands arrays
+// eagerly for its whole session; switching to another solver of the manager
+// and back must not hand it the lazy strategy half way.
+TEST(OptionEffects, the_fp_abstraction_driver_keeps_its_array_strategy)
+{
+  TermManager tm;
+  const Term x = tm.declare("x", tm.mk_bv_sort(8));
+  Options o;
+  o.set_bool("fp-abstraction", true);
+  o.set_bool("fp-abstraction-incremental", true);
+  o.set("incremental", "on");
+  Solver a(tm, o), b(tm);
+  a.add(x == 1);
+  ASSERT_TRUE(a.check_sat().is_sat());
+  EXPECT_TRUE(flags_after(tm).ackermannisation);
+  b.add(x == 2);
+  ASSERT_TRUE(b.check_sat().is_sat());
+  EXPECT_FALSE(flags_after(tm).ackermannisation);
+  ASSERT_TRUE(a.check_sat().is_sat());
+  EXPECT_TRUE(flags_after(tm).ackermannisation);
+}

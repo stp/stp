@@ -130,6 +130,9 @@ public:
   // session is active; the batch pipeline never touches it.
   IncrementalSolver* incrementalSolver = nullptr;
   RealSessionState* realSession = nullptr;
+  // The driver was created under the floating-point abstraction and so
+  // expands arrays eagerly for its whole session (getIncrementalSolver).
+  bool incrementalArraysEager = false;
 
   // The API's engagement bookkeeping (lib/Api/Solver.cpp), mirroring the
   // SMT-LIB2 frontend's: once a push has made the session incremental, the

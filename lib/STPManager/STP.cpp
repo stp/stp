@@ -184,10 +184,16 @@ IncrementalSolver* STP::getIncrementalSolver()
                      "expands arrays eagerly (--ackermanize)."
                   << std::endl;
       bm->UserFlags.ackermannisation = true;
+      incrementalArraysEager = true;
     }
     incrementalSolver =
         new IncrementalSolver(bm, Ctr_Example, simp, arrayTransformer);
   }
+  else if (incrementalArraysEager)
+    // The flags are the manager's, and the API puts every entry back to its
+    // default when it switches between solvers of one manager: the session
+    // keeps the array strategy it began with.
+    bm->UserFlags.ackermannisation = true;
   return incrementalSolver;
 }
 
@@ -195,6 +201,7 @@ void STP::resetIncrementalSolver()
 {
   delete incrementalSolver;
   incrementalSolver = nullptr;
+  incrementalArraysEager = false;
 }
 
 SATSolver* STP::get_new_sat_solver()

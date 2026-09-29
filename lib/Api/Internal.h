@@ -613,6 +613,7 @@ struct SolverImpl
   std::size_t level_count() const; // engine levels while active, shelved ones otherwise
   void reapply_engine_defaults(); // every registry default, then this solver's options
   void apply_options(const char* fn);
+  Settable effective_settable(const OptionSpec& spec) const; // latched_by applied
   bool option_window_open(const OptionSpec& spec) const;
   void ensure_snapshot(); // materialise a pending model before the tables change
   std::shared_ptr<const ModelSnapshot> take_snapshot(Verdict v);

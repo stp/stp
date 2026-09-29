@@ -299,6 +299,11 @@ class Emitter:
             required = o.get('requires', {}).get('option')
             if required is not None and required not in onames:
                 raise SystemExit('options.toml: %s requires unknown %s' % (o['name'], required))
+            latch = o.get('latched_by')
+            if latch is not None:
+                other = next((p for p in self.options if p['name'] == latch), None)
+                if other is None or other['type'] != 'bool' or o['settable'] != 'anytime':
+                    raise SystemExit('options.toml: %s: latched_by names a bool entry, on an anytime entry' % o['name'])
             form = o.get('cli_form', 'value')
             if form not in ('value', 'flag', 'none'):
                 raise SystemExit('options.toml: %s: cli_form %r is not value, flag or none' % (o['name'], form))

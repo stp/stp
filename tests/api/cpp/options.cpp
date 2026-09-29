@@ -1005,3 +1005,30 @@ TEST(Options, reset_all_on_a_live_solver)
   EXPECT_EQ(t.options().get_str("sat-backend"), "cadical");
   EXPECT_TRUE(t.options().is_set("sat-backend"));
 }
+
+// An entry latched by another is before-first-check while that one is true:
+// fp-abstraction under fp-abstraction-incremental, whose driver prepares its
+// session once.
+TEST(Options, a_latched_entry_closes_at_the_first_check)
+{
+  TermManager tm;
+  const Term x = tm.declare("x", tm.mk_bv_sort(8));
+  Options o;
+  o.set_bool("fp-abstraction-incremental", true);
+  Solver s(tm, o);
+  s.options().set_bool("fp-abstraction", true); // open until the first check
+  s.add(x == 1);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  auto e = API_ERROR_OF(s.options().set_bool("fp-abstraction", false));
+  ASSERT_TRUE(e.has_value());
+  EXPECT_EQ(e->code(), ErrorCode::OPTION_TIMING);
+  EXPECT_NE(std::string(e->what()).find("while fp-abstraction-incremental is true"), std::string::npos)
+      << e->what();
+  EXPECT_TRUE(s.options().get_bool("fp-abstraction"));
+  // unlatched, the entry is anytime
+  Solver t(tm);
+  t.add(x == 1);
+  ASSERT_TRUE(t.check_sat().is_sat());
+  t.options().set_bool("fp-abstraction", true);
+  EXPECT_TRUE(t.check_sat().is_sat());
+}
