@@ -440,7 +440,7 @@ public:
   std::string to_string(Format f, bool share_subterms = true) const;
 
   bool same_as(const Term&) const noexcept; ///< structural: the same node
-  struct Less
+  struct STP_API_EXPORT Less
   {
     bool operator()(const Term&, const Term&) const noexcept;
   }; ///< by id; std::less<Term> is this
@@ -1256,13 +1256,16 @@ using namespace api;
 
 } // namespace stp
 
+// The library defines these two, and Term::Less: exported, as a Windows DLL
+// does not export what it is not told to, and the containers that use them
+// would not link.
 namespace std
 {
-template <> struct hash<stp::api::Term>
+template <> struct STP_API_EXPORT hash<stp::api::Term>
 {
   std::size_t operator()(const stp::api::Term& t) const noexcept;
 };
-template <> struct hash<stp::api::Sort>
+template <> struct STP_API_EXPORT hash<stp::api::Sort>
 {
   std::size_t operator()(const stp::api::Sort& s) const noexcept;
 };
