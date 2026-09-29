@@ -12,9 +12,14 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import inspect
+import os
+import sys
+from pathlib import Path
+
+stp_build = Path(os.environ.get(
+    'STP_DOCS_BUILD_DIR', Path(__file__).resolve().parents[1] / 'build')).resolve()
+sys.path.insert(0, str(stp_build / 'bindings/python'))
 
 
 # -- Project information -----------------------------------------------------
@@ -40,7 +45,38 @@ release = '2.4.1'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    'breathe',
+    'sphinx.ext.autodoc',
 ]
+
+breathe_projects = {
+    'stp-c': str(stp_build / 'docs/doxygen/c/xml'),
+    'stp-cpp': str(stp_build / 'docs/doxygen/cpp/xml'),
+}
+breathe_domain_by_extension = {'h': 'c', 'hpp': 'cpp'}
+autodoc_member_order = 'bysource'
+
+
+def python_signature(app, what, name, obj, options, signature, return_annotation):
+    # Cython embeds signatures in docstrings. Autodoc can inherit one from a
+    # base class even when the Python wrapper has a different signature, e.g.
+    # Solver.set_args(*argv) wrapping SolverHandle.set_args(argv). Introspection
+    # sees the public wrapper and also works for our binding=True Cython methods.
+    if what in ('function', 'method') and name.startswith('stp.'):
+        try:
+            actual = inspect.signature(obj)
+        except (TypeError, ValueError):
+            return None
+        params = list(actual.parameters.values())
+        if what == 'method' and params and params[0].name in ('self', 'cls'):
+            params = params[1:]
+        actual = actual.replace(parameters=params, return_annotation=inspect.Signature.empty)
+        return str(actual), return_annotation
+    return None
+
+
+def setup(app):
+    app.connect('autodoc-process-signature', python_signature)
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -116,7 +152,7 @@ html_theme_options = {
 
     'show_powered_by': False,
     'show_relbars': False,
-    'sidebar_collapse': False,
+    'sidebar_collapse': True,
     'page_width': '940px',
     'sidebar_width': '240px',
 

@@ -119,6 +119,7 @@ page <https://smt-lib.org/>`__.
    :maxdepth: 1
 
    api
+   reference/index
    c-api-lifetime
    array-extensionality
    uninterpreted-functions
