@@ -493,6 +493,44 @@ TEST(c_runtime, batch_values_substitution_and_children)
   stp_tm_release(tm);
 }
 
+TEST(c_runtime, array_equality_without_completion)
+{
+  for (bool simplify : {false, true})
+  {
+    SCOPED_TRACE(simplify);
+    stp_tm tm = stp_tm_new_with(simplify, STP_RM_RNE, 16);
+    stp_tm_scope_push(tm);
+    stp_sort bv2 = stp_mk_bv_sort(tm, 2), A = stp_mk_array_sort(tm, bv2, bv2);
+    stp_term a = stp_declare(tm, "a", A), b = stp_declare(tm, "b", A);
+    stp_term eq = stp_eq(tm, a, b), ne = stp_not(tm, eq);
+    stp_solver s = stp_solver_new(tm, nullptr);
+    stp_result result;
+    ASSERT_EQ(STP_OK, stp_solver_check_sat(s, &result));
+    ASSERT_EQ(STP_SAT, result.kind);
+    stp_model m = stp_solver_model(s);
+    for (stp_term t : {a, b, eq, ne})
+    {
+      EXPECT_EQ(nullptr, stp_model_try_value(m, t));
+      EXPECT_EQ(nullptr, stp_tm_error(tm));
+    }
+    bool value = false;
+    ASSERT_EQ(STP_OK, stp_model_bool(m, eq, &value));
+    EXPECT_TRUE(value);
+    ASSERT_EQ(STP_OK, stp_model_bool(m, ne, &value));
+    EXPECT_FALSE(value);
+    EXPECT_EQ(nullptr, stp_model_try_value(m, eq));
+    EXPECT_EQ(nullptr, stp_tm_error(tm));
+    stp_term self = stp_model_try_value(m, stp_eq(tm, a, a));
+    ASSERT_NE(nullptr, self);
+    ASSERT_EQ(STP_OK, stp_term_to_bool(self, &value));
+    EXPECT_TRUE(value);
+    stp_model_release(m);
+    stp_solver_delete(s);
+    stp_tm_scope_pop(tm);
+    stp_tm_release(tm);
+  }
+}
+
 // An array's value is its array value's term; a function has none.
 TEST(c_runtime, the_value_of_an_array_or_a_function)
 {

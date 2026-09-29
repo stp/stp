@@ -252,6 +252,115 @@ TEST_F(Models, the_value_of_an_array_or_a_function_term)
   EXPECT_EQ(m.function_value(f).size(), 1u);
 }
 
+TEST(ArrayEqualityModels, try_value_refuses_missing_bases)
+{
+  for (bool simplify : {false, true})
+    for (const char* fill : {"zero", "ones"})
+    {
+      SCOPED_TRACE(simplify);
+      SCOPED_TRACE(fill);
+      TermManager::Config config;
+      config.simplify = simplify;
+      TermManager tm(config);
+      const Sort bv2 = tm.mk_bv_sort(2), A = tm.mk_array_sort(bv2, bv2);
+      const Term a = tm.declare("a", A), b = tm.declare("b", A);
+      const Term zero = tm.mk_bv(2, 0), one = tm.mk_bv(2, 1);
+      const Term k = tm.mk_const_array(A, zero);
+      Solver s(tm);
+      s.options().set_str("model-array-fill", fill);
+      ASSERT_TRUE(s.check_sat().is_sat());
+      const Model m = s.model();
+      const Term late = tm.declare("late", A);
+      EXPECT_FALSE(m.in_core(a));
+      EXPECT_FALSE(m.in_core(b));
+      EXPECT_FALSE(m.try_value(a).has_value());
+      EXPECT_FALSE(m.try_value(b).has_value());
+      // Explicit completion still uses the configured fill, without adding
+      // the missing arrays to the snapshot for later non-completing reads.
+      EXPECT_TRUE(m.bool_value(a == b));
+      EXPECT_FALSE(m.bool_value(a != b));
+      EXPECT_EQ(m.bool_value(a == k), std::string(fill) == "zero");
+      for (const Term& t : {a == b, a != b, a == k, k == b, distinct({a, b, late}),
+                            store(a, zero, one) == store(b, zero, one)})
+        EXPECT_FALSE(m.try_value(t).has_value()) << t;
+      EXPECT_FALSE(m.in_core(a));
+      EXPECT_FALSE(m.in_core(b));
+    }
+}
+
+TEST(ArrayEqualityModels, determined_without_base_values)
+{
+  for (bool simplify : {false, true})
+  {
+    SCOPED_TRACE(simplify);
+    TermManager::Config config;
+    config.simplify = simplify;
+    TermManager tm(config);
+    const Sort bv1 = tm.mk_bv_sort(1), A = tm.mk_array_sort(bv1, bv1);
+    const Term a = tm.declare("a", A), b = tm.declare("b", A);
+    const Term zero = tm.mk_bv(1, 0), one = tm.mk_bv(1, 1);
+    const Term k0 = tm.mk_const_array(A, zero), k1 = tm.mk_const_array(A, one);
+    Solver s(tm);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    const Model m = s.model();
+    const auto determined = [&](const Term& left, const Term& right, bool equal) {
+      const auto eq = m.try_value(left == right), ne = m.try_value(left != right);
+      ASSERT_TRUE(eq.has_value());
+      ASSERT_TRUE(ne.has_value());
+      EXPECT_EQ(eq->to_bool(), equal);
+      EXPECT_EQ(ne->to_bool(), !equal);
+    };
+    determined(a, a, true);
+    determined(k0, k1, false);
+    const Term half_a = store(a, zero, one), half_b = store(b, zero, one);
+    // The same unknown base needs no fill; a known differing cell also
+    // decides the result without looking at either base's default.
+    determined(half_a, half_a, true);
+    determined(half_a, store(b, zero, zero), false);
+    // Writes covering both indices on both sides leave no unknown cells.
+    const Term full_a = store(half_a, one, zero), full_b = store(half_b, one, zero);
+    determined(full_a, full_b, true);
+    determined(full_a, k1, false);
+    EXPECT_FALSE(m.try_value(half_a == half_b).has_value());
+    // Covering the domain only in the union still needs a missing cell on
+    // each side; it must not be mistaken for full coverage of both arrays.
+    EXPECT_FALSE(m.try_value(half_a == store(b, one, zero)).has_value());
+  }
+}
+
+TEST(ArrayEqualityModels, uses_recorded_fills_without_completion)
+{
+  for (bool simplify : {false, true})
+    for (const char* fill : {"zero", "ones"})
+    {
+      SCOPED_TRACE(simplify);
+      SCOPED_TRACE(fill);
+      TermManager::Config config;
+      config.simplify = simplify;
+      TermManager tm(config);
+      const Sort bv2 = tm.mk_bv_sort(2), A = tm.mk_array_sort(bv2, bv2);
+      const Term a = tm.declare("a", A), b = tm.declare("b", A);
+      const Term zero = tm.mk_bv(2, 0), one = tm.mk_bv(2, 1);
+      Solver s(tm);
+      s.options().set_str("model-array-fill", fill);
+      s.add(a[zero] == one);
+      s.add(b[zero] == one);
+      ASSERT_TRUE(s.check_sat().is_sat());
+      const Model m = s.model();
+      ASSERT_TRUE(m.in_core(a));
+      ASSERT_TRUE(m.in_core(b));
+      const Term same = store(tm.mk_const_array(A, m.array_value(a).default_value()), zero, one);
+      const Term different = store(tm.mk_const_array(A, tm.mk_bv(2, 2)), zero, one);
+      for (const auto& [t, expected] :
+           {std::pair<Term, bool>{a == b, true}, {a == same, true}, {a == different, false}})
+      {
+        const auto value = m.try_value(t);
+        ASSERT_TRUE(value.has_value()) << t;
+        EXPECT_EQ(value->to_bool(), expected);
+      }
+    }
+}
+
 TEST_F(Models, array_values)
 {
   const Term i = tm.declare("i", bv32);

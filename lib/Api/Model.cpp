@@ -898,14 +898,19 @@ bool Evaluator::arrays_equal(const ASTNode& a, const ASTNode& b)
   // base
   if (base_a == base_b || covers_index_sort(m_, m_->sort_of_node(a, fn_), indices.size()))
     return true;
-  auto fa = s_.arrays.find(base_a);
-  auto fb = s_.arrays.find(base_b);
-  const ASTNode fill_a = fa != s_.arrays.end() ? fa->second.fill
-                         : m_->is_const_array(base_a) ? eval(m_->const_array_default(base_a))
-                                                                  : fill_value(m_, m_->sort_of_node(base_a, fn_), s_.fill_ones, fn_);
-  const ASTNode fill_b = fb != s_.arrays.end() ? fb->second.fill
-                         : m_->is_const_array(base_b) ? eval(m_->const_array_default(base_b))
-                                                                  : fill_value(m_, m_->sort_of_node(base_b, fn_), s_.fill_ones, fn_);
+  const auto base_fill = [&](const ASTNode& base) {
+    if (const auto it = s_.arrays.find(base); it != s_.arrays.end())
+      return it->second.fill;
+    if (m_->is_const_array(base))
+      return eval(m_->const_array_default(base));
+    // Recorded arrays include their defaults. Supplying one for an absent
+    // base is completion, just as reading an absent array cell is.
+    if (!complete_)
+      incomplete_ = true;
+    return fill_value(m_, m_->sort_of_node(base, fn_), s_.fill_ones, fn_);
+  };
+  const ASTNode fill_a = base_fill(base_a);
+  const ASTNode fill_b = base_fill(base_b);
   return fill_a == fill_b;
 }
 
