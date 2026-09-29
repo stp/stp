@@ -947,6 +947,9 @@ public:
       const std::function<bool(const ASTNode&)>& condition_oracle =
           std::function<bool(const ASTNode&)>()) const noexcept;
   DLL_PUBLIC bool HasRealModelValue(const ASTNode& term) const noexcept;
+  // Whether the exact model's value of Real symbol `symbol` is the solve's,
+  // rather than the zero of a symbol no arithmetic mentioned.
+  DLL_PUBLIC bool RealModelSolveValued(const ASTNode& symbol) const noexcept;
   DLL_PUBLIC std::string GetRealModelValue(const ASTNode& term) const;
   DLL_PUBLIC std::string GetRealModelNumerator(const ASTNode& term) const;
   DLL_PUBLIC std::string GetRealModelDenominator(const ASTNode& term) const;

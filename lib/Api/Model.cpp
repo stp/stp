@@ -333,6 +333,11 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
         (bm->FoundIntroducedSymbolSet(sym) || mgr->decl_of(sym) != nullptr ||
          STPMgr::isReservedSymbolName(sym.GetName())))
       continue;
+    // A symbol no arithmetic mentioned has the model's zero, which is the
+    // completion's value too: it is not in the core, as a bit-vector symbol
+    // the solve never saw is not.
+    if (sym.GetKind() == SYMBOL && !bm->RealModelSolveValued(sym))
+      continue;
     ASTNode value;
     if (bm->HasRealModelValue(sym) && bm->RealModelValueNode(sym, value) && !value.IsNull())
     {

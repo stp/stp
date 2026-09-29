@@ -155,6 +155,24 @@ TEST_F(Models, completion_versus_try_value)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
+// A Real symbol no arithmetic of the check mentioned is outside the core, as a
+// bit-vector symbol the solve never saw is: the exact model's zero for it made
+// in_core true, try_value 0 and to_smt2 print it.
+TEST_F(Models, an_unused_real_is_outside_the_core)
+{
+  const Term r = tm.declare("r", R), unused = tm.declare("ur", R);
+  s.add(x == 1);
+  s.add(real_gt(r, tm.mk_real(1, 2)));
+  ASSERT_TRUE(s.check_sat().is_sat());
+  const Model m = s.model();
+  EXPECT_TRUE(m.in_core(r));
+  EXPECT_FALSE(m.in_core(unused));
+  EXPECT_FALSE(m.try_value(unused).has_value());
+  EXPECT_EQ(m.real_value(unused).str(), "0"); // value completes it
+  EXPECT_EQ(m.to_smt2().find("ur"), std::string::npos) << m.to_smt2();
+  EXPECT_EQ(m.symbols().size(), 2u);
+}
+
 // Whether `t` holds no declared symbol: the shape of a value term.
 bool symbol_free(const Term& t)
 {
