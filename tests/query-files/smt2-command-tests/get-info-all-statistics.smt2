@@ -12,9 +12,15 @@
 (set-logic QF_BV)
 (declare-fun a () (_ BitVec 8))
 (declare-fun b () (_ BitVec 8))
+; Answered before any check rather than refused for being outside sat or
+; unsat mode. No stage has done work yet, so the process figures close it.
+; CHECK: ^\(:check-sat-calls 0$
+; CHECK-NEXT: ^ :cpu-time [0-9]+\.[0-9]+$
+; CHECK-NEXT: ^ :peak-memory-mb [0-9]+\.[0-9]+\)$
+(get-info :all-statistics)
 (assert (= (bvmul a b) #x0f))
 (assert (bvugt a #x01))
-; CHECK: ^sat$
+; CHECK-NEXT: ^sat$
 (check-sat)
 ; CHECK-NEXT: ^\(:check-sat-calls 1$
 ; CHECK-NEXT: ^ :cpu-time [0-9]+\.[0-9]+$

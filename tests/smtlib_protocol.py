@@ -168,7 +168,6 @@ class CommandModes(unittest.TestCase):
         for query, option, assertion in [
                 ('get-model', 'produce-models', 'true'),
                 ('get-value (true)', 'produce-models', 'true'),
-                ('get-assertions', 'produce-assertions', 'true'),
                 ('get-assignment', 'produce-assignments', 'true'),
                 ('get-proof', 'produce-proofs', 'false'),
                 ('get-unsat-core', 'produce-unsat-cores', 'false'),
@@ -221,14 +220,49 @@ class CommandModes(unittest.TestCase):
         self.assertTrue(result.stdout.endswith('false\nfalse\nfalse\nfalse\nsat\n'))
 
     def test_information_query_modes(self):
-        self.assert_error('(get-info :all-statistics)',
-                          'get-info :all-statistics requires a preceding check-sat')
         for before in ['', '(check-sat)', '(assert false)(check-sat)',
                        '(check-sat)(reset-assertions)']:
             with self.subTest(before=before):
                 self.assert_error('(set-logic QF_BV)' + before +
                                   '(get-info :reason-unknown)',
                                   'get-info :reason-unknown requires a preceding unknown result')
+
+    def test_statistics_before_checks_and_after_context_changes(self):
+        result = run('''
+(get-info :all-statistics)
+(set-logic QF_BV)
+(get-info :all-statistics)
+(check-sat)
+(assert true)
+(get-info :all-statistics)
+(reset)
+(get-info :all-statistics)
+''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(re.findall(r':check-sat-calls (\d+)', result.stdout),
+                         ['0', '0', '1', '0'])
+        # Reset must not leave the previous check's stage counters behind.
+        self.assertRegex(result.stdout, r'\(:check-sat-calls 0\n'
+                         r' :cpu-time [\d.]+\n :peak-memory-mb [\d.]+\)\n$')
+
+    def test_assertions_are_always_available(self):
+        for option in ['', '(set-option :produce-assertions false)',
+                       '(set-option :produce-assertions true)']:
+            with self.subTest(option=option):
+                result = run(option + '''
+(get-assertions)
+(set-logic QF_BV)
+(declare-const p Bool)
+(assert p)
+(push 1)
+(assert (not p))
+(get-assertions)
+(pop 1)
+(get-assertions)
+''')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(result.stdout,
+                                 '(\n)\n(\n|p|\n(not |p|)\n)\n(\n|p|\n)\n')
 
 
 class SortAliases(unittest.TestCase):

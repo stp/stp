@@ -91,9 +91,11 @@ Implemented language and protocol features
        ``get-value`` for the same model.
    * - Other queries
      - ``check-sat-assuming`` accepts Boolean terms; ``get-unsat-assumptions``
-       requires its production option. ``get-assertions`` requires
-       ``:produce-assertions true``. Information and option queries report
-       the implemented settings.
+       requires its production option. STP always retains assertions, so
+       ``get-assertions`` works regardless of ``:produce-assertions``.
+       ``get-info :all-statistics`` is available before solving and after
+       context changes. Other information and option queries report the
+       implemented settings.
    * - Responses and channels
      - ``:print-success`` defaults to false. ``echo`` produces one string
        response. Regular and diagnostic output channels support

@@ -123,6 +123,7 @@ void Cpp_interface::init()
   delayed_bv_auto_engagement = false;
   lra_logic = false;
   solves_run = 0;
+  last_check_work.clear();
 }
 
 void Cpp_interface::addFrame()
@@ -1870,9 +1871,6 @@ static const char* categoryKeyword(RunTimes::Category c)
 
 void Cpp_interface::getInfo(std::string flag)
 {
-  if (protocol_checks && flag == "all-statistics" &&
-      mode != Mode::Sat && mode != Mode::Unsat)
-    refuseCurrentCommand("get-info :all-statistics requires a preceding check-sat");
   if (protocol_checks && flag == "reason-unknown" &&
       (mode != Mode::Sat || bm.getUnknownReason() == UnknownReason::None))
     refuseCurrentCommand("get-info :reason-unknown requires a preceding unknown result");
@@ -2122,8 +2120,8 @@ bool declaredSortCarrierMayBeShort(const STPMgr& bm, const ASTVec& assertions,
 
 void Cpp_interface::getAssertions()
 {
-  if (!produce_assertions)
-    unavailableQuery("get-assertions", "produce-assertions");
+  // Assertions are always retained. Like cvc5, allow inspection regardless
+  // of :produce-assertions rather than reject information already available.
   // GetAsserts() flattens the stack into the individual asserted formulas,
   // unlike getAssertVector(), which conjoins each level.
   const ASTVec v = GetAsserts();

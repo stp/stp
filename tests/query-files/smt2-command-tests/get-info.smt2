@@ -19,6 +19,11 @@
 (get-info :error-behavior)
 ; CHECK-NEXT: ^\(:assertion-stack-levels 0\)
 (get-info :assertion-stack-levels)
+; Statistics are available before the first check.
+; CHECK-NEXT: ^\(:check-sat-calls 0$
+; CHECK-NEXT: ^ :cpu-time
+; CHECK-NEXT: ^ :peak-memory-mb
+(get-info :all-statistics)
 (push 1)
 ; CHECK-NEXT: ^\(:assertion-stack-levels 1\)
 (get-info :assertion-stack-levels)

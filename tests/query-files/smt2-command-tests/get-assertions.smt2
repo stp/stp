@@ -1,7 +1,6 @@
 ; get-assertions prints the individual asserted formulas, and an empty list
 ; when nothing is asserted.
 ; RUN: %solver %s | %OutputCheck %s
-(set-option :produce-assertions true)
 (set-logic QF_BV)
 (declare-fun x () (_ BitVec 4))
 ; CHECK: ^\($

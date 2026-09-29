@@ -23,7 +23,6 @@
 ;
 (set-logic QF_BV)
 (set-option :produce-models true)
-(set-option :produce-assertions true)
 (declare-const x (_ BitVec 2))
 (declare-const y (_ BitVec 2))
 (declare-const z (_ BitVec 2))
