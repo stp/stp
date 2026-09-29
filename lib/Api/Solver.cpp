@@ -1731,11 +1731,22 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   });
   pi.onCheck([s, &stop_control, &arm_stop] {
     if (s->interrupt_consumed)
-      s->interrupt.store(false); // the last check reported it
+      s->interrupt.store(false); // the last check reported it, and ended in an exception
     s->interrupt_consumed = false;
     s->terminator_fired = false;
     if (stop_control)
       arm_stop(); // the same place, so bm->preparation_control still points at it
+    // an interrupt already pending is this check's, and answers it at once,
+    // as run_check_impl answers one of the API's own checks
+    return s->interrupt.exchange(false);
+  });
+  // The interrupt a check reported is taken back as the check ends, before
+  // its answer is written: one requested while it is written (from the output
+  // sink, say) is the next check's.
+  pi.onCheckEnd([s] {
+    if (s->interrupt_consumed)
+      s->interrupt.store(false);
+    s->interrupt_consumed = false;
   });
   GlobalParserInterface = &pi;
   GlobalSTP = s->stp;

@@ -1136,8 +1136,19 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   const EngineWork work(engine_work_failed);
   if (ignoreCheckSatRequest)
     return;
-  if (before_check)
-    before_check();
+  if (before_check && before_check())
+  {
+    // An interrupt pending as the check begins answers it at once, as the
+    // API answers its own checks: unknown, nothing solved, no model. (An
+    // interrupted search reports its budget gone, as this does.)
+    model_valid = false;
+    session_touched = true;
+    lastCheckWasAssuming = false;
+    bm.clearUnknown();
+    bm.noteUnknown(UnknownReason::Timeout, "the check was interrupted before it began");
+    ToSATBase::PrintOutput(&bm, bm.unknownResult());
+    return;
+  }
 
   // Upstream post-solve accounting can allocate after the coordinator has
   // installed an exact model.  A public check that unwinds at any later
@@ -1361,6 +1372,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
     printAbstractionCoverage(bm.UserFlags, std::cerr);
   }
 
+  if (after_check)
+    after_check();
   ToSATBase::PrintOutput(&bm, last_run.result);
 
   // User has specified -p option to print model.

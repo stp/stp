@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include "api_common.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <ios>
 #include <sstream>
@@ -574,6 +575,40 @@ TEST(Runs, interrupt_reaches_a_check_the_script_runs)
   EXPECT_TRUE(quick.interrupt_pending());
   EXPECT_EQ(quick.check_sat().reason(), UnknownReason::INTERRUPTED);
   EXPECT_FALSE(quick.interrupt_pending());
+}
+
+// An interrupt requested while an answer is written -- from the output sink,
+// which may call interrupt() -- is the next check's, and a check that begins
+// with one pending answers at once, solving nothing: so a sink can end a run
+// of many checks by interrupting at every answer.
+TEST(Runs, an_interrupt_from_the_output_sink_is_the_next_checks)
+{
+  TermManager tm;
+  Solver s(tm);
+  std::string out;
+  s.set_output_sink([&](std::string_view text) {
+    out += text;
+    if (std::count(out.begin(), out.end(), '\n') >= 2) // two answers out
+      s.interrupt();
+  });
+  std::string script = "(declare-fun a () (_ BitVec 16))(declare-fun b () (_ BitVec 16))\n";
+  for (int i = 0; i < 200; ++i)
+    script += "(push 1)(assert (= (bvmul ((_ zero_extend 16) a) ((_ zero_extend 16) b)) (_ bv" +
+              std::to_string(1000003 + 2 * i) +
+              " 32)))(assert (bvugt a #x0001))(assert (bvugt b #x0001))(check-sat)(pop 1)\n";
+  const auto start = std::chrono::steady_clock::now();
+  s.parse_smt2(script, ParseMode::EXECUTE);
+  EXPECT_LT(std::chrono::steady_clock::now() - start, 20s);
+  // two answered, then the interrupt each answer requests is the next check's
+  ASSERT_EQ(std::count(out.begin(), out.end(), '\n'), 200) << out;
+  const std::size_t third = out.find('\n', out.find('\n') + 1) + 1;
+  EXPECT_EQ(out.find("unknown"), third) << out;
+  std::string rest;
+  for (int i = 2; i < 200; ++i)
+    rest += "unknown\n";
+  EXPECT_EQ(out.substr(third), rest);
+  EXPECT_TRUE(s.interrupt_pending()); // the last answer's request, for the next check
+  s.clear_interrupt();
 }
 
 // An exception out of a check the input runs -- here the terminator's, which
