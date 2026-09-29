@@ -107,6 +107,7 @@ void Cpp_interface::init()
   produce_models = initial_produce_models;
   bm.UserFlags.produce_models = initial_produce_models;
   produce_assertions = false;
+  produce_assignments = false;
   produce_unsat_assumptions = false;
   global_declarations = false;
   mode = Mode::Start;
@@ -514,7 +515,7 @@ void Cpp_interface::removeSymbol(ASTNode to_remove)
 }
 
 void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
-                                  const ASTNode& function)
+                                  const ASTNode& function, bool named)
 {
   if (current_command_rejected)
     return;
@@ -523,6 +524,7 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
                          "' conflicts with a name retained by the term manager");
   Function f;
   f.name = name;
+  f.named = named;
 
   ASTNodeMap fromTo;
   for (size_t i = 0, size = params.size(); i < size; ++i)
@@ -1679,7 +1681,7 @@ void Cpp_interface::setOption(std::string option, std::string value)
     else if (value == "false")
     {
       produce_models = false;
-      bm.UserFlags.produce_models = false;
+      bm.UserFlags.produce_models = produce_assignments;
       success();
     }
     else
@@ -1716,6 +1718,12 @@ void Cpp_interface::setOption(std::string option, std::string value)
     else
       badBooleanOptionValue(option, value);
   }
+  else if (option == "produce-assignments")
+  {
+    produce_assignments = value == "true";
+    bm.UserFlags.produce_models = produce_models || produce_assignments;
+    success();
+  }
   else if (option == "produce-unsat-assumptions")
   {
     produce_unsat_assumptions = value == "true";
@@ -1750,8 +1758,9 @@ void Cpp_interface::getOption(std::string option)
     cout << (produce_assertions ? "true" : "false") << endl;
   else if (option == "produce-unsat-assumptions")
     cout << (produce_unsat_assumptions ? "true" : "false") << endl;
-  else if (option == "produce-proofs" || option == "produce-unsat-cores" ||
-           option == "produce-assignments")
+  else if (option == "produce-assignments")
+    cout << (produce_assignments ? "true" : "false") << endl;
+  else if (option == "produce-proofs" || option == "produce-unsat-cores")
     cout << "false" << endl;
   else if (option == "random-seed" || option == "reproducible-resource-limit" ||
            option == "verbosity")
@@ -2226,6 +2235,35 @@ void Cpp_interface::getValue(const ASTVec& v)
   cout << os.str() << std::endl;
 }
 
+void Cpp_interface::getAssignment()
+{
+  if (!produce_assignments)
+    unavailableQuery("get-assignment", "produce-assignments");
+  const EngineWork work(engine_work_failed);
+  if (!model_valid)
+    refuseCurrentCommand("get-assignment: no model is available for the current context");
+  if (GlobalSTP->hasIncrementalSolver())
+    GlobalSTP->getIncrementalSolver()->materializePendingModel();
+  std::map<std::string, ASTNode> labels;
+  for (const auto& definition : functions)
+    if (definition.second.named &&
+        definition.second.function.GetSourceSort().kind() == SourceSort::Kind::Bool)
+      labels.emplace(definition.first, definition.second.function);
+  std::ostringstream response;
+  response << "(";
+  bool first = true;
+  for (const auto& label : labels)
+  {
+    if (!first) response << " ";
+    first = false;
+    const ASTNode value = GlobalSTP->Ctr_Example->ModelValueOfFormula(label.second);
+    response << "(|" << label.first << "| "
+             << (value == bm.ASTTrue ? "true" : "false") << ")";
+  }
+  response << ")";
+  cout << response.str() << endl;
+}
+
 void Cpp_interface::getUnsatAssumptions()
 {
   if (!produce_unsat_assumptions)
@@ -2332,7 +2370,7 @@ ASTNode Cpp_interface::abstractValue(const std::string& name,
 }
 
 Cpp_interface::SolverFrame::SolverFrame(
-    ankerl::unordered_dense::map<std::string, Function>*
+    FunctionMap*
         global_function_context,
     SortMap* global_sort_alias_context,
     STPMgr* manager)

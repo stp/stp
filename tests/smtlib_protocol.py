@@ -407,5 +407,18 @@ class TheoryBinders(unittest.TestCase):
                 self.assertIn('cannot shadow theory', result.stdout)
 
 
+class InlineDefinitionStorage(unittest.TestCase):
+    def test_named_arguments_do_not_invalidate_surrounding_function(self):
+        # Every annotation inserts a definition after the parser has looked
+        # up identity; enough insertions exercise repeated table growth.
+        body = 'true'
+        for index in range(150):
+            body = '(identity (! ' + body + ' :named n' + str(index) + '))'
+        result = run('(set-logic QF_BV)(define-fun identity ((x Bool)) Bool x)'
+                     '(assert ' + body + ')(check-sat)')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, 'sat\n')
+
+
 if __name__ == '__main__':
     unittest.main()

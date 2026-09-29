@@ -39,6 +39,7 @@ THE SOFTWARE.
 #include <string>
 #include <string_view>
 #include <utility>
+#include <unordered_map>
 #include <vector>
 
 namespace stp
@@ -166,8 +167,12 @@ public:
     ASTVec params;
     ASTNode function;
     std::string name;
+    bool named = false;
   };
-  using FunctionMap = ankerl::unordered_dense::map<std::string, Function>;
+  // Lexer tokens borrow Function addresses. A :named argument can insert a
+  // definition while its surrounding application's token is on the parser
+  // stack, so those addresses must survive insertions and rehashing.
+  using FunctionMap = std::unordered_map<std::string, Function>;
 
 private:
   FunctionMap functions;
@@ -183,7 +188,7 @@ private:
   public:
     // Functions are (currently) managed at global scope; we need a pointer to
     // the global functions to be able to remove functions when we pop
-    SolverFrame(ankerl::unordered_dense::map<std::string, Function>*
+    SolverFrame(FunctionMap*
                     global_function_context,
                 SortMap* global_sort_alias_context,
                 STPMgr* manager);
@@ -232,7 +237,7 @@ private:
     ankerl::unordered_dense::map<std::string, std::vector<ASTNode>,
                                  TransparentStringHash, std::equal_to<>>
         _temporary_symbol_bindings;
-    ankerl::unordered_dense::map<std::string, Function>*
+    FunctionMap*
         _global_function_context;
     SortMap* _global_sort_alias_context;
     STPMgr* _manager;
@@ -351,6 +356,7 @@ private:
   bool initial_produce_models;
   bool model_option_before_parse;
   bool produce_assertions = false;
+  bool produce_assignments = false;
   bool produce_unsat_assumptions = false;
   enum class Mode { Start, Assert, Sat, Unsat };
   Mode mode = Mode::Start;
@@ -551,7 +557,7 @@ public:
   // Declare a function. We can't keep references to the declared variables
   // though. So rename them..
   DLL_PUBLIC void storeFunction(const std::string& name, const ASTVec& params,
-                                const ASTNode& function);
+                                const ASTNode& function, bool named = false);
 
   DLL_PUBLIC ASTNode applyFunction(const std::string& name,
                                    const ASTVec& params);
@@ -775,6 +781,7 @@ public:
   DLL_PUBLIC void getAssertions();
 
   DLL_PUBLIC void getModel();
+  void getAssignment();
   ASTNode abstractValue(const std::string& name, const SourceSort& sort);
   DLL_PUBLIC void getValue(const ASTVec& v);
 };

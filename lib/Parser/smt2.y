@@ -1688,7 +1688,7 @@
       std::string diagnostic;
       if (!stp::GlobalParserInterface->validateTopLevelDeclarationName(name, &diagnostic))
         stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
-      stp::GlobalParserInterface->storeFunction(name, ASTVec(), term);
+      stp::GlobalParserInterface->storeFunction(name, ASTVec(), term, true);
       stp::GlobalParserInterface->noteInlineDefinition();
     }
   }
@@ -1792,9 +1792,8 @@
 
   std::string *str;
 
-  /* A resolved define-fun, pointing into Cpp_interface::functions. The map
-     only mutates between commands, never inside a term, so the pointer
-     outlives the token that carries it. */
+  /* A resolved define-fun. FunctionMap preserves addresses when :named
+     terms introduce definitions while an application is being parsed. */
   const stp::Cpp_interface::Function *fn;
   const stp::UFDecl *ufdecl;
   stp::parsed_uf_sort *ufsort;
@@ -2227,7 +2226,7 @@ cmdi:
         be processed regardless. */
      GET_ASSIGNMENT_TOK
     {
-       stp::GlobalParserInterface->unavailableQuery("get-assignment", "produce-assignments");
+       stp::GlobalParserInterface->getAssignment();
     }
 |
      GET_PROOF_TOK

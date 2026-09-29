@@ -7,7 +7,6 @@
 (set-option :produce-proofs true)
 ; CHECK-NEXT: ^unsupported
 (set-option :produce-unsat-cores true)
-; CHECK-NEXT: ^unsupported
 (set-option :produce-assignments true)
 (set-logic QF_BV)
 (declare-fun x () (_ BitVec 4))
