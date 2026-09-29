@@ -512,10 +512,6 @@ IncrementalSolver::Impl::exactStackCheckSat(
   if (scopedAccepted != NULL)
     *scopedAccepted = true;
 
-  // Formula output and eliminated-definition replay become active together.
-  // A rejected speculative block returned above without committing either.
-  scopes.commitWholeStack(stackTransaction);
-
   if (activeHasFp)
   {
     // As on the per-level route: abstraction immediately before lowering.
@@ -587,6 +583,13 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // them as permanent units first (see restoreDroppedSigma0) -- always
   // sound, since the base only grows.
   restoreDroppedSigma0(inputToSat);
+
+  // Publish the block's eliminations after restoring permanent base
+  // equations: those raw equations can mention a symbol this block
+  // eliminates, and rootLit checks against the active elimination set.
+  // The block's model replay then takes precedence over the restored bits.
+  // A rejected speculative block returned without committing either view.
+  scopes.commitWholeStack(stackTransaction);
 
   int blockLit;
   Aig_Obj_t* blockRegular = NULL;
