@@ -137,16 +137,17 @@ typedef struct stp_statistics_s* stp_statistics;
 #include <stp/api/gen/kinds.h>
 #include <stp/api/gen/options.h>
 
-/* Every enum of this header, and of the generated ones it includes, ends with a
- * *_MAX_ENUM member that is not a value: it widens the type to int, so that any
- * int a C caller passes is a value of the enum for the C++ implementation,
- * which refuses the ones it does not know instead of meeting undefined
- * behaviour. */
+/* Every enum of this header, and of the generated ones it includes, ends with
+ * *_MAX_ENUM and *_MIN_ENUM members that are not values: together they widen
+ * the type to all of int, so that any int a C caller passes, negative ones
+ * included, is a value of the enum for the C++ implementation, which refuses
+ * the ones it does not know instead of meeting undefined behaviour. */
 typedef enum stp_status
 {
   STP_OK = 0,
   STP_ERROR = 1,
-  STP_STATUS_MAX_ENUM = 0x7fffffff
+  STP_STATUS_MAX_ENUM = 0x7fffffff,
+  STP_STATUS_MIN_ENUM = -0x7fffffff - 1
 } stp_status;
 
 typedef enum stp_sort_kind
@@ -159,7 +160,8 @@ typedef enum stp_sort_kind
   STP_SORT_ARRAY,
   STP_SORT_FUN,
   STP_SORT_UNINTERPRETED,
-  STP_SORT_MAX_ENUM = 0x7fffffff
+  STP_SORT_MAX_ENUM = 0x7fffffff,
+  STP_SORT_MIN_ENUM = -0x7fffffff - 1
 } stp_sort_kind;
 
 typedef enum stp_rm
@@ -169,7 +171,8 @@ typedef enum stp_rm
   STP_RM_RTP,
   STP_RM_RTN,
   STP_RM_RTZ,
-  STP_RM_MAX_ENUM = 0x7fffffff
+  STP_RM_MAX_ENUM = 0x7fffffff,
+  STP_RM_MIN_ENUM = -0x7fffffff - 1
 } stp_rm;
 
 typedef enum stp_result_kind
@@ -177,7 +180,8 @@ typedef enum stp_result_kind
   STP_SAT = 1,
   STP_UNSAT = 2,
   STP_UNKNOWN = 3,
-  STP_RESULT_MAX_ENUM = 0x7fffffff
+  STP_RESULT_MAX_ENUM = 0x7fffffff,
+  STP_RESULT_MIN_ENUM = -0x7fffffff - 1
 } stp_result_kind; /* no zero member */
 
 typedef enum stp_validity
@@ -185,7 +189,8 @@ typedef enum stp_validity
   STP_VALID = 1,
   STP_INVALID = 2,
   STP_UNKNOWN_VALIDITY = 3,
-  STP_VALIDITY_MAX_ENUM = 0x7fffffff
+  STP_VALIDITY_MAX_ENUM = 0x7fffffff,
+  STP_VALIDITY_MIN_ENUM = -0x7fffffff - 1
 } stp_validity;
 
 typedef enum stp_unknown_reason
@@ -200,7 +205,8 @@ typedef enum stp_unknown_reason
   STP_REASON_ASSUMED_INJECTIVITY,
   STP_REASON_STOPPED_AFTER_CNF,
   STP_REASON_OTHER,
-  STP_REASON_MAX_ENUM = 0x7fffffff
+  STP_REASON_MAX_ENUM = 0x7fffffff,
+  STP_REASON_MIN_ENUM = -0x7fffffff - 1
 } stp_unknown_reason;
 
 typedef enum stp_format
@@ -211,7 +217,8 @@ typedef enum stp_format
   STP_FORMAT_CVC,
   STP_FORMAT_DOT,
   STP_FORMAT_GDL,
-  STP_FORMAT_MAX_ENUM = 0x7fffffff
+  STP_FORMAT_MAX_ENUM = 0x7fffffff,
+  STP_FORMAT_MIN_ENUM = -0x7fffffff - 1
 } stp_format;
 
 typedef enum stp_parse_mode
@@ -219,7 +226,8 @@ typedef enum stp_parse_mode
   STP_PARSE_DECLARE_AND_ASSERT = 0,
   STP_PARSE_EXECUTE,
   STP_PARSE_ONLY,
-  STP_PARSE_MAX_ENUM = 0x7fffffff
+  STP_PARSE_MAX_ENUM = 0x7fffffff,
+  STP_PARSE_MIN_ENUM = -0x7fffffff - 1
 } stp_parse_mode;
 
 typedef enum stp_cnf_scope
@@ -227,7 +235,8 @@ typedef enum stp_cnf_scope
   STP_CNF_WHOLE = 0,
   STP_CNF_PARTIAL,
   STP_CNF_OVER_APPROXIMATION,
-  STP_CNF_SCOPE_MAX_ENUM = 0x7fffffff
+  STP_CNF_SCOPE_MAX_ENUM = 0x7fffffff,
+  STP_CNF_SCOPE_MIN_ENUM = -0x7fffffff - 1
 } stp_cnf_scope;
 
 typedef enum stp_tier
@@ -236,7 +245,8 @@ typedef enum stp_tier
   STP_TIER_EXPERT,
   STP_TIER_EXPERIMENTAL,
   STP_TIER_DIAGNOSTIC,
-  STP_TIER_MAX_ENUM = 0x7fffffff
+  STP_TIER_MAX_ENUM = 0x7fffffff,
+  STP_TIER_MIN_ENUM = -0x7fffffff - 1
 } stp_tier;
 
 typedef enum stp_settable
@@ -244,14 +254,16 @@ typedef enum stp_settable
   STP_SETTABLE_ANYTIME = 0,
   STP_SETTABLE_BEFORE_FIRST_CHECK,
   STP_SETTABLE_CONSTRUCTION,
-  STP_SETTABLE_MAX_ENUM = 0x7fffffff
+  STP_SETTABLE_MAX_ENUM = 0x7fffffff,
+  STP_SETTABLE_MIN_ENUM = -0x7fffffff - 1
 } stp_settable;
 
 typedef enum stp_option_scope
 {
   STP_SCOPE_SOLVER = 0,
   STP_SCOPE_MANAGER,
-  STP_SCOPE_MAX_ENUM = 0x7fffffff
+  STP_SCOPE_MAX_ENUM = 0x7fffffff,
+  STP_SCOPE_MIN_ENUM = -0x7fffffff - 1
 } stp_option_scope;
 
 typedef enum stp_fp_class
@@ -261,14 +273,16 @@ typedef enum stp_fp_class
   STP_FP_ZERO,
   STP_FP_INFINITY,
   STP_FP_NAN,
-  STP_FP_MAX_ENUM = 0x7fffffff
+  STP_FP_MAX_ENUM = 0x7fffffff,
+  STP_FP_MIN_ENUM = -0x7fffffff - 1
 } stp_fp_class;
 
 typedef enum stp_internal_error_policy
 {
   STP_POISON = 0,
   STP_ABORT = 1,
-  STP_POLICY_MAX_ENUM = 0x7fffffff
+  STP_POLICY_MAX_ENUM = 0x7fffffff,
+  STP_POLICY_MIN_ENUM = -0x7fffffff - 1
 } stp_internal_error_policy;
 
 /* ------------------------------------------------------------------ by-value structs (the six public layouts) */

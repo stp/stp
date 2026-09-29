@@ -519,7 +519,8 @@ unsigned rm_onehot(stp_rm rm)
     case STP_RM_RTN: return VC_RM_RTN;
     case STP_RM_RTZ: return VC_RM_RTZ;
     case STP_RM_RNA: return VC_RM_RNA;
-    case STP_RM_MAX_ENUM: break;
+    case STP_RM_MAX_ENUM:
+    case STP_RM_MIN_ENUM: break;
   }
   return VC_RM_RNE;
 }
@@ -1617,6 +1618,7 @@ enum reason_unknown_t map_reason(stp_unknown_reason r)
     case STP_REASON_STOPPED_AFTER_CNF:
     case STP_REASON_OTHER:
     case STP_REASON_MAX_ENUM:
+    case STP_REASON_MIN_ENUM:
       return REASON_UNKNOWN_INCOMPLETE;
   }
   return REASON_UNKNOWN_INCOMPLETE;
@@ -1724,6 +1726,7 @@ int vc_query_with_timeout(VC vcp, Expr e, int timeout_max_conflicts, int timeout
       }
       break;
     case STP_VALIDITY_MAX_ENUM:
+    case STP_VALIDITY_MIN_ENUM:
       break;
   }
   if (vc->flag_n)

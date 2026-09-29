@@ -449,7 +449,8 @@ class Emitter:
         for k in self.kinds:
             lines.append('  STP_KIND_%s = %d,' % (k['name'], k['id']))
         lines.append('  STP_NUM_KINDS = %d,' % len(self.kinds))
-        lines.append('  STP_KIND_MAX_ENUM = 0x7fffffff /* not a kind: widens the enum to int (stp.h) */')
+        lines.append('  STP_KIND_MAX_ENUM = 0x7fffffff, /* not a kind: with the next, widens the enum to int (stp.h) */')
+        lines.append('  STP_KIND_MIN_ENUM = -0x7fffffff - 1')
         lines.append('} stp_kind;')
         lines += ['', '#endif', '']
         self.write('include/stp/api/gen/kinds.h', '\n'.join(lines))
@@ -676,7 +677,8 @@ class Emitter:
         for o in stable:
             lines.append('  STP_OPT_%s = %d,' % (o['name'].upper().replace('-', '_').replace('.', '_'), o['id']))
         lines.append('  STP_NUM_STABLE_OPTIONS = %d,' % len(stable))
-        lines.append('  STP_OPT_MAX_ENUM = 0x7fffffff /* not an option: widens the enum to int (stp.h) */')
+        lines.append('  STP_OPT_MAX_ENUM = 0x7fffffff, /* not an option: with the next, widens the enum to int (stp.h) */')
+        lines.append('  STP_OPT_MIN_ENUM = -0x7fffffff - 1')
         lines.append('} stp_option;')
         lines += ['', '#endif', '']
         self.write('include/stp/api/gen/options.h', '\n'.join(lines))
@@ -874,7 +876,8 @@ class Emitter:
                  'typedef enum stp_error_code {']
         for e in self.errors:
             lines.append('  STP_ERR_%s = %d,' % (e['name'], e['value']))
-        lines.append('  STP_ERR_MAX_ENUM = 0x7fffffff /* not a code: widens the enum to int (stp.h) */')
+        lines.append('  STP_ERR_MAX_ENUM = 0x7fffffff, /* not a code: with the next, widens the enum to int (stp.h) */')
+        lines.append('  STP_ERR_MIN_ENUM = -0x7fffffff - 1')
         lines.append('} stp_error_code;')
         lines += ['', '#endif', '']
         self.write('include/stp/api/gen/errors.h', '\n'.join(lines))

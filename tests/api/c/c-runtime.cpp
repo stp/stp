@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <climits>
 #include <cstring>
 #include <initializer_list>
 #include <string>
@@ -619,4 +620,35 @@ TEST(c_runtime, an_error_code_past_sixteen_bits_names_nothing)
   EXPECT_STREQ("INTERNAL", stp_error_code_name(STP_ERR_INTERNAL));
   for (const int wide : {65536 + STP_ERR_INTERNAL, 65536 + STP_ERR_PARSE, 0x7fffffff})
     EXPECT_STREQ("?", stp_error_code_name(static_cast<stp_error_code>(wide))) << wide;
+}
+
+// Every enum spans all of int, from its *_MIN_ENUM to its *_MAX_ENUM, so a C
+// caller's negative value is a value of the type for the implementation
+// rather than undefined behaviour there, and is refused like any other value
+// no enumerator names.
+TEST(c_runtime, a_negative_enum_value_is_refused)
+{
+  static_assert(STP_RM_MIN_ENUM == INT_MIN && STP_KIND_MIN_ENUM == INT_MIN &&
+                    STP_ERR_MIN_ENUM == INT_MIN && STP_OPT_MIN_ENUM == INT_MIN &&
+                    STP_STATUS_MIN_ENUM == INT_MIN && STP_POLICY_MIN_ENUM == INT_MIN,
+                "every enum reaches INT_MIN");
+  stp_tm tm = stp_tm_new(nullptr);
+  for (const int v : {-1, INT_MIN})
+  {
+    SCOPED_TRACE(v);
+    EXPECT_EQ(nullptr, stp_mk_rm(tm, static_cast<stp_rm>(v)));
+    EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, code_of(tm));
+    EXPECT_STREQ("?", stp_rm_name(static_cast<stp_rm>(v)));
+    EXPECT_STREQ("?", stp_kind_name(static_cast<stp_kind>(v)));
+    EXPECT_STREQ("?", stp_error_code_name(static_cast<stp_error_code>(v)));
+    EXPECT_STREQ("?", stp_unknown_reason_name(static_cast<stp_unknown_reason>(v)));
+    EXPECT_STREQ("?", stp_result_kind_name(static_cast<stp_result_kind>(v)));
+    EXPECT_STREQ("?", stp_validity_name(static_cast<stp_validity>(v)));
+    EXPECT_EQ(nullptr, stp_option_name(static_cast<stp_option>(v)));
+    ASSERT_NE(nullptr, stp_last_error());
+    EXPECT_EQ(STP_ERR_OPTION_UNKNOWN, stp_last_error()->code);
+    stp_clear_last_error();
+  }
+  stp_tm_release_all(tm);
+  stp_tm_release(tm);
 }
