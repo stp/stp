@@ -3774,6 +3774,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         result = NodeFactory::CreateTerm(ITE, width, children[0],
                                          children[0][1], children[2]);
       else if (width == 1 && children[0].GetKind() == EQ &&
+               !children[0][0].isRealTerm() &&
                children[0][0].GetValueWidth() == 1 &&
                children[1].isConstant() && children[2].isConstant() &&
                children[1] != children[2])

@@ -887,6 +887,44 @@ TEST_F(KindValues, reals)
   EXPECT_TRUE(bo(real_ge(Q(1, 1), Q(1, 1))));
 }
 
+// A 1-bit ite over a Real equality builds under either simplify setting: the
+// simplifying factory's rewrite of a 1-bit ite over a 1-bit equality asked a
+// Real operand for its width, which poisoned the manager (INTERNAL) at
+// construction. Solving it is the engine's to decide: a Real comparison the
+// simplifier brings up to the Boolean level is solved, and one left under a
+// bit-vector term is refused at assertion (UNSUPPORTED), the manager as it
+// was.
+TEST(KindsSolved, one_bit_ite_over_a_real_equality)
+{
+  for (bool simplify : {true, false})
+  {
+    TermManager::Config cfg;
+    cfg.simplify = simplify;
+    TermManager tm(cfg);
+    const Term r = tm.declare("r", tm.mk_real_sort());
+    const Term b = tm.declare("b", tm.mk_bv_sort(1));
+    const Term one = tm.mk_real(1);
+    const Term flag = bool_to_bv1(r == one);
+    const Term chosen = ite(r == one, b, bvnot(b));
+    const Term bit = ite(r == one, tm.mk_bv(1, 1), tm.mk_bv(1, 0));
+    EXPECT_TRUE(flag.sort() == tm.mk_bv_sort(1));
+    EXPECT_TRUE(chosen.sort() == tm.mk_bv_sort(1));
+    EXPECT_TRUE(bit.sort() == tm.mk_bv_sort(1));
+    Solver s(tm);
+    API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.add(chosen == tm.mk_bv(1, 0)));
+    if (simplify)
+    {
+      s.add(flag == tm.mk_bv(1, 1)); // (= r 1)
+      ASSERT_TRUE(s.check_sat().is_sat());
+      EXPECT_EQ(s.model().real_value(r).str(), "1");
+    }
+    else
+      API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.add(flag == tm.mk_bv(1, 1)));
+    s.add(real_lt(one, r));
+    EXPECT_EQ(s.check_sat().is_unsat(), simplify) << simplify;
+  }
+}
+
 // A symbolic instance of every theory, solved and read back, so that the
 // kinds are not only folded but also blasted.
 TEST(KindsSolved, every_theory_round_trip)

@@ -299,6 +299,10 @@ Limits of the alpha
 -  A function over Reals is modelled from the applications the check saw; one
    it never saw completes to the codomain's default. A Real argument with a
    bit-vector result under a comparison is refused at assertion.
+-  A Real comparison belongs at the Boolean level: one that stays inside a
+   bit-vector term -- the condition of a bit-vector ``ite``, ``bool_to_bv1``
+   of it -- is refused at assertion (``UNSUPPORTED``) unless simplification
+   brings it up (``bool_to_bv1(r == 1) == 1`` is ``r == 1``).
 -  An option's exclusions are checked when a solver is made, whenever both
    entries are set, whatever their values; ``set_args`` accepts ``--no-name``
    for every Boolean option.
