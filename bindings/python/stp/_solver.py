@@ -40,7 +40,8 @@ from ._core import (Error, ArgumentError, SortMismatch, NotAValue, NoModel, Unsu
 from ._gen_kinds import Kind, ErrorCode, Option
 from ._terms import (TermManager, main_tm, _tm, SortKind, RoundingMode, UnknownReason, Tier, _reason,
                      ExprRef, BoolRef, BitVecRef, ArrayRef, ArrayNumRef, FuncRef, FuncInterp, SortRef,
-                     _coerce_arg, _flatten_bools, _format_code, _is_int, BitVec, Not, And, BoolVal)
+                     _coerce_arg, _flatten_bools, _format_code, _is_int, BitVec, Not, And, BoolVal,
+                     ULT, ULE, UGT, UGE, UDiv, URem, LShR, is_bv)
 
 _PARSE_MODES = {
     "declare-and-assert": _core.PARSE_DECLARE_AND_ASSERT,
@@ -1167,6 +1168,14 @@ def model():
     return _need_current("model").model()
 
 
+def _bv_or(bv_op, other_op):
+    """The @stp decorator's 2.x rule for an operator: over bit-vectors (a Python int beside
+    one included), `bv_op`, the unsigned or logical form; over any other sort, `other_op`."""
+    def apply(x, y):
+        return bv_op(x, y) if is_bv(x) or is_bv(y) else other_op(x, y)
+    return apply
+
+
 class _ASTtoSTP(ast.NodeVisitor):
     """The 2.x decorator's evaluator: a function body read as constraints over bit-vectors.
     Arguments not supplied at the call become 32-bit symbols (a default value gives the
@@ -1242,15 +1251,19 @@ class _ASTtoSTP(ast.NodeVisitor):
             return v
         raise TypeError("@stp: %s is not supported" % type(node.op).__name__)
 
+    # The 2.x rules, the decorator's only reason to exist: over bit-vectors
+    # the comparisons are unsigned, >> is the logical shift, and / // % are
+    # the unsigned quotient and remainder, where the z3-style operators of
+    # this package are signed. Other sorts keep their own operators.
     _BINOPS = {
         ast.Add: lambda x, y: x + y,
         ast.Sub: lambda x, y: x - y,
         ast.Mult: lambda x, y: x * y,
-        ast.Div: lambda x, y: x / y,
-        ast.FloorDiv: lambda x, y: x // y,
-        ast.Mod: lambda x, y: x % y,
+        ast.Div: _bv_or(UDiv, lambda x, y: x / y),
+        ast.FloorDiv: _bv_or(UDiv, lambda x, y: x // y),
+        ast.Mod: _bv_or(URem, lambda x, y: x % y),
         ast.LShift: lambda x, y: x << y,
-        ast.RShift: lambda x, y: x >> y,
+        ast.RShift: _bv_or(LShR, lambda x, y: x >> y),
         ast.BitOr: lambda x, y: x | y,
         ast.BitXor: lambda x, y: x ^ y,
         ast.BitAnd: lambda x, y: x & y,
@@ -1265,10 +1278,10 @@ class _ASTtoSTP(ast.NodeVisitor):
     _CMPS = {
         ast.Eq: lambda x, y: x == y,
         ast.NotEq: lambda x, y: x != y,
-        ast.Lt: lambda x, y: x < y,
-        ast.LtE: lambda x, y: x <= y,
-        ast.Gt: lambda x, y: x > y,
-        ast.GtE: lambda x, y: x >= y,
+        ast.Lt: _bv_or(ULT, lambda x, y: x < y),
+        ast.LtE: _bv_or(ULE, lambda x, y: x <= y),
+        ast.Gt: _bv_or(UGT, lambda x, y: x > y),
+        ast.GtE: _bv_or(UGE, lambda x, y: x >= y),
         ast.Is: lambda x, y: x == y,
         ast.IsNot: lambda x, y: x != y,
     }

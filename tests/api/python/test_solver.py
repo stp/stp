@@ -548,6 +548,49 @@ def test_stp_decorator_and_current_solver():
         solver_scope(3).__enter__()
 
 
+def test_stp_decorator_keeps_the_2x_meanings():
+    """The decorator exists for 2.x code, whose bit-vector operators were unsigned and
+    logical: the comparisons and >> read their operands as unsigned, and / // % are the
+    unsigned quotient and remainder (the z3-style operators elsewhere are signed)."""
+    @stp.stp
+    def big(x):
+        assert x > 0x7fffffff
+
+    @stp.stp
+    def shr(x):
+        assert (x >> 31) == 1
+
+    @stp.stp
+    def half(x):
+        assert x == 0xfffffffe
+        return x // 2
+
+    @stp.stp
+    def tenth(x):
+        assert x == 0xfffffffe
+        return x / 10
+
+    @stp.stp
+    def rest(x):
+        assert x == 0xffffffff
+        return x % 10
+
+    for fn in (big, shr):
+        s = Solver()
+        with solver_scope(s):
+            fn()
+            assert check() == sat, fn.__name__
+        s.close()
+    s = Solver()
+    with solver_scope(s):
+        h, t, r = half(), tenth(), rest()
+        assert check() == sat
+        m = model()
+        assert m[h].as_long() == 0x7fffffff and m[t].as_long() == 0xfffffffe // 10
+        assert m[r].as_long() == 0xffffffff % 10
+    s.close()
+
+
 def test_close_and_lifetime():
     x = BitVec("x", 8)
     s = Solver()
