@@ -71,6 +71,17 @@
       GlobalParserInterface->last_error_message = msg;
     return 1;
   }
+
+  // A name this input declares a second time: the syntax error the grammar
+  // gave at the name itself, token and all, before it took a declared name.
+  int yyerror_redeclared(const std::string& name) {
+    std::ostringstream o;
+    o << "syntax error: line " << smtlineno << ": syntax error  token: " << name;
+    cout << o.str() << endl;
+    if (GlobalParserInterface != NULL)
+      GlobalParserInterface->last_error_message = o.str();
+    return 1;
+  }
   int yyerror(void* /*AssertsQuery*/, const char* s) { return yyerror(s); }
 
   // A semantic error found inside an action. yyerror only reports: after one
@@ -265,6 +276,8 @@ benchmark
   ((ASTVec*)AssertsQuery)->push_back(query);
   delete $1;
   query = ASTNode();
+  // the names this input declared (var_decl), as cvc.y keeps them
+  GlobalParserInterface->letMgr->_parser_symbol_table.clear();
   YYACCEPT;
 }
 ;
@@ -463,6 +476,7 @@ LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
   s.SetIndexWidth($3.indexwidth);
   s.SetValueWidth($3.valuewidth);
   GlobalParserInterface->addSymbol(s);
+  GlobalParserInterface->letMgr->_parser_symbol_table.insert(s);
   delete $2;
 }
 | LPAREN_TOK STRING_TOK RPAREN_TOK
@@ -471,25 +485,39 @@ LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
   GlobalParserInterface->addSymbol(s);
+  GlobalParserInterface->letMgr->_parser_symbol_table.insert(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   delete $2;
 }
 /* A name already declared -- by an earlier input, or the caller -- may be
-   declared again at its type: it is the same symbol. */
+   declared again at its type: it is the same symbol. Declared already by
+   this input, it is the syntax error it always was. */
 | LPAREN_TOK TERMID_TOK sort_symbs RPAREN_TOK
 {
-  const bool same = hasSmtType(*$2, $3.indexwidth, $3.valuewidth);
+  const ASTNode declared = *$2;
   delete $2;
-  if (!same)
+  if (GlobalParserInterface->letMgr->_parser_symbol_table.count(declared) != 0)
+  {
+    yyerror_redeclared(declared.GetName());
+    YYABORT;
+  }
+  if (!hasSmtType(declared, $3.indexwidth, $3.valuewidth))
     SMT_REJECT("a name already declared is declared again at another sort");
+  GlobalParserInterface->letMgr->_parser_symbol_table.insert(declared);
 }
 | LPAREN_TOK FORMID_TOK RPAREN_TOK
 {
-  const bool same = hasSmtType(*$2, 0, 0);
+  const ASTNode declared = *$2;
   delete $2;
-  if (!same)
+  if (GlobalParserInterface->letMgr->_parser_symbol_table.count(declared) != 0)
+  {
+    yyerror_redeclared(declared.GetName());
+    YYABORT;
+  }
+  if (!hasSmtType(declared, 0, 0))
     SMT_REJECT("a name already declared is declared again at another sort");
+  GlobalParserInterface->letMgr->_parser_symbol_table.insert(declared);
 }
 ;
 

@@ -1169,6 +1169,18 @@ TEST(Parsing, a_cvc_or_smtlib1_input_may_declare_a_name_again)
                    s.parse("(benchmark b :logic QF_BV :extrafuns ((q BitVec[1])) :formula true)",
                            Format::SMTLIB1));
   EXPECT_TRUE(s.check_sat().is_sat());
+  // but one input declaring a name twice is the syntax error it always was,
+  // a name known before it included
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse("x : BITVECTOR(8); x : BITVECTOR(8); QUERY(FALSE);", Format::CVC));
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse("y, y : BITVECTOR(8); QUERY(FALSE);", Format::CVC));
+  API_EXPECT_ERROR(ErrorCode::PARSE,
+                   s.parse("(benchmark b :logic QF_BV :extrafuns ((x BitVec[8])) :extrafuns ((x BitVec[8])) "
+                           ":formula true)",
+                           Format::SMTLIB1));
+  API_EXPECT_ERROR(ErrorCode::PARSE,
+                   s.parse("(benchmark b :logic QF_BV :extrafuns ((z BitVec[8]) (z BitVec[8])) :formula true)",
+                           Format::SMTLIB1));
+  EXPECT_TRUE(s.check_sat().is_sat());
 }
 
 // SMT-LIB's <script> is <command>*: blanks and comments alone are a script,

@@ -357,8 +357,12 @@ VarDecl         :      FORM_IDs ':' Type
     ASTNode declared;
     if (GlobalParserInterface->LookupSymbol(*i, declared))
     {
+      // declared already by this input: the syntax error it always was
+      if (GlobalParserInterface->letMgr->_parser_symbol_table.count(declared) != 0)
+        CVC_REJECT("syntax error");
       if (!hasCvcType(declared, $3.indexwidth, $3.valuewidth))
         CVC_REJECT("a name already declared is declared again at another type");
+      GlobalParserInterface->letMgr->_parser_symbol_table.insert(declared);
       // the same symbol, and one of this input's declarations
       ASTVec& vars = GlobalParserBM->ListOfDeclaredVars;
       if (std::find(vars.begin(), vars.end(), declared) == vars.end())
