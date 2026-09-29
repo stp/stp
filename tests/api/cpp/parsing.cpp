@@ -1195,3 +1195,26 @@ TEST(Parsing, a_script_with_no_command_is_a_script)
   API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_term(""));
   API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_term("; a comment"));
 }
+
+// A later script's declaration of a name already declared is refused at the
+// name, with the command line's text; the API's error says what it means.
+TEST(Parsing, a_redeclaration_says_so)
+{
+  TermManager tm;
+  Solver s(tm);
+  tm.declare("b", tm.mk_bool_sort());
+  s.parse_smt2("(declare-fun x () (_ BitVec 8))");
+  for (const char* script : {"(declare-fun x () (_ BitVec 8))", "(declare-const x (_ BitVec 4))",
+                             "(define-fun x () Bool true)", "(declare-fun b () Bool)"})
+  {
+    SCOPED_TRACE(script);
+    const auto e = API_ERROR_OF(s.parse_smt2(script));
+    ASSERT_TRUE(e.has_value());
+    EXPECT_EQ(e->code(), ErrorCode::PARSE);
+    EXPECT_NE(std::string(e->what()).find("is already declared"), std::string::npos) << e->what();
+  }
+  // an ordinary syntax error is not a redeclaration
+  const auto e = API_ERROR_OF(s.parse_smt2("(assert (= x"));
+  ASSERT_TRUE(e.has_value());
+  EXPECT_EQ(std::string(e->what()).find("is already declared"), std::string::npos) << e->what();
+}

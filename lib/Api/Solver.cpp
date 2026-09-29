@@ -1437,6 +1437,27 @@ void seed_parser_symbols(Cpp_interface& pi, ManagerImpl* m)
   }
 }
 
+// The grammar refuses a declaration of a name already declared at the name,
+// with the command line's own text: "unexpected TERMID_TOK, expecting
+// STRING_TOK  token: x" (FORMID_TOK for a Boolean, *_FUNCTIONID_TOK for a
+// function). The API's error says what that means as well.
+std::string explain_redeclaration(const std::string& message)
+{
+  static const std::string expecting = ", expecting STRING_TOK  token: ";
+  const std::size_t at = message.find(expecting);
+  if (at == std::string::npos)
+    return message;
+  const std::size_t unexpected = message.rfind("unexpected ", at);
+  if (unexpected == std::string::npos)
+    return message;
+  const std::string token = message.substr(unexpected + 11, at - unexpected - 11);
+  if (token != "TERMID_TOK" && token != "FORMID_TOK" &&
+      (token.size() < 15 || token.compare(token.size() - 15, 15, "_FUNCTIONID_TOK") != 0))
+    return message;
+  const std::string name = message.substr(at + expecting.size());
+  return "the name '" + name + "' is already declared (" + message + ")";
+}
+
 // Where a parse reads its input: a script in memory, or a stream read as far
 // as the parser needs it.
 struct ParseSource
@@ -1848,8 +1869,9 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
                        "the script compares arrays for equality, which a run decides "
                        "only with array-equality = on");
         detail::fail_parse(fn, smt2lineno, 0,
-                           pi.last_error_message.empty() ? "syntax error"
-                                                         : pi.last_error_message);
+                           pi.last_error_message.empty()
+                               ? "syntax error"
+                               : explain_redeclaration(pi.last_error_message));
       }
       break;
     }
