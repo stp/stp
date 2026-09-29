@@ -136,6 +136,8 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
           FatalError("invalid RoundingMode literal", n);
         os << name;
       }
+      else if (n.GetSourceSort().kind() == stp::SourceSort::Kind::Uninterpreted)
+        n.GetNodeManager()->printUninterpretedElement(os, n.GetSourceSort(), n);
       else if (n.GetType() == stp::FLOATINGPOINT_TYPE)
         outputFloatingPointSMTLIB2(n, os, n);
       else

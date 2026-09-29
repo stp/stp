@@ -1869,6 +1869,7 @@
 %type <realc> an_real_constant
 
 %token <node> FORMID_TOK TERMID_TOK
+%token <str> ABSTRACT_VALUE_TOK
 %token <str> STRING_TOK
 %token <fn> BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK REAL_FUNCTIONID_TOK
 %token <ufdecl> UF_BV_FUNCTIONID_TOK UF_BOOL_FUNCTIONID_TOK
@@ -4433,7 +4434,14 @@ id_fp_leq an_terms
 ;
 
 an_term:
-id_termid
+LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
+{
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->abstractValue(*$3, *$4));
+  stp::releaseParserValue($3);
+  stp::releaseParserValue($4);
+}
+| id_termid
 {
   $$ = stp::GlobalParserInterface->newNode((*$1));
   stp::GlobalParserInterface->deleteNode( $1);

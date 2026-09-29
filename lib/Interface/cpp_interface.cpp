@@ -2210,8 +2210,7 @@ void Cpp_interface::getValue(const ASTVec& v)
       // by. The sort is recoverable here: a UF_APPLY's source sort is its
       // declaration's codomain.
       if (bm.isUninterpretedSortedTerm(n))
-        os << "|"
-           << bm.uninterpretedElementName(n.GetSourceSort(), value) << "|";
+        bm.printUninterpretedElement(os, n.GetSourceSort(), value);
       else
         printer::SMTLIB2_Print1(os, value, 0, false);
       os << " )" << std::endl;
@@ -2305,9 +2304,6 @@ void Cpp_interface::getModel()
   if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
     GlobalSTP->getIncrementalSolver()->materializePendingModel();
 
-  // The body is rendered first because rendering it is what names the
-  // elements of any declared sort, and the preamble that declares them has to
-  // come before the definitions that use them.
   std::ostringstream os;
   GlobalSTP->Ctr_Example->PrintFullCounterExampleSMTLIB2(os);
   if (bm.HasRealModel())
@@ -2328,24 +2324,22 @@ void Cpp_interface::getModel()
 
   cout << "(" << std::endl;
 
-  // A model that mentions a sort declared by declare-sort has to say so, or it
-  // cannot be read back: the sort has no elements anyone else knows about. So
-  // it declares the sort, then one constant per element the model mentions,
-  // and the definitions refer to those. Distinct names denote distinct
-  // elements -- the convention every solver's models rest on, and the only
-  // thing this format cannot state outright.
-  // Every sort the body mentioned, not only those that named an element. A
-  // sort can reach the text through a function signature alone -- a predicate
-  // over an opaque sort, which is the commonest shape of all -- and a model
-  // that used a sort it never declared cannot be read back at all.
-  for (const SourceSort& sort : bm.uninterpretedSortsPrinted())
-    cout << "(declare-sort " << sourceSortToSMTLib(sort) << " 0)" << std::endl;
-  for (const STPMgr::UninterpretedElement& element : bm.uninterpretedElements())
-    cout << "(declare-fun |" << element.name << "| () "
-         << sourceSortToSMTLib(element.sort) << ")" << std::endl;
-
+  // SMT-LIB models contain only definitions. Abstract values carry their
+  // sorts locally, and user-declared sorts are already in the signature.
   cout << os.str();
   cout << ")" << std::endl;
+}
+
+ASTNode Cpp_interface::abstractValue(const std::string& name,
+                                     const SourceSort& sort)
+{
+  if (current_command_name != "get-value" || !model_valid)
+    refuseCurrentCommand("abstract values may only occur in get-value for the current model");
+  for (const auto& value : bm.uninterpretedElements())
+    if (value.name == name && value.sort == sort)
+      return bm.CreateUninterpretedConst(value.carrier, sort);
+  refuseCurrentCommand("unknown abstract value for the current model: " + name);
+  return ASTNode();
 }
 
 Cpp_interface::SolverFrame::SolverFrame(

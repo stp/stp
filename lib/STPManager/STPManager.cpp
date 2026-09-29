@@ -810,7 +810,8 @@ std::string STPMgr::uninterpretedElementName(const SourceSort& sort,
 {
   assert(sort.kind() == SourceSort::Kind::Uninterpreted);
   for (const UninterpretedElement& element : uninterpreted_elements)
-    if (element.sort == sort && element.carrier == carrier)
+    if (element.sort == sort &&
+        CONSTANTBV::BitVector_equal(element.carrier.GetBVConst(), carrier.GetBVConst()))
       return element.name;
 
   // Numbered per sort rather than globally, so a model reads as one sort's
@@ -821,12 +822,9 @@ std::string STPMgr::uninterpretedElementName(const SourceSort& sort,
     if (element.sort == sort)
       ordinal++;
 
-  // The name has to be one nothing else in this query answers to, because the
-  // model declares it as a fresh constant: an input free to declare |S!0|
-  // itself would get a model that both invents S!0 and defines the input's own
-  // S!0 as something else, and reading it back is then a redeclaration. Step
-  // past any name already taken rather than assume the shape is private.
-  const std::string base = uninterpretedSortName(sort.uninterpretedId()) + "!";
+  // @ is reserved for solver-generated abstract values. Quoting preserves
+  // sort names containing whitespace and other non-simple characters.
+  const std::string base = "@" + uninterpretedSortName(sort.uninterpretedId()) + "!";
   std::string name;
   while (true)
   {
@@ -846,6 +844,13 @@ std::string STPMgr::uninterpretedElementName(const SourceSort& sort,
   uninterpreted_elements.push_back(fresh);
   noteUninterpretedSortPrinted(sort);
   return fresh.name;
+}
+
+void STPMgr::printUninterpretedElement(std::ostream& os, const SourceSort& sort,
+                                       const ASTNode& carrier)
+{
+  os << "(as |" << uninterpretedElementName(sort, carrier) << "| "
+     << sourceSortToSMTLib(sort) << ")";
 }
 
 ASTNode STPMgr::arrayBaseSymbol(const ASTNode& arr) const

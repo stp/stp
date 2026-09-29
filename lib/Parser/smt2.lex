@@ -389,6 +389,11 @@ namespace stp
       // legacy lexer would, then hand a classified name back unclassified
       // and record what it would have been (see the statics above).
       ufDeclarationNamePending = false;
+      if (s[0] == '@')
+      {
+        smt2lval.str = new std::string(s);
+        return STRING_TOK;
+      }
       if (const int builtin = theoryToken(s))
         return builtin;
       const int token = classify(s);
@@ -539,7 +544,7 @@ namespace stp
       if (!floatTokensActive && theoryToken(s, true) != 0)
         unresolvedFpKeyword = s;
       smt2lval.str = new std::string(s);
-      return STRING_TOK;
+      return s[0] == '@' ? ABSTRACT_VALUE_TOK : STRING_TOK;
     }
   }
 

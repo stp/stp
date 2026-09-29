@@ -2486,10 +2486,8 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
     // As in outputLine: an element of a declared sort has a name in the
     // model, not a carrier pattern. get-value must agree with get-model or a
     // caller is handed a bit-vector literal where a term of the sort belongs.
-    os << "|"
-       << bm->uninterpretedElementName(n.GetSourceSort(),
-                                       TermToConstTermUsingModel(n, false))
-       << "|";
+    bm->printUninterpretedElement(os, n.GetSourceSort(),
+                                  TermToConstTermUsingModel(n, false));
   else if (n.GetType() == stp::BITVECTOR_TYPE)
     printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
   else
@@ -2546,16 +2544,9 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
       }
       else if (bm->isUninterpretedSortedTerm(f))
       {
-        // At the sort the query declared, and named, not numbered: the carrier
-        // pattern is not a literal of this sort, and printing one would name a
-        // bit-vector -- the one thing the sort exists to say it is not. The
-        // element names are declared in the model's preamble.
-        bm->noteUninterpretedSortPrinted(f.GetSourceSort());
-        os << " () " << sourceSortToSMTLib(f.GetSourceSort()) << " |"
-           << bm->uninterpretedElementName(
-                  f.GetSourceSort(),
-                  TermToConstTermUsingModel(se, false))
-           << "|";
+        os << " () " << sourceSortToSMTLib(f.GetSourceSort()) << " ";
+        bm->printUninterpretedElement(os, f.GetSourceSort(),
+                                      TermToConstTermUsingModel(se, false));
       }
       else if (f.GetType() == stp::BITVECTOR_TYPE)
       {
@@ -2809,7 +2800,8 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     const auto printCell = [&](const ASTNode& cell) {
       if (elementSort.kind() == SourceSort::Kind::Uninterpreted)
       {
-        os << " |" << bm->uninterpretedElementName(elementSort, cell) << "|";
+        os << " ";
+        bm->printUninterpretedElement(os, elementSort, cell);
         return;
       }
       if (eb != 0)
@@ -2833,7 +2825,8 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     const auto printIndex = [&](const ASTNode& index) {
       if (indexSort.kind() == SourceSort::Kind::Uninterpreted)
       {
-        os << " |" << bm->uninterpretedElementName(indexSort, index) << "|";
+        os << " ";
+        bm->printUninterpretedElement(os, indexSort, index);
         return;
       }
       if (fpIndex)

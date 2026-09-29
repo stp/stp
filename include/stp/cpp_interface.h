@@ -775,6 +775,7 @@ public:
   DLL_PUBLIC void getAssertions();
 
   DLL_PUBLIC void getModel();
+  ASTNode abstractValue(const std::string& name, const SourceSort& sort);
   DLL_PUBLIC void getValue(const ASTVec& v);
 };
 

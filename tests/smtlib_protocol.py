@@ -293,5 +293,43 @@ class QualifiedIdentifiers(unittest.TestCase):
                 self.assertNotIn('sat\n', result.stdout)
 
 
+class AbstractValues(unittest.TestCase):
+    prefix = """
+(set-option :produce-models true)
+(set-logic QF_UF)
+(declare-sort S 0)
+(declare-sort T 0)
+(declare-const x S)
+(declare-fun f (S) S)
+(assert (= (f x) x))
+(check-sat)
+(get-value (x))
+"""
+
+    def test_model_values_can_be_queried_again(self):
+        result = run(self.prefix + """
+(get-value ((as @S!0 S) (= x (as @S!0 S)) (f (as @S!0 S))))
+(get-model)
+""")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('(as |@S!0| S)', result.stdout)
+        self.assertIn('true', result.stdout)
+        self.assertIn('(define-fun |x| () S (as |@S!0| S))', result.stdout)
+        self.assertNotIn('(declare-', result.stdout)
+        self.assertNotIn('#x', result.stdout)
+
+    def test_abstract_values_are_scoped_to_model_inspection(self):
+        for suffix, message in [
+            ('(assert (= x (as @S!0 S)))', 'abstract values may only occur in get-value'),
+            ('(get-value ((as @S!0 T)))', 'unknown abstract value'),
+            ('(get-value ((as @missing S)))', 'unknown abstract value'),
+            ('(check-sat)(get-value ((as @S!0 S)))', 'unknown abstract value'),
+        ]:
+            with self.subTest(suffix=suffix):
+                result = run(self.prefix + suffix)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stdout)
+
+
 if __name__ == '__main__':
     unittest.main()

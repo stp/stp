@@ -115,12 +115,12 @@ void printValue(std::ostream& os, STPMgr* manager,
     return;
   }
   // An element of a declared sort has no literal at all. It gets a name, and
-  // the model's preamble declares it; a carrier pattern here would be a
+  // a qualification supplies its sort; a carrier pattern here would be a
   // bit-vector literal where a term of the sort belongs, which is the same
   // mistake as printing a rounding mode's five bits.
   if (declared.kind() == SourceSort::Kind::Uninterpreted)
   {
-    os << '|' << manager->uninterpretedElementName(declared, constant) << '|';
+    manager->printUninterpretedElement(os, declared, constant);
     return;
   }
   printer::outputBitVecSMTLIB2(constant, os);
