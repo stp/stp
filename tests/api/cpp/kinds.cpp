@@ -645,11 +645,21 @@ TEST_F(Kinds, null_and_foreign_arguments)
 // ---------------------------------------------------------------- values
 
 // Closed terms of every kind evaluated through a model (the evaluator folds
-// them through the engine); the expected values follow SMT-LIB.
-class KindValues : public ::testing::Test
+// them through the engine); the expected values follow SMT-LIB. On a
+// simplifying manager most of them fold at construction, before the model
+// sees them, so each case runs on a manager that does not simplify as well,
+// where the evaluator computes every one.
+TermManager::Config simplifying(bool simplify)
+{
+  TermManager::Config cfg;
+  cfg.simplify = simplify;
+  return cfg;
+}
+
+class KindValues : public ::testing::TestWithParam<bool>
 {
 protected:
-  TermManager tm;
+  TermManager tm{simplifying(GetParam())};
   Solver s{tm};
   std::optional<Model> m;
   Sort bv8 = tm.mk_bv_sort(8), bv4 = tm.mk_bv_sort(4);
@@ -673,7 +683,7 @@ protected:
   Term Fa() { return tm.mk_false(); }
 };
 
-TEST_F(KindValues, boolean_and_core)
+TEST_P(KindValues, boolean_and_core)
 {
   EXPECT_FALSE(bo(not_(T())));
   EXPECT_TRUE(bo(not_(Fa())));
@@ -703,7 +713,7 @@ TEST_F(KindValues, boolean_and_core)
   EXPECT_FALSE(bo(distinct(T(), T())));
 }
 
-TEST_F(KindValues, bitvectors)
+TEST_P(KindValues, bitvectors)
 {
   EXPECT_EQ(u(bvnot(B(0x0f))), 0xf0u);
   EXPECT_EQ(u(bvand(B(0x0f), B(0x3c))), 0x0cu);
@@ -784,7 +794,7 @@ TEST_F(KindValues, bitvectors)
   EXPECT_TRUE(bo(bv1_to_bool(tm.mk_bv(1, 1))));
 }
 
-TEST_F(KindValues, arrays)
+TEST_P(KindValues, arrays)
 {
   const Term k = tm.mk_const_array(A, B(9));
   EXPECT_EQ(u(select(store(k, B(3), B(7)), B(3))), 7u);
@@ -798,7 +808,7 @@ TEST_F(KindValues, arrays)
   API_EXPECT_ERROR(ErrorCode::VALUE_OUT_OF_RANGE, array_from_bytes(tm, {1, 2, 3}, 1));
 }
 
-TEST_F(KindValues, floating_point)
+TEST_P(KindValues, floating_point)
 {
   EXPECT_EQ(d(fp_abs(F(-1.5))), 1.5);
   EXPECT_EQ(d(fp_neg(F(1.5))), -1.5);
@@ -867,7 +877,7 @@ TEST_F(KindValues, floating_point)
   EXPECT_EQ(u(fp_to_ieee_bv(tm.mk_fp_nan(f32))), 0x7fc00000u);
 }
 
-TEST_F(KindValues, reals)
+TEST_P(KindValues, reals)
 {
   EXPECT_EQ(q(real_add(Q(1, 2), Q(1, 3))), "5/6");
   EXPECT_EQ(q(real_add({Q(1, 2), Q(1, 3), Q(1, 6)})), "1");
@@ -886,6 +896,12 @@ TEST_F(KindValues, reals)
   EXPECT_FALSE(bo(real_gt(Q(1, 1), Q(2, 1))));
   EXPECT_TRUE(bo(real_ge(Q(1, 1), Q(1, 1))));
 }
+
+INSTANTIATE_TEST_SUITE_P(Simplify, KindValues, ::testing::Bool(),
+                         [](const ::testing::TestParamInfo<bool>& info) {
+                           return info.param ? "simplifying" : "raw";
+                         });
+
 
 // A 1-bit ite over a Real equality builds under either simplify setting: the
 // simplifying factory's rewrite of a 1-bit ite over a 1-bit equality asked a
