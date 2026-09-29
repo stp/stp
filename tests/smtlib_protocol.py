@@ -252,5 +252,20 @@ class NamedTerms(unittest.TestCase):
                 self.assertIn(message, result.stdout)
 
 
+class SymbolSyntax(unittest.TestCase):
+    def test_strings_are_distinct_from_symbols(self):
+        for source in ['(echo identifier)', '(echo |quoted identifier|)',
+                       '(set-logic "QF_BV")',
+                       '(set-logic QF_BV)(declare-const "x" Bool)',
+                       '(set-logic QF_BV)(declare-const |true| Bool)',
+                       '(set-logic QF_BV)(declare-const x (_ BitVec 08))',
+                       '(set-logic QF_BV)(assert (= #b02 #b00))',
+                       '(echo "complete") "unfinished']:
+            with self.subTest(source=source):
+                result = run(source)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn('(error "', result.stdout)
+
+
 if __name__ == '__main__':
     unittest.main()

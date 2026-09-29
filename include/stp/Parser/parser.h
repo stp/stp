@@ -60,6 +60,8 @@ void SMT2SetFloatTokens(bool enable);
 // Mathematical-Real theory names are live only under the Real logics: QF_LRA,
 // QF_UFLRA, QF_AUFLRA and the LRA variants of the floating-point logics.
 void SMT2SetRealTokens(bool enable);
+void SMT2SetBitVectorTokens(bool enable);
+void SMT2ExpectCommand();
 
 // Sort and term symbols live in separate namespaces.
 void SMT2SetSortContext(bool enable);

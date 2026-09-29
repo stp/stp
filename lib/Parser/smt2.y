@@ -1953,6 +1953,7 @@
 %token DEFINE_SORT_TOK
 %token DECLARE_DATATYPE_TOK
 %token DECLARE_DATATYPES_TOK
+%token <str> STRING_LITERAL_TOK
 %token ECHO_TOK
 %token DEFINE_CONST_TOK
 %token EXIT_TOK
@@ -2130,7 +2131,7 @@ cmdi:
       stp::GlobalParserInterface->success();
     }
 |
-     ECHO_TOK STRING_TOK
+     ECHO_TOK STRING_LITERAL_TOK
     {
       stp::GlobalParserInterface->echo(*$2);
       stp::releaseParserValue($2);
@@ -2242,7 +2243,7 @@ cmdi:
        stp::releaseParserValue($2);
     }
 |
-     DEFINE_SORT_TOK STRING_TOK LPAREN_TOK sort_parameters RPAREN_TOK sort_expression
+     DEFINE_SORT_TOK STRING_TOK sort_parameter_open sort_parameters sort_parameter_close sort_expression
     {
       stp::GlobalParserInterface->defineSort(*$2, *$6);
       stp::SMT2SetSortContext(false);
@@ -2293,6 +2294,7 @@ cmdi:
        // (all_theory_tokens) stay open.
        stp::SMT2SetFloatTokens(stp::GlobalParserInterface->all_theory_tokens);
        stp::SMT2SetRealTokens(stp::GlobalParserInterface->all_theory_tokens);
+       stp::SMT2SetBitVectorTokens(stp::GlobalParserInterface->all_theory_tokens);
        stp::GlobalParserInterface->success();
     }
 |
@@ -2387,6 +2389,8 @@ cmdi:
       // exactly as before floating-point support existed.
       stp::SMT2SetFloatTokens(fp_logic);
       stp::SMT2SetRealTokens(real_logic);
+      stp::SMT2SetBitVectorTokens(stp::GlobalParserInterface->all_theory_tokens ||
+                                fp_logic || $2->find("BV") != std::string::npos);
       stp::GlobalParserInterface->success();
       stp::releaseParserValue($2);
     }
@@ -2546,6 +2550,13 @@ an_fp_sort:
     checkFpFormatWidths($4, $5);
     $$ = new stp::float_size($4, $5);
 }
+;
+
+sort_parameter_open:
+LPAREN_TOK { stringOnly = true; }
+;
+sort_parameter_close:
+RPAREN_TOK { stringOnly = false; }
 ;
 
 sort_parameters:
@@ -4110,6 +4121,7 @@ namespace stp {
     // disabled and turn on at an FP set-logic.
     SMT2SetFloatTokens(GlobalParserInterface->all_theory_tokens);
     SMT2SetRealTokens(GlobalParserInterface->all_theory_tokens);
+    SMT2SetBitVectorTokens(GlobalParserInterface->all_theory_tokens);
     SMT2ResetCommandLexerState();
     SMT2ResetLexMode();
     int result;

@@ -893,6 +893,7 @@ void Cpp_interface::beginCurrentCommand()
   if (current_command_active)
     abortCurrentCommand();
   SMT2ResetCommandLexerState();
+  SMT2ExpectCommand();
   current_command_active = true;
   current_command_rejected = false;
   current_command_supported = true;
