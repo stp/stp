@@ -189,6 +189,9 @@ private:
 
     void addSortAlias(const std::string& name);
     void addSymbol(const ASTNode& symbol);
+    // `symbol` under a second name: found by lookupSymbol, but not one of
+    // the frame's declarations
+    void addSymbolAs(const std::string& name, const ASTNode& symbol);
     void addTemporarySymbol(const ASTNode& symbol);
     void clearTemporarySymbols();
     void addUFDeclaration(const UFDecl* declaration);
@@ -566,6 +569,9 @@ public:
 
   DLL_PUBLIC void deleteNode(ASTNode* n);
   DLL_PUBLIC void addSymbol(ASTNode& s);
+  // An existing symbol, visible to the input under another name as well
+  // (the API's TermManager::bind_symbol aliases).
+  DLL_PUBLIC void addSymbolAlias(const std::string& name, const ASTNode& s);
   // Function formal parameters are parser-local bindings. They may shadow a
   // top-level declaration, and are installed for as long as the containing
   // define-fun command is being reduced.

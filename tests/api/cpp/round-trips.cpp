@@ -249,3 +249,21 @@ TEST(RoundTrips, a_parsed_real_minus_rebuilds_from_its_view)
     EXPECT_EQ(s.parse_term("(- r1 r2 r3)").num_children(), 2u);
   }
 }
+
+// A bind_symbol alias names its symbol for every reader of the manager's
+// table, the parsers included.
+TEST(RoundTrips, bind_symbol_aliases_reach_the_parsers)
+{
+  TermManager tm;
+  const Term x = tm.declare("x", tm.mk_bv_sort(8));
+  tm.bind_symbol("y", x);
+  Solver s(tm);
+  s.parse_smt2("(assert (= y #x01))");
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.model().uint64_value(x), 1u);
+  EXPECT_TRUE(s.entails(s.parse_term("(bvadd y x)") == bvadd(x, x)).is_valid());
+  s.parse("ASSERT(BVLT(y, 0hex05)); QUERY(FALSE);", Format::CVC);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  // and a script's own declaration of the name is a redeclaration
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2("(declare-fun y () (_ BitVec 8))"));
+}

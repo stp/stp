@@ -66,6 +66,10 @@ def test_name_table_and_symbols(fresh_manager):
     assert tm.symbol("nope") is None
     tm.bind_symbol("alias", x)
     assert tm.symbol("alias") is x
+    s = Solver()  # the alias names x for the parsers too
+    s.from_string("(assert (= alias #x05))")
+    assert s.check() == sat and s.model()[x].as_long() == 5
+    s.close()
     # a name SMT-LIB predefines cannot be told apart from the predefined symbol
     for name in ("select", "true", "bvadd", "RNE", "+"):
         with pytest.raises(ArgumentError):

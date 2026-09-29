@@ -673,6 +673,11 @@ void Cpp_interface::addSymbol(ASTNode& s)
   session_touched = true;
 }
 
+void Cpp_interface::addSymbolAlias(const std::string& name, const ASTNode& s)
+{
+  frames.back()->addSymbolAs(name, s);
+}
+
 void Cpp_interface::addTemporarySymbol(ASTNode& s)
 {
   // A formal is parser-local scratch, not a declaration. The successful
@@ -2228,6 +2233,11 @@ void Cpp_interface::SolverFrame::addSymbol(const ASTNode& symbol)
 {
   _scoped_symbols.push_back(symbol);
   _symbol_bindings[std::string(symbol.GetName())].push_back(symbol);
+}
+
+void Cpp_interface::SolverFrame::addSymbolAs(const std::string& name, const ASTNode& symbol)
+{
+  _symbol_bindings[name].push_back(symbol);
 }
 
 void Cpp_interface::SolverFrame::addTemporarySymbol(const ASTNode& symbol)

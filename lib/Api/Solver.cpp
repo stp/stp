@@ -1427,7 +1427,11 @@ void seed_parser_symbols(Cpp_interface& pi, ManagerImpl* m)
     if (rec.is_function)
       continue;
     ASTNode node = rec.node;
-    pi.addSymbol(node);
+    // a bind_symbol alias goes in under its own name
+    if (name == node.GetName())
+      pi.addSymbol(node);
+    else
+      pi.addSymbolAlias(name, node);
   }
 }
 
