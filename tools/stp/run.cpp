@@ -305,6 +305,13 @@ int run(const Invocation& in, std::unique_ptr<stp::Solver> owned)
   // What stp's teardown says (a Real session's -s statistics) is said as the
   // solver goes, and before the manager does.
   owned.reset();
+#ifdef NDEBUG
+  // The manager's teardown frees every node of the run, which after a large
+  // input takes longer than the answer did (0.7 s after 200,000 assertions);
+  // the process is ending anyway, so a release build leaves it undone, as the
+  // command line always did. A build with assertions keeps it, and checks it.
+  std::exit(0);
+#endif
   return 0;
 }
 
