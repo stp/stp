@@ -1770,6 +1770,20 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   Cpp_interface pi(*bm, &checker);
   pi.keepDeclaredSymbolsAtCleanup(&declared_at_end);
   pi.keepSortAliasesAtCleanup(&sorts_at_end);
+  // Parser scopes may forget a name, but the manager and its live handles
+  // cannot. Refuse a conflicting identity while the parser can still roll
+  // back, before adoption would merge sorts by name or hide a new symbol
+  // behind an existing binding. An ordinary symbol redeclared at the same
+  // source sort is already the same interned node and remains admissible.
+  pi.onSymbolDeclaration([mgr = s->mgr](const std::string& name, const ASTNode& node) {
+    const detail::SymbolRec* existing = mgr->find_symbol(name);
+    return existing == nullptr || existing->node == node;
+  });
+  pi.onSortDeclaration([mgr = s->mgr](const std::string& name, const SourceSort& sort) {
+    const auto existing = mgr->sorts_by_name.find(name);
+    return existing == mgr->sorts_by_name.end() ||
+           mgr->rec(existing->second).source == sort;
+  });
   // A script's (reset) empties the manager's Real registries, which the
   // manager's own Real symbols -- declared, made with mk_fresh, adopted from
   // an earlier script -- outlive: each is recorded again there, or every

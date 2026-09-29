@@ -317,6 +317,9 @@ void Cpp_interface::addSortAlias(const std::string& name,
     rejectCurrentCommand(msg);
     endParseWithDiagnostic(msg);
   }
+  if (accept_sort_declaration && !accept_sort_declaration(name, sort))
+    refuseCurrentCommand("the sort name '" + name +
+                         "' conflicts with a declaration retained by the term manager");
   sort_aliases[name] = sort;
   frames.back()->addSortAlias(name);
   session_touched = true;
@@ -543,7 +546,12 @@ const UFDecl* Cpp_interface::declareScopedUninterpretedFunction(
   const UFDecl* result =
       declareUninterpretedFunction(name, domain, codomain, diagnostic);
   if (result != NULL)
+  {
     frames.back()->addUFDeclaration(result);
+    // The frame owns the declaration before validation, so a refusal also
+    // deactivates it when the failed parse tears the frame down.
+    checkSymbolDeclaration(name, result->identityNode());
+  }
   return result;
 }
 
@@ -663,10 +671,19 @@ void Cpp_interface::deleteNode(ASTNode*& n)
   n = nullptr;
 }
 
+void Cpp_interface::checkSymbolDeclaration(const std::string& name,
+                                            const ASTNode& symbol)
+{
+  if (accept_symbol_declaration && !accept_symbol_declaration(name, symbol))
+    refuseCurrentCommand("the symbol name '" + name +
+                         "' conflicts with a declaration retained by the term manager");
+}
+
 void Cpp_interface::addSymbol(ASTNode& s)
 {
   if (current_command_rejected)
     return;
+  checkSymbolDeclaration(s.GetName(), s);
   // A public declaration changes the context whose combined model is being
   // described, even when the new symbol belongs to a disjoint theory.
   bm.InvalidateRealModel();

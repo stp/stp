@@ -225,6 +225,17 @@ does. An input can also come from a ``std::istream``, read as its data
 arrives, so a script driven over a pipe is answered command by command (in C
 a ``stp_text_source`` callback, in Python ``Solver.from_stream``).
 
+A script's ``reset`` or ``reset-assertions`` can discard its declarations,
+but the term manager retains declarations from the API and earlier parses,
+and existing handles remain valid. Reusing a retained name for a different
+symbol or sort is a recoverable ``PARSE`` error; the solver's assertion stack
+is restored. An ordinary symbol redeclared at the same sort keeps its
+identity. A ``declare-sort`` always introduces a new sort identity, so it
+cannot reuse a retained sort name even after reset. Use the existing sort
+without redeclaring it in a subsequent parse, or use a fresh term manager
+and solver when a script needs a new namespace. Declarations created and
+discarded within one script still follow SMT-LIB scope and reset rules.
+
 STP writes nothing to the process's streams. The answers, and what the
 printing options print, go to the solver's output sink, where an empty chunk
 asks for a flush; statistics, warnings and a fatal error's report go to its
