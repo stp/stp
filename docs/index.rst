@@ -107,8 +107,9 @@ SMT-LIB2 input language
 The SMT-LIB2 format is the recommended file format for use with STP, in
 part because it is parsed by all modern bitvector solvers. STP implements a
 subset of the SMT-LIB2 language; not all SMT-LIB2 features are
-implemented. What follows is a short description of the language STP
-parses. For more information related to SMT-LIB, please refer to `this
+implemented. :doc:`smtlib27` describes the 2.7 compatibility target,
+implemented commands and remaining limits. What follows is a short
+description of the language STP parses. For more information, see `this
 page <https://smt-lib.org/>`__.
 
 .. Hidden: these two pages are reached from the sidebar, like the pages for
@@ -127,18 +128,19 @@ page <https://smt-lib.org/>`__.
    bv-abstraction
    fp-abstraction
    linear-real-arithmetic
+   smtlib27
 
 Header
 ------
 
 The SMT-LIB2 format uses a header to tell the solver which type of
-problem is coming. Only ``set-logic`` is needed; ``set-info`` is accepted
-and ignored, and benchmark files usually carry it:
+problem is coming. ``set-logic`` is required; ``set-info`` supplies
+metadata, most of which STP ignores:
 
 .. code-block:: lisp
 
     (set-logic QF_ABV)
-    (set-info :smt-lib-version 2.0)
+    (set-info :smt-lib-version 2.7)
 
 The logic names the theories the problem is written in. STP accepts
 these, and rejects any other name:
@@ -153,14 +155,17 @@ these, and rejects any other name:
      - bitvectors
    * - ``QF_ABV``
      - bitvectors and arrays
+   * - ``QF_AX``
+     - extensional arrays over uninterpreted sorts
    * - ``QF_UF``
      - uninterpreted functions and uninterpreted sorts
    * - ``QF_UFBV``, ``QF_AUFBV``
      - bitvectors and uninterpreted functions, optionally with arrays
    * - ``QF_LRA``
      - linear real arithmetic (see :doc:`linear-real-arithmetic`)
-   * - ``QF_UFLRA``
-     - linear real arithmetic and uninterpreted functions
+   * - ``QF_UFLRA``, ``QF_AUFLRA``
+     - linear real arithmetic and uninterpreted functions, optionally
+       with arrays over supported component sorts
    * - ``QF_FP``
      - floating-point
    * - ``QF_BVFP``
@@ -168,20 +173,22 @@ these, and rejects any other name:
    * - ``QF_ABVFP``
      - floating-point, bitvectors and arrays
    * - ``QF_FPLRA``, ``QF_BVFPLRA``, ``QF_ABVFPLRA``
-     - as the three above, plus the real constants that appear as the
-       argument of ``to_fp``; no other use of reals is supported
+     - as the three above, plus linear real arithmetic and ``fp.to_real``;
+       ``to_fp`` accepts constant Real arguments
    * - ``QF_UFFP``, ``QF_UFBVFP``, ``QF_AUFBVFP``
      - uninterpreted functions and floating-point, optionally with explicit
        bitvectors and arrays
    * - ``QF_UFFPLRA``, ``QF_UFBVFPLRA``, ``QF_AUFBVFPLRA``
-     - as the three UF+FP logics above, plus real constants used as the
-       argument of ``to_fp``
+     - as the three UF+FP logics above, plus linear real arithmetic
+   * - ``ALL``
+     - all of STP's supported quantifier-free fragments together
 
 For compatibility, ``QF_UFABVFP`` and ``QF_UFABVFPLRA`` are accepted as
 aliases of the corresponding ``QF_AUFBV*`` spellings.  A logic containing
 ``UF`` enables uninterpreted-function support itself.  The
 ``--uninterpreted-functions`` option is still available for an input whose
-logic name omits ``UF``.
+logic name omits ``UF``. Array logics enable extensional array equality
+without an additional command-line option.
 
 Declarations
 ------------
@@ -204,7 +211,7 @@ results is:
 
 A ``declare-fun`` with a nonempty domain declares an uninterpreted function.
 Its arguments and result may be ``Bool``, bitvectors, declared sorts,
-``RoundingMode`` or floating-point sorts.  For example:
+``RoundingMode``, floating-point sorts or ``Real``. For example:
 
 .. code-block:: lisp
 
@@ -372,7 +379,7 @@ look for files with a ``.smt2`` extension under |queryfiles|_. Signed division o
 .. code-block:: lisp
 
     (set-logic QF_BV)
-    (set-info :smt-lib-version 2.0)
+    (set-info :smt-lib-version 2.7)
     (set-info :status sat)
     (assert (= (bvsdiv (_ bv3 2) (_ bv2 2)) (_ bv0 2)))
     (check-sat)

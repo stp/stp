@@ -34,15 +34,16 @@ Output
 An SMT-LIB2 input is a script, and STP answers its commands as it reaches
 them: ``sat``, ``unsat`` or ``unknown`` for each ``(check-sat)``, and the
 responses to ``(get-model)`` and ``(get-value ...)``. Those two need
-``(set-option :produce-models true)`` earlier in the script, or ``-p`` or
-``-d`` on the command line, and answer ``unsupported`` without one of
-them.
+``(set-option :produce-models true)`` before ``set-logic``, or ``-p`` or
+``-d`` on the command line, and require a current satisfiable context.
+Without the option, they report an error and end the script.
+:doc:`smtlib27` describes the command modes and other compatibility rules.
 
 .. code-block:: text
 
     $ cat example.smt2
-    (set-logic QF_BV)
     (set-option :produce-models true)
+    (set-logic QF_BV)
     (declare-fun x () (_ BitVec 8))
     (declare-fun y () (_ BitVec 8))
     (assert (= (bvadd x y) #x10))

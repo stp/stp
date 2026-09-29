@@ -23,8 +23,8 @@ Usage
 
 .. code-block:: lisp
 
-    (set-logic QF_LRA)
     (set-option :produce-models true)
+    (set-logic QF_LRA)
     (declare-fun x () Real)
     (declare-fun y () Real)
     (assert (or (< (+ x y) 1) (> (+ x y) 10)))
@@ -52,9 +52,10 @@ refused with an error when the term is built rather than answered
 ``is_int`` are not available. A value is printed as an exact rational:
 ``(/ 3 2)``, ``(- (/ 9 4))``.
 
-``Real`` is a sort only under ``QF_LRA`` and ``QF_UFLRA``. The ``*FPLRA``
-logics keep their floating-point meaning, in which a real appears only as
-the literal argument of ``to_fp``. In ``QF_UFLRA`` a function may take and
+``Real`` is available under the supported ``*LRA`` logics and ``ALL``.
+The ``*FPLRA`` logics combine linear real arithmetic with floating-point
+operations, including ``fp.to_real``; ``to_fp`` requires a constant Real
+argument. In ``QF_UFLRA`` a function may take and
 return Reals. How its congruence is decided is described in
 :doc:`uninterpreted-functions`, under "Real positions".
 
@@ -66,8 +67,8 @@ comparisons ``real_lt`` and its siblings. A model reads a value exactly,
 as a numerator and denominator (``Model::real_value``). Python has
 ``Real``, ``Reals``, ``RealVal`` and ``Q``, whose model values give
 ``as_fraction()``. The capability ``lra`` lets a program check for
-support first. Through the API a query may mix Reals with bit-vectors,
-arrays and floating point, which SMT-LIB's logic names cannot express.
+support first. Through the API, or a script selecting ``ALL``, a query
+may mix Reals with bit-vectors, arrays and floating point.
 
 How a query is decided
 ----------------------
