@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 #include "api_common.hpp"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -267,6 +268,21 @@ TEST(RoundTrips, bind_symbol_aliases_reach_the_parsers)
   ASSERT_TRUE(s.check_sat().is_sat());
   // and a script's own declaration of the name is a redeclaration
   API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2("(declare-fun y () (_ BitVec 8))"));
+  // the symbol is listed once, whatever its names
+  const std::vector<Term> all = tm.symbols();
+  EXPECT_EQ(std::count_if(all.begin(), all.end(), [&](const Term& t) { return t.same_as(x); }), 1);
+}
+
+// A name mk_fresh_sort made is the anonymous sort's, as mk_fresh's names are
+// the anonymous constants': declare_sort of it is refused, not that sort.
+TEST(RoundTrips, a_fresh_sorts_name_is_not_declared_again)
+{
+  TermManager tm;
+  const Sort fresh = tm.mk_fresh_sort("T");
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.declare_sort(fresh.name()));
+  EXPECT_TRUE(tm.declared_sorts().empty());
+  const Sort named = tm.declare_sort("T");
+  EXPECT_EQ(tm.declare_sort("T"), named);
 }
 
 // The CVC reader has no overflow predicate and no distinct, so the CVC

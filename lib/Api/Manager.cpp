@@ -1138,6 +1138,12 @@ Sort TermManager::declare_sort(std::string_view name)
     detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::declare_sort",
                  "a sort needs a name", 0);
   refuse_predefined(m, std::string(name), true, "TermManager::declare_sort");
+  // as declare does for a fresh constant's name
+  const auto existing = m->sorts_by_name.find(std::string(name));
+  if (existing != m->sorts_by_name.end() && m->rec(existing->second).anonymous)
+    detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::declare_sort",
+                 "the name '" + std::string(name) + "' belongs to an anonymous sort made by mk_fresh_sort",
+                 0);
   return Sort(m, m->uninterpreted_sort(std::string(name), false));
 }
 Sort TermManager::mk_fresh_sort(std::string_view prefix)
@@ -1192,8 +1198,14 @@ std::vector<Term> TermManager::symbols() const
   ManagerImpl* m = live(*this, "TermManager::symbols");
   std::vector<Term> out;
   out.reserve(m->symbol_order.size());
+  // a symbol once, however many names bind_symbol gave it
+  ASTNodeSet seen;
   for (const std::string& name : m->symbol_order)
-    out.push_back(detail::make_term(m, m->symbols.at(name).node));
+  {
+    const ASTNode& node = m->symbols.at(name).node;
+    if (seen.insert(node).second)
+      out.push_back(detail::make_term(m, node));
+  }
   return out;
 }
 std::vector<Sort> TermManager::declared_sorts() const
