@@ -20,9 +20,9 @@
 (assert (= (select ri RNE) #x11))
 ; CHECK: ^sat
 (check-sat)
-; The observed reads print sorted by array name, then index.
-; CHECK-L: (define-fun |fe| (_ BitVec 2) (_ FloatingPoint 8 24) #b01 (fp #b0 #b01111111 #b00000000000000000000000))
-; CHECK-L: (define-fun |fi| (_ FloatingPoint 8 24) (_ BitVec 8) (fp #b0 #b01111111 #b00000000000000000000000) #x2A)
-; CHECK-L: (define-fun |re| (_ BitVec 2) RoundingMode #b10 RTZ)
-; CHECK-L: (define-fun |ri| RoundingMode (_ BitVec 8) RNE #x11)
+; Array definitions print sorted by name, with the observed cells stored.
+; CHECK-L: (define-fun |fe| () (Array (_ BitVec 2) (_ FloatingPoint 8 24)) (store ((as const (Array (_ BitVec 2) (_ FloatingPoint 8 24))) (fp #b0 #b00000000 #b00000000000000000000000)) #b01 (fp #b0 #b01111111 #b00000000000000000000000)))
+; CHECK-L: (define-fun |fi| () (Array (_ FloatingPoint 8 24) (_ BitVec 8)) (store ((as const (Array (_ FloatingPoint 8 24) (_ BitVec 8))) #x00) (fp #b0 #b01111111 #b00000000000000000000000) #x2A))
+; CHECK-L: (define-fun |re| () (Array (_ BitVec 2) RoundingMode) (store ((as const (Array (_ BitVec 2) RoundingMode)) RNE) #b10 RTZ))
+; CHECK-L: (define-fun |ri| () (Array RoundingMode (_ BitVec 8)) (store ((as const (Array RoundingMode (_ BitVec 8))) #x00) RNE #x11))
 (get-model)

@@ -916,7 +916,7 @@ TEST(Parsing, frontend_refusals_are_parse_errors)
       "(define-sort F () (_ FloatingPoint 8 24))\n(define-sort F () (_ FloatingPoint 11 53))", // a sort alias defined twice
       "(declare-sort T 0)\n(declare-sort T 0)",                     // a sort declared twice
       "(declare-sort T 0)\n(declare-fun t () T)\n(assert (= t t))\n(assert (= x (bvadd t x)))", // a declared sort where a bit-vector is expected
-      "(set-logic ALL)",                                            // a logic STP does not decide
+      "(set-logic QF_NIA)",                                            // a logic STP does not decide
   };
   for (const char* script : scripts)
   {
@@ -1090,31 +1090,42 @@ TEST(Parsing, a_failed_script_leaves_the_stack_as_it_was)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
-// A run reads a script as the command line does: an equality between whole
-// arrays is decided with array-equality = on, and refused otherwise -- as
-// the UNSUPPORTED the API's own reading gives under off, where the refusal
-// used to poison the manager as an engine failure.
-TEST(Parsing, a_run_decides_whole_array_equality_only_when_switched_on)
+// The logic selects extensional arrays for scripts, without a second
+// nonstandard switch. Explicit native API settings still govern API work.
+TEST(Parsing, a_run_selects_whole_array_equality_from_its_logic)
 {
   const char* script = "(set-logic QF_ABV)(declare-fun a () (Array (_ BitVec 8) (_ BitVec 8)))"
                        "(declare-fun b () (Array (_ BitVec 8) (_ BitVec 8)))"
                        "(assert (= a b))(check-sat)";
+  for (const char* setting : {"auto", "on", "off"})
   {
     TermManager tm;
-    Solver s(tm);
-    API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.parse_smt2(script, ParseMode::EXECUTE));
-    EXPECT_TRUE(s.assertions().empty());
-    EXPECT_NO_THROW(tm.mk_bv(8, 1));
-    EXPECT_TRUE(s.check_sat().is_sat());
+    Options options;
+    options.set("array-equality", setting);
+    Solver s(tm, options);
+    std::string out;
+    s.set_output_sink([&](std::string_view text) { out.append(text); });
+    s.parse_smt2(script, ParseMode::EXECUTE);
+    EXPECT_EQ(out, "sat\n");
   }
+}
+
+TEST(Parsing, exported_model_options_precede_the_logic)
+{
   TermManager tm;
   Options options;
-  options.set("array-equality", "on");
+  options.set("produce-models", "true");
   Solver s(tm, options);
-  std::string out;
-  s.set_output_sink([&](std::string_view text) { out.append(text); });
-  s.parse_smt2(script, ParseMode::EXECUTE);
-  EXPECT_EQ(out, "sat\n");
+  s.add(tm.declare("p", tm.mk_bool_sort()));
+  const std::string script = s.to_smt2(true) + "(get-model)\n";
+  EXPECT_LT(script.find("set-option :produce-models"), script.find("set-logic"));
+  TermManager again;
+  Solver back(again);
+  std::string output;
+  back.set_output_sink([&](std::string_view text) { output.append(text); });
+  back.parse_smt2(script, ParseMode::EXECUTE);
+  EXPECT_NE(output.find("sat\n"), std::string::npos);
+  EXPECT_NE(output.find("define-fun |p| () Bool true"), std::string::npos);
 }
 
 // parse_term reads its term as a script's terms are read, over the type
@@ -1353,9 +1364,8 @@ TEST(Parsing, a_script_reset_leaves_the_managers_reals_alone)
 }
 
 // A printed script names a logic that admits what it declares: a declared
-// sort needs a UF logic as much as a function does, and an array beside a
-// Real needs QF_AUFLRA, since QF_UFLRA has no arrays. STP reads the script
-// back whatever logic it names; another reader need not.
+// sort needs a UF logic as much as a function does. Mixed Real, bit-vector
+// and array scripts use ALL instead of claiming a narrower named logic.
 TEST(Parsing, a_printed_script_names_a_logic_that_admits_it)
 {
   const auto printed = [](const std::function<void(TermManager&, Solver&)>& build) {
@@ -1365,7 +1375,7 @@ TEST(Parsing, a_printed_script_names_a_logic_that_admits_it)
     const std::string text = s.to_smt2(true);
     TermManager again;
     Solver back(again);
-    back.parse_smt2(text);
+    back.parse_smt2(text, ParseMode::EXECUTE);
     EXPECT_TRUE(back.check_sat().is_sat()) << text;
     return text.substr(0, text.find('\n'));
   };
@@ -1376,13 +1386,13 @@ TEST(Parsing, a_printed_script_names_a_logic_that_admits_it)
               s.add(select(a, tm.declare("i", u)) != select(a, tm.declare("j", u)));
               s.add(real_gt(tm.declare("x", tm.mk_real_sort()), half(tm)));
             }),
-            "(set-logic QF_AUFLRA)");
+            "(set-logic ALL)");
   EXPECT_EQ(printed([&](TermManager& tm, Solver& s) {
               const Sort bv8 = tm.mk_bv_sort(8);
               s.add(select(tm.declare("a", tm.mk_array_sort(bv8, bv8)), tm.mk_bv(8, 1)) == tm.mk_bv(8, 3));
               s.add(real_gt(tm.declare("x", tm.mk_real_sort()), half(tm)));
             }),
-            "(set-logic QF_AUFLRA)");
+            "(set-logic ALL)");
   EXPECT_EQ(printed([&](TermManager& tm, Solver& s) {
               const Sort u = tm.declare_sort("U");
               s.add(tm.declare("u", u) != tm.declare("v", u));

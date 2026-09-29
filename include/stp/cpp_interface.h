@@ -398,10 +398,11 @@ private:
   void restoreUFOptionAfterLogic();
 
   // QF_AX needs declared sorts and extensional array equality, but it does
-  // not contain uninterpreted functions. Keep that selection separate from
-  // enable_uninterpreted_functions and restore the caller's array-equality
+  // not contain uninterpreted functions. Other array logics and ALL also
+  // select extensional arrays. Restore the caller's array-equality
   // option when reset clears the logic or parser teardown ends the session.
   bool ax_enabled_by_logic = false;
+  bool arrays_enabled_by_logic = false;
   bool array_equality_option_before_logic = false;
   void restoreArrayEqualityOptionAfterLogic();
 

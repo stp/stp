@@ -211,7 +211,7 @@ void Cpp_interface::setLogic(const std::string& logic)
 {
   mode = Mode::Assert;
   const bool selectsUF =
-      logic.compare(0, 5, "QF_UF") == 0 ||
+      logic == "ALL" || logic.compare(0, 5, "QF_UF") == 0 ||
       logic.compare(0, 6, "QF_AUF") == 0;
   if (selectsUF)
   {
@@ -225,14 +225,15 @@ void Cpp_interface::setLogic(const std::string& logic)
   else
     restoreUFOptionAfterLogic();
 
-  const bool selectsAX = logic == "QF_AX";
-  if (selectsAX)
+  ax_enabled_by_logic = logic == "QF_AX";
+  const bool selectsArrays = logic == "ALL" || logic.compare(0, 4, "QF_A") == 0;
+  if (selectsArrays)
   {
-    if (!ax_enabled_by_logic)
+    if (!arrays_enabled_by_logic)
     {
       array_equality_option_before_logic =
           bm.UserFlags.enable_array_equality;
-      ax_enabled_by_logic = true;
+      arrays_enabled_by_logic = true;
     }
     bm.UserFlags.enable_array_equality = true;
   }
@@ -257,10 +258,11 @@ void Cpp_interface::restoreUFOptionAfterLogic()
 
 void Cpp_interface::restoreArrayEqualityOptionAfterLogic()
 {
-  if (!ax_enabled_by_logic)
+  ax_enabled_by_logic = false;
+  if (!arrays_enabled_by_logic)
     return;
   bm.UserFlags.enable_array_equality = array_equality_option_before_logic;
-  ax_enabled_by_logic = false;
+  arrays_enabled_by_logic = false;
 }
 
 void Cpp_interface::AddAssert(const ASTNode& assert)

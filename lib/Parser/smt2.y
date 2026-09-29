@@ -297,7 +297,7 @@
   // looking for a fragment STP has, not for a synonym of one.
   static const char* supportedLogicsPhrase()
   {
-    return "QF_BV, QF_ABV, QF_AX, QF_UF, QF_UFBV, QF_AUFBV, QF_LRA, QF_UFLRA, "
+    return "ALL (the supported quantifier-free fragments), QF_BV, QF_ABV, QF_AX, QF_UF, QF_UFBV, QF_AUFBV, QF_LRA, QF_UFLRA, "
            "QF_AUFLRA, the floating-point logics QF_FP, QF_BVFP, QF_ABVFP, "
            "QF_UFFP, QF_UFBVFP, QF_AUFBVFP, and their LRA variants";
   }
@@ -2394,7 +2394,8 @@ cmdi:
                          0 == strcmp($2->c_str(),"QF_UFLRA") ||
                          0 == strcmp($2->c_str(),"QF_AUFLRA") ||
                          fp_lra_logic;
-      const bool supported_logic =
+      const bool all_logic = *$2 == "ALL";
+      const bool supported_logic = all_logic ||
             0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
             0 == strcmp($2->c_str(),"QF_AX") ||
@@ -2424,10 +2425,10 @@ cmdi:
       // The floating-point keywords exist only inside the FP logics;
       // everywhere else names like "fp" or "NaN" stay ordinary symbols,
       // exactly as before floating-point support existed.
-      stp::SMT2SetFloatTokens(fp_logic);
-      stp::SMT2SetRealTokens(real_logic);
+      stp::SMT2SetFloatTokens(all_logic || fp_logic);
+      stp::SMT2SetRealTokens(all_logic || real_logic);
       stp::SMT2SetBitVectorTokens(stp::GlobalParserInterface->all_theory_tokens ||
-                                fp_logic || $2->find("BV") != std::string::npos);
+                                all_logic || fp_logic || $2->find("BV") != std::string::npos);
       stp::GlobalParserInterface->success();
       stp::releaseParserValue($2);
     }
