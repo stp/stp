@@ -625,3 +625,21 @@ TEST(libstp2_fidelity, a_misuse_is_reported_once)
   vc_setErrorPolicy(STP_ON_ERROR_ABORT);
   vc_registerErrorHandler(nullptr);
 }
+
+// 2.x took any name, one that spells a symbol SMT-LIB predefines included,
+// which the 3.x declare refuses: libstp2 still takes it.
+TEST(libstp2_fidelity, a_name_smtlib_predefines_is_still_a_name)
+{
+  VC vc = vc_createValidityChecker();
+  Type bv8 = vc_bvType(vc, 8);
+  Expr sel = vc_varExpr(vc, "select", bv8);
+  Expr t = vc_varExpr(vc, "true", vc_boolType(vc));
+  ASSERT_NE(sel, nullptr);
+  ASSERT_NE(t, nullptr);
+  vc_assertFormula(vc, vc_eqExpr(vc, sel, vc_bvConstExprFromInt(vc, 8, 42)));
+  vc_assertFormula(vc, vc_notExpr(vc, t));
+  EXPECT_EQ(vc_query(vc, vc_falseExpr(vc)), 0);
+  EXPECT_EQ(getBVUnsigned(vc_getCounterExample(vc, sel)), 42u);
+  EXPECT_EQ(vc_isBool(vc_getCounterExample(vc, t)), 0); // FALSE
+  vc_Destroy(vc);
+}

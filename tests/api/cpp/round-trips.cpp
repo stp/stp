@@ -176,3 +176,45 @@ TEST(RoundTrips, to_smt2_prints_options_every_reader_accepts)
     EXPECT_EQ(out.find("error"), std::string::npos) << out;
   }
 }
+
+// SMT-LIB takes |true| and true for the same symbol, so a declaration named
+// after a predefined symbol could not be printed so that it reads back: the
+// script would mean the theory's symbol. Such names are refused; every
+// other name, reserved words included, prints so that it reads back.
+TEST(RoundTrips, names_that_spell_predefined_symbols_are_refused)
+{
+  TermManager tm;
+  const Sort bv8 = tm.mk_bv_sort(8);
+  const Term x = tm.declare("x", bv8);
+  for (const char* name : {"true", "false", "not", "ite", "distinct", "select", "store", "concat",
+                           "extract", "bvadd", "bvult", "RNE", "roundTowardZero", "NaN", "+oo",
+                           "fp", "fp.add", "to_fp", "+", "<=", "/"})
+  {
+    SCOPED_TRACE(name);
+    API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.declare(name, bv8));
+    API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.bind_symbol(name, x));
+    EXPECT_FALSE(tm.symbol(name).has_value());
+  }
+  for (const char* sort : {"Bool", "Real", "Array", "BitVec", "FloatingPoint", "Float32", "RoundingMode"})
+    API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.declare_sort(sort));
+
+  Solver s(tm);
+  std::vector<Term> named;
+  for (const char* name : {"True", "Select", "bvadd1", "assert", "let", "odd name", "1abc", "x!0"})
+    named.push_back(tm.declare(name, bv8));
+  for (std::size_t i = 0; i < named.size(); ++i)
+    s.add(named[i] == tm.mk_bv(8, i + 1));
+  const Sort T = tm.declare_sort("Boolean");
+  s.add(tm.declare("t1", T) != tm.declare("t2", T));
+  ASSERT_TRUE(s.check_sat().is_sat());
+  TermManager fresh;
+  Solver back(fresh);
+  back.parse_smt2(s.to_smt2(true));
+  ASSERT_TRUE(back.check_sat().is_sat());
+  for (std::size_t i = 0; i < named.size(); ++i)
+  {
+    const std::string name = *named[i].symbol();
+    ASSERT_TRUE(fresh.symbol(name).has_value()) << name;
+    EXPECT_EQ(back.model().uint64_value(*fresh.symbol(name)), i + 1) << name;
+  }
+}

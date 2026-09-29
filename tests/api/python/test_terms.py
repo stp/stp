@@ -66,6 +66,15 @@ def test_name_table_and_symbols(fresh_manager):
     assert tm.symbol("nope") is None
     tm.bind_symbol("alias", x)
     assert tm.symbol("alias") is x
+    # a name SMT-LIB predefines cannot be told apart from the predefined symbol
+    for name in ("select", "true", "bvadd", "RNE", "+"):
+        with pytest.raises(ArgumentError):
+            BitVec(name, 8)
+        with pytest.raises(ArgumentError):
+            tm.bind_symbol(name, x)
+    with pytest.raises(ArgumentError):
+        tm.declare_sort("Bool")
+    assert BitVec("Select", 8).decl_name() == "Select"
     assert x in tm.symbols()
     f = tm.mk_fresh(BitVecSort(8), "c")
     assert f.is_symbol() and f.decl_name().startswith("c!")

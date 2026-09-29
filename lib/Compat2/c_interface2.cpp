@@ -1344,6 +1344,8 @@ VC vc_createValidityChecker(void)
               << (e != nullptr && e->message != nullptr ? std::string(": ") + e->message : "") << std::endl;
     return nullptr;
   }
+  // 2.x took any name, one that spells a symbol SMT-LIB predefines included
+  stp_internal_accept_predefined_names(tm);
   VCImpl* vc = new VCImpl;
   vc->tm = tm;
   vc->opts = stp_options_new();

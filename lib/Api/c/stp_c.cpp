@@ -797,6 +797,15 @@ uint64_t stp_tm_id(stp_tm tm)
   return tm == nullptr ? 0 : cm_of(tm)->impl->id;
 }
 
+// Not in stp.h: libstp2 (lib/Compat2) calls it on the manager behind every
+// 2.x validity checker, since 2.x took any name, one that spells a symbol
+// SMT-LIB predefines included (TermManager::declare refuses those).
+extern "C" STP_API void stp_internal_accept_predefined_names(stp_tm tm)
+{
+  if (tm != nullptr)
+    cm_of(tm)->impl->predefined_names_accepted = true;
+}
+
 bool stp_tm_simplify_enabled(stp_tm tm)
 {
   return tm != nullptr && cm_of(tm)->impl->config.simplify;

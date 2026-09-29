@@ -290,6 +290,9 @@ struct ManagerImpl
   bool array_equality_off = false;
   // an equality between arrays was built or parsed: what array-equality = auto engages
   bool array_equality_seen = false;
+  // Names that spell a predefined SMT-LIB symbol are taken as given (for
+  // libstp2: 2.x took any name); refused otherwise.
+  bool predefined_names_accepted = false;
 
   // poison
   bool poisoned = false;
@@ -675,6 +678,11 @@ unsigned rm_encoding(RoundingMode rm);
 // printing
 std::string print_term(ManagerImpl* m, const ASTNode& n, Format f, bool share);
 std::string quote_symbol(const std::string& name); // SMT-LIB |quoting| where needed
+// A symbol, or a sort symbol, that SMT-LIB's theories predefine (true, bvadd,
+// select, RNE, +, Bool, ...): |quoting| cannot tell a declaration apart from
+// it, since |true| and true are the same symbol.
+bool predefined_symbol(const std::string& name);
+bool predefined_sort_symbol(const std::string& name);
 
 // The process-wide parser lock: the bison parsers use global state.
 std::mutex& parser_mutex();

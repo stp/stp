@@ -397,7 +397,7 @@ STP_API stp_sort stp_mk_rm_sort(stp_tm);
 STP_API stp_sort stp_mk_real_sort(stp_tm);
 STP_API stp_sort stp_mk_array_sort(stp_tm, stp_sort index, stp_sort element); /* UNSUPPORTED for combinations the engine lacks */
 STP_API stp_sort stp_mk_fun_sort(stp_tm, size_t arity, const stp_sort* domain, stp_sort codomain);
-STP_API stp_sort stp_tm_declare_sort(stp_tm, const char* name); /* a named uninterpreted sort, keyed by name */
+STP_API stp_sort stp_tm_declare_sort(stp_tm, const char* name); /* a named uninterpreted sort, keyed by name; INVALID_ARGUMENT for a sort SMT-LIB predefines (Bool, Real, ...) */
 STP_API stp_sort stp_mk_fresh_sort(stp_tm, const char* prefix); /* anonymous; printed as prefix!k; NULL prefix means "" */
 STP_API stp_sort stp_sort_copy(stp_sort); /* the same handle */
 STP_API void stp_sort_release(stp_sort);  /* a no-op: sorts are pooled by the manager */
@@ -416,10 +416,10 @@ STP_API char* stp_sort_str(stp_sort);   /* SMT-LIB 2 */
 STP_API stp_tm stp_sort_manager(stp_sort); /* +1 handle */
 
 /* ------------------------------------------------------------------ symbols and values */
-STP_API stp_term stp_declare(stp_tm, const char* name, stp_sort); /* the manager's name table: the same (name, sort) gives the same term; SORT_MISMATCH on a clash */
+STP_API stp_term stp_declare(stp_tm, const char* name, stp_sort); /* the manager's name table: the same (name, sort) gives the same term; SORT_MISMATCH on a clash; INVALID_ARGUMENT for a name SMT-LIB predefines (true, select, bvadd, RNE, ...) */
 STP_API stp_term stp_mk_fresh(stp_tm, stp_sort, const char* prefix); /* anonymous, never in the name table; printed as prefix!k; NULL prefix means "" */
 STP_API stp_term stp_tm_symbol(stp_tm, const char* name); /* NULL, no error, if the name is not in the table */
-STP_API stp_status stp_tm_bind_symbol(stp_tm, const char* name, stp_term); /* enter an existing symbol into the table under this name; SORT_MISMATCH if taken, INVALID_ARGUMENT for a compound term */
+STP_API stp_status stp_tm_bind_symbol(stp_tm, const char* name, stp_term); /* enter an existing symbol into the table under this name; SORT_MISMATCH if taken, INVALID_ARGUMENT for a compound term or a predefined name */
 STP_API size_t stp_tm_num_symbols(stp_tm); /* declared symbols, in declaration order */
 STP_API stp_term stp_tm_symbol_at(stp_tm, size_t i);
 STP_API size_t stp_tm_num_declared_sorts(stp_tm);

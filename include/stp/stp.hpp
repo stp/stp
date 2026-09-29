@@ -537,7 +537,7 @@ public:
   Sort mk_real_sort();
   Sort mk_array_sort(const Sort& index, const Sort& element); ///< UNSUPPORTED for combinations the engine lacks
   Sort mk_fun_sort(const std::vector<Sort>& domain, const Sort& codomain);
-  Sort declare_sort(std::string_view name); ///< named uninterpreted sort, keyed by name
+  Sort declare_sort(std::string_view name); ///< named uninterpreted sort, keyed by name; INVALID_ARGUMENT for a sort SMT-LIB predefines (Bool, Real, ...)
   Sort mk_fresh_sort(std::string_view prefix = ""); ///< anonymous, printed as prefix!k
 
   // -- symbols: two doors with two purposes
@@ -545,7 +545,10 @@ public:
   /// name and sort give the same term whether it comes from this call, from
   /// Python's BitVec('x', 32), from a parsed script or from bind_symbol;
   /// SORT_MISMATCH if the name is already declared at another sort. Any string
-  /// is a legal name; the printer quotes it where SMT-LIB requires.
+  /// is a legal name, and the printer quotes it where SMT-LIB requires, except
+  /// one that spells a symbol SMT-LIB's theories predefine (true, select,
+  /// bvadd, RNE, +, ...): INVALID_ARGUMENT, since |true| and true are the
+  /// same symbol and no printed script could tell the two apart.
   Term declare(std::string_view name, const Sort&);
   /// An anonymous symbol that never enters the name table: fresh on every call,
   /// printed as prefix!k with a manager-unique k.
@@ -553,7 +556,7 @@ public:
   std::optional<Term> symbol(std::string_view name) const; ///< name table lookup
   std::vector<Term> symbols() const; ///< every declared symbol, declaration order
   std::vector<Sort> declared_sorts() const; ///< every declared sort, declaration order
-  void bind_symbol(std::string_view name, const Term&); ///< a symbol under a second name: SORT_MISMATCH if taken, INVALID_ARGUMENT for a compound term
+  void bind_symbol(std::string_view name, const Term&); ///< a symbol under a second name: SORT_MISMATCH if taken, INVALID_ARGUMENT for a compound term or a predefined name
   Term term_from_id(std::uint64_t id) const; ///< INVALID_ARGUMENT if no live term has that id
 
   // -- values (strict)

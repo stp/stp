@@ -326,7 +326,10 @@ unsupported, and which 2.x suites run against it.
 20. **Symbol names** follow the 3.x rules: a name starting with `@` or `.`
     is fatal, as in 2.x, and so is the empty name, which 2.x accepted; the
     3.x manager keys symbols by name and sort, so re-declaring a name at
-    another sort is the 2.x fatal "cannot be redeclared".
+    another sort is the 2.x fatal "cannot be redeclared". A name that spells
+    a symbol SMT-LIB predefines (`true`, `select`, `bvadd`, `RNE`, ...),
+    which the 3.x `declare` refuses, is taken as 2.x took it: the manager
+    behind every checker accepts such names, and they print bare, as in 2.x.
 21. **`vc_Destroy`** frees the persist list and every tracked handle of the
     checker, the whole counterexamples it handed out, the cached model, the UF
     function terms, the last query, the stack copy, the solver and the options,

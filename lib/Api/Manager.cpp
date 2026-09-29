@@ -694,6 +694,38 @@ std::string quote_symbol(const std::string& name)
   return "|" + name + "|";
 }
 
+bool predefined_symbol(const std::string& name)
+{
+  // What the SMT-LIB 2 reader takes as the theories' own: Core, FixedSizeBitVectors
+  // (with STP's reductions and overflow predicates), ArraysEx, FloatingPoint and Reals.
+  static const std::unordered_set<std::string> symbols = {
+      "true", "false", "not", "and", "or", "xor", "=>", "=", "distinct", "ite",
+      "concat", "extract", "repeat", "zero_extend", "sign_extend", "rotate_left", "rotate_right",
+      "bvnot", "bvand", "bvor", "bvxor", "bvnand", "bvnor", "bvxnor", "bvneg", "bvadd", "bvsub",
+      "bvmul", "bvudiv", "bvurem", "bvsdiv", "bvsrem", "bvsmod", "bvshl", "bvlshr", "bvashr",
+      "bvcomp", "bvult", "bvule", "bvugt", "bvuge", "bvslt", "bvsle", "bvsgt", "bvsge",
+      "bvredor", "bvredand", "bvnego", "bvuaddo", "bvsaddo", "bvumulo", "bvsmulo", "bvusubo",
+      "bvssubo", "bvsdivo",
+      "select", "store",
+      "fp", "fp.abs", "fp.neg", "fp.add", "fp.sub", "fp.mul", "fp.div", "fp.fma", "fp.sqrt",
+      "fp.rem", "fp.roundToIntegral", "fp.min", "fp.max", "fp.leq", "fp.lt", "fp.geq", "fp.gt",
+      "fp.eq", "fp.isNormal", "fp.isSubnormal", "fp.isZero", "fp.isInfinite", "fp.isNaN",
+      "fp.isNegative", "fp.isPositive", "fp.to_ubv", "fp.to_sbv", "fp.to_real", "fp.to_ieee_bv",
+      "to_fp", "to_fp_unsigned", "NaN", "+oo", "-oo", "+zero", "-zero",
+      "RNE", "RNA", "RTP", "RTN", "RTZ", "roundNearestTiesToEven", "roundNearestTiesToAway",
+      "roundTowardPositive", "roundTowardNegative", "roundTowardZero",
+      "+", "-", "*", "/", "<", "<=", ">", ">="};
+  return symbols.count(name) != 0;
+}
+
+bool predefined_sort_symbol(const std::string& name)
+{
+  static const std::unordered_set<std::string> sorts = {
+      "Bool", "BitVec", "Array", "FloatingPoint", "Float16", "Float32", "Float64", "Float128",
+      "RoundingMode", "Real"};
+  return sorts.count(name) != 0;
+}
+
 } // namespace detail
 
 using detail::ManagerImpl;
@@ -1087,12 +1119,27 @@ Sort TermManager::mk_fun_sort(const std::vector<Sort>& domain, const Sort& codom
                  "a function sort needs at least one domain sort", 0);
   return Sort(m, m->fun_sort(d, codomain.impl_index()));
 }
+namespace
+{
+void refuse_predefined(ManagerImpl* m, const std::string& name, bool sort, const char* fn)
+{
+  if (m->predefined_names_accepted)
+    return;
+  if (sort ? detail::predefined_sort_symbol(name) : detail::predefined_symbol(name))
+    detail::fail(ErrorCode::INVALID_ARGUMENT, fn,
+                 "'" + name + "' is a symbol SMT-LIB predefines, which no quoting tells a " +
+                     (sort ? "declared sort" : "declaration") + " apart from; choose another name",
+                 0);
+}
+} // namespace
+
 Sort TermManager::declare_sort(std::string_view name)
 {
   ManagerImpl* m = live(*this, "TermManager::declare_sort");
   if (name.empty())
     detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::declare_sort",
                  "a sort needs a name", 0);
+  refuse_predefined(m, std::string(name), true, "TermManager::declare_sort");
   return Sort(m, m->uninterpreted_sort(std::string(name), false));
 }
 Sort TermManager::mk_fresh_sort(std::string_view prefix)
@@ -1112,6 +1159,7 @@ Sort TermManager::mk_fresh_sort(std::string_view prefix)
 Term TermManager::declare(std::string_view name, const Sort& sort)
 {
   ManagerImpl* m = live(*this, "TermManager::declare");
+  refuse_predefined(m, std::string(name), false, "TermManager::declare");
   if (sort.is_null())
     detail::fail(ErrorCode::NULL_HANDLE, "TermManager::declare", "the sort is null", 1);
   if (sort.impl_manager() != m)
@@ -1169,6 +1217,7 @@ void TermManager::bind_symbol(std::string_view name, const Term& t)
   const std::string key(name);
   if (key.empty())
     detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::bind_symbol", "a name is needed", 0);
+  refuse_predefined(m, key, false, "TermManager::bind_symbol");
   const ASTNode node = detail::node_of(t);
   // The table maps names to symbols (declared or fresh); a compound term has
   // no place in it -- the parser's frames and the declaration printers walk

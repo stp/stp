@@ -271,6 +271,16 @@ TEST(c_roundtrip, binding_and_fresh_symbols)
   EXPECT_EQ(STP_ERROR, stp_tm_bind_symbol(a.tm, "x_alias", fresh)); // the name means something else
   EXPECT_EQ(STP_ERR_SORT_MISMATCH, stp_tm_error(a.tm)->code);
   stp_tm_clear_error(a.tm);
+  // a name SMT-LIB predefines cannot be told apart from the predefined symbol
+  EXPECT_EQ(nullptr, stp_declare(a.tm, "select", bv8));
+  EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, stp_tm_error(a.tm)->code);
+  stp_tm_clear_error(a.tm);
+  EXPECT_EQ(STP_ERROR, stp_tm_bind_symbol(a.tm, "true", x));
+  EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, stp_tm_error(a.tm)->code);
+  stp_tm_clear_error(a.tm);
+  EXPECT_EQ(nullptr, stp_tm_declare_sort(a.tm, "Bool"));
+  EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, stp_tm_error(a.tm)->code);
+  stp_tm_clear_error(a.tm);
   // a compound term has no place in the table, and the parse below still sees the table whole
   EXPECT_EQ(STP_ERROR, stp_tm_bind_symbol(a.tm, "x_sum", stp_bvadd(a.tm, x, x)));
   EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, stp_tm_error(a.tm)->code);

@@ -51,6 +51,11 @@ THE SOFTWARE.
 #include <unordered_set>
 #include <vector>
 
+// libstp's, not in stp.h: the manager takes names that spell a symbol SMT-LIB
+// predefines (true, select, bvadd, ...), which the 3.x declare refuses and 2.x
+// took.
+extern "C" void stp_internal_accept_predefined_names(stp_tm);
+
 namespace compat2
 {
 
