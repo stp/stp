@@ -646,8 +646,9 @@ STP_API stp_model stp_solver_model(stp_solver);           /* NO_MODEL unless the
 STP_API stp_model stp_solver_candidate_model(stp_solver); /* NULL, no error, if there is none */
 STP_API stp_term stp_solver_value(stp_solver, stp_term);  /* one lookup in the shared snapshot */
 /* interrupts: safe from any thread and from a signal handler; consumed by the check that
- * reports INTERRUPTED; a pending interrupt with no check running makes the next check return
- * INTERRUPTED at once; INTERRUPTED > TIMEOUT > CONFLICT_LIMIT */
+ * reports INTERRUPTED (a check an EXECUTE-mode input runs included); a pending interrupt with no
+ * check running makes the next check return INTERRUPTED at once; INTERRUPTED > TIMEOUT >
+ * CONFLICT_LIMIT */
 STP_API void stp_solver_interrupt(stp_solver);
 STP_API void stp_solver_clear_interrupt(stp_solver); /* discard a pending interrupt */
 STP_API bool stp_solver_interrupt_pending(stp_solver);

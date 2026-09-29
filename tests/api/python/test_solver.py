@@ -30,7 +30,7 @@ import pytest
 
 from stp import *
 import stp
-from conftest import hard_solver
+from conftest import hard_solver, interruptible_backend
 
 
 def test_check_and_results():
@@ -603,4 +603,44 @@ def test_every_unsat_core_rechecks_unsat():
             assert s.check(*assumptions) == unsat
             core = s.unsat_core()
             assert len(core) > 0 and s.check(*core) == unsat
+    s.close()
+
+
+_HARD_SCRIPT = """
+(declare-fun hx () (_ BitVec 64)) (declare-fun hy () (_ BitVec 64))
+(assert (= (bvmul ((_ zero_extend 64) hx) ((_ zero_extend 64) hy)) (_ bv18446744073709551557 128)))
+(assert (not (= hx (_ bv1 64)))) (assert (not (= hy (_ bv1 64)))) (assert (bvult hx hy))
+(check-sat)
+"""
+
+
+def test_interrupt_reaches_a_check_the_script_runs():
+    # interrupt() from another thread, and Ctrl-C on the main thread, stop a check an EXECUTE
+    # script runs as they stop check(): the script ran on (to max_time) and the interrupt stayed
+    # pending, spoiling the next check
+    import signal
+    import threading
+    backend = interruptible_backend()
+    if backend is None:
+        pytest.skip("no backend of this build can be interrupted mid-search")
+    s = Solver(tm=TermManager(), sat_backend=backend, max_time=120000)
+    out = []
+    s.set_output_sink(out.append)
+    timer = threading.Timer(0.3, s.interrupt)
+    timer.start()
+    t0 = time.monotonic()
+    s.from_string(_HARD_SCRIPT, mode="execute")
+    timer.join()
+    assert time.monotonic() - t0 < 60 and "".join(out) == "unknown\n" and not s.interrupt_pending()
+    s.close()
+    if threading.current_thread() is not threading.main_thread():
+        return
+    s = Solver(tm=TermManager(), sat_backend=backend, max_time=120000)
+    timer = threading.Timer(0.3, signal.raise_signal, (signal.SIGINT,))
+    timer.start()
+    t0 = time.monotonic()
+    with pytest.raises(KeyboardInterrupt):
+        s.from_string(_HARD_SCRIPT, mode="execute")
+    timer.join()
+    assert time.monotonic() - t0 < 60 and not s.interrupt_pending()
     s.close()

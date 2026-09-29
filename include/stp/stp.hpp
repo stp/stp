@@ -1120,9 +1120,11 @@ public:
   Term value(const Term& t) const { return model().value(t); }
 
   /// Thread-safe and async-signal-safe. The flag is CONSUMED by the check that
-  /// reports it; if no check is running, the next check returns
+  /// reports it -- a check an input read with ParseMode::EXECUTE runs as much
+  /// as check_sat's; if no check is running, the next check returns
   /// unknown(INTERRUPTED) immediately. clear_interrupt() discards a pending
-  /// interrupt. INTERRUPTED > TIMEOUT > CONFLICT_LIMIT when several fire.
+  /// interrupt. INTERRUPTED > TIMEOUT > CONFLICT_LIMIT when several fire. The
+  /// terminator reaches a script's checks the same way.
   void interrupt() noexcept;
   void clear_interrupt() noexcept;
   bool interrupt_pending() const noexcept;

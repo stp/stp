@@ -260,11 +260,15 @@ public:
   // outlive the script -- the API's, whose name table is the manager's --
   // records them again in `hook`, which reset() runs right after that.
   void onPublicReset(std::function<void()> hook) { after_public_reset = std::move(hook); }
+  // Called as each check-sat (or check-sat-assuming) of the input begins:
+  // the API marks a new check there, as its own check_sat does.
+  void onCheck(std::function<void()> hook) { before_check = std::move(hook); }
 
 private:
   ASTVec* symbols_at_cleanup = nullptr;
   std::map<std::string, SourceSort>* sorts_at_cleanup = nullptr;
   std::function<void()> after_public_reset;
+  std::function<void()> before_check;
 
   // What the most recent check-sat charged to each pipeline stage: the
   // difference between two readings of the manager's run times taken around

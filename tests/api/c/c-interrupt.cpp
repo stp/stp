@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <string>
 #include <thread>
 
 namespace
@@ -186,4 +187,40 @@ TEST(c_interrupt, conflict_budget_and_assumptions)
   EXPECT_EQ(STP_UNSAT, r.kind);
   ASSERT_EQ(1u, stp_solver_num_unsat_assumptions(h.s));
   EXPECT_EQ(assumption, stp_solver_unsat_assumption(h.s, 0));
+}
+
+// A check an EXECUTE script runs is interrupted like stp_solver_check_sat's,
+// and consumes the interrupt: it ran on regardless and left the interrupt
+// pending for the next, unrelated check.
+TEST(c_interrupt, reaches_a_check_the_script_runs)
+{
+  if (mid_search_backend() == nullptr)
+    GTEST_SKIP() << "no backend in this build stops mid-search";
+  stp_tm tm = stp_tm_new(nullptr);
+  stp_options o = stp_options_new();
+  stp_options_set_str(o, "sat-backend", mid_search_backend());
+  stp_options_set_duration_ms(o, "max-time", 120000); // a broken interrupt fails, it does not hang
+  stp_solver s = stp_solver_new(tm, o);
+  stp_options_delete(o);
+  std::string out;
+  stp_solver_set_output_sink(
+      s, [](const char* text, size_t n, void* user) { static_cast<std::string*>(user)->append(text, n); },
+      &out);
+  const char* script =
+      "(declare-fun x () (_ BitVec 64)) (declare-fun y () (_ BitVec 64))\n"
+      "(assert (= (bvmul ((_ zero_extend 64) x) ((_ zero_extend 64) y)) (_ bv18446744073709551557 128)))\n"
+      "(assert (not (= x (_ bv1 64)))) (assert (not (= y (_ bv1 64)))) (assert (bvult x y))\n"
+      "(check-sat)\n";
+  std::thread other([&] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(400));
+    stp_solver_interrupt(s);
+  });
+  const auto started = std::chrono::steady_clock::now();
+  EXPECT_EQ(STP_OK, stp_solver_parse_smt2(s, script, STP_PARSE_EXECUTE));
+  other.join();
+  EXPECT_LT(std::chrono::steady_clock::now() - started, std::chrono::seconds(60));
+  EXPECT_EQ("unknown\n", out);
+  EXPECT_FALSE(stp_solver_interrupt_pending(s));
+  stp_solver_delete(s);
+  stp_tm_release(tm);
 }

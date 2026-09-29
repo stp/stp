@@ -30,13 +30,16 @@ THE SOFTWARE.
 
 #include "api_common.hpp"
 
+#include <chrono>
 #include <ios>
 #include <sstream>
 #include <streambuf>
+#include <thread>
 #include <utility>
 #include <vector>
 
 using namespace stp;
+using namespace std::chrono_literals;
 
 namespace
 {
@@ -73,6 +76,16 @@ const char* const kNeedsCnf = "(declare-fun a () (_ BitVec 8))\n"
                               "(assert (= (bvmul a b) #x0f))\n"
                               "(assert (bvugt a #x01))\n"
                               "(assert (bvugt b #x01))\n";
+
+// api_test::add_hard_factoring's query as a script.
+const char* const kHard = "(declare-fun hard_a () (_ BitVec 96))\n"
+                          "(declare-fun hard_b () (_ BitVec 96))\n"
+                          "(assert (= (bvmul hard_a hard_b) (_ bv486579698794948075013401 96)))\n"
+                          "(assert (bvugt hard_a (_ bv1 96)))\n"
+                          "(assert (bvugt hard_b (_ bv1 96)))\n"
+                          "(assert (bvult hard_a (_ bv1099511627776 96)))\n"
+                          "(assert (bvult hard_b (_ bv1099511627776 96)))\n"
+                          "(assert (bvule hard_a hard_b))\n";
 
 // A stream buffer that hands out one line per refill and records what the
 // solver had said by the time each line was asked for.
@@ -513,4 +526,51 @@ TEST(Runs, the_sat_versions_are_listed_in_the_builds_order)
       EXPECT_NE(versions.find(backend + (" " + it->second)), std::string::npos) << versions;
     }
   }
+}
+
+// A check the input runs answers interrupt() as check_sat does: it stops, the
+// run goes on (the script's answer is unknown), and the interrupt is consumed.
+// Such a check ran on regardless and left the interrupt pending, so the next,
+// unrelated check answered unknown at once.
+TEST(Runs, interrupt_reaches_a_check_the_script_runs)
+{
+  const std::optional<std::string> backend = api_test::interruptible_backend();
+  if (!backend)
+    GTEST_SKIP() << "no backend of this build can be interrupted mid-search";
+  TermManager tm;
+  Options o;
+  o.set_str("sat-backend", *backend);
+  Solver s(tm, o);
+  Heard heard;
+  heard.attach(s);
+  std::thread stopper([&s] {
+    std::this_thread::sleep_for(300ms);
+    s.interrupt();
+  });
+  const auto start = std::chrono::steady_clock::now();
+  s.parse_smt2(std::string(kHard) + "(check-sat)\n", ParseMode::EXECUTE);
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  stopper.join();
+  EXPECT_LT(elapsed, 10s);
+  EXPECT_EQ(heard.out, "unknown\n");
+  EXPECT_FALSE(s.interrupt_pending());
+  // the next check is not interrupted (its budget is what stops it)
+  EXPECT_EQ(s.check_sat({}, CheckBudget{0ms, std::nullopt}).reason(), UnknownReason::TIMEOUT);
+
+  // pending before the run: its first check answers unknown, the rest are
+  // answered; a run with no check leaves it for the next check
+  TermManager t2;
+  Solver quick(t2);
+  Heard said;
+  said.attach(quick);
+  quick.interrupt();
+  quick.parse_smt2("(declare-fun x () (_ BitVec 8)) (assert (= x #x01)) (check-sat) (check-sat)",
+                   ParseMode::EXECUTE);
+  EXPECT_EQ(said.out, "unknown\nsat\n");
+  EXPECT_FALSE(quick.interrupt_pending());
+  quick.interrupt();
+  quick.parse_smt2("(declare-fun y () (_ BitVec 8))", ParseMode::EXECUTE);
+  EXPECT_TRUE(quick.interrupt_pending());
+  EXPECT_EQ(quick.check_sat().reason(), UnknownReason::INTERRUPTED);
+  EXPECT_FALSE(quick.interrupt_pending());
 }

@@ -25,6 +25,7 @@
 # written by lib/Api/gen/generate.py into <build>/generated/python/.
 
 from libc.stdint cimport uint8_t, uint32_t, uint64_t, int64_t
+from libc.signal cimport sighandler_t
 
 include "_gen_enums.pxi"
 
@@ -530,6 +531,8 @@ cdef class SolverHandle:
     cdef object __weakref__
     cdef int _fail_mutate(self, const char* fn) except -1
     cdef int _live(self) except -1
+    cdef bint _sigint_bridge_on(self, sighandler_t* old)
+    cdef void _sigint_bridge_off(self, bint on, sighandler_t old)
 
 cdef class ModelHandle:
     cdef stp_model _h

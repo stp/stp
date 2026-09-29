@@ -1595,6 +1595,48 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   const detail::CheckRun run(s);
   input_status = NOT_DECLARED;
 
+  // A check the input runs answers interrupt() and the terminator as
+  // check_sat does: the stop poll and the preparation observer are in place
+  // for the whole run. A check that reported an interrupt consumes it (at
+  // the next check's start, or at the end of the run), so one pending when
+  // the run starts stops its first check, and one that arrives after its
+  // last check stays pending for the next.
+  struct StopHooks
+  {
+    SolverImpl* s;
+    const PreparationControl* control;
+    StopHooks(SolverImpl* solver, const PreparationControl* outer) : s(solver), control(outer) {}
+    StopHooks(const StopHooks&) = delete;
+    StopHooks& operator=(const StopHooks&) = delete;
+    ~StopHooks()
+    {
+      UserDefinedFlags& flags = s->mgr->bm->UserFlags;
+      flags.stop_poll = nullptr;
+      flags.stop_poll_opaque = nullptr;
+      s->mgr->bm->preparation_control = control;
+      if (s->interrupt_consumed)
+        s->interrupt.store(false);
+    }
+  };
+  // The observer's control latches once it has stopped a check, so each
+  // check gets it afresh (arm_stop, at its start).
+  std::optional<PreparationControl> stop_control;
+  const auto arm_stop = [&stop_control, s] {
+    stop_control.emplace(PreparationControl::Clock::time_point::max(), nullptr,
+                         &detail::observe_preparation, s);
+  };
+  std::optional<StopHooks> stop_hooks;
+  if (runs)
+  {
+    s->interrupt_consumed = false;
+    s->terminator_fired = false;
+    bm->UserFlags.stop_poll = &SolverImpl::poll_stop;
+    bm->UserFlags.stop_poll_opaque = s;
+    stop_hooks.emplace(s, bm->preparation_control);
+    arm_stop();
+    bm->preparation_control = &*stop_control;
+  }
+
   // Everything the frontend needs lives in this block: its destructor puts
   // back the switches the script's set-logic turned on, so what the script's
   // content needs is switched on again after it.
@@ -1631,6 +1673,14 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
     }
     if (any)
       bm->noteReal();
+  });
+  pi.onCheck([s, &stop_control, &arm_stop] {
+    if (s->interrupt_consumed)
+      s->interrupt.store(false); // the last check reported it
+    s->interrupt_consumed = false;
+    s->terminator_fired = false;
+    if (stop_control)
+      arm_stop(); // the same place, so bm->preparation_control still points at it
   });
   GlobalParserInterface = &pi;
   GlobalSTP = s->stp;

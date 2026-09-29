@@ -1131,6 +1131,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   const EngineWork work(engine_work_failed);
   if (ignoreCheckSatRequest)
     return;
+  if (before_check)
+    before_check();
 
   // Upstream post-solve accounting can allocate after the coordinator has
   // installed an exact model.  A public check that unwinds at any later

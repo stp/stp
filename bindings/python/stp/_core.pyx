@@ -2096,6 +2096,28 @@ cdef class SolverHandle:
             return None
         return self._m._wrap(h)
 
+    cdef bint _sigint_bridge_on(self, sighandler_t* old):
+        """Ctrl-C becomes stp_solver_interrupt while a call that may check runs on the main
+        thread (a script run in EXECUTE mode checks as check() does); false off it."""
+        global stp_py_sigint_fired, stp_py_sigint_target
+        if threading.current_thread() is not threading.main_thread():
+            return 0
+        stp_py_sigint_fired = 0
+        stp_py_sigint_target = self._s
+        old[0] = signal(SIGINT, stp_py_sigint_handler)
+        return 1
+
+    cdef void _sigint_bridge_off(self, bint on, sighandler_t old):
+        global stp_py_sigint_fired, stp_py_sigint_target
+        if not on:
+            return
+        stp_py_sigint_target = NULL
+        if old != SIG_ERR:
+            signal(SIGINT, old)
+        if stp_py_sigint_fired:
+            stp_py_sigint_fired = 0
+            PyErr_SetInterrupt()
+
     def parse_smt2(self, text, mode=None):
         self._live()
         cdef bytes b = _b(text)
@@ -2104,12 +2126,18 @@ cdef class SolverHandle:
         if mode is not None:
             m = <stp_parse_mode><int>mode
         cdef stp_status st
+        cdef sighandler_t old = SIG_ERR
+        cdef bint bridged = 0
+        if m != STP_PARSE_DECLARE_AND_ASSERT:
+            bridged = self._sigint_bridge_on(&old)
         _set_busy(self._m, True)
         try:
             with nogil:
                 st = stp_solver_parse_smt2(self._s, p, m)
         finally:
             _set_busy(self._m, False)
+            self._sigint_bridge_off(bridged, old)
+        PyErr_CheckSignals()
         if st != STP_OK:
             self._fail_mutate("stp_solver_parse_smt2")
 
@@ -2129,6 +2157,10 @@ cdef class SolverHandle:
             text.offset = 0
         else:
             stream = _StreamSource(source)
+        cdef sighandler_t old = SIG_ERR
+        cdef bint bridged = 0
+        if m != STP_PARSE_DECLARE_AND_ASSERT:
+            bridged = self._sigint_bridge_on(&old)
         _set_busy(self._m, True)
         try:
             if stream is None:
@@ -2139,6 +2171,8 @@ cdef class SolverHandle:
                     st = stp_solver_parse_source(self._s, _stream_source_cb, <void*>stream, f, m)
         finally:
             _set_busy(self._m, False)
+            self._sigint_bridge_off(bridged, old)
+        PyErr_CheckSignals()
         if st != STP_OK:
             if stream is not None and stream.error is not None:
                 # the stream's own exception says more than the IO error it became
