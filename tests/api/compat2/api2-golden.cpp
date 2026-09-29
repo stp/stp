@@ -200,7 +200,12 @@ TEST(libstp2_golden, the_buffer_printers_give_2x_text)
   Expr x = vc_varExpr(vc, "x", bv8), y = vc_varExpr(vc, "y", bv8);
   Expr a = vc_varExpr(vc, "a", arr);
   Expr b = vc_varExpr(vc, "b", vc_boolType(vc));
-  vc_assertFormula(vc, vc_eqExpr(vc, vc_bvPlusExpr(vc, 8, x, y), vc_bvConstExprFromInt(vc, 8, 7)));
+  // An equality prints its operands in the order their nodes were made, and
+  // C++ leaves the order of a call's arguments to the compiler: the constant
+  // is made before the sum, as in the 2.x build this text comes from.
+  Expr seven = vc_bvConstExprFromInt(vc, 8, 7);
+  Expr sum = vc_bvPlusExpr(vc, 8, x, y);
+  vc_assertFormula(vc, vc_eqExpr(vc, sum, seven));
   vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 32, 3)), x));
   vc_assertFormula(vc, vc_iffExpr(vc, b, vc_bvLtExpr(vc, x, y)));
   Expr q = vc_eqExpr(vc, x, vc_bvConstExprFromInt(vc, 8, 1));
