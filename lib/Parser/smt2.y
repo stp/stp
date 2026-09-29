@@ -2457,6 +2457,8 @@ LPAREN_TOK
 function_param:
 function_param_open STRING_TOK resolved_sort RPAREN_TOK
 {
+  if (stp::SMT2IsTheorySymbol(*$2))
+    fatal_yyerror("function parameters cannot shadow theory functions");
   $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol($2->c_str(), *$3));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
   stp::releaseParserValue($2);
@@ -4065,12 +4067,14 @@ let: LPAREN_TOK
 } 
   STRING_TOK 
 {
+  if (stp::SMT2IsTheorySymbol(*$3))
+    fatal_yyerror("let variables cannot shadow theory functions");
   // Set it back to normal.
   stringOnly = false;
 }
-  an_mixed RPAREN_TOK
+  definition_body RPAREN_TOK
 {
-  stp::GlobalParserInterface->letMgr->LetExprMgr(*$3,($5->back()));
+  stp::GlobalParserInterface->letMgr->LetExprMgr(*$3, *$5);
   stp::releaseParserValue($3);
   stp::releaseParserValue($5);
 }
@@ -4517,7 +4521,7 @@ LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
   $$ = createExactRealTerm(stp::REAL_DIV, $3);
   checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK AS_TOK STRING_TOK an_array_sort RPAREN_TOK an_term
+| LPAREN_TOK AS_TOK STRING_TOK resolved_sort RPAREN_TOK an_term
 {
   // ((as const (Array I E)) v): the array whose every cell is v, the only
   // constant-array extension. The manager registers the
@@ -4537,7 +4541,9 @@ LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
     stp::GlobalParserInterface->deleteNode($6);
     fatal_yyerror("only (as const ...) is supported after 'as'");
   }
-  const stp::SourceSort array_sort = $4->sourceSort();
+  const stp::SourceSort array_sort = *$4;
+  if (array_sort.kind() != stp::SourceSort::Kind::Array)
+    fatal_yyerror("constant arrays require an Array result sort");
   ASTNode value = *$6;
   if (value.GetSourceSort() != array_sort.element())
   {

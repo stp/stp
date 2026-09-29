@@ -1,15 +1,23 @@
 ; RUN: %solver %s | %OutputCheck %s
-(set-logic QF_BV)
+(set-logic QF_UFBV)
 (declare-const |x| (_ |BitVec| 8))
 (define-const assert |Bool| |true|)
 (declare-const get-option Bool)
 (declare-const define-sort Bool)
 (assert (|and| assert get-option define-sort (|=| x (_ |bv42| 8))))
 (assert (|=| (|bvadd| x #x01) #x2b))
-; Locals can shadow theory symbols; quoted and unquoted references agree.
-(define-fun identity ((true Bool)) Bool |true|)
+; Locals can shadow user symbols; quoted and unquoted references agree.
+(define-fun identity ((assert Bool)) Bool |assert|)
 (assert (not (identity false)))
-(assert (let ((and false)) (not |and|)))
+(assert (let ((assert false)) (not |assert|)))
+; Sort names and term names occupy separate namespaces.
+(declare-const Bool Bool)
+(assert Bool)
+(define-sort bvadd () Bool)
+(declare-const another bvadd)
+(assert another)
+(declare-fun same-sort-name (Bool) Bool)
+(assert (same-sort-name Bool))
 ; CHECK: ^sat$
 (check-sat)
 (reset)

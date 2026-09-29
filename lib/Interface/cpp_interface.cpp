@@ -355,6 +355,8 @@ bool Cpp_interface::lookupSortAlias(const std::string& name,
 
 void Cpp_interface::addSortParameter(const std::string& name)
 {
+  if (SMT2IsTheorySortSymbol(name))
+    refuseCurrentCommand("sort parameters cannot shadow theory sorts: " + name);
   const unsigned slot = sort_parameters.size();
   if (!sort_parameters.emplace(name, slot).second)
     refuseCurrentCommand("duplicate sort parameter: " + name);

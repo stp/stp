@@ -11,8 +11,8 @@
 (define-sort Ignore (T) Word)
 ; A local sort parameter shadows a visible sort without changing that sort.
 (define-sort Local (Word) (Identity Word))
-(define-sort Shadow (Bool) Bool)
-(define-sort ShadowFloat (Float32) Float32)
+(define-sort Shadow (Flag) Flag)
+(define-sort ShadowFloat (Float) Float)
 (declare-const shadow (Shadow Word))
 (declare-const shadow-float (ShadowFloat Word))
 (declare-const x Word)

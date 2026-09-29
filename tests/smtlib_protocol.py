@@ -390,5 +390,22 @@ class ErrorResponses(unittest.TestCase):
                 self.assertNotIn('unreachable', response)
 
 
+class TheoryBinders(unittest.TestCase):
+    def test_a_let_binding_has_exactly_one_value(self):
+        result = run('(set-logic QF_BV)(assert (let ((x true false)) x))(check-sat)')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('(error "', result.stdout)
+
+    def test_binders_cannot_shadow_theory_symbols(self):
+        for command in ['(define-sort Bad (Bool) Bool)',
+                        '(define-sort Bad (|BitVec|) BitVec)',
+                        '(define-fun bad ((true Bool)) Bool true)',
+                        '(assert (let ((|and| false)) and))']:
+            with self.subTest(command=command):
+                result = run('(set-logic QF_BV)' + command + '(check-sat)')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('cannot shadow theory', result.stdout)
+
+
 if __name__ == '__main__':
     unittest.main()

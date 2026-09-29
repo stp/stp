@@ -77,6 +77,7 @@
   static thread_local bool bitVectorTokensActive = false;
   static thread_local bool commandNamePending = false;
   static thread_local bool qualifiedNamePending = false;
+  static thread_local bool declarationSortsAfterName = false;
 
   // Inside an indexed identifier -- between "(_" and its ")" -- a numeral
   // is an index, a width or a count, never a Real literal, whatever the
@@ -171,6 +172,7 @@ namespace stp
     indexedIdentifierOpen = false;
     commandNamePending = false;
     qualifiedNamePending = false;
+    declarationSortsAfterName = false;
     sortContext = false;
     annotations.clear();
     ufDeclarationNamePending = false;
@@ -349,10 +351,36 @@ namespace stp
     return 0;
   }
 
+  static bool isSortToken(int token)
+  {
+    switch (token)
+    {
+      case BOOL_TOK: case BITVEC_TOK: case ARRAY_TOK: case REAL_TOK:
+      case FLOATINGPOINT_TOK: case ROUNDINGMODE_TOK:
+      case FLOAT16_TOK: case FLOAT32_TOK: case FLOAT64_TOK: case FLOAT128_TOK:
+        return true;
+      default: return false;
+    }
+  }
+
+  static int termTheoryToken(std::string_view name)
+  {
+    const int token = theoryToken(name);
+    return isSortToken(token) ? 0 : token;
+  }
+
   static int classify(char* s);
 
   static int lookup(char* s)
   {
+    // declare-fun's domain and codomain belong to the sort namespace. Its
+    // name is classified first, then the entire signature uses that namespace.
+    struct SignatureScope
+    {
+      bool begin;
+      ~SignatureScope() { if (begin) sortContext = true; }
+    } signature{declarationSortsAfterName};
+    declarationSortsAfterName = false;
     const bool qualifiedName = qualifiedNamePending;
     qualifiedNamePending = false;
     // The SMTLIB2 specifications sez that the outter bars aren't part of the
@@ -385,9 +413,11 @@ namespace stp
     if (sortContext)
     {
       if (!stp::GlobalParserInterface->isSortParameter(s))
-        if (const int token = theoryToken(s))
-          return token;
-      if (!floatTokensActive && theoryToken(s, true) != 0)
+      {
+        const int token = theoryToken(s);
+        if (isSortToken(token)) return token;
+      }
+      if (!floatTokensActive && theoryToken(s) == 0 && theoryToken(s, true) != 0)
         unresolvedFpKeyword = s;
       smt2lval.str = new std::string(s);
       return STRING_TOK;
@@ -404,7 +434,7 @@ namespace stp
         smt2lval.str = new std::string(s);
         return STRING_TOK;
       }
-      if (const int builtin = theoryToken(s))
+      if (const int builtin = termTheoryToken(s))
         return builtin;
       const int token = classify(s);
       if (token == STRING_TOK)
@@ -477,7 +507,7 @@ namespace stp
         smt2lval.str = new std::string(s + 2);
         return BVCONST_DECIMAL_TOK;
       }
-      if (const int builtin = theoryToken(s))
+      if (const int builtin = termTheoryToken(s))
         return builtin;
     }
     if (!found)
@@ -551,7 +581,7 @@ namespace stp
     else
     {
       // it has not been seen before.
-      if (!floatTokensActive && theoryToken(s, true) != 0)
+      if (!floatTokensActive && theoryToken(s) == 0 && theoryToken(s, true) != 0)
         unresolvedFpKeyword = s;
       smt2lval.str = new std::string(s);
       return STRING_TOK;
@@ -748,12 +778,14 @@ bv{DIGIT}+             { return lookup(smt2text); }
 "declare-const"           { return commandToken(DECLARE_CONST_TOK); }
 "declare-fun"             {
                               if (!commandNamePending) return lookup(smt2text);
+                              declarationSortsAfterName = true;
                               ufDeclarationNamePending =
                                   stp::GlobalParserInterface->getUserFlags()
                                       .enable_uninterpreted_functions;
                               return commandToken(DECLARE_FUNCTION_TOK);
                             }
-"declare-sort"            { return commandToken(DECLARE_SORT_TOK);}
+"declare-sort"            { if (!commandNamePending) return lookup(smt2text);
+                            sortContext = true; return commandToken(DECLARE_SORT_TOK);}
 "define-fun"              { return commandToken(DEFINE_FUNCTION_TOK); }
 "define-const"            { return commandToken(DEFINE_CONST_TOK); }
 "echo"                    { return commandToken(ECHO_TOK);}
@@ -854,7 +886,11 @@ namespace stp
 {
 bool SMT2IsTheorySymbol(const std::string& name)
 {
-  return theoryToken(name) != 0;
+  return termTheoryToken(name) != 0;
+}
+bool SMT2IsTheorySortSymbol(const std::string& name)
+{
+  return isSortToken(theoryToken(name));
 }
 void SMT2BeginAnnotation()
 {
