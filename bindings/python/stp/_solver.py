@@ -242,7 +242,7 @@ class Options:
     time; durations take an int of milliseconds, a timedelta, or a string with a unit ("500ms",
     "0.5s"); a mode option takes True/False or "auto"/"on"/"off"; a set option a list of names.
 
-    Options(**kwargs) is a standalone value; Solver.options is the live view of a solver, where
+    ``Options(**kwargs)`` is a standalone value; Solver.options is the live view of a solver, where
     the entry's Settable window is enforced."""
 
     def __init__(self, *positional_pairs, **kwargs):

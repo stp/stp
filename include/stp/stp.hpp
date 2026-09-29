@@ -359,9 +359,15 @@ public:
   friend STP_API_EXPORT std::ostream& operator<<(std::ostream&, const Sort&);
 
   // internal
+  /// @cond INTERNAL
   Sort(detail::ManagerImpl*, std::uint32_t index) noexcept;
+  /// @endcond
+  /// @cond INTERNAL
   detail::ManagerImpl* impl_manager() const noexcept { return mgr_; }
+  /// @endcond
+  /// @cond INTERNAL
   std::uint32_t impl_index() const noexcept { return index_; }
+  /// @endcond
 
 private:
   detail::ManagerImpl* mgr_;
@@ -444,9 +450,15 @@ public:
   friend STP_API_EXPORT std::ostream& operator<<(std::ostream&, const Term&);
 
   // internal: the node is the engine's ASTInternal*, retained
+  /// @cond INTERNAL
   Term(detail::ManagerImpl*, void* node) noexcept;
+  /// @endcond
+  /// @cond INTERNAL
   detail::ManagerImpl* impl_manager() const noexcept { return mgr_; }
+  /// @endcond
+  /// @cond INTERNAL
   void* impl_node() const noexcept { return node_; }
+  /// @endcond
 
 private:
   detail::ManagerImpl* mgr_;
@@ -577,7 +589,7 @@ public:
   Term mk_bool(bool);
   Term mk_bv(std::uint32_t width, std::uint64_t value); ///< VALUE_OUT_OF_RANGE unless value < 2^width
   Term mk_bv_signed(std::uint32_t width, std::int64_t value); ///< two's complement range
-  /// base 2/10/16; optional #b/#x/0x; '-' in base 10; '_' between two digits
+  /// base 2/10/16; optional `#b`/`#x`/`0x`; '-' in base 10; '_' between two digits
   /// separates them
   Term mk_bv(std::uint32_t width, std::string_view digits, int base);
   Term mk_bv_limbs(std::uint32_t width, const std::vector<std::uint64_t>& lsb_first);
@@ -619,8 +631,12 @@ public:
   Term simplify(const Term&) const; ///< local rewrites only; touches no solver; an unspecified floating-point case (fp.min of +0 and -0, fp.to_ubv of NaN, ...) stays as it is
 
   // internal
+  /// @cond INTERNAL
   explicit TermManager(detail::ManagerImpl*) noexcept; ///< retains
+  /// @endcond
+  /// @cond INTERNAL
   detail::ManagerImpl* impl() const noexcept { return impl_; }
+  /// @endcond
 
 private:
   detail::ManagerImpl* impl_;
@@ -681,9 +697,9 @@ STP_API_EXPORT Term repeat(std::uint32_t k, const Term&);
 STP_API_EXPORT Term rotate_left(std::uint32_t k, const Term&);
 STP_API_EXPORT Term rotate_right(std::uint32_t k, const Term&);
 STP_API_EXPORT Term concat(const Term&, const Term&); // declared by the generator too
-STP_API_EXPORT Term bit(const Term& bv, std::uint32_t i); ///< (= ((_ extract i i) bv) #b1)
-STP_API_EXPORT Term bool_to_bv1(const Term& b); ///< (ite b #b1 #b0)
-STP_API_EXPORT Term bv1_to_bool(const Term& bv1); ///< (= bv1 #b1)
+STP_API_EXPORT Term bit(const Term& bv, std::uint32_t i); ///< `(= ((_ extract i i) bv) #b1)`
+STP_API_EXPORT Term bool_to_bv1(const Term& b); ///< `(ite b #b1 #b0)`
+STP_API_EXPORT Term bv1_to_bool(const Term& bv1); ///< `(= bv1 #b1)`
 /// A store chain over (as const ... 0) holding `bytes` at indices [0, n) of an
 /// Array BV[index_width] BV8.
 STP_API_EXPORT Term array_from_bytes(TermManager& tm,
@@ -855,7 +871,9 @@ public:
   static std::optional<Option> stable_option(std::string_view name);
 
   // internal
+  /// @cond INTERNAL
   detail::OptionsImpl* impl() const noexcept { return impl_; }
+  /// @endcond
 
 private:
   detail::OptionsImpl* impl_;
@@ -905,7 +923,9 @@ public:
   void resolve() const;
 
   // internal
+  /// @cond INTERNAL
   explicit SolverOptions(detail::SolverImpl*) noexcept;
+  /// @endcond
 
 private:
   friend class Solver;
@@ -984,7 +1004,9 @@ public:
   Term as_term() const; ///< store chain over (as const ...); re-assertable
 
   // internal
+  /// @cond INTERNAL
   ArrayValue(std::shared_ptr<const detail::ValueImpl>) noexcept;
+  /// @endcond
   ArrayValue(const ArrayValue&) noexcept;
   ArrayValue& operator=(const ArrayValue&) noexcept;
   ~ArrayValue();
@@ -1019,7 +1041,9 @@ public:
   Term as_ite_term(const std::vector<Term>& formal_args) const;
 
   // internal
+  /// @cond INTERNAL
   FunctionValue(std::shared_ptr<const detail::ValueImpl>) noexcept;
+  /// @endcond
   FunctionValue(const FunctionValue&) noexcept;
   FunctionValue& operator=(const FunctionValue&) noexcept;
   ~FunctionValue();
@@ -1074,11 +1098,15 @@ public:
   friend STP_API_EXPORT std::ostream& operator<<(std::ostream&, const Model&);
 
   // internal
+  /// @cond INTERNAL
   explicit Model(std::shared_ptr<const detail::ModelSnapshot>) noexcept;
+  /// @endcond
   Model(const Model&) noexcept;
   Model& operator=(const Model&) noexcept;
   ~Model();
+  /// @cond INTERNAL
   const detail::ModelSnapshot* impl() const noexcept { return snap_.get(); }
+  /// @endcond
 
 private:
   std::shared_ptr<const detail::ModelSnapshot> snap_;
@@ -1235,7 +1263,9 @@ public:
   void set_cnf_sink(std::function<void(std::string_view dimacs, CnfScope)>);
 
   // internal
+  /// @cond INTERNAL
   detail::SolverImpl* impl() const noexcept { return impl_; }
+  /// @endcond
 
 private:
   detail::SolverImpl* impl_;

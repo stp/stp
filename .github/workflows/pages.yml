@@ -13,12 +13,24 @@ on:
     branches: [master]
     paths:
       - 'docs/**'
+      - 'include/stp/stp.h'
+      - 'include/stp/stp.hpp'
+      - 'lib/Api/**'
+      - 'bindings/python/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
       - '.github/workflows/pages.yml'
   # Build (but do not deploy) on PRs, so a change that breaks the site is
   # caught in review rather than after it is already published.
   pull_request:
     paths:
       - 'docs/**'
+      - 'include/stp/stp.h'
+      - 'include/stp/stp.hpp'
+      - 'lib/Api/**'
+      - 'bindings/python/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -43,9 +55,19 @@ jobs:
 
       - run: pip install -r docs/requirements.txt
 
-      # -W turns warnings into errors: a problem fails the build rather than
-      # quietly publishing a broken site.
-      - run: sphinx-build -W -b html docs _site
+      - name: Install native documentation dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build bison flex doxygen
+
+      # Autodoc reads inherited methods from the real Cython extension.
+      - name: Build the Python API
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_AUTO_DOWNLOAD=ON -DUSE_CRYPTOMINISAT=OFF \
+            -DENABLE_PYTHON_API=ON -DPYTHON_EXECUTABLE="$(command -v python)"
+          cmake --build build --target stp_python --parallel 2
+
+      # Both Doxygen and Sphinx treat warnings as errors.
+      - run: python docs/build.py --build-dir build --output _site
 
       - uses: actions/upload-pages-artifact@v5
         with:

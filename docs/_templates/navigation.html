@@ -9,7 +9,7 @@
            href="{{ pathto(master_doc) }}">{{ _('Overview') }}</a>
     </li>
 </ul>
-{{ toctree(includehidden=theme_sidebar_includehidden, collapse=theme_sidebar_collapse) }}
+{{ toctree(includehidden=theme_sidebar_includehidden, collapse=theme_sidebar_collapse, maxdepth=3) }}
 {% if theme_extra_nav_links %}
 <hr />
 <ul>
