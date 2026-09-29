@@ -1160,8 +1160,12 @@ public:
   void parse(std::istream& in, Format, ParseMode = ParseMode::DECLARE_AND_ASSERT);
   Term parse_term(std::string_view smt2_term) const; ///< over the manager's name table
 
-  /// The assertions through the engine's printers, which recurse once per
-  /// level of a term (see Term::to_string).
+  /// The assertions as a script a fresh manager reads back: the logic their
+  /// content and the manager's declarations need, the declarations, the
+  /// assertion levels as pushes. produce-models prints as a set-option, the
+  /// solver's other options as "; name = value" comments. Through the
+  /// engine's printers, which recurse once per level of a term (see
+  /// Term::to_string).
   std::string to_smt2(bool with_check_sat = false) const;
   std::string to_string(Format) const; ///< SMTLIB2, CVC, DOT, GDL
   /// The last CVC or SMT-LIB 1 input this solver read, as the stp command

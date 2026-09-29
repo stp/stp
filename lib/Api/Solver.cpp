@@ -2420,18 +2420,26 @@ std::string Solver::to_smt2(bool with_check_sat) const
     }
   }
   os << "(set-logic " << logic << ")\n";
-  // options that differ from their defaults
+  // The options set on the solver. produce-models is SMT-LIB's own; the rest
+  // are STP's, which no reader takes from a script, so they print as
+  // comments: the script reads back, and the settings stay on record.
   std::size_t n = 0;
   const detail::OptionSpec* specs = detail::option_specs(n);
   for (std::size_t i = 0; i < n; ++i)
     if (s->options.is_set[i] && specs[i].scope == OptionScope::SOLVER)
     {
       const std::string name = specs[i].name;
-      const std::string text = detail::option_text(specs[i], s->options.values[i]);
+      std::string text = detail::option_text(specs[i], s->options.values[i]);
       if (name == "produce-models")
         os << "(set-option :produce-models " << text << ")\n";
       else if (name != "logic")
-        os << "(set-option :stp." << name << " " << text << ")\n";
+      {
+        // one comment line, whatever a string value holds
+        for (char& c : text)
+          if (c == '\n' || c == '\r')
+            c = ' ';
+        os << "; " << name << " = " << text << "\n";
+      }
     }
   os << decls.str();
   // the assertion stack

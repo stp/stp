@@ -492,12 +492,13 @@ TEST(Parsing, smt2_text_round_trips_through_a_fresh_solver)
   Solver s3(t3);
   s3.parse_smt2(s.to_smt2(true));
   EXPECT_TRUE(s3.check_sat().is_unsat());
-  // options that differ from their defaults are written as set-option
+  // produce-models is written as SMT-LIB's set-option, STP's own options as
+  // comments (no reader takes them from a script)
   s.options().set_bool("produce-models", false);
   s.options().set_int("max-num-confl", 5);
   const std::string with_options = s.to_smt2();
   EXPECT_NE(with_options.find("(set-option :produce-models false)"), std::string::npos);
-  EXPECT_NE(with_options.find("(set-option :stp.max-num-confl 5)"), std::string::npos);
+  EXPECT_NE(with_options.find("; max-num-confl = 5"), std::string::npos);
   // floating point and a declared sort
   TermManager t4;
   Solver s4(t4);
