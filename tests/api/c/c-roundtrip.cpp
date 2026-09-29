@@ -235,7 +235,9 @@ TEST(c_roundtrip, cvc_and_dot_and_model_printing)
   Session b;
   ASSERT_EQ(STP_OK, stp_solver_parse(b.s, cvc.c_str(), STP_FORMAT_CVC)) << pending(b.tm) << "\n" << cvc;
   EXPECT_EQ(STP_SAT, b.check());
-  ASSERT_EQ(STP_OK, stp_model_uint64(stp_solver_model(b.s), stp_tm_symbol(b.tm, "cx"), &v));
+  stp_model mb = stp_solver_model(b.s);
+  ASSERT_EQ(STP_OK, stp_model_uint64(mb, stp_tm_symbol(b.tm, "cx"), &v));
+  stp_model_release(mb);
   EXPECT_EQ(42u, v);
 
   const std::string dot = take(stp_solver_to_string(a.s, STP_FORMAT_DOT));
@@ -256,7 +258,7 @@ TEST(c_roundtrip, binding_and_fresh_symbols)
   stp_term x = stp_declare(a.tm, "x", bv8);
   stp_term fresh = stp_mk_fresh(a.tm, bv8, "tmp");
   ASSERT_NE(nullptr, fresh);
-  EXPECT_NE(nullptr, stp_term_symbol(x));
+  EXPECT_EQ("x", take(stp_term_symbol(x)));
   EXPECT_EQ(1u, stp_tm_num_symbols(a.tm)); // fresh symbols never enter the table
   EXPECT_EQ(x, stp_tm_symbol_at(a.tm, 0));
   EXPECT_EQ(nullptr, stp_tm_symbol_at(a.tm, 1));
@@ -290,6 +292,8 @@ TEST(c_roundtrip, binding_and_fresh_symbols)
   ASSERT_EQ(STP_OK, stp_solver_parse_smt2(a.s, "(assert (= x #x07))", STP_PARSE_DECLARE_AND_ASSERT)) << pending(a.tm);
   EXPECT_EQ(STP_SAT, a.check());
   uint64_t v = 0;
-  ASSERT_EQ(STP_OK, stp_model_uint64(stp_solver_model(a.s), x, &v));
+  stp_model m = stp_solver_model(a.s);
+  ASSERT_EQ(STP_OK, stp_model_uint64(m, x, &v));
+  stp_model_release(m);
   EXPECT_EQ(7u, v);
 }

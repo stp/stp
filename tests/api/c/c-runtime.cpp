@@ -303,7 +303,9 @@ TEST(c_runtime, the_failed_state_is_the_solvers_alone)
   EXPECT_NE(nullptr, stp_bvadd(tm, x, x));
   EXPECT_EQ(1u, stp_solver_num_assertions(s));
   EXPECT_FALSE(take(stp_solver_to_smt2(s, false)).empty());
-  EXPECT_NE(nullptr, stp_solver_statistics(s));
+  stp_statistics st = stp_solver_statistics(s);
+  EXPECT_NE(nullptr, st);
+  stp_statistics_release(st);
   EXPECT_EQ(nullptr, stp_tm_error(tm));
   // successful mutations do not clear it either; only clear_error does
   EXPECT_EQ(STP_OK, stp_solver_push(s, 1));
