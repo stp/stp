@@ -471,6 +471,49 @@ TEST_F(Values, decimal_exponents_far_out)
   EXPECT_LT(std::chrono::steady_clock::now() - started, std::chrono::seconds(5));
 }
 
+// FloatValue::to_rational is exact whatever the exponent width: the bias is
+// 64-bit and the digits come from a big-number shift rather than repeated
+// doubling (a 19-bit exponent took half a minute; a 33-bit one overflowed the
+// bias and gave a two-digit numerator). Past 2^24 bits it is refused, and a
+// value whose exponent has more than 64 bits does not fit a FloatValue.
+TEST_F(Values, fp_to_rational_of_wide_formats)
+{
+  const auto started = std::chrono::steady_clock::now();
+  // (19, 4): the largest finite value, 15 * 2^262140, and the smallest
+  // subnormal, 2^-262145 (digits from an independent big-integer computation)
+  const Sort w19 = tm.mk_fp_sort(19, 4);
+  const auto big = tm.mk_fp_from_bits(w19, "0" + std::string(18, '1') + "0111").to_fp().to_rational();
+  ASSERT_TRUE(big.has_value());
+  EXPECT_EQ(big->denominator, "1");
+  ASSERT_EQ(big->numerator.size(), 78914u);
+  EXPECT_EQ(big->numerator.substr(0, 24), "151061786014290044401834");
+  EXPECT_EQ(big->numerator.substr(78914 - 24), "581746192515563404656640");
+  const auto tiny = tm.mk_fp_from_bits(w19, "1" + std::string(19, '0') + "001").to_fp().to_rational();
+  ASSERT_TRUE(tiny.has_value());
+  EXPECT_EQ(tiny->numerator, "-1");
+  ASSERT_EQ(tiny->denominator.size(), 78914u);
+  EXPECT_EQ(tiny->denominator.substr(0, 24), "322265143497152094723914");
+  EXPECT_EQ(tiny->denominator.substr(78914 - 24), "507725210699868596600832");
+  // (15, 4) agrees with the exact fp.to_real fold
+  const Sort w15 = tm.mk_fp_sort(15, 4);
+  for (const char* bits : {"0111111111111101111", "0000000000000000001", "1011111111111111010"})
+  {
+    const Term v = tm.mk_fp_from_bits(w15, bits);
+    EXPECT_EQ(v.to_fp().to_rational()->str(), fp_to_real(v).to_rational().str()) << bits;
+  }
+  // a 40-bit exponent: small values are fine, the extremes are refused
+  const Sort w40 = tm.mk_fp_sort(40, 4);
+  EXPECT_EQ(tm.mk_fp(w40, RoundingMode::RNE, "1.5").to_fp().to_rational()->str(), "3/2");
+  auto e = API_ERROR_OF(tm.mk_fp_from_bits(w40, "0" + std::string(39, '1') + "0000").to_fp().to_rational());
+  ASSERT_TRUE(e.has_value());
+  EXPECT_EQ(e->code(), ErrorCode::UNSUPPORTED);
+  // a 65-bit exponent does not fit a FloatValue, and a wide NaN is still a NaN
+  const Sort w65 = tm.mk_fp_sort(65, 4);
+  API_EXPECT_ERROR(ErrorCode::DOES_NOT_FIT, tm.mk_fp_nan(w65).to_fp());
+  EXPECT_TRUE(fp_is_nan(tm.mk_fp_nan(w65)).to_bool());
+  EXPECT_LT(std::chrono::steady_clock::now() - started, std::chrono::seconds(10));
+}
+
 TEST_F(Values, fp_from_bits_canonicalises_nan)
 {
   const Term one = tm.mk_fp(f32, RoundingMode::RNE, 1.0);

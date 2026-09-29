@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 #include "../Lra/ASTRealConstAccess.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/DecimalLiteral.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Printer/printers.h"
@@ -39,6 +40,7 @@ THE SOFTWARE.
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <new>
 #include <ostream>
 #include <sstream>
 
@@ -311,9 +313,17 @@ FloatValue fp_value_of(const ASTNode& c, std::uint32_t e, std::uint32_t s)
   v.sig_size = s;
   const std::string bits = bv_bits_of(c); // MSB first: sign, exponent, significand
   v.sign = bits[0] == '1';
+  // the exponent's low 64 bits (Term::to_fp refuses a wider one), and its
+  // class read off all of it
   v.biased_exponent = 0;
+  bool exp_ones = true, exp_zero = true;
   for (std::uint32_t i = 0; i < e; ++i)
-    v.biased_exponent = (v.biased_exponent << 1) | (bits[1 + i] == '1' ? 1u : 0u);
+  {
+    const bool set = bits[1 + i] == '1';
+    exp_ones = exp_ones && set;
+    exp_zero = exp_zero && !set;
+    v.biased_exponent = (v.biased_exponent << 1) | (set ? 1u : 0u);
+  }
   const std::uint32_t t = s - 1;
   v.significand.assign((t + 63) / 64, 0);
   bool sig_zero = true;
@@ -326,10 +336,9 @@ FloatValue fp_value_of(const ASTNode& c, std::uint32_t e, std::uint32_t s)
       sig_zero = false;
     }
   }
-  const std::uint64_t max_exp = (e >= 64) ? ~std::uint64_t(0) : ((std::uint64_t(1) << e) - 1);
-  if (v.biased_exponent == max_exp)
+  if (exp_ones)
     v.cls = sig_zero ? FloatValue::Class::INF : FloatValue::Class::NOT_A_NUMBER;
-  else if (v.biased_exponent == 0)
+  else if (exp_zero)
     v.cls = sig_zero ? FloatValue::Class::ZERO : FloatValue::Class::SUBNORMAL;
   else
     v.cls = FloatValue::Class::NORMAL;
@@ -985,6 +994,11 @@ FloatValue Term::to_fp() const
   if (ss.kind() != SourceSort::Kind::FloatingPoint)
     detail::fail(ErrorCode::SORT_MISMATCH, "Term::to_fp", "expected a floating-point value", 0,
                  {*this}, {sort()});
+  if (ss.exponentWidth() > 64)
+    detail::fail(ErrorCode::DOES_NOT_FIT, "Term::to_fp",
+                 "a FloatValue holds an exponent of at most 64 bits; read the bits through "
+                 "fp_to_ieee_bv",
+                 0, {*this}, {sort()});
   return detail::fp_value_of(n, ss.exponentWidth(), ss.significandWidth());
 }
 
@@ -1214,49 +1228,48 @@ std::optional<RationalValue> FloatValue::to_rational() const
     r.denominator = "1";
     return r;
   }
-  // integer significand m (with the hidden bit), exponent e2 such that value = m * 2^e2
+  const char* fn = "FloatValue::to_rational";
+  if (exp_size < 2 || exp_size > 64 || sig_size < 2 ||
+      significand.size() < (std::uint64_t{sig_size} - 1 + 63) / 64)
+    detail::fail(ErrorCode::INVALID_ARGUMENT, fn,
+                 "the fields do not describe a value of a floating-point format");
+  // value = m * 2^e2, m the integer significand (with the hidden bit of a
+  // normal value), e2 = exponent - bias - t
   const std::uint32_t t = sig_size - 1;
-  const int bias = (1 << (exp_size - 1)) - 1;
-  std::vector<bool> m(t + 1, false);
-  for (std::uint32_t i = 0; i < t; ++i)
-    m[i] = ((significand[i / 64] >> (i % 64)) & 1) != 0;
-  int e2;
-  if (cls == Class::SUBNORMAL)
-    e2 = 1 - bias - static_cast<int>(t);
-  else
+  const std::uint64_t bias = (std::uint64_t{1} << (exp_size - 1)) - 1;
+  const std::uint64_t exponent = cls == Class::SUBNORMAL ? 1 : biased_exponent;
+  // Past this many bits a numerator or denominator is refused rather than
+  // written out: about five million decimal digits.
+  constexpr std::uint64_t limit = std::uint64_t{1} << 24;
+  const std::uint64_t distance = exponent >= bias ? exponent - bias : bias - exponent;
+  if (distance > limit || t > limit)
+    detail::fail(ErrorCode::UNSUPPORTED, fn,
+                 "the exact rational of this value has more than 2^24 bits");
+  std::int64_t e2 = (exponent >= bias ? static_cast<std::int64_t>(distance)
+                                      : -static_cast<std::int64_t>(distance)) -
+                    static_cast<std::int64_t>(t);
+  std::string m;
+  m.reserve(t + 1);
+  m.push_back(cls == Class::SUBNORMAL ? '0' : '1');
+  for (std::uint32_t i = t; i-- > 0;)
+    m.push_back(((significand[i / 64] >> (i % 64)) & 1) != 0 ? '1' : '0');
+  // trailing zero bits move into the exponent
+  const std::size_t last = m.find_last_of('1');
+  if (last == std::string::npos)
   {
-    m[t] = true;
-    e2 = static_cast<int>(biased_exponent) - bias - static_cast<int>(t);
+    r.numerator = "0";
+    r.denominator = "1";
+    return r;
   }
-  // strip trailing zero bits into the exponent
-  std::size_t shift = 0;
-  while (shift < m.size() && !m[shift])
-    ++shift;
-  e2 += static_cast<int>(shift);
-  // decimal of m >> shift
-  std::string dec = "0";
-  auto times2_plus = [](std::string d, int add) {
-    int carry = add;
-    for (std::size_t j = d.size(); j-- > 0;)
-    {
-      const int v = (d[j] - '0') * 2 + carry;
-      d[j] = static_cast<char>('0' + v % 10);
-      carry = v / 10;
-    }
-    if (carry)
-      d.insert(d.begin(), static_cast<char>('0' + carry));
-    return d;
-  };
-  for (std::size_t i = m.size(); i-- > shift;)
-    dec = times2_plus(dec, m[i] ? 1 : 0);
-  std::string den = "1";
-  if (e2 >= 0)
-    for (int i = 0; i < e2; ++i)
-      dec = times2_plus(dec, 0);
-  else
-    for (int i = 0; i < -e2; ++i)
-      den = times2_plus(den, 0);
-  r.numerator = (sign ? "-" : "") + dec;
+  e2 += static_cast<std::int64_t>(m.size() - 1 - last);
+  m.erase(last + 1);
+  std::string num, den = "1", err;
+  const bool ok =
+      binaryTimesPowerOfTwoToDecimal(m, e2 > 0 ? static_cast<std::uint64_t>(e2) : 0, num, err) &&
+      (e2 >= 0 || binaryTimesPowerOfTwoToDecimal("1", static_cast<std::uint64_t>(-e2), den, err));
+  if (!ok)
+    throw std::bad_alloc(); // the digits are well formed: only memory can fail
+  r.numerator = (sign ? "-" : "") + num;
   r.denominator = den;
   return r;
 }
