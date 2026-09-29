@@ -30,8 +30,8 @@
 ; CHECK: \( \(\|f\| \(\|k\| \|x\|\)\)  #x3 \)
 ; CHECK: REACHED-END
 ;
-(set-logic QF_UFBVFP)
 (set-option :produce-models true)
+(set-logic QF_UFBVFP)
 (declare-fun k ((_ BitVec 4)) RoundingMode)
 (declare-fun f (RoundingMode) (_ BitVec 4))
 (declare-const x (_ BitVec 4))

@@ -16,6 +16,7 @@
 ; RUN: %solver --incremental --check-sanity %s | %OutputCheck --check-prefix=VERDICT %s
 ; RUN: %solver --incremental --incremental-cbp-reset --check-sanity %s | %OutputCheck --check-prefix=VERDICT %s
 ; RUN: %solver --incremental-auto-engage-at 1 --check-sanity %s | %OutputCheck --check-prefix=VERDICT %s
+(set-logic QF_BV)
 (push 1)
 (declare-const _x0 (_ BitVec 2))
 (declare-const _x2 (_ BitVec 1))

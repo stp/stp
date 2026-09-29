@@ -69,14 +69,14 @@ struct Heard
 };
 
 // A factoring query that preprocessing leaves to the SAT solver.
-const char* const kNeedsCnf = "(declare-fun a () (_ BitVec 8))\n"
+const char* const kNeedsCnf = "(set-logic QF_BV)(declare-fun a () (_ BitVec 8))\n"
                               "(declare-fun b () (_ BitVec 8))\n"
                               "(assert (= (bvmul a b) #x0f))\n"
                               "(assert (bvugt a #x01))\n"
                               "(assert (bvugt b #x01))\n";
 
 // api_test::add_hard_factoring's query as a script.
-const char* const kHard = "(declare-fun hard_a () (_ BitVec 96))\n"
+const char* const kHard = "(set-logic QF_BV)(declare-fun hard_a () (_ BitVec 96))\n"
                           "(declare-fun hard_b () (_ BitVec 96))\n"
                           "(assert (= (bvmul hard_a hard_b) (_ bv486579698794948075013401 96)))\n"
                           "(assert (bvugt hard_a (_ bv1 96)))\n"
@@ -209,7 +209,7 @@ TEST(Runs, execute_runs_a_script_under_its_own_logic)
     Heard h;
     h.attach(s);
     testing::internal::CaptureStdout();
-    s.parse_smt2("(declare-fun a () (_ BitVec 8))\n(assert (= a #x2a))\n(check-sat)\n"
+    s.parse_smt2("(set-logic QF_BV)(declare-fun a () (_ BitVec 8))\n(assert (= a #x2a))\n(check-sat)\n"
                  "(echo \"after\")\n",
                  mode);
     EXPECT_TRUE(testing::internal::GetCapturedStdout().empty());
@@ -245,7 +245,7 @@ TEST(Runs, a_stream_is_parsed_as_it_arrives)
   Solver s(tm);
   Heard h;
   h.attach(s);
-  LineFeed feed({"(declare-fun a () Bool)\n", "(assert a)\n", "(check-sat)\n",
+  LineFeed feed({"(set-logic QF_BV)(declare-fun a () Bool)\n", "(assert a)\n", "(check-sat)\n",
                  "(assert (not a))\n", "(check-sat)\n"},
                 h.out);
   std::istream in(&feed);
@@ -260,7 +260,7 @@ TEST(Runs, a_stream_that_fails_fails_the_parse)
 {
   TermManager tm;
   Solver s(tm);
-  FailingFeed feed("(declare-fun a () Bool)\n(assert a)\n");
+  FailingFeed feed("(set-logic QF_BV)(declare-fun a () Bool)\n(assert a)\n");
   std::istream in(&feed);
   API_EXPECT_ERROR(ErrorCode::IO, s.parse(in, Format::SMTLIB2, ParseMode::EXECUTE));
   // the parse ended there, with the stack as it was
@@ -416,7 +416,7 @@ TEST(Runs, end_after_cnf_ends_the_run_at_the_first_cnf)
     Solver s(tm, o);
     Heard h;
     h.attach(s);
-    s.parse_smt2("(declare-fun c () Bool)\n(assert c)\n(check-sat)\n(echo \"reached\")\n",
+    s.parse_smt2("(set-logic QF_BV)(declare-fun c () Bool)\n(assert c)\n(check-sat)\n(echo \"reached\")\n",
                  ParseMode::EXECUTE);
     EXPECT_EQ(h.out, "sat\n\"reached\"\n");
     EXPECT_TRUE(h.cnfs.empty());
@@ -429,7 +429,7 @@ TEST(Runs, the_fatal_error_handler_hears_first)
   Solver s(tm);
   Heard h;
   h.attach(s);
-  std::istringstream in("(declare-fun x () (_ BitVec 0))\n");
+  std::istringstream in("(set-logic QF_BV)(declare-fun x () (_ BitVec 0))\n");
   API_EXPECT_ERROR(ErrorCode::PARSE, s.parse(in, Format::SMTLIB2, ParseMode::EXECUTE));
   EXPECT_NE(h.fatal.find("bit-vectors must be of positive length"), std::string::npos) << h.fatal;
   EXPECT_NE(h.err.find("Fatal Error: " + h.fatal + "\n"), std::string::npos) << h.err;
@@ -439,7 +439,7 @@ TEST(Runs, the_fatal_error_handler_hears_first)
   // a syntax error is no fatal error
   Heard h2;
   h2.attach(s);
-  std::istringstream unknown("(declare-fun a () Bool)\n(assert (foo a))\n");
+  std::istringstream unknown("(set-logic QF_BV)(declare-fun a () Bool)\n(assert (foo a))\n");
   API_EXPECT_ERROR(ErrorCode::PARSE, s.parse(unknown, Format::SMTLIB2, ParseMode::EXECUTE));
   EXPECT_EQ(h2.fatal, "");
 }
@@ -526,12 +526,12 @@ TEST(Runs, interrupt_reaches_a_check_the_script_runs)
   Heard said;
   said.attach(quick);
   quick.interrupt();
-  quick.parse_smt2("(declare-fun x () (_ BitVec 8)) (assert (= x #x01)) (check-sat) (check-sat)",
+  quick.parse_smt2("(set-logic QF_BV)(declare-fun x () (_ BitVec 8)) (assert (= x #x01)) (check-sat) (check-sat)",
                    ParseMode::EXECUTE);
   EXPECT_EQ(said.out, "unknown\nsat\n");
   EXPECT_FALSE(quick.interrupt_pending());
   quick.interrupt();
-  quick.parse_smt2("(declare-fun y () (_ BitVec 8))", ParseMode::EXECUTE);
+  quick.parse_smt2("(set-logic QF_BV)(declare-fun y () (_ BitVec 8))", ParseMode::EXECUTE);
   EXPECT_TRUE(quick.interrupt_pending());
   EXPECT_EQ(quick.check_sat().reason(), UnknownReason::INTERRUPTED);
   EXPECT_FALSE(quick.interrupt_pending());
@@ -551,7 +551,7 @@ TEST(Runs, an_interrupt_from_the_output_sink_is_the_next_checks)
     if (std::count(out.begin(), out.end(), '\n') >= 2) // two answers out
       s.interrupt();
   });
-  std::string script = "(declare-fun a () (_ BitVec 16))(declare-fun b () (_ BitVec 16))\n";
+  std::string script = "(set-logic QF_BV)(declare-fun a () (_ BitVec 16))(declare-fun b () (_ BitVec 16))\n";
   for (int i = 0; i < 200; ++i)
     script += "(push 1)(assert (= (bvmul ((_ zero_extend 16) a) ((_ zero_extend 16) b)) (_ bv" +
               std::to_string(1000003 + 2 * i) +
@@ -619,7 +619,7 @@ TEST(Runs, a_callback_that_calls_the_library_is_refused)
         if (what == "push")
           s.push();
         else if (what == "parse")
-          s.parse_smt2("(declare-fun z () (_ BitVec 8))");
+          s.parse_smt2("(set-logic QF_BV)(declare-fun z () (_ BitVec 8))");
         else if (what == "check")
           (void)s.check_sat();
         else if (what == "declare")
@@ -636,7 +636,7 @@ TEST(Runs, a_callback_that_calls_the_library_is_refused)
         refused = e.code();
       }
     });
-    s.parse_smt2("(declare-fun x () (_ BitVec 8)) (assert (= x #x01)) (check-sat)", ParseMode::EXECUTE);
+    s.parse_smt2("(set-logic QF_BV)(declare-fun x () (_ BitVec 8)) (assert (= x #x01)) (check-sat)", ParseMode::EXECUTE);
     EXPECT_TRUE(called) << what;
     if (what == "interrupt")
       EXPECT_FALSE(refused.has_value());

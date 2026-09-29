@@ -17,6 +17,7 @@
 ; which the array-equality substitution work does -- moves x's whole
 ; definition into the substitution map with the disequality still
 ; inside it, and this query then segfaulted under the reference.
+(set-logic QF_ABV)
 (declare-fun x () (_ BitVec 8))
 (declare-fun i () (_ BitVec 4))
 (declare-fun A () (Array (_ BitVec 4) (_ BitVec 8)))

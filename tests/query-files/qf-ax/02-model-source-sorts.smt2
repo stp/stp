@@ -12,8 +12,8 @@
 ; CHECK: ^\(define-fun \|a\| \(\) \(Array Index Element\) \(store \(\(as const \(Array Index Element\)\) \|Element![0-9]+\|\) \|Index![0-9]+\| \|Element![0-9]+\|\)\)$
 ; CHECK: ^\( \(select \|a\| \|i\|\) \|Element![0-9]+\| \)$
 ;
-(set-logic QF_AX)
 (set-option :produce-models true)
+(set-logic QF_AX)
 (declare-sort Index 0)
 (declare-sort Element 0)
 (declare-fun a () (Array Index Element))

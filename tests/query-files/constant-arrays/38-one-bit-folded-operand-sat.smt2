@@ -5,8 +5,8 @@
 ; The satisfiable half of 37: only p = true makes the right operand the
 ; all-ones array the left one folds to. The recovery's all-zeros array gave
 ; p = false, a model -d refuses.
-(set-logic QF_ABV)
 (set-option :produce-models true)
+(set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 2) (_ BitVec 1)))
 (declare-fun b () (Array (_ BitVec 2) (_ BitVec 1)))
 (declare-fun e () (_ BitVec 1))

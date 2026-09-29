@@ -1,5 +1,5 @@
 ; RUN: %solver --SMTLIB2 --lra-presolve-monotone=0 --lra-presolve-unconstrained 1 %s | %OutputCheck %s
-; RUN: %solver --SMTLIB2 --lra-presolve-monotone=1 %s | %OutputCheck --check-prefix=SOLVED %s
+; RUN: not %solver --SMTLIB2 --lra-presolve-monotone=1 %s | %OutputCheck --check-prefix=SOLVED %s
 ;
 ; Building the LRA problem does exact arithmetic at four layers, and each one
 ; refuses in its own currency. The solve context already separates a budget it
@@ -20,7 +20,7 @@
 ; CHECK-NEXT-L: (:reason-unknown (incomplete "the exact linear arithmetic solver could not decide this query within its resource budget: exact assertion reached a resource limit"))
 ; Monotone elimination avoids the large core row and reconstructs a checked model.
 ; SOLVED: ^sat$
-; SOLVED-NEXT-L: (:reason-unknown (error "the last answer was not unknown"))
+; SOLVED-NEXT-L: (error "get-info :reason-unknown requires a preceding unknown result")
 (set-logic QF_LRA)
 (declare-const _x0 Real)
 (declare-const _x1 Real)

@@ -19,9 +19,9 @@
 ; rather than against RNE alone: the fix decides what a free carrier completes
 ; to, not what the backend leaves in it, and a run whose bits happened to name
 ; a mode already would otherwise fail for no reason.
-(set-logic QF_FP)
 (set-option :produce-models true)
 (set-option :global-declarations true)
+(set-logic QF_FP)
 (push 1)
 (declare-fun c () Bool)
 (declare-fun r () RoundingMode)

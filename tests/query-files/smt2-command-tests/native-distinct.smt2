@@ -21,8 +21,9 @@
 ; DRIVER-NEXT: ^\( \(distinct \|x\| \|y\| \|z\|\) true \)$
 ; DRIVER-NEXT: ^\)$
 ;
-(set-logic QF_BV)
 (set-option :produce-models true)
+(set-option :produce-assertions true)
+(set-logic QF_BV)
 (declare-const x (_ BitVec 2))
 (declare-const y (_ BitVec 2))
 (declare-const z (_ BitVec 2))

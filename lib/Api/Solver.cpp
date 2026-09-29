@@ -1720,6 +1720,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   // The command line's parse: the manager's factory behind the type checker.
   ::TypeChecker checker(*s->mgr->factory(), *bm);
   Cpp_interface pi(*bm, &checker);
+  pi.enableProtocolChecks(runs);
   pi.keepDeclaredSymbolsAtCleanup(&declared_at_end);
   pi.keepSortAliasesAtCleanup(&sorts_at_end);
   pi.keepFunctionsAtCleanup(&definitions_at_end);

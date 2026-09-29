@@ -12,8 +12,8 @@
 ; the constant the result took -- total, and in agreement with the single
 ; application, which is all any interpretation of f has to satisfy. The
 ; durable handle still answers get-value from that same certified result.
-(set-logic QF_UFBV)
 (set-option :produce-models true)
+(set-logic QF_UFBV)
 (declare-fun f ((_ BitVec 8)) (_ BitVec 8))
 (declare-const x (_ BitVec 8))
 (declare-const y (_ BitVec 8))

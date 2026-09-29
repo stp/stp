@@ -2229,17 +2229,17 @@ cmdi:
         be processed regardless. */
      GET_ASSIGNMENT_TOK
     {
-       stp::GlobalParserInterface->unsupported();
+       stp::GlobalParserInterface->unavailableQuery("get-assignment", "produce-assignments");
     }
 |
      GET_PROOF_TOK
     {
-       stp::GlobalParserInterface->unsupported();
+       stp::GlobalParserInterface->unavailableQuery("get-proof", "produce-proofs");
     }
 |
      GET_UNSAT_CORE_TOK
     {
-       stp::GlobalParserInterface->unsupported();
+       stp::GlobalParserInterface->unavailableQuery("get-unsat-core", "produce-unsat-cores");
     }
 |
      GET_UNSAT_ASSUMPTIONS_TOK

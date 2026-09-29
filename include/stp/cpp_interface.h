@@ -348,6 +348,15 @@ private:
   void resetIncrementalSolver();
 
   bool produce_models;
+  bool initial_produce_models;
+  bool model_option_before_parse;
+  bool produce_assertions = false;
+  bool produce_unsat_assumptions = false;
+  enum class Mode { Start, Assert, Sat, Unsat };
+  Mode mode = Mode::Start;
+  bool protocol_checks = false;
+  std::string current_command_name;
+  bool current_command_supported = true;
   std::unique_ptr<SMT2Output> output_channels;
 
   // :global-declarations. False (the required default) scopes declarations
@@ -355,9 +364,7 @@ private:
   // permanent, so pop and reset-assertions keep them and reset -- which
   // discards every declaration -- is the only thing that takes them away.
   //
-  // Initialised here rather than in init(), which reset() re-runs: reset
-  // empties the assertion stack and with it the declarations, but the option
-  // saying how later declarations are scoped outlives it.
+  // reset restores the startup default; reset-assertions preserves it.
   bool global_declarations = false;
 
   // Whether anything has been declared, defined, asserted, pushed or solved
@@ -659,6 +666,10 @@ public:
   // be discarded whole, with no malformed UF_APPLY or fresh placeholder
   // constructed or registered.
   DLL_PUBLIC void beginCurrentCommand();
+  void enableProtocolChecks(bool enable) { protocol_checks = enable; }
+  DLL_PUBLIC void requireCommand(const std::string& command);
+  DLL_PUBLIC void unavailableQuery(const std::string& command,
+                                   const std::string& option);
   DLL_PUBLIC void abortCurrentCommand();
   // Reports the diagnostic and marks the command discarded, but returns:
   // for the parser's yyerror, where bison abandons the parse of its own

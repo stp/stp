@@ -1,5 +1,5 @@
 ; RUN: %solver --produce-models %s | %OutputCheck %s
-; RUN: %solver %s | %OutputCheck --check-prefix=DEFAULT %s
+; RUN: not %solver %s | %OutputCheck --check-prefix=DEFAULT %s
 ; RUN: not %solver --logic NONSENSE %s 2>&1 | %OutputCheck --check-prefix=LOGIC %s
 ;
 ; --produce-models is a flag, so the file after it is still the input (as a
@@ -14,5 +14,5 @@
 ; CHECK-NEXT: ^\(
 ; CHECK-NEXT: #x03
 ; DEFAULT: ^sat
-; DEFAULT-NEXT: ^unsupported
+; DEFAULT-NEXT: ^\(error "get-value requires :produce-models true"\)
 ; LOGIC: --logic must be one of

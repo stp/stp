@@ -2,8 +2,8 @@
 ; the persistent assumption core or either array decision procedure.
 ; RUN: %solver --incremental --incremental-core-only --incremental-profile --array-equality %s 2>&1 | %OutputCheck %s
 ; RUN: %solver --incremental-auto-engage-at 1 --incremental-core-only --incremental-profile --array-equality %s 2>&1 | %OutputCheck %s
-(set-logic QF_ABV)
 (set-option :produce-models true)
+(set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 2) (_ BitVec 2)))
 (declare-fun b () (Array (_ BitVec 2) (_ BitVec 2)))
 (declare-fun x () (_ BitVec 2))

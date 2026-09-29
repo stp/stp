@@ -10,8 +10,8 @@
 ; CHECK: ^unsat
 ; CHECK: ^\(.*\|p\|.*\)$
 ;
-(set-logic QF_BV)
 (set-option :produce-unsat-assumptions true)
+(set-logic QF_BV)
 (declare-const a (_ BitVec 8))
 (declare-const b (_ BitVec 8))
 (declare-const c (_ BitVec 8))

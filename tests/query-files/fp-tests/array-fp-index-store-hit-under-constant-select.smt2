@@ -16,8 +16,8 @@
 ; :produce-models is what runs the counterexample checker, and the pinned cell
 ; is what makes the checker resolve the write rather than agree either way;
 ; array-fp-index-store-hit-model.smt2 has neither and so cannot catch this.
-(set-logic QF_ABVFP)
 (set-option :produce-models true)
+(set-logic QF_ABVFP)
 (declare-fun a () (Array (_ FloatingPoint 8 24) (_ BitVec 8)))
 (declare-fun x () (_ FloatingPoint 8 24))
 (assert (fp.isNaN x))

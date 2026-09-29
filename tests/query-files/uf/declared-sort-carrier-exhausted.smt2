@@ -26,20 +26,18 @@
 ;
 ; RUN: %solver --uninterpreted-functions --incremental=off --uf-sort-width=2 %s 2>&1 | %OutputCheck --check-prefix=TIGHT %s
 ; RUN: %solver --uninterpreted-functions --incremental=on  --uf-sort-width=2 %s 2>&1 | %OutputCheck --check-prefix=TIGHT %s
-; RUN: %solver --uninterpreted-functions --incremental=off --uf-sort-width=3 %s 2>&1 | %OutputCheck --check-prefix=ROOMY %s
-; RUN: %solver --uninterpreted-functions --incremental=on  --uf-sort-width=3 %s 2>&1 | %OutputCheck --check-prefix=ROOMY %s
+; RUN: not %solver --uninterpreted-functions --incremental=off --uf-sort-width=3 %s 2>&1 | %OutputCheck --check-prefix=ROOMY %s
+; RUN: not %solver --uninterpreted-functions --incremental=on  --uf-sort-width=3 %s 2>&1 | %OutputCheck --check-prefix=ROOMY %s
 ;
 ; TIGHT-NOT: ^unsat
 ; TIGHT: ^unknown
 ; TIGHT: :reason-unknown \(incomplete "the query needs up to 5 elements of sort S, and --uf-sort-width=2 tells only 4 apart; raise --uf-sort-width to at least 3"\)
 ;
 ; ROOMY: ^sat
-; ROOMY: :reason-unknown \(error "the last answer was not unknown"\)
+; ROOMY: error "get-info :reason-unknown requires a preceding unknown result"
 ;
 ; TIGHT: WITHHELD-DONE
 ; TIGHT: ^sat
-; ROOMY: WITHHELD-DONE
-; ROOMY: ^sat
 ;
 (set-logic QF_UFBV)
 (declare-sort S 0)

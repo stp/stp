@@ -16,6 +16,7 @@
 ;
 ; Found by a murxla campaign against the floating-point branch; delta
 ; minimization removed the floating point entirely, so it belongs here.
+(set-logic QF_ABV)
 (declare-fun _x0 () (Array (_ BitVec 20) (_ BitVec 20)))
 (declare-fun _x2 () (Array (_ BitVec 20) (_ BitVec 20)))
 (declare-fun _x3 () (_ BitVec 20))

@@ -4,8 +4,8 @@
 ; CHECK: define-fun \|f\|
 ;
 ; EXPECT: sat
-(set-logic QF_UFBV)
 (set-option :produce-models true)
+(set-logic QF_UFBV)
 (declare-fun x () (_ BitVec 4))
 (declare-fun y () (_ BitVec 4))
 (declare-fun f ((_ BitVec 4)) (_ BitVec 8))

@@ -4,8 +4,8 @@
 ; other value in the model holds, in symbol order. The three results sit at
 ; their lower bounds, 10, 20 and 30, so the arguments take 1, 2 and 3 -- and
 ; a symbol that is not an argument of anything keeps the zero it always had.
-(set-logic QF_UFLRA)
 (set-option :produce-models true)
+(set-logic QF_UFLRA)
 (declare-fun f (Real) Real)
 (declare-fun a () Real)
 (declare-fun b () Real)

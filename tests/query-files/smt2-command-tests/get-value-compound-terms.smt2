@@ -56,8 +56,8 @@
 ; CHECK-L: unsupported
 ; CHECK: REACHED-END
 ;
-(set-logic QF_ABVFP)
 (set-option :produce-models true)
+(set-logic QF_ABVFP)
 (declare-const x (_ BitVec 8))
 (declare-const p Bool)
 (declare-const a (Array (_ BitVec 8) (_ BitVec 8)))

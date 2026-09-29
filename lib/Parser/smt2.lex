@@ -391,6 +391,12 @@ namespace stp
   {
     return realTokensActive ? token : lookup(smt2text);
   }
+  static int commandToken(int token)
+  {
+    stp::GlobalParserInterface->requireCommand(smt2text);
+    return token;
+  }
+
   // Where the input comes from when it is not the FILE* (setSMT2Reader in
   // parser.h): the 3.x API reads a caller's stream through one. Without a
   // reader the lexer reads its FILE* as flex always has -- flex's own
@@ -511,36 +517,36 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
 
  /* COMMANDS */
-"assert"                  { return ASSERT_TOK; }
-"check-sat"               { return CHECK_SAT_TOK; }
-"check-sat-assuming"      { return CHECK_SAT_ASSUMING_TOK;}
-"declare-const"           { return DECLARE_CONST_TOK; }
+"assert"                  { return commandToken(ASSERT_TOK); }
+"check-sat"               { return commandToken(CHECK_SAT_TOK); }
+"check-sat-assuming"      { return commandToken(CHECK_SAT_ASSUMING_TOK);}
+"declare-const"           { return commandToken(DECLARE_CONST_TOK); }
 "declare-fun"             {
                               ufDeclarationNamePending =
                                   stp::GlobalParserInterface->getUserFlags()
                                       .enable_uninterpreted_functions;
-                              return DECLARE_FUNCTION_TOK;
+                              return commandToken(DECLARE_FUNCTION_TOK);
                             }
-"declare-sort"            { return DECLARE_SORT_TOK;}
-"define-fun"              { return DEFINE_FUNCTION_TOK; }
-"echo"                    { return ECHO_TOK;}
-"exit"                    { return EXIT_TOK;}
-"get-assertions"          { return GET_ASSERTIONS_TOK;}
-"get-assignment"          { return GET_ASSIGNMENT_TOK;}
-"get-info"                { return GET_INFO_TOK;}
-"get-model"               { return GET_MODEL_TOK;}
-"get-option"              { return GET_OPTION_TOK;}
-"get-proof"               { return GET_PROOF_TOK;}
-"get-unsat-assumptions"   { return GET_UNSAT_ASSUMPTIONS_TOK;}
-"get-unsat-core"          { return GET_UNSAT_CORE_TOK;}
-"get-value"               { return GET_VALUE_TOK;}
-"pop"                     { return POP_TOK;}
-"push"                    { return PUSH_TOK;}
-"reset"                   { return RESET_TOK;}
-"reset-assertions"        { return RESET_ASSERTIONS_TOK;}
-"set-info"                { return NOTES_TOK;  }
-"set-logic"               { return LOGIC_TOK; }
-"set-option"              { return SET_OPTION_TOK; }
+"declare-sort"            { return commandToken(DECLARE_SORT_TOK);}
+"define-fun"              { return commandToken(DEFINE_FUNCTION_TOK); }
+"echo"                    { return commandToken(ECHO_TOK);}
+"exit"                    { return commandToken(EXIT_TOK);}
+"get-assertions"          { return commandToken(GET_ASSERTIONS_TOK);}
+"get-assignment"          { return commandToken(GET_ASSIGNMENT_TOK);}
+"get-info"                { return commandToken(GET_INFO_TOK);}
+"get-model"               { return commandToken(GET_MODEL_TOK);}
+"get-option"              { return commandToken(GET_OPTION_TOK);}
+"get-proof"               { return commandToken(GET_PROOF_TOK);}
+"get-unsat-assumptions"   { return commandToken(GET_UNSAT_ASSUMPTIONS_TOK);}
+"get-unsat-core"          { return commandToken(GET_UNSAT_CORE_TOK);}
+"get-value"               { return commandToken(GET_VALUE_TOK);}
+"pop"                     { return commandToken(POP_TOK);}
+"push"                    { return commandToken(PUSH_TOK);}
+"reset"                   { return commandToken(RESET_TOK);}
+"reset-assertions"        { return commandToken(RESET_ASSERTIONS_TOK);}
+"set-info"                { return commandToken(NOTES_TOK);  }
+"set-logic"               { return commandToken(LOGIC_TOK); }
+"set-option"              { return commandToken(SET_OPTION_TOK); }
 
  /* Commands STP cannot interpret, but which must still parse so that the
   * rest of the script survives. The standard requires the response
@@ -548,12 +554,13 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
   * function bodies, datatype declarations) are of no use to us, so the
   * lexer swallows the remainder of the s-expression and hands the parser
   * the closing parenthesis. */
-"define-fun-rec"   { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_FUN_REC_TOK;}
-"define-funs-rec"  { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_FUNS_REC_TOK;}
-"define-sort"      { skippedDepth = 0; skippedText.clear();
+"define-fun-rec"   { skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DEFINE_FUN_REC_TOK);}
+"define-funs-rec"  { skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DEFINE_FUNS_REC_TOK);}
+"define-sort"      { stp::GlobalParserInterface->requireCommand("define-sort");
+                     skippedDepth = 0; skippedText.clear();
                      deferredDefineSort = true; BEGIN SKIP_SEXPR; }
-"declare-datatype" { skippedDepth = 0; BEGIN SKIP_SEXPR; return DECLARE_DATATYPE_TOK;}
-"declare-datatypes" { skippedDepth = 0; BEGIN SKIP_SEXPR; return DECLARE_DATATYPES_TOK;}
+"declare-datatype" { skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DECLARE_DATATYPE_TOK);}
+"declare-datatypes" { skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DECLARE_DATATYPES_TOK);}
 
  /* Consume a command's arguments without interpreting them, tracking nesting
   * so that the parenthesis returned is the one that closes the command

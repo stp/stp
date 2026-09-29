@@ -1,6 +1,6 @@
 ; Models from the incremental driver: values pinned at pushed levels are
 ; reported, and a model after the pop no longer honours the popped pin.
-; RUN: %solver --incremental --check-sanity %s | %OutputCheck %s
+; RUN: not %solver --incremental --check-sanity %s | %OutputCheck %s
 ; (--incremental keeps this a DRIVER test: the default pure-BV policy
 ; leaves this two-check session on the batch path.)
 (set-option :produce-models true)
@@ -25,6 +25,6 @@
 (get-value (x y))
 (pop 1)
 ; after the pop the model is stale, per SMT-LIB
-; CHECK: ^unsupported
+; CHECK: error "get-value is not permitted
 (get-value (y))
 (exit)

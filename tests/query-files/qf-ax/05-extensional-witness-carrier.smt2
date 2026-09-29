@@ -4,12 +4,13 @@
 ;
 ; RUN: %solver --incremental=off --uf-sort-width=1 %s 2>&1 | %OutputCheck --check-prefix=TIGHT %s
 ; RUN: %solver --incremental=on  --uf-sort-width=1 %s 2>&1 | %OutputCheck --check-prefix=TIGHT %s
-; RUN: %solver --incremental=off --uf-sort-width=2 %s 2>&1 | %OutputCheck --check-prefix=ROOMY %s
-; RUN: %solver --incremental=on  --uf-sort-width=2 %s 2>&1 | %OutputCheck --check-prefix=ROOMY %s
+; RUN: not %solver --incremental=off --uf-sort-width=2 %s 2>&1 | %OutputCheck --check-prefix=ROOMY %s
+; RUN: not %solver --incremental=on  --uf-sort-width=2 %s 2>&1 | %OutputCheck --check-prefix=ROOMY %s
 ; TIGHT-NOT: ^unsat
 ; TIGHT: ^unknown
 ; TIGHT: the query needs up to 3 elements of sort Index, and --uf-sort-width=1 tells only 2 apart
 ; ROOMY: ^unsat
+; ROOMY: error "get-info :reason-unknown requires a preceding unknown result"
 ;
 (set-logic QF_AX)
 (declare-sort Index 0)

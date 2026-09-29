@@ -90,5 +90,97 @@ class OutputChannels(unittest.TestCase):
                              '(error "cannot open output channel: missing/directory/out")\n')
 
 
+class CommandModes(unittest.TestCase):
+    def assert_error(self, source, message):
+        result = run(source + '\n(echo "unreachable")\n')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('(error "' + message, result.stdout)
+        self.assertNotIn('unreachable', result.stdout)
+
+    def test_logic_is_required_and_set_once(self):
+        for command in ['(assert true)', '(declare-const x Bool)',
+                        '(push 1)', '(check-sat)']:
+            with self.subTest(command=command):
+                self.assert_error(command, command[1:].split()[0].rstrip(')') +
+                                  ' is not permitted')
+        self.assert_error('(set-logic QF_BV)(set-logic QF_BV)',
+                          'set-logic is not permitted')
+
+    def test_start_only_options(self):
+        for option in ['produce-models', 'produce-assertions', 'global-declarations',
+                       'produce-unsat-assumptions', 'produce-proofs', 'random-seed']:
+            value = '0' if option == 'random-seed' else 'true'
+            with self.subTest(option=option):
+                self.assert_error('(set-logic QF_BV)(set-option :' + option +
+                                  ' ' + value + ')', 'set-option :' + option +
+                                  ' is only permitted before set-logic')
+
+    def test_disabled_queries_are_errors(self):
+        for query, option, assertion in [
+                ('get-model', 'produce-models', 'true'),
+                ('get-value (true)', 'produce-models', 'true'),
+                ('get-assertions', 'produce-assertions', 'true'),
+                ('get-assignment', 'produce-assignments', 'true'),
+                ('get-proof', 'produce-proofs', 'false'),
+                ('get-unsat-core', 'produce-unsat-cores', 'false'),
+                ('get-unsat-assumptions', 'produce-unsat-assumptions', 'false')]:
+            with self.subTest(query=query):
+                self.assert_error('(set-logic QF_BV)(assert ' + assertion +
+                                  ')(check-sat)(' + query + ')',
+                                  query.split()[0] + ' requires :' + option + ' true')
+
+    def test_model_queries_require_current_sat_context(self):
+        for commands in ['', '(assert false)(check-sat)',
+                         '(check-sat)(assert true)', '(check-sat)(push 0)',
+                         '(check-sat)(declare-const x Bool)',
+                         '(check-sat)(reset-assertions)']:
+            with self.subTest(commands=commands):
+                self.assert_error('(set-option :produce-models true)'
+                                  '(set-logic QF_BV)' + commands + '(get-model)',
+                                  'get-model is not permitted')
+
+    def test_reset_options_and_preserve_reset_assertions_options(self):
+        result = run('''
+(set-option :global-declarations true)
+(set-option :produce-models true)
+(set-option :produce-assertions true)
+(set-option :produce-unsat-assumptions true)
+(set-logic QF_BV)
+(declare-const p Bool)
+(assert p)
+(get-assertions)
+(reset-assertions)
+(get-option :produce-models)
+(get-option :produce-assertions)
+(get-option :produce-unsat-assumptions)
+(get-option :global-declarations)
+(check-sat-assuming (p (not p)))
+(get-unsat-assumptions)
+(check-sat-assuming (p))
+(get-value (p))
+(reset)
+(get-option :produce-models)
+(get-option :produce-assertions)
+(get-option :produce-unsat-assumptions)
+(get-option :global-declarations)
+(set-logic QF_BV)
+(check-sat)
+''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('true\ntrue\ntrue\ntrue\nunsat\n', result.stdout)
+        self.assertIn('(not |p|)', result.stdout)
+        self.assertTrue(result.stdout.endswith('false\nfalse\nfalse\nfalse\nsat\n'))
+
+    def test_information_query_modes(self):
+        self.assert_error('(get-info :all-statistics)',
+                          'get-info :all-statistics requires a preceding check-sat')
+        for before in ['', '(check-sat)', '(assert false)(check-sat)',
+                       '(check-sat)(reset-assertions)']:
+            with self.subTest(before=before):
+                self.assert_error('(set-logic QF_BV)' + before +
+                                  '(get-info :reason-unknown)',
+                                  'get-info :reason-unknown requires a preceding unknown result')
+
+
 if __name__ == '__main__':
     unittest.main()

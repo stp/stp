@@ -1,12 +1,13 @@
 ; The same eliminated-definition restoration as
-; subst-frozen-rhs-restores-eliminated.smt2, reached with no flags at all:
-; a push makes the session incremental, the (unknown-logic) policy engages
+; subst-frozen-rhs-restores-eliminated.smt2, using automatic engagement:
+; a push makes the session incremental, the explicit threshold engages
 ; the driver at the third real solve, and the base then grows a frozen
 ; definition whose right-hand side names an eliminated variable. This is
-; the default-configuration route to the soundness hazard, so it is pinned
+; the automatic route to the soundness hazard, so it is pinned
 ; separately from the forced --incremental one.
-; RUN: %solver %s | %OutputCheck %s
-; RUN: %solver --check-sanity %s | %OutputCheck %s
+; RUN: %solver --incremental-auto-engage-at 3 %s | %OutputCheck %s
+; RUN: %solver --incremental-auto-engage-at 3 --check-sanity %s | %OutputCheck %s
+(set-logic QF_BV)
 (declare-fun y () (_ BitVec 8))
 (push 1)
 (pop 1)

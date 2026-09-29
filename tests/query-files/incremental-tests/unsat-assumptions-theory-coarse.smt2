@@ -18,6 +18,7 @@
 ;
 ; RUN: %solver --incremental --uninterpreted-functions %s | %OutputCheck %s
 ;
+(set-option :produce-unsat-assumptions true)
 (set-logic QF_UFBV)
 (declare-fun f ((_ BitVec 8)) (_ BitVec 8))
 (declare-fun x () (_ BitVec 8))

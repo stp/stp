@@ -7,8 +7,8 @@
 ; value.  c is pinned through a widen-narrow-widen round trip, so the model
 ; also checks that the redundant extract of a concatenation survives.
 ; Replaces a164/a172/a174/a177-a180.
-(set-logic QF_BV)
 (set-option :produce-models true)
+(set-logic QF_BV)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
 (set-info :status sat)

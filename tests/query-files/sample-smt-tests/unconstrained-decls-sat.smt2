@@ -8,8 +8,8 @@
 ; so this keeps the shapes they covered -- an array declaration nobody reads,
 ; a symbol nothing mentions, an equality and a disequality on independent
 ; symbols -- and pins the one value a model has no freedom over.
-(set-logic QF_ABV)
 (set-option :produce-models true)
+(set-logic QF_ABV)
 (set-info :smt-lib-version 2.0)
 (set-info :category "check")
 (set-info :status sat)

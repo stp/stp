@@ -14,8 +14,8 @@
 ; CHECK-NOT-L: @fp_unspecified
 ; CHECK-L: (define-fun |x| () (_ FloatingPoint 8 24)
 ; CHECK-NOT-L: @fp_unspecified
-(set-logic QF_BVFP)
 (set-option :produce-models true)
+(set-logic QF_BVFP)
 (declare-const x (_ FloatingPoint 8 24))
 (assert (= ((_ fp.to_ubv 8) RNE x) #x07))
 (check-sat)

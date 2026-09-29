@@ -5,8 +5,8 @@
 ; get-model prints RoundingMode index and element sorts true to the
 ; declaration, with mode names for indexes and cells (RNE for the
 ; unobserved cells), so the define-funs replay.
-(set-logic QF_ABVFP)
 (set-option :produce-models true)
+(set-logic QF_ABVFP)
 (declare-fun a () (Array RoundingMode (_ BitVec 8)))
 (declare-fun b () (Array RoundingMode (_ BitVec 8)))
 (declare-fun c () (Array (_ BitVec 2) RoundingMode))

@@ -21,8 +21,8 @@
 ;
 ; RUN: %solver --incremental=on %s 2>&1 | %OutputCheck --check-prefix=CHECK %s
 ; RUN: %solver --incremental=off %s 2>&1 | %OutputCheck --check-prefix=CHECK %s
-(set-logic QF_BVFP)
 (set-option :produce-models true)
+(set-logic QF_BVFP)
 (declare-const s (_ BitVec 1))
 (declare-const e (_ BitVec 5))
 ; A binary16 sign bit and exponent, pinned to the ones 1.0 packs with, by

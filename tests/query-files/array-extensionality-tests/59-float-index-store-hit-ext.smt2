@@ -6,8 +6,8 @@
 ; candidate-model re-check used to compare the interned float literal
 ; index against plain evaluated bits by node identity, miss the write,
 ; and die on an "unreachable" refinement assertion.
-(set-logic QF_ABVFP)
 (set-option :produce-models true)
+(set-logic QF_ABVFP)
 (declare-fun a () (Array (_ FloatingPoint 8 24) (_ BitVec 8)))
 (declare-fun x () (_ FloatingPoint 8 24))
 (assert (fp.isNaN x))

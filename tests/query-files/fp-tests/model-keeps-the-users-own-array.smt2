@@ -8,8 +8,8 @@
 ; CHECK: ^sat
 ; CHECK-L: (define-fun |a| (_ BitVec 4) (_ BitVec 8) #x3 #x2A)
 ; CHECK-NOT-L: @fp_unspecified
-(set-logic QF_ABVFP)
 (set-option :produce-models true)
+(set-logic QF_ABVFP)
 (declare-const a (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-const x (_ FloatingPoint 8 24))
 (assert (= (select a #x3) #x2a))

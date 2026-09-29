@@ -11,8 +11,8 @@
 ; CHECK: ^unsat
 ; CHECK: REACHED-END
 ;
-(set-logic QF_UFBVFP)
 (set-option :global-declarations true)
+(set-logic QF_UFBVFP)
 (declare-fun k (RoundingMode) RoundingMode)
 (declare-const r RoundingMode)
 ; The introduced result symbol has to name a mode.

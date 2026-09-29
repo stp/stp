@@ -9,11 +9,13 @@
 
 ; Reset on empty. 
 (reset)
+(set-logic QF_BV)
 
 (declare-fun v0 () (_ BitVec 10))
 
 ; Should clear away v0.
 (reset)
+(set-logic QF_BV)
 
 ; So that we can create it again!
 (declare-fun v0 () (_ BitVec 1))
@@ -27,6 +29,7 @@
 (check-sat)
 
 (reset)
+(set-logic QF_BV)
 
 
 (declare-fun v0 () (_ BitVec 1))
@@ -36,6 +39,7 @@
 ; CHECK-NEXT: ^unsat
 (check-sat)
 (reset)
+(set-logic QF_BV)
 
 (push 1)
 (push 1)
@@ -45,6 +49,7 @@
 (check-sat)
 
 (reset)
+(set-logic QF_BV)
 ; Should have cleared away everythiung, so should be able to create it again..
 (declare-fun v0 () (_ BitVec 1))
 

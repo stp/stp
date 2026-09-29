@@ -4,6 +4,7 @@
 ; has for bvadd, so SMT-LIB1 consumers never see a wide application.
 ; CHECK: bvmul \S+ \(bvmul
 ; CHECK: ^sat
+(set-option :produce-assertions true)
 (set-logic QF_BV)
 (declare-const a (_ BitVec 4))
 (declare-const b (_ BitVec 4))

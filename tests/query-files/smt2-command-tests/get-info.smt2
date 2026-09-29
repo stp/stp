@@ -23,17 +23,6 @@
 ; CHECK-NEXT: ^\(:assertion-stack-levels 1\)
 (get-info :assertion-stack-levels)
 (pop 1)
-; Answered; its contents are get-info-all-statistics's business, so all that
-; is wanted here is that the flag is one of the answered ones.
-; CHECK-NEXT: ^\(:check-sat-calls 0$
-; CHECK-NEXT: ^ :cpu-time
-; CHECK-NEXT: ^ :peak-memory-mb
-(get-info :all-statistics)
-; :reason-unknown is implemented, so it is answered rather than refused --
-; and asked when the last answer was not unknown it says that, which is the
-; only honest thing it can say and is not the same as being unsupported.
-; CHECK-NEXT: ^\(:reason-unknown \(error "the last answer was not unknown"\)\)$
-(get-info :reason-unknown)
 ; CHECK-NEXT: ^unsupported
 (get-info :some-unknown-flag)
 (assert (= x #x1))

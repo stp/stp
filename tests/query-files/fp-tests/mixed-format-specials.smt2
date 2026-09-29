@@ -6,8 +6,8 @@
 ; parsed last, and a file mixing formats crashed the blaster on the widths
 ; (silently wrong under NDEBUG). They are packed interned constants now, one
 ; node per format.
-(set-logic QF_FP)
 (set-option :produce-models true)
+(set-logic QF_FP)
 (declare-fun x () (_ FloatingPoint 8 24))
 (declare-fun y () (_ FloatingPoint 5 11))
 (declare-fun z () (_ FloatingPoint 3 5))

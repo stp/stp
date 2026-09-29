@@ -4,6 +4,7 @@
 ; parsed, factory-rewritten form, the same convention get-value uses.
 ; RUN: %solver --incremental %s | %OutputCheck %s
 ; RUN: %solver --incremental-auto-engage-at 1 %s | %OutputCheck %s
+(set-option :produce-unsat-assumptions true)
 (set-logic QF_BV)
 (declare-fun x () (_ BitVec 8))
 (declare-fun p () Bool)
@@ -23,11 +24,9 @@
 ; CHECK: ^unsat
 (get-unsat-assumptions)
 ; CHECK: ^\(\(bvugt \|x\|  #x14\)\)$
-; after a sat answer the core is empty
+; A sat answer changes the mode; a following unsat check establishes a new core.
 (check-sat-assuming ((bvult x #x05)))
 ; CHECK: ^sat
-(get-unsat-assumptions)
-; CHECK: ^\(\)$
 ; A native distinct is lowered for the persistent solver but retained for
 ; reporting. Matching the driver's failed conjunct back to the source
 ; assumption therefore has to use the same lowering, while printing the raw

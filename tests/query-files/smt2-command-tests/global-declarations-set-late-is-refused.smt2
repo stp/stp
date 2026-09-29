@@ -5,7 +5,7 @@
 ; RUN: not %solver %s 2>&1 | %OutputCheck %s
 (set-logic QF_BV)
 (declare-fun x () (_ BitVec 4))
-; CHECK: ^\(error ".*:global-declarations must come before anything is declared or asserted"\)$
+; CHECK: ^\(error ".*:global-declarations is only permitted before set-logic"\)$
 (set-option :global-declarations true)
 (assert (= x #x1))
 ; CHECK-NOT: ^sat$
