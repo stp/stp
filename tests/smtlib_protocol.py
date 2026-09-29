@@ -374,5 +374,21 @@ class ArrayValues(unittest.TestCase):
                 self.assertEqual(replay.stdout, 'unsat\n')
 
 
+class ErrorResponses(unittest.TestCase):
+    def test_all_parse_refusals_use_regular_channel_and_stop(self):
+        for source in ['(assert (let ((x true) (x false)) x))',
+                       '[', '(assert (= #x00 #b0))']:
+            with self.subTest(source=source), tempfile.TemporaryDirectory() as tmp:
+                result = run('(set-option :regular-output-channel "responses")\n'
+                             '(set-option :diagnostic-output-channel "diagnostics")\n'
+                             '(set-logic QF_BV)\n' + source + '\n(echo "unreachable")', tmp)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, '')
+                self.assertEqual(result.stderr, '')
+                response = (Path(tmp) / 'responses').read_text()
+                self.assertEqual(response.count('(error "'), 1, response)
+                self.assertNotIn('unreachable', response)
+
+
 if __name__ == '__main__':
     unittest.main()

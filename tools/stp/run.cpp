@@ -185,7 +185,8 @@ int run(const Invocation& in, std::unique_ptr<stp::Solver> owned)
   stp::Solver& solver = *owned;
   solver.set_output_sink(write_output);
   solver.set_diagnostic_sink(write_diagnostic);
-  solver.set_fatal_error_handler(fatal_exit);
+  // Let parser failures unwind: SMT2Parse must emit the regular-channel
+  // error response before this driver's catch determines the exit status.
 
   // Every CNF --output-CNF writes, and whether one ended the run
   // (--exit-after-CNF, the solver's end-after-cnf).

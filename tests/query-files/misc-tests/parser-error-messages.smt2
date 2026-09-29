@@ -2,20 +2,10 @@
 ; diagnosis, and this file is malformed: the assertion at the bottom is
 ; missing an operand.
 ;
-; There are three such channels, and each one used to lose the message:
-;
-;   stdout   the SMT-LIB (error "...") response, which a caller's result
-;            parser reads. This one had the text, but the productions that
-;            report a bad width put "Fatal Error: parsing: " and a newline
-;            inside it, splitting a single-line response across two lines.
-;   stderr   FatalError's own line. It was handed the empty string, so it
-;            printed "Fatal Error: " and nothing after it.
-;   handler  the fatal error handler a library caller installs on a solver
-;            (Solver::set_fatal_error_handler), which is how an embedder
-;            learns that parsing failed. It received the same empty string,
-;            so it learned nothing about why. The stp binary installs one
-;            that prints "STP Error: ", which is what makes that path
-;            checkable from here rather than only from the API.
+; The regular channel carries the SMT-LIB error response; the diagnostic
+; channel carries the explanatory log line. A native API caller may also
+; install a fatal-error observer. The CLI lets parsing unwind so engine
+; type errors reach the regular channel before the process exits.
 ;
 ; Pinning text after each label is the whole point: a blank message is what
 ; the bug looked like, and only a positive match rules it out. The line
@@ -30,7 +20,6 @@
 ; CHECK-NOT: terminate called
 ; CHECK: ^\(error "syntax error: line [0-9]+ too few arguments to eq\.  token: \)"\)$
 ; CHECK: ^Fatal Error: syntax error: line [0-9]+ too few arguments to eq\.  token: \)$
-; CHECK: ^STP Error: syntax error: line [0-9]+ too few arguments to eq\.  token: \)$
 
 ; The response on stdout is one line and carries no "Fatal Error" wording:
 ; it is a protocol answer, not a log line.

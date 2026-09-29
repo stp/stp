@@ -76,6 +76,7 @@
   static thread_local bool realTokensActive = false;
   static thread_local bool bitVectorTokensActive = false;
   static thread_local bool commandNamePending = false;
+  static thread_local bool qualifiedNamePending = false;
 
   // Inside an indexed identifier -- between "(_" and its ")" -- a numeral
   // is an index, a width or a count, never a Real literal, whatever the
@@ -169,6 +170,7 @@ namespace stp
   {
     indexedIdentifierOpen = false;
     commandNamePending = false;
+    qualifiedNamePending = false;
     sortContext = false;
     annotations.clear();
     ufDeclarationNamePending = false;
@@ -351,6 +353,8 @@ namespace stp
 
   static int lookup(char* s)
   {
+    const bool qualifiedName = qualifiedNamePending;
+    qualifiedNamePending = false;
     // The SMTLIB2 specifications sez that the outter bars aren't part of the
     // name. This means that we can create an empty string symbol name.
     // Strip them in place: s is always yytext (writable, and dead once the
@@ -364,6 +368,12 @@ namespace stp
         s[len-1] = '\0'; // chop off first and last characters.
         s++;
       }
+    }
+
+    if (qualifiedName && s[0] == '@')
+    {
+      smt2lval.str = new std::string(s);
+      return ABSTRACT_VALUE_TOK;
     }
 
     if (stringOnly)
@@ -544,7 +554,7 @@ namespace stp
       if (!floatTokensActive && theoryToken(s, true) != 0)
         unresolvedFpKeyword = s;
       smt2lval.str = new std::string(s);
-      return s[0] == '@' ? ABSTRACT_VALUE_TOK : STRING_TOK;
+      return STRING_TOK;
     }
   }
 
@@ -711,7 +721,7 @@ bv{DIGIT}+             { return lookup(smt2text); }
                            throw stp::ParseAbandon(); }
 
  /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
-"("             { return LPAREN_TOK; }
+"("             { qualifiedNamePending = false; return LPAREN_TOK; }
 ")"             { indexedIdentifierOpen = false; return RPAREN_TOK; }
 "_"             { indexedIdentifierOpen = true; return UNDERSCORE_TOK; }
 "!"             { return EXCLAIMATION_MARK_TOK; }
@@ -806,7 +816,7 @@ bv{DIGIT}+             { return lookup(smt2text); }
 
 
  /* Syntactically reserved words. Quoted spellings are ordinary symbols. */
-"as"  { return AS_TOK; }
+"as"  { qualifiedNamePending = true; return AS_TOK; }
 "let" { return LET_TOK; }
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
@@ -821,6 +831,7 @@ bv{DIGIT}+             { return lookup(smt2text); }
     smt2error("Illegal input character.");
     if (abandon)
       throw stp::DeclassifiedNameAbandon();
+    throw stp::ParseAbandon();
   }
 %%
 
