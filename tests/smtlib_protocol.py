@@ -267,5 +267,31 @@ class SymbolSyntax(unittest.TestCase):
                 self.assertIn('(error "', result.stdout)
 
 
+class QualifiedIdentifiers(unittest.TestCase):
+    def test_qualifier_checks_result_sort(self):
+        cases = [
+            '(as p (_ BitVec 1))',
+            '(as true (_ BitVec 1))',
+            '((as and (_ BitVec 1)) p true)',
+            '(= ((as bvadd (_ BitVec 16)) x x) #x00)',
+            '(= ((as (_ extract 7 4) (_ BitVec 8)) x) #x0)',
+            '(= ((as (_ rotate_left 8) (_ BitVec 16)) x) #x00)',
+            '(= (as (_ bv42 8) (_ BitVec 16)) #x00)',
+            '(= ((as identity Bool) x) x)',
+            '(= ((as f Bool) x) x)',
+        ]
+        for term in cases:
+            with self.subTest(term=term):
+                result = run('(set-logic QF_UFBV)\n'
+                             '(declare-const p Bool)\n'
+                             '(declare-const x (_ BitVec 8))\n'
+                             '(declare-fun f ((_ BitVec 8)) (_ BitVec 8))\n'
+                             '(define-fun identity ((v (_ BitVec 8))) (_ BitVec 8) v)\n'
+                             '(assert ' + term + ')\n(check-sat)\n')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('qualified identifier has result sort', result.stdout)
+                self.assertNotIn('sat\n', result.stdout)
+
+
 if __name__ == '__main__':
     unittest.main()

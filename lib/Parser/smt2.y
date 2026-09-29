@@ -1728,6 +1728,36 @@
     stp::GlobalParserInterface->success();
   }
 
+  void checkQualifiedSort(stp::SourceSort*& requested, const stp::SourceSort& actual)
+  {
+    if (!requested) return;
+    const bool matches = *requested == actual;
+    const std::string diagnostic = matches ? std::string() :
+        "qualified identifier has result sort " + stp::sourceSortToSMTLib(actual) +
+        ", not " + stp::sourceSortToSMTLib(*requested);
+    stp::releaseParserValue(requested);
+    if (!matches) fatal_yyerror(diagnostic.c_str());
+  }
+
+  void checkQualifiedResult(stp::SourceSort*& requested, stp::ASTNode*& result)
+  {
+    if (requested && *requested != result->GetSourceSort())
+    {
+      const stp::SourceSort actual = result->GetSourceSort();
+      stp::GlobalParserInterface->deleteNode(result);
+      checkQualifiedSort(requested, actual);
+    }
+    stp::releaseParserValue(requested);
+  }
+
+  struct ParsedIndexedIdentifier
+  {
+    unsigned first = 0, second = 0, tag = 0;
+    std::string digits;
+    stp::SourceSort* qualifier = nullptr;
+    ~ParsedIndexedIdentifier() { delete qualifier; }
+  };
+
 #define YYLTYPE_IS_TRIVIAL 1
 #define YYMAXDEPTH 104857600
 #define YYERROR_VERBOSE 1
@@ -1742,6 +1772,7 @@
 %expect 0
 
 %union {
+  struct ParsedIndexedIdentifier* indexed;
   stp::SMT2Attribute* attribute;
   std::vector<stp::SMT2Attribute>* attributes;
   stp::SMT2AttributeValue* attribute_value;
@@ -1781,6 +1812,12 @@
    ParserUnwind.h. */
 %initial-action { STP_PARSER_RECLAIM_ON_UNWIND() }
 
+%type <sort> id_and id_bvand id_bvarithrightshift id_bvcomp id_bvconcat id_bvdiv id_bvge id_bvgt id_bvle id_bvleftshift_1 id_bvlt id_bvmod id_bvmult id_bvnand id_bvneg id_bvnego id_bvnor id_bvnot id_bvor id_bvplus id_bvrightshift_1 id_bvsaddo id_bvsdivo id_bvsge id_bvsgt id_bvsle id_bvslt id_bvsmulo id_bvssubo id_bvsub id_bvuaddo id_bvumulo id_bvusubo id_bvxnor id_bvxor id_distinct id_eq id_false id_fp id_fp_abs id_fp_add id_fp_div id_fp_eq id_fp_fma id_fp_geq id_fp_gt id_fp_isinfinite id_fp_isnan id_fp_isnegative id_fp_isnormal id_fp_ispositive id_fp_issubnormal id_fp_iszero id_fp_leq id_fp_lt id_fp_max id_fp_min id_fp_mul id_fp_neg id_fp_rem id_fp_rm_roundnearesttiestoaway id_fp_rm_roundnearesttiestoeven id_fp_rm_roundtowardnegative id_fp_rm_roundtowardpositive id_fp_rm_roundtowardzero id_fp_roundtointegral id_fp_sqrt id_fp_sub id_fp_to_ieee_bv id_fp_to_real id_implies id_ite id_not id_or id_real_add id_real_div id_real_ge id_real_gt id_real_le id_real_lt id_real_mul id_real_sub id_sbvdiv id_sbvmod id_sbvrem id_select id_store id_true id_xor
+%type <fn> id_array_functionid id_bitvector_functionid id_boolean_functionid id_declaredsort_functionid id_floatingpoint_functionid id_real_functionid id_roundingmode_functionid
+%type <node> id_formid id_termid
+%type <ufdecl> id_uf_bool_functionid id_uf_bv_functionid
+%type <indexed> id_bvconst_decimal id_bvconst_decimal_bare id_bvextract id_bvextract_bare id_bvrepeat id_bvrepeat_bare id_bvrotate_left id_bvrotate_left_bare id_bvrotate_right id_bvrotate_right_bare id_bvsx id_bvsx_bare id_bvzx id_bvzx_bare id_fp_special id_fp_special_bare id_fp_to_sbv id_fp_to_sbv_bare id_fp_to_ubv id_fp_to_ubv_bare id_fp_tofp id_fp_tofp_bare id_fp_tofp_unsigned id_fp_tofp_unsigned_bare
+
 %start cmd
 
 %type <vec> an_formulas an_terms function_params an_mixed
@@ -1808,7 +1845,7 @@
 %destructor { delete $$; } <vec>
 %destructor { delete $$; } <fp_size>
 %destructor { delete $$; } <sort> <sortexpr> <sortexprvec>
-%destructor { delete $$; } <arr_sort>
+%destructor { delete $$; } <arr_sort> <indexed>
 %destructor { destroyParsedRealConstant($$); } <realc>
 
 %token <str> ATTRIBUTE_KEYWORD_TOK
@@ -2939,21 +2976,770 @@ an_formulas an_formula
 }
 ;
 
+/* Qualified identifiers: qualification selects a result sort; it never
+   converts a value. Separate heads keep the existing term/formula grammar
+   conflict-free and share every operation's original construction path. */
+
+id_and:
+  AND_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK AND_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_array_functionid:
+  ARRAY_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK ARRAY_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_bitvector_functionid:
+  BITVECTOR_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK BITVECTOR_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_boolean_functionid:
+  BOOLEAN_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK BOOLEAN_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_bvand:
+  BVAND_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVAND_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvarithrightshift:
+  BVARITHRIGHTSHIFT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVARITHRIGHTSHIFT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvcomp:
+  BVCOMP_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVCOMP_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvconcat:
+  BVCONCAT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVCONCAT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvdiv:
+  BVDIV_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVDIV_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvge:
+  BVGE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVGE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvgt:
+  BVGT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVGT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvle:
+  BVLE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVLE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvleftshift_1:
+  BVLEFTSHIFT_1_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVLEFTSHIFT_1_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvlt:
+  BVLT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVLT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvmod:
+  BVMOD_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVMOD_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvmult:
+  BVMULT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVMULT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvnand:
+  BVNAND_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVNAND_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvneg:
+  BVNEG_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVNEG_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvnego:
+  BVNEGO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVNEGO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvnor:
+  BVNOR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVNOR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvnot:
+  BVNOT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVNOT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvor:
+  BVOR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVOR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvplus:
+  BVPLUS_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVPLUS_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvrightshift_1:
+  BVRIGHTSHIFT_1_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVRIGHTSHIFT_1_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsaddo:
+  BVSADDO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSADDO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsdivo:
+  BVSDIVO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSDIVO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsge:
+  BVSGE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSGE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsgt:
+  BVSGT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSGT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsle:
+  BVSLE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSLE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvslt:
+  BVSLT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSLT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsmulo:
+  BVSMULO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSMULO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvssubo:
+  BVSSUBO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSSUBO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsub:
+  BVSUB_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSUB_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvuaddo:
+  BVUADDO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVUADDO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvumulo:
+  BVUMULO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVUMULO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvusubo:
+  BVUSUBO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVUSUBO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvxnor:
+  BVXNOR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVXNOR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvxor:
+  BVXOR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVXOR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_declaredsort_functionid:
+  DECLAREDSORT_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK DECLAREDSORT_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_distinct:
+  DISTINCT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK DISTINCT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_eq:
+  EQ_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK EQ_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_false:
+  FALSE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FALSE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_floatingpoint_functionid:
+  FLOATINGPOINT_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK FLOATINGPOINT_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_formid:
+  FORMID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK FORMID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_fp:
+  FP_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_abs:
+  FP_ABS_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ABS_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_add:
+  FP_ADD_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ADD_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_div:
+  FP_DIV_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_DIV_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_eq:
+  FP_EQ_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_EQ_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_fma:
+  FP_FMA_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_FMA_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_geq:
+  FP_GEQ_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_GEQ_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_gt:
+  FP_GT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_GT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_isinfinite:
+  FP_ISINFINITE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISINFINITE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_isnan:
+  FP_ISNAN_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISNAN_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_isnegative:
+  FP_ISNEGATIVE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISNEGATIVE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_isnormal:
+  FP_ISNORMAL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISNORMAL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_ispositive:
+  FP_ISPOSITIVE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISPOSITIVE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_issubnormal:
+  FP_ISSUBNORMAL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISSUBNORMAL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_iszero:
+  FP_ISZERO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISZERO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_leq:
+  FP_LEQ_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_LEQ_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_lt:
+  FP_LT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_LT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_max:
+  FP_MAX_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_MAX_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_min:
+  FP_MIN_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_MIN_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_mul:
+  FP_MUL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_MUL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_neg:
+  FP_NEG_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_NEG_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rem:
+  FP_REM_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_REM_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rm_roundnearesttiestoaway:
+  FP_RM_ROUNDNEARESTTIESTOAWAY_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_RM_ROUNDNEARESTTIESTOAWAY_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rm_roundnearesttiestoeven:
+  FP_RM_ROUNDNEARESTTIESTOEVEN_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_RM_ROUNDNEARESTTIESTOEVEN_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rm_roundtowardnegative:
+  FP_RM_ROUNDTOWARDNEGATIVE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_RM_ROUNDTOWARDNEGATIVE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rm_roundtowardpositive:
+  FP_RM_ROUNDTOWARDPOSITIVE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_RM_ROUNDTOWARDPOSITIVE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rm_roundtowardzero:
+  FP_RM_ROUNDTOWARDZERO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_RM_ROUNDTOWARDZERO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_roundtointegral:
+  FP_ROUNDTOINTEGRAL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ROUNDTOINTEGRAL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_sqrt:
+  FP_SQRT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_SQRT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_sub:
+  FP_SUB_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_SUB_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_to_ieee_bv:
+  FP_TO_IEEE_BV_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_TO_IEEE_BV_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_to_real:
+  FP_TO_REAL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_TO_REAL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_implies:
+  IMPLIES_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK IMPLIES_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_ite:
+  ITE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK ITE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_not:
+  NOT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK NOT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_or:
+  OR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK OR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_add:
+  REAL_ADD_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_ADD_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_div:
+  REAL_DIV_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_DIV_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_functionid:
+  REAL_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK REAL_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_real_ge:
+  REAL_GE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_GE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_gt:
+  REAL_GT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_GT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_le:
+  REAL_LE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_LE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_lt:
+  REAL_LT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_LT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_mul:
+  REAL_MUL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_MUL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_sub:
+  REAL_SUB_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_SUB_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_roundingmode_functionid:
+  ROUNDINGMODE_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK ROUNDINGMODE_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_sbvdiv:
+  SBVDIV_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK SBVDIV_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_sbvmod:
+  SBVMOD_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK SBVMOD_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_sbvrem:
+  SBVREM_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK SBVREM_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_select:
+  SELECT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK SELECT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_store:
+  STORE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK STORE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_termid:
+  TERMID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK TERMID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_true:
+  TRUE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK TRUE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_uf_bool_functionid:
+  UF_BOOL_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK UF_BOOL_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->signature().codomain());
+  $$ = $3;
+}
+;
+
+id_uf_bv_functionid:
+  UF_BV_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK UF_BV_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->signature().codomain());
+  $$ = $3;
+}
+;
+
+id_xor:
+  XOR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK XOR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvconst_decimal:
+  id_bvconst_decimal_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvconst_decimal_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvconst_decimal_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVCONST_DECIMAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->digits = *$3;
+  stp::releaseParserValue($3);
+  $$->first = $4;
+}
+;
+
+id_bvextract:
+  id_bvextract_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvextract_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvextract_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVEXTRACT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+  $$->second = $5;
+}
+;
+
+id_bvrepeat:
+  id_bvrepeat_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvrepeat_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvrepeat_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVREPEAT_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_bvrotate_left:
+  id_bvrotate_left_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvrotate_left_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvrotate_left_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVROTATE_LEFT_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_bvrotate_right:
+  id_bvrotate_right_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvrotate_right_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvrotate_right_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVROTATE_RIGHT_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_bvsx:
+  id_bvsx_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvsx_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvsx_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVSX_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_bvzx:
+  id_bvzx_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvzx_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvzx_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVZX_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_fp_special:
+  id_fp_special_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_fp_special_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_fp_special_bare:
+  LPAREN_TOK UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->tag = $3;
+  $$->first = $4;
+  $$->second = $5;
+}
+;
+
+id_fp_to_sbv:
+  id_fp_to_sbv_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_fp_to_sbv_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_fp_to_sbv_bare:
+  LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_fp_to_ubv:
+  id_fp_to_ubv_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_fp_to_ubv_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_fp_to_ubv_bare:
+  LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_fp_tofp:
+  id_fp_tofp_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_fp_tofp_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_fp_tofp_bare:
+  LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+  $$->second = $5;
+}
+;
+
+id_fp_tofp_unsigned:
+  id_fp_tofp_unsigned_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_fp_tofp_unsigned_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_fp_tofp_unsigned_bare:
+  LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+  $$->second = $5;
+}
+;
+
 an_formula:
-TRUE_TOK
+id_true
 {
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(TRUE));
   assert(0 == $$->GetIndexWidth());
   assert(0 == $$->GetValueWidth());
+  checkQualifiedResult($1, $$);
 }
-| FALSE_TOK
+| id_false
 {
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(FALSE));
   assert(0 == $$->GetIndexWidth());
   assert(0 == $$->GetValueWidth());
+  checkQualifiedResult($1, $$);
 }
 |
-FORMID_TOK
+id_formid
 {
   $$ = stp::GlobalParserInterface->newNode(*$1); //todo creating then deleting same?
   stp::GlobalParserInterface->deleteNode($1);
@@ -2962,23 +3748,27 @@ FORMID_TOK
 {
    $$ = $2;
 }
-| LPAREN_TOK REAL_LT_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_lt an_terms RPAREN_TOK
 {
   $$ = createExactRealPredicate(stp::REAL_LT, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_LE_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_le an_terms RPAREN_TOK
 {
   $$ = createExactRealPredicate(stp::REAL_LE, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_GT_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_gt an_terms RPAREN_TOK
 {
   $$ = createExactRealPredicate(stp::REAL_GT, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_GE_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_ge an_terms RPAREN_TOK
 {
   $$ = createExactRealPredicate(stp::REAL_GE, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK EQ_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_eq an_mixed RPAREN_TOK
 {
   const ASTVec& terms = *$3;
 
@@ -3024,8 +3814,9 @@ FORMID_TOK
   {
     fatal_yyerror("too few arguments to eq."); 
   }
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK DISTINCT_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_distinct an_terms RPAREN_TOK
 {
   using namespace stp;
 
@@ -3050,8 +3841,9 @@ FORMID_TOK
   }
 
   stp::releaseParserValue($3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK DISTINCT_TOK an_formulas RPAREN_TOK
+| LPAREN_TOK id_distinct an_formulas RPAREN_TOK
 {
   using namespace stp;
 
@@ -3076,81 +3868,99 @@ FORMID_TOK
   }
 
   stp::releaseParserValue($3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSLT_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvslt an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSLT, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSLE_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsle an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSLE, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSGT_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsgt an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSGT, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSGE_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsge an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSGE, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVLT_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvlt an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVLT, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVLE_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvle an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVLE, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVGT_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvgt an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVGT, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVGE_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvge an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVGE, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVUADDO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvuaddo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVUADDO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSADDO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsaddo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSADDO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVUMULO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvumulo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVUMULO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSMULO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsmulo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSMULO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVUSUBO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvusubo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVUSUBO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSSUBO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvssubo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSSUBO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSDIVO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsdivo an_term an_term RPAREN_TOK
 {
   $$ = createSDivOverflow($3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVNEGO_TOK an_term RPAREN_TOK
+| LPAREN_TOK id_bvnego an_term RPAREN_TOK
 {
   $$ = createNegOverflow($3);
+  checkQualifiedResult($2, $$);
 }
 | LPAREN_TOK an_formula RPAREN_TOK
 {
   $$ = $2;
 }
-| LPAREN_TOK NOT_TOK an_formula RPAREN_TOK
+| LPAREN_TOK id_not an_formula RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(NOT, *$3));
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK IMPLIES_TOK an_formulas RPAREN_TOK
+| LPAREN_TOK id_implies an_formulas RPAREN_TOK
 {
   ASTVec forms = *$3;
 
@@ -3170,8 +3980,9 @@ FORMID_TOK
 
   $$ = stp::GlobalParserInterface->newNode(forms[0]);
   stp::releaseParserValue($3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK ITE_TOK an_formula an_formula an_formula RPAREN_TOK
+| LPAREN_TOK id_ite an_formula an_formula an_formula RPAREN_TOK
 {
   if (!$4->GetSourceSort().isKnown() ||
       $4->GetSourceSort() != $5->GetSourceSort())
@@ -3180,39 +3991,43 @@ FORMID_TOK
   stp::GlobalParserInterface->deleteNode( $3);
   stp::GlobalParserInterface->deleteNode( $4);
   stp::GlobalParserInterface->deleteNode( $5);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK AND_TOK an_formulas RPAREN_TOK
+| LPAREN_TOK id_and an_formulas RPAREN_TOK
 {
  $$ = createNode(AND, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK OR_TOK an_formulas RPAREN_TOK
+| LPAREN_TOK id_or an_formulas RPAREN_TOK
 {
   $$ = createNode(OR, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK XOR_TOK an_formulas RPAREN_TOK
+| LPAREN_TOK id_xor an_formulas RPAREN_TOK
 {
   $$ = createNode(XOR, $3);
+  checkQualifiedResult($2, $$);
 }
 | LPAREN_TOK LET_TOK lets an_formula RPAREN_TOK
   {
     $$ = $4;
     stp::GlobalParserInterface->letMgr->pop();
   }
-| LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_boolean_functionid an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
   stp::releaseParserValue($3);
 }
-| LPAREN_TOK UF_BOOL_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_uf_bool_functionid an_mixed RPAREN_TOK
 {
   $$ = applyParsedUF($2, *$3);
   stp::releaseParserValue($3);
 }
-| LPAREN_TOK UF_BOOL_FUNCTIONID_TOK RPAREN_TOK
+| LPAREN_TOK id_uf_bool_functionid RPAREN_TOK
 {
   $$ = applyParsedUF($2, ASTVec());
 }
-| BOOLEAN_FUNCTIONID_TOK
+| id_boolean_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
@@ -3295,9 +4110,10 @@ BVCONST_HEXIDECIMAL_TOK
   $$->SetValueWidth(width);
   stp::releaseParserValue($1);
 }
-| FP_TOK an_term an_term an_term
+| id_fp an_term an_term an_term
 {
   $$ = createFPFromParts($2, $3, $4);
+  checkQualifiedResult($1, $$);
 };
 
  /* The magnitude of a real constant: a decimal, or a numeral. Conversion is
@@ -3367,30 +4183,35 @@ an_real_constant:
 ;
 
 an_rounding_mode:
-  FP_RM_ROUNDTOWARDZERO_TOK
+id_fp_rm_roundtowardzero
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateRMConst(ROUND_TOWARD_ZERO));
+  checkQualifiedResult($1, $$);
 }
-| FP_RM_ROUNDNEARESTTIESTOEVEN_TOK
+| id_fp_rm_roundnearesttiestoeven
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateRMConst(ROUND_NEAREST_TIES_TO_EVEN));
+  checkQualifiedResult($1, $$);
 }
-| FP_RM_ROUNDNEARESTTIESTOAWAY_TOK
+| id_fp_rm_roundnearesttiestoaway
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateRMConst(ROUND_NEAREST_TIES_TO_AWAY));
+  checkQualifiedResult($1, $$);
 }
-| FP_RM_ROUNDTOWARDPOSITIVE_TOK
+| id_fp_rm_roundtowardpositive
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateRMConst(ROUND_TOWARD_POSITIVE));
+  checkQualifiedResult($1, $$);
 }
-| FP_RM_ROUNDTOWARDNEGATIVE_TOK
+| id_fp_rm_roundtowardnegative
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateRMConst(ROUND_TOWARD_NEGATIVE));
+  checkQualifiedResult($1, $$);
 }
 ;
 
@@ -3403,109 +4224,139 @@ an_fp_const:
 ;
 
 an_fp_term:
-  LPAREN_TOK FP_ABS_TOK an_term RPAREN_TOK
+LPAREN_TOK id_fp_abs an_term RPAREN_TOK
 {
   $$ = createFPUnary(FP_ABS, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_NEG_TOK an_term RPAREN_TOK
+| LPAREN_TOK id_fp_neg an_term RPAREN_TOK
 {
   $$ = createFPUnary(FP_NEG, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_ADD_TOK an_term an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_add an_term an_term an_term RPAREN_TOK
 {
   $$ = createFPArith(FP_ADD, $3, $4, $5);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_SUB_TOK an_term an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_sub an_term an_term an_term RPAREN_TOK
 {
   $$ = createFPArith(FP_SUB, $3, $4, $5);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_MUL_TOK an_term an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_mul an_term an_term an_term RPAREN_TOK
 {
   $$ = createFPArith(FP_MUL, $3, $4, $5);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_DIV_TOK an_term an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_div an_term an_term an_term RPAREN_TOK
 {
   $$ = createFPArith(FP_DIV, $3, $4, $5);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_FMA_TOK an_term an_term an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_fma an_term an_term an_term an_term RPAREN_TOK
 {
   $$ = createFPFma($3, $4, $5, $6);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_SQRT_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_sqrt an_term an_term RPAREN_TOK
 {
   $$ = createFPSqrt($3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_REM_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_rem an_term an_term RPAREN_TOK
 {
   $$ = createFPBinary(FP_REM, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_ROUNDTOINTEGRAL_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_roundtointegral an_term an_term RPAREN_TOK
 {
   $$ = createFPRoundToIntegral($3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_MIN_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_min an_term an_term RPAREN_TOK
 {
   $$ = createFPBinary(FP_MIN, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_MAX_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_max an_term an_term RPAREN_TOK
 {
   $$ = createFPBinary(FP_MAX, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_to_ubv an_term an_term RPAREN_TOK
 {
-  $$ = createFPToBV(FP_TO_UBV, $5, $7, $8);
+  $$ = createFPToBV(FP_TO_UBV, $2->first, $3, $4);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_to_sbv an_term an_term RPAREN_TOK
 {
-  $$ = createFPToBV(FP_TO_SBV, $5, $7, $8);
+  $$ = createFPToBV(FP_TO_SBV, $2->first, $3, $4);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term RPAREN_TOK
+| LPAREN_TOK id_fp_tofp an_term RPAREN_TOK
 {
   // ((_ to_fp e s) bv) reinterprets the bits of a bitvector as an IEEE-754
   // float. STP already stores floats as their packed bit pattern, so this is
   // purely a retyping: keep the child and stamp the format onto it.
-  $$ = createFPFromBits($5, $6, $8);
+  $$ = createFPFromBits($2->first, $2->second, $3);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_tofp an_term an_term RPAREN_TOK
 {
   // ((_ to_fp e s) rm f) reformats an existing float under a rounding mode.
-  $$ = createFPToFP($5, $6, $8, $9);
+  $$ = createFPToFP($2->first, $2->second, $3, $4);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_tofp_unsigned an_term an_term RPAREN_TOK
 {
-  $$ = createFPFromUnsignedBV($5, $6, $8, $9);
+  $$ = createFPFromUnsignedBV($2->first, $2->second, $3, $4);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_real_constant RPAREN_TOK
+| LPAREN_TOK id_fp_tofp an_term an_real_constant RPAREN_TOK
 {
-  $$ = createFPFromReal($5, $6, $8, $9);
+  $$ = createFPFromReal($2->first, $2->second, $3, $4);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_real_constant RPAREN_TOK
+| LPAREN_TOK id_fp_tofp an_real_constant RPAREN_TOK
 {
   $$ = nullptr;
-  destroyParsedRealConstant($8);
+  destroyParsedRealConstant($3);
   fatal_yyerror("converting a real literal needs a rounding mode, e.g. "
                 "((_ to_fp 8 24) RNE 1.5); the one-argument form of to_fp "
                 "reinterprets the packed bits of a bitvector");
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK FP_TO_REAL_TOK an_term RPAREN_TOK
+| LPAREN_TOK id_fp_to_real an_term RPAREN_TOK
 {
   $$ = createFpToReal($3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_TO_IEEE_BV_TOK an_term RPAREN_TOK
+| LPAREN_TOK id_fp_to_ieee_bv an_term RPAREN_TOK
 {
   $$ = createFPToIEEEBV($3);
+  checkQualifiedResult($2, $$);
 }
-| UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
+| id_fp_special
 {
   // The special values are constants: build the packed interned constant
   // directly. A childless special-value node would hash-cons every format
   // of, say, NaN to one node, which whoever parsed last would re-stamp.
-  uint32_t exp_width($3);
-  uint32_t sig_width($4);
+  uint32_t exp_width($1->first);
+  uint32_t sig_width($1->second);
   checkFpFormatWidths(exp_width, sig_width);
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateFPSpecialConst(
-          (stp::FPSpecial)$2, exp_width, sig_width));
+          (stp::FPSpecial)$1->tag, exp_width, sig_width));
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
 ;
 
@@ -3516,65 +4367,77 @@ an_fp_term:
 // from both, which is where most of the grammar's reduce/reduce conflicts
 // came from.
 an_fp_predicate:
-  FP_LEQ_TOK an_terms
+id_fp_leq an_terms
 {
   $$ = createFPChain(FP_LEQ, $2, "fp.leq");
+  checkQualifiedResult($1, $$);
 }
-| FP_LT_TOK an_terms
+| id_fp_lt an_terms
 {
   $$ = createFPChain(FP_LT, $2, "fp.lt");
+  checkQualifiedResult($1, $$);
 }
-| FP_GEQ_TOK an_terms
+| id_fp_geq an_terms
 {
   $$ = createFPChain(FP_GEQ, $2, "fp.geq");
+  checkQualifiedResult($1, $$);
 }
-| FP_GT_TOK an_terms
+| id_fp_gt an_terms
 {
   $$ = createFPChain(FP_GT, $2, "fp.gt");
+  checkQualifiedResult($1, $$);
 }
-| FP_EQ_TOK an_terms
+| id_fp_eq an_terms
 {
   // Through the same helper as the other chainable comparisons, gaining its
   // operand and format checks (the old inline version had none).
   $$ = createFPChain(FP_EQ, $2, "fp.eq");
+  checkQualifiedResult($1, $$);
 }
-| FP_ISNORMAL_TOK an_term
+| id_fp_isnormal an_term
 {
   $$ = createFPPredicate(FP_ISNORMAL, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISSUBNORMAL_TOK an_term
+| id_fp_issubnormal an_term
 {
   $$ = createFPPredicate(FP_ISSUBNORMAL, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISZERO_TOK an_term
+| id_fp_iszero an_term
 {
   $$ = createFPPredicate(FP_ISZERO, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISINFINITE_TOK an_term
+| id_fp_isinfinite an_term
 {
   $$ = createFPPredicate(FP_ISINFINITE, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISNAN_TOK an_term
+| id_fp_isnan an_term
 {
   $$ = createFPPredicate(FP_ISNAN, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISNEGATIVE_TOK an_term
+| id_fp_isnegative an_term
 {
   $$ = createFPPredicate(FP_ISNEGATIVE, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISPOSITIVE_TOK an_term
+| id_fp_ispositive an_term
 {
   $$ = createFPPredicate(FP_ISPOSITIVE, $2);
+  checkQualifiedResult($1, $$);
 }
 ;
 
 an_term:
-TERMID_TOK
+id_termid
 {
   $$ = stp::GlobalParserInterface->newNode((*$1));
   stp::GlobalParserInterface->deleteNode( $1);
 }
-| REAL_FUNCTIONID_TOK
+| id_real_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(
@@ -3582,7 +4445,7 @@ TERMID_TOK
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
     fatal_yyerror("Real define-fun alias did not return Real sort");
 }
-| LPAREN_TOK REAL_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_real_functionid an_mixed RPAREN_TOK
 {
   // A Real-returning macro applied to arguments. Substitution happens
   // here, so what leaves this rule is an ordinary Real term.
@@ -3600,7 +4463,7 @@ TERMID_TOK
 {
   $$ = createExactRealLiteral($1);
 }
-| ARRAY_FUNCTIONID_TOK
+| id_array_functionid
 {
   // A use of a nullary array-sorted define-fun expands to its body.
   ASTVec empty;
@@ -3625,26 +4488,30 @@ TERMID_TOK
      not only in the dedicated rounding-mode operand slots. */
   $$ = $1;
 }
-| LPAREN_TOK REAL_ADD_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_add an_terms RPAREN_TOK
 {
   $$ = createExactRealTerm(stp::REAL_ADD, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_SUB_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_sub an_terms RPAREN_TOK
 {
   $$ = createExactRealTerm(stp::REAL_SUB, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_MUL_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_mul an_terms RPAREN_TOK
 {
   $$ = createExactRealTerm(stp::REAL_MUL, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_DIV_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_div an_terms RPAREN_TOK
 {
   $$ = createExactRealTerm(stp::REAL_DIV, $3);
+  checkQualifiedResult($2, $$);
 }
 | LPAREN_TOK AS_TOK STRING_TOK an_array_sort RPAREN_TOK an_term
 {
   // ((as const (Array I E)) v): the array whose every cell is v, the only
-  // qualified identifier the frontend admits. The manager registers the
+  // constant-array extension. The manager registers the
   // symbol with its default and interns by (sort, default), so the same
   // text names the same array wherever it occurs.
   // Like select, store and the grammar's other operator productions, this
@@ -3690,7 +4557,7 @@ TERMID_TOK
   stp::releaseParserValue($4);
   stp::GlobalParserInterface->deleteNode($6);
 }
-| SELECT_TOK an_term an_term
+| id_select an_term an_term
 {
   //ARRAY READ
   // valuewidth is same as array, indexwidth is 0.
@@ -3701,8 +4568,9 @@ TERMID_TOK
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(READ, width, array, index));
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($1, $$);
 }
-| STORE_TOK an_term an_term an_term
+| id_store an_term an_term an_term
 {
   //ARRAY WRITE
   unsigned int width = $4->GetValueWidth();
@@ -3716,44 +4584,51 @@ TERMID_TOK
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
   stp::GlobalParserInterface->deleteNode( $4);
+  checkQualifiedResult($1, $$);
 }
-| LPAREN_TOK UNDERSCORE_TOK BVEXTRACT_TOK  NUMERAL_TOK  NUMERAL_TOK RPAREN_TOK an_term
+| id_bvextract an_term
 {
-  checkBitVectorTerm(*$7);
+  checkBitVectorTerm(*$2);
   // Bounds outside the operand end the parse: going on, the extract was
   // built anyway and folded, reading past a constant's bits.
-  int width = $4 - $5 + 1;
+  int width = $1->first - $1->second + 1;
   if (width < 0)
     fatal_yyerror("Negative width in extract");
 
-  if((unsigned)$4 >= $7->GetValueWidth())
+  if((unsigned)$1->first >= $2->GetValueWidth())
     fatal_yyerror("Parsing: Wrong width in BVEXTRACT");
 
-  ASTNode hi  =  stp::GlobalParserInterface->CreateBVConst(32, $4);
-  ASTNode low =  stp::GlobalParserInterface->CreateBVConst(32, $5);
-  ASTNode output = stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT, width, *$7,hi,low);
+  ASTNode hi  =  stp::GlobalParserInterface->CreateBVConst(32, $1->first);
+  ASTNode low =  stp::GlobalParserInterface->CreateBVConst(32, $1->second);
+  ASTNode output = stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT, width, *$2,hi,low);
   ASTNode * n = stp::GlobalParserInterface->newNode(output);
   $$ = n;
-    stp::GlobalParserInterface->deleteNode( $7);
+    stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-| LPAREN_TOK UNDERSCORE_TOK BVZX_TOK  NUMERAL_TOK  RPAREN_TOK an_term
+| id_bvzx an_term
 {
-  checkBitVectorTerm(*$6);
-  unsigned w = $6->GetValueWidth() + $4;
+  checkBitVectorTerm(*$2);
+  unsigned w = $2->GetValueWidth() + $1->first;
   ASTNode width = stp::GlobalParserInterface->CreateBVConst(32,w);
-  $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVZX,w,*$6,width));
-  stp::GlobalParserInterface->deleteNode( $6);
+  $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVZX,w,*$2,width));
+  stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-|  LPAREN_TOK UNDERSCORE_TOK BVSX_TOK  NUMERAL_TOK  RPAREN_TOK an_term
+| id_bvsx an_term
 {
-  checkBitVectorTerm(*$6);
-  unsigned w = $6->GetValueWidth() + $4;
+  checkBitVectorTerm(*$2);
+  unsigned w = $2->GetValueWidth() + $1->first;
   ASTNode width = stp::GlobalParserInterface->CreateBVConst(32,w);
-  $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVSX,w,*$6,width));
-  stp::GlobalParserInterface->deleteNode( $6);
+  $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVSX,w,*$2,width));
+  stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
 
-|  ITE_TOK an_formula an_term an_term
+| id_ite an_formula an_term an_term
 {
   // Reject branches of different floating-point formats up front, as the
   // (= ...) rule does for its operands: with a constant condition the
@@ -3779,6 +4654,7 @@ TERMID_TOK
     stp::GlobalParserInterface->deleteNode( $2);
     stp::GlobalParserInterface->deleteNode( $3);
     stp::GlobalParserInterface->deleteNode( $4);
+    checkQualifiedResult($1, $$);
     break;
   }
   const unsigned int width = $3->GetValueWidth();
@@ -3786,8 +4662,9 @@ TERMID_TOK
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
   stp::GlobalParserInterface->deleteNode( $4);
+  checkQualifiedResult($1, $$);
 }
-|  BVCONCAT_TOK an_term an_term
+| id_bvconcat an_term an_term
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
@@ -3795,43 +4672,50 @@ TERMID_TOK
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, width, *$2, *$3));
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVNOT_TOK an_term
+| id_bvnot an_term
 {
   checkBitVectorTerm(*$2);
   //this is the BVNEG (term) in the CVCL language
   unsigned int width = $2->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2));
   stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1, $$);
 }
-|  BVNEG_TOK an_term
+| id_bvneg an_term
 {
   checkBitVectorTerm(*$2);
   //this is the BVUMINUS term in CVCL langauge
   unsigned width = $2->GetValueWidth();
   $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVUMINUS,width,*$2));
   stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1, $$);
 }
-|  LPAREN_TOK BVAND_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_bvand an_terms RPAREN_TOK
 {
  $$ = createTerm(BVAND, $3);
+  checkQualifiedResult($2, $$);
 }
-|  LPAREN_TOK BVOR_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_bvor an_terms RPAREN_TOK
 {
   $$ = createTerm(BVOR, $3);
+  checkQualifiedResult($2, $$);
 }
-|  LPAREN_TOK BVXOR_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_bvxor an_terms RPAREN_TOK
 {
   $$ = createTerm(BVXOR, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVXNOR_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvxnor an_term an_term RPAREN_TOK
 {
   ASTNode *temp = createTerm(BVXOR, $3, $4);
   const unsigned int width = temp->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, *temp));
   stp::GlobalParserInterface->deleteNode( temp);
+  checkQualifiedResult($2, $$);
 }
-|  BVCOMP_TOK an_term an_term
+| id_bvcomp an_term an_term
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
@@ -3843,40 +4727,49 @@ TERMID_TOK
 
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVSUB_TOK an_term an_term
+| id_bvsub an_term an_term
 {
   $$ = createTerm(BVSUB, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|  LPAREN_TOK BVPLUS_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_bvplus an_terms RPAREN_TOK
 {
   $$ = createTerm(BVPLUS, $3);
+  checkQualifiedResult($2, $$);
 }
-|  LPAREN_TOK BVMULT_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_bvmult an_terms RPAREN_TOK
 {
   $$ = createTerm(BVMULT, $3);
+  checkQualifiedResult($2, $$);
 }
-|      BVDIV_TOK an_term an_term
+| id_bvdiv an_term an_term
 {
   $$ = createTerm(BVDIV, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|      BVMOD_TOK an_term an_term
+| id_bvmod an_term an_term
 {
   $$ = createTerm(BVMOD, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|      SBVDIV_TOK an_term an_term
+| id_sbvdiv an_term an_term
 {
   $$ = createTerm(SBVDIV, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|      SBVREM_TOK an_term an_term
+| id_sbvrem an_term an_term
 {
   $$ = createTerm(SBVREM, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|      SBVMOD_TOK an_term an_term
+| id_sbvmod an_term an_term
 {
   $$ = createTerm(SBVMOD, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVNAND_TOK an_term an_term
+| id_bvnand an_term an_term
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
@@ -3885,8 +4778,9 @@ TERMID_TOK
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, stp::GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3)));
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVNOR_TOK an_term an_term
+| id_bvnor an_term an_term
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
@@ -3895,28 +4789,33 @@ TERMID_TOK
   $$= stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, stp::GlobalParserInterface->nf->CreateTerm(BVOR, width, *$2, *$3)));
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVLEFTSHIFT_1_TOK an_term an_term
+| id_bvleftshift_1 an_term an_term
 {
    $$ = createTerm(BVLEFTSHIFT, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-| BVRIGHTSHIFT_1_TOK an_term an_term
+| id_bvrightshift_1 an_term an_term
 {
    $$ = createTerm(BVRIGHTSHIFT, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVARITHRIGHTSHIFT_TOK an_term an_term
+| id_bvarithrightshift an_term an_term
 {
    $$ = createTerm(BVSRSHIFT, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-| LPAREN_TOK UNDERSCORE_TOK BVROTATE_LEFT_TOK  NUMERAL_TOK  RPAREN_TOK an_term
+| id_bvrotate_left an_term
 {
-  checkBitVectorTerm(*$6);
+  checkBitVectorTerm(*$2);
   ASTNode *n;
-  unsigned width = $6->GetValueWidth();
-  unsigned rotate = $4 % width;
+  unsigned width = $2->GetValueWidth();
+  unsigned rotate = $1->first % width;
   if (0 == rotate)
   {
-      n = $6;
+      n = $2;
+      $2 = nullptr;
   }
   else
   {
@@ -3925,22 +4824,25 @@ TERMID_TOK
     ASTNode cut = stp::GlobalParserInterface->CreateBVConst(32,width-rotate);
     ASTNode cutMinusOne = stp::GlobalParserInterface->CreateBVConst(32,width-rotate-1);
 
-    ASTNode top =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$6,high, cut);
-    ASTNode bottom =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$6,cutMinusOne,zero);
+    ASTNode top =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$2,high, cut);
+    ASTNode bottom =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$2,cutMinusOne,zero);
     n =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,width,bottom,top));
-    stp::GlobalParserInterface->deleteNode( $6);
+    stp::GlobalParserInterface->deleteNode( $2);
   }
   $$ = n;
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-| LPAREN_TOK UNDERSCORE_TOK BVROTATE_RIGHT_TOK  NUMERAL_TOK  RPAREN_TOK an_term
+| id_bvrotate_right an_term
 {
-  checkBitVectorTerm(*$6);
+  checkBitVectorTerm(*$2);
   ASTNode *n;
-  unsigned width = $6->GetValueWidth();
-  unsigned rotate = $4 % width;
+  unsigned width = $2->GetValueWidth();
+  unsigned rotate = $1->first % width;
   if (0 == rotate)
   {
-      n = $6;
+      n = $2;
+      $2 = nullptr;
   }
   else
   {
@@ -3949,52 +4851,55 @@ TERMID_TOK
     ASTNode cut = stp::GlobalParserInterface->CreateBVConst(32,rotate);
     ASTNode cutMinusOne = stp::GlobalParserInterface->CreateBVConst(32,rotate-1);
 
-    ASTNode bottom =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$6,cutMinusOne, zero);
-    ASTNode top =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$6,high,cut);
+    ASTNode bottom =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$2,cutMinusOne, zero);
+    ASTNode top =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$2,high,cut);
     n =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,width,bottom,top));
-    stp::GlobalParserInterface->deleteNode( $6);
+    stp::GlobalParserInterface->deleteNode( $2);
   }
   $$ = n;
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-| LPAREN_TOK UNDERSCORE_TOK BVREPEAT_TOK  NUMERAL_TOK RPAREN_TOK an_term
+| id_bvrepeat an_term
 {
-  checkBitVectorTerm(*$6);
-  unsigned count = $4;
+  checkBitVectorTerm(*$2);
+  unsigned count = $1->first;
   if (count < 1)
       fatal_yyerror("One or more repeats please");
 
-  unsigned w = $6->GetValueWidth();
-  ASTNode n =  *$6;
+  unsigned w = $2->GetValueWidth();
+  ASTNode n =  *$2;
 
   for (unsigned i =1; i < count; i++)
   {
-        n = stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$6);
+        n = stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$2);
   }
   $$ = stp::GlobalParserInterface->newNode(n);
-  stp::GlobalParserInterface->deleteNode( $6);
+  stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-| UNDERSCORE_TOK BVCONST_DECIMAL_TOK NUMERAL_TOK
+| id_bvconst_decimal
 {
   // (_ bvN w): w is positive and N fits w bits, and saying so is the
   // parser's job (the engine's constructor treats either as fatal).
-  if ($3 == 0)
+  if ($1->first == 0)
   {
-    stp::releaseParserValue($2);
     fatal_yyerror("bit-vectors must be of positive length");
   }
-  if (!decimalFitsWidth(*$2, $3))
+  if (!decimalFitsWidth($1->digits, $1->first))
   {
-    const std::string diagnostic = "(_ bv" + *$2 + " " + std::to_string($3) +
+    const std::string diagnostic = "(_ bv" + $1->digits + " " + std::to_string($1->first) +
                                    "): the value does not fit in " +
-                                   std::to_string($3) + " bits";
-    stp::releaseParserValue($2);
+                                   std::to_string($1->first) + " bits";
     fatal_yyerror(diagnostic.c_str());
   }
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$2, 10, $3));
-  $$->SetValueWidth($3);
-  stp::releaseParserValue($2);
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst($1->digits, 10, $1->first));
+  $$->SetValueWidth($1->first);
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-| LPAREN_TOK BITVECTOR_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_bitvector_functionid an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
 
@@ -4003,16 +4908,16 @@ TERMID_TOK
 
   stp::releaseParserValue($3);
 }
-| LPAREN_TOK UF_BV_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_uf_bv_functionid an_mixed RPAREN_TOK
 {
   $$ = applyParsedUF($2, *$3);
   stp::releaseParserValue($3);
 }
-| LPAREN_TOK UF_BV_FUNCTIONID_TOK RPAREN_TOK
+| LPAREN_TOK id_uf_bv_functionid RPAREN_TOK
 {
   $$ = applyParsedUF($2, ASTVec());
 }
-| LPAREN_TOK FLOATINGPOINT_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_floatingpoint_functionid an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
 
@@ -4021,7 +4926,7 @@ TERMID_TOK
 
   stp::releaseParserValue($3);
 }
-| FLOATINGPOINT_FUNCTIONID_TOK
+| id_floatingpoint_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
@@ -4029,7 +4934,7 @@ TERMID_TOK
   if ($$->GetType() != FLOATINGPOINT_TYPE)
     yyerror("Must be floating-point type");
 }
-| BITVECTOR_FUNCTIONID_TOK
+| id_bitvector_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
@@ -4037,7 +4942,7 @@ TERMID_TOK
   if ($$->GetType() != BITVECTOR_TYPE)
     yyerror("Must be bitvector type");
 }
-| LPAREN_TOK ROUNDINGMODE_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_roundingmode_functionid an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(
       applyFunctionChecked(*$2, *$3));
@@ -4045,7 +4950,7 @@ TERMID_TOK
     yyerror("Must be RoundingMode type");
   stp::releaseParserValue($3);
 }
-| ROUNDINGMODE_FUNCTIONID_TOK
+| id_roundingmode_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(
@@ -4053,7 +4958,7 @@ TERMID_TOK
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
     yyerror("Must be RoundingMode type");
 }
-| LPAREN_TOK DECLAREDSORT_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_declaredsort_functionid an_mixed RPAREN_TOK
 {
   // A define-fun whose result sort is one declared by declare-sort. Its own
   // token for the same reason RoundingMode has one: the lexer dispatches a
@@ -4066,7 +4971,7 @@ TERMID_TOK
     yyerror("Must be a declared sort");
   stp::releaseParserValue($3);
 }
-| DECLAREDSORT_FUNCTIONID_TOK
+| id_declaredsort_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(
