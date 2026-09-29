@@ -155,6 +155,8 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "exit_after_CNF" }
 category = "cnf"
+# stop-after-cnf asks for the check to stop and the run to go on: one or the other
+excludes = ["stop-after-cnf"]
 # tools/stp's --exit-after-CNF (a frontend row) sets this entry: the run ends where the command line always stopped
 help = "end the run at the first CNF a check generates: the check stops there and says nothing more (print-quickstat's report and a partial CNF's warning come first), and an input read with ParseMode::EXECUTE ends with it; a check answers unknown (STOPPED_AFTER_CNF)"
 
@@ -432,6 +434,7 @@ kind = "flag"
 group = "Miscellaneous options"
 help = "exit after the CNF has been generated"
 api = "Options end-after-cnf: the run ends at the first CNF instead of the process exiting"
+excludes = ["--stop-after-cnf"]
 
 [[frontend]]
 key = "parse-only"

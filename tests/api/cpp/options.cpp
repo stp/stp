@@ -617,6 +617,11 @@ TEST(Options, conflicts)
   r.set_bool("size-reducing-only", true);
   r.set_bool("difficulty-reversion", false);
   API_EXPECT_ERROR(ErrorCode::OPTION_CONFLICT, r.resolve());
+  // ending the run at the first CNF and going on after it
+  Options c;
+  c.set_bool("end-after-cnf", true);
+  c.set_bool("stop-after-cnf", true);
+  API_EXPECT_ERROR(ErrorCode::OPTION_CONFLICT, c.resolve());
   // a value-level requirement: threads needs the cryptominisat backend
   if (has_sat_backend("cadical"))
   {
