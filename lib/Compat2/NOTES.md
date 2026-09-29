@@ -237,11 +237,13 @@ unsupported, and which 2.x suites run against it.
     declarations by the model's order and gives floating-point declarations
     no trailing space; `vc_printCounterExampleSMTLIB2` prints an array as one
     store-chain `define-fun` where 2.x printed a line per cell;
-    `vc_printVarDecls` writes `x : BITVECTOR(8);` where 2.x wrote
-    `x  : BITVECTOR(8);`, and `typeString` `BITVECTOR(8)` where 2.x wrote
-    `BITVECTOR(00000008) `; with simplification asked for,
-    `vc_printAsserts` and `vc_printQueryStateToBuffer` print the local
-    simplifier's form, not 2.x's top-level one; `vc_counterexample_size` counts
+    `vc_printVarDecls` and `vc_printQueryStateToBuffer` declare
+    `x : BITVECTOR(8);` where 2.x wrote `x  : BITVECTOR(8);`, and
+    `typeString` gives `BITVECTOR(8)` and `BOOLEAN` where 2.x gave
+    `BITVECTOR(00000008) ` and `BOOLEAN ` (and aborted on an array type);
+    with simplification asked for, `vc_printAsserts` and
+    `vc_printQueryStateToBuffer` print the local simplifier's form, not
+    2.x's top-level one; `vc_counterexample_size` counts
     the model's symbols, where 2.x counted every entry of its map; and
     `vc_getCounterExampleArray` lists the model's own cells, without the cells
     an earlier `vc_getCounterExample` had evaluated.
@@ -249,6 +251,9 @@ unsupported, and which 2.x suites run against it.
     conjunction of the negated query with every assertion on the stack (the
     design suggested a text hash; a hash value was never stable across
     versions, and the term hash is the one the engine already maintains).
+    As in 2.x, where the value was the node number of a conjunction built
+    for the call and freed on return, two calls over the same state need not
+    return the same value.
 14. **Parsing.** 3.x's CVC parser asserts the *negation* of a `QUERY`
     (`stp_solver_parse` semantics). To give 2.x's `vc_parseExpr`/
     `vc_parseMemExpr` their `asserts` and `query` back, the shim splits the
