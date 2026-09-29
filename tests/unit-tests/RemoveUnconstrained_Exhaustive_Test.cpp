@@ -1425,6 +1425,30 @@ TEST(RemoveUnconstrained_ImageConstrained, shared_multi_step_not_rewritten)
   c.checkEquivalent(back, result);
 }
 
+TEST(RemoveUnconstrained_ImageConstrained,
+     fresh_var_not_unconstrained_in_same_run)
+{
+  // sx(x) is shared between the comparison and the xor. The image
+  // rewrite replaces it with v, setting "v is a fixed point of
+  // re-extension" aside. The xor rule then eliminates y and takes that
+  // parent of v away, leaving v single-use in the mutable tree. v must
+  // not be treated as unconstrained by the comparison rule: the extreme
+  // value it would assign is outside the image, and the set-aside
+  // constraint then makes a satisfiable formula unsat.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv(2 * W);
+  ASTNode t = c.hf->CreateTerm(BVSX, 2 * W, x, c.konst(2 * W, 32));
+  ASTNode top = c.hf->CreateNode(
+      BVSGT,
+      c.hf->CreateTerm(BVNOT, 2 * W,
+                       c.hf->CreateTerm(BVXOR, 2 * W, y, c.konst(1, 2 * W), t)),
+      t);
+  c.mgr.UserFlags.unconstrained_image_vars = true;
+  ASTNode result = c.run(top);
+  c.checkEquisat(top, result);
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // 4) Symbolic-side collapse: the predicate's other side is any term. The
 //    predicate is rewritten into its invertibility condition over that term

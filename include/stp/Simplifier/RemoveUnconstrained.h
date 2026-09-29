@@ -61,6 +61,13 @@ class RemoveUnconstrained
   // topLevel_other() run; conjoined onto the result before returning.
   ASTVec imageConstraints;
 
+  // The untouchable set installed for the current topLevel() call, so
+  // that tryImageConstrainShared can add its fresh variables to it: their
+  // membership constraint is outside the mutable tree, which would
+  // otherwise count them as unconstrained. NULL outside a call, and
+  // when the image rewrite is off.
+  std::set<ASTNode>* passUntouchable = NULL;
+
   void replace(const ASTNode& from, const ASTNode to);
 
   NodeFactory* nf;
