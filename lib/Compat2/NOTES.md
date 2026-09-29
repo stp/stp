@@ -229,6 +229,20 @@ unsupported, and which 2.x suites run against it.
     entries of `stp_fun_value`). The 3.x script printers write legal SMT-LIB
     too, but not this text (no `set-info`, and a declaration spells a simple
     name bare), and 2.x clients compare text.
+    Both printers give 2.x's shape, not its every byte. Known differences,
+    none of which changes a value: `vc_printSMTLIB2` omits 2.x's
+    `(set-info :status unknown)`, closes `(assert ...)` on its line, orders
+    declarations by the model's order and gives floating-point declarations
+    no trailing space; `vc_printCounterExampleSMTLIB2` prints an array as one
+    store-chain `define-fun` where 2.x printed a line per cell;
+    `vc_printVarDecls` writes `x : BITVECTOR(8);` where 2.x wrote
+    `x  : BITVECTOR(8);`, and `typeString` `BITVECTOR(8)` where 2.x wrote
+    `BITVECTOR(00000008) `; with simplification asked for,
+    `vc_printAsserts` and `vc_printQueryStateToBuffer` print the local
+    simplifier's form, not 2.x's top-level one; `vc_counterexample_size` counts
+    the model's symbols, where 2.x counted every entry of its map; and
+    `vc_getCounterExampleArray` lists the model's own cells, without the cells
+    an earlier `vc_getCounterExample` had evaluated.
 13. **Hash.** `vc_getHashQueryStateToBuffer` is `stp_term_hash` of the
     conjunction of the negated query with every assertion on the stack (the
     design suggested a text hash; a hash value was never stable across
@@ -325,7 +339,7 @@ unsupported, and which 2.x suites run against it.
 | `vc_getCounterExample` after a VALID answer | `NULL` plus a diagnostic instead of 2.x's invented value (deliberate). |
 | `vc_pop` at the base level | fatal instead of 2.x's deletion of the base assertions (deliberate). |
 | `vc_parseExpr` / `vc_parseMemExpr` | reproduced by the split described in decision 14; a script with several `QUERY` statements is a syntax error, as it was in 2.x (the grammar allows one). A re-declaration of a name the checker has at another type is refused, where 2.x made a new symbol (decision 14). |
-| `vc_printSMTLIB2`, `vc_printCounterExampleSMTLIB2`, `vc_getRealModelSMTLIB2` | composed by the shim (decision 12); the text is the 2.x form, not the 3.x printers' form. |
+| `vc_printSMTLIB2`, `vc_printCounterExampleSMTLIB2`, `vc_getRealModelSMTLIB2` | composed by the shim (decision 12); the text has the 2.x shape, not the 3.x printers', with the byte-level differences decision 12 lists. |
 | `vc_setErrorPolicy` | new, honoured; under `STP_ON_ERROR_RETURN` every fatal path returns its failure value after the handler. |
 
 Everything else is a direct mapping.
