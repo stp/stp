@@ -1137,3 +1137,35 @@ TEST(Parsing, a_parse_leaves_other_threads_output_alone)
 }
 
 } // namespace
+
+// A CVC or SMT-LIB 1 input may declare a name the manager already has -- from
+// the caller, or an earlier input -- at the symbol's own type: it is the same
+// symbol. At another type it is refused. Such a declaration was a syntax error.
+TEST(Parsing, a_cvc_or_smtlib1_input_may_declare_a_name_again)
+{
+  TermManager tm;
+  Solver s(tm);
+  const Term x = tm.declare("x", tm.mk_bv_sort(8));
+  s.parse("x : BITVECTOR(8); ASSERT(x = 0hex05); QUERY(FALSE);", Format::CVC);
+  s.parse("x : BITVECTOR(8); p : BOOLEAN; ASSERT(p); QUERY(FALSE);", Format::CVC);
+  s.parse("p : BOOLEAN; ASSERT(p); QUERY(FALSE);", Format::CVC);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.model().uint64_value(x), 5u);
+  auto e = API_ERROR_OF(s.parse("x : BITVECTOR(4); QUERY(FALSE);", Format::CVC));
+  ASSERT_TRUE(e.has_value());
+  EXPECT_EQ(e->code(), ErrorCode::PARSE);
+  EXPECT_NE(std::string(e->what()).find("declared again"), std::string::npos) << e->what();
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse("p : BITVECTOR(1); QUERY(FALSE);", Format::CVC));
+  // SMT-LIB 1 likewise
+  const char* benchmark = "(benchmark b :logic QF_BV :extrafuns ((x BitVec[8])) "
+                          ":extrapreds ((q)) :assumption (= x bv5[8]) :formula q)";
+  s.parse(benchmark, Format::SMTLIB1);
+  s.parse(benchmark, Format::SMTLIB1);
+  API_EXPECT_ERROR(ErrorCode::PARSE,
+                   s.parse("(benchmark b :logic QF_BV :extrafuns ((x BitVec[4])) :formula true)",
+                           Format::SMTLIB1));
+  API_EXPECT_ERROR(ErrorCode::PARSE,
+                   s.parse("(benchmark b :logic QF_BV :extrafuns ((q BitVec[1])) :formula true)",
+                           Format::SMTLIB1));
+  EXPECT_TRUE(s.check_sat().is_sat());
+}

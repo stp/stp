@@ -250,6 +250,11 @@ unsupported, and which 2.x suites run against it.
     as 2.x's `benchmark` rule built them. `vc_parseExpr` returns the conjunction of the asserts
     with the negated query, as 2.x did; a file that cannot be opened is the 2.x
     fatal "Cannot open file", a parse failure is fatal with the 3.x message.
+    A text may declare a name the checker already has -- from `vc_varExpr`, or
+    an earlier parse -- at the symbol's own type: it is the same symbol, as it
+    was in 2.x, where every parse had its own declaration scope. 2.x also
+    accepted one at another type, as a new symbol of the same name; a checker
+    has one symbol per name, so libstp2 refuses it (a parse failure).
 15. **Kinds and children.** `getExprKind` maps every public 3.x kind to the
     nearest `exprkind_t` (a VALUE reports TRUE/FALSE/BVCONST/REAL_CONST, a
     float or rounding-mode constant reports BVCONST as 2.x did, a Boolean
@@ -319,7 +324,7 @@ unsupported, and which 2.x suites run against it.
 | `vc_printVarDecls` | symbols of float, rounding-mode and Real sorts are skipped (the presentation language cannot spell them; 2.x printed nothing usable for them either). |
 | `vc_getCounterExample` after a VALID answer | `NULL` plus a diagnostic instead of 2.x's invented value (deliberate). |
 | `vc_pop` at the base level | fatal instead of 2.x's deletion of the base assertions (deliberate). |
-| `vc_parseExpr` / `vc_parseMemExpr` | reproduced by the split described in decision 14; a script with several `QUERY` statements is a syntax error, as it was in 2.x (the grammar allows one). |
+| `vc_parseExpr` / `vc_parseMemExpr` | reproduced by the split described in decision 14; a script with several `QUERY` statements is a syntax error, as it was in 2.x (the grammar allows one). A re-declaration of a name the checker has at another type is refused, where 2.x made a new symbol (decision 14). |
 | `vc_printSMTLIB2`, `vc_printCounterExampleSMTLIB2`, `vc_getRealModelSMTLIB2` | composed by the shim (decision 12); the text is the 2.x form, not the 3.x printers' form. |
 | `vc_setErrorPolicy` | new, honoured; under `STP_ON_ERROR_RETURN` every fatal path returns its failure value after the handler. |
 

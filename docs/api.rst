@@ -239,12 +239,14 @@ library that provides it: KLEE and other 2.x clients link it unchanged
 package's ``STP_C_INTERFACE_LIBRARY``, ``STP_SHARED_LIBRARY`` and
 ``STP_STATIC_LIBRARY`` variables name). The header-only ``fp.hpp`` and
 ``uf.hpp`` over ``c_interface.h`` come with it. It reproduces the
-2.x ownership modes, the error handler and the model-lifetime rules, with three
+2.x ownership modes, the error handler and the model-lifetime rules, with four
 documented exceptions: reading a counterexample after a VALID answer returns
 ``NULL`` with a diagnostic instead of an invented value, an unmatched
-``vc_pop`` is an error instead of deleting the base assertions, and a Real
+``vc_pop`` is an error instead of deleting the base assertions, a Real
 constant or term beyond the exact-arithmetic budget is a fatal refusal, as any
-constructor's is, where 2.x returned ``NULL``.
+constructor's is, where 2.x returned ``NULL``, and a parsed text that declares
+a name the checker already has at another type is refused, where 2.x made a
+second symbol of that name.
 ``lib/Compat2/NOTES.md`` records how each 2.x function, option letter and
 ``ifaceflag_t`` ordinal maps onto the 3.x API.
 
@@ -287,7 +289,9 @@ Limits of the alpha
    constant does: it survives an API ``pop()`` of the level it was declared
    in, and a later script over the same manager uses the name rather than
    declaring it again (a second declaration is a ``PARSE`` error, as SMT-LIB
-   has it; ``declare`` is the idempotent door). A ``define-fun`` name lasts
+   has it; ``declare`` is the idempotent door). A CVC or SMT-LIB 1 input may
+   declare a name the manager has at the symbol's own type, as a 2.x input
+   could; at another type it is a ``PARSE`` error. A ``define-fun`` name lasts
    only for the script that defines it: ``symbol()``, a later script and
    ``parse_term`` do not see it.
 -  A value of a declared sort prints as ``S!k``, which the parser does not

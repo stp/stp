@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
+#include <algorithm>
 #include <sstream>
 #include <string>
 
@@ -79,6 +80,24 @@ THE SOFTWARE.
     yyerror(msg);                                                              \
     YYABORT;                                                                   \
   } while (0)
+
+  // Whether declared symbol `s` has the CVC type (index width, value width)
+  // a declaration gives it: a bit-vector, a Boolean or an array of
+  // bit-vectors of those widths.
+  bool hasCvcType(const ASTNode& s, unsigned indexwidth, unsigned valuewidth)
+  {
+    if (s.GetKind() != SYMBOL)
+      return false;
+    const SourceSort ss = s.GetSourceSort();
+    if (indexwidth > 0)
+      return ss.kind() == SourceSort::Kind::Array &&
+             ss.index().kind() == SourceSort::Kind::BitVector &&
+             ss.element().kind() == SourceSort::Kind::BitVector &&
+             s.GetIndexWidth() == indexwidth && s.GetValueWidth() == valuewidth;
+    if (valuewidth > 0)
+      return ss.kind() == SourceSort::Kind::BitVector && s.GetValueWidth() == valuewidth;
+    return ss.kind() == SourceSort::Kind::Bool;
+  }
   
   %}
 
@@ -219,6 +238,7 @@ THE SOFTWARE.
 %type <vec>  Exprs 
 %type <vec>  Asserts
 %type <stringVec>  FORM_IDs reverseFORM_IDs  
+%type <str>  DeclaredID
 %type <node> Expr Formula IfExpr ElseRestExpr IfForm ElseRestForm Assert Query ArrayUpdateExpr
 %type <Index_To_UpdateValue> Updates
 
@@ -334,6 +354,17 @@ VarDecls        :      VarDecl ';'
 VarDecl         :      FORM_IDs ':' Type 
 {
   for(vector<char*>::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {
+    ASTNode declared;
+    if (GlobalParserInterface->LookupSymbol(*i, declared))
+    {
+      if (!hasCvcType(declared, $3.indexwidth, $3.valuewidth))
+        CVC_REJECT("a name already declared is declared again at another type");
+      // the same symbol, and one of this input's declarations
+      ASTVec& vars = GlobalParserBM->ListOfDeclaredVars;
+      if (std::find(vars.begin(), vars.end(), declared) == vars.end())
+        vars.push_back(declared);
+      continue;
+    }
     ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol(*i);
     s.SetIndexWidth($3.indexwidth);
     s.SetValueWidth($3.valuewidth);
@@ -391,6 +422,22 @@ reverseFORM_IDs  :      STRING_TOK
   $$ = $3;
  // delete $1;
 }
+/* A name already declared -- by an earlier input, or the caller -- may be
+   declared again at its type (VarDecl): it is the same symbol. */
+|      DeclaredID
+{
+  $$ = new vector<char*>();
+  $$->push_back($1);
+}
+|      DeclaredID ',' reverseFORM_IDs
+{
+  $3->push_back($1);
+  $$ = $3;
+}
+;
+
+DeclaredID       :      TERMID_TOK { $$ = strdup($1->GetName()); delete $1; }
+|      FORMID_TOK { $$ = strdup($1->GetName()); delete $1; }
 ;
 
 FORM_IDs         :     reverseFORM_IDs

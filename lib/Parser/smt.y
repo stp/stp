@@ -86,6 +86,24 @@
     YYABORT;                                                                   \
   } while (0)
 
+  // Whether declared symbol `s` has the type (index width, value width) a
+  // declaration gives it: a bit-vector, a predicate or an array of
+  // bit-vectors of those widths.
+  bool hasSmtType(const ASTNode& s, unsigned indexwidth, unsigned valuewidth)
+  {
+    if (s.GetKind() != SYMBOL)
+      return false;
+    const SourceSort ss = s.GetSourceSort();
+    if (indexwidth > 0)
+      return ss.kind() == SourceSort::Kind::Array &&
+             ss.index().kind() == SourceSort::Kind::BitVector &&
+             ss.element().kind() == SourceSort::Kind::BitVector &&
+             s.GetIndexWidth() == indexwidth && s.GetValueWidth() == valuewidth;
+    if (valuewidth > 0)
+      return ss.kind() == SourceSort::Kind::BitVector && s.GetValueWidth() == valuewidth;
+    return ss.kind() == SourceSort::Kind::Bool;
+  }
+
   ASTNode query;
 #define YYLTYPE_IS_TRIVIAL 1
 #define YYMAXDEPTH 104857600
@@ -456,6 +474,22 @@ LPAREN_TOK STRING_TOK sort_symbs RPAREN_TOK
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
   delete $2;
+}
+/* A name already declared -- by an earlier input, or the caller -- may be
+   declared again at its type: it is the same symbol. */
+| LPAREN_TOK TERMID_TOK sort_symbs RPAREN_TOK
+{
+  const bool same = hasSmtType(*$2, $3.indexwidth, $3.valuewidth);
+  delete $2;
+  if (!same)
+    SMT_REJECT("a name already declared is declared again at another sort");
+}
+| LPAREN_TOK FORMID_TOK RPAREN_TOK
+{
+  const bool same = hasSmtType(*$2, 0, 0);
+  delete $2;
+  if (!same)
+    SMT_REJECT("a name already declared is declared again at another sort");
 }
 ;
 

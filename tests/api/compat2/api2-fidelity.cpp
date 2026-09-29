@@ -425,3 +425,64 @@ TEST(libstp2_fidelity, a_deep_term_is_read_back_and_simplified)
   vc_DeleteExpr(value);
   vc_Destroy(vc);
 }
+
+// 2.x gave each vc_parseExpr/vc_parseMemExpr its own declaration scope, so a
+// text declares what it uses and a name the checker already has is simply the
+// same symbol again: the same text parsed twice, a text declaring a symbol
+// vc_varExpr made, an SMT-LIB 1 benchmark parsed twice. libstp2 seeded the
+// checker's names into the parse, and the declaration of one was a syntax
+// error, fatal by default. A re-declaration at another width -- a new symbol
+// in 2.x -- is refused (lib/Compat2/NOTES.md).
+TEST(libstp2_fidelity, a_parse_may_declare_a_name_the_checker_has)
+{
+  VC vc = vc_createValidityChecker();
+  const char* text = "x : BITVECTOR(8); ASSERT(x = 0hex01); QUERY(x = 0hex02);";
+  for (int round = 0; round < 2; ++round)
+  {
+    Expr query = nullptr, asserts = nullptr;
+    ASSERT_EQ(1, vc_parseMemExpr(vc, text, &query, &asserts)) << round;
+    EXPECT_EQ(0, vc_query(vc, query)) << round; // x = 1 makes x = 2 invalid
+    vc_DeleteExpr(query);
+    vc_DeleteExpr(asserts);
+  }
+  vc_Destroy(vc);
+
+  vc = vc_createValidityChecker();
+  Expr x = vc_varExpr(vc, "x", vc_bvType(vc, 8));
+  vc_assertFormula(vc, vc_eqExpr(vc, x, vc_bvConstExprFromInt(vc, 8, 2)));
+  Expr query = nullptr, asserts = nullptr;
+  ASSERT_EQ(1, vc_parseMemExpr(vc, "x : BITVECTOR(8); QUERY(x = 0hex02);", &query, &asserts));
+  EXPECT_EQ(1, vc_query(vc, query)); // the text's x is the checker's
+  vc_DeleteExpr(query);
+  vc_DeleteExpr(asserts);
+  vc_Destroy(vc);
+
+  vc = vc_createValidityChecker();
+  vc_setFlags(vc, 'm', 0); // SMT-LIB 1
+  const char* benchmark = "(benchmark b :logic QF_BV :extrafuns ((y BitVec[8])) "
+                          ":assumption (= y bv3[8]) :formula (= y bv3[8]))";
+  for (int round = 0; round < 2; ++round)
+  {
+    Expr q = nullptr, a = nullptr;
+    EXPECT_EQ(1, vc_parseMemExpr(vc, benchmark, &q, &a)) << round;
+    vc_DeleteExpr(q);
+    vc_DeleteExpr(a);
+  }
+  vc_Destroy(vc);
+
+  // at another width: refused, through the handler
+  vc_registerErrorHandler(count_parse_error);
+  vc_setErrorPolicy(STP_ON_ERROR_RETURN);
+  vc = vc_createValidityChecker();
+  parse_errors = 0;
+  Expr q = nullptr, a = nullptr;
+  ASSERT_EQ(1, vc_parseMemExpr(vc, "x : BITVECTOR(8); QUERY(x = 0hex02);", &q, &a));
+  vc_DeleteExpr(q);
+  vc_DeleteExpr(a);
+  q = a = nullptr;
+  EXPECT_NE(1, vc_parseMemExpr(vc, "x : BITVECTOR(4); QUERY(x = 0hex2);", &q, &a));
+  EXPECT_EQ(1, parse_errors);
+  vc_Destroy(vc);
+  vc_setErrorPolicy(STP_ON_ERROR_ABORT);
+  vc_registerErrorHandler(nullptr);
+}
