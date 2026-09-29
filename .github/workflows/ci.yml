@@ -270,9 +270,9 @@ jobs:
     # release -- so the package is built once more against the newest one
     # and its tests run there. Its extension is compiled for one interpreter,
     # hence the second build directory; the compiler cache makes libstp's
-    # half of it cheap. python-pip-install is left out: it installs the
-    # whole build, and this directory builds only the package; the CaDiCaL
-    # jobs pip-install the package into a fresh environment instead.
+    # half of it cheap. What an install needs is built as well, the manual
+    # page aside, so that python-pip-install can stage one and pip-install
+    # the package against it with the newest Python, as a packager would.
     #
     # Bump the version when a newer Python is released. The point is to be
     # a step ahead of what the distributions ship, not to pin one version
@@ -289,10 +289,10 @@ jobs:
       if: matrix.name == 'gcc'
       run: |
         python3 --version
-        python3 -m pip install --quiet cython pytest
-        ${{ matrix.env }} cmake -S . -B build-newest-python -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DENABLE_PYTHON_API:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja
-        cmake --build build-newest-python --target stp_python --parallel "$(nproc)"
-        ctest --test-dir build-newest-python -R '^python-' -E '^python-pip-install$' --output-on-failure
+        python3 -m pip install --quiet cython pytest setuptools wheel
+        ${{ matrix.env }} cmake -S . -B build-newest-python -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DENABLE_PYTHON_API:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DBUILD_MANPAGE=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja
+        cmake --build build-newest-python --target stp stp2 stp-bin stp_python --parallel "$(nproc)"
+        ctest --test-dir build-newest-python -R '^python-' --output-on-failure
 
     # The three legs of this matrix configure identically and differ only in
     # compiler and optimisation level, which makes them the pairs worth
@@ -420,7 +420,9 @@ jobs:
     - uses: actions/checkout@v7
 
     # llvm for llvm-symbolizer, which is what turns the frames of a stack
-    # trace into names and line numbers.
+    # trace into names and line numbers. cython3 and python3-pytest build and
+    # run the Python package, whose extension is the one C++ file of the
+    # library no other sanitizer job compiles.
     - name: Packages
       run: |
         sudo apt-get update
@@ -430,12 +432,14 @@ jobs:
           ccache \
           clang \
           cmake \
+          cython3 \
           flex \
           git \
           llvm \
           ninja-build \
           python3 \
           python3-pip \
+          python3-pytest \
           python3-setuptools \
           zlib1g-dev
         sudo pip3 install -U lit
@@ -510,6 +514,7 @@ jobs:
           -DUSE_CRYPTOMINISAT:STRING=OFF \
           -DUSE_CADICAL:BOOL=ON \
           -DSTP_ALLOCATOR=system \
+          -DENABLE_PYTHON_API:BOOL=ON \
           -DENABLE_TESTING:BOOL=ON \
           -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
           -DCMAKE_C_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
@@ -1209,6 +1214,8 @@ jobs:
 
     - uses: actions/checkout@v7
 
+    # cython3 and python3-setuptools build the Python package, which the last
+    # step loads from the install tree.
     - name: Packages
       run: |
         sudo apt-get update
@@ -1216,10 +1223,12 @@ jobs:
           bison \
           build-essential \
           cmake \
+          cython3 \
           flex \
           git \
           ninja-build \
           python3 \
+          python3-setuptools \
           zlib1g-dev
 
     - name: Dependencies
@@ -1230,7 +1239,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DBUILD_SHARED_LIBS:BOOL=ON -DENABLE_TESTING:BOOL=OFF -DBUILD_EXTRA_TOOLS:BOOL=OFF -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DBUILD_SHARED_LIBS:BOOL=ON -DENABLE_TESTING:BOOL=OFF -DBUILD_EXTRA_TOOLS:BOOL=OFF -DENABLE_PYTHON_API:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -G Ninja ..
 
     - name: Build
       run: cmake --build build --parallel "$(nproc)"
@@ -1246,6 +1255,35 @@ jobs:
         out=$(build/stp test.smt2)
         echo "output: '$out'"
         [ "$out" = "sat" ]
+
+    # Everything a client of the hidden library links: the 2.x C API through
+    # libstp2, the 3.x C and C++ APIs and managers on several threads (the
+    # consumer project), and the Python package's extension. A symbol the
+    # visibility settings left out shows here as a link or load failure,
+    # which the binary above, needing only a few, cannot show.
+    - name: The installed library serves every API
+      run: |
+        cmake --install build
+        prefix="$GITHUB_WORKSPACE/install"
+        cmake -S tests/api/install/uf-public-header-consumer -B consumer \
+          -DSTP_DIR:PATH="$prefix/lib/cmake/STP" \
+          -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
+          -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF \
+          -G Ninja
+        grep -qx "STP_DIR:PATH=$prefix/lib/cmake/STP" consumer/CMakeCache.txt
+        cmake --build consumer --parallel "$(nproc)"
+        ctest --test-dir consumer --output-on-failure
+        pylib=$(python3 -c "import sysconfig; print(sysconfig.get_path('platlib', 'posix_prefix', vars={'base': '$prefix', 'platbase': '$prefix'}))")
+        test -f "$pylib/stp/__init__.py"
+        PYTHONPATH="$pylib" python3 -c "
+        from stp import BitVec, Solver, unsat
+        x = BitVec('x', 8)
+        s = Solver()
+        s.add(x + x != 2 * x)
+        assert s.check() == unsat, 'the installed python module gave the wrong answer'
+        "
+        echo "ok: the consumers and the python module run against the hidden library"
+
 
   # The MiniSat backend is opt-in (-DUSE_MINISAT) and no other Linux job
   # enables it, so this is the configuration that keeps it honest: MiniSat
