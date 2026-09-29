@@ -140,7 +140,7 @@ __all__ = [
     "Kind", "SortKind", "RoundingMode", "UnknownReason", "ErrorCode", "Tier", "Option",
     # errors
     "Error", "ArgumentError", "SortMismatch", "DoesNotFit", "NotAValue", "NoModel", "Unsupported", "OptionError",
-    "UnknownOption", "ParseError", "IOError", "StateError", "ResourceError", "InternalError",
+    "UnknownOption", "ParseError", "StateError", "ResourceError", "InternalError",
     # manager
     "TermManager", "main_tm", "set_main_tm",
     # sorts

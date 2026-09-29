@@ -39,6 +39,11 @@ def test_hierarchy():
     assert issubclass(UnknownOption, OptionError) and issubclass(UnknownOption, KeyError)
     assert issubclass(ParseError, Error) and issubclass(ParseError, ValueError) and not issubclass(ParseError, SyntaxError)
     assert issubclass(stp.IOError, Error) and issubclass(stp.IOError, OSError)
+    # spelt stp.IOError: `from stp import *` leaves the builtin IOError alone, so an
+    # `except IOError:` elsewhere still catches every OSError
+    star = {}
+    exec("from stp import *", star)
+    assert "IOError" not in star and "ParseError" in star
     assert issubclass(StateError, Error) and issubclass(StateError, RuntimeError)
     assert issubclass(ResourceError, Error) and issubclass(ResourceError, MemoryError)
     assert issubclass(InternalError, Error) and issubclass(Error, Exception)
