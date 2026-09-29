@@ -210,24 +210,28 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
   // What makes this CNF partial, named so a reader can act on it.
   //
   // There are two reasons and they are not the same reason, which the one
-  // sentence that used to be here could not say. Array read refinement leaves
-  // out congruence axioms over a faithful bit-vector layer, and --ackermanize
-  // is the flag that puts them in up front. A bit-vector abstraction leaves
-  // out the arithmetic itself: the CNF over-approximates the query, and no
-  // flag completes it -- turning the abstraction off is the only way to get a
-  // total CNF, and that is a different encoding rather than the same one
-  // finished.
+  // sentence that used to be here could not say. A refinement -- of array
+  // reads, uninterpreted functions, Real arithmetic, the floating-point
+  // abstraction -- leaves out what the search will ask for over a faithful
+  // bit-vector layer; for arrays alone --ackermanize puts it in up front. A
+  // bit-vector abstraction leaves out the arithmetic itself: the CNF
+  // over-approximates the query, and no flag completes it -- turning the
+  // abstraction off is the only way to get a total CNF, and that is a
+  // different encoding rather than the same one finished.
   //
   // Said when the run ends at its first CNF; the stp binary says the same of
   // the files --output-CNF writes from the CNF sink (tools/stp/run.cpp).
   const bool abstracted = bm->UserFlags.bv_eq_abstraction ||
                           bm->UserFlags.bv_term_abstraction;
-  const bool arrayRefinement = needAbsRef && !abstracted;
+  const bool refinedLater = needAbsRef && !abstracted;
   const auto sayWhyPartial = [&](const char* what) {
-    if (arrayRefinement)
-      cerr << "Warning: " << what << " is partial: array read refinement adds"
-           << " its congruence axioms as the search asks for them. Use"
-           << " --ackermanize to have them all up front." << endl;
+    if (refinedLater)
+      cerr << "Warning: " << what << " is partial: a refinement (of array"
+           << " reads, uninterpreted functions, Real arithmetic or the"
+           << " floating-point abstraction) adds what the search asks for as"
+           << " it goes. --ackermanize puts the array axioms in up front, which"
+           << " makes the CNF whole when arrays are the only refinement."
+           << endl;
     else if (abstracted)
       cerr << "Warning: " << what << " is an over-approximation of the query:"
            << " --bv-eq-abstraction and --bv-term-abstraction replace"
@@ -250,7 +254,7 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
   {
     std::ostringstream dimacs;
     cnf.writeDimacs(dimacs);
-    bm->cnf_listener(dimacs.str(), arrayRefinement ? CnfExtent::Partial
+    bm->cnf_listener(dimacs.str(), refinedLater ? CnfExtent::Partial
                                    : abstracted    ? CnfExtent::OverApproximation
                                                    : CnfExtent::Whole);
   }

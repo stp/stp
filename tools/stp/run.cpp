@@ -153,9 +153,12 @@ void write_cnf_file(unsigned& counter, std::string_view dimacs, stp::CnfScope sc
   out.write(dimacs.data(), static_cast<std::streamsize>(dimacs.size()));
   const char* what = "the CNF written by --output-CNF";
   if (scope == stp::CnfScope::PARTIAL)
-    std::cerr << "Warning: " << what << " is partial: array read refinement adds"
-              << " its congruence axioms as the search asks for them. Use"
-              << " --ackermanize to have them all up front." << std::endl;
+    std::cerr << "Warning: " << what << " is partial: a refinement (of array"
+              << " reads, uninterpreted functions, Real arithmetic or the"
+              << " floating-point abstraction) adds what the search asks for as"
+              << " it goes. --ackermanize puts the array axioms in up front,"
+              << " which makes the CNF whole when arrays are the only"
+              << " refinement." << std::endl;
   else if (scope == stp::CnfScope::OVER_APPROXIMATION)
     std::cerr << "Warning: " << what << " is an over-approximation of the query:"
               << " --bv-eq-abstraction and --bv-term-abstraction replace"
