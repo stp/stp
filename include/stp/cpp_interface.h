@@ -167,6 +167,11 @@ public:
 
 private:
   ankerl::unordered_dense::map<std::string, Function> functions;
+  // API aliases borrow context-owned declarations. Like the original API
+  // function names, they survive parser frame resets; each new parser
+  // interface imports the current bindings from the term manager.
+  ankerl::unordered_dense::map<std::string, const UFDecl*>
+      uninterpreted_function_aliases;
 
   // Nested helper class to encapsulate a frame (i.e., between push a pop)
   class SolverFrame
@@ -540,6 +545,8 @@ public:
       const SourceSort& codomain, std::string* diagnostic = NULL);
   DLL_PUBLIC const UFDecl* lookupUninterpretedFunction(
       const std::string& name) const;
+  DLL_PUBLIC void addUninterpretedFunctionAlias(
+      const std::string& name, const UFDecl* declaration);
   DLL_PUBLIC ASTNode applyUninterpretedFunction(
       const UFDecl* declaration, const ASTVec& actuals,
       std::string* diagnostic = NULL);

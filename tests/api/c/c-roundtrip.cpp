@@ -146,6 +146,26 @@ TEST(c_roundtrip, fresh_sort_declarations_round_trip)
   EXPECT_EQ(STP_UNSAT, copy.check());
 }
 
+TEST(c_roundtrip, function_aliases_are_visible_to_parsing)
+{
+  Session a;
+  stp_sort bv4 = stp_mk_bv_sort(a.tm, 4);
+  stp_term f = stp_declare(a.tm, "f", stp_mk_fun_sort(a.tm, 1, &bv4, bv4));
+  ASSERT_NE(nullptr, f);
+  ASSERT_EQ(STP_OK, stp_tm_bind_symbol(a.tm, "g", f));
+  stp_term application = stp_apply(a.tm, f, stp_mk_bv_uint64(a.tm, 4, 0));
+  ASSERT_NE(nullptr, application);
+  EXPECT_EQ(application, stp_solver_parse_term(a.s, "(g #x0)")) << pending(a.tm);
+  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(
+      a.s, "(assert (= (g #x0) #x1))", STP_PARSE_DECLARE_AND_ASSERT)) << pending(a.tm);
+  ASSERT_EQ(STP_SAT, a.check());
+  EXPECT_EQ(f, stp_tm_symbol(a.tm, "g"));
+  EXPECT_EQ(application, stp_solver_parse_term(a.s, "(g #x0)")) << pending(a.tm);
+  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(
+      a.s, "(assert (= (f #x0) #x2))", STP_PARSE_DECLARE_AND_ASSERT)) << pending(a.tm);
+  EXPECT_EQ(STP_UNSAT, a.check());
+}
+
 TEST(c_roundtrip, a_term_prints_and_parses_to_the_same_node)
 {
   Session a;
