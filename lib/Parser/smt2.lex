@@ -529,6 +529,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
                             }
 "declare-sort"            { return commandToken(DECLARE_SORT_TOK);}
 "define-fun"              { return commandToken(DEFINE_FUNCTION_TOK); }
+"define-const"            { return commandToken(DEFINE_CONST_TOK); }
 "echo"                    { return commandToken(ECHO_TOK);}
 "exit"                    { return commandToken(EXIT_TOK);}
 "get-assertions"          { return commandToken(GET_ASSERTIONS_TOK);}

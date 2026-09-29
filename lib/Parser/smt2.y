@@ -1828,6 +1828,7 @@ namespace stp
 %type <vec> an_formulas an_terms function_params an_mixed
 
 %type <node> an_term  an_formula function_param an_const an_fp_term an_fp_predicate an_rounding_mode
+%type <node> definition_body
 %type <uintval> an_fp_const command_numeral
 %type <str> info_flag
 %type <str> uf_decl_name function_def_name
@@ -1988,6 +1989,7 @@ namespace stp
 %token DECLARE_DATATYPE_TOK
 %token DECLARE_DATATYPES_TOK
 %token ECHO_TOK
+%token DEFINE_CONST_TOK
 %token EXIT_TOK
 %token GET_ASSERTIONS_TOK
 %token GET_ASSIGNMENT_TOK
@@ -2147,6 +2149,19 @@ cmdi:
 |
      DEFINE_FUNCTION_TOK function_def
     {
+      stp::GlobalParserInterface->success();
+    }
+|
+     DEFINE_CONST_TOK function_def_name uf_codomain_sort definition_body
+    {
+      if ($3->sort.kind() == stp::SourceSort::Kind::Unknown)
+        fatal_yyerror("define-const: unknown sort");
+      if ($3->sort != $4->GetSourceSort())
+        fatal_yyerror("define-const: the body's sort does not match the declared result sort");
+      stp::GlobalParserInterface->storeFunction(*$2, ASTVec(), *$4);
+      stp::releaseParserValue($2);
+      stp::releaseParserValue($3);
+      stp::GlobalParserInterface->deleteNode($4);
       stp::GlobalParserInterface->success();
     }
 |
@@ -2478,6 +2493,11 @@ cmdi:
       stp::GlobalParserInterface->success();
     }
 
+;
+
+definition_body:
+  an_term { $$ = $1; }
+| an_formula { $$ = $1; }
 ;
 
 function_param_open:
