@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include <cstring>
 #include <gtest/gtest.h>
 #include <string>
+#include <utility>
 
 using namespace stp;
 using namespace stp::symbolic_fp;
@@ -382,11 +383,81 @@ TEST(DecimalToFP, unsupportedExponentWidths)
   EXPECT_FALSE(decimalToPackedFPBits("1.5", 2, 8,
                                      ROUND_NEAREST_TIES_TO_EVEN, bits, err));
   EXPECT_NE(err.find("exponent widths"), std::string::npos) << err;
-  // And ends at LIMB_BITS - 3 (61 on 64-bit builds, 29 on 32-bit ones).
-  err.clear();
-  EXPECT_FALSE(decimalToPackedFPBits("1.5", 62, 8,
-                                     ROUND_NEAREST_TIES_TO_EVEN, bits, err));
-  EXPECT_NE(err.find("exponent widths"), std::string::npos) << err;
+}
+
+// Re-bias a normal value from an 8-bit exponent into a wider field. The
+// extra bits between its high bit and low seven bits are zeros above the
+// bias, and ones below it. Its sign and significand do not change.
+std::string widenNormalExponent(const std::string& bits, unsigned eb)
+{
+  return bits.substr(0, 2) + std::string(eb - 8, bits[1] == '1' ? '0' : '1') +
+         bits.substr(2);
+}
+
+TEST(DecimalToFP, wideExponentDecimalRounding)
+{
+  for (unsigned eb : {30u, 40u, 62u, 64u, 65u, 128u})
+    for (unsigned sb : {4u, 53u, 113u})
+      for (unsigned rm : {ROUND_NEAREST_TIES_TO_EVEN, ROUND_NEAREST_TIES_TO_AWAY,
+                          ROUND_TOWARD_POSITIVE, ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO})
+        for (const char* value : {"1.5", "-1.5", "0.1", "-0.1", "0.09375", "1e20", "-1e-20",
+                                   "1.5625", "-1.5625", "1.9375", "-1.9375", "12345"})
+        {
+          SCOPED_TRACE(value);
+          SCOPED_TRACE(eb);
+          SCOPED_TRACE(sb);
+          SCOPED_TRACE(rm);
+          // Includes ties and a significand carry into the exponent at sb=4.
+          EXPECT_EQ(convert(value, eb, sb, rm),
+                    widenNormalExponent(convert(value, 8, sb, rm), eb));
+        }
+}
+
+TEST(DecimalToFP, wideExponentRationalRounding)
+{
+  for (unsigned eb : {30u, 40u, 62u, 64u, 65u, 128u})
+    for (unsigned sb : {4u, 53u, 113u})
+      for (unsigned rm : {ROUND_NEAREST_TIES_TO_EVEN, ROUND_NEAREST_TIES_TO_AWAY,
+                          ROUND_TOWARD_POSITIVE, ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO})
+        for (bool negative : {false, true})
+          for (const auto& pq : {std::pair<const char*, const char*>{"3", "2"},
+                                {"1", "3"}, {"25", "16"}, {"31", "16"}, {"1.2", "3.25"}})
+          {
+            SCOPED_TRACE(eb);
+            SCOPED_TRACE(sb);
+            SCOPED_TRACE(rm);
+            SCOPED_TRACE(negative);
+            EXPECT_EQ(convertRational(pq.first, pq.second, negative, eb, sb, rm),
+                      widenNormalExponent(convertRational(pq.first, pq.second, negative,
+                                                           8, sb, rm), eb));
+          }
+}
+
+TEST(DecimalToFP, wideExponentZeroAndWorkingRangeLimits)
+{
+  for (unsigned rm : {ROUND_NEAREST_TIES_TO_EVEN, ROUND_NEAREST_TIES_TO_AWAY,
+                      ROUND_TOWARD_POSITIVE, ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO})
+  {
+    for (const char* zero : {"0", "-0.000", "0e20", "-0e-20"})
+      EXPECT_EQ(convert(zero, 65, 4, rm), std::string(69, '0'));
+    EXPECT_EQ(convertRational("0", "3", true, 65, 4, rm), std::string(69, '0'));
+    // Exceed both the normal working range and LibBF's raw exponent range;
+    // neither may leak a narrower format's rounded boundary value.
+    for (const char* value : {"1e1000000000000000000", "-1e1000000000000000000",
+                              "1e-1000000000000000000", "-1e-1000000000000000000",
+                              "1e4611686018427387904", "-1e4611686018427387904",
+                              "1e-4611686018427387904", "-1e-4611686018427387904"})
+    {
+      std::string bits, err;
+      EXPECT_FALSE(decimalToPackedFPBits(value, 65, 4, rm, bits, err));
+      EXPECT_NE(err.find("working exponent range"), std::string::npos) << err;
+    }
+  }
+  // The separate packed-arithmetic helper still requires a LibBF format.
+  std::string bits, err;
+  const std::string one = "00" + std::string(64, '1') + "000";
+  EXPECT_FALSE(packedFPBinaryOp(one, one, 65, 4, ROUND_NEAREST_TIES_TO_EVEN,
+                               PackedFpBinaryOp::Add, bits, err));
 }
 
 TEST(PackedFpBinaryOp, exactArithmeticAndCancellation)

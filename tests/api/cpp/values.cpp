@@ -361,6 +361,55 @@ TEST_F(Values, fp_formats)
   EXPECT_EQ(tm.mk_fp_from_bits(f4, "0010").to_fp().to_double(), std::optional<double>(1.0));
 }
 
+TEST_F(Values, fp_literals_with_wide_exponents)
+{
+  const struct { RoundingMode mode; const char* token; } modes[] = {
+      {RoundingMode::RNE, "RNE"}, {RoundingMode::RNA, "RNA"},
+      {RoundingMode::RTP, "RTP"}, {RoundingMode::RTN, "RTN"}, {RoundingMode::RTZ, "RTZ"}};
+  Solver parser(tm);
+  for (unsigned eb : {40u, 62u, 65u, 128u})
+  {
+    SCOPED_TRACE(eb);
+    const Sort wide = tm.mk_fp_sort(eb, 4);
+    const Term exact = tm.mk_fp_from_bits(wide, "00" + std::string(eb - 1, '1') + "100");
+    EXPECT_TRUE(tm.mk_fp(wide, RoundingMode::RNE, 1.5).same_as(exact));
+    EXPECT_TRUE(tm.mk_fp(wide, RoundingMode::RNE, "1.5").same_as(exact));
+    EXPECT_TRUE(tm.mk_fp(wide, RoundingMode::RNE, "3/2").same_as(exact));
+    for (const auto& mode : modes)
+      for (bool negative : {false, true})
+      {
+        SCOPED_TRACE(mode.token);
+        SCOPED_TRACE(negative);
+        const bool away = mode.mode == RoundingMode::RNA ||
+                          mode.mode == (negative ? RoundingMode::RTN : RoundingMode::RTP);
+        // +/-1.5625 is halfway between +/-1.5 (even) and +/-1.625.
+        const std::string bits = std::string(negative ? "10" : "00") +
+                                 std::string(eb - 1, '1') + (away ? "101" : "100");
+        const Term expected = tm.mk_fp_from_bits(wide, bits);
+        EXPECT_TRUE(tm.mk_fp(wide, mode.mode, negative ? -1.5625 : 1.5625).same_as(expected));
+        EXPECT_TRUE(tm.mk_fp(wide, mode.mode, negative ? "-1.5625" : "1.5625").same_as(expected));
+        EXPECT_TRUE(tm.mk_fp(wide, mode.mode, negative ? "-25/16" : "25/16").same_as(expected));
+        const std::string head = "((_ to_fp " + std::to_string(eb) + " 4) " + mode.token + " ";
+        EXPECT_TRUE(parser.parse_term(head + (negative ? "(- 1.5625))" : "1.5625)"))
+                        .same_as(expected));
+        EXPECT_TRUE(parser.parse_term(head + (negative ? "(- (/ 25 16)))" : "(/ 25 16))"))
+                        .same_as(expected));
+      }
+    EXPECT_TRUE(tm.mk_fp(wide, RoundingMode::RNE, "0e999999999999").same_as(tm.mk_fp_pos_zero(wide)));
+    EXPECT_TRUE(tm.mk_fp(wide, RoundingMode::RNE, "-0.0").same_as(tm.mk_fp_neg_zero(wide)));
+    EXPECT_TRUE(tm.mk_fp(wide, RoundingMode::RNE, -0.0).same_as(tm.mk_fp_neg_zero(wide)));
+  }
+  const Sort wide = tm.mk_fp_sort(65, 4);
+  for (const char* text : {"1e99999999999999999999999", "-1e99999999999999999999999",
+                           "1e-99999999999999999999999", "-1e-99999999999999999999999"})
+  {
+    const auto error = API_ERROR_OF(tm.mk_fp(wide, RoundingMode::RNE, text));
+    ASSERT_TRUE(error.has_value());
+    EXPECT_EQ(error->code(), ErrorCode::UNSUPPORTED);
+    EXPECT_NE(std::string(error->what()).find("working exponent range"), std::string::npos);
+  }
+}
+
 TEST_F(Values, fp_from_double_rounds_once_under_the_mode)
 {
   const double rne = *tm.mk_fp(f32, RoundingMode::RNE, 0.1).to_fp().to_double();
@@ -508,9 +557,7 @@ TEST_F(Values, fp_to_rational_of_wide_formats)
     const Term v = tm.mk_fp_from_bits(w15, bits);
     EXPECT_EQ(v.to_fp().to_rational()->str(), fp_to_real(v).to_rational().str()) << bits;
   }
-  // a 40-bit exponent: small values are fine, the extremes are refused (1.5
-  // from its bits, the biased exponent 2^39 - 1: a decimal literal needs an
-  // exponent LibBF can encode, at most 29 bits with 32-bit limbs)
+  // a 40-bit exponent: small values are fine, the extremes are refused
   const Sort w40 = tm.mk_fp_sort(40, 4);
   const Term one_and_a_half = tm.mk_fp_from_bits(w40, "00" + std::string(39, '1') + "100");
   EXPECT_EQ(one_and_a_half.to_fp().to_rational()->str(), "3/2");

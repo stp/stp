@@ -196,6 +196,23 @@ TEST(c_roundtrip, fresh_sort_declarations_round_trip)
   EXPECT_EQ(STP_UNSAT, copy.check());
 }
 
+TEST(c_roundtrip, wide_float_literals_match_their_packed_bits)
+{
+  Session a;
+  for (unsigned eb : {40u, 65u})
+  {
+    stp_sort fp = stp_mk_fp_sort(a.tm, eb, 4);
+    const std::string bits = "00" + std::string(eb - 1, '1') + "100";
+    stp_term expected = stp_mk_fp_from_bits_str(a.tm, fp, bits.c_str());
+    ASSERT_NE(nullptr, expected);
+    EXPECT_EQ(expected, stp_mk_fp_double(a.tm, fp, STP_RM_RNE, 1.5)) << pending(a.tm);
+    EXPECT_EQ(expected, stp_mk_fp_decimal(a.tm, fp, STP_RM_RNE, "1.5")) << pending(a.tm);
+    EXPECT_EQ(expected, stp_mk_fp_decimal(a.tm, fp, STP_RM_RNE, "3/2")) << pending(a.tm);
+    const std::string term = "((_ to_fp " + std::to_string(eb) + " 4) RNE 1.5)";
+    EXPECT_EQ(expected, stp_solver_parse_term(a.s, term.c_str())) << pending(a.tm);
+  }
+}
+
 TEST(c_roundtrip, function_aliases_are_visible_to_parsing)
 {
   Session a;

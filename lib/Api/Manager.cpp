@@ -1812,7 +1812,7 @@ bool parse_decimal(std::string_view text, DecimalLiteral& d)
   return true;
 }
 
-// The plain decimal form the literal converters take: "-0.0025", "100000",
+// The plain decimal form the Real literal converter takes: "-0.0025", "100000",
 // "7" ("-0" for a negative zero).
 std::string plain_decimal(const DecimalLiteral& d)
 {
@@ -1926,7 +1926,13 @@ Term TermManager::mk_fp(const Sort& fp, RoundingMode rm, std::string_view text)
     std::int64_t lo, hi;
     decimal_point_bounds(r.a, r.b, lo, hi);
     d.point = std::clamp(d.point, lo, hi);
-    ok = decimalToPackedFPBits(plain_decimal(d), r.a, r.b, detail::rm_encoding(rm), bits, err);
+    // Keep the scale compact: a wide format can admit a decimal point
+    // billions of places out. LibBF rounds a scaled significand without
+    // materialising those zeros, and reports its working-range limits.
+    const std::string literal = d.digits.empty() ? "0" :
+        (d.negative ? "-" : "") + d.digits + "e" +
+        std::to_string(d.point - static_cast<std::int64_t>(d.digits.size()));
+    ok = decimalToPackedFPBits(literal, r.a, r.b, detail::rm_encoding(rm), bits, err);
   }
   if (!ok)
     detail::fail(ErrorCode::UNSUPPORTED, "TermManager::mk_fp", err, 2, {}, {fp});
