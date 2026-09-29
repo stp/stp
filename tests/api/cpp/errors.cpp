@@ -568,8 +568,14 @@ TEST(Errors, widths_that_do_not_fit_are_refused)
   const Term wide = tm.declare("wide", tm.mk_bv_sort(0xffffffffu));
   API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, concat(wide, a));
   API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.mk_fp_sort(0xfffffffeu, 3));
-  // up to the limit is fine
-  EXPECT_EQ(zero_extend(0xffffffffu - 6, a).sort().bv_size(), 0xffffffffu);
+  // Up to the limit is fine. On a manager that does not simplify: a
+  // simplifying one folds the extension into a concatenation with a
+  // four-gigabit zero constant, which takes seconds and a gigabyte to build.
+  TermManager::Config cfg;
+  cfg.simplify = false;
+  TermManager raw(cfg);
+  const Term b = raw.declare("b", raw.mk_bv_sort(6));
+  EXPECT_EQ(zero_extend(0xffffffffu - 6, b).sort().bv_size(), 0xffffffffu);
 }
 
 // A Real literal too large for the exact arithmetic is well formed, and is
