@@ -159,6 +159,15 @@ def test_array_values():
         m2[wide].as_bytes(0, 2)  # element width not a multiple of 8
     with pytest.raises(ArgumentError):
         m2.array_bytes(wide, 0, 2)
+    # a term that is no array is refused without leaving the refusal behind
+    # for the next, unrelated call to report
+    x = BitVec("x_bytes", 8)
+    m3 = _model(x == 5)
+    with pytest.raises(ArgumentError):
+        m3.array_bytes(x, 0, 1)
+    assert main_tm().symbol("nope") is None
+    with pytest.raises(SortMismatch):
+        BitVecVal(1, 8) + BitVecVal(3, 16)
     # the engine holds bit-vectors, floats, rounding modes and declared sorts in arrays, not Bools
     with pytest.raises(Unsupported):
         ArraySort(BitVecSort(4), BoolSort())

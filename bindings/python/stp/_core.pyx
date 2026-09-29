@@ -1554,6 +1554,11 @@ def option_info(name):
     return info
 
 
+cdef bint _sort_kind_is(stp_sort s, stp_sort_kind want):
+    cdef stp_sort_kind kind
+    return s != NULL and stp_sort_get_kind(s, &kind) == STP_OK and kind == want
+
+
 # ----------------------------------------------------------------- callbacks
 
 cdef void _sink_raised(SolverHandle s):
@@ -2482,14 +2487,15 @@ cdef class ModelHandle:
         """count elements from first_index of a BV-indexed array of byte-multiple elements."""
         self._m._check()
         cdef stp_sort s = stp_term_sort(t._h)
-        cdef stp_sort e
         cdef uint32_t w = 0
         cdef size_t n = <size_t>count
-        if s != NULL:
-            e = stp_sort_array_element(s)
-            if e != NULL and stp_sort_bv_size(e, &w) != STP_OK:
-                stp_tm_clear_error(self._m._tm)
-                w = 0
+        # The sort is read by kind first: an accessor asked of the wrong kind
+        # would leave its refusal in the manager's record, which the next
+        # unrelated call would then report.
+        if (s != NULL and _sort_kind_is(s, STP_SORT_ARRAY)
+                and _sort_kind_is(stp_sort_array_index(s), STP_SORT_BV)
+                and _sort_kind_is(stp_sort_array_element(s), STP_SORT_BV)):
+            stp_sort_bv_size(stp_sort_array_element(s), &w)
         if w == 0 or w % 8 != 0:
             raise ArgumentError("array_bytes needs a BV-indexed array whose element width is a multiple of 8",
                                 code=ErrorCode.INVALID_ARGUMENT, function="stp_model_array_bytes")
