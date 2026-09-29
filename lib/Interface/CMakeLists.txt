@@ -25,6 +25,7 @@
 # API is not part of libstp: libstp2 (lib/Compat2) provides it.
 add_library(cppinterface OBJECT
     cpp_interface.cpp
+    SMT2Output.cpp
 )
 
 add_dependencies(cppinterface ASTKind_header)

@@ -179,12 +179,14 @@ const OutputSinks* current_output_route() noexcept
   return t_route;
 }
 
-OutputRoute::OutputRoute(const OutputSinks* sinks) : saved_(t_route)
+OutputRoute::OutputRoute(const OutputSinks* sinks, bool preserveFatalObserver)
+    : saved_(t_route)
 {
   install_dispatch();
   saved_observer_ = stp::GetFatalErrorObserver(&saved_opaque_);
   t_route = sinks;
-  stp::SetFatalErrorObserver(&observe_fatal, const_cast<OutputSinks*>(sinks));
+  if (!preserveFatalObserver)
+    stp::SetFatalErrorObserver(&observe_fatal, const_cast<OutputSinks*>(sinks));
 }
 
 OutputRoute::~OutputRoute()

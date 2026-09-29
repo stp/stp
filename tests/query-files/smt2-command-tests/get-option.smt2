@@ -10,7 +10,7 @@
 (set-option :produce-models true)
 ; CHECK-NEXT: ^true
 (get-option :produce-models)
-; CHECK-NEXT: ^"stdout"
+; CHECK-NEXT: ^"stderr"
 (get-option :diagnostic-output-channel)
 ; CHECK-NEXT: ^unsupported
 (get-option :produce-proofs)

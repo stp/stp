@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
+#include "stp/Parser/SMT2Output.h"
 #include "stp/Printer/printers.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
@@ -100,6 +101,7 @@ void Cpp_interface::init()
     bm.Push();
 
   print_success = false;
+  output_channels->reset();
   ignoreCheckSatRequest = false;
   retain_uf_declarations = false;
   produce_models = false;
@@ -137,7 +139,7 @@ void Cpp_interface::removeFrame()
 }
 
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
-    : bm(bm_), set_global_parser_bm(false),
+    : bm(bm_), output_channels(new SMT2Output), set_global_parser_bm(false),
       letMgr(new LetMgr(bm.ASTUndefined)), nf(factory)
 {
   init();
@@ -776,6 +778,9 @@ bool Cpp_interface::arraySortsAgree(const ASTNode& arr, const array_sort& sort)
 {
   return arr.GetSourceSort() == sort.sourceSort();
 }
+
+void Cpp_interface::beginOutputRouting() { output_channels->begin(); }
+void Cpp_interface::endOutputRouting() { output_channels->end(); }
 
 void Cpp_interface::success()
 {
@@ -1431,7 +1436,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
 // something which dereferences GlobalSTP, such as BBAsProp) construct the STP
 // themselves and assign it before that point.
 Cpp_interface::Cpp_interface(STPMgr& bm_)
-    : bm(bm_), set_global_parser_bm(true),
+    : bm(bm_), output_channels(new SMT2Output), set_global_parser_bm(true),
       letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
 {
   nf = bm.defaultNodeFactory;
@@ -1582,12 +1587,12 @@ void Cpp_interface::setOption(std::string option, std::string value)
     else
       badBooleanOptionValue(option, value);
   }
-  else if (option == "diagnostic-output-channel")
+  else if (option == "diagnostic-output-channel" ||
+           option == "regular-output-channel")
   {
-    if (value == "stdout")
-      success();
-    else
-      unsupported();
+    if (!output_channels->set(option == "diagnostic-output-channel", value))
+      refuseCurrentCommand("cannot open output channel: " + value);
+    success();
   }
   else
     unsupported();
@@ -1604,8 +1609,10 @@ void Cpp_interface::getOption(std::string option)
     cout << (produce_models ? "true" : "false") << endl;
   else if (option == "global-declarations")
     cout << (global_declarations ? "true" : "false") << endl;
-  else if (option == "diagnostic-output-channel")
-    cout << "\"stdout\"" << endl;
+  else if (option == "diagnostic-output-channel" ||
+           option == "regular-output-channel")
+    cout << quoteSMTLibString(output_channels->name(
+                option == "diagnostic-output-channel")) << endl;
   else
   {
     unsupported();

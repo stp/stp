@@ -49,6 +49,7 @@ namespace stp
 struct UserDefinedFlags;
 class STPMgr;
 class LetMgr;
+class SMT2Output;
 enum class FPSpecial; // see STPManager.h
 
 // The (exponent bits, significand bits) of a parsed floating-point sort;
@@ -347,6 +348,7 @@ private:
   void resetIncrementalSolver();
 
   bool produce_models;
+  std::unique_ptr<SMT2Output> output_channels;
 
   // :global-declarations. False (the required default) scopes declarations
   // and definitions to the assertion level that made them; true makes them
@@ -646,6 +648,8 @@ public:
   DLL_PUBLIC bool arraySortsAgree(const ASTNode& arr, const array_sort& sort);
 
   DLL_PUBLIC void success();
+  DLL_PUBLIC void beginOutputRouting();
+  DLL_PUBLIC void endOutputRouting();
   DLL_PUBLIC void echo(const std::string& value);
   DLL_PUBLIC void error(std::string msg);
   DLL_PUBLIC void unsupported();
