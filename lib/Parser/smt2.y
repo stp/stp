@@ -4492,18 +4492,13 @@ an_boolean { $$ = $1; }
     fatal_yyerror("the default of a constant array must have the array's "
                   "element sort");
   }
-  // Only a value (STPMgr::CreateConstArray says why).
-  const ASTNode free_symbol = stp::GlobalParserBM->firstFreeSymbol(value);
-  if (!free_symbol.IsNull())
+  if (!stp::GlobalParserBM->unsupportedConstArrayDefault(value).IsNull())
   {
-    const std::string message =
-        std::string("the default of a constant array must be a value, and "
-                    "this one depends on ") +
-        free_symbol.GetName();
     stp::releaseParserValue($3);
     stp::releaseParserValue($4);
     stp::GlobalParserInterface->deleteNode($6);
-    fatal_yyerror(message.c_str());
+    fatal_yyerror("constant-array defaults cannot contain UF applications, "
+                  "Real terms or array-equality conditions");
   }
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserBM->CreateConstArray(array_sort, value));

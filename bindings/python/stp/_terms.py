@@ -1591,7 +1591,8 @@ def Array(name, index, element):
 def K(sort, element):
     """A constant array. K(ArraySort(I, E), literal_or_value) coerces the literal by the array's
     element sort; K(index_sort, value) is z3py's form (the range sort is the value's). The
-    element must be a value, a term with no symbol in it: anything else raises Unsupported."""
+    element may be symbolic; every index has the same element value. Defaults with
+    UF applications, Real terms or array-equality conditions raise Unsupported."""
     _check_sort(sort, "K")
     if isinstance(sort, ArraySortRef):
         elem = _coerce_arg(sort.range(), element)

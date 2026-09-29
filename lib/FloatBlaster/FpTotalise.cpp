@@ -169,6 +169,8 @@ void FpTotalise::collectRoundingModeTerms(const ASTNode& n, ASTNodeSet& seen,
     // pinning as a read is.
     if (m.GetKind() == SYMBOL)
     {
+      if (bm->isConstArray(m))
+        collectRoundingModeTerms(bm->constArrayDefault(m), seen, constraints);
       if (bm->isRoundingModeSymbol(m))
         constraints.push_back(bm->roundingModeValidConstraint(m));
       return false;
@@ -310,6 +312,18 @@ ASTNode FpTotalise::zeroChoice(const char* tag, const ASTNode& left,
 ASTNode FpTotalise::visit(const ASTNode& n)
 {
   PrimeAudit::Running running(memoAudit, n);
+
+  // A constant array's scalar default is stored outside GetChildren().
+  // Totalise it as part of the source term, so partial FP operations and
+  // float-indexed reads inside a symbolic default follow the same rules as
+  // expressions written directly in the formula.
+  if (bm->isConstArray(n))
+  {
+    const ASTNode& value = bm->constArrayDefault(n);
+    const ASTNode prepared = visit(value);
+    return prepared == value ? n
+                             : bm->CreateConstArray(n.GetSourceSort(), prepared);
+  }
 
   if (n.Degree() == 0)
     return n;

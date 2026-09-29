@@ -171,13 +171,41 @@ TEST(c_const_arrays, spelling_and_parsing)
   stp_solver_delete(s);
 }
 
-// A constant array's default is a value: one over a symbol is refused, and the
-// manager goes on building.
-TEST(c_const_arrays, a_default_must_be_a_value)
+TEST(c_const_arrays, symbolic_defaults_survive_solving)
 {
   Fixture f;
   stp_term z = stp_declare(f.tm, "z", f.bv8);
-  EXPECT_EQ(nullptr, stp_mk_const_array(f.tm, f.A, z));
+  stp_term symbolic = stp_mk_const_array(f.tm, f.A, z);
+  ASSERT_NE(nullptr, symbolic);
+  EXPECT_EQ(nullptr, stp_tm_error(f.tm));
+  stp_term a = stp_declare(f.tm, "a", f.A);
+  stp_solver s = stp_solver_new(f.tm, nullptr);
+  ASSERT_EQ(STP_OK, stp_solver_assert(s, stp_eq(f.tm, a, symbolic)));
+  ASSERT_EQ(STP_OK, stp_solver_assert(s, stp_eq(f.tm, z, f.idx(3))));
+  ASSERT_EQ(STP_SAT, check(s));
+  stp_model m = stp_solver_model(s);
+  ASSERT_NE(nullptr, m);
+  EXPECT_EQ(3u, u64(m, stp_select(f.tm, a, f.idx(200))));
+  stp_array_value v = stp_model_array_value(m, a);
+  ASSERT_NE(nullptr, v);
+  std::uint64_t d = 0;
+  EXPECT_EQ(STP_OK, stp_term_to_uint64(stp_array_value_default(v), &d));
+  EXPECT_EQ(3u, d);
+  stp_array_value_release(v);
+  stp_model_release(m);
+  stp_solver_delete(s);
+  EXPECT_EQ(nullptr, stp_tm_error(f.tm));
+}
+
+TEST(c_const_arrays, unsupported_defaults_are_recoverable)
+{
+  Fixture f;
+  stp_term a = stp_declare(f.tm, "a", f.A);
+  stp_term b = stp_declare(f.tm, "b", f.A);
+  stp_term condition = stp_eq(f.tm, a, b);
+  stp_term value = stp_mk_term3(f.tm, STP_KIND_ITE, condition, f.idx(1), f.idx(2));
+  ASSERT_NE(nullptr, value);
+  EXPECT_EQ(nullptr, stp_mk_const_array(f.tm, f.A, value));
   const stp_error* e = stp_tm_error(f.tm);
   ASSERT_NE(nullptr, e);
   EXPECT_EQ(STP_ERR_UNSUPPORTED, e->code);

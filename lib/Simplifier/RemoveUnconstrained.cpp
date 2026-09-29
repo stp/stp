@@ -121,26 +121,59 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
       if (!visited.insert(current).second)
         continue;
       if (current.GetKind() == SYMBOL && bm.isConstArray(current))
+      {
         constArrays.insert(current);
+        // The default is held outside the ordinary DAG. Preserve every
+        // symbol it depends on, including before array-equality lowering
+        // installs the extensionality procedure's protection set.
+        ASTNodeSet defaultsSeen;
+        std::vector<ASTNode> defaults(1, bm.constArrayDefault(current));
+        while (!defaults.empty())
+        {
+          const ASTNode term = defaults.back();
+          defaults.pop_back();
+          if (!defaultsSeen.insert(term).second)
+            continue;
+          if (term.GetKind() == SYMBOL)
+          {
+            constArrays.insert(term);
+            if (bm.isConstArray(term))
+              defaults.push_back(bm.constArrayDefault(term));
+          }
+          for (const ASTNode& child : term.GetChildren())
+            defaults.push_back(child);
+        }
+      }
       for (const ASTNode& child : current.GetChildren())
         pending.push_back(child);
     }
   }
   const std::set<ASTNode>* constSet =
       constArrays.empty() ? NULL : &constArrays;
+
+  // An earlier pass may already have assigned a symbol a reconstruction
+  // definition. Replacing it again would overwrite that definition (and
+  // violates UpdateSubstitutionMapFewChecks' contract). This matters when
+  // a protected symbolic default keeps the source symbol reachable across
+  // repeated preprocessing rounds.
+  std::set<ASTNode> alreadyDefined;
+  for (const auto& binding : *simplifier->Return_SolverMap())
+    if (binding.first.GetKind() == SYMBOL)
+      alreadyDefined.insert(binding.first);
   // The image-constrained fresh variables join this set as they are
   // made (tryImageConstrainShared), so the set is always materialised
   // when that rewrite is enabled.
   std::set<ASTNode> mergedUntouchable;
   const std::set<ASTNode>* effective = NULL;
   if (extSet != NULL || ufSet != NULL || fpSet != NULL ||
-      alsoUntouchable != NULL || constSet != NULL ||
+      alsoUntouchable != NULL || constSet != NULL || !alreadyDefined.empty() ||
       bm.UserFlags.unconstrained_image_vars)
   {
     if (extSet != NULL)
       mergedUntouchable.insert(extSet->begin(), extSet->end());
     if (constSet != NULL)
       mergedUntouchable.insert(constSet->begin(), constSet->end());
+    mergedUntouchable.insert(alreadyDefined.begin(), alreadyDefined.end());
     if (ufSet != NULL)
       mergedUntouchable.insert(ufSet->begin(), ufSet->end());
     if (fpSet != NULL)

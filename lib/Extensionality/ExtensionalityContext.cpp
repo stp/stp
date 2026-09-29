@@ -881,6 +881,55 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
     if (!r.indexSortClause.IsNull())
       conjuncts.push_back(r.indexSortClause);
   }
+
+  // Constant-array defaults live in the manager's side table rather than
+  // the array symbol's children. Expose their defining equations before
+  // preprocessing (including FP lowering), and preserve their dependencies.
+  // prepare() then reuses these scalar names instead of introducing an
+  // unprocessed copy of a default after the passes have run.
+  ASTNodeSet seen;
+  std::vector<ASTNode> pending(conjuncts.begin(), conjuncts.end());
+  for (size_t i = 0; i < activeRecordIds.size(); ++i)
+  {
+    const Record& r = records[activeRecordIds[i]];
+    pending.push_back(r.constructionLeft);
+    pending.push_back(r.constructionRight);
+  }
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!seen.insert(node).second)
+      continue;
+    if (bm->isConstArray(node))
+    {
+      const ASTNode& value = bm->constArrayDefault(node);
+      freshName(value, conjuncts);
+      ASTNodeSet dependencies;
+      std::vector<ASTNode> defaults(1, value);
+      while (!defaults.empty())
+      {
+        const ASTNode term = defaults.back();
+        defaults.pop_back();
+        if (!dependencies.insert(term).second)
+          continue;
+        if (term.GetKind() == SYMBOL)
+        {
+          // Only scalars have SAT bits. Array dependencies are retained by
+          // the owned graph and RemoveUnconstrained's default traversal.
+          if (term.GetType() != ARRAY_TYPE)
+            protectedSymbols.insert(term);
+          if (bm->isConstArray(term))
+            defaults.push_back(bm->constArrayDefault(term));
+        }
+        for (const ASTNode& child : term.GetChildren())
+          defaults.push_back(child);
+      }
+      pending.push_back(value);
+    }
+    for (const ASTNode& child : node.GetChildren())
+      pending.push_back(child);
+  }
   ASTNode out = bm->defaultNodeFactory->CreateNode(AND, conjuncts);
 
   // Anticipate the complete owned graph before any pass can act on the

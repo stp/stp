@@ -638,11 +638,9 @@ ASTNode STPMgr::CreateConstArray(const SourceSort& array_sort,
   if (default_value.GetType() == ARRAY_TYPE)
     FatalError("CreateConstArray: the default must be a scalar term",
                default_value);
-  const ASTNode free_symbol = firstFreeSymbol(default_value);
-  if (!free_symbol.IsNull())
-    FatalError("CreateConstArray: the default must be a value, and it "
-               "depends on this symbol",
-               free_symbol);
+  const ASTNode unsupported = unsupportedConstArrayDefault(default_value);
+  if (!unsupported.IsNull())
+    FatalError("CreateConstArray: unsupported theory in a default", unsupported);
   if (default_value.GetSTPMgr() != this)
     FatalError("CreateConstArray: the default belongs to another manager",
                default_value);
@@ -685,9 +683,12 @@ ASTNode STPMgr::firstFreeSymbol(const ASTNode& t) const
     pending.pop_back();
     if (!visited.insert(n).second)
       continue;
-    // a constant array is a value (its own default was checked)
-    if (n.GetKind() == SYMBOL && !isConstArray(n))
-      return n;
+    if (n.GetKind() == SYMBOL)
+    {
+      if (!isConstArray(n))
+        return n;
+      pending.push_back(constArrayDefault(n));
+    }
     for (const ASTNode& child : n.GetChildren())
       pending.push_back(child);
   }
@@ -700,6 +701,27 @@ const ASTNode& STPMgr::constArrayDefault(const ASTNode& n) const
   if (it == constArrayDefaults.end())
     FatalError("constArrayDefault: not a constant array", n);
   return it->second;
+}
+
+ASTNode STPMgr::unsupportedConstArrayDefault(const ASTNode& t) const
+{
+  ASTNodeSet seen;
+  std::vector<ASTNode> pending(1, t);
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!seen.insert(node).second)
+      continue;
+    if (node.GetKind() == UF_APPLY || node.GetKind() == ARRAY_EQ ||
+        node.GetSourceSort().kind() == SourceSort::Kind::Real)
+      return node;
+    if (isConstArray(node))
+      pending.push_back(constArrayDefault(node));
+    for (const ASTNode& child : node.GetChildren())
+      pending.push_back(child);
+  }
+  return ASTNode();
 }
 
 ASTNode STPMgr::CreateUninterpretedConst(const ASTNode& carrier,

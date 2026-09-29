@@ -41,15 +41,18 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
 - Constant arrays are the engine's: `STPMgr::CreateConstArray` registers an
   introduced array symbol with its default, interned by sort and default, so a
   script's `((as const S) v)` and `mk_const_array` give one term. The default is
-  a value (`STPMgr::firstFreeSymbol` finds no symbol in it): the registry is out
-  of the preprocessing passes' sight, so a variable in a default could be
-  eliminated while the array still named it. The hashing
+  allowed to be symbolic: unconstrained elimination preserves its hidden
+  dependencies, and extensionality exposes its defining equation before
+  preprocessing, including floating-point lowering. The hashing
   factory folds every read of one to the default in both construction modes, and
   the extensionality checker decides equality, distinct, ite and store chains
   over them (rules K and K' in `lib/Extensionality/ExtChecker.cpp`), completing
   an array it equates with a constant array with that default; the model printers
   and `Model::array_value` take the completion from the engine. The API asks
   `is_const_array` / `const_array_default` on the manager.
+  Defaults containing UF applications, Real syntax or array-equality
+  conditions still report `UNSUPPORTED`: their coordinators run before
+  these hidden definitions enter the formula.
 - `fp.to_real` is the engine's (`STPMgr::CreateFpToReal`, lib/STPManager/FpToReal.cpp),
   shared with the SMT-LIB 2 frontend: a float value folds to its exact Real value;
   a symbolic float is an exact linear encoding over its bits, the exponent applied
