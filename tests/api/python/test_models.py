@@ -103,6 +103,42 @@ def test_completion_versus_lookup():
     assert m.eval(arr)[3].as_long() == 0 and m.eval(arr).default.as_long() == 0
 
 
+@pytest.mark.parametrize("simplify", [False, True])
+@pytest.mark.parametrize("fill", ["zero", "ones"])
+def test_array_equality_without_completion(simplify, fill):
+    tm = TermManager(simplify=simplify)
+    bv = tm.bv_sort(2)
+    arrays = tm.array_sort(bv, bv)
+    a, b, c = [tm.declare(name, arrays) for name in ("a", "b", "c")]
+    k = tm.mk_const_array(arrays, tm.mk_bv(2, 0))
+    s = Solver(tm)
+    s.set("model-array-fill", fill)
+    assert s.check() == sat
+    m = s.model()
+    assert not m.in_core(a) and not m.in_core(b)
+    assert m.try_value(a) is None and m.try_value(b) is None
+    # Completing reads still answer, but do not change subsequent lookups.
+    assert bool(m.eval(a == b)) is True
+    assert bool(m.eval(a != b)) is False
+    assert bool(m.eval(a == k)) is (fill == "zero")
+    for t in (a == b, a != b, a == k, k == b, Distinct(a, b, c),
+              Store(a, 0, 1) == Store(b, 0, 1)):
+        assert m.try_value(t) is None
+        with pytest.raises(KeyError):
+            m[t]
+        assert m.get(t) is None
+        assert not m.eval(t, model_completion=False).is_value()
+    assert bool(m[a == a]) is True
+    assert bool(m[a != a]) is False
+    # All four indices are overwritten, so neither absent base is needed.
+    full_a, full_b = a, b
+    for i in range(4):
+        full_a, full_b = Store(full_a, i, i), Store(full_b, i, i)
+    assert bool(m[full_a == full_b]) is True
+    assert bool(m[full_a != full_b]) is False
+    assert not m.in_core(a) and not m.in_core(b)
+
+
 def test_array_and_function_terms_in_the_value_readers():
     a = Array("a", BitVecSort(32), BitVecSort(8))
     b = Array("b", BitVecSort(32), BitVecSort(8))
