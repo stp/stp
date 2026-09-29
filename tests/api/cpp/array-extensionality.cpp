@@ -1249,7 +1249,7 @@ TEST(array_extensionality, flag_off_refuses_array_equality)
   // was set, and the refusal ended the process. The API has no such gate:
   // under the default (array-equality = auto) the equality is built and
   // engages the procedure. The refusal is what array-equality = off asks
-  // for, and it is a recoverable UNSUPPORTED at construction.
+  // for, and it is a recoverable UNSUPPORTED from the check.
   {
     TermManager tm;
     Solver s(tm);
@@ -1270,13 +1270,42 @@ TEST(array_extensionality, flag_off_refuses_array_equality)
 
   const Term a = tm.declare("a", arrT), b = tm.declare("b", arrT);
 
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, (void)(a == b));
+  // The equality builds, the switch being the solver's; the check refuses it.
+  const Term arrays_equal = a == b;
+  EXPECT_EQ(stp::api::Kind::EQUAL, arrays_equal.kind());
+  s.push();
+  s.add(arrays_equal);
+  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.check_sat());
+  s.pop();
 
-  // The check is specific to arrays: ordinary equality remains available
+  // The refusal is specific to arrays: ordinary equality remains available
   // when the extension is switched off.
   const Term x = tm.declare("x", bv8), y = tm.declare("y", bv8);
   const Term eq = x == y;
   EXPECT_EQ(stp::api::Kind::EQUAL, eq.kind());
+  s.add(eq);
+  EXPECT_TRUE(s.check_sat().is_sat());
+}
+
+// Whether an array equality builds does not depend on which solver of the
+// manager was constructed or checked last: only a check under `off` refuses.
+TEST(array_extensionality, construction_does_not_depend_on_the_last_solver)
+{
+  TermManager tm;
+  const Sort arrT = tm.mk_array_sort(tm.mk_bv_sort(4), tm.mk_bv_sort(8));
+  const Term a = tm.declare("a", arrT), b = tm.declare("b", arrT);
+  Options off;
+  off.set_str("array-equality", "off");
+  Solver on_solver(tm);
+  Solver off_solver(tm, off);
+  EXPECT_EQ(stp::api::Kind::EQUAL, (a == b).kind()); // the off solver was made last
+  EXPECT_TRUE(off_solver.check_sat().is_sat());
+  EXPECT_EQ(stp::api::Kind::EQUAL, (a == b).kind()); // and checked last
+  on_solver.add(a == b);
+  on_solver.add(a[tm.mk_bv(4, 1)] != b[tm.mk_bv(4, 1)]);
+  EXPECT_TRUE(on_solver.check_sat().is_unsat());
+  off_solver.add(a == b);
+  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, off_solver.check_sat());
 }
 
 TEST(array_extensionality, ite_replacement_survives_a_rewritten_condition)

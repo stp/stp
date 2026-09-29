@@ -206,8 +206,9 @@ ASTNode equality(const Ctx& c, std::size_t i, std::size_t j)
     case SortKind::REAL: return real_pred(c, EQ, a, b);
     case SortKind::ARRAY:
     {
-      if (c.m->array_equality_off)
-        c.unsupported("array equality was switched off (array-equality = off)");
+      // Built whatever array-equality says: the switch is a solver's, and
+      // which solver of the manager was applied last is no business of a
+      // term. A check under `off` refuses the equality instead.
       // The factory builds the opaque ARRAY_EQ node; the solve boundary lowers it.
       c.bm()->UserFlags.enable_array_equality = true;
       c.m->array_equality_seen = true;
