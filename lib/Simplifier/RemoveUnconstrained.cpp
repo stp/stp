@@ -128,10 +128,14 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   }
   const std::set<ASTNode>* constSet =
       constArrays.empty() ? NULL : &constArrays;
+  // The image-constrained fresh variables join this set as they are
+  // made (tryImageConstrainShared), so the set is always materialised
+  // when that rewrite is enabled.
   std::set<ASTNode> mergedUntouchable;
   const std::set<ASTNode>* effective = NULL;
   if (extSet != NULL || ufSet != NULL || fpSet != NULL ||
-      alsoUntouchable != NULL || constSet != NULL)
+      alsoUntouchable != NULL || constSet != NULL ||
+      bm.UserFlags.unconstrained_image_vars)
   {
     if (extSet != NULL)
       mergedUntouchable.insert(extSet->begin(), extSet->end());
@@ -147,6 +151,7 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
     effective = &mergedUntouchable;
   }
   MutableASTNode::UntouchableScope protect(effective);
+  passUntouchable = effective == NULL ? NULL : &mergedUntouchable;
 
   bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
 
@@ -168,6 +173,7 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   }
 
   bm.GetRunTimes()->stop(RunTimes::RemoveUnconstrained);
+  passUntouchable = NULL;
   return result;
 }
 
@@ -637,7 +643,13 @@ static void enumerateChainExtremes(const std::vector<GroundStep>& steps,
  * e.g. shared (concat 0 x) becomes v with high bits pinned to zero and
  * x := extract(v). Consumers then see a variable, which the
  * symbol-keyed passes (equality propagation, the bit-vector solver, the
- * disjoint-extract splitter, this pass itself) can work with.
+ * disjoint-extract splitter, later runs of this pass) can work with.
+ *
+ * Within this run, v is untouchable. The membership constraint is held
+ * aside until the mutable tree is materialised, so the tree counts one
+ * parent too few for v: once another rule replaces one of t's old
+ * consumers, v looks single-use, and a per-kind rule would then give it
+ * a witness value that the constraint excludes -- a wrong unsat.
  *
  * Note this rewrite satisfies equisatisfiability with model mapping (a
  * model of the result maps back through x := projection(v)), not the
@@ -815,6 +827,8 @@ bool RemoveUnconstrained::tryImageConstrainShared(
   }
 
   assert(projection.GetValueWidth() == var.GetValueWidth());
+  assert(passUntouchable != NULL);
+  passUntouchable->insert(v);
   sharedNode.replaceWithVar(v, variables);
   replace(var, projection);
   imageConstraints.push_back(constraint);
