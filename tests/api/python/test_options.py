@@ -178,6 +178,8 @@ def test_solver_options_live_view():
     assert e.value.code == ErrorCode.OPTION_TIMING and o["logic"] == "QF_BV"
     s.set(max_time=1000)  # anytime
     assert o["max_time"] == 1000 and s.check() == sat
+    o["max_time"] = None  # no limit, read back through the millisecond getter
+    assert o["max_time"] is None and o.is_set("max_time") and s.check() == sat
     o.reset("max_time")
     assert o["max_time"] is None
     detached = o.copy()

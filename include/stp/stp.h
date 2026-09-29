@@ -548,6 +548,10 @@ STP_API stp_status stp_term_real_to_double(stp_term, double* out); /* nearest do
 STP_API stp_status stp_term_to_uninterpreted_index(stp_term, uint64_t* out);
 
 /* ------------------------------------------------------------------ options (a standalone value; errors through stp_options_error) */
+/* A duration option's "none" (no limit; max-time's default) as the *_duration_ms functions spell
+ * it: the getters report it, and the setters take it back as "none". Every other duration is a
+ * count of milliseconds up to INT64_MAX; a larger one is VALUE_OUT_OF_RANGE. */
+#define STP_DURATION_NONE UINT64_MAX
 STP_API stp_options stp_options_new(void); /* every entry at its default */
 STP_API stp_options stp_options_copy(stp_options);
 STP_API void stp_options_delete(stp_options);

@@ -140,8 +140,12 @@ std::vector<std::string> names_arg(std::size_t n, const char* const* members, co
   return out;
 }
 
+// STP_DURATION_NONE is the C spelling of "none", which the registry stores
+// as -1 ms.
 std::chrono::milliseconds ms_arg(std::uint64_t ms, const char* fn, int arg)
 {
+  if (ms == STP_DURATION_NONE)
+    return std::chrono::milliseconds(-1);
   if (ms > static_cast<std::uint64_t>(INT64_MAX))
     fail(ErrorCode::VALUE_OUT_OF_RANGE, fn, "the duration does not fit int64 milliseconds", arg);
   return std::chrono::milliseconds(static_cast<std::int64_t>(ms));
@@ -149,7 +153,7 @@ std::chrono::milliseconds ms_arg(std::uint64_t ms, const char* fn, int arg)
 
 std::uint64_t ms_of(std::chrono::milliseconds d)
 {
-  return d.count() < 0 ? 0 : static_cast<std::uint64_t>(d.count());
+  return d.count() < 0 ? STP_DURATION_NONE : static_cast<std::uint64_t>(d.count());
 }
 
 // The registry rows of one tier (-1: every tier), in registry order.

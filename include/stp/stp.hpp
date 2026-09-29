@@ -800,6 +800,7 @@ public:
   void set_uint(std::string_view name, std::uint64_t);
   void set_str(std::string_view name, std::string_view); ///< string/enum/mode/path
   void set_names(std::string_view name, const std::vector<std::string>&); ///< set-typed
+  /// -1 ms is "none" (no limit); any other negative duration is OPTION_VALUE.
   void set_duration(std::string_view name, std::chrono::milliseconds);
   // by enum: the stable tier only
   void set_bool(Option, bool);
@@ -818,6 +819,7 @@ public:
   std::uint64_t get_uint(std::string_view name) const;
   std::string get_str(std::string_view name) const;
   std::vector<std::string> get_names(std::string_view name) const;
+  /// -1 ms for "none" (no limit, max-time's default).
   std::chrono::milliseconds get_duration(std::string_view name) const;
   OptionValue resolved(std::string_view name) const; ///< after implications
   bool is_set(std::string_view name) const;

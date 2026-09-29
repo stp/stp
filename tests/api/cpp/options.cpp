@@ -947,3 +947,16 @@ TEST(Options, value_semantics)
 }
 
 } // namespace
+
+TEST(Options, none_is_minus_one_millisecond)
+{
+  Options o;
+  EXPECT_EQ(o.get_duration("max-time"), std::chrono::milliseconds(-1));
+  o.set_duration("max-time", std::chrono::milliseconds(2000));
+  EXPECT_EQ(o.get_duration("max-time"), std::chrono::milliseconds(2000));
+  o.set_duration("max-time", std::chrono::milliseconds(-1));
+  EXPECT_TRUE(o.is_set("max-time"));
+  EXPECT_EQ(o.get_duration("max-time"), std::chrono::milliseconds(-1));
+  API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_duration("max-time", std::chrono::milliseconds(-2)));
+  EXPECT_EQ(o.get_duration("max-time"), std::chrono::milliseconds(-1));
+}

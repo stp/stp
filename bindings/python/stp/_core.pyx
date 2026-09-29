@@ -1420,7 +1420,7 @@ cdef class OptionsHandle:
         cdef uint64_t v
         if stp_options_get_duration_ms(self._o, n, &v) != STP_OK:
             self._fail("stp_options_get_duration_ms")
-        return v
+        return None if v == STP_DURATION_NONE else v
 
     def resolved_str(self, name):
         cdef bytes n = _b(name)
@@ -1845,7 +1845,7 @@ cdef class SolverHandle:
         cdef uint64_t v
         if stp_solver_get_duration_ms(self._s, n, &v) != STP_OK:
             self._m._fail("stp_solver_get_duration_ms")
-        return v
+        return None if v == STP_DURATION_NONE else v
 
     def resolved_str(self, name):
         self._live()

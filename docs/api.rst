@@ -121,6 +121,10 @@ Options are set at construction or on the live solver:
    Result r = s.check_sat({assumption}, CheckBudget{std::chrono::milliseconds(500), std::nullopt});
    if (r.is_unknown()) std::cout << r.reason_message();
 
+A duration option's ``none`` (no limit; ``max-time``'s default) is ``-1ms``
+to ``get_duration`` and ``set_duration``, and ``STP_DURATION_NONE`` to the C
+``*_duration_ms`` functions, so a value read back can be written back.
+
 C
 -
 

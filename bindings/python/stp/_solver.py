@@ -360,9 +360,7 @@ class Options:
         if type_ == "uint":
             return b.get_uint64(name)
         if type_ == "duration":
-            if b.get_str(name) == "none":
-                return None
-            return b.get_duration_ms(name)
+            return b.get_duration_ms(name)  # None for "none"
         if type_ == "set":
             s = b.get_str(name)
             return [] if s in ("", "none") else s.split(",")

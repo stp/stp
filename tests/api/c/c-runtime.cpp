@@ -548,3 +548,41 @@ TEST(c_runtime, the_thread_record_is_cleared_to_ask_a_registry_query)
   stp_clear_last_error();
   EXPECT_EQ(nullptr, stp_last_error());
 }
+
+TEST(c_runtime, no_limit_round_trips_through_the_duration_functions)
+{
+  // max-time's default, read and copied the way a C client copies a setting
+  stp_options o = stp_options_new();
+  uint64_t ms = 0;
+  ASSERT_EQ(STP_OK, stp_options_get_duration_ms(o, "max-time", &ms));
+  EXPECT_EQ(STP_DURATION_NONE, ms);
+  stp_options o2 = stp_options_new();
+  ASSERT_EQ(STP_OK, stp_options_set_duration_ms(o2, "max-time", 1000));
+  ASSERT_EQ(STP_OK, stp_options_set_duration_ms(o2, "max-time", ms));
+  EXPECT_EQ("none", take(stp_options_get_str(o2, "max-time")));
+  EXPECT_EQ(STP_ERROR, stp_options_set_duration_ms(o2, "max-time", STP_DURATION_NONE - 1));
+  ASSERT_NE(nullptr, stp_options_error(o2));
+  EXPECT_EQ(STP_ERR_VALUE_OUT_OF_RANGE, stp_options_error(o2)->code);
+  stp_options_clear_error(o2);
+
+  stp_tm tm = stp_tm_new(nullptr);
+  stp_term x = stp_declare(tm, "x", stp_mk_bv_sort(tm, 8));
+  stp_solver s = stp_solver_new(tm, o2);
+  ASSERT_EQ(STP_OK, stp_solver_assert(s, stp_eq(tm, x, stp_mk_bv_uint64(tm, 8, 3))));
+  stp_result r;
+  ASSERT_EQ(STP_OK, stp_solver_check_sat(s, &r));
+  EXPECT_EQ(STP_SAT, r.kind); // not the "give up at once" of a 0 ms budget
+  ms = 0;
+  ASSERT_EQ(STP_OK, stp_solver_get_duration_ms(s, "max-time", &ms));
+  EXPECT_EQ(STP_DURATION_NONE, ms);
+  ASSERT_EQ(STP_OK, stp_solver_set_duration_ms(s, "max-time", 5000));
+  ASSERT_EQ(STP_OK, stp_solver_get_duration_ms(s, "max-time", &ms));
+  EXPECT_EQ(5000u, ms);
+  ASSERT_EQ(STP_OK, stp_solver_set_duration_ms(s, "max-time", STP_DURATION_NONE));
+  EXPECT_EQ("none", take(stp_solver_get_str(s, "max-time")));
+  stp_solver_delete(s);
+  stp_options_delete(o);
+  stp_options_delete(o2);
+  stp_tm_release_all(tm);
+  stp_tm_release(tm);
+}

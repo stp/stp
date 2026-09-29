@@ -322,6 +322,7 @@ cdef extern from "stp/stp.h":
     stp_status stp_term_to_uninterpreted_index(stp_term, uint64_t* out)
 
     # ------------------------------------------------------------ options
+    uint64_t STP_DURATION_NONE
     stp_options stp_options_new()
     stp_options stp_options_copy(stp_options)
     void stp_options_delete(stp_options)
