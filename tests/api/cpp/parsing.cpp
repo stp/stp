@@ -979,6 +979,145 @@ TEST(Parsing, a_stream_that_throws)
   }
 }
 
+// A parser reset drops the script's declarations, but API handles and the
+// manager's name table outlive it. A new sort with an old name must not be
+// adopted as the old sort, nor a new symbol hidden behind an old binding.
+TEST(Parsing, a_script_reset_cannot_replace_a_managers_sort)
+{
+  for (bool simplify : {false, true})
+    for (ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::EXECUTE,
+                           ParseMode::PARSE_ONLY})
+      for (const char* reset : {"(reset)", "(reset-assertions)"})
+      {
+        SCOPED_TRACE(reset);
+        SCOPED_TRACE(static_cast<int>(mode));
+        SCOPED_TRACE(simplify);
+        TermManager::Config config;
+        config.simplify = simplify;
+        TermManager tm(config);
+        const Sort u = tm.declare_sort("U");
+        const Term x = tm.declare("x", u), z = tm.declare("z", u);
+        Solver s(tm);
+        s.add(x != z);
+        s.push();
+        s.add(x == z);
+        const auto e = API_ERROR_OF(s.parse_smt2(
+            std::string(reset) + " (set-logic QF_UFBV) (declare-sort V 0)"
+                                 " (declare-sort U 0) (declare-fun y () U)", mode));
+        ASSERT_TRUE(e.has_value());
+        EXPECT_EQ(e->code(), ErrorCode::PARSE);
+        EXPECT_NE(std::string(e->what()).find("term manager"), std::string::npos);
+        EXPECT_EQ(tm.declared_sorts().size(), 1u);
+        EXPECT_EQ(tm.declare_sort("U"), u);
+        EXPECT_FALSE(tm.symbol("y").has_value());
+        ASSERT_EQ(s.level(), 1u);
+        EXPECT_EQ(s.assertions().size(), 2u);
+        EXPECT_TRUE(s.check_sat().is_unsat());
+        s.pop();
+        ASSERT_TRUE(s.check_sat().is_sat());
+        EXPECT_TRUE(s.model().bool_value(x != z));
+        s.parse_smt2("(declare-fun y () U) (assert (distinct x y))");
+        EXPECT_EQ(tm.symbol("y")->sort(), u);
+        EXPECT_TRUE(s.check_sat().is_sat());
+
+        TermManager back;
+        Solver roundtrip(back);
+        roundtrip.parse_smt2(s.to_smt2());
+        EXPECT_EQ(back.declared_sorts().size(), 1u);
+        EXPECT_TRUE(roundtrip.check_sat().is_sat());
+      }
+}
+
+TEST(Parsing, a_script_reset_cannot_replace_a_managers_symbol)
+{
+  for (bool simplify : {false, true})
+    for (ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::EXECUTE,
+                           ParseMode::PARSE_ONLY})
+      for (const char* reset : {"(reset)", "(reset-assertions)"})
+        for (const char* declaration : {"(declare-fun x () Bool)",
+                                        "(declare-const x Real)",
+                                        "(declare-fun x ((_ BitVec 4)) (_ BitVec 4))"})
+        {
+          SCOPED_TRACE(declaration);
+          SCOPED_TRACE(reset);
+          SCOPED_TRACE(static_cast<int>(mode));
+          SCOPED_TRACE(simplify);
+          TermManager::Config config;
+          config.simplify = simplify;
+          TermManager tm(config);
+          Solver s(tm);
+          s.parse_smt2("(declare-fun x () (_ BitVec 4)) (assert (= x #x3))");
+          const Term x = *tm.symbol("x");
+          s.push();
+          s.add(x == 4);
+          const auto e = API_ERROR_OF(s.parse_smt2(
+              std::string(reset) + " (set-logic QF_UFBVFPLRA) " + declaration, mode));
+          ASSERT_TRUE(e.has_value());
+          EXPECT_EQ(e->code(), ErrorCode::PARSE);
+          EXPECT_NE(std::string(e->what()).find("term manager"), std::string::npos);
+          EXPECT_TRUE(tm.symbol("x")->same_as(x));
+          EXPECT_EQ(tm.symbols().size(), 1u);
+          ASSERT_EQ(s.level(), 1u);
+          EXPECT_EQ(s.assertions().size(), 2u);
+          EXPECT_TRUE(s.check_sat().is_unsat());
+          s.pop();
+          ASSERT_TRUE(s.check_sat().is_sat());
+          EXPECT_EQ(s.model().uint64_value(x), 3u);
+          // A refused function declaration must not retain an active UF
+          // under the ordinary symbol's name.
+          s.parse_smt2("(assert (= x #x3))");
+          EXPECT_TRUE(s.check_sat().is_sat());
+
+          TermManager back;
+          Solver roundtrip(back);
+          roundtrip.parse_smt2(s.to_smt2());
+          ASSERT_TRUE(roundtrip.check_sat().is_sat());
+          EXPECT_EQ(roundtrip.model().uint64_value(*back.symbol("x")), 3u);
+        }
+}
+
+TEST(Parsing, a_script_reset_allows_compatible_and_local_redeclarations)
+{
+  for (bool simplify : {false, true})
+    for (ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::EXECUTE,
+                           ParseMode::PARSE_ONLY})
+    {
+      SCOPED_TRACE(static_cast<int>(mode));
+      SCOPED_TRACE(simplify);
+      TermManager::Config config;
+      config.simplify = simplify;
+      TermManager tm(config);
+      const Term x = tm.declare("x", tm.mk_bv_sort(4));
+      const Sort u = tm.declare_sort("U");
+      const Term a = tm.declare("a", u), b = tm.declare("b", u);
+      Solver s(tm), other(tm);
+      other.add(a != b);
+      s.parse_smt2("(reset) (set-logic QF_UFBV) (declare-fun x () (_ BitVec 4))"
+                   " (declare-sort V 0) (declare-fun y () V) (assert (= x #x5))", mode);
+      EXPECT_TRUE(tm.symbol("x")->same_as(x));
+      EXPECT_NE(tm.symbol("y")->sort(), u);
+      API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, (void)(a != *tm.symbol("y")));
+      ASSERT_TRUE(s.check_sat().is_sat());
+      EXPECT_EQ(s.model().uint64_value(x), 5u);
+      EXPECT_TRUE(other.check_sat().is_sat());
+      // A define-fun formal may still shadow a persistent name at another sort.
+      s.parse_smt2("(define-fun identity ((x Bool)) Bool x) (assert (identity true))");
+      EXPECT_TRUE(s.check_sat().is_sat());
+
+      // Within one script, discarded declarations have no public handles.
+      TermManager local(config);
+      Solver script(local);
+      script.parse_smt2("(set-logic QF_UFBV) (declare-sort U 0) (declare-fun x () U)"
+                        " (reset) (set-logic QF_UFBV) (declare-sort U 0)"
+                        " (declare-fun y () U) (declare-fun x () Bool) (assert x)", mode);
+      EXPECT_EQ(local.symbol("x")->sort(), local.mk_bool_sort());
+      EXPECT_EQ(local.symbol("y")->sort(), local.declare_sort("U"));
+      EXPECT_EQ(local.declared_sorts().size(), 1u);
+      ASSERT_TRUE(script.check_sat().is_sat());
+      EXPECT_TRUE(script.model().bool_value(*local.symbol("x")));
+    }
+}
+
 // A script's (reset) begins a new session for the script, but the manager's
 // symbols outlive it: a Real the API declared, or made with mk_fresh, is
 // still one afterwards and a model reads its value, not 0 -- in this solver,

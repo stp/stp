@@ -300,6 +300,41 @@ def test_declared_sorts_carry_across_parses():
     s2.close()
 
 
+@pytest.mark.parametrize("simplify", [False, True])
+def test_reset_cannot_replace_persistent_sorts(simplify):
+    tm = TermManager(simplify=simplify)
+    u = tm.declare_sort("U")
+    x, z = tm.declare("x", u), tm.declare("z", u)
+    s = Solver(tm)
+    s.add(x != z)
+    with pytest.raises(ParseError, match="term manager"):
+        s.from_string("(reset) (declare-sort U 0) (declare-fun y () U)")
+    assert tm.declare_sort("U") == u
+    assert tm.symbol("y") is None
+    assert s.check() == sat
+    assert s.model().eval(x != z)
+    s.from_string("(declare-fun y () U) (assert (distinct x y))")
+    assert tm.symbol("y").sort() == u
+    assert s.check() == sat
+
+
+@pytest.mark.parametrize("simplify", [False, True])
+def test_reset_cannot_retype_persistent_symbols(simplify):
+    tm = TermManager(simplify=simplify)
+    s = Solver(tm)
+    s.from_string("(declare-fun x () (_ BitVec 4)) (assert (= x #x3))")
+    x = tm.symbol("x")
+    with pytest.raises(ParseError, match="term manager"):
+        s.from_string("(reset) (declare-fun x () Bool) (assert x)")
+    assert tm.symbol("x") is x
+    assert s.check() == sat
+    assert s.model()[x].as_long() == 3
+    back = Solver(TermManager())
+    back.from_string(s.to_smt2())
+    assert back.check() == sat
+    assert back.model()[back.manager().symbol("x")].as_long() == 3
+
+
 def test_printed_logic_admits_unused_declarations():
     # a Real no assertion mentions printed under QF_BV, which the execute
     # mode refuses

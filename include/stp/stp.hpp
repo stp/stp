@@ -1154,6 +1154,11 @@ public:
 
   // symbols and scripts (the name table is the manager's)
   std::optional<Term> symbol(std::string_view name) const;
+  /// A script's reset does not discard the manager's declarations or handles.
+  /// Redeclaring a retained name with a different identity is PARSE, with
+  /// the assertion stack restored. In particular, declare-sort creates a
+  /// new identity even at the same spelling; use a fresh manager for a new
+  /// namespace. Ordinary symbols redeclared at the same sort keep their identity.
   void parse_smt2(std::string_view script, ParseMode = ParseMode::DECLARE_AND_ASSERT);
   void parse(std::string_view text, Format); ///< SMTLIB2, SMTLIB1 or CVC
   void parse_file(std::string_view path, Format = Format::AUTO); ///< AUTO picks by extension

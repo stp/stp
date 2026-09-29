@@ -263,6 +263,17 @@ public:
   // outlive the script -- the API's, whose name table is the manager's --
   // records them again in `hook`, which reset() runs right after that.
   void onPublicReset(std::function<void()> hook) { after_public_reset = std::move(hook); }
+  // The API's declarations outlive parser scopes and resets. Its validators
+  // reject a declaration that would give a retained name another identity.
+  // Returning false abandons the parse through the ordinary recovery path.
+  void onSymbolDeclaration(std::function<bool(const std::string&, const ASTNode&)> hook)
+  {
+    accept_symbol_declaration = std::move(hook);
+  }
+  void onSortDeclaration(std::function<bool(const std::string&, const SourceSort&)> hook)
+  {
+    accept_sort_declaration = std::move(hook);
+  }
   // Called as each check-sat (or check-sat-assuming) of the input begins:
   // the API marks a new check there, as its own check_sat does. True when the
   // caller holds an interrupt for it: the check answers unknown at once.
@@ -274,6 +285,9 @@ private:
   ASTVec* symbols_at_cleanup = nullptr;
   std::map<std::string, SourceSort>* sorts_at_cleanup = nullptr;
   std::function<void()> after_public_reset;
+  std::function<bool(const std::string&, const ASTNode&)> accept_symbol_declaration;
+  std::function<bool(const std::string&, const SourceSort&)> accept_sort_declaration;
+  void checkSymbolDeclaration(const std::string& name, const ASTNode& symbol);
   std::function<bool()> before_check;
   std::function<void()> after_check;
 
