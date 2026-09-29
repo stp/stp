@@ -68,16 +68,16 @@ def test_sort_mismatch_fields():
         u + v
 
 
-def test_a_foreign_term_is_its_own_managers():
+def test_a_foreign_term_is_refused_without_being_kept():
     a, b = TermManager(), TermManager()
     y = BitVec("y", 8, tm=b)
     with pytest.raises(SortMismatch) as e:
         a.simplify_term(y)
     err = e.value
     assert err.code == ErrorCode.FOREIGN_MANAGER
-    # the one wrapper of the other manager's node, not a new one of a's
-    assert len(err.terms) == 1 and err.terms[0] is y
-    assert err.terms[0]._manager() is b
+    # the error keeps none of the other manager's terms: that manager may be busy on another
+    # thread, and keeping one touched its reference counts from this one
+    assert err.terms == [] or len(err.terms) == 0
 
 def test_argument_errors():
     with pytest.raises(ArgumentError) as e:

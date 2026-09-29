@@ -1074,8 +1074,7 @@ ASTNode own_bool(SolverImpl* s, const Term& t, const char* fn, int arg)
   if (t.is_null())
     detail::fail(ErrorCode::NULL_HANDLE, fn, "the term is null", arg);
   if (t.impl_manager() != s->mgr)
-    detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the term belongs to another term manager", arg,
-                 {t});
+    detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the term belongs to another term manager", arg);
   const ASTNode n = detail::node_of(t);
   if (n.GetSourceSort().kind() != SourceSort::Kind::Bool)
     detail::fail(ErrorCode::SORT_MISMATCH, fn, "expected a Boolean term", arg, {t}, {t.sort()});

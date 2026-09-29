@@ -106,7 +106,7 @@ value = 9
 recoverable = true
 python = "SortMismatch(ArgumentError, TypeError)"
 message = "invalid call to '{fn}': argument {arg} belongs to another term manager"
-fields = ["argument_index", "terms"]
+fields = ["argument_index"]   # no terms: they are another manager's, whose counts this thread must not touch
 
 [[error]]
 name = "NULL_HANDLE"

@@ -42,6 +42,7 @@ class NodeAccess
 public:
   static ASTNode wrap(ASTInternal* p) { return ASTNode(p); }
   static ASTInternal* raw(const ASTNode& n) { return n._int_node_ptr; }
+  static STPMgr* manager_of(const ASTInternal* p) { return ASTNode::ManagerOf(p); }
   static void retain(ASTInternal* p)
   {
     if (p)

@@ -1863,7 +1863,7 @@ Term TermManager::mk_term(Kind k, const std::vector<Term>& args,
                    static_cast<int>(i));
     if (args[i].impl_manager() != m)
       detail::fail(ErrorCode::FOREIGN_MANAGER, "TermManager::mk_term",
-                   "the term belongs to another term manager", static_cast<int>(i), {args[i]});
+                   "the term belongs to another term manager", static_cast<int>(i));
     nodes.push_back(detail::node_of(args[i]));
   }
   std::optional<std::uint32_t> rs;
@@ -1891,7 +1891,7 @@ Term TermManager::simplify(const Term& t) const
     detail::fail(ErrorCode::NULL_HANDLE, "TermManager::simplify", "the term is null", 0);
   if (t.impl_manager() != m)
     detail::fail(ErrorCode::FOREIGN_MANAGER, "TermManager::simplify",
-                 "the term belongs to another term manager", 0, {t});
+                 "the term belongs to another term manager", 0);
   return detail::engine_call(m, "TermManager::simplify", [&]() -> Term {
   // Rebuild bottom-up through the folding factory, on an explicit stack (a
   // deep term costs heap, not the C++ stack); a memo bounds the work by the

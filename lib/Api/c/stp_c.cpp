@@ -261,7 +261,7 @@ CManager* cm_of_node(ASTInternal* p) noexcept
 {
   if (p == nullptr)
     return nullptr;
-  STPMgr* bm = detail::NodeAccess::wrap(p).GetNodeManager();
+  STPMgr* bm = detail::NodeAccess::manager_of(p);
   std::lock_guard<std::mutex> hold(registry().mu);
   auto it = registry().by_bm.find(bm);
   return it == registry().by_bm.end() ? nullptr : it->second;
@@ -312,14 +312,10 @@ Term term_arg(CManager* cm, stp_term t, const char* fn, int arg)
   if (t == nullptr)
     throw NullArgument{};
   ASTInternal* p = raw(t);
-  if (detail::NodeAccess::wrap(p).GetNodeManager() != cm->bm)
-  {
-    std::vector<Term> involved;
-    if (CManager* other = cm_of_node(p))
-      involved.emplace_back(other->impl, p);
-    detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the term belongs to another term manager", arg,
-                 involved);
-  }
+  // Read without a reference, and the record keeps no copy: the other
+  // manager's counts belong to whichever thread uses it.
+  if (detail::NodeAccess::manager_of(p) != cm->bm)
+    detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the term belongs to another term manager", arg);
   return Term(cm->impl, p);
 }
 
@@ -906,20 +902,9 @@ stp_term stp_tm_error_term(stp_tm tm, size_t i)
            "index " + std::to_string(i) + " out of range [0, " +
                std::to_string(cm->error.pending ? cm->error.terms.size() : 0) + ")",
            1);
-    // A FOREIGN_MANAGER error names the other manager's term, and the
-    // reference is that manager's: it keeps that manager alive and is given
-    // back through it. Every handle of the other manager may be gone by now
-    // (the record's term holds the manager itself); it then gets a C manager
-    // anew, for the reference to hold.
-    const Term& t = cm->error.terms[i];
-    if (CManager* owner = cm_of_node(detail::internal_of(t)))
-      return export_term(owner, t);
-    struct Drop
-    {
-      CManager* cm;
-      ~Drop() { cm_release(cm); }
-    } revived{cm_new(TermManager(t.impl_manager()))};
-    return export_term(revived.cm, t);
+    // Every term a record keeps is its own manager's: a FOREIGN_MANAGER
+    // error keeps none.
+    return export_term(cm, cm->error.terms[i]);
   });
 }
 

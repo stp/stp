@@ -101,6 +101,10 @@ class ASTNode
   }
 
   STPMgr* GetSTPMgr() const;
+  // The manager of node `p`, read without taking a reference to it: the API
+  // looks up a term's owner this way, and must not touch another manager's
+  // counts from its own thread when that term is foreign to the call.
+  static STPMgr* ManagerOf(const ASTInternal* p) { return p->nodeManager; }
 
 public:
   uint8_t getIteration() const;

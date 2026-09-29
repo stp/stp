@@ -287,7 +287,9 @@ public:
   const char* what() const noexcept override; ///< one line
   std::string_view function() const noexcept; ///< the API function that refused
   std::optional<int> argument_index() const noexcept; ///< 0-based, if any
-  const std::vector<Term>& terms() const noexcept; ///< the terms involved
+  /// the terms involved; none for FOREIGN_MANAGER, whose term is another
+  /// manager's, which may be in use on another thread
+  const std::vector<Term>& terms() const noexcept;
   const std::vector<Sort>& sorts() const noexcept;
   std::string_view option() const noexcept; ///< for OPTION_* codes
   /// Parse errors: 1-based line and column of the failure (0 when unknown).

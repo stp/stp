@@ -376,7 +376,7 @@ STP_API void stp_tm_release_all(stp_tm);   /* term references only; solver, mode
 /* errors */
 STP_API const stp_error* stp_tm_error(stp_tm); /* NULL when no error is pending; infallible */
 STP_API size_t stp_tm_error_num_terms(stp_tm); /* the terms involved in the recorded error (e.g. both operands) */
-STP_API stp_term stp_tm_error_term(stp_tm, size_t i); /* +1; a FOREIGN_MANAGER error's term is the other manager's, and so is the reference */
+STP_API stp_term stp_tm_error_term(stp_tm, size_t i); /* +1; a FOREIGN_MANAGER error lists no term (it would be another manager's) */
 STP_API void stp_tm_clear_error(stp_tm);
 typedef void (*stp_error_callback)(const stp_error*, void* user); /* sees every error; may return; the call still fails; must not call the library; the pointer is valid during the call only */
 STP_API void stp_tm_set_error_callback(stp_tm, stp_error_callback, void* user);

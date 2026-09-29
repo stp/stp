@@ -1060,7 +1060,7 @@ ASTNode own_node(const ModelSnapshot& s, const Term& t, const char* fn)
   if (t.is_null())
     detail::fail(ErrorCode::NULL_HANDLE, fn, "the term is null", 0);
   if (t.impl_manager() != s.mgr)
-    detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the term belongs to another term manager", 0, {t});
+    detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the term belongs to another term manager", 0);
   return detail::node_of(t);
 }
 
@@ -1409,8 +1409,7 @@ Term ArrayValue::at(const Term& index) const
   if (index.is_null())
     detail::fail(ErrorCode::NULL_HANDLE, fn, "the index is null", 0);
   if (index.impl_manager() != m)
-    detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the index belongs to another term manager", 0,
-                 {index});
+    detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the index belongs to another term manager", 0);
   const ASTNode i = detail::node_of(index);
   if (!i.isConstant())
     detail::fail(ErrorCode::NOT_A_VALUE, fn, "the index must be a value", 0, {index});
@@ -1489,7 +1488,7 @@ Term FunctionValue::apply(const std::vector<Term>& args) const
       detail::fail(ErrorCode::NULL_HANDLE, fn, "an argument is null", static_cast<int>(i));
     if (args[i].impl_manager() != m)
       detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the argument belongs to another term manager",
-                   static_cast<int>(i), {args[i]});
+                   static_cast<int>(i));
     nodes.push_back(detail::node_of(args[i]));
     if (!nodes.back().isConstant())
       detail::fail(ErrorCode::NOT_A_VALUE, fn, "the arguments must be values",

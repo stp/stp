@@ -918,7 +918,7 @@ Term mk_named(Kind k, const char* fn, const std::vector<Term>& args)
       m = args[i].impl_manager();
     else if (args[i].impl_manager() != m)
       fail(ErrorCode::FOREIGN_MANAGER, fn, "the term belongs to another term manager",
-           static_cast<int>(i), {args[i]});
+           static_cast<int>(i));
   }
   if (m == nullptr)
     fail(ErrorCode::ARITY, fn, "no arguments");

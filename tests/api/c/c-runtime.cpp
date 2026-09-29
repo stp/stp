@@ -31,6 +31,7 @@ THE SOFTWARE.
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -156,15 +157,15 @@ TEST(c_runtime, the_manager_outlives_every_release_order)
   stp_term q = stp_declare(t2, "p", stp_mk_bv_sort(t2, 8));
   EXPECT_NE(p, q);
   EXPECT_NE(stp_term_hash(p), stp_term_hash(q));
-  // a foreign term is refused with the term involved
+  // a foreign term is refused at its argument, and the record keeps none of
+  // the other manager's terms
   EXPECT_EQ(nullptr, stp_bvadd(t1, p, q));
   const stp_error* e = stp_tm_error(t1);
   ASSERT_NE(nullptr, e);
   EXPECT_EQ(STP_ERR_FOREIGN_MANAGER, e->code);
   EXPECT_STREQ("stp_bvadd", e->function); // the constructor called, at its operand
   EXPECT_EQ(1, e->argument_index);
-  EXPECT_EQ(1u, stp_tm_error_num_terms(t1));
-  EXPECT_EQ(q, stp_tm_error_term(t1, 0));
+  EXPECT_EQ(0u, stp_tm_error_num_terms(t1));
   stp_tm_clear_error(t1);
   EXPECT_EQ(nullptr, stp_tm_error(t2)); // the other manager saw nothing
   stp_solver s1 = stp_solver_new(t1, nullptr);
@@ -178,44 +179,44 @@ TEST(c_runtime, the_manager_outlives_every_release_order)
   stp_tm_release(t2);
 }
 
-// A FOREIGN_MANAGER error names the other manager's term, and the reference
-// stp_tm_error_term hands out is that manager's: released through it, and
-// keeping it alive past every other handle of it.
-TEST(c_runtime, a_foreign_error_term_is_its_own_managers_reference)
+// Refusing a term of another manager touches nothing of that manager's: the
+// check read the term's owner through a counted reference, and the record kept
+// the term, so the refusal and every later clearing of the record changed the
+// other manager's plain reference counts from this thread while its own thread
+// used them (a crash, or a node freed under it).
+TEST(c_runtime, refusing_a_foreign_term_leaves_its_manager_alone)
 {
   stp_tm a = stp_tm_new(nullptr);
   stp_tm b = stp_tm_new(nullptr);
   stp_term y = stp_declare(b, "y", stp_mk_bv_sort(b, 8));
-  // (a) the handle is y's, and each reference is given back once
-  EXPECT_EQ(nullptr, stp_tm_simplify(a, y));
-  stp_term err = stp_tm_error_term(a, 0);
-  EXPECT_EQ(y, err);
-  EXPECT_EQ(STP_ERR_FOREIGN_MANAGER, code_of(a));
-  EXPECT_EQ(STP_OK, stp_term_release(err));
-  EXPECT_EQ(nullptr, stp_tm_error(b));
-  // (b) it outlives the other manager's handle and its own term
-  EXPECT_EQ(nullptr, stp_tm_simplify(a, y));
-  err = stp_tm_error_term(a, 0);
-  stp_tm_clear_error(a);
+  std::atomic<bool> stop{false};
+  std::thread builder([&] {
+    stp_tm_scope_push(b);
+    stp_sort bv8 = stp_mk_bv_sort(b, 8);
+    for (unsigned i = 0; !stop.load(); ++i)
+    {
+      stp_term t = stp_bvadd(b, y, stp_mk_bv_uint64(b, 8, i & 0xff));
+      (void)stp_bvmul(b, t, stp_declare(b, "z", bv8));
+      if (i % 256 == 255)
+      {
+        stp_tm_scope_pop(b);
+        stp_tm_scope_push(b);
+      }
+    }
+    stp_tm_scope_pop(b);
+  });
+  for (int i = 0; i < 200000; ++i)
+  {
+    EXPECT_EQ(nullptr, stp_tm_simplify(a, y));
+    EXPECT_EQ(STP_ERR_FOREIGN_MANAGER, code_of(a));
+    EXPECT_EQ(0u, stp_tm_error_num_terms(a));
+    stp_tm_clear_error(a);
+  }
+  stop.store(true);
+  builder.join();
+  EXPECT_EQ(nullptr, stp_tm_error(b)); // the other manager saw nothing
   EXPECT_EQ(STP_OK, stp_term_release(y));
   stp_tm_release(b);
-  EXPECT_EQ("y", symbol_text(err));
-  EXPECT_EQ(STP_OK, stp_term_release(err)); // the other manager dies here
-  // (c) asked for after every handle of the other manager is gone: the
-  // record kept that manager alive, and the reference holds it in turn
-  b = stp_tm_new(nullptr);
-  y = stp_declare(b, "y", stp_mk_bv_sort(b, 8));
-  const uint64_t b_id = stp_tm_id(b);
-  EXPECT_EQ(nullptr, stp_tm_simplify(a, y));
-  EXPECT_EQ(STP_OK, stp_term_release(y));
-  stp_tm_release(b);
-  err = stp_tm_error_term(a, 0);
-  stp_tm_clear_error(a);
-  EXPECT_EQ("y", symbol_text(err));
-  stp_tm owner = stp_term_manager(err);
-  EXPECT_EQ(b_id, stp_tm_id(owner));
-  stp_tm_release(owner);
-  EXPECT_EQ(STP_OK, stp_term_release(err));
   stp_tm_release(a);
 }
 
