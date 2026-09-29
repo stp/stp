@@ -681,14 +681,44 @@ def _ground_value(t):
 
 
 def _ground_truth(t):
-    """True/False for a Bool term over values that the rewriter did not fold; None otherwise."""
-    kind = t.kind()
-    children = t.children()
+    """True/False for a Bool term over values that the rewriter did not fold; None otherwise.
+    On an explicit stack, as a deep term would exhaust Python's recursion limit; an ite values
+    only the branch its condition picks."""
+    done = {}
+    stack = [t]
+    while stack:
+        u = stack[-1]
+        if u.id in done:
+            stack.pop()
+            continue
+        kind = u.kind()
+        children = u.children()
+        if kind == Kind.NOT or kind in (Kind.AND, Kind.OR, Kind.XOR, Kind.IMPLIES):
+            need = [c for c in children if c.id not in done]
+        elif kind == Kind.ITE:
+            if children[0].id not in done:
+                need = [children[0]]
+            else:
+                c = done[children[0].id]
+                branch = None if c is None else children[1] if c else children[2]
+                need = [branch] if branch is not None and branch.id not in done else []
+        else:
+            need = []
+        if need:
+            stack.extend(reversed(need))
+            continue
+        stack.pop()
+        done[u.id] = _ground_truth_of(u, kind, children, done)
+    return done[t.id]
+
+
+def _ground_truth_of(t, kind, children, done):
+    """_ground_truth of t, its Boolean children's already in `done`."""
     if kind == Kind.NOT:
-        v = _ground_truth(children[0])
+        v = done[children[0].id]
         return None if v is None else not v
     if kind in (Kind.AND, Kind.OR, Kind.XOR, Kind.IMPLIES):
-        vs = [_ground_truth(c) for c in children]
+        vs = [done[c.id] for c in children]
         if any(v is None for v in vs):
             return None
         if kind == Kind.AND:
@@ -712,10 +742,10 @@ def _ground_truth(t):
             return None
         return {Kind.REAL_LT: a < b, Kind.REAL_LE: a <= b, Kind.REAL_GT: a > b, Kind.REAL_GE: a >= b}[kind]
     if kind == Kind.ITE:
-        c = _ground_truth(children[0])
+        c = done[children[0].id]
         if c is None:
             return None
-        return _ground_truth(children[1] if c else children[2])
+        return done[(children[1] if c else children[2]).id]
     return None
 
 

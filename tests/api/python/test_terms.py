@@ -656,3 +656,18 @@ def test_pickle_and_translate():
 def test_all_exports_exist():
     for name in stp.__all__:
         assert hasattr(stp, name), name
+
+
+def test_deep_terms_print_pickle_translate_and_decide():
+    # 20 000 levels: far past Python's recursion limit, which str(), pickling, translate()
+    # and bool() each reached walking a term one call per level
+    x = BitVec("x", 32)
+    t = x
+    for _ in range(10000):
+        t = t * 3 + 1
+    text = str(t)
+    assert text.count("*") == 10000 and text.count("+") == 10000
+    assert pickle.loads(pickle.dumps(t)) is t
+    tm2 = TermManager()
+    assert t.translate(tm2).sexpr() == t.sexpr()
+    assert bool(Not(t == t + 0)) is False

@@ -280,6 +280,7 @@ def uninterpreted_index(sx):
 _TAG_VALUE = 0
 _TAG_SYMBOL = 1
 _TAG_APP = 2
+_TAG_TABLE = 3
 
 
 def _sym_name(t):
@@ -291,9 +292,9 @@ def _sym_name(t):
     return name if tm.symbol(name) is t else None
 
 
-def encode_term(t):
-    """The structural encoding of t: nested tuples of kinds, indices, sort texts, values and
-    symbol names (the pickle payload; rebuilt through the target manager's name table)."""
+def _encode_node(t, index_of):
+    """One node of the encoding: a value, a symbol, or an application naming its children by
+    their places in the table (`index_of`)."""
     from ._terms import SortKind
     if t.is_value():
         k = t.sort_kind()
@@ -309,22 +310,51 @@ def encode_term(t):
                               "elsewhere; declare it by name instead" % t.sexpr(),
                               code=ErrorCode.UNSUPPORTED, function="encode_term")
         return (_TAG_SYMBOL, name, sort_text(t.sort()))
-    children = tuple(encode_term(c) for c in t.children())
+    children = tuple(index_of[c.id] for c in t.children())
     result_sort = sort_text(t.sort()) if kind == Kind.CONST_ARRAY else None
     return (_TAG_APP, int(kind), tuple(t.indices()), result_sort, children)
 
 
+def encode_term(t):
+    """The structural encoding of t (the pickle payload; rebuilt through the target manager's
+    name table): a table of nodes -- kinds, indices, sort texts, values and symbol names --
+    each after the nodes it names, the last one t. Flat, so neither building it nor pickling
+    it recurses per level of the term, and a shared subterm is one entry."""
+    index_of = {}
+    table = []
+    stack = [(t, False)]
+    while stack:
+        u, expanded = stack.pop()
+        if u.id in index_of:
+            continue
+        leaf = u.is_value() or Kind(u.kind()) == Kind.CONSTANT
+        if not expanded and not leaf:
+            stack.append((u, True))
+            for c in reversed(u.children()):  # popped left to right: symbols meet in order
+                if c.id not in index_of:
+                    stack.append((c, False))
+            continue
+        index_of[u.id] = len(table)
+        table.append(_encode_node(u, index_of))
+    return (_TAG_TABLE, tuple(table))
+
+
 def decode_term(enc, tm):
-    tag = enc[0]
-    if tag == _TAG_VALUE:
-        sort = parse_sort(enc[1], tm)
-        return value_of(read_sexpr(enc[2]), sort, tm)
-    if tag == _TAG_SYMBOL:
-        return tm.declare(enc[1], parse_sort(enc[2], tm))
-    _, kind, indices, result_sort, children = enc
-    args = [decode_term(c, tm) for c in children]
-    sort = parse_sort(result_sort, tm) if result_sort is not None else None
-    return tm.mk_term(Kind(kind), args, indices, sort)
+    """t rebuilt in tm from encode_term's table."""
+    if enc[0] != _TAG_TABLE:
+        raise ValueError("not an encoded term")
+    built = []
+    for node in enc[1]:
+        tag = node[0]
+        if tag == _TAG_VALUE:
+            built.append(value_of(read_sexpr(node[2]), parse_sort(node[1], tm), tm))
+        elif tag == _TAG_SYMBOL:
+            built.append(tm.declare(node[1], parse_sort(node[2], tm)))
+        else:
+            _, kind, indices, result_sort, children = node
+            sort = parse_sort(result_sort, tm) if result_sort is not None else None
+            built.append(tm.mk_term(Kind(kind), [built[i] for i in children], indices, sort))
+    return built[-1]
 
 
 def reduce_term(t):

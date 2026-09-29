@@ -120,43 +120,79 @@ def _paren(s):
     return s if _balanced(s) else "(" + s + ")"
 
 
+def _leaf(t):
+    return t.is_value() or Kind(t.kind()) == Kind.CONSTANT
+
+
 def pretty(t):
-    if t.is_value():
-        return _value(t)
+    """z3py-style text for t. Bottom-up on an explicit stack -- a deep term would exhaust
+    Python's recursion limit -- each subterm's text made once and kept only until the last
+    term above it has used it."""
+    uses = {}
+    order = []
+    seen = set()
+    stack = [(t, False)]
+    while stack:
+        u, expanded = stack.pop()
+        if expanded:
+            order.append(u)
+            continue
+        if u.id in seen:
+            continue
+        seen.add(u.id)
+        stack.append((u, True))
+        if not _leaf(u):
+            for c in reversed(u.children()):
+                uses[c.id] = uses.get(c.id, 0) + 1
+                if c.id not in seen:
+                    stack.append((c, False))
+    text = {}
+    for u in order:
+        if _leaf(u):
+            text[u.id] = _value(u) if u.is_value() else (u.symbol() or u.sexpr())
+            continue
+        children = u.children()
+        text[u.id] = _render(u, children, [text[c.id] for c in children])
+        for c in children:
+            uses[c.id] -= 1
+            if uses[c.id] == 0:
+                del text[c.id]
+    return text[t.id]
+
+
+def _render(t, children, parts):
+    """t's text from its children's (`parts`, in order)."""
     kind = Kind(t.kind())
-    if kind == Kind.CONSTANT:
-        return t.symbol() or t.sexpr()
-    children = t.children()
     if kind in _INFIX and len(children) == 2:
-        return "%s %s %s" % (_paren(pretty(children[0])), _INFIX[kind], _paren(pretty(children[1])))
+        return "%s %s %s" % (_paren(parts[0]), _INFIX[kind], _paren(parts[1]))
     if kind in _FP_INFIX and len(children) == 3:
         rm = children[0]
         if rm.is_value() and rm.to_rm() == t._manager().default_rounding_mode:
-            return "%s %s %s" % (_paren(pretty(children[1])), _FP_INFIX[kind], _paren(pretty(children[2])))
+            return "%s %s %s" % (_paren(parts[1]), _FP_INFIX[kind], _paren(parts[2]))
     if kind == Kind.DISTINCT and len(children) == 2:
-        return "%s != %s" % (_paren(pretty(children[0])), _paren(pretty(children[1])))
+        return "%s != %s" % (_paren(parts[0]), _paren(parts[1]))
     if kind == Kind.BV_NEG or kind == Kind.REAL_NEG:
-        return "-" + _paren(pretty(children[0]))
+        return "-" + _paren(parts[0])
     if kind == Kind.BV_NOT:
-        return "~" + _paren(pretty(children[0]))
+        return "~" + _paren(parts[0])
     if kind == Kind.SELECT:
-        return "%s[%s]" % (_paren(pretty(children[0])), pretty(children[1]))
+        return "%s[%s]" % (_paren(parts[0]), parts[1])
     if kind == Kind.APPLY:
-        return "%s(%s)" % (pretty(children[0]), ", ".join(pretty(c) for c in children[1:]))
+        return "%s(%s)" % (parts[0], ", ".join(parts[1:]))
     if kind == Kind.CONST_ARRAY:
-        return "K(%r, %s)" % (t.sort(), pretty(children[0]))
+        return "K(%r, %s)" % (t.sort(), parts[0])
     if kind in _INDEXED:
         idx = t.indices()
         if kind == Kind.BV_EXTRACT:
-            return "Extract(%d, %d, %s)" % (idx[0], idx[1], pretty(children[0]))
+            return "Extract(%d, %d, %s)" % (idx[0], idx[1], parts[0])
         if kind in (Kind.BV_ROTATE_LEFT, Kind.BV_ROTATE_RIGHT):
-            return "%s(%s, %d)" % (_INDEXED[kind], pretty(children[0]), idx[0])
-        return "%s(%d, %s)" % (_INDEXED[kind], idx[0], pretty(children[0]))
+            return "%s(%s, %d)" % (_INDEXED[kind], parts[0], idx[0])
+        return "%s(%d, %s)" % (_INDEXED[kind], idx[0], parts[0])
     if kind in _TO_FP:
         idx = t.indices()
-        args = ", ".join(pretty(c) for c in children)
+        args = ", ".join(parts)
         if kind in (Kind.FP_TO_UBV, Kind.FP_TO_SBV):
             return "%s(%s, %d)" % (_TO_FP[kind], args, idx[0])
         return "%s(%s, FPSort(%d, %d))" % (_TO_FP[kind], args, idx[0], idx[1])
     name = _PREFIX.get(kind) or Kind(kind).name
-    return "%s(%s)" % (name, ", ".join(pretty(c) for c in children))
+    return "%s(%s)" % (name, ", ".join(parts))
