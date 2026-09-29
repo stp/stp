@@ -2216,19 +2216,6 @@ void Cpp_interface::getValue(const ASTVec& v)
       os << " )" << std::endl;
       continue;
     }
-    // (get-value ...) asks for the value of arbitrary well-sorted terms and
-    // not just of variables, and the model evaluator already decides all of
-    // them -- including terms built over uninterpreted applications. The one
-    // shape with no value to print is an array: (get-model) prints the
-    // completed array interpretations instead. That refusal is
-    // unconditional, because reaching the printer with an array aborted the
-    // process rather than answering when array equality was disabled -- and
-    // disabled is the default.
-    if (n.GetType() == ARRAY_TYPE)
-    {
-      unsupported();
-      return;
-    }
     GlobalSTP->Ctr_Example->PrintSMTLIB2(os, n);
     os << std::endl;
   }

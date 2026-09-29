@@ -49,11 +49,8 @@
 ; CHECK-L: ( |p| true )
 ; A shared subterm is bound once rather than expanded at each use.
 ; CHECK: \(let \(\(\|\?let_k_0\|.*  #x05 \)
-; An array has no SMT-LIB2 value spelling here; (get-model) prints the
-; completed interpretation instead. It is refused, not evaluated -- reaching
-; the Boolean branch of the printer with an array used to abort the process,
-; in the default configuration.
-; CHECK-L: unsupported
+; Array-valued queries use the same completion as get-model.
+; CHECK-L: ( |a| (store ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x00) #x00 #x07) )
 ; CHECK: REACHED-END
 ;
 (set-option :produce-models true)

@@ -1,6 +1,7 @@
 """SMT-LIB command protocol checks that need separate channels or files."""
 
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -329,6 +330,48 @@ class AbstractValues(unittest.TestCase):
                 result = run(self.prefix + suffix)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stdout)
+
+
+class ArrayValues(unittest.TestCase):
+    def test_array_values_replay_and_preserve_stores(self):
+        source = """
+(set-option :produce-models true)
+(set-logic QF_ABV)
+(declare-const a (Array (_ BitVec 8) (_ BitVec 8)))
+(declare-const choose Bool)
+(assert choose)
+(assert (= a (store ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x11) #x01 #x22)))
+(check-sat)
+"""
+        term = '(store (ite choose a ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x00)) #x02 #x33)'
+        for queried, expected in [('a', '(store ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x11) #x01 #x22)'),
+                                  (term, '(store (store ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x11) #x01 #x22) #x02 #x33)')]:
+            with self.subTest(queried=queried):
+                result = run(source + '(get-value (' + queried + '))')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue(result.stdout.startswith('sat\n'))
+                tokens = iter(re.findall(r'\|[^|]*\||[()]|[^\s()]+', result.stdout[4:]))
+
+                def read(token):
+                    if token != '(':
+                        return token
+                    values = []
+                    for token in tokens:
+                        if token == ')':
+                            return values
+                        values.append(read(token))
+                    self.fail('unbalanced response')
+
+                def render(value):
+                    return '(' + ' '.join(map(render, value)) + ')' if isinstance(value, list) else value
+
+                pairs = read(next(tokens))
+                self.assertEqual(len(pairs), 1)
+                self.assertEqual(len(pairs[0]), 2)
+                value = render(pairs[0][1])
+                replay = run('(set-logic QF_ABV)(assert (distinct ' + value + ' ' + expected + '))(check-sat)')
+                self.assertEqual(replay.returncode, 0, replay.stdout + replay.stderr)
+                self.assertEqual(replay.stdout, 'unsat\n')
 
 
 if __name__ == '__main__':

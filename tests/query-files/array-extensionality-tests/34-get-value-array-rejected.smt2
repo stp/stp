@@ -1,10 +1,8 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; CHECK-L: ( |x|  #b10 )
-; CHECK-L: unsupported
-; Array-valued get-value is rejected as unsupported with the option on
-; (get-model prints completed array interpretations instead); scalar
-; get-value keeps working in the same session.
+; CHECK-L: ( |a| ((as const (Array (_ BitVec 2) (_ BitVec 2))) #b00) )
+; Scalar and array values are both available from the same model.
 (set-option :produce-models true)
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 2) (_ BitVec 2)))

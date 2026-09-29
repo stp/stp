@@ -244,6 +244,7 @@ public:
   void PrintFullCounterExampleSMTLIB2(std::ostream& os);
   void outputLine(std::ostream& os, const ASTNode &f, ASTNode se);
   
+  void PrintArrayValueSMTLIB2(std::ostream& os, const ASTNode& array);
   void PrintSMTLIB2(std::ostream& os, const ASTNode& n);
 
   void ClearCounterExampleMap(void) { CounterExampleMap.clear(); }
