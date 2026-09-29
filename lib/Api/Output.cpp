@@ -137,14 +137,10 @@ private:
 // sinks; so every route checks, and puts a dispatching buffer in front of
 // the new one, which unrouted writes still reach. One per buffer seen,
 // reused, and never freed: the streams may write through them until the
-// process ends.
+// process ends. Called with install_dispatch's lock held.
 void ensure_dispatch(std::ostream& stream, bool diagnostic)
 {
-  if (dynamic_cast<DispatchBuf*>(stream.rdbuf()) != nullptr)
-    return;
-  static std::mutex lock;
   static auto* const made = new std::map<std::pair<std::streambuf*, bool>, DispatchBuf*>();
-  std::lock_guard<std::mutex> hold(lock);
   std::streambuf* const current = stream.rdbuf();
   if (dynamic_cast<DispatchBuf*>(current) != nullptr)
     return;
@@ -154,8 +150,14 @@ void ensure_dispatch(std::ostream& stream, bool diagnostic)
   stream.rdbuf(wrapper);
 }
 
+// The check as well as the change under the lock: a route on another thread
+// may be putting a dispatching buffer in front of either stream, and reading
+// a stream's buffer while it does is a data race -- on the first routes of
+// managers made on several threads at once, say.
 void install_dispatch()
 {
+  static std::mutex lock;
+  std::lock_guard<std::mutex> hold(lock);
   ensure_dispatch(std::cout, false);
   ensure_dispatch(std::cerr, true);
 }

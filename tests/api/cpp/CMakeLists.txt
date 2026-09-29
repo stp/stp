@@ -51,6 +51,7 @@ AddSTPGTest(round-trips.cpp)
 AddSTPGTest(docs-snippets.cpp)
 AddSTPGTest(enum-pins.cpp)
 AddSTPGTest(session-fuzz.cpp)
+AddSTPGTest(thread-stress.cpp)
 
 # The 2.x C API's suites, rewritten against this API: libstp carries no 2.x
 # code, and tests/api/compat2 keeps a few of the originals to test libstp2. A
@@ -183,3 +184,9 @@ add_test(NAME api-generator-toml-subset
 # tests/api/python, so that ctest -L api runs the API's suites.
 get_property(_api_tests DIRECTORY PROPERTY TESTS)
 set_property(TEST ${_api_tests} APPEND PROPERTY LABELS api)
+
+# The suites that run the library on several threads at once also carry the
+# label threads, which the tsan job runs.
+set_property(TEST thread-stressTests-gtest errorsTests-gtest solverTests-gtest
+                  runsTests-gtest parsingTests-gtest fp-multi-checkerTests-gtest
+             APPEND PROPERTY LABELS threads)

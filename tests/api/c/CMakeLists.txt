@@ -63,3 +63,7 @@ target_link_libraries(c-interrupt${UNIT_TEST_EXE_SUFFIX} Threads::Threads)
 # tests/api/python, so that ctest -L api runs the API's suites.
 get_property(_api_tests DIRECTORY PROPERTY TESTS)
 set_property(TEST ${_api_tests} APPEND PROPERTY LABELS api)
+
+# The suites that run the library on several threads at once also carry the
+# label threads, which the tsan job runs.
+set_property(TEST c-interruptTests-gtest c-runtimeTests-gtest APPEND PROPERTY LABELS threads)
