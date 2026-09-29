@@ -25,3 +25,7 @@ Source = "https://github.com/stp/stp"
 
 [tool.setuptools]
 packages = ["stp"]
+
+# The extension's own sources, which an sdist needs to build it again.
+[tool.setuptools.package-data]
+stp = ["_core.pyx", "_core.pxd"]

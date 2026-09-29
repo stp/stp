@@ -35,6 +35,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 
 SKIP = 77
 
@@ -118,6 +119,22 @@ def main():
     if not os.path.isfile(os.path.join(site, "stp", "_gen_kinds.py")):
         print("pip installed no stp/_gen_kinds.py")
         return 1
+
+    # An sdist carries what the extension is built from.
+    dist = os.path.join(scratch, "dist")
+    subprocess.check_call([sys.executable, "setup.py", "-q", "sdist", "-d", dist], cwd=src, env=env,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    tarballs = os.listdir(dist)
+    if len(tarballs) != 1:
+        print("setup.py sdist wrote %s" % tarballs)
+        return 1
+    with tarfile.open(os.path.join(dist, tarballs[0])) as sdist:
+        names = sdist.getnames()
+    for need in ("stp/_core.pyx", "stp/_core.pxd"):
+        if not any(n.endswith("/" + need) for n in names):
+            print("the sdist lacks %s" % need)
+            return 1
+    print("ok: the sdist carries the extension's sources")
 
     # From the scratch directory, with nothing on the search paths, so the
     # package can only be the one pip installed and libstp only what its
