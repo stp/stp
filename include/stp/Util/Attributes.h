@@ -92,17 +92,17 @@ THE SOFTWARE.
 // normal cases. Configure with -DUSE_THREAD_LOCAL=OFF for plain globals.
 #if !USE_THREAD_LOCAL
 #define STP_THREAD_LOCAL
-#elif __cplusplus >= 201103L
-#define STP_THREAD_LOCAL thread_local
-#elif defined _WIN32 && (defined _MSC_VER || defined __ICL ||                  \
-                         defined __DMC__ || defined __BORLANDC__)
-
-//********************
-// For windows, this does not work, DLL_PUBLIC and thread-local together die
-//********************
-//#define STP_THREAD_LOCAL __declspec(thread)
+#elif defined(_MSC_VER) && defined(STP_SHARED_LIB)
+// A DLL cannot export thread-local data (MSVC's C2492), and GlobalSTP and its
+// neighbours are exported. No shared MSVC build is produced (see DLL_PUBLIC
+// above); one would keep them process-wide, so its managers could not run on
+// several threads at once.
 #define STP_THREAD_LOCAL
-
+#elif __cplusplus >= 201103L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201103L)
+// MSVC reports __cplusplus as 199711L unless given /Zc:__cplusplus, and every
+// MSVC build fell through to plain globals here; _MSVC_LANG is the standard
+// it actually compiles.
+#define STP_THREAD_LOCAL thread_local
 /* note that ICC (linux) and Clang are covered by __GNUC__ */
 #elif defined __GNUC__ || defined __SUNPRO_C || defined __xlC__
 #define STP_THREAD_LOCAL __thread
