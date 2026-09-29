@@ -1071,6 +1071,8 @@ void CommandLine::make_solver()
   // prints it back would).
   if (invocation.print_back() && !invocation.parse_only)
     options.reset("print-quickstat");
+  const api::OptionValue statistics = options.resolved("print-functionstat");
+  invocation.statistics = std::holds_alternative<bool>(statistics) && std::get<bool>(statistics);
   manager.emplace(config);
   solver = std::make_unique<stp::Solver>(*manager, options);
 }

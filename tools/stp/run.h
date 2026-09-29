@@ -54,6 +54,9 @@ struct Invocation
   bool print_back_smtlib2 = false;
   bool print_back_gdl = false;
   bool print_back_dot = false;
+  // -s: the solver's teardown prints statistics of its own (a Real session's,
+  // the floating-point abstraction's), so the run ends with it
+  bool statistics = false;
 
   bool print_back() const
   {

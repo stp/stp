@@ -305,17 +305,23 @@ int run(const Invocation& in, std::unique_ptr<stp::Solver> owned)
     std::fflush(stdout);
   }
 
-  // What stp's teardown says (a Real session's -s statistics) is said as the
-  // solver goes, and before the manager does.
-  owned.reset();
 #ifdef NDEBUG
-  // The manager's teardown frees every node of the run, which after a large
-  // input takes longer than the answer did (0.7 s after 200,000 assertions);
-  // the process is ending anyway, so a release build leaves it undone, as the
-  // command line always did. A build with assertions keeps it, and checks it.
+  // The teardown frees every node of the run, which after a large input
+  // takes a good part of what the answer did; the process is ending anyway,
+  // so a release build leaves it undone, as the command line always did.
+  // What the solver's teardown says -- a Real session's statistics, the
+  // floating-point abstraction's -- it says under -s alone, so under -s the
+  // solver still goes first. A build with assertions tears everything down,
+  // and checks it.
+  if (in.statistics)
+    owned.reset();
   std::exit(0);
-#endif
+#else
+  // What the solver's teardown says (under -s) is said before the manager
+  // goes.
+  owned.reset();
   return 0;
+#endif
 }
 
 } // namespace stp_cli
