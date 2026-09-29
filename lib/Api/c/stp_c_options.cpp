@@ -49,18 +49,10 @@ const detail::OptionSpec* spec_arg(const char* name, const char* fn, int arg)
 
 const detail::OptionSpec* stable_spec(stp_option o, const char* fn, int arg)
 {
-  if (static_cast<unsigned>(o) >= static_cast<unsigned>(STP_NUM_STABLE_OPTIONS))
-    detail::fail(ErrorCode::OPTION_UNKNOWN, fn, "not a stable option", arg);
-  std::size_t n = 0;
-  const detail::OptionSpec* specs = detail::option_specs(n);
-  std::size_t stable = 0;
-  for (std::size_t i = 0; i < n; ++i)
-    if (specs[i].tier == Tier::STABLE)
-    {
-      if (stable == static_cast<std::size_t>(o))
-        return &specs[i];
-      ++stable;
-    }
+  // the values are the rows' pinned ids, not their positions
+  if (static_cast<unsigned>(o) < static_cast<unsigned>(STP_NUM_STABLE_OPTIONS))
+    if (const detail::OptionSpec* spec = detail::stable_option_spec(static_cast<std::size_t>(o)))
+      return spec;
   detail::fail(ErrorCode::OPTION_UNKNOWN, fn, "not a stable option", arg);
 }
 

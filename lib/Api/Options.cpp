@@ -59,6 +59,11 @@ const OptionSpec* option_specs(std::size_t& count)
   count = kNumOptionSpecs;
   return kOptionSpecs;
 }
+
+const OptionSpec* stable_option_spec(std::size_t id)
+{
+  return id < kNumStableOptions ? &kOptionSpecs[kStableOptionRows[id]] : nullptr;
+}
 const char* const* cli_groups(std::size_t& count)
 {
   count = kNumCliGroups;
@@ -1494,16 +1499,9 @@ void Options::resolve() const { impl_->resolve("Options::resolve"); }
 
 std::string Options::name_of(Option o)
 {
-  std::size_t n = 0;
-  const detail::OptionSpec* specs = detail::option_specs(n);
-  std::size_t stable = 0;
-  for (std::size_t i = 0; i < n; ++i)
-    if (specs[i].tier == Tier::STABLE)
-    {
-      if (stable == static_cast<std::size_t>(o))
-        return specs[i].name;
-      ++stable;
-    }
+  // the values are the rows' pinned ids, not their positions
+  if (const detail::OptionSpec* spec = detail::stable_option_spec(static_cast<std::size_t>(o)))
+    return spec->name;
   detail::fail_option(ErrorCode::OPTION_UNKNOWN, std::to_string(static_cast<int>(o)),
                       "not a stable option");
 }
@@ -1511,19 +1509,9 @@ std::string Options::name_of(Option o)
 std::optional<Option> Options::stable_option(std::string_view name)
 {
   const detail::OptionSpec* s = detail::find_option(name);
-  if (s == nullptr || s->tier != Tier::STABLE)
+  if (s == nullptr || s->tier != Tier::STABLE || s->stable_id < 0)
     return std::nullopt;
-  std::size_t n = 0;
-  const detail::OptionSpec* specs = detail::option_specs(n);
-  std::size_t stable = 0;
-  for (std::size_t i = 0; i < n; ++i)
-  {
-    if (specs + i == s)
-      return static_cast<Option>(stable);
-    if (specs[i].tier == Tier::STABLE)
-      ++stable;
-  }
-  return std::nullopt;
+  return static_cast<Option>(s->stable_id);
 }
 
 } // namespace api

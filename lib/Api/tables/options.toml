@@ -37,6 +37,9 @@
 #
 # Schema
 #   name        the canonical key: every language and the CLI (--name) use it; lower-case, hyphenated
+#   id          a stable entry's value in the Option / stp_option enums, pinned: never changed or reused; a
+#               new stable entry takes the next (the generator refuses a duplicate, a gap, or an id off the
+#               stable tier)
 #   aliases     other CLI spellings accepted for compatibility (the underscore spellings, etc.)
 #   short       single-letter CLI form
 #   type        bool | int | uint | mode | enum | set | string | path | duration
@@ -89,6 +92,7 @@
 
 [[option]]
 name = "produce-models"
+id = 0
 type = "bool"
 default = true
 tier = "stable"
@@ -104,6 +108,7 @@ help = "build a model on sat so that Solver::model() is available; off saves the
 
 [[option]]
 name = "sat-backend"
+id = 1
 type = "enum"
 default = "auto"
 values = ["auto", "cryptominisat", "cadical", "minisat", "simplifying-minisat"]
@@ -118,6 +123,7 @@ help = "the SAT backend; one this build lacks is a recoverable OPTION_UNAVAILABL
 
 [[option]]
 name = "random-seed"
+id = 2
 type = "uint"
 default = 0
 tier = "stable"
@@ -129,6 +135,7 @@ help = "seed for every randomised component (SAT backend, phase and decision heu
 
 [[option]]
 name = "model-array-fill"
+id = 3
 type = "enum"
 cli_form = "none"
 default = "zero"
@@ -171,6 +178,7 @@ help = "end the run at the first CNF a check generates: the check stops there an
 
 [[option]]
 name = "logic"
+id = 4
 type = "enum"
 default = ""
 # the logics a script's set-logic accepts (lib/Parser/smt2.y), QF_UFABVFP and its LRA form included
@@ -186,6 +194,7 @@ help = "the SMT-LIB logic; the same entry (set-logic) writes when a script is pa
 
 [[option]]
 name = "simplify"
+id = 5
 type = "bool"
 default = true
 tier = "stable"
@@ -200,6 +209,7 @@ help = "construction-time folding by the term manager (the normal form in kinds.
 
 [[option]]
 name = "default-rounding-mode"
+id = 6
 type = "enum"
 cli_form = "none"
 default = "RNE"
@@ -480,6 +490,7 @@ excludes = ["--CVC", "--SMTLIB1"]
 # ============================================================================ generated entries
 [[option]]
 name = "disable-simplifications"
+id = 7
 type = "bool"
 cli_form = "flag"
 default = false
@@ -897,6 +908,7 @@ help = "keep cadical's search trail between the solve calls of a refinement loop
 
 [[option]]
 name = "threads"
+id = 8
 type = "int"
 default = 1
 range = { min = 1, max = 1024 }
@@ -936,6 +948,7 @@ help = "eagerly encode array-read axioms (Ackermannistaion)"
 
 [[option]]
 name = "array-equality"
+id = 9
 type = "mode"
 cli_form = "flag"
 default = "auto"
@@ -1634,6 +1647,7 @@ help = "independently re-derive every LRA conflict certificate before trusting i
 
 [[option]]
 name = "bv-eq-abstraction"
+id = 10
 type = "bool"
 default = false
 tier = "stable"
@@ -1683,6 +1697,7 @@ help = "initial prefix width for lazy BV equality refinement (0 = full)"
 
 [[option]]
 name = "bv-term-abstraction"
+id = 11
 type = "bool"
 default = false
 tier = "stable"
@@ -1957,6 +1972,7 @@ help = "offer the whole active stack to the exact-stack preprocessor on every in
 
 [[option]]
 name = "uninterpreted-functions"
+id = 12
 type = "mode"
 cli_form = "flag"
 default = "auto"
@@ -1984,6 +2000,7 @@ help = "how many congruence lemmas one refuted candidate may install (0: every c
 
 [[option]]
 name = "uf-ackermann"
+id = 13
 type = "mode"
 default = "auto"
 values = ["on", "off", "auto"]
@@ -2100,6 +2117,7 @@ help = "run the congruence checker on a candidate the bit-vector abstraction has
 
 [[option]]
 name = "uf-sort-width"
+id = 14
 type = "uint"
 default = 16
 range = { min = 1, max = 1024 }
@@ -2601,6 +2619,7 @@ help = "under the incremental driver, check only the records of the active encod
 
 [[option]]
 name = "fp-abstraction"
+id = 15
 type = "bool"
 default = false
 tier = "stable"
@@ -3025,6 +3044,7 @@ help = "AND-node count at or above which --cnf-generation-effort auto stops mini
 
 [[option]]
 name = "cnf-generation-effort"
+id = 16
 type = "enum"
 default = "auto"
 values = ["auto", "very-low", "low", "medium", "high", "very-high", "new-very-low", "new-low", "new-medium", "new-high", "gia-low", "gia-high", "gia-very-high"]
@@ -3060,6 +3080,7 @@ help = "new-* CNF rungs: encode a recovered if-then-else with all six prime impl
 
 [[option]]
 name = "incremental"
+id = 17
 type = "mode"
 cli_form = "flag"
 default = "auto"
@@ -3073,6 +3094,7 @@ help = "whether to solve incrementally -- keeping the SAT solver and the bit-bla
 
 [[option]]
 name = "incremental-auto-engage-at"
+id = 18
 type = "int"
 default = -1
 range = { min = -1 }
@@ -3196,6 +3218,7 @@ help = "promote long-stable pushed levels to permanent unit clauses on the incre
 
 [[option]]
 name = "max-num-confl"
+id = 19
 aliases = ["max_num_confl"]
 short = "g"
 type = "int"
@@ -3211,6 +3234,7 @@ help = "Number of conflicts after which the SAT solver gives up. -1 means never,
 
 [[option]]
 name = "max-time"
+id = 20
 aliases = ["max_time"]
 short = "k"
 type = "duration"
@@ -3225,6 +3249,7 @@ help = "Number of seconds after which the SAT solver gives up. The budget is for
 
 [[option]]
 name = "check-sanity"
+id = 21
 short = "d"
 type = "bool"
 cli_form = "flag"

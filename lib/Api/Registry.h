@@ -106,9 +106,12 @@ struct OptionSpec
   bool cli_empty_unset;      // an empty value on the command line leaves the entry unset
   const char* cli_help;      // what --help says, where `help` speaks of the API; nullptr: `help`
   const char* cli_default;   // the value tools/stp gives an entry it is not given, where not `default`
+  int stable_id;             // the pinned Option / stp_option value of a stable entry; -1 for the rest
 };
 
 STP_API_EXPORT const OptionSpec* option_specs(std::size_t& count);
+// The row of a stable id (an Option / stp_option value), or nullptr.
+STP_API_EXPORT const OptionSpec* stable_option_spec(std::size_t id);
 
 // The command-line data of tools/stp that is not a per-entry column
 // (lib/Api/gen/cli_table.inc, from the [[cli_group]], [[category]], [[alias]]
