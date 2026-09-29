@@ -3890,6 +3890,22 @@ struct IncrementalSolver::Impl
       channel->erase(k);
     seededModelKeys.clear();
 
+    // A whole-stack block starts from the raw assertions, independently of
+    // sigma0 and the ordinary route's base eliminations. Its own replay is
+    // complete. Combining the two can form a cycle: sigma0 may hold
+    // y -> ite(p, 1, x), while the block under !p eliminates x -> y.
+    // The block's free y must then get its SAT value or model completion,
+    // not the older definition which leads straight back to x.
+    if (scopes.hasWholeStackPreprocessing())
+    {
+      for (const ScopedElimination& d : scopes.activeEliminations())
+      {
+        (*channel)[d.symbol] = d.value;
+        seededModelKeys.insert(d.symbol);
+      }
+      return;
+    }
+
     for (ASTNodeMap::const_iterator it = sigma0.begin(); it != sigma0.end();
          ++it)
     {
