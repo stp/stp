@@ -46,6 +46,57 @@ THE SOFTWARE.
 
 using namespace stp;
 
+// Switching from per-level preprocessing to a whole-stack array block must
+// not combine differently oriented model substitutions into a cycle (#1190).
+TEST(incremental_query, whole_stack_models_do_not_replay_per_level_definitions)
+{
+  for (const char* incremental : {"auto", "on"})
+  {
+    SCOPED_TRACE(incremental);
+    TermManager tm;
+    Options options;
+    options.set("incremental", incremental);
+    options.set_bool("check-sanity", true);
+    Solver s(tm, options);
+    const Sort fp = tm.mk_fp_sort(3, 2);
+    const Sort bv = tm.mk_bv_sort(2);
+    const Term i = tm.declare("i", fp);
+    const Term x = tm.declare("x", bv);
+    const Term y = tm.declare("y", bv);
+    const Term p = tm.declare("p", tm.mk_bool_sort());
+    ASSERT_TRUE(s.check_sat().is_sat());
+    const Term definition = y == ite(p, tm.mk_bv(2, 1), x);
+    s.add((i == tm.mk_fp_nan(fp)) && definition);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    s.push();
+    s.add(!p);
+    ASSERT_TRUE(s.check_sat().is_sat());
+
+    const Sort array = tm.mk_array_sort(fp, bv);
+    const Term different = tm.mk_const_array(array, tm.mk_bv(2, 2)) !=
+        store(tm.mk_const_array(array, tm.mk_bv(2, 0)),
+              tm.mk_fp_from_bits(fp, "10111"), tm.mk_bv(2, 3));
+    s.add(different);
+    for (int repeat = 0; repeat < 2; ++repeat)
+    {
+      ASSERT_TRUE(s.check_sat().is_sat());
+      EXPECT_TRUE(s.model().bool_value(definition));
+      EXPECT_TRUE(s.model().bool_value(different));
+      EXPECT_EQ(s.model().uint64_value(x), s.model().uint64_value(y));
+    }
+    s.pop();
+    ASSERT_TRUE(s.check_sat().is_sat()); // per-level replay is needed again
+    EXPECT_TRUE(s.model().bool_value(definition));
+    s.push();
+    s.add(p && (x == tm.mk_bv(2, 2)) && different);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_EQ(s.model().uint64_value(x), 2u);
+    EXPECT_EQ(s.model().uint64_value(y), 1u);
+    s.add(y == tm.mk_bv(2, 0));
+    EXPECT_TRUE(s.check_sat().is_unsat());
+  }
+}
+
 // The classic bracket, over rounds whose verdicts alternate: retraction of
 // both the pushed level and the previous query's negation must be real.
 TEST(incremental_query, brackets_alternate_verdicts)
