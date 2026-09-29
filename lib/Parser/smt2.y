@@ -1148,6 +1148,25 @@ namespace stp
     return nullptr;
   }
 
+  // (fp.to_ieee_bv f) -- STP's extension, the inverse of ((_ to_fp e s) bv):
+  // a float's packed bits (sign, exponent, significand) as a bitvector of
+  // width e + s; every NaN gives the canonical pattern.
+  ASTNode* createFPToIEEEBV(ASTNode* expr)
+  {
+    if (expr->GetSourceSort().kind() !=
+        stp::SourceSort::Kind::FloatingPoint)
+    {
+      delete expr;
+      fatal_yyerror("fp.to_ieee_bv takes a floating-point operand.");
+      return nullptr;
+    }
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(
+            stp::FP_TO_IEEE_BV, expr->GetExpWidth() + expr->GetSigWidth(), *expr));
+    delete expr;
+    return n;
+  }
+
   // ((_ to_fp e s) bv) -- reinterpret a bitvector's bits as a float.
   ASTNode* createFPFromBits(unsigned int exp_width, unsigned int sig_width,
                             ASTNode* bits)
@@ -2007,6 +2026,7 @@ namespace stp
 %token FP_GT_TOK;
 %token FP_EQ_TOK;
 %token FP_TO_REAL_TOK;
+%token FP_TO_IEEE_BV_TOK;
 %token FP_ISNORMAL_TOK;
 %token FP_ISSUBNORMAL_TOK;
 %token FP_ISZERO_TOK;
@@ -3869,6 +3889,10 @@ an_fp_term:
 | LPAREN_TOK FP_TO_REAL_TOK an_term RPAREN_TOK
 {
   $$ = createFpToReal($3);
+}
+| LPAREN_TOK FP_TO_IEEE_BV_TOK an_term RPAREN_TOK
+{
+  $$ = createFPToIEEEBV($3);
 }
 | UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
 {

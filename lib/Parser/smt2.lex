@@ -695,6 +695,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
  /* Functions for FP */
 "fp.to_real" { return fpKeyword(FP_TO_REAL_TOK); }
+"fp.to_ieee_bv" { return fpKeyword(FP_TO_IEEE_BV_TOK); }
 "fp.abs" { return fpKeyword(FP_ABS_TOK); }
 "fp.neg" { return fpKeyword(FP_NEG_TOK); }
 "fp.add" { return fpKeyword(FP_ADD_TOK); }

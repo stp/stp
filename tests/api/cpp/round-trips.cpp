@@ -107,6 +107,7 @@ std::vector<std::pair<std::string, Term>> one_per_kind(TermManager& tm)
   ts.emplace_back("FP_TO_UBV", tm.mk_term(Kind::FP_TO_UBV, {rm, fx}, {8}) == x);
   ts.emplace_back("FP_TO_SBV", tm.mk_term(Kind::FP_TO_SBV, {rm, fx}, {8}) == x);
   ts.emplace_back("FP_TO_REAL", real_lt(tm.mk_term(Kind::FP_TO_REAL, {fx}), r));
+  ts.emplace_back("FP_TO_IEEE_BV", tm.mk_term(Kind::FP_TO_IEEE_BV, {fx}) == tm.mk_bv(16, 0x3c00));
   ts.emplace_back("REAL arithmetic",
                   real_le(tm.mk_term(Kind::REAL_ADD, {r, t, r}),
                           tm.mk_term(Kind::REAL_SUB,
