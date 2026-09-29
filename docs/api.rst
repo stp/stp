@@ -254,7 +254,10 @@ Limits of the alpha
 -  CryptoMiniSat is interrupted between its solver calls only.
 -  ``fp.to_real`` takes formats whose exponent has at most 16 bits (the exact
    arithmetic's number limits), and a Real converts to a float only when it
-   and the rounding mode are both values.
+   and the rounding mode are both values. Relating two conversions costs about
+   four times more per exponent bit: well under a second at binary64, a minute
+   or more at binary128; at 16 bits it exceeds the number limits, and the check
+   answers unknown (``INCOMPLETE``).
 -  The float literal constructors (``mk_fp`` from a ``double`` or from text)
    need an exponent of at least 3 bits; ``mk_fp_from_bits`` builds a value of
    any format.

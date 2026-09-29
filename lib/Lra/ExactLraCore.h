@@ -119,6 +119,11 @@ class ExactLraCore final
 
   CoreStatistics statistics() const noexcept;
   CheckStatus status() const noexcept;
+  // Whether a number budget refused work in the middle of a change the core
+  // cannot undo, which tears the core down as a fault does (every later
+  // call is refused until reset). Nothing is wrong with it: the solve only
+  // ran out of budget, and gives up rather than reporting an error.
+  bool exhausted() const noexcept;
   CoreGeneration generation() const noexcept;
 
   void reset() noexcept;
