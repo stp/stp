@@ -1096,7 +1096,7 @@ TEST(Parsing, a_script_reset_allows_compatible_and_local_redeclarations)
                    " (declare-sort V 0) (declare-fun y () V) (assert (= x #x5))", mode);
       EXPECT_TRUE(tm.symbol("x")->same_as(x));
       EXPECT_NE(tm.symbol("y")->sort(), u);
-      API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, a != *tm.symbol("y"));
+      API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, (void)(a != *tm.symbol("y")));
       ASSERT_TRUE(s.check_sat().is_sat());
       EXPECT_EQ(s.model().uint64_value(x), 5u);
       EXPECT_TRUE(other.check_sat().is_sat());
