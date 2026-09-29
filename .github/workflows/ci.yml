@@ -661,6 +661,113 @@ jobs:
       run: ASAN_OPTIONS=detect_leaks=0 ctest --parallel "$(nproc)" -L api2 --output-on-failure
       working-directory: build
 
+  # ThreadSanitizer over the suites that run the library on several threads
+  # at once (the label threads), among them thread-stress: managers on their
+  # own threads under two dozen option sets. The API lets each manager be
+  # used from any thread, one call at a time, so whatever the threads share is
+  # the library's -- static tables and caches the options reach -- and two of
+  # those raced before, each only under the option that reaches it. The
+  # dependencies are built with the same flags, so CaDiCaL's two benign
+  # global writes are suppressed (tests/api/tsan-suppressions.txt).
+  build-tsan:
+    name: clang (tsan)
+    runs-on: ubuntu-latest
+
+    env:
+      CCACHE_MAXSIZE: 400M
+      TSAN_OPTIONS: halt_on_error=1 second_deadlock_stack=1
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          clang \
+          cmake \
+          flex \
+          git \
+          llvm \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U 'lit~=23.1'
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: deps
+        key: deps-x86_64-tsan-${{ steps.deps-key.outputs.key }}
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-tsan/${{ github.run_id }}
+        restore-keys: ccache-tsan/
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        CC=clang CXX=clang++ cmake \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+          -DUSE_CRYPTOMINISAT:STRING=OFF \
+          -DUSE_CADICAL:BOOL=ON \
+          -DSTP_ALLOCATOR=system \
+          -DENABLE_PYTHON_API:BOOL=OFF \
+          -DENABLE_TESTING:BOOL=ON \
+          -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
+          -DCMAKE_C_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
+          -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread" \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -G Ninja ..
+
+    # The threaded suites' programs only. Two of the Real-arithmetic suites
+    # replace operator new to inject allocation failures, which a program
+    # linked with ThreadSanitizer's runtime cannot also define.
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)" --target \
+          thread-stressTests errorsTests solverTests runsTests parsingTests \
+          fp-multi-checkerTests c-interruptTests c-runtimeTests
+        ccache --show-stats
+      working-directory: build
+
+    - name: The build really is instrumented
+      run: |
+        set -u
+        f=build/lib/libstp.so
+        n=$(nm -D "$f" | grep -c '__tsan_' || true)
+        echo "$f: $n ThreadSanitizer entry points"
+        if [ "$n" -eq 0 ]; then
+          echo "::error::$f was not built with -fsanitize=thread"
+          exit 1
+        fi
+
+    - name: Test the threaded suites
+      run: |
+        TSAN_OPTIONS="$TSAN_OPTIONS suppressions=$GITHUB_WORKSPACE/tests/api/tsan-suppressions.txt" \
+          ctest --parallel "$(nproc)" -L threads --output-on-failure
+      working-directory: build
+
   build-cadical:
     name: gcc (cadical ${{ matrix.cadical_tag }})
     runs-on: ubuntu-latest
