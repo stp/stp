@@ -1,21 +1,23 @@
-# The Python bindings on their own, against an STP that is already installed:
+# The Python package on its own, against an STP that is already installed:
 #
 #   python3 -m pip install ./bindings/python
 #
-# The package is pure Python and loads libstp through ctypes, so one copy
-# works under every Python 3, and nothing here builds STP. The version is
-# STP's, edited by hand at release time (docs/releasing.rst).
+# setup.py compiles the extension stp._core against the installation's headers
+# and links its libstp, so this needs a C compiler and the interpreter's
+# development headers; pip fetches Cython. README.md says how the installation
+# is found. The version is STP's, edited by hand at release time
+# (docs/releasing.rst).
 
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=61", "Cython>=3.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "stp"
 version = "2.4.1"
-description = "Python bindings for the STP constraint solver"
+description = "Python API for the STP constraint solver"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.8"
 
 [project.urls]
 Homepage = "https://stp.github.io/"
@@ -23,3 +25,7 @@ Source = "https://github.com/stp/stp"
 
 [tool.setuptools]
 packages = ["stp"]
+
+# The extension's own sources, which an sdist needs to build it again.
+[tool.setuptools.package-data]
+stp = ["_core.pyx", "_core.pxd"]

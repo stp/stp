@@ -60,9 +60,8 @@ enum inputStatus
 };
 
 // return types for the GetType() function in ASTNode class.
-// FLOATINGPOINT_TYPE is appended after UNKNOWN_TYPE, not slotted in sort
-// order. The legacy prefix of the C API's type_t mirrors these values
-// numerically, preserving values compiled into pre-floating-point clients.
+// FLOATINGPOINT_TYPE follows UNKNOWN_TYPE rather than sort order: it was
+// added last, and nothing compares these values.
 // Source-only sorts such as RoundingMode are intentionally absent here:
 // GetType() describes the carrier used by the bit-vector pipeline.
 enum types
@@ -113,7 +112,7 @@ enum class UnknownReason
   // appended rather than inserted so that nothing already reporting
   // Incomplete moves. SMT-LIB2 spells all of them the same, as (incomplete
   // "..."), since the sentence already says which; they are separate values
-  // because a caller holding only the value -- vc_getReasonUnknown -- has
+  // because a caller holding only the value -- the API's UnknownReason -- has
   // nothing to read the sentence for, and the action differs.
   Incomplete,
   // A declared sort's carrier was too narrow for the query, so an unsat that
@@ -127,7 +126,10 @@ enum class UnknownReason
   AssumedInjectivity,
   // --aig-node-budget stopped bit-blasting before the AIG exhausted memory.
   // Raise that budget; the accompanying sentence says what it stopped at.
-  AIGBudget
+  AIGBudget,
+  // The 3.x API's stop-after-cnf option: the query was abandoned, as asked,
+  // once its CNF had been generated (and written to the manager's cnf_sink).
+  StoppedAfterCnf
 };
 
 // Empty vector. Useful commonly used ASTNodes

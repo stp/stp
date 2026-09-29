@@ -58,18 +58,16 @@ the literal argument of ``to_fp``. In ``QF_UFLRA`` a function may take and
 return Reals. How its congruence is decided is described in
 :doc:`uninterpreted-functions`, under "Real positions".
 
-The C, C++ and Python interfaces build the same terms. The C interface
-has ``vc_realType``, ``vc_realConstExprFromStr``, ``vc_realConstExpr``
-and ``vc_realPlusExpr`` through ``vc_realGeExpr``. It reads models
-through ``vc_getRealModelValue`` (and its ``Numerator``, ``Denominator``
-and ``SMTLIBValue`` forms), which return strings the caller frees with
-``vc_deleteString``. The probes ``vc_hasQFLRA``, ``vc_hasQFUFLRA``,
-``vc_hasRealConstruction`` and ``vc_hasRealIte`` let a program check for
-support first. Python has ``Solver.real``, ``Solver.reals``,
-``Solver.realval`` and ``RealExpr``, whose model values are exact
-``ExactRealValue`` objects. Through the C and C++ interfaces a query may
-mix Reals with bit-vectors, arrays and floating point, which SMT-LIB's
-logic names cannot express.
+The C++, C and Python APIs (:doc:`api`) build the same terms. In C++
+the sort is ``TermManager::mk_real_sort`` and a constant ``mk_real``, from
+an integer, a numerator and denominator, or a literal such as ``"-3/7"``
+or ``"0.25"``; the arithmetic is the ordinary operators and the
+comparisons ``real_lt`` and its siblings. A model reads a value exactly,
+as a numerator and denominator (``Model::real_value``). Python has
+``Real``, ``Reals``, ``RealVal`` and ``Q``, whose model values give
+``as_fraction()``. The capability ``lra`` lets a program check for
+support first. Through the API a query may mix Reals with bit-vectors,
+arrays and floating point, which SMT-LIB's logic names cannot express.
 
 How a query is decided
 ----------------------
@@ -217,8 +215,9 @@ before it is committed. A model that fails is refused, never printed.
 ``-d`` (``--check-sanity``) adds STP's ordinary model check on top.
 Solving a query with the float tier on and off, or with presolve on and
 off, and comparing the answers is therefore a differential test of either
-one. The C API flags below exist so that a client can run such
-comparisons. Two self-checks re-derive what the core already proves:
+one; the options below are set through the API too, so that a client
+can run such comparisons. Two self-checks re-derive what the core already
+proves:
 
 ``--lra-verify-conflicts``
   Re-derive every conflict certificate independently before the search
@@ -504,52 +503,17 @@ arithmetic contexts as well as the final context. The other work fields
 describe the final context only, and can omit work when rebuilding is
 enabled.
 
-C API
------
+Through the API
+---------------
 
-``vc_setInterfaceFlags`` sets the LRA controls a library caller is most
-likely to vary. The ordinals are fixed and appended after the
-floating-point abstraction's; ``param_value`` is nonzero for on and zero
-for off.
+The LRA controls above are options of the API as well, under the same
+names without the leading dashes: ``lra-theory-propagation``,
+``lra-verify-conflicts``, ``lra-verify-canonical`` (process-wide, read
+when each budget is created), the ``lra-presolve-*`` family,
+``lra-float-driver`` and ``lra-incremental-session``. The last is read
+only by an SMT-LIB2 script's ``check-sat``, so it applies to input run
+through ``Solver::parse`` and not to a check the API makes itself.
 
-.. list-table::
-   :header-rows: 1
-   :widths: 40 10 50
-
-   * - Flag
-     - Value
-     - Option
-   * - ``LRA_THEORY_PROPAGATION``
-     - 61
-     - ``--lra-theory-propagation``
-   * - ``LRA_VERIFY_CONFLICTS``
-     - 62
-     - ``--lra-verify-conflicts``
-   * - ``LRA_VERIFY_CANONICAL``
-     - 63
-     - ``--lra-verify-canonical``; process-wide, read when each budget is created
-   * - ``LRA_PRESOLVE_SUBST``
-     - 64
-     - ``--lra-presolve-subst``
-   * - ``LRA_PRESOLVE_BOUNDS``
-     - 65
-     - ``--lra-presolve-bounds``
-   * - ``LRA_PRESOLVE_ROWS``
-     - 66
-     - ``--lra-presolve-rows``
-   * - ``LRA_PRESOLVE_PROPAGATE``
-     - 67
-     - ``--lra-presolve-propagate``
-   * - ``LRA_PRESOLVE_UNCONSTRAINED``
-     - 68
-     - ``--lra-presolve-unconstrained``
-   * - ``LRA_FLOAT_DRIVER``
-     - 69
-     - ``--lra-float-driver``
-   * - ``LRA_INCREMENTAL_SESSION``
-     - 70
-     - ``--lra-incremental-session``; only the SMT-LIB ``check-sat`` path reads it, ``vc_query`` does not
-
-A Real constructor that exceeds the exact-arithmetic budget returns NULL
-through the registered error handler, and a query that exceeds it answers
-``unknown``.
+A Real constant, term or assertion that exceeds the exact-arithmetic
+budget is refused with a recoverable error, and the manager stays usable;
+a check that exceeds it answers ``unknown``.

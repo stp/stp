@@ -83,6 +83,78 @@ bool IncrementalSolver::lastUnsatHasAssumptionGranularity() const
          impl->lastLevelIndividual;
 }
 
+namespace
+{
+// Whether any top-level conjunct of `a` is in `failed`. The driver reports
+// failed conjuncts of the assumptions LEVEL, and an assumption that is
+// itself a conjunction was split before it was assumed, so membership is
+// judged against its flattened conjuncts.
+bool assumptionFailed(const ASTNode& a, const ASTNodeSet& failed,
+                      const ASTNode& trueNode)
+{
+  std::vector<ASTNode> pending(1, a);
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (n == trueNode)
+      continue;
+    if (n.GetKind() == AND)
+    {
+      for (const ASTNode& c : n)
+        pending.push_back(c);
+      continue;
+    }
+    if (failed.count(n))
+      return true;
+  }
+  return false;
+}
+} // namespace
+
+std::vector<size_t>
+IncrementalSolver::lastUnsatAssumptionIndices(const ASTVec& assumptions) const
+{
+  std::vector<size_t> all(assumptions.size());
+  for (size_t i = 0; i < all.size(); ++i)
+    all[i] = i;
+  if (!lastUnsatHasAssumptionGranularity())
+    return all;
+  const std::vector<ASTNode> failed = lastUnsatAssumptionConjuncts();
+  const ASTNodeSet failedSet(failed.begin(), failed.end());
+  STPMgr* bm = impl->bm;
+
+  ASTVec semantic;
+  const ASTVec* matching = &assumptions;
+  if (bm->has_distinct)
+  {
+    semantic.reserve(assumptions.size());
+    for (const ASTNode& a : assumptions)
+      semantic.push_back(lowerDistinct(bm, a));
+    matching = &semantic;
+  }
+
+  for (const ASTNode& failedConjunct : failedSet)
+  {
+    const ASTNodeSet singleton{failedConjunct};
+    bool found = false;
+    for (const ASTNode& a : *matching)
+      if (assumptionFailed(a, singleton, bm->ASTTrue))
+      {
+        found = true;
+        break;
+      }
+    if (!found)
+      return all;
+  }
+
+  std::vector<size_t> used;
+  for (size_t i = 0; i < matching->size(); ++i)
+    if (assumptionFailed((*matching)[i], failedSet, bm->ASTTrue))
+      used.push_back(i);
+  return used;
+}
+
 std::vector<ASTNode> IncrementalSolver::lastUnsatAssumptionConjuncts() const
 {
   std::vector<ASTNode> out;
@@ -398,9 +470,9 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // for symbols this round never encoded. active() deliberately outlives the
   // solve that set it -- the model surfaces read the frozen graph after the
   // solve returns -- so only the next round can retire it, and the SMT-LIB2
-  // pop is the only caller that does so itself: the C API's vc_pop
-  // deliberately clears nothing (its model outlives the bracket), and
-  // check-sat-assuming's frame pop keeps the model too.
+  // pop is the only caller that does so itself: the API's pop clears nothing
+  // (it takes its model's snapshot first), and check-sat-assuming's frame
+  // pop keeps the model too.
   //
   // This is ahead of the routing because every route materializes candidates.
   // The exact-stack route begins a solve of its own only for an
@@ -553,8 +625,8 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   }
   const bool needRefinement = activeHasArrays && !uf.ackermannisation;
 
-  // Derived afresh from the genuine inputs -- including the C API's direct
-  // request, which now has its own field -- so that a check needing a
+  // Derived afresh from the genuine inputs -- including a direct request for
+  // a counterexample, which has its own field -- so that a check needing a
   // candidate model for refinement cannot leave construction switched on
   // for every later check, and with it the frontend's shortcut for a
   // repeated query whose model nobody wants.

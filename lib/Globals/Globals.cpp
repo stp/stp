@@ -43,9 +43,6 @@ THREAD_LOCAL_IE STPMgr* GlobalParserBM;
 // Used exclusively for parsing.
 THREAD_LOCAL_IE Cpp_interface* GlobalParserInterface;
 
-// FIXME: This isn't in Globals.h so how can anyone use this?
-void (*vc_error_hdlr)(const char* err_msg) = 0;
-
 // This is reusable empty vector, for representing empty children
 // arrays
 ASTVec _empty_ASTVec;

@@ -28,12 +28,17 @@ THE SOFTWARE.
 namespace stp
 {
 
+std::mutex& darLibraryLock()
+{
+  static std::mutex lock;
+  return lock;
+}
+
 void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
                                      BBNodeManagerAIG& mgr)
 {
   if (!needAbsRef && uf.AIG_rewrites_iterations)
   {
-    ensureDarLibrary();
     Dar_RwrPar_t Pars, *pPars = &Pars;
     Dar_ManDefaultRwrParams(pPars);
 
@@ -57,7 +62,7 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
       Aig_Man_t* pTemp;
       mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
       Aig_ManStop(pTemp);
-      Dar_ManRewrite(mgr.aigMgr, pPars);
+      rewriteWithDarLibrary(mgr.aigMgr, pPars);
 
       // Rewriting can leave a node with no fanout behind. Dar_LibBuildBest()
       // builds each replacement subgraph bottom up with Aig_And(), and a

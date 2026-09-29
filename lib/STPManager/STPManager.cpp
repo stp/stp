@@ -629,6 +629,103 @@ ASTNode STPMgr::CreateRMConst(unsigned mode)
   return ASTNode(LookupOrCreateRMConst(temp));
 }
 
+ASTNode STPMgr::CreateConstArray(const SourceSort& array_sort,
+                                 const ASTNode& default_value)
+{
+  if (array_sort.kind() != SourceSort::Kind::Array)
+    FatalError("CreateConstArray: the sort is not an array sort");
+  if (default_value.GetType() == ARRAY_TYPE ||
+      default_value.GetType() == BOOLEAN_TYPE)
+    FatalError("CreateConstArray: the default must be a scalar term",
+               default_value);
+  const ASTNode free_symbol = firstFreeSymbol(default_value);
+  if (!free_symbol.IsNull())
+    FatalError("CreateConstArray: the default must be a value, and it "
+               "depends on this symbol",
+               free_symbol);
+  if (default_value.GetSTPMgr() != this)
+    FatalError("CreateConstArray: the default belongs to another manager",
+               default_value);
+  const SourceSort element = array_sort.element();
+  if (default_value.GetValueWidth() != element.packedWidth())
+    FatalError("CreateConstArray: the default's width is not the element "
+               "sort's width",
+               default_value);
+  const SourceSort given = default_value.GetSourceSort();
+  if (given.isKnown() && given != element)
+    FatalError("CreateConstArray: the default's sort is not the element "
+               "sort",
+               default_value);
+
+  const std::pair<SourceSort, ASTNode> key(array_sort, default_value);
+  const auto it = constArraysByKey.find(key);
+  if (it != constArraysByKey.end())
+    return it->second;
+  const ASTNode symbol = CreateFreshSourceVariable(array_sort, "constarray");
+  constArrayDefaults[symbol] = default_value;
+  constArraysByKey[key] = symbol;
+  return symbol;
+}
+
+bool STPMgr::isConstArray(const ASTNode& n) const
+{
+  return n.GetKind() == SYMBOL &&
+         constArrayDefaults.find(n) != constArrayDefaults.end();
+}
+
+ASTNode STPMgr::firstFreeSymbol(const ASTNode& t) const
+{
+  ASTNodeSet visited;
+  std::vector<ASTNode> pending(1, t);
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (!visited.insert(n).second)
+      continue;
+    // a constant array is a value (its own default was checked)
+    if (n.GetKind() == SYMBOL && !isConstArray(n))
+      return n;
+    for (const ASTNode& child : n.GetChildren())
+      pending.push_back(child);
+  }
+  return ASTNode();
+}
+
+const ASTNode& STPMgr::constArrayDefault(const ASTNode& n) const
+{
+  const ASTNodeMap::const_iterator it = constArrayDefaults.find(n);
+  if (it == constArrayDefaults.end())
+    FatalError("constArrayDefault: not a constant array", n);
+  return it->second;
+}
+
+ASTNode STPMgr::CreateUninterpretedConst(const ASTNode& carrier,
+                                         const SourceSort& sort)
+{
+  if (sort.kind() != SourceSort::Kind::Uninterpreted)
+    FatalError("CreateUninterpretedConst requires a declared sort");
+  if (carrier.GetKind() != BVCONST || carrier.GetValueWidth() != sort.packedWidth())
+    FatalError("CreateUninterpretedConst: the carrier must be a constant of "
+               "the sort's carrier width: ",
+               carrier);
+  ASTBVConst* src = static_cast<ASTBVConst*>(carrier._int_node_ptr);
+  ASTUninterpretedConst temp(this, src->GetBVConst(), sort);
+  return ASTNode(LookupOrCreateUninterpretedConst(temp));
+}
+
+ASTUninterpretedConst*
+STPMgr::LookupOrCreateUninterpretedConst(ASTUninterpretedConst& s)
+{
+  const ASTBVConstSet::const_iterator it = _bvconst_unique_table.find(&s);
+  if (it != _bvconst_unique_table.end())
+    return static_cast<ASTUninterpretedConst*>(*it);
+
+  ASTUninterpretedConst* copy = new ASTUninterpretedConst(s);
+  _bvconst_unique_table.insert(copy);
+  return copy;
+}
+
 ASTRMConst* STPMgr::LookupOrCreateRMConst(ASTRMConst& s)
 {
   const ASTBVConstSet::const_iterator it = _bvconst_unique_table.find(&s);
@@ -1004,13 +1101,6 @@ void STPMgr::Push(void)
   }
 }
 
-void STPMgr::NoteRealAssertionRefused() noexcept
-{
-  const size_t depth = _asserts.size();
-  if (lra_refused_depth == 0 || depth < lra_refused_depth)
-    lra_refused_depth = depth;
-}
-
 void STPMgr::Pop(void)
 {
   InvalidateRealModel();
@@ -1021,8 +1111,6 @@ void STPMgr::Pop(void)
   ASTVec* c = _asserts.back();
   delete c;
   _asserts.pop_back();
-  if (lra_refused_depth != 0 && _asserts.size() < lra_refused_depth)
-    lra_refused_depth = 0;
 }
 
 void STPMgr::PopPreservingRealModel(void)
@@ -1034,21 +1122,6 @@ void STPMgr::PopPreservingRealModel(void)
   ASTVec* c = _asserts.back();
   delete c;
   _asserts.pop_back();
-  if (lra_refused_depth != 0 && _asserts.size() < lra_refused_depth)
-    lra_refused_depth = 0;
-}
-
-//BUG this is most probably wrongly handled. It gets propagated and messed up
-//with the state. On the next query, this mixed state then causes trouble
-void STPMgr::SetQuery(const ASTNode& q)
-{
-  InvalidateRealModel();
-  _current_query = q;
-}
-
-const ASTNode STPMgr::GetQuery()
-{
-  return _current_query;
 }
 
 // return a vector of the levels.
@@ -1192,8 +1265,30 @@ UFContext* STPMgr::getUFContext()
   return uninterpretedFunctions;
 }
 
+void STPMgr::ExposeNode(const ASTNode& n)
+{
+  if (n.IsNull() || !exposed_nodes_live)
+    return;
+  exposed_nodes.emplace(n.GetNodeNum(), n._int_node_ptr);
+  n._int_node_ptr->exposed = true;
+}
+
+ASTNode STPMgr::ExposedNode(uint64_t id) const
+{
+  const auto it = exposed_nodes.find(id);
+  return it == exposed_nodes.end() ? ASTNode() : ASTNode(it->second);
+}
+
+void STPMgr::WithdrawExposedNode(uint64_t id)
+{
+  if (exposed_nodes_live)
+    exposed_nodes.erase(id);
+}
+
 STPMgr::~STPMgr()
 {
+  exposed_nodes_live = false;
+  exposed_nodes.clear();
   ClearAllTables();
 
   delete extensionality;
@@ -1212,7 +1307,6 @@ STPMgr::~STPMgr()
   ASTFalse = ASTNode(0);
   ASTTrue = ASTNode(0);
   ASTUndefined = ASTNode(0);
-  _current_query = ASTNode(0);
   // dummy_node = ASTNode(0);
 
   zeroes.clear();
@@ -1234,7 +1328,12 @@ STPMgr::~STPMgr()
   // and the implicit member-destruction phase runs after those tables are gone.
   uninterpreted_elements.clear();
   uninterpreted_sorts_printed.clear();
+  constArrayDefaults.clear();
+  constArraysByKey.clear();
   uf_injectivity_guard = ASTNode();
+  DestroyFpToRealState(fp_to_real_state);
+  fp_to_real_state = nullptr;
+  fp_to_real_special_ids.clear();
 
   Introduced_SymbolsSet.clear();
   _symbol_unique_table.clear();

@@ -390,6 +390,14 @@ SOLVER_RETURN_TYPE STP::checkSatRealSession(const std::vector<ASTVec*>& levels,
   }
   catch (...)
   {
+    // A run that ended at the session's first CNF ends here too: declining
+    // would hand the check to the batch path, which would generate the CNF
+    // again.
+    if (bm->run_ended_after_cnf)
+    {
+      handled = true;
+      return bm->unknownResult();
+    }
     return decline();
   }
 }

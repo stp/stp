@@ -1129,8 +1129,26 @@ void LraSolveContext::giveUp(std::string detail) noexcept
 
 void LraSolveContext::invalidate(std::string detail) noexcept
 {
-  status_ = SolveContextStatus::Invalid;
+  // A core that a number budget stopped in the middle of a change had to be
+  // torn down (ExactLraCore::exhausted), and refuses everything after; the
+  // refusal that brings the context here is the budget's, and the solve
+  // gives up rather than reporting a fault -- unless the context had already
+  // failed for a reason of its own.
+  const bool budget = status_ == SolveContextStatus::Ready && core_ != nullptr &&
+                      core_->exhausted();
+  status_ = budget ? SolveContextStatus::ResourceLimit : SolveContextStatus::Invalid;
   failure_detail_ = std::move(detail);
+  if (budget)
+  {
+    try
+    {
+      failure_detail_ = "the exact linear arithmetic solver could not decide "
+                        "this query within its number limits";
+    }
+    catch (...)
+    {
+    }
+  }
   clearSemanticState();
   bindings_ready_ = false;
   component_bindings_.clear();

@@ -3,10 +3,11 @@
 // DID ask is making its forced first solve.
 //
 // This was a literal in two places. The SMT-LIB2 reader read
-// --incremental-auto-engage-at and applied a per-logic default; the C API
-// hard-coded "from the third solve" and consulted nothing, so the documented
-// override was inert for every embedder and the two frontends could drift
-// apart silently. These pin the policy itself, which both now call.
+// --incremental-auto-engage-at and applied a per-logic default; the 2.x C
+// API hard-coded "from the third solve" and consulted nothing, so the
+// documented override was inert for every embedder and the two frontends
+// could drift apart silently. These pin the policy itself, which the
+// SMT-LIB2 reader and the API now both call.
 #include "stp/Incremental/IncrementalSolver.h"
 #include <gtest/gtest.h>
 

@@ -270,11 +270,24 @@ AdapterResult LraCandidateAdapter::refusal(const std::exception& failure,
   if (!gaveUpOnABudget(failure))
   {
     context_.invalidate(failure.what());
-    return result(AdapterOutcome::InternalNoResult, candidate,
-                  context_.failure_detail_);
+    return invalidated(candidate);
   }
   context_.giveUp(failure.what());
   return result(AdapterOutcome::ResourceLimit, candidate,
+                context_.failure_detail_);
+}
+
+// Over a core that a number budget stopped in the middle of a change
+// (ExactLraCore::exhausted), the context gives up rather than failing
+// (LraSolveContext::invalidate): the check ran out of budget, which is what
+// the propagating path reports for the same stop. Anything else is a fault.
+AdapterResult LraCandidateAdapter::invalidated(std::uint64_t candidate) const
+{
+  if (context_.status() == SolveContextStatus::ResourceLimit)
+    return result(AdapterOutcome::ResourceLimit, candidate,
+                  "the exact core exceeded its number limits in the middle "
+                  "of a change");
+  return result(AdapterOutcome::InternalNoResult, candidate,
                 context_.failure_detail_);
 }
 
@@ -658,8 +671,7 @@ AdapterResult LraCandidateAdapter::checkCompleteCandidate() noexcept
     if (!popped && !gaveUpOnABudget(failure))
     {
       context_.invalidate("candidate failure and checkpoint pop failed");
-      return result(AdapterOutcome::InternalNoResult, candidate,
-                    context_.failure_detail_);
+      return invalidated(candidate);
     }
     return refusal(failure, candidate);
   }
@@ -667,8 +679,7 @@ AdapterResult LraCandidateAdapter::checkCompleteCandidate() noexcept
   {
     (void)popCandidate();
     context_.invalidate("unexpected complete-candidate failure");
-    return result(AdapterOutcome::InternalNoResult, candidate,
-                  context_.failure_detail_);
+    return invalidated(candidate);
   }
 }
 

@@ -584,38 +584,31 @@ the answers is a differential test of it;
 ``tests/query-files/fp-abstraction-tests/`` runs the refinement loop end to
 end in the test suite.
 
-From the C interface
---------------------
+Through the API
+---------------
 
-Every option above but ``--fp-abstraction-active-closure`` has a
-``vc_setInterfaceFlags`` counterpart: ``FP_ABSTRACTION`` turns the
-abstraction on, ``FP_ABSTRACTION_OPS`` and ``FP_ABSTRACTION_CHAIN_OPS`` take
-the operation set as a bitmask (1 ``mul``, 2 ``div``, 4 ``sqrt``, 8 ``add``,
-16 ``sub``, 32 ``fma``, 64 ``rem``, 128 ``rti``, 256 ``to_sbv``, 512
-``to_ubv``; the default set is 39, and zero restores it), and the rest take
-the option's value under the same name, ``FP_ABSTRACTION_WIDTH`` for
-``--fp-abstraction-width`` and so on. Two differences from the command line:
-``FP_ABSTRACTION_RESTART_WIDTH`` is never raised for you when the bit-vector
-abstraction is on, and ``FP_ABSTRACTION_INCREMENTAL`` must be set before the
-session's first query, since the driver decides its array strategy once,
-when it is created.
+Every option above is an option of the API (:doc:`api`) under the same
+name without the leading dashes, with the same defaults, set in the
+``Options`` a solver is made with or on the solver itself. The operation
+sets take the names the command line does (``set_names`` takes them as a
+list). ``fp-abstraction-incremental`` must be set before the solver's first
+check, since the driver decides its array strategy once, when it is
+created.
 
-.. code-block:: c
+.. code-block:: cpp
 
-    vc_setInterfaceFlags(vc, FP_ABSTRACTION, 1);
-    vc_setInterfaceFlags(vc, FP_ABSTRACTION_OPS, 1 | 2 | 4 | 32 | 256);
-    /* ... build the query and solve it ... */
-    unsigned long long released = vc_getCounter(vc, STP_COUNTER_FP_RELEASES);
+    stp::Options o;
+    o.set_bool("fp-abstraction", true);
+    o.set_names("fp-abstraction-ops", {"mul", "div", "sqrt", "fma", "to_sbv"});
+    stp::Solver s(tm, o);
+    // ... build the query and solve it ...
+    std::uint64_t released = s.statistics().uint64("fp.releases");
 
-``vc_getCounter`` reads what ``-s`` prints, as totals over every solve of
-the session: ``STP_COUNTER_FP_CANDIDATES``, ``STP_COUNTER_FP_ABSTRACTED``,
-``STP_COUNTER_FP_SHARED``, ``STP_COUNTER_FP_CHAINED``,
-``STP_COUNTER_FP_RULE_LEMMAS``, ``STP_COUNTER_FP_CROSS_RULES``,
-``STP_COUNTER_FP_CHECKS``, ``STP_COUNTER_FP_SKIPPED_CHECKS``,
-``STP_COUNTER_FP_INCONSISTENT``, ``STP_COUNTER_FP_VALUE_LEMMAS``,
-``STP_COUNTER_FP_BOX_LEMMAS``, ``STP_COUNTER_FP_SHAPE_LEMMAS``,
-``STP_COUNTER_FP_RELATIONAL_LEMMAS``, ``STP_COUNTER_FP_RELEASES``,
-``STP_COUNTER_FP_REFINEMENT_ROUNDS``, ``STP_COUNTER_FP_RESTARTS``,
-``STP_COUNTER_FP_REPAIRS`` and ``STP_COUNTER_FP_LEMMA_MICROSECONDS``. They
-answer mid-session as well as after a solve, and a query without floating
-point leaves them at zero.
+A solver's statistics carry what ``-s`` prints, as totals over every check
+it has made: ``fp.candidates``, ``fp.abstracted``, ``fp.shared``,
+``fp.chained``, ``fp.rule_lemmas``, ``fp.cross_rules``, ``fp.checks``,
+``fp.skipped_checks``, ``fp.inconsistent``, ``fp.value_lemmas``,
+``fp.box_lemmas``, ``fp.shape_lemmas``, ``fp.relational_lemmas``,
+``fp.releases``, ``fp.refinement_rounds``, ``fp.restarts``, ``fp.repairs``
+and ``fp.lemma_microseconds``. They answer between checks as well as after
+one, and a query without floating point leaves them at zero.

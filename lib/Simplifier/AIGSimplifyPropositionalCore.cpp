@@ -256,7 +256,6 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
   int initial_nodeCount = mgr.totalNumberOfNodes();
   // cerr << "Nodes before AIG rewrite:" << initial_nodeCount << endl;
 
-  ensureDarLibrary();
   Dar_RwrPar_t Pars, *pPars = &Pars;
   Dar_ManDefaultRwrParams(pPars);
 
@@ -274,7 +273,7 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
     Aig_Man_t* pTemp;
     mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
     Aig_ManStop(pTemp);
-    Dar_ManRewrite(mgr.aigMgr, pPars);
+    rewriteWithDarLibrary(mgr.aigMgr, pPars);
 
     // Rewriting can leave nodes with no fanout behind, and Aig_ManDupDfs()
     // asserts that it drops none. See the same call in ToCNFAIG.cpp.

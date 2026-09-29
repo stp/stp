@@ -106,9 +106,6 @@ STP::~STP()
 void STP::ClearAllTables(void)
 {
   QueryPhaseScope cleanup(bm->query_timing, QueryPhase::QueryCleanup);
-  // The counterexample goes with them, so there is no longer a model to read.
-  // Whoever decides the next query says so again.
-  queryAnswered = false;
 
   if (simp != NULL)
     simp->ClearAllTables();
@@ -187,10 +184,16 @@ IncrementalSolver* STP::getIncrementalSolver()
                      "expands arrays eagerly (--ackermanize)."
                   << std::endl;
       bm->UserFlags.ackermannisation = true;
+      incrementalArraysEager = true;
     }
     incrementalSolver =
         new IncrementalSolver(bm, Ctr_Example, simp, arrayTransformer);
   }
+  else if (incrementalArraysEager)
+    // The flags are the manager's, and the API puts every entry back to its
+    // default when it switches between solvers of one manager: the session
+    // keeps the array strategy it began with.
+    bm->UserFlags.ackermannisation = true;
   return incrementalSolver;
 }
 
@@ -198,6 +201,7 @@ void STP::resetIncrementalSolver()
 {
   delete incrementalSolver;
   incrementalSolver = nullptr;
+  incrementalArraysEager = false;
 }
 
 SATSolver* STP::get_new_sat_solver()
@@ -237,11 +241,9 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   QueryTiming timing(started);
   QueryTimingReport timing_report(bm->query_timing,
       bm->UserFlags.stats_flag ? &timing : nullptr, std::cerr);
-  const auto deadline = started +
-      std::chrono::seconds(bm->UserFlags.timeout_max_time >= 0
-                               ? bm->UserFlags.timeout_max_time : 0);
+  const auto deadline = bm->UserFlags.queryDeadline(started);
   const PreparationControl preparation(
-      bm->UserFlags.timeout_max_time >= 0
+      bm->UserFlags.hasQueryTimeLimit()
           ? deadline : PreparationControl::Clock::time_point::max(),
       bm->preparation_control);
   const PreparationScope preparation_scope(bm->preparation_control, preparation);
@@ -288,10 +290,10 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     bm->UserFlags.uf_inject_args = false;
     // A second run of the pipeline is a second solve, and every solve reaches
     // topLevelSTPOnce over tables nobody has written yet: the SMT-LIB2 frontend
-    // clears them in Cpp_interface::resetSolver, the C API in vc_query, and the
-    // single-query tool has never run anything. This one is reached from inside
-    // the driver, so nothing did it here, and the run inherits the first run's
-    // substitution map, array-transform tables and bit-blasting cache.
+    // clears them in Cpp_interface::resetSolver, and the API before each of
+    // its checks. This one is reached from inside the driver, so nothing did
+    // it here, and the run inherits the first run's substitution map,
+    // array-transform tables and bit-blasting cache.
     //
     // The substitution map is the one that bites rather than merely wastes:
     // RemoveUnconstrained's array rules meet a symbol the first run already
@@ -318,8 +320,14 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     bm->clearInjectivityAssumed();
     skeletonAsked = false;
     bm->soft_timeout_expired = true;
-    bm->noteUnknown(UnknownReason::Timeout);
-    if (bm->UserFlags.stats_flag)
+    // A stage that had already said why it stopped (stop-after-cnf) keeps
+    // its reason; an interrupt with no reason of its own is the deadline.
+    if (bm->getUnknownReason() == UnknownReason::None)
+      bm->noteUnknown(UnknownReason::Timeout);
+    // A run that ended at its first CNF reports nothing past that point.
+    if (bm->run_ended_after_cnf)
+      timing_report.cancel();
+    else if (bm->UserFlags.stats_flag)
     {
       const auto finished = std::chrono::steady_clock::now();
       std::cerr << "Preparation timeout: stage=" << preparationStageName(stopped.stage)
@@ -403,7 +411,7 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   // succeeds.
   bm->InvalidateRealModel();
   bm->checkPreparation(PreparationStage::Boundary);
-  if (bm->UserFlags.timeout_max_time >= 0 &&
+  if (bm->UserFlags.hasQueryTimeLimit() &&
       std::chrono::steady_clock::now() >= deadline)
   {
     bm->soft_timeout_expired = true;
@@ -914,6 +922,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
               actual.GetSourceSort().kind() == SourceSort::Kind::Real)
             spreadSymbols.push_back(actual);
       ASTNode lra_input = original_input;
+      // Before presolve, which may settle the operand's NaN and infinity
+      // tests from the assertions and so dissolve the conversion's root,
+      // where the link is read from (see STPMgr::LinkFpToReal).
+      if (bm->HasFpToReal())
+        lra_input = bm->LinkFpToReal(lra_input);
       lra::LraReconstruction reconstruction;
       // Storage is available to query-local AUTO selection, and to the model
       // commit, which checks its model against the `original` recorded here
@@ -942,7 +955,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
           bm->UserFlags.lra_presolve_propagate ||
           bm->UserFlags.lra_presolve_unconstrained ||
           bm->UserFlags.lra_presolve_monotone)
-        lra_input = lra::presolveForSolve(*bm, original_input, &NewSolver,
+        lra_input = lra::presolveForSolve(*bm, lra_input, &NewSolver,
                                           reconstruction_ptr, highs_enabled);
       if (NewSolver.timeLimitExpired())
       {
@@ -1225,9 +1238,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       true);
 
   // Recomputed per query, never latched: every input is available here,
-  // including the C API's direct request, so a query that happens to need a
-  // candidate model cannot leave construction switched on for the rest of
-  // the session.
+  // including a direct request for a counterexample, so a query that happens
+  // to need a candidate model cannot leave construction switched on for the
+  // rest of the session.
   bm->UserFlags.construct_counterexample_flag =
       lraActive ||
       bm->UserFlags.modelConstructionRequired(
@@ -2069,6 +2082,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
         ext->reportLemmaStats();
       reportBVAbstractionRecords();
       CountersAndStats("print_func_stats", bm);
+      if (ext != NULL)
+        res = ext->withholdDeclaredSortUnsat(res,
+                                             ext->declaredSortLemmasEncoded() != 0);
       return res;
     }
 

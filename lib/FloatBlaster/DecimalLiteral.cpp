@@ -498,4 +498,46 @@ bool packedFPBinaryOp(const std::string& left, const std::string& right,
   return ok;
 }
 
+bool binaryTimesPowerOfTwoToDecimal(const std::string& binary, std::uint64_t k,
+                                    std::string& decimal, std::string& err)
+{
+  if (binary.empty() ||
+      binary.find_first_not_of("01") != std::string::npos ||
+      k > (std::uint64_t{1} << 40))
+  {
+    err = "not a binary integer and a shift LibBF can represent";
+    return false;
+  }
+  bf_context_t ctx;
+  bf_context_init(&ctx, bfRealloc, nullptr);
+  bf_t v;
+  bf_init(&ctx, &v);
+  bool ok = false;
+  const char* next = nullptr;
+  // Exact at infinite precision: reading the digits, the shift, and the
+  // integer's decimal digits (no fractional digit to round).
+  int status =
+      bf_atof(&v, binary.c_str(), &next, 2, BF_PREC_INF, BF_RNDZ);
+  if (!(status & BF_ST_MEM_ERROR))
+    status = bf_mul_2exp(&v, static_cast<slimb_t>(k), BF_PREC_INF, BF_RNDZ);
+  if (status & BF_ST_MEM_ERROR)
+    err = "out of memory";
+  else
+  {
+    size_t len = 0;
+    char* text = bf_ftoa(&len, &v, 10, 0, BF_RNDZ | BF_FTOA_FORMAT_FRAC);
+    if (text == nullptr)
+      err = "out of memory";
+    else
+    {
+      decimal.assign(text, len);
+      bf_free(&ctx, text);
+      ok = true;
+    }
+  }
+  bf_delete(&v);
+  bf_context_end(&ctx);
+  return ok;
+}
+
 } // namespace stp

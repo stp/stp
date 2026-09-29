@@ -41,7 +41,7 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
-THREAD_LOCAL_IE uint64_t ASTInternal::node_uid_cntr = 0;
+std::atomic<uint64_t> ASTInternal::node_uid_cntr{0};
 
 /****************************************************************
  * Universal Helper Functions                                   *
@@ -428,6 +428,49 @@ bool isCommutative(const Kind k)
   }
 }
 
+// While set, FatalError throws EngineFatal instead of ending the process;
+// see the declaration in AST.h for who sets it and why.
+static THREAD_LOCAL_IE bool fatal_error_throws = false;
+
+bool FatalErrorThrows()
+{
+  return fatal_error_throws;
+}
+
+void SetFatalErrorThrows(bool on)
+{
+  fatal_error_throws = on;
+}
+
+// Who is told of this thread's fatal errors; see the declaration in AST.h.
+static THREAD_LOCAL_IE FatalErrorObserver fatal_error_observer = nullptr;
+static THREAD_LOCAL_IE void* fatal_error_observer_opaque = nullptr;
+
+void SetFatalErrorObserver(FatalErrorObserver observer, void* opaque)
+{
+  fatal_error_observer = observer;
+  fatal_error_observer_opaque = opaque;
+}
+
+FatalErrorObserver GetFatalErrorObserver(void** opaque)
+{
+  if (opaque != nullptr)
+    *opaque = fatal_error_observer_opaque;
+  return fatal_error_observer;
+}
+
+static void notifyFatalErrorObserver(const char* str)
+{
+  if (fatal_error_observer != nullptr)
+    fatal_error_observer(str, fatal_error_observer_opaque);
+}
+
+void ReportFatalError(const char* str)
+{
+  cerr << "Fatal Error: " << str << endl;
+  notifyFatalErrorObserver(str);
+}
+
 ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)
 {
   if (a.GetKind() != UNDEFINED)
@@ -440,20 +483,24 @@ ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)
     cerr << "Fatal Error: " << str << endl;
     cerr << w << endl;
   }
-  if (vc_error_hdlr)
+  notifyFatalErrorObserver(str);
+  if (fatal_error_throws)
   {
-    vc_error_hdlr(str);
+    // the node is part of the message: some callers pass an empty text
+    std::ostringstream what;
+    what << str;
+    if (a.GetKind() != UNDEFINED)
+      what << (*str ? " " : "") << a;
+    throw EngineFatal(what.str());
   }
   abort();
 }
 
 ATTR_NORETURN void FatalError(const char* str)
 {
-  cerr << "Fatal Error: " << str << endl;
-  if (vc_error_hdlr)
-  {
-    vc_error_hdlr(str);
-  }
+  ReportFatalError(str);
+  if (fatal_error_throws)
+    throw EngineFatal(str);
   abort();
 }
 
@@ -502,7 +549,7 @@ void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
 
 // A float is carried internally as its packed bits, so after FloatBlast a
 // float-typed leaf may stand in a bitvector circuit -- but this is not public
-// subtyping. The parser and C API reject BV operations over FP terms; this
+// subtyping. The parsers and the API reject BV operations over FP terms; this
 // predicate exists for lowered and model-evaluation nodes built inside STP.
 // A leaf's format is declared (a symbol) or
 // fixed when it is made (an ASTFPConst, which interns apart from the plain

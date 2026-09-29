@@ -51,6 +51,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/Extensionality/ExtChecker.h"
+#include "stp/Globals/Globals.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/ToSat/ToSATBase.h"
 #include <map>
@@ -177,7 +178,7 @@ public:
   // The same ownership, restricted to the solve that established it.
   //
   // active() deliberately outlives its solve: the model surfaces --
-  // (get-model), vc_getCounterExampleArray, term evaluation through the
+  // (get-model), the API's model snapshot, term evaluation through the
   // counterexample -- read the frozen graph and the certified
   // observations after TopLevelSTPAux has returned, and they must keep
   // seeing them until the next solve calls beginSolve(). Only
@@ -188,8 +189,8 @@ public:
   // the array graph. Those have to stand back only while the solve that
   // owns the graph is running; anything that reaches the simplifier, the
   // substitution map or unconstrained-variable removal outside that
-  // window -- a direct vc_simplify, an assertion arriving for the next
-  // query -- is ordinary work and should get ordinary treatment.
+  // window -- an assertion arriving for the next query, say -- is
+  // ordinary work and should get ordinary treatment.
   // SolveScope marks the window, and every pass gate tests this instead.
   bool activeInSolve() const { return solveInProgress && active(); }
 
@@ -226,10 +227,27 @@ public:
     return protectedSymbols.find(s) != protectedSymbols.end();
   }
 
+  // A read at a witness index: the right-hand side of an anchor equation,
+  // which has to reach locateCanonicalOperands in that equation, since it
+  // is where the current form of an equality operand is read back from.
+  // A pass may pin such a read's value with a fact of its own, but must
+  // not replace the read inside the anchor.
+  bool isWitnessRead(const ASTNode& n) const
+  {
+    return n.GetKind() == READ && n[1].GetKind() == SYMBOL &&
+           isProtected(n[1]);
+  }
+
   // Conservative pre-preprocessing inventory of the array symbols in an
   // active solve. The final graph is built from the whole prepared formula,
   // so this set is a pre/post ownership tripwire: it must anticipate every
   // array symbol the checker may later own.
+  // Whether an array term is built over a constant array (itself, its
+  // write chain's base, or an if-then-else branch), and whether any active
+  // record's operand is; the eager instantiation arm is not taken then.
+  bool involvesConstArray(const ASTNode& arrayTerm) const;
+  bool anyRecordInvolvesConstArray() const;
+
   bool wasArrayAnticipated(const ASTNode& arraySymbol) const
   {
     return anticipatedArraySymbols.find(arraySymbol) !=
@@ -428,6 +446,18 @@ public:
 
   bool hasPendingLemma() const { return pendingLemmaValid; }
 
+  // How many lemmas this solve encoded that count a declared sort's elements
+  // by the patterns of its carrier (ExtConflict::countsDeclaredSort). An
+  // unsat that had them in the solver may be an artefact of that count
+  // rather than a refutation, and the drivers withhold it.
+  size_t declaredSortLemmasEncoded() const { return declaredSortLemmas; }
+
+  // A driver's answer with that taken into account: an unsat is withheld
+  // (unknown, with the reason recorded) when `counted` says a lemma counting
+  // a declared sort by its carrier was in the solver.
+  SOLVER_RETURN_TYPE withholdDeclaredSortUnsat(SOLVER_RETURN_TYPE result,
+                                               bool counted) const;
+
   // Encode every pending lemma into the persistent incremental SAT
   // solver, then clear them. The lemma premise/conclusion atoms are
   // reified over the SAT variables of already-encoded symbols -- the
@@ -514,6 +544,19 @@ public:
       const std::vector<std::pair<ASTNode, ASTNode>>& left,
       const std::vector<std::pair<ASTNode, ASTNode>>& right,
       const ASTNode& absent, const SourceSort& elementSort);
+
+  // The same question when the two arrays complete differently -- one
+  // side's unobserved cells hold a constant array's default, the other's
+  // do not, or two different defaults. Cells neither side observes then
+  // differ whenever such a cell exists, which an index sort with more
+  // values than the two observation lists name always has; the values are
+  // counted as ExtChecker::indexValueCount counts them.
+  static bool contentsAgree(
+      const std::vector<std::pair<ASTNode, ASTNode>>& left,
+      const std::vector<std::pair<ASTNode, ASTNode>>& right,
+      const ASTNode& absentLeft, const ASTNode& absentRight,
+      const SourceSort& indexSort, unsigned indexWidth,
+      const SourceSort& elementSort);
 
   // Validate one bit-vector lemma leaf: it must be a fixed-width
   // constant, or a SYMBOL whose complete SAT-variable vector was
@@ -626,6 +669,7 @@ private:
   bool arrayGraphIsFrozen;
   std::set<ASTNode> ownedArrays;
   std::map<ASTNode, ExtWriteNode> ownedWrites; // write node -> info
+  std::map<ASTNode, ExtConstArray> ownedConstArrays; // constant array -> default
   std::map<ASTNode, std::vector<ASTNode>> ownedWriteParents;
   std::map<ASTNode, ExtIteNode> ownedItes; // ite node -> info
   std::map<ASTNode, std::vector<ASTNode>> ownedIteParents;
@@ -671,6 +715,9 @@ private:
 
   bool pendingLemmaValid;
   std::vector<ExtConflict> pendingLemmas;
+  // The lemmas this solve encoded that count a declared sort by its carrier
+  // (see declaredSortLemmasEncoded).
+  size_t declaredSortLemmas = 0;
 
   // Encode one lemma as the clause guard OR NOT p1 OR ... OR NOT pk OR
   // conclusion (guard per encodePendingLemmas, absent when -1); the

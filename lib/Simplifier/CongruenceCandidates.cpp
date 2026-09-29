@@ -199,29 +199,23 @@ bool CongruenceCandidates::proves(const ASTNode& equality)
   // solve that gave up. A candidate is allowed to run out of conflicts --
   // that is what the budget is for -- and the flag and reason it raises on
   // its way out would otherwise be read by the main query as its own, which
-  // turns a query STP can answer into an unknown. The current query is
-  // manager-wide for the same reason: the C interface reads it back. Put
-  // back on every exit, including a cancelled preparation unwinding out of
-  // the sub-solve.
+  // turns a query STP can answer into an unknown. Put back on every exit,
+  // including a cancelled preparation unwinding out of the sub-solve.
   struct RestoreManager
   {
     STPMgr* manager;
-    ASTNode savedQuery;
     bool savedExpired;
     UnknownReason savedReason;
     std::string savedDetail;
     ~RestoreManager()
     {
-      manager->SetQuery(savedQuery);
       manager->soft_timeout_expired = savedExpired;
       manager->clearUnknown();
       if (savedReason != UnknownReason::None)
         manager->noteUnknown(savedReason, savedDetail);
     }
-  } restore{bm, bm->GetQuery(), bm->soft_timeout_expired,
-            bm->getUnknownReason(), bm->getUnknownReasonDetail()};
-
-  bm->SetQuery(bm->ASTUndefined);
+  } restore{bm, bm->soft_timeout_expired, bm->getUnknownReason(),
+            bm->getUnknownReasonDetail()};
 
   const SOLVER_RETURN_TYPE result = counterExample.CallSAT_ResultCheck(
       *solver, query, query, query, &tosat, false);

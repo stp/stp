@@ -141,7 +141,7 @@ ostream& Lisp_Print(ostream& os, const ASTNode& n, int indentation)
   // Clear the PrintMap
   Lisp_AlreadyPrintedSet.clear();
   Lisp_Print_indent(os, n, indentation);
-  printf("\n");
+  std::cout << "\n";
   return os;
 }
 

@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include "stp/config.h"
 #include <ankerl/unordered_dense.h>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -129,6 +130,7 @@ class Cpp_interface
   std::map<std::string, SourceSort> sort_aliases;
   bool print_success;
   bool ignoreCheckSatRequest;
+  bool retain_uf_declarations; // see retainUFDeclarations
 
   // Used to cache prior queries.
   struct Entry
@@ -182,13 +184,21 @@ private:
     // Obtain the functions for the current frame
     vector<std::string>& getFunctions();
 
-    // Obtain the symbols for the current frame
+    // Obtain the symbols declared in this frame
+    const ASTVec& getSymbols() const { return _scoped_symbols; }
 
     void addSortAlias(const std::string& name);
     void addSymbol(const ASTNode& symbol);
+    // `symbol` under a second name: found by lookupSymbol, but not one of
+    // the frame's declarations
+    void addSymbolAs(const std::string& name, const ASTNode& symbol);
     void addTemporarySymbol(const ASTNode& symbol);
     void clearTemporarySymbols();
     void addUFDeclaration(const UFDecl* declaration);
+    // Forget the uninterpreted-function declarations made in this frame
+    // without deactivating them: they belong to whoever keeps the manager
+    // beyond this interface (see Cpp_interface::retainUFDeclarations).
+    void releaseUFDeclarations();
     bool removeSymbol(const ASTNode& symbol);
     bool lookupSymbol(std::string_view name, ASTNode& output) const;
     bool lookupTemporarySymbol(std::string_view name, ASTNode& output) const;
@@ -227,6 +237,46 @@ private:
   // Obtain the symbols/functions for the current frame
   vector<std::string>& getCurrentFunctions();
 
+public:
+  // Every symbol a parse declared that is still in scope: the symbols of each
+  // live frame, the base frame first. A symbol declared under a (push) that
+  // was popped again is not among them.
+  ASTVec getDeclaredSymbols() const;
+  // The end of an SMT-LIB 2 script tears the frames down (cleanUp) and with
+  // them their references; a caller that wants the symbols they held then
+  // passes a vector for cleanUp to fill first (nullptr: none).
+  void keepDeclaredSymbolsAtCleanup(ASTVec* sink) { symbols_at_cleanup = sink; }
+  // The same for the sort names in scope (sortAliases), which cleanUp copies
+  // into `sink` before the frames drop them.
+  void keepSortAliasesAtCleanup(std::map<std::string, SourceSort>* sink)
+  {
+    sorts_at_cleanup = sink;
+  }
+  // Every sort name in scope and its sort: define-sort's aliases and
+  // declare-sort's sorts, a caller's seeded ones among them.
+  const std::map<std::string, SourceSort>& sortAliases() const
+  {
+    return sort_aliases;
+  }
+  // reset() empties the manager's Real registries along with the script's
+  // declarations (ResetLraStateForPublicReset). A caller whose own symbols
+  // outlive the script -- the API's, whose name table is the manager's --
+  // records them again in `hook`, which reset() runs right after that.
+  void onPublicReset(std::function<void()> hook) { after_public_reset = std::move(hook); }
+  // Called as each check-sat (or check-sat-assuming) of the input begins:
+  // the API marks a new check there, as its own check_sat does. True when the
+  // caller holds an interrupt for it: the check answers unknown at once.
+  void onCheck(std::function<bool()> hook) { before_check = std::move(hook); }
+  // Called as each check ends, before its answer is written.
+  void onCheckEnd(std::function<void()> hook) { after_check = std::move(hook); }
+
+private:
+  ASTVec* symbols_at_cleanup = nullptr;
+  std::map<std::string, SourceSort>* sorts_at_cleanup = nullptr;
+  std::function<void()> after_public_reset;
+  std::function<bool()> before_check;
+  std::function<void()> after_check;
+
   // What the most recent check-sat charged to each pipeline stage: the
   // difference between two readings of the manager's run times taken around
   // the solve, which is the granularity (get-info :all-statistics) reports on.
@@ -255,7 +305,8 @@ private:
   // Report (set-option :<option> <value>) where the option's argument is a
   // <b_value> and the value is neither true nor false. Malformed rather than
   // unsupported, so it is an error response and not "unsupported"; STP's
-  // :error-behavior is immediate-exit, so it does not return.
+  // :error-behavior is immediate-exit, so it does not return: the parse
+  // ends (endParseWithDiagnostic).
   ATTR_NORETURN void badBooleanOptionValue(const std::string& option,
                                            const std::string& value);
   void addFrame();
@@ -356,6 +407,23 @@ private:
   bool set_global_parser_bm;
 
 public:
+  // The text of the last (error ...) response, for embedders that drive the
+  // parser and need the diagnostic rather than the stdout line.
+  std::string last_error_message;
+  // Whether an exception left the engine's own work in this interface -- a
+  // check-sat, a get-value, a push -- rather than the building of the
+  // script's terms. SMT2Parse() reports an engine failure (EngineFatal) out
+  // of the latter as the script's refusal of itself, a failed parse; one out
+  // of the former is the engine's.
+  bool engine_work_failed = false;
+  // When set, SMT2Parse() starts with the floating-point and Real keywords
+  // enabled instead of waiting for a set-logic that names them; the 3.x API
+  // parses fragments with no logic in front of them.
+  bool all_theory_tokens = false;
+
+private:
+
+public:
   std::unique_ptr<LetMgr> letMgr;
   NodeFactory* nf;
 
@@ -373,7 +441,6 @@ public:
   DLL_PUBLIC UserDefinedFlags& getUserFlags();
 
   DLL_PUBLIC void AddAssert(const ASTNode& assert);
-  DLL_PUBLIC void SetQuery(const ASTNode& q);
 
   // NODES//
   DLL_PUBLIC ASTNode CreateNode(stp::Kind kind,
@@ -416,6 +483,8 @@ public:
   DLL_PUBLIC ASTNode CreateRealTerm(Kind kind, const ASTVec& children);
   DLL_PUBLIC ASTNode CreateRealPredicate(Kind kind, const ASTNode& lhs,
                                          const ASTNode& rhs);
+  // fp.to_real: STPMgr::CreateFpToReal, which the 3.x API shares.
+  DLL_PUBLIC ASTNode CreateFpToReal(const ASTNode& x);
   DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
                                         const SourceSort& source_sort);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);
@@ -502,8 +571,13 @@ public:
   // allocator and the pool allocator.
   DLL_PUBLIC ASTNode* newNode(const ASTNode& copyIn);
 
-  DLL_PUBLIC void deleteNode(ASTNode* n);
+  // Releases a node newNode made and empties the pointer, which in a grammar
+  // action is the parser stack slot that held it (see ParserUnwind.h).
+  DLL_PUBLIC void deleteNode(ASTNode*& n);
   DLL_PUBLIC void addSymbol(ASTNode& s);
+  // An existing symbol, visible to the input under another name as well
+  // (the API's TermManager::bind_symbol aliases).
+  DLL_PUBLIC void addSymbolAlias(const std::string& name, const ASTNode& s);
   // Function formal parameters are parser-local bindings. They may shadow a
   // top-level declaration, and are installed for as long as the containing
   // define-fun command is being reduced.
@@ -561,9 +635,15 @@ public:
   // with immediate-exit, so an error it recovered from was a false claim --
   // and, where the discarded command was an assert, a claim that cost a
   // conjunct: the assertion went missing and the next check-sat answered
-  // the query that was left.
+  // the query that was left. "Out" is the end of the parse as a whole, not
+  // of the process: the parse unwinds to SMT2Parse() (ParseAbandon) and no
+  // later command runs; the command line then exits with the diagnostic.
   DLL_PUBLIC ATTR_NORETURN void refuseCurrentCommand(
       const std::string& diagnostic);
+  // Inside a command: report through the command line's fatal channels
+  // unless the 3.x API is the caller, then throw ParseAbandon. Outside one
+  // (no parse to abandon): FatalError, as before.
+  ATTR_NORETURN void endParseWithDiagnostic(const std::string& diagnostic);
   DLL_PUBLIC void finishCurrentCommand();
   bool currentCommandRejected() const { return current_command_rejected; }
 
@@ -580,6 +660,24 @@ public:
   DLL_PUBLIC void resetAssertions();
   DLL_PUBLIC void pop();
   DLL_PUBLIC void push();
+
+  // Give the interface a frame and a result-cache entry for every assertion
+  // level the manager already holds beyond the base, so that a script may
+  // pop a level that was pushed before this interface existed. The 3.x API
+  // constructs one interface per parse call over a stack it shares with the
+  // caller; without this a (pop) in the script hits the base-frame guard.
+  DLL_PUBLIC void adoptAssertLevels();
+
+  // Whether the uninterpreted functions still declared when this interface
+  // cleans up (end of script, (exit), destruction) stay active in the
+  // manager's UF context. Off, a frame deactivates its declarations as it
+  // goes, which is what the CLI wants: its interface lives as long as the
+  // manager. The 3.x API turns it on, since it makes one interface per parse
+  // call over a manager that lives on together with the terms applying those
+  // functions: a declaration the script made and did not pop is the
+  // manager's afterwards, as one made through the API is. A (pop) in the
+  // script still deactivates what its level declared.
+  DLL_PUBLIC void retainUFDeclarations(bool retain);
   DLL_PUBLIC void popToFirstLevel(); // We can't pop off the zeroeth level
 
   // Useful when printing back, so that you can parse, but ignore the request.
@@ -616,6 +714,14 @@ public:
   DLL_PUBLIC void getModel();
   DLL_PUBLIC void getValue(const ASTVec& v);
 };
+
+// True when the formulas could need more elements of some declared sort than
+// its carrier tells apart, with a sentence in `detail` saying which and how
+// far to raise `option`, the width's spelling for the caller: an unsat reached
+// then may be an artefact of the encoding rather than a refutation, and the
+// command line and the API both withhold it.
+bool declaredSortCarrierMayBeShort(const STPMgr& bm, const ASTVec& formulas,
+                                   const char* option, std::string& detail);
 }
 
 #endif

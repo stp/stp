@@ -308,9 +308,9 @@ include(AddGTestSuite)
 # -----------------------------------------------------------------------------
 option(USE_VALGRIND "Use Valgrind when running unit tests" OFF)
 
-# Leaks are reported but do not fail a test: the tests under tests/api/C
-# create Expr handles through the C API and mostly never call vc_DeleteExpr,
-# so about thirty of them leak a few bytes each by construction. Memory errors
+# Leaks are reported but do not fail a test: the libstp2 tests under
+# tests/api/compat2 create Expr handles through the 2.x C interface and mostly
+# never call vc_DeleteExpr, so they leak a few bytes each by construction. Memory errors
 # -- invalid accesses, uninitialised values -- do fail. Add
 # --errors-for-leak-kinds=definite here if you want to hunt the leaks.
 set(VALGRIND_ARGS

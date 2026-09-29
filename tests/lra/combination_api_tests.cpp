@@ -1,4 +1,37 @@
-#include "stp/c_interface.h"
+/********************************************************************
+ * AUTHORS: Andrew Teylu
+ *
+ * BEGIN DATE: September, 2026
+ *
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+********************************************************************/
+
+// combination_api_tests.cpp -- exact Real arithmetic beside the other
+// theories, through the 3.x C++ API: a Boolean combination with a bit-vector,
+// floating-point operations under the floating-point abstraction, extensional
+// arrays in every combination of verdicts, the array-read refinement after the
+// Real stage, and independent managers, interleaved and on threads.
+//
+// A plain executable: every case runs in order and the first failed check
+// ends the run with a non-zero exit.
+
+#include <stp/stp.hpp>
 
 #include <atomic>
 #include <cstdint>
@@ -6,10 +39,14 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
-namespace {
+using namespace stp;
+
+namespace
+{
 
 void require(bool condition, const char* detail)
 {
@@ -17,67 +54,49 @@ void require(bool condition, const char* detail)
     throw std::runtime_error(detail);
 }
 
-class OwnedVc final
+Term realSymbol(TermManager& tm, const char* name)
 {
-public:
-  explicit OwnedVc(bool array_equality = false)
-      : vc_(vc_createValidityChecker())
-  {
-    if (array_equality)
-      vc_setFlag(vc_, 'x');
-  }
-  ~OwnedVc()
-  {
-    for (auto it = expressions_.rbegin(); it != expressions_.rend(); ++it)
-      vc_DeleteExpr(*it);
-    vc_Destroy(vc_);
-  }
-  OwnedVc(const OwnedVc&) = delete;
-  OwnedVc& operator=(const OwnedVc&) = delete;
-
-  operator VC() const noexcept { return vc_; }
-  Expr own(Expr expression)
-  {
-    expressions_.push_back(expression);
-    return expression;
-  }
-  int solve() { return vc_query(vc_, own(vc_falseExpr(vc_))); }
-
-private:
-  VC vc_;
-  std::vector<Expr> expressions_;
-};
-
-Expr real(OwnedVc& owner, const char* text)
-{
-  return owner.own(vc_realConstExprFromStr(owner, text));
+  return tm.declare(name, tm.mk_real_sort());
 }
 
-Expr realSymbol(OwnedVc& owner, const char* name)
+// The exact value the last satisfiable check gave a Real term, as "n/d" or
+// "n". A model exists only after a check that answered sat; 2.x's separate
+// question of whether an exact Real model had been published is that one.
+std::string realValue(const Solver& s, const Term& term)
 {
-  return owner.own(vc_varExpr(owner, name, vc_realType(owner)));
+  return s.model().real_value(term).str();
+}
+
+// Whether the solver has no model to give: the last check did not answer
+// sat, so model() refuses with NO_MODEL.
+bool hasNoModel(const Solver& s)
+{
+  try
+  {
+    (void)s.model();
+  }
+  catch (const RecoverableError& error)
+  {
+    return error.code() == ErrorCode::NO_MODEL;
+  }
+  return false;
 }
 
 void bvAndReal()
 {
-  OwnedVc owner;
-  VC vc = owner;
-  Expr x = realSymbol(owner, "x");
-  Expr b = owner.own(vc_varExpr(vc, "b", vc_bvType(vc, 8)));
-  Expr lra = owner.own(vc_eqExpr(vc, x, real(owner, "7/3")));
-  Expr bv = owner.own(vc_eqExpr(
-      vc, b, owner.own(vc_bvConstExprFromLL(vc, 8, 0xa5))));
-  vc_assertFormula(vc, owner.own(vc_orExpr(vc, lra, bv)));
-  vc_assertFormula(vc, lra);
-  vc_assertFormula(vc, bv);
-  require(owner.solve() == 0, "BV/LRA Boolean combination was not SAT");
-  char* value = vc_getRealModelValue(vc, x);
-  require(vc_hasRealModel(vc) == 1 && value != nullptr &&
-              std::string(value) == "7/3",
+  TermManager tm;
+  Solver s(tm);
+  const Term x = realSymbol(tm, "x");
+  const Term b = tm.declare("b", tm.mk_bv_sort(8));
+  const Term lra = x == tm.mk_real("7/3");
+  const Term bv = b == tm.mk_bv(8, 0xa5);
+  s.add(lra || bv);
+  s.add(lra);
+  s.add(bv);
+  require(s.check_sat().is_sat(), "BV/LRA Boolean combination was not SAT");
+  require(s.model().in_core(x) && realValue(s, x) == "7/3",
           "BV/LRA combined exact model mismatch");
-  vc_deleteString(value);
 }
-
 
 // A Real query that also carries floating-point operations, with the
 // floating-point abstraction switched on: the abstraction declines, since
@@ -85,77 +104,61 @@ void bvAndReal()
 // both verdicts come out as the exact encoding decides them.
 void fpAbstractionBesideReal(bool unsat)
 {
-  OwnedVc owner;
-  VC vc = owner;
-  vc_setInterfaceFlags(vc, FP_ABSTRACTION, 1);
-  vc_setInterfaceFlags(vc, FP_ABSTRACTION_WIDTH, 1);
-  Type single = vc_fpType(vc, 8, 24);
-  // The floating-point constructors return handles the validity checker
-  // owns (vc_Destroy releases them), so only the others are owned here.
-  const auto constant = [&](unsigned long long bits) {
-    return vc_fpConstFromBits(
-        vc, 8, 24, owner.own(vc_bvConstExprFromLL(vc, 32, bits)));
+  TermManager tm;
+  Solver s(tm);
+  s.options().set_bool("fp-abstraction", true);
+  s.options().set_uint("fp-abstraction-width", 1);
+  const Sort single = tm.mk_fp_sort(8, 24);
+  const auto constant = [&](std::uint64_t bits) {
+    return tm.mk_fp_from_bits(single, tm.mk_bv(32, bits));
   };
-  Expr x = realSymbol(owner, "x");
-  Expr a = owner.own(vc_varExpr(vc, "a", single));
-  Expr b = owner.own(vc_varExpr(vc, "b", single));
-  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  const Term x = realSymbol(tm, "x");
+  const Term a = tm.declare("a", single);
+  const Term b = tm.declare("b", single);
   // a = 3, a * b = 6 under RNE: b is exactly 2.
-  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, a, constant(0x40400000))));
-  vc_assertFormula(
-      vc, owner.own(vc_eqExpr(vc, vc_fpMulExpr(vc, rne, a, b),
-                              constant(0x40c00000))));
+  s.add(a == constant(0x40400000));
+  s.add(fp_mul(RoundingMode::RNE, a, b) == constant(0x40c00000));
   if (unsat)
-  {
-    Expr two = owner.own(vc_eqExpr(vc, b, constant(0x40000000)));
-    vc_assertFormula(vc, owner.own(vc_notExpr(vc, two)));
-  }
-  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, real(owner, "7/3"))));
+    s.add(!(b == constant(0x40000000)));
+  s.add(x == tm.mk_real("7/3"));
 
-  const int result = owner.solve();
-  require(result == (unsat ? 1 : 0),
+  const Result result = s.check_sat();
+  require(unsat ? result.is_unsat() : result.is_sat(),
           "Real query with an abstractable floating-point operation returned "
           "the wrong verdict");
   if (!unsat)
-  {
-    char* value = vc_getRealModelValue(vc, x);
-    require(value != nullptr && std::string(value) == "7/3",
+    require(realValue(s, x) == "7/3",
             "Real model beside a floating-point operation mismatch");
-    vc_deleteString(value);
-  }
 }
 
 void arrayOutcome(bool lra_conflict, bool array_conflict)
 {
-  OwnedVc owner(true);
-  VC vc = owner;
-  Expr x = realSymbol(owner, "x");
-  Type index = vc_bvType(vc, 2);
-  Type value = vc_bvType(vc, 4);
-  Type array = vc_arrayType(vc, index, value);
-  Expr a = owner.own(vc_varExpr(vc, "a", array));
-  Expr b = owner.own(vc_varExpr(vc, "b", array));
-  Expr zero_index = owner.own(vc_bvConstExprFromLL(vc, 2, 0));
-  Expr three = owner.own(vc_bvConstExprFromLL(vc, 4, 3));
-  Expr other = owner.own(
-      vc_bvConstExprFromLL(vc, 4, array_conflict ? 4 : 3));
+  TermManager tm;
+  Solver s(tm);
+  // 2.x's 'x' flag: whole-array equality decided by lemmas on demand.
+  s.options().set_str("array-equality", "on");
+  const Term x = realSymbol(tm, "x");
+  const Sort index = tm.mk_bv_sort(2);
+  const Sort value = tm.mk_bv_sort(4);
+  const Sort array = tm.mk_array_sort(index, value);
+  const Term a = tm.declare("a", array);
+  const Term b = tm.declare("b", array);
+  const Term zero_index = tm.mk_bv(2, 0);
+  const Term three = tm.mk_bv(4, 3);
+  const Term other = tm.mk_bv(4, array_conflict ? 4 : 3);
 
-  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, a, b)));
-  Expr read_a = owner.own(vc_readExpr(vc, a, zero_index));
-  Expr read_b = owner.own(vc_readExpr(vc, b, zero_index));
-  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, read_a, three)));
-  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, read_b, other)));
-  vc_assertFormula(
-      vc, owner.own(vc_realLtExpr(vc, x, real(owner, "2"))));
+  s.add(a == b);
+  s.add(a[zero_index] == three);
+  s.add(b[zero_index] == other);
+  s.add(real_lt(x, tm.mk_real(2)));
   if (lra_conflict)
-    vc_assertFormula(
-        vc, owner.own(vc_realGeExpr(vc, x, real(owner, "2"))));
+    s.add(real_ge(x, tm.mk_real(2)));
   else
-    vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, real(owner, "1"))));
+    s.add(x == tm.mk_real(1));
 
-  const int result = owner.solve();
+  const Result result = s.check_sat();
   const bool expected_sat = !lra_conflict && !array_conflict;
-  if (result != (expected_sat ? 0 : 1))
+  if (expected_sat ? !result.is_sat() : !result.is_unsat())
   {
     std::ostringstream detail;
     detail << "LRA/array outcome combination returned " << result
@@ -163,113 +166,92 @@ void arrayOutcome(bool lra_conflict, bool array_conflict)
            << " array_conflict=" << array_conflict;
     throw std::runtime_error(detail.str());
   }
-  require(vc_hasRealModel(vc) == (expected_sat ? 1 : 0),
-          "LRA/array outcome published or lost an exact model");
+  // A model, with x's exact value, exactly when the check answered sat.
+  if (expected_sat)
+    require(realValue(s, x) == "1", "LRA/array outcome lost its exact model");
+  else
+    require(hasNoModel(s), "LRA/array outcome published a model for unsat");
+}
+
+// The value of `"key":<digits>` in a diagnostic trace, or -1 if absent.
+long long traceCounter(const std::string& trace, const std::string& key)
+{
+  const std::string quoted = "\"" + key + "\":";
+  const std::size_t position = trace.find(quoted);
+  if (position == std::string::npos)
+    return -1;
+  long long value = 0;
+  for (std::size_t i = position + quoted.size();
+       i < trace.size() && trace[i] >= '0' && trace[i] <= '9'; ++i)
+    value = value * 10 + (trace[i] - '0');
+  return value;
 }
 
 void legacyArrayReadAfterLraStage()
 {
-  OwnedVc owner;
-  VC vc = owner;
-  Expr x = realSymbol(owner, "x");
-  Type bv4 = vc_bvType(vc, 4);
-  vc_assertFormula(vc, owner.own(vc_eqExpr(vc, x, real(owner, "9/4"))));
+  TermManager tm;
+  Solver s(tm);
+  const Term x = realSymbol(tm, "x");
+  const Sort bv4 = tm.mk_bv_sort(4);
+  s.add(x == tm.mk_real("9/4"));
 
   const auto impossibleReadBranch = [&](const char* array_name,
                                         const char* left_name,
                                         const char* right_name) {
-    Expr array = owner.own(
-        vc_varExpr(vc, array_name, vc_arrayType(vc, bv4, bv4)));
-    Expr left = owner.own(vc_varExpr(vc, left_name, bv4));
-    Expr right = owner.own(vc_varExpr(vc, right_name, bv4));
-    Expr same_index = owner.own(vc_eqExpr(vc, left, right));
-    Expr left_read = owner.own(vc_readExpr(vc, array, left));
-    Expr right_read = owner.own(vc_readExpr(vc, array, right));
-    Expr different_values = owner.own(
-        vc_notExpr(vc, owner.own(vc_eqExpr(vc, left_read, right_read))));
+    const Term array = tm.declare(array_name, tm.mk_array_sort(bv4, bv4));
+    const Term left = tm.declare(left_name, bv4);
+    const Term right = tm.declare(right_name, bv4);
+    const Term same_index = left == right;
+    const Term different_values = !(array[left] == array[right]);
 
     // Keep each array's initial read count above the eager
     // Ackermannisation threshold so the legacy candidate checker owns the
     // two independent refinement rounds.
-    for (int k = 0; k != 10; ++k)
-    {
-      Expr index = owner.own(
-          vc_bvConstExprFromLL(vc, 4, static_cast<unsigned>(k)));
-      Expr read = owner.own(vc_readExpr(vc, array, index));
-      vc_assertFormula(
-          vc, owner.own(vc_eqExpr(
-                  vc, read,
-                  owner.own(vc_bvConstExprFromLL(
-                      vc, 4, static_cast<unsigned>(k))))));
-    }
-    return owner.own(vc_andExpr(vc, same_index, different_values));
+    for (std::uint64_t k = 0; k != 10; ++k)
+      s.add(array[tm.mk_bv(4, k)] == tm.mk_bv(4, k));
+    return same_index && different_values;
   };
 
-  Expr first = impossibleReadBranch("a", "i", "j");
-  Expr second = impossibleReadBranch("b", "k", "l");
-  vc_assertFormula(vc, owner.own(vc_orExpr(vc, first, second)));
+  const Term first = impossibleReadBranch("a", "i", "j");
+  const Term second = impossibleReadBranch("b", "k", "l");
+  s.add(first || second);
 
-  vc_setFlags(vc, 's');
-  std::ostringstream diagnostics;
-  std::streambuf* old_buffer = std::cerr.rdbuf(diagnostics.rdbuf());
-  int result = 0;
-  try
-  {
-    result = owner.solve();
-  }
-  catch (...)
-  {
-    std::cerr.rdbuf(old_buffer);
-    throw;
-  }
-  std::cerr.rdbuf(old_buffer);
-  require(result == 1,
+  // 2.x's 's' flag: the coordinator's metrics, which carry the number of
+  // legacy refinement rounds, are diagnostic output.
+  s.options().set_bool("print-functionstat", true);
+  std::string diagnostics;
+  s.set_diagnostic_sink(
+      [&diagnostics](std::string_view text) { diagnostics.append(text); });
+  const Result result = s.check_sat();
+  s.set_diagnostic_sink(nullptr);
+  require(result.is_unsat(),
           "legacy array-read refinement after LRA stage was not UNSAT");
-  require(vc_hasRealModel(vc) == 0,
-          "legacy array refinement retained a staged Real model");
+  require(hasNoModel(s), "legacy array refinement retained a staged Real model");
 
-  const std::string trace = diagnostics.str();
-  const std::string key = "\"legacy_refinements\":";
-  const std::size_t position = trace.find(key);
-  require(position != std::string::npos,
-          "legacy coordinator diagnostics were not emitted");
-  std::size_t value_position = position + key.size();
-  unsigned refinements = 0;
-  while (value_position < trace.size() &&
-         trace[value_position] >= '0' && trace[value_position] <= '9')
-  {
-    refinements = refinements * 10U +
-                  static_cast<unsigned>(trace[value_position] - '0');
-    ++value_position;
-  }
+  const long long refinements =
+      traceCounter(diagnostics, "legacy_refinements");
+  require(refinements >= 0, "legacy coordinator diagnostics were not emitted");
   if (refinements < 2)
     throw std::runtime_error(
         "legacy array fixture did not require multiple candidate rounds: " +
-        std::to_string(refinements) + "\n" + trace);
+        std::to_string(refinements) + "\n" + diagnostics);
 }
 
 void interleavedManagers()
 {
-  OwnedVc first_owner;
-  OwnedVc second_owner;
-  VC first = first_owner;
-  VC second = second_owner;
-  Expr x = realSymbol(first_owner, "x");
-  Expr y = realSymbol(second_owner, "y");
-  vc_assertFormula(first, first_owner.own(
-                              vc_eqExpr(first, x, real(first_owner, "11/13"))));
-  vc_assertFormula(
-      second, second_owner.own(
-                  vc_eqExpr(second, y, real(second_owner, "-17/19"))));
-  require(first_owner.solve() == 0 && second_owner.solve() == 0 &&
-              first_owner.solve() == 0,
+  TermManager first_tm;
+  TermManager second_tm;
+  Solver first(first_tm);
+  Solver second(second_tm);
+  const Term x = realSymbol(first_tm, "x");
+  const Term y = realSymbol(second_tm, "y");
+  first.add(x == first_tm.mk_real("11/13"));
+  second.add(y == second_tm.mk_real("-17/19"));
+  require(first.check_sat().is_sat() && second.check_sat().is_sat() &&
+              first.check_sat().is_sat(),
           "interleaved independent managers disagreed");
-  char* xv = vc_getRealModelValue(first, x);
-  char* yv = vc_getRealModelValue(second, y);
-  require(std::string(xv) == "11/13" && std::string(yv) == "-17/19",
+  require(realValue(first, x) == "11/13" && realValue(second, y) == "-17/19",
           "interleaved manager models mixed values");
-  vc_deleteString(xv);
-  vc_deleteString(yv);
 }
 
 void concurrentManagers()
@@ -283,20 +265,15 @@ void concurrentManagers()
       {
         for (unsigned round = 0; round != 20; ++round)
         {
-          OwnedVc owner;
-          VC vc = owner;
-          Expr x = realSymbol(owner, "thread_x");
+          TermManager tm;
+          Solver s(tm);
+          const Term x = realSymbol(tm, "thread_x");
           const std::string expected =
               std::to_string(worker * 20 + round + 1) + "/997";
-          vc_assertFormula(
-              vc, owner.own(
-                      vc_eqExpr(vc, x, real(owner, expected.c_str()))));
-          if (owner.solve() != 0)
+          s.add(x == tm.mk_real(expected));
+          if (!s.check_sat().is_sat())
             throw std::runtime_error("concurrent solve failed");
-          char* value = vc_getRealModelValue(vc, x);
-          const std::string actual(value);
-          vc_deleteString(value);
-          if (actual != expected)
+          if (realValue(s, x) != expected)
             throw std::runtime_error("concurrent model mismatch");
         }
       }

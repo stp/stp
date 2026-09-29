@@ -329,7 +329,8 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
 
 LraCoordinator::~LraCoordinator() noexcept
 {
-  if (manager_.UserFlags.stats_flag)
+  // A run that ended at its first CNF reports nothing past that point.
+  if (manager_.UserFlags.stats_flag && !manager_.run_ended_after_cnf)
   {
     try
     {

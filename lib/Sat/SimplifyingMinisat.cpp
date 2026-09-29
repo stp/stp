@@ -24,19 +24,45 @@ THE SOFTWARE.
 
 #define __STDC_FORMAT_MACROS
 #include "stp/Sat/SimplifyingMinisat.h"
+#include "stp/Sat/MinisatSeed.h"
 #include "minisat/simp/SimpSolver.h"
 #include <iostream>
 
 namespace stp
 {
 
+#ifdef STP_MINISAT_HAS_TERMINATOR
+namespace
+{
+// MinisatCore's: the deadline and stop requests the SATSolver base class
+// keeps, read on every conflict and restart.
+class DeadlineTerminator : public Minisat::Terminator
+{
+  const SATSolver& owner;
+
+public:
+  explicit DeadlineTerminator(const SATSolver& o) : owner(o) {}
+
+  bool terminate() override { return owner.timeLimitExpired(); }
+};
+} // namespace
+#endif
+
 SimplifyingMinisat::SimplifyingMinisat()
 {
   s = new Minisat::SimpSolver();
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  deadline_terminator.reset(new DeadlineTerminator(*this));
+  s->connectTerminator(deadline_terminator.get());
+#endif
 }
 
 SimplifyingMinisat::~SimplifyingMinisat()
 {
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  // Before the terminator it points at.
+  s->connectTerminator(nullptr);
+#endif
   delete s;
 }
 
@@ -171,4 +197,9 @@ void SimplifyingMinisat::setFrozen(uint32_t x)
 {
   s->setFrozen(x, true);
 }
+}
+
+void stp::SimplifyingMinisat::setSeed(uint64_t seed)
+{
+  s->random_seed = minisatSeed(seed);
 }

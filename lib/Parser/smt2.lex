@@ -73,6 +73,11 @@
   static thread_local bool floatTokensActive = false;
   static thread_local bool realTokensActive = false;
 
+  // Inside an indexed identifier -- between "(_" and its ")" -- a numeral
+  // is an index, a width or a count, never a Real literal, whatever the
+  // Real gate says. Set by the "_" rule, cleared by the next ")".
+  static thread_local bool indexedIdentifierOpen = false;
+
   // The most recent floating-point name that the gate above handed back as an
   // ordinary identifier without finding a declaration for it. A missing
   // set-logic surfaces far from its cause -- the grammar just trips over an
@@ -167,9 +172,14 @@ namespace stp
 
   void SMT2ResetCommandLexerState()
   {
+    indexedIdentifierOpen = false;
     ufDeclarationNamePending = false;
     functionParameterNamePending = false;
     declassifiedNamePending = false;
+    // The let rule sets it for its binder and clears it once the binder is
+    // read; a parse abandoned in between left every identifier of the next
+    // parse lexed as an unknown name.
+    stringOnly = false;
   }
 
   bool SMT2DeclassifiedNamePending() { return declassifiedNamePending; }
@@ -372,14 +382,51 @@ namespace stp
     return fallback;
   }
 
-  // Mathematical Real names are keywords only in QF_LRA, QF_UFLRA and
-  // QF_AUFLRA.
+  // Mathematical Real names are keywords only in the Real logics: QF_LRA,
+  // QF_UFLRA, QF_AUFLRA and the LRA variants of the floating-point logics.
   // Outside those logics they retain the ordinary identifier behavior
   // required by the existing BV/FP grammars (notably '-' and '/' in to_fp
   // literals).
   static int realKeyword(int token)
   {
     return realTokensActive ? token : lookup(smt2text);
+  }
+  // Where the input comes from when it is not the FILE* (setSMT2Reader in
+  // parser.h): the 3.x API reads a caller's stream through one. Without a
+  // reader the lexer reads its FILE* as flex always has -- flex's own
+  // YY_INPUT, spelled out because defining the macro replaces it.
+  static stp::ParserReader smt2Reader = NULL;
+  static void* smt2ReaderOpaque = NULL;
+#define YY_INPUT(buf, result, max_size)                                        \
+  if (smt2Reader != NULL)                                                      \
+    result = static_cast<int>(                                                 \
+        smt2Reader((buf), static_cast<size_t>(max_size), smt2ReaderOpaque));   \
+  else if (YY_CURRENT_BUFFER_LVALUE->yy_is_interactive)                        \
+  {                                                                            \
+    int c = '*';                                                               \
+    int n;                                                                     \
+    for (n = 0; n < max_size && (c = getc(yyin)) != EOF && c != '\n'; ++n)     \
+      buf[n] = (char)c;                                                        \
+    if (c == '\n')                                                             \
+      buf[n++] = (char)c;                                                      \
+    if (c == EOF && ferror(yyin))                                              \
+      YY_FATAL_ERROR("input in flex scanner failed");                          \
+    result = n;                                                                \
+  }                                                                            \
+  else                                                                         \
+  {                                                                            \
+    errno = 0;                                                                 \
+    while ((result = (int)fread(buf, 1, (yy_size_t)max_size, yyin)) == 0 &&    \
+           ferror(yyin))                                                       \
+    {                                                                          \
+      if (errno != EINTR)                                                      \
+      {                                                                        \
+        YY_FATAL_ERROR("input in flex scanner failed");                        \
+        break;                                                                 \
+      }                                                                        \
+      errno = 0;                                                               \
+      clearerr(yyin);                                                          \
+    }                                                                          \
   }
 %}
 
@@ -403,7 +450,7 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
     exact, while every other use of a numeral is a syntax error rather than
     the silently wrapped value strtoul would hand back. */
 {DIGIT}+               {
-                         if (realTokensActive)
+                         if (realTokensActive && !indexedIdentifierOpen)
                          {
                            smt2lval.str = new std::string(smt2text);
                            return REAL_NUMERAL_TOK;
@@ -444,8 +491,8 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
  /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
 "("             { return LPAREN_TOK; }
-")"             { return RPAREN_TOK; }
-"_"             { return UNDERSCORE_TOK; }
+")"             { indexedIdentifierOpen = false; return RPAREN_TOK; }
+"_"             { indexedIdentifierOpen = true; return UNDERSCORE_TOK; }
 "!"             { return EXCLAIMATION_MARK_TOK; }
 ":"             { return COLON_TOK; }
 
@@ -543,6 +590,9 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
  /* Types for QF_BV and QF_ABV. */
 "BitVec"        { return BITVEC_TOK;}
 "Array"         { return ARRAY_TOK;}
+ /* The one qualified identifier the grammar admits, ((as const S) v).
+  * "as" is reserved in SMT-LIB 2, so no input can mean a symbol by it. */
+"as"            { return AS_TOK;}
 "Bool"          { return BOOL_TOK;}
 
  /* Types for QF_FP and QF_BVFP. These and every other floating-point
@@ -649,6 +699,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
  /* Functions for FP */
 "fp.to_real" { return fpKeyword(FP_TO_REAL_TOK); }
+"fp.to_ieee_bv" { return fpKeyword(FP_TO_IEEE_BV_TOK); }
 "fp.abs" { return fpKeyword(FP_ABS_TOK); }
 "fp.neg" { return fpKeyword(FP_NEG_TOK); }
 "fp.add" { return fpKeyword(FP_ADD_TOK); }
@@ -715,17 +766,12 @@ namespace stp {
     smt2_scan_string(yy_str);
   }
 
-  FILE* getSMT2In() {
-    return smt2in;
-  }
-
   void setSMT2In(FILE* file) {
     smt2in = file;
   }
 
-  void setSMT2Interactive(bool enable) {
-    if (smt2in == NULL)
-      smt2in = stdin;
-    yy_set_interactive(enable ? 1 : 0);
+  void setSMT2Reader(ParserReader reader, void* opaque) {
+    smt2Reader = reader;
+    smt2ReaderOpaque = opaque;
   }
 }

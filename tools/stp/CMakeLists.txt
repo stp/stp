@@ -22,14 +22,16 @@
 # Create binary
 # -----------------------------------------------------------------------------
 if(BUILD_EXECUTABLES)
+    # A client of the 3.x API: <stp/stp.hpp>, and the option registry's rows
+    # for its command line.
     add_executable(stp-bin
         main.cpp
-        main_common.cpp
+        run.cpp
     )
-    # main_common.cpp reaches the generated ASTKind.h through NodeFactory.h,
-    # so name the generator here or a parallel build can compile this TU
-    # before ASTKind.h exists.
-    add_dependencies(stp-bin ASTKind_header)
+    # Both reach the 3.x API's generated headers (and main.cpp the registry's
+    # tables) through <stp/stp.hpp>, so name their generator here or a
+    # parallel build can compile these TUs before their headers exist.
+    add_dependencies(stp-bin stp_api_tables)
 
     set_target_properties(stp-bin PROPERTIES
         OUTPUT_NAME stp
@@ -52,6 +54,10 @@ if(BUILD_EXECUTABLES)
         stp
         CLI11
     )
+    # main.cpp registers the command line from the 3.x option registry, whose
+    # rows are declared in lib/Api/Registry.h: an in-tree header, not an
+    # installed one, hence the source-tree include directory.
+    target_include_directories(stp-bin PRIVATE ${PROJECT_SOURCE_DIR}/lib)
 
     install(TARGETS stp-bin
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"

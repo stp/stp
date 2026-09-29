@@ -39,7 +39,7 @@
 ;
 ; RUN: not %solver --SMTLIB2 --cnf-generation-effort nonsense %s 2>&1 | %OutputCheck --check-prefix=BADLEVEL %s
 ;
-; BADLEVEL: Unknown --cnf-generation-effort value 'nonsense'\. Expected one of: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, gia-low, gia-high, gia-very-high\.
+; BADLEVEL: Unknown --cnf-generation-effort value 'nonsense'\. Expected one of: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, new-high, gia-low, gia-high, gia-very-high\.
 ;
 ; The new-* rungs are a different generator over a different AIG, so they
 ; say so rather than printing one of the ABC lines.

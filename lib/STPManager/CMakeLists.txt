@@ -22,6 +22,7 @@ add_library(stpmgr OBJECT
     STP.cpp
     RealSession.cpp
     STPManager.cpp
+    FpToReal.cpp
     UserDefinedFlags.cpp
 )
 

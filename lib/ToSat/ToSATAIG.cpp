@@ -210,25 +210,28 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
   // What makes this CNF partial, named so a reader can act on it.
   //
   // There are two reasons and they are not the same reason, which the one
-  // sentence that used to be here could not say. Array read refinement leaves
-  // out congruence axioms over a faithful bit-vector layer, and --ackermanize
-  // is the flag that puts them in up front. A bit-vector abstraction leaves
-  // out the arithmetic itself: the CNF over-approximates the query, and no
-  // flag completes it -- turning the abstraction off is the only way to get a
-  // total CNF, and that is a different encoding rather than the same one
-  // finished.
+  // sentence that used to be here could not say. A refinement -- of array
+  // reads, uninterpreted functions, Real arithmetic, the floating-point
+  // abstraction -- leaves out what the search will ask for over a faithful
+  // bit-vector layer; for arrays alone --ackermanize puts it in up front. A
+  // bit-vector abstraction leaves out the arithmetic itself: the CNF
+  // over-approximates the query, and no flag completes it -- turning the
+  // abstraction off is the only way to get a total CNF, and that is a
+  // different encoding rather than the same one finished.
   //
-  // Said at both exits. --output-CNF writes the file whether or not
-  // --exit-after-CNF is given, and it used to write an over-approximate one
-  // with no warning at all.
+  // Said when the run ends at its first CNF; the stp binary says the same of
+  // the files --output-CNF writes from the CNF sink (tools/stp/run.cpp).
   const bool abstracted = bm->UserFlags.bv_eq_abstraction ||
                           bm->UserFlags.bv_term_abstraction;
-  const bool arrayRefinement = needAbsRef && !abstracted;
+  const bool refinedLater = needAbsRef && !abstracted;
   const auto sayWhyPartial = [&](const char* what) {
-    if (arrayRefinement)
-      cerr << "Warning: " << what << " is partial: array read refinement adds"
-           << " its congruence axioms as the search asks for them. Use"
-           << " --ackermanize to have them all up front." << endl;
+    if (refinedLater)
+      cerr << "Warning: " << what << " is partial: a refinement (of array"
+           << " reads, uninterpreted functions, Real arithmetic or the"
+           << " floating-point abstraction) adds what the search asks for as"
+           << " it goes. --ackermanize puts the array axioms in up front, which"
+           << " makes the CNF whole when arrays are the only refinement."
+           << endl;
     else if (abstracted)
       cerr << "Warning: " << what << " is an over-approximation of the query:"
            << " --bv-eq-abstraction and --bv-term-abstraction replace"
@@ -237,25 +240,36 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
            << " that is the whole query." << endl;
   };
 
+  // what Solver::statistics reports as the last encoding's size
+  bm->UserFlags.coverage.last_cnf_variables = cnf.varCount() - 1;
+  bm->UserFlags.coverage.last_cnf_clauses = cnf.clauseCount();
+
   // One line, whichever generator ran, so that a sweep over the levels can be
   // read without knowing which of them prints what.
   if (bm->UserFlags.stats_flag)
     cerr << "cnf: " << cnf.clauseCount() << " clauses, " << cnf.varCount() - 1
          << " variables, " << cnf.literalCount() << " literals" << endl;
 
-  if (bm->UserFlags.output_CNF_flag)
+  if (bm->cnf_listener)
   {
-    std::stringstream fileName;
-    fileName << "output_" << bm->CNFFileNameCounter++ << ".cnf";
-    std::ofstream out(fileName.str().c_str());
-    if (!out)
-      cerr << "Warning: could not open " << fileName.str() << " for writing."
-           << endl;
-    else
-    {
-      cnf.writeDimacs(out);
-      sayWhyPartial("the CNF written by --output-CNF");
-    }
+    std::ostringstream dimacs;
+    cnf.writeDimacs(dimacs);
+    bm->cnf_listener(dimacs.str(), refinedLater ? CnfExtent::Partial
+                                   : abstracted    ? CnfExtent::OverApproximation
+                                                   : CnfExtent::Whole);
+  }
+
+  if (bm->UserFlags.stop_after_cnf)
+  {
+    // Abandon the check the way a preparation deadline does: TopLevelSTP
+    // catches this, clears the tables and reports the reason noted here.
+    bm->noteUnknown(UnknownReason::StoppedAfterCnf,
+                    needAbsRef ? "stopped after generating the first CNF, "
+                                 "which is partial (array or arithmetic "
+                                 "refinement was still to come)"
+                               : "stopped after generating the CNF");
+    throw PreparationInterrupted(PreparationStage::Boundary,
+                                 std::chrono::steady_clock::now());
   }
 
   if (bm->UserFlags.exit_after_CNF)
@@ -276,7 +290,14 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
       sayWhyPartial("that CNF");
     }
 
-    exit(0);
+    // The run ends here: the check stops as stop_after_cnf does, and what
+    // unwinds from here says nothing more (run_ended_after_cnf), so that the
+    // output is what the stp binary once gave by exiting here.
+    bm->run_ended_after_cnf = true;
+    bm->noteUnknown(UnknownReason::StoppedAfterCnf,
+                    "the run ended after generating the first CNF");
+    throw PreparationInterrupted(PreparationStage::Boundary,
+                                 std::chrono::steady_clock::now());
   }
 }
 
@@ -456,6 +477,7 @@ bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
   cb = NULL;
   bb.cb = NULL;
 
+  bm->UserFlags.coverage.last_blast_nodes = static_cast<uint64_t>(mgr.totalNumberOfNodes());
   {
     RunTimes::Scope cnf_runtime(*bm->GetRunTimes(), RunTimes::CNFConversion);
     QueryPhaseScope cnf_time(bm->query_timing, QueryPhase::CNFConversion);

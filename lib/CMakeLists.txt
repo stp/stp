@@ -19,9 +19,9 @@
 # THE SOFTWARE.
 
 # Symbol visibility, see the DLL_PUBLIC block in include/stp/Util/Attributes.h
-# (duplicated in include/stp/c_interface.h). Both macros only ever do anything
-# under MSVC; the GNU/clang branch of that block tests neither of them, so on
-# every non-MSVC build these definitions are inert.
+# (duplicated in lib/Compat2/include/stp/c_interface.h). Both macros only ever
+# do anything under MSVC; the GNU/clang branch of that block tests neither of
+# them, so on every non-MSVC build these definitions are inert.
 #
 # STP_EXPORTS means "this translation unit is part of libstp", as opposed to a
 # client compiling against the installed headers. It must reach every source
@@ -61,6 +61,7 @@ add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
 add_subdirectory(Interface)
+add_subdirectory(Api)
 add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(ToSat)
@@ -90,8 +91,8 @@ set(stp_lib_targets
     floatblaster
     simplifier
     constantbv
-    cinterface
     cppinterface
+    stpapi
     parser
     printer
     util
@@ -113,18 +114,10 @@ foreach(_stp_obj_lib ${stp_lib_targets})
     endif()
 endforeach()
 
-# Create list of objects and gather list of
-# associated public headers.
+# The objects libstp is made of.
 set(stp_lib_objects "")
-set(stp_public_headers "")
 foreach(target ${stp_lib_targets})
     list(APPEND stp_lib_objects $<TARGET_OBJECTS:${target}>)
-
-    get_target_property(TARGETS_PUBLIC_HEADERS ${target} PUBLIC_HEADER)
-    if (EXISTS "${TARGETS_PUBLIC_HEADERS}")
-        list(APPEND stp_public_headers "${TARGETS_PUBLIC_HEADERS}")
-        message("Adding public header(s) ${TARGETS_PUBLIC_HEADERS} to target stp")
-    endif()
 endforeach()
 
 
@@ -151,8 +144,9 @@ add_library(stp
 # must never become part of the link interface.
 #
 # STP_SHARED_LIB is the opposite: consumers need it too. A client compiling
-# against the installed c_interface.h must see STP_SHARED_LIB (so DLL_PUBLIC is
-# a __declspec) with STP_EXPORTS unset (so it resolves to dllimport). Putting it
+# against the installed stp.h or stp.hpp (or libstp2's c_interface.h) must see
+# STP_SHARED_LIB (so the export macros are a __declspec) with STP_EXPORTS unset
+# (so they resolve to dllimport). Putting it
 # in the INTERFACE requirements records it in the exported STPTargets.cmake, so
 # anything that links the imported stp target picks it up automatically, and
 # in-tree consumers (tools/, bindings/, tests/) get it for free.
@@ -163,12 +157,13 @@ endif()
 target_include_directories(stp INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
+    $<BUILD_INTERFACE:${STP_API_GEN_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 # Set the public header so it will be installed
 set_target_properties(stp PROPERTIES
-    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp;${PROJECT_SOURCE_DIR}/include/stp/uf.hpp"
+    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/stp.hpp;${PROJECT_SOURCE_DIR}/include/stp/stp.h"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )
@@ -306,8 +301,8 @@ target_link_libraries(stp
 # names without complaint, so naming them here left the build-tree
 # STPTargets.cmake asking a consumer for -lSymFPU -lABC.
 #
-# An installed STP needs neither -- c_interface.h, fp.hpp and uf.hpp include
-# neither library. SYSTEM keeps the warning suppression both find modules set.
+# An installed STP needs neither -- no installed header includes either
+# library. SYSTEM keeps the warning suppression both find modules set.
 # Only the include directory travels this way: ABC's archive is named on stp's
 # own link line above, and the tests that call into ABC directly link it
 # themselves because a shared libstp localises its symbols.
@@ -372,3 +367,20 @@ install(TARGETS stp
     # staging root.
     PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/stp"
 )
+# The 3.x API's generated headers (enums, named constructors, version).
+install(DIRECTORY "${STP_API_GEN_DIR}/include/stp/api"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/stp"
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+)
+# And the generated sources of the Python package, which a pip install of
+# bindings/python against this installation compiles in, so that the package
+# it builds agrees with this libstp (bindings/python/setup.py). Installed
+# whether or not this build makes the package itself.
+install(FILES "${STP_API_GEN_DIR}/python/_gen_enums.pxi"
+              "${STP_API_GEN_DIR}/python/_gen_kinds.py"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/stp/api/python"
+)
+
+# libstp2: the 2.x C API re-implemented over the 3.x C API. After the stp
+# target, which it links.
+add_subdirectory(Compat2)

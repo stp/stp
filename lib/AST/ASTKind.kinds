@@ -87,20 +87,9 @@ PARAMBOOL       2       2       Form
 READ		2	2	Term
 WRITE		3	3	Term
 
-#Types: These kinds are used only in the API. Once processed inside
-#the API, they are never used again in the system
-ARRAY           0       0
-BITVECTOR       0       0
-BOOLEAN         0       0
-FLOATINGPOINT   0       0
-ROUNDINGMODE    0       0
-
 # Floating point _terms_ (i.e., things that produce FPs)
 
 # fp.abs: fp -> fp
-# The public C API mirrors every kind below in include/stp/c_interface.h
-# (enum exprkind_t) by numeric value; keep the two in lockstep. Anchoring
-# static_asserts live next to getExprKind in lib/Interface/c_interface.cpp.
 FP_ABS                      1    1    Term    FP
 
 # fp.neg: fp -> fp
@@ -147,7 +136,7 @@ FP_TOFP                     3   4    Term    FP
 # The distinction is in the source's *sort*, and a blasted float is its packed
 # bits -- so by the time the blaster sees the operand, a float and an integer
 # look identical. Asking the operand's type made an integer source get read as
-# a float and answer the wrong thing. The parser and the C API know which one
+# a float and answer the wrong thing. The parsers and the API know which one
 # was written, so they record it here.
 FP_TOFP_SIGNED              4    4    Term    FP
 
@@ -222,12 +211,10 @@ UF_APPLY        2       -       Term    Form
 # Durable SMT-LIB distinct predicate. Its operands remain together through
 # frontend substitution and query assembly, then the completed-root distinct
 # pass either exploits their symmetry or lowers them to pairwise disequalities.
-# Keep new public kinds at the end: their numeric values are ABI-visible.
 DISTINCT        2       -       Form
 
-# Mathematical Real first-fragment nodes.  Keep this append-only catalogue in
-# numeric lockstep with the public C exprkind_t enum.  REAL_ADD and REAL_SUB
-# retain their parsed n-ary shape; the exact frontend canonicalizes them.
+# Mathematical Real first-fragment nodes.  REAL_ADD and REAL_SUB retain their
+# parsed n-ary shape; the exact frontend canonicalizes them.
 REAL_CONST      0       0       Term
 REAL_ADD        2       -       Term
 REAL_SUB        1       -       Term

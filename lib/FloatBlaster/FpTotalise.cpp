@@ -52,7 +52,7 @@ ASTNode FpTotalise::topLevel(const ASTNode& n)
   //
   // The symbols carry a constraint from their declaration too, but that one
   // is asserted at whatever level was current then, and the node outlives the
-  // level: a symbol built inside a vc_push/vc_pop bracket comes out of it
+  // level: a symbol built inside a push/pop bracket comes out of it
   // hash-consed and unpinned, and answers with a junk encoding. Re-pinning
   // here is what makes the guarantee independent of the assertion stack; the
   // repeat is a duplicate conjunct whenever the original survived.

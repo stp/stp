@@ -16,6 +16,43 @@
   using namespace stp;
   extern char *yytext;
   extern int cvcerror (const char *msg);
+  // Where the input comes from when it is not the FILE* (setCVCReader in
+  // parser.h): the 3.x API reads a caller's stream through one. Without a
+  // reader the lexer reads its FILE* as flex always has -- flex's own
+  // YY_INPUT, spelled out because defining the macro replaces it.
+  static stp::ParserReader cvcReader = NULL;
+  static void* cvcReaderOpaque = NULL;
+#define YY_INPUT(buf, result, max_size)                                        \
+  if (cvcReader != NULL)                                                       \
+    result = static_cast<int>(                                                 \
+        cvcReader((buf), static_cast<size_t>(max_size), cvcReaderOpaque));     \
+  else if (YY_CURRENT_BUFFER_LVALUE->yy_is_interactive)                        \
+  {                                                                            \
+    int c = '*';                                                               \
+    int n;                                                                     \
+    for (n = 0; n < max_size && (c = getc(yyin)) != EOF && c != '\n'; ++n)     \
+      buf[n] = (char)c;                                                        \
+    if (c == '\n')                                                             \
+      buf[n++] = (char)c;                                                      \
+    if (c == EOF && ferror(yyin))                                              \
+      YY_FATAL_ERROR("input in flex scanner failed");                          \
+    result = n;                                                                \
+  }                                                                            \
+  else                                                                         \
+  {                                                                            \
+    errno = 0;                                                                 \
+    while ((result = (int)fread(buf, 1, (yy_size_t)max_size, yyin)) == 0 &&    \
+           ferror(yyin))                                                       \
+    {                                                                          \
+      if (errno != EINTR)                                                      \
+      {                                                                        \
+        YY_FATAL_ERROR("input in flex scanner failed");                        \
+        break;                                                                 \
+      }                                                                        \
+      errno = 0;                                                               \
+      clearerr(yyin);                                                          \
+    }                                                                          \
+  }
 %}
 
 %option never-interactive
@@ -164,8 +201,9 @@ namespace stp {
     cvc_scan_string(yy_str);
   }
 
-  FILE* getCVCIn() {
-    return cvcin;
+  void setCVCReader(ParserReader reader, void* opaque) {
+    cvcReader = reader;
+    cvcReaderOpaque = opaque;
   }
 
   void setCVCIn(FILE* file) {

@@ -1,48 +1,49 @@
-# STP Python bindings
+# STP's Python API
 
-Python bindings for [STP](https://github.com/stp/stp). They are pure Python
-and load the `libstp` shared library through `ctypes`, so one copy of the
-package works under every Python 3 and nothing needs compiling.
+The Python API of [STP](https://github.com/stp/stp): the `stp` package, a
+z3py-style shell over the compiled module `stp._core`, which calls STP's C API
+(`<stp/stp.h>`). `docs/api.rst` in the STP tree is the guide to it.
 
-## Two ways to install them
+## Two ways to install it
 
-**With STP's CMake build.** Configure STP with `-DENABLE_PYTHON_INTERFACE=ON`
-(the default for a shared-library build), and `cmake --install`
-installs the package under the install prefix, recording where it put the
-library. `PYTHON_LIB_INSTALL_DIR` chooses the directory.
+**With STP's CMake build.** Configure STP with `-DENABLE_PYTHON_API=ON` (the
+default when the interpreter can import Cython), and `cmake --install`
+installs the package under the install prefix. `PYTHON_LIB_INSTALL_DIR`
+chooses the directory, relative to the prefix unless it is absolute.
 
-**With pip, against an STP that is already installed.** Install STP first
-(a shared-library build, the default), then, once per Python interpreter:
+**With pip, against an STP that is already installed.** Install STP first (a
+shared-library build, the default), then, once per Python interpreter:
 
     python3 -m pip install ./bindings/python
 
-This installs only the Python package. It is how to give several Python
-versions the bindings for one installed `libstp`.
+This compiles the package's extension against the installed STP, so it needs
+a C compiler and the interpreter's development headers; pip fetches Cython.
+It is how to give several Python versions the API of one installed `libstp`.
+It is not supported on Windows, where the CMake build is the way.
 
-## Finding libstp
+## Finding the installation
 
-At import, the package tries, in order:
+pip looks for STP's headers and its shared `libstp` under:
 
-1. `STP_LIBRARY`, if set: the full path of the library to load, and nothing
-   else is tried.
-2. The locations a CMake build or install recorded. A pip install records
-   none.
-3. The directories in `LD_LIBRARY_PATH` (Linux and the BSDs),
-   `DYLD_LIBRARY_PATH` (macOS) or `PATH` (Windows, where the library is
-   `stpwin.dll`).
-4. The platform's own search, through `ctypes.util.find_library`: the
-   `ldconfig` cache on Linux and the BSDs, the linker's default paths on
-   macOS.
+1. `STP_PREFIX`, if set, and nothing else;
+2. otherwise the prefix of the `stp` on `PATH`, then `/usr/local`, then `/usr`.
 
-So an STP installed to a system prefix is found unaided. One installed
-elsewhere needs its `lib` directory on the library search path, or
-`STP_LIBRARY` pointing at the library.
+The headers are `include/stp/stp.h` and the generated sources the install
+puts in `include/stp/api/python` for this build; the library is looked for in
+`lib64` and then `lib`. `STP_INCLUDE_DIR` and `STP_LIBRARY_DIR` name the two
+directories outright, for an installation laid out otherwise.
+
+The extension records the library directory it was built against as its
+rpath, so `import stp` loads that `libstp` with nothing set. The generated
+sources come from the same tables as that library, so build against the STP
+you are going to run.
 
 ## Example
 
-    import stp
+    from stp import *
 
-    s = stp.Solver()
-    x = s.bitvec('x', width=8)
-    s.add(x + x != 2 * x)
-    print(s.check())  # False: no x makes the two differ
+    x, y = BitVecs('x y', 32)
+    s = Solver()
+    s.add(ULT(x + y, 20), UGT(x, 10), UGT(y, 10))
+    print(s.check())  # sat
+    print(s.model())  # e.g. [x = 4294967288, y = 11]

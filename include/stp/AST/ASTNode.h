@@ -40,8 +40,10 @@ namespace stp
 namespace lra {
 class Frontend;
 }
+namespace api {
 namespace detail {
-class CInterfaceNodeAccess;
+class NodeAccess;
+}
 }
 using std::ostream;
 class ASTInternal;
@@ -59,7 +61,9 @@ class ASTNode
   friend class ASTInterior;
   friend class UFContext;
   friend class lra::Frontend;
-  friend class detail::CInterfaceNodeAccess;
+  // The 3.x API keeps its terms as raw ASTInternal pointers behind an opaque
+  // handle and wraps them back into nodes through this one access class.
+  friend class api::detail::NodeAccess;
   friend class ::SimplifyingNodeFactory;
   friend class vector<ASTNode>;
   friend ASTNode HashingNodeFactory::CreateNode(
@@ -97,6 +101,10 @@ class ASTNode
   }
 
   STPMgr* GetSTPMgr() const;
+  // The manager of node `p`, read without taking a reference to it: the API
+  // looks up a term's owner this way, and must not touch another manager's
+  // counts from its own thread when that term is foreign to the call.
+  static STPMgr* ManagerOf(const ASTInternal* p) { return p->nodeManager; }
 
 public:
   uint8_t getIteration() const;

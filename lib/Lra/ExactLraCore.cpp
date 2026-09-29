@@ -186,6 +186,7 @@ class ExactLraCore::Impl final
 
   CoreStatistics statistics() const noexcept;
   CheckStatus status() const noexcept;
+  bool exhausted() const noexcept { return exhausted_; }
   CoreGeneration generation() const noexcept
   {
     return generation_state_->engine->generation;
@@ -318,6 +319,7 @@ class ExactLraCore::Impl final
 
   bool prepareRevision() noexcept;
   void invalidate() noexcept;
+  void exhaust() noexcept;
   InputStatus inputFailure(NumberFailure const&, bool mutated) noexcept;
   InputStatus inputFailure(StorageFailure const&, bool mutated) noexcept;
   InputStatus inputFailure() noexcept;
@@ -343,6 +345,9 @@ class ExactLraCore::Impl final
   mutable NumberBudget witness_budget_;
   std::unique_ptr<GenerationState> generation_state_;
   State state_ = State::Building;
+  // A number budget refused mid-change and the core was torn down for it
+  // (exhaust): Invalid, but not a fault.
+  bool exhausted_ = false;
   std::uint64_t revision_ = 1;
   // The generation whose snapshot the candidate-certificate path last
   // audited in full.  Keyed on the generation, not the revision: asserts
@@ -405,6 +410,17 @@ void ExactLraCore::Impl::invalidate() noexcept
   increment(statistics_.internal_errors);
 }
 
+// A budget refused in the middle of a change: the state cannot be kept, so it
+// goes as for a fault, but the refusal is counted as the budget's.
+void ExactLraCore::Impl::exhaust() noexcept
+{
+  invalidate();
+  if (statistics_.internal_errors != 0)
+    --statistics_.internal_errors;
+  increment(statistics_.resource_stops);
+  exhausted_ = true;
+}
+
 InputStatus ExactLraCore::Impl::inputFailure(NumberFailure const& failure,
                                              bool mutated) noexcept
 {
@@ -413,7 +429,10 @@ InputStatus ExactLraCore::Impl::inputFailure(NumberFailure const& failure,
     increment(statistics_.resource_stops);
     return InputStatus::ResourceLimit;
   }
-  invalidate();
+  if (isSafeResource(failure))
+    exhaust();
+  else
+    invalidate();
   return InputStatus::InternalError;
 }
 
@@ -425,7 +444,10 @@ InputStatus ExactLraCore::Impl::inputFailure(StorageFailure const& failure,
     increment(statistics_.resource_stops);
     return InputStatus::ResourceLimit;
   }
-  invalidate();
+  if (isSafeResource(failure))
+    exhaust();
+  else
+    invalidate();
   return InputStatus::InternalError;
 }
 
@@ -1969,6 +1991,11 @@ CheckResult ExactLraCore::Impl::checkFailure(
     return CheckResult{CheckStatus::ResourceLimit, std::nullopt,
                        std::nullopt};
   }
+  if (isSafeResource(failure))
+  {
+    exhaust();
+    return CheckResult{CheckStatus::InternalError, std::nullopt, std::nullopt};
+  }
   return checkFailure();
 }
 
@@ -1981,6 +2008,11 @@ CheckResult ExactLraCore::Impl::checkFailure(
     increment(statistics_.resource_stops);
     return CheckResult{CheckStatus::ResourceLimit, std::nullopt,
                        std::nullopt};
+  }
+  if (isSafeResource(failure))
+  {
+    exhaust();
+    return CheckResult{CheckStatus::InternalError, std::nullopt, std::nullopt};
   }
   return checkFailure();
 }
@@ -2274,6 +2306,7 @@ void ExactLraCore::Impl::reset() noexcept
     // ownership proof for the retired bundle.
     replacement.reset();
     state_ = State::Building;
+    exhausted_ = false;
     revision_ = 1;
     increment(statistics_.resets);
   }
@@ -2508,6 +2541,11 @@ CoreStatistics ExactLraCore::statistics() const noexcept
 CheckStatus ExactLraCore::status() const noexcept
 {
   return impl_ ? impl_->status() : CheckStatus::InternalError;
+}
+
+bool ExactLraCore::exhausted() const noexcept
+{
+  return impl_ && impl_->exhausted();
 }
 
 CoreGeneration ExactLraCore::generation() const noexcept

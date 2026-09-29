@@ -31,6 +31,11 @@ if (USE_CADICAL)
 else()
     set(STP_CADICAL_PYBOOL "False")
 endif()
+if (STP_BUILD_WITH_CRYPTOMINISAT)
+    set(STP_CRYPTOMINISAT_PYBOOL "True")
+else()
+    set(STP_CRYPTOMINISAT_PYBOOL "False")
+endif()
 if (CADICAL_HAS_INPROBING)
     set(STP_CADICAL_INPROBING_PYBOOL "True")
 else()
@@ -123,6 +128,27 @@ if (USE_CADICAL)
         PROPERTIES RESOURCE_LOCK query-files-exec-root
     )
 endif()
+
+# The constant-array and fp.to_real files under the incremental driver and
+# with every sat answer's model checked (-d). The run above decides them
+# with the batch driver and checks no model, and both features have met
+# defects only one of those showed: an operand the incremental driver
+# folded to a constant array, a model the checker refused.
+foreach(_dir constant-arrays fp-to-real)
+    foreach(_variant "incremental;--incremental=on" "checked;-d")
+        list(GET _variant 0 _variant_name)
+        list(GET _variant 1 _variant_flag)
+        set(_name "query-files-${_dir}-${_variant_name}")
+        add_test(NAME ${_name}
+            COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG>
+                    --param solver_params=${_variant_flag} ./${_dir}
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        )
+        set_tests_properties(${_name}
+            PROPERTIES RESOURCE_LOCK query-files-exec-root
+        )
+    endforeach()
+endforeach()
 
 # The linear-arithmetic files under every backend that can host the theory
 # propagator, with the float driver on and off: the propagator is the same

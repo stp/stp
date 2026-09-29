@@ -46,7 +46,19 @@ THE SOFTWARE.
  *   C     on every insertion, compare against the access already at
  *         the destination for the same concrete index: a different
  *         concrete value violates the (adapted) read-congruence axiom
- *         A1 and yields a conflict (section 7.2).
+ *         A1 and yields a conflict (section 7.2);
+ *   K     an access arriving at a constant array (every cell of which
+ *         holds its default) must carry the default, else its path's
+ *         guards imply value = default -- a conflict of its own;
+ *   K'    two constant arrays with different defaults connected by
+ *         writes, true equalities and selected if-then-else branches
+ *         differ at every cell no write on the path names, so the
+ *         path's guards imply the defaults are equal; over an index
+ *         sort with no more values than the graph has writes the cells
+ *         are made explicit accesses instead, and rules K and C decide.
+ *         A consistent candidate hands every array connected to a
+ *         constant array that array's default as the value of its
+ *         unobserved cells (the completion the model publishes).
  *
  * The work list is FIFO and rule I seeds every access before the
  * fixed point starts, so discovery is breadth-first per access: the
@@ -120,6 +132,7 @@ THE SOFTWARE.
 #define EXTCHECKER_H
 
 #include "stp/AST/AST.h"
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -236,6 +249,21 @@ struct ExtWriteNode
   ASTNode indexName;
 };
 
+// A constant array of the graph: an array symbol whose every cell holds
+// its default (STPMgr::CreateConstArray). No read of one exists -- the
+// hashing factory folds it to the default -- so the checker knows it only
+// as an array node whose every arriving access must carry the default
+// (rule K, at insertion) and whose default the arrays it is connected to
+// inherit as the value of their unobserved cells (the completion of a
+// consistent candidate). defaultName is the scalar name of the default,
+// so the candidate assigns it a value and a lemma can be encoded over it.
+struct ExtConstArray
+{
+  ASTNode array;
+  ASTNode defaultTerm;
+  ASTNode defaultName;
+};
+
 // The array subgraph of the preprocessed formula, frozen for one
 // solve: accesses, write edges, equality edges, and the witness
 // obligations of preprocessing step 1. All vectors carry a fixed
@@ -262,6 +290,8 @@ struct ExtGraph
                                                       // node number)
 
   std::vector<ExtWitness> witnesses; // sorted by record id
+
+  std::map<ASTNode, ExtConstArray> constArrays; // constant array -> default
 };
 
 // Access to the candidate assignment sigma. Every checker-visible term
@@ -323,6 +353,32 @@ struct ExtConflict
 
   std::vector<ExtLemmaAtom> theoryPremise; // canonical order
   ASTNode theoryConclusionA, theoryConclusionB;
+
+  // Which rule found the conflict, and so what the fields above mean.
+  // CONGRUENCE is rule C: two accesses, two paths, the paper's lemma.
+  // CONST_DEFAULT is rule K: rightAccess arrived along rightGuards at a
+  // constant array (commonArray) carrying a value other than its default;
+  // the conclusion is value(rightAccess) = default, and leftAccess is
+  // unused. CONST_PAIR is rule K': two constant arrays with different
+  // defaults are connected by a path whose guards are leftGuards; the
+  // conclusion is default = default, and neither access is used.
+  enum Shape
+  {
+    CONGRUENCE,
+    CONST_DEFAULT,
+    CONST_PAIR
+  };
+  Shape shape = CONGRUENCE;
+  ASTNode constTermA, constTermB; // the defaults, theory layer
+  ASTNode constNameA, constNameB; // the defaults, abstract layer
+
+  // Whether the lemma counts a declared sort's elements by the patterns of
+  // its carrier: rule K' over a declared index sort takes some element no
+  // write names to exist, and a conflict among explicit cells of a declared
+  // sort's constant arrays takes a carrier pattern no term names to be an
+  // element. A model may give a declared sort fewer elements than that, so a
+  // refutation that used such a lemma is not one.
+  bool countsDeclaredSort = false;
 };
 
 struct ExtEvent
@@ -373,6 +429,14 @@ struct ExtCheckResult
   // (index, value) BVCONSTs for every rho entry. Valid iff CONSISTENT.
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> observed;
 
+  // The value every cell no access observes holds, for the arrays the
+  // candidate connects to a constant array (through a write and its
+  // base, an equality sigma assigns true, or an if-then-else and the
+  // branch sigma selects): that constant array's default. Arrays absent
+  // from the map complete with the model's ordinary default. Valid iff
+  // CONSISTENT; the model publishes it as the arrays' completion.
+  std::map<ASTNode, ASTNode> completion;
+
   std::vector<ExtEvent> events;
   std::map<std::string, int> stats;
 
@@ -390,6 +454,14 @@ public:
   // Pure: no SAT access, no term allocation into the host query.
   static ExtCheckResult check(const ExtGraph& graph, ExtModelView& model,
                               bool recordEvents = false);
+
+  // How many values an array index sort of carrier width `width` has, which
+  // is what a constant array's cells are counted in: every pattern of a
+  // bit-vector, or of a declared sort's carrier; the five rounding modes; a
+  // float format's patterns with its NaNs counted once (an index is
+  // canonical, so no other NaN pattern is ever one). Saturates at
+  // UINT64_MAX.
+  static uint64_t indexValueCount(const SourceSort& index, unsigned width);
 };
 
 } // namespace stp

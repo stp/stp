@@ -140,6 +140,8 @@ private:
   // to record under would be found and the other missed, and the miss
   // completes to zero: one array reads a cell the other does not, and
   // two equal arrays are reported as differing.
+  std::map<ASTNode, ASTNode> arrayCompletions; // see setArrayCompletions
+
   typedef std::map<std::pair<ASTNode, ASTNode>, ASTNode> ModelCells;
   void CollectModelCells(const ASTNodeSet& arrays, ModelCells& out);
 
@@ -241,7 +243,6 @@ public:
 
   // Prints the counterexample to stdout
   void PrintCounterExample(bool t, std::ostream& os = std::cout);
-  void PrintCounterExampleSMTLIB2(std::ostream& os);
   void PrintFullCounterExampleSMTLIB2(std::ostream& os);
   void outputLine(std::ostream& os, const ASTNode &f, ASTNode se);
   
@@ -306,6 +307,10 @@ public:
   // queries the counterexample, and returns a vector of index-value pairs for e
   vector<std::pair<ASTNode, ASTNode>> GetCounterExampleArray(bool t,
                                                              const ASTNode& e);
+  // The same for every array symbol in `arrays` at once, keyed by the array:
+  // one walk over the counterexample however many arrays there are.
+  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>>
+  GetCounterExampleArrays(bool t, const vector<ASTNode>& arrays);
 
   // The observed (index, value) model entries of one array symbol,
   // deduplicated per concrete index and sorted in ascending unsigned
@@ -314,6 +319,10 @@ public:
   // observations.
   vector<std::pair<ASTNode, ASTNode>>
   GetSortedArrayModelEntries(const ASTNode& arraySym);
+  // The same for every array symbol in `arraySyms`, keyed by the array
+  // (one with no entries has none), from one walk over the counterexample.
+  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>>
+  GetSortedArrayModelEntries(const vector<ASTNode>& arraySyms);
 
   int CounterExampleSize(void) const
   {
@@ -376,6 +385,12 @@ public:
   // term. Anywhere else both terms read the same default.
   bool ArraysEqualUsingModel(const ASTNode& left, const ASTNode& right);
 
+  // The array a term is built over once the model decides its
+  // if-then-elses and its writes are peeled (a substituted symbol is
+  // followed to its definition): the array whose completion its
+  // unobserved cells hold.
+  ASTNode BaseUnderModel(const ASTNode& arrayTerm);
+
   // Whether ArraysEqualUsingModel can answer about this array term at
   // all. Ask before asking; see the definition for the one case it
   // cannot.
@@ -400,7 +415,28 @@ public:
   // all-zero pattern denotes no mode at all, so a five-bit array of
   // modes cannot be completed with the same constant a five-bit array
   // of bitvectors is.
-  ASTNode defaultCellValue(const ASTNode& arrayTerm) const;
+  //
+  // Two arrays answer with something other than the sort's plain default.
+  // A constant array (STPMgr::isConstArray), or a write chain over one,
+  // answers with the constant array's default. An array the array-equality
+  // checker connected to a constant array in the certified candidate
+  // (through a true equality, a selected if-then-else branch or a write)
+  // answers with that default too: the checker publishes it through
+  // setArrayCompletions, and without it the printed model of an array
+  // equated with a constant array would fill its unobserved cells with
+  // zero and fail to satisfy the equality.
+  ASTNode defaultCellValue(const ASTNode& arrayTerm);
+
+  // The unobserved-cell completions the array-equality checker certified
+  // for one candidate: array node -> plain constant. Cleared with the
+  // tables, so a completion never outlives the candidate it belongs to.
+  void setArrayCompletions(const std::map<ASTNode, ASTNode>& completions);
+  // The value an array term's unobserved cells hold when it is not the
+  // sort's plain default: the default of the constant array it is built
+  // over (directly, through a write chain, a selected if-then-else branch
+  // or an equality propagation substituted away), or the checker's
+  // completion for the array it is built over. False for a plain array.
+  bool arrayCompletion(const ASTNode& array, ASTNode& out);
 
   // The mode a RoundingMode carrier with nothing behind it denotes.
   // defaultCellValue publishes it for an unobserved cell of an array of
@@ -480,58 +516,11 @@ public:
   {
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
+    arrayCompletions.clear();
   }
 
   ~AbsRefine_CounterExample() { ClearAllTables(); }
 };
 
-class CompleteCounterExample // not copyable
-{
-  ASTNodeMap counterexample;
-  STPMgr* bv;
-
-public:
-  CompleteCounterExample(ASTNodeMap a, STPMgr* beev)
-      : counterexample(a), bv(beev)
-  {
-  }
-  ASTNode GetCounterExample(ASTNode e)
-  {
-    if (BOOLEAN_TYPE == e.GetType() && SYMBOL != e.GetKind())
-    {
-      FatalError("You must input a term or propositional variables\n", e);
-    }
-    if (counterexample.find(e) != counterexample.end())
-    {
-      // The map is the raw model, holding the plain bitvector constants that
-      // model evaluation works in. A value handed out carries the sort of
-      // what was asked for, as from
-      // AbsRefine_CounterExample::GetCounterExample -- so a float term's
-      // value can be equated with the term again.
-      return bv->LiftSourceValue(counterexample[e], e.GetSourceSort());
-    }
-    else
-    {
-      if (SYMBOL == e.GetKind() && BOOLEAN_TYPE == e.GetType())
-      {
-        return bv->CreateNode(stp::FALSE);
-      }
-
-      if (SYMBOL == e.GetKind())
-      {
-        // Simplified out, so it can take any value. RoundingMode has only five
-        // values in its 5-bit carrier, so use a legal deterministic default;
-        // ordinary bitvectors and floats retain the all-zero completion.
-        ASTNode z = bv->isRoundingModeSortedTerm(e)
-                        ? bv->CreateBVConst(
-                              5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
-                        : bv->CreateZeroConst(e.GetValueWidth());
-        return bv->LiftSourceValue(z, e.GetSourceSort());
-      }
-
-      return e;
-    }
-  }
-};
 } // end of namespace
 #endif

@@ -86,20 +86,17 @@ limits, statistics, and writing CNF.
 Overflowing a 32-bit integer using the Python interface:
 
 ```python
-import stp
+from stp import *
 
-s = stp.Solver()
-x = s.bitvec('x', width=32)
-y = s.bitvec('y', width=32)
-s.add(x + y < 20)
-s.add(x > 10)
-s.add(y > 10)
-print(s.check())  # True
-print(s.model())  # e.g. {'x': 4294967287, 'y': 11}
+x, y = BitVecs('x y', 32)
+s = Solver()
+s.add(ULT(x + y, 20), UGT(x, 10), UGT(y, 10))
+print(s.check())  # sat
+print(s.model())  # e.g. [x = 4294967288, y = 11]
 ```
 
 The [manual](https://stp.github.io/stp/) documents the accepted subset of SMT-LIB2,
-the C and C++ interfaces, incremental solving and array extensionality, and how
+the C, C++ and Python API, incremental solving and array extensionality, and how
 STP works. Its sources are in [`docs/`](docs), and
 [`docs/README.md`](docs/README.md) says how to build and read it locally.
 

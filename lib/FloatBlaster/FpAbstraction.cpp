@@ -1204,14 +1204,14 @@ FpAbstraction::~FpAbstraction()
 
 void FpAbstraction::publishCoverage()
 {
-  // bm_ outlives every instance: vc_Destroy deletes the STP object, and with
-  // it the driver and the batch pipeline, before the manager.
+  // bm_ outlives every instance: a solver deletes its STP object, and with
+  // it the driver and the batch pipeline, before its manager goes.
   //
   // Every difference below is unsigned, and stats_ is not monotone --
   // acceptRepairedCandidate rolls the lemma and release counts back to what
   // they were when the check that queued them began. That is safe here
   // only because publishing happens at settled points: from the destructor,
-  // and from vc_getCounter, which a caller can only reach between API
+  // and from Solver::statistics, which a caller can only reach between API
   // calls, never inside a refinement round. The rollback floor is the start
   // of the current check, which is at or above the totals at the end of the
   // previous one, so a published watermark is never above the live value.

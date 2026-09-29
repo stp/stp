@@ -12,11 +12,13 @@ STP currently supports the following types of tests
    `OutputCheck <https://github.com/stp/OutputCheck>`__ tools. We refer
    to these as query file tests. They live in ``tests/query-files``.
 -  Tests that call STP's API. Those under ``tests/unit-tests`` exercise
-   STP's internals and those under ``tests/api/C`` and ``tests/api/CPP``
-   exercise the public C and C++ APIs, all using the
+   STP's internals, those under ``tests/api/cpp`` and ``tests/api/c``
+   exercise the C++ and C API, and those under ``tests/api/compat2``
+   exercise ``libstp2``, the 2.x C interface over the C API, all using the
    `GoogleTest <https://google.github.io/googletest/>`__ framework. The
-   Python API tests under ``tests/api/python`` are plain Python scripts
-   registered directly with CTest.
+   Python tests of the ``stp`` package, in ``tests/api/python``, are
+   registered directly with CTest: its pytest suite, and the allocator
+   checks of a process that loads the package.
 
 Both kinds are registered with CTest, so ``ctest`` (or ``make test``)
 runs everything.
@@ -81,8 +83,12 @@ file becomes its own executable and its own CTest test, named after the
 source file with ``Tests-gtest`` appended -- so
 ``tests/unit-tests/SimplifyFormula_Test.cpp`` is run by the CTest test
 ``SimplifyFormula_TestTests-gtest``. The tests that are not GoogleTest
-are named individually: ``python-interface-tests``,
+are named individually, such as ``python-api-tests``,
 ``python-allocator-tests``, ``test_fpbackend`` and ``test_fprewrites``.
+The API's tests carry the label ``api``, and those of ``libstp2`` (in
+``tests/api/compat2``, their files named ``api2-*``) the label ``api2``.
+``ctest -L`` takes a regular expression, so ``ctest -L api`` runs both
+and ``ctest -L api2`` only ``libstp2``'s.
 
 .. _valgrind:
 
@@ -104,9 +110,9 @@ The flags come from ``VALGRIND_ARGS``, which defaults to
 ``--error-exitcode=1 --leak-check=full --errors-for-leak-kinds=none
 --track-origins=yes``. Memory errors -- invalid accesses, uninitialised
 values -- therefore fail a test, while leaks are reported in the output
-without failing it. That split is deliberate: the tests under
-``tests/api/C`` build ``Expr`` handles through the C API and mostly never
-call ``vc_DeleteExpr``, so about thirty of them leak a few bytes each by
+without failing it. That split is deliberate: the ``libstp2`` tests under
+``tests/api/compat2`` build ``Expr`` handles through the 2.x C interface
+and mostly never call ``vc_DeleteExpr``, so they leak a few bytes each by
 construction, and two of the unit tests drop what
 ``NodeDomainAnalysis::harmonise`` and ``FixedBits::GetMinBVConst`` hand
 back. To make leaks fail as well, override the list -- remembering that
@@ -172,9 +178,9 @@ first, and set ``UBSAN_OPTIONS=print_stacktrace=1`` for a stack trace with
 each one.
 
 The rest is plumbing. ``-shared-libsan`` and the matching ``-rpath`` are what
-let ``python-interface-tests`` work: the bindings dlopen ``libstp.so``, which
-fails against clang's default static runtime with "undefined symbol:
-``__ubsan_handle_type_mismatch_v1``". ``STP_ALLOCATOR=system`` keeps the
+let a process load ``libstp.so`` with ``dlopen`` (the Python package's
+extension does), which fails against clang's default static runtime with
+"undefined symbol: ``__ubsan_handle_type_mismatch_v1``". ``STP_ALLOCATOR=system`` keeps the
 vendored mimalloc, which replaces ``malloc`` wholesale, out of the picture.
 
 CI runs this configuration on every pull request, as the ``clang (ubsan)``
@@ -236,7 +242,7 @@ Unit tests
 The unit tests are built as standalone executables so individual tests
 can be executed by just running their executables, which live in the
 build directory under the same path they have in the source tree --
-``tests/unit-tests`` and ``tests/api/C``. Because they are GoogleTest
+``tests/unit-tests`` and ``tests/api/cpp``. Because they are GoogleTest
 binaries they take the usual flags, e.g. ``--gtest_filter=...`` to run a
 subset of the cases in one executable.
 

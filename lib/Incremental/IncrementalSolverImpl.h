@@ -1556,6 +1556,13 @@ struct IncrementalSolver::Impl
   // the per-solve hinting cost bounded on long sessions.
   std::unordered_map<int, uint64_t> everAssumedLits;
 
+  // The block literals under which an extensionality lemma counting a
+  // declared sort by its carrier was encoded (ExtConflict::countsDeclaredSort).
+  // Such a lemma stays in the solver guarded by its block's literal and takes
+  // part again whenever the identical block is assumed, so an unsat under one
+  // of these blocks is withheld however long ago the lemma came.
+  std::unordered_set<int> declaredSortBlocks;
+
   // Per-call bookkeeping for unsat answers: which level each assumed
   // literal carried, and -- when the caller asked for the last level to be
   // assumed one conjunct at a time (check-sat-assuming wants per-assumption
@@ -2619,7 +2626,7 @@ struct IncrementalSolver::Impl
   // arrayEqualityIsModelDecidable gives. Installing only when this epoch
   // happened to lower a float makes NULL mean two things at once, and the
   // model machinery has no way to tell them apart. It read the second as the
-  // first, and took abort() out of a legal C API call over a float term the
+  // first, and took abort() out of a legal API call over a float term the
   // assertion stack never mentioned -- which is answerable, and which the
   // batch driver answers, from the context it builds per solve whether or not
   // that solve had a float anywhere in it (STP.cpp, TopLevelSTP).
@@ -3337,6 +3344,7 @@ struct IncrementalSolver::Impl
     rootLitOf.clear();
     actLitOf.clear();
     everAssumedLits.clear();
+    declaredSortBlocks.clear();
     // Folding records describe readsOfEncoded from the OLD backend epoch.
     // Re-encoding can overwrite a key with a different row set (for example
     // after new permanent substitutions fold an index), so rebuild the

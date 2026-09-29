@@ -190,6 +190,7 @@ public:
 
   bool okay() const override; // FALSE means solver is in a conflicting state
 
+  void setSeed(uint64_t seed) override;
   void setMaxConflicts(int64_t max_confl) override; // set max solver conflicts
 
   bool simplify() override; // Removes already satisfied clauses.

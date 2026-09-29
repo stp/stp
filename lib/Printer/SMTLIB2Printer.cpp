@@ -367,6 +367,10 @@ void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
        i != iend; i++)
   {
     const stp::ASTNode& a = *i;
+    // A constant array is the manager's symbol, printed in its as-const
+    // spelling wherever it occurs; it is not a declaration of the input.
+    if (mgr->isConstArray(a))
+      continue;
     os << "(declare-fun ";
 
     // Should be a symbol.
@@ -465,14 +469,9 @@ void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
 void outputBitVecSMTLIB2(const ASTNode n, ostream& os)
 {
   const Kind k = n.GetKind();
-  const ASTChildren c = n.GetChildren();
   ASTNode op;
 
-  if (BITVECTOR == k)
-  {
-    op = c[0];
-  }
-  else if (BVCONST == k)
+  if (BVCONST == k)
   {
     op = n;
   }

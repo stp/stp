@@ -10,9 +10,9 @@
 ;
 ; Ten solves over the one multiplication below therefore read mult=10->1, which
 ; says the abstraction took a tenth of what it could have. It took all of it.
-; The ratio reaches vc_getCounter and every profile comparison run over an
-; incremental corpus, so a number that degrades linearly with session length is
-; not a number those comparisons can use.
+; The ratio reaches the published statistics and every profile comparison run
+; over an incremental corpus, so a number that degrades linearly with session
+; length is not a number those comparisons can use.
 ;
 ; Counted once per operation, the ratio means what it says and carries an
 ; invariant with it: abstracted can never exceed candidates, so a second record

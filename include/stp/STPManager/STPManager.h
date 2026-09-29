@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "stp/Util/QueryTiming.h"
 #include "stp/AST/ASTFPConst.h"
 #include "stp/AST/ASTRMConst.h"
+#include "stp/AST/ASTUninterpretedConst.h"
 #include "stp/AST/ASTInterior.h"
 #include "stp/AST/ASTNode.h"
 #include "stp/AST/ASTSymbol.h"
@@ -41,8 +42,11 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 #include "stp/config.h"
 #include <ankerl/unordered_dense.h>
+#include <unordered_map>
 #include <cstdint>
+#include <functional>
 #include <set>
+#include <string>
 
 namespace stp
 {
@@ -59,9 +63,13 @@ ASTNode presolveForSolve(STPMgr& manager, const ASTNode& input,
 }
 class ExtensionalityContext;
 class UFContext;
+class ASTUninterpretedConst;
 class ASTRealConst;
 class LraAstState;
 class FpAbstraction;
+struct FpToRealFormat;
+struct FpToRealState;
+void DestroyFpToRealState(FpToRealState* state);
 
 // The five SMT-LIB floating-point special values. Their nodes are ordinary
 // packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
@@ -73,6 +81,17 @@ enum class FPSpecial
   MinusInfinity,
   PlusZero,
   MinusZero,
+};
+
+// How a CNF a check hands to the SAT solver relates to the query: the whole
+// of it; partial, array read refinement adding its congruence axioms as the
+// search asks for them; or an over-approximation, the bit-vector
+// abstractions having replaced operations with free inputs.
+enum class CnfExtent
+{
+  Whole,
+  Partial,
+  OverApproximation,
 };
 
 /*
@@ -148,13 +167,18 @@ private:
   // to run, an abandoned encoding before it ever was -- and only one of them
   // has anything to say beyond its name. The SMT-LIB frontend clears this at
   // the top of every check-sat and on reset / reset-assertions. SMT-LIB reads
-  // it through (get-info :reason-unknown), and the C API through
-  // vc_getReasonUnknown.
+  // it through (get-info :reason-unknown), and the API through a check's
+  // Result.
   UnknownReason unknown_reason = UnknownReason::None;
   std::string unknown_detail;
 
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
+
+  // See ExposeNode. Off while the manager is destroyed, whose nodes go
+  // without withdrawing their ids one by one.
+  std::unordered_map<uint64_t, ASTInternal*> exposed_nodes;
+  bool exposed_nodes_live = true;
 
   // Created only by the private LRA frontend, on the first Real
   // construction.  The incomplete type keeps ExactRational, IMath, frontend
@@ -163,7 +187,6 @@ private:
 
   ASTRealConst* LookupOrCreateRealConst(ASTRealConst& value);
   void EraseRealConst(ASTRealConst* value);
-  void RecordRealSymbol(const ASTNode& symbol);
   void RegisterLraAssertion(const ASTNode& assertion);
   void PushLraAssertionFrame();
   void PopLraAssertionFrame();
@@ -232,7 +255,7 @@ public:
   // now. An instance registers itself here on construction and folds its
   // totals into UserFlags.coverage on destruction; publishFpCoverage() folds
   // in what the live ones have accumulated since they last published, so
-  // vc_getCounter answers mid-session as well as after teardown. There are
+  // Solver::statistics answers mid-session as well as after teardown. There are
   // at most a handful: one per batch solve or restart, one per encoding
   // epoch under --fp-abstraction-incremental.
   void registerFpAbstraction(FpAbstraction* abstraction)
@@ -541,7 +564,6 @@ private:
   // assertions in that logical context. Logical contexts are
   // created by PUSH/POP
   vector<ASTVec*> _asserts;
-  size_t lra_refused_depth = 0;
 
   // Memo table that tracks terms already seen
   ASTNodeMap TermsAlreadySeenMap;
@@ -549,7 +571,6 @@ private:
   // The query for the current logical context. BUG probably wrongly handled
   // and gets mixed up with the state, which it shouldn't (otherwise, next
   // query will be affected)
-  ASTNode _current_query;
 
   // Ptr to class that reports on the running time of various parts
   // of the code
@@ -576,6 +597,8 @@ private:
 
   ASTFPConst* LookupOrCreateFPConst(ASTFPConst& s);
   ASTRMConst* LookupOrCreateRMConst(ASTRMConst& s);
+  ASTUninterpretedConst* LookupOrCreateUninterpretedConst(
+      ASTUninterpretedConst& s);
 
   // Cache of zero/one/max BVConsts of different widths.
   ASTVec zeroes;
@@ -584,6 +607,21 @@ private:
 
   // Set of new symbols introduced that replace the array read terms
   ASTNodeSet Introduced_SymbolsSet;
+
+  // Constant arrays (see CreateConstArray): symbol -> default, and the
+  // interning key (array sort text, default) -> symbol.
+  ASTNodeMap constArrayDefaults;
+  // Keyed by the sort itself, not its text: two declared sorts can be
+  // spelled alike (one popped, one declared after it) and are two sorts.
+  struct ConstArrayKeyHash
+  {
+    size_t operator()(const std::pair<SourceSort, ASTNode>& k) const
+    {
+      return SourceSort::Hasher()(k.first) * 31 + k.second.Hash();
+    }
+  };
+  std::unordered_map<std::pair<SourceSort, ASTNode>, ASTNode, ConstArrayKeyHash>
+      constArraysByKey;
 
   CBV CreateBVConstVal;
 
@@ -614,6 +652,12 @@ private:
   // name identifies the object without being looked up in the symbol table.
   // See introducedSymbol.
   std::map<std::string, ASTNode> _introduced_by_name;
+
+  // fp.to_real's constants per format (FpToReal.cpp), made on first use, and
+  // the node numbers of its NaN and infinity constants among them.
+  FpToRealState* fp_to_real_state = nullptr;
+  std::unordered_set<uint64_t> fp_to_real_special_ids;
+  FpToRealFormat& FpToRealFormatFor(unsigned exp_width, unsigned sig_width);
 
 public:
   bool LookupSymbol(const char* const name);
@@ -651,16 +695,22 @@ public:
   // count is used in the creation of new variables
   unsigned int _symbol_count;
 
-  // The value to append to the filename when saving the CNF.
-  unsigned int CNFFileNameCounter;
+  // What the 3.x API's CNF sink receives: the DIMACS of every CNF a check
+  // hands to the SAT solver, and how that CNF relates to the query. Empty:
+  // no CNF is written out.
+  std::function<void(const std::string& dimacs, CnfExtent scope)> cnf_listener;
+
+  // Set when a check ended the run at its first CNF (exit_after_CNF): what
+  // unwinds from there prints nothing more, and an executed script ends with
+  // it. Cleared by whoever starts the next run.
+  bool run_ended_after_cnf = false;
 
   /****************************************************************
    * Public Member Functions                                      *
    ****************************************************************/
 
   DLL_PUBLIC STPMgr()
-      : last_iteration(0), soft_timeout_expired(false), _symbol_count(0),
-        CNFFileNameCounter(0)
+      : last_iteration(0), soft_timeout_expired(false), _symbol_count(0)
   {
     ValidFlag = false;
 
@@ -672,7 +722,6 @@ public:
     ASTTrue = CreateNode(TRUE);
     ASTUndefined = CreateNode(UNDEFINED);
     runTimes = new RunTimes();
-    _current_query = ASTUndefined;
     CreateBVConstVal = NULL;
   }
 
@@ -701,6 +750,10 @@ public:
   DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode& bvconst,
                                    unsigned exp_width, unsigned sig_width);
   DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
+  // The element of a declared sort whose carrier pattern is `carrier` (a
+  // BVCONST of the sort's carrier width), as a value of that sort.
+  DLL_PUBLIC ASTNode CreateUninterpretedConst(const ASTNode& carrier,
+                                              const SourceSort& sort);
 
   // Exact Real construction. Text is parsed only by the private
   // ExactRational implementation; no binary floating representation enters
@@ -712,10 +765,81 @@ public:
   DLL_PUBLIC ASTNode CreateRealPredicate(Kind kind, const ASTNode& lhs,
                                          const ASTNode& rhs);
 
+  // fp.to_real (FpToReal.cpp): the exact Real value of the float `x`. A float
+  // value folds to its Real value, zero of either sign to 0. SMT-LIB leaves
+  // fp.to_real of NaN and of the infinities unspecified, but it is still a
+  // function: NaN, +oo and -oo of each format map to three Real constants of
+  // that format, made once and reused. Anything else is an exact linear
+  // encoding over the float's bits, whose root names `x` (FpToRealOperand).
+  // Throws std::invalid_argument when `x` is not a float, and the exact
+  // arithmetic's own exception when a format's constants exceed its number
+  // limits (an exponent of 17 bits or more).
+  DLL_PUBLIC ASTNode CreateFpToReal(const ASTNode& x);
+  // fp.to_real at a float value of format (exp_width, sig_width): a
+  // REAL_CONST, or the format's constant for NaN, +oo or -oo. For evaluators,
+  // whose values do not always carry their format.
+  DLL_PUBLIC ASTNode FpToRealOfValue(const ASTNode& value, unsigned exp_width,
+                                     unsigned sig_width);
+  // The float `n` converts, when `n` is a conversion CreateFpToReal built or a
+  // rebuilding of one; otherwise a null node.
+  DLL_PUBLIC ASTNode FpToRealOperand(const ASTNode& n) const;
+  // Whether `n` is one of the constants standing for fp.to_real of NaN, +oo or
+  // -oo. Inline, for the exact Real model: nothing constrains such a constant
+  // that the solve never saw, and it evaluates to zero there.
+  bool IsFpToRealSpecial(const ASTNode& n) const
+  {
+    return !fp_to_real_special_ids.empty() && n.GetKind() == SYMBOL &&
+           fp_to_real_special_ids.count(n.GetNodeNum()) != 0;
+  }
+  bool HasFpToReal() const noexcept { return fp_to_real_state != nullptr; }
+  // `input` with the facts that tie each comparison of a conversion against a
+  // constant, or against a conversion of the same format, to the floating-point
+  // comparison it is for finite operands. Valid facts, for the SAT search.
+  ASTNode LinkFpToReal(const ASTNode& input);
+
   // Restore a model carrier value to the immutable sort of the source term
   // it answers. The solver itself continues to evaluate plain bitvectors.
   ASTNode LiftSourceValue(const ASTNode& carrier,
                           const SourceSort& source_sort);
+
+  // ---- constant arrays ----
+  //
+  // A constant array is an array symbol whose every cell holds one term, its
+  // default: what SMT-LIB writes ((as const (Array I E)) v). The symbol is
+  // introduced (never declared by a printer, never assigned by a model) and
+  // registered here with its default; creating one interns by (array sort,
+  // default), so the same request gives the same symbol however it arrives.
+  //
+  // The registry is what gives the symbol its meaning. Every construction
+  // path ends in HashingNodeFactory::CreateNode, which folds a read of a
+  // constant array to its default, so no read of one survives -- not the
+  // frontends', not a rewrite's, not the array transformer's, not the
+  // extensionality checker's witness and instantiation reads. That checker
+  // treats a constant array as one whose every access carries the default
+  // (ExtChecker rule K) and completes the arrays it equates with the default
+  // as their unobserved-cell value; the SMT-LIB printers write the symbol
+  // back in the as-const spelling.
+  //
+  // The default must be a value: a term with no symbol in it but other
+  // constant arrays (firstFreeSymbol). The registry is out of every
+  // preprocessing pass's sight, so a variable in a default would be
+  // eliminated there while the registry still named it; the passes treat a
+  // constant array as a value for that reason (PropagateEqualities,
+  // RemoveUnconstrained). The API and the SMT-LIB parser refuse anything
+  // else recoverably before they get here; here it is fatal.
+  DLL_PUBLIC ASTNode CreateConstArray(const SourceSort& array_sort,
+                                      const ASTNode& default_value);
+  // The first symbol found in `t` other than a constant array -- a variable,
+  // the function of an application, a symbol the engine introduced -- or a
+  // null node when there is none, which is what makes `t` a constant array's
+  // admissible default.
+  DLL_PUBLIC ASTNode firstFreeSymbol(const ASTNode& t) const;
+  DLL_PUBLIC bool isConstArray(const ASTNode& n) const;
+  // Whether any constant array exists: passes that would walk a formula
+  // looking for one skip the walk when none does.
+  bool hasConstArrays() const { return !constArrayDefaults.empty(); }
+  // The default of a registered constant array; fatal for anything else.
+  DLL_PUBLIC const ASTNode& constArrayDefault(const ASTNode& n) const;
 
   // Create a source-language leaf atomically. Its complete sort participates
   // in hash-consing and cannot subsequently be changed by width setters.
@@ -765,6 +889,26 @@ public:
   DLL_PUBLIC void noteReal();
   bool HasSeenRealSyntax() const noexcept { return has_real; }
 
+  // The ids the 3.x API hands out (Term::id), to their nodes. Held weakly: a
+  // node's last release withdraws its id (ASTInternal::exposed), so an id
+  // resolves exactly while some reference to its node lives, and handing one
+  // out never keeps a node alive.
+  DLL_PUBLIC void ExposeNode(const ASTNode& n);
+  // The live node with id `id`, or a null node.
+  DLL_PUBLIC ASTNode ExposedNode(uint64_t id) const;
+  void WithdrawExposedNode(uint64_t id);
+  // The node factory's refusals of a whole-array equality (= or distinct
+  // over arrays) built while array equality is switched off
+  // (UserFlags::enable_array_equality), counted: a caller reading a script
+  // tells that refusal apart from the script's other failures by it.
+  unsigned array_equality_refusals = 0;
+  // Record a manager-owned Real symbol as a current Real declaration, whose
+  // value the exact model then carries; recording one twice is a no-op.
+  // CreateSourceSymbol does it for every Real symbol it makes; a caller whose
+  // symbols outlive a public reset (ResetLraStateForPublicReset) does it
+  // again afterwards.
+  void RecordRealSymbol(const ASTNode& symbol);
+
   // Exact model access never exposes the private arithmetic type.  Returned
   // strings own their bytes and remain valid independently of subsequent
   // model invalidation.
@@ -803,6 +947,9 @@ public:
       const std::function<bool(const ASTNode&)>& condition_oracle =
           std::function<bool(const ASTNode&)>()) const noexcept;
   DLL_PUBLIC bool HasRealModelValue(const ASTNode& term) const noexcept;
+  // Whether the exact model's value of Real symbol `symbol` is the solve's,
+  // rather than the zero of a symbol no arithmetic mentioned.
+  DLL_PUBLIC bool RealModelSolveValued(const ASTNode& symbol) const noexcept;
   DLL_PUBLIC std::string GetRealModelValue(const ASTNode& term) const;
   DLL_PUBLIC std::string GetRealModelNumerator(const ASTNode& term) const;
   DLL_PUBLIC std::string GetRealModelDenominator(const ASTNode& term) const;
@@ -812,16 +959,6 @@ public:
                                         const ASTVec& visible_symbols) const;
   void InvalidateRealModel() noexcept;
 
-  // A Real assertion the exact-arithmetic budget refused is not in _asserts,
-  // so a later query would be answered without it -- soundly wrong rather
-  // than merely incomplete. Record the depth it was refused at; every query
-  // at or below that depth must answer "unknown" instead, and popping back
-  // past it clears the debt.
-  void NoteRealAssertionRefused() noexcept;
-  bool RealAssertionRefused() const noexcept
-  {
-    return lra_refused_depth != 0;
-  }
   ASTVec AllRealSymbols() const;
 
   /* Whether exact rationals re-derive a canonical form their construction
@@ -1009,11 +1146,6 @@ public:
   // accepted model remains readable after its call-local frame closes.
   void PopPreservingRealModel(void);
 
-  // Queries aren't maintained on a stack.
-  // Used by CVC & C-interface.
-  const ASTNode GetQuery();
-  void SetQuery(const ASTNode& q);
-
   const ASTVec GetAsserts();
   const ASTVec getVectorOfAsserts();
 
@@ -1027,16 +1159,6 @@ public:
   // For printing purposes
   // Used just by the CVC parser.
   ASTVec ListOfDeclaredVars;
-
-  // For printing purposes
-  // Used just via the C-interface.
-  // Note, not maintained properly wrt push/pops
-  vector<stp::ASTNode> decls;
-
-  // C API declarations have manager lifetime and no lexical binding frame.
-  // Keep their printed names unambiguous even if the caller clears the list
-  // used only for printing declarations.
-  std::map<std::string, SourceSort> c_api_source_sorts;
 
   // Nodes seen so far
   ASTNodeSet PLPrintNodeSet;
@@ -1238,11 +1360,6 @@ public:
   }
 
   DLL_PUBLIC ~STPMgr();
-
-  // The C interface's checker-owned wrappers, released by vc_Destroy. A hash
-  // set so that vc_DeleteExpr can forget a wrapper the caller released in
-  // constant time; the order they are released in does not matter.
-  ankerl::unordered_dense::set<stp::ASTNode*> persist;
 
   void print_stats() const
   {

@@ -36,8 +36,8 @@ namespace symbolic_fp
 
 // A rounding mode is a one-hot 5-bit bitvector: one bit per IEEE mode, so
 // an invalid mode is representable (all-zero, or multiple bits) and
-// roundingMode::valid() can constrain a symbolic one. The public C API's
-// VCRoundingMode mirrors these values.
+// roundingMode::valid() can constrain a symbolic one. libstp2's
+// VCRoundingMode (c_interface.h) uses the same values.
 enum rounding_modes
 {
   ROUND_NEAREST_TIES_TO_EVEN = 1,

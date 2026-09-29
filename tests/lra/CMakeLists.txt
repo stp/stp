@@ -484,48 +484,6 @@ if(STP_EXECUTABLE_AVAILABLE)
   )
 endif()
 
-add_executable(stp_lra_combination_api_tests
-  combination_api_tests.cpp)
-target_link_libraries(stp_lra_combination_api_tests PRIVATE
-  stp Threads::Threads)
-set_property(TARGET stp_lra_combination_api_tests
-  PROPERTY INCLUDE_DIRECTORIES
-  "${PROJECT_BINARY_DIR}/include"
-  "${PROJECT_SOURCE_DIR}/include"
-)
-set_target_properties(stp_lra_combination_api_tests PROPERTIES
-  CXX_STANDARD 17
-  CXX_STANDARD_REQUIRED ON
-  CXX_EXTENSIONS OFF
-)
-add_test(NAME lra_combination_api
-  COMMAND stp_lra_combination_api_tests)
-set_tests_properties(lra_combination_api PROPERTIES
-  LABELS "lra;api;combine;array;legacy;context;concurrency"
-  TIMEOUT 3600
-)
-
-add_executable(stp_lra_real_capability_api_tests
-  real_capability_api_tests.cpp)
-target_link_libraries(stp_lra_real_capability_api_tests PRIVATE
-  stp Threads::Threads)
-set_property(TARGET stp_lra_real_capability_api_tests
-  PROPERTY INCLUDE_DIRECTORIES
-  "${PROJECT_BINARY_DIR}/include"
-  "${PROJECT_SOURCE_DIR}/include"
-)
-set_target_properties(stp_lra_real_capability_api_tests PROPERTIES
-  CXX_STANDARD 17
-  CXX_STANDARD_REQUIRED ON
-  CXX_EXTENSIONS OFF
-)
-add_test(NAME lra_real_capability_api
-  COMMAND stp_lra_real_capability_api_tests)
-set_tests_properties(lra_real_capability_api PROPERTIES
-  LABELS "lra;api;ite;uf"
-  TIMEOUT 3600
-)
-
 add_executable(stp_lra_coordinator_fault_tests
   coordinator_fault_tests.cpp)
 target_link_libraries(stp_lra_coordinator_fault_tests PRIVATE
@@ -894,6 +852,33 @@ set_tests_properties(lra_frontend_internal_print_barrier PROPERTIES
   LABELS "lra;frontend;negative;printer"
 )
 
+# The Real extension's API tests, against the 3.x API (C++ and C). Its tests of
+# libstp2, the 2.x C API over the 3.x one, are in tests/api/compat2.
+foreach(api_test combination_api real_capability_api)
+  add_executable(stp_lra_${api_test}_tests ${api_test}_tests.cpp)
+  target_link_libraries(stp_lra_${api_test}_tests PRIVATE stp Threads::Threads)
+  set_property(TARGET stp_lra_${api_test}_tests PROPERTY INCLUDE_DIRECTORIES
+    "${PROJECT_BINARY_DIR}/include"
+    "${PROJECT_SOURCE_DIR}/include"
+  )
+  set_target_properties(stp_lra_${api_test}_tests PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+  )
+endforeach()
+add_test(NAME lra_combination_api
+  COMMAND stp_lra_combination_api_tests)
+set_tests_properties(lra_combination_api PROPERTIES
+  LABELS "lra;api;combine;array;context;concurrency"
+  TIMEOUT 3600
+)
+add_test(NAME lra_real_capability_api
+  COMMAND stp_lra_real_capability_api_tests)
+set_tests_properties(lra_real_capability_api PROPERTIES
+  LABELS "lra;api;ite;uf"
+  TIMEOUT 3600
+)
 add_executable(stp_lra_real_c_api_smoke real_c_api_smoke.c)
 target_link_libraries(stp_lra_real_c_api_smoke PRIVATE stp)
 set_property(TARGET stp_lra_real_c_api_smoke PROPERTY INCLUDE_DIRECTORIES
@@ -905,31 +890,9 @@ set_target_properties(stp_lra_real_c_api_smoke PROPERTIES
   C_STANDARD_REQUIRED ON
   C_EXTENSIONS OFF
 )
-add_executable(stp_lra_real_c_api_undeleted_expr real_c_api_undeleted_expr.c)
-target_link_libraries(stp_lra_real_c_api_undeleted_expr PRIVATE stp)
-set_property(TARGET stp_lra_real_c_api_undeleted_expr PROPERTY INCLUDE_DIRECTORIES
-  "${PROJECT_BINARY_DIR}/include"
-  "${PROJECT_SOURCE_DIR}/include"
-)
-set_target_properties(stp_lra_real_c_api_undeleted_expr PROPERTIES
-  C_STANDARD 99
-  C_STANDARD_REQUIRED ON
-  C_EXTENSIONS OFF
-)
-add_test(NAME lra_c_api_undeleted_expr
-         COMMAND stp_lra_real_c_api_undeleted_expr)
-
 add_test(NAME lra_c_api_smoke COMMAND stp_lra_real_c_api_smoke)
 set_tests_properties(lra_c_api_smoke PROPERTIES
   LABELS "lra;api;model"
-)
-
-add_test(NAME lra_c_api_negative
-  COMMAND "${PYTHON_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/real_c_api_negative_runner.py"
-    "$<TARGET_FILE:stp_lra_real_c_api_smoke>")
-set_tests_properties(lra_c_api_negative PROPERTIES
-  LABELS "lra;api;negative"
 )
 
 add_executable(stp_lra_real_cpp_api_smoke real_cpp_api_smoke.cpp)
@@ -968,10 +931,10 @@ set_tests_properties(lra_cpp_api_smoke PROPERTIES
   LABELS "lra;api;model;context"
 )
 
-if(ENABLE_PYTHON_INTERFACE)
+if(ENABLE_PYTHON_API)
   add_test(NAME lra_python_api_smoke
     COMMAND "${CMAKE_COMMAND}" -E env
-      "PYTHONPATH=${PROJECT_BINARY_DIR}/bindings/python"
+      "PYTHONPATH=${STP_PY_PYTHONPATH}"
       "${PYTHON_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/real_python_api_smoke.py"
   )

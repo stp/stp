@@ -290,8 +290,8 @@ public:
 // Ids come from a process-global counter and are never recycled, which two
 // things force. A SourceSort is a value and carries no provenance, so a
 // per-manager counter would make manager A's first sort compare equal to
-// manager B's -- and the C API creates a manager per validity checker, with
-// more than one alive at once. And sort aliases are frame-scoped, so
+// manager B's -- and the API lets any number of term managers be alive at
+// once. And sort aliases are frame-scoped, so
 // (push 1)(declare-sort S 0)(pop 1)(declare-sort S 0) legally declares two
 // different sorts spelled the same; keying identity on the name would hand
 // back a symbol belonging to a discarded frame.

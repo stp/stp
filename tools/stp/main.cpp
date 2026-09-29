@@ -22,1780 +22,729 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "main_common.h"
-#include "stp/FloatBlaster/FpAbstraction.h"
-#include "stp/Sat/SearchBias.h"
-#include "stp/Sat/SATSolverFactory.h"
+// The stp binary: a client of the 3.x API (<stp/stp.hpp>) and of the option
+// registry's tables (lib/Api/Registry.h), and of nothing else of the library.
+// This file is its command line; run.cpp reads and runs the input.
+
+#include "run.h"
+
+// The 3.x option registry's rows: the entries of lib/Api/tables/options.toml
+// and the command line's own rows. The command line below is registered from
+// them and every value goes to stp::Options, so the binary and the API
+// accept the same options with the same meanings.
+#include "Api/Registry.h"
+
+#include <stp/stp.hpp>
 
 #include <CLI/CLI.hpp>
 
-#include <climits>
-#include <cctype>
-#include <initializer_list>
+#include <cerrno>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
 #include <iterator>
+#include <map>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
-using namespace stp;
 using std::cout;
 using std::cerr;
 using std::endl;
 
-/********************************************************************
- * MAIN FUNCTION:
- *
- * step 0. Parse the input into an ASTVec.
- * step 1. Do BV Rewrites
- * step 2. Bitblasts the ASTNode.
- * step 3. Convert to CNF
- * step 4. Convert to SAT
- * step 5. Call SAT to determine if input is SAT or UNSAT
- ********************************************************************/
+namespace api = stp::api;
+namespace reg = stp::api::detail;
 
-class ExtraMain : public Main
+// The command line is the option registry plus the frontend rows.
+//
+// Every [[option]] entry of options.toml with a CLI form is registered with
+// CLI11 from its row (name, aliases, short flag, negation, type, default,
+// help, group), its value is handed to stp::Options as text, the options are
+// resolved (excludes, requires, build) and the solver is made from them,
+// which applies them to the engine through the appliers every library caller
+// goes through. The [[alias]] rows are the bare backend flags (--cadical and
+// friends) that set sat-backend to a value. The [[frontend]] rows are the
+// CLI-only registrations, bound here by their key to the Invocation that
+// run.cpp carries out.
+//
+// Hand-written and CLI-only, listed so that nothing else hides here:
+//   - the frontend rows' actions: the positional input file, --help,
+//     --version, the parser selection (--CVC, --SMTLIB1, --SMTLIB2, else the
+//     file's extension), the print-back flags, --print-output, --output-CNF,
+//     --exit-after-CNF (the solver's end-after-cnf), --parse-only and
+//     --interactive;
+//   - the reading of --max-time as a whole number of seconds (as the command
+//     line always read it; the registry's duration type wants a unit);
+//   - the wording of a refused value, kept to what the binary always said
+//     ("--max-time must be -1 (no limit) or greater", "--search-bias must be
+//     one of ..."), built from the row's range and values, or spelled out by
+//     the row's cli_bad_value, cli_below_min or cli_above_max line where the
+//     old wording was its own, and the order in which the refusals of a
+//     command line with several mistakes are reported (kCheckedFirst ...);
+//   - CLI11's own checks where the binary always had them: a 32-bit slot for
+//     an entry over a 32-bit engine field (its range says so), the unsigned
+//     entries with a range, the rows whose cli_range is narrower than the
+//     API's (the CaDiCaL knobs, whose -1 means unset to the library), a
+//     lenient mode's values, and a repeated option (refused unless the row
+//     takes its last value);
+//   - the exclusions of the backend flags among themselves and against the
+//     entries that require a particular backend (from the rows' `of` and
+//     `requires`), and CLI11's own exclusions for the frontend rows;
+//   - the split-value diagnostic for --incremental (a flag whose value must be
+//     attached with '=');
+//   - the defaults the binary keeps where the library's differ: no model is
+//     built unless asked for (produce-models) and exact rationals are not
+//     re-derived (lra-verify-canonical), both set explicitly unless given;
+//   - where the refusals the solver makes from the applied options (the
+//     CaDiCaL knobs, --lra-decision-polarity) and the HiGHS-only searches are
+//     reported;
+//   - the LRA option combinations the coordinator would refuse only once a
+//     Real query reached it (the extension controls with a Real session;
+//     --lra-extension-restart-sat without CaDiCaL, with an explicit
+//     --cadical-factor=on or with --array-index-hints=decide), refused by
+//     value;
+//   - the manager-scoped entries (simplify, uf-sort-width), which go to the
+//     TermManager: an input printed back is read without folding, as it
+//     always was.
+class CommandLine
 {
 public:
-  int create_and_parse_options(int argc, char** argv);
   void create_options();
   int parse_options(int argc, char** argv);
 
   CLI::App app;
 
-  // Pure flags, true when given on the command line.
+  // One slot per registry row. CLI11 keeps references to the storage, so
+  // the vector is sized once, before the first registration. An entry that
+  // reaches a 32-bit engine field is read into a 32-bit slot, so that CLI11
+  // refuses what does not fit as it always did ("Could not convert").
+  struct Entry
+  {
+    const reg::OptionSpec* spec = nullptr;
+    CLI::Option* option = nullptr;
+    bool b = false;
+    std::int64_t i = 0;
+    std::uint64_t u = 0;
+    std::int32_t i32 = 0;
+    std::uint32_t u32 = 0;
+    std::string s;
+  };
+  std::vector<Entry> entries;
+
+  // The backend flags of the [[alias]] rows.
+  struct AliasFlag
+  {
+    const reg::CliAlias* alias = nullptr;
+    CLI::Option* option = nullptr;
+    bool given = false;
+  };
+  std::vector<AliasFlag> alias_flags;
+
+  stp::Options options;
+
+  // What the frontend rows set, carried out by run.cpp.
+  stp_cli::Invocation invocation;
+  // The frontend rows that are the command line's own.
   bool version = false;
-  bool disable_simplifications = false;
-  bool switch_word = false;
-  bool disable_opt_inc = false;
-  bool disable_cbitp = false;
-  bool disable_equality = false;
-  bool size_reducing_only = false;
   bool use_cvc = false;
   bool use_smtlib1 = false;
   bool use_smtlib2 = false;
-#ifdef USE_MINISAT
-  bool use_simplifying_minisat = false;
-  bool use_minisat = false;
-#endif
-#ifdef USE_CRYPTOMINISAT
-  bool use_cryptominisat = false;
-#endif
-#ifdef USE_CADICAL
-  bool use_cadical = false;
-#endif
-
-  // Held as text until parse_options() turns it into UserFlags.search_bias.
-  std::string search_bias;
-  CLI::Option* search_bias_option = nullptr;
-
-  // The default polarity preference yields to backend capabilities; an
-  // explicit request must still diagnose missing prerequisites.
-  CLI::Option* lra_decision_polarity_option = nullptr;
-
-  // Likewise for UserFlags.array_index_hints.
-  std::string array_index_hints;
-  CLI::Option* array_index_hints_option = nullptr;
-
-  // Likewise for UserFlags.cadical_factor.
-  std::string cadical_factor;
-#ifdef USE_CADICAL
-  CLI::Option* cadical_factor_option = nullptr;
-#endif
-
-  // Likewise for UserFlags.incremental_inprobing.
-  std::string incremental_inprobing;
-#ifdef USE_CADICAL
-  CLI::Option* incremental_inprobing_option = nullptr;
-#endif
-
-  // Likewise for UserFlags.incremental_mode. This one is a flag rather than
-  // an option so that a bare --incremental keeps meaning what it always has;
-  // a value has to be attached with '=', which is also what stops it from
-  // swallowing the input file.
-  std::string incremental;
-  CLI::Option* incremental_option = nullptr;
-
-  // Likewise for UserFlags.cnf_effort; always mapped, so it carries the
-  // default spelling.
-  std::string cnf_effort = "auto";
-
-  // Likewise for the named mask of BV abstraction schema families.
-  std::string bv_schema_groups = formatBVSchemaGroups(BV_SCHEMA_GROUP_DEFAULT);
-
-  // A named, atomic schema-mask/refinement-round pair. Empty means the two
-  // lower-level options retain their independently parsed values.
-  std::string bv_abstraction_profile;
-  std::string fp_abstraction_ops;
-  std::string fp_abstraction_chain_ops;
-
-  // Which of the two scope options were actually given. The older MULT
-  // switch covers all three nonlinear operations while it is the only one
-  // supplied, and DIV/MOD wins once it is named -- in either argument order,
-  // which is what makes this a presence check rather than a last-writer one.
-  // vc_setInterfaceFlags resolves the same pair the same way, through
-  // bv_term_abstraction_divmod_explicit.
-  CLI::Option* bv_term_abstraction_mult_option = nullptr;
-  CLI::Option* bv_term_abstraction_divmod_option = nullptr;
-
-  // And whether the round ceiling was given, for the same kind of reason:
-  // --bv-term-abstraction-profile carries a ceiling of its own, and the two
-  // options exclude each other here, so this records what a run named for
-  // bv_term_abstraction_rounds_explicit -- which is what the C interface
-  // resolves the same pair with, where they do not exclude each other.
-  CLI::Option* bv_rounds_option = nullptr;
-  // --bb.fp-native-all and the per-operation switches it sets. Kept so that
-  // an operation named in its own right overrides the baseline.
-  CLI::Option* fp_native_all_option = nullptr;
-  std::vector<std::pair<CLI::Option*, bool*>> fp_native_options;
-  // ... and the group list, for the same reason: it is the other half of the
-  // pair a profile applies, and resolves the same way.
-  CLI::Option* bv_schema_groups_option = nullptr;
-
-  // Tri-state: UserFlags.interactive_read is only overridden when the
-  // option was given, so the value needs its own presence check.
+  // Tri-state: --interactive is only honoured when it was given, so the
+  // value needs its own presence check.
   bool interactive = false;
   CLI::Option* interactive_option = nullptr;
 
-  // Likewise for UserFlags.uf_eager_mode. An option rather than a flag: it
-  // has no legacy bare spelling to preserve, and an option cannot swallow the
-  // input file.
-  std::string uf_ackermann;
-  CLI::Option* uf_ackermann_option = nullptr;
-  // Likewise for UserFlags.fp_abstraction_constant_operands.
-  std::string fp_abstraction_constant_operands;
-  CLI::Option* fp_constant_operands_option = nullptr;
+  // The manager and the solver the options made, for run.cpp.
+  std::optional<stp::TermManager> manager;
+  std::unique_ptr<stp::Solver> solver;
 
-  // Likewise for UserFlags.uf_bv_term_abstraction.
-  std::string uf_bv_term_abstraction;
-  CLI::Option* uf_bv_term_abstraction_option = nullptr;
+  std::string group_of(const reg::OptionSpec& spec) const;
+  bool* frontend_target(const std::string& key);
+  void register_frontend(const reg::CliFrontend& row);
+  void register_entry(std::size_t index, const std::string& group);
+  void register_alias(std::size_t k, const std::string& group);
+  void register_exclusions();
+  std::string entry_text(const Entry& e, std::string& refusal);
+  std::string bad_value_line(const reg::OptionSpec& spec, const std::string& given,
+                             const api::Error& error) const;
+  [[noreturn]] void refuse(const std::string& line) const;
+  const Entry* entry_named(const char* name) const;
+  bool given(const char* name) const;
+  void make_solver();
+  void select_parser_by_extension();
 };
 
-int ExtraMain::create_and_parse_options(int argc, char** argv)
+// ---------------------------------------------------------------------
+// Registration
+// ---------------------------------------------------------------------
+
+namespace
 {
-  create_options();
-  int ret = parse_options(argc, argv);
-  if (ret != 0)
+const char* kCliOnlyGroup = ""; // an empty group hides an option from --help
+
+std::string quoted_list(const std::vector<std::string>& values)
+{
+  // 'a', 'b' or 'c'
+  std::string out;
+  for (std::size_t i = 0; i < values.size(); ++i)
   {
-    return ret;
+    if (i > 0)
+      out += (i + 1 == values.size()) ? " or " : ", ";
+    out += "'" + values[i] + "'";
   }
-  return 0;
+  return out;
 }
 
-void ExtraMain::create_options()
+bool backend_available(const std::string& value)
+{
+  if (value == "cadical" || value == "cryptominisat" || value == "minisat" ||
+      value == "simplifying-minisat")
+    return stp::has_sat_backend(value);
+  return true;
+}
+
+// An entry whose range is exactly a 32-bit engine field's is read into a
+// 32-bit slot: CLI11 then refuses a value the field cannot hold.
+bool reads_int32(const reg::OptionSpec& spec)
+{
+  return spec.type == reg::OptType::INT && spec.has_min && spec.has_max && spec.min == INT32_MIN &&
+         spec.max == INT32_MAX;
+}
+bool reads_uint32(const reg::OptionSpec& spec)
+{
+  return spec.type == reg::OptType::UINT && !spec.has_min && spec.has_max && spec.max == UINT32_MAX;
+}
+} // namespace
+
+std::string CommandLine::group_of(const reg::OptionSpec& spec) const
+{
+  std::size_t n = 0;
+  const reg::CliCategory* cats = reg::cli_categories(n);
+  for (std::size_t i = 0; i < n; ++i)
+    if (std::strcmp(cats[i].category, spec.category) == 0)
+      return cats[i].group;
+  // the generator refuses a category without a group, so this is unreachable
+  throw std::logic_error(std::string("option category without a --help group: ") + spec.category);
+}
+
+const CommandLine::Entry* CommandLine::entry_named(const char* name) const
+{
+  const reg::OptionSpec* spec = reg::find_option(name);
+  if (spec == nullptr)
+    return nullptr;
+  return &entries[reg::option_index(spec)];
+}
+
+bool* CommandLine::frontend_target(const std::string& key)
+{
+  if (key == "version")
+    return &version;
+  if (key == "cvc")
+    return &use_cvc;
+  if (key == "smtlib1")
+    return &use_smtlib1;
+  if (key == "smtlib2")
+    return &use_smtlib2;
+  if (key == "interactive")
+    return &interactive;
+  if (key == "parse-only")
+    return &invocation.parse_only;
+  if (key == "exit-after-cnf")
+    return &invocation.exit_after_cnf;
+  if (key == "print-stpinput")
+    return &invocation.print_stpinput;
+  if (key == "print-back-cvc")
+    return &invocation.print_back_cvc;
+  if (key == "print-back-smtlib2")
+    return &invocation.print_back_smtlib2;
+  if (key == "print-back-gdl")
+    return &invocation.print_back_gdl;
+  if (key == "print-back-dot")
+    return &invocation.print_back_dot;
+  if (key == "print-output")
+    return &invocation.print_output;
+  if (key == "output-cnf")
+    return &invocation.output_cnf;
+  // A frontend row this binary has no action for is a table/binary mismatch.
+  throw std::logic_error("options.toml frontend row with no binding here: " + key);
+}
+
+void CommandLine::register_frontend(const reg::CliFrontend& row)
+{
+  const std::string kind = row.kind;
+  if (kind == "positional")
+  {
+    // positional-only, hidden from --help
+    app.add_option(row.spellings, invocation.infile, row.help)->group(kCliOnlyGroup);
+    return;
+  }
+  if (kind == "help")
+  {
+    app.set_help_flag(row.spellings, row.help)->group(row.group);
+    return;
+  }
+  bool* target = frontend_target(row.key);
+  if (kind == "flag")
+  {
+    app.add_flag(row.spellings, *target, row.help)->group(row.group);
+    return;
+  }
+  // bool-option: a value-taking Boolean (--interactive=true)
+  CLI::Option* opt = app.add_option(row.spellings, *target, row.help)->group(row.group);
+  if (std::string(row.key) == "interactive")
+    interactive_option = opt;
+}
+
+void CommandLine::register_entry(std::size_t index, const std::string& group)
+{
+  std::size_t n = 0;
+  const reg::OptionSpec& spec = reg::option_specs(n)[index];
+  Entry& e = entries[index];
+  e.spec = &spec;
+  const std::string form = spec.cli_form;
+  if (form == "none")
+    return;
+  // An entry of a SAT backend this build lacks is not registered, as it never
+  // was; other build requirements (HiGHS) are accepted here and refused by
+  // the registry with the build they need, so the spelling is still explained.
+  if (spec.requires_build != nullptr && !reg::option_build_supported(spec) &&
+      !backend_available(spec.requires_build))
+    return;
+  const bool flag = form == "flag";
+  const bool mode_flag = flag && spec.type == reg::OptType::MODE;
+  // A mode that lists its spellings takes those alone; one that does not also
+  // reads 1/true and 0/false, in any case (the registry's `values`).
+  const bool lenient_mode = spec.type == reg::OptType::MODE && spec.num_values == 0;
+
+  // The spelling list: --name, its aliases, the short flag; a mode flag reads
+  // bare as on, so each spelling carries CLI11's {on} default value; a
+  // Boolean flag with a negation adds !--no-name.
+  std::vector<std::string> spellings;
+  spellings.push_back(std::string("--") + spec.name);
+  for (std::size_t a = 0; a < spec.num_aliases; ++a)
+    spellings.push_back(std::string("--") + spec.aliases[a]);
+  if (spec.short_flag != nullptr)
+    spellings.push_back(std::string("-") + spec.short_flag);
+  std::string names;
+  for (const std::string& s : spellings)
+    names += (names.empty() ? "" : ",") + s + (mode_flag ? "{on}" : "");
+  if (flag && spec.negation != nullptr && spec.type == reg::OptType::BOOL)
+    names += std::string(",!--") + spec.negation;
+
+  // the command line's own words and default, where the row has them
+  const std::string help = spec.cli_help != nullptr ? spec.cli_help : spec.help;
+  const std::string dflt = spec.cli_default != nullptr ? spec.cli_default : spec.default_text;
+  CLI::Option* opt = nullptr;
+  switch (spec.type)
+  {
+    case reg::OptType::BOOL:
+      if (flag)
+        opt = app.add_flag(names, e.b, help);
+      else
+      {
+        // A value-taking Boolean: accepts 1/0, true/false, on/off, as
+        // '--flattening false' or '--flattening=false'. The captured default
+        // is the registry's, which the registry suite holds to the engine's.
+        e.b = dflt == "true";
+        opt = app.add_option(names, e.b, help)->capture_default_str();
+      }
+      break;
+    case reg::OptType::INT:
+      e.i = std::strtoll(dflt.c_str(), nullptr, 10);
+      if (reads_int32(spec))
+      {
+        e.i32 = static_cast<std::int32_t>(e.i);
+        opt = app.add_option(names, e.i32, help)->capture_default_str();
+        break;
+      }
+      opt = app.add_option(names, e.i, help);
+      // a default outside the window the command line checks is the API's
+      // sentinel, not a value this option takes: not shown
+      if (!(spec.has_cli_range && (e.i < spec.cli_min || e.i > spec.cli_max)))
+        opt->capture_default_str();
+      break;
+    case reg::OptType::UINT:
+      e.u = std::strtoull(dflt.c_str(), nullptr, 10);
+      if (reads_uint32(spec))
+      {
+        e.u32 = static_cast<std::uint32_t>(e.u);
+        opt = app.add_option(names, e.u32, help)->capture_default_str();
+        break;
+      }
+      opt = app.add_option(names, e.u, help)->capture_default_str();
+      break;
+    case reg::OptType::MODE:
+      if (flag && lenient_mode)
+      {
+        // A switch on or off, as a Boolean flag reads its value (bare: on).
+        e.b = dflt == "on";
+        opt = app.add_flag(names, e.b, help);
+      }
+      else if (flag)
+        opt = app.add_flag(names, e.s, help);
+      else
+      {
+        e.s = dflt;
+        opt = app.add_option(names, e.s, help)->type_name("MODE")->default_str(dflt);
+      }
+      // CLI11 refuses a lenient mode's bad value itself, in the words the
+      // command line always used for one
+      if (lenient_mode && !flag)
+        opt->check(CLI::Validator(
+            [](std::string& value) -> std::string {
+              std::string low = value;
+              for (char& c : low)
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+              for (const char* ok : {"auto", "on", "1", "true", "off", "0", "false"})
+                if (low == ok)
+                  return std::string();
+              return "expected auto, on/1/true, or off/0/false";
+            },
+            std::string(), std::string()));
+      break;
+    case reg::OptType::DURATION:
+      // A whole number of seconds, as the binary always took (-1: no limit).
+      e.i = -1;
+      opt = app.add_option(names, e.i, help)
+                ->type_name("INT")
+                ->default_str(dflt == "none" ? "-1" : dflt);
+      break;
+    case reg::OptType::ENUM:
+    case reg::OptType::SET:
+    case reg::OptType::STRING:
+    case reg::OptType::PATH:
+      e.s = dflt;
+      opt = app.add_option(names, e.s, help)->type_name("TEXT")->default_str(dflt);
+      break;
+  }
+  // The window the command line checks itself, as it always did: the row's
+  // cli_range, or the range of an unsigned entry. A signed entry with a -1
+  // sentinel keeps the binary's own wording instead (bad_value_line).
+  if (spec.has_cli_range)
+    opt->check(CLI::Range(spec.cli_min, spec.cli_max));
+  else if (spec.type == reg::OptType::UINT && spec.has_min && spec.has_max)
+    opt->check(CLI::Range(static_cast<std::uint64_t>(spec.min), static_cast<std::uint64_t>(spec.max)));
+  // A repeated flag, Boolean or lenient mode takes its last value, so a test
+  // or a script that appends "--flag=1" to a command line that already says
+  // "--flag=0" gets the appended value rather than a parse error; so does a
+  // row that says so. Any other option given twice is CLI11's refusal.
+  if (flag || spec.type == reg::OptType::BOOL || lenient_mode || spec.cli_take_last)
+    opt->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+  opt->group(group);
+  e.option = opt;
+}
+
+void CommandLine::register_alias(std::size_t k, const std::string& group)
+{
+  AliasFlag& af = alias_flags[k];
+  // The flag of a backend this build lacks is not registered, as it never was.
+  if (!backend_available(af.alias->value))
+    return;
+  af.option = app.add_flag(std::string("--") + af.alias->name, af.given, af.alias->help)
+                  ->group(group);
+}
+
+// Combinations where one option discards another's effect. Each pair is one
+// STP cannot honour both halves of; reporting that is more useful than
+// obeying half a command line, most of all for the generated ones that option
+// sweeps and build scripts produce, where a silently dropped flag reads as a
+// measurement. CLI11 tests whether an option was given, not what it was set
+// to, so '--disable-simplifications --flattening false' is refused as well,
+// even though the two agree: the second option still had no bearing on the
+// run. The pairs are the rows' `excludes`, `of` and `requires` columns.
+void CommandLine::register_exclusions()
+{
+  for (const Entry& e : entries)
+  {
+    if (e.option == nullptr)
+      continue;
+    for (std::size_t x = 0; x < e.spec->num_excludes; ++x)
+    {
+      const Entry* other = entry_named(e.spec->excludes[x]);
+      if (other != nullptr && other->option != nullptr)
+        e.option->excludes(other->option);
+    }
+  }
+
+  // The backend flags: only one of them can be meant, and none of them
+  // alongside the entry they set.
+  for (std::size_t k = 0; k < alias_flags.size(); ++k)
+  {
+    const AliasFlag& a = alias_flags[k];
+    if (a.option == nullptr)
+      continue;
+    for (std::size_t j = k + 1; j < alias_flags.size(); ++j)
+      if (alias_flags[j].option != nullptr &&
+          std::strcmp(alias_flags[j].alias->of, a.alias->of) == 0)
+        a.option->excludes(alias_flags[j].option);
+    const Entry* of = entry_named(a.alias->of);
+    if (of != nullptr && of->option != nullptr)
+      a.option->excludes(of->option);
+    // An entry that requires this backend flag's entry to hold another value
+    // (--threads is read only by CryptoMiniSat) excludes the flag.
+    for (const Entry& e : entries)
+      if (e.option != nullptr && e.spec->requires_option != nullptr &&
+          e.spec->requires_value != nullptr &&
+          std::strcmp(e.spec->requires_option, a.alias->of) == 0 &&
+          std::strcmp(e.spec->requires_value, a.alias->value) != 0)
+        e.option->excludes(a.option);
+  }
+
+  // The frontend rows' exclusions, by spelling.
+  std::size_t nf = 0;
+  const reg::CliFrontend* front = reg::cli_frontend(nf);
+  for (std::size_t r = 0; r < nf; ++r)
+  {
+    if (front[r].num_excludes == 0)
+      continue;
+    const std::string first = std::string(front[r].spellings).substr(
+        0, std::string(front[r].spellings).find(','));
+    CLI::Option* mine = app.get_option(first);
+    for (std::size_t x = 0; x < front[r].num_excludes; ++x)
+      mine->excludes(app.get_option(front[r].excludes[x]));
+  }
+}
+
+void CommandLine::create_options()
 {
   app.usage("USAGE: stp [options] <input-file>\n"
             " where input is SMTLIB1/2 or CVC depending on options and file "
             "extension");
 
-  // An empty group hides an option from --help; the input file is
-  // positional-only.
-  app.add_option("file", infile, "input file")->group("");
-
-  const char* const general_group = "Most important options";
-  app.set_help_flag("--help,-h", "print this help")->group(general_group);
-  app.add_flag("--version", version, "print version number")
-      ->group(general_group);
-
-  const char* const simp_group = "Simplifications";
-
-  // A value-taking bool: accepts 1/0, true/false, on/off, as
-  // '--flattening false' or '--flattening=false'. capture_default_str()
-  // shows the current UserFlags default in --help.
-  // A repeated boolean flag takes its last value, so a test or a script
-  // that appends "--flag=1" to a command line that already says "--flag=0"
-  // gets the appended value rather than a parse error.
-  auto bool_arg = [this](const char* name, bool& var, const char* desc,
-                         const char* group) {
-    return app.add_option(name, var, desc)
-        ->capture_default_str()
-        ->group(group)
-        ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
-  };
-
-  // One native floating-point circuit. Recorded so --bb.fp-native-all knows
-  // which switches it may set and which the command line named itself.
-  auto fp_native_arg = [this, &bool_arg](const char* name, bool& var,
-                                         const char* desc, const char* group) {
-    fp_native_options.emplace_back(bool_arg(name, var, desc, group), &var);
-  };
-  auto int64_arg = [this](const char* name, int64_t& var, const char* desc,
-                          const char* group) {
-    return app.add_option(name, var, desc)->capture_default_str()->group(group);
-  };
-  auto mode_arg = [this](const char* name, UserDefinedFlags::OptionMode& mode,
-                         const char* desc, const char* group) {
-    using Mode = UserDefinedFlags::OptionMode;
-    return app.add_option_function<std::string>(
-        name, [&mode, name](std::string value) {
-          for (auto& c : value)
-            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-          if (value == "auto")
-            mode = Mode::AUTO;
-          else if (value == "on" || value == "1" || value == "true")
-            mode = Mode::ON;
-          else if (value == "off" || value == "0" || value == "false")
-            mode = Mode::OFF;
-          else
-            throw CLI::ValidationError(name, "expected auto, on/1/true, or off/0/false");
-        }, desc)
-        ->type_name("MODE")
-        ->default_str(mode == Mode::AUTO ? "auto" : mode == Mode::ON ? "on" : "off")
-        ->group(group)
-        ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
-  };
-
-  app.add_flag("--disable-simplifications", disable_simplifications,
-               "disable all simplifications")
-      ->group(simp_group);
-  app.add_flag("--switch-word,-w", switch_word, "switch off wordlevel solver")
-      ->group(simp_group);
-  app.add_flag("--disable-opt-inc,-a", disable_opt_inc,
-               "disable rewriting simplifier")
-      ->group(simp_group);
-  app.add_flag("--disable-cbitp", disable_cbitp,
-               "disable constant bit propagation")
-      ->group(simp_group);
-  app.add_flag("--disable-equality", disable_equality,
-               "disable equality propagation")
-      ->group(simp_group);
-  app.add_flag("--size-reducing-only", size_reducing_only,
-               "size reducing simplifications only")
-      ->group(simp_group);
-
-  bool_arg("--unconstrained-variable-elimination",
-           bm->UserFlags.enable_unconstrained,
-           "Unconstrained variables are eliminated.", simp_group);
-
-  bool_arg("--unconstrained-image-vars",
-           bm->UserFlags.unconstrained_image_vars,
-           "Unconstrained elimination replaces a shared term of an "
-           "unconstrained variable (zero-extension, constant shift, "
-           "modulus, ...) by a fresh variable constrained to the term's "
-           "image",
-           simp_group);
-
-  int64_arg("--aig-rewrite-passes", bm->UserFlags.AIG_rewrites_iterations,
-            "Iterations of AIG rewriting to perform", simp_group);
-
-  bool_arg("--flattening", bm->UserFlags.enable_flatten,
-           "Enable sharing-aware flattening of >2 arity nodes", simp_group);
-
-  bool_arg("--rewriting", bm->UserFlags.enable_sharing_aware_rewriting,
-           "Enable sharing-aware rewriting", simp_group);
-
-  bool_arg("--mulo-recognition", bm->UserFlags.mulo_recognition,
-           "rewrite the double-width spellings of a multiplication overflow "
-           "check -- the high half of a multiply of zero-extended operands "
-           "compared with zero, the high bits of a multiply of sign-extended "
-           "operands all zero or all one, or either product equal to the "
-           "extension of its own low half -- into the overflow predicates",
-           simp_group);
-
-  bool_arg("--split-extracts", bm->UserFlags.enable_split_extracts,
-           "Create new variables for some extracts", simp_group);
-
-  bool_arg("--ite-context-simplifications", bm->UserFlags.enable_ite_context,
-           "Use what is known to be true in an if-then-else node to simplify "
-           "the true or false branches",
-           simp_group);
-
-  bool_arg("--aig-core-simplification", bm->UserFlags.enable_aig_core_simplify,
-           "Simplify the propositional core with AIGs", simp_group);
-
-  bool_arg("--use-intervals", bm->UserFlags.enable_use_intervals,
-           "Simplify with interval analysis", simp_group);
-
-  bool_arg("--interval-sets", bm->UserFlags.enable_interval_sets,
-           "Refine interval analysis with sets of disjoint intervals "
-           "(needs --use-intervals)",
-           simp_group);
-
-  bool_arg("--pure-literals", bm->UserFlags.enable_pure_literals,
-           "Pure literals are replaced.", simp_group);
-
-  bool_arg("--common-subsum", bm->UserFlags.enable_common_subsum,
-           "Factor sub-terms shared between same-kind n-ary applications of "
-           "each associative-commutative operator (bvadd, bvmul, bvxor, "
-           "bvand, xor, and, or) into a single shared node, so the shared "
-           "circuit is built once (needs --flattening)",
-           simp_group);
-
-  int64_arg("--common-subsum-budget", bm->UserFlags.common_subsum_budget,
-            "Tally operations --common-subsum may spend per operator before "
-            "it stops extracting and reports the result as truncated. A "
-            "chain of flattened gates, each a prefix of the next, otherwise "
-            "costs the cube of its length to re-nest",
-            simp_group);
-
-  bool_arg("--common-factor", bm->UserFlags.enable_common_factor,
-           "Take a factor that several of a sum's products have in common "
-           "out of the sum, so that one multiplication is built where there "
-           "were several (needs --flattening)",
-           simp_group);
-
-  bool_arg("--linear-form", bm->UserFlags.enable_linear_form,
-           "Rewrite every bit-vector term into a canonical linear "
-           "combination of its non-linear sub-terms, so that two equal "
-           "combinations spelled differently become one node and share the "
-           "circuit built on them rather than each blasting their own",
-           simp_group);
-
-  int64_arg("--linear-form-addend-limit",
-            bm->UserFlags.linear_form_addend_limit,
-            "How many atoms a combination may hold before it keeps the "
-            "spelling it arrived with. Distributing a constant over a sum "
-            "writes one multiply per addend, so this bounds the growth a "
-            "single term can cause",
-            simp_group);
-
-  bool_arg("--pair-extract", bm->UserFlags.enable_pair_extract,
-           "In an n-ary bvadd, replace a pair of addends whose possibly-one "
-           "bits are disjoint by their bitwise-or, removing an adder stage",
-           simp_group);
-
-  bool_arg("--merge-same", bm->UserFlags.enable_merge_same,
-           "Uses simple boolean algebra rules to combine conjuncts at the top "
-           "level",
-           simp_group);
-
-  int64_arg("--size-reducing-fixed-point-limit",
-            bm->UserFlags.size_reducing_fixed_point,
-            "If the number of non-leaf nodes is fewer than this number, run "
-            "size-reducing simplifications to a fixed-point. -1 means always.",
-            simp_group);
-
-  bool_arg("--simplify-to-constants-only,--simply_to_constants_only",
-           bm->UserFlags.simplify_to_constants_only,
-           "Use just the simplifications from the potentially size increasing "
-           "suite that transform nodes to constants",
-           simp_group);
-
-  bool_arg("--difficulty-reversion,--difficulty_reversion",
-           bm->UserFlags.difficulty_reversion,
-           "Undo size increasing simplifications if they haven't made the "
-           "problem simpler",
-           simp_group);
-
-  bool_arg("--distinct-ordering", bm->UserFlags.distinct_ordering,
-           "replace a (distinct ...) over variables that occur nowhere else "
-           "with a strict chain, which fixes one of the n! equivalent "
-           "orderings the bit-blaster would otherwise search. Incremental "
-           "solves keep the rewrite behind a retractable root assumption",
-           simp_group);
-
-  const char* const solver_group = "SAT Solver options";
-
-#ifdef USE_CADICAL
-  app.add_flag("--cadical", use_cadical, "use cadical as the solver")
-      ->group(solver_group);
-  app.add_option("--cadical-elim", bm->UserFlags.cadical_options.elim,
-                 "CaDiCaL variable elimination: 0 disables, 1 enables; an "
-                 "explicit value overrides the environment, search bias and "
-                 "incremental retirement. Unspecified keeps existing policies")
-      ->check(CLI::Range(0, 1))
-      ->group(solver_group);
-  app.add_option("--cadical-elimmineff", bm->UserFlags.cadical_options.elimmineff,
-                 "CaDiCaL minimum elimination effort; overrides CADICAL_ELIMMINEFF. "
-                 "Unspecified keeps the backend setting")
-      ->check(CLI::Range(0, INT_MAX))
-      ->group(solver_group);
-  app.add_option("--cadical-elimmaxeff", bm->UserFlags.cadical_options.elimmaxeff,
-                 "CaDiCaL maximum elimination effort; overrides CADICAL_ELIMMAXEFF. "
-                 "The backend may raise the allowance for large formulas. "
-                 "Unspecified keeps the backend setting")
-      ->check(CLI::Range(0, INT_MAX))
-      ->group(solver_group);
-  cadical_factor_option =
-      app.add_option("--cadical-factor", cadical_factor,
-                     "let cadical use bounded variable addition: 'on' (the "
-                     "default), 'off', or 'auto' (on only for problems with "
-                     "array operations, which was the default until it was "
-                     "measured on bitvector-only problems). Needs a CaDiCaL "
-                     "3.x build; otherwise an explicit request is declined "
-                     "with a warning")
-          ->group(solver_group)
-          // The query-files-cadical-factor-off sweep prepends
-          // --cadical-factor=off; a test's own setting wins.
-          ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
-  incremental_inprobing_option =
-      app.add_option(
-             "--incremental-inprobing", incremental_inprobing,
-             "cadical's probe-based inprocessing on the incremental "
-             "driver's persistent solver: 'on' (always), 'off' (never), or "
-             "'auto' (the default: retired once a session shows many "
-             "solves, where re-probing the whole encoding every solve "
-             "costs more than it earns)")
-          ->group(solver_group);
-  bool_arg("--refinement-trail-reuse", bm->UserFlags.refinement_trail_reuse,
-           "keep cadical's search trail between the solve calls of a "
-           "refinement loop (array reads, bit-vector abstractions, "
-           "uninterpreted functions) instead of restarting each round from "
-           "the root",
-           solver_group)
-      // As for --array-index-hints: a sweep's setting yields to the test's.
-      ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
-#endif
-
-#ifdef USE_CRYPTOMINISAT
-  app.add_flag("--cryptominisat", use_cryptominisat,
-               "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 "
-               "or above ")
-      ->group(solver_group);
-  app.add_option("--threads", bm->UserFlags.num_solver_threads,
-                 "Number of threads for cryptominisat")
-      ->capture_default_str()
-      ->group(solver_group);
-#endif
-
-#ifdef USE_MINISAT
-  app.add_flag("--simplifying-minisat", use_simplifying_minisat,
-               "use installed simplifying minisat version as the solver")
-      ->group(solver_group);
-  app.add_flag("--minisat", use_minisat,
-               "use installed minisat version as the solver ")
-      ->group(solver_group);
-#endif
-  search_bias_option =
-      app.add_option("--search-bias", search_bias,
-                     "tune the SAT search towards one answer: 'unsat' (best "
-                     "for unsatisfiable / verification workloads), 'sat', or "
-                     "'none' (the default, leaving the solver at its own "
-                     "settings). Solvers with no such setting ignore it")
-          ->group(solver_group);
-
-  const char* const refinement_group = "Refinement options";
-  app.add_flag("--ackermanize,-r", bm->UserFlags.ackermannisation,
-               "eagerly encode array-read axioms (Ackermannistaion)")
-      ->group(refinement_group);
-  app.add_flag("--array-equality", bm->UserFlags.enable_array_equality,
-               "decide whole-array equality/disequality (extensional arrays) "
-               "by lemmas on demand")
-      ->group(refinement_group);
-  bool_arg("--lazy-write-reads", bm->UserFlags.lazy_write_reads,
-           "abstract a read over a long write chain to a fresh variable "
-           "constrained by refinement lemmas, instead of expanding the "
-           "whole if-then-else chain",
-           refinement_group);
-  int64_arg("--lazy-write-reads-depth",
-            bm->UserFlags.lazy_write_reads_depth,
-            "may-alias write levels a read still expands eagerly before the "
-            "rest of its chain is abstracted",
-            refinement_group);
-  bool_arg("--lra-theory-propagation", bm->UserFlags.lra_theory_propagation,
-           "let the LRA theory take part in the SAT search, on a backend "
-           "that hosts a propagator (CaDiCaL, CryptoMiniSat)",
-           refinement_group);
-  bool_arg("--lra-float-driver", bm->UserFlags.lra_float_driver,
-           "drive partial theory checks with a double-precision simplex, "
-           "conflicts and models re-derived exactly (under "
-           "--lra-theory-propagation)",
-           refinement_group);
-  app.add_option("--lra-float-reroute", bm->UserFlags.lra_float_reroute,
-                 "when the float tableau's live fill exceeds this multiple of "
-                 "its pristine nonzero count, re-solve the query on the exact "
-                 "driver (which certifies float results, so the answer is "
-                 "unchanged) and keep it for the rest of the session; a few "
-                 "cpachecker cilled files blow the float tableau up and never "
-                 "finish while the exact driver settles them in under a "
-                 "second; 0 disables")
-      ->group(refinement_group)
-      ->capture_default_str();
-  app.add_option("--lra-float-reroute-floor",
-                 bm->UserFlags.lra_float_reroute_floor,
-                 "absolute live-nonzero count the float tableau must also "
-                 "exceed before a reroute fires; the fill ratio alone trips on "
-                 "small healthy problems, so this floor restricts the reroute "
-                 "to genuinely large tableaux; 0 means no floor")
-      ->group(refinement_group)
-      ->capture_default_str();
-  app.add_option("--lra-extension-mode", bm->UserFlags.lra_extension_mode,
-                 "arithmetic extensions: 0 automatic, 1 reuse, 2 rebuild, "
-                 "3 reuse IDs but reset assignments/bases (experimental)")
-      ->check(CLI::Range(0, 3))->group(refinement_group);
-  app.add_option("--lra-row-order", bm->UserFlags.lra_row_order,
-                 "arithmetic row insertion: 0 original, 1 reverse, "
-                 "2 sparse first, 3 dense first (experimental)")
-      ->check(CLI::Range(0, 3))->group(refinement_group);
-  bool_arg("--lra-extension-restart-float-basis",
-           bm->UserFlags.lra_extension_restart_float_basis,
-           "restart the advisory basis after arithmetic extensions "
-           "while keeping assignments and IDs (experimental)", refinement_group);
-  bool_arg("--lra-extension-restart-sat", bm->UserFlags.lra_extension_restart_sat,
-           "copy the current Boolean formula into a fresh CaDiCaL search "
-           "after permanent arithmetic extensions (experimental; needs "
-           "--cadical, turns the factor off)", refinement_group);
-  bool_arg("--lra-presolve-unconstrained",
-           bm->UserFlags.lra_presolve_unconstrained,
-           "fold single-use pure-polarity Real atoms, conjoining the "
-           "witness equality that realises them",
-           refinement_group);
-  bool_arg("--lra-presolve-monotone", bm->UserFlags.lra_presolve_monotone,
-           "eliminate Real variables constrained in one direction across "
-           "several atoms, with exact model reconstruction (experimental)",
-           refinement_group);
-  app.add_option("--lra-presolve-monotone-work",
-                 bm->UserFlags.lra_presolve_monotone_work,
-                 "maximum monotone presolve work visits; on exhaustion "
-                 "retain the input (default 1000000)")->group(refinement_group);
-  bool_arg("--lra-presolve-propagate", bm->UserFlags.lra_presolve_propagate,
-           "propagate top-level truths through the Boolean structure before "
-           "registration",
-           refinement_group);
-  bool_arg("--lra-presolve-rows", bm->UserFlags.lra_presolve_rows,
-           "drop Real inequalities implied by a stronger same-polynomial "
-           "sibling; refute contradictory pairs",
-           refinement_group);
-  bool_arg("--lra-presolve-bounds", bm->UserFlags.lra_presolve_bounds,
-           "derive and propagate Real variable bounds before registration; "
-           "fix met bounds, refute contradictory ones",
-           refinement_group);
-  bool_arg("--lra-presolve-subst", bm->UserFlags.lra_presolve_subst,
-           "substitute top-level Real definitions (x = t) through the query "
-           "before registration, keeping the definitions conjoined",
-           refinement_group);
-  app.add_option("--lra-presolve-rounds", bm->UserFlags.lra_presolve_rounds,
-                 "maximum ordinary presolve rounds, stopping at a fixed point "
-                 "(1-8, default 1; extra rounds experimental)")
-      ->check(CLI::Range(1, 8))->group(refinement_group);
-  app.add_option("--lra-presolve-subst-growth", bm->UserFlags.lra_presolve_subst_growth,
-                 "query-wide allowance for new substitution DAG nodes plus "
-                 "child links; 0 disables substitution guards (default 0)")
-      ->group(refinement_group);
-  app.add_option("--lra-presolve-subst-work", bm->UserFlags.lra_presolve_subst_work,
-                 "query-wide work visits when substitution growth is guarded; "
-                 "exhaustion retains equations (default 1000000)")
-      ->group(refinement_group);
-  app.add_option("--lra-direct-bounds", bm->UserFlags.lra_direct_bounds,
-                 "exact bounds without auxiliary rows: 0 off, 1 +1 identity "
-                 "rows, 2 all singleton rows (experimental)")
-      ->check(CLI::Range(0, 2))->group(refinement_group);
-  bool_arg("--lra-singleton-ordering", bm->UserFlags.lra_singleton_ordering,
-           "emit SAT ordering clauses across scaled bounds on the same Real "
-           "variable (experimental)", refinement_group);
-  bool_arg("--lra-highs-replay", bm->UserFlags.lra_highs_replay,
-           "replay binary branches with exact conditional conflicts (experimental; implies HiGHS LP)", refinement_group);
-  app.add_option("--lra-highs-replay-nodes", bm->UserFlags.lra_highs_replay_nodes,
-                 "maximum binary replay LP nodes (default 128; hard cap 8192)")->group(refinement_group);
-  bool_arg("--lra-highs-cuts", bm->UserFlags.lra_highs_cuts,
-           "reconstruct selected binary root cuts exactly (experimental; requires HiGHS root-cut patch)", refinement_group);
-  app.add_option("--lra-highs-cut-limit", bm->UserFlags.lra_highs_cut_limit,
-                 "maximum certified root cuts (default 64)")->group(refinement_group);
-  bool_arg("--lra-highs-mip", bm->UserFlags.lra_highs_mip,
-           "propose exact models for asserted binary domains (experimental; requires HiGHS; includes LP recovery)", refinement_group);
-  bool_arg("--lra-highs-lp", bm->UserFlags.lra_highs_lp,
-           "try original-row LP bases and rays with exact certification (experimental; requires HiGHS)", refinement_group);
-  app.add_option("--lra-highs-seconds", bm->UserFlags.lra_highs_seconds,
-                 "total time budget for general HiGHS proposals (default 5 seconds)")->group(refinement_group);
-  mode_arg("--lra-relu-bounds", bm->UserFlags.lra_relu_bounds,
-           "propagate exact bounds through asserted ReLUs and affine "
-           "definitions: auto (default, bounded recognition), on, or off; "
-           "explicit LP/cases/branch still implies bounds", refinement_group);
-  mode_arg("--lra-relu-lp", bm->UserFlags.lra_relu_lp,
-           "optimize uncertain ReLU bounds with exact dual certification "
-           "and model proposals: auto (default, eligible graphs only), on "
-           "(full search), or off; on requires HiGHS", refinement_group);
-  app.add_option("--lra-relu-auto-seconds", bm->UserFlags.lra_relu_auto_seconds,
-                 "initial automatic ReLU LP budget in seconds (default 1; 0 skips automatic LP)")
-      ->group(refinement_group);
-  bool_arg("--lra-relu-cases", bm->UserFlags.lra_relu_cases,
-           "refute property alternatives using exact affine network bounds "
-           "inside each alternative's input box (experimental; implies ReLU bounds)",
-           refinement_group);
-  app.add_option("--lra-relu-cases-seconds", bm->UserFlags.lra_relu_cases_seconds,
-                 "time budget for checking ReLU property alternatives (default 60 seconds)")
-      ->group(refinement_group);
-  app.add_option("--lra-relu-lp-rounds", bm->UserFlags.lra_relu_lp_rounds,
-                 "maximum ReLU bound optimization rounds (default 8)")
-      ->group(refinement_group);
-  app.add_option("--lra-relu-lp-seconds", bm->UserFlags.lra_relu_lp_seconds,
-                 "ReLU bound optimization time budget in seconds (default 60)")
-      ->group(refinement_group);
-  app.add_option("--lra-relu-lp-call-seconds", bm->UserFlags.lra_relu_lp_call_seconds,
-                 "time budget per advisory LP in tightening and phase search "
-                 "(default 2 seconds)")
-      ->group(refinement_group);
-  bool_arg("--lra-relu-branch", bm->UserFlags.lra_relu_branch,
-           "use relaxation-guided ReLU phase search and exactly checked "
-           "conditional conflicts (experimental; requires HiGHS)", refinement_group);
-  bool_arg("--lra-relu-property-branches", bm->UserFlags.lra_relu_property_branches,
-           "include arithmetic property alternatives in ReLU phase search "
-           "and its conflict explanations (default: on; requires phase search)",
-           refinement_group);
-  bool_arg("--lra-dense-recovery", bm->UserFlags.lra_dense_recovery,
-           "use density-aware work budgets and bounded floating basis recovery "
-           "before exact fallback (experimental)",
-           refinement_group);
-  mode_arg("--lra-model-reconstruction", bm->UserFlags.lra_model_reconstruction,
-           "reconstruct eliminated affine definitions and check complete "
-           "Real models: auto (default, eligible ReLU proposals only), on "
-           "(also ordinary LRA), or off",
-           refinement_group);
-  app.add_option("--lra-relu-branch-nodes", bm->UserFlags.lra_relu_branch_nodes,
-                 "maximum relaxation-guided phase nodes (default 128)")
-      ->group(refinement_group);
-  app.add_option("--lra-relu-branch-seconds", bm->UserFlags.lra_relu_branch_seconds,
-                 "ReLU phase search time budget in seconds (default 60)")
-      ->group(refinement_group);
-  bool_arg("--lra-replay-screen", bm->UserFlags.lra_replay_screen,
-           "screen candidate inputs by floating network replay before exact "
-           "model reconstruction (default: on; requires reconstruction)", refinement_group);
-  bool_arg("--lra-boolean-bounds", bm->UserFlags.lra_boolean_bounds,
-           "derive interval hulls across asserted Boolean alternatives during "
-           "ReLU preprocessing (default: on; requires ReLU preprocessing)", refinement_group);
-  bool_arg("--lra-lp-screen", bm->UserFlags.lra_lp_screen,
-           "skip exact LP certificates unlikely to improve a bound (default: on)", refinement_group);
-  bool_arg("--lra-lp-partial", bm->UserFlags.lra_lp_partial,
-           "exactly check dual proposals from unfinished LP searches (default: on)", refinement_group);
-  bool_arg("--lra-incremental-session", bm->UserFlags.lra_incremental_session,
-           "keep a Real solve's coordinator, CNF and SAT solver across the "
-           "check-sats of a pushing session on Boolean and Real terms; the "
-           "exact core is still rebuilt when the stack changes "
-           "(experimental; off by default)",
-           refinement_group);
-  bool_arg(
-      "--lra-conflict-recovery", bm->UserFlags.lra_conflict_recovery,
-      "Recover floating-point conflict weights by bounded exact elimination "
-      "(default: on). Set to 0 to use exact simplex fallback directly.",
-      refinement_group);
-  bool_arg("--lra-early-conflicts", bm->UserFlags.lra_early_conflicts,
-           "detect conflicts in affected arithmetic rows before repair pivots "
-           "(experimental; off by default)", refinement_group);
-  bool_arg("--lra-first-search", bm->UserFlags.lra_first_search,
-           "connect arithmetic before the first SAT search "
-           "(experimental; off by default)", refinement_group);
-  mode_arg("--lra-separate-model-values",
-           bm->UserFlags.lra_separate_model_values,
-           "before a satisfying assignment is published, move variables "
-           "inside the slack their asserted bounds leave so that fewer of "
-           "them share a value by accident; a reader that groups by value, "
-           "as the lazy congruence round does, is then not handed pairs the "
-           "query never asked for; auto runs it when the query has a "
-           "declaration whose congruence is decided from model values, "
-           "which is the only reader such a coincidence misleads",
-           refinement_group);
-  bool_arg("--lra-persistent-state", bm->UserFlags.lra_persistent_state,
-           "preserve arithmetic registrations and bases across incremental "
-           "Real checks (experimental; implies the Real session)", refinement_group);
-  bool_arg("--lra-soi", bm->UserFlags.lra_soi,
-           "use bounded sum-of-infeasibilities arithmetic repair "
-           "(experimental; off by default)", refinement_group);
-  bool_arg("--lra-float-dormant-rows", bm->UserFlags.lra_float_dormant_rows,
-           "keep float-tier rows with no asserted bound out of the tableau "
-           "until their first bound (experimental; off by default)",
-           refinement_group);
-  int64_arg("--lra-float-dormant-min-cells", bm->UserFlags.lra_float_dormant_min_cells,
-            "with --lra-float-dormant-rows, only rows with at least this many "
-            "cells start dormant; 0 means every row", refinement_group);
-  int64_arg("--lra-float-promotion-budget", bm->UserFlags.lra_float_promotion_budget,
-            "fresh factorized float tiers one solve may build after infinitesimal "
-            "trips; 0 means unbounded", refinement_group);
-  lra_decision_polarity_option =
-      bool_arg("--lra-decision-polarity", bm->UserFlags.lra_decision_polarity,
-               "advise arithmetic polarity for SAT's selected decision variable "
-               "(on by default with patched CaDiCaL and theory propagation; "
-               "=0 disables advice, explicit =1 requires support)", refinement_group);
-  bool_arg("--lra-verify-canonical", bm->UserFlags.lra_verify_canonical,
-           "re-derive the canonical form of exact rationals whose "
-           "construction already proves it",
-           refinement_group);
-  bool_arg("--lra-verify-conflicts", bm->UserFlags.lra_verify_conflicts,
-           "independently re-derive every LRA conflict certificate before "
-           "trusting it",
-           refinement_group);
-  bool_arg("--bv-eq-abstraction", bm->UserFlags.bv_eq_abstraction,
-           "replace wide BV equalities -- whatever their operands; the "
-           "bit-blaster proxies non-input ones -- with fresh Boolean "
-           "variables during bit-blasting, refining lazily via CEGAR",
-           refinement_group);
-  bool_arg("--bv-eq-abstraction-constant-side",
-           bm->UserFlags.bv_eq_abstraction_constant_side,
-           "abstract an equality one side of which the blast knows "
-           "entirely; off by default, such an equality is lowered exactly, "
-           "since a comparison against a constant is one AND over the "
-           "term's bits, where a record is a free Boolean the refinement "
-           "pins a round at a time",
-           refinement_group);
-  app.add_option("--bv-abstraction-width",
-                 bm->UserFlags.bv_abstraction_width,
-                 "minimum operand width at which --bv-eq-abstraction and "
-                 "--bv-term-abstraction abstract an operation")
-      ->group(refinement_group)
-      ->capture_default_str();
-  app.add_option("--bv-eq-refine-width",
-                 bm->UserFlags.bv_eq_refine_width,
-                 "initial prefix width for lazy BV equality refinement (0 = full)")
-      ->group(refinement_group)
-      ->capture_default_str();
-
-  bool_arg("--bv-term-abstraction", bm->UserFlags.bv_term_abstraction,
-           "abstract wide BVMULT, BVDIV and BVMOD during bit-blasting, "
-           "refining lazily via CEGAR; the three options below add the "
-           "cheaper kinds",
-           refinement_group);
-  bool_arg("--bv-term-abstraction-ite", bm->UserFlags.bv_term_abstraction_ite,
-           "also abstract wide if-then-else (off: it is noise on bit-vector "
-           "workloads and the whole benefit on floating-point ones)",
-           refinement_group);
-  bool_arg("--bv-term-abstraction-plus", bm->UserFlags.bv_term_abstraction_plus,
-           "also abstract wide BVPLUS (off, for the same reason)",
-           refinement_group);
-  bool_arg("--bv-term-abstraction-compare",
-           bm->UserFlags.bv_term_abstraction_compare,
-           "also abstract wide inequalities (off, for the same reason)",
-           refinement_group);
-  array_index_hints_option =
-      app.add_option(
-             "--array-index-hints", array_index_hints,
-             "seed the free indices of each array's reads apart before the "
-             "first solve, so that fewer candidates collide two reads on one "
-             "index: 'off' (the default), 'phase' (suggest a counting value "
-             "per index), or 'decide' (also decide those bits first, through "
-             "cadical's external propagator; other backends get the phases)")
-          ->group(refinement_group)
-          // A corpus sweep prepends one setting to every test's command
-          // line, and a test about the option says its own: the later one
-          // wins.
-          ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
-  bool_arg("--congruence-candidates",
-           bm->UserFlags.enable_congruence_candidates,
-           "prove equalities between terms the query applies the same "
-           "operator to in the same position, and assert the ones that "
-           "hold, so the two applications and everything built on them "
-           "collapse into one instead of being bit-blasted twice",
-           refinement_group);
-  int64_arg("--congruence-candidate-limit",
-            bm->UserFlags.congruence_candidate_limit,
-            "how many candidate equalities may be put to the solver. Each "
-            "is its own small query, so this is what the pass costs on a "
-            "query where nothing turns out to be equal",
-            refinement_group);
-  int64_arg("--congruence-candidate-conflicts",
-            bm->UserFlags.congruence_candidate_conflicts,
-            "conflicts one candidate may take before it is dropped "
-            "undecided; a candidate needing more than this to settle is not "
-            "one whose proof pays for itself. Negative removes the budget",
-            refinement_group);
-  bool_arg("--skeleton-preproc", bm->UserFlags.skeleton_preproc,
-           "ask the query's propositional skeleton what it forces, and assert "
-           "that before solving", refinement_group);
-  bool_arg("--embedded-constraints", bm->UserFlags.embedded_constraints,
-           "replace an assertion where it occurs inside another assertion",
-           refinement_group);
-  bv_term_abstraction_mult_option = bool_arg(
-      "--bv-term-abstraction-mult", bm->UserFlags.bv_term_abstraction_mult,
-      "scope for BVMULT, and for BVDIV and BVMOD unless the separate DIV/MOD "
-      "option is also given, which overrides them in either order",
-      refinement_group);
-  bv_term_abstraction_divmod_option = bool_arg(
-      "--bv-term-abstraction-divmod", bm->UserFlags.bv_term_abstraction_divmod,
-      "independently override whether BVDIV and BVMOD are abstracted; turning "
-      "it off leaves division and remainder encoded exactly from the start",
-      refinement_group);
-  bool_arg("--bv-term-abstraction-schemas",
-           bm->UserFlags.bv_term_abstraction_schemas,
-           "refine abstracted BVPLUS, BVMULT, BVDIV and BVMOD operations "
-           "with algebraic facts that hold for every pair of operands before "
-           "their operation-specific fallback",
-           refinement_group);
-  bv_schema_groups_option =
-      app.add_option("--bv-term-abstraction-schema-groups", bv_schema_groups,
-                     "comma-separated schema families allowed by "
-                     "--bv-term-abstraction-schemas: base, udiv15, "
-                     "udiv-observed, udiv-tail, urem, mul8, mul-ref3, "
-                     "mul-tail, add, quotient-thresholds, low-prefix, "
-                     "quotient-one-rem, quotient-one-quot, "
-                     "divisor-magnitude, or divrem-full; 'all' selects the "
-                     "complete experimental stack and 'none' selects no "
-                     "schemas; semantic aliases are udiv, mul6, "
-                     "quotient-one and divrem-identity")
-          ->group(refinement_group)
-          ->capture_default_str();
-  bv_rounds_option =
-      app.add_option("--bv-term-abstraction-rounds",
-                     bm->UserFlags.bv_term_abstraction_rounds,
-                     "ceiling on the blocking lemmas one abstracted "
-                     "BVMULT/BVDIV/BVMOD may take before its refinement "
-                     "encodes the operation exactly instead of enumerating "
-                     "further operand pairs (0: never; enumerate without "
-                     "limit)")
-          ->group(refinement_group)
-          ->capture_default_str();
-  app.add_option("--bv-term-abstraction-profile", bv_abstraction_profile,
-                 "apply an atomic schema-mask/round pair: 'qualified' is the "
-                 "inherited base, UREM and MulRef3 mask at 32 rounds; "
-                 "'broad' adds the observed UDIV and MUL8 facts, "
-                 "divisor-magnitude and quotient-one facts at 16 rounds but "
-                 "no paired DIV/REM relation; 'aggressive' adds the "
-                 "full-width paired DIV/REM identity to that")
-      ->group(refinement_group)
-      ->excludes(bv_schema_groups_option)
-      ->excludes(bv_rounds_option);
-  app.add_option("--bv-term-abstraction-value-divisor",
-                 bm->UserFlags.bv_term_abstraction_value_divisor,
-                 "scale that allowance with the operand width, as "
-                 "width/divisor floored at one and capped by the ceiling "
-                 "above; a blocking lemma rules out one pair of operand "
-                 "values, so what one is worth falls away as the operands "
-                 "widen (0, the default: do not scale, which measured no "
-                 "slower and no faster)")
-      ->group(refinement_group)
-      ->capture_default_str();
-  bool_arg("--bv-term-abstraction-constant-operands",
-           bm->UserFlags.bv_term_abstraction_constant_operands,
-           "abstract a multiplication one of whose operands the blast knows "
-           "entirely, or a division or remainder by such a divisor (on by "
-           "default); declined, such an operation is lowered exactly, since "
-           "the constant's shift-and-add propagates where a record spends a "
-           "round per candidate before escalating to it",
-           refinement_group);
-  app.add_option("--bv-term-abstraction-constant-operand-limit",
-                 bm->UserFlags.bv_term_abstraction_constant_operand_limit,
-                 "cap on value-pair blocking rounds for an abstracted "
-                 "multiplication, division or remainder one of whose "
-                 "operands is a constant, whose exact encoding is a "
-                 "constant's shift-and-add (0: no cap)")
-      ->group(refinement_group)
-      ->capture_default_str();
-  app.add_option("--bv-term-abstraction-divmod-value-limit",
-                 bm->UserFlags.bv_term_abstraction_divmod_value_limit,
-                 "independent cap on BVDIV/BVMOD value-pair blocking after "
-                 "the round ceiling and optional width scaling; unlike "
-                 "--rounds this changes neither the algebraic-schema budget "
-                 "nor BVMULT (0, the default: no additional cap)")
-      ->group(refinement_group)
-      ->capture_default_str();
-
-  bool_arg("--bv-term-abstraction-inc-bitblast",
-           bm->UserFlags.bv_term_abstraction_inc_bitblast,
-           "escalate an abstracted BVMULT a piece at a time: encode the bits "
-           "up to and a little past the lowest one the candidate got wrong, "
-           "rather than the whole width at once",
-           refinement_group);
-
-  bool_arg("--incremental-piece-rewriting",
-           bm->UserFlags.incremental_piece_rewriting,
-           "run the batch pipeline's rewriting passes -- strength reduction "
-           "over a derived interval domain, and common sub-sum extraction -- "
-           "on each piece the incremental driver prepares; each is a "
-           "function of its piece alone, so the result caches and the "
-           "encoding built from it stays valid",
-           refinement_group);
-
-  bool_arg("--incremental-scoped-preprocessing",
-           bm->UserFlags.incremental_scoped_preprocessing,
-           "offer the whole active stack to the exact-stack preprocessor on "
-           "every incremental check rather than only on a forced first "
-           "engagement, and offer it stacks carrying array reads and "
-           "floating point rather than plain bit-vectors alone",
-           refinement_group);
-
-  app.add_flag("--uninterpreted-functions",
-               bm->UserFlags.enable_uninterpreted_functions,
-               "decide uninterpreted functions over Bool, bit-vector, "
-               "RoundingMode and floating-point sorts by dynamic Ackermann "
-               "refinement, including when the input logic omits UF")
-      ->group(refinement_group);
-  app.add_option("--uf-lemmas-per-round",
-                 bm->UserFlags.uf_lemmas_per_round,
-                 "how many congruence lemmas one refuted candidate may "
-                 "install (0: every conflict it exposes; 1: one conflict "
-                 "per round)")
-      ->group(refinement_group)
-      ->capture_default_str();
-  uf_ackermann_option =
-      app.add_option("--uf-ackermann", uf_ackermann,
-                     "whether to install a function's pairwise congruence "
-                     "constraints before the first solve: 'on' (every "
-                     "declaration), 'off' (none, so a candidate has to earn "
-                     "each lemma), or 'auto' "
-                     "(the default: the declarations whose pair count fits "
-                     "the budget, cheapest first)")
-          ->group(refinement_group);
-  app.add_option("--uf-ackermann-budget", bm->UserFlags.uf_eager_budget,
-                 "how many congruence constraints --uf-ackermann=auto may "
-                 "install up front")
-      ->group(refinement_group)
-      ->capture_default_str();
-  bool_arg("--uf-lazy-in-place", bm->UserFlags.uf_lazy_in_place,
-           "whether a lazy congruence round extends the running solve in "
-           "place, keeping the SAT solver, rather than starting a new one",
-           refinement_group);
-  app.add_option("--uf-lazy-full-expansion-pairs",
-                 bm->UserFlags.uf_lazy_full_expansion_pairs,
-                 "cap on n(n-1)/2 at which a persistently-breaking UF "
-                 "declaration is fully Ackermannised; larger functions stay "
-                 "lazy (0 never full-expands)")
-      ->capture_default_str()
-      ->group(refinement_group);
-  app.add_option("--uf-lazy-round-limit", bm->UserFlags.uf_lazy_round_limit,
-                 "how many rounds a lazily-decided Real function may keep "
-                 "breaking congruence before every pair it has left is "
-                 "stated at once")
-      ->group(refinement_group)
-      ->capture_default_str();
-  mode_arg("--uf-congruence-closure", bm->UserFlags.uf_congruence_closure,
-           "when a large function keeps breaking congruence past the round "
-           "limit -- too large for the full-expansion fallback, so otherwise "
-           "purely lazy -- escalate it to a transitive closure over the model, "
-           "which states the congruences a nested equality will break next "
-           "round instead of re-discovering them one round at a time; every "
-           "lemma is still a congruence axiom, so answers do not change; on "
-           "escalates every large stuck function, auto only those with at "
-           "least --uf-congruence-closure-min-apps applications",
-           refinement_group);
-  app.add_option("--uf-congruence-closure-min-apps",
-                 bm->UserFlags.uf_congruence_closure_min_apps,
-                 "in auto mode, the least applications a UF function must have "
-                 "before its congruence is escalated to the closure; the files "
-                 "the closure helps carry a function of many hundreds of "
-                 "applications, so this keeps auto off the medium functions "
-                 "where escalating only adds overhead")
-      ->group(refinement_group)
-      ->capture_default_str();
-  app.add_option("--array-ackermann-budget", bm->UserFlags.array_eager_budget,
-                 "how many index comparisons eager array Ackermannisation may "
-                 "introduce before read refinement is preferred; 0 selects it "
-                 "only when asked for by name")
-      ->group(refinement_group)
-      ->capture_default_str();
-  bool_arg("--uf-phase-hints", bm->UserFlags.uf_phase_hints,
-           "bias the first candidate so the congruence checker's scalars "
-           "start out pairwise different (advisory; affects search order "
-           "only)", refinement_group);
-  bool_arg("--uf-check-during-bv-refinement",
-           bm->UserFlags.uf_check_during_bv_refinement,
-           "run the congruence checker on a candidate the bit-vector "
-           "abstraction has just refined as well, so its lemmas go in beside "
-           "the abstraction's rather than after the abstraction is faithful",
-           refinement_group);
-  app.add_option("--uf-sort-width", bm->UserFlags.uf_sort_width,
-                 "bit-vector width given to a sort introduced by "
-                 "(declare-sort S 0); it bounds how many elements of that "
-                 "sort a query can tell apart, so a larger value is always "
-                 "sound and only a smaller one is not")
-      ->group(refinement_group)
-      // Bounded because both ends were reachable and neither failed cleanly.
-      // Zero made every element of the sort a zero-width term, which the
-      // legacy width checks read as a Boolean -- an abort on an asserting
-      // build and a silently retyped model otherwise. The top end overflows
-      // the (width + 63) / 64 word arithmetic the bit-vector layer is built
-      // on and answered unsat for two elements of an unbounded sort. The
-      // ceiling is well above any carrier a query can exhaust: 1024 bits
-      // distinguishes more elements than a query can name.
-      ->check(CLI::Range(1u, 1024u))
-      ->capture_default_str();
-  bool_arg("--uf-narrow-results", bm->UserFlags.uf_narrow_results,
-           "narrow UF result sorts whose applications are used only for "
-           "equality to ceil(log2(N+1)) bits, cutting the AIG cost of each "
-           "congruence constraint from O(width) to O(log N)",
-           refinement_group);
-  mode_arg("--uf-propagate-equalities",
-           bm->UserFlags.uf_propagate_equalities,
-           "before lowering, rewrite the query under its own top-level "
-           "equalities with applications still in place, so that `x = y` "
-           "merges (f x) and (f y) into one application and `a = (f y)` "
-           "or `(f 3) = 0` reach the terms built on a or (f 3); auto runs "
-           "it unless the query has Real content, where it measures as a "
-           "loss",
-           refinement_group);
-  mode_arg("--uf-skeleton-preproc", bm->UserFlags.uf_skeleton_preproc,
-           "let --uf-propagate-equalities also read the facts the query's "
-           "Boolean skeleton forces, so an equality stated under an "
-           "implication the structure resolves still crosses the "
-           "applications; one SAT call over the skeleton per UF solve, and "
-           "auto follows the pass it feeds",
-           refinement_group);
-  uf_bv_term_abstraction_option =
-      app.add_option("--uf-bv-term-abstraction", uf_bv_term_abstraction,
-                     "whether a solve with uninterpreted functions abstracts "
-                     "its wide multiplications, divisions and remainders as "
-                     "--bv-term-abstraction does: 'auto' (the default) does "
-                     "so when the query holds one at or above "
-                     "--bv-abstraction-width, 'on' and 'off' decide it for "
-                     "every UF solve")
-          ->group(refinement_group)
-          ->type_name("TEXT")
-          ->default_str("auto");
-  bool_arg("--uf-quotient-threshold-schemas",
-           bm->UserFlags.uf_quotient_threshold_schemas,
-           "when --uf-bv-term-abstraction abstracts a solve, also admit the "
-           "quotient-threshold division schemas for it (see "
-           "--bv-term-abstraction-schema-groups); naming the groups yourself "
-           "overrides this",
-           refinement_group);
-  bool_arg("--uf-inject-args", bm->UserFlags.uf_inject_args,
-           "assume equality-only UF declarations are injective and encode it, "
-           "giving the SAT solver bidirectional propagation between argument "
-           "and result equalities. The assumption is not entailed by the "
-           "query, so it is installed retractably: a refutation that used it "
-           "is taken back and the query decided without it. Verdicts are "
-           "unchanged; what this buys is faster model-finding on a query "
-           "whose functions are injective anyway, and it costs a second "
-           "search on one that is not",
-           refinement_group);
-
-  const char* const bb_group = "Bit-blasting options";
-  bool_arg("--bb.umulo-schulte", bm->UserFlags.umulo_schulte,
-           "detect unsigned multiplication overflow from the operands' "
-           "leading ones and bit w of a (w+1)-wide product instead of the "
-           "high half of a 2w-wide product",
-           bb_group);
-
-  bool_arg("--bb.smulo-schulte", bm->UserFlags.smulo_schulte,
-           "detect signed multiplication overflow from the operands' bits "
-           "that differ from their signs and the top three bits of a "
-           "(w+2)-wide product instead of a 2w-wide product tested against "
-           "its sign extension",
-           bb_group);
-
-  bool_arg("--bb.div-lemmas", bm->UserFlags.division_lemmas,
-           "assert each divider's order laws (b!=0 implies r<b and q<=a, "
-           "r<=a, the b=0 and b=1 cases) as side constraints; consequences "
-           "of the circuit that its own unit propagation cannot rederive",
-           bb_group);
-
-  bool_arg("--bb.div-v5", bm->UserFlags.division_variant_5,
-           "unsigned division encoding variant 5: restoring long division "
-           "with the quotient bit from a dedicated comparator per row",
-           bb_group);
-
-  bool_arg("--bb.div-by-const", bm->UserFlags.division_by_constant,
-           "encode a division or remainder by a constant through its "
-           "defining relation, x = c*q + r with r < c, where the product is "
-           "the constant's shift-and-add over the fresh quotient; a 256-bit "
-           "division by a 34-bit constant is 22k clauses this way against "
-           "510k as a divider",
-           bb_group);
-  app.add_option("--bb.div-by-const-width",
-                 bm->UserFlags.division_by_constant_width,
-                 "the width from which --bb.div-by-const applies; below it "
-                 "the divider is small either way")
-      ->group(bb_group)
-      ->capture_default_str();
-
-  bool_arg("--bb.div-by-mult", bm->UserFlags.division_by_multiplication,
-           "encode division and remainder through their defining relation: "
-           "fresh quotient and remainder variables, x = y*q + r at double "
-           "width, and r < y wherever the divisor is nonzero, instead of a "
-           "divider circuit",
-           bb_group);
-
-  bool_arg("--bb.div-v1", bm->UserFlags.division_variant_1,
-           "unsigned division encoding variant 1", bb_group);
-
-  bool_arg("--bb.div-v2", bm->UserFlags.division_variant_2,
-           "unsigned division encoding variant 2", bb_group);
-
-  bool_arg("--bb.div-v3", bm->UserFlags.division_variant_3,
-           "unsigned division encoding variant 3", bb_group);
-
-  bool_arg("--bb.div-v4", bm->UserFlags.division_variant_4,
-           "unsigned division encoding variant 4: a two-stage shift/subtract "
-           "circuit at half the recursive one's size. Off by default -- "
-           "smaller measured slightly worse over a floating-point corpus and "
-           "much worse on whole-division refutations -- and variants 1 to 3 "
-           "modify the recursive circuit that runs instead",
-           bb_group);
-
-  int64_arg("--bb.shift-variant", bm->UserFlags.shift_variant,
-            "symbolic-amount shift encoding. 0 (default) is the barrel: "
-            "conditionally shift by each power of two, O(w log w) gates. "
-            "1 is one-hot selectors, o_k meaning the amount is exactly k, "
-            "with the result the disjunction of the terms they gate -- it "
-            "propagates better than the barrel at 64 bits but costs O(w^2) "
-            "gates. 2 adds the amount-support family, 2w redundant clauses "
-            "that let unit propagation fix an amount bit once every class "
-            "disagreeing with it is dead. 3 adds an order ladder over the "
-            "selectors and the zeroing bound built on it. 4 leaves the "
-            "barrel in place and adds the exact prime implicates of the "
-            "relation for shifts up to 5 bits wide, which makes those "
-            "propagation complete for a fixed clause block and no new "
-            "variables. Constant amounts are wiring and never reach any of "
-            "this. All of 1 to 4 measured slower than the barrel on the "
-            "benchmarks tried, most starkly on pure-shift refutations, so "
-            "0 remains the default",
-            bb_group);
-
-  int64_arg("--bb.shift-onehot-minw", bm->UserFlags.shift_onehot_min_width,
-            "narrowest shift the selector variants (--bb.shift-variant 1 "
-            "to 3) apply to; below it the barrel is used", bb_group);
-
-  int64_arg("--bb.shift-onehot-maxw", bm->UserFlags.shift_onehot_max_width,
-            "widest shift the selector variants apply to. They are O(w^2) "
-            "gates, and past 256 bits cost 8.8x the clauses and time out "
-            "where the barrel takes ten seconds", bb_group);
-
-  bool_arg("--bb.add-v1", bm->UserFlags.adder_variant,
-           "addition encoding variant 1", bb_group);
-
-  bool_arg("--bb.add-v2", bm->UserFlags.bvplus_variant,
-           "addition encoding variant 2", bb_group);
-
-  bool_arg("--bb.vle-v1", bm->UserFlags.bbbvle_variant,
-           "comparison encoding variant 1", bb_group);
-
-  int64_arg("--bb.mult-variant", bm->UserFlags.multiplication_variant,
-            "unsigned multiplication encoding. 1 shifts and adds. "
-            "14 is 1, except that a multiplier holding a run of constant one "
-            "bits is Booth recoded. 15 is radix-4 modified Booth, which halves "
-            "the partial-product rows and recodes symbolic multipliers too. "
-            "16 chooses between 14 and 15 for each multiply. "
-            "3, 4, 6, 7, 8, 9 and 13 Booth recode and differ in how the "
-            "partial-product columns are summed. 5 uses the constant-bit "
-            "multiplication bounds, and needs --bb.mult-v2. 17 accumulates "
-            "the partial-product rows in carry-save form with one final "
-            "adder. 18 reduces the Booth-recoded columns as a Dadda tree. "
-            "19 is 1 with the operands of a symbolic multiply put in a "
-            "canonical order, so both orders of one product share a circuit. "
-            "20 is radix-4 with a hard triple, every row a select of "
-            "0, y, 2y or 3y. 21 is 14 for a constant multiplier and 19 for a "
-            "symbolic one; 22 is 21 with carry-save rows; 23 is 21 with the "
-            "hard-triple rows of 20; 25 is 22 with the runs of "
-            "identical symbolic bits in the multiplier -- a sign "
-            "extension's replicated sign bit -- Booth recoded as well; 26 "
-            "is 25 on 21's ripple rows; 27 (default) is 26 with a constant's "
-            "rows carry-saved as 25 does. Any other value "
-            "is an error, reported once bit-blasting reaches a multiply",
-            bb_group);
-
-  int64_arg("--bb.mult-lemmas", bm->UserFlags.multiplication_lemmas,
-            "conjoin to each multiply the low-bit residue implicates its "
-            "circuit cannot propagate: 0 (default) none, 3 the six clauses "
-            "that make the 3-bit relation refutation-complete, 4 the 88 for "
-            "4 bits",
-            bb_group);
-
-  bool_arg("--bb.mult-v2", bm->UserFlags.upper_multiplication_bound,
-           "unsigned multiplication variant 2", bb_group);
-
-  bool_arg("--bb.conjoin-constant", bm->UserFlags.conjoin_to_top,
-           "When constant-bit propagation detects a constant bit during AIG "
-           "construction, assert the AIG node and replace it, in the AIG, by "
-           "the constant bit",
-           bb_group);
-
-  bool_arg("--bb.fp-native-cmp", bm->UserFlags.fp_native_cmp,
-           "Bit-blast floating-point predicates (comparisons, equalities, "
-           "classifications) over already-packed operands natively instead of "
-           "via the SymFPU unpacking circuits",
-           bb_group);
-
-  int64_arg("--bb.fp-add-variant", bm->UserFlags.fp_add_variant,
-            "alignment frame for the native fp.add datapath. 1 keeps a whole "
-            "significand below the larger operand, so alignment never shifts "
-            "anything out of the frame. 2 keeps only a guard, a round and a "
-            "sticky position, letting alignment past those reach the sticky "
-            "bit as it already does past the clamp, which halves the width "
-            "the cancellation shift and its leading-zero count run over. "
-            "2 is the default",
-            bb_group);
-
-  bool_arg("--bb.fp-normalise-lemma", bm->UserFlags.fp_normalise_lemma,
-           "Assert what normalising by a leading-zero count means -- the top "
-           "bit of the shifted vector is set exactly when the input is "
-           "nonzero -- beside each native normalising shifter, which reaches "
-           "the same fact only once every stage select has resolved",
-           bb_group);
-
-  fp_native_arg("--bb.fp-native-arith", bm->UserFlags.fp_native_arith,
-           "Bit-blast fp.add and fp.mul under surviving native predicates "
-           "with the hand-written packed-operand circuits instead of the "
-           "SymFPU unpacking circuits",
-           bb_group);
-
-  // Deliberately without a captured default: this sets the switches above
-  // rather than holding a state of its own, and they do not all start alike,
-  // so a default shown here would misdescribe every one of them.
-  fp_native_all_option =
-      app.add_option("--bb.fp-native-all", bm->UserFlags.fp_native_all,
-                     "Set every native floating-point circuit at once, in "
-                     "whichever direction is given: on is what a build "
-                     "without SymFPU needs, off routes every operation "
-                     "through SymFPU. An operation named in its own right "
-                     "wins over this")
-          ->group(bb_group)
-          ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
-
-  fp_native_arg("--bb.fp-native-minmax", bm->UserFlags.fp_native_minmax,
-           "Bit-blast fp.min and fp.max natively over packed operands",
-           bb_group);
-
-  fp_native_arg("--bb.fp-native-pack", bm->UserFlags.fp_native_pack,
-           "Bit-blast fp.to_ieee_bv natively over packed operands",
-           bb_group);
-
-  fp_native_arg("--bb.fp-native-round", bm->UserFlags.fp_native_round,
-           "Bit-blast fp.roundToIntegral natively over packed operands",
-           bb_group);
-
-  fp_native_arg("--bb.fp-native-sqrt", bm->UserFlags.fp_native_sqrt,
-           "Bit-blast fp.sqrt natively over packed operands, through the "
-           "defining relation rather than a restoring array",
-           bb_group);
-
-  fp_native_arg("--bb.fp-native-fma", bm->UserFlags.fp_native_fma,
-           "Bit-blast fp.fma natively over packed operands",
-           bb_group);
-
-  fp_native_arg("--bb.fp-native-conv", bm->UserFlags.fp_native_conv,
-           "Bit-blast the bit-vector conversions -- to_fp from a signed or "
-           "unsigned bit-vector, fp.to_ubv and fp.to_sbv -- natively",
-           bb_group);
-
-  fp_native_arg("--bb.fp-native-rem", bm->UserFlags.fp_native_rem,
-           "Bit-blast fp.rem natively over packed operands",
-           bb_group);
-
-  fp_native_arg("--bb.fp-native-div", bm->UserFlags.fp_native_div,
-           "Bit-blast fp.div under surviving native predicates with the "
-           "hand-written packed-operand circuit, whose significand quotient "
-           "is the defining relation rather than a restoring array",
-           bb_group);
-
-  bool_arg("--bb.fp-native-add-iszero",
-           bm->UserFlags.fp_native_add_iszero,
-           "Encode fp.isZero(fp.add ...) directly from its operands without "
-           "constructing the complete rounded sum (enabled by default; "
-           "works with both SymFPU and native arithmetic)",
-           bb_group);
-
-  const char* const fp_abstraction_group =
-      "Floating-point abstraction options";
-  bool_arg("--fp-abstraction-incremental",
-           bm->UserFlags.fp_abstraction_incremental,
-           "host the abstraction inside the incremental driver as well; a "
-           "hosted session expands arrays eagerly (--ackermanize)",
-           fp_abstraction_group);
-  bool_arg("--fp-abstraction-active-closure",
-           bm->UserFlags.fp_abstraction_active_closure,
-           "under the incremental driver, check only the records of the "
-           "active encoding units rather than every "
-           "record of the epoch; a measurement flag, off by default",
-           fp_abstraction_group);
-  bool_arg("--fp-abstraction", bm->UserFlags.fp_abstraction,
-           "abstract selected floating-point operations to same-sort "
-           "surrogates constrained by exact class/sign, order, exponent-band "
-           "and identity rules; check candidates against the exact evaluator "
-           "and release the exact encoding only after a bounded number of "
-           "value lemmas (batch solves only, unless "
-           "--fp-abstraction-incremental)",
-           fp_abstraction_group);
-  app.add_option("--fp-abstraction-ops", fp_abstraction_ops,
-                 "comma-separated operations to abstract: mul, div, sqrt, "
-                 "add, sub, fma, rem, rti, to_sbv, to_ubv; 'default' is "
-                 "mul,div,sqrt,fma and 'all' every one of them")
-      ->group(fp_abstraction_group);
-  app.add_option("--fp-abstraction-chain-ops", fp_abstraction_chain_ops,
-                 "operations abstracted only as links in a chain, when an "
-                 "operand is the result of an application already "
-                 "abstracted (the names of --fp-abstraction-ops); none by "
-                 "default")
-      ->group(fp_abstraction_group);
-  app.add_option("--fp-abstraction-width",
-                 bm->UserFlags.fp_abstraction_width,
-                 "minimum packed width (exponent plus significand bits) at "
-                 "which an operation is abstracted")
-      ->group(fp_abstraction_group)
-      ->capture_default_str();
-  app.add_option("--fp-abstraction-tiers",
-                 bm->UserFlags.fp_abstraction_tiers,
-                 "highest rule tier emitted with a surrogate: 0 the exact "
-                 "class/sign shell, 1 adds order facts, 2 adds exponent "
-                 "bands and overflow selection, 3 adds identities")
-      ->group(fp_abstraction_group)
-      ->capture_default_str();
-  app.add_option("--fp-abstraction-values",
-                 bm->UserFlags.fp_abstraction_values,
-                 "value lemmas one abstracted operation may take before its "
-                 "exact encoding is released")
-      ->group(fp_abstraction_group)
-      ->capture_default_str();
-  bool_arg("--fp-abstraction-shape", bm->UserFlags.fp_abstraction_shape,
-           "spend model-instantiated trailing-exponent (exactness) lemmas "
-           "before value lemmas",
-           fp_abstraction_group);
-  bool_arg("--fp-abstraction-relational",
-           bm->UserFlags.fp_abstraction_relational,
-           "emit pairwise monotonicity lemmas between abstracted operations "
-           "that share an operand, for the pair a candidate violates",
-           fp_abstraction_group);
-  app.add_option("--fp-abstraction-relational-last-width",
-                 bm->UserFlags.fp_abstraction_relational_last_width,
-                 "packed width at or above which a monotonicity lemma is "
-                 "stated only once the record's value budget is spent, "
-                 "instead of before its first value lemma: keeps wide "
-                 "witness hunts from stalling under many pairwise facts, "
-                 "at the cost of the narrow ones the facts carry; 0 never, "
-                 "128 by default")
-      ->group(fp_abstraction_group)
-      ->capture_default_str();
-  bool_arg("--fp-abstraction-box-lemmas",
-           bm->UserFlags.fp_abstraction_box_lemmas,
-           "add an operand-box result-prefix constraint beside value lemmas "
-           "for mul/div/sqrt/add/sub/fma/rti, when monotone corner bounds "
-           "establish it (excludes remainder and integer conversions)",
-           fp_abstraction_group);
-  bool_arg("--fp-abstraction-phase-hints",
-           bm->UserFlags.fp_abstraction_phase_hints,
-           "after a refuted candidate, suggest to the SAT solver the "
-           "operand values it tried and the exact result for them, so the "
-           "next candidate keeps the operands and is consistent at once "
-           "when nothing else forbids it",
-           fp_abstraction_group);
-  bool_arg("--fp-abstraction-repair", bm->UserFlags.fp_abstraction_repair,
-           "before refining a candidate the abstraction refuted, replay the "
-           "original formula under it and accept the candidate as a model "
-           "when the formula holds for its values of the original symbols",
-           fp_abstraction_group);
-  app.add_option("--fp-abstraction-restart-limit",
-                 bm->UserFlags.fp_abstraction_restart_limit,
-                 "how many times one query may run the pipeline again to "
-                 "release operations exactly; past it, and whenever a run "
-                 "abstracted no fewer operations than the run before it, "
-                 "releases are spliced instead")
-      ->group(fp_abstraction_group)
-      ->capture_default_str();
-  app.add_option("--fp-abstraction-significand-bits",
-                 bm->UserFlags.fp_abstraction_significand_bits,
-                 "significand bits of the reduced-precision bands emitted "
-                 "with an abstracted multiplication, division or square "
-                 "root: the operands truncated to this many bits bound the "
-                 "result through a small multiplier; 0 emits none")
-      ->group(fp_abstraction_group)
-      ->capture_default_str();
-  app.add_option("--fp-abstraction-significand-bits-wide",
-                 bm->UserFlags.fp_abstraction_significand_bits_wide,
-                 "the same at packed widths of 128 bits and above; 0 uses "
-                 "--fp-abstraction-significand-bits everywhere")
-      ->group(fp_abstraction_group)
-      ->capture_default_str();
-  app.add_option("--fp-abstraction-restart-width",
-                 bm->UserFlags.fp_abstraction_restart_width,
-                 "packed width at or above which releasing a multiplication, "
-                 "division, square root, fma or remainder exactly runs the "
-                 "whole pipeline again with it lowered exactly, so that the "
-                 "bit-vector abstraction can see its circuit, instead of "
-                 "splicing the circuit into the running solver; 0 never "
-                 "restarts, and is the default unless --bv-term-abstraction "
-                 "is on, which sets 128")
-      ->group(fp_abstraction_group)
-      ->capture_default_str();
-  fp_constant_operands_option =
-      app.add_option("--fp-abstraction-constant-operands",
-                     fp_abstraction_constant_operands,
-                     "whether an operation one of whose float operands is a "
-                     "constant is abstracted: 'auto' (the default) does so "
-                     "when the configuration abstracts an operation of two "
-                     "operands it does not know or one whose operand is "
-                     "another abstracted operation, 'on' and 'off' decide it "
-                     "for every query. Declined, such an operation is "
-                     "lowered exactly, since a constant's circuit is small "
-                     "and propagates where the abstraction would have the "
-                     "solver search -- which wins on queries that only scale "
-                     "their unknowns and loses on those that compute with "
-                     "them")
-          ->group(fp_abstraction_group)
-          ->type_name("TEXT")
-          ->default_str("auto");
-  app.add_flag("--fp-abstraction-decline-pinned",
-               bm->UserFlags.fp_abstraction_decline_pinned,
-               "leave exact any operation whose result the query equates "
-               "directly with a constant or a conversion -- the witness-hunt "
-               "signature, where the solve must produce the exact value "
-               "anyway and a surrogate only defers the circuit")
-      ->group(fp_abstraction_group);
-  app.add_option("--fp-abstraction-budget",
-                 bm->UserFlags.fp_abstraction_budget,
-                 "wall-clock seconds after which a batch refinement releases "
-                 "every remaining record exactly, spliced in place, bounding "
-                 "a loss near the budget instead of the timeout; 0 never")
-      ->group(fp_abstraction_group)
-      ->capture_default_str();
-
-  bool_arg("--bb.fp-native-domain", bm->UserFlags.fp_native_domain,
-           "Mine simple finite box bounds and omit NaN/infinity cases that "
-           "are impossible under those top-level facts (enabled by default)",
-           bb_group);
-
-  bool_arg("--bb.fp-native-known-sign",
-           bm->UserFlags.fp_native_known_sign,
-           "Use finite semantic-sign facts in native fp.add/fp.mul to omit "
-           "opposite-sign/sign-dependent circuitry while preserving signed "
-           "zero (experimental; requires --bb.fp-native-domain)",
-           bb_group);
-
-  bool_arg("--fp-domain-simplify", bm->UserFlags.fp_domain_simplify,
-           "Experimental FP prepass: mine boxed variable bounds, use boxed FP "
-           "domain facts, and discharge ordered FP "
-           "comparisons or zero-sum rows decided by those facts",
-           bb_group);
-
-  bool_arg("--fp-domain-derived-bounds",
-           bm->UserFlags.fp_domain_derived_bounds,
-           "Decision-only FP prepass (enabled by default): derive finite "
-           "symbol bounds from top-level symbol/expression relations and "
-           "zero-result additions, then discharge comparisons or "
-           "contradictory boxes",
-           bb_group);
-
-  bool_arg("--fp-domain-extremal-selectors",
-           bm->UserFlags.fp_domain_extremal_selectors,
-           "FP prepass (enabled by default): replace an objective by "
-           "necessary semantic {0,1} selector values only after proving "
-           "their conjunction sufficient (primarily exact extrema)",
-           bb_group);
-
-  bool_arg("--fp-domain-sound-zero-facts",
-           bm->UserFlags.fp_domain_sound_zero_facts,
-           "Derive sound zero facts from "
-           "association-safe same-sign boxed +/-1 rows and encode them as "
-           "zero magnitude bits, preserving the +0/-0 distinction (enabled "
-           "by default; does not enable --fp-domain-simplify)",
-           bb_group);
-
-  bool_arg("--fp-domain-row-bounds", bm->UserFlags.fp_domain_row_bounds,
-           "Experimental FP prepass: recognise linear FP zero rows and "
-           "rewrite them to false when association-preserving target-format "
-           "interval endpoints exclude zero",
-           bb_group);
-
-  bool_arg("--bb.simplify-during-bb", bm->UserFlags.simplify_during_BB_flag,
-           "When bit-blasting discovers that a non-constant child of a term "
-           "blasts to an all-constant vector, rebuild the term with that "
-           "constant and re-run the word-level term simplifier on it. Needs "
-           "the rewriting simplifier, so not with --disable-opt-inc or "
-           "--disable-simplifications",
-           bb_group);
-
-  int64_arg("--aig-node-budget", bm->UserFlags.aig_node_budget,
-            "Number of AIG AND gates after which one query's bit-blast gives "
-            "up. -1 means never, 0 means give up without blasting. Exceeding "
-            "it abandons the query through the soft-timeout path, so the "
-            "answer is the one --max-time gives -- \"unknown\" in SMT-LIB "
-            "mode, with (get-info :reason-unknown) naming this budget, and "
-            "\"Unknown.\" in the CVC language. "
-            "Batch solves only: the incremental encoder's AIG outlives the "
-            "check that grew it and is never capped, so engaging it with a "
-            "budget set warns once instead. Bounds the blast, not the "
-            "process -- CNF conversion and the SAT search allocate on top "
-            "of it",
-            bb_group);
-
-  const char* const print_group = "Printing options";
-  app.add_flag("--print-stpinput,-b", bm->UserFlags.print_STPinput_back_flag,
-               "print STP input back to cout")
-      ->group(print_group);
-  app.add_flag("--print-back-CVC", bm->UserFlags.print_STPinput_back_CVC_flag,
-               "print input in CVC format, then exit")
-      ->group(print_group);
-  app.add_flag("--print-back-SMTLIB2",
-               bm->UserFlags.print_STPinput_back_SMTLIB2_flag,
-               "print input in SMT-LIB2 format, then exit")
-      ->group(print_group);
-  app.add_flag("--print-back-GDL", bm->UserFlags.print_STPinput_back_GDL_flag,
-               "print AiSee's graph format, then exit")
-      ->group(print_group);
-  app.add_flag("--print-back-dot", bm->UserFlags.print_STPinput_back_dot_flag,
-               "print dotty/neato's graph format, then exit")
-      ->group(print_group);
-  app.add_flag("--print-counterex,-p", bm->UserFlags.print_counterexample_flag,
-               "print counterexample")
-      ->group(print_group);
-  app.add_flag("--print-counterexbin,-y", bm->UserFlags.print_binary_flag,
-               "print counterexample in binary")
-      ->group(print_group);
-  app.add_flag("--print-arrayval,-q",
-               bm->UserFlags.print_arrayval_declaredorder_flag,
-               "print arrayval declared order")
-      ->group(print_group);
-  app.add_flag("--print-functionstat,-s", bm->UserFlags.stats_flag,
-               "print function statistics")
-      ->group(print_group);
-  app.add_flag("--print-quickstat,-t", bm->UserFlags.quick_statistics_flag,
-               "print quick statistics")
-      ->group(print_group);
-  app.add_flag("--print-nodes,-v", bm->UserFlags.print_nodes_flag,
-               "print nodes ")
-      ->group(print_group);
-  app.add_flag("--print-output,-n", bm->UserFlags.print_output_flag,
-               "Print output")
-      ->group(print_group);
-
-  const char* const input_group = "Input options";
-  app.add_flag("--SMTLIB1,-m", use_smtlib1, "use the SMT-LIB1 format parser")
-      ->group(input_group);
-  app.add_flag("--SMTLIB2", use_smtlib2, "use the SMT-LIB2 format parser")
-      ->group(input_group);
-  app.add_flag("--CVC", use_cvc, "use the CVC format parser")
-      ->group(input_group);
-
-  const char* const output_group = "Output options";
-  app.add_flag("--output-CNF", bm->UserFlags.output_CNF_flag,
-               "Save the CNF into output_[0..n].cnf. NOTE: variables cannot "
-               "be mapped back, and problems solved by the preprocessing "
-               "simplifier alone will not generate any CNF as the SAT solver "
-               "is never invoked")
-      ->group(output_group);
-
-  const char* const misc_group = "Miscellaneous options";
-  app.add_option("--cnf-auto-threshold", bm->UserFlags.cnf_auto_threshold,
-                 "AND-node count at or above which --cnf-generation-effort "
-                 "auto stops minimising: it picks new-medium there and "
-                 "gia-low below, or on the estimate-less fallback drops "
-                 "medium to very-low")
-      ->capture_default_str()
-      ->group(misc_group);
-  app.add_option("--cnf-generation-effort", cnf_effort,
-                 "effort spent minimising the CNF: auto, very-low, low, "
-                 "medium, high, very-high, new-very-low, new-low, new-medium, new-high. "
-                 "Higher is slower to "
-                 "generate but yields a smaller CNF; auto picks gia-low or, "
-                 "for large estimated blasts, new-medium, since minimising a "
-                 "large one costs more than the solver saves - falling back "
-                 "to the very-low/medium choice under array refinement, on "
-                 "solvers other than cadical, or with no estimate recorded. "
-                 "The new-* rungs blast through STP's own AIG instead of "
-                 "ABC's and write the CNF directly: new-very-low is plain "
-                 "Tseitin, new-low recovers XOR and if-then-else, new-medium "
-                 "also collapses n-ary ANDs and ORs. The gia-* rungs are low, "
-                 "high and very-high again, reaching the same generator over "
-                 "a Gia the blaster built rather than one converted from an "
-                 "ABC AIG")
-      ->capture_default_str()
-      ->group(misc_group);
-
-  bool_arg("--cnf-link-shared-cells", bm->UserFlags.cnf_link_shared_cells,
-           "new-* CNF rungs: keep a comparator cell propagation-complete "
-           "when its exclusive-or is shared, with a linking block beside the "
-           "exclusive-or's own clauses instead of the per-gate encoding",
-           misc_group);
-
-  bool_arg("--cnf-complete-ite", bm->UserFlags.cnf_complete_ite,
-           "new-* CNF rungs: encode a recovered if-then-else with all six "
-           "prime implicates, adding the two that let agreeing arms decide "
-           "the output while the condition is unset",
-           misc_group);
-
-  app.add_flag("--exit-after-CNF", bm->UserFlags.exit_after_CNF,
-               "exit after the CNF has been generated")
-      ->group(misc_group);
-
-  app.add_flag("--parse-only", bm->UserFlags.parse_only,
-               "exit after parsing the input, without solving")
-      ->group(misc_group);
-
-  interactive_option =
-      app.add_option("--interactive", interactive,
-                     "read the input a character at a time, as needed when "
-                     "driving stp interactively over a pipe. Off reads in "
-                     "blocks, which is faster. Default: on when reading from "
-                     "stdin, off when reading from a file. SMT-LIB2 only.")
-          ->group(misc_group);
-
-  incremental_option =
-      app.add_flag("--incremental{on}", incremental,
-                   "whether to solve incrementally -- keeping the SAT solver "
-                   "and the bit-blasted encoding across (check-sat) commands, "
-                   "asserting retractable formulas as SAT assumptions: 'on' "
-                   "(from the first solve, pushes or no pushes), 'off' (never, "
-                   "not even for an input that pushes), or 'auto' (the "
-                   "default: an input that pushes switches it on for itself). "
-                   "A bare --incremental means 'on'; a value must be attached "
-                   "with '=' rather than spelled as a separate argument. "
-                   "SMT-LIB2 only.")
-          ->group(misc_group);
-
-  int64_arg("--incremental-auto-engage-at",
-            bm->UserFlags.incremental_auto_engage_at,
-            "real-solve ordinal at which an automatically incremental "
-            "SMT-LIB session engages the persistent driver; -1 uses the "
-            "theory default (QF_BV/QF_ABV: 32, others: 3), 1 engages on "
-            "the first solve, and 0 never engages automatically "
-            "(--incremental=on still engages at 1, and --incremental=off "
-            "engages never)",
-            misc_group);
-
-  app.add_flag("--incremental-profile", bm->UserFlags.incremental_profile,
-               "print fine-grained per-check and cumulative timings and "
-               "work counters for the incremental driver (use with "
-               "--incremental=on to profile from the first check)")
-      ->group(misc_group);
-
-  app.add_flag("--incremental-core-only",
-               bm->UserFlags.incremental_core_only,
-               "run the minimal persistent assumption/refinement core "
-               "without fitted preprocessing, promotion, or adaptive "
-               "backend policies; memory-relief rebuilding remains active")
-      ->group(misc_group);
-
-  app.add_flag("--incremental-cbp-reset", bm->UserFlags.incremental_cbp_reset,
-               "use reset and prefix re-feed instead of CBP level rollback "
-               "on stack divergence (diagnostic oracle)")
-      ->group(misc_group);
-
-  int64_arg("--incremental-cbp-bootstrap-limit",
-            bm->UserFlags.incremental_cbp_bootstrap_limit,
-            "on a first incremental solve forced by --incremental=on, defer "
-            "the cross-level CBP bootstrap when the assertion stack exceeds "
-            "this many DAG nodes. 0 disables the deferral.",
-            misc_group);
-
-  int64_arg("--incremental-cbp-feed-cap", bm->UserFlags.incremental_cbp_feed_cap,
-            "how many DAG nodes the cross-level CBP engine may retain for "
-            "the live stack before it stops accepting levels; the charge is "
-            "refunded when a level pops.",
-            misc_group);
-
-  int64_arg("--incremental-base-resimplify-limit",
-            bm->UserFlags.incremental_base_resimplify_limit,
-            "skip the whole-base semantic pass a relief rebuild runs when "
-            "the base exceeds this many DAG nodes; the raw base is "
-            "re-encoded instead. 0 always skips it.",
-            misc_group);
-
-  int64_arg("--incremental-reencode-limit",
-            bm->UserFlags.incremental_reencode_limit,
-            "rebuild the incremental solver from the live assertion stack "
-            "once its variable count passes this limit and most encodings "
-            "belong to popped content. 0 disables the rebuild.",
-            misc_group);
-
-  int64_arg("--incremental-semantic-cache-limit",
-            bm->UserFlags.incremental_semantic_cache_limit,
-            "rotate the complete incremental encoding epoch once semantic "
-            "caches pass this approximate DAG-node charge and an exact "
-            "retained/live graph check finds mostly popped content. 0 "
-            "disables this trigger.",
-            misc_group);
-
-  app.add_flag("--incremental-promote-units,!--no-incremental-promote-units",
-               bm->UserFlags.incremental_promote_units,
-               "promote long-stable pushed levels to permanent unit "
-               "clauses on the incremental driver; retracting a promoted "
-               "level restarts its solver")
-      ->group(misc_group);
-
-  int64_arg("--max-num-confl,--max_num_confl,-g",
-            bm->UserFlags.timeout_max_conflicts,
-            "Number of conflicts after which the SAT solver gives up. "
-            "-1 means never, 0 means give up without searching.",
-            misc_group);
-
-  int64_arg("--max-time,--max_time,-k", bm->UserFlags.timeout_max_time,
-            "Number of seconds after which the SAT solver gives up. The "
-            "budget is for the whole query, not for each call into the SAT "
-            "solver. -1 means never, 0 means give up without searching.",
-            misc_group);
-
-  app.add_flag("--check-sanity,-d", bm->UserFlags.check_counterexample_flag,
-               "construct counterexample and check it")
-      ->group(misc_group);
-
-  // ---------------------------------------------------------------------
-  // Combinations where one option discards another's effect
-  // ---------------------------------------------------------------------
-  // Each pair below is one STP cannot honour both halves of: whichever the
-  // code happens to apply last wins, and the other request never reaches the
-  // solver. Reporting that is more useful than obeying half a command line,
-  // most of all for the generated ones that option sweeps and build scripts
-  // produce, where a silently dropped flag reads as a measurement.
-  //
-  // The options are looked up by name so that the definitions above stay as
-  // they were; get_option() throws if a name here stops matching one, so
-  // renaming an option cannot quietly drop its relationships.
-  //
-  // CLI11 tests whether an option was given, not what it was set to, so
-  // '--disable-simplifications --flattening false' is refused as well, even
-  // though the two agree. That is the same mistake in a milder form -- the
-  // second option still had no bearing on the run -- and treating it the same
-  // way keeps the rule to one sentence.
-  //
-  // Deliberately not here: the CVC/SMT-LIB1/SMT-LIB2 parser flags, which
-  // parse_options() already rejects with a message of their own, and
-  // --search-bias, documented as ignored by solvers that have no such setting
-  // rather than as an error.
-  auto excludes_all = [this](const std::string& name,
-                             std::initializer_list<const char*> others) {
-    CLI::Option* const option = app.get_option(name);
-    for (const char* other : others)
-    {
-      option->excludes(app.get_option(other));
-    }
-  };
-
-  // The solver flags are not applied in the order given: parse_options()
-  // consults them in a fixed sequence, so 'stp --cadical --minisat' quietly
-  // ran CaDiCaL. Only one of them can be meant. Which ones exist depends on
-  // what was compiled in.
-  std::vector<std::string> solver_flags;
-#ifdef USE_CADICAL
-  solver_flags.emplace_back("--cadical");
-#endif
-#ifdef USE_CRYPTOMINISAT
-  solver_flags.emplace_back("--cryptominisat");
-#endif
-#ifdef USE_MINISAT
-  solver_flags.emplace_back("--simplifying-minisat");
-  solver_flags.emplace_back("--minisat");
-#endif
-
-  for (auto first = solver_flags.begin(); first != solver_flags.end(); ++first)
+  std::size_t n = 0;
+  const reg::OptionSpec* specs = reg::option_specs(n);
+  entries.resize(n);
+  std::size_t na = 0;
+  const reg::CliAlias* aliases = reg::cli_aliases(na);
+  alias_flags.resize(na);
+  for (std::size_t k = 0; k < na; ++k)
+    alias_flags[k].alias = &aliases[k];
+  std::size_t nf = 0;
+  const reg::CliFrontend* front = reg::cli_frontend(nf);
+
+  // The positional input file first, then every --help group in the table's
+  // order: its frontend rows, its entries in registry order, then the backend
+  // flags of an entry in the group.
+  for (std::size_t r = 0; r < nf; ++r)
+    if (std::string(front[r].kind) == "positional")
+      register_frontend(front[r]);
+
+  std::size_t ng = 0;
+  const char* const* groups = reg::cli_groups(ng);
+  for (std::size_t g = 0; g < ng; ++g)
   {
-    CLI::Option* const option = app.get_option(*first);
-    for (auto second = std::next(first); second != solver_flags.end(); ++second)
+    const std::string group = groups[g];
+    for (std::size_t r = 0; r < nf; ++r)
+      if (front[r].group != nullptr && group == front[r].group)
+        register_frontend(front[r]);
+    for (std::size_t i = 0; i < n; ++i)
+      if (std::string(specs[i].cli_form) != "none" && group_of(specs[i]) == group)
+        register_entry(i, group);
+    for (std::size_t k = 0; k < na; ++k)
     {
-      option->excludes(app.get_option(*second));
+      const reg::OptionSpec* of = reg::find_option(aliases[k].of);
+      if (of != nullptr && group_of(*of) == group)
+        register_alias(k, group);
     }
   }
-
-#ifdef USE_CRYPTOMINISAT
-  // A thread count is read only by CryptoMiniSat, so asking for one while
-  // selecting a different solver gets neither threads nor a warning.
-  //
-  // --cadical-factor is deliberately not treated the same way: it is a
-  // request CaDiCaL may decline with a warning rather than a setting that
-  // must apply, and tests/query-files/CMakeLists.txt sweeps the whole corpus
-  // with it appended to every invocation, so an exclusion would fail every
-  // test in that run that names a solver.
-  CLI::Option* const threads_option = app.get_option("--threads");
-  for (const std::string& flag : solver_flags)
-  {
-    if (flag != "--cryptominisat")
-    {
-      threads_option->excludes(app.get_option(flag));
-    }
-  }
-#endif
-
-  // disableSimplifications() clears each of these after the command line has
-  // been read, so a request for one alongside it never takes effect.
-  excludes_all("--disable-simplifications",
-               {"--switch-word", "--disable-opt-inc", "--disable-cbitp",
-                "--disable-equality", "--unconstrained-variable-elimination",
-                "--flattening", "--rewriting", "--split-extracts",
-                "--ite-context-simplifications", "--use-intervals",
-                "--pure-literals", "--common-subsum", "--common-factor",
-                "--pair-extract", "--merge-same", "--distinct-ordering",
-                "--linear-form"});
-
-  // Likewise for what disableSizeIncreasingSimplifications() forces.
-  excludes_all("--size-reducing-only",
-               {"--simplify-to-constants-only",
-                "--ite-context-simplifications", "--difficulty-reversion"});
-
-  // The rewriting simplifier has to be on for this to do anything.
-  excludes_all("--bb.simplify-during-bb",
-               {"--disable-opt-inc", "--disable-simplifications"});
-
-  // --parse-only stops before the SAT solver is reached, so there is never a
-  // CNF for these two to write out or exit after.
-  excludes_all("--parse-only", {"--output-CNF", "--exit-after-CNF"});
-
-  // interactive_read is consulted only on the SMT-LIB2 path.
-  excludes_all("--interactive", {"--CVC", "--SMTLIB1"});
+  register_exclusions();
 }
 
-int ExtraMain::parse_options(int argc, char** argv)
+// ---------------------------------------------------------------------
+// Parsing
+// ---------------------------------------------------------------------
+
+void CommandLine::refuse(const std::string& line) const
+{
+  cerr << line << endl;
+  std::exit(-1);
+}
+
+// The text the registry parses for an entry the command line gave, or the
+// line refusing it.
+std::string CommandLine::entry_text(const Entry& e, std::string& refusal)
+{
+  const reg::OptionSpec& spec = *e.spec;
+  switch (spec.type)
+  {
+    case reg::OptType::BOOL: return e.b ? "true" : "false";
+    case reg::OptType::INT:
+      return std::to_string(reads_int32(spec) ? static_cast<std::int64_t>(e.i32) : e.i);
+    case reg::OptType::UINT:
+      return std::to_string(reads_uint32(spec) ? static_cast<std::uint64_t>(e.u32) : e.u);
+    case reg::OptType::MODE:
+      if (std::string(spec.cli_form) == "flag" && spec.num_values == 0)
+        return e.b ? "on" : "off";
+      return e.s;
+    case reg::OptType::DURATION:
+      // As the command line always read it: a whole number of seconds, -1 no
+      // limit. -1 is the only negative value with a meaning; anything more
+      // negative than that is a mistake, and silently treating it as
+      // unlimited hides it.
+      if (e.i == -1)
+        return "none";
+      if (e.i < -1)
+        refusal = std::string("ERROR: --") + spec.name + " must be -1 (no limit) or greater";
+      return std::to_string(e.i) + "s";
+    default: return e.s;
+  }
+}
+
+namespace
+{
+// The first quoted piece of a registry diagnostic after its "option 'name':"
+// prefix: the member or value it refused ("invalid member 'x'; expected ...").
+std::string quoted_piece(const std::string& what)
+{
+  const std::size_t prefix = what.find("': ");
+  const std::size_t open = what.find('\'', prefix == std::string::npos ? 0 : prefix + 3);
+  if (open == std::string::npos)
+    return "";
+  const std::size_t close = what.find('\'', open + 1);
+  if (close == std::string::npos)
+    return "";
+  return what.substr(open + 1, close - open - 1);
+}
+
+// A registry diagnostic without its "option 'name': " prefix and " [CODE]"
+// suffix: the refusal itself, in the words of whoever refused.
+std::string detail_of(const std::string& what)
+{
+  std::string out = what;
+  const std::size_t prefix = out.find("': ");
+  if (out.rfind("option '", 0) == 0 && prefix != std::string::npos)
+    out = out.substr(prefix + 3);
+  const std::size_t code = out.rfind(" [");
+  if (code != std::string::npos && !out.empty() && out.back() == ']')
+    out = out.substr(0, code);
+  return out;
+}
+
+// The row's values as the engine's own diagnostics list them: "a, b, or c".
+std::string expected_values(const reg::OptionSpec& spec)
+{
+  std::string out;
+  for (std::size_t i = 0; i < spec.num_values; ++i)
+  {
+    if (i > 0)
+      out += (i + 1 == spec.num_values) ? ", or " : ", ";
+    out += spec.values[i];
+  }
+  return out;
+}
+
+std::string fill_template(std::string text, const std::string& name, const std::string& value,
+                          const std::string& member, const std::string& expected)
+{
+  for (const auto& hole : {std::make_pair("{name}", name), std::make_pair("{value}", value),
+                           std::make_pair("{member}", member), std::make_pair("{expected}", expected)})
+    for (std::size_t at = text.find(hole.first); at != std::string::npos;
+         at = text.find(hole.first, at + hole.second.size()))
+      text.replace(at, std::strlen(hole.first), hole.second);
+  return text;
+}
+} // namespace
+
+// The line the binary prints about a value the registry refused: the wording
+// it has always used, spelled out by the row's template where it had one of
+// its own and built from the row's range and values otherwise.
+std::string CommandLine::bad_value_line(const reg::OptionSpec& spec, const std::string& given,
+                                      const api::Error& error) const
+{
+  const std::string flag = std::string("--") + spec.name;
+  const std::string detail = detail_of(error.what());
+  const std::string plain = "ERROR: " + flag + ": " + detail;
+  if (error.code() != api::ErrorCode::OPTION_VALUE)
+    return plain;
+  // The row's own wording is for the registry's refusal of a value or a
+  // member; an applier or an engine parser that refuses in its own words (the
+  // parser of a schema-group list, say) is quoted as it stands.
+  if (spec.cli_bad_value != nullptr)
+  {
+    const bool registry_refusal =
+        detail.rfind("invalid value", 0) == 0 || detail.rfind("invalid member", 0) == 0;
+    if (registry_refusal)
+      return fill_template(spec.cli_bad_value, spec.name, given, quoted_piece(error.what()),
+                           expected_values(spec));
+    return plain;
+  }
+  switch (spec.type)
+  {
+    case reg::OptType::INT:
+    case reg::OptType::UINT:
+    {
+      errno = 0;
+      const long long v = std::strtoll(given.c_str(), nullptr, 10);
+      const bool converted = errno == 0;
+      if (converted && spec.has_min && v < spec.min)
+      {
+        if (spec.cli_below_min != nullptr)
+          return fill_template(spec.cli_below_min, spec.name, given, "", "");
+        const bool no_limit = spec.min == -1 && spec.sentinel != nullptr &&
+                              std::strncmp(spec.sentinel, "-1 = no limit", 13) == 0;
+        return "ERROR: " + flag + " must be " + std::to_string(spec.min) +
+               (no_limit ? " (no limit)" : "") + " or greater";
+      }
+      if (converted && spec.has_max && v > spec.max)
+      {
+        if (spec.cli_above_max != nullptr)
+          return fill_template(spec.cli_above_max, spec.name, given, "", "");
+        return "ERROR: " + flag + " must be at most " + std::to_string(spec.max);
+      }
+      return plain;
+    }
+    case reg::OptType::ENUM:
+    case reg::OptType::MODE:
+    {
+      std::vector<std::string> values;
+      for (std::size_t i = 0; i < spec.num_values; ++i)
+        values.emplace_back(spec.values[i]);
+      if (values.empty())
+        values = {"on", "off", "auto"};
+      std::string out = "ERROR: " + flag + " must be one of " + quoted_list(values);
+      if (std::string(spec.cli_form) == "flag")
+        out += ", attached with '=' (a bare " + flag + " means 'on')";
+      return out;
+    }
+    default: return plain;
+  }
+}
+
+namespace
+{
+// Where the command line reports a refused value. It has always checked the
+// entries it validated itself in this order, interleaved with the checks
+// that are not about one value (the parser selection, CaDiCaL's options, the
+// polarity advice, the HiGHS searches, the LRA option combinations,
+// --incremental's split value); a command line with several mistakes is told
+// about the same one it always was. Every other refusal is CLI11's, while it
+// parses.
+const char* const kCheckedFirst[] = {"bv-term-abstraction-schema-groups", "bv-term-abstraction-profile",
+                                     "fp-abstraction-ops", "fp-abstraction-chain-ops",
+                                     "cnf-generation-effort"};
+const char* const kCheckedAfterHighs[] = {"array-index-hints", "search-bias", "cadical-factor",
+                                          "incremental-inprobing"};
+const char* const kCheckedAfterLra[] = {"fp-abstraction-constant-operands", "uf-bv-term-abstraction",
+                                        "uf-ackermann", "incremental"};
+const char* const kCheckedLast[] = {"max-num-confl", "max-time", "aig-node-budget",
+                                    "incremental-base-resimplify-limit", "incremental-cbp-feed-cap",
+                                    "incremental-auto-engage-at"};
+
+bool listed(const char* name, const char* const* list, std::size_t n)
+{
+  for (std::size_t i = 0; i < n; ++i)
+    if (std::strcmp(name, list[i]) == 0)
+      return true;
+  return false;
+}
+} // namespace
+
+int CommandLine::parse_options(int argc, char** argv)
 {
   try
   {
@@ -1813,170 +762,124 @@ int ExtraMain::parse_options(int argc, char** argv)
     exit(-1);
   }
 
-  // One switch for every native floating-point circuit. Each operation keeps
-  // its own flag so its encoding can be measured on its own; naming this one
-  // sets the baseline for the lot, in whichever direction. An operation named
-  // in its own right keeps what it was given, which is what selects one
-  // circuit against SymFPU everywhere else.
-  if (fp_native_all_option->count() != 0)
-    for (const auto& entry : fp_native_options)
-      if (entry.first->count() == 0)
-        *entry.second = bm->UserFlags.fp_native_all;
-
-  // The command line cannot reach the profile-versus-ceiling conflict at all
-  // -- the two options exclude each other -- but a run that named the ceiling
-  // records it anyway, so the flag means the same thing whichever front end
-  // set it. Likewise for the group list, which is the other half of the same
-  // pair and now resolves by the same rule.
-  if (bv_rounds_option->count() != 0)
-    bm->UserFlags.bv_term_abstraction_rounds_explicit = true;
-  if (bv_schema_groups_option->count() != 0)
-    bm->UserFlags.bv_term_abstraction_schema_groups_explicit = true;
-
-  if (bv_term_abstraction_divmod_option->count() != 0)
-    bm->UserFlags.bv_term_abstraction_divmod_explicit = true;
-  else if (bv_term_abstraction_mult_option->count() != 0)
-    bm->UserFlags.bv_term_abstraction_divmod =
-        bm->UserFlags.bv_term_abstraction_mult;
-
+  // Every entry the command line gave goes to the registry as text, which
+  // parses and validates it as the library would; a refusal is kept for its
+  // place in the order above. An empty value of a row that says so leaves the
+  // entry unset, as if it was not given.
+  std::map<std::string, std::string> refused;
+  for (const Entry& e : entries)
   {
-    std::string error;
-    if (!parseBVSchemaGroups(bv_schema_groups,
-                             bm->UserFlags.bv_term_abstraction_schema_groups,
-                             error))
+    if (e.option == nullptr || e.option->count() == 0)
+      continue;
+    std::string refusal;
+    const std::string text = entry_text(e, refusal);
+    if (!refusal.empty())
     {
-      cerr << "ERROR: --bv-term-abstraction-schema-groups: " << error << endl;
-      return -1;
+      refused.emplace(e.spec->name, refusal);
+      continue;
+    }
+    if (text.empty() && e.spec->cli_empty_unset)
+      continue;
+    try
+    {
+      options.set(e.spec->name, text);
+    }
+    catch (const api::Error& error)
+    {
+      refused.emplace(e.spec->name, bad_value_line(*e.spec, text, error));
     }
   }
-
-  if (!bv_abstraction_profile.empty())
+  for (const AliasFlag& a : alias_flags)
   {
-    std::string error;
-    if (!parseBVTermAbstractionProfile(
-            bv_abstraction_profile,
-            bm->UserFlags.bv_term_abstraction_schema_groups,
-            bm->UserFlags.bv_term_abstraction_rounds, error))
+    if (a.option == nullptr || !a.given)
+      continue;
+    try
     {
-      cerr << "ERROR: --bv-term-abstraction-profile: " << error << endl;
-      return -1;
+      options.set(a.alias->of, a.alias->value);
+    }
+    catch (const api::Error& error)
+    {
+      refuse(std::string("ERROR: --") + a.alias->name + ": " + detail_of(error.what()));
     }
   }
-  /* Before anything can build an exact rational, so that every budget this
-   * run creates agrees about it. Left alone by every other entry point, which
-   * therefore keeps the check. */
-  bm->SetLraCanonicalVerification(bm->UserFlags.lra_verify_canonical);
+  const auto report = [&](const char* const* list, std::size_t n) {
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      const auto it = refused.find(list[i]);
+      if (it != refused.end())
+        refuse(it->second);
+    }
+  };
+  report(kCheckedFirst, std::size(kCheckedFirst));
+  // an entry with no place of its own (one the registry added) goes next
+  for (const Entry& e : entries)
+    if (e.spec != nullptr && refused.count(e.spec->name) &&
+        !listed(e.spec->name, kCheckedAfterHighs, std::size(kCheckedAfterHighs)) &&
+        !listed(e.spec->name, kCheckedAfterLra, std::size(kCheckedAfterLra)) &&
+        !listed(e.spec->name, kCheckedLast, std::size(kCheckedLast)))
+      refuse(refused[e.spec->name]);
 
-  if (!fp_abstraction_ops.empty() &&
-      !parseFpAbstractionOps(fp_abstraction_ops,
-                             bm->UserFlags.fp_abstraction_ops))
+  // A HiGHS search this build cannot run is reported where the command line
+  // always checked for one, after the other build checks: set aside here, so
+  // that the registry's own refusal of it does not come first.
+  bool highs_cuts_requested = false, highs_search_requested = false;
+  for (const Entry& e : entries)
   {
-    cerr << "ERROR: --fp-abstraction-ops: unknown operation in '"
-         << fp_abstraction_ops
-         << "' (expected mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, "
-            "to_ubv, default or all)"
-         << endl;
-    return -1;
-  }
-  if (!fp_abstraction_chain_ops.empty() &&
-      !parseFpAbstractionOps(fp_abstraction_chain_ops,
-                             bm->UserFlags.fp_abstraction_chain_ops))
-  {
-    cerr << "ERROR: --fp-abstraction-chain-ops: unknown operation in '"
-         << fp_abstraction_chain_ops
-         << "' (expected mul, div, sqrt, add, sub, fma, rem, rti, to_sbv, "
-            "to_ubv, default, all or none)"
-         << endl;
-    return -1;
-  }
-  // A release by restart exists so that the bit-vector abstraction can see
-  // the released circuit; without it the restart loses more than it wins
-  // (docs/fp-abstraction.rst, the release step), so it is on by default
-  // only with --bv-term-abstraction, and then from 128 bits: at binary64
-  // the smaller circuit it buys is worth less than the learnt clauses it
-  // throws away.
-  if (app.count("--fp-abstraction-restart-width") == 0 &&
-      bm->UserFlags.bv_term_abstraction)
-    bm->UserFlags.fp_abstraction_restart_width = 128;
-
-  onePrintBack = bm->UserFlags.get_print_output_at_all();
-
-  if (disable_opt_inc)
-  {
-    bm->UserFlags.optimize_flag = false;
+    // an entry the command line does not register has no spec here
+    if (e.option == nullptr || e.option->count() == 0)
+      continue;
+    const reg::OptionSpec& spec = *e.spec;
+    if (spec.requires_build == nullptr || std::strncmp(spec.requires_build, "highs", 5) != 0 ||
+        reg::option_build_supported(spec))
+      continue;
+    const api::OptionInfo info = options.info(spec.name);
+    if (info.current == info.default_value)
+      continue;
+    (std::string(spec.name) == "lra-highs-cuts" ? highs_cuts_requested : highs_search_requested) = true;
+    options.reset(spec.name);
   }
 
-  if (switch_word)
+  // The binary's own defaults where the library's differ, unless given (the
+  // rows' cli_default): no model is built unless asked for, and exact
+  // rationals are not re-derived. --exit-after-CNF is the solver's
+  // end-after-cnf.
+  for (const Entry& e : entries)
+    if (e.option != nullptr && e.spec->cli_default != nullptr && !given(e.spec->name))
+      options.set(e.spec->name, e.spec->cli_default);
+  if (invocation.exit_after_cnf)
+    options.set_bool("end-after-cnf", true);
+
+  // The cross-entry rules (excludes, requires, a build without the backend).
+  try
   {
-    bm->UserFlags.wordlevel_solve_flag = false;
+    options.resolve();
+  }
+  catch (const api::Error& error)
+  {
+    const std::string name(error.option());
+    refuse("ERROR: " + (name.empty() ? std::string() : "--" + name + ": ") + detail_of(error.what()));
   }
 
-  if (disable_cbitp)
-  {
-    bm->UserFlags.bitConstantProp_flag = false;
-  }
-
-  if (interactive_option->count())
-  {
-    bm->UserFlags.interactive_read = interactive ? 1 : 0;
-  }
-
-  if (cnf_effort == "very-low")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_LOW;
-  else if (cnf_effort == "low")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_LOW;
-  else if (cnf_effort == "medium")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_MEDIUM;
-  else if (cnf_effort == "high")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_HIGH;
-  else if (cnf_effort == "very-high")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_HIGH;
-  else if (cnf_effort == "auto")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_AUTO;
-  else if (cnf_effort == "new-very-low")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW;
-  else if (cnf_effort == "new-low")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_LOW;
-  else if (cnf_effort == "new-medium")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM;
-  else if (cnf_effort == "new-high")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_HIGH;
-  else if (cnf_effort == "gia-low")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
-  else if (cnf_effort == "gia-high")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_HIGH;
-  else if (cnf_effort == "gia-very-high")
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_VERY_HIGH;
-  else
-  {
-    std::cerr << "Unknown --cnf-generation-effort value '" << cnf_effort
-              << "'. Expected one of: auto, very-low, low, medium, high, "
-                 "very-high, new-very-low, new-low, new-medium, gia-low, "
-                 "gia-high, gia-very-high."
-              << std::endl;
-    return -1;
-  }
+  if (interactive_option != nullptr && interactive_option->count())
+    invocation.interactive = interactive;
 
   int selected_type = 0;
   if (use_cvc)
   {
     selected_type++;
-    bm->UserFlags.smtlib1_parser_flag = false;
-    bm->UserFlags.smtlib2_parser_flag = false;
+    invocation.format = stp::Format::CVC;
   }
 
   if (use_smtlib2)
   {
     selected_type++;
-    bm->UserFlags.smtlib1_parser_flag = false;
-    bm->UserFlags.smtlib2_parser_flag = true;
+    invocation.format = stp::Format::SMTLIB2;
   }
 
   if (use_smtlib1)
   {
     selected_type++;
-    bm->UserFlags.smtlib1_parser_flag = true;
-    bm->UserFlags.smtlib2_parser_flag = false;
+    invocation.format = stp::Format::SMTLIB1;
   }
 
   if (selected_type > 1)
@@ -1987,178 +890,56 @@ int ExtraMain::parse_options(int argc, char** argv)
     std::exit(-1);
   }
 
-  if (selected_type == 0)
-  {
-    bm->UserFlags.smtlib2_parser_flag = true;
-  }
-
-#ifdef USE_MINISAT
-  if (use_simplifying_minisat)
-  {
-    bm->UserFlags.solver_to_use = UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER;
-  }
-
-  if (use_minisat)
-  {
-    bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
-  }
-#endif
-
-#ifdef USE_CRYPTOMINISAT
-  if (use_cryptominisat)
-  {
-    bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
-  }
-#endif
-
-#ifdef USE_CADICAL
-  if (use_cadical)
-  {
-    bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
-  }
-#endif
-
+  // The solver applies the options and refuses what the applied options
+  // cannot honour (CaDiCaL's knobs, an explicit --lra-decision-polarity
+  // without what it needs), in the engine's words.
   try
   {
-    validateCadicalOptions(bm->UserFlags);
+    make_solver();
   }
-  catch (const std::invalid_argument& error)
+  catch (const api::Error& error)
   {
-    cerr << "ERROR: " << error.what() << endl;
+    cerr << "ERROR: " << detail_of(error.what()) << endl;
     return -1;
   }
 
-  bm->UserFlags.lra_decision_polarity_explicit =
-      lra_decision_polarity_option->count() != 0;
-  if (bm->UserFlags.lra_decision_polarity &&
-      bm->UserFlags.lra_decision_polarity_explicit)
-  {
-    if (!bm->UserFlags.lra_theory_propagation)
-    {
-      cerr << "ERROR: --lra-decision-polarity requires "
-              "--lra-theory-propagation=1" << endl;
-      return -1;
-    }
-    bool supported = false;
-#if defined(USE_CADICAL) && defined(STP_CADICAL_HAS_DECISION_POLARITY)
-    supported = bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER;
-#endif
-    if (!supported)
-    {
-      cerr << "ERROR: --lra-decision-polarity requires CaDiCaL built with "
-              "cmake/deps-utils/cadical-decision-polarity.patch" << endl;
-      return -1;
-    }
-  }
-
-#ifndef STP_HAVE_HIGHS_CUT_LOG
-  if (bm->UserFlags.lra_highs_cuts)
+  if (highs_cuts_requested)
   {
     cerr << "ERROR: --lra-highs-cuts requires -DENABLE_HIGHS_CUT_LOG=ON and the HiGHS root-cut patch" << endl;
     return -1;
   }
-#endif
-#ifndef STP_HAVE_HIGHS
-  if (bm->UserFlags.lra_relu_lp == UserDefinedFlags::OptionMode::ON ||
-      bm->UserFlags.lra_relu_branch ||
-      bm->UserFlags.lra_highs_lp || bm->UserFlags.lra_highs_mip ||
-      bm->UserFlags.lra_highs_replay)
+  if (stp::capabilities()["highs"] != "true")
+  {
+    const api::OptionValue relu = options.resolved("lra-relu-lp");
+    if (std::holds_alternative<std::string>(relu) && std::get<std::string>(relu) == "on")
+      highs_search_requested = true;
+  }
+  if (highs_search_requested)
   {
     cerr << "ERROR: LRA LP/branch search requires a build with -DENABLE_HIGHS=ON" << endl;
     return -1;
   }
-#endif
-  if (array_index_hints_option->count())
-  {
-    if (array_index_hints == "off")
-      bm->UserFlags.array_index_hints = UserDefinedFlags::ArrayIndexHints::OFF;
-    else if (array_index_hints == "phase")
-      bm->UserFlags.array_index_hints =
-          UserDefinedFlags::ArrayIndexHints::PHASE;
-    else if (array_index_hints == "decide")
-      bm->UserFlags.array_index_hints =
-          UserDefinedFlags::ArrayIndexHints::DECIDE;
-    else
-    {
-      cerr << "ERROR: --array-index-hints must be one of 'off', 'phase' or "
-              "'decide'"
-           << endl;
-      std::exit(-1);
-    }
-  }
 
-  if (search_bias_option->count())
-  {
-    if (search_bias == "sat")
-      bm->UserFlags.search_bias = SearchBias::SAT;
-    else if (search_bias == "unsat")
-      bm->UserFlags.search_bias = SearchBias::UNSAT;
-    else if (search_bias == "none")
-      bm->UserFlags.search_bias = SearchBias::NONE;
-    else
-    {
-      cerr << "ERROR: --search-bias must be one of 'sat', 'unsat' or 'none'"
-           << endl;
-      std::exit(-1);
-    }
-  }
-
-#ifdef USE_CADICAL
-  if (cadical_factor_option->count())
-  {
-    bm->UserFlags.cadical_factor_explicit = true;
-    if (cadical_factor == "on")
-      bm->UserFlags.cadical_factor = UserDefinedFlags::BVAMode::ON;
-    else if (cadical_factor == "off")
-      bm->UserFlags.cadical_factor = UserDefinedFlags::BVAMode::OFF;
-    else if (cadical_factor == "auto")
-      bm->UserFlags.cadical_factor = UserDefinedFlags::BVAMode::AUTO;
-    else
-    {
-      cerr << "ERROR: --cadical-factor must be one of 'on', 'off' or 'auto'"
-           << endl;
-      std::exit(-1);
-    }
-  }
-
-  if (incremental_inprobing_option->count())
-  {
-    if (incremental_inprobing == "on")
-      bm->UserFlags.incremental_inprobing = UserDefinedFlags::BVAMode::ON;
-    else if (incremental_inprobing == "off")
-      bm->UserFlags.incremental_inprobing = UserDefinedFlags::BVAMode::OFF;
-    else if (incremental_inprobing == "auto")
-      bm->UserFlags.incremental_inprobing = UserDefinedFlags::BVAMode::AUTO;
-    else
-    {
-      cerr << "ERROR: --incremental-inprobing must be one of 'on', 'off' "
-              "or 'auto'"
-           << endl;
-      std::exit(-1);
-    }
-  }
-#endif
+  report(kCheckedAfterHighs, std::size(kCheckedAfterHighs));
 
   // Checked by value, not presence: a control at 0 is the batch default and
   // combines with anything. LraCoordinator refuses the same combinations for
   // library callers, but only once a Real query reaches it.
   {
-    const UserDefinedFlags& uf = bm->UserFlags;
     std::vector<std::string> controls;
-    if (uf.lra_extension_mode != 0)
-      controls.push_back("--lra-extension-mode=" +
-                         std::to_string(uf.lra_extension_mode));
-    if (uf.lra_row_order != 0)
-      controls.push_back("--lra-row-order=" +
-                         std::to_string(uf.lra_row_order));
-    if (uf.lra_extension_restart_float_basis)
+    if (options.get_uint("lra-extension-mode") != 0)
+      controls.push_back("--lra-extension-mode=" + std::to_string(options.get_uint("lra-extension-mode")));
+    if (options.get_uint("lra-row-order") != 0)
+      controls.push_back("--lra-row-order=" + std::to_string(options.get_uint("lra-row-order")));
+    if (options.get_bool("lra-extension-restart-float-basis"))
       controls.push_back("--lra-extension-restart-float-basis=1");
-    if (uf.lra_extension_restart_sat)
+    const bool restart_sat = options.get_bool("lra-extension-restart-sat");
+    if (restart_sat)
       controls.push_back("--lra-extension-restart-sat=1");
     std::vector<std::string> sessions;
-    if (uf.lra_incremental_session)
+    if (options.get_bool("lra-incremental-session"))
       sessions.push_back("--lra-incremental-session=1");
-    if (uf.lra_persistent_state)
+    if (options.get_bool("lra-persistent-state"))
       sessions.push_back("--lra-persistent-state=1");
     if (!controls.empty() && !sessions.empty())
     {
@@ -2168,223 +949,152 @@ int ExtraMain::parse_options(int argc, char** argv)
           joined += (joined.empty() ? "" : ", ") + name;
         return joined;
       };
-      cerr << "ERROR: " << join(controls) << " cannot be combined with "
-           << join(sessions)
-           << ": the LRA extension controls apply to batch solves only"
-           << endl;
+      cerr << "ERROR: " << join(controls) << " cannot be combined with " << join(sessions)
+           << ": the LRA extension controls apply to batch solves only" << endl;
       std::exit(-1);
     }
 
-    if (uf.lra_extension_restart_sat &&
-        uf.solver_to_use != UserDefinedFlags::CADICAL_SOLVER)
+    // 'auto' is the first backend the build has, in sat_backends()' order.
+    std::string backend = options.get_str("sat-backend");
+    if (backend == "auto")
     {
-#ifdef USE_CADICAL
-      cerr << "ERROR: --lra-extension-restart-sat=1 requires --cadical" << endl;
-#else
-      cerr << "ERROR: --lra-extension-restart-sat=1 requires a build with "
-              "CaDiCaL"
-           << endl;
-#endif
+      const std::vector<std::string> built = stp::sat_backends();
+      backend = built.empty() ? std::string() : built.front();
+    }
+    if (restart_sat && backend != "cadical")
+    {
+      if (stp::has_sat_backend("cadical"))
+        cerr << "ERROR: --lra-extension-restart-sat=1 requires --cadical" << endl;
+      else
+        cerr << "ERROR: --lra-extension-restart-sat=1 requires a build with CaDiCaL" << endl;
       std::exit(-1);
     }
 
 #ifdef STP_CADICAL_HAS_FACTOR
     // Only an explicit 'on': the unnamed default and 'auto' are turned off
     // for it (STP.cpp).
-    if (uf.lra_extension_restart_sat && uf.cadical_factor_explicit &&
-        uf.cadical_factor == UserDefinedFlags::BVAMode::ON)
+    if (restart_sat && options.is_set("cadical-factor") && options.get_str("cadical-factor") == "on")
     {
-      cerr << "ERROR: --lra-extension-restart-sat=1 requires "
-              "--cadical-factor=off"
-           << endl;
+      cerr << "ERROR: --lra-extension-restart-sat=1 requires --cadical-factor=off" << endl;
       std::exit(-1);
     }
 #endif
 
     // The decision hints hold CaDiCaL's propagator slot, which a search
     // reset cannot carry over.
-    if (uf.lra_extension_restart_sat &&
-        uf.array_index_hints == UserDefinedFlags::ArrayIndexHints::DECIDE)
+    if (restart_sat && options.get_str("array-index-hints") == "decide")
     {
-      cerr << "ERROR: --lra-extension-restart-sat=1 cannot be combined with "
-              "--array-index-hints=decide"
-           << endl;
+      cerr << "ERROR: --lra-extension-restart-sat=1 cannot be combined with --array-index-hints=decide" << endl;
       std::exit(-1);
     }
   }
 
-  if (fp_constant_operands_option->count())
-  {
-    typedef UserDefinedFlags::FpConstantOperandMode Mode;
-    if (fp_abstraction_constant_operands == "on")
-      bm->UserFlags.fp_abstraction_constant_operands = Mode::ON;
-    else if (fp_abstraction_constant_operands == "off")
-      bm->UserFlags.fp_abstraction_constant_operands = Mode::OFF;
-    else if (fp_abstraction_constant_operands == "auto")
-      bm->UserFlags.fp_abstraction_constant_operands = Mode::AUTO;
-    else
-    {
-      cerr << "ERROR: --fp-abstraction-constant-operands must be one of "
-              "'on', 'off' or 'auto'"
-           << endl;
-      exit(-1);
-    }
-  }
-
-  if (uf_bv_term_abstraction_option->count())
-  {
-    typedef UserDefinedFlags::UFAbstractionMode Mode;
-    if (uf_bv_term_abstraction == "on")
-      bm->UserFlags.uf_bv_term_abstraction = Mode::ON;
-    else if (uf_bv_term_abstraction == "off")
-      bm->UserFlags.uf_bv_term_abstraction = Mode::OFF;
-    else if (uf_bv_term_abstraction == "auto")
-      bm->UserFlags.uf_bv_term_abstraction = Mode::AUTO;
-    else
-    {
-      cerr << "ERROR: --uf-bv-term-abstraction must be one of 'on', 'off' "
-              "or 'auto'"
-           << endl;
-      exit(-1);
-    }
-  }
-  if (uf_ackermann_option->count())
-  {
-    typedef UserDefinedFlags::UFEagerMode Mode;
-    if (uf_ackermann == "on")
-      bm->UserFlags.uf_eager_mode = Mode::ON;
-    else if (uf_ackermann == "off")
-      bm->UserFlags.uf_eager_mode = Mode::OFF;
-    else if (uf_ackermann == "auto")
-      bm->UserFlags.uf_eager_mode = Mode::AUTO;
-    else
-    {
-      cerr << "ERROR: --uf-ackermann must be one of 'on', 'off' or 'auto'"
-           << endl;
-      std::exit(-1);
-    }
-  }
-
-  if (incremental_option->count())
-  {
-    if (incremental == "on")
-      bm->UserFlags.incremental_mode = UserDefinedFlags::IncrementalMode::ON;
-    else if (incremental == "off")
-      bm->UserFlags.incremental_mode = UserDefinedFlags::IncrementalMode::OFF;
-    else if (incremental == "auto")
-      bm->UserFlags.incremental_mode = UserDefinedFlags::IncrementalMode::AUTO;
-    else
-    {
-      cerr << "ERROR: --incremental must be one of 'on', 'off' or 'auto', "
-              "attached with '=' (a bare --incremental means 'on')"
-           << endl;
-      std::exit(-1);
-    }
-  }
+  report(kCheckedAfterLra, std::size(kCheckedAfterLra));
 
   // A flag's value has to be attached, so 'stp --incremental off' parses as
   // --incremental (which means 'on') followed by an input file named 'off' --
   // the opposite of what was asked for, reported as "Cannot open off", which
   // names neither half of the mistake.
-  if (incremental_option->count() &&
+  const std::string& infile = invocation.infile;
+  const Entry* incremental = entry_named("incremental");
+  if (incremental != nullptr && incremental->option != nullptr && incremental->option->count() &&
       (infile == "on" || infile == "off" || infile == "auto"))
   {
-    cerr << "ERROR: --incremental takes its value attached with '=', as "
-            "--incremental="
-         << infile
-         << "; given as a separate argument it was read as the name of the "
-            "input file"
-         << endl;
-    std::exit(-1);
+    refuse("ERROR: --incremental takes its value attached with '=', as --incremental=" + infile +
+           "; given as a separate argument it was read as the name of the input file");
   }
 
-  /*
-   * -1 is the only negative value with a meaning ("no limit"); anything more
-   * negative than that is a mistake, and silently treating it as unlimited
-   * hides it.
-   */
-  if (bm->UserFlags.timeout_max_conflicts < -1)
-  {
-    cerr << "ERROR: --max-num-confl must be -1 (no limit) or greater" << endl;
-    std::exit(-1);
-  }
-
-  if (bm->UserFlags.timeout_max_time < -1)
-  {
-    cerr << "ERROR: --max-time must be -1 (no limit) or greater" << endl;
-    std::exit(-1);
-  }
-
-  if (bm->UserFlags.aig_node_budget < -1)
-  {
-    cerr << "ERROR: --aig-node-budget must be -1 (no limit) or greater"
-         << endl;
-    std::exit(-1);
-  }
-
-  // The AND-gate counter the budget is compared against is ABC's
-  // Aig_Man_t::nObjs[], an int. A budget it can never reach would be a cap
-  // that silently never fires, which is worse than no cap at all.
-  if (bm->UserFlags.aig_node_budget > INT_MAX)
-  {
-    cerr << "ERROR: --aig-node-budget must be at most " << INT_MAX
-         << "; larger caps can never be reached" << endl;
-    std::exit(-1);
-  }
-
-  if (bm->UserFlags.incremental_base_resimplify_limit < 0)
-  {
-    cerr << "ERROR: --incremental-base-resimplify-limit must be 0 or greater"
-         << endl;
-    std::exit(-1);
-  }
-
-  if (bm->UserFlags.incremental_cbp_feed_cap < 1)
-  {
-    cerr << "ERROR: --incremental-cbp-feed-cap must be at least 1" << endl;
-    std::exit(-1);
-  }
-
-  if (bm->UserFlags.incremental_auto_engage_at < -1)
-  {
-    cerr << "ERROR: --incremental-auto-engage-at must be -1 (theory "
-            "default), 0 (never), or greater"
-         << endl;
-    std::exit(-1);
-  }
-
-  if (disable_simplifications)
-  {
-    bm->UserFlags.disableSimplifications();
-  }
-
-  if (size_reducing_only)
-  {
-    bm->UserFlags.disableSizeIncreasingSimplifications();
-  }
-
-  if (disable_equality)
-  {
-    bm->UserFlags.propagate_equalities = false;
-  }
+  report(kCheckedLast, std::size(kCheckedLast));
 
   if (selected_type == 0)
   {
     // No parser is explicity requested.
-    check_infile_type();
+    select_parser_by_extension();
   }
 
   if (version)
   {
-    printVersionInfo();
+    stp_cli::print_version();
     exit(0);
   }
 
   return 0;
 }
 
+// Whether the command line gave the entry itself.
+bool CommandLine::given(const char* name) const
+{
+  const Entry* e = entry_named(name);
+  return e != nullptr && e->option != nullptr && e->option->count() > 0;
+}
+
+// The parser a file's extension picks when no flag picked one: .cvc and .smt
+// their own, SMT-LIB 2 for .smt2 and anything else.
+void CommandLine::select_parser_by_extension()
+{
+  const std::string& infile = invocation.infile;
+  if (infile.size() >= 5)
+  {
+    if (!infile.compare(infile.length() - 4, 4, ".cvc"))
+      invocation.format = stp::Format::CVC;
+    if (!infile.compare(infile.length() - 4, 4, ".smt"))
+      invocation.format = stp::Format::SMTLIB1;
+    if (!infile.compare(infile.length() - 5, 5, ".smt2"))
+      invocation.format = stp::Format::SMTLIB2;
+  }
+}
+
+namespace
+{
+std::uint64_t as_uint(const api::OptionValue& v)
+{
+  if (std::holds_alternative<std::uint64_t>(v))
+    return std::get<std::uint64_t>(v);
+  return static_cast<std::uint64_t>(std::get<std::int64_t>(v));
+}
+} // namespace
+
+// The manager and the solver, from the options. The manager-scoped entries
+// are the manager's: `simplify` (always off for an input printed back, which
+// is read as written) and the uninterpreted sorts' width. The solver copies
+// the rest, resolves and applies them.
+void CommandLine::make_solver()
+{
+  stp::TermManager::Config config;
+  const api::OptionValue simplify = options.resolved("simplify");
+  config.simplify = (!std::holds_alternative<bool>(simplify) || std::get<bool>(simplify)) &&
+                    !invocation.print_back();
+  config.uf_sort_width = static_cast<std::uint32_t>(as_uint(options.resolved("uf-sort-width")));
+  options.reset("simplify");
+  options.reset("uf-sort-width");
+  // An input printed back reports no run times; it never did (the read that
+  // prints it back would).
+  if (invocation.print_back() && !invocation.parse_only)
+    options.reset("print-quickstat");
+  const api::OptionValue statistics = options.resolved("print-functionstat");
+  invocation.statistics = std::holds_alternative<bool>(statistics) && std::get<bool>(statistics);
+  manager.emplace(config);
+  solver = std::make_unique<stp::Solver>(*manager, options);
+}
+
 int main(int argc, char** argv)
 {
-  ExtraMain main;
-  return main.main(argc, argv);
+  // Every error the library reports arrives as a stp::Error that the command
+  // line handles where it happens; anything else is reported, as a fatal
+  // error is, rather than left to end the process with no word.
+  try
+  {
+    CommandLine command_line;
+    command_line.create_options();
+    const int ret = command_line.parse_options(argc, argv);
+    if (ret != 0)
+      return ret;
+    return stp_cli::run(command_line.invocation, std::move(command_line.solver));
+  }
+  catch (const std::exception& e)
+  {
+    std::fflush(stdout);
+    std::cerr << "STP Error: " << e.what() << std::endl;
+    return -1;
+  }
 }

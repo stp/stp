@@ -154,7 +154,10 @@ MiniSat, whichever it finds first. One flag picks another for a run:
    * - ``--simplifying-minisat``
      - MiniSat with its variable elimination
 
-The flags exclude one another. ``--search-bias unsat`` tunes the solver
+The flags exclude one another, and ``--sat-backend`` names the solver
+instead (``cryptominisat``, ``cadical``, ``minisat`` or
+``simplifying-minisat``; ``auto``, the default, is the order above), as the
+API's ``sat-backend`` option does. ``--search-bias unsat`` tunes the solver
 for problems that are expected to be unsatisfiable, such as verification
 conditions, and ``--search-bias sat`` for the reverse; a solver with no
 such setting warns and ignores it.

@@ -8,28 +8,24 @@
 namespace
 {
 
-struct SolverError
-{
-};
-
-// Intercept the fatal-error callback so the test can inspect the output and
-// manager state without terminating the process. Restore all global state.
+// Have a fatal error throw rather than end the process, so the test can
+// inspect the output and manager state. Restore all global state.
 struct PrinterCapture
 {
   std::ostringstream out;
   std::ostringstream err;
   std::streambuf* old_out = std::cout.rdbuf(out.rdbuf());
   std::streambuf* old_err = std::cerr.rdbuf(err.rdbuf());
-  decltype(stp::vc_error_hdlr) old_handler = stp::vc_error_hdlr;
+  bool old_throws = stp::FatalErrorThrows();
 
   PrinterCapture()
   {
-    stp::vc_error_hdlr = [](const char*) { throw SolverError{}; };
+    stp::SetFatalErrorThrows(true);
   }
 
   ~PrinterCapture()
   {
-    stp::vc_error_hdlr = old_handler;
+    stp::SetFatalErrorThrows(old_throws);
     std::cout.rdbuf(old_out);
     std::cerr.rdbuf(old_err);
   }
@@ -58,7 +54,7 @@ TEST(SolverOutput_Test, ErrorsAreFatalInEveryOutputMode)
 
         PrinterCapture capture;
         EXPECT_THROW(stp::ToSATBase::PrintOutput(&manager, stp::SOLVER_ERROR),
-                     SolverError);
+                     stp::EngineFatal);
         EXPECT_FALSE(manager.ValidFlag);
         const char* expected = !print ? "" : mode == 0 ? "Error.\n"
             : "(error \"solver returned SOLVER_ERROR\")\n";

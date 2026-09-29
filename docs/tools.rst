@@ -16,7 +16,7 @@ three groups by what switches them on:
      - Purpose
    * - ``extdiff``
      - every build that has executables, as ``stp``
-     - C API observation driver for a differential test
+     - 2.x C API observation driver for a differential test (links ``libstp2``)
    * - ``test_fpbackend``
      - ``ENABLE_TESTING`` or ``BUILD_EXTRA_TOOLS``
      - self-test of the floating-point circuit backend
@@ -25,7 +25,7 @@ three groups by what switches them on:
      - exhaustive check of the floating-point rewrite rules
    * - ``c_handle_churn_benchmark``
      - ``ENABLE_TESTING`` or ``BUILD_EXTRA_TOOLS``
-     - cost of creating and releasing C API handles
+     - cost of creating and releasing 2.x C API handles (``libstp2``)
    * - ``rewrite_rule_gen``
      - ``BUILD_EXTRA_TOOLS`` and CryptoMiniSat
      - search for bit-vector rewrite rules
@@ -170,9 +170,9 @@ See |diffbench|_.
 ``c_handle_churn_benchmark``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Creates the same bit-vector constant through the C API and releases its
-handle, a million times by default, and prints the time taken and the
-peak memory:
+Creates the same bit-vector constant through the 2.x C API, which
+``libstp2`` provides, and releases its handle, a million times by default,
+and prints the time taken and the peak memory:
 
 .. code-block:: text
 
@@ -197,7 +197,8 @@ unrewritten terms to agree on every float of a small format -- zeros,
 subnormals, infinities and NaNs included.
 
 ``extdiff`` takes no arguments. It runs a fixed set of array queries
-through the C API and prints what comes back: each query's status, the
+through the 2.x C API, linking ``libstp2`` so that the same source builds
+against an older STP, and prints what comes back: each query's status, the
 scalar counterexample values, and each array's counterexample entries,
 sorted, since the API leaves their order unspecified. The baseline
 differential test builds it against the current tree and against a

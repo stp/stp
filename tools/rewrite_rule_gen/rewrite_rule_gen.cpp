@@ -703,7 +703,6 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
   ASTNode query2 = nf->CreateNode(NOT, query);
 
   assert(!ss->reportsClauseCount() || ss->nClauses() == 0);
-  mgr->SetQuery(mgr->ASTUndefined);
 
   // A negative budget means "no limit", which is spelled by not configuring
   // one: the SAT solvers are only ever handed a value >= 0.
@@ -1380,7 +1379,6 @@ void load_new_rules(const string fileName = "rules_new.smt2")
 
   TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
   Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
-  mgr->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
   GlobalParserInterface = &piTypeCheckDefault;
 
   // This file I/O code: 1) Is terrible  2) I'm in a big rush so just getting it

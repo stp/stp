@@ -890,15 +890,15 @@ PositionVerdict compareRealPosition(const ASTNode& left, const ASTNode& right,
 // (= (bvadd i 1) (bvadd i 2)) to false on its own.
 //
 // Whatever the factory cannot decide stays Unknown, so a factory without those
-// rewrites (the C API's default hashing factory) simply prunes nothing. The
-// premise is still stated over the named actuals: only the *test* moves.
+// rewrites (a plain hashing factory) simply prunes nothing. The premise is
+// still stated over the named actuals: only the *test* moves.
 PositionVerdict comparePosition(NodeFactory* factory, const ASTNode& left,
                                 const ASTNode& right, const SourceSort& sort,
                                 const UnitBounds* bounds)
 {
   // Interning makes equal constants one node, so the first two tests are
-  // exact and hold whatever factory is installed -- the C API leaves the
-  // plain hashing factory in place, and it folds nothing.
+  // exact and hold whatever factory is installed -- a plain hashing factory
+  // folds nothing.
   if (left == right)
     return PositionVerdict::Identical;
   if (left.isConstant() && right.isConstant())

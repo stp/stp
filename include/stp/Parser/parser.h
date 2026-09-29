@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Util/Attributes.h"
+#include <cstddef>
 #include <cstdio>
 #include <string>
 
@@ -37,20 +38,23 @@ namespace stp
 {
 // external parser table for declared symbols.
 
-// Symbols in generated  files used by tools/stp
+// The generated lexers' input, which the 3.x API's parse entries set
+// (lib/Api/Solver.cpp): a string, or a FILE*, or a reader (below).
 void SMTScanString(const char* yy_str);
 void SMT2ScanString(const char* yy_str);
 void CVCScanString(const char* yy_str);
-DLL_PUBLIC FILE* getCVCIn();
-DLL_PUBLIC FILE* getSMTIn();
-DLL_PUBLIC FILE* getSMT2In();
 DLL_PUBLIC void setCVCIn(FILE* file);
 DLL_PUBLIC void setSMTIn(FILE* file);
 DLL_PUBLIC void setSMT2In(FILE* file);
 
-// Whether the SMT-LIB2 lexer reads a character at a time. Needed when stp
-// is driven interactively over a pipe, where block reads would deadlock.
-DLL_PUBLIC void setSMT2Interactive(bool enable);
+// Where a lexer reads its input instead of its FILE*: a reader fills up to
+// `max` bytes of `buf` and answers how many, 0 at the end of the input. The
+// 3.x API reads a caller's stream through one. A null reader restores the
+// FILE*.
+typedef std::size_t (*ParserReader)(char* buf, std::size_t max, void* opaque);
+DLL_PUBLIC void setSMT2Reader(ParserReader reader, void* opaque);
+DLL_PUBLIC void setCVCReader(ParserReader reader, void* opaque);
+DLL_PUBLIC void setSMTReader(ParserReader reader, void* opaque);
 
 // Whether the SMT-LIB2 lexer recognises the floating-point keywords.
 // SMT-LIB reserves theory names per-logic, so they are live only under an
@@ -59,10 +63,8 @@ DLL_PUBLIC void setSMT2Interactive(bool enable);
 // starts each script with them off; the set-logic action flips them.
 void SMT2SetFloatTokens(bool enable);
 
-// Mathematical-Real theory names are live only under QF_LRA, QF_UFLRA and
-// QF_AUFLRA.
-// This gate is deliberately independent of the legacy floating-point *LRA
-// logic names, whose established meaning does not include a Real AST carrier.
+// Mathematical-Real theory names are live only under the Real logics: QF_LRA,
+// QF_UFLRA, QF_AUFLRA and the LRA variants of the floating-point logics.
 void SMT2SetRealTokens(bool enable);
 
 // The same question, for the one place that cannot be answered by the lexer
@@ -77,9 +79,9 @@ bool SMT2FloatTokensActive();
 void SMT2ExpectFunctionParameterName();
 
 // Clear command-local lexer expectations after parser recovery/abort and
-// before the next top-level command. This includes declaration-name and
-// define-fun-formal latches and the declassified-name record below, none of
-// which may leak across commands.
+// before the next top-level command. This includes declaration-name,
+// define-fun-formal and let-binder latches and the declassified-name record
+// below, none of which may leak across commands.
 void SMT2ResetCommandLexerState();
 
 // The declassified declare-fun name. With uninterpreted functions enabled,
@@ -100,15 +102,33 @@ int SMT2DeclassifiedNameLine();
 const std::string& SMT2DeclassifiedNameText();
 void SMT2ConsumeDeclassifiedName();
 
-// Thrown when the parse fails downstream of a declassified declare-fun name
-// somewhere bison cannot unwind by itself -- a fatal sort rule, an illegal
-// character in the lexer. The pinned response is the name-position error
-// ALONE, so the failure in progress must not add its own message or its own
-// exit path. Caught in SMT2Parse(), which answers 1 exactly as an ordinary
-// abandoned parse does. (A bison syntax error downstream of the name needs
-// no throw: yyerror prints the name-position error and returns, and bison's
-// own abort reclaims its stack.)
-struct DeclassifiedNameAbandon
+// Thrown by the SMT-LIB 2 frontend's own refusals -- fatal_yyerror in the
+// grammar, Cpp_interface::refuseCurrentCommand and badBooleanOptionValue --
+// to abandon the parse as a whole once the (error ...) response is out: no
+// later command of the script runs. Caught in SMT2Parse(), which answers 1
+// exactly as an ordinary abandoned parse does; the caller decides what a
+// failed parse means (the command line exits with the diagnostic, the 3.x
+// API reports a PARSE error with its assertion stack put back).
+struct ParseAbandon
+{
+};
+
+// The same, when the parse fails downstream of a declassified declare-fun
+// name somewhere bison cannot unwind by itself -- a fatal sort rule, an
+// illegal character in the lexer. The pinned response is the name-position
+// error ALONE, so the failure in progress must not add its own message or
+// its own exit path. (A bison syntax error downstream of the name needs no
+// throw: yyerror prints the name-position error and returns, and bison's own
+// abort reclaims its stack.)
+struct DeclassifiedNameAbandon : ParseAbandon
+{
+};
+
+// Thrown by the SMT-LIB 2 frontend's check-sat when the run ended at the
+// check's first CNF (UserDefinedFlags::exit_after_CNF): the script ends
+// there, with no answer printed and no later command run. Caught in
+// SMT2Parse(), which answers 0 -- the script did what it was asked to.
+struct ScriptEnded
 {
 };
 

@@ -78,7 +78,6 @@ void rewrite(BBNodeManagerAIG& mgr, int64_t iterations)
   // the CI order the callers splice by is untouched.
   Aig_ManCleanup(mgr.aigMgr);
 
-  ensureDarLibrary();
   Dar_RwrPar_t Pars;
   Dar_ManDefaultRwrParams(&Pars);
 
@@ -89,7 +88,7 @@ void rewrite(BBNodeManagerAIG& mgr, int64_t iterations)
     Aig_Man_t* pTemp;
     mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
     Aig_ManStop(pTemp);
-    Dar_ManRewrite(mgr.aigMgr, &Pars);
+    rewriteWithDarLibrary(mgr.aigMgr, &Pars);
 
     // Rewriting can leave an unreferenced AND node behind, which
     // Aig_ManDupDfs asserts about rather than copies; see the same call in

@@ -51,6 +51,12 @@
 ; BADBIAS-NOT: terminate called
 ; BADBIAS: --search-bias must be one of
 
+; A multiplier variant that names no circuit is refused as the option is
+; read, not by the bit-blaster at the first multiply.
+; RUN: not %solver --bb.mult-variant=2 %s 2>&1 | %OutputCheck %s --check-prefix=BADMULT
+; BADMULT-NOT: sda44f
+; BADMULT: is not one of 1, 3, 4
+
 ; RUN: not %solver --incremental=bogus %s 2>&1 | %OutputCheck %s --check-prefix=BADINCREMENTAL
 ; BADINCREMENTAL-NOT: terminate called
 ; BADINCREMENTAL: --incremental must be one of

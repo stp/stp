@@ -12,8 +12,8 @@
 ;              float-indexed arrays that was not reachable in the most
 ;              recent solve
 ;
-; (Through the C API the same place is a FatalError, so it took the process
-; down rather than reporting anything.)
+; (Through the 2.x C API the same place was a FatalError, so it took the
+; process down rather than reporting anything.)
 ;
 ; The driver built its encoding context lazily during encoding and published
 ; it only when it had one, so a solve with no float in the encoded formula

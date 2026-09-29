@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AIG/Tseitin.h"
 #include <algorithm>
+#include <mutex>
 #include <unordered_map>
 
 #include <limits>
@@ -565,13 +566,20 @@ struct CellKeyHash
 const std::vector<std::vector<int8_t>>& primeImplicates(uint32_t table,
                                                         unsigned k)
 {
+  // Shared by every manager in the process, and managers run on threads of
+  // their own: looked up and filled under a lock, computed outside it. An
+  // entry is never erased, so a reference into the map stays valid.
+  static std::mutex lock;
   static std::unordered_map<CellKey, std::vector<std::vector<int8_t>>,
                             CellKeyHash>
       cache;
   const CellKey key{table, static_cast<uint8_t>(k)};
-  auto it = cache.find(key);
-  if (it != cache.end())
-    return it->second;
+  {
+    std::lock_guard<std::mutex> guard(lock);
+    auto it = cache.find(key);
+    if (it != cache.end())
+      return it->second;
+  }
 
   const unsigned nv = k + 1;
   unsigned nCand = 1;
@@ -636,6 +644,8 @@ const std::vector<std::vector<int8_t>>& primeImplicates(uint32_t table,
     }
     primes.push_back(cl);
   }
+  std::lock_guard<std::mutex> guard(lock);
+  // another thread may have filled it meanwhile: the same clauses
   return cache.emplace(key, std::move(primes)).first->second;
 }
 } // namespace

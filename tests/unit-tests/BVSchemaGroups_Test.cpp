@@ -28,7 +28,6 @@ THE SOFTWARE.
 
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/ToSat/BVAbstractionRefiner.h"
-#include "stp/c_interface.h"
 
 #include <gtest/gtest.h>
 
@@ -101,12 +100,13 @@ TEST(BVSchemaGroups, rejected_lists_are_atomic)
 // Every group name the diagnostics print is a name the parser accepts, and
 // selects that group alone.
 //
-// The C interface has no schema-group constants: a client names a group
-// through vc_setSchemaGroups and reads one back through vc_schemaGroupName,
-// so the two vocabularies being the same one is the contract, and this is it
-// at the level both are built on. Checking it by round-trip rather than
-// against a written-out table means a family added tomorrow is covered
-// without anyone remembering to come back here.
+// No public API has schema-group constants: a client names groups in the
+// bv-term-abstraction-schema-groups option (the 2.x C API: vc_setSchemaGroups,
+// and vc_schemaGroupName to read one back), so the two vocabularies being the
+// same one is the contract, and this is it at the level both are built on.
+// Checking it by round-trip rather than against a written-out table means a
+// family added tomorrow is covered without anyone remembering to come back
+// here.
 TEST(BVSchemaGroups, every_group_name_round_trips_through_the_parser)
 {
   for (unsigned i = 0; i < BV_SCHEMA_GROUP_COUNT; ++i)

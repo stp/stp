@@ -279,9 +279,8 @@ TEST(FPPrintBack, overload_by_format_matches_by_term)
 }
 
 // Logic selection is a property of the expression being printed, not of all
-// terms that have ever been built in its manager. The C-API test below this
-// suite covers the popped-scope case; an entirely unused float is the smaller
-// direct regression for the printer's manager-history leak.
+// terms that have ever been built in its manager. An entirely unused float is
+// the smallest direct regression for the printer's manager-history leak.
 TEST(FPPrintBack, logic_selection_is_expression_local)
 {
   STPMgr mgr;

@@ -2874,14 +2874,13 @@ TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
 // them left STP's passes held off the array graph after the solve that
 // owned it had returned.
 //
-// active() has to outlive its solve: (get-model),
-// vc_getCounterExampleArray and term evaluation all read the frozen
-// graph and the certified observations once TopLevelSTPAux has
-// returned, and only the next beginSolve() clears it.
-// activeInSolve() must not, or an assertion arriving for the next query
-// -- or a direct vc_simplify -- is still denied ordinary substitution
-// and read-over-if-then-else distribution on account of a solve that
-// has already finished.
+// active() has to outlive its solve: (get-model), the API's model
+// snapshot and term evaluation all read the frozen graph and the
+// certified observations once TopLevelSTPAux has returned, and only the
+// next beginSolve() clears it. activeInSolve() must not, or an assertion
+// arriving for the next query is still denied ordinary substitution and
+// read-over-if-then-else distribution on account of a solve that has
+// already finished.
 TEST_F(ExtPrepareTest, OwnershipGatesPassesOnlyInsideTheSolveWindow)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -3229,6 +3228,57 @@ TEST(ExtCertifiedEqualities, ContentsAgreeQuotientsNaNAtAFloatElementSort)
   EXPECT_TRUE(ExtensionalityContext::contentsAgree(zeroCell, empty, zero, f32));
 }
 
+// An index sort's cells are its values: a rounding mode's carrier has
+// thirty-two patterns for five modes, and a float format's NaN patterns are
+// one value.
+TEST(ExtCertifiedEqualities, IndexValueCountCountsValuesNotPatterns)
+{
+  EXPECT_EQ(ExtChecker::indexValueCount(SourceSort::bitVector(8), 8), 256u);
+  EXPECT_EQ(ExtChecker::indexValueCount(SourceSort::roundingMode(), 5), 5u);
+  EXPECT_EQ(ExtChecker::indexValueCount(SourceSort::floatingPoint(2, 2), 4),
+            15u);
+  EXPECT_EQ(ExtChecker::indexValueCount(SourceSort::floatingPoint(8, 24), 32),
+            (uint64_t(1) << 32) - (uint64_t(1) << 24) + 3);
+  EXPECT_EQ(ExtChecker::indexValueCount(SourceSort::bitVector(64), 64),
+            UINT64_MAX);
+}
+
+// Two arrays completing to different values agree exactly when the
+// observations name every value of the index sort, so that no cell is left
+// for the completions to disagree at.
+TEST(ExtCertifiedEqualities, TwoCompletionsAgreeWhenEveryIndexValueIsNamed)
+{
+  STPMgr mgr;
+  const SourceSort bv1 = SourceSort::bitVector(1);
+  const ASTNode zero = mgr.CreateZeroConst(1);
+  const ASTNode one = mgr.CreateOneConst(1);
+  typedef std::vector<std::pair<ASTNode, ASTNode>> Obs;
+  const Obs empty;
+
+  // zero written at every mode, completing to one, against all zeros
+  const SourceSort rm = SourceSort::roundingMode();
+  Obs modes;
+  for (unsigned mode : {1u, 2u, 4u, 8u, 16u})
+    modes.push_back(std::make_pair(mgr.CreateBVConst(5, mode), zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(modes, empty, one, zero, rm,
+                                                   5, bv1));
+  modes.pop_back();
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(modes, empty, one, zero,
+                                                    rm, 5, bv1));
+
+  // the same over Float(2,2)'s fifteen values: every pattern but the
+  // second NaN, 0xF
+  const SourceSort f22 = SourceSort::floatingPoint(2, 2);
+  Obs floats;
+  for (unsigned bits = 0; bits < 15; bits++)
+    floats.push_back(std::make_pair(mgr.CreateBVConst(4, bits), zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(floats, empty, one, zero,
+                                                   f22, 4, bv1));
+  floats.erase(floats.begin() + 8); // -0
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(floats, empty, one, zero,
+                                                    f22, 4, bv1));
+}
+
 // The rule on its own, at the level the model is read back.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
@@ -3480,10 +3530,11 @@ TEST_F(ExtModelEqualityTest, FollowsTheSelectedIfThenElseBranch)
 // evaluating the read completes a cell nobody recorded exactly as the
 // contents comparison completes it.
 //
-// Evaluation used to invent all-ones for such a cell, while the printer,
-// vc_getCounterExampleArray and the comparison below all fill it with
-// zero. store(a, i, 0) = a then read false through its lowering and true
-// through the contents, and the audit killed a satisfiable query.
+// Evaluation used to invent all-ones for such a cell, while the printer
+// and the comparison below fill it with zero (as the 2.x C API's array
+// counterexample did). store(a, i, 0) = a then read false through its
+// lowering and true through the contents, and the audit killed a
+// satisfiable query.
 TEST_F(ExtModelEqualityTest, LoweringOfAWriteChainAgreesWithTheContents)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;

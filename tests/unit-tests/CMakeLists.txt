@@ -20,7 +20,8 @@
 
 #AddGTestSuite(unit-tests)
 # -----------------------------------------------------------------------------
-# C API tests (these should be .cpp or .cxx files because GTest needs C++)
+# Unit tests of the engine (these should be .cpp or .cxx files because GTest
+# needs C++)
 # -----------------------------------------------------------------------------
 AddSTPGTest(LazyWriteChainReads_Test.cpp)
 AddSTPGTest(IncrementalCBP_Test.cpp)
@@ -42,6 +43,7 @@ AddSTPGTest(DecisionHints_Test.cpp)
 AddSTPGTest(DecisionPolarity_Test.cpp)
 AddSTPGTest(UnsatAssumptions_Test.cpp)
 AddSTPGTest(SimplifyingMinisatAssumptions_Test.cpp)
+AddSTPGTest(MinisatSeed_Test.cpp)
 AddSTPGTest(PropagateEqualities_Test.cpp)
 AddSTPGTest(SimplifyingNodeFactory_Test.cpp)
 AddSTPGTest(SelfStoreEquality_Test.cpp)
@@ -190,7 +192,6 @@ AddSTPGTest(CadicalOptions_Test.cpp)
 AddSTPGTest(Bva_Test.cpp)
 AddSTPGTest(IncrementalEngagement_Test.cpp)
 AddSTPGTest(SATSolverConfigWindow_Test.cpp)
-AddSTPGTest(FdOStream_Test.cpp)
 # Deeply nested input must not put the AST-depth-recursive traversals through
 # the call stack. Each case runs in a forked child on a 1 MiB stack.
 AddSTPGTest(DeepDag_Test.cpp)

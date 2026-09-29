@@ -140,6 +140,8 @@ public:
   }
   QueryTimingReport(const QueryTimingReport&) = delete;
   QueryTimingReport& operator=(const QueryTimingReport&) = delete;
+  // Report nothing: the query ended the run, where nothing more is said.
+  void cancel() { timing_ = nullptr; }
 private:
   QueryTiming*& slot_;
   QueryTiming* saved_;

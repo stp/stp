@@ -1,0 +1,337 @@
+#********************************************************************
+# AUTHORS: Andrew Teylu
+#
+# BEGIN DATE: September, 2026
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#********************************************************************
+# statistics.toml -- the STP 3.x statistics table (see Statistics in stp.hpp).
+#
+# Generates: the name table behind Statistics::get / stp_statistics_* / stp.Statistics, the tier query,
+# and the docs. Names are dotted, stable strings. This is the snapshot a caller reads; the reports
+# the printing options ask for (the command line's -s and -t) go to the solver's sinks.
+#
+# Fields: name, type (uint64 | double | string), tier (stable | expert | diagnostic), help.
+
+# ---------------------------------------------------------------- times (what -t printed)
+[[stat]]
+name = "time.total_ms"
+type = "double"
+tier = "stable"
+help = "wall-clock time of the last check, including preprocessing"
+
+[[stat]]
+name = "time.simplify_ms"
+type = "double"
+tier = "stable"
+help = "simplification and substitution"
+
+[[stat]]
+name = "time.bitblast_ms"
+type = "double"
+tier = "stable"
+help = "bit-blasting (AIG construction)"
+
+[[stat]]
+name = "time.cnf_ms"
+type = "double"
+tier = "stable"
+help = "CNF generation"
+
+[[stat]]
+name = "time.sat_ms"
+type = "double"
+tier = "stable"
+help = "time inside the SAT backend, summed over refinement rounds"
+
+# ---------------------------------------------------------------- sat / cnf
+[[stat]]
+name = "sat.backend"
+type = "string"
+tier = "stable"
+help = "the backend that ran: cryptominisat | cadical | minisat | simplifying-minisat"
+
+[[stat]]
+name = "cnf.variables"
+type = "uint64"
+tier = "stable"
+help = "CNF variables of the last encoding"
+
+[[stat]]
+name = "cnf.clauses"
+type = "uint64"
+tier = "stable"
+help = "CNF clauses of the last encoding"
+
+[[stat]]
+name = "aig.nodes"
+type = "uint64"
+tier = "expert"
+help = "AND nodes after bit-blasting (the quantity aig-node-budget bounds)"
+
+[[stat]]
+name = "checks.total"
+type = "uint64"
+tier = "stable"
+help = "checks answered by this solver so far"
+
+[[stat]]
+name = "checks.bitblasted"
+type = "uint64"
+tier = "expert"
+help = "checks that reached bit-blasting (the rest were decided by preprocessing)"
+
+# ---------------------------------------------------------------- bit-vector abstraction
+[[stat]]
+name = "bv.candidates.eq"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.candidates.compare"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.candidates.ite"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.candidates.plus"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.candidates.mult"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.candidates.divmod"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.abstracted.eq"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.abstracted.compare"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.abstracted.ite"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.abstracted.plus"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.abstracted.mult"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.abstracted.divmod"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.refinement_rounds"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.blocking_lemmas"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.schema_lemmas"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.exact.escalations"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.exact.escalations_mult"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.exact.escalations_divmod"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.exact.clauses"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.exact.variables"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.exact.microseconds"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.schema.clauses"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.schema.variables"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.schema.microseconds"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "bv.schema_group.lemmas"
+type = "string"
+tier = "expert"
+help = "per-group lemma counts as 'group=count,...' (15 groups); also available per group as bv.schema_group.<name>.lemmas"
+
+# ---------------------------------------------------------------- uninterpreted functions
+[[stat]]
+name = "uf.applications_lowered"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "uf.constraints_installed"
+type = "uint64"
+tier = "expert"
+help = ""
+
+# ---------------------------------------------------------------- floating-point abstraction
+[[stat]]
+name = "fp.candidates"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.abstracted"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.shared"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.chained"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.rule_lemmas"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.cross_rules"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.checks"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.skipped_checks"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.inconsistent"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.value_lemmas"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.box_lemmas"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.shape_lemmas"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.relational_lemmas"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.releases"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.refinement_rounds"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.restarts"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.repairs"
+type = "uint64"
+tier = "expert"
+help = ""
+[[stat]]
+name = "fp.lemma_microseconds"
+type = "uint64"
+tier = "expert"
+help = ""
+
+# ---------------------------------------------------------------- incremental driver
+[[stat]]
+name = "incremental.engaged"
+type = "uint64"
+tier = "diagnostic"
+help = "1 when the incremental driver was in use for the last check, 0 otherwise"
+

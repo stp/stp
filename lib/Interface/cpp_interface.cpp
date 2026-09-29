@@ -39,6 +39,7 @@ THE SOFTWARE.
 #include "stp/Util/GitSHA1.h"
 #include "Lra/LraFrontend.h"
 #include <cassert>
+#include <exception>
 #include <limits>
 
 using std::cerr;
@@ -47,6 +48,34 @@ using std::endl;
 
 namespace stp
 {
+
+namespace
+{
+// Opens the engine's own work in a command -- a check, a model read, a push
+// -- and records in engine_work_failed that an exception left it. Only an
+// EngineFatal is ever classified by the record (see engine_work_failed); a
+// ParseAbandon or ScriptEnded unwinding through ends the parse on its own
+// terms, before any EngineFatal could be asked about.
+class EngineWork
+{
+public:
+  explicit EngineWork(bool& failed) noexcept
+      : failed_(failed), uncaught_(std::uncaught_exceptions())
+  {
+  }
+  ~EngineWork()
+  {
+    if (std::uncaught_exceptions() > uncaught_)
+      failed_ = true;
+  }
+  EngineWork(const EngineWork&) = delete;
+  EngineWork& operator=(const EngineWork&) = delete;
+
+private:
+  bool& failed_;
+  const int uncaught_;
+};
+} // namespace
 
 void Cpp_interface::checkInvariant()
 {
@@ -71,6 +100,7 @@ void Cpp_interface::init()
 
   print_success = false;
   ignoreCheckSatRequest = false;
+  retain_uf_declarations = false;
   produce_models = false;
   session_touched = false;
   model_valid = false;
@@ -114,8 +144,8 @@ Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
 
 // Every writer of the parser globals borrows: whoever sets one clears it
 // again. GlobalParserInterface is cleared whichever constructor ran, because
-// the callers that assign it directly (the C interface's parse entry points)
-// point it at a stack local of theirs, which is this object. The guard keeps
+// the callers that assign it directly (the API's parse entries) point it at
+// a stack local of theirs, which is this object. The guard keeps
 // an interface that has since been superseded from clearing a pointer that
 // now belongs to a live one.
 Cpp_interface::~Cpp_interface()
@@ -249,11 +279,6 @@ void Cpp_interface::AddAssert(const ASTNode& assert)
   lastCheckWasAssuming = false;
 }
 
-void Cpp_interface::SetQuery(const ASTNode& q)
-{
-  bm.SetQuery(q);
-}
-
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTVec& children)
 {
   return nf->CreateNode(kind, children);
@@ -287,7 +312,11 @@ void Cpp_interface::addSortAlias(const std::string& name,
 {
   // SMT-LIB does not allow redefining a sort name.
   if (sort_aliases.find(name) != sort_aliases.end())
-    FatalError("the sort name is already defined");
+  {
+    const std::string msg = "the sort name is already defined: " + name;
+    rejectCurrentCommand(msg);
+    endParseWithDiagnostic(msg);
+  }
   sort_aliases[name] = sort;
   frames.back()->addSortAlias(name);
   session_touched = true;
@@ -355,6 +384,11 @@ ASTNode Cpp_interface::CreateRealPredicate(Kind kind, const ASTNode& lhs,
   return bm.CreateRealPredicate(kind, lhs, rhs);
 }
 
+ASTNode Cpp_interface::CreateFpToReal(const ASTNode& x)
+{
+  return bm.CreateFpToReal(x);
+}
+
 
 ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
                                           const SourceSort& source_sort)
@@ -370,8 +404,13 @@ ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
   // place it has to be said. Symbols STP mints for itself go to the manager
   // directly and are unaffected.
   if (STPMgr::isReservedSymbolName(name))
-    FatalError("a symbol name beginning with '@' or '.' is reserved for "
-               "solver use and cannot be declared");
+  {
+    const std::string msg = std::string("a symbol name beginning with '@' or '.' is reserved for "
+                                        "solver use and cannot be declared: ") +
+                            name;
+    rejectCurrentCommand(msg);
+    endParseWithDiagnostic(msg);
+  }
 
   return bm.CreateSourceSymbol(name, source_sort);
 }
@@ -618,9 +657,10 @@ ASTNode* Cpp_interface::newNode(const ASTNode& copyIn)
   return new ASTNode(copyIn);
 }
 
-void Cpp_interface::deleteNode(ASTNode* n)
+void Cpp_interface::deleteNode(ASTNode*& n)
 {
   delete n;
+  n = nullptr;
 }
 
 void Cpp_interface::addSymbol(ASTNode& s)
@@ -632,6 +672,11 @@ void Cpp_interface::addSymbol(ASTNode& s)
   bm.InvalidateRealModel();
   frames.back()->addSymbol(s);
   session_touched = true;
+}
+
+void Cpp_interface::addSymbolAlias(const std::string& name, const ASTNode& s)
+{
+  frames.back()->addSymbolAs(name, s);
 }
 
 void Cpp_interface::addTemporarySymbol(ASTNode& s)
@@ -673,7 +718,7 @@ void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
 // SMT-LIB's RoundingMode sort has exactly five values; the 5-bit carrier has
 // 32. Pin a declared RoundingMode symbol to the five one-hot encodings.
 // Asserted (rather than built into the blaster) so that every route to a
-// query -- check-sat here, or a C-API query over a parsed file -- sees it.
+// query -- check-sat here, or an API check over a parsed script -- sees it.
 //
 // This is the pin for the level the symbol is declared at, not the guarantee:
 // an assertion belongs to a level and the symbol node does not, so FpTotalise
@@ -708,6 +753,7 @@ void Cpp_interface::success()
 //TODO escape string.
 void Cpp_interface::error(std::string msg)
 {
+  last_error_message = msg;
   cout << "(error \"" << msg << "\")" << endl;
   flush(cout);
 }
@@ -759,8 +805,23 @@ void Cpp_interface::refuseCurrentCommand(const std::string& diagnostic)
   rejectCurrentCommand(diagnostic);
   // Reducing the rest of the command first would only build carriers for a
   // session that is over, so the report above is the last thing printed on
-  // stdout and FatalError takes it from here.
-  FatalError(diagnostic.c_str());
+  // stdout, and the parse ends here as a whole. Inside a command that means
+  // unwinding to SMT2Parse(), which answers failure -- the command line
+  // exits with the diagnostic, a library caller gets a parse error with its
+  // assertion stack put back. Outside one there is no parse to abandon, and
+  // FatalError takes it as before.
+  endParseWithDiagnostic(diagnostic);
+}
+
+void Cpp_interface::endParseWithDiagnostic(const std::string& diagnostic)
+{
+  if (!current_command_active)
+    FatalError(diagnostic.c_str());
+  // The other channels ("Fatal Error:" on stderr and the observer) keep
+  // their report; under the 3.x API the diagnostic is also the parse error's
+  // own text.
+  ReportFatalError(diagnostic.c_str());
+  throw ParseAbandon();
 }
 
 void Cpp_interface::finishCurrentCommand()
@@ -811,6 +872,7 @@ void Cpp_interface::discardExtensionalitySolveState()
 // Can clear away the base frame..
 void Cpp_interface::reset()
 {
+  const EngineWork work(engine_work_failed);
   // reset destroys the current frame and UF context itself, so close its
   // accepted command transaction while both are still alive. The grammar's
   // outer finish becomes a harmless no-op after init().
@@ -846,6 +908,8 @@ void Cpp_interface::reset()
   // manager but cannot leak an old model or registry identity into this
   // fresh public context.
   bm.ResetLraStateForPublicReset();
+  if (after_public_reset)
+    after_public_reset();
 
   checkInvariant();
 
@@ -869,6 +933,7 @@ void Cpp_interface::popToFirstLevel()
 // re-queries them.
 void Cpp_interface::resetAssertions()
 {
+  const EngineWork work(engine_work_failed);
   // Pop the ordinary levels through the ordinary path so the assertion stack,
   // result cache, declarations and solver tables stay in lockstep.
   while (frames.size() > 1)
@@ -906,10 +971,16 @@ void Cpp_interface::resetAssertions()
 
 void Cpp_interface::pop()
 {
+  const EngineWork work(engine_work_failed);
   if (frames.size() == 0)
     FatalError("Popping from an empty stack.");
   if (frames.size() == 1)
-    FatalError("Can't pop away the default base element.");
+  {
+    // a (pop) with nothing pushed: the script's error, not the process's end
+    const std::string msg = "Can't pop away the default base element.";
+    rejectCurrentCommand(msg);
+    endParseWithDiagnostic(msg);
+  }
 
   model_valid = false;
   lastCheckWasAssuming = false;
@@ -939,6 +1010,7 @@ void Cpp_interface::pop()
 
 void Cpp_interface::push()
 {
+  const EngineWork work(engine_work_failed);
   // The session is incremental from the first push on (the same trigger z3
   // uses): later check-sats go through the incremental driver where they
   // can. Sessions that never push are untouched by this. This is session
@@ -970,6 +1042,21 @@ void Cpp_interface::push()
   checkInvariant();
 }
 
+void Cpp_interface::adoptAssertLevels()
+{
+  while (frames.size() < bm.getAssertLevel())
+  {
+    cache.push_back(Entry(SOLVER_UNDECIDED));
+    addFrame();
+  }
+  checkInvariant();
+}
+
+void Cpp_interface::retainUFDeclarations(bool retain)
+{
+  retain_uf_declarations = retain;
+}
+
 void Cpp_interface::popAssumptionFrame()
 {
   // The assumption frame cannot contain declarations -- nothing runs
@@ -985,6 +1072,7 @@ void Cpp_interface::popAssumptionFrame()
 
 void Cpp_interface::checkSatAssuming(const ASTVec& assumptions)
 {
+  const EngineWork work(engine_work_failed);
   // The parser reduces a malformed UF subexpression to a typed carrier so it
   // can reach this outer boundary. Rejection is transactional: in particular
   // do not push, invalidate a model, solve the base stack, or print a verdict.
@@ -996,6 +1084,26 @@ void Cpp_interface::checkSatAssuming(const ASTVec& assumptions)
   // propagates to the levels beneath, so the verdict cache keeps working
   // across this the same way it does for user levels.
   push();
+  // The frame is the assumptions' own, and comes off however the check ends:
+  // a run that ends at the check's first CNF (ScriptEnded) used to leave the
+  // assumptions asserted on a level of their own.
+  struct PopOnUnwind
+  {
+    Cpp_interface* self;
+    bool armed;
+    ~PopOnUnwind()
+    {
+      if (!armed)
+        return;
+      try
+      {
+        self->popAssumptionFrame();
+      }
+      catch (...)
+      {
+      }
+    }
+  } pop_on_unwind{this, true};
 
   for (const ASTNode& a : assumptions)
     AddAssert(a);
@@ -1003,6 +1111,7 @@ void Cpp_interface::checkSatAssuming(const ASTVec& assumptions)
   // The assumptions ride as the last level, assumed one conjunct each so
   // an unsat answer can name exactly the assumptions it used.
   checkSat(getAssertVector(), true);
+  pop_on_unwind.armed = false;
 
   // Remember the round for get-unsat-assumptions; the verdict is read
   // before the frame pop erases its cache entry.
@@ -1025,8 +1134,22 @@ void Cpp_interface::ignoreCheckSat()
 void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
                              bool fromCheckSatAssuming)
 {
+  const EngineWork work(engine_work_failed);
   if (ignoreCheckSatRequest)
     return;
+  if (before_check && before_check())
+  {
+    // An interrupt pending as the check begins answers it at once, as the
+    // API answers its own checks: unknown, nothing solved, no model. (An
+    // interrupted search reports its budget gone, as this does.)
+    model_valid = false;
+    session_touched = true;
+    lastCheckWasAssuming = false;
+    bm.clearUnknown();
+    bm.noteUnknown(UnknownReason::Timeout, "the check was interrupted before it began");
+    ToSATBase::PrintOutput(&bm, bm.unknownResult());
+    return;
+  }
 
   // Upstream post-solve accounting can allocate after the coordinator has
   // installed an exact model.  A public check that unwinds at any later
@@ -1119,7 +1242,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   {
     resetSolver();
 
-    // The policy itself lives on the driver, so this frontend and the C API
+    // The policy itself lives on the driver, so this frontend and the API
     // cannot drift apart again; --incremental=on overrides it, and
     // --incremental=off has already kept session_incremental false.
     const bool autoEngaged = IncrementalSolver::automaticEngagementReady(
@@ -1192,6 +1315,15 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
       }
     }
 
+    // The run ended at this check's first CNF: so does the script, with no
+    // answer and nothing else said (see ScriptEnded). The Parsing bracket is
+    // put back as the end of this function puts it back.
+    if (bm.run_ended_after_cnf)
+    {
+      bm.GetRunTimes()->start(RunTimes::Parsing);
+      throw ScriptEnded();
+    }
+
     // Store away the answer. It may also be unknown or an error.
     last_run = Entry(last_result);
     last_run.node_number = assertionsSMT2.back().GetNodeNum();
@@ -1241,6 +1373,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
     printAbstractionCoverage(bm.UserFlags, std::cerr);
   }
 
+  if (after_check)
+    after_check();
   ToSATBase::PrintOutput(&bm, last_run.result);
 
   // User has specified -p option to print model.
@@ -1288,6 +1422,19 @@ void Cpp_interface::cleanUp()
   for (SolverFrame* frame : frames)
     frame->getFunctions().clear();
 
+  // The manager outlives this interface and keeps the functions the script
+  // declared (retainUFDeclarations): the frames must not deactivate them.
+  if (retain_uf_declarations)
+    for (SolverFrame* frame : frames)
+      frame->releaseUFDeclarations();
+
+  // What the frames declare is what the script left in scope, which a caller
+  // may have asked to keep (keepDeclaredSymbolsAtCleanup).
+  if (symbols_at_cleanup != nullptr)
+    *symbols_at_cleanup = getDeclaredSymbols();
+  if (sorts_at_cleanup != nullptr)
+    *sorts_at_cleanup = sort_aliases;
+
   while (frames.size() > 0)
   {
     removeFrame();
@@ -1308,8 +1455,8 @@ void Cpp_interface::badBooleanOptionValue(const std::string& option,
 {
   const std::string msg = "set-option :" + option +
                           " takes true or false, but was given: " + value;
-  error(msg);
-  FatalError(msg.c_str());
+  rejectCurrentCommand(msg);
+  endParseWithDiagnostic(msg);
 }
 
 void Cpp_interface::setOption(std::string option, std::string value)
@@ -1373,8 +1520,8 @@ void Cpp_interface::setOption(std::string option, std::string value)
     {
       const std::string msg = "set-option :global-declarations must come "
                               "before anything is declared or asserted";
-      error(msg);
-      FatalError(msg.c_str());
+      rejectCurrentCommand(msg);
+      endParseWithDiagnostic(msg);
     }
 
     if (value == "true")
@@ -1516,6 +1663,7 @@ static const char* categoryKeyword(RunTimes::Category c)
 
 void Cpp_interface::getInfo(std::string flag)
 {
+  const EngineWork work(engine_work_failed);
   if (flag == "name")
     cout << "(:name \"STP\")" << endl;
   else if (flag == "version")
@@ -1610,6 +1758,7 @@ void Cpp_interface::getInfo(std::string flag)
       case UnknownReason::CarrierExhausted:
       case UnknownReason::AssumedInjectivity:
       case UnknownReason::AIGBudget:
+      case UnknownReason::StoppedAfterCnf:
       case UnknownReason::Incomplete:
         // The predefined SMT-LIB spelling, followed by what was incomplete:
         // the flag admits an s-expression, and a bare "incomplete" tells a
@@ -1657,7 +1806,14 @@ bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
                   alias.second.kind() == SourceSort::Kind::Uninterpreted;
   if (!anyDeclared)
     return false;
+  return declaredSortCarrierMayBeShort(bm, assertions, "--uf-sort-width",
+                                       detail);
+}
 
+// See cpp_interface.h.
+bool declaredSortCarrierMayBeShort(const STPMgr& bm, const ASTVec& assertions,
+                                   const char* option, std::string& detail)
+{
   // What counts is a term that could need an element of its own, so two node
   // shapes carrying the sort are excluded and neither is an edge case:
   //
@@ -1753,8 +1909,8 @@ bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
     std::ostringstream message;
     message << "the query needs up to " << entry.second
             << " elements of sort " << uninterpretedSortName(entry.first)
-            << ", and --uf-sort-width=" << width << " tells only " << capacity
-            << " apart; raise --uf-sort-width to at least " << needed;
+            << ", and " << option << "=" << width << " tells only " << capacity
+            << " apart; raise " << option << " to at least " << needed;
     detail = message.str();
     return true;
   }
@@ -1779,6 +1935,7 @@ void Cpp_interface::getAssertions()
 
 void Cpp_interface::getValue(const ASTVec& v)
 {
+  const EngineWork work(engine_work_failed);
   if (current_command_rejected)
     return;
   bool readable_model = bm.UserFlags.construct_counterexample_flag;
@@ -1891,37 +2048,9 @@ void Cpp_interface::getValue(const ASTVec& v)
   cout << os.str() << std::endl;
 }
 
-namespace
-{
-// Whether any top-level conjunct of `a` is in `failed`. The driver reports
-// failed conjuncts of the assumptions LEVEL, and an assumption that is
-// itself a conjunction was split before it was assumed, so membership is
-// judged against its flattened conjuncts.
-bool assumptionFailed(const ASTNode& a, const ASTNodeSet& failed,
-                      const ASTNode& trueNode)
-{
-  std::vector<ASTNode> pending(1, a);
-  while (!pending.empty())
-  {
-    const ASTNode n = pending.back();
-    pending.pop_back();
-    if (n == trueNode)
-      continue;
-    if (n.GetKind() == AND)
-    {
-      for (const ASTNode& c : n)
-        pending.push_back(c);
-      continue;
-    }
-    if (failed.count(n))
-      return true;
-  }
-  return false;
-}
-} // namespace
-
 void Cpp_interface::getUnsatAssumptions()
 {
+  const EngineWork work(engine_work_failed);
   // Meaningful right after a check-sat-assuming that answered unsat;
   // anything else gets the empty list, which is the correct core whenever
   // the command is legal at all.
@@ -1931,70 +2060,30 @@ void Cpp_interface::getUnsatAssumptions()
     return;
   }
 
-  // Per-assumption granularity from the driver when it ran the solve; the
-  // full assumption set is always a correct core, and covers the batch
-  // first solve and the extensionality rounds.
-  std::vector<ASTNode> failed;
-  bool granular = false;
+  // Per-assumption granularity from the driver when it ran the solve
+  // (IncrementalSolver::lastUnsatAssumptionIndices); the full assumption set
+  // is always a correct core, and covers the batch first solve and the
+  // extensionality rounds.
+  std::vector<size_t> used;
+  bool fromDriver = false;
   if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
   {
     IncrementalSolver* inc = GlobalSTP->getIncrementalSolver();
-    if (inc->lastSolveWasUnsat() &&
-        inc->lastUnsatHasAssumptionGranularity())
+    if (inc->lastSolveWasUnsat())
     {
-      failed = inc->lastUnsatAssumptionConjuncts();
-      granular = true;
+      used = inc->lastUnsatAssumptionIndices(lastAssumptionTerms);
+      fromDriver = true;
     }
   }
-  const ASTNodeSet failedSet(failed.begin(), failed.end());
-
-  ASTVec semanticAssumptions;
-  const ASTVec* assumptionsForMatching = &lastAssumptionTerms;
-  if (granular && bm.has_distinct)
-  {
-    semanticAssumptions.reserve(lastAssumptionTerms.size());
-    for (const ASTNode& a : lastAssumptionTerms)
-      semanticAssumptions.push_back(lowerDistinct(&bm, a));
-    assumptionsForMatching = &semanticAssumptions;
-  }
-
-  // Ordinarily each failed driver conjunct is exactly one flattened conjunct
-  // of a lowered source assumption. The simplifying factory may instead
-  // collapse the assumptions level as a whole (for example, p and (not p))
-  // before the driver assigns its per-conjunct literals. If a reported
-  // conjunct cannot be mapped back, falling back to the full source set is a
-  // correct core; silently dropping it can produce an empty, invalid one.
-  bool completeMapping = true;
-  if (granular)
-  {
-    for (const ASTNode& failedConjunct : failedSet)
-    {
-      const ASTNodeSet singleton{failedConjunct};
-      bool found = false;
-      for (const ASTNode& a : *assumptionsForMatching)
-      {
-        if (assumptionFailed(a, singleton, bm.ASTTrue))
-        {
-          found = true;
-          break;
-        }
-      }
-      if (!found)
-      {
-        completeMapping = false;
-        break;
-      }
-    }
-  }
+  if (!fromDriver)
+    for (size_t i = 0; i < lastAssumptionTerms.size(); ++i)
+      used.push_back(i);
 
   std::ostringstream os;
   os << "(";
   bool first = true;
-  for (size_t i = 0; i < lastAssumptionTerms.size(); ++i)
+  for (size_t i : used)
   {
-    if (granular && completeMapping &&
-        !assumptionFailed((*assumptionsForMatching)[i], failedSet, bm.ASTTrue))
-      continue;
     if (!first)
       os << " ";
     first = false;
@@ -2007,6 +2096,7 @@ void Cpp_interface::getUnsatAssumptions()
 // Note, doesn't consider that extra assertions might have been applied?
 void Cpp_interface::getModel()
 {
+  const EngineWork work(engine_work_failed);
   bool readable_model = bm.UserFlags.construct_counterexample_flag;
   readable_model = readable_model || bm.HasRealModel();
   if (!readable_model)
@@ -2148,10 +2238,20 @@ void Cpp_interface::SolverFrame::addUFDeclaration(const UFDecl* declaration)
   _scoped_uf_declarations.push_back(declaration);
 }
 
+void Cpp_interface::SolverFrame::releaseUFDeclarations()
+{
+  _scoped_uf_declarations.clear();
+}
+
 void Cpp_interface::SolverFrame::addSymbol(const ASTNode& symbol)
 {
   _scoped_symbols.push_back(symbol);
   _symbol_bindings[std::string(symbol.GetName())].push_back(symbol);
+}
+
+void Cpp_interface::SolverFrame::addSymbolAs(const std::string& name, const ASTNode& symbol)
+{
+  _symbol_bindings[name].push_back(symbol);
 }
 
 void Cpp_interface::SolverFrame::addTemporarySymbol(const ASTNode& symbol)
@@ -2230,6 +2330,14 @@ void Cpp_interface::SolverFrame::adoptDeclarations(SolverFrame& donor)
                                  donor._scoped_uf_declarations.begin(),
                                  donor._scoped_uf_declarations.end());
   donor._scoped_uf_declarations.clear();
+}
+
+ASTVec Cpp_interface::getDeclaredSymbols() const
+{
+  ASTVec out;
+  for (const SolverFrame* frame : frames)
+    out.insert(out.end(), frame->getSymbols().begin(), frame->getSymbols().end());
+  return out;
 }
 
 bool Cpp_interface::SolverFrame::lookupSymbol(std::string_view name,

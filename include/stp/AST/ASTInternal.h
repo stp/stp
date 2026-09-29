@@ -28,6 +28,7 @@ THE SOFTWARE.
 // ASTVec and a forward declaration of ASTNode (both from UsefulDefs.h);
 // including ASTNode.h would create a circular include that forces the hot
 // ASTNode accessors (GetKind/GetNodeNum/...) to be defined out-of-line.
+#include <atomic>
 #include "stp/AST/UsefulDefs.h"
 #include "stp/AST/SourceSort.h"
 #include <iostream>
@@ -66,6 +67,7 @@ private:
 class ASTInternal
 {
   friend class ASTNode;
+  friend class STPMgr; // the exposed-id table (STPMgr::exposeNode)
 
 protected:
   // Pointer back to the node manager that holds this.
@@ -78,7 +80,9 @@ protected:
   // the are NOTs of.
   //
   uint64_t node_uid;
-  static THREAD_LOCAL_IE uint64_t node_uid_cntr;
+  // Process-wide and atomic: a manager may be used from any thread (one at
+  // a time), so ids handed out on different threads must never collide.
+  static std::atomic<uint64_t> node_uid_cntr;
 
   // reference counting for garbage collection
   uint32_t _ref_count;
@@ -143,10 +147,16 @@ protected:
   enumeration<Kind, unsigned char> _kind;
 
   //Used just by ASTInterior, but storing it here saves 8-bytes in ASTInterior, sizeof this class is unchanged.
-  mutable bool is_simplified;
+  mutable bool is_simplified : 1;
 
   //Used just by ASTBVConst, but storing it here saves 8-bytes in ASTBVConst, sizeof this class is unchanged.
-  bool cbv_managed_outside;
+  bool cbv_managed_outside : 1;
+
+  // Whether the 3.x API handed out this node's id (STPMgr::exposeNode): its
+  // last release then withdraws the id, so that handing one out never keeps
+  // the node alive. The three flags share one byte, which keeps the class at
+  // 32 bytes.
+  bool exposed : 1;
 
   mutable uint8_t iteration;
 
@@ -173,8 +183,9 @@ protected:
 public:
   // Constructor (kind only, empty children, int nodenum)
   ASTInternal(STPMgr* mgr, Kind kind)
-      : nodeManager(mgr), node_uid(node_uid_cntr += 2), _ref_count(0),
-        _kind(kind), iteration(0)
+      : nodeManager(mgr), node_uid(node_uid_cntr.fetch_add(2, std::memory_order_relaxed) + 2),
+        _ref_count(0),
+        _kind(kind), exposed(false), iteration(0)
   {
   }
 
@@ -185,7 +196,7 @@ public:
   // FIXME:  I don't think children need to be copied.
   ASTInternal(const ASTInternal& int_node)
       : nodeManager(int_node.nodeManager), node_uid(int_node.node_uid),
-        _ref_count(0), _kind(int_node._kind), iteration(0)
+        _ref_count(0), _kind(int_node._kind), exposed(false), iteration(0)
 
   {
   }
@@ -198,10 +209,15 @@ public:
   {
     if (--_ref_count == 0)
     {
+      if (exposed)
+        WithdrawExposedId();
       // Delete node from unique table and kill it.
       CleanUp();
     }
   }
+
+  // Out of line: STPMgr is incomplete here.
+  void WithdrawExposedId();
 
   uint64_t GetNodeNum() const { return node_uid; }
 

@@ -145,6 +145,21 @@ public:
   DLL_PUBLIC void stop(Category c);
   DLL_PUBLIC void print();
 
+  // The phases open now, and whether `c` is the innermost. A caller an
+  // exception unwound through -- past timed phases whose stops never ran --
+  // cuts the stack back to the depth it found (unwindTo) instead of stopping
+  // a phase that is not on top.
+  std::size_t depth() const { return category_stack.size(); }
+  bool innermostIs(Category c) const
+  {
+    return !category_stack.empty() && category_stack.top().first == c;
+  }
+  void unwindTo(std::size_t d)
+  {
+    while (category_stack.size() > d)
+      category_stack.pop();
+  }
+
   // Balance a phase on ordinary return and when preparation is cancelled.
   class Scope final
   {

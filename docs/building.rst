@@ -305,11 +305,12 @@ These apply to all generators:
    ``-DENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release`` silently produced
    a build without them; it now produces an asserting Release build
 -  ``ENABLE_TESTING`` -- enable running the tests
--  ``ENABLE_PYTHON_INTERFACE`` -- build the Python interface (Python 3
-   only). The bindings can also be installed on their own, once per
-   interpreter, with ``python3 -m pip install ./bindings/python`` against
-   an STP that is already installed; ``bindings/python/README.md`` says how
-   they find ``libstp``
+-  ``ENABLE_PYTHON_API`` -- build the ``stp`` Python package. On by
+   default when ``PYTHON_EXECUTABLE`` can import Cython and the libraries
+   are shared; asking for it without Cython is an error. The package can
+   also be installed on its own, once per interpreter, with
+   ``python3 -m pip install ./bindings/python`` against an STP that is
+   already installed; ``bindings/python/README.md`` says how that finds it
 -  ``PYTHON_EXECUTABLE`` -- which Python 3 to use, when more than one is
    installed
 -  ``SANITIZE`` -- use Clang's sanitization checks. It sets C++ flags only,
@@ -786,7 +787,6 @@ both.
       -DENABLE_AUTO_DOWNLOAD=ON ^
       -DSTATICCOMPILE=ON ^
       -DUSE_MINISAT=ON -DUSE_CRYPTOMINISAT=OFF -DUSE_CADICAL=OFF ^
-      -DENABLE_PYTHON_INTERFACE=OFF ^
       -DZLIB_INCLUDE_DIR=C:/vcpkg/installed/x64-windows-static/include ^
       -DZLIB_LIBRARY=C:/vcpkg/installed/x64-windows-static/lib/zs.lib ^
       .
@@ -826,7 +826,6 @@ From a UCRT64 shell:
         -DENABLE_AUTO_DOWNLOAD=ON \
         -DSTATICCOMPILE=ON \
         -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=OFF \
-        -DENABLE_PYTHON_INTERFACE=OFF \
         .
     cmake --build build --parallel "$(nproc)"
 

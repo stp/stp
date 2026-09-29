@@ -1,0 +1,9 @@
+# ThreadSanitizer suppressions for the tsan job (.github/workflows/ci.yml).
+#
+# CaDiCaL writes two globals from every solver it constructs, whichever
+# thread constructs it: its static option table, filled in by the Options
+# constructor, and a dummy global that silences a static analyser's
+# memory-leak warning, written when the value array grows. Every thread
+# writes the same values, and neither is read to decide anything.
+race:CaDiCaL::Options::Options
+race:CaDiCaL::Internal::enlarge_vals

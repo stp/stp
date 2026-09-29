@@ -7,6 +7,7 @@
 #include <iosfwd>
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 #include <map>
 #include <string>
 #include <utility>
@@ -126,6 +127,10 @@ public:
   }
 
   bool hasValue(const ASTNode& term) const noexcept;
+  // Whether the solve gave `symbol` its value -- one it staged, a presolve
+  // reconstruction, or a spread value for an application's argument --
+  // rather than the zero a required symbol no arithmetic mentions takes.
+  bool solveValued(const ASTNode& symbol) const noexcept;
   RealModelStrings stringsFor(const ASTNode& term) const;
   int compareTerms(const ASTNode& left, const ASTNode& right) const;
   bool predicateValue(const ASTNode& predicate) const;
@@ -200,6 +205,8 @@ private:
   // number in bijection, so this is the same key operator== compares, and it
   // is the key eval_cache_ already uses.
   std::unordered_map<std::uint64_t, std::size_t> symbol_index_;
+  // The required symbols that took the default zero, by node number.
+  std::unordered_set<std::uint64_t> defaulted_;
   // Built by defineApplicationValues from the applications the solve lowered;
   // read by applicationValue for the ones it did not.
   std::map<std::string, ExactRational> applications_;

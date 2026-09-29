@@ -262,15 +262,17 @@ jobs:
           exit 1
         fi
 
-    # The bindings walk the CPython AST, whose node types drift between
-    # releases: 3.14 removed NodeVisitor's visit_Num fallback, so every
-    # numeric literal in an @stp-decorated function began reaching
-    # ASTtoSTP.generic_visit and raising "Constant is not yet supported!".
-    # Nothing above catches that -- the build configures against whatever
-    # python3 the runner ships, which trails the newest release -- so run
-    # the binding tests once more against the newest one. stp.py is copied
-    # into the build tree unchanged, so the interpreter can be swapped
-    # under the same build tree; no second build is needed.
+    # The Python package's @stp decorator walks the CPython AST, whose node
+    # types drift between releases: 3.14 removed NodeVisitor's visit_Num
+    # fallback, which once left every numeric literal in a decorated
+    # function unhandled. Nothing above catches that -- the build configures
+    # against whatever python3 the runner ships, which trails the newest
+    # release -- so the package is built once more against the newest one
+    # and its tests run there. Its extension is compiled for one interpreter,
+    # hence the second build directory; the compiler cache makes libstp's
+    # half of it cheap. What an install needs is built as well, the manual
+    # page aside, so that python-pip-install can stage one and pip-install
+    # the package against it with the newest Python, as a packager would.
     #
     # Bump the version when a newer Python is released. The point is to be
     # a step ahead of what the distributions ship, not to pin one version
@@ -283,21 +285,14 @@ jobs:
       with:
         python-version: '3.14'
 
-    - name: Python bindings against the newest Python
+    - name: The Python package against the newest Python
       if: matrix.name == 'gcc'
       run: |
         python3 --version
-        python3 tests.py
-        python3 allocator_tests.py
-        # The pip install of bindings/python, which ctest skips when the
-        # interpreter's setuptools is too old or absent -- as it is from
-        # Python 3.12 on, until installed.
-        python3 -m pip install --disable-pip-version-check setuptools
-        python3 "$GITHUB_WORKSPACE/tests/api/python/pip_install_test.py" \
-          "$GITHUB_WORKSPACE/bindings/python" \
-          "$GITHUB_WORKSPACE/build/lib/libstp.so" \
-          "$RUNNER_TEMP/pip-install"
-      working-directory: build/tests/api/python
+        python3 -m pip install --quiet cython pytest setuptools wheel
+        ${{ matrix.env }} cmake -S . -B build-newest-python -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DENABLE_PYTHON_API:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DBUILD_MANPAGE=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja
+        cmake --build build-newest-python --target stp stp2 stp-bin stp_python --parallel "$(nproc)"
+        ctest --test-dir build-newest-python -R '^python-' --output-on-failure
 
     # The three legs of this matrix configure identically and differ only in
     # compiler and optimisation level, which makes them the pairs worth
@@ -425,7 +420,9 @@ jobs:
     - uses: actions/checkout@v7
 
     # llvm for llvm-symbolizer, which is what turns the frames of a stack
-    # trace into names and line numbers.
+    # trace into names and line numbers. cython3 and python3-pytest build and
+    # run the Python package, whose extension is the one C++ file of the
+    # library no other sanitizer job compiles.
     - name: Packages
       run: |
         sudo apt-get update
@@ -435,12 +432,14 @@ jobs:
           ccache \
           clang \
           cmake \
+          cython3 \
           flex \
           git \
           llvm \
           ninja-build \
           python3 \
           python3-pip \
+          python3-pytest \
           python3-setuptools \
           zlib1g-dev
         sudo pip3 install -U lit
@@ -476,11 +475,11 @@ jobs:
     # the CNF that every query is decided from is built.
     #
     # -shared-libsan puts the sanitizer runtime in a shared object that
-    # libstp.so then records as a dependency, which is what lets the Python
-    # bindings dlopen it. With clang's default static runtime that dlopen
-    # fails outright -- "undefined symbol: __ubsan_handle_type_mismatch_v1" --
-    # and python-interface-tests is lost. Nothing then puts that shared object
-    # on the loader's path, hence the -rpath: clang adds none of its own, so
+    # libstp.so then records as a dependency, which is what lets a process
+    # that dlopens libstp (the Python package's extension, say) load it. With
+    # clang's default static runtime that dlopen fails outright -- "undefined
+    # symbol: __ubsan_handle_type_mismatch_v1". Nothing then puts that shared
+    # object on the loader's path, hence the -rpath: clang adds none of its own, so
     # without it every binary this job builds fails to start. The directory
     # comes from -print-file-name rather than -print-runtime-dir because the
     # two disagree on some distributions, and it is the one that answers where
@@ -515,6 +514,7 @@ jobs:
           -DUSE_CRYPTOMINISAT:STRING=OFF \
           -DUSE_CADICAL:BOOL=ON \
           -DSTP_ALLOCATOR=system \
+          -DENABLE_PYTHON_API:BOOL=ON \
           -DENABLE_TESTING:BOOL=ON \
           -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
           -DCMAKE_C_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
@@ -553,6 +553,232 @@ jobs:
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
 
+  # AddressSanitizer with the UndefinedBehaviorSanitizer and, for the API's
+  # own suites, LeakSanitizer: the tests of lifetimes -- terms dropped, parses
+  # abandoned, handles released, managers outliving what they made -- can
+  # fail only where a leak or a use after free is caught, and no other job
+  # catches either. libstp2's suites run without leak detection: 2.x's C API
+  # keeps what a checker makes until vc_Destroy, as it was designed to, and
+  # libstp2 keeps that. The install consumers are left out; they build
+  # uninstrumented projects against the instrumented library.
+  build-asan:
+    name: clang (asan+ubsan)
+    runs-on: ubuntu-latest
+
+    env:
+      CCACHE_MAXSIZE: 400M
+      UBSAN_OPTIONS: print_stacktrace=1
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    # llvm for llvm-symbolizer, which names the frames of a report.
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          clang \
+          cmake \
+          flex \
+          git \
+          llvm \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U 'lit~=23.1'
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: deps
+        key: deps-x86_64-asan-${{ steps.deps-key.outputs.key }}
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-asan/${{ github.run_id }}
+        restore-keys: ccache-asan/
+
+    # STP_ALLOCATOR=system for the reason the ubsan job gives, and one more:
+    # AddressSanitizer has to see every allocation to check it, and mimalloc
+    # would take them all. The Python package is off: an uninstrumented
+    # interpreter cannot load an instrumented extension without preloading
+    # the runtime, and the ubsan job runs the package's suites.
+    #
+    # -fno-sanitize=vptr: the dynamic-type check's handlers are in the C++
+    # half of the sanitizer runtime, which a C program linked with the static
+    # runtime does not get, so the C test programs would not link against a
+    # libstp that uses them. The ubsan job links the shared runtime, which
+    # has both halves, and keeps the check.
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        CC=clang CXX=clang++ cmake \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+          -DUSE_CRYPTOMINISAT:STRING=OFF \
+          -DUSE_CADICAL:BOOL=ON \
+          -DSTP_ALLOCATOR=system \
+          -DENABLE_PYTHON_API:BOOL=OFF \
+          -DENABLE_TESTING:BOOL=ON \
+          -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
+          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize=vptr -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize=vptr -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined -fno-sanitize=vptr" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined -fno-sanitize=vptr" \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -G Ninja ..
+
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
+      working-directory: build
+
+    # As in the ubsan job: a build that lost its flags would pass everything
+    # below while checking nothing.
+    - name: The build really is instrumented
+      run: |
+        set -u
+        f=build/lib/libstp.so
+        asan=$(nm -D "$f" | grep -c '__asan_report_' || true)
+        ubsan=$(nm -D "$f" | grep -c '__ubsan_handle_.*_abort' || true)
+        echo "$f: $asan AddressSanitizer and $ubsan aborting UBSan entry points"
+        if [ "$asan" -eq 0 ] || [ "$ubsan" -eq 0 ]; then
+          echo "::error::$f was not built with -fsanitize=address,undefined -fno-sanitize-recover=all"
+          exit 1
+        fi
+
+    - name: Test the API and Real arithmetic, leaks detected
+      run: ASAN_OPTIONS=detect_leaks=1 ctest --parallel "$(nproc)" -L 'api|lra' -LE 'api2|install|python' --output-on-failure
+      working-directory: build
+
+    - name: Test libstp2, leaks not detected
+      run: ASAN_OPTIONS=detect_leaks=0 ctest --parallel "$(nproc)" -L api2 --output-on-failure
+      working-directory: build
+
+  # ThreadSanitizer over the suites that run the library on several threads
+  # at once (the label threads), among them thread-stress: managers on their
+  # own threads under two dozen option sets. The API lets each manager be
+  # used from any thread, one call at a time, so whatever the threads share is
+  # the library's -- static tables and caches the options reach -- and two of
+  # those raced before, each only under the option that reaches it. The
+  # dependencies are built with the same flags, so CaDiCaL's two benign
+  # global writes are suppressed (tests/api/tsan-suppressions.txt).
+  build-tsan:
+    name: clang (tsan)
+    runs-on: ubuntu-latest
+
+    env:
+      CCACHE_MAXSIZE: 400M
+      TSAN_OPTIONS: halt_on_error=1 second_deadlock_stack=1
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          clang \
+          cmake \
+          flex \
+          git \
+          llvm \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U 'lit~=23.1'
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: deps
+        key: deps-x86_64-tsan-${{ steps.deps-key.outputs.key }}
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-tsan/${{ github.run_id }}
+        restore-keys: ccache-tsan/
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        CC=clang CXX=clang++ cmake \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+          -DUSE_CRYPTOMINISAT:STRING=OFF \
+          -DUSE_CADICAL:BOOL=ON \
+          -DSTP_ALLOCATOR=system \
+          -DENABLE_PYTHON_API:BOOL=OFF \
+          -DENABLE_TESTING:BOOL=ON \
+          -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
+          -DCMAKE_C_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
+          -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread" \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -G Ninja ..
+
+    # The threaded suites' programs only. Two of the Real-arithmetic suites
+    # replace operator new to inject allocation failures, which a program
+    # linked with ThreadSanitizer's runtime cannot also define.
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)" --target \
+          thread-stressTests errorsTests solverTests runsTests parsingTests \
+          fp-multi-checkerTests c-interruptTests c-runtimeTests
+        ccache --show-stats
+      working-directory: build
+
+    - name: The build really is instrumented
+      run: |
+        set -u
+        f=build/lib/libstp.so
+        n=$(nm -D "$f" | grep -c '__tsan_' || true)
+        echo "$f: $n ThreadSanitizer entry points"
+        if [ "$n" -eq 0 ]; then
+          echo "::error::$f was not built with -fsanitize=thread"
+          exit 1
+        fi
+
+    - name: Test the threaded suites
+      run: |
+        TSAN_OPTIONS="$TSAN_OPTIONS suppressions=$GITHUB_WORKSPACE/tests/api/tsan-suppressions.txt" \
+          ctest --parallel "$(nproc)" -L threads --output-on-failure
+      working-directory: build
+
   build-cadical:
     name: gcc (cadical ${{ matrix.cadical_tag }})
     runs-on: ubuntu-latest
@@ -574,6 +800,8 @@ jobs:
 
     - uses: actions/checkout@v7
 
+    # cython3 builds the 3.x Python package, which the install steps below
+    # load from the install tree, and python3-pytest runs its suite.
     - name: Packages
       run: |
         sudo apt-get update
@@ -582,12 +810,14 @@ jobs:
           build-essential \
           ccache \
           cmake \
+          cython3 \
           flex \
           gcc \
           git \
           ninja-build \
           python3 \
           python3-pip \
+          python3-pytest \
           python3-setuptools \
           zlib1g-dev
         sudo pip3 install -U lit
@@ -726,37 +956,37 @@ jobs:
         ctest --test-dir consumer --output-on-failure
         echo "ok: consumer builds and runs against the installed package"
 
-        # The installed Python package, whose library_path.py comes from
-        # library_path.py.in_install and names the install prefix. The
-        # build-tree template is a different file, and it is the only one the
-        # ctest suite imports, so this is the first time the installed one is
+        # The installed Python package, the 3.x API, whose extension finds
+        # libstp through its install RPATH. The ctest suite imports the
+        # build tree's copy, so this is the first time the installed one is
         # loaded at all.
-        pylib=$(python3 -c "import sysconfig; print(sysconfig.get_path('purelib', 'posix_prefix', vars={'base': '$prefix', 'platbase': '$prefix'}))")
-        test -f "$pylib/stp/library_path.py"
+        pylib=$(python3 -c "import sysconfig; print(sysconfig.get_path('platlib', 'posix_prefix', vars={'base': '$prefix', 'platbase': '$prefix'}))")
+        test -f "$pylib/stp/__init__.py"
         PYTHONPATH="$pylib" python3 -c "
-        import stp
-        s = stp.Solver()
-        x = s.bitvec('x', width=8)
+        from stp import BitVec, Solver, unsat
+        x = BitVec('x', 8)
+        s = Solver()
         s.add(x + x != 2 * x)
-        assert s.check() is False, 'installed python module gave the wrong answer'
+        assert s.check() == unsat, 'installed python module gave the wrong answer'
         "
         echo "ok: installed python module solves a query"
 
         # The same package installed by pip into a fresh environment, as a
-        # packager building it once per Python would, finding the library
-        # through the search path rather than a recorded location.
+        # packager building it once per Python would: compiled against this
+        # installation (pip fetches Cython), with its extension recording the
+        # library directory as its rpath, so nothing needs setting to run it.
         python3 -m venv "$RUNNER_TEMP/venv"
-        "$RUNNER_TEMP/venv/bin/python" -m pip install \
+        STP_PREFIX="$prefix" "$RUNNER_TEMP/venv/bin/python" -m pip install \
           --disable-pip-version-check ./bindings/python
-        LD_LIBRARY_PATH="$prefix/lib" "$RUNNER_TEMP/venv/bin/python" -c "
-        import os, stp
-        s = stp.Solver()
-        x = s.bitvec('x', width=8)
+        "$RUNNER_TEMP/venv/bin/python" -c "
+        from stp import BitVec, Solver, unsat
+        x = BitVec('x', 8)
+        s = Solver()
         s.add(x + x != 2 * x)
-        assert s.check() is False, 'pip-installed python module gave the wrong answer'
-        loaded = os.path.dirname(stp.get_lib()._name)
-        assert loaded == '$prefix/lib', 'loaded libstp from ' + loaded
+        assert s.check() == unsat, 'pip-installed python module gave the wrong answer'
         "
+        core=$("$RUNNER_TEMP/venv/bin/python" -c "import stp._core; print(stp._core.__file__)")
+        ldd "$core" | grep -q "=> $prefix/lib/libstp"
         echo "ok: pip-installed python module solves a query"
 
         # And again from a different directory, which is what a packager
@@ -766,9 +996,9 @@ jobs:
         # machine that has another libstp there it loads that one and crashes
         # rather than reporting a missing library.
         #
-        # The Python module is not retried here. Its library_path.py names
-        # ${prefix}/lib outright, so it is still tied to the configured
-        # prefix -- a separate matter from the RPATH.
+        # The Python module is not retried here. Its extension's install
+        # RPATH names ${prefix}/lib outright, where the binary's is relative
+        # to the binary, so it is still tied to the configured prefix.
         mv "$prefix" "${prefix}-moved"
         "${prefix}-moved/bin/stp" query.smt2 | grep -qx sat
         ldd "${prefix}-moved/bin/stp" | grep -q "${prefix}-moved/bin/../lib/libstp"
@@ -990,6 +1220,8 @@ jobs:
 
     - uses: actions/checkout@v7
 
+    # cython3 and python3-setuptools build the Python package, which the last
+    # step loads from the install tree.
     - name: Packages
       run: |
         sudo apt-get update
@@ -997,10 +1229,12 @@ jobs:
           bison \
           build-essential \
           cmake \
+          cython3 \
           flex \
           git \
           ninja-build \
           python3 \
+          python3-setuptools \
           zlib1g-dev
 
     - name: Dependencies
@@ -1011,7 +1245,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DBUILD_SHARED_LIBS:BOOL=ON -DENABLE_TESTING:BOOL=OFF -DBUILD_EXTRA_TOOLS:BOOL=OFF -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DBUILD_SHARED_LIBS:BOOL=ON -DENABLE_TESTING:BOOL=OFF -DBUILD_EXTRA_TOOLS:BOOL=OFF -DENABLE_PYTHON_API:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -G Ninja ..
 
     - name: Build
       run: cmake --build build --parallel "$(nproc)"
@@ -1027,6 +1261,35 @@ jobs:
         out=$(build/stp test.smt2)
         echo "output: '$out'"
         [ "$out" = "sat" ]
+
+    # Everything a client of the hidden library links: the 2.x C API through
+    # libstp2, the 3.x C and C++ APIs and managers on several threads (the
+    # consumer project), and the Python package's extension. A symbol the
+    # visibility settings left out shows here as a link or load failure,
+    # which the binary above, needing only a few, cannot show.
+    - name: The installed library serves every API
+      run: |
+        cmake --install build
+        prefix="$GITHUB_WORKSPACE/install"
+        cmake -S tests/api/install/uf-public-header-consumer -B consumer \
+          -DSTP_DIR:PATH="$prefix/lib/cmake/STP" \
+          -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
+          -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF \
+          -G Ninja
+        grep -qx "STP_DIR:PATH=$prefix/lib/cmake/STP" consumer/CMakeCache.txt
+        cmake --build consumer --parallel "$(nproc)"
+        ctest --test-dir consumer --output-on-failure
+        pylib=$(python3 -c "import sysconfig; print(sysconfig.get_path('platlib', 'posix_prefix', vars={'base': '$prefix', 'platbase': '$prefix'}))")
+        test -f "$pylib/stp/__init__.py"
+        PYTHONPATH="$pylib" python3 -c "
+        from stp import BitVec, Solver, unsat
+        x = BitVec('x', 8)
+        s = Solver()
+        s.add(x + x != 2 * x)
+        assert s.check() == unsat, 'the installed python module gave the wrong answer'
+        "
+        echo "ok: the consumers and the python module run against the hidden library"
+
 
   # The MiniSat backend is opt-in (-DUSE_MINISAT) and no other Linux job
   # enables it, so this is the configuration that keeps it honest: MiniSat
@@ -1456,9 +1719,9 @@ jobs:
         -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
         -DENABLE_AUTO_DOWNLOAD=ON
         -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DUSE_CRYPTOMINISAT=OFF -DUSE_CADICAL=OFF
-        -DENABLE_PYTHON_INTERFACE=OFF
         "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR"
         "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY"
+        "-DCMAKE_INSTALL_PREFIX:PATH=$env:GITHUB_WORKSPACE/install"
         .
 
     # No --config: Ninja is single-config, and no --parallel either, since Ninja
@@ -1549,6 +1812,27 @@ jobs:
         "lra refutation exit code: $LASTEXITCODE"
         if ($outlrau.Trim() -ne "unsat") { exit 1 }
 
+    # The library from programs, as a client builds them against the installed
+    # package with the same compiler: the 2.x C API through libstp2, the 3.x C
+    # and C++ APIs, and managers on several threads at once. Nothing else
+    # compiles a program against the API on Windows, or runs one. A static STP
+    # is built against the static C runtime (/MT, see CMakeLists.txt), and
+    # MSVC links no program that mixes the two runtimes, so the consumer asks
+    # for the same one.
+    - name: API consumers
+      run: |
+        cmake --install build
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        cmake -S tests/api/install/uf-public-header-consumer -B consumer -G Ninja `
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl `
+          -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
+          "-DSTP_DIR:PATH=$env:GITHUB_WORKSPACE/install/CMake"
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        cmake --build consumer
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        ctest --test-dir consumer --output-on-failure
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
   # CaDiCaL on Windows. MSVC cannot compile CaDiCaL, but CaDiCaL's BUILD.md
   # documents a MinGW build, so this leg compiles both CaDiCaL and STP with
   # the MSYS2 UCRT64 toolchain: the Windows counterpart of the Linux cadical
@@ -1630,7 +1914,7 @@ jobs:
     # LibBF a CMakeLists, so the UCRT64 gcc compiles it like everything else.
 
     - name: Configure
-      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_PYTHON_INTERFACE:BOOL=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
+      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_INSTALL_PREFIX:PATH="$(cygpath -m "$GITHUB_WORKSPACE")/install" .
 
     # CaDiCaL above is built by its own makefile and so is not cached; ABC and
     # STP are, which is the bulk of this step. The stats are printed so a run
@@ -1687,5 +1971,16 @@ jobs:
         out=$("$stp" testlrau.smt2)
         echo "lra refutation output: '$out'"
         [ "$out" = "unsat" ]
+
+    # As in the MSVC job: programs against the installed package, built with
+    # the same compiler, the threaded one included.
+    - name: API consumers
+      run: |
+        cmake --install build
+        prefix="$(cygpath -m "$GITHUB_WORKSPACE")/install"
+        cmake -S tests/api/install/uf-public-header-consumer -B consumer -G Ninja \
+          -DSTP_DIR:PATH="$prefix/CMake"
+        cmake --build consumer
+        ctest --test-dir consumer --output-on-failure
 
 # EOF

@@ -100,6 +100,8 @@ RealModel::RealModel(NumberLimits limits,
           break;
       value = ExactRational(next_spread++);
     }
+    else
+      defaulted_.insert(symbol.GetNodeNum());
     if (!value.invariantHolds() || value.denominatorDecimal().empty() ||
         value.denominatorDecimal().front() == '-' ||
         value.denominatorDecimal() == "0")
@@ -170,6 +172,7 @@ void RealModel::reconstruct(const std::vector<RealModelDefinition>& definitions)
     }
     else
       entries_[found->second].value = std::move(value);
+    defaulted_.erase(definition.symbol.GetNodeNum());
     pending.erase(definition.symbol);
   }
   // Queries following publication must see only reconstructed values.
@@ -291,6 +294,15 @@ ExactRational RealModel::evaluateTermUncached(const ASTNode& term) const
     case SYMBOL:
     {
       const ExactRational* value = findSymbol(term);
+      // fp.to_real's constant for NaN or an infinity of some format, which the
+      // solve never saw -- a get-value can build a conversion the assertions
+      // did not have. Nothing constrains it, so it is what an unvalued
+      // required symbol is: zero.
+      if (value == nullptr && term.GetNodeManager()->IsFpToRealSpecial(term))
+      {
+        NumberOperationScope operation(budget_);
+        return ExactRational(std::int64_t{0});
+      }
       if (value == nullptr)
         throw std::runtime_error("exact Real model has no value for symbol");
       NumberOperationScope operation(budget_);
@@ -552,6 +564,11 @@ void RealModel::defineApplicationValues(const ASTNodeMap& handle_to_result)
   applications_.swap(applications);
 }
 
+bool RealModel::solveValued(const ASTNode& symbol) const noexcept
+{
+  return findSymbol(symbol) != nullptr && defaulted_.count(symbol.GetNodeNum()) == 0;
+}
+
 bool RealModel::hasValue(const ASTNode& term) const noexcept
 {
   try
@@ -765,6 +782,11 @@ bool STPMgr::EvaluateRealPredicate(
 bool STPMgr::HasRealModelValue(const ASTNode& term) const noexcept
 {
   return HasRealModel() && lra_ast_state->real_model->hasValue(term);
+}
+
+bool STPMgr::RealModelSolveValued(const ASTNode& symbol) const noexcept
+{
+  return HasRealModel() && lra_ast_state->real_model->solveValued(symbol);
 }
 
 std::string STPMgr::GetRealModelValue(const ASTNode& term) const

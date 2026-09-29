@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef STP_FP_DECIMAL_LITERAL_H
 #define STP_FP_DECIMAL_LITERAL_H
 
+#include <cstdint>
 #include <string>
 
 namespace stp
@@ -71,6 +72,13 @@ bool rationalToPackedFPBits(const std::string& numerator,
                             unsigned exp_width, unsigned sig_width,
                             unsigned rounding_mode, std::string& bits,
                             std::string& err);
+
+// The decimal digits of m * 2^k, for m a non-negative integer spelled in
+// binary (most significant digit first, leading zeros allowed) and k >= 0:
+// exact, with no sign and no leading zero ("0" for zero). Returns false with
+// a diagnostic in `err` for a malformed `binary` or when out of memory.
+bool binaryTimesPowerOfTwoToDecimal(const std::string& binary, std::uint64_t k,
+                                    std::string& decimal, std::string& err);
 
 enum class PackedFpBinaryOp
 {

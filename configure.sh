@@ -45,7 +45,7 @@ SAT backends (disable with --no-<name>):
 Features (disable with --no-<name>):
   --assertions        build with assertions
   --testing           build the test suite
-  --python-bindings   build the Python interface
+  --python-bindings   build the stp Python package (needs Cython)
   --manpage           build and install the stp(1) manpage
   --static            build static libraries and a static binary
   --werror            treat compiler warnings as errors
@@ -237,7 +237,7 @@ add COVERAGE               "$coverage"
 add ENABLE_LTO             "$lto"
 add PGO                    "$pgo"
 add BUILD_MANPAGE          "$manpage"
-add ENABLE_PYTHON_INTERFACE "$python_bindings"
+add ENABLE_PYTHON_API      "$python_bindings"
 add SANITIZE               "$sanitize"
 add STATICCOMPILE          "$static"
 add ENABLE_TESTING         "$testing"

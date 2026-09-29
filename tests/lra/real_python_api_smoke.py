@@ -1,10 +1,41 @@
-#!/usr/bin/env python3
-"""Exact-Real Python construction, solve, model, and lifetime smoke."""
+# AUTHORS: Andrew Teylu
+#
+# BEGIN DATE: September, 2026
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+
+"""Exact Real arithmetic from the stp Python package: construction, the
+refusals that keep it linear, solving, exact model values, scopes,
+assumptions, a zero time budget and term lifetimes.
+
+A plain script: every check runs in order and the first failure raises.
+Where the package behaves differently from the 2.x ctypes binding this
+smoke test was first written for, the check says what it does."""
 
 import gc
 import weakref
+from fractions import Fraction
 
-from stp import ExactRealValue, Expr, RealExpr, Solver
+import stp as stp_package
+from stp import (And, Or, If, Real, Reals, RealVal, Solver, TermManager, is_bool, is_real,
+                 sat, unknown, unsat, NoModel, SortMismatch, StateError, Unsupported,
+                 UnknownReason)
 
 
 def require(condition, detail):
@@ -12,160 +43,106 @@ def require(condition, detail):
         raise AssertionError(detail)
 
 
-solver = Solver()
-require(solver.has_real_construction(), "Real construction capability")
-require(solver.has_qf_lra(), "QF_LRA semantic capability")
+def refused(action, error_type, fragment, detail):
+    try:
+        action()
+    except error_type as failure:
+        require(fragment in str(failure), "%s: the diagnostic %r lacks %r" % (detail, str(failure), fragment))
+    else:
+        raise AssertionError(detail + " was accepted")
 
-x, y = solver.reals("x y")
-half_decimal = solver.realval("0.5000")
-half_fraction = solver.realval(2, 4)
+
+require(stp_package.capabilities().get("lra") is True, "linear Real arithmetic capability")
+
+# construction
+x, y = Reals("x y")
+half_decimal = RealVal("0.5000")
+half_fraction = RealVal(Fraction(2, 4))
 linear = 3 * x + half_decimal - y / "7/9"
 predicate = linear <= half_fraction
-
-require(isinstance(x, RealExpr), "Real variable wrapper")
-require(isinstance(linear, RealExpr), "Real arithmetic wrapper")
-require(isinstance(predicate, Expr), "Boolean comparison wrapper")
-require(linear.width is None and predicate.width is None,
-        "mathematical Real/Boolean wrappers expose no BV width")
+require(is_real(x) and is_real(linear), "Real terms")
+require(is_bool(predicate), "a Real comparison is a Boolean term")
+require(half_decimal.as_fraction() == Fraction(1, 2) and half_decimal is half_fraction,
+        "the same value, however it is spelled, is the same term")
 
 for approximate in (0.5, True):
-    try:
-        solver.realval(approximate)
-    except TypeError as failure:
-        require("floating-point values are not accepted" in str(failure),
-                "approximate-number rejection diagnostic")
-    else:
-        raise AssertionError("approximate Python Real input was accepted")
+    refused(lambda: RealVal(approximate), TypeError, "RealVal", "an approximate or Boolean Real value")
 
-# A product of two concrete operands is a constant, not a nonlinear term:
-# it folds, here as everywhere else, and the result stays concrete, so it
-# can still be the coefficient of a further product.
-folded = solver.realval(2) * solver.realval(3)
-require(isinstance(folded, RealExpr), "folded concrete product wrapper")
-require(isinstance(folded * x, RealExpr),
-        "a folded product is usable as a coefficient")
+folded = RealVal(2) * RealVal(3)
+require(folded.as_fraction() == 6, "a product of values folds")
+require(is_real(folded * x), "a folded product is usable as a coefficient")
 
-for unsupported, diagnostic in (
-        (lambda: x * y, "an exact concrete coefficient"),
-        (lambda: x / y, "exact concrete divisor"),
-        (lambda: 1 / x, "exact concrete divisor")):
-    try:
-        unsupported()
-    except TypeError as failure:
-        require(diagnostic in str(failure),
-                "unsupported Python Real operation diagnostic")
-    else:
-        raise AssertionError("unsupported Python Real operation was accepted")
+# the arithmetic stays linear, and a divisor is a non-zero value
+refused(lambda: x * y, Unsupported, "must be linear", "a product of two variables")
+refused(lambda: x / y, Unsupported, "divisor", "division by a variable")
+refused(lambda: 1 / x, Unsupported, "divisor", "a variable divisor")
 
-second = Solver()
-foreign = second.real("foreign")
-try:
-    _ = x + foreign
-except ValueError as failure:
-    require("different solvers" in str(failure), "cross-manager diagnostic")
-else:
-    raise AssertionError("cross-manager Real construction was accepted")
+# a term belongs to its manager
+foreign = Real("foreign", tm=TermManager())
+refused(lambda: x + foreign, SortMismatch, "another term manager", "a term of another manager")
 
-try:
-    solver.ite(predicate, x, y)
-except TypeError as failure:
-    require("Real-term ite" in str(failure), "Real ite diagnostic")
-else:
-    raise AssertionError("unsupported Real-term ite was accepted")
+# 3.x: an ite over Reals is a Real term, and is decided
+choice = If(predicate, x, y)
+require(is_real(choice), "a Real ite")
 
 
-def expression_from_temporary_solver():
-    temporary = Solver()
-    retained_solver = weakref.ref(temporary)
-    value = temporary.real("lifetime") + temporary.realval("1/3")
-    return value, retained_solver
+# a term keeps its manager alive
+def term_of_a_temporary_manager():
+    temporary = TermManager()
+    return Real("lifetime", tm=temporary) + RealVal("1/3", tm=temporary), weakref.ref(temporary)
 
 
-retained_expression, retained_solver = expression_from_temporary_solver()
+retained, manager_ref = term_of_a_temporary_manager()
 gc.collect()
-require(retained_solver() is not None,
-        "RealExpr did not retain its owning solver")
-require(isinstance(retained_expression + "2/3", RealExpr),
-        "retained RealExpr was unusable after local solver lifetime ended")
+require(manager_ref() is not None, "a term did not keep its manager alive")
+require(is_real(retained + "2/3"), "a term of a manager no name holds is still usable")
 
-solver.add(x == solver.realval("4/3"), predicate)
-require(solver.check(), "Python exact Real solve")
-require(solver.has_real_model(), "Python current exact Real model")
-x_value = solver.model(expr=x)
-sum_value = solver.real_model_value(expr=3 * x + solver.realval("1/3"))
-require(isinstance(x_value, ExactRealValue), "Python exact value wrapper")
-require(x_value.canonical_fraction == "4/3" and
-        x_value.numerator == "4" and x_value.denominator == "3" and
-        x_value.smtlib == "(/ 4 3)", "Python exact value fields")
-require(sum_value.canonical_fraction == "13/3",
-        "Python normalized-expression model value")
-whole_model = solver.model()
-require(isinstance(whole_model["x"], ExactRealValue) and
-        whole_model["x"] == x_value,
-        "Python complete model did not retain exact Real values")
-require("(define-fun |x| () Real (/ 4 3))" in
-        solver.real_model_smtlib(), "Python legal SMT-LIB model")
+# solving and exact values
+solver = Solver()
+solver.add(x == RealVal("4/3"), predicate)
+require(solver.check() == sat, "an exact Real solve")
+model = solver.model()
+x_value = model[x]
+require(x_value.as_fraction() == Fraction(4, 3), "the exact value of x")
+require(model.eval(3 * x + RealVal("1/3")).as_fraction() == Fraction(13, 3),
+        "the value of a term built from x")
+require("(define-fun x () Real (/ 4 3))" in model.sexpr(), "the model as SMT-LIB")
 
-try:
-    x_value.numerator = "5"
-except AttributeError:
-    pass
-else:
-    raise AssertionError("Python exact value was mutable")
-
+# scopes
 solver.push()
-require(not solver.has_real_model(), "Python push invalidation")
-solver.add(x > solver.realval("2"))
-require(not solver.check(), "Python nested UNSAT")
-require(not solver.has_real_model(), "Python UNSAT model invalidation")
+solver.add(x > 2)
+require(solver.check() == unsat, "unsat inside a scope")
+refused(solver.model, NoModel, "", "a model after an unsat check")
 solver.pop()
-require(solver.check(), "Python post-pop repeated SAT")
-require(solver.model(key="x").canonical_fraction == "4/3",
-        "Python deterministic repeated exact model")
+require(solver.check() == sat and solver.model()[x].as_fraction() == Fraction(4, 3),
+        "the same answer after the pop")
 
-# Positional check expressions are one-call assumptions in this binding.
-require(solver.check(x == solver.realval("4/3")),
-        "Python SAT one-call Real assumption")
-require(not solver.check(x > solver.realval("2")),
-        "Python UNSAT one-call Real assumption")
-require(not solver.has_real_model(),
-        "Python UNSAT assumption retained an exact model")
-require(solver.check() and solver.model(key="x") == x_value,
-        "Python assumption state survived its public call")
-require(x_value.canonical_fraction == "4/3",
-        "copied Python exact DTO changed after model invalidation")
+# assumptions hold for one check
+require(solver.check(x == RealVal("4/3")) == sat, "sat under a Real assumption")
+require(solver.check(x > 2) == unsat, "unsat under a Real assumption")
+refused(solver.model, NoModel, "", "a model after an unsat check under assumptions")
+require(solver.check() == sat and solver.model()[x] is x_value,
+        "an assumption does not outlive its check")
+# a model is a snapshot: the value read before is unchanged
+require(x_value.as_fraction() == Fraction(4, 3), "an earlier model value")
 
-timeout_solver = Solver()
-t = timeout_solver.real("t")
-zero = timeout_solver.realval("0")
-one = timeout_solver.realval("1")
-timeout_solver.add(timeout_solver.or_(
-    timeout_solver.and_(t < zero, t >= zero),
-    timeout_solver.and_(t > one, t <= one)))
-require(timeout_solver.check_with_timeout(max_time=0) == 3,
-        "Python public zero-timeout path did not stop")
-require(not timeout_solver.has_real_model(),
-        "Python timeout published a stale exact model")
+# a zero time budget gives up at once, with no model
+t = Real("t")
+timed = Solver()
+timed.add(Or(And(t < 0, t >= 0), And(t > 1, t <= 1)))
+require(timed.check(timeout=0) == unknown, "a zero time budget did not stop the check")
+require(timed.reason_unknown() == UnknownReason.TIMEOUT, "the reason is the time budget")
+refused(timed.model, NoModel, "", "a model after a check that gave up")
 
-# The binding owns every C expression handle until deterministic solver
-# teardown.  Context exit closes the checker, retained wrappers fail safely,
-# and repeated close is harmless.
-with Solver() as scoped_solver:
-    scoped_real = scoped_solver.real("scoped")
-    scoped_solver.add(scoped_real == scoped_solver.realval("5/7"))
-    require(scoped_solver.check(), "Python context-managed exact Real solve")
-try:
-    _ = scoped_real + "1"
-except RuntimeError as failure:
-    require("closed" in str(failure), "closed-solver diagnostic")
-else:
-    raise AssertionError("expression used a closed Python solver")
-scoped_solver.close()
-
-retained_owner = retained_solver()
-require(retained_owner is not None, "retained expression owner disappeared")
-for owned_solver in (solver, second, timeout_solver, retained_owner):
-    owned_solver.close()
-    owned_solver.close()
+# 3.x: terms belong to the manager, so closing a solver leaves them usable;
+# the closed solver refuses every call, and closing twice is harmless
+scoped = Solver()
+s_real = Real("scoped")
+scoped.add(s_real == RealVal("5/7"))
+require(scoped.check() == sat, "a solve before closing")
+scoped.close()
+scoped.close()
+refused(scoped.check, StateError, "closed", "a check on a closed solver")
+require(is_real(s_real + "1"), "a term outlives the solver it was asserted in")
 
 print("PASS real-python-api-smoke")

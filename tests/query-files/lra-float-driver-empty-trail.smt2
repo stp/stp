@@ -7,7 +7,7 @@
 ; exact core, and the core answers check() only with one open, so the final
 ; check got InternalError back. The adapter then stopped the solve context,
 ; and a query whose Real content is nothing at all came back SOLVER_ERROR --
-; through the C interface, a raw -100 on a boundary documented to answer
+; through the 2.x C interface, a raw -100 on a boundary documented to answer
 ; 0, 1, 2 or 3.
 ;
 ; Reduced by delta debugging from a murxla trace. The Boolean chain is what

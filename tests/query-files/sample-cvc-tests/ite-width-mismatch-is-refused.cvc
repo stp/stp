@@ -1,0 +1,9 @@
+% RUN: not %solver %s 2>&1 | %OutputCheck %s
+%
+% The branches of an IF-THEN-ELSE must have one width.
+x : BITVECTOR(8);
+y : BITVECTOR(4);
+ASSERT((IF x = 0hex00 THEN x ELSE y ENDIF) = 0hex05);
+QUERY(FALSE);
+% CHECK-L: Width mismatch in IF-THEN-ELSE
+% CHECK-NOT: Valid.

@@ -1,4 +1,6 @@
-# AUTHORS: Dan Liew, Ryan Govostes, Mate Soos
+# AUTHORS: Andrew Teylu
+#
+# BEGIN DATE: September, 2026
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -18,53 +20,65 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-set(PYTHON_INTERFACE_DIR ${PROJECT_BINARY_DIR}/bindings/python)
-configure_file(tests.py.in tests.py.in.g @ONLY)
-configure_file(${CMAKE_CURRENT_BINARY_DIR}/tests.py.in.g
-              ${CMAKE_CURRENT_BINARY_DIR}/tests.py)
+# -----------------------------------------------------------------------------
+# The package installed by pip on its own, against a DESTDIR-staged
+# installation of this build (pip_install_test.py). Skipped when the
+# interpreter cannot build it offline.
+# -----------------------------------------------------------------------------
 
-# this test is way too slow TODO fix
-add_custom_target(python-interface-tests
-    DEPENDS stp
-    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/tests.py
-    COMMENT "Running python-interface-tests"
-)
+add_test(
+    NAME python-pip-install
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pip_install_test.py
+            ${PROJECT_SOURCE_DIR}/bindings/python ${CMAKE_COMMAND}
+            ${PROJECT_BINARY_DIR} ${CMAKE_INSTALL_PREFIX}
+            ${CMAKE_CURRENT_BINARY_DIR}/pip-install $<CONFIG>)
+set_tests_properties(python-pip-install PROPERTIES
+    SKIP_RETURN_CODE 77
+    LABELS "python;api"
+    TIMEOUT 900)
 
-# Make sure this test-suite runs when "check" is target
-add_test (
-  NAME python-interface-tests
-  COMMAND ${PYTHON_EXECUTABLE} tests.py
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
+# -----------------------------------------------------------------------------
+# The pytest suite of the 3.x Python API, run against the package assembled in
+# <build>/bindings/python (PYTHONPATH). Registered only when the interpreter
+# can import pytest; the suite itself lives in this source directory.
+# -----------------------------------------------------------------------------
 
-# Allocator behaviour of the ctypes interface. Unlike the stp binaries, which
-# link an allocator statically, a process embedding libstp picks the allocator
-# itself - so libstp must not carry one, and preloading one must reach it.
+# libstp and the allocator, as a process that loads the package sees them: no
+# allocator inside libstp, and a preloaded one serving it (a unittest script,
+# so it needs no pytest). Its arguments are libstp's path, the preloadable
+# allocator's (empty when none was built) and the allocator's name.
 if (STP_ALLOCATOR_PRELOADABLE AND TARGET ${STP_ALLOCATOR_PRELOADABLE})
-    set(STP_PRELOADABLE_ALLOCATOR "$<TARGET_FILE:${STP_ALLOCATOR_PRELOADABLE}>")
+    set(_stp_py_preloadable "$<TARGET_FILE:${STP_ALLOCATOR_PRELOADABLE}>")
 else()
-    set(STP_PRELOADABLE_ALLOCATOR "")
+    set(_stp_py_preloadable "")
 endif()
+add_test(
+    NAME python-allocator-tests
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/allocator_tests.py
+            $<TARGET_FILE:stp> "${_stp_py_preloadable}" "${STP_ALLOCATOR}"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(python-allocator-tests PROPERTIES
+    ENVIRONMENT "PYTHONPATH=${STP_PY_PYTHONPATH};PYTHONDONTWRITEBYTECODE=1"
+    LABELS "python;api")
 
-configure_file(allocator_tests.py.in allocator_tests.py.in.g @ONLY)
-# file(GENERATE) rather than a second configure_file: the allocator path is a
-# generator expression and is only known at generate time.
-file(GENERATE
-     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/allocator_tests.py
-     INPUT ${CMAKE_CURRENT_BINARY_DIR}/allocator_tests.py.in.g)
+execute_process(
+    COMMAND ${PYTHON_EXECUTABLE} -c "import pytest; print(pytest.__version__)"
+    RESULT_VARIABLE _stp_py_pytest_rc
+    OUTPUT_VARIABLE _stp_py_pytest_version
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
 
-add_test (
-  NAME python-allocator-tests
-  COMMAND ${PYTHON_EXECUTABLE} allocator_tests.py
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
+if(NOT _stp_py_pytest_rc EQUAL 0)
+    message(STATUS "python-api-tests: ${PYTHON_EXECUTABLE} cannot import pytest; the 3.x Python tests are not registered")
+    return()
+endif()
+message(STATUS "python-api-tests: pytest ${_stp_py_pytest_version}")
 
-
-add_test (
-  NAME python-pip-install
-  COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pip_install_test.py
-          ${PROJECT_SOURCE_DIR}/bindings/python
-          $<TARGET_FILE:stp>
-          ${CMAKE_CURRENT_BINARY_DIR}/pip-install
-)
-set_tests_properties(python-pip-install PROPERTIES SKIP_RETURN_CODE 77)
+add_test(
+    NAME python-api-tests
+    COMMAND ${PYTHON_EXECUTABLE} -m pytest -q -p no:cacheprovider ${CMAKE_CURRENT_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(python-api-tests PROPERTIES
+    ENVIRONMENT "PYTHONPATH=${STP_PY_PYTHONPATH};PYTHONDONTWRITEBYTECODE=1"
+    LABELS "python;api"
+    TIMEOUT 900)

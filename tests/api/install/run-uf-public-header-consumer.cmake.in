@@ -44,7 +44,7 @@ elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
   # destination configured as an absolute path escapes the prefix; stage that
   # case under DESTDIR so the write outside the prefix cannot need root.
   set(python_lib_install_dir "@PYTHON_LIB_INSTALL_DIR@")
-  set(python_enabled "@ENABLE_PYTHON_INTERFACE@")
+  set(python_enabled "@ENABLE_PYTHON_API@")
   if(python_enabled AND IS_ABSOLUTE "${python_lib_install_dir}")
     file(MAKE_DIRECTORY "${stage_dir}")
     # DESTDIR prepends the whole prefix, leading slash and all.
@@ -71,6 +71,7 @@ elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
   # the files went instead of restating where they were meant to go.
   file(GLOB_RECURSE _found_config "${staged_prefix_dir}/*/STPConfig.cmake")
   file(GLOB_RECURSE _found_header "${staged_prefix_dir}/*/c_interface.h")
+  file(GLOB_RECURSE _found_api_header "${staged_prefix_dir}/*/stp/stp.h")
   if(NOT _found_config)
     message(FATAL_ERROR
       "cmake --install --prefix put no STPConfig.cmake under ${staged_prefix_dir}")
@@ -80,10 +81,14 @@ elseif(STP_CONSUMER_EXPORT STREQUAL "install-prefix")
       "cmake --install --prefix put no c_interface.h under ${staged_prefix_dir}; "
       "an install DESTINATION is still absolute and ignored the new prefix")
   endif()
-  if(python_enabled AND NOT IS_ABSOLUTE "${python_lib_install_dir}"
-     AND NOT EXISTS "${prefix_dir}/${python_lib_install_dir}/stp/library_path.py")
+  if(NOT _found_api_header)
     message(FATAL_ERROR
-      "cmake --install --prefix put no stp/library_path.py under "
+      "cmake --install --prefix put no stp/stp.h under ${staged_prefix_dir}")
+  endif()
+  if(python_enabled AND NOT IS_ABSOLUTE "${python_lib_install_dir}"
+     AND NOT EXISTS "${prefix_dir}/${python_lib_install_dir}/stp/__init__.py")
+    message(FATAL_ERROR
+      "cmake --install --prefix put no stp/__init__.py under "
       "${prefix_dir}/${python_lib_install_dir}")
   endif()
   list(GET _found_config 0 _found_config)

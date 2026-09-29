@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include <cassert>
+#include <sstream>
 
 // Functions shared between the printers: the letize pass used by all of
 // them, and the SMT-LIB2 traversal.
@@ -101,13 +102,29 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 
   // otherwise print it normally
   const Kind kind = n.GetKind();
+
+  // A conversion prints as the operation it is, not as its encoding over the
+  // operand's bits (see STPMgr::CreateFpToReal).
+  if (kind == ITE)
+  {
+    STPMgr* manager = n.GetNodeManager();
+    const ASTNode operand =
+        manager == NULL ? ASTNode() : manager->FpToRealOperand(n);
+    if (!operand.IsNull())
+    {
+      os << "(fp.to_real ";
+      SMTLIB_Print1(os, operand, 0, letize);
+      os << ")";
+      return;
+    }
+  }
+
   const ASTChildren c = n.GetChildren();
   switch (kind)
   {
     case REAL_CONST:
       n.nodeprint(os);
       break;
-    case BITVECTOR:
     case BVCONST:
       // A rounding mode and a float are both stored as packed bits but
       // denote neither: print them by mode name and in (fp ...) syntax
@@ -125,12 +142,29 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
         outputBitVecSMTLIB2(n, os);
       break;
     case SYMBOL:
+    {
+      // A constant array prints in its SMT-LIB spelling: the symbol that
+      // stands for it is the manager's, not the input's.
+      STPMgr* manager = n.GetNodeManager();
+      if (manager != NULL && manager->isConstArray(n))
+      {
+        // The constant printer puts a space before a literal; one space
+        // separates the sort from the default either way.
+        std::ostringstream value;
+        SMTLIB_Print1(value, manager->constArrayDefault(n), 0, letize);
+        std::string text = value.str();
+        text.erase(0, text.find_first_not_of(' '));
+        os << "((as const " << sourceSortToSMTLib(n.GetSourceSort()) << ") "
+           << text << ")";
+        break;
+      }
       // Quoted, so that STP's names, which can contain characters SMT-LIB2
       // reserves, survive a round trip.
       os << "|";
       n.nodeprint(os);
       os << "|";
       break;
+    }
     case UF_APPLY:
     {
       STPMgr* manager = n.GetNodeManager();
@@ -281,9 +315,12 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
     }
     break;
     case FP_TO_IEEE_BV:
-      FatalError("SMTLIB2: a float-to-IEEE-bits node (an API-only operation) "
-                 "has no SMT-LIB spelling",
-                 n);
+      // STP's extension spelling (kinds.toml), which its SMT-LIB 2 reader
+      // takes back; the API builds these, and a printer must not abort on
+      // a term.
+      os << "(fp.to_ieee_bv ";
+      SMTLIB_Print1(os, c[0], 0, letize);
+      os << ")";
       break;
     default:
     {
@@ -455,7 +492,19 @@ void LetizeNode(const ASTNode& n, LetizeState& st, STPMgr* stp)
   if (n.isAtom())
     return;
 
-  const ASTChildren c = n.GetChildren();
+  // A conversion prints as (fp.to_real operand), so its operand is the one
+  // child the printing sees; its encoding's nodes are never printed and must
+  // not be named.
+  ASTVec conversion_operand;
+  if (n.GetKind() == ITE && n.GetNodeManager() != NULL)
+  {
+    const ASTNode operand = n.GetNodeManager()->FpToRealOperand(n);
+    if (!operand.IsNull())
+      conversion_operand.push_back(operand);
+  }
+  const ASTChildren c = conversion_operand.empty()
+                            ? n.GetChildren()
+                            : ASTChildren(conversion_operand);
   for (auto it = c.begin(), itend = c.end(); it != itend;
        it++)
   {

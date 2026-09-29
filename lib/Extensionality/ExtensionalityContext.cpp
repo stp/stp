@@ -828,6 +828,7 @@ void ExtensionalityContext::beginSolve()
   arrayGraphIsFrozen = false;
   ownedArrays.clear();
   ownedWrites.clear();
+  ownedConstArrays.clear();
   ownedWriteParents.clear();
   ownedItes.clear();
   ownedIteParents.clear();
@@ -848,6 +849,7 @@ void ExtensionalityContext::beginSolve()
   readTransformComplete = false;
   pendingLemmaValid = false;
   pendingLemmas.clear();
+  declaredSortLemmas = 0;
   eqLitCache.clear();
   lastObserved.clear();
 }
@@ -899,6 +901,38 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
   // formula; anything minted after this point could not be.
   registrySealed = true;
   return out;
+}
+
+// Whether an array term is built over a constant array: itself, the base
+// of its write chain, or either branch of an array if-then-else.
+bool ExtensionalityContext::involvesConstArray(const ASTNode& arrayTerm) const
+{
+  ASTNode n = arrayTerm;
+  while (true)
+  {
+    if (n.GetKind() == SYMBOL)
+      return bm->isConstArray(n);
+    if (n.GetKind() == WRITE)
+    {
+      n = n[0];
+      continue;
+    }
+    if (n.GetKind() == ITE && isArrayType(n))
+      return involvesConstArray(n[1]) || involvesConstArray(n[2]);
+    return false;
+  }
+}
+
+bool ExtensionalityContext::anyRecordInvolvesConstArray() const
+{
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
+  {
+    const Record& r = records[activeRecordIds[i]];
+    if (involvesConstArray(r.constructionLeft) ||
+        involvesConstArray(r.constructionRight))
+      return true;
+  }
+  return false;
 }
 
 bool ExtensionalityContext::equalityQuotientsBitPatterns() const
@@ -1083,6 +1117,25 @@ ASTNode ExtensionalityContext::prepareInitialFormula(const ASTNode& root)
     return constrained;
   }
 
+  // The eager block instantiates an equality at the indexes the formula
+  // names and takes the two sides to agree everywhere else, which holds
+  // when both sides' unobserved cells are free. A constant array's are
+  // not: two chains over constant arrays with different defaults differ at
+  // every cell no write names, whatever the named cells do. Such solves
+  // stay on lemmas on demand, whose checker knows the defaults (rules K
+  // and K'); only a request by name is worth a warning.
+  if (anyRecordInvolvesConstArray())
+  {
+    if (bm->UserFlags.ackermannisation)
+    {
+      std::cerr << "Warning: --ackermanize is disabled for queries with "
+                   "array equality over constant arrays."
+                << std::endl;
+      bm->UserFlags.ackermannisation = false;
+    }
+    return constrained;
+  }
+
   IndexInventory indexesByShape;
   collectIndexInventory(constrained, indexesByShape);
 
@@ -1147,6 +1200,10 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   // would pick a different operand from run to run and certify the
   // candidate against the wrong arrays. Refuse instead.
   std::map<ASTNode, ASTNode> anchorRhs;
+  // name symbol -> a value it is equated with, and the names equated with
+  // two (see the recovery of a folded operand below)
+  std::map<ASTNode, ASTNode> foldedRhs;
+  std::set<ASTNode> foldedConflict;
   ASTNodeSet visited;
   collectDag(root, visited);
 
@@ -1224,18 +1281,158 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
     }
   }
 
+  // The value a name is equated with (see the recovery of a folded operand
+  // below), taken from the top-level conjuncts alone: nested in the formula,
+  // an equation of that shape says nothing about the name by itself. That
+  // includes the negated form -- the simplifier writes that a one-bit name
+  // is #b1 as (not (= #b0 name)), and the equation inside the NOT says the
+  // opposite of the fact -- so a negated equation settles a one-bit name
+  // alone, as the other value. Bit propagation also states a value beside
+  // an intact anchor when it fixes a name, so a value is never an anchor.
+  {
+    std::vector<ASTNode> conjuncts(1, root);
+    for (size_t k = 0; k < conjuncts.size(); k++)
+    {
+      const ASTNode c = conjuncts[k];
+      if (c.GetKind() == AND)
+      {
+        conjuncts.insert(conjuncts.end(), c.GetChildren().begin(),
+                         c.GetChildren().end());
+        continue;
+      }
+      const bool negated = c.GetKind() == NOT;
+      const ASTNode eq = negated ? c[0] : c;
+      if (eq.GetKind() != EQ || eq.Degree() != 2)
+        continue;
+      for (int side = 0; side < 2; side++)
+      {
+        const ASTNode& s = eq[side];
+        const ASTNode& other = eq[1 - side];
+        if (s.GetKind() != SYMBOL ||
+            witnessNames.find(s) == witnessNames.end() ||
+            other.GetKind() == READ || other.GetKind() == ITE ||
+            !bm->firstFreeSymbol(other).IsNull())
+          continue;
+        // Kept in the plain spelling: a floating-point constant and the
+        // plain constant with its bits intern apart, and two spellings of
+        // one value are one fact, not two.
+        ASTNode value =
+            other.GetKind() == BVCONST ? plainBitVectorConstant(bm, other) : other;
+        if (negated)
+        {
+          if (s.GetValueWidth() != 1 || other.GetKind() != BVCONST)
+            continue;
+          value = bm->CreateBVConst(1, other.GetUnsignedConst() == 0 ? 1 : 0);
+        }
+        const std::map<ASTNode, ASTNode>::const_iterator f = foldedRhs.find(s);
+        if (f != foldedRhs.end() && !(f->second == value))
+          foldedConflict.insert(s);
+        foldedRhs[s] = value;
+      }
+    }
+  }
+
+  // Every witness read left in the prepared formula, by its index.
+  std::map<ASTNode, ASTNodeSet> witnessReads;
+  for (ASTNodeSet::const_iterator it = visited.begin(); it != visited.end();
+       ++it)
+    if (it->GetKind() == READ &&
+        witnessIndexes.find((*it)[1]) != witnessIndexes.end())
+      witnessReads[(*it)[1]].insert(*it);
+
   for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
     Record& r = records[activeRecordIds[i]];
+    // A constant array operand has no anchor read to recover it from:
+    // that read folded to the default when the anchor was built. It is a
+    // symbol no pass rewrites, so its current form is itself.
+    const bool constL = bm->isConstArray(r.constructionLeft);
+    const bool constR = bm->isConstArray(r.constructionRight);
     std::map<ASTNode, ASTNode>::const_iterator lit = anchorRhs.find(r.nameL);
     std::map<ASTNode, ASTNode>::const_iterator rit = anchorRhs.find(r.nameR);
-    if (lit == anchorRhs.end() || rit == anchorRhs.end())
+
+    // Nor has an operand preprocessing turned into a constant array -- an
+    // if-then-else whose condition folded, a store of the default value: its
+    // witness read folded to that array's default, leaving "name = value".
+    // A value says so only once no read over the record's index is left
+    // that no anchor holds -- then this side's read is gone, and only a
+    // read of an operand every cell of which is the value folds so, the
+    // index being a protected symbol no pass can give a value. (Otherwise
+    // the value is a fact bit propagation derived about one cell, or the
+    // anchor was rewritten some other way, and the operand stays lost.)
+    const auto foldedValue = [&](const ASTNode& name) -> ASTNode {
+      const std::map<ASTNode, ASTNode>::const_iterator f = foldedRhs.find(name);
+      if (f == foldedRhs.end() || foldedConflict.count(name) != 0)
+        return ASTNode();
+      ASTNodeSet held;
+      for (const ASTNode& anchoredName : {r.nameL, r.nameR})
+      {
+        const std::map<ASTNode, ASTNode>::const_iterator a =
+            anchorRhs.find(anchoredName);
+        if (a == anchorRhs.end())
+          continue;
+        ASTNodeSet seen;
+        std::vector<ASTNode> pending(1, a->second);
+        while (!pending.empty())
+        {
+          const ASTNode n = pending.back();
+          pending.pop_back();
+          if (!seen.insert(n).second)
+            continue;
+          if (n.GetKind() == READ && n[1] == r.lambda)
+            held.insert(n);
+          for (const ASTNode& c : n.GetChildren())
+            pending.push_back(c);
+        }
+      }
+      for (const ASTNode& read : witnessReads[r.lambda])
+        if (held.find(read) == held.end())
+          return ASTNode();
+      return f->second;
+    };
+    const ASTNode foldL = (!constL && lit == anchorRhs.end())
+                              ? foldedValue(r.nameL)
+                              : ASTNode();
+    const ASTNode foldR = (!constR && rit == anchorRhs.end())
+                              ? foldedValue(r.nameR)
+                              : ASTNode();
+    if ((!constL && lit == anchorRhs.end() && foldL.IsNull()) ||
+        (!constR && rit == anchorRhs.end() && foldR.IsNull()))
       FatalError("array-equality: a witness-read defining equation was "
                  "lost during preprocessing, so the current form of an "
                  "equality operand cannot be recovered",
                  r.proxy);
-    r.canonicalLeft = recoverAnchoredOperand(lit->second, r.lambda, r.proxy);
-    r.canonicalRight = recoverAnchoredOperand(rit->second, r.lambda, r.proxy);
+    const auto constantArrayOf = [&](const ASTNode& construction,
+                                     const ASTNode& value) {
+      SourceSort sort = construction.GetSourceSort();
+      if (sort.kind() != SourceSort::Kind::Array)
+        sort = SourceSort::array(
+            SourceSort::bitVector(construction.GetIndexWidth()),
+            SourceSort::bitVector(construction.GetValueWidth()));
+      // The value is spelled as the name is, in plain bits; the default is
+      // spelled at the element's sort.
+      ASTNode spelled = value;
+      if (value.GetKind() == BVCONST)
+      {
+        const SourceSort element = sort.element();
+        if (element.kind() == SourceSort::Kind::FloatingPoint ||
+            element.kind() == SourceSort::Kind::RoundingMode)
+          spelled = bm->LiftSourceValue(value, element);
+        else if (element.kind() == SourceSort::Kind::Uninterpreted)
+          spelled = bm->CreateUninterpretedConst(value, element);
+      }
+      return bm->CreateConstArray(sort, spelled);
+    };
+    r.canonicalLeft =
+        constL ? r.constructionLeft
+        : !foldL.IsNull()
+            ? constantArrayOf(r.constructionLeft, foldL)
+            : recoverAnchoredOperand(lit->second, r.lambda, r.proxy);
+    r.canonicalRight =
+        constR ? r.constructionRight
+        : !foldR.IsNull()
+            ? constantArrayOf(r.constructionRight, foldR)
+            : recoverAnchoredOperand(rit->second, r.lambda, r.proxy);
   }
 }
 
@@ -1331,6 +1528,19 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   locateCanonicalOperands(root);
   computeArrayGraph(root, arrays, parents);
 
+  // A constant array equated with another array can occur in the formula
+  // through that equality alone, and its lowering left nothing of it
+  // behind (the anchor read folded to the default), so the graph walk
+  // does not find it. It is an operand all the same: it joins the graph.
+  for (size_t i = 0; i < activeRecordIds.size(); ++i)
+  {
+    const Record& r = records[activeRecordIds[i]];
+    if (bm->isConstArray(r.canonicalLeft))
+      arrays.insert(r.canonicalLeft);
+    if (bm->isConstArray(r.canonicalRight))
+      arrays.insert(r.canonicalRight);
+  }
+
   for (size_t i = 0; i < activeRecordIds.size(); ++i)
   {
     const Record& r = records[activeRecordIds[i]];
@@ -1351,7 +1561,8 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   for (std::set<ASTNode>::const_iterator it = arrays.begin();
        it != arrays.end(); ++it)
   {
-    if (it->GetKind() == SYMBOL && !wasArrayAnticipated(*it))
+    if (it->GetKind() == SYMBOL && !wasArrayAnticipated(*it) &&
+        !bm->isConstArray(*it))
       FatalError("array-equality: an array symbol entered the prepared graph "
                  "without appearing at the pre-preprocessing ownership "
                  "boundary",
@@ -1361,6 +1572,21 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   // Freeze the complete graph; it must not change for the rest of the solve.
   ownedArrays = arrays;
   ownedWriteParents = parents;
+
+  // Every constant array of the graph, with a scalar name for its default
+  // so the candidate assigns the default a value and rules K and K' can
+  // compare against it and encode their lemmas over it.
+  for (std::set<ASTNode>::const_iterator it = arrays.begin();
+       it != arrays.end(); ++it)
+  {
+    if (!bm->isConstArray(*it))
+      continue;
+    ExtConstArray info;
+    info.array = *it;
+    info.defaultTerm = bm->constArrayDefault(*it);
+    info.defaultName = freshName(info.defaultTerm, extraConstraints);
+    ownedConstArrays[*it] = info;
+  }
 
   // Inventory the owned graph's writes as accesses (a write is treated as a
   // read of its own index yielding the written value, paper section
@@ -1751,13 +1977,17 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
       haveL = haveL || acc.site == r.canonicalLeft;
       haveR = haveR || acc.site == r.canonicalRight;
     }
-    if (!haveL || !haveR)
+    // A constant array side has no witness read: its cell at lambda is
+    // the default, which the witness name is anchored to directly.
+    if ((!haveL && !bm->isConstArray(r.canonicalLeft)) ||
+        (!haveR && !bm->isConstArray(r.canonicalRight)))
       FatalError("array-equality: a witness read is absent from the complete "
                  "owned access graph",
                  r.proxy);
   }
 
   graph.writes = ownedWrites;
+  graph.constArrays = ownedConstArrays;
   graph.writeParents = ownedWriteParents;
   graph.ites = ownedItes;
   graph.iteParents = ownedIteParents;
@@ -1862,6 +2092,10 @@ ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
   {
     case ExtCheckResult::CONSISTENT:
       lastObserved = res.observed;
+      // The completion first: what an unobserved cell of an array
+      // connected to a constant array holds is part of the certified
+      // model, and every reader of the model asks defaultCellValue.
+      ce->setArrayCompletions(res.completion);
       // Publishing first makes the certified array contents visible
       // to term evaluation; only then can an owned read's term be
       // compared against its name.
@@ -2008,9 +2242,31 @@ void ExtensionalityContext::encodePendingLemmas(SATSolver& solver,
   if ((int)pendingLemmas.size() > lemmasInLargestRound)
     lemmasInLargestRound = (int)pendingLemmas.size();
   for (size_t i = 0; i < pendingLemmas.size(); i++)
+  {
     encodeOneLemma(pendingLemmas[i], solver, tosat, guardLit);
+    if (pendingLemmas[i].countsDeclaredSort)
+      declaredSortLemmas++;
+  }
   pendingLemmas.clear();
   pendingLemmaValid = false;
+}
+
+// See the header. SMT-LIB lets a model give a declared sort any positive
+// number of elements, so a refutation that took its carrier's every pattern
+// to be one, or took one no write names to exist, refuted only the models of
+// that size.
+SOLVER_RETURN_TYPE
+ExtensionalityContext::withholdDeclaredSortUnsat(SOLVER_RETURN_TYPE result,
+                                                 bool counted) const
+{
+  if (result != SOLVER_UNSATISFIABLE || !counted)
+    return result;
+  bm->noteUnknown(UnknownReason::Incomplete,
+                  "array-equality: a lemma about a constant array indexed by a "
+                  "declared sort counted the sort's elements by the patterns "
+                  "of its carrier, which a model need not have, so this unsat "
+                  "may be an artefact of that count rather than a refutation");
+  return bm->unknownResult();
 }
 
 // See the header. Every figure is cumulative over the context lifetime -- a
@@ -2264,6 +2520,10 @@ void ExtensionalityContext::publishObservations(AbsRefine_CounterExample* ce)
        it != lastObserved.end(); ++it)
   {
     const ASTNode& array = it->first;
+    // A constant array's cells are its default, and a read of one is not
+    // a node the model could hold an entry under.
+    if (bm->isConstArray(array))
+      continue;
     NodeFactory* hf = bm->hashingNodeFactory;
     for (size_t i = 0; i < it->second.size(); i++)
     {
@@ -2339,6 +2599,53 @@ bool ExtensionalityContext::contentsAgree(
   return true;
 }
 
+// See the header: the two-completion form.
+bool ExtensionalityContext::contentsAgree(
+    const std::vector<std::pair<ASTNode, ASTNode>>& left,
+    const std::vector<std::pair<ASTNode, ASTNode>>& right,
+    const ASTNode& absentLeft, const ASTNode& absentRight,
+    const SourceSort& indexSort, unsigned indexWidth,
+    const SourceSort& elementSort)
+{
+  std::map<ASTNode, ASTNode> leftCells, rightCells;
+  for (size_t i = 0; i < left.size(); i++)
+    leftCells[left[i].first] = left[i].second;
+  for (size_t i = 0; i < right.size(); i++)
+    rightCells[right[i].first] = right[i].second;
+
+  std::set<ASTNode> named;
+  for (std::map<ASTNode, ASTNode>::const_iterator it = leftCells.begin();
+       it != leftCells.end(); ++it)
+  {
+    named.insert(it->first);
+    const std::map<ASTNode, ASTNode>::const_iterator other =
+        rightCells.find(it->first);
+    if (constantsDenoteDifferentSourceValues(
+            it->second,
+            other == rightCells.end() ? absentRight : other->second,
+            elementSort))
+      return false;
+  }
+  for (std::map<ASTNode, ASTNode>::const_iterator it = rightCells.begin();
+       it != rightCells.end(); ++it)
+  {
+    named.insert(it->first);
+    if (leftCells.find(it->first) == leftCells.end() &&
+        constantsDenoteDifferentSourceValues(absentLeft, it->second,
+                                             elementSort))
+      return false;
+  }
+  // A cell neither side names holds each side's completion; such a cell
+  // exists unless the observations exhaust the index sort's values.
+  const bool unnamedCellExists =
+      ExtChecker::indexValueCount(indexSort, indexWidth) > named.size();
+  if (unnamedCellExists &&
+      constantsDenoteDifferentSourceValues(absentLeft, absentRight,
+                                           elementSort))
+    return false;
+  return true;
+}
+
 // See the header. Runs against the published model, so it must come
 // after publishObservations -- the contents it compares are the ones
 // the model APIs and the printers will hand back.
@@ -2382,20 +2689,25 @@ const char* ExtensionalityContext::recheckCertifiedEqualities(
     // its way to, which need not still carry the sort the user wrote.
     const ObsMap::const_iterator obsL = lastObserved.find(r.canonicalLeft);
     const ObsMap::const_iterator obsR = lastObserved.find(r.canonicalRight);
-    const ASTNode absent = ce->defaultCellValue(r.constructionLeft);
+    // Each side completes with its own default: a side connected to a
+    // constant array holds that array's default at its unobserved cells.
+    const ASTNode absentL = ce->defaultCellValue(r.constructionLeft);
+    const ASTNode absentR = ce->defaultCellValue(r.constructionRight);
     // The element sort comes from the operands the user wrote: the
     // canonical forms are post-lowering carriers, and what a cell means
     // is a property of the source sort, not of its carrier. That is
-    // also why the default above is asked of the construction operand.
+    // also why the defaults above are asked of the construction operands.
     const SourceSort constructionSort = r.constructionLeft.GetSourceSort();
+    const bool arraySort = constructionSort.kind() == SourceSort::Kind::Array;
+    const SourceSort indexSort =
+        arraySort ? constructionSort.index() : SourceSort::unknown();
     const SourceSort elementSort =
-        constructionSort.kind() == SourceSort::Kind::Array
-            ? constructionSort.element()
-            : SourceSort::unknown();
+        arraySort ? constructionSort.element() : SourceSort::unknown();
     const bool agree =
         contentsAgree(obsL == lastObserved.end() ? unobserved : obsL->second,
                       obsR == lastObserved.end() ? unobserved : obsR->second,
-                      absent, elementSort);
+                      absentL, absentR, indexSort,
+                      r.constructionLeft.GetIndexWidth(), elementSort);
 
     if (agree != (assigned.GetKind() == TRUE))
       return agree ? "array-equality: the model makes an array equality's "

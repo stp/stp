@@ -149,9 +149,18 @@ option(BUILD_SHARED_LIBS "Build the shared library" ON)
 option(STATICCOMPILE "Compile static library and executable" OFF)
 if (STATICCOMPILE)
     set(BUILD_SHARED_LIBS OFF)
-    set(ENABLE_PYTHON_INTERFACE OFF)
 endif()
 add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
+
+# -----------------------------------------------------------------------------
+# libstp is the 3.x API (include/stp/stp.hpp, include/stp/stp.h) over the
+# engine; STP's own tools, bindings and tests are written against it. The 2.x
+# C API (stp/c_interface.h, and the header-only fp.hpp and uf.hpp over it, all
+# in lib/Compat2/include) is provided by libstp2 alone (lib/Compat2): a
+# separate library that re-implements every function of c_interface.h over
+# the 3.x C API, for clients that have not moved. A 2.x client links stp2,
+# which brings in stp.
+# -----------------------------------------------------------------------------
 
 # Settings below that have to hold across the whole link, not just STP's
 # own objects, are collected here as well as applied. A dependency STP
@@ -1125,8 +1134,8 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
     # The static library is what the executables link: it keeps them
     # self-contained, with nothing extra to install or ship. The shared one is
     # built too but not installed - it is there to be LD_PRELOADed by processes
-    # that embed libstp rather than run the stp binary, the Python (ctypes)
-    # interface being the one in tree. See tests/api/python/allocator_tests.py.
+    # that embed libstp rather than run the stp binary, the Python package
+    # being the one in tree. See tests/api/python/allocator_tests.py.
     set(MI_BUILD_SHARED ON  CACHE BOOL "" FORCE)
     set(MI_BUILD_OBJECT OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
@@ -1463,9 +1472,11 @@ if (BUILD_MANPAGE)
         ARGS  --name="Simple Theorem Prover SMT solver" --version-string=${STP_FULL_VERSION} --help-option="--help" $<TARGET_FILE:stp-bin> -o ${CMAKE_CURRENT_BINARY_DIR}/stp.1
     )
 
+    # Relative, so that an install relocated with --prefix takes the page
+    # along; an absolute destination is fixed when the cache is written.
     INSTALL(
         FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.1
-        DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man1)
+        DESTINATION man/man1)
     message(STATUS "Manpage will be created and installed")
 endif()
 add_feature_info(Manpage BUILD_MANPAGE "Builds and installs the stp(1) manpage")
@@ -1591,8 +1602,9 @@ if(DEFINED CMAKE_CONFIGURATION_TYPES)
   # Placing the binaries in ${CMAKE_*_OUTPUT_DIRECTORY} without regard to
   # the debug/release/... configuration. This is needed for build systems
   # where files for multiple configurations are kept within the same build
-  # directory (eg. MSBuild), since some targets (e.g. python-interface-tests)
-  # require the path to the stp library to be given in a configuration file.
+  # directory (eg. MSBuild), since some tests (e.g. the query-file tests, whose
+  # lit configuration names the directory the stp binary is in) are given a
+  # built target's path in a configuration file.
   # Note: the paths could be determined in a cleaner fashion by using generator
   # expressions, which were used up to commit 1af1f5. However, that solution
   # was not feasible, since CMake versions provided by recent Debian versions
@@ -1667,17 +1679,6 @@ else()
         "STP requires a Python 3 interpreter to generate lib/AST/ASTKind.{h,cpp}. "
         "Install python3, or point -DPYTHON_EXECUTABLE=<path> at one.")
 endif()
-
-# The Python bindings are a separate, optional matter: they additionally need
-# a shared library to bind against.
-if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
-    if(BUILD_SHARED_LIBS)
-        set(ENABLE_PYTHON_INTERFACE ON)
-    else()
-        set(ENABLE_PYTHON_INTERFACE OFF)
-    endif()
-endif()
-add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interface")
 
 # -----------------------------------------------------------------------------
 # Compile all subdirs
@@ -1777,7 +1778,7 @@ set(STP_TARGETS_FILENAME "STPTargets.cmake")
 set(STP_CONFIG_FILENAME "STPConfig.cmake")
 set(STP_CONFIG_VERSION_FILENAME "STPConfigVersion.cmake")
 
-export(TARGETS stp
+export(TARGETS stp stp2
     FILE "${PROJECT_BINARY_DIR}/${STP_TARGETS_FILENAME}")
 
 # Create STPConfig file

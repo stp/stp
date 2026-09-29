@@ -125,9 +125,6 @@ typedef Span<const ASTNode> ASTChildren;
 // std::vector-typed copy is genuinely needed).
 DLL_PUBLIC ASTVec toASTVec(const ASTChildren& c);
 
-// Error handling function
-DLL_PUBLIC extern void (*vc_error_hdlr)(const char* err_msg);
-
 /******************************************************************
  * Class Spacer:
  *
