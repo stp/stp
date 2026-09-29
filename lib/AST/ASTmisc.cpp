@@ -691,7 +691,7 @@ void FlattenKindNoDuplicates(const Kind k, const ASTChildren& children,
 //
 // The budget only has to stop the explosion, so it is set far above what a
 // formula plausibly needs rather than close to it. Declining to flatten is not
-// a small loss: generated-tests/form_32.var_64.bits_32.cvc wants 1054 operands
+// a small loss: generated-tests/form_32.var_64.bits_32.smt2 wants 1054 operands
 // at its widest, and capping it below that leaves BVPLUS nested, which turns a
 // two-second solve into one that has not finished after five minutes. A cap
 // tight enough to be reached by an ordinary formula is worse than no pass at

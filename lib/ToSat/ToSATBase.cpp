@@ -43,13 +43,7 @@ void ToSATBase::PrintOutput(STPMgr* bm, SOLVER_RETURN_TYPE ret)
   {
     bm->ValidFlag = false;
     if (bm->UserFlags.print_output_flag)
-    {
-      if (bm->UserFlags.smtlib1_parser_flag ||
-          bm->UserFlags.smtlib2_parser_flag)
-        cout << "(error \"solver returned SOLVER_ERROR\")" << endl;
-      else
-        cout << "Error." << endl;
-    }
+      cout << "(error \"solver returned SOLVER_ERROR\")" << endl;
     FatalError("solver returned SOLVER_ERROR");
   }
 
@@ -66,13 +60,7 @@ void ToSATBase::PrintOutput(STPMgr* bm, SOLVER_RETURN_TYPE ret)
     // stays quiet about sat and unsat has no business narrating this one.
     bm->unknownResult();
     if (bm->UserFlags.print_output_flag)
-    {
-      if (bm->UserFlags.smtlib1_parser_flag ||
-          bm->UserFlags.smtlib2_parser_flag)
-        cout << "unknown" << endl;
-      else
-        cout << "Unknown." << endl;
-    }
+      cout << "unknown" << endl;
     return;
   }
 
@@ -80,20 +68,17 @@ void ToSATBase::PrintOutput(STPMgr* bm, SOLVER_RETURN_TYPE ret)
 
   if (bm->UserFlags.print_output_flag)
   {
-    if (bm->UserFlags.smtlib1_parser_flag || bm->UserFlags.smtlib2_parser_flag)
+    if (true_iff_valid && (input_status == TO_BE_SATISFIABLE))
     {
-      if (true_iff_valid && (input_status == TO_BE_SATISFIABLE))
-      {
-        cerr << "Warning. Expected satisfiable,"
-                " FOUND unsatisfiable"
-             << endl;
-      }
-      else if (!true_iff_valid && (input_status == TO_BE_UNSATISFIABLE))
-      {
-        cerr << "Warning. Expected unsatisfiable,"
-                " FOUND satisfiable"
-             << endl;
-      }
+      cerr << "Warning. Expected satisfiable,"
+              " FOUND unsatisfiable"
+           << endl;
+    }
+    else if (!true_iff_valid && (input_status == TO_BE_UNSATISFIABLE))
+    {
+      cerr << "Warning. Expected unsatisfiable,"
+              " FOUND satisfiable"
+           << endl;
     }
   }
 
@@ -101,25 +86,13 @@ void ToSATBase::PrintOutput(STPMgr* bm, SOLVER_RETURN_TYPE ret)
   {
     bm->ValidFlag = true;
     if (bm->UserFlags.print_output_flag)
-    {
-      if (bm->UserFlags.smtlib1_parser_flag ||
-          bm->UserFlags.smtlib2_parser_flag)
-        cout << "unsat\n";
-      else
-        cout << "Valid.\n";
-    }
+      cout << "unsat\n";
   }
   else
   {
     bm->ValidFlag = false;
     if (bm->UserFlags.print_output_flag)
-    {
-      if (bm->UserFlags.smtlib1_parser_flag ||
-          bm->UserFlags.smtlib2_parser_flag)
-        cout << "sat\n";
-      else
-        cout << "Invalid.\n";
-    }
+      cout << "sat\n";
   }
 
   flush(cout);

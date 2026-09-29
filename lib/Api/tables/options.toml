@@ -354,7 +354,7 @@ key = "file"
 cli = "file"
 kind = "positional"
 help = "input file"
-api = "Solver::parse(std::istream&, Format, ParseMode::EXECUTE) over the file (standard input without one), in the format --CVC, --SMTLIB1 or --SMTLIB2 names or else the file's extension: .cvc, .smt, and SMT-LIB 2 for .smt2 and anything else"
+api = "Solver::parse(std::istream&, Format::SMTLIB2, ParseMode::EXECUTE) over the file (standard input without one)"
 
 [[frontend]]
 key = "help"
@@ -373,68 +373,12 @@ help = "print version number"
 api = "stp::version(); stp::sat_backends() (with per-backend versions in capabilities())"
 
 [[frontend]]
-key = "cvc"
-cli = "--CVC"
-kind = "flag"
-group = "Input options"
-help = "use the CVC format parser"
-api = "the Format argument of Solver::parse / parse_file"
-
-[[frontend]]
-key = "smtlib1"
-cli = "--SMTLIB1,-m"
-kind = "flag"
-group = "Input options"
-help = "use the SMT-LIB1 format parser"
-api = "the Format argument of Solver::parse / parse_file"
-
-[[frontend]]
 key = "smtlib2"
 cli = "--SMTLIB2"
 kind = "flag"
 group = "Input options"
-help = "use the SMT-LIB2 format parser"
-api = "the Format argument of Solver::parse / parse_file"
-
-[[frontend]]
-key = "print-stpinput"
-cli = "--print-stpinput,-b"
-kind = "flag"
-group = "Printing options"
-help = "print STP input back to cout"
-api = "Solver::input_to_string(Format::CVC), or Format::SMTLIB2 for an SMT-LIB 1 input"
-
-[[frontend]]
-key = "print-back-cvc"
-cli = "--print-back-CVC"
-kind = "flag"
-group = "Printing options"
-help = "print input in CVC format, then exit"
-api = "Solver::input_to_string(Format::CVC)"
-
-[[frontend]]
-key = "print-back-smtlib2"
-cli = "--print-back-SMTLIB2"
-kind = "flag"
-group = "Printing options"
-help = "print input in SMT-LIB2 format, then exit"
-api = "Solver::input_to_string(Format::SMTLIB2)"
-
-[[frontend]]
-key = "print-back-gdl"
-cli = "--print-back-GDL"
-kind = "flag"
-group = "Printing options"
-help = "print AiSee's graph format, then exit"
-api = "Solver::input_to_string(Format::GDL)"
-
-[[frontend]]
-key = "print-back-dot"
-cli = "--print-back-dot"
-kind = "flag"
-group = "Printing options"
-help = "print dotty/neato's graph format, then exit"
-api = "Solver::input_to_string(Format::DOT)"
+help = "read the input as SMT-LIB2, the only input language (accepted for compatibility)"
+api = "Format::SMTLIB2, what Solver::parse / parse_file read"
 
 [[frontend]]
 key = "print-output"
@@ -475,9 +419,8 @@ key = "interactive"
 cli = "--interactive"
 kind = "bool-option"
 group = "Miscellaneous options"
-help = "read the input a character at a time, as needed when driving stp interactively over a pipe. Off reads in blocks, which is faster. Default: on when reading from stdin, off when reading from a file. SMT-LIB2 only."
+help = "read the input a character at a time, as needed when driving stp interactively over a pipe. Off reads in blocks, which is faster. Default: on when reading from stdin, off when reading from a file."
 api = "CLI only: how the binary reads standard input for Solver::parse(std::istream&, ...)"
-excludes = ["--CVC", "--SMTLIB1"]
 
 # ============================================================================ in-band SMT-LIB 2 keys and environment taps
 # (set-option :produce-models b) writes the registry entry produce-models. The other in-band keys are parser
@@ -2950,7 +2893,7 @@ engine = { field = "aig_node_budget" }
 category = "limits"
 range = { min = -1, max = 2147483647 }
 cli_above_max = "ERROR: --{name} must be at most 2147483647; larger caps can never be reached"
-help = "Number of AIG AND gates after which one query's bit-blast gives up. -1 means never, 0 means give up without blasting. Exceeding it abandons the query through the soft-timeout path, so the answer is the one --max-time gives -- \"unknown\" in SMT-LIB mode, with (get-info :reason-unknown) naming this budget, and \"Unknown.\" in the CVC language. Batch solves only: the incremental encoder's AIG outlives the check that grew it and is never capped, so engaging it with a budget set warns once instead. Bounds the blast, not the process -- CNF conversion and the SAT search allocate on top of it"
+help = "Number of AIG AND gates after which one query's bit-blast gives up. -1 means never, 0 means give up without blasting. Exceeding it abandons the query through the soft-timeout path, so the answer is the one --max-time gives -- \"unknown\", with (get-info :reason-unknown) naming this budget. Batch solves only: the incremental encoder's AIG outlives the check that grew it and is never capped, so engaging it with a budget set warns once instead. Bounds the blast, not the process -- CNF conversion and the SAT search allocate on top of it"
 
 [[option]]
 name = "print-counterex"
@@ -2964,32 +2907,6 @@ scope = "solver"
 engine = { field = "print_counterexample_flag" }
 category = "output"
 help = "print counterexample"
-
-[[option]]
-name = "print-counterexbin"
-short = "y"
-type = "bool"
-cli_form = "flag"
-default = false
-tier = "diagnostic"
-settable = "anytime"
-scope = "solver"
-engine = { field = "print_binary_flag" }
-category = "output"
-help = "print counterexample in binary"
-
-[[option]]
-name = "print-arrayval"
-short = "q"
-type = "bool"
-cli_form = "flag"
-default = false
-tier = "diagnostic"
-settable = "anytime"
-scope = "solver"
-engine = { field = "print_arrayval_declaredorder_flag" }
-category = "output"
-help = "print arrayval declared order"
 
 [[option]]
 name = "print-functionstat"

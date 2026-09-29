@@ -347,7 +347,7 @@ if(USE_VALGRIND)
 endif()
 
 # -----------------------------------------------------------------------------
-# Tests that drive STP by using query files (e.g. smt2, smt and cvc files)
+# Tests that drive STP by using query files (SMT-LIB2 scripts)
 # -----------------------------------------------------------------------------
 
 option(TEST_QUERY_FILES

@@ -170,13 +170,6 @@ std::vector<std::string> lines_of(const std::string& text)
   return lines;
 }
 
-std::string replace_all(std::string text, const std::string& from, const std::string& to)
-{
-  for (std::size_t at = text.find(from); at != std::string::npos; at = text.find(from, at + to.size()))
-    text.replace(at, from.size(), to);
-  return text;
-}
-
 } // namespace
 
 TEST(libstp2_golden, the_uncovered_constructors_give_2x_values)
@@ -192,7 +185,10 @@ TEST(libstp2_golden, the_uncovered_constructors_give_2x_values)
   vc_registerErrorHandler(nullptr);
 }
 
-TEST(libstp2_golden, the_buffer_printers_give_2x_text)
+// 2.x printed these in its presentation language (CVC); libstp2 prints
+// SMT-LIB 2, with the engine's shared printer (lib/Compat2/NOTES.md,
+// decision 11).
+TEST(libstp2_golden, the_buffer_printers_give_smtlib2_text)
 {
   VC vc = vc_createValidityChecker();
   Type bv8 = vc_bvType(vc, 8);
@@ -213,49 +209,45 @@ TEST(libstp2_golden, the_buffer_printers_give_2x_text)
   char* buf = nullptr;
   std::size_t len = 0;
   vc_printExprToBuffer(vc, q, &buf, &len);
-  EXPECT_EQ(take(buf), "(x = 0x01\n) ");
-  EXPECT_EQ(len, 13u); // the terminating NUL counted, as 2.x did
+  EXPECT_EQ(take(buf), "(= |x|  #x01)");
+  EXPECT_EQ(len, 14u); // the terminating NUL counted, as 2.x did
 
-  const std::string two_x_state = "x  : BITVECTOR(8);\n"
-                                  "y  : BITVECTOR(8);\n"
-                                  "a  : ARRAY BITVECTOR(32) OF BITVECTOR(8);\n"
-                                  "b  : BOOLEAN;\n"
-                                  "%----------------------------------------------------\n"
-                                  "ASSERT( (0x07 = BVPLUS(8, \nx, \ny)\n\n) );\n"
-                                  "ASSERT( (x = a[0x00000003]\n) );\n"
-                                  "ASSERT( ( NOT( (b XOR BVGT(y,x)\n\n))) );\n"
-                                  "%----------------------------------------------------\n"
-                                  "QUERY( (x = 0x01\n)  );\n";
-  // 2.x's bytes but for the declarations' single space before the colon
-  // (lib/Compat2/NOTES.md, decision 12)
-  const std::string state = replace_all(two_x_state, "  : ", " : ");
+  // a script STP reads back
+  const std::string state = "(set-logic QF_ABV)\n"
+                            "(declare-fun |x| () (_ BitVec 8))\n"
+                            "(declare-fun |y| () (_ BitVec 8))\n"
+                            "(declare-fun |a| () (Array (_ BitVec 32) (_ BitVec 8)))\n"
+                            "(declare-fun |b| () Bool)\n"
+                            "(assert (=  #x07 (bvadd |x| |y|)))\n"
+                            "(assert (= |x| (select |a|  #x00000003)))\n"
+                            "(assert (not (xor |b| (bvugt |y| |x|))))\n"
+                            "(assert (not (= |x|  #x01)))\n"
+                            "(check-sat)\n";
   buf = nullptr;
   vc_printQueryStateToBuffer(vc, q, &buf, &len, 0);
   EXPECT_EQ(take(buf), state);
   EXPECT_EQ(len, state.size() + 1);
 
-  // y pinned, so the counterexample is the one 2.x printed
+  // y pinned, so the counterexample is fixed
   vc_assertFormula(vc, vc_eqExpr(vc, y, vc_bvConstExprFromInt(vc, 8, 5)));
   ASSERT_EQ(vc_query(vc, q), 0);
   buf = nullptr;
   vc_printCounterExampleToBuffer(vc, &buf, &len);
   const std::string ce = take(buf);
-  EXPECT_EQ(len, 137u);
   std::vector<std::string> got = lines_of(ce);
-  std::vector<std::string> expected = {"COUNTEREXAMPLE BEGIN: ",
-                                       "ASSERT( a[0x00000003] = 0x02 );",
-                                       "ASSERT( b<=>TRUE );",
-                                       "ASSERT( x = 0x02 );",
-                                       "ASSERT( y = 0x05 );",
-                                       "COUNTEREXAMPLE END: "};
-  ASSERT_EQ(got.size(), expected.size()) << ce;
-  EXPECT_EQ(got.front(), expected.front());
-  EXPECT_EQ(got.back(), expected.back());
+  std::vector<std::string> expected = {
+      "(define-fun |a| () (Array (_ BitVec 32) (_ BitVec 8)) "
+      "(store ((as const (Array (_ BitVec 32) (_ BitVec 8))) #xff) #x00000003 #x02))",
+      "(define-fun |b| () Bool true)",
+      "(define-fun |x| () (_ BitVec 8) #x02)",
+      "(define-fun |y| () (_ BitVec 8) #x05)"};
+  EXPECT_EQ(len, ce.size() + 1);
   // the entries in whichever order the model keeps them
-  std::sort(got.begin() + 1, got.end() - 1);
-  EXPECT_EQ(got, expected);
+  std::sort(got.begin(), got.end());
+  EXPECT_EQ(got, expected) << ce;
 
-  EXPECT_EQ(std::string(exprString(vc_bvPlusExpr(vc, 8, x, y))), "BVPLUS(8, \nx, \ny)\n ");
+  EXPECT_EQ(std::string(exprString(vc_bvPlusExpr(vc, 8, x, y))), "(bvadd |x| |y|)");
+  EXPECT_EQ(std::string(typeString(arr)), "(Array (_ BitVec 32) (_ BitVec 8))");
   EXPECT_EQ(vc_getIndexSize(vc, arr), 32);
   EXPECT_EQ(vc_getValueSize(vc, arr), 8);
   buf = nullptr;

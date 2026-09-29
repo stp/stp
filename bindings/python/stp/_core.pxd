@@ -94,8 +94,6 @@ cdef extern from "stp/stp.h":
     ctypedef enum stp_format:
         STP_FORMAT_AUTO
         STP_FORMAT_SMTLIB2
-        STP_FORMAT_SMTLIB1
-        STP_FORMAT_CVC
         STP_FORMAT_DOT
         STP_FORMAT_GDL
     ctypedef enum stp_parse_mode:
@@ -429,7 +427,6 @@ cdef extern from "stp/stp.h":
     ctypedef size_t (*stp_text_source)(char* buf, size_t max, void* user) noexcept
     stp_status stp_solver_parse_source(stp_solver, stp_text_source, void* user, stp_format,
                                        stp_parse_mode) nogil
-    char* stp_solver_input_to_string(stp_solver, stp_format)
     void stp_solver_set_output_sink(stp_solver, stp_text_sink, void* user)
     ctypedef void (*stp_fatal_error_handler)(const char* message, void* user) noexcept
     void stp_solver_set_fatal_error_handler(stp_solver, stp_fatal_error_handler, void* user)

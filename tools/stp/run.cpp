@@ -41,7 +41,6 @@ THE SOFTWARE.
 #include <streambuf>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace stp_cli
 {
@@ -123,20 +122,6 @@ void write_diagnostic(std::string_view text)
 {
   std::cerr << "Fatal Error: " << message << std::endl;
   fatal_exit(message);
-}
-
-// The parser's own diagnostic in a PARSE error's text, which the API wraps
-// as "parse error[ at L:C]: <diagnostic> [PARSE]".
-std::string parser_diagnostic(const stp::Error& e)
-{
-  std::string_view text = e.what();
-  const std::string_view head = "parse error", tail = " [PARSE]";
-  const std::size_t colon = text.find(": ");
-  if (text.substr(0, head.size()) == head && colon != std::string_view::npos)
-    text.remove_prefix(colon + 2);
-  if (text.size() >= tail.size() && text.substr(text.size() - tail.size()) == tail)
-    text.remove_suffix(tail.size());
-  return std::string(text);
 }
 
 // Where --output-CNF writes: output_0.cnf, output_1.cnf, ... in the working
@@ -221,28 +206,16 @@ int run(const Invocation& in, std::unique_ptr<stp::Solver> owned)
       refuse_fatally("Cannot open " + in.infile);
   }
 
-  const bool print_back = in.print_back() && !in.parse_only;
-  if (in.print_back() && in.format == stp::Format::SMTLIB2)
-  {
-    std::cerr << "Printback from SMTLIB2 inputs isn't currently working." << std::endl;
-    std::cerr << "Please try again later" << std::endl;
-    std::cerr << "It works prior to revision 1354" << std::endl;
-    std::exit(1);
-  }
-
-  // Only the SMT-LIB 2 lexer reads a line at a time: by default when the
-  // input is standard input, or as --interactive says.
-  bool interactive = false;
-  if (in.format == stp::Format::SMTLIB2)
-    interactive = in.interactive.has_value() ? *in.interactive : in.infile.empty();
+  // The lexer reads a line at a time by default when the input is standard
+  // input, or as --interactive says.
+  const bool interactive = in.interactive.has_value() ? *in.interactive : in.infile.empty();
   FileInput input_buffer(file, interactive);
   std::istream input(&input_buffer);
 
-  const stp::ParseMode mode =
-      in.parse_only || print_back ? stp::ParseMode::PARSE_ONLY : stp::ParseMode::EXECUTE;
+  const stp::ParseMode mode = in.parse_only ? stp::ParseMode::PARSE_ONLY : stp::ParseMode::EXECUTE;
   try
   {
-    solver.parse(input, in.format, mode);
+    solver.parse(input, stp::Format::SMTLIB2, mode);
   }
   catch (const stp::Error& e)
   {
@@ -256,11 +229,7 @@ int run(const Invocation& in, std::unique_ptr<stp::Solver> owned)
         // remains is the status of the run as a whole. Scripted callers have
         // no other way to tell a rejected input from a solved one, and a
         // script may legitimately have answered several check-sats before
-        // the command that broke -- those answers stand. A CVC or SMT-LIB 1
-        // input's refusal was a fatal error, whose two lines follow the
-        // parser's own.
-        if (in.format != stp::Format::SMTLIB2)
-          refuse_fatally(parser_diagnostic(e));
+        // the command that broke -- those answers stand.
         std::exit(-1);
       default:
         fatal_exit(e.what());
@@ -273,37 +242,6 @@ int run(const Invocation& in, std::unique_ptr<stp::Solver> owned)
   // more is said.
   if (in.exit_after_cnf && cnf_generated)
     std::exit(0);
-
-  if (print_back)
-  {
-    std::vector<stp::Format> formats;
-    const bool smtlib1 = in.format == stp::Format::SMTLIB1;
-    if (in.print_back_cvc || (in.print_stpinput && !smtlib1))
-      formats.push_back(stp::Format::CVC);
-    if (in.print_back_smtlib2 || (in.print_stpinput && smtlib1))
-      formats.push_back(stp::Format::SMTLIB2);
-    if (in.print_back_gdl)
-      formats.push_back(stp::Format::GDL);
-    if (in.print_back_dot)
-      formats.push_back(stp::Format::DOT);
-    for (stp::Format f : formats)
-    {
-      std::string text;
-      try
-      {
-        text = solver.input_to_string(f);
-      }
-      catch (const stp::Error& e)
-      {
-        // A CVC input without a query has no question to print back.
-        if (e.code() != stp::ErrorCode::STATE)
-          fatal_exit(e.what());
-        refuse_fatally("Input is Empty. Please enter some asserts and query\n");
-      }
-      write_output(text);
-    }
-    std::fflush(stdout);
-  }
 
 #ifdef NDEBUG
   // The teardown frees every node of the run, which after a large input

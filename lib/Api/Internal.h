@@ -605,15 +605,6 @@ struct SolverImpl
   std::function<void(std::string_view, CnfScope)> cnf_sink;
   const OutputSinks route_sinks{&output_sink, &diagnostic_sink, &fatal_handler};
 
-  // The last CVC or SMT-LIB 1 input's question, as its parser returned it
-  // (the conjunction of its assertions, and its query), and the conjunction
-  // of the two that input_to_string prints, built once: a node made again
-  // after the first was released would be numbered afresh.
-  ASTNode input_asserts;
-  ASTNode input_query;
-  ASTNode input_question;
-  bool have_input_question = false;
-
   // C layer: the failed state
   std::shared_ptr<const ErrorDetails> failed;
 
@@ -662,7 +653,6 @@ struct SolverImpl
                         const std::optional<CheckBudget>& budget);
   static bool poll_stop(void* opaque);
   void rebuild_engine();
-  void forget_input_question(); // the nodes go before the manager can
 };
 
 // ---------------------------------------------------------------- kinds

@@ -22,13 +22,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// parsefile-using-cinterface.cpp -- parsing a CVC file through the API.
+// parsefile-using-cinterface.cpp -- parsing a file through the API.
 //
-// 2.x's vc_parseExpr returned the file's assertions conjoined with its negated
-// query as one expression. 3.x's Solver::parse_file asserts the assertions,
-// and the query as the assertion of its negation, so that check_sat answers
-// the file's question; the file is t.cvc, a KLEE query over byte arrays whose
-// QUERY is FALSE (are the assertions satisfiable?).
+// 2.x's vc_parseExpr returned a CVC file's assertions conjoined with its
+// negated query as one expression. 3.x's Solver::parse_file asserts an
+// SMT-LIB 2 script's assertions, so that check_sat answers the file's
+// question; the file is t.smt2, a KLEE query over byte arrays (are the
+// assertions satisfiable?), converted from the CVC file 2.x read here.
 
 #include "api_common.hpp"
 
@@ -38,7 +38,7 @@ THE SOFTWARE.
 
 using namespace stp;
 
-TEST(parsefile, CVC)
+TEST(parsefile, SMTLIB2)
 {
   TermManager tm;
   // 2.x set 'n', 'd' and 'p'. 'n' printed the verdict, which 3.x returns as a
@@ -48,25 +48,24 @@ TEST(parsefile, CVC)
   o.set_bool("print-counterex", true);
   Solver s(tm, o);
 
-  // CVC_FILE is a macro that expands to a file path. A failure would be an
+  // INPUT_FILE is a macro that expands to a file path. A failure would be an
   // exception (2.x counted the handler's calls).
-  s.parse_file(CVC_FILE, Format::CVC);
+  s.parse_file(INPUT_FILE, Format::SMTLIB2);
 
-  // vc_printExpr: the parsed problem in the presentation language
-  const std::string printed = s.to_string(Format::CVC);
-  EXPECT_NE(printed.find("arr665 : ARRAY BITVECTOR(32) OF BITVECTOR(8);"), std::string::npos)
+  // vc_printExpr: the parsed problem printed back
+  const std::string printed = s.to_smt2();
+  EXPECT_NE(printed.find("(declare-fun arr665 () (Array (_ BitVec 32) (_ BitVec 8)))"),
+            std::string::npos)
       << printed;
-  EXPECT_NE(printed.find("QUERY(FALSE);"), std::string::npos) << printed;
 
-  // The file's sixteen ASSERTs are the solver's assertions, and QUERY FALSE
-  // adds nothing; the arrays they read are the manager's symbols.
+  // The file's sixteen assertions are the solver's; the arrays they read are
+  // the manager's symbols.
   EXPECT_EQ(s.assertions().size(), 16u);
   const std::optional<Term> arr665 = tm.symbol("arr665");
   ASSERT_TRUE(arr665.has_value());
   EXPECT_TRUE(arr665->sort() == tm.mk_array_sort(tm.mk_bv_sort(32), tm.mk_bv_sort(8)));
 
-  // The file's question: its assertions are satisfiable (stp --CVC says
-  // Invalid.).
+  // The file's question: its assertions are satisfiable.
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
@@ -81,11 +80,11 @@ TEST(parsefile, missing_file)
   o.set_bool("print-counterex", true);
   Solver s(tm, o);
 
-  const char* nonExistantFile = "./iShOuLdNoTExiSt.cvc";
+  const char* nonExistantFile = "./iShOuLdNoTExiSt.smt2";
   std::ifstream file(nonExistantFile, std::ifstream::in);
   ASSERT_FALSE(file.good()); // Check the file does not exist
 
-  const auto e = API_ERROR_OF(s.parse_file(nonExistantFile, Format::CVC));
+  const auto e = API_ERROR_OF(s.parse_file(nonExistantFile, Format::SMTLIB2));
   ASSERT_TRUE(e.has_value());
   EXPECT_EQ(e->code(), ErrorCode::IO);
   EXPECT_EQ(e->function(), "Solver::parse_file");

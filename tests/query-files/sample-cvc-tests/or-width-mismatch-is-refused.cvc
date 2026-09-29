@@ -1,8 +1,0 @@
-% RUN: not %solver %s 2>&1 | %OutputCheck %s
-%
-% As for AND: the mismatch was reported, the OR built, and the query answered.
-x : BITVECTOR(8);
-ASSERT((x | 0hex001) = 0hex000);
-QUERY(FALSE);
-% CHECK-L: CVC syntax error: line 5: Width mismatch in OR
-% CHECK-NOT: Valid.

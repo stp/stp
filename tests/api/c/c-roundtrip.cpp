@@ -140,12 +140,9 @@ TEST(c_roundtrip, a_term_prints_and_parses_to_the_same_node)
   ASSERT_NE(nullptr, back) << pending(a.tm) << "\nprinted: " << text;
   EXPECT_EQ(t, back);
   EXPECT_EQ(text, take(stp_term_str(back)));
-  // the shared form and the other formats
+  // the shared form
   const std::string shared = take(stp_term_to_string(t, STP_FORMAT_SMTLIB2, true));
   EXPECT_FALSE(shared.empty());
-  EXPECT_EQ(nullptr, stp_term_to_string(t, STP_FORMAT_SMTLIB1, false));
-  EXPECT_EQ(STP_ERR_UNSUPPORTED, stp_tm_error(a.tm)->code);
-  stp_tm_clear_error(a.tm);
   // a symbol with a name that needs quoting survives too
   stp_term odd = stp_declare(a.tm, "odd name", bv8);
   ASSERT_NE(nullptr, odd);
@@ -210,11 +207,13 @@ TEST(c_roundtrip, a_refused_command_is_a_parse_error)
   EXPECT_EQ(STP_SAT, a.check());
 }
 
-TEST(c_roundtrip, cvc_and_dot_and_model_printing)
+TEST(c_roundtrip, smtlib2_and_dot_and_model_printing)
 {
   Session a;
-  ASSERT_EQ(STP_OK, stp_solver_parse(a.s, "cx : BITVECTOR(8);\nASSERT(cx = 0hex2a);\nQUERY(cx = 0hex2b);\n",
-                                     STP_FORMAT_CVC))
+  ASSERT_EQ(STP_OK, stp_solver_parse(a.s,
+                                     "(declare-fun cx () (_ BitVec 8))\n(assert (= cx #x2a))\n"
+                                     "(assert (not (= cx #x2b)))\n",
+                                     STP_FORMAT_SMTLIB2))
       << pending(a.tm);
   EXPECT_EQ(STP_SAT, a.check());
   stp_term cx = stp_tm_symbol(a.tm, "cx");
@@ -230,10 +229,9 @@ TEST(c_roundtrip, cvc_and_dot_and_model_printing)
       << model;
   stp_model_release(m);
 
-  const std::string cvc = take(stp_solver_to_string(a.s, STP_FORMAT_CVC));
-  EXPECT_NE(std::string::npos, cvc.find("cx : BITVECTOR(8);")) << cvc;
+  const std::string smt2 = take(stp_solver_to_string(a.s, STP_FORMAT_SMTLIB2));
   Session b;
-  ASSERT_EQ(STP_OK, stp_solver_parse(b.s, cvc.c_str(), STP_FORMAT_CVC)) << pending(b.tm) << "\n" << cvc;
+  ASSERT_EQ(STP_OK, stp_solver_parse(b.s, smt2.c_str(), STP_FORMAT_SMTLIB2)) << pending(b.tm) << "\n" << smt2;
   EXPECT_EQ(STP_SAT, b.check());
   stp_model mb = stp_solver_model(b.s);
   ASSERT_EQ(STP_OK, stp_model_uint64(mb, stp_tm_symbol(b.tm, "cx"), &v));
@@ -243,9 +241,6 @@ TEST(c_roundtrip, cvc_and_dot_and_model_printing)
   const std::string dot = take(stp_solver_to_string(a.s, STP_FORMAT_DOT));
   EXPECT_NE(std::string::npos, dot.find("digraph")) << dot;
   EXPECT_FALSE(take(stp_solver_to_string(a.s, STP_FORMAT_GDL)).empty());
-  EXPECT_EQ(nullptr, stp_solver_to_string(a.s, STP_FORMAT_SMTLIB1));
-  EXPECT_EQ(STP_ERR_UNSUPPORTED, stp_tm_error(a.tm)->code);
-  stp_tm_clear_error(a.tm);
   EXPECT_EQ(nullptr, stp_solver_to_string(a.s, static_cast<stp_format>(42)));
   EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, stp_tm_error(a.tm)->code);
   stp_tm_clear_error(a.tm);

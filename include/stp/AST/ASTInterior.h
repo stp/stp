@@ -174,9 +174,8 @@ private:
   virtual void CleanUp();
 
   // Returns kinds.  "lispprinter" handles printing of parenthesis
-  // and childnodes. (c_friendly is for printing hex. numbers that C
-  // compilers will accept)
-  virtual void nodeprint(ostream& os, bool c_friendly = false);
+  // and childnodes.
+  virtual void nodeprint(ostream& os);
 
   virtual void setIndexWidth(uint32_t i)
   {

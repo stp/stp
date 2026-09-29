@@ -21,7 +21,7 @@
 # -----------------------------------------------------------------------------
 # Tests of libstp2, the 2.x C API (c_interface.h) re-implemented over the 3.x C
 # API: a few of the 2.x suites, unchanged, covering the handle lifecycle,
-# counterexamples, push and pop, parsing, Expr ownership, the counter enum's
+# counterexamples, push and pop, Expr ownership, the counter enum's
 # ABI, floating point and the header-only fp.hpp over it, uninterpreted
 # functions, arrays and the reason a query had no answer. Every 2.x suite,
 # these included, is also rewritten against the 3.x API in tests/api/cpp.
@@ -33,8 +33,6 @@ AddSTPGTest(api2-stp-counterex.cpp)
 target_link_libraries(api2-stp-counterexTests stp2)
 AddSTPGTest(api2-push-pop.cpp)
 target_link_libraries(api2-push-popTests stp2)
-AddSTPGTest(api2-parsestring-using-cinterface.cpp)
-target_link_libraries(api2-parsestring-using-cinterfaceTests stp2)
 AddSTPGTest(api2-persist-delete.cpp)
 target_link_libraries(api2-persist-deleteTests stp2)
 AddSTPGTest(api2-counter-enum-abi.cpp)

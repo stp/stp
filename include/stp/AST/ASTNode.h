@@ -219,7 +219,7 @@ public:
   }
 
   // delegates to the ASTInternal node.
-  void nodeprint(ostream& os, bool c_friendly = false) const;
+  void nodeprint(ostream& os) const;
 
   // Assignment (for ref counting). The IncRef happens before the DecRef so
   // that self-assignment is safe.
@@ -394,13 +394,6 @@ public:
   // Lisp-form printer
   ostream& LispPrint(ostream& os, int indentation = 0) const;
   ostream& LispPrint_indent(ostream& os, int indentation) const;
-
-  // Presentation Language Printer
-  ostream& PL_Print(ostream& os, STPMgr* mgr, int indentation = 0) const;
-  ostream& PL_Print(ostream& os, int /*indentation = 0*/) const
-  {
-    return PL_Print(os, GetSTPMgr(), 0);
-  }
 
   // Attempt to define something that will work in the gdb
   friend void lpvec(const ASTVec& vec);

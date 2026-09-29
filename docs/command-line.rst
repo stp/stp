@@ -18,35 +18,15 @@ build configuration and the SAT solvers compiled in.
 Input
 -----
 
-With no file named, ``stp`` reads standard input. Three input languages
-are understood:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 30 48
-
-   * - Language
-     - Chosen by
-     - Notes
-   * - SMT-LIB2
-     - ``--SMTLIB2``, a ``.smt2`` file, or anything not chosen otherwise
-     - The recommended format, and the one this manual describes.
-   * - CVC
-     - ``--CVC``, or a ``.cvc`` file
-     - STP's original input language.
-   * - SMT-LIB1
-     - ``--SMTLIB1`` (``-m``), or a ``.smt`` file
-     - The pre-2010 SMT-LIB format.
-
-A flag overrides the file extension, and naming more than one of the
-three flags is an error. Standard input has no extension, so it is read as SMT-LIB2
-unless a flag says otherwise:
+With no file named, ``stp`` reads standard input. The input is SMT-LIB2,
+whatever the file is called; ``--SMTLIB2`` is accepted, and changes
+nothing. (Releases up to 2.4 also read STP's original CVC language and the
+pre-2010 SMT-LIB1 format.)
 
 .. code-block:: bash
 
     stp problem.smt2
     stp < problem.smt2
-    stp --CVC < problem.cvc
 
 Output
 ------
@@ -76,17 +56,9 @@ them.
     ( |x|  #xFF )
     )
 
-A CVC input asks whether its ``QUERY`` follows from its assertions, and
-STP answers ``Valid.``, ``Invalid.`` or, when a limit runs out,
-``Unknown.``. ``Invalid.`` means a counterexample exists, so a
-satisfiable set of assertions with ``QUERY(FALSE);`` answers
-``Invalid.``. An SMT-LIB1 input is answered ``sat`` or ``unsat``.
-
 ``-p`` (``--print-counterex``) prints a model with every satisfiable
-answer without the input asking for one: as ``define-fun`` lines after
-the answer for SMT-LIB2, and as ``ASSERT`` lines before it for CVC and
-SMT-LIB1. With ``-p``, ``-y`` (``--print-counterexbin``) writes the
-``ASSERT`` form's values in binary rather than hexadecimal.
+answer without the input asking for one, as ``define-fun`` lines after
+the answer.
 
 Exit status
 ~~~~~~~~~~~
@@ -94,9 +66,7 @@ Exit status
 ``stp`` exits with 0 once it has read and answered the input, whatever
 the answers were -- ``unsat`` and ``unknown`` included. It exits
 non-zero when it could not: usually with 255, for an unreadable file, an
-unknown or conflicting option, or an input it rejected, and with 1 for a
-``--print-back-*`` option given SMT-LIB2 input and for a few parser
-errors. STP stops at the first error in an SMT-LIB2 script, usually
+unknown or conflicting option, or an input it rejected. STP stops at the first error in an SMT-LIB2 script, usually
 printing an ``(error "...")`` response saying why; answers already given
 to earlier ``(check-sat)`` commands stand. Read the answers from standard
 output, not from the exit status.
@@ -262,37 +232,6 @@ the two options together turn a single-check problem into DIMACS.
 against its size. ``--cnf-link-shared-cells`` makes the ``new-*`` rungs
 keep a comparator cell propagation-complete when its exclusive-or has
 another reader, at the price of a few more clauses.
-
-Converting between formats
---------------------------
-
-These print the parsed formula and exit without solving:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 34 66
-
-   * - Option
-     - Prints
-   * - ``--print-back-SMTLIB2``
-     - SMT-LIB2
-   * - ``--print-back-CVC``
-     - CVC
-   * - ``--print-back-dot``
-     - a graph for Graphviz's ``dot``
-   * - ``--print-back-GDL``
-     - a graph in aiSee's GDL
-
-They take CVC or SMT-LIB1 input; an SMT-LIB2 input is refused. ``-b``
-(``--print-stpinput``) is ``--print-back-CVC`` for CVC input and
-``--print-back-SMTLIB2`` for SMT-LIB1 input.
-
-Treat the output as a readable dump rather than an equivalent problem.
-The SMT-LIB2 printout declares and asserts the formula but has no
-``(check-sat)``. The CVC printout ends in a ``QUERY`` of the conjunction
-of the assertions and the negated original query, which does not
-preserve the answer: a problem that is ``Invalid.`` can print back as one
-that is ``Valid.``.
 
 Other options
 -------------

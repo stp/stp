@@ -111,9 +111,6 @@ _FORMATS = {
     "auto": _core.FORMAT_AUTO,
     "smtlib2": _core.FORMAT_SMTLIB2,
     "smt2": _core.FORMAT_SMTLIB2,
-    "smtlib1": _core.FORMAT_SMTLIB1,
-    "smt1": _core.FORMAT_SMTLIB1,
-    "cvc": _core.FORMAT_CVC,
     "dot": _core.FORMAT_DOT,
     "gdl": _core.FORMAT_GDL,
 }

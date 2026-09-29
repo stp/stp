@@ -36,13 +36,6 @@ THE SOFTWARE.
 
 namespace
 {
-std::string take(char* s)
-{
-  std::string out = s ? s : "<null>";
-  stp_free(s);
-  return out;
-}
-
 struct Session
 {
   stp_tm tm;
@@ -159,22 +152,15 @@ TEST(c_runs, a_failed_source_is_an_io_error)
   stp_solver_clear_error(a.s);
 }
 
-TEST(c_runs, parse_only_and_the_input_printed_back)
+TEST(c_runs, parse_only_decides_nothing)
 {
   Session a;
   Heard h;
   attach(a.s, h);
-  EXPECT_EQ(nullptr, stp_solver_input_to_string(a.s, STP_FORMAT_CVC));
-  EXPECT_EQ(STP_ERR_STATE, stp_tm_error(a.tm)->code);
-  stp_tm_clear_error(a.tm);
-  stp_solver_clear_error(a.s);
-  Lines l{{"x : BITVECTOR(8);\n", "ASSERT(x = 0hex05);\n", "QUERY(x = 0hex06);\n"}};
-  ASSERT_EQ(STP_OK, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_CVC, STP_PARSE_ONLY));
+  Lines l{{"(declare-fun x () (_ BitVec 8))\n", "(assert (= x #x05))\n", "(check-sat)\n"}};
+  ASSERT_EQ(STP_OK, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_SMTLIB2, STP_PARSE_ONLY));
   EXPECT_EQ("", h.out); // nothing decided
   EXPECT_EQ(1u, stp_solver_num_assertions(a.s));
-  const std::string cvc = take(stp_solver_input_to_string(a.s, STP_FORMAT_CVC));
-  EXPECT_NE(std::string::npos, cvc.find("QUERY(")) << cvc;
-  EXPECT_EQ(0u, take(stp_solver_input_to_string(a.s, STP_FORMAT_DOT)).rfind("digraph G{", 0));
   // PARSE_ONLY through parse_smt2: the commands run, the check does not
   Heard h2;
   attach(a.s, h2);
@@ -183,14 +169,15 @@ TEST(c_runs, parse_only_and_the_input_printed_back)
   EXPECT_EQ("\"done\"\n", h2.out);
 }
 
-TEST(c_runs, execute_answers_a_cvc_query)
+TEST(c_runs, execute_answers_a_script_from_a_source)
 {
   Session a;
   Heard h;
   attach(a.s, h);
-  Lines l{{"x : BITVECTOR(8);\n", "ASSERT(x = 0hex05);\n", "QUERY(x = 0hex05);\n"}};
-  ASSERT_EQ(STP_OK, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_CVC, STP_PARSE_EXECUTE));
-  EXPECT_EQ("Valid.\n", h.out);
+  Lines l{{"(declare-fun x () (_ BitVec 8))\n", "(assert (= x #x05))\n", "(assert (not (= x #x05)))\n",
+           "(check-sat)\n"}};
+  ASSERT_EQ(STP_OK, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_SMTLIB2, STP_PARSE_EXECUTE));
+  EXPECT_EQ("unsat\n", h.out);
 }
 
 TEST(c_runs, the_fatal_error_handler_hears_first)
@@ -198,18 +185,18 @@ TEST(c_runs, the_fatal_error_handler_hears_first)
   Session a;
   Heard h;
   attach(a.s, h);
-  Lines l{{"x : BITVECTOR(0);\n", "QUERY(TRUE);\n"}};
-  EXPECT_EQ(STP_ERROR, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_CVC, STP_PARSE_EXECUTE));
+  Lines l{{"(declare-fun x () (_ BitVec 0))\n"}};
+  EXPECT_EQ(STP_ERROR, stp_solver_parse_source(a.s, read_lines, &l, STP_FORMAT_SMTLIB2, STP_PARSE_EXECUTE));
   EXPECT_EQ(STP_ERR_PARSE, stp_tm_error(a.tm)->code);
   stp_tm_clear_error(a.tm);
   stp_solver_clear_error(a.s);
-  EXPECT_EQ("parsing: bit-vectors must be of positive length", h.fatal);
-  EXPECT_NE(std::string::npos, h.err.find("Fatal Error: parsing: bit-vectors must be of positive length"));
+  EXPECT_NE(std::string::npos, h.fatal.find("bit-vectors must be of positive length")) << h.fatal;
+  EXPECT_NE(std::string::npos, h.err.find("Fatal Error: " + h.fatal)) << h.err;
   // cleared: nobody is told
   stp_solver_set_fatal_error_handler(a.s, nullptr, nullptr);
-  Lines again{{"y : BITVECTOR(0);\n", "QUERY(TRUE);\n"}};
+  Lines again{{"(declare-fun y () (_ BitVec 0))\n"}};
   h.fatal.clear();
-  EXPECT_EQ(STP_ERROR, stp_solver_parse_source(a.s, read_lines, &again, STP_FORMAT_CVC, STP_PARSE_EXECUTE));
+  EXPECT_EQ(STP_ERROR, stp_solver_parse_source(a.s, read_lines, &again, STP_FORMAT_SMTLIB2, STP_PARSE_EXECUTE));
   stp_tm_clear_error(a.tm);
   stp_solver_clear_error(a.s);
   EXPECT_EQ("", h.fatal);

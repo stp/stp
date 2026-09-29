@@ -241,8 +241,6 @@ public:
   void setFpRepairAllowed(bool allowed) { fpRepairAllowed = allowed; }
   UFTheoryAdapter* getUFTheoryAdapter() const { return ufTheoryAdapter; }
 
-  // Prints the counterexample to stdout
-  void PrintCounterExample(bool t, std::ostream& os = std::cout);
   void PrintFullCounterExampleSMTLIB2(std::ostream& os);
   void outputLine(std::ostream& os, const ASTNode &f, ASTNode se);
   
@@ -284,9 +282,6 @@ public:
     ASTNodeMap::const_iterator it = CounterExampleMap.find(key);
     return it == CounterExampleMap.end() ? ASTNode() : it->second;
   }
-
-  // Prints the counterexample to stdout
-  void PrintCounterExample_InOrder(bool t);
 
   // queries the counterexample, and returns the value corresponding
   // to e

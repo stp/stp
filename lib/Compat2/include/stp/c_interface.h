@@ -174,10 +174,14 @@ DLL_PUBLIC const char* get_compilation_env(void);
 //!  - 'c': Enables construction of counter examples.
 //!  - 'd': Enables construction and checking of counter examples. Superseeds flag 'c'.
 //!  - 'i': Enables incremental solving from the first vc_query on.
-//!  - 'm': Use SMTLib1 parser. Conflicts with using SMTLib2 parser.
-//!  - 'n': Enables printing of the output. TODO: What is meant with output here?
-//!  - 'p': Enables printing of counter examples.
-//!  - 'q': Enables printing of array values in declared order.
+//!  - 'm': Accepted and ignored. It chose the SMT-LIB 1 parser, which STP no
+//!         longer has.
+//!  - 'n': Enables printing of each query's answer, as stp prints it: unsat
+//!         for a valid query, sat for an invalid one, unknown.
+//!  - 'p': Enables printing of counter examples, as vc_printCounterExample
+//!         prints them.
+//!  - 'q': Accepted and ignored. It printed array values in declared order,
+//!         in the presentation language STP no longer has.
 //!  - 'r': Enables accermannisation.
 //!  - 's': Sets the status flag to true. TODO: What consequenses does this have?
 //!  - 't': Enables quick statistics. TODO: What is this?
@@ -186,7 +190,8 @@ DLL_PUBLIC const char* get_compilation_env(void);
 //!  - 'w': *Disables* word-level solving, despite the name.
 //!  - 'x': Enables deciding equality between whole arrays (the extensional
 //!         theory of arrays). Must be set before any such equality is built.
-//!  - 'y': Enables printing binaries. TODO: What is meant with this?
+//!  - 'y': Accepted and ignored. It printed counterexamples in binary, in the
+//!         presentation language STP no longer has.
 //!
 //! This function panics if given an unsupported or unknown flag.
 //!
@@ -1630,7 +1635,7 @@ DLL_PUBLIC Expr vc_boolToBVExpr(VC vc, Expr form);
 
 //! \brief Creates a boolean variable named after the application of the
 //!        given boolean variable expression to the parameter, each printed
-//!        in the presentation language: "p (0x3 )" for a four-bit 3.
+//!        in SMT-LIB 2: "p(#x3)" for a four-bit 3.
 //!        Two applications denote the same variable exactly when the names
 //!        match. The parameter must be a constant bit-vector expression.
 //!
@@ -1662,20 +1667,18 @@ DLL_PUBLIC Expr vc_readExpr(VC vc, Expr array, Expr index);
 //!
 DLL_PUBLIC Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue);
 
-//! \brief Parses the expression stored in the file of the given filepath
-//!        and returns it on success.
+//! \brief Refuses: this parsed a CVC or SMT-LIB 1 file, and STP no longer
+//!        reads either language.
 //!
-//! TODO: What format is expected? SMTLib2?
-//!       Does the user have to deallocate resources for the returned expression?
-//!       Why exactly is this "pretty cool!"?
+//! Reports a fatal error through the error handler and returns NULL. Read an
+//! SMT-LIB 2 script through the 3.x API (stp_solver_parse_file).
 //!
 DLL_PUBLIC Expr vc_parseExpr(VC vc, const char* filepath);
 
-//! \brief Prints the given expression to stdout in the presentation language.
+//! \brief Prints the given expression to stdout in SMT-LIB 2.
 //!
-//! The presentation language has no floating-point syntax. An expression that
-//! uses the floating-point theory -- including a RoundingMode -- is refused
-//! here rather than printed; use vc_printSMTLIB2.
+//! 2.x printed it in its presentation language (CVC), which STP no longer
+//! has; this is the term vc_printSMTLIB2 asserts, without the declarations.
 //!
 DLL_PUBLIC void vc_printExpr(VC vc, Expr e);
 
@@ -1683,15 +1686,14 @@ DLL_PUBLIC void vc_printExpr(VC vc, Expr e);
 //!
 //! It is the responsibility of the caller to free the returned string.
 //!
-//! This is the export that understands every sort STP has: bit-vectors,
-//! arrays, FloatingPoint and RoundingMode. Prefer it to vc_printExpr, which
-//! predates the floating-point theory and refuses it. (vc_printSMTLIB, which
-//! returned SMT-LIB 1, has been removed.)
+//! A whole problem: the logic, a declaration per symbol and the assertion of
+//! the expression. (vc_printSMTLIB, which returned SMT-LIB 1, has been
+//! removed.)
 //!
 DLL_PUBLIC char* vc_printSMTLIB2(VC vc, Expr e);
 
 //! \brief Prints the given expression into the file with the given file descriptor
-//!        in the presentation language.
+//!        in SMT-LIB 2, as vc_printExpr prints it.
 //!
 DLL_PUBLIC void vc_printExprFile(VC vc, Expr e, int fd);
 
@@ -1710,16 +1712,13 @@ DLL_PUBLIC void vc_printExprFile(VC vc, Expr e, int fd);
 DLL_PUBLIC void vc_printExprToBuffer(VC vc, Expr e, char** buf,
                                      size_t* len);
 
-//! \brief Prints the counter example after an invalid query to stdout, in the
-//!        presentation language.
+//! \brief Prints the counter example after an invalid query to stdout, as
+//!        vc_printCounterExampleSMTLIB2 prints it.
 //!
 //! This method should only be called after a query which returns false.
 //!
-//! The presentation language has no floating-point or rounding-mode syntax, so
-//! values of those sorts print as their packed carriers here -- a float as its
-//! IEEE bits, a rounding mode as a 5-bit constant. Use
-//! vc_printCounterExampleSMTLIB2 to get them at the sort they were declared
-//! with.
+//! 2.x printed it in its presentation language (CVC), which STP no longer
+//! has, between COUNTEREXAMPLE BEGIN: and END: lines.
 //!
 DLL_PUBLIC void vc_printCounterExample(VC vc);
 
@@ -1728,13 +1727,14 @@ DLL_PUBLIC void vc_printCounterExample(VC vc);
 //!
 //! This method should only be called after a query which returns false.
 //!
-//! Unlike vc_printCounterExample this states each value at its declared sort:
-//! a float as `(fp #b... #b... #b...)` of the right `(_ FloatingPoint eb sb)`,
-//! a rounding mode by name. Symbols STP introduced for itself are left out.
+//! Each value is stated at its declared sort: a float as
+//! `(fp #b... #b... #b...)` of the right `(_ FloatingPoint eb sb)`, a rounding
+//! mode by name. Symbols STP introduced for itself are left out.
 //!
 DLL_PUBLIC void vc_printCounterExampleSMTLIB2(VC vc);
 
-//! \brief Prints variable declarations to stdout.
+//! \brief Prints variable declarations to stdout, a `(declare-fun ...)` per
+//!        symbol, in SMT-LIB 2.
 //!
 DLL_PUBLIC void vc_printVarDecls(VC vc);
 
@@ -1747,7 +1747,8 @@ DLL_PUBLIC void vc_printVarDecls(VC vc);
 //!
 DLL_PUBLIC void vc_clearDecls(VC vc);
 
-//! \brief Prints assertions to stdout.
+//! \brief Prints assertions to stdout, an `(assert ...)` per assertion, in
+//!        SMT-LIB 2.
 //!
 //! The validity checker's flag 'simplify_print' must be set to '1'
 //! to enable simplifications of the asserted formulas during printing.
@@ -1759,6 +1760,10 @@ DLL_PUBLIC void vc_printAsserts(VC vc, int simplify_print _CVCL_DEFAULT_ARG(0));
 //!        length in 'len'.
 //!
 //! It is the callers responsibility to free the buffer's memory.
+//!
+//! The state is an SMT-LIB 2 script STP reads back: the logic, the
+//! declarations vc_printVarDecls prints, the assertions, the negation of the
+//! given query and (check-sat), which answers unsat when the query is valid.
 //!
 //! The validity checker's flag 'simplify_print' must be set to '1'
 //! to enable simplifications of the query state during printing.
@@ -1773,13 +1778,16 @@ DLL_PUBLIC void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf,
 //!
 //! It is the callers responsibility to free the buffer's memory.
 //!
+//! The text is what vc_printCounterExample prints.
+//!
 //! The validity checker's flag 'simplify_print' must be set to '1'
 //! to enable simplifications of the counter example during printing.
 //!
 DLL_PUBLIC void vc_printCounterExampleToBuffer(VC vc, char** buf,
                                                size_t* len);
 
-//! \brief Prints the query to stdout in presentation language.
+//! \brief Prints the last query to stdout as SMT-LIB 2 asks it: the
+//!        assertion of its negation, and (check-sat).
 //!
 DLL_PUBLIC void vc_printQuery(VC vc);
 
@@ -1995,8 +2003,7 @@ DLL_PUBLIC Type vc_fpType(VC vc, int exp_bits, int sig_bits);
 //! asserts the validity constraint (at the current assertion level, so it
 //! scopes with vc_push/vc_pop like any assertion), and
 //! vc_printCounterExampleSMTLIB2 prints the variable's value by mode name.
-//! (vc_printCounterExample prints the 5-bit carrier: the presentation language
-//! has no rounding-mode syntax.) Read it from a model with
+//! Read it from a model with
 //! vc_getCounterExample; the bits are the enum VCRoundingMode encoding.
 //! vc_fpRoundingModeVar is a one-call convenience for the same thing.
 DLL_PUBLIC Type vc_fpRoundingModeType(VC vc);
@@ -2647,7 +2654,8 @@ DLL_PUBLIC Expr vc_bvWriteToMemoryArray(VC vc, Expr array, Expr byteIndex,
 /// GENERAL EXPRESSION OPERATIONS
 /////////////////////////////////////////////////////////////////////////////
 
-//! \brief Returns a string representation of the given expression.
+//! \brief Returns a string representation of the given expression: its
+//!        SMT-LIB 2 text, or the sort's for a type.
 //!
 //! Note:
 //!     The caller is responsible for deallocating the string afterwards.
@@ -2655,7 +2663,8 @@ DLL_PUBLIC Expr vc_bvWriteToMemoryArray(VC vc, Expr array, Expr byteIndex,
 //!
 DLL_PUBLIC char* exprString(Expr e);
 
-//! \brief Returns a string representation of the given type.
+//! \brief Returns a string representation of the given type: its SMT-LIB 2
+//!        sort.
 //!
 //! Note:
 //!     The caller is responsible for deallocating the string afterwards.
@@ -2951,15 +2960,12 @@ DLL_PUBLIC const char* exprName(Expr e);
 //!
 DLL_PUBLIC uint64_t getExprID(Expr ex);
 
-//! \brief Parses the given string in CVC or SMTLib1.0 format and extracts
-//!        query and assertion information into the 'outQuery' and 'outAsserts'
-//!        buffers respectively.
+//! \brief Refuses: this parsed a CVC or SMT-LIB 1 string, and STP no longer
+//!        reads either language.
 //!
-//! It is the caller's responsibility to free the buffer's memory afterwards.
-//!
-//! Note: The user can controle the parsed format via 'process_argument'.
-//!
-//! Returns '1' if parsing was successful.
+//! Sets 'outQuery' and 'outAsserts' to NULL, reports a fatal error through
+//! the error handler and returns 0. Read an SMT-LIB 2 script through the 3.x
+//! API (stp_solver_parse).
 //!
 DLL_PUBLIC int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery,
                                Expr* outAsserts);

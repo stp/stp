@@ -59,7 +59,7 @@ TEST(multi_query_bug, one)
   const Term b = tm.declare("b", tm.mk_bv_sort(32));
   // a == b
   const Term expr = a == b;
-  std::cout << expr.to_string(Format::CVC);
+  std::cout << expr.to_string(Format::SMTLIB2);
 
   s.push();
   const Entailment res = s.entails(expr);
@@ -69,7 +69,7 @@ TEST(multi_query_bug, one)
   s.pop();
 
   const Term expr2 = bvugt(a, b);
-  std::cout << expr2.to_string(Format::CVC);
+  std::cout << expr2.to_string(Format::SMTLIB2);
 
   s.push();
   const Entailment res2 = s.entails(expr2);
@@ -90,7 +90,7 @@ TEST(multi_query_bug, many)
 
   // a == b
   Term expr = a == b;
-  std::cout << expr.to_string(Format::CVC);
+  std::cout << expr.to_string(Format::SMTLIB2);
   s.push();
   Entailment res = s.entails(expr);
   std::cout << "vc_query result = " << res << "\n";
@@ -100,7 +100,7 @@ TEST(multi_query_bug, many)
 
   // a >= b
   expr = bvuge(a, b);
-  std::cout << expr.to_string(Format::CVC);
+  std::cout << expr.to_string(Format::SMTLIB2);
   s.push();
   res = s.entails(expr);
   std::cout << "vc_query result = " << res << "\n";
@@ -110,7 +110,7 @@ TEST(multi_query_bug, many)
 
   // a > b
   expr = bvugt(a, b);
-  std::cout << expr.to_string(Format::CVC);
+  std::cout << expr.to_string(Format::SMTLIB2);
   s.push();
   res = s.entails(expr);
   std::cout << "vc_query result = " << res << "\n";
@@ -120,7 +120,7 @@ TEST(multi_query_bug, many)
 
   // a < b
   expr = bvugt(b, a);
-  std::cout << expr.to_string(Format::CVC);
+  std::cout << expr.to_string(Format::SMTLIB2);
   s.push();
   res = s.entails(expr);
   std::cout << "vc_query result = " << res << "\n";

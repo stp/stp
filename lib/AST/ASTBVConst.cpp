@@ -44,49 +44,22 @@ void ASTBVConst::CleanUp()
   delete this;
 }
 
-// Print function for bvconst -- return _bvconst value in bin
-// format (c_friendly is for printing hex. numbers that C
-// compilers will accept)
-void ASTBVConst::nodeprint(ostream& os, bool c_friendly)
+// The value in hex (0x...) when its width is a multiple of four, else in
+// binary (0b...), as C writes them.
+void ASTBVConst::nodeprint(ostream& os)
 {
   unsigned char* res;
   const char* prefix;
 
-  if (nodeManager->UserFlags.print_binary_flag)
-  {
-    res = CONSTANTBV::BitVector_to_Bin(_bvconst);
-    if (c_friendly)
-    {
-      prefix = "0b";
-    }
-    else
-    {
-      prefix = "0bin";
-    }
-  }
-  else if (getValueWidth() % 4 == 0)
+  if (getValueWidth() % 4 == 0)
   {
     res = CONSTANTBV::BitVector_to_Hex(_bvconst);
-    if (c_friendly)
-    {
-      prefix = "0x";
-    }
-    else
-    {
-      prefix = "0hex";
-    }
+    prefix = "0x";
   }
   else
   {
     res = CONSTANTBV::BitVector_to_Bin(_bvconst);
-    if (c_friendly)
-    {
-      prefix = "0b";
-    }
-    else
-    {
-      prefix = "0bin";
-    }
+    prefix = "0b";
   }
   if (NULL == res)
   {

@@ -104,5 +104,5 @@ while IFS= read -r input; do
         # shellcheck disable=SC2086
         printf '%-64s  %s\n' "$(cat $cnfs | sha256sum | cut -d' ' -f1)" "$rel"
     fi
-done < <(find "$corpus" -type f \( -name '*.smt2' -o -name '*.cvc' \) \
+done < <(find "$corpus" -type f -name '*.smt2' \
              | LC_ALL=C sort)

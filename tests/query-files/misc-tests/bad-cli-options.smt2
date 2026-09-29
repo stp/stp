@@ -9,11 +9,15 @@
 ; --- errors detected by CLI11 --------------------------------------------
 
 ; An unrecognised option. CLI11 reports it as an unexpected argument, and
-; a prefix of a real option name (--print-back) is no longer expanded to
-; the full name, so it is diagnosed the same way.
+; a prefix of a real option name (--print-counter) is no longer expanded to
+; the full name, so it is diagnosed the same way. So are the options of the
+; CVC and SMT-LIB 1 input languages, which STP no longer reads.
 ; RUN: not %solver --this-option-does-not-exist %s 2>&1 | %OutputCheck %s --check-prefix=UNKNOWN
 ; RUN: not %solver -Z %s 2>&1 | %OutputCheck %s --check-prefix=UNKNOWN
-; RUN: not %solver --print-back %s 2>&1 | %OutputCheck %s --check-prefix=UNKNOWN
+; RUN: not %solver --print-counter %s 2>&1 | %OutputCheck %s --check-prefix=UNKNOWN
+; RUN: not %solver --CVC %s 2>&1 | %OutputCheck %s --check-prefix=UNKNOWN
+; RUN: not %solver --SMTLIB1 %s 2>&1 | %OutputCheck %s --check-prefix=UNKNOWN
+; RUN: not %solver --print-back-SMTLIB2 %s 2>&1 | %OutputCheck %s --check-prefix=UNKNOWN
 ; UNKNOWN-NOT: terminate called
 ; UNKNOWN: was not expected
 
@@ -76,10 +80,6 @@
 ; BADCONFL-NOT: terminate called
 ; BADCONFL: --max-num-confl must be -1
 
-; RUN: not %solver --CVC --SMTLIB2 %s 2>&1 | %OutputCheck %s --check-prefix=BADPARSER
-; BADPARSER-NOT: terminate called
-; BADPARSER: more than one parsing option
-
 ; --- options that cannot both take effect --------------------------------
 ;
 ; One option discarding another's is a usage error rather than a silent
@@ -117,12 +117,6 @@
 ; PARSEONLY-NOT: terminate called
 ; PARSEONLY: excludes
 
-; --interactive is read only on the SMT-LIB2 path.
-; RUN: not %solver --interactive=true --CVC %s 2>&1 | %OutputCheck %s --check-prefix=INTERACTIVE
-; RUN: not %solver --interactive=true --SMTLIB1 %s 2>&1 | %OutputCheck %s --check-prefix=INTERACTIVE
-; INTERACTIVE-NOT: terminate called
-; INTERACTIVE: excludes
-
 ; --- combinations that are still accepted --------------------------------
 ;
 ; The exclusions above must not have caught anything that does take effect.
@@ -136,6 +130,9 @@
 ; --search-bias is documented as ignored by solvers without such a setting,
 ; so it stays accepted next to any solver flag.
 ; RUN: %solver --search-bias=unsat %s 2>&1 | %OutputCheck %s --check-prefix=SOLVE
+
+; --SMTLIB2 names the only input language, and is accepted as it always was.
+; RUN: %solver --SMTLIB2 %s 2>&1 | %OutputCheck %s --check-prefix=SOLVE
 
 ; --- the diagnostics above go to stderr, not stdout ----------------------
 ;

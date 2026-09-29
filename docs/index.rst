@@ -90,9 +90,9 @@ Give ``stp`` a problem file, or pipe one to it, and it prints the answer:
     stp problem.smt2
     stp < problem.smt2
 
-:doc:`command-line` covers the rest: the input formats, what STP prints
-and its exit status, driving it over a pipe, choosing the SAT solver,
-time and conflict limits, statistics, writing CNF and converting between formats.
+:doc:`command-line` covers the rest: the input, what STP prints and its
+exit status, driving it over a pipe, choosing the SAT solver, time and
+conflict limits, statistics and writing CNF.
 
 .. toctree::
    :hidden:

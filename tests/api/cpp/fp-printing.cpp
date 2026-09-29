@@ -26,12 +26,8 @@ THE SOFTWARE.
 //
 // SMT-LIB 2 is the printer that understands every sort STP has: a solver's
 // state prints as a script (Solver::to_smt2), a model as its definitions
-// (Model::to_smt2), a term as its text (Term::str). The CVC presentation
-// language predates the floating-point theory and has no syntax for it, and
-// its printer (PL_Print) treats a floating-point term as a fatal engine
-// error, so the API refuses such a term or problem up front (UNSUPPORTED,
-// saying why) before the printer sees it. Nothing here prints to stdout:
-// every printer returns a string.
+// (Model::to_smt2), a term as its text (Term::str). Nothing here prints to
+// stdout: every printer returns a string.
 
 #include "api_common.hpp"
 
@@ -102,8 +98,7 @@ TEST(fp_printing, smtlib2_states_the_source_sorts)
 }
 
 // A model states each value at the sort it was declared with: the mode by
-// name, the float in (fp ...) syntax. The presentation-language route cannot
-// do either -- it has no syntax for them -- which is why this one exists.
+// name, the float in (fp ...) syntax.
 TEST(fp_printing, smtlib2_counterexample_states_the_source_sorts)
 {
   TermManager tm;
@@ -120,35 +115,21 @@ TEST(fp_printing, smtlib2_counterexample_states_the_source_sorts)
   EXPECT_TRUE(contains(out, "(fp #b")) << out;
 }
 
-// The bit-vector-only route refuses rather than dies. 3.x: the refusal is a
-// RecoverableError (UNSUPPORTED) that names what the CVC language lacks, and
-// the term prints as SMT-LIB 2 as before.
-TEST(fp_printing, the_bitvector_only_route_refuses)
+// A float prints as itself, both as a term and in a problem holding it.
+TEST(fp_printing, a_float_prints_as_smtlib2)
 {
   TermManager tm;
   const Term x = tm.declare("x", tm.mk_fp_sort(8, 24));
   const Term f = fp_is_nan(x);
-
-  const auto e = API_ERROR_OF(f.to_string(Format::CVC));
-  ASSERT_TRUE(e.has_value());
-  EXPECT_EQ(e->code(), ErrorCode::UNSUPPORTED);
-  EXPECT_EQ(e->function(), "Term::to_string");
-  EXPECT_TRUE(contains(e->what(), "floating-point")) << e->what();
-
-  // the same for a problem holding it
   Solver s(tm);
   s.add(f);
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.to_string(Format::CVC));
-
-  // and the SMT-LIB 2 route prints it
   EXPECT_EQ(f.to_string(Format::SMTLIB2, false), "(fp.isNaN x)");
   EXPECT_TRUE(contains(s.to_smt2(), "fp.isNaN"));
 }
 
-// A RoundingMode carries no format and no float need occur at all, so it is
-// the case a "does this contain a float" test misses. It still cannot be
-// printed by a bit-vector-only route: RoundingMode is not (_ BitVec 5), and
-// printing it as one produces text that re-parses as a different problem.
+// A RoundingMode carries no format and no float need occur at all: it still
+// prints as a RoundingMode, not as the (_ BitVec 5) it is carried in, which
+// would re-parse as a different problem.
 TEST(fp_printing, a_rounding_mode_alone_is_still_the_fp_theory)
 {
   TermManager tm;
@@ -157,20 +138,15 @@ TEST(fp_printing, a_rounding_mode_alone_is_still_the_fp_theory)
   const Term f = r == tm.mk_rm(RoundingMode::RTZ);
 
   EXPECT_TRUE(contains(smtlib2(tm, f), "RoundingMode"));
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, f.to_string(Format::CVC));
 }
 
-// Pure bit-vector problems keep the older route, which is what makes the
-// refusal above a floating-point rule rather than a general narrowing.
-TEST(fp_printing, bitvector_problems_still_print_the_old_way)
+// A pure bit-vector problem declares its symbols as bit-vectors.
+TEST(fp_printing, bitvector_problems_print_their_declarations)
 {
   TermManager tm;
 
   const Term b = tm.declare("b", tm.mk_bv_sort(8));
   const Term f = b == tm.mk_bv(8, 1);
-
-  const std::string out = f.to_string(Format::CVC);
-  EXPECT_TRUE(contains(out, "0x01")) << out;
 
   // 3.x quotes a symbol in a declaration only where SMT-LIB requires it.
   EXPECT_TRUE(contains(smtlib2(tm, f), "(declare-fun b () (_ BitVec 8))"));

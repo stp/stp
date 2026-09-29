@@ -1156,32 +1156,8 @@ public:
    * Toplevel printing and stats functions                        *
    ****************************************************************/
 
-  // For printing purposes
-  // Used just by the CVC parser.
-  ASTVec ListOfDeclaredVars;
-
-  // Nodes seen so far
-  ASTNodeSet PLPrintNodeSet;
-
-  // Map from ASTNodes to LetVars
-  ASTNodeMap NodeLetVarMap;
-
-  // This is a vector which stores the Node to LetVars pairs. It
-  // allows for sorted printing, as opposed to NodeLetVarMap
-  vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
-
-  // A partial Map from ASTNodes to LetVars. Needed in order to
-  // correctly print shared subterms inside the LET itself
-  ASTNodeMap NodeLetVarMap1;
-
   // prints statistics for the ASTNode.
   void ASTNodeStats(const char* c, const ASTNode& a);
-
-  // Print variable to the input stream
-  void printVarDeclsToStream(ostream& os, ASTNodeSet& symbols);
-
-  // Print assertions to the input stream
-  void printAssertsToStream(ostream& os);
 
   // Variables are added automatically to the introduced_symbolset. Variables
   // in the set aren't printed out as part of the counter example.
@@ -1342,21 +1318,13 @@ public:
 
   bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
 
-  ASTNode NewParameterized_BooleanVar(const ASTNode& var,
-                                      const ASTNode& constant);
-
   void TermsAlreadySeenMap_Clear(void) { TermsAlreadySeenMap.clear(); }
 
   // This is called before SAT solving, so only junk that isn't needed
   // after SAT solving should be cleaned out.
   void ClearAllTables(void)
   {
-    NodeLetVarMap.clear();
-    NodeLetVarMap1.clear();
-    PLPrintNodeSet.clear();
     TermsAlreadySeenMap.clear();
-    NodeLetVarVec.clear();
-    ListOfDeclaredVars.clear();
   }
 
   DLL_PUBLIC ~STPMgr();

@@ -631,11 +631,10 @@ def test_introspection_and_printing():
     assert str(fpNaN(Float32())) == "NaN" and str(fpMinusZero(Float32())) == "-0.0" and str(fpPlusInfinity(Float32())) == "+oo"
     assert t.to_string("smtlib2") == t.sexpr()
     assert "bvadd" in t.to_string("smtlib2")
-    cvc = t.to_string("cvc")
-    assert "BVPLUS" in cvc or "+" in cvc
     assert t.to_string("dot").startswith("digraph") or "->" in t.to_string("dot")
-    with pytest.raises(ArgumentError):
-        t.to_string("pdf")
+    for unknown in ("pdf", "cvc"):
+        with pytest.raises(ArgumentError):
+            t.to_string(unknown)
     assert x.decl_name() == "x" and (x + y).decl_name() is None
     assert is_expr(x) and is_app(t) and is_const(x) and is_const(BitVecVal(1, 8)) and not is_const(t)
     assert is_symbol(x) and not is_symbol(BitVecVal(1, 8)) and is_value(BitVecVal(1, 8)) and not is_value(x)

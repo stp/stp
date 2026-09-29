@@ -199,7 +199,6 @@ public:
   enum class OptionMode { OFF, ON, AUTO };
 
   /* Parsing options */
-  bool smtlib1_parser_flag = false;
   bool smtlib2_parser_flag = false;
 
   /* Output details of how the solving went*/
@@ -708,11 +707,6 @@ public:
   // construct the counterexample in terms of original variable based
   // on the counterexample returned by SAT solver
   bool print_counterexample_flag = false;
-  bool print_binary_flag = false;
-
-  // if this option is true then print the way dawson wants using a
-  // different printer. do not use this printer.
-  bool print_arrayval_declaredorder_flag = false;
 
   // flag to decide whether to print "valid/invalid" or not
   bool print_output_flag = false;
@@ -728,8 +722,8 @@ public:
   // who transfers their intuition here must not get the opposite of what
   // they asked for. Exceeding the cap abandons the query through the
   // soft-timeout path, so the answer is the same one a `--max-time` expiry
-  // gives -- `unknown` on stdout in SMT-LIB mode (`Unknown.` in the CVC
-  // language) with exit status 0, and SOLVER_UNKNOWN from the library.
+  // gives -- `unknown` on stdout with exit status 0, and SOLVER_UNKNOWN
+  // from the library.
   // (get-info :reason-unknown) is what tells this budget from the clock.
   //
   // The cap governs the transient AIGs a solve builds -- the batch bit-blast

@@ -264,8 +264,6 @@ TEST(RoundTrips, bind_symbol_aliases_reach_the_parsers)
   ASSERT_TRUE(s.check_sat().is_sat());
   EXPECT_EQ(s.model().uint64_value(x), 1u);
   EXPECT_TRUE(s.entails(s.parse_term("(bvadd y x)") == bvadd(x, x)).is_valid());
-  s.parse("ASSERT(BVLT(y, 0hex05)); QUERY(FALSE);", Format::CVC);
-  ASSERT_TRUE(s.check_sat().is_sat());
   // and a script's own declaration of the name is a redeclaration
   API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2("(declare-fun y () (_ BitVec 8))"));
   // the symbol is listed once, whatever its names
@@ -283,71 +281,4 @@ TEST(RoundTrips, a_fresh_sorts_name_is_not_declared_again)
   EXPECT_TRUE(tm.declared_sorts().empty());
   const Sort named = tm.declare_sort("T");
   EXPECT_EQ(tm.declare_sort("T"), named);
-}
-
-// The CVC reader has no overflow predicate and no distinct, so the CVC
-// printer spells them in operators it has; read back, each spelling is
-// equivalent to the predicate, at every width.
-TEST(RoundTrips, cvc_spells_overflow_predicates_and_distinct_exactly)
-{
-  for (const Kind k : {Kind::BV_UADDO, Kind::BV_SADDO, Kind::BV_UMULO, Kind::BV_SMULO, Kind::BV_USUBO,
-                       Kind::BV_SSUBO, Kind::DISTINCT})
-    for (std::uint32_t w = 1; w <= 8; ++w)
-    {
-      SCOPED_TRACE(std::string(to_string(k)) + " at width " + std::to_string(w));
-      TermManager tm;
-      const Sort bv = tm.mk_bv_sort(w);
-      const Term x = tm.declare("x", bv), y = tm.declare("y", bv), z = tm.declare("z", bv);
-      Solver s(tm);
-      s.add(k == Kind::DISTINCT ? tm.mk_term(k, {x, y, z}) : tm.mk_term(k, {x, y}));
-      const std::string text = s.to_string(Format::CVC);
-      TermManager back;
-      Solver read(back);
-      read.parse(text, Format::CVC);
-      ASSERT_EQ(read.assertions().size(), 1u) << text;
-      const Term spelled = read.assertions()[0];
-      const Term x2 = *back.symbol("x"), y2 = *back.symbol("y");
-      const Term original = k == Kind::DISTINCT ? back.mk_term(k, {x2, y2, *back.symbol("z")})
-                                                : back.mk_term(k, {x2, y2});
-      Solver check(back);
-      EXPECT_TRUE(check.entails(spelled == original).is_valid()) << text;
-    }
-}
-
-// A name the CVC reader would not read back as that name is refused rather
-// than printed: a space, a leading digit, one of its keywords.
-TEST(RoundTrips, cvc_refuses_a_name_it_cannot_spell)
-{
-  for (const char* name : {"odd name", "1abc", "x!0", "ASSERT", "WITH"})
-  {
-    SCOPED_TRACE(name);
-    TermManager tm;
-    Solver s(tm);
-    s.add(tm.declare(name, tm.mk_bv_sort(8)) == tm.mk_bv(8, 1));
-    API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, s.to_string(Format::CVC));
-  }
-  TermManager tm;
-  Solver s(tm);
-  s.add(tm.declare("x_1'?$", tm.mk_bv_sort(8)) == tm.mk_bv(8, 1));
-  TermManager back;
-  Solver read(back);
-  read.parse(s.to_string(Format::CVC), Format::CVC);
-  EXPECT_TRUE(back.symbol("x_1'?$").has_value());
-}
-
-// Reading CVC, like SMT-LIB 2, builds an equality between whole arrays
-// whatever array-equality says (a check under `off` refuses it).
-TEST(RoundTrips, cvc_reads_an_equality_between_arrays)
-{
-  TermManager tm;
-  const Sort bv8 = tm.mk_bv_sort(8), arr = tm.mk_array_sort(bv8, bv8);
-  const Term a = tm.declare("a", arr), b = tm.declare("b", arr), x = tm.declare("x", bv8);
-  Solver s(tm);
-  s.add(a == store(b, x, tm.mk_bv(8, 7)));
-  s.add(select(a, x) != tm.mk_bv(8, 7));
-  ASSERT_TRUE(s.check_sat().is_unsat());
-  TermManager back;
-  Solver read(back);
-  read.parse(s.to_string(Format::CVC), Format::CVC);
-  EXPECT_TRUE(read.check_sat().is_unsat());
 }

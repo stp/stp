@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-// stp-test3.cpp -- a CVC file parsed into a solver running each MiniSat
+// stp-test3.cpp -- an SMT-LIB 2 file parsed into a solver running each MiniSat
 // flavour (sat-backend minisat and simplifying-minisat), and an entailment
 // decided over its assertions.
 //
@@ -64,8 +64,8 @@ void go(const char* backend)
   o.set_bool("check-sanity", true); // the model self-check every 2.x checker ran
   Solver s(tm, o);
 
-  // CVC_FILE is a macro that expands to a file path
-  s.parse_file(CVC_FILE, Format::CVC);
+  // INPUT_FILE is a macro that expands to a file path
+  s.parse_file(INPUT_FILE, Format::SMTLIB2);
 
   const Term a = tm.declare("a", tm.mk_bv_sort(8));
   const Term ct_0 = tm.mk_bv(8, 0);

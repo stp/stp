@@ -28,12 +28,11 @@ component of STP. The headers that go with them live under
    ``pop`` and repeated ``check-sat`` against a solver kept alive between
    queries. See :doc:`incremental-solving`.
 -  ``Interface``: The engine's C++ interface (``stp/cpp_interface.h``),
-   through which the parsers and the API build terms and run queries.
+   through which the parser and the API build terms and run queries.
 -  ``NodeFactory``: Creates AST nodes. Which factory a client asks for
    decides how much work happens as nodes are built, from hash consing
    alone up to the rewriting done by ``SimplifyingNodeFactory``.
--  ``Parser``: Contains the parsers for the CVC, SMT-LIB1, and SMT-LIB2
-   input formats.
+-  ``Parser``: Contains the SMT-LIB2 parser.
 -  ``Printer``: Implements various output formatters.
 -  ``Sat``: Adapters presenting each supported SAT solver --
    `MiniSat <https://github.com/stp/minisat>`__,

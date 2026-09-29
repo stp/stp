@@ -38,23 +38,17 @@ namespace stp
 {
 // external parser table for declared symbols.
 
-// The generated lexers' input, which the 3.x API's parse entries set
+// The generated lexer's input, which the 3.x API's parse entries set
 // (lib/Api/Solver.cpp): a string, or a FILE*, or a reader (below).
-void SMTScanString(const char* yy_str);
 void SMT2ScanString(const char* yy_str);
-void CVCScanString(const char* yy_str);
-DLL_PUBLIC void setCVCIn(FILE* file);
-DLL_PUBLIC void setSMTIn(FILE* file);
 DLL_PUBLIC void setSMT2In(FILE* file);
 
-// Where a lexer reads its input instead of its FILE*: a reader fills up to
+// Where the lexer reads its input instead of its FILE*: a reader fills up to
 // `max` bytes of `buf` and answers how many, 0 at the end of the input. The
 // 3.x API reads a caller's stream through one. A null reader restores the
 // FILE*.
 typedef std::size_t (*ParserReader)(char* buf, std::size_t max, void* opaque);
 DLL_PUBLIC void setSMT2Reader(ParserReader reader, void* opaque);
-DLL_PUBLIC void setCVCReader(ParserReader reader, void* opaque);
-DLL_PUBLIC void setSMTReader(ParserReader reader, void* opaque);
 
 // Whether the SMT-LIB2 lexer recognises the floating-point keywords.
 // SMT-LIB reserves theory names per-logic, so they are live only under an
@@ -138,13 +132,9 @@ struct ScriptEnded
 // naming the set-logic that would have made the name a keyword.
 bool SMT2FpKeywordNeedsLogic(const char* text);
 
-DLL_PUBLIC int SMTParse(void* AssertsQuery);
 DLL_PUBLIC int SMT2Parse();
-DLL_PUBLIC int CVCParse(void* AssertsQuery);
 } // end of namespace
 
-DLL_PUBLIC int cvclex_destroy(void);
-DLL_PUBLIC int smtlex_destroy(void);
 DLL_PUBLIC int smt2lex_destroy(void);
 
 #endif

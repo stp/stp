@@ -44,24 +44,14 @@ void LetMgr::LetExprMgr(string name, const ASTNode& letExpr)
 {
   assert(frames.size() > 0);
 
-  // In CVC lets are available immediately. In SMTLIB2 it's only when the list of them has all been done.
-  if (frameMode)
+  // A binding is visible only once the whole list of them has been read
+  // (commit), so the bindings of one let cannot see each other.
+  if (interim.find(name) != interim.end())
   {
-    if (interim.find(name) != interim.end())
-      {
-        string msg = "Let already created:" + name;
-        FatalError(msg.c_str());
-      }
-    interim.insert(make_pair(name,letExpr));
+    string msg = "Let already created:" + name;
+    FatalError(msg.c_str());
   }
-  else
-  {
-    if (!insertIntoFrame(name, letExpr))
-      {
-        string msg = "Let already created:" + name;
-        FatalError(msg.c_str());
-      }
-  }
+  interim.insert(make_pair(name, letExpr));
 }
 
 bool LetMgr::insertIntoFrame(const string& name, const ASTNode& letExpr)
@@ -140,20 +130,6 @@ const ASTNode* LetMgr::lookupLet(std::string_view s) const
 
   // The innermost binding shadows the others.
   return &found->second.back().second;
-}
-
-void LetMgr::cleanupParserSymbolTable()
-{
-  _parser_symbol_table.clear(); 
-}
-
-// Used only by the SMT1 & CVC parsers.
-void LetMgr::CleanupLetIDMap(void)
-{
-  interim.clear();
-  bindings.clear();
-  frames.clear();
-  push();
 }
 
 }

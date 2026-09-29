@@ -37,7 +37,7 @@ const char* ASTSymbol::GetName() const
 }
 
 // Print function for symbol
-void ASTSymbol::nodeprint(ostream& os, bool /*c_friendly*/)
+void ASTSymbol::nodeprint(ostream& os)
 {
   os << _name;
 }

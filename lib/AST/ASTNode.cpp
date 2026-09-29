@@ -464,9 +464,9 @@ void ASTNode::SetSigWidth(unsigned int _sw) const
 //
 // 0 iff BOOLEAN; 1 iff BITVECTOR; 2 iff ARRAY; 3 iff UNKNOWN;
 // Print the node
-void ASTNode::nodeprint(ostream& os, bool c_friendly) const
+void ASTNode::nodeprint(ostream& os) const
 {
-  _int_node_ptr->nodeprint(os, c_friendly);
+  _int_node_ptr->nodeprint(os);
 }
 
 // Get the name from a symbol (char *).  It's an error if kind !=

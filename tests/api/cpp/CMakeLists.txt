@@ -144,11 +144,11 @@ foreach(suite IN LISTS API_REWRITTEN_SUITES)
     target_include_directories(${suite}Tests PRIVATE ${PROJECT_SOURCE_DIR}/lib)
     add_dependencies(${suite}Tests stp_api_tables)
 endforeach()
-# The two suites that parse a CVC file from this directory.
+# The two suites that parse an SMT-LIB 2 file from this directory.
 set_property(TARGET parsefile-using-cinterfaceTests APPEND PROPERTY
-             COMPILE_DEFINITIONS CVC_FILE="${CMAKE_CURRENT_SOURCE_DIR}/t.cvc")
+             COMPILE_DEFINITIONS INPUT_FILE="${CMAKE_CURRENT_SOURCE_DIR}/t.smt2")
 set_property(TARGET stp-test3Tests APPEND PROPERTY
-             COMPILE_DEFINITIONS CVC_FILE="${CMAKE_CURRENT_SOURCE_DIR}/f.cvc")
+             COMPILE_DEFINITIONS INPUT_FILE="${CMAKE_CURRENT_SOURCE_DIR}/f.smt2")
 
 # The registry against the engine and the command line generated from it:
 # reads lib/Api/Internal.h, and through it the tables tools/stp/main.cpp

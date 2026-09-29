@@ -2893,175 +2893,6 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
   os.flush();
 }
 
-// FUNCTION: prints a counterexample for INVALID inputs.  iterate
-// through the CounterExampleMap data structure and print it to
-// stdout
-void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
-{
-  // input is valid, no counterexample to print
-  if (bm->ValidFlag)
-  {
-    return;
-  }
-
-  // if this option is true then print the way dawson wants using a
-  // different printer. do not use this printer.
-  if (bm->UserFlags.print_arrayval_declaredorder_flag)
-  {
-    return;
-  }
-
-  // t is true if SAT solver generated a counterexample, else it is
-  // false
-  if (!t)
-  {
-    os << "PrintCounterExample: No CounterExample to print: " << endl;
-    return;
-  }
-
-  bm->PLPrintNodeSet.clear();
-  bm->NodeLetVarMap.clear();
-  bm->NodeLetVarVec.clear();
-  bm->NodeLetVarMap1.clear();
-
-  // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
-  // changes it. Which breaks the iterator otherwise.
-  const ASTNodeMap c(CounterExampleMap);
-
-  ASTNodeMap::const_iterator it = c.begin();
-  ASTNodeMap::const_iterator itend = c.end();
-  for (; it != itend; it++)
-  {
-    const ASTNode& f = it->first;
-    const ASTNode& se = it->second;
-
-    if (ARRAY_TYPE == se.GetType())
-    {
-      // A definitional alias installed by equality propagation (array
-      // symbol := array term), not a cell of the model. The cells are
-      // recorded against the definition's base arrays and print there.
-      continue;
-    }
-
-    // skip over introduced variables, and over the reads of an introduced
-    // array -- those entries are keyed on the read, not on the array
-    if (bm->isIntroducedCounterExampleEntry(f))
-    {
-      continue;
-    }
-    if (f.GetKind() == SYMBOL ||
-        (f.GetKind() == READ && f[0].GetKind() == SYMBOL &&
-         f[1].GetKind() == BVCONST))
-    {
-
-      os << "ASSERT( ";
-
-      printer::PL_Print1(os, f, 0, false, bm);
-      if (BOOLEAN_TYPE == f.GetType())
-      {
-        os << "<=>";
-      }
-      else
-      {
-        os << " = ";
-      }
-
-      ASTNode rhs;
-      if (BITVECTOR_TYPE == se.GetType() || FLOATINGPOINT_TYPE == se.GetType())
-      {
-        rhs = TermToConstTermUsingModel(se, false);
-      }
-      else
-      {
-        rhs = ComputeFormulaUsingModel(se);
-      }
-      assert(rhs.isConstant());
-      printer::PL_Print1(os, rhs, 0, false, bm);
-
-      os << " );" << endl;
-    }
-  }
-}
-
-/* iterate through the CounterExampleMap data structure and print it
- * to stdout. this function prints only the declared array variables
- * IN the ORDER in which they were declared. It also assumes that
- * the variables are of the form 'varname_number'. otherwise it will
- * not print anything. This function was specifically written for
- * Dawson Engler's group (bug finding research group at Stanford)
- */
-void AbsRefine_CounterExample::PrintCounterExample_InOrder(bool t)
-{
-  // global command-line option to print counterexample. we do not
-  // want both counterexample printers to print at the sametime.
-  // FIXME: This should always print the counterexample.  If you want
-  // to turn it off, check the switch at the point of call.
-  if (bm->UserFlags.print_counterexample_flag)
-    return;
-
-  // input is valid, no counterexample to print
-  if (bm->ValidFlag)
-    return;
-
-  // print if the commandline option is '-q'. allows printing the
-  // counterexample in order.
-  if (!bm->UserFlags.print_arrayval_declaredorder_flag)
-    return;
-
-  // t is true if SAT solver generated a counterexample, else it is
-  // false
-  if (!t)
-  {
-    cerr << "PrintCounterExample: No CounterExample to print: " << endl;
-    return;
-  }
-
-  // vector to store the integer values
-  vector<int> out_int;
-  cout << "% ";
-  for (ASTVec::iterator it = bm->ListOfDeclaredVars.begin(),
-                        itend = bm->ListOfDeclaredVars.end();
-       it != itend; it++)
-  {
-    if (ARRAY_TYPE == it->GetType())
-    {
-      // get the name of the variable
-      const char* c = it->GetName();
-      std::string ss(c);
-      if (!(0 == strncmp(ss.c_str(), "ini_", 4)))
-        continue;
-      reverse(ss.begin(), ss.end());
-
-      // cout << "debugging: " << ss;
-      size_t pos = ss.find('_', 0);
-      if (!((0 < pos) && (pos < ss.size())))
-        continue;
-
-      // get the associated length
-      std::string sss = ss.substr(0, pos);
-      reverse(sss.begin(), sss.end());
-      int n = atoi(sss.c_str());
-
-      it->PL_Print(cout, bm, 2);
-      for (int j = 0; j < n; j++)
-      {
-        ASTNode index = bm->CreateBVConst(it->GetIndexWidth(), j);
-        ASTNode readexpr =
-            bm->CreateTerm(READ, it->GetValueWidth(), *it, index);
-        ASTNode val = GetCounterExample(readexpr);
-        // cout << "ASSERT( ";
-        // cout << " = ";
-        out_int.push_back(val.GetUnsignedConst());
-        // cout << "\n";
-      }
-    }
-  }
-  cout << endl;
-  for (unsigned int jj = 0; jj < out_int.size(); jj++)
-    cout << out_int[jj] << endl;
-  cout << endl;
-}
-
 // Prints Satisfying assignment directly, for debugging.
 void AbsRefine_CounterExample::PrintSATModel(SATSolver& newS,
                                              ToSATBase::ASTNodeToSATVar& m)
@@ -3570,12 +3401,15 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
           CheckCounterExample(SatSolver.okay(), submitted_input);
         }
 
+        // A caller that asked for the counterexample without an SMT-LIB 2
+        // frontend to print it after the check (the API): the model in
+        // SMT-LIB 2, as that frontend's -p prints it.
         if ((bm->UserFlags.stats_flag ||
              bm->UserFlags.print_counterexample_flag) &&
             (!bm->UserFlags.smtlib2_parser_flag))
         {
-          PrintCounterExample(SatSolver.okay());
-          PrintCounterExample_InOrder(SatSolver.okay());
+          PrintFullCounterExampleSMTLIB2(cout);
+          cout.flush();
         }
         if (lra_coordinator != NULL)
         {
@@ -3609,16 +3443,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
 
       case ExtensionalityContext::RUN_HOST_REFINEMENT:
       default:
-      {
-        // counterexample is bogus: flag it
-        if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
-        {
-          cout << "Supposedly bogus one: \n";
-          PrintCounterExample(true);
-        }
-
         return SOLVER_UNDECIDED;
-      }
     }
   }
   else

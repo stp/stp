@@ -67,25 +67,15 @@ private:
   bool insertIntoFrame(const string& name, const ASTNode& letExpr);
 
 public:
-  
-  bool frameMode = true;
-
   LetMgr([[maybe_unused]] ASTNode undefined)
   {
     assert(!undefined.IsNull());
-    push(); // CVC format has a global let scope.
+    push(); // the outermost frame, which commit() binds into outside any let
   }
 
   ~LetMgr() 
   {  
   }
-
-  // I think this keeps a reference to symbols so they don't get garbage
-  // collected. Used only by the CVC parser.
-  ASTNodeSet _parser_symbol_table;
-  void cleanupParserSymbolTable();
-
-  void CleanupLetIDMap(void);
 
   // The expression the innermost binding of s maps to, or nullptr.
   // The pointer is invalidated by any change to the bindings.
