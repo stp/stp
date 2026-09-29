@@ -270,6 +270,27 @@ def test_scripts_and_printing(tmp_path):
     s.close()
 
 
+@pytest.mark.parametrize("alias", ["g", "function alias"])
+def test_function_aliases_are_visible_to_parsing(alias):
+    tm = TermManager()
+    bv4 = tm.bv_sort(4)
+    f = tm.declare("f", tm.fun_sort([bv4], bv4))
+    tm.bind_symbol(alias, f)
+    s = Solver(tm)
+    application = f(0)
+    assert tm.symbol(alias) is f
+    for _ in range(2):
+        assert s.parse_term(f"(|{alias}| #x0)") is application
+        s.from_string(f"(assert (= (|{alias}| #x0) #x1))")
+        assert s.check() == sat
+        assert s.model()[application].as_long() == 1
+    with pytest.raises(ParseError):
+        s.from_string(f"(declare-fun |{alias}| ((_ BitVec 4)) (_ BitVec 4))")
+    assert s.parse_term(f"(|{alias}| #x0)") is application
+    s.from_string("(assert (= (f #x0) #x2))")
+    assert s.check() == unsat
+
+
 @pytest.mark.parametrize("prefix", ["U", "sort with space"])
 @pytest.mark.parametrize("with_check_sat", [False, True])
 def test_fresh_sort_export_round_trip(prefix, with_check_sat):

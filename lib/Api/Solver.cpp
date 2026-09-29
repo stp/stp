@@ -1446,8 +1446,8 @@ namespace
 {
 // The grammar resolves names through the parser interface's frames, not the
 // manager: every symbol the API declared has to be introduced to a fresh
-// interface before a script can refer to it. Function symbols are found by
-// name in the UF context and need no seeding.
+// interface before a script can refer to it. Original function names live in
+// the UF context; aliases need a parser binding to that same declaration.
 void seed_parser_symbols(Cpp_interface& pi, ManagerImpl* m)
 {
   // The manager's declared sorts, whichever door declared them: a script
@@ -1461,7 +1461,11 @@ void seed_parser_symbols(Cpp_interface& pi, ManagerImpl* m)
   {
     const detail::SymbolRec& rec = m->symbols.at(name);
     if (rec.is_function)
+    {
+      if (name != rec.decl->name())
+        pi.addUninterpretedFunctionAlias(name, rec.decl);
       continue;
+    }
     ASTNode node = rec.node;
     // a bind_symbol alias goes in under its own name
     if (name == node.GetName())

@@ -355,6 +355,108 @@ TEST(Parsing, parse_term)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
+TEST(Parsing, function_aliases_parse_as_the_original_function)
+{
+  for (ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::EXECUTE,
+                         ParseMode::PARSE_ONLY})
+  {
+    SCOPED_TRACE(static_cast<int>(mode));
+    TermManager tm;
+    const Sort bv4 = tm.mk_bv_sort(4);
+    const Term x = tm.declare("x", bv4);
+    const Term f = tm.declare("f", tm.mk_fun_sort({bv4}, bv4));
+    const Term p = tm.declare("p", tm.mk_fun_sort({bv4}, tm.mk_bool_sort()));
+    tm.bind_symbol("x_alias", x);
+    tm.bind_symbol("g", f);
+    tm.bind_symbol("function alias", f);
+    tm.bind_symbol("q", p);
+    Solver s(tm);
+    for (unsigned round = 0; round < 2; ++round)
+    {
+      EXPECT_TRUE(s.parse_term("(f x)").same_as(f(x)));
+      EXPECT_TRUE(s.parse_term("(g x_alias)").same_as(f(x)));
+      EXPECT_TRUE(s.parse_term("(|function alias| x)").same_as(f(x)));
+      EXPECT_TRUE(s.parse_term("(q x_alias)").same_as(p(x)));
+      EXPECT_TRUE(s.parse_term("x_alias").same_as(x));
+      EXPECT_TRUE(s.assertions().empty());
+      s.push();
+      s.parse_smt2("(set-logic QF_UFBV)"
+                    " (assert (= (|function alias| x_alias) #x1))"
+                    " (assert (q x_alias))", mode);
+      ASSERT_TRUE(s.check_sat().is_sat());
+      EXPECT_EQ(s.model().uint64_value(f(x)), 1u);
+      EXPECT_TRUE(s.model().bool_value(p(x)));
+      s.add(f(x) != tm.mk_bv(4, 1));
+      EXPECT_TRUE(s.check_sat().is_unsat());
+      s.pop();
+    }
+    EXPECT_EQ(tm.symbols().size(), 3u);
+    EXPECT_TRUE(tm.symbol("g")->same_as(f));
+    EXPECT_EQ(f.symbol(), std::optional<std::string>("f"));
+  }
+}
+
+TEST(Parsing, function_aliases_keep_identity_after_shadowing_and_errors)
+{
+  TermManager tm;
+  const Sort bv4 = tm.mk_bv_sort(4), fun = tm.mk_fun_sort({bv4}, bv4);
+  const Term f = tm.mk_fresh(fun, "fresh_fun"), other = tm.declare("other", fun);
+  tm.bind_symbol("g", f);
+  tm.bind_symbol("g", f); // the same binding remains idempotent
+  API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, tm.bind_symbol("g", other));
+  Solver s(tm);
+  const Term application = f(tm.mk_bv(4, 0));
+  EXPECT_TRUE(s.parse_term("(g #x0)").same_as(application));
+  for (const char* term : {"g", "(g)", "(g true)", "(g #x0 #x1)"})
+  {
+    SCOPED_TRACE(term);
+    API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_term(term));
+    EXPECT_TRUE(s.parse_term("(g #x0)").same_as(application));
+  }
+  for (const char* script : {
+           "(declare-fun g ((_ BitVec 4)) (_ BitVec 4))",
+           "(declare-const g (_ BitVec 4))",
+           "(define-fun g ((x (_ BitVec 4))) (_ BitVec 4) x)"})
+  {
+    SCOPED_TRACE(script);
+    API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2(script));
+    EXPECT_TRUE(s.parse_term("(g #x0)").same_as(application));
+    EXPECT_TRUE(tm.symbol("g")->same_as(f));
+  }
+  // An alias still denotes a function, never its internal identity constant,
+  // even when the selected logic disables function applications.
+  API_EXPECT_ERROR(ErrorCode::PARSE,
+                   s.parse_smt2("(set-logic QF_BV) (assert (= g #x0))", ParseMode::EXECUTE));
+  EXPECT_TRUE(s.parse_term("(let ((g #x2)) (bvadd g #x1))").same_as(tm.mk_bv(4, 3)));
+  s.parse_smt2("(define-fun identity ((g Bool)) Bool g) (assert (identity true))");
+  EXPECT_TRUE(s.parse_term("(g #x0)").same_as(application));
+  EXPECT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(tm.symbols().size(), 2u);
+}
+
+TEST(Parsing, function_aliases_survive_parser_scopes_like_the_original_name)
+{
+  TermManager tm;
+  Solver s(tm);
+  s.parse_smt2("(declare-fun f ((_ BitVec 4)) (_ BitVec 4))");
+  const Term f = *tm.symbol("f"), application = f(tm.mk_bv(4, 0));
+  tm.bind_symbol("g", f);
+  for (const char* scope : {"(push 1) (pop 1)", "(reset-assertions)", "(reset)"})
+  {
+    SCOPED_TRACE(scope);
+    // A function retained by the manager stays active across parser resets;
+    // its aliases must continue to refer to that same declaration.
+    s.parse_smt2(std::string(scope) + " (set-logic QF_UFBV) (assert (= (g #x0) #x1))",
+                 ParseMode::EXECUTE);
+    EXPECT_TRUE(s.parse_term("(f #x0)").same_as(application));
+    EXPECT_TRUE(s.parse_term("(g #x0)").same_as(application));
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_EQ(s.model().uint64_value(application), 1u);
+    s.add(application != tm.mk_bv(4, 1));
+    EXPECT_TRUE(s.check_sat().is_unsat());
+  }
+}
+
 TEST(Parsing, errors_keep_the_solver_unchanged)
 {
   TermManager tm;
