@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
+#include "stp/Parser/ParserUnwind.h"
 #include <algorithm>
 #include <sstream>
 #include <string>
@@ -78,8 +79,19 @@ THE SOFTWARE.
   do                                                                           \
   {                                                                            \
     yyerror(msg);                                                              \
-    YYABORT;                                                                   \
+    STP_PARSER_ABORT();                                                        \
   } while (0)
+
+  // A list of declared names, and the names in it: they are the lexer's
+  // strdup copies, which a declaration consumes.
+  void releaseIdentifiers(vector<char*>*& ids)
+  {
+    if (ids == NULL)
+      return;
+    for (char* id : *ids)
+      free(id);
+    releaseParserValue(ids);
+  }
 
   // Whether declared symbol `s` has the CVC type (index width, value width)
   // a declaration gives it: a bit-vector, a Boolean or an array of
@@ -128,6 +140,16 @@ THE SOFTWARE.
   //to array values. To support the WITH construct
   stp::ASTNodeMap * Index_To_UpdateValue;
 };
+
+/* Values bison discards -- after a syntax error, CVC_REJECT, or an
+   exception out of an action (see ParserUnwind.h) -- are released here. An
+   action releases what it consumes through releaseParserValue, which empties
+   the slot. */
+%destructor { delete $$; } <node> <vec> <Index_To_UpdateValue>
+%destructor { free($$); } <str>
+%destructor { releaseIdentifiers($$); } <stringVec>
+
+%initial-action { STP_PARSER_RECLAIM_ON_UNWIND(AssertsQuery) }
 
 %start cmd
 
@@ -245,7 +267,9 @@ THE SOFTWARE.
 %type <indexvaluewidth>  BvType BoolType ArrayType Type 
 
 %token <node> BVCONST_TOK
-%token <node> TERMID_TOK FORMID_TOK COUNTEREXAMPLE_TOK
+%token <node> TERMID_TOK FORMID_TOK
+/* Carries no value: the lexer sets none. */
+%token COUNTEREXAMPLE_TOK
 %token <uintval> NUMERAL_TOK
 %token <str> BIN_BASED_NUMBER
 %token <str> DEC_BASED_NUMBER
@@ -276,13 +300,13 @@ other_cmd       :
 { 
   ((ASTVec*)AssertsQuery)->push_back(GlobalParserInterface->CreateNode(TRUE));
   ((ASTVec*)AssertsQuery)->push_back(*$1);                       
-  delete $1;
+  releaseParserValue($1);
 }
 |      VarDecls Query 
 { 
   ((ASTVec*)AssertsQuery)->push_back(GlobalParserInterface->CreateNode(TRUE));
   ((ASTVec*)AssertsQuery)->push_back(*$2);
-  delete $2;
+  releaseParserValue($2);
 }
 |      other_cmd1 Query
 {
@@ -298,21 +322,21 @@ other_cmd       :
     GlobalParserInterface->CreateNode(AND, aaa);
   ((ASTVec*)AssertsQuery)->push_back(asserts);
   ((ASTVec*)AssertsQuery)->push_back(*$2);
-  delete $2;
+  releaseParserValue($2);
 }
 ;
 
 other_cmd1      :     VarDecls Asserts
 {
-  delete $2;
+  releaseParserValue($2);
 }                 
 |     Asserts
 {
-  delete $1;
+  releaseParserValue($1);
 }
 |     other_cmd1 VarDecls Asserts
 {
-  delete $3;
+  releaseParserValue($3);
 }
 ;
 
@@ -321,14 +345,14 @@ Asserts         :      Assert
   $$ = new ASTVec;
   $$->push_back(*$1);
   GlobalParserInterface->AddAssert(*$1);
-  delete $1;
+  releaseParserValue($1);
 }
 |      Asserts Assert
 {
   $1->push_back(*$2);
   GlobalParserInterface->AddAssert(*$2);
   $$ = $1;
-  delete $2;
+  releaseParserValue($2);
 }
 ;
 
@@ -380,7 +404,7 @@ VarDecl         :      FORM_IDs ':' Type
     GlobalParserInterface->letMgr->_parser_symbol_table.insert(s);
     GlobalParserBM->ListOfDeclaredVars.push_back(s);
   }
-  delete $1;
+  releaseIdentifiers($1);
 }
 |      FORM_IDs ':' Type '=' Expr
 {
@@ -394,8 +418,8 @@ VarDecl         :      FORM_IDs ':' Type
   for(vector<char*>::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {                         
     GlobalParserInterface->letMgr->LetExprMgr(*i,*$5);
   }
-    delete $5;
-    delete $1;
+    releaseParserValue($5);
+    releaseIdentifiers($1);
 }
 |      FORM_IDs ':' Type '=' Formula
 {
@@ -409,8 +433,8 @@ VarDecl         :      FORM_IDs ':' Type
   for(vector<char*>::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {                         
     GlobalParserInterface->letMgr->LetExprMgr(*i,*$5);
   }
-  delete $5;
-  delete $1;
+  releaseParserValue($5);
+  releaseIdentifiers($1);
 }                
 ;
 
@@ -418,13 +442,13 @@ reverseFORM_IDs  :      STRING_TOK
 {
   $$ = new vector<char*>();                      
   $$->push_back($1);
- // delete $1;
+  $1 = NULL; // the list's now
 }
 |      STRING_TOK ',' reverseFORM_IDs
 {
   $3->push_back($1);
+  $1 = NULL;
   $$ = $3;
- // delete $1;
 }
 /* A name already declared -- by an earlier input, or the caller -- may be
    declared again at its type (VarDecl): it is the same symbol. */
@@ -432,22 +456,24 @@ reverseFORM_IDs  :      STRING_TOK
 {
   $$ = new vector<char*>();
   $$->push_back($1);
+  $1 = NULL;
 }
 |      DeclaredID ',' reverseFORM_IDs
 {
   $3->push_back($1);
+  $1 = NULL;
   $$ = $3;
 }
 ;
 
-DeclaredID       :      TERMID_TOK { $$ = strdup($1->GetName()); delete $1; }
-|      FORMID_TOK { $$ = strdup($1->GetName()); delete $1; }
+DeclaredID       :      TERMID_TOK { $$ = strdup($1->GetName()); releaseParserValue($1); }
+|      FORMID_TOK { $$ = strdup($1->GetName()); releaseParserValue($1); }
 ;
 
 FORM_IDs         :     reverseFORM_IDs
 {
   $$ = new vector<char*>($1->rbegin(),$1->rend());
-  delete $1;
+  releaseParserValue($1);
 }
 ;
 
@@ -495,9 +521,9 @@ IfExpr          :      IF_TOK Formula THEN_TOK Expr ElseRestExpr
   BVTypeCheck(*$4);
   BVTypeCheck(*$5);
   $$ = new ASTNode(GlobalParserInterface->nf->CreateArrayTerm(ITE,$5->GetIndexWidth(), width, *$2, *$4, *$5));
-  delete $2;
-  delete $4;
-  delete $5;
+  releaseParserValue($2);
+  releaseParserValue($4);
+  releaseParserValue($5);
 }
 ;
 
@@ -514,9 +540,9 @@ ElseRestExpr    :      ELSE_TOK Expr ENDIF_TOK  { $$ = $2; }
   BVTypeCheck(*$4);
   BVTypeCheck(*$5);                     
   $$ = new ASTNode(GlobalParserInterface->nf->CreateArrayTerm(ITE, $5->GetIndexWidth(), width, *$2, *$4, *$5));
-  delete $2;
-  delete $4;
-  delete $5;
+  releaseParserValue($2);
+  releaseParserValue($4);
+  releaseParserValue($5);
 }
 ;
 
@@ -527,15 +553,15 @@ Formula         :     '(' Formula ')'
 }
 |      FORMID_TOK 
 {  
-  $$ = new ASTNode(GlobalParserInterface->letMgr->ResolveID(*$1)); delete $1;
+  $$ = new ASTNode(GlobalParserInterface->letMgr->ResolveID(*$1)); releaseParserValue($1);
 }
 |      FORMID_TOK '(' Expr ')'
 {
   if (stp::BVCONST != $3->GetKind())
     CVC_REJECT("the argument of a parameterised boolean must be a constant");
   $$ = new ASTNode(GlobalParserInterface->CreateParameterisedBooleanVar(*$1,*$3));
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      BOOLEXTRACT_TOK '(' Expr ',' NUMERAL_TOK ')'
 {
@@ -547,124 +573,124 @@ Formula         :     '(' Formula ')'
   ASTNode * out = new ASTNode(GlobalParserInterface->nf->CreateNode(BOOLEXTRACT,*$3,bit));
 
   $$ = out;
-  delete $3;
+  releaseParserValue($3);
 }
 |      Expr '=' Expr 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateNode(EQ, *$1, *$3));
   $$ = n;
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 } 
 |      Expr NEQ_TOK Expr 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateNode(NOT, GlobalParserInterface->nf->CreateNode(EQ, *$1, *$3)));
   $$ = n;
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      NOT_TOK Formula 
 {
   $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(NOT, *$2));
-  delete $2;
+  releaseParserValue($2);
 }
 |      Formula OR_TOK Formula %prec OR_TOK 
 {
   $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(OR, *$1, *$3));
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 } 
 |      Formula NOR_TOK Formula
 {
   $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(NOR, *$1, *$3));
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 } 
 |      Formula AND_TOK Formula %prec AND_TOK 
 {
   $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(AND, *$1, *$3));
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      Formula NAND_TOK Formula
 {
   $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(NAND, *$1, *$3));
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      Formula IMPLIES_TOK Formula
 {
   $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(IMPLIES, *$1, *$3));
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      Formula IFF_TOK Formula
 {
   $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(IFF, *$1, *$3));
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 } 
 |      Formula XOR_TOK Formula
 {
   $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(XOR, *$1, *$3));
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 } 
 |      BVLT_TOK '(' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateNode(BVLT, *$3, *$5));
   $$ = n;
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVGT_TOK '(' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateNode(BVGT, *$3, *$5));
   $$ = n;
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVLE_TOK '(' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateNode(BVLE, *$3, *$5));
   $$ = n;
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVGE_TOK '(' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateNode(BVGE, *$3, *$5));
   $$ = n;
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVSLT_TOK '(' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateNode(BVSLT, *$3, *$5));
   $$ = n;
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVSGT_TOK '(' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateNode(BVSGT, *$3, *$5));
   $$ = n;
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVSLE_TOK '(' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateNode(BVSLE, *$3, *$5));
   $$ = n;
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVSGE_TOK '(' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateNode(BVSGE, *$3, *$5));
   $$ = n;
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      IfForm
 |      TRUELIT_TOK 
@@ -692,9 +718,9 @@ Formula         :     '(' Formula ')'
 IfForm          :      IF_TOK Formula THEN_TOK Formula ElseRestForm 
 {
   $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(ITE, *$2, *$4, *$5));
-  delete $2;
-  delete $4;
-  delete $5;
+  releaseParserValue($2);
+  releaseParserValue($4);
+  releaseParserValue($5);
 }
 ;
 
@@ -702,12 +728,13 @@ ElseRestForm    :      ELSE_TOK Formula ENDIF_TOK  { $$ = $2; }
 |      ELSIF_TOK Formula THEN_TOK Formula ElseRestForm 
 {
   $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(ITE, *$2, *$4, *$5));
-  delete $2;
-  delete $4;
-  delete $5;
+  releaseParserValue($2);
+  releaseParserValue($4);
+  releaseParserValue($5);
 } | STRING_TOK
 {
    cerr << "Unresolved symbol:" << $1 << endl;
+   $$ = NULL;
    CVC_REJECT("bad symbol");
 }
 ;
@@ -718,19 +745,19 @@ Exprs           :      Expr
   $$ = new ASTVec;
   BVTypeCheck(*$1);
   $$->push_back(*$1);
-  delete $1;
+  releaseParserValue($1);
 }
 |      Exprs ',' Expr 
 {
   $1->push_back(*$3);
   BVTypeCheck(*$3);
   $$ = $1; 
-  delete $3;
+  releaseParserValue($3);
 }
 ;
 
 /* Grammar for Expr */
-Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letMgr->ResolveID(*$1)); delete $1;}
+Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letMgr->ResolveID(*$1)); releaseParserValue($1);}
 |      '(' Expr ')' { $$ = $2; }
 |      BVCONST_TOK { $$ = $1; }
 |      BOOL_TO_BV_TOK '(' Formula ')'           
@@ -741,25 +768,25 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 
   //return ITE(*$3, length(1), 0bin1, 0bin0)
   $$ = new ASTNode(GlobalParserInterface->nf->CreateTerm(ITE,1,*$3,one,zero));
-  delete $3;
+  releaseParserValue($3);
 }
 | NUMERAL_TOK BIN_BASED_NUMBER 
 { 
   std::string vals($2);
   $$ = new ASTNode(GlobalParserInterface->CreateBVConst(vals, 2, $1));
-  free($2);
+  releaseParserString($2);
 }
 | NUMERAL_TOK DEC_BASED_NUMBER
 { 
   std::string vals($2);
   $$ = new ASTNode(GlobalParserInterface->CreateBVConst(vals, 10, $1));
-  free($2);
+  releaseParserString($2);
 }
 | NUMERAL_TOK HEX_BASED_NUMBER 
 { 
   std::string vals($2);
   $$ = new ASTNode(GlobalParserInterface->CreateBVConst(vals, 16, $1));
-  free($2);
+  releaseParserString($2);
 }
 |      Expr '[' Expr ']' 
 {                        
@@ -768,8 +795,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(READ, width, *$1, *$3));
   $$ = n;
 
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      Expr '(' Expr ')' //array read but in the form of a uninterpreted function application
 {
@@ -778,8 +805,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(READ, width, *$1, *$3));
   $$ = n;
 
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      Expr '[' NUMERAL_TOK ':' NUMERAL_TOK ']' 
 {
@@ -794,14 +821,14 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode low =  GlobalParserInterface->CreateBVConst(32, $5);
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVEXTRACT, width, *$1,hi,low));
   $$ = n;
-  delete $1;
+  releaseParserValue($1);
 }
 |      BVNEG_TOK Expr 
 {
   unsigned int width = $2->GetValueWidth();
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2));
   $$ = n;
-  delete $2;
+  releaseParserValue($2);
 }
 |      Expr BVAND_TOK Expr 
 {
@@ -811,8 +838,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   }
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVAND, width, *$1, *$3));
   $$ = n;
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      Expr BVOR_TOK Expr 
 {
@@ -822,8 +849,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   }
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVOR, width, *$1, *$3)); 
   $$ = n;
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      BVXOR_TOK '(' Expr ',' Expr ')' 
 {
@@ -833,8 +860,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   }
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVXOR, width, *$3, *$5));
   $$ = n;
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVNAND_TOK '(' Expr ',' Expr ')' 
 {
@@ -845,8 +872,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNAND, width, *$3, *$5));
   $$ = n;
 
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVNOR_TOK '(' Expr ',' Expr ')' 
 {
@@ -857,8 +884,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVNOR, width, *$3, *$5));
   $$ = n;
 
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVXNOR_TOK '(' Expr ',' Expr ')' 
 {
@@ -869,8 +896,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVXNOR, width, *$3, *$5));
   $$ = n;
 
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVSX_TOK '(' Expr ',' NUMERAL_TOK ')'
 {
@@ -882,7 +909,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode *n =
     new ASTNode(GlobalParserInterface->nf->CreateTerm(BVSX, $5,*$3,width));
   $$ = n;
-  delete $3;
+  releaseParserValue($3);
 }
 |      BVZX_TOK '(' Expr ',' NUMERAL_TOK ')'
 {
@@ -894,7 +921,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode *n =
     new ASTNode(GlobalParserInterface->nf->CreateTerm(BVZX, $5,*$3,width));
   $$ = n;
-  delete $3;
+  releaseParserValue($3);
 }
 |      Expr BVCONCAT_TOK Expr 
 {
@@ -902,8 +929,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVCONCAT, width, *$1, *$3));
   $$ = n;
                          
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      Expr BVLEFTSHIFT_TOK NUMERAL_TOK 
 {
@@ -918,7 +945,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
     new ASTNode(GlobalParserInterface->nf->CreateTerm(BVCONCAT,
                                      $1->GetValueWidth() + $3, *$1, zero_bits));
   $$ = n;
-  delete $1;
+  releaseParserValue($1);
   }
 }
 |      Expr BVLEFTSHIFT_TOK Expr
@@ -934,8 +961,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   //cout << *ret;
 
   $$ = ret;
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      Expr BVRIGHTSHIFT_TOK NUMERAL_TOK
 {
@@ -955,7 +982,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   else
     $$ = new ASTNode(GlobalParserInterface->CreateZeroConst(w));
 
-  delete $1;
+  releaseParserValue($1);
 }
 |      Expr BVRIGHTSHIFT_TOK Expr
 {
@@ -970,8 +997,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   //cout << *ret;
 
   $$ = ret;
-  delete $1;
-  delete $3;
+  releaseParserValue($1);
+  releaseParserValue($3);
 }
 |      BVSHL_TOK '(' Expr ',' Expr ')'
 {
@@ -979,8 +1006,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVLEFTSHIFT, width, *$3, *$5));
   $$ = n;
 
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVLSHR_TOK '(' Expr ',' Expr ')'
 {
@@ -988,8 +1015,8 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVRIGHTSHIFT, width, *$3, *$5));
   $$ = n;
 
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVASHR_TOK '(' Expr ',' Expr ')'
 {
@@ -997,69 +1024,69 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVSRSHIFT, width, *$3, *$5));
   $$ = n;
 
-  delete $3;
-  delete $5;
+  releaseParserValue($3);
+  releaseParserValue($5);
 }
 |      BVPLUS_TOK '(' NUMERAL_TOK ',' Exprs ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVPLUS, $3, *$5));
   $$ = n;
 
-  delete $5;
+  releaseParserValue($5);
 }
 |      BVSUB_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVSUB, $3, *$5, *$7));
   $$ = n;
 
-  delete $5;
-  delete $7;
+  releaseParserValue($5);
+  releaseParserValue($7);
 }
 |      BVUMINUS_TOK '(' Expr ')' 
 {
   unsigned width = $3->GetValueWidth();
   ASTNode * n =  new ASTNode(GlobalParserInterface->nf->CreateTerm(BVUMINUS,width,*$3));
   $$ = n;
-  delete $3;
+  releaseParserValue($3);
 }
 |      BVMULT_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVMULT, $3, *$5, *$7));
   $$ = n;
 
-  delete $5;
-  delete $7;
+  releaseParserValue($5);
+  releaseParserValue($7);
 }
 |      BVDIV_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVDIV, $3, *$5, *$7));
   $$ = n;
 
-  delete $5;
-  delete $7;
+  releaseParserValue($5);
+  releaseParserValue($7);
 }
 |      BVMOD_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVMOD, $3, *$5, *$7));
   $$ = n;
 
-  delete $5;
-  delete $7;
+  releaseParserValue($5);
+  releaseParserValue($7);
 }
 |      SBVDIV_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(SBVDIV, $3, *$5, *$7));
   $$ = n;
 
-  delete $5;
-  delete $7;
+  releaseParserValue($5);
+  releaseParserValue($7);
 }
 |      SBVREM_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {
   ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(SBVREM, $3, *$5, *$7));
   $$ = n;
-  delete $5;
-  delete $7;
+  releaseParserValue($5);
+  releaseParserValue($7);
 }        
 |      IfExpr { $$ = $1; }
 |      ArrayUpdateExpr
@@ -1069,6 +1096,7 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 } | STRING_TOK
 {
    cerr << "Unresolved symbol:" << $1 << endl;
+   $$ = NULL;
    CVC_REJECT("bad symbol");
 }
 ;
@@ -1076,31 +1104,29 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
 /*Grammar for Array Update Expr*/
 ArrayUpdateExpr : Expr WITH_TOK Updates
 {
-  ASTNode * result;
   unsigned int width = $1->GetValueWidth();
 
   ASTNodeMap::iterator it = $3->begin();
   ASTNodeMap::iterator itend = $3->end();
-  result = new ASTNode(GlobalParserInterface->nf->CreateArrayTerm(WRITE,
+  ASTNode result = GlobalParserInterface->nf->CreateArrayTerm(WRITE,
                                             $1->GetIndexWidth(),
                                             width,
                                             *$1,
                                             (*it).first,
-                                            (*it).second));
-  BVTypeCheck(*result);
+                                            (*it).second);
+  BVTypeCheck(result);
   for(it++;it!=itend;it++) {
-    result = new ASTNode(GlobalParserInterface->nf->CreateArrayTerm(WRITE,
+    result = GlobalParserInterface->nf->CreateArrayTerm(WRITE,
                                               $1->GetIndexWidth(),
                                               width,
-                                              *result,
+                                              result,
                                               (*it).first,
-                                              (*it).second));
-    BVTypeCheck(*result);
+                                              (*it).second);
+    BVTypeCheck(result);
   }
-  BVTypeCheck(*result);
-  $$ = result;
-  delete $3;
-  delete $1;
+  $$ = new ASTNode(result);
+  releaseParserValue($3);
+  releaseParserValue($1);
 }
 ;
 
@@ -1108,14 +1134,15 @@ Updates         : '[' Expr ']' ASSIGN_TOK Expr
 {
   $$ = new ASTNodeMap();
   (*$$)[*$2] = *$5;         
-  delete $2;
-  delete $5;        
+  releaseParserValue($2);
+  releaseParserValue($5);        
 }
 | Updates WITH_TOK '[' Expr ']' ASSIGN_TOK Expr 
 {                   
   (*$1)[*$4] = *$7;
-  delete $4;
-  delete $7;
+  releaseParserValue($4);
+  releaseParserValue($7);
+  $$ = $1;
 }
 ;
 
@@ -1140,8 +1167,8 @@ LetDecl         :       STRING_TOK '=' Expr
   //2. Ensure that LET variables are not
   //2. defined more than once
   GlobalParserInterface->letMgr->LetExprMgr($1,*$3);
-  free($1);
-  delete $3;
+  releaseParserString($1);
+  releaseParserValue($3);
 }
 |       STRING_TOK ':' Type '=' Expr
 {
@@ -1154,8 +1181,8 @@ LetDecl         :       STRING_TOK '=' Expr
     CVC_REJECT("LET Expr: type check fail");
 
   GlobalParserInterface->letMgr->LetExprMgr($1,*$5);
-  free( $1);
-  delete $5;
+  releaseParserString($1);
+  releaseParserValue($5);
 }
 |       STRING_TOK '=' Formula
 {
@@ -1164,8 +1191,8 @@ LetDecl         :       STRING_TOK '=' Expr
 
   //Do LET-expr management
   GlobalParserInterface->letMgr->LetExprMgr($1,*$3);
-  free( $1);
-  delete $3;
+  releaseParserString($1);
+  releaseParserValue($3);
 }
 |       STRING_TOK ':' Type '=' Formula
 {
@@ -1179,8 +1206,8 @@ LetDecl         :       STRING_TOK '=' Expr
 
   //Do LET-expr management
   GlobalParserInterface->letMgr->LetExprMgr($1,*$5);
-  free( $1);
-  delete $5;
+  releaseParserString($1);
+  releaseParserValue($5);
 }                
 ;
 

@@ -571,7 +571,9 @@ public:
   // allocator and the pool allocator.
   DLL_PUBLIC ASTNode* newNode(const ASTNode& copyIn);
 
-  DLL_PUBLIC void deleteNode(ASTNode* n);
+  // Releases a node newNode made and empties the pointer, which in a grammar
+  // action is the parser stack slot that held it (see ParserUnwind.h).
+  DLL_PUBLIC void deleteNode(ASTNode*& n);
   DLL_PUBLIC void addSymbol(ASTNode& s);
   // An existing symbol, visible to the input under another name as well
   // (the API's TermManager::bind_symbol aliases).

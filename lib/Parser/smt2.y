@@ -53,6 +53,7 @@
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
+#include "stp/Parser/ParserUnwind.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/FloatBlaster/DecimalLiteral.h"
@@ -457,7 +458,7 @@ namespace stp
     return static_cast<uint64_t>(operands) > (static_cast<uint64_t>(1) << width);
   }
 
-  ASTNode* createNode(Kind k, ASTVec * c)
+  ASTNode* createNode(Kind k, ASTVec*& c)
   {
     if (c->size() < 2)
     {
@@ -465,11 +466,11 @@ namespace stp
       // SMT2Parse() turns the unwind into a failed parse, so a library caller
       // (the 3.x API's parse_term) sees a PARSE error rather than exit(1).
       yyerror("Must be >=2 operands.");
-      delete c;
+      stp::releaseParserValue(c);
       throw stp::DeclassifiedNameAbandon();
     }
    ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(k, *c));
-   delete c;
+   stp::releaseParserValue(c);
    return n;
    }
 
@@ -521,13 +522,12 @@ namespace stp
   }
 
   static ASTNode* applyParsedUF(const stp::UFDecl* declaration,
-                                ASTVec* actuals)
+                                const ASTVec& actuals)
   {
     std::string diagnostic;
     ASTNode application =
         stp::GlobalParserInterface->applyUninterpretedFunction(
-            declaration, *actuals, &diagnostic);
-    delete actuals;
+            declaration, actuals, &diagnostic);
     if (application.GetKind() == UNDEFINED)
       stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
     return stp::GlobalParserInterface->newNode(application);
@@ -567,7 +567,7 @@ namespace stp
     stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
   }
 
-  ASTNode* createNode(Kind k, ASTNode* c0, ASTNode *c1)
+  ASTNode* createNode(Kind k, ASTNode*& c0, ASTNode*& c1)
   {
     // Every binary call to this overload is a BV predicate/overflow
     // production. Boolean connectives use the vector overload.
@@ -575,8 +575,8 @@ namespace stp
     checkBitVectorTerm(*c1);
     checkSameWidth(*c0, *c1);
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(k, *c0, *c1));
-    delete c0;
-    delete c1;
+    stp::releaseParserValue(c0);
+    stp::releaseParserValue(c1);
     return n;
   }
 
@@ -683,7 +683,7 @@ namespace stp
   // narrower nonterminal here makes the position ambiguous and LALR resolves
   // it by swallowing the rounding mode as the first operand. Checking the
   // rounding mode here (and again in BVTypeCheck) costs nothing by comparison.
-  ASTNode* createFPArith(Kind k, ASTNode* rm, ASTNode* lhs, ASTNode* rhs)
+  ASTNode* createFPArith(Kind k, ASTNode*& rm, ASTNode*& lhs, ASTNode*& rhs)
   {
     checkRoundingMode(rm);
 
@@ -705,15 +705,15 @@ namespace stp
         stp::GlobalParserInterface->nf->CreateTerm(k, lhs->GetValueWidth(),
                                                    *rm, *lhs, *rhs));
     setFPFormat(n, lhs->GetExpWidth(), lhs->GetSigWidth());
-    delete rm;
-    delete lhs;
-    delete rhs;
+    stp::releaseParserValue(rm);
+    stp::releaseParserValue(lhs);
+    stp::releaseParserValue(rhs);
     return n;
   }
 
   // fp.leq/fp.lt/fp.geq/fp.gt. These are chainable in SMT-LIB, so (fp.lt x y z)
   // means (and (fp.lt x y) (fp.lt y z)).
-  ASTNode* createFPChain(Kind k, ASTVec* terms, const char* name)
+  ASTNode* createFPChain(Kind k, ASTVec*& terms, const char* name)
   {
     if (terms->size() < 2)
     {
@@ -761,13 +761,13 @@ namespace stp
       n = stp::GlobalParserInterface->newNode(
           stp::GlobalParserInterface->CreateNode(AND, result));
     }
-    delete terms;
+    stp::releaseParserValue(terms);
     return n;
   }
 
   // fp.rem/fp.min/fp.max: two floats of the same format in, one out. Unlike
   // fp.add and friends these take no rounding mode.
-  ASTNode* createFPBinary(Kind k, ASTNode* lhs, ASTNode* rhs)
+  ASTNode* createFPBinary(Kind k, ASTNode*& lhs, ASTNode*& rhs)
   {
     if (lhs->GetSourceSort().kind() !=
             stp::SourceSort::Kind::FloatingPoint ||
@@ -806,13 +806,13 @@ namespace stp
         stp::GlobalParserInterface->nf->CreateTerm(k, lhs->GetValueWidth(),
                                                    *lhs, *rhs));
     setFPFormat(n, lhs->GetExpWidth(), lhs->GetSigWidth());
-    delete lhs;
-    delete rhs;
+    stp::releaseParserValue(lhs);
+    stp::releaseParserValue(rhs);
     return n;
   }
 
   // fp.fma: a rounding mode and three floats of the same format.
-  ASTNode* createFPFma(ASTNode* rm, ASTNode* x, ASTNode* y, ASTNode* z)
+  ASTNode* createFPFma(ASTNode*& rm, ASTNode*& x, ASTNode*& y, ASTNode*& z)
   {
     checkRoundingMode(rm);
 
@@ -844,15 +844,15 @@ namespace stp
         stp::GlobalParserInterface->nf->CreateTerm(FP_FMA, x->GetValueWidth(),
                                                    children));
     setFPFormat(n, x->GetExpWidth(), x->GetSigWidth());
-    delete rm;
-    delete x;
-    delete y;
-    delete z;
+    stp::releaseParserValue(rm);
+    stp::releaseParserValue(x);
+    stp::releaseParserValue(y);
+    stp::releaseParserValue(z);
     return n;
   }
 
   // fp.sqrt: a rounding mode and one float.
-  ASTNode* createFPSqrt(ASTNode* rm, ASTNode* expr)
+  ASTNode* createFPSqrt(ASTNode*& rm, ASTNode*& expr)
   {
     checkRoundingMode(rm);
 
@@ -867,15 +867,15 @@ namespace stp
                                                    expr->GetValueWidth(), *rm,
                                                    *expr));
     setFPFormat(n, expr->GetExpWidth(), expr->GetSigWidth());
-    delete rm;
-    delete expr;
+    stp::releaseParserValue(rm);
+    stp::releaseParserValue(expr);
     return n;
   }
 
   // (fp.roundToIntegral rm f). The mode is an ordinary term, exactly as in
   // fp.sqrt, so a RoundingMode variable is accepted as well as the five
   // literal modes.
-  ASTNode* createFPRoundToIntegral(ASTNode* rm, ASTNode* expr)
+  ASTNode* createFPRoundToIntegral(ASTNode*& rm, ASTNode*& expr)
   {
     checkRoundingMode(rm);
 
@@ -890,8 +890,8 @@ namespace stp
                                                    expr->GetValueWidth(), *rm,
                                                    *expr));
     setFPFormat(n, expr->GetExpWidth(), expr->GetSigWidth());
-    delete rm;
-    delete expr;
+    stp::releaseParserValue(rm);
+    stp::releaseParserValue(expr);
     return n;
   }
 
@@ -1035,8 +1035,8 @@ namespace stp
   // ((_ to_fp_unsigned e s) rm bv) -- convert an unsigned integer held in a
   // bitvector to the nearest float.
   ASTNode* createFPFromUnsignedBV(unsigned int exp_width,
-                                  unsigned int sig_width, ASTNode* rm,
-                                  ASTNode* bits)
+                                  unsigned int sig_width, ASTNode*& rm,
+                                  ASTNode*& bits)
   {
     checkFpFormatWidths(exp_width, sig_width);
     checkRoundingMode(rm);
@@ -1054,8 +1054,8 @@ namespace stp
             stp::GlobalParserInterface->CreateBVConst(32, sig_width), *rm,
             ASTVec(1, *bits)));
     setFPFormat(n, exp_width, sig_width);
-    delete rm;
-    delete bits;
+    stp::releaseParserValue(rm);
+    stp::releaseParserValue(bits);
     return n;
   }
 
@@ -1063,8 +1063,8 @@ namespace stp
   // integer of width m. The result is a bitvector, not a float, so it gets no
   // floating-point format. The value for the inputs SMT-LIB leaves
   // unspecified is added later, by FpTotalise.
-  ASTNode* createFPToBV(Kind k, unsigned int target_width, ASTNode* rm,
-                        ASTNode* expr)
+  ASTNode* createFPToBV(Kind k, unsigned int target_width, ASTNode*& rm,
+                        ASTNode*& expr)
   {
     if (target_width == 0)
       fatal_yyerror("fp.to_ubv/fp.to_sbv width must be positive.");
@@ -1080,13 +1080,13 @@ namespace stp
             k, target_width,
             stp::GlobalParserInterface->CreateBVConst(32, target_width), *rm,
             *expr));
-    delete rm;
-    delete expr;
+    stp::releaseParserValue(rm);
+    stp::releaseParserValue(expr);
     return n;
   }
 
   // fp.abs/fp.neg: a float in, a float of the same format out.
-  ASTNode* createFPUnary(Kind k, ASTNode* expr)
+  ASTNode* createFPUnary(Kind k, ASTNode*& expr)
   {
     if (expr->GetSourceSort().kind() !=
         stp::SourceSort::Kind::FloatingPoint)
@@ -1098,12 +1098,12 @@ namespace stp
         stp::GlobalParserInterface->nf->CreateTerm(k, expr->GetValueWidth(),
                                                    *expr));
     setFPFormat(n, expr->GetExpWidth(), expr->GetSigWidth());
-    delete expr;
+    stp::releaseParserValue(expr);
     return n;
   }
 
   // fp.isNaN and friends: a float in, a Boolean out.
-  ASTNode* createFPPredicate(Kind k, ASTNode* expr)
+  ASTNode* createFPPredicate(Kind k, ASTNode*& expr)
   {
     if (expr->GetSourceSort().kind() !=
         stp::SourceSort::Kind::FloatingPoint)
@@ -1113,25 +1113,25 @@ namespace stp
 
     ASTNode* n = stp::GlobalParserInterface->newNode(
         stp::GlobalParserInterface->nf->CreateNode(k, *expr));
-    delete expr;
+    stp::releaseParserValue(expr);
     return n;
   }
 
   // (fp.to_real f) -- the exact Real value of a float, through the engine's
   // one construction (STPMgr::CreateFpToReal), which the 3.x API shares.
-  ASTNode* createFpToReal(ASTNode* expr)
+  ASTNode* createFpToReal(ASTNode*& expr)
   {
     if (expr->GetSourceSort().kind() !=
         stp::SourceSort::Kind::FloatingPoint)
     {
-      delete expr;
+      stp::releaseParserValue(expr);
       fatal_yyerror("fp.to_real takes a floating-point operand.");
       return nullptr;
     }
     try
     {
       ASTNode value = stp::GlobalParserInterface->CreateFpToReal(*expr);
-      delete expr;
+      stp::releaseParserValue(expr);
       return stp::GlobalParserInterface->newNode(value);
     }
     catch (const stp::ParseAbandon&)
@@ -1142,7 +1142,7 @@ namespace stp
     {
       const std::string diagnostic =
           std::string("fp.to_real: ") + failure.what();
-      delete expr;
+      stp::releaseParserValue(expr);
       fatal_yyerror(diagnostic.c_str());
     }
     return nullptr;
@@ -1151,25 +1151,25 @@ namespace stp
   // (fp.to_ieee_bv f) -- STP's extension, the inverse of ((_ to_fp e s) bv):
   // a float's packed bits (sign, exponent, significand) as a bitvector of
   // width e + s; every NaN gives the canonical pattern.
-  ASTNode* createFPToIEEEBV(ASTNode* expr)
+  ASTNode* createFPToIEEEBV(ASTNode*& expr)
   {
     if (expr->GetSourceSort().kind() !=
         stp::SourceSort::Kind::FloatingPoint)
     {
-      delete expr;
+      stp::releaseParserValue(expr);
       fatal_yyerror("fp.to_ieee_bv takes a floating-point operand.");
       return nullptr;
     }
     ASTNode* n = stp::GlobalParserInterface->newNode(
         stp::GlobalParserInterface->nf->CreateTerm(
             stp::FP_TO_IEEE_BV, expr->GetExpWidth() + expr->GetSigWidth(), *expr));
-    delete expr;
+    stp::releaseParserValue(expr);
     return n;
   }
 
   // ((_ to_fp e s) bv) -- reinterpret a bitvector's bits as a float.
   ASTNode* createFPFromBits(unsigned int exp_width, unsigned int sig_width,
-                            ASTNode* bits)
+                            ASTNode*& bits)
   {
     checkFpFormatWidths(exp_width, sig_width);
     if (bits->GetSourceSort().kind() !=
@@ -1193,7 +1193,7 @@ namespace stp
             stp::GlobalParserInterface->CreateBVConst(32, exp_width),
             stp::GlobalParserInterface->CreateBVConst(32, sig_width), *bits));
     setFPFormat(n, exp_width, sig_width);
-    delete bits;
+    stp::releaseParserValue(bits);
     return n;
   }
 
@@ -1207,34 +1207,35 @@ namespace stp
     bool negative;
   };
 
-  static void destroyParsedRealConstant(ParsedRealConstant* value)
+  static void destroyParsedRealConstant(ParsedRealConstant*& value)
   {
     if (value == nullptr)
       return;
     delete value->num;
     delete value->den;
     delete value;
+    value = nullptr;
   }
 
-  static ASTNode* createExactRealLiteral(std::string* text)
+  static ASTNode* createExactRealLiteral(std::string*& text)
   {
     try
     {
       ASTNode value = stp::GlobalParserInterface->CreateRealConst(*text);
-      delete text;
+      stp::releaseParserValue(text);
       return stp::GlobalParserInterface->newNode(value);
     }
     catch (const std::exception& failure)
     {
       const std::string diagnostic =
           std::string("invalid exact Real literal: ") + failure.what();
-      delete text;
+      stp::releaseParserValue(text);
       fatal_yyerror(diagnostic.c_str());
     }
     return nullptr;
   }
 
-  static ASTNode* createExactRealTerm(Kind kind, ASTVec* children)
+  static ASTNode* createExactRealTerm(Kind kind, ASTVec*& children)
   {
     try
     {
@@ -1252,12 +1253,12 @@ namespace stp
         for (std::size_t i = 1, n = children->size(); i != n; ++i)
           folded = stp::GlobalParserInterface->CreateRealTerm(
               kind, ASTVec{folded, (*children)[i]});
-        delete children;
+        stp::releaseParserValue(children);
         return stp::GlobalParserInterface->newNode(folded);
       }
       ASTNode value =
           stp::GlobalParserInterface->CreateRealTerm(kind, *children);
-      delete children;
+      stp::releaseParserValue(children);
       return stp::GlobalParserInterface->newNode(value);
     }
     catch (const std::exception& failure)
@@ -1265,7 +1266,7 @@ namespace stp
       const std::string diagnostic =
           std::string("unsupported or malformed exact Real operation: ") +
           failure.what();
-      delete children;
+      stp::releaseParserValue(children);
       fatal_yyerror(diagnostic.c_str());
     }
     return nullptr;
@@ -1329,8 +1330,8 @@ namespace stp
     {
       ASTNode value = stp::GlobalParserInterface->CreateRealPredicate(
           kind, *lhs, *rhs);
-      delete lhs;
-      delete rhs;
+      stp::releaseParserValue(lhs);
+      stp::releaseParserValue(rhs);
       return stp::GlobalParserInterface->newNode(value);
     }
     catch (const std::exception& failure)
@@ -1338,14 +1339,14 @@ namespace stp
       const std::string diagnostic =
           std::string("unsupported or malformed exact Real comparison: ") +
           failure.what();
-      delete lhs;
-      delete rhs;
+      stp::releaseParserValue(lhs);
+      stp::releaseParserValue(rhs);
       fatal_yyerror(diagnostic.c_str());
     }
     return nullptr;
   }
 
-  static ASTNode* createExactRealPredicate(Kind kind, ASTVec* operands)
+  static ASTNode* createExactRealPredicate(Kind kind, ASTVec*& operands)
   {
     /* SMT-LIB declares <, <=, > and >= over Reals :chainable, so (> a b c) is
      * (and (> a b) (> b c)) and any arity of two or more is well formed. */
@@ -1355,7 +1356,7 @@ namespace stp
           "Real comparison " +
           exactRealSignature(stp::_kind_names[kind], *operands) +
           ": expected at least two operands";
-      delete operands;
+      stp::releaseParserValue(operands);
       fatal_yyerror(diagnostic.c_str());
       return nullptr;
     }
@@ -1363,7 +1364,7 @@ namespace stp
     {
       ASTNode* lhs = new ASTNode((*operands)[0]);
       ASTNode* rhs = new ASTNode((*operands)[1]);
-      delete operands;
+      stp::releaseParserValue(operands);
       return createExactRealPredicate(kind, lhs, rhs);
     }
     ASTVec conjuncts;
@@ -1378,12 +1379,12 @@ namespace stp
       // consumed here, so they are released here.
       delete link;
     }
-    delete operands;
+    stp::releaseParserValue(operands);
     return stp::GlobalParserInterface->newNode(
         stp::GlobalParserInterface->nf->CreateNode(stp::AND, conjuncts));
   }
 
-  static unsigned exactCommandNumeral(std::string* text)
+  static unsigned exactCommandNumeral(std::string*& text)
   {
     errno = 0;
     char* end = nullptr;
@@ -1391,7 +1392,7 @@ namespace stp
     const bool invalid = errno == ERANGE || end == text->c_str() ||
                          *end != '\0' ||
                          parsed > std::numeric_limits<unsigned>::max();
-    delete text;
+    stp::releaseParserValue(text);
     if (invalid)
       fatal_yyerror("command numeral does not fit an unsigned value");
     return static_cast<unsigned>(parsed);
@@ -1448,7 +1449,7 @@ namespace stp
   // identically (anything exactly representable) collapses to the one
   // constant, symbolic rounding mode or not.
   ASTNode* createFPFromReal(unsigned int exp_width, unsigned int sig_width,
-                            ASTNode* rm, ParsedRealConstant* real)
+                            ASTNode*& rm, ParsedRealConstant*& real)
   {
     checkFpFormatWidths(exp_width, sig_width);
     checkRoundingMode(rm);
@@ -1522,10 +1523,8 @@ namespace stp
       }
       n = stp::GlobalParserInterface->newNode(result);
     }
-    delete rm;
-    delete real->num;
-    delete real->den;
-    delete real;
+    stp::releaseParserValue(rm);
+    destroyParsedRealConstant(real);
     return n;
   }
 
@@ -1535,7 +1534,7 @@ namespace stp
   // arbitrary bitvector term, not just a literal, so concatenate them and
   // reinterpret the packed bits -- folding to an interned float constant when
   // every component is literal, exactly as the one-argument to_fp does.
-  ASTNode* createFPFromParts(ASTNode* sign, ASTNode* exp, ASTNode* sig)
+  ASTNode* createFPFromParts(ASTNode*& sign, ASTNode*& exp, ASTNode*& sig)
   {
     if (sign->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector ||
         exp->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector ||
@@ -1593,11 +1592,11 @@ namespace stp
   }
 
   ASTNode* createFPFromReal(unsigned int exp_width, unsigned int sig_width,
-                            ASTNode* rm, ParsedRealConstant* real);
+                            ASTNode*& rm, ParsedRealConstant*& real);
 
   // ((_ to_fp e s) rm f) -- reformat a float under a rounding mode.
   ASTNode* createFPToFP(unsigned int exp_width, unsigned int sig_width,
-                        ASTNode* rm, ASTNode* expr)
+                        ASTNode*& rm, ASTNode*& expr)
   {
     // With the Real keywords live (a Real logic, or a parse the API opened
     // for every theory) a real literal is lexed as a Real term and folded to
@@ -1613,8 +1612,18 @@ namespace stp
       ParsedRealConstant* real = new ParsedRealConstant{
           new std::string(num), den == "1" ? nullptr : new std::string(den),
           negative};
-      delete expr;
-      return createFPFromReal(exp_width, sig_width, rm, real);
+      stp::releaseParserValue(expr);
+      try
+      {
+        return createFPFromReal(exp_width, sig_width, rm, real);
+      }
+      catch (...)
+      {
+        // Not on the parser's stack, so nothing else reclaims it; null here
+        // if createFPFromReal released it before refusing.
+        destroyParsedRealConstant(real);
+        throw;
+      }
     }
 
     checkFpFormatWidths(exp_width, sig_width);
@@ -1652,12 +1661,12 @@ namespace stp
             stp::GlobalParserInterface->CreateBVConst(32, sig_width), *rm,
             ASTVec(1, *expr)));
     setFPFormat(n, exp_width, sig_width);
-    delete rm;
-    delete expr;
+    stp::releaseParserValue(rm);
+    stp::releaseParserValue(expr);
     return n;
   }
 
-  ASTNode* createTerm(Kind k, ASTVec * c)
+  ASTNode* createTerm(Kind k, ASTVec*& c)
   {
     assert(k != BVEXTRACT);
     assert(k != BVCONCAT); // width must be width of first operand.
@@ -1666,32 +1675,32 @@ namespace stp
     {
       // see createNode: unwind to SMT2Parse() rather than exit(1)
       yyerror("Must be >=2 operands");
-      delete c;
+      stp::releaseParserValue(c);
       throw stp::DeclassifiedNameAbandon();
     }
     checkBitVectorTerms(*c);
     checkSameWidths(*c);
     const unsigned int width = (*c)[0].GetValueWidth();
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(k, width,  *c));
-    delete c;
+    stp::releaseParserValue(c);
     return n;
   }
 
-  ASTNode* createTerm(Kind k, ASTNode* c0, ASTNode *c1)
+  ASTNode* createTerm(Kind k, ASTNode*& c0, ASTNode*& c1)
   {
     checkBitVectorTerm(*c0);
     checkBitVectorTerm(*c1);
     checkSameWidth(*c0, *c1);
     const unsigned int width = c0->GetValueWidth();
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(k, width, *c0, *c1));
-    delete c0;
-    delete c1;
+    stp::releaseParserValue(c0);
+    stp::releaseParserValue(c1);
     return n;
   }
 
   // (bvnego s) is true iff negating s overflows, i.e. iff s is the signed
   // minimum value INT_MIN (100...0). Desugar it to (= s INT_MIN).
-  ASTNode* createNegOverflow(ASTNode* c0)
+  ASTNode* createNegOverflow(ASTNode*& c0)
   {
     checkBitVectorTerm(*c0);
     auto gi = stp::GlobalParserInterface;
@@ -1703,13 +1712,13 @@ namespace stp
       intMin = gi->nf->CreateTerm(BVCONCAT, width, gi->CreateOneConst(1),
                                   gi->CreateZeroConst(width - 1));
     ASTNode* n = gi->newNode(gi->nf->CreateNode(EQ, *c0, intMin));
-    delete c0;
+    stp::releaseParserValue(c0);
     return n;
   }
 
   // (bvsdivo s t) is true iff the signed division s/t overflows. This happens
   // only for INT_MIN / -1, so desugar it to (and (= s INT_MIN) (= t -1)).
-  ASTNode* createSDivOverflow(ASTNode* c0, ASTNode* c1)
+  ASTNode* createSDivOverflow(ASTNode*& c0, ASTNode*& c1)
   {
     checkBitVectorTerm(*c0);
     checkBitVectorTerm(*c1);
@@ -1728,14 +1737,14 @@ namespace stp
     const ASTNode lhs = gi->nf->CreateNode(EQ, *c0, intMin);
     const ASTNode rhs = gi->nf->CreateNode(EQ, *c1, minusOne);
     ASTNode* n = gi->newNode(gi->nf->CreateNode(AND, lhs, rhs));
-    delete c0;
-    delete c1;
+    stp::releaseParserValue(c0);
+    stp::releaseParserValue(c1);
     return n;
   }
 
   // Declare an array symbol from a parsed (Array X Y) sort: the shared body
   // of the declare-fun and declare-const productions. Frees both arguments.
-  void declareArraySymbol(std::string* name, stp::array_sort* sort)
+  void declareArraySymbol(std::string*& name, stp::array_sort*& sort)
   {
     requireFreeTopLevelDeclarationName(*name);
     ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
@@ -1745,13 +1754,13 @@ namespace stp
     if (s.GetType() != ARRAY_TYPE)
       fatal_yyerror("failed to declare an array.");
 
-    delete name;
-    delete sort;
+    stp::releaseParserValue(name);
+    stp::releaseParserValue(sort);
   }
 
   // Shared scalar declaration action. A cross-namespace name is diagnosed
   // before anything is interned or registered, and does not come back.
-  void declareScalarSymbol(std::string* name,
+  void declareScalarSymbol(std::string*& name,
                            const stp::SourceSort& sourceSort,
                            bool roundingMode = false)
   {
@@ -1762,7 +1771,7 @@ namespace stp
       stp::GlobalParserInterface->addRoundingModeSymbol(s);
     else
       stp::GlobalParserInterface->addSymbol(s);
-    delete name;
+    stp::releaseParserValue(name);
   }
 
 #define YYLTYPE_IS_TRIVIAL 1
@@ -1802,12 +1811,16 @@ namespace stp
   std::vector<stp::parsed_uf_sort> *ufsortvec;
 };
 
-/* Successful reductions transfer/delete strings in their grammar actions.
-   Values discarded by Bison during recovery or parse abort remain Bison's
-   responsibility; release them here so malformed commands do not leak their
-   identifier/string lookahead. */
+/* Successful reductions transfer or release (stp::releaseParserValue) the
+   values they own in their grammar actions. Values discarded by Bison during
+   recovery or parse abort remain Bison's responsibility; release them here so
+   malformed commands do not leak their identifier/string lookahead. */
 %destructor { delete $$; } <str>
 %destructor { delete $$; } <ufsort> <ufsortvec>
+
+/* An exception out of an action or the lexer gets the same cleanup: see
+   ParserUnwind.h. */
+%initial-action { STP_PARSER_RECLAIM_ON_UNWIND() }
 
 %start cmd
 
@@ -1826,7 +1839,7 @@ namespace stp
 %type <arr_sort> an_array_sort
 
 /* Release owning values discarded during parser recovery or teardown.
-   Successful reductions still transfer/delete their own RHS values. */
+   Successful reductions still transfer or release their own RHS values. */
 %destructor { delete $$; } <node>
 %destructor { delete $$; } <vec>
 %destructor { delete $$; } <fp_size>
@@ -2112,7 +2125,7 @@ cmdi:
       // symbols or their negations. We accept any boolean formula, which
       // is a superset of that.
       stp::GlobalParserInterface->checkSatAssuming(*$3);
-      delete $3;
+      stp::releaseParserValue($3);
     }
 |
      CHECK_SAT_ASSUMING_TOK LPAREN_TOK RPAREN_TOK
@@ -2140,7 +2153,7 @@ cmdi:
      ECHO_TOK STRING_TOK
     {
       std::cout << "\"" << *$2  << "\"" << endl;
-      delete $2;
+      stp::releaseParserValue($2);
       stp::GlobalParserInterface->success();
     }
 |
@@ -2159,26 +2172,26 @@ cmdi:
      GET_VALUE_TOK LPAREN_TOK an_mixed RPAREN_TOK
     {
       stp::GlobalParserInterface->getValue(*$3);
-      delete $3;
+      stp::releaseParserValue($3);
     }
 |
      SET_OPTION_TOK COLON_TOK STRING_TOK STRING_TOK
     {
        stp::GlobalParserInterface->setOption(*$3,*$4);
-       delete $3;
-       delete $4;
+       stp::releaseParserValue($3);
+       stp::releaseParserValue($4);
     }
 |
      SET_OPTION_TOK COLON_TOK STRING_TOK FALSE_TOK
     {
        stp::GlobalParserInterface->setOption(*$3,"false");
-       delete $3;
+       stp::releaseParserValue($3);
     }
 |
      SET_OPTION_TOK COLON_TOK STRING_TOK TRUE_TOK
     {
        stp::GlobalParserInterface->setOption(*$3,"true");
-       delete $3;
+       stp::releaseParserValue($3);
     }
 |
      /* :random-seed, :verbosity and :reproducible-resource-limit take a
@@ -2186,19 +2199,19 @@ cmdi:
      SET_OPTION_TOK COLON_TOK STRING_TOK command_numeral
     {
        stp::GlobalParserInterface->setOption(*$3,std::to_string($4));
-       delete $3;
+       stp::releaseParserValue($3);
     }
 |
      GET_OPTION_TOK COLON_TOK STRING_TOK
     {
        stp::GlobalParserInterface->getOption(*$3);
-       delete $3;
+       stp::releaseParserValue($3);
     }
 |
      GET_INFO_TOK info_flag
     {
        stp::GlobalParserInterface->getInfo(*$2);
-       delete $2;
+       stp::releaseParserValue($2);
     }
 |
      GET_ASSERTIONS_TOK
@@ -2268,7 +2281,7 @@ cmdi:
                                .uf_sort_width));
          stp::GlobalParserInterface->success();
        }
-       delete $2;
+       stp::releaseParserValue($2);
     }
 |
      /* The arguments of these are swallowed by the lexer, which leaves us the
@@ -2421,18 +2434,18 @@ cmdi:
       stp::SMT2SetFloatTokens(fp_logic);
       stp::SMT2SetRealTokens(real_logic);
       stp::GlobalParserInterface->success();
-      delete $2;
+      stp::releaseParserValue($2);
     }
 |
      NOTES_TOK attribute STRING_TOK
     {
-      delete $3;
+      stp::releaseParserValue($3);
       stp::GlobalParserInterface->success();
     }
 |
      NOTES_TOK attribute DECIMAL_TOK
     {
-      delete $3;
+      stp::releaseParserValue($3);
       stp::GlobalParserInterface->success();
     }
 |
@@ -2443,7 +2456,7 @@ cmdi:
 |
      NOTES_TOK attribute REAL_NUMERAL_TOK
     {
-      delete $3;
+      stp::releaseParserValue($3);
       stp::GlobalParserInterface->success();
     }
 |
@@ -2451,13 +2464,13 @@ cmdi:
         of a problem here than an ordinary numeral is. */
      NOTES_TOK attribute BIG_NUMERAL_TOK
     {
-      delete $3;
+      stp::releaseParserValue($3);
       stp::GlobalParserInterface->success();
     }
 |
      NOTES_TOK attribute REAL_DECIMAL_TOK
     {
-      delete $3;
+      stp::releaseParserValue($3);
       stp::GlobalParserInterface->success();
     }
 |
@@ -2482,7 +2495,7 @@ function_param_open STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK 
   $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
       $2->c_str(), stp::SourceSort::bitVector($6)));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  delete $2;
+  stp::releaseParserValue($2);
 }
 |
 function_param_open STRING_TOK BOOL_TOK RPAREN_TOK
@@ -2490,7 +2503,7 @@ function_param_open STRING_TOK BOOL_TOK RPAREN_TOK
   $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
       $2->c_str(), stp::SourceSort::boolean()));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  delete $2;
+  stp::releaseParserValue($2);
 }
 |
 function_param_open STRING_TOK REAL_TOK RPAREN_TOK
@@ -2503,7 +2516,7 @@ function_param_open STRING_TOK REAL_TOK RPAREN_TOK
   $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
       $2->c_str(), stp::SourceSort::real()));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  delete $2;
+  stp::releaseParserValue($2);
 }
 |
 function_param_open STRING_TOK an_fp_sort RPAREN_TOK
@@ -2512,8 +2525,8 @@ function_param_open STRING_TOK an_fp_sort RPAREN_TOK
       $2->c_str(),
       stp::SourceSort::floatingPoint($3->exp_bits, $3->sig_bits)));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  delete $2;
-  delete $3;
+  stp::releaseParserValue($2);
+  stp::releaseParserValue($3);
 }
 |
 function_param_open STRING_TOK ROUNDINGMODE_TOK RPAREN_TOK
@@ -2521,7 +2534,7 @@ function_param_open STRING_TOK ROUNDINGMODE_TOK RPAREN_TOK
   $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
       $2->c_str(), stp::SourceSort::roundingMode()));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  delete $2;
+  stp::releaseParserValue($2);
 }
 |
 function_param_open STRING_TOK STRING_TOK RPAREN_TOK
@@ -2537,8 +2550,8 @@ function_param_open STRING_TOK STRING_TOK RPAREN_TOK
   $$ = new ASTNode(
       stp::GlobalParserInterface->CreateSourceSymbol($2->c_str(), resolved));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  delete $2;
-  delete $3;
+  stp::releaseParserValue($2);
+  stp::releaseParserValue($3);
 }
 ;
 
@@ -2583,8 +2596,8 @@ function_def_name LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TO
   for (size_t i = 0; i < $3->size(); i++)
     stp::GlobalParserInterface->removeSymbol((*$3)[i]);
 
-  delete $1;
-  delete $3;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($3);
   stp::GlobalParserInterface->deleteNode($10);
 }
 |
@@ -2609,9 +2622,9 @@ function_def_name LPAREN_TOK function_params RPAREN_TOK STRING_TOK an_term
   for (size_t i = 0; i < $3->size(); i++)
     stp::GlobalParserInterface->removeSymbol((*$3)[i]);
 
-  delete $1;
-  delete $3;
-  delete $5;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($3);
+  stp::releaseParserValue($5);
   stp::GlobalParserInterface->deleteNode($6);
 }
 |
@@ -2634,8 +2647,8 @@ function_def_name LPAREN_TOK RPAREN_TOK STRING_TOK an_term
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
 
-  delete $1;
-  delete $4;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($4);
   stp::GlobalParserInterface->deleteNode($5);
 }
 |
@@ -2647,8 +2660,8 @@ function_def_name LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula
   for (size_t i = 0; i < $3->size(); i++)
    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
 
-  delete $1;
-  delete $3;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($3);
   stp::GlobalParserInterface->deleteNode($6);
 }
 |
@@ -2657,7 +2670,7 @@ function_def_name LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
 
-  delete $1;
+  stp::releaseParserValue($1);
   stp::GlobalParserInterface->deleteNode($5);
 }
 |
@@ -2667,7 +2680,7 @@ function_def_name LPAREN_TOK RPAREN_TOK REAL_TOK an_term
     fatal_yyerror("define-fun Real alias body must have Real sort");
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-  delete $1;
+  stp::releaseParserValue($1);
   stp::GlobalParserInterface->deleteNode($5);
 }
 |
@@ -2680,8 +2693,8 @@ function_def_name LPAREN_TOK function_params RPAREN_TOK REAL_TOK an_term
   if ($6->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
     fatal_yyerror("define-fun Real body must have Real sort");
   stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-  delete $1;
-  delete $3;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($3);
   stp::GlobalParserInterface->deleteNode($6);
 }
 |
@@ -2695,7 +2708,7 @@ function_def_name LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK an_term
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
 
-  delete $1;
+  stp::releaseParserValue($1);
   stp::GlobalParserInterface->deleteNode($5);
 }
 |
@@ -2708,8 +2721,8 @@ function_def_name LPAREN_TOK function_params RPAREN_TOK ROUNDINGMODE_TOK an_term
   for (size_t i = 0; i < $3->size(); i++)
     stp::GlobalParserInterface->removeSymbol((*$3)[i]);
 
-  delete $1;
-  delete $3;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($3);
   stp::GlobalParserInterface->deleteNode($6);
 }
 |
@@ -2725,8 +2738,8 @@ function_def_name LPAREN_TOK RPAREN_TOK an_fp_sort an_term
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
 
-  delete $1;
-  delete $4;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($4);
   stp::GlobalParserInterface->deleteNode($5);
 }
 |
@@ -2748,9 +2761,9 @@ function_def_name LPAREN_TOK function_params RPAREN_TOK an_fp_sort an_term
   for (size_t i = 0; i < $3->size(); i++)
     stp::GlobalParserInterface->removeSymbol((*$3)[i]);
 
-  delete $1;
-  delete $3;
-  delete $5;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($3);
+  stp::releaseParserValue($5);
   stp::GlobalParserInterface->deleteNode($6);
 }
 |
@@ -2768,7 +2781,7 @@ function_def_name LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUM
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1,empty, *$9);
 
-  delete $1;
+  stp::releaseParserValue($1);
   stp::GlobalParserInterface->deleteNode($9);
 }
 |
@@ -2782,9 +2795,9 @@ function_def_name LPAREN_TOK function_params RPAREN_TOK an_array_sort an_term
   for (size_t i = 0; i < $3->size(); i++)
     stp::GlobalParserInterface->removeSymbol((*$3)[i]);
 
-  delete $1;
-  delete $3;
-  delete $5;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($3);
+  stp::releaseParserValue($5);
   stp::GlobalParserInterface->deleteNode($6);
 }
 |
@@ -2816,8 +2829,8 @@ function_def_name LPAREN_TOK RPAREN_TOK an_array_sort an_term
 
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-  delete $1;
-  delete $4;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($4);
   stp::GlobalParserInterface->deleteNode($5);
 }
 ;
@@ -2834,7 +2847,7 @@ STRING_TOK {
       stp::input_status = TO_BE_UNKNOWN;
   else
       yyerror($1->c_str());
-  delete $1;
+  stp::releaseParserValue($1);
   $$ = NULL;
 }
 ;
@@ -2884,7 +2897,7 @@ SOURCE_TOK
 {}
 | STATUS_TOK status
 {
-  delete $2;
+  stp::releaseParserValue($2);
 }
 | LICENSE_TOK
 {}
@@ -2892,7 +2905,7 @@ SOURCE_TOK
      token of its own. Benchmarks carry things like :notes freely. */
   COLON_TOK STRING_TOK
 {
-  delete $2;
+  stp::releaseParserValue($2);
 }
 ;
 
@@ -2939,7 +2952,7 @@ an_array_sort_component:
 {
   $$ = new stp::array_sort_component(stp::SourceSort::floatingPoint(
       (unsigned)$1->exp_bits, (unsigned)$1->sig_bits));
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | ROUNDINGMODE_TOK
 {
@@ -2952,7 +2965,7 @@ an_array_sort_component:
       !resolved.isScalar())
     fatal_yyerror("unknown array component sort");
   $$ = new stp::array_sort_component(resolved);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | REAL_TOK
 {
@@ -2965,15 +2978,15 @@ an_array_sort:
 LPAREN_TOK ARRAY_TOK an_array_sort_component an_array_sort_component RPAREN_TOK
 {
   $$ = new stp::array_sort{*$3, *$4};
-  delete $3;
-  delete $4;
+  stp::releaseParserValue($3);
+  stp::releaseParserValue($4);
 }
 ;
 
 var_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
-  ABANDON_IF_REDECLARED_ZERO_ARITY(delete $1);
+  ABANDON_IF_REDECLARED_ZERO_ARITY(stp::releaseParserValue($1));
   checkBitVectorWidth($7);
   declareScalarSymbol($1, stp::SourceSort::bitVector($7));
 }
@@ -2981,11 +2994,11 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 {
   ASTNode s = createExactRealSourceSymbol($1->c_str());
   stp::GlobalParserInterface->addSymbol(s);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK STRING_TOK
 {
-  ABANDON_IF_REDECLARED_ZERO_ARITY((delete $1, delete $4));
+  ABANDON_IF_REDECLARED_ZERO_ARITY((stp::releaseParserValue($1), stp::releaseParserValue($4)));
   // The sort position holds a bare name: a sort the script introduced, by
   // define-sort or declare-sort. (This used to match any TERM symbol, so
   // `(declare-fun y () x)` with x a variable "worked" as an alias use.)
@@ -2995,16 +3008,16 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
     fatal_yyerror("unknown sort (not built in, and not a declared sort)");
   }
   declareScalarSymbol($1, resolved);
-  delete $4;
+  stp::releaseParserValue($4);
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
 {
-  ABANDON_IF_REDECLARED_ZERO_ARITY(delete $1);
+  ABANDON_IF_REDECLARED_ZERO_ARITY(stp::releaseParserValue($1));
   declareScalarSymbol($1, stp::SourceSort::boolean());
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK an_array_sort
 {
-  ABANDON_IF_REDECLARED_ZERO_ARITY((delete $1, delete $4));
+  ABANDON_IF_REDECLARED_ZERO_ARITY((stp::releaseParserValue($1), stp::releaseParserValue($4)));
   // An array over any pairing of supported scalar index/element sorts. A
   // float element's format lives on the array node
   // -- a read off it inherits the format (see deriveFPFormat) -- while a
@@ -3015,14 +3028,14 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 {
-  ABANDON_IF_REDECLARED_ZERO_ARITY((delete $1, delete $4));
+  ABANDON_IF_REDECLARED_ZERO_ARITY((stp::releaseParserValue($1), stp::releaseParserValue($4)));
   declareScalarSymbol(
       $1, stp::SourceSort::floatingPoint($4->exp_bits, $4->sig_bits));
-  delete $4;
+  stp::releaseParserValue($4);
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK
 {
-  ABANDON_IF_REDECLARED_ZERO_ARITY(delete $1);
+  ABANDON_IF_REDECLARED_ZERO_ARITY(stp::releaseParserValue($1));
   // A rounding mode is carried as a 5-bit one-hot bitvector, so a variable of
   // that sort is a 5-bit symbol. Declaring it as anything else -- or, as
   // before, not declaring it at all -- leaves every use of the name
@@ -3055,9 +3068,9 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
           *$1, domain, $4->sort, &diagnostic);
   if (declaration == NULL)
     stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
-  delete $1;
-  delete $2;
-  delete $4;
+  stp::releaseParserValue($1);
+  stp::releaseParserValue($2);
+  stp::releaseParserValue($4);
 }
 ;
 
@@ -3080,7 +3093,7 @@ STRING_TOK LPAREN_TOK
     message += yychar < 0 ? "end of file" : yytname[YYTRANSLATE(yychar)];
     message += ", expecting RPAREN_TOK";
     yyerror(message.c_str());
-    delete $1;
+    stp::releaseParserValue($1);
     YYABORT;
   }
   // The first domain token proves this declaration is nonzero-arity: the
@@ -3097,12 +3110,12 @@ uf_sort
 {
   $$ = new std::vector<stp::parsed_uf_sort>();
   $$->push_back(std::move(*$1));
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | uf_domain_sorts uf_sort
 {
   $1->push_back(std::move(*$2));
-  delete $2;
+  stp::releaseParserValue($2);
   $$ = $1;
 }
 ;
@@ -3136,7 +3149,7 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   const stp::SourceSort sort = $1->sourceSort();
   $$ = new stp::parsed_uf_sort(
       sort, stp::sourceSortToSMTLib(sort), false);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | an_fp_sort
 {
@@ -3144,7 +3157,7 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
       stp::SourceSort::floatingPoint($1->exp_bits, $1->sig_bits);
   $$ = new stp::parsed_uf_sort(
       sort, stp::sourceSortToSMTLib(sort), true);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | ROUNDINGMODE_TOK
 {
@@ -3162,7 +3175,7 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   else
     $$ = new stp::parsed_uf_sort(
         stp::SourceSort::unknown(), *$1, false, false);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 ;
 
@@ -3195,7 +3208,7 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   const stp::SourceSort sort = $1->sourceSort();
   $$ = new stp::parsed_uf_sort(
       sort, stp::sourceSortToSMTLib(sort), false);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | an_fp_sort
 {
@@ -3203,7 +3216,7 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
       stp::SourceSort::floatingPoint($1->exp_bits, $1->sig_bits);
   $$ = new stp::parsed_uf_sort(
       sort, stp::sourceSortToSMTLib(sort), true);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | ROUNDINGMODE_TOK
 {
@@ -3218,7 +3231,7 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   else
     $$ = new stp::parsed_uf_sort(
         stp::SourceSort::unknown(), *$1, false, false);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 ;
 
@@ -3232,7 +3245,7 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
   ASTNode s = createExactRealSourceSymbol($1->c_str());
   stp::GlobalParserInterface->addSymbol(s);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | STRING_TOK BOOL_TOK
 {
@@ -3252,7 +3265,7 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   // declare-fun's twin set it).
   declareScalarSymbol(
       $1, stp::SourceSort::floatingPoint($2->exp_bits, $2->sig_bits));
-  delete $2;
+  stp::releaseParserValue($2);
 }
 | STRING_TOK STRING_TOK
 {
@@ -3263,7 +3276,7 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
     fatal_yyerror("unknown sort (not built in, and not a declared sort)");
   }
   declareScalarSymbol($1, resolved);
-  delete $2;
+  stp::releaseParserValue($2);
 }
 | STRING_TOK ROUNDINGMODE_TOK
 {
@@ -3409,7 +3422,7 @@ FORMID_TOK
         result.push_back(stp::GlobalParserInterface->CreateNode(k, terms[i], terms[i-1]));
     }
     $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, result));
-    delete $3;
+    stp::releaseParserValue($3);
   }
   else
   {
@@ -3440,7 +3453,7 @@ FORMID_TOK
         stp::GlobalParserInterface->CreateNode(DISTINCT, terms));
   }
 
-  delete $3;
+  stp::releaseParserValue($3);
 }
 | LPAREN_TOK DISTINCT_TOK an_formulas RPAREN_TOK
 {
@@ -3466,7 +3479,7 @@ FORMID_TOK
         stp::GlobalParserInterface->CreateNode(DISTINCT, terms));
   }
 
-  delete $3;
+  stp::releaseParserValue($3);
 }
 | LPAREN_TOK BVSLT_TOK an_term an_term RPAREN_TOK
 {
@@ -3560,7 +3573,7 @@ FORMID_TOK
   }
 
   $$ = stp::GlobalParserInterface->newNode(forms[0]);
-  delete $3;
+  stp::releaseParserValue($3);
 }
 | LPAREN_TOK ITE_TOK an_formula an_formula an_formula RPAREN_TOK
 {
@@ -3592,15 +3605,16 @@ FORMID_TOK
 | LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
-  delete $3;
+  stp::releaseParserValue($3);
 }
 | LPAREN_TOK UF_BOOL_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
-  $$ = applyParsedUF($2, $3);
+  $$ = applyParsedUF($2, *$3);
+  stp::releaseParserValue($3);
 }
 | LPAREN_TOK UF_BOOL_FUNCTIONID_TOK RPAREN_TOK
 {
-  $$ = applyParsedUF($2, new ASTVec());
+  $$ = applyParsedUF($2, ASTVec());
 }
 | BOOLEAN_FUNCTIONID_TOK
 {
@@ -3624,7 +3638,7 @@ FORMID_TOK
 
   stp::GlobalParserInterface->AddAssert(n);
 
-  delete $5;
+  stp::releaseParserValue($5);
 
   $$ = $3;
 }
@@ -3659,8 +3673,8 @@ let: LPAREN_TOK
   an_mixed RPAREN_TOK
 {
   stp::GlobalParserInterface->letMgr->LetExprMgr(*$3,($5->back()));
-  delete $3;
-  delete $5;
+  stp::releaseParserValue($3);
+  stp::releaseParserValue($5);
 }
 ;
 
@@ -3691,14 +3705,14 @@ BVCONST_HEXIDECIMAL_TOK
   unsigned width = $1->length()*4;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 16, width));
   $$->SetValueWidth(width);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | BVCONST_BINARY_TOK
 {
   unsigned width = $1->length();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 2, width));
   $$->SetValueWidth(width);
-  delete $1;
+  stp::releaseParserValue($1);
 }
 | FP_TOK an_term an_term an_term
 {
@@ -3743,7 +3757,7 @@ an_real_constant:
     fatal_yyerror("expected '-' (negation): the only unary operation on a "
                   "real constant");
   }
-  delete $2;
+  stp::releaseParserValue($2);
   $$ = $3;
   $$->negative = !$$->negative;
 }
@@ -3754,7 +3768,7 @@ an_real_constant:
     fatal_yyerror("expected '/' (a rational constant): the only binary "
                   "operation on real constants");
   }
-  delete $2;
+  stp::releaseParserValue($2);
   if ($3->den != nullptr || $4->den != nullptr)
   {
     fatal_yyerror("a rational constant does not nest: write (/ p q), "
@@ -3767,7 +3781,7 @@ an_real_constant:
   }
   $$ = $3;
   $$->den = $4->num;
-  delete $4;
+  stp::releaseParserValue($4);
 }
 ;
 
@@ -3995,7 +4009,7 @@ TERMID_TOK
       applyFunctionChecked(*$2, *$3));
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
     fatal_yyerror("Real define-fun did not return Real sort");
-  delete $3;
+  stp::releaseParserValue($3);
 }
 | REAL_NUMERAL_TOK
 {
@@ -4056,8 +4070,8 @@ TERMID_TOK
   // parse reports them as a parse error, the command line exits with them.
   if (*$3 != "const")
   {
-    delete $3;
-    delete $4;
+    stp::releaseParserValue($3);
+    stp::releaseParserValue($4);
     stp::GlobalParserInterface->deleteNode($6);
     fatal_yyerror("only (as const ...) is supported after 'as'");
   }
@@ -4065,8 +4079,8 @@ TERMID_TOK
   ASTNode value = *$6;
   if (value.GetSourceSort() != array_sort.element())
   {
-    delete $3;
-    delete $4;
+    stp::releaseParserValue($3);
+    stp::releaseParserValue($4);
     stp::GlobalParserInterface->deleteNode($6);
     fatal_yyerror("the default of a constant array must have the array's "
                   "element sort");
@@ -4079,15 +4093,15 @@ TERMID_TOK
         std::string("the default of a constant array must be a value, and "
                     "this one depends on ") +
         free_symbol.GetName();
-    delete $3;
-    delete $4;
+    stp::releaseParserValue($3);
+    stp::releaseParserValue($4);
     stp::GlobalParserInterface->deleteNode($6);
     fatal_yyerror(message.c_str());
   }
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserBM->CreateConstArray(array_sort, value));
-  delete $3;
-  delete $4;
+  stp::releaseParserValue($3);
+  stp::releaseParserValue($4);
   stp::GlobalParserInterface->deleteNode($6);
 }
 | SELECT_TOK an_term an_term
@@ -4174,7 +4188,8 @@ TERMID_TOK
   // for on each branch.
   if ($3->GetSourceSort().kind() == stp::SourceSort::Kind::Real)
   {
-    $$ = createExactRealTerm(ITE, new ASTVec{*$2, *$3, *$4});
+    ASTVec* branches = new ASTVec{*$2, *$3, *$4};
+    $$ = createExactRealTerm(ITE, branches);
     stp::GlobalParserInterface->deleteNode( $2);
     stp::GlobalParserInterface->deleteNode( $3);
     stp::GlobalParserInterface->deleteNode( $4);
@@ -4378,7 +4393,7 @@ TERMID_TOK
   // parser's job (the engine's constructor treats either as fatal).
   if ($3 == 0)
   {
-    delete $2;
+    stp::releaseParserValue($2);
     fatal_yyerror("bit-vectors must be of positive length");
   }
   if (!decimalFitsWidth(*$2, $3))
@@ -4386,12 +4401,12 @@ TERMID_TOK
     const std::string diagnostic = "(_ bv" + *$2 + " " + std::to_string($3) +
                                    "): the value does not fit in " +
                                    std::to_string($3) + " bits";
-    delete $2;
+    stp::releaseParserValue($2);
     fatal_yyerror(diagnostic.c_str());
   }
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$2, 10, $3));
   $$->SetValueWidth($3);
-  delete $2;
+  stp::releaseParserValue($2);
 }
 | LPAREN_TOK BITVECTOR_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
@@ -4400,15 +4415,16 @@ TERMID_TOK
   if ($$->GetType() != BITVECTOR_TYPE)
       yyerror("Must be bitvector type");
 
-  delete $3;
+  stp::releaseParserValue($3);
 }
 | LPAREN_TOK UF_BV_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
-  $$ = applyParsedUF($2, $3);
+  $$ = applyParsedUF($2, *$3);
+  stp::releaseParserValue($3);
 }
 | LPAREN_TOK UF_BV_FUNCTIONID_TOK RPAREN_TOK
 {
-  $$ = applyParsedUF($2, new ASTVec());
+  $$ = applyParsedUF($2, ASTVec());
 }
 | LPAREN_TOK FLOATINGPOINT_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
@@ -4417,7 +4433,7 @@ TERMID_TOK
   if ($$->GetType() != FLOATINGPOINT_TYPE)
       yyerror("Must be floating-point type");
 
-  delete $3;
+  stp::releaseParserValue($3);
 }
 | FLOATINGPOINT_FUNCTIONID_TOK
 {
@@ -4441,7 +4457,7 @@ TERMID_TOK
       applyFunctionChecked(*$2, *$3));
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
     yyerror("Must be RoundingMode type");
-  delete $3;
+  stp::releaseParserValue($3);
 }
 | ROUNDINGMODE_FUNCTIONID_TOK
 {
@@ -4462,7 +4478,7 @@ TERMID_TOK
       applyFunctionChecked(*$2, *$3));
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::Uninterpreted)
     yyerror("Must be a declared sort");
-  delete $3;
+  stp::releaseParserValue($3);
 }
 | DECLAREDSORT_FUNCTIONID_TOK
 {
@@ -4478,7 +4494,7 @@ TERMID_TOK
 
   ASTNode s(stp::GlobalParserInterface->CreateSourceSymbol(
       $5->c_str(), $3->GetSourceSort()));
-  delete $5;
+  stp::releaseParserValue($5);
 
   stp::GlobalParserInterface->addSymbol(s);
 

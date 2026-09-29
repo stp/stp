@@ -657,9 +657,10 @@ ASTNode* Cpp_interface::newNode(const ASTNode& copyIn)
   return new ASTNode(copyIn);
 }
 
-void Cpp_interface::deleteNode(ASTNode* n)
+void Cpp_interface::deleteNode(ASTNode*& n)
 {
   delete n;
+  n = nullptr;
 }
 
 void Cpp_interface::addSymbol(ASTNode& s)

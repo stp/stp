@@ -1257,3 +1257,61 @@ TEST(Parsing, a_parse_abandoned_at_a_let_binder_leaves_the_next_alone)
     EXPECT_TRUE(t.check_sat().is_sat());
   }
 }
+
+// A parse can end early in several ways: bison's own syntax error, a
+// grammar action that refuses its operands (itself or through a helper), an
+// engine refusal while an action builds a node, and each in all three
+// grammars, at the top of a script or 300 terms deep, where bison has moved
+// its stack to the heap. Every one releases what the parse had read -- the
+// lookahead, the values waiting on the parser's stack, the operands of the
+// action that refused -- where an exception used to unwind past all of it.
+// The memory checkers see a leak or a double release (this suite runs under
+// the sanitizer job); here each is PARSE, over and over, with the manager
+// still parsing and solving.
+TEST(Parsing, an_abandoned_parse_releases_what_it_read)
+{
+  std::string deep = "(declare-fun d () (_ BitVec 8))\n(assert (= d ";
+  for (int i = 0; i < 300; ++i)
+    deep += "(bvadd d ";
+  deep += "#b1";
+  deep += std::string(300, ')');
+  deep += "))\n";
+  const std::vector<std::pair<Format, std::string>> inputs{
+      {Format::SMTLIB2, "(declare-fun a () (_ BitVec 8))\n(assert (and (= a #x01) (= a #b1)))\n"},
+      {Format::SMTLIB2,
+       "(declare-fun a () (_ BitVec 8))\n(assert (or (= a #x01) (= ((_ extract 9 0) a) #x00)))\n"},
+      {Format::SMTLIB2, "(set-option :print-success maybe)\n"},
+      {Format::SMTLIB2, "(declare-fun a () (_ BitVec 8))\n(assert (= a (bvadd a"},
+      {Format::SMTLIB2, deep},
+      {Format::SMTLIB2, "(declare-fun f () (_ FloatingPoint 8 24))\n"
+                        "(assert (fp.lt f (fp.add RNE f (_ bv0 8))))\n"},
+      {Format::SMTLIB2, "(declare-fun f () (_ FloatingPoint 8 24))\n(assert (fp.lt f (fp.to_real f)))\n"},
+      {Format::SMTLIB2, "(declare-fun f () (_ FloatingPoint 8 24))\n"
+                        "(assert (fp.eq f ((_ to_fp 1 1) RNE 1.5)))\n"},
+      {Format::CVC, "x : BITVECTOR(8);\ny : BITVECTOR(4);\nASSERT(BVPLUS(8, x, x) = y);\nQUERY(FALSE);\n"},
+      {Format::CVC, "x, y : BITVECTOR(8);\nASSERT(x = 0hex0"},
+      {Format::CVC, "x : BITVECTOR(8);\nASSERT(x = z);\nQUERY(FALSE);\n"},
+      {Format::CVC, "y : BITVECTOR(0);\n"},
+      {Format::SMTLIB1, "(benchmark b :logic QF_BV :extrafuns ((sx BitVec[8])) :formula (= sx "},
+      {Format::SMTLIB1, "(benchmark b :logic QF_BV :formula (= undefined bv3[8]))\n"},
+      {Format::SMTLIB1, "(benchmark b :logic QF_BV :extrafuns ((x BitVec[8]))\n"
+                        " :formula (= (rotate_left[9] x) bv1[8]))\n"},
+  };
+  for (int round = 0; round < 3; ++round)
+    for (const auto& input : inputs)
+    {
+      SCOPED_TRACE(input.second.substr(0, 60));
+      TermManager tm;
+      Solver s(tm);
+      if (input.first == Format::SMTLIB2)
+        API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2(input.second));
+      else
+        API_EXPECT_ERROR(ErrorCode::PARSE, s.parse(input.second, input.first));
+      s.parse_smt2("(declare-fun g () (_ BitVec 8))\n(assert (= g #x05))\n");
+      ASSERT_TRUE(s.check_sat().is_sat());
+      EXPECT_EQ(s.model().uint64_value(*tm.symbol("g")), 5u);
+      Solver t(tm);
+      t.parse("h : BITVECTOR(8);\nASSERT(h = 0hex07);\nQUERY(FALSE);\n", Format::CVC);
+      EXPECT_TRUE(t.check_sat().is_sat());
+    }
+}
