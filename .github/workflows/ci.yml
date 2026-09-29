@@ -1809,13 +1809,17 @@ jobs:
     # The library from programs, as a client builds them against the installed
     # package with the same compiler: the 2.x C API through libstp2, the 3.x C
     # and C++ APIs, and managers on several threads at once. Nothing else
-    # compiles a program against the API on Windows, or runs one.
+    # compiles a program against the API on Windows, or runs one. A static STP
+    # is built against the static C runtime (/MT, see CMakeLists.txt), and
+    # MSVC links no program that mixes the two runtimes, so the consumer asks
+    # for the same one.
     - name: API consumers
       run: |
         cmake --install build
         if ($LASTEXITCODE -ne 0) { exit 1 }
         cmake -S tests/api/install/uf-public-header-consumer -B consumer -G Ninja `
           -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl `
+          -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
           "-DSTP_DIR:PATH=$env:GITHUB_WORKSPACE/install/CMake"
         if ($LASTEXITCODE -ne 0) { exit 1 }
         cmake --build consumer
