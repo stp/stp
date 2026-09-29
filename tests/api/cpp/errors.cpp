@@ -359,13 +359,13 @@ TEST(Threads, managers_on_threads_share_the_engines_process_wide_state)
   {
     const char* name = setting.first;
     const char* value = setting.second;
-    const int threads = 8, formulas = 12;
+    constexpr int threads = 8, formulas = 12;
     std::vector<std::string> expected, got(threads);
     for (int t = 0; t < threads; ++t)
       expected.push_back(answers(100 + t, formulas, name, value));
     std::vector<std::thread> pool;
     for (int t = 0; t < threads; ++t)
-      pool.emplace_back([&got, t, formulas, name, value] {
+      pool.emplace_back([&got, t, name, value] {
         got[t] = answers(100 + t, formulas, name, value);
       });
     for (std::thread& th : pool)
