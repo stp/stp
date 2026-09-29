@@ -3781,20 +3781,14 @@ id_formid
   checkSameSourceSort(terms, "= requires operands of the same sort");
 
   bool one_float = false;
-  bool one_real = false;
   bool one_boolean = false;
   for (unsigned i = 0; i < terms.size();i++)
   {
     one_float |= (terms[i].GetSourceSort().kind() ==
                   stp::SourceSort::Kind::FloatingPoint);
-    one_real |= (terms[i].GetSourceSort().kind() ==
-                 stp::SourceSort::Kind::Real);
     one_boolean |= (terms[i].GetSourceSort().kind() ==
                     stp::SourceSort::Kind::Bool);
   }
-
-  if (one_real && terms.size() != 2)
-    fatal_yyerror("Real equality is binary in the exact linear QF_LRA fragment");
 
   Kind k = one_float ? FP_SMT_EQ : (one_boolean ? IFF : EQ);
 
