@@ -71,14 +71,6 @@
 #include <string>
 #include <vector>
 
-namespace stp
-{
-  // Defined in smt2.lex: the text SKIP_SEXPR swallowed for the current
-  // command, comments excluded. define-sort inspects it (see
-  // tryRegisterFpSortAlias below).
-  const std::string& smt2_skipped_text();
-}
-
   using std::cout;
   using std::cerr;
   using std::endl;
@@ -918,25 +910,7 @@ namespace stp
     }
   }
 
-  // (define-sort <name> () <floating-point sort>) is the one define-sort STP
-  // implements. The lexer swallows every define-sort's arguments (SKIP_SEXPR
-  // in smt2.lex), which is what lets the uninterpreted shapes -- parametric
-  // sorts, sorts STP lacks, parentheses hiding in comments -- be answered
-  // "unsupported" without parsing them; this inspects the swallowed text
-  // (comments already excluded) and registers the alias when it has the one
-  // implemented shape. Returns false to answer "unsupported" instead.
-  // The IEEE interchange formats SMT-LIB gives names to: (eb, sb), with sb
-  // counting the hidden bit -- the same pair (_ FloatingPoint eb sb) takes.
-  //
-  // One table, because the two callers cannot share a code path. The sort
-  // rule below reaches these names as lexer tokens; tryRegisterFpSortAlias
-  // reaches them as raw text, because define-sort's body is swallowed whole
-  // and re-tokenised by hand. Both need the same answer, and these widths
-  // have been wrong once already -- the named sorts used to split the packed
-  // total in two (4+12, 16+48, 32+96) rather than use the IEEE fields, so
-  // every one but Float32 named a format that does not exist. A second copy
-  // is a second chance to make that mistake, in the caller that no test
-  // reaches.
+  // Named IEEE interchange formats, including the hidden significand bit.
   bool namedFloatFormat(const std::string& name, unsigned int& exp_width,
                         unsigned int& sig_width)
   {
@@ -959,77 +933,18 @@ namespace stp
     return new stp::float_size(exp_width, sig_width);
   }
 
-  bool tryRegisterFpSortAlias(const std::string& text)
+  stp::SMT2Sort* namedSortExpression(const std::string& name,
+                                     const std::vector<stp::SMT2Sort>& args = {})
   {
-    // The per-logic gate, which nothing else here can apply for us. Every
-    // other floating-point name in the input is a keyword only while an FP
-    // set-logic is in force, because the lexer routes it through fpKeyword();
-    // define-sort's body never reaches those rules -- SKIP_SEXPR swallows it
-    // and the loop below re-tokenises the raw text -- so "Float32" was a
-    // floating-point sort here under QF_BV, and a QF_BV script could obtain a
-    // FloatingPoint variable while legitimately declaring a symbol named "fp"
-    // in the same scope. Answer "unsupported", as this does for every other
-    // sort it does not implement.
-    if (!stp::SMT2FloatTokensActive())
-      return false;
-
-    std::vector<std::string> toks;
-    std::string cur;
-    for (const char c : text)
+    try
     {
-      if (c == '(' || c == ')')
-      {
-        if (!cur.empty())
-        {
-          toks.push_back(cur);
-          cur.clear();
-        }
-        toks.push_back(std::string(1, c));
-      }
-      else if (isspace(static_cast<unsigned char>(c)))
-      {
-        if (!cur.empty())
-        {
-          toks.push_back(cur);
-          cur.clear();
-        }
-      }
-      else
-      {
-        cur += c;
-      }
+      return new stp::SMT2Sort(stp::GlobalParserInterface->sortExpression(name, args));
     }
-    if (!cur.empty())
-      toks.push_back(cur);
-
-    // <name> ( ) followed by a named format or ( _ FloatingPoint eb sb ).
-    if (toks.size() < 4 || toks[0] == "(" || toks[0] == ")" ||
-        toks[1] != "(" || toks[2] != ")")
-      return false;
-
-    unsigned int exp_width, sig_width;
-    if (toks.size() == 4)
+    catch (const std::invalid_argument& error)
     {
-      if (!namedFloatFormat(toks[3], exp_width, sig_width))
-        return false;
+      fatal_yyerror(error.what());
     }
-    else if (toks.size() == 9 && toks[3] == "(" && toks[4] == "_" &&
-             toks[5] == "FloatingPoint" && toks[8] == ")" &&
-             !toks[6].empty() && !toks[7].empty() &&
-             toks[6].find_first_not_of("0123456789") == std::string::npos &&
-             toks[7].find_first_not_of("0123456789") == std::string::npos)
-    {
-      exp_width = static_cast<unsigned int>(strtoul(toks[6].c_str(), NULL, 10));
-      sig_width = static_cast<unsigned int>(strtoul(toks[7].c_str(), NULL, 10));
-    }
-    else
-      return false;
-
-    checkFpFormatWidths(exp_width, sig_width);
-    // A real alias table: the name maps to a format, and is NOT interned as a
-    // symbol -- the old scheme made the sort name usable as a term variable.
-    stp::GlobalParserInterface->addSortAlias(toks[0], exp_width, sig_width);
-    return true;
+    return nullptr;
   }
 
   // ((_ to_fp_unsigned e s) rm bv) -- convert an unsigned integer held in a
@@ -1398,13 +1313,6 @@ namespace stp
     return static_cast<unsigned>(parsed);
   }
 
-  static ASTNode createExactRealSourceSymbol(const char* name)
-  {
-    return stp::GlobalParserInterface->CreateSourceSymbol(
-        name, stp::SourceSort::real());
-    return ASTNode();
-  }
-
   // The five rounding modes as parse-time values. Rounding-mode constants
   // are interned, so comparing against the five is exact; anything else of
   // RoundingMode sort is symbolic.
@@ -1742,32 +1650,19 @@ namespace stp
     return n;
   }
 
-  // Declare an array symbol from a parsed (Array X Y) sort: the shared body
-  // of the declare-fun and declare-const productions. Frees both arguments.
-  void declareArraySymbol(std::string*& name, stp::array_sort*& sort)
-  {
-    requireFreeTopLevelDeclarationName(*name);
-    ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
-        name->c_str(), sort->sourceSort());
-    stp::GlobalParserInterface->addArraySymbol(s, *sort);
-
-    if (s.GetType() != ARRAY_TYPE)
-      fatal_yyerror("failed to declare an array.");
-
-    stp::releaseParserValue(name);
-    stp::releaseParserValue(sort);
-  }
-
   // Shared scalar declaration action. A cross-namespace name is diagnosed
   // before anything is interned or registered, and does not come back.
   void declareScalarSymbol(std::string*& name,
-                           const stp::SourceSort& sourceSort,
-                           bool roundingMode = false)
+                           const stp::SourceSort& sourceSort)
   {
     requireFreeTopLevelDeclarationName(*name);
     ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
         name->c_str(), sourceSort);
-    if (roundingMode)
+    if (sourceSort.kind() == stp::SourceSort::Kind::Array)
+      stp::GlobalParserInterface->addArraySymbol(s, stp::array_sort{
+          stp::array_sort_component(sourceSort.index()),
+          stp::array_sort_component(sourceSort.element())});
+    else if (sourceSort.kind() == stp::SourceSort::Kind::RoundingMode)
       stp::GlobalParserInterface->addRoundingModeSymbol(s);
     else
       stp::GlobalParserInterface->addSymbol(s);
@@ -1793,7 +1688,9 @@ namespace stp
   struct ParsedRealConstant* realc;
   unsigned uintval; /* for numerals in types. */
   stp::float_size* fp_size;
-  stp::array_sort_component* arr_component;
+  stp::SourceSort* sort;
+  stp::SMT2Sort* sortexpr;
+  std::vector<stp::SMT2Sort>* sortexprvec;
   stp::array_sort* arr_sort;
 
   //ASTNode,ASTVec
@@ -1830,13 +1727,15 @@ namespace stp
 %type <node> an_term  an_formula function_param an_const an_fp_term an_fp_predicate an_rounding_mode
 %type <node> definition_body
 %type <uintval> an_fp_const command_numeral
-%type <str> info_flag
+%type <str> info_flag sort_parameter_name
 %type <str> uf_decl_name function_def_name
 %type <ufsortvec> uf_domain_sorts
 %type <ufsort> uf_sort uf_codomain_sort
 
 %type <fp_size> an_fp_sort
-%type <arr_component> an_array_sort_component
+%type <sort> resolved_sort
+%type <sortexpr> sort_expression array_sort_expression sort_application
+%type <sortexprvec> sort_arguments
 %type <arr_sort> an_array_sort
 
 /* Release owning values discarded during parser recovery or teardown.
@@ -1844,7 +1743,7 @@ namespace stp
 %destructor { delete $$; } <node>
 %destructor { delete $$; } <vec>
 %destructor { delete $$; } <fp_size>
-%destructor { delete $$; } <arr_component>
+%destructor { delete $$; } <sort> <sortexpr> <sortexprvec>
 %destructor { delete $$; } <arr_sort>
 %destructor { destroyParsedRealConstant($$); } <realc>
 
@@ -2152,11 +2051,11 @@ cmdi:
       stp::GlobalParserInterface->success();
     }
 |
-     DEFINE_CONST_TOK function_def_name uf_codomain_sort definition_body
+     DEFINE_CONST_TOK function_def_name resolved_sort definition_body
     {
-      if ($3->sort.kind() == stp::SourceSort::Kind::Unknown)
+      if ($3->kind() == stp::SourceSort::Kind::Unknown)
         fatal_yyerror("define-const: unknown sort");
-      if ($3->sort != $4->GetSourceSort())
+      if (*$3 != $4->GetSourceSort())
         fatal_yyerror("define-const: the body's sort does not match the declared result sort");
       stp::GlobalParserInterface->storeFunction(*$2, ASTVec(), *$4);
       stp::releaseParserValue($2);
@@ -2298,17 +2197,13 @@ cmdi:
        stp::releaseParserValue($2);
     }
 |
-     /* The arguments of these are swallowed by the lexer, which leaves us the
-        parenthesis that closes the command. define-sort is the one of them
-        STP partially implements: a nullary alias for a floating-point sort
-        is registered from the swallowed text; every other shape -- other
-        sorts, parameters -- is answered "unsupported". */
-     DEFINE_SORT_TOK
+     DEFINE_SORT_TOK STRING_TOK LPAREN_TOK sort_parameters RPAREN_TOK sort_expression
     {
-      if (tryRegisterFpSortAlias(stp::smt2_skipped_text()))
-        stp::GlobalParserInterface->success();
-      else
-        stp::GlobalParserInterface->unsupported();
+      stp::GlobalParserInterface->defineSort(*$2, *$6);
+      stp::SMT2SetSortContext(false);
+      stp::releaseParserValue($2);
+      stp::releaseParserValue($6);
+      stp::GlobalParserInterface->success();
     }
 |
      DEFINE_FUN_REC_TOK
@@ -2508,77 +2403,9 @@ LPAREN_TOK
 ;
 
 function_param:
-function_param_open STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
+function_param_open STRING_TOK resolved_sort RPAREN_TOK
 {
-  checkBitVectorWidth($6);
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(), stp::SourceSort::bitVector($6)));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-}
-|
-function_param_open STRING_TOK BOOL_TOK RPAREN_TOK
-{
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(), stp::SourceSort::boolean()));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-}
-|
-function_param_open STRING_TOK REAL_TOK RPAREN_TOK
-{
-  // A define-fun formal of Real sort. These are macro parameters, not
-  // uninterpreted functions: Cpp_interface::applyFunction substitutes the
-  // arguments into the stored body, so nothing of Real sort survives the
-  // expansion that the Real fragment does not already handle. The families
-  // that use them define min and max this way.
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(), stp::SourceSort::real()));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-}
-|
-function_param_open STRING_TOK an_fp_sort RPAREN_TOK
-{
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(),
-      stp::SourceSort::floatingPoint($3->exp_bits, $3->sig_bits)));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-  stp::releaseParserValue($3);
-}
-|
-function_param_open STRING_TOK ROUNDINGMODE_TOK RPAREN_TOK
-{
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(), stp::SourceSort::roundingMode()));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-}
-|
-function_param_open STRING_TOK an_array_sort RPAREN_TOK
-{
-  // The same sort is already accepted through a define-sort alias. Accept
-  // its inline spelling too, as used when an API definition is exported.
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(), $3->sourceSort()));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-  stp::releaseParserValue($3);
-}
-|
-function_param_open STRING_TOK STRING_TOK RPAREN_TOK
-{
-  // A formal whose sort is a name the script introduced. This is how the
-  // uninterpreted-sort benchmarks bind their state parameter:
-  //   (define-fun p ((state S)) Bool ...)
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$3, resolved))
-  {
-    fatal_yyerror("unknown sort (not built in, and not a declared sort)");
-  }
-  $$ = new ASTNode(
-      stp::GlobalParserInterface->CreateSourceSymbol($2->c_str(), resolved));
+  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol($2->c_str(), *$3));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
   stp::releaseParserValue($2);
   stp::releaseParserValue($3);
@@ -2609,258 +2436,24 @@ STRING_TOK
 ;
 
 function_def:
-function_def_name LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK  an_term
+function_def_name LPAREN_TOK function_params RPAREN_TOK resolved_sort definition_body
 {
-  checkBitVectorWidth($8);
-  checkBitVectorTerm(*$10);
-  if ($10->GetValueWidth() != $8)
-  {
-    char msg [100];
-    sprintf(msg, "Different bit-widths specified: %d %d", $10->GetValueWidth(), $8);
-    yyerror(msg);
-  }
-
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$10);
-
-  // Next time the variable is used, we want it to be fresh.
-  for (size_t i = 0; i < $3->size(); i++)
-    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::GlobalParserInterface->deleteNode($10);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK STRING_TOK an_term
-{
-  // A result sort written as a name the script introduced. The body has to
-  // carry that sort already -- nothing is coerced here, exactly as the
-  // floating-point arm below refuses a mismatched format.
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$5, resolved))
-  {
-    fatal_yyerror("unknown sort (not built in, and not a declared sort)");
-  }
-  if ($6->GetSourceSort() != resolved)
-  {
-    fatal_yyerror("define-fun: the body's sort does not match the declared "
-                  "result sort");
-  }
-
+  if ($6->GetSourceSort() != *$5)
+    fatal_yyerror("define-fun: the body's sort does not match the declared result sort");
   stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-
-  for (size_t i = 0; i < $3->size(); i++)
-    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
+  for (const ASTNode& parameter : *$3)
+    stp::GlobalParserInterface->removeSymbol(parameter);
   stp::releaseParserValue($1);
   stp::releaseParserValue($3);
   stp::releaseParserValue($5);
   stp::GlobalParserInterface->deleteNode($6);
 }
 |
-function_def_name LPAREN_TOK RPAREN_TOK STRING_TOK an_term
+function_def_name LPAREN_TOK RPAREN_TOK resolved_sort definition_body
 {
-  // The zero-arity form of the arm above. It was missing, which is what stopped
-  // a printed model from being read back: the model of a symbol of a declared
-  // sort is exactly a nullary define-fun at that sort.
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$4, resolved))
-  {
-    fatal_yyerror("unknown sort (not built in, and not a declared sort)");
-  }
-  if ($5->GetSourceSort() != resolved)
-  {
-    fatal_yyerror("define-fun: the body's sort does not match the declared "
-                  "result sort");
-  }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($4);
-  stp::GlobalParserInterface->deleteNode($5);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula
-{
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-
-  // Next time the variable is used, we want it to be fresh.
-  for (size_t i = 0; i < $3->size(); i++)
-   stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::GlobalParserInterface->deleteNode($6);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
-{
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-
-  stp::releaseParserValue($1);
-  stp::GlobalParserInterface->deleteNode($5);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK REAL_TOK an_term
-{
-  if ($5->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
-    fatal_yyerror("define-fun Real alias body must have Real sort");
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-  stp::releaseParserValue($1);
-  stp::GlobalParserInterface->deleteNode($5);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK REAL_TOK an_term
-{
-  // A Real-returning macro with formals. Substitution happens at each
-  // application, so the body is only ever seen by the Real fragment after
-  // its parameters have been replaced by the actual arguments. This is how
-  // the calendar-automata families spell min and max.
-  if ($6->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
-    fatal_yyerror("define-fun Real body must have Real sort");
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::GlobalParserInterface->deleteNode($6);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK an_term
-{
-  if ($5->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
-  {
-    fatal_yyerror("define-fun: the body is not a rounding mode");
-  }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-
-  stp::releaseParserValue($1);
-  stp::GlobalParserInterface->deleteNode($5);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK ROUNDINGMODE_TOK an_term
-{
-  if ($6->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
-    fatal_yyerror("define-fun: the body is not a rounding mode");
-
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-  for (size_t i = 0; i < $3->size(); i++)
-    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::GlobalParserInterface->deleteNode($6);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK an_fp_sort an_term
-{
-  if ($5->GetSourceSort() != stp::SourceSort::floatingPoint(
-                                  $4->exp_bits, $4->sig_bits))
-  {
-    fatal_yyerror("define-fun: the body's floating-point format does not "
-                  "match the declared result sort");
-  }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($4);
-  stp::GlobalParserInterface->deleteNode($5);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK an_fp_sort an_term
-{
-  // This action was empty: the function was silently dropped, and -- worse --
-  // its parameter symbols stayed interned, resolvable as free variables that
-  // were never declared.
-  if ($6->GetSourceSort() != stp::SourceSort::floatingPoint(
-                                  $5->exp_bits, $5->sig_bits))
-  {
-    fatal_yyerror("define-fun: the body's floating-point format does not "
-                  "match the declared result sort");
-  }
-
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-
-  // Next time the variable is used, we want it to be fresh.
-  for (size_t i = 0; i < $3->size(); i++)
-    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::releaseParserValue($5);
-  stp::GlobalParserInterface->deleteNode($6);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_term
-{
-  checkBitVectorWidth($7);
-  checkBitVectorTerm(*$9);
-  if ($9->GetValueWidth() != $7)
-  {
-    char msg [100];
-    sprintf(msg, "Different bit-widths specified: %d %d", $9->GetValueWidth(), $7);
-    yyerror(msg);
-  }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1,empty, *$9);
-
-  stp::releaseParserValue($1);
-  stp::GlobalParserInterface->deleteNode($9);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK an_array_sort an_term
-{
-  if ($6->GetSourceSort() != $5->sourceSort())
-    fatal_yyerror("define-fun: the body's array sort does not match the declared result sort");
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-
-  // Match the other parameterised productions: leaving the parameter
-  // symbols interned would let later input resolve them as free variables
-  // that were never declared.
-  for (size_t i = 0; i < $3->size(); i++)
-    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::releaseParserValue($5);
-  stp::GlobalParserInterface->deleteNode($6);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK an_array_sort an_term
-{
-  // A nullary define-fun whose result is an array. This is just a name for
-  // its body, stored like any other nullary function -- accepted with or
-  // without --array-equality; the lexer resolves later references to it
-  // back to that body. A body whose widths disagree with the declared sort
-  // is reported -- mirroring the sibling bitvector define-fun productions
-  // -- and still stored, so parsing continues. The sorts that share one
-  // bit layout (a float index or element format, RoundingMode on either
-  // side) get their own check: the widths cannot tell them apart.
-  if ($5->GetIndexWidth() != $4->index.width() ||
-      $5->GetValueWidth() != $4->elem.width())
-  {
-    char msg [100];
-    snprintf(msg, sizeof(msg),
-             "Different array widths specified: (%u %u) vs (%u %u)",
-             $5->GetIndexWidth(), $5->GetValueWidth(), $4->index.width(),
-             $4->elem.width());
-    yyerror(msg);
-  }
-  else if (!stp::GlobalParserInterface->arraySortsAgree(*$5, *$4))
-  {
-    yyerror("The body's array index or element sorts differ from the "
-            "declared ones");
-  }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
+  if ($5->GetSourceSort() != *$4)
+    fatal_yyerror("define-fun: the body's sort does not match the declared result sort");
+  stp::GlobalParserInterface->storeFunction(*$1, ASTVec(), *$5);
   stp::releaseParserValue($1);
   stp::releaseParserValue($4);
   stp::GlobalParserInterface->deleteNode($5);
@@ -2942,9 +2535,6 @@ SOURCE_TOK
 ;
 
 an_fp_sort:
-  // Through namedFloatFormat, which define-sort's text scraper reads too --
-  // see there for why the two must not each carry their own copy of these
-  // widths.
   FLOAT16_TOK
 {
     $$ = namedFloatSize("Float16");
@@ -2971,110 +2561,113 @@ an_fp_sort:
 }
 ;
 
-an_array_sort_component:
-  // An index or element sort of an (Array X Y) sort. Every supported scalar
-  // keeps its full source identity here even though the solver sees its
-  // packed bit-vector carrier below this boundary.
-  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK command_numeral RPAREN_TOK
+sort_parameters:
+  %empty
+| sort_parameters sort_parameter_name
 {
-  checkBitVectorWidth($4);
-  $$ = new stp::array_sort_component(stp::SourceSort::bitVector($4));
-}
-| an_fp_sort
-{
-  $$ = new stp::array_sort_component(stp::SourceSort::floatingPoint(
-      (unsigned)$1->exp_bits, (unsigned)$1->sig_bits));
-  stp::releaseParserValue($1);
-}
-| ROUNDINGMODE_TOK
-{
-  $$ = new stp::array_sort_component(stp::SourceSort::roundingMode());
-}
-| STRING_TOK
-{
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$1, resolved) ||
-      !resolved.isScalar())
-    fatal_yyerror("unknown array component sort");
-  $$ = new stp::array_sort_component(resolved);
-  stp::releaseParserValue($1);
-}
-| REAL_TOK
-{
-  $$ = nullptr;
-  fatal_yyerror("arrays with a Real index or element sort are not supported");
+  stp::GlobalParserInterface->addSortParameter(*$2);
+  stp::releaseParserValue($2);
 }
 ;
 
-an_array_sort:
-LPAREN_TOK ARRAY_TOK an_array_sort_component an_array_sort_component RPAREN_TOK
+sort_parameter_name:
+  STRING_TOK { $$ = $1; }
+| BOOL_TOK { $$ = new std::string("Bool"); }
+| REAL_TOK { $$ = new std::string("Real"); }
+| ROUNDINGMODE_TOK { $$ = new std::string("RoundingMode"); }
+| FLOAT16_TOK { $$ = new std::string("Float16"); }
+| FLOAT32_TOK { $$ = new std::string("Float32"); }
+| FLOAT64_TOK { $$ = new std::string("Float64"); }
+| FLOAT128_TOK { $$ = new std::string("Float128"); }
+| ARRAY_TOK { $$ = new std::string("Array"); }
+| BITVEC_TOK { $$ = new std::string("BitVec"); }
+| FLOATINGPOINT_TOK { $$ = new std::string("FloatingPoint"); }
+;
+
+sort_context:
+%empty { stp::SMT2SetSortContext(true); }
+;
+
+resolved_sort:
+sort_context sort_expression
 {
-  $$ = new stp::array_sort{*$3, *$4};
+  $$ = new stp::SourceSort(stp::GlobalParserInterface->resolveSort(*$2));
+  stp::releaseParserValue($2);
+  stp::SMT2SetSortContext(false);
+}
+;
+
+sort_expression:
+  BOOL_TOK { $$ = new stp::SMT2Sort(stp::GlobalParserInterface->sortAtom("Bool", stp::SourceSort::boolean())); }
+| REAL_TOK { $$ = new stp::SMT2Sort(stp::GlobalParserInterface->sortAtom("Real", stp::SourceSort::real())); }
+| ROUNDINGMODE_TOK { $$ = new stp::SMT2Sort(stp::GlobalParserInterface->sortAtom("RoundingMode", stp::SourceSort::roundingMode())); }
+| LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK command_numeral RPAREN_TOK
+{
+  checkBitVectorWidth($4);
+  $$ = new stp::SMT2Sort(stp::SourceSort::bitVector($4));
+}
+| an_fp_sort
+{
+  $$ = new stp::SMT2Sort(stp::SourceSort::floatingPoint($1->exp_bits, $1->sig_bits));
+  stp::releaseParserValue($1);
+}
+| STRING_TOK
+{
+  $$ = namedSortExpression(*$1);
+  stp::releaseParserValue($1);
+}
+| sort_application { $$ = $1; }
+| array_sort_expression { $$ = $1; }
+;
+
+sort_arguments:
+sort_expression
+{
+  $$ = new std::vector<stp::SMT2Sort>{*$1};
+  stp::releaseParserValue($1);
+}
+| sort_arguments sort_expression
+{
+  $$ = $1;
+  $$->push_back(*$2);
+  stp::releaseParserValue($2);
+}
+;
+
+sort_application:
+LPAREN_TOK STRING_TOK sort_arguments RPAREN_TOK
+{
+  $$ = namedSortExpression(*$2, *$3);
+  stp::releaseParserValue($2);
+  stp::releaseParserValue($3);
+}
+;
+
+array_sort_expression:
+LPAREN_TOK ARRAY_TOK sort_expression sort_expression RPAREN_TOK
+{
+  $$ = new stp::SMT2Sort(stp::SMT2Sort::array(*$3, *$4));
   stp::releaseParserValue($3);
   stp::releaseParserValue($4);
 }
 ;
 
-var_decl:
-STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
+an_array_sort:
+array_sort_expression
 {
-  ABANDON_IF_REDECLARED_ZERO_ARITY(stp::releaseParserValue($1));
-  checkBitVectorWidth($7);
-  declareScalarSymbol($1, stp::SourceSort::bitVector($7));
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK REAL_TOK
-{
-  ASTNode s = createExactRealSourceSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
+  const stp::SourceSort sort = stp::GlobalParserInterface->resolveSort(*$1);
+  $$ = new stp::array_sort{stp::array_sort_component(sort.index()),
+                          stp::array_sort_component(sort.element())};
   stp::releaseParserValue($1);
 }
-| STRING_TOK LPAREN_TOK RPAREN_TOK STRING_TOK
+;
+
+var_decl:
+STRING_TOK LPAREN_TOK RPAREN_TOK resolved_sort
 {
   ABANDON_IF_REDECLARED_ZERO_ARITY((stp::releaseParserValue($1), stp::releaseParserValue($4)));
-  // The sort position holds a bare name: a sort the script introduced, by
-  // define-sort or declare-sort. (This used to match any TERM symbol, so
-  // `(declare-fun y () x)` with x a variable "worked" as an alias use.)
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$4, resolved))
-  {
-    fatal_yyerror("unknown sort (not built in, and not a declared sort)");
-  }
-  declareScalarSymbol($1, resolved);
+  declareScalarSymbol($1, *$4);
   stp::releaseParserValue($4);
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
-{
-  ABANDON_IF_REDECLARED_ZERO_ARITY(stp::releaseParserValue($1));
-  declareScalarSymbol($1, stp::SourceSort::boolean());
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK an_array_sort
-{
-  ABANDON_IF_REDECLARED_ZERO_ARITY((stp::releaseParserValue($1), stp::releaseParserValue($4)));
-  // An array over any pairing of supported scalar index/element sorts. A
-  // float element's format lives on the array node
-  // -- a read off it inherits the format (see deriveFPFormat) -- while a
-  // float index format and the RoundingMode sorts land in the manager's
-  // registries (see addArraySymbol). Either way the widths lay the array
-  // out exactly like an array of bitvectors.
-  declareArraySymbol($1, $4);
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
-{
-  ABANDON_IF_REDECLARED_ZERO_ARITY((stp::releaseParserValue($1), stp::releaseParserValue($4)));
-  declareScalarSymbol(
-      $1, stp::SourceSort::floatingPoint($4->exp_bits, $4->sig_bits));
-  stp::releaseParserValue($4);
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK
-{
-  ABANDON_IF_REDECLARED_ZERO_ARITY(stp::releaseParserValue($1));
-  // A rounding mode is carried as a 5-bit one-hot bitvector, so a variable of
-  // that sort is a 5-bit symbol. Declaring it as anything else -- or, as
-  // before, not declaring it at all -- leaves every use of the name
-  // unresolved, and the lexer hands it back as a bare string.
-  // addRoundingModeSymbol also pins the symbol to the five legal encodings,
-  // without which the sort would have 32 values instead of 5.
-  declareScalarSymbol($1, stp::SourceSort::roundingMode(), true);
 }
 | uf_decl_name uf_domain_sorts RPAREN_TOK uf_codomain_sort
 {
@@ -3203,12 +2796,20 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   // with its spelling by the caller.
   stp::SourceSort resolved;
   if (stp::GlobalParserInterface->lookupSortAlias(*$1, resolved))
-    $$ = new stp::parsed_uf_sort(resolved, *$1, true);
+    $$ = new stp::parsed_uf_sort(resolved, *$1, resolved.kind() != stp::SourceSort::Kind::Array);
   else
     $$ = new stp::parsed_uf_sort(
         stp::SourceSort::unknown(), *$1, false, false);
   stp::releaseParserValue($1);
 }
+| sort_application
+{
+  const stp::SourceSort sort = stp::GlobalParserInterface->resolveSort(*$1);
+  $$ = new stp::parsed_uf_sort(sort, stp::sourceSortToSMTLib(sort),
+                              sort.kind() != stp::SourceSort::Kind::Array);
+  stp::releaseParserValue($1);
+}
+
 ;
 
 uf_codomain_sort:
@@ -3259,62 +2860,27 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
   stp::SourceSort resolved;
   if (stp::GlobalParserInterface->lookupSortAlias(*$1, resolved))
-    $$ = new stp::parsed_uf_sort(resolved, *$1, true);
+    $$ = new stp::parsed_uf_sort(resolved, *$1, resolved.kind() != stp::SourceSort::Kind::Array);
   else
     $$ = new stp::parsed_uf_sort(
         stp::SourceSort::unknown(), *$1, false, false);
   stp::releaseParserValue($1);
 }
+| sort_application
+{
+  const stp::SourceSort sort = stp::GlobalParserInterface->resolveSort(*$1);
+  $$ = new stp::parsed_uf_sort(sort, stp::sourceSortToSMTLib(sort),
+                              sort.kind() != stp::SourceSort::Kind::Array);
+  stp::releaseParserValue($1);
+}
+
 ;
 
 const_decl:
-STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
+STRING_TOK resolved_sort
 {
-  checkBitVectorWidth($5);
-  declareScalarSymbol($1, stp::SourceSort::bitVector($5));
-}
-| STRING_TOK REAL_TOK
-{
-  ASTNode s = createExactRealSourceSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
-  stp::releaseParserValue($1);
-}
-| STRING_TOK BOOL_TOK
-{
-  declareScalarSymbol($1, stp::SourceSort::boolean());
-}
-| STRING_TOK an_array_sort
-{
-  // declare-const of an array: same surface as declare-fun's, including
-  // float and RoundingMode index/element sorts (the float-element form
-  // used to exist only for declare-fun).
-  declareArraySymbol($1, $2);
-}
-| STRING_TOK an_fp_sort
-{
-  // The format must land on the symbol, or it types as a Boolean and every
-  // use of the name is a syntax error (this branch used to forget it while
-  // declare-fun's twin set it).
-  declareScalarSymbol(
-      $1, stp::SourceSort::floatingPoint($2->exp_bits, $2->sig_bits));
+  declareScalarSymbol($1, *$2);
   stp::releaseParserValue($2);
-}
-| STRING_TOK STRING_TOK
-{
-  // declare-const with a script-introduced sort name in sort position.
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$2, resolved))
-  {
-    fatal_yyerror("unknown sort (not built in, and not a declared sort)");
-  }
-  declareScalarSymbol($1, resolved);
-  stp::releaseParserValue($2);
-}
-| STRING_TOK ROUNDINGMODE_TOK
-{
-  // As above: 5 bits, not 0 (a zero-width symbol would be a Boolean), and
-  // pinned to the five legal encodings.
-  declareScalarSymbol($1, stp::SourceSort::roundingMode(), true);
 }
 ;
 

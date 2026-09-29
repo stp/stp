@@ -334,7 +334,7 @@ void Cpp_interface::addSortAlias(const std::string& name,
   if (accept_sort_declaration && !accept_sort_declaration(name, sort))
     refuseCurrentCommand("the sort name '" + name +
                          "' conflicts with a declaration retained by the term manager");
-  sort_aliases[name] = sort;
+  sort_aliases.emplace(name, SMT2SortDefinition{0, SMT2Sort(sort)});
   frames.back()->addSortAlias(name);
   session_touched = true;
 }
@@ -345,8 +345,71 @@ bool Cpp_interface::lookupSortAlias(const std::string& name,
   const auto found = sort_aliases.find(name);
   if (found == sort_aliases.end())
     return false;
-  sort = found->second;
+  if (found->second.arity != 0)
+    return false;
+  sort = found->second.body.sourceSort();
   return true;
+}
+
+void Cpp_interface::addSortParameter(const std::string& name)
+{
+  const unsigned slot = sort_parameters.size();
+  if (!sort_parameters.emplace(name, slot).second)
+    refuseCurrentCommand("duplicate sort parameter: " + name);
+}
+
+SMT2Sort Cpp_interface::sortAtom(const std::string& name, const SourceSort& builtin) const
+{
+  const auto parameter = sort_parameters.find(name);
+  return parameter == sort_parameters.end() ? SMT2Sort(builtin)
+                                            : SMT2Sort::param(parameter->second);
+}
+
+SMT2Sort Cpp_interface::sortExpression(const std::string& name,
+                                      const std::vector<SMT2Sort>& arguments) const
+{
+  const auto parameter = sort_parameters.find(name);
+  if (parameter != sort_parameters.end())
+  {
+    if (!arguments.empty())
+      throw std::invalid_argument("sort parameter cannot take arguments: " + name);
+    return SMT2Sort::param(parameter->second);
+  }
+  const auto definition = sort_aliases.find(name);
+  if (definition == sort_aliases.end())
+    throw std::invalid_argument("unknown sort (not built in, and not a declared sort): " + name);
+  if (arguments.size() != definition->second.arity)
+    throw std::invalid_argument("wrong number of arguments to sort: " + name);
+  return definition->second.body.substitute(arguments);
+}
+
+SourceSort Cpp_interface::resolveSort(const SMT2Sort& expression)
+{
+  try
+  {
+    return expression.sourceSort();
+  }
+  catch (const std::invalid_argument& error)
+  {
+    refuseCurrentCommand(error.what());
+  }
+}
+
+void Cpp_interface::defineSort(const std::string& name, const SMT2Sort& body)
+{
+  if (sort_parameters.empty())
+    addSortAlias(name, resolveSort(body));
+  else
+  {
+    if (sort_aliases.count(name))
+      refuseCurrentCommand("the sort name is already defined: " + name);
+    if (accept_sort_declaration && !accept_sort_declaration(name, SourceSort::unknown()))
+      refuseCurrentCommand("the sort name conflicts with a declaration retained by the term manager: " + name);
+    sort_aliases.emplace(name, SMT2SortDefinition{static_cast<unsigned>(sort_parameters.size()), body});
+    frames.back()->addSortAlias(name);
+    session_touched = true;
+  }
+  sort_parameters.clear();
 }
 
 void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
@@ -834,6 +897,7 @@ void Cpp_interface::beginCurrentCommand()
   current_command_rejected = false;
   current_command_supported = true;
   current_command_name.clear();
+  sort_parameters.clear();
   if (UFContext* context = bm.getUFContextIfAny())
     context->beginParserCommand();
 }
@@ -1917,9 +1981,10 @@ bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
   if (sort_aliases.empty())
     return false;
   bool anyDeclared = false;
-  for (const std::pair<const std::string, SourceSort>& alias : sort_aliases)
+  for (const auto& alias : sort_aliases)
     anyDeclared = anyDeclared ||
-                  alias.second.kind() == SourceSort::Kind::Uninterpreted;
+                  (alias.second.arity == 0 &&
+                   alias.second.body.sourceSort().kind() == SourceSort::Kind::Uninterpreted);
   if (!anyDeclared)
     return false;
   return declaredSortCarrierMayBeShort(bm, assertions, "--uf-sort-width",
@@ -2280,8 +2345,7 @@ void Cpp_interface::getModel()
 Cpp_interface::SolverFrame::SolverFrame(
     ankerl::unordered_dense::map<std::string, Function>*
         global_function_context,
-    std::map<std::string, SourceSort>*
-        global_sort_alias_context,
+    SortMap* global_sort_alias_context,
     STPMgr* manager)
     : _global_function_context(global_function_context),
       _global_sort_alias_context(global_sort_alias_context), _manager(manager)

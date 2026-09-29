@@ -2,6 +2,7 @@
 %option bison-bridge*/
 %option noyywrap
 %option noreject
+%option nounput
 %option noyymore
 
 /* %option debug */
@@ -128,21 +129,11 @@
   // interpret. Zero means the next ')' closes the command itself.
   static THREAD_LOCAL_IE int skippedDepth = 0;
 
-  // The skipped text, comments excluded, for the one command that is only
-  // MOSTLY uninterpreted: define-sort inspects it for the nullary
-  // floating-point alias shape (see tryRegisterFpSortAlias in smt2.y).
-  //
-  // define-sort's token is emitted AFTER the swallowing (deferredDefineSort
-  // below), not before like its neighbours': its parser action reads the
-  // captured text, and bison runs that action as a default reduction,
-  // without fetching the lookahead that would otherwise drive the lexer
-  // through the s-expression first.
-  static thread_local std::string skippedText;
-  static thread_local bool deferredDefineSort = false;
+  static thread_local bool sortContext = false;
 
 namespace stp
 {
-  const std::string& smt2_skipped_text() { return skippedText; }
+  void SMT2SetSortContext(bool enable) { sortContext = enable; }
 
   void SMT2SetFloatTokens(bool enable)
   {
@@ -159,11 +150,6 @@ namespace stp
     realTokensActive = enable;
   }
 
-  // define-sort's body never reaches the rules below -- SKIP_SEXPR swallows
-  // it and the grammar re-tokenises the text by hand -- so it has to ask the
-  // gate itself rather than being answered by it. See tryRegisterFpSortAlias.
-  bool SMT2FloatTokensActive() { return floatTokensActive; }
-
   void SMT2ExpectFunctionParameterName()
   {
     assert(!functionParameterNamePending);
@@ -173,6 +159,7 @@ namespace stp
   void SMT2ResetCommandLexerState()
   {
     indexedIdentifierOpen = false;
+    sortContext = false;
     ufDeclarationNamePending = false;
     functionParameterNamePending = false;
     declassifiedNamePending = false;
@@ -221,7 +208,7 @@ namespace stp
       }
     }
 
-    if (stringOnly)
+    if (stringOnly || sortContext)
     {
       smt2lval.str = new std::string(s);
       return STRING_TOK;
@@ -365,8 +352,20 @@ namespace stp
   // A name that is a keyword only in the FP logics: outside them it takes
   // the ordinary identifier path, resolving to a declared symbol or coming
   // back as a plain string.
+  static bool isLocalSortParameter()
+  {
+    return sortContext && stp::GlobalParserInterface->isSortParameter(smt2text);
+  }
+
+  static int sortKeyword(int token)
+  {
+    return isLocalSortParameter() ? lookup(smt2text) : token;
+  }
+
   static int fpKeyword(int token)
   {
+    if (isLocalSortParameter())
+      return lookup(smt2text);
     if (floatTokensActive)
       return token;
     const int fallback = lookup(smt2text);
@@ -389,7 +388,7 @@ namespace stp
   // literals).
   static int realKeyword(int token)
   {
-    return realTokensActive ? token : lookup(smt2text);
+    return realTokensActive && !isLocalSortParameter() ? token : lookup(smt2text);
   }
   static int commandToken(int token)
   {
@@ -557,9 +556,10 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
   * the closing parenthesis. */
 "define-fun-rec"   { skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DEFINE_FUN_REC_TOK);}
 "define-funs-rec"  { skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DEFINE_FUNS_REC_TOK);}
-"define-sort"      { stp::GlobalParserInterface->requireCommand("define-sort");
-                     skippedDepth = 0; skippedText.clear();
-                     deferredDefineSort = true; BEGIN SKIP_SEXPR; }
+"define-sort"      { sortContext = true;
+                     stp::GlobalParserInterface->beginSortDefinition();
+                     return commandToken(DEFINE_SORT_TOK); }
+
 "declare-datatype" { skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DECLARE_DATATYPE_TOK);}
 "declare-datatypes" { skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DECLARE_DATATYPES_TOK);}
 
@@ -568,40 +568,32 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
   * itself. String literals and quoted symbols are matched as units, since
   * either may contain an unbalanced parenthesis. */
 <SKIP_SEXPR>"\""([^"]|"\"\"")*"\""  { countNewlines(yytext, yyleng);
-                                      skippedText += yytext; /* string literal */ }
+                                       /* string literal */ }
 <SKIP_SEXPR>"|"[^|]*"|"             { countNewlines(yytext, yyleng);
-                                      skippedText += yytext; /* quoted symbol */ }
+                                       /* quoted symbol */ }
 <SKIP_SEXPR>";"[^\n]*               { /* comment: not captured */ }
-<SKIP_SEXPR>"("                     { skippedDepth++; skippedText += '('; }
+<SKIP_SEXPR>"("                     { skippedDepth++;  }
 <SKIP_SEXPR>")"                     { if (skippedDepth == 0)
                                         {
                                           BEGIN INITIAL;
-                                          if (deferredDefineSort)
-                                          {
-                                            // Hand back the closer so it
-                                            // arrives as the next token.
-                                            deferredDefineSort = false;
-                                            unput(')');
-                                            return DEFINE_SORT_TOK;
-                                          }
                                           return RPAREN_TOK;
                                         }
-                                      skippedDepth--; skippedText += ')'; }
+                                      skippedDepth--;  }
 <SKIP_SEXPR>[^()|;\"]+              { countNewlines(yytext, yyleng);
-                                      skippedText += yytext; }
-<SKIP_SEXPR>.                       { skippedText += yytext; }
-<SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL; deferredDefineSort = false;
+                                       }
+<SKIP_SEXPR>.                       {  }
+<SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL;
                                       return 0; }
 
 
 
  /* Types for QF_BV and QF_ABV. */
-"BitVec"        { return BITVEC_TOK;}
-"Array"         { return ARRAY_TOK;}
+"BitVec"        { return sortKeyword(BITVEC_TOK);}
+"Array"         { return sortKeyword(ARRAY_TOK);}
  /* The one qualified identifier the grammar admits, ((as const S) v).
   * "as" is reserved in SMT-LIB 2, so no input can mean a symbol by it. */
 "as"            { return AS_TOK;}
-"Bool"          { return BOOL_TOK;}
+"Bool"          { return sortKeyword(BOOL_TOK);}
 
  /* Types for QF_FP and QF_BVFP. These and every other floating-point
   * name go through fpKeyword(): they are keywords only while an FP logic

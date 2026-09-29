@@ -182,5 +182,29 @@ class CommandModes(unittest.TestCase):
                                   'get-info :reason-unknown requires a preceding unknown result')
 
 
+class SortAliases(unittest.TestCase):
+    def test_invalid_sort_definitions_and_applications(self):
+        for source, error in [
+                ('(define-sort Bad () Missing)', 'unknown sort'),
+                ('(define-sort Loop () Loop)', 'unknown sort'),
+                ('(define-sort Id (T T) T)', 'duplicate sort parameter'),
+                ('(define-sort S () Bool)(define-sort S () Bool)', 'the sort name is already defined'),
+                ('(define-sort Id (T) T)(declare-const x Id)', 'wrong number of arguments'),
+                ('(define-sort Id (T) T)(declare-const x (Id Bool Bool))', 'wrong number of arguments'),
+                ('(push 1)(define-sort Id (T) T)(pop 1)(declare-const x (Id Bool))', 'unknown sort'),
+                ('(define-sort Id (T) T)(reset-assertions)(declare-const x (Id Bool))', 'unknown sort')]:
+            with self.subTest(source=source):
+                result = run('(set-logic QF_BV)' + source)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(error, result.stdout)
+
+    def test_global_parameterized_alias_survives_pop(self):
+        result = run('(set-option :global-declarations true)(set-logic QF_BV)'
+                     '(push 1)(define-sort Id (T) T)(pop 1)(reset-assertions)'
+                     '(declare-const x (Id Bool))(assert x)(check-sat)')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, 'sat\n')
+
+
 if __name__ == '__main__':
     unittest.main()

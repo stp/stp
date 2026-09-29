@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef CPP_INTERFACE_H_
 #define CPP_INTERFACE_H_
 
+#include "stp/Parser/SMT2Sort.h"
 #include "stp/AST/AST.h"
 #include "stp/UninterpretedFunctions/UFDecl.h"
 #include "stp/NodeFactory/NodeFactory.h"
@@ -123,12 +124,13 @@ struct TransparentStringHash
 
 class Cpp_interface
 {
+public:
+  using SortMap = std::map<std::string, SMT2SortDefinition>;
+
+private:
   STPMgr& bm;
-  // Sort names the script introduced: define-sort's nullary floating-point
-  // aliases, and declare-sort's uninterpreted sorts. Both resolve to a
-  // SourceSort, so a name in sort position needs one lookup whichever
-  // command introduced it.
-  std::map<std::string, SourceSort> sort_aliases;
+  SortMap sort_aliases;
+  std::map<std::string, unsigned> sort_parameters;
   bool print_success;
   bool ignoreCheckSatRequest;
   bool retain_uf_declarations; // see retainUFDeclarations
@@ -183,8 +185,7 @@ private:
     // the global functions to be able to remove functions when we pop
     SolverFrame(ankerl::unordered_dense::map<std::string, Function>*
                     global_function_context,
-                std::map<std::string, SourceSort>*
-                    global_sort_alias_context,
+                SortMap* global_sort_alias_context,
                 STPMgr* manager);
     virtual ~SolverFrame();
 
@@ -233,8 +234,7 @@ private:
         _temporary_symbol_bindings;
     ankerl::unordered_dense::map<std::string, Function>*
         _global_function_context;
-    std::map<std::string, SourceSort>*
-        _global_sort_alias_context;
+    SortMap* _global_sort_alias_context;
     STPMgr* _manager;
   };
 
@@ -255,7 +255,7 @@ public:
   void keepDeclaredSymbolsAtCleanup(ASTVec* sink) { symbols_at_cleanup = sink; }
   // The same for the sort names in scope (sortAliases), which cleanUp copies
   // into `sink` before the frames drop them.
-  void keepSortAliasesAtCleanup(std::map<std::string, SourceSort>* sink)
+  void keepSortAliasesAtCleanup(SortMap* sink)
   {
     sorts_at_cleanup = sink;
   }
@@ -267,7 +267,7 @@ public:
   void addFunction(const Function& function);
   // Every sort name in scope and its sort: define-sort's aliases and
   // declare-sort's sorts, a caller's seeded ones among them.
-  const std::map<std::string, SourceSort>& sortAliases() const
+  const SortMap& sortAliases() const
   {
     return sort_aliases;
   }
@@ -300,7 +300,7 @@ public:
 
 private:
   ASTVec* symbols_at_cleanup = nullptr;
-  std::map<std::string, SourceSort>* sorts_at_cleanup = nullptr;
+  SortMap* sorts_at_cleanup = nullptr;
   FunctionMap* functions_at_cleanup = nullptr;
   std::function<void()> after_public_reset;
   std::function<bool(const std::string&, const ASTNode&)> accept_symbol_declaration;
@@ -503,6 +503,17 @@ public:
   // interned as a symbol (the old scheme made the sort name resolvable as a
   // term variable). Aliases follow assertion-frame scope, and
   // :global-declarations along with the other declarations.
+  void beginSortDefinition() { sort_parameters.clear(); }
+  bool isSortParameter(const std::string& name) const
+  {
+    return sort_parameters.count(name) != 0;
+  }
+  DLL_PUBLIC void addSortParameter(const std::string& name);
+  DLL_PUBLIC void defineSort(const std::string& name, const SMT2Sort& body);
+  DLL_PUBLIC SMT2Sort sortExpression(const std::string& name,
+                                     const std::vector<SMT2Sort>& arguments = {}) const;
+  DLL_PUBLIC SMT2Sort sortAtom(const std::string& name, const SourceSort& builtin) const;
+  DLL_PUBLIC SourceSort resolveSort(const SMT2Sort& expression);
   DLL_PUBLIC void addSortAlias(const std::string& name, const SourceSort& sort);
   DLL_PUBLIC bool lookupSortAlias(const std::string& name,
                                   SourceSort& sort) const;

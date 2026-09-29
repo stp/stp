@@ -1715,7 +1715,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   // Declared before the interface, which may tear its frames down again as it
   // is destroyed, and detached from it once read.
   ASTVec declared_at_end;
-  std::map<std::string, SourceSort> sorts_at_end;
+  Cpp_interface::SortMap sorts_at_end;
   Cpp_interface::FunctionMap definitions_at_end;
   // The command line's parse: the manager's factory behind the type checker.
   ::TypeChecker checker(*s->mgr->factory(), *bm);
@@ -1935,8 +1935,9 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   pi.keepSortAliasesAtCleanup(nullptr);
   sorts_at_end.insert(pi.sortAliases().begin(), pi.sortAliases().end());
   for (const auto& alias : sorts_at_end)
-    if (alias.second.kind() == SourceSort::Kind::Uninterpreted)
-      s->mgr->sort_of_source(alias.second, fn);
+    if (alias.second.arity == 0 &&
+        alias.second.body.sourceSort().kind() == SourceSort::Kind::Uninterpreted)
+      s->mgr->sort_of_source(alias.second.body.sourceSort(), fn);
   if (runs)
   {
     // A script that ran has answered its questions: what is left is the
