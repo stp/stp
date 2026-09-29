@@ -54,6 +54,177 @@ struct TempFile
   ~TempFile() { std::remove(path.c_str()); }
 };
 
+TEST(Parsing, definitions_survive_separate_calls_and_are_shared_by_the_manager)
+{
+  for (ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::EXECUTE})
+  {
+    TermManager tm;
+    Solver s(tm);
+    s.parse_smt2("(declare-const x (_ BitVec 8)) "
+                 "(define-fun d () (_ BitVec 8) (bvadd x #x01)) "
+                 "(define-fun inc ((a (_ BitVec 8))) (_ BitVec 8) (bvadd a #x01))", mode);
+    const Term x = *tm.symbol("x");
+    ASSERT_TRUE(tm.symbol("d").has_value());
+    EXPECT_TRUE(tm.symbol("d")->same_as(x + tm.mk_bv(8, 1)));
+    EXPECT_TRUE(s.symbol("d")->same_as(*tm.symbol("d")));
+    ASSERT_TRUE(tm.symbol("inc").has_value());
+    const Term inc = *tm.symbol("inc");
+    EXPECT_TRUE(inc.sort() == tm.mk_fun_sort({x.sort()}, x.sort()));
+    EXPECT_EQ(inc.symbol(), std::optional<std::string>("inc"));
+    EXPECT_EQ(inc.str(), "inc");
+    EXPECT_EQ(inc.to_string(Format::SMTLIB2, true), "inc");
+    EXPECT_TRUE(inc(x).same_as(*tm.symbol("d")));
+    EXPECT_EQ(tm.symbols().size(), 2u); // x and inc, not bodies or private formals
+    EXPECT_TRUE(s.parse_term("d").same_as(*tm.symbol("d")));
+    s.parse_smt2("(assert (= (inc d) #x09))", mode);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_EQ(s.model().uint64_value(x), 7u);
+    Solver other(tm);
+    EXPECT_TRUE(tm.simplify(other.parse_term("(inc #x07)")).same_as(tm.mk_bv(8, 8)));
+    other.parse_smt2("(assert (= d #x08))");
+    EXPECT_TRUE(other.check_sat().is_sat());
+    s.reset();
+    EXPECT_TRUE(s.parse_term("d").same_as(*tm.symbol("d")));
+  }
+}
+
+TEST(Parsing, definitions_commit_only_when_the_parse_succeeds)
+{
+  TermManager tm;
+  Solver s(tm);
+  s.parse_smt2("(define-fun d () (_ BitVec 8) #x07) "
+               "(define-fun inc ((a (_ BitVec 8))) (_ BitVec 8) (bvadd a #x01))");
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2(
+      "(define-fun lost () Bool true) (assert missing)"));
+  EXPECT_FALSE(tm.symbol("lost").has_value());
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_term("lost"));
+  EXPECT_TRUE(tm.simplify(s.parse_term("(inc d)")).same_as(tm.mk_bv(8, 8)));
+  for (const char* script : {"(define-fun d () (_ BitVec 8) #x08)",
+                             "(reset) (define-fun d () Bool true)",
+                             "(reset) (declare-const inc Bool)",
+                             "(reset) (declare-fun d (Bool) Bool)"})
+  {
+    API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2(script));
+    EXPECT_TRUE(s.parse_term("d").same_as(tm.mk_bv(8, 7)));
+  }
+  const Term x = tm.declare("x", tm.mk_bool_sort());
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2("(reset) (define-fun x () Bool true)"));
+  EXPECT_TRUE(tm.symbol("x")->same_as(x));
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.declare("d", tm.mk_bv_sort(8)));
+  API_EXPECT_ERROR(ErrorCode::INVALID_ARGUMENT, tm.declare("inc", tm.mk_bool_sort()));
+  API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, tm.bind_symbol("d", x));
+  API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, tm.bind_symbol("inc", x));
+  API_EXPECT_ERROR(ErrorCode::PARSE, s.parse_smt2(
+      "(define-fun wrong_array ((a (Array (_ BitVec 8) (_ BitVec 8)))) "
+      "(Array (_ BitVec 8) (_ BitVec 16)) a)"));
+  EXPECT_FALSE(tm.symbol("wrong_array").has_value());
+}
+
+TEST(Parsing, definitions_follow_script_scopes_before_becoming_manager_names)
+{
+  TermManager tm;
+  Solver s(tm);
+  s.parse_smt2("(push 1) (define-fun gone () Bool true) (pop 1) "
+               "(define-fun kept () Bool true)");
+  EXPECT_FALSE(tm.symbol("gone").has_value());
+  ASSERT_TRUE(tm.symbol("kept").has_value());
+  s.push();
+  s.parse_smt2("(define-fun api_kept () Bool false)");
+  s.pop();
+  EXPECT_TRUE(s.parse_term("api_kept").same_as(tm.mk_false()));
+  s.parse_smt2("(define-fun reset_away () Bool true) (reset-assertions)");
+  EXPECT_FALSE(tm.symbol("reset_away").has_value());
+  EXPECT_TRUE(s.parse_term("kept").same_as(tm.mk_true()));
+  s.parse_smt2("(set-option :global-declarations true) (push 1) "
+               "(define-fun global_kept () Bool true) (pop 1) (reset-assertions)");
+  EXPECT_TRUE(s.parse_term("global_kept").same_as(tm.mk_true()));
+  s.parse_smt2("(define-fun reset_away () Bool true) (reset) "
+               "(define-fun after_reset () Bool false)");
+  EXPECT_FALSE(tm.symbol("reset_away").has_value());
+  EXPECT_TRUE(s.parse_term("after_reset").same_as(tm.mk_false()));
+  s.parse_smt2("(define-fun fresh!0 () Bool true)");
+  EXPECT_NE(tm.mk_fresh(tm.mk_bool_sort(), "fresh").symbol(), std::optional<std::string>("fresh!0"));
+}
+
+TEST(Parsing, persisted_definitions_keep_sorts_and_lexical_formals)
+{
+  TermManager tm;
+  Solver s(tm);
+  s.parse_smt2("(declare-sort U 0) (declare-const u U) "
+               "(define-fun alias () U u) "
+               "(define-fun flag () Bool true) "
+               "(define-fun mode () RoundingMode RTZ) "
+               "(define-fun zero () (_ FloatingPoint 8 24) (_ +zero 8 24)) "
+               "(define-fun real () Real (/ 1 3)) "
+               "(define-fun array () (Array (_ BitVec 8) (_ BitVec 8)) "
+                 "((as const (Array (_ BitVec 8) (_ BitVec 8))) #x07)) "
+               "(define-fun identity ((flag (_ BitVec 8))) (_ BitVec 8) flag)");
+  for (const char* name : {"alias", "flag", "mode", "zero", "real", "array"})
+  {
+    ASSERT_TRUE(tm.symbol(name).has_value()) << name;
+    EXPECT_TRUE(s.parse_term(name).same_as(*tm.symbol(name))) << name;
+  }
+  EXPECT_TRUE(s.parse_term("(identity #x03)").same_as(tm.mk_bv(8, 3)));
+  EXPECT_TRUE(s.parse_term("(let ((flag false)) flag)").same_as(tm.mk_false()));
+  s.parse_smt2("(define-fun negation ((identity Bool)) Bool (not identity))");
+  EXPECT_TRUE(tm.simplify(s.parse_term("(negation false)")).same_as(tm.mk_true()));
+  EXPECT_EQ(tm.symbols().size(), 3u); // u, identity and negation
+}
+
+TEST(Parsing, callable_definitions_are_typed_aliasable_and_exported)
+{
+  for (bool simplify : {false, true})
+  {
+    TermManager::Config config;
+    config.simplify = simplify;
+    TermManager tm(config);
+    Solver s(tm);
+    s.parse_smt2("(declare-const arg!0 (_ BitVec 8)) "
+                 "(declare-fun uf ((_ BitVec 8)) (_ BitVec 8)) "
+                 "(define-fun |add offset| ((p (_ BitVec 8))) (_ BitVec 8) (bvadd p arg!0)) "
+                 "(define-fun twice ((p (_ BitVec 8))) (_ BitVec 8) (|add offset| (|add offset| p))) "
+                 "(define-fun composed ((p (_ BitVec 8))) (_ BitVec 8) (uf (twice p))) "
+                 "(define-fun unused ((a (Array (_ BitVec 8) (_ BitVec 8)))) "
+                   "(Array (_ BitVec 8) (_ BitVec 8)) a) "
+                 "(define-fun seven () (_ BitVec 8) #x07)");
+    const Term add = *tm.symbol("add offset"), twice = *tm.symbol("twice");
+    const Term x = *tm.symbol("arg!0"), seven = *tm.symbol("seven");
+    EXPECT_TRUE(add(seven).same_as(seven + x));
+    EXPECT_EQ(add.str(), "|add offset|");
+    EXPECT_TRUE(tm.term_from_id(add.id()).same_as(add));
+    tm.bind_symbol("alternate", add);
+    tm.bind_symbol("add offset", add); // binding the same identity is idempotent
+    EXPECT_TRUE(tm.symbol("alternate")->same_as(add));
+    EXPECT_TRUE(s.parse_term("(alternate #x07)").same_as(add(seven)));
+    API_EXPECT_ERROR(ErrorCode::ARITY, add(std::vector<Term>{}));
+    API_EXPECT_ERROR(ErrorCode::ARITY, add(seven, seven));
+    API_EXPECT_ERROR(ErrorCode::SORT_MISMATCH, add(tm.mk_true()));
+    TermManager foreign;
+    API_EXPECT_ERROR(ErrorCode::FOREIGN_MANAGER, add(foreign.mk_bv(8, 7)));
+    s.add(x == 2);
+    s.add(twice(seven) == 11);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    const std::string text = s.to_smt2();
+    EXPECT_NE(text.find("(define-fun |add offset|"), std::string::npos);
+    EXPECT_NE(text.find("(define-fun alternate"), std::string::npos);
+    EXPECT_EQ(text.find("@STP_INTERNAL_FUNCTION_NAME"), std::string::npos);
+    EXPECT_EQ(text.find("@defined_fun"), std::string::npos);
+    TermManager copy;
+    Solver roundtrip(copy);
+    roundtrip.parse_smt2(text);
+    ASSERT_TRUE(roundtrip.check_sat().is_sat());
+    const Term read_twice = *copy.symbol("twice");
+    EXPECT_EQ(roundtrip.model().uint64_value(read_twice(copy.mk_bv(8, 7))), 11u);
+    roundtrip.add(read_twice(copy.mk_bv(8, 7)) != 11);
+    EXPECT_TRUE(roundtrip.check_sat().is_unsat());
+    Solver other(tm);
+    other.options().set_str("uninterpreted-functions", "off");
+    other.add(x == 3);
+    other.add(twice(seven) == 13);
+    EXPECT_TRUE(other.check_sat().is_sat()); // defining a function does not require UF solving
+  }
+}
+
 TEST(Parsing, smt2_declare_and_assert)
 {
   TermManager tm;
@@ -108,6 +279,35 @@ TEST(Parsing, smt2_declare_and_assert)
   EXPECT_EQ(s.assertions()[0].kind(), Kind::AND);
   EXPECT_TRUE(s.check_sat().is_sat());
   EXPECT_EQ(s.model().uint64_value(*tm.symbol("py")), 3u);
+}
+
+TEST(Parsing, defined_function_export_keeps_dag_sharing)
+{
+  TermManager::Config config;
+  config.simplify = false;
+  TermManager tm(config);
+  Solver s(tm);
+  std::string script = "(declare-const deflet!0 (_ BitVec 64)) "
+                       "(define-fun doubled ((p (_ BitVec 64))) (_ BitVec 64) ";
+  std::string previous = "p";
+  for (int i = 0; i < 36; ++i)
+  {
+    const std::string name = "t" + std::to_string(i);
+    script += "(let ((" + name + " (bvadd " + previous + " " + previous + "))) ";
+    previous = name;
+  }
+  script += "(bvadd " + previous + " deflet!0)" + std::string(37, ')');
+  s.parse_smt2(script);
+  const std::string exported = s.to_smt2();
+  EXPECT_LT(exported.size(), 10000u);
+  EXPECT_NE(exported.find("(let"), std::string::npos);
+  TermManager copy(config);
+  Solver r(copy);
+  r.parse_smt2(exported);
+  const Term doubled = *copy.symbol("doubled"), offset = *copy.symbol("deflet!0");
+  r.add(offset == 1);
+  r.add(doubled(copy.mk_bv(64, 1)) != (std::uint64_t{1} << 36) + 1);
+  EXPECT_TRUE(r.check_sat().is_unsat());
 }
 
 TEST(Parsing, push_and_pop_inside_scripts)
@@ -431,7 +631,9 @@ TEST(Parsing, function_aliases_keep_identity_after_shadowing_and_errors)
   s.parse_smt2("(define-fun identity ((g Bool)) Bool g) (assert (identity true))");
   EXPECT_TRUE(s.parse_term("(g #x0)").same_as(application));
   EXPECT_TRUE(s.check_sat().is_sat());
-  EXPECT_EQ(tm.symbols().size(), 2u);
+  ASSERT_TRUE(tm.symbol("identity").has_value());
+  EXPECT_TRUE(tm.symbol("identity")->is_defined_function());
+  EXPECT_EQ(tm.symbols().size(), 3u); // other, g and the retained definition
 }
 
 TEST(Parsing, function_aliases_survive_parser_scopes_like_the_original_name)

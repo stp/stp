@@ -123,6 +123,56 @@ TEST(c_roundtrip, smt2_script_prints_and_parses_again)
   EXPECT_EQ(nullptr, stp_tm_error(b.tm)) << pending(b.tm);
 }
 
+TEST(c_roundtrip, retained_definitions_are_callable_and_have_model_interpretations)
+{
+  Session a;
+  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(a.s,
+      "(declare-const x (_ BitVec 8)) "
+      "(define-fun d () (_ BitVec 8) #x07) "
+      "(define-fun add_x ((p (_ BitVec 8))) (_ BitVec 8) (bvadd p x))",
+      STP_PARSE_DECLARE_AND_ASSERT)) << pending(a.tm);
+  stp_term d = stp_tm_symbol(a.tm, "d"), f = stp_tm_symbol(a.tm, "add_x");
+  ASSERT_NE(nullptr, d);
+  ASSERT_NE(nullptr, f);
+  EXPECT_TRUE(stp_term_is_defined_function(f));
+  EXPECT_FALSE(stp_term_is_defined_function(d));
+  EXPECT_EQ(f, stp_solver_symbol(a.s, "add_x"));
+  stp_term applied = stp_apply(a.tm, f, d);
+  ASSERT_NE(nullptr, applied) << pending(a.tm);
+  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(a.s, "(assert (= (add_x d) #x09))",
+                                         STP_PARSE_DECLARE_AND_ASSERT)) << pending(a.tm);
+  ASSERT_EQ(STP_SAT, a.check());
+  stp_model model = stp_solver_model(a.s);
+  ASSERT_NE(nullptr, model);
+  uint64_t value = 0;
+  ASSERT_EQ(STP_OK, stp_model_uint64(model, applied, &value));
+  EXPECT_EQ(9u, value);
+  stp_fun_value fv = stp_model_fun_value(model, f);
+  ASSERT_NE(nullptr, fv) << pending(a.tm);
+  EXPECT_FALSE(stp_fun_value_is_tabular(fv));
+  EXPECT_EQ(nullptr, stp_tm_error(a.tm));
+  stp_term evaluated = stp_fun_value_apply(fv, 1, &d);
+  ASSERT_NE(nullptr, evaluated) << pending(a.tm);
+  ASSERT_EQ(STP_OK, stp_term_to_uint64(evaluated, &value));
+  EXPECT_EQ(9u, value);
+  stp_term body = stp_fun_value_as_ite(fv, 1, &d);
+  ASSERT_NE(nullptr, body) << pending(a.tm);
+  ASSERT_EQ(STP_OK, stp_model_uint64(model, body, &value));
+  EXPECT_EQ(9u, value);
+  EXPECT_EQ(nullptr, stp_fun_value_else(fv));
+  ASSERT_NE(nullptr, stp_tm_error(a.tm));
+  EXPECT_EQ(STP_ERR_UNSUPPORTED, stp_tm_error(a.tm)->code);
+  stp_tm_clear_error(a.tm);
+  stp_fun_value_release(fv);
+  stp_model_release(model);
+  const std::string script = take(stp_solver_to_smt2(a.s, false));
+  Session b;
+  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(b.s, script.c_str(), STP_PARSE_DECLARE_AND_ASSERT))
+      << pending(b.tm) << script;
+  EXPECT_TRUE(stp_term_is_defined_function(stp_tm_symbol(b.tm, "add_x")));
+  EXPECT_EQ(STP_SAT, b.check());
+}
+
 TEST(c_roundtrip, fresh_sort_declarations_round_trip)
 {
   Session original;
@@ -144,6 +194,23 @@ TEST(c_roundtrip, fresh_sort_declarations_round_trip)
   ASSERT_NE(nullptr, py);
   ASSERT_EQ(STP_OK, stp_solver_assert(copy.s, stp_eq(copy.tm, px, py)));
   EXPECT_EQ(STP_UNSAT, copy.check());
+}
+
+TEST(c_roundtrip, wide_float_literals_match_their_packed_bits)
+{
+  Session a;
+  for (unsigned eb : {40u, 65u})
+  {
+    stp_sort fp = stp_mk_fp_sort(a.tm, eb, 4);
+    const std::string bits = "00" + std::string(eb - 1, '1') + "100";
+    stp_term expected = stp_mk_fp_from_bits_str(a.tm, fp, bits.c_str());
+    ASSERT_NE(nullptr, expected);
+    EXPECT_EQ(expected, stp_mk_fp_double(a.tm, fp, STP_RM_RNE, 1.5)) << pending(a.tm);
+    EXPECT_EQ(expected, stp_mk_fp_decimal(a.tm, fp, STP_RM_RNE, "1.5")) << pending(a.tm);
+    EXPECT_EQ(expected, stp_mk_fp_decimal(a.tm, fp, STP_RM_RNE, "3/2")) << pending(a.tm);
+    const std::string term = "((_ to_fp " + std::to_string(eb) + " 4) RNE 1.5)";
+    EXPECT_EQ(expected, stp_solver_parse_term(a.s, term.c_str())) << pending(a.tm);
+  }
 }
 
 TEST(c_roundtrip, function_aliases_are_visible_to_parsing)

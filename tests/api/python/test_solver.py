@@ -291,6 +291,58 @@ def test_function_aliases_are_visible_to_parsing(alias):
     assert s.check() == unsat
 
 
+@pytest.mark.parametrize("mode", ["declare-and-assert", "execute"])
+def test_defined_functions_survive_parsing_and_are_callable(mode):
+    import pickle
+
+    tm = TermManager()
+    s = Solver(tm)
+    s.from_string("(declare-const x (_ BitVec 8)) "
+                  "(define-fun d () (_ BitVec 8) #x07) "
+                  "(define-fun add_x ((p (_ BitVec 8))) (_ BitVec 8) (bvadd p x))", mode=mode)
+    x, d, f = (tm.symbol(name) for name in ("x", "d", "add_x"))
+    assert s.symbol("add_x") is f and isinstance(f, FuncRef)
+    assert f.is_defined_function() and not x.is_defined_function()
+    assert d.as_long() == 7 and f.sexpr() == "add_x"
+    tm.bind_symbol("function alias", f)
+    assert s.parse_term("(|function alias| d)") is f(d)
+    s.from_string("(assert (= (add_x d) #x09))")
+    assert s.check() == sat
+    old = s.model()
+    interp = old[f]
+    assert not interp.is_tabular()
+    assert interp(7).as_long() == 9
+    assert old[f(d)].as_long() == 9
+    assert old.eval(f)(7).as_long() == 9
+    assert "defined function" in repr(interp)
+    for read in (interp.size, interp.entries, interp.else_value, lambda: interp.entry(0)):
+        with pytest.raises(Unsupported):
+            read()
+    body = interp.as_ite(x)
+    s.reset()
+    s.add(x == 100)
+    assert s.check() == sat
+    assert s.model()[body].as_long() == 102
+    assert s.model()[f](7).as_long() == 107
+    assert interp(7).as_long() == 9
+    with pytest.raises(ParseError):
+        s.from_string("(define-fun lost () Bool true) (assert missing)")
+    assert tm.symbol("lost") is None and tm.symbol("add_x") is f
+    # Handles cannot silently become uninterpreted functions in another manager.
+    with pytest.raises(Unsupported):
+        f.translate(TermManager())
+    with pytest.raises(Unsupported):
+        pickle.dumps(f)
+    other_tm = TermManager()
+    other = Solver(other_tm)
+    other.from_string(s.to_smt2())
+    assert other.check() == sat
+    other_f = other_tm.symbol("add_x")
+    assert other_f.is_defined_function() and other.model()[other_f](7).as_long() == 107
+    expanded = f(d).translate(other_tm)
+    assert other.model()[expanded].as_long() == 107
+
+
 @pytest.mark.parametrize("prefix", ["U", "sort with space"])
 @pytest.mark.parametrize("with_check_sat", [False, True])
 def test_fresh_sort_export_round_trip(prefix, with_check_sat):

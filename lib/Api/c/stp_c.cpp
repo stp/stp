@@ -1909,6 +1909,12 @@ bool stp_term_is_const(stp_term t)
   return term_ref(t, "stp_term_is_const", r) && r.term.is_const();
 }
 
+bool stp_term_is_defined_function(stp_term t)
+{
+  TermRef r;
+  return term_ref(t, "stp_term_is_defined_function", r) && r.term.is_defined_function();
+}
+
 char* stp_term_symbol(stp_term t)
 {
   TermRef r;

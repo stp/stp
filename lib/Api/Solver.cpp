@@ -1450,6 +1450,8 @@ namespace
 // the UF context; aliases need a parser binding to that same declaration.
 void seed_parser_symbols(Cpp_interface& pi, ManagerImpl* m)
 {
+  for (const auto& entry : m->definitions)
+    pi.addFunction(entry.second);
   // The manager's declared sorts, whichever door declared them: a script
   // names one as it names a declared symbol.
   for (std::uint32_t index : m->declared_sort_order)
@@ -1462,7 +1464,7 @@ void seed_parser_symbols(Cpp_interface& pi, ManagerImpl* m)
     const detail::SymbolRec& rec = m->symbols.at(name);
     if (rec.is_function)
     {
-      if (name != rec.decl->name())
+      if (rec.decl != nullptr && name != rec.decl->name())
         pi.addUninterpretedFunctionAlias(name, rec.decl);
       continue;
     }
@@ -1714,19 +1716,26 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   // is destroyed, and detached from it once read.
   ASTVec declared_at_end;
   std::map<std::string, SourceSort> sorts_at_end;
+  Cpp_interface::FunctionMap definitions_at_end;
   // The command line's parse: the manager's factory behind the type checker.
   ::TypeChecker checker(*s->mgr->factory(), *bm);
   Cpp_interface pi(*bm, &checker);
   pi.keepDeclaredSymbolsAtCleanup(&declared_at_end);
   pi.keepSortAliasesAtCleanup(&sorts_at_end);
+  pi.keepFunctionsAtCleanup(&definitions_at_end);
   // Parser scopes may forget a name, but the manager and its live handles
   // cannot. Refuse a conflicting identity while the parser can still roll
   // back, before adoption would merge sorts by name or hide a new symbol
   // behind an existing binding. An ordinary symbol redeclared at the same
   // source sort is already the same interned node and remains admissible.
   pi.onSymbolDeclaration([mgr = s->mgr](const std::string& name, const ASTNode& node) {
+    if (mgr->definitions.count(name) != 0)
+      return false;
     const detail::SymbolRec* existing = mgr->find_symbol(name);
     return existing == nullptr || existing->node == node;
+  });
+  pi.onFunctionDefinition([mgr = s->mgr](const std::string& name) {
+    return mgr->find_symbol(name) == nullptr && mgr->definitions.count(name) == 0;
   });
   pi.onSortDeclaration([mgr = s->mgr](const std::string& name, const SourceSort& sort) {
     const auto existing = mgr->sorts_by_name.find(name);
@@ -1963,6 +1972,14 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   }
   if (UFContext* ctx = bm->getUFContextIfAny())
     keep_uf = !ctx->activeDeclarations().empty();
+  // Commit definitions only after every parse/content check succeeded. A
+  // failed parse leaves the manager's prior table intact. Definitions popped
+  // or reset within this script are absent, while names retained from an
+  // earlier call keep their manager lifetime just like declared symbols.
+  pi.keepFunctionsAtCleanup(nullptr);
+  for (const auto& entry : pi.definedFunctions())
+    definitions_at_end.emplace(entry.first, entry.second);
+  s->mgr->adopt_definitions(std::move(definitions_at_end));
   }
   // The switches a script's set-logic turns on are turned back when the
   // interface goes (the CLI keeps its interface alive through the solve);
@@ -2268,6 +2285,11 @@ std::string Solver::to_smt2(bool with_check_sat) const
   STPMgr* bm = m->bm;
   std::ostringstream os;
   std::vector<ASTNode> roots = detail::flat_assertions(bm);
+  for (const auto& entry : m->definitions)
+  {
+    roots.push_back(entry.second.function);
+    roots.insert(roots.end(), entry.second.params.begin(), entry.second.params.end());
+  }
   std::vector<ASTNode> symbols;
   std::vector<SourceSort> required_sorts;
   bool has_fp = false, has_array = false, has_uf = false, has_real = false;
@@ -2399,6 +2421,8 @@ std::string Solver::to_smt2(bool with_check_sat) const
       }
     }
   os << decls.str();
+  for (const auto& entry : m->definitions)
+    os << detail::print_definition(m, entry.second);
   // the assertion stack
   bool first_level = true;
   for (const ASTVec* level : bm->AssertLevels())

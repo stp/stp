@@ -139,6 +139,7 @@ ManagerImpl::~ManagerImpl()
   fun_sort_of_identity.clear();
   names_by_node.clear();
   symbols.clear();
+  definitions.clear();
   symbol_list.clear();
   symbol_list_members.clear();
   if (bm->defaultNodeFactory != bm->hashingNodeFactory)
@@ -410,13 +411,56 @@ const UFDecl* ManagerImpl::decl_of(const ASTNode& identity) const
   return ctx->lookupIdentity(identity);
 }
 
+const Cpp_interface::Function* ManagerImpl::definition_of(const ASTNode& identity) const
+{
+  const SymbolRec* r = find_symbol(identity);
+  if (r == nullptr || !r->is_function || r->decl != nullptr)
+    return nullptr;
+  return &definitions.at(names_by_node.at(identity));
+}
+
+void ManagerImpl::adopt_definitions(Cpp_interface::FunctionMap&& incoming)
+{
+  const auto record = [&](const Cpp_interface::Function& f) {
+    if (f.params.empty())
+      return;
+    std::vector<std::uint32_t> domain;
+    for (const ASTNode& p : f.params)
+      domain.push_back(sort_of_node(p, "parse"));
+    SymbolRec r;
+    r.sort = fun_sort(domain, sort_of_node(f.function, "parse"));
+    // An API identity only: applications substitute the body, so this never
+    // enters a formula or the uninterpreted-function registry.
+    r.node = bm->CreateFreshSourceVariable(SourceSort::boolean(), "defined_fun");
+    r.is_function = true;
+    fun_sort_of_identity.emplace(r.node, r.sort);
+    names_by_node.emplace(r.node, f.name);
+    record_symbol_name(f.name, r.node);
+    symbols.emplace(f.name, std::move(r));
+  };
+  if (definitions.empty())
+  {
+    definitions = std::move(incoming);
+    for (const auto& entry : definitions)
+      record(entry.second);
+  }
+  else
+    for (auto& entry : incoming)
+    {
+      auto inserted = definitions.emplace(entry.first, std::move(entry.second));
+      if (inserted.second)
+        record(inserted.first->second);
+    }
+}
+
 std::string ManagerImpl::fresh_name(std::string_view prefix)
 {
   std::string base(prefix);
   for (;;)
   {
     std::string name = base + "!" + std::to_string(fresh_counter++);
-    if (symbols.find(name) == symbols.end() && !bm->LookupSymbol(name.c_str()))
+    if (symbols.find(name) == symbols.end() && definitions.count(name) == 0 &&
+        !bm->LookupSymbol(name.c_str()))
       return name;
   }
 }
@@ -424,6 +468,9 @@ std::string ManagerImpl::fresh_name(std::string_view prefix)
 Term ManagerImpl::declare(const char* fn, const std::string& name, std::uint32_t sort,
                           bool anonymous)
 {
+  if (definitions.count(name) != 0)
+    fail(ErrorCode::INVALID_ARGUMENT, fn,
+         "the name '" + name + "' already denotes an SMT-LIB definition", 0);
   if (const SymbolRec* existing = find_symbol(name))
   {
     if (existing->anonymous)
@@ -1212,7 +1259,15 @@ Term TermManager::mk_fresh(const Sort& sort, std::string_view prefix)
 std::optional<Term> TermManager::symbol(std::string_view name) const
 {
   ManagerImpl* m = live(*this, "TermManager::symbol");
-  const detail::SymbolRec* rec = m->find_symbol(std::string(name));
+  const std::string key(name);
+  const auto definition = m->definitions.find(key);
+  if (definition != m->definitions.end())
+  {
+    if (definition->second.params.empty())
+      return detail::make_term(m, definition->second.function);
+    return detail::make_term(m, m->symbols.at(key).node);
+  }
+  const detail::SymbolRec* rec = m->find_symbol(key);
   if (rec == nullptr || rec->anonymous)
     return std::nullopt;
   return detail::make_term(m, rec->node);
@@ -1247,6 +1302,10 @@ void TermManager::bind_symbol(std::string_view name, const Term& t)
   const std::string key(name);
   refuse_predefined(m, key, false, "TermManager::bind_symbol");
   const ASTNode node = detail::node_of(t);
+  if (m->definitions.count(key) != 0 &&
+      (m->find_symbol(key) == nullptr || m->find_symbol(key)->node != node))
+    detail::fail(ErrorCode::SORT_MISMATCH, "TermManager::bind_symbol",
+                 "the name '" + key + "' already denotes an SMT-LIB definition", 0);
   // The table maps names to symbols (declared or fresh); a compound term has
   // no place in it -- the parser's frames and the declaration printers walk
   // the table expecting symbols.
@@ -1265,8 +1324,14 @@ void TermManager::bind_symbol(std::string_view name, const Term& t)
   detail::SymbolRec rec;
   rec.node = node;
   rec.sort = m->sort_of_node(node, "TermManager::bind_symbol");
-  rec.is_function = m->decl_of(node) != nullptr;
-  rec.decl = rec.is_function ? m->decl_of(node) : nullptr;
+  rec.is_function = m->rec(rec.sort).kind == SortKind::FUN;
+  rec.decl = m->decl_of(node);
+  if (const auto* definition = m->definition_of(node))
+  {
+    Cpp_interface::Function alias = *definition;
+    alias.name = key;
+    m->definitions.emplace(key, std::move(alias));
+  }
   m->symbols.emplace(key, std::move(rec));
   if (m->names_by_node.count(node) == 0)
     m->names_by_node.emplace(node, key);
@@ -1747,7 +1812,7 @@ bool parse_decimal(std::string_view text, DecimalLiteral& d)
   return true;
 }
 
-// The plain decimal form the literal converters take: "-0.0025", "100000",
+// The plain decimal form the Real literal converter takes: "-0.0025", "100000",
 // "7" ("-0" for a negative zero).
 std::string plain_decimal(const DecimalLiteral& d)
 {
@@ -1861,7 +1926,13 @@ Term TermManager::mk_fp(const Sort& fp, RoundingMode rm, std::string_view text)
     std::int64_t lo, hi;
     decimal_point_bounds(r.a, r.b, lo, hi);
     d.point = std::clamp(d.point, lo, hi);
-    ok = decimalToPackedFPBits(plain_decimal(d), r.a, r.b, detail::rm_encoding(rm), bits, err);
+    // Keep the scale compact: a wide format can admit a decimal point
+    // billions of places out. LibBF rounds a scaled significand without
+    // materialising those zeros, and reports its working-range limits.
+    const std::string literal = d.digits.empty() ? "0" :
+        (d.negative ? "-" : "") + d.digits + "e" +
+        std::to_string(d.point - static_cast<std::int64_t>(d.digits.size()));
+    ok = decimalToPackedFPBits(literal, r.a, r.b, detail::rm_encoding(rm), bits, err);
   }
   if (!ok)
     detail::fail(ErrorCode::UNSUPPORTED, "TermManager::mk_fp", err, 2, {}, {fp});

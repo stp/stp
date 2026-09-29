@@ -1309,8 +1309,9 @@ class FuncEntry:
 
 
 class FuncInterp(_core.FunValueHandle):
-    """The value of a function in a model: (entries, else). Iterable, callable, sized; z3py's
-    method spellings (else_value(), num_entries(), entry(i)) are kept."""
+    """A function in a saved model. Uninterpreted functions have entries and an else
+    value; define-fun functions have a symbolic body. Both are callable; is_tabular()
+    tells whether table inspection is supported."""
 
     def arity(self):
         return _core.FunValueHandle.arity(self)
@@ -1347,6 +1348,8 @@ class FuncInterp(_core.FunValueHandle):
         return _core.FunValueHandle.as_ite(self, list(formals))
 
     def __repr__(self):
+        if not self.is_tabular():
+            return "<defined function %s>" % self.sort()
         parts = ["[%s -> %s]" % (", ".join(str(a) for a in args), value) for args, value in self.entries()]
         parts.append("else -> %s" % self.else_value())
         return "[" + ", ".join(parts) + "]"

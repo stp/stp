@@ -210,6 +210,22 @@ def test_declarations():
     assert x.manager() is main_tm() and x.id > 0
 
 
+@pytest.mark.parametrize("eb", [40, 62, 65, 128])
+def test_wide_float_literals(eb):
+    tm = TermManager()
+    sort = tm.fp_sort(eb, 4)
+    expected = fpFromBits(int("00" + "1" * (eb - 1) + "100", 2), sort)
+    for value in (1.5, "1.5", "3/2"):
+        assert FPVal(value, sort) is expected
+    for rm in RoundingMode:
+        for negative in (False, True):
+            away = rm == RoundingMode.RNA or rm == (RoundingMode.RTN if negative else RoundingMode.RTP)
+            bits = ("10" if negative else "00") + "1" * (eb - 1) + ("101" if away else "100")
+            expected = fpFromBits(int(bits, 2), sort)
+            for value in ((-1.5625, "-1.5625", "-25/16") if negative else (1.5625, "1.5625", "25/16")):
+                assert FPVal(value, sort, rm=rm) is expected
+
+
 def test_values():
     assert BoolVal(True).kind() == Kind.VALUE and bool(BoolVal(True)) is True and bool(BoolVal(False)) is False
     assert isinstance(BoolVal(True), BoolNumRef) and is_true(BoolVal(True)) and is_false(BoolVal(False))

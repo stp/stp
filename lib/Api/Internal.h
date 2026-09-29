@@ -42,6 +42,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/STPManager/UserDefinedFlags.h"
+#include "stp/cpp_interface.h"
 
 #include <array>
 #include <atomic>
@@ -275,6 +276,9 @@ struct ManagerImpl
 
   // symbols: one name table (declared and fresh alike)
   std::unordered_map<std::string, SymbolRec> symbols;
+  // Retained SMT-LIB bodies and private formals. Parameterized definitions
+  // also have a function identity in symbols; nullary ones name their body.
+  Cpp_interface::FunctionMap definitions;
   std::vector<std::string> symbol_order; // declaration order, declared only
   // symbol_order's distinct symbols, in the same order (a name that
   // bind_symbol gave a symbol already listed adds nothing): what
@@ -341,6 +345,8 @@ struct ManagerImpl
   const SymbolRec* find_symbol(const std::string& name) const;
   const SymbolRec* find_symbol(const ASTNode& n) const; // by node, any name
   const UFDecl* decl_of(const ASTNode& identity) const;
+  const Cpp_interface::Function* definition_of(const ASTNode& identity) const;
+  void adopt_definitions(Cpp_interface::FunctionMap&& definitions);
   std::string fresh_name(std::string_view prefix);
   void adopt_engine_symbols(const std::vector<ASTNode>& roots); // after a parse
   // What an SMT-LIB 2 script that ran leaves to adopt: the roots of what it
@@ -516,6 +522,7 @@ struct ValueImpl
   ASTNode key; // the array symbol / function identity, or a null node for a synthesised value
   ArrayCells cells;
   FunctionCases cases;
+  std::optional<Cpp_interface::Function> definition;
   bool is_array = false;
 };
 
@@ -706,6 +713,7 @@ unsigned rm_encoding(RoundingMode rm);
 
 // printing
 std::string print_term(ManagerImpl* m, const ASTNode& n, Format f, bool share);
+std::string print_definition(ManagerImpl* m, const Cpp_interface::Function& definition);
 std::string quote_symbol(const std::string& name); // SMT-LIB |quoting| where needed
 // A symbol, or a sort symbol, that SMT-LIB's theories predefine (true, bvadd,
 // select, RNE, +, Bool, ...): |quoting| cannot tell a declaration apart from

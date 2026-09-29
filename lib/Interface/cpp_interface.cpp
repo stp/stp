@@ -437,6 +437,9 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
 {
   if (current_command_rejected)
     return;
+  if (accept_function_definition && !accept_function_definition(name))
+    refuseCurrentCommand("the name '" + name +
+                         "' conflicts with a name retained by the term manager");
   Function f;
   f.name = name;
 
@@ -459,6 +462,13 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
   // record which frame this function was created in, such that it can be
   // removed later (e.g., via pop)
   getCurrentFunctions().push_back(f.name);
+}
+
+void Cpp_interface::addFunction(const Function& function)
+{
+  const auto inserted = functions.emplace(function.name, function);
+  if (inserted.second)
+    getCurrentFunctions().push_back(function.name);
 }
 
 ASTNode Cpp_interface::applyFunction(const string& name, const ASTVec& params)
@@ -1437,6 +1447,8 @@ void Cpp_interface::cleanUp()
 
   // Every frame is going away, so don't erase the functions from the
   // map one at a time (files can define millions of functions).
+  if (functions_at_cleanup != nullptr)
+    *functions_at_cleanup = std::move(functions);
   functions.clear();
   for (SolverFrame* frame : frames)
     frame->getFunctions().clear();

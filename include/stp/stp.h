@@ -446,9 +446,9 @@ STP_API stp_tm stp_sort_manager(stp_sort); /**< +1 handle */
 /* ------------------------------------------------------------------ symbols and values */
 STP_API stp_term stp_declare(stp_tm, const char* name, stp_sort); /**< the manager's name table: the same (name, sort) gives the same term; SORT_MISMATCH on a clash; INVALID_ARGUMENT for a name SMT-LIB predefines (true, select, bvadd, RNE, ...) */
 STP_API stp_term stp_mk_fresh(stp_tm, stp_sort, const char* prefix); /**< anonymous, never in the name table; printed as prefix!k; NULL prefix means "" */
-STP_API stp_term stp_tm_symbol(stp_tm, const char* name); /**< NULL, no error, if the name is not in the table */
+STP_API stp_term stp_tm_symbol(stp_tm, const char* name); /**< NULL, no error, if absent; define-fun: the body if nullary, otherwise a callable function term */
 STP_API stp_status stp_tm_bind_symbol(stp_tm, const char* name, stp_term); /**< enter an existing symbol into the table under this name; SORT_MISMATCH if taken, INVALID_ARGUMENT for a compound term or a predefined name */
-STP_API size_t stp_tm_num_symbols(stp_tm); /**< declared symbols, in declaration order */
+STP_API size_t stp_tm_num_symbols(stp_tm); /**< declared symbols and parameterized definitions, distinct identities */
 STP_API stp_term stp_tm_symbol_at(stp_tm, size_t i);
 STP_API size_t stp_tm_num_declared_sorts(stp_tm);
 STP_API stp_sort stp_tm_declared_sort_at(stp_tm, size_t i);
@@ -545,6 +545,7 @@ STP_API stp_term stp_term_child(stp_term, size_t i); /**< INDEX_OUT_OF_RANGE */
 STP_API stp_status stp_term_num_indices(stp_term, size_t* out);
 STP_API stp_status stp_term_index(stp_term, size_t i, uint32_t* out);
 STP_API bool stp_term_is_value(stp_term); /**< infallible; false for NULL */
+STP_API bool stp_term_is_defined_function(stp_term); /**< a parameterized define-fun; false for NULL */
 STP_API bool stp_term_is_const(stp_term); /**< a declared symbol; infallible; false for NULL */
 STP_API char* stp_term_symbol(stp_term);  /**< NULL, no error, if anonymous or not a symbol */
 STP_API char* stp_term_str(stp_term);     /**< SMT-LIB 2, untruncated; works while an error is pending */
@@ -779,6 +780,11 @@ STP_API stp_term stp_array_value_as_term(stp_array_value); /**< store chain over
 STP_API void stp_fun_value_release(stp_fun_value);
 STP_API stp_sort stp_fun_value_sort(stp_fun_value);
 STP_API uint32_t stp_fun_value_arity(stp_fun_value);
+/** A define-fun has a symbolic body instead of a table: size, entry and else
+ * report UNSUPPORTED. apply evaluates it in the saved model; as_ite returns
+ * its body over the supplied formals, with free symbols fixed to the model
+ * (UNSUPPORTED for parameter-dependent partial floating-point operations). */
+STP_API bool stp_fun_value_is_tabular(stp_fun_value);
 STP_API stp_term stp_fun_value_else(stp_fun_value); /**< always ground: a VALUE of the codomain */
 STP_API size_t stp_fun_value_size(stp_fun_value);
 STP_API stp_status stp_fun_value_entry(stp_fun_value, size_t i, size_t n, stp_term* args_out /* n slots, at least the arity */, stp_term* value); /**< an application the model records; INVALID_ARGUMENT if n is below the arity */
