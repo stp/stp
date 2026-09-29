@@ -197,7 +197,7 @@ Kind kind_of(ManagerImpl* m, const ASTNode& n)
     case FP_TO_SBV: return Kind::FP_TO_SBV;
     case FP_TO_IEEE_BV: return Kind::FP_TO_IEEE_BV;
     case REAL_ADD: return Kind::REAL_ADD;
-    case REAL_SUB: return Kind::REAL_SUB;
+    case REAL_SUB: return n.Degree() == 1 ? Kind::REAL_NEG : Kind::REAL_SUB; // (- a), as view_of
     case REAL_NEG: return Kind::REAL_NEG;
     case REAL_MUL: return Kind::REAL_MUL;
     case REAL_DIV: return Kind::REAL_DIV;
@@ -261,6 +261,19 @@ View view_of(ManagerImpl* m, const ASTNode& n)
     case FP_MIN:
     case FP_MAX:
       v.children.assign(kids.begin(), kids.begin() + 2);
+      return v;
+    case REAL_SUB:
+      // SMT-LIB's unary (- a) and n-ary (- a b c), which the reader builds as
+      // one node, are REAL_NEG and REAL_SUB's left-associated binary form
+      // here, the kinds a walker can rebuild them from.
+      if (kids.size() > 2)
+      {
+        ASTVec head(kids.begin(), kids.end() - 1);
+        v.children.push_back(m->bm->hashingNodeFactory->CreateNode(REAL_SUB, head));
+        v.children.push_back(kids[kids.size() - 1]);
+        return v;
+      }
+      v.children.assign(kids.begin(), kids.end());
       return v;
     case FP_TOFP:
     case FP_TOFP_SIGNED:

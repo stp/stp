@@ -218,3 +218,34 @@ TEST(RoundTrips, names_that_spell_predefined_symbols_are_refused)
     EXPECT_EQ(back.model().uint64_value(*fresh.symbol(name)), i + 1) << name;
   }
 }
+
+// SMT-LIB's unary (- a) and n-ary (- a b c) read as one engine node; the
+// public view presents them as REAL_NEG and left-associated binary REAL_SUB,
+// so a walker rebuilds them from kind(), children(), indices() and sort().
+TEST(RoundTrips, a_parsed_real_minus_rebuilds_from_its_view)
+{
+  for (const bool simplify : {true, false})
+  {
+    SCOPED_TRACE(simplify ? "simplify" : "no simplify");
+    TermManager::Config cfg;
+    cfg.simplify = simplify;
+    TermManager tm(cfg);
+    const Sort R = tm.mk_real_sort();
+    const Term r1 = tm.declare("r1", R), r2 = tm.declare("r2", R);
+    tm.declare("r3", R);
+    Solver s(tm);
+    for (const char* text : {"(- r1 r2 r3)", "(- r1)", "(- r1 r2)", "(- 5 2 r3)", "(- r1 r2 r3 r1)"})
+    {
+      SCOPED_TRACE(text);
+      const Term t = s.parse_term(text);
+      Term back;
+      const auto e = API_ERROR_OF(back = tm.mk_term(t.kind(), t.children(), t.indices(), t.sort()));
+      ASSERT_FALSE(e.has_value()) << e->what();
+      EXPECT_TRUE(s.entails(back == t).is_valid()) << back.str() << " vs " << t.str();
+      const Term swapped = t.substitute({{r1, r2}});
+      EXPECT_EQ(swapped.sort(), R);
+    }
+    EXPECT_EQ(s.parse_term("(- r1)").kind(), Kind::REAL_NEG);
+    EXPECT_EQ(s.parse_term("(- r1 r2 r3)").num_children(), 2u);
+  }
+}
