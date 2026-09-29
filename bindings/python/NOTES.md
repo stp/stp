@@ -54,13 +54,22 @@ that depart from z3py or from a literal reading of the C API.
   deferred releases are kept per manager, so a drain looks at the idle
   managers' only. `Solver.interrupt()` (which
   takes no lock) may be called from any thread at any time and reaches a
-  running check. On the main thread a C `SIGINT` handler is installed for the
-  duration of a check: it calls `stp_solver_interrupt` and, after the check,
-  Python's own handler is restored and the signal re-delivered
+  running check. On the main thread, while Python's own handler
+  (`signal.default_int_handler`) is the one installed, a C `SIGINT` handler
+  replaces it for the duration of a check: it calls `stp_solver_interrupt`
+  and, after the check, Python's disposition is put back whole (`sigaction`,
+  so no `SA_RESTART` creeps in) and the signal re-delivered
   (`PyErr_SetInterrupt`), so Ctrl-C raises `KeyboardInterrupt` from `check()`
   and the solver stays usable (around a parse that runs its input as well).
+  A process that ignores `SIGINT`, or handles it itself, is left alone.
   A user terminator (`set_terminator`) runs with the GIL; an exception it
-  raises interrupts the check and is re-raised. Parses take one process-wide
+  raises interrupts the check and is re-raised. A sink (output, diagnostic,
+  CNF, fatal handler) that raises `KeyboardInterrupt` or `SystemExit` ends
+  the call it runs in: the exception is kept, the solver interrupted (every
+  check after it too, and the sink not called again), and the exception
+  raised from the call once it returns; any other exception a sink raises is
+  printed with its traceback and the call goes on, since a sink has no caller
+  to raise to. Parses take one process-wide
   lock for their whole length, so a parse on another manager waits for one
   that is checking or waiting on its stream. A callback (a sink, the
   terminator, the stream a parse reads) must not call the library: every call

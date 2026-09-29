@@ -40,7 +40,6 @@ core hands out is already of the right Python class.
 from libc.stdint cimport uint8_t, uint32_t, uint64_t, int64_t, UINT64_MAX, INT64_MIN
 from libc.stdlib cimport malloc, free
 from libc.string cimport memcpy, strlen
-from libc.signal cimport signal, sighandler_t, SIGINT, SIG_ERR
 from cpython.bytes cimport PyBytes_FromStringAndSize
 from cpython.exc cimport PyErr_CheckSignals, PyErr_SetInterrupt
 
@@ -48,12 +47,16 @@ cdef extern from "pythread.h":
     unsigned long PyThread_get_thread_ident()
 
 # The SIGINT bridge: while a check runs on the main thread, a C handler turns
-# Ctrl-C into stp_solver_interrupt (async-signal-safe); afterwards the Python
-# handler is restored and the interrupt is re-delivered to it, so the usual
-# KeyboardInterrupt surfaces from check() and the solver stays usable.
+# Ctrl-C into stp_solver_interrupt (async-signal-safe); afterwards Python's
+# disposition is put back whole and the interrupt is re-delivered to it, so
+# the usual KeyboardInterrupt surfaces from check() and the solver stays
+# usable. The whole struct sigaction is saved and restored: signal() would put
+# Python's handler back with SA_RESTART, after which a blocking read is no
+# longer interrupted by Ctrl-C.
 cdef extern from *:
     """
     #include <signal.h>
+    #include <string.h>
     #include <stp/stp.h>
     static volatile sig_atomic_t stp_py_sigint_fired = 0;
     static stp_solver stp_py_sigint_target = NULL;
@@ -64,12 +67,55 @@ cdef extern from *:
       if (stp_py_sigint_target != NULL)
         stp_solver_interrupt(stp_py_sigint_target);
     }
+    #ifdef _WIN32
+    static void (*stp_py_sigint_saved)(int) = NULL;
+    static int stp_py_sigint_install(stp_solver target)
+    {
+      stp_py_sigint_fired = 0;
+      stp_py_sigint_target = target;
+      stp_py_sigint_saved = signal(SIGINT, stp_py_sigint_handler);
+      if (stp_py_sigint_saved == SIG_ERR)
+      {
+        stp_py_sigint_target = NULL;
+        return 0;
+      }
+      return 1;
+    }
+    static void stp_py_sigint_remove(void)
+    {
+      stp_py_sigint_target = NULL;
+      signal(SIGINT, stp_py_sigint_saved);
+    }
+    #else
+    static struct sigaction stp_py_sigint_saved;
+    static int stp_py_sigint_install(stp_solver target)
+    {
+      struct sigaction bridge;
+      memset(&bridge, 0, sizeof bridge);
+      bridge.sa_handler = stp_py_sigint_handler;
+      sigemptyset(&bridge.sa_mask);
+      stp_py_sigint_fired = 0;
+      stp_py_sigint_target = target;
+      if (sigaction(SIGINT, &bridge, &stp_py_sigint_saved) != 0)
+      {
+        stp_py_sigint_target = NULL;
+        return 0;
+      }
+      return 1;
+    }
+    static void stp_py_sigint_remove(void)
+    {
+      stp_py_sigint_target = NULL;
+      sigaction(SIGINT, &stp_py_sigint_saved, NULL);
+    }
+    #endif
     """
     int stp_py_sigint_fired
-    stp_solver stp_py_sigint_target
-    void stp_py_sigint_handler(int) noexcept nogil
+    int stp_py_sigint_install(stp_solver) noexcept nogil
+    void stp_py_sigint_remove() noexcept nogil
 
 import re
+import signal as _pysignal
 import sys
 import threading
 import traceback
@@ -1510,12 +1556,29 @@ def option_info(name):
 
 # ----------------------------------------------------------------- callbacks
 
+cdef void _sink_raised(SolverHandle s):
+    """A sink raised. KeyboardInterrupt and SystemExit end the call it runs in:
+    kept, the solver interrupted (and every check after it, until the call
+    returns), and raised again then; anything else is printed, since a sink
+    has no caller to raise to."""
+    e = sys.exc_info()[1]
+    if isinstance(e, (KeyboardInterrupt, SystemExit)):
+        if s._callback_error is None:
+            s._callback_error = e
+        s._sink_interrupted = True
+        stp_solver_interrupt(s._s)
+    else:
+        traceback.print_exc()
+
+
 cdef cbool _terminator_cb(void* user) noexcept with gil:
     cdef CallbackBox* box = <CallbackBox*>user
     cdef SolverHandle s
     if box.owner == NULL:
         return 0
     s = <SolverHandle>box.owner
+    if s._sink_interrupted:
+        return 1
     try:
         if s._terminator is None:
             return 0
@@ -1531,11 +1594,14 @@ cdef void _sink_cb(const char* text, size_t n, void* user) noexcept with gil:
     if box.owner == NULL:
         return
     s = <SolverHandle>box.owner
+    if s._sink_interrupted:
+        stp_solver_interrupt(s._s)  # every check until the call returns
+        return
     try:
         if s._sink is not None:
             s._sink(PyBytes_FromStringAndSize(text, n).decode("utf-8", "replace"))
     except BaseException:
-        traceback.print_exc()
+        _sink_raised(s)
 
 
 cdef void _out_sink_cb(const char* text, size_t n, void* user) noexcept with gil:
@@ -1544,11 +1610,14 @@ cdef void _out_sink_cb(const char* text, size_t n, void* user) noexcept with gil
     if box.owner == NULL:
         return
     s = <SolverHandle>box.owner
+    if s._sink_interrupted:
+        stp_solver_interrupt(s._s)  # every check until the call returns
+        return
     try:
         if s._out_sink is not None:
             s._out_sink(PyBytes_FromStringAndSize(text, n).decode("utf-8", "replace"))
     except BaseException:
-        traceback.print_exc()
+        _sink_raised(s)
 
 
 cdef void _fatal_cb(const char* message, void* user) noexcept with gil:
@@ -1557,12 +1626,15 @@ cdef void _fatal_cb(const char* message, void* user) noexcept with gil:
     if box.owner == NULL:
         return
     s = <SolverHandle>box.owner
+    if s._sink_interrupted:
+        stp_solver_interrupt(s._s)  # every check until the call returns
+        return
     try:
         if s._fatal_handler is not None:
             s._fatal_handler(PyBytes_FromStringAndSize(message, strlen(message))
                              .decode("utf-8", "replace"))
     except BaseException:
-        traceback.print_exc()
+        _sink_raised(s)
 
 
 _CNF_SCOPES = {STP_CNF_WHOLE: "whole", STP_CNF_PARTIAL: "partial",
@@ -1575,11 +1647,14 @@ cdef void _cnf_cb(const char* dimacs, size_t n, stp_cnf_scope scope, void* user)
     if box.owner == NULL:
         return
     s = <SolverHandle>box.owner
+    if s._sink_interrupted:
+        stp_solver_interrupt(s._s)  # every check until the call returns
+        return
     try:
         if s._cnf_sink is not None:
             s._cnf_sink(PyBytes_FromStringAndSize(dimacs, n), _CNF_SCOPES.get(<int>scope, "whole"))
     except BaseException:
-        traceback.print_exc()
+        _sink_raised(s)
 
 
 # A parse's input: text already in memory, read without the GIL ...
@@ -1669,6 +1744,7 @@ cdef class SolverHandle:
         self._fatal_handler = None
         self._cnf_sink = None
         self._callback_error = None
+        self._sink_interrupted = False
 
     def __init__(self, Manager tm not None, OptionsHandle options=None):
         if self._s != NULL:
@@ -1932,42 +2008,27 @@ cdef class SolverHandle:
         cdef size_t n = 0
         cdef stp_term* arr = self._m._array(assumptions if assumptions is not None else [], &n,
                                             "stp_solver_check_sat")
-        cdef bint main_thread = 0
-        cdef sighandler_t old = SIG_ERR
+        cdef bint bridged = 0
         if timeout is not None or conflicts is not None:
             budget.has_time = timeout is not None
             budget.time_ms = <uint64_t>(timeout if timeout is not None else 0)
             budget.has_conflicts = conflicts is not None
             budget.conflicts = <uint64_t>(conflicts if conflicts is not None else 0)
             bp = &budget
-        self._callback_error = None
-        global stp_py_sigint_fired, stp_py_sigint_target
+        self._before_call()
         try:
-            main_thread = threading.current_thread() is threading.main_thread()
-            if main_thread:
-                stp_py_sigint_fired = 0
-                stp_py_sigint_target = self._s
-                old = signal(SIGINT, stp_py_sigint_handler)
+            bridged = self._sigint_bridge_on()
             _set_busy(self._m, True)
             try:
                 with nogil:
                     st = stp_solver_check_sat_budget(self._s, n, arr, bp, &r)
             finally:
                 _set_busy(self._m, False)
-                if main_thread:
-                    stp_py_sigint_target = NULL
-                    if old != SIG_ERR:
-                        signal(SIGINT, old)
-                    if stp_py_sigint_fired:
-                        stp_py_sigint_fired = 0
-                        PyErr_SetInterrupt()
+                self._sigint_bridge_off(bridged)
         finally:
             free(arr)
         PyErr_CheckSignals()
-        if self._callback_error is not None:
-            e = self._callback_error
-            self._callback_error = None
-            raise e
+        self._after_call()
         if st != STP_OK:
             self._m._fail("stp_solver_check_sat")
         return (<int>r.kind, <int>r.reason, self._last_reason())
@@ -1979,39 +2040,24 @@ cdef class SolverHandle:
         cdef const stp_budget* bp = NULL
         cdef stp_entailment r
         cdef stp_status st
-        cdef bint main_thread = 0
-        cdef sighandler_t old = SIG_ERR
+        cdef bint bridged = 0
         if timeout is not None or conflicts is not None:
             budget.has_time = timeout is not None
             budget.time_ms = <uint64_t>(timeout if timeout is not None else 0)
             budget.has_conflicts = conflicts is not None
             budget.conflicts = <uint64_t>(conflicts if conflicts is not None else 0)
             bp = &budget
-        self._callback_error = None
-        global stp_py_sigint_fired, stp_py_sigint_target
-        main_thread = threading.current_thread() is threading.main_thread()
-        if main_thread:
-            stp_py_sigint_fired = 0
-            stp_py_sigint_target = self._s
-            old = signal(SIGINT, stp_py_sigint_handler)
+        self._before_call()
+        bridged = self._sigint_bridge_on()
         _set_busy(self._m, True)
         try:
             with nogil:
                 st = stp_solver_entails(self._s, f._h, bp, &r)
         finally:
             _set_busy(self._m, False)
-            if main_thread:
-                stp_py_sigint_target = NULL
-                if old != SIG_ERR:
-                    signal(SIGINT, old)
-                if stp_py_sigint_fired:
-                    stp_py_sigint_fired = 0
-                    PyErr_SetInterrupt()
+            self._sigint_bridge_off(bridged)
         PyErr_CheckSignals()
-        if self._callback_error is not None:
-            e = self._callback_error
-            self._callback_error = None
-            raise e
+        self._after_call()
         if st != STP_OK:
             self._m._fail("stp_solver_entails")
         return (<int>r.kind, <int>r.reason, self._last_reason())
@@ -2108,27 +2154,41 @@ cdef class SolverHandle:
             return None
         return self._m._wrap(h)
 
-    cdef bint _sigint_bridge_on(self, sighandler_t* old):
+    cdef bint _sigint_bridge_on(self):
         """Ctrl-C becomes stp_solver_interrupt while a call that may check runs on the main
-        thread (a script run in EXECUTE mode checks as check() does); false off it."""
-        global stp_py_sigint_fired, stp_py_sigint_target
+        thread (a script run in EXECUTE mode checks as check() does), where Python's own
+        handler would raise KeyboardInterrupt; false elsewhere, and where the process ignores
+        SIGINT or handles it itself."""
         if threading.current_thread() is not threading.main_thread():
             return 0
-        stp_py_sigint_fired = 0
-        stp_py_sigint_target = self._s
-        old[0] = signal(SIGINT, stp_py_sigint_handler)
-        return 1
+        if _pysignal.getsignal(_pysignal.SIGINT) is not _pysignal.default_int_handler:
+            return 0
+        return stp_py_sigint_install(self._s) != 0
 
-    cdef void _sigint_bridge_off(self, bint on, sighandler_t old):
-        global stp_py_sigint_fired, stp_py_sigint_target
+    cdef void _sigint_bridge_off(self, bint on):
+        global stp_py_sigint_fired
         if not on:
             return
-        stp_py_sigint_target = NULL
-        if old != SIG_ERR:
-            signal(SIGINT, old)
+        stp_py_sigint_remove()
         if stp_py_sigint_fired:
             stp_py_sigint_fired = 0
             PyErr_SetInterrupt()
+
+    cdef void _before_call(self):
+        self._callback_error = None
+        self._sink_interrupted = False
+
+    cdef int _after_call(self) except -1:
+        """Raise what a callback kept for the caller, now that the call has returned. A
+        sink's interrupt was the bindings' own, so it is taken back first."""
+        if self._sink_interrupted:
+            self._sink_interrupted = False
+            stp_solver_clear_interrupt(self._s)
+        if self._callback_error is not None:
+            e = self._callback_error
+            self._callback_error = None
+            raise e
+        return 0
 
     def parse_smt2(self, text, mode=None):
         self._live()
@@ -2138,18 +2198,19 @@ cdef class SolverHandle:
         if mode is not None:
             m = <stp_parse_mode><int>mode
         cdef stp_status st
-        cdef sighandler_t old = SIG_ERR
         cdef bint bridged = 0
+        self._before_call()
         if m != STP_PARSE_DECLARE_AND_ASSERT:
-            bridged = self._sigint_bridge_on(&old)
+            bridged = self._sigint_bridge_on()
         _set_busy(self._m, True)
         try:
             with nogil:
                 st = stp_solver_parse_smt2(self._s, p, m)
         finally:
             _set_busy(self._m, False)
-            self._sigint_bridge_off(bridged, old)
+            self._sigint_bridge_off(bridged)
         PyErr_CheckSignals()
+        self._after_call()
         if st != STP_OK:
             self._fail_mutate("stp_solver_parse_smt2")
 
@@ -2169,10 +2230,10 @@ cdef class SolverHandle:
             text.offset = 0
         else:
             stream = _StreamSource(source)
-        cdef sighandler_t old = SIG_ERR
         cdef bint bridged = 0
+        self._before_call()
         if m != STP_PARSE_DECLARE_AND_ASSERT:
-            bridged = self._sigint_bridge_on(&old)
+            bridged = self._sigint_bridge_on()
         _set_busy(self._m, True)
         try:
             if stream is None:
@@ -2183,8 +2244,9 @@ cdef class SolverHandle:
                     st = stp_solver_parse_source(self._s, _stream_source_cb, <void*>stream, f, m)
         finally:
             _set_busy(self._m, False)
-            self._sigint_bridge_off(bridged, old)
+            self._sigint_bridge_off(bridged)
         PyErr_CheckSignals()
+        self._after_call()
         if st != STP_OK:
             if stream is not None and stream.error is not None:
                 # the stream's own exception says more than the IO error it became
@@ -2208,12 +2270,14 @@ cdef class SolverHandle:
         cdef const char* p = b
         cdef stp_format f = <stp_format>format
         cdef stp_status st
+        self._before_call()
         _set_busy(self._m, True)
         try:
             with nogil:
                 st = stp_solver_parse(self._s, p, f)
         finally:
             _set_busy(self._m, False)
+        self._after_call()
         if st != STP_OK:
             self._fail_mutate("stp_solver_parse")
 
@@ -2223,12 +2287,14 @@ cdef class SolverHandle:
         cdef const char* p = b
         cdef stp_format f = <stp_format>format
         cdef stp_status st
+        self._before_call()
         _set_busy(self._m, True)
         try:
             with nogil:
                 st = stp_solver_parse_file(self._s, p, f)
         finally:
             _set_busy(self._m, False)
+        self._after_call()
         if st != STP_OK:
             self._fail_mutate("stp_solver_parse_file")
 

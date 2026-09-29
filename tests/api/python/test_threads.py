@@ -92,6 +92,91 @@ def test_sigint_on_main_thread(hard):
     assert hard.check(timeout=0).reason == UnknownReason.TIMEOUT  # the solver is usable
 
 
+def test_a_keyboard_interrupt_in_a_sink_ends_the_call(fresh_manager):
+    """Ctrl-C reaches Python code at a bytecode boundary, and during a run that is often inside
+    the output sink: the KeyboardInterrupt ends the run (every check after it is interrupted)
+    and is raised from the call that ran the script; the solver is usable afterwards."""
+    body = "".join("(push 1)(assert (= (bvmul ((_ zero_extend 16) a) ((_ zero_extend 16) b)) #x%08x))"
+                   "(assert (bvugt a #x0001))(assert (bvugt b #x0001))(check-sat)(pop 1)\n"
+                   % (1000003 + 2 * i) for i in range(400))
+    script = "(declare-fun a () (_ BitVec 16))(declare-fun b () (_ BitVec 16))\n" + body
+    s = Solver()
+    calls = []
+
+    def sink(text):
+        calls.append(text)
+        if len(calls) == 3:
+            raise KeyboardInterrupt
+
+    s.set_output_sink(sink)
+    t0 = time.monotonic()
+    with pytest.raises(KeyboardInterrupt):
+        s.from_string(script, mode="execute")
+    assert time.monotonic() - t0 < 30
+    assert len(calls) == 3  # the sink is not called again once it has ended the run
+    assert not s.interrupt_pending()  # the interrupt was the bindings' own, taken back
+    s.set_output_sink(None)
+    s.add(BitVec("x", 8) == 1)
+    assert s.check() == sat
+    s.close()
+
+
+def test_an_ordinary_exception_in_a_sink_is_printed(fresh_manager, capsys):
+    s = Solver()
+
+    def sink(text):
+        raise ValueError("sink failure")
+
+    s.set_output_sink(sink)
+    s.from_string("(declare-fun p () Bool)(assert p)(check-sat)", mode="execute")
+    assert "sink failure" in capsys.readouterr().err
+    assert s.check() == sat
+    s.close()
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="SA_RESTART as Linux spells it")
+def test_the_sigint_bridge_puts_the_handler_back_as_it_was(hard):
+    """The bridge restores Python's disposition whole: re-installed with signal(), Python's
+    handler would carry SA_RESTART, and a blocking read would no longer be interrupted."""
+    hard.check(timeout=0)
+
+    r, w = os.pipe()
+
+    def kill():
+        time.sleep(0.3)
+        os.kill(os.getpid(), signal.SIGINT)
+        time.sleep(3.0)
+        os.write(w, b"x")  # unblocks the read if the signal did not
+
+    t = threading.Thread(target=kill, daemon=True)
+    t.start()
+    t0 = time.monotonic()
+    with pytest.raises(KeyboardInterrupt):
+        os.read(r, 1)
+    assert time.monotonic() - t0 < 2.5
+    t.join()
+    os.close(r)
+    os.close(w)
+
+
+@pytest.mark.mid_search
+def test_a_process_that_ignores_sigint_is_not_interrupted(hard):
+    before = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    try:
+        def kill():
+            time.sleep(0.3)
+            os.kill(os.getpid(), signal.SIGINT)
+
+        t = threading.Thread(target=kill)
+        t.start()
+        r = hard.check(timeout=1500)
+        t.join()
+        assert r == unknown and r.reason == UnknownReason.TIMEOUT
+        assert signal.getsignal(signal.SIGINT) is signal.SIG_IGN
+    finally:
+        signal.signal(signal.SIGINT, before)
+
+
 def test_manager_usable_from_another_thread(fresh_manager):
     """A manager and everything created from it may be used from any thread, one call at a
     time; the caller serialises (here: the join before the next use)."""
