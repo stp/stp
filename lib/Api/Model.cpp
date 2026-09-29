@@ -1115,12 +1115,12 @@ std::shared_ptr<detail::ValueImpl> array_value_of(const std::shared_ptr<const Mo
   return impl;
 }
 
-// A function has no value term: its value is a table (function_value).
+// A function has no value term: read its interpretation with function_value.
 void refuse_function(const ModelSnapshot& s, const ASTNode& n, const Term& t, const char* fn)
 {
   if (s.mgr->rec(s.mgr->sort_of_node(n, fn)).kind == SortKind::FUN)
     detail::fail(ErrorCode::SORT_MISMATCH, fn,
-                 "a function has no value term; read its table with Model::function_value", 0,
+                 "a function has no value term; use Model::function_value", 0,
                  {t}, {t.sort()});
 }
 
@@ -1207,12 +1207,19 @@ FunctionValue Model::function_value(const Term& t) const
 {
   const ModelSnapshot& s = snap_of(*this, "Model::function_value");
   const ASTNode n = own_node(s, t, "Model::function_value");
-  if (s.mgr->decl_of(n) == nullptr)
+  const auto* definition = s.mgr->definition_of(n);
+  if (definition == nullptr && s.mgr->decl_of(n) == nullptr)
     detail::fail(ErrorCode::SORT_MISMATCH, "Model::function_value", "expected a function symbol", 0,
                  {t}, {t.sort()});
   auto impl = std::make_shared<detail::ValueImpl>();
   impl->snap = snap_;
   impl->key = n;
+  if (definition != nullptr)
+  {
+    impl->definition = *definition;
+    impl->cases.sort = s.mgr->sort_of_node(n, "Model::function_value");
+    return FunctionValue(impl);
+  }
   auto it = s.functions.find(n);
   if (it != s.functions.end())
     impl->cases = it->second;
@@ -1439,15 +1446,144 @@ Term ArrayValue::as_term() const
 
 // ============================================================ FunctionValue
 
+namespace
+{
+void require_table(const detail::ValueImpl& v, const char* fn)
+{
+  v.snap->mgr->check_alive(fn);
+  if (v.definition)
+    detail::fail(ErrorCode::UNSUPPORTED, fn,
+                 "a defined function has a symbolic body, not a finite table; use apply or as_ite_term");
+}
+
+void check_function_args(ManagerImpl* m, const detail::SortRec& r,
+                         const std::vector<Term>& args, const char* fn)
+{
+  if (args.size() != r.domain.size())
+    detail::fail(ErrorCode::ARITY, fn,
+                 "the function takes " + std::to_string(r.domain.size()) + " arguments");
+  for (std::size_t i = 0; i < args.size(); ++i)
+  {
+    if (args[i].is_null())
+      detail::fail(ErrorCode::NULL_HANDLE, fn, "an argument is null", static_cast<int>(i));
+    if (args[i].impl_manager() != m)
+      detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the argument belongs to another term manager",
+                   static_cast<int>(i));
+    if (args[i].sort().impl_index() != r.domain[i])
+      detail::fail(ErrorCode::SORT_MISMATCH, fn, "the argument is not of the function's domain sort",
+                   static_cast<int>(i), {args[i]}, {Sort(m, r.domain[i])});
+  }
+}
+
+// An array value is a constant array under stores of values. Unlike a scalar
+// value it is not an engine constant, but is a valid argument to a definition.
+bool argument_value(ManagerImpl* m, ASTNode n)
+{
+  if (n.GetSourceSort().kind() != SourceSort::Kind::Array)
+    return n.isConstant();
+  while (n.GetKind() == WRITE)
+  {
+    if (!n[1].isConstant() || !n[2].isConstant())
+      return false;
+    n = n[0];
+  }
+  return m->is_const_array(n) && m->const_array_default(n).isConstant();
+}
+
+// Freeze the free parts of a definition in the snapshot, leaving only its
+// formal arguments open. In particular, expanding a UF to the snapshot's
+// table is essential: merely replacing scalar globals would leave that UF
+// free to take a different interpretation in a later solve.
+Term defined_model_body(const detail::ValueImpl& v, const std::vector<Term>& args)
+{
+  const char* fn = "FunctionValue::as_ite_term";
+  ManagerImpl* m = v.snap->mgr;
+  const auto& def = *v.definition;
+  struct Rewritten { Term term; bool depends; };
+  std::unordered_map<ASTNode, Rewritten, ASTNode::ASTNodeHasher> memo;
+  for (std::size_t i = 0; i < def.params.size(); ++i)
+    memo.emplace(def.params[i], Rewritten{args[i], true});
+  struct Frame { ASTNode node; detail::View view; bool expanded; };
+  std::vector<Frame> stack{{def.function, {}, false}};
+  const Model model(v.snap);
+  detail::Evaluator ev(*v.snap, fn, true);
+  return detail::engine_call(m, fn, [&] {
+    while (!stack.empty())
+    {
+      if (memo.count(stack.back().node) != 0)
+      {
+        stack.pop_back();
+        continue;
+      }
+      if (!stack.back().expanded)
+      {
+        Frame& f = stack.back();
+        f.view = detail::view_of(m, f.node);
+        f.expanded = true;
+        const auto kids = f.view.children;
+        for (auto it = kids.rbegin(); it != kids.rend(); ++it)
+          if (memo.count(*it) == 0)
+            stack.push_back({*it, {}, false});
+        continue;
+      }
+      Frame f = std::move(stack.back());
+      stack.pop_back();
+      std::vector<Term> kids;
+      std::vector<ASTNode> nodes;
+      bool depends = false;
+      for (const ASTNode& child : f.view.children)
+      {
+        const auto& r = memo.at(child);
+        depends = depends || r.depends;
+        kids.push_back(r.term);
+        nodes.push_back(detail::node_of(r.term));
+      }
+      Term result;
+      const Term original = detail::make_term(m, f.node);
+      if (original.sort().is_fun())
+        result = original; // the identity child of APPLY
+      else if (!depends)
+        result = value_term(v.snap, ev, original, fn);
+      else if (f.view.kind == Kind::APPLY)
+        result = model.function_value(kids[0]).as_ite_term(
+            std::vector<Term>(kids.begin() + 1, kids.end()));
+      else
+      {
+        if (f.view.kind == Kind::FP_MIN || f.view.kind == Kind::FP_MAX ||
+            f.view.kind == Kind::FP_TO_UBV || f.view.kind == Kind::FP_TO_SBV)
+          detail::fail(ErrorCode::UNSUPPORTED, fn,
+                       "a parameter-dependent partial FP operation needs FunctionValue::apply");
+        const std::optional<std::uint32_t> sort = f.view.kind == Kind::CONST_ARRAY
+            ? std::optional<std::uint32_t>(original.sort().impl_index()) : std::nullopt;
+        result = detail::make_term(m, detail::build_term(m, fn, f.view.kind, nodes,
+                                                        f.view.indices, sort));
+      }
+      memo.emplace(f.node, Rewritten{result, depends});
+    }
+    return memo.at(def.function).term;
+  });
+}
+} // namespace
+
 FunctionValue::FunctionValue(std::shared_ptr<const detail::ValueImpl> i) noexcept : impl_(std::move(i)) {}
 FunctionValue::FunctionValue(const FunctionValue&) noexcept = default;
 FunctionValue& FunctionValue::operator=(const FunctionValue&) noexcept = default;
 FunctionValue::~FunctionValue() = default;
 
 Sort FunctionValue::sort() const { return Sort(impl_->snap->mgr, impl_->cases.sort); }
-std::size_t FunctionValue::size() const { return impl_->cases.cases.size(); }
+bool FunctionValue::is_tabular() const
+{
+  impl_->snap->mgr->check_alive("FunctionValue::is_tabular");
+  return !impl_->definition.has_value();
+}
+std::size_t FunctionValue::size() const
+{
+  require_table(*impl_, "FunctionValue::size");
+  return impl_->cases.cases.size();
+}
 FunctionValue::Entry FunctionValue::entry(std::size_t i) const
 {
+  require_table(*impl_, "FunctionValue::entry");
   if (i >= impl_->cases.cases.size())
     detail::fail(ErrorCode::INDEX_OUT_OF_RANGE, "FunctionValue::entry",
                  "index " + std::to_string(i) + " out of range [0, " +
@@ -1470,7 +1606,7 @@ std::vector<FunctionValue::Entry> FunctionValue::entries() const
 }
 Term FunctionValue::else_value() const
 {
-  impl_->snap->mgr->check_alive("FunctionValue::else_value");
+  require_table(*impl_, "FunctionValue::else_value");
   return detail::make_term(impl_->snap->mgr, impl_->cases.else_value);
 }
 Term FunctionValue::apply(const std::vector<Term>& args) const
@@ -1481,25 +1617,17 @@ Term FunctionValue::apply(const std::vector<Term>& args) const
   // the function's own arity and domain: arguments that fit no case of it
   // used to answer the else value
   const detail::SortRec& r = m->rec(impl_->cases.sort);
-  if (args.size() != r.domain.size())
-    detail::fail(ErrorCode::ARITY, fn,
-                 "the function takes " + std::to_string(r.domain.size()) + " arguments");
+  check_function_args(m, r, args, fn);
   std::vector<ASTNode> nodes;
   for (std::size_t i = 0; i < args.size(); ++i)
   {
-    if (args[i].is_null())
-      detail::fail(ErrorCode::NULL_HANDLE, fn, "an argument is null", static_cast<int>(i));
-    if (args[i].impl_manager() != m)
-      detail::fail(ErrorCode::FOREIGN_MANAGER, fn, "the argument belongs to another term manager",
-                   static_cast<int>(i));
     nodes.push_back(detail::node_of(args[i]));
-    if (!nodes.back().isConstant())
+    if (!argument_value(m, nodes.back()))
       detail::fail(ErrorCode::NOT_A_VALUE, fn, "the arguments must be values",
                    static_cast<int>(i), {args[i]});
-    if (m->sort_of_node(nodes.back(), fn) != r.domain[i])
-      detail::fail(ErrorCode::SORT_MISMATCH, fn, "the argument is not of the function's domain sort",
-                   static_cast<int>(i), {args[i]}, {args[i].sort(), Sort(m, r.domain[i])});
   }
+  if (impl_->definition)
+    return Model(impl_->snap).value(detail::make_term(m, impl_->key)(args));
   for (const auto& c : impl_->cases.cases)
   {
     if (c.first.size() != nodes.size())
@@ -1517,9 +1645,9 @@ Term FunctionValue::as_ite_term(const std::vector<Term>& formals) const
   ManagerImpl* m = impl_->snap->mgr;
   m->check_alive("FunctionValue::as_ite_term");
   const detail::SortRec& r = m->rec(impl_->cases.sort);
-  if (formals.size() != r.domain.size())
-    detail::fail(ErrorCode::ARITY, "FunctionValue::as_ite_term",
-                 "the function takes " + std::to_string(r.domain.size()) + " formals");
+  check_function_args(m, r, formals, "FunctionValue::as_ite_term");
+  if (impl_->definition)
+    return defined_model_body(*impl_, formals);
   Term body = else_value();
   for (std::size_t c = impl_->cases.cases.size(); c-- > 0;)
   {

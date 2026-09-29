@@ -369,6 +369,15 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
       for (std::size_t i = 1; i < args.size(); ++i)
         if (c.sort(i) != fr.domain[i - 1])
           c.mismatch(i, m->sort_text(fr.domain[i - 1]));
+      if (const auto* definition = m->definition_of(args[0]))
+      {
+        std::vector<std::pair<Term, Term>> substitutions;
+        for (std::size_t i = 0; i < definition->params.size(); ++i)
+        {
+          substitutions.emplace_back(make_term(m, definition->params[i]), c.term(i + 1));
+        }
+        return node_of(make_term(m, definition->function).substitute(substitutions));
+      }
       const UFDecl* decl = m->decl_of(args[0]);
       if (decl == nullptr)
         c.mismatch(0, "a declared function symbol");

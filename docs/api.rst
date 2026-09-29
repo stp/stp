@@ -41,7 +41,7 @@ Objects
   Symbols the solver never assigned are completed with their sort's default;
   ``try_value`` refuses to complete instead. An array's value is a term, the
   constant array of its default under a store per cell; a function has no
-  value term, and ``function_value`` reads its table.
+  value term, and ``function_value`` reads its interpretation.
 
 ``Options``
   The whole option registry of the ``stp`` binary, settable by name with the
@@ -80,6 +80,37 @@ raises ``ArgumentError``, except for its existing NUL check, which raises
 checked in full. Theory-predefined names such as ``true`` and ``bvadd``
 cannot be declared or bound, and predefined sort names such as ``Bool``
 cannot be declared, because quoting does not distinguish them.
+
+SMT-LIB ``define-fun`` names surviving a successful parse belong to the
+manager too. Later scripts, ``parse_term`` and other solvers of that manager
+can use them. ``symbol(name)`` returns the body of a nullary definition,
+or a callable function term for a parameterized definition. Applying that
+term expands the body with the supplied arguments. ``symbols()`` includes
+parameterized definitions; nullary bodies are expressions, not additional
+declared symbols. ``bind_symbol`` can give a function another name.
+
+Definitions popped or reset within their original script are not retained;
+after adoption they survive API pops and resets, like declarations. A failed
+parse commits no new definitions. A retained definition cannot be redefined
+or replaced by a declaration; use a fresh manager for a new namespace.
+``Solver::to_smt2`` includes the definitions and their dependencies.
+
+``Model::function_value`` evaluates a defined function's body in the saved
+snapshot, including its free symbols and calls to uninterpreted functions.
+``FunctionValue::is_tabular()`` distinguishes an uninterpreted function's
+finite table from a definition's symbolic body. For the latter, ``apply``
+evaluates the body; ``size``, ``entry``, ``entries`` and ``else_value`` report
+``UNSUPPORTED``. ``as_ite_term`` substitutes the snapshot's values for free
+symbols and function interpretations, leaving the supplied arguments open;
+the result may be a general expression. It reports ``UNSUPPORTED`` for
+parameter-dependent partial FP operations (``fp.min``, ``fp.max``,
+``fp.to_ubv`` and ``fp.to_sbv``), which ``apply`` can still evaluate.
+
+Python exposes these as ``is_defined_function()``, ``is_tabular()``, callable
+``FuncInterp`` objects and ``as_ite``. Pickling or translating a defined
+function handle reports ``UNSUPPORTED`` rather than discarding its body;
+expanded applications support those operations, and a solver's SMT-LIB
+export preserves definitions across managers.
 
 C++
 ---
@@ -331,13 +362,6 @@ Limits of the alpha
    ``unsat_assumptions()`` do not see it. In either mode a script's
    ``(check-sat)`` leaves each assertion level as one conjunction in
    ``assertions()``.
--  A function a script declares belongs to the manager, as a declared
-   constant does: it survives an API ``pop()`` of the level it was declared
-   in, and a later script over the same manager uses the name rather than
-   declaring it again (a second declaration is a ``PARSE`` error, as SMT-LIB
-   has it; ``declare`` is the idempotent door). A ``define-fun`` name lasts
-   only for the script that defines it: ``symbol()``, a later script and
-   ``parse_term`` do not see it.
 -  A value of a declared sort prints as ``S!k``, which the parser does not
    read back.
 -  A constant array's default must be a value, a term with no symbol in it:

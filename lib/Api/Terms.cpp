@@ -394,7 +394,9 @@ namespace
 class Smt2Printer
 {
 public:
-  Smt2Printer(ManagerImpl* m, std::string& out) : m_(m), out_(out) {}
+  using Names = std::unordered_map<ASTNode, std::string, ASTNode::ASTNodeHasher>;
+  Smt2Printer(ManagerImpl* m, std::string& out, const Names* bound = nullptr)
+      : m_(m), out_(out), bound_(bound) {}
 
   // On an explicit stack: a deep term costs heap, not the C++ stack. Each
   // open application is a frame holding its children and the next to print.
@@ -409,6 +411,15 @@ public:
     std::vector<Frame> stack;
     // A leaf is printed whole; an application prints its head and opens.
     const auto open = [&](const ASTNode& n) {
+      if (bound_ != nullptr)
+      {
+        const auto it = bound_->find(n);
+        if (it != bound_->end())
+        {
+          out_ += quote_symbol(it->second);
+          return;
+        }
+      }
       if (n.isConstant())
       {
         value(n);
@@ -454,6 +465,12 @@ public:
 private:
   std::string symbol_name(const ASTNode& n) const
   {
+    if (bound_ != nullptr)
+    {
+      const auto it = bound_->find(n);
+      if (it != bound_->end())
+        return quote_symbol(it->second);
+    }
     auto it = m_->names_by_node.find(n);
     if (it != m_->names_by_node.end())
       return quote_symbol(it->second);
@@ -549,8 +566,62 @@ private:
 
   ManagerImpl* m_;
   std::string& out_;
+  const Names* bound_;
 };
 } // namespace
+
+std::string print_definition(ManagerImpl* m, const Cpp_interface::Function& f)
+{
+  Smt2Printer::Names names;
+  std::string out = "(define-fun " + quote_symbol(f.name) + " (";
+  for (std::size_t i = 0; i < f.params.size(); ++i)
+  {
+    std::string name = "arg!" + std::to_string(i);
+    // The binder must not capture a free symbol in the expanded body.
+    while (m->symbols.count(name) != 0 || m->definitions.count(name) != 0)
+      name += "!";
+    names.emplace(f.params[i], name);
+    out += (i ? " " : "") + std::string("(") + name + " " +
+           m->sort_text(m->sort_of_node(f.params[i], "Solver::to_smt2")) + ")";
+  }
+  out += ") " + m->sort_text(m->sort_of_node(f.function, "Solver::to_smt2")) + " ";
+  // Expanded macros can share a large DAG. Bind each repeated subterm once,
+  // after its dependencies, rather than expanding an exponential tree.
+  std::unordered_map<ASTNode, std::size_t, ASTNode::ASTNodeHasher> uses;
+  std::vector<std::pair<ASTNode, bool>> stack{{f.function, false}};
+  std::vector<ASTNode> order;
+  while (!stack.empty())
+  {
+    const auto item = stack.back();
+    stack.pop_back();
+    if (item.second)
+    {
+      order.push_back(item.first);
+      continue;
+    }
+    if (++uses[item.first] != 1)
+      continue;
+    stack.emplace_back(item.first, true);
+    const auto kids = view_of(m, item.first).children;
+    for (auto it = kids.rbegin(); it != kids.rend(); ++it)
+      stack.emplace_back(*it, false);
+  }
+  std::size_t lets = 0;
+  for (const ASTNode& n : order)
+  {
+    if (uses.at(n) < 2 || n.isConstant() || view_of(m, n).children.empty())
+      continue;
+    std::string name = "deflet!" + std::to_string(lets++);
+    while (m->symbols.count(name) != 0 || m->definitions.count(name) != 0)
+      name += "!";
+    out += "(let ((" + name + " ";
+    Smt2Printer(m, out, &names).print(n);
+    out += ")) ";
+    names.emplace(n, name);
+  }
+  Smt2Printer(m, out, &names).print(f.function);
+  return out + std::string(lets, ')') + ")\n";
+}
 
 std::string print_term(ManagerImpl* m, const ASTNode& n, Format f, bool share)
 {
@@ -575,8 +646,12 @@ std::string print_term(ManagerImpl* m, const ASTNode& n, Format f, bool share)
   // A function symbol's engine name is an internal identity; it prints as
   // the name it was declared under, as Term::symbol() reports it.
   if (n.GetKind() == SYMBOL && (f == Format::AUTO || f == Format::SMTLIB2))
+  {
+    if (const auto* d = m->definition_of(n))
+      return quote_symbol(d->name);
     if (const UFDecl* d = m->decl_of(n))
       return quote_symbol(d->name());
+  }
   // the engine's printers, inside an engine scope
   return engine_call(m, "Term::to_string", [&]() -> std::string {
     switch (f)
@@ -844,6 +919,11 @@ std::optional<std::string> Term::symbol() const
   if (m->is_const_array(n))
     return std::nullopt;
   return std::string(n.GetName());
+}
+
+bool Term::is_defined_function() const noexcept
+{
+  return !is_null() && mgr_->definition_of(detail::node_of(*this)) != nullptr;
 }
 
 // -- readers

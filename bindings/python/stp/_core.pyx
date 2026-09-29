@@ -1209,6 +1209,9 @@ cdef class Term:
     def is_const(self):
         return bool(stp_term_is_const(self._h))
 
+    def is_defined_function(self):
+        return bool(stp_term_is_defined_function(self._h))
+
     def symbol(self):
         cdef char* p = stp_term_symbol(self._h)
         if p == NULL:
@@ -2664,6 +2667,13 @@ cdef class FunValueHandle:
     def arity(self):
         return stp_fun_value_arity(self._h)
 
+    def is_tabular(self):
+        self._m._check()
+        cdef bint result = stp_fun_value_is_tabular(self._h)
+        if stp_tm_error(self._m._tm) != NULL:
+            self._m._fail("stp_fun_value_is_tabular")
+        return result
+
     def else_value(self):
         self._m._check()
         cdef stp_term h = stp_fun_value_else(self._h)
@@ -2672,12 +2682,16 @@ cdef class FunValueHandle:
         return self._m._wrap(h)
 
     def size(self):
-        return stp_fun_value_size(self._h)
+        self._m._check()
+        cdef size_t result = stp_fun_value_size(self._h)
+        if stp_tm_error(self._m._tm) != NULL:
+            self._m._fail("stp_fun_value_size")
+        return result
 
     def entry(self, i):
         """((arg values...), value)"""
         self._m._check()
-        cdef size_t n = stp_fun_value_size(self._h), k
+        cdef size_t n = self.size(), k
         cdef uint32_t arity = stp_fun_value_arity(self._h)
         cdef stp_term* args
         cdef stp_term val = NULL
