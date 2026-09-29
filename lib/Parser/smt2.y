@@ -4066,6 +4066,11 @@ TERMID_TOK
   // qualified identifier the frontend admits. The manager registers the
   // symbol with its default and interns by (sort, default), so the same
   // text names the same array wherever it occurs.
+  // Like select, store and the grammar's other operator productions, this
+  // one has no parentheses of its own: the generic ( an_term ) rule gives
+  // the standard form, and the bare (as const S) v inside another term is
+  // accepted as a bare select a i always has been. STP prints the standard
+  // form only.
   // Both refusals end the parse, not the process (fatal_yyerror): an API
   // parse reports them as a parse error, the command line exits with them.
   if (*$3 != "const")

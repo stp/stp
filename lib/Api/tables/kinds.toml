@@ -668,12 +668,12 @@ sig = "(Array[I,E], I, E) -> Array[I,E]"
 name = "CONST_ARRAY"
 id = 58
 smtlib = "((as const (Array I E)) v)"
-c = ""   # created by declare (named) or mk_fresh (anonymous)_array(sort, element)
+c = ""   # stp_mk_const_array(tm, array_sort, element), written by hand
 py = "K(ArraySort(I, E), v)"
 arity = "1"
 indices = 0
 sig = "(E) -> Array[I,E]   (the array sort is an argument of mk_const_array)"
-engine = "new in 3.0; any element term. STPMgr::CreateConstArray registers the symbol with its default (interned by sort and default, so a script's ((as const S) v) and mk_const_array give one term); the hashing factory folds every read of it to the default at construction in both modes; equality, distinct, ite and store chains over it are decided by the extensionality checker (rules K and K' in ExtChecker.cpp), which completes an array it equates with a constant array with that default"
+engine = "new in 3.0; the default is ground (a term with no symbol in it, UNSUPPORTED otherwise). STPMgr::CreateConstArray registers the symbol with its default (interned by sort and default, so a script's ((as const S) v) and mk_const_array give one term); the hashing factory folds every read of it to the default at construction in both modes; equality, distinct, ite and store chains over it are decided by the extensionality checker (rules K and K' in ExtChecker.cpp), which completes an array it equates with a constant array with that default"
 
 # ---------------------------------------------------------------- FP arithmetic
 [[kind]]
