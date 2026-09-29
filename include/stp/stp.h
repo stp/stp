@@ -421,7 +421,7 @@ STP_API stp_term stp_mk_false(stp_tm);
 STP_API stp_term stp_mk_bool(stp_tm, bool);
 STP_API stp_term stp_mk_bv_uint64(stp_tm, uint32_t width, uint64_t value); /* VALUE_OUT_OF_RANGE unless it fits */
 STP_API stp_term stp_mk_bv_int64(stp_tm, uint32_t width, int64_t value);   /* two's complement range of width */
-STP_API stp_term stp_mk_bv_str(stp_tm, uint32_t width, const char* digits, int base); /* base 2, 10, 16; #b/#x/0x; '-' in base 10 */
+STP_API stp_term stp_mk_bv_str(stp_tm, uint32_t width, const char* digits, int base); /* base 2, 10, 16; #b/#x/0x; '-' in base 10; '_' between two digits */
 STP_API stp_term stp_mk_bv_limbs(stp_tm, uint32_t width, size_t n, const uint64_t* lsb_first);
 STP_API stp_term stp_mk_bv_bytes(stp_tm, uint32_t width, size_t n, const uint8_t* bytes, bool little_endian);
 STP_API stp_term stp_mk_bv_wrapped(stp_tm, uint32_t width, uint64_t value); /* value mod 2^width, by name */

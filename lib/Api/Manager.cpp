@@ -39,6 +39,7 @@ THE SOFTWARE.
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <mutex>
@@ -1314,8 +1315,9 @@ bool digits_to_bits(std::string_view digits, int base, std::uint32_t width, std:
       carry >>= 1;
     }
   };
-  for (char c : digits)
+  for (std::size_t i = 0; i < digits.size(); ++i)
   {
+    const char c = digits[i];
     int d;
     if (c >= '0' && c <= '9')
       d = c - '0';
@@ -1323,8 +1325,10 @@ bool digits_to_bits(std::string_view digits, int base, std::uint32_t width, std:
       d = 10 + (c - 'a');
     else if (c >= 'A' && c <= 'F')
       d = 10 + (c - 'A');
-    else if (c == '_')
-      continue;
+    else if (c == '_' && i > 0 && i + 1 < digits.size() &&
+             std::isxdigit(static_cast<unsigned char>(digits[i - 1])) &&
+             std::isxdigit(static_cast<unsigned char>(digits[i + 1])))
+      continue; // a separator between two digits
     else
     {
       why = std::string("unexpected character '") + c + "'";

@@ -126,6 +126,13 @@ TEST_F(Values, mk_bv_from_digits)
   API_EXPECT_ERROR(ErrorCode::VALUE_OUT_OF_RANGE, tm.mk_bv(8, "1x", 10));
   API_EXPECT_ERROR(ErrorCode::VALUE_OUT_OF_RANGE, tm.mk_bv(8, "12", 2));
   API_EXPECT_ERROR(ErrorCode::VALUE_OUT_OF_RANGE, tm.mk_bv(8, "g", 16));
+  // an underscore separates two digits and nothing else: it was skipped
+  // anywhere, and "_" alone was 0
+  EXPECT_EQ(tm.mk_bv(16, "1_000", 10).to_uint64(), 1000u);
+  EXPECT_EQ(tm.mk_bv(16, "#xab_cd", 16).to_uint64(), 0xabcdu);
+  for (const char* bad : {"_", "_1", "1_", "1__0", "-_1"})
+    API_EXPECT_ERROR(ErrorCode::VALUE_OUT_OF_RANGE, tm.mk_bv(8, bad, 10));
+  API_EXPECT_ERROR(ErrorCode::VALUE_OUT_OF_RANGE, tm.mk_bv(8, "#b_10", 2));
   e = API_ERROR_OF(tm.mk_bv(8, "12", 3));
   ASSERT_TRUE(e.has_value());
   EXPECT_EQ(e->code(), ErrorCode::INVALID_ARGUMENT);

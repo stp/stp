@@ -551,7 +551,9 @@ public:
   Term mk_bool(bool);
   Term mk_bv(std::uint32_t width, std::uint64_t value); ///< VALUE_OUT_OF_RANGE unless value < 2^width
   Term mk_bv_signed(std::uint32_t width, std::int64_t value); ///< two's complement range
-  Term mk_bv(std::uint32_t width, std::string_view digits, int base); ///< base 2/10/16; optional #b/#x/0x; '-' in base 10
+  /// base 2/10/16; optional #b/#x/0x; '-' in base 10; '_' between two digits
+  /// separates them
+  Term mk_bv(std::uint32_t width, std::string_view digits, int base);
   Term mk_bv_limbs(std::uint32_t width, const std::vector<std::uint64_t>& lsb_first);
   Term mk_bv_bytes(std::uint32_t width, const std::vector<std::uint8_t>& bytes,
                    bool little_endian = true);
