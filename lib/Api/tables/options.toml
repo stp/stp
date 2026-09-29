@@ -78,6 +78,9 @@
 #               CLI11 refuses the repetition
 #   cli_empty   "unset": an empty value on the command line leaves the entry unset, as if it was not given
 #   help        shown by --help and info(); the CLI text, so it may run to several sentences
+#   cli_help    what --help shows instead, for an entry whose `help` speaks of the API
+#   cli_default the value tools/stp gives the entry when the command line does not, where the binary's
+#               default differs from `default` (shown by --help, and set before the input is read)
 #
 # [[cli_group]] and [[category]] give the --help groups of tools/stp; [[alias]] the bare flags that set another
 # entry to a value; [[frontend]] the CLI-only registrations (see each section).
@@ -93,6 +96,10 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "produce_models" }
 category = "model"
+cli_form = "flag"
+negation = "no-produce-models"
+cli_default = false
+cli_help = "build a model on sat, for (get-model), (get-value) and the counterexample printers; off unless given, on the command line"
 help = "build a model on sat so that Solver::model() is available; off saves the model construction for truth-only clients"
 
 [[option]]
@@ -106,6 +113,7 @@ scope = "solver"
 engine = { custom = "sat_backend" }
 category = "sat"
 requires = { build = "the named backend; auto picks the first available of cryptominisat, cadical, minisat" }
+cli_help = "the SAT backend: auto picks the first this build has of CryptoMiniSat, CaDiCaL and MiniSat; a backend it lacks is refused"
 help = "the SAT backend; one this build lacks is a recoverable OPTION_UNAVAILABLE when a solver is made with it, never exit(-1) at solve time"
 
 [[option]]
@@ -143,6 +151,7 @@ scope = "solver"
 engine = { field = "stop_after_cnf" }
 category = "cnf"
 # not tools/stp's --exit-after-CNF: that spelling is a frontend row, and it sets end-after-cnf
+cli_help = "stop each check once its CNF is generated and answer unknown; the run goes on, where --exit-after-CNF ends it"
 help = "stop the check after CNF generation and answer unknown (STOPPED_AFTER_CNF)"
 
 [[option]]
@@ -162,14 +171,17 @@ help = "end the run at the first CNF a check generates: the check stops there an
 
 [[option]]
 name = "logic"
-type = "string"
+type = "enum"
 default = ""
+# the logics a script's set-logic accepts (lib/Parser/smt2.y), QF_UFABVFP and its LRA form included
+values = ["QF_BV", "QF_ABV", "QF_AX", "QF_UF", "QF_UFBV", "QF_AUFBV", "QF_LRA", "QF_UFLRA", "QF_AUFLRA", "QF_FP", "QF_BVFP", "QF_ABVFP", "QF_UFFP", "QF_UFBVFP", "QF_AUFBVFP", "QF_UFABVFP", "QF_FPLRA", "QF_BVFPLRA", "QF_ABVFPLRA", "QF_UFFPLRA", "QF_UFBVFPLRA", "QF_AUFBVFPLRA", "QF_UFABVFPLRA"]
 tier = "stable"
 settable = "before-first-check"
 scope = "solver"
 engine = { custom = "logic" }
 category = "frontend"
 implies = "QF_UF*/QF_AUF* -> the UF machinery on; QF_AX and QF_AUF* -> extensional arrays on; each as the content engages them under the uninterpreted-functions and array-equality entries' auto (their on and off win), and another logic, or none, takes it back. A script's own set-logic acts in the frontend (the QF_BV/QF_ABV engagement policy, QF_LRA's Real checks), not through this entry"
+cli_help = "the logic whose switches the run takes: the UF machinery for QF_UF*/QF_AUF*, extensional arrays for QF_AX/QF_AUF*; a script's own set-logic decides for the script"
 help = "the SMT-LIB logic; the same entry (set-logic) writes when a script is parsed"
 
 [[option]]
@@ -181,6 +193,9 @@ settable = "construction"
 scope = "manager"
 engine = { custom = "manager_simplify" }
 category = "manager"
+cli_form = "flag"
+negation = "no-simplify"
+cli_help = "fold terms as they are read (constants, identities); --no-simplify builds them as written"
 help = "construction-time folding by the term manager (the normal form in kinds.toml); false builds terms faithfully"
 
 [[option]]
@@ -1603,6 +1618,7 @@ engine = { custom = "lra_verify_canonical" }
 category = "lra"
 # a process-wide switch of the number layer, set only when the entry is set
 # explicitly (the library's own default keeps the check)
+cli_default = false
 help = "re-derive the canonical form of exact rationals whose construction already proves it"
 
 [[option]]

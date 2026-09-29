@@ -336,8 +336,9 @@ void CommandLine::register_entry(std::size_t index, const std::string& group)
   if (flag && spec.negation != nullptr && spec.type == reg::OptType::BOOL)
     names += std::string(",!--") + spec.negation;
 
-  const std::string help = spec.help;
-  const std::string dflt = spec.default_text;
+  // the command line's own words and default, where the row has them
+  const std::string help = spec.cli_help != nullptr ? spec.cli_help : spec.help;
+  const std::string dflt = spec.cli_default != nullptr ? spec.cli_default : spec.default_text;
   CLI::Option* opt = nullptr;
   switch (spec.type)
   {
@@ -838,13 +839,13 @@ int CommandLine::parse_options(int argc, char** argv)
     options.reset(spec.name);
   }
 
-  // The binary's own defaults where the library's differ, unless given: no
-  // model is built unless asked for, and exact rationals are not re-derived.
-  // --exit-after-CNF is the solver's end-after-cnf.
-  if (!given("produce-models"))
-    options.set_bool("produce-models", false);
-  if (!given("lra-verify-canonical"))
-    options.set_bool("lra-verify-canonical", false);
+  // The binary's own defaults where the library's differ, unless given (the
+  // rows' cli_default): no model is built unless asked for, and exact
+  // rationals are not re-derived. --exit-after-CNF is the solver's
+  // end-after-cnf.
+  for (const Entry& e : entries)
+    if (e.option != nullptr && e.spec->cli_default != nullptr && !given(e.spec->name))
+      options.set(e.spec->name, e.spec->cli_default);
   if (invocation.exit_after_cnf)
     options.set_bool("end-after-cnf", true);
 

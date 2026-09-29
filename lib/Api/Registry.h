@@ -104,6 +104,8 @@ struct OptionSpec
   const char* cli_above_max; // ... above `max`
   bool cli_take_last;        // a repeated spelling takes its last value (bool and lenient mode entries always do)
   bool cli_empty_unset;      // an empty value on the command line leaves the entry unset
+  const char* cli_help;      // what --help says, where `help` speaks of the API; nullptr: `help`
+  const char* cli_default;   // the value tools/stp gives an entry it is not given, where not `default`
 };
 
 STP_API_EXPORT const OptionSpec* option_specs(std::size_t& count);

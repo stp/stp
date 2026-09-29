@@ -101,8 +101,9 @@ def main():
             expect('-' + o['short'] + ',', 'short flag of ' + o['name'])
         if o.get('negation') and o.get('cli_form') == 'flag':
             expect('--' + o['negation'], 'negation of ' + o['name'])
-        # the first sentence of the help text (CLI11 wraps long texts)
-        first = re.split(r'[.;:]', o['help'])[0][:40].strip()
+        # the first sentence of the help text the command line shows (CLI11
+        # wraps long texts)
+        first = re.split(r'[.;:]', o.get('cli_help', o['help']))[0][:40].strip()
         if first:
             expect(first, 'help of ' + o['name'])
 

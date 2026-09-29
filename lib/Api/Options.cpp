@@ -41,6 +41,7 @@ THE SOFTWARE.
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 
 namespace stp
 {
@@ -1000,12 +1001,13 @@ bool custom_sat_backend(EngineTarget& t, const OptionSpec& spec, const OptionVal
                 "the '" + s + "' backend is not part of this build (available: " +
                     [&] {
                       std::string out;
-                      if (have_cms)
-                        out += "cryptominisat ";
-                      if (have_cadical)
-                        out += "cadical ";
-                      if (have_minisat)
-                        out += "minisat simplifying-minisat";
+                      for (const auto& [have, name] :
+                           {std::pair<bool, const char*>{have_cms, "cryptominisat"},
+                            {have_cadical, "cadical"},
+                            {have_minisat, "minisat"},
+                            {have_minisat, "simplifying-minisat"}})
+                        if (have)
+                          out += (out.empty() ? "" : " ") + std::string(name);
                       return out;
                     }() +
                     ")");

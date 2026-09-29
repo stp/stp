@@ -49,10 +49,14 @@ Objects
   tier (stable, expert, experimental, diagnostic) and a settable window
   (anytime, before the first check, at construction); a write outside the
   window is a recoverable error, never silent. The binary registers its own
-  command line from the same registry, so an option has one spelling, one
-  default and one meaning whether it arrives as ``--name`` or through
-  ``Options::set``; the binary's only additions are its frontend switches
-  (input format, printing, ``--parse-only``, ``--interactive``).
+  command line from the same registry, so an option has one spelling and one
+  meaning whether it arrives as ``--name`` or through ``Options::set``, and
+  the binary's only additions are its frontend switches (input format,
+  printing, ``--parse-only``, ``--interactive``). Three things differ on the
+  command line, as ``stp --help`` shows: ``produce-models`` and
+  ``lra-verify-canonical`` default to off there, a duration such as
+  ``--max-time`` is a bare number of seconds, and ``--logic`` sets only the
+  logic's switches for the uninterpreted functions and extensional arrays.
 
 Errors are exceptions in C++ and Python and a per-manager error record in C.
 Every precondition is checked in every build type; a recoverable error leaves

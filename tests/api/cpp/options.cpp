@@ -900,7 +900,11 @@ TEST(Options, info_names_help_and_the_stable_tier)
   EXPECT_EQ(o.info("merge-same").tier, Tier::EXPERIMENTAL);
   EXPECT_EQ(o.info("incremental").type, "mode");
   EXPECT_EQ(o.info("fp-abstraction-ops").type, "set");
-  EXPECT_EQ(o.info("logic").type, "string");
+  EXPECT_EQ(o.info("logic").type, "enum"); // the logics set-logic accepts
+  API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_str("logic", "QF_LIA"));
+  API_EXPECT_ERROR(ErrorCode::OPTION_VALUE, o.set_str("logic", "NONSENSE"));
+  o.set_str("logic", "QF_ABVFPLRA");
+  o.reset("logic");
   EXPECT_EQ(o.info("uf-sort-width").scope, OptionScope::MANAGER);
   o.set_duration("max-time", std::chrono::seconds(1));
   EXPECT_TRUE(o.info("max-time").is_set);

@@ -299,6 +299,8 @@ class Emitter:
             required = o.get('requires', {}).get('option')
             if required is not None and required not in onames:
                 raise SystemExit('options.toml: %s requires unknown %s' % (o['name'], required))
+            if ('cli_help' in o or 'cli_default' in o) and o.get('cli_form', 'value') == 'none':
+                raise SystemExit('options.toml: %s: cli_help and cli_default are for an entry the command line has' % o['name'])
             latch = o.get('latched_by')
             if latch is not None:
                 other = next((p for p in self.options if p['name'] == latch), None)
@@ -661,6 +663,15 @@ class Emitter:
         lines += ['', '#endif', '']
         self.write('include/stp/api/gen/options.h', '\n'.join(lines))
 
+    def cli_default_text(self, o):
+        """The row's cli_default as its default is spelt (a Boolean true/false), or None."""
+        if 'cli_default' not in o:
+            return None
+        v = o['cli_default']
+        if isinstance(v, bool):
+            return 'true' if v else 'false'
+        return str(v)
+
     def emit_option_table(self):
         lines = [HEADER, '// OptionSpec rows, in registry order. String arrays first, then the rows.', '']
         rows = []
@@ -687,7 +698,7 @@ class Emitter:
                 ib_opt, ib_val = key, ('true' if val is True else 'false' if val is False else str(val))
             req = o.get('requires', {})
             engine = o.get('engine', {})
-            rows.append('  { %s, %s, OptType::%s, %s, %s, %s, %s, %s, kOptValues%d, %d, Tier::%s, Settable::%s, OptionScope::%s, %s, %s, kOptAliases%d, %d, %s, %s, %s, %s, %s, kOptExcludes%d, %d, kOptImplies%d, %d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s },' % (
+            rows.append('  { %s, %s, OptType::%s, %s, %s, %s, %s, %s, kOptValues%d, %d, Tier::%s, Settable::%s, OptionScope::%s, %s, %s, kOptAliases%d, %d, %s, %s, %s, %s, %s, kOptExcludes%d, %d, kOptImplies%d, %d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s },' % (
                 cstr(o['name']), cstr(self.python_key(o['name'])), o['type'].upper(), cstr(self.default_text(o)),
                 'true' if 'min' in rng else 'false', c_i64(rng.get('min', 0)),
                 'true' if 'max' in rng else 'false', c_i64(rng.get('max', 0)),
@@ -708,7 +719,8 @@ class Emitter:
                 c_i64(o.get('cli_range', {}).get('min', 0)), c_i64(o.get('cli_range', {}).get('max', 0)),
                 cstr(o.get('cli_below_min')), cstr(o.get('cli_above_max')),
                 'true' if o.get('cli_take_last', False) else 'false',
-                'true' if o.get('cli_empty') == 'unset' else 'false'))
+                'true' if o.get('cli_empty') == 'unset' else 'false',
+                cstr(o.get('cli_help')), cstr(self.cli_default_text(o))))
         lines.append('')
         lines.append('static const OptionSpec kOptionSpecs[] = {')
         lines += rows
