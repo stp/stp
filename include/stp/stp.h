@@ -406,6 +406,15 @@ typedef void (*stp_error_callback)(const stp_error*, void* user); /* sees every 
 STP_API void stp_tm_set_error_callback(stp_tm, stp_error_callback, void* user);
 
 /* ------------------------------------------------------------------ sorts */
+/* Names supplied to stp_tm_declare_sort, stp_declare and stp_tm_bind_symbol,
+ * and prefixes supplied to stp_mk_fresh_sort and stp_mk_fresh, must be
+ * representable as SMT-LIB quoted symbols: no '|', backslash, DEL, or ASCII
+ * control characters other than tab, newline and carriage return. Spaces
+ * and non-ASCII bytes (including UTF-8) are allowed; printing quotes where
+ * needed. Leading '@' and '.' are reserved for solver use. Violations are
+ * INVALID_ARGUMENT before any name is recorded. Names must be nonempty;
+ * fresh-name prefixes may be empty. As with all C strings, the first NUL
+ * terminates the name or prefix. */
 STP_API stp_sort stp_mk_bool_sort(stp_tm);
 STP_API stp_sort stp_mk_bv_sort(stp_tm, uint32_t width); /* INVALID_ARGUMENT if width == 0 */
 STP_API stp_sort stp_mk_fp_sort(stp_tm, uint32_t exp_size, uint32_t sig_size); /* each >= 2 */

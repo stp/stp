@@ -101,6 +101,48 @@ def test_name_table_and_symbols(fresh_manager):
     assert tm.simplify_term(x + 0) is x
 
 
+@pytest.mark.parametrize("name", ["a|b", "a\\b", "a\x01b", "a\x7fb", "@x", ".x", "x\x00a"])
+def test_invalid_names_are_recoverable(name):
+    tm = TermManager()
+    bv = tm.bv_sort(8)
+    fun = tm.fun_sort([bv], bv)
+    x = tm.declare("x", bv)
+    # Python's existing NUL check raises ValueError before entering the C API.
+    error = ValueError if "\x00" in name else ArgumentError
+    for operation in (
+        lambda: tm.declare(name, bv),
+        lambda: tm.declare(name, fun),
+        lambda: tm.bind_symbol(name, x),
+        lambda: tm.declare_sort(name),
+        lambda: tm.mk_fresh(bv, name),
+        lambda: tm.mk_fresh(fun, name),
+        lambda: tm.mk_fresh_sort(name),
+    ):
+        with pytest.raises(error):
+            operation()
+    assert len(tm.symbols()) == 1 and tm.symbols()[0] is x
+    assert not tm.declared_sorts()
+    assert tm.declare("x", bv) is x
+    s = Solver(tm)
+    s.add(x == 5)
+    assert s.check() == sat and s.model()[x].as_long() == 5
+
+
+@pytest.mark.parametrize("name", ["has space", "\u03c0", "a\tb", "a\nb", "a\rb", "let"])
+def test_quoted_names_round_trip(name):
+    tm = TermManager()
+    x = tm.declare(name, tm.bv_sort(8))
+    s = Solver(tm)
+    s.add(x == 1)
+    copy = TermManager()
+    parsed = Solver(copy)
+    parsed.from_string(s.to_smt2(True))
+    assert parsed.check() == sat
+    px = copy.symbol(name)
+    assert px.decl_name() == name
+    assert parsed.model()[px].as_long() == 1
+
+
 # ---------------------------------------------------------------- sorts
 
 

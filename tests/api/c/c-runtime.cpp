@@ -114,6 +114,42 @@ TEST(c_runtime, scope_rules)
   stp_tm_release(tm);
 }
 
+TEST(c_runtime, invalid_names_are_recoverable)
+{
+  stp_tm tm = stp_tm_new(nullptr);
+  stp_tm_scope_push(tm);
+  stp_sort bv8 = stp_mk_bv_sort(tm, 8);
+  stp_sort fun = stp_mk_fun_sort(tm, 1, &bv8, bv8);
+  stp_term x = stp_declare(tm, "x", bv8);
+  for (const char* name : {"a|b", "a\\b", "a\1b", "a\x7f", "@x", ".x"})
+  {
+    SCOPED_TRACE(testing::PrintToString(name));
+    EXPECT_EQ(nullptr, stp_declare(tm, name, bv8));
+    EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, code_of(tm));
+    EXPECT_EQ(nullptr, stp_declare(tm, name, fun));
+    EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, code_of(tm));
+    EXPECT_EQ(STP_ERROR, stp_tm_bind_symbol(tm, name, x));
+    EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, code_of(tm));
+    EXPECT_EQ(nullptr, stp_tm_declare_sort(tm, name));
+    EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, code_of(tm));
+    EXPECT_EQ(nullptr, stp_mk_fresh(tm, bv8, name));
+    EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, code_of(tm));
+    EXPECT_EQ(nullptr, stp_mk_fresh_sort(tm, name));
+    EXPECT_EQ(STP_ERR_INVALID_ARGUMENT, code_of(tm));
+    EXPECT_EQ(nullptr, stp_tm_symbol(tm, name));
+  }
+  EXPECT_EQ(1u, stp_tm_num_symbols(tm));
+  EXPECT_EQ(0u, stp_tm_num_declared_sorts(tm));
+  EXPECT_EQ(x, stp_declare(tm, "x", bv8));
+  stp_term spaced = stp_declare(tm, "has space", bv8);
+  EXPECT_EQ("|has space|", take(stp_term_str(spaced)));
+  EXPECT_NE(nullptr, stp_mk_fresh(tm, bv8, nullptr));
+  EXPECT_NE(nullptr, stp_mk_fresh_sort(tm, nullptr));
+  EXPECT_EQ(nullptr, stp_tm_error(tm));
+  stp_tm_scope_pop(tm);
+  stp_tm_release(tm);
+}
+
 TEST(c_runtime, the_manager_outlives_every_release_order)
 {
   // (a) the manager handle goes first; terms, solver and model keep working
