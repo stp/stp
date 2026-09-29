@@ -194,6 +194,44 @@ R stats_call(stp_statistics s, const char* fn, R fail_value, F&& f) noexcept
     return fail_value;
   return guarded<R>(nullptr, nullptr, fn, fail_value, [&] { return f(cstats(s)); });
 }
+
+// The collections the indexed readers read (see CSolver and CModel), built at
+// the first read. These helpers and assumption_args return C++ types, so they
+// are defined here rather than in the extern "C" block below, where they would
+// have C language linkage.
+const std::vector<Term>& assertions_view(CSolver* cs)
+{
+  if (!cs->assertions)
+    cs->assertions = cs->solver.assertions();
+  return *cs->assertions;
+}
+
+const std::vector<Term>& unsat_assumptions_view(CSolver* cs)
+{
+  if (!cs->unsat_assumptions)
+    cs->unsat_assumptions = cs->solver.unsat_assumptions();
+  return *cs->unsat_assumptions;
+}
+
+const std::vector<Term>& model_symbols_view(CModel* cmo)
+{
+  if (!cmo->symbols)
+    cmo->symbols = cmo->model.symbols();
+  return *cmo->symbols;
+}
+
+// A check's assumptions. A NULL among them is an error of the check, as the
+// formula of stp_solver_assert and stp_solver_entails is, not the unrecorded
+// failure a NULL argument of a constructor propagates: a NULL here is most
+// often a failed lookup (stp_tm_symbol answers NULL for an unknown name).
+std::vector<Term> assumption_args(CSolver* cs, size_t n, const stp_term* assumptions,
+                                  const char* fn)
+{
+  for (size_t i = 0; assumptions != nullptr && i < n; ++i)
+    if (assumptions[i] == nullptr)
+      fail(ErrorCode::NULL_HANDLE, fn, "assumption " + std::to_string(i) + " is null", 2);
+  return term_args(cs->cm, n, assumptions, fn, 2);
+}
 } // namespace
 
 extern "C" {
@@ -310,23 +348,6 @@ uint32_t stp_solver_level(stp_solver s)
   return s == nullptr ? 0 : csolver(s)->solver.level();
 }
 
-namespace
-{
-const std::vector<Term>& assertions_view(CSolver* cs)
-{
-  if (!cs->assertions)
-    cs->assertions = cs->solver.assertions();
-  return *cs->assertions;
-}
-
-const std::vector<Term>& unsat_assumptions_view(CSolver* cs)
-{
-  if (!cs->unsat_assumptions)
-    cs->unsat_assumptions = cs->solver.unsat_assumptions();
-  return *cs->unsat_assumptions;
-}
-} // namespace
-
 size_t stp_solver_num_assertions(stp_solver s)
 {
   return solver_read<size_t>(s, "stp_solver_num_assertions", 0,
@@ -366,22 +387,6 @@ stp_status stp_solver_check_sat(stp_solver s, stp_result* out)
     return STP_OK;
   });
 }
-
-// A check's assumptions. A NULL among them is an error of the check, as the
-// formula of stp_solver_assert and stp_solver_entails is, not the unrecorded
-// failure a NULL argument of a constructor propagates: a NULL here is most
-// often a failed lookup (stp_tm_symbol answers NULL for an unknown name).
-namespace
-{
-std::vector<Term> assumption_args(CSolver* cs, size_t n, const stp_term* assumptions,
-                                  const char* fn)
-{
-  for (size_t i = 0; assumptions != nullptr && i < n; ++i)
-    if (assumptions[i] == nullptr)
-      fail(ErrorCode::NULL_HANDLE, fn, "assumption " + std::to_string(i) + " is null", 2);
-  return term_args(cs->cm, n, assumptions, fn, 2);
-}
-} // namespace
 
 stp_status stp_solver_check_sat_assuming(stp_solver s, size_t n, const stp_term* assumptions,
                                          stp_result* out)
@@ -906,16 +911,6 @@ stp_status stp_model_array_bytes(stp_model m, stp_term array, uint64_t first_ind
                            out);
   });
 }
-
-namespace
-{
-const std::vector<Term>& model_symbols_view(CModel* cmo)
-{
-  if (!cmo->symbols)
-    cmo->symbols = cmo->model.symbols();
-  return *cmo->symbols;
-}
-} // namespace
 
 size_t stp_model_num_symbols(stp_model m)
 {
