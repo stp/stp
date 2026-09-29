@@ -269,6 +269,8 @@ private:
    * all. */
   AdapterResult refusal(const std::exception& failure,
                         std::uint64_t candidate) noexcept;
+  // What a candidate check that has just invalidated the context reports.
+  AdapterResult invalidated(std::uint64_t candidate) const;
   // The one reader of the SAT assignment into the context's selection, for
   // both candidate paths. See the definition for `verify_stable`.
   void readSelectionFromSolver(bool verify_stable);

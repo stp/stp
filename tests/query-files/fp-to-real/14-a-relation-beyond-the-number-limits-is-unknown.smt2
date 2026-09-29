@@ -2,9 +2,11 @@
 ; At exponent width 16 the constants of fp.to_real fit the exact arithmetic's
 ; number limits, but relating two conversions needs more than they allow. The
 ; solve stops at the limit, which is an unknown answer with its reason rather
-; than an error (it was SOLVER_ERROR, "Fatal Error" and exit 255).
+; than an error (it was SOLVER_ERROR, "Fatal Error" and exit 255), whether the
+; SAT backend hands the arithmetic each assignment during its search or, as
+; MiniSat does, a whole candidate at a time.
 ; CHECK-NEXT: ^unknown$
-; CHECK-NEXT-L: (:reason-unknown (incomplete "the exact linear arithmetic solver could not decide this query within its number limits"))
+; CHECK-NEXT: ^\(:reason-unknown \(incomplete "the exact linear arithmetic solver could not decide this query within its .*number limits.*"\)\)$
 ; The solver goes on. (Whether a check over a single conversion stays within
 ; the limits at this width depends on the backend, so none is made here.)
 ; CHECK-NEXT: ^sat$
