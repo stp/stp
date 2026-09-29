@@ -182,11 +182,18 @@ The Python package is the z3py idiom over the same objects:
    f = FP('f', Float32())
    s.add(fpAdd(RNE(), f, 1.0) == 3.0)
 
-Differences from z3py are deliberate and documented in the package: ``==``
-builds a term on every sort (``fpEQ`` is IEEE equality), ``bool(term)``
-raises unless the term is a ground Boolean value, bit-vector ``<`` and ``>>``
-are signed and arithmetic, ``/`` on bit-vectors raises (use ``UDiv``/``SDiv``),
-and literals are strict (``BitVecVal(256, 8)`` raises; ``wrap=True`` wraps).
+The package's own rules, documented in it: ``==`` builds a term on every
+sort (``fpEQ`` is IEEE equality); ``bool(term)`` raises unless the term is a
+ground Boolean value, so ``x in [y, x]``, ``list.index`` and ``list.remove``
+over terms raise too; bit-vector ``<`` and ``>>`` are signed and arithmetic
+(``ULT``, ``LShR`` and the rest are the unsigned and logical forms), and ``/``
+on bit-vectors raises (use ``UDiv``/``SDiv``), except inside the ``@stp``
+decorator, which keeps STP 2.x's unsigned meanings; literals are strict
+(``BitVecVal(256, 8)`` raises; ``wrap=True`` wraps); ``Model.eval`` completes
+by default (``model_completion=False`` leaves a symbol the model does not fix
+in place); ``as_decimal(k)`` always gives ``k`` digits
+(``Q(1, 2).as_decimal(3)`` is ``"0.500"``); and ``fpToFP`` takes a rounding
+mode first, the bits of a bit-vector read as a float being ``fpBVToFP``.
 Options are keyword arguments with ``-`` and ``.`` spelled ``_``:
 ``Solver(max_time='2s', bb_div_v3=False)``.
 

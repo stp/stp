@@ -34,7 +34,14 @@ The classes live in the Cython extension stp._core (handles, error translation, 
 GIL-free checks); this package is the pure-Python shell over it.
 """
 
-from . import _core
+try:
+    from . import _core
+except ImportError as e:  # the circular-import wording Python gives this case misleads
+    import sys as _sys
+    raise ImportError("stp._core could not be loaded into Python %d.%d: an extension built for another "
+                      "interpreter, or one whose libstp is missing, fails this way. Build STP with "
+                      "-DPYTHON_EXECUTABLE naming this interpreter, or pip install ./bindings/python "
+                      "with it. (%s)" % (_sys.version_info[0], _sys.version_info[1], e)) from e
 from ._core import (Error, ArgumentError, SortMismatch, DoesNotFit, NotAValue, NoModel, Unsupported,
                     OptionError, UnknownOption, ParseError, IOError, StateError, ResourceError, InternalError)
 from ._gen_kinds import Kind, ErrorCode, Option

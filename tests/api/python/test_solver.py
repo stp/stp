@@ -476,7 +476,7 @@ def test_solve_and_prove(capsys):
     r = prove(ULT(x, 200))
     out = capsys.readouterr().out
     assert r == invalid and "counterexample" in out and "x = " in out
-    # with a live solver on the manager the formulas are solved in a scratch manager
+    # a solver already live on the manager is left as it was: solve() runs its own
     s = Solver()
     s.add(x == 1)
     assert solve(x == 2, show=False) == sat and s.check() == sat and s.model()[x].as_long() == 1
@@ -605,7 +605,7 @@ def test_close_and_lifetime():
             op()
     s.close()  # idempotent
     s.interrupt()  # harmless on a closed solver
-    s2 = Solver()  # the manager is free again
+    s2 = Solver()  # the manager serves new solvers as before
     assert s2.check() == sat
     del s2
     import gc
