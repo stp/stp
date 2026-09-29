@@ -27,9 +27,12 @@ THE SOFTWARE.
 
 #include "SATSolver.h"
 
+#include <memory>
+
 namespace Minisat
 {
 class SimpSolver;
+class Terminator;
 }
 
 namespace stp
@@ -37,6 +40,13 @@ namespace stp
 class SimplifyingMinisat : public SATSolver
 {
   Minisat::SimpSolver* s;
+
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  // As in MinisatCore: polled by MiniSat wherever its own budgets are, so
+  // that the deadline and the stop requests SATSolver keeps stop a search in
+  // progress rather than only between calls.
+  std::unique_ptr<Minisat::Terminator> deadline_terminator;
+#endif
 
 public:
   SimplifyingMinisat();
@@ -70,6 +80,10 @@ public:
   bool supportsAssumptions() const override { return true; }
   void unsatAssumptions(const vec_literals& assumps,
                         std::vector<int>& out) override;
+
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  bool canInterruptSearch() const override { return true; }
+#endif
 
 protected:
   bool addClauseInternal(const vec_literals& ps) override;

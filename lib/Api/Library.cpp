@@ -113,6 +113,13 @@ std::map<std::string, std::string> capabilities()
   c["cores.assumptions"] = "true";
   c["solvers-per-manager"] = "unbounded";
   c["interrupt.cryptominisat"] = "between-solver-calls";
+#ifdef USE_MINISAT
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  c["interrupt.minisat"] = "during-search";
+#else
+  c["interrupt.minisat"] = "between-solver-calls";
+#endif
+#endif
   c["threads"] = "any-thread-one-call-at-a-time";
   c["api.version"] = "3.0.0-alpha";
   return c;

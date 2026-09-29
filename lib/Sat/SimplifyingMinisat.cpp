@@ -31,13 +31,38 @@ THE SOFTWARE.
 namespace stp
 {
 
+#ifdef STP_MINISAT_HAS_TERMINATOR
+namespace
+{
+// MinisatCore's: the deadline and stop requests the SATSolver base class
+// keeps, read on every conflict and restart.
+class DeadlineTerminator : public Minisat::Terminator
+{
+  const SATSolver& owner;
+
+public:
+  explicit DeadlineTerminator(const SATSolver& o) : owner(o) {}
+
+  bool terminate() override { return owner.timeLimitExpired(); }
+};
+} // namespace
+#endif
+
 SimplifyingMinisat::SimplifyingMinisat()
 {
   s = new Minisat::SimpSolver();
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  deadline_terminator.reset(new DeadlineTerminator(*this));
+  s->connectTerminator(deadline_terminator.get());
+#endif
 }
 
 SimplifyingMinisat::~SimplifyingMinisat()
 {
+#ifdef STP_MINISAT_HAS_TERMINATOR
+  // Before the terminator it points at.
+  s->connectTerminator(nullptr);
+#endif
   delete s;
 }
 

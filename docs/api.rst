@@ -273,7 +273,9 @@ second symbol of that name.
 Limits of the alpha
 -------------------
 
--  CryptoMiniSat is interrupted between its solver calls only.
+-  CryptoMiniSat is interrupted between its solver calls only, and so is
+   MiniSat when the MiniSat it was built with lacks the terminator hook of
+   stp/minisat (``capabilities()`` says which, under ``interrupt.minisat``).
 -  The model's evaluator, ``simplify``, ``substitute`` and ``str()`` take a
    term of any depth. The engine's printers -- ``to_string`` with let-sharing,
    the CVC, DOT and GDL forms, and ``Solver::to_smt2`` and ``to_string`` --
@@ -337,8 +339,8 @@ Limits of the alpha
    for every Boolean option.
 
 ``capabilities()`` reports the ones that depend on the build or the sort:
-``interrupt.cryptominisat``, ``array.element-sorts`` and
-``kind.FP_TO_FP_FROM_REAL``.
+``interrupt.cryptominisat``, ``interrupt.minisat`` (in a build with MiniSat),
+``array.element-sorts`` and ``kind.FP_TO_FP_FROM_REAL``.
 
 Several solvers, several threads
 --------------------------------
