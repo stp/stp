@@ -389,8 +389,14 @@ void validate_option_value(const OptionSpec& spec, const OptionValue& v);
 // bare UserDefinedFlags.
 struct DLL_PUBLIC OptionsImpl
 {
-  std::vector<OptionValue> values;    // by registry index
+  // By registry index. Written only by set, reset and reset_all, which give
+  // the options a new generation: what is derived from the values can be
+  // kept for as long as the generation stands (SolverImpl::derived_options).
+  std::vector<OptionValue> values;
   std::vector<bool> is_set;
+  // Unique to one content of the options across the process; a copy carries
+  // its source's, which describes it as well.
+  std::uint64_t generation;
   OptionsImpl();
   void set(const char* fn, std::string_view name, const OptionValue& v, OptType via);
   void set_text(const char* fn, std::string_view name, std::string_view text);
@@ -403,6 +409,15 @@ struct DLL_PUBLIC OptionsImpl
   std::string help(std::optional<Tier>) const;
   void reset(std::string_view name);
   void reset_all();
+};
+
+// Each entry's resolved value (OptionsImpl::resolved) and whether it is the
+// entry's default, for the options of one generation (0: none yet).
+struct DerivedOptions
+{
+  std::uint64_t generation = 0;
+  std::vector<OptionValue> resolved;
+  std::vector<bool> at_default;
 };
 
 // Where a validated value goes: the engine. `flags` is the manager's
@@ -607,6 +622,13 @@ struct SolverImpl
   // its default through another), as last applied. An entry that goes back
   // to its default is applied again only then (apply_all_options).
   std::vector<bool> engine_off_default;
+  // What apply_all_options derives from the options at every application --
+  // each entry's resolved value, and whether that is its default -- kept for
+  // the options' generation, so that a check after no write derives nothing;
+  // and the generation whose consistency (OptionsImpl::resolve) a check last
+  // established.
+  DerivedOptions derived_options;
+  std::uint64_t consistent_generation = 0;
 
   SolverImpl(ManagerImpl* m, const Options& o);
   ~SolverImpl();

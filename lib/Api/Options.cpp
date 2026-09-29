@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/config.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
@@ -507,7 +508,18 @@ bool option_build_supported(const OptionSpec& spec)
 
 // ------------------------------------------------------------ OptionsImpl
 
-OptionsImpl::OptionsImpl()
+namespace
+{
+// 0 is never a generation: it is what a DerivedOptions that holds nothing
+// records.
+std::uint64_t next_generation() noexcept
+{
+  static std::atomic<std::uint64_t> counter{0};
+  return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+} // namespace
+
+OptionsImpl::OptionsImpl() : generation(next_generation())
 {
   values.reserve(kNumOptionSpecs);
   for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
@@ -641,6 +653,7 @@ void OptionsImpl::set(const char* /*fn*/, std::string_view name, const OptionVal
   const std::size_t index = option_index(&spec);
   values[index] = value;
   is_set[index] = true;
+  generation = next_generation();
 }
 
 void OptionsImpl::set_text(const char* fn, std::string_view name, std::string_view text)
@@ -912,6 +925,7 @@ void OptionsImpl::reset(std::string_view name)
   const std::size_t index = option_index(&spec);
   values[index] = option_default(spec);
   is_set[index] = false;
+  generation = next_generation();
 }
 
 void OptionsImpl::reset_all()
@@ -921,6 +935,7 @@ void OptionsImpl::reset_all()
     values[i] = option_default(kOptionSpecs[i]);
     is_set[i] = false;
   }
+  generation = next_generation();
 }
 
 // ------------------------------------------------------------ the engine appliers
@@ -1363,15 +1378,41 @@ bool apply_option_to_engine(EngineTarget& t, std::size_t index, const OptionSpec
 #include "gen/option_apply.inc"
 }
 
-void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
+// Each entry's resolved value and whether it is at its default: the options
+// alone decide both, so a solver keeps them for the options' generation.
+void derive_options(const OptionsImpl& o, DerivedOptions& d)
 {
   const ResolutionIndex& index = resolution_index();
+  d.generation = 0; // holds nothing until complete
+  d.resolved.clear();
+  d.resolved.reserve(kNumOptionSpecs);
+  d.at_default.assign(kNumOptionSpecs, false);
+  for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
+  {
+    const OptionSpec& spec = kOptionSpecs[i];
+    d.resolved.push_back(o.resolved(i));
+    const OptionValue& r = d.resolved.back();
+    // printing a value is the test; an entry holding its default value (most
+    // of them) prints as the default printed, which is known
+    d.at_default[i] =
+        !o.is_set[i] && (r == index.defaults[i] ? static_cast<bool>(index.default_prints_as_default[i])
+                                                : option_text(spec, r) == spec.default_text);
+  }
+  d.generation = o.generation;
+}
+
+void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
+{
   // What the engine holds for the solver, entry by entry: an unset entry at
   // its default is skipped unless the solver's last application left the
   // engine elsewhere (it followed another entry, or was set and reset).
   std::vector<bool>* off_default = t.solver != nullptr ? &t.solver->engine_off_default : nullptr;
   if (off_default != nullptr && off_default->size() != kNumOptionSpecs)
     off_default->assign(kNumOptionSpecs, false);
+  DerivedOptions local;
+  DerivedOptions& derived = t.solver != nullptr ? t.solver->derived_options : local;
+  if (derived.generation != o.generation)
+    derive_options(o, derived);
   for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
   {
     const OptionSpec& spec = kOptionSpecs[i];
@@ -1381,12 +1422,8 @@ void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
         apply_option_to_engine(t, i, spec, o.values[i]); // refuses
       continue;
     }
-    const OptionValue r = o.resolved(i);
-    // printing a value is the test; an entry holding its default value (most
-    // of them) prints as the default printed, which is known
-    const bool at_default =
-        !o.is_set[i] && (r == index.defaults[i] ? static_cast<bool>(index.default_prints_as_default[i])
-                                                : option_text(spec, r) == spec.default_text);
+    const OptionValue& r = derived.resolved[i];
+    const bool at_default = derived.at_default[i];
     if (!force_all && at_default && !(off_default != nullptr && (*off_default)[i]))
       continue;
     // a default that the build cannot honour (a backend it lacks) stays unapplied

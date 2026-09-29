@@ -576,7 +576,13 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
          "a check's time budget cannot be negative (0ms gives up at once; leave the field "
          "empty for no limit)");
   ensure_snapshot();
-  options.resolve(fn);
+  // the options' consistency depends on them alone: established once per
+  // generation (a refusal leaves it unestablished, and is raised again)
+  if (consistent_generation != options.generation)
+  {
+    options.resolve(fn);
+    consistent_generation = options.generation;
+  }
   apply_options(fn);
   validate_engine_options(mgr->bm->UserFlags);
 
