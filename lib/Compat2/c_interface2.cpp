@@ -2673,7 +2673,7 @@ char* vc_printSMTLIB2(VC vcp, Expr e)
   collect_symbols(t, syms);
   std::ostringstream os;
   os << "(set-logic " << logic_of(syms) << ")\n";
-  os << "(set-info :smt-lib-version 2.0)\n";
+  os << "(set-info :smt-lib-version 2.7)\n";
   print_declarations_smt2(vc, syms, os);
   // The engine's printer (the shared form), as 2.x's SMTLIB2_PrintBack used:
   // every symbol |quoted|, Reals as numerals. The 3.x unshared printer

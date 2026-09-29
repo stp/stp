@@ -202,10 +202,14 @@ TEST(RoundTrips, names_that_spell_predefined_symbols_are_refused)
 
   Solver s(tm);
   std::vector<Term> named;
-  for (const char* name : {"True", "Select", "bvadd1", "assert", "let", "odd name", "1abc", "x!0"})
+  for (const char* name : {"True", "Select", "bvadd1", "assert", "let", "lambda",
+                         "declare-sort-parameter", "define-const", "odd name", "1abc", "x!0"})
     named.push_back(tm.declare(name, bv8));
   for (std::size_t i = 0; i < named.size(); ++i)
+  {
+    EXPECT_TRUE(s.parse_term(named[i].str()).same_as(named[i]));
     s.add(named[i] == tm.mk_bv(8, i + 1));
+  }
   const Sort T = tm.declare_sort("Boolean");
   s.add(tm.declare("t1", T) != tm.declare("t2", T));
   ASSERT_TRUE(s.check_sat().is_sat());

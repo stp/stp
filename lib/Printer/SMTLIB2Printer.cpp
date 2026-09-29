@@ -324,7 +324,7 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
   else
     os << (has_arrays ? "(set-logic QF_ABV)\n" : "(set-logic QF_BV)\n");
 
-  os << "(set-info :smt-lib-version 2.0)\n";
+  os << "(set-info :smt-lib-version 2.7)\n";
 
   if (input_status == TO_BE_SATISFIABLE)
   {
