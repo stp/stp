@@ -37,6 +37,9 @@ using std::ostream;
 
 namespace stp
 {
+namespace lra {
+class Frontend;
+}
 /******************************************************************
  * struct enumeration:                                            *
  *                                                                *
@@ -68,6 +71,7 @@ class ASTInternal
 {
   friend class ASTNode;
   friend class STPMgr; // the exposed-id table (STPMgr::exposeNode)
+  friend class lra::Frontend;
 
 protected:
   // Pointer back to the node manager that holds this.
@@ -154,9 +158,16 @@ protected:
 
   // Whether the 3.x API handed out this node's id (STPMgr::exposeNode): its
   // last release then withdraws the id, so that handing one out never keeps
-  // the node alive. The three flags share one byte, which keeps the class at
-  // 32 bytes.
+  // the node alive. These flags and the Real-syntax memo share one byte,
+  // which keeps the class at 32 bytes.
   bool exposed : 1;
+
+  // Whether this node or a descendant contains Real syntax. Unlike carrier
+  // widths, the kinds, children and declared Real sorts are immutable. Both
+  // answers can therefore live on the node, without a solver-lifetime map
+  // retaining discarded scopes. Used by lra::Frontend::containsRealSyntax.
+  mutable bool real_syntax_known : 1;
+  mutable bool real_syntax_present : 1;
 
   mutable uint8_t iteration;
 
@@ -184,7 +195,8 @@ public:
   ASTInternal(STPMgr* mgr, Kind kind)
       : nodeManager(mgr), node_uid(node_uid_cntr.fetch_add(2, std::memory_order_relaxed) + 2),
         _ref_count(0),
-        _kind(kind), exposed(false), iteration(0)
+        _kind(kind), exposed(false), real_syntax_known(false),
+        real_syntax_present(false), iteration(0)
   {
   }
 
@@ -195,7 +207,8 @@ public:
   // FIXME:  I don't think children need to be copied.
   ASTInternal(const ASTInternal& int_node)
       : nodeManager(int_node.nodeManager), node_uid(int_node.node_uid),
-        _ref_count(0), _kind(int_node._kind), exposed(false), iteration(0)
+        _ref_count(0), _kind(int_node._kind), exposed(false),
+        real_syntax_known(false), real_syntax_present(false), iteration(0)
 
   {
   }
