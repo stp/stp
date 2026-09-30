@@ -658,19 +658,12 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
              std::nullopt, {}, {make_sort(m, *result_sort)});
       if (c.sort(0) != r.element)
         c.mismatch(0, m->sort_text(r.element));
-      // Only a value: the engine keeps the default beside the array's
-      // symbol, where no preprocessing pass sees it, so a variable in it
-      // could be eliminated while the array still named it
-      // (STPMgr::CreateConstArray).
-      const ASTNode free_symbol = m->bm->firstFreeSymbol(args[0]);
-      if (!free_symbol.IsNull())
-      {
-        const Term symbol = make_term(m, free_symbol);
+      const ASTNode unsupported = m->bm->unsupportedConstArrayDefault(args[0]);
+      if (!unsupported.IsNull())
         fail(ErrorCode::UNSUPPORTED, fn,
-             "a constant array's default must be a value, and this one depends on " +
-                 symbol.str(),
-             0, {symbol});
-      }
+             "constant-array defaults cannot contain UF applications, Real "
+             "terms or array-equality conditions", 0,
+             {make_term(m, unsupported)});
       // The engine registers the symbol with its default and interns by
       // (sort, default), so the same request from a script or another
       // call gives the same term.

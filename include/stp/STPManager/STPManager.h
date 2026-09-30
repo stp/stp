@@ -820,26 +820,32 @@ public:
   // as their unobserved-cell value; the SMT-LIB printers write the symbol
   // back in the as-const spelling.
   //
-  // The default must be a value: a term with no symbol in it but other
-  // constant arrays (firstFreeSymbol). The registry is out of every
-  // preprocessing pass's sight, so a variable in a default would be
-  // eliminated there while the registry still named it; the passes treat a
-  // constant array as a value for that reason (PropagateEqualities,
-  // RemoveUnconstrained). The API and the SMT-LIB parser refuse anything
-  // else recoverably before they get here; here it is fatal.
+  // The default may be symbolic. RemoveUnconstrained preserves its hidden
+  // dependencies, and extensionality exposes a defining scalar equation
+  // before preprocessing so late checker lemmas use the processed value.
   DLL_PUBLIC ASTNode CreateConstArray(const SourceSort& array_sort,
                                       const ASTNode& default_value);
-  // The first symbol found in `t` other than a constant array -- a variable,
-  // the function of an application, a symbol the engine introduced -- or a
-  // null node when there is none, which is what makes `t` a constant array's
-  // admissible default.
+  // The first free symbol in `t`, following constant arrays' hidden defaults,
+  // or a null node for a ground term.
   DLL_PUBLIC ASTNode firstFreeSymbol(const ASTNode& t) const;
+  // Symbolic defaults currently use the BV/FP/array-read preparation path.
+  // Return a subterm requiring a coordinator that runs before these hidden
+  // defaults can be exposed, or a null node when none occurs.
+  DLL_PUBLIC ASTNode unsupportedConstArrayDefault(const ASTNode& t) const;
   DLL_PUBLIC bool isConstArray(const ASTNode& n) const;
   // Whether any constant array exists: passes that would walk a formula
   // looking for one skip the walk when none does.
   bool hasConstArrays() const { return !constArrayDefaults.empty(); }
   // The default of a registered constant array; fatal for anything else.
   DLL_PUBLIC const ASTNode& constArrayDefault(const ASTNode& n) const;
+  // Rebuild with a replacement stored (possibly packed Boolean) default,
+  // preserving the original handle when the default is unchanged.
+  DLL_PUBLIC ASTNode rebuildConstArray(const ASTNode& n,
+                                       const ASTNode& default_value);
+  // Dependency walks must see a constant array's default even though it is
+  // stored beside its symbol. The returned view is not an AST operand list:
+  // rebuilding a constant array still goes through rebuildConstArray.
+  DLL_PUBLIC ASTChildren childrenWithConstArrayDefault(const ASTNode& n) const;
 
   // Create a source-language leaf atomically. Its complete sort participates
   // in hash-consing and cannot subsequently be changed by width setters.

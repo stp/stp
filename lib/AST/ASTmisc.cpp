@@ -313,7 +313,8 @@ ASTNode rebuildNodeWithChildren(STPMgr* stp, const ASTNode& original,
                                   original.GetValueWidth(), children);
 }
 
-bool containsKind(const ASTNode& root, Kind kind)
+bool containsKind(const ASTNode& root, Kind kind,
+                  bool includeConstArrayDefaults)
 {
   ASTNodeSet visited;
   ASTVec pending(1, root);
@@ -325,8 +326,11 @@ bool containsKind(const ASTNode& root, Kind kind)
       continue;
     if (node.GetKind() == kind)
       return true;
-    for (unsigned i = 0; i < node.Degree(); ++i)
-      pending.push_back(node[i]);
+    const ASTChildren children = includeConstArrayDefaults
+        ? node.GetNodeManager()->childrenWithConstArrayDefault(node)
+        : node.GetChildren();
+    for (const ASTNode& child : children)
+      pending.push_back(child);
   }
   return false;
 }
@@ -373,7 +377,7 @@ bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 
 bool containsFloatingPoint(const ASTNode& n, STPMgr* mgr)
 {
-  NodeIterator ni(n, mgr->ASTUndefined, *mgr);
+  NodeIterator ni(n, mgr->ASTUndefined, *mgr, true);
   ASTNode current;
   while ((current = ni.next()) != ni.end())
   {
@@ -386,7 +390,7 @@ bool containsFloatingPoint(const ASTNode& n, STPMgr* mgr)
 
 bool containsFloatingPointTheory(const ASTNode& n, STPMgr* mgr)
 {
-  NodeIterator ni(n, mgr->ASTUndefined, *mgr);
+  NodeIterator ni(n, mgr->ASTUndefined, *mgr, true);
   ASTNode current;
   while ((current = ni.next()) != ni.end())
   {

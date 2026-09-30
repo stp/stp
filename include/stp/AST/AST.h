@@ -95,7 +95,9 @@ bool isCommutative(const Kind k);
 // Complete-DAG containment, iterative so input-chosen AST depth cannot consume
 // the C++ call stack. Use for solve-boundary barriers whose answer cannot be
 // taken from a manager-lifetime "has ever seen" hint.
-bool containsKind(const ASTNode& n, Kind kind);
+// Opt into registered constant-array defaults for semantic lowering barriers.
+bool containsKind(const ASTNode& n, Kind kind,
+                  bool includeConstArrayDefaults = false);
 bool containsRealSort(const ASTNode& n);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
 // Rebuild one node over replacement children, restoring whatever the original

@@ -1791,7 +1791,7 @@ struct IncrementalSolver::Impl
       : bm(bm_), ce(ce_), batchSimp(batchSimp_), batchAT(batchAT_),
         policy(bm_->UserFlags.incremental_core_only),
         solver(makeBackend(bm_->UserFlags, true)), encoding(bm_),
-        walks(bm_->ASTFalse), cnf(solver.get()), bvAbstraction(bm_),
+        walks(*bm_), cnf(solver.get()), bvAbstraction(bm_),
         ufAdapter(new UFPersistentAdapter(bm_)),
         lastUnsat(false), lastUnsatCoarse(false),
         lastLevelIndividual(false), modelPending(false),

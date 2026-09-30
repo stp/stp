@@ -449,8 +449,12 @@ TEST_F(Kinds, substitute_replaces_in_the_public_tree)
   const Term k42 = k.substitute({{tm.mk_bv(8, 7), tm.mk_bv(8, 42)}});
   EXPECT_TRUE(k42.same_as(tm.mk_const_array(A, tm.mk_bv(8, 42)))) << k42;
   EXPECT_TRUE(select(k42, y).same_as(tm.mk_bv(8, 42)));
-  // a default is a value, so a variable put into one is refused
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, k.substitute({{tm.mk_bv(8, 7), x}}));
+  const Term symbolic = k.substitute({{tm.mk_bv(8, 7), x}});
+  EXPECT_TRUE(symbolic.same_as(tm.mk_const_array(A, x)));
+  EXPECT_TRUE(select(symbolic, y).same_as(x));
+  // Unsupported defaults are still refused when substitution rebuilds one.
+  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED,
+                   k.substitute({{tm.mk_bv(8, 7), f(x, y)}}));
 
   API_EXPECT_ERROR(ErrorCode::UNSUPPORTED,
                    real_div(rx, tm.mk_real(2)).substitute({{tm.mk_real(2), tm.mk_real(0)}}));

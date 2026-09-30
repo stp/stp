@@ -331,7 +331,7 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
     if (orderedDistincts > 0)
     {
       assumptionScopedRoot = lowerDistinct(impl->bm, ordered);
-      if (containsKind(assumptionScopedRoot, DISTINCT))
+      if (containsKind(assumptionScopedRoot, DISTINCT, true))
         FatalError("DISTINCT crossed the incremental ordered-root lowering "
                    "barrier",
                    assumptionScopedRoot);
@@ -354,7 +354,7 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
     for (const ASTNode& assertion : inputLevels)
     {
       const ASTNode lowered = lowerDistinct(impl->bm, assertion);
-      if (containsKind(lowered, DISTINCT))
+      if (containsKind(lowered, DISTINCT, true))
         FatalError("DISTINCT crossed the incremental completed-root lowering "
                    "barrier",
                    lowered);

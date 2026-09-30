@@ -34,7 +34,8 @@ namespace stp
 
 class STPMgr;
 
-// Lower every native DISTINCT reachable from `root` to the corresponding
+// Lower every native DISTINCT reachable from `root`, including registered
+// constant-array defaults, to the corresponding
 // conjunction of pairwise disequalities. Boolean operands use IFF,
 // floating-point operands use SMT equality, and every other source sort uses
 // EQ (including ARRAY_EQ through the hashing factory). This is the semantic
@@ -58,8 +59,8 @@ ASTNode lowerDistinct(STPMgr* manager, const ASTNode& root);
 // result is a model of `root` and published models never need qualifying --
 // which is also why only positive occurrences are taken. The converse -- that
 // rewriting cannot turn satisfiable into unsatisfiable -- is what the
-// occurrence guard buys, and it is checked against `root` itself rather than
-// assumed from the parse.
+// occurrence guard buys, and it is checked against `root` and its constant-
+// array defaults rather than assumed from the parse.
 ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
                               size_t* ordered = NULL);
 

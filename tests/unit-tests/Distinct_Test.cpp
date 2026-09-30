@@ -143,6 +143,124 @@ TEST(DistinctAst, OrderingConsumesNativePredicateDirectly)
   EXPECT_EQ(0u, ordered);
 }
 
+TEST(DistinctAst, DefaultSymbolUseBlocksOnlyItsOwnOrderingGroup)
+{
+  STPMgr mgr;
+  const SourceSort bv8 = SourceSort::bitVector(8);
+  const SourceSort arrays = SourceSort::array(bv8, bv8);
+  const ASTNode x = mgr.CreateSourceSymbol("default_x", bv8);
+  const ASTNode y = mgr.CreateSourceSymbol("default_y", bv8);
+  const ASTNode z = mgr.CreateSourceSymbol("default_z", bv8);
+  const ASTNode blocked = mgr.CreateNode(DISTINCT, ASTVec{x, y, z});
+  const ASTNode array = mgr.CreateConstArray(arrays, x);
+  const ASTNode other = mgr.CreateSourceSymbol("default_array", arrays);
+  const ASTNode equality = mgr.CreateNode(ARRAY_EQ, array, other);
+  const ASTNode root = mgr.CreateNode(AND, blocked, equality);
+
+  size_t ordered = 0;
+  EXPECT_EQ(root, applyDistinctOrdering(&mgr, root, &ordered));
+  EXPECT_EQ(0u, ordered);
+
+  const ASTNode a = mgr.CreateSourceSymbol("independent_a", bv8);
+  const ASTNode b = mgr.CreateSourceSymbol("independent_b", bv8);
+  const ASTNode c = mgr.CreateSourceSymbol("independent_c", bv8);
+  const ASTNode independent = mgr.CreateNode(DISTINCT, ASTVec{a, b, c});
+  const ASTNode combined = mgr.CreateNode(AND, root, independent);
+  const ASTNode result = applyDistinctOrdering(&mgr, combined, &ordered);
+  EXPECT_EQ(1u, ordered);
+  EXPECT_TRUE(containsKind(result, DISTINCT, true));
+  EXPECT_TRUE(containsKind(result, BVLT, true));
+  EXPECT_EQ(x, mgr.constArrayDefault(array));
+}
+
+TEST(DistinctAst, SharedAssertionAndBooleanDefaultHasBothPolarities)
+{
+  STPMgr mgr;
+  const SourceSort bv8 = SourceSort::bitVector(8);
+  const SourceSort arrays = SourceSort::array(bv8, SourceSort::boolean());
+  const ASTNode x = mgr.CreateSourceSymbol("shared_x", bv8);
+  const ASTNode y = mgr.CreateSourceSymbol("shared_y", bv8);
+  const ASTNode z = mgr.CreateSourceSymbol("shared_z", bv8);
+  const ASTNode distinct = mgr.CreateNode(DISTINCT, ASTVec{x, y, z});
+  const ASTNode array = mgr.CreateConstArray(arrays, distinct);
+  const ASTNode other = mgr.CreateSourceSymbol("shared_array", arrays);
+  const ASTNode root = mgr.CreateNode(
+      AND, distinct, mgr.CreateNode(ARRAY_EQ, array, other));
+
+  // The assertion alone is eligible. Reaching the identical node as array
+  // data must add both polarities, even if the assertion was visited first.
+  size_t ordered = 0;
+  applyDistinctOrdering(&mgr, distinct, &ordered);
+  ASSERT_EQ(1u, ordered);
+  EXPECT_EQ(root, applyDistinctOrdering(&mgr, root, &ordered));
+  EXPECT_EQ(0u, ordered);
+  EXPECT_TRUE(containsKind(mgr.constArrayDefault(array), DISTINCT, true));
+}
+
+TEST(DistinctAst, LoweringRebuildsNestedDefaultsWithoutMutatingTheirHandles)
+{
+  STPMgr mgr;
+  const SourceSort bv8 = SourceSort::bitVector(8);
+  const SourceSort arrays = SourceSort::array(bv8, bv8);
+  const ASTNode x = mgr.CreateSourceSymbol("nested_x", bv8);
+  const ASTNode y = mgr.CreateSourceSymbol("nested_y", bv8);
+  const ASTNode z = mgr.CreateSourceSymbol("nested_z", bv8);
+  const ASTNode distinct = mgr.CreateNode(DISTINCT, ASTVec{x, y, z});
+  const ASTNode zero = mgr.CreateZeroConst(8);
+  const ASTNode value = mgr.CreateTerm(
+      ITE, 8, distinct, mgr.CreateOneConst(8), zero);
+  const ASTNode inner = mgr.CreateConstArray(arrays, value);
+  const ASTNode i = mgr.CreateSourceSymbol("nested_i", bv8);
+  const ASTNode j = mgr.CreateSourceSymbol("nested_j", bv8);
+  // A direct read would fold to the default before lowering sees the array.
+  const ASTNode store =
+      mgr.CreateArrayTerm(WRITE, 8, 8, ASTVec{inner, i, zero});
+  const ASTNode read = mgr.CreateTerm(READ, 8, store, j);
+  const ASTNode outer = mgr.CreateConstArray(arrays, read);
+  ASSERT_FALSE(containsKind(outer, DISTINCT));
+  ASSERT_TRUE(containsKind(outer, DISTINCT, true));
+
+  const ASTNode lowered = lowerDistinct(&mgr, outer);
+  ASSERT_TRUE(mgr.isConstArray(lowered));
+  EXPECT_NE(outer, lowered);
+  EXPECT_EQ(arrays, lowered.GetSourceSort());
+  EXPECT_FALSE(containsKind(lowered, DISTINCT, true));
+  EXPECT_TRUE(containsKind(lowered, EQ, true));
+  EXPECT_EQ(value, mgr.constArrayDefault(inner));
+  EXPECT_EQ(read, mgr.constArrayDefault(outer));
+  EXPECT_TRUE(containsKind(outer, DISTINCT, true));
+  EXPECT_EQ(outer, mgr.CreateConstArray(arrays, read));
+  EXPECT_EQ(lowered, lowerDistinct(&mgr, lowered));
+}
+
+TEST(DistinctAst, LoweringPreservesPackedBooleanDefaults)
+{
+  STPMgr mgr;
+  const SourceSort arrays = SourceSort::array(
+      SourceSort::bitVector(8), SourceSort::boolean());
+  const ASTNode p = mgr.CreateSourceSymbol("packed_p", SourceSort::boolean());
+  const ASTNode q = mgr.CreateSourceSymbol("packed_q", SourceSort::boolean());
+  const ASTNode distinct = mgr.CreateNode(DISTINCT, ASTVec{p, q});
+  const ASTNode array = mgr.CreateConstArray(arrays, distinct);
+  const ASTNode originalDefault = mgr.constArrayDefault(array);
+  ASSERT_EQ(ITE, originalDefault.GetKind());
+  ASSERT_EQ(distinct, originalDefault[0]);
+
+  const ASTNode lowered = lowerDistinct(&mgr, array);
+  ASSERT_TRUE(mgr.isConstArray(lowered));
+  EXPECT_EQ(arrays, lowered.GetSourceSort());
+  const ASTNode packed = mgr.constArrayDefault(lowered);
+  ASSERT_EQ(ITE, packed.GetKind());
+  EXPECT_EQ(1u, packed.GetValueWidth());
+  EXPECT_EQ(lowerDistinct(&mgr, distinct), packed[0]);
+  EXPECT_EQ(mgr.CreateOneConst(1), packed[1]);
+  EXPECT_EQ(mgr.CreateZeroConst(1), packed[2]);
+  EXPECT_FALSE(containsKind(lowered, DISTINCT, true));
+  EXPECT_EQ(originalDefault, mgr.constArrayDefault(array));
+  EXPECT_EQ(array, mgr.CreateConstArray(arrays, distinct));
+  EXPECT_EQ(lowered, lowerDistinct(&mgr, lowered));
+}
+
 TEST(DistinctAst, Smt2ParserPreservesNativePredicate)
 {
   STPMgr mgr;

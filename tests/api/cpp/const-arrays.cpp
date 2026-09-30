@@ -354,30 +354,35 @@ TEST(ConstArrays, equality_between_constant_arrays_is_equality_of_defaults)
   EXPECT_TRUE((f.c1 != f.c2).same_as(f.tm.mk_true()));
 }
 
-// A default is a value: the engine keeps it beside the array's symbol, out of
-// every preprocessing pass's sight, so a variable in it could be eliminated
-// while the array still named it -- K(0) = store(K(z), 0, 0) with z = 3 came
-// back sat, the model setting z to 0.
-TEST(ConstArrays, a_default_must_be_a_value)
+TEST(ConstArrays, symbolic_defaults_survive_solving_and_parsing)
 {
   Arrays f;
   Term z = f.tm.declare("z", f.bv8);
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, f.tm.mk_const_array(f.A, z));
-  const auto e = API_ERROR_OF(f.tm.mk_term(Kind::CONST_ARRAY, {bvadd(f.idx(1), z)}, {}, f.A));
-  ASSERT_TRUE(e.has_value());
-  EXPECT_EQ(e->code(), ErrorCode::UNSUPPORTED);
-  EXPECT_EQ(e->argument_index(), 0);
-  ASSERT_EQ(e->terms().size(), 1u);
-  EXPECT_TRUE(e->terms()[0].same_as(z));
-  // an application of a declared function is no value either
-  Term g = f.tm.declare("g", f.tm.mk_fun_sort({f.bv8}, f.bv8));
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, f.tm.mk_const_array(f.A, g(f.idx(1))));
-  // nor in a script, where it is a parse error and the solver is untouched
+  const Term symbolic = f.tm.mk_const_array(f.A, z);
+  const Term next =
+      f.tm.mk_term(Kind::CONST_ARRAY, {bvadd(f.idx(1), z)}, {}, f.A);
+  const Term a = f.tm.declare("a", f.A);
   Solver s(f.tm);
-  API_EXPECT_ERROR(ErrorCode::PARSE,
-                   s.parse_smt2("(assert (= ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x00) "
-                           "(store ((as const (Array (_ BitVec 8) (_ BitVec 8))) z) #x00 #x00)))"));
-  EXPECT_TRUE(s.assertions().empty());
+  s.add(a == symbolic);
+  s.add(z == f.idx(3));
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.model().array_value(a).default_value().to_uint64(), 3u);
+  EXPECT_EQ(s.model().uint64_value(next[f.idx(5)]), 4u);
+  s.push();
+  s.add(a[f.idx(5)] != f.idx(3));
+  EXPECT_TRUE(s.check_sat().is_unsat());
+  s.pop();
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(s.model().uint64_value(a[f.idx(5)]), 3u);
+
+  Solver parsed(f.tm);
+  parsed.parse_smt2(
+      "(declare-fun parsed_z () (_ BitVec 8)) "
+      "(assert (= ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x00) "
+      "(store ((as const (Array (_ BitVec 8) (_ BitVec 8))) parsed_z) "
+      "#x00 #x00)))");
+  ASSERT_TRUE(parsed.check_sat().is_sat());
+  EXPECT_EQ(parsed.model().uint64_value(*f.tm.symbol("parsed_z")), 0u);
 
   // A ground term is a value whether it is folded or not.
   TermManager raw = api_test::raw_manager();
@@ -385,11 +390,34 @@ TEST(ConstArrays, a_default_must_be_a_value)
   const Term three = bvadd(raw.mk_bv(8, 1), raw.mk_bv(8, 2));
   const Term k = raw.mk_const_array(A, three);
   EXPECT_EQ(k.kind(), Kind::CONST_ARRAY);
-  const Term a = raw.declare("a", A);
+  const Term raw_array = raw.declare("a", A);
   Solver r(raw);
-  r.add(a == k);
-  r.add(a[raw.mk_bv(8, 5)] != raw.mk_bv(8, 3));
+  r.add(raw_array == k);
+  r.add(raw_array[raw.mk_bv(8, 5)] != raw.mk_bv(8, 3));
   EXPECT_TRUE(r.check_sat().is_unsat());
+}
+
+TEST(ConstArrays, unsupported_defaults_are_recoverable)
+{
+  Arrays f;
+  Term g = f.tm.declare("g", f.tm.mk_fun_sort({f.bv8}, f.bv8));
+  const Term application = g(f.idx(1));
+  const auto e = API_ERROR_OF(f.tm.mk_const_array(f.A, application));
+  ASSERT_TRUE(e.has_value());
+  EXPECT_EQ(e->code(), ErrorCode::UNSUPPORTED);
+  EXPECT_EQ(e->argument_index(), 0);
+  ASSERT_EQ(e->terms().size(), 1u);
+  EXPECT_TRUE(e->terms()[0].same_as(application));
+
+  Solver s(f.tm);
+  API_EXPECT_ERROR(
+      ErrorCode::PARSE,
+      s.parse_smt2(
+          "(declare-fun parsed_g ((_ BitVec 8)) (_ BitVec 8)) "
+          "(assert (= (select ((as const (Array (_ BitVec 8) (_ BitVec 8))) "
+          "(parsed_g #x01)) #x00) #x01))"));
+  EXPECT_TRUE(s.assertions().empty());
+  EXPECT_TRUE(s.check_sat().is_sat());
 }
 
 TEST(ConstArrays, distinct_over_constant_arrays)
@@ -489,14 +517,17 @@ TEST(ConstArrays, every_element_sort)
     EXPECT_EQ(s2.model().rm_value(ar[tm.mk_bv(4, 9)]), RoundingMode::RTZ);
   }
   {
-    // A declared sort has no literals: the default is a value a model gave.
+    // A declared-sort default can be a symbol or a value a model gave.
     Sort S = tm.declare_sort("S");
     Sort U = tm.mk_array_sort(bv4, S);
     Term u = tm.declare("u", S);
-    API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, tm.mk_const_array(U, u));
+    Term symbolic = tm.mk_const_array(U, u);
+    Term symbolic_array = tm.declare("symbolic_array", U);
     Solver s0(tm);
     s0.add(u != tm.declare("u2", S));
+    s0.add(symbolic_array == symbolic);
     ASSERT_TRUE(s0.check_sat().is_sat());
+    EXPECT_TRUE(s0.model().bool_value(symbolic_array[i] == u));
     const Term uv = s0.model().value(u);
     Term cu = tm.mk_const_array(U, uv);
     Term au = tm.declare("au", U);
