@@ -1236,8 +1236,6 @@ declare -a g_solver=(
 # is the UF entries: 5/30 there, and nothing where refinement settles first
 # time. Other backends have no trail to keep, hence the pairing.
 "--cadical --refinement-trail-reuse=0"
-"--cryptominisat"
-"--cryptominisat --threads=4"
 "--simplifying-minisat"
 "--minisat"
 )
@@ -1373,6 +1371,10 @@ declare -a NOT_FUZZED=(
 # Already fixed by the harness: -d is passed to every STP run, and the input
 # is SMT-LIB2, the only language STP reads.
 --check-sanity --SMTLIB2
+# Not fuzzed by choice: CaDiCaL is the backend under test, and the empty
+# solver entry already draws it as STP's default. --threads only reaches
+# CryptoMiniSat, so it goes with it.
+--cryptominisat --threads
 # Measured inert on every generated file; see the group comments below for
 # what each would need before it is worth an entry.
 --bb.fp-native-fma --bb.fp-native-known-sign
