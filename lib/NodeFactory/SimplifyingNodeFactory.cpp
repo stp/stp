@@ -4369,6 +4369,21 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       else if (children[1].isConstant() &&
                children[1] == bm.CreateOneConst(width))
         result = children[0];
+      else if (children[1].GetKind() == stp::BVLEFTSHIFT &&
+               children[1][0] == bm.CreateOneConst(width))
+      {
+        // A variable power of two needs a barrel shifter, not a divider.
+        // Overshifting the one makes the divisor zero, whose unsigned
+        // SMT-LIB quotient is all ones rather than the right shift's zero.
+        const ASTNode& shift = children[1][1];
+        result = NodeFactory::CreateTerm(
+            ITE, width,
+            NodeFactory::CreateNode(stp::BVGE, shift,
+                                    bm.CreateBVConst(width, width)),
+            bm.CreateMaxConst(width),
+            NodeFactory::CreateTerm(stp::BVRIGHTSHIFT, width, children[0],
+                                    shift));
+      }
       else if (children[1].isConstant() && hasSingleOneBit(children[1]) &&
                lowestOneBit(children[1]) > 0)
       {
@@ -4544,6 +4559,41 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             NodeFactory::CreateNode(EQ, children[0],
                                     bm.CreateZeroConst(width)),
             bm.CreateMaxConst(width), bm.CreateOneConst(width));
+
+      if (result.IsNull() && children[1].GetKind() == ITE)
+      {
+        const ASTNode& x = children[0];
+        const ASTNode& divisor = children[1];
+        const ASTNode zero = bm.CreateZeroConst(width);
+        ASTNode condition = divisor[0];
+        unsigned negativeArm = 1;
+        if (condition.GetKind() == stp::NOT)
+        {
+          condition = condition[0];
+          negativeArm = 2;
+        }
+        // Signed comparisons are normally canonicalised to BVSGT, but also
+        // accept the direct x <s 0 spelling from an unsimplified child.
+        const bool testsNegative =
+            (condition.GetKind() == stp::BVSGT && condition[0] == zero &&
+             condition[1] == x) ||
+            (condition.GetKind() == stp::BVSLT && condition[0] == x &&
+             condition[1] == zero);
+        if (testsNegative && divisor[3 - negativeArm] == x &&
+            divisor[negativeArm].GetKind() == BVUMINUS &&
+            divisor[negativeArm][0] == x)
+        {
+          // x / abs(x) needs no divider. Positive x gives one and negative
+          // x gives minus one, except signed-min: abs wraps to signed-min,
+          // so its quotient is one. At zero SMT-LIB specifies minus one.
+          const ASTNode positiveOrMin = NodeFactory::CreateNode(
+              stp::OR, NodeFactory::CreateNode(stp::BVSGT, x, zero),
+              NodeFactory::CreateNode(EQ, x, get_smallest_number(width)));
+          result = NodeFactory::CreateTerm(ITE, width, positiveOrMin,
+                                           bm.CreateOneConst(width),
+                                           bm.CreateMaxConst(width));
+        }
+      }
       break;
 
     case SBVREM:

@@ -703,6 +703,27 @@ TEST(SimplifyingNodeFactory_Exhaustive, udiv_self)
   }
 }
 
+/* x / (1 << shift): overshifts are division by zero, not a zero quotient. */
+TEST(SimplifyingNodeFactory_Exhaustive, udiv_variable_power_of_two)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 3u, 4u, 5u})
+  {
+    const ASTNode x = c.bv(w);
+    const ASTNode shift = c.bv(w);
+    const ASTNode divisor =
+        c.hf->CreateTerm(BVLEFTSHIFT, w, c.konst(1, w), shift);
+    // Exhaust all shift values, including width and much larger values.
+    c.checkTerm(BVDIV, w, {x, divisor});
+  }
+  const ASTNode x = c.bv(3);
+  const ASTNode shift = c.bv(3);
+  const ASTNode notOne = c.hf->CreateTerm(BVLEFTSHIFT, 3, c.konst(3, 3), shift);
+  c.checkTerm(BVDIV, 3, {x, notOne}, false);
+  EXPECT_EQ(c.hf->CreateTerm(BVDIV, 3, x, notOne),
+            c.nf->CreateTerm(BVDIV, 3, x, notOne));
+}
+
 /* sdiv constant rules: by zero, of zero, and negative-constant
    normalisation on either side (the most negative constant excluded) */
 TEST(SimplifyingNodeFactory_Exhaustive, sdiv_constant_rules)
@@ -715,6 +736,44 @@ TEST(SimplifyingNodeFactory_Exhaustive, sdiv_constant_rules)
   c.checkTerm(SBVDIV, 3, {x, c.konst(6, 3)}); // x / -2
   c.checkTerm(SBVDIV, 3, {c.konst(4, 3), x}, false); // most negative
   c.checkTerm(SBVDIV, 3, {x, c.konst(4, 3)}, false);
+}
+
+/* x / abs(x): includes SMT-LIB division by zero and wrapped signed-min. */
+TEST(SimplifyingNodeFactory_Exhaustive, sdiv_absolute_self)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 3u, 4u, 8u})
+  {
+    const ASTNode x = c.bv(w);
+    const ASTNode zero = c.konst(0, w);
+    const ASTNode neg = c.hf->CreateTerm(BVUMINUS, w, x);
+    for (const ASTNode& negative :
+         {c.hf->CreateNode(BVSLT, x, zero), c.hf->CreateNode(BVSGT, zero, x)})
+    {
+      const ASTNode absolute = c.hf->CreateTerm(ITE, w, negative, neg, x);
+      c.checkTerm(SBVDIV, w, {x, absolute});
+      const ASTNode nonnegative = c.hf->CreateNode(NOT, negative);
+      const ASTNode swapped = c.hf->CreateTerm(ITE, w, nonnegative, x, neg);
+      c.checkTerm(SBVDIV, w, {x, swapped});
+    }
+  }
+
+  const ASTNode x = c.bv(3);
+  const ASTNode y = c.bv(3);
+  const ASTNode zero = c.konst(0, 3);
+  const ASTNode negative = c.hf->CreateNode(BVSGT, zero, x);
+  const ASTNode negX = c.hf->CreateTerm(BVUMINUS, 3, x);
+  // Reject a different negated operand, a reversed predicate and unsigned
+  // comparison: none describes the signed absolute value of the dividend.
+  for (const ASTNode& divisor :
+       {c.hf->CreateTerm(ITE, 3, negative, c.hf->CreateTerm(BVUMINUS, 3, y), x),
+        c.hf->CreateTerm(ITE, 3, negative, x, negX),
+        c.hf->CreateTerm(ITE, 3, c.hf->CreateNode(BVLT, x, zero), negX, x)})
+  {
+    c.checkTerm(SBVDIV, 3, {x, divisor}, false);
+    EXPECT_EQ(c.hf->CreateTerm(SBVDIV, 3, x, divisor),
+              c.nf->CreateTerm(SBVDIV, 3, x, divisor));
+  }
 }
 
 /* srem negative-constant normalisation on either side */
