@@ -77,7 +77,7 @@ struct array_sort_component
   }
 
   SourceSort sort;
-  unsigned width() const { return sort.packedWidth(); }
+  unsigned width() const { return sort.arrayComponentWidth(); }
   SourceSort sourceSort() const { return sort; }
 };
 

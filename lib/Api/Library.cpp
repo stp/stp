@@ -96,8 +96,8 @@ std::map<std::string, std::string> capabilities()
   // Every backend with its version, in the build's own order and words, as
   // `stp --version` lists them.
   c["sat.versions"] = versions;
-  c["array.element-sorts"] = "bv,fp,rm,uninterpreted";
-  c["array.index-sorts"] = "bv,fp,rm,uninterpreted";
+  c["array.element-sorts"] = "bool,bv,fp,rm,uninterpreted";
+  c["array.index-sorts"] = "bool,bv,fp,rm,uninterpreted";
   c["array.const-equality"] = "true";
   c["lra"] = "true";
   c["real.nonlinear"] = "false";

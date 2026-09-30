@@ -26,6 +26,7 @@ THE SOFTWARE.
 // STPMgr.
 
 #include "Internal.h"
+#include "stp/AST/ArrayOps.h"
 #include "NodeAccess.h"
 
 #include "Lra/LraBudgetRefusal.h"
@@ -241,12 +242,13 @@ std::uint32_t ManagerImpl::array_sort(std::uint32_t index, std::uint32_t element
   const SortRec& i = sorts[index];
   const SortRec& e = sorts[element];
   auto scalar = [](const SortRec& r) {
-    return r.kind == SortKind::BV || r.kind == SortKind::FP || r.kind == SortKind::RM ||
+    return r.kind == SortKind::BOOL || r.kind == SortKind::BV ||
+           r.kind == SortKind::FP || r.kind == SortKind::RM ||
            r.kind == SortKind::UNINTERPRETED;
   };
   if (!scalar(i) || !scalar(e))
     fail(ErrorCode::UNSUPPORTED, fn,
-         "the engine supports arrays indexed by and holding bit-vectors, "
+         "the engine supports arrays indexed by and holding Booleans, bit-vectors, "
          "floating-point numbers, rounding modes and declared sorts only "
          "(capabilities: array.element-sorts)",
          std::nullopt, {}, {make_sort(this, index), make_sort(this, element)});
@@ -707,9 +709,11 @@ bool ManagerImpl::is_const_array(const ASTNode& n) const
   return bm->isConstArray(n);
 }
 
-const ASTNode& ManagerImpl::const_array_default(const ASTNode& n) const
+ASTNode ManagerImpl::const_array_default(const ASTNode& n) const
 {
-  return bm->constArrayDefault(n);
+  const ASTNode value = bm->constArrayDefault(n);
+  return n.GetSourceSort().element().kind() == SourceSort::Kind::Bool
+             ? unpackBoolean(*bm->hashingNodeFactory, value) : value;
 }
 
 std::string quote_symbol(const std::string& name)

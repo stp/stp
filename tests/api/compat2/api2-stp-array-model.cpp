@@ -26,6 +26,38 @@ THE SOFTWARE.
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
+
+TEST(stp_array_model, boolean_indices_and_elements)
+{
+  VC vc = vc_createValidityChecker();
+  const Type boolean = vc_boolType(vc);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, boolean, boolean));
+  Expr f = vc_falseExpr(vc), t = vc_trueExpr(vc);
+  vc_assertFormula(vc, vc_readExpr(vc, a, f));
+  vc_assertFormula(vc, vc_notExpr(vc, vc_readExpr(vc, a, t)));
+  ASSERT_EQ(vc_query(vc, f), 0);
+  EXPECT_EQ(vc_isBool(vc_getCounterExample(vc, vc_readExpr(vc, a, f))), 1);
+  EXPECT_EQ(vc_isBool(vc_getCounterExample(vc, vc_readExpr(vc, a, t))), 0);
+  Expr* indices = nullptr;
+  Expr* values = nullptr;
+  int size = 0;
+  vc_getCounterExampleArray(vc, a, &indices, &values, &size);
+  ASSERT_GT(size, 0);
+  for (int i = 0; i < size; ++i)
+  {
+    EXPECT_GE(vc_isBool(indices[i]), 0);
+    EXPECT_GE(vc_isBool(values[i]), 0);
+  }
+  vc_deleteCounterExampleArray(indices, values, size);
+  char* printed = vc_printSMTLIB2(vc, vc_readExpr(vc, a, f));
+  ASSERT_NE(printed, nullptr);
+  EXPECT_NE(std::string(printed).find("(set-logic ALL)"), std::string::npos);
+  free(printed);
+  Expr updated = vc_writeExpr(vc, a, t, t);
+  EXPECT_EQ(vc_query(vc, vc_readExpr(vc, updated, t)), 1);
+  vc_Destroy(vc);
+}
 
 TEST(stp_array_model, one)
 {

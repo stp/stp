@@ -130,8 +130,16 @@ public:
     // Real intentionally stays outside this legacy array-scalar predicate.
     // Array constructors therefore reject Real indices and elements
     // instead of silently giving them a nonexistent packed representation.
-    return kind_ == Kind::BitVector || kind_ == Kind::FloatingPoint ||
-           kind_ == Kind::RoundingMode || kind_ == Kind::Uninterpreted;
+    return kind_ == Kind::Bool || kind_ == Kind::BitVector ||
+           kind_ == Kind::FloatingPoint || kind_ == Kind::RoundingMode ||
+           kind_ == Kind::Uninterpreted;
+  }
+
+  // Boolean formulas retain width zero; an array index or cell needs a bit.
+  unsigned arrayComponentWidth() const
+  {
+    assert(isScalar());
+    return kind_ == Kind::Bool ? 1 : packedWidth();
   }
 
   bool containsFloatingPoint() const

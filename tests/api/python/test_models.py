@@ -163,6 +163,28 @@ def test_array_and_function_terms_in_the_value_readers():
     assert m[f] is not None and m.eval(f) is not None
 
 
+@pytest.mark.parametrize("simplify", [False, True])
+def test_boolean_array_models(simplify):
+    tm = TermManager(simplify=simplify)
+    boolean = tm.bool_sort()
+    a = tm.declare("a", tm.array_sort(boolean, boolean))
+    false, true = tm.mk_bool(False), tm.mk_bool(True)
+    s = Solver(tm)
+    s.add(a[false], Not(a[true]))
+    assert s.check() == sat
+    m = s.model()
+    value = m[a]
+    assert isinstance(value.default, BoolNumRef)
+    assert bool(value[false]) is True and bool(value[true]) is False
+    assert all(isinstance(k, BoolNumRef) and isinstance(v, BoolNumRef)
+               for k, v in value.items())
+    assert bool(m.eval(a[a[false]])) is False
+    assert bool(m.eval(value == a)) is True
+    changed = Store(Store(a, false, false), true, true)
+    assert bool(m.eval(changed)[false]) is False
+    assert bool(m.eval(changed)[true]) is True
+
+
 def test_array_values():
     A = ArraySort(BitVecSort(32), BitVecSort(8))
     a = Array("a", BitVecSort(32), BitVecSort(8))
@@ -204,9 +226,10 @@ def test_array_values():
     assert main_tm().symbol("nope") is None
     with pytest.raises(SortMismatch):
         BitVecVal(1, 8) + BitVecVal(3, 16)
-    # the engine holds bit-vectors, floats, rounding modes and declared sorts in arrays, not Bools
-    with pytest.raises(Unsupported):
-        ArraySort(BitVecSort(4), BoolSort())
+    flags = Array("flags", BitVecSort(4), BoolSort())
+    flag_model = _model(flags[3], Not(flags[5]))
+    assert bool(flag_model[flags][3]) is True
+    assert bool(flag_model[flags][5]) is False
     # 16-bit elements, little-endian bytes per element
     words = Array("words", BitVecSort(8), BitVecSort(16))
     m4 = _model(words[0] == 0x1234)

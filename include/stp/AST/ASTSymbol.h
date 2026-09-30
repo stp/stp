@@ -206,8 +206,8 @@ private:
         // legacy width-based path.
         break;
       case SourceSort::Kind::Array:
-        _index_width = _source_sort.index().packedWidth();
-        _value_width = _source_sort.element().packedWidth();
+        _index_width = _source_sort.index().arrayComponentWidth();
+        _value_width = _source_sort.element().arrayComponentWidth();
         if (_source_sort.element().kind() ==
             SourceSort::Kind::FloatingPoint)
         {

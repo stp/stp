@@ -164,28 +164,26 @@ TEST(Sorts, array_combinations)
   const Sort bv8 = tm.mk_bv_sort(8), B = tm.mk_bool_sort(), R = tm.mk_real_sort();
   const Sort f32 = tm.mk_fp32_sort(), RM = tm.mk_rm_sort(), S = tm.declare_sort("S");
   const Sort A = tm.mk_array_sort(bv8, bv8);
-  // admitted: BV, FP, RM and declared sorts as index and as element
-  for (const Sort& index : {bv8, f32, RM, S})
-    for (const Sort& element : {bv8, f32, RM, S})
+  // admitted: Bool, BV, FP, RM and declared sorts as index and as element
+  for (const Sort& index : {B, bv8, f32, RM, S})
+    for (const Sort& element : {B, bv8, f32, RM, S})
     {
       const Sort arr = tm.mk_array_sort(index, element);
       EXPECT_TRUE(arr.array_index() == index);
       EXPECT_TRUE(arr.array_element() == element);
       EXPECT_TRUE(arr == tm.mk_array_sort(index, element));
     }
-  // refused: Bool, Real, arrays and functions in either position
-  auto e = API_ERROR_OF(tm.mk_array_sort(B, bv8));
+  // refused: Real, arrays and functions in either position
+  auto e = API_ERROR_OF(tm.mk_array_sort(R, bv8));
   ASSERT_TRUE(e.has_value());
   EXPECT_EQ(e->code(), ErrorCode::UNSUPPORTED);
   EXPECT_EQ(e->sorts().size(), 2u);
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, tm.mk_array_sort(bv8, B));
-  API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, tm.mk_array_sort(R, bv8));
   API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, tm.mk_array_sort(bv8, R));
   API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, tm.mk_array_sort(A, bv8));
   API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, tm.mk_array_sort(bv8, A));
   API_EXPECT_ERROR(ErrorCode::UNSUPPORTED, tm.mk_array_sort(tm.mk_fun_sort({bv8}, bv8), bv8));
-  EXPECT_EQ(capabilities()["array.index-sorts"], "bv,fp,rm,uninterpreted");
-  EXPECT_EQ(capabilities()["array.element-sorts"], "bv,fp,rm,uninterpreted");
+  EXPECT_EQ(capabilities()["array.index-sorts"], "bool,bv,fp,rm,uninterpreted");
+  EXPECT_EQ(capabilities()["array.element-sorts"], "bool,bv,fp,rm,uninterpreted");
 
   // the admitted exotic arrays solve and read back
   Solver s(tm);
