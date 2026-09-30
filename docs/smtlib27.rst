@@ -251,9 +251,11 @@ Remaining limits and extensions
 * ``Int``, integer/bit-vector conversions, nonlinear real arithmetic,
   strings, sequences, sets and other theories outside STP's supported
   fragments are not implemented. Selecting ``ALL`` does not enable them.
-* Arrays currently require bit-vector, floating-point, rounding-mode or
-  uninterpreted index and element sorts. Boolean, Real and nested array
-  components are not supported. Arrays are not accepted as uninterpreted
+* Arrays support Boolean, bit-vector, floating-point, rounding-mode and
+  uninterpreted index and element sorts. Boolean indices have exactly two
+  values, ``false`` and ``true``, and Boolean cells retain their ``Bool``
+  sort in terms and models. Real and nested array components are not
+  supported. Arrays are not accepted as uninterpreted
   function arguments or results.
 * Proofs are not produced. ``:produce-proofs`` reports ``unsupported``
   when enabled; a query without an enabled

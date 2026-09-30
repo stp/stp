@@ -2711,6 +2711,12 @@ void AbsRefine_CounterExample::PrintArrayValueSMTLIB2(
   bm->noteUninterpretedSortPrinted(elementSort);
 
   const auto printCell = [&](const ASTNode& cell) {
+    if (elementSort.kind() == SourceSort::Kind::Bool)
+    {
+      os << (bm->LiftSourceValue(cell, elementSort) == bm->ASTTrue
+                 ? " true" : " false");
+      return;
+    }
     if (elementSort.kind() == SourceSort::Kind::Uninterpreted)
     {
       os << " ";
@@ -2736,6 +2742,12 @@ void AbsRefine_CounterExample::PrintArrayValueSMTLIB2(
     printer::outputBitVecSMTLIB2(cell, os);
   };
   const auto printIndex = [&](const ASTNode& index) {
+    if (indexSort.kind() == SourceSort::Kind::Bool)
+    {
+      os << (bm->LiftSourceValue(index, indexSort) == bm->ASTTrue
+                 ? " true" : " false");
+      return;
+    }
     if (indexSort.kind() == SourceSort::Kind::Uninterpreted)
     {
       os << " ";

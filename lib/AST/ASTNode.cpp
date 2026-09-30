@@ -625,6 +625,11 @@ SourceSort ASTNode::deriveSourceSort() const
   if (GetKind() == READ && Degree() >= 1)
   {
     const SourceSort array = (*this)[0].GetSourceSort();
+    // Boolean selects are exposed as a Boolean test of this one-bit READ.
+    // Rewriters and model evaluators see the carrier here, not that test.
+    if (array.kind() == SourceSort::Kind::Array &&
+        array.element().kind() == SourceSort::Kind::Bool)
+      return SourceSort::bitVector(1);
     return array.kind() == SourceSort::Kind::Array
                ? array.element()
                : SourceSort::unknown();

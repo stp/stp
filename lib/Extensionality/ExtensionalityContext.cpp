@@ -1415,7 +1415,8 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
       if (value.GetKind() == BVCONST)
       {
         const SourceSort element = sort.element();
-        if (element.kind() == SourceSort::Kind::FloatingPoint ||
+        if (element.kind() == SourceSort::Kind::Bool ||
+            element.kind() == SourceSort::Kind::FloatingPoint ||
             element.kind() == SourceSort::Kind::RoundingMode)
           spelled = bm->LiftSourceValue(value, element);
         else if (element.kind() == SourceSort::Kind::Uninterpreted)

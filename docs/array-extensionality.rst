@@ -88,7 +88,10 @@ soft timeout expires while lazy refinement is still undecided, the
 solve now reports ``unknown`` with a timeout reason where it previously
 aborted with an internal error.
 
-Limitations: Boolean, Real and nested array components are not supported.
+Boolean indices and elements are supported, including equality between
+whole arrays and constant arrays. Boolean indices range over exactly
+``false`` and ``true``; models print Boolean indices and cells at that sort.
+Real and nested array components are not supported.
 
 How it works
 ------------

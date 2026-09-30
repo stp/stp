@@ -52,6 +52,7 @@
 
 #include "stp/Parser/SMT2Attribute.h"
 #include "stp/cpp_interface.h"
+#include "stp/AST/ArrayOps.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
 #include "stp/Parser/ParserUnwind.h"
@@ -627,6 +628,9 @@
     if (index.GetSourceSort() == array_sort.index())
       return;
 
+    if (array_sort.index().kind() == stp::SourceSort::Kind::Bool)
+      fatal_yyerror("array index is not of sort Bool");
+
     if (array_sort.index().kind() == stp::SourceSort::Kind::FloatingPoint)
     {
       fatal_yyerror("array index is not a float of the declared format");
@@ -650,6 +654,9 @@
       fatal_yyerror("store expects an array as its first argument");
     if (value.GetSourceSort() == array_sort.element())
       return;
+
+    if (array_sort.element().kind() == stp::SourceSort::Kind::Bool)
+      fatal_yyerror("stored value is not of sort Bool");
 
     if (array_sort.element().kind() ==
         stp::SourceSort::Kind::FloatingPoint)
@@ -1824,7 +1831,7 @@
 
 %type <vec> an_formulas an_terms function_params an_mixed
 
-%type <node> an_term  an_formula function_param an_const an_fp_term an_fp_predicate an_rounding_mode
+%type <node> an_term an_formula an_boolean function_param an_const an_fp_term an_fp_predicate an_rounding_mode
 %type <node> definition_body
 %type <uintval> an_fp_const command_numeral
 %type <str> sort_parameter_name
@@ -2456,7 +2463,6 @@ cmdi:
 
 definition_body:
   an_term { $$ = $1; }
-| an_formula { $$ = $1; }
 ;
 
 function_param_open:
@@ -2934,41 +2940,8 @@ STRING_TOK resolved_sort
 ;
 
 an_mixed:
-an_formula
-{
-  $$ = new ASTVec;
-  if ($1 != NULL) {
-    $$->push_back(*$1);
-    stp::GlobalParserInterface->deleteNode($1);
-  }
-}
-|
-an_term
-{
-  $$ = new ASTVec;
-  if ($1 != NULL) {
-    $$->push_back(*$1);
-    stp::GlobalParserInterface->deleteNode($1);
-  }
-}
-|
-an_mixed an_formula
-{
-  if ($1 != NULL && $2 != NULL) {
-    $1->push_back(*$2);
-    $$ = $1;
-    stp::GlobalParserInterface->deleteNode($2);
-  }
-}
-|
-an_mixed an_term
-{
-  if ($1 != NULL && $2 != NULL) {
-    $1->push_back(*$2);
-    $$ = $1;
-    stp::GlobalParserInterface->deleteNode($2);
-  }
-};
+an_terms { $$ = $1; }
+;
 
 an_formulas:
 an_formula
@@ -2991,8 +2964,8 @@ an_formulas an_formula
 ;
 
 /* Qualified identifiers: qualification selects a result sort; it never
-   converts a value. Separate heads keep the existing term/formula grammar
-   conflict-free and share every operation's original construction path. */
+   converts a value. Separate heads keep the grammar conflict-free and share every
+   operation's original construction path. */
 
 id_and:
   AND_TOK { $$ = nullptr; }
@@ -3737,7 +3710,18 @@ id_fp_tofp_unsigned_bare:
 }
 ;
 
+// Every SMT-LIB formula is a term. Sort checking belongs at Boolean operand
+// positions, since select can return Bool and store can take Boolean operands.
 an_formula:
+an_term
+{
+  if ($1->GetSourceSort().kind() != stp::SourceSort::Kind::Bool)
+    fatal_yyerror("Boolean operand required");
+  $$ = $1;
+}
+;
+
+an_boolean:
 id_true
 {
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(TRUE));
@@ -3851,33 +3835,6 @@ id_formid
   stp::releaseParserValue($3);
   checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK id_distinct an_formulas RPAREN_TOK
-{
-  using namespace stp;
-
-  ASTVec terms = *$3;
-
-  checkSameSourceSort(terms, "distinct requires operands of the same sort");
-
-  // More operands than the sort has values: refuse the group here rather than
-  // hand the solver the C(n, 2) encoding of a pigeonhole it cannot search.
-  if (!terms.empty() &&
-      distinctExceedsCardinality(terms[0].GetSourceSort(), terms.size()))
-  {
-    $$ = stp::GlobalParserInterface->newNode(
-        stp::GlobalParserInterface->CreateNode(FALSE));
-  }
-  else
-  {
-    if (terms.size() < 2)
-      fatal_yyerror("too few arguments to distinct");
-    $$ = stp::GlobalParserInterface->newNode(
-        stp::GlobalParserInterface->CreateNode(DISTINCT, terms));
-  }
-
-  stp::releaseParserValue($3);
-  checkQualifiedResult($2, $$);
-}
 | LPAREN_TOK id_bvslt an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSLT, $3, $4);
@@ -3958,10 +3915,6 @@ id_formid
   $$ = createNegOverflow($3);
   checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK an_formula RPAREN_TOK
-{
-  $$ = $2;
-}
 | LPAREN_TOK id_not an_formula RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(NOT, *$3));
@@ -3990,17 +3943,6 @@ id_formid
   stp::releaseParserValue($3);
   checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK id_ite an_formula an_formula an_formula RPAREN_TOK
-{
-  if (!$4->GetSourceSort().isKnown() ||
-      $4->GetSourceSort() != $5->GetSourceSort())
-    fatal_yyerror("ite branches must have the same sort");
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(ITE, *$3, *$4, *$5));
-  stp::GlobalParserInterface->deleteNode( $3);
-  stp::GlobalParserInterface->deleteNode( $4);
-  stp::GlobalParserInterface->deleteNode( $5);
-  checkQualifiedResult($2, $$);
-}
 | LPAREN_TOK id_and an_formulas RPAREN_TOK
 {
  $$ = createNode(AND, $3);
@@ -4016,11 +3958,6 @@ id_formid
   $$ = createNode(XOR, $3);
   checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK LET_TOK lets an_formula RPAREN_TOK
-  {
-    $$ = $4;
-    stp::GlobalParserInterface->letMgr->pop();
-  }
 | LPAREN_TOK id_boolean_functionid an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
@@ -4039,12 +3976,6 @@ id_formid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
-}
-| annotation_open an_formula annotation_attributes attributes RPAREN_TOK
-{
-  annotateTerm($1, *$2, *$4);
-  stp::releaseParserValue($4);
-  $$ = $2;
 }
 ;
 
@@ -4440,7 +4371,8 @@ id_fp_leq an_terms
 ;
 
 an_term:
-LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
+an_boolean { $$ = $1; }
+| LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->abstractValue(*$3, *$4));
@@ -4483,6 +4415,11 @@ LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
   // A use of a nullary array-sorted define-fun expands to its body.
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
+}
+| LPAREN_TOK id_array_functionid an_mixed RPAREN_TOK
+{
+  $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2, *$3));
+  stp::releaseParserValue($3);
 }
 | LPAREN_TOK an_term RPAREN_TOK
 {
@@ -4581,8 +4518,8 @@ LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
   ASTNode array = *$2;
   ASTNode index = *$3;
   checkArrayIndexSort(array, index);
-  unsigned int width = array.GetValueWidth();
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(READ, width, array, index));
+  $$ = stp::GlobalParserInterface->newNode(stp::createArrayRead(
+      *stp::GlobalParserInterface->nf, array, index));
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
   checkQualifiedResult($1, $$);
@@ -4590,13 +4527,13 @@ LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
 | id_store an_term an_term an_term
 {
   //ARRAY WRITE
-  unsigned int width = $4->GetValueWidth();
   ASTNode array = *$2;
   ASTNode index = *$3;
   ASTNode writeval = *$4;
   checkArrayIndexSort(array, index);
   checkArrayValueSort(array, writeval);
-  ASTNode write_term = stp::GlobalParserInterface->nf->CreateArrayTerm(WRITE,$2->GetIndexWidth(),width,array,index,writeval);
+  ASTNode write_term = stp::createArrayWrite(
+      *stp::GlobalParserInterface->nf, array, index, writeval);
   $$ = stp::GlobalParserInterface->newNode(write_term);
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
@@ -4675,7 +4612,11 @@ LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
     break;
   }
   const unsigned int width = $3->GetValueWidth();
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateArrayTerm(ITE,$4->GetIndexWidth(), width,*$2, *$3, *$4));
+  const ASTNode result = $3->GetSourceSort().kind() == stp::SourceSort::Kind::Bool
+      ? stp::GlobalParserInterface->nf->CreateNode(ITE, *$2, *$3, *$4)
+      : stp::GlobalParserInterface->nf->CreateArrayTerm(
+            ITE, $4->GetIndexWidth(), width, *$2, *$3, *$4);
+  $$ = stp::GlobalParserInterface->newNode(result);
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
   stp::GlobalParserInterface->deleteNode( $4);

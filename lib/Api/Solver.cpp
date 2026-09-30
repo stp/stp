@@ -2319,6 +2319,7 @@ std::string Solver::to_smt2(bool with_check_sat) const
   // the assertions: a declared symbol no assertion mentions still names its
   // sort, and a script that declares a Real under QF_BV is refused.
   std::ostringstream decls;
+  bool has_boolean_array = false;
   std::unordered_set<std::uint32_t> visited_sorts;
   const std::function<void(std::uint32_t)> visit_sort = [&](std::uint32_t sort) {
     if (!visited_sorts.insert(sort).second)
@@ -2338,6 +2339,8 @@ std::string Solver::to_smt2(bool with_check_sat) const
         break;
       case SortKind::ARRAY:
         has_array = true;
+        has_boolean_array |= m->rec(r.index).kind == SortKind::BOOL ||
+                             m->rec(r.element).kind == SortKind::BOOL;
         visit_sort(r.index);
         visit_sort(r.element);
         break;
@@ -2398,10 +2401,10 @@ std::string Solver::to_smt2(bool with_check_sat) const
   std::string logic = s->logic;
   if (logic.empty())
   {
-    if (has_real && (has_bv || has_fp || has_array))
-      // These combinations exceed the named linear-Real fragments. ALL
-      // selects the solver's supported combination without misclassifying
-      // bit-vectors as part of QF_AUFLRA or inventing a standard logic name.
+    if (has_boolean_array || (has_real && (has_bv || has_fp || has_array)))
+      // These combinations exceed the named linear-Real or bit-vector-array
+      // fragments. ALL also admits Boolean array components, whereas QF_ABV
+      // restricts arrays to bit-vector indices and elements.
       logic = "ALL";
     else if (has_real)
       logic = has_uf ? "QF_UFLRA" : "QF_LRA";

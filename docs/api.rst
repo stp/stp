@@ -359,8 +359,9 @@ Limits of the alpha
    that range are refused; they are not rounded to the narrower working
    format's zero, infinity or largest finite value. ``mk_fp_from_bits``
    builds a value of any format without these conversion limits.
--  Arrays hold bit-vectors, floats, rounding modes and values of declared
-   sorts, not Booleans.
+-  Arrays support Booleans, bit-vectors, floats, rounding modes and values
+   of declared sorts as indices and elements. Real and nested array
+   components remain unsupported.
 -  ``unsat_assumptions`` after a batch check reports every assumption; the
    failed subset comes from a check the incremental driver ran.
 -  ``stop-after-cnf`` stops the batch pipeline only: once pushes have made the

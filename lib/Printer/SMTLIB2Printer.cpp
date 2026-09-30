@@ -276,6 +276,7 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
   const bool has_fp = containsFloatingPointTheory(n, mgr);
   bool has_real = false;
   bool has_array_sort = false;
+  bool has_boolean_array = false;
   {
     ASTVec pending(1, n);
     ASTNodeSet seen;
@@ -292,6 +293,11 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
                  current.GetKind() == REAL_GE;
       has_array_sort =
           has_array_sort || current.GetType() == stp::ARRAY_TYPE;
+      const SourceSort sort = current.GetSourceSort();
+      if (sort.kind() == SourceSort::Kind::Array &&
+          (sort.index().kind() == SourceSort::Kind::Bool ||
+           sort.element().kind() == SourceSort::Kind::Bool))
+        has_boolean_array = true;
       for (const ASTNode& child : current.GetChildren())
         pending.push_back(child);
     }
@@ -304,7 +310,9 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
   const bool has_arrays =
       !definately_bv &&
       (has_real ? has_array_sort : containsArrayOps(n, mgr));
-  if (has_real && !has_fp && !has_arrays && !has_uninterpreted && !has_bv_sort)
+  if (has_boolean_array)
+    os << "(set-logic ALL)\n";
+  else if (has_real && !has_fp && !has_arrays && !has_uninterpreted && !has_bv_sort)
     os << "(set-logic QF_LRA)\n";
   else if (has_real)
     os << "(set-logic ALL)\n";
@@ -389,7 +397,10 @@ void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
     // registry-based cases below remain for legacy API nodes whose richer
     // RoundingMode/FP source sort is reconstructed from use sites.
     const SourceSort source_sort = a.GetSourceSort();
-    if (sortContainsUninterpreted(source_sort))
+    if (sortContainsUninterpreted(source_sort) ||
+        (source_sort.kind() == SourceSort::Kind::Array &&
+         (source_sort.index().kind() == SourceSort::Kind::Bool ||
+          source_sort.element().kind() == SourceSort::Kind::Bool)))
     {
       os << " () " << sourceSortToSMTLib(source_sort) << ")\n";
       continue;

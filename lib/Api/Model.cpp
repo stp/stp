@@ -26,6 +26,7 @@ THE SOFTWARE.
 // Model / ArrayValue / FunctionValue value types.
 
 #include "Internal.h"
+#include "stp/AST/ArrayOps.h"
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
@@ -80,6 +81,8 @@ bool involves_real(const UFSignature& sig)
 
 bool index_before(const ASTNode& a, const ASTNode& b)
 {
+  if (a.GetType() == BOOLEAN_TYPE)
+    return a.GetKind() == FALSE && b.GetKind() == TRUE;
   return CONSTANTBV::BitVector_Lexicompare(a.GetBVConst(), b.GetBVConst()) < 0;
 }
 
@@ -97,6 +100,8 @@ ASTNode lift(ManagerImpl* m, const ASTNode& carrier, const SourceSort& sort)
 {
   if (carrier.IsNull() || !carrier.isConstant())
     return carrier;
+  if (sort.kind() == SourceSort::Kind::Bool)
+    return m->bm->LiftSourceValue(carrier, sort);
   if (sort.kind() == SourceSort::Kind::FloatingPoint || sort.kind() == SourceSort::Kind::RoundingMode)
   {
     if (carrier.GetKind() == BVCONST && carrier.GetValueWidth() == sort.packedWidth())
@@ -607,14 +612,18 @@ void Evaluator::step(Frame& f, std::vector<ASTNode>& needs, ASTNode& out)
           {
             if (m_->is_const_array(array))
             {
-              const ASTNode fill = m_->const_array_default(array);
+              const ASTNode fill = m_->bm->constArrayDefault(array);
               if (const ASTNode* v = valued(fill))
                 out = *v;
               else
                 needs.push_back(fill);
               return;
             }
-            out = read_symbol(array, f.index);
+            const SourceSort sort = array.GetSourceSort();
+            const ASTNode index = lift(m_, f.index, sort.index());
+            out = read_symbol(array, index);
+            if (sort.element().kind() == SourceSort::Kind::Bool)
+              out = packBoolean(*m_->bm->hashingNodeFactory, out);
             return;
           }
           case WRITE:
@@ -768,8 +777,8 @@ ASTNode Evaluator::eval_read(const ASTNode& from, const ASTNode& index)
           return eval(m_->const_array_default(array));
         return read_symbol(array, index);
       case WRITE:
-        if (eval(array[1]) == index)
-          return eval(array[2]);
+        if (lift(m_, eval(array[1]), array.GetSourceSort().index()) == index)
+          return lift(m_, eval(array[2]), array.GetSourceSort().element());
         array = array[0];
         continue;
       case ITE:
@@ -827,9 +836,9 @@ void chain_cells(Evaluator& ev, ManagerImpl* m, const ASTNode& array,
   {
     if (n.GetKind() == WRITE)
     {
-      const ASTNode index = ev.evaluate(n[1]);
+      const ASTNode index = lift(m, ev.evaluate(n[1]), n.GetSourceSort().index());
       if (written.insert(index).second)
-        cells.emplace_back(index, ev.evaluate(n[2]));
+        cells.emplace_back(index, lift(m, ev.evaluate(n[2]), n.GetSourceSort().element()));
       n = n[0];
     }
     else if (n.GetKind() == ITE)
@@ -851,6 +860,8 @@ bool covers_index_sort(ManagerImpl* m, std::uint32_t array_sort, std::size_t cou
   constexpr unsigned digits = std::numeric_limits<std::size_t>::digits;
   switch (i.kind)
   {
+    case SortKind::BOOL:
+      return count == 2;
     case SortKind::BV:
       return i.a < digits && count == (std::size_t{1} << i.a);
     case SortKind::UNINTERPRETED:

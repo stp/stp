@@ -27,6 +27,7 @@ THE SOFTWARE.
 // constructors, the literal helpers and the operators.
 
 #include "Internal.h"
+#include "stp/AST/ArrayOps.h"
 
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/DecimalLiteral.h"
@@ -628,7 +629,7 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
       // to the default in the engine's hashing factory, in both
       // construction modes.
       const SortRec& er = c.m->rec(r.element);
-      ASTNode out = c.f()->CreateTerm(READ, args[0].GetValueWidth(), args[0], args[1]);
+      ASTNode out = createArrayRead(*c.f(), args[0], args[1]);
       if (er.kind == SortKind::FP && out.GetExpWidth() == 0)
         out = FloatBlaster::withFormat(c.bm(), out, er.a, er.b);
       return out;
@@ -642,8 +643,7 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
       if (c.sort(2) != r.element)
         c.mismatch(2, m->sort_text(r.element));
       const SortRec& er = m->rec(r.element);
-      ASTNode out = c.f()->CreateArrayTerm(WRITE, args[0].GetIndexWidth(), args[0].GetValueWidth(),
-                                           kids);
+      ASTNode out = createArrayWrite(*c.f(), args[0], args[1], args[2]);
       if (er.kind == SortKind::FP && out.GetExpWidth() == 0)
         out = FloatBlaster::withFormat(m->bm, out, er.a, er.b);
       return out;

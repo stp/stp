@@ -240,16 +240,18 @@ Type vc_arrayType(VC vcp, Type typeIndex, Type typeData)
   stp_sort td = type_of(typeData, "vc_arrayType");
   if (ti == nullptr || td == nullptr)
     return nullptr;
-  const auto scalar = [](stp_sort s) { return is_bv(s) || is_fp(s) || is_rm(s); };
+  const auto scalar = [](stp_sort s) {
+    return is_bool(s) || is_bv(s) || is_fp(s) || is_rm(s);
+  };
   if (!scalar(ti))
   {
-    fatal("CInterface: vc_arrayType: the index type must be a bitvector, floating-point or "
+    fatal("CInterface: vc_arrayType: the index type must be a Boolean, bitvector, floating-point or "
           "RoundingMode type: ");
     return nullptr;
   }
   if (!scalar(td))
   {
-    fatal("CInterface: vc_arrayType: the element type must be a bitvector, floating-point or "
+    fatal("CInterface: vc_arrayType: the element type must be a Boolean, bitvector, floating-point or "
           "RoundingMode type: ");
     return nullptr;
   }
@@ -578,7 +580,9 @@ bool check_array_index(const char* who, stp_term arr, stp_term index)
   const stp_sort expected = stp_sort_array_index(as);
   if (stp_term_sort(index) == expected)
     return true;
-  if (is_fp(expected))
+  if (is_bool(expected))
+    fatal(message(who, ": the array is indexed by Bool, but the index is not a Boolean: "));
+  else if (is_fp(expected))
     fatal(message(who, ": the array is indexed by a floating-point sort, but the index is not a float "
                        "of that format: "));
   else if (is_rm(expected))
@@ -599,7 +603,9 @@ bool check_array_value(stp_term arr, stp_term value)
   const stp_sort expected = stp_sort_array_element(as);
   if (stp_term_sort(value) == expected)
     return true;
-  if (is_fp(expected))
+  if (is_bool(expected))
+    fatal("CInterface: vc_writeExpr: the array's elements are Booleans, but the stored value is not: ");
+  else if (is_fp(expected))
     fatal("CInterface: vc_writeExpr: the array's elements are floats, but the stored value is not a "
           "float of that format: ");
   else if (is_rm(expected))

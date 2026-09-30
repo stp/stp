@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Printer/printers.h"
+#include "stp/AST/ArrayOps.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include <cassert>
@@ -74,6 +75,24 @@ static void printRoundingModeSMTLIB2(ostream& os, const ASTNode& rm,
   SMTLIB_Print1(os, rm, 0, letize);
 }
 
+static void printArrayAccess(ostream& os, const ASTNode& n, bool letize)
+{
+  const SourceSort sort = n[0].GetSourceSort();
+  NodeFactory& nf = *n.GetNodeManager()->hashingNodeFactory;
+  os << (n.GetKind() == READ ? "(select " : "(store ");
+  SMTLIB_Print1(os, n[0], 0, letize);
+  os << ' ';
+  SMTLIB_Print1(os, sort.index().kind() == SourceSort::Kind::Bool
+                       ? unpackBoolean(nf, n[1]) : n[1], 0, letize);
+  if (n.GetKind() == WRITE)
+  {
+    os << ' ';
+    SMTLIB_Print1(os, sort.element().kind() == SourceSort::Kind::Bool
+                         ? unpackBoolean(nf, n[2]) : n[2], 0, letize);
+  }
+  os << ')';
+}
+
 // Prints one node, in SMT-LIB2 syntax.
 void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 {
@@ -102,6 +121,40 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 
   // otherwise print it normally
   const Kind kind = n.GetKind();
+
+  const ASTNode boolRead = booleanArrayRead(n);
+  if (!boolRead.IsNull())
+  {
+    printArrayAccess(os, boolRead, letize);
+    return;
+  }
+  const ASTNode negatedRead = booleanArrayRead(n, true);
+  if (!negatedRead.IsNull())
+  {
+    os << "(not ";
+    printArrayAccess(os, negatedRead, letize);
+    os << ')';
+    return;
+  }
+  if (kind == READ || kind == WRITE)
+  {
+    const SourceSort sort = n[0].GetSourceSort();
+    if (sort.index().kind() == SourceSort::Kind::Bool ||
+        sort.element().kind() == SourceSort::Kind::Bool)
+    {
+      // A raw Boolean-cell READ denotes its one-bit carrier. Its enclosing
+      // Boolean test above prints simply as select; shared carrier subterms
+      // still need an explicit conversion to keep let bindings well sorted.
+      const bool packedRead = kind == READ &&
+                              sort.element().kind() == SourceSort::Kind::Bool;
+      if (packedRead)
+        os << "(ite ";
+      printArrayAccess(os, n, letize);
+      if (packedRead)
+        os << " #b1 #b0)";
+      return;
+    }
+  }
 
   // A conversion prints as the operation it is, not as its encoding over the
   // operand's bits (see STPMgr::CreateFpToReal).
@@ -153,7 +206,11 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
         // The constant printer puts a space before a literal; one space
         // separates the sort from the default either way.
         std::ostringstream value;
-        SMTLIB_Print1(value, manager->constArrayDefault(n), 0, letize);
+        const ASTNode raw = manager->constArrayDefault(n);
+        SMTLIB_Print1(value,
+            n.GetSourceSort().element().kind() == SourceSort::Kind::Bool
+                ? unpackBoolean(*manager->hashingNodeFactory, raw) : raw,
+            0, letize);
         std::string text = value.str();
         text.erase(0, text.find_first_not_of(' '));
         os << "((as const " << sourceSortToSMTLib(n.GetSourceSort()) << ") "

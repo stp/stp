@@ -2416,6 +2416,7 @@ struct Symbols
   std::vector<stp_term> list; // +1 each
   std::unordered_set<std::uint64_t> seen;
   bool fp = false, arrays = false, uf = false, real = false, bv = false;
+  bool boolean_arrays = false;
 
   ~Symbols()
   {
@@ -2437,6 +2438,8 @@ void note_sort(Symbols& out, stp_sort s)
       break;
     case STP_SORT_ARRAY:
       out.arrays = true;
+      out.boolean_arrays |= is_bool(stp_sort_array_index(s)) ||
+                            is_bool(stp_sort_array_element(s));
       note_sort(out, stp_sort_array_index(s));
       note_sort(out, stp_sort_array_element(s));
       break;
@@ -2489,6 +2492,8 @@ void collect_symbols(stp_term root, Symbols& out)
 
 std::string logic_of(const Symbols& s)
 {
+  if (s.boolean_arrays)
+    return "ALL";
   if (s.real)
     return s.uf ? "QF_UFLRA" : "QF_LRA";
   if (s.fp && s.uf)

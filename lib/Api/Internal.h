@@ -266,7 +266,7 @@ struct ManagerImpl
   // symbol with its default, and the hashing factory folds every read of
   // one); these are the API's spellings of the two queries
   bool is_const_array(const ASTNode& n) const;
-  const ASTNode& const_array_default(const ASTNode& n) const;
+  ASTNode const_array_default(const ASTNode& n) const;
   // options that forbid what construction would otherwise enable on demand
   bool array_equality_off = false;
   // an equality between arrays was built or parsed: what array-equality = auto engages

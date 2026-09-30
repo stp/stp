@@ -901,5 +901,59 @@ class InlineDefinitionStorage(unittest.TestCase):
         self.assertEqual(result.stdout, 'sat\n')
 
 
+class BooleanArrays(unittest.TestCase):
+    def test_boolean_positions_still_require_boolean_terms(self):
+        for formula in ['#b1', '(not #b1)', '(and true #b1)',
+                        '(ite #b1 true false)', '(ite true true #b1)',
+                        '(bvult true false)', '(= (bvnot true) #b0)',
+                        '(select b true)']:
+            with self.subTest(formula=formula):
+                result = run('(set-logic ALL)'
+                             '(declare-const b (Array Bool (_ BitVec 1)))'
+                             '(assert ' + formula + ')(check-sat)')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('(error ', result.stdout)
+                self.assertNotIn('Assertion', result.stderr)
+
+    def test_boolean_and_one_bit_vector_sorts_remain_distinct(self):
+        prefix = '''(set-logic ALL)
+(declare-const a (Array Bool Bool))
+(declare-const b (Array (_ BitVec 1) (_ BitVec 1)))
+'''
+        for term in ['(select a #b0)', '(store a true #b1)',
+                     '(select b true)', '(store b #b0 false)',
+                     '(= a b)', '((as const (Array Bool Bool)) #b1)']:
+            with self.subTest(term=term):
+                result = run(prefix + '(assert (= ' + term + ' ' + term + '))'
+                             '(check-sat)')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('(error ', result.stdout)
+                self.assertNotIn('Assertion', result.stderr)
+
+    def test_printed_boolean_array_model_replays(self):
+        for args in [(), ('--incremental=off',), ('--array-ackermann-budget=0',)]:
+            with self.subTest(args=args):
+                result = run('''(set-option :produce-models true)
+(set-logic ALL)
+(declare-const a (Array Bool Bool))
+(assert (select a false))
+(assert (not (select a true)))
+(check-sat)
+(get-model)
+''', args=args)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue(result.stdout.startswith('sat\n'), result.stdout)
+                model = result.stdout[4:].strip()
+                self.assertTrue(model.startswith('(') and model.endswith(')'), model)
+                self.assertIn('(Array Bool Bool)', model)
+                self.assertNotIn('#b', model)
+                replay = run('(set-logic ALL)' + model[1:-1] + '''
+(assert (not (and (select a false) (not (select a true)))))
+(check-sat)
+''')
+                self.assertEqual(replay.returncode, 0, replay.stdout + replay.stderr)
+                self.assertEqual(replay.stdout, 'unsat\n')
+
+
 if __name__ == '__main__':
     unittest.main()

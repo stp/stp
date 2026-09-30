@@ -26,6 +26,7 @@ THE SOFTWARE.
 // typed value readers, printing and substitution.
 
 #include "Internal.h"
+#include "stp/AST/ArrayOps.h"
 
 #include "../Lra/ASTRealConstAccess.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
@@ -86,6 +87,15 @@ bool is_fp_node(const ASTNode& n)
 
 Kind kind_of(ManagerImpl* m, const ASTNode& n)
 {
+  if (!booleanArrayRead(n).IsNull())
+    return Kind::SELECT;
+  if (!booleanArrayRead(n, true).IsNull())
+    return Kind::NOT;
+  // An explicit Bool-to-BV1 conversion can simplify to the raw read. Its
+  // public view must retain that conversion: select itself returns Bool.
+  if (n.GetKind() == READ &&
+      n[0].GetSourceSort().element().kind() == SourceSort::Kind::Bool)
+    return Kind::ITE;
   // A conversion to a Real is an encoding over its operand's bits, whose
   // root names the operand (STPMgr::CreateFpToReal).
   if (n.GetKind() == ITE && !m->bm->FpToRealOperand(n).IsNull())
@@ -217,6 +227,33 @@ View view_of(ManagerImpl* m, const ASTNode& n)
 {
   View v;
   v.kind = kind_of(m, n);
+  if (v.kind == Kind::ITE && n.GetKind() == READ)
+  {
+    v.children = {unpackBoolean(*m->factory(), n), m->bm->CreateOneConst(1),
+                  m->bm->CreateZeroConst(1)};
+    return v;
+  }
+  const ASTNode negatedRead = booleanArrayRead(n, true);
+  if (!negatedRead.IsNull())
+  {
+    v.children.push_back(unpackBoolean(*m->factory(), negatedRead));
+    return v;
+  }
+  const ASTNode boolRead = booleanArrayRead(n);
+  const ASTNode access = boolRead.IsNull() ? n : boolRead;
+  if (access.GetKind() == READ || access.GetKind() == WRITE)
+  {
+    const SourceSort sort = access[0].GetSourceSort();
+    v.children.push_back(access[0]);
+    v.children.push_back(sort.index().kind() == SourceSort::Kind::Bool
+                             ? unpackBoolean(*m->factory(), access[1])
+                             : access[1]);
+    if (access.GetKind() == WRITE)
+      v.children.push_back(sort.element().kind() == SourceSort::Kind::Bool
+                               ? unpackBoolean(*m->factory(), access[2])
+                               : access[2]);
+    return v;
+  }
   if (v.kind == Kind::FP_TO_REAL)
   {
     v.children.push_back(m->bm->FpToRealOperand(n));

@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
 #include "stp/STPManager/STPManager.h"
+#include "stp/AST/ArrayOps.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/FloatBlaster/FpAbstraction.h"
@@ -634,8 +635,7 @@ ASTNode STPMgr::CreateConstArray(const SourceSort& array_sort,
 {
   if (array_sort.kind() != SourceSort::Kind::Array)
     FatalError("CreateConstArray: the sort is not an array sort");
-  if (default_value.GetType() == ARRAY_TYPE ||
-      default_value.GetType() == BOOLEAN_TYPE)
+  if (default_value.GetType() == ARRAY_TYPE)
     FatalError("CreateConstArray: the default must be a scalar term",
                default_value);
   const ASTNode free_symbol = firstFreeSymbol(default_value);
@@ -662,7 +662,9 @@ ASTNode STPMgr::CreateConstArray(const SourceSort& array_sort,
   if (it != constArraysByKey.end())
     return it->second;
   const ASTNode symbol = CreateFreshSourceVariable(array_sort, "constarray");
-  constArrayDefaults[symbol] = default_value;
+  constArrayDefaults[symbol] = element.kind() == SourceSort::Kind::Bool
+                                  ? packBoolean(*defaultNodeFactory, default_value)
+                                  : default_value;
   constArraysByKey[key] = symbol;
   return symbol;
 }
@@ -754,6 +756,8 @@ ASTNode STPMgr::LiftSourceValue(const ASTNode& carrier,
         FatalError("LiftSourceValue: invalid RoundingMode carrier: ", carrier);
       return CreateRMConst(carrier.GetUnsignedConst());
     case SourceSort::Kind::Bool:
+      if (carrier.GetKind() == BVCONST && carrier.GetValueWidth() == 1)
+        return carrier.GetUnsignedConst() == 0 ? ASTFalse : ASTTrue;
       if (carrier != ASTTrue && carrier != ASTFalse)
         FatalError("LiftSourceValue: invalid Boolean carrier: ", carrier);
       return carrier;
