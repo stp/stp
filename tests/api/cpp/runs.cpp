@@ -167,6 +167,37 @@ TEST(Runs, execute_warns_when_an_answer_contradicts_the_status)
       << h2.err;
 }
 
+TEST(Runs, script_channels_preserve_and_restore_the_callers_sinks)
+{
+  TermManager tm;
+  Solver s(tm);
+  Heard h;
+  h.attach(s);
+  s.parse_smt2(R"(
+    (set-option :regular-output-channel "stderr")
+    (echo "diagnostic")
+    (reset)
+    (echo "regular")
+  )", ParseMode::EXECUTE);
+  EXPECT_EQ(h.out, "\"regular\"\n");
+  EXPECT_EQ(h.err, "\"diagnostic\"\n");
+
+  h.out.clear();
+  h.err.clear();
+  s.parse_smt2(R"(
+    (set-option :diagnostic-output-channel "stdout")
+    (set-logic QF_BV)
+    (set-info :status unsat)
+    (check-sat)
+  )", ParseMode::EXECUTE);
+  EXPECT_NE(h.out.find("Warning. Expected unsatisfiable"), std::string::npos);
+  EXPECT_TRUE(h.err.empty());
+
+  h.out.clear();
+  s.parse_smt2("(echo \"next script\")", ParseMode::EXECUTE);
+  EXPECT_EQ(h.out, "\"next script\"\n");
+}
+
 TEST(Runs, execute_runs_a_script_under_its_own_logic)
 {
   // EXECUTE answers every command, and PARSE_ONLY every command but the

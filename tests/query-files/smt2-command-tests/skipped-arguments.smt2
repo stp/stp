@@ -1,30 +1,11 @@
-; define-sort, define-fun-rec, define-funs-rec and declare-datatype(s) have
-; arguments STP has no use for, so the lexer swallows the rest of the
-; s-expression. If it miscounted, the commands after these would be eaten
-; silently -- hence the check-sat at the end of every group.
+; Unsupported recursive functions and datatypes consume balanced arguments.
 ; RUN: %solver %s | %OutputCheck %s
 (set-logic QF_ABV)
 (declare-fun x () (_ BitVec 4))
-
+; A comment containing an unbalanced ) must not close the command.
 ; CHECK-NEXT: ^unsupported
-(define-sort BV4 () (_ BitVec 4))
-; CHECK-NEXT: ^unsupported
-(define-sort Parametric (T) (Array T T))
-; CHECK-NEXT: ^unsupported
-(define-sort Deep () (Array (_ BitVec 4) (Array (_ BitVec 4) (_ BitVec 4))))
-
-; Arguments spread over several lines.
-; CHECK-NEXT: ^unsupported
-(define-sort
-   Multi
-   ()
-   (_ BitVec 4)
-)
-
-; A comment containing an unbalanced ) inside the skipped region.
-; CHECK-NEXT: ^unsupported
-(define-sort Commented () ; a comment with ) in it
-  (_ BitVec 4))
+(declare-datatype Commented ( ; a comment with ) in it
+  (leaf)))
 
 ; A quoted symbol containing an unbalanced ) inside the skipped region.
 ; CHECK-NEXT: ^unsupported

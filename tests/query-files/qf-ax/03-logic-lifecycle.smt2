@@ -1,21 +1,12 @@
-; QF_AX's automatic array-equality selection follows the logic lifecycle.
-; reset-assertions retains it; reset clears it and restores the caller's prior
-; option. Passing --array-equality explicitly therefore makes the final QF_ABV
-; query legal, while the default run rejects it.
-;
-; RUN: not %solver --incremental=off %s 2>&1 | %OutputCheck --check-prefix=DEFAULT %s
-; RUN: not %solver --incremental=on  %s 2>&1 | %OutputCheck --check-prefix=DEFAULT %s
-; RUN: %solver --incremental=off --array-equality %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
-; RUN: %solver --incremental=on  --array-equality %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
-; DEFAULT: ^sat
-; DEFAULT: ^sat
-; DEFAULT: without --array-equality
-; DEFAULT-NOT: REACHED-END
-; EXPLICIT: ^sat
-; EXPLICIT: ^sat
-; EXPLICIT: ^sat
-; EXPLICIT: REACHED-END
-;
+; reset-assertions retains the logic; reset lets another array logic select
+; its own support. Both QF_AX and QF_ABV include extensional equality.
+; RUN: %solver --incremental=off %s | %OutputCheck %s
+; RUN: %solver --incremental=on %s | %OutputCheck %s
+; RUN: %solver --array-equality %s | %OutputCheck %s
+; CHECK: ^sat$
+; CHECK: ^sat$
+; CHECK: ^sat$
+; CHECK: REACHED-END
 (set-logic QF_AX)
 (declare-sort I 0)
 (declare-sort E 0)

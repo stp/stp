@@ -716,13 +716,14 @@ std::string quote_symbol(const std::string& name)
 {
   if (name.empty())
     return "||";
-  // SMT-LIB 2.6 section 3.1: a reserved word is not a symbol, so a name
+  // SMT-LIB 2.7 section 3.1: a reserved word is not a symbol, so a name
   // that spells one must be quoted to be read back as a symbol.
   static const char* const reserved[] = {
       "BINARY", "DECIMAL", "HEXADECIMAL", "NUMERAL", "STRING", "_", "!", "as", "let",
-      "exists", "forall", "match", "par", "assert", "check-sat", "check-sat-assuming",
+      "lambda", "exists", "forall", "match", "par", "assert", "check-sat", "check-sat-assuming",
       "declare-const", "declare-datatype", "declare-datatypes", "declare-fun",
-      "declare-sort", "define-fun", "define-fun-rec", "define-funs-rec", "define-sort",
+      "declare-sort", "declare-sort-parameter", "define-const", "define-fun",
+      "define-fun-rec", "define-funs-rec", "define-sort",
       "echo", "exit", "get-assertions", "get-assignment", "get-info", "get-model",
       "get-option", "get-proof", "get-unsat-assumptions", "get-unsat-core", "get-value",
       "pop", "push", "reset", "reset-assertions", "set-info", "set-logic", "set-option"};

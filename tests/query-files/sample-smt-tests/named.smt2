@@ -1,6 +1,7 @@
 ; RUN: %solver %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 
+(set-option :produce-models true)
 (set-logic QF_AUFBV )
 (declare-fun arr () (Array (_ BitVec 32) (_ BitVec 32) ) )
 (push 1)

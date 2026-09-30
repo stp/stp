@@ -3,8 +3,8 @@
 ; a "Different bit-widths specified" syntax error, and then an answer.
 
 ; RUN: not %solver %s 2>&1 | %OutputCheck %s
-; CHECK: ^\(error "syntax error: line [0-9]+ bit-vectors must be of positive length  token: x"\)$
-; CHECK: ^Fatal Error: syntax error: line [0-9]+ bit-vectors must be of positive length  token: x$
+; CHECK: ^\(error "syntax error: line [0-9]+ bit-vectors must be of positive length  token: \)"\)$
+; CHECK: ^Fatal Error: syntax error: line [0-9]+ bit-vectors must be of positive length  token: \)$
 ;
 ; The negatives have to hold over the whole output, so they get a prefix to
 ; themselves: OutputCheck scopes a negative directive to the region between the
@@ -17,7 +17,7 @@
 ; The response is one line, on stdout, and nothing follows it there: the
 ; "Fatal Error:"/"STP Error:" framing belongs to the other channel.
 ; RUN: not %solver %s 2>/dev/null | %OutputCheck %s --check-prefix=STDOUT
-; STDOUT: ^\(error ".*positive length  token: x"\)$
+; STDOUT: ^\(error ".*positive length  token: \)"\)$
 ; STDOUT-NOT: .
 
 (set-logic QF_BV)

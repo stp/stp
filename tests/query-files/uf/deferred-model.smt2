@@ -1,9 +1,9 @@
-; RUN: %solver --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
-; RUN: %solver --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
 ; CHECK: ^sat
 ; CHECK: define-fun \|f\|
 ; CHECK: \( \(\|f\| \|x\|\)  #x2A \)
-; CHECK: unsupported
+; CHECK: error "get-value is not permitted
 ;
 (set-logic QF_UFBV)
 (set-option :produce-models true)

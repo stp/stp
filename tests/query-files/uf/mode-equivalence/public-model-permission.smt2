@@ -1,9 +1,8 @@
-; RUN: %solver --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
-; RUN: %solver --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
 ; CHECK-NEXT: ^sat
-; CHECK-NEXT: ^unsupported
-; CHECK-NEXT: ^unsupported
-; CHECK-NEXT: ^"REACHED-END"
+; CHECK-NEXT: ^\(error "get-value requires :produce-models true"\)
+; CHECK-NOT: REACHED-END
 ; CHECK-NOT: define-fun
 ;
 ; UF certification needs an internal candidate in both modes, but that does

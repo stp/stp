@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
+#include "stp/Parser/SMT2Output.h"
 #include "stp/Printer/printers.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
@@ -37,6 +38,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFModel.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "stp/Util/GitSHA1.h"
+#include "stp/Util/SMTLibString.h"
 #include "Lra/LraFrontend.h"
 #include <cassert>
 #include <exception>
@@ -99,9 +101,18 @@ void Cpp_interface::init()
     bm.Push();
 
   print_success = false;
+  output_channels->reset();
   ignoreCheckSatRequest = false;
   retain_uf_declarations = false;
-  produce_models = false;
+  produce_models = initial_produce_models;
+  bm.UserFlags.produce_models = initial_produce_models;
+  produce_assertions = false;
+  produce_assignments = false;
+  produce_unsat_assumptions = false;
+  global_declarations = false;
+  mode = Mode::Start;
+  current_command_name.clear();
+  current_command_supported = true;
   session_touched = false;
   model_valid = false;
   current_command_rejected = false;
@@ -112,6 +123,7 @@ void Cpp_interface::init()
   delayed_bv_auto_engagement = false;
   lra_logic = false;
   solves_run = 0;
+  last_check_work.clear();
 }
 
 void Cpp_interface::addFrame()
@@ -136,7 +148,9 @@ void Cpp_interface::removeFrame()
 }
 
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
-    : bm(bm_), set_global_parser_bm(false),
+    : bm(bm_), initial_produce_models(bm_.UserFlags.callerRequestedModel()),
+      model_option_before_parse(bm_.UserFlags.produce_models),
+      output_channels(new SMT2Output), set_global_parser_bm(false),
       letMgr(new LetMgr(bm.ASTUndefined)), nf(factory)
 {
   init();
@@ -151,6 +165,7 @@ Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
 Cpp_interface::~Cpp_interface()
 {
   cleanUp();
+  bm.UserFlags.produce_models = model_option_before_parse;
 
   if (GlobalParserInterface == this)
     GlobalParserInterface = NULL;
@@ -196,8 +211,9 @@ bool Cpp_interface::declaredSortsEnabled() const
 
 void Cpp_interface::setLogic(const std::string& logic)
 {
+  mode = Mode::Assert;
   const bool selectsUF =
-      logic.compare(0, 5, "QF_UF") == 0 ||
+      logic == "ALL" || logic.compare(0, 5, "QF_UF") == 0 ||
       logic.compare(0, 6, "QF_AUF") == 0;
   if (selectsUF)
   {
@@ -211,14 +227,15 @@ void Cpp_interface::setLogic(const std::string& logic)
   else
     restoreUFOptionAfterLogic();
 
-  const bool selectsAX = logic == "QF_AX";
-  if (selectsAX)
+  ax_enabled_by_logic = logic == "QF_AX";
+  const bool selectsArrays = logic == "ALL" || logic.compare(0, 4, "QF_A") == 0;
+  if (selectsArrays)
   {
-    if (!ax_enabled_by_logic)
+    if (!arrays_enabled_by_logic)
     {
       array_equality_option_before_logic =
           bm.UserFlags.enable_array_equality;
-      ax_enabled_by_logic = true;
+      arrays_enabled_by_logic = true;
     }
     bm.UserFlags.enable_array_equality = true;
   }
@@ -243,10 +260,11 @@ void Cpp_interface::restoreUFOptionAfterLogic()
 
 void Cpp_interface::restoreArrayEqualityOptionAfterLogic()
 {
-  if (!ax_enabled_by_logic)
+  ax_enabled_by_logic = false;
+  if (!arrays_enabled_by_logic)
     return;
   bm.UserFlags.enable_array_equality = array_equality_option_before_logic;
-  ax_enabled_by_logic = false;
+  arrays_enabled_by_logic = false;
 }
 
 void Cpp_interface::AddAssert(const ASTNode& assert)
@@ -320,7 +338,7 @@ void Cpp_interface::addSortAlias(const std::string& name,
   if (accept_sort_declaration && !accept_sort_declaration(name, sort))
     refuseCurrentCommand("the sort name '" + name +
                          "' conflicts with a declaration retained by the term manager");
-  sort_aliases[name] = sort;
+  sort_aliases.emplace(name, SMT2SortDefinition{0, SMT2Sort(sort)});
   frames.back()->addSortAlias(name);
   session_touched = true;
 }
@@ -331,8 +349,71 @@ bool Cpp_interface::lookupSortAlias(const std::string& name,
   const auto found = sort_aliases.find(name);
   if (found == sort_aliases.end())
     return false;
-  sort = found->second;
+  if (found->second.arity != 0)
+    return false;
+  sort = found->second.body.sourceSort();
   return true;
+}
+
+void Cpp_interface::addSortParameter(const std::string& name)
+{
+  const unsigned slot = sort_parameters.size();
+  if (!sort_parameters.emplace(name, slot).second)
+    refuseCurrentCommand("duplicate sort parameter: " + name);
+}
+
+SMT2Sort Cpp_interface::sortAtom(const std::string& name, const SourceSort& builtin) const
+{
+  const auto parameter = sort_parameters.find(name);
+  return parameter == sort_parameters.end() ? SMT2Sort(builtin)
+                                            : SMT2Sort::param(parameter->second);
+}
+
+SMT2Sort Cpp_interface::sortExpression(const std::string& name,
+                                      const std::vector<SMT2Sort>& arguments) const
+{
+  const auto parameter = sort_parameters.find(name);
+  if (parameter != sort_parameters.end())
+  {
+    if (!arguments.empty())
+      throw std::invalid_argument("sort parameter cannot take arguments: " + name);
+    return SMT2Sort::param(parameter->second);
+  }
+  const auto definition = sort_aliases.find(name);
+  if (definition == sort_aliases.end())
+    throw std::invalid_argument("unknown sort (not built in, and not a declared sort): " + name);
+  if (arguments.size() != definition->second.arity)
+    throw std::invalid_argument("wrong number of arguments to sort: " + name);
+  return definition->second.body.substitute(arguments);
+}
+
+SourceSort Cpp_interface::resolveSort(const SMT2Sort& expression)
+{
+  try
+  {
+    return expression.sourceSort();
+  }
+  catch (const std::invalid_argument& error)
+  {
+    refuseCurrentCommand(error.what());
+  }
+}
+
+void Cpp_interface::defineSort(const std::string& name, const SMT2Sort& body)
+{
+  if (sort_parameters.empty())
+    addSortAlias(name, resolveSort(body));
+  else
+  {
+    if (sort_aliases.count(name))
+      refuseCurrentCommand("the sort name is already defined: " + name);
+    if (accept_sort_declaration && !accept_sort_declaration(name, SourceSort::unknown()))
+      refuseCurrentCommand("the sort name conflicts with a declaration retained by the term manager: " + name);
+    sort_aliases.emplace(name, SMT2SortDefinition{static_cast<unsigned>(sort_parameters.size()), body});
+    frames.back()->addSortAlias(name);
+    session_touched = true;
+  }
+  sort_parameters.clear();
 }
 
 void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
@@ -393,8 +474,7 @@ ASTNode Cpp_interface::CreateFpToReal(const ASTNode& x)
 }
 
 
-ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
-                                          const SourceSort& source_sort)
+void Cpp_interface::checkReservedSymbolName(const char* name)
 {
   // SMT-LIB 2 reserves an initial '@' or '.' for the solver, and STP does not
   // merely respect that reservation, it relies on it: CreateFreshVariable
@@ -414,8 +494,23 @@ ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
     rejectCurrentCommand(msg);
     endParseWithDiagnostic(msg);
   }
+}
 
+ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
+                                          const SourceSort& source_sort)
+{
+  checkReservedSymbolName(name);
   return bm.CreateSourceSymbol(name, source_sort);
+}
+
+ASTNode Cpp_interface::CreateParameterSymbol(const char* name,
+                                             const SourceSort& source_sort)
+{
+  checkReservedSymbolName(name);
+  // A formal is local to its definition. Registering it as a public Real
+  // symbol both requests an unnecessary model value and invalidates the
+  // current exact model, even though the assertion context has not changed.
+  return bm.CreateInternalSourceSymbol(name, source_sort);
 }
 
 ASTNode Cpp_interface::LookupOrCreateSymbol(const char* const name)
@@ -433,7 +528,7 @@ void Cpp_interface::removeSymbol(ASTNode to_remove)
 }
 
 void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
-                                  const ASTNode& function)
+                                  const ASTNode& function, bool named)
 {
   if (current_command_rejected)
     return;
@@ -442,11 +537,12 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
                          "' conflicts with a name retained by the term manager");
   Function f;
   f.name = name;
+  f.named = named;
 
   ASTNodeMap fromTo;
   for (size_t i = 0, size = params.size(); i < size; ++i)
   {
-    ASTNode p = bm.CreateFreshSourceVariable(
+    ASTNode p = bm.CreateFreshInternalSourceVariable(
         params[i].GetSourceSort(), "STP_INTERNAL_FUNCTION_NAME");
     fromTo.insert(std::make_pair(params[i], p));
     f.params.push_back(p);
@@ -776,6 +872,9 @@ bool Cpp_interface::arraySortsAgree(const ASTNode& arr, const array_sort& sort)
   return arr.GetSourceSort() == sort.sourceSort();
 }
 
+void Cpp_interface::beginOutputRouting() { output_channels->begin(); }
+void Cpp_interface::endOutputRouting() { output_channels->end(); }
+
 void Cpp_interface::success()
 {
   if (current_command_rejected)
@@ -787,16 +886,21 @@ void Cpp_interface::success()
   }
 }
 
-//TODO escape string.
+void Cpp_interface::echo(const std::string& value)
+{
+  cout << quoteSMTLibString(value) << endl;
+}
+
 void Cpp_interface::error(std::string msg)
 {
   last_error_message = msg;
-  cout << "(error \"" << msg << "\")" << endl;
+  cout << "(error " << quoteSMTLibString(msg) << ")" << endl;
   flush(cout);
 }
 
 void Cpp_interface::unsupported()
 {
+  current_command_supported = false;
   cout << "unsupported" << endl;
   flush(cout);
 }
@@ -808,10 +912,52 @@ void Cpp_interface::beginCurrentCommand()
   if (current_command_active)
     abortCurrentCommand();
   SMT2ResetCommandLexerState();
+  SMT2ExpectCommand();
   current_command_active = true;
   current_command_rejected = false;
+  current_command_supported = true;
+  current_command_name.clear();
+  sort_parameters.clear();
   if (UFContext* context = bm.getUFContextIfAny())
     context->beginParserCommand();
+}
+
+void Cpp_interface::requireCommand(const std::string& command)
+{
+  current_command_name = command;
+  if (!protocol_checks)
+    return;
+  bool allowed = true;
+  if (command == "set-logic")
+    allowed = mode == Mode::Start;
+  else if (command == "get-model" || command == "get-value" ||
+           command == "get-assignment")
+    allowed = mode == Mode::Sat;
+  else if (command == "get-proof" || command == "get-unsat-core" ||
+           command == "get-unsat-assumptions")
+    allowed = mode == Mode::Unsat;
+  else if (mode == Mode::Start &&
+           (command == "assert" || command == "check-sat" ||
+            command == "check-sat-assuming" ||
+            command.compare(0, 8, "declare-") == 0 ||
+            command.compare(0, 7, "define-") == 0))
+  {
+    // Like cvc5 and Bitwuzla, accept scripts that omit set-logic. Select
+    // the supported theories before the lexer reads this command's terms.
+    // Metadata and stack operations alone do not choose a logic.
+    setLogic("ALL");
+    SMT2SetFloatTokens(true);
+    SMT2SetRealTokens(true);
+    SMT2SetBitVectorTokens(true);
+  }
+  if (!allowed)
+    refuseCurrentCommand(command + " is not permitted in the current solver mode");
+}
+
+void Cpp_interface::unavailableQuery(const std::string& command,
+                                     const std::string& option)
+{
+  refuseCurrentCommand(command + " requires :" + option + " true");
 }
 
 void Cpp_interface::abortCurrentCommand()
@@ -863,6 +1009,16 @@ void Cpp_interface::endParseWithDiagnostic(const std::string& diagnostic)
 
 void Cpp_interface::finishCurrentCommand()
 {
+  const std::string& command = current_command_name;
+  if (!current_command_rejected && current_command_supported &&
+      (command == "assert" || command == "reset-assertions" ||
+       command.compare(0, 8, "declare-") == 0))
+  {
+    if (mode != Mode::Start)
+      mode = Mode::Assert;
+    model_valid = false;
+    lastCheckWasAssuming = false;
+  }
   if (current_command_active)
   {
     if (UFContext* context = bm.getUFContextIfAny())
@@ -1014,6 +1170,8 @@ void Cpp_interface::pop()
     endParseWithDiagnostic(msg);
   }
 
+  if (mode != Mode::Start)
+    mode = Mode::Assert;
   model_valid = false;
   lastCheckWasAssuming = false;
 
@@ -1062,6 +1220,8 @@ void Cpp_interface::push()
   else
     cache.push_back(Entry(SOLVER_UNDECIDED));
 
+  if (mode != Mode::Start)
+    mode = Mode::Assert;
   model_valid = false;
   lastCheckWasAssuming = false;
   session_touched = true;
@@ -1169,6 +1329,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
     return;
   if (before_check && before_check())
   {
+    mode = Mode::Sat;
     // An interrupt pending as the check begins answers it at once, as the
     // API answers its own checks: unknown, nothing solved, no model. (An
     // interrupted search reports its budget gone, as this does.)
@@ -1405,10 +1566,11 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
 
   if (after_check)
     after_check();
+  mode = last_run.result == SOLVER_UNSATISFIABLE ? Mode::Unsat : Mode::Sat;
   ToSATBase::PrintOutput(&bm, last_run.result);
 
   // User has specified -p option to print model.
-   if (bm.UserFlags.print_counterexample_flag)
+   if (bm.UserFlags.print_counterexample_flag && model_valid)
    {
       getModel();
    }
@@ -1426,7 +1588,9 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
 // something which dereferences GlobalSTP, such as BBAsProp) construct the STP
 // themselves and assign it before that point.
 Cpp_interface::Cpp_interface(STPMgr& bm_)
-    : bm(bm_), set_global_parser_bm(true),
+    : bm(bm_), initial_produce_models(bm_.UserFlags.callerRequestedModel()),
+      model_option_before_parse(bm_.UserFlags.produce_models),
+      output_channels(new SMT2Output), set_global_parser_bm(true),
       letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
 {
   nf = bm.defaultNodeFactory;
@@ -1492,6 +1656,16 @@ void Cpp_interface::badBooleanOptionValue(const std::string& option,
 
 void Cpp_interface::setOption(std::string option, std::string value)
 {
+  const bool boolean_option = option == "print-success" ||
+      option == "global-declarations" || option == "interactive-mode" ||
+      option == "produce-assertions" || option == "produce-assignments" ||
+      option == "produce-models" || option == "produce-proofs" ||
+      option == "produce-unsat-assumptions" || option == "produce-unsat-cores";
+  if (boolean_option && value != "true" && value != "false")
+    badBooleanOptionValue(option, value);
+  // Accept production options on either side of set-logic, as cvc5 and
+  // Bitwuzla do. Restrictions needed by an option's implementation belong
+  // in its handler (for example, global-declarations below).
   /*
       :diagnostic-output-channel
       :global-declarations
@@ -1531,7 +1705,7 @@ void Cpp_interface::setOption(std::string option, std::string value)
     else if (value == "false")
     {
       produce_models = false;
-      bm.UserFlags.produce_models = false;
+      bm.UserFlags.produce_models = produce_assignments;
       success();
     }
     else
@@ -1568,29 +1742,34 @@ void Cpp_interface::setOption(std::string option, std::string value)
     else
       badBooleanOptionValue(option, value);
   }
+  else if (option == "produce-assignments")
+  {
+    produce_assignments = value == "true";
+    bm.UserFlags.produce_models = produce_models || produce_assignments;
+    success();
+  }
   else if (option == "produce-unsat-assumptions")
   {
-    // get-unsat-assumptions is always answered; the option is accepted so
-    // conforming drivers can request it.
-    if (value == "true" || value == "false")
-      success();
-    else
-      badBooleanOptionValue(option, value);
+    produce_unsat_assumptions = value == "true";
+    success();
   }
-  else if (option == "diagnostic-output-channel")
+  else if (option == "produce-assertions" || option == "interactive-mode")
   {
-    if (value == "stdout")
-      success();
-    else
-      unsupported();
+    produce_assertions = value == "true";
+    success();
+  }
+  else if (option == "diagnostic-output-channel" ||
+           option == "regular-output-channel")
+  {
+    if (!output_channels->set(option == "diagnostic-output-channel", value))
+      refuseCurrentCommand("cannot open output channel: " + value);
+    success();
   }
   else
     unsupported();
 }
 
-// The options we report are exactly the ones setOption() honours; everything
-// else must answer "unsupported" rather than invent a value (SMT-LIB 2.6
-// 4.1.7).
+// Unsupported predefined options retain their defaults (2.7 section 4.2.8).
 void Cpp_interface::getOption(std::string option)
 {
   if (option == "print-success")
@@ -1599,8 +1778,21 @@ void Cpp_interface::getOption(std::string option)
     cout << (produce_models ? "true" : "false") << endl;
   else if (option == "global-declarations")
     cout << (global_declarations ? "true" : "false") << endl;
-  else if (option == "diagnostic-output-channel")
-    cout << "\"stdout\"" << endl;
+  else if (option == "produce-assertions" || option == "interactive-mode")
+    cout << (produce_assertions ? "true" : "false") << endl;
+  else if (option == "produce-unsat-assumptions")
+    cout << (produce_unsat_assumptions ? "true" : "false") << endl;
+  else if (option == "produce-assignments")
+    cout << (produce_assignments ? "true" : "false") << endl;
+  else if (option == "produce-proofs" || option == "produce-unsat-cores")
+    cout << "false" << endl;
+  else if (option == "random-seed" || option == "reproducible-resource-limit" ||
+           option == "verbosity")
+    cout << "0" << endl;
+  else if (option == "diagnostic-output-channel" ||
+           option == "regular-output-channel")
+    cout << quoteSMTLibString(output_channels->name(
+                option == "diagnostic-output-channel")) << endl;
   else
   {
     unsupported();
@@ -1694,6 +1886,9 @@ static const char* categoryKeyword(RunTimes::Category c)
 
 void Cpp_interface::getInfo(std::string flag)
 {
+  if (protocol_checks && flag == "reason-unknown" &&
+      (mode != Mode::Sat || bm.getUnknownReason() == UnknownReason::None))
+    refuseCurrentCommand("get-info :reason-unknown requires a preceding unknown result");
   const EngineWork work(engine_work_failed);
   if (flag == "name")
     cout << "(:name \"STP\")" << endl;
@@ -1733,10 +1928,6 @@ void Cpp_interface::getInfo(std::string flag)
     // as the standard asks; the process ones are what they say, process-wide,
     // and :check-sat-calls counts the session. Stages the check did no work in
     // are left out, so a small query does not answer with a screen of zeroes.
-    //
-    // The standard permits this only in sat or unsat mode. STP answers it
-    // whenever it is asked, since the alternative under an immediate-exit
-    // error behaviour is killing a session over a diagnostic query.
     std::ios_base::fmtflags saved(cout.flags());
     const std::streamsize saved_precision = cout.precision();
     cout << std::fixed;
@@ -1766,14 +1957,7 @@ void Cpp_interface::getInfo(std::string flag)
   }
   else if (flag == "reason-unknown")
   {
-    // Only meaningful after an answer of `unknown`, which is the one case
-    // SMT-LIB defines it for. Asked at any other time the honest answer is
-    // that there is no unknown to explain, and saying so beats inventing a
-    // reason or reporting the flag as unsupported when it is implemented.
-    // That answer is carried inside the info response rather than raised as
-    // an error response, for the reason :all-statistics gives above: under an
-    // immediate-exit error behaviour, raising one would kill the session over
-    // a diagnostic query.
+    // Protocol checks above restrict this to the most recent unknown result.
     switch (bm.getUnknownReason())
     {
       case UnknownReason::Timeout:
@@ -1796,9 +1980,9 @@ void Cpp_interface::getInfo(std::string flag)
         // caller nothing they can act on. All four share it because the
         // sentence is what says which, and SMT-LIB2 has no spelling that
         // would say it better.
-        cout << "(:reason-unknown (incomplete \""
-             << bm.getUnknownReasonDetail()
-             << "\"))" << endl;
+        cout << "(:reason-unknown (incomplete "
+             << quoteSMTLibString(bm.getUnknownReasonDetail())
+             << "))" << endl;
         break;
       case UnknownReason::None:
         // SOLVER_UNKNOWN cannot reach the frontend without a reason: both
@@ -1832,9 +2016,10 @@ bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
   if (sort_aliases.empty())
     return false;
   bool anyDeclared = false;
-  for (const std::pair<const std::string, SourceSort>& alias : sort_aliases)
+  for (const auto& alias : sort_aliases)
     anyDeclared = anyDeclared ||
-                  alias.second.kind() == SourceSort::Kind::Uninterpreted;
+                  (alias.second.arity == 0 &&
+                   alias.second.body.sourceSort().kind() == SourceSort::Kind::Uninterpreted);
   if (!anyDeclared)
     return false;
   return declaredSortCarrierMayBeShort(bm, assertions, "--uf-sort-width",
@@ -1950,6 +2135,8 @@ bool declaredSortCarrierMayBeShort(const STPMgr& bm, const ASTVec& assertions,
 
 void Cpp_interface::getAssertions()
 {
+  // Assertions are always retained. Like cvc5, allow inspection regardless
+  // of :produce-assertions rather than reject information already available.
   // GetAsserts() flattens the stack into the individual asserted formulas,
   // unlike getAssertVector(), which conjoins each level.
   const ASTVec v = GetAsserts();
@@ -1969,6 +2156,8 @@ void Cpp_interface::getValue(const ASTVec& v)
   const EngineWork work(engine_work_failed);
   if (current_command_rejected)
     return;
+  if (!produce_models)
+    unavailableQuery("get-value", "produce-models");
   bool readable_model = bm.UserFlags.construct_counterexample_flag;
   // Exact Real solving constructs and certifies a combined model even when
   // the caller did not request the ordinary counterexample product. The
@@ -1977,8 +2166,7 @@ void Cpp_interface::getValue(const ASTVec& v)
   readable_model = readable_model || bm.HasRealModel();
   if (!readable_model || !model_valid)
   {
-    unsupported();
-    return;
+    refuseCurrentCommand("get-value: no model is available for the current context");
   }
 
   // The driver defers counterexample construction to the first reader.
@@ -2051,25 +2239,11 @@ void Cpp_interface::getValue(const ASTVec& v)
       // by. The sort is recoverable here: a UF_APPLY's source sort is its
       // declaration's codomain.
       if (bm.isUninterpretedSortedTerm(n))
-        os << "|"
-           << bm.uninterpretedElementName(n.GetSourceSort(), value) << "|";
+        bm.printUninterpretedElement(os, n.GetSourceSort(), value);
       else
         printer::SMTLIB2_Print1(os, value, 0, false);
       os << " )" << std::endl;
       continue;
-    }
-    // (get-value ...) asks for the value of arbitrary well-sorted terms and
-    // not just of variables, and the model evaluator already decides all of
-    // them -- including terms built over uninterpreted applications. The one
-    // shape with no value to print is an array: (get-model) prints the
-    // completed array interpretations instead. That refusal is
-    // unconditional, because reaching the printer with an array aborted the
-    // process rather than answering when array equality was disabled -- and
-    // disabled is the default.
-    if (n.GetType() == ARRAY_TYPE)
-    {
-      unsupported();
-      return;
     }
     GlobalSTP->Ctr_Example->PrintSMTLIB2(os, n);
     os << std::endl;
@@ -2079,8 +2253,39 @@ void Cpp_interface::getValue(const ASTVec& v)
   cout << os.str() << std::endl;
 }
 
+void Cpp_interface::getAssignment()
+{
+  if (!produce_assignments)
+    unavailableQuery("get-assignment", "produce-assignments");
+  const EngineWork work(engine_work_failed);
+  if (!model_valid)
+    refuseCurrentCommand("get-assignment: no model is available for the current context");
+  if (GlobalSTP->hasIncrementalSolver())
+    GlobalSTP->getIncrementalSolver()->materializePendingModel();
+  std::map<std::string, ASTNode> labels;
+  for (const auto& definition : functions)
+    if (definition.second.named &&
+        definition.second.function.GetSourceSort().kind() == SourceSort::Kind::Bool)
+      labels.emplace(definition.first, definition.second.function);
+  std::ostringstream response;
+  response << "(";
+  bool first = true;
+  for (const auto& label : labels)
+  {
+    if (!first) response << " ";
+    first = false;
+    const ASTNode value = GlobalSTP->Ctr_Example->ModelValueOfFormula(label.second);
+    response << "(|" << label.first << "| "
+             << (value == bm.ASTTrue ? "true" : "false") << ")";
+  }
+  response << ")";
+  cout << response.str() << endl;
+}
+
 void Cpp_interface::getUnsatAssumptions()
 {
+  if (!produce_unsat_assumptions)
+    unavailableQuery("get-unsat-assumptions", "produce-unsat-assumptions");
   const EngineWork work(engine_work_failed);
   // Meaningful right after a check-sat-assuming that answered unsat;
   // anything else gets the empty list, which is the correct core whenever
@@ -2128,19 +2333,13 @@ void Cpp_interface::getUnsatAssumptions()
 void Cpp_interface::getModel()
 {
   const EngineWork work(engine_work_failed);
+  if (!produce_models)
+    unavailableQuery("get-model", "produce-models");
   bool readable_model = bm.UserFlags.construct_counterexample_flag;
   readable_model = readable_model || bm.HasRealModel();
-  if (!readable_model)
+  if (!readable_model || !model_valid)
   {
-    // Perhaps this is confusing and instead it whould return "()"?
-    unsupported();
-    return;
-  }
-
-  if (cache.size() == 0 || (cache.back().result != SOLVER_SATISFIABLE) ||
-      !model_valid)
-  {
-    return;
+    refuseCurrentCommand("get-model: no model is available for the current context");
   }
 
   // The driver defers counterexample construction to the first reader.
@@ -2150,9 +2349,6 @@ void Cpp_interface::getModel()
   if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
     GlobalSTP->getIncrementalSolver()->materializePendingModel();
 
-  // The body is rendered first because rendering it is what names the
-  // elements of any declared sort, and the preamble that declares them has to
-  // come before the definitions that use them.
   std::ostringstream os;
   GlobalSTP->Ctr_Example->PrintFullCounterExampleSMTLIB2(os);
   if (bm.HasRealModel())
@@ -2173,31 +2369,28 @@ void Cpp_interface::getModel()
 
   cout << "(" << std::endl;
 
-  // A model that mentions a sort declared by declare-sort has to say so, or it
-  // cannot be read back: the sort has no elements anyone else knows about. So
-  // it declares the sort, then one constant per element the model mentions,
-  // and the definitions refer to those. Distinct names denote distinct
-  // elements -- the convention every solver's models rest on, and the only
-  // thing this format cannot state outright.
-  // Every sort the body mentioned, not only those that named an element. A
-  // sort can reach the text through a function signature alone -- a predicate
-  // over an opaque sort, which is the commonest shape of all -- and a model
-  // that used a sort it never declared cannot be read back at all.
-  for (const SourceSort& sort : bm.uninterpretedSortsPrinted())
-    cout << "(declare-sort " << sourceSortToSMTLib(sort) << " 0)" << std::endl;
-  for (const STPMgr::UninterpretedElement& element : bm.uninterpretedElements())
-    cout << "(declare-fun |" << element.name << "| () "
-         << sourceSortToSMTLib(element.sort) << ")" << std::endl;
-
+  // SMT-LIB models contain only definitions. Abstract values carry their
+  // sorts locally, and user-declared sorts are already in the signature.
   cout << os.str();
   cout << ")" << std::endl;
 }
 
+ASTNode Cpp_interface::abstractValue(const std::string& name,
+                                     const SourceSort& sort)
+{
+  if (current_command_name != "get-value" || !model_valid)
+    refuseCurrentCommand("abstract values may only occur in get-value for the current model");
+  for (const auto& value : bm.uninterpretedElements())
+    if (value.name == name && value.sort == sort)
+      return bm.CreateUninterpretedConst(value.carrier, sort);
+  refuseCurrentCommand("unknown abstract value for the current model: " + name);
+  return ASTNode();
+}
+
 Cpp_interface::SolverFrame::SolverFrame(
-    ankerl::unordered_dense::map<std::string, Function>*
+    FunctionMap*
         global_function_context,
-    std::map<std::string, SourceSort>*
-        global_sort_alias_context,
+    SortMap* global_sort_alias_context,
     STPMgr* manager)
     : _global_function_context(global_function_context),
       _global_sort_alias_context(global_sort_alias_context), _manager(manager)

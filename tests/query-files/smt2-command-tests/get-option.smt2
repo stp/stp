@@ -1,5 +1,4 @@
-; get-option reports the options set-option honours, and "unsupported"
-; otherwise.
+; get-option reports supported values and defaults for predefined options.
 ; RUN: %solver %s | %OutputCheck %s
 (set-logic QF_BV)
 (declare-fun x () (_ BitVec 4))
@@ -10,9 +9,9 @@
 (set-option :produce-models true)
 ; CHECK-NEXT: ^true
 (get-option :produce-models)
-; CHECK-NEXT: ^"stdout"
+; CHECK-NEXT: ^"stderr"
 (get-option :diagnostic-output-channel)
-; CHECK-NEXT: ^unsupported
+; CHECK-NEXT: ^false
 (get-option :produce-proofs)
 ; CHECK-NEXT: ^unsupported
 (get-option :some-unknown-option)

@@ -60,11 +60,16 @@ void SMT2SetFloatTokens(bool enable);
 // Mathematical-Real theory names are live only under the Real logics: QF_LRA,
 // QF_UFLRA, QF_AUFLRA and the LRA variants of the floating-point logics.
 void SMT2SetRealTokens(bool enable);
+void SMT2SetBitVectorTokens(bool enable);
+void SMT2ExpectCommand();
 
-// The same question, for the one place that cannot be answered by the lexer
-// rules: define-sort's body is swallowed whole and re-tokenised by hand in
-// the grammar, so it has to consult the gate itself.
-bool SMT2FloatTokensActive();
+// Sort and term symbols live in separate namespaces.
+void SMT2SetSortContext(bool enable);
+void SMT2BeginAttributes();
+void SMT2BeginAnnotation();
+bool SMT2EndAnnotation();
+bool SMT2IsTheorySymbol(const std::string& name);
+void SMT2ResetLexMode();
 
 // The next ordinary identifier is the declaration site of a define-fun
 // formal.  The lexer must return its spelling rather than resolving it in a

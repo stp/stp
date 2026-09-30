@@ -207,6 +207,7 @@ TEST(c_interrupt, reaches_a_check_the_script_runs)
       s, [](const char* text, size_t n, void* user) { static_cast<std::string*>(user)->append(text, n); },
       &out);
   const char* script =
+      "(set-logic QF_BV)\n"
       "(declare-fun x () (_ BitVec 64)) (declare-fun y () (_ BitVec 64))\n"
       "(assert (= (bvmul ((_ zero_extend 64) x) ((_ zero_extend 64) y)) (_ bv18446744073709551557 128)))\n"
       "(assert (not (= x (_ bv1 64)))) (assert (not (= y (_ bv1 64)))) (assert (bvult x y))\n"
@@ -255,7 +256,7 @@ TEST(c_interrupt, a_sink_that_parses_is_refused)
           w->code = e->code;
       },
       &seen);
-  EXPECT_EQ(STP_OK, stp_solver_parse_smt2(s, "(declare-fun x () Bool) (assert x) (check-sat)", STP_PARSE_EXECUTE));
+  EXPECT_EQ(STP_OK, stp_solver_parse_smt2(s, "(set-logic QF_BV) (declare-fun x () Bool) (assert x) (check-sat)", STP_PARSE_EXECUTE));
   EXPECT_TRUE(seen.called);
   EXPECT_EQ(STP_ERROR, seen.status);
   EXPECT_EQ(STP_ERR_STATE, seen.code);

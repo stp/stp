@@ -1,14 +1,12 @@
 Array extensionality
 ====================
 
-STP reasons about array elements (``select``/``store``) always, and
-about arrays as whole values with the ``--array-equality`` option: it
-then decides the quantifier-free *extensional* theory of arrays, in
-which equality and ``distinct`` between array terms are first-class
-atoms. Without the option an equality between two array terms is
-refused, with an error, at the point the term is built -- except a
-syntactically reflexive one, which the simplifying node factory folds to
-true before the rejection is reached.
+STP decides the quantifier-free *extensional* theory of arrays: equality
+and ``distinct`` between whole arrays are first-class atoms alongside
+``select`` and ``store``. SMT-LIB array logics, including ``QF_ABV`` and
+``QF_AX``, and ``ALL`` enable this support automatically. The
+``--array-equality`` option also enables it for inputs whose logic omits
+arrays. See :doc:`smtlib27` for the supported array sorts.
 
 The implementation is an STP-specific integration of the
 lemmas-on-demand procedure of
@@ -23,14 +21,17 @@ Usage
 
 Command line::
 
-    stp --array-equality file.smt2
+    stp file.smt2
+
+The script selects an array logic with ``set-logic``.
 
 API (:doc:`api`): the ``array-equality`` option. Its default, ``auto``,
 lets an equality between whole arrays built through the API engage the
 procedure by itself; ``on`` forces the procedure on, as
-``--array-equality`` does, and is what a script read through the API
-needs; ``off`` refuses such an equality at construction with
-``UNSUPPORTED``. An equality that is built is the dedicated opaque
+``--array-equality`` does. An array logic in a parsed script enables
+the procedure for that script. Outside that selection, ``off`` refuses
+whole-array equality at construction with ``UNSUPPORTED``. An equality
+that is built is the dedicated opaque
 ``ARRAY_EQ`` node, and its abstraction is deferred until the completed
 query reaches the solver.
 
@@ -46,24 +47,23 @@ With the option enabled:
   equality involving ``store`` chains and array-valued ``ite``;
 * ``(get-model)`` prints each array as a valid nullary ``define-fun``
   whose body is a constant default cell with the observed writes stored
-  on top, in ascending index order — the model replays in any conforming
-  SMT-LIB2 solver. This form is used whenever the option is on, even for
+  on top, in ascending index order. This uses the common ``as const``
+  extension and replays in readers that support it. This form is used
+  whenever the option is on, even for
   a query containing no array equality; only with the option off does
   the pre-feature array printer run;
 * a model's value of an array (``Model::array_value`` in C++,
   ``stp_model_array_value`` in C, ``m[a]`` in Python) has one entry per
   concrete index, in ascending index order, over a default element;
-* array-valued ``(get-value ...)`` is rejected as unsupported (use
-  ``(get-model)``). This is not conditional on the option: an array has no
-  value spelling in a valuation pair either way.
+* array-valued ``(get-value ...)`` returns a complete array in the same
+  constant-array and store form, including for compound array terms.
 
 Nullary array-sorted ``define-fun`` is accepted by the SMT-LIB2 parser
 whether or not the option is on: such a definition is a pure name for its
 body, and benchmarks use them without any whole-array equality in sight.
 
-Without the option, STP decides exactly what it decided before the
-feature existed, with one deliberate exception: an equality between whole
-array terms is now refused rather than warned about. It was never
+For native API users who disable the procedure, an equality between whole
+array terms is refused rather than warned about. It was never
 decided -- nothing eliminates the array-sorted operands, so the atom
 reached the solver unconstrained and the verdict could be wrong, and a
 build with assertions aborted instead of answering. Both behaviours
@@ -88,8 +88,7 @@ soft timeout expires while lazy refinement is still undecided, the
 solve now reports ``unknown`` with a timeout reason where it previously
 aborted with an internal error.
 
-Limitations: arrays of arrays are not supported (STP's sort system has
-no nested array sorts).
+Limitations: Boolean, Real and nested array components are not supported.
 
 How it works
 ------------

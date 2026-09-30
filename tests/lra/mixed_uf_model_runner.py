@@ -22,7 +22,7 @@ def expressions(text):
 
 
 def check(solver, name, body, expected, flags):
-    body = body.replace("\n", "\n(set-option :produce-models true)\n", 1)
+    body = "(set-option :produce-models true)\n" + body
     result = subprocess.run(
         [solver, "--SMTLIB2", *flags], input=body, text=True,
         capture_output=True, timeout=20)
@@ -98,6 +98,7 @@ CASES = [
 (check-sat)
 (get-value ((f q)))
 (reset)
+(set-option :produce-models true)
 (set-logic QF_UFLRA)
 (declare-fun f (Bool) Real)
 (declare-fun q () Bool)

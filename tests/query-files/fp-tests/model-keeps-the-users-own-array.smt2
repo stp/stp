@@ -6,7 +6,7 @@
 ; so filtering on "is an array read" rather than on "is introduced" would
 ; pass that test and break this one.
 ; CHECK: ^sat
-; CHECK-L: (define-fun |a| (_ BitVec 4) (_ BitVec 8) #x3 #x2A)
+; CHECK-L: (define-fun |a| () (Array (_ BitVec 4) (_ BitVec 8)) (store ((as const (Array (_ BitVec 4) (_ BitVec 8))) #x00) #x3 #x2A))
 ; CHECK-NOT-L: @fp_unspecified
 (set-logic QF_ABVFP)
 (set-option :produce-models true)

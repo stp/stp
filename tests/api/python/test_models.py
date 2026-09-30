@@ -355,6 +355,41 @@ def test_model_pickle_and_translate():
         Model.from_smt2("(define-fun x () (_ BitVec 8) nonsense)")
 
 
+@pytest.mark.parametrize("sort_name", ["S", "sort with spaces"])
+def test_model_pickle_uninterpreted_values(sort_name):
+    p, q, r = Consts("p q r", DeclareSort(sort_name))
+    m = _model(p == q, p != r)
+    for rebuilt in (pickle.loads(pickle.dumps(m)), m.translate(TermManager())):
+        assert rebuilt[p].index == rebuilt[q].index
+        assert rebuilt[p].index != rebuilt[r].index
+        assert bool(rebuilt.eval(p == q)) and bool(rebuilt.eval(p != r))
+
+
+@pytest.mark.parametrize("sort_name, sort_text, first, second", [
+    ("S", "S", "S!0", "S!1"),
+    ("sort with spaces", "|sort with spaces|", "|sort with spaces!0|", "|sort with spaces!1|"),
+    ("S", "|S|", "(as |@S!0| S)", "(as @S!1 |S|)"),
+])
+def test_model_read_uninterpreted_values(sort_name, sort_text, first, second):
+    # Older pickles store bare S!k values; quoted and simple symbols name the
+    # same sort and abstract values in the qualified spelling.
+    text = """(
+      (define-fun p () {sort} {first})
+      (define-fun q () {sort} {first})
+      (define-fun r () {sort} {second})
+    )""".format(sort=sort_text, first=first, second=second)
+    m = Model.from_smt2(text)
+    p, q, r = Consts("p q r", DeclareSort(sort_name, tm=m.manager()))
+    assert m[p].index == m[q].index
+    assert m[p].index != m[r].index
+
+
+@pytest.mark.parametrize("qualifier", ["T", "(_ BitVec 8)"])
+def test_model_read_uninterpreted_value_wrong_sort(qualifier):
+    with pytest.raises(ParseError, match="cannot read"):
+        Model.from_smt2("(define-fun p () S (as @S!0 %s))" % qualifier)
+
+
 def test_model_survives_solver_changes():
     x = BitVec("x", 8)
     s = Solver()

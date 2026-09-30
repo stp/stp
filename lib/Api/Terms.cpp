@@ -543,7 +543,9 @@ private:
         out_ += to_string(rm_of(n, "Term::str"));
         return;
       case SourceSort::Kind::Uninterpreted:
-        out_ += quote_symbol(ss.name() + "!" + std::to_string(bv_limbs_of(n)[0]));
+        out_ += "(as " + quote_symbol("@" + ss.name() + "!" +
+                     std::to_string(bv_limbs_of(n)[0])) + " " +
+                m_->sort_text(m_->sort_of_source(ss, "Term::str")) + ")";
         return;
       default:
         break;
@@ -641,7 +643,9 @@ std::string print_term(ManagerImpl* m, const ASTNode& n, Format f, bool share)
       (f == Format::AUTO || f == Format::SMTLIB2))
   {
     const std::uint64_t index = bv_limbs_of(n)[0];
-    return quote_symbol(n.GetSourceSort().name() + "!" + std::to_string(index));
+    return "(as " + quote_symbol("@" + n.GetSourceSort().name() + "!" +
+                    std::to_string(index)) + " " +
+           m->sort_text(m->sort_of_source(n.GetSourceSort(), "Term::to_string")) + ")";
   }
   // A function symbol's engine name is an internal identity; it prints as
   // the name it was declared under, as Term::symbol() reports it.

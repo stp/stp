@@ -996,22 +996,16 @@ public:
 
   // ── Model vocabulary for declared sorts ───────────────────────────
   //
-  // An element of a sort introduced by declare-sort has no literal. Its
-  // carrier pattern is not one: printing #x0000 for it would name a
-  // bit-vector, which is the sort the whole representation exists to say it
-  // is not. SMT-LIB's answer, and every solver's, is to give the elements
-  // names and let distinct names denote distinct elements -- so a model
-  // declares the sort, declares one constant per element it mentions, and
-  // refers to those.
-  //
-  // Names are handed out per sort in first-request order, so the same solve
-  // always prints the same model and two solves of the same query agree.
-  // Reset with the counterexample.
+  // Elements of declared sorts print as qualified abstract values:
+  // (as |@S!0| S). Names are stable within the current model and reset with
+  // its counterexample. They are not declarations in the script signature.
   std::string uninterpretedElementName(const SourceSort& sort,
                                        const ASTNode& carrier);
 
-  // Every (sort, element name, carrier) the model has named so far, in the
-  // order the names were issued. What the model's preamble is printed from.
+  void printUninterpretedElement(std::ostream& os, const SourceSort& sort,
+                                  const ASTNode& carrier);
+
+  // Every abstract value exposed by the current model, for get-value input.
   const std::vector<UninterpretedElement>& uninterpretedElements() const
   {
     return uninterpreted_elements;

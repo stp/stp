@@ -1715,11 +1715,12 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   // Declared before the interface, which may tear its frames down again as it
   // is destroyed, and detached from it once read.
   ASTVec declared_at_end;
-  std::map<std::string, SourceSort> sorts_at_end;
+  Cpp_interface::SortMap sorts_at_end;
   Cpp_interface::FunctionMap definitions_at_end;
   // The command line's parse: the manager's factory behind the type checker.
   ::TypeChecker checker(*s->mgr->factory(), *bm);
   Cpp_interface pi(*bm, &checker);
+  pi.enableProtocolChecks(runs);
   pi.keepDeclaredSymbolsAtCleanup(&declared_at_end);
   pi.keepSortAliasesAtCleanup(&sorts_at_end);
   pi.keepFunctionsAtCleanup(&definitions_at_end);
@@ -1934,8 +1935,9 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   pi.keepSortAliasesAtCleanup(nullptr);
   sorts_at_end.insert(pi.sortAliases().begin(), pi.sortAliases().end());
   for (const auto& alias : sorts_at_end)
-    if (alias.second.kind() == SourceSort::Kind::Uninterpreted)
-      s->mgr->sort_of_source(alias.second, fn);
+    if (alias.second.arity == 0 &&
+        alias.second.body.sourceSort().kind() == SourceSort::Kind::Uninterpreted)
+      s->mgr->sort_of_source(alias.second.body.sourceSort(), fn);
   if (runs)
   {
     // A script that ran has answered its questions: what is left is the
@@ -2293,6 +2295,7 @@ std::string Solver::to_smt2(bool with_check_sat) const
   std::vector<ASTNode> symbols;
   std::vector<SourceSort> required_sorts;
   bool has_fp = false, has_array = false, has_uf = false, has_real = false;
+  bool has_bv = false;
   collect_symbols(roots, symbols, required_sorts, has_fp, has_array, has_uf, has_real);
   for (const std::string& name : m->symbol_order)
     symbols.push_back(m->symbols.at(name).node);
@@ -2308,6 +2311,9 @@ std::string Solver::to_smt2(bool with_check_sat) const
     const detail::SortRec& r = m->rec(sort);
     switch (r.kind)
     {
+      case SortKind::BV:
+        has_bv = true;
+        break;
       case SortKind::FP:
       case SortKind::RM:
         has_fp = true;
@@ -2377,13 +2383,13 @@ std::string Solver::to_smt2(bool with_check_sat) const
   std::string logic = s->logic;
   if (logic.empty())
   {
-    if (has_real && has_fp)
-      // the LRA variants of the floating-point logics (fp.to_real, a Real
-      // literal under to_fp): the widest one the content needs
-      logic = std::string("QF_") + (has_array ? "A" : "") + (has_uf ? "UF" : "") + "BVFPLRA";
+    if (has_real && (has_bv || has_fp || has_array))
+      // These combinations exceed the named linear-Real fragments. ALL
+      // selects the solver's supported combination without misclassifying
+      // bit-vectors as part of QF_AUFLRA or inventing a standard logic name.
+      logic = "ALL";
     else if (has_real)
-      // QF_UFLRA has no arrays: an array beside a Real is QF_AUFLRA's
-      logic = has_array ? "QF_AUFLRA" : has_uf ? "QF_UFLRA" : "QF_LRA";
+      logic = has_uf ? "QF_UFLRA" : "QF_LRA";
     else
     {
       logic = "QF_";
@@ -2398,7 +2404,6 @@ std::string Solver::to_smt2(bool with_check_sat) const
         logic = "QF_ABV";
     }
   }
-  os << "(set-logic " << logic << ")\n";
   // The options set on the solver. produce-models is SMT-LIB's own; the rest
   // are STP's, which no reader takes from a script, so they print as
   // comments: the script reads back, and the settings stay on record.
@@ -2420,6 +2425,7 @@ std::string Solver::to_smt2(bool with_check_sat) const
         os << "; " << name << " = " << text << "\n";
       }
     }
+  os << "(set-logic " << logic << ")\n";
   os << decls.str();
   for (const auto& entry : m->definitions)
     os << detail::print_definition(m, entry.second);

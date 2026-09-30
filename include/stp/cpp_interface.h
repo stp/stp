@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef CPP_INTERFACE_H_
 #define CPP_INTERFACE_H_
 
+#include "stp/Parser/SMT2Sort.h"
 #include "stp/AST/AST.h"
 #include "stp/UninterpretedFunctions/UFDecl.h"
 #include "stp/NodeFactory/NodeFactory.h"
@@ -38,6 +39,7 @@ THE SOFTWARE.
 #include <string>
 #include <string_view>
 #include <utility>
+#include <unordered_map>
 #include <vector>
 
 namespace stp
@@ -49,6 +51,7 @@ namespace stp
 struct UserDefinedFlags;
 class STPMgr;
 class LetMgr;
+class SMT2Output;
 enum class FPSpecial; // see STPManager.h
 
 // The (exponent bits, significand bits) of a parsed floating-point sort;
@@ -122,12 +125,13 @@ struct TransparentStringHash
 
 class Cpp_interface
 {
+public:
+  using SortMap = std::map<std::string, SMT2SortDefinition>;
+
+private:
   STPMgr& bm;
-  // Sort names the script introduced: define-sort's nullary floating-point
-  // aliases, and declare-sort's uninterpreted sorts. Both resolve to a
-  // SourceSort, so a name in sort position needs one lookup whichever
-  // command introduced it.
-  std::map<std::string, SourceSort> sort_aliases;
+  SortMap sort_aliases;
+  std::map<std::string, unsigned> sort_parameters;
   bool print_success;
   bool ignoreCheckSatRequest;
   bool retain_uf_declarations; // see retainUFDeclarations
@@ -163,8 +167,12 @@ public:
     ASTVec params;
     ASTNode function;
     std::string name;
+    bool named = false;
   };
-  using FunctionMap = ankerl::unordered_dense::map<std::string, Function>;
+  // Lexer tokens borrow Function addresses. A :named argument can insert a
+  // definition while its surrounding application's token is on the parser
+  // stack, so those addresses must survive insertions and rehashing.
+  using FunctionMap = std::unordered_map<std::string, Function>;
 
 private:
   FunctionMap functions;
@@ -180,10 +188,9 @@ private:
   public:
     // Functions are (currently) managed at global scope; we need a pointer to
     // the global functions to be able to remove functions when we pop
-    SolverFrame(ankerl::unordered_dense::map<std::string, Function>*
+    SolverFrame(FunctionMap*
                     global_function_context,
-                std::map<std::string, SourceSort>*
-                    global_sort_alias_context,
+                SortMap* global_sort_alias_context,
                 STPMgr* manager);
     virtual ~SolverFrame();
 
@@ -230,10 +237,9 @@ private:
     ankerl::unordered_dense::map<std::string, std::vector<ASTNode>,
                                  TransparentStringHash, std::equal_to<>>
         _temporary_symbol_bindings;
-    ankerl::unordered_dense::map<std::string, Function>*
+    FunctionMap*
         _global_function_context;
-    std::map<std::string, SourceSort>*
-        _global_sort_alias_context;
+    SortMap* _global_sort_alias_context;
     STPMgr* _manager;
   };
 
@@ -254,7 +260,7 @@ public:
   void keepDeclaredSymbolsAtCleanup(ASTVec* sink) { symbols_at_cleanup = sink; }
   // The same for the sort names in scope (sortAliases), which cleanUp copies
   // into `sink` before the frames drop them.
-  void keepSortAliasesAtCleanup(std::map<std::string, SourceSort>* sink)
+  void keepSortAliasesAtCleanup(SortMap* sink)
   {
     sorts_at_cleanup = sink;
   }
@@ -266,7 +272,7 @@ public:
   void addFunction(const Function& function);
   // Every sort name in scope and its sort: define-sort's aliases and
   // declare-sort's sorts, a caller's seeded ones among them.
-  const std::map<std::string, SourceSort>& sortAliases() const
+  const SortMap& sortAliases() const
   {
     return sort_aliases;
   }
@@ -299,7 +305,7 @@ public:
 
 private:
   ASTVec* symbols_at_cleanup = nullptr;
-  std::map<std::string, SourceSort>* sorts_at_cleanup = nullptr;
+  SortMap* sorts_at_cleanup = nullptr;
   FunctionMap* functions_at_cleanup = nullptr;
   std::function<void()> after_public_reset;
   std::function<bool(const std::string&, const ASTNode&)> accept_symbol_declaration;
@@ -325,6 +331,7 @@ private:
   std::vector<CategoryWork> last_check_work;
 
   void checkInvariant();
+  void checkReservedSymbolName(const char* name);
   void init();
 
   // The manager's run times as they stand, and -- given a reading taken in
@@ -347,15 +354,24 @@ private:
   void resetIncrementalSolver();
 
   bool produce_models;
+  bool initial_produce_models;
+  bool model_option_before_parse;
+  bool produce_assertions = false;
+  bool produce_assignments = false;
+  bool produce_unsat_assumptions = false;
+  enum class Mode { Start, Assert, Sat, Unsat };
+  Mode mode = Mode::Start;
+  bool protocol_checks = false;
+  std::string current_command_name;
+  bool current_command_supported = true;
+  std::unique_ptr<SMT2Output> output_channels;
 
   // :global-declarations. False (the required default) scopes declarations
   // and definitions to the assertion level that made them; true makes them
   // permanent, so pop and reset-assertions keep them and reset -- which
   // discards every declaration -- is the only thing that takes them away.
   //
-  // Initialised here rather than in init(), which reset() re-runs: reset
-  // empties the assertion stack and with it the declarations, but the option
-  // saying how later declarations are scoped outlives it.
+  // reset restores the startup default; reset-assertions preserves it.
   bool global_declarations = false;
 
   // Whether anything has been declared, defined, asserted, pushed or solved
@@ -389,10 +405,11 @@ private:
   void restoreUFOptionAfterLogic();
 
   // QF_AX needs declared sorts and extensional array equality, but it does
-  // not contain uninterpreted functions. Keep that selection separate from
-  // enable_uninterpreted_functions and restore the caller's array-equality
+  // not contain uninterpreted functions. Other array logics and ALL also
+  // select extensional arrays. Restore the caller's array-equality
   // option when reset clears the logic or parser teardown ends the session.
   bool ax_enabled_by_logic = false;
+  bool arrays_enabled_by_logic = false;
   bool array_equality_option_before_logic = false;
   void restoreArrayEqualityOptionAfterLogic();
 
@@ -494,6 +511,17 @@ public:
   // interned as a symbol (the old scheme made the sort name resolvable as a
   // term variable). Aliases follow assertion-frame scope, and
   // :global-declarations along with the other declarations.
+  void beginSortDefinition() { sort_parameters.clear(); }
+  bool isSortParameter(const std::string& name) const
+  {
+    return sort_parameters.count(name) != 0;
+  }
+  DLL_PUBLIC void addSortParameter(const std::string& name);
+  DLL_PUBLIC void defineSort(const std::string& name, const SMT2Sort& body);
+  DLL_PUBLIC SMT2Sort sortExpression(const std::string& name,
+                                     const std::vector<SMT2Sort>& arguments = {}) const;
+  DLL_PUBLIC SMT2Sort sortAtom(const std::string& name, const SourceSort& builtin) const;
+  DLL_PUBLIC SourceSort resolveSort(const SMT2Sort& expression);
   DLL_PUBLIC void addSortAlias(const std::string& name, const SourceSort& sort);
   DLL_PUBLIC bool lookupSortAlias(const std::string& name,
                                   SourceSort& sort) const;
@@ -519,6 +547,8 @@ public:
   DLL_PUBLIC ASTNode CreateFpToReal(const ASTNode& x);
   DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
                                         const SourceSort& source_sort);
+  DLL_PUBLIC ASTNode CreateParameterSymbol(const char* name,
+                                           const SourceSort& source_sort);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);
 
   void removeSymbol(ASTNode to_remove);
@@ -530,7 +560,7 @@ public:
   // Declare a function. We can't keep references to the declared variables
   // though. So rename them..
   DLL_PUBLIC void storeFunction(const std::string& name, const ASTVec& params,
-                                const ASTNode& function);
+                                const ASTNode& function, bool named = false);
 
   DLL_PUBLIC ASTNode applyFunction(const std::string& name,
                                    const ASTVec& params);
@@ -646,6 +676,9 @@ public:
   DLL_PUBLIC bool arraySortsAgree(const ASTNode& arr, const array_sort& sort);
 
   DLL_PUBLIC void success();
+  DLL_PUBLIC void beginOutputRouting();
+  DLL_PUBLIC void endOutputRouting();
+  DLL_PUBLIC void echo(const std::string& value);
   DLL_PUBLIC void error(std::string msg);
   DLL_PUBLIC void unsupported();
 
@@ -654,6 +687,10 @@ public:
   // be discarded whole, with no malformed UF_APPLY or fresh placeholder
   // constructed or registered.
   DLL_PUBLIC void beginCurrentCommand();
+  void enableProtocolChecks(bool enable) { protocol_checks = enable; }
+  DLL_PUBLIC void requireCommand(const std::string& command);
+  DLL_PUBLIC void unavailableQuery(const std::string& command,
+                                   const std::string& option);
   DLL_PUBLIC void abortCurrentCommand();
   // Reports the diagnostic and marks the command discarded, but returns:
   // for the parser's yyerror, where bison abandons the parse of its own
@@ -741,6 +778,8 @@ public:
   DLL_PUBLIC void getAssertions();
 
   DLL_PUBLIC void getModel();
+  void getAssignment();
+  ASTNode abstractValue(const std::string& name, const SourceSort& sort);
   DLL_PUBLIC void getValue(const ASTVec& v);
 };
 

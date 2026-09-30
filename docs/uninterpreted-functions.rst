@@ -2,7 +2,7 @@ Uninterpreted functions
 =======================
 
 A ``declare-fun`` with a nonempty domain declares an uninterpreted function,
-and any logic whose name contains ``UF`` enables the support; the
+and any logic whose name contains ``UF``, or ``ALL``, enables the support; the
 ``--uninterpreted-functions`` option enables it for an input whose logic
 omits it. Through the API (:doc:`api`) the ``uninterpreted-functions``
 option's default, ``auto``, engages it whenever the assertions contain an
@@ -155,3 +155,9 @@ candidate. An application the rewrite turned into another application --
 so the value asked for is the one the solve certified. ``define-fun`` output
 for a declaration is a nested if-then-else over the argument tuples the
 solve observed, with the commonest observed value as the default.
+
+Values of uninterpreted sorts use qualified abstract names such as
+``(as @S!0 S)``. These names may be passed back to ``get-value`` while
+inspecting the same model. They are not declarations that can be added
+to a later assertion. ``get-model`` prints definitions only; the script's
+sort declarations already provide their context.

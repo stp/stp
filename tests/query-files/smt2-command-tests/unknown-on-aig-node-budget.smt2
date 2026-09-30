@@ -36,7 +36,7 @@
 ; sentinel would send a caller to the one value that reproduces their problem.
 ;
 ; RUN: %solver --incremental=off --aig-node-budget=100 %s 2>&1 | %OutputCheck --check-prefix=CAPPED %s
-; RUN: %solver --incremental=off --aig-node-budget=-1 %s 2>&1 | %OutputCheck --check-prefix=UNCAPPED %s
+; RUN: not %solver --incremental=off --aig-node-budget=-1 %s 2>&1 | %OutputCheck --check-prefix=UNCAPPED %s
 ;
 ; CAPPED: ^unknown$
 ; CAPPED: :reason-unknown \(incomplete "the AIG node budget set by --aig-node-budget \(100\) ran out at [0-9]+ AND gates; raise it, or set it to -1 for no limit"\)
@@ -44,7 +44,7 @@
 ; CAPPED-NOT: the last answer was not unknown
 ;
 ; UNCAPPED: ^sat$
-; UNCAPPED: :reason-unknown \(error "the last answer was not unknown"\)
+; UNCAPPED: error "get-info :reason-unknown requires a preceding unknown result"
 ;
 (set-logic QF_BV)
 (declare-fun a () (_ BitVec 64))

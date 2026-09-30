@@ -80,6 +80,12 @@ public:
   // The expression the innermost binding of s maps to, or nullptr.
   // The pointer is invalidated by any change to the bindings.
   const ASTNode* lookupLet(std::string_view s) const;
+  size_t depth() const { return frames.size(); }
+  bool boundOutside(std::string_view name, size_t depth) const
+  {
+    const auto found = bindings.find(name);
+    return found != bindings.end() && found->second.back().first < depth;
+  }
 
   ASTNode ResolveID(const ASTNode& var);
 

@@ -704,7 +704,7 @@ TEST_F(Models, functions_over_declared_sorts)
   EXPECT_EQ(hv.apply({m.value(v)}).to_uint64(), 9u);
   // the text names the elements, never a carrier's bits
   const std::string text = m.to_smt2();
-  const std::size_t kdef = text.find("(define-fun k ((x!0 S)) S (ite (= x!0 S!");
+  const std::size_t kdef = text.find("(define-fun k ((x!0 S)) S (ite (= x!0 (as @S!");
   ASSERT_NE(kdef, std::string::npos);
   EXPECT_EQ(text.substr(kdef, text.find('\n', kdef) - kdef).find("#x"), std::string::npos);
   // the values re-assert consistently
@@ -852,21 +852,21 @@ TEST_F(Models, every_sort)
   EXPECT_TRUE(m.value(r).sort().is_real());
   EXPECT_TRUE(m.bool_value(b));
   EXPECT_TRUE(m.value(b).same_as(tm.mk_true()));
-  // declared sorts: distinct elements have distinct indices and print as S!k
+  // declared sorts: distinct elements have distinct indices and print as (as @S!k S)
   const std::set<std::uint64_t> idx{m.uninterpreted_index(p), m.uninterpreted_index(q),
                                     m.uninterpreted_index(u)};
   EXPECT_EQ(idx.size(), 3u);
   EXPECT_EQ(m.value(p).to_uninterpreted_index(), m.uninterpreted_index(p));
   EXPECT_TRUE(m.value(p).is_value());
   EXPECT_TRUE(m.value(p).sort() == S);
-  EXPECT_EQ(m.value(p).str().rfind("S!", 0), 0u);
+  EXPECT_EQ(m.value(p).str().rfind("(as @S!", 0), 0u);
   EXPECT_FALSE(m.bool_value(p == q));
   EXPECT_TRUE(m.bool_value(p == p));
   EXPECT_TRUE(m.bool_value(distinct(p, q)));
   EXPECT_TRUE(m.value(ite(p == q, x, y)).is_value());
   // the text names them the same way
   const std::string text = m.to_smt2();
-  EXPECT_NE(text.find("(define-fun p () S S!"), std::string::npos);
+  EXPECT_NE(text.find("(define-fun p () S (as @S!"), std::string::npos);
   EXPECT_NE(text.find("(define-fun rm () RoundingMode "), std::string::npos);
   EXPECT_NE(text.find("(define-fun fx () (_ FloatingPoint 8 24) (fp "), std::string::npos);
   EXPECT_NE(text.find("(define-fun r () Real "), std::string::npos);

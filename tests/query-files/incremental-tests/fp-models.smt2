@@ -1,7 +1,7 @@
 ; Floating-point models from the incremental driver: get-value answers
 ; through the session-long encoding context, and pinned values round-trip
 ; bit for bit.
-; RUN: %solver --incremental --check-sanity %s | %OutputCheck %s
+; RUN: not %solver --incremental --check-sanity %s | %OutputCheck %s
 (set-option :produce-models true)
 (set-logic QF_BVFP)
 (declare-fun f () (_ FloatingPoint 8 24))
@@ -21,6 +21,6 @@
 (get-value (f))
 (pop 1)
 ; after the pop the model is stale, per SMT-LIB
-; CHECK: ^unsupported
+; CHECK: error "get-value is not permitted
 (get-value (f))
 (exit)

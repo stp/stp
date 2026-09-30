@@ -304,11 +304,10 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
   const bool has_arrays =
       !definately_bv &&
       (has_real ? has_array_sort : containsArrayOps(n, mgr));
-  if (has_real && !has_fp && !has_arrays && !has_uninterpreted)
+  if (has_real && !has_fp && !has_arrays && !has_uninterpreted && !has_bv_sort)
     os << "(set-logic QF_LRA)\n";
   else if (has_real)
-    FatalError("SMTLIB2_PrintBack: no standard mixed Real logic name is enabled",
-               n);
+    os << "(set-logic ALL)\n";
   else if (has_fp && has_uninterpreted)
     os << (has_arrays ? "(set-logic QF_AUFBVFP)\n"
                       : "(set-logic QF_UFBVFP)\n");
@@ -325,7 +324,7 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
   else
     os << (has_arrays ? "(set-logic QF_ABV)\n" : "(set-logic QF_BV)\n");
 
-  os << "(set-info :smt-lib-version 2.0)\n";
+  os << "(set-info :smt-lib-version 2.7)\n";
 
   if (input_status == TO_BE_SATISFIABLE)
   {

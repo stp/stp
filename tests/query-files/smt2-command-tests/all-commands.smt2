@@ -1,6 +1,5 @@
-; Every command in SMT-LIB 2.6 figure 3.6, in a legal order. None of them may
-; produce a syntax error, and the script must run to the end: each is either
-; answered or reported "unsupported" per section 3.9.1.
+; Supported commands and optional refusals in SMT-LIB 2.7 command order.
+; Disabled query errors are covered by smtlib_protocol.py.
 ; RUN: %solver %s | %OutputCheck %s
 (set-option :print-success false)
 (set-option :produce-models true)
@@ -22,7 +21,6 @@
 (get-info :error-behavior)
 (get-info :assertion-stack-levels)
 (get-info :all-statistics)
-(get-info :reason-unknown)
 (get-info :authors)
 (set-logic QF_ABV)
 (set-info :status sat)
@@ -45,20 +43,18 @@
 (check-sat)
 (get-model)
 (get-value (x))
-(get-assignment)
 (pop 1)
 (push 1)
 (assert (and p (not p)))
 ; CHECK: ^unsat
 (check-sat)
-(get-proof)
-(get-unsat-core)
+(get-info :all-statistics)
+(get-unsat-assumptions)
 (pop 1)
 (push 1)
 (assert (= x #x1))
 (check-sat-assuming (p))
 (check-sat-assuming ())
-(get-unsat-assumptions)
 (pop 1)
 (reset-assertions)
 (reset)

@@ -50,6 +50,7 @@
    * <hr>
   ********************************************************************/
 
+#include "stp/Parser/SMT2Attribute.h"
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
@@ -70,14 +71,6 @@
 #include <limits>
 #include <string>
 #include <vector>
-
-namespace stp
-{
-  // Defined in smt2.lex: the text SKIP_SEXPR swallowed for the current
-  // command, comments excluded. define-sort inspects it (see
-  // tryRegisterFpSortAlias below).
-  const std::string& smt2_skipped_text();
-}
 
   using std::cout;
   using std::cerr;
@@ -304,7 +297,7 @@ namespace stp
   // looking for a fragment STP has, not for a synonym of one.
   static const char* supportedLogicsPhrase()
   {
-    return "QF_BV, QF_ABV, QF_AX, QF_UF, QF_UFBV, QF_AUFBV, QF_LRA, QF_UFLRA, "
+    return "ALL (the supported quantifier-free fragments), QF_BV, QF_ABV, QF_AX, QF_UF, QF_UFBV, QF_AUFBV, QF_LRA, QF_UFLRA, "
            "QF_AUFLRA, the floating-point logics QF_FP, QF_BVFP, QF_ABVFP, "
            "QF_UFFP, QF_UFBVFP, QF_AUFBVFP, and their LRA variants";
   }
@@ -918,25 +911,7 @@ namespace stp
     }
   }
 
-  // (define-sort <name> () <floating-point sort>) is the one define-sort STP
-  // implements. The lexer swallows every define-sort's arguments (SKIP_SEXPR
-  // in smt2.lex), which is what lets the uninterpreted shapes -- parametric
-  // sorts, sorts STP lacks, parentheses hiding in comments -- be answered
-  // "unsupported" without parsing them; this inspects the swallowed text
-  // (comments already excluded) and registers the alias when it has the one
-  // implemented shape. Returns false to answer "unsupported" instead.
-  // The IEEE interchange formats SMT-LIB gives names to: (eb, sb), with sb
-  // counting the hidden bit -- the same pair (_ FloatingPoint eb sb) takes.
-  //
-  // One table, because the two callers cannot share a code path. The sort
-  // rule below reaches these names as lexer tokens; tryRegisterFpSortAlias
-  // reaches them as raw text, because define-sort's body is swallowed whole
-  // and re-tokenised by hand. Both need the same answer, and these widths
-  // have been wrong once already -- the named sorts used to split the packed
-  // total in two (4+12, 16+48, 32+96) rather than use the IEEE fields, so
-  // every one but Float32 named a format that does not exist. A second copy
-  // is a second chance to make that mistake, in the caller that no test
-  // reaches.
+  // Named IEEE interchange formats, including the hidden significand bit.
   bool namedFloatFormat(const std::string& name, unsigned int& exp_width,
                         unsigned int& sig_width)
   {
@@ -959,77 +934,18 @@ namespace stp
     return new stp::float_size(exp_width, sig_width);
   }
 
-  bool tryRegisterFpSortAlias(const std::string& text)
+  stp::SMT2Sort* namedSortExpression(const std::string& name,
+                                     const std::vector<stp::SMT2Sort>& args = {})
   {
-    // The per-logic gate, which nothing else here can apply for us. Every
-    // other floating-point name in the input is a keyword only while an FP
-    // set-logic is in force, because the lexer routes it through fpKeyword();
-    // define-sort's body never reaches those rules -- SKIP_SEXPR swallows it
-    // and the loop below re-tokenises the raw text -- so "Float32" was a
-    // floating-point sort here under QF_BV, and a QF_BV script could obtain a
-    // FloatingPoint variable while legitimately declaring a symbol named "fp"
-    // in the same scope. Answer "unsupported", as this does for every other
-    // sort it does not implement.
-    if (!stp::SMT2FloatTokensActive())
-      return false;
-
-    std::vector<std::string> toks;
-    std::string cur;
-    for (const char c : text)
+    try
     {
-      if (c == '(' || c == ')')
-      {
-        if (!cur.empty())
-        {
-          toks.push_back(cur);
-          cur.clear();
-        }
-        toks.push_back(std::string(1, c));
-      }
-      else if (isspace(static_cast<unsigned char>(c)))
-      {
-        if (!cur.empty())
-        {
-          toks.push_back(cur);
-          cur.clear();
-        }
-      }
-      else
-      {
-        cur += c;
-      }
+      return new stp::SMT2Sort(stp::GlobalParserInterface->sortExpression(name, args));
     }
-    if (!cur.empty())
-      toks.push_back(cur);
-
-    // <name> ( ) followed by a named format or ( _ FloatingPoint eb sb ).
-    if (toks.size() < 4 || toks[0] == "(" || toks[0] == ")" ||
-        toks[1] != "(" || toks[2] != ")")
-      return false;
-
-    unsigned int exp_width, sig_width;
-    if (toks.size() == 4)
+    catch (const std::invalid_argument& error)
     {
-      if (!namedFloatFormat(toks[3], exp_width, sig_width))
-        return false;
+      fatal_yyerror(error.what());
     }
-    else if (toks.size() == 9 && toks[3] == "(" && toks[4] == "_" &&
-             toks[5] == "FloatingPoint" && toks[8] == ")" &&
-             !toks[6].empty() && !toks[7].empty() &&
-             toks[6].find_first_not_of("0123456789") == std::string::npos &&
-             toks[7].find_first_not_of("0123456789") == std::string::npos)
-    {
-      exp_width = static_cast<unsigned int>(strtoul(toks[6].c_str(), NULL, 10));
-      sig_width = static_cast<unsigned int>(strtoul(toks[7].c_str(), NULL, 10));
-    }
-    else
-      return false;
-
-    checkFpFormatWidths(exp_width, sig_width);
-    // A real alias table: the name maps to a format, and is NOT interned as a
-    // symbol -- the old scheme made the sort name usable as a term variable.
-    stp::GlobalParserInterface->addSortAlias(toks[0], exp_width, sig_width);
-    return true;
+    return nullptr;
   }
 
   // ((_ to_fp_unsigned e s) rm bv) -- convert an unsigned integer held in a
@@ -1398,13 +1314,6 @@ namespace stp
     return static_cast<unsigned>(parsed);
   }
 
-  static ASTNode createExactRealSourceSymbol(const char* name)
-  {
-    return stp::GlobalParserInterface->CreateSourceSymbol(
-        name, stp::SourceSort::real());
-    return ASTNode();
-  }
-
   // The five rounding modes as parse-time values. Rounding-mode constants
   // are interned, so comparing against the five is exact; anything else of
   // RoundingMode sort is symbolic.
@@ -1742,37 +1651,111 @@ namespace stp
     return n;
   }
 
-  // Declare an array symbol from a parsed (Array X Y) sort: the shared body
-  // of the declare-fun and declare-const productions. Frees both arguments.
-  void declareArraySymbol(std::string*& name, stp::array_sort*& sort)
-  {
-    requireFreeTopLevelDeclarationName(*name);
-    ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
-        name->c_str(), sort->sourceSort());
-    stp::GlobalParserInterface->addArraySymbol(s, *sort);
-
-    if (s.GetType() != ARRAY_TYPE)
-      fatal_yyerror("failed to declare an array.");
-
-    stp::releaseParserValue(name);
-    stp::releaseParserValue(sort);
-  }
-
   // Shared scalar declaration action. A cross-namespace name is diagnosed
   // before anything is interned or registered, and does not come back.
   void declareScalarSymbol(std::string*& name,
-                           const stp::SourceSort& sourceSort,
-                           bool roundingMode = false)
+                           const stp::SourceSort& sourceSort)
   {
     requireFreeTopLevelDeclarationName(*name);
     ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
         name->c_str(), sourceSort);
-    if (roundingMode)
+    if (sourceSort.kind() == stp::SourceSort::Kind::Array)
+      stp::GlobalParserInterface->addArraySymbol(s, stp::array_sort{
+          stp::array_sort_component(sourceSort.index()),
+          stp::array_sort_component(sourceSort.element())});
+    else if (sourceSort.kind() == stp::SourceSort::Kind::RoundingMode)
       stp::GlobalParserInterface->addRoundingModeSymbol(s);
     else
       stp::GlobalParserInterface->addSymbol(s);
     stp::releaseParserValue(name);
   }
+
+  void annotateTerm(const ASTNode& term,
+                    const std::vector<stp::SMT2Attribute>& attributes)
+  {
+    const bool closed = stp::SMT2EndAnnotation();
+    for (const auto& attribute : attributes)
+    {
+      if (attribute.name != "named")
+        continue;
+      if (attribute.value.kind != stp::SMT2AttributeValue::Kind::Symbol)
+        fatal_yyerror(":named requires a symbol");
+      if (!closed)
+        fatal_yyerror(":named requires a closed term");
+      const std::string& name = attribute.value.text;
+      if (stp::SMT2IsTheorySymbol(name) || stp::STPMgr::isReservedSymbolName(name.c_str()))
+        fatal_yyerror(":named requires a fresh, non-reserved symbol");
+      std::string diagnostic;
+      if (!stp::GlobalParserInterface->validateTopLevelDeclarationName(name, &diagnostic))
+        stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
+      stp::GlobalParserInterface->storeFunction(name, ASTVec(), term, true);
+    }
+  }
+
+  void setParsedOption(const stp::SMT2Attribute& attribute)
+  {
+    using Kind = stp::SMT2AttributeValue::Kind;
+    const std::string& name = attribute.name;
+    const auto& value = attribute.value;
+    const bool boolean = name == "print-success" || name == "global-declarations" ||
+        name == "interactive-mode" || name == "produce-models" ||
+        name == "produce-assertions" || name == "produce-assignments" ||
+        name == "produce-proofs" || name == "produce-unsat-cores" ||
+        name == "produce-unsat-assumptions";
+    if (boolean && value.kind != Kind::Symbol)
+      stp::GlobalParserInterface->refuseCurrentCommand("option :" + name + " requires a Boolean symbol");
+    if ((name == "regular-output-channel" || name == "diagnostic-output-channel") &&
+        value.kind != Kind::String)
+      stp::GlobalParserInterface->refuseCurrentCommand("option :" + name + " requires a string");
+    if ((name == "random-seed" || name == "verbosity" || name == "reproducible-resource-limit") &&
+        value.kind != Kind::Numeral)
+      stp::GlobalParserInterface->refuseCurrentCommand("option :" + name + " requires a numeral");
+    stp::GlobalParserInterface->setOption(name, value.text);
+  }
+
+  void setParsedInfo(const stp::SMT2Attribute& attribute)
+  {
+    if (attribute.name == "status")
+    {
+      const std::string& status = attribute.value.text;
+      if (attribute.value.kind != stp::SMT2AttributeValue::Kind::Symbol ||
+          (status != "sat" && status != "unsat" && status != "unknown"))
+        stp::GlobalParserInterface->refuseCurrentCommand("set-info :status requires sat, unsat, or unknown");
+      stp::input_status = status == "sat" ? stp::TO_BE_SATISFIABLE :
+                          status == "unsat" ? stp::TO_BE_UNSATISFIABLE : stp::TO_BE_UNKNOWN;
+    }
+    stp::GlobalParserInterface->success();
+  }
+
+  void checkQualifiedSort(stp::SourceSort*& requested, const stp::SourceSort& actual)
+  {
+    if (!requested) return;
+    const bool matches = *requested == actual;
+    const std::string diagnostic = matches ? std::string() :
+        "qualified identifier has result sort " + stp::sourceSortToSMTLib(actual) +
+        ", not " + stp::sourceSortToSMTLib(*requested);
+    stp::releaseParserValue(requested);
+    if (!matches) fatal_yyerror(diagnostic.c_str());
+  }
+
+  void checkQualifiedResult(stp::SourceSort*& requested, stp::ASTNode*& result)
+  {
+    if (requested && *requested != result->GetSourceSort())
+    {
+      const stp::SourceSort actual = result->GetSourceSort();
+      stp::GlobalParserInterface->deleteNode(result);
+      checkQualifiedSort(requested, actual);
+    }
+    stp::releaseParserValue(requested);
+  }
+
+  struct ParsedIndexedIdentifier
+  {
+    unsigned first = 0, second = 0, tag = 0;
+    std::string digits;
+    stp::SourceSort* qualifier = nullptr;
+    ~ParsedIndexedIdentifier() { delete qualifier; }
+  };
 
 #define YYLTYPE_IS_TRIVIAL 1
 #define YYMAXDEPTH 104857600
@@ -1788,12 +1771,18 @@ namespace stp
 %expect 0
 
 %union {
+  struct ParsedIndexedIdentifier* indexed;
+  stp::SMT2Attribute* attribute;
+  std::vector<stp::SMT2Attribute>* attributes;
+  stp::SMT2AttributeValue* attribute_value;
   /* Elaborated: the union lands in parsesmt2.tab.h, where only this
      pointer is named; the struct itself lives in the parser prologue. */
   struct ParsedRealConstant* realc;
   unsigned uintval; /* for numerals in types. */
   stp::float_size* fp_size;
-  stp::array_sort_component* arr_component;
+  stp::SourceSort* sort;
+  stp::SMT2Sort* sortexpr;
+  std::vector<stp::SMT2Sort>* sortexprvec;
   stp::array_sort* arr_sort;
 
   //ASTNode,ASTVec
@@ -1802,9 +1791,8 @@ namespace stp
 
   std::string *str;
 
-  /* A resolved define-fun, pointing into Cpp_interface::functions. The map
-     only mutates between commands, never inside a term, so the pointer
-     outlives the token that carries it. */
+  /* A resolved define-fun. FunctionMap preserves addresses when :named
+     terms introduce definitions while an application is being parsed. */
   const stp::Cpp_interface::Function *fn;
   const stp::UFDecl *ufdecl;
   stp::parsed_uf_sort *ufsort;
@@ -1815,27 +1803,38 @@ namespace stp
    values they own in their grammar actions. Values discarded by Bison during
    recovery or parse abort remain Bison's responsibility; release them here so
    malformed commands do not leak their identifier/string lookahead. */
-%destructor { delete $$; } <str>
+%destructor { delete $$; } <str> <attribute> <attribute_value> <attributes>
 %destructor { delete $$; } <ufsort> <ufsortvec>
 
 /* An exception out of an action or the lexer gets the same cleanup: see
    ParserUnwind.h. */
 %initial-action { STP_PARSER_RECLAIM_ON_UNWIND() }
 
+%type <sort> id_and id_bvand id_bvarithrightshift id_bvcomp id_bvconcat id_bvdiv id_bvge id_bvgt id_bvle id_bvleftshift_1 id_bvlt id_bvmod id_bvmult id_bvnand id_bvneg id_bvnego id_bvnor id_bvnot id_bvor id_bvplus id_bvrightshift_1 id_bvsaddo id_bvsdivo id_bvsge id_bvsgt id_bvsle id_bvslt id_bvsmulo id_bvssubo id_bvsub id_bvuaddo id_bvumulo id_bvusubo id_bvxnor id_bvxor id_distinct id_eq id_false id_fp id_fp_abs id_fp_add id_fp_div id_fp_eq id_fp_fma id_fp_geq id_fp_gt id_fp_isinfinite id_fp_isnan id_fp_isnegative id_fp_isnormal id_fp_ispositive id_fp_issubnormal id_fp_iszero id_fp_leq id_fp_lt id_fp_max id_fp_min id_fp_mul id_fp_neg id_fp_rem id_fp_rm_roundnearesttiestoaway id_fp_rm_roundnearesttiestoeven id_fp_rm_roundtowardnegative id_fp_rm_roundtowardpositive id_fp_rm_roundtowardzero id_fp_roundtointegral id_fp_sqrt id_fp_sub id_fp_to_ieee_bv id_fp_to_real id_implies id_ite id_not id_or id_real_add id_real_div id_real_ge id_real_gt id_real_le id_real_lt id_real_mul id_real_sub id_sbvdiv id_sbvmod id_sbvrem id_select id_store id_true id_xor
+%type <fn> id_array_functionid id_bitvector_functionid id_boolean_functionid id_declaredsort_functionid id_floatingpoint_functionid id_real_functionid id_roundingmode_functionid
+%type <node> id_formid id_termid
+%type <ufdecl> id_uf_bool_functionid id_uf_bv_functionid
+%type <indexed> id_bvconst_decimal id_bvconst_decimal_bare id_bvextract id_bvextract_bare id_bvrepeat id_bvrepeat_bare id_bvrotate_left id_bvrotate_left_bare id_bvrotate_right id_bvrotate_right_bare id_bvsx id_bvsx_bare id_bvzx id_bvzx_bare id_fp_special id_fp_special_bare id_fp_to_sbv id_fp_to_sbv_bare id_fp_to_ubv id_fp_to_ubv_bare id_fp_tofp id_fp_tofp_bare id_fp_tofp_unsigned id_fp_tofp_unsigned_bare
+
 %start cmd
 
-%type <node> status
 %type <vec> an_formulas an_terms function_params an_mixed
 
 %type <node> an_term  an_formula function_param an_const an_fp_term an_fp_predicate an_rounding_mode
+%type <node> definition_body
 %type <uintval> an_fp_const command_numeral
-%type <str> info_flag
+%type <str> sort_parameter_name
+%type <attribute> attribute
+%type <attributes> attributes
+%type <attribute_value> attribute_value
 %type <str> uf_decl_name function_def_name
 %type <ufsortvec> uf_domain_sorts
 %type <ufsort> uf_sort uf_codomain_sort
 
 %type <fp_size> an_fp_sort
-%type <arr_component> an_array_sort_component
+%type <sort> resolved_sort
+%type <sortexpr> sort_expression array_sort_expression sort_application
+%type <sortexprvec> sort_arguments
 %type <arr_sort> an_array_sort
 
 /* Release owning values discarded during parser recovery or teardown.
@@ -1843,10 +1842,12 @@ namespace stp
 %destructor { delete $$; } <node>
 %destructor { delete $$; } <vec>
 %destructor { delete $$; } <fp_size>
-%destructor { delete $$; } <arr_component>
-%destructor { delete $$; } <arr_sort>
+%destructor { delete $$; } <sort> <sortexpr> <sortexprvec>
+%destructor { delete $$; } <arr_sort> <indexed>
 %destructor { destroyParsedRealConstant($$); } <realc>
 
+%token <str> ATTRIBUTE_KEYWORD_TOK
+%token <attribute_value> ATTRIBUTE_VALUE_TOK
 %token <uintval> NUMERAL_TOK
 
  /* A numeral too large for an unsigned, carrying its digits. It is a real
@@ -1866,6 +1867,7 @@ namespace stp
 %type <realc> an_real_constant
 
 %token <node> FORMID_TOK TERMID_TOK
+%token <str> ABSTRACT_VALUE_TOK
 %token <str> STRING_TOK
 %token <fn> BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK REAL_FUNCTIONID_TOK
 %token <ufdecl> UF_BV_FUNCTIONID_TOK UF_BOOL_FUNCTIONID_TOK
@@ -1981,13 +1983,17 @@ namespace stp
 %token DECLARE_CONST_TOK
 %token DECLARE_FUNCTION_TOK
 %token DECLARE_SORT_TOK
+%token DECLARE_SORT_PARAMETER_TOK
+%token RESERVED_TOK
 %token DEFINE_FUNCTION_TOK
 %token DEFINE_FUN_REC_TOK
 %token DEFINE_FUNS_REC_TOK
 %token DEFINE_SORT_TOK
 %token DECLARE_DATATYPE_TOK
 %token DECLARE_DATATYPES_TOK
+%token <str> STRING_LITERAL_TOK
 %token ECHO_TOK
+%token DEFINE_CONST_TOK
 %token EXIT_TOK
 %token GET_ASSERTIONS_TOK
 %token GET_ASSIGNMENT_TOK
@@ -2150,11 +2156,23 @@ cmdi:
       stp::GlobalParserInterface->success();
     }
 |
-     ECHO_TOK STRING_TOK
+     DEFINE_CONST_TOK function_def_name resolved_sort definition_body
     {
-      std::cout << "\"" << *$2  << "\"" << endl;
+      if ($3->kind() == stp::SourceSort::Kind::Unknown)
+        fatal_yyerror("define-const: unknown sort");
+      if (*$3 != $4->GetSourceSort())
+        fatal_yyerror("define-const: the body's sort does not match the declared result sort");
+      stp::GlobalParserInterface->storeFunction(*$2, ASTVec(), *$4);
       stp::releaseParserValue($2);
+      stp::releaseParserValue($3);
+      stp::GlobalParserInterface->deleteNode($4);
       stp::GlobalParserInterface->success();
+    }
+|
+     ECHO_TOK STRING_LITERAL_TOK
+    {
+      stp::GlobalParserInterface->echo(*$2);
+      stp::releaseParserValue($2);
     }
 |
      EXIT_TOK
@@ -2175,43 +2193,22 @@ cmdi:
       stp::releaseParserValue($3);
     }
 |
-     SET_OPTION_TOK COLON_TOK STRING_TOK STRING_TOK
+     SET_OPTION_TOK attribute
     {
-       stp::GlobalParserInterface->setOption(*$3,*$4);
-       stp::releaseParserValue($3);
-       stp::releaseParserValue($4);
+      setParsedOption(*$2);
+      stp::releaseParserValue($2);
     }
 |
-     SET_OPTION_TOK COLON_TOK STRING_TOK FALSE_TOK
+     GET_OPTION_TOK ATTRIBUTE_KEYWORD_TOK
     {
-       stp::GlobalParserInterface->setOption(*$3,"false");
-       stp::releaseParserValue($3);
+      stp::GlobalParserInterface->getOption(*$2);
+      stp::releaseParserValue($2);
     }
 |
-     SET_OPTION_TOK COLON_TOK STRING_TOK TRUE_TOK
+     GET_INFO_TOK ATTRIBUTE_KEYWORD_TOK
     {
-       stp::GlobalParserInterface->setOption(*$3,"true");
-       stp::releaseParserValue($3);
-    }
-|
-     /* :random-seed, :verbosity and :reproducible-resource-limit take a
-        numeral. */
-     SET_OPTION_TOK COLON_TOK STRING_TOK command_numeral
-    {
-       stp::GlobalParserInterface->setOption(*$3,std::to_string($4));
-       stp::releaseParserValue($3);
-    }
-|
-     GET_OPTION_TOK COLON_TOK STRING_TOK
-    {
-       stp::GlobalParserInterface->getOption(*$3);
-       stp::releaseParserValue($3);
-    }
-|
-     GET_INFO_TOK info_flag
-    {
-       stp::GlobalParserInterface->getInfo(*$2);
-       stp::releaseParserValue($2);
+      stp::GlobalParserInterface->getInfo(*$2);
+      stp::releaseParserValue($2);
     }
 |
      GET_ASSERTIONS_TOK
@@ -2230,17 +2227,17 @@ cmdi:
         be processed regardless. */
      GET_ASSIGNMENT_TOK
     {
-       stp::GlobalParserInterface->unsupported();
+       stp::GlobalParserInterface->getAssignment();
     }
 |
      GET_PROOF_TOK
     {
-       stp::GlobalParserInterface->unsupported();
+       stp::GlobalParserInterface->unavailableQuery("get-proof", "produce-proofs");
     }
 |
      GET_UNSAT_CORE_TOK
     {
-       stp::GlobalParserInterface->unsupported();
+       stp::GlobalParserInterface->unavailableQuery("get-unsat-core", "produce-unsat-cores");
     }
 |
      GET_UNSAT_ASSUMPTIONS_TOK
@@ -2284,17 +2281,20 @@ cmdi:
        stp::releaseParserValue($2);
     }
 |
-     /* The arguments of these are swallowed by the lexer, which leaves us the
-        parenthesis that closes the command. define-sort is the one of them
-        STP partially implements: a nullary alias for a floating-point sort
-        is registered from the swallowed text; every other shape -- other
-        sorts, parameters -- is answered "unsupported". */
-     DEFINE_SORT_TOK
+     DECLARE_SORT_PARAMETER_TOK STRING_TOK
     {
-      if (tryRegisterFpSortAlias(stp::smt2_skipped_text()))
-        stp::GlobalParserInterface->success();
-      else
-        stp::GlobalParserInterface->unsupported();
+       // Global sort parameters require polymorphic declarations and solving.
+       stp::GlobalParserInterface->unsupported();
+       stp::releaseParserValue($2);
+    }
+|
+     DEFINE_SORT_TOK STRING_TOK sort_parameter_open sort_parameters sort_parameter_close sort_expression
+    {
+      stp::GlobalParserInterface->defineSort(*$2, *$6);
+      stp::SMT2SetSortContext(false);
+      stp::releaseParserValue($2);
+      stp::releaseParserValue($6);
+      stp::GlobalParserInterface->success();
     }
 |
      DEFINE_FUN_REC_TOK
@@ -2339,6 +2339,7 @@ cmdi:
        // (all_theory_tokens) stay open.
        stp::SMT2SetFloatTokens(stp::GlobalParserInterface->all_theory_tokens);
        stp::SMT2SetRealTokens(stp::GlobalParserInterface->all_theory_tokens);
+       stp::SMT2SetBitVectorTokens(stp::GlobalParserInterface->all_theory_tokens);
        stp::GlobalParserInterface->success();
     }
 |
@@ -2401,7 +2402,8 @@ cmdi:
                          0 == strcmp($2->c_str(),"QF_UFLRA") ||
                          0 == strcmp($2->c_str(),"QF_AUFLRA") ||
                          fp_lra_logic;
-      const bool supported_logic =
+      const bool all_logic = *$2 == "ALL";
+      const bool supported_logic = all_logic ||
             0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
             0 == strcmp($2->c_str(),"QF_AX") ||
@@ -2431,54 +2433,25 @@ cmdi:
       // The floating-point keywords exist only inside the FP logics;
       // everywhere else names like "fp" or "NaN" stay ordinary symbols,
       // exactly as before floating-point support existed.
-      stp::SMT2SetFloatTokens(fp_logic);
-      stp::SMT2SetRealTokens(real_logic);
+      stp::SMT2SetFloatTokens(all_logic || fp_logic);
+      stp::SMT2SetRealTokens(all_logic || real_logic);
+      stp::SMT2SetBitVectorTokens(stp::GlobalParserInterface->all_theory_tokens ||
+                                all_logic || fp_logic || $2->find("BV") != std::string::npos);
       stp::GlobalParserInterface->success();
       stp::releaseParserValue($2);
     }
 |
-     NOTES_TOK attribute STRING_TOK
-    {
-      stp::releaseParserValue($3);
-      stp::GlobalParserInterface->success();
-    }
-|
-     NOTES_TOK attribute DECIMAL_TOK
-    {
-      stp::releaseParserValue($3);
-      stp::GlobalParserInterface->success();
-    }
-|
-     NOTES_TOK attribute NUMERAL_TOK
-    {
-      stp::GlobalParserInterface->success();
-    }
-|
-     NOTES_TOK attribute REAL_NUMERAL_TOK
-    {
-      stp::releaseParserValue($3);
-      stp::GlobalParserInterface->success();
-    }
-|
-     /* set-info values are not interpreted, so an oversized one is no more
-        of a problem here than an ordinary numeral is. */
-     NOTES_TOK attribute BIG_NUMERAL_TOK
-    {
-      stp::releaseParserValue($3);
-      stp::GlobalParserInterface->success();
-    }
-|
-     NOTES_TOK attribute REAL_DECIMAL_TOK
-    {
-      stp::releaseParserValue($3);
-      stp::GlobalParserInterface->success();
-    }
-|
      NOTES_TOK attribute
     {
-      stp::GlobalParserInterface->success();
+      setParsedInfo(*$2);
+      stp::releaseParserValue($2);
     }
 
+;
+
+definition_body:
+  an_term { $$ = $1; }
+| an_formula { $$ = $1; }
 ;
 
 function_param_open:
@@ -2489,77 +2462,9 @@ LPAREN_TOK
 ;
 
 function_param:
-function_param_open STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
+function_param_open STRING_TOK resolved_sort RPAREN_TOK
 {
-  checkBitVectorWidth($6);
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(), stp::SourceSort::bitVector($6)));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-}
-|
-function_param_open STRING_TOK BOOL_TOK RPAREN_TOK
-{
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(), stp::SourceSort::boolean()));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-}
-|
-function_param_open STRING_TOK REAL_TOK RPAREN_TOK
-{
-  // A define-fun formal of Real sort. These are macro parameters, not
-  // uninterpreted functions: Cpp_interface::applyFunction substitutes the
-  // arguments into the stored body, so nothing of Real sort survives the
-  // expansion that the Real fragment does not already handle. The families
-  // that use them define min and max this way.
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(), stp::SourceSort::real()));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-}
-|
-function_param_open STRING_TOK an_fp_sort RPAREN_TOK
-{
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(),
-      stp::SourceSort::floatingPoint($3->exp_bits, $3->sig_bits)));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-  stp::releaseParserValue($3);
-}
-|
-function_param_open STRING_TOK ROUNDINGMODE_TOK RPAREN_TOK
-{
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(), stp::SourceSort::roundingMode()));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-}
-|
-function_param_open STRING_TOK an_array_sort RPAREN_TOK
-{
-  // The same sort is already accepted through a define-sort alias. Accept
-  // its inline spelling too, as used when an API definition is exported.
-  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
-      $2->c_str(), $3->sourceSort()));
-  stp::GlobalParserInterface->addTemporarySymbol(*$$);
-  stp::releaseParserValue($2);
-  stp::releaseParserValue($3);
-}
-|
-function_param_open STRING_TOK STRING_TOK RPAREN_TOK
-{
-  // A formal whose sort is a name the script introduced. This is how the
-  // uninterpreted-sort benchmarks bind their state parameter:
-  //   (define-fun p ((state S)) Bool ...)
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$3, resolved))
-  {
-    fatal_yyerror("unknown sort (not built in, and not a declared sort)");
-  }
-  $$ = new ASTNode(
-      stp::GlobalParserInterface->CreateSourceSymbol($2->c_str(), resolved));
+  $$ = new ASTNode(stp::GlobalParserInterface->CreateParameterSymbol($2->c_str(), *$3));
   stp::GlobalParserInterface->addTemporarySymbol(*$$);
   stp::releaseParserValue($2);
   stp::releaseParserValue($3);
@@ -2590,342 +2495,83 @@ STRING_TOK
 ;
 
 function_def:
-function_def_name LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK  an_term
+function_def_name LPAREN_TOK function_params RPAREN_TOK resolved_sort definition_body
 {
-  checkBitVectorWidth($8);
-  checkBitVectorTerm(*$10);
-  if ($10->GetValueWidth() != $8)
-  {
-    char msg [100];
-    sprintf(msg, "Different bit-widths specified: %d %d", $10->GetValueWidth(), $8);
-    yyerror(msg);
-  }
-
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$10);
-
-  // Next time the variable is used, we want it to be fresh.
-  for (size_t i = 0; i < $3->size(); i++)
-    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::GlobalParserInterface->deleteNode($10);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK STRING_TOK an_term
-{
-  // A result sort written as a name the script introduced. The body has to
-  // carry that sort already -- nothing is coerced here, exactly as the
-  // floating-point arm below refuses a mismatched format.
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$5, resolved))
-  {
-    fatal_yyerror("unknown sort (not built in, and not a declared sort)");
-  }
-  if ($6->GetSourceSort() != resolved)
-  {
-    fatal_yyerror("define-fun: the body's sort does not match the declared "
-                  "result sort");
-  }
-
+  if ($6->GetSourceSort() != *$5)
+    fatal_yyerror("define-fun: the body's sort does not match the declared result sort");
   stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-
-  for (size_t i = 0; i < $3->size(); i++)
-    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
+  for (const ASTNode& parameter : *$3)
+    stp::GlobalParserInterface->removeSymbol(parameter);
   stp::releaseParserValue($1);
   stp::releaseParserValue($3);
   stp::releaseParserValue($5);
   stp::GlobalParserInterface->deleteNode($6);
 }
 |
-function_def_name LPAREN_TOK RPAREN_TOK STRING_TOK an_term
+function_def_name LPAREN_TOK RPAREN_TOK resolved_sort definition_body
 {
-  // The zero-arity form of the arm above. It was missing, which is what stopped
-  // a printed model from being read back: the model of a symbol of a declared
-  // sort is exactly a nullary define-fun at that sort.
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$4, resolved))
-  {
-    fatal_yyerror("unknown sort (not built in, and not a declared sort)");
-  }
-  if ($5->GetSourceSort() != resolved)
-  {
-    fatal_yyerror("define-fun: the body's sort does not match the declared "
-                  "result sort");
-  }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($4);
-  stp::GlobalParserInterface->deleteNode($5);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK BOOL_TOK an_formula
-{
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-
-  // Next time the variable is used, we want it to be fresh.
-  for (size_t i = 0; i < $3->size(); i++)
-   stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::GlobalParserInterface->deleteNode($6);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
-{
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-
-  stp::releaseParserValue($1);
-  stp::GlobalParserInterface->deleteNode($5);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK REAL_TOK an_term
-{
-  if ($5->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
-    fatal_yyerror("define-fun Real alias body must have Real sort");
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-  stp::releaseParserValue($1);
-  stp::GlobalParserInterface->deleteNode($5);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK REAL_TOK an_term
-{
-  // A Real-returning macro with formals. Substitution happens at each
-  // application, so the body is only ever seen by the Real fragment after
-  // its parameters have been replaced by the actual arguments. This is how
-  // the calendar-automata families spell min and max.
-  if ($6->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
-    fatal_yyerror("define-fun Real body must have Real sort");
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::GlobalParserInterface->deleteNode($6);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK an_term
-{
-  if ($5->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
-  {
-    fatal_yyerror("define-fun: the body is not a rounding mode");
-  }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-
-  stp::releaseParserValue($1);
-  stp::GlobalParserInterface->deleteNode($5);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK ROUNDINGMODE_TOK an_term
-{
-  if ($6->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
-    fatal_yyerror("define-fun: the body is not a rounding mode");
-
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-  for (size_t i = 0; i < $3->size(); i++)
-    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::GlobalParserInterface->deleteNode($6);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK an_fp_sort an_term
-{
-  if ($5->GetSourceSort() != stp::SourceSort::floatingPoint(
-                                  $4->exp_bits, $4->sig_bits))
-  {
-    fatal_yyerror("define-fun: the body's floating-point format does not "
-                  "match the declared result sort");
-  }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($4);
-  stp::GlobalParserInterface->deleteNode($5);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK an_fp_sort an_term
-{
-  // This action was empty: the function was silently dropped, and -- worse --
-  // its parameter symbols stayed interned, resolvable as free variables that
-  // were never declared.
-  if ($6->GetSourceSort() != stp::SourceSort::floatingPoint(
-                                  $5->exp_bits, $5->sig_bits))
-  {
-    fatal_yyerror("define-fun: the body's floating-point format does not "
-                  "match the declared result sort");
-  }
-
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-
-  // Next time the variable is used, we want it to be fresh.
-  for (size_t i = 0; i < $3->size(); i++)
-    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::releaseParserValue($5);
-  stp::GlobalParserInterface->deleteNode($6);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_term
-{
-  checkBitVectorWidth($7);
-  checkBitVectorTerm(*$9);
-  if ($9->GetValueWidth() != $7)
-  {
-    char msg [100];
-    sprintf(msg, "Different bit-widths specified: %d %d", $9->GetValueWidth(), $7);
-    yyerror(msg);
-  }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1,empty, *$9);
-
-  stp::releaseParserValue($1);
-  stp::GlobalParserInterface->deleteNode($9);
-}
-|
-function_def_name LPAREN_TOK function_params RPAREN_TOK an_array_sort an_term
-{
-  if ($6->GetSourceSort() != $5->sourceSort())
-    fatal_yyerror("define-fun: the body's array sort does not match the declared result sort");
-  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
-
-  // Match the other parameterised productions: leaving the parameter
-  // symbols interned would let later input resolve them as free variables
-  // that were never declared.
-  for (size_t i = 0; i < $3->size(); i++)
-    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
-
-  stp::releaseParserValue($1);
-  stp::releaseParserValue($3);
-  stp::releaseParserValue($5);
-  stp::GlobalParserInterface->deleteNode($6);
-}
-|
-function_def_name LPAREN_TOK RPAREN_TOK an_array_sort an_term
-{
-  // A nullary define-fun whose result is an array. This is just a name for
-  // its body, stored like any other nullary function -- accepted with or
-  // without --array-equality; the lexer resolves later references to it
-  // back to that body. A body whose widths disagree with the declared sort
-  // is reported -- mirroring the sibling bitvector define-fun productions
-  // -- and still stored, so parsing continues. The sorts that share one
-  // bit layout (a float index or element format, RoundingMode on either
-  // side) get their own check: the widths cannot tell them apart.
-  if ($5->GetIndexWidth() != $4->index.width() ||
-      $5->GetValueWidth() != $4->elem.width())
-  {
-    char msg [100];
-    snprintf(msg, sizeof(msg),
-             "Different array widths specified: (%u %u) vs (%u %u)",
-             $5->GetIndexWidth(), $5->GetValueWidth(), $4->index.width(),
-             $4->elem.width());
-    yyerror(msg);
-  }
-  else if (!stp::GlobalParserInterface->arraySortsAgree(*$5, *$4))
-  {
-    yyerror("The body's array index or element sorts differ from the "
-            "declared ones");
-  }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
+  if ($5->GetSourceSort() != *$4)
+    fatal_yyerror("define-fun: the body's sort does not match the declared result sort");
+  stp::GlobalParserInterface->storeFunction(*$1, ASTVec(), *$5);
   stp::releaseParserValue($1);
   stp::releaseParserValue($4);
   stp::GlobalParserInterface->deleteNode($5);
 }
 ;
 
-status:
-STRING_TOK {
-
-  std::transform($1->begin(), $1->end(), $1->begin(), ::tolower);
-  if (0 == strcmp($1->c_str(), "sat"))
-      stp::input_status = TO_BE_SATISFIABLE;
-  else if (0 == strcmp($1->c_str(), "unsat"))
-    stp::input_status = TO_BE_UNSATISFIABLE;
-  else if (0 == strcmp($1->c_str(), "unknown"))
-      stp::input_status = TO_BE_UNKNOWN;
-  else
-      yyerror($1->c_str());
-  stp::releaseParserValue($1);
-  $$ = NULL;
-}
+annotation_open:
+LPAREN_TOK EXCLAIMATION_MARK_TOK { stp::SMT2BeginAnnotation(); }
 ;
 
-/* The argument of get-info. The standard flags all arrive as a colon followed
-   by an identifier; the keywords that the lexer gives a token of their own are
-   accepted too, since ⟨info_flag⟩ admits any ⟨keyword⟩. */
-info_flag:
-COLON_TOK STRING_TOK
+annotation_attributes:
+%empty { stp::SMT2BeginAttributes(); }
+;
+
+attributes:
+attribute
 {
-  $$ = $2;
+  $$ = new std::vector<stp::SMT2Attribute>{*$1};
+  stp::releaseParserValue($1);
 }
-| SOURCE_TOK
+| attributes attribute
 {
-  $$ = new std::string("source");
-}
-| CATEGORY_TOK
-{
-  $$ = new std::string("category");
-}
-| DIFFICULTY_TOK
-{
-  $$ = new std::string("difficulty");
-}
-| VERSION_TOK
-{
-  $$ = new std::string("smt-lib-version");
-}
-| STATUS_TOK
-{
-  $$ = new std::string("status");
-}
-| LICENSE_TOK
-{
-  $$ = new std::string("license");
+  $$ = $1;
+  $$->push_back(*$2);
+  stp::releaseParserValue($2);
 }
 ;
 
 attribute:
-SOURCE_TOK
-{}
-| CATEGORY_TOK
-{}
-| DIFFICULTY_TOK
-{}
-| VERSION_TOK
-{}
-| STATUS_TOK status
+ATTRIBUTE_KEYWORD_TOK
 {
-  stp::releaseParserValue($2);
+  $$ = new stp::SMT2Attribute{*$1, {}};
+  stp::releaseParserValue($1);
 }
-| LICENSE_TOK
-{}
-| /* set-info accepts any keyword, not just the handful the lexer gives a
-     token of its own. Benchmarks carry things like :notes freely. */
-  COLON_TOK STRING_TOK
+| ATTRIBUTE_KEYWORD_TOK attribute_value
 {
+  if ($2->kind == stp::SMT2AttributeValue::Kind::Reserved)
+    fatal_yyerror("reserved word is not an attribute value outside an s-expression");
+  $$ = new stp::SMT2Attribute{*$1, *$2};
+  stp::releaseParserValue($1);
   stp::releaseParserValue($2);
 }
 ;
 
+attribute_value:
+ATTRIBUTE_VALUE_TOK { $$ = $1; }
+| LPAREN_TOK sexpr_items RPAREN_TOK
+{
+  $$ = new stp::SMT2AttributeValue{stp::SMT2AttributeValue::Kind::List, ""};
+}
+;
+
+sexpr_items:
+  %empty
+| sexpr_items attribute_value { stp::releaseParserValue($2); }
+| sexpr_items ATTRIBUTE_KEYWORD_TOK { stp::releaseParserValue($2); }
+;
+
 an_fp_sort:
-  // Through namedFloatFormat, which define-sort's text scraper reads too --
-  // see there for why the two must not each carry their own copy of these
-  // widths.
   FLOAT16_TOK
 {
     $$ = namedFloatSize("Float16");
@@ -2952,110 +2598,120 @@ an_fp_sort:
 }
 ;
 
-an_array_sort_component:
-  // An index or element sort of an (Array X Y) sort. Every supported scalar
-  // keeps its full source identity here even though the solver sees its
-  // packed bit-vector carrier below this boundary.
-  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK command_numeral RPAREN_TOK
+sort_parameter_open:
+LPAREN_TOK { stringOnly = true; }
+;
+sort_parameter_close:
+RPAREN_TOK { stringOnly = false; }
+;
+
+sort_parameters:
+  %empty
+| sort_parameters sort_parameter_name
 {
-  checkBitVectorWidth($4);
-  $$ = new stp::array_sort_component(stp::SourceSort::bitVector($4));
-}
-| an_fp_sort
-{
-  $$ = new stp::array_sort_component(stp::SourceSort::floatingPoint(
-      (unsigned)$1->exp_bits, (unsigned)$1->sig_bits));
-  stp::releaseParserValue($1);
-}
-| ROUNDINGMODE_TOK
-{
-  $$ = new stp::array_sort_component(stp::SourceSort::roundingMode());
-}
-| STRING_TOK
-{
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$1, resolved) ||
-      !resolved.isScalar())
-    fatal_yyerror("unknown array component sort");
-  $$ = new stp::array_sort_component(resolved);
-  stp::releaseParserValue($1);
-}
-| REAL_TOK
-{
-  $$ = nullptr;
-  fatal_yyerror("arrays with a Real index or element sort are not supported");
+  stp::GlobalParserInterface->addSortParameter(*$2);
+  stp::releaseParserValue($2);
 }
 ;
 
-an_array_sort:
-LPAREN_TOK ARRAY_TOK an_array_sort_component an_array_sort_component RPAREN_TOK
+sort_parameter_name:
+  STRING_TOK { $$ = $1; }
+| BOOL_TOK { $$ = new std::string("Bool"); }
+| REAL_TOK { $$ = new std::string("Real"); }
+| ROUNDINGMODE_TOK { $$ = new std::string("RoundingMode"); }
+| FLOAT16_TOK { $$ = new std::string("Float16"); }
+| FLOAT32_TOK { $$ = new std::string("Float32"); }
+| FLOAT64_TOK { $$ = new std::string("Float64"); }
+| FLOAT128_TOK { $$ = new std::string("Float128"); }
+| ARRAY_TOK { $$ = new std::string("Array"); }
+| BITVEC_TOK { $$ = new std::string("BitVec"); }
+| FLOATINGPOINT_TOK { $$ = new std::string("FloatingPoint"); }
+;
+
+sort_context:
+%empty { stp::SMT2SetSortContext(true); }
+;
+
+resolved_sort:
+sort_context sort_expression
 {
-  $$ = new stp::array_sort{*$3, *$4};
+  $$ = new stp::SourceSort(stp::GlobalParserInterface->resolveSort(*$2));
+  stp::releaseParserValue($2);
+  stp::SMT2SetSortContext(false);
+}
+;
+
+sort_expression:
+  BOOL_TOK { $$ = new stp::SMT2Sort(stp::GlobalParserInterface->sortAtom("Bool", stp::SourceSort::boolean())); }
+| REAL_TOK { $$ = new stp::SMT2Sort(stp::GlobalParserInterface->sortAtom("Real", stp::SourceSort::real())); }
+| ROUNDINGMODE_TOK { $$ = new stp::SMT2Sort(stp::GlobalParserInterface->sortAtom("RoundingMode", stp::SourceSort::roundingMode())); }
+| LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK command_numeral RPAREN_TOK
+{
+  checkBitVectorWidth($4);
+  $$ = new stp::SMT2Sort(stp::SourceSort::bitVector($4));
+}
+| an_fp_sort
+{
+  $$ = new stp::SMT2Sort(stp::SourceSort::floatingPoint($1->exp_bits, $1->sig_bits));
+  stp::releaseParserValue($1);
+}
+| STRING_TOK
+{
+  $$ = namedSortExpression(*$1);
+  stp::releaseParserValue($1);
+}
+| sort_application { $$ = $1; }
+| array_sort_expression { $$ = $1; }
+;
+
+sort_arguments:
+sort_expression
+{
+  $$ = new std::vector<stp::SMT2Sort>{*$1};
+  stp::releaseParserValue($1);
+}
+| sort_arguments sort_expression
+{
+  $$ = $1;
+  $$->push_back(*$2);
+  stp::releaseParserValue($2);
+}
+;
+
+sort_application:
+LPAREN_TOK STRING_TOK sort_arguments RPAREN_TOK
+{
+  $$ = namedSortExpression(*$2, *$3);
+  stp::releaseParserValue($2);
+  stp::releaseParserValue($3);
+}
+;
+
+array_sort_expression:
+LPAREN_TOK ARRAY_TOK sort_expression sort_expression RPAREN_TOK
+{
+  $$ = new stp::SMT2Sort(stp::SMT2Sort::array(*$3, *$4));
   stp::releaseParserValue($3);
   stp::releaseParserValue($4);
 }
 ;
 
-var_decl:
-STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
+an_array_sort:
+array_sort_expression
 {
-  ABANDON_IF_REDECLARED_ZERO_ARITY(stp::releaseParserValue($1));
-  checkBitVectorWidth($7);
-  declareScalarSymbol($1, stp::SourceSort::bitVector($7));
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK REAL_TOK
-{
-  ASTNode s = createExactRealSourceSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
+  const stp::SourceSort sort = stp::GlobalParserInterface->resolveSort(*$1);
+  $$ = new stp::array_sort{stp::array_sort_component(sort.index()),
+                          stp::array_sort_component(sort.element())};
   stp::releaseParserValue($1);
 }
-| STRING_TOK LPAREN_TOK RPAREN_TOK STRING_TOK
+;
+
+var_decl:
+STRING_TOK LPAREN_TOK RPAREN_TOK resolved_sort
 {
   ABANDON_IF_REDECLARED_ZERO_ARITY((stp::releaseParserValue($1), stp::releaseParserValue($4)));
-  // The sort position holds a bare name: a sort the script introduced, by
-  // define-sort or declare-sort. (This used to match any TERM symbol, so
-  // `(declare-fun y () x)` with x a variable "worked" as an alias use.)
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$4, resolved))
-  {
-    fatal_yyerror("unknown sort (not built in, and not a declared sort)");
-  }
-  declareScalarSymbol($1, resolved);
+  declareScalarSymbol($1, *$4);
   stp::releaseParserValue($4);
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
-{
-  ABANDON_IF_REDECLARED_ZERO_ARITY(stp::releaseParserValue($1));
-  declareScalarSymbol($1, stp::SourceSort::boolean());
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK an_array_sort
-{
-  ABANDON_IF_REDECLARED_ZERO_ARITY((stp::releaseParserValue($1), stp::releaseParserValue($4)));
-  // An array over any pairing of supported scalar index/element sorts. A
-  // float element's format lives on the array node
-  // -- a read off it inherits the format (see deriveFPFormat) -- while a
-  // float index format and the RoundingMode sorts land in the manager's
-  // registries (see addArraySymbol). Either way the widths lay the array
-  // out exactly like an array of bitvectors.
-  declareArraySymbol($1, $4);
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
-{
-  ABANDON_IF_REDECLARED_ZERO_ARITY((stp::releaseParserValue($1), stp::releaseParserValue($4)));
-  declareScalarSymbol(
-      $1, stp::SourceSort::floatingPoint($4->exp_bits, $4->sig_bits));
-  stp::releaseParserValue($4);
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK
-{
-  ABANDON_IF_REDECLARED_ZERO_ARITY(stp::releaseParserValue($1));
-  // A rounding mode is carried as a 5-bit one-hot bitvector, so a variable of
-  // that sort is a 5-bit symbol. Declaring it as anything else -- or, as
-  // before, not declaring it at all -- leaves every use of the name
-  // unresolved, and the lexer hands it back as a bare string.
-  // addRoundingModeSymbol also pins the symbol to the five legal encodings,
-  // without which the sort would have 32 values instead of 5.
-  declareScalarSymbol($1, stp::SourceSort::roundingMode(), true);
 }
 | uf_decl_name uf_domain_sorts RPAREN_TOK uf_codomain_sort
 {
@@ -3184,12 +2840,20 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   // with its spelling by the caller.
   stp::SourceSort resolved;
   if (stp::GlobalParserInterface->lookupSortAlias(*$1, resolved))
-    $$ = new stp::parsed_uf_sort(resolved, *$1, true);
+    $$ = new stp::parsed_uf_sort(resolved, *$1, resolved.kind() != stp::SourceSort::Kind::Array);
   else
     $$ = new stp::parsed_uf_sort(
         stp::SourceSort::unknown(), *$1, false, false);
   stp::releaseParserValue($1);
 }
+| sort_application
+{
+  const stp::SourceSort sort = stp::GlobalParserInterface->resolveSort(*$1);
+  $$ = new stp::parsed_uf_sort(sort, stp::sourceSortToSMTLib(sort),
+                              sort.kind() != stp::SourceSort::Kind::Array);
+  stp::releaseParserValue($1);
+}
+
 ;
 
 uf_codomain_sort:
@@ -3240,62 +2904,27 @@ LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
   stp::SourceSort resolved;
   if (stp::GlobalParserInterface->lookupSortAlias(*$1, resolved))
-    $$ = new stp::parsed_uf_sort(resolved, *$1, true);
+    $$ = new stp::parsed_uf_sort(resolved, *$1, resolved.kind() != stp::SourceSort::Kind::Array);
   else
     $$ = new stp::parsed_uf_sort(
         stp::SourceSort::unknown(), *$1, false, false);
   stp::releaseParserValue($1);
 }
+| sort_application
+{
+  const stp::SourceSort sort = stp::GlobalParserInterface->resolveSort(*$1);
+  $$ = new stp::parsed_uf_sort(sort, stp::sourceSortToSMTLib(sort),
+                              sort.kind() != stp::SourceSort::Kind::Array);
+  stp::releaseParserValue($1);
+}
+
 ;
 
 const_decl:
-STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
+STRING_TOK resolved_sort
 {
-  checkBitVectorWidth($5);
-  declareScalarSymbol($1, stp::SourceSort::bitVector($5));
-}
-| STRING_TOK REAL_TOK
-{
-  ASTNode s = createExactRealSourceSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
-  stp::releaseParserValue($1);
-}
-| STRING_TOK BOOL_TOK
-{
-  declareScalarSymbol($1, stp::SourceSort::boolean());
-}
-| STRING_TOK an_array_sort
-{
-  // declare-const of an array: same surface as declare-fun's, including
-  // float and RoundingMode index/element sorts (the float-element form
-  // used to exist only for declare-fun).
-  declareArraySymbol($1, $2);
-}
-| STRING_TOK an_fp_sort
-{
-  // The format must land on the symbol, or it types as a Boolean and every
-  // use of the name is a syntax error (this branch used to forget it while
-  // declare-fun's twin set it).
-  declareScalarSymbol(
-      $1, stp::SourceSort::floatingPoint($2->exp_bits, $2->sig_bits));
+  declareScalarSymbol($1, *$2);
   stp::releaseParserValue($2);
-}
-| STRING_TOK STRING_TOK
-{
-  // declare-const with a script-introduced sort name in sort position.
-  stp::SourceSort resolved;
-  if (!stp::GlobalParserInterface->lookupSortAlias(*$2, resolved))
-  {
-    fatal_yyerror("unknown sort (not built in, and not a declared sort)");
-  }
-  declareScalarSymbol($1, resolved);
-  stp::releaseParserValue($2);
-}
-| STRING_TOK ROUNDINGMODE_TOK
-{
-  // As above: 5 bits, not 0 (a zero-width symbol would be a Boolean), and
-  // pinned to the five legal encodings.
-  declareScalarSymbol($1, stp::SourceSort::roundingMode(), true);
 }
 ;
 
@@ -3356,21 +2985,770 @@ an_formulas an_formula
 }
 ;
 
+/* Qualified identifiers: qualification selects a result sort; it never
+   converts a value. Separate heads keep the existing term/formula grammar
+   conflict-free and share every operation's original construction path. */
+
+id_and:
+  AND_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK AND_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_array_functionid:
+  ARRAY_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK ARRAY_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_bitvector_functionid:
+  BITVECTOR_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK BITVECTOR_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_boolean_functionid:
+  BOOLEAN_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK BOOLEAN_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_bvand:
+  BVAND_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVAND_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvarithrightshift:
+  BVARITHRIGHTSHIFT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVARITHRIGHTSHIFT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvcomp:
+  BVCOMP_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVCOMP_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvconcat:
+  BVCONCAT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVCONCAT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvdiv:
+  BVDIV_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVDIV_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvge:
+  BVGE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVGE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvgt:
+  BVGT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVGT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvle:
+  BVLE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVLE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvleftshift_1:
+  BVLEFTSHIFT_1_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVLEFTSHIFT_1_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvlt:
+  BVLT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVLT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvmod:
+  BVMOD_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVMOD_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvmult:
+  BVMULT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVMULT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvnand:
+  BVNAND_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVNAND_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvneg:
+  BVNEG_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVNEG_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvnego:
+  BVNEGO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVNEGO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvnor:
+  BVNOR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVNOR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvnot:
+  BVNOT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVNOT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvor:
+  BVOR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVOR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvplus:
+  BVPLUS_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVPLUS_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvrightshift_1:
+  BVRIGHTSHIFT_1_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVRIGHTSHIFT_1_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsaddo:
+  BVSADDO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSADDO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsdivo:
+  BVSDIVO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSDIVO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsge:
+  BVSGE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSGE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsgt:
+  BVSGT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSGT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsle:
+  BVSLE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSLE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvslt:
+  BVSLT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSLT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsmulo:
+  BVSMULO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSMULO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvssubo:
+  BVSSUBO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSSUBO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvsub:
+  BVSUB_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVSUB_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvuaddo:
+  BVUADDO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVUADDO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvumulo:
+  BVUMULO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVUMULO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvusubo:
+  BVUSUBO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVUSUBO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvxnor:
+  BVXNOR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVXNOR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvxor:
+  BVXOR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK BVXOR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_declaredsort_functionid:
+  DECLAREDSORT_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK DECLAREDSORT_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_distinct:
+  DISTINCT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK DISTINCT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_eq:
+  EQ_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK EQ_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_false:
+  FALSE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FALSE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_floatingpoint_functionid:
+  FLOATINGPOINT_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK FLOATINGPOINT_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_formid:
+  FORMID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK FORMID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_fp:
+  FP_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_abs:
+  FP_ABS_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ABS_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_add:
+  FP_ADD_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ADD_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_div:
+  FP_DIV_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_DIV_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_eq:
+  FP_EQ_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_EQ_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_fma:
+  FP_FMA_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_FMA_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_geq:
+  FP_GEQ_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_GEQ_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_gt:
+  FP_GT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_GT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_isinfinite:
+  FP_ISINFINITE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISINFINITE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_isnan:
+  FP_ISNAN_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISNAN_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_isnegative:
+  FP_ISNEGATIVE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISNEGATIVE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_isnormal:
+  FP_ISNORMAL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISNORMAL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_ispositive:
+  FP_ISPOSITIVE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISPOSITIVE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_issubnormal:
+  FP_ISSUBNORMAL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISSUBNORMAL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_iszero:
+  FP_ISZERO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ISZERO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_leq:
+  FP_LEQ_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_LEQ_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_lt:
+  FP_LT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_LT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_max:
+  FP_MAX_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_MAX_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_min:
+  FP_MIN_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_MIN_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_mul:
+  FP_MUL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_MUL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_neg:
+  FP_NEG_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_NEG_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rem:
+  FP_REM_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_REM_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rm_roundnearesttiestoaway:
+  FP_RM_ROUNDNEARESTTIESTOAWAY_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_RM_ROUNDNEARESTTIESTOAWAY_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rm_roundnearesttiestoeven:
+  FP_RM_ROUNDNEARESTTIESTOEVEN_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_RM_ROUNDNEARESTTIESTOEVEN_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rm_roundtowardnegative:
+  FP_RM_ROUNDTOWARDNEGATIVE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_RM_ROUNDTOWARDNEGATIVE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rm_roundtowardpositive:
+  FP_RM_ROUNDTOWARDPOSITIVE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_RM_ROUNDTOWARDPOSITIVE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_rm_roundtowardzero:
+  FP_RM_ROUNDTOWARDZERO_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_RM_ROUNDTOWARDZERO_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_roundtointegral:
+  FP_ROUNDTOINTEGRAL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_ROUNDTOINTEGRAL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_sqrt:
+  FP_SQRT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_SQRT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_sub:
+  FP_SUB_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_SUB_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_to_ieee_bv:
+  FP_TO_IEEE_BV_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_TO_IEEE_BV_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_fp_to_real:
+  FP_TO_REAL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK FP_TO_REAL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_implies:
+  IMPLIES_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK IMPLIES_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_ite:
+  ITE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK ITE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_not:
+  NOT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK NOT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_or:
+  OR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK OR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_add:
+  REAL_ADD_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_ADD_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_div:
+  REAL_DIV_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_DIV_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_functionid:
+  REAL_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK REAL_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_real_ge:
+  REAL_GE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_GE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_gt:
+  REAL_GT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_GT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_le:
+  REAL_LE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_LE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_lt:
+  REAL_LT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_LT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_mul:
+  REAL_MUL_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_MUL_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_real_sub:
+  REAL_SUB_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK REAL_SUB_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_roundingmode_functionid:
+  ROUNDINGMODE_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK ROUNDINGMODE_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->function.GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_sbvdiv:
+  SBVDIV_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK SBVDIV_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_sbvmod:
+  SBVMOD_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK SBVMOD_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_sbvrem:
+  SBVREM_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK SBVREM_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_select:
+  SELECT_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK SELECT_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_store:
+  STORE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK STORE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_termid:
+  TERMID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK TERMID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->GetSourceSort());
+  $$ = $3;
+}
+;
+
+id_true:
+  TRUE_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK TRUE_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_uf_bool_functionid:
+  UF_BOOL_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK UF_BOOL_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->signature().codomain());
+  $$ = $3;
+}
+;
+
+id_uf_bv_functionid:
+  UF_BV_FUNCTIONID_TOK { $$ = $1; }
+| LPAREN_TOK AS_TOK UF_BV_FUNCTIONID_TOK resolved_sort RPAREN_TOK
+{
+  checkQualifiedSort($4, $3->signature().codomain());
+  $$ = $3;
+}
+;
+
+id_xor:
+  XOR_TOK { $$ = nullptr; }
+| LPAREN_TOK AS_TOK XOR_TOK resolved_sort RPAREN_TOK { $$ = $4; }
+;
+
+id_bvconst_decimal:
+  id_bvconst_decimal_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvconst_decimal_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvconst_decimal_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVCONST_DECIMAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->digits = *$3;
+  stp::releaseParserValue($3);
+  $$->first = $4;
+}
+;
+
+id_bvextract:
+  id_bvextract_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvextract_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvextract_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVEXTRACT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+  $$->second = $5;
+}
+;
+
+id_bvrepeat:
+  id_bvrepeat_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvrepeat_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvrepeat_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVREPEAT_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_bvrotate_left:
+  id_bvrotate_left_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvrotate_left_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvrotate_left_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVROTATE_LEFT_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_bvrotate_right:
+  id_bvrotate_right_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvrotate_right_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvrotate_right_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVROTATE_RIGHT_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_bvsx:
+  id_bvsx_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvsx_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvsx_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVSX_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_bvzx:
+  id_bvzx_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_bvzx_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_bvzx_bare:
+  LPAREN_TOK UNDERSCORE_TOK BVZX_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_fp_special:
+  id_fp_special_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_fp_special_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_fp_special_bare:
+  LPAREN_TOK UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->tag = $3;
+  $$->first = $4;
+  $$->second = $5;
+}
+;
+
+id_fp_to_sbv:
+  id_fp_to_sbv_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_fp_to_sbv_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_fp_to_sbv_bare:
+  LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_fp_to_ubv:
+  id_fp_to_ubv_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_fp_to_ubv_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_fp_to_ubv_bare:
+  LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+}
+;
+
+id_fp_tofp:
+  id_fp_tofp_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_fp_tofp_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_fp_tofp_bare:
+  LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+  $$->second = $5;
+}
+;
+
+id_fp_tofp_unsigned:
+  id_fp_tofp_unsigned_bare { $$ = $1; }
+| LPAREN_TOK AS_TOK id_fp_tofp_unsigned_bare resolved_sort RPAREN_TOK
+{
+  $$ = $3;
+  $$->qualifier = $4;
+}
+;
+id_fp_tofp_unsigned_bare:
+  LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+  $$ = new ParsedIndexedIdentifier;
+  $$->first = $4;
+  $$->second = $5;
+}
+;
+
 an_formula:
-TRUE_TOK
+id_true
 {
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(TRUE));
   assert(0 == $$->GetIndexWidth());
   assert(0 == $$->GetValueWidth());
+  checkQualifiedResult($1, $$);
 }
-| FALSE_TOK
+| id_false
 {
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(FALSE));
   assert(0 == $$->GetIndexWidth());
   assert(0 == $$->GetValueWidth());
+  checkQualifiedResult($1, $$);
 }
 |
-FORMID_TOK
+id_formid
 {
   $$ = stp::GlobalParserInterface->newNode(*$1); //todo creating then deleting same?
   stp::GlobalParserInterface->deleteNode($1);
@@ -3379,23 +3757,27 @@ FORMID_TOK
 {
    $$ = $2;
 }
-| LPAREN_TOK REAL_LT_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_lt an_terms RPAREN_TOK
 {
   $$ = createExactRealPredicate(stp::REAL_LT, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_LE_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_le an_terms RPAREN_TOK
 {
   $$ = createExactRealPredicate(stp::REAL_LE, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_GT_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_gt an_terms RPAREN_TOK
 {
   $$ = createExactRealPredicate(stp::REAL_GT, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_GE_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_ge an_terms RPAREN_TOK
 {
   $$ = createExactRealPredicate(stp::REAL_GE, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK EQ_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_eq an_mixed RPAREN_TOK
 {
   const ASTVec& terms = *$3;
 
@@ -3405,20 +3787,14 @@ FORMID_TOK
   checkSameSourceSort(terms, "= requires operands of the same sort");
 
   bool one_float = false;
-  bool one_real = false;
   bool one_boolean = false;
   for (unsigned i = 0; i < terms.size();i++)
   {
     one_float |= (terms[i].GetSourceSort().kind() ==
                   stp::SourceSort::Kind::FloatingPoint);
-    one_real |= (terms[i].GetSourceSort().kind() ==
-                 stp::SourceSort::Kind::Real);
     one_boolean |= (terms[i].GetSourceSort().kind() ==
                     stp::SourceSort::Kind::Bool);
   }
-
-  if (one_real && terms.size() != 2)
-    fatal_yyerror("Real equality is binary in the exact linear QF_LRA fragment");
 
   Kind k = one_float ? FP_SMT_EQ : (one_boolean ? IFF : EQ);
 
@@ -3441,8 +3817,9 @@ FORMID_TOK
   {
     fatal_yyerror("too few arguments to eq."); 
   }
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK DISTINCT_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_distinct an_terms RPAREN_TOK
 {
   using namespace stp;
 
@@ -3467,8 +3844,9 @@ FORMID_TOK
   }
 
   stp::releaseParserValue($3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK DISTINCT_TOK an_formulas RPAREN_TOK
+| LPAREN_TOK id_distinct an_formulas RPAREN_TOK
 {
   using namespace stp;
 
@@ -3493,81 +3871,99 @@ FORMID_TOK
   }
 
   stp::releaseParserValue($3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSLT_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvslt an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSLT, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSLE_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsle an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSLE, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSGT_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsgt an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSGT, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSGE_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsge an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSGE, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVLT_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvlt an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVLT, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVLE_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvle an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVLE, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVGT_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvgt an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVGT, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVGE_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvge an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVGE, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVUADDO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvuaddo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVUADDO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSADDO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsaddo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSADDO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVUMULO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvumulo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVUMULO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSMULO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsmulo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSMULO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVUSUBO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvusubo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVUSUBO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSSUBO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvssubo an_term an_term RPAREN_TOK
 {
   $$ = createNode(BVSSUBO, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVSDIVO_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvsdivo an_term an_term RPAREN_TOK
 {
   $$ = createSDivOverflow($3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVNEGO_TOK an_term RPAREN_TOK
+| LPAREN_TOK id_bvnego an_term RPAREN_TOK
 {
   $$ = createNegOverflow($3);
+  checkQualifiedResult($2, $$);
 }
 | LPAREN_TOK an_formula RPAREN_TOK
 {
   $$ = $2;
 }
-| LPAREN_TOK NOT_TOK an_formula RPAREN_TOK
+| LPAREN_TOK id_not an_formula RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(NOT, *$3));
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK IMPLIES_TOK an_formulas RPAREN_TOK
+| LPAREN_TOK id_implies an_formulas RPAREN_TOK
 {
   ASTVec forms = *$3;
 
@@ -3587,8 +3983,9 @@ FORMID_TOK
 
   $$ = stp::GlobalParserInterface->newNode(forms[0]);
   stp::releaseParserValue($3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK ITE_TOK an_formula an_formula an_formula RPAREN_TOK
+| LPAREN_TOK id_ite an_formula an_formula an_formula RPAREN_TOK
 {
   if (!$4->GetSourceSort().isKnown() ||
       $4->GetSourceSort() != $5->GetSourceSort())
@@ -3597,63 +3994,52 @@ FORMID_TOK
   stp::GlobalParserInterface->deleteNode( $3);
   stp::GlobalParserInterface->deleteNode( $4);
   stp::GlobalParserInterface->deleteNode( $5);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK AND_TOK an_formulas RPAREN_TOK
+| LPAREN_TOK id_and an_formulas RPAREN_TOK
 {
  $$ = createNode(AND, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK OR_TOK an_formulas RPAREN_TOK
+| LPAREN_TOK id_or an_formulas RPAREN_TOK
 {
   $$ = createNode(OR, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK XOR_TOK an_formulas RPAREN_TOK
+| LPAREN_TOK id_xor an_formulas RPAREN_TOK
 {
   $$ = createNode(XOR, $3);
+  checkQualifiedResult($2, $$);
 }
 | LPAREN_TOK LET_TOK lets an_formula RPAREN_TOK
   {
     $$ = $4;
     stp::GlobalParserInterface->letMgr->pop();
   }
-| LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_boolean_functionid an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
   stp::releaseParserValue($3);
 }
-| LPAREN_TOK UF_BOOL_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_uf_bool_functionid an_mixed RPAREN_TOK
 {
   $$ = applyParsedUF($2, *$3);
   stp::releaseParserValue($3);
 }
-| LPAREN_TOK UF_BOOL_FUNCTIONID_TOK RPAREN_TOK
+| LPAREN_TOK id_uf_bool_functionid RPAREN_TOK
 {
   $$ = applyParsedUF($2, ASTVec());
 }
-| BOOLEAN_FUNCTIONID_TOK
+| id_boolean_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
 }
-| LPAREN_TOK EXCLAIMATION_MARK_TOK an_formula NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
+| annotation_open an_formula annotation_attributes attributes RPAREN_TOK
 {
-  /*
-    This implements (! <an_formula> :named foo)
-    "foo" is created as a symbol that can be refered to by later commands.
-  */
-
-  // TODO, will fail if name is already defined?
-  ASTNode s(stp::GlobalParserInterface->CreateSourceSymbol(
-      $5->c_str(), stp::SourceSort::boolean()));
-
-  stp::GlobalParserInterface->addSymbol(s);
-
-  ASTNode n = stp::GlobalParserInterface->CreateNode(IFF,s, *$3);
-
-  stp::GlobalParserInterface->AddAssert(n);
-
-  stp::releaseParserValue($5);
-
-  $$ = $3;
+  annotateTerm(*$2, *$4);
+  stp::releaseParserValue($4);
+  $$ = $2;
 }
 ;
 
@@ -3678,14 +4064,14 @@ let: LPAREN_TOK
   // Set lexer to only return symbols.
   stringOnly = true;
 } 
-  STRING_TOK 
+  STRING_TOK
 {
   // Set it back to normal.
   stringOnly = false;
 }
-  an_mixed RPAREN_TOK
+  definition_body RPAREN_TOK
 {
-  stp::GlobalParserInterface->letMgr->LetExprMgr(*$3,($5->back()));
+  stp::GlobalParserInterface->letMgr->LetExprMgr(*$3, *$5);
   stp::releaseParserValue($3);
   stp::releaseParserValue($5);
 }
@@ -3727,9 +4113,10 @@ BVCONST_HEXIDECIMAL_TOK
   $$->SetValueWidth(width);
   stp::releaseParserValue($1);
 }
-| FP_TOK an_term an_term an_term
+| id_fp an_term an_term an_term
 {
   $$ = createFPFromParts($2, $3, $4);
+  checkQualifiedResult($1, $$);
 };
 
  /* The magnitude of a real constant: a decimal, or a numeral. Conversion is
@@ -3799,30 +4186,35 @@ an_real_constant:
 ;
 
 an_rounding_mode:
-  FP_RM_ROUNDTOWARDZERO_TOK
+id_fp_rm_roundtowardzero
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateRMConst(ROUND_TOWARD_ZERO));
+  checkQualifiedResult($1, $$);
 }
-| FP_RM_ROUNDNEARESTTIESTOEVEN_TOK
+| id_fp_rm_roundnearesttiestoeven
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateRMConst(ROUND_NEAREST_TIES_TO_EVEN));
+  checkQualifiedResult($1, $$);
 }
-| FP_RM_ROUNDNEARESTTIESTOAWAY_TOK
+| id_fp_rm_roundnearesttiestoaway
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateRMConst(ROUND_NEAREST_TIES_TO_AWAY));
+  checkQualifiedResult($1, $$);
 }
-| FP_RM_ROUNDTOWARDPOSITIVE_TOK
+| id_fp_rm_roundtowardpositive
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateRMConst(ROUND_TOWARD_POSITIVE));
+  checkQualifiedResult($1, $$);
 }
-| FP_RM_ROUNDTOWARDNEGATIVE_TOK
+| id_fp_rm_roundtowardnegative
 {
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateRMConst(ROUND_TOWARD_NEGATIVE));
+  checkQualifiedResult($1, $$);
 }
 ;
 
@@ -3835,109 +4227,139 @@ an_fp_const:
 ;
 
 an_fp_term:
-  LPAREN_TOK FP_ABS_TOK an_term RPAREN_TOK
+LPAREN_TOK id_fp_abs an_term RPAREN_TOK
 {
   $$ = createFPUnary(FP_ABS, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_NEG_TOK an_term RPAREN_TOK
+| LPAREN_TOK id_fp_neg an_term RPAREN_TOK
 {
   $$ = createFPUnary(FP_NEG, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_ADD_TOK an_term an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_add an_term an_term an_term RPAREN_TOK
 {
   $$ = createFPArith(FP_ADD, $3, $4, $5);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_SUB_TOK an_term an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_sub an_term an_term an_term RPAREN_TOK
 {
   $$ = createFPArith(FP_SUB, $3, $4, $5);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_MUL_TOK an_term an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_mul an_term an_term an_term RPAREN_TOK
 {
   $$ = createFPArith(FP_MUL, $3, $4, $5);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_DIV_TOK an_term an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_div an_term an_term an_term RPAREN_TOK
 {
   $$ = createFPArith(FP_DIV, $3, $4, $5);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_FMA_TOK an_term an_term an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_fma an_term an_term an_term an_term RPAREN_TOK
 {
   $$ = createFPFma($3, $4, $5, $6);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_SQRT_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_sqrt an_term an_term RPAREN_TOK
 {
   $$ = createFPSqrt($3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_REM_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_rem an_term an_term RPAREN_TOK
 {
   $$ = createFPBinary(FP_REM, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_ROUNDTOINTEGRAL_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_roundtointegral an_term an_term RPAREN_TOK
 {
   $$ = createFPRoundToIntegral($3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_MIN_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_min an_term an_term RPAREN_TOK
 {
   $$ = createFPBinary(FP_MIN, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_MAX_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_max an_term an_term RPAREN_TOK
 {
   $$ = createFPBinary(FP_MAX, $3, $4);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_to_ubv an_term an_term RPAREN_TOK
 {
-  $$ = createFPToBV(FP_TO_UBV, $5, $7, $8);
+  $$ = createFPToBV(FP_TO_UBV, $2->first, $3, $4);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_to_sbv an_term an_term RPAREN_TOK
 {
-  $$ = createFPToBV(FP_TO_SBV, $5, $7, $8);
+  $$ = createFPToBV(FP_TO_SBV, $2->first, $3, $4);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term RPAREN_TOK
+| LPAREN_TOK id_fp_tofp an_term RPAREN_TOK
 {
   // ((_ to_fp e s) bv) reinterprets the bits of a bitvector as an IEEE-754
   // float. STP already stores floats as their packed bit pattern, so this is
   // purely a retyping: keep the child and stamp the format onto it.
-  $$ = createFPFromBits($5, $6, $8);
+  $$ = createFPFromBits($2->first, $2->second, $3);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_tofp an_term an_term RPAREN_TOK
 {
   // ((_ to_fp e s) rm f) reformats an existing float under a rounding mode.
-  $$ = createFPToFP($5, $6, $8, $9);
+  $$ = createFPToFP($2->first, $2->second, $3, $4);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_fp_tofp_unsigned an_term an_term RPAREN_TOK
 {
-  $$ = createFPFromUnsignedBV($5, $6, $8, $9);
+  $$ = createFPFromUnsignedBV($2->first, $2->second, $3, $4);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_real_constant RPAREN_TOK
+| LPAREN_TOK id_fp_tofp an_term an_real_constant RPAREN_TOK
 {
-  $$ = createFPFromReal($5, $6, $8, $9);
+  $$ = createFPFromReal($2->first, $2->second, $3, $4);
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_real_constant RPAREN_TOK
+| LPAREN_TOK id_fp_tofp an_real_constant RPAREN_TOK
 {
   $$ = nullptr;
-  destroyParsedRealConstant($8);
+  destroyParsedRealConstant($3);
   fatal_yyerror("converting a real literal needs a rounding mode, e.g. "
                 "((_ to_fp 8 24) RNE 1.5); the one-argument form of to_fp "
                 "reinterprets the packed bits of a bitvector");
+  checkQualifiedResult($2->qualifier, $$);
+  stp::releaseParserValue($2);
 }
-| LPAREN_TOK FP_TO_REAL_TOK an_term RPAREN_TOK
+| LPAREN_TOK id_fp_to_real an_term RPAREN_TOK
 {
   $$ = createFpToReal($3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK FP_TO_IEEE_BV_TOK an_term RPAREN_TOK
+| LPAREN_TOK id_fp_to_ieee_bv an_term RPAREN_TOK
 {
   $$ = createFPToIEEEBV($3);
+  checkQualifiedResult($2, $$);
 }
-| UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
+| id_fp_special
 {
   // The special values are constants: build the packed interned constant
   // directly. A childless special-value node would hash-cons every format
   // of, say, NaN to one node, which whoever parsed last would re-stamp.
-  uint32_t exp_width($3);
-  uint32_t sig_width($4);
+  uint32_t exp_width($1->first);
+  uint32_t sig_width($1->second);
   checkFpFormatWidths(exp_width, sig_width);
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateFPSpecialConst(
-          (stp::FPSpecial)$2, exp_width, sig_width));
+          (stp::FPSpecial)$1->tag, exp_width, sig_width));
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
 ;
 
@@ -3948,65 +4370,84 @@ an_fp_term:
 // from both, which is where most of the grammar's reduce/reduce conflicts
 // came from.
 an_fp_predicate:
-  FP_LEQ_TOK an_terms
+id_fp_leq an_terms
 {
   $$ = createFPChain(FP_LEQ, $2, "fp.leq");
+  checkQualifiedResult($1, $$);
 }
-| FP_LT_TOK an_terms
+| id_fp_lt an_terms
 {
   $$ = createFPChain(FP_LT, $2, "fp.lt");
+  checkQualifiedResult($1, $$);
 }
-| FP_GEQ_TOK an_terms
+| id_fp_geq an_terms
 {
   $$ = createFPChain(FP_GEQ, $2, "fp.geq");
+  checkQualifiedResult($1, $$);
 }
-| FP_GT_TOK an_terms
+| id_fp_gt an_terms
 {
   $$ = createFPChain(FP_GT, $2, "fp.gt");
+  checkQualifiedResult($1, $$);
 }
-| FP_EQ_TOK an_terms
+| id_fp_eq an_terms
 {
   // Through the same helper as the other chainable comparisons, gaining its
   // operand and format checks (the old inline version had none).
   $$ = createFPChain(FP_EQ, $2, "fp.eq");
+  checkQualifiedResult($1, $$);
 }
-| FP_ISNORMAL_TOK an_term
+| id_fp_isnormal an_term
 {
   $$ = createFPPredicate(FP_ISNORMAL, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISSUBNORMAL_TOK an_term
+| id_fp_issubnormal an_term
 {
   $$ = createFPPredicate(FP_ISSUBNORMAL, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISZERO_TOK an_term
+| id_fp_iszero an_term
 {
   $$ = createFPPredicate(FP_ISZERO, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISINFINITE_TOK an_term
+| id_fp_isinfinite an_term
 {
   $$ = createFPPredicate(FP_ISINFINITE, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISNAN_TOK an_term
+| id_fp_isnan an_term
 {
   $$ = createFPPredicate(FP_ISNAN, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISNEGATIVE_TOK an_term
+| id_fp_isnegative an_term
 {
   $$ = createFPPredicate(FP_ISNEGATIVE, $2);
+  checkQualifiedResult($1, $$);
 }
-| FP_ISPOSITIVE_TOK an_term
+| id_fp_ispositive an_term
 {
   $$ = createFPPredicate(FP_ISPOSITIVE, $2);
+  checkQualifiedResult($1, $$);
 }
 ;
 
 an_term:
-TERMID_TOK
+LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
+{
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->abstractValue(*$3, *$4));
+  stp::releaseParserValue($3);
+  stp::releaseParserValue($4);
+}
+| id_termid
 {
   $$ = stp::GlobalParserInterface->newNode((*$1));
   stp::GlobalParserInterface->deleteNode( $1);
 }
-| REAL_FUNCTIONID_TOK
+| id_real_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(
@@ -4014,7 +4455,7 @@ TERMID_TOK
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::Real)
     fatal_yyerror("Real define-fun alias did not return Real sort");
 }
-| LPAREN_TOK REAL_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_real_functionid an_mixed RPAREN_TOK
 {
   // A Real-returning macro applied to arguments. Substitution happens
   // here, so what leaves this rule is an ordinary Real term.
@@ -4032,7 +4473,7 @@ TERMID_TOK
 {
   $$ = createExactRealLiteral($1);
 }
-| ARRAY_FUNCTIONID_TOK
+| id_array_functionid
 {
   // A use of a nullary array-sorted define-fun expands to its body.
   ASTVec empty;
@@ -4057,26 +4498,30 @@ TERMID_TOK
      not only in the dedicated rounding-mode operand slots. */
   $$ = $1;
 }
-| LPAREN_TOK REAL_ADD_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_add an_terms RPAREN_TOK
 {
   $$ = createExactRealTerm(stp::REAL_ADD, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_SUB_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_sub an_terms RPAREN_TOK
 {
   $$ = createExactRealTerm(stp::REAL_SUB, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_MUL_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_mul an_terms RPAREN_TOK
 {
   $$ = createExactRealTerm(stp::REAL_MUL, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK REAL_DIV_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_real_div an_terms RPAREN_TOK
 {
   $$ = createExactRealTerm(stp::REAL_DIV, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK AS_TOK STRING_TOK an_array_sort RPAREN_TOK an_term
+| LPAREN_TOK AS_TOK STRING_TOK resolved_sort RPAREN_TOK an_term
 {
   // ((as const (Array I E)) v): the array whose every cell is v, the only
-  // qualified identifier the frontend admits. The manager registers the
+  // constant-array extension. The manager registers the
   // symbol with its default and interns by (sort, default), so the same
   // text names the same array wherever it occurs.
   // Like select, store and the grammar's other operator productions, this
@@ -4093,7 +4538,9 @@ TERMID_TOK
     stp::GlobalParserInterface->deleteNode($6);
     fatal_yyerror("only (as const ...) is supported after 'as'");
   }
-  const stp::SourceSort array_sort = $4->sourceSort();
+  const stp::SourceSort array_sort = *$4;
+  if (array_sort.kind() != stp::SourceSort::Kind::Array)
+    fatal_yyerror("constant arrays require an Array result sort");
   ASTNode value = *$6;
   if (value.GetSourceSort() != array_sort.element())
   {
@@ -4122,7 +4569,7 @@ TERMID_TOK
   stp::releaseParserValue($4);
   stp::GlobalParserInterface->deleteNode($6);
 }
-| SELECT_TOK an_term an_term
+| id_select an_term an_term
 {
   //ARRAY READ
   // valuewidth is same as array, indexwidth is 0.
@@ -4133,8 +4580,9 @@ TERMID_TOK
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(READ, width, array, index));
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($1, $$);
 }
-| STORE_TOK an_term an_term an_term
+| id_store an_term an_term an_term
 {
   //ARRAY WRITE
   unsigned int width = $4->GetValueWidth();
@@ -4148,44 +4596,51 @@ TERMID_TOK
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
   stp::GlobalParserInterface->deleteNode( $4);
+  checkQualifiedResult($1, $$);
 }
-| LPAREN_TOK UNDERSCORE_TOK BVEXTRACT_TOK  NUMERAL_TOK  NUMERAL_TOK RPAREN_TOK an_term
+| id_bvextract an_term
 {
-  checkBitVectorTerm(*$7);
+  checkBitVectorTerm(*$2);
   // Bounds outside the operand end the parse: going on, the extract was
   // built anyway and folded, reading past a constant's bits.
-  int width = $4 - $5 + 1;
+  int width = $1->first - $1->second + 1;
   if (width < 0)
     fatal_yyerror("Negative width in extract");
 
-  if((unsigned)$4 >= $7->GetValueWidth())
+  if((unsigned)$1->first >= $2->GetValueWidth())
     fatal_yyerror("Parsing: Wrong width in BVEXTRACT");
 
-  ASTNode hi  =  stp::GlobalParserInterface->CreateBVConst(32, $4);
-  ASTNode low =  stp::GlobalParserInterface->CreateBVConst(32, $5);
-  ASTNode output = stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT, width, *$7,hi,low);
+  ASTNode hi  =  stp::GlobalParserInterface->CreateBVConst(32, $1->first);
+  ASTNode low =  stp::GlobalParserInterface->CreateBVConst(32, $1->second);
+  ASTNode output = stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT, width, *$2,hi,low);
   ASTNode * n = stp::GlobalParserInterface->newNode(output);
   $$ = n;
-    stp::GlobalParserInterface->deleteNode( $7);
+    stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-| LPAREN_TOK UNDERSCORE_TOK BVZX_TOK  NUMERAL_TOK  RPAREN_TOK an_term
+| id_bvzx an_term
 {
-  checkBitVectorTerm(*$6);
-  unsigned w = $6->GetValueWidth() + $4;
+  checkBitVectorTerm(*$2);
+  unsigned w = $2->GetValueWidth() + $1->first;
   ASTNode width = stp::GlobalParserInterface->CreateBVConst(32,w);
-  $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVZX,w,*$6,width));
-  stp::GlobalParserInterface->deleteNode( $6);
+  $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVZX,w,*$2,width));
+  stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-|  LPAREN_TOK UNDERSCORE_TOK BVSX_TOK  NUMERAL_TOK  RPAREN_TOK an_term
+| id_bvsx an_term
 {
-  checkBitVectorTerm(*$6);
-  unsigned w = $6->GetValueWidth() + $4;
+  checkBitVectorTerm(*$2);
+  unsigned w = $2->GetValueWidth() + $1->first;
   ASTNode width = stp::GlobalParserInterface->CreateBVConst(32,w);
-  $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVSX,w,*$6,width));
-  stp::GlobalParserInterface->deleteNode( $6);
+  $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVSX,w,*$2,width));
+  stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
 
-|  ITE_TOK an_formula an_term an_term
+| id_ite an_formula an_term an_term
 {
   // Reject branches of different floating-point formats up front, as the
   // (= ...) rule does for its operands: with a constant condition the
@@ -4211,6 +4666,7 @@ TERMID_TOK
     stp::GlobalParserInterface->deleteNode( $2);
     stp::GlobalParserInterface->deleteNode( $3);
     stp::GlobalParserInterface->deleteNode( $4);
+    checkQualifiedResult($1, $$);
     break;
   }
   const unsigned int width = $3->GetValueWidth();
@@ -4218,8 +4674,9 @@ TERMID_TOK
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
   stp::GlobalParserInterface->deleteNode( $4);
+  checkQualifiedResult($1, $$);
 }
-|  BVCONCAT_TOK an_term an_term
+| id_bvconcat an_term an_term
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
@@ -4227,43 +4684,50 @@ TERMID_TOK
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, width, *$2, *$3));
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVNOT_TOK an_term
+| id_bvnot an_term
 {
   checkBitVectorTerm(*$2);
   //this is the BVNEG (term) in the CVCL language
   unsigned int width = $2->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2));
   stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1, $$);
 }
-|  BVNEG_TOK an_term
+| id_bvneg an_term
 {
   checkBitVectorTerm(*$2);
   //this is the BVUMINUS term in CVCL langauge
   unsigned width = $2->GetValueWidth();
   $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVUMINUS,width,*$2));
   stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1, $$);
 }
-|  LPAREN_TOK BVAND_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_bvand an_terms RPAREN_TOK
 {
  $$ = createTerm(BVAND, $3);
+  checkQualifiedResult($2, $$);
 }
-|  LPAREN_TOK BVOR_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_bvor an_terms RPAREN_TOK
 {
   $$ = createTerm(BVOR, $3);
+  checkQualifiedResult($2, $$);
 }
-|  LPAREN_TOK BVXOR_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_bvxor an_terms RPAREN_TOK
 {
   $$ = createTerm(BVXOR, $3);
+  checkQualifiedResult($2, $$);
 }
-| LPAREN_TOK BVXNOR_TOK an_term an_term RPAREN_TOK
+| LPAREN_TOK id_bvxnor an_term an_term RPAREN_TOK
 {
   ASTNode *temp = createTerm(BVXOR, $3, $4);
   const unsigned int width = temp->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, *temp));
   stp::GlobalParserInterface->deleteNode( temp);
+  checkQualifiedResult($2, $$);
 }
-|  BVCOMP_TOK an_term an_term
+| id_bvcomp an_term an_term
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
@@ -4275,40 +4739,49 @@ TERMID_TOK
 
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVSUB_TOK an_term an_term
+| id_bvsub an_term an_term
 {
   $$ = createTerm(BVSUB, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|  LPAREN_TOK BVPLUS_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_bvplus an_terms RPAREN_TOK
 {
   $$ = createTerm(BVPLUS, $3);
+  checkQualifiedResult($2, $$);
 }
-|  LPAREN_TOK BVMULT_TOK an_terms RPAREN_TOK
+| LPAREN_TOK id_bvmult an_terms RPAREN_TOK
 {
   $$ = createTerm(BVMULT, $3);
+  checkQualifiedResult($2, $$);
 }
-|      BVDIV_TOK an_term an_term
+| id_bvdiv an_term an_term
 {
   $$ = createTerm(BVDIV, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|      BVMOD_TOK an_term an_term
+| id_bvmod an_term an_term
 {
   $$ = createTerm(BVMOD, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|      SBVDIV_TOK an_term an_term
+| id_sbvdiv an_term an_term
 {
   $$ = createTerm(SBVDIV, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|      SBVREM_TOK an_term an_term
+| id_sbvrem an_term an_term
 {
   $$ = createTerm(SBVREM, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|      SBVMOD_TOK an_term an_term
+| id_sbvmod an_term an_term
 {
   $$ = createTerm(SBVMOD, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVNAND_TOK an_term an_term
+| id_bvnand an_term an_term
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
@@ -4317,8 +4790,9 @@ TERMID_TOK
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, stp::GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3)));
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVNOR_TOK an_term an_term
+| id_bvnor an_term an_term
 {
   checkBitVectorTerm(*$2);
   checkBitVectorTerm(*$3);
@@ -4327,28 +4801,33 @@ TERMID_TOK
   $$= stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, stp::GlobalParserInterface->nf->CreateTerm(BVOR, width, *$2, *$3)));
   stp::GlobalParserInterface->deleteNode( $2);
   stp::GlobalParserInterface->deleteNode( $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVLEFTSHIFT_1_TOK an_term an_term
+| id_bvleftshift_1 an_term an_term
 {
    $$ = createTerm(BVLEFTSHIFT, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-| BVRIGHTSHIFT_1_TOK an_term an_term
+| id_bvrightshift_1 an_term an_term
 {
    $$ = createTerm(BVRIGHTSHIFT, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-|  BVARITHRIGHTSHIFT_TOK an_term an_term
+| id_bvarithrightshift an_term an_term
 {
    $$ = createTerm(BVSRSHIFT, $2, $3);
+  checkQualifiedResult($1, $$);
 }
-| LPAREN_TOK UNDERSCORE_TOK BVROTATE_LEFT_TOK  NUMERAL_TOK  RPAREN_TOK an_term
+| id_bvrotate_left an_term
 {
-  checkBitVectorTerm(*$6);
+  checkBitVectorTerm(*$2);
   ASTNode *n;
-  unsigned width = $6->GetValueWidth();
-  unsigned rotate = $4 % width;
+  unsigned width = $2->GetValueWidth();
+  unsigned rotate = $1->first % width;
   if (0 == rotate)
   {
-      n = $6;
+      n = $2;
+      $2 = nullptr;
   }
   else
   {
@@ -4357,22 +4836,25 @@ TERMID_TOK
     ASTNode cut = stp::GlobalParserInterface->CreateBVConst(32,width-rotate);
     ASTNode cutMinusOne = stp::GlobalParserInterface->CreateBVConst(32,width-rotate-1);
 
-    ASTNode top =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$6,high, cut);
-    ASTNode bottom =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$6,cutMinusOne,zero);
+    ASTNode top =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$2,high, cut);
+    ASTNode bottom =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$2,cutMinusOne,zero);
     n =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,width,bottom,top));
-    stp::GlobalParserInterface->deleteNode( $6);
+    stp::GlobalParserInterface->deleteNode( $2);
   }
   $$ = n;
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-| LPAREN_TOK UNDERSCORE_TOK BVROTATE_RIGHT_TOK  NUMERAL_TOK  RPAREN_TOK an_term
+| id_bvrotate_right an_term
 {
-  checkBitVectorTerm(*$6);
+  checkBitVectorTerm(*$2);
   ASTNode *n;
-  unsigned width = $6->GetValueWidth();
-  unsigned rotate = $4 % width;
+  unsigned width = $2->GetValueWidth();
+  unsigned rotate = $1->first % width;
   if (0 == rotate)
   {
-      n = $6;
+      n = $2;
+      $2 = nullptr;
   }
   else
   {
@@ -4381,52 +4863,55 @@ TERMID_TOK
     ASTNode cut = stp::GlobalParserInterface->CreateBVConst(32,rotate);
     ASTNode cutMinusOne = stp::GlobalParserInterface->CreateBVConst(32,rotate-1);
 
-    ASTNode bottom =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$6,cutMinusOne, zero);
-    ASTNode top =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$6,high,cut);
+    ASTNode bottom =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,rotate,*$2,cutMinusOne, zero);
+    ASTNode top =  stp::GlobalParserInterface->nf->CreateTerm(BVEXTRACT,width-rotate,*$2,high,cut);
     n =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,width,bottom,top));
-    stp::GlobalParserInterface->deleteNode( $6);
+    stp::GlobalParserInterface->deleteNode( $2);
   }
   $$ = n;
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-| LPAREN_TOK UNDERSCORE_TOK BVREPEAT_TOK  NUMERAL_TOK RPAREN_TOK an_term
+| id_bvrepeat an_term
 {
-  checkBitVectorTerm(*$6);
-  unsigned count = $4;
+  checkBitVectorTerm(*$2);
+  unsigned count = $1->first;
   if (count < 1)
       fatal_yyerror("One or more repeats please");
 
-  unsigned w = $6->GetValueWidth();
-  ASTNode n =  *$6;
+  unsigned w = $2->GetValueWidth();
+  ASTNode n =  *$2;
 
   for (unsigned i =1; i < count; i++)
   {
-        n = stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$6);
+        n = stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT,w*(i+1),n,*$2);
   }
   $$ = stp::GlobalParserInterface->newNode(n);
-  stp::GlobalParserInterface->deleteNode( $6);
+  stp::GlobalParserInterface->deleteNode( $2);
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-| UNDERSCORE_TOK BVCONST_DECIMAL_TOK NUMERAL_TOK
+| id_bvconst_decimal
 {
   // (_ bvN w): w is positive and N fits w bits, and saying so is the
   // parser's job (the engine's constructor treats either as fatal).
-  if ($3 == 0)
+  if ($1->first == 0)
   {
-    stp::releaseParserValue($2);
     fatal_yyerror("bit-vectors must be of positive length");
   }
-  if (!decimalFitsWidth(*$2, $3))
+  if (!decimalFitsWidth($1->digits, $1->first))
   {
-    const std::string diagnostic = "(_ bv" + *$2 + " " + std::to_string($3) +
+    const std::string diagnostic = "(_ bv" + $1->digits + " " + std::to_string($1->first) +
                                    "): the value does not fit in " +
-                                   std::to_string($3) + " bits";
-    stp::releaseParserValue($2);
+                                   std::to_string($1->first) + " bits";
     fatal_yyerror(diagnostic.c_str());
   }
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$2, 10, $3));
-  $$->SetValueWidth($3);
-  stp::releaseParserValue($2);
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst($1->digits, 10, $1->first));
+  $$->SetValueWidth($1->first);
+  checkQualifiedResult($1->qualifier, $$);
+  stp::releaseParserValue($1);
 }
-| LPAREN_TOK BITVECTOR_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_bitvector_functionid an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
 
@@ -4435,16 +4920,16 @@ TERMID_TOK
 
   stp::releaseParserValue($3);
 }
-| LPAREN_TOK UF_BV_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_uf_bv_functionid an_mixed RPAREN_TOK
 {
   $$ = applyParsedUF($2, *$3);
   stp::releaseParserValue($3);
 }
-| LPAREN_TOK UF_BV_FUNCTIONID_TOK RPAREN_TOK
+| LPAREN_TOK id_uf_bv_functionid RPAREN_TOK
 {
   $$ = applyParsedUF($2, ASTVec());
 }
-| LPAREN_TOK FLOATINGPOINT_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_floatingpoint_functionid an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$2,*$3));
 
@@ -4453,7 +4938,7 @@ TERMID_TOK
 
   stp::releaseParserValue($3);
 }
-| FLOATINGPOINT_FUNCTIONID_TOK
+| id_floatingpoint_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
@@ -4461,7 +4946,7 @@ TERMID_TOK
   if ($$->GetType() != FLOATINGPOINT_TYPE)
     yyerror("Must be floating-point type");
 }
-| BITVECTOR_FUNCTIONID_TOK
+| id_bitvector_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(applyFunctionChecked(*$1,empty));
@@ -4469,7 +4954,7 @@ TERMID_TOK
   if ($$->GetType() != BITVECTOR_TYPE)
     yyerror("Must be bitvector type");
 }
-| LPAREN_TOK ROUNDINGMODE_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_roundingmode_functionid an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(
       applyFunctionChecked(*$2, *$3));
@@ -4477,7 +4962,7 @@ TERMID_TOK
     yyerror("Must be RoundingMode type");
   stp::releaseParserValue($3);
 }
-| ROUNDINGMODE_FUNCTIONID_TOK
+| id_roundingmode_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(
@@ -4485,7 +4970,7 @@ TERMID_TOK
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
     yyerror("Must be RoundingMode type");
 }
-| LPAREN_TOK DECLAREDSORT_FUNCTIONID_TOK an_mixed RPAREN_TOK
+| LPAREN_TOK id_declaredsort_functionid an_mixed RPAREN_TOK
 {
   // A define-fun whose result sort is one declared by declare-sort. Its own
   // token for the same reason RoundingMode has one: the lexer dispatches a
@@ -4498,7 +4983,7 @@ TERMID_TOK
     yyerror("Must be a declared sort");
   stp::releaseParserValue($3);
 }
-| DECLAREDSORT_FUNCTIONID_TOK
+| id_declaredsort_functionid
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(
@@ -4506,25 +4991,11 @@ TERMID_TOK
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::Uninterpreted)
     yyerror("Must be a declared sort");
 }
-| LPAREN_TOK EXCLAIMATION_MARK_TOK an_term NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
+| annotation_open an_term annotation_attributes attributes RPAREN_TOK
 {
-  /* This implements (! <an_term> :named foo) */
-
-  ASTNode s(stp::GlobalParserInterface->CreateSourceSymbol(
-      $5->c_str(), $3->GetSourceSort()));
-  stp::releaseParserValue($5);
-
-  stp::GlobalParserInterface->addSymbol(s);
-
-  const Kind equality =
-      $3->GetSourceSort().kind() == stp::SourceSort::Kind::FloatingPoint
-          ? FP_SMT_EQ
-          : EQ;
-  ASTNode n = stp::GlobalParserInterface->CreateNode(equality, s, *$3);
-
-  stp::GlobalParserInterface->AddAssert(n);
-
-  $$ = $3;
+  annotateTerm(*$2, *$4);
+  stp::releaseParserValue($4);
+  $$ = $2;
 }
 | LPAREN_TOK LET_TOK lets an_term RPAREN_TOK
   {
@@ -4557,11 +5028,19 @@ void reportRedeclaredName()
 
 namespace stp {
   int SMT2Parse() {
+    GlobalParserInterface->beginOutputRouting();
+    struct RestoreOutput
+    {
+      Cpp_interface* interface;
+      ~RestoreOutput() { interface->endOutputRouting(); }
+    } restoreOutput{GlobalParserInterface};
     // Each SMT2Parse is one script: the floating-point keywords start
     // disabled and turn on at an FP set-logic.
     SMT2SetFloatTokens(GlobalParserInterface->all_theory_tokens);
     SMT2SetRealTokens(GlobalParserInterface->all_theory_tokens);
+    SMT2SetBitVectorTokens(GlobalParserInterface->all_theory_tokens);
     SMT2ResetCommandLexerState();
+    SMT2ResetLexMode();
     int result;
     bool ended = false;
     try
@@ -4574,6 +5053,7 @@ namespace stp {
     }
     catch (const stp::EngineFatal& e)
     {
+      GlobalParserInterface->rejectCurrentCommand(e.what());
       // An engine failure in the engine's own work -- a check the script
       // ran, a model it read -- is the engine's. Any other came out of
       // building the script's terms: the type checker refusing operands of
@@ -4581,7 +5061,6 @@ namespace stp {
       // refusal of itself, a failed parse like any other.
       if (GlobalParserInterface->engine_work_failed)
         throw;
-      GlobalParserInterface->last_error_message = e.what();
       result = 1;
     }
     catch (const stp::ScriptEnded&)

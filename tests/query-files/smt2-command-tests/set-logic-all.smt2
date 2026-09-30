@@ -1,0 +1,27 @@
+; RUN: %solver %s | %OutputCheck %s
+; ALL selects the quantifier-free theories this solver implements.
+(set-logic ALL)
+(declare-sort S 0)
+(declare-const x S)
+(declare-fun f (S) Bool)
+(declare-const v (_ BitVec 8))
+(declare-const r Real)
+(declare-const z Float32)
+(declare-const a (Array (_ BitVec 8) (_ BitVec 8)))
+(declare-const b (Array (_ BitVec 8) (_ BitVec 8)))
+(assert (f x))
+(assert (= v #x12))
+(assert (> r 1.0))
+(assert (fp.isZero z))
+(assert (= a b))
+(assert (distinct (select a v) (select b v)))
+; CHECK: ^unsat$
+(check-sat)
+(reset)
+(set-logic QF_ABV)
+(declare-const a (Array (_ BitVec 8) (_ BitVec 8)))
+(declare-const b (Array (_ BitVec 8) (_ BitVec 8)))
+(assert (= a b))
+(assert (distinct (select a #x00) (select b #x00)))
+; CHECK: ^unsat$
+(check-sat)

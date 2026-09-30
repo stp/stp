@@ -5,12 +5,8 @@
 ; RUN: %solver --incremental=off %s 2>&1 | %OutputCheck %s
 ; RUN: %solver --incremental=on  %s 2>&1 | %OutputCheck %s
 ; CHECK: ^sat
-; CHECK: ^\(declare-sort Element 0\)$
-; CHECK: ^\(declare-sort Index 0\)$
-; CHECK: ^\(declare-fun \|Element![0-9]+\| \(\) Element\)$
-; CHECK: ^\(declare-fun \|Index![0-9]+\| \(\) Index\)$
-; CHECK: ^\(define-fun \|a\| \(\) \(Array Index Element\) \(store \(\(as const \(Array Index Element\)\) \|Element![0-9]+\|\) \|Index![0-9]+\| \|Element![0-9]+\|\)\)$
-; CHECK: ^\( \(select \|a\| \|i\|\) \|Element![0-9]+\| \)$
+; CHECK: ^\(define-fun \|a\| \(\) \(Array Index Element\) \(store \(\(as const \(Array Index Element\)\) \(as \|@Element![0-9]+\| Element\)\) \(as \|@Index![0-9]+\| Index\) \(as \|@Element![0-9]+\| Element\)\)\)$
+; CHECK: ^\( \(select \|a\| \|i\|\) \(as \|@Element![0-9]+\| Element\) \)$
 ;
 (set-logic QF_AX)
 (set-option :produce-models true)

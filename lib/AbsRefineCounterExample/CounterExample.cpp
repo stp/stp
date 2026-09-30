@@ -2449,9 +2449,6 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
 // positionally: response i answers term i, as SMT-LIB requires.
 void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
 {
-  if (n.GetType() == stp::ARRAY_TYPE)
-    FatalError("get-value: an array-valued term has no printable value", n);
-
   os << "( ";
   // The first component of the pair is a term, not just a name: a symbol
   // prints as |x| exactly as it did when this only accepted symbols, and a
@@ -2462,7 +2459,9 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
   printer::SMTLIB2_PrintTerm(os, bm, n);
   os << " ";
 
-  if (bm->isRoundingModeSortedTerm(n))
+  if (n.GetType() == stp::ARRAY_TYPE)
+    PrintArrayValueSMTLIB2(os, n);
+  else if (bm->isRoundingModeSortedTerm(n))
   {
     // A RoundingMode value must print as a mode name -- a legal term of
     // the sort -- not as its raw 5-bit carrier. Every rounding mode a query
@@ -2486,10 +2485,8 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
     // As in outputLine: an element of a declared sort has a name in the
     // model, not a carrier pattern. get-value must agree with get-model or a
     // caller is handed a bit-vector literal where a term of the sort belongs.
-    os << "|"
-       << bm->uninterpretedElementName(n.GetSourceSort(),
-                                       TermToConstTermUsingModel(n, false))
-       << "|";
+    bm->printUninterpretedElement(os, n.GetSourceSort(),
+                                  TermToConstTermUsingModel(n, false));
   else if (n.GetType() == stp::BITVECTOR_TYPE)
     printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
   else
@@ -2546,16 +2543,9 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
       }
       else if (bm->isUninterpretedSortedTerm(f))
       {
-        // At the sort the query declared, and named, not numbered: the carrier
-        // pattern is not a literal of this sort, and printing one would name a
-        // bit-vector -- the one thing the sort exists to say it is not. The
-        // element names are declared in the model's preamble.
-        bm->noteUninterpretedSortPrinted(f.GetSourceSort());
-        os << " () " << sourceSortToSMTLib(f.GetSourceSort()) << " |"
-           << bm->uninterpretedElementName(
-                  f.GetSourceSort(),
-                  TermToConstTermUsingModel(se, false))
-           << "|";
+        os << " () " << sourceSortToSMTLib(f.GetSourceSort()) << " ";
+        bm->printUninterpretedElement(os, f.GetSourceSort(),
+                                      TermToConstTermUsingModel(se, false));
       }
       else if (f.GetType() == stp::BITVECTOR_TYPE)
       {
@@ -2670,6 +2660,124 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
 
 }
 
+void AbsRefine_CounterExample::PrintArrayValueSMTLIB2(
+    std::ostream& os, const ASTNode& array)
+{
+  // Peel a query's writes and conditionals iteratively. Its base uses the
+  // same completed observations as get-model; applying the writes in source
+  // order then preserves last-write-wins, including repeated indexes.
+  ASTNode base = array;
+  vector<std::pair<ASTNode, ASTNode>> writes;
+  while (base.GetKind() == WRITE || base.GetKind() == ITE)
+  {
+    if (base.GetKind() == ITE)
+      base = ComputeFormulaUsingModel(base[0]) == bm->ASTTrue ? base[1] : base[2];
+    else
+    {
+      writes.emplace_back(TermToConstTermUsingModel(base[1], false),
+                           TermToConstTermUsingModel(base[2], false));
+      base = base[0];
+    }
+  }
+  vector<std::pair<ASTNode, ASTNode>> entries = GetSortedArrayModelEntries(base);
+  entries.insert(entries.end(), writes.rbegin(), writes.rend());
+  const SourceSort arraySort = array.GetSourceSort();
+  if (arraySort.kind() != SourceSort::Kind::Array)
+    FatalError("array model: symbol has no array source sort", array);
+  const SourceSort indexSort = arraySort.index();
+  const SourceSort elementSort = arraySort.element();
+
+  // The define-fun prints the array's true sorts -- the element float
+  // format lives on the symbol, a float index format and RoundingMode
+  // on either side in the manager's registries -- with (fp ...)
+  // literals for float cells and indexes and mode names for
+  // RoundingMode ones, so it replays against the original
+  // declaration.
+  const bool fpElement = elementSort.kind() == SourceSort::Kind::FloatingPoint;
+  const unsigned eb = fpElement ? elementSort.exponentWidth() : 0;
+  const unsigned sb = fpElement ? elementSort.significandWidth() : 0;
+  const bool fpIndex = indexSort.kind() == SourceSort::Kind::FloatingPoint;
+  const unsigned ieb = fpIndex ? indexSort.exponentWidth() : 0;
+  const unsigned isb = fpIndex ? indexSort.significandWidth() : 0;
+  const bool rmIndex = indexSort.kind() == SourceSort::Kind::RoundingMode;
+  const bool rmElement = elementSort.kind() == SourceSort::Kind::RoundingMode;
+
+  // The declaration and both `as const` occurrences must use the source
+  // sorts, not their packed carriers. In particular, (Array Index Element)
+  // is not (Array (_ BitVec 16) (_ BitVec 16)), even though that is how it
+  // is represented below this boundary.
+  const std::string sortText = sourceSortToSMTLib(arraySort);
+  bm->noteUninterpretedSortPrinted(indexSort);
+  bm->noteUninterpretedSortPrinted(elementSort);
+
+  const auto printCell = [&](const ASTNode& cell) {
+    if (elementSort.kind() == SourceSort::Kind::Uninterpreted)
+    {
+      os << " ";
+      bm->printUninterpretedElement(os, elementSort, cell);
+      return;
+    }
+    if (eb != 0)
+    {
+      os << " ";
+      printer::outputFloatingPointSMTLIB2(cell, os, eb, sb);
+      return;
+    }
+    if (rmElement)
+    {
+      const char* name = printer::roundingModeName(cell.GetUnsignedConst());
+      if (name == NULL)
+        FatalError("array-equality: a RoundingMode cell of the model "
+                   "is not one of the five modes",
+                   cell);
+      os << " " << name;
+      return;
+    }
+    printer::outputBitVecSMTLIB2(cell, os);
+  };
+  const auto printIndex = [&](const ASTNode& index) {
+    if (indexSort.kind() == SourceSort::Kind::Uninterpreted)
+    {
+      os << " ";
+      bm->printUninterpretedElement(os, indexSort, index);
+      return;
+    }
+    if (fpIndex)
+    {
+      os << " ";
+      printer::outputFloatingPointSMTLIB2(index, os, ieb, isb);
+      return;
+    }
+    if (rmIndex)
+    {
+      const char* name = printer::roundingModeName(index.GetUnsignedConst());
+      if (name == NULL)
+        FatalError("array-equality: a RoundingMode index of the model "
+                   "is not one of the five modes",
+                   index);
+      os << " " << name;
+      return;
+    }
+    printer::outputBitVecSMTLIB2(index, os);
+  };
+
+  for (size_t i = 0; i < entries.size(); i++)
+    os << "(store ";
+  os << "((as const " << sortText << ")";
+  // The unobserved cells' value, printed through the same cell
+  // printer as an observed one, so that what is published here is
+  // demonstrably the value every other reader completes with rather
+  // than text that happens to match it.
+  printCell(defaultCellValue(array));
+  os << ")";
+  for (size_t i = 0; i < entries.size(); i++)
+  {
+    printIndex(entries[i].first);
+    printCell(entries[i].second);
+    os << ")";
+  }
+}
+
 /*
  SMTLIB2 models are supposed to contain all variables.
  So we can't just use the counterexample - because some might have been eliminated from the problem
@@ -2774,105 +2882,10 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
 
   for (const ASTNode& array : arrays)
   {
-    // Shared with GetCounterExampleArray, so the text and programmatic
-    // model surfaces expose identical deterministic observations.
-    vector<std::pair<ASTNode, ASTNode>> entries =
-        GetSortedArrayModelEntries(array);
-
-    const SourceSort arraySort = array.GetSourceSort();
-    if (arraySort.kind() != SourceSort::Kind::Array)
-      FatalError("array model: symbol has no array source sort", array);
-    const SourceSort indexSort = arraySort.index();
-    const SourceSort elementSort = arraySort.element();
-
-    // The define-fun prints the array's true sorts -- the element float
-    // format lives on the symbol, a float index format and RoundingMode
-    // on either side in the manager's registries -- with (fp ...)
-    // literals for float cells and indexes and mode names for
-    // RoundingMode ones, so it replays against the original
-    // declaration.
-    const unsigned eb = array.GetExpWidth();
-    const unsigned sb = array.GetSigWidth();
-    unsigned ieb = 0, isb = 0;
-    const bool fpIndex = bm->arrayHasFpIndex(array, ieb, isb);
-    const bool rmIndex = bm->arrayHasRmIndex(array);
-    const bool rmElement = bm->arrayHasRmElement(array);
-
-    // The declaration and both `as const` occurrences must use the source
-    // sorts, not their packed carriers. In particular, (Array Index Element)
-    // is not (Array (_ BitVec 16) (_ BitVec 16)), even though that is how it
-    // is represented below this boundary.
-    const std::string sortText = sourceSortToSMTLib(arraySort);
-    bm->noteUninterpretedSortPrinted(indexSort);
-    bm->noteUninterpretedSortPrinted(elementSort);
-
-    const auto printCell = [&](const ASTNode& cell) {
-      if (elementSort.kind() == SourceSort::Kind::Uninterpreted)
-      {
-        os << " |" << bm->uninterpretedElementName(elementSort, cell) << "|";
-        return;
-      }
-      if (eb != 0)
-      {
-        os << " ";
-        printer::outputFloatingPointSMTLIB2(cell, os, eb, sb);
-        return;
-      }
-      if (rmElement)
-      {
-        const char* name = printer::roundingModeName(cell.GetUnsignedConst());
-        if (name == NULL)
-          FatalError("array-equality: a RoundingMode cell of the model "
-                     "is not one of the five modes",
-                     cell);
-        os << " " << name;
-        return;
-      }
-      printer::outputBitVecSMTLIB2(cell, os);
-    };
-    const auto printIndex = [&](const ASTNode& index) {
-      if (indexSort.kind() == SourceSort::Kind::Uninterpreted)
-      {
-        os << " |" << bm->uninterpretedElementName(indexSort, index) << "|";
-        return;
-      }
-      if (fpIndex)
-      {
-        os << " ";
-        printer::outputFloatingPointSMTLIB2(index, os, ieb, isb);
-        return;
-      }
-      if (rmIndex)
-      {
-        const char* name = printer::roundingModeName(index.GetUnsignedConst());
-        if (name == NULL)
-          FatalError("array-equality: a RoundingMode index of the model "
-                     "is not one of the five modes",
-                     index);
-        os << " " << name;
-        return;
-      }
-      printer::outputBitVecSMTLIB2(index, os);
-    };
-
     os << "(define-fun |";
     array.nodeprint(os);
-    os << "| () " << sortText;
-    for (size_t i = 0; i < entries.size(); i++)
-      os << " (store";
-    os << " ((as const " << sortText << ")";
-    // The unobserved cells' value, printed through the same cell
-    // printer as an observed one, so that what is published here is
-    // demonstrably the value every other reader completes with rather
-    // than text that happens to match it.
-    printCell(defaultCellValue(array));
-    os << ")";
-    for (size_t i = 0; i < entries.size(); i++)
-    {
-      printIndex(entries[i].first);
-      printCell(entries[i].second);
-      os << ")";
-    }
+    os << "| () " << sourceSortToSMTLib(array.GetSourceSort()) << " ";
+    PrintArrayValueSMTLIB2(os, array);
     os << ")" << std::endl;
   }
 

@@ -21,7 +21,7 @@ def relu(pre, post, reverse=False, strict=False):
 
 
 def source(assertions, symbols=("x", "y", "z", "a", "b")):
-    return "(set-logic QF_LRA)\n" + "\n".join(
+    return "(set-option :produce-models true)\n(set-logic QF_LRA)\n" + "\n".join(
         f"(declare-fun {v} () Real)" for v in symbols) + "\n" + "\n".join(
         f"(assert {a})" for a in assertions) + "\n(check-sat)\n"
 

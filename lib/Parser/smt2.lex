@@ -2,6 +2,7 @@
 %option bison-bridge*/
 %option noyywrap
 %option noreject
+%option nounput
 %option noyymore
 
 /* %option debug */
@@ -38,6 +39,7 @@
 ********************************************************************/
 #include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
+#include "stp/Parser/SMT2Attribute.h"
 #include "parsesmt2.tab.h"
 
 #include <cerrno>
@@ -72,6 +74,10 @@
   // parsing). See fpKeyword() below and stp::SMT2SetFloatTokens.
   static thread_local bool floatTokensActive = false;
   static thread_local bool realTokensActive = false;
+  static thread_local bool bitVectorTokensActive = false;
+  static thread_local bool commandNamePending = false;
+  static thread_local bool qualifiedNamePending = false;
+  static thread_local bool declarationSortsAfterName = false;
 
   // Inside an indexed identifier -- between "(_" and its ")" -- a numeral
   // is an index, a width or a count, never a Real literal, whatever the
@@ -128,21 +134,14 @@
   // interpret. Zero means the next ')' closes the command itself.
   static THREAD_LOCAL_IE int skippedDepth = 0;
 
-  // The skipped text, comments excluded, for the one command that is only
-  // MOSTLY uninterpreted: define-sort inspects it for the nullary
-  // floating-point alias shape (see tryRegisterFpSortAlias in smt2.y).
-  //
-  // define-sort's token is emitted AFTER the swallowing (deferredDefineSort
-  // below), not before like its neighbours': its parser action reads the
-  // captured text, and bison runs that action as a default reduction,
-  // without fetching the lookahead that would otherwise drive the lexer
-  // through the s-expression first.
-  static thread_local std::string skippedText;
-  static thread_local bool deferredDefineSort = false;
+  static thread_local bool sortContext = false;
+  static thread_local unsigned attributeDepth = 0;
+  struct AnnotationScope { size_t letDepth; bool closed; };
+  static thread_local std::vector<AnnotationScope> annotations;
 
 namespace stp
 {
-  const std::string& smt2_skipped_text() { return skippedText; }
+  void SMT2SetSortContext(bool enable) { sortContext = enable; }
 
   void SMT2SetFloatTokens(bool enable)
   {
@@ -154,15 +153,13 @@ namespace stp
     unresolvedFpKeyword.clear();
   }
 
+  void SMT2SetBitVectorTokens(bool enable) { bitVectorTokensActive = enable; }
+  void SMT2ExpectCommand() { commandNamePending = true; }
+
   void SMT2SetRealTokens(bool enable)
   {
     realTokensActive = enable;
   }
-
-  // define-sort's body never reaches the rules below -- SKIP_SEXPR swallows
-  // it and the grammar re-tokenises the text by hand -- so it has to ask the
-  // gate itself rather than being answered by it. See tryRegisterFpSortAlias.
-  bool SMT2FloatTokensActive() { return floatTokensActive; }
 
   void SMT2ExpectFunctionParameterName()
   {
@@ -173,6 +170,11 @@ namespace stp
   void SMT2ResetCommandLexerState()
   {
     indexedIdentifierOpen = false;
+    commandNamePending = false;
+    qualifiedNamePending = false;
+    declarationSortsAfterName = false;
+    sortContext = false;
+    annotations.clear();
     ufDeclarationNamePending = false;
     functionParameterNamePending = false;
     declassifiedNamePending = false;
@@ -202,10 +204,185 @@ namespace stp
   }
 }
 
+  static int theoryToken(std::string_view name, bool includeInactiveFP = false)
+  {
+    {
+      static const ankerl::unordered_dense::map<std::string_view, int> names = {
+          {"Array", ARRAY_TOK},
+          {"Bool", BOOL_TOK},
+          {"true", TRUE_TOK},
+          {"false", FALSE_TOK},
+          {"not", NOT_TOK},
+          {"and", AND_TOK},
+          {"or", OR_TOK},
+          {"xor", XOR_TOK},
+          {"ite", ITE_TOK},
+          {"=", EQ_TOK},
+          {"=>", IMPLIES_TOK},
+          {"distinct", DISTINCT_TOK},
+          {"select", SELECT_TOK},
+          {"store", STORE_TOK}};
+      const auto found = names.find(name);
+      if (found != names.end()) return found->second;
+    }
+    if (bitVectorTokensActive)
+    {
+      static const ankerl::unordered_dense::map<std::string_view, int> names = {
+          {"BitVec", BITVEC_TOK},
+          {"bvshl", BVLEFTSHIFT_1_TOK},
+          {"bvlshr", BVRIGHTSHIFT_1_TOK},
+          {"bvashr", BVARITHRIGHTSHIFT_TOK},
+          {"bvadd", BVPLUS_TOK},
+          {"bvsub", BVSUB_TOK},
+          {"bvnot", BVNOT_TOK},
+          {"bvmul", BVMULT_TOK},
+          {"bvudiv", BVDIV_TOK},
+          {"bvsdiv", SBVDIV_TOK},
+          {"bvurem", BVMOD_TOK},
+          {"bvsrem", SBVREM_TOK},
+          {"bvsmod", SBVMOD_TOK},
+          {"bvneg", BVNEG_TOK},
+          {"bvand", BVAND_TOK},
+          {"bvor", BVOR_TOK},
+          {"bvxor", BVXOR_TOK},
+          {"bvnand", BVNAND_TOK},
+          {"bvnor", BVNOR_TOK},
+          {"bvxnor", BVXNOR_TOK},
+          {"concat", BVCONCAT_TOK},
+          {"extract", BVEXTRACT_TOK},
+          {"bvult", BVLT_TOK},
+          {"bvugt", BVGT_TOK},
+          {"bvule", BVLE_TOK},
+          {"bvuge", BVGE_TOK},
+          {"bvslt", BVSLT_TOK},
+          {"bvsgt", BVSGT_TOK},
+          {"bvsle", BVSLE_TOK},
+          {"bvsge", BVSGE_TOK},
+          {"bvcomp", BVCOMP_TOK},
+          {"zero_extend", BVZX_TOK},
+          {"sign_extend", BVSX_TOK},
+          {"repeat", BVREPEAT_TOK},
+          {"rotate_left", BVROTATE_LEFT_TOK},
+          {"rotate_right", BVROTATE_RIGHT_TOK},
+          {"bvnego", BVNEGO_TOK},
+          {"bvuaddo", BVUADDO_TOK},
+          {"bvsaddo", BVSADDO_TOK},
+          {"bvumulo", BVUMULO_TOK},
+          {"bvsmulo", BVSMULO_TOK},
+          {"bvusubo", BVUSUBO_TOK},
+          {"bvssubo", BVSSUBO_TOK},
+          {"bvsdivo", BVSDIVO_TOK}};
+      const auto found = names.find(name);
+      if (found != names.end()) return found->second;
+    }
+    if (floatTokensActive || includeInactiveFP)
+    {
+      static const ankerl::unordered_dense::map<std::string_view, int> names = {
+          {"FloatingPoint", FLOATINGPOINT_TOK},
+          {"RoundingMode", ROUNDINGMODE_TOK},
+          {"Float16", FLOAT16_TOK},
+          {"Float32", FLOAT32_TOK},
+          {"Float64", FLOAT64_TOK},
+          {"Float128", FLOAT128_TOK},
+          {"fp", FP_TOK},
+          {"to_fp", FP_TOFP_TOK},
+          {"to_fp_unsigned", FP_TOFP_UNSIGNED_TOK},
+          {"fp.to_ubv", FP_TO_UBV_TOK},
+          {"fp.to_sbv", FP_TO_SBV_TOK},
+          {"fp.to_real", FP_TO_REAL_TOK},
+          {"fp.to_ieee_bv", FP_TO_IEEE_BV_TOK},
+          {"fp.abs", FP_ABS_TOK},
+          {"fp.neg", FP_NEG_TOK},
+          {"fp.add", FP_ADD_TOK},
+          {"fp.sub", FP_SUB_TOK},
+          {"fp.mul", FP_MUL_TOK},
+          {"fp.div", FP_DIV_TOK},
+          {"fp.fma", FP_FMA_TOK},
+          {"fp.sqrt", FP_SQRT_TOK},
+          {"fp.rem", FP_REM_TOK},
+          {"fp.roundToIntegral", FP_ROUNDTOINTEGRAL_TOK},
+          {"fp.min", FP_MIN_TOK},
+          {"fp.max", FP_MAX_TOK},
+          {"fp.leq", FP_LEQ_TOK},
+          {"fp.lt", FP_LT_TOK},
+          {"fp.geq", FP_GEQ_TOK},
+          {"fp.gt", FP_GT_TOK},
+          {"fp.eq", FP_EQ_TOK},
+          {"fp.isNormal", FP_ISNORMAL_TOK},
+          {"fp.isSubnormal", FP_ISSUBNORMAL_TOK},
+          {"fp.isZero", FP_ISZERO_TOK},
+          {"fp.isInfinite", FP_ISINFINITE_TOK},
+          {"fp.isNaN", FP_ISNAN_TOK},
+          {"fp.isNegative", FP_ISNEGATIVE_TOK},
+          {"fp.isPositive", FP_ISPOSITIVE_TOK},
+          {"roundTowardZero", FP_RM_ROUNDTOWARDZERO_TOK},
+          {"roundNearestTiesToEven", FP_RM_ROUNDNEARESTTIESTOEVEN_TOK},
+          {"roundNearestTiesToAway", FP_RM_ROUNDNEARESTTIESTOAWAY_TOK},
+          {"roundTowardPositive", FP_RM_ROUNDTOWARDPOSITIVE_TOK},
+          {"roundTowardNegative", FP_RM_ROUNDTOWARDNEGATIVE_TOK},
+          {"RTZ", FP_RM_ROUNDTOWARDZERO_TOK},
+          {"RNE", FP_RM_ROUNDNEARESTTIESTOEVEN_TOK},
+          {"RNA", FP_RM_ROUNDNEARESTTIESTOAWAY_TOK},
+          {"RTP", FP_RM_ROUNDTOWARDPOSITIVE_TOK},
+          {"RTN", FP_RM_ROUNDTOWARDNEGATIVE_TOK},
+          {"NaN", FP_NAN_TOK},
+          {"-oo", FP_NEG_INF_TOK},
+          {"+oo", FP_POS_INF_TOK},
+          {"-zero", FP_NEG_ZERO_TOK},
+          {"+zero", FP_POS_ZERO_TOK}};
+      const auto found = names.find(name);
+      if (found != names.end()) return found->second;
+    }
+    if (realTokensActive)
+    {
+      static const ankerl::unordered_dense::map<std::string_view, int> names = {
+          {"Real", REAL_TOK},
+          {"+", REAL_ADD_TOK},
+          {"-", REAL_SUB_TOK},
+          {"*", REAL_MUL_TOK},
+          {"/", REAL_DIV_TOK},
+          {"<", REAL_LT_TOK},
+          {"<=", REAL_LE_TOK},
+          {">", REAL_GT_TOK},
+          {">=", REAL_GE_TOK}};
+      const auto found = names.find(name);
+      if (found != names.end()) return found->second;
+    }
+    return 0;
+  }
+
+  static bool isSortToken(int token)
+  {
+    switch (token)
+    {
+      case BOOL_TOK: case BITVEC_TOK: case ARRAY_TOK: case REAL_TOK:
+      case FLOATINGPOINT_TOK: case ROUNDINGMODE_TOK:
+      case FLOAT16_TOK: case FLOAT32_TOK: case FLOAT64_TOK: case FLOAT128_TOK:
+        return true;
+      default: return false;
+    }
+  }
+
+  static int termTheoryToken(std::string_view name)
+  {
+    const int token = theoryToken(name);
+    return isSortToken(token) ? 0 : token;
+  }
+
   static int classify(char* s);
 
   static int lookup(char* s)
   {
+    // declare-fun's domain and codomain belong to the sort namespace. Its
+    // name is classified first, then the entire signature uses that namespace.
+    struct SignatureScope
+    {
+      bool begin;
+      ~SignatureScope() { if (begin) sortContext = true; }
+    } signature{declarationSortsAfterName};
+    declarationSortsAfterName = false;
+    const bool qualifiedName = qualifiedNamePending;
+    qualifiedNamePending = false;
     // The SMTLIB2 specifications sez that the outter bars aren't part of the
     // name. This means that we can create an empty string symbol name.
     // Strip them in place: s is always yytext (writable, and dead once the
@@ -221,8 +398,27 @@ namespace stp
       }
     }
 
+    if (qualifiedName && s[0] == '@')
+    {
+      smt2lval.str = new std::string(s);
+      return ABSTRACT_VALUE_TOK;
+    }
+
     if (stringOnly)
     {
+      smt2lval.str = new std::string(s);
+      return STRING_TOK;
+    }
+
+    if (sortContext)
+    {
+      if (!stp::GlobalParserInterface->isSortParameter(s))
+      {
+        const int token = theoryToken(s);
+        if (isSortToken(token)) return token;
+      }
+      if (!floatTokensActive && theoryToken(s) == 0 && theoryToken(s, true) != 0)
+        unresolvedFpKeyword = s;
       smt2lval.str = new std::string(s);
       return STRING_TOK;
     }
@@ -233,6 +429,13 @@ namespace stp
       // legacy lexer would, then hand a classified name back unclassified
       // and record what it would have been (see the statics above).
       ufDeclarationNamePending = false;
+      if (s[0] == '@')
+      {
+        smt2lval.str = new std::string(s);
+        return STRING_TOK;
+      }
+      if (const int builtin = termTheoryToken(s))
+        return builtin;
       const int token = classify(s);
       if (token == STRING_TOK)
         return token;
@@ -282,12 +485,30 @@ namespace stp
       {
         nptr = *let;
         found = true;
+        for (auto& annotation : annotations)
+          if (stp::GlobalParserInterface->letMgr->boundOutside(s, annotation.letDepth))
+            annotation.closed = false;
       }
       // Function formals are lexical binders and therefore resolve before
       // all top-level namespaces. Lets remain first because a nested let may
       // shadow a formal in the define-fun body.
       else if (stp::GlobalParserInterface->LookupTemporarySymbol(s, nptr))
+      {
         found = true;
+        for (auto& annotation : annotations)
+          annotation.closed = false;
+      }
+    }
+    if (!found)
+    {
+      if (indexedIdentifierOpen && bitVectorTokensActive && s[0] == 'b' && s[1] == 'v' &&
+          s[2] != '\0' && strspn(s + 2, "0123456789") == strlen(s + 2))
+      {
+        smt2lval.str = new std::string(s + 2);
+        return BVCONST_DECIMAL_TOK;
+      }
+      if (const int builtin = termTheoryToken(s))
+        return builtin;
     }
     if (!found)
     {
@@ -300,6 +521,7 @@ namespace stp
             stp::GlobalParserInterface->lookupFunction(s);
         if (fn != NULL)
         {
+          if (unresolvedFpKeyword == s) unresolvedFpKeyword.clear();
           smt2lval.fn = fn;
           switch (fn->function.GetSourceSort().kind())
           {
@@ -331,6 +553,7 @@ namespace stp
             stp::GlobalParserInterface->lookupUninterpretedFunction(s);
         if (declaration != NULL)
         {
+          if (unresolvedFpKeyword == s) unresolvedFpKeyword.clear();
           smt2lval.ufdecl = declaration;
           return declaration->signature().codomain().kind() ==
                          stp::SourceSort::Kind::Bool
@@ -345,6 +568,7 @@ namespace stp
 
     if (found)
     {
+      if (unresolvedFpKeyword == s) unresolvedFpKeyword.clear();
       // Check valuesize to see if it's a prop var.  I don't like doing
       // type determination in the lexer, but it's easier than rewriting
       // the whole grammar to eliminate the term/formula distinction.
@@ -357,40 +581,22 @@ namespace stp
     else
     {
       // it has not been seen before.
+      if (!floatTokensActive && theoryToken(s) == 0 && theoryToken(s, true) != 0)
+        unresolvedFpKeyword = s;
       smt2lval.str = new std::string(s);
       return STRING_TOK;
     }
   }
 
-  // A name that is a keyword only in the FP logics: outside them it takes
-  // the ordinary identifier path, resolving to a declared symbol or coming
-  // back as a plain string.
-  static int fpKeyword(int token)
+  static int commandToken(int token)
   {
-    if (floatTokensActive)
-      return token;
-    const int fallback = lookup(smt2text);
-    if (fallback == STRING_TOK)
-      unresolvedFpKeyword = smt2text;
-    else if (unresolvedFpKeyword == smt2text)
-    {
-      // The name resolved this time, so the earlier record of it is stale:
-      // declaring "NaN" is exactly how a QF_BV file makes it its own, and a
-      // later error mentioning it deserves no floating-point hint.
-      unresolvedFpKeyword.clear();
-    }
-    return fallback;
+    if (!commandNamePending)
+      return lookup(smt2text);
+    commandNamePending = false;
+    stp::GlobalParserInterface->requireCommand(smt2text);
+    return token;
   }
 
-  // Mathematical Real names are keywords only in the Real logics: QF_LRA,
-  // QF_UFLRA, QF_AUFLRA and the LRA variants of the floating-point logics.
-  // Outside those logics they retain the ordinary identifier behavior
-  // required by the existing BV/FP grammars (notably '-' and '/' in to_fp
-  // literals).
-  static int realKeyword(int token)
-  {
-    return realTokensActive ? token : lookup(smt2text);
-  }
   // Where the input comes from when it is not the FILE* (setSMT2Reader in
   // parser.h): the 3.x API reads a caller's stream through one. Without a
   // reader the lexer reads its FILE* as flex always has -- flex's own
@@ -432,6 +638,7 @@ namespace stp
 
 %x  COMMENT
 %x  STRING_LITERAL
+%x  ATTRIBUTE
 %x  SKIP_SEXPR
 
 LETTER  ([a-zA-Z])
@@ -441,6 +648,59 @@ OPCHAR  ([~!@$%^&*\_\-+=<>\.?/])
 ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
 %%
+<ATTRIBUTE>[ \n\t\r]+ { countNewlines(yytext, yyleng); }
+<ATTRIBUTE>";"[^\n]* { }
+<ATTRIBUTE>":"({LETTER}|{OPCHAR}){ANYTHING}* {
+  smt2lval.str = new std::string(smt2text + 1); return ATTRIBUTE_KEYWORD_TOK;
+}
+<ATTRIBUTE>"(" { ++attributeDepth; return LPAREN_TOK; }
+<ATTRIBUTE>")" {
+  if (attributeDepth == 0) BEGIN INITIAL;
+  else --attributeDepth;
+  return RPAREN_TOK;
+}
+<ATTRIBUTE>"\""([^"]|"\"\"")*"\"" {
+  countNewlines(yytext, yyleng);
+  std::string decoded;
+  for (int i = 1; i < yyleng - 1; ++i) {
+    decoded += yytext[i];
+    if (yytext[i] == '"') ++i;
+  }
+  smt2lval.attribute_value = new stp::SMT2AttributeValue{
+      stp::SMT2AttributeValue::Kind::String, decoded};
+  return ATTRIBUTE_VALUE_TOK;
+}
+<ATTRIBUTE>"|"[^|\\]*"|" {
+  countNewlines(yytext, yyleng);
+  smt2lval.attribute_value = new stp::SMT2AttributeValue{
+      stp::SMT2AttributeValue::Kind::Symbol, std::string(yytext + 1, yyleng - 2)};
+  return ATTRIBUTE_VALUE_TOK;
+}
+<ATTRIBUTE>(0|[1-9]{DIGIT}*) {
+  smt2lval.attribute_value = new stp::SMT2AttributeValue{
+      stp::SMT2AttributeValue::Kind::Numeral, yytext};
+  return ATTRIBUTE_VALUE_TOK;
+}
+<ATTRIBUTE>((0|[1-9]{DIGIT}*)"."{DIGIT}+|#b[01]+|#x[0-9a-fA-F]+) {
+  smt2lval.attribute_value = new stp::SMT2AttributeValue{
+      stp::SMT2AttributeValue::Kind::Constant, yytext};
+  return ATTRIBUTE_VALUE_TOK;
+}
+<ATTRIBUTE>({LETTER}|{OPCHAR}){ANYTHING}* {
+  using Kind = stp::SMT2AttributeValue::Kind;
+  const std::string name(yytext);
+  const bool reserved = name == "!" || name == "_" || name == "as" ||
+      name == "let" || name == "exists" || name == "forall" || name == "match" ||
+      name == "par" || name == "lambda" || name == "BINARY" ||
+      name == "DECIMAL" || name == "HEXADECIMAL" || name == "NUMERAL" ||
+      name == "STRING";
+  smt2lval.attribute_value = new stp::SMT2AttributeValue{
+      reserved ? Kind::Reserved : Kind::Symbol, name};
+  return ATTRIBUTE_VALUE_TOK;
+}
+<ATTRIBUTE>. { smt2error("invalid attribute character"); return 0; }
+<ATTRIBUTE><<EOF>> { BEGIN INITIAL; return 0; }
+
 [ \n\t\r\f] { if (*smt2text == '\n') smt2lineno++; /* skip whitespace */ }
 
  /* Numerals are arbitrary precision in the specification, but every numeral
@@ -449,7 +709,7 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
     different token: a real literal converts from the digits and so stays
     exact, while every other use of a numeral is a syntax error rather than
     the silently wrapped value strtoul would hand back. */
-{DIGIT}+               {
+(0|[1-9]{DIGIT}*)      {
                          if (realTokensActive && !indexedIdentifierOpen)
                          {
                            smt2lval.str = new std::string(smt2text);
@@ -466,10 +726,10 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
                          smt2lval.uintval = static_cast<unsigned>(value);
                          return NUMERAL_TOK;
                        }
-bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
-#b{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
+bv{DIGIT}+             { return lookup(smt2text); }
+#b[01]+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
 #x({DIGIT}|[a-fA-F])+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_HEXIDECIMAL_TOK; }
-{DIGIT}+"."{DIGIT}+    { smt2lval.str = new std::string(smt2text);
+(0|[1-9]{DIGIT}*)"."{DIGIT}+    { smt2lval.str = new std::string(smt2text);
                          return realTokensActive ? REAL_DECIMAL_TOK
                                                  : DECIMAL_TOK;}
 
@@ -484,13 +744,16 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
           _string_lit.insert(_string_lit.end(),'"'); }
 <STRING_LITERAL>"\""  { BEGIN INITIAL;
           smt2lval.str = new std::string(_string_lit);
-          return STRING_TOK; }
+          return STRING_LITERAL_TOK; }
 <STRING_LITERAL>.     { _string_lit.insert(_string_lit.end(),*smt2text); }
 <STRING_LITERAL>"\n"  { smt2lineno++;
                         _string_lit.insert(_string_lit.end(),*smt2text); }
 
+<STRING_LITERAL><<EOF>> { BEGIN INITIAL; smt2error("unterminated string literal");
+                           throw stp::ParseAbandon(); }
+
  /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
-"("             { return LPAREN_TOK; }
+"("             { qualifiedNamePending = false; return LPAREN_TOK; }
 ")"             { indexedIdentifierOpen = false; return RPAREN_TOK; }
 "_"             { indexedIdentifierOpen = true; return UNDERSCORE_TOK; }
 "!"             { return EXCLAIMATION_MARK_TOK; }
@@ -511,36 +774,43 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
 
  /* COMMANDS */
-"assert"                  { return ASSERT_TOK; }
-"check-sat"               { return CHECK_SAT_TOK; }
-"check-sat-assuming"      { return CHECK_SAT_ASSUMING_TOK;}
-"declare-const"           { return DECLARE_CONST_TOK; }
+"assert"                  { return commandToken(ASSERT_TOK); }
+"check-sat"               { return commandToken(CHECK_SAT_TOK); }
+"check-sat-assuming"      { return commandToken(CHECK_SAT_ASSUMING_TOK);}
+"declare-const"           { return commandToken(DECLARE_CONST_TOK); }
 "declare-fun"             {
+                              if (!commandNamePending) return lookup(smt2text);
+                              const int token = commandToken(DECLARE_FUNCTION_TOK);
+                              declarationSortsAfterName = true;
                               ufDeclarationNamePending =
                                   stp::GlobalParserInterface->getUserFlags()
                                       .enable_uninterpreted_functions;
-                              return DECLARE_FUNCTION_TOK;
+                              return token;
                             }
-"declare-sort"            { return DECLARE_SORT_TOK;}
-"define-fun"              { return DEFINE_FUNCTION_TOK; }
-"echo"                    { return ECHO_TOK;}
-"exit"                    { return EXIT_TOK;}
-"get-assertions"          { return GET_ASSERTIONS_TOK;}
-"get-assignment"          { return GET_ASSIGNMENT_TOK;}
-"get-info"                { return GET_INFO_TOK;}
-"get-model"               { return GET_MODEL_TOK;}
-"get-option"              { return GET_OPTION_TOK;}
-"get-proof"               { return GET_PROOF_TOK;}
-"get-unsat-assumptions"   { return GET_UNSAT_ASSUMPTIONS_TOK;}
-"get-unsat-core"          { return GET_UNSAT_CORE_TOK;}
-"get-value"               { return GET_VALUE_TOK;}
-"pop"                     { return POP_TOK;}
-"push"                    { return PUSH_TOK;}
-"reset"                   { return RESET_TOK;}
-"reset-assertions"        { return RESET_ASSERTIONS_TOK;}
-"set-info"                { return NOTES_TOK;  }
-"set-logic"               { return LOGIC_TOK; }
-"set-option"              { return SET_OPTION_TOK; }
+"declare-sort"            { if (!commandNamePending) return lookup(smt2text);
+                            sortContext = true; return commandToken(DECLARE_SORT_TOK);}
+"declare-sort-parameter"  { if (!commandNamePending) return lookup(smt2text);
+                            sortContext = true; return commandToken(DECLARE_SORT_PARAMETER_TOK);}
+"define-fun"              { return commandToken(DEFINE_FUNCTION_TOK); }
+"define-const"            { return commandToken(DEFINE_CONST_TOK); }
+"echo"                    { return commandToken(ECHO_TOK);}
+"exit"                    { return commandToken(EXIT_TOK);}
+"get-assertions"          { return commandToken(GET_ASSERTIONS_TOK);}
+"get-assignment"          { return commandToken(GET_ASSIGNMENT_TOK);}
+"get-info"                { if (!commandNamePending) return lookup(smt2text); stp::SMT2BeginAttributes(); return commandToken(GET_INFO_TOK);}
+"get-model"               { return commandToken(GET_MODEL_TOK);}
+"get-option"              { if (!commandNamePending) return lookup(smt2text); stp::SMT2BeginAttributes(); return commandToken(GET_OPTION_TOK);}
+"get-proof"               { return commandToken(GET_PROOF_TOK);}
+"get-unsat-assumptions"   { return commandToken(GET_UNSAT_ASSUMPTIONS_TOK);}
+"get-unsat-core"          { return commandToken(GET_UNSAT_CORE_TOK);}
+"get-value"               { return commandToken(GET_VALUE_TOK);}
+"pop"                     { return commandToken(POP_TOK);}
+"push"                    { return commandToken(PUSH_TOK);}
+"reset"                   { return commandToken(RESET_TOK);}
+"reset-assertions"        { return commandToken(RESET_ASSERTIONS_TOK);}
+"set-info"                { if (!commandNamePending) return lookup(smt2text); stp::SMT2BeginAttributes(); return commandToken(NOTES_TOK);  }
+"set-logic"               { return commandToken(LOGIC_TOK); }
+"set-option"              { if (!commandNamePending) return lookup(smt2text); stp::SMT2BeginAttributes(); return commandToken(SET_OPTION_TOK); }
 
  /* Commands STP cannot interpret, but which must still parse so that the
   * rest of the script survives. The standard requires the response
@@ -548,206 +818,51 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
   * function bodies, datatype declarations) are of no use to us, so the
   * lexer swallows the remainder of the s-expression and hands the parser
   * the closing parenthesis. */
-"define-fun-rec"   { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_FUN_REC_TOK;}
-"define-funs-rec"  { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_FUNS_REC_TOK;}
-"define-sort"      { skippedDepth = 0; skippedText.clear();
-                     deferredDefineSort = true; BEGIN SKIP_SEXPR; }
-"declare-datatype" { skippedDepth = 0; BEGIN SKIP_SEXPR; return DECLARE_DATATYPE_TOK;}
-"declare-datatypes" { skippedDepth = 0; BEGIN SKIP_SEXPR; return DECLARE_DATATYPES_TOK;}
+"define-fun-rec"   { if (!commandNamePending) return lookup(smt2text); skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DEFINE_FUN_REC_TOK);}
+"define-funs-rec"  { if (!commandNamePending) return lookup(smt2text); skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DEFINE_FUNS_REC_TOK);}
+"define-sort"      { if (!commandNamePending) return lookup(smt2text);
+                     sortContext = true;
+                     stp::GlobalParserInterface->beginSortDefinition();
+                     return commandToken(DEFINE_SORT_TOK); }
+
+"declare-datatype" { if (!commandNamePending) return lookup(smt2text); skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DECLARE_DATATYPE_TOK);}
+"declare-datatypes" { if (!commandNamePending) return lookup(smt2text); skippedDepth = 0; BEGIN SKIP_SEXPR; return commandToken(DECLARE_DATATYPES_TOK);}
 
  /* Consume a command's arguments without interpreting them, tracking nesting
   * so that the parenthesis returned is the one that closes the command
   * itself. String literals and quoted symbols are matched as units, since
   * either may contain an unbalanced parenthesis. */
 <SKIP_SEXPR>"\""([^"]|"\"\"")*"\""  { countNewlines(yytext, yyleng);
-                                      skippedText += yytext; /* string literal */ }
+                                       /* string literal */ }
 <SKIP_SEXPR>"|"[^|]*"|"             { countNewlines(yytext, yyleng);
-                                      skippedText += yytext; /* quoted symbol */ }
+                                       /* quoted symbol */ }
 <SKIP_SEXPR>";"[^\n]*               { /* comment: not captured */ }
-<SKIP_SEXPR>"("                     { skippedDepth++; skippedText += '('; }
+<SKIP_SEXPR>"("                     { skippedDepth++;  }
 <SKIP_SEXPR>")"                     { if (skippedDepth == 0)
                                         {
                                           BEGIN INITIAL;
-                                          if (deferredDefineSort)
-                                          {
-                                            // Hand back the closer so it
-                                            // arrives as the next token.
-                                            deferredDefineSort = false;
-                                            unput(')');
-                                            return DEFINE_SORT_TOK;
-                                          }
                                           return RPAREN_TOK;
                                         }
-                                      skippedDepth--; skippedText += ')'; }
+                                      skippedDepth--;  }
 <SKIP_SEXPR>[^()|;\"]+              { countNewlines(yytext, yyleng);
-                                      skippedText += yytext; }
-<SKIP_SEXPR>.                       { skippedText += yytext; }
-<SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL; deferredDefineSort = false;
+                                       }
+<SKIP_SEXPR>.                       {  }
+<SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL;
                                       return 0; }
 
 
 
- /* Types for QF_BV and QF_ABV. */
-"BitVec"        { return BITVEC_TOK;}
-"Array"         { return ARRAY_TOK;}
- /* The one qualified identifier the grammar admits, ((as const S) v).
-  * "as" is reserved in SMT-LIB 2, so no input can mean a symbol by it. */
-"as"            { return AS_TOK;}
-"Bool"          { return BOOL_TOK;}
-
- /* Types for QF_FP and QF_BVFP. These and every other floating-point
-  * name go through fpKeyword(): they are keywords only while an FP logic
-  * is set, and ordinary identifiers otherwise. */
-"FloatingPoint" { return fpKeyword(FLOATINGPOINT_TOK); }
-"RoundingMode" { return fpKeyword(ROUNDINGMODE_TOK); }
-"Float16" { return fpKeyword(FLOAT16_TOK); }
-"Float32" { return fpKeyword(FLOAT32_TOK); }
-"Float64" { return fpKeyword(FLOAT64_TOK); }
-"Float128" { return fpKeyword(FLOAT128_TOK); }
-
- /* Mathematical Real sort and linear operations.  These do not share the
-  * floating-point keyword gate: QF_FPLRA remains an FP logic. */
-"Real"          { return realKeyword(REAL_TOK); }
-"+"             { return realKeyword(REAL_ADD_TOK); }
-"-"             { return realKeyword(REAL_SUB_TOK); }
-"*"             { return realKeyword(REAL_MUL_TOK); }
-"/"             { return realKeyword(REAL_DIV_TOK); }
-"<"             { return realKeyword(REAL_LT_TOK); }
-"<="            { return realKeyword(REAL_LE_TOK); }
-">"             { return realKeyword(REAL_GT_TOK); }
-">="            { return realKeyword(REAL_GE_TOK); }
-
-
- /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
-"true"          { return TRUE_TOK; }
-"false"         { return FALSE_TOK; }
-"not"           { return NOT_TOK; }
-"and"           { return AND_TOK; }
-"or"            { return OR_TOK; }
-"xor"           { return XOR_TOK;}
-"ite"           { return ITE_TOK;} // PARAMETRIC
-"="             { return EQ_TOK;}
-"=>"           { return IMPLIES_TOK; }
-
- /* CORE THEORY. But not on pg 29. */
-"distinct"      { return DISTINCT_TOK; }  // variadic
-"let"           { return LET_TOK; }
-
- /* Functions for QF_BV and QF_AUFBV.  */
-"bvshl"         { return BVLEFTSHIFT_1_TOK;}
-"bvlshr"        { return BVRIGHTSHIFT_1_TOK;}
-"bvashr"        { return BVARITHRIGHTSHIFT_TOK;}
-"bvadd"         { return BVPLUS_TOK;}
-"bvsub"         { return BVSUB_TOK;}
-"bvnot"         { return BVNOT_TOK;}
-"bvmul"         { return BVMULT_TOK;}
-"bvudiv"        { return BVDIV_TOK;}
-"bvsdiv"        { return SBVDIV_TOK;}
-"bvurem"        { return BVMOD_TOK;}
-"bvsrem"        { return SBVREM_TOK;}
-"bvsmod"        { return SBVMOD_TOK;}
-"bvneg"         { return BVNEG_TOK;}
-"bvand"         { return BVAND_TOK;}
-"bvor"          { return BVOR_TOK;}
-"bvxor"         { return BVXOR_TOK;}
-"bvnand"        { return BVNAND_TOK;}
-"bvnor"         { return BVNOR_TOK;}
-"bvxnor"        { return BVXNOR_TOK;}
-"concat"        { return BVCONCAT_TOK;}
-"extract"       { return BVEXTRACT_TOK;}
-"bvult"         { return BVLT_TOK;}
-"bvugt"         { return BVGT_TOK;}
-"bvule"         { return BVLE_TOK;}
-"bvuge"         { return BVGE_TOK;}
-"bvslt"         { return BVSLT_TOK;}
-"bvsgt"         { return BVSGT_TOK;}
-"bvsle"         { return BVSLE_TOK;}
-"bvsge"         { return BVSGE_TOK;}
-"bvcomp"        { return BVCOMP_TOK;}
-"zero_extend"   { return BVZX_TOK;}
-"sign_extend"   { return BVSX_TOK;}
-"repeat"        { return BVREPEAT_TOK;}
-"rotate_left"   { return BVROTATE_LEFT_TOK;}
-"rotate_right"  { return BVROTATE_RIGHT_TOK;}
-"bvnego"        { return BVNEGO_TOK;}
-"bvuaddo"       { return BVUADDO_TOK;}
-"bvsaddo"       { return BVSADDO_TOK;}
-"bvumulo"       { return BVUMULO_TOK;}
-"bvsmulo"       { return BVSMULO_TOK;}
-"bvusubo"       { return BVUSUBO_TOK;}
-"bvssubo"       { return BVSSUBO_TOK;}
-"bvsdivo"       { return BVSDIVO_TOK;}
-
- /* Functions for QF_AUFBV. */
-"select"        { return SELECT_TOK; }
-"store"         { return STORE_TOK; }
-
- /*
-  * NOTE: the call to `lookup` below is *extremely* greedy -- it means we
-  * cannot search for FP DOT ADD, we have to search for the whole thing --
-  * c'est la vie
-  */
-
- /* generic FP token*/
-"fp" { return fpKeyword(FP_TOK); }
-
- /* FP conversions */
-"to_fp" { return fpKeyword(FP_TOFP_TOK); }
-"to_fp_unsigned" { return fpKeyword(FP_TOFP_UNSIGNED_TOK); }
-"fp.to_ubv" { return fpKeyword(FP_TO_UBV_TOK); }
-"fp.to_sbv" { return fpKeyword(FP_TO_SBV_TOK); }
-
- /* Functions for FP */
-"fp.to_real" { return fpKeyword(FP_TO_REAL_TOK); }
-"fp.to_ieee_bv" { return fpKeyword(FP_TO_IEEE_BV_TOK); }
-"fp.abs" { return fpKeyword(FP_ABS_TOK); }
-"fp.neg" { return fpKeyword(FP_NEG_TOK); }
-"fp.add" { return fpKeyword(FP_ADD_TOK); }
-"fp.sub" { return fpKeyword(FP_SUB_TOK); }
-"fp.mul" { return fpKeyword(FP_MUL_TOK); }
-"fp.div" { return fpKeyword(FP_DIV_TOK); }
-"fp.fma" { return fpKeyword(FP_FMA_TOK); }
-"fp.sqrt" { return fpKeyword(FP_SQRT_TOK); }
-"fp.rem" { return fpKeyword(FP_REM_TOK); }
-"fp.roundToIntegral" { return fpKeyword(FP_ROUNDTOINTEGRAL_TOK); }
-"fp.min" { return fpKeyword(FP_MIN_TOK); }
-"fp.max" { return fpKeyword(FP_MAX_TOK); }
-"fp.leq" { return fpKeyword(FP_LEQ_TOK); }
-"fp.lt" { return fpKeyword(FP_LT_TOK); }
-"fp.geq" { return fpKeyword(FP_GEQ_TOK); }
-"fp.gt" { return fpKeyword(FP_GT_TOK); }
-"fp.eq" { return fpKeyword(FP_EQ_TOK); }
-"fp.isNormal" { return fpKeyword(FP_ISNORMAL_TOK); }
-"fp.isSubnormal" { return fpKeyword(FP_ISSUBNORMAL_TOK); }
-"fp.isZero" { return fpKeyword(FP_ISZERO_TOK); }
-"fp.isInfinite" { return fpKeyword(FP_ISINFINITE_TOK); }
-"fp.isNaN" { return fpKeyword(FP_ISNAN_TOK); }
-"fp.isNegative" { return fpKeyword(FP_ISNEGATIVE_TOK); }
-"fp.isPositive" { return fpKeyword(FP_ISPOSITIVE_TOK); }
-
- /* rounding modes */
-"roundTowardZero" { return fpKeyword(FP_RM_ROUNDTOWARDZERO_TOK); }
-"roundNearestTiesToEven" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOEVEN_TOK); }
-"roundNearestTiesToAway" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOAWAY_TOK); }
-"roundTowardPositive" { return fpKeyword(FP_RM_ROUNDTOWARDPOSITIVE_TOK); }
-"roundTowardNegative" { return fpKeyword(FP_RM_ROUNDTOWARDNEGATIVE_TOK); }
-
-"RTZ" { return fpKeyword(FP_RM_ROUNDTOWARDZERO_TOK); }
-"RNE" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOEVEN_TOK); }
-"RNA" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOAWAY_TOK); }
-"RTP" { return fpKeyword(FP_RM_ROUNDTOWARDPOSITIVE_TOK); }
-"RTN" { return fpKeyword(FP_RM_ROUNDTOWARDNEGATIVE_TOK); }
-
- /* fp constants */
-"NaN" { return fpKeyword(FP_NAN_TOK); }
-"-oo" { return fpKeyword(FP_NEG_INF_TOK); }
-"+oo" { return fpKeyword(FP_POS_INF_TOK); }
-"-zero" { return fpKeyword(FP_NEG_ZERO_TOK); }
-"+zero" { return fpKeyword(FP_POS_ZERO_TOK); }
-
+ /* Syntactically reserved words. Quoted spellings are ordinary symbols.
+  * Keep accepting lambda as an SMT-LIB 2.6 identifier, like cvc5 and
+  * Bitwuzla. Higher-order lambda terms are not implemented. */
+"as"  { qualifiedNamePending = true; return AS_TOK; }
+"let" { return LET_TOK; }
+"exists"|"forall"|"match"|"par"|"BINARY"|"DECIMAL"|"HEXADECIMAL"|"NUMERAL"|"STRING" {
+  return RESERVED_TOK;
+}
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
-\|([^\|]|[\x80-\xff]|\n)*\| { countNewlines(smt2text, smt2leng); return lookup(smt2text); }
+\|[^\|\\]*\| { countNewlines(smt2text, smt2leng); return lookup(smt2text); }
 
 . {
     // Downstream of a declassified declare-fun name the pinned response is
@@ -758,6 +873,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
     smt2error("Illegal input character.");
     if (abandon)
       throw stp::DeclassifiedNameAbandon();
+    throw stp::ParseAbandon();
   }
 %%
 
@@ -774,4 +890,32 @@ namespace stp {
     smt2Reader = reader;
     smt2ReaderOpaque = opaque;
   }
+}
+
+namespace stp
+{
+bool SMT2IsTheorySymbol(const std::string& name)
+{
+  return termTheoryToken(name) != 0;
+}
+void SMT2BeginAnnotation()
+{
+  annotations.push_back({GlobalParserInterface->letMgr->depth(), true});
+}
+bool SMT2EndAnnotation()
+{
+  assert(!annotations.empty());
+  const bool closed = annotations.back().closed;
+  annotations.pop_back();
+  return closed;
+}
+void SMT2BeginAttributes()
+{
+  attributeDepth = 0;
+  BEGIN ATTRIBUTE;
+}
+void SMT2ResetLexMode()
+{
+  BEGIN INITIAL;
+}
 }

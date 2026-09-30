@@ -388,6 +388,13 @@ endif()
 
 add_subdirectory(lra)
 
+if(STP_EXECUTABLE_AVAILABLE)
+    add_test(NAME smtlib-protocol
+        COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/smtlib_protocol.py"
+                "$<TARGET_FILE:stp-bin>")
+    set_tests_properties(smtlib-protocol PROPERTIES TIMEOUT 180)
+endif()
+
 if(USE_CADICAL AND STP_EXECUTABLE_AVAILABLE)
     add_test(NAME cadical-options-cli
         COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/cadical_options.py"
