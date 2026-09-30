@@ -103,6 +103,47 @@ def test_completion_versus_lookup():
     assert m.eval(arr)[3].as_long() == 0 and m.eval(arr).default.as_long() == 0
 
 
+@pytest.mark.parametrize("reencode_limit", [0, 1])
+def test_incremental_lazy_read_completion_after_rebuild(reencode_limit):
+    # A partial-width read still needs every bit of its refinement symbols.
+    # Repeated scopes exercise reuse and promotion; a low relief threshold
+    # also forces reconstruction as popped encodings accumulate.
+    a = Array("completion_array", BitVecSort(8), BitVecSort(32))
+    indices = BitVecs("completion_i completion_j completion_k", 8)
+    values = BitVecs("completion_v completion_w completion_z", 32)
+    query = BitVec("completion_query", 8)
+    chain = a
+    for index, value in zip(indices, values):
+        chain = Store(chain, index, value)
+    cell = Select(chain, query)
+    solver = Solver(incremental="on", incremental_reencode_limit=reencode_limit,
+                    incremental_base_resimplify_limit=0, check_sanity=True)
+    solver.add(Extract(0, 0, cell) == 1)
+    try:
+        for round in range(48):
+            solver.push()
+            # Use a new circuit each round so relief cannot just reuse roots.
+            extra = BitVec(f"completion_extra_{round}", 8)
+            solver.add(UGT(extra * extra, 3))
+            solver.add(cell == 0xDEADBEEF)
+            assert solver.check() == sat
+            assert solver.model().eval(cell).as_long() == 0xDEADBEEF
+            solver.pop()
+        # Returning to the original partial read, then binding its upper bits
+        # differently, must work after both backend and complete epoch resets.
+        assert solver.check() == sat
+        solver.push()
+        solver.add(cell == 0x12345679)
+        assert solver.check() == sat
+        assert solver.model().eval(cell).as_long() == 0x12345679
+        solver.add(Extract(0, 0, cell) == 0)
+        assert solver.check() == unsat
+        solver.pop()
+        assert solver.check() == sat
+    finally:
+        solver.close()
+
+
 @pytest.mark.parametrize("simplify", [False, True])
 @pytest.mark.parametrize("fill", ["zero", "ones"])
 def test_array_equality_without_completion(simplify, fill):
