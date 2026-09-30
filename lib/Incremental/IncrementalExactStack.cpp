@@ -591,6 +591,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
   batchAT->ClearAllTables();
 
   const bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
+  const bool arrayWrites = arrayops && containsKind(inputToSat, WRITE);
   if (arrayops)
   {
     inputToSat = batchAT->TransformFormula_TopLevel(inputToSat);
@@ -641,6 +642,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
         profile.rootMisses++;
       ScopedProfileTimer encodingTimer(profile.enabled, profile.encodeNs);
       const uint64_t submittedBefore = solver->submittedClauses();
+      cnf.setRecoverCells(arrayops || activeHasFp, arrayWrites || activeHasFp);
       bm->GetRunTimes()->start(RunTimes::BitBlasting);
       BBNodeAIG root = encoding.blaster().BBForm(inputToSat);
       bm->GetRunTimes()->stop(RunTimes::BitBlasting);

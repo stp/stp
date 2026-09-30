@@ -2028,10 +2028,10 @@ struct IncrementalSolver::Impl
   }
 
   // Exact number of clauses ensureEncoded() submitted for the unique AIG
-  // nodes reachable from the permanent-root prefix and current roots: three
-  // per AND and one for the shared TRUE variable when a cone reaches the
-  // constant. CIs allocate variables but no clauses. Every root has already
-  // been encoded in this backend epoch.
+  // nodes reachable from the permanent-root prefix and current roots. Follow
+  // the encoder's recovered cells and their actual clause counts, including
+  // the shared TRUE unit. CIs allocate variables but no clauses. Every root
+  // has already been encoded in this backend epoch.
   uint64_t encodedAigConeMass(
       const std::vector<Aig_Obj_t*>& currentRoots,
       size_t permanentRootCount)
@@ -2050,18 +2050,7 @@ struct IncrementalSolver::Impl
       pending.pop_back();
       if (!seen.insert(Aig_ObjId(node)).second)
         continue;
-      assert(varOfAig(node) != -1);
-      if (Aig_ObjIsConst1(node))
-      {
-        mass = addMass(mass, 1);
-        continue;
-      }
-      if (Aig_ObjIsCi(node))
-        continue;
-      assert(Aig_ObjIsAnd(node));
-      mass = addMass(mass, 3);
-      pending.push_back(Aig_ObjFanin0(node));
-      pending.push_back(Aig_ObjFanin1(node));
+      mass = addMass(mass, cnf.appendEncodedInputs(node, pending));
     }
     return mass;
   }
@@ -2380,6 +2369,7 @@ struct IncrementalSolver::Impl
   int encodePrepared(const ASTNode& key, ASTNode toEncode, const Fragment& frag)
   {
     ScopedProfileTimer encodingTimer(profile.enabled, profile.encodeNs);
+    const bool arrayWrites = frag.arrays && containsKind(toEncode, WRITE);
     restoreDroppedSigma0(toEncode);
 #ifndef NDEBUG
     // Vacuous right after the guard above by construction; it stays
@@ -2488,6 +2478,10 @@ struct IncrementalSolver::Impl
     }
 
     const uint64_t clausesPre = solver->submittedClauses();
+    // Recover muxes in array and floating-point cones. XOR recovery helps
+    // write-chain and floating-point circuits, but keep the established XOR
+    // decision variables in read-only arrays and pure integer arithmetic.
+    cnf.setRecoverCells(frag.arrays || frag.fp, arrayWrites || frag.fp);
     bm->UserFlags.coverage.queries_bitblasted++;
     bm->GetRunTimes()->start(RunTimes::BitBlasting);
     BBNodeAIG root = encoding.blaster().BBForm(toEncode);
