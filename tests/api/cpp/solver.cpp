@@ -197,6 +197,28 @@ TEST_F(SolverTest, unsat_assumptions_subset_under_the_incremental_driver)
   EXPECT_TRUE(inc.model().bool_value(q));
 }
 
+TEST_F(SolverTest, assumption_origins_survive_shared_conjuncts_and_collapsed_queries)
+{
+  Options options;
+  options.set_str("incremental", "on");
+  Solver inc(tm, options);
+  const Term bundle = a && b;
+  ASSERT_TRUE(inc.check_sat({bundle, a, !a, x == 1}).is_unsat());
+  const std::vector<Term> core = inc.unsat_assumptions();
+  ASSERT_EQ(core.size(), 2u);
+  EXPECT_TRUE(core[0].same_as(bundle));
+  EXPECT_TRUE(core[1].same_as(!a));
+  EXPECT_TRUE(inc.check_sat(core).is_unsat());
+
+  // The next snapshot has different input positions and a different conflict.
+  ASSERT_TRUE(inc.check_sat({x == 1, b, !b}).is_unsat());
+  const std::vector<Term> next = inc.unsat_assumptions();
+  ASSERT_EQ(next.size(), 2u);
+  EXPECT_TRUE(next[0].same_as(b));
+  EXPECT_TRUE(next[1].same_as(!b));
+  EXPECT_TRUE(inc.check_sat(next).is_unsat());
+}
+
 // Every core the driver's answer gives is a core: it rechecks unsat. The
 // driver reports failed conjuncts of the assumption level, flattened and
 // with distinct lowered, and the solver kept an assumption only if that

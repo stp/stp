@@ -1570,6 +1570,16 @@ struct IncrementalSolver::Impl
   // for. Consumed by the unsat-assumption accessors; rebuilt every call.
   std::vector<std::pair<int, size_t>> assumedLitLevels;
   std::vector<std::pair<int, ASTNode>> lastLevelLitConjuncts;
+  // Occurrence IDs belong to this check's source snapshot, not to interned
+  // ASTs or persistent SAT clauses. The first origin of a shared conjunct is
+  // sufficient: that original assertion entails the conjunct. Rebuild this
+  // map before lowering the last level, and capture literal origins while
+  // encoding, so reporting never has to rediscover dependencies by AST search.
+  ASTVec assumptionSources;
+  std::unordered_map<ASTNode, size_t, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual> assumptionOriginOf;
+  std::vector<std::pair<int, size_t>> lastLevelLitOrigins;
+  bool assumptionOriginsComplete = true;
   bool lastUnsat;
   bool lastUnsatCoarse;     // ext rounds: one block literal, no granularity
   bool lastLevelIndividual; // the per-conjunct mode actually ran
@@ -3175,6 +3185,7 @@ struct IncrementalSolver::Impl
     releaseContainer(pendingBaseSeed);
     releaseContainer(assumedLitLevels);
     releaseContainer(lastLevelLitConjuncts);
+    releaseContainer(lastLevelLitOrigins);
     releaseContainer(lastFailedLits);
     semanticEpoch.releaseStorage();
 

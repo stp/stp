@@ -83,74 +83,24 @@ bool IncrementalSolver::lastUnsatHasAssumptionGranularity() const
          impl->lastLevelIndividual;
 }
 
-namespace
+std::vector<size_t> IncrementalSolver::lastUnsatAssumptionIndices() const
 {
-// Whether any top-level conjunct of `a` is in `failed`. The driver reports
-// failed conjuncts of the assumptions LEVEL, and an assumption that is
-// itself a conjunction was split before it was assumed, so membership is
-// judged against its flattened conjuncts.
-bool assumptionFailed(const ASTNode& a, const ASTNodeSet& failed,
-                      const ASTNode& trueNode)
-{
-  std::vector<ASTNode> pending(1, a);
-  while (!pending.empty())
-  {
-    const ASTNode n = pending.back();
-    pending.pop_back();
-    if (n == trueNode)
-      continue;
-    if (n.GetKind() == AND)
-    {
-      for (const ASTNode& c : n)
-        pending.push_back(c);
-      continue;
-    }
-    if (failed.count(n))
-      return true;
-  }
-  return false;
-}
-} // namespace
-
-std::vector<size_t>
-IncrementalSolver::lastUnsatAssumptionIndices(const ASTVec& assumptions) const
-{
-  std::vector<size_t> all(assumptions.size());
-  for (size_t i = 0; i < all.size(); ++i)
-    all[i] = i;
-  if (!lastUnsatHasAssumptionGranularity())
-    return all;
-  const std::vector<ASTNode> failed = lastUnsatAssumptionConjuncts();
-  const ASTNodeSet failedSet(failed.begin(), failed.end());
-  STPMgr* bm = impl->bm;
-
-  ASTVec semantic;
-  const ASTVec* matching = &assumptions;
-  if (bm->has_distinct)
-  {
-    semantic.reserve(assumptions.size());
-    for (const ASTNode& a : assumptions)
-      semantic.push_back(lowerDistinct(bm, a));
-    matching = &semantic;
-  }
-
-  for (const ASTNode& failedConjunct : failedSet)
-  {
-    const ASTNodeSet singleton{failedConjunct};
-    bool found = false;
-    for (const ASTNode& a : *matching)
-      if (assumptionFailed(a, singleton, bm->ASTTrue))
-      {
-        found = true;
-        break;
-      }
-    if (!found)
-      return all;
-  }
-
   std::vector<size_t> used;
-  for (size_t i = 0; i < matching->size(); ++i)
-    if (assumptionFailed((*matching)[i], failedSet, bm->ASTTrue))
+  if (!lastUnsatHasAssumptionGranularity() || !impl->assumptionOriginsComplete)
+  {
+    for (size_t i = 0; i < impl->assumptionSources.size(); ++i)
+      used.push_back(i);
+    return used;
+  }
+
+  const std::unordered_set<int> failed(impl->lastFailedLits.begin(),
+                                       impl->lastFailedLits.end());
+  std::vector<bool> selected(impl->assumptionSources.size(), false);
+  for (const auto& origin : impl->lastLevelLitOrigins)
+    if (failed.count(origin.first))
+      selected[origin.second] = true;
+  for (size_t i = 0; i < selected.size(); ++i)
+    if (selected[i])
       used.push_back(i);
   return used;
 }
@@ -292,7 +242,8 @@ bool IncrementalSolver::canHandle(const ASTVec& assertionsSMT2)
 
 SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
                                                bool assumeLastLevelPerConjunct,
-                                               bool firstForcedIncrementalSolve)
+                                               bool firstForcedIncrementalSolve,
+                                               const ASTVec* sourceAssumptions)
 {
   if (impl->bm->UserFlags.aig_node_budget >= 0 && !budgetNotEnforcedWarned)
   {
@@ -301,6 +252,53 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
                  "incremental encoder; the cap covers batch solves only."
               << std::endl;
   }
+
+  // Preserve source occurrences before the level factory can collapse their
+  // conjunction (notably p AND NOT p). Lower each source independently: these
+  // rewrites and AND splitting depend only on that source. A transformation
+  // using facts from other sources must not go through this single-origin map.
+  impl->assumptionSources.clear();
+  impl->assumptionOriginOf.clear();
+  ASTVec trackedLevels;
+  if (assumeLastLevelPerConjunct)
+  {
+    if (sourceAssumptions)
+      impl->assumptionSources = *sourceAssumptions;
+    else
+      splitConjuncts(assertionsSMT2.back(), impl->bm->ASTTrue,
+                     impl->assumptionSources);
+    ASTVec conjuncts;
+    ASTNodeSet visited;
+    for (size_t i = 0; i < impl->assumptionSources.size(); ++i)
+    {
+      ASTVec pending{impl->bm->has_distinct
+                         ? lowerDistinct(impl->bm, impl->assumptionSources[i])
+                         : impl->assumptionSources[i]};
+      while (!pending.empty())
+      {
+        const ASTNode node = pending.back();
+        pending.pop_back();
+        if (node == impl->bm->ASTTrue || !visited.insert(node).second)
+          continue;
+        if (node.GetKind() == AND)
+        {
+          for (size_t k = node.Degree(); k > 0; --k)
+            pending.push_back(node[k - 1]);
+        }
+        else
+        {
+          impl->assumptionOriginOf.emplace(node, i);
+          conjuncts.push_back(node);
+        }
+      }
+    }
+    trackedLevels = assertionsSMT2;
+    trackedLevels.back() = conjuncts.empty() ? impl->bm->ASTTrue
+        : conjuncts.size() == 1 ? conjuncts.front()
+        : impl->bm->hashingNodeFactory->CreateNode(AND, conjuncts);
+  }
+  const ASTVec& inputLevels = assumeLastLevelPerConjunct
+                                 ? trackedLevels : assertionsSMT2;
 
   // Survey the complete active formula while DISTINCT is still native. An
   // earned ordering is passed as a whole-formula override and encoded behind
@@ -313,9 +311,9 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
   size_t orderedDistincts = 0;
   if (impl->bm->UserFlags.distinct_ordering && impl->bm->has_distinct)
   {
-    const ASTNode active = assertionsSMT2.size() == 1
-                               ? assertionsSMT2[0]
-                               : impl->bm->CreateNode(AND, assertionsSMT2);
+    const ASTNode active = inputLevels.size() == 1
+                               ? inputLevels[0]
+                               : impl->bm->CreateNode(AND, inputLevels);
     const ASTNode ordered =
         applyDistinctOrdering(impl->bm, active, &orderedDistincts);
     if (orderedDistincts > 0)
@@ -337,11 +335,11 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
   // across checks and must happen before any incremental preprocessing or
   // bit-blasting.
   ASTVec loweredAssertions;
-  const ASTVec* solverAssertions = &assertionsSMT2;
+  const ASTVec* solverAssertions = &inputLevels;
   if (assumptionScopedRoot.IsNull() && impl->bm->has_distinct)
   {
-    loweredAssertions.reserve(assertionsSMT2.size());
-    for (const ASTNode& assertion : assertionsSMT2)
+    loweredAssertions.reserve(inputLevels.size());
+    for (const ASTNode& assertion : inputLevels)
     {
       const ASTNode lowered = lowerDistinct(impl->bm, assertion);
       if (containsKind(lowered, DISTINCT))

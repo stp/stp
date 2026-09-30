@@ -209,6 +209,9 @@ Only an annotation on the whole asserted term contributes a label; naming
 a nested subterm or using a previously defined name does not label an
 assertion. Unnamed assertions remain background constraints. An empty
 core is therefore possible when that background is already unsatisfiable.
+Origins are retained through assertion-local lowering and conjunction
+splitting. Repeated formulas and shared conjuncts can be represented by one
+sufficient originating assertion; their other labels need not appear.
 
 After ``check-sat-assuming``, assumptions also remain background for
 ``get-unsat-core``. When ``get-unsat-assumptions`` is enabled too, both

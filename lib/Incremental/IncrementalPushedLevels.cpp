@@ -386,8 +386,15 @@ size_t IncrementalSolver::Impl::prepareAndEncodePushedLevels(
           everAssumedLits[r] = engagedSolves;
         assumedLitLevels.push_back(std::make_pair(r, level));
         if (individually)
+        {
           lastLevelLitConjuncts.push_back(
               std::make_pair(r, conjuncts[k]));
+          const auto origin = assumptionOriginOf.find(conjuncts[k]);
+          if (origin != assumptionOriginOf.end())
+            lastLevelLitOrigins.emplace_back(r, origin->second);
+          else
+            assumptionOriginsComplete = false;
+        }
         assumptions.push(SATSolver::mkLit(r >> 1, r & 1));
       }
       continue;

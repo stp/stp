@@ -26,6 +26,7 @@
 AddSTPGTest(LazyWriteChainReads_Test.cpp)
 AddSTPGTest(IncrementalCBP_Test.cpp)
 AddSTPGTest(IncrementalEncodingEpoch_Test.cpp)
+AddSTPGTest(IncrementalAssumptionOrigins_Test.cpp)
 AddSTPGTest(IncrementalLifetimeState_Test.cpp)
 AddSTPGTest(IncrementalPolicy_Test.cpp)
 AddSTPGTest(IncrementalScopeState_Test.cpp)

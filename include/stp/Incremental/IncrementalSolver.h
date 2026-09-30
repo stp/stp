@@ -136,6 +136,9 @@ public:
   // assumed one root literal each instead of grouped under an activation
   // literal -- check-sat-assuming passes its assumptions as that level and
   // wants per-assumption failure granularity for get-unsat-assumptions.
+  // sourceAssumptions supplies the original last-level occurrences, before
+  // conjunction simplification. In per-conjunct mode it replaces that level;
+  // indices reported after solving refer to this snapshot's input order.
   // `firstForcedIncrementalSolve` is set only by a frontend explicitly
   // forced incremental from its first real solve. It enables first-engagement
   // policies which automatic (third-solve) engagement does not need: an
@@ -156,7 +159,8 @@ public:
   // which is sound because reset/reset-assertions destroys this object.
   SOLVER_RETURN_TYPE checkSat(const ASTVec& assertionsSMT2,
                               bool assumeLastLevelPerConjunct = false,
-                              bool firstForcedIncrementalSolve = false);
+                              bool firstForcedIncrementalSolve = false,
+                              const ASTVec* sourceAssumptions = nullptr);
 
   // The unsat story of the most recent checkSat, valid until the next one.
   // hasAssumptionGranularity: the last level was assumed per conjunct and
@@ -172,15 +176,12 @@ public:
   bool lastSolveWasUnsat() const;
   bool lastUnsatHasAssumptionGranularity() const;
   std::vector<ASTNode> lastUnsatAssumptionConjuncts() const;
-  // Which of `assumptions` -- the terms the last level was built from -- the
-  // last unsat answer used, by index: those with a top-level conjunct among
-  // the failed ones, each assumption's distinct lowered as the level's was.
-  // Every index when there is no granularity, and also when a failed
-  // conjunct maps back to no assumption (the factory may collapse the level
-  // as a whole: p and (not p) become false) -- the whole set is always a
-  // correct core, where dropping the unmapped conjunct can leave an empty,
-  // invalid one.
-  std::vector<size_t> lastUnsatAssumptionIndices(const ASTVec& assumptions) const;
+  // Indices into checkSat's sourceAssumptions, captured before lowering and
+  // splitting. Each occurrence has its own index, even for identical terms.
+  // A shared conjunct needs only one originating occurrence. Without exact
+  // provenance, return every index. If sourceAssumptions was omitted, the
+  // source occurrences are the last level's flattened conjuncts.
+  std::vector<size_t> lastUnsatAssumptionIndices() const;
   std::vector<size_t> lastUnsatCoreLevels() const;
 
   // A sat answer defers counterexample construction unless something

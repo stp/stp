@@ -112,6 +112,7 @@ void Cpp_interface::init()
   produce_unsat_cores = false;
   core_solver_layout = false;
   last_core_available = false;
+  last_assumption_core_available = false;
   last_unsat_core.clear();
   last_core_assumption_indices.clear();
   current_assertion_name.reset();
@@ -1367,6 +1368,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   if (ignoreCheckSatRequest)
     return;
   last_core_available = false;
+  last_assumption_core_available = false;
   last_unsat_core.clear();
   last_core_assumption_indices.clear();
   if (before_check && before_check())
@@ -1434,6 +1436,11 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   std::vector<std::string> coreNames;
   ASTVec coreLevels;
   std::vector<size_t> coreIndices;
+  // Snapshot every assumption answer, including batch/cached answers, rather
+  // than interpreting a previous driver's occurrence IDs against a new query.
+  if (fromCheckSatAssuming && !produce_unsat_cores)
+    for (size_t i = 0; i < bm.AssertLevels().back()->size(); ++i)
+      coreIndices.push_back(i);
   if (produce_unsat_cores)
   {
     ASTVec background;
@@ -1551,7 +1558,10 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
       IncrementalSolver* inc = GlobalSTP->getIncrementalSolver();
       last_result = inc->checkSat(produce_unsat_cores ? coreLevels : assertionsSMT2,
                                   produce_unsat_cores || fromCheckSatAssuming,
-                                  !produce_unsat_cores && firstForcedIncrementalSolve);
+                                  !produce_unsat_cores && firstForcedIncrementalSolve,
+                                  produce_unsat_cores ? &coreTerms
+                                    : fromCheckSatAssuming ? bm.AssertLevels().back()
+                                                          : nullptr);
       if (bm.UserFlags.quick_statistics_flag)
         inc->reportBVAbstractionRecords(std::cerr);
 
@@ -1566,9 +1576,9 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
       // erases the entry, which is exactly its validity condition.
       if (last_result == SOLVER_UNSATISFIABLE && inc->lastSolveWasUnsat())
       {
-        if (produce_unsat_cores)
-          coreIndices = inc->lastUnsatAssumptionIndices(coreTerms);
-        else
+        if (produce_unsat_cores || fromCheckSatAssuming)
+          coreIndices = inc->lastUnsatAssumptionIndices();
+        if (!produce_unsat_cores)
         {
           const std::vector<size_t> core = inc->lastUnsatCoreLevels();
           const size_t deepest = core.empty() ? 0 : core.back();
@@ -1647,7 +1657,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
     last_run.result = bm.unknownResult();
   }
 
-  if (produce_unsat_cores && last_run.result == SOLVER_UNSATISFIABLE)
+  if ((produce_unsat_cores || fromCheckSatAssuming) &&
+      last_run.result == SOLVER_UNSATISFIABLE)
   {
     // Both SMT-LIB queries must project the SAME core: the returned names
     // plus unnamed assertions plus returned assumptions must still be unsat.
@@ -1656,7 +1667,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
         last_unsat_core.push_back(coreNames[i]);
       else
         last_core_assumption_indices.push_back(i - coreNames.size());
-    last_core_available = true;
+    last_core_available = produce_unsat_cores;
+    last_assumption_core_available = true;
   }
 
   // A model exists exactly when this check concluded SAT and the solve
@@ -2446,23 +2458,8 @@ void Cpp_interface::getUnsatAssumptions()
   // (IncrementalSolver::lastUnsatAssumptionIndices); the full assumption set
   // is always a correct core, and covers the batch first solve and the
   // extensionality rounds.
-  std::vector<size_t> used;
-  bool fromDriver = false;
-  if (last_core_available)
-  {
-    used = last_core_assumption_indices;
-    fromDriver = true;
-  }
-  else if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
-  {
-    IncrementalSolver* inc = GlobalSTP->getIncrementalSolver();
-    if (inc->lastSolveWasUnsat())
-    {
-      used = inc->lastUnsatAssumptionIndices(lastAssumptionTerms);
-      fromDriver = true;
-    }
-  }
-  if (!fromDriver)
+  std::vector<size_t> used = last_core_assumption_indices;
+  if (!last_assumption_core_available)
     for (size_t i = 0; i < lastAssumptionTerms.size(); ++i)
       used.push_back(i);
 

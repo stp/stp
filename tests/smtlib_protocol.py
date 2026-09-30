@@ -538,6 +538,22 @@ class NamedUnsatCores(unittest.TestCase):
                     '(check-sat)(get-unsat-core)')
                 self.assertEqual(output, 'unsat\n(|left| |right|)\n')
 
+    def test_cached_assumption_answer_does_not_reuse_old_occurrence_ids(self):
+        output = self.check_script("""
+(set-option :produce-unsat-assumptions true)
+(set-logic QF_BV)
+(declare-const p Bool)
+(declare-const q Bool)
+(declare-const r Bool)
+(check-sat-assuming (r p (not p)))
+(get-unsat-assumptions)
+(assert false)
+(check-sat)
+(check-sat-assuming (q))
+(get-unsat-assumptions)
+""", ('--incremental=on',))
+        self.assertEqual(output, 'unsat\n(|p| (not |p|))\nunsat\nunsat\n(|q|)\n')
+
     def test_option_changes_require_fresh_core_and_retire_permanent_units(self):
         output = self.check_script('''
 (set-logic QF_BV)

@@ -44,6 +44,8 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
     ufAdapter->invalidateCertifiedModel();
   assumedLitLevels.clear();
   lastLevelLitConjuncts.clear();
+  lastLevelLitOrigins.clear();
+  assumptionOriginsComplete = true;
   lastFailedLits.clear();
   // Scope reconciliation below can change the eliminated-variable filter the
   // adapter's cached symbol map was built under.

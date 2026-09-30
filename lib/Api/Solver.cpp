@@ -744,7 +744,8 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
       IncrementalSolver* inc = stp->getIncrementalSolver();
       if (inc->canHandle(levels))
       {
-        out = inc->checkSat(levels, !assumptions.empty(), first_forced);
+        const ASTVec sources(assumptions.begin(), assumptions.end());
+        out = inc->checkSat(levels, !assumptions.empty(), first_forced, &sources);
         last_incremental = true;
         done = true;
       }
@@ -815,13 +816,11 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
         }
       }
       r = Result(Verdict::UNSAT, UnknownReason::NONE, "");
-      // the driver's failed conjuncts, mapped back to the assumptions as the
-      // SMT-LIB frontend maps them (flattened, distinct lowered, the whole
-      // set when one does not map); the batch pipeline reports none
+      // Both frontends use the occurrence IDs captured before lowering.
+      // The batch pipeline retains the complete assumption set.
       if (last_incremental && stp->hasIncrementalSolver())
       {
-        const ASTVec terms(assumptions.begin(), assumptions.end());
-        for (std::size_t i : stp->getIncrementalSolver()->lastUnsatAssumptionIndices(terms))
+        for (std::size_t i : stp->getIncrementalSolver()->lastUnsatAssumptionIndices())
           last_failed_assumptions.push_back(assumptions[i]);
       }
       else

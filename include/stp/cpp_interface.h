@@ -375,6 +375,7 @@ private:
   bool produce_unsat_cores = false;
   bool core_solver_layout = false;
   bool last_core_available = false;
+  bool last_assumption_core_available = false;
   std::vector<std::string> last_unsat_core;
   std::vector<size_t> last_core_assumption_indices;
   enum class Mode { Start, Assert, Sat, Unsat };
