@@ -1064,11 +1064,19 @@ class FPNumRef(FPRef):
         if c in (_core.FP_NAN, _core.FP_INFINITY):
             raise NotAValue("%s has no rational value" % self.sexpr(), code=ErrorCode.NOT_A_VALUE,
                             function="FPNumRef.as_fraction")
+        if c == _core.FP_ZERO:
+            return Fraction(0)
         # Decode the binary fields directly. Decimal strings for binary128's
         # extremes exceed Python's integer-string digit limit.
+        exponent = max(exponent, 1) - ((1 << (ebits - 1)) - 1)
+        # Preserve FloatValue::to_rational's allocation guard before shifting.
+        limit = 1 << 24
+        if abs(exponent) > limit or sbits - 1 > limit:
+            raise Unsupported("the exact rational of this value has more than 2^24 bits",
+                              code=ErrorCode.UNSUPPORTED, function="FPNumRef.as_fraction")
         if c == _core.FP_NORMAL:
             significand |= 1 << (sbits - 1)
-        power = max(exponent, 1) - ((1 << (ebits - 1)) - 1) - (sbits - 1)
+        power = exponent - (sbits - 1)
         if sign:
             significand = -significand
         if power >= 0:
