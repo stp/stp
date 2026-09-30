@@ -373,7 +373,7 @@ bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 
 bool containsFloatingPoint(const ASTNode& n, STPMgr* mgr)
 {
-  NodeIterator ni(n, mgr->ASTUndefined, *mgr);
+  NodeIterator ni(n, mgr->ASTUndefined, *mgr, true);
   ASTNode current;
   while ((current = ni.next()) != ni.end())
   {
@@ -386,7 +386,7 @@ bool containsFloatingPoint(const ASTNode& n, STPMgr* mgr)
 
 bool containsFloatingPointTheory(const ASTNode& n, STPMgr* mgr)
 {
-  NodeIterator ni(n, mgr->ASTUndefined, *mgr);
+  NodeIterator ni(n, mgr->ASTUndefined, *mgr, true);
   ASTNode current;
   while ((current = ni.next()) != ni.end())
   {

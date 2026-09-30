@@ -23,14 +23,15 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/VariablesInExpression.h"
+#include "stp/STPManager/STPManager.h"
 #include "stp/Util/DagWalk.h"
 
 namespace stp
 {
 
-VariablesInExpression::VariablesInExpression()
+VariablesInExpression::VariablesInExpression(STPMgr* bm) : bm(bm)
 {
-  // TODO Auto-generated constructor stub
+  assert(bm != nullptr);
 }
 
 VariablesInExpression::~VariablesInExpression()
@@ -55,15 +56,40 @@ void VariablesInExpression::insert(const ASTNode& n, Symbols* s)
 // here that it would not have built anyway.
 void VariablesInExpression::primeSymbols(const ASTNode& n)
 {
-  primeMemo(
-      n,
-      [this](const ASTNode& node)
-      {
-        if (symbol_graph.find(node.GetNodeNum()) != symbol_graph.end())
-          return Walk::Skip; // getSymbol would answer from the graph.
-        return node.Degree() == 0 ? Walk::Visit : Walk::Descend;
-      },
-      [this](const ASTNode& node, PrimeMemoReady) { getSymbol(node, true); });
+  if (symbol_graph.find(n.GetNodeNum()) != symbol_graph.end())
+    return;
+
+  // Constant-array defaults live outside GetChildren(), but their scalar
+  // variables still constrain which substitutions can be made. Prime those
+  // dependencies bottom up too, including arbitrarily nested defaults.
+  struct Frame
+  {
+    ASTNode node;
+    ASTChildren children;
+    size_t next = 0;
+
+    Frame(const ASTNode& n, ASTChildren operands)
+        : node(n), children(operands)
+    {
+    }
+  };
+
+  vector<Frame> pending;
+  pending.emplace_back(n, bm->childrenWithConstArrayDefault(n));
+  while (!pending.empty())
+  {
+    Frame& frame = pending.back();
+    if (frame.next < frame.children.size())
+    {
+      const ASTNode& child = frame.children[frame.next++];
+      if (symbol_graph.find(child.GetNodeNum()) == symbol_graph.end())
+        pending.emplace_back(child, bm->childrenWithConstArrayDefault(child));
+      continue;
+    }
+
+    getSymbol(frame.node, true);
+    pending.pop_back();
+  }
 }
 
 Symbols* VariablesInExpression::getSymbol(const ASTNode& n)
@@ -76,9 +102,8 @@ Symbols* VariablesInExpression::getSymbol(const ASTNode& n,
 {
   PrimeAudit::Running running(symbolAudit, n);
 
-  // primeSymbols' classifier already made this lookup. Its ready token is a
-  // known miss because building a descendant cannot insert an ancestor into
-  // this bottom-up graph.
+  // primeSymbols already made this lookup. It remains a known miss because
+  // building a descendant cannot insert an ancestor into this bottom-up graph.
   if (!knownMissing)
   {
     const ASTNodeToNodes::const_iterator it = symbol_graph.find(n.GetNodeNum());
@@ -109,9 +134,9 @@ Symbols* VariablesInExpression::getSymbol(const ASTNode& n,
   }
 
   vector<Symbols*> children;
-  for (size_t i = 0; i < n.Degree(); i++)
+  for (const ASTNode& child : bm->childrenWithConstArrayDefault(n))
   {
-    Symbols* v = getSymbol(n[i]);
+    Symbols* v = getSymbol(child);
     if (!v->empty())
       children.push_back(v);
   }

@@ -703,6 +703,17 @@ const ASTNode& STPMgr::constArrayDefault(const ASTNode& n) const
   return it->second;
 }
 
+ASTChildren STPMgr::childrenWithConstArrayDefault(const ASTNode& n) const
+{
+  if (n.GetKind() == SYMBOL)
+  {
+    const auto it = constArrayDefaults.find(n);
+    if (it != constArrayDefaults.end())
+      return ASTChildren(&it->second, 1);
+  }
+  return n.GetChildren();
+}
+
 ASTNode STPMgr::unsupportedConstArrayDefault(const ASTNode& t) const
 {
   ASTNodeSet seen;

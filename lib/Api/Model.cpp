@@ -321,7 +321,10 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
         if (bm->HasRealModelValue(n) && bm->RealModelValueNode(n, value) && !value.IsNull())
           snap->scalars[n] = value;
       }
-      for (const ASTNode& c : n.GetChildren())
+      // A partial FP operation used as a constant-array default still
+      // carries the solve's choice, even though the default is hidden from
+      // the array symbol's ordinary children.
+      for (const ASTNode& c : bm->childrenWithConstArrayDefault(n))
         stack.push_back(c);
     }
   }

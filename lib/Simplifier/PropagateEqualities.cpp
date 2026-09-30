@@ -42,51 +42,59 @@ typedef ankerl::unordered_dense::set<ASTNode, ASTNode::ASTNodeHasher,
 // node-based std::unordered_map (mapped is never inserted into after build).
 typedef PropagateEqualities::MapToNodeSet MapToNodeSet;
 
-void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, DenseNodeSet& shared)
+void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, DenseNodeSet& shared, STPMgr* bm)
 {
-  if (n.Degree() == 0)
-    return; 
-
-  const auto n_id = n.GetNodeNum();
-
-  const auto it = nodeToTag.find(n_id);
-  if (it != nodeToTag.end())
+  ASTVec pending(1, n);
+  while (!pending.empty())
   {
-    if (it->second != tag)
-      shared.insert(n); // Two or more nodes share this node.
-
-    return; // already tagged
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    const ASTChildren children =
+        bm->childrenWithConstArrayDefault(current);
+    if (children.empty())
+      continue;
+    const auto inserted = nodeToTag.emplace(current.GetNodeNum(), tag);
+    if (!inserted.second)
+    {
+      if (inserted.first->second != tag)
+        shared.insert(current);
+      continue;
+    }
+    for (size_t i = children.size(); i-- > 0;)
+      pending.push_back(children[i]);
   }
-
-  nodeToTag[n_id] = tag;
-
-  for (const auto & c : n)
-    tagNodes(c, tag, nodeToTag, shared);
 }
 
 // Take the intersection of the symbols in n, and the symbols in "candidates", putting the result into "variablers"
-void intersection(const ASTNode& n, IdSet& visited, IdSet& variables, const IdSet& candidates, IdToIdSet& cache)
+void intersection(const ASTNode& n, IdSet& visited, IdSet& variables, const IdSet& candidates, IdToIdSet& cache, STPMgr* bm)
 {
-  const auto n_id = n.GetNodeNum();
-  
-  if (!visited.insert(n_id).second)
-    return;
-
-  const auto cit = cache.find(n_id);
-  if (cit != cache.end())
+  ASTVec pending(1, n);
+  while (!pending.empty())
   {
-    variables.insert(cit->second.begin(), cit->second.end());
-    return;
-  }
- 
-  if (SYMBOL == n.GetKind() && candidates.find(n_id) != candidates.end())
-  {
-    variables.insert(n_id);
-    return;
-  }
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    const auto id = current.GetNodeNum();
+    if (!visited.insert(id).second)
+      continue;
+    const auto cached = cache.find(id);
+    if (cached != cache.end())
+    {
+      variables.insert(cached->second.begin(), cached->second.end());
+      continue;
+    }
+    if (current.GetKind() == SYMBOL && candidates.count(id) != 0)
+    {
+      variables.insert(id);
+      continue;
+    }
 
-  for (const auto & c : n)
-    intersection(c, visited, variables, candidates, cache);
+    // A constant array is represented by a symbol, but substituting it for
+    // an array that its default reads would introduce a circular definition.
+    const ASTChildren children =
+        bm->childrenWithConstArrayDefault(current);
+    for (size_t i = children.size(); i-- > 0;)
+      pending.push_back(children[i]);
+  }
 }
 
 MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& allLhsVariables)
@@ -97,7 +105,7 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
     uint64_t tag = 0;
 
     for (const auto& e: candidates)  
-        tagNodes(e.second, tag++, tags, shared);
+        tagNodes(e.second, tag++, tags, shared, bm);
   }
 
   IdToIdSet cache;
@@ -110,7 +118,7 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
     {
       IdSet visited;
       IdSet variables;
-      intersection(n,visited,variables, allLhsVariables, cache);
+      intersection(n,visited,variables, allLhsVariables, cache, bm);
       cache.insert(std::make_pair(n.GetNodeNum(),variables));
     }
   }
@@ -125,7 +133,7 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
   {
     IdSet visited;
     IdSet variables;
-    intersection(e.second, visited, variables, allLhsVariables, cache);
+    intersection(e.second, visited, variables, allLhsVariables, cache, bm);
     mapped.insert(std::make_pair(
         e.first.GetNodeNum(),
         PropagateEqualities::CandidateInfo{e.first, e.second,
@@ -207,7 +215,7 @@ static void update(const uint64_t start, MapToNodeSet& m,
   }
 }
 
-void PropagateEqualities::processCandidates()
+void PropagateEqualities::processCandidates(bool preserveDefaultGrammar)
 {
   assert(!simp->hasUnappliedSubstitutions());
 
@@ -270,6 +278,14 @@ void PropagateEqualities::processCandidates()
 
     assert(SYMBOL == lhs.GetKind());
 
+    // The pre-lowering pass can still see ARRAY_EQ. Inlining its Boolean
+    // alias into a constant-array default would hide it from the lowering
+    // coordinator (and violate the supported default grammar). Retain the
+    // defining equation until its theory has been lowered. Check every RHS,
+    // since an alias chain can reach a default through another candidate.
+    if (preserveDefaultGrammar &&
+        !bm->unsupportedConstArrayDefault(rhs).IsNull())
+      continue;
 
     if (rhsVariables.find(lhs_id) != rhsVariables.end())
       continue; // Loops already, so no more processing.
@@ -322,7 +338,27 @@ ASTNode PropagateEqualities::topLevel(const ASTNode& a)
       std::cerr <<  "{PropagateEqualities} Candidates:" << candidates.size() << std::endl;
   }
 
-  processCandidates();
+  bool preserveDefaultGrammar = false;
+  if (bm->hasConstArrays())
+  {
+    ASTNodeSet seen;
+    ASTVec pending(1, result);
+    while (!pending.empty())
+    {
+      const ASTNode node = pending.back();
+      pending.pop_back();
+      if (!seen.insert(node).second)
+        continue;
+      if (bm->isConstArray(node))
+      {
+        preserveDefaultGrammar = true;
+        break;
+      }
+      for (const ASTNode& child : node.GetChildren())
+        pending.push_back(child);
+    }
+  }
+  processCandidates(preserveDefaultGrammar);
 
   bm->GetRunTimes()->stop(RunTimes::PropagateEqualities);
 

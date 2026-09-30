@@ -153,33 +153,34 @@ ASTNode FpTotalise::canonicalSourceBits(const ASTNode& value)
   return nf->CreateTerm(FP_TO_IEEE_BV, sort.packedWidth(), value);
 }
 
-// A continuation stack rather than a call per level: how deeply a float
-// expression nests is the input's choice, and this walks the whole of one.
-// It preserves the recursion's pre-order while retaining only ancestors, not
-// every sibling in a wide frontier. See DeepDag_Test.cpp.
+// Defaults are dependencies too, including when another constant array is
+// reached through a default. Keep that traversal off the call stack.
 void FpTotalise::collectRoundingModeTerms(const ASTNode& n, ASTNodeSet& seen,
                                           ASTVec& constraints)
 {
-  walkPreOrder(n, [&](const ASTNode& m) {
+  ASTVec pending(1, n);
+  while (!pending.empty())
+  {
+    const ASTNode m = pending.back();
+    pending.pop_back();
     if (!seen.insert(m).second)
-      return false;
+      continue;
 
     // Leaves are visited now, where they were skipped before: a declared
     // RoundingMode symbol is a leaf, and it is exactly as much in need of
     // pinning as a read is.
     if (m.GetKind() == SYMBOL)
     {
-      if (bm->isConstArray(m))
-        collectRoundingModeTerms(bm->constArrayDefault(m), seen, constraints);
       if (bm->isRoundingModeSymbol(m))
         constraints.push_back(bm->roundingModeValidConstraint(m));
-      return false;
     }
 
     if (m.GetKind() == READ && bm->arrayHasRmElement(m[0]))
       constraints.push_back(bm->roundingModeValidConstraint(m));
-    return true;
-  });
+    const ASTChildren children = bm->childrenWithConstArrayDefault(m);
+    for (size_t i = children.size(); i-- > 0;)
+      pending.push_back(children[i]);
+  }
 }
 
 ASTNode FpTotalise::rebuild(const ASTNode& n, const ASTVec& children)
@@ -313,19 +314,7 @@ ASTNode FpTotalise::visit(const ASTNode& n)
 {
   PrimeAudit::Running running(memoAudit, n);
 
-  // A constant array's scalar default is stored outside GetChildren().
-  // Totalise it as part of the source term, so partial FP operations and
-  // float-indexed reads inside a symbolic default follow the same rules as
-  // expressions written directly in the formula.
-  if (bm->isConstArray(n))
-  {
-    const ASTNode& value = bm->constArrayDefault(n);
-    const ASTNode prepared = visit(value);
-    return prepared == value ? n
-                             : bm->CreateConstArray(n.GetSourceSort(), prepared);
-  }
-
-  if (n.Degree() == 0)
+  if (bm->childrenWithConstArrayDefault(n).empty())
     return n;
 
   const ASTNodeMap::const_iterator persistent = persistent_cache.find(n);
@@ -338,32 +327,50 @@ ASTNode FpTotalise::visit(const ASTNode& n)
   // Nothing below `m` needs filling: it is answered already, or it has no
   // children to be answered from.
   auto settled = [this](const ASTNode& m) {
-    return m.Degree() == 0 || persistent_cache.count(m) != 0 ||
+    return bm->childrenWithConstArrayDefault(m).empty() ||
+           persistent_cache.count(m) != 0 ||
            traversal_cache.count(m) != 0;
   };
 
   bool fill = false;
-  for (size_t i = 0; i < n.Degree() && !fill; i++)
-    fill = !settled(n[i]);
+  for (const ASTNode& child : bm->childrenWithConstArrayDefault(n))
+    fill = fill || !settled(child);
 
   if (!fill)
     return totalise(n);
 
-  // The walk finishes with the node it started from, so the last answer it
-  // records is that one.
-  ASTNode answer;
-  primeMemo(
-      n, [&](const ASTNode& child)
-      { return settled(child) ? Walk::Skip : Walk::Descend; },
-      [&](const ASTNode& m, PrimeMemoReady) { answer = totalise(m, true); });
-  return answer;
+  // Prime the same dependency graph that totalise visits. In particular a
+  // constant-array symbol is not a leaf: its default must already be cached
+  // when totalise asks for it, however many defaults the input nests.
+  struct Frame
+  {
+    ASTNode node;
+    size_t next = 0;
+  };
+  std::vector<Frame> pending{{n, 0}};
+  while (true)
+  {
+    Frame& frame = pending.back();
+    const ASTChildren children = bm->childrenWithConstArrayDefault(frame.node);
+    if (frame.next < children.size())
+    {
+      const ASTNode child = children[frame.next++];
+      if (!settled(child))
+        pending.push_back({child, 0});
+      continue;
+    }
+    const ASTNode answer = totalise(frame.node, true);
+    pending.pop_back();
+    if (pending.empty())
+      return answer;
+  }
 }
 
 // One node, with its children already totalised -- which is what the walk
 // below arranges, and what its own calls on those children then find.
 ASTNode FpTotalise::totalise(const ASTNode& n, const bool knownMissing)
 {
-  if (n.Degree() == 0)
+  if (bm->childrenWithConstArrayDefault(n).empty())
     return n;
 
   // visit's classifier already checked both caches for primed nodes. Neither
@@ -376,6 +383,18 @@ ASTNode FpTotalise::totalise(const ASTNode& n, const bool knownMissing)
     const ASTNodeMap::const_iterator current = traversal_cache.find(n);
     if (current != traversal_cache.end())
       return current->second;
+  }
+
+  if (bm->isConstArray(n))
+  {
+    const ASTNode& value = bm->constArrayDefault(n);
+    const ASTNode prepared = visit(value);
+    const ASTNode out = prepared == value
+        ? n : bm->CreateConstArray(n.GetSourceSort(), prepared);
+    traversal_cache[n] = out;
+    if (out != n)
+      persistent_cache[n] = out;
+    return out;
   }
 
   ASTVec children;

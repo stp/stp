@@ -81,7 +81,7 @@ private:
 
   std::vector < std::pair<ASTNode, ASTNode> > candidates;
 
-  void processCandidates();
+  void processCandidates(bool preserveDefaultGrammar);
 
   MapToNodeSet buildMapOfLHStoVariablesInRHS(const IdSet&);
 

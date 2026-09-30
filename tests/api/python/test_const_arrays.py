@@ -156,6 +156,35 @@ def test_symbolic_default_can_read_another_array(mode):
     s.close()
 
 
+@pytest.mark.parametrize("mode", ["auto", "on", "off"])
+def test_symbolic_default_cannot_define_an_array_through_itself(mode):
+    a = Array("ca_self", BitVecSort(8), BitVecSort(8))
+    i = BitVec("ca_self_i", 8)
+    s = Solver(incremental=mode)
+    s.add(a == K(_a8(), a[i] + 1))
+    assert s.check() == unsat
+    s.close()
+
+
+@pytest.mark.parametrize("mode", ["auto", "on", "off"])
+def test_symbolic_defaults_with_mutual_array_dependencies(mode):
+    a = Array("ca_cycle_a", BitVecSort(8), BitVecSort(8))
+    b = Array("ca_cycle_b", BitVecSort(8), BitVecSort(8))
+    i, j = BitVecs("ca_cycle_i ca_cycle_j", 8)
+    s = Solver(incremental=mode)
+    s.add(a == K(_a8(), b[i] + 1), b == K(_a8(), a[j] - 1))
+    assert s.check() == sat
+    m = s.model()
+    assert bool(m.eval(a == K(_a8(), b[i] + 1))) is True
+    assert bool(m.eval(b == K(_a8(), a[j] - 1))) is True
+    s.push()
+    s.add(b == K(_a8(), a[j]))
+    assert s.check() == unsat
+    s.pop()
+    assert s.check() == sat
+    s.close()
+
+
 def test_symbolic_default_parses_and_round_trips():
     s = Solver()
     s.from_string("(declare-fun ca_z () (_ BitVec 8)) (assert (= ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x00) "
@@ -180,6 +209,48 @@ def test_symbolic_float_default_is_lowered_before_checker_preparation():
     assert float(s.model()[a].default) == 3.75
     s.add(Not(fpEQ(a[2], FPVal(3.75, Float32()))))
     assert s.check() == unsat
+    s.close()
+
+
+@pytest.mark.parametrize("mode", ["auto", "on", "off"])
+def test_float_conversion_hidden_in_a_bitvector_default(mode):
+    x = FP("ca_hidden_float", Float32())
+    a = Array("ca_hidden_conversion", BitVecSort(8), BitVecSort(8))
+    s = Solver(incremental=mode)
+    # The conversion is the only FP operation in the first check's assertions.
+    s.add(a == K(_a8(), fpToUBV(RNE(), x, 8)))
+    assert s.check() == sat
+    s.push()
+    s.add(x == FPVal(2.5, Float32()))
+    assert s.check() == sat
+    assert s.model()[a].default.as_long() == 2
+    assert s.model().eval(a[9]).as_long() == 2
+    s.add(a[9] != 2)
+    assert s.check() == unsat
+    s.pop()
+    assert s.check() == sat
+    s.close()
+
+
+@pytest.mark.parametrize("mode", ["auto", "on", "off"])
+def test_nested_symbolic_float_defaults_are_prepared_iteratively(mode):
+    x, y = FP("ca_nested_x", Float32()), FP("ca_nested_y", Float32())
+    i, j = BitVecs("ca_nested_i ca_nested_j", 8)
+    a = Array("ca_nested", BitVecSort(8), Float32())
+    c = K(BitVecSort(8), x)
+    for _ in range(19):
+        c = K(BitVecSort(8), Store(c, i, y)[j])
+    s = Solver(incremental=mode)
+    s.add(a == c)
+    assert s.check() == sat
+    s.push()
+    s.add(i == j, y == FPVal(3.0, Float32()))
+    assert s.check() == sat
+    assert float(s.model()[a].default) == 3.0
+    s.add(Not(fpEQ(a[9], FPVal(3.0, Float32()))))
+    assert s.check() == unsat
+    s.pop()
+    assert s.check() == sat
     s.close()
 
 

@@ -838,6 +838,10 @@ public:
   bool hasConstArrays() const { return !constArrayDefaults.empty(); }
   // The default of a registered constant array; fatal for anything else.
   DLL_PUBLIC const ASTNode& constArrayDefault(const ASTNode& n) const;
+  // Dependency walks must see a constant array's default even though it is
+  // stored beside its symbol. The returned view is not an AST operand list:
+  // rebuilding a constant array still goes through CreateConstArray.
+  DLL_PUBLIC ASTChildren childrenWithConstArrayDefault(const ASTNode& n) const;
 
   // Create a source-language leaf atomically. Its complete sort participates
   // in hash-consing and cannot subsequently be changed by width setters.

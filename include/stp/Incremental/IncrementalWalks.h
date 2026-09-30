@@ -33,6 +33,7 @@ THE SOFTWARE.
 // input-chosen DAG depth cannot exhaust the call stack.
 
 #include "stp/AST/AST.h"
+#include "stp/STPManager/STPManager.h"
 
 #include <cassert>
 #include <cstdint>
@@ -45,6 +46,7 @@ namespace stp
 
 class IncrementalWalks
 {
+  STPMgr& bm;
   // Per-node symbol sets, memoised for this encoding epoch; the keys hold
   // their nodes.
   // Looked up by node and never iterated, so it wants hashing rather than
@@ -108,17 +110,33 @@ class IncrementalWalks
     return true;
   }
 
+  void collectReachableSymbols(const ASTVec& roots, ASTNodeSet& out)
+  {
+    ASTVec pending = roots;
+    while (!pending.empty())
+    {
+      const ASTNode n = pending.back();
+      pending.pop_back();
+      if (!firstSymbolVisit(n))
+        continue;
+      if (n.GetKind() == SYMBOL)
+        out.insert(n);
+      for (const ASTNode& child : bm.childrenWithConstArrayDefault(n))
+        pending.push_back(child);
+    }
+  }
+
 public:
-  // `falseNode` is the manager's ASTFalse: the first node it minted, so
+  // ASTFalse is the first node the manager minted, so
   // every node number is at or above it.
-  explicit IncrementalWalks(const ASTNode& falseNode)
-      : baseNodeNum(falseNode.GetNodeNum())
+  explicit IncrementalWalks(STPMgr& manager)
+      : bm(manager), baseNodeNum(manager.ASTFalse.GetNodeNum())
   {
   }
 
-  // Both symbol walkers are the shared collectSymbols() walk (AST.h) over
-  // the paged epoch marks in place of the library wrapper's per-call
-  // ASTNodeSet.
+  // Both symbol walkers include dependencies hidden in constant-array
+  // defaults. A later use of an eliminated variable must restore its
+  // defining equation even when that use is only in a default.
   const ASTNodeSet& symbolsOf(const ASTNode& n)
   {
     NodeSymbolsMap::iterator hit = symbolsOfCache.find(n);
@@ -127,10 +145,7 @@ public:
 
     beginSymbolVisit();
     ASTNodeSet& out = symbolsOfCache[n];
-    collectSymbols(ASTVec(1, n),
-                   [this](const ASTNode& node)
-                   { return firstSymbolVisit(node); },
-                   out);
+    collectReachableSymbols(ASTVec(1, n), out);
     return out;
   }
 
@@ -144,10 +159,7 @@ public:
     if (roots.empty())
       return;
     beginSymbolVisit();
-    collectSymbols(roots,
-                   [this](const ASTNode& node)
-                   { return firstSymbolVisit(node); },
-                   out);
+    collectReachableSymbols(roots, out);
   }
 
   // DAG node count up to `cap`; the returned value is only guaranteed
