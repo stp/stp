@@ -101,6 +101,9 @@ Implemented language and protocol features
        ``get-info :all-statistics`` is available before solving and after
        context changes. Other information and option queries report the
        implemented settings.
+   * - Random seed
+     - ``:random-seed`` accepts unsigned 64-bit numerals and is used by
+       every SAT backend. ``get-option`` reports the selected seed.
    * - Responses and channels
      - ``:print-success`` defaults to false. ``echo`` produces one string
        response. Regular and diagnostic output channels support
@@ -184,6 +187,25 @@ internal symbols and abstract model values. Local shadowing and the legacy
 ``lambda`` identifier are extensions; portable 2.7 scripts avoid shadowing
 theory names and quote ``|lambda|``.
 
+Random seed
+-----------
+
+``(set-option :random-seed 42)`` seeds the SAT backend through the same
+setting as ``--random-seed=42``. The default, ``0``, leaves the backend's
+own default in place. Nonzero seeds make its random choices repeatable
+for the same input, backend and configuration. Different backends may
+map the 64-bit seed into smaller ranges; distinct seeds need not produce
+distinct results. Parallel solving and wall-clock limits can still make
+runs differ.
+
+For portable scripts, set the seed before ``set-logic``. STP also accepts
+it after ``set-logic`` and between checks. A change preserves the last
+model or core and rebuilds persistent solving state at the next solve.
+``push``, ``pop`` and ``reset-assertions`` preserve the option; ``reset``
+restores the startup value, including a seed supplied on the command line.
+An API script's seed applies within that parse call; afterwards the
+caller's solver options are restored.
+
 Named unsat cores
 -----------------
 
@@ -260,7 +282,7 @@ Remaining limits and extensions
 * Proofs are not produced. ``:produce-proofs`` reports ``unsupported``
   when enabled; a query without an enabled
   production option is an error. Unsupported optional settings such as
-  ``:random-seed`` also report ``unsupported``.
+  ``:reproducible-resource-limit`` also report ``unsupported``.
 * Constant arrays, spelled ``((as const (Array I E)) value)``, are an
   extension used in array model output. ``fp.to_ieee_bv`` and some logic
   combinations are also extensions. Model text containing these forms

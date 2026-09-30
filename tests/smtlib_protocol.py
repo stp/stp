@@ -160,7 +160,7 @@ class CommandModes(unittest.TestCase):
 
     def test_unsupported_options_after_logic_do_not_end_the_script(self):
         result = run('(set-logic QF_BV)(set-option :produce-proofs true)'
-                     '(set-option :random-seed 0)(check-sat)')
+                     '(set-option :reproducible-resource-limit 0)(check-sat)')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, 'unsupported\nunsupported\nsat\n')
 
@@ -348,6 +348,90 @@ class SortAliases(unittest.TestCase):
                      '(declare-const x (Id Bool))(assert x)(check-sat)')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, 'sat\n')
+
+
+class RandomSeed(unittest.TestCase):
+    def test_invalid_seeds_end_the_script(self):
+        for value in ['', '-1', '1.5', 'true', '"42"', '#x2a', '(42)',
+                      '18446744073709551616', '9' * 100]:
+            with self.subTest(value=value):
+                result = run('(set-option :random-seed ' + value + ')'
+                             '(echo "unreachable")')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('requires a numeral', result.stdout)
+                self.assertNotIn('unreachable', result.stdout)
+
+    def test_reset_restores_command_line_seed(self):
+        result = run('''
+(get-option :random-seed)
+(set-option :random-seed 42)
+(set-logic QF_BV)
+(check-sat)
+(reset-assertions)
+(get-option :random-seed)
+(reset)
+(get-option :random-seed)
+(check-sat)
+''', args=('--random-seed=17',))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, '17\nsat\n42\n17\nsat\n')
+
+    def test_seeded_models_repeat_and_match_command_line(self):
+        script = '''
+(set-option :produce-models true)
+(set-logic QF_BV)
+(declare-const x (_ BitVec 8))
+(declare-const y (_ BitVec 8))
+(assert (= (bvmul x y) #x8f))
+(assert (bvugt x #x01))
+(assert (bvugt y #x01))
+(check-sat)
+(get-value (x y))
+(push 1)
+(assert (bvult x y))
+(check-sat)
+(get-value (x y))
+(pop 1)
+(check-sat-assuming ((bvugt x y)))
+(get-value (x y))
+'''
+        for mode in ['auto', 'on', 'off']:
+            for seed in [1, 4294967296, 18446744073709551615]:
+                with self.subTest(mode=mode, seed=seed):
+                    args = ('--incremental=' + mode,)
+                    seeded = '(set-option :random-seed ' + str(seed) + ')' + script
+                    first = run(seeded, args=args)
+                    second = run(seeded, args=args)
+                    command_line = run(script, args=args + ('--random-seed=' + str(seed),))
+                    for result in [first, second, command_line]:
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertEqual(result.stdout.count('sat\n'), 3)
+                        self.assertNotIn('unsat', result.stdout)
+                    self.assertEqual(first.stdout, second.stdout)
+                    self.assertEqual(first.stdout, command_line.stdout)
+
+    def test_seed_changes_in_a_real_session(self):
+        result = run('''
+(set-option :produce-models true)
+(set-option :random-seed 42)
+(set-logic QF_LRA)
+(declare-const x Real)
+(assert (> x 0))
+(check-sat)
+(set-option :random-seed 43)
+(get-value ((> x 0)))
+(push 1)
+(assert (< x 0))
+(check-sat)
+(set-option :random-seed 0)
+(pop 1)
+(check-sat)
+(get-value ((> x 0)))
+''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([line for line in result.stdout.splitlines()
+                          if line in ('sat', 'unsat')], ['sat', 'unsat', 'sat'])
+        self.assertEqual(result.stdout.count(' true )'), 2)
 
 
 class Attributes(unittest.TestCase):

@@ -41,6 +41,7 @@ THE SOFTWARE.
 #include "stp/Util/SMTLibString.h"
 #include "Lra/LraFrontend.h"
 #include <cassert>
+#include <charconv>
 #include <exception>
 #include <limits>
 
@@ -106,6 +107,8 @@ void Cpp_interface::init()
   retain_uf_declarations = false;
   produce_models = initial_produce_models;
   bm.UserFlags.produce_models = initial_produce_models;
+  bm.UserFlags.random_seed = initial_random_seed;
+  solver_random_seed = initial_random_seed;
   produce_assertions = false;
   produce_assignments = false;
   produce_unsat_assumptions = false;
@@ -159,6 +162,7 @@ void Cpp_interface::removeFrame()
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
     : bm(bm_), initial_produce_models(bm_.UserFlags.callerRequestedModel()),
       model_option_before_parse(bm_.UserFlags.produce_models),
+      initial_random_seed(bm_.UserFlags.random_seed),
       output_channels(new SMT2Output), set_global_parser_bm(false),
       letMgr(new LetMgr(bm.ASTUndefined)), nf(factory)
 {
@@ -1526,10 +1530,15 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
     resetSolver();
     // Ordinary checks may have made named assertions permanent base units.
     // Changing layouts must retire that encoding before extracting a core.
-    if (core_solver_layout != produce_unsat_cores)
+    // A new seed also needs a fresh backend: existing persistent solvers
+    // keep their original random state. Defer this until solving so that
+    // set-option alone preserves the previous model and core.
+    if (core_solver_layout != produce_unsat_cores ||
+        solver_random_seed != bm.UserFlags.random_seed)
     {
       resetIncrementalSolver();
       core_solver_layout = produce_unsat_cores;
+      solver_random_seed = bm.UserFlags.random_seed;
     }
 
     // The policy itself lives on the driver, so this frontend and the API
@@ -1714,6 +1723,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
 Cpp_interface::Cpp_interface(STPMgr& bm_)
     : bm(bm_), initial_produce_models(bm_.UserFlags.callerRequestedModel()),
       model_option_before_parse(bm_.UserFlags.produce_models),
+      initial_random_seed(bm_.UserFlags.random_seed),
       output_channels(new SMT2Output), set_global_parser_bm(true),
       letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
 {
@@ -1735,13 +1745,16 @@ void Cpp_interface::cleanUp()
 
   if (assertion_names_at_cleanup != nullptr)
     *assertion_names_at_cleanup = assertion_names;
-  // An API caller can resume with a different layout after this frontend
-  // is destroyed. No model/core query in the completed script needs it now.
-  if (core_solver_layout)
+  // An API caller resumes with its own options after this frontend is
+  // destroyed. Retire a script's core layout or seeded solver before
+  // restoring those options. No query in the completed script needs it now.
+  if (core_solver_layout || solver_random_seed != initial_random_seed)
   {
     resetIncrementalSolver();
     core_solver_layout = false;
+    solver_random_seed = initial_random_seed;
   }
+  bm.UserFlags.random_seed = initial_random_seed;
 
   // Every frame is going away, so don't erase the functions from the
   // map one at a time (files can define millions of functions).
@@ -1809,7 +1822,6 @@ void Cpp_interface::setOption(std::string option, std::string value)
       :produce-proofs
       :produce-unsat-assumptions
       :produce-unsat-cores
-      :random-seed
       :regular-output-channel
       :reproducible-resource-limit
       :verbosity
@@ -1823,6 +1835,16 @@ void Cpp_interface::setOption(std::string option, std::string value)
       setPrintSuccess(false);
     else
       badBooleanOptionValue(option, value);
+  }
+  else if (option == "random-seed")
+  {
+    uint64_t seed = 0;
+    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), seed);
+    if (parsed.ec != std::errc() || parsed.ptr != value.data() + value.size())
+      refuseCurrentCommand("set-option :random-seed requires a numeral in the range "
+                           "0 to 18446744073709551615");
+    bm.UserFlags.random_seed = seed;
+    success();
   }
   else if (option == "produce-models")
   {
@@ -1927,8 +1949,9 @@ void Cpp_interface::getOption(std::string option)
     cout << (produce_unsat_cores ? "true" : "false") << endl;
   else if (option == "produce-proofs")
     cout << "false" << endl;
-  else if (option == "random-seed" || option == "reproducible-resource-limit" ||
-           option == "verbosity")
+  else if (option == "random-seed")
+    cout << bm.UserFlags.random_seed << endl;
+  else if (option == "reproducible-resource-limit" || option == "verbosity")
     cout << "0" << endl;
   else if (option == "diagnostic-output-channel" ||
            option == "regular-output-channel")

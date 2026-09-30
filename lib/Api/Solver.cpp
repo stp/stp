@@ -2422,9 +2422,9 @@ std::string Solver::to_smt2(bool with_check_sat) const
         logic = "QF_ABV";
     }
   }
-  // The options set on the solver. produce-models is SMT-LIB's own; the rest
-  // are STP's, which no reader takes from a script, so they print as
-  // comments: the script reads back, and the settings stay on record.
+  // The options set on the solver. produce-models and random-seed are
+  // SMT-LIB's own; the rest are STP's and print as comments: the script
+  // reads back, and the settings stay on record.
   std::size_t n = 0;
   const detail::OptionSpec* specs = detail::option_specs(n);
   for (std::size_t i = 0; i < n; ++i)
@@ -2432,8 +2432,8 @@ std::string Solver::to_smt2(bool with_check_sat) const
     {
       const std::string name = specs[i].name;
       std::string text = detail::option_text(specs[i], s->options.values[i]);
-      if (name == "produce-models")
-        os << "(set-option :produce-models " << text << ")\n";
+      if (name == "produce-models" || name == "random-seed")
+        os << "(set-option :" << name << " " << text << ")\n";
       else if (name != "logic")
       {
         // one comment line, whatever a string value holds
