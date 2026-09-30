@@ -1332,9 +1332,11 @@ public:
   // against a constant divisor only within each level, so at 256 bits a
   // 34-bit constant still costs it 510,000 clauses; the relation is a row
   // per set divisor bit, 22,000 clauses for the same operation. Below the
-  // width the divider is small either way and is left alone.
+  // width the divider is small either way and is left alone. Keep restoring
+  // propagation below 128 bits: at intermediate widths the smaller relation
+  // can still require much more SAT search (e.g. widened fixed-point scaling).
   bool division_by_constant = true;
-  unsigned division_by_constant_width = 64;
+  unsigned division_by_constant_width = 128;
   // Measurement arm: encode division and remainder as a free result
   // constrained only by the term abstraction's schema registry, asserted
   // eagerly, so the lemmas' propagation can be graded on its own. The

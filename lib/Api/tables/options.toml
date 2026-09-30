@@ -2196,7 +2196,7 @@ help = "encode a division or remainder by a constant through its defining relati
 [[option]]
 name = "bb.div-by-const-width"
 type = "uint"
-default = 64
+default = 128
 range = { max = 4294967295 }
 tier = "expert"
 settable = "before-first-check"
