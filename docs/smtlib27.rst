@@ -1,5 +1,5 @@
 SMT-LIB 2.7 compatibility
-========================
+=========================
 
 STP targets the `SMT-LIB 2.7 reference, release 2025-02-05
 <https://smt-lib.org/papers/smt-lib-reference-v2.7-r2025-02-05.pdf>`__
@@ -53,7 +53,7 @@ and output channels. ``reset-assertions`` preserves options and the logic,
 and retains declarations only when ``:global-declarations`` is true.
 
 Implemented language and protocol features
------------------------------------------
+------------------------------------------
 
 .. list-table::
    :header-rows: 1
@@ -184,7 +184,7 @@ internal symbols and abstract model values. Local shadowing and the legacy
 theory names and quote ``|lambda|``.
 
 Remaining limits and extensions
-------------------------------
+-------------------------------
 
 * Global sort parameters and polymorphic function declarations from 2.7
   are not implemented. ``declare-sort-parameter`` reports ``unsupported``.
