@@ -871,6 +871,7 @@ void SolverImpl::rebuild_engine()
   candidate.reset();
   model_pending = false;
   have_last = false;
+  assertion_names.clear();
   engine_call(mgr, "Solver::reset", [&] {
   while (mgr->bm->getAssertLevel() > 0)
     mgr->bm->Pop();
@@ -1277,6 +1278,8 @@ void Solver::pop(std::uint32_t n)
     try
     {
       s->mgr->bm->Pop();
+      if (s->assertion_names.size() > s->mgr->bm->getAssertLevel())
+        s->assertion_names.resize(s->mgr->bm->getAssertLevel());
     }
     catch (const stp::EngineFatal&)
     {
@@ -1336,6 +1339,7 @@ void Solver::reset_assertions()
     bm->clearUnknown();
   });
   s->have_last = false;
+  s->assertion_names.clear();
   s->model.reset();
   s->candidate.reset();
 }
@@ -1612,6 +1616,12 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   for (const ASTVec* level : bm->AssertLevels())
     stack_before.push_back(*level);
   auto restore_stack = [&] {
+    // A failed EXECUTE parse may already have solved its temporary stack.
+    // Its encoding and core provenance cannot survive rolling that stack
+    // back, even when the only assertion changes were additions.
+    s->stp->ClearAllTables();
+    s->stp->resetIncrementalSolver();
+    s->stp->discardRealSession();
     bool only_added = bm->getAssertLevel() >= stack_before.size();
     for (std::size_t i = 0; i < stack_before.size() && only_added; ++i)
     {
@@ -1627,7 +1637,6 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
         bm->AssertLevels()[i]->resize(stack_before[i].size());
       return;
     }
-    s->stp->ClearAllTables();
     while (bm->getAssertLevel() > 0)
       bm->Pop();
     for (const ASTVec& level : stack_before)
@@ -1717,6 +1726,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   ASTVec declared_at_end;
   Cpp_interface::SortMap sorts_at_end;
   Cpp_interface::FunctionMap definitions_at_end;
+  Cpp_interface::AssertionNames assertion_names_at_end;
   // The command line's parse: the manager's factory behind the type checker.
   ::TypeChecker checker(*s->mgr->factory(), *bm);
   Cpp_interface pi(*bm, &checker);
@@ -1724,6 +1734,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   pi.keepDeclaredSymbolsAtCleanup(&declared_at_end);
   pi.keepSortAliasesAtCleanup(&sorts_at_end);
   pi.keepFunctionsAtCleanup(&definitions_at_end);
+  pi.keepAssertionNamesAtCleanup(&assertion_names_at_end);
   // Parser scopes may forget a name, but the manager and its live handles
   // cannot. Refuse a conflicting identity while the parser can still roll
   // back, before adoption would merge sorts by name or hide a new symbol
@@ -1824,6 +1835,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   // a frame for every level already pushed (by the API or an earlier script)
   // so that a (pop) in this script can take one back.
   pi.adoptAssertLevels();
+  pi.adoptAssertionNames(s->assertion_names);
   // A function the script declares is scoped to the frontend's frame, which
   // deactivates it when the frame goes -- at a (pop), rightly, but also at
   // the end of the script, where the CLI's session ends and this one does
@@ -1982,6 +1994,10 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   for (const auto& entry : pi.definedFunctions())
     definitions_at_end.emplace(entry.first, entry.second);
   s->mgr->adopt_definitions(std::move(definitions_at_end));
+  pi.keepAssertionNamesAtCleanup(nullptr);
+  if (!pi.assertionNames().empty())
+    assertion_names_at_end = pi.assertionNames();
+  s->assertion_names = std::move(assertion_names_at_end);
   }
   // The switches a script's set-logic turns on are turned back when the
   // interface goes (the CLI keeps its interface alive through the solve);

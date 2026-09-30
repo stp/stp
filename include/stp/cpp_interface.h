@@ -36,6 +36,7 @@ THE SOFTWARE.
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -127,6 +128,9 @@ class Cpp_interface
 {
 public:
   using SortMap = std::map<std::string, SMT2SortDefinition>;
+  // Assertion occurrence -> label, separately for each assertion level.
+  // Definitions made by :named can outlive the assertion they label.
+  using AssertionNames = std::vector<std::map<size_t, std::string>>;
 
 private:
   STPMgr& bm;
@@ -267,6 +271,12 @@ public:
   // Keep live define-funs across a frontend's end-of-script cleanup. Moving
   // the table avoids copying scripts with many definitions.
   void keepFunctionsAtCleanup(FunctionMap* sink) { functions_at_cleanup = sink; }
+  void keepAssertionNamesAtCleanup(AssertionNames* sink)
+  {
+    assertion_names_at_cleanup = sink;
+  }
+  const AssertionNames& assertionNames() const { return assertion_names; }
+  void adoptAssertionNames(const AssertionNames& names);
   const FunctionMap& definedFunctions() const { return functions; }
   // Import a definition whose private formal identities are already stable.
   void addFunction(const Function& function);
@@ -307,6 +317,9 @@ private:
   ASTVec* symbols_at_cleanup = nullptr;
   SortMap* sorts_at_cleanup = nullptr;
   FunctionMap* functions_at_cleanup = nullptr;
+  AssertionNames* assertion_names_at_cleanup = nullptr;
+  AssertionNames assertion_names;
+  std::optional<std::string> current_assertion_name;
   std::function<void()> after_public_reset;
   std::function<bool(const std::string&, const ASTNode&)> accept_symbol_declaration;
   std::function<bool(const std::string&, const SourceSort&)> accept_sort_declaration;
@@ -359,6 +372,11 @@ private:
   bool produce_assertions = false;
   bool produce_assignments = false;
   bool produce_unsat_assumptions = false;
+  bool produce_unsat_cores = false;
+  bool core_solver_layout = false;
+  bool last_core_available = false;
+  std::vector<std::string> last_unsat_core;
+  std::vector<size_t> last_core_assumption_indices;
   enum class Mode { Start, Assert, Sat, Unsat };
   Mode mode = Mode::Start;
   bool protocol_checks = false;
@@ -490,6 +508,9 @@ public:
   DLL_PUBLIC UserDefinedFlags& getUserFlags();
 
   DLL_PUBLIC void AddAssert(const ASTNode& assert);
+  void nameCurrentAssertion(const std::string& name);
+  void addParsedAssertion(const ASTNode& assertion);
+  void getUnsatCore();
 
   // NODES//
   DLL_PUBLIC ASTNode CreateNode(stp::Kind kind,

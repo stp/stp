@@ -109,8 +109,9 @@ std::map<std::string, std::string> capabilities()
   c["fp.rem.limit"] = "2^eb+sb-4<=2304";
   c["kind.FP_TO_REAL"] = "true";
   c["kind.FP_TO_FP_FROM_REAL"] = "values-only";
-  c["cores.assertions"] = "false";
+  c["cores.assertions"] = "false"; // no native assert-and-track API
   c["cores.assumptions"] = "true";
+  c["smtlib.named-unsat-cores"] = "true";
   c["solvers-per-manager"] = "unbounded";
   c["interrupt.cryptominisat"] = "between-solver-calls";
 #ifdef USE_MINISAT

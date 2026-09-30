@@ -88,6 +88,93 @@ TEST(Parsing, definitions_survive_separate_calls_and_are_shared_by_the_manager)
   }
 }
 
+TEST(Parsing, named_cores_preserve_assertion_occurrences_across_parse_calls)
+{
+  TermManager tm;
+  Solver s(tm);
+  std::string output;
+  s.set_output_sink([&](std::string_view text) { output.append(text); });
+  s.parse_smt2("(declare-const p Bool)(declare-const q Bool)"
+               "(assert (! p :named positive))(assert (! q :named irrelevant))");
+  // A prior ordinary check must neither collapse the assertion vector nor
+  // leave the named assertions permanent in the core-producing encoding.
+  s.parse_smt2("(check-sat)", ParseMode::EXECUTE);
+  ASSERT_EQ(s.assertions().size(), 2u);
+  s.push();
+  s.parse_smt2("(assert (! (not p) :named negative))");
+  output.clear();
+  const char* check = "(set-option :produce-unsat-cores true)"
+                      "(check-sat)(get-unsat-core)";
+  s.parse_smt2(check, ParseMode::EXECUTE);
+  EXPECT_EQ(output, "unsat\n(|positive| |negative|)\n");
+  ASSERT_EQ(s.assertions().size(), 3u);
+  s.pop();
+  EXPECT_TRUE(s.check_sat().is_sat());
+  s.push();
+  s.parse_smt2("(assert (! (not p) :named replacement))");
+  output.clear();
+  s.parse_smt2(check, ParseMode::EXECUTE);
+  EXPECT_EQ(output, "unsat\n(|positive| |replacement|)\n");
+
+  // Labels belong to assertion occurrences in this solver, not to the
+  // manager's shared definitions of positive/negative/replacement.
+  Solver other(tm);
+  other.set_output_sink([&](std::string_view text) { output.append(text); });
+  other.assert_formula(s.parse_term("(not positive)"));
+  other.assert_formula(*tm.symbol("p"));
+  output.clear();
+  other.parse_smt2(check, ParseMode::EXECUTE);
+  EXPECT_EQ(output, "unsat\n()\n");
+  output.clear();
+  s.parse_smt2(check, ParseMode::EXECUTE);
+  EXPECT_EQ(output, "unsat\n(|positive| |replacement|)\n");
+
+  s.reset_assertions();
+  s.assert_formula(tm.mk_bool(false));
+  output.clear();
+  s.parse_smt2(check, ParseMode::EXECUTE);
+  EXPECT_EQ(output, "unsat\n()\n");
+}
+
+TEST(Parsing, failed_parse_restores_assertion_labels_and_lexer_depth)
+{
+  TermManager tm;
+  Solver s(tm);
+  std::string output;
+  s.set_output_sink([&](std::string_view text) { output.append(text); });
+  s.parse_smt2("(declare-const p Bool)(assert (! p :named original))");
+  API_EXPECT_ERROR(ErrorCode::PARSE,
+      s.parse_smt2("(reset-assertions)(assert (! false :named abandoned))"
+                   "(assert (! true :named broken"));
+  ASSERT_EQ(s.assertions().size(), 1u);
+  s.parse_smt2("(assert (! (not p) :named opposite))");
+  output.clear();
+  s.parse_smt2("(set-option :produce-unsat-cores true)"
+               "(check-sat)(get-unsat-core)", ParseMode::EXECUTE);
+  EXPECT_EQ(output, "unsat\n(|original| |opposite|)\n");
+}
+
+TEST(Parsing, a_failed_executed_core_check_does_not_escape_the_parse)
+{
+  TermManager tm;
+  Options options;
+  options.set_str("incremental", "on");
+  Solver s(tm, options);
+  s.parse_smt2("(declare-const p Bool)(assert (! p :named original))");
+  API_EXPECT_ERROR(ErrorCode::PARSE,
+      s.parse_smt2("(set-option :produce-unsat-cores true)"
+                   "(push 1)(assert (! (not p) :named temporary))"
+                   "(check-sat)(get-unsat-core)(assert missing)", ParseMode::EXECUTE));
+  ASSERT_EQ(s.assertions().size(), 1u);
+  EXPECT_EQ(s.level(), 0u);
+  EXPECT_TRUE(s.check_sat().is_sat());
+  std::string output;
+  s.set_output_sink([&](std::string_view text) { output.append(text); });
+  s.parse_smt2("(set-option :produce-unsat-cores true)"
+               "(check-sat-assuming ((not p)))(get-unsat-core)", ParseMode::EXECUTE);
+  EXPECT_EQ(output, "unsat\n(|original|)\n");
+}
+
 TEST(Parsing, definitions_commit_only_when_the_parse_succeeds)
 {
   TermManager tm;
@@ -270,13 +357,15 @@ TEST(Parsing, smt2_declare_and_assert)
   (void)testing::internal::GetCapturedStdout();
   EXPECT_EQ(tm.symbols().size(), 3u);
   EXPECT_EQ(s.assertions().size(), 5u);
-  // a script's check-sat is ignored in this mode, but the frontend conjoins
-  // the level's assertions on the way (a limit docs/api.rst lists)
+  // A script's check-sat is ignored in this mode and leaves the original
+  // assertion occurrences intact, as an executed check does.
+  const std::vector<Term> before_check = s.assertions();
   testing::internal::CaptureStdout();
   s.parse_smt2("(check-sat)\n");
   EXPECT_TRUE(testing::internal::GetCapturedStdout().empty());
-  EXPECT_EQ(s.assertions().size(), 1u);
-  EXPECT_EQ(s.assertions()[0].kind(), Kind::AND);
+  ASSERT_EQ(s.assertions().size(), before_check.size());
+  for (size_t i = 0; i < before_check.size(); ++i)
+    EXPECT_TRUE(s.assertions()[i].same_as(before_check[i]));
   EXPECT_TRUE(s.check_sat().is_sat());
   EXPECT_EQ(s.model().uint64_value(*tm.symbol("py")), 3u);
 }

@@ -1670,7 +1670,7 @@
     stp::releaseParserValue(name);
   }
 
-  void annotateTerm(const ASTNode& term,
+  void annotateTerm(unsigned depth, const ASTNode& term,
                     const std::vector<stp::SMT2Attribute>& attributes)
   {
     const bool closed = stp::SMT2EndAnnotation();
@@ -1689,6 +1689,10 @@
       if (!stp::GlobalParserInterface->validateTopLevelDeclarationName(name, &diagnostic))
         stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
       stp::GlobalParserInterface->storeFunction(name, ASTVec(), term, true);
+      // Only (! ... :named n) at the root of an assert labels an
+      // assertion. Nested annotations still introduce ordinary definitions.
+      if (depth == 2)
+        stp::GlobalParserInterface->nameCurrentAssertion(name);
     }
   }
 
@@ -1883,7 +1887,8 @@
  /* ASCII Symbols */
  /* Semicolons (comments) are ignored by the lexer */
 %token UNDERSCORE_TOK
-%token LPAREN_TOK
+%token <uintval> LPAREN_TOK
+%type <uintval> annotation_open
 %token RPAREN_TOK
 
 /* Used for attributed expressions */
@@ -2115,7 +2120,7 @@ commands: commands command_open cmdi RPAREN_TOK
 cmdi:
      ASSERT_TOK an_formula
     {
-      stp::GlobalParserInterface->AddAssert(*$2);
+      stp::GlobalParserInterface->addParsedAssertion(*$2);
       stp::GlobalParserInterface->deleteNode($2);
       stp::GlobalParserInterface->success();
     }
@@ -2237,7 +2242,7 @@ cmdi:
 |
      GET_UNSAT_CORE_TOK
     {
-       stp::GlobalParserInterface->unavailableQuery("get-unsat-core", "produce-unsat-cores");
+       stp::GlobalParserInterface->getUnsatCore();
     }
 |
      GET_UNSAT_ASSUMPTIONS_TOK
@@ -2520,7 +2525,7 @@ function_def_name LPAREN_TOK RPAREN_TOK resolved_sort definition_body
 ;
 
 annotation_open:
-LPAREN_TOK EXCLAIMATION_MARK_TOK { stp::SMT2BeginAnnotation(); }
+LPAREN_TOK EXCLAIMATION_MARK_TOK { stp::SMT2BeginAnnotation(); $$ = $1; }
 ;
 
 annotation_attributes:
@@ -4037,7 +4042,7 @@ id_formid
 }
 | annotation_open an_formula annotation_attributes attributes RPAREN_TOK
 {
-  annotateTerm(*$2, *$4);
+  annotateTerm($1, *$2, *$4);
   stp::releaseParserValue($4);
   $$ = $2;
 }
@@ -4993,7 +4998,7 @@ LPAREN_TOK AS_TOK ABSTRACT_VALUE_TOK resolved_sort RPAREN_TOK
 }
 | annotation_open an_term annotation_attributes attributes RPAREN_TOK
 {
-  annotateTerm(*$2, *$4);
+  annotateTerm($1, *$2, *$4);
   stp::releaseParserValue($4);
   $$ = $2;
 }

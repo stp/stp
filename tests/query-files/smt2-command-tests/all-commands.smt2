@@ -50,6 +50,7 @@
 (check-sat)
 (get-info :all-statistics)
 (get-unsat-assumptions)
+(get-unsat-core)
 (pop 1)
 (push 1)
 (assert (= x #x1))

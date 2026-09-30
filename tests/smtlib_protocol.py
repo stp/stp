@@ -10,8 +10,8 @@ import unittest
 SOLVER = str(Path(sys.argv.pop(1)).resolve())
 
 
-def run(source, cwd=None):
-    return subprocess.run([SOLVER], input=source, text=True,
+def run(source, cwd=None, args=()):
+    return subprocess.run([SOLVER, *args], input=source, text=True,
                           capture_output=True, cwd=cwd, timeout=30)
 
 
@@ -134,6 +134,7 @@ class CommandModes(unittest.TestCase):
 (set-option :produce-assertions true)
 (set-option :global-declarations true)
 (set-option :produce-unsat-assumptions true)
+(set-option :produce-unsat-cores true)
 '''
         for prefix in [options + '(set-logic QF_BV)',
                        '(set-logic QF_BV)' + options]:
@@ -159,10 +160,9 @@ class CommandModes(unittest.TestCase):
 
     def test_unsupported_options_after_logic_do_not_end_the_script(self):
         result = run('(set-logic QF_BV)(set-option :produce-proofs true)'
-                     '(set-option :produce-unsat-cores true)'
                      '(set-option :random-seed 0)(check-sat)')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(result.stdout, 'unsupported\nunsupported\nunsupported\nsat\n')
+        self.assertEqual(result.stdout, 'unsupported\nunsupported\nsat\n')
 
     def test_disabled_queries_are_errors(self):
         for query, option, assertion in [
@@ -371,6 +371,227 @@ class Attributes(unittest.TestCase):
                      '(check-sat)')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, 'sat\n')
+
+
+class NamedUnsatCores(unittest.TestCase):
+    prefix = '(set-option :produce-unsat-cores true)(set-logic QF_BV)'
+
+    def check_script(self, source, args=()):
+        result = run(source, args=args)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stdout
+
+    def test_projects_failed_assertions_and_preserves_assertion_occurrences(self):
+        script = self.prefix + '''
+(declare-const p Bool)
+(declare-const q Bool)
+(assert (! p :named positive))
+(assert (! q :named irrelevant))
+(assert (! (not p) :named negative))
+(check-sat)
+(get-unsat-core)
+(get-unsat-core)
+(get-assertions)
+(check-sat)
+(get-unsat-core)
+'''
+        for args in [(), ('--incremental=on',)]:
+            with self.subTest(args=args):
+                output = self.check_script(script, args)
+                self.assertEqual(output.count('(|positive| |negative|)'), 3)
+                self.assertNotIn('|irrelevant|', output)
+                self.assertIn('(\n|p|\n|q|\n(not |p|)\n)', output)
+
+    def test_unnamed_background_and_syntactic_labels(self):
+        # All these named subterms become definitions, but none labels its
+        # whole assertion. Simplification can make their ASTs identical.
+        for assertion in [
+                '(assert (not (! true :named nested)))',
+                '(assert (let ((unused true)) (! false :named nested)))',
+                '(assert (! (! false :named nested) :ignored (x (y z))))',
+                '(define-fun f () Bool (! false :named nested))(assert f)',
+                '(assert (and (! false :named nested) true))']:
+            with self.subTest(assertion=assertion):
+                output = self.check_script(self.prefix + assertion +
+                                           '(check-sat)(get-unsat-core)')
+                self.assertEqual(output, 'unsat\n()\n')
+        output = self.check_script(self.prefix + '''
+(declare-const p Bool)
+(assert p)
+(assert (! (not p) :named |needs background|))
+(check-sat)
+(get-unsat-core)
+''')
+        self.assertEqual(output, 'unsat\n(|needs background|)\n')
+        output = self.check_script(self.prefix + '''
+(assert false)
+(assert (! true :named irrelevant))
+(check-sat)
+(get-unsat-core)
+''')
+        self.assertEqual(output, 'unsat\n()\n')
+
+    def test_scopes_aliases_and_global_declarations(self):
+        for global_declarations in [False, True]:
+            with self.subTest(global_declarations=global_declarations):
+                output = self.check_script(
+                    '(set-option :global-declarations ' +
+                    str(global_declarations).lower() + ')' + self.prefix + '''
+(declare-const p Bool)
+(assert (! p :named base))
+(push 1)
+(assert (! (not p) :named local))
+(check-sat)
+(get-unsat-core)
+(pop 1)
+(check-sat)
+(push 1)
+(assert (! (not p) :named replacement))
+(check-sat)
+(get-unsat-core)
+(pop 1)
+(assert (not base))
+(check-sat)
+(get-unsat-core)
+''')
+                self.assertEqual(output, 'unsat\n(|base| |local|)\nsat\n'
+                                 'unsat\n(|base| |replacement|)\n'
+                                 'unsat\n(|base|)\n')
+
+    def test_reset_assertions_removes_labels_even_when_names_survive(self):
+        output = self.check_script('(set-option :global-declarations true)' +
+                                  self.prefix + '''
+(assert (! false :named old))
+(check-sat)
+(get-unsat-core)
+(reset-assertions)
+(get-option :produce-unsat-cores)
+(assert old)
+(check-sat)
+(get-unsat-core)
+(reset)
+(get-option :produce-unsat-cores)
+''')
+        self.assertEqual(output, 'unsat\n(|old|)\ntrue\nunsat\n()\nfalse\n')
+
+    def test_unnamed_background_can_be_retracted_and_sat_models_survive(self):
+        output = self.check_script('(set-option :produce-models true)' + self.prefix + '''
+(declare-const p Bool)
+(assert (! p :named positive))
+(push 1)
+(assert (not p))
+(check-sat)
+(get-unsat-core)
+(pop 1)
+(check-sat)
+(get-value (p))
+(check-sat-assuming ((not p)))
+(get-unsat-core)
+(check-sat)
+(get-value (p))
+''')
+        self.assertEqual(output, 'unsat\n(|positive|)\nsat\n(\n( |p| true )\n)\n'
+                         'unsat\n(|positive|)\nsat\n(\n( |p| true )\n)\n')
+
+    def test_labels_quote_empty_reserved_and_spaced_names(self):
+        for name in ['||', '|assert|', '|with spaces|']:
+            with self.subTest(name=name):
+                output = self.check_script(self.prefix +
+                    '(assert (! (! false :named inner) :named ' + name +
+                    '))(check-sat)(get-unsat-core)')
+                self.assertEqual(output, 'unsat\n(' + name + ')\n')
+
+    def test_core_and_assumptions_are_jointly_unsatisfiable(self):
+        declarations = '(declare-const p Bool)(declare-const q Bool)(declare-const r Bool)'
+        named = {'np': '(not p)', 'nq': '(not q)', 'irrelevant': 'r'}
+        assertions = ''.join('(assert (! ' + term + ' :named ' + name + '))'
+                             for name, term in named.items())
+        for queries in ['(get-unsat-core)(get-unsat-assumptions)',
+                        '(get-unsat-assumptions)(get-unsat-core)']:
+            with self.subTest(queries=queries):
+                output = self.check_script(self.prefix +
+                    '(set-option :produce-unsat-assumptions true)' +
+                    declarations + assertions + '(check-sat-assuming (p q))' + queries)
+                lines = output.splitlines()
+                self.assertEqual(lines[0], 'unsat')
+                core, assumptions = lines[1:]
+                if queries.startswith('(get-unsat-assumptions)'):
+                    assumptions, core = core, assumptions
+                names = re.findall(r'\|([^|]*)\|', core)
+                self.assertTrue(names)
+                self.assertTrue(set(names) <= {'np', 'nq'})
+                # Replay exactly the two returned projections in a fresh
+                # solver, without the assertions/assumptions omitted by it.
+                replay = '(set-logic QF_BV)' + declarations
+                replay += ''.join('(assert ' + named[name] + ')' for name in names)
+                replay += '(check-sat-assuming ' + assumptions + ')'
+                self.assertEqual(self.check_script(replay), 'unsat\n')
+
+    def test_conjunctions_and_distinct_keep_valid_source_labels(self):
+        for left, right in [('(and p q)', '(not q)'),
+                            ('(distinct p q)', '(= p q)')]:
+            with self.subTest(left=left):
+                output = self.check_script(self.prefix +
+                    '(declare-const p Bool)(declare-const q Bool)' +
+                    '(assert (! ' + left + ' :named left))' +
+                    '(assert (! ' + right + ' :named right))' +
+                    '(check-sat)(get-unsat-core)')
+                self.assertEqual(output, 'unsat\n(|left| |right|)\n')
+
+    def test_option_changes_require_fresh_core_and_retire_permanent_units(self):
+        output = self.check_script('''
+(set-logic QF_BV)
+(declare-const p Bool)
+(assert (! p :named yes))
+(assert (! (not p) :named no))
+(check-sat)
+(set-option :produce-unsat-cores true)
+(check-sat)
+(get-unsat-core)
+(set-option :produce-unsat-cores false)
+(check-sat)
+(set-option :produce-unsat-cores true)
+(check-sat)
+(get-unsat-core)
+''', ('--incremental=on',))
+        self.assertEqual(output, 'unsat\nunsat\n(|yes| |no|)\n'
+                         'unsat\nunsat\n(|yes| |no|)\n')
+        result = run('(assert false)(check-sat)'
+                     '(set-option :produce-unsat-cores true)(get-unsat-core)')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('requires an unsat check', result.stdout)
+
+    def test_stale_and_sat_cores_are_rejected(self):
+        for middle in ['(assert true)', '(push 1)', '(reset-assertions)',
+                       '(pop 1)(check-sat)']:
+            with self.subTest(middle=middle):
+                result = run(self.prefix + '(push 1)(assert (! false :named n))'
+                             '(check-sat)' + middle + '(get-unsat-core)')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('get-unsat-core is not permitted', result.stdout)
+        output = self.check_script(self.prefix + '(assert (! false :named n))'
+            '(check-sat)(push 0)(pop 0)(define-fun f () Bool true)(get-unsat-core)')
+        self.assertEqual(output, 'unsat\n(|n|)\n')
+
+    def test_batch_and_whole_stack_routes_return_valid_cores(self):
+        cases = [
+            ('QF_BV', '(declare-const x (_ BitVec 8))',
+             '(= x #x00)', '(= x #x01)', ('--incremental=off',)),
+            ('QF_LRA', '(declare-const x Real)',
+             '(> x 1)', '(< x 0)', ()),
+            ('QF_UFBV', '(declare-fun f ((_ BitVec 8)) (_ BitVec 8))',
+             '(= (f #x00) #x00)', '(= (f #x00) #x01)', ()),
+            ('QF_ABV', '(declare-const a (Array (_ BitVec 4) (_ BitVec 4)))'
+             '(declare-const b (Array (_ BitVec 4) (_ BitVec 4)))',
+             '(= a b)', '(not (= a b))', ())]
+        for logic, declarations, left, right, args in cases:
+            with self.subTest(logic=logic):
+                output = self.check_script('(set-option :produce-unsat-cores true)'
+                    '(set-logic ' + logic + ')' + declarations +
+                    '(assert (! ' + left + ' :named left))' +
+                    '(assert (! ' + right + ' :named right))' +
+                    '(check-sat)(get-unsat-core)', args)
+                self.assertEqual(output, 'unsat\n(|left| |right|)\n')
 
 
 class NamedTerms(unittest.TestCase):

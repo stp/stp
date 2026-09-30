@@ -55,6 +55,10 @@ size_t IncrementalSolver::Impl::prepareAndEncodePushedLevels(
   {
     const bool individually =
         assumeLastLevelPerConjunct && level + 1 == assertionsSMT2.size();
+    // An empty/TRUE assumptions level still has exact provenance: if the
+    // background is unsatisfiable, no assumption contributed to its core.
+    if (individually)
+      lastLevelIndividual = true;
     PreprocessingTransaction levelTransaction(PreprocessingMode::PerLevel,
                                               assertionsSMT2[level]);
 
@@ -375,8 +379,6 @@ size_t IncrementalSolver::Impl::prepareAndEncodePushedLevels(
     {
       // Per-assumption mode keeps one source-conjunct root for reporting;
       // core-only mode uses the same direct-root mechanism for every level.
-      if (individually)
-        lastLevelIndividual = true;
       for (size_t k = 0; k < conjuncts.size(); k++)
       {
         const int r = levelRoots[k];
