@@ -492,9 +492,22 @@ struct NoWalkCheckpoint
   void operator()() const {}
 };
 
-template <class Cache, class Combine, class Checkpoint = NoWalkCheckpoint>
+struct NodeChildren
+{
+  ASTChildren operator()(const ASTNode& node) const
+  {
+    return node.GetChildren();
+  }
+};
+
+// A custom children provider can expose semantic dependencies, such as a
+// registered constant-array default. combine must rebuild that representation
+// too; its children need not have the node's physical Degree().
+template <class Cache, class Combine, class Checkpoint = NoWalkCheckpoint,
+          class Children = NodeChildren>
 ASTNode postOrderRebuild(const ASTNode& top, Cache& cache, Combine combine,
-                         Checkpoint checkpoint = Checkpoint())
+                         Checkpoint checkpoint = Checkpoint(),
+                         Children children = Children())
 {
   // One node's progress: where its children begin in the shared LIFO arena,
   // and how far along its own child list it has got. Keeping an ASTVec in
@@ -523,9 +536,10 @@ ASTNode postOrderRebuild(const ASTNode& top, Cache& cache, Combine combine,
 
   // Answers that need no frame, which is what the recursive form answered
   // without a call.
-  auto known = [&cache, &result, &checkpoint](const ASTNode& n) -> bool {
+  auto known = [&cache, &result, &checkpoint,
+                &children](const ASTNode& n) -> bool {
     checkpoint();
-    if (n.Degree() == 0)
+    if (children(n).empty())
     {
       result = n;
       return true;
@@ -560,9 +574,10 @@ ASTNode postOrderRebuild(const ASTNode& top, Cache& cache, Combine combine,
     }
 
     bool descended = false;
-    while (current.i < current.n.Degree())
+    const ASTChildren operands = children(current.n);
+    while (current.i < operands.size())
     {
-      if (known(current.n[current.i]))
+      if (known(operands[current.i]))
       {
         activeChildren.push_back(result);
         current.i++;
@@ -571,7 +586,7 @@ ASTNode postOrderRebuild(const ASTNode& top, Cache& cache, Combine combine,
 
       // Nothing above may be read after this push.
       current.waiting = true;
-      stack.emplace_back(current.n[current.i], activeChildren.size());
+      stack.emplace_back(operands[current.i], activeChildren.size());
       descended = true;
       break;
     }
@@ -580,7 +595,7 @@ ASTNode postOrderRebuild(const ASTNode& top, Cache& cache, Combine combine,
       continue;
 
     assert(activeChildren.size() - current.childrenBegin ==
-           current.n.Degree());
+           operands.size());
     combinedChildren.clear();
     combinedChildren.insert(
         combinedChildren.end(),

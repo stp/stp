@@ -389,8 +389,7 @@ ASTNode FpTotalise::totalise(const ASTNode& n, const bool knownMissing)
   {
     const ASTNode& value = bm->constArrayDefault(n);
     const ASTNode prepared = visit(value);
-    const ASTNode out = prepared == value
-        ? n : bm->CreateConstArray(n.GetSourceSort(), prepared);
+    const ASTNode out = bm->rebuildConstArray(n, prepared);
     traversal_cache[n] = out;
     if (out != n)
       persistent_cache[n] = out;

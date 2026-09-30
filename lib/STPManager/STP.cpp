@@ -465,7 +465,7 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   if (bm->has_distinct)
   {
     original_input = lowerDistinct(bm, original_input);
-    if (containsKind(original_input, DISTINCT))
+    if (containsKind(original_input, DISTINCT, true))
       FatalError("DISTINCT crossed the batch completed-root lowering barrier",
                  original_input);
   }
@@ -888,7 +888,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
                     const ASTNodeMap& arrayEqualityRewrites)
 {
   QueryPhaseScope query_work(bm->query_timing, QueryPhase::Other);
-  if (bm->has_distinct && containsKind(original_input, DISTINCT))
+  if (bm->has_distinct && containsKind(original_input, DISTINCT, true))
     FatalError("DISTINCT reached ordinary batch preprocessing", original_input);
   if (bm->UserFlags.enable_uninterpreted_functions &&
       containsKind(original_input, UF_APPLY))

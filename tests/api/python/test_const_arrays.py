@@ -98,6 +98,63 @@ def test_constant_arrays_against_each_other():
     s.close()
 
 
+@pytest.mark.parametrize("mode", ["auto", "on", "off"])
+def test_distinct_symbols_used_in_a_default_cannot_be_ordered(mode):
+    x, y, z = BitVecs("ca_order_x ca_order_y ca_order_z", 8)
+    a = Array("ca_order_a", BitVecSort(8), BitVecSort(8))
+    d = Distinct(x, y, z)
+    c = K(_a8(), If(UGT(x, y), BitVecVal(1, 8), BitVecVal(2, 8)))
+    s = Solver(incremental=mode)
+    # The hidden x > y occurrence forbids replacing d with x < y < z.
+    s.add(d, a == c, a[0] == 1)
+    assert s.check() == sat
+    m = s.model()
+    assert bool(m.eval(d)) is True
+    assert m.eval(x).as_long() > m.eval(y).as_long()
+    assert m[a].default.as_long() == 1
+    assert m.eval(c).default.as_long() == 1
+    s.push()
+    s.add(x == 2, y == 1, z == 0)
+    assert s.check() == sat
+    assert s.model().eval(a[255]).as_long() == 1
+    s.add(x == y)
+    assert s.check() == unsat
+    s.pop()
+    assert s.check() == sat
+    s.close()
+
+
+@pytest.mark.parametrize("mode", ["auto", "on", "off"])
+def test_distinct_shared_with_boolean_defaults_and_assumptions(mode):
+    x, y, z = BitVecs("ca_bool_x ca_bool_y ca_bool_z", 8)
+    gate = Bool("ca_bool_gate")
+    yes = Array("ca_yes", BitVecSort(8), BoolSort())
+    no = Array("ca_no", BitVecSort(8), BoolSort())
+    d = Distinct(x, y, z)
+    positive = K(BitVecSort(8), d)
+    negative = K(BitVecSort(8), Not(d))
+    s = Solver(incremental=mode)
+    # Both packed defaults and the visible occurrence share the same atom.
+    s.add(Or(d, gate), yes == positive, no == negative)
+    assert s.check(yes[0], no[0]) == unsat
+    for assumption, expected in ((yes[0], True), (no[0], False)):
+        assert s.check(assumption) == sat
+        m = s.model()
+        assert bool(m.eval(d)) is expected
+        assert bool(m[yes].default) is expected
+        assert bool(m[no].default) is (not expected)
+        assert bool(m.eval(positive).default) is expected
+        assert bool(m.eval(negative).default) is (not expected)
+        assert bool(m.eval(no[255])) is (not expected)
+    s.push()
+    s.add(d)
+    assert s.check(no[0]) == unsat
+    s.pop()
+    assert s.check(no[0]) == sat
+    assert bool(s.model().eval(d)) is False
+    s.close()
+
+
 @pytest.mark.parametrize("index_width", [1, 8])
 @pytest.mark.parametrize("mode", ["auto", "on", "off"])
 def test_symbolic_defaults_survive_preprocessing_and_complete_models(index_width, mode):
@@ -263,6 +320,17 @@ def test_default_refuses_theories_that_need_earlier_preparation():
     b = Array("ca_condition_b", BitVecSort(8), BitVecSort(8))
     with pytest.raises(Unsupported):
         K(BitVecSort(8), If(a == b, x, x + 1))
+    c = Array("ca_condition_c", BitVecSort(8), BitVecSort(8))
+    d = Distinct(a, b, c)
+    s = Solver()
+    s.add(d, x == 3)  # Array DISTINCT remains supported outside defaults.
+    with pytest.raises(Unsupported):
+        K(BitVecSort(8), d)
+    with pytest.raises(Unsupported):
+        K(BitVecSort(8), If(d, x, x + 1))
+    assert s.check() == sat
+    assert s.model().eval(x).as_long() == 3
+    s.close()
 
 
 def test_symbolic_rounding_mode_in_a_float_default_is_pinned():

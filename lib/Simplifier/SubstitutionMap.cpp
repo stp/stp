@@ -405,8 +405,7 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
     if (current.constArray)
     {
       assert(current.newChildren.size() == 1);
-      built = manager.CreateConstArray(
-          current.n.GetSourceSort(), current.newChildren[0]);
+      built = manager.rebuildConstArray(current.n, current.newChildren[0]);
     }
     // A Real term has no widths to restore; CreateNode is the whole of it,
     // and asking a Real for a value width is an error rather than a zero.

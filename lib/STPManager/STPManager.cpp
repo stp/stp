@@ -703,6 +703,17 @@ const ASTNode& STPMgr::constArrayDefault(const ASTNode& n) const
   return it->second;
 }
 
+ASTNode STPMgr::rebuildConstArray(const ASTNode& n,
+                                  const ASTNode& default_value)
+{
+  if (default_value == constArrayDefault(n))
+    return n;
+  const SourceSort sort = n.GetSourceSort();
+  const ASTNode value = sort.element().kind() == SourceSort::Kind::Bool
+      ? unpackBoolean(*defaultNodeFactory, default_value) : default_value;
+  return CreateConstArray(sort, value);
+}
+
 ASTChildren STPMgr::childrenWithConstArrayDefault(const ASTNode& n) const
 {
   if (n.GetKind() == SYMBOL)
@@ -725,6 +736,7 @@ ASTNode STPMgr::unsupportedConstArrayDefault(const ASTNode& t) const
     if (!seen.insert(node).second)
       continue;
     if (node.GetKind() == UF_APPLY || node.GetKind() == ARRAY_EQ ||
+        (node.GetKind() == DISTINCT && node[0].GetType() == ARRAY_TYPE) ||
         node.GetSourceSort().kind() == SourceSort::Kind::Real)
       return node;
     if (isConstArray(node))

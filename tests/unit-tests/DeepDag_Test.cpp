@@ -62,6 +62,7 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 #include "stp/Simplifier/CommonFactor.h"
 #include "stp/Simplifier/CommonSubSum.h"
+#include "stp/Simplifier/DistinctOrdering.h"
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/Simplifier.h"
@@ -2021,6 +2022,68 @@ bool constArrayDefaultWalksOk(Context& c, unsigned depth)
   return defaults == depth && conversions == 1 && foundValidRm;
 }
 
+// DISTINCT surveys and rebuilding must cross the same hidden-default spine.
+// One top-level group has a symbol used in the innermost default, a second
+// predicate occurs both there and as an assertion, and a third is independent.
+bool distinctConstArrayDefaultWalksOk(Context& c, unsigned depth)
+{
+  const SourceSort bv8 = SourceSort::bitVector(8);
+  const SourceSort arrays = SourceSort::array(bv8, bv8);
+  const ASTNode x = c.mgr.CreateSourceSymbol("distinct_default_x", bv8);
+  const ASTNode y = c.mgr.CreateSourceSymbol("distinct_default_y", bv8);
+  const ASTNode z = c.mgr.CreateSourceSymbol("distinct_default_z", bv8);
+  const ASTNode escaped = c.hf->CreateNode(DISTINCT, ASTVec{x, y, z});
+  const ASTNode a = c.mgr.CreateSourceSymbol("distinct_default_a", bv8);
+  const ASTNode b = c.mgr.CreateSourceSymbol("distinct_default_b", bv8);
+  const ASTNode d = c.mgr.CreateSourceSymbol("distinct_default_d", bv8);
+  const ASTNode shared = c.hf->CreateNode(DISTINCT, ASTVec{a, b, d});
+  const ASTNode u = c.mgr.CreateSourceSymbol("distinct_default_u", bv8);
+  const ASTNode v = c.mgr.CreateSourceSymbol("distinct_default_v", bv8);
+  const ASTNode w = c.mgr.CreateSourceSymbol("distinct_default_w", bv8);
+  const ASTNode independent = c.hf->CreateNode(DISTINCT, ASTVec{u, v, w});
+  const ASTNode i = c.mgr.CreateSourceSymbol("distinct_default_i", bv8);
+  const ASTNode j = c.mgr.CreateSourceSymbol("distinct_default_j", bv8);
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  ASTNode value = c.hf->CreateTerm(ITE, 8, shared, x, zero);
+  for (unsigned level = 0; level < depth; ++level)
+  {
+    const ASTNode array = c.mgr.CreateConstArray(arrays, value);
+    const ASTNode store = c.hf->CreateArrayTerm(WRITE, 8, 8, array, i, zero);
+    value = c.hf->CreateTerm(READ, 8, store, j);
+  }
+  const ASTNode root = c.hf->CreateNode(
+      AND, ASTVec{escaped, shared, independent, c.formula(value)});
+  c.roots.push_back(root);
+
+  size_t ordered = 0;
+  const ASTNode orderedRoot = applyDistinctOrdering(&c.mgr, root, &ordered);
+  c.roots.push_back(orderedRoot);
+  // The simplifying factory canonicalizes x < y to y > x.
+  if (ordered != 1 || !containsKind(orderedRoot, BVGT, true))
+    return false;
+
+  // Check which groups survived, not just the count of replacements.
+  ASTNodeSet seen;
+  ASTVec pending{orderedRoot};
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!seen.insert(node).second)
+      continue;
+    for (const ASTNode& child : c.mgr.childrenWithConstArrayDefault(node))
+      pending.push_back(child);
+  }
+  if (!seen.count(escaped) || !seen.count(shared) || seen.count(independent))
+    return false;
+
+  const ASTNode lowered = lowerDistinct(&c.mgr, orderedRoot);
+  c.roots.push_back(lowered);
+  return !containsKind(lowered, DISTINCT, true) &&
+         containsKind(value, DISTINCT, true) &&
+         containsKind(orderedRoot, DISTINCT, true);
+}
+
 // The LISP printer, which is what operator<< on a node uses -- so a deep
 // node cannot even be printed, including from an error path.
 bool printerLispOk(Context& c, unsigned depth)
@@ -2059,6 +2122,12 @@ TEST(DeepDag, shallow_const_array_default_walks)
 {
   Context c;
   EXPECT_TRUE(constArrayDefaultWalksOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_distinct_const_array_default_walks)
+{
+  Context c;
+  EXPECT_TRUE(distinctConstArrayDefaultWalksOk(c, SHALLOW));
 }
 
 TEST(DeepDag, shallow_rewriting)
@@ -3019,6 +3088,10 @@ TEST(DeepDag, deep_fp_totalise)        { EXPECT_STACK_SAFE(fpTotaliseChainOk, 20
 TEST(DeepDag, deep_const_array_default_walks)
 {
   EXPECT_STACK_SAFE(constArrayDefaultWalksOk, 1000);
+}
+TEST(DeepDag, deep_distinct_const_array_default_walks)
+{
+  EXPECT_STACK_SAFE(distinctConstArrayDefaultWalksOk, 1000);
 }
 TEST(DeepDag, deep_uf_lowering)        { EXPECT_STACK_SAFE(ufLoweringOk, 20000); }
 
