@@ -24,8 +24,8 @@
 Model.from_smt2. Terms travel as their public structure (kind, indices, children,
 values, symbol declarations) and are rebuilt through the name table of the target
 manager; the SMT-LIB text of a model is read by a small s-expression reader and the
-values are constructed through the API (the parser does not read back the S!k spelling
-of a value of a declared sort)."""
+values are constructed through the API. Abstract values of declared sorts are
+reconstructed from their equalities and disequalities."""
 
 import re
 from fractions import Fraction
@@ -266,8 +266,13 @@ def array_cells(sx):
     return default, list(seen.values())
 
 
-def uninterpreted_index(sx):
-    """k of a printed uninterpreted value S!k; None if sx is not one."""
+def uninterpreted_index(sx, sort):
+    """k of a printed (as @S!k S), or legacy S!k value; None if invalid."""
+    if isinstance(sx, list):
+        if (len(sx) != 3 or sx[0] != "as" or not isinstance(sx[2], str)
+                or unquote_symbol(sx[2]) != sort.name()):
+            return None
+        sx = sx[1]
     if isinstance(sx, str):
         m = re.match(r"^.*!(\d+)$", unquote_symbol(sx))
         if m:
@@ -457,7 +462,7 @@ def model_from_smt2(text, tm, solver_factory):
                                                            value_of(el, sort.range(), tm)]))
             continue
         if sort.kind() == SortKind.UNINTERPRETED:
-            k = uninterpreted_index(body)
+            k = uninterpreted_index(body, sort)
             if k is None:
                 raise ParseError("cannot read %s as a value of %r" % (write_sexpr(body), sort), code=ErrorCode.PARSE)
             by_sort.setdefault(sort, []).append((sym, k))
