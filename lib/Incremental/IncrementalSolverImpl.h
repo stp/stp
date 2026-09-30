@@ -2679,10 +2679,16 @@ struct IncrementalSolver::Impl
   // reached the solver" -- and an unconstrained fresh variable is exactly
   // the meaning the blasted formula gives an unused bit, the same argument
   // ToSATAIG makes for lemma-only extensionality symbols.
+  // This memo belongs to the SAT backend, not just the AIG manager: a
+  // backend rebuild discards the bit bindings even if the AIGs survive.
+  ASTNodeSet totalizedSymbols;
+
   void totalizeSymbol(const ASTNode& s)
   {
     // Eager-Ackermann registry rows carry no index symbol at all.
     if (s.IsNull() || s.GetKind() != SYMBOL)
+      return;
+    if (totalizedSymbols.find(s) != totalizedSymbols.end())
       return;
     const unsigned width = std::max((unsigned)1, s.GetValueWidth());
     for (unsigned i = 0; i < width; i++)
@@ -2690,6 +2696,9 @@ struct IncrementalSolver::Impl
       BBNodeAIG bit = encoding.nodes().CreateSymbol(s, i);
       ensureEncoded(Aig_Regular(bit.n));
     }
+    // Publish only after every bit is encoded. Preparation can be interrupted
+    // midway through a symbol; retrying must still finish the remaining bits.
+    totalizedSymbols.insert(s);
   }
 
   // What the last refinement-driven check-sat seeded into the batch-side
@@ -3021,9 +3030,10 @@ struct IncrementalSolver::Impl
   // Those rows live in the batch transformer's per-round table, not in the
   // persistent registry -- the round transforms on a fresh table by design
   // -- so totalizeRegistrySymbols cannot cover them. Idempotent (the bit
-  // creation is memoised), so calling it before every refinement entry is
-  // cheap, and necessary: the checker's lemma encodings can add rows
-  // mid-round.
+  // creation and completion are memoised), so calling it before every
+  // refinement entry is necessary: the checker's lemma encodings can add
+  // rows mid-round. Long chain rows share many anchors; completing each
+  // symbol only once avoids repeating a full bit-width walk per occurrence.
   //
   // The chain rows are covered here too, and not only in the registry pass:
   // an exact-stack round reaches read refinement without ever running that
@@ -3114,6 +3124,7 @@ struct IncrementalSolver::Impl
     symbolMapCache.releaseStorage();
 
     releaseContainer(driverReadPairs);
+    releaseContainer(totalizedSymbols);
     releaseContainer(driverReadPairSymbols);
     releaseContainer(driverReadPairValue);
     releaseContainer(fragmentCache);
@@ -3325,6 +3336,7 @@ struct IncrementalSolver::Impl
       rotateEncodingEpoch();
 
     cnf.reset(solver.get());
+    totalizedSymbols.clear();
     symbolMapCache.invalidate();
     // The fresh backend holds none of the abstraction's pinning clauses and
     // none of the variables they named, and its proxy constraints were
