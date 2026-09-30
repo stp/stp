@@ -305,6 +305,50 @@ def test_fp_values():
         FPVal(v, Float64())
 
 
+def test_quad_fraction_extremes_without_integer_string_limit_changes():
+    tm = TermManager()
+    quad = Float128(tm=tm)
+    smallest = fpFromBits(BitVecVal(1, 128, tm=tm), quad)
+    largest_bits = (0x7FFE << 112) | ((1 << 112) - 1)
+    largest = fpFromBits(BitVecVal(largest_bits, 128, tm=tm), quad)
+    assert smallest.as_fraction() == Fraction(1, 1 << 16494)
+    assert largest.as_fraction() == Fraction(((1 << 113) - 1) << 16271)
+    assert fpNeg(smallest).as_fraction() == -smallest.as_fraction()
+    assert fpNeg(largest).as_fraction() == -largest.as_fraction()
+    assert fpMinusZero(quad).as_fraction() == 0
+
+
+@pytest.mark.parametrize("ebits", [40, 64])
+@pytest.mark.parametrize("negative", [False, True])
+def test_wide_exponent_fractions(ebits, negative):
+    sort = main_tm().fp_sort(ebits, 4)
+    zero = fpZero(sort, negative)
+    assert zero.as_fraction() == Fraction(0)
+    # A wide exponent field can still describe an ordinary, small rational.
+    bias = (1 << (ebits - 1)) - 1
+    sign_bits = int(negative) << (ebits + 3)
+    for exponent, expected in ((bias - 1, Fraction(3, 4)),
+                               (bias, Fraction(3, 2)),
+                               (bias + 1, Fraction(3))):
+        value = fpFromBits(sign_bits | (exponent << 3) | 4, sort)
+        assert value.as_fraction() == (-expected if negative else expected)
+
+
+@pytest.mark.parametrize("ebits", [40, 64])
+@pytest.mark.parametrize("distance", [-(1 << 24) - 1, (1 << 24) + 1])
+def test_fraction_preserves_native_size_limit(ebits, distance):
+    sort = main_tm().fp_sort(ebits, 4)
+    bias = (1 << (ebits - 1)) - 1
+    value = fpFromBits((bias + distance) << 3, sort)
+    # The exponent's distance from the bias exceeds the native limit by one.
+    # Keep them close to the boundary so a missing guard is safe to exercise.
+    with pytest.raises(Unsupported) as native:
+        value.fp_to_rational()
+    with pytest.raises(Unsupported) as rational:
+        value.as_fraction()
+    assert rational.value.code == native.value.code == ErrorCode.UNSUPPORTED
+
+
 def test_literal_strictness():
     with pytest.raises(ArgumentError) as e:
         BitVecVal(256, 8)
