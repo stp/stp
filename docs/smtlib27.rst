@@ -225,11 +225,16 @@ definitions introduced by ``:named``. A new check replaces the previous
 core, and a context change makes it unavailable until another unsat check.
 
 Cores need not be minimal. Core production engages the assumption solver
-from the first check where supported. With ``--incremental=off``, Real
-arithmetic, or an encoding that treats the complete stack as one block
-(including UF applications, whole-array equality and DISTINCT ordering),
-the existing engine exposes only a coarse core. Those checks return all
-active assertion labels and, when requested, all user assumptions.
+from the first check where supported. UF applications and whole-array
+equality retain individual assertion origins through private SAT selectors,
+including when solving requires theory refinement. This path bypasses UF
+pre-propagation, whole-stack elimination and DISTINCT symmetry breaking:
+those passes do not yet preserve dependencies for individual core entries.
+
+With ``--incremental=off``, Real arithmetic, or a standalone DISTINCT-ordering
+block without UF applications or whole-array equality, the engine still
+exposes only a coarse core. Those checks return all active assertion labels
+and, when requested, all user assumptions.
 
 Remaining limits and extensions
 -------------------------------

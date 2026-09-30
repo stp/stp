@@ -163,16 +163,17 @@ public:
                               const ASTVec* sourceAssumptions = nullptr);
 
   // The unsat story of the most recent checkSat, valid until the next one.
-  // hasAssumptionGranularity: the last level was assumed per conjunct and
-  // the backend reported which assumptions failed -- then
+  // hasAssumptionGranularity: the last level was tracked through direct roots
+  // or theory-block selectors, and the backend reported failed assumptions.
+  // Then
   // lastUnsatAssumptionConjuncts() is the (possibly empty: the
   // unsatisfiability may not need the assumptions at all) subset of that
   // level's conjuncts in the core. Without granularity a caller must fall
   // back to reporting every assumption, which is always a correct core.
   // lastUnsatCoreLevels() is the set of pushed-level indices (into the
   // checkSat argument vector) whose assumed literals the refutation used;
-  // an extensionality round is assumed as one block literal, so it
-  // reports every level.
+  // a theory block reports every level even when its selectors identify
+  // individual source assumptions: its definitions/lemmas span the stack.
   bool lastSolveWasUnsat() const;
   bool lastUnsatHasAssumptionGranularity() const;
   std::vector<ASTNode> lastUnsatAssumptionConjuncts() const;

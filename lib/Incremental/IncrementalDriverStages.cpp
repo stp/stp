@@ -39,6 +39,7 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
   lastUnsat = false;
   lastUnsatCoarse = false;
   lastLevelIndividual = false;
+  lastLevelSelectors = false;
   modelPending = false;
   if (ufAdapter)
     ufAdapter->invalidateCertifiedModel();
@@ -201,7 +202,8 @@ bool IncrementalSolver::Impl::tryExactStackRoute(
     if (f.arrayEq || f.ufApply)
     {
       result = exactStackCheckSat(assertionsSMT2,
-                                  firstForcedIncrementalSolve);
+                                  firstForcedIncrementalSolve, false, NULL,
+                                  ASTNode(), 0, assumeLastLevelPerConjunct);
       return true;
     }
   }

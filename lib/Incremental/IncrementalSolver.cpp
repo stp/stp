@@ -79,8 +79,8 @@ bool IncrementalSolver::lastSolveWasUnsat() const
 
 bool IncrementalSolver::lastUnsatHasAssumptionGranularity() const
 {
-  return impl->lastUnsat && !impl->lastUnsatCoarse &&
-         impl->lastLevelIndividual;
+  return impl->lastUnsat && impl->lastLevelIndividual &&
+         (!impl->lastUnsatCoarse || impl->lastLevelSelectors);
 }
 
 std::vector<size_t> IncrementalSolver::lastUnsatAssumptionIndices() const
@@ -300,6 +300,17 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
   const ASTVec& inputLevels = assumeLastLevelPerConjunct
                                  ? trackedLevels : assertionsSMT2;
 
+  // Theory cores use selectors inside their completed root. Whole-formula
+  // symmetry breaking before those selectors are introduced would erase the
+  // conditions under which an assertion participates in the solve.
+  bool trackTheoryAssumptions = false;
+  if (assumeLastLevelPerConjunct)
+    for (const ASTNode& level : inputLevels)
+    {
+      const Fragment& f = impl->fragment(level);
+      trackTheoryAssumptions = trackTheoryAssumptions || f.arrayEq || f.ufApply;
+    }
+
   // Survey the complete active formula while DISTINCT is still native. An
   // earned ordering is passed as a whole-formula override and encoded behind
   // an assumption: unlike a base-level unit, that root can be withdrawn on the
@@ -309,7 +320,8 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
   // optimization exists to avoid.
   ASTNode assumptionScopedRoot;
   size_t orderedDistincts = 0;
-  if (impl->bm->UserFlags.distinct_ordering && impl->bm->has_distinct)
+  if (!trackTheoryAssumptions && impl->bm->UserFlags.distinct_ordering &&
+      impl->bm->has_distinct)
   {
     const ASTNode active = inputLevels.size() == 1
                                ? inputLevels[0]

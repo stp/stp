@@ -219,6 +219,55 @@ TEST_F(SolverTest, assumption_origins_survive_shared_conjuncts_and_collapsed_que
   EXPECT_TRUE(inc.check_sat(next).is_unsat());
 }
 
+TEST_F(SolverTest, theory_assumption_cores_survive_reuse_and_pop)
+{
+  for (bool arrays : {false, true})
+  {
+    SCOPED_TRACE(arrays ? "arrays" : "UF");
+    TermManager t;
+    Options options;
+    options.set_str("incremental", "on");
+    options.set_str("uf-ackermann", "off");
+    options.set_uint("array-ackermann-budget", 0);
+    Solver inc(t, options);
+    const Sort bv = t.mk_bv_sort(8);
+    const Term irrelevant = t.declare("irrelevant", t.mk_bool_sort());
+    Term left, right;
+    if (arrays)
+    {
+      const Sort array = t.mk_array_sort(bv, bv);
+      const Term a = t.declare("a", array), b = t.declare("b", array);
+      const Term i = t.declare("i", bv);
+      left = a == b;
+      right = a[i] != b[i];
+    }
+    else
+    {
+      const Term x = t.declare("x", bv), y = t.declare("y", bv);
+      const Term f = t.declare("f", t.mk_fun_sort({bv}, bv));
+      left = x == y;
+      right = f(x) != f(y);
+    }
+    inc.add(left);
+    for (unsigned round = 0; round < 3; ++round)
+    {
+      ASSERT_TRUE(inc.check_sat({right, irrelevant}).is_unsat());
+      const std::vector<Term> core = inc.unsat_assumptions();
+      ASSERT_EQ(core.size(), 1u);
+      EXPECT_TRUE(core[0].same_as(right));
+      EXPECT_TRUE(inc.check_sat(core).is_unsat());
+      EXPECT_TRUE(inc.check_sat({irrelevant}).is_sat());
+      EXPECT_TRUE(inc.model().bool_value(left));
+      inc.push();
+      inc.add(right);
+      ASSERT_TRUE(inc.check_sat({irrelevant}).is_unsat());
+      EXPECT_TRUE(inc.unsat_assumptions().empty());
+      inc.pop();
+      EXPECT_TRUE(inc.check_sat().is_sat());
+    }
+  }
+}
+
 // Every core the driver's answer gives is a core: it rechecks unsat. The
 // driver reports failed conjuncts of the assumption level, flattened and
 // with distinct lowered, and the solver kept an assumption only if that

@@ -1474,7 +1474,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
                   coreTerms.empty() ? bm.ASTTrue
                     : coreTerms.size() == 1 ? coreTerms.front()
                     : bm.hashingNodeFactory->CreateNode(AND, coreTerms)};
-    // Batch and whole-stack encodings have no finer provenance. The same
+    // Batch and untracked whole-stack encodings have no finer provenance. The same
     // fallback as get-unsat-assumptions keeps their full input core valid.
     for (size_t i = 0; i < coreTerms.size(); ++i)
       coreIndices.push_back(i);
@@ -2457,7 +2457,7 @@ void Cpp_interface::getUnsatAssumptions()
   // Per-assumption granularity from the driver when it ran the solve
   // (IncrementalSolver::lastUnsatAssumptionIndices); the full assumption set
   // is always a correct core, and covers the batch first solve and the
-  // extensionality rounds.
+  // untracked whole-stack rounds.
   std::vector<size_t> used = last_core_assumption_indices;
   if (!last_assumption_core_available)
     for (size_t i = 0; i < lastAssumptionTerms.size(); ++i)

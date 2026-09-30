@@ -589,6 +589,61 @@ class NamedUnsatCores(unittest.TestCase):
             '(check-sat)(push 0)(pop 0)(define-fun f () Bool true)(get-unsat-core)')
         self.assertEqual(output, 'unsat\n(|n|)\n')
 
+    def test_theory_cores_replay_with_background_and_assumptions(self):
+        cases = [
+            ('QF_UFBV',
+             '(declare-const x (_ BitVec 8))(declare-const y (_ BitVec 8))'
+             '(declare-fun f ((_ BitVec 8)) (_ BitVec 8))',
+             {'arguments': '(= x y)'}, '(distinct (f x) (f y))'),
+            ('QF_ABV',
+             '(declare-const a (Array (_ BitVec 8) (_ BitVec 8)))'
+             '(declare-const b (Array (_ BitVec 8) (_ BitVec 8)))'
+             '(declare-const i (_ BitVec 8))',
+             {'arrays': '(= a b)'}, '(distinct (select a i) (select b i))'),
+            ('QF_AUFBV',
+             '(declare-const a (Array (_ BitVec 8) (_ BitVec 8)))'
+             '(declare-const b (Array (_ BitVec 8) (_ BitVec 8)))'
+             '(declare-const x (_ BitVec 8))(declare-const y (_ BitVec 8))'
+             '(declare-fun f ((_ BitVec 8)) (_ BitVec 8))',
+             {'arguments': '(= x y)', 'arrays': '(= a b)'},
+             '(distinct (select a (f x)) (select b (f y)))'),
+        ]
+        modes = [(), ('--uf-ackermann=off', '--array-ackermann-budget=0'),
+                 ('--uf-ackermann=on', '--ackermanize'),
+                 ('--incremental-core-only',),
+                 ('--incremental-reencode-limit=1',
+                  '--incremental-semantic-cache-limit=8')]
+        for logic, declarations, necessary, conflict in cases:
+            named = dict(necessary, irrelevant='r')
+            prefix = '(set-option :produce-unsat-cores true)' + \
+                '(set-option :produce-unsat-assumptions true)' + \
+                '(set-option :produce-models true)(set-logic ' + logic + ')'
+            declarations += '(declare-const p Bool)(declare-const q Bool)' + \
+                '(declare-const r Bool)'
+            background = '(assert (=> p ' + conflict + '))'
+            assertions = ''.join('(assert (! ' + formula + ' :named ' + name + '))'
+                                 for name, formula in named.items())
+            for args in modes:
+                with self.subTest(logic=logic, args=args):
+                    output = self.check_script(prefix + declarations + background +
+                        assertions + '(check-sat-assuming (p q))(get-unsat-core)'
+                        '(get-unsat-assumptions)(check-sat-assuming (q))'
+                        '(get-value (p))', args)
+                    lines = output.splitlines()
+                    self.assertEqual(lines[0], 'unsat')
+                    names = re.findall(r'\|([^|]*)\|', lines[1])
+                    self.assertEqual(set(names), set(necessary))
+                    self.assertEqual(lines[2], '(|p|)')
+                    self.assertEqual(lines[3], 'sat')
+                    self.assertIn('|p| false', output)
+                    # Replay the two projections together with the unnamed
+                    # background, through both the batch and incremental paths.
+                    replay = prefix + declarations + background + ''.join(
+                        '(assert ' + named[name] + ')' for name in names) + \
+                        '(check-sat-assuming ' + lines[2] + ')'
+                    for replay_args in [('--incremental=off',), ('--incremental=on',)]:
+                        self.assertEqual(self.check_script(replay, replay_args), 'unsat\n')
+
     def test_batch_and_whole_stack_routes_return_valid_cores(self):
         cases = [
             ('QF_BV', '(declare-const x (_ BitVec 8))',

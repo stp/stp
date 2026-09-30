@@ -54,4 +54,40 @@ TEST(IncrementalAssumptionOrigins, TrueAndFalseRetainInputPositions)
             inc.checkSat(ASTVec{bm.ASTFalse, bm.ASTTrue}, true, false, &none));
   EXPECT_TRUE(inc.lastUnsatAssumptionIndices().empty());
 }
+
+TEST(IncrementalAssumptionOrigins, TheorySelectorsDoNotNarrowTheScopeCache)
+{
+  STPMgr bm;
+  bm.UserFlags.enable_array_equality = true;
+  bm.UserFlags.array_eager_budget = 0;
+  SubstitutionMap sm(&bm);
+  Simplifier simp(&bm, &sm);
+  ArrayTransformer at(&bm, &simp);
+  AbsRefine_CounterExample ce(&bm, &simp, &at);
+  IncrementalSolver inc(&bm, &ce, &simp, &at);
+  NodeFactory* nf = bm.defaultNodeFactory;
+  const ASTNode a = bm.CreateSymbol("a", 4, 8);
+  const ASTNode b = bm.CreateSymbol("b", 4, 8);
+  const ASTNode i = bm.CreateSymbol("i", 0, 4);
+  const ASTNode irrelevant = bm.CreateSymbol("irrelevant", 0, 0);
+  const ASTNode equal = nf->CreateNode(ARRAY_EQ, a, b);
+  const ASTNode different = nf->CreateNode(NOT, nf->CreateNode(
+      EQ, nf->CreateTerm(READ, 8, a, i), nf->CreateTerm(READ, 8, b, i)));
+  const ASTVec sources{different, irrelevant};
+  ASSERT_EQ(SOLVER_UNSATISFIABLE, inc.checkSat(
+      ASTVec{bm.ASTTrue, equal, nf->CreateNode(AND, sources)}, true, false, &sources));
+  EXPECT_TRUE(inc.lastUnsatHasAssumptionGranularity());
+  EXPECT_EQ((std::vector<size_t>{0}), inc.lastUnsatAssumptionIndices());
+  EXPECT_EQ((std::vector<size_t>{1, 2}), inc.lastUnsatCoreLevels());
+
+  ASSERT_EQ(SOLVER_SATISFIABLE, inc.checkSat(ASTVec{bm.ASTTrue, equal}));
+  EXPECT_FALSE(inc.lastUnsatHasAssumptionGranularity());
+
+  const ASTVec none;
+  ASSERT_EQ(SOLVER_UNSATISFIABLE, inc.checkSat(
+      ASTVec{bm.ASTTrue, nf->CreateNode(AND, equal, different), bm.ASTTrue},
+      true, false, &none));
+  EXPECT_TRUE(inc.lastUnsatHasAssumptionGranularity());
+  EXPECT_TRUE(inc.lastUnsatAssumptionIndices().empty());
+}
 } // namespace

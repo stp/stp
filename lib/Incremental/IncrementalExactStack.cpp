@@ -262,8 +262,8 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
 
   if (!sat)
   {
-    // The complete stack rode one assumption, so its core is deliberately
-    // coarse even though this solve did not need the refinement adapter.
+    // Keep whole-stack level accounting conservative, including when an
+    // eagerly lowered theory block carries individual source selectors.
     recordUnsat(assumptions, assertionsSMT2.size(), true);
     return SOLVER_UNSATISFIABLE;
   }
@@ -326,13 +326,15 @@ SOLVER_RETURN_TYPE
 IncrementalSolver::Impl::exactStackCheckSat(
     const ASTVec& assertionsSMT2, bool firstForcedIncrementalSolve,
     bool requireScopedCollapse, bool* scopedAccepted,
-    const ASTNode& completedRoot, size_t orderedDistincts)
+    const ASTNode& completedRoot, size_t orderedDistincts,
+    bool trackAssumptions)
 {
   for (const ASTNode& assertion : assertionsSMT2)
     if (lra::Frontend::containsRealSyntax(assertion))
       return SOLVER_ERROR;
   UserDefinedFlags& uf = bm->UserFlags;
   assert(orderedDistincts == 0 || !completedRoot.IsNull());
+  assert(!trackAssumptions || completedRoot.IsNull());
 
   bool arrayEqualityRound = false;
   bool ufRound = false;
@@ -366,8 +368,32 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // the flag disabled and the batch pipeline's warning.
   const bool savedAck = uf.ackermannisation;
 
+  // The theory machinery still owns one complete array/UF graph. Put the
+  // tracked conjuncts behind independent selectors before lowering that graph,
+  // then assume the selectors alongside the completed block. All auxiliary
+  // definitions and theory lemmas remain scoped by the block, including when
+  // a selector is absent from a refutation. In particular, lowering must never
+  // see an unconditionally asserted source that the core might later omit.
+  std::vector<std::pair<ASTNode, ASTNode>> selectorConjuncts;
   ASTNode activeConjunction = completedRoot;
-  if (activeConjunction.IsNull())
+  if (trackAssumptions)
+  {
+    ASTVec conjuncts, guarded;
+    splitConjuncts(assertionsSMT2.back(), bm->ASTTrue, conjuncts);
+    for (const ASTNode& conjunct : conjuncts)
+    {
+      const ASTNode selector = bm->CreateDeterministicSourceVariable(
+          SourceSort::boolean(), "core_selector", conjunct);
+      selectorConjuncts.emplace_back(selector, conjunct);
+      guarded.push_back(bm->CreateNode(IMPLIES, selector, conjunct));
+    }
+    ASTVec levels = assertionsSMT2;
+    levels.back() = guarded.empty() ? bm->ASTTrue
+        : guarded.size() == 1 ? guarded.front() : bm->CreateNode(AND, guarded);
+    activeConjunction = levels.size() == 1 ? levels.front()
+                                          : bm->CreateNode(AND, levels);
+  }
+  else if (activeConjunction.IsNull())
     activeConjunction = assertionsSMT2.size() > 1
                             ? bm->CreateNode(AND, assertionsSMT2)
                             : assertionsSMT2[0];
@@ -388,7 +414,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
   {
     ASTNodeMap handleAliases;
     const UFPreLoweringChoice ufChoice = chooseUFPreLowering(*bm, ufRoot);
-    if (ufChoice.propagate)
+    if (ufChoice.propagate && !trackAssumptions)
     {
       UFPreLowering pre(bm);
       UFPreLoweringStats preStats;
@@ -468,7 +494,12 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // active conjunction above, so a repeated or re-pushed stack never flips
   // encoding strategy underneath the block cache.
   bool scopedPreprocess = false;
-  if (policy.semanticPreprocessing())
+  // These passes preserve satisfiability of a complete query, but may fix a
+  // free selector to false and erase its assertion. Keep selectors symbolic:
+  // core mode uses assertion-local rewrites and theory lowering, with neither
+  // UF pre-propagation above nor whole-stack elimination here. Enabling a pass
+  // requires preservation of satisfiability for every selector assignment.
+  if (policy.semanticPreprocessing() && !trackAssumptions)
     scopedPreprocess =
         exactScopedPreprocessOf
             .insert(std::make_pair(activeConjunction,
@@ -679,6 +710,29 @@ IncrementalSolver::Impl::exactStackCheckSat(
   if (policy.retractionSearchHints())
     everAssumedLits[blockLit] = engagedSolves;
   assumptions.push(SATSolver::mkLit(blockLit >> 1, blockLit & 1));
+  if (trackAssumptions)
+  {
+    // Also true for an empty selector set: an inconsistent background has an
+    // empty assumption core, although the block guard itself may have failed.
+    lastLevelIndividual = true;
+    lastLevelSelectors = true;
+    for (const auto& entry : selectorConjuncts)
+    {
+      const BBNodeAIG bit = encoding.blaster().BBForm(entry.first);
+      ensureEncoded(Aig_Regular(bit.n));
+      const int literal = 2 * varOfAig(Aig_Regular(bit.n)) +
+                          (Aig_IsComplement(bit.n) ? 1 : 0);
+      assumptions.push(SATSolver::mkLit(literal >> 1, literal & 1));
+      lastLevelLitConjuncts.emplace_back(literal, entry.second);
+      const auto origin = assumptionOriginOf.find(entry.second);
+      if (origin != assumptionOriginOf.end())
+        lastLevelLitOrigins.emplace_back(literal, origin->second);
+      else
+        assumptionOriginsComplete = false;
+      if (policy.retractionSearchHints())
+        everAssumedLits[literal] = engagedSolves;
+    }
+  }
   hintRetractedLevels(assumptions);
   if (profile.enabled)
   {
@@ -871,8 +925,8 @@ IncrementalSolver::Impl::exactStackCheckSat(
   if (ext != NULL)
     res = ext->withholdDeclaredSortUnsat(res, declaredSortBlocks.count(blockLit) != 0);
 
-  // The whole round rode one block literal, so an unsat answer has no
-  // per-level or per-assumption granularity: the core is everything.
+  // The whole-stack block cannot narrow the level-based verdict cache.
+  // Selectors, when present, independently retain assertion-core granularity.
   if (res == SOLVER_UNSATISFIABLE)
     recordUnsat(assumptions, assertionsSMT2.size(), true);
 
