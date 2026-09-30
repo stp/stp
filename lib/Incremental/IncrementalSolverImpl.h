@@ -1570,9 +1570,20 @@ struct IncrementalSolver::Impl
   // for. Consumed by the unsat-assumption accessors; rebuilt every call.
   std::vector<std::pair<int, size_t>> assumedLitLevels;
   std::vector<std::pair<int, ASTNode>> lastLevelLitConjuncts;
+  // Occurrence IDs belong to this check's source snapshot, not to interned
+  // ASTs or persistent SAT clauses. The first origin of a shared conjunct is
+  // sufficient: that original assertion entails the conjunct. Rebuild this
+  // map before lowering the last level, and capture literal origins while
+  // encoding, so reporting never has to rediscover dependencies by AST search.
+  ASTVec assumptionSources;
+  std::unordered_map<ASTNode, size_t, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual> assumptionOriginOf;
+  std::vector<std::pair<int, size_t>> lastLevelLitOrigins;
+  bool assumptionOriginsComplete = true;
   bool lastUnsat;
-  bool lastUnsatCoarse;     // ext rounds: one block literal, no granularity
-  bool lastLevelIndividual; // the per-conjunct mode actually ran
+  bool lastUnsatCoarse;     // whole-stack rounds cannot narrow the scope cache
+  bool lastLevelIndividual; // direct roots or selectors retain source origins
+  bool lastLevelSelectors = false; // a block guard is safe background for these
 
   // A sat answer whose counterexample nobody has read yet; see
   // materializePendingModel. Cleared at the top of every solve.
@@ -1603,18 +1614,11 @@ struct IncrementalSolver::Impl
   std::vector<int> lastFailedLits;
   size_t lastLevelCount;
 
-  // A granular core is trustworthy only if every literal that could fail is
-  // one this call can attribute. The accessors go the other way -- they keep
-  // the failed literals they can find in assumedLitLevels and
-  // lastLevelLitConjuncts, and silently drop the rest -- so an assumed
-  // literal missing from those tables does not widen the reported core, it
-  // narrows it. The extensionality block literal is exactly such a literal
-  // (assumed, deliberately unrecorded), and a round that assumed one would
-  // report a core too shallow, letting the frontend cache unsat at a level
-  // that is satisfiable. Those rounds are routed to coarse today; this is
-  // the statement of why that routing is load-bearing, and it re-establishes
-  // the conclusion rather than trusting the routing, because coarse is
-  // always a correct answer and a wrong unsat is not.
+  // Narrowing the level-based verdict cache requires attribution of every
+  // assumed literal. A whole-stack block has no single level: dropping its
+  // failed guard from that accounting could cache UNSAT below the actual
+  // conflict. Keep its level core coarse even when selectors independently
+  // provide precise origins for the assertion/assumption core.
   void recordUnsat(const SATSolver::vec_literals& assumptions,
                    size_t levelCount, bool coarse)
   {
@@ -1630,7 +1634,11 @@ struct IncrementalSolver::Impl
     lastUnsat = true;
     lastUnsatCoarse = coarse;
     lastLevelCount = levelCount;
-    if (!coarse)
+    // A theory block remains coarse for level-based verdict caching, but its
+    // selectors can still identify the failed source assumptions. Its block
+    // guard carries the unnamed background, definitions and conditional
+    // assertions, and is deliberately not projected onto a source occurrence.
+    if (!coarse || lastLevelSelectors)
       solver->unsatAssumptions(assumptions, lastFailedLits);
   }
 
@@ -2596,7 +2604,8 @@ struct IncrementalSolver::Impl
                                         bool requireScopedCollapse = false,
                                         bool* scopedAccepted = NULL,
                                         const ASTNode& completedRoot = ASTNode(),
-                                        size_t orderedDistincts = 0);
+                                        size_t orderedDistincts = 0,
+                                        bool trackAssumptions = false);
   SOLVER_RETURN_TYPE
   solvePlainExactStack(const ASTVec& assertionsSMT2,
                        const SATSolver::vec_literals& assumptions,
@@ -3175,6 +3184,7 @@ struct IncrementalSolver::Impl
     releaseContainer(pendingBaseSeed);
     releaseContainer(assumedLitLevels);
     releaseContainer(lastLevelLitConjuncts);
+    releaseContainer(lastLevelLitOrigins);
     releaseContainer(lastFailedLits);
     semanticEpoch.releaseStorage();
 

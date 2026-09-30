@@ -279,6 +279,12 @@ without redeclaring it in a subsequent parse, or use a fresh term manager
 and solver when a script needs a new namespace. Declarations created and
 discarded within one script still follow SMT-LIB scope and reset rules.
 
+Named assertion cores are available through SMT-LIB ``get-unsat-core`` in
+``EXECUTE`` mode; see :doc:`smtlib27`. Assertion labels survive separate
+parse calls on the same solver and follow both scripted and native
+``push``, ``pop`` and reset operations. The native ``unsat_assumptions()``
+API continues to report assumption terms.
+
 STP writes nothing to the process's streams. The answers, and what the
 printing options print, go to the solver's output sink, where an empty chunk
 asks for a flush; statistics, warnings and a fatal error's report go to its
@@ -367,9 +373,8 @@ Limits of the alpha
    negation of an equality or a conjunction of them, among others.
 -  A script run with ``ParseMode::EXECUTE`` answers its ``(check-sat)``
    inside the frontend, where the answer is printed; ``model()`` and
-   ``unsat_assumptions()`` do not see it. In either mode a script's
-   ``(check-sat)`` leaves each assertion level as one conjunction in
-   ``assertions()``.
+   ``unsat_assumptions()`` do not see it. Scripted checks preserve the
+   original assertion occurrences reported by ``assertions()``.
 -  A value of a declared sort prints as ``S!k``, which the parser does not
    read back.
 -  A constant array's default must be a value, a term with no symbol in it:

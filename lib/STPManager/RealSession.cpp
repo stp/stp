@@ -66,13 +66,9 @@ struct RealSessionState final
 namespace
 {
 
-// getVectorOfAsserts() collapses every assertion level to a single node
-// before each check: TRUE for an empty level, the lone assertion for one, an
-// AND(...) for several. Its identity therefore changes whenever the level's
-// contents change -- growing the base from {a>=1} to {a>=1,b>=2} turns node
-// `a>=1` into node `AND(a>=1,b>=2)`. Reconciling on that node is what made
-// the session decline a monotonically growing base. Flatten it back to the
-// set of atomic conjuncts so growth reads as a superset instead.
+// An assertion can itself be a conjunction, and older callers may have
+// conjoined an entire level through getVectorOfAsserts(). Reconcile atomic
+// conjuncts so growth reads as a superset, independently of that grouping.
 void decomposeLevel(const ASTVec& level, std::vector<ASTNode>& out)
 {
   std::vector<ASTNode> work(level.rbegin(), level.rend());

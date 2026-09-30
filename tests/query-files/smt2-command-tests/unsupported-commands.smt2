@@ -5,7 +5,6 @@
 (set-option :produce-unsat-assumptions true)
 ; CHECK-NEXT: ^unsupported
 (set-option :produce-proofs true)
-; CHECK-NEXT: ^unsupported
 (set-option :produce-unsat-cores true)
 (set-option :produce-assignments true)
 (set-logic QF_BV)

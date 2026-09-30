@@ -39,11 +39,14 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
   lastUnsat = false;
   lastUnsatCoarse = false;
   lastLevelIndividual = false;
+  lastLevelSelectors = false;
   modelPending = false;
   if (ufAdapter)
     ufAdapter->invalidateCertifiedModel();
   assumedLitLevels.clear();
   lastLevelLitConjuncts.clear();
+  lastLevelLitOrigins.clear();
+  assumptionOriginsComplete = true;
   lastFailedLits.clear();
   // Scope reconciliation below can change the eliminated-variable filter the
   // adapter's cached symbol map was built under.
@@ -199,7 +202,8 @@ bool IncrementalSolver::Impl::tryExactStackRoute(
     if (f.arrayEq || f.ufApply)
     {
       result = exactStackCheckSat(assertionsSMT2,
-                                  firstForcedIncrementalSolve);
+                                  firstForcedIncrementalSolve, false, NULL,
+                                  ASTNode(), 0, assumeLastLevelPerConjunct);
       return true;
     }
   }

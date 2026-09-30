@@ -136,6 +136,9 @@
 
   static thread_local bool sortContext = false;
   static thread_local unsigned attributeDepth = 0;
+  // Carried by each '(' token so parser lookahead cannot change an
+  // annotation's syntactic position before its reduction.
+  static thread_local unsigned parenthesisDepth = 0;
   struct AnnotationScope { size_t letDepth; bool closed; };
   static thread_local std::vector<AnnotationScope> annotations;
 
@@ -653,8 +656,9 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 <ATTRIBUTE>":"({LETTER}|{OPCHAR}){ANYTHING}* {
   smt2lval.str = new std::string(smt2text + 1); return ATTRIBUTE_KEYWORD_TOK;
 }
-<ATTRIBUTE>"(" { ++attributeDepth; return LPAREN_TOK; }
+<ATTRIBUTE>"(" { ++attributeDepth; smt2lval.uintval = ++parenthesisDepth; return LPAREN_TOK; }
 <ATTRIBUTE>")" {
+  --parenthesisDepth;
   if (attributeDepth == 0) BEGIN INITIAL;
   else --attributeDepth;
   return RPAREN_TOK;
@@ -753,8 +757,8 @@ bv{DIGIT}+             { return lookup(smt2text); }
                            throw stp::ParseAbandon(); }
 
  /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
-"("             { qualifiedNamePending = false; return LPAREN_TOK; }
-")"             { indexedIdentifierOpen = false; return RPAREN_TOK; }
+"("             { qualifiedNamePending = false; smt2lval.uintval = ++parenthesisDepth; return LPAREN_TOK; }
+")"             { indexedIdentifierOpen = false; --parenthesisDepth; return RPAREN_TOK; }
 "_"             { indexedIdentifierOpen = true; return UNDERSCORE_TOK; }
 "!"             { return EXCLAIMATION_MARK_TOK; }
 ":"             { return COLON_TOK; }
@@ -841,6 +845,7 @@ bv{DIGIT}+             { return lookup(smt2text); }
 <SKIP_SEXPR>")"                     { if (skippedDepth == 0)
                                         {
                                           BEGIN INITIAL;
+                                          --parenthesisDepth;
                                           return RPAREN_TOK;
                                         }
                                       skippedDepth--;  }
@@ -916,6 +921,7 @@ void SMT2BeginAttributes()
 }
 void SMT2ResetLexMode()
 {
+  parenthesisDepth = 0;
   BEGIN INITIAL;
 }
 }

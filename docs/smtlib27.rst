@@ -95,7 +95,8 @@ Implemented language and protocol features
        ``get-value`` for the same model.
    * - Other queries
      - ``check-sat-assuming`` accepts Boolean terms; ``get-unsat-assumptions``
-       requires its production option. STP always retains assertions, so
+       and ``get-unsat-core`` require their production options. Named cores
+       report labels on active assertions. STP always retains assertions, so
        ``get-assertions`` works regardless of ``:produce-assertions``.
        ``get-info :all-statistics`` is available before solving and after
        context changes. Other information and option queries report the
@@ -183,6 +184,58 @@ internal symbols and abstract model values. Local shadowing and the legacy
 ``lambda`` identifier are extensions; portable 2.7 scripts avoid shadowing
 theory names and quote ``|lambda|``.
 
+Named unsat cores
+-----------------
+
+Enable ``:produce-unsat-cores`` before the check whose core is needed. Like
+the other production options, it is accepted before or after ``set-logic``.
+After an ``unsat`` answer, ``get-unsat-core`` returns a list of assertion
+labels::
+
+    (set-option :produce-unsat-cores true)
+    (set-logic QF_BV)
+    (declare-const p Bool)
+    (declare-const q Bool)
+    (assert (! p :named positive))
+    (assert (! q :named unrelated))
+    (assert (! (not p) :named negative))
+    (check-sat)
+    (get-unsat-core)
+    ; unsat
+    ; (|positive| |negative|)
+
+STP projects its failed-assumption core onto named assertion occurrences.
+Only an annotation on the whole asserted term contributes a label; naming
+a nested subterm or using a previously defined name does not label an
+assertion. Unnamed assertions remain background constraints. An empty
+core is therefore possible when that background is already unsatisfiable.
+Origins are retained through assertion-local lowering and conjunction
+splitting. Repeated formulas and shared conjuncts can be represented by one
+sufficient originating assertion; their other labels need not appear.
+
+After ``check-sat-assuming``, assumptions also remain background for
+``get-unsat-core``. When ``get-unsat-assumptions`` is enabled too, both
+answers project the same engine core: the returned named assertions,
+unnamed assertions and returned assumptions together are unsatisfiable.
+Neither query prints the other query's entries.
+
+Labels follow their assertions through ``push``, ``pop`` and
+``reset-assertions``, even when ``:global-declarations true`` retains the
+definitions introduced by ``:named``. A new check replaces the previous
+core, and a context change makes it unavailable until another unsat check.
+
+Cores need not be minimal. Core production engages the assumption solver
+from the first check where supported. UF applications and whole-array
+equality retain individual assertion origins through private SAT selectors,
+including when solving requires theory refinement. This path bypasses UF
+pre-propagation, whole-stack elimination and DISTINCT symmetry breaking:
+those passes do not yet preserve dependencies for individual core entries.
+
+With ``--incremental=off``, Real arithmetic, or a standalone DISTINCT-ordering
+block without UF applications or whole-array equality, the engine still
+exposes only a coarse core. Those checks return all active assertion labels
+and, when requested, all user assumptions.
+
 Remaining limits and extensions
 -------------------------------
 
@@ -202,8 +255,8 @@ Remaining limits and extensions
   uninterpreted index and element sorts. Boolean, Real and nested array
   components are not supported. Arrays are not accepted as uninterpreted
   function arguments or results.
-* Proofs and named unsat cores are not produced. Their production options
-  report ``unsupported`` when enabled; a query without an enabled
+* Proofs are not produced. ``:produce-proofs`` reports ``unsupported``
+  when enabled; a query without an enabled
   production option is an error. Unsupported optional settings such as
   ``:random-seed`` also report ``unsupported``.
 * Constant arrays, spelled ``((as const (Array I E)) value)``, are an

@@ -109,6 +109,13 @@ void Cpp_interface::init()
   produce_assertions = false;
   produce_assignments = false;
   produce_unsat_assumptions = false;
+  produce_unsat_cores = false;
+  core_solver_layout = false;
+  last_core_available = false;
+  last_assumption_core_available = false;
+  last_unsat_core.clear();
+  last_core_assumption_indices.clear();
+  current_assertion_name.reset();
   global_declarations = false;
   mode = Mode::Start;
   current_command_name.clear();
@@ -133,6 +140,7 @@ void Cpp_interface::addFrame()
 
   // store the new frame
   frames.push_back(new_frame);
+  assertion_names.emplace_back();
 }
 
 void Cpp_interface::removeFrame()
@@ -145,6 +153,7 @@ void Cpp_interface::removeFrame()
 
     // remove it from the vector of frames
     frames.pop_back();
+    assertion_names.pop_back();
 }
 
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
@@ -196,7 +205,35 @@ const ASTVec Cpp_interface::GetAsserts(void)
 
 const ASTVec Cpp_interface::getAssertVector(void)
 {
-  return bm.getVectorOfAsserts();
+  // Keep assertion occurrences intact: labels and get-assertions refer to
+  // the original assertions, even after a check has conjoined a level.
+  ASTVec result;
+  for (const ASTVec* level : bm.AssertLevels())
+    result.push_back(level->empty() ? bm.ASTTrue
+                     : level->size() == 1 ? level->front()
+                     : nf->CreateNode(AND, *level));
+  return result;
+}
+
+void Cpp_interface::adoptAssertionNames(const AssertionNames& names)
+{
+  assert(names.size() <= frames.size());
+  assertion_names = names;
+  assertion_names.resize(frames.size());
+}
+
+void Cpp_interface::nameCurrentAssertion(const std::string& name)
+{
+  if (current_command_name == "assert")
+    current_assertion_name = name;
+}
+
+void Cpp_interface::addParsedAssertion(const ASTNode& assertion)
+{
+  AddAssert(assertion);
+  if (!current_command_rejected && current_assertion_name)
+    assertion_names.back().emplace(bm.AssertLevels().back()->size() - 1,
+                                   *current_assertion_name);
 }
 
 UserDefinedFlags& Cpp_interface::getUserFlags()
@@ -918,6 +955,7 @@ void Cpp_interface::beginCurrentCommand()
   current_command_supported = true;
   current_command_name.clear();
   sort_parameters.clear();
+  current_assertion_name.reset();
   if (UFContext* context = bm.getUFContextIfAny())
     context->beginParserCommand();
 }
@@ -1141,6 +1179,8 @@ void Cpp_interface::resetAssertions()
   bm.Pop();
   if (!global_declarations)
     removeFrame();
+  else
+    assertion_names.front().clear();
   cache.clear();
   bm.clearUnknown();
 
@@ -1327,6 +1367,10 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   const EngineWork work(engine_work_failed);
   if (ignoreCheckSatRequest)
     return;
+  last_core_available = false;
+  last_assumption_core_available = false;
+  last_unsat_core.clear();
+  last_core_assumption_indices.clear();
   if (before_check && before_check())
   {
     mode = Mode::Sat;
@@ -1388,6 +1432,54 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   checkInvariant();
   assert(assertionsSMT2.size() == cache.size());
 
+  ASTVec coreTerms;
+  std::vector<std::string> coreNames;
+  ASTVec coreLevels;
+  std::vector<size_t> coreIndices;
+  // Snapshot every assumption answer, including batch/cached answers, rather
+  // than interpreting a previous driver's occurrence IDs against a new query.
+  if (fromCheckSatAssuming && !produce_unsat_cores)
+    for (size_t i = 0; i < bm.AssertLevels().back()->size(); ++i)
+      coreIndices.push_back(i);
+  if (produce_unsat_cores)
+  {
+    ASTVec background;
+    const auto& levels = bm.AssertLevels();
+    const size_t assertionLevels = levels.size() - (fromCheckSatAssuming ? 1 : 0);
+    for (size_t level = 0; level < assertionLevels; ++level)
+      for (size_t i = 0; i < levels[level]->size(); ++i)
+      {
+        const ASTNode& assertion = (*levels[level])[i];
+        const auto name = assertion_names[level].find(i);
+        if (name == assertion_names[level].end())
+          background.push_back(assertion);
+        else
+        {
+          coreTerms.push_back(assertion);
+          coreNames.push_back(name->second);
+        }
+      }
+    if (fromCheckSatAssuming)
+      coreTerms.insert(coreTerms.end(), levels.back()->begin(), levels.back()->end());
+
+    // The permanent base is empty: even unnamed assertions can be popped.
+    // Keep their conjunction in a retractable background level, and track
+    // named assertions and user assumptions together at the final level.
+    // Do not simplify that conjunction: p AND (NOT p) must retain both
+    // source assertions for the driver's failed-assumption projection.
+    coreLevels = {bm.ASTTrue,
+                  background.empty() ? bm.ASTTrue
+                    : background.size() == 1 ? background.front()
+                    : nf->CreateNode(AND, background),
+                  coreTerms.empty() ? bm.ASTTrue
+                    : coreTerms.size() == 1 ? coreTerms.front()
+                    : bm.hashingNodeFactory->CreateNode(AND, coreTerms)};
+    // Batch and untracked whole-stack encodings have no finer provenance. The same
+    // fallback as get-unsat-assumptions keeps their full input core valid.
+    for (size_t i = 0; i < coreTerms.size(); ++i)
+      coreIndices.push_back(i);
+  }
+
   // A sort declared by declare-sort is unbounded and its carrier is not, so a
   // query needing more elements of one sort than the carrier can tell apart may
   // be unsatisfiable in the encoding while being satisfiable in the theory.
@@ -1426,12 +1518,19 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   // We might have run this query before, or it might already be shown to be
   // unsat. If it was sat, we've stored the result (but not the model), so we 
   // can shortcut and return what we know - if we don't need the model.
-  if (active_real ||
+  if (produce_unsat_cores || active_real ||
        (!((last_run.result == SOLVER_SATISFIABLE) || last_run.result == SOLVER_UNSATISFIABLE)) ||
         (last_run.result == SOLVER_SATISFIABLE && bm.UserFlags.construct_counterexample_flag)
      )
   {
     resetSolver();
+    // Ordinary checks may have made named assertions permanent base units.
+    // Changing layouts must retire that encoding before extracting a core.
+    if (core_solver_layout != produce_unsat_cores)
+    {
+      resetIncrementalSolver();
+      core_solver_layout = produce_unsat_cores;
+    }
 
     // The policy itself lives on the driver, so this frontend and the API
     // cannot drift apart again; --incremental=on overrides it, and
@@ -1440,8 +1539,10 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
         bm.UserFlags.incremental_auto_engage_at, delayed_bv_auto_engagement,
         solves_run);
     const bool use_incremental =
-        !active_real && session_incremental &&
-        (incremental_from_start || autoEngaged) &&
+        !active_real &&
+        ((produce_unsat_cores && bm.UserFlags.incremental_mode !=
+                                    UserDefinedFlags::IncrementalMode::OFF) ||
+         (session_incremental && (incremental_from_start || autoEngaged))) &&
         GlobalSTP->getIncrementalSolver()->canHandle(assertionsSMT2);
     // The `use_incremental &&` this used to carry was dead: the value is read
     // only inside the `if (use_incremental)` branch below.
@@ -1455,8 +1556,12 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
       // The incremental driver keeps its SAT solver and encoding across
       // check-sats; resetSolver() above cleared only batch-pipeline tables.
       IncrementalSolver* inc = GlobalSTP->getIncrementalSolver();
-      last_result = inc->checkSat(assertionsSMT2, fromCheckSatAssuming,
-                                  firstForcedIncrementalSolve);
+      last_result = inc->checkSat(produce_unsat_cores ? coreLevels : assertionsSMT2,
+                                  produce_unsat_cores || fromCheckSatAssuming,
+                                  !produce_unsat_cores && firstForcedIncrementalSolve,
+                                  produce_unsat_cores ? &coreTerms
+                                    : fromCheckSatAssuming ? bm.AssertLevels().back()
+                                                          : nullptr);
       if (bm.UserFlags.quick_statistics_flag)
         inc->reportBVAbstractionRecords(std::cerr);
 
@@ -1471,12 +1576,17 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
       // erases the entry, which is exactly its validity condition.
       if (last_result == SOLVER_UNSATISFIABLE && inc->lastSolveWasUnsat())
       {
-        const std::vector<size_t> core = inc->lastUnsatCoreLevels();
-        const size_t deepest = core.empty() ? 0 : core.back();
-        if (deepest + 1 < cache.size())
+        if (produce_unsat_cores || fromCheckSatAssuming)
+          coreIndices = inc->lastUnsatAssumptionIndices();
+        if (!produce_unsat_cores)
         {
-          cache[deepest].result = SOLVER_UNSATISFIABLE;
-          cache[deepest].fromCore = true;
+          const std::vector<size_t> core = inc->lastUnsatCoreLevels();
+          const size_t deepest = core.empty() ? 0 : core.back();
+          if (deepest + 1 < cache.size())
+          {
+            cache[deepest].result = SOLVER_UNSATISFIABLE;
+            cache[deepest].fromCore = true;
+          }
         }
       }
     }
@@ -1547,6 +1657,20 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
     last_run.result = bm.unknownResult();
   }
 
+  if ((produce_unsat_cores || fromCheckSatAssuming) &&
+      last_run.result == SOLVER_UNSATISFIABLE)
+  {
+    // Both SMT-LIB queries must project the SAME core: the returned names
+    // plus unnamed assertions plus returned assumptions must still be unsat.
+    for (size_t i : coreIndices)
+      if (i < coreNames.size())
+        last_unsat_core.push_back(coreNames[i]);
+      else
+        last_core_assumption_indices.push_back(i - coreNames.size());
+    last_core_available = produce_unsat_cores;
+    last_assumption_core_available = true;
+  }
+
   // A model exists exactly when this check concluded SAT and the solve
   // constructed a counterexample. On the shortcut paths (verdict reused,
   // no model wanted) nothing was constructed, so nothing may be read.
@@ -1608,6 +1732,16 @@ void Cpp_interface::cleanUp()
     finishCurrentCommand();
 
   cache.clear();
+
+  if (assertion_names_at_cleanup != nullptr)
+    *assertion_names_at_cleanup = assertion_names;
+  // An API caller can resume with a different layout after this frontend
+  // is destroyed. No model/core query in the completed script needs it now.
+  if (core_solver_layout)
+  {
+    resetIncrementalSolver();
+    core_solver_layout = false;
+  }
 
   // Every frame is going away, so don't erase the functions from the
   // map one at a time (files can define millions of functions).
@@ -1753,6 +1887,11 @@ void Cpp_interface::setOption(std::string option, std::string value)
     produce_unsat_assumptions = value == "true";
     success();
   }
+  else if (option == "produce-unsat-cores")
+  {
+    produce_unsat_cores = value == "true";
+    success();
+  }
   else if (option == "produce-assertions" || option == "interactive-mode")
   {
     produce_assertions = value == "true";
@@ -1784,7 +1923,9 @@ void Cpp_interface::getOption(std::string option)
     cout << (produce_unsat_assumptions ? "true" : "false") << endl;
   else if (option == "produce-assignments")
     cout << (produce_assignments ? "true" : "false") << endl;
-  else if (option == "produce-proofs" || option == "produce-unsat-cores")
+  else if (option == "produce-unsat-cores")
+    cout << (produce_unsat_cores ? "true" : "false") << endl;
+  else if (option == "produce-proofs")
     cout << "false" << endl;
   else if (option == "random-seed" || option == "reproducible-resource-limit" ||
            option == "verbosity")
@@ -2282,6 +2423,23 @@ void Cpp_interface::getAssignment()
   cout << response.str() << endl;
 }
 
+void Cpp_interface::getUnsatCore()
+{
+  if (!produce_unsat_cores)
+    unavailableQuery("get-unsat-core", "produce-unsat-cores");
+  if (mode != Mode::Unsat || !last_core_available)
+    refuseCurrentCommand("get-unsat-core requires an unsat check with :produce-unsat-cores true");
+  std::ostringstream response;
+  response << "(";
+  for (size_t i = 0; i < last_unsat_core.size(); ++i)
+  {
+    if (i != 0) response << " ";
+    response << "|" << last_unsat_core[i] << "|";
+  }
+  response << ")";
+  cout << response.str() << endl;
+}
+
 void Cpp_interface::getUnsatAssumptions()
 {
   if (!produce_unsat_assumptions)
@@ -2299,19 +2457,9 @@ void Cpp_interface::getUnsatAssumptions()
   // Per-assumption granularity from the driver when it ran the solve
   // (IncrementalSolver::lastUnsatAssumptionIndices); the full assumption set
   // is always a correct core, and covers the batch first solve and the
-  // extensionality rounds.
-  std::vector<size_t> used;
-  bool fromDriver = false;
-  if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
-  {
-    IncrementalSolver* inc = GlobalSTP->getIncrementalSolver();
-    if (inc->lastSolveWasUnsat())
-    {
-      used = inc->lastUnsatAssumptionIndices(lastAssumptionTerms);
-      fromDriver = true;
-    }
-  }
-  if (!fromDriver)
+  // untracked whole-stack rounds.
+  std::vector<size_t> used = last_core_assumption_indices;
+  if (!last_assumption_core_available)
     for (size_t i = 0; i < lastAssumptionTerms.size(); ++i)
       used.push_back(i);
 

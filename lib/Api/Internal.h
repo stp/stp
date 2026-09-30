@@ -587,6 +587,9 @@ struct SolverImpl
   // levels (the base level first) live here; while this one is active they
   // are the engine's own stack.
   std::vector<std::vector<ASTNode>> shelf;
+  // SMT-LIB assertion labels belong to this solver's stack, even though
+  // the nullary definitions introduced by :named belong to its manager.
+  Cpp_interface::AssertionNames assertion_names;
   // The same for the engine's counters (UserDefinedFlags::coverage, one per
   // manager): this solver's while another is active, so that each solver's
   // statistics count its own checks.
