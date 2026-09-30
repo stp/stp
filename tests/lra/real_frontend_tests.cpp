@@ -1,6 +1,7 @@
 #include "LraFrontend.h"
 
 #include "stp/STPManager/STPManager.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 
 #include <cstdint>
 #include <iostream>
@@ -576,6 +577,74 @@ void internalPrintBarrier()
   fail("SMT-LIB2 printer exposed a private LRA atom");
 }
 
+// Real detection must keep working when the same nodes recur after checks,
+// scope changes, or construction of a new parent over an already seen DAG.
+void syntaxMemo()
+{
+  STPMgr manager;
+  HashingNodeFactory factory(manager);
+  auto expect = [](const ASTNode& node, bool real, const char* detail) {
+    require(Frontend::containsRealSyntax(node) == real, detail);
+  };
+  const ASTNode bits = manager.CreateSourceSymbol("bits", SourceSort::bitVector(32));
+  const ASTNode fp = manager.CreateSourceSymbol("fp", SourceSort::floatingPoint(8, 24));
+  const ASTNode real = manager.CreateSourceSymbol("real", SourceSort::real());
+  const ASTNode zero = manager.CreateRealConst("0");
+  const ASTNode bound = manager.CreateRealPredicate(REAL_LT, real, zero);
+  const ASTNode equality = manager.CreateNode(EQ, real, zero);
+  for (unsigned repetition = 0; repetition != 4; ++repetition)
+  {
+    expect(ASTNode(), false, "null has Real syntax");
+    expect(bits, false, "bitvector has Real syntax");
+    expect(fp, false, "floating point has Real syntax");
+    expect(manager.ASTTrue, false, "Boolean value has Real syntax");
+    expect(real, true, "Real symbol was missed");
+    expect(zero, true, "Real value was missed");
+    expect(bound, true, "Real comparison was missed");
+    expect(equality, true, "Real equality was missed");
+  }
+
+  const ASTNode p = manager.CreateSourceSymbol("p", SourceSort::boolean());
+  const ASTNode q = manager.CreateSourceSymbol("q", SourceSort::boolean());
+  const ASTNode prefix = factory.CreateNode(AND, p, q);
+  expect(prefix, false, "Boolean prefix has Real syntax");
+  expect(factory.CreateNode(AND, prefix, bound), true, "new Real conjunct was missed");
+  expect(factory.CreateNode(ITE, bound, p, q), true, "Real ITE condition was missed");
+  expect(manager.CreateRealTerm(ITE, {prefix, real, zero}), true, "Real ITE branch was missed");
+  expect(prefix, false, "a discarded Real parent changed its Boolean child");
+
+  // Exponentially many paths, linear nodes, and enough depth to prohibit a
+  // recursive classification. Keep the descendants alive during teardown.
+  ASTVec nodes{prefix};
+  for (unsigned i = 0; i != 10000; ++i)
+    nodes.push_back(factory.CreateNode(AND, nodes.back(), nodes.back()));
+  expect(nodes.back(), false, "deep shared Boolean DAG has Real syntax");
+  nodes.push_back(factory.CreateNode(AND, nodes.back(), bound));
+  expect(nodes.back(), true, "Real extension of a deep Boolean DAG was missed");
+  nodes.pop_back();
+  expect(nodes.back(), false, "removing a Real parent changed the shared DAG");
+  while (!nodes.empty())
+    nodes.pop_back();
+
+  // Legacy setters change carrier widths, never declared Real membership.
+  const ASTNode sum = factory.CreateTerm(BVPLUS, 32, bits, bits);
+  expect(sum, false, "bitvector sum has Real syntax");
+  sum.SetValueWidth(64);
+  expect(sum, false, "carrier width change introduced Real syntax");
+  sum.SetValueWidth(32);
+
+  manager.UserFlags.enable_uninterpreted_functions = true;
+  UFContext* context = manager.getUFContext();
+  const UFDecl* f = context->declareFunction("f", {SourceSort::bitVector(32)}, SourceSort::real());
+  const UFDecl* g = context->declareFunction("g", {SourceSort::real()}, SourceSort::boolean());
+  const UFDecl* h = context->declareFunction("h", {SourceSort::bitVector(32)}, SourceSort::boolean());
+  require(f != nullptr && g != nullptr && h != nullptr, "test functions were refused");
+  const ASTNode application = context->apply(f, {bits});
+  expect(application, true, "Real-returning function was missed");
+  expect(context->apply(g, {application}), true, "Real function argument was missed");
+  expect(context->apply(h, {bits}), false, "Boolean function of a bitvector has Real syntax");
+}
+
 } // namespace
 
 
@@ -631,6 +700,8 @@ int main(int argc, char** argv)
       canonicalValidation();
     else if (mode == "metrics")
       metrics();
+    else if (mode == "syntax-memo")
+      syntaxMemo();
     else if (mode == "internal-print-barrier")
       internalPrintBarrier();
     else

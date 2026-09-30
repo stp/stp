@@ -1170,23 +1170,56 @@ bool Frontend::containsRealSyntax(const ASTNode& formula)
 {
   if (formula.IsNull())
     return false;
-  ASTVec pending(1, formula);
-  ASTNodeSet seen;
+  if (formula._int_node_ptr->real_syntax_known)
+    return formula._int_node_ptr->real_syntax_present;
+
+  // Incremental callers ask about the same assertions at every check. A
+  // fresh visited set made those checks repeatedly traverse and allocate
+  // for the entire prefix, even when it contained no Real terms at all.
+  // Settle negative answers in postorder and share them with every caller;
+  // a positive answer settles only the current path to the root.
+  std::vector<std::pair<ASTNode, std::size_t>> pending;
+  pending.emplace_back(formula, 0);
+  auto positive = [&]() {
+    for (const auto& frame : pending)
+    {
+      frame.first._int_node_ptr->real_syntax_present = true;
+      frame.first._int_node_ptr->real_syntax_known = true;
+    }
+    return true;
+  };
   while (!pending.empty())
   {
-    const ASTNode current = pending.back();
-    pending.pop_back();
-    if (!seen.insert(current).second)
+    auto& frame = pending.back();
+    const ASTNode& current = frame.first;
+    const Kind kind = current.GetKind();
+    // For ITE, isRealTerm recursively reads the branch's isRealTerm. The
+    // iterative walk reaches that branch anyway, so avoid the recursive
+    // duplicate traversal (and its call-stack limit on deep ITE chains).
+    if (frame.second == 0 &&
+        ((kind != ITE && current.isRealTerm()) || kind == REAL_LT ||
+         kind == REAL_LE || kind == REAL_GT || kind == REAL_GE ||
+         (kind == EQ && current.Degree() == 2 &&
+          (current[0].GetSourceSort().kind() == SourceSort::Kind::Real ||
+           current[1].GetSourceSort().kind() == SourceSort::Kind::Real))))
+      return positive();
+
+    const ASTChildren children = current.GetChildren();
+    if (frame.second == children.size())
+    {
+      current._int_node_ptr->real_syntax_present = false;
+      current._int_node_ptr->real_syntax_known = true;
+      pending.pop_back();
       continue;
-    if (current.isRealTerm() || current.GetKind() == REAL_LT ||
-        current.GetKind() == REAL_LE || current.GetKind() == REAL_GT ||
-        current.GetKind() == REAL_GE ||
-        (current.GetKind() == EQ && current.Degree() == 2 &&
-         (current[0].GetSourceSort().kind() == SourceSort::Kind::Real ||
-          current[1].GetSourceSort().kind() == SourceSort::Kind::Real)))
-      return true;
-    for (const ASTNode& child : current.GetChildren())
-      pending.push_back(child);
+    }
+    const ASTNode child = children[frame.second++];
+    if (child._int_node_ptr->real_syntax_known)
+    {
+      if (child._int_node_ptr->real_syntax_present)
+        return positive();
+    }
+    else
+      pending.emplace_back(child, 0);
   }
   return false;
 }

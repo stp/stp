@@ -1054,7 +1054,12 @@ def _model_of_constraints(tm, constraints):
 
 
 def SolverFor(logic, tm=None, ctx=None, **options):
-    """A solver with the `logic` option set (QF_BV, QF_ABV, QF_AUFBV, QF_BVFP, QF_LRA, ...)."""
+    """A solver with the `logic` option set (QF_BV, QF_ABV, QF_AUFBV, QF_BVFP, QF_LRA, ...).
+
+    This selects logic-dependent settings; it does not restrict the theories
+    of API terms. Checks still discover the theories used by their assertions
+    and assumptions.
+    """
     return Solver(_tm(tm, ctx), logic=logic, **options)
 
 

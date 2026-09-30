@@ -835,7 +835,7 @@ else()
     -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
   )
 endif()
-foreach(mode unit deep normalization shared-dag equality lifetime validation metrics)
+foreach(mode unit deep normalization shared-dag equality lifetime validation metrics syntax-memo)
   add_test(NAME lra_frontend_${mode}
     COMMAND stp_lra_real_frontend_tests ${mode}
   )
