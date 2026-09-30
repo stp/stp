@@ -1816,7 +1816,7 @@ public:
   int num_solver_threads = 1;
 
   // Seed for the SAT backend's randomised choices; 0 leaves each backend at
-  // its own default. Set by the 3.x API's random-seed option.
+  // its own default. Set by the API/CLI or SMT-LIB random-seed option.
   uint64_t random_seed = 0;
 
   // The query's time budget in milliseconds, -1 for none; 0 gives up at

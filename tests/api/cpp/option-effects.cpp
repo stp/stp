@@ -31,7 +31,9 @@ THE SOFTWARE.
 
 #include "api_engine.hpp"
 
+#include <limits>
 #include <string>
+#include <vector>
 
 using namespace stp::api;
 
@@ -62,6 +64,103 @@ void take_back(Solver& s, const std::string& name, TakeBack how)
 }
 
 } // namespace
+
+TEST(OptionEffects, smtlib_random_seed_reaches_each_backend_and_retires_old_solvers)
+{
+  for (const char* backend : {"cadical", "cryptominisat", "minisat", "simplifying-minisat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    SCOPED_TRACE(backend);
+    for (const char* incremental : {"on", "off"})
+    {
+      SCOPED_TRACE(incremental);
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", backend);
+      options.set("incremental", incremental);
+      options.set_uint("random-seed", 17);
+      Solver s(tm, options);
+      std::string output;
+      // Observe the engine setting at solved responses, rather than just
+      // checking get-option's echo of the requested value. In batch mode
+      // also observe it at CNF emission, where the backend is configured.
+      std::vector<uint64_t> seeds;
+      s.set_output_sink([&](std::string_view text) {
+        output += text;
+        if (text.find("sat") != std::string_view::npos)
+          seeds.push_back(flags_after(tm).random_seed);
+      });
+      std::vector<uint64_t> cnf_seeds;
+      s.set_cnf_sink([&](std::string_view, CnfScope) {
+        const uint64_t seed = flags_after(tm).random_seed;
+        if (cnf_seeds.empty() || cnf_seeds.back() != seed)
+          cnf_seeds.push_back(seed);
+      });
+      s.parse_smt2("(declare-const x (_ BitVec 8))(declare-const y (_ BitVec 8))"
+                   "(assert (= (bvmul x y) #x8f))(assert (bvugt x #x01))"
+                   "(assert (bvugt y #x01))");
+      ASSERT_TRUE(s.check_sat().is_sat());
+      // A persistent solver from the API must also be reseeded when the
+      // script changes the option before its own first check.
+      s.parse_smt2("(set-option :produce-models true)"
+                   "(set-option :random-seed 42)(check-sat)"
+                   "(set-option :random-seed 18446744073709551615)(check-sat)"
+                   "(set-option :random-seed 0)(check-sat)"
+                   "(set-option :random-seed 17)", ParseMode::EXECUTE);
+      EXPECT_EQ(output, "sat\nsat\nsat\n");
+      EXPECT_EQ(flags_after(tm).random_seed, 17u);
+      // Restoring the option without another check must still retire the
+      // backend constructed under 0 before native API solving resumes.
+      EXPECT_FALSE(api_test::engine_solver(s).hasIncrementalSolver());
+      EXPECT_EQ(s.options().get_uint("random-seed"), 17u);
+      ASSERT_TRUE(s.check_sat().is_sat());
+      const std::vector<uint64_t> expected{42, std::numeric_limits<uint64_t>::max(), 0};
+      EXPECT_EQ(seeds, expected);
+      if (std::string(incremental) == "off")
+      {
+        const std::vector<uint64_t> expected_cnf{
+            17, 42, std::numeric_limits<uint64_t>::max(), 0, 17};
+        EXPECT_EQ(cnf_seeds, expected_cnf);
+      }
+    }
+  }
+}
+
+TEST(OptionEffects, smtlib_random_seed_is_local_even_when_parsing_fails)
+{
+  for (const char* script : {
+       "(set-option :random-seed 42)",
+       "(set-option :random-seed 42)(reset)",
+       "(set-option :random-seed 42)(exit)",
+       "(set-option :random-seed 42)(check-sat)",
+       "(set-option :random-seed 42)(assert missing)",
+       "(set-option :random-seed 42)(check-sat)(assert missing)",
+       "(set-option :random-seed 18446744073709551616)"})
+  {
+    SCOPED_TRACE(script);
+    for (ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::EXECUTE,
+                           ParseMode::PARSE_ONLY})
+    {
+      TermManager tm;
+      Options options;
+      options.set_uint("random-seed", 17);
+      Solver s(tm, options);
+      s.set_output_sink([](std::string_view) {});
+      const auto error = API_ERROR_OF(s.parse_smt2(script, mode));
+      const bool invalid = std::string(script).find("missing") != std::string::npos ||
+                           std::string(script).find("51616") != std::string::npos;
+      ASSERT_EQ(error.has_value(), invalid);
+      if (error)
+      {
+        EXPECT_EQ(error->code(), ErrorCode::PARSE);
+      }
+      EXPECT_EQ(flags_after(tm).random_seed, 17u);
+      EXPECT_EQ(s.options().get_uint("random-seed"), 17u);
+      ASSERT_TRUE(s.check_sat().is_sat());
+    }
+  }
+}
 
 TEST(OptionEffects, disable_simplifications_goes_back_with_everything_it_implied)
 {

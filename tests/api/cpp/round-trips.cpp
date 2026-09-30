@@ -148,8 +148,8 @@ TEST(RoundTrips, to_smt2_of_every_kind_reads_back_and_agrees)
 }
 
 // A solver's own options are its reader's business: they print as comments
-// (produce-models, which SMT-LIB defines, as a set-option), so the script
-// reads back whatever they are.
+// (produce-models and random-seed, which SMT-LIB defines, as set-option),
+// so the script reads back whatever they are.
 TEST(RoundTrips, to_smt2_prints_options_every_reader_accepts)
 {
   TermManager tm;
@@ -163,7 +163,7 @@ TEST(RoundTrips, to_smt2_prints_options_every_reader_accepts)
   s.add(b);
   const std::string printed = s.to_smt2(true);
   EXPECT_NE(printed.find("(set-option :produce-models false)"), std::string::npos) << printed;
-  EXPECT_NE(printed.find("; random-seed = 3"), std::string::npos) << printed;
+  EXPECT_NE(printed.find("(set-option :random-seed 3)"), std::string::npos) << printed;
   EXPECT_NE(printed.find("; max-time = 5000ms"), std::string::npos) << printed;
   EXPECT_EQ(printed.find(":stp."), std::string::npos) << printed;
   for (const ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::EXECUTE})

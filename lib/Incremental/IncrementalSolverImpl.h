@@ -166,6 +166,8 @@ inline SATSolver* makeBackend(UserDefinedFlags& uf, bool warn)
                 << std::endl;
 #ifdef USE_MINISAT
     s = new MinisatCore;
+    if (uf.random_seed != 0)
+      s->setSeed(uf.random_seed);
 #else
     // Let the central factory issue its standard, precise diagnostic for a
     // solver that was not compiled in.
