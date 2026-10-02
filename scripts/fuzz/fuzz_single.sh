@@ -6,9 +6,9 @@
 # STP -- under a randomly chosen option setting -- and the reference solver on
 # each problem file individually, both under a short wall-clock timeout. A
 # file is skipped unless both solvers finish and the checker answered
-# sat/unsat; a file where the answers then differ is copied aside with both
-# outputs. An STP crash counts: it truncates or garbles STP's answer, so it
-# differs from the answer the checker gave.
+# sat/unsat to every (check-sat) in it; a file where the answers then differ
+# is copied aside with both outputs. An STP crash counts: it truncates or
+# garbles STP's answer, so it differs from the answer the checker gave.
 #
 # Runs until interrupted. Use fuzz.sh to run several copies in parallel.
 #
@@ -74,8 +74,9 @@
 #   LOGIC         A single entry, for the same purpose. Ignored if LOGICS is
 #                 set. Default: the built-in list.
 #   QUERIES       Problem files generated per iteration. Default: 2500.
-#   TIMEOUT       Per-solver wall-clock seconds per file; a file where either
-#                 solver runs out is skipped. Default: 10.
+#   TIMEOUT       Per-solver wall-clock seconds per (check-sat), so a session
+#                 of n checks gets n times this; a file where either solver
+#                 runs out is skipped. Default: 10.
 #   FAIL_DIR      Where mismatches are saved.
 #                 Default: $TMPDIR/stp-fuzz-failures.
 
@@ -241,6 +242,35 @@ declare -a LOGIC_SETS=(
 # something to break: the uflra group's round settings change 28 to 38 files
 # in 60 here against 19 to 25 at the default counts.
 "QF_UFLRA -mf 2 -Mf 4 -mp 1 -Mp 3 | | z3"
+# Sessions. FuzzSMT's -incremental follows the formula's (check-sat) with
+# further rounds, -mcs to -Mcs of them (default 1 to 3), each one to three
+# of: push of one or two levels, pop of some of them, and assert of a fresh
+# formula over the same constants; then (check-sat). About 85 files in 100
+# push at least once. Everything a single-check file never reaches runs
+# here: the assertion stack and its retraction on pop, the batch pipeline
+# re-solving across pushes, and the persistent driver, which the default
+# 'auto' engages at the 3rd solve on the non-bit-vector logics and the 32nd
+# on QF_BV/QF_ABV -- so on a bit-vector session only the session group and
+# the misc group's --incremental=on reach it. One entry per theory, with the
+# generator counts of the single-check entry that found most, so a session
+# carries the same terms the single-check files do. The second QF_BV entry
+# has sessions of 9 to 17 checks, where the driver's adaptive policies have
+# a history to act on; its rebuild and promotion limits still moved nothing
+# there, see the session group. A session shares its checker with the
+# single-check entry: both bitwuzla and z3 take push and pop as they come.
+"QF_BV -incremental"
+"QF_BV -incremental -mcs 8 -Mcs 16"
+"QF_ABV -mxn 1 -Mxn 3 -mw 3 -Mw 10 -Mar 5 -incremental | --array-equality"
+"QF_ABV -mar 1 -Mar 1 -mw 20 -Mw 40 -mr 8 -Mr 20 -mv 4 -Mv 8 -incremental"
+"QF_ABVFP -mr 12 -Mr 30 -mw 4 -Mw 12 -Mar 3 -incremental | --array-equality"
+"QF_FP -mvf 3 -Mvf 8 -mcf 2 -Mcf 6 -mvrm 1 -Mvrm 2 -ref 3 -incremental"
+"QF_UFBV -mf 3 -Mf 5 -mp 2 -Mp 4 -ma 1 -Ma 2 -ref 3 -mv 2 -Mv 4 -mbw 2 -Mbw 8 -incremental"
+"QF_AUFBV -mf 2 -Mf 4 -mp 1 -Mp 3 -ref 3 -mr 4 -Mr 12 -mw 2 -Mw 8 -incremental"
+"QF_BVFP -mconv 2 -Mconv 6 -incremental"
+"QF_UF -mv 2 -Mv 4 -ref 2 -incremental | | z3"
+"QF_AX -mw 3 -Mw 12 -mr 3 -Mr 12 -incremental | | z3"
+"QF_LRA -mv 2 -Mv 5 -mc 2 -Mc 5 -incremental | | z3"
+"QF_UFLRA -mf 2 -Mf 4 -mp 1 -Mp 3 -incremental | | z3"
 )
 
 # LOGICS overrides the list, LOGIC gives a single entry. Split on both newlines
@@ -345,8 +375,13 @@ parse_entry() {
 #     would run for hours and check nothing.
 # A logic with no clause here still gets (assert true), which says at least
 # whether the checker accepts the logic name.
+#
+# For a session entry ($2 set) the query goes on to push a contradiction,
+# check, pop it and check again, and the checker has to answer sat, unsat,
+# sat: one that takes push and pop but does not retract on pop would turn
+# every session into a mismatch.
 probe_query() {
-  local logic=$1 sort=""
+  local logic=$1 incremental=${2:-} sort=""
   echo "(set-logic $logic)"
   case $logic in
     *BV*)
@@ -391,7 +426,18 @@ probe_query() {
     echo "(assert (not (fp.isNaN (fp.add RNE z z))))"
   fi
   echo "(check-sat)"
+  if [ -n "$incremental" ]; then
+    echo "(push 1)"
+    echo "(assert false)"
+    echo "(check-sat)"
+    echo "(pop 1)"
+    echo "(check-sat)"
+  fi
 }
+
+# Whether a generator part asks for a session. A word match, so that a
+# generator option that merely starts with it would not count.
+is_session() { [[ " $1 " == *" -incremental "* ]]; }
 
 # Check every entry actually generates what it says. A misspelt generator
 # option is rejected outright, but a misspelt *logic* is not: FuzzSMT prints
@@ -431,15 +477,21 @@ for entry in "${LOGIC_SETS[@]}"; do
   done
   if [ "$keep" -eq 0 ]; then continue; fi
 
-  key="${gen_args[0]}|$entry_checker"
+  session=""
+  expected=sat
+  if is_session "$gen"; then
+    session=1
+    expected=$'sat\nunsat\nsat'
+  fi
+  key="${gen_args[0]}|$entry_checker|$session"
   if [ -z "${probe_failure[$key]+set}" ]; then
     if ! command -v "$entry_checker" > /dev/null && [ ! -x "$entry_checker" ]; then
       probe_failure[$key]="checker '$entry_checker' not found"
     else
-      probe_query "${gen_args[0]}" > probe.smt2
+      probe_query "${gen_args[0]}" "$session" > probe.smt2
       probe_out=$(timeout 60 "$entry_checker" probe.smt2 2>&1)
       probe_rc=$?
-      if [ "$probe_rc" -ne 0 ] || [ "$probe_out" != "sat" ]; then
+      if [ "$probe_rc" -ne 0 ] || [ "$probe_out" != "$expected" ]; then
         probe_failure[$key]="checker '$entry_checker' failed the probe"
         probe_failure[$key]+=" for ${gen_args[0]} (exit $probe_rc):"
         probe_failure[$key]+=" $(echo "$probe_out" | head -3 | tr '\n' ' ')"
@@ -459,7 +511,8 @@ rm -f probe.smt2
 LOGIC_SETS=("${kept_logics[@]}")
 if [ "${#LOGIC_SETS[@]}" -eq 0 ]; then
   echo "Every logic was skipped, there is nothing left to generate." >&2
-  echo "A checker has to print exactly 'sat' for its probe query: upgrade it," >&2
+  echo "A checker has to print exactly 'sat' for its probe query (and 'unsat'" >&2
+  echo "then 'sat' for a session's pushed contradiction): upgrade it," >&2
   echo "or set CHECKER, or the entry's own checker, to one that does." >&2
   exit 1
 fi
@@ -515,12 +568,16 @@ fi
 # replaces the answer with something else entirely.
 
 declare -a OPTION_GROUPS=(simplify mult div shift bitblast abstract array uf
-                          ufsort fp fpabs lra uflra cnf solver bias misc)
+                          ufsort fp fpabs lra uflra cnf solver bias misc
+                          session)
 
 # A group named here is drawn only for the logics it applies to, which is how
 # options that do nothing outside one theory stay out of the draw everywhere
 # else. The value is a list of shell globs, any one of which may match the
-# logic name.
+# logic name. A glob may carry a generator option after a colon, as in
+# '*BV*:-incremental'; it then matches only an entry whose generator options
+# include that word, which is how the session group is drawn for the
+# -incremental entries alone.
 #
 # Write each against every logic name in LOGIC_SETS, not against the one the
 # group was written for. '*A*' reads as "has arrays" and was this file's
@@ -550,18 +607,27 @@ declare -A GROUP_LOGIC_FILTER=(
 [lra]='*LRA*'
 [uflra]='QF_UFLRA'
 [misc]='*BV* *FP* QF_UF QF_AX'
+[session]='*BV*:-incremental *FP*:-incremental QF_UF:-incremental QF_AX:-incremental'
 )
 
-# Whether group $1 is drawn for logic $2. read rather than a bare for loop, so
-# the patterns are not expanded against the files in the working directory.
+# Whether group $1 is drawn for logic $2, generated with the options $3. read
+# rather than a bare for loop, so the patterns are not expanded against the
+# files in the working directory.
 group_applies() {
-  local filter=${GROUP_LOGIC_FILTER[$1]:-} pattern
+  local filter=${GROUP_LOGIC_FILTER[$1]:-} pattern option
   local -a patterns
   [ -z "$filter" ] && return 0
   read -r -a patterns <<< "$filter"
   for pattern in "${patterns[@]}"; do
+    option=""
+    if [[ $pattern == *:* ]]; then
+      option=${pattern#*:}
+      pattern=${pattern%%:*}
+    fi
     # Unquoted on purpose: it is a pattern.
-    if [[ $2 == $pattern ]]; then return 0; fi
+    if [[ $2 == $pattern ]]; then
+      if [ -z "$option" ] || [[ " $3 " == *" $option "* ]]; then return 0; fi
+    fi
   done
   return 1
 }
@@ -991,6 +1057,12 @@ declare -a g_lra=(
 "--lra-soi=1"
 "--lra-first-search=1"
 "--lra-persistent-state=1"
+# The Real session on its own, without the persistent state that implies it.
+# Acts from the second check onwards, so only on the -incremental entries,
+# where it changes the -t counters on 15 of 20 generated QF_LRA sessions
+# (the persistent state, 16 of 20). It is here and not in a group of its own
+# for the reason --lra-extension-mode=1 gives below.
+"--lra-incremental-session=1"
 "--lra-float-dormant-rows=1"
 "--lra-float-dormant-rows=1 --lra-float-dormant-min-cells=3"
 "--lra-decision-polarity=0"
@@ -1037,8 +1109,6 @@ declare -a g_lra=(
 #                          300 files), and beside --lra-persistent-state.
 #                          Until the two refusals are made on the command line
 #                          there is no group it can go in.
-#   --lra-incremental-session  acts from the second check onwards, and a
-#                          generated file has one.
 #   --lra-direct-bounds    1 moved 1 file of 240, and 2 answered "unknown" on
 #                          a file the checker and STP's default call sat.
 #   --lra-float-promotion-budget, --lra-dense-recovery, and
@@ -1148,9 +1218,14 @@ declare -a g_fp=(
 # than splicing 2/9 on top of that, box lemmas 1/8.
 #
 # The incremental entry only means something when the misc group draws
-# --incremental=on, which it does one iteration in two; there it changes the
-# whole -s output on 38 of 40 and 26 of 30 files. --incremental cannot be
-# named here as well: the two groups are drawn together.
+# --incremental=on, which it does one iteration in two, or on a QF_FP session
+# of three or more checks, where the driver engages by itself; there it
+# changes the whole -s output on 38 of 40 and 26 of 30 files. --incremental
+# cannot be named here as well: the two groups are drawn together. The
+# active-closure entry on top of it narrows the records checked to the
+# active encoding units, which single-check files never tell apart (the -s
+# output was identical on all 70 measured) and sessions do: 11 of 12
+# generated QF_FP sessions, 6 of 12 beside --incremental=on.
 declare -a g_fpabs=(
 ""
 "--fp-abstraction=1"
@@ -1169,6 +1244,7 @@ declare -a g_fpabs=(
 "--fp-abstraction=1 --fp-abstraction-values=0 --fp-abstraction-restart-width=16"
 "--fp-abstraction=1 --fp-abstraction-box-lemmas=1"
 "--fp-abstraction=1 --fp-abstraction-incremental=1"
+"--fp-abstraction=1 --fp-abstraction-incremental=1 --fp-abstraction-active-closure=1"
 
 # Not here, each measured on the same 140 files:
 #   --fp-abstraction-shape=0, --fp-abstraction-relational=0 and
@@ -1252,19 +1328,19 @@ declare -a g_bias=(
 )
 
 # The incremental driver keeps the SAT solver and the bit-blasted encoding
-# across (check-sat) commands. A generated file has exactly one, and the
-# default 'auto' only switches over for an input that pushes, so without an
-# entry here the whole driver goes unfuzzed. 'on' engages it from the first
-# solve, which a profile confirms: the encoding is built and solved through
-# the driver rather than the batch pipeline on every file. --core-only is
-# the same driver without its fitted preprocessing and adaptive policies,
-# and changes the work counters on 30/30.
+# across (check-sat) commands. A single-check file never reaches it, and the
+# default 'auto' switches over for an input that pushes, and then only from
+# the 32nd solve on QF_BV/QF_ABV and the 3rd elsewhere, so of the sessions
+# the -incremental entries generate only the non-bit-vector ones of three or
+# more checks engage it by default. 'on' engages it from the first solve,
+# pushes or no pushes, which a profile confirms: the encoding is built and
+# solved through the driver rather than the batch pipeline on every file.
+# --core-only is the same driver without its fitted preprocessing and
+# adaptive policies, and changes the work counters on 30/30.
 #
-# The rest of the --incremental-* family gets no entry: the CBP rollback
-# knobs, the rebuild limits, the promotion and inprobing settings all only
-# act from the second check onwards, and they move no counter on 30/30
-# single-check files. Fuzzing them needs the generated files rewritten into
-# push/pop sessions, which this script does not do.
+# The rest of the --incremental-* family acts from the second check onwards,
+# so it is drawn for the -incremental entries alone, from the session group
+# below.
 #
 # Sharing this group with --interactive makes one iteration in two an
 # incremental one. Giving these entries a group of their own would raise
@@ -1276,6 +1352,60 @@ declare -a g_misc=(
 "--interactive=1"
 "--incremental=on"
 "--incremental=on --incremental-core-only"
+)
+
+# The driver's session settings, drawn for the -incremental entries alone:
+# each acts from the second (check-sat) onwards and moved no counter on 30/30
+# single-check files. Measured against the counters --incremental-profile
+# prints, times stripped, on 75 generated sessions of 2 to 4 checks across
+# QF_BV, QF_ABV, QF_FP and QF_UFBV, and on 35 QF_BV/QF_ABV sessions of 9 to
+# 17.
+#
+# --incremental-auto-engage-at is the 'auto' policy's threshold. The default
+# engages the driver at the 32nd solve on QF_BV/QF_ABV and the 3rd elsewhere,
+# so 1 and 2 (63/75) and 3 (37/75) are what reach the switch-over from the
+# batch pipeline to the driver mid-session on a bit-vector logic at all, and
+# 0 (4/75, the floating-point files; 9/12 on a QF_FP corpus) keeps the batch
+# pipeline through a session the default would hand over. Unlike the misc
+# group's --incremental=on these act only on a session that pushes, so about
+# 15 files in 100 stay batch under them.
+#
+# The knobs ride on an engagement at the first solve, so that they act on
+# every pushing file rather than only in the iterations where the misc group
+# draws the driver: the CBP reset oracle 30/75 and 33/35, the CBP feed cap
+# at its floor of 1 (0 is refused) 41/75, scoped preprocessing 55/75.
+declare -a g_session=(
+""
+"--incremental-auto-engage-at=1"
+"--incremental-auto-engage-at=2"
+"--incremental-auto-engage-at=3"
+"--incremental-auto-engage-at=0"
+"--incremental-auto-engage-at=1 --incremental-cbp-reset"
+"--incremental-auto-engage-at=1 --incremental-cbp-feed-cap=1"
+"--incremental-auto-engage-at=1 --incremental-scoped-preprocessing=1"
+
+# Not here, each 0/75 and 0/35 beside --incremental=on:
+#   --incremental-cbp-bootstrap-limit=1  defers the CBP bootstrap of a forced
+#                          first solve over a stack of more than one level,
+#                          and a generated session's first check comes before
+#                          its first push (cbp-bootstrap-deferred stayed 0 on
+#                          all 110).
+#   --incremental-base-resimplify-limit=0  acts in a memory-relief rebuild,
+#                          which no generated session triggered
+#                          (rebuild-relief stayed 0 on all 110).
+#   --incremental-reencode-limit=1, --incremental-semantic-cache-limit=1:
+#                          a rebuild needs most of the encoding to belong to
+#                          popped content, which 17 checks of push, pop and
+#                          assert do not leave behind.
+#   --no-incremental-promote-units  promotion waits for a level to stay pushed
+#                          across many solves.
+#   --incremental-piece-rewriting=1  moved nothing, driver-clauses included,
+#                          on the -nary 8 -ref 3 files among the 75 as well.
+#   --incremental-inprobing  'auto' retires probing after many solves, more
+#                          than a generated session has, so on and off both
+#                          equal it.
+#   --incremental-profile  prints the counters this group was measured by,
+#                          to stderr, and decides nothing.
 )
 
 # --cadical-factor is accepted by the option parser whatever CaDiCaL is linked,
@@ -1404,25 +1534,18 @@ declare -a NOT_FUZZED=(
 # Nothing generated reaches them, or they moved too few files to be worth a
 # draw; --lra-direct-bounds=2 also answers "unknown" on a satisfiable file:
 --lra-dense-recovery --lra-float-promotion-budget --lra-direct-bounds
---lra-extension-restart-float-basis --lra-incremental-session
+--lra-extension-restart-float-basis
 # Refused at solve time beside --cadical-factor on; see the lra group.
 --lra-extension-restart-sat
 # Wall-clock budgets, and inert besides:
 --lra-highs-seconds --lra-relu-auto-seconds --lra-relu-cases-seconds
 --lra-relu-lp-seconds --lra-relu-lp-call-seconds --lra-relu-branch-seconds
-# Only act from the second (check-sat) onwards. A generated file has one, so
-# fuzzing these needs the files rewritten into push/pop sessions, which this
-# script does not do.
---incremental-auto-engage-at --incremental-profile --incremental-cbp-reset
---incremental-cbp-bootstrap-limit --incremental-cbp-feed-cap
+# Driver settings the generated sessions never reach; the session group says
+# why, each.
+--incremental-profile --incremental-cbp-bootstrap-limit
 --incremental-base-resimplify-limit --incremental-reencode-limit
 --incremental-semantic-cache-limit --incremental-promote-units
---incremental-piece-rewriting --incremental-scoped-preprocessing
---incremental-inprobing
-# Narrows the checks to the pieces a session's current solve asserts; with
-# one (check-sat) every piece is asserted, and the whole -s output was
-# identical on all 70 floating-point files measured.
---fp-abstraction-active-closure
+--incremental-piece-rewriting --incremental-inprobing
 )
 
 # $supported is the wrong list to check against: it harvests every
@@ -1507,7 +1630,7 @@ for entry in "${LOGIC_SETS[@]}"; do
     option_group[$opt]="the logic entry"
   done
   for gname in "${OPTION_GROUPS[@]}"; do
-    group_applies "$gname" "${gen_args[0]}" || continue
+    group_applies "$gname" "${gen_args[0]}" "$gen" || continue
     declare -n group="g_$gname"
     # Within a group only one entry is drawn, so a name repeated across that
     # group's entries is fine; sort -u makes this per-group, not per-entry.
@@ -1535,10 +1658,10 @@ fi
 # contributes only to the logics it applies to.
 combinations=0
 for entry in "${LOGIC_SETS[@]}"; do
-  read -r -a gen_args <<< "${entry%%|*}"
+  parse_entry "$entry"
   per_logic=1
   for gname in "${OPTION_GROUPS[@]}"; do
-    group_applies "$gname" "${gen_args[0]}" || continue
+    group_applies "$gname" "${gen_args[0]}" "$gen" || continue
     declare -n group="g_$gname"
     per_logic=$(( per_logic * ${#group[@]} ))
     unset -n group
@@ -1573,7 +1696,7 @@ while (true)
     # configuration.
     se=""
     for gname in "${OPTION_GROUPS[@]}"; do
-      group_applies "$gname" "$logic" || continue
+      group_applies "$gname" "$logic" "$gen" || continue
       declare -n group="g_$gname"
       pick=${group[ $RANDOM % ${#group[@]} ]}
       if [ -n "$pick" ]; then se="${se:+$se }$pick"; fi
@@ -1600,16 +1723,18 @@ while (true)
     echo "$se" > expression.txt
     for problem in _file*.smt2; do
       # Both solvers on the one file, concurrently. A file either solver
-      # cannot answer inside TIMEOUT is skipped: a timeout says nothing
+      # cannot answer inside its budget is skipped: a timeout says nothing
       # about correctness, and skipping is what keeps a slow checker (or a
-      # hard instance) from stalling the run.
-      timeout "$TIMEOUT" "$entry_checker" "$problem" > first.txt 2> first-err.txt &
+      # hard instance) from stalling the run. The budget is TIMEOUT per
+      # (check-sat), so a session is not skipped for having several.
+      budget=$(( TIMEOUT * $(grep -c '^(check-sat)' "$problem") ))
+      timeout "$budget" "$entry_checker" "$problem" > first.txt 2> first-err.txt &
       checker_job=$!
       # $se is deliberately unquoted, some entries are two options. The
       # subshell is where the stack limit checked at startup takes effect;
       # timeout and STP inherit it.
       (ulimit -S -s "$STP_STACK_KB" &&
-       exec timeout "$TIMEOUT" "$STP" $se -d "$problem") \
+       exec timeout "$budget" "$STP" $se -d "$problem") \
         > second.txt 2> second-err.txt
       stp_rc=$?
       wait "$checker_job"
@@ -1624,11 +1749,20 @@ while (true)
       # about STP, so such files are skipped like timeouts. STP gets no
       # such pass -- against a checker that answered, an STP crash garbles
       # or truncates second.txt and is reported as the mismatch it is.
-      read -r checker_answer < first.txt || checker_answer=""
-      case $checker_answer in
-        sat|unsat) ;;
-        *) continue;;
-      esac
+      #
+      # One line per (check-sat), every one of them sat or unsat, and a
+      # clean exit: an "unknown" or an error on any check of a session says
+      # nothing about STP's answer to that check, and a checker that
+      # answered the first checks and then crashed (bitwuzla 0.9.1 does, on
+      # some floating-point sessions) leaves a truncated first.txt that
+      # would otherwise be saved as STP's mismatch. (awk rather than
+      # grep -v: ugrep, which may be installed as grep, inverts -q -v
+      # differently.)
+      if [ "$checker_rc" -ne 0 ] || [ ! -s first.txt ] \
+         || ! awk '$0 != "sat" && $0 != "unsat" { bad = 1 } END { exit bad }' \
+                first.txt; then
+        continue
+      fi
 
       # STP declining is not STP being wrong. "unknown" is the answer it owes
       # whenever a sound one is out of reach: --uf-sort-width gives a declared
@@ -1640,14 +1774,17 @@ while (true)
       #
       # Only a clean exit earns the pass. An "unknown" printed on the way out
       # of a crash leaves a non-zero status, and is still reported.
-      if [ "$stp_rc" -eq 0 ]; then
-        read -r stp_answer < second.txt || stp_answer=""
-        if [ "$stp_answer" = unknown ]; then
+      #
+      # A session is compared check by check, and the checks STP declined
+      # are left out of it: the rest still have to agree, and so does the
+      # number of them.
+      if [ "$stp_rc" -eq 0 ] && grep -qx unknown second.txt; then
+        if [ "$(wc -l < first.txt)" -eq "$(wc -l < second.txt)" ] \
+           && paste -d ' ' first.txt second.txt \
+              | awk '$2 != "unknown" && $1 != $2 { exit 1 }'; then
           continue
         fi
-      fi
-
-      if cmp -s first.txt second.txt; then
+      elif cmp -s first.txt second.txt; then
         continue
       fi
 
