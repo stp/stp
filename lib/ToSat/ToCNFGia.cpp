@@ -24,6 +24,11 @@ THE SOFTWARE.
 
 #include "stp/ToSat/ToCNFGia.h"
 
+// From ABC: the fallback converts the graph and derives without mapping.
+#include "aig/aig/aig.h"
+#include "aig/gia/giaAig.h"
+#include "sat/cnf/cnf.h"
+
 #include "stp/ToSat/AbcCnfAdopt.h"
 
 #include <iostream>
@@ -65,8 +70,30 @@ void ToCNFGia::toCNF(const BBNodeGia& top, CNF& cnf,
   // measured at 2.1% of the AND nodes on the largest query in the hard set.
   // Removing them means copying the graph, and a second Gia at 12 bytes an
   // object costs more than the 2.1% is worth.
-  Cnf_Dat_t* const cnfData =
-      (Cnf_Dat_t*)Mf_ManGenerateCnf(p, nLutSize, 0, 1, 0, 0);
+  Cnf_Dat_t* cnfData = (Cnf_Dat_t*)Mf_ManGenerateCnf(p, nLutSize, 0, 1, 0, 0);
+
+  // The generator can hand back a clause over a variable it never allocated
+  // -- abcCnfVariablesAllocated() has the mechanism -- and such a formula has
+  // no sound weakening: the node whose variable is missing has no defining
+  // clauses either, so giving it a fresh one leaves the gates above it
+  // unconstrained. Derive the same graph again with the generator that does
+  // not map, which has no mapping reference count to get wrong. That one
+  // takes an Aig, so the graph is converted first; Gia_ManToAig appends
+  // inputs and outputs in order, which is what the projection below reads.
+  Aig_Man_t* aigFallback = NULL;
+  if (!abcCnfVariablesAllocated(cnfData))
+  {
+    std::cerr << "Warning: the LUT" << nLutSize << " CNF generator named a "
+              << "variable it did not allocate; deriving this CNF with the "
+              << "unmapped generator instead." << std::endl;
+    cnfData->pMan = NULL;
+    Cnf_DataFree(cnfData);
+    p->pData = NULL;
+    aigFallback = Gia_ManToAig(p, 0);
+    Cnf_Man_t* const cnfMan = Cnf_ManStart();
+    cnfData = Cnf_DeriveWithMan(cnfMan, aigFallback, 0);
+    Cnf_ManStop(cnfMan);
+  }
 
   // pVarNums is indexed by the object ids of the graph passed in -- this one.
   //
@@ -84,18 +111,29 @@ void ToCNFGia::toCNF(const BBNodeGia& top, CNF& cnf,
   // land interleaved with gates -- on 375 of 388 fuzz corpus files, and with
   // an input moved by the coarsening on 186 of 193. None of it matters,
   // because no id read here is one the coarsening had a chance to move.
-  cnf = adoptAbcCnf(cnfData, (unsigned)Gia_ManCiNum(p),
-                    (unsigned)Gia_ManCoNum(p), [&](bool isCo, unsigned i) {
-                      Gia_Obj_t* const o =
-                          isCo ? Gia_ManCo(p, (int)i) : Gia_ManCi(p, (int)i);
-                      return cnfData->pVarNums[Gia_ObjId(p, o)];
-                    });
+  cnf = adoptAbcCnf(
+      cnfData, (unsigned)Gia_ManCiNum(p), (unsigned)Gia_ManCoNum(p),
+      [&](bool isCo, unsigned i) {
+        if (aigFallback != NULL)
+        {
+          Aig_Obj_t* const a = isCo ? Aig_ManCo(aigFallback, (int)i)
+                                    : Aig_ManCi(aigFallback, (int)i);
+          return cnfData->pVarNums[Aig_ObjId(a)];
+        }
+        Gia_Obj_t* const o =
+            isCo ? Gia_ManCo(p, (int)i) : Gia_ManCi(p, (int)i);
+        return cnfData->pVarNums[Gia_ObjId(p, o)];
+      });
 
   // Mf leaves pMan pointing at the graph it derived over, cast to Aig_Man_t*,
-  // and when it coarsened, that graph is a copy it has already stopped.
-  // Nothing in STP reads pMan and Cnf_DataFree does not touch it; null the
-  // pointer so a dangling one cannot be followed.
+  // and when it coarsened, that graph is a copy it has already stopped. The
+  // fallback leaves it pointing at the converted Aig, which is released right
+  // below. Nothing in STP reads pMan and Cnf_DataFree does not touch it; null
+  // the pointer so a dangling one cannot be followed.
   cnfData->pMan = NULL;
+
+  if (aigFallback != NULL)
+    Aig_ManStop(aigFallback);
 
   // Mf also hangs the CNF off the graph it was given. Here that graph is the
   // blaster's own manager, which outlives this call, while the CNF is about

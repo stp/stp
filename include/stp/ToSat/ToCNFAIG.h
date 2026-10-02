@@ -51,6 +51,8 @@ class ToCNFAIG // not copyable
   CNF derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
                     unsigned namedOutputs);
 
+  CNF derive_cnf_unmapped(BBNodeManagerAIG& mgr, unsigned namedOutputs);
+
   void fill_node_to_var(const CNF& cnf,
                         ToSATBase::ASTNodeToSATVar& nodeToVars,
                         BBNodeManagerAIG& mgr);

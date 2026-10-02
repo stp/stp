@@ -30,10 +30,38 @@ THE SOFTWARE.
 
 #include "stp/AIG/CNF.h"
 
+#include <cstdint>
 #include <functional>
 
 namespace stp
 {
+
+// Whether every literal in an ABC-generated formula names a variable the
+// formula allocated. A clause that fails this cannot be stated at all: the
+// literal encoding is 2*variable + negated, so the variable is recovered by a
+// shift, and a literal outside the range gives an index past what the solver
+// was told to allocate -- a write outside its arrays rather than a wrong
+// answer.
+//
+// How one gets there is ABC's "no variable" marker of -1. Abc_Var2Lit(-1, c)
+// is the negative literal -2 or -1, and the generators have been seen to
+// write one: Mf_ManDeriveCnf gives a variable only to an object whose mapping
+// reference count is non-zero, and the exact-area round maintains those
+// counts in a 16-bit bitfield with unchecked ++/--, which on a large enough
+// AIG leaves a node that is still a leaf of a live best cut reading zero.
+//
+// One pass over the arena. Clause loading walks the same literals again, so
+// this is a second read of memory already about to be touched, against a
+// generation that took orders of magnitude longer.
+inline bool abcCnfVariablesAllocated(const Cnf_Dat_t* cnfData)
+{
+  assert(cnfData != NULL);
+  const int* const lits = cnfData->pClauses[0];
+  for (uint64_t i = 0, n = (uint64_t)cnfData->nLiterals; i < n; i++)
+    if (lits[i] < 0 || (lits[i] >> 1) >= cnfData->nVars)
+      return false;
+  return true;
+}
 
 // Take over an ABC-generated formula, projecting its per-object pVarNums down
 // to the CI and CO variables that are the only ones anybody asks for. The
