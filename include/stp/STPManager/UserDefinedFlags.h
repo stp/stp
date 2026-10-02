@@ -1349,6 +1349,14 @@ public:
   bool bbbvle_variant =true;
   bool upper_multiplication_bound = false;
   bool bvplus_variant = true;
+  // n-ary addition through the sorting-network column reducer the
+  // multiplier's variant 6 uses: each column Batcher-sorted, the previous
+  // column's odd sorted outputs merged in as a unary carry. Off by default.
+  bool bvplus_sorter = false;
+  // The sum-of-products collapse: a sum's products are expanded into their
+  // partial products in the sum's columns and reduced by one sorting
+  // network per column. Width-capped in the blaster. Off by default.
+  bool bvplus_fused = false;
   bool conjoin_to_top = false;
 
   // Bit-blast the floating-point predicates -- comparisons, equalities and

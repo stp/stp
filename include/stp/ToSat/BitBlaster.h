@@ -190,6 +190,19 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
 
   BBNodeVec v6(vector<list<BBNode>>& products, BBNodeSet& support,
                     const ASTNode& n);
+
+  // The sum-of-products collapse behind --bb.add-v4: a sum's terms are
+  // walked and every partial product of every term lands in the sum's own
+  // columns, which v6 then reduces once.
+  void fusedSumCollect(const ASTNode& t, bool negate,
+                       vector<list<BBNode>>& columns, BBNodeSet& support,
+                       uint64_t& constant);
+  void fusedSumMonomials(const vector<BBNodeVec>& factors, unsigned first,
+                         int shift, bool negate,
+                         vector<list<BBNode>>& columns);
+  void fusedSumRec(const vector<BBNodeVec>& factors, unsigned k,
+                   unsigned first, bool negate, int col, BBNode acc,
+                   vector<list<BBNode>>& columns);
   BBNodeVec v7(vector<list<BBNode>>& products, BBNodeSet& support,
                     const ASTNode& n);
   BBNodeVec v8(vector<list<BBNode>>& products, BBNodeSet& support,

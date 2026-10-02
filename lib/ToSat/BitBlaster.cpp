@@ -1679,7 +1679,41 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
         }
       }
 
-      if (uf->bvplus_variant)
+      if (uf->bvplus_fused && term.GetValueWidth() <= 16)
+      {
+        // Every term's partial products straight into the sum's columns,
+        // then one sorting network per column (v6).
+        const int bitWidth = term.GetValueWidth();
+        vector<list<BBNode>> products(bitWidth + 1);
+        uint64_t constant = 0;
+        fusedSumCollect(term, false, products, support, constant);
+        for (int i = 0; i < bitWidth; i++)
+        {
+          if ((constant >> i) & 1)
+            products[i].push_back(nf->getTrue());
+          if (products[i].empty())
+            products[i].push_back(nf->getFalse());
+        }
+        result = v6(products, support, term);
+      }
+      else if (uf->bvplus_sorter && term.Degree() >= 3)
+      {
+        // The multiplier's sorting-network column reducer (v6) over the
+        // operands' columns: a unary count per column propagates what the
+        // adder chain's intermediate sums lose.
+        vector<BBNodeVec> results;
+        for (unsigned i = 0; i < term.Degree(); i++)
+          results.push_back(BBTerm(term[i], support));
+
+        const int bitWidth = term[0].GetValueWidth();
+        vector<list<BBNode>> products(bitWidth + 1);
+        for (int i = 0; i < bitWidth; i++)
+          for (unsigned j = 0; j < results.size(); j++)
+            products[i].push_back(results[j][i]);
+
+        result = v6(products, support, term);
+      }
+      else if (uf->bvplus_variant)
       {
         // Add children pairwise and accumulate in BBsum
 
@@ -4964,6 +4998,126 @@ void BitBlaster<BBNode, BBNodeManagerT>::sortingNetworkAdd(
     resultNode = nf->CreateNode(OR, resultNode, currentSorted.at(height - 1));
 
   current.push_back(resultNode);
+}
+
+// --bb.add-v4 support. A term is summed as its monomials: for a product of
+// symbolic factors every tuple of bit positions whose weights add to less
+// than the width contributes the AND of those bits to that column. A
+// negated product -(x*R) is summed as (~x + 1)*R = ~x*R + R, so the first
+// factor is complemented and the rest re-entered unnegated; a lone negated
+// word is ~x plus a one. Constant factors are folded into one multiplier,
+// which becomes the negation of its two's complement when that has fewer
+// set bits, and each set bit shifts the monomials by its weight. Plain
+// constants accumulate into `constant` and are pushed once by the caller.
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::fusedSumRec(
+    const vector<BBNodeVec>& factors, unsigned k, unsigned first, bool negate,
+    int col, BBNode acc, vector<list<BBNode>>& columns)
+{
+  const int w = columns.size() - 1;
+  if (k == factors.size())
+  {
+    columns[col].push_back(acc);
+    return;
+  }
+  for (int i = 0; i < w && col + i < w; i++)
+  {
+    BBNode bit = factors[k][i];
+    if (k == first && negate)
+      bit = nf->CreateNode(NOT, bit);
+    if (bit == nf->getFalse())
+      continue;
+    BBNode next;
+    if (acc == nf->getTrue())
+      next = bit;
+    else if (bit == nf->getTrue())
+      next = acc;
+    else
+      next = nf->CreateNode(AND, acc, bit);
+    if (next == nf->getFalse())
+      continue;
+    fusedSumRec(factors, k + 1, first, negate, col + i, next, columns);
+  }
+}
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::fusedSumMonomials(
+    const vector<BBNodeVec>& factors, unsigned first, int shift, bool negate,
+    vector<list<BBNode>>& columns)
+{
+  fusedSumRec(factors, first, first, negate, shift, nf->getTrue(), columns);
+  if (!negate)
+    return;
+  if (first + 1 < factors.size())
+    fusedSumMonomials(factors, first + 1, shift, false, columns);
+  else
+    columns[shift].push_back(nf->getTrue());
+}
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::fusedSumCollect(
+    const ASTNode& t, bool negate, vector<list<BBNode>>& columns,
+    BBNodeSet& support, uint64_t& constant)
+{
+  const unsigned w = t.GetValueWidth();
+  const uint64_t mask = (1ull << w) - 1;
+  switch (t.GetKind())
+  {
+    case BVPLUS:
+      for (const ASTNode& c : t)
+        fusedSumCollect(c, negate, columns, support, constant);
+      return;
+    case BVUMINUS:
+      fusedSumCollect(t[0], !negate, columns, support, constant);
+      return;
+    case BVCONST:
+    {
+      uint64_t v = t.GetUnsignedConst() & mask;
+      if (negate)
+        v = (mask + 1 - v) & mask;
+      constant = (constant + v) & mask;
+      return;
+    }
+    case BVMULT:
+    {
+      uint64_t k = 1;
+      vector<ASTNode> sym;
+      for (const ASTNode& c : t)
+      {
+        if (c.GetKind() == BVCONST)
+          k = (k * (c.GetUnsignedConst() & mask)) & mask;
+        else
+          sym.push_back(c);
+      }
+      if (k == 0)
+        return;
+      if (sym.empty())
+      {
+        constant = (constant + (negate ? (mask + 1 - k) & mask : k)) & mask;
+        return;
+      }
+      bool neg = negate;
+      const uint64_t minusk = (mask + 1 - k) & mask;
+      if (__builtin_popcountll(minusk) < __builtin_popcountll(k))
+      {
+        k = minusk;
+        neg = !neg;
+      }
+      vector<BBNodeVec> factors;
+      for (const ASTNode& c : sym)
+        factors.push_back(BBTerm(c, support));
+      for (unsigned i = 0; i < w; i++)
+        if ((k >> i) & 1)
+          fusedSumMonomials(factors, 0, i, neg, columns);
+      return;
+    }
+    default:
+    {
+      vector<BBNodeVec> factors(1, BBTerm(t, support));
+      fusedSumMonomials(factors, 0, 0, negate, columns);
+      return;
+    }
+  }
 }
 
 template <class BBNode, class BBNodeManagerT>
