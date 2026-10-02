@@ -652,6 +652,12 @@ declare -a g_simplify=(
 "--size-reducing-fixed-point-limit=-1"
 "--aig-core-simplification=1"
 
+# Read-time folding of constants and identities, a different pass from the
+# simplifier stack: it changed the -s output on all of 30 bit-vector, 30 plain
+# floating-point and 30 floating-point-array files, and on all 90 again when
+# drawn on top of --disable-simplifications, so neither subsumes the other.
+"--no-simplify"
+
 # This and the --flattening entry above are opt-outs because the flattening
 # stack is on by default since #838, so an opt-in form only re-runs the
 # baseline. Its third member --common-subsum has no entry either way: opting
@@ -1191,6 +1197,17 @@ declare -a g_fp=(
 "--bb.fp-native-all=0"
 "--bb.fp-native-all=1"
 
+# How the native fp.div relation spells its divisor-quotient product (#1225).
+# Inert unless the native divider is on, so each entry pairs with it: drawn
+# alone --bb.fp-div-product left the -s output identical on all 60 measured
+# files, and paired it changed 16 of 30 plain floating-point files and 6 of 30
+# array ones. product=2, which adds the redundant no-overflow clause on top of
+# the ordinary bit-vector multiplier, changed 17/30 and 6/30. Spelling the
+# product with the multiplier is also what lets --bb.mult-variant reach it, so
+# these entries put the whole multiplier family behind fp.div.
+"--bb.fp-native-div=1 --bb.fp-div-product=1"
+"--bb.fp-native-div=1 --bb.fp-div-product=2"
+
 # Absent because there is nothing to blast: --bb.fp-native-fma. FuzzSMT
 # writes no fp.fma in either entry, so the option is byte-identical on all
 # 60 files. It needs a logic entry that generates one before it is worth
@@ -1503,6 +1520,19 @@ declare -a NOT_FUZZED=(
 # Already fixed by the harness: -d is passed to every STP run, and the input
 # is SMT-LIB2, the only language STP reads.
 --check-sanity --SMTLIB2
+# Answer-replacing in the same way: --stop-after-cnf answers "unknown" by
+# design, so every file drawn with it would be saved as a mismatch.
+--stop-after-cnf
+# Decided elsewhere, or a second spelling of something already drawn: the
+# file's own set-logic decides --logic, --sat-backend names the same backends
+# the solver group draws by their own flags, and --simplify is the default-on
+# half of the --no-simplify pair that the simplify group now draws.
+--logic --sat-backend --simplify
+# Not part of the encoding: --produce-models only toggles model building, and
+# -d already asks for the answer the checker is compared against. --random-seed
+# re-rolls the backend's randomisation and changes no clause; a fresh generated
+# query every iteration already varies the search far more.
+--produce-models --random-seed
 # Measured inert on every generated file; see the group comments below for
 # what each would need before it is worth an entry.
 --bb.fp-native-fma --bb.fp-native-known-sign
