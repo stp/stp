@@ -138,6 +138,10 @@ public:
     bitBlaster.reset(new BitBlasterAIG(nodeManager.get(), simplifier.get(),
                                     bm->defaultNodeFactory,
                                     &bm->UserFlags, NULL));
+    // syncAbstractions asserts every division relation as a permanent
+    // unit, so the blaster keeps the quotient-remainder pairs and the
+    // memos that name them across roots.
+    bitBlaster->setRelationsPermanent(true);
   }
 
   BBNodeManagerAIG& nodes() { return *nodeManager; }
@@ -325,6 +329,7 @@ struct IncrementalSolver::Impl
   size_t harvestedEQAbstractions = 0;
   size_t harvestedTermAbstractions = 0;
   size_t assertedSideConstraints = 0;
+  size_t assertedRelationalConstraints = 0;
 
   // The records this solve semantically owns, closed over parent-to-child
   // producer dependencies. Records outside this sparse view are logically
@@ -3350,6 +3355,7 @@ struct IncrementalSolver::Impl
     harvestedEQAbstractions = 0;
     harvestedTermAbstractions = 0;
     assertedSideConstraints = 0;
+    assertedRelationalConstraints = 0;
     if (fpAbs)
       fpAbs->resetForNewSolverEpoch();
     abstractionScope = BVAbstractionScope::all();
@@ -3973,6 +3979,25 @@ struct IncrementalSolver::Impl
     return (unsigned)varOfAig(ci);
   }
 
+  // Every node of `nodes` from `asserted` on as a permanent unit.
+  void assertPermanentUnits(const std::vector<BBNodeAIG>& nodes,
+                            size_t& asserted)
+  {
+    for (; asserted < nodes.size(); asserted++)
+    {
+      const BBNodeAIG& sc = nodes[asserted];
+      Aig_Obj_t* regular = Aig_Regular(sc.n);
+      ensureEncoded(regular);
+      const int lit =
+          2 * varOfAig(regular) + (Aig_IsComplement(sc.n) ? 1 : 0);
+      SATSolver::vec_literals unit;
+      unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
+      addClause(unit);
+      permanentAigRoots.push_back(regular);
+      permanentUnitMass = addMass(permanentUnitMass, 1);
+    }
+  }
+
   // Take across everything the blaster has produced since the last call:
   // the operand proxies' defining constraints, and the abstraction records
   // themselves. Called once per solve, after all of this call's encoding
@@ -3997,20 +4022,19 @@ struct IncrementalSolver::Impl
     // nothing else mentions, so it constrains no assignment of the query.
     // Dropped, as they were, the proxies stand for nothing and every
     // operand the refinement reads through one is noise.
-    const std::vector<BBNodeAIG>& side = bb.sideConstraints();
-    for (; assertedSideConstraints < side.size(); assertedSideConstraints++)
-    {
-      const BBNodeAIG& sc = side[assertedSideConstraints];
-      Aig_Obj_t* regular = Aig_Regular(sc.n);
-      ensureEncoded(regular);
-      const int lit =
-          2 * varOfAig(regular) + (Aig_IsComplement(sc.n) ? 1 : 0);
-      SATSolver::vec_literals unit;
-      unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
-      addClause(unit);
-      permanentAigRoots.push_back(regular);
-      permanentUnitMass = addMass(permanentUnitMass, 1);
-    }
+    assertPermanentUnits(bb.sideConstraints(), assertedSideConstraints);
+
+    // A division relation defines its quotient and remainder inputs over
+    // the operands' bits, and a proxy tied to such an input is only as
+    // good as the relation. Conjoined into one root alone, the relation
+    // retracts with it while the proxy, the registry entry and every
+    // record over them persist: the next root re-minted the pair, the
+    // registry answered with the first one, and a refined equality over a
+    // free quotient certified a candidate the raw stack refutes. Permanent
+    // here, by the same argument as the proxies: a definition of fresh
+    // inputs constrains no assignment of the query.
+    assertPermanentUnits(bb.relationalConstraints(),
+                         assertedRelationalConstraints);
 
     const std::vector<BitBlasterAIG::RawBVEQAbstraction>& rawEQs =
         bb.abstractedEQs();
