@@ -642,7 +642,16 @@ void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf)
     {
       poll();
       uint32_t var = (*pLit) >> 1;
-      assert((var < satSolver.nVars()));
+      // Not an assertion. A literal past what was allocated reaches the
+      // backend as an index into arrays sized by nVars(), so with assertions
+      // off this is a write outside them rather than a wrong answer -- in a
+      // release build it segfaults inside addClause. The one way it has
+      // arisen is a generator naming a variable it never allocated: ABC's
+      // "no variable" marker is -1, and Abc_Var2Lit(-1, c) is a negative
+      // literal, which this shift turns into ~0u.
+      if (var >= satSolver.nVars())
+        FatalError("add_cnf_to_solver: the CNF names a variable the "
+                   "conversion never allocated");
       SATSolver::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
       satSolverClause.push(l);
     }

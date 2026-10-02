@@ -147,6 +147,25 @@ CNF ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
   Cnf_Dat_t* cnfData = (Cnf_Dat_t*)Mf_ManGenerateCnf(
       pGia, nLutSize, 0, assertOutputs, 0, 0);
 
+  // This generator can emit a clause over a variable it never allocated --
+  // see abcCnfVariablesAllocated() for the mechanism. Such a formula is not
+  // one STP can weaken into something usable: the node whose variable is
+  // missing has no defining clauses either, so minting a fresh variable for
+  // it would leave the gates above it unconstrained and the encoding an
+  // over-approximation of the query. Derive it again with the generator that
+  // does not map, which is a correct encoding of the same AIG.
+  if (!abcCnfVariablesAllocated(cnfData))
+  {
+    cerr << "Warning: the LUT" << nLutSize << " CNF generator named a "
+         << "variable it did not allocate; deriving this CNF with the "
+         << "unmapped generator instead." << endl;
+    cnfData->pMan = NULL;
+    Cnf_DataFree(cnfData);
+    pGia->pData = NULL;
+    Gia_ManStop(pGia);
+    return derive_cnf_unmapped(mgr, namedOutputs);
+  }
+
   // pVarNums comes back indexed by Gia object id, and the only entries anyone
   // wants are the CIs' and the COs'. Project those out here; the per-object
   // array goes with the Cnf_Dat_t.
@@ -169,6 +188,30 @@ CNF ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
   Gia_ManStop(pGia);
 
   return cnf;
+}
+
+// Cut enumeration and technology mapping, as in ABC's Cnf_Derive(). That
+// convenience wrapper reuses one process-global Cnf_Man_t, so two independent
+// STP instances deriving CNF concurrently overwrite the same cut/mapping
+// state. ABC exposes the underlying per-manager entry point; keep the manager
+// local to this conversion instead.
+//
+// This is the --cnf-generation-effort medium arm, and it is also where
+// derive_cnf_mf() goes when the LUT generator hands back a formula that
+// cannot be stated. Nothing here consults a mapping reference count, so it
+// cannot reach that failure.
+CNF ToCNFAIG::derive_cnf_unmapped(BBNodeManagerAIG& mgr, unsigned namedOutputs)
+{
+  Cnf_Man_t* cnfMan = Cnf_ManStart();
+  Cnf_Dat_t* result = Cnf_DeriveWithMan(cnfMan, mgr.aigMgr, (int)namedOutputs);
+  Cnf_ManStop(cnfMan);
+  return adoptAbcCnf(result, (unsigned)Aig_ManCiNum(mgr.aigMgr),
+                     (unsigned)Aig_ManCoNum(mgr.aigMgr),
+                     [&](bool isCo, unsigned i) {
+                       Aig_Obj_t* o = isCo ? Aig_ManCo(mgr.aigMgr, (int)i)
+                                           : Aig_ManCi(mgr.aigMgr, (int)i);
+                       return result->pVarNums[Aig_ObjId(o)];
+                     });
 }
 
 CNF ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs)
@@ -285,18 +328,7 @@ CNF ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs)
 
     case UserDefinedFlags::CNF_EFFORT_AUTO: // resolved above; cannot reach here
     case UserDefinedFlags::CNF_EFFORT_MEDIUM:
-    {
-      // Cut enumeration and technology mapping, as in ABC's Cnf_Derive().
-      // That convenience wrapper reuses one process-global Cnf_Man_t, so two
-      // independent STP instances deriving CNF concurrently overwrite the
-      // same cut/mapping state. ABC exposes the underlying per-manager entry
-      // point; keep the manager local to this conversion instead.
-      Cnf_Man_t* cnfMan = Cnf_ManStart();
-      Cnf_Dat_t* result =
-          Cnf_DeriveWithMan(cnfMan, mgr.aigMgr, (int)namedOutputs);
-      Cnf_ManStop(cnfMan);
-      return fromAig(result);
-    }
+      return derive_cnf_unmapped(mgr, namedOutputs);
   }
 
   // No default arm above: -Wswitch is what makes a new rung choose what this
