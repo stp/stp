@@ -2091,8 +2091,10 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
   // blasts many roots through one blaster, each under its own literal, so
   // every root starts the memos afresh -- within a root, the division and
   // remainder of one operand pair still share their pair, and two square
-  // roots of one operand still share theirs.
-  divByMultMemo.clear();
+  // roots of one operand still share theirs. A consumer that asserts the
+  // division relations permanently keeps the pair: see relationsPermanent_.
+  if (!relationsPermanent_)
+    divByMultMemo.clear();
   sqrtPreRoundMemo.clear();
 
   // A relational encoding mints fresh inputs and constrains them only
@@ -2106,7 +2108,10 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
   // guarantee belongs here, where it does not depend on a flag.
   //
   // Only a root that follows one which minted a relation pays for it, so
-  // an incremental bit-vector workload keeps its sharing.
+  // an incremental bit-vector workload keeps its sharing. Division inputs
+  // under a permanent relation are not counted: the registry's proxies
+  // and the records over them name the first-minted pair, and only a
+  // relation that outlives its root keeps those meaningful.
   const bool rootChanged =
       !lastBlastedRoot.IsNull() && !(lastBlastedRoot == form);
   if (rootChanged && relationalFreshInputs > 0)
@@ -3862,8 +3867,8 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivByMult(const BBNodeVec& x,
   r = BBNodeVec(w);
   for (unsigned i = 0; i < w; i++)
   {
-    q[i] = freshRelationalInput();
-    r[i] = freshRelationalInput();
+    q[i] = freshDivisionInput();
+    r[i] = freshDivisionInput();
   }
 
   // The ladder: h[i] <=> y < 2^i, one AND gate per rung.
@@ -3931,9 +3936,9 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivByConstant(
   q = BBNodeVec(w, BBFalse);
   r = BBNodeVec(w, BBFalse);
   for (unsigned i = 0; i < qBits; i++)
-    q[i] = freshRelationalInput();
+    q[i] = freshDivisionInput();
   for (unsigned i = 0; i < span; i++)
-    r[i] = freshRelationalInput();
+    r[i] = freshDivisionInput();
 
   BBNodeVec acc(w + 1, BBFalse);
   bool first = true;
@@ -3999,12 +4004,13 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     // refiner's offer order.
     BBNodeVec t(width);
     for (unsigned i = 0; i < width; i++)
-      t[i] = freshRelationalInput();
+      t[i] = freshDivisionInput();
 
     const int only = uf->division_abstraction_only_lemma;
     const unsigned prefix = uf->division_abstraction_prefix;
     const unsigned count =
         (k == BVDIV) ? BV_DIV_LEMMA_COUNT : BV_REM_LEMMA_COUNT;
+    BBNodeSet relation;
     for (unsigned i = 0; i < count; i++)
     {
       if (only >= 0 && (unsigned)only != i)
@@ -4012,12 +4018,13 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
       if (prefix > 0 && i >= prefix)
         continue;
       if (k == BVDIV)
-        support.insert(
-            BBDivLemma(static_cast<DivLemma>(i), x, y, t, support));
+        relation.insert(
+            BBDivLemma(static_cast<DivLemma>(i), x, y, t, relation));
       else
-        support.insert(
-            BBRemLemma(static_cast<RemLemma>(i), x, y, t, support));
+        relation.insert(
+            BBRemLemma(static_cast<RemLemma>(i), x, y, t, relation));
     }
+    recordDivisionRelation(relation, support);
     return t;
   }
 
@@ -4049,10 +4056,12 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
     }
     else
     {
+      BBNodeSet relation;
       if (byConstant)
-        BBDivByConstant(x, y, q, r, support);
+        BBDivByConstant(x, y, q, r, relation);
       else
-        BBDivByMult(x, y, q, r, support);
+        BBDivByMult(x, y, q, r, relation);
+      recordDivisionRelation(relation, support);
       divByMultMemo.emplace(key, std::make_pair(q, r));
     }
   }
