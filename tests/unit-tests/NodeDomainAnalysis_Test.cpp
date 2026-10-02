@@ -825,3 +825,81 @@ TEST(NodeDomainAnalysis_FixedPoint, sign_extend_and_extract_raw_nodes)
   stp::ASTNodeSet visited;
   checkNodeAtFixedPoint(c, top, visited);
 }
+
+// ---------------------------------------------------------------------
+// The same check over parsed formulas, after the simplifying factory has
+// rewritten the input: the fixed point must hold on the nodes the solver
+// analyses, not only on raw ones.
+
+static ASTNode parseFormula(Context& c, const std::string& input)
+{
+  stp::SMT2ScanString((start_input + input).c_str());
+  stp::SMT2Parse();
+  smt2lex_destroy();
+  return c.mgr.CreateNode(stp::AND, c.mgr.GetAsserts());
+}
+
+static void checkAtFixedPoint(Context& c, const std::string& input)
+{
+  const ASTNode top = parseFormula(c, input);
+  c.domain.topLevel(top);
+
+  stp::ASTNodeSet visited;
+  checkNodeAtFixedPoint(c, top, visited);
+}
+
+
+TEST(NodeDomainAnalysis_FixedPoint, arithmetic_and_shifts)
+{
+  CONSTANTBV::BitVector_Boot(); // idempotent; needed if this test runs first
+  Context c;
+  checkAtFixedPoint(c, R"(
+    ( assert (= (bvadd v0 (_ bv1 20)) (bvshl v1 (_ bv2 20))) )
+    ( assert (bvult v2 (_ bv100 20)) )
+    ( assert (= v3 (bvlshr v2 (_ bv3 20))) )
+  )");
+}
+
+TEST(NodeDomainAnalysis_FixedPoint, extract_concat_sharing)
+{
+  CONSTANTBV::BitVector_Boot(); // idempotent; needed if this test runs first
+  Context c;
+  checkAtFixedPoint(c, R"(
+    ( assert (= ((_ extract 9 0) (bvand v0 v1))
+                ((_ extract 19 10) (bvand v0 v1))) )
+    ( assert (= v3 (bvor v0 (_ bv4095 20))) )
+    ( assert (= v4 (concat ((_ extract 9 0) v2) ((_ extract 19 10) v3))) )
+  )");
+}
+
+TEST(NodeDomainAnalysis_FixedPoint, booleans_and_ite)
+{
+  CONSTANTBV::BitVector_Boot(); // idempotent; needed if this test runs first
+  Context c;
+  checkAtFixedPoint(c, R"(
+    ( assert (ite a (bvult v0 (_ bv100 20)) (= v1 (_ bv5 20))) )
+    ( assert (or b (not c)) )
+    ( assert (= v2 (ite b v0 (_ bv77 20))) )
+  )");
+}
+
+TEST(NodeDomainAnalysis_FixedPoint, division_family)
+{
+  CONSTANTBV::BitVector_Boot(); // idempotent; needed if this test runs first
+  Context c;
+  checkAtFixedPoint(c, R"(
+    ( assert (= v4 (bvudiv v0 (_ bv7 20))) )
+    ( assert (= v2 (bvsdiv v1 (_ bv3 20))) )
+    ( assert (= v3 (bvurem v0 (_ bv6 20))) )
+  )");
+}
+
+TEST(NodeDomainAnalysis_FixedPoint, sign_extend_unknown_child)
+{
+  CONSTANTBV::BitVector_Boot(); // idempotent; needed if this test runs first
+  Context c;
+  checkAtFixedPoint(c, R"(
+    ( assert (= v0 (bvashr ((_ sign_extend 19) x0) (_ bv2 20))) )
+    ( assert (= v1 (bvsub v0 ((_ zero_extend 19) x0))) )
+  )");
+}
