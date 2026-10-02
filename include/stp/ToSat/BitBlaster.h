@@ -389,8 +389,10 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   // bit-vector multiplier so that it inherits its variants -- the recoding
   // of constant runs above all, which a floating-point multiply by a
   // literal needs exactly as much as a bit-vector one does.
+  // width 0 means twice the operand width, which is what a significand
+  // product needs; the divider's relation asks for a width of its own.
   BBNodeVec BBfpSignificandProduct(const BBNodeVec& a, const BBNodeVec& b,
-                                   BBNodeSet& support);
+                                   BBNodeSet& support, unsigned width = 0);
 
   BBNodeVec BBfpMul(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpAdd(const ASTNode& term, BBNodeSet& support);

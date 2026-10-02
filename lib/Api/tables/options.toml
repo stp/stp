@@ -2352,6 +2352,19 @@ engine = { field = "multiplication_lemmas" }
 category = "bitblast"
 help = "conjoin to each multiply the low-bit residue implicates its circuit cannot propagate: 0 (default) none, 3 the six clauses that make the 3-bit relation refutation-complete, 4 the 88 for 4 bits"
 
+
+[[option]]
+name = "bb.fp-div-product"
+type = "int"
+default = 0
+sentinel = "0/1/2"
+values = ["0", "1", "2"]
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "fp_div_product" }
+category = "bitblast"
+help = "how the native fp.div relation spells its divisor-quotient product: 0 (default) an open-coded partial-product array, 1 the ordinary bit-vector multiplier so that --bb.mult-variant reaches it, 2 the same plus the redundant no-overflow clause"
 [[option]]
 name = "bb.mult-v2"
 type = "bool"

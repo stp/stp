@@ -1420,6 +1420,16 @@ public:
     fp_native_rem = on;
   }
 
+  // How the native fp.div relation spells its D*Q product.
+  //   0  the open-coded partial-product array: one AND row per quotient bit,
+  //      each rippled into the accumulator with its carry-out pinned false.
+  //   1  the ordinary bit-vector multiplier, so that --bb.mult-variant
+  //      reaches the divider and a constant divisor gets its constant runs
+  //      recoded, as BBfpSignificandProduct already does for fp.mul.
+  //   2  1 plus the redundant no-overflow clause that 0 asserts per row,
+  //      stated once over the product's top bits.
+  int64_t fp_div_product = 0;
+
   // Frame width for the native fp.add datapath.
   //   1  the alignment frame holds a whole significand below the larger
   //      operand, so nothing shifted for alignment ever leaves it.
