@@ -1,7 +1,11 @@
+; REQUIRES: cadical
 ; RUN: %solver --cadical --incremental-auto-engage-at=1 -d %s | %OutputCheck %s
 ; RUN: %solver --cadical --incremental-auto-engage-at=1 --ackermanize -d %s | %OutputCheck %s
 ; RUN: %solver --cadical --incremental=on -d %s | %OutputCheck %s
 ; RUN: %solver --cadical -d %s | %OutputCheck %s
+;
+; Which cell the retracted rows poison depends on the bits the backend leaves
+; in retracted variables; the reduction exposes it with CaDiCaL.
 ;
 ; The second check-sat carries an array equality and is small enough for
 ; the eager instantiation arm, which solves the whole stack as one

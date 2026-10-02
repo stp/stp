@@ -1,8 +1,8 @@
-; RUN: %solver --cadical --incremental-auto-engage-at=1 %s | %OutputCheck %s
-; RUN: %solver --cadical --incremental-auto-engage-at=1 -d %s | %OutputCheck %s
-; RUN: %solver --cadical --incremental-auto-engage-at=1 --ackermanize -d %s | %OutputCheck %s
-; RUN: %solver --cadical --incremental=on -d %s | %OutputCheck %s
-; RUN: %solver --cadical -d %s | %OutputCheck %s
+; RUN: %solver --incremental-auto-engage-at=1 %s | %OutputCheck %s
+; RUN: %solver --incremental-auto-engage-at=1 -d %s | %OutputCheck %s
+; RUN: %solver --incremental-auto-engage-at=1 --ackermanize -d %s | %OutputCheck %s
+; RUN: %solver --incremental=on -d %s | %OutputCheck %s
+; RUN: %solver -d %s | %OutputCheck %s
 ;
 ; The base reads a[i] lazily, as a registry row that read refinement
 ; owns. The second check-sat takes the eager instantiation arm for its
