@@ -242,6 +242,31 @@ declare -a LOGIC_SETS=(
 # something to break: the uflra group's round settings change 28 to 38 files
 # in 60 here against 19 to 25 at the default counts.
 "QF_UFLRA -mf 2 -Mf 4 -mp 1 -Mp 3 | | z3"
+# Floating point and real arithmetic in one query -- the only entry that draws
+# the fp and lra groups together; every other entry reaches one family or the
+# other. -mconv 0 -Mconv 0 is load-bearing rather than tidying: the
+# conversions FuzzSMT writes for an FP-and-Real logic include to_fp of a
+# symbolic Real, which STP refuses by design ("only a Real constant converts
+# to a float"), and it writes both directions under the one setting, so at
+# any other -mconv every file dies in the parser. Without them the two
+# theories sit side by side in one formula, which is the part nothing else
+# covers.
+#
+# 29 of 30 files get a comparable answer from both STP and z3 inside the
+# harness's own budget of TIMEOUT per check-sat, a better yield than most
+# entries (the QF_ABVFP entry emits a CNF on 11 of 30). Measured on stp -s
+# against no options: the fp group changes 21 of 30 files
+# (--bb.fp-native-cmp=0) and 4 of 30 (--bb.fp-native-all=1), the lra group 9
+# of 30 (--lra-soi=1) and 7 of 30 (--lra-row-order=2), with
+# --lra-presolve-rows=0 inert on all 30. No STP/z3 disagreement in 30 files,
+# so this is coverage rather than a find.
+#
+# The lra counts are a floor, not a measurement of the group: the LRA
+# counters are printed by -t, and -t output is not reproducible between two
+# identical runs -- 12 of 30 files differed on a control run after the
+# obvious timing fields were normalised away -- so -s is the only surface
+# that can be diffed, and it does not carry them.
+"QF_FPLRA -mvf 3 -Mvf 6 -mcf 2 -Mcf 4 -mvrm 1 -Mvrm 2 -mv 2 -Mv 5 -mc 2 -Mc 5 -mconv 0 -Mconv 0 | | z3"
 # Sessions. FuzzSMT's -incremental follows the formula's (check-sat) with
 # further rounds, -mcs to -Mcs of them (default 1 to 3), each one to three
 # of: push of one or two levels, pop of some of them, and assert of a fresh
