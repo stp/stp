@@ -200,11 +200,19 @@ BitBlaster<BBNode, BBNodeManagerT>::abstractionSourcesOf(const BBNodeVec& bits)
 template <class BBNode, class BBNodeManagerT>
 vector<BBNode>
 BitBlaster<BBNode, BBNodeManagerT>::ensureProxyCIs(const ASTNode& node,
-                                                   const BBNodeVec& bits)
+                                                   const BBNodeVec& bits,
+                                                   BBNodeSet& support)
 {
   auto it = nf->symbolToBBNode.find(node);
   if (it != nf->symbolToBBNode.end())
+  {
+    // Registered as something else -- proxies, an abstraction's result, or
+    // an earlier root's inputs. This root blasted the node to `bits`, so
+    // under this root the registered vector is those bits.
+    if (proxyTiesPerRoot_ && !(it->second == bits))
+      tieProxies(it->second, bits, support);
     return it->second;
+  }
 
   if (allBBNodesAreCIs(nf, bits))
   {
@@ -220,10 +228,88 @@ BitBlaster<BBNode, BBNodeManagerT>::ensureProxyCIs(const ASTNode& node,
         abstractionSourcesOf(bits[i]);
     proxies[i] = nf->CreateFreshInput();
     tagAbstractionSources(proxies[i], sources);
-    sideConstraints_.push_back(nf->CreateNode(IFF, proxies[i], bits[i]));
+    // Tied here rather than in one pass after the loop: the biconditionals
+    // are AIG nodes, so building them all after the inputs renumbers the
+    // manager and moves the batch lowering's CNF with it.
+    tie(proxies[i], bits[i], support);
   }
   nf->symbolToBBNode[node] = proxies;
   return proxies;
+}
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::tie(const BBNode& proxy,
+                                             const BBNode& bit,
+                                             BBNodeSet& support)
+{
+  const BBNode iff = nf->CreateNode(IFF, proxy, bit);
+  if (proxyTiesPerRoot_)
+    support.insert(iff);
+  else
+    sideConstraints_.push_back(iff);
+}
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::tieProxies(const BBNodeVec& proxies,
+                                                    const BBNodeVec& bits,
+                                                    BBNodeSet& support)
+{
+  assert(proxies.size() == bits.size());
+  const unsigned width = std::min(proxies.size(), bits.size());
+  for (unsigned i = 0; i < width; i++)
+    if (!proxies[i].IsNull() && !bits[i].IsNull() && !(proxies[i] == bits[i]))
+      tie(proxies[i], bits[i], support);
+}
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::registerAbstractionResult(
+    const ASTNode& term, const BBNodeVec& abstracted, BBNodeSet& support)
+{
+  if (proxyTiesPerRoot_)
+  {
+    const auto it = nf->symbolToBBNode.find(term);
+    if (it != nf->symbolToBBNode.end() && !(it->second == abstracted))
+    {
+      tieProxies(it->second, abstracted, support);
+      return;
+    }
+  }
+  nf->symbolToBBNode[term] = abstracted;
+}
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::fileTermRecord(
+    const RawBVTermAbstraction& raw)
+{
+  termRecordIndexOf_[raw.termNode] = abstractedTerms_.size();
+  abstractedTerms_.push_back(raw);
+}
+
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::retieRecordOperands(
+    const ASTNode& term, BBNodeSet& support)
+{
+  if (!proxyTiesPerRoot_)
+    return;
+  const auto index = termRecordIndexOf_.find(term);
+  if (index == termRecordIndexOf_.end())
+    return;
+  // A copy: blasting an operand can file a record and move the vector.
+  const RawBVTermAbstraction raw = abstractedTerms_[index->second];
+  for (unsigned i = 0; i < raw.numOperands; i++)
+  {
+    const ASTNode& op = raw.operands[i];
+    if (op.IsNull())
+      continue;
+    if (op.GetType() == BOOLEAN_TYPE)
+    {
+      const auto proxy = iteConditionProxyOf_.find(term);
+      if (proxy != iteConditionProxyOf_.end())
+        tie(proxy->second, BBForm(op, support), support);
+      continue;
+    }
+    ensureProxyCIs(op, BBTerm(op, support), support);
+  }
 }
 
 // An abstraction stands for its term with fresh inputs, and refinement later
@@ -259,6 +345,13 @@ bool BitBlaster<BBNode, BBNodeManagerT>::reuseRegisteredTerm(
     reused = abstraction->second.bits;
     return true;
   }
+
+  // A vector registered for a node that was only ever an operand is tied to
+  // the node's bits under the roots that blasted it, not permanently, so a
+  // root that took it as the term's value without blasting the term would
+  // read it untied. Blast the term instead; its arm registers and ties.
+  if (proxyTiesPerRoot_)
+    return false;
 
   const typename BBNodeManagerT::SymbolToBBNode::const_iterator it =
       nf->symbolToBBNode.find(term);
@@ -1412,13 +1505,14 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           BBNodeVec reused;
           if (reuseRegisteredTerm(term, num_bits, reused))
           {
+            retieRecordOperands(term, support);
             result = reused;
             break;
           }
         }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_ITE]++;
-        const BBNodeVec thnInputs = ensureProxyCIs(term[1], thn);
-        const BBNodeVec elsInputs = ensureProxyCIs(term[2], els);
+        const BBNodeVec thnInputs = ensureProxyCIs(term[1], thn, support);
+        const BBNodeVec elsInputs = ensureProxyCIs(term[2], els, support);
 
         std::vector<BVAbstractionId> dependencies =
             abstractionSourcesOf(cond);
@@ -1440,9 +1534,10 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
         // turn the dependency cut into an unlabelled CI.
         tagAbstractionSources(condCI, abstractionSourcesOf(cond));
 
-        sideConstraints_.push_back(nf->CreateNode(IFF, condCI, cond));
+        tie(condCI, cond, support);
+        iteConditionProxyOf_[term] = condCI;
 
-        nf->symbolToBBNode[term] = abstracted;
+        registerAbstractionResult(term, abstracted, support);
         abstractedResults_[term] = {id, abstracted};
 
         RawBVTermAbstraction raw;
@@ -1457,7 +1552,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
         raw.width = num_bits;
         raw.condCISymbolIndex = nf->ciOrdinal(condCI);
         raw.resultCISymbolIndices = ciSymbolIndices(nf, abstracted);
-        abstractedTerms_.push_back(raw);
+        fileTermRecord(raw);
         result = abstracted;
       }
       else
@@ -1609,6 +1704,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           BBNodeVec reused;
           if (reuseRegisteredTerm(term, num_bits, reused))
           {
+            retieRecordOperands(term, support);
             result = reused;
             break;
           }
@@ -1643,8 +1739,8 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           // it is not in the registry refinement reads, and every round that
           // touches the record has to mint a fresh pinned vector for it.
           const BBNodeVec operandInputs[2] = {
-              ensureProxyCIs(realOp[0], *opVecs[0]),
-              ensureProxyCIs(realOp[1], *opVecs[1])};
+              ensureProxyCIs(realOp[0], *opVecs[0], support),
+              ensureProxyCIs(realOp[1], *opVecs[1], support)};
           std::vector<BVAbstractionId> dependencies =
               abstractionSourcesOf(operandInputs[0]);
           appendAbstractionSources(dependencies,
@@ -1658,7 +1754,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
             tagAbstractionSources(abstracted[i], {id});
           }
           uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_PLUS]++;
-          nf->symbolToBBNode[term] = abstracted;
+          registerAbstractionResult(term, abstracted, support);
           abstractedResults_[term] = {id, abstracted};
           RawBVTermAbstraction raw;
           raw.id = id;
@@ -1673,7 +1769,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           raw.operandNegated[0] = negated[0];
           raw.operandNegated[1] = negated[1];
           raw.resultCISymbolIndices = ciSymbolIndices(nf, abstracted);
-          abstractedTerms_.push_back(raw);
+          fileTermRecord(raw);
           result = abstracted;
           break;
         }
@@ -1774,13 +1870,14 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           BBNodeVec reused;
           if (reuseRegisteredTerm(term, num_bits, reused))
           {
+            retieRecordOperands(term, support);
             result = reused;
             break;
           }
         }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_MULT]++;
-        const BBNodeVec op0 = ensureProxyCIs(term[0], mpcd1);
-        const BBNodeVec op1 = ensureProxyCIs(term[1], mpcd2);
+        const BBNodeVec op0 = ensureProxyCIs(term[0], mpcd1, support);
+        const BBNodeVec op1 = ensureProxyCIs(term[1], mpcd2, support);
         std::vector<BVAbstractionId> dependencies =
             abstractionSourcesOf(op0);
         appendAbstractionSources(dependencies, abstractionSourcesOf(op1));
@@ -1792,7 +1889,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           abstracted[i] = nf->CreateFreshInput();
           tagAbstractionSources(abstracted[i], {id});
         }
-        nf->symbolToBBNode[term] = abstracted;
+        registerAbstractionResult(term, abstracted, support);
         abstractedResults_[term] = {id, abstracted};
 
         RawBVTermAbstraction raw;
@@ -1807,7 +1904,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
         raw.resultCISymbolIndices = ciSymbolIndices(nf, abstracted);
         raw.operandKnownBits[0] = knownBitsOf(nf, mpcd1);
         raw.operandKnownBits[1] = knownBitsOf(nf, mpcd2);
-        abstractedTerms_.push_back(raw);
+        fileTermRecord(raw);
         result = abstracted;
       }
       else
@@ -1850,13 +1947,14 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           BBNodeVec reused;
           if (reuseRegisteredTerm(term, num_bits, reused))
           {
+            retieRecordOperands(term, support);
             result = reused;
             break;
           }
         }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_DIVMOD]++;
-        const BBNodeVec dividendInputs = ensureProxyCIs(term[0], dvdd);
-        const BBNodeVec divisorInputs = ensureProxyCIs(term[1], dvsr);
+        const BBNodeVec dividendInputs = ensureProxyCIs(term[0], dvdd, support);
+        const BBNodeVec divisorInputs = ensureProxyCIs(term[1], dvsr, support);
         std::vector<BVAbstractionId> dependencies =
             abstractionSourcesOf(dividendInputs);
         appendAbstractionSources(dependencies,
@@ -1869,7 +1967,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
           abstracted[i] = nf->CreateFreshInput();
           tagAbstractionSources(abstracted[i], {id});
         }
-        nf->symbolToBBNode[term] = abstracted;
+        registerAbstractionResult(term, abstracted, support);
         abstractedResults_[term] = {id, abstracted};
 
         RawBVTermAbstraction raw;
@@ -1884,7 +1982,7 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
         raw.resultCISymbolIndices = ciSymbolIndices(nf, abstracted);
         raw.operandKnownBits[0] = knownBitsOf(nf, dvdd);
         raw.operandKnownBits[1] = knownBitsOf(nf, dvsr);
-        abstractedTerms_.push_back(raw);
+        fileTermRecord(raw);
         result = abstracted;
       }
       else
@@ -2464,12 +2562,16 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
         const auto reused = abstractedFormulas_.find(form);
         if (reused != abstractedFormulas_.end())
         {
+          // One Boolean per predicate, but the operand proxies its record is
+          // defined over are tied under each root that reads it.
+          ensureProxyCIs(form[0], left, support);
+          ensureProxyCIs(form[1], right, support);
           result = reused->second.bit;
           break;
         }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_EQ]++;
-        const BBNodeVec leftInputs = ensureProxyCIs(form[0], left);
-        const BBNodeVec rightInputs = ensureProxyCIs(form[1], right);
+        const BBNodeVec leftInputs = ensureProxyCIs(form[0], left, support);
+        const BBNodeVec rightInputs = ensureProxyCIs(form[1], right, support);
         std::vector<BVAbstractionId> dependencies =
             abstractionSourcesOf(leftInputs);
         appendAbstractionSources(dependencies,
@@ -2519,12 +2621,14 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
           const auto reused = abstractedFormulas_.find(form);
           if (reused != abstractedFormulas_.end())
           {
+            ensureProxyCIs(form[0], left, support);
+            ensureProxyCIs(form[1], right, support);
             result = reused->second.bit;
             break;
           }
           uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_COMPARE]++;
-          const BBNodeVec leftInputs = ensureProxyCIs(form[0], left);
-          const BBNodeVec rightInputs = ensureProxyCIs(form[1], right);
+          const BBNodeVec leftInputs = ensureProxyCIs(form[0], left, support);
+          const BBNodeVec rightInputs = ensureProxyCIs(form[1], right, support);
           std::vector<BVAbstractionId> dependencies =
               abstractionSourcesOf(leftInputs);
           appendAbstractionSources(dependencies,
@@ -2543,7 +2647,7 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
           raw.numOperands = 2;
           raw.width = left.size();
           raw.condCISymbolIndex = nf->ciOrdinal(abstractCI);
-          abstractedTerms_.push_back(raw);
+          fileTermRecord(raw);
           abstractedFormulas_[form] = {id, abstractCI};
           result = abstractCI;
           break;

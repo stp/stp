@@ -811,9 +811,52 @@ private:
   BVAbstractionId newAbstractionId();
   void tagAbstractionSources(const BBNode& ci,
                              const std::vector<BVAbstractionId>& sources);
-  BBNodeVec ensureProxyCIs(const ASTNode& node, const BBNodeVec& bits);
+  BBNodeVec ensureProxyCIs(const ASTNode& node, const BBNodeVec& bits,
+                           BBNodeSet& support);
   bool reuseRegisteredTerm(const ASTNode& term, unsigned width,
                            BBNodeVec& reused) const;
+
+  // Where a proxy's defining biconditional goes. Off -- the batch lowering,
+  // one root through the blaster -- it is a side constraint, conjoined once
+  // and permanently: a fresh variable defined by a circuit over the query's
+  // inputs, which constrains no assignment.
+  //
+  // On, it goes into the support of the root being blasted, and every root
+  // that reads the proxy ties it again to its own bits for the node. A bit
+  // need not mean the same thing under every root. A relational encoding's
+  // fresh inputs are constrained only by the relation conjoined into the
+  // root that minted them, and the fp-native domain analysis folds a circuit
+  // only where its facts hold -- which is why BBForm clears the memos that
+  // hold such bits on every root change. The registry is the one memo that
+  // cannot be cleared, because refinement resolves a record's operands
+  // through it by node, so all live records must agree on one vector per
+  // node. Pinning that vector permanently to one root's bits is what leaves
+  // it, and every record resolved through it, meaningless once that root is
+  // gone.
+  bool proxyTiesPerRoot_ = false;
+  void tie(const BBNode& proxy, const BBNode& bit, BBNodeSet& support);
+  void tieProxies(const BBNodeVec& proxies, const BBNodeVec& bits,
+                  BBNodeSet& support);
+  // An abstraction's result inputs become the term's registered vector,
+  // unless the term already has one -- an operand's proxies, which live
+  // records resolve it through. Then that vector stays registered and is
+  // tied to the result instead.
+  void registerAbstractionResult(const ASTNode& term,
+                                 const BBNodeVec& abstracted,
+                                 BBNodeSet& support);
+  // A reused term abstraction is defined over its operands' proxies, so a
+  // root that takes it from the memo without blasting the operands has to
+  // tie those proxies to its own bits for them.
+  void retieRecordOperands(const ASTNode& term, BBNodeSet& support);
+  void fileTermRecord(const RawBVTermAbstraction& raw);
+  std::unordered_map<ASTNode, size_t, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      termRecordIndexOf_;
+  // An abstracted ITE's condition proxy, which is one Boolean rather than a
+  // vector and so is not in the registry.
+  std::unordered_map<ASTNode, BBNode, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      iteConditionProxyOf_;
   // Operations already counted as abstraction candidates.
   //
   // bv_candidates says it counts operations reaching the bit-blaster at or
@@ -863,6 +906,13 @@ public:
   const std::vector<BBNode>& sideConstraints() const
   {
     return sideConstraints_;
+  }
+
+  // The consumer blasts several roots through this blaster and asserts each
+  // under its own literal; see proxyTiesPerRoot_.
+  void setProxyTiesPerRoot(bool perRoot)
+  {
+    proxyTiesPerRoot_ = perRoot;
   }
 
   // Direct producer IDs reachable from an AIG result. Walking the committed
