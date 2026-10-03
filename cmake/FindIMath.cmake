@@ -80,20 +80,19 @@ if(NOT (IMATH_INCLUDE_DIR AND IMATH_LIBRARY))
     set(IMath_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}imath${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
-    # The patch is regenerated with zero context so that `git diff --check`
-    # accepts it, which is why applying it needs --unidiff-zero. Upstream
-    # carries no CMakeLists, so supply the one that builds the two files STP
-    # needs against STP's allocation hooks.
+    # Patched through deps-utils/patch-imath.cmake rather than a bare
+    # `git apply`: ExternalProject repeats its patch step whenever the step's
+    # arguments change, a moved STP_DEP_DIR included, and the second run would
+    # otherwise fail on the checkout the first one patched. The script also
+    # supplies the CMakeLists upstream does not carry, which builds the two
+    # files STP needs against STP's allocation hooks.
     ExternalProject_Add(
         IMath-EP
         ${STP_EP_COMMON_CONFIG}
         GIT_REPOSITORY https://github.com/creachadair/imath
         GIT_TAG ${IMath_VERSION}
-        PATCH_COMMAND git apply --unidiff-zero
-                      "${CMAKE_CURRENT_LIST_DIR}/deps-utils/imath-no-gmp-names-immutable-tuning.patch"
-              COMMAND ${CMAKE_COMMAND} -E copy
-                      "${CMAKE_CURRENT_LIST_DIR}/deps-utils/imath-CMakeLists.txt"
-                      <SOURCE_DIR>/CMakeLists.txt
+        PATCH_COMMAND ${CMAKE_COMMAND} "-DSOURCE_DIR=<SOURCE_DIR>"
+                      -P "${CMAKE_CURRENT_LIST_DIR}/deps-utils/patch-imath.cmake"
         CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
                    -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
                    -DCMAKE_INSTALL_LIBDIR=lib
