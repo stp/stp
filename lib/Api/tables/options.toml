@@ -3008,6 +3008,17 @@ engine = { field = "cnf_complete_ite" }
 category = "cnf"
 help = "new-* CNF rungs: encode a recovered if-then-else with all six prime implicates, adding the two that let agreeing arms decide the output while the condition is unset"
 
+
+[[option]]
+name = "cnf-fa-minimal"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "cnf_fa_minimal" }
+category = "cnf"
+help = "new-* CNF rungs: encode a recovered full adder with the ten clauses that define it instead of the fourteen that make it propagation complete"
 [[option]]
 name = "incremental"
 id = 17

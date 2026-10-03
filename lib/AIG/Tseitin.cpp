@@ -786,8 +786,8 @@ bool Cone::tryCell(const Manager& m, Node n, const std::vector<uint8_t>& refs)
 }
 
 Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover,
-           bool linkShared, bool completeIte)
-    : completeIte_(completeIte)
+           bool linkShared, bool completeIte, bool faMinimal)
+    : completeIte_(completeIte), faMinimal_(faMinimal)
 {
   const uint32_t nCo = m.outputCount();
   assert(namedOutputs <= nCo);
@@ -1053,8 +1053,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover,
       continue; // priced with its carry's block
     if (faCarry(n))
     {
-      nClauses_ += 14;
-      nLiterals_ += 44;
+      nClauses_ += faMinimal_ ? 10 : 14;
+      nLiterals_ += faMinimal_ ? 36 : 44;
       continue;
     }
     if (cellRoot(n))
@@ -1149,9 +1149,10 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover,
 
 CNF deriveTseitin(const Manager& m, unsigned namedOutputs, Recover recover,
                   std::vector<uint32_t>* nodeVarOut, bool linkShared,
-                  bool completeIte)
+                  bool completeIte, bool faMinimal)
 {
-  const Cone cone(m, namedOutputs, recover, linkShared, completeIte);
+  const Cone cone(m, namedOutputs, recover, linkShared, completeIte,
+                  faMinimal);
   CNF cnf;
   writeTseitin(m, cone, cnf, nodeVarOut);
   return cnf;

@@ -141,9 +141,12 @@ public:
   //
   // completeIte: a patterned ITE also gets the two prime implicates that
   // skip the condition.
+  //
+  // faMinimal: a recovered full adder emits the ten-clause minimum of its
+  // relation instead of the fourteen-clause propagation-complete block.
   Cone(const Manager& m, unsigned namedOutputs = 0,
        Recover recover = Recover::PatternsAndAnds, bool linkShared = false,
-       bool completeIte = false);
+       bool completeIte = false, bool faMinimal = false);
 
   // In the cone, so it gets a variable and its defining clauses.
   bool live(Node n) const { return (live_[n >> 6] >> (n & 63)) & 1u; }
@@ -253,6 +256,7 @@ public:
   // Outputs at or above this index are named; the ones below are asserted.
   uint32_t firstNamedOutput() const { return firstNamed_; }
   bool completeIte() const { return completeIte_; }
+  bool faMinimal() const { return faMinimal_; }
 
 private:
   void setLive(Node n) { live_[n >> 6] |= 1ull << (n & 63); }
@@ -294,6 +298,7 @@ private:
   uint32_t nNamed_ = 0;
   uint32_t firstNamed_ = 0;
   bool completeIte_ = false;
+  bool faMinimal_ = false;
 };
 
 // Pass B: emit. Ascending is automatically topological, so a fanin's variable
@@ -361,6 +366,21 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink,
       const int A = cnfLit(fa.a), B = cnfLit(fa.b), C = cnfLit(fa.c);
       const int S = static_cast<int>(2 * var[fa.sum]);
       const int T = nx, Tn = px; // t is the carry-out literal, so !node
+      if (cone.faMinimal())
+      {
+        // The smallest clause set equivalent to the relation: unit-refutation
+        // complete, but not propagation complete.
+        sink.clause(A, B, Tn);
+        sink.clause(A ^ 1, B ^ 1, T);
+        sink.clause(C, S ^ 1, Tn);
+        sink.clause(C ^ 1, S, T);
+        const int p[6][4] = {{A, B, C, S ^ 1},         {A, B ^ 1, C, S},
+                             {A, B ^ 1, C ^ 1, S ^ 1}, {A ^ 1, B, C, S},
+                             {A ^ 1, B, C ^ 1, S ^ 1}, {A ^ 1, B ^ 1, C ^ 1, S}};
+        for (const int(&cl)[4] : p)
+          sink.clause(cl, 4);
+        continue;
+      }
       sink.clause(C ^ 1, S, T);
       sink.clause(B ^ 1, C ^ 1, T);
       sink.clause(B ^ 1, S, T);
@@ -566,7 +586,8 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink,
 CNF deriveTseitin(const Manager& m, unsigned namedOutputs = 0,
                   Recover recover = Recover::PatternsAndAnds,
                   std::vector<uint32_t>* nodeVarOut = nullptr,
-                  bool linkShared = false, bool completeIte = false);
+                  bool linkShared = false, bool completeIte = false,
+                  bool faMinimal = false);
 
 } // namespace aig
 } // namespace stp
