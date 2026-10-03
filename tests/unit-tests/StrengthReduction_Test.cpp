@@ -78,6 +78,24 @@ struct Context
       return false;
    }
 
+   // The first node of this kind in a pre-order walk, or a null node when
+   // there is none. For asserting on the shape a rewrite left behind, where
+   // "a node of this kind is somewhere in the tree" is too weak a question.
+   ASTNode find(const Kind k, const ASTNode& n)
+   {
+      if (n.GetKind() == k)
+        return n;
+
+      for (const auto& c: n)
+      {
+        const ASTNode r = find(k,c);
+        if (!r.IsNull())
+          return r;
+      }
+
+      return ASTNode();
+   }
+
    ASTNode process(std::string input)
    {
       stp::SMT2ScanString((start_input + input).c_str());
@@ -546,4 +564,251 @@ TEST(StrengthReduction_Test , __LINE__)
   ASSERT_FALSE(c.present(stp::BVPLUS, n));
   ASSERT_FALSE(c.present(stp::BVNOT, n));
   ASSERT_TRUE(c.present(stp::BVCONCAT, n));
+}
+
+
+// A read moves past a write whose index disagrees with it on a fixed bit.
+// The masks make the low bit of one index zero and of the other one, which
+// the node factory's own chase cannot see.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (declare-fun arr () (Array (_ BitVec 4) (_ BitVec 8)))
+    (declare-fun x () (_ BitVec 4))
+    (declare-fun y () (_ BitVec 4))
+    (
+      assert
+            ( =
+              (select (store arr (bvand x #xC) #x01) (bvor y #x1))
+              #x02
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_TRUE(c.present(stp::READ, n));
+  ASSERT_FALSE(c.present(stp::WRITE, n));
+}
+
+// Disjoint intervals, with no fixed bit to separate them: the written
+// index lies in [1,4] and the read index in [5,8].
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (declare-fun arr () (Array (_ BitVec 4) (_ BitVec 8)))
+    (declare-fun x () (_ BitVec 4))
+    (declare-fun y () (_ BitVec 4))
+    (
+      assert
+            ( =
+              (select
+                (store arr (bvadd (bvand x #x3) #x1) #x01)
+                (bvadd (bvand y #x3) #x5))
+              #x02
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_TRUE(c.present(stp::READ, n));
+  ASSERT_FALSE(c.present(stp::WRITE, n));
+}
+
+// Only the value sets separate these: {2,5} and {3,4} share a fixed-bit
+// pattern and their hulls [2,5] and [3,4] overlap.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (declare-fun arr () (Array (_ BitVec 4) (_ BitVec 8)))
+    (
+      assert
+            ( =
+              (select
+                (store arr (ite a #x2 #x5) #x01)
+                (ite b #x3 #x4))
+              #x02
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_TRUE(c.present(stp::READ, n));
+  ASSERT_FALSE(c.present(stp::WRITE, n));
+}
+
+// Both indexes are masked the same way, so they might be equal and the
+// write has to stay.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (declare-fun arr () (Array (_ BitVec 4) (_ BitVec 8)))
+    (declare-fun x () (_ BitVec 4))
+    (declare-fun y () (_ BitVec 4))
+    (
+      assert
+            ( =
+              (select (store arr (bvand x #x3) #x01) (bvand y #x3))
+              #x02
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_TRUE(c.present(stp::WRITE, n));
+}
+
+// Nothing is known about either index, so nothing is skipped.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (declare-fun arr () (Array (_ BitVec 4) (_ BitVec 8)))
+    (declare-fun x () (_ BitVec 4))
+    (declare-fun y () (_ BitVec 4))
+    (
+      assert
+            ( = (select (store arr x #x01) y) #x02 )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_TRUE(c.present(stp::WRITE, n));
+}
+
+// Several writes in one chase: both written indexes are even and the read
+// index is odd, so the read reaches the base array.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (declare-fun arr () (Array (_ BitVec 4) (_ BitVec 8)))
+    (declare-fun x () (_ BitVec 4))
+    (declare-fun y () (_ BitVec 4))
+    (declare-fun z () (_ BitVec 4))
+    (
+      assert
+            ( =
+              (select
+                (store (store arr (bvand x #xE) #x01) (bvand y #xC) #x03)
+                (bvor z #x1))
+              #x02
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_TRUE(c.present(stp::READ, n));
+  ASSERT_FALSE(c.present(stp::WRITE, n));
+}
+
+// The chase stops at the first write that might alias, and keeps the ones
+// below it. The outer write is to an odd index, which the read's mask rules
+// out; the inner one is to an unconstrained index, which it cannot.
+//
+// The masks are deliberately misaligned (two low bits against one), because
+// aligned ones are already handled without this pass: the fixed-bit
+// reduction below rewrites each masked index to a concat, and the node
+// factory's own chase then splits the two concats and folds the index
+// equality to false by itself.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (declare-fun arr () (Array (_ BitVec 4) (_ BitVec 8)))
+    (declare-fun x () (_ BitVec 4))
+    (declare-fun y () (_ BitVec 4))
+    (declare-fun z () (_ BitVec 4))
+    (
+      assert
+            ( =
+              (select
+                (store (store arr z #x03) (bvor y #x1) #x01)
+                (bvand x #xC))
+              #x02
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+
+  // Exactly one write survives, the inner one: the read sits on a write
+  // whose index is the unconstrained symbol and whose array is the base.
+  const ASTNode read = c.find(stp::READ, n);
+  ASSERT_FALSE(read.IsNull());
+  ASSERT_EQ(stp::WRITE, read[0].GetKind());
+  ASSERT_EQ(stp::SYMBOL, read[0][1].GetKind());
+  ASSERT_EQ(stp::SYMBOL, read[0][0].GetKind());
+}
+
+
+// A write the read misses is deleted even when a write that might alias
+// sits above it. The read index is odd, the top write's index is a bare
+// symbol (so it might be that odd index), and the one below it is even.
+// Both writes belong to this chain alone, so rebuilding the chain around
+// the gap is strictly smaller.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (declare-fun arr () (Array (_ BitVec 4) (_ BitVec 8)))
+    (declare-fun x () (_ BitVec 4))
+    (declare-fun y () (_ BitVec 4))
+    (declare-fun s () (_ BitVec 4))
+    (
+      assert
+            ( =
+              (select
+                (store (store arr (bvand y #xE) #x03) s #x01)
+                (bvor x #x1))
+              #x02
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+
+  // One write is left, the symbolic one, sitting straight on the array.
+  const ASTNode read = c.find(stp::READ, n);
+  ASSERT_FALSE(read.IsNull());
+  ASSERT_EQ(stp::WRITE, read[0].GetKind());
+  ASSERT_EQ(stp::SYMBOL, read[0][1].GetKind());
+  ASSERT_EQ(stp::SYMBOL, read[0][0].GetKind());
+}
+
+// The same chain, with the even write also read somewhere else. It is no
+// longer this chain's to delete: rebuilding around the gap would copy the
+// writes above it rather than replace them, so the chain stays whole.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (declare-fun arr () (Array (_ BitVec 4) (_ BitVec 8)))
+    (declare-fun x () (_ BitVec 4))
+    (declare-fun y () (_ BitVec 4))
+    (declare-fun s () (_ BitVec 4))
+    (
+      assert
+            (and
+              ( =
+                (select
+                  (store (store arr (bvand y #xE) #x03) s #x01)
+                  (bvor x #x1))
+                #x02
+              )
+              ( = (select (store arr (bvand y #xE) #x03) s) #x04 )
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+
+  const ASTNode read = c.find(stp::READ, n);
+  ASSERT_FALSE(read.IsNull());
+  ASSERT_EQ(stp::WRITE, read[0].GetKind());
+  // Both writes survive: the shared one is still under the symbolic one.
+  ASSERT_EQ(stp::WRITE, read[0][0].GetKind());
 }
