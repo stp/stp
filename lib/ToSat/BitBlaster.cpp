@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/Util/BitOps.h"
 #include "stp/Util/DagWalk.h"
 #include <algorithm>
 #include <cassert>
@@ -5098,7 +5099,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::fusedSumCollect(
       }
       bool neg = negate;
       const uint64_t minusk = (mask + 1 - k) & mask;
-      if (__builtin_popcountll(minusk) < __builtin_popcountll(k))
+      if (::stp::popCount64(minusk) < ::stp::popCount64(k))
       {
         k = minusk;
         neg = !neg;
