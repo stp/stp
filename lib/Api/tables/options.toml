@@ -3019,6 +3019,17 @@ scope = "solver"
 engine = { field = "cnf_fa_minimal" }
 category = "cnf"
 help = "new-* CNF rungs: encode a recovered full adder with the ten clauses that define it instead of the fourteen that make it propagation complete"
+
+[[option]]
+name = "extract-through-bitwise"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "extract_through_bitwise" }
+category = "simplification"
+help = "sharing-aware rewriting: extract from each operand of an unshared bitwise operation instead of from its result, narrowing the operation to the bits that are read"
 [[option]]
 name = "incremental"
 id = 17
