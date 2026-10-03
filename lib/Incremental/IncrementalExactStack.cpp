@@ -595,7 +595,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
   if (arrayops)
   {
     inputToSat = batchAT->TransformFormula_TopLevel(inputToSat);
-    recordDriverReadPairs(batchAT->arrayToIndexToRead);
+    recordBlockReadPairs(batchAT->arrayToIndexToRead);
   }
   if (extPrepared)
     ext->bindAfterTransform(batchAT);
@@ -753,8 +753,18 @@ IncrementalSolver::Impl::exactStackCheckSat(
   if ((!arrayEqualityRound && !ufRound &&
        (!arrayops || uf.ackermannisation)) ||
       (!ufRound && uf.ackermannisation && !extActive))
-    return solvePlainExactStack(assertionsSMT2, assumptions, inputToSat,
-                                blockRegular);
+  {
+    // The flag must hold while the plain solve materialises its model (its
+    // row seeding reads the block's eager read-pair record), and must not
+    // outlive the round: eager instantiation selects it for one block, and a
+    // later ordinary query under it would encode its pieces eagerly against
+    // lazily encoded base rows, skip read refinement, and could answer sat
+    // to an unsatisfiable stack.
+    const SOLVER_RETURN_TYPE plain = solvePlainExactStack(
+        assertionsSMT2, assumptions, inputToSat, blockRegular);
+    uf.ackermannisation = savedAck;
+    return plain;
+  }
 
   // Array equality needs a candidate model on every refinement round. Keep
   // that internal requirement distinct from whether this query's caller is
