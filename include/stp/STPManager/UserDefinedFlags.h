@@ -1792,6 +1792,13 @@ public:
   // complete. Off by default: it loses on bit-vector logics.
   bool cnf_fa_minimal = false;
 
+  // Sharing-aware rewriting: take an extract of a bitwise operation on each
+  // of its operands instead, narrowing the operation to the bits that are
+  // read. Only where nothing else reads the operation. Off by default: it
+  // can add a node per operand, and what it buys depends on the extracts
+  // then folding or composing further down.
+  bool extract_through_bitwise = false;
+
   // Whether AUTO should read the threshold the Real path's way. Set for an
   // active Real solve, and for nothing else; the bit-vector choice at either
   // end of the threshold is untouched.

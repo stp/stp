@@ -47,6 +47,7 @@ class Rewriting
   std::unordered_map<uint64_t, ASTNode> fromTo;
 
   int removed;
+  unsigned narrowedBitwise;
 
   // sharecount is 1 if the node has one reference in the tree.
   void buildShareCount(const ASTNode& n);
