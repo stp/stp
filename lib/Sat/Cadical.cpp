@@ -670,6 +670,36 @@ bool Cadical::supportsDecisionPolarity() const
 #endif
 }
 
+// CaDiCaL only lets a *clean* variable become observed: one that no
+// inprocessing has put on its extension stack. The theory's atoms are not
+// known here -- they exist once a CNF does -- so there is nothing to freeze
+// yet, and by the time connectTheoryPropagator() names them the solver may
+// have run several searches. Under BV equality abstraction it does: the first
+// CNFs carry none of the theory's atoms, the refinement rounds introduce
+// them, and each round solves. So retire the techniques that can witness-mark
+// a variable, for the rest of the query, and every later observe is legal.
+//
+// These are the six that push onto the extension stack in CaDiCaL 3.x:
+// bounded variable elimination, blocked/covered/globally-blocked clause
+// elimination, SCC decomposition with equivalent-literal substitution, and
+// SAT sweeping. Congruence closure reaches substitution only through
+// decompose, so it needs no switch of its own; probing, vivification and
+// subsumption never touch the extension stack and stay enabled.
+//
+// Unlike the incremental driver's retirement in
+// disableEliminationAndShrinkingInternal, this is not a heuristic an explicit
+// --cadical-elim=1 may override: observing an unclean variable is a contract
+// violation that aborts the process.
+void Cadical::expectTheoryPropagator()
+{
+  if (theory_expected)
+    return;
+  theory_expected = true;
+  for (const char* option :
+       {"elim", "block", "cover", "condition", "decompose", "sweep"})
+    s->set(option, 0);
+}
+
 bool Cadical::connectTheoryPropagator(
     SATSolver::TheoryPropagator* propagator,
     const std::vector<uint32_t>& observed)
