@@ -138,6 +138,10 @@ public:
     bitBlaster.reset(new BitBlasterAIG(nodeManager.get(), simplifier.get(),
                                     bm->defaultNodeFactory,
                                     &bm->UserFlags, NULL));
+    // Every root goes through this one blaster and is asserted under its own
+    // literal, so a proxy's tie to its bits belongs to the root that blasted
+    // them, not to the session.
+    bitBlaster->setProxyTiesPerRoot(true);
   }
 
   BBNodeManagerAIG& nodes() { return *nodeManager; }
