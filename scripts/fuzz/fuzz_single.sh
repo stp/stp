@@ -1329,6 +1329,18 @@ declare -a g_cnf=(
 "--cnf-generation-effort=gia-very-high"
 # The other way to reach very-low: the threshold auto drops to it above.
 "--cnf-auto-threshold=0"
+# A third option only the new-* rungs read: whether a recovered full adder is
+# written with the ten clauses that define it or the fourteen that make it
+# propagation complete (#1235). Measured on the same four entries, counting
+# files that emit a CNF at all -- 14 of 30 QF_BV, 17 n-ary, 16 wide and 24
+# QF_UFBV -- it changed 7, 10, 10 and 22 of them, and identically under
+# new-medium and new-high, so one rung is enough to carry it. Named with no
+# rung at all it still reaches 5 of the 16 wide files, because auto picks
+# new-medium for a large estimated blast; the pairing below is what makes it
+# deterministic rather than what makes it bite. Answers agreed on all 360
+# comparisons, so this is coverage rather than a find.
+"--cnf-generation-effort=new-medium --cnf-fa-minimal=1"
+
 # Two writer options only the new-* rungs read, so each rides on one. On
 # 19 QF_BV, 14 n-ary, 15 wide and 25 QF_UFBV files emitting a CNF:
 # --cnf-link-shared-cells changed 5, 4, 4 and 23 of them under new-high,
