@@ -1787,6 +1787,11 @@ public:
   // unset. Off by default: it grows the CNF where multiplexers dominate.
   bool cnf_complete_ite = false;
 
+  // The new-* CNF writer's recovered full adders: emit the ten clauses that
+  // define the relation instead of the fourteen that make it propagation
+  // complete. Off by default: it loses on bit-vector logics.
+  bool cnf_fa_minimal = false;
+
   // Whether AUTO should read the threshold the Real path's way. Set for an
   // active Real solve, and for nothing else; the bit-vector choice at either
   // end of the threshold is untouched.

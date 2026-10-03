@@ -196,11 +196,12 @@ void buildRandom(aig::Manager& m, std::mt19937& rng, unsigned nCi,
 // and BCP from the CIs reproduces every one of them.
 void checkExact(const aig::Manager& m, unsigned namedOutputs,
                 aig::Recover recover, bool linkShared = false,
-                bool completeIte = false)
+                bool completeIte = false, bool faMinimal = false)
 {
-  const aig::Cone cone(m, namedOutputs, recover, linkShared, completeIte);
+  const aig::Cone cone(m, namedOutputs, recover, linkShared, completeIte,
+                       faMinimal);
   const CNF cnf = aig::deriveTseitin(m, namedOutputs, recover, nullptr,
-                                     linkShared, completeIte);
+                                     linkShared, completeIte, faMinimal);
   const Layout l = layoutOf(m, cone);
 
   ASSERT_EQ(cnf.varCount(), l.nVars);
@@ -591,6 +592,66 @@ TEST(Tseitin, RippleCarryChainRecoversEveryFullAdder)
   const CNF folded = aig::deriveTseitin(m, width, aig::Recover::PatternsAndAnds);
   EXPECT_LT(folded.clauseCount(), plain.clauseCount());
   EXPECT_LT(folded.varCount(), plain.varCount());
+}
+
+// faMinimal trades the four clauses that only serve propagation for a
+// smaller block. From the inputs, propagation still decides every output.
+TEST(Tseitin, MinimalFullAdderIsTheTenClauseBlock)
+{
+  aig::Manager m;
+  const aig::Lit a = m.createCi(), b = m.createCi(), c = m.createCi();
+  aig::Lit sum = aig::LIT_NULL, carry = aig::LIT_NULL;
+  fullAdder(m, a, b, c, sum, carry);
+  m.createOutput(sum);
+  m.createOutput(carry);
+
+  checkExact(m, 2, aig::Recover::PatternsAndAnds, false, false, true);
+
+  const CNF full = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds);
+  const CNF lean = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds,
+                                      nullptr, false, false, true);
+  EXPECT_EQ(lean.clauseCount(), full.clauseCount() - 4);
+  EXPECT_EQ(lean.varCount(), full.varCount());
+}
+
+// Along a ripple chain every recovered adder saves four clauses and no
+// variables, and the chain stays exact.
+TEST(Tseitin, MinimalFullAdderAlongARippleChain)
+{
+  for (unsigned width = 1; width <= 5; width++)
+  {
+    aig::Manager m;
+    std::vector<aig::Lit> a, b;
+    for (unsigned i = 0; i < width; i++)
+      a.push_back(m.createCi());
+    for (unsigned i = 0; i < width; i++)
+      b.push_back(m.createCi());
+
+    std::vector<aig::Lit> sums;
+    sums.push_back(xorSharing(m, a[0], b[0]));
+    aig::Lit cin = m.And(a[0], b[0]);
+    for (unsigned i = 1; i < width; i++)
+    {
+      aig::Lit s = aig::LIT_NULL, cout = aig::LIT_NULL;
+      fullAdder(m, a[i], b[i], cin, s, cout);
+      sums.push_back(s);
+      cin = cout;
+    }
+    for (const aig::Lit s : sums)
+      m.createOutput(s);
+
+    checkExact(m, width, aig::Recover::PatternsAndAnds, false, false, true);
+
+    const CNF full =
+        aig::deriveTseitin(m, width, aig::Recover::PatternsAndAnds);
+    const CNF lean = aig::deriveTseitin(m, width, aig::Recover::PatternsAndAnds,
+                                        nullptr, false, false, true);
+    // The top carry is dropped, so only the interior adders are recovered.
+    const uint64_t adders = width >= 3 ? width - 2 : 0;
+    EXPECT_EQ(lean.clauseCount() + 4 * adders, full.clauseCount())
+        << "width " << width;
+    EXPECT_EQ(lean.varCount(), full.varCount()) << "width " << width;
+  }
 }
 
 // An interior shared with outside logic keeps the plain encoding: the block
