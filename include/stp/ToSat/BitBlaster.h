@@ -275,12 +275,15 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
 
   // One (q, r) pair per operand pair: BVDIV and BVMOD of the same operands
   // must name the same fresh variables, which strashing cannot arrange.
+  // Keyed on the operand pair, never on a BVDIV built for the lookup: the
+  // term factory simplifies, and a quotient it folds need not mention the
+  // dividend, so two remainders over one divisor would share a pair -- the
+  // second with no relation over its own dividend.
   // The pair is only as good as the relation asserted over it, which is
   // conjoined into the root the pair was minted under, so the memo lives
   // for one top-level BBForm: a blaster that outlives a root, as the
   // incremental driver's does, starts the next one afresh.
-  std::unordered_map<ASTNode, std::pair<BBNodeVec, BBNodeVec>,
-                     ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+  std::map<std::pair<ASTNode, ASTNode>, std::pair<BBNodeVec, BBNodeVec>>
       divByMultMemo;
 
   // The rounding-mode independent half of a native square root: the

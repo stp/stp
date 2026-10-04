@@ -4078,11 +4078,10 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
 
   if (byConstant || (uf->division_by_multiplication && !bothConstant))
   {
-    // BVDIV and BVMOD of one operand pair share one relation, keyed by the
-    // quotient's node whichever of the two arrives first.
-    const ASTNode key =
-        (k == BVDIV) ? term
-                     : ASTNF->CreateTerm(BVDIV, width, term[0], term[1]);
+    // BVDIV and BVMOD of one operand pair share one relation. The operands
+    // are the key; a BVDIV built here would be the factory's answer, not
+    // theirs. See divByMultMemo.
+    const std::pair<ASTNode, ASTNode> key(term[0], term[1]);
     const auto it = divByMultMemo.find(key);
     if (it != divByMultMemo.end())
     {
