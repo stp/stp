@@ -677,6 +677,14 @@ declare -a g_simplify=(
 "--size-reducing-fixed-point-limit=-1"
 "--aig-core-simplification=1"
 
+# Sharing-aware rewriting from #1239, off by default: extract from each
+# operand of an unshared bitwise operation rather than from its result. It
+# needs an extract over a bitwise operation that nothing else reads, which
+# generated files reach seldom -- of the files that emit a CNF it changed
+# none of 14 plain QF_BV and none of 16 wide, 2 of 17 n-ary and 5 of 24
+# QF_UFBV. Thin, like the box-lemma entry in the fpabs group, but not inert.
+"--extract-through-bitwise=1"
+
 # Read-time folding of constants and identities, a different pass from the
 # simplifier stack: it changed the -s output on all of 30 bit-vector, 30 plain
 # floating-point and 30 floating-point-array files, and on all 90 again when
@@ -877,6 +885,18 @@ declare -a g_bitblast=(
 ""
 "--bb.add-v1=0"
 "--bb.add-v2=0"
+
+# The two sorting-network sum lowerings from #1227, both off by default, and
+# each reaching a different shape. --bb.add-v3 replaces the pairwise adders of
+# an n-ary sum with multiplication variant 6's column reducer, so it needs a
+# sum of three or more operands: it changed nothing on the 14 plain QF_BV
+# files that emit a CNF and 9 of the 17 n-ary ones, which is the entry that
+# generates them. --bb.add-v4 collapses a sum of products into one column
+# reduction and is documented as width 16 and below, which is exactly what the
+# measurement shows -- 0 of the 16 wide files (-mbw 24 -Mbw 96) against 2/14,
+# 10/17 and 16/24. The control, the same options twice, differed on none.
+"--bb.add-v3=1"
+"--bb.add-v4=1"
 "--bb.vle-v1=0"
 "--bb.conjoin-constant=1"
 "--bb.umulo-schulte=0"
