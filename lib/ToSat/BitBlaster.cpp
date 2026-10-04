@@ -1057,6 +1057,64 @@ BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(ASTNode& term,
   return BBTermMemo.end();
 }
 
+// How many bits of what a shift shifts can never reach its result.
+//
+// A shift by at least m leaves m bits of the first operand unread: for
+// x << s with s >= m, result bit j is x[j-s] and j-s <= w-1-m, so the top m
+// bits of x reach no output. The right shifts drop their bottom m bits the
+// same way, the arithmetic one included -- its fill is the sign bit, which
+// is at the other end. m is the amount's interval minimum.
+//
+// Only the interval can say this. The dead bits are not fixed in the
+// operand's own domain -- nothing constrains them -- they are made
+// unreachable by the *other* operand's range, so no fixed-bit reduction
+// reaches them and neither does conjoin-to-top. Nor would the amount's own
+// fixed bits do instead: a bit of the amount known to be one already costs
+// the barrel nothing, because that stage's multiplexers have a constant
+// condition, fold to wires, and discard the corresponding operand bits for
+// free. What is left is exactly the gap between the amount's interval
+// minimum and its fixed-bit minimum -- an amount in [5,7] has only its third
+// bit fixed, so the barrel discards four bits by itself and this discards
+// the fifth.
+template <class BBNode, class BBNodeManagerT>
+unsigned BitBlaster<BBNode, BBNodeManagerT>::unreachableShiftBits(
+    const ASTNode& amount, const unsigned width)
+{
+  // A constant amount is wiring: the node factory has already turned the
+  // shift into an extract and a concat, and nothing here is reached.
+  if (!uf->shift_narrow_operand || amount.isConstant())
+    return 0;
+
+  if (shiftDomains_ == nullptr)
+    shiftDomains_.reset(new NodeDomainAnalysis(&ASTNF->getStpMgr()));
+
+  const UnsignedInterval* bounds = shiftDomains_->buildMap(amount).interval;
+  if (bounds == nullptr)
+    return 0;
+
+  // An amount needing more than 64 bits to write down is far past the
+  // width, which the barrel's own remainder test already answers.
+  const long top = CONSTANTBV::Set_Max(bounds->minV);
+  if (top < 0 || top >= 64)
+    return 0;
+
+  uint64_t least = 0;
+  for (unsigned b = 0; b <= (unsigned)top; b++)
+    if (CONSTANTBV::BitVector_bit_test(bounds->minV, b))
+      least |= ((uint64_t)1 << b);
+
+  // At or past the width every bit is dropped and the result is the fill
+  // throughout; that is the remainder test's job, not this one's.
+  if (least == 0 || least >= width)
+    return 0;
+
+  if (uf->stats_flag)
+    std::cerr << "{BitBlaster} shift operand bits driven false: " << least
+              << std::endl;
+
+  return (unsigned)least;
+}
+
 template <class BBNode, class BBNodeManagerT>
 const vector<BBNode>
 BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& term,
@@ -1177,15 +1235,31 @@ const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
     case BVLEFTSHIFT:
     {
       // Barrel shifter
-      const BBNodeVec& bbarg1 = BBTerm(term[0], support);
+      const BBNodeVec& blasted = BBTerm(term[0], support);
       const BBNodeVec& bbarg2 = BBTerm(term[1], support);
 
-      // Signed right shift, need to copy the sign bit.
+      // Signed right shift, need to copy the sign bit. Read it from the
+      // operand as blasted, before any bit is driven to false: the fill is
+      // the sign bit, and only the bound below keeps the dead range off it.
       BBNode toFill;
       if (BVSRSHIFT == k)
-        toFill = bbarg1.back();
+        toFill = blasted.back();
       else
         toFill = nf->getFalse();
+
+      // Drive the bits this shift can never read to false -- in a copy,
+      // because `blasted` is the memo for term[0] and every other use of
+      // that term still needs it whole.
+      const unsigned deadBits = unreachableShiftBits(term[1], blasted.size());
+      BBNodeVec narrowed;
+      if (deadBits > 0)
+      {
+        narrowed = blasted;
+        for (unsigned i = 0; i < deadBits; i++)
+          narrowed[(BVLEFTSHIFT == k) ? narrowed.size() - 1 - i : i] =
+              nf->getFalse();
+      }
+      const BBNodeVec& bbarg1 = (deadBits > 0) ? narrowed : blasted;
 
       BBNodeVec temp_result(bbarg1);
       // if any bit is set in bbarg2 higher than log2Width, then we know that

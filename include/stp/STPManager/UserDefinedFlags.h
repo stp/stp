@@ -1800,6 +1800,11 @@ public:
   // complete. Off by default: it loses on bit-vector logics.
   bool cnf_fa_minimal = false;
 
+  // Bit-blasting a shift: drive the bits of the shifted operand that an
+  // amount of at least its interval minimum can never read to false, so the
+  // barrel shifter's multiplexers over them fold away. On by default.
+  bool shift_narrow_operand = true;
+
   // Sharing-aware rewriting: take an extract of a bitwise operation on each
   // of its operands instead, narrowing the operation to the bits that are
   // read. Only where nothing else reads the operation. Off by default: it

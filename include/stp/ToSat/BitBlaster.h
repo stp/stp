@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define BITBLASTNEW_H
 
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BBNodeManagerGia.h"
@@ -35,6 +36,7 @@ THE SOFTWARE.
 #include <cassert>
 #include <cmath>
 #include <list>
+#include <memory>
 #include <map>
 #include <string>
 
@@ -926,6 +928,17 @@ public:
 
   simplifier::constantBitP::ConstantBitPropagation* cb;
 
+  // Built on first use, for shift amounts only: the unsigned interval of a
+  // shift amount says how many bits of the shifted operand the shift can
+  // never read. The simplifier's own NodeDomainAnalysis is long gone by the
+  // time anything is blasted, and buildMap derives a node's domains from its
+  // children, so a fresh one answers without needing that state.
+  std::unique_ptr<NodeDomainAnalysis> shiftDomains_;
+
+  // How many bits of a shift's first operand an amount of at least its
+  // interval minimum can never reach. Zero when nothing is known.
+  unsigned unreachableShiftBits(const ASTNode& amount, unsigned width);
+
   // Bit blast a bitvector term.  The term must have a kind for a
   // bitvector term.  Result is a ref to a vector of formula nodes
   // representing the boolean formula.
@@ -1036,6 +1049,7 @@ public:
 
   void ClearAllTables()
   {
+    shiftDomains_.reset();
     BBTermMemo.clear();
     BBFormMemo.clear();
     fpNativeFiniteTerms.clear();
