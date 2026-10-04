@@ -111,6 +111,10 @@ namespace stp
   // not touched it, and before the first search none has been.
   bool searched = false;
 
+  // Whether expectTheoryPropagator() has already retired the inprocessing
+  // that would make a variable unobservable. That hook is idempotent.
+  bool theory_expected = false;
+
   // The IPASIR-UP side of SATSolver::TheoryPropagator. CaDiCaL speaks signed
   // external indices; STP speaks var*2+sign. This is the only place the two
   // meet, which is what keeps the theory itself free of any CaDiCaL type.
@@ -185,6 +189,7 @@ public:
       SATSolver::TheoryPropagator* propagator,
       const std::vector<uint32_t>& observed) override;
   void disconnectTheoryPropagator() override;
+  void expectTheoryPropagator() override;
 
   ~Cadical();
 
