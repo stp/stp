@@ -642,7 +642,10 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   size_t fpNativeSqrtPreRoundReuses = 0;
   // Fresh inputs minted for a defining relation under the current root.
   // The variables mean nothing without the relation asserted beside them,
-  // and that relation goes into one root's support -- see BBForm.
+  // and that relation goes into one root's support -- see BBForm. Counted
+  // even where the relation is also recorded as permanent: a floating-point
+  // circuit is specialised by the root's own native-domain facts, so its
+  // memo entry must not cross a root whatever the relation's scope.
   size_t relationalFreshInputs = 0;
   ASTNode lastBlastedRoot;
   BBNode freshRelationalInput()
@@ -652,23 +655,28 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   }
   // Set by a consumer that asserts every entry of relationalConstraints()
   // beyond the root it was minted under -- the incremental driver, as
-  // permanent units at each solve's sync. The division relations are then
-  // definitions that hold under every root, so their inputs and the memos
-  // naming them can outlive a root, and so can the proxies the abstraction
-  // registered for them: a proxy is tied to its bit permanently, which is
-  // only sound while the bit means the same thing under every root.
+  // permanent units at each solve's sync. Every recorded relation is then a
+  // definition that holds under every root, which is what the abstraction
+  // already assumed of the bits it registers: a proxy is tied to its bit
+  // permanently, and that is only sound while the bit means the same thing
+  // under every root. For the bit-vector division relations the inputs and
+  // the memos naming them can outlive a root as well; the floating-point
+  // ones still re-mint per root, because their circuits are specialised by
+  // the root's own native-domain facts.
   bool relationsPermanent_ = false;
   std::vector<BBNode> relationalConstraints_;
-  // A fresh input of a bit-vector division relation.
+  // A fresh input of a bit-vector division relation. Not counted towards
+  // BBForm's root-change memo clear: the relation outlives the root, so the
+  // memo may name the pair under the next one.
   BBNode freshDivisionInput()
   {
     if (!relationsPermanent_)
       ++relationalFreshInputs;
     return nf->CreateFreshInput();
   }
-  // A division relation into the root's support, and on record for a
+  // A defining relation into the root's support, and on record for a
   // consumer that asserts it permanently.
-  void recordDivisionRelation(const BBNodeSet& relation, BBNodeSet& support)
+  void recordRelation(const BBNodeSet& relation, BBNodeSet& support)
   {
     for (const BBNode& c : relation)
     {
