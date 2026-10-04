@@ -26,7 +26,6 @@ THE SOFTWARE.
 #define BITBLASTNEW_H
 
 #include "stp/STPManager/STPManager.h"
-#include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BBNodeManagerGia.h"
@@ -36,7 +35,6 @@ THE SOFTWARE.
 #include <cassert>
 #include <cmath>
 #include <list>
-#include <memory>
 #include <map>
 #include <string>
 
@@ -51,6 +49,11 @@ class FixedBits;
 
 namespace stp
 {
+
+// Only ever held by pointer here; see shiftDomains_ below. Declaring it
+// rather than including NodeDomainAnalysis.h keeps the Simplifier's domain
+// stack out of every translation unit that blasts anything.
+class NodeDomainAnalysis;
 
 using std::list;
 using simplifier::constantBitP::MultiplicationStats;
@@ -933,7 +936,12 @@ public:
   // never read. The simplifier's own NodeDomainAnalysis is long gone by the
   // time anything is blasted, and buildMap derives a node's domains from its
   // children, so a fresh one answers without needing that state.
-  std::unique_ptr<NodeDomainAnalysis> shiftDomains_;
+  //
+  // A raw pointer to an incomplete type, freed by releaseShiftDomains below,
+  // which is defined where the type is complete. A unique_ptr here would put
+  // the delete in this header and drag the whole domain stack in with it.
+  NodeDomainAnalysis* shiftDomains_ = nullptr;
+  void releaseShiftDomains();
 
   // How many bits of a shift's first operand an amount of at least its
   // interval minimum can never reach. Zero when nothing is known.
@@ -1049,7 +1057,7 @@ public:
 
   void ClearAllTables()
   {
-    shiftDomains_.reset();
+    releaseShiftDomains();
     BBTermMemo.clear();
     BBFormMemo.clear();
     fpNativeFiniteTerms.clear();

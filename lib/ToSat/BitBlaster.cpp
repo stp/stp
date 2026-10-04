@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/DecimalLiteral.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
+#include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
@@ -1077,6 +1078,13 @@ BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(ASTNode& term,
 // bit fixed, so the barrel discards four bits by itself and this discards
 // the fifth.
 template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::releaseShiftDomains()
+{
+  delete shiftDomains_;
+  shiftDomains_ = nullptr;
+}
+
+template <class BBNode, class BBNodeManagerT>
 unsigned BitBlaster<BBNode, BBNodeManagerT>::unreachableShiftBits(
     const ASTNode& amount, const unsigned width)
 {
@@ -1086,7 +1094,7 @@ unsigned BitBlaster<BBNode, BBNodeManagerT>::unreachableShiftBits(
     return 0;
 
   if (shiftDomains_ == nullptr)
-    shiftDomains_.reset(new NodeDomainAnalysis(&ASTNF->getStpMgr()));
+    shiftDomains_ = new NodeDomainAnalysis(&ASTNF->getStpMgr());
 
   const UnsignedInterval* bounds = shiftDomains_->buildMap(amount).interval;
   if (bounds == nullptr)
