@@ -2740,17 +2740,48 @@ struct IncrementalSolver::Impl
 
   void recordDriverReadPairs(const ArrayTransformer::ArrType& table)
   {
+    recordReadPairs(table, driverReadPairs, driverReadPairSymbols,
+                    driverReadPairValue);
+  }
+
+  // The rows of the current whole-stack block, kept apart from the
+  // pieces' record. A block's transform runs over a fresh table, so its
+  // congruence chains never mention the pieces' read symbols and the
+  // pieces' chains never mention the block's: once the block is retracted
+  // its symbols keep live but unconstrained bits, and a block row whose
+  // index evaluates to the same cell as a live piece row would overwrite
+  // that cell with an arbitrary value. These rows therefore participate
+  // only while the block is the active encoding.
+  std::map<ASTNode, std::vector<ArrayTransformer::ReadKey>> blockReadPairs;
+  std::set<ASTNode> blockReadPairSymbols;
+  ASTNodeMap blockReadPairValue;
+
+  void recordBlockReadPairs(const ArrayTransformer::ArrType& table)
+  {
+    blockReadPairs.clear();
+    blockReadPairSymbols.clear();
+    blockReadPairValue.clear();
+    recordReadPairs(table, blockReadPairs, blockReadPairSymbols,
+                    blockReadPairValue);
+  }
+
+  static void
+  recordReadPairs(const ArrayTransformer::ArrType& table,
+                  std::map<ASTNode, std::vector<ArrayTransformer::ReadKey>>&
+                      pairs,
+                  std::set<ASTNode>& symbols, ASTNodeMap& values)
+  {
     for (ArrayTransformer::ArrType::const_iterator it = table.begin();
          it != table.end(); ++it)
       for (ArrayTransformer::arrTypeMap::const_iterator rit =
                it->second.begin();
            rit != it->second.end(); ++rit)
       {
-        if (driverReadPairSymbols.insert(rit->second.symbol).second)
+        if (symbols.insert(rit->second.symbol).second)
         {
-          driverReadPairs[it->first].push_back(
+          pairs[it->first].push_back(
               std::make_pair(rit->first, rit->second.symbol));
-          driverReadPairValue[rit->second.symbol] = rit->second.ite;
+          values[rit->second.symbol] = rit->second.ite;
         }
       }
   }
@@ -2931,24 +2962,33 @@ struct IncrementalSolver::Impl
             return true;
         return false;
       };
-      for (const auto& ap : driverReadPairs)
+      auto materialise =
+          [&](const std::map<ASTNode,
+                             std::vector<ArrayTransformer::ReadKey>>& pairs,
+              const ASTNodeMap& values)
       {
-        ArrayTransformer::arrTypeMap& rows = fresh[ap.first];
-        for (const ArrayTransformer::ReadKey& rk : ap.second)
+        for (const auto& ap : pairs)
         {
-          if (live(rk.second))
+          ArrayTransformer::arrTypeMap& rows = fresh[ap.first];
+          for (const ArrayTransformer::ReadKey& rk : ap.second)
           {
+            if (!live(rk.second))
+              continue;
             // The full row value, never the bare symbol: see
             // driverReadPairValue.
-            ASTNodeMap::const_iterator vit =
-                driverReadPairValue.find(rk.second);
+            ASTNodeMap::const_iterator vit = values.find(rk.second);
             const ASTNode& value =
-                vit != driverReadPairValue.end() ? vit->second : rk.second;
+                vit != values.end() ? vit->second : rk.second;
             rows.insert(std::make_pair(
                 rk.first, ArrayTransformer::ArrayRead(value, rk.second)));
           }
         }
-      }
+      };
+      materialise(driverReadPairs, driverReadPairValue);
+      // The block's rows only while the block is the active encoding: see
+      // blockReadPairs.
+      if (scopes.hasWholeStackPreprocessing())
+        materialise(blockReadPairs, blockReadPairValue);
     }
     batchAT->arrayToIndexToRead = fresh;
 
@@ -3129,6 +3169,9 @@ struct IncrementalSolver::Impl
     releaseContainer(totalizedSymbols);
     releaseContainer(driverReadPairSymbols);
     releaseContainer(driverReadPairValue);
+    releaseContainer(blockReadPairs);
+    releaseContainer(blockReadPairSymbols);
+    releaseContainer(blockReadPairValue);
     releaseContainer(fragmentCache);
     arrayRegistry.releaseStorage();
     releaseContainer(readsOfEncoded);
