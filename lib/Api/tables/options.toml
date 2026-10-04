@@ -2316,6 +2316,28 @@ engine = { field = "bvplus_variant" }
 category = "bitblast"
 help = "addition encoding variant 2"
 
+
+[[option]]
+name = "bb.add-v3"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bvplus_sorter" }
+category = "bitblast"
+help = "sum three or more operands with the sorting-network column reducer of multiplication variant 6 instead of the pairwise adders: near-complete unit propagation for the n-ary sum at several times the clauses. Off by default"
+
+[[option]]
+name = "bb.add-v4"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "bvplus_fused" }
+category = "bitblast"
+help = "collapse each sum of products into one sorting-network column reduction over all the partial products (width 16 and below); the products themselves are never built as words. Off by default"
 [[option]]
 name = "bb.vle-v1"
 type = "bool"
