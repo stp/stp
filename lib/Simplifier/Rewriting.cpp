@@ -58,6 +58,7 @@ namespace stp
     stpMgr->GetRunTimes()->start(RunTimes::Rewriting);
     
     removed=0;
+    narrowedBitwise=0;
 
     buildShareCount(n);
     ASTNode result = rewrite(n);
@@ -65,6 +66,8 @@ namespace stp
     if (stpMgr->UserFlags.stats_flag)
     {
       std::cerr << "{Rewriting} Nodes removed:" << removed << std::endl;
+      std::cerr << "{Rewriting} bitwise operations narrowed by an extract:"
+                << narrowedBitwise << std::endl;
     }
 
     shareCount.clear();
@@ -91,6 +94,14 @@ namespace stp
         return false;
       return true;
     });
+  }
+
+  // Operators whose every output bit depends only on the operands' bit at
+  // the same position. BVOR is listed for the hashing factory's sake: the
+  // simplifying one spells it NOT(AND(NOT, NOT)) and so never builds one.
+  static bool isBitwise(const Kind k)
+  {
+    return k == BVNOT || k == BVAND || k == BVOR || k == BVXOR;
   }
 
   // Every sharing-aware rule, in order, applied to one node. Each rule
@@ -834,6 +845,47 @@ namespace stp
           c = nf->CreateArrayTerm(ITE, c.GetIndexWidth(), c.GetValueWidth(),
                                   cond, thenBranch, elseBranch);
       }
+
+    /*
+      A bitwise operation computes each output bit from the operands' bit
+      at that position alone, so an extract of one is the same operation
+      over the extracts of its operands:
+
+        extract(a & b, hi, lo)  ==  extract(a, hi, lo) & extract(b, hi, lo)
+
+      Pushing the extract inwards narrows the operation to the bits that
+      are actually read. The bit-blaster does not do this for itself --
+      BVEXTRACT blasts its child whole and selects afterwards, with a
+      comment saying the unread bits could be skipped but that memoisation
+      makes it awkward -- so the word level is where the width has to come
+      off.
+
+      The guard is the usual one, and here it is what makes the rewrite
+      worth doing at all rather than what makes it safe: the operation
+      dies only if nothing else reads it. Node count can still rise, by
+      one per operand beyond the first, which is why this is off by
+      default and measured rather than assumed. What the extra extracts
+      buy is a chance to go further down: an extract meeting a constant
+      folds, meeting a concat or another extract composes, and meeting a
+      term with a width-narrowing rule of its own exposes that rule.
+    */
+    if (
+      c.GetKind() == BVEXTRACT
+      && stpMgr->UserFlags.extract_through_bitwise
+      && isBitwise(c[0].GetKind())
+      && shareCount[c[0].GetNodeNum()] <= 1
+     )
+     {
+        const auto width = c.GetValueWidth();
+        ASTVec kids;
+        kids.reserve(c[0].Degree());
+        for (const ASTNode& operand : c[0])
+          kids.push_back(
+              nf->CreateTerm(BVEXTRACT, width, operand, c[1], c[2]));
+
+        narrowedBitwise++;
+        c = nf->CreateTerm(c[0].GetKind(), width, kids);
+     }
 
     return c;
   }

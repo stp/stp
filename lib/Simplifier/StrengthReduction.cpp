@@ -35,6 +35,101 @@ namespace stp
   using std::make_pair;
   using simplifier::constantBitP::FixedBits;
 
+namespace
+{
+  // Whether two domains of the same kind, over two terms of the same
+  // width, share a value -- i.e. whether the terms might be equal.
+  //
+  // A null domain admits every value, which is the analysis' "top", so it
+  // intersects everything. Every caller wants that reading: "nothing is
+  // known about this index" has to come back as "the indexes might be the
+  // same", never as a licence to treat them as different.
+  bool domainsIntersect(const FixedBits* a, const FixedBits* b)
+  {
+    if (a == nullptr || b == nullptr)
+      return true;
+
+    assert(a->getWidth() == b->getWidth());
+    for (unsigned i = 0; i < a->getWidth(); i++)
+      if (a->isFixed(i) && b->isFixed(i) && a->getValue(i) != b->getValue(i))
+        return false;
+    return true;
+  }
+
+  bool domainsIntersect(const UnsignedInterval* a, const UnsignedInterval* b)
+  {
+    if (a == nullptr || b == nullptr)
+      return true;
+
+    // Two closed ranges miss each other exactly when one ends below the
+    // other begins.
+    return CONSTANTBV::BitVector_Lexicompare(a->minV, b->maxV) <= 0 &&
+           CONSTANTBV::BitVector_Lexicompare(b->minV, a->maxV) <= 0;
+  }
+
+  bool domainsIntersect(const UnsignedIntervalSet* a,
+                        const UnsignedIntervalSet* b)
+  {
+    if (a == nullptr || b == nullptr)
+      return true;
+
+    // An empty set admits no value at all, which the analysis does not
+    // produce. Were one to arrive here the honest answer is "no
+    // conclusion", not "disjoint" -- the point is to never reach a
+    // disequality through a domain that says nothing.
+    if (a->empty() || b->empty())
+      return true;
+
+    // Both part lists are sorted ascending and disjoint, so advancing
+    // whichever ends first walks each list once.
+    size_t i = 0, j = 0;
+    while (i < a->parts.size() && j < b->parts.size())
+    {
+      if (domainsIntersect(a->parts[i], b->parts[j]))
+        return true;
+
+      if (CONSTANTBV::BitVector_Lexicompare(a->parts[i]->maxV,
+                                            b->parts[j]->maxV) < 0)
+        i++;
+      else
+        j++;
+    }
+    return false;
+  }
+
+  bool domainsIntersect(const ValueSet* a, const ValueSet* b)
+  {
+    if (a == nullptr || b == nullptr)
+      return true;
+
+    if (a->values.empty() || b->values.empty())
+      return true; // As above: an empty domain is not a disequality.
+
+    // At most ValueSet::MAX_ELEMENTS each.
+    for (const CBV v : a->values)
+      if (b->in(v))
+        return true;
+    return false;
+  }
+
+  // Whether a bit-level disequality between two index terms of this sort
+  // proves they address different cells.
+  //
+  // It does for a bit-vector index, where each value has one encoding, and
+  // for a declared sort, whose bit-vector carrier exists precisely to tell
+  // its elements apart. It does not for a floating-point index: NaN is one
+  // value with many packings and the two zeroes share a value, so there
+  // differing bits can still be one index. Anything else -- including an
+  // index whose sort the derivation could not pin down -- is refused
+  // rather than guessed at.
+  bool indexSortDistinguishesBits(const ASTNode& index)
+  {
+    const SourceSort::Kind kind = index.GetSourceSort().kind();
+    return kind == SourceSort::Kind::BitVector ||
+           kind == SourceSort::Kind::Uninterpreted;
+  }
+}
+
   // visit each node apply strength reductions to it.
   //
   // postOrderRebuild does the walking, on the heap: how deeply the input
@@ -54,6 +149,14 @@ namespace stp
           // buildMap memoises on the node, so it only needs redoing when the
           // preceding reduction actually replaced the node.
           nda.buildMap(newN);
+
+          ASTNode chased = chaseReadPastWrites(newN, nda);
+          if (chased != newN)
+          {
+            newN = chased;
+            nda.buildMap(newN);
+          }
+
           ASTNode reduced = strengthReduction(newN, *nda.getCbitMap());
 
           if (reduced != newN)
@@ -78,9 +181,209 @@ namespace stp
   {
     ASTNodeMap fromTo;
     ASTNode result = visit(top, nda, fromTo);
+    result = dropShadowedWrites(result, nda);
     if (uf->stats_flag)
       stats();
     return result;
+  }
+
+  // read(write(A, j, v), i) is read(A, i) when i and j cannot be equal, and
+  // the domains answer that where the node factory's chase cannot: it has
+  // the syntactic tests (the same index node, two constants that denote
+  // different values, an equality the factory folds) and no view of what
+  // the analysis knows. Indexes built out of a shared offset, a concat or a
+  // masked field routinely have disjoint intervals or disagree on a fixed
+  // bit while being syntactically unrelated.
+  //
+  // The walk stops at the first write that might alias, exactly as the
+  // factory's does: the writes above the stopping point have been shown
+  // irrelevant to this read, which says nothing about the ones below it.
+  // Only the read moves -- no write is dropped from the term, so a write
+  // still reachable from elsewhere is untouched, and the array the chain
+  // is built on is never rewritten.
+  //
+  // The domains here are the ones buildMap derives bottom-up from a term's
+  // children, so they bound the term's value under every assignment rather
+  // than only under the asserted formula.
+  ASTNode StrengthReduction::chaseReadPastWrites(const ASTNode& n,
+                                                 NodeDomainAnalysis& nda)
+  {
+    if (n.GetKind() != READ || n[0].GetKind() != stp::WRITE)
+      return n;
+
+    // Whatever this call decides, the second pass has something to look at.
+    // Nothing else sets this, so a formula without a read over a write --
+    // every QF_BV one -- skips that pass's walk and rebuild entirely.
+    sawReadOverWrite = true;
+
+    const ASTNode& readIndex = n[1];
+    if (!indexSortDistinguishesBits(readIndex))
+      return n;
+
+    const NodeDomainAnalysis::DomainInfo read = nda.buildMap(readIndex);
+    if (read.bits == nullptr && read.interval == nullptr &&
+        read.intervalSet == nullptr && read.set == nullptr)
+      return n; // Nothing known about the read index; no write can be ruled out.
+
+    ASTNode write = n[0];
+    unsigned skipped = 0;
+
+    while (write.GetKind() == stp::WRITE)
+    {
+      const ASTNode& writeIndex = write[1];
+      if (!indexSortDistinguishesBits(writeIndex))
+        break;
+
+      // The domain objects live on the heap and the maps only hold
+      // pointers to them, so building one index's domains cannot
+      // invalidate another's.
+      const NodeDomainAnalysis::DomainInfo w = nda.buildMap(writeIndex);
+
+      if (domainsIntersect(read.bits, w.bits) &&
+          domainsIntersect(read.interval, w.interval) &&
+          domainsIntersect(read.intervalSet, w.intervalSet) &&
+          domainsIntersect(read.set, w.set))
+        break; // The indexes might be equal.
+
+      write = write[0];
+      skipped++;
+    }
+
+    if (skipped == 0)
+      return n;
+
+    writesSkipped += skipped;
+    return nf->CreateTerm(READ, n.GetValueWidth(), write, readIndex);
+  }
+
+  // counter is 1 if the node has one reference in the tree.
+  void StrengthReduction::buildShareCount(const ASTNode& n)
+  {
+    walkPreOrder(n, [&](const ASTNode& current) {
+      if (current.Degree() == 0)
+        return false;
+
+      return shareCount[current.GetNodeNum()]++ == 0; // descend once.
+    });
+  }
+
+  // A write the read provably misses does not stop mattering just because
+  // another write that might alias sits above it: the read's value at its
+  // index is unaffected by a store to any other index, at any depth. So the
+  // chase's stopping point is not the end of what the disequality is good
+  // for -- below it, every write the read misses can be deleted outright.
+  //
+  // Deleting one is not free the way moving the read past the top of the
+  // chain is. The writes above a deleted one have to be rebuilt around the
+  // gap, so the rebuild only shrinks the term if those writes were being
+  // kept alive by this chain alone. That is what the share count is for:
+  // each write from the top down to the deepest deletion must have exactly
+  // one reference, and then every node the rebuild creates replaces one it
+  // makes unreachable, with the deleted writes as the saving.
+  //
+  // This runs as its own pass, after the reductions above have settled,
+  // because the share count has to describe the graph being rewritten: in
+  // the middle of a rebuild, a chain node that any earlier reduction
+  // touched is a fresh node that no count covers. Such a node is absent
+  // from the map, which reads here as "shared" and stops the deletion --
+  // conservative, so a stale count costs an optimisation, never a wrong
+  // answer.
+  ASTNode StrengthReduction::dropShadowedWrites(const ASTNode& top,
+                                                NodeDomainAnalysis& nda)
+  {
+    if (!sawReadOverWrite)
+      return top;
+
+    shareCount.clear();
+    buildShareCount(top);
+
+    ASTNodeMap cache;
+    ASTNode result = postOrderRebuild(
+        top, cache, [&](const ASTNode& node, const ASTVec& children) {
+          ASTNode newN;
+          if (node.GetType() == BOOLEAN_TYPE)
+            newN = nf->CreateNode(node.GetKind(), children);
+          else
+            newN = nf->CreateArrayTerm(node.GetKind(), node.GetIndexWidth(),
+                                       node.GetValueWidth(), children);
+
+          return filterWriteChain(newN, nda);
+        });
+
+    shareCount.clear();
+    return result;
+  }
+
+  ASTNode StrengthReduction::filterWriteChain(const ASTNode& n,
+                                              NodeDomainAnalysis& nda)
+  {
+    if (n.GetKind() != READ || n[0].GetKind() != stp::WRITE)
+      return n;
+
+    const ASTNode& readIndex = n[1];
+    if (!indexSortDistinguishesBits(readIndex))
+      return n;
+
+    const NodeDomainAnalysis::DomainInfo read = nda.buildMap(readIndex);
+    if (read.bits == nullptr && read.interval == nullptr &&
+        read.intervalSet == nullptr && read.set == nullptr)
+      return n;
+
+    // Walk down as far as the writes are this chain's alone, recording
+    // which ones the read misses. `deepest` is the last position worth
+    // rebuilding for: past it there is either nothing to delete or nothing
+    // the deletion would pay for.
+    ASTVec chain; // the writes, top first
+    std::vector<bool> missed;
+    int deepest = -1;
+
+    for (ASTNode write = n[0]; write.GetKind() == stp::WRITE;
+         write = write[0])
+    {
+      const auto it = shareCount.find(write.GetNodeNum());
+      if (it == shareCount.end() || it->second != 1)
+        break; // Shared, or too fresh to know: rebuilding it would copy it.
+
+      const ASTNode& writeIndex = write[1];
+      bool aliases = true;
+      if (indexSortDistinguishesBits(writeIndex))
+      {
+        const NodeDomainAnalysis::DomainInfo w = nda.buildMap(writeIndex);
+        aliases = domainsIntersect(read.bits, w.bits) &&
+                  domainsIntersect(read.interval, w.interval) &&
+                  domainsIntersect(read.intervalSet, w.intervalSet) &&
+                  domainsIntersect(read.set, w.set);
+      }
+
+      chain.push_back(write);
+      missed.push_back(!aliases);
+      if (!aliases)
+        deepest = (int)chain.size() - 1;
+    }
+
+    if (deepest < 0)
+      return n; // Nothing to delete, so nothing to rebuild.
+
+    // Everything below the deepest deletion stays as it is, shared.
+    ASTNode rebuilt = chain[deepest][0];
+    unsigned dropped = 0;
+
+    for (int i = deepest; i >= 0; i--)
+    {
+      if (missed[i])
+      {
+        dropped++;
+        continue;
+      }
+
+      const ASTNode& write = chain[i];
+      rebuilt = nf->CreateArrayTerm(stp::WRITE, write.GetIndexWidth(),
+                                    write.GetValueWidth(), rebuilt, write[1],
+                                    write[2]);
+    }
+
+    writesDropped += dropped;
+    return nf->CreateTerm(READ, n.GetValueWidth(), rebuilt, readIndex);
   }
 
   // True unless the product of the operands' interval maxima provably
@@ -1077,6 +1380,11 @@ namespace stp
               << std::endl;
     std::cerr << "{" << name
               << "} replace with simpler operation: " << replaceWithSimpler
+              << std::endl;
+    std::cerr << "{" << name
+              << "} writes skipped by a read: " << writesSkipped << std::endl;
+    std::cerr << "{" << name
+              << "} writes dropped from a chain: " << writesDropped
               << std::endl;
 
   }

@@ -138,6 +138,10 @@ public:
     bitBlaster.reset(new BitBlasterAIG(nodeManager.get(), simplifier.get(),
                                     bm->defaultNodeFactory,
                                     &bm->UserFlags, NULL));
+    // syncAbstractions asserts every division relation as a permanent
+    // unit, so the blaster keeps the quotient-remainder pairs and the
+    // memos that name them across roots.
+    bitBlaster->setRelationsPermanent(true);
   }
 
   BBNodeManagerAIG& nodes() { return *nodeManager; }
@@ -325,6 +329,7 @@ struct IncrementalSolver::Impl
   size_t harvestedEQAbstractions = 0;
   size_t harvestedTermAbstractions = 0;
   size_t assertedSideConstraints = 0;
+  size_t assertedRelationalConstraints = 0;
 
   // The records this solve semantically owns, closed over parent-to-child
   // producer dependencies. Records outside this sparse view are logically
@@ -2740,17 +2745,48 @@ struct IncrementalSolver::Impl
 
   void recordDriverReadPairs(const ArrayTransformer::ArrType& table)
   {
+    recordReadPairs(table, driverReadPairs, driverReadPairSymbols,
+                    driverReadPairValue);
+  }
+
+  // The rows of the current whole-stack block, kept apart from the
+  // pieces' record. A block's transform runs over a fresh table, so its
+  // congruence chains never mention the pieces' read symbols and the
+  // pieces' chains never mention the block's: once the block is retracted
+  // its symbols keep live but unconstrained bits, and a block row whose
+  // index evaluates to the same cell as a live piece row would overwrite
+  // that cell with an arbitrary value. These rows therefore participate
+  // only while the block is the active encoding.
+  std::map<ASTNode, std::vector<ArrayTransformer::ReadKey>> blockReadPairs;
+  std::set<ASTNode> blockReadPairSymbols;
+  ASTNodeMap blockReadPairValue;
+
+  void recordBlockReadPairs(const ArrayTransformer::ArrType& table)
+  {
+    blockReadPairs.clear();
+    blockReadPairSymbols.clear();
+    blockReadPairValue.clear();
+    recordReadPairs(table, blockReadPairs, blockReadPairSymbols,
+                    blockReadPairValue);
+  }
+
+  static void
+  recordReadPairs(const ArrayTransformer::ArrType& table,
+                  std::map<ASTNode, std::vector<ArrayTransformer::ReadKey>>&
+                      pairs,
+                  std::set<ASTNode>& symbols, ASTNodeMap& values)
+  {
     for (ArrayTransformer::ArrType::const_iterator it = table.begin();
          it != table.end(); ++it)
       for (ArrayTransformer::arrTypeMap::const_iterator rit =
                it->second.begin();
            rit != it->second.end(); ++rit)
       {
-        if (driverReadPairSymbols.insert(rit->second.symbol).second)
+        if (symbols.insert(rit->second.symbol).second)
         {
-          driverReadPairs[it->first].push_back(
+          pairs[it->first].push_back(
               std::make_pair(rit->first, rit->second.symbol));
-          driverReadPairValue[rit->second.symbol] = rit->second.ite;
+          values[rit->second.symbol] = rit->second.ite;
         }
       }
   }
@@ -2931,24 +2967,33 @@ struct IncrementalSolver::Impl
             return true;
         return false;
       };
-      for (const auto& ap : driverReadPairs)
+      auto materialise =
+          [&](const std::map<ASTNode,
+                             std::vector<ArrayTransformer::ReadKey>>& pairs,
+              const ASTNodeMap& values)
       {
-        ArrayTransformer::arrTypeMap& rows = fresh[ap.first];
-        for (const ArrayTransformer::ReadKey& rk : ap.second)
+        for (const auto& ap : pairs)
         {
-          if (live(rk.second))
+          ArrayTransformer::arrTypeMap& rows = fresh[ap.first];
+          for (const ArrayTransformer::ReadKey& rk : ap.second)
           {
+            if (!live(rk.second))
+              continue;
             // The full row value, never the bare symbol: see
             // driverReadPairValue.
-            ASTNodeMap::const_iterator vit =
-                driverReadPairValue.find(rk.second);
+            ASTNodeMap::const_iterator vit = values.find(rk.second);
             const ASTNode& value =
-                vit != driverReadPairValue.end() ? vit->second : rk.second;
+                vit != values.end() ? vit->second : rk.second;
             rows.insert(std::make_pair(
                 rk.first, ArrayTransformer::ArrayRead(value, rk.second)));
           }
         }
-      }
+      };
+      materialise(driverReadPairs, driverReadPairValue);
+      // The block's rows only while the block is the active encoding: see
+      // blockReadPairs.
+      if (scopes.hasWholeStackPreprocessing())
+        materialise(blockReadPairs, blockReadPairValue);
     }
     batchAT->arrayToIndexToRead = fresh;
 
@@ -3129,6 +3174,9 @@ struct IncrementalSolver::Impl
     releaseContainer(totalizedSymbols);
     releaseContainer(driverReadPairSymbols);
     releaseContainer(driverReadPairValue);
+    releaseContainer(blockReadPairs);
+    releaseContainer(blockReadPairSymbols);
+    releaseContainer(blockReadPairValue);
     releaseContainer(fragmentCache);
     arrayRegistry.releaseStorage();
     releaseContainer(readsOfEncoded);
@@ -3350,6 +3398,7 @@ struct IncrementalSolver::Impl
     harvestedEQAbstractions = 0;
     harvestedTermAbstractions = 0;
     assertedSideConstraints = 0;
+    assertedRelationalConstraints = 0;
     if (fpAbs)
       fpAbs->resetForNewSolverEpoch();
     abstractionScope = BVAbstractionScope::all();
@@ -3973,6 +4022,25 @@ struct IncrementalSolver::Impl
     return (unsigned)varOfAig(ci);
   }
 
+  // Every node of `nodes` from `asserted` on as a permanent unit.
+  void assertPermanentUnits(const std::vector<BBNodeAIG>& nodes,
+                            size_t& asserted)
+  {
+    for (; asserted < nodes.size(); asserted++)
+    {
+      const BBNodeAIG& sc = nodes[asserted];
+      Aig_Obj_t* regular = Aig_Regular(sc.n);
+      ensureEncoded(regular);
+      const int lit =
+          2 * varOfAig(regular) + (Aig_IsComplement(sc.n) ? 1 : 0);
+      SATSolver::vec_literals unit;
+      unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
+      addClause(unit);
+      permanentAigRoots.push_back(regular);
+      permanentUnitMass = addMass(permanentUnitMass, 1);
+    }
+  }
+
   // Take across everything the blaster has produced since the last call:
   // the operand proxies' defining constraints, and the abstraction records
   // themselves. Called once per solve, after all of this call's encoding
@@ -3997,20 +4065,19 @@ struct IncrementalSolver::Impl
     // nothing else mentions, so it constrains no assignment of the query.
     // Dropped, as they were, the proxies stand for nothing and every
     // operand the refinement reads through one is noise.
-    const std::vector<BBNodeAIG>& side = bb.sideConstraints();
-    for (; assertedSideConstraints < side.size(); assertedSideConstraints++)
-    {
-      const BBNodeAIG& sc = side[assertedSideConstraints];
-      Aig_Obj_t* regular = Aig_Regular(sc.n);
-      ensureEncoded(regular);
-      const int lit =
-          2 * varOfAig(regular) + (Aig_IsComplement(sc.n) ? 1 : 0);
-      SATSolver::vec_literals unit;
-      unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
-      addClause(unit);
-      permanentAigRoots.push_back(regular);
-      permanentUnitMass = addMass(permanentUnitMass, 1);
-    }
+    assertPermanentUnits(bb.sideConstraints(), assertedSideConstraints);
+
+    // A division relation defines its quotient and remainder inputs over
+    // the operands' bits, and a proxy tied to such an input is only as
+    // good as the relation. Conjoined into one root alone, the relation
+    // retracts with it while the proxy, the registry entry and every
+    // record over them persist: the next root re-minted the pair, the
+    // registry answered with the first one, and a refined equality over a
+    // free quotient certified a candidate the raw stack refutes. Permanent
+    // here, by the same argument as the proxies: a definition of fresh
+    // inputs constrains no assignment of the query.
+    assertPermanentUnits(bb.relationalConstraints(),
+                         assertedRelationalConstraints);
 
     const std::vector<BitBlasterAIG::RawBVEQAbstraction>& rawEQs =
         bb.abstractedEQs();

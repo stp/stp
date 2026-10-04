@@ -1349,6 +1349,14 @@ public:
   bool bbbvle_variant =true;
   bool upper_multiplication_bound = false;
   bool bvplus_variant = true;
+  // n-ary addition through the sorting-network column reducer the
+  // multiplier's variant 6 uses: each column Batcher-sorted, the previous
+  // column's odd sorted outputs merged in as a unary carry. Off by default.
+  bool bvplus_sorter = false;
+  // The sum-of-products collapse: a sum's products are expanded into their
+  // partial products in the sum's columns and reduced by one sorting
+  // network per column. Width-capped in the blaster. Off by default.
+  bool bvplus_fused = false;
   bool conjoin_to_top = false;
 
   // Bit-blast the floating-point predicates -- comparisons, equalities and
@@ -1786,6 +1794,18 @@ public:
   // skip the condition, so agreeing arms decide the output while it is
   // unset. Off by default: it grows the CNF where multiplexers dominate.
   bool cnf_complete_ite = false;
+
+  // The new-* CNF writer's recovered full adders: emit the ten clauses that
+  // define the relation instead of the fourteen that make it propagation
+  // complete. Off by default: it loses on bit-vector logics.
+  bool cnf_fa_minimal = false;
+
+  // Sharing-aware rewriting: take an extract of a bitwise operation on each
+  // of its operands instead, narrowing the operation to the bits that are
+  // read. Only where nothing else reads the operation. Off by default: it
+  // can add a node per operand, and what it buys depends on the extracts
+  // then folding or composing further down.
+  bool extract_through_bitwise = false;
 
   // Whether AUTO should read the threshold the Real path's way. Set for an
   // active Real solve, and for nothing else; the bit-vector choice at either

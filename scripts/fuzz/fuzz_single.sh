@@ -242,6 +242,31 @@ declare -a LOGIC_SETS=(
 # something to break: the uflra group's round settings change 28 to 38 files
 # in 60 here against 19 to 25 at the default counts.
 "QF_UFLRA -mf 2 -Mf 4 -mp 1 -Mp 3 | | z3"
+# Floating point and real arithmetic in one query -- the only entry that draws
+# the fp and lra groups together; every other entry reaches one family or the
+# other. -mconv 0 -Mconv 0 is load-bearing rather than tidying: the
+# conversions FuzzSMT writes for an FP-and-Real logic include to_fp of a
+# symbolic Real, which STP refuses by design ("only a Real constant converts
+# to a float"), and it writes both directions under the one setting, so at
+# any other -mconv every file dies in the parser. Without them the two
+# theories sit side by side in one formula, which is the part nothing else
+# covers.
+#
+# 29 of 30 files get a comparable answer from both STP and z3 inside the
+# harness's own budget of TIMEOUT per check-sat, a better yield than most
+# entries (the QF_ABVFP entry emits a CNF on 11 of 30). Measured on stp -s
+# against no options: the fp group changes 21 of 30 files
+# (--bb.fp-native-cmp=0) and 4 of 30 (--bb.fp-native-all=1), the lra group 9
+# of 30 (--lra-soi=1) and 7 of 30 (--lra-row-order=2), with
+# --lra-presolve-rows=0 inert on all 30. No STP/z3 disagreement in 30 files,
+# so this is coverage rather than a find.
+#
+# The lra counts are a floor, not a measurement of the group: the LRA
+# counters are printed by -t, and -t output is not reproducible between two
+# identical runs -- 12 of 30 files differed on a control run after the
+# obvious timing fields were normalised away -- so -s is the only surface
+# that can be diffed, and it does not carry them.
+"QF_FPLRA -mvf 3 -Mvf 6 -mcf 2 -Mcf 4 -mvrm 1 -Mvrm 2 -mv 2 -Mv 5 -mc 2 -Mc 5 -mconv 0 -Mconv 0 | | z3"
 # Sessions. FuzzSMT's -incremental follows the formula's (check-sat) with
 # further rounds, -mcs to -Mcs of them (default 1 to 3), each one to three
 # of: push of one or two levels, pop of some of them, and assert of a fresh
@@ -651,6 +676,12 @@ declare -a g_simplify=(
 "--simplify-to-constants-only=1"
 "--size-reducing-fixed-point-limit=-1"
 "--aig-core-simplification=1"
+
+# Read-time folding of constants and identities, a different pass from the
+# simplifier stack: it changed the -s output on all of 30 bit-vector, 30 plain
+# floating-point and 30 floating-point-array files, and on all 90 again when
+# drawn on top of --disable-simplifications, so neither subsumes the other.
+"--no-simplify"
 
 # This and the --flattening entry above are opt-outs because the flattening
 # stack is on by default since #838, so an opt-in form only re-runs the
@@ -1191,6 +1222,17 @@ declare -a g_fp=(
 "--bb.fp-native-all=0"
 "--bb.fp-native-all=1"
 
+# How the native fp.div relation spells its divisor-quotient product (#1225).
+# Inert unless the native divider is on, so each entry pairs with it: drawn
+# alone --bb.fp-div-product left the -s output identical on all 60 measured
+# files, and paired it changed 16 of 30 plain floating-point files and 6 of 30
+# array ones. product=2, which adds the redundant no-overflow clause on top of
+# the ordinary bit-vector multiplier, changed 17/30 and 6/30. Spelling the
+# product with the multiplier is also what lets --bb.mult-variant reach it, so
+# these entries put the whole multiplier family behind fp.div.
+"--bb.fp-native-div=1 --bb.fp-div-product=1"
+"--bb.fp-native-div=1 --bb.fp-div-product=2"
+
 # Absent because there is nothing to blast: --bb.fp-native-fma. FuzzSMT
 # writes no fp.fma in either entry, so the option is byte-identical on all
 # 60 files. It needs a logic entry that generates one before it is worth
@@ -1287,6 +1329,18 @@ declare -a g_cnf=(
 "--cnf-generation-effort=gia-very-high"
 # The other way to reach very-low: the threshold auto drops to it above.
 "--cnf-auto-threshold=0"
+# A third option only the new-* rungs read: whether a recovered full adder is
+# written with the ten clauses that define it or the fourteen that make it
+# propagation complete (#1235). Measured on the same four entries, counting
+# files that emit a CNF at all -- 14 of 30 QF_BV, 17 n-ary, 16 wide and 24
+# QF_UFBV -- it changed 7, 10, 10 and 22 of them, and identically under
+# new-medium and new-high, so one rung is enough to carry it. Named with no
+# rung at all it still reaches 5 of the 16 wide files, because auto picks
+# new-medium for a large estimated blast; the pairing below is what makes it
+# deterministic rather than what makes it bite. Answers agreed on all 360
+# comparisons, so this is coverage rather than a find.
+"--cnf-generation-effort=new-medium --cnf-fa-minimal=1"
+
 # Two writer options only the new-* rungs read, so each rides on one. On
 # 19 QF_BV, 14 n-ary, 15 wide and 25 QF_UFBV files emitting a CNF:
 # --cnf-link-shared-cells changed 5, 4, 4 and 23 of them under new-high,
@@ -1503,6 +1557,19 @@ declare -a NOT_FUZZED=(
 # Already fixed by the harness: -d is passed to every STP run, and the input
 # is SMT-LIB2, the only language STP reads.
 --check-sanity --SMTLIB2
+# Answer-replacing in the same way: --stop-after-cnf answers "unknown" by
+# design, so every file drawn with it would be saved as a mismatch.
+--stop-after-cnf
+# Decided elsewhere, or a second spelling of something already drawn: the
+# file's own set-logic decides --logic, --sat-backend names the same backends
+# the solver group draws by their own flags, and --simplify is the default-on
+# half of the --no-simplify pair that the simplify group now draws.
+--logic --sat-backend --simplify
+# Not part of the encoding: --produce-models only toggles model building, and
+# -d already asks for the answer the checker is compared against. --random-seed
+# re-rolls the backend's randomisation and changes no clause; a fresh generated
+# query every iteration already varies the search far more.
+--produce-models --random-seed
 # Measured inert on every generated file; see the group comments below for
 # what each would need before it is worth an entry.
 --bb.fp-native-fma --bb.fp-native-known-sign

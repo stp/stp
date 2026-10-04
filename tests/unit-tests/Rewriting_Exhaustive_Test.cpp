@@ -625,4 +625,118 @@ TEST(Rewriting_Exhaustive, ite_shared_disjunction_is_not_rebuilt)
 }
 
 
+/* --extract-through-bitwise: an extract of a bitwise operation becomes the
+   operation over the extracts of its operands. Equivalence is the thing to
+   check exhaustively -- the rule rewrites every operand, so the n-ary forms
+   are the ones that would catch this file's recurring bug, an operand
+   silently dropped by a rule that rebuilt from c[0] and c[1] alone. */
+TEST(Rewriting_Exhaustive, extract_through_bvand_arity2)
+{
+  Context c;
+  c.mgr.UserFlags.extract_through_bitwise = true;
+  ASTNode band = c.hf->CreateTerm(BVAND, 4, c.bv(4), c.bv(4));
+  ASSERT_EQ(band.Degree(), 2u);
+  ASTNode e = c.hf->CreateTerm(BVEXTRACT, 2, band, c.konst(2, 32),
+                               c.konst(1, 32));
+  c.checkSoundTerm(e);
+}
+
+TEST(Rewriting_Exhaustive, extract_through_bvand_arity3)
+{
+  Context c;
+  c.mgr.UserFlags.extract_through_bitwise = true;
+  ASTNode band = c.hf->CreateTerm(BVAND, 3, c.bv(3), c.bv(3), c.bv(3));
+  ASSERT_EQ(band.Degree(), 3u);
+  ASTNode e = c.hf->CreateTerm(BVEXTRACT, 2, band, c.konst(1, 32),
+                               c.konst(0, 32));
+  c.checkSoundTerm(e);
+}
+
+TEST(Rewriting_Exhaustive, extract_through_bvxor_arity3)
+{
+  Context c;
+  c.mgr.UserFlags.extract_through_bitwise = true;
+  ASTNode bxor = c.hf->CreateTerm(BVXOR, 3, c.bv(3), c.bv(3), c.bv(3));
+  ASSERT_EQ(bxor.Degree(), 3u);
+  ASTNode e = c.hf->CreateTerm(BVEXTRACT, 1, bxor, c.konst(2, 32),
+                               c.konst(2, 32));
+  c.checkSoundTerm(e);
+}
+
+/* BVOR reaches the pass only from the hashing factory: the simplifying one
+   spells a disjunction NOT(AND(NOT, NOT)). Both spellings are covered. */
+TEST(Rewriting_Exhaustive, extract_through_bvor_arity2)
+{
+  Context c;
+  c.mgr.UserFlags.extract_through_bitwise = true;
+  ASTNode bor = c.hf->CreateTerm(BVOR, 4, c.bv(4), c.bv(4));
+  ASSERT_EQ(bor.GetKind(), BVOR);
+  ASTNode e = c.hf->CreateTerm(BVEXTRACT, 2, bor, c.konst(3, 32),
+                               c.konst(2, 32));
+  c.checkSoundTerm(e);
+}
+
+TEST(Rewriting_Exhaustive, extract_through_bvnot)
+{
+  Context c;
+  c.mgr.UserFlags.extract_through_bitwise = true;
+  ASTNode bnot = c.hf->CreateTerm(BVNOT, 4, c.bv(4));
+  ASTNode e = c.hf->CreateTerm(BVEXTRACT, 2, bnot, c.konst(2, 32),
+                               c.konst(1, 32));
+  c.checkSoundTerm(e);
+}
+
+/* The rule fires, and the operands really are narrowed: every operand of
+   the rebuilt operation is an extract of the original width. Without this
+   the equivalence tests above would pass on an unchanged formula. */
+TEST(Rewriting_Exhaustive, extract_through_bitwise_narrows_the_operands)
+{
+  Context c;
+  c.mgr.UserFlags.extract_through_bitwise = true;
+  ASTNode a = c.bv(4), b = c.bv(4);
+  ASTNode band = c.hf->CreateTerm(BVAND, 4, a, b);
+  ASTNode e = c.hf->CreateTerm(BVEXTRACT, 2, band, c.konst(2, 32),
+                               c.konst(1, 32));
+  ASTNode top = c.hf->CreateNode(EQ, e, c.bv(2));
+
+  ASTNode after = c.run(top);
+  ASSERT_EQ(after.GetKind(), EQ);
+  const ASTNode& narrowed = (after[0].GetKind() == BVAND) ? after[0] : after[1];
+  ASSERT_EQ(narrowed.GetKind(), BVAND) << after;
+  ASSERT_EQ(narrowed.GetValueWidth(), 2u);
+  for (const auto& operand : narrowed)
+    ASSERT_EQ(operand.GetKind(), BVEXTRACT) << after;
+  c.checkEquivalent(top, after);
+}
+
+/* Off by default, so the shape is left alone unless the option asks. */
+TEST(Rewriting_Exhaustive, extract_through_bitwise_is_off_by_default)
+{
+  Context c;
+  ASTNode band = c.hf->CreateTerm(BVAND, 4, c.bv(4), c.bv(4));
+  ASTNode e = c.hf->CreateTerm(BVEXTRACT, 2, band, c.konst(2, 32),
+                               c.konst(1, 32));
+  ASTNode top = c.hf->CreateNode(EQ, e, c.bv(2));
+
+  ASSERT_EQ(top, c.run(top));
+}
+
+/* A bitwise operation another term reads is not narrowed: the extract would
+   be taken on each operand while the full-width operation stayed for the
+   other reader, so the node count would rise. */
+TEST(Rewriting_Exhaustive, extract_through_shared_bitwise_is_not_narrowed)
+{
+  Context c;
+  c.mgr.UserFlags.extract_through_bitwise = true;
+  ASTNode band = c.hf->CreateTerm(BVAND, 4, c.bv(4), c.bv(4));
+  ASTNode e = c.hf->CreateTerm(BVEXTRACT, 2, band, c.konst(2, 32),
+                               c.konst(1, 32));
+  ASTNode top = c.hf->CreateNode(AND, c.hf->CreateNode(EQ, e, c.bv(2)),
+                                 c.hf->CreateNode(EQ, band, c.bv(4)));
+
+  ASTNode after = c.run(top);
+  EXPECT_LE(c.mgr.NodeSize(after), c.mgr.NodeSize(top)) << after;
+  c.checkEquivalent(top, after);
+}
+
 } // namespace

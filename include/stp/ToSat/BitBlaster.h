@@ -190,6 +190,19 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
 
   BBNodeVec v6(vector<list<BBNode>>& products, BBNodeSet& support,
                     const ASTNode& n);
+
+  // The sum-of-products collapse behind --bb.add-v4: a sum's terms are
+  // walked and every partial product of every term lands in the sum's own
+  // columns, which v6 then reduces once.
+  void fusedSumCollect(const ASTNode& t, bool negate,
+                       vector<list<BBNode>>& columns, BBNodeSet& support,
+                       uint64_t& constant);
+  void fusedSumMonomials(const vector<BBNodeVec>& factors, unsigned first,
+                         int shift, bool negate,
+                         vector<list<BBNode>>& columns);
+  void fusedSumRec(const vector<BBNodeVec>& factors, unsigned k,
+                   unsigned first, bool negate, int col, BBNode acc,
+                   vector<list<BBNode>>& columns);
   BBNodeVec v7(vector<list<BBNode>>& products, BBNodeSet& support,
                     const ASTNode& n);
   BBNodeVec v8(vector<list<BBNode>>& products, BBNodeSet& support,
@@ -634,6 +647,33 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
     ++relationalFreshInputs;
     return nf->CreateFreshInput();
   }
+  // Set by a consumer that asserts every entry of relationalConstraints()
+  // beyond the root it was minted under -- the incremental driver, as
+  // permanent units at each solve's sync. The division relations are then
+  // definitions that hold under every root, so their inputs and the memos
+  // naming them can outlive a root, and so can the proxies the abstraction
+  // registered for them: a proxy is tied to its bit permanently, which is
+  // only sound while the bit means the same thing under every root.
+  bool relationsPermanent_ = false;
+  std::vector<BBNode> relationalConstraints_;
+  // A fresh input of a bit-vector division relation.
+  BBNode freshDivisionInput()
+  {
+    if (!relationsPermanent_)
+      ++relationalFreshInputs;
+    return nf->CreateFreshInput();
+  }
+  // A division relation into the root's support, and on record for a
+  // consumer that asserts it permanently.
+  void recordDivisionRelation(const BBNodeSet& relation, BBNodeSet& support)
+  {
+    for (const BBNode& c : relation)
+    {
+      support.insert(c);
+      if (relationsPermanent_)
+        relationalConstraints_.push_back(c);
+    }
+  }
   size_t fpNativeRecordReuses = 0;
   size_t fpNativeRecordClassifications = 0;
   // One placeholder multiply node per width, for BBfpSignificandProduct.
@@ -863,6 +903,16 @@ public:
   const std::vector<BBNode>& sideConstraints() const
   {
     return sideConstraints_;
+  }
+  // The consumer promises to assert every division relation permanently;
+  // see relationsPermanent_.
+  void setRelationsPermanent(bool permanent)
+  {
+    relationsPermanent_ = permanent;
+  }
+  const std::vector<BBNode>& relationalConstraints() const
+  {
+    return relationalConstraints_;
   }
 
   // Direct producer IDs reachable from an AIG result. Walking the committed
