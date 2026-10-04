@@ -95,11 +95,13 @@ if(NOT ABC_FOUND_SYSTEM)
     # a clause over a variable it never allocated. Mf_ManGenerateCnf no longer
     # builds the mapped network it was about to free, the CNF coming from the
     # cuts rather than from that network. And Cnf_DeriveFast remembers each
-    # distinct cut function's ISOP cover instead of recomputing it per cone.
+    # distinct cut function's ISOP cover instead of recomputing it per cone,
+    # in a table bounded at 1024 entries -- nothing bounds how many distinct
+    # cut functions a circuit presents, and an unbounded table is O(AIG).
     #
     # All four leave the CNF byte-identical except the overflow fix, which
     # only changes a formula that was malformed.
-    set(ABC_GIT_TAG "1b977a4d54491b7ad720a533519fa5239bb6bad6" CACHE STRING
+    set(ABC_GIT_TAG "e19e80d78388a779198c0f3da4623f785bf319b1" CACHE STRING
         "ABC revision to build when one has to be built")
     mark_as_advanced(ABC_GIT_TAG)
 
