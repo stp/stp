@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include "extlib-constbv/constantbv.h"
 #include <algorithm>
 #include <cctype>
+#include <map>
 #include <sstream>
 
 namespace stp
@@ -180,6 +181,51 @@ bool seedFunctionBefore(const UFFunctionModelSeed* left,
   return left->declaration->id() < right->declaration->id();
 }
 
+// The model value of a non-Real scalar at its lowering sort, read from the
+// counterexample unless it is already constant.
+bool nonRealModelValue(STPMgr* manager,
+                       AbsRefine_CounterExample* counterexample,
+                       const ASTNode& scalar, const SourceSort& declared,
+                       UFConcreteValue& value)
+{
+  if (!scalar.isConstant() && counterexample == NULL)
+    return false;
+  ASTNode constant = scalar.isConstant()
+                         ? scalar
+                         : declared.kind() == SourceSort::Kind::Bool
+                               ? counterexample->ModelValueOfFormula(scalar)
+                               : counterexample->ModelValueOfTerm(scalar);
+  if (constant.IsNull())
+    return false;
+  if (declared.kind() == SourceSort::Kind::FloatingPoint)
+    constant = canonicalConstant(manager, constant, declared);
+  if (constant.IsNull())
+    return false;
+  std::string diagnostic;
+  return UFConcreteValue::fromConstant(
+      constant, UFSignature::loweringSort(declared), value, diagnostic);
+}
+
+// One argument or result at its declared sort: a Real from the exact model,
+// anything else through the printer the seed cases use.
+bool printModelScalar(std::ostream& os, STPMgr* manager,
+                      AbsRefine_CounterExample* counterexample,
+                      const ASTNode& scalar, const SourceSort& declared)
+{
+  if (declared.kind() == SourceSort::Kind::Real)
+  {
+    if (scalar.GetKind() != REAL_CONST && !manager->HasRealModelValue(scalar))
+      return false;
+    os << manager->GetRealModelSMTLIB(scalar);
+    return true;
+  }
+  UFConcreteValue value;
+  if (!nonRealModelValue(manager, counterexample, scalar, declared, value))
+    return false;
+  printValue(os, manager, value, declared);
+  return true;
+}
+
 } // namespace
 
 bool UFModel::scalarModelKey(STPMgr* manager,
@@ -205,23 +251,8 @@ bool UFModel::scalarModelKey(STPMgr* manager,
     key = "r:" + manager->GetRealModelValue(scalar);
     return true;
   }
-  if (!scalar.isConstant() && counterexample == NULL)
-    return false;
-  ASTNode constant = scalar.isConstant()
-                         ? scalar
-                         : declared.kind() == SourceSort::Kind::Bool
-                               ? counterexample->ModelValueOfFormula(scalar)
-                               : counterexample->ModelValueOfTerm(scalar);
-  if (constant.IsNull())
-    return false;
-  if (declared.kind() == SourceSort::Kind::FloatingPoint)
-    constant = canonicalConstant(manager, constant, declared);
-  if (constant.IsNull())
-    return false;
   UFConcreteValue value;
-  std::string diagnostic;
-  if (!UFConcreteValue::fromConstant(
-          constant, UFSignature::loweringSort(declared), value, diagnostic))
+  if (!nonRealModelValue(manager, counterexample, scalar, declared, value))
     return false;
 
   // Own the value's bytes rather than the identity of a temporary AST
@@ -654,7 +685,10 @@ void UFModel::printSMTLIB2(std::ostream& os,
   std::vector<const UFFunctionModelSeed*> functions;
   functions.reserve(seed.functions.size());
   for (const UFFunctionModelSeed& function : seed.functions)
-    functions.push_back(&function);
+    // A Real position has no packed value; printRealPositionSMTLIB2 owns it.
+    if (function.declaration == NULL ||
+        !hasRealPosition(function.declaration->signature()))
+      functions.push_back(&function);
   std::sort(functions.begin(), functions.end(), seedFunctionBefore);
 
   for (const UFFunctionModelSeed* function : functions)
@@ -699,6 +733,142 @@ void UFModel::printSMTLIB2(std::ostream& os,
     }
     printValue(os, manager, function->defaultValue, signature.codomain());
     for (size_t i = 0; i < function->cases.size(); ++i)
+      os << ')';
+    os << ")\n";
+  }
+}
+
+bool UFModel::hasRealPosition(const UFSignature& signature)
+{
+  if (signature.codomain().kind() == SourceSort::Kind::Real)
+    return true;
+  for (const SourceSort& sort : signature.domain())
+    if (sort.kind() == SourceSort::Kind::Real)
+      return true;
+  return false;
+}
+
+void UFModel::printRealPositionSMTLIB2(std::ostream& os, STPMgr* manager,
+                                       const UFTheoryAdapter* adapter,
+                                       AbsRefine_CounterExample* counterexample)
+{
+  UFContext* context = manager == NULL ? NULL : manager->getUFContextIfAny();
+  if (context == NULL)
+    return;
+  std::vector<const UFDecl*> declarations;
+  for (const UFDecl* declaration : context->activeDeclarations())
+    if (declaration != NULL && hasRealPosition(declaration->signature()))
+      declarations.push_back(declaration);
+  std::sort(declarations.begin(), declarations.end(),
+            [](const UFDecl* left, const UFDecl* right) {
+              if (left->name() != right->name())
+                return left->name() < right->name();
+              return left->id() < right->id();
+            });
+  const LoweredApplicationView* view =
+      adapter != NULL && adapter->hasCertifiedModel()
+          ? adapter->applicationView()
+          : NULL;
+
+  for (const UFDecl* declaration : declarations)
+  {
+    const UFSignature& signature = declaration->signature();
+    const bool realResult =
+        signature.codomain().kind() == SourceSort::Kind::Real;
+
+    // Keyed as lazy congruence and evaluateApplicationInTerm key a tuple, so
+    // congruent observations collapse to one case.
+    std::map<std::string, std::pair<std::string, std::string>> cases;
+    if (view != NULL)
+      for (const LoweredApplicationRecord& record : view->applications)
+      {
+        if (record.declaration != declaration)
+          continue;
+        if (record.loweredActuals.size() != signature.arity())
+          FatalError("UF model: an observed application has an incomplete "
+                     "argument tuple",
+                     record.durableHandle);
+        std::string key;
+        std::ostringstream condition;
+        if (signature.arity() > 1)
+          condition << "(and ";
+        for (size_t i = 0; i < signature.arity(); ++i)
+        {
+          std::string part;
+          if (i != 0)
+            condition << ' ';
+          condition << "(= x" << i << ' ';
+          if (!scalarModelKey(manager, counterexample,
+                              record.loweredActuals[i], signature.domain()[i],
+                              part) ||
+              !printModelScalar(condition, manager, counterexample,
+                                record.loweredActuals[i],
+                                signature.domain()[i]))
+            FatalError("UF model: an observed argument has no model value",
+                       record.loweredActuals[i]);
+          condition << ')';
+          key += part + '\n';
+        }
+        if (signature.arity() > 1)
+          condition << ')';
+
+        std::ostringstream result;
+        if (realResult)
+        {
+          if (!manager->HasRealModelValue(record.durableHandle))
+            FatalError("UF model: an observed Real application has no model "
+                       "value",
+                       record.durableHandle);
+          result << manager->GetRealModelSMTLIB(record.durableHandle);
+        }
+        else
+        {
+          UFConcreteValue value;
+          if (!adapter->lookupCertifiedApplication(record.durableHandle,
+                                                   value))
+            FatalError("UF model: an observed application has no certified "
+                       "value",
+                       record.durableHandle);
+          printValue(result, manager, value, signature.codomain());
+        }
+
+        const auto inserted = cases.insert(
+            std::make_pair(key, std::make_pair(condition.str(), result.str())));
+        if (!inserted.second && inserted.first->second.second != result.str())
+          FatalError("UF model: congruent applications have different values",
+                     record.durableHandle);
+      }
+
+    // An unobserved tuple: the zero the Real model and
+    // evaluateApplicationInTerm complete it with. Spelled as
+    // RealModel::smtlibValue spells zero; there may be no Real model.
+    std::ostringstream fallback;
+    if (realResult)
+      fallback << "0";
+    else
+      printValue(fallback, manager,
+                 UFConcreteValue::zero(
+                     UFSignature::loweringSort(signature.codomain())),
+                 signature.codomain());
+
+    os << "(define-fun ";
+    printQuotedSymbol(os, declaration->name());
+    os << " (";
+    for (size_t i = 0; i < signature.arity(); ++i)
+    {
+      if (i != 0)
+        os << ' ';
+      os << "(x" << i << ' ';
+      printSort(os, manager, signature.domain()[i]);
+      os << ')';
+    }
+    os << ") ";
+    printSort(os, manager, signature.codomain());
+    os << '\n' << "  ";
+    for (const auto& c : cases)
+      os << "(ite " << c.second.first << ' ' << c.second.second << ' ';
+    os << fallback.str();
+    for (size_t i = 0; i < cases.size(); ++i)
       os << ')';
     os << ")\n";
   }

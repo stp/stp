@@ -118,6 +118,16 @@ public:
   // including declarations with no active observations.
   static void printSMTLIB2(std::ostream& os,
                            const UFFunctionModelSeedSet& seed);
+
+  // Whether the codomain or any argument is Real.
+  static bool hasRealPosition(const UFSignature& signature);
+
+  // The same for every active declaration with a Real position, which have no
+  // seed: cases come from the observed applications, Real values from the
+  // exact model, and the default is the one evaluation completes with.
+  static void printRealPositionSMTLIB2(std::ostream& os, STPMgr* manager,
+                                       const UFTheoryAdapter* adapter,
+                                       AbsRefine_CounterExample* counterexample);
 };
 
 } // namespace stp
