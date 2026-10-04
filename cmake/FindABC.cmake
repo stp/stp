@@ -87,10 +87,19 @@ if(NOT ABC_FOUND_SYSTEM)
     # bump the upstream base with it. To work on either, clone the fork and
     # point -DABC_DIR at a build of the clone. See docs/code-guide.rst.
     #
-    # The pinned commit adds one fix to that set: Cnf_CutDeriveTruth keeps its
-    # truth-table scratch per call rather than in a static array, so managers
-    # deriving CNF on separate threads do not race.
-    set(ABC_GIT_TAG "b1e6f8f09f19c59a799c01e4ab684006065d402c" CACHE STRING
+    # The pinned commit adds four fixes to that set. Cnf_CutDeriveTruth keeps
+    # its truth-table scratch per call rather than in a static array, so
+    # managers deriving CNF on separate threads do not race. Mf_Obj_t's Delay
+    # and nMapRefs are whole words rather than 16-bit fields: a large blast
+    # overflows nMapRefs, which is a fanout count, and the mapper then writes
+    # a clause over a variable it never allocated. Mf_ManGenerateCnf no longer
+    # builds the mapped network it was about to free, the CNF coming from the
+    # cuts rather than from that network. And Cnf_DeriveFast remembers each
+    # distinct cut function's ISOP cover instead of recomputing it per cone.
+    #
+    # All four leave the CNF byte-identical except the overflow fix, which
+    # only changes a formula that was malformed.
+    set(ABC_GIT_TAG "1b977a4d54491b7ad720a533519fa5239bb6bad6" CACHE STRING
         "ABC revision to build when one has to be built")
     mark_as_advanced(ABC_GIT_TAG)
 
