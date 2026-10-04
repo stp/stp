@@ -138,9 +138,10 @@ public:
     bitBlaster.reset(new BitBlasterAIG(nodeManager.get(), simplifier.get(),
                                     bm->defaultNodeFactory,
                                     &bm->UserFlags, NULL));
-    // syncAbstractions asserts every division relation as a permanent
-    // unit, so the blaster keeps the quotient-remainder pairs and the
-    // memos that name them across roots.
+    // syncAbstractions asserts every defining relation as a permanent
+    // unit, so the bits a proxy is tied to keep their meaning under every
+    // root. The blaster also keeps the bit-vector division pairs and the
+    // memos naming them across roots on the strength of it.
     bitBlaster->setRelationsPermanent(true);
   }
 
@@ -4067,15 +4068,16 @@ struct IncrementalSolver::Impl
     // operand the refinement reads through one is noise.
     assertPermanentUnits(bb.sideConstraints(), assertedSideConstraints);
 
-    // A division relation defines its quotient and remainder inputs over
-    // the operands' bits, and a proxy tied to such an input is only as
-    // good as the relation. Conjoined into one root alone, the relation
-    // retracts with it while the proxy, the registry entry and every
-    // record over them persist: the next root re-minted the pair, the
-    // registry answered with the first one, and a refined equality over a
-    // free quotient certified a candidate the raw stack refutes. Permanent
-    // here, by the same argument as the proxies: a definition of fresh
-    // inputs constrains no assignment of the query.
+    // A defining relation -- bit-vector division, and the native
+    // floating-point divide, remainder and square root -- defines its
+    // quotient and remainder inputs over the operands' bits, and a proxy
+    // tied to such an input is only as good as the relation. Conjoined
+    // into one root alone, the relation retracts with it while the proxy,
+    // the registry entry and every record over them persist: the next root
+    // re-minted the pair, the registry answered with the first one, and a
+    // refined equality over a free quotient certified a candidate the raw
+    // stack refutes. Permanent here, by the same argument as the proxies:
+    // a definition of fresh inputs constrains no assignment of the query.
     assertPermanentUnits(bb.relationalConstraints(),
                          assertedRelationalConstraints);
 
