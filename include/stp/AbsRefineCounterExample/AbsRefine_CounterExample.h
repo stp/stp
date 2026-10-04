@@ -242,6 +242,8 @@ public:
   UFTheoryAdapter* getUFTheoryAdapter() const { return ufTheoryAdapter; }
 
   void PrintFullCounterExampleSMTLIB2(std::ostream& os);
+  // The define-fun of every active uninterpreted function.
+  void PrintFunctionModelsSMTLIB2(std::ostream& os);
   void outputLine(std::ostream& os, const ASTNode &f, ASTNode se);
   
   void PrintArrayValueSMTLIB2(std::ostream& os, const ASTNode& array);

@@ -2853,19 +2853,7 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     {
       outputLine(os, e.first, e.second);
     }
-    if (ufTheoryAdapter != NULL && ufTheoryAdapter->hasCertifiedModel())
-    {
-      const UFFunctionModelSeedSet* seed =
-          ufTheoryAdapter->certifiedModelSeed();
-      if (seed == NULL)
-        FatalError("certified UF adapter has no model seed");
-      UFModel::printSMTLIB2(os, *seed);
-    }
-    else if (bm->UserFlags.enable_uninterpreted_functions &&
-             bm->getUFContextIfAny() != NULL)
-      UFModel::printSMTLIB2(
-          os, UFModel::defaultSeed(
-                  bm->getUFContextIfAny()->activeDeclarations()));
+    PrintFunctionModelsSMTLIB2(os);
     os.flush();
     return;
   }
@@ -2901,6 +2889,13 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     os << ")" << std::endl;
   }
 
+  PrintFunctionModelsSMTLIB2(os);
+  os.flush();
+}
+
+void AbsRefine_CounterExample::PrintFunctionModelsSMTLIB2(std::ostream& os)
+{
+  const UFTheoryAdapter* certified = NULL;
   if (ufTheoryAdapter != NULL && ufTheoryAdapter->hasCertifiedModel())
   {
     const UFFunctionModelSeedSet* seed =
@@ -2908,14 +2903,22 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     if (seed == NULL)
       FatalError("certified UF adapter has no model seed");
     UFModel::printSMTLIB2(os, *seed);
+    certified = ufTheoryAdapter;
   }
   else if (bm->UserFlags.enable_uninterpreted_functions &&
            bm->getUFContextIfAny() != NULL)
-    UFModel::printSMTLIB2(
-        os, UFModel::defaultSeed(
-                bm->getUFContextIfAny()->activeDeclarations()));
-
-  os.flush();
+  {
+    // A Real has no packed zero to seed with; those functions are printed
+    // from the exact model below.
+    std::vector<const UFDecl*> seeded;
+    for (const UFDecl* d : bm->getUFContextIfAny()->activeDeclarations())
+      if (d != NULL && !UFModel::hasRealPosition(d->signature()))
+        seeded.push_back(d);
+    UFModel::printSMTLIB2(os, UFModel::defaultSeed(seeded));
+  }
+  else
+    return;
+  UFModel::printRealPositionSMTLIB2(os, bm, certified, this);
 }
 
 // Prints Satisfying assignment directly, for debugging.
