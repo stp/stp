@@ -3067,6 +3067,15 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     ClearAllTables();
     return SOLVER_ERROR;
   }
+  // A solve abandoned before its search (a before-search callback said no, or
+  // a required activation could not be bound) answers nothing; its `false`
+  // is not "unsatisfiable". Every caller, not only the arithmetic one.
+  if (tosat->hasInternalSolveFailure())
+  {
+    bm->noteUnknown(UnknownReason::Incomplete,
+                    tosat->internalSolveFailureDetail());
+    return bm->unknownResult();
+  }
 
   if (bm->soft_timeout_expired)
   {

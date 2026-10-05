@@ -1080,6 +1080,10 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
 {
   bm->checkPreparation(PreparationStage::Encoding);
   bm->GetRunTimes()->start(RunTimes::Solving);
+  // A failure describes the solve that recorded it. An encoder that lives on
+  // (refinement rounds, a persistent Real session) must not abandon its next
+  // solve for it.
+  internalSolveFailure.clear();
   // The LRA activation, when present, precedes the optional UF injectivity
   // guard. solveRetractingInjectivity requires the retractable guard last so
   // it can remove only that assumption and retain the exact query activation.
