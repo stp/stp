@@ -1,15 +1,15 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK: ^sat
 ; CHECK-L: (define-fun |i| () (_ BitVec 8) #x01)
-; CHECK-L: (define-fun |b| () (Array (_ BitVec 4) (_ BitVec 8)) (store ((as const (Array (_ BitVec 4) (_ BitVec 8))) #x00) #x0 #x00))
+; CHECK-L: (define-fun |b| () (Array (_ BitVec 4) (_ BitVec 8)) ((as const (Array (_ BitVec 4) (_ BitVec 8))) #x00))
 ; Unconstrained-variable elimination reaches this disequality from
 ; either side: i occurs once, and so does the array b beneath the read.
 ; The read rule is the one that fires -- select(b,j) with b free is
 ; itself free -- so the read becomes a fresh value and b is defined as a
-; write of it, which is why b prints with an explicit cell rather than
-; as the bare constant array. (Before the array rules existed it was i
-; that was eliminated, defined from select(b,j), and b printed with no
-; cells at all.)
+; write of it. That cell holds the default, so the canonical form the
+; model prints in drops it and b prints as the bare constant array. (Before
+; the array rules existed it was i that was eliminated, defined from
+; select(b,j), and b printed with no cells at all.)
 ;
 ; Either way the model has to be self-consistent, which is what this
 ; pins: b[0] is the value the evaluation used, and i is one more than

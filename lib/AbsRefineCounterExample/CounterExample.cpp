@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "Lra/LraCoordinator.h"
+#include "stp/AST/ArrayOps.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
@@ -2772,14 +2773,20 @@ void AbsRefine_CounterExample::PrintArrayValueSMTLIB2(
     printer::outputBitVecSMTLIB2(index, os);
   };
 
-  for (size_t i = 0; i < entries.size(); i++)
-    os << "(store ";
-  os << "((as const " << sortText << ")";
   // The unobserved cells' value, printed through the same cell
   // printer as an observed one, so that what is published here is
   // demonstrably the value every other reader completes with rather
-  // than text that happens to match it.
-  printCell(defaultCellValue(array));
+  // than text that happens to match it. The cells are printed in the
+  // canonical form the simplifying factory builds a constant array's
+  // stores in (where the index sort has one), so a value prints one way
+  // however its cells were observed.
+  ASTNode fill = defaultCellValue(array);
+  canonicaliseConstantArray(*bm, indexSort, fill, entries);
+
+  for (size_t i = 0; i < entries.size(); i++)
+    os << "(store ";
+  os << "((as const " << sortText << ")";
+  printCell(fill);
   os << ")";
   for (size_t i = 0; i < entries.size(); i++)
   {

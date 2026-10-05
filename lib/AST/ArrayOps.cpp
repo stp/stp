@@ -25,6 +25,8 @@ THE SOFTWARE.
 #include "stp/AST/ArrayOps.h"
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/STPManager/STPManager.h"
+#include <iterator>
+#include <map>
 
 namespace stp
 {
@@ -113,5 +115,139 @@ ASTNode createArrayWrite(NodeFactory& nf, const ASTNode& array,
                                   : value;
   return nf.CreateArrayTerm(WRITE, array.GetIndexWidth(), array.GetValueWidth(),
                             array, packedIndex, packedValue);
+}
+
+bool canonicalIndexSort(const SourceSort& index)
+{
+  return index.kind() == SourceSort::Kind::BitVector ||
+         index.kind() == SourceSort::Kind::Bool;
+}
+
+bool isPlainConstant(const ASTNode& n)
+{
+  return n.GetKind() == BVCONST &&
+         n.GetSourceSort().kind() == SourceSort::Kind::BitVector;
+}
+
+uint64_t smallIndexCardinality(const SourceSort& index)
+{
+  if (index.kind() == SourceSort::Kind::Bool)
+    return 2;
+  if (index.kind() == SourceSort::Kind::BitVector &&
+      index.bitVectorWidth() <= 30)
+    return uint64_t(1) << index.bitVectorWidth();
+  return 0;
+}
+
+bool constantBitsLess(const ASTNode& a, const ASTNode& b)
+{
+  assert(a.GetKind() == BVCONST && b.GetKind() == BVCONST);
+  assert(a.GetValueWidth() == b.GetValueWidth());
+  return CONSTANTBV::BitVector_Lexicompare(a.GetBVConst(), b.GetBVConst()) < 0;
+}
+
+bool canonicaliseConstantArray(STPMgr& bm, const SourceSort& index,
+                               ASTNode& fill,
+                               std::vector<std::pair<ASTNode, ASTNode>>& stores)
+{
+  if (!canonicalIndexSort(index))
+    return false;
+  for (const auto& s : stores)
+    if (!isPlainConstant(s.first))
+      return false;
+
+  // The last store at an index wins; a cell holding the default needs no
+  // store.
+  std::map<ASTNode, ASTNode, ConstantBitsLess> cells;
+  for (const auto& s : stores)
+    cells[s.first] = s.second;
+  for (auto it = cells.begin(); it != cells.end();)
+    it = (it->second == fill) ? cells.erase(it) : std::next(it);
+
+  // Once the stores could cover half the sort the default must be the most
+  // frequent cell value, which takes every value being a constant to count.
+  const uint64_t card = smallIndexCardinality(index);
+  bool countable =
+      card != 0 && card <= 2 * (uint64_t)cells.size() && isPlainConstant(fill);
+  for (const auto& c : cells)
+    countable = countable && isPlainConstant(c.second);
+  if (countable)
+  {
+    std::map<ASTNode, uint64_t, ConstantBitsLess> counts;
+    counts[fill] = card - cells.size();
+    for (const auto& c : cells)
+      counts[c.second]++;
+    ASTNode best = fill;
+    for (const auto& c : counts)
+      if (c.second > counts[best] ||
+          (c.second == counts[best] && constantBitsLess(c.first, best)))
+        best = c.first;
+    if (best != fill)
+    {
+      const unsigned width = index.arrayComponentWidth();
+      std::map<ASTNode, ASTNode, ConstantBitsLess> flipped;
+      for (uint64_t k = 0; k < card; ++k)
+      {
+        const ASTNode at = bm.CreateBVConst(width, k);
+        const auto it = cells.find(at);
+        const ASTNode cell = (it == cells.end()) ? fill : it->second;
+        if (cell != best)
+          flipped[at] = cell;
+      }
+      cells.swap(flipped);
+      fill = best;
+    }
+  }
+
+  stores.assign(cells.begin(), cells.end());
+  return true;
+}
+
+bool isCanonicalConstantArray(const ASTNode& a, size_t budget)
+{
+  const SourceSort sort = a.GetSourceSort();
+  if (sort.kind() != SourceSort::Kind::Array ||
+      !canonicalIndexSort(sort.index()))
+    return false;
+  const SourceSort::Kind element = sort.element().kind();
+  if (element != SourceSort::Kind::BitVector &&
+      element != SourceSort::Kind::Bool)
+    return false;
+
+  // Top down, so each index must be below the one above it.
+  std::vector<ASTNode> values;
+  ASTNode n = a;
+  ASTNode above;
+  while (n.GetKind() == WRITE)
+  {
+    if (values.size() == budget || !isPlainConstant(n[1]) ||
+        !isPlainConstant(n[2]))
+      return false;
+    if (!above.IsNull() && !constantBitsLess(n[1], above))
+      return false;
+    above = n[1];
+    values.push_back(n[2]);
+    n = n[0];
+  }
+  if (n.GetKind() != CONST_ARRAY || !isPlainConstant(n[0]))
+    return false;
+  const ASTNode& fill = n[0];
+  for (const ASTNode& v : values)
+    if (v == fill)
+      return false;
+
+  const uint64_t card = smallIndexCardinality(sort.index());
+  if (card != 0 && card <= 2 * (uint64_t)values.size())
+  {
+    std::map<ASTNode, uint64_t, ConstantBitsLess> counts;
+    for (const ASTNode& v : values)
+      counts[v]++;
+    const uint64_t fillCount = card - values.size();
+    for (const auto& c : counts)
+      if (c.second > fillCount ||
+          (c.second == fillCount && constantBitsLess(c.first, fill)))
+        return false;
+  }
+  return true;
 }
 } // namespace stp

@@ -52,6 +52,9 @@ THE SOFTWARE.
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Util/Attributes.h"
+#include <cstdint>
+#include <unordered_map>
+#include <unordered_set>
 
 class DLL_PUBLIC SimplifyingNodeFactory : public NodeFactory
 {
@@ -118,6 +121,32 @@ private:
                                     const ASTNode& concat);
 
   ASTNode chaseRead(ASTChildren children, unsigned int width);
+
+  // A store over a constant array: dropped when it writes the default
+  // straight onto the constant array, and otherwise -- when every index of
+  // the chain is a constant of a canonical index sort -- the chain in the
+  // canonical form isCanonicalConstantArray describes. Null when neither
+  // applies.
+  ASTNode normaliseConstantWrite(const ASTNode& array, const ASTNode& index,
+                                 const ASTNode& value);
+
+  // The canonical chains this factory has built, by node number: their
+  // depth and the node number of their default. What makes the usual
+  // construction, a store at a larger index on top, cost no walk. Node
+  // numbers are never reused, and the append this permits is the literal
+  // store, so an entry can only ever cost canonicity, not meaning.
+  struct CanonicalChain
+  {
+    uint32_t depth;
+    uint64_t defaultNum;
+  };
+  std::unordered_map<uint64_t, CanonicalChain> canonicalChains;
+  // And the arrays no store over can be put in that form -- a store at a
+  // symbolic index or a base other than a constant array lies beneath, or
+  // more stores than the rebuild walks -- so that a store over one, or a
+  // pass rebuilding a chain of them, gives up without walking. A property
+  // of the node, so an entry never goes stale.
+  std::unordered_set<uint64_t> uncanonicalChains;
 
   // Push an extract down through the operators it passes through, in a loop.
   // Null if none of them applies.

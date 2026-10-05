@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/NodeFactory/HashingNodeFactory.h"
 #include "stp/AST/AST.h"
+#include "stp/AST/ArrayOps.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/STPManager/STP.h"
@@ -311,6 +312,16 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
         return bm.ASTFalse;
       return CreateNode(floats ? FP_SMT_EQ : EQ, d1, d2);
     }
+
+    // Two different constant arrays in canonical form differ in some cell:
+    // the form is a function of the cells. Without the default's change on
+    // a small index sort this would not hold -- over a one-bit index,
+    // (store (store K0 #b0 #x07) #b1 #x07) and K7 are the same array -- so
+    // the whole form is checked here, not taken on trust from its builder.
+    if (!(back_children[0] == back_children[1]) &&
+        isCanonicalConstantArray(back_children[0]) &&
+        isCanonicalConstantArray(back_children[1]))
+      return bm.ASTFalse;
 
     if (array_eq_from_source)
       return CreateNode(ARRAY_EQ, back_children);
