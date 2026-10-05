@@ -139,11 +139,47 @@ struct Context
       collectSymbols(c, out);
   }
 
+  // Whether the definition of `sym` reaches `sym` again through the map,
+  // directly or along a chain of other definitions.
+  bool definitionCycles(const DenseNodeMap& defs, const ASTNode& sym,
+                        ASTNodeSet& onPath, ASTNodeSet& done)
+  {
+    if (done.count(sym))
+      return false;
+    if (!onPath.insert(sym).second)
+      return true;
+    const auto it = defs.find(sym);
+    if (it != defs.end())
+    {
+      ASTNodeSet uses;
+      collectSymbols(it->second, uses);
+      for (const auto& u : uses)
+        if (definitionCycles(defs, u, onPath, done))
+          return true;
+    }
+    onPath.erase(sym);
+    done.insert(sym);
+    return false;
+  }
+
   // Apply the substitution map produced by the pass to `n`, to a fixed point.
   // The pass uses UpdateSubstitutionMapFewChecks, so definitions can chain
   // (x := f(v), v := g(w), ...); iterate until nothing changes.
+  //
+  // A definition that reaches its own symbol is reported first: replace()
+  // substitutes into what it substitutes, so it would follow such a cycle
+  // until memory ran out rather than fail.
   ASTNode backSubstitute(const ASTNode& n)
   {
+    const DenseNodeMap& defs = *simp.Return_SolverMap();
+    ASTNodeSet onPath, done;
+    for (const auto& d : defs)
+      if (definitionCycles(defs, d.first, onPath, done))
+      {
+        ADD_FAILURE() << "the pass defined " << d.first << " through itself";
+        return n;
+      }
+
     ASTNode cur = n;
     for (int i = 0; i < 64; i++)
     {
@@ -760,6 +796,24 @@ TEST(RemoveUnconstrained_Exhaustive, array_write_shared_value)
   conjuncts.push_back(c.hf->CreateNode(EQ, e, keep)); // second use of `e`
   conjuncts.push_back(c.anchorFor(keep));
   c.checkSoundArrays(c.hf->CreateNode(AND, conjuncts));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_write_value_is_index)
+{
+  Context c;
+  // write(a, e, e): the written value is the index as well, so the write
+  // holds e at e and is not a free array. `e` still looks unconstrained --
+  // the write is its only parent, counted once although it names `e`
+  // twice -- and the rule used to fire, defining e := v[e] in terms of
+  // itself, which backSubstitute reports.
+  ASTNode a = c.array();
+  ASTNode e = c.bv(Context::IW);
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode w = c.hf->CreateArrayTerm(WRITE, Context::IW, Context::VW, a, e, e);
+  ASTNode read =
+      c.hf->CreateTerm(READ, Context::VW, w, c.konst(0, Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, read, keep), c.anchorFor(keep)));
 }
 
 TEST(RemoveUnconstrained_Exhaustive, array_ite)
