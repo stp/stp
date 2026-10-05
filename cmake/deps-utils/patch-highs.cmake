@@ -1,5 +1,5 @@
 if(NOT EXISTS "${SOURCE_DIR}/highs/interfaces/highs_c_api.h")
-  message(FATAL_ERROR "SOURCE_DIR must name a HiGHS 1.12.0 source tree")
+  message(FATAL_ERROR "SOURCE_DIR must name a HiGHS source tree")
 endif()
 set(path "${CMAKE_CURRENT_LIST_DIR}/highs-root-cut-log.patch")
 execute_process(COMMAND git apply --reverse --check "${path}"
