@@ -37,7 +37,10 @@ THE SOFTWARE.
  * unconstrained only when its *value* is unconstrained as well as its
  * base array. write(a, i, e) with a free but e fixed is pinned to e at
  * i, so it does not range over every array, and treating it as free
- * would decide equalities that are in fact unsatisfiable.
+ * would decide equalities that are in fact unsatisfiable. The same holds
+ * when e is the index itself: write(a, e, e) holds e at e, whatever a
+ * is, although e passes for unconstrained -- the write is its only
+ * parent, and parents are counted once however many times they name it.
  *
  * The corresponding rule for array equality -- one unconstrained side
  * is enough to make the equality a free boolean -- is deliberately
@@ -2022,9 +2025,12 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
         // Both the base array and the written value have to be free.
         // With the value fixed the result is pinned at the write index
-        // and is not an arbitrary array; see the header comment.
+        // and is not an arbitrary array; see the header comment. A value
+        // that is also the index is fixed in the same way, and the
+        // definition below would make it its own read index: e := v[e].
         if (mutable_children[0]->isUnconstrained() &&
-            mutable_children[2]->isUnconstrained())
+            mutable_children[2]->isUnconstrained() &&
+            children[1] != children[2])
         {
           ASTNode v = replaceParentWithFresh(muteParent, variable_array);
           // write(a, i, e) == v is met by a := v and e := v[i], for any
