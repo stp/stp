@@ -106,6 +106,57 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   const std::set<ASTNode>* fpSet =
       (fp != NULL && fp->active()) ? &fp->protectedSymbols() : NULL;
 
+  // A declared sort may be given as few elements as the formula's terms
+  // name (see ExtDeclaredElement), and an equality between arrays over it
+  // can make use of that: a store chain equated with a constant array can
+  // say every element is one of a few terms. A variable of such a sort is
+  // then not free to differ from another term, which is what replacing an
+  // equality over it by a fresh Boolean assumes -- the assumption that the
+  // sort has a second element. So where a sort indexes both a constant
+  // array and an array equality, its symbols, and the arrays whose reads
+  // are values of it, keep their constraints. Without the equality nothing
+  // compares whole arrays over the sort, and nothing can bound it.
+  std::set<ASTNode> boundableSymbols;
+  if (bm.hasConstArrays())
+  {
+    std::set<unsigned> constIndexed, equated;
+    const auto declaredIndex = [](const ASTNode& array, std::set<unsigned>& to) {
+      const SourceSort sort = array.GetSourceSort();
+      if (sort.kind() == SourceSort::Kind::Array &&
+          sort.index().kind() == SourceSort::Kind::Uninterpreted)
+        to.insert(sort.index().uninterpretedId());
+    };
+    ASTNodeSet visited;
+    std::vector<ASTNode> pending(1, result);
+    std::vector<ASTNode> symbols;
+    while (!pending.empty())
+    {
+      const ASTNode node = pending.back();
+      pending.pop_back();
+      if (!visited.insert(node).second)
+        continue;
+      if (node.GetKind() == CONST_ARRAY)
+        declaredIndex(node, constIndexed);
+      if ((node.GetKind() == ARRAY_EQ || node.GetKind() == DISTINCT) &&
+          node.Degree() > 0 && node[0].GetType() == ARRAY_TYPE)
+        declaredIndex(node[0], equated);
+      if (node.GetKind() == SYMBOL)
+        symbols.push_back(node);
+      for (const ASTNode& child : node.GetChildren())
+        pending.push_back(child);
+    }
+    for (const ASTNode& symbol : symbols)
+    {
+      SourceSort sort = symbol.GetSourceSort();
+      if (sort.kind() == SourceSort::Kind::Array)
+        sort = sort.element();
+      if (sort.kind() == SourceSort::Kind::Uninterpreted &&
+          constIndexed.count(sort.uninterpretedId()) != 0 &&
+          equated.count(sort.uninterpretedId()) != 0)
+        boundableSymbols.insert(symbol);
+    }
+  }
+
   // An earlier pass may already have assigned a symbol a reconstruction
   // definition. Replacing it again would overwrite that definition (and
   // violates UpdateSubstitutionMapFewChecks' contract). This matters when
@@ -122,10 +173,11 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   const std::set<ASTNode>* effective = NULL;
   if (extSet != NULL || ufSet != NULL || fpSet != NULL ||
       alsoUntouchable != NULL || !alreadyDefined.empty() ||
-      bm.UserFlags.unconstrained_image_vars)
+      !boundableSymbols.empty() || bm.UserFlags.unconstrained_image_vars)
   {
     if (extSet != NULL)
       mergedUntouchable.insert(extSet->begin(), extSet->end());
+    mergedUntouchable.insert(boundableSymbols.begin(), boundableSymbols.end());
     mergedUntouchable.insert(alreadyDefined.begin(), alreadyDefined.end());
     if (ufSet != NULL)
       mergedUntouchable.insert(ufSet->begin(), ufSet->end());

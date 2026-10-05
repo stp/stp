@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/ToSATBase.h"
+#include <set>
 
 namespace stp
 {
@@ -429,6 +430,14 @@ public:
   // for one candidate: array node -> plain constant. Cleared with the
   // tables, so a completion never outlives the candidate it belongs to.
   void setArrayCompletions(const std::map<ASTNode, ASTNode>& completions);
+
+  // Whether the distinct index values `indexes` (plain constants) are every
+  // value of the index sort, so that no cell is left for a completion to
+  // decide: a declared sort's elements where the array-equality checker
+  // gave it some (STPMgr::declaredSortDomain), otherwise its values as
+  // ExtChecker::indexValueCount counts them.
+  bool indexesCoverSort(const SourceSort& index, unsigned width,
+                        const std::set<ASTNode>& indexes) const;
   // The value an array term's unobserved cells hold when it is not the
   // sort's plain default: the default of the constant array it is built
   // over (directly, through a write chain, a selected if-then-else branch

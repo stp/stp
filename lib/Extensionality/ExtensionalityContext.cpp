@@ -23,11 +23,13 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/AST/ArrayOps.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/ToSat/ToSATBase.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/Util/DagWalk.h"
 #include <algorithm>
 #include <cstdio>
@@ -829,6 +831,7 @@ void ExtensionalityContext::beginSolve()
   ownedArrays.clear();
   ownedWrites.clear();
   ownedConstArrays.clear();
+  declaredElements.clear();
   ownedWriteParents.clear();
   ownedItes.clear();
   ownedIteParents.clear();
@@ -849,8 +852,9 @@ void ExtensionalityContext::beginSolve()
   readTransformComplete = false;
   pendingLemmaValid = false;
   pendingLemmas.clear();
-  declaredSortLemmas = 0;
   eqLitCache.clear();
+  // The domains belong to the model this solve certifies, if it does.
+  bm->setDeclaredSortDomains(std::map<unsigned, std::set<ASTNode>>());
   lastObserved.clear();
 }
 
@@ -882,11 +886,21 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
       conjuncts.push_back(r.indexSortClause);
   }
 
-  // Constant-array defaults live in the manager's side table rather than
-  // the array symbol's children. Expose their defining equations before
+  // Expose the constant arrays' defaults as defining equations before
   // preprocessing (including FP lowering), and preserve their dependencies.
   // prepare() then reuses these scalar names instead of introducing an
   // unprocessed copy of a default after the passes have run.
+  //
+  // The same walk collects the terms of every declared sort (see
+  // ExtDeclaredElement), for the sorts that index a constant array: here,
+  // before preprocessing, a term still carries its sort, and its symbols
+  // can still be kept from being eliminated, which would let a model give
+  // one a value no named term has -- an element the checker never saw.
+  std::set<unsigned> constArrayIndexSorts;
+  std::map<unsigned, std::vector<ASTNode>> declaredTerms;
+  ASTNodeSet identities;
+  if (const UFContext* uf = bm->getUFContextIfAny())
+    uf->collectIdentitySymbols(identities);
   ASTNodeSet seen;
   std::vector<ASTNode> pending(conjuncts.begin(), conjuncts.end());
   for (size_t i = 0; i < activeRecordIds.size(); ++i)
@@ -901,8 +915,24 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
     pending.pop_back();
     if (!seen.insert(node).second)
       continue;
+    // An element is a symbol, an application, a read or an abstract
+    // value of the sort; an if-then-else is one of its branches. A
+    // function's identity symbol carries its codomain's sort but denotes
+    // the function.
+    if (node.GetType() != ARRAY_TYPE && !node.isRealTerm())
+    {
+      const SourceSort sort = node.GetSourceSort();
+      const Kind k = node.GetKind();
+      if (sort.kind() == SourceSort::Kind::Uninterpreted &&
+          (k == SYMBOL || k == UF_APPLY || k == READ || k == BVCONST) &&
+          identities.count(node) == 0)
+        declaredTerms[sort.uninterpretedId()].push_back(node);
+    }
     if (node.GetKind() == CONST_ARRAY)
     {
+      const SourceSort index = node.GetSourceSort().index();
+      if (index.kind() == SourceSort::Kind::Uninterpreted)
+        constArrayIndexSorts.insert(index.uninterpretedId());
       const ASTNode& value = node[0];
       freshName(value, conjuncts);
       ASTNodeSet dependencies;
@@ -923,6 +953,57 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
     }
     for (const ASTNode& child : node.GetChildren())
       pending.push_back(child);
+  }
+
+  // The elements of each declared sort that indexes both a constant array
+  // and one of this solve's equalities -- the only sorts a model can bound:
+  // two constant arrays are connected through an equality or not at all.
+  // Its terms, each with a scalar name the SAT encoding keeps (a symbol is
+  // its own, and is protected), and the witness indexes of the equalities
+  // over the sort, which lowering minted below the source boundary.
+  std::set<unsigned> equatedIndexSorts;
+  for (size_t i = 0; i < activeRecordIds.size(); ++i)
+  {
+    const SourceSort sort =
+        records[activeRecordIds[i]].constructionLeft.GetSourceSort();
+    if (sort.kind() == SourceSort::Kind::Array &&
+        sort.index().kind() == SourceSort::Kind::Uninterpreted)
+      equatedIndexSorts.insert(sort.index().uninterpretedId());
+  }
+  for (const unsigned id : constArrayIndexSorts)
+  {
+    if (equatedIndexSorts.count(id) == 0)
+      continue;
+    std::vector<ASTNode>& terms = declaredTerms[id];
+    std::sort(terms.begin(), terms.end(), nodeNumLess);
+    std::vector<ExtDeclaredElement>& elements = declaredElements[id];
+    for (const ASTNode& term : terms)
+    {
+      ExtDeclaredElement e;
+      e.term = term;
+      if (term.GetKind() == SYMBOL)
+      {
+        protectedSymbols.insert(term);
+        e.name = term;
+      }
+      else
+        e.name = freshName(term, conjuncts);
+      elements.push_back(e);
+    }
+    for (size_t i = 0; i < activeRecordIds.size(); ++i)
+    {
+      const Record& r = records[activeRecordIds[i]];
+      const SourceSort sort = r.constructionLeft.GetSourceSort();
+      if (sort.kind() != SourceSort::Kind::Array ||
+          sort.index().kind() != SourceSort::Kind::Uninterpreted ||
+          sort.index().uninterpretedId() != id)
+        continue;
+      protectedSymbols.insert(r.lambda);
+      ExtDeclaredElement e;
+      e.term = r.lambda;
+      e.name = r.lambda;
+      elements.push_back(e);
+    }
   }
   ASTNode out = bm->defaultNodeFactory->CreateNode(AND, conjuncts);
 
@@ -2033,6 +2114,7 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
 
   graph.writes = ownedWrites;
   graph.constArrays = ownedConstArrays;
+  graph.declaredElements = declaredElements;
   graph.writeParents = ownedWriteParents;
   graph.ites = ownedItes;
   graph.iteParents = ownedIteParents;
@@ -2139,8 +2221,20 @@ ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
       lastObserved = res.observed;
       // The completion first: what an unobserved cell of an array
       // connected to a constant array holds is part of the certified
-      // model, and every reader of the model asks defaultCellValue.
+      // model, and every reader of the model asks defaultCellValue. So is
+      // the domain each declared index sort was certified over: the
+      // values of its elements, and no others.
       ce->setArrayCompletions(res.completion);
+      {
+        std::map<unsigned, std::set<ASTNode>> domains;
+        for (const auto& sort : graph.declaredElements)
+        {
+          std::set<ASTNode>& values = domains[sort.first];
+          for (const ExtDeclaredElement& e : sort.second)
+            values.insert(plainBitVectorConstant(bm, view.bvValue(e.name)));
+        }
+        bm->setDeclaredSortDomains(domains);
+      }
       // Publishing first makes the certified array contents visible
       // to term evaluation; only then can an owned read's term be
       // compared against its name.
@@ -2287,31 +2381,9 @@ void ExtensionalityContext::encodePendingLemmas(SATSolver& solver,
   if ((int)pendingLemmas.size() > lemmasInLargestRound)
     lemmasInLargestRound = (int)pendingLemmas.size();
   for (size_t i = 0; i < pendingLemmas.size(); i++)
-  {
     encodeOneLemma(pendingLemmas[i], solver, tosat, guardLit);
-    if (pendingLemmas[i].countsDeclaredSort)
-      declaredSortLemmas++;
-  }
   pendingLemmas.clear();
   pendingLemmaValid = false;
-}
-
-// See the header. SMT-LIB lets a model give a declared sort any positive
-// number of elements, so a refutation that took its carrier's every pattern
-// to be one, or took one no write names to exist, refuted only the models of
-// that size.
-SOLVER_RETURN_TYPE
-ExtensionalityContext::withholdDeclaredSortUnsat(SOLVER_RETURN_TYPE result,
-                                                 bool counted) const
-{
-  if (result != SOLVER_UNSATISFIABLE || !counted)
-    return result;
-  bm->noteUnknown(UnknownReason::Incomplete,
-                  "array-equality: a lemma about a constant array indexed by a "
-                  "declared sort counted the sort's elements by the patterns "
-                  "of its carrier, which a model need not have, so this unsat "
-                  "may be an artefact of that count rather than a refutation");
-  return bm->unknownResult();
 }
 
 // See the header. Every figure is cumulative over the context lifetime -- a
@@ -2650,7 +2722,7 @@ bool ExtensionalityContext::contentsAgree(
     const std::vector<std::pair<ASTNode, ASTNode>>& right,
     const ASTNode& absentLeft, const ASTNode& absentRight,
     const SourceSort& indexSort, unsigned indexWidth,
-    const SourceSort& elementSort)
+    const SourceSort& elementSort, const std::set<ASTNode>* domain)
 {
   std::map<ASTNode, ASTNode> leftCells, rightCells;
   for (size_t i = 0; i < left.size(); i++)
@@ -2681,9 +2753,21 @@ bool ExtensionalityContext::contentsAgree(
       return false;
   }
   // A cell neither side names holds each side's completion; such a cell
-  // exists unless the observations exhaust the index sort's values.
-  const bool unnamedCellExists =
-      ExtChecker::indexValueCount(indexSort, indexWidth) > named.size();
+  // exists unless the observations exhaust the index sort's values -- a
+  // declared sort's elements, when the checker gave it a domain.
+  bool unnamedCellExists = false;
+  if (domain != NULL)
+  {
+    // By bits: an observed index may be a typed constant of the sort.
+    const std::set<ASTNode, ConstantBitsLess> observed(named.begin(),
+                                                       named.end());
+    for (const ASTNode& element : *domain)
+      unnamedCellExists =
+          unnamedCellExists || observed.find(element) == observed.end();
+  }
+  else
+    unnamedCellExists =
+        ExtChecker::indexValueCount(indexSort, indexWidth) > named.size();
   if (unnamedCellExists &&
       constantsDenoteDifferentSourceValues(absentLeft, absentRight,
                                            elementSort))
@@ -2752,7 +2836,8 @@ const char* ExtensionalityContext::recheckCertifiedEqualities(
         contentsAgree(obsL == lastObserved.end() ? unobserved : obsL->second,
                       obsR == lastObserved.end() ? unobserved : obsR->second,
                       absentL, absentR, indexSort,
-                      r.constructionLeft.GetIndexWidth(), elementSort);
+                      r.constructionLeft.GetIndexWidth(), elementSort,
+                      bm->declaredSortDomain(indexSort));
 
     if (agree != (assigned.GetKind() == TRUE))
       return agree ? "array-equality: the model makes an array equality's "

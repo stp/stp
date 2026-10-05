@@ -151,6 +151,7 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
   AbsRefine_CounterExample* ce = stp->Ctr_Example;
   const ASTNodeMap raw = ce->GetCompleteCounterExample();
   const char* fn = "Solver::model";
+  snap->declared_domains = bm->declaredSortDomains();
 
   std::set<ASTNode> arrays_seen;
   for (const auto& entry : raw)
@@ -856,14 +857,31 @@ void chain_cells(Evaluator& ev, ManagerImpl* m, const ASTNode& array,
   base = n;
 }
 
-// Whether `count` distinct indexes are every value of the array sort's index
+// Whether the distinct indexes are every value of the array sort's index
 // sort, leaving no cell for a fill to decide. Values are interned canonically
 // (a float format's NaNs are one node, its two zeros are two), so distinct
-// nodes are distinct values; a declared sort has an element per pattern of its
-// carrier.
-bool covers_index_sort(ManagerImpl* m, std::uint32_t array_sort, std::size_t count)
+// nodes are distinct values. A declared sort has the elements the solve gave
+// it, when it indexes a constant array, and otherwise an element per pattern
+// of its carrier.
+bool covers_index_sort(ManagerImpl* m, const ModelSnapshot& s,
+                       std::uint32_t array_sort,
+                       const std::set<ASTNode>& indices)
 {
   const SortRec& i = m->rec(m->rec(array_sort).index);
+  const std::size_t count = indices.size();
+  if (i.kind == SortKind::UNINTERPRETED && i.has_source)
+    if (const auto d = s.declared_domains.find(i.source.uninterpretedId());
+        d != s.declared_domains.end())
+    {
+      // By bits: an index is the sort's abstract value, the domain plain
+      // constants.
+      const std::set<ASTNode, ConstantBitsLess> named(indices.begin(),
+                                                      indices.end());
+      for (const ASTNode& element : d->second)
+        if (named.find(element) == named.end())
+          return false;
+      return true;
+    }
   constexpr unsigned digits = std::numeric_limits<std::size_t>::digits;
   switch (i.kind)
   {
@@ -914,7 +932,8 @@ bool Evaluator::arrays_equal(const ASTNode& a, const ASTNode& b)
       return false;
   // the unobserved cells, if the writes leave any: equal fills, or the same
   // base
-  if (base_a == base_b || covers_index_sort(m_, m_->sort_of_node(a, fn_), indices.size()))
+  if (base_a == base_b ||
+      covers_index_sort(m_, s_, m_->sort_of_node(a, fn_), indices))
     return true;
   const auto base_fill = [&](const ASTNode& base) {
     if (const auto it = s_.arrays.find(base); it != s_.arrays.end())
@@ -1333,6 +1352,7 @@ std::string Model::to_smt2() const
   ManagerImpl* m = s.mgr;
   std::ostringstream os;
   os << "(\n";
+  m->bm->printDeclaredSortDomains(os, s.declared_domains, "  ");
   for (const ASTNode& n : s.core)
   {
     std::string name;

@@ -683,7 +683,9 @@ ASTNode ManagerImpl::default_value(std::uint32_t sort, const char* fn)
     case SortKind::RM: return rm_const(RoundingMode::RNE);
     case SortKind::REAL: return real_const(fn, "0");
     case SortKind::UNINTERPRETED:
-      return bm->CreateUninterpretedConst(bm->CreateZeroConst(r.b), r.source);
+      // an element of the sort, where the solve gave it a domain
+      return bm->CreateUninterpretedConst(
+          bm->declaredSortValue(r.source, bm->CreateZeroConst(r.b)), r.source);
     case SortKind::ARRAY:
       return build_term(this, fn, Kind::CONST_ARRAY, {default_value(r.element, fn)}, {}, sort);
     case SortKind::FUN:

@@ -91,16 +91,6 @@ struct CheckerState
                : synthetic[id - graph.accesses.size()];
   }
 
-  // An explicit cell of a declared sort's constant array: its index is a
-  // carrier pattern, which no term need name (see
-  // ExtConflict::countsDeclaredSort).
-  bool declaredCell(size_t id) const
-  {
-    return id >= graph.accesses.size() &&
-           access(id).site.GetSourceSort().index().kind() ==
-               SourceSort::Kind::Uninterpreted;
-  }
-
   CheckerState(const ExtGraph& g, ExtModelView& m, bool ev)
       : graph(g), model(m), recordEvents(ev), materializedGuardCount(0)
   {
@@ -234,7 +224,6 @@ struct CheckerState
         c.rightGuards = materializeGuards(candidatePath);
         c.constTermA = kit->second.defaultTerm;
         c.constNameA = kit->second.defaultName;
-        c.countsDeclaredSort = declaredCell(accessId);
         result.stats["conflicts"]++;
         result.stats["rule_K"]++;
         event(ExtEvent::CONFLICT, rule, source, destination, accessId);
@@ -266,7 +255,6 @@ struct CheckerState
                      destination);
         c.leftGuards = materializeGuards(otherPath->second);
         c.rightGuards = materializeGuards(candidatePath);
-        c.countsDeclaredSort = declaredCell(otherId) && declaredCell(accessId);
         result.stats["conflicts"]++;
         event(ExtEvent::CONFLICT, rule, source, destination, accessId);
         result.conflicts.push_back(std::move(c));
@@ -755,6 +743,7 @@ struct ConstArrayAnalysis
 ConstArrayAnalysis analyseConstArrays(const ExtGraph& graph,
                                       ExtModelView& model)
 {
+  static const std::vector<ExtDeclaredElement> noElements;
   ConstArrayAnalysis out;
   if (graph.constArrays.empty())
     return out;
@@ -773,6 +762,15 @@ ConstArrayAnalysis analyseConstArrays(const ExtGraph& graph,
     const unsigned width = it->second.array.GetIndexWidth();
     const SourceSort index = it->second.array.GetSourceSort().index();
     const uint64_t values = ExtChecker::indexValueCount(index, width);
+    // A declared index sort's cells are its elements (ExtDeclaredElement).
+    const std::vector<ExtDeclaredElement>* elements = NULL;
+    if (index.kind() == SourceSort::Kind::Uninterpreted)
+    {
+      const std::map<unsigned, std::vector<ExtDeclaredElement>>::const_iterator
+          found = graph.declaredElements.find(index.uninterpretedId());
+      elements =
+          found == graph.declaredElements.end() ? &noElements : &found->second;
+    }
     std::vector<ASTNode> members;
     std::vector<ExtConflict> found;
     bool covered = false;
@@ -796,7 +794,40 @@ ConstArrayAnalysis analyseConstArrays(const ExtGraph& graph,
       c.rightValue = model.bvValue(other->second.defaultName);
       std::vector<ASTNode> writes;
       ComponentGraph::pathGuards(via, reached[i], c.leftGuards, writes);
-      if (writes.size() >= values)
+      if (elements != NULL && !writes.empty())
+      {
+        // A declared sort has the elements its terms name and may have no
+        // others, so no count of writes leaves a cell: name an element the
+        // path's writes leave alone, or there is none.
+        std::set<ASTNode, ConstantBitsLess> addressed;
+        for (const ASTNode& w : writes)
+          addressed.insert(model.bvValue(graph.writes.at(w).indexName));
+        const ExtDeclaredElement* cell = NULL;
+        for (const ExtDeclaredElement& e : *elements)
+          if (addressed.find(model.bvValue(e.name)) == addressed.end())
+          {
+            cell = &e;
+            break;
+          }
+        if (cell == NULL)
+        {
+          covered = true;
+          continue;
+        }
+        for (const ASTNode& w : writes)
+        {
+          const ExtWriteNode& node = graph.writes.at(w);
+          ExtGuard g;
+          g.kind = ExtGuard::INDEX_NE;
+          g.theoryA = cell->term;
+          g.theoryB = node.indexTerm;
+          g.absA = cell->name;
+          g.absB = node.indexName;
+          g.eqRecord = 0;
+          c.leftGuards.push_back(g);
+        }
+      }
+      else if (elements == NULL && writes.size() >= values)
       {
         std::set<ASTNode, ConstantBitsLess> addressed;
         for (const ASTNode& w : writes)
@@ -825,9 +856,6 @@ ConstArrayAnalysis analyseConstArrays(const ExtGraph& graph,
       c.constNameA = it->second.defaultName;
       c.constTermB = other->second.defaultTerm;
       c.constNameB = other->second.defaultName;
-      // Over a declared index sort the cell, or the one K' takes to exist,
-      // is a carrier pattern, which need not be an element.
-      c.countsDeclaredSort = index.kind() == SourceSort::Kind::Uninterpreted;
       found.push_back(std::move(c));
     }
     if (covered)
@@ -892,14 +920,28 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     const unsigned w = it->second.array.GetIndexWidth();
     const SourceSort index = it->second.array.GetSourceSort().index();
     STPMgr* bm = it->second.array.GetNodeManager();
-    for (const ASTNode& value : indexValueCarriers(bm, index, w))
+    // A declared sort's cells are its elements, each at the term that
+    // names it; any other sort's are its values' plain constants.
+    std::vector<std::pair<ASTNode, ASTNode>> cells;
+    if (index.kind() == SourceSort::Kind::Uninterpreted)
+    {
+      const std::map<unsigned, std::vector<ExtDeclaredElement>>::const_iterator
+          found = graph.declaredElements.find(index.uninterpretedId());
+      if (found != graph.declaredElements.end())
+        for (const ExtDeclaredElement& e : found->second)
+          cells.emplace_back(e.term, e.name);
+    }
+    else
+      for (const ASTNode& value : indexValueCarriers(bm, index, w))
+        cells.emplace_back(value, value);
+    for (const std::pair<ASTNode, ASTNode>& cell : cells)
     {
       ExtAccess a;
       a.id = graph.accesses.size() + st.synthetic.size();
       a.isWrite = false;
       a.site = it->second.array;
-      a.indexTerm = value;
-      a.indexName = a.indexTerm;
+      a.indexTerm = cell.first;
+      a.indexName = cell.second;
       a.valueTerm = it->second.defaultTerm;
       a.valueName = it->second.defaultName;
       st.synthetic.push_back(a);

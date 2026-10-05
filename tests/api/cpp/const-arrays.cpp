@@ -318,8 +318,9 @@ TEST(ConstArrays, disequality_over_a_small_index_sort)
 
 // A model may give a declared sort fewer elements than its carrier has
 // patterns: two writes can cover the sort, so an equality of constant arrays
-// with different defaults through them is not refuted -- while a read at a
-// term's index, which names an element, still refutes.
+// with different defaults through them holds in a model whose sort has just
+// the two elements the writes name -- while a read at a term's index, which
+// names an element, still refutes.
 TEST(ConstArrays, a_declared_index_sort_is_not_counted_by_its_carrier)
 {
   TermManager tm;
@@ -329,11 +330,18 @@ TEST(ConstArrays, a_declared_index_sort_is_not_counted_by_its_carrier)
   Term zero = tm.mk_bv(1, 0), one = tm.mk_bv(1, 1);
   {
     Solver s(tm);
+    const Term covered =
+        tm.mk_const_array(A, zero) ==
+        store(store(tm.mk_const_array(A, one), u, zero), v, zero);
     s.add(u != v);
-    s.add(tm.mk_const_array(A, zero) == store(store(tm.mk_const_array(A, one), u, zero), v, zero));
-    const Result r = s.check_sat();
-    EXPECT_TRUE(r.is_unknown());
-    EXPECT_EQ(r.reason(), UnknownReason::INCOMPLETE);
+    s.add(covered);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_TRUE(s.model().bool_value(covered));
+    // The printed model states the two elements, as its definitions alone
+    // do not.
+    EXPECT_NE(s.model().to_smt2().find("; S has exactly these elements: "
+                                       "(forall ((x S)) (or "),
+              std::string::npos);
   }
   {
     Solver s(tm);

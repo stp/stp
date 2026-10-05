@@ -120,7 +120,11 @@ void STP::ClearAllTables(void)
     Ctr_Example->setFpAbstraction(NULL);
   }
   if (bm != NULL)
+  {
     bm->setFpAbstraction(NULL);
+    // Part of the model the counterexample's tables held.
+    bm->setDeclaredSortDomains(std::map<unsigned, std::set<ASTNode>>());
+  }
   fpAbstraction.reset();
   fpEncodingContext.reset();
   *batchUFView = LoweredApplicationView();
@@ -2082,9 +2086,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
         ext->reportLemmaStats();
       reportBVAbstractionRecords();
       CountersAndStats("print_func_stats", bm);
-      if (ext != NULL)
-        res = ext->withholdDeclaredSortUnsat(res,
-                                             ext->declaredSortLemmasEncoded() != 0);
       return res;
     }
 

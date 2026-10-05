@@ -688,6 +688,72 @@ const SourceSort& STPMgr::constArraySort(const ASTNode& param) const
   return constArraySorts[param.GetUnsignedConst()];
 }
 
+const std::set<ASTNode>*
+STPMgr::declaredSortDomain(const SourceSort& sort) const
+{
+  if (sort.kind() != SourceSort::Kind::Uninterpreted)
+    return NULL;
+  const auto it = declared_sort_domains.find(sort.uninterpretedId());
+  return (it == declared_sort_domains.end() || it->second.empty())
+             ? NULL
+             : &it->second;
+}
+
+void STPMgr::printDeclaredSortDomains(
+    std::ostream& os, const std::map<unsigned, std::set<ASTNode>>& domains,
+    const char* prefix)
+{
+  for (const auto& domain : domains)
+  {
+    if (domain.second.empty())
+      continue;
+    // Carrier order, so a model prints its elements one way every run.
+    std::vector<ASTNode> elements(domain.second.begin(), domain.second.end());
+    std::sort(elements.begin(), elements.end(),
+              [](const ASTNode& a, const ASTNode& b) {
+                return CONSTANTBV::BitVector_Lexicompare(a.GetBVConst(),
+                                                         b.GetBVConst()) < 0;
+              });
+    const SourceSort sort = SourceSort::uninterpreted(
+        domain.first, elements.front().GetValueWidth());
+    const std::string name = sourceSortToSMTLib(sort);
+    os << prefix << "; " << name
+       << " has exactly these elements: (forall ((x " << name << ")) ";
+    if (elements.size() > 1)
+      os << "(or ";
+    for (size_t i = 0; i < elements.size(); ++i)
+    {
+      os << (i == 0 ? "" : " ") << "(= x ";
+      printUninterpretedElement(os, sort, elements[i]);
+      os << ")";
+    }
+    if (elements.size() > 1)
+      os << ")";
+    os << ")\n";
+  }
+}
+
+ASTNode STPMgr::declaredSortValue(const SourceSort& sort,
+                                  const ASTNode& value)
+{
+  const std::set<ASTNode>* domain = declaredSortDomain(sort);
+  if (domain == NULL || value.GetKind() != BVCONST)
+    return value;
+  // By bits: the value may be a typed constant of the sort.
+  for (const ASTNode& element : *domain)
+    if (CONSTANTBV::BitVector_Lexicompare(element.GetBVConst(),
+                                          value.GetBVConst()) == 0)
+      return value;
+  ASTNode least = *domain->begin();
+  for (const ASTNode& element : *domain)
+    if (CONSTANTBV::BitVector_Lexicompare(element.GetBVConst(),
+                                          least.GetBVConst()) < 0)
+      least = element;
+  return value.GetSourceSort().kind() == SourceSort::Kind::Uninterpreted
+             ? CreateUninterpretedConst(least, sort)
+             : least;
+}
+
 ASTNode STPMgr::firstFreeSymbol(const ASTNode& t) const
 {
   ASTNodeSet visited;
@@ -1345,6 +1411,7 @@ STPMgr::~STPMgr()
   // and the implicit member-destruction phase runs after those tables are gone.
   uninterpreted_elements.clear();
   uninterpreted_sorts_printed.clear();
+  declared_sort_domains.clear();
   uf_injectivity_guard = ASTNode();
   DestroyFpToRealState(fp_to_real_state);
   fp_to_real_state = nullptr;

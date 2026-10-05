@@ -614,6 +614,8 @@ private:
   // the sort itself, not its text: two declared sorts can be spelled alike
   // (one popped, one declared after it) and are two sorts.
   std::vector<SourceSort> constArraySorts;
+  // See setDeclaredSortDomains.
+  std::map<unsigned, std::set<ASTNode>> declared_sort_domains;
   std::unordered_map<SourceSort, uint32_t, SourceSort::Hasher>
       constArraySortIds;
 
@@ -834,6 +836,43 @@ public:
   // first use, and the sort a parameter names.
   DLL_PUBLIC ASTNode constArraySortParam(const SourceSort& array_sort);
   DLL_PUBLIC const SourceSort& constArraySort(const ASTNode& param) const;
+
+  // The elements the array-equality checker gave each declared sort that
+  // indexes a constant array, in the model it last certified: their values
+  // as plain constants, by the sort's id (see ExtDeclaredElement). Such a
+  // sort has those elements and no others, so every value of it the model
+  // gives -- a symbol the solve never valued, a function's else branch, an
+  // unobserved cell -- must be one of them. Set when a candidate is
+  // certified, cleared when the next solve begins.
+  void setDeclaredSortDomains(std::map<unsigned, std::set<ASTNode>> domains)
+  {
+    declared_sort_domains = std::move(domains);
+  }
+  const std::map<unsigned, std::set<ASTNode>>& declaredSortDomains() const
+  {
+    return declared_sort_domains;
+  }
+  // A declared sort's elements, or null when it was given none: it then has
+  // an element per carrier pattern.
+  DLL_PUBLIC const std::set<ASTNode>*
+  declaredSortDomain(const SourceSort& sort) const;
+  // A model's statement of each such sort's elements, one comment line per
+  // sort, each line starting with `prefix`:
+  //
+  //   ; S has exactly these elements: (forall ((x S)) (or (= x e0) ...))
+  //
+  // The definitions alone do not say it, and a reader that gave the sort
+  // more elements would find the model false: a store chain equated with a
+  // constant array can hold only because the elements are these. A comment,
+  // since SMT-LIB has no command for it.
+  DLL_PUBLIC void printDeclaredSortDomains(
+      std::ostream& os, const std::map<unsigned, std::set<ASTNode>>& domains,
+      const char* prefix);
+  // `value`, a carrier of `sort`, when it is an element of the sort, and the
+  // sort's least element when it is not -- spelled as `value` is, a plain
+  // constant or the sort's abstract value.
+  DLL_PUBLIC ASTNode declaredSortValue(const SourceSort& sort,
+                                       const ASTNode& value);
 
   // Create a source-language leaf atomically. Its complete sort participates
   // in hash-consing and cannot subsequently be changed by width setters.

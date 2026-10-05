@@ -2150,6 +2150,78 @@ TEST_F(ExtConstArrayPathTest, PathAddressingEveryCellMakesThemExplicit)
   EXPECT_EQ(8, r.stats["seeds"]);
 }
 
+// Over a declared index sort the cells are the sort's elements -- the
+// values of the terms the formula names -- not its carrier's patterns: a
+// model may give the sort only those (ExtDeclaredElement).
+class ExtDeclaredIndexTest : public ExtConstArrayPathTest
+{
+protected:
+  const SourceSort declared = SourceSort::uninterpreted(7, 2);
+
+  ASTNode declaredConstArray(const char* defaultName, int defaultValue)
+  {
+    const ASTNode d = bv(defaultName, defaultValue);
+    const ASTNode k = mgr.CreateConstArray(
+        SourceSort::array(declared, SourceSort::bitVector(2)), d);
+    ExtConstArray info;
+    info.array = k;
+    info.defaultTerm = d;
+    info.defaultName = d;
+    g.constArrays[k] = info;
+    return k;
+  }
+
+  ASTNode element(const char* name, int value)
+  {
+    const ASTNode e = bv(name, value);
+    g.declaredElements[declared.uninterpretedId()].push_back({e, e});
+    return e;
+  }
+};
+
+TEST_F(ExtDeclaredIndexTest, PathNamesAnElementItLeaves)
+{
+  const ASTNode k0 = declaredConstArray("d0", 0);
+  const ASTNode k1 = declaredConstArray("d1", 1);
+  element("e0", 0);
+  element("e1", 1);
+  const ASTNode left = element("e2", 3);
+  // Two writes, fewer than the carrier's four patterns -- but that proves
+  // nothing about a declared sort, so the lemma names the element they
+  // leave alone rather than taking one to exist.
+  const ASTNode proxy = writePath(k0, k1, {0, 1}, 1);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  ASSERT_EQ(1u, r.conflicts.size());
+  const ExtConflict& c = r.conflicts[0];
+  EXPECT_EQ(ExtConflict::CONST_PAIR, c.shape);
+  EXPECT_EQ(0, r.stats["seeds"]);
+  ASSERT_EQ(3u, c.abstractPremise.size());
+  EXPECT_TRUE(hasBoolGuard(c.abstractPremise, proxy, true));
+  for (std::map<ASTNode, ExtWriteNode>::const_iterator it = g.writes.begin();
+       it != g.writes.end(); ++it)
+    EXPECT_TRUE(hasNeGuard(c.abstractPremise, left, it->second.indexName) ||
+                hasNeGuard(c.abstractPremise, it->second.indexName, left));
+}
+
+TEST_F(ExtDeclaredIndexTest, CoveredElementsAreTheExplicitCells)
+{
+  const ASTNode k0 = declaredConstArray("d0", 0);
+  const ASTNode k1 = declaredConstArray("d1", 1);
+  element("e0", 0);
+  element("e1", 1);
+  // The writes address both elements, so the sort may be just those two and
+  // the arrays equal: consistent, with the two elements -- not the
+  // carrier's four patterns -- seeded at each constant array.
+  writePath(k0, k1, {0, 1}, 1);
+
+  ExtCheckResult r = run();
+  EXPECT_EQ(ExtCheckResult::CONSISTENT, r.status);
+  EXPECT_EQ(0, r.stats["rule_K_prime"]);
+  EXPECT_EQ(4, r.stats["seeds"]);
+}
+
 TEST_F(ExtFixtureTest, IteDoesNotPropagateThroughUnselectedBranch)
 {
   ASTNode A = arr("A"), B = arr("B");

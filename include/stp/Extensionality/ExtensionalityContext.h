@@ -446,18 +446,6 @@ public:
 
   bool hasPendingLemma() const { return pendingLemmaValid; }
 
-  // How many lemmas this solve encoded that count a declared sort's elements
-  // by the patterns of its carrier (ExtConflict::countsDeclaredSort). An
-  // unsat that had them in the solver may be an artefact of that count
-  // rather than a refutation, and the drivers withhold it.
-  size_t declaredSortLemmasEncoded() const { return declaredSortLemmas; }
-
-  // A driver's answer with that taken into account: an unsat is withheld
-  // (unknown, with the reason recorded) when `counted` says a lemma counting
-  // a declared sort by its carrier was in the solver.
-  SOLVER_RETURN_TYPE withholdDeclaredSortUnsat(SOLVER_RETURN_TYPE result,
-                                               bool counted) const;
-
   // Encode every pending lemma into the persistent incremental SAT
   // solver, then clear them. The lemma premise/conclusion atoms are
   // reified over the SAT variables of already-encoded symbols -- the
@@ -551,12 +539,16 @@ public:
   // differ whenever such a cell exists, which an index sort with more
   // values than the two observation lists name always has; the values are
   // counted as ExtChecker::indexValueCount counts them.
+  //
+  // `domain`, when not null, is a declared index sort's elements (see
+  // STPMgr::declaredSortDomain): the cells there are.
   static bool contentsAgree(
       const std::vector<std::pair<ASTNode, ASTNode>>& left,
       const std::vector<std::pair<ASTNode, ASTNode>>& right,
       const ASTNode& absentLeft, const ASTNode& absentRight,
       const SourceSort& indexSort, unsigned indexWidth,
-      const SourceSort& elementSort);
+      const SourceSort& elementSort,
+      const std::set<ASTNode>* domain = NULL);
 
   // Validate one bit-vector lemma leaf: it must be a fixed-width
   // constant, or a SYMBOL whose complete SAT-variable vector was
@@ -670,6 +662,9 @@ private:
   std::set<ASTNode> ownedArrays;
   std::map<ASTNode, ExtWriteNode> ownedWrites; // write node -> info
   std::map<ASTNode, ExtConstArray> ownedConstArrays; // constant array -> default
+  // Each declared index sort's elements; see ExtDeclaredElement and
+  // conjoinRecordConstraints, which collects them.
+  std::map<unsigned, std::vector<ExtDeclaredElement>> declaredElements;
   std::map<ASTNode, std::vector<ASTNode>> ownedWriteParents;
   std::map<ASTNode, ExtIteNode> ownedItes; // ite node -> info
   std::map<ASTNode, std::vector<ASTNode>> ownedIteParents;
@@ -715,9 +710,6 @@ private:
 
   bool pendingLemmaValid;
   std::vector<ExtConflict> pendingLemmas;
-  // The lemmas this solve encoded that count a declared sort by its carrier
-  // (see declaredSortLemmasEncoded).
-  size_t declaredSortLemmas = 0;
 
   // Encode one lemma as the clause guard OR NOT p1 OR ... OR NOT pk OR
   // conclusion (guard per encodePendingLemmas, absent when -1); the

@@ -479,6 +479,10 @@ struct ModelSnapshot
   // check never saw, over the same values, takes the same choice.
   std::unordered_map<PartialChoiceKey, ASTNode, PartialChoiceKeyHash> partial_choices;
   std::vector<ASTNode> core; // symbols the solver assigned, in name order
+  // The elements the solve gave each declared sort that indexes a constant
+  // array, as plain constants, by the sort's id; such a sort has no others
+  // (STPMgr::declaredSortDomain).
+  std::map<unsigned, std::set<ASTNode>> declared_domains;
   bool fill_ones = false;
   Verdict verdict = Verdict::UNKNOWN; // SAT for a real model, UNKNOWN for a candidate
   ~ModelSnapshot();
