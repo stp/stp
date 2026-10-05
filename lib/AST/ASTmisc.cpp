@@ -313,8 +313,7 @@ ASTNode rebuildNodeWithChildren(STPMgr* stp, const ASTNode& original,
                                   original.GetValueWidth(), children);
 }
 
-bool containsKind(const ASTNode& root, Kind kind,
-                  bool includeConstArrayDefaults)
+bool containsKind(const ASTNode& root, Kind kind)
 {
   ASTNodeSet visited;
   ASTVec pending(1, root);
@@ -326,10 +325,7 @@ bool containsKind(const ASTNode& root, Kind kind,
       continue;
     if (node.GetKind() == kind)
       return true;
-    const ASTChildren children = includeConstArrayDefaults
-        ? node.GetNodeManager()->childrenWithConstArrayDefault(node)
-        : node.GetChildren();
-    for (const ASTNode& child : children)
+    for (const ASTNode& child : node.GetChildren())
       pending.push_back(child);
   }
   return false;
@@ -377,7 +373,7 @@ bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 
 bool containsFloatingPoint(const ASTNode& n, STPMgr* mgr)
 {
-  NodeIterator ni(n, mgr->ASTUndefined, *mgr, true);
+  NodeIterator ni(n, mgr->ASTUndefined, *mgr);
   ASTNode current;
   while ((current = ni.next()) != ni.end())
   {
@@ -390,7 +386,7 @@ bool containsFloatingPoint(const ASTNode& n, STPMgr* mgr)
 
 bool containsFloatingPointTheory(const ASTNode& n, STPMgr* mgr)
 {
-  NodeIterator ni(n, mgr->ASTUndefined, *mgr, true);
+  NodeIterator ni(n, mgr->ASTUndefined, *mgr);
   ASTNode current;
   while ((current = ni.next()) != ni.end())
   {
@@ -1009,6 +1005,30 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         FatalError("Third parameter to write should be a bitvector or a float",
                    n[2]);
       break;
+
+    case CONST_ARRAY:
+    {
+      if (n.GetChildren().size() != 2)
+        FatalError("2 params to a constant array.");
+      const SourceSort sort = n.GetNodeManager()->constArraySort(n[1]);
+      if (n.GetIndexWidth() != sort.index().arrayComponentWidth() ||
+          n.GetValueWidth() != sort.element().arrayComponentWidth())
+        FatalError("BVTypeCheck: a constant array's widths are not its "
+                   "sort's in the term t = \n",
+                   n);
+      // The default is a term of the element's packed width: a float may be
+      // its circuit once lowered, as a stored value may (see WRITE above).
+      if (n[0].GetValueWidth() != n.GetValueWidth())
+        FatalError("BVTypeCheck: a constant array's default is not as wide "
+                   "as its element in the term t = \n",
+                   n);
+      if (BITVECTOR_TYPE != n[0].GetType() &&
+          FLOATINGPOINT_TYPE != n[0].GetType())
+        FatalError("The default of a constant array should be a bitvector or "
+                   "a float",
+                   n[0]);
+      break;
+    }
 
     case BVDIV:
     case BVMOD:

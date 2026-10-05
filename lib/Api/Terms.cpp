@@ -103,9 +103,9 @@ Kind kind_of(ManagerImpl* m, const ASTNode& n)
   switch (n.GetKind())
   {
     case SYMBOL:
-      if (m->is_const_array(n))
-        return Kind::CONST_ARRAY;
       return Kind::CONSTANT;
+    case CONST_ARRAY:
+      return Kind::CONST_ARRAY;
     case BVCONST:
     case TRUE:
     case FALSE:
@@ -263,11 +263,11 @@ View view_of(ManagerImpl* m, const ASTNode& n)
   switch (n.GetKind())
   {
     case SYMBOL:
-    {
-      if (m->is_const_array(n))
-        v.children.push_back(m->const_array_default(n));
       return v;
-    }
+    // The sort parameter is the term's sort, not an operand.
+    case CONST_ARRAY:
+      v.children.push_back(m->const_array_default(n));
+      return v;
     case NAND:
     case NOR:
     {
@@ -942,8 +942,7 @@ bool Term::is_const() const noexcept
   if (is_null())
     return false;
   const ASTNode n = detail::node_of(*this);
-  return (n.GetKind() == SYMBOL && !mgr_->is_const_array(n)) ||
-         n.GetKind() == PARAMBOOL;
+  return n.GetKind() == SYMBOL || n.GetKind() == PARAMBOOL;
 }
 
 std::optional<std::string> Term::symbol() const
@@ -957,8 +956,6 @@ std::optional<std::string> Term::symbol() const
     return it->second;
   if (const UFDecl* d = m->decl_of(n))
     return d->name();
-  if (m->is_const_array(n))
-    return std::nullopt;
   return std::string(n.GetName());
 }
 

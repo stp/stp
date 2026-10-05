@@ -168,9 +168,9 @@ TEST(DistinctAst, DefaultSymbolUseBlocksOnlyItsOwnOrderingGroup)
   const ASTNode combined = mgr.CreateNode(AND, root, independent);
   const ASTNode result = applyDistinctOrdering(&mgr, combined, &ordered);
   EXPECT_EQ(1u, ordered);
-  EXPECT_TRUE(containsKind(result, DISTINCT, true));
-  EXPECT_TRUE(containsKind(result, BVLT, true));
-  EXPECT_EQ(x, mgr.constArrayDefault(array));
+  EXPECT_TRUE(containsKind(result, DISTINCT));
+  EXPECT_TRUE(containsKind(result, BVLT));
+  EXPECT_EQ(x, array[0]);
 }
 
 TEST(DistinctAst, SharedAssertionAndBooleanDefaultHasBothPolarities)
@@ -194,7 +194,7 @@ TEST(DistinctAst, SharedAssertionAndBooleanDefaultHasBothPolarities)
   ASSERT_EQ(1u, ordered);
   EXPECT_EQ(root, applyDistinctOrdering(&mgr, root, &ordered));
   EXPECT_EQ(0u, ordered);
-  EXPECT_TRUE(containsKind(mgr.constArrayDefault(array), DISTINCT, true));
+  EXPECT_TRUE(containsKind(array[0], DISTINCT));
 }
 
 TEST(DistinctAst, LoweringRebuildsNestedDefaultsWithoutMutatingTheirHandles)
@@ -217,18 +217,18 @@ TEST(DistinctAst, LoweringRebuildsNestedDefaultsWithoutMutatingTheirHandles)
       mgr.CreateArrayTerm(WRITE, 8, 8, ASTVec{inner, i, zero});
   const ASTNode read = mgr.CreateTerm(READ, 8, store, j);
   const ASTNode outer = mgr.CreateConstArray(arrays, read);
-  ASSERT_FALSE(containsKind(outer, DISTINCT));
-  ASSERT_TRUE(containsKind(outer, DISTINCT, true));
+  // The default is an ordinary child: a plain walk reaches it.
+  ASSERT_TRUE(containsKind(outer, DISTINCT));
 
   const ASTNode lowered = lowerDistinct(&mgr, outer);
-  ASSERT_TRUE(mgr.isConstArray(lowered));
+  ASSERT_EQ(CONST_ARRAY, lowered.GetKind());
   EXPECT_NE(outer, lowered);
   EXPECT_EQ(arrays, lowered.GetSourceSort());
-  EXPECT_FALSE(containsKind(lowered, DISTINCT, true));
-  EXPECT_TRUE(containsKind(lowered, EQ, true));
-  EXPECT_EQ(value, mgr.constArrayDefault(inner));
-  EXPECT_EQ(read, mgr.constArrayDefault(outer));
-  EXPECT_TRUE(containsKind(outer, DISTINCT, true));
+  EXPECT_FALSE(containsKind(lowered, DISTINCT));
+  EXPECT_TRUE(containsKind(lowered, EQ));
+  EXPECT_EQ(value, inner[0]);
+  EXPECT_EQ(read, outer[0]);
+  EXPECT_TRUE(containsKind(outer, DISTINCT));
   EXPECT_EQ(outer, mgr.CreateConstArray(arrays, read));
   EXPECT_EQ(lowered, lowerDistinct(&mgr, lowered));
 }
@@ -242,21 +242,21 @@ TEST(DistinctAst, LoweringPreservesPackedBooleanDefaults)
   const ASTNode q = mgr.CreateSourceSymbol("packed_q", SourceSort::boolean());
   const ASTNode distinct = mgr.CreateNode(DISTINCT, ASTVec{p, q});
   const ASTNode array = mgr.CreateConstArray(arrays, distinct);
-  const ASTNode originalDefault = mgr.constArrayDefault(array);
+  const ASTNode originalDefault = array[0];
   ASSERT_EQ(ITE, originalDefault.GetKind());
   ASSERT_EQ(distinct, originalDefault[0]);
 
   const ASTNode lowered = lowerDistinct(&mgr, array);
-  ASSERT_TRUE(mgr.isConstArray(lowered));
+  ASSERT_EQ(CONST_ARRAY, lowered.GetKind());
   EXPECT_EQ(arrays, lowered.GetSourceSort());
-  const ASTNode packed = mgr.constArrayDefault(lowered);
+  const ASTNode packed = lowered[0];
   ASSERT_EQ(ITE, packed.GetKind());
   EXPECT_EQ(1u, packed.GetValueWidth());
   EXPECT_EQ(lowerDistinct(&mgr, distinct), packed[0]);
   EXPECT_EQ(mgr.CreateOneConst(1), packed[1]);
   EXPECT_EQ(mgr.CreateZeroConst(1), packed[2]);
-  EXPECT_FALSE(containsKind(lowered, DISTINCT, true));
-  EXPECT_EQ(originalDefault, mgr.constArrayDefault(array));
+  EXPECT_FALSE(containsKind(lowered, DISTINCT));
+  EXPECT_EQ(originalDefault, array[0]);
   EXPECT_EQ(array, mgr.CreateConstArray(arrays, distinct));
   EXPECT_EQ(lowered, lowerDistinct(&mgr, lowered));
 }

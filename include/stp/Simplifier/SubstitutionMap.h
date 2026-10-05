@@ -69,7 +69,7 @@ class DLL_PUBLIC SubstitutionMap
   VariablesInExpression vars;
 
 public:
-  SubstitutionMap(STPMgr* _bm) : vars(_bm)
+  SubstitutionMap(STPMgr* _bm)
   {
     bm = _bm;
 

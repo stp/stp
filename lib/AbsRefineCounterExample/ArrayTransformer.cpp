@@ -218,12 +218,13 @@ ArrayTransformer::TransformFormulaWithRegistry(const ASTNode& form,
 
 // Choose where a read of this write chain stops being expanded eagerly:
 // after the configured number of may-alias levels the rest of the chain is
-// abstracted to a refinement row, provided it runs through writes to a
-// plain array symbol and still holds at least two may-alias levels (a
-// shorter tail is cheaper expanded). May-aliasing is judged on the raw
-// index terms; a comparison that only resolves after transformation costs
-// eagerness, never soundness. Called once per (top read, index); the
-// suffix reads the eager expansion creates skip it (see the WRITE arm).
+// abstracted to a refinement row, provided it runs through writes to an
+// array symbol or a constant array and still holds at least two may-alias
+// levels (a shorter tail is cheaper expanded). May-aliasing is judged on
+// the raw index terms; a comparison that only resolves after
+// transformation costs eagerness, never soundness. Called once per (top
+// read, index); the suffix reads the eager expansion creates skip it (see
+// the WRITE arm).
 bool ArrayTransformer::markLazyChainCut(const ASTNode& writeNode,
                                         const ASTNode& readIndex)
 {
@@ -251,7 +252,8 @@ bool ArrayTransformer::markLazyChainCut(const ASTNode& writeNode,
     }
     n = n[0];
   }
-  if (cut.IsNull() || n.GetKind() != SYMBOL || unresolved < budget + 2)
+  if (cut.IsNull() || (n.GetKind() != SYMBOL && n.GetKind() != CONST_ARRAY) ||
+      unresolved < budget + 2)
     return false;
   lazyCutTargets[cut].insert(readIndex);
   qualifiedScansOf[n]++;
@@ -1189,13 +1191,10 @@ class ArrayTransformer::TransformDriver
                   break;
                 w = w[0];
               }
-              if (w.GetKind() == SYMBOL)
-              {
-                if (bm->isConstArray(w))
-                  rawParts.push_back(bm->constArrayDefault(w));
-                else
-                  base = w;
-              }
+              if (w.GetKind() == CONST_ARRAY)
+                rawParts.push_back(w[0]);
+              else if (w.GetKind() == SYMBOL)
+                base = w;
               assert(rawParts.size() >= 2);
 
               f.storage = activeParts.size();

@@ -196,27 +196,26 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
       else
         outputBitVecSMTLIB2(n, os);
       break;
+    case CONST_ARRAY:
+    {
+      // The sort comes from the parameter child, which is not an operand.
+      // The constant printer puts a space before a literal; one space
+      // separates the sort from the default either way.
+      STPMgr* manager = n.GetNodeManager();
+      std::ostringstream value;
+      const ASTNode& raw = n[0];
+      SMTLIB_Print1(value,
+          n.GetSourceSort().element().kind() == SourceSort::Kind::Bool
+              ? unpackBoolean(*manager->hashingNodeFactory, raw) : raw,
+          0, letize);
+      std::string text = value.str();
+      text.erase(0, text.find_first_not_of(' '));
+      os << "((as const " << sourceSortToSMTLib(n.GetSourceSort()) << ") "
+         << text << ")";
+      break;
+    }
     case SYMBOL:
     {
-      // A constant array prints in its SMT-LIB spelling: the symbol that
-      // stands for it is the manager's, not the input's.
-      STPMgr* manager = n.GetNodeManager();
-      if (manager != NULL && manager->isConstArray(n))
-      {
-        // The constant printer puts a space before a literal; one space
-        // separates the sort from the default either way.
-        std::ostringstream value;
-        const ASTNode raw = manager->constArrayDefault(n);
-        SMTLIB_Print1(value,
-            n.GetSourceSort().element().kind() == SourceSort::Kind::Bool
-                ? unpackBoolean(*manager->hashingNodeFactory, raw) : raw,
-            0, letize);
-        std::string text = value.str();
-        text.erase(0, text.find_first_not_of(' '));
-        os << "((as const " << sourceSortToSMTLib(n.GetSourceSort()) << ") "
-           << text << ")";
-        break;
-      }
       // Quoted, so that STP's names, which can contain characters SMT-LIB2
       // reserves, survive a round trip.
       os << "|";

@@ -36,7 +36,6 @@ namespace stp
 class VariablesInExpression
 {
 private:
-  STPMgr* bm;
   void insert(const ASTNode& n, Symbols* s);
   Symbols* getSymbol(const ASTNode& n, bool knownMissing);
 
@@ -47,7 +46,7 @@ private:
   PrimeAudit symbolAudit{"VariablesInExpression::getSymbol", 8};
 
 public:
-  DLL_PUBLIC explicit VariablesInExpression(STPMgr* bm);
+  DLL_PUBLIC VariablesInExpression();
   DLL_PUBLIC virtual ~VariablesInExpression();
   
   VariablesInExpression(VariablesInExpression const&) = delete;

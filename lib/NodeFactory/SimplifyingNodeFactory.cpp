@@ -3691,6 +3691,11 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   if (kind == stp::UF_APPLY)
     return hashing.CreateTerm(kind, width, children);
 
+  // A constant array is a value of an array sort, not one the evaluator
+  // computes: its children are its default and its sort's parameter.
+  if (kind == stp::CONST_ARRAY)
+    return hashing.CreateTerm(kind, width, children);
+
   // If all the parameters are constant, return the constant value.
   if (children_all_constants(children) && !is_partial_fp_operation)
   {

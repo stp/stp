@@ -580,7 +580,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
                inputToSat);
   if (uf.enable_uninterpreted_functions && containsKind(inputToSat, UF_APPLY))
     FatalError("IncrementalSolver: UF_APPLY reached bit-blast", inputToSat);
-  if (containsKind(inputToSat, DISTINCT, true))
+  if (containsKind(inputToSat, DISTINCT))
     FatalError("IncrementalSolver: DISTINCT reached bit-blast", inputToSat);
 
   // A fresh per-round registry: the whole-graph transform must neither see

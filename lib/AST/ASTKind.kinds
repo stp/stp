@@ -225,3 +225,11 @@ REAL_LT         2       2       Form
 REAL_LE         2       2       Form
 REAL_GT         2       2       Form
 REAL_GE         2       2       Form
+
+# A constant array: every index holds the default. Child 0 is the default as
+# a read of the array yields it (a one-bit vector for a Boolean element).
+# Child 1 is a 32-bit constant naming the array sort in the manager's table
+# (STPMgr::constArraySortParam): the default fixes neither the index sort nor
+# a Boolean element, so the children carry the whole sort and a rebuild that
+# replaces the default keeps it. A read of one folds to child 0 when built.
+CONST_ARRAY     2       2       Term

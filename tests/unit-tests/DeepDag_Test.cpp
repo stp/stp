@@ -1325,7 +1325,7 @@ bool varsInExpressionOk(Context& c, unsigned depth)
 {
   const ASTNode f = c.formula(c.chain(BVXOR, depth));
   c.roots.push_back(f);
-  VariablesInExpression vie(&c.mgr);
+  VariablesInExpression vie;
   bool destruct = false;
   ASTNodeSet* v = vie.SetofVarsSeenInTerm(f, destruct);
   const bool ok = v != nullptr;
@@ -1981,7 +1981,7 @@ bool constArrayDefaultWalksOk(Context& c, unsigned depth)
   const ASTNode top = c.formula(value);
   c.roots.push_back(top);
 
-  VariablesInExpression vars(&c.mgr);
+  VariablesInExpression vars;
   if (!vars.VarSeenInTerm(x, top) || !vars.VarSeenInTerm(rm, top) ||
       vars.VarSeenInTerm(y, top))
     return false;
@@ -2009,20 +2009,20 @@ bool constArrayDefaultWalksOk(Context& c, unsigned depth)
     if (!seen.insert(node).second)
       continue;
     foundValidRm = foundValidRm || node == validRm;
-    defaults += c.mgr.isConstArray(node);
+    defaults += (node.GetKind() == CONST_ARRAY);
     if (node.GetKind() == FP_TO_UBV)
     {
       if (node.Degree() != 4)
         return false;
       ++conversions;
     }
-    for (const ASTNode& child : c.mgr.childrenWithConstArrayDefault(node))
+    for (const ASTNode& child : node.GetChildren())
       pending.push_back(child);
   }
   return defaults == depth && conversions == 1 && foundValidRm;
 }
 
-// DISTINCT surveys and rebuilding must cross the same hidden-default spine.
+// DISTINCT surveys and rebuilding must cross the same constant-array spine.
 // One top-level group has a symbol used in the innermost default, a second
 // predicate occurs both there and as an assertion, and a third is independent.
 bool distinctConstArrayDefaultWalksOk(Context& c, unsigned depth)
@@ -2059,7 +2059,7 @@ bool distinctConstArrayDefaultWalksOk(Context& c, unsigned depth)
   const ASTNode orderedRoot = applyDistinctOrdering(&c.mgr, root, &ordered);
   c.roots.push_back(orderedRoot);
   // The simplifying factory canonicalizes x < y to y > x.
-  if (ordered != 1 || !containsKind(orderedRoot, BVGT, true))
+  if (ordered != 1 || !containsKind(orderedRoot, BVGT))
     return false;
 
   // Check which groups survived, not just the count of replacements.
@@ -2071,7 +2071,7 @@ bool distinctConstArrayDefaultWalksOk(Context& c, unsigned depth)
     pending.pop_back();
     if (!seen.insert(node).second)
       continue;
-    for (const ASTNode& child : c.mgr.childrenWithConstArrayDefault(node))
+    for (const ASTNode& child : node.GetChildren())
       pending.push_back(child);
   }
   if (!seen.count(escaped) || !seen.count(shared) || seen.count(independent))
@@ -2079,9 +2079,9 @@ bool distinctConstArrayDefaultWalksOk(Context& c, unsigned depth)
 
   const ASTNode lowered = lowerDistinct(&c.mgr, orderedRoot);
   c.roots.push_back(lowered);
-  return !containsKind(lowered, DISTINCT, true) &&
-         containsKind(value, DISTINCT, true) &&
-         containsKind(orderedRoot, DISTINCT, true);
+  return !containsKind(lowered, DISTINCT) &&
+         containsKind(value, DISTINCT) &&
+         containsKind(orderedRoot, DISTINCT);
 }
 
 // The LISP printer, which is what operator<< on a node uses -- so a deep

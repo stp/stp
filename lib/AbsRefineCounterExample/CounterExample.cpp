@@ -1951,10 +1951,9 @@ bool AbsRefine_CounterExample::arrayCompletion(const ASTNode& array,
                                                ASTNode& out)
 {
   const ASTNode base = BaseUnderModel(array);
-  if (bm->isConstArray(base))
+  if (base.GetKind() == CONST_ARRAY)
   {
-    out = plainBitVectorConstant(
-        bm, TermToConstTermUsingModel(bm->constArrayDefault(base), false));
+    out = plainBitVectorConstant(bm, TermToConstTermUsingModel(base[0], false));
     return true;
   }
   const std::map<ASTNode, ASTNode>::const_iterator it =

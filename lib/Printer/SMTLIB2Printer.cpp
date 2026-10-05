@@ -374,10 +374,6 @@ void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
        i != iend; i++)
   {
     const stp::ASTNode& a = *i;
-    // A constant array is the manager's symbol, printed in its as-const
-    // spelling wherever it occurs; it is not a declaration of the input.
-    if (mgr->isConstArray(a))
-      continue;
     os << "(declare-fun ";
 
     // Should be a symbol.

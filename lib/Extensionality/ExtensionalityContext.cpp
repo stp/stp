@@ -901,9 +901,9 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
     pending.pop_back();
     if (!seen.insert(node).second)
       continue;
-    if (bm->isConstArray(node))
+    if (node.GetKind() == CONST_ARRAY)
     {
-      const ASTNode& value = bm->constArrayDefault(node);
+      const ASTNode& value = node[0];
       freshName(value, conjuncts);
       ASTNodeSet dependencies;
       std::vector<ASTNode> defaults(1, value);
@@ -913,19 +913,13 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
         defaults.pop_back();
         if (!dependencies.insert(term).second)
           continue;
-        if (term.GetKind() == SYMBOL)
-        {
-          // Only scalars have SAT bits. Array dependencies are retained by
-          // the owned graph and RemoveUnconstrained's default traversal.
-          if (term.GetType() != ARRAY_TYPE)
-            protectedSymbols.insert(term);
-          if (bm->isConstArray(term))
-            defaults.push_back(bm->constArrayDefault(term));
-        }
+        // Only scalars have SAT bits. Array dependencies are retained by
+        // the owned graph.
+        if (term.GetKind() == SYMBOL && term.GetType() != ARRAY_TYPE)
+          protectedSymbols.insert(term);
         for (const ASTNode& child : term.GetChildren())
           defaults.push_back(child);
       }
-      pending.push_back(value);
     }
     for (const ASTNode& child : node.GetChildren())
       pending.push_back(child);
@@ -959,8 +953,10 @@ bool ExtensionalityContext::involvesConstArray(const ASTNode& arrayTerm) const
   ASTNode n = arrayTerm;
   while (true)
   {
+    if (n.GetKind() == CONST_ARRAY)
+      return true;
     if (n.GetKind() == SYMBOL)
-      return bm->isConstArray(n);
+      return false;
     if (n.GetKind() == WRITE)
     {
       n = n[0];
@@ -1393,10 +1389,10 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   {
     Record& r = records[activeRecordIds[i]];
     // A constant array operand has no anchor read to recover it from:
-    // that read folded to the default when the anchor was built. It is a
-    // symbol no pass rewrites, so its current form is itself.
-    const bool constL = bm->isConstArray(r.constructionLeft);
-    const bool constR = bm->isConstArray(r.constructionRight);
+    // that read folded to the default when the anchor was built. Its
+    // default's symbols are protected, so its current form is itself.
+    const bool constL = r.constructionLeft.GetKind() == CONST_ARRAY;
+    const bool constR = r.constructionRight.GetKind() == CONST_ARRAY;
     std::map<ASTNode, ASTNode>::const_iterator lit = anchorRhs.find(r.nameL);
     std::map<ASTNode, ASTNode>::const_iterator rit = anchorRhs.find(r.nameR);
 
@@ -1585,9 +1581,9 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   for (size_t i = 0; i < activeRecordIds.size(); ++i)
   {
     const Record& r = records[activeRecordIds[i]];
-    if (bm->isConstArray(r.canonicalLeft))
+    if (r.canonicalLeft.GetKind() == CONST_ARRAY)
       arrays.insert(r.canonicalLeft);
-    if (bm->isConstArray(r.canonicalRight))
+    if (r.canonicalRight.GetKind() == CONST_ARRAY)
       arrays.insert(r.canonicalRight);
   }
 
@@ -1611,8 +1607,7 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   for (std::set<ASTNode>::const_iterator it = arrays.begin();
        it != arrays.end(); ++it)
   {
-    if (it->GetKind() == SYMBOL && !wasArrayAnticipated(*it) &&
-        !bm->isConstArray(*it))
+    if (it->GetKind() == SYMBOL && !wasArrayAnticipated(*it))
       FatalError("array-equality: an array symbol entered the prepared graph "
                  "without appearing at the pre-preprocessing ownership "
                  "boundary",
@@ -1629,11 +1624,11 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   for (std::set<ASTNode>::const_iterator it = arrays.begin();
        it != arrays.end(); ++it)
   {
-    if (!bm->isConstArray(*it))
+    if (it->GetKind() != CONST_ARRAY)
       continue;
     ExtConstArray info;
     info.array = *it;
-    info.defaultTerm = bm->constArrayDefault(*it);
+    info.defaultTerm = (*it)[0];
     info.defaultName = freshName(info.defaultTerm, extraConstraints);
     ownedConstArrays[*it] = info;
   }
@@ -2029,8 +2024,8 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
     }
     // A constant array side has no witness read: its cell at lambda is
     // the default, which the witness name is anchored to directly.
-    if ((!haveL && !bm->isConstArray(r.canonicalLeft)) ||
-        (!haveR && !bm->isConstArray(r.canonicalRight)))
+    if ((!haveL && r.canonicalLeft.GetKind() != CONST_ARRAY) ||
+        (!haveR && r.canonicalRight.GetKind() != CONST_ARRAY))
       FatalError("array-equality: a witness read is absent from the complete "
                  "owned access graph",
                  r.proxy);
@@ -2572,7 +2567,7 @@ void ExtensionalityContext::publishObservations(AbsRefine_CounterExample* ce)
     const ASTNode& array = it->first;
     // A constant array's cells are its default, and a read of one is not
     // a node the model could hold an entry under.
-    if (bm->isConstArray(array))
+    if (array.GetKind() == CONST_ARRAY)
       continue;
     NodeFactory* hf = bm->hashingNodeFactory;
     for (size_t i = 0; i < it->second.size(); i++)

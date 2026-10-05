@@ -262,9 +262,9 @@ struct ManagerImpl
 
   // ids handed out by Term::id(), for term_from_id
 
-  // constant arrays are the engine's (STPMgr::CreateConstArray registers the
-  // symbol with its default, and the hashing factory folds every read of
-  // one); these are the API's spellings of the two queries
+  // constant arrays are the engine's (STPMgr::CreateConstArray builds a
+  // CONST_ARRAY node over the default, and the hashing factory folds every
+  // read of one); these are the API's spellings of the two queries
   bool is_const_array(const ASTNode& n) const;
   ASTNode const_array_default(const ASTNode& n) const;
   // options that forbid what construction would otherwise enable on demand

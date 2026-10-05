@@ -142,7 +142,6 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
                                  NodeMapType& cache, NodeFactory* nf,
                                  bool stopAtArrays, bool preventInfinite)
 {
-  STPMgr& manager = nf->getStpMgr();
   // One node's progress. `phase` says what a value arriving from below is:
   // the recursive version called itself from three places -- following a
   // chain of substitutions, replacing a child, and running again over a
@@ -156,7 +155,6 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
     // A mathematical Real carries neither width, so both are meaningless
     // for it and rebuilding goes through CreateNode instead.
     bool realTerm;
-    bool constArray = false;
 
     enum Phase
     {
@@ -200,8 +198,6 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
       return false;
     }
 
-    frame.constArray = manager.isConstArray(node);
-
     if ((it = fromTo.find(node)) != fromTo.end())
     {
       // By value, not by reference: the walk below inserts into and erases
@@ -215,10 +211,7 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
       if (preventInfinite)
         cache.insert(make_pair(node, frame.chainTarget));
     }
-    // A constant array is a symbol only in representation. Its default
-    // participates in substitutions, including formal parameters in an
-    // SMT-LIB define-fun, and is rebuilt through CreateConstArray below.
-    else if (k == SYMBOL && !frame.constArray)
+    else if (k == SYMBOL)
     {
       result = node;
       return false;
@@ -232,7 +225,7 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
     // leaves that the BVCONST/TRUE/FALSE test above does not cover, so they
     // reach here with no children. They are values: there is nothing to
     // substitute into.
-    else if (node.Degree() == 0 && !frame.constArray)
+    else if (node.Degree() == 0)
     {
       result = node;
       return false;
@@ -240,7 +233,7 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
     else
     {
       frame.phase = Frame::AwaitingChild;
-      frame.children = manager.childrenWithConstArrayDefault(node);
+      frame.children = node.GetChildren();
       assert(frame.children.size() > 0);
       // Should have no leaves left here.
     }
@@ -402,14 +395,9 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
     }
 
     ASTNode built;
-    if (current.constArray)
-    {
-      assert(current.newChildren.size() == 1);
-      built = manager.rebuildConstArray(current.n, current.newChildren[0]);
-    }
     // A Real term has no widths to restore; CreateNode is the whole of it,
     // and asking a Real for a value width is an error rather than a zero.
-    else if (current.realTerm || current.valueWidth == 0)
+    if (current.realTerm || current.valueWidth == 0)
     {
       built = nf->CreateNode(current.k, current.newChildren);
     }

@@ -415,7 +415,7 @@ public:
   // of bitvectors is.
   //
   // Two arrays answer with something other than the sort's plain default.
-  // A constant array (STPMgr::isConstArray), or a write chain over one,
+  // A constant array (a CONST_ARRAY node), or a write chain over one,
   // answers with the constant array's default. An array the array-equality
   // checker connected to a constant array in the certified candidate
   // (through a true equality, a selected if-then-else branch or a write)

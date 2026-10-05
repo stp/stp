@@ -249,7 +249,7 @@ struct ExtWriteNode
   ASTNode indexName;
 };
 
-// A constant array of the graph: an array symbol whose every cell holds
+// A constant array of the graph: a CONST_ARRAY node whose every cell holds
 // its default (STPMgr::CreateConstArray). No read of one exists -- the
 // hashing factory folds it to the default -- so the checker knows it only
 // as an array node whose every arriving access must carry the default

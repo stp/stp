@@ -1085,7 +1085,9 @@ class Simplifier::SimplifyDriver
   StepResult requestArray(Frame& f, const ResumePhase resume, const ASTNode& n)
   {
     f.resumeAt(resume);
-    if (n.GetKind() == SYMBOL)
+    // A constant array is a leaf here, as a symbol is: its default is
+    // rewritten where solved variables are substituted, not simplified.
+    if (n.GetKind() == SYMBOL || n.GetKind() == CONST_ARRAY)
     {
       result = n;
       return StepResult::Redispatch;

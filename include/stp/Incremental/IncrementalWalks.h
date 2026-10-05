@@ -46,7 +46,6 @@ namespace stp
 
 class IncrementalWalks
 {
-  STPMgr& bm;
   // Per-node symbol sets, memoised for this encoding epoch; the keys hold
   // their nodes.
   // Looked up by node and never iterated, so it wants hashing rather than
@@ -121,7 +120,7 @@ class IncrementalWalks
         continue;
       if (n.GetKind() == SYMBOL)
         out.insert(n);
-      for (const ASTNode& child : bm.childrenWithConstArrayDefault(n))
+      for (const ASTNode& child : n.GetChildren())
         pending.push_back(child);
     }
   }
@@ -130,13 +129,13 @@ public:
   // ASTFalse is the first node the manager minted, so
   // every node number is at or above it.
   explicit IncrementalWalks(STPMgr& manager)
-      : bm(manager), baseNodeNum(manager.ASTFalse.GetNodeNum())
+      : baseNodeNum(manager.ASTFalse.GetNodeNum())
   {
   }
 
-  // Both symbol walkers include dependencies hidden in constant-array
-  // defaults. A later use of an eliminated variable must restore its
-  // defining equation even when that use is only in a default.
+  // Both symbol walkers reach a constant array's default, an ordinary
+  // child: a later use of an eliminated variable must restore its defining
+  // equation even when that use is only in a default.
   const ASTNodeSet& symbolsOf(const ASTNode& n)
   {
     NodeSymbolsMap::iterator hit = symbolsOfCache.find(n);

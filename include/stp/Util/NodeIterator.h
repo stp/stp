@@ -44,7 +44,6 @@ class NodeIterator // not copyable
 
   const ASTNode& sentinel;
   uint8_t iteration;
-  const STPMgr* dependencyManager;
 
 protected:
   // The generic iterator retains its historical virtual `ok` hook. Known
@@ -65,10 +64,7 @@ protected:
         return result;
 
       result.setIteration(iteration);
-      const ASTChildren children = dependencyManager == nullptr
-          ? result.GetChildren()
-          : dependencyManager->childrenWithConstArrayDefault(result);
-      for (const ASTNode& child : children)
+      for (const ASTNode& child : result.GetChildren())
       {
         if (child.getIteration() != iteration)
           toVisit.push_back(child);
@@ -80,10 +76,8 @@ protected:
   }
 
 public:
-  NodeIterator(const ASTNode& n, const ASTNode& _sentinel, STPMgr& stpMgr,
-               bool includeConstArrayDefaults = false)
-      : sentinel(_sentinel), iteration(stpMgr.getNextIteration()),
-        dependencyManager(includeConstArrayDefaults ? &stpMgr : nullptr)
+  NodeIterator(const ASTNode& n, const ASTNode& _sentinel, STPMgr& stpMgr)
+      : sentinel(_sentinel), iteration(stpMgr.getNextIteration())
   {
     toVisit.push_back(n);
   }

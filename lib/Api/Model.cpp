@@ -165,7 +165,7 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
     }
     if (key.GetKind() != SYMBOL || bm->FoundIntroducedSymbolSet(key))
       continue;
-    if (mgr->is_const_array(key) || mgr->decl_of(key) != nullptr)
+    if (mgr->decl_of(key) != nullptr)
       continue;
     const SourceSort ss = key.GetSourceSort();
     if (!ss.isKnown() || ss.kind() == SourceSort::Kind::Real)
@@ -321,10 +321,9 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
         if (bm->HasRealModelValue(n) && bm->RealModelValueNode(n, value) && !value.IsNull())
           snap->scalars[n] = value;
       }
-      // A partial FP operation used as a constant-array default still
-      // carries the solve's choice, even though the default is hidden from
-      // the array symbol's ordinary children.
-      for (const ASTNode& c : bm->childrenWithConstArrayDefault(n))
+      // A partial FP operation used as a constant-array default carries the
+      // solve's choice too: the default is an ordinary child.
+      for (const ASTNode& c : n.GetChildren())
         stack.push_back(c);
     }
   }
@@ -574,14 +573,17 @@ void Evaluator::step(Frame& f, std::vector<ASTNode>& needs, ASTNode& out)
     case REAL_CONST:
       out = n;
       return;
+    // a constant array is complete as it stands; reads resolve it
+    case CONST_ARRAY:
+      out = n;
+      return;
     case SYMBOL:
     {
-      if (n.GetType() == ARRAY_TYPE || m_->is_const_array(n) || m_->decl_of(n) != nullptr)
+      if (n.GetType() == ARRAY_TYPE || m_->decl_of(n) != nullptr)
       {
         // arrays and functions stay symbolic; reads and applications resolve
         // them -- but one the model never assigned is a completion
-        if (!complete_ && !m_->is_const_array(n) && s_.arrays.count(n) == 0 &&
-            s_.functions.count(n) == 0)
+        if (!complete_ && s_.arrays.count(n) == 0 && s_.functions.count(n) == 0)
           incomplete_ = true;
         out = n;
         return;
@@ -611,17 +613,17 @@ void Evaluator::step(Frame& f, std::vector<ASTNode>& needs, ASTNode& out)
         const ASTNode array = f.cursor;
         switch (array.GetKind())
         {
+          case CONST_ARRAY:
+          {
+            const ASTNode& fill = array[0];
+            if (const ASTNode* v = valued(fill))
+              out = *v;
+            else
+              needs.push_back(fill);
+            return;
+          }
           case SYMBOL:
           {
-            if (m_->is_const_array(array))
-            {
-              const ASTNode fill = m_->bm->constArrayDefault(array);
-              if (const ASTNode* v = valued(fill))
-                out = *v;
-              else
-                needs.push_back(fill);
-              return;
-            }
             const SourceSort sort = array.GetSourceSort();
             const ASTNode index = lift(m_, f.index, sort.index());
             out = read_symbol(array, index);
@@ -660,7 +662,8 @@ void Evaluator::step(Frame& f, std::vector<ASTNode>& needs, ASTNode& out)
             continue;
           }
           default:
-            fail_internal(fn_, "a read over an array term that is not a symbol, store or ite");
+            fail_internal(fn_, "a read over an array term that is not a "
+                               "symbol, constant array, store or ite");
         }
       }
     }
@@ -775,9 +778,9 @@ ASTNode Evaluator::eval_read(const ASTNode& from, const ASTNode& index)
   {
     switch (array.GetKind())
     {
+      case CONST_ARRAY:
+        return eval(m_->const_array_default(array));
       case SYMBOL:
-        if (m_->is_const_array(array))
-          return eval(m_->const_array_default(array));
         return read_symbol(array, index);
       case WRITE:
         if (lift(m_, eval(array[1]), array.GetSourceSort().index()) == index)
@@ -788,7 +791,8 @@ ASTNode Evaluator::eval_read(const ASTNode& from, const ASTNode& index)
         array = eval(array[0]) == m_->bm->ASTTrue ? array[1] : array[2];
         continue;
       default:
-        fail_internal(fn_, "a read over an array term that is not a symbol, store or ite");
+        fail_internal(fn_, "a read over an array term that is not a symbol, "
+                           "constant array, store or ite");
     }
   }
 }

@@ -23,16 +23,12 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/VariablesInExpression.h"
-#include "stp/STPManager/STPManager.h"
 #include "stp/Util/DagWalk.h"
 
 namespace stp
 {
 
-VariablesInExpression::VariablesInExpression(STPMgr* bm) : bm(bm)
-{
-  assert(bm != nullptr);
-}
+VariablesInExpression::VariablesInExpression() {}
 
 VariablesInExpression::~VariablesInExpression()
 {
@@ -59,9 +55,9 @@ void VariablesInExpression::primeSymbols(const ASTNode& n)
   if (symbol_graph.find(n.GetNodeNum()) != symbol_graph.end())
     return;
 
-  // Constant-array defaults live outside GetChildren(), but their scalar
-  // variables still constrain which substitutions can be made. Prime those
-  // dependencies bottom up too, including arbitrarily nested defaults.
+  // Prime bottom up, so the graph is built without recursion however deep
+  // the input. A constant array's default is an ordinary child: its scalar
+  // variables constrain which substitutions can be made like any others.
   struct Frame
   {
     ASTNode node;
@@ -75,7 +71,7 @@ void VariablesInExpression::primeSymbols(const ASTNode& n)
   };
 
   vector<Frame> pending;
-  pending.emplace_back(n, bm->childrenWithConstArrayDefault(n));
+  pending.emplace_back(n, n.GetChildren());
   while (!pending.empty())
   {
     Frame& frame = pending.back();
@@ -83,7 +79,7 @@ void VariablesInExpression::primeSymbols(const ASTNode& n)
     {
       const ASTNode& child = frame.children[frame.next++];
       if (symbol_graph.find(child.GetNodeNum()) == symbol_graph.end())
-        pending.emplace_back(child, bm->childrenWithConstArrayDefault(child));
+        pending.emplace_back(child, child.GetChildren());
       continue;
     }
 
@@ -134,7 +130,7 @@ Symbols* VariablesInExpression::getSymbol(const ASTNode& n,
   }
 
   vector<Symbols*> children;
-  for (const ASTNode& child : bm->childrenWithConstArrayDefault(n))
+  for (const ASTNode& child : n.GetChildren())
   {
     Symbols* v = getSymbol(child);
     if (!v->empty())
