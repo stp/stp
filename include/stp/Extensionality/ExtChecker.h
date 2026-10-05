@@ -52,10 +52,13 @@ THE SOFTWARE.
  *         guards imply value = default -- a conflict of its own;
  *   K'    two constant arrays with different defaults connected by
  *         writes, true equalities and selected if-then-else branches
- *         differ at every cell no write on the path names, so the
- *         path's guards imply the defaults are equal; over an index
- *         sort with no more values than the graph has writes the cells
- *         are made explicit accesses instead, and rules K and C decide.
+ *         agree at every cell no write on the path names, so the path's
+ *         guards imply the defaults are equal -- with that cell differing
+ *         from each write index on the path, when the path crosses as
+ *         many writes as the index sort has values. Only when a path's
+ *         writes address every value under the candidate are the cells
+ *         of its component's constant arrays made explicit accesses
+ *         instead, and rules K and C decide.
  *         A consistent candidate hands every array connected to a
  *         constant array that array's default as the value of its
  *         unobserved cells (the completion the model publishes).

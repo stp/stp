@@ -28,6 +28,7 @@ THE SOFTWARE.
 // overview of the rules and data model.
 
 #include "stp/Extensionality/ExtChecker.h"
+#include "stp/AST/ArrayOps.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/STPManager/STPManager.h"
 #include <algorithm>
@@ -78,9 +79,9 @@ struct CheckerState
   std::deque<PairKey> worklist;
   ExtCheckResult result;
   size_t materializedGuardCount;
-  // The accesses rule I mints for a constant array over a tiny index
-  // sort (see check); numbered after the graph's own, and never part of
-  // the frozen graph.
+  // The accesses rule I mints for the cells of a constant array (see
+  // analyseConstArrays); numbered after the graph's own, and never part
+  // of the frozen graph.
   std::vector<ExtAccess> synthetic;
 
   const ExtAccess& access(size_t id) const
@@ -525,18 +526,6 @@ void buildLemmas(ExtConflict& c, const ExtGraph& graph,
   validateAbstractLemma(c, model);
 }
 
-// An index sort with no more values than the graph has writes: a path
-// between two constant arrays could then address every cell, so rule K'
-// (which needs an index no write on the path touches) does not apply, and
-// the cells of such an array are made explicit instead. Values, not the
-// carrier's patterns: a rounding mode's carrier has thirty-two patterns
-// for five modes, and writes at all five leave no cell for K' to find.
-bool tinyIndexDomain(const SourceSort& index, unsigned width,
-                     size_t writeCount)
-{
-  return ExtChecker::indexValueCount(index, width) <= writeCount;
-}
-
 // Whether pattern k of float format (eb, sb) is a NaN other than the
 // canonical quiet one, a pattern no canonical index takes.
 bool nonCanonicalNaN(uint64_t k, unsigned eb, unsigned sb)
@@ -549,24 +538,46 @@ bool nonCanonicalNaN(uint64_t k, unsigned eb, unsigned sb)
   return exponent == allOnes && significand != 0 && k != canonical;
 }
 
-// The carriers of every value of a tiny index sort (see
-// ExtChecker::indexValueCount), in pattern order.
+// Whether pattern k is the carrier of a value of the index sort (see
+// ExtChecker::indexValueCount): every pattern but a rounding mode's
+// non-modes and a float's non-canonical NaNs.
+bool indexValuePattern(const SourceSort& index, uint64_t k)
+{
+  if (index.kind() == SourceSort::Kind::RoundingMode)
+    return symbolic_fp::isRoundingModeEncoding(static_cast<unsigned>(k));
+  if (index.kind() == SourceSort::Kind::FloatingPoint)
+    return !nonCanonicalNaN(k, index.exponentWidth(), index.significandWidth());
+  return true;
+}
+
+// The carriers of every value of an index sort, in pattern order.
 std::vector<ASTNode> indexValueCarriers(STPMgr* bm, const SourceSort& index,
                                         unsigned width)
 {
   std::vector<ASTNode> out;
   const uint64_t patterns = uint64_t(1) << width;
   for (uint64_t k = 0; k < patterns; k++)
-  {
-    if (index.kind() == SourceSort::Kind::RoundingMode &&
-        !symbolic_fp::isRoundingModeEncoding(static_cast<unsigned>(k)))
-      continue;
-    if (index.kind() == SourceSort::Kind::FloatingPoint &&
-        nonCanonicalNaN(k, index.exponentWidth(), index.significandWidth()))
-      continue;
-    out.push_back(bm->CreateBVConst(width, k));
-  }
+    if (indexValuePattern(index, k))
+      out.push_back(bm->CreateBVConst(width, k));
   return out;
+}
+
+// The first carrier, in pattern order, of a value of the index sort that
+// `covered` does not hold; null when it holds them all. Looks at no more
+// than |covered| + 1 values.
+ASTNode uncoveredIndex(STPMgr* bm, const SourceSort& index, unsigned width,
+                       const std::set<ASTNode, ConstantBitsLess>& covered)
+{
+  if (covered.size() >= ExtChecker::indexValueCount(index, width))
+    return ASTNode();
+  for (uint64_t k = 0;; k++)
+  {
+    if (!indexValuePattern(index, k))
+      continue;
+    const ASTNode carrier = bm->CreateBVConst(width, k);
+    if (covered.find(carrier) == covered.end())
+      return carrier;
+  }
 }
 
 // The arrays a candidate connects, for rule K' and the completion: a
@@ -580,6 +591,7 @@ struct ComponentEdge
   ASTNode to;
   bool guarded = false;
   bool crossesWrite = false;
+  ASTNode write; // the write crossed, when crossesWrite
   ExtGuard guard;
 };
 
@@ -596,8 +608,10 @@ struct ComponentGraph
       ComponentEdge down, up;
       down.to = it->second.base;
       down.crossesWrite = true;
+      down.write = it->second.write;
       up.to = it->second.write;
       up.crossesWrite = true;
+      up.write = it->second.write;
       adjacency[it->second.write].push_back(down);
       adjacency[it->second.base].push_back(up);
     }
@@ -636,22 +650,30 @@ struct ComponentGraph
     }
   }
 
-  // Breadth-first from `from`, in adjacency order: every node reached,
-  // and for each the edge it was reached through, keyed by the node.
+  // Every node reached from `from`, in the order the search settles them,
+  // and for each the edge it was reached through, keyed by the node. The
+  // search is breadth-first in the number of writes crossed (a 0-1 search:
+  // an equality or if-then-else edge costs nothing, a write one), so the
+  // recorded path to each node crosses as few writes as any: the fewer it
+  // crosses, the more cells it leaves for rule K' to find.
   void component(const ASTNode& from, std::vector<ASTNode>& reached,
                  std::map<ASTNode, std::pair<ASTNode, ComponentEdge>>& via)
   {
     reached.clear();
     via.clear();
     std::deque<ASTNode> queue;
-    std::set<ASTNode> seen;
+    std::map<ASTNode, size_t> writes;
+    std::set<ASTNode> settled;
     queue.push_back(from);
-    seen.insert(from);
+    writes[from] = 0;
     while (!queue.empty())
     {
       const ASTNode current = queue.front();
       queue.pop_front();
+      if (!settled.insert(current).second)
+        continue;
       reached.push_back(current);
+      const size_t here = writes[current];
       const std::map<ASTNode, std::vector<ComponentEdge>>::const_iterator
           it = adjacency.find(current);
       if (it == adjacency.end())
@@ -659,22 +681,30 @@ struct ComponentGraph
       for (size_t i = 0; i < it->second.size(); i++)
       {
         const ComponentEdge& e = it->second[i];
-        if (!seen.insert(e.to).second)
+        const size_t there = here + (e.crossesWrite ? 1 : 0);
+        const std::map<ASTNode, size_t>::const_iterator known =
+            writes.find(e.to);
+        if (known != writes.end() && known->second <= there)
           continue;
+        writes[e.to] = there;
         via[e.to] = std::make_pair(current, e);
-        queue.push_back(e.to);
+        if (e.crossesWrite)
+          queue.push_back(e.to);
+        else
+          queue.push_front(e.to);
       }
     }
   }
 
   // The guards of the path `via` recorded from the search's origin to
-  // `to`, origin first, and the number of writes it crosses.
+  // `to`, origin first, and the writes it crosses.
   static void pathGuards(
       const std::map<ASTNode, std::pair<ASTNode, ComponentEdge>>& via,
-      const ASTNode& to, std::vector<ExtGuard>& guards, size_t& writes)
+      const ASTNode& to, std::vector<ExtGuard>& guards,
+      std::vector<ASTNode>& writes)
   {
     guards.clear();
-    writes = 0;
+    writes.clear();
     ASTNode current = to;
     while (true)
     {
@@ -685,12 +715,133 @@ struct ComponentGraph
       if (it->second.second.guarded)
         guards.push_back(it->second.second.guard);
       if (it->second.second.crossesWrite)
-        writes++;
+        writes.push_back(it->second.second.write);
       current = it->second.first;
     }
     std::reverse(guards.begin(), guards.end());
+    std::reverse(writes.begin(), writes.end());
   }
 };
+
+// Rule K' and the completion, worked out over the components the candidate
+// connects before the fixed point runs, because which constant arrays need
+// their cells made explicit depends on them.
+//
+// The arrays of a component hold one value at every cell no access
+// observes, so two constant arrays in one with different defaults
+// contradict it wherever a path between them leaves a cell no write on it
+// addresses. The test is on the path, not the graph: a path crossing fewer
+// writes than the index sort has values always leaves such a cell, and its
+// guards imply the defaults are equal (the lemma names no index). A path
+// crossing more may still leave one in this
+// candidate, and then the lemma names it: the guards and that cell
+// differing from every write index on the path imply the defaults are
+// equal. Only a path whose writes address every value leaves nothing to
+// name, and only then are the cells of its component's constant arrays
+// made explicit accesses, which rules K and C decide between (they reach
+// the second array along any path that leaves their cell alone).
+struct ConstArrayAnalysis
+{
+  // The constant arrays whose cells rule I seeds as accesses.
+  std::set<ASTNode> explicitArrays;
+  // The rule K' conflicts, in discovery order, without their lemmas, and
+  // the constant array each one's path starts from.
+  std::vector<ExtConflict> conflicts;
+  std::vector<ASTNode> origins;
+  // Each component, and the default its unobserved cells complete with.
+  std::vector<std::pair<std::vector<ASTNode>, ASTNode>> completions;
+};
+
+ConstArrayAnalysis analyseConstArrays(const ExtGraph& graph,
+                                      ExtModelView& model)
+{
+  ConstArrayAnalysis out;
+  if (graph.constArrays.empty())
+    return out;
+  ComponentGraph components(graph, model);
+  std::set<ASTNode> placed;
+  std::vector<ASTNode> reached;
+  std::map<ASTNode, std::pair<ASTNode, ComponentEdge>> via;
+  for (std::map<ASTNode, ExtConstArray>::const_iterator it =
+           graph.constArrays.begin();
+       it != graph.constArrays.end(); ++it)
+  {
+    if (placed.find(it->first) != placed.end())
+      continue;
+    components.component(it->first, reached, via);
+    const ASTNode origin = model.bvValue(it->second.defaultName);
+    const unsigned width = it->second.array.GetIndexWidth();
+    const SourceSort index = it->second.array.GetSourceSort().index();
+    const uint64_t values = ExtChecker::indexValueCount(index, width);
+    std::vector<ASTNode> members;
+    std::vector<ExtConflict> found;
+    bool covered = false;
+    for (size_t i = 0; i < reached.size(); i++)
+    {
+      const std::map<ASTNode, ExtConstArray>::const_iterator other =
+          graph.constArrays.find(reached[i]);
+      if (other == graph.constArrays.end())
+        continue;
+      placed.insert(reached[i]);
+      members.push_back(reached[i]);
+      if (reached[i] == it->first ||
+          model.bvValue(other->second.defaultName) == origin)
+        continue;
+      ExtConflict c;
+      c.shape = ExtConflict::CONST_PAIR;
+      c.commonArray = reached[i];
+      c.leftAccess = 0;
+      c.rightAccess = 0;
+      c.leftValue = origin;
+      c.rightValue = model.bvValue(other->second.defaultName);
+      std::vector<ASTNode> writes;
+      ComponentGraph::pathGuards(via, reached[i], c.leftGuards, writes);
+      if (writes.size() >= values)
+      {
+        std::set<ASTNode, ConstantBitsLess> addressed;
+        for (const ASTNode& w : writes)
+          addressed.insert(model.bvValue(graph.writes.at(w).indexName));
+        const ASTNode cell = uncoveredIndex(
+            it->second.array.GetNodeManager(), index, width, addressed);
+        if (cell.IsNull())
+        {
+          covered = true;
+          continue;
+        }
+        for (const ASTNode& w : writes)
+        {
+          const ExtWriteNode& node = graph.writes.at(w);
+          ExtGuard g;
+          g.kind = ExtGuard::INDEX_NE;
+          g.theoryA = cell;
+          g.theoryB = node.indexTerm;
+          g.absA = cell;
+          g.absB = node.indexName;
+          g.eqRecord = 0;
+          c.leftGuards.push_back(g);
+        }
+      }
+      c.constTermA = it->second.defaultTerm;
+      c.constNameA = it->second.defaultName;
+      c.constTermB = other->second.defaultTerm;
+      c.constNameB = other->second.defaultName;
+      // Over a declared index sort the cell, or the one K' takes to exist,
+      // is a carrier pattern, which need not be an element.
+      c.countsDeclaredSort = index.kind() == SourceSort::Kind::Uninterpreted;
+      found.push_back(std::move(c));
+    }
+    if (covered)
+      out.explicitArrays.insert(members.begin(), members.end());
+    else
+      for (ExtConflict& c : found)
+      {
+        out.conflicts.push_back(std::move(c));
+        out.origins.push_back(it->first);
+      }
+    out.completions.emplace_back(reached, origin);
+  }
+  return out;
+}
 
 } // namespace
 
@@ -722,22 +873,24 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     st.insert(a.site, a.id, NULL, rule, ASTNode());
   }
 
-  // Rule I for a constant array over a tiny index sort (see
-  // tinyIndexDomain): one synthetic access per index value, carrying the
-  // default, seeded at the array. Every cell of such an array is then an
-  // ordinary access the other rules propagate, so rules K and C decide
-  // between two constant arrays what rule K' below decides for the
-  // larger sorts. The index terms are the plain constants, which the
-  // model view answers directly; minting them in the host manager
-  // creates no term of the query.
+  // Rule I for a constant array whose component has a path that addresses
+  // every value of the index sort (see analyseConstArrays): one synthetic
+  // access per index value, carrying the default, seeded at the array.
+  // Every cell of such an array is then an ordinary access the other rules
+  // propagate, so rules K and C decide between two constant arrays what
+  // rule K' decides when a path leaves a cell alone. The index terms are
+  // the plain constants, which the model view answers directly; minting
+  // them in the host manager creates no term of the query.
+  const ConstArrayAnalysis constArrays = analyseConstArrays(graph, model);
   for (std::map<ASTNode, ExtConstArray>::const_iterator it =
            graph.constArrays.begin();
        it != graph.constArrays.end(); ++it)
   {
+    if (constArrays.explicitArrays.find(it->first) ==
+        constArrays.explicitArrays.end())
+      continue;
     const unsigned w = it->second.array.GetIndexWidth();
     const SourceSort index = it->second.array.GetSourceSort().index();
-    if (!tinyIndexDomain(index, w, graph.writes.size()))
-      continue;
     STPMgr* bm = it->second.array.GetNodeManager();
     for (const ASTNode& value : indexValueCarriers(bm, index, w))
     {
@@ -950,85 +1103,32 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     }
   }
 
-  // Rule K' and the completion. The arrays the candidate connects (see
-  // ComponentGraph) hold one value at every cell no access observes. Two
-  // constant arrays in one component with different defaults contradict
-  // that: they agree at every index no write on the path between them
-  // addresses, and an index sort with more values than the graph has
-  // writes always has such an index (the others were made explicit
-  // above), so the path's guards imply the two defaults are equal -- a
-  // lemma the candidate falsifies. A component with one default hands it
+  // Rule K' (see analyseConstArrays), reported only once the fixed point
+  // found nothing, as before; otherwise each component hands its default
   // to every array in it as the value of its unobserved cells: the
-  // completion the model publishes, without which an array equated with
-  // a constant array would print with the ordinary zero fill and the
+  // completion the model publishes, without which an array equated with a
+  // constant array would print with the ordinary zero fill and the
   // printed model would not satisfy the equality.
-  if (!graph.constArrays.empty())
+  if (!constArrays.conflicts.empty())
   {
-    ComponentGraph components(graph, model);
-    std::set<ASTNode> placed;
-    std::vector<ASTNode> reached;
-    std::map<ASTNode, std::pair<ASTNode, ComponentEdge>> via;
-    for (std::map<ASTNode, ExtConstArray>::const_iterator it =
-             graph.constArrays.begin();
-         it != graph.constArrays.end(); ++it)
+    for (size_t i = 0; i < constArrays.conflicts.size(); i++)
     {
-      if (placed.find(it->first) != placed.end())
-        continue;
-      components.component(it->first, reached, via);
-      const ASTNode origin = model.bvValue(it->second.defaultName);
-      const unsigned w = it->second.array.GetIndexWidth();
-      const SourceSort index = it->second.array.GetSourceSort().index();
-      const bool explicitCells =
-          tinyIndexDomain(index, w, graph.writes.size());
-      for (size_t i = 0; i < reached.size(); i++)
-      {
-        const std::map<ASTNode, ExtConstArray>::const_iterator other =
-            graph.constArrays.find(reached[i]);
-        if (other == graph.constArrays.end())
-          continue;
-        placed.insert(reached[i]);
-        if (explicitCells || reached[i] == it->first ||
-            model.bvValue(other->second.defaultName) == origin)
-          continue;
-        ExtConflict c;
-        c.shape = ExtConflict::CONST_PAIR;
-        c.commonArray = reached[i];
-        c.leftAccess = 0;
-        c.rightAccess = 0;
-        c.leftValue = origin;
-        c.rightValue = model.bvValue(other->second.defaultName);
-        size_t writesCrossed = 0;
-        ComponentGraph::pathGuards(via, reached[i], c.leftGuards,
-                                   writesCrossed);
-        if (tinyIndexDomain(index, w, writesCrossed))
-          FatalError("array-equality: rule K' met a path with more writes "
-                     "than the index sort has values",
-                     reached[i]);
-        c.constTermA = it->second.defaultTerm;
-        c.constNameA = it->second.defaultName;
-        c.constTermB = other->second.defaultTerm;
-        c.constNameB = other->second.defaultName;
-        c.countsDeclaredSort = index.kind() == SourceSort::Kind::Uninterpreted;
-        st.result.stats["conflicts"]++;
-        st.result.stats["rule_K_prime"]++;
-        st.event(ExtEvent::CONFLICT, "K_PRIME", it->first, reached[i], 0);
-        st.result.conflicts.push_back(std::move(c));
-      }
-      if (st.result.conflicts.empty())
-        for (size_t i = 0; i < reached.size(); i++)
-          st.result.completion[reached[i]] = origin;
+      ExtConflict c = constArrays.conflicts[i];
+      st.result.stats["conflicts"]++;
+      st.result.stats["rule_K_prime"]++;
+      st.event(ExtEvent::CONFLICT, "K_PRIME", constArrays.origins[i],
+               c.commonArray, 0);
+      buildLemmas(c, graph, st.synthetic, model);
+      st.result.conflicts.push_back(std::move(c));
     }
-    if (!st.result.conflicts.empty())
-    {
-      for (size_t i = 0; i < st.result.conflicts.size(); i++)
-        buildLemmas(st.result.conflicts[i], graph, st.synthetic, model);
-      st.result.conflict = st.result.conflicts[0];
-      st.result.status = ExtCheckResult::CONFLICT;
-      st.result.completion.clear();
-      st.finishProofDiagnostics();
-      return std::move(st.result);
-    }
+    st.result.conflict = st.result.conflicts[0];
+    st.result.status = ExtCheckResult::CONFLICT;
+    st.finishProofDiagnostics();
+    return std::move(st.result);
   }
+  for (size_t i = 0; i < constArrays.completions.size(); i++)
+    for (const ASTNode& array : constArrays.completions[i].first)
+      st.result.completion[array] = constArrays.completions[i].second;
 
   // Conflict-free: export the observed (index, value) pairs of every
   // array; rho's fixed point defines the completed array contents
