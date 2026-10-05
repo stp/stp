@@ -27,8 +27,8 @@ if(NOT HIGHS_INCLUDE_DIR OR NOT HIGHS_LIBRARY)
       "-DSOURCE_DIR=<SOURCE_DIR>" -P "${CMAKE_CURRENT_LIST_DIR}/deps-utils/patch-highs.cmake")
   endif()
   ExternalProject_Add(HiGHS-EP ${STP_EP_COMMON_CONFIG}
-    URL https://codeload.github.com/ERGO-Code/HiGHS/tar.gz/refs/tags/v1.12.0
-    URL_HASH SHA256=cd0daddaca57e66b55524588d715dc62dcee06b5ab9ad186412dc23bc71ae342
+    URL https://codeload.github.com/ERGO-Code/HiGHS/tar.gz/38e323294bd29e15f5e6cdfb07021a4f8bd9dc52
+    URL_HASH SHA256=ec5b6fe5f34f62699fb810eb0ec9022bf77a6b24cc3b6c8cd2162f76098caf90
     ${stp_highs_patch_args}
     CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
       -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR> -DCMAKE_INSTALL_LIBDIR=lib
