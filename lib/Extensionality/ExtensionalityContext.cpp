@@ -169,7 +169,10 @@ void collectDag(const ASTNode& n, ASTNodeSet& visited)
 // an argument in a comment.
 //
 // Anything else means an anchor was rewritten beyond recognition:
-// refuse loudly rather than guess.
+// refuse loudly rather than guess. (A right-hand side that mentions no
+// witness symbol comes here only for an operand not built over a
+// constant array. For one that is, it is the default the operand folded
+// to, and locateCanonicalOperands recovers the operand from it.)
 ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
                                const ASTNode& proxy)
 {
@@ -1296,16 +1299,59 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   // the same shape is none of this function's business.
   std::set<ASTNode> witnessNames;
   ASTNodeSet witnessIndexes;
+  // witness name -> the construction operand its read is over
+  std::map<ASTNode, ASTNode> operandOf;
   for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
     const Record& r = records[activeRecordIds[i]];
     witnessNames.insert(r.nameL);
     witnessNames.insert(r.nameR);
     witnessIndexes.insert(r.lambda);
+    operandOf[r.nameL] = r.constructionLeft;
+    operandOf[r.nameR] = r.constructionRight;
   }
 
+  // Whether a witness name's operand is built over a constant array. Only
+  // such an operand can have become one -- a pass makes a constant array
+  // only out of another, rebuilding it with a new default or absorbing
+  // stores into it -- and so only its witness read can have folded to a
+  // default (see the recovery of a folded operand below).
+  const auto mayHaveFolded = [&](const ASTNode& name) {
+    const std::map<ASTNode, ASTNode>::const_iterator o = operandOf.find(name);
+    return o != operandOf.end() && containsKind(o->second, CONST_ARRAY);
+  };
+
+  // Whether a term mentions a witness index or a witness name. A
+  // right-hand side that does is an anchor, intact or rewritten. One that
+  // does not is, where the operand may have folded, what the witness read
+  // folded to or a fact about the name's value; elsewhere a read or an
+  // if-then-else that does not can only be a rewritten anchor.
+  const auto mentionsWitness = [&](const ASTNode& term) {
+    // An intact anchor's read, without a walk through its array.
+    if (term.GetKind() == READ &&
+        witnessIndexes.find(term[1]) != witnessIndexes.end())
+      return true;
+    bool mentions = false;
+    ASTNodeSet seen;
+    walkPreOrder(term, [&](const ASTNode& current) {
+      if (mentions || !seen.insert(current).second)
+        return false;
+      if (witnessIndexes.find(current) != witnessIndexes.end() ||
+          witnessNames.find(current) != witnessNames.end())
+      {
+        mentions = true;
+        return false;
+      }
+      return true;
+    });
+    return mentions;
+  };
+
   // name symbol -> the anchored right-hand side: the witness read, or
-  // the if-then-else the simplifier pushed it into.
+  // the if-then-else the simplifier pushed it into. A read or an
+  // if-then-else that mentions no witness symbol, of an operand that may
+  // have folded, is neither: it is a constant array's symbolic default,
+  // which the witness read folded to.
   //
   // Exactly one equation of this shape may exist per name. The names
   // are fresh, so no user term mentions them; they occur only in their
@@ -1326,10 +1372,11 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   // would pick a different operand from run to run and certify the
   // candidate against the wrong arrays. Refuse instead.
   std::map<ASTNode, ASTNode> anchorRhs;
-  // name symbol -> a value it is equated with, and the names equated with
-  // two (see the recovery of a folded operand below)
-  std::map<ASTNode, ASTNode> foldedRhs;
-  std::set<ASTNode> foldedConflict;
+  // name symbol -> a constant it is equated with, and the names equated
+  // with two; and the same for a value that is not a constant (see the
+  // recovery of a folded operand below)
+  std::map<ASTNode, ASTNode> foldedRhs, foldedTerm;
+  std::set<ASTNode> foldedConflict, foldedTermConflict;
   ASTNodeSet visited;
   collectDag(root, visited);
 
@@ -1394,7 +1441,8 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
       const ASTNode& other = n[1 - side];
       if (s.GetKind() != SYMBOL ||
           witnessNames.find(s) == witnessNames.end() ||
-          !(other.GetKind() == READ || other.GetKind() == ITE))
+          !(other.GetKind() == READ || other.GetKind() == ITE) ||
+          (!mentionsWitness(other) && mayHaveFolded(s)))
         continue;
       const std::map<ASTNode, ASTNode>::const_iterator prev = anchorRhs.find(s);
       if (prev != anchorRhs.end() && !(prev->second == other))
@@ -1415,6 +1463,11 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   // opposite of the fact -- so a negated equation settles a one-bit name
   // alone, as the other value. Bit propagation also states a value beside
   // an intact anchor when it fixes a name, so a value is never an anchor.
+  // Nor need a value be a constant: a constant array's default may be any
+  // term over the query's symbols, a read or an if-then-else included, and
+  // the witness read folds to that term as preprocessing has left it. The
+  // two kinds are kept apart, since bit propagation can state a constant
+  // beside that term when it fixes the name.
   {
     std::vector<ASTNode> conjuncts(1, root);
     for (size_t k = 0; k < conjuncts.size(); k++)
@@ -1436,8 +1489,7 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
         const ASTNode& other = eq[1 - side];
         if (s.GetKind() != SYMBOL ||
             witnessNames.find(s) == witnessNames.end() ||
-            other.GetKind() == READ || other.GetKind() == ITE ||
-            !bm->firstFreeSymbol(other).IsNull())
+            mentionsWitness(other))
           continue;
         // Kept in the plain spelling: a floating-point constant and the
         // plain constant with its bits intern apart, and two spellings of
@@ -1450,10 +1502,12 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
             continue;
           value = bm->CreateBVConst(1, other.GetUnsignedConst() == 0 ? 1 : 0);
         }
-        const std::map<ASTNode, ASTNode>::const_iterator f = foldedRhs.find(s);
-        if (f != foldedRhs.end() && !(f->second == value))
-          foldedConflict.insert(s);
-        foldedRhs[s] = value;
+        const bool constant = value.GetKind() == BVCONST;
+        std::map<ASTNode, ASTNode>& values = constant ? foldedRhs : foldedTerm;
+        const std::map<ASTNode, ASTNode>::const_iterator f = values.find(s);
+        if (f != values.end() && !(f->second == value))
+          (constant ? foldedConflict : foldedTermConflict).insert(s);
+        values[s] = value;
       }
     }
   }
@@ -1486,9 +1540,19 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
     // index being a protected symbol no pass can give a value. (Otherwise
     // the value is a fact bit propagation derived about one cell, or the
     // anchor was rewritten some other way, and the operand stays lost.)
+    // And a value is taken only for an operand that may have folded at
+    // all. A name equated with a constant and with a term holds one value
+    // in every model, both being facts; the constant is taken, as the
+    // simpler default.
     const auto foldedValue = [&](const ASTNode& name) -> ASTNode {
-      const std::map<ASTNode, ASTNode>::const_iterator f = foldedRhs.find(name);
-      if (f == foldedRhs.end() || foldedConflict.count(name) != 0)
+      const bool constant = foldedRhs.count(name) != 0;
+      const std::map<ASTNode, ASTNode>& values =
+          constant ? foldedRhs : foldedTerm;
+      const std::set<ASTNode>& conflict =
+          constant ? foldedConflict : foldedTermConflict;
+      const std::map<ASTNode, ASTNode>::const_iterator f = values.find(name);
+      if (f == values.end() || conflict.count(name) != 0 ||
+          !mayHaveFolded(name))
         return ASTNode();
       ASTNodeSet held;
       for (const ASTNode& anchoredName : {r.nameL, r.nameR})
@@ -1535,19 +1599,26 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
         sort = SourceSort::array(
             SourceSort::bitVector(construction.GetIndexWidth()),
             SourceSort::bitVector(construction.GetValueWidth()));
-      // The value is spelled as the name is, in plain bits; the default is
+      // A symbolic value is the default as the read yielded it -- packed
+      // for a Boolean element, and as preprocessing left it -- which is
+      // what the node stores. The node is rebuilt around it as every pass
+      // rebuilds one; CreateConstArray would take it for a default spelled
+      // at the element's sort, which a processed term need not be.
+      if (value.GetKind() != BVCONST)
+        return bm->hashingNodeFactory->CreateArrayTerm(
+            CONST_ARRAY, construction.GetIndexWidth(),
+            construction.GetValueWidth(),
+            {value, bm->constArraySortParam(sort)});
+      // A constant is spelled as the name is, in plain bits; the default is
       // spelled at the element's sort.
       ASTNode spelled = value;
-      if (value.GetKind() == BVCONST)
-      {
-        const SourceSort element = sort.element();
-        if (element.kind() == SourceSort::Kind::Bool ||
-            element.kind() == SourceSort::Kind::FloatingPoint ||
-            element.kind() == SourceSort::Kind::RoundingMode)
-          spelled = bm->LiftSourceValue(value, element);
-        else if (element.kind() == SourceSort::Kind::Uninterpreted)
-          spelled = bm->CreateUninterpretedConst(value, element);
-      }
+      const SourceSort element = sort.element();
+      if (element.kind() == SourceSort::Kind::Bool ||
+          element.kind() == SourceSort::Kind::FloatingPoint ||
+          element.kind() == SourceSort::Kind::RoundingMode)
+        spelled = bm->LiftSourceValue(value, element);
+      else if (element.kind() == SourceSort::Kind::Uninterpreted)
+        spelled = bm->CreateUninterpretedConst(value, element);
       return bm->CreateConstArray(sort, spelled);
     };
     r.canonicalLeft =

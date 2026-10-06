@@ -2577,6 +2577,44 @@ TEST_F(ExtPrepareTest, RewrittenWitnessIndexFailsLoudly)
                "witness read's index was rewritten away");
 }
 
+// What the same anchor means for an operand built over a constant array:
+// preprocessing can turn such an operand into the constant array, and the
+// witness read over it then folds to the default, which may be any term --
+// here a read of another array at an index of its own. That is not a
+// rewritten anchor but the operand's current form, the constant array of
+// that default.
+TEST_F(ExtPrepareTest, OperandFoldedToASymbolicDefaultIsRecovered)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), d = arr("d");
+  ASTNode c = mgr.CreateSymbol("c", 0, 0);
+  ASTNode mu = bv("mu");
+  const SourceSort sort =
+      SourceSort::array(SourceSort::bitVector(2), SourceSort::bitVector(2));
+  const ASTNode def = hf->CreateTerm(READ, 2, d, mu);
+  const ASTNode k = mgr.CreateConstArray(sort, def);
+  const ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, k, a});
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, ite, b));
+  (void)proxy;
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ExtensionalityContext::Record r = ext->getRecords()[0];
+  const bool iteLeft = r.constructionLeft == ite;
+  ASSERT_EQ(ite, iteLeft ? r.constructionLeft : r.constructionRight);
+
+  // c folded to true: the if-then-else's anchor is left as name = default.
+  ASTVec conjuncts;
+  conjuncts.push_back(hf->CreateNode(EQ, iteLeft ? r.nameL : r.nameR, def));
+  conjuncts.push_back(iteLeft ? r.anchorR : r.anchorL);
+  conjuncts.push_back(r.witnessClause);
+  ext->prepare(hf->CreateNode(AND, conjuncts));
+
+  const ExtensionalityContext::Record& p = ext->getRecords()[0];
+  EXPECT_EQ(k, iteLeft ? p.canonicalLeft : p.canonicalRight);
+  EXPECT_EQ(b, iteLeft ? p.canonicalRight : p.canonicalLeft);
+  EXPECT_TRUE(ext->ownsArray(k));
+}
+
 // A float-element record must not accept two NaN payloads as its
 // witness: every NaN bit pattern denotes the one NaN value, so the
 // witness clause carries "and not both cells NaN" next to the bitwise
