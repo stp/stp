@@ -14,6 +14,15 @@ elseif(NOT STP_DEPS_LOCAL_ONLY)
   find_library(HIGHS_LIBRARY NAMES highs)
 endif()
 if(NOT HIGHS_INCLUDE_DIR OR NOT HIGHS_LIBRARY)
+  set(stp_highs_cut_log_default ON)
+else()
+  set(stp_highs_cut_log_default OFF)
+endif()
+# Bundled HiGHS can carry the callback patch; ordinary installed HiGHS need
+# not have this STP-specific extension. An explicit cache value still wins.
+option(ENABLE_HIGHS_CUT_LOG "Enable the optional HiGHS root-cut recipe patch"
+  ${stp_highs_cut_log_default})
+if(NOT HIGHS_INCLUDE_DIR OR NOT HIGHS_LIBRARY)
   check_ep_downloaded("HiGHS-EP")
   if(NOT HiGHS-EP_DOWNLOADED)
     check_auto_download("HiGHS" "-DENABLE_HIGHS=OFF")
