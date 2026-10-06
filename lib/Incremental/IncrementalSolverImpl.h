@@ -4123,8 +4123,16 @@ struct IncrementalSolver::Impl
   }
 
   // Every node of `nodes` from `asserted` on as a permanent unit.
+  //
+  // `carriesOwnership` says whether a record minted inside one of these
+  // units is live because the unit is asserted. A defining relation is: it
+  // constrains the query's own terms, and the inputs it defines are read by
+  // whatever conjunct asked for them. An operand proxy is not -- it defines
+  // a fresh input equal to some operand's bits and is read only by the
+  // refinement clauses of records that are themselves live, so a dormant
+  // record stays dormant however many proxies mention it.
   void assertPermanentUnits(const std::vector<BBNodeAIG>& nodes,
-                            size_t& asserted)
+                            size_t& asserted, bool carriesOwnership)
   {
     for (; asserted < nodes.size(); asserted++)
     {
@@ -4138,6 +4146,23 @@ struct IncrementalSolver::Impl
       addClause(unit);
       permanentAigRoots.push_back(regular);
       permanentUnitMass = addMass(permanentUnitMass, 1);
+      // A record minted inside a defining relation has no keyed root to own
+      // it. The relation is asserted straight into the solver rather than
+      // conjoined into a conjunct's cone, so the per-root ownership walk
+      // never reaches it, and a record no root claims is dormant as far as
+      // the scoped refinement is concerned -- it certifies a candidate that
+      // gives the surrogate a value its operands refute, the exact replay
+      // refutes that candidate, and no array axiom explains the rejection.
+      // Permanent is what such a record is, by the same argument as the
+      // relation carrying it: the relation holds for the whole epoch, and
+      // the quotient it defines is read wherever the division was.
+      if (carriesOwnership)
+      {
+        const std::vector<BVAbstractionId> carried =
+            encoding.blaster().abstractionSourcesOf(sc);
+        permanentAbstractionIds.insert(carried.begin(), carried.end());
+        abstractionScopeStale = true;
+      }
     }
   }
 
@@ -4165,7 +4190,8 @@ struct IncrementalSolver::Impl
     // nothing else mentions, so it constrains no assignment of the query.
     // Dropped, as they were, the proxies stand for nothing and every
     // operand the refinement reads through one is noise.
-    assertPermanentUnits(bb.sideConstraints(), assertedSideConstraints);
+    assertPermanentUnits(bb.sideConstraints(), assertedSideConstraints,
+                         false);
 
     // A defining relation -- bit-vector division, and the native
     // floating-point divide, remainder and square root -- defines its
@@ -4178,7 +4204,7 @@ struct IncrementalSolver::Impl
     // stack refutes. Permanent here, by the same argument as the proxies:
     // a definition of fresh inputs constrains no assignment of the query.
     assertPermanentUnits(bb.relationalConstraints(),
-                         assertedRelationalConstraints);
+                         assertedRelationalConstraints, true);
 
     const std::vector<BitBlasterAIG::RawBVEQAbstraction>& rawEQs =
         bb.abstractedEQs();
