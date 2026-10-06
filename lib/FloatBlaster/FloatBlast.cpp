@@ -72,6 +72,8 @@ public:
     traversal_cache.clear();
     const ASTNode out = lower(n);
     traversal_cache.clear();
+    assert(native_depth == 0 && native_log.empty() &&
+           native_tentative.empty());
     return out;
   }
 
@@ -310,7 +312,140 @@ private:
   // case returns the node unchanged, or a node of the same kind whose
   // children are themselves resolved this way (or lowered, for the parts
   // that are not float-sorted).
+  //
+  // An operation is encoded one way only. The native arms of resolveLeaf
+  // take an operation a native consumer reaches, and asUnpacked builds the
+  // same operation in SymFPU for any other consumer, so a term both reach
+  // -- an array index wraps it in fp.to_ieee_bv, a stored value is packed
+  // -- used to get two circuits for one value, with nothing tying them
+  // together. In a Murxla query, 13 Float32 fp.rem terms encoded both ways
+  // added 1.6M clauses, and a refutation SymFPU alone finishes in half a
+  // minute ran past 15. The first route to commit an operation decides it:
+  // an operation SymFPU has already built sends a native consumer to the
+  // SymFPU path as well, where it reads the cached unpacked record rather
+  // than unpacking SymFPU's packed bits again; and a native circuit a
+  // consumer has kept is what a later SymFPU consumer decodes (nativeBits).
   ASTNode comparisonLeaf(const ASTNode& n)
+  {
+    if (lower_everything || !isNativeOperation(n))
+      return resolveLeaf(n);
+
+    const ASTNodeMap::const_iterator kept = native_cache.find(n);
+    if (kept != native_cache.end())
+      return kept->second;
+    const ASTNodeMap::const_iterator pending = native_tentative.find(n);
+    if (pending != native_tentative.end())
+      return pending->second;
+    if (unpacked_cache.find(n) != unpacked_cache.end())
+    {
+      ++stats.symfpu_shares;
+      return ASTNode();
+    }
+
+    const ASTNode out = resolveLeaf(n);
+    if (!out.IsNull() && isNativeOperation(out))
+    {
+      native_tentative[n] = out;
+      native_log.push_back(n);
+    }
+    return out;
+  }
+
+  // The operations the arms of resolveLeaf can leave for a native circuit.
+  // fp.sub never arrives: the factory spells it as fp.add of a negation.
+  static bool isNativeOperation(const ASTNode& n)
+  {
+    switch (n.GetKind())
+    {
+      case FP_ADD:
+      case FP_MUL:
+      case FP_DIV:
+      case FP_REM:
+      case FP_FMA:
+      case FP_SQRT:
+      case FP_ROUNDTOINTEGRAL:
+      case FP_MIN:
+      case FP_MAX:
+      case FP_TOFP_SIGNED:
+      case FP_TOFP_UNSIGNED:
+        return true;
+      case FP_TOFP:
+        return n.Degree() == 4;
+      default:
+        return false;
+    }
+  }
+
+  // A native survivor counts as the operation's encoding only once the
+  // consumer it was built for keeps it; a consumer whose other operand has
+  // no packed view goes to SymFPU instead, and then the survivors built for
+  // it never reach the formula. So comparisonLeaf records them tentatively,
+  // and each consumer that calls it brackets the call: a consumer that
+  // gives up rolls back what it recorded, and the outermost one that keeps
+  // its survivor commits everything recorded so far. (A consumer can be
+  // nested in another's operand -- the condition of a float if-then-else is
+  // lowered from inside comparisonLeaf -- and only the outermost decision
+  // is final.)
+  size_t beginNativeConsumer()
+  {
+    ++native_depth;
+    return native_log.size();
+  }
+
+  void endNativeConsumer(size_t mark, bool kept)
+  {
+    assert(native_depth > 0 && mark <= native_log.size());
+    --native_depth;
+    if (!kept)
+    {
+      for (size_t i = mark; i < native_log.size(); ++i)
+        native_tentative.erase(native_log[i]);
+      native_log.resize(mark);
+      return;
+    }
+    if (native_depth > 0)
+      return;
+    for (const ASTNode& n : native_log)
+    {
+      const ASTNodeMap::iterator it = native_tentative.find(n);
+      if (it == native_tentative.end())
+        continue; // already promoted by nativeBits
+      native_cache[n] = it->second;
+      native_tentative.erase(it);
+    }
+    native_log.clear();
+  }
+
+  // The packed bits of an operation whose native circuit a consumer has
+  // kept, for a SymFPU consumer to read instead of building the operation a
+  // second time. fp.to_ieee_bv over the survivor is what asPacked has
+  // always produced for an operation -- its canonical bits, every NaN the
+  // one SymFPU encodes -- and the shape the bit-blaster already takes for
+  // an array index. A survivor still pending for an enclosing consumer is
+  // in the formula from here on whatever that consumer decides, so it is
+  // kept.
+  ASTNode nativeBits(const ASTNode& n)
+  {
+    ASTNodeMap::const_iterator it = native_cache.find(n);
+    if (it == native_cache.end())
+    {
+      const ASTNodeMap::iterator pending = native_tentative.find(n);
+      if (pending == native_tentative.end())
+        return ASTNode();
+      it = native_cache.emplace(n, pending->second).first;
+      native_tentative.erase(pending);
+    }
+    const ASTNodeMap::const_iterator done = canonical_packed_cache.find(n);
+    if (done != canonical_packed_cache.end())
+      return done->second;
+    ++stats.native_shares;
+    const ASTNode bits = node_factory->CreateTerm(
+        FP_TO_IEEE_BV, n.GetValueWidth(), it->second);
+    canonical_packed_cache[n] = bits;
+    return bits;
+  }
+
+  ASTNode resolveLeaf(const ASTNode& n)
   {
     if (n.Degree() == 0)
       return n;
@@ -646,6 +781,14 @@ private:
   {
     if (!bm->UserFlags.fp_native_cmp)
       return ASTNode();
+    const size_t mark = beginNativeConsumer();
+    const ASTNode out = comparisonSurvivor(n);
+    endNativeConsumer(mark, !out.IsNull());
+    return out;
+  }
+
+  ASTNode comparisonSurvivor(const ASTNode& n)
+  {
     const ASTNode left = comparisonLeaf(n[0]);
     if (left.IsNull())
       return ASTNode();
@@ -676,6 +819,14 @@ private:
   {
     if (!bm->UserFlags.fp_native_cmp)
       return ASTNode();
+    const size_t mark = beginNativeConsumer();
+    const ASTNode out = classificationSurvivor(n);
+    endNativeConsumer(mark, !out.IsNull());
+    return out;
+  }
+
+  ASTNode classificationSurvivor(const ASTNode& n)
+  {
     const ASTNode leaf = comparisonLeaf(n[0]);
     if (leaf.IsNull() || leaf.isConstant())
       return ASTNode();
@@ -874,8 +1025,12 @@ private:
         out = canonical->second;
       else
       {
-        out = symbolic_fp::unpacked::encode(formatOf(n), asUnpacked(n));
-        ++stats.pack_builds;
+        out = nativeBits(n);
+        if (out.IsNull())
+        {
+          out = symbolic_fp::unpacked::encode(formatOf(n), asUnpacked(n));
+          ++stats.pack_builds;
+        }
         canonical_packed_cache[n] = out;
       }
     }
@@ -892,6 +1047,13 @@ private:
     const ASTNodeMap::const_iterator cached = canonical_packed_cache.find(n);
     if (cached != canonical_packed_cache.end())
       return cached->second;
+
+    const ASTNode shared = nativeBits(n);
+    if (!shared.IsNull())
+    {
+      packed_cache[n] = shared;
+      return shared;
+    }
 
     const ASTNode out =
         symbolic_fp::unpacked::encode(formatOf(n), asUnpacked(n));
@@ -968,6 +1130,18 @@ private:
       const ASTNode carrier = changed ? rebuild(n, children) : n;
       packed_cache[n] = carrier;
       return decodeCarrier(n, carrier);
+    }
+
+    // An operation a native consumer already keeps: decode its circuit's
+    // bits rather than build the operation again (see comparisonLeaf).
+    if (isNativeOperation(n))
+    {
+      const ASTNode shared = nativeBits(n);
+      if (!shared.IsNull())
+      {
+        packed_cache[n] = shared;
+        return decodeCarrier(n, shared);
+      }
     }
 
     std::unique_ptr<symbolic_fp::uf> result;
@@ -1137,8 +1311,11 @@ private:
         if (native(bm->UserFlags.fp_native_conv) &&
             nativeFpConvFormatIsSafe(n[2].GetSourceSort(), n.GetValueWidth()))
         {
+          const size_t mark = beginNativeConsumer();
           const ASTNode operand = comparisonLeaf(n[2]);
-          if (!operand.IsNull() && !operand.isConstant())
+          const bool kept = !operand.IsNull() && !operand.isConstant();
+          endNativeConsumer(mark, kept);
+          if (kept)
           {
             ASTVec children;
             children.push_back(n[0]);
@@ -1167,8 +1344,11 @@ private:
         if (native(bm->UserFlags.fp_native_pack) &&
             nativeFpFieldFormatIsSafe(n[0].GetSourceSort()))
         {
+          const size_t mark = beginNativeConsumer();
           const ASTNode operand = comparisonLeaf(n[0]);
-          if (!operand.IsNull() && !operand.isConstant())
+          const bool kept = !operand.IsNull() && !operand.isConstant();
+          endNativeConsumer(mark, kept);
+          if (kept)
             return operand == n[0]
                        ? n
                        : node_factory->CreateTerm(FP_TO_IEEE_BV,
@@ -1316,6 +1496,15 @@ private:
   ASTNodeMap packed_cache;
   ASTNodeMap canonical_packed_cache;
   UnpackedMap unpacked_cache;
+
+  // Native survivors by operation: those a consumer has kept, and those
+  // built for a consumer still deciding (endNativeConsumer), in the order
+  // they were recorded. Kept ones persist across roots like the caches
+  // above, so an incremental session encodes an operation one way too.
+  ASTNodeMap native_cache;
+  ASTNodeMap native_tentative;
+  std::vector<ASTNode> native_log;
+  unsigned native_depth = 0;
 };
 
 FloatBlast::FloatBlast(STPMgr* bm_, bool lowerEverything)

@@ -86,6 +86,14 @@ public:
     // Predicates built directly from two unpacked operands, without
     // constructing the rounded fp.add result they observe.
     size_t add_iszero_builds = 0;
+
+    // Operations reached both by a native consumer and by a SymFPU one,
+    // which are encoded once (see FloatBlast.cpp, comparisonLeaf):
+    // operations whose native circuit SymFPU consumers read, and native
+    // consumers that found their operand already built in SymFPU and went
+    // to SymFPU themselves.
+    size_t native_shares = 0;
+    size_t symfpu_shares = 0;
   };
 
   // lowerEverything: spell out every floating-point operation rather than
