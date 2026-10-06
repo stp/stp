@@ -444,6 +444,18 @@ public:
   // checker conflict.
   CandidateOutcome checkCandidate(AbsRefine_CounterExample* ce);
 
+  // Publish the conflict-free observed (index, value) pairs of every
+  // owned array -- including write and array-if-then-else nodes -- into
+  // the counterexample map, so model
+  // evaluation, the model APIs, and the printers all see the array
+  // contents the consistency check certified. Called by checkCandidate
+  // on every conflict-free fixed point, before the name verification,
+  // and again by the incremental driver when it rebuilds the model of a
+  // certified solve from the same SAT assignment: that rebuild starts
+  // from an empty map, and an active solve's assignment holds no array
+  // cell. After a refuted candidate there are no observations to publish.
+  void publishObservations(AbsRefine_CounterExample* ce);
+
   bool hasPendingLemma() const { return pendingLemmaValid; }
 
   // Encode every pending lemma into the persistent incremental SAT
@@ -725,13 +737,6 @@ private:
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> lastObserved;
 
   // helpers
-  // Publish the conflict-free observed (index, value) pairs of every
-  // owned array -- including write and array-if-then-else nodes -- into
-  // the counterexample map, so model
-  // evaluation, the model APIs, and the printers all see the array
-  // contents the consistency check certified. Called by checkCandidate
-  // on every conflict-free fixed point, before the name verification.
-  void publishObservations(AbsRefine_CounterExample* ce);
   // With the observations published, check that every access's scalar
   // names evaluate exactly like the terms they stand for.
   bool namesAgreeWithCandidate(ExtModelView& view,

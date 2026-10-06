@@ -445,6 +445,18 @@ void IncrementalSolver::buildPendingModel()
   ToSATBase::ASTNodeToSATVar symbolMap;
   impl->buildSymbolMap(symbolMap);
   impl->ce->ConstructCounterExample(*impl->solver, symbolMap);
+  // The assignment is only half of an array-equality round's model. Its
+  // checker owns every read, so the map just built holds no array cell;
+  // the cells are what the checker certified, and CallSAT_ResultCheck
+  // published them into the map cleared above. Without them every read
+  // of an owned array answers the completion's default. The completion
+  // and the certified index domains live outside that map and survive.
+  // The context is still active only if the deferred solve was its
+  // solve: each solve retires the previous one's records before it can
+  // defer a model.
+  if (ExtensionalityContext* ext = bm->getExtensionalityIfAny())
+    if (ext->active())
+      ext->publishObservations(impl->ce);
   bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
 
   if (bm->UserFlags.stats_flag)
