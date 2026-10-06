@@ -2434,6 +2434,7 @@ struct IncrementalSolver::Impl
       recordDriverReadPairs(batchAT->arrayToIndexToRead);
       assert(!containsArrayOps(toEncode, bm));
       totalizeRegistrySymbols();
+      pinModeCells();
 
       // The transformer conjoins a read's index-binding equation
       // (index-expression = index-symbol) only when it CREATES the
@@ -2760,6 +2761,50 @@ struct IncrementalSolver::Impl
     // Publish only after every bit is encoded. Preparation can be interrupted
     // midway through a symbol; retrying must still finish the remaining bits.
     totalizedSymbols.insert(s);
+  }
+
+  // A read of an array of modes is abstracted to a plain five-bit variable,
+  // and the transformer pins it to the five modes only on the conjunct
+  // whose transform minted its row. Here that conjunct is the wrong owner:
+  // the row and the variable outlive it -- an assumption, a popped level --
+  // and later conjuncts reach the variable without the pin, through a
+  // registry hit or, under eager Ackermannisation, through the congruence
+  // chain of every later read of the array, which compares against it as
+  // an index as well as taking it as a value. Left free, the solve may give
+  // it a pattern that names no mode: the chain then decides an index
+  // equality no model can reproduce, and the model publishes the pattern as
+  // the cell. Whatever the stack, the variable stands for a cell of an
+  // array of modes, so its pin is asserted as a permanent unit, once per
+  // backend (a rebuild discards the units, as it does the bit bindings
+  // above), for every row the driver has recorded.
+  ASTNodeSet pinnedModeCells;
+
+  void pinModeCells()
+  {
+    for (const auto& pairs : driverReadPairs)
+    {
+      if (!bm->arrayHasRmElement(pairs.first))
+        continue;
+      for (const ArrayTransformer::ReadKey& rk : pairs.second)
+      {
+        const ASTNode& cell = rk.second;
+        if (pinnedModeCells.find(cell) != pinnedModeCells.end())
+          continue;
+        const BBNodeAIG pin =
+            encoding.blaster().BBForm(bm->roundingModeValidConstraint(cell));
+        Aig_Obj_t* regular = Aig_Regular(pin.n);
+        ensureEncoded(regular);
+        const int lit =
+            2 * varOfAig(regular) + (Aig_IsComplement(pin.n) ? 1 : 0);
+        SATSolver::vec_literals unit;
+        unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
+        addClause(unit);
+        permanentAigRoots.push_back(regular);
+        permanentUnitMass = addMass(permanentUnitMass, 1);
+        // As totalizeSymbol: only once the unit is in.
+        pinnedModeCells.insert(cell);
+      }
+    }
   }
 
   // What the last refinement-driven check-sat seeded into the batch-side
@@ -3226,6 +3271,7 @@ struct IncrementalSolver::Impl
 
     releaseContainer(driverReadPairs);
     releaseContainer(totalizedSymbols);
+    releaseContainer(pinnedModeCells);
     releaseContainer(driverReadPairSymbols);
     releaseContainer(driverReadPairValue);
     releaseContainer(blockReadPairs);
@@ -3441,6 +3487,7 @@ struct IncrementalSolver::Impl
 
     cnf.reset(solver.get());
     totalizedSymbols.clear();
+    pinnedModeCells.clear();
     symbolMapCache.invalidate();
     // The fresh backend holds none of the abstraction's pinning clauses and
     // none of the variables they named, and its proxy constraints were
