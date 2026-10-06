@@ -1039,5 +1039,78 @@ class BooleanArrays(unittest.TestCase):
                 self.assertEqual(replay.stdout, 'unsat\n')
 
 
+class RegistrySetOptions(unittest.TestCase):
+    def test_model_request_survives_backend_option(self):
+        result = run('''
+(set-option :produce-models true)
+(set-option :fp-abstraction true)
+(set-logic QF_BV)
+(declare-const x (_ BitVec 8))
+(assert (= x #x01))
+(check-sat)
+(get-model)
+''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('sat\n', result.stdout)
+        self.assertIn('(define-fun |x| () (_ BitVec 8) #x01)', result.stdout)
+
+    def test_logic_and_registry_alias_reach_the_frontend(self):
+        result = run('''
+(set-option :logic QF_UF)
+(set-option :max_time 1)
+(declare-sort S 0)
+(declare-const x S)
+(check-sat)
+''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, 'sat\n')
+
+    def test_backend_options_use_the_registry(self):
+        result = run('''
+(set-option :fp-abstraction true)
+(set-option :fp-abstraction-incremental 1)
+(set-option :fp-abstraction-ops "all")
+(set-option :fp-abstraction-tiers 0)
+(set-option :fp-abstraction-budget 0)
+(set-option :incremental true)
+(set-option :array-index-hints phase)
+(set-option :bv-eq-abstraction 1)
+(set-option :max-time 1)
+(set-logic QF_FP)
+(declare-const x Float32)
+(assert (fp.eq (fp.rem x x) x))
+(check-sat)
+''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn('unsupported', result.stdout)
+        self.assertIn(result.stdout.strip(), ('sat', 'unsat'))
+
+    def test_registry_value_and_timing_errors_are_not_unsupported(self):
+        for script, detail in [
+                ('(set-option :fp-abstraction banana)', 'expected true or false'),
+                ('(set-option :fp-abstraction-ops "invented")', 'invalid value'),
+                ('(check-sat)(set-option :fp-abstraction-incremental true)',
+                 'before the first check'),
+                ('(set-option :sat-backend cadical)', 'at construction'),
+                ('(set-option :simplify false)', 'manager-scoped')]:
+            with self.subTest(script=script):
+                result = run(script + '(echo "unreachable")')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(detail, result.stdout)
+                self.assertNotIn('unsupported', result.stdout)
+                self.assertNotIn('unreachable', result.stdout)
+
+    def test_reset_reopens_before_first_check_options(self):
+        result = run('''
+(set-option :fp-abstraction-incremental true)
+(check-sat)
+(reset)
+(set-option :fp-abstraction-incremental false)
+(check-sat)
+''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, 'sat\nsat\n')
+
+
 if __name__ == '__main__':
     unittest.main()

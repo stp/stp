@@ -312,6 +312,13 @@ public:
   void onCheck(std::function<bool()> hook) { before_check = std::move(hook); }
   // Called as each check ends, before its answer is written.
   void onCheckEnd(std::function<void()> hook) { after_check = std::move(hook); }
+  // A registry-backed option writer. Return false for an unknown option;
+  // otherwise leave diagnostic empty on success or fill it on refusal.
+  void onRegistryOption(std::function<bool(const std::string&, const std::string&,
+                                           std::string&)> hook)
+  {
+    set_registry_option = std::move(hook);
+  }
 
 private:
   ASTVec* symbols_at_cleanup = nullptr;
@@ -327,6 +334,8 @@ private:
   void checkSymbolDeclaration(const std::string& name, const ASTNode& symbol);
   std::function<bool()> before_check;
   std::function<void()> after_check;
+  std::function<bool(const std::string&, const std::string&, std::string&)>
+      set_registry_option;
 
   // What the most recent check-sat charged to each pipeline stage: the
   // difference between two readings of the manager's run times taken around
@@ -449,6 +458,7 @@ private:
   // passed, forced-first-solve policies and all.
   bool incremental_from_start;
   bool session_incremental;
+  bool pushed_in_session;
   bool delayed_bv_auto_engagement;
   // True only for the mathematical SMT-LIB QF_LRA logic.  The established
   // QF_FPLRA-family names remain floating-point modes and never set it.

@@ -130,6 +130,7 @@ void Cpp_interface::init()
   incremental_from_start =
       bm.UserFlags.incremental_mode == UserDefinedFlags::IncrementalMode::ON;
   session_incremental = incremental_from_start;
+  pushed_in_session = false;
   delayed_bv_auto_engagement = false;
   lra_logic = false;
   solves_run = 0;
@@ -1243,6 +1244,7 @@ void Cpp_interface::pop()
 void Cpp_interface::push()
 {
   const EngineWork work(engine_work_failed);
+  pushed_in_session = true;
   // The session is incremental from the first push on (the same trigger z3
   // uses): later check-sats go through the incremental driver where they
   // can. Sessions that never push are untouched by this. This is session
@@ -1925,6 +1927,30 @@ void Cpp_interface::setOption(std::string option, std::string value)
     if (!output_channels->set(option == "diagnostic-output-channel", value))
       refuseCurrentCommand("cannot open output channel: " + value);
     success();
+  }
+  else if (set_registry_option)
+  {
+    std::string diagnostic;
+    if (!set_registry_option(option, value, diagnostic))
+      unsupported();
+    else if (!diagnostic.empty())
+      refuseCurrentCommand("set-option :" + option + ": " + diagnostic);
+    else
+    {
+      // The frontend keeps the driver's session policy as well as the
+      // registry's engine flag. A setting before the first check must update
+      // both, including a push that preceded set-option.
+      if (option == "incremental")
+      {
+        const auto mode = bm.UserFlags.incremental_mode;
+        incremental_from_start = mode == UserDefinedFlags::IncrementalMode::ON;
+        session_incremental = incremental_from_start ||
+            (mode != UserDefinedFlags::IncrementalMode::OFF && pushed_in_session);
+      }
+      else if (option == "logic")
+        setLogic(value);
+      success();
+    }
   }
   else
     unsupported();

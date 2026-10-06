@@ -423,10 +423,12 @@ help = "read the input a character at a time, as needed when driving stp interac
 api = "CLI only: how the binary reads standard input for Solver::parse(std::istream&, ...)"
 
 # ============================================================================ in-band SMT-LIB 2 keys and environment taps
-# (set-option :produce-models b) writes the registry entry produce-models. The other in-band keys are parser
-# state, not solver options: :print-success, :global-declarations, :produce-unsat-assumptions and
-# :diagnostic-output-channel are handled by the SMT-LIB 2 frontend of Solver::parse_smt2 (ParseMode::EXECUTE) and
-# by tools/stp; an unknown key answers `unsupported`, as SMT-LIB requires. The environment taps STP_DIVMAP,
+# The SMT-LIB 2 frontend routes a (set-option :name value) for each solver-scoped [[option]] row through
+# the same registry as the CLI and SolverOptions, including its value and timing checks. Standard protocol
+# keys such as :produce-models, :print-success, :global-declarations, :random-seed and
+# :diagnostic-output-channel retain their frontend handlers. Construction-only and manager-scoped rows
+# cannot be changed by an already constructed solver. The [[frontend]] rows are CLI actions, not solver
+# settings; an unknown key answers `unsupported`, as SMT-LIB requires. The environment taps STP_DIVMAP,
 # STP_SHIFT_ANNOTATE and STP_MULT_ANNOTATE are not options: they are process-wide diagnostics the engine reads
 # from the environment and writes to the files they name.
 
