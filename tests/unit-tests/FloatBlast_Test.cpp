@@ -878,3 +878,30 @@ TEST(FloatBlast, uf_application_with_a_non_float_result_is_opaque_too)
   EXPECT_EQ(0u, countKind(lowered, FP_ADD));
   EXPECT_EQ(0u, countKind(lowered, FP_TOFP));
 }
+
+// SymFPU's rounding-mode constants are RoundingMode literals, not plain
+// five-bit constants with the same bits. The circuit tests the operation's
+// mode against them, and the simplifying factory decides a branch by putting
+// the constant in the mode's place -- under a UF application over the mode,
+// too, which refuses an actual of any other sort. The factory now declines a
+// constant of the wrong sort, so with plain constants every such decision
+// would be lost rather than fatal.
+TEST(FloatBlast, rounding_mode_is_tested_against_rounding_mode_literals)
+{
+  STPMgr mgr;
+  const SourceSort fp16 = SourceSort::floatingPoint(5, 11);
+  const ASTNode r = mgr.CreateSourceSymbol("r", SourceSort::roundingMode());
+  const ASTNode x = mgr.CreateSourceSymbol("x", fp16);
+  const ASTNode y = mgr.CreateSourceSymbol("y", fp16);
+  const ASTNode sum = mgr.CreateTerm(FP_ADD, 16, ASTVec{r, x, y});
+
+  FloatBlast lower(&mgr, true /*lowerEverything*/);
+  const ASTNode lowered = lower.topLevel(sum);
+
+  // An exact zero sum is -0 only when rounding toward negative, so the
+  // circuit asks whether r is RTN.
+  const unsigned rtn = symbolic_fp::ROUND_TOWARD_NEGATIVE;
+  EXPECT_TRUE(contains(lowered, mgr.CreateNode(EQ, r, mgr.CreateRMConst(rtn))));
+  EXPECT_FALSE(
+      contains(lowered, mgr.CreateNode(EQ, r, mgr.CreateBVConst(5, rtn))));
+}
