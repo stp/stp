@@ -19,8 +19,10 @@ THE SOFTWARE.
 **********************/
 
 #include "stp/cpp_interface.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Parser/parser.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
+#include "stp/Simplifier/constantBitP/FixedBits.h"
 #include <gtest/gtest.h>
 
 
@@ -153,3 +155,59 @@ TEST(ConstantBitPropagation_Test , DISABLED_asserted_xor_removed_from_nested_and
   ASSERT_EQ(c.mgr.LookupOrCreateSymbol("c"), n[1][0]);
 }
 
+
+// A rounding mode is carried in five bits, but a fixing for one has to come
+// back as a rounding-mode constant: a plain five-bit constant put in its place
+// hides the sort that floating-point lowering goes by.
+TEST(ConstantBitPropagation_Test, rounding_mode_fixing_is_a_rounding_mode)
+{
+  stp::STPMgr mgr;
+  const ASTNode rm =
+      mgr.CreateSourceSymbol("rm", stp::SourceSort::roundingMode());
+  const ASTNode rtz = mgr.CreateRMConst(stp::symbolic_fp::ROUND_TOWARD_ZERO);
+
+  using simplifier::constantBitP::ConstantBitPropagation;
+  using simplifier::constantBitP::FixedBits;
+
+  const ASTNode fixed = ConstantBitPropagation::bitsToNode(
+      mgr.defaultNodeFactory, rm,
+      FixedBits::fromUnsignedInt(5, stp::symbolic_fp::ROUND_TOWARD_ZERO));
+  ASSERT_EQ(fixed, rtz);
+  ASSERT_EQ(fixed.GetSourceSort(), stp::SourceSort::roundingMode());
+
+  // Two bits set encode no mode at all, so there is no constant to give.
+  ASSERT_TRUE(ConstantBitPropagation::bitsToNode(
+                  mgr.defaultNodeFactory, rm, FixedBits::fromUnsignedInt(5, 3))
+                  .IsNull());
+
+  // A five-bit bit-vector is still given the plain constant.
+  const ASTNode v =
+      mgr.CreateSourceSymbol("v", stp::SourceSort::bitVector(5));
+  const ASTNode plain = ConstantBitPropagation::bitsToNode(
+      mgr.defaultNodeFactory, v, FixedBits::fromUnsignedInt(5, 8));
+  ASSERT_EQ(plain, mgr.CreateBVConst(5, 8));
+  ASSERT_EQ(plain.GetSourceSort(), stp::SourceSort::bitVector(5));
+}
+
+// The same through the pass: a rounding mode the formula fixes is substituted
+// by the rounding-mode constant, not by its bits.
+TEST(ConstantBitPropagation_Test, fixed_rounding_mode_symbol_keeps_its_sort)
+{
+  stp::STPMgr mgr;
+  stp::SubstitutionMap substitutionMap(&mgr);
+  stp::Simplifier simplifier(&mgr, &substitutionMap);
+
+  const ASTNode rm =
+      mgr.CreateSourceSymbol("rm", stp::SourceSort::roundingMode());
+  const ASTNode rtz = mgr.CreateRMConst(stp::symbolic_fp::ROUND_TOWARD_ZERO);
+  const ASTNode top = mgr.CreateNode(stp::EQ, rm, rtz);
+
+  simplifier::constantBitP::ConstantBitPropagation cb(
+      &mgr, &simplifier, mgr.defaultNodeFactory, top);
+  cb.topLevelBothWays(top);
+
+  ASTNode value;
+  ASSERT_TRUE(simplifier.InsideSubstitutionMap(rm, value));
+  ASSERT_EQ(value, rtz);
+  ASSERT_EQ(value.GetSourceSort(), stp::SourceSort::roundingMode());
+}

@@ -141,7 +141,8 @@ public:
   stp::ASTNodeMap getAllFixed();
 
   // Static, so the incremental engine converts its fixings through the
-  // same code on its own factory.
+  // same code on its own factory. Null when the node's sort has no constant
+  // with those bits (see the definition).
   static ASTNode bitsToNode(NodeFactory* nf, const ASTNode& node,
                             const FixedBits& bits);
 
