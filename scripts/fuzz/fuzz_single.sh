@@ -1770,6 +1770,33 @@ trap 'exit 143' TERM
 # timeout says nothing about correctness.
 timed_out() { [ "$1" -eq 124 ] || [ "$1" -eq 137 ]; }
 
+# A timeout says nothing about the check it interrupted, but the checks both
+# solvers answered before it are still comparable, and on the session entries
+# that run longest a quarter of every batch runs out: 7 of 25 files on each of
+# the floating-point and floating-point-array session entries, discarding 9 to
+# 11 answered checks apiece. So compare the common prefix rather than drop the
+# file, and report only when that prefix disagrees.
+#
+# Sets prefix_result to "agree", "differ", or "unusable" -- the last when the
+# checker's own prefix is not all sat/unsat, which leaves nothing the positions
+# can be trusted against. wc -l counts newlines, so a half-written final line
+# from a killed solver is not among the lines compared, and "unknown" is
+# excused on STP's side for the reason the whole-session comparison excuses it.
+# Sets prefix_checks to the number compared. Assigns rather than prints: a
+# $(...) call would set both in a subshell and the caller would see neither.
+prefix_verdict() {
+  local q
+  prefix_checks=$(wc -l < first.txt); q=$(wc -l < second.txt)
+  [ "$q" -lt "$prefix_checks" ] && prefix_checks=$q
+  if [ "$prefix_checks" -lt 1 ]; then prefix_result=unusable; return; fi
+  prefix_result=$(paste -d ' ' <(head -n "$prefix_checks" first.txt) \
+                               <(head -n "$prefix_checks" second.txt) |
+    awk 'BEGIN { v = "agree" }
+         $1 != "sat" && $1 != "unsat" { v = "unusable"; exit }
+         $2 != "unknown" && $1 != $2  { v = "differ"; exit }
+         END { print v }')
+}
+
 while (true)
   do
     # One logic per iteration. Drawn before the options because a group can be
@@ -1826,8 +1853,15 @@ while (true)
       stp_rc=$?
       wait "$checker_job"
       checker_rc=$?
+      prefix_note=""
       if timed_out "$stp_rc" || timed_out "$checker_rc"; then
-        continue
+        prefix_verdict
+        if [ "$prefix_result" != differ ]; then
+          continue
+        fi
+        # Saved, with the count the verdict rests on: the checks after it are
+        # the timeout's, and say nothing.
+        prefix_note="compared over the $prefix_checks check(s) both solvers answered before a timeout"
       fi
 
       # The comparison only means something when the checker produced an
@@ -1893,6 +1927,7 @@ while (true)
         echo "options: $se"
         echo "stp:     $STP (exit $stp_rc)"
         echo "checker: $entry_checker (exit $checker_rc)"
+        if [ -n "$prefix_note" ]; then echo "note:    $prefix_note"; fi
       } > "$failure/what-happened.txt"
       echo -n "[mismatch $failure]"
     done
