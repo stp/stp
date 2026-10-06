@@ -2422,8 +2422,12 @@ struct IncrementalSolver::Impl
       // second ran to timeout exactly this way once piece preparation
       // separated bindings from their users). Every conjunct therefore
       // re-conjoins the bindings of every row it touches; for rows whose
-      // binding is already inside, the AND simply deduplicates.
-      if (!bm->UserFlags.ackermannisation && !readsOfEncoded[key].empty())
+      // binding is already inside, the AND simply deduplicates. A conjunct
+      // can touch chain rows without touching any read row -- a chain over
+      // a constant array has no base read -- so a chain row alone is
+      // reason enough.
+      if (!bm->UserFlags.ackermannisation &&
+          (!readsOfEncoded[key].empty() || !chainsOfEncoded[key].empty()))
       {
         ASTVec binds;
         for (const std::pair<ASTNode, ASTNode>& ai : readsOfEncoded[key])
@@ -2468,6 +2472,13 @@ struct IncrementalSolver::Impl
               binds.push_back(bm->defaultNodeFactory->CreateNode(
                   EQ, lvl.value, lvl.valueAnchor));
           }
+          // A chain over a constant array falls through to its default's
+          // anchor, which binds the same way. (A chain over an array symbol
+          // falls through to a read row, already re-bound above.)
+          if (!row.baseDefault.IsNull() &&
+              row.baseDefault != row.baseReadSymbol)
+            binds.push_back(bm->defaultNodeFactory->CreateNode(
+                EQ, row.baseDefault, row.baseReadSymbol));
         }
 
         if (!binds.empty())
