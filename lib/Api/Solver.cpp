@@ -1730,6 +1730,64 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   ::TypeChecker checker(*s->mgr->factory(), *bm);
   Cpp_interface pi(*bm, &checker);
   pi.enableProtocolChecks(runs);
+  // The SMT-LIB frontend owns its protocol options, but backend options use
+  // the same TOML-generated registry, type parser and live timing rules as
+  // SolverOptions and the command line. Unknown SMT-LIB options remain
+  // "unsupported"; known options with invalid values are errors.
+  pi.onRegistryOption([s, bm](const std::string& name,
+                              const std::string& value,
+                              std::string& diagnostic) {
+    const detail::OptionSpec* spec = detail::find_option(name);
+    if (spec == nullptr)
+      return false;
+    // SMT-LIB writes Boolean values as true/false. A mode with on/off
+    // members has the same two meanings even when its CLI spellings are
+    // explicitly listed in the registry (notably :incremental).
+    std::string registry_value = value;
+    if (spec->type == detail::OptType::MODE &&
+        (value == "true" || value == "false" || value == "1" || value == "0"))
+    {
+      bool has_on = false, has_off = false;
+      for (std::size_t i = 0; i < spec->num_values; ++i)
+      {
+        has_on |= std::string_view(spec->values[i]) == "on";
+        has_off |= std::string_view(spec->values[i]) == "off";
+      }
+      if (has_on && has_off)
+        registry_value = value == "true" || value == "1" ? "on" : "off";
+    }
+    // A bare number on the CLI means seconds for duration options; the API
+    // registry requires an explicit unit. Preserve the CLI reading for an
+    // SMT-LIB numeral while still accepting strings such as "500ms".
+    if (spec->type == detail::OptType::DURATION)
+    {
+      if (value == "-1")
+        registry_value = "none";
+      else if (!value.empty() &&
+               std::all_of(value.begin(), value.end(), [](unsigned char c) {
+                 return std::isdigit(c) != 0;
+               }))
+        registry_value += "s";
+    }
+    // The frontend's standard :produce-models and :random-seed commands are
+    // session-local. Re-applying registry options must not undo them.
+    const bool parser_models = bm->UserFlags.produce_models;
+    const bool parser_counterexample = bm->UserFlags.request_counterexample;
+    const std::uint64_t parser_seed = bm->UserFlags.random_seed;
+    try
+    {
+      SolverOptions(s).set(spec->name, registry_value);
+    }
+    catch (const Error& error)
+    {
+      diagnostic = error.what();
+    }
+    bm->UserFlags.produce_models = parser_models;
+    bm->UserFlags.request_counterexample = parser_counterexample;
+    bm->UserFlags.random_seed = parser_seed;
+    return true;
+  });
+  const detail::OptionsImpl options_before_parse = s->options;
   pi.keepDeclaredSymbolsAtCleanup(&declared_at_end);
   pi.keepSortAliasesAtCleanup(&sorts_at_end);
   pi.keepFunctionsAtCleanup(&definitions_at_end);
@@ -1758,7 +1816,10 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   // an earlier script -- outlive: each is recorded again there, or every
   // later model reads it as 0. A script that fails after its (reset) keeps
   // them the same way.
-  pi.onPublicReset([bm, mgr = s->mgr] {
+  pi.onPublicReset([bm, mgr = s->mgr, s, options_before_parse] {
+    s->options = options_before_parse;
+    s->checks = 0;
+    s->apply_options("Solver::parse reset");
     bool any = false;
     for (const auto& entry : mgr->symbols)
     {
@@ -1774,6 +1835,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
       bm->noteReal();
   });
   pi.onCheck([s, &stop_control, &arm_stop] {
+    ++s->checks;
     if (s->interrupt_consumed)
       s->interrupt.store(false); // the last check reported it, and ended in an exception
     s->interrupt_consumed = false;
