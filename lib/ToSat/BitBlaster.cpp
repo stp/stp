@@ -2211,12 +2211,15 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
   // roots of one operand still share theirs. A consumer that asserts the
   // division relations permanently keeps the pair: see relationsPermanent_.
   //
-  // The square-root pre-round is re-minted either way. Its circuit reads the
-  // native-domain facts collected from the root below, so one root's pair
-  // carries that root's assumptions about the operand; a permanent relation
-  // keeps the pair meaningful where it was minted, not everywhere.
+  // The square-root pre-round is rebuilt either way. Its circuit reads the
+  // native-domain facts collected from the root below, so it carries that
+  // root's assumptions about the operand; the next root shares its pair only
+  // where it builds the same radicand, through fpRelationMemo.
   if (!relationsPermanent_)
+  {
     divByMultMemo.clear();
+    fpRelationMemo.clear();
+  }
   sqrtPreRoundMemo.clear();
 
   // A relational encoding mints fresh inputs and constrains them only
@@ -8578,6 +8581,33 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundToIntegral(const ASTNode& term,
   return res;
 }
 
+// See fpRelationMemo. A pair taken from the memo counts towards the
+// root-change memo clear as a minted one does: the circuit built around it
+// is still specialised by this root's native-domain facts.
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpRelationPair(
+    Kind kind, const BBNodeVec& a, const BBNodeVec& b, unsigned qw, unsigned rw,
+    BBNodeVec& q, BBNodeVec& r)
+{
+  std::tuple<Kind, BBNodeVec, BBNodeVec> key(kind, a, b);
+  const auto it = fpRelationMemo.find(key);
+  if (it != fpRelationMemo.end())
+  {
+    q = it->second.first;
+    r = it->second.second;
+    relationalFreshInputs += qw + rw;
+    return false;
+  }
+  q.resize(qw);
+  r.resize(rw);
+  for (unsigned i = 0; i < qw; i++)
+    q[i] = freshRelationalInput();
+  for (unsigned i = 0; i < rw; i++)
+    r[i] = freshRelationalInput();
+  fpRelationMemo.emplace(std::move(key), std::make_pair(q, r));
+  return true;
+}
+
 // The rounding-mode independent half of BBfpSqrt: unpack, normalise, mint
 // the relation's (q, r), assert q*q + r = N and r <= 2q, and hand back the
 // unrounded significand with its guard and sticky. Splitting the circuit
@@ -8643,47 +8673,45 @@ BitBlaster<BBNode, BBNodeManagerT>::BBfpSqrtPreRound(const ASTNode& operand,
   for (unsigned i = 0; i < sb + 1 && i + sb + 3 < W; i++)
     n[i + sb + 3] = radicand[i];
 
-  BBNodeVec q(qw);
-  BBNodeVec r(sb + 3);
-  for (unsigned i = 0; i < qw; i++)
-    q[i] = freshRelationalInput();
-  for (unsigned i = 0; i < sb + 3; i++)
-    r[i] = freshRelationalInput();
-  ++fpNativeDivRelations;
-
-  // q*q + r at width W, carry-outs pinned so the sum is the integer sum.
-  // The square's columns: q_i alone at 2i, and q_i AND q_j once at i+j+1.
-  //
-  // Collected rather than inserted straight into the support, so that a
-  // consumer asserting the relations permanently gets this one too: see
-  // recordRelation. n < 2^W by construction, so q = isqrt(n) and
-  // r = n - q*q satisfy every conjunct below for any assignment of the
-  // operand -- the relation defines fresh inputs and constrains nothing
-  // else, exactly the argument the proxies tied to q and r rely on.
-  BBNodeSet relation;
-  BBNodeVec acc(W + 1, nf->getFalse());
-  for (unsigned i = 0; i < sb + 3 && i < W; i++)
-    acc[i] = r[i];
-  for (unsigned i = 0; i < qw; i++)
+  BBNodeVec q, r;
+  if (fpRelationPair(FP_SQRT, n, BBNodeVec(), qw, sb + 3, q, r))
   {
-    BBNodeVec row(W + 1, nf->getFalse());
-    if (2 * i < W)
-      row[2 * i] = q[i];
-    for (unsigned j = i + 1; j < qw && i + j + 1 < W; j++)
-      row[i + j + 1] = nf->CreateNode(AND, q[i], q[j]);
-    BBPlus2(acc, row, nf->getFalse());
-    relation.insert(nf->CreateNode(NOT, acc[W]));
-    acc[W] = nf->getFalse();
-  }
-  const BBNodeVec accLow(acc.begin(), acc.begin() + W);
-  relation.insert(BBEQ(accLow, n));
+    ++fpNativeDivRelations;
 
-  // r <= 2q, which with q*q + r = n is what makes q the integer root.
-  BBNodeVec twoQ(sb + 4, nf->getFalse());
-  for (unsigned i = 0; i < qw && i + 1 < sb + 4; i++)
-    twoQ[i + 1] = q[i];
-  relation.insert(BBBVLE(zext(r, sb + 4), twoQ, false /*unsigned*/));
-  recordRelation(relation, support);
+    // q*q + r at width W, carry-outs pinned so the sum is the integer sum.
+    // The square's columns: q_i alone at 2i, and q_i AND q_j once at i+j+1.
+    //
+    // Collected rather than inserted straight into the support, so that a
+    // consumer asserting the relations permanently gets this one too: see
+    // recordRelation. n < 2^W by construction, so q = isqrt(n) and
+    // r = n - q*q satisfy every conjunct below for any assignment of the
+    // operand -- the relation defines fresh inputs and constrains nothing
+    // else, exactly the argument the proxies tied to q and r rely on.
+    BBNodeSet relation;
+    BBNodeVec acc(W + 1, nf->getFalse());
+    for (unsigned i = 0; i < sb + 3 && i < W; i++)
+      acc[i] = r[i];
+    for (unsigned i = 0; i < qw; i++)
+    {
+      BBNodeVec row(W + 1, nf->getFalse());
+      if (2 * i < W)
+        row[2 * i] = q[i];
+      for (unsigned j = i + 1; j < qw && i + j + 1 < W; j++)
+        row[i + j + 1] = nf->CreateNode(AND, q[i], q[j]);
+      BBPlus2(acc, row, nf->getFalse());
+      relation.insert(nf->CreateNode(NOT, acc[W]));
+      acc[W] = nf->getFalse();
+    }
+    const BBNodeVec accLow(acc.begin(), acc.begin() + W);
+    relation.insert(BBEQ(accLow, n));
+
+    // r <= 2q, which with q*q + r = n is what makes q the integer root.
+    BBNodeVec twoQ(sb + 4, nf->getFalse());
+    for (unsigned i = 0; i < qw && i + 1 < sb + 4; i++)
+      twoQ[i + 1] = q[i];
+    relation.insert(BBBVLE(zext(r, sb + 4), twoQ, false /*unsigned*/));
+    recordRelation(relation, support);
+  }
 
   // Q is sqrt(r) * 2^(sb+1) with its top bit set by construction, so the
   // significand is its top sb bits and no normalisation is needed.
@@ -9038,13 +9066,8 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpDiv(const ASTNode& term,
   for (unsigned i = 0; i < sb; i++)
     n[i + sb + 1] = an[i];
 
-  BBNodeVec q(qw);
-  BBNodeVec r(sb);
-  for (unsigned i = 0; i < qw; i++)
-    q[i] = freshRelationalInput();
-  for (unsigned i = 0; i < sb; i++)
-    r[i] = freshRelationalInput();
-  ++fpNativeDivRelations;
+  BBNodeVec q, r;
+  const bool minted = fpRelationPair(FP_DIV, n, dn, qw, sb, q, r);
 
   // dn*q + r at width W. The product never leaves W bits: dn < 2^sb and
   // q < 2^(sb+2) give dn*q <= 2^W - 2^sb - 2^(sb+2) + 1, and r < 2^sb, so
@@ -9055,56 +9078,60 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpDiv(const ASTNode& term,
     cerr << "Unknown --bb.fp-div-product " << uf->fp_div_product;
     FatalError("bad fp-div-product");
   }
-  // Collected rather than inserted straight into the support, so that a
-  // consumer asserting the relations permanently gets this one too: see
-  // recordRelation. dn is nonzero and n < 2^W by construction, so
-  // q = n / dn and r = n mod dn satisfy every conjunct below for any
-  // assignment of the operands.
-  BBNodeSet relation;
-  BBNodeVec acc;
-  if (uf->fp_div_product == 0)
+  if (minted)
   {
-    // The open-coded array: one AND row per quotient bit, rippled in, each
-    // step's carry-out pinned false. The pins are implied by the bound
-    // above rather than needed for it.
-    acc.assign(W + 1, nf->getFalse());
-    for (unsigned i = 0; i < sb; i++)
-      acc[i] = r[i];
-    for (unsigned j = 0; j < qw; j++)
+    ++fpNativeDivRelations;
+    // Collected rather than inserted straight into the support, so that a
+    // consumer asserting the relations permanently gets this one too: see
+    // recordRelation. dn is nonzero and n < 2^W by construction, so
+    // q = n / dn and r = n mod dn satisfy every conjunct below for any
+    // assignment of the operands.
+    BBNodeSet relation;
+    BBNodeVec acc;
+    if (uf->fp_div_product == 0)
     {
-      BBNodeVec row(W + 1, nf->getFalse());
-      for (unsigned i = 0; i < sb && i + j < W; i++)
-        row[i + j] = nf->CreateNode(AND, dn[i], q[j]);
-      BBPlus2(acc, row, nf->getFalse());
-      relation.insert(nf->CreateNode(NOT, acc[W]));
-      acc[W] = nf->getFalse();
+      // The open-coded array: one AND row per quotient bit, rippled in, each
+      // step's carry-out pinned false. The pins are implied by the bound
+      // above rather than needed for it.
+      acc.assign(W + 1, nf->getFalse());
+      for (unsigned i = 0; i < sb; i++)
+        acc[i] = r[i];
+      for (unsigned j = 0; j < qw; j++)
+      {
+        BBNodeVec row(W + 1, nf->getFalse());
+        for (unsigned i = 0; i < sb && i + j < W; i++)
+          row[i + j] = nf->CreateNode(AND, dn[i], q[j]);
+        BBPlus2(acc, row, nf->getFalse());
+        relation.insert(nf->CreateNode(NOT, acc[W]));
+        acc[W] = nf->getFalse();
+      }
+      acc.resize(W);
     }
-    acc.resize(W);
-  }
-  else
-  {
-    // Through the bit-vector multiplier, which is what makes every
-    // --bb.mult-variant reach the divider. A constant divisor leaves dn a
-    // constant vector, and constant-run recoding is worth about a third of
-    // this product on its own.
-    acc = BBfpSignificandProduct(dn, q, relation, W);
-    BBPlus2(acc, zext(r, W), nf->getFalse());
-    if (uf->fp_div_product == 2)
+    else
     {
-      // The top column of the sum, asserted false. Not implied by the
-      // magnitude bound above -- 2^W - 2^sb - 2^(sb+2) + 1 has bit W-1 set
-      // -- but implied by the equality below, since n = an << (sb+1) is
-      // structurally zero at column 2sb+1. This is NOT the open-coded
-      // path's per-row pins, which are qw separate facts about intermediate
-      // sums a monolithic product does not expose.
-      for (unsigned i = 2 * sb + 1; i < W; i++)
-        relation.insert(nf->CreateNode(NOT, acc[i]));
+      // Through the bit-vector multiplier, which is what makes every
+      // --bb.mult-variant reach the divider. A constant divisor leaves dn a
+      // constant vector, and constant-run recoding is worth about a third of
+      // this product on its own.
+      acc = BBfpSignificandProduct(dn, q, relation, W);
+      BBPlus2(acc, zext(r, W), nf->getFalse());
+      if (uf->fp_div_product == 2)
+      {
+        // The top column of the sum, asserted false. Not implied by the
+        // magnitude bound above -- 2^W - 2^sb - 2^(sb+2) + 1 has bit W-1 set
+        // -- but implied by the equality below, since n = an << (sb+1) is
+        // structurally zero at column 2sb+1. This is NOT the open-coded
+        // path's per-row pins, which are qw separate facts about intermediate
+        // sums a monolithic product does not expose.
+        for (unsigned i = 2 * sb + 1; i < W; i++)
+          relation.insert(nf->CreateNode(NOT, acc[i]));
+      }
     }
+    relation.insert(BBEQ(acc, n));
+    // dn is nonzero by construction, so this needs no divisor-zero guard.
+    relation.insert(BBBVLE(r, dn, false, true));
+    recordRelation(relation, support);
   }
-  relation.insert(BBEQ(acc, n));
-  // dn is nonzero by construction, so this needs no divisor-zero guard.
-  relation.insert(BBBVLE(r, dn, false, true));
-  recordRelation(relation, support);
 
   // One bit of normalisation: the quotient's top bit decides whether the
   // leading one sits at qw-1 or qw-2.
@@ -9704,36 +9731,34 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRem(const ASTNode& term,
   // nx = dv*q + r with r < dv. The divisor is a significand, so the product
   // is sb+1 narrow rows rather than one step per quotient bit.
   const unsigned qw = F;
-  BBNodeVec q(qw);
-  BBNodeVec r(sb + 1);
-  for (unsigned i = 0; i < qw; i++)
-    q[i] = freshRelationalInput();
-  for (unsigned i = 0; i < sb + 1; i++)
-    r[i] = freshRelationalInput();
-  ++fpNativeDivRelations;
-
-  // Collected rather than inserted straight into the support, so that a
-  // consumer asserting the relations permanently gets this one too: see
-  // recordRelation. dv is nonzero and nx < 2^F by construction, so
-  // q = nx / dv and r = nx mod dv satisfy every conjunct below for any
-  // assignment of the operands.
-  BBNodeSet relation;
-  BBNodeVec acc(F + 1, nf->getFalse());
-  for (unsigned i = 0; i < sb + 1 && i < F; i++)
-    acc[i] = r[i];
-  for (unsigned j = 0; j < sb + 1; j++)
+  BBNodeVec q, r;
+  if (fpRelationPair(FP_REM, nx, dv, qw, sb + 1, q, r))
   {
-    BBNodeVec row(F + 1, nf->getFalse());
-    for (unsigned i = 0; i + j < F; i++)
-      row[i + j] = nf->CreateNode(AND, q[i], dv[j]);
-    BBPlus2(acc, row, nf->getFalse());
-    relation.insert(nf->CreateNode(NOT, acc[F]));
-    acc[F] = nf->getFalse();
+    ++fpNativeDivRelations;
+
+    // Collected rather than inserted straight into the support, so that a
+    // consumer asserting the relations permanently gets this one too: see
+    // recordRelation. dv is nonzero and nx < 2^F by construction, so
+    // q = nx / dv and r = nx mod dv satisfy every conjunct below for any
+    // assignment of the operands.
+    BBNodeSet relation;
+    BBNodeVec acc(F + 1, nf->getFalse());
+    for (unsigned i = 0; i < sb + 1 && i < F; i++)
+      acc[i] = r[i];
+    for (unsigned j = 0; j < sb + 1; j++)
+    {
+      BBNodeVec row(F + 1, nf->getFalse());
+      for (unsigned i = 0; i + j < F; i++)
+        row[i + j] = nf->CreateNode(AND, q[i], dv[j]);
+      BBPlus2(acc, row, nf->getFalse());
+      relation.insert(nf->CreateNode(NOT, acc[F]));
+      acc[F] = nf->getFalse();
+    }
+    const BBNodeVec accLow(acc.begin(), acc.begin() + F);
+    relation.insert(BBEQ(accLow, nx));
+    relation.insert(BBBVLE(r, dv, false /*unsigned*/, true /*strict*/));
+    recordRelation(relation, support);
   }
-  const BBNodeVec accLow(acc.begin(), acc.begin() + F);
-  relation.insert(BBEQ(accLow, nx));
-  relation.insert(BBBVLE(r, dv, false /*unsigned*/, true /*strict*/));
-  recordRelation(relation, support);
 
   // Round the quotient to nearest, ties to even: compare twice the
   // remainder with the divisor, and break a tie on the quotient's low bit.
