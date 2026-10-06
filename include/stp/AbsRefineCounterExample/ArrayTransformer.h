@@ -143,8 +143,8 @@ public:
   // the expanded if-then-else chain. `levels` lists the chain top-down;
   // the fall-through is `baseReadSymbol`, the ordinary read abstraction of
   // (baseArray, index), whose registry row also anchors the read index --
-  // or, for a chain over a constant array, the anchor of its default, with
-  // `baseArray` null.
+  // or, for a chain over a constant array, the anchor of its transformed
+  // default `baseDefault`, with `baseArray` null.
   // Refinement pins `symbol` with path lemmas over the anchors.
   struct ChainRow
   {
@@ -152,6 +152,7 @@ public:
     ASTNode index;
     ASTNode indexAnchor;
     ASTNode baseArray;
+    ASTNode baseDefault;
     ASTNode baseReadSymbol;
     std::vector<ChainLevel> levels;
   };
