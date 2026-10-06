@@ -3043,6 +3043,17 @@ category = "cnf"
 help = "new-* CNF rungs: encode a recovered full adder with the ten clauses that define it instead of the fourteen that make it propagation complete"
 
 [[option]]
+name = "shift-narrow-operand"
+type = "bool"
+default = true
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "shift_narrow_operand" }
+category = "bitblast"
+help = "bit-blasting a shift: drive the bits of the shifted operand that an amount of at least its interval minimum cannot read to false, so the barrel shifter's multiplexers over them fold away"
+
+[[option]]
 name = "extract-through-bitwise"
 type = "bool"
 default = false

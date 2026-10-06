@@ -39,6 +39,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/UnsignedInterval.h"
 #include <algorithm>
+#include <cstddef>
 #include <vector>
 
 namespace stp
@@ -278,10 +279,13 @@ private:
         }
       }
 
-      // Merge bestI and bestI+1 into one [min_i, max_{i+1}].
+      // Merge bestI and bestI+1 into one [min_i, max_{i+1}]. The index is
+      // cast for the iterator arithmetic, which -Wsign-conversion rejects
+      // from a size_t; some translation units here are built with it.
       CONSTANTBV::BitVector_Copy(parts[bestI]->maxV, parts[bestI + 1]->maxV);
       delete parts[bestI + 1];
-      parts.erase(parts.begin() + bestI + 1);
+      parts.erase(parts.begin() +
+                  static_cast<std::ptrdiff_t>(bestI + 1));
     }
 
     CONSTANTBV::BitVector_Destroy(gap);

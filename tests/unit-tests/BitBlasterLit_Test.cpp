@@ -311,3 +311,139 @@ TEST(BitBlasterLit, TheHandleIsOneLiteral)
   EXPECT_FALSE(BBNodeLit(aig::LIT_TRUE).IsNull());
   EXPECT_NE(BBNodeLit(aig::LIT_TRUE), BBNodeLit(aig::LIT_FALSE));
 }
+
+// --shift-narrow-operand drives the bits of a shifted operand that the
+// amount can never read to false. That must not change the function the
+// circuit computes, which is what these check: the same formula is blasted
+// with the option off and on, and the two truth tables have to agree.
+//
+// The amount is built as (a & 1) + c so that its interval has a non-zero
+// minimum -- a bare symbol's interval is the whole range, and a constant
+// amount never reaches the barrel at all.
+namespace
+{
+uint64_t blastWithNarrowing(STPMgr& mgr, const ASTNode& form, bool narrow)
+{
+  mgr.UserFlags.shift_narrow_operand = narrow;
+
+  SubstitutionMap subs(&mgr);
+  Simplifier simp(&mgr, &subs);
+  BBNodeManagerLit litMgr;
+  BitBlasterLit bb(&litMgr, &simp, mgr.defaultNodeFactory, &mgr.UserFlags);
+
+  const BBNodeLit top = bb.BBForm(form);
+
+  std::map<unsigned, uint64_t> inputs;
+  unsigned column = 0;
+  for (const auto& entry : litMgr.symbolToBBNode)
+    for (size_t i = 0; i < entry.second.size(); i++)
+    {
+      if (entry.second[i].IsNull())
+        continue;
+      EXPECT_LT(column, 6u) << "too many input bits for one word";
+      inputs[aig::nodeOf(entry.second[i].n)] = INPUT_TT[column];
+      column++;
+    }
+
+  return litTruthTable(litMgr.mgr, top.n, inputs);
+}
+
+// Same, reporting how big the circuit came out.
+unsigned blastedNodeCount(STPMgr& mgr, const ASTNode& form, bool narrow)
+{
+  mgr.UserFlags.shift_narrow_operand = narrow;
+
+  SubstitutionMap subs(&mgr);
+  Simplifier simp(&mgr, &subs);
+  BBNodeManagerLit litMgr;
+  BitBlasterLit bb(&litMgr, &simp, mgr.defaultNodeFactory, &mgr.UserFlags);
+
+  bb.BBForm(form);
+  return litMgr.mgr.nodeCount();
+}
+} // namespace
+
+TEST(BitBlasterLit, ShiftNarrowingKeepsTheFunction)
+{
+  STPMgr mgr;
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  const ASTNode x = mgr.CreateSymbol("x", 0, 3);
+  const ASTNode a = mgr.CreateSymbol("a", 0, 3);
+  const ASTNode one = mgr.CreateBVConst(3, 1);
+
+  // (a & 1) + 2, so the amount lies in [2,3] and two bits of x are dead.
+  const ASTNode amount = hf->CreateTerm(
+      BVPLUS, 3, hf->CreateTerm(BVAND, 3, a, one), mgr.CreateBVConst(3, 2));
+
+  const Kind kinds[] = {BVLEFTSHIFT, BVRIGHTSHIFT, BVSRSHIFT};
+  const char* names[] = {"shl", "lshr", "ashr"};
+
+  for (unsigned i = 0; i < 3; i++)
+  {
+    const ASTNode form =
+        hf->CreateNode(EQ, hf->CreateTerm(kinds[i], 3, x, amount), one);
+
+    const uint64_t off = blastWithNarrowing(mgr, form, false);
+    const uint64_t on = blastWithNarrowing(mgr, form, true);
+    EXPECT_EQ(off, on) << names[i] << ": narrowing changed the function";
+  }
+}
+
+// The arithmetic shift's fill is the operand's sign bit, at the opposite end
+// from the bits a right shift drops. A wide dead range must not reach it.
+TEST(BitBlasterLit, ShiftNarrowingKeepsTheSignFill)
+{
+  STPMgr mgr;
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  const ASTNode x = mgr.CreateSymbol("x", 0, 3);
+  const ASTNode a = mgr.CreateSymbol("a", 0, 3);
+
+  // [2,3] again: two of three bits dead, leaving only the sign bit live.
+  const ASTNode amount =
+      hf->CreateTerm(BVPLUS, 3, hf->CreateTerm(BVAND, 3, a, mgr.CreateBVConst(3, 1)),
+                     mgr.CreateBVConst(3, 2));
+  const ASTNode form = hf->CreateNode(
+      EQ, hf->CreateTerm(BVSRSHIFT, 3, x, amount), mgr.CreateBVConst(3, 7));
+
+  EXPECT_EQ(blastWithNarrowing(mgr, form, false),
+            blastWithNarrowing(mgr, form, true));
+}
+
+// An amount that can be zero reads every bit, so the circuit is untouched.
+TEST(BitBlasterLit, ShiftNarrowingLeavesUnboundedAmountsAlone)
+{
+  STPMgr mgr;
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  const ASTNode x = mgr.CreateSymbol("x", 0, 3);
+  const ASTNode a = mgr.CreateSymbol("a", 0, 3);
+  const ASTNode form = hf->CreateNode(
+      EQ, hf->CreateTerm(BVRIGHTSHIFT, 3, x, a), mgr.CreateBVConst(3, 1));
+
+  EXPECT_EQ(blastedNodeCount(mgr, form, false),
+            blastedNodeCount(mgr, form, true));
+}
+
+// And it does something: a shift whose amount's interval minimum exceeds
+// its fixed-bit minimum gets a smaller circuit. [5,8] has no fixed bit at
+// all, so the barrel saves nothing by itself and all five bits are this
+// rule's to drop.
+TEST(BitBlasterLit, ShiftNarrowingShrinksTheCircuit)
+{
+  STPMgr mgr;
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  const ASTNode x = mgr.CreateSymbol("x", 0, 16);
+  const ASTNode a = mgr.CreateSymbol("a", 0, 16);
+  const ASTNode amount = hf->CreateTerm(
+      BVPLUS, 16, hf->CreateTerm(BVAND, 16, a, mgr.CreateBVConst(16, 3)),
+      mgr.CreateBVConst(16, 5));
+  const ASTNode form = hf->CreateNode(
+      EQ, hf->CreateTerm(BVRIGHTSHIFT, 16, x, amount),
+      mgr.CreateBVConst(16, 1));
+
+  EXPECT_LT(blastedNodeCount(mgr, form, true),
+            blastedNodeCount(mgr, form, false));
+}

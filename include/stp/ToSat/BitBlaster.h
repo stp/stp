@@ -50,6 +50,11 @@ class FixedBits;
 namespace stp
 {
 
+// Only ever held by pointer here; see shiftDomains_ below. Declaring it
+// rather than including NodeDomainAnalysis.h keeps the Simplifier's domain
+// stack out of every translation unit that blasts anything.
+class NodeDomainAnalysis;
+
 using std::list;
 using simplifier::constantBitP::MultiplicationStats;
 
@@ -937,6 +942,22 @@ public:
 
   simplifier::constantBitP::ConstantBitPropagation* cb;
 
+  // Built on first use, for shift amounts only: the unsigned interval of a
+  // shift amount says how many bits of the shifted operand the shift can
+  // never read. The simplifier's own NodeDomainAnalysis is long gone by the
+  // time anything is blasted, and buildMap derives a node's domains from its
+  // children, so a fresh one answers without needing that state.
+  //
+  // A raw pointer to an incomplete type, freed by releaseShiftDomains below,
+  // which is defined where the type is complete. A unique_ptr here would put
+  // the delete in this header and drag the whole domain stack in with it.
+  NodeDomainAnalysis* shiftDomains_ = nullptr;
+  void releaseShiftDomains();
+
+  // How many bits of a shift's first operand an amount of at least its
+  // interval minimum can never reach. Zero when nothing is known.
+  unsigned unreachableShiftBits(const ASTNode& amount, unsigned width);
+
   // Bit blast a bitvector term.  The term must have a kind for a
   // bitvector term.  Result is a ref to a vector of formula nodes
   // representing the boolean formula.
@@ -1047,6 +1068,7 @@ public:
 
   void ClearAllTables()
   {
+    releaseShiftDomains();
     BBTermMemo.clear();
     BBFormMemo.clear();
     fpNativeFiniteTerms.clear();
