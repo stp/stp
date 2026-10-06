@@ -3203,6 +3203,36 @@ TEST_F(ExtPrepareTest, ConstantTermIteAccountsForDeadReadSubtree)
             transformer.arrayToIndexToRead.find(x));
 }
 
+// An equality's abstraction variable is free in the formula but for its
+// witness clause, which preprocessing drops once the witness reads are known
+// to differ (constant-arrays/73). The checker reads it all the same, so it
+// is a lemma-only leaf, which the batch encoder gives fresh variables when
+// the bit-blast never reached it. The witness names are defined by their
+// anchors, and a missing one has to keep failing loudly.
+TEST_F(ExtPrepareTest, EqualityVariableIsALemmaOnlyLeaf)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+  ASTNode prepared = ext->prepare(ext->conjoinRecordConstraints(proxy));
+
+  SubstitutionMap substitutions(&mgr);
+  Simplifier simplifier(&mgr, &substitutions);
+  ArrayTransformer transformer(&mgr, &simplifier);
+  ExtensionalityContext::SolveScope scope(ext);
+  transformer.TransformFormula_TopLevel(prepared);
+  ext->bindAfterTransform(&transformer);
+
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  const std::set<ASTNode>& lemmaOnly = ext->getLemmaOnlySymbols();
+  EXPECT_EQ(1u, lemmaOnly.count(r.proxy));
+  EXPECT_EQ(0u, lemmaOnly.count(r.nameL));
+  EXPECT_EQ(0u, lemmaOnly.count(r.nameR));
+}
+
 TEST_F(ExtPrepareTest, MissingPreparedReadDispositionFailsLoudly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
