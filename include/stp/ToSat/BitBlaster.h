@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include <list>
 #include <map>
 #include <string>
+#include <tuple>
 
 namespace simplifier
 {
@@ -311,6 +312,33 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
       sqrtPreRoundMemo;
   SqrtPreRound BBfpSqrtPreRound(const ASTNode& operand, unsigned sb,
                                 unsigned eb, unsigned E, BBNodeSet& support);
+
+  // One (q, r) pair per native floating-point relation -- the remainder's,
+  // the divide's significand quotient, the square root's -- keyed on the
+  // bit vectors the relation is stated over. A second relation over the
+  // same vectors restates the first over fresh names, and nothing tells the
+  // search that the names agree: deriving it is as hard as proving two
+  // dividers equivalent, the (x, q1, r1, q2, r2) search sqrtPreRoundMemo
+  // exists to avoid. The floating-point term memos start afresh under every
+  // root (BBForm), and the incremental driver blasts each conjunct as a root
+  // of its own, so a term that two conjuncts share was given one relation
+  // per conjunct: two contradictory comparisons of one fp.rem ran for
+  // minutes.
+  //
+  // Keyed on the vectors rather than on the term, because the circuit
+  // around a relation is what a root specialises: a root whose native-domain
+  // facts build different vectors gets a pair of its own. Like
+  // divByMultMemo it lives for one top-level BBForm, unless the consumer
+  // asserts every relation permanently (relationsPermanent_), and then a
+  // pair keeps its definition under every later root.
+  std::map<std::tuple<Kind, BBNodeVec, BBNodeVec>,
+           std::pair<BBNodeVec, BBNodeVec>>
+      fpRelationMemo;
+  // The pair for kind's relation over a and b: the memo's, or qw and rw
+  // fresh inputs entered there, and then the caller states the relation
+  // over them. Returns whether it minted.
+  bool fpRelationPair(Kind kind, const BBNodeVec& a, const BBNodeVec& b,
+                      unsigned qw, unsigned rw, BBNodeVec& q, BBNodeVec& r);
 
   // Return formula for majority function of three formulas.
   BBNode Majority(const BBNode& a, const BBNode& b, const BBNode& c);
@@ -665,9 +693,10 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   // already assumed of the bits it registers: a proxy is tied to its bit
   // permanently, and that is only sound while the bit means the same thing
   // under every root. For the bit-vector division relations the inputs and
-  // the memos naming them can outlive a root as well; the floating-point
-  // ones still re-mint per root, because their circuits are specialised by
-  // the root's own native-domain facts.
+  // the memos naming them can outlive a root as well. A floating-point
+  // circuit is specialised by the root's own native-domain facts, so its
+  // term memos still start afresh under each root, but its pair outlives
+  // the root through fpRelationMemo, keyed on the vectors the root built.
   bool relationsPermanent_ = false;
   std::vector<BBNode> relationalConstraints_;
   // A fresh input of a bit-vector division relation. Not counted towards
