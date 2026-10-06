@@ -56,6 +56,7 @@ AddSTPGTest(c-runtime.cpp)
 AddSTPGTest(c-interrupt.cpp)
 AddSTPGTest(c-const-arrays.cpp)
 AddSTPGTest(c-runs.cpp)
+AddSTPGTest(c-parse-term-array-equality.cpp)
 find_package(Threads REQUIRED)
 target_link_libraries(c-interrupt${UNIT_TEST_EXE_SUFFIX} Threads::Threads)
 

@@ -67,8 +67,9 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   against a conversion of the same format, the floating-point comparison it is
   for finite operands, so the SAT search sees it while choosing the bits.
 - Array equality is built as the engine's opaque `ARRAY_EQ` (through the factory,
-  which needs `enable_array_equality`); construction switches the flag on unless the
-  `array-equality` option was set to `off`.
+  which needs `enable_array_equality`); construction, `parse_term` and a parsed
+  script's adoption switch the flag on whatever the `array-equality` option says, and
+  a check under `off` refuses the equality as UNSUPPORTED.
 - A model is a detached snapshot (`take_snapshot` in Model.cpp) taken at the first
   `model()` call or before the engine's tables change (`ensure_snapshot`); reading an
   arbitrary term evaluates it over the snapshot (`Evaluator`), folding through the

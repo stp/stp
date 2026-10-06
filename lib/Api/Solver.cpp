@@ -510,10 +510,13 @@ bool any_node(const std::vector<ASTNode>& roots, Pred pred)
   return false;
 }
 
+// A distinct over arrays counts: the engine lowers it to pairwise array
+// equalities, and the factory builds one only under the same switch as `=`.
 bool is_array_equality(const ASTNode& n)
 {
   return n.GetKind() == ARRAY_EQ ||
-         (n.GetKind() == EQ && n.Degree() == 2 && n[0].GetType() == ARRAY_TYPE);
+         (n.GetKind() == EQ && n.Degree() == 2 && n[0].GetType() == ARRAY_TYPE) ||
+         (n.GetKind() == DISTINCT && n.Degree() >= 2 && n[0].GetType() == ARRAY_TYPE);
 }
 
 bool is_uf_application(const ASTNode& n)
@@ -2310,7 +2313,16 @@ Term Solver::parse_term(std::string_view text) const
   }
   s->mgr->adopt_engine_symbols({t});
   if (detail::any_node({t}, detail::is_array_equality))
-    s->mgr->array_equality_seen = true; // what array-equality = auto engages
+  {
+    // What the manager's construction of an array equality does: record it
+    // for array-equality = auto, and turn the engine's switch on with it. The
+    // attempt put the switch back as it found it, and a check does not apply
+    // an unset `auto` again, so the record alone would leave it off: the
+    // check would meet an equality that nothing lowers, and the fold below
+    // would refuse an array distinct.
+    s->mgr->array_equality_seen = true;
+    bm->UserFlags.enable_array_equality = true;
+  }
   // Parsed without folding (so that the equality survived); fold now, as
   // the manager's own construction would have.
   Term parsed = detail::make_term(s->mgr, t);
