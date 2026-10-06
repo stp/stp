@@ -2591,6 +2591,31 @@ struct IncrementalSolver::Impl
       basis = fpContext()->prepare(n);
     f.arrays = basis == n ? f.sourceArrays : containsArrayOps(basis, bm);
 
+    // For a level that form is not always the whole node, though. A route
+    // that splits the level -- the base level, a pushed level prepared raw,
+    // and above all the per-assumption level -- encodes each conjunct as a
+    // root of its own, prepared on its own. Totalising the whole conjunction
+    // rebuilds it through the simplifying factory, which folds across
+    // conjuncts, and the per-assumption level is deliberately left
+    // unsimplified so that each assumption keeps its root: assuming p and
+    // (not p) totalises to FALSE, which has no arrays, while both roots
+    // still read theirs. Judged on that fold, the solve took the route that
+    // never refines array reads, and two roots whose reads only refinement
+    // relates were both satisfied: a false sat. Without a fold the
+    // conjuncts carry exactly what the whole does, so only a changed node
+    // found free of arrays needs this second look.
+    if (!f.arrays && basis != n && n.GetKind() == AND)
+    {
+      ASTVec conjuncts;
+      splitConjuncts(n, bm->ASTTrue, conjuncts);
+      for (const ASTNode& c : conjuncts)
+        if (fragment(c).arrays)
+        {
+          f.arrays = true;
+          break;
+        }
+    }
+
     return fragmentCache.insert(std::make_pair(n, f)).first->second;
   }
 
