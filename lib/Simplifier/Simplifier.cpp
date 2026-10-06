@@ -1403,11 +1403,8 @@ class Simplifier::SimplifyDriver
 
       auto finishTermTail = [&](const ASTNode& output)
       {
-        if (!f.t2.IsNull())
-          UpdateSimplifyMap(f.t2, output, false);
-        if (f.a != f.t2)
-          UpdateSimplifyMap(f.a, output, false);
-        if (f.b != f.a && f.b != f.t2)
+        UpdateSimplifyMap(f.a, output, false);
+        if (f.b != f.a)
           UpdateSimplifyMap(f.b, output, false);
 
         assert(!output.IsNull());
@@ -1437,6 +1434,10 @@ class Simplifier::SimplifyDriver
         UpdateSimplifyMap(f.b, result, false);
         if (f.a != f.b)
           UpdateSimplifyMap(f.a, result, false);
+        // Set only when a READ was rebuilt on its simplified array, below:
+        // the READ before that rebuild is a memo key too.
+        if (!f.t2.IsNull() && f.t2 != f.b)
+          UpdateSimplifyMap(f.t2, result, false);
         return finishTerm(result);
       }
       if (f.termPhase == Frame::TermPhase::AfterOutput)
@@ -1572,14 +1573,22 @@ class Simplifier::SimplifyDriver
       if (f.a.GetKind() == READ &&
           f.termPhase == Frame::TermPhase::AfterReadArray && result != f.a[0])
       {
-        // Preserve the pre-rebuild READ as a memo key. The recursive version
-        // returned through that invocation after simplifying the array.
+        // The array changed, so the READ is rebuilt on it, and the rebuilt
+        // node is a term none of the checks above has seen: simplify it as
+        // one, as the recursive version simplified the READ its switch
+        // rebuilt. It need not be the READ it looks like. The factory
+        // resolves a read of a constant array, directly or at the bottom of
+        // a chain of writes, to the array's default, and a default is a leaf
+        // to this walk, never simplified; handed straight to the switch
+        // below, its operands would stay unsimplified, and the tail asserts
+        // they were. The READ before the rebuild stays a memo key; the retry
+        // records it with the answer.
         f.t2 = f.a;
         ASTVec children = toASTVec(f.a.GetChildren());
         children[0] = result;
         f.a = nf->CreateArrayTerm(READ, f.a.GetIndexWidth(), f.valueWidth,
                                   children);
-        f.output = f.a;
+        return requestTerm(f, Frame::TermPhase::AfterRetry, f.a);
       }
 
       // The kind switch and its helpers perform one rewrite step. If that

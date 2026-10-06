@@ -97,7 +97,8 @@ private:
   // nodes replaced by `k`. Builds nothing along a path with no `t` under it,
   // and running out of budget only leaves occurrences in place: every
   // occurrence equals `k` where this is used, so replacing any subset of
-  // them preserves the meaning.
+  // them preserves the meaning. `k` is a constant of `t`'s source sort, so
+  // nothing rebuilt above an occurrence changes sort either.
   ASTNode substituteConstant(const ASTNode& n, const ASTNode& t,
                              const ASTNode& k, int& budget);
 

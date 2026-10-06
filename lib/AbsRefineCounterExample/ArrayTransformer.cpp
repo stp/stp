@@ -1340,8 +1340,8 @@ class ArrayTransformer::TransformDriver
         if (total % 2 == 1)
         {
           // A constant array's default, transformed after the levels.
-          row.baseReadSymbol =
-              owner.anchorForChainTerm(state[ChainFixedSlots + total - 1]);
+          row.baseDefault = state[ChainFixedSlots + total - 1];
+          row.baseReadSymbol = owner.anchorForChainTerm(row.baseDefault);
         }
         else if (!row.baseArray.IsNull())
         {

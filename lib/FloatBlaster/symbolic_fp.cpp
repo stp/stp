@@ -79,8 +79,15 @@ nodeWrapper::nodeWrapper(const ASTNode& n) : ASTNode(n) {}
  * roundingMode                                                 *
  ****************************************************************/
 
+// SymFPU's constants (traits::RNE() and friends) are compared against the
+// operation's own rounding-mode operand, so they are made RoundingMode
+// values, as the parser and the API make them, rather than plain five-bit
+// constants with the same bits. A rule that learns the operand from such a
+// comparison and puts the constant in its place -- the simplifying factory
+// deciding an if-then-else branch does -- then leaves the operand's sort as
+// it was, which a UF application over the operand checks.
 roundingMode::roundingMode(unsigned int v)
-    : nodeWrapper(s_bm->CreateBVConst(SYMFPU_NUMBER_OF_ROUNDING_MODES, v))
+    : nodeWrapper(s_bm->CreateRMConst(v))
 {
 }
 

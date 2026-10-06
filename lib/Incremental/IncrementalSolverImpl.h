@@ -2366,8 +2366,10 @@ struct IncrementalSolver::Impl
   // under in rootLitOf -- the raw conjunct on the ordinary path, the
   // rewritten node on the pushed-definitions path -- and the registry rows
   // the transform visits are recorded under the same key, so a later cache
-  // hit finds its rows by the node it hit with.
-  int encodePrepared(const ASTNode& key, ASTNode toEncode, const Fragment& frag)
+  // hit finds its rows by the node it hit with. `frag` is a copy: it
+  // describes the conjunct, and the piece encoded here can carry more than
+  // the conjunct does (see the abstraction below).
+  int encodePrepared(const ASTNode& key, ASTNode toEncode, Fragment frag)
   {
     ScopedProfileTimer encodingTimer(profile.enabled, profile.encodeNs);
     const bool arrayWrites = frag.arrays && containsKind(toEncode, WRITE);
@@ -2392,9 +2394,31 @@ struct IncrementalSolver::Impl
       if (FpAbstraction* fa = fpAbstractionInst())
       {
         std::set<ASTNode> closure;
+        const ASTNode own = toEncode;
         toEncode = fa->abstractPiece(toEncode, &closure);
         fpClosureOfKey[key].swap(closure);
         publishFpAbstraction();
+
+        // The closure is not this conjunct's content. A record reached
+        // through a shared operand or a cross-operation rule brings the
+        // proxy definitions its own piece minted, and they mention whatever
+        // that piece's operands did: a select from a user array, or the read
+        // of an unspecified-value array that totalising another piece's
+        // fp.to_ubv introduced. The fragment judged this conjunct alone, so
+        // such a read skipped the transform below and reached the
+        // bit-blaster. Judge arrayness again on what will be encoded, as the
+        // exact-stack route does for its block. Only the closure can add an
+        // array operation here -- surrogate views only remove subterms, and
+        // lowering mints none -- so a piece the abstraction left alone is
+        // not walked again.
+        //
+        // The level survey that decides read refinement still sees such a
+        // conjunct as array-free when the record's own piece is popped. That
+        // is sound: the closure is definitional, so a model of the live
+        // stack extends to its reads, and dropping their congruence axioms
+        // only weakens it.
+        if (!frag.arrays && toEncode != own)
+          frag.arrays = containsArrayOps(toEncode, bm);
       }
       toEncode = fpContext()->lowerPrepared(toEncode);
     }
@@ -2410,6 +2434,7 @@ struct IncrementalSolver::Impl
       recordDriverReadPairs(batchAT->arrayToIndexToRead);
       assert(!containsArrayOps(toEncode, bm));
       totalizeRegistrySymbols();
+      pinModeCells();
 
       // The transformer conjoins a read's index-binding equation
       // (index-expression = index-symbol) only when it CREATES the
@@ -2422,8 +2447,12 @@ struct IncrementalSolver::Impl
       // second ran to timeout exactly this way once piece preparation
       // separated bindings from their users). Every conjunct therefore
       // re-conjoins the bindings of every row it touches; for rows whose
-      // binding is already inside, the AND simply deduplicates.
-      if (!bm->UserFlags.ackermannisation && !readsOfEncoded[key].empty())
+      // binding is already inside, the AND simply deduplicates. A conjunct
+      // can touch chain rows without touching any read row -- a chain over
+      // a constant array has no base read -- so a chain row alone is
+      // reason enough.
+      if (!bm->UserFlags.ackermannisation &&
+          (!readsOfEncoded[key].empty() || !chainsOfEncoded[key].empty()))
       {
         ASTVec binds;
         for (const std::pair<ASTNode, ASTNode>& ai : readsOfEncoded[key])
@@ -2468,6 +2497,13 @@ struct IncrementalSolver::Impl
               binds.push_back(bm->defaultNodeFactory->CreateNode(
                   EQ, lvl.value, lvl.valueAnchor));
           }
+          // A chain over a constant array falls through to its default's
+          // anchor, which binds the same way. (A chain over an array symbol
+          // falls through to a read row, already re-bound above.)
+          if (!row.baseDefault.IsNull() &&
+              row.baseDefault != row.baseReadSymbol)
+            binds.push_back(bm->defaultNodeFactory->CreateNode(
+                EQ, row.baseDefault, row.baseReadSymbol));
         }
 
         if (!binds.empty())
@@ -2591,6 +2627,31 @@ struct IncrementalSolver::Impl
       basis = fpContext()->prepare(n);
     f.arrays = basis == n ? f.sourceArrays : containsArrayOps(basis, bm);
 
+    // For a level that form is not always the whole node, though. A route
+    // that splits the level -- the base level, a pushed level prepared raw,
+    // and above all the per-assumption level -- encodes each conjunct as a
+    // root of its own, prepared on its own. Totalising the whole conjunction
+    // rebuilds it through the simplifying factory, which folds across
+    // conjuncts, and the per-assumption level is deliberately left
+    // unsimplified so that each assumption keeps its root: assuming p and
+    // (not p) totalises to FALSE, which has no arrays, while both roots
+    // still read theirs. Judged on that fold, the solve took the route that
+    // never refines array reads, and two roots whose reads only refinement
+    // relates were both satisfied: a false sat. Without a fold the
+    // conjuncts carry exactly what the whole does, so only a changed node
+    // found free of arrays needs this second look.
+    if (!f.arrays && basis != n && n.GetKind() == AND)
+    {
+      ASTVec conjuncts;
+      splitConjuncts(n, bm->ASTTrue, conjuncts);
+      for (const ASTNode& c : conjuncts)
+        if (fragment(c).arrays)
+        {
+          f.arrays = true;
+          break;
+        }
+    }
+
     return fragmentCache.insert(std::make_pair(n, f)).first->second;
   }
 
@@ -2700,6 +2761,50 @@ struct IncrementalSolver::Impl
     // Publish only after every bit is encoded. Preparation can be interrupted
     // midway through a symbol; retrying must still finish the remaining bits.
     totalizedSymbols.insert(s);
+  }
+
+  // A read of an array of modes is abstracted to a plain five-bit variable,
+  // and the transformer pins it to the five modes only on the conjunct
+  // whose transform minted its row. Here that conjunct is the wrong owner:
+  // the row and the variable outlive it -- an assumption, a popped level --
+  // and later conjuncts reach the variable without the pin, through a
+  // registry hit or, under eager Ackermannisation, through the congruence
+  // chain of every later read of the array, which compares against it as
+  // an index as well as taking it as a value. Left free, the solve may give
+  // it a pattern that names no mode: the chain then decides an index
+  // equality no model can reproduce, and the model publishes the pattern as
+  // the cell. Whatever the stack, the variable stands for a cell of an
+  // array of modes, so its pin is asserted as a permanent unit, once per
+  // backend (a rebuild discards the units, as it does the bit bindings
+  // above), for every row the driver has recorded.
+  ASTNodeSet pinnedModeCells;
+
+  void pinModeCells()
+  {
+    for (const auto& pairs : driverReadPairs)
+    {
+      if (!bm->arrayHasRmElement(pairs.first))
+        continue;
+      for (const ArrayTransformer::ReadKey& rk : pairs.second)
+      {
+        const ASTNode& cell = rk.second;
+        if (pinnedModeCells.find(cell) != pinnedModeCells.end())
+          continue;
+        const BBNodeAIG pin =
+            encoding.blaster().BBForm(bm->roundingModeValidConstraint(cell));
+        Aig_Obj_t* regular = Aig_Regular(pin.n);
+        ensureEncoded(regular);
+        const int lit =
+            2 * varOfAig(regular) + (Aig_IsComplement(pin.n) ? 1 : 0);
+        SATSolver::vec_literals unit;
+        unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
+        addClause(unit);
+        permanentAigRoots.push_back(regular);
+        permanentUnitMass = addMass(permanentUnitMass, 1);
+        // As totalizeSymbol: only once the unit is in.
+        pinnedModeCells.insert(cell);
+      }
+    }
   }
 
   // What the last refinement-driven check-sat seeded into the batch-side
@@ -3166,6 +3271,7 @@ struct IncrementalSolver::Impl
 
     releaseContainer(driverReadPairs);
     releaseContainer(totalizedSymbols);
+    releaseContainer(pinnedModeCells);
     releaseContainer(driverReadPairSymbols);
     releaseContainer(driverReadPairValue);
     releaseContainer(blockReadPairs);
@@ -3381,6 +3487,7 @@ struct IncrementalSolver::Impl
 
     cnf.reset(solver.get());
     totalizedSymbols.clear();
+    pinnedModeCells.clear();
     symbolMapCache.invalidate();
     // The fresh backend holds none of the abstraction's pinning clauses and
     // none of the variables they named, and its proxy constraints were

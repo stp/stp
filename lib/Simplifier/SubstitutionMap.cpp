@@ -633,6 +633,32 @@ bool SubstitutionMap::theoryProtected(const ASTNode& key,
   return false;
 }
 
+// A float, a rounding mode, or an array of either may only be replaced by a
+// term of exactly its sort. Each shares its packed carrier with a bit-vector,
+// so an equation over carriers -- the definition of a name the solver gave
+// the term, or a fixing found for its bits -- can offer a plain bit-vector
+// for one, and the bits would agree. The sort would not, and the sort is
+// what floating-point lowering and everything after it go by: a float
+// replaced by a bit-vector symbol leaves fp.isNormal over an operand that no
+// longer says it is a float, which the bit-blaster's native classification
+// cannot encode; and a rounding mode replaced by a five-bit constant leaves
+// a constant array of rounding modes with a bit-vector default. Lowering
+// does not lift the rule: a float symbol keeps its sort through it, and the
+// comparisons and classifications blasted natively still read that sort.
+//
+// The other direction is allowed. A bit-vector key opposite a float is such
+// a name -- the array-equality procedure names its witness reads and
+// constant-array defaults this way -- and substituting the term for its name
+// hands the sort back rather than taking it away. Declared sorts are left
+// alone too: nothing lowers them, and their carrier pattern is their value
+// (see STPMgr::LiftSourceValue).
+bool SubstitutionMap::erasesSourceSort(const ASTNode& key,
+                                       const ASTNode& value)
+{
+  const SourceSort sort = key.GetSourceSort();
+  return sort.usesFloatingPointTheory() && sort != value.GetSourceSort();
+}
+
 bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
                                             const ASTNode& e1)
 {
@@ -683,6 +709,12 @@ bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
     if (loops(e1, e0))
       return false; // loops
   }
+
+  // Unlike theoryProtected, this has to wait for the final orientation: the
+  // flip above can make a bit-vector symbol the key opposite a rounding-mode
+  // one, which is allowed.
+  if (erasesSourceSort(1 == i ? e0 : e1, 1 == i ? e1 : e0))
+    return false;
 
   // e0 is of the form READ(Arr,const), and e1 is const, or
   // e0 is of the form var, and e1 is a function.

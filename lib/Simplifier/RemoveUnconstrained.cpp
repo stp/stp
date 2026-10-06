@@ -306,7 +306,7 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
   if (simplifier->UpdateSubstitutionMapFewChecks(from, to))
     return;
 
-  // Refused (only SubstitutionMap::theoryProtected refuses).
+  // Refused (by SubstitutionMap::theoryProtected or erasesSourceSort).
   // The caller has already rewritten the graph to remove whatever
   // constrained "from", so dropping the definition here would leave it
   // free. Keep it as an ordinary conjunct instead; topLevel() attaches
