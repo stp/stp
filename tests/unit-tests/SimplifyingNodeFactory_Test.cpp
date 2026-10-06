@@ -19,7 +19,9 @@ THE SOFTWARE.
 **********************/
 
 #include "stp/cpp_interface.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Parser/parser.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
 
@@ -1180,4 +1182,50 @@ TEST(SimplifyingNodeFactory_Test, pinned_condition_rebuilds_real_ite)
     else
       EXPECT_EQ(original, simplified);
   }
+}
+
+/* A branch decided by putting a pinned term's constant in its place must not
+   change the term's sort. A rounding-mode literal is a value of r's sort, so
+   the test it decides folds. A plain five-bit constant with the same bits is
+   not: in r's place under p it would be an actual of the wrong sort, which
+   the UF layer refuses to build, so that test is left for the solver. */
+TEST(SimplifyingNodeFactory_Test, pinned_condition_keeps_the_term_sort)
+{
+  using namespace stp::symbolic_fp;
+  Context c;
+  NodeFactory& f = c.snf;
+  NodeFactory& h = *c.mgr.hashingNodeFactory;
+  c.mgr.UserFlags.enable_uninterpreted_functions = true;
+  stp::UFContext* const context = c.mgr.getUFContext();
+  std::string diagnostic;
+  const stp::UFDecl* const decl = context->declareFunction(
+      "pin-p", {stp::SourceSort::roundingMode()}, stp::SourceSort::boolean(),
+      &diagnostic);
+  ASSERT_NE(nullptr, decl) << diagnostic;
+
+  const ASTNode r =
+      c.mgr.CreateSourceSymbol("pin-r", stp::SourceSort::roundingMode());
+  const ASTNode p = context->apply(decl, {r}, &diagnostic);
+  ASSERT_FALSE(p.IsNull()) << diagnostic;
+  const ASTNode a = c.mgr.CreateSymbol("pin-a", 0, 0);
+  const ASTNode b = c.mgr.CreateSymbol("pin-b", 0, 0);
+  const ASTNode e = c.mgr.CreateSymbol("pin-e", 0, 0);
+
+  // r = RTN rules out r = RNE and r = RTZ.
+  const ASTNode rtn = f.CreateNode(
+      stp::EQ, r, c.mgr.CreateRMConst(ROUND_TOWARD_NEGATIVE));
+  const ASTNode other = h.CreateNode(
+      stp::OR,
+      h.CreateNode(stp::EQ, r, c.mgr.CreateRMConst(ROUND_NEAREST_TIES_TO_EVEN)),
+      h.CreateNode(stp::EQ, r, c.mgr.CreateRMConst(ROUND_TOWARD_ZERO)));
+  const ASTNode nested = h.CreateNode(stp::ITE, other, a, b);
+  EXPECT_EQ(f.CreateNode(stp::ITE, rtn, b, e),
+            f.CreateNode(stp::ITE, rtn, nested, e));
+
+  // The same bits as a plain constant.
+  const ASTNode bits = f.CreateNode(
+      stp::EQ, r, c.mgr.CreateBVConst(5, ROUND_TOWARD_NEGATIVE));
+  const ASTNode guarded = h.CreateNode(stp::ITE, p, a, b);
+  EXPECT_EQ(h.CreateNode(stp::ITE, bits, guarded, e),
+            f.CreateNode(stp::ITE, bits, guarded, e));
 }

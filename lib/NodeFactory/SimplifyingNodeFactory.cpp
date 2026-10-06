@@ -2395,7 +2395,15 @@ int SimplifyingNodeFactory::decides(const ASTNode& cond, bool holds,
   if (t.IsNull())
     return 0;
 
+  // The constant goes where the term was, so it has to be a value of the
+  // term's sort and not just its bits. An equality can pair a term with a
+  // constant of another sort that spells the same bits -- a rounding-mode
+  // term with a plain five-bit constant, say -- and putting that constant in
+  // the term's place changes the sort of what is rebuilt above it, which a
+  // UF application refuses as an actual of the wrong sort.
   const ASTNode& k = (cond[0].GetKind() == stp::BVCONST) ? cond[0] : cond[1];
+  if (k.GetSourceSort() != t.GetSourceSort())
+    return 0;
   int budget = substitution_budget;
   const ASTNode folded = substituteConstant(other, t, k, budget);
   if (!folded.isConstant())
