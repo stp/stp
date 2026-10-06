@@ -27,6 +27,7 @@ THE SOFTWARE.
 // FIXME: External library
 #include "extlib-constbv/constantbv.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
@@ -57,7 +58,8 @@ namespace simplifier
 namespace constantBitP
 {
 
-// If the bits are totally fixed, then return a new matching ASTNode.
+// If the bits are totally fixed, then return a new matching ASTNode: a
+// constant of the node's sort, or the null node when there is none to give.
 ASTNode ConstantBitPropagation::bitsToNode(NodeFactory* nf,
                                            const ASTNode& node,
                                            const FixedBits& bits)
@@ -82,6 +84,21 @@ ASTNode ConstantBitPropagation::bitsToNode(NodeFactory* nf,
   else if (node.GetType() == BITVECTOR_TYPE)
   {
     result = nf->CreateConstant(bits.GetBVConst(), node.GetValueWidth());
+
+    // A rounding mode is carried in five bits, but a five-bit constant is not
+    // a rounding mode: put in a mode's place, it hides the sort that lowering
+    // goes by, and a constant array of modes ends up with a bit-vector
+    // default (see SubstitutionMap::erasesSourceSort). So give the mode
+    // constant the bits encode. Rounding-mode symbols and reads are pinned to
+    // the five encodings (FpTotalise), so any other pattern can only be fixed
+    // by an unsatisfiable formula; the node is left alone then.
+    if (node.GetSourceSort().kind() == SourceSort::Kind::RoundingMode)
+    {
+      const unsigned encoding = result.GetUnsignedConst();
+      if (!symbolic_fp::isRoundingModeEncoding(encoding))
+        return ASTNode();
+      result = nf->getStpMgr().CreateRMConst(encoding);
+    }
   }
   else
     FatalError("sadf234s");
@@ -121,7 +138,9 @@ ASTNodeMap ConstantBitPropagation::getAllFixed()
 
     if (bits.isTotallyFixed())
     {
-      toFrom.insert(make_pair(node, bitsToNode(nf, node, bits)));
+      const ASTNode constant = bitsToNode(nf, node, bits);
+      if (!constant.IsNull())
+        toFrom.insert(make_pair(node, constant));
     }
   }
 
@@ -286,6 +305,8 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
       continue;
 
     ASTNode constNode = bitsToNode(nf, node, bits);
+    if (constNode.IsNull())
+      continue;
 
     if (SYMBOL == node.GetKind())
     {

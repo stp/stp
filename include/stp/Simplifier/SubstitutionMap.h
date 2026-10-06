@@ -65,6 +65,10 @@ class DLL_PUBLIC SubstitutionMap
   // gets replaced. See the definition.
   bool theoryProtected(const ASTNode& key, const ASTNode& value) const;
 
+  // Whether replacing "key" by "value" would take away a floating-point or
+  // rounding-mode sort. Oriented like theoryProtected. See the definition.
+  static bool erasesSourceSort(const ASTNode& key, const ASTNode& value);
+
   size_t substitutionsLastApplied;
   VariablesInExpression vars;
 
@@ -132,6 +136,12 @@ public:
     if (theoryProtected(var, value))
       return false;
 
+    // Asked of the variable, not of the extract: BVSolver::substitute follows
+    // an extract's entry with one for the whole variable and does not check
+    // that the second went in, so it has to be the first that is refused.
+    if (erasesSourceSort(var, value))
+      return false;
+
     if (var.GetKind() == SYMBOL && loops(var, value))
       return false;
 
@@ -161,7 +171,7 @@ public:
   {
     assert(e0.GetKind() == SYMBOL);
     assert(!InsideSubstitutionMap(e0) && "e0 MUST NOT be in the SolverMap");
-    if (theoryProtected(e0, e1))
+    if (theoryProtected(e0, e1) || erasesSourceSort(e0, e1))
       return false;
     (*SolverMap)[e0] = e1;
     return true;
