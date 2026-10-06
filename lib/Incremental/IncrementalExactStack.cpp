@@ -593,10 +593,14 @@ IncrementalSolver::Impl::exactStackCheckSat(
   const bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
   const bool arrayWrites = arrayops && containsKind(inputToSat, WRITE);
   if (arrayops)
-  {
     inputToSat = batchAT->TransformFormula_TopLevel(inputToSat);
-    recordBlockReadPairs(batchAT->arrayToIndexToRead);
-  }
+  // Every block records its rows, an array-free one too: the table was
+  // cleared above, so it records none. The record is materialised for
+  // whichever block is active, and the previous block's rows must not
+  // outlive it: once that block is retracted their symbols keep live but
+  // unconstrained bits, and a model of this block would publish those bits
+  // as array cells.
+  recordBlockReadPairs(batchAT->arrayToIndexToRead);
   if (extPrepared)
     ext->bindAfterTransform(batchAT);
 
