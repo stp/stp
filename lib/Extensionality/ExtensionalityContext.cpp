@@ -2125,6 +2125,35 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
     graph.accesses.push_back(a);
   }
 
+  // Two more kinds of leaf the checker reads may legally be absent: free
+  // symbols that no equation defines. Each is protected from every
+  // substitution, so no pass can take one out of the formula while the
+  // formula still says something about it -- a value derived for it stays
+  // behind as the constraint that derives it, and constant-bit propagation
+  // conjoins a fixing it may not substitute. One leaves only once nothing
+  // left depends on it, and fresh, unconstrained variables are then
+  // exactly its meaning, as for the reads above.
+  //
+  // An equality's abstraction variable. Its witness clause, proxy OR
+  // nameL != nameR, holds whatever it is once the witness names are known
+  // to differ -- an operand folded to a constant array whose default is
+  // not the other side's -- and a disjunction of the query's that held it
+  // may be satisfied by another disjunct. The checker reads it as the
+  // guard of the equality's edge and in the witness check.
+  //
+  // A declared index sort's elements that are symbols: the sort's own
+  // symbols and the witness indexes (see conjoinRecordConstraints). A
+  // witness index occurs only in its anchors, so it leaves once both
+  // witness reads have folded to defaults, and a symbol of the sort leaves
+  // with the last constraint on it. The checker reads every element to
+  // bound the sort's domain.
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
+    lemmaOnlySymbols.insert(records[activeRecordIds[i]].proxy);
+  for (const auto& sort : declaredElements)
+    for (const ExtDeclaredElement& e : sort.second)
+      if (e.name.GetKind() == SYMBOL && e.name == e.term)
+        lemmaOnlySymbols.insert(e.name);
+
   // writes, deterministically ordered by node number
   std::vector<ASTNode> writeNodes;
   for (std::map<ASTNode, ExtWriteNode>::const_iterator it = ownedWrites.begin();

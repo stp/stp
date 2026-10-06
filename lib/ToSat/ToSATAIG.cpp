@@ -792,9 +792,11 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
     }
 
     // A lemma-only symbol -- an owned read's abstraction variable or
-    // index -- may legally never have reached the bit-blast: the
+    // index, an equality's abstraction variable, a declared index sort's
+    // element -- may legally never have reached the bit-blast: the
     // read's only occurrence can itself sit inside another abstracted
-    // term. Its semantics live entirely in future refinement lemmas,
+    // term, and preprocessing drops the others once nothing depends on
+    // them. Its semantics live entirely in future refinement lemmas,
     // so fresh SAT variables allocated here, before the first solve,
     // are exactly the unconstrained meaning the blasted formula gives
     // it; the model loop then values them like any other symbol, and
@@ -808,7 +810,9 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
     {
       if (nodeToSATVar.find(*it) != nodeToSATVar.end())
         continue;
-      const unsigned width = it->GetValueWidth();
+      // A Boolean -- an equality's abstraction variable -- has no value
+      // width, and one variable.
+      const unsigned width = std::max((unsigned)1, it->GetValueWidth());
       vector<unsigned> v(width);
       for (unsigned i = 0; i < width; i++)
       {

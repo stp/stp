@@ -582,6 +582,10 @@ public:
   // another abstracted term -- and the translator then allocates
   // fresh SAT variables for it before the first solve, which is
   // exactly the unconstrained semantics the blasted formula gives it.
+  // The same holds for the other free symbols the checker reads, which
+  // preprocessing drops once nothing depends on them: the equalities'
+  // abstraction variables and a declared index sort's symbol elements
+  // (see bindAfterTransform).
   // Names defined by equations (witness reads, scalar names) are
   // deliberately not in this set: for them, absence from the
   // bit-blast means a defining equation was lost, and lemma encoding
