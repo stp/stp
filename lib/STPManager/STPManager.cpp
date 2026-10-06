@@ -655,22 +655,103 @@ ASTNode STPMgr::CreateConstArray(const SourceSort& array_sort,
                "sort",
                default_value);
 
-  const std::pair<SourceSort, ASTNode> key(array_sort, default_value);
-  const auto it = constArraysByKey.find(key);
-  if (it != constArraysByKey.end())
-    return it->second;
-  const ASTNode symbol = CreateFreshSourceVariable(array_sort, "constarray");
-  constArrayDefaults[symbol] = element.kind() == SourceSort::Kind::Bool
-                                  ? packBoolean(*defaultNodeFactory, default_value)
-                                  : default_value;
-  constArraysByKey[key] = symbol;
-  return symbol;
+  const ASTNode stored = element.kind() == SourceSort::Kind::Bool
+                            ? packBoolean(*defaultNodeFactory, default_value)
+                            : default_value;
+  return hashingNodeFactory->CreateArrayTerm(
+      CONST_ARRAY, array_sort.index().arrayComponentWidth(),
+      element.arrayComponentWidth(), {stored, constArraySortParam(array_sort)});
 }
 
-bool STPMgr::isConstArray(const ASTNode& n) const
+ASTNode STPMgr::constArraySortParam(const SourceSort& array_sort)
 {
-  return n.GetKind() == SYMBOL &&
-         constArrayDefaults.find(n) != constArrayDefaults.end();
+  if (array_sort.kind() != SourceSort::Kind::Array)
+    FatalError("constArraySortParam: the sort is not an array sort");
+  const auto it = constArraySortIds.find(array_sort);
+  uint32_t id;
+  if (it != constArraySortIds.end())
+    id = it->second;
+  else
+  {
+    id = (uint32_t)constArraySorts.size();
+    constArraySorts.push_back(array_sort);
+    constArraySortIds.emplace(array_sort, id);
+  }
+  return CreateBVConst(32, id);
+}
+
+const SourceSort& STPMgr::constArraySort(const ASTNode& param) const
+{
+  if (param.GetKind() != BVCONST || param.GetValueWidth() != 32 ||
+      param.GetUnsignedConst() >= constArraySorts.size())
+    FatalError("constArraySort: not a constant array's sort parameter", param);
+  return constArraySorts[param.GetUnsignedConst()];
+}
+
+const std::set<ASTNode>*
+STPMgr::declaredSortDomain(const SourceSort& sort) const
+{
+  if (sort.kind() != SourceSort::Kind::Uninterpreted)
+    return NULL;
+  const auto it = declared_sort_domains.find(sort.uninterpretedId());
+  return (it == declared_sort_domains.end() || it->second.empty())
+             ? NULL
+             : &it->second;
+}
+
+void STPMgr::printDeclaredSortDomains(
+    std::ostream& os, const std::map<unsigned, std::set<ASTNode>>& domains,
+    const char* prefix)
+{
+  for (const auto& domain : domains)
+  {
+    if (domain.second.empty())
+      continue;
+    // Carrier order, so a model prints its elements one way every run.
+    std::vector<ASTNode> elements(domain.second.begin(), domain.second.end());
+    std::sort(elements.begin(), elements.end(),
+              [](const ASTNode& a, const ASTNode& b) {
+                return CONSTANTBV::BitVector_Lexicompare(a.GetBVConst(),
+                                                         b.GetBVConst()) < 0;
+              });
+    const SourceSort sort = SourceSort::uninterpreted(
+        domain.first, elements.front().GetValueWidth());
+    const std::string name = sourceSortToSMTLib(sort);
+    os << prefix << "; " << name
+       << " has exactly these elements: (forall ((x " << name << ")) ";
+    if (elements.size() > 1)
+      os << "(or ";
+    for (size_t i = 0; i < elements.size(); ++i)
+    {
+      os << (i == 0 ? "" : " ") << "(= x ";
+      printUninterpretedElement(os, sort, elements[i]);
+      os << ")";
+    }
+    if (elements.size() > 1)
+      os << ")";
+    os << ")\n";
+  }
+}
+
+ASTNode STPMgr::declaredSortValue(const SourceSort& sort,
+                                  const ASTNode& value)
+{
+  const std::set<ASTNode>* domain = declaredSortDomain(sort);
+  if (domain == NULL || value.GetKind() != BVCONST)
+    return value;
+  // By bits: the value may be a typed constant of the sort.
+  for (const ASTNode& element : *domain)
+    if (CONSTANTBV::BitVector_Lexicompare(element.GetBVConst(),
+                                          value.GetBVConst()) == 0)
+      return value;
+  ASTNode least = *domain->begin();
+  for (const ASTNode& element : *domain)
+    if (CONSTANTBV::BitVector_Lexicompare(element.GetBVConst(),
+                                          least.GetBVConst()) < 0)
+      least = element;
+  return value.GetSourceSort().kind() == SourceSort::Kind::Uninterpreted
+             ? CreateUninterpretedConst(least, sort)
+             : least;
 }
 
 ASTNode STPMgr::firstFreeSymbol(const ASTNode& t) const
@@ -684,45 +765,11 @@ ASTNode STPMgr::firstFreeSymbol(const ASTNode& t) const
     if (!visited.insert(n).second)
       continue;
     if (n.GetKind() == SYMBOL)
-    {
-      if (!isConstArray(n))
-        return n;
-      pending.push_back(constArrayDefault(n));
-    }
+      return n;
     for (const ASTNode& child : n.GetChildren())
       pending.push_back(child);
   }
   return ASTNode();
-}
-
-const ASTNode& STPMgr::constArrayDefault(const ASTNode& n) const
-{
-  const ASTNodeMap::const_iterator it = constArrayDefaults.find(n);
-  if (it == constArrayDefaults.end())
-    FatalError("constArrayDefault: not a constant array", n);
-  return it->second;
-}
-
-ASTNode STPMgr::rebuildConstArray(const ASTNode& n,
-                                  const ASTNode& default_value)
-{
-  if (default_value == constArrayDefault(n))
-    return n;
-  const SourceSort sort = n.GetSourceSort();
-  const ASTNode value = sort.element().kind() == SourceSort::Kind::Bool
-      ? unpackBoolean(*defaultNodeFactory, default_value) : default_value;
-  return CreateConstArray(sort, value);
-}
-
-ASTChildren STPMgr::childrenWithConstArrayDefault(const ASTNode& n) const
-{
-  if (n.GetKind() == SYMBOL)
-  {
-    const auto it = constArrayDefaults.find(n);
-    if (it != constArrayDefaults.end())
-      return ASTChildren(&it->second, 1);
-  }
-  return n.GetChildren();
 }
 
 ASTNode STPMgr::unsupportedConstArrayDefault(const ASTNode& t) const
@@ -739,8 +786,6 @@ ASTNode STPMgr::unsupportedConstArrayDefault(const ASTNode& t) const
         (node.GetKind() == DISTINCT && node[0].GetType() == ARRAY_TYPE) ||
         node.GetSourceSort().kind() == SourceSort::Kind::Real)
       return node;
-    if (isConstArray(node))
-      pending.push_back(constArrayDefault(node));
     for (const ASTNode& child : node.GetChildren())
       pending.push_back(child);
   }
@@ -1366,8 +1411,7 @@ STPMgr::~STPMgr()
   // and the implicit member-destruction phase runs after those tables are gone.
   uninterpreted_elements.clear();
   uninterpreted_sorts_printed.clear();
-  constArrayDefaults.clear();
-  constArraysByKey.clear();
+  declared_sort_domains.clear();
   uf_injectivity_guard = ASTNode();
   DestroyFpToRealState(fp_to_real_state);
   fp_to_real_state = nullptr;

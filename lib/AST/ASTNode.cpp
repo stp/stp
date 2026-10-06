@@ -165,6 +165,24 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
       return e != 0 && s != 0;
     }
 
+    // A constant array of floats names its element format in its sort, which
+    // its parameter child carries; the default need not (a lowered default
+    // is its packed circuit).
+    case CONST_ARRAY:
+    {
+      if (n.Degree() != 2)
+        return false;
+
+      const SourceSort element =
+          n.GetNodeManager()->constArraySort(n[1]).element();
+      if (element.kind() != SourceSort::Kind::FloatingPoint)
+        return false;
+
+      e = element.exponentWidth();
+      s = element.significandWidth();
+      return e != 0 && s != 0;
+    }
+
     // A float-valued ITE takes the format of its branches (children 1 and 2,
     // which share it). Checked first and cheaply because bitvector ITEs are
     // everywhere: for those the branch carries no format and this returns at
@@ -637,6 +655,10 @@ SourceSort ASTNode::deriveSourceSort() const
 
   if (GetKind() == WRITE && Degree() >= 1)
     return (*this)[0].GetSourceSort();
+
+  // A constant array's parameter names its sort.
+  if (GetKind() == CONST_ARRAY && Degree() == 2)
+    return GetNodeManager()->constArraySort((*this)[1]);
 
   if (GetKind() == ITE && Degree() == 3)
   {

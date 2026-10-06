@@ -218,12 +218,13 @@ ArrayTransformer::TransformFormulaWithRegistry(const ASTNode& form,
 
 // Choose where a read of this write chain stops being expanded eagerly:
 // after the configured number of may-alias levels the rest of the chain is
-// abstracted to a refinement row, provided it runs through writes to a
-// plain array symbol and still holds at least two may-alias levels (a
-// shorter tail is cheaper expanded). May-aliasing is judged on the raw
-// index terms; a comparison that only resolves after transformation costs
-// eagerness, never soundness. Called once per (top read, index); the
-// suffix reads the eager expansion creates skip it (see the WRITE arm).
+// abstracted to a refinement row, provided it runs through writes to an
+// array symbol or a constant array and still holds at least two may-alias
+// levels (a shorter tail is cheaper expanded). May-aliasing is judged on
+// the raw index terms; a comparison that only resolves after
+// transformation costs eagerness, never soundness. Called once per (top
+// read, index); the suffix reads the eager expansion creates skip it (see
+// the WRITE arm).
 bool ArrayTransformer::markLazyChainCut(const ASTNode& writeNode,
                                         const ASTNode& readIndex)
 {
@@ -251,7 +252,8 @@ bool ArrayTransformer::markLazyChainCut(const ASTNode& writeNode,
     }
     n = n[0];
   }
-  if (cut.IsNull() || n.GetKind() != SYMBOL || unresolved < budget + 2)
+  if (cut.IsNull() || (n.GetKind() != SYMBOL && n.GetKind() != CONST_ARRAY) ||
+      unresolved < budget + 2)
     return false;
   lazyCutTargets[cut].insert(readIndex);
   qualifiedScansOf[n]++;
@@ -562,7 +564,9 @@ class ArrayTransformer::TransformDriver
 
   // The chain-collection frames use a different layout: the fixed slots,
   // then two slots per residual level holding the raw index and value
-  // until their transforms overwrite them in place.
+  // until their transforms overwrite them in place, then -- for a chain
+  // over a constant array -- one more for its default. The count slot
+  // holds the number of these parts, so an odd count means a default.
   enum ChainStateSlot : size_t
   {
     ChainReadIndexSlot,
@@ -1164,6 +1168,14 @@ class ArrayTransformer::TransformDriver
               // for the fall-through (the base is then unreachable and
               // stays null). The walk repeats markLazyChainCut's
               // simplifications, so the two always agree.
+              //
+              // A chain over a constant array falls through to its
+              // default, which rides as one trailing part after the
+              // levels' pairs and leaves the base null. The array has no
+              // read rows -- every read of it folds to the default when
+              // built -- so a fall-through minted as a read would be a
+              // variable nothing ties to the default, and its model entry
+              // would be keyed on the default itself.
               ASTVec rawParts;
               ASTNode base;
               ASTNode w = arrName;
@@ -1179,7 +1191,9 @@ class ArrayTransformer::TransformDriver
                   break;
                 w = w[0];
               }
-              if (w.GetKind() == SYMBOL)
+              if (w.GetKind() == CONST_ARRAY)
+                rawParts.push_back(w[0]);
+              else if (w.GetKind() == SYMBOL)
                 base = w;
               assert(rawParts.size() >= 2);
 
@@ -1190,9 +1204,8 @@ class ArrayTransformer::TransformDriver
               state[ChainReadIndexSlot] = readIndex;
               state[ChainBaseSlot] = base;
               // Nested transforms grow the arena above these slots, so the
-              // level count cannot be recovered from its size later.
-              state[ChainCountSlot] =
-                  bm->CreateBVConst(32, rawParts.size() / 2);
+              // part count cannot be recovered from its size later.
+              state[ChainCountSlot] = bm->CreateBVConst(32, rawParts.size());
               for (size_t k = 0; k < rawParts.size(); k++)
                 state[ChainFixedSlots + k] = rawParts[k];
               f.i = 0;
@@ -1298,8 +1311,7 @@ class ArrayTransformer::TransformDriver
         state = activeParts.data() + f.storage;
         state[ChainFixedSlots + f.i] = result;
         f.i++;
-        const size_t total =
-            2 * (size_t)state[ChainCountSlot].GetUnsignedConst();
+        const size_t total = (size_t)state[ChainCountSlot].GetUnsignedConst();
         if (f.i < total)
         {
           const ASTNode nextRaw = state[ChainFixedSlots + f.i];
@@ -1325,7 +1337,13 @@ class ArrayTransformer::TransformDriver
           row.levels.push_back(lvl);
         }
 
-        if (!row.baseArray.IsNull())
+        if (total % 2 == 1)
+        {
+          // A constant array's default, transformed after the levels.
+          row.baseReadSymbol =
+              owner.anchorForChainTerm(state[ChainFixedSlots + total - 1]);
+        }
+        else if (!row.baseArray.IsNull())
         {
           // The fall-through is the ordinary read abstraction of
           // (base, index): reuse its row, or create it exactly as a direct
@@ -1471,8 +1489,8 @@ public:
           size_t slots = ReadStateSlots;
           if (current.readPhase == Frame::ReadPhase::ChainLevel)
             slots = ChainFixedSlots +
-                    2 * (size_t)activeParts[current.storage + ChainCountSlot]
-                            .GetUnsignedConst();
+                    (size_t)activeParts[current.storage + ChainCountSlot]
+                        .GetUnsignedConst();
           assert(current.storage + slots == activeParts.size());
           (void)slots;
           activeParts.resize(current.storage);

@@ -151,6 +151,7 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
   AbsRefine_CounterExample* ce = stp->Ctr_Example;
   const ASTNodeMap raw = ce->GetCompleteCounterExample();
   const char* fn = "Solver::model";
+  snap->declared_domains = bm->declaredSortDomains();
 
   std::set<ASTNode> arrays_seen;
   for (const auto& entry : raw)
@@ -165,7 +166,7 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
     }
     if (key.GetKind() != SYMBOL || bm->FoundIntroducedSymbolSet(key))
       continue;
-    if (mgr->is_const_array(key) || mgr->decl_of(key) != nullptr)
+    if (mgr->decl_of(key) != nullptr)
       continue;
     const SourceSort ss = key.GetSourceSort();
     if (!ss.isKnown() || ss.kind() == SourceSort::Kind::Real)
@@ -321,10 +322,9 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
         if (bm->HasRealModelValue(n) && bm->RealModelValueNode(n, value) && !value.IsNull())
           snap->scalars[n] = value;
       }
-      // A partial FP operation used as a constant-array default still
-      // carries the solve's choice, even though the default is hidden from
-      // the array symbol's ordinary children.
-      for (const ASTNode& c : bm->childrenWithConstArrayDefault(n))
+      // A partial FP operation used as a constant-array default carries the
+      // solve's choice too: the default is an ordinary child.
+      for (const ASTNode& c : n.GetChildren())
         stack.push_back(c);
     }
   }
@@ -574,14 +574,17 @@ void Evaluator::step(Frame& f, std::vector<ASTNode>& needs, ASTNode& out)
     case REAL_CONST:
       out = n;
       return;
+    // a constant array is complete as it stands; reads resolve it
+    case CONST_ARRAY:
+      out = n;
+      return;
     case SYMBOL:
     {
-      if (n.GetType() == ARRAY_TYPE || m_->is_const_array(n) || m_->decl_of(n) != nullptr)
+      if (n.GetType() == ARRAY_TYPE || m_->decl_of(n) != nullptr)
       {
         // arrays and functions stay symbolic; reads and applications resolve
         // them -- but one the model never assigned is a completion
-        if (!complete_ && !m_->is_const_array(n) && s_.arrays.count(n) == 0 &&
-            s_.functions.count(n) == 0)
+        if (!complete_ && s_.arrays.count(n) == 0 && s_.functions.count(n) == 0)
           incomplete_ = true;
         out = n;
         return;
@@ -611,17 +614,17 @@ void Evaluator::step(Frame& f, std::vector<ASTNode>& needs, ASTNode& out)
         const ASTNode array = f.cursor;
         switch (array.GetKind())
         {
+          case CONST_ARRAY:
+          {
+            const ASTNode& fill = array[0];
+            if (const ASTNode* v = valued(fill))
+              out = *v;
+            else
+              needs.push_back(fill);
+            return;
+          }
           case SYMBOL:
           {
-            if (m_->is_const_array(array))
-            {
-              const ASTNode fill = m_->bm->constArrayDefault(array);
-              if (const ASTNode* v = valued(fill))
-                out = *v;
-              else
-                needs.push_back(fill);
-              return;
-            }
             const SourceSort sort = array.GetSourceSort();
             const ASTNode index = lift(m_, f.index, sort.index());
             out = read_symbol(array, index);
@@ -660,7 +663,8 @@ void Evaluator::step(Frame& f, std::vector<ASTNode>& needs, ASTNode& out)
             continue;
           }
           default:
-            fail_internal(fn_, "a read over an array term that is not a symbol, store or ite");
+            fail_internal(fn_, "a read over an array term that is not a "
+                               "symbol, constant array, store or ite");
         }
       }
     }
@@ -775,9 +779,9 @@ ASTNode Evaluator::eval_read(const ASTNode& from, const ASTNode& index)
   {
     switch (array.GetKind())
     {
+      case CONST_ARRAY:
+        return eval(m_->const_array_default(array));
       case SYMBOL:
-        if (m_->is_const_array(array))
-          return eval(m_->const_array_default(array));
         return read_symbol(array, index);
       case WRITE:
         if (lift(m_, eval(array[1]), array.GetSourceSort().index()) == index)
@@ -788,7 +792,8 @@ ASTNode Evaluator::eval_read(const ASTNode& from, const ASTNode& index)
         array = eval(array[0]) == m_->bm->ASTTrue ? array[1] : array[2];
         continue;
       default:
-        fail_internal(fn_, "a read over an array term that is not a symbol, store or ite");
+        fail_internal(fn_, "a read over an array term that is not a symbol, "
+                           "constant array, store or ite");
     }
   }
 }
@@ -852,14 +857,31 @@ void chain_cells(Evaluator& ev, ManagerImpl* m, const ASTNode& array,
   base = n;
 }
 
-// Whether `count` distinct indexes are every value of the array sort's index
+// Whether the distinct indexes are every value of the array sort's index
 // sort, leaving no cell for a fill to decide. Values are interned canonically
 // (a float format's NaNs are one node, its two zeros are two), so distinct
-// nodes are distinct values; a declared sort has an element per pattern of its
-// carrier.
-bool covers_index_sort(ManagerImpl* m, std::uint32_t array_sort, std::size_t count)
+// nodes are distinct values. A declared sort has the elements the solve gave
+// it, when it indexes a constant array, and otherwise an element per pattern
+// of its carrier.
+bool covers_index_sort(ManagerImpl* m, const ModelSnapshot& s,
+                       std::uint32_t array_sort,
+                       const std::set<ASTNode>& indices)
 {
   const SortRec& i = m->rec(m->rec(array_sort).index);
+  const std::size_t count = indices.size();
+  if (i.kind == SortKind::UNINTERPRETED && i.has_source)
+    if (const auto d = s.declared_domains.find(i.source.uninterpretedId());
+        d != s.declared_domains.end())
+    {
+      // By bits: an index is the sort's abstract value, the domain plain
+      // constants.
+      const std::set<ASTNode, ConstantBitsLess> named(indices.begin(),
+                                                      indices.end());
+      for (const ASTNode& element : d->second)
+        if (named.find(element) == named.end())
+          return false;
+      return true;
+    }
   constexpr unsigned digits = std::numeric_limits<std::size_t>::digits;
   switch (i.kind)
   {
@@ -910,7 +932,8 @@ bool Evaluator::arrays_equal(const ASTNode& a, const ASTNode& b)
       return false;
   // the unobserved cells, if the writes leave any: equal fills, or the same
   // base
-  if (base_a == base_b || covers_index_sort(m_, m_->sort_of_node(a, fn_), indices.size()))
+  if (base_a == base_b ||
+      covers_index_sort(m_, s_, m_->sort_of_node(a, fn_), indices))
     return true;
   const auto base_fill = [&](const ASTNode& base) {
     if (const auto it = s_.arrays.find(base); it != s_.arrays.end())
@@ -1329,6 +1352,7 @@ std::string Model::to_smt2() const
   ManagerImpl* m = s.mgr;
   std::ostringstream os;
   os << "(\n";
+  m->bm->printDeclaredSortDomains(os, s.declared_domains, "  ");
   for (const ASTNode& n : s.core)
   {
     std::string name;

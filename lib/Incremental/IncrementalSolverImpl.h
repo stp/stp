@@ -1564,13 +1564,6 @@ struct IncrementalSolver::Impl
   // the per-solve hinting cost bounded on long sessions.
   std::unordered_map<int, uint64_t> everAssumedLits;
 
-  // The block literals under which an extensionality lemma counting a
-  // declared sort by its carrier was encoded (ExtConflict::countsDeclaredSort).
-  // Such a lemma stays in the solver guarded by its block's literal and takes
-  // part again whenever the identical block is assumed, so an unsat under one
-  // of these blocks is withheld however long ago the lemma came.
-  std::unordered_set<int> declaredSortBlocks;
-
   // Per-call bookkeeping for unsat answers: which level each assumed
   // literal carried, and -- when the caller asked for the last level to be
   // assumed one conjunct at a time (check-sat-assuming wants per-assumption
@@ -3412,7 +3405,6 @@ struct IncrementalSolver::Impl
     rootLitOf.clear();
     actLitOf.clear();
     everAssumedLits.clear();
-    declaredSortBlocks.clear();
     // Folding records describe readsOfEncoded from the OLD backend epoch.
     // Re-encoding can overwrite a key with a different row set (for example
     // after new permanent substitutions fold an index), so rebuild the

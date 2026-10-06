@@ -38,12 +38,13 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   at construction, so a term's kind is only guaranteed under `simplify = false`.
   The switch picks the factory the API's construction and the parsers use
   (`ManagerImpl::factory`); the engine's own `defaultNodeFactory` folds either way.
-- Constant arrays are the engine's: `STPMgr::CreateConstArray` registers an
-  introduced array symbol with its default, interned by sort and default, so a
-  script's `((as const S) v)` and `mk_const_array` give one term. The default is
-  allowed to be symbolic: unconstrained elimination preserves its hidden
-  dependencies, and extensionality exposes its defining equation before
-  preprocessing, including floating-point lowering. The hashing
+- Constant arrays are the engine's: `STPMgr::CreateConstArray` builds a
+  `CONST_ARRAY` node whose children are the default and a parameter naming the
+  array sort, hash-consed like any node, so a script's `((as const S) v)` and
+  `mk_const_array` give one term. The default is allowed to be symbolic: it is
+  an ordinary child, so every pass sees what it depends on, and extensionality
+  exposes its defining equation before preprocessing, including floating-point
+  lowering. The hashing
   factory folds every read of one to the default in both construction modes, and
   the extensionality checker decides equality, distinct, ite and store chains
   over them (rules K and K' in `lib/Extensionality/ExtChecker.cpp`), completing
@@ -51,8 +52,9 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   and `Model::array_value` take the completion from the engine. The API asks
   `is_const_array` / `const_array_default` on the manager.
   Defaults containing UF applications, Real syntax or array-equality
-  conditions still report `UNSUPPORTED`: their coordinators run before
-  these hidden definitions enter the formula.
+  conditions still report `UNSUPPORTED`: the default is an ordinary child
+  that those theories' lowering passes reach, but none has been checked
+  against one.
 - `fp.to_real` is the engine's (`STPMgr::CreateFpToReal`, lib/STPManager/FpToReal.cpp),
   shared with the SMT-LIB 2 frontend: a float value folds to its exact Real value;
   a symbolic float is an exact linear encoding over its bits, the exponent applied

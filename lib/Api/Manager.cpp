@@ -683,7 +683,9 @@ ASTNode ManagerImpl::default_value(std::uint32_t sort, const char* fn)
     case SortKind::RM: return rm_const(RoundingMode::RNE);
     case SortKind::REAL: return real_const(fn, "0");
     case SortKind::UNINTERPRETED:
-      return bm->CreateUninterpretedConst(bm->CreateZeroConst(r.b), r.source);
+      // an element of the sort, where the solve gave it a domain
+      return bm->CreateUninterpretedConst(
+          bm->declaredSortValue(r.source, bm->CreateZeroConst(r.b)), r.source);
     case SortKind::ARRAY:
       return build_term(this, fn, Kind::CONST_ARRAY, {default_value(r.element, fn)}, {}, sort);
     case SortKind::FUN:
@@ -706,12 +708,12 @@ Sort make_sort(ManagerImpl* m, std::uint32_t index)
 
 bool ManagerImpl::is_const_array(const ASTNode& n) const
 {
-  return bm->isConstArray(n);
+  return n.GetKind() == CONST_ARRAY;
 }
 
 ASTNode ManagerImpl::const_array_default(const ASTNode& n) const
 {
-  const ASTNode value = bm->constArrayDefault(n);
+  const ASTNode value = n[0];
   return n.GetSourceSort().element().kind() == SourceSort::Kind::Bool
              ? unpackBoolean(*bm->hashingNodeFactory, value) : value;
 }
@@ -1314,7 +1316,7 @@ void TermManager::bind_symbol(std::string_view name, const Term& t)
   // The table maps names to symbols (declared or fresh); a compound term has
   // no place in it -- the parser's frames and the declaration printers walk
   // the table expecting symbols.
-  if (node.GetKind() != SYMBOL || m->is_const_array(node))
+  if (node.GetKind() != SYMBOL)
     detail::fail(ErrorCode::INVALID_ARGUMENT, "TermManager::bind_symbol",
                  "bind_symbol takes a symbol (a declared or fresh constant), not a compound term",
                  1, {t});

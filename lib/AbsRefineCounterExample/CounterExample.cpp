@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "Lra/LraCoordinator.h"
+#include "stp/AST/ArrayOps.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
@@ -1204,10 +1205,14 @@ class AbsRefine_CounterExample::EvaluationDriver
         }
         // Has been simplified out and can take any value. A RoundingMode's
         // 5-bit representation has 27 junk patterns, though, so complete that
-        // sort with a real value rather than the ordinary all-zero default.
+        // sort with a real value rather than the ordinary all-zero default,
+        // and a declared sort with one of the elements it was certified to
+        // have, if it was.
         return finish(bm->isRoundingModeSortedTerm(term)
                           ? defaultRoundingMode()
-                          : bm->CreateZeroConst(term.GetValueWidth()));
+                          : bm->declaredSortValue(
+                                term.GetSourceSort(),
+                                bm->CreateZeroConst(term.GetValueWidth())));
       }
       case READ:
       {
@@ -1932,13 +1937,31 @@ ASTNode AbsRefine_CounterExample::defaultCellValue(const ASTNode& arrayTerm)
     return completed;
   if (bm->arrayHasRmElement(arrayTerm))
     return defaultRoundingMode();
-  return bm->CreateZeroConst(arrayTerm.GetValueWidth());
+  const SourceSort sort = arrayTerm.GetSourceSort();
+  const ASTNode zero = bm->CreateZeroConst(arrayTerm.GetValueWidth());
+  return sort.kind() == SourceSort::Kind::Array
+             ? bm->declaredSortValue(sort.element(), zero)
+             : zero;
 }
 
 void AbsRefine_CounterExample::setArrayCompletions(
     const std::map<ASTNode, ASTNode>& completions)
 {
   arrayCompletions = completions;
+}
+
+bool AbsRefine_CounterExample::indexesCoverSort(
+    const SourceSort& index, unsigned width,
+    const std::set<ASTNode>& indexes) const
+{
+  if (const std::set<ASTNode>* domain = bm->declaredSortDomain(index))
+  {
+    for (const ASTNode& element : *domain)
+      if (indexes.find(element) == indexes.end())
+        return false;
+    return true;
+  }
+  return ExtChecker::indexValueCount(index, width) <= indexes.size();
 }
 
 // See the header. The base the array term is built over -- a write chain's
@@ -1951,10 +1974,9 @@ bool AbsRefine_CounterExample::arrayCompletion(const ASTNode& array,
                                                ASTNode& out)
 {
   const ASTNode base = BaseUnderModel(array);
-  if (bm->isConstArray(base))
+  if (base.GetKind() == CONST_ARRAY)
   {
-    out = plainBitVectorConstant(
-        bm, TermToConstTermUsingModel(bm->constArrayDefault(base), false));
+    out = plainBitVectorConstant(bm, TermToConstTermUsingModel(base[0], false));
     return true;
   }
   const std::map<ASTNode, ASTNode>::const_iterator it =
@@ -2145,16 +2167,16 @@ bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
   // side is built over a constant array and the other is not, or over
   // constant arrays with different defaults. Such a cell exists unless
   // the indexes above exhaust the index sort's values -- five for a
-  // rounding mode, one NaN per float format -- counted as the array-equality
-  // checker counts them (ExtChecker::indexValueCount), not as the
-  // carrier's bit patterns, which would count a rounding-mode index 32 ways.
+  // rounding mode, one NaN per float format, a declared sort's elements --
+  // as the array-equality checker counts them (indexesCoverSort), not as
+  // the carrier's bit patterns, which would count a rounding-mode index 32
+  // ways.
   const unsigned iw = lowered_left.GetIndexWidth();
   const SourceSort leftSort = left.GetSourceSort();
   const SourceSort indexSort = leftSort.kind() == SourceSort::Kind::Array
                                    ? leftSort.index()
                                    : SourceSort::bitVector(iw);
-  const bool otherCellExists =
-      ExtChecker::indexValueCount(indexSort, iw) > indexes.size();
+  const bool otherCellExists = !indexesCoverSort(indexSort, iw, indexes);
   if (otherCellExists &&
       constantsDenoteDifferentSourceValues(
           defaultCellValue(BaseUnderModel(lowered_left)),
@@ -2773,14 +2795,20 @@ void AbsRefine_CounterExample::PrintArrayValueSMTLIB2(
     printer::outputBitVecSMTLIB2(index, os);
   };
 
-  for (size_t i = 0; i < entries.size(); i++)
-    os << "(store ";
-  os << "((as const " << sortText << ")";
   // The unobserved cells' value, printed through the same cell
   // printer as an observed one, so that what is published here is
   // demonstrably the value every other reader completes with rather
-  // than text that happens to match it.
-  printCell(defaultCellValue(array));
+  // than text that happens to match it. The cells are printed in the
+  // canonical form the simplifying factory builds a constant array's
+  // stores in (where the index sort has one), so a value prints one way
+  // however its cells were observed.
+  ASTNode fill = defaultCellValue(array);
+  canonicaliseConstantArray(*bm, indexSort, fill, entries);
+
+  for (size_t i = 0; i < entries.size(); i++)
+    os << "(store ";
+  os << "((as const " << sortText << ")";
+  printCell(fill);
   os << ")";
   for (size_t i = 0; i < entries.size(); i++)
   {
@@ -2857,6 +2885,9 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     os.flush();
     return;
   }
+
+  // First what the model's declared sorts are, where a cover bounded one.
+  bm->printDeclaredSortDomains(os, bm->declaredSortDomains(), "");
 
   for (ASTNode f: symbols)
   {

@@ -262,9 +262,9 @@ struct ManagerImpl
 
   // ids handed out by Term::id(), for term_from_id
 
-  // constant arrays are the engine's (STPMgr::CreateConstArray registers the
-  // symbol with its default, and the hashing factory folds every read of
-  // one); these are the API's spellings of the two queries
+  // constant arrays are the engine's (STPMgr::CreateConstArray builds a
+  // CONST_ARRAY node over the default, and the hashing factory folds every
+  // read of one); these are the API's spellings of the two queries
   bool is_const_array(const ASTNode& n) const;
   ASTNode const_array_default(const ASTNode& n) const;
   // options that forbid what construction would otherwise enable on demand
@@ -479,6 +479,10 @@ struct ModelSnapshot
   // check never saw, over the same values, takes the same choice.
   std::unordered_map<PartialChoiceKey, ASTNode, PartialChoiceKeyHash> partial_choices;
   std::vector<ASTNode> core; // symbols the solver assigned, in name order
+  // The elements the solve gave each declared sort that indexes a constant
+  // array, as plain constants, by the sort's id; such a sort has no others
+  // (STPMgr::declaredSortDomain).
+  std::map<unsigned, std::set<ASTNode>> declared_domains;
   bool fill_ones = false;
   Verdict verdict = Verdict::UNKNOWN; // SAT for a real model, UNKNOWN for a candidate
   ~ModelSnapshot();

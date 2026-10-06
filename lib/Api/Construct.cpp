@@ -664,9 +664,8 @@ ASTNode build_term_impl(ManagerImpl* m, const char* fn, Kind k, const std::vecto
              "constant-array defaults cannot contain UF applications, Real "
              "terms or array-equality conditions", 0,
              {make_term(m, unsupported)});
-      // The engine registers the symbol with its default and interns by
-      // (sort, default), so the same request from a script or another
-      // call gives the same term.
+      // A constant array is hash-consed by (sort, default), so the same
+      // request from a script or another call gives the same term.
       return m->bm->CreateConstArray(r.source, args[0]);
     }
 

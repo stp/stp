@@ -194,7 +194,7 @@ Form classify(const ASTNode& distinct, ASTVec& ordered)
 // everything except those nodes -- the SYMBOLs that occur outside them. A
 // node reached at both polarities is expanded once per polarity, which is
 // what makes the record exact rather than merely conservative.
-void surveyOutside(STPMgr* manager, const ASTNode& root, const ASTNodeSet& opaque,
+void surveyOutside(const ASTNode& root, const ASTNodeSet& opaque,
                    ASTNodeSet& symbols, ASTNodeCountMap& opaquePolarity)
 {
   ASTNodeCountMap seen;
@@ -216,8 +216,8 @@ void surveyOutside(STPMgr* manager, const ASTNode& root, const ASTNodeSet& opaqu
       opaquePolarity[current] |= (int32_t)polarity;
       continue;
     }
-    const bool constArray = manager->isConstArray(current);
-    if (current.GetKind() == SYMBOL && !constArray)
+    const bool constArray = current.GetKind() == CONST_ARRAY;
+    if (current.GetKind() == SYMBOL)
     {
       symbols.insert(current);
       continue;
@@ -230,7 +230,7 @@ void surveyOutside(STPMgr* manager, const ASTNode& root, const ASTNodeSet& opaqu
     // A default is data, regardless of the polarity at which its array is
     // used. In particular, a shared predicate also reached here must not be
     // ordered just because another occurrence is a positive assertion.
-    for (const ASTNode& child : manager->childrenWithConstArrayDefault(current))
+    for (const ASTNode& child : current.GetChildren())
       pending.push_back(std::make_pair(child, childPolarity));
   }
 }
@@ -240,7 +240,7 @@ void surveyOutside(STPMgr* manager, const ASTNode& root, const ASTNodeSet& opaqu
 // forms hide different things -- the operands in one, the arguments and the
 // declaration's own name in the other -- and a guard that assumed which
 // would be wrong the moment a third form appeared.
-void collectInside(STPMgr* manager, const ASTNode& node, ASTNodeSet& symbols)
+void collectInside(const ASTNode& node, ASTNodeSet& symbols)
 {
   ASTNodeSet visited;
   std::vector<ASTNode> pending(1, node);
@@ -250,12 +250,12 @@ void collectInside(STPMgr* manager, const ASTNode& node, ASTNodeSet& symbols)
     pending.pop_back();
     if (!visited.insert(current).second)
       continue;
-    if (current.GetKind() == SYMBOL && !manager->isConstArray(current))
+    if (current.GetKind() == SYMBOL)
     {
       symbols.insert(current);
       continue;
     }
-    for (const ASTNode& child : manager->childrenWithConstArrayDefault(current))
+    for (const ASTNode& child : current.GetChildren())
       pending.push_back(child);
   }
 }
@@ -273,28 +273,13 @@ ASTNode chainFor(STPMgr* manager, const ASTVec& ordered)
              : manager->defaultNodeFactory->CreateNode(AND, conjuncts);
 }
 
-// Constant arrays expose their defaults as semantic children, but keep their
-// registered representation when rebuilt. The walk stays iterative even when
-// defaults contain reads of other constant arrays.
+// Rebuild bottom up, iteratively however deep the input; a constant array's
+// default is an ordinary child, so a distinct inside one is reached too.
 template <class Combine>
-ASTNode rebuildWithDefaults(STPMgr* manager, const ASTNode& root,
-                            Combine combine)
+ASTNode rebuildBottomUp(const ASTNode& root, Combine combine)
 {
   DenseNodeMap rewritten;
-  return postOrderRebuild(
-      root, rewritten,
-      [&](const ASTNode& node, const ASTVec& children) -> ASTNode
-      {
-        if (manager->isConstArray(node))
-        {
-          assert(children.size() == 1);
-          return manager->rebuildConstArray(node, children[0]);
-        }
-        return combine(node, children);
-      },
-      NoWalkCheckpoint(),
-      [&](const ASTNode& node)
-      { return manager->childrenWithConstArrayDefault(node); });
+  return postOrderRebuild(root, rewritten, combine);
 }
 
 } // namespace
@@ -304,8 +289,8 @@ ASTNode lowerDistinct(STPMgr* manager, const ASTNode& root)
   if (root.IsNull())
     return root;
 
-  return rebuildWithDefaults(
-      manager, root,
+  return rebuildBottomUp(
+      root,
       [&](const ASTNode& node, const ASTVec& children) -> ASTNode
       {
         if (node.GetKind() != DISTINCT)
@@ -356,7 +341,7 @@ ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
     if (!visited.insert(node).second)
       continue;
 
-    for (const ASTNode& child : manager->childrenWithConstArrayDefault(node))
+    for (const ASTNode& child : node.GetChildren())
       pending.push_back(child);
     if (node.GetKind() != DISTINCT)
       continue;
@@ -374,7 +359,7 @@ ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
 
   ASTNodeSet outside;
   ASTNodeCountMap polarity;
-  surveyOutside(manager, root, opaque, outside, polarity);
+  surveyOutside(root, opaque, outside, polarity);
 
   // A candidate concealed inside another candidate is not reached by the
   // polarity walk (the outer node is intentionally opaque), so retain the
@@ -388,7 +373,7 @@ ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
       continue;
     reached.push_back(&candidate);
     concealed.push_back(ASTNodeSet());
-    collectInside(manager, candidate.distinct, concealed.back());
+    collectInside(candidate.distinct, concealed.back());
   }
 
   ASTNodeMap replacements;
@@ -435,8 +420,8 @@ ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
   if (replacements.empty())
     return root;
 
-  return rebuildWithDefaults(
-      manager, root,
+  return rebuildBottomUp(
+      root,
       [&](const ASTNode& node, const ASTVec& children) -> ASTNode
       {
         const ASTNodeMap::const_iterator found = replacements.find(node);

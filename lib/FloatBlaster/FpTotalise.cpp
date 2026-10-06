@@ -177,7 +177,7 @@ void FpTotalise::collectRoundingModeTerms(const ASTNode& n, ASTNodeSet& seen,
 
     if (m.GetKind() == READ && bm->arrayHasRmElement(m[0]))
       constraints.push_back(bm->roundingModeValidConstraint(m));
-    const ASTChildren children = bm->childrenWithConstArrayDefault(m);
+    const ASTChildren children = m.GetChildren();
     for (size_t i = children.size(); i-- > 0;)
       pending.push_back(children[i]);
   }
@@ -314,7 +314,7 @@ ASTNode FpTotalise::visit(const ASTNode& n)
 {
   PrimeAudit::Running running(memoAudit, n);
 
-  if (bm->childrenWithConstArrayDefault(n).empty())
+  if (n.GetChildren().empty())
     return n;
 
   const ASTNodeMap::const_iterator persistent = persistent_cache.find(n);
@@ -327,21 +327,21 @@ ASTNode FpTotalise::visit(const ASTNode& n)
   // Nothing below `m` needs filling: it is answered already, or it has no
   // children to be answered from.
   auto settled = [this](const ASTNode& m) {
-    return bm->childrenWithConstArrayDefault(m).empty() ||
+    return m.GetChildren().empty() ||
            persistent_cache.count(m) != 0 ||
            traversal_cache.count(m) != 0;
   };
 
   bool fill = false;
-  for (const ASTNode& child : bm->childrenWithConstArrayDefault(n))
+  for (const ASTNode& child : n.GetChildren())
     fill = fill || !settled(child);
 
   if (!fill)
     return totalise(n);
 
   // Prime the same dependency graph that totalise visits. In particular a
-  // constant-array symbol is not a leaf: its default must already be cached
-  // when totalise asks for it, however many defaults the input nests.
+  // constant array's default must already be cached when totalise asks for
+  // it, however many defaults the input nests.
   struct Frame
   {
     ASTNode node;
@@ -351,7 +351,7 @@ ASTNode FpTotalise::visit(const ASTNode& n)
   while (true)
   {
     Frame& frame = pending.back();
-    const ASTChildren children = bm->childrenWithConstArrayDefault(frame.node);
+    const ASTChildren children = frame.node.GetChildren();
     if (frame.next < children.size())
     {
       const ASTNode child = children[frame.next++];
@@ -370,7 +370,7 @@ ASTNode FpTotalise::visit(const ASTNode& n)
 // below arranges, and what its own calls on those children then find.
 ASTNode FpTotalise::totalise(const ASTNode& n, const bool knownMissing)
 {
-  if (bm->childrenWithConstArrayDefault(n).empty())
+  if (n.GetChildren().empty())
     return n;
 
   // visit's classifier already checked both caches for primed nodes. Neither
@@ -383,17 +383,6 @@ ASTNode FpTotalise::totalise(const ASTNode& n, const bool knownMissing)
     const ASTNodeMap::const_iterator current = traversal_cache.find(n);
     if (current != traversal_cache.end())
       return current->second;
-  }
-
-  if (bm->isConstArray(n))
-  {
-    const ASTNode& value = bm->constArrayDefault(n);
-    const ASTNode prepared = visit(value);
-    const ASTNode out = bm->rebuildConstArray(n, prepared);
-    traversal_cache[n] = out;
-    if (out != n)
-      persistent_cache[n] = out;
-    return out;
   }
 
   ASTVec children;

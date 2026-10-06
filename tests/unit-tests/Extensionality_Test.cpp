@@ -278,6 +278,10 @@ public:
 
   virtual ASTNode bvValue(const ASTNode& term)
   {
+    // A constant is its own value, as it is in the real view: the cells
+    // the checker names are plain constants.
+    if (term.GetKind() == BVCONST)
+      return term;
     std::map<ASTNode, ASTNode>::const_iterator it = bvVals.find(term);
     if (it == bvVals.end())
       FatalError("MapModel: missing bv value", term);
@@ -2045,6 +2049,177 @@ TEST_F(ExtFixtureTest, SharedIteConditionGuardIsCanonicalizedOnce)
   EXPECT_TRUE(hasBoolGuard(conflict.abstractPremise, condName, true));
   ASSERT_EQ(1u, conflict.theoryPremise.size());
   EXPECT_TRUE(hasBoolGuard(conflict.theoryPremise, condTerm, true));
+}
+
+// Rule K' decides on the path between two constant arrays, not on the
+// graph: how many writes the rest of the graph has says nothing about the
+// cells a path leaves alone. The fixture's index sort has four values.
+class ExtConstArrayPathTest : public ExtFixtureTest
+{
+protected:
+  ASTNode constArray(const char* defaultName, int defaultValue)
+  {
+    const ASTNode d = bv(defaultName, defaultValue);
+    const SourceSort sort =
+        SourceSort::array(SourceSort::bitVector(2), SourceSort::bitVector(2));
+    const ASTNode k = mgr.CreateConstArray(sort, d);
+    ExtConstArray info;
+    info.array = k;
+    info.defaultTerm = d;
+    info.defaultName = d;
+    g.constArrays[k] = info;
+    return k;
+  }
+
+  // Four writes to an array no constant array is connected to.
+  void unrelatedWrites()
+  {
+    ASTNode a = arr("unrelated");
+    for (int k = 0; k < 4; k++)
+      a = write(a, bv(("unrelated_i" + std::to_string(k)).c_str(), k),
+                bv(("unrelated_v" + std::to_string(k)).c_str(), 0));
+  }
+
+  // A path from `from` crossing a write at each of `indexes`, its top
+  // equated (truly) with `to`.
+  ASTNode writePath(const ASTNode& from, const ASTNode& to,
+                    const std::vector<int>& indexes, int value)
+  {
+    ASTNode a = from;
+    for (size_t k = 0; k < indexes.size(); k++)
+      a = write(a, bv(("path_i" + std::to_string(k)).c_str(), indexes[k]),
+                bv(("path_v" + std::to_string(k)).c_str(), value));
+    return eqEdge(a, to, "path_eq", true);
+  }
+};
+
+TEST_F(ExtConstArrayPathTest, ShortPathNeedsNoExplicitCells)
+{
+  unrelatedWrites();
+  const ASTNode k0 = constArray("d0", 0), k1 = constArray("d1", 1);
+  const ASTNode proxy = writePath(k0, k1, {2}, 3);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  ASSERT_EQ(1u, r.conflicts.size());
+  const ExtConflict& c = r.conflicts[0];
+  EXPECT_EQ(ExtConflict::CONST_PAIR, c.shape);
+  // The graph has eight writes, twice the index sort's values, and still no
+  // cell is made an access: the path crosses one.
+  EXPECT_EQ(0, r.stats["seeds"]);
+  EXPECT_EQ(1, r.stats["rule_K_prime"]);
+  ASSERT_EQ(1u, c.abstractPremise.size());
+  EXPECT_TRUE(hasBoolGuard(c.abstractPremise, proxy, true));
+}
+
+TEST_F(ExtConstArrayPathTest, LongPathNamesTheCellItLeaves)
+{
+  const ASTNode k0 = constArray("d0", 0), k1 = constArray("d1", 1);
+  // Four writes, as many as the index sort has values, but at 0, 1, 1, 2:
+  // cell 3 is left alone, so the two arrays share it.
+  const ASTNode proxy = writePath(k0, k1, {0, 1, 1, 2}, 1);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  ASSERT_EQ(1u, r.conflicts.size());
+  const ExtConflict& c = r.conflicts[0];
+  EXPECT_EQ(ExtConflict::CONST_PAIR, c.shape);
+  EXPECT_EQ(0, r.stats["seeds"]);
+  ASSERT_EQ(5u, c.abstractPremise.size());
+  EXPECT_TRUE(hasBoolGuard(c.abstractPremise, proxy, true));
+  for (std::map<ASTNode, ExtWriteNode>::const_iterator it = g.writes.begin();
+       it != g.writes.end(); ++it)
+    EXPECT_TRUE(hasNeGuard(c.abstractPremise, c2(3), it->second.indexName) ||
+                hasNeGuard(c.abstractPremise, it->second.indexName, c2(3)));
+  EXPECT_EQ(c.constNameA, c.abstractConclusionA);
+  EXPECT_EQ(c.constNameB, c.abstractConclusionB);
+}
+
+TEST_F(ExtConstArrayPathTest, PathAddressingEveryCellMakesThemExplicit)
+{
+  unrelatedWrites();
+  const ASTNode k0 = constArray("d0", 0), k1 = constArray("d1", 1);
+  // Every cell written with 1, so the arrays are equal: no K' lemma could
+  // be valid, and the cells, made accesses, find nothing either.
+  writePath(k0, k1, {0, 1, 2, 3}, 1);
+
+  ExtCheckResult r = run();
+  EXPECT_EQ(ExtCheckResult::CONSISTENT, r.status);
+  EXPECT_EQ(0, r.stats["rule_K_prime"]);
+  // Four cells for each of the two constant arrays in the component.
+  EXPECT_EQ(8, r.stats["seeds"]);
+}
+
+// Over a declared index sort the cells are the sort's elements -- the
+// values of the terms the formula names -- not its carrier's patterns: a
+// model may give the sort only those (ExtDeclaredElement).
+class ExtDeclaredIndexTest : public ExtConstArrayPathTest
+{
+protected:
+  const SourceSort declared = SourceSort::uninterpreted(7, 2);
+
+  ASTNode declaredConstArray(const char* defaultName, int defaultValue)
+  {
+    const ASTNode d = bv(defaultName, defaultValue);
+    const ASTNode k = mgr.CreateConstArray(
+        SourceSort::array(declared, SourceSort::bitVector(2)), d);
+    ExtConstArray info;
+    info.array = k;
+    info.defaultTerm = d;
+    info.defaultName = d;
+    g.constArrays[k] = info;
+    return k;
+  }
+
+  ASTNode element(const char* name, int value)
+  {
+    const ASTNode e = bv(name, value);
+    g.declaredElements[declared.uninterpretedId()].push_back({e, e});
+    return e;
+  }
+};
+
+TEST_F(ExtDeclaredIndexTest, PathNamesAnElementItLeaves)
+{
+  const ASTNode k0 = declaredConstArray("d0", 0);
+  const ASTNode k1 = declaredConstArray("d1", 1);
+  element("e0", 0);
+  element("e1", 1);
+  const ASTNode left = element("e2", 3);
+  // Two writes, fewer than the carrier's four patterns -- but that proves
+  // nothing about a declared sort, so the lemma names the element they
+  // leave alone rather than taking one to exist.
+  const ASTNode proxy = writePath(k0, k1, {0, 1}, 1);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  ASSERT_EQ(1u, r.conflicts.size());
+  const ExtConflict& c = r.conflicts[0];
+  EXPECT_EQ(ExtConflict::CONST_PAIR, c.shape);
+  EXPECT_EQ(0, r.stats["seeds"]);
+  ASSERT_EQ(3u, c.abstractPremise.size());
+  EXPECT_TRUE(hasBoolGuard(c.abstractPremise, proxy, true));
+  for (std::map<ASTNode, ExtWriteNode>::const_iterator it = g.writes.begin();
+       it != g.writes.end(); ++it)
+    EXPECT_TRUE(hasNeGuard(c.abstractPremise, left, it->second.indexName) ||
+                hasNeGuard(c.abstractPremise, it->second.indexName, left));
+}
+
+TEST_F(ExtDeclaredIndexTest, CoveredElementsAreTheExplicitCells)
+{
+  const ASTNode k0 = declaredConstArray("d0", 0);
+  const ASTNode k1 = declaredConstArray("d1", 1);
+  element("e0", 0);
+  element("e1", 1);
+  // The writes address both elements, so the sort may be just those two and
+  // the arrays equal: consistent, with the two elements -- not the
+  // carrier's four patterns -- seeded at each constant array.
+  writePath(k0, k1, {0, 1}, 1);
+
+  ExtCheckResult r = run();
+  EXPECT_EQ(ExtCheckResult::CONSISTENT, r.status);
+  EXPECT_EQ(0, r.stats["rule_K_prime"]);
+  EXPECT_EQ(4, r.stats["seeds"]);
 }
 
 TEST_F(ExtFixtureTest, IteDoesNotPropagateThroughUnselectedBranch)

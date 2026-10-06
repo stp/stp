@@ -52,10 +52,15 @@ THE SOFTWARE.
  *         guards imply value = default -- a conflict of its own;
  *   K'    two constant arrays with different defaults connected by
  *         writes, true equalities and selected if-then-else branches
- *         differ at every cell no write on the path names, so the
- *         path's guards imply the defaults are equal; over an index
- *         sort with no more values than the graph has writes the cells
- *         are made explicit accesses instead, and rules K and C decide.
+ *         agree at every cell no write on the path names, so the path's
+ *         guards imply the defaults are equal -- with that cell differing
+ *         from each write index on the path, when the path crosses as
+ *         many writes as the index sort has values. Only when a path's
+ *         writes address every value under the candidate are the cells
+ *         of its component's constant arrays made explicit accesses
+ *         instead, and rules K and C decide. Over a declared index sort
+ *         the cells are its elements (see ExtDeclaredElement), and the
+ *         lemma always names the one the path leaves alone.
  *         A consistent candidate hands every array connected to a
  *         constant array that array's default as the value of its
  *         unobserved cells (the completion the model publishes).
@@ -249,7 +254,7 @@ struct ExtWriteNode
   ASTNode indexName;
 };
 
-// A constant array of the graph: an array symbol whose every cell holds
+// A constant array of the graph: a CONST_ARRAY node whose every cell holds
 // its default (STPMgr::CreateConstArray). No read of one exists -- the
 // hashing factory folds it to the default -- so the checker knows it only
 // as an array node whose every arriving access must carry the default
@@ -262,6 +267,23 @@ struct ExtConstArray
   ASTNode array;
   ASTNode defaultTerm;
   ASTNode defaultName;
+};
+
+// An element of a declared sort that indexes a constant array: a term of
+// the sort the formula contains, and its scalar name.
+//
+// A declared sort may have any number of elements, so its constant arrays'
+// cells cannot be counted from its carrier: (= (store K0 s1 1) K1) holds when
+// s1 is the sort's one element. Every model of the formula, though, restricts
+// to one whose elements are the values of the formula's terms of the sort --
+// a disequality between arrays over it has its witness index among them --
+// and the checker gives the sort exactly those. Rule K' and the explicit
+// cells then range over these terms, and every lemma they give names one, so
+// it holds in every model, whatever size it gives the sort.
+struct ExtDeclaredElement
+{
+  ASTNode term;
+  ASTNode name;
 };
 
 // The array subgraph of the preprocessed formula, frozen for one
@@ -292,6 +314,10 @@ struct ExtGraph
   std::vector<ExtWitness> witnesses; // sorted by record id
 
   std::map<ASTNode, ExtConstArray> constArrays; // constant array -> default
+
+  // The elements of each declared sort that indexes one of constArrays, by
+  // the sort's id (SourceSort::uninterpretedId), in a fixed order.
+  std::map<unsigned, std::vector<ExtDeclaredElement>> declaredElements;
 };
 
 // Access to the candidate assignment sigma. Every checker-visible term
@@ -371,14 +397,6 @@ struct ExtConflict
   Shape shape = CONGRUENCE;
   ASTNode constTermA, constTermB; // the defaults, theory layer
   ASTNode constNameA, constNameB; // the defaults, abstract layer
-
-  // Whether the lemma counts a declared sort's elements by the patterns of
-  // its carrier: rule K' over a declared index sort takes some element no
-  // write names to exist, and a conflict among explicit cells of a declared
-  // sort's constant arrays takes a carrier pattern no term names to be an
-  // element. A model may give a declared sort fewer elements than that, so a
-  // refutation that used such a lemma is not one.
-  bool countsDeclaredSort = false;
 };
 
 struct ExtEvent
@@ -457,10 +475,11 @@ public:
 
   // How many values an array index sort of carrier width `width` has, which
   // is what a constant array's cells are counted in: every pattern of a
-  // bit-vector, or of a declared sort's carrier; the five rounding modes; a
-  // float format's patterns with its NaNs counted once (an index is
-  // canonical, so no other NaN pattern is ever one). Saturates at
-  // UINT64_MAX.
+  // bit-vector; the five rounding modes; a float format's patterns with its
+  // NaNs counted once (an index is canonical, so no other NaN pattern is
+  // ever one). A declared sort's elements are not counted this way (see
+  // ExtDeclaredElement); its carrier's patterns are what this answers for
+  // one, the most a model could give it. Saturates at UINT64_MAX.
   static uint64_t indexValueCount(const SourceSort& index, unsigned width);
 };
 

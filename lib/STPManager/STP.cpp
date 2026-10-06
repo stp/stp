@@ -120,7 +120,11 @@ void STP::ClearAllTables(void)
     Ctr_Example->setFpAbstraction(NULL);
   }
   if (bm != NULL)
+  {
     bm->setFpAbstraction(NULL);
+    // Part of the model the counterexample's tables held.
+    bm->setDeclaredSortDomains(std::map<unsigned, std::set<ASTNode>>());
+  }
   fpAbstraction.reset();
   fpEncodingContext.reset();
   *batchUFView = LoweredApplicationView();
@@ -465,7 +469,7 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   if (bm->has_distinct)
   {
     original_input = lowerDistinct(bm, original_input);
-    if (containsKind(original_input, DISTINCT, true))
+    if (containsKind(original_input, DISTINCT))
       FatalError("DISTINCT crossed the batch completed-root lowering barrier",
                  original_input);
   }
@@ -888,7 +892,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
                     const ASTNodeMap& arrayEqualityRewrites)
 {
   QueryPhaseScope query_work(bm->query_timing, QueryPhase::Other);
-  if (bm->has_distinct && containsKind(original_input, DISTINCT, true))
+  if (bm->has_distinct && containsKind(original_input, DISTINCT))
     FatalError("DISTINCT reached ordinary batch preprocessing", original_input);
   if (bm->UserFlags.enable_uninterpreted_functions &&
       containsKind(original_input, UF_APPLY))
@@ -2082,9 +2086,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
         ext->reportLemmaStats();
       reportBVAbstractionRecords();
       CountersAndStats("print_func_stats", bm);
-      if (ext != NULL)
-        res = ext->withholdDeclaredSortUnsat(res,
-                                             ext->declaredSortLemmasEncoded() != 0);
       return res;
     }
 

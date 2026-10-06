@@ -500,9 +500,9 @@ struct NodeChildren
   }
 };
 
-// A custom children provider can expose semantic dependencies, such as a
-// registered constant-array default. combine must rebuild that representation
-// too; its children need not have the node's physical Degree().
+// A custom children provider can expose dependencies that are not operands.
+// combine must rebuild that representation too; its children need not have
+// the node's physical Degree().
 template <class Cache, class Combine, class Checkpoint = NoWalkCheckpoint,
           class Children = NodeChildren>
 ASTNode postOrderRebuild(const ASTNode& top, Cache& cache, Combine combine,

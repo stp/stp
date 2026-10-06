@@ -42,15 +42,14 @@ typedef ankerl::unordered_dense::set<ASTNode, ASTNode::ASTNodeHasher,
 // node-based std::unordered_map (mapped is never inserted into after build).
 typedef PropagateEqualities::MapToNodeSet MapToNodeSet;
 
-void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, DenseNodeSet& shared, STPMgr* bm)
+void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, DenseNodeSet& shared)
 {
   ASTVec pending(1, n);
   while (!pending.empty())
   {
     const ASTNode current = pending.back();
     pending.pop_back();
-    const ASTChildren children =
-        bm->childrenWithConstArrayDefault(current);
+    const ASTChildren children = current.GetChildren();
     if (children.empty())
       continue;
     const auto inserted = nodeToTag.emplace(current.GetNodeNum(), tag);
@@ -66,7 +65,7 @@ void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, DenseNode
 }
 
 // Take the intersection of the symbols in n, and the symbols in "candidates", putting the result into "variablers"
-void intersection(const ASTNode& n, IdSet& visited, IdSet& variables, const IdSet& candidates, IdToIdSet& cache, STPMgr* bm)
+void intersection(const ASTNode& n, IdSet& visited, IdSet& variables, const IdSet& candidates, IdToIdSet& cache)
 {
   ASTVec pending(1, n);
   while (!pending.empty())
@@ -88,10 +87,10 @@ void intersection(const ASTNode& n, IdSet& visited, IdSet& variables, const IdSe
       continue;
     }
 
-    // A constant array is represented by a symbol, but substituting it for
-    // an array that its default reads would introduce a circular definition.
-    const ASTChildren children =
-        bm->childrenWithConstArrayDefault(current);
+    // A constant array's default is an ordinary child, so an array that
+    // the default reads is found here: substituting the constant array for
+    // it would introduce a circular definition.
+    const ASTChildren children = current.GetChildren();
     for (size_t i = children.size(); i-- > 0;)
       pending.push_back(children[i]);
   }
@@ -105,7 +104,7 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
     uint64_t tag = 0;
 
     for (const auto& e: candidates)  
-        tagNodes(e.second, tag++, tags, shared, bm);
+        tagNodes(e.second, tag++, tags, shared);
   }
 
   IdToIdSet cache;
@@ -118,7 +117,7 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
     {
       IdSet visited;
       IdSet variables;
-      intersection(n,visited,variables, allLhsVariables, cache, bm);
+      intersection(n,visited,variables, allLhsVariables, cache);
       cache.insert(std::make_pair(n.GetNodeNum(),variables));
     }
   }
@@ -133,7 +132,7 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
   {
     IdSet visited;
     IdSet variables;
-    intersection(e.second, visited, variables, allLhsVariables, cache, bm);
+    intersection(e.second, visited, variables, allLhsVariables, cache);
     mapped.insert(std::make_pair(
         e.first.GetNodeNum(),
         PropagateEqualities::CandidateInfo{e.first, e.second,
@@ -279,8 +278,8 @@ void PropagateEqualities::processCandidates(bool preserveDefaultGrammar)
     assert(SYMBOL == lhs.GetKind());
 
     // The pre-lowering pass can still see ARRAY_EQ. Inlining its Boolean
-    // alias into a constant-array default would hide it from the lowering
-    // coordinator (and violate the supported default grammar). Retain the
+    // alias into a constant-array default would violate the supported
+    // default grammar (see STPMgr::unsupportedConstArrayDefault). Retain the
     // defining equation until its theory has been lowered. Check every RHS,
     // since an alias chain can reach a default through another candidate.
     if (preserveDefaultGrammar &&
@@ -349,7 +348,7 @@ ASTNode PropagateEqualities::topLevel(const ASTNode& a)
       pending.pop_back();
       if (!seen.insert(node).second)
         continue;
-      if (bm->isConstArray(node))
+      if (node.GetKind() == CONST_ARRAY)
       {
         preserveDefaultGrammar = true;
         break;
@@ -372,9 +371,8 @@ void PropagateEqualities::addCandidate(const ASTNode a, const ASTNode b)
 {
   candidates.push_back(std::make_pair(a,b));
 
-  // The swapped candidate defines b by a; a constant array (see the
-  // ARRAY_EQ arm) is a value and is never defined by anything.
-  if (SYMBOL == b.GetKind() && !bm->isConstArray(b))
+  // The swapped candidate defines b by a, and only a symbol is defined.
+  if (SYMBOL == b.GetKind())
     candidates.push_back(std::make_pair(b,a));
 }
 
@@ -633,14 +631,9 @@ bool PropagateEqualities::buildCandidateListNode(const ASTNode& a)
     // to abstraction: the model machinery that reconstructs a
     // substituted symbol's cells reads them as plain bits, which is
     // wrong under NaN's many packings and float index canonicalisation.
-    //
-    // A constant array is a symbol only in representation: every cell of
-    // it is fixed, so it is a value, not something an equality defines.
-    // Substituting one away would make two constant arrays with different
-    // defaults 'equal' by definition.
-    if (SYMBOL == a[0].GetKind() && !bm->isConstArray(a[0]))
+    if (SYMBOL == a[0].GetKind())
       addCandidate(a[0], a[1]);
-    else if (SYMBOL == a[1].GetKind() && !bm->isConstArray(a[1]))
+    else if (SYMBOL == a[1].GetKind())
       addCandidate(a[1], a[0]);
   }
   return AND == k;

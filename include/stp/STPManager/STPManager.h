@@ -608,20 +608,16 @@ private:
   // Set of new symbols introduced that replace the array read terms
   ASTNodeSet Introduced_SymbolsSet;
 
-  // Constant arrays (see CreateConstArray): symbol -> default, and the
-  // interning key (array sort text, default) -> symbol.
-  ASTNodeMap constArrayDefaults;
-  // Keyed by the sort itself, not its text: two declared sorts can be
-  // spelled alike (one popped, one declared after it) and are two sorts.
-  struct ConstArrayKeyHash
-  {
-    size_t operator()(const std::pair<SourceSort, ASTNode>& k) const
-    {
-      return SourceSort::Hasher()(k.first) * 31 + k.second.Hash();
-    }
-  };
-  std::unordered_map<std::pair<SourceSort, ASTNode>, ASTNode, ConstArrayKeyHash>
-      constArraysByKey;
+  // The array sorts constant arrays have been built at, in order of first
+  // use. A CONST_ARRAY node's second child is a 32-bit constant indexing
+  // this table (see constArraySortParam); the map is its inverse. Keyed by
+  // the sort itself, not its text: two declared sorts can be spelled alike
+  // (one popped, one declared after it) and are two sorts.
+  std::vector<SourceSort> constArraySorts;
+  // See setDeclaredSortDomains.
+  std::map<unsigned, std::set<ASTNode>> declared_sort_domains;
+  std::unordered_map<SourceSort, uint32_t, SourceSort::Hasher>
+      constArraySortIds;
 
   CBV CreateBVConstVal;
 
@@ -804,48 +800,79 @@ public:
 
   // ---- constant arrays ----
   //
-  // A constant array is an array symbol whose every cell holds one term, its
-  // default: what SMT-LIB writes ((as const (Array I E)) v). The symbol is
-  // introduced (never declared by a printer, never assigned by a model) and
-  // registered here with its default; creating one interns by (array sort,
-  // default), so the same request gives the same symbol however it arrives.
+  // A constant array is a CONST_ARRAY node whose every cell holds one term,
+  // its default: what SMT-LIB writes ((as const (Array I E)) v). The default
+  // is the node's first child, stored as a read yields it (packed for a
+  // Boolean element), and the second is a parameter naming the array sort,
+  // so a constant array is hash-consed by (array sort, default) like any
+  // other node and every walk sees what its default depends on.
   //
-  // The registry is what gives the symbol its meaning. Every construction
-  // path ends in HashingNodeFactory::CreateNode, which folds a read of a
-  // constant array to its default, so no read of one survives -- not the
-  // frontends', not a rewrite's, not the array transformer's, not the
-  // extensionality checker's witness and instantiation reads. That checker
-  // treats a constant array as one whose every access carries the default
-  // (ExtChecker rule K) and completes the arrays it equates with the default
-  // as their unobserved-cell value; the SMT-LIB printers write the symbol
-  // back in the as-const spelling.
+  // HashingNodeFactory::CreateNode folds a read of a constant array to its
+  // default, so no read of one survives -- not the frontends', not a
+  // rewrite's, not the array transformer's, not the extensionality checker's
+  // witness and instantiation reads. That checker treats a constant array as
+  // one whose every access carries the default (ExtChecker rule K) and
+  // completes the arrays it equates with the default as their
+  // unobserved-cell value; the SMT-LIB printers write it in the as-const
+  // spelling.
   //
-  // The default may be symbolic. RemoveUnconstrained preserves its hidden
-  // dependencies, and extensionality exposes a defining scalar equation
-  // before preprocessing so late checker lemmas use the processed value.
+  // The default may be symbolic; extensionality exposes a defining scalar
+  // equation before preprocessing so late checker lemmas use the processed
+  // value.
   DLL_PUBLIC ASTNode CreateConstArray(const SourceSort& array_sort,
                                       const ASTNode& default_value);
-  // The first free symbol in `t`, following constant arrays' hidden defaults,
-  // or a null node for a ground term.
+  // The first free symbol in `t`, or a null node for a ground term.
   DLL_PUBLIC ASTNode firstFreeSymbol(const ASTNode& t) const;
   // Symbolic defaults currently use the BV/FP/array-read preparation path.
-  // Return a subterm requiring a coordinator that runs before these hidden
-  // defaults can be exposed, or a null node when none occurs.
+  // Return a subterm of `t` that a default may not contain -- one whose
+  // theory is lowered by a coordinator that runs too late for it -- or a
+  // null node when none occurs.
   DLL_PUBLIC ASTNode unsupportedConstArrayDefault(const ASTNode& t) const;
-  DLL_PUBLIC bool isConstArray(const ASTNode& n) const;
-  // Whether any constant array exists: passes that would walk a formula
-  // looking for one skip the walk when none does.
-  bool hasConstArrays() const { return !constArrayDefaults.empty(); }
-  // The default of a registered constant array; fatal for anything else.
-  DLL_PUBLIC const ASTNode& constArrayDefault(const ASTNode& n) const;
-  // Rebuild with a replacement stored (possibly packed Boolean) default,
-  // preserving the original handle when the default is unchanged.
-  DLL_PUBLIC ASTNode rebuildConstArray(const ASTNode& n,
-                                       const ASTNode& default_value);
-  // Dependency walks must see a constant array's default even though it is
-  // stored beside its symbol. The returned view is not an AST operand list:
-  // rebuilding a constant array still goes through rebuildConstArray.
-  DLL_PUBLIC ASTChildren childrenWithConstArrayDefault(const ASTNode& n) const;
+  // Whether any constant array has been built in this manager: passes that
+  // would walk a formula looking for one skip the walk when none has. A
+  // manager-lifetime hint, never query state.
+  bool hasConstArrays() const { return !constArraySorts.empty(); }
+  // The CONST_ARRAY parameter naming `array_sort`, registering the sort on
+  // first use, and the sort a parameter names.
+  DLL_PUBLIC ASTNode constArraySortParam(const SourceSort& array_sort);
+  DLL_PUBLIC const SourceSort& constArraySort(const ASTNode& param) const;
+
+  // The elements the array-equality checker gave each declared sort that
+  // indexes a constant array, in the model it last certified: their values
+  // as plain constants, by the sort's id (see ExtDeclaredElement). Such a
+  // sort has those elements and no others, so every value of it the model
+  // gives -- a symbol the solve never valued, a function's else branch, an
+  // unobserved cell -- must be one of them. Set when a candidate is
+  // certified, cleared when the next solve begins.
+  void setDeclaredSortDomains(std::map<unsigned, std::set<ASTNode>> domains)
+  {
+    declared_sort_domains = std::move(domains);
+  }
+  const std::map<unsigned, std::set<ASTNode>>& declaredSortDomains() const
+  {
+    return declared_sort_domains;
+  }
+  // A declared sort's elements, or null when it was given none: it then has
+  // an element per carrier pattern.
+  DLL_PUBLIC const std::set<ASTNode>*
+  declaredSortDomain(const SourceSort& sort) const;
+  // A model's statement of each such sort's elements, one comment line per
+  // sort, each line starting with `prefix`:
+  //
+  //   ; S has exactly these elements: (forall ((x S)) (or (= x e0) ...))
+  //
+  // The definitions alone do not say it, and a reader that gave the sort
+  // more elements would find the model false: a store chain equated with a
+  // constant array can hold only because the elements are these. A comment,
+  // since SMT-LIB has no command for it.
+  DLL_PUBLIC void printDeclaredSortDomains(
+      std::ostream& os, const std::map<unsigned, std::set<ASTNode>>& domains,
+      const char* prefix);
+  // `value`, a carrier of `sort`, when it is an element of the sort, and the
+  // sort's least element when it is not -- spelled as `value` is, a plain
+  // constant or the sort's abstract value.
+  DLL_PUBLIC ASTNode declaredSortValue(const SourceSort& sort,
+                                       const ASTNode& value);
 
   // Create a source-language leaf atomically. Its complete sort participates
   // in hash-consing and cannot subsequently be changed by width setters.

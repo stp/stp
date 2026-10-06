@@ -580,7 +580,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
                inputToSat);
   if (uf.enable_uninterpreted_functions && containsKind(inputToSat, UF_APPLY))
     FatalError("IncrementalSolver: UF_APPLY reached bit-blast", inputToSat);
-  if (containsKind(inputToSat, DISTINCT, true))
+  if (containsKind(inputToSat, DISTINCT))
     FatalError("IncrementalSolver: DISTINCT reached bit-blast", inputToSat);
 
   // A fresh per-round registry: the whole-graph transform must neither see
@@ -929,13 +929,6 @@ IncrementalSolver::Impl::exactStackCheckSat(
   stageLiveConeMass(currentRoots, cheapLiveMass,
                     addMass(permanentUnitMass, theoryMass));
   stageSemanticLiveStack(assertionsSMT2, ASTVec(1, inputToSat));
-
-  // An unsat a lemma counting a declared sort by its carrier may have reached
-  // (see declaredSortBlocks) is withheld before anything can record it.
-  if (ext != NULL && ext->declaredSortLemmasEncoded() != 0)
-    declaredSortBlocks.insert(blockLit);
-  if (ext != NULL)
-    res = ext->withholdDeclaredSortUnsat(res, declaredSortBlocks.count(blockLit) != 0);
 
   // The whole-stack block cannot narrow the level-based verdict cache.
   // Selectors, when present, independently retain assertion-core granularity.

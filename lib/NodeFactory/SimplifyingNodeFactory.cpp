@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTKind.h"
+#include "stp/AST/ArrayOps.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Simplifier/Simplifier.h"
@@ -2591,6 +2592,117 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTChildren children,
   return hashing.CreateTerm(stp::READ, width, write, readIndex);
 }
 
+// How deep a chain the rebuild below walks. The usual construction, each
+// store at a larger index than the last, never walks at all (see
+// canonicalChains); this bounds the rest, so a long chain built some other
+// way costs at most this much per store and is left as built beyond it.
+static const size_t CANONICAL_CHAIN_BUDGET = 1024;
+
+ASTNode SimplifyingNodeFactory::normaliseConstantWrite(const ASTNode& array,
+                                                       const ASTNode& index,
+                                                       const ASTNode& value)
+{
+  using stp::canonicalIndexSort;
+  using stp::constantBitsLess;
+  using stp::isPlainConstant;
+  using stp::smallIndexCardinality;
+  using stp::SourceSort;
+
+  // Writing the default straight onto the constant array changes no cell,
+  // whatever the index and whatever the sorts.
+  if (array.GetKind() == stp::CONST_ARRAY && value == array[0])
+    return array;
+
+  if ((array.GetKind() != stp::CONST_ARRAY && array.GetKind() != stp::WRITE) ||
+      !isPlainConstant(index))
+    return ASTNode();
+  const SourceSort sort = array.GetSourceSort();
+  if (sort.kind() != SourceSort::Kind::Array ||
+      !canonicalIndexSort(sort.index()))
+    return ASTNode();
+  const uint64_t card = smallIndexCardinality(sort.index());
+  const unsigned iw = array.GetIndexWidth();
+  const unsigned vw = array.GetValueWidth();
+
+  // A store at a larger index than any on a canonical chain, of something
+  // other than the default, keeps it canonical -- unless the stores could
+  // then cover half the index sort, when the default may have to change.
+  bool known = false;
+  CanonicalChain chain = {0, 0};
+  if (array.GetKind() == stp::CONST_ARRAY)
+  {
+    known = true;
+    chain.defaultNum = array[0].GetNodeNum();
+  }
+  else
+  {
+    const auto it = canonicalChains.find(array.GetNodeNum());
+    if (it != canonicalChains.end())
+    {
+      known = true;
+      chain = it->second;
+    }
+  }
+  if (known && value.GetNodeNum() != chain.defaultNum &&
+      (chain.depth == 0 || constantBitsLess(array[1], index)) &&
+      (card == 0 || card > 2 * ((uint64_t)chain.depth + 1)))
+  {
+    const ASTNode out = hashing.CreateArrayTerm(stp::WRITE, iw, vw,
+                                                {array, index, value});
+    canonicalChains[out.GetNodeNum()] = {chain.depth + 1, chain.defaultNum};
+    return out;
+  }
+
+  // Otherwise rebuild the chain from its cells. Every store under this one
+  // must be at a constant, down to the constant array: a store at a
+  // symbolic index may alias any of them.
+  std::vector<ASTNode> levels;
+  // What blocks a level blocks every level above it. Running out of budget
+  // only says the top is too deep: a level lower down may not be.
+  const auto giveUp = [&](bool blocked) {
+    uncanonicalChains.insert(array.GetNodeNum());
+    if (blocked)
+      for (const ASTNode& level : levels)
+        uncanonicalChains.insert(level.GetNodeNum());
+    return ASTNode();
+  };
+  ASTNode n = array;
+  while (n.GetKind() == stp::WRITE)
+  {
+    if (uncanonicalChains.count(n.GetNodeNum()) != 0 ||
+        !isPlainConstant(n[1]))
+      return giveUp(true);
+    if (levels.size() == CANONICAL_CHAIN_BUDGET)
+      return giveUp(false);
+    levels.push_back(n);
+    n = n[0];
+  }
+  if (n.GetKind() != stp::CONST_ARRAY)
+    return giveUp(true);
+  const ASTNode base = n;
+  ASTNode fill = base[0];
+  std::vector<std::pair<ASTNode, ASTNode>> stores;
+  stores.reserve(levels.size() + 1);
+  for (auto it = levels.rbegin(); it != levels.rend(); ++it)
+    stores.emplace_back((*it)[1], (*it)[2]);
+  stores.emplace_back(index, value);
+  if (!stp::canonicaliseConstantArray(bm, sort.index(), fill, stores))
+    return ASTNode();
+
+  ASTNode out = (fill == base[0])
+                    ? base
+                    : hashing.CreateArrayTerm(stp::CONST_ARRAY, iw, vw,
+                                              {fill, base[1]});
+  const uint64_t fillNum = fill.GetNodeNum();
+  uint32_t depth = 0;
+  for (const auto& c : stores)
+  {
+    out = hashing.CreateArrayTerm(stp::WRITE, iw, vw, {out, c.first, c.second});
+    canonicalChains[out.GetNodeNum()] = {++depth, fillNum};
+  }
+  return out;
+}
+
 namespace
 {
 // The whole-array equality rules only fire over arrays whose cells and
@@ -3691,6 +3803,11 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   if (kind == stp::UF_APPLY)
     return hashing.CreateTerm(kind, width, children);
 
+  // A constant array is a value of an array sort, not one the evaluator
+  // computes: its children are its default and its sort's parameter.
+  if (kind == stp::CONST_ARRAY)
+    return hashing.CreateTerm(kind, width, children);
+
   // If all the parameters are constant, return the constant value.
   if (children_all_constants(children) && !is_partial_fp_operation)
   {
@@ -4723,6 +4840,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
     break;
 
     case stp::WRITE:
+      result = normaliseConstantWrite(children[0], children[1], children[2]);
+      if (!result.IsNull())
+        break;
       if (children[0].GetKind() == stp::WRITE && children[1] == children[0][1])
       {
         // If the indexes of two writes are the same, then discard the inner

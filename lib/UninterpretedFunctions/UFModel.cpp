@@ -324,6 +324,12 @@ ASTNode UFModel::concreteValue(STPMgr* manager, const UFConcreteValue& value,
     return concreteValue(manager, widened);
   }
   const ASTNode solved = concreteValue(manager, value);
+  // A declared sort the array-equality checker gave a domain has no other
+  // elements (STPMgr::declaredSortDomain). Every value a solve gave its terms
+  // is one; what is not is a completion -- an else branch, an application
+  // the model never valued -- and takes one of the elements instead.
+  if (declared.kind() == SourceSort::Kind::Uninterpreted)
+    return manager->declaredSortValue(declared, solved);
   if (declared.kind() != SourceSort::Kind::FloatingPoint)
     return solved;
   return manager->LiftSourceValue(solved, declared);
