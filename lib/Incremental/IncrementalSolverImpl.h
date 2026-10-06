@@ -2366,8 +2366,10 @@ struct IncrementalSolver::Impl
   // under in rootLitOf -- the raw conjunct on the ordinary path, the
   // rewritten node on the pushed-definitions path -- and the registry rows
   // the transform visits are recorded under the same key, so a later cache
-  // hit finds its rows by the node it hit with.
-  int encodePrepared(const ASTNode& key, ASTNode toEncode, const Fragment& frag)
+  // hit finds its rows by the node it hit with. `frag` is a copy: it
+  // describes the conjunct, and the piece encoded here can carry more than
+  // the conjunct does (see the abstraction below).
+  int encodePrepared(const ASTNode& key, ASTNode toEncode, Fragment frag)
   {
     ScopedProfileTimer encodingTimer(profile.enabled, profile.encodeNs);
     const bool arrayWrites = frag.arrays && containsKind(toEncode, WRITE);
@@ -2392,9 +2394,31 @@ struct IncrementalSolver::Impl
       if (FpAbstraction* fa = fpAbstractionInst())
       {
         std::set<ASTNode> closure;
+        const ASTNode own = toEncode;
         toEncode = fa->abstractPiece(toEncode, &closure);
         fpClosureOfKey[key].swap(closure);
         publishFpAbstraction();
+
+        // The closure is not this conjunct's content. A record reached
+        // through a shared operand or a cross-operation rule brings the
+        // proxy definitions its own piece minted, and they mention whatever
+        // that piece's operands did: a select from a user array, or the read
+        // of an unspecified-value array that totalising another piece's
+        // fp.to_ubv introduced. The fragment judged this conjunct alone, so
+        // such a read skipped the transform below and reached the
+        // bit-blaster. Judge arrayness again on what will be encoded, as the
+        // exact-stack route does for its block. Only the closure can add an
+        // array operation here -- surrogate views only remove subterms, and
+        // lowering mints none -- so a piece the abstraction left alone is
+        // not walked again.
+        //
+        // The level survey that decides read refinement still sees such a
+        // conjunct as array-free when the record's own piece is popped. That
+        // is sound: the closure is definitional, so a model of the live
+        // stack extends to its reads, and dropping their congruence axioms
+        // only weakens it.
+        if (!frag.arrays && toEncode != own)
+          frag.arrays = containsArrayOps(toEncode, bm);
       }
       toEncode = fpContext()->lowerPrepared(toEncode);
     }
