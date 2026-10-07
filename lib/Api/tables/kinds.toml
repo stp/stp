@@ -1014,7 +1014,7 @@ py = "fpToReal"
 arity = "1"
 indices = 0
 sig = "(FP[e,s]) -> Real"
-engine = "STPMgr::CreateFpToReal: a float value folds to its exact Real value; NaN, +oo and -oo of each format select a Real constant of their own (SMT-LIB leaves them unspecified, but fp.to_real is a function); a symbolic float is an exact linear encoding over its bits, the exponent applied one bit at a time with constant factors, whose root kind() and the printers read back as (fp.to_real x). A format whose exponent is wider than 16 bits exceeds the exact arithmetic's number limits and is UNSUPPORTED; at 16 bits a check that relates two conversions exceeds them and answers unknown (INCOMPLETE), and one over a single conversion can, depending on the SAT backend. Relating conversions costs about four times more per exponent bit."
+engine = "STPMgr::CreateFpToReal: a float value folds to its exact Real value; NaN, +oo and -oo of each format select a Real constant of their own (SMT-LIB leaves them unspecified, but fp.to_real is a function); a symbolic float is an exact linear encoding over its bits, the exponent applied one bit at a time with constant factors, whose root kind() and the printers read back as (fp.to_real x). A format whose exponent is wider than 16 bits exceeds the exact arithmetic's number limits and is UNSUPPORTED; at 16 bits a check that relates two conversions can exceed them, and then answers unknown (INCOMPLETE), as can one over a single conversion, depending on the models the SAT backend proposes. Relating conversions costs about four times more per exponent bit."
 
 [[kind]]
 name = "FP_TO_IEEE_BV"

@@ -345,9 +345,11 @@ Limits of the alpha
    arithmetic's number limits), and a Real converts to a float only when it
    and the rounding mode are both values. Relating two conversions costs about
    four times more per exponent bit: well under a second at binary64, a minute
-   or more at binary128; at 16 bits it exceeds the number limits, and the check
-   answers unknown (``INCOMPLETE``). At 16 bits a check over a single
-   conversion can exceed them too, depending on the SAT backend.
+   or more at binary128; at 16 bits it can exceed the number limits, and the
+   check then answers unknown (``INCOMPLETE``). Whether it does depends on the
+   models the SAT backend proposes -- a NaN or an infinity converts to a Real
+   constant of its own, and a model that uses one need not relate the two at
+   all -- and so does whether a check over a single conversion exceeds them.
 -  The float literal constructors (``mk_fp`` from a ``double`` or from text)
    and SMT-LIB real-literal conversions need an exponent field of at least
    3 bits. Wider fields, including those larger than a machine word, accept
