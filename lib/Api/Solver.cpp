@@ -1834,6 +1834,16 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
     if (any)
       bm->noteReal();
   });
+  pi.onCheckOptions([bm](std::string& diagnostic) {
+    try
+    {
+      detail::validate_engine_options(bm->UserFlags);
+    }
+    catch (const Error& error)
+    {
+      diagnostic = error.what();
+    }
+  });
   pi.onCheck([s, &stop_control, &arm_stop] {
     ++s->checks;
     if (s->interrupt_consumed)

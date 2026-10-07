@@ -1373,6 +1373,16 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   const EngineWork work(engine_work_failed);
   if (ignoreCheckSatRequest)
     return;
+  // Before anything is solved, and before any of this check's state is
+  // cleared: a setting the engine cannot honour is this command's to refuse,
+  // not something for the engine to discover and report as its own failure.
+  if (validate_check_options)
+  {
+    std::string diagnostic;
+    validate_check_options(diagnostic);
+    if (!diagnostic.empty())
+      refuseCurrentCommand(diagnostic);
+  }
   last_core_available = false;
   last_assumption_core_available = false;
   last_unsat_core.clear();
