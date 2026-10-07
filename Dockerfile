@@ -43,14 +43,14 @@ RUN apt-get update \
 # carry. STATIC_BINARY=OFF because only the library is wanted here; a fully
 # static cryptominisat5 executable would need static gmp and zlib.
 #
-# NOCADICAL=ON, so 5.14 fetches and builds neither CaDiCaL nor cadiback: STP
+# NOCADICAL=ON, so it fetches and builds neither CaDiCaL nor cadiback: STP
 # reaches backbone extraction, the only thing CryptoMiniSat wants CaDiCaL for,
 # from nowhere. git and ca-certificates are still needed for the clone itself,
 # and GMP is looked up through pkg-config, which is why that is in the package
 # list above.
 WORKDIR /cms
 RUN git clone https://github.com/stp/cryptominisat . \
- && git checkout e06847e1006f06ec630a62349d930e5ead54def6 \
+ && git checkout 84ec14e17014b02d1ebbe441b5f38977a2224acd \
  && mkdir build && cd build \
  && cmake .. \
         -DCMAKE_BUILD_TYPE=Release \

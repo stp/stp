@@ -1,3 +1,4 @@
+; REQUIRES: cadical
 ; Extensionality emits its refinement lemma directly through SATSolver. The
 ; solver-wide submission counter must include that work in both the check and
 ; session totals, while the dedicated field identifies the refinement share.
@@ -5,7 +6,13 @@
 ; query is now affordable enough for the eager arm, which retires the
 ; records and reports no rounds. The counters below are what refinement
 ; does, which is what this profiles.
-; RUN: %solver --incremental --array-equality --incremental-profile --array-ackermann-budget=0 %s 2>&1 | %OutputCheck %s
+;
+; The backend is pinned too. The checker emits one lemma per conflict in the
+; first candidate, so the counts are a property of the model the SAT solver
+; happens to find: CaDiCaL's yields two lemmas, CryptoMiniSat 5.16's four, in
+; the same single round and to the same answer. The accounting is the same
+; whichever backend runs it, so one is enough to pin it exactly.
+; RUN: %solver --cadical --incremental --array-equality --incremental-profile --array-ackermann-budget=0 %s 2>&1 | %OutputCheck %s
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-fun b () (Array (_ BitVec 4) (_ BitVec 8)))
