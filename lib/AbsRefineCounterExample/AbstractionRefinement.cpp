@@ -738,7 +738,7 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
   {
     if (bm->UserFlags.stats_flag)
     {
-      std::cout << "Adding all the remaining " << RemainingAxiomsVec.size()
+      std::cerr << "Adding all the remaining " << RemainingAxiomsVec.size()
                 << " read axioms " << std::endl;
     }
     ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();

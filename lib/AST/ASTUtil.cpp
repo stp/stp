@@ -27,7 +27,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 namespace stp
 {
-using std::cout;
+using std::cerr;
 using std::endl;
 
 ostream& operator<<(ostream& os, const Spacer& sp)
@@ -57,10 +57,10 @@ void CountersAndStats(const char* functionname, STPMgr* bm)
 
     if (!strcmp(functionname, "print_func_stats"))
     {
-      cout << endl;
+      cerr << endl;
       for (function_counters::iterator it = s.begin(), itend = s.end();
            it != itend; it++)
-        cout << "Number of times the function: " << it->first
+        cerr << "Number of times the function: " << it->first
              << ": is called: " << it->second << endl;
       return;
     }
