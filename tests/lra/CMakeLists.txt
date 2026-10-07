@@ -438,6 +438,12 @@ if(STP_EXECUTABLE_AVAILABLE)
     set_tests_properties(lra_polarity_persistent_session PROPERTIES
       LABELS "lra;semantic;persistent;polarity" TIMEOUT 3600)
   endif()
+  if(USE_MINISAT AND MINISAT_HAS_UP)
+    add_test(NAME lra_polarity_cli_minisat
+      COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/decision_polarity_runner.py"
+              "$<TARGET_FILE:stp-bin>" "--minisat")
+    set_tests_properties(lra_polarity_cli_minisat PROPERTIES LABELS "lra;semantic;polarity" TIMEOUT 120)
+  endif()
   foreach(arithmetic float exact)
     if(arithmetic STREQUAL "float")
       set(first_search_float 1)

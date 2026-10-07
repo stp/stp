@@ -3,8 +3,10 @@
 ; number limits, but relating two conversions needs more than they allow. The
 ; solve stops at the limit, which is an unknown answer with its reason rather
 ; than an error (it was SOLVER_ERROR, "Fatal Error" and exit 255), whether the
-; SAT backend hands the arithmetic each assignment during its search or, as
-; MiniSat does, a whole candidate at a time.
+; SAT backend hands the arithmetic each assignment during its search or a
+; whole candidate at a time. Both operands are normal: a NaN converts to an
+; unconstrained real, and a search that tries one answers sat without ever
+; relating two conversions -- as MiniSat's does, given the chance.
 ; CHECK-NEXT: ^unknown$
 ; CHECK-NEXT: ^\(:reason-unknown \(incomplete "the exact linear arithmetic solver could not decide this query within its .*number limits.*"\)\)$
 ; The solver goes on. (Whether a check over a single conversion stays within
@@ -14,6 +16,8 @@
 (declare-fun x () (_ FloatingPoint 16 3))
 (declare-fun y () (_ FloatingPoint 16 3))
 (push 1)
+(assert (fp.isNormal x))
+(assert (fp.isNormal y))
 (assert (< (fp.to_real x) (fp.to_real y)))
 (check-sat)
 (get-info :reason-unknown)

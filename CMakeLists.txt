@@ -1496,6 +1496,9 @@ if (USE_MINISAT)
     if (MINISAT_HAS_TERMINATOR)
         add_definitions(-DSTP_MINISAT_HAS_TERMINATOR)
     endif()
+    if (MINISAT_HAS_UP)
+        add_definitions(-DSTP_MINISAT_HAS_UP)
+    endif()
     # The include directory is no longer added project-wide: the MiniSat target
     # carries it to lib/Sat and lib/Incremental, which are the two object
     # libraries whose sources reach a MiniSat header, and to the unit tests

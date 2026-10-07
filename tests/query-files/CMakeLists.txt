@@ -50,11 +50,13 @@ else()
 endif()
 # Whether the backend a query gets when its RUN line names none can host the
 # theory propagator. That backend is CryptoMiniSat when it is compiled in,
-# else CaDiCaL, else MiniSat (UserDefinedFlags.h). CaDiCaL always can,
-# CryptoMiniSat only when built with the interface, and MiniSat never.
+# else CaDiCaL, else MiniSat (UserDefinedFlags.h). CaDiCaL always can, and
+# CryptoMiniSat and MiniSat when built with the interface.
 if (STP_BUILD_WITH_CRYPTOMINISAT)
     set(_stp_default_backend_propagates "${CRYPTOMINISAT_HAS_UP}")
 elseif (STP_BUILD_WITH_CADICAL)
+    set(_stp_default_backend_propagates TRUE)
+elseif (MINISAT_HAS_UP)
     set(_stp_default_backend_propagates TRUE)
 else()
     set(_stp_default_backend_propagates FALSE)
@@ -153,8 +155,8 @@ endforeach()
 # The linear-arithmetic files under every backend that can host the theory
 # propagator, with the float driver on and off: the propagator is the same
 # code above both solvers, and each solver's bridge is what these sweeps
-# exercise. A CryptoMiniSat built without the interface is left out, as is
-# MiniSat, which hosts no propagator: the theory runs full-lazy on them.
+# exercise. A CryptoMiniSat or a MiniSat built without the interface is left
+# out: the theory runs full-lazy on it.
 # The sweep above already runs these files under the default backend, so
 # when that is the only backend listed nothing new is registered here. A
 # test that names a backend of its own would clash with the flag appended
@@ -169,6 +171,9 @@ if (USE_CADICAL)
 endif()
 if (STP_BUILD_WITH_CRYPTOMINISAT AND CRYPTOMINISAT_HAS_UP)
     list(APPEND _stp_lra_backends "--cryptominisat")
+endif()
+if (USE_MINISAT AND MINISAT_HAS_UP)
+    list(APPEND _stp_lra_backends "--minisat")
 endif()
 list(LENGTH _stp_lra_backends _stp_lra_backend_count)
 # A default backend that can host the propagator is on the list, and a list

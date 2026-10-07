@@ -248,8 +248,12 @@ distribution's minisat package works too, as does one built by hand:
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
 
-MiniSat hosts no theory propagator: on it the arithmetic theory runs
-in the full-lazy loop, judging complete assignments rather than working
+The MiniSat STP builds, a commit on the ``ipasir-up`` branch of
+`stp/minisat <https://github.com/stp/minisat>`__, hosts the theory
+propagator. Another MiniSat -- a release, or your distribution's -- still
+builds STP, and configure says whether it has the interface. Without it,
+and always with ``--simplifying-minisat``, the arithmetic theory runs in
+the full-lazy loop, judging complete assignments rather than working
 inside the search.
 
 Every dependency is fetched and built by the build itself under

@@ -317,12 +317,16 @@ TEST_F(FpToReal, formats_beyond_the_exact_arithmetic)
 // the number limits allow: the solve stops there, which is an unknown answer
 // with its reason -- it was an engine error (unknown(OTHER), "no answer";
 // SOLVER_ERROR and exit 255 on the command line), and the solver goes on.
+// Both operands are normal: a NaN converts to an unconstrained real, which
+// a search may find before it ever relates two conversions.
 TEST_F(FpToReal, a_relation_beyond_the_number_limits_is_unknown)
 {
   const Sort w16 = tm.mk_fp_sort(16, 3);
   const Term a = tm.declare("a", w16), b = tm.declare("b", w16);
   Solver s(tm);
   s.push();
+  s.add(fp_is_normal(a));
+  s.add(fp_is_normal(b));
   s.add(real_lt(fp_to_real(a), fp_to_real(b)));
   const Result r = s.check_sat();
   EXPECT_TRUE(r.is_unknown());

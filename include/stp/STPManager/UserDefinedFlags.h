@@ -759,10 +759,10 @@ public:
   // assignments, the search learns a cross-row conflict where it arises
   // rather than after a whole model has been built on top of it. Measured on
   // the SMT-LIB QF_LRA and QF_UFLRA sets at twenty seconds: 938 to 1018 and
-  // 1234 to 1240 solved, no answer changed. CaDiCaL and CryptoMiniSat host
-  // the propagator; MiniSat, which hosts none, a CryptoMiniSat without the
-  // IPASIR-UP interface, or one asked for more than one thread runs the
-  // full-lazy loop regardless.
+  // 1234 to 1240 solved, no answer changed. CaDiCaL, CryptoMiniSat and
+  // MiniSat host the propagator; a CryptoMiniSat or MiniSat without the
+  // IPASIR-UP interface, a CryptoMiniSat asked for more than one thread, or
+  // the simplifying MiniSat runs the full-lazy loop regardless.
   bool lra_theory_propagation = true;
 
   // Drive the propagator's partial checks with a double-precision simplex

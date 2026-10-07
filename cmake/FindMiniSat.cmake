@@ -82,8 +82,10 @@ if(NOT MiniSat_FOUND_SYSTEM)
     # STP maintains a fork: upstream MiniSat 2.2 has not moved since 2010 and
     # does not build with a current compiler. A commit rather than a tag,
     # because stp/minisat carries only the upstream 2.0/2.2.x release tags,
-    # none of which name the fork's own history.
-    set(MiniSat_VERSION "74c4aa2e450ef4eb6eb159e984d64d86a2a35058")
+    # none of which name the fork's own history. This one is on the fork's
+    # ipasir-up branch: the terminator below, and the IPASIR-UP external
+    # propagator interface that lib/Sat/MinisatCore.cpp bridges to.
+    set(MiniSat_VERSION "b3b4500e1815c924aa2e7fb204eec851ce134d26")
 
     set(MiniSat_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}minisat${CMAKE_STATIC_LIBRARY_SUFFIX}")
@@ -264,6 +266,44 @@ else()
 endif()
 
 mark_as_advanced(MINISAT_HAS_TERMINATOR)
+
+# Whether this MiniSat hosts an IPASIR-UP external propagator, which is what
+# lets the linear-arithmetic theory take part in its search rather than judge
+# complete assignments after the fact. Decided the same way as the
+# terminator: somebody else's MiniSat is asked, and the pinned one has it.
+if(NOT DEFINED MINISAT_HAS_UP)
+    if(MiniSat_FOUND_SYSTEM)
+        set(_up_src "${PROJECT_BINARY_DIR}/MiniSat_up.cpp")
+        file(WRITE "${_up_src}"
+             "#include <minisat/core/Solver.h>\n"
+             "struct P : public Minisat::ExternalPropagator {\n"
+             "  void notify_assignment(const Minisat::vec<Minisat::Lit>&) {}\n"
+             "  void notify_new_decision_level() {}\n"
+             "  void notify_backtrack(int) {}\n"
+             "  bool cb_check_found_model(const Minisat::vec<Minisat::Lit>&) { return true; }\n"
+             "  bool cb_has_external_clause(bool&) { return false; }\n"
+             "  Minisat::Lit cb_add_external_clause_lit() { return Minisat::lit_Undef; }\n"
+             "};\n"
+             "int main() { Minisat::Solver s; P p; s.connect_external_propagator(&p);\n"
+             "  s.add_observed_var(s.newVar()); s.disconnect_external_propagator(); return 0; }\n")
+        try_compile(MINISAT_HAS_UP
+                    "${PROJECT_BINARY_DIR}" "${_up_src}"
+                    LINK_LIBRARIES MiniSat)
+    else()
+        # Not probed, for the reason the terminator is not: there is nothing
+        # to compile against until the ExternalProject has built.
+        set(MINISAT_HAS_UP TRUE)
+    endif()
+endif()
+
+if(MINISAT_HAS_UP)
+    message(STATUS "MiniSat hosts an external propagator")
+else()
+    message(STATUS "MiniSat has no external-propagator interface: the "
+                   "arithmetic theory runs full-lazy on it")
+endif()
+
+mark_as_advanced(MINISAT_HAS_UP)
 mark_as_advanced(MiniSat_FOUND)
 mark_as_advanced(MiniSat_FOUND_SYSTEM)
 mark_as_advanced(MINISAT_INCLUDE_DIR)
