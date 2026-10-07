@@ -1438,7 +1438,6 @@ class AbsRefine_CounterExample::EvaluationDriver
             return finish(f.entry);
           }
 
-          if (bm->UserFlags.enable_array_equality)
           {
             // Has been simplified out, so any value will do -- but only one
             // value agrees with the model that is published. With array
@@ -1462,19 +1461,21 @@ class AbsRefine_CounterExample::EvaluationDriver
             // that never recorded it. Agreeing with the completion the rest
             // of the model already uses needs no bookkeeping at all.
             //
-            // Gated on the option: with it off the counterexample map, and
-            // so the model the API reads from it, must stay exactly as
-            // before.
+            // This used to be gated on enable_array_equality, to keep the
+            // historical all-one completion where the extension was off. It
+            // cannot be: the printer prints one total interpretation per array
+            // whatever the option says, so an all-one cell under
+            // `array-equality off` published a model that contradicted itself
+            // -- (get-value (a (select a #x0))) answering
+            //
+            //   ( |a| ((as const (Array (_ BitVec 4) (_ BitVec 6))) #b000000) )
+            //   ( (select |a| #x0)  #b111111 )
+            //
+            // in one reply. `auto` reached it too, on any array logic the
+            // logic table does not list (QF_ABV among them), so it was the
+            // default behaviour and not an opt-in.
             return finish(defaultCellValue(arrName));
           }
-
-          // Has been simplified out and can take any value. Keep the historical
-          // all-one completion for ordinary bitvectors, but not for
-          // RoundingMode: 0b11111 is not one of that sort's five values and can
-          // make SymFPU exhibit a non-IEEE sixth rounding behaviour.
-          return finish(bm->isRoundingModeSortedTerm(f.entry)
-                            ? defaultRoundingMode()
-                            : bm->CreateMaxConst(f.entry.GetValueWidth()));
         }
 
         return finish(result); // Frame::TermPhase::AfterReadValue
@@ -2827,65 +2828,16 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
 {
   const ASTNodeSet symbols = bm->getSymbols();
 
-  // With array equality disabled, follow the pre-extension output
-  // path byte for byte, legacy array format and all. The repaired
-  // printer below applies only when the extension is enabled.
-  if (!bm->UserFlags.enable_array_equality)
-  {
-    for (ASTNode f: symbols)
-    {
-        if (ARRAY_TYPE != f.GetType())
-          outputLine(os, f, f); // Can't do arrays because we need the reads.
-    }
-
-    ASTNodeMap c; // believe we need a copy because iterator gets invalidated?
-    for (const auto& e: CounterExampleMap)
-    {
-      if (READ == e.first.GetKind())
-          c.insert(e);
-    }
-
-    // The map iterates in an order that follows interning history, which
-    // varies across configurations of the solver. Sort the observed reads
-    // by array name and then by index, so one query prints one model text
-    // everywhere. Solver-map entries can carry a read at a symbolic index
-    // next to the concrete observations, so indexes are only compared as
-    // bits when both are constants; symbolic ones sort after, by name
-    // when possible.
-    const auto nodeBefore = [](const ASTNode& a, const ASTNode& b) {
-      if (a.GetKind() == SYMBOL && b.GetKind() == SYMBOL)
-        return strcmp(a.GetName(), b.GetName()) < 0;
-      return a.GetNodeNum() < b.GetNodeNum();
-    };
-    std::vector<std::pair<ASTNode, ASTNode>> reads(c.begin(), c.end());
-    std::sort(reads.begin(), reads.end(),
-              [&nodeBefore](const std::pair<ASTNode, ASTNode>& x,
-                            const std::pair<ASTNode, ASTNode>& y) {
-                const ASTNode& ax = x.first[0];
-                const ASTNode& ay = y.first[0];
-                if (ax != ay)
-                  return nodeBefore(ax, ay);
-                const ASTNode& ix = x.first[1];
-                const ASTNode& iy = y.first[1];
-                const bool cx = ix.isConstant();
-                const bool cy = iy.isConstant();
-                if (cx && cy)
-                  return CONSTANTBV::BitVector_Lexicompare(ix.GetBVConst(),
-                                                           iy.GetBVConst()) < 0;
-                if (cx != cy)
-                  return cx;
-                return nodeBefore(ix, iy);
-              });
-
-    for (const auto& e : reads)
-    {
-      outputLine(os, e.first, e.second);
-    }
-    PrintFunctionModelsSMTLIB2(os);
-    os.flush();
-    return;
-  }
-
+  // There used to be a second output path here, taken when array equality was
+  // off, which printed arrays as one line per observed read:
+  //
+  //   (define-fun |a| (_ BitVec 2) (_ BitVec 8) #b01 #x00)
+  //
+  // That is not SMT-LIB -- the parameter list is not a list and there are two
+  // body terms -- and an array with no observed read printed nothing at all, so
+  // a query whose only symbol was an unconstrained array answered with an empty
+  // model. A printer's format cannot depend on which theory machinery the solve
+  // used, so there is one path now: the array define-funs below, which replay.
   // First what the model's declared sorts are, where a cover bounded one.
   bm->printDeclaredSortDomains(os, bm->declaredSortDomains(), "");
 
