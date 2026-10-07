@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/ToSATBase.h"
+#include <functional>
 #include <set>
 
 namespace stp
@@ -242,7 +243,15 @@ public:
   void setFpRepairAllowed(bool allowed) { fpRepairAllowed = allowed; }
   UFTheoryAdapter* getUFTheoryAdapter() const { return ufTheoryAdapter; }
 
-  void PrintFullCounterExampleSMTLIB2(std::ostream& os);
+  // `visible` decides which of the manager's symbols are entries of this
+  // model. The manager's table holds every symbol ever interned -- a
+  // declaration a pop has since removed, a name a later declaration has
+  // rebound, and the solver's own circuit-shape symbols among them -- so a
+  // caller that has a notion of scope passes it. Without one every symbol is
+  // printed, which is what the API's own debug print wants.
+  using SymbolVisible = std::function<bool(const ASTNode&)>;
+  void PrintFullCounterExampleSMTLIB2(std::ostream& os,
+                                      const SymbolVisible& visible = {});
   // The define-fun of every active uninterpreted function.
   void PrintFunctionModelsSMTLIB2(std::ostream& os);
   void outputLine(std::ostream& os, const ASTNode &f, ASTNode se);
