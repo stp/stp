@@ -20,8 +20,15 @@
 ; The clock leg asks for zero seconds. That is deterministic -- the budget is
 ; spent before the solver is entered, which is the case the pre-check exists
 ; for -- where a one-second budget on a hard query is a race that a fast
-; machine wins and a slow one loses. Ten 32-bit multiplies with a distinct over
-; the operands.
+; machine wins and a slow one loses.
+;
+; The conflict leg needs a query no backend answers inside two conflicts, and
+; a satisfiable one cannot promise that: the ten multiplies with a distinct
+; over the operands that used to stand here, CryptoMiniSat 5.16 solves within
+; them. So the query is unsatisfiable instead, with nothing for a good first
+; assignment to find and nothing a preprocessor can refute up front: two
+; 32-bit factors, neither of them 1, of the largest prime below 2^62.
+; Refuting that is factoring.
 ;
 ; RUN: %solver -g 2 %s 2>&1 | %OutputCheck --check-prefix=CONFL %s
 ; RUN: %solver -k 0 %s 2>&1 | %OutputCheck --check-prefix=CLOCK %s
@@ -38,22 +45,10 @@
 ; CLOCK: :reason-unknown timeout
 ;
 (set-logic QF_BV)
-(declare-fun x0 () (_ BitVec 32))
-(declare-fun x1 () (_ BitVec 32))
-(declare-fun x2 () (_ BitVec 32))
-(declare-fun x3 () (_ BitVec 32))
-(declare-fun x4 () (_ BitVec 32))
-(declare-fun x5 () (_ BitVec 32))
-(declare-fun x6 () (_ BitVec 32))
-(declare-fun x7 () (_ BitVec 32))
-(declare-fun x8 () (_ BitVec 32))
-(declare-fun x9 () (_ BitVec 32))
-(declare-fun mk () (_ BitVec 32))
-(assert (= (bvmul (bvmul (bvmul x0 x1) (bvmul x2 x3)) (bvmul (bvmul x4 x5) (bvmul x6 x7))) (bvmul x8 x9)))
-(assert (= (bvmul x8 x9) mk))
-(assert (bvugt mk #x7ffffff0))
-(assert (bvugt x0 #x00000001))
-(assert (bvugt x1 #x00000001))
-(assert (distinct x0 x1 x2 x3 x4 x5 x6 x7 x8 x9))
+(declare-fun x () (_ BitVec 32))
+(declare-fun y () (_ BitVec 32))
+(assert (= (bvmul ((_ zero_extend 32) x) ((_ zero_extend 32) y)) #x3fffffffffffffc7))
+(assert (bvugt x #x00000001))
+(assert (bvugt y #x00000001))
 (check-sat)
 (get-info :reason-unknown)

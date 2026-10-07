@@ -136,9 +136,11 @@ never looks for one, which is what pins a build's set of backends to the
 flags that produced it. With ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do: STP clones and
 builds `stp/cryptominisat <https://github.com/stp/cryptominisat>`__ at a
 pinned commit, as it does for its other dependencies. That commit, on the
-fork's ``stp-ipasir-up`` branch, is release 5.14.7 with the ``NOCADICAL``
-option and the IPASIR-UP propagator interface the linear-arithmetic theory
-drives. A CryptoMiniSat without the interface -- a release, or your
+fork's ``stp-nocadical-ipasir-up`` branch, is release 5.16.0 with the
+``NOCADICAL`` option proposed upstream in
+`msoos/cryptominisat#841 <https://github.com/msoos/cryptominisat/pull/841>`__
+and the IPASIR-UP propagator interface the linear-arithmetic theory drives.
+A CryptoMiniSat without the interface -- a release, or your
 distribution's -- still builds STP;
 the arithmetic theory then runs in the full-lazy loop on it.
 Configure warns when the copy it found lacks the interface, because
@@ -154,7 +156,7 @@ is found and preferred, including one installed into ``deps/install``:
 
     git clone https://github.com/stp/cryptominisat
     cd cryptominisat
-    git checkout e06847e1006f06ec630a62349d930e5ead54def6
+    git checkout 84ec14e17014b02d1ebbe441b5f38977a2224acd
     mkdir build && cd build
     cmake .. -DNOCADICAL=ON -DBUILD_SHARED_LIBS=OFF -DSTATIC_BINARY=OFF \
              -DCMAKE_POSITION_INDEPENDENT_CODE=ON
