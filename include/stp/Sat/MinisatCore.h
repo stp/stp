@@ -57,6 +57,12 @@ namespace stp
   // because MiniSat's header is not included here.
   std::unique_ptr<Minisat::Terminator> deadline_terminator;
 #endif
+#ifdef STP_MINISAT_HAS_UP
+  // The IPASIR-UP side of SATSolver::TheoryPropagator, defined in
+  // MinisatCore.cpp with MiniSat's headers, which this one does not include.
+  class PropagatorBridge;
+  std::unique_ptr<PropagatorBridge> propagator_bridge;
+#endif
 
 public:
   MinisatCore();
@@ -95,6 +101,20 @@ public:
 
 
   bool supportsAssumptions() const override { return true; }
+
+  // Only a MiniSat with the IPASIR-UP interface can host a propagator
+  // (cmake/FindMiniSat.cmake decides). It also advises decision polarity,
+  // so the theory may pick the sign of a decision on an arithmetic atom.
+  // The core solver eliminates nothing, so expectTheoryPropagator() has
+  // nothing to do.
+#ifdef STP_MINISAT_HAS_UP
+  bool supportsTheoryPropagator() const override { return true; }
+  bool supportsDecisionPolarity() const override { return true; }
+  bool connectTheoryPropagator(
+      SATSolver::TheoryPropagator* propagator,
+      const std::vector<uint32_t>& observed) override;
+  void disconnectTheoryPropagator() override;
+#endif
 
 protected:
   // MiniSat counts work, not time, so it cannot be handed a deadline the way

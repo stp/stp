@@ -1390,6 +1390,11 @@ jobs:
           cat probe.log
           exit 1
         fi
+        if ! grep -q "MiniSat hosts an external propagator" probe.log; then
+          echo "::error::the external-propagator probe did not find the interface in the pinned MiniSat"
+          cat probe.log
+          exit 1
+        fi
 
   # HiGHS is opt-in (-DENABLE_HIGHS, -DENABLE_HIGHS_CUT_LOG) and no other job
   # enables it, so nothing else compiles the STP_HAVE_HIGHS paths in lib/Lra

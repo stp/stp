@@ -937,7 +937,7 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "lra_theory_propagation" }
 category = "lra"
-help = "let the LRA theory take part in the SAT search, on a backend that hosts a propagator (CaDiCaL, CryptoMiniSat)"
+help = "let the LRA theory take part in the SAT search, on a backend that hosts a propagator (CaDiCaL, CryptoMiniSat, MiniSat)"
 
 [[option]]
 name = "lra-float-driver"
@@ -1563,7 +1563,7 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "lra_decision_polarity" }
 category = "lra"
-help = "advise arithmetic polarity for SAT's selected decision variable (on by default with patched CaDiCaL and theory propagation; =0 disables advice, explicit =1 requires support)"
+help = "advise arithmetic polarity for SAT's selected decision variable (on by default with theory propagation on patched CaDiCaL or MiniSat; =0 disables advice, explicit =1 requires support)"
 
 [[option]]
 name = "lra-verify-canonical"

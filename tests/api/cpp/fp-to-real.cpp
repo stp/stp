@@ -313,11 +313,14 @@ TEST_F(FpToReal, formats_beyond_the_exact_arithmetic)
   EXPECT_EQ(t.kind(), Kind::FP_TO_REAL);
 }
 
-// At 16 bits the constants fit, but relating two conversions needs more than
-// the number limits allow: the solve stops there, which is an unknown answer
-// with its reason -- it was an engine error (unknown(OTHER), "no answer";
-// SOLVER_ERROR and exit 255 on the command line), and the solver goes on.
-TEST_F(FpToReal, a_relation_beyond_the_number_limits_is_unknown)
+// At 16 bits the constants fit, but relating two conversions can need more
+// than the number limits allow: a solve that runs into them stops, which is an
+// unknown answer with its reason -- it was an engine error (unknown(OTHER),
+// "no answer"; SOLVER_ERROR and exit 255 on the command line), and the solver
+// goes on. Whether this one does is the search's doing: NaN and the infinities
+// convert to Real constants of their own, and a search that tries them answers
+// sat without relating two conversions at all.
+TEST_F(FpToReal, a_relation_beyond_the_number_limits_is_not_an_error)
 {
   const Sort w16 = tm.mk_fp_sort(16, 3);
   const Term a = tm.declare("a", w16), b = tm.declare("b", w16);
@@ -325,9 +328,12 @@ TEST_F(FpToReal, a_relation_beyond_the_number_limits_is_unknown)
   s.push();
   s.add(real_lt(fp_to_real(a), fp_to_real(b)));
   const Result r = s.check_sat();
-  EXPECT_TRUE(r.is_unknown());
-  EXPECT_EQ(r.reason(), UnknownReason::INCOMPLETE);
-  EXPECT_NE(r.reason_message().find("number limits"), std::string::npos) << r.reason_message();
+  if (!r.is_sat())
+  {
+    EXPECT_TRUE(r.is_unknown());
+    EXPECT_EQ(r.reason(), UnknownReason::INCOMPLETE);
+    EXPECT_NE(r.reason_message().find("number limits"), std::string::npos) << r.reason_message();
+  }
   s.pop();
   s.add(fp_is_zero(a));
   EXPECT_TRUE(s.check_sat().is_sat());

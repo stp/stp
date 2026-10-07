@@ -139,12 +139,16 @@ void validate_engine_options(const UserDefinedFlags& flags)
                   "--lra-decision-polarity requires --lra-theory-propagation=1");
     bool supported = false;
 #if defined(USE_CADICAL) && defined(STP_CADICAL_HAS_DECISION_POLARITY)
-    supported = flags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER;
+    supported |= flags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER;
+#endif
+#if defined(USE_MINISAT) && defined(STP_MINISAT_HAS_UP)
+    supported |= flags.solver_to_use == UserDefinedFlags::MINISAT_SOLVER;
 #endif
     if (!supported)
       fail_option(ErrorCode::OPTION_UNAVAILABLE, "lra-decision-polarity",
                   "--lra-decision-polarity requires CaDiCaL built with "
-                  "cmake/deps-utils/cadical-decision-polarity.patch");
+                  "cmake/deps-utils/cadical-decision-polarity.patch, or "
+                  "MiniSat with the external-propagator interface");
   }
 }
 
