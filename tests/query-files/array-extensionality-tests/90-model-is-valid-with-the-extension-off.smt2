@@ -12,9 +12,10 @@
 ; What must come back is one nullary define-fun whose body is a constant array
 ; with the observed cell stored over it.
 ; RUN: %solver %s | %OutputCheck %s
+; One line, so one directive: OutputCheck's CHECK directives are ordered by
+; line, and a second one looking for `store` would be looking after it.
 ; CHECK: ^sat$
-; CHECK: \(define-fun \|a\| \(\) \(Array \(_ BitVec 2\) \(_ BitVec 8\)\)
-; CHECK: store
+; CHECK: ^\(define-fun \|a\| \(\) \(Array \(_ BitVec 2\) \(_ BitVec 8\)\) \(store \(\(as const \(Array \(_ BitVec 2\) \(_ BitVec 8\)\)\) #x00\) #b01 #x07\)\)$
 ; CHECK-NOT: define-fun \|a\| \(_ BitVec
 (set-option :produce-models true)
 (set-logic QF_ABV)

@@ -2686,7 +2686,6 @@ TEST(DeepDag, counterexample_continuation_paths_preserve_model_values)
   const ASTNode one = c.mgr.CreateOneConst(8);
   const ASTNode two = c.mgr.CreateBVConst(8, 2);
   const ASTNode three = c.mgr.CreateBVConst(8, 3);
-  const ASTNode maximum = c.mgr.CreateMaxConst(8);
   const ASTNode x = c.mgr.CreateSymbol("ce-path-x", 0, 8);
   const ASTNode y = c.mgr.CreateSymbol("ce-path-y", 0, 8);
   const ASTNode p = c.mgr.CreateSymbol("ce-path-p", 0, 0);
@@ -2717,18 +2716,22 @@ TEST(DeepDag, counterexample_continuation_paths_preserve_model_values)
   const ASTNode symbolicIndex = c.mgr.CreateSymbol("ce-path-index", 0, 8);
   const ASTNode plainRead = c.hf->CreateTerm(READ, 8, base, symbolicIndex);
 
-  // The formerly uncovered completion path: a read requested as a concrete
-  // value, with array equality disabled and no model entry, is all ones.
+  // A read requested as a concrete value with no model entry completes with
+  // defaultCellValue, which is what the printer fills the array with. It used
+  // to be all ones here, and only here -- the arm was taken when array
+  // equality was off -- so the published model said the array was
+  // constant-zero and a read of it all ones, in one reply. The option cannot
+  // decide it: there is one completion now.
   c.mgr.UserFlags.enable_array_equality = false;
-  EXPECT_EQ(maximum, ce.ModelValueOfTerm(plainRead));
+  EXPECT_EQ(zero, ce.ModelValueOfTerm(plainRead));
 
   // Expansion resumes both when a write hits and when it misses and pushes
   // the read into the base array.
   const ASTNode write = c.hf->CreateArrayTerm(WRITE, 8, 8, base, zero, one);
   EXPECT_EQ(one, ce.Expand_ReadOverWrite_UsingModel(
                      c.hf->CreateTerm(READ, 8, write, zero), false));
-  EXPECT_EQ(maximum, ce.Expand_ReadOverWrite_UsingModel(
-                         c.hf->CreateTerm(READ, 8, write, two), false));
+  EXPECT_EQ(zero, ce.Expand_ReadOverWrite_UsingModel(
+                      c.hf->CreateTerm(READ, 8, write, two), false));
 
   // A read over an array ITE keeps its evaluated index while the condition
   // and selected read are evaluated below it.
