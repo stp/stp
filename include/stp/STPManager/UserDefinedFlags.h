@@ -1905,6 +1905,15 @@ public:
   // construction itself may be deferred to the first read.
   bool produce_models = false;
 
+  // The API's model-array-fill = ones (the 2.x C API's default): an array
+  // cell the model never observed holds every bit set rather than zero.
+  // Model evaluation completes such a cell with it, not just the published
+  // model, because the check that accepts a candidate can read one: when two
+  // read rows collapse onto one cell, a nested read lands on a cell neither
+  // recorded, and the candidate is a model only for the value the check gave
+  // that cell.
+  bool model_array_fill_ones = false;
+
   // A counterexample asked for directly, with no other trace of the request:
   // the API's produce-models option (on by default) sets it, since the model
   // it promises is built from the counterexample. Held here so the
