@@ -737,7 +737,12 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
       // which rewrites each level into its conjunction as a side effect and
       // would make Solver::assertions() report one formula per level.
       ASTVec levels;
-      levels.push_back(bm->ASTTrue);
+      // The API's permanent assertions are its base frame, which no pop
+      // removes, so they are the driver's level zero: only reset() and
+      // reset_assertions() remove the base, and both discard the whole
+      // driver with it, so only pushed frames and the final assumption frame
+      // ever retract. A dummy true level in front would make the base a
+      // pushed frame of its own, with a pushed frame's costs at every check.
       for (const ASTVec* level : bm->AssertLevels())
       {
         if (level->empty())
