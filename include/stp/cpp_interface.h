@@ -137,8 +137,12 @@ private:
   SortMap sort_aliases;
   std::map<std::string, unsigned> sort_parameters;
   bool print_success;
-  bool ignoreCheckSatRequest;
-  bool retain_uf_declarations; // see retainUFDeclarations
+  // How the caller reads the script (ignoreCheckSat, retainUFDeclarations),
+  // set before the parse and not the script's to change. init() runs again
+  // at (reset), which starts the script's session afresh, so these are
+  // initialised here instead: like all_theory_tokens, they outlive a reset.
+  bool ignoreCheckSatRequest = false;
+  bool retain_uf_declarations = false; // see retainUFDeclarations
 
   // Used to cache prior queries.
   struct Entry

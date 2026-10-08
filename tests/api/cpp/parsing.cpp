@@ -1413,6 +1413,56 @@ TEST(Parsing, a_script_reset_allows_compatible_and_local_redeclarations)
     }
 }
 
+// A script's (reset) begins a new session for the script, not a new reading
+// of it: a declare-and-assert or parse-only parse still skips the check-sats
+// after the reset, and a function declared after it is the manager's
+// afterwards, as one declared before it is. A check-sat run there engaged the
+// incremental driver without the solver knowing, so its own first check under
+// incremental = on claimed a forced first solve of a driver that had already
+// solved (an assertion failure).
+TEST(Parsing, a_script_reset_keeps_the_parse_modes_reading)
+{
+  const std::string script = "(set-logic QF_BV) (declare-const a (_ BitVec 2))"
+                             " (assert (bvult a #b11)) (check-sat) (reset)"
+                             " (set-logic QF_BV) (declare-const a (_ BitVec 2))"
+                             " (assert (bvult a #b10)) (check-sat)";
+  for (ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::PARSE_ONLY})
+    for (const char* incremental : {"on", "auto"})
+    {
+      SCOPED_TRACE(incremental);
+      SCOPED_TRACE(static_cast<int>(mode));
+      TermManager tm;
+      Options options;
+      options.set_str("incremental", incremental);
+      Solver s(tm, options);
+      std::string output;
+      s.set_output_sink([&](std::string_view text) { output.append(text); });
+      s.parse_smt2(script, mode);
+      EXPECT_EQ(output, "");
+      EXPECT_EQ(s.statistics().uint64("checks.total"), 0u);
+      ASSERT_TRUE(s.check_sat().is_sat());
+      EXPECT_LT(s.model().uint64_value(*tm.symbol("a")), 2u);
+    }
+
+  for (ParseMode mode : {ParseMode::DECLARE_AND_ASSERT, ParseMode::EXECUTE,
+                         ParseMode::PARSE_ONLY})
+    for (const char* reset : {"", "(reset) "})
+    {
+      SCOPED_TRACE(reset);
+      SCOPED_TRACE(static_cast<int>(mode));
+      TermManager tm;
+      Solver s(tm);
+      s.parse_smt2(
+          std::string(reset) +
+              "(set-logic QF_UFBV) (declare-fun f ((_ BitVec 4)) (_ BitVec 4))",
+          mode);
+      ASSERT_TRUE(tm.symbol("f").has_value());
+      s.parse_smt2("(assert (= (f #x1) #x2))");
+      ASSERT_TRUE(s.check_sat().is_sat());
+      EXPECT_EQ(s.model().uint64_value((*tm.symbol("f"))(tm.mk_bv(4, 1))), 2u);
+    }
+}
+
 // A script's (reset) begins a new session for the script, but the manager's
 // symbols outlive it: a Real the API declared, or made with mk_fresh, is
 // still one afterwards and a model reads its value, not 0 -- in this solver,
