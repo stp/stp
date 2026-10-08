@@ -629,6 +629,65 @@ ASTNode UFPreLowering::propagate(const ASTNode& root, UFPreLoweringStats* stats,
       chosen.swap(kept);
     }
 
+    // The peel sees the keys a value mentions, but the rewrite also meets
+    // keys a value never mentions: a node it rebuilds over rewritten
+    // children is looked up in the map again, so an application whose
+    // arguments are rewritten can become another application that is a key.
+    // Under a = 2, (f 2) sent to (f a) is no cycle to the peel, yet
+    // rewriting (f a) rebuilds (f 2), which is sent to (f a) again, and the
+    // walk descends for as long as memory lasts.
+    //
+    // Only an application sent to another application can close such a
+    // cycle. Every other compound key -- an asserted atom, or an application
+    // pinned to a constant -- is sent to a constant, which ends the walk; and
+    // the factory builds no symbol its operands do not hold, so a symbol key
+    // is reached only through a mention the peel has seen. An application
+    // whose arguments mention no key is left as it is by the rewrite, so as
+    // a value it rebuilds nothing, and that merge is safe this round. Any
+    // other merge waits for the next round, which reads the conjunct over
+    // the applications this round leaves -- here (f 2) = (f 2), no merge at
+    // all. Every merge is tested against the map the peel left, so dropping
+    // one never decides whether another stays.
+    {
+      const auto argumentsMentionAKey = [&](const ASTNode& application) {
+        marks.next();
+        ASTVec stack(application.begin(), application.end());
+        while (!stack.empty())
+        {
+          const ASTNode node = stack.back();
+          stack.pop_back();
+          if (!marks.first(node))
+            continue;
+          if (fromTo.find(node) != fromTo.end())
+            return true;
+          for (size_t c = 0; c < node.Degree(); ++c)
+            stack.push_back(node[c]);
+        }
+        return false;
+      };
+
+      std::vector<bool> deferred(chosen.size(), false);
+      for (size_t i = 0; i < chosen.size(); ++i)
+        deferred[i] = isApplication(chosen[i].key) &&
+                      isApplication(chosen[i].value) &&
+                      argumentsMentionAKey(chosen[i].value);
+
+      std::vector<Candidate> kept;
+      kept.reserve(chosen.size());
+      for (size_t i = 0; i < chosen.size(); ++i)
+      {
+        if (!deferred[i])
+        {
+          kept.push_back(chosen[i]);
+          continue;
+        }
+        fromTo.erase(chosen[i].key);
+        defines[chosen[i].conjunct] = false;
+        definedKey[chosen[i].conjunct] = ASTNode();
+      }
+      chosen.swap(kept);
+    }
+
     for (const Candidate& candidate : chosen)
     {
       if (!substituted.insert(candidate.key).second)

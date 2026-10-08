@@ -446,3 +446,64 @@ TEST(UFPreLowering, TheLaterOfTwoEquatedApplicationsGoesAndTheEqualityStays)
   EXPECT_TRUE(conjuncts.find(fx.eq(fOfX, gOfY)) != conjuncts.end() ||
               conjuncts.find(fx.eq(gOfY, fOfX)) != conjuncts.end());
 }
+
+// A merge is only made over an application the round leaves as it is. Here
+// the round sends a to 2, and (f 2), built after (f a), would be sent to
+// (f a); but rewriting (f a) rebuilds (f 2), so the map that merge leaves
+// sends the rewrite round in circles, and the pass never returned. The
+// merge waits for the next round instead, which reads (f 2) = (f 2) and
+// has nothing to merge.
+TEST(UFPreLowering, AMergeItsOwnRewriteWouldRebuildWaitsForTheNextRound)
+{
+  Fixture fx;
+  ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
+  const ASTNode a = fx.symbol("a");
+  const ASTNode fOfA = fx.apply(a);
+  const ASTNode fOf2 = fx.apply(fx.constant(2));
+  ASSERT_LT(fOfA.GetNodeNum(), fOf2.GetNodeNum());
+  const ASTNode root = fx.factory->CreateNode(
+      AND, {fx.eq(a, fx.constant(2)), fx.eq(fOfA, fOf2)});
+
+  UFPreLowering pass(&fx.manager);
+  UFPreLoweringStats stats;
+  const ASTNode rewritten = pass.propagate(root, &stats);
+
+  EXPECT_EQ(1u, stats.symbolSubstitutions);
+  EXPECT_EQ(0u, stats.applicationSubstitutions);
+  EXPECT_EQ(fx.eq(a, fx.constant(2)), rewritten);
+  EXPECT_EQ(0u, stats.applicationsRemaining);
+}
+
+// Waiting loses no merge. x is sent to 5 in the round that first reads
+// (f x) = (g y), so the merge waits; the next round reads (f 5) = (g y),
+// whose survivor has no argument that round rewrites, and makes it. The
+// terms built on the two sides are then one term, pinned to two values. The
+// second round is what shows that the merge waited rather than being made
+// at once.
+TEST(UFPreLowering, AMergeThatWaitedIsMadeTheNextRound)
+{
+  Fixture fx;
+  ASSERT_NE(nullptr, fx.f) << fx.diagnostic;
+  const UFDecl* g =
+      fx.context->declareFunction("g", {fx.bv8}, fx.bv8, &fx.diagnostic);
+  ASSERT_NE(nullptr, g) << fx.diagnostic;
+  const ASTNode x = fx.symbol("x");
+  const ASTNode y = fx.symbol("y");
+  const ASTNode fOfX = fx.apply(x);
+  const ASTNode gOfY = fx.context->apply(g, {y}, &fx.diagnostic);
+  ASSERT_FALSE(gOfY.IsNull()) << fx.diagnostic;
+  ASSERT_LT(fOfX.GetNodeNum(), gOfY.GetNodeNum());
+  const ASTNode root = fx.factory->CreateNode(
+      AND, {fx.eq(x, fx.constant(5)), fx.eq(fOfX, gOfY),
+            fx.eq(fx.apply(fOfX), fx.constant(1)),
+            fx.eq(fx.apply(gOfY), fx.constant(2))});
+  ASSERT_NE(fx.manager.ASTFalse, root);
+
+  UFPreLowering pass(&fx.manager);
+  UFPreLoweringStats stats;
+  const ASTNode rewritten = pass.propagate(root, &stats);
+
+  EXPECT_GE(stats.applicationSubstitutions, 1u);
+  EXPECT_GE(stats.rounds, 2u);
+  EXPECT_EQ(fx.manager.ASTFalse, rewritten);
+}
