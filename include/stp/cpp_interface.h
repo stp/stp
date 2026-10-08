@@ -312,6 +312,16 @@ public:
   void onCheck(std::function<bool()> hook) { before_check = std::move(hook); }
   // Called as each check ends, before its answer is written.
   void onCheckEnd(std::function<void()> hook) { after_check = std::move(hook); }
+  // Asked as each check begins, before anything is solved: whether the engine
+  // can honour the options as they now stand. The command line checks this
+  // before it reads the input and the API checks it at construction and at
+  // every check; a parsed script reached neither, so a setting the engine
+  // cannot honour was discovered by the engine failing. Fill the string to
+  // refuse the check with it.
+  void onCheckOptions(std::function<void(std::string&)> hook)
+  {
+    validate_check_options = std::move(hook);
+  }
   // A registry-backed option writer. Return false for an unknown option;
   // otherwise leave diagnostic empty on success or fill it on refusal.
   void onRegistryOption(std::function<bool(const std::string&, const std::string&,
@@ -336,6 +346,7 @@ private:
   std::function<void()> after_check;
   std::function<bool(const std::string&, const std::string&, std::string&)>
       set_registry_option;
+  std::function<void(std::string&)> validate_check_options;
 
   // What the most recent check-sat charged to each pipeline stage: the
   // difference between two readings of the manager's run times taken around
