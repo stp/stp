@@ -621,26 +621,30 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   // fallback for when it cannot, which is when the theory propagator holds
   // the context: then the next round is a whole new solve over the original
   // query and everything earned so far.
+  //
+  // Everything earned so far includes what a solve stated in place: those
+  // lemmas lived only in the solve they extended, but the rounds still count
+  // them as stated, so a new solve that lacked them would find their pairs
+  // broken, drop them as already known, and answer sat on a model that breaks
+  // congruence.
   SOLVER_RETURN_TYPE result;
-  ASTVec earnedCongruence;
   lazyCongruence = LazyCongruenceState();
+  const auto roundInput = [&]() -> ASTNode {
+    if (lazyCongruence.stated.empty())
+      return original_input;
+    ASTVec conjuncts;
+    conjuncts.reserve(lazyCongruence.stated.size() + 1);
+    conjuncts.push_back(original_input);
+    conjuncts.insert(conjuncts.end(), lazyCongruence.stated.begin(),
+                     lazyCongruence.stated.end());
+    return bm->CreateNode(AND, conjuncts);
+  };
   unsigned restarts = 0;
   for (;;)
   {
-    ASTNode round_input = original_input;
-    if (!earnedCongruence.empty())
-    {
-      ASTVec conjuncts;
-      conjuncts.reserve(earnedCongruence.size() + 1);
-      conjuncts.push_back(original_input);
-      conjuncts.insert(conjuncts.end(), earnedCongruence.begin(),
-                       earnedCongruence.end());
-      round_input = bm->CreateNode(AND, conjuncts);
-    }
-
     std::unique_ptr<SATSolver, QueryTimedDelete<SATSolver>> newS(
         get_new_sat_solver(), {bm->query_timing, QueryPhase::SolverCleanup});
-    result = solve_by_sat_solver(newS.get(), round_input, arrayEqualityRewrites,
+    result = solve_by_sat_solver(newS.get(), roundInput(), arrayEqualityRewrites,
                                  deadline);
     // The LRA float tier can blow its tableau up on a handful of cpachecker
     // files and never terminate, where the exact driver settles the same
@@ -653,7 +657,9 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
     // Only when the float solve did not decide the query. A float result is
     // exact-certified, so a SAT/UNSAT answer stands even if the fill crossed
     // the budget on the way to it -- rerouting then would discard a good
-    // answer and needlessly pin the session to the exact driver.
+    // answer and needlessly pin the session to the exact driver. The re-solve
+    // is a new solve, so it starts from every lemma the abandoned one stated
+    // in place as well.
     const bool rerouteFloat = newS->theoryRerouteRequested() &&
                               !bm->UserFlags.lra_force_exact_driver &&
                               result != SOLVER_SATISFIABLE &&
@@ -666,8 +672,8 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
         std::cerr << "LRA: float tier blew up; re-solving on the exact driver"
                   << std::endl;
       newS.reset(get_new_sat_solver());
-      result = solve_by_sat_solver(newS.get(), round_input, arrayEqualityRewrites,
-                                   deadline);
+      result = solve_by_sat_solver(newS.get(), roundInput(),
+                                   arrayEqualityRewrites, deadline);
       newS.reset();
     }
 
@@ -680,8 +686,6 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
                                                  lazyCongruence);
     if (fresh.empty())
       break;
-    earnedCongruence.insert(earnedCongruence.end(), fresh.begin(),
-                            fresh.end());
     ++restarts;
   }
   // Install both parts of the combined interpretation before indexing UF
@@ -1881,9 +1885,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     if (extended != lra::ExtensionOutcome::Extended)
     {
       // Give the lemmas back either way: this round did not state them.
-      for (const ASTNode& item : fresh)
-        lazyCongruence.earned.erase(item);
-      lazyCongruence.lemmas -= fresh.size();
+      lazyCongruence.forgetLastRound(fresh);
       if (extended == lra::ExtensionOutcome::Declined)
         // The coordinator would not take it on and nothing moved. The
         // caller's restart loop finds the lemmas again and states them from

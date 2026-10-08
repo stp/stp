@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/UninterpretedFunctions/UFDecl.h"
+#include <cassert>
 #include <cstdint>
 #include <map>
 #include <set>
@@ -333,13 +334,33 @@ DLL_PUBLIC ASTVec fullLazyCongruence(STPMgr* manager,
 // The bookkeeping one query's lazy rounds share: what has been stated, how
 // many rounds each declaration has broken in, which have been expanded in
 // full, and the counts the statistics line reports.
+//
+// `earned` is what a round filters against, so everything in it must be in
+// the formula the solve is working on: a pair it holds is never stated again.
+// A lemma stated in place lives only in the solve it extended, so a solve
+// that starts over has to be given `stated` -- the same lemmas, in the order
+// they were stated -- or it will find those pairs broken and drop them as
+// already known.
 struct LazyCongruenceState
 {
   ASTNodeSet earned;
+  ASTVec stated;
   std::map<const UFDecl*, unsigned> brokenRounds;
   std::set<const UFDecl*> expanded;
   unsigned rounds = 0;
   std::size_t lemmas = 0;
+
+  // Give back the lemmas the last round returned, when they were not stated
+  // after all. They are the tail of `stated`: nothing is stated between a
+  // round and the attempt to state what it found.
+  void forgetLastRound(const ASTVec& fresh)
+  {
+    assert(fresh.size() <= stated.size());
+    for (const ASTNode& item : fresh)
+      earned.erase(item);
+    stated.resize(stated.size() - fresh.size());
+    lemmas -= fresh.size();
+  }
 };
 
 // The lemmas the next round adds, given the model just committed: the pairs
