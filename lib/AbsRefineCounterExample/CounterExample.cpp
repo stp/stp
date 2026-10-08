@@ -1931,6 +1931,12 @@ AbsRefine_CounterExample::completeRoundingMode(const ASTNode& carrier) const
 // is RoundingMode, whose one-hot encoding leaves all-zero denoting
 // nothing at all; the value is a don't-care, so what matters is that
 // every site takes it from here and none of them invents its own.
+//
+// That includes the API, which fills a published array's unobserved cells
+// with every bit set under model-array-fill = ones, for a bit-vector element
+// only. The check that accepts a candidate reads such cells through here, so
+// answering zero to it while the API publishes all-ones certified one model
+// and published another.
 ASTNode AbsRefine_CounterExample::defaultCellValue(const ASTNode& arrayTerm)
 {
   ASTNode completed;
@@ -1939,6 +1945,10 @@ ASTNode AbsRefine_CounterExample::defaultCellValue(const ASTNode& arrayTerm)
   if (bm->arrayHasRmElement(arrayTerm))
     return defaultRoundingMode();
   const SourceSort sort = arrayTerm.GetSourceSort();
+  if (bm->UserFlags.model_array_fill_ones &&
+      sort.kind() == SourceSort::Kind::Array &&
+      sort.element().kind() == SourceSort::Kind::BitVector)
+    return bm->CreateMaxConst(arrayTerm.GetValueWidth());
   const ASTNode zero = bm->CreateZeroConst(arrayTerm.GetValueWidth());
   return sort.kind() == SourceSort::Kind::Array
              ? bm->declaredSortValue(sort.element(), zero)

@@ -1068,10 +1068,21 @@ bool custom_random_seed(EngineTarget& t, const OptionSpec&, const OptionValue& v
   t.flags.random_seed = static_cast<std::uint64_t>(as_int(v));
   return true;
 }
+// The engine completes unobserved cells with the fill as well as the snapshot
+// does (UserDefinedFlags::model_array_fill_ones): the check that accepts a
+// candidate can read such a cell, and the model it accepted is the one to
+// publish. A model still pending was accepted under the old fill, so it is
+// taken before the fill changes; the new fill is the next check's.
 bool custom_model_array_fill(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
+  const bool ones = as_str(v) == "ones";
   if (t.solver != nullptr)
-    t.solver->fill_ones = as_str(v) == "ones";
+  {
+    if (t.solver->fill_ones != ones)
+      t.solver->ensure_snapshot();
+    t.solver->fill_ones = ones;
+  }
+  t.flags.model_array_fill_ones = ones;
   return true;
 }
 // set-logic's side effects: the UF logics switch the UF machinery on, QF_AX

@@ -145,7 +145,7 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "model_array_fill" }
 category = "model"
-help = "the element every reader and printer reports for an array cell the model never observed: zero (SMT-LIB (as const) printing) or ones (every bit set, the completion KLEE's .ktest bytes depend on)"
+help = "the element every reader and printer reports for an array cell the model never observed: zero (SMT-LIB (as const) printing) or ones (every bit set, the completion KLEE's .ktest bytes depend on). The check completes such cells with it too, and a check's model keeps the fill it was checked under"
 
 [[option]]
 name = "stop-after-cnf"
