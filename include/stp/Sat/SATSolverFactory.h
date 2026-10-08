@@ -80,7 +80,8 @@ bool enableBVAIfWanted(SATSolver& s, const UserDefinedFlags& flags,
 // STP spells "no limit" as a negative value, and every other value --
 // zero included -- is a budget to be honoured. Translate once, here, so
 // backends are only ever handed a value >= 0 and cannot each decide what,
-// say, zero means.
+// say, zero means. A negative value clears whatever budget the backend was
+// armed with before, since a backend can be armed for more than one query.
 void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags);
 
 // Internal retries share the deadline captured at the public query boundary.

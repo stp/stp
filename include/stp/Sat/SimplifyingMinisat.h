@@ -58,6 +58,7 @@ public:
 
   void setSeed(uint64_t seed) override;
   void setMaxConflicts(int64_t max_confl) override;
+  void clearMaxConflicts() override;
 
   void setVerbosity(int v) override;
 

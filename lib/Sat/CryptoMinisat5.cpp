@@ -264,6 +264,13 @@ void CryptoMiniSat5::setMaxConflicts(int64_t _max_confl)
   confl_base = s->get_sum_conflicts();
 }
 
+void CryptoMiniSat5::clearMaxConflicts()
+{
+  // CryptoMiniSat drops its own limits when solve() returns; this is the
+  // budget armBudgets() would hand it again.
+  max_confl = -1;
+}
+
 bool CryptoMiniSat5::addClauseInternal(
     const vec_literals& ps) // Add a clause to the solver.
 {

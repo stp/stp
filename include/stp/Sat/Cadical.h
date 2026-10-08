@@ -197,6 +197,7 @@ public:
 
   void setSeed(uint64_t seed) override;
   void setMaxConflicts(int64_t max_confl) override; // set max solver conflicts
+  void clearMaxConflicts() override;
 
   bool simplify() override; // Removes already satisfied clauses.
 

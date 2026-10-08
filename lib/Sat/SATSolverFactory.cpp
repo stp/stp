@@ -203,10 +203,17 @@ void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags)
 void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags,
                        std::chrono::steady_clock::time_point deadline)
 {
+  // A budget the flags do not set is cleared rather than left alone: the
+  // incremental drivers arm one long-lived backend here at every check, and
+  // a check without a budget must not stop where the last one did.
   if (flags.timeout_max_conflicts >= 0)
     s.setMaxConflicts(flags.timeout_max_conflicts);
+  else
+    s.clearMaxConflicts();
   if (flags.hasQueryTimeLimit())
     s.setDeadline(deadline);
+  else
+    s.clearDeadline();
   // The external stop request rides with the flags so that every backend a
   // query creates -- the first and any replacement -- polls the same hook.
   s.setStopPoll(flags.stop_poll, flags.stop_poll_opaque);

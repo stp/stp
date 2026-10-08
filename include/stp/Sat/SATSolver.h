@@ -430,10 +430,14 @@ public:
   // ---------------------------------------------------------------------
   // Resource budgets.
   //
-  // STP spells "no limit" as -1, and that case is filtered out by the
-  // caller, so these are only ever called with a value >= 0. A value of 0
-  // therefore means what it says: a budget of zero, i.e. give up without
-  // searching. It does not mean "unlimited".
+  // STP spells "no limit" as -1, and the caller turns that case into the
+  // clear*() calls below, so the setters are only ever called with a value
+  // >= 0. A value of 0 therefore means what it says: a budget of zero, i.e.
+  // give up without searching. It does not mean "unlimited".
+  //
+  // A backend can outlive the query it was armed for -- the incremental
+  // drivers keep one across checks and arm it again per check -- so a query
+  // without a budget clears the last one's rather than leaving it in place.
   // ---------------------------------------------------------------------
 
   // Seed the backend's randomised choices; backends without one ignore it.
@@ -445,6 +449,10 @@ public:
         << "Warning: Max conflict setting is not supported by this SAT solver"
         << std::endl;
   }
+
+  // Lift a conflict budget an earlier setMaxConflicts() armed. A backend
+  // without conflict budgets has none to lift.
+  virtual void clearMaxConflicts() {}
 
   // The time budget belongs to the whole query, not to one solve() call.
   // STP calls solve() once per abstraction-refinement iteration, so a budget
@@ -478,6 +486,9 @@ public:
                 << std::endl;
     }
   }
+
+  // Lift a deadline an earlier setDeadline() armed.
+  void clearDeadline() { deadline_set = false; }
 
   bool hasTimeLimit() const { return deadline_set; }
 
