@@ -175,8 +175,15 @@ bool CongruenceCandidates::proves(const ASTNode& equality)
   // what the rewriter adds on top of that is what decides whether the
   // proof is a few hundred conflicts or a few hundred thousand: unsimplified
   // it is two full circuits and a comparison.
-  const ASTNode query =
-      simplifier.SimplifyFormula_TopLevel(nf->CreateNode(NOT, equality), false);
+  //
+  // Only speed, though, so --disable-opt-inc is honoured here rather than
+  // overridden: SimplifyFormula_TopLevel asserts the flag, and the candidate
+  // is still decided by blasting the raw inequality. The two constant
+  // shortcuts below survive the skip because the factory folds as it builds.
+  const ASTNode negated = nf->CreateNode(NOT, equality);
+  const ASTNode query = bm->UserFlags.optimize_flag
+                            ? simplifier.SimplifyFormula_TopLevel(negated, false)
+                            : negated;
 
   if (query == bm->ASTFalse)
     return true; // the rewriter settled it: no solver needed
