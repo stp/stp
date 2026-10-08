@@ -40,6 +40,7 @@ THE SOFTWARE.
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -243,6 +244,74 @@ TEST(timeout_budget, no_limit_still_answers)
     s.add(a == value);
 
     EXPECT_TRUE(s.entails(a == value, CheckBudget{}).is_valid());
+  }
+}
+
+// A budget belongs to the check it is given to. The incremental driver keeps
+// one SAT backend across checks and arms it per check, so a check with no
+// budget -- neither in its CheckBudget nor in the options -- must search
+// without one, not stop where the check before it did. 46337 * 46327 is
+// answered within a second, but not within ten conflicts.
+TEST(timeout_budget, a_budget_does_not_outlive_its_check)
+{
+  struct Case
+  {
+    const char* name;
+    UnknownReason reason;
+    std::function<Result(Solver&)> limited;
+  };
+  const Case cases[] = {
+      {"CheckBudget conflicts", UnknownReason::CONFLICT_LIMIT,
+       [](Solver& s) { return s.check_sat({}, CheckBudget{std::nullopt, std::uint64_t(10)}); }},
+      {"CheckBudget time", UnknownReason::TIMEOUT,
+       [](Solver& s) { return s.check_sat({}, CheckBudget{0ms, std::nullopt}); }},
+      {"max-num-confl", UnknownReason::CONFLICT_LIMIT,
+       [](Solver& s) {
+         s.options().set_int("max-num-confl", 10);
+         const Result r = s.check_sat();
+         s.options().reset("max-num-confl");
+         return r;
+       }},
+      {"max-time", UnknownReason::TIMEOUT,
+       [](Solver& s) {
+         s.options().set_duration("max-time", 0ms);
+         const Result r = s.check_sat();
+         s.options().reset("max-time");
+         return r;
+       }},
+  };
+
+  for (const Backend& backend : backends())
+  {
+    for (const Case& c : cases)
+    {
+      SCOPED_TRACE(std::string(backend.name) + ", " + c.name);
+
+      TermManager tm;
+      Options o = backend_options(backend.name);
+      o.set("incremental", "on");
+      Solver s(tm, o);
+
+      const std::uint32_t width = 40;
+      const Term x = tm.declare("x", tm.mk_bv_sort(width));
+      const Term y = tm.declare("y", tm.mk_bv_sort(width));
+      const Term limit = tm.mk_bv(width, 1ULL << 16);
+      s.add(bvmul(x, y) == tm.mk_bv(width, 2146654199));
+      s.add(bvugt(x, tm.mk_bv(width, 1)));
+      s.add(bvugt(y, tm.mk_bv(width, 1)));
+      s.add(bvult(x, limit));
+      s.add(bvult(y, limit));
+
+      const Result limited = c.limited(s);
+      EXPECT_TRUE(limited.is_unknown()) << limited;
+      EXPECT_EQ(c.reason, limited.reason());
+
+      const Result unlimited = s.check_sat();
+      EXPECT_TRUE(unlimited.is_sat()) << unlimited << ": " << unlimited.reason_message();
+
+      // both checks ran on the driver's one backend
+      EXPECT_EQ(1u, s.statistics().uint64("incremental.engaged"));
+    }
   }
 }
 

@@ -75,6 +75,13 @@ void SimplifyingMinisat::setMaxConflicts(int64_t max_confl)
   s->setConfBudget(max_confl);
 }
 
+void SimplifyingMinisat::clearMaxConflicts()
+{
+  // As in MinisatCore: solveLimited() keeps the budget across calls, and
+  // the propagation budget this also lifts is one STP never sets.
+  s->budgetOff();
+}
+
 bool SimplifyingMinisat::addClauseInternal(
     const vec_literals& ps) // Add a clause to the solver.
 {

@@ -178,6 +178,13 @@ void Cadical::setMaxConflicts(int64_t _max_confl)
   max_confl = _max_confl;
 }
 
+void Cadical::clearMaxConflicts()
+{
+  // CaDiCaL drops its own limit when solve() returns; this is the copy
+  // solveInternal() would re-arm it from.
+  max_confl = -1;
+}
+
  //    0 = UNSOLVED     (limit reached or interrupted through 'terminate')
  //   10 = SATISFIABLE
  //   20 = UNSATISFIABLE

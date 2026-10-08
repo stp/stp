@@ -274,6 +274,13 @@ void MinisatCore::setMaxConflicts(int64_t max_confl)
   s->setConfBudget(max_confl);
 }
 
+void MinisatCore::clearMaxConflicts()
+{
+  // solveLimited() keeps the budget across calls. This also lifts a
+  // propagation budget, which STP never sets.
+  s->budgetOff();
+}
+
 bool MinisatCore::addClauseInternal(
     const SATSolver::vec_literals& ps) // Add a clause to the solver.
 {
