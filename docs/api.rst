@@ -268,6 +268,31 @@ answer as they are read. ``PARSE_ONLY`` reads it as ``--parse-only`` does. An in
 arrives, so a script driven over a pipe is answered command by command (in C
 a ``stp_text_source`` callback, in Python ``Solver.from_stream``).
 
+``SINGLE_QUERY`` (C ``STP_PARSE_SINGLE_QUERY``, Python ``"single-query"``)
+reads a script as data: it applies declarations, definitions and assertions
+as ``DECLARE_AND_ASSERT`` does, and nothing in the script may change the
+solver's configuration or state. The script must be one query: ``set-logic``
+at most once, before any declaration or assertion; ``set-info``, ignored;
+``set-option`` for ``:print-success`` and ``:produce-models`` only, ignored
+too (the output channels would open files, and every other option is the
+caller's to set); ``declare-const``, ``declare-fun``, ``declare-sort``,
+``define-fun``, ``define-sort``, ``define-const`` and ``assert``; exactly one
+``check-sat``, which is recorded and not run; after it, only ``exit``, any
+number of times. Anything else -- ``push``, ``pop``, either reset,
+``check-sat-assuming``, a ``get-`` request, ``echo``, a second ``check-sat``,
+a declaration after the ``check-sat`` -- or a script without a
+``check-sat`` is a ``PARSE`` error that names the command and its line. The
+caller then decides the query with its own ``check_sat``, under its own
+options. ``Solver::declared_logic()`` (C ``stp_solver_declared_logic``,
+Python ``declared_logic()``) is the logic the last successful parse named in
+``set-logic``, empty when it named none; it is not the ``logic`` option.
+
+A parse that fails part way, in any mode, leaves the solver as it was: its
+assertion stack, without the symbols the script declared, and its declared
+logic. A NUL byte in an input is ``INVALID_ARGUMENT``: in a text before
+anything is read, in a stream when the reader reaches it, since the lexer
+would stop or end a token there.
+
 A script's ``reset`` or ``reset-assertions`` can discard its declarations,
 but the term manager retains declarations from the API and earlier parses,
 and existing handles remain valid. Reusing a retained name for a different

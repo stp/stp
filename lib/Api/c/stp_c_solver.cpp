@@ -343,6 +343,13 @@ stp_status stp_solver_pop(stp_solver s, uint32_t n)
   return solver_write(s, "stp_solver_pop", [&](CSolver* cs) { cs->solver.pop(n); });
 }
 
+char* stp_solver_declared_logic(stp_solver s)
+{
+  return solver_read<char*>(s, "stp_solver_declared_logic", nullptr, [](CSolver* cs) {
+    return dup_string(cs->solver.declared_logic());
+  });
+}
+
 uint32_t stp_solver_level(stp_solver s)
 {
   return s == nullptr ? 0 : csolver(s)->solver.level();
@@ -529,7 +536,7 @@ stp_term stp_solver_symbol(stp_solver s, const char* name)
 stp_status stp_solver_parse_smt2(stp_solver s, const char* script, stp_parse_mode mode)
 {
   return solver_write(s, "stp_solver_parse_smt2", [&](CSolver* cs) {
-    if (static_cast<unsigned>(mode) > static_cast<unsigned>(STP_PARSE_ONLY))
+    if (static_cast<unsigned>(mode) > static_cast<unsigned>(STP_PARSE_SINGLE_QUERY))
       fail(ErrorCode::INVALID_ARGUMENT, "stp_solver_parse_smt2", "not a parse mode", 2);
     cs->solver.parse_smt2(str_arg(script, "stp_solver_parse_smt2", 1), static_cast<ParseMode>(mode));
   });
@@ -646,7 +653,7 @@ stp_status stp_solver_parse_source(stp_solver s, stp_text_source source, void* u
   return solver_write(s, "stp_solver_parse_source", [&](CSolver* cs) {
     if (source == nullptr)
       fail(ErrorCode::NULL_HANDLE, "stp_solver_parse_source", "the source is null", 1);
-    if (static_cast<unsigned>(mode) > static_cast<unsigned>(STP_PARSE_ONLY))
+    if (static_cast<unsigned>(mode) > static_cast<unsigned>(STP_PARSE_SINGLE_QUERY))
       fail(ErrorCode::INVALID_ARGUMENT, "stp_solver_parse_source", "not a parse mode", 4);
     SourceBuf buf(source, user);
     std::istream in(&buf);

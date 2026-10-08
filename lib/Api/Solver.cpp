@@ -47,6 +47,7 @@ THE SOFTWARE.
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <istream>
@@ -1315,6 +1316,11 @@ std::uint32_t Solver::level() const noexcept
   return n == 0 ? 0 : static_cast<std::uint32_t>(n - 1);
 }
 
+std::string Solver::declared_logic() const
+{
+  return live_read(*this, "Solver::declared_logic")->declared_logic;
+}
+
 std::vector<Term> Solver::assertions() const
 {
   SolverImpl* s = live_read(*this, "Solver::assertions");
@@ -1526,6 +1532,17 @@ struct InputFailed
 {
 };
 
+// A NUL in a stream: the lexer would end a token there, so the input would
+// be read as something other than it says. `offset` counts from the start
+// of the parse.
+struct InputHasNul
+{
+  std::size_t offset;
+};
+// How much of the stream the reader has handed the lexer (one parse at a
+// time: the reader is a process global, set under the parser lock).
+std::size_t stream_offset = 0;
+
 // The lexer's reader over a stream (setSMT2Reader): what the
 // stream's buffer holds after at most one refill, so that input arriving
 // over a pipe is parsed as it arrives rather than once a block has filled.
@@ -1562,9 +1579,17 @@ std::size_t read_stream(char* buf, std::size_t max, void* opaque)
       buf[0] = c;
       n = 1;
     }
+    if (const void* nul = std::memchr(buf, '\0', static_cast<std::size_t>(n)))
+      throw InputHasNul{stream_offset +
+                        static_cast<std::size_t>(static_cast<const char*>(nul) - buf)};
+    stream_offset += static_cast<std::size_t>(n);
     return static_cast<std::size_t>(n);
   }
   catch (const InputFailed&)
+  {
+    throw;
+  }
+  catch (const InputHasNul&)
   {
     throw;
   }
@@ -1583,6 +1608,7 @@ struct ReaderScope
 {
   explicit ReaderScope(std::istream* in)
   {
+    stream_offset = 0;
     if (in != nullptr)
       setSMT2Reader(&read_stream, in);
   }
@@ -1605,9 +1631,17 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   if (format != Format::AUTO && format != Format::SMTLIB2)
     detail::fail(ErrorCode::INVALID_ARGUMENT, fn, "parse reads SMT-LIB 2 only (SMTLIB2 or AUTO)");
   if (mode != ParseMode::DECLARE_AND_ASSERT && mode != ParseMode::EXECUTE &&
-      mode != ParseMode::PARSE_ONLY)
+      mode != ParseMode::PARSE_ONLY && mode != ParseMode::SINGLE_QUERY)
     detail::fail(ErrorCode::INVALID_ARGUMENT, fn, "not a parse mode");
-  const bool runs = mode != ParseMode::DECLARE_AND_ASSERT;
+  // The lexer scans a text as a C string: a NUL would end it there, and the
+  // rest would be dropped without a word.
+  if (source.stream == nullptr)
+    if (const std::size_t nul = source.text.find('\0'); nul != std::string_view::npos)
+      detail::fail(ErrorCode::INVALID_ARGUMENT, fn,
+                   "the input holds a NUL byte at offset " + std::to_string(nul) +
+                       ", where the parser would stop reading");
+  const bool single_query = mode == ParseMode::SINGLE_QUERY;
+  const bool runs = mode != ParseMode::DECLARE_AND_ASSERT && !single_query;
   detail::OutputRoute route(&s->route_sinks);
   std::lock_guard<std::mutex> hold(detail::parser_mutex());
   // The frontend's own refusals unwind to the parse entry and come back as a
@@ -1742,6 +1776,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   ::TypeChecker checker(*s->mgr->factory(), *bm);
   Cpp_interface pi(*bm, &checker);
   pi.enableProtocolChecks(runs);
+  pi.setSingleQuery(single_query);
   // The SMT-LIB frontend owns its protocol options, but backend options use
   // the same TOML-generated registry, type parser and live timing rules as
   // SolverOptions and the command line. Unknown SMT-LIB options remain
@@ -1983,6 +2018,16 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
     restore_stack();
     detail::fail(ErrorCode::IO, fn, "reading the input failed");
   }
+  catch (const InputHasNul& nul)
+  {
+    smt2lex_destroy();
+    pi.abortCurrentCommand();
+    pi.retainUFDeclarations(false);
+    restore_stack();
+    detail::fail(ErrorCode::INVALID_ARGUMENT, fn,
+                 "the input holds a NUL byte at offset " + std::to_string(nul.offset) +
+                     ", where the parser would stop reading");
+  }
   catch (const std::exception& e)
   {
     // anything else the engine threw inside the script, reported as
@@ -2001,6 +2046,14 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   // does, and fails only where the parser gave up.
   if (!runs && status == 0 && !pi.last_error_message.empty())
     status = 1;
+  // A single query is one: the script's end without its check-sat is a
+  // failed parse, as a second check-sat is.
+  if (single_query && status == 0 && pi.singleQueryChecks() == 0)
+  {
+    pi.last_error_message =
+        "the single-query parse mode needs a check-sat, and the script has none";
+    status = 1;
+  }
   if (status != 0)
   {
     // the interface's teardown deactivates what the failed script declared
@@ -2019,6 +2072,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
                            ? "syntax error"
                            : explain_redeclaration(pi.last_error_message));
   }
+  s->declared_logic = pi.declaredLogic();
   // adopt the symbols the script declared
   const std::vector<ASTNode> after = detail::flat_assertions(bm);
   ASTNodeSet old(before.begin(), before.end());
@@ -2235,6 +2289,10 @@ Term Solver::parse_term(std::string_view text) const
   // One term and nothing else, before anything is parsed: the text goes
   // inside "(assert ...)", and a ')' in it would close that command and run
   // what followed against this solver ("true) (reset-assertions) ...").
+  if (const std::size_t nul = text.find('\0'); nul != std::string_view::npos)
+    detail::fail(ErrorCode::INVALID_ARGUMENT, "Solver::parse_term",
+                 "the text holds a NUL byte at offset " + std::to_string(nul) +
+                     ", where the parser would stop reading");
   if (!is_one_smt2_term(text))
     detail::fail_parse("Solver::parse_term", 1, 0, "the text is not exactly one term");
   STPMgr* bm = s->mgr->bm;

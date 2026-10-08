@@ -225,6 +225,7 @@ typedef enum stp_parse_mode
   STP_PARSE_DECLARE_AND_ASSERT = 0,
   STP_PARSE_EXECUTE,
   STP_PARSE_ONLY,
+  STP_PARSE_SINGLE_QUERY, /**< a script as data: one query, nothing that changes the solver (ParseMode::SINGLE_QUERY) */
   STP_PARSE_MAX_ENUM = 0x7fffffff,
   STP_PARSE_MIN_ENUM = -0x7fffffff - 1
 } stp_parse_mode;
@@ -680,6 +681,7 @@ STP_API stp_status stp_solver_assert(stp_solver, stp_term); /**< SORT_MISMATCH u
 STP_API stp_status stp_solver_push(stp_solver, uint32_t n);
 STP_API stp_status stp_solver_pop(stp_solver, uint32_t n); /**< INVALID_ARGUMENT if n > level; nothing removed */
 STP_API uint32_t stp_solver_level(stp_solver);
+STP_API char* stp_solver_declared_logic(stp_solver); /**< the logic the last successful parse named in set-logic, "" for none (not the "logic" option); caller-owned (stp_free) */
 STP_API size_t stp_solver_num_assertions(stp_solver); /**< outermost first */
 STP_API stp_term stp_solver_assertion(stp_solver, size_t i);
 STP_API stp_status stp_solver_reset_assertions(stp_solver); /**< keeps options */

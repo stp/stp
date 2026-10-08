@@ -1726,6 +1726,12 @@
 
   void setParsedInfo(const stp::SMT2Attribute& attribute)
   {
+    // A single query's set-info is accepted and ignored: the script is data.
+    if (stp::GlobalParserInterface->singleQuery())
+    {
+      stp::GlobalParserInterface->success();
+      return;
+    }
     if (attribute.name == "status")
     {
       const std::string& status = attribute.value.text;
@@ -2189,9 +2195,16 @@ cmdi:
 |
      EXIT_TOK
     {
-       stp::GlobalParserInterface->cleanUp();
-       stp::GlobalParserInterface->success();
-       YYACCEPT;
+       // A single query's exit ends nothing: what follows it is checked as
+       // well (more exits, and nothing else).
+       if (stp::GlobalParserInterface->singleQuery())
+         stp::GlobalParserInterface->success();
+       else
+       {
+         stp::GlobalParserInterface->cleanUp();
+         stp::GlobalParserInterface->success();
+         YYACCEPT;
+       }
     }
 |
      GET_MODEL_TOK
@@ -2442,6 +2455,7 @@ cmdi:
       // choose its measured automatic-engagement policy. reset clears the
       // classification; reset-assertions retains it with the SMT-LIB logic.
       stp::GlobalParserInterface->setLogic(*$2);
+      stp::GlobalParserInterface->noteDeclaredLogic(*$2);
       // The floating-point keywords exist only inside the FP logics;
       // everywhere else names like "fp" or "NaN" stay ordinary symbols,
       // exactly as before floating-point support existed.

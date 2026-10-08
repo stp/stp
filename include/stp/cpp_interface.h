@@ -409,6 +409,14 @@ private:
   enum class Mode { Start, Assert, Sat, Unsat };
   Mode mode = Mode::Start;
   bool protocol_checks = false;
+  bool single_query = false;
+  int single_query_checks = 0;
+  bool single_query_content = false; // a declaration, definition or assertion
+  bool single_query_exited = false;
+  std::string declared_logic;
+  void admitInSingleQuery(const std::string& command);
+  ATTR_NORETURN void refuseInSingleQuery(const std::string& command,
+                                         const std::string& why);
   std::string current_command_name;
   bool current_command_supported = true;
   std::unique_ptr<SMT2Output> output_channels;
@@ -741,6 +749,26 @@ public:
   // constructed or registered.
   DLL_PUBLIC void beginCurrentCommand();
   void enableProtocolChecks(bool enable) { protocol_checks = enable; }
+  // The API's single-query parse (ParseMode::SINGLE_QUERY): a script as
+  // data, which applies declarations, definitions and assertions and may
+  // change nothing of the solver's configuration or state. requireCommand
+  // refuses, by name and line, every command outside one query's shape,
+  // setOption every option but the two printing ones, and an exit ends
+  // nothing, so what follows it is checked too. The check-sat is counted,
+  // and skipped as every non-run parse skips it.
+  void setSingleQuery(bool on)
+  {
+    single_query = on;
+    single_query_checks = 0;
+    single_query_content = false;
+    single_query_exited = false;
+  }
+  bool singleQuery() const { return single_query; }
+  int singleQueryChecks() const { return single_query_checks; }
+  // The logic the script named in its set-logic, or "": a script without
+  // one is read as ALL, but names nothing.
+  void noteDeclaredLogic(const std::string& logic) { declared_logic = logic; }
+  const std::string& declaredLogic() const { return declared_logic; }
   DLL_PUBLIC void requireCommand(const std::string& command);
   DLL_PUBLIC void unavailableQuery(const std::string& command,
                                    const std::string& option);
