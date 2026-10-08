@@ -367,8 +367,9 @@ These apply to all generators:
 -  ``ENABLE_HIGHS_CUT_LOG`` -- with ``ENABLE_HIGHS``, build HiGHS with
    ``cmake/deps-utils/highs-root-cut-log.patch``, which has it report how
    it derived the cuts it adds at the root of a MIP search, so that
-   ``--lra-highs-cuts`` can rebuild them exactly. Off by default. An
-   installed HiGHS has to have been built with that patch
+   ``--lra-highs-cuts`` can rebuild them exactly. On by default when STP
+   builds HiGHS via ExternalProject; off by default for an installed HiGHS.
+   An installed HiGHS has to have been built with that patch to enable it
 -  ``HIGHS_DIR`` -- the prefix of an installed HiGHS to use, rather than
    searching for one. ``STP_DEPS_LOCAL_ONLY`` skips that search, as it does
    for the dependencies it names

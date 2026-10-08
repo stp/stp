@@ -247,6 +247,10 @@ def main():
         (["(<= (+ x y) 0)", "(>= (+ (* 2 x) (* 2 y)) 1)"], "unsat", "rays=1"),
         (["(= (+ x y) 0)", "(> x 0)", "(< x 1)"], "sat", "models=1"),
         (["(>= x 0)", "(< x 0)"], "unsat", None),
+        # Inconsistent column bounds have no HiGHS basis for a dual ray.
+        (["(<= x 1)", "(>= x 2)"], "unsat", None),
+        # HiGHS drops this tiny matrix entry and would request a basisless ray.
+        (["(<= 1 (* x 0.00000000000001))"], "sat", None),
         (["(>= x 1)", "(>= y 1)", "(<= (+ x y) 1)"], "unsat", "rays=1"),
         (["(= x (/ 1 3))", "(= y (/ 1 7))", "(= (+ x y) (/ 10 21))"], "sat", "models=1"),
         # A tolerance-sized numerical inconsistency is still an exact conflict.
