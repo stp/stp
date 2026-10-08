@@ -2563,21 +2563,26 @@ void Cpp_interface::getModel()
   if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
     GlobalSTP->getIncrementalSolver()->materializePendingModel();
 
+  // Current frames keep their declaration vectors private. Resolve every
+  // manager-known name through the frame lookup instead: only the innermost
+  // live binding compares equal, while popped and shadowed nodes, and the
+  // solver's own symbols, which were never declared, remain excluded.
+  const auto in_scope = [this](const ASTNode& symbol) {
+    if (symbol.GetKind() != SYMBOL)
+      return true; // nothing to look up, and GetName would be fatal
+    ASTNode visible;
+    return LookupSymbol(symbol.GetName(), visible) && visible == symbol;
+  };
+
   std::ostringstream os;
-  GlobalSTP->Ctr_Example->PrintFullCounterExampleSMTLIB2(os);
+  GlobalSTP->Ctr_Example->PrintFullCounterExampleSMTLIB2(os, in_scope);
   if (bm.HasRealModel())
   {
     ASTVec visible_real_symbols;
-    // Current frames keep their declaration vectors private. Resolve every
-    // manager-known Real name through the frame lookup instead: only the
-    // innermost live binding compares equal, while popped and shadowed nodes
-    // remain excluded. The RealModel applies its own deterministic ordering.
+    // The same rule; the RealModel applies its own deterministic ordering.
     for (const ASTNode& symbol : bm.AllRealSymbols())
-    {
-      ASTNode visible;
-      if (LookupSymbol(symbol.GetName(), visible) && visible == symbol)
+      if (in_scope(symbol))
         visible_real_symbols.push_back(symbol);
-    }
     bm.PrintRealModelSMTLIB2(os, visible_real_symbols);
   }
 

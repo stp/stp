@@ -2834,9 +2834,22 @@ void AbsRefine_CounterExample::PrintArrayValueSMTLIB2(
  So we can't just use the counterexample - because some might have been eliminated from the problem
  before SAT solving.
 */
-void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
+void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(
+    std::ostream& os, const SymbolVisible& visible)
 {
   const ASTNodeSet symbols = bm->getSymbols();
+  // getSymbols() is the manager's whole intern table, which outlives every
+  // scope: it keeps a declaration whose frame was popped, a node whose name a
+  // later declaration rebound, and the solver's own symbols. A caller with a
+  // notion of scope says which of them this model is about.
+  // Only a symbol has a name to resolve. A read's array operand can be a
+  // write chain, an if-then-else or a substituted definition, and asking those
+  // for a name is fatal (GetName: Called GetName on a non-symbol), so they are
+  // not the caller's to judge: they belong to whichever symbol the chain is
+  // built over, which this is asked about separately.
+  const auto entry = [&visible](const ASTNode& node) {
+    return !visible || node.GetKind() != SYMBOL || visible(node);
+  };
 
   // There used to be a second output path here, taken when array equality was
   // off, which printed arrays as one line per observed read:
@@ -2853,7 +2866,7 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
 
   for (ASTNode f: symbols)
   {
-      if (ARRAY_TYPE != f.GetType())
+      if (ARRAY_TYPE != f.GetType() && entry(f))
         outputLine(os, f, f); // Arrays are printed below, from the reads.
   }
 
@@ -2866,7 +2879,8 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
   // observed.
   vector<ASTNode> arrays;
   for (ASTNode f : symbols)
-    if (ARRAY_TYPE == f.GetType() && !bm->FoundIntroducedSymbolSet(f))
+    if (ARRAY_TYPE == f.GetType() && !bm->FoundIntroducedSymbolSet(f) &&
+        entry(f))
       arrays.push_back(f);
   std::sort(arrays.begin(), arrays.end(),
             [](const ASTNode& x, const ASTNode& y) {
