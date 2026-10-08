@@ -478,7 +478,9 @@ private:
   // True only for the mathematical SMT-LIB QF_LRA logic.  The established
   // QF_FPLRA-family names remain floating-point modes and never set it.
   bool lra_logic;
-  size_t solves_run;
+  // The solves made so far are not counted here but on GlobalSTP
+  // (STP::incrementalSolvesRun): the API's own checks solve on the same
+  // driver, and an interface lasts only as long as one parse.
 
   // The most recent check-sat-assuming: its assumption terms, its verdict,
   // and whether it is still the last thing that happened to the assertion

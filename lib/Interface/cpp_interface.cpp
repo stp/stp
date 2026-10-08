@@ -131,7 +131,6 @@ void Cpp_interface::init()
   pushed_in_session = false;
   delayed_bv_auto_engagement = false;
   lra_logic = false;
-  solves_run = 0;
   last_check_work.clear();
 }
 
@@ -1125,6 +1124,9 @@ void Cpp_interface::reset()
   resetSolver();
   discardExtensionalitySolveState();
   resetIncrementalSolver();
+  // The new session's first solve is the new driver's first.
+  if (GlobalSTP != NULL)
+    GlobalSTP->incrementalSolvesRun = 0;
 
   // A reason-unknown belongs to the session that produced it.
   bm.clearUnknown();
@@ -1554,6 +1556,12 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
     // The policy itself lives on the driver, so this frontend and the API
     // cannot drift apart again; --incremental=on overrides it, and
     // --incremental=off has already kept session_incremental false.
+    //
+    // The count is the session's, on GlobalSTP, not this interface's: the
+    // API makes a new interface for every parse, and its own checks solve on
+    // the same driver, so a count of this interface's solves would claim a
+    // forced first solve of a driver the API had already solved on.
+    size_t& solves_run = GlobalSTP->incrementalSolvesRun;
     const bool autoEngaged = IncrementalSolver::automaticEngagementReady(
         bm.UserFlags.incremental_auto_engage_at, delayed_bv_auto_engagement,
         solves_run);
@@ -2131,7 +2139,8 @@ void Cpp_interface::getInfo(std::string flag)
     cout << std::fixed;
     cout.precision(2);
 
-    cout << "(:check-sat-calls " << solves_run << endl;
+    cout << "(:check-sat-calls "
+         << (GlobalSTP != NULL ? GlobalSTP->incrementalSolvesRun : 0) << endl;
     cout << " :cpu-time " << processCpuTime() << endl;
     cout << " :peak-memory-mb " << peakMemoryMB();
 

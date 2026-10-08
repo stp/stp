@@ -140,13 +140,19 @@ public:
   // third by default, as the API has no set-logic to choose a per-logic
   // default by -- so the first checks, the largest all-new formulas, get the
   // batch pipeline's whole-formula simplification; incremental=on engages it
-  // from the start. The SMT-LIB2 frontend keeps its own copies in
-  // Cpp_interface.
+  // from the start. The SMT-LIB2 frontend keeps its own copies of the two
+  // flags in Cpp_interface.
   bool incrementalFromStart = false;
   // Session state, turned on by the first push unless the caller asked for
   // IncrementalMode::OFF. Separate from UserFlags.incremental_mode, which
   // stays the caller's request.
   bool sessionIncremental = false;
+  // The solves made on this STP's driver since the STP was made or an
+  // SMT-LIB2 (reset) ended the session, by either frontend: one count, not
+  // a copy each, because the API's check_sat and a script's check-sat solve
+  // on the one driver, and whether a solve is its forced first
+  // (IncrementalSolver::forcedFirstSolve) is a fact about the driver's
+  // session. reset_assertions leaves it, as forcedFirstSolve describes.
   size_t incrementalSolvesRun = 0;
 
   DLL_PUBLIC IncrementalSolver* getIncrementalSolver();
