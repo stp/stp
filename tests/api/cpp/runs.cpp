@@ -360,6 +360,59 @@ TEST(Runs, a_run_ended_in_check_sat_assuming_keeps_no_assumptions)
   EXPECT_TRUE(s.check_sat().is_sat());
 }
 
+// A check the input runs and the solver's own check_sat solve on one
+// incremental driver, so they are one session's checks: whichever comes first
+// is the driver's first solve, and only that one. Each used to count only its
+// own, so under incremental = on the second claimed a forced first solve of a
+// driver that had already solved -- an assertion failure, and in a build
+// without assertions a script's check after the solver's could run the
+// first solve's pure-literal pass over its new assertions alone and answer
+// sat for an unsatisfiable stack.
+TEST(Runs, a_script_and_the_solver_check_in_one_session)
+{
+  for (const char* incremental : {"on", "auto", "off"})
+    for (const bool script_first : {true, false})
+    {
+      SCOPED_TRACE(incremental);
+      SCOPED_TRACE(script_first ? "script first" : "solver first");
+      TermManager tm;
+      Options o;
+      o.set_str("incremental", incremental);
+      Solver s(tm, o);
+      Heard h;
+      h.attach(s);
+      s.parse_smt2("(declare-const a (_ BitVec 2)) (assert (bvult a #b10))");
+      if (script_first)
+        s.parse_smt2("(check-sat)", ParseMode::EXECUTE);
+      EXPECT_TRUE(s.check_sat().is_sat());
+      if (!script_first)
+        s.parse_smt2("(check-sat) (get-info :all-statistics)", ParseMode::EXECUTE);
+      EXPECT_EQ(h.out.rfind("sat\n", 0), 0u) << h.out;
+      EXPECT_EQ(s.statistics().uint64("checks.total"), 2u);
+      // the script's statistics count the session's solves, the solver's too
+      if (!script_first)
+      {
+        EXPECT_NE(h.out.find("(:check-sat-calls 2\n"), std::string::npos) << h.out;
+      }
+    }
+
+  for (const char* incremental : {"on", "auto", "off"})
+  {
+    SCOPED_TRACE(incremental);
+    TermManager tm;
+    Options o;
+    o.set_str("incremental", incremental);
+    Solver s(tm, o);
+    Heard h;
+    h.attach(s);
+    s.parse_smt2("(declare-const p Bool) (declare-const q Bool) (assert (or (not p) (not q)))");
+    EXPECT_TRUE(s.check_sat().is_sat());
+    s.parse_smt2("(assert p) (assert q) (check-sat)", ParseMode::EXECUTE);
+    EXPECT_EQ(h.out, "unsat\n");
+    EXPECT_TRUE(s.check_sat().is_unsat());
+  }
+}
+
 TEST(Runs, every_cnf_reaches_the_cnf_sink)
 {
   TermManager tm;
