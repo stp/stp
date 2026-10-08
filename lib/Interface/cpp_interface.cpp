@@ -103,8 +103,6 @@ void Cpp_interface::init()
 
   print_success = false;
   output_channels->reset();
-  ignoreCheckSatRequest = false;
-  retain_uf_declarations = false;
   produce_models = initial_produce_models;
   bm.UserFlags.produce_models = initial_produce_models;
   bm.UserFlags.random_seed = initial_random_seed;
