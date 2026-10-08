@@ -1806,7 +1806,7 @@ void AbsRefine_CounterExample::CheckCounterExample(
   // this root aligned with solve-boundary array-equality lowering; rebuilding
   // the check from the manager's parsed assertions would lose both facts.
   if (bm->UserFlags.stats_flag)
-    std::cout << "checking counterexample\n";
+    std::cerr << "checking counterexample\n";
 
   if (debug_counterexample)
     cerr << "checking " << checked_input;
@@ -2961,7 +2961,7 @@ void AbsRefine_CounterExample::PrintSATModel(SATSolver& newS,
   if (!(bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag))
     return;
 
-  cout << "Satisfying assignment: " << endl;
+  cerr << "Satisfying assignment: " << endl;
   for (ToSATBase::ASTNodeToSATVar::const_iterator it = m.begin(); it != m.end();
        it++)
   {
@@ -2975,14 +2975,14 @@ void AbsRefine_CounterExample::PrintSATModel(SATSolver& newS,
 
       if (newS.modelValue(v[i]) == newS.true_literal())
       {
-        it->first.nodeprint(cout);
-        cout << " {" << i << "}" << endl;
+        it->first.nodeprint(cerr);
+        cerr << " {" << i << "}" << endl;
       }
       else if (newS.modelValue(v[i]) == newS.false_literal())
       {
-        cout << "NOT ";
-        it->first.nodeprint(cout);
-        cout << " {" << i << "}" << endl;
+        cerr << "NOT ";
+        it->first.nodeprint(cerr);
+        cerr << " {" << i << "}" << endl;
       }
     }
   }

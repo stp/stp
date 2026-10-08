@@ -1269,11 +1269,11 @@ void STPMgr::ASTNodeStats(const char* c, const ASTNode& a)
   if (!UserFlags.stats_flag)
     return;
 
-  cout << "[" << GetRunTimes()->getDifference() << "]" << c;
+  cerr << "[" << GetRunTimes()->getDifference() << "]" << c;
   if (UserFlags.print_nodes_flag)
-    cout << a << endl;
+    cerr << a << endl;
 
-  cout << "Node size is: " << NodeSize(a) << endl;
+  cerr << "Node size is: " << NodeSize(a) << endl;
 }
 
 unsigned int STPMgr::NodeSize(const ASTNode& a)

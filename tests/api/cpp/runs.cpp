@@ -306,9 +306,14 @@ TEST(Runs, the_engine_prints_nowhere_but_the_sinks)
   EXPECT_TRUE(s.check_sat().is_sat());
   stdout_is_quiet(testing::internal::GetCapturedStdout());
   EXPECT_EQ(testing::internal::GetCapturedStderr(), "");
-  // the statistics the options asked for, on both channels
+  // The statistics the options asked for, on the diagnostic channel -- all of
+  // them. The per-pass node sizes used to arrive on the regular channel, which
+  // for the SMT-LIB frontend is the one that carries command responses, so a
+  // (get-model) came back with them interleaved. They are diagnostics, so they
+  // go where "Difficulty Initially" already went.
   EXPECT_NE(h.err.find("Difficulty Initially"), std::string::npos) << h.err;
-  EXPECT_NE(h.out.find("Node size is"), std::string::npos) << h.out;
+  EXPECT_NE(h.err.find("Node size is"), std::string::npos) << h.err;
+  EXPECT_EQ(h.out.find("Node size is"), std::string::npos) << h.out;
   // a sink that writes to the process's streams itself reaches them
   s.set_diagnostic_sink([](std::string_view c) { std::cerr << c; });
   testing::internal::CaptureStderr();

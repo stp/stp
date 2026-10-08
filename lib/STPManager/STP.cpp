@@ -1436,7 +1436,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   }
 
   if (bm->UserFlags.stats_flag && difficultyReversionApplies)
-    cout << "Difficulty After Size reducing:" << initial_difficulty_score
+    cerr << "Difficulty After Size reducing:" << initial_difficulty_score
          << endl;
 
   // So we can delete the object and release all the hash-buckets storage.
