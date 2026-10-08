@@ -150,6 +150,21 @@ void validate_engine_options(const UserDefinedFlags& flags)
                   "cmake/deps-utils/cadical-decision-polarity.patch, or "
                   "MiniSat with the external-propagator interface");
   }
+  // The SAT search reset needs a backend that can do one. LraCoordinator
+  // refuses it as well, but as an exception the engine reports as
+  // SOLVER_ERROR -- an internal failure, for a backend the caller chose.
+  // tools/stp refuses it before reading the input; this is the same refusal,
+  // in the same words, for the two routes that reach neither: a script's
+  // set-option, and the API.
+  if (flags.lra_extension_restart_sat &&
+      flags.solver_to_use != UserDefinedFlags::CADICAL_SOLVER)
+  {
+    if (has_sat_backend("cadical"))
+      fail_option(ErrorCode::OPTION_CONFLICT, "lra-extension-restart-sat",
+                  "--lra-extension-restart-sat=1 requires --cadical");
+    fail_option(ErrorCode::OPTION_UNAVAILABLE, "lra-extension-restart-sat",
+                "--lra-extension-restart-sat=1 requires a build with CaDiCaL");
+  }
 }
 
 // ------------------------------------------------------------ SolverImpl
