@@ -1100,6 +1100,78 @@ class RegistrySetOptions(unittest.TestCase):
                 self.assertNotIn('unsupported', result.stdout)
                 self.assertNotIn('unreachable', result.stdout)
 
+    def test_excluded_options_are_refused(self):
+        # Every exclusion relation the registry declares, both ways round: the
+        # relation is written on one of its two entries, and a script may name
+        # either first. The command line refuses each of these; through
+        # set-option they used to be accepted and the query answered.
+        pairs = [('end-after-cnf', 'true', 'stop-after-cnf', 'true'),
+                 ('size-reducing-only', 'true', 'difficulty-reversion', 'true'),
+                 ('size-reducing-only', 'true', 'ite-context-simplifications',
+                  'true'),
+                 ('size-reducing-only', 'true', 'simplify-to-constants-only',
+                  'true'),
+                 ('bb.simplify-during-bb', 'true', 'disable-opt-inc', 'true'),
+                 ('disable-simplifications', 'true', 'flattening', 'true'),
+                 ('bv-term-abstraction-profile', 'aggressive',
+                  'bv-term-abstraction-rounds', '2')]
+        for first, fv, second, sv in pairs:
+            for a, av, b, bv in ((first, fv, second, sv),
+                                 (second, sv, first, fv)):
+                with self.subTest(first=a, second=b):
+                    result = run('(set-option :%s %s)\n'
+                                 '(set-option :%s %s)\n'
+                                 '(echo "unreachable")\n' % (a, av, b, bv))
+                    self.assertNotEqual(result.returncode, 0,
+                                        result.stdout + result.stderr)
+                    self.assertIn("cannot be combined with '%s'" % a,
+                                  result.stdout)
+                    self.assertIn(':%s' % b, result.stdout)
+                    self.assertNotIn('unsupported', result.stdout)
+                    self.assertNotIn('unreachable', result.stdout)
+
+    def test_build_prerequisite_is_refused(self):
+        # The other rule that a later set-option cannot settle: an entry this
+        # build cannot honour. Only checked where the build really lacks it,
+        # which the command line reports for the same option.
+        probe = run('', args=('--lra-highs-replay=1',))
+        if 'requires a build with' not in probe.stdout + probe.stderr:
+            self.skipTest('this build has HiGHS')
+        result = run('(set-option :lra-highs-replay true)\n'
+                     '(echo "unreachable")\n')
+        self.assertNotEqual(result.returncode, 0,
+                            result.stdout + result.stderr)
+        self.assertIn('needs a build with highs', result.stdout)
+        self.assertNotIn('unsupported', result.stdout)
+        self.assertNotIn('unreachable', result.stdout)
+        # Naming the default asks for nothing the build lacks, so it stands.
+        kept = run('(set-option :lra-highs-replay false)\n'
+                   '(set-logic QF_BV)\n'
+                   '(declare-const x (_ BitVec 8))\n'
+                   '(assert (= x #x03))\n'
+                   '(check-sat)\n')
+        self.assertEqual(kept.returncode, 0, kept.stdout + kept.stderr)
+        self.assertEqual(kept.stdout, 'sat\n')
+
+    def test_one_half_of_an_exclusion_still_solves(self):
+        # The refusal is about the pair. Either option on its own is accepted,
+        # or the test above would pass on a solver that refused both.
+        for option, value in [('end-after-cnf', 'false'),
+                              ('stop-after-cnf', 'false'),
+                              ('size-reducing-only', 'true'),
+                              ('difficulty-reversion', 'true'),
+                              ('disable-simplifications', 'true'),
+                              ('flattening', 'true')]:
+            with self.subTest(option=option):
+                result = run('(set-option :%s %s)\n'
+                             '(set-logic QF_BV)\n'
+                             '(declare-const x (_ BitVec 8))\n'
+                             '(assert (= x #x03))\n'
+                             '(check-sat)\n' % (option, value))
+                self.assertEqual(result.returncode, 0,
+                                 result.stdout + result.stderr)
+                self.assertEqual(result.stdout, 'sat\n')
+
     def test_reset_reopens_before_first_check_options(self):
         result = run('''
 (set-option :fp-abstraction-incremental true)

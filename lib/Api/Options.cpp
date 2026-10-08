@@ -853,6 +853,36 @@ void OptionsImpl::resolve(const char* /*fn*/) const
   }
 }
 
+std::string OptionsImpl::refuses_write(std::string_view name,
+                                       std::string_view text) const
+{
+  const OptionSpec& spec = spec_of(name);
+  // Exclusions in both directions: a relation is declared on one of its two
+  // entries, and a caller may write either one first.
+  for (std::size_t e = 0; e < spec.num_excludes; ++e)
+  {
+    const OptionSpec* other = find_option(spec.excludes[e]);
+    if (other != nullptr && is_set[option_index(other)])
+      return std::string("cannot be combined with '") + other->name + "'";
+  }
+  for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
+  {
+    if (!is_set[i] || &kOptionSpecs[i] == &spec)
+      continue;
+    for (std::size_t e = 0; e < kOptionSpecs[i].num_excludes; ++e)
+      if (std::string_view(kOptionSpecs[i].excludes[e]) == spec.name)
+        return std::string("cannot be combined with '") + kOptionSpecs[i].name +
+               "'";
+  }
+  // As resolve() has it, and over the same canonical spelling: naming the
+  // default asks for nothing the build lacks. parse_option_text raises an
+  // invalid value, which is the caller's to report either way.
+  if (!option_build_supported(spec) &&
+      option_text(spec, parse_option_text(spec, text)) != spec.default_text)
+    return std::string("needs a build with ") + spec.requires_build;
+  return std::string();
+}
+
 OptionInfo OptionsImpl::info(std::string_view name) const
 {
   const OptionSpec& spec = spec_of(name);

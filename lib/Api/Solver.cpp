@@ -1788,7 +1788,17 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
     const std::uint64_t parser_seed = bm->UserFlags.random_seed;
     try
     {
-      SolverOptions(s).set(spec->name, registry_value);
+      // The registry's exclusions and build prerequisites are enforced in
+      // resolve(), which a parsed script never reaches: its checks go through
+      // the frontend, not run_check_impl. Asked at the write instead, before
+      // anything is written, so an option already set keeps the value it was
+      // given and the message can name both halves of a conflict.
+      const std::string refusal =
+          s->options.refuses_write(spec->name, registry_value);
+      if (refusal.empty())
+        SolverOptions(s).set(spec->name, registry_value);
+      else
+        diagnostic = refusal;
     }
     catch (const Error& error)
     {

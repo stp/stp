@@ -388,6 +388,13 @@ struct DLL_PUBLIC OptionsImpl
   const OptionValue& get(const char* fn, std::string_view name, OptType expect) const;
   OptionValue resolved(std::size_t index) const;
   void resolve(const char* fn) const;
+  // Why a write of `name` = `text` is refused, or "". resolve() reports the
+  // same once every option is in, which is where the command line asks; a
+  // caller that writes them one at a time and never resolves asks here. Only
+  // the rules that cannot be settled by a later write: an exclusion stands
+  // whatever follows it, and so does a build that lacks the entry, but
+  // `requires` names an option a later write may still give the right value.
+  std::string refuses_write(std::string_view name, std::string_view text) const;
   OptionInfo info(std::string_view name) const;
   std::vector<std::string> names(std::optional<Tier>) const;
   std::string help(std::optional<Tier>) const;
