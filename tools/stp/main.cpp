@@ -100,13 +100,13 @@ namespace reg = stp::api::detail;
 //     built unless asked for (produce-models) and exact rationals are not
 //     re-derived (lra-verify-canonical), both set explicitly unless given;
 //   - where the refusals the solver makes from the applied options (the
-//     CaDiCaL knobs, --lra-decision-polarity) and the HiGHS-only searches are
+//     CaDiCaL knobs, --lra-decision-polarity, --lra-extension-restart-sat
+//     without a backend that can reset) and the HiGHS-only searches are
 //     reported;
 //   - the LRA option combinations the coordinator would refuse only once a
 //     Real query reached it (the extension controls with a Real session;
-//     --lra-extension-restart-sat without CaDiCaL, with an explicit
-//     --cadical-factor=on or with --array-index-hints=decide), refused by
-//     value;
+//     --lra-extension-restart-sat with an explicit --cadical-factor=on or
+//     with --array-index-hints=decide), refused by value;
 //   - the manager-scoped entries (simplify, uf-sort-width), which go to the
 //     TermManager: an input printed back is read without folding, as it
 //     always was.
@@ -846,15 +846,27 @@ int CommandLine::parse_options(int argc, char** argv)
 
   // The solver applies the options and refuses what the applied options
   // cannot honour (CaDiCaL's knobs, an explicit --lra-decision-polarity
-  // without what it needs), in the engine's words.
+  // without what it needs, a SAT search reset on a backend that cannot do
+  // one), in the engine's words.
+  //
+  // The reset's refusal is set aside rather than reported here, as a
+  // HiGHS-only search is: the command line has always checked for it with
+  // the LRA combinations below, and reports the combination first. It is
+  // reported there without fail, so a solver this leaves unmade never
+  // reaches the run.
+  std::string restart_sat_refusal;
   try
   {
     make_solver();
   }
   catch (const api::Error& error)
   {
-    cerr << "ERROR: " << detail_of(error.what()) << endl;
-    return -1;
+    if (error.option() != "lra-extension-restart-sat")
+    {
+      cerr << "ERROR: " << detail_of(error.what()) << endl;
+      return -1;
+    }
+    restart_sat_refusal = detail_of(error.what());
   }
 
   if (highs_cuts_requested)
@@ -908,21 +920,10 @@ int CommandLine::parse_options(int argc, char** argv)
       std::exit(-1);
     }
 
-    // 'auto' is the first backend the build has, in sat_backends()' order.
-    std::string backend = options.get_str("sat-backend");
-    if (backend == "auto")
-    {
-      const std::vector<std::string> built = stp::sat_backends();
-      backend = built.empty() ? std::string() : built.front();
-    }
-    if (restart_sat && backend != "cadical")
-    {
-      if (stp::has_sat_backend("cadical"))
-        cerr << "ERROR: --lra-extension-restart-sat=1 requires --cadical" << endl;
-      else
-        cerr << "ERROR: --lra-extension-restart-sat=1 requires a build with CaDiCaL" << endl;
-      std::exit(-1);
-    }
+    // The backend that cannot reset is the engine's own refusal, set aside at
+    // make_solver and reported here, where this has always checked for it.
+    if (!restart_sat_refusal.empty())
+      refuse("ERROR: " + restart_sat_refusal);
 
 #ifdef STP_CADICAL_HAS_FACTOR
     // Only an explicit 'on': the unnamed default and 'auto' are turned off
