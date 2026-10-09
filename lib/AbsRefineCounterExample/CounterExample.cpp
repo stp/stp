@@ -3444,17 +3444,6 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
         {
           CheckCounterExample(SatSolver.okay(), submitted_input);
         }
-
-        // A caller that asked for the counterexample without an SMT-LIB 2
-        // frontend to print it after the check (the API): the model in
-        // SMT-LIB 2, as that frontend's -p prints it.
-        if ((bm->UserFlags.stats_flag ||
-             bm->UserFlags.print_counterexample_flag) &&
-            (!bm->UserFlags.smtlib2_parser_flag))
-        {
-          PrintFullCounterExampleSMTLIB2(cout);
-          cout.flush();
-        }
         if (lra_coordinator != NULL)
         {
           const lra::CommitOutcome committed =
@@ -3481,6 +3470,19 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
             ClearAllTables();
             return SOLVER_ERROR;
           }
+        }
+
+        // A caller that asked for the counterexample without an SMT-LIB 2
+        // frontend to print it after the check (the API): the model in
+        // SMT-LIB 2, as that frontend's -p prints it. Printed once the
+        // arithmetic coordinator has committed the Real model, which an
+        // uninterpreted function's Real arguments are read from.
+        if ((bm->UserFlags.stats_flag ||
+             bm->UserFlags.print_counterexample_flag) &&
+            (!bm->UserFlags.smtlib2_parser_flag))
+        {
+          PrintFullCounterExampleSMTLIB2(cout);
+          cout.flush();
         }
         return SOLVER_INVALID;
       }

@@ -272,6 +272,33 @@ TEST(Runs, a_stream_that_fails_fails_the_parse)
                    s.parse(text, Format::SMTLIB2, static_cast<ParseMode>(7)));
 }
 
+TEST(Runs, the_diagnostic_prints_answer_a_query_over_reals_with_a_function)
+{
+  // Either option prints the counterexample from the library; on a query
+  // whose uninterpreted function takes a Real, that print reads the Real
+  // model, so it must come after the arithmetic has committed it.
+  for (const char* option : {"print-functionstat", "print-counterex"})
+  {
+    SCOPED_TRACE(option);
+    TermManager tm;
+    Options o;
+    o.set(option, "true");
+    Solver s(tm, o);
+    s.parse_smt2("(declare-const v Real)(declare-fun f (Real) Real)"
+                 "(assert (> (f v) 0.0))");
+    testing::internal::CaptureStdout();
+    testing::internal::CaptureStderr();
+    const Result r = s.check_sat();
+    testing::internal::GetCapturedStdout();
+    testing::internal::GetCapturedStderr();
+    EXPECT_TRUE(r.is_sat()) << r.reason_message();
+    // and the manager is still sound for another solver
+    Solver again(tm);
+    again.parse_smt2("(declare-const x (_ BitVec 8))(assert (= x #x01))");
+    EXPECT_TRUE(again.check_sat().is_sat());
+  }
+}
+
 TEST(Runs, the_engine_prints_nowhere_but_the_sinks)
 {
   TermManager tm;
