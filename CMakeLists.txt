@@ -27,6 +27,23 @@
 # by default at this minimum.
 cmake_minimum_required(VERSION 3.18)
 
+# SANITIZE forces clang++, and a compiler has to be chosen before project()
+# detects one. Forced afterwards, as this was, the detection has already run
+# for the compiler that is no longer going to be used: CMAKE_CXX_STANDARD then
+# produces no -std= flag for most targets -- 139 of 196 translation units in a
+# measured configure -- so clang falls back to gnu++14 and the build dies on
+# C++17 code with no indication of why.
+#
+# It instruments C++ only. ABC is C, and the CI sanitizer jobs do not use this
+# option at all for that reason: they pass -fsanitize=... in CMAKE_C_FLAGS and
+# CMAKE_CXX_FLAGS with CC/CXX set, which reaches everything. See the comment
+# above the asan job in .github/workflows/ci.yml.
+option(SANITIZE "Use Clang sanitizers" OFF)
+if (SANITIZE)
+    # In the cache so it can be tweaked later.
+    set(CMAKE_CXX_COMPILER "clang++" CACHE FILEPATH "" FORCE)
+endif()
+
 project(STP)
 
 set(CMAKE_C_STANDARD 99)
@@ -122,11 +139,8 @@ macro(add_cxx_flag flagname)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
 endmacro()
 
-option(SANITIZE "Use Clang sanitizers" OFF)
 if (SANITIZE)
-    # Set in Cache so user can tweak it later
-    SET(CMAKE_CXX_COMPILER "clang++" CACHE FILEPATH "" FORCE)
-    message(STATUS "Forcing compiler: ${CMAKE_CXX_COMPILER}")
+    message(STATUS "Sanitizers on, C++ compiler: ${CMAKE_CXX_COMPILER}")
     add_cxx_flag("-fsanitize=return")
     add_cxx_flag("-fsanitize=bounds")
     add_cxx_flag("-fsanitize=integer")
