@@ -1806,6 +1806,9 @@
   stp::ASTNode *node;
   stp::ASTVec *vec;
 
+  stp::GetValueTerm *get_value_term;
+  std::vector<stp::GetValueTerm> *get_value_terms;
+
   std::string *str;
 
   /* A resolved define-fun. FunctionMap preserves addresses when :named
@@ -1822,6 +1825,7 @@
    malformed commands do not leak their identifier/string lookahead. */
 %destructor { delete $$; } <str> <attribute> <attribute_value> <attributes>
 %destructor { delete $$; } <ufsort> <ufsortvec>
+%destructor { delete $$; } <get_value_term> <get_value_terms>
 
 /* An exception out of an action or the lexer gets the same cleanup: see
    ParserUnwind.h. */
@@ -1836,6 +1840,8 @@
 %start cmd
 
 %type <vec> an_formulas an_terms function_params an_mixed
+%type <get_value_term> get_value_term
+%type <get_value_terms> get_value_terms
 
 %type <node> an_term an_formula an_boolean function_param an_const an_fp_term an_fp_predicate an_rounding_mode
 %type <node> definition_body
@@ -2022,6 +2028,9 @@
 %token GET_UNSAT_ASSUMPTIONS_TOK
 %token GET_UNSAT_CORE_TOK
 %token GET_VALUE_TOK
+/* One get-value term as the script spelled it; the lexer re-scans the same
+   text so that an_term follows it. */
+%token <str> GET_VALUE_TERM_TOK
 %token POP_TOK
 %token PUSH_TOK
 %token RESET_TOK
@@ -2212,7 +2221,7 @@ cmdi:
        stp::GlobalParserInterface->getModel();
     }
 |
-     GET_VALUE_TOK LPAREN_TOK an_mixed RPAREN_TOK
+     GET_VALUE_TOK LPAREN_TOK get_value_terms RPAREN_TOK
     {
       stp::GlobalParserInterface->getValue(*$3);
       stp::releaseParserValue($3);
@@ -2950,6 +2959,30 @@ STRING_TOK resolved_sort
 {
   declareScalarSymbol($1, *$2);
   stp::releaseParserValue($2);
+}
+;
+
+get_value_terms:
+get_value_term
+{
+  $$ = new std::vector<stp::GetValueTerm>;
+  $$->push_back(*$1);
+  stp::releaseParserValue($1);
+}
+| get_value_terms get_value_term
+{
+  $$ = $1;
+  $$->push_back(*$2);
+  stp::releaseParserValue($2);
+}
+;
+
+get_value_term:
+GET_VALUE_TERM_TOK an_term
+{
+  $$ = new stp::GetValueTerm{*$1, *$2};
+  stp::releaseParserValue($1);
+  stp::GlobalParserInterface->deleteNode($2);
 }
 ;
 

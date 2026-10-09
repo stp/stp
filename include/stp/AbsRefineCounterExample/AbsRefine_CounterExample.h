@@ -257,7 +257,8 @@ public:
   void outputLine(std::ostream& os, const ASTNode &f, ASTNode se);
   
   void PrintArrayValueSMTLIB2(std::ostream& os, const ASTNode& array);
-  void PrintSMTLIB2(std::ostream& os, const ASTNode& n);
+  // The model value of n, printed as a term of n's sort.
+  void PrintValueSMTLIB2(std::ostream& os, const ASTNode& n);
 
   void ClearCounterExampleMap(void) { CounterExampleMap.clear(); }
 

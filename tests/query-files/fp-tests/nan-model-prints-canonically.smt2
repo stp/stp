@@ -17,7 +17,7 @@
 (assert (fp.isNaN (select a #b00)))
 ; CHECK: ^sat
 (check-sat)
-; CHECK-L: ( |x| (fp #b0 #b11111111 #b10000000000000000000000) )
+; CHECK-L: (x (fp #b0 #b11111111 #b10000000000000000000000))
 (get-value (x))
 ; CHECK-L: (define-fun |x| () (_ FloatingPoint 8 24) (fp #b0 #b11111111 #b10000000000000000000000))
 ; CHECK-L: (define-fun |a| () (Array (_ BitVec 2) (_ FloatingPoint 8 24)) (store ((as const (Array (_ BitVec 2) (_ FloatingPoint 8 24))) (fp #b0 #b00000000 #b00000000000000000000000)) #b00 (fp #b0 #b11111111 #b10000000000000000000000)))

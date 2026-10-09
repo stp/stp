@@ -33,18 +33,18 @@
 ;
 ; CHECK: ^sat
 ; x is -3, so fp.abs x is 3, f(3) is 10, and f(-3) is 20.
-; CHECK-L: ( (fp.min |x| (|f| |x|)) (fp #b1 #b10000000 #b10000000000000000000000) )
-; CHECK-L: ( (|f| (fp.abs |x|)) (fp #b0 #b10000010 #b01000000000000000000000) )
+; CHECK-L: ((fp.min x (f x)) (fp #b1 #b10000000 #b10000000000000000000000))
+; CHECK-L: ((f (fp.abs x)) (fp #b0 #b10000010 #b01000000000000000000000))
 ; min(3, 10) = 3, max(3, 10) = 10, 3 + 10 = 13.
-; CHECK-L: ( (let ((|?let_k_0| (fp.abs |x|))) (fp.min |?let_k_0| (|f| |?let_k_0|))) (fp #b0 #b10000000 #b10000000000000000000000) )
-; CHECK-L: ( (let ((|?let_k_0| (fp.abs |x|))) (fp.max |?let_k_0| (|f| |?let_k_0|))) (fp #b0 #b10000010 #b01000000000000000000000) )
-; CHECK-L: ( (let ((|?let_k_0| (fp.abs |x|))) (fp.add RTN |?let_k_0| (|f| |?let_k_0|))) (fp #b0 #b10000010 #b10100000000000000000000) )
+; CHECK-L: ((fp.min (fp.abs x) (f (fp.abs x))) (fp #b0 #b10000000 #b10000000000000000000000))
+; CHECK-L: ((fp.max (fp.abs x) (f (fp.abs x))) (fp #b0 #b10000010 #b01000000000000000000000))
+; CHECK-L: ((fp.add RTN (fp.abs x) (f (fp.abs x))) (fp #b0 #b10000010 #b10100000000000000000000))
 ; A Bool-codomain application over the same computed actual, reached inside a
 ; float-valued term through the mux it selects: p(3) holds, so min(3, x) = -3.
-; CHECK-L: ( (let ((|?let_k_0| (fp.abs |x|))) (fp.min |?let_k_0| (ite (|p| |?let_k_0|) |x| |y|))) (fp #b1 #b10000000 #b10000000000000000000000) )
+; CHECK-L: ((fp.min (fp.abs x) (ite (p (fp.abs x)) x y)) (fp #b1 #b10000000 #b10000000000000000000000))
 ; A bit-vector-codomain application over it, read back into the float layer:
 ; w(3) is 5, and min(3, 5) = 3.
-; CHECK-L: ( (let ((|?let_k_0| (fp.abs |x|))) (fp.min |?let_k_0| ((_ to_fp 8 24) RNE (|w| |?let_k_0|)))) (fp #b0 #b10000000 #b10000000000000000000000) )
+; CHECK-L: ((fp.min (fp.abs x) ((_ to_fp 8 24) RNE (w (fp.abs x)))) (fp #b0 #b10000000 #b10000000000000000000000))
 ; CHECK: REACHED-END
 ;
 (set-option :produce-models true)

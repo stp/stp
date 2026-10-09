@@ -1,6 +1,6 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
-; CHECK-L: (= |a| |b|) true
+; CHECK-L: (= a b) true
 ; b writes #b0 at all five rounding modes over the constant array of #b1,
 ; so it equals a, the constant array of #b0: the model's evaluation of
 ; (= a b) counted the rounding-mode index's 32 carrier patterns, found an

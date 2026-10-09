@@ -29,8 +29,8 @@
 ; A float index, under assumptions.
 ; CHECK: ^sat$
 (check-sat-assuming ((= a b) (= (select b c) #x07)))
-; CHECK: ^\( \(select \|a\| \(fp #b0 #b01111111 #b00000000000000000000000\)\) +#x07 \)$
-; CHECK: ^\( \(select \|b\| \(fp #b0 #b01111111 #b00000000000000000000000\)\) +#x07 \)$
+; CHECK: ^\(\(select a c\) #x07\)$
+; CHECK: ^\(\(select b c\) #x07\)$
 (get-value ((select a c) (select b c)))
 ; CHECK: define-fun \|a\| .*\(fp #b0 #b01111111 #b00000000000000000000000\) #x07\)
 ; CHECK: define-fun \|b\| .*\(fp #b0 #b01111111 #b00000000000000000000000\) #x07\)
@@ -41,12 +41,12 @@
 (assert (= p (store q #x3 (fp #b0 #b10000000 #b00000000000000000000000))))
 ; CHECK: ^sat$
 (check-sat)
-; CHECK: ^\( \(select \|p\| +#x3\) +\(fp #b0 #b10000000 #b00000000000000000000000\) \)$
+; CHECK: ^\(\(select p #x3\) +\(fp #b0 #b10000000 #b00000000000000000000000\)\)$
 (get-value ((select p #x3)))
 (pop 1)
 
 ; No float at all: a constant array keeps a bit-vector equality lazy too.
 ; CHECK: ^sat$
 (check-sat-assuming ((= r (store ((as const (Array (_ BitVec 4) (_ BitVec 8))) #x05) i #x07)) (= i #x3)))
-; CHECK: ^\( \(select \|r\| +#x3\) +#x07 \)$
+; CHECK: ^\(\(select r #x3\) #x07\)$
 (get-value ((select r #x3)))

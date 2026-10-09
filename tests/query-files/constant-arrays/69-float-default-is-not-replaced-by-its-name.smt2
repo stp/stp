@@ -27,7 +27,7 @@
           b)))
 ; CHECK: ^sat$
 (check-sat)
-; CHECK: \|b\| +#b1
+; CHECK: \(b #b1\)
 (get-value (b))
 (assert (= b #b0))
 ; CHECK: ^unsat$
@@ -40,6 +40,6 @@
            x))
 ; CHECK: ^sat$
 (check-sat)
-; CHECK: \|b\| +#b0
+; CHECK: \(b #b0\)
 (get-value (b))
 (pop 1)

@@ -288,8 +288,9 @@ Remaining limits and extensions
   combinations are also extensions. Model text containing these forms
   needs a reader that supports them.
 * Some older permissive syntax remains accepted, including extra
-  parentheses in term positions. ``get-value`` may print a normalized
-  spelling of the queried term. STP is not a strict syntax validator for
+  parentheses in term positions. ``get-value`` echoes each queried term as
+  the script spelled it, with runs of whitespace inside the term reduced to
+  one space and comments removed. STP is not a strict syntax validator for
   arbitrary SMT-LIB input.
 
 Unsupported commands and options have a response distinct from an error:

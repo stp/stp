@@ -4,7 +4,7 @@
 ; CHECK: define-fun \|f\| \(\(x0 \(_ BitVec 8\)\)\) \(_ BitVec 8\)
 ; CHECK-NOT: ite
 ; CHECK: #x2A
-; CHECK: \( \(\|f\| \(bvadd \|x\| \|y\|\)\)  #x2A \)
+; CHECK: \(\(f \(bvadd x y\)\) #x2A\)
 ;
 ; f has one application, so no congruence lemma can ever equate its actual
 ; with anything and the compound argument needs no name. Without a name the

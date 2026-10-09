@@ -11,9 +11,9 @@
 (assert p)
 ; CHECK-NEXT: ^sat$
 (check-sat)
-; CHECK: \(select \|a\| false\).*true
-; CHECK-NEXT: \(select \|a\| true\).*false
-; CHECK-NEXT: \(select \|a\| \|p\|\).*false
+; CHECK: \(select a false\).*true
+; CHECK-NEXT: \(select a true\).*false
+; CHECK-NEXT: \(select a p\).*false
 (get-value ((select a false) (select a true) (select a p)))
 ; CHECK: \(define-fun \|a\| \(\) \(Array Bool Bool\)
 ; CHECK-NOT: #b
@@ -25,5 +25,5 @@
 (pop 1)
 ; CHECK-NEXT: ^sat$
 (check-sat)
-; CHECK: \(select \|a\| false\).*true
+; CHECK: \(select a false\).*true
 (get-value ((select a false)))

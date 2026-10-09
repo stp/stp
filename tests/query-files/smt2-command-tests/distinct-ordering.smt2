@@ -35,10 +35,10 @@
 ; CHECK: NEGATED-DONE
 ; CHECK: Ordered 1 symmetric distinct group\(s\)
 ; CHECK: ^sat
-; CHECK: \|a\| +#b00
-; CHECK: \|b\| +#b01
-; CHECK: \|c\| +#b10
-; CHECK: \|d\| +#b11
+; CHECK: \(a #b00\)
+; CHECK: \(b #b01\)
+; CHECK: \(c #b10\)
+; CHECK: \(d #b11\)
 ;
 (set-logic QF_BV)
 (declare-const a (_ BitVec 8))

@@ -5,7 +5,7 @@
 ; CHECK: define-fun \|a\| .*#x2A
 ; CHECK: define-fun \|f\|
 ; CHECK: #x7F
-; CHECK: \( \(\|f\| \|x\|\)  #x7F \)
+; CHECK: \(\(f x\) #x7F\)
 ;
 ; Scalar, array, and UF authorities publish one certified model. The direct
 ; value query goes through the durable application handle, not @uf_result.

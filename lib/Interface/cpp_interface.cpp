@@ -43,6 +43,7 @@ THE SOFTWARE.
 #include <cassert>
 #include <charconv>
 #include <exception>
+#include <functional>
 #include <limits>
 
 using std::cerr;
@@ -2421,7 +2422,27 @@ void Cpp_interface::getAssertions()
   flush(cout);
 }
 
-void Cpp_interface::getValue(const ASTVec& v)
+// Prints one pair of the response: the term as the script spelled it, then
+// its value. The spelling comes from the lexer (GET_VALUE_TERM_TOK), not from
+// the node: hash-consing and rewriting happen in the node factory as the
+// grammar builds, so the node is equivalent to what was asked but frequently
+// not equal to it -- (bvadd v v) is a BVMULT, (bvsub v v) a constant, and
+// (not (not p)) is p. Echoing the node left a client unable to attribute
+// values to its requests (issue #1288).
+static void printGetValuePair(std::ostream& os, const std::string& text,
+                              const std::function<void(std::ostream&)>& value)
+{
+  std::ostringstream v;
+  value(v);
+  std::string s = v.str();
+  // The bit-vector printer leads with a space, which is the separator in
+  // the define-fun lines of get-model.
+  const size_t first = s.find_first_not_of(' ');
+  os << "(" << text << " " << (first == std::string::npos ? s : s.substr(first))
+     << ")" << std::endl;
+}
+
+void Cpp_interface::getValue(const std::vector<GetValueTerm>& terms)
 {
   const EngineWork work(engine_work_failed);
   if (current_command_rejected)
@@ -2450,8 +2471,9 @@ void Cpp_interface::getValue(const ASTVec& v)
 
   os << "(" << std::endl;
 
-  for (ASTNode n : v)
+  for (const GetValueTerm& term : terms)
   {
+    const ASTNode& n = term.node;
     if (n.GetSourceSort().kind() == SourceSort::Kind::Real)
     {
       if (!bm.HasRealModelValue(n))
@@ -2459,9 +2481,8 @@ void Cpp_interface::getValue(const ASTVec& v)
         unsupported();
         return;
       }
-      os << "(";
-      printer::SMTLIB2_Print1(os, n, 0, false);
-      os << " " << bm.GetRealModelSMTLIB(n) << ")" << std::endl;
+      printGetValuePair(os, term.text,
+                        [&](std::ostream& o) { o << bm.GetRealModelSMTLIB(n); });
       continue;
     }
 
@@ -2492,31 +2513,27 @@ void Cpp_interface::getValue(const ASTVec& v)
                          "value";
           refuseCurrentCommand(diagnostic);
         }
-        GlobalSTP->Ctr_Example->PrintSMTLIB2(os, n);
-        os << std::endl;
+        printGetValuePair(os, term.text, [&](std::ostream& o) {
+          GlobalSTP->Ctr_Example->PrintValueSMTLIB2(o, n);
+        });
         continue;
       }
-      os << "( ";
-      // Through the letizing entry point, for the reason the note above
-      // AbsRefine_CounterExample::PrintSMTLIB2 gives: an application's
-      // arguments may be a shared DAG a caller built out of very little
-      // input text.
-      printer::SMTLIB2_PrintTerm(os, &bm, n);
-      os << " ";
       // The value is printed at the application's own sort, not by handing the
       // node to the term printer -- which prints a node and would print an
       // element of a declared sort as the carrier pattern it is represented
       // by. The sort is recoverable here: a UF_APPLY's source sort is its
       // declaration's codomain.
-      if (bm.isUninterpretedSortedTerm(n))
-        bm.printUninterpretedElement(os, n.GetSourceSort(), value);
-      else
-        printer::SMTLIB2_Print1(os, value, 0, false);
-      os << " )" << std::endl;
+      printGetValuePair(os, term.text, [&](std::ostream& o) {
+        if (bm.isUninterpretedSortedTerm(n))
+          bm.printUninterpretedElement(o, n.GetSourceSort(), value);
+        else
+          printer::SMTLIB2_Print1(o, value, 0, false);
+      });
       continue;
     }
-    GlobalSTP->Ctr_Example->PrintSMTLIB2(os, n);
-    os << std::endl;
+    printGetValuePair(os, term.text, [&](std::ostream& o) {
+      GlobalSTP->Ctr_Example->PrintValueSMTLIB2(o, n);
+    });
   }
   os << ")";
 

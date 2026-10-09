@@ -14,12 +14,12 @@
 ; This is uf/23-pre-lowering-keeps-the-model.smt2 with the sort changed; the
 ; Real model prints its values as rationals rather than as hex.
 ; CHECK: ^sat$
-; CHECK-L: (|x| 5)
-; CHECK-L: (|y| 5)
-; CHECK-L: ((|f| |x|) 42)
-; CHECK-L: ((|f| |y|) 42)
-; CHECK-L: (|a| 42)
-; CHECK-L: (|b| 43)
+; CHECK-L: (x 5)
+; CHECK-L: (y 5)
+; CHECK-L: ((f x) 42)
+; CHECK-L: ((f y) 42)
+; CHECK-L: (a 42)
+; CHECK-L: (b 43)
 (set-logic QF_UFLRA)
 (set-option :produce-models true)
 (declare-fun f (Real) Real)

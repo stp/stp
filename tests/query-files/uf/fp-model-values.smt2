@@ -12,8 +12,8 @@
 ; CHECK: ^sat
 ; CHECK-L: define-fun |q| ((x0 (_ BitVec 4))) (_ FloatingPoint 8 24)
 ; CHECK-L: (fp #b0 #b10000000 #b10000000000000000000000)
-; CHECK-L: ( (|q| |i|) (fp #b0 #b10000000 #b10000000000000000000000) )
-; CHECK-L: ( (|w| |z|)  #x01 )
+; CHECK-L: ((q i) (fp #b0 #b10000000 #b10000000000000000000000))
+; CHECK-L: ((w z) #x01)
 ; CHECK: REACHED-END
 ;
 (set-option :produce-models true)

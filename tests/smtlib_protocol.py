@@ -153,7 +153,7 @@ class CommandModes(unittest.TestCase):
 ''')
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn('sat\n', result.stdout)
-                self.assertIn('( |x|  #x2A )', result.stdout)
+                self.assertIn('(x #x2A)', result.stdout)
                 self.assertIn('(|answer| true)', result.stdout)
                 self.assertIn('unsat\n', result.stdout)
                 self.assertIn('(not (= |x|  #x2A))', result.stdout)
@@ -198,7 +198,7 @@ class CommandModes(unittest.TestCase):
                              middle + '(get-model)(get-value (p))')
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn('(define-fun |p| () Bool true)', result.stdout)
-                self.assertIn('( |p| true )', result.stdout)
+                self.assertIn('(p true)', result.stdout)
 
     def test_definitions_can_be_evaluated_in_the_existing_model(self):
         result = run('''
@@ -246,7 +246,7 @@ class CommandModes(unittest.TestCase):
                              logic + ')' + declarations + '(check-sat)' +
                              definition + '(get-value (' + term + '))')
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertIn(' true )', result.stdout)
+                self.assertIn(' true)', result.stdout)
 
     def test_reset_options_and_preserve_reset_assertions_options(self):
         result = run('''
@@ -431,7 +431,7 @@ class RandomSeed(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual([line for line in result.stdout.splitlines()
                           if line in ('sat', 'unsat')], ['sat', 'unsat', 'sat'])
-        self.assertEqual(result.stdout.count(' true )'), 2)
+        self.assertEqual(result.stdout.count('((> x 0) true)'), 2)
 
 
 class Attributes(unittest.TestCase):
@@ -574,8 +574,8 @@ class NamedUnsatCores(unittest.TestCase):
 (check-sat)
 (get-value (p))
 ''')
-        self.assertEqual(output, 'unsat\n(|positive|)\nsat\n(\n( |p| true )\n)\n'
-                         'unsat\n(|positive|)\nsat\n(\n( |p| true )\n)\n')
+        self.assertEqual(output, 'unsat\n(|positive|)\nsat\n(\n(p true)\n)\n'
+                         'unsat\n(|positive|)\nsat\n(\n(p true)\n)\n')
 
     def test_labels_quote_empty_reserved_and_spaced_names(self):
         for name in ['||', '|assert|', '|with spaces|']:
@@ -719,7 +719,7 @@ class NamedUnsatCores(unittest.TestCase):
                     self.assertEqual(set(names), set(necessary))
                     self.assertEqual(lines[2], '(|p|)')
                     self.assertEqual(lines[3], 'sat')
-                    self.assertIn('|p| false', output)
+                    self.assertIn('(p false)', output)
                     # Replay the two projections together with the unnamed
                     # background, through both the batch and incremental paths.
                     replay = prefix + declarations + background + ''.join(
@@ -757,7 +757,7 @@ class NamedTerms(unittest.TestCase):
                      '(get-value (label))(get-assignment)')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout,
-                         'sat\n(\n( true true )\n)\n(\n( true true )\n)\n'
+                         'sat\n(\n((! true :named label) true)\n)\n(\n(label true)\n)\n'
                          '((|label| true))\n')
 
     def test_named_requires_a_fresh_symbol_and_closed_term(self):
@@ -952,7 +952,7 @@ class TheoryBinders(unittest.TestCase):
                      '(declare-const lambda Bool)(assert |lambda|)'
                      '(check-sat)(get-value (lambda))')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(result.stdout, 'sat\n(\n( |lambda| true )\n)\n')
+        self.assertEqual(result.stdout, 'sat\n(\n(lambda true)\n)\n')
 
     def test_binders_may_shadow_theory_symbols_locally(self):
         for source in [

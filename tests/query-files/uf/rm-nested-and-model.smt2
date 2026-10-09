@@ -25,9 +25,9 @@
 ; CHECK: define-fun \|r\| \(\) RoundingMode (RNE|RTZ|RTP|RTN|RNA)\)$
 ; CHECK: define-fun \|f\| \(\(x0 RoundingMode\)\) \(_ BitVec 4\)
 ; CHECK: define-fun \|k\| \(\(x0 \(_ BitVec 4\)\)\) RoundingMode
-; CHECK: \( \(\|k\| \|x\|\) RTP \)
-; CHECK: \( \(\|f\| \|r\|\)  #x5 \)
-; CHECK: \( \(\|f\| \(\|k\| \|x\|\)\)  #x3 \)
+; CHECK: \(\(k x\) RTP\)
+; CHECK: \(\(f r\) #x5\)
+; CHECK: \(\(f \(k x\)\) #x3\)
 ; CHECK: REACHED-END
 ;
 (set-logic QF_UFBVFP)

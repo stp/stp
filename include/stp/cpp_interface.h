@@ -124,6 +124,14 @@ struct TransparentStringHash
   }
 };
 
+// A get-value term: its text as the script spelled it, which the response
+// echoes, and the node the grammar built from that text, which is evaluated.
+struct GetValueTerm
+{
+  std::string text;
+  ASTNode node;
+};
+
 class Cpp_interface
 {
 public:
@@ -861,7 +869,7 @@ public:
   DLL_PUBLIC void getModel();
   void getAssignment();
   ASTNode abstractValue(const std::string& name, const SourceSort& sort);
-  DLL_PUBLIC void getValue(const ASTVec& v);
+  DLL_PUBLIC void getValue(const std::vector<GetValueTerm>& terms);
 };
 
 // True when the formulas could need more elements of some declared sort than

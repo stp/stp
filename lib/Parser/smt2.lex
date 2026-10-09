@@ -134,6 +134,33 @@
   // interpret. Zero means the next ')' closes the command itself.
   static THREAD_LOCAL_IE int skippedDepth = 0;
 
+  // A get-value term as the script spelled it. The response echoes each term
+  // (SMT-LIB 2.6, 4.2.6), and no node can stand in for it: the node factory
+  // rewrites and folds while the grammar builds, and NOT(NOT x) cannot exist
+  // as a node at all. So the term list is scanned twice. The GET_VALUE_TERM
+  // condition copies one term's text here with its whitespace normalised and
+  // comments dropped, hands it to the grammar as GET_VALUE_TERM_TOK, then
+  // pushes the same text back as input so the ordinary rules build the node.
+  static THREAD_LOCAL_IE std::string capturedTerm;
+  // Parentheses open inside the term being captured. Zero means the next
+  // ')' closes the get-value list itself.
+  static thread_local int capturedDepth = 0;
+  // Input buffers holding a captured term, pushed over the script's own.
+  static thread_local unsigned rescanDepth = 0;
+
+  static void captureText(const char* s, size_t len)
+  {
+    if (!capturedTerm.empty() && capturedTerm.back() != '(' && s[0] != ')')
+      capturedTerm += ' ';
+    capturedTerm.append(s, len);
+  }
+
+  static void dropCapturedTerms()
+  {
+    capturedTerm.clear();
+    capturedDepth = 0;
+  }
+
   static thread_local bool sortContext = false;
   static thread_local unsigned attributeDepth = 0;
   // Carried by each '(' token so parser lookahead cannot change an
@@ -172,6 +199,14 @@ namespace stp
 
   void SMT2ResetCommandLexerState()
   {
+    // A parse abandoned inside a get-value term leaves its re-scan buffers
+    // pushed; the next input would be read from them.
+    while (rescanDepth > 0)
+    {
+      yypop_buffer_state();
+      --rescanDepth;
+    }
+    dropCapturedTerms();
     indexedIdentifierOpen = false;
     commandNamePending = false;
     qualifiedNamePending = false;
@@ -600,6 +635,9 @@ namespace stp
     return token;
   }
 
+  // Defined after the rules: it needs INITIAL.
+  static int capturedTermToken();
+
   // Where the input comes from when it is not the FILE* (setSMT2Reader in
   // parser.h): the 3.x API reads a caller's stream through one. Without a
   // reader the lexer reads its FILE* as flex always has -- flex's own
@@ -643,6 +681,8 @@ namespace stp
 %x  STRING_LITERAL
 %x  ATTRIBUTE
 %x  SKIP_SEXPR
+%x  GET_VALUE_LIST
+%x  GET_VALUE_TERM
 
 LETTER  ([a-zA-Z])
 DIGIT  ([0-9])
@@ -807,7 +847,10 @@ bv{DIGIT}+             { return lookup(smt2text); }
 "get-proof"               { return commandToken(GET_PROOF_TOK);}
 "get-unsat-assumptions"   { return commandToken(GET_UNSAT_ASSUMPTIONS_TOK);}
 "get-unsat-core"          { return commandToken(GET_UNSAT_CORE_TOK);}
-"get-value"               { return commandToken(GET_VALUE_TOK);}
+"get-value"               { if (!commandNamePending) return lookup(smt2text);
+                            const int token = commandToken(GET_VALUE_TOK);
+                            BEGIN GET_VALUE_LIST;
+                            return token; }
 "pop"                     { return commandToken(POP_TOK);}
 "push"                    { return commandToken(PUSH_TOK);}
 "reset"                   { return commandToken(RESET_TOK);}
@@ -855,6 +898,59 @@ bv{DIGIT}+             { return lookup(smt2text); }
 <SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL;
                                       return 0; }
 
+ /* The get-value term list: see capturedTerm above. GET_VALUE_LIST reads up
+  * to the '(' that opens the list. Anything else there is a syntax error the
+  * grammar reports itself, so it is handed back to the ordinary rules.
+  * GET_VALUE_TERM copies one term at a time. A bare atom, quoted symbol or
+  * string at depth zero is a whole term; a '(' opens one that ends at its
+  * matching ')'. Newlines are counted here only outside quotes: the re-scan
+  * counts those inside a quoted symbol or string, and sees no others. */
+<GET_VALUE_LIST>[ \t\r\f]+            { }
+<GET_VALUE_LIST>\n                    { smt2lineno++; }
+<GET_VALUE_LIST>";"[^\n]*             { }
+<GET_VALUE_LIST>"("                   { smt2lval.uintval = ++parenthesisDepth;
+                                        dropCapturedTerms();
+                                        BEGIN GET_VALUE_TERM;
+                                        return LPAREN_TOK; }
+<GET_VALUE_LIST>.                     { yyless(0); BEGIN INITIAL; }
+<GET_VALUE_LIST><<EOF>>               { BEGIN INITIAL; return 0; }
+
+<GET_VALUE_TERM>[ \t\r\f]+            { }
+<GET_VALUE_TERM>\n                    { smt2lineno++; }
+<GET_VALUE_TERM>";"[^\n]*             { }
+<GET_VALUE_TERM>"\""([^"]|"\"\"")*"\""  { captureText(smt2text, smt2leng);
+                                        if (capturedDepth == 0)
+                                          return capturedTermToken(); }
+<GET_VALUE_TERM>"|"[^|\\]*"|"          { captureText(smt2text, smt2leng);
+                                        if (capturedDepth == 0)
+                                          return capturedTermToken(); }
+<GET_VALUE_TERM>"("                   { captureText(smt2text, smt2leng);
+                                        ++capturedDepth; }
+<GET_VALUE_TERM>")"                   { if (capturedDepth == 0)
+                                        {
+                                          --parenthesisDepth;
+                                          BEGIN INITIAL;
+                                          return RPAREN_TOK;
+                                        }
+                                        captureText(smt2text, smt2leng);
+                                        if (--capturedDepth == 0)
+                                          return capturedTermToken(); }
+<GET_VALUE_TERM>[^()|;\" \t\r\n\f]+    { captureText(smt2text, smt2leng);
+                                        if (capturedDepth == 0)
+                                          return capturedTermToken(); }
+<GET_VALUE_TERM>.                     { captureText(smt2text, smt2leng);
+                                        if (capturedDepth == 0)
+                                          return capturedTermToken(); }
+<GET_VALUE_TERM><<EOF>>               { BEGIN INITIAL; return 0; }
+
+ /* The end of a captured term's re-scan: back to the list for the next term
+  * or the ')' that closes it. The script's own end is unchanged. */
+<INITIAL><<EOF>>                      { if (rescanDepth == 0)
+                                          yyterminate();
+                                        yypop_buffer_state();
+                                        --rescanDepth;
+                                        BEGIN GET_VALUE_TERM; }
+
 
 
  /* Syntactically reserved words. Quoted spellings are ordinary symbols.
@@ -881,6 +977,20 @@ bv{DIGIT}+             { return lookup(smt2text); }
     throw stp::ParseAbandon();
   }
 %%
+
+// A captured get-value term is complete: hand its text to the grammar and
+// queue the same text as the next input, so the term's node is built by
+// the ordinary rules. The pushed buffer pops at its end (<INITIAL><<EOF>>).
+static int capturedTermToken()
+{
+  smt2lval.str = new std::string(capturedTerm);
+  yypush_buffer_state(YY_CURRENT_BUFFER);
+  yy_scan_string(capturedTerm.c_str());
+  ++rescanDepth;
+  dropCapturedTerms();
+  BEGIN INITIAL;
+  return GET_VALUE_TERM_TOK;
+}
 
 namespace stp {
   void SMT2ScanString (const char *yy_str) {

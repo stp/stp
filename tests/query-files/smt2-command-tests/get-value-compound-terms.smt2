@@ -12,45 +12,42 @@
 ; RUN: %solver --incremental=off %s 2>&1 | %OutputCheck %s
 ; RUN: %solver --incremental=on %s 2>&1 | %OutputCheck %s
 ;
-; The first half of each pair is STP's node for the term, not the text that
-; was written: hash-consing and rewriting happen in the node factory as the
-; parser builds each term, so the input spelling is gone before anything can
-; be asked about it. Commutative operands come back in canonical order, a
-; rewritten term comes back rewritten, and a folded term comes back as the
-; constant it folded to -- see the (bvadd #x01 #x01) row below. Pairs are
-; therefore matched positionally, response i to term i, which is what SMT-LIB
-; asks of a caller; they cannot be matched by spelling.
-;
-; A term is echoed through the letizing printer, so a shared subterm is
-; printed once. The chain of define-funs at the end builds a node whose tree
-; expansion is exponential in the chain length; it must come back as a `let`.
+; The first half of each pair is the term as this script spelled it, not
+; STP's node for it: hash-consing and rewriting happen in the node factory as
+; the parser builds each term, so the node is equivalent to what was asked
+; but frequently not equal to it -- (bvadd #x01 #x01) is the constant #x02,
+; and a define-fun alias is its expansion. The lexer keeps each term's text
+; for the response (issue #1288), so a client can attribute a value to its
+; request by spelling, as SMT-LIB 2.6 (4.2.6) lets it.
 ;
 ; CHECK: ^sat
-; CHECK-L: ( |x|  #x2A )
-; CHECK-L: ( |p| true )
-; CHECK-L: ( (bvadd  #x01 |x|)  #x2B )
-; CHECK-L: ( (= |x|  #x2A) true )
-; CHECK-L: ( (= |x|  #x00) false )
-; CHECK-L: ( (select |a|  #x00)  #x07 )
-; CHECK-L: ( (ite |p| |x|  #x00)  #x2A )
-; A constant-folded query keeps its answer but loses its spelling.
-; CHECK-L: (  #x02  #x02 )
-; CHECK-L: ( |f| (fp #b0 #b10000000 #b10000000000000000000000) )
-; CHECK-L: ( (fp.add RNE |f| |f|) (fp #b0 #b10000001 #b10000000000000000000000) )
+; CHECK-L: (x #x2A)
+; CHECK-L: (p true)
+; CHECK-L: ((bvadd x #x01) #x2B)
+; CHECK-L: ((= x #x2a) true)
+; CHECK-L: ((= x #x00) false)
+; CHECK-L: ((select a #x00) #x07)
+; CHECK-L: ((ite p x #x00) #x2A)
+; A constant-folded query keeps its spelling.
+; CHECK-L: ((bvadd #x01 #x01) #x02)
+; CHECK-L: (f (fp #b0 #b10000000 #b10000000000000000000000))
+; CHECK-L: ((fp.add RNE f f) (fp #b0 #b10000001 #b10000000000000000000000))
 ; A floating-point predicate is a Boolean, and answers like one.
-; CHECK-L: ( (fp.isNaN |f|) false )
-; CHECK-L: ( |r| RTZ )
+; CHECK-L: ((fp.isNaN f) false)
+; CHECK-L: (r RTZ)
 ; A rounding-mode-sorted expression prints a mode name, not its bit carrier.
-; CHECK-L: ( (ite |p| RTZ RNE) RTZ )
-; CHECK-L: ( (fp.mul |r| |f| |f|) (fp #b0 #b10000010 #b00100000000000000000000) )
+; CHECK-L: ((ite p RTZ RNE) RTZ)
+; CHECK-L: ((fp.mul r f f) (fp #b0 #b10000010 #b00100000000000000000000))
 ; A single command answers every term it was given, in the order asked.
-; CHECK-L: ( |x|  #x2A )
-; CHECK-L: ( (bvnot |x|)  #xD5 )
-; CHECK-L: ( |p| true )
-; A shared subterm is bound once rather than expanded at each use.
-; CHECK: \(let \(\(\|\?let_k_0\|.*  #x05 \)
+; CHECK-L: (x #x2A)
+; CHECK-L: ((bvnot x) #xD5)
+; CHECK-L: (p true)
+; A define-fun alias comes back as the alias, not as its expansion: the chain
+; of g0..g3 below builds a node whose tree expansion is exponential in the
+; chain length, and none of it is printed.
+; CHECK-L: (g3 #x05)
 ; Array-valued queries use the same completion as get-model.
-; CHECK-L: ( |a| (store ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x00) #x00 #x07) )
+; CHECK-L: (a (store ((as const (Array (_ BitVec 8) (_ BitVec 8))) #x00) #x00 #x07))
 ; CHECK: REACHED-END
 ;
 (set-logic QF_ABVFP)

@@ -23,9 +23,9 @@
 ;
 ; CHECK: ^sat
 ; x - x is +0 under every mode but RTN ...
-; CHECK-L: ( (let ((|?let_k_0| (|f| |s|))) (fp.add |s| |?let_k_0| (fp.neg |?let_k_0|))) (fp #b0 #b00000000 #b00000000000000000000000) )
+; CHECK-L: ((fp.sub s (f s) (f s)) (fp #b0 #b00000000 #b00000000000000000000000))
 ; ... where it is -0.
-; CHECK-L: ( (let ((|?let_k_0| (|f| |r|))) (fp.add |r| |?let_k_0| (fp.neg |?let_k_0|))) (fp #b1 #b00000000 #b00000000000000000000000) )
+; CHECK-L: ((fp.sub r (f r) (f r)) (fp #b1 #b00000000 #b00000000000000000000000))
 ; CHECK: REACHED-END
 ;
 (set-option :produce-models true)

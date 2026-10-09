@@ -17,7 +17,7 @@
 (assert (= x (select b #b00)))
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \|x\| +#b10
+; CHECK: \(x #b10\)
 (get-value (x))
 (pop 1)
 (exit)

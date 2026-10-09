@@ -17,14 +17,14 @@
 ; STP's canonical order rather than as written.
 ;
 ; CHECK: ^sat
-; CHECK-L: ( (|f| |x|)  #x03 )
-; CHECK-L: ( (bvadd  #x01 (|f| |x|))  #x04 )
-; CHECK-L: ( (= (|f| |x|)  #x03) true )
-; CHECK-L: ( (|g| |p|) true )
-; CHECK-L: ( (not (|g| |p|)) false )
-; CHECK-L: ( (and |q| (|g| |p|)) true )
-; CHECK-L: ( (= (|k| |x|) RTZ) true )
-; CHECK-L: ( (bvadd  #x01 (|f|  #x07))  #x04 )
+; CHECK-L: ((f x) #x03)
+; CHECK-L: ((bvadd (f x) #x01) #x04)
+; CHECK-L: ((= (f x) #x03) true)
+; CHECK-L: ((g p) true)
+; CHECK-L: ((not (g p)) false)
+; CHECK-L: ((and (g p) q) true)
+; CHECK-L: ((= (k x) RTZ) true)
+; CHECK-L: ((bvadd (f #x07) #x01) #x04)
 ; CHECK: REACHED-END
 ;
 (set-option :produce-models true)

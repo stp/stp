@@ -15,7 +15,7 @@
 ; CHECK: ^sat$
 (check-sat)
 ; CHECK-NEXT: ^\($
-; CHECK-NEXT: \|a\| \(store \(store \(\(as const \(Array \(_ BitVec 4\) \(_ BitVec 4\)\)\) #x0\) #x1 #x6\) #x3 #x7\)
+; CHECK-NEXT: \(a \(store \(store \(\(as const \(Array \(_ BitVec 4\) \(_ BitVec 4\)\)\) #x0\) #x1 #x6\) #x3 #x7\)\)
 (get-value (a))
 (pop 1)
 ; Every cell of a one-bit-indexed array written: the constant array.
@@ -24,7 +24,7 @@
 ; CHECK: ^sat$
 (check-sat)
 ; CHECK-NEXT: ^\($
-; CHECK-NEXT: \|b\| \(\(as const \(Array \(_ BitVec 1\) \(_ BitVec 8\)\)\) #x07\)
+; CHECK-NEXT: \(b \(\(as const \(Array \(_ BitVec 1\) \(_ BitVec 8\)\)\) #x07\)\)
 (get-value (b))
 (pop 1)
 ; Permuted, with a shadowed store and a store of the default: one term.

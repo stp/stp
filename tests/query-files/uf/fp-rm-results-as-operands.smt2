@@ -23,15 +23,15 @@
 ; twice over -- (q i) below is one such subterm.
 ;
 ; CHECK: ^sat
-; CHECK-L: ( (|q| |i|) (fp #b0 #b10000000 #b00000000000000000000000) )
+; CHECK-L: ((q i) (fp #b0 #b10000000 #b00000000000000000000000))
 ; 1.0 + 1.0 = 2.0, under a literal rounding mode ...
-; CHECK-L: ( (let ((|?let_k_0| (|q| |i|))) (fp.add RNE |?let_k_0| |?let_k_0|)) (fp #b0 #b10000001 #b00000000000000000000000) )
-; CHECK-L: ( (fp.isNaN (|q| |i|)) false )
-; CHECK-L: ( (|k| |i|) RTZ )
+; CHECK-L: ((fp.add RNE (q i) (q i)) (fp #b0 #b10000001 #b00000000000000000000000))
+; CHECK-L: ((fp.isNaN (q i)) false)
+; CHECK-L: ((k i) RTZ)
 ; ... and under one an uninterpreted function computed.
-; CHECK-L: ( (let ((|?let_k_0| (|q| |i|))) (fp.add (|k| |i|) |?let_k_0| |?let_k_0|)) (fp #b0 #b10000001 #b00000000000000000000000) )
-; CHECK-L: ( (fp.isNaN (|q|  #xE)) false )
-; CHECK-L: ( (= RNE (|k|  #xE)) true )
+; CHECK-L: ((fp.add (k i) (q i) (q i)) (fp #b0 #b10000001 #b00000000000000000000000))
+; CHECK-L: ((fp.isNaN (q #xe)) false)
+; CHECK-L: ((= (k #xe) RNE) true)
 ; CHECK: REACHED-END
 ;
 (set-logic QF_UFBVFP)

@@ -85,8 +85,8 @@
 ; above left behind.
 ;
 ; CHECK: ^sat
-; CHECK: \( \(\|f\|  #b0\)  #b1 \)
-; CHECK: \( \(select \|b\|  #b0\)  #b0 \)
+; CHECK: \(\(f #b0\) #b1\)
+; CHECK: \(\(select b #b0\) #b0\)
 ; CHECK: SESSION-ALIVE-DONE
 ;
 ; TRACE: ^sat

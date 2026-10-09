@@ -89,11 +89,11 @@
 ; LAZY: Incremental profile cbp/backend: check=1 .*sat-calls=1 refinement-sat-calls=0 refinement-rounds=0 .*extensionality=0 first-stack-preprocesses=1 first-stack-eliminations=[1-9][0-9]* first-stack-rejected=0
 ; LAZY: ^sat
 (check-sat)
-; CHECK: \|p00\| +false
-; CHECK: \|p69\| +true
+; CHECK: \(p00 false\)
+; CHECK: \(p69 true\)
 ; LAZY: Incremental: model materialized on demand
-; LAZY: \|p00\| +false
-; LAZY: \|p69\| +true
+; LAZY: \(p00 false\)
+; LAZY: \(p69 true\)
 (get-value (p00 p69))
 (pop 1)
 
@@ -105,9 +105,9 @@
 ; LAZY: Incremental profile cbp/backend: check=2 .*sat-calls=1 refinement-sat-calls=0 refinement-rounds=0 .*extensionality=0 first-stack-preprocesses=0 first-stack-eliminations=0 first-stack-rejected=0
 ; LAZY: ^sat
 (check-sat)
-; CHECK: \|p00\| +false
+; CHECK: \(p00 false\)
 ; LAZY: Incremental: model materialized on demand
-; LAZY: \|p00\| +false
+; LAZY: \(p00 false\)
 (get-value (p00))
 
 (push 1)

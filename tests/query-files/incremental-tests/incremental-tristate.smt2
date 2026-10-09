@@ -56,7 +56,7 @@
 ; ON: ^sat
 ; BATCH: ^sat
 (check-sat)
-; ON: \|y\| +#x02
-; BATCH: \|y\| +#x02
+; ON: \(y #x02\)
+; BATCH: \(y #x02\)
 (get-value (y))
 (exit)

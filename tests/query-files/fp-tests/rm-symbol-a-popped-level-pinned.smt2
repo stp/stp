@@ -34,5 +34,5 @@
 (pop 1)
 ; CHECK: ^sat
 (check-sat)
-; CHECK: ^\( \|r\| (RNE|RNA|RTP|RTN|RTZ) \)$
+; CHECK: ^\(r (RNE|RNA|RTP|RTN|RTZ)\)$
 (get-value (r))

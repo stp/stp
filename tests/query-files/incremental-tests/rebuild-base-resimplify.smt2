@@ -77,7 +77,7 @@
 ; CHECK: ^sat
 (check-sat)
 ; the eliminated chain replays through its definitions: b2 = a + 2 = 2
-; CHECK: \( \|b2\|  #x02 \)
+; CHECK: \(b2 #x02\)
 (get-value (b2))
 ; mentioning an eliminated variable re-asserts its equation; b1 = a + 1
 ; = 1, so requiring b1 distinct from 1 contradicts

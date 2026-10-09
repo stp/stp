@@ -1828,7 +1828,7 @@ jobs:
         $outlra = & $stp testlra.smt2 2>&1 | Out-String
         "lra output: '$($outlra.Trim())'"
         "lra exit code: $LASTEXITCODE"
-        if (-not $outlra.StartsWith("sat") -or -not $outlra.Contains("(|x| (/ 1000000000000000000000000000000000000000003 2))")) { exit 1 }
+        if (-not $outlra.StartsWith("sat") -or -not $outlra.Contains("(x (/ 1000000000000000000000000000000000000000003 2))")) { exit 1 }
         "(set-logic QF_LRA)(declare-fun x () Real)(declare-fun y () Real)(assert (> (+ x y) 1000000000000000000000000000000000000000001))(assert (< (* 3 x) 1000000000000000000000000000000000000000001))(assert (< (* 3 y) 1000000000000000000000000000000000000000001))(check-sat)" | Out-File -Encoding ascii testlrau.smt2
         $outlrau = & $stp testlrau.smt2 2>&1 | Out-String
         "lra refutation output: '$($outlrau.Trim())'"
@@ -1989,7 +1989,7 @@ jobs:
         out=$("$stp" testlra.smt2)
         echo "lra output: '$out'"
         [ "$(echo "$out" | head -1)" = "sat" ]
-        echo "$out" | grep -qF '(|x| (/ 1000000000000000000000000000000000000000003 2))'
+        echo "$out" | grep -qF '(x (/ 1000000000000000000000000000000000000000003 2))'
         echo '(set-logic QF_LRA)(declare-fun x () Real)(declare-fun y () Real)(assert (> (+ x y) 1000000000000000000000000000000000000000001))(assert (< (* 3 x) 1000000000000000000000000000000000000000001))(assert (< (* 3 y) 1000000000000000000000000000000000000000001))(check-sat)' > testlrau.smt2
         out=$("$stp" testlrau.smt2)
         echo "lra refutation output: '$out'"
