@@ -47,10 +47,11 @@ option(ENABLE_AUTO_DOWNLOAD
 add_feature_info(AutoDownload ENABLE_AUTO_DOWNLOAD
                  "Downloads and builds dependencies that are not installed")
 
-# Rung 1 skipped: an installed ABC, CaDiCaL, CLI11, LibBF, MiniSat or SymFPU is
-# not looked for, and each is built into STP_DEP_DIR instead. Pair it with
-# ENABLE_AUTO_DOWNLOAD on a cold build directory, or there is nothing left for
-# the ladder to reach and configuration stops at rung 4.
+# Rung 1 skipped: an installed ABC, CaDiCaL, CLI11, LibBF, MiniSat,
+# nlohmann/json or SymFPU is not looked for, and each is built into STP_DEP_DIR
+# instead. Pair it with ENABLE_AUTO_DOWNLOAD on a cold build directory, or
+# there is nothing left for the ladder to reach and configuration stops at
+# rung 4.
 #
 # Rung 0 is deliberately untouched: -DABC_DIR and friends are an answer rather
 # than a search, and a caller who names a copy has said which one to use.

@@ -802,7 +802,7 @@ jobs:
 
     # cython3 builds the 3.x Python package, which the install steps below
     # load from the install tree, and python3-pytest runs its suite.
-    # nlohmann-json3-dev is stp-p's (STP_BUILD_PARALLEL, below).
+    # stp-p's nlohmann/json headers are fetched by its ExternalProject.
     - name: Packages
       run: |
         sudo apt-get update
@@ -816,7 +816,6 @@ jobs:
           gcc \
           git \
           ninja-build \
-          nlohmann-json3-dev \
           python3 \
           python3-pip \
           python3-pytest \
