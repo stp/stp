@@ -448,3 +448,68 @@ fatal-error handler, the stream a parse reads, C's error callback -- runs in
 the middle of a call, and must not call the library: every call from one is
 refused with ``STATE``, but ``interrupt()``, ``clear_interrupt()`` and
 ``interrupt_pending()``.
+
+Copies of one check
+-------------------
+
+A process may encode a check once and search it in several forked copies of
+itself, which share what they learn. Two members make that possible; they
+are C++ only for now.
+
+``Solver::set_before_search(hook, reason, otherwise)`` sets a hook for the
+next ``check_sat`` or ``entails`` that starts, which consumes it whatever
+becomes of it; a call refused before its check starts (an argument, sort,
+option or unsupported-content error) leaves it set, ``reset`` and
+``reset_assertions`` clear it, and ``write_cnf`` and a parse in ``EXECUTE``
+mode refuse to run while one is set. The check takes the batch pipeline,
+and ``hook`` runs at most once, at the moment the check's SAT backend, with
+its CNF loaded, would start to search. A check that preprocessing decides,
+or that its solve decides as soon as it is encoded, answers without ever
+calling the hook. The point is offered only when the main solve may not be
+followed by refinement: lazy array axioms, uninterpreted functions, Real
+arithmetic, and the bit-vector and floating-point abstractions (their
+options alone refuse) all may. An array equality the pipeline expands
+eagerly instead -- most equalities between stores over bit-vector arrays --
+is offered; one left to lazy extensionality (a large one, or one over a
+constant array or floating-point elements) refuses. Such a check does what
+``otherwise`` says, at that same moment and without calling the hook:
+``NoSearchPoint::abandon`` (the default) abandons it, unknown
+(``INCOMPLETE``) with a reason saying why followed by ``reason``;
+``NoSearchPoint::search`` lets it search in place, on the batch pipeline
+(where a check without a hook might have taken the incremental driver). The
+statistics
+``before-search.outcome`` (``none``, ``offered``, ``refused`` or ``not
+reached``) and ``before-search.refusal`` say which happened. ``true`` lets
+the check search; ``false`` or a throw abandons it, unknown with ``reason``,
+which must not be empty.
+
+The hook's ``SearchPoint`` connects a ``ClauseExchange`` to that backend or
+diversifies its search (seed, saved phases, decision order, focused or
+stable mode -- nothing that changes which models exist). A process may fork
+in the hook, provided it is single-threaded there (libstp starts no threads
+and holds no lock across the hook) and handles the descriptors the copies
+inherit: every copy holds the loaded backend and continues the same check.
+The exchange's ``learned`` receives the clauses a copy learns (at most
+``max_size`` literals, over the variables that existed at connection);
+``next`` hands it clauses to import at each poll (every ``import_interval``
+conflicts, every unit and at most ``import_budget`` longer clauses, or the
+backend's own cap when ``import_budget`` is 0; ``begin_import`` is told the
+poll's real cap). Literals are the backend's own numbering, which means
+something only between copies forked at the same point, and every clause
+handed over must have been learned by such a copy. It then holds in every
+model of the query: it is implied by the clauses every copy shares, and, in
+a copy that refined after the point (a model on eager array axioms that
+failed its replay), by the lemmas that refinement added, which are valid for
+the query. That needs the copies to run the same backend options, no
+technique that removes models to run between the fork and the connection,
+and the variables created after the connection (the backend's extension
+variables, a refinement's encoding) to lie above the connection's cutoff,
+which no exported clause crosses. The cutoff is the backend's own variable
+count at connection, at most ``SearchPoint::variables()``. Both callbacks
+run inside the search and must not call the solver.
+
+The exchange needs CaDiCaL with STP's clause-import extension, which is
+applied to the 3.x CaDiCaL a build fetches (the default); ``capabilities()``
+reports it as ``sat.clause-exchange``, and without it
+``connect_clause_exchange`` and ``diversify`` return ``false``. The
+``sat.exchange.*`` statistics count the last check's exchange.

@@ -1087,6 +1087,7 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
   // A failure describes the solve that recorded it. An encoder that lives on
   // (refinement rounds, a persistent Real session) must not abandon its next
   // solve for it.
+  internalSolveFailed = false;
   internalSolveFailure.clear();
   // The LRA activation, when present, precedes the optional UF injectivity
   // guard. solveRetractingInjectivity requires the retractable guard last so
@@ -1096,6 +1097,7 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
   {
     if (!satSolver.supportsAssumptions())
     {
+      internalSolveFailed = true;
       internalSolveFailure =
           "configured SAT backend lacks required solve assumptions";
       break;
@@ -1105,6 +1107,7 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
         found->second.front() == ~static_cast<unsigned>(0) ||
         !satSolver.validVariable(found->second.front()))
     {
+      internalSolveFailed = true;
       internalSolveFailure =
           "solve activation has no complete AST-to-SAT binding";
       break;
@@ -1112,10 +1115,13 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
     assumptions.push(SATSolver::mkLit(found->second.front(), false));
   }
   injectivity_.assumeInto(assumptions);
-  if (internalSolveFailure.empty() && before_search_ && !before_search_())
-    internalSolveFailure = "theory setup before SAT search failed";
+  if (!internalSolveFailed && before_search_ && !before_search_())
+  {
+    internalSolveFailed = true;
+    internalSolveFailure = before_search_failure_;
+  }
   bool result = false;
-  if (internalSolveFailure.empty())
+  if (!internalSolveFailed)
     result = bm->solveRetractingInjectivity(
         satSolver, assumptions, injectivity_);
   bm->GetRunTimes()->stop(RunTimes::Solving);

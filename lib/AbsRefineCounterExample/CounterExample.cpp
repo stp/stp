@@ -3028,15 +3028,116 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     ToSATBase* tosat;
     ~SearchHookScope() { tosat->clearBeforeSearch(); }
   } search_hook_scope{tosat};
+  std::function<bool()> arithmetic_callback;
   if (lra_coordinator != NULL &&
       (bm->UserFlags.lra_first_search || bm->UserFlags.lra_persistent_state))
-    tosat->setBeforeSearch([lra_coordinator, tosat]() {
+  {
+    arithmetic_callback = [lra_coordinator, tosat]() {
       return lra_coordinator->afterCnf(*tosat);
-    });
+    };
+    tosat->setBeforeSearch(arithmetic_callback);
+  }
+  if (STPMgr::BeforeSearchRequest* request = bm->before_search)
+  {
+    // A caller's hook (see STPMgr::before_search). It stands for the whole
+    // check, so it is offered once, at the moment this solve's search would
+    // start -- a solve that a shortcut decides never gets there -- and only
+    // when nothing may refine after this solve; otherwise the point is
+    // refused at that same moment, and the check is abandoned or searches in
+    // place, as the caller asked (NoSearchPoint).
+    if (request->abandoned)
+    {
+      bm->noteUnknown(UnknownReason::Incomplete, request->reason);
+      return bm->unknownResult();
+    }
+    if (!request->offered && !request->refused && request->main == &SatSolver)
+    {
+      // What may refine after this solve, if anything: the point is refused
+      // then. That is a conservative rule, not a soundness one -- a copy
+      // forked at the point continues the same check, refinement included --
+      // kept until refining copies that share clauses have been analysed.
+      // The abstraction options refuse by themselves, whether or not this
+      // query has anything to abstract.
+      const char* refines = NULL;
+      if (lra_coordinator != NULL)
+        refines = "Real arithmetic";
+      else if (ufTheoryAdapter != NULL && ufTheoryAdapter->active())
+        refines = "uninterpreted functions";
+      else if (bm->UserFlags.bv_term_abstraction)
+        refines = "the bit-vector term abstraction";
+      else if (bm->UserFlags.bv_eq_abstraction)
+        refines = "the bit-vector equality abstraction";
+      else if (bm->UserFlags.fp_abstraction)
+        refines = "the floating-point abstraction";
+      else if (refinement)
+        refines = "lazy array axioms or uninterpreted functions";
+      const std::string refusal =
+          refines == NULL
+              ? std::string()
+              : std::string("the check may refine after its first solve (") +
+                    refines + ")";
+      SATSolver* backend = &SatSolver;
+      if (refines != NULL && request->search_unoffered)
+      {
+        // Refused, and searched in place: the solve keeps the arithmetic
+        // coordinator's callback, and the hook is never called.
+        tosat->setBeforeSearch([request, refusal, arithmetic_callback]() {
+          request->refused = true;
+          request->refusal = refusal;
+          return arithmetic_callback ? arithmetic_callback() : true;
+        });
+      }
+      else
+      {
+        // Replaces the arithmetic coordinator's callback, which a check with
+        // a coordinator never needs: it is abandoned here (it refines).
+        tosat->setBeforeSearch(
+            [request, backend, refusal]() {
+              request->offered = true;
+              if (!refusal.empty())
+              {
+                request->refused = true;
+                request->refusal = refusal;
+                request->reason = "the before-search hook needs a check with "
+                                  "exactly one solve ahead of it: " +
+                                  refusal + "; " + request->reason;
+                request->abandoned = true;
+                return false;
+              }
+              bool proceed = false;
+              try
+              {
+                proceed = request->hook(*backend);
+              }
+              catch (...)
+              {
+                request->reason = "the before-search hook failed: " +
+                                  request->reason;
+              }
+              request->abandoned = !proceed;
+              return proceed;
+            },
+            request->reason);
+      }
+    }
+  }
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
   const bool ufActive =
       ufTheoryAdapter != NULL && ufTheoryAdapter->active();
 
+  // A caller's hook abandoned the check (see STPMgr::before_search): unknown
+  // with its reason, whatever else the check had in hand.
+  if (tosat->hasInternalSolveFailure() && bm->before_search != NULL &&
+      bm->before_search->abandoned)
+  {
+    if (lra_coordinator != NULL)
+    {
+      lra_coordinator->failClosed(bm->before_search->reason);
+      ClearAllTables();
+    }
+    bm->noteUnknown(UnknownReason::Incomplete, bm->before_search->reason);
+    return bm->unknownResult();
+  }
   if (lra_coordinator != NULL && tosat->hasInternalSolveFailure())
   {
     lra_coordinator->failClosed(tosat->internalSolveFailureDetail());

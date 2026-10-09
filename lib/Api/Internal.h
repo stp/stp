@@ -42,6 +42,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/STPManager/UserDefinedFlags.h"
+#include "stp/Sat/SATSolver.h"
 #include "stp/cpp_interface.h"
 #include "stp/Util/Output.h"
 
@@ -576,6 +577,26 @@ struct SolverImpl
   std::array<double, 4> last_phase_ms{};
   bool last_incremental = false;
   bool batch_only = false; // write_cnf: the batch pipeline, whatever `incremental` says
+  // SearchPoint::connect_clause_exchange: what the check's backend calls into
+  std::unique_ptr<::stp::SATSolver::ClauseExchange> exchange_bridge;
+  // The counters a connected backend handed over as it was destroyed (a
+  // batch check's backend goes with the check).
+  ::stp::SATSolver::ExchangeCounters closed_exchange;
+  // set_before_search: the hook for the next check, its reason and what the
+  // check does if the point cannot be offered; then what the last check that
+  // took a hook did with it (before-search.outcome, before-search.refusal).
+  std::function<bool(SearchPoint&)> before_search;
+  std::string before_search_reason;
+  NoSearchPoint before_search_otherwise = NoSearchPoint::abandon;
+  // reset() and reset_assertions(): a hook not yet used goes with them.
+  void clear_before_search()
+  {
+    before_search = nullptr;
+    before_search_reason.clear();
+    before_search_otherwise = NoSearchPoint::abandon;
+  }
+  std::string search_point_outcome = "none";
+  std::string search_point_refusal;
 
   // interrupts
   std::atomic<bool> interrupt{false};

@@ -106,6 +106,13 @@ std::map<std::string, std::string> capabilities()
 #else
   c["highs"] = "false";
 #endif
+  // Learned-clause exchange between forked copies of one solver
+  // (ClauseExchange): CaDiCaL with STP's clause-import extension.
+#ifdef STP_CADICAL_HAS_CLAUSE_IMPORT
+  c["sat.clause-exchange"] = "true";
+#else
+  c["sat.clause-exchange"] = "false";
+#endif
   c["fp.rem.limit"] = "2^eb+sb-4<=2304";
   c["kind.FP_TO_REAL"] = "true";
   c["kind.FP_TO_FP_FROM_REAL"] = "values-only";

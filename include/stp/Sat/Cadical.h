@@ -172,6 +172,11 @@ namespace stp
   };
 
   std::unique_ptr<PropagatorBridge> propagator_bridge;
+
+  // Clause exchange (connectClauseExchange): CaDiCaL's Learner exports, and
+  // the clause-import extension of STP's maintained CaDiCaL patch imports.
+  class Exchange;
+  std::unique_ptr<Exchange> exchange;
   // CaDiCaL external index -> STP variable, populated only when factoring
   // has moved the numbering apart.
   std::vector<uint32_t> stp_of_ext;
@@ -225,7 +230,18 @@ public:
 
   void suggestPhase(uint32_t var, bool value) override;
   void declarePendingVariables() override;
-  bool supportsSearchReset() const override { return !factor_enabled; }
+  // A connected exchange numbers clauses by this solver's variables, which a
+  // reset to a copy would keep but whose learned clauses it would drop: kept
+  // as a guard, though only the arithmetic coordinator resets, and its
+  // checks are never offered a before-search point.
+  bool supportsSearchReset() const override
+  {
+    return !factor_enabled && !exchange;
+  }
+  bool connectClauseExchange(ClauseExchange* exchange,
+                             const ExchangeSettings& settings) override;
+  ExchangeCounters exchangeCounters() const override;
+  bool diversify(const Diversification& d) override;
   bool resetSearch() override;
   bool preferDecisions(const std::vector<DecisionHint>& wanted) override;
 

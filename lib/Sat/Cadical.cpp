@@ -24,6 +24,7 @@ THE SOFTWARE.
 #include "stp/Sat/Cadical.h"
 #include <unordered_set>
 #include <algorithm>
+#include <climits>
 #include <cstdlib>
 #include <deque>
 #include <iostream>
@@ -148,6 +149,92 @@ private:
 };
 #else
 class Cadical::DecisionHints
+{
+};
+#endif
+
+#if defined(STP_CADICAL_HAS_CLAUSE_IMPORT)
+// Learned clauses out through CaDiCaL's Learner, shared clauses in through
+// the import extension. Only clauses over the variables that existed when
+// the exchange connected leave: anything later (a refinement lemma's fresh
+// variables, a factor extension variable) is numbered by this copy alone.
+// CaDiCaL's external numbering is what both directions speak, which is the
+// numbering every copy forked at one point before the search shares, factor
+// translation included.
+class Cadical::Exchange : public CaDiCaL::Learner,
+                          public CaDiCaL::ClauseImporter
+{
+public:
+  Exchange(SATSolver::ClauseExchange& target,
+           const SATSolver::ExchangeSettings& settings, int variables)
+      : target(target), settings(settings), variables(variables)
+  {
+  }
+
+  bool learning(int size) override
+  {
+    return size >= 1 && size <= (int)settings.maxSize;
+  }
+  void learn(int lit) override
+  {
+    if (lit)
+    {
+      if (std::abs(lit) > variables)
+        spoiled = true;
+      else
+        buffer.push_back(lit);
+      return;
+    }
+    if (spoiled || buffer.empty())
+      ++filtered;
+    else
+    {
+      target.learned(buffer.data(), buffer.size());
+      ++exported;
+    }
+    buffer.clear();
+    spoiled = false;
+  }
+  int import_interval() override { return settings.importInterval; }
+  int import_budget() override
+  {
+    // The exchange learns the poll's real cap: with no budget set that is
+    // this backend's own.
+    const int cap = settings.importBudget > 0 ? settings.importBudget : 1 << 14;
+    target.beginImport(size_t(cap));
+    return cap;
+  }
+  bool import_clause(std::vector<int>& clause) override
+  {
+    // A literal beyond the shared variables names something this copy
+    // numbered on its own: such a clause is never handed over. INT_MIN has
+    // no magnitude to compare, and a skipped clause is cleared before the
+    // next, so an exchange that appends rather than assigns adds nothing.
+    clause.clear();
+    while (target.next(clause))
+    {
+      bool shared = !clause.empty();
+      for (int lit : clause)
+        shared = shared && lit != 0 && lit != INT_MIN &&
+                 std::abs(lit) <= variables;
+      if (shared)
+        return true;
+      ++skipped;
+      clause.clear();
+    }
+    return false;
+  }
+
+  SATSolver::ClauseExchange& target;
+  const SATSolver::ExchangeSettings settings;
+  const int variables;
+  std::vector<int> buffer;
+  bool spoiled = false;
+  // Clauses kept back on export, and handed over but not shared on import.
+  uint64_t exported = 0, filtered = 0, skipped = 0;
+};
+#else
+class Cadical::Exchange
 {
 };
 #endif
@@ -293,6 +380,10 @@ void Cadical::applyOptions()
 
 Cadical::~Cadical()
 {
+#if defined(STP_CADICAL_HAS_CLAUSE_IMPORT)
+  if (exchange)
+    exchange->target.closing(exchangeCounters());
+#endif
   // The propagator, if any, outlives the solver: `hints` is destroyed after
   // this body, and CaDiCaL's own destructor never calls back into it.
   delete s;
@@ -787,6 +878,78 @@ void Cadical::disconnectTheoryPropagator()
   s->disconnect_external_propagator();
   propagator_bridge.reset();
   stp_of_ext.clear();
+}
+
+bool Cadical::connectClauseExchange(ClauseExchange* target,
+                                    const ExchangeSettings& settings)
+{
+#if defined(STP_CADICAL_HAS_CLAUSE_IMPORT)
+  if (exchange)
+  {
+    // Connected only before the backend has searched (at its before-search
+    // point), so the exchange replaced here has counted nothing.
+    s->disconnect_learner();
+    s->disconnect_clause_importer();
+    exchange.reset();
+  }
+  if (!target)
+    return true;
+  if (factor_enabled && ext_of_stp.size() <= next_variable)
+    declareNewVariables();
+  exchange.reset(new Exchange(*target, settings, s->vars()));
+  s->connect_learner(exchange.get());
+  if (settings.import)
+    s->connect_clause_importer(exchange.get());
+  return true;
+#else
+  (void)target;
+  (void)settings;
+  return false;
+#endif
+}
+
+SATSolver::ExchangeCounters Cadical::exchangeCounters() const
+{
+  ExchangeCounters out;
+#if defined(STP_CADICAL_HAS_CLAUSE_IMPORT)
+  if (!exchange)
+    return out;
+  const auto in = s->import_statistics();
+  out.connected = true;
+  out.variables = (uint64_t)exchange->variables;
+  out.exported = exchange->exported;
+  out.filtered = exchange->filtered;
+  out.polls = (uint64_t)in.polls;
+  out.imported = (uint64_t)in.clauses;
+  out.units = (uint64_t)in.units;
+  out.dropped = (uint64_t)in.dropped + exchange->skipped;
+  out.satisfied = (uint64_t)in.satisfied;
+  out.backtracks = (uint64_t)in.backtracks;
+#endif
+  return out;
+}
+
+bool Cadical::diversify(const Diversification& d)
+{
+#if defined(STP_CADICAL_HAS_CLAUSE_IMPORT)
+  // Before the first solve only (a SearchPoint is, by construction): CaDiCaL
+  // accepts stabilize-only search while it is configuring, and once a solve
+  // has run, switching to it breaks its search-mode invariant.
+  if (searched)
+    return false;
+  // Search state only: the configuration window closed with the first
+  // clause, so everything here goes through the patch's post-load setters.
+  if (d.mode == 1 && !s->set_search_option("stabilize", 0))
+    return false;
+  if (d.mode == 2 && !(s->set_search_option("stabilize", 1) &&
+                       s->set_search_option("stabilizeonly", 1)))
+    return false;
+  s->diversify(d.seed, d.phase, d.shuffle);
+  return true;
+#else
+  (void)d;
+  return false;
+#endif
 }
 
 bool Cadical::resetSearch()

@@ -165,6 +165,9 @@ bool CongruenceCandidates::proves(const ASTNode& equality)
   // free to take either value; left attached, the enclosing solve's
   // array-equality checker would judge this solve's model as its own.
   STPMgr::DetachedExtensionality detached(bm);
+  // A caller's before-search hook belongs to the enclosing check, not to
+  // this side solve.
+  STPMgr::DetachedBeforeSearch detached_hook(bm);
 
   SubstitutionMap substitutions(bm);
   Simplifier simplifier(bm, &substitutions);

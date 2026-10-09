@@ -1,0 +1,449 @@
+diff --git a/src/cadical.hpp b/src/cadical.hpp
+index 1eed2882..0521803c 100644
+--- a/src/cadical.hpp
++++ b/src/cadical.hpp
+@@ -229,6 +229,7 @@ class ClauseIterator;
+ class WitnessIterator;
+ class ExternalPropagator;
+ class DecisionPolarityAdvisor;
++class ClauseImporter;
+ class Tracer;
+ struct InternalTracer;
+ class FileTracer;
+@@ -388,6 +389,48 @@ public:
+   void connect_learner (Learner *learner);
+   void disconnect_learner ();
+ 
++  // Clause import (an STP extension). The importer is polled during search,
++  // between propagation and the next decision, once every
++  // 'import_interval ()' conflicts; one poll accepts every unit and at most
++  // 'import_budget ()' longer clauses. Every clause it hands over must be
++  // implied by the clauses added to this solver (for example a clause another
++  // solver learned over the same clauses); it is added as a redundant
++  // (learned) clause. A clause naming a variable that is not active here
++  // (eliminated, substituted, never used, or above 'vars ()') is dropped, as
++  // is everything while a proof is being traced. Import is best effort.
++  //
++  //   require (VALID)
++  //   ensure (VALID)
++  //
++  void connect_clause_importer (ClauseImporter *importer);
++  void disconnect_clause_importer ();
++  struct ImportStatistics {
++    int64_t polls, clauses, units, dropped, satisfied, backtracks;
++  };
++  ImportStatistics import_statistics () const;
++
++  // Search diversification for a solver that already holds clauses (an STP
++  // extension: 'set' accepts options only before the first clause). Only
++  // search state changes: the random seed, every saved phase ('phase' 1
++  // true, -1 false, 0 pseudo-random from 'seed', any other value keeps
++  // them), and with 'shuffle' the order of the decision queue and scores.
++  //
++  //   require (VALID)
++  //   ensure (VALID)
++  //
++  void diversify (int seed, int phase, bool shuffle);
++
++  // The search-mode options 'stabilize' and 'stabilizeonly', which the
++  // search reads at each mode switch, so they may change after the first
++  // clause. Stable-only search is set up by the first solve: turning
++  // 'stabilizeonly' on after a solve that ended in focused mode is refused
++  // (false), as is any other name or a value outside the option's range.
++  //
++  //   require (VALID)
++  //   ensure (VALID)
++  //
++  bool set_search_option (const char *name, int val);
++
+   // ====== END IPASIR =====================================================
+ 
+   // Add call-back which allows to observe when a variable is fixed.
+@@ -1256,6 +1299,25 @@ public:
+ // with an external clause as a reason or to learn new clauses during the
+ // CDCL loop (without restart).
+ 
++// Supplies clauses to import (see 'connect_clause_importer'). Called from
++// inside the search: it must not call back into the solver.
++
++class ClauseImporter {
++public:
++  virtual ~ClauseImporter () {}
++  // Conflicts between two polls; read at each poll.
++  virtual int import_interval () { return 256; }
++  // The most clauses of two or more literals this poll accepts (units are
++  // never limited). Called once at the start of every poll, before its
++  // first 'import_clause', so an importer may select the poll's clauses
++  // here. A poll ends at the first 'import_clause' returning false; a
++  // longer clause beyond the budget is dropped and ends the poll.
++  virtual int import_budget () { return 1 << 14; }
++  // Fill 'clause' with the external literals of one clause (no terminating
++  // zero) and return true, or return false when nothing is pending.
++  virtual bool import_clause (std::vector<int> &clause) = 0;
++};
++
+ class DecisionPolarityAdvisor {
+ public:
+   virtual ~DecisionPolarityAdvisor () {}
+diff --git a/src/external.hpp b/src/external.hpp
+index 1798f14e..f57035cd 100644
+--- a/src/external.hpp
++++ b/src/external.hpp
+@@ -119,6 +119,10 @@ struct External {
+ 
+   ExternalPropagator *propagator;
+   DecisionPolarityAdvisor *decision_polarity_advisor = nullptr;
++
++  // If there is a clause importer (an STP extension, see 'import.cpp').
++
++  ClauseImporter *clause_importer = nullptr;
+   FILE *trace_api_file; // Only for user propagator interaction tracing
+ 
+   vector<bool> is_observed; // Quick flag for each external variable
+diff --git a/src/import.cpp b/src/import.cpp
+new file mode 100644
+index 00000000..3bacbafa
+--- /dev/null
++++ b/src/import.cpp
+@@ -0,0 +1,246 @@
++#include "internal.hpp"
++
++namespace CaDiCaL {
++
++/*------------------------------------------------------------------------*/
++
++// Clause import and search diversification, an STP extension for solvers
++// forked from one loaded solver which exchange learned clauses.
++//
++// Every imported clause is promised to be implied by the clauses added to
++// this solver (the 'ClauseImporter' contract). Such a clause can be added as
++// a redundant clause whatever inprocessing has done, provided every one of
++// its variables is still active here: removing clauses or eliminating
++// variables (all that the enabled techniques do to the irredundant clauses
++// apart from adding implied ones) keeps every model of the added clauses
++// a model of what remains, so an implied clause excludes no model the
++// solver could still return, and a reconstructed model satisfies it anyway.
++// A clause over an eliminated, substituted or unused variable is dropped
++// instead of restoring that variable. 'block', 'cover', 'condition' and
++// 'instantiate' (all off by default) are not analysed for import; with any
++// of them enabled nothing is imported, conservatively.
++//
++// Clauses are imported between propagation and the next decision, so the
++// watch invariants hold. A clause with at least two unassigned literals is
++// watched on two of them at once; any other clause, and every unit, makes
++// the solver backtrack first: units to the root, other clauses to the
++// highest level at which two of their literals are unassigned. One poll
++// backtracks at most once, to the lowest level any of its clauses needs.
++
++bool Internal::importing () {
++  return external->clause_importer && stats.conflicts >= import_limit;
++}
++
++void Internal::import_clauses () {
++  ClauseImporter *importer = external->clause_importer;
++  assert (importer);
++  const int interval = importer->import_interval ();
++  import_limit = stats.conflicts + (interval > 0 ? interval : 1);
++  import_stats.polls++;
++  if (unsat || proof || opts.block || opts.cover || opts.condition ||
++      opts.instantiate)
++    return;
++
++  // The literals of every accepted clause, each clause followed by a zero,
++  // in internal numbering with root-level falsified literals removed.
++  vector<int> accepted;
++  int target = level;
++  const int budget = importer->import_budget ();
++  int64_t longer = 0; // clauses of two or more literals handed over
++  for (;;) {
++    import_external.clear ();
++    if (!importer->import_clause (import_external))
++      break;
++    if (import_external.size () > 1 && longer++ >= budget) {
++      import_stats.dropped++; // beyond the budget: the importer's fault
++      break;
++    }
++    assert (clause.empty ());
++    bool drop = false, satisfied = false;
++    for (const int elit : import_external) {
++      const int eidx = abs (elit);
++      if (!elit || elit == INT_MIN || eidx > external->max_var ||
++          (eidx < (int) external->ervars.size () &&
++           external->ervars[eidx])) {
++        drop = true;
++        break;
++      }
++      const int iidx = external->e2i[eidx];
++      if (!iidx) {
++        drop = true;
++        break;
++      }
++      const int ilit = elit < 0 ? -iidx : iidx;
++      const Flags &f = flags (ilit);
++      if (f.status == Flags::FIXED) {
++        const int value = fixed (ilit);
++        if (value > 0) {
++          satisfied = true;
++          break;
++        }
++        continue; // falsified at the root: not part of the clause
++      }
++      if (!f.active ()) {
++        drop = true;
++        break;
++      }
++      const signed char tmp = marked (ilit);
++      if (tmp > 0)
++        continue; // duplicate
++      if (tmp < 0) {
++        satisfied = true; // tautology
++        break;
++      }
++      mark (ilit);
++      clause.push_back (ilit);
++    }
++    for (const int ilit : clause)
++      unmark (ilit);
++    if (drop || satisfied) {
++      if (drop)
++        import_stats.dropped++;
++      else
++        import_stats.satisfied++;
++      clause.clear ();
++      continue;
++    }
++    if (clause.empty ()) {
++      // Every literal is false at the root: the formula is unsatisfiable.
++      clause.clear ();
++      if (level)
++        backtrack (0);
++      import_stats.clauses++;
++      learn_empty_clause ();
++      return;
++    }
++    // The level this clause needs: the root for a unit; otherwise the
++    // highest level leaving two of its literals unassigned.
++    int needed = level;
++    if (clause.size () == 1)
++      needed = 0;
++    else {
++      int open = 0, first = -1, second = -1;
++      for (const int ilit : clause) {
++        if (!val (ilit)) {
++          open++;
++          continue;
++        }
++        const int l = var (ilit).level;
++        if (l > first)
++          second = first, first = l;
++        else if (l > second)
++          second = l;
++      }
++      if (open == 1)
++        needed = first - 1;
++      else if (!open)
++        needed = second - 1;
++      if (needed < 0)
++        needed = 0;
++    }
++    if (needed < target)
++      target = needed;
++    for (const int ilit : clause)
++      accepted.push_back (ilit);
++    accepted.push_back (0);
++    clause.clear ();
++  }
++  if (accepted.empty ())
++    return;
++  if (target < level) {
++    import_stats.backtracks++;
++    backtrack (target);
++  }
++
++  // Add what was accepted. Units first, at the root; a unit falsified by an
++  // earlier unit of this poll refutes the formula.
++  for (size_t i = 0; i < accepted.size (); i++) {
++    const size_t begin = i;
++    while (accepted[i])
++      i++;
++    if (i - begin != 1)
++      continue;
++    assert (!level);
++    const int ilit = accepted[begin];
++    const signed char tmp = val (ilit);
++    if (tmp > 0)
++      continue;
++    import_stats.clauses++;
++    import_stats.units++;
++    if (tmp < 0) {
++      learn_empty_clause ();
++      return;
++    }
++    assign_unit (ilit);
++  }
++  for (size_t i = 0; i < accepted.size (); i++) {
++    const size_t begin = i;
++    while (accepted[i])
++      i++;
++    if (i - begin < 2)
++      continue;
++    assert (clause.empty ());
++    // Two unassigned literals go first and are watched; a literal fixed at
++    // the root by a unit of this poll satisfies or shortens the clause.
++    bool satisfied = false;
++    int open = 0;
++    for (size_t j = begin; j < i; j++) {
++      const int ilit = accepted[j];
++      const int value = fixed (ilit);
++      if (value > 0) {
++        satisfied = true;
++        break;
++      }
++      if (value < 0)
++        continue;
++      clause.push_back (ilit);
++      if (!val (ilit) && open < 2) {
++        swap (clause[open], clause.back ());
++        open++;
++      }
++    }
++    if (satisfied || open < 2) {
++      // Only units of this poll can have made this happen: satisfied by one,
++      // or shortened by them below two open literals (dropped, best effort).
++      if (satisfied)
++        import_stats.satisfied++;
++      else
++        import_stats.dropped++;
++      clause.clear ();
++      continue;
++    }
++    Clause *c = new_clause (true, (int) clause.size ());
++    watch_clause (c);
++    clause.clear ();
++    import_stats.clauses++;
++  }
++}
++
++/*------------------------------------------------------------------------*/
++
++void Internal::diversify (int seed, int phase, bool shuffle) {
++  opts.seed = seed;
++  Random random (seed);
++  if (-1 <= phase && phase <= 1)
++    for (auto idx : vars)
++      phases.saved[idx] = phase > 0   ? 1
++                          : phase < 0 ? -1
++                          : (random.generate_bool () ? -1 : 1);
++  if (!shuffle)
++    return;
++  if (level)
++    backtrack (0);
++  const int saved_shuffle = opts.shuffle, saved_queue = opts.shufflequeue,
++            saved_scores = opts.shufflescores,
++            saved_random = opts.shufflerandom;
++  opts.shuffle = opts.shufflequeue = opts.shufflescores =
++      opts.shufflerandom = 1;
++  shuffle_scores ();
++  shuffle_queue ();
++  opts.shuffle = saved_shuffle;
++  opts.shufflequeue = saved_queue;
++  opts.shufflescores = saved_scores;
++  opts.shufflerandom = saved_random;
++}
++
++} // namespace CaDiCaL
+diff --git a/src/internal.cpp b/src/internal.cpp
+index 485c33ad..7df5ccd6 100644
+--- a/src/internal.cpp
++++ b/src/internal.cpp
+@@ -319,6 +319,8 @@ int Internal::cdcl_loop_with_inprocessing () {
+       break;                               // decision or conflict limit
+     else if (terminated_asynchronously ()) // externally terminated
+       break;
++    else if (importing ())
++      import_clauses (); // shared clauses (STP extension)
+     else if (restarting ())
+       restart (); // restart by backtracking
+     else if (rephasing ())
+diff --git a/src/internal.hpp b/src/internal.hpp
+index dd53d4b3..e4643be2 100644
+--- a/src/internal.hpp
++++ b/src/internal.hpp
+@@ -868,6 +868,15 @@ struct Internal {
+   int reuse_trail ();
+   void restart ();
+ 
++  // Clause import and diversification (STP extensions) in 'import.cpp'.
++  //
++  int64_t import_limit = 0;
++  Solver::ImportStatistics import_stats = {0, 0, 0, 0, 0, 0};
++  vector<int> import_external;
++  bool importing ();
++  void import_clauses ();
++  void diversify (int seed, int phase, bool shuffle);
++
+   // Functions to set and reset certain 'phases'.
+   //
+   void clear_phases (vector<signed char> &); // reset argument to zero
+diff --git a/src/solver.cpp b/src/solver.cpp
+index 0530c508..f225ee80 100644
+--- a/src/solver.cpp
++++ b/src/solver.cpp
+@@ -1029,6 +1029,57 @@ void Solver::connect_learner (Learner *learner) {
+   LOG_API_CALL_END ("connect_learner");
+ }
+ 
++void Solver::connect_clause_importer (ClauseImporter *importer) {
++  LOG_API_CALL_BEGIN ("connect_clause_importer");
++  REQUIRE_VALID_STATE ();
++  REQUIRE (importer, "can not connect zero clause importer");
++  external->clause_importer = importer;
++  internal->import_limit = internal->stats.conflicts;
++  LOG_API_CALL_END ("connect_clause_importer");
++}
++
++void Solver::disconnect_clause_importer () {
++  LOG_API_CALL_BEGIN ("disconnect_clause_importer");
++  REQUIRE_VALID_STATE ();
++  external->clause_importer = nullptr;
++  LOG_API_CALL_END ("disconnect_clause_importer");
++}
++
++Solver::ImportStatistics Solver::import_statistics () const {
++  return internal->import_stats;
++}
++
++void Solver::diversify (int seed, int phase, bool shuffle) {
++  LOG_API_CALL_BEGIN ("diversify");
++  REQUIRE_VALID_STATE ();
++  REQUIRE (state () != SOLVING, "can not diversify while solving");
++  internal->diversify (seed, phase, shuffle);
++  LOG_API_CALL_END ("diversify");
++}
++
++bool Solver::set_search_option (const char *name, int val) {
++  LOG_API_CALL_BEGIN ("set_search_option", name, val);
++  REQUIRE_VALID_STATE ();
++  REQUIRE (state () != SOLVING, "can not set options while solving");
++  // The search modes, read at each mode switch; everything else a forked
++  // copy varies goes through diversify().
++  static const char *const search_only[] = {"stabilize", "stabilizeonly",
++                                            nullptr};
++  bool known = false;
++  for (const char *const *n = search_only; *n; n++)
++    known = known || !strcmp (*n, name);
++  const Option *o = known ? Options::has (name) : nullptr;
++  // A later solve that finds stable-only search on in focused mode trips
++  // its 'assert (stable)' (init_search_limits).
++  const bool late_stable_only = !strcmp (name, "stabilizeonly") && val &&
++                                internal->lim.initialized &&
++                                !internal->stable;
++  bool res = o && o->lo <= val && val <= o->hi && !late_stable_only &&
++             internal->opts.set (name, val);
++  LOG_API_CALL_END ("set_search_option", name, val, res);
++  return res;
++}
++
+ void Solver::disconnect_learner () {
+   LOG_API_CALL_BEGIN ("disconnect_learner");
+   REQUIRE_VALID_STATE ();

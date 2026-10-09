@@ -276,6 +276,54 @@ public:
   // Borrowed only within a PreparationScope. Public queries install their
   // original deadline here and restore an optional outer observer on exit.
   const PreparationControl* preparation_control = nullptr;
+
+  // A caller's before-search hook for one check (the API's
+  // Solver::set_before_search). CallSAT_ResultCheck arms it on each solve of
+  // the check until one reaches the moment its search would start; a solve
+  // a shortcut decides never does, and a check decided that way answers
+  // without the hook. At that moment the hook runs -- with the CNF loaded and
+  // nothing searched -- if the solve cannot be followed by refinement
+  // (maybeRefinement: no `refinement` round, arithmetic coordinator,
+  // uninterpreted-function adapter or abstraction); otherwise the point is
+  // refused there (`refused`, with `refusal` saying why), and the check is
+  // abandoned or, with `search_unoffered`, searches in place with the hook
+  // never called and whatever callback the solve had kept. When the hook
+  // says no or throws, the check is abandoned with `reason`, and so is any
+  // later solve of the same check: a check whose hook declined never
+  // searches. `abandoned` is the signal, not the reason's text. Owned by the
+  // caller for the duration of the check; null otherwise, and null inside a
+  // nested solve (DetachedBeforeSearch). Only a solve on `main`, the backend
+  // TopLevelSTPAux runs the check's pipeline on, arms the hook: a solve on
+  // any other backend is never offered the point and never refuses it.
+  struct BeforeSearchRequest
+  {
+    std::function<bool(SATSolver&)> hook;
+    SATSolver* main = nullptr;
+    std::string reason;
+    bool search_unoffered = false;
+    bool offered = false;
+    bool refused = false;
+    std::string refusal;
+    bool abandoned = false;
+  };
+  BeforeSearchRequest* before_search = nullptr;
+
+  // Hides a caller's before-search hook from a nested solve of a query of
+  // its own: the hook stands for the enclosing check.
+  class DetachedBeforeSearch
+  {
+    STPMgr* manager;
+    BeforeSearchRequest* saved;
+
+  public:
+    explicit DetachedBeforeSearch(STPMgr* m) : manager(m), saved(m->before_search)
+    {
+      manager->before_search = nullptr;
+    }
+    ~DetachedBeforeSearch() { manager->before_search = saved; }
+    DetachedBeforeSearch(const DetachedBeforeSearch&) = delete;
+    DetachedBeforeSearch& operator=(const DetachedBeforeSearch&) = delete;
+  };
   // Borrowed by the current public query; null unless statistics are enabled.
   QueryTiming* query_timing = nullptr;
   void checkPreparation(PreparationStage stage) const
