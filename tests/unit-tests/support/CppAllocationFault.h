@@ -24,6 +24,7 @@
 namespace allocation_fault {
 thread_local std::int64_t fail_after = -1;
 thread_local bool enabled = false;
+thread_local bool persistent = false;
 thread_local bool counting = false;
 thread_local std::uint64_t attempts = 0;
 
@@ -35,8 +36,11 @@ void before(std::size_t)
     return;
   if (fail_after == 0)
   {
-    enabled = false;
-    fail_after = -1;
+    if (!persistent)
+    {
+      enabled = false;
+      fail_after = -1;
+    }
     throw std::bad_alloc();
   }
   if (fail_after > 0)
@@ -45,11 +49,18 @@ void before(std::size_t)
 
 void arm(std::uint64_t index) noexcept
 {
+  persistent = false;
   fail_after = static_cast<std::int64_t>(index);
   enabled = true;
 }
+void arm_persistent() noexcept
+{
+  arm(0);
+  persistent = true;
+}
 void disable() noexcept
 {
+  persistent = false;
   fail_after = -1;
   enabled = false;
 }

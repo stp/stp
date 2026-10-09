@@ -47,6 +47,7 @@ THE SOFTWARE.
 #include <iterator>
 #include <map>
 #include <memory>
+#include <new>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -1017,6 +1018,14 @@ int main(int argc, char** argv)
     if (ret != 0)
       return ret;
     return stp_cli::run(command_line.invocation, std::move(command_line.solver));
+  }
+  catch (const std::bad_alloc&)
+  {
+    // Also cover allocations outside the engine (CLI setup and input I/O),
+    // without allocating a diagnostic while the heap is exhausted.
+    std::fflush(stdout);
+    std::fputs("STP Error: out of memory [RESOURCE]\n", stderr);
+    return -1;
   }
   catch (const std::exception& e)
   {

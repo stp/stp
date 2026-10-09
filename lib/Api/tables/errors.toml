@@ -195,7 +195,7 @@ name = "RESOURCE"
 value = 100
 recoverable = false
 python = "ResourceError(Error, MemoryError)"
-message = "resource failure in '{fn}': {what}"   # an out-of-memory's own record is a static string; building the error for it may still allocate
+message = "resource failure in '{fn}': {what}"   # falls back to a fixed message with empty details if the error record cannot allocate
 fields = []
 
 [[error]]

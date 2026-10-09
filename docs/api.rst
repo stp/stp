@@ -66,6 +66,9 @@ does not fit its width) is a ``PARSE`` error with the solver as it was, and an
 engine failure inside any call is ``INTERNAL`` and poisons the manager, after
 which every call on it, its solvers, models and terms is refused with
 ``STATE`` naming the failure.
+An allocation failure is ``RESOURCE`` and also poisons the manager. If
+recording that error cannot allocate, its message is a fixed string and
+its optional details are empty.
 
 Names supplied to ``declare``, ``declare_sort`` and ``bind_symbol``, and
 prefixes supplied to ``mk_fresh`` and ``mk_fresh_sort``, must be representable

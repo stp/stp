@@ -134,6 +134,10 @@ struct EngineScope
 // own errors) unwound through the engine as a failure does, and is one:
 // INTERNAL, or RESOURCE for bad_alloc, and the manager is poisoned.
 [[noreturn]] DLL_PUBLIC void fail_foreign(ManagerImpl* m, const char* fn, const std::exception& e);
+// Also handles backend exceptions that do not derive from std::exception
+// (MiniSat's allocation failure), and poisons on other foreign exceptions.
+[[noreturn]] DLL_PUBLIC void fail_foreign(ManagerImpl* m, const char* fn,
+                                        std::exception_ptr exception);
 // INVALID_ARGUMENT unless `width` is in the uf-sort-width entry's range.
 void check_uf_sort_width(std::uint64_t width, const char* fn, std::optional<int> arg);
 
@@ -164,9 +168,9 @@ auto engine_call(ManagerImpl* m, const char* fn, F&& f) -> decltype(f())
   {
     throw; // the call's own refusal
   }
-  catch (const std::exception& e)
+  catch (...)
   {
-    fail_foreign(m, fn, e);
+    fail_foreign(m, fn, std::current_exception());
   }
 }
 const char* error_template(ErrorCode code);

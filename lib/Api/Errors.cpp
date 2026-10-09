@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 #include <ostream>
 
 namespace stp
@@ -185,43 +186,45 @@ Error::~Error() = default;
 
 ErrorCode Error::code() const noexcept
 {
-  return d_->code;
+  return d_ ? d_->code : ErrorCode::RESOURCE;
 }
 bool Error::recoverable() const noexcept
 {
-  return detail::error_recoverable(d_->code);
+  return detail::error_recoverable(code());
 }
 const char* Error::what() const noexcept
 {
-  return d_->message.c_str();
+  return d_ ? d_->message.c_str() : "resource failure: out of memory [RESOURCE]";
 }
 std::string_view Error::function() const noexcept
 {
-  return d_->function;
+  return d_ ? std::string_view(d_->function) : std::string_view();
 }
 std::optional<int> Error::argument_index() const noexcept
 {
-  return d_->argument_index;
+  return d_ ? d_->argument_index : std::nullopt;
 }
 const std::vector<Term>& Error::terms() const noexcept
 {
-  return d_->terms;
+  static const std::vector<Term> empty;
+  return d_ ? d_->terms : empty;
 }
 const std::vector<Sort>& Error::sorts() const noexcept
 {
-  return d_->sorts;
+  static const std::vector<Sort> empty;
+  return d_ ? d_->sorts : empty;
 }
 std::string_view Error::option() const noexcept
 {
-  return d_->option;
+  return d_ ? std::string_view(d_->option) : std::string_view();
 }
 int Error::line() const noexcept
 {
-  return d_->line;
+  return d_ ? d_->line : 0;
 }
 int Error::column() const noexcept
 {
-  return d_->column;
+  return d_ ? d_->column : 0;
 }
 
 // ------------------------------------------------------------ throw helpers
@@ -253,11 +256,11 @@ std::atomic<InternalErrorPolicy> g_policy{[] {
 
 [[noreturn]] void throw_details(std::shared_ptr<ErrorDetails> d)
 {
-  if (error_recoverable(d->code))
+  if (d && error_recoverable(d->code))
     throw RecoverableError(std::move(d));
   if (g_policy == InternalErrorPolicy::ABORT)
   {
-    std::fputs(d->message.c_str(), stderr);
+    std::fputs(UnsafeError(d).what(), stderr);
     std::fputc('\n', stderr);
     std::abort();
   }
@@ -319,11 +322,21 @@ void fail_internal(const char* fn, const std::string& what)
 
 void fail_resource(const char* fn, const char* what)
 {
-  auto d = std::make_shared<ErrorDetails>();
-  d->code = ErrorCode::RESOURCE;
-  d->function = fn ? fn : "";
-  d->message = std::string("resource failure in '") + d->function + "': " + what +
-               " [RESOURCE]";
+  std::shared_ptr<ErrorDetails> d;
+  try
+  {
+    d = std::make_shared<ErrorDetails>();
+    d->code = ErrorCode::RESOURCE;
+    d->function = fn ? fn : "";
+    d->message = std::string("resource failure in '") + d->function + "': " + what +
+                 " [RESOURCE]";
+  }
+  catch (const std::bad_alloc&)
+  {
+    // A null record is the allocation-free RESOURCE error. Reporting an
+    // exhausted heap must not require another successful allocation.
+    d.reset();
+  }
   throw_details(std::move(d));
 }
 

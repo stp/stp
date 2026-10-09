@@ -72,6 +72,18 @@ elseif(NOT STP_DEPS_LOCAL_ONLY)
     endif()
 endif()
 
+# An earlier STP build may have installed the unchecked ABC into the shared
+# dependency directory. Rebuild that copy with the allocation checks below;
+# an explicitly supplied ABC_DIR remains the caller's dependency.
+if(ABC_FOUND_SYSTEM AND NOT ABC_DIR AND
+   ABC_LIBRARY STREQUAL "${STP_DEP_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}abc-pic${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    file(STRINGS "${ABC_INCLUDE_DIR}/misc/util/abc_global.h" _abc_checked
+         REGEX "^#define ABC_STP_CHECKED_ALLOCATIONS 1$")
+    if(NOT _abc_checked)
+        set(ABC_FOUND_SYSTEM FALSE)
+    endif()
+endif()
+
 if(NOT ABC_FOUND_SYSTEM)
     # Rungs 2 and 3.
     check_ep_downloaded("ABC-EP")
@@ -177,6 +189,8 @@ if(NOT ABC_FOUND_SYSTEM)
         ${STP_EP_COMMON_CONFIG}
         GIT_REPOSITORY https://github.com/stp/abc.git
         GIT_TAG ${ABC_GIT_TAG}
+        PATCH_COMMAND ${CMAKE_COMMAND} "-DSOURCE_DIR=<SOURCE_DIR>"
+                      -P "${CMAKE_CURRENT_LIST_DIR}/deps-utils/patch-abc.cmake"
         CONFIGURE_COMMAND
             ${CMAKE_COMMAND} -E env ABC_USE_NO_CUDD=1 ABC_USE_NO_PTHREADS=1
             ${CMAKE_COMMAND} -S <SOURCE_DIR> -B <BINARY_DIR>

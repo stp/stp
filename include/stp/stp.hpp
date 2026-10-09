@@ -315,6 +315,7 @@ public:
   ~Error() override;
 
 protected:
+  // Null is the RESOURCE fallback when even an error record cannot be allocated.
   std::shared_ptr<const detail::ErrorDetails> d_;
 };
 /// The call had no effect.
