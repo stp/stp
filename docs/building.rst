@@ -18,7 +18,11 @@ Dependencies
 STP relies on flex, bison and python3, plus at least one SAT backend.
 Nothing else has to be installed: with ``-DENABLE_AUTO_DOWNLOAD=ON`` the
 build fetches every library it needs, and ``lit``, which drives the
-tests, into a virtual environment of its own.
+tests, into a virtual environment of its own. The one exception is
+``stp-p`` (``-DSTP_BUILD_PARALLEL=ON``, :doc:`tools`), which
+needs nlohmann/json 3.9 or later and does not download it: install it
+(Debian and Ubuntu: ``nlohmann-json3-dev``; Fedora: ``json-devel``) or
+point ``NLOHMANN_JSON_DIR`` at a copy.
 Configuration fails if no backend is enabled.
 
 On a Debian-like platform most of it comes from the package manager:

@@ -1042,6 +1042,10 @@ find_package(ABC REQUIRED)
 # Declared here, well before its first use (the manpage rule); the subdirs it
 # gates are added at the bottom of this file.
 option(BUILD_EXECUTABLES "Build executables" ON)
+option(STP_BUILD_PARALLEL "Build the Linux native stp-p executable" OFF)
+if(STP_BUILD_PARALLEL AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "STP_BUILD_PARALLEL currently requires Linux")
+endif()
 
 # -----------------------------------------------------------------------------
 # Dependency machinery
@@ -1092,6 +1096,13 @@ if (USE_CADICAL)
     if (CADICAL_HAS_DECISION_POLARITY)
         add_definitions(-DSTP_CADICAL_HAS_DECISION_POLARITY)
     endif()
+endif()
+# stp-p's group needs CaDiCaL with STP's clause-import extension; without it
+# the tool still builds, and refuses -j greater than 1.
+if(STP_BUILD_PARALLEL AND NOT CADICAL_HAS_CLAUSE_IMPORT)
+    message(WARNING "STP_BUILD_PARALLEL is ON, but this build's CaDiCaL has no "
+                    "clause-import extension (none, a 2.x, or one found without "
+                    "STP's patch): stp-p will refuse -j greater than 1")
 endif()
 
 # -----------------------------------------------------------------------------
@@ -1725,9 +1736,9 @@ if(BUILD_SHARED_LIBS AND UNIX AND NOT APPLE)
     "${stp_lra_private_map}")
 endif()
 
-# Only tools/stp/main.cpp includes CLI11, so it is looked for only when there
-# is a binary to build.
-if (BUILD_EXECUTABLES)
+# CLI11 is the command line of the stp binary and of stp-p, so it is looked
+# for when either is built.
+if (BUILD_EXECUTABLES OR STP_BUILD_PARALLEL)
     find_package(CLI11 REQUIRED)
 endif()
 add_subdirectory(tools)
