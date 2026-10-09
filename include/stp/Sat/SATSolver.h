@@ -395,6 +395,62 @@ public:
   virtual bool supportsSearchReset() const { return false; }
   virtual bool resetSearch() { return false; }
 
+  // Learned-clause exchange between copies of one backend forked with its
+  // clauses loaded, before any search (the API's SearchPoint). Literals are
+  // the backend's own numbering, which every such copy shares; only clauses
+  // over the variables that existed at connection leave this backend. The
+  // callbacks run inside the search and must not throw.
+  struct ExchangeCounters
+  {
+    bool connected = false;
+    uint64_t variables = 0, exported = 0, filtered = 0, polls = 0,
+             imported = 0, units = 0, dropped = 0, satisfied = 0,
+             backtracks = 0;
+  };
+  class ClauseExchange
+  {
+  public:
+    virtual ~ClauseExchange() {}
+    virtual void learned(const int* literals, size_t size) = 0;
+    virtual bool next(std::vector<int>& literals) = 0;
+    // The start of an import poll, before its first next(), with the poll's
+    // cap on clauses of two or more literals (importBudget, or the backend's
+    // own when that is 0).
+    virtual void beginImport(size_t /*budget*/) {}
+    // The backend's final counters, as it is destroyed while connected: a
+    // check's own backend (the batch pipeline's) does not outlive the check.
+    virtual void closing(const ExchangeCounters&) {}
+  };
+  struct ExchangeSettings
+  {
+    unsigned maxSize = 8;       // longest clause exported
+    int importInterval = 256;   // conflicts between import polls
+    int importBudget = 0;       // longer-than-unit clauses per poll; 0 none
+    bool import = true;         // false: export only
+  };
+  // false: this backend cannot exchange clauses. nullptr disconnects.
+  virtual bool connectClauseExchange(ClauseExchange* /*exchange*/,
+                                     const ExchangeSettings&)
+  {
+    return false;
+  }
+  virtual ExchangeCounters exchangeCounters() const { return {}; }
+
+  // Search diversification of a backend that already holds its clauses,
+  // before its first solve: the random seed; every saved phase (1 true,
+  // -1 false, 0 pseudo-random, anything else kept); a shuffled decision
+  // order; and the search mode (0 the backend's own, 1 focused only,
+  // 2 stable only). false: not supported, or a solve has run; nothing
+  // changed.
+  struct Diversification
+  {
+    int seed = 0;
+    int phase = 2;
+    bool shuffle = false;
+    int mode = 0;
+  };
+  virtual bool diversify(const Diversification&) { return false; }
+
   // A decision hint: decide this variable, to this value, before the
   // backend's own heuristic chooses. Stronger than suggestPhase, which only
   // says which value to try once the heuristic reaches the variable.

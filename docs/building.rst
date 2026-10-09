@@ -419,7 +419,10 @@ These apply to all generators:
    sharing a path cannot corrupt each other's state -- though a shared
    directory does hold one copy of each library, whatever compiled it,
    and STP warns when the compiler or sanitizer settings that filled it
-   differ from the ones now building against it
+   differ from the ones now building against it. CaDiCaL is the
+   exception that stops the configure: STP patches it, and a CaDiCaL in a
+   shared directory that was built from another set of STP's patches is
+   not used (see "What invalidates a shared directory" below)
 -  ``STP_ALLOCATOR`` -- which memory allocator the ``stp`` binary uses.
    STP is allocation-heavy and the C library allocator is a significant
    bottleneck, so this defaults to ``mimalloc``, which is vendored and
@@ -658,6 +661,17 @@ One ``STP_DEP_DIR`` holds one copy of each library, whatever compiled it.
 STP records what filled it in ``.stp-dep-config`` and warns when the
 compiler, sanitizer, toolchain or ABC ABI settings differ from the build
 now using it. An ASan build in particular wants a directory of its own.
+
+CaDiCaL is built with STP's own patches (``cmake/deps-utils/``), and the
+install records which set of them it was built from. In a build directory's
+own dependency directory, a CaDiCaL from another set is simply patched and
+built again. In a shared one, other build directories may be using it, so
+the configure stops instead, and names the two ways out: give this build
+directory a dependency directory of its own (``-USTP_DEP_DIR``), or remove
+that CaDiCaL alone -- ``lib/libcadical.a``, ``lib/cadical-patch-set.txt``
+and ``include/cadical/`` under ``STP_DEP_DIR`` -- so that the next build
+makes it again from the current set. The other dependencies stay. A
+directory filled before STP recorded its patch set counts as another set.
 
 The build type is deliberately not recorded, except on MSVC: sharing a
 differently-optimised ABC is a choice rather than a fault, but on MSVC

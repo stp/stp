@@ -38,6 +38,25 @@ set(CADICAL_DIR "" CACHE PATH
 set(CaDiCaL_FOUND_SYSTEM FALSE)
 set(CADICAL_VERSION "unknown")
 
+# The CaDiCaL patch set STP carries, as one hash: the patch step records it in
+# the checkout and the install, so that a changed set is applied again to an
+# existing checkout and an install built from another set is not adopted. The
+# files are configure dependencies, so an edit to one -- committed or not --
+# re-runs CMake, which hashes the set again.
+set(_cadical_patch_files)
+file(GLOB _cadical_patch_files CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_LIST_DIR}/deps-utils/cadical-*.patch"
+     "${CMAKE_CURRENT_LIST_DIR}/deps-utils/patch-cadical.cmake"
+     "${CMAKE_CURRENT_LIST_DIR}/deps-utils/cadical-CMakeLists.txt")
+list(SORT _cadical_patch_files)
+set(_cadical_patch_hashes "")
+foreach(_file ${_cadical_patch_files})
+    file(SHA256 "${_file}" _hash)
+    string(APPEND _cadical_patch_hashes "${_hash}")
+endforeach()
+string(SHA256 CADICAL_PATCH_SET "${_cadical_patch_hashes}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_cadical_patch_files})
+
 # Everything downstream includes <cadical/cadical.hpp>, which is where an
 # installed CaDiCaL puts its header. A checkout has it at src/cadical.hpp, so
 # rung 0 stages a copy under the installed name and every rung then presents
@@ -76,6 +95,65 @@ elseif(NOT STP_DEPS_LOCAL_ONLY)
     # build directory installed into STP_DEP_DIR.
     find_path(CADICAL_INCLUDE_DIR NAMES cadical/cadical.hpp)
     find_library(CADICAL_LIBRARY NAMES cadical)
+    # A CaDiCaL this build installed into STP_DEP_DIR carries the patch set it
+    # was built with; one built from another set, or before sets were
+    # recorded, is not adopted. Inside this build directory (STP_DEP_DIR's
+    # default) it is this tree's own and is built again. Outside it, other
+    # build directories may be using it, and building it again would change
+    # their CaDiCaL underneath them: configure stops instead.
+    if(CADICAL_LIBRARY AND STP_DEP_DIR)
+        get_filename_component(_cadical_lib_dir "${CADICAL_LIBRARY}" DIRECTORY)
+        get_filename_component(_cadical_lib_dir "${_cadical_lib_dir}" REALPATH)
+        get_filename_component(_stp_dep_dir "${STP_DEP_DIR}" REALPATH)
+        string(FIND "${_cadical_lib_dir}/" "${_stp_dep_dir}/" _in_dep_dir)
+        if(_in_dep_dir EQUAL 0)
+            set(_cadical_recorded "")
+            if(EXISTS "${_cadical_lib_dir}/cadical-patch-set.txt")
+                file(READ "${_cadical_lib_dir}/cadical-patch-set.txt" _cadical_recorded)
+                string(STRIP "${_cadical_recorded}" _cadical_recorded)
+            endif()
+            if(NOT _cadical_recorded STREQUAL CADICAL_PATCH_SET)
+                get_filename_component(_stp_binary_dir "${PROJECT_BINARY_DIR}" REALPATH)
+                string(FIND "${_stp_dep_dir}/" "${_stp_binary_dir}/" _dep_dir_here)
+                if(NOT _dep_dir_here EQUAL 0)
+                    message(FATAL_ERROR
+                        "The CaDiCaL in ${_cadical_lib_dir} was built from another "
+                        "STP patch set, and STP_DEP_DIR (${STP_DEP_DIR}) is outside "
+                        "this build directory, so other build directories may be "
+                        "using it. Either give this build directory a dependency "
+                        "directory of its own (configure with -USTP_DEP_DIR for "
+                        "the default, ${STP_DEPS_PREFIX}/install), or remove that "
+                        "CaDiCaL alone -- ${_cadical_lib_dir}/libcadical.a, "
+                        "${_cadical_lib_dir}/cadical-patch-set.txt and "
+                        "${STP_DEP_DIR}/include/cadical -- so that it is built "
+                        "again from this patch set; the other dependencies there "
+                        "stay.")
+                endif()
+                message(STATUS "CaDiCaL in ${_cadical_lib_dir} was built from "
+                               "another patch set: building it again")
+                # This tree's stamps say the old set was patched in. Without
+                # them the patch step runs again, and every step after it:
+                # 'patch', or 'patch_disconnected' from CMake 3.27 on (with
+                # UPDATE_DISCONNECTED), in a per-configuration directory for a
+                # multi-config generator. CMake from 3.27 would also rerun it
+                # for its changed command (the set's hash is in it); before
+                # 3.27 only the missing stamp does.
+                set(_cadical_stamps "${STP_DEPS_PREFIX}/src/CaDiCaL-EP-stamp")
+                file(GLOB _cadical_patch_stamps
+                     "${_cadical_stamps}/CaDiCaL-EP-patch"
+                     "${_cadical_stamps}/CaDiCaL-EP-patch_disconnected"
+                     "${_cadical_stamps}/*/CaDiCaL-EP-patch"
+                     "${_cadical_stamps}/*/CaDiCaL-EP-patch_disconnected")
+                if(_cadical_patch_stamps)
+                    file(REMOVE ${_cadical_patch_stamps})
+                endif()
+                unset(CADICAL_INCLUDE_DIR CACHE)
+                unset(CADICAL_LIBRARY CACHE)
+                set(CADICAL_INCLUDE_DIR "")
+                set(CADICAL_LIBRARY "")
+            endif()
+        endif()
+    endif()
     if(CADICAL_INCLUDE_DIR AND CADICAL_LIBRARY)
         set(CaDiCaL_FOUND_SYSTEM TRUE)
         # There is no VERSION file to read here, and the header carries no
@@ -129,6 +207,7 @@ if(NOT CaDiCaL_FOUND_SYSTEM)
         GIT_TAG ${CaDiCaL_TAG}
         PATCH_COMMAND ${CMAKE_COMMAND} "-DSOURCE_DIR=<SOURCE_DIR>"
                       "-DCADICAL_VERSION=${CADICAL_VERSION}"
+                      "-DSTP_PATCH_SET=${CADICAL_PATCH_SET}"
                       -P "${CMAKE_CURRENT_LIST_DIR}/deps-utils/patch-cadical.cmake"
         CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
                    -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
@@ -169,6 +248,31 @@ else()
     set(CADICAL_HAS_DECISION_POLARITY OFF)
 endif()
 message(STATUS "CaDiCaL decision-time polarity advice: ${CADICAL_HAS_DECISION_POLARITY}")
+
+# Clause import and post-load diversification: also an STP extension
+# (cadical-clause-import.patch), probed the same way for a CaDiCaL that was
+# not built here. A copy patched before the per-poll import budget existed
+# counts as without it.
+if(CaDiCaL_FOUND_SYSTEM)
+    set(_import_src "${PROJECT_BINARY_DIR}/CaDiCaL_import.cpp")
+    file(WRITE "${_import_src}"
+         "#include <cadical/cadical.hpp>\n"
+         "struct I : CaDiCaL::ClauseImporter { int import_budget () override "
+         "{ return 1; } bool import_clause (std::vector<int> &) override "
+         "{ return false; } };\n"
+         "int main() { CaDiCaL::Solver s; I i; s.connect_clause_importer(&i); "
+         "s.disconnect_clause_importer(); "
+         "s.diversify(0, 2, false); return (int) s.import_statistics().polls; }\n")
+    try_compile(CADICAL_HAS_CLAUSE_IMPORT
+                "${PROJECT_BINARY_DIR}/CaDiCaL_import_probe" "${_import_src}"
+                CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${CADICAL_INCLUDE_DIR}"
+                LINK_LIBRARIES ${_polarity_libraries})
+elseif(CADICAL_VERSION VERSION_GREATER_EQUAL "3.0.0")
+    set(CADICAL_HAS_CLAUSE_IMPORT ON)
+else()
+    set(CADICAL_HAS_CLAUSE_IMPORT OFF)
+endif()
+message(STATUS "CaDiCaL clause import: ${CADICAL_HAS_CLAUSE_IMPORT}")
 
 # Bounded variable addition (--cadical-factor) needs the declare_more_variables
 # API. That appeared in CaDiCaL 2.2.0, but the 2.2 line shipped it with

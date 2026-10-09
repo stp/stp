@@ -71,12 +71,12 @@ add_feature_info(LocalDeps STP_DEPS_LOCAL_ONLY
 # per-build-directory and not negotiable. Stamp files are mutable
 # per-configuration state, and two builds sharing them corrupt each other.
 #
-# The install tree is write-once and its contents are fully determined by the
-# pinned revision, so it can be shared. STP_DEP_DIR names it, and it also goes
-# on CMAKE_PREFIX_PATH, which is the whole trick: point several build
-# directories at one and only the first pays to build anything, because the
-# rest find what it installed at rung 1 of the ladder above and create no
-# ExternalProject.
+# The install tree's contents are determined by the pinned revisions (and, for
+# CaDiCaL, by STP's patch set, which FindCaDiCaL checks), so it can be shared.
+# STP_DEP_DIR names it, and it also goes on CMAKE_PREFIX_PATH, which is the
+# whole trick: point several build directories at one and only the first pays
+# to build anything, because the rest find what it installed at rung 1 of the
+# ladder above and create no ExternalProject.
 set(STP_DEPS_PREFIX "${PROJECT_BINARY_DIR}/deps")
 set(STP_DEP_DIR "${STP_DEPS_PREFIX}/install" CACHE PATH
     "Where built dependencies are installed, and looked for. Point several build directories at one to build them once")

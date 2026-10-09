@@ -66,5 +66,9 @@ endif()
 install(TARGETS cadical ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/cadical.hpp"
         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cadical")
+# The patch set STP applied (deps-utils/patch-cadical.cmake), beside the
+# archive, so that STP never adopts an install built from another set.
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/.stp-patch-set"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}" RENAME cadical-patch-set.txt OPTIONAL)
 
 # EOF

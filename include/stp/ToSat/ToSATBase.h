@@ -84,6 +84,7 @@ protected:
   // Ptr to STPManager
   STPMgr* bm;
   std::function<bool()> before_search_;
+  std::string before_search_failure_;
 
 public:
   typedef std::unordered_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
@@ -110,10 +111,14 @@ public:
 
   // Runs after CNF installation and activation binding, before entering
   // SAT search. The caller owns the callback's lifetime and clears it
-  // after CallSAT. A false result is an internal failure, never UNSAT.
-  void setBeforeSearch(std::function<bool()> callback)
+  // after CallSAT. A false result is an internal failure, never UNSAT;
+  // `failure` is what the solve then reports.
+  void setBeforeSearch(std::function<bool()> callback,
+                       std::string failure =
+                           "theory setup before SAT search failed")
   {
     before_search_ = std::move(callback);
+    before_search_failure_ = std::move(failure);
   }
   void clearBeforeSearch() noexcept { before_search_ = nullptr; }
 

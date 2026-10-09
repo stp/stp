@@ -68,6 +68,19 @@ namespace api
 {
 namespace detail
 {
+// What a SearchPoint reaches: the check's backend and the solver whose
+// statistics its exchange reports to. It lives for the hook's one call.
+struct SearchPointState
+{
+  ::stp::SATSolver* backend;
+  SolverImpl* solver;
+};
+
+// set_before_search hands its hook a SearchPoint over the check's backend.
+struct SearchPointAccess
+{
+  static SearchPoint make(SearchPointState* state) { return SearchPoint(state); }
+};
 
 std::mutex& parser_mutex()
 {
@@ -710,6 +723,14 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
   last_assumptions = assumptions;
   last_failed_assumptions.clear();
   ++checks;
+  // set_before_search: the hook belongs to this check whatever becomes of it
+  // (answered, abandoned, interrupted or failed), and the last check's
+  // exchange counters do not describe this one.
+  std::function<bool(SearchPoint&)> search_hook = std::move(before_search);
+  before_search = nullptr;
+  closed_exchange = {};
+  search_point_outcome = search_hook ? "not reached" : "none";
+  search_point_refusal.clear();
 
   // an interrupt that arrived before the check is consumed by it
   if (interrupt.exchange(false))
@@ -775,6 +796,45 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
   stp->ClearAllTables();
   bm->clearUnknown();
 
+  // set_before_search: the check takes the batch pipeline, the only one with
+  // a single before-search point.
+  ::stp::STPMgr::BeforeSearchRequest search_request;
+  struct ClearSearchRequest
+  {
+    SolverImpl* s;
+    STPMgr* bm;
+    const ::stp::STPMgr::BeforeSearchRequest& request;
+    bool hooked;
+    bool& batch;
+    bool saved;
+    ~ClearSearchRequest()
+    {
+      bm->before_search = nullptr;
+      batch = saved;
+      if (!hooked)
+        return;
+      s->search_point_outcome = request.refused   ? "refused"
+                                : request.offered ? "offered"
+                                                  : "not reached";
+      s->search_point_refusal = request.refusal;
+    }
+  } clear_search_request{this,         bm,         search_request,
+                         bool(search_hook), batch_only, batch_only};
+  if (search_hook)
+  {
+    batch_only = true;
+    search_request.reason = before_search_reason;
+    search_request.search_unoffered =
+        before_search_otherwise == NoSearchPoint::search;
+    search_request.hook = [&search_hook, this](::stp::SATSolver& backend) {
+      detail::SearchPointState state{&backend, this};
+      SearchPoint point = detail::SearchPointAccess::make(&state);
+      const InCallback callback;
+      return search_hook(point);
+    };
+    bm->before_search = &search_request;
+  }
+
   SOLVER_RETURN_TYPE out = SOLVER_UNDECIDED;
   last_incremental = false;
   try
@@ -805,9 +865,12 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
       // would make Solver::assertions() report one formula per level.
       ASTVec levels;
       // The API's permanent assertions are its base frame, which no pop
-      // removes, so they are the driver's level zero: only reset() and
-      // reset_assertions() remove the base, and both discard the whole
-      // driver with it, so only pushed frames and the final assumption frame
+      // removes, so they are the driver's level zero: every path that
+      // removes or rewrites base content -- reset(), reset_assertions(), a
+      // failed parse's restore, a script's (reset) or (reset-assertions) --
+      // discards the whole driver first, and switching solvers shelves the
+      // base and reinstalls the same hash-consed nodes (activate), so the
+      // driver keeps it. Only pushed frames and the final assumption frame
       // ever retract. A dummy true level in front would make the base a
       // pushed frame of its own, with a pushed frame's costs at every check.
       for (const ASTVec* level : bm->AssertLevels())
@@ -1410,6 +1473,7 @@ void Solver::reset_assertions()
 {
   SolverImpl* s = live(*this, "Solver::reset_assertions");
   detail::OutputRoute route(&s->route_sinks);
+  s->clear_before_search();
   s->ensure_snapshot();
   STPMgr* bm = s->mgr->bm;
   detail::engine_call(s->mgr, "Solver::reset_assertions", [&] {
@@ -1431,6 +1495,7 @@ void Solver::reset()
 {
   SolverImpl* s = live(*this, "Solver::reset");
   detail::OutputRoute route(&s->route_sinks);
+  s->clear_before_search();
   s->options.reset_all();
   s->rebuild_engine();
 }
@@ -1447,6 +1512,93 @@ Result Solver::check_sat(const std::vector<Term>& assumptions, std::optional<Che
   for (std::size_t i = 0; i < assumptions.size(); ++i)
     nodes.push_back(own_bool(s, assumptions[i], "Solver::check_sat", static_cast<int>(i)));
   return s->run_check("Solver::check_sat", nodes, budget);
+}
+
+ClauseExchange::~ClauseExchange() = default;
+
+namespace
+{
+struct ExchangeBridge final : ::stp::SATSolver::ClauseExchange
+{
+  // Inside this class the bare name is the base; the target is the API's.
+  ExchangeBridge(api::ClauseExchange* t, SolverImpl* o) : target(t), owner(o) {}
+  void learned(const int* literals, size_t size) override
+  {
+    target->learned(literals, size);
+  }
+  bool next(std::vector<int>& literals) override { return target->next(literals); }
+  void beginImport(size_t budget) override { target->begin_import(budget); }
+  void closing(const ::stp::SATSolver::ExchangeCounters& c) override
+  {
+    owner->closed_exchange = c;
+  }
+  api::ClauseExchange* target;
+  SolverImpl* owner;
+};
+
+bool connect_exchange(SolverImpl* s, ::stp::SATSolver* backend,
+                      ClauseExchange* exchange, const ClauseExchangeSettings& settings)
+{
+  if (!exchange)
+  {
+    backend->connectClauseExchange(nullptr, {});
+    s->exchange_bridge.reset();
+    return true;
+  }
+  auto bridge = std::make_unique<ExchangeBridge>(exchange, s);
+  ::stp::SATSolver::ExchangeSettings native;
+  native.maxSize = std::min<std::uint32_t>(settings.max_size, 1u << 30);
+  native.importInterval =
+      static_cast<int>(std::min<std::uint32_t>(settings.import_interval, 1u << 30));
+  native.importBudget =
+      static_cast<int>(std::min<std::uint32_t>(settings.import_budget, 1u << 30));
+  native.import = settings.import;
+  if (!backend->connectClauseExchange(bridge.get(), native))
+    return false;
+  s->exchange_bridge = std::move(bridge);
+  return true;
+}
+
+bool diversify_backend(::stp::SATSolver* backend, const SearchDiversification& d)
+{
+  ::stp::SATSolver::Diversification native;
+  native.seed = d.seed;
+  native.phase = d.phase;
+  native.shuffle = d.shuffle;
+  native.mode = d.mode;
+  return backend->diversify(native);
+}
+
+} // namespace
+
+void Solver::set_before_search(BeforeSearch hook, std::string reason,
+                               NoSearchPoint otherwise)
+{
+  SolverImpl* s = live(*this, "Solver::set_before_search");
+  // An abandoned check answers unknown with this reason; without one it
+  // would be indistinguishable from a check that failed for no reason.
+  if (hook && reason.empty())
+    detail::fail(ErrorCode::INVALID_ARGUMENT, "Solver::set_before_search",
+         "a before-search hook needs a non-empty reason");
+  s->before_search = std::move(hook);
+  s->before_search_reason = std::move(reason);
+  s->before_search_otherwise = otherwise;
+}
+
+std::uint64_t SearchPoint::variables() const
+{
+  return state_->backend->nVars();
+}
+
+bool SearchPoint::connect_clause_exchange(ClauseExchange* exchange,
+                                          const ClauseExchangeSettings& settings)
+{
+  return connect_exchange(state_->solver, state_->backend, exchange, settings);
+}
+
+bool SearchPoint::diversify(const SearchDiversification& d)
+{
+  return diversify_backend(state_->backend, d);
 }
 
 Entailment Solver::entails(const Term& formula, std::optional<CheckBudget> budget)
@@ -1706,6 +1858,13 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
       detail::fail(ErrorCode::INVALID_ARGUMENT, fn,
                    "the input holds a NUL byte at offset " + std::to_string(nul) +
                        ", where the parser would stop reading");
+  // A script's (check-sat) goes through the frontend, not run_check_impl: it
+  // would neither use nor consume a hook set for the next check.
+  if (mode == ParseMode::EXECUTE && s->before_search)
+    detail::fail(ErrorCode::STATE, fn,
+                 "a before-search hook is set for the next check, which a "
+                 "script's (check-sat) would not use; clear it "
+                 "(set_before_search(nullptr, {})) or run that check first");
   const bool single_query = mode == ParseMode::SINGLE_QUERY;
   const bool runs = mode != ParseMode::DECLARE_AND_ASSERT && !single_query;
   detail::OutputRoute route(&s->route_sinks);
@@ -2728,13 +2887,20 @@ CnfScope Solver::write_cnf(std::ostream& os) const
 {
   SolverImpl* s = live(*this, "Solver::write_cnf");
   STPMgr* bm = s->mgr->bm;
+  // An export is not a check: it neither runs nor consumes a hook set for
+  // the next one.
+  if (s->before_search)
+    detail::fail(ErrorCode::STATE, "Solver::write_cnf",
+                 "a before-search hook is set for the next check; clear it "
+                 "(set_before_search(nullptr, {})) or run that check first");
   // Run the batch pipeline up to its first CNF; the check itself is
   // abandoned with STOPPED_AFTER_CNF. The export is not a
   // check: what the last check left is the caller's and is put back however
   // the export ends -- its result, its assumptions and the failed ones, its
   // model (snapshotted first, since the export's pipeline refills the tables
-  // a pending model is read from), the candidate, and the count of solves
-  // that engages the incremental driver -- and an interrupt pending when it
+  // a pending model is read from), the candidate, the count of solves
+  // that engages the incremental driver, and what the check did with a
+  // before-search hook -- and an interrupt pending when it
   // starts is left for the next check.
   if (s->model_pending)
     s->ensure_snapshot();
@@ -2751,6 +2917,8 @@ CnfScope Solver::write_cnf(std::ostream& os) const
     std::size_t checks;
     std::size_t solves_run;
     bool interrupt;
+    ::stp::SATSolver::ExchangeCounters exchange;
+    std::string search_outcome, search_refusal;
     ~LastCheck()
     {
       s->last = last;
@@ -2767,6 +2935,9 @@ CnfScope Solver::write_cnf(std::ostream& os) const
       s->stp->incrementalSolvesRun = solves_run;
       if (interrupt)
         s->interrupt.store(true);
+      s->closed_exchange = exchange;
+      s->search_point_outcome = std::move(search_outcome);
+      s->search_point_refusal = std::move(search_refusal);
     }
   } kept{s,
          s->last,
@@ -2780,7 +2951,10 @@ CnfScope Solver::write_cnf(std::ostream& os) const
          s->last_incremental,
          s->checks,
          s->stp->incrementalSolvesRun,
-         s->interrupt.exchange(false)};
+         s->interrupt.exchange(false),
+         s->closed_exchange,
+         s->search_point_outcome,
+         s->search_point_refusal};
   // The first CNF and its scope -- how it relates to the assertions -- come
   // from the listener the engine tells of every CNF, which is the export's
   // for the call: the solver's own sink sees the CNFs checks hand to the SAT
@@ -2885,6 +3059,22 @@ Statistics Solver::statistics() const
   }
   e["sat.backend"] = std::string(backend);
   e["incremental.engaged"] = static_cast<std::uint64_t>(s->last_incremental ? 1 : 0);
+  {
+    // The last check's backend went with the check; it left its counters.
+    const ::stp::SATSolver::ExchangeCounters& x = s->closed_exchange;
+    e["sat.exchange.connected"] = static_cast<std::uint64_t>(x.connected ? 1 : 0);
+    e["sat.exchange.variables"] = x.variables;
+    e["sat.exchange.exported"] = x.exported;
+    e["sat.exchange.filtered"] = x.filtered;
+    e["sat.exchange.polls"] = x.polls;
+    e["sat.exchange.imported"] = x.imported;
+    e["sat.exchange.import-units"] = x.units;
+    e["sat.exchange.import-dropped"] = x.dropped;
+    e["sat.exchange.import-satisfied"] = x.satisfied;
+    e["sat.exchange.import-backtracks"] = x.backtracks;
+  }
+  e["before-search.outcome"] = s->search_point_outcome;
+  e["before-search.refusal"] = s->search_point_refusal;
   static const char* const kinds[] = {"eq", "compare", "ite", "plus", "mult", "divmod"};
   static const int kind_index[] = {UF::ABSTRACT_EQ, UF::ABSTRACT_COMPARE, UF::ABSTRACT_ITE,
                                    UF::ABSTRACT_PLUS, UF::ABSTRACT_MULT, UF::ABSTRACT_DIVMOD};

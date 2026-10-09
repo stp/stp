@@ -1129,6 +1129,105 @@ private:
   std::shared_ptr<const detail::ModelSnapshot> snap_;
 };
 
+/// Learned-clause exchange between copies of one check's SAT backend, forked
+/// at its before-search point (Solver::set_before_search) and connected there
+/// (SearchPoint::connect_clause_exchange). Literals are the backend's own
+/// numbering, which every copy forked at that point shares and which means
+/// nothing outside that group. Every clause next() hands over must have been
+/// learned() by such a copy: it then holds in every model of the query. It
+/// is implied by the clauses every copy shares plus, in a copy that refined
+/// after the point (eager array axioms whose model failed replay), lemmas
+/// valid for the query -- provided every copy runs the same backend options
+/// (diversify() changes only the search), no technique that removes models
+/// runs between the fork and the connection, and variables created after
+/// the connection (the backend's extension variables, a refinement's
+/// encoding) lie above the cutoff, so no exported clause names one. Both run
+/// inside the search: they must not call back into the solver and must not
+/// throw.
+class STP_API_EXPORT ClauseExchange
+{
+public:
+  virtual ~ClauseExchange();
+  /// A clause the backend learned: at most max_size literals, all over the
+  /// variables that existed when the exchange was connected.
+  virtual void learned(const int* literals, std::size_t size) noexcept = 0;
+  /// One clause to import, replacing the contents of `literals`, or false
+  /// when none is pending.
+  virtual bool next(std::vector<int>& literals) noexcept = 0;
+  /// The start of an import poll, before its first next(): the poll takes
+  /// every unit and at most `budget` clauses of two or more literals (the
+  /// settings' import_budget, or the backend's own cap when that is 0). An
+  /// exchange may select the poll's clauses here; the poll ends at the first
+  /// next() returning false.
+  virtual void begin_import(std::size_t /*budget*/) noexcept {}
+};
+struct ClauseExchangeSettings
+{
+  std::uint32_t max_size = 8;          ///< longest clause exported
+  std::uint32_t import_interval = 256; ///< conflicts between import polls
+  /// Clauses of two or more literals one poll imports at most (units are
+  /// never limited); 0: no budget but the backend's own cap.
+  std::uint32_t import_budget = 0;
+  bool import = true; ///< false: export only, never poll next()
+};
+/// Search-only diversification of a copy at its before-search point: random
+/// seed; saved phases (1 true, -1 false, 0 pseudo-random from the seed, 2
+/// kept); a shuffled decision order; search mode (0 the backend's, 1 focused
+/// only, 2 stable only). None of these changes which models exist.
+struct SearchDiversification
+{
+  std::int32_t seed = 0;
+  std::int32_t phase = 2;
+  bool shuffle = false;
+  std::int32_t mode = 0;
+};
+
+namespace detail
+{
+struct SearchPointAccess;
+struct SearchPointState;
+}
+/// A check's SAT backend at its before-search point (Solver::set_before_search):
+/// the check's CNF is loaded and nothing has searched. Valid only inside the
+/// hook it is handed to.
+class STP_API_EXPORT SearchPoint
+{
+public:
+  /// The variables STP's encoding numbered. The exchange's cutoff
+  /// (sat.exchange.variables) is the backend's own count at connection,
+  /// which may be smaller (a numbered variable no clause mentions); the
+  /// backend's extension variables (cadical-factor) appear only during the
+  /// search, above it.
+  std::uint64_t variables() const;
+  /// Connect `exchange` (not owned; nullptr disconnects) to this check's
+  /// backend, exporting only clauses over the variables it holds now. false
+  /// when the backend cannot exchange clauses (CaDiCaL without STP's
+  /// clause-import extension). Connected until the backend goes with the
+  /// check, whose final counters are then the solver's sat.exchange.*
+  /// statistics.
+  bool connect_clause_exchange(ClauseExchange* exchange,
+                               const ClauseExchangeSettings& settings = {});
+  /// Diversify this check's search (SearchDiversification). false when the
+  /// backend does not support it; nothing then changed.
+  bool diversify(const SearchDiversification& diversification);
+  SearchPoint(const SearchPoint&) = delete;
+  SearchPoint& operator=(const SearchPoint&) = delete;
+
+private:
+  friend struct detail::SearchPointAccess;
+  explicit SearchPoint(detail::SearchPointState* state) : state_(state) {}
+  detail::SearchPointState* state_;
+};
+/// Called at the before-search point; true lets the check search.
+using BeforeSearch = std::function<bool(SearchPoint&)>;
+/// What a check does when its before-search point cannot be offered
+/// (Solver::set_before_search): the hook is never called either way.
+enum class NoSearchPoint
+{
+  abandon, ///< unknown (INCOMPLETE), with a reason saying why
+  search,  ///< search in place, on the batch pipeline, without calling the hook
+};
+
 using StatisticValue = std::variant<std::uint64_t, double, std::string>;
 /// A snapshot keyed by the names in statistics.toml. Never printed by the library.
 class STP_API_EXPORT Statistics
@@ -1189,12 +1288,46 @@ public:
   /// set-logic does not set the `logic` option, which is the caller's.
   std::string declared_logic() const;
   std::vector<Term> assertions() const; ///< outermost first
-  void reset_assertions(); ///< keeps options
-  void reset(); ///< assertions gone, options back to defaults, engine rebuilt
+  void reset_assertions(); ///< keeps options; clears a before-search hook not yet used
+  void reset(); ///< assertions gone, options back to defaults, engine rebuilt, no before-search hook
 
   Result check_sat();
   Result check_sat(const std::vector<Term>& assumptions,
                    std::optional<CheckBudget> budget = std::nullopt);
+  /// A hook for the next check_sat or entails that starts, which consumes it
+  /// whatever becomes of it (answered, abandoned, interrupted or failed). A
+  /// call refused before its check starts (an argument, sort, option or
+  /// unsupported-content error) leaves it set, and reset() and
+  /// reset_assertions() clear it; write_cnf and a parse in EXECUTE mode
+  /// refuse to run while one is set (STATE). The check takes the batch
+  /// pipeline, and `hook` runs at most once, at the moment the check's SAT
+  /// backend, with its CNF loaded, would start to search. A check decided
+  /// before that (by preprocessing) answers, and the hook is never called.
+  /// The point is offered only when the main solve may not be followed by
+  /// refinement: lazy array axioms, uninterpreted functions, Real
+  /// arithmetic, and the bit-vector and floating-point abstractions (their
+  /// options alone refuse, whatever the query holds) all may. An array
+  /// equality the pipeline expands eagerly instead -- most equalities
+  /// between stores over bit-vector arrays -- is offered; one left to lazy
+  /// extensionality (a large one, or one over a constant array or
+  /// floating-point elements) refuses. Such a check does what `otherwise`
+  /// says, at that same moment and without calling the hook: abandoned,
+  /// unknown (INCOMPLETE) with a reason saying why followed by `reason`, or
+  /// searched in place, on the batch pipeline. The statistics
+  /// before-search.outcome and before-search.refusal say which happened.
+  /// (A model on eager array axioms that fails its replay still refines a
+  /// check after the hook; that is sound for copies sharing clauses, since
+  /// the axioms are valid for the query and their new variables lie above
+  /// every cutoff.) true lets the check search; false abandons it, unknown
+  /// (INCOMPLETE) with `reason`, as does a throw. `reason` must not be empty
+  /// (INVALID_ARGUMENT); nullptr clears a hook not yet used. The hook reaches
+  /// the solver only through its SearchPoint. It may fork(): every copy then
+  /// holds the loaded backend and continues the same check, provided the
+  /// caller is single-threaded at that point (libstp starts no threads and
+  /// holds no lock across the hook) and handles the descriptors the copies
+  /// inherit.
+  void set_before_search(BeforeSearch hook, std::string reason,
+                         NoSearchPoint otherwise = NoSearchPoint::abandon);
   Entailment entails(const Term& formula,
                      std::optional<CheckBudget> budget = std::nullopt);
   std::vector<Term> unsat_assumptions() const; ///< after unsat: the failed subset; after sat/unknown: STATE

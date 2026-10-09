@@ -335,3 +335,75 @@ type = "uint64"
 tier = "diagnostic"
 help = "1 when the incremental driver was in use for the last check, 0 otherwise"
 
+# ---------------------------------------------------------------- clause exchange
+[[stat]]
+name = "before-search.outcome"
+type = "string"
+tier = "diagnostic"
+help = "what the last check did with a before-search hook (Solver::set_before_search): none (no hook), offered (the hook ran), refused (the point could not be offered), not reached (decided before the point, interrupted or failed)"
+
+[[stat]]
+name = "before-search.refusal"
+type = "string"
+tier = "diagnostic"
+help = "why the last check could not offer its before-search point, or empty"
+
+[[stat]]
+name = "sat.exchange.connected"
+type = "uint64"
+tier = "diagnostic"
+help = "1 when a clause exchange was connected to the last check's backend (SearchPoint::connect_clause_exchange)"
+
+[[stat]]
+name = "sat.exchange.variables"
+type = "uint64"
+tier = "diagnostic"
+help = "Backend variables shared at connection; only clauses over them are exported"
+
+[[stat]]
+name = "sat.exchange.exported"
+type = "uint64"
+tier = "diagnostic"
+help = "Learned clauses the backend handed to the exchange"
+
+[[stat]]
+name = "sat.exchange.filtered"
+type = "uint64"
+tier = "diagnostic"
+help = "Learned clauses kept back because they named a variable created after connection"
+
+[[stat]]
+name = "sat.exchange.polls"
+type = "uint64"
+tier = "diagnostic"
+help = "Import polls the backend made"
+
+[[stat]]
+name = "sat.exchange.imported"
+type = "uint64"
+tier = "diagnostic"
+help = "Clauses the backend added from the exchange"
+
+[[stat]]
+name = "sat.exchange.import-units"
+type = "uint64"
+tier = "diagnostic"
+help = "Units among the imported clauses"
+
+[[stat]]
+name = "sat.exchange.import-dropped"
+type = "uint64"
+tier = "diagnostic"
+help = "Clauses not imported: a variable not shared or inactive here, too few open literals, or beyond the poll's budget"
+
+[[stat]]
+name = "sat.exchange.import-satisfied"
+type = "uint64"
+tier = "diagnostic"
+help = "Clauses not imported because they were satisfied at the root or tautological"
+
+[[stat]]
+name = "sat.exchange.import-backtracks"
+type = "uint64"
+tier = "diagnostic"
+help = "Import polls that backtracked to place a clause"

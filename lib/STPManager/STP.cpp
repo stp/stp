@@ -896,6 +896,21 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
                     const ASTNodeMap& arrayEqualityRewrites)
 {
   QueryPhaseScope query_work(bm->query_timing, QueryPhase::Other);
+  // A caller's before-search hook belongs to this run's backend (see
+  // STPMgr::before_search), put back as it was when the run ends.
+  struct MainBackend
+  {
+    STPMgr::BeforeSearchRequest* request;
+    SATSolver* saved;
+    ~MainBackend()
+    {
+      if (request != NULL)
+        request->main = saved;
+    }
+  } main_backend{bm->before_search,
+                 bm->before_search != NULL ? bm->before_search->main : NULL};
+  if (bm->before_search != NULL)
+    bm->before_search->main = &NewSolver;
   if (bm->has_distinct && containsKind(original_input, DISTINCT))
     FatalError("DISTINCT reached ordinary batch preprocessing", original_input);
   if (bm->UserFlags.enable_uninterpreted_functions &&

@@ -47,6 +47,9 @@ private:
   ASTNodeToSATVar nodeToSATVar;
   ASTNodeSet protectedSymbols;
   ASTVec requiredSolveAssumptions;
+  // The solve did not run, and why. The flag is the signal: a reason may be
+  // empty (a before-search callback's failure text is the caller's).
+  bool internalSolveFailed = false;
   std::string internalSolveFailure;
   simplifier::constantBitP::ConstantBitPropagation* cb;
 
@@ -193,7 +196,7 @@ public:
   bool setRequiredSolveAssumptions(const ASTVec& symbols) override;
   bool hasInternalSolveFailure() const override
   {
-    return !internalSolveFailure.empty();
+    return internalSolveFailed;
   }
   const std::string& internalSolveFailureDetail() const override
   {
