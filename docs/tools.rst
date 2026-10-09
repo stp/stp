@@ -2,10 +2,10 @@ Developer tools
 ===============
 
 Besides ``stp`` itself (:doc:`command-line`), the ``tools/`` directory
-holds programs for working on STP: searches for rewrite rules the
-simplifier is missing, benchmarks of its propagators and of its size
-estimate, and self-tests. None of them is installed, and they fall into
-three groups by what switches them on:
+holds ``stp-p``, STP's parallel decision solver, and programs for working
+on STP: searches for rewrite rules the simplifier is missing, benchmarks of
+its propagators and of its size estimate, and self-tests. Only ``stp-p`` is
+installed, and they fall into four groups by what switches them on:
 
 .. list-table::
    :header-rows: 1
@@ -14,6 +14,12 @@ three groups by what switches them on:
    * - Program
      - Built with
      - Purpose
+   * - ``stp-p``
+     - ``STP_BUILD_PARALLEL`` (Linux only), as ``stp-p``; installed
+     - the parallel decision solver: a clause-sharing group of forked copies of one encoded query
+   * - ``stpp-drive``
+     - ``STP_BUILD_PARALLEL`` and ``ENABLE_TESTING``; never installed
+     - ``stp-p``'s test driver: the same command line plus the policies, portfolio, pinning, transport and fault-injection controls its tests vary
    * - ``extdiff``
      - every build that has executables, as ``stp``
      - 2.x C API observation driver for a differential test (links ``libstp2``)
@@ -40,8 +46,9 @@ three groups by what switches them on:
      - accuracy of the difficulty estimate
 
 Each is built by a target of its own name into ``tools/<name>/`` under
-the build directory, except ``extdiff``: its target is ``extdiff-bin``,
-and it lands at the top of the build directory beside ``stp``. The two
+the build directory, except ``extdiff``, ``stp-p`` and ``stpp-drive``:
+``extdiff``'s target is ``extdiff-bin``, and all three land at the top of
+the build directory beside ``stp``. The two
 that need CryptoMiniSat are left out, ``rewrite_rule_gen`` without a
 message, when the build has none, so ask for it:
 

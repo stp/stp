@@ -802,6 +802,7 @@ jobs:
 
     # cython3 builds the 3.x Python package, which the install steps below
     # load from the install tree, and python3-pytest runs its suite.
+    # nlohmann-json3-dev is stp-p's (STP_BUILD_PARALLEL, below).
     - name: Packages
       run: |
         sudo apt-get update
@@ -815,6 +816,7 @@ jobs:
           gcc \
           git \
           ninja-build \
+          nlohmann-json3-dev \
           python3 \
           python3-pip \
           python3-pytest \
@@ -865,11 +867,14 @@ jobs:
     # the cache. PYTHON_LIB_INSTALL_DIR is left to its default, which follows
     # the prefix. Neither affects what is built or tested - the Python tests
     # run out of the build tree.
+    # STP_BUILD_PARALLEL builds stp-p here, the one job where it can run:
+    # rel-3.0.1 gets the clause-import patch and runs the group; rel-2.1.3
+    # does not, and checks that -jN is refused.
     - name: Configure
       run: |
         mkdir build
         cd build
-        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCaDiCaL_TAG:STRING=${{ matrix.cadical_tag }} -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCaDiCaL_TAG:STRING=${{ matrix.cadical_tag }} -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DSTP_BUILD_PARALLEL:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -879,7 +884,13 @@ jobs:
       working-directory: build
 
     - name: Test
-      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure -LE parallel
+      working-directory: build
+
+    # stp-p's tests start their own processes on up to four CPUs each, so
+    # they run one at a time, after everything else.
+    - name: Test stp-p
+      run: ctest -L parallel --output-on-failure
       working-directory: build
 
     # An installed binary has to find its own libraries whatever directory it
@@ -1003,6 +1014,13 @@ jobs:
         "${prefix}-moved/bin/stp" query.smt2 | grep -qx sat
         ldd "${prefix}-moved/bin/stp" | grep -q "${prefix}-moved/bin/../lib/libstp"
         echo "ok: relocated install tree runs and loads its own libstp"
+        # stp-p's exit status is its answer's (10 for sat), so it is checked
+        # apart from the answer rather than through a pipe.
+        status=0
+        "${prefix}-moved/bin/stp-p" query.smt2 > stp-p-answer || status=$?
+        test "$status" -eq 10
+        grep -qx sat stp-p-answer
+        echo "ok: relocated install tree's stp-p solves a query"
 
         cmake -S tests/api/install/uf-public-header-consumer -B consumer-moved \
           -DSTP_DIR:PATH="${prefix}-moved/lib/cmake/STP" \

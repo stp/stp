@@ -19,6 +19,9 @@
 # THE SOFTWARE.
 
 add_subdirectory(stp)
+if(STP_BUILD_PARALLEL)
+  add_subdirectory(stp-p)
+endif()
 add_subdirectory(extdiff)
 
 option(BUILD_EXTRA_TOOLS "Build extra tools" OFF)

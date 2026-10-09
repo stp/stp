@@ -18,13 +18,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# Find CLI11, the header-only command-line parser the stp binary uses.
+# Find CLI11, the header-only command-line parser the stp and stp-p binaries
+# use.
 #
 #   CLI11      imported interface target carrying the include path
 #   CLI11_DIR  a directory containing CLI/CLI.hpp; rung 0 of the ladder in
 #              cmake/deps-helper.cmake
 #
-# Only tools/stp/main.cpp includes it, so only that target links this.
+# Only tools/stp and tools/stp-p include it, so only their targets link this.
 
 include(deps-helper)
 

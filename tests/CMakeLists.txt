@@ -451,3 +451,7 @@ if(TEST_BASELINE_DIFFERENTIAL AND BUILD_EXECUTABLES)
       LABELS "baseline-differential"
     )
 endif()
+
+if(STP_BUILD_PARALLEL)
+  add_subdirectory(parallel)
+endif()
