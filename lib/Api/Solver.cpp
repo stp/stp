@@ -1425,6 +1425,7 @@ void Solver::reset_assertions()
   s->assertion_names.clear();
   s->model.reset();
   s->candidate.reset();
+  s->declared_logic.clear();
 }
 
 void Solver::reset()
@@ -1433,6 +1434,7 @@ void Solver::reset()
   detail::OutputRoute route(&s->route_sinks);
   s->options.reset_all();
   s->rebuild_engine();
+  s->declared_logic.clear();
 }
 
 Result Solver::check_sat()

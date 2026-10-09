@@ -285,7 +285,9 @@ a declaration after the ``check-sat`` -- or a script without a
 caller then decides the query with its own ``check_sat``, under its own
 options. ``Solver::declared_logic()`` (C ``stp_solver_declared_logic``,
 Python ``declared_logic()``) is the logic the last successful parse named in
-``set-logic``, empty when it named none; it is not the ``logic`` option.
+``set-logic``, empty when it named none or a reset came after it (a
+script's ``(reset)``, ``reset`` or ``reset_assertions``); it is not the
+``logic`` option.
 
 A parse that fails part way, in any mode, leaves the solver as it was: its
 assertion stack, without the symbols the script declared, and its declared
