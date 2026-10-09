@@ -128,6 +128,7 @@ page <https://smt-lib.org/>`__.
    bv-abstraction
    fp-abstraction
    linear-real-arithmetic
+   parallel-solving
    smtlib27
 
 Header
