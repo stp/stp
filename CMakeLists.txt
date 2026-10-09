@@ -40,8 +40,21 @@ cmake_minimum_required(VERSION 3.18)
 # above the asan job in .github/workflows/ci.yml.
 option(SANITIZE "Use Clang sanitizers" OFF)
 if (SANITIZE)
-    # In the cache so it can be tweaked later.
-    set(CMAKE_CXX_COMPILER "clang++" CACHE FILEPATH "" FORCE)
+    # A clang++ the user named -- on the command line or in CXX -- is kept.
+    # Any other is replaced, in the cache so it can be tweaked later, by the
+    # clang++ on the PATH, by its full path: a bare name forced into an entry
+    # the command line set without a type (-DCMAKE_CXX_COMPILER=...) is made a
+    # path relative to the directory cmake runs in, and project() then finds
+    # no compiler there.
+    set(_stp_cxx "${CMAKE_CXX_COMPILER}")
+    if (NOT _stp_cxx)
+        set(_stp_cxx "$ENV{CXX}")
+    endif()
+    if (NOT _stp_cxx MATCHES "clang\\+\\+[^/]*$")
+        find_program(STP_SANITIZE_CLANGXX NAMES clang++ REQUIRED)
+        set(CMAKE_CXX_COMPILER "${STP_SANITIZE_CLANGXX}" CACHE FILEPATH "" FORCE)
+    endif()
+    unset(_stp_cxx)
 endif()
 
 project(STP)
