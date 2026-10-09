@@ -55,7 +55,9 @@ THE SOFTWARE.
 #include <ostream>
 #include <set>
 #include <sstream>
+#include <string>
 #include <string_view>
+#include <vector>
 
 extern int smt2lineno;
 
@@ -150,12 +152,46 @@ void validate_engine_options(const UserDefinedFlags& flags)
                   "cmake/deps-utils/cadical-decision-polarity.patch, or "
                   "MiniSat with the external-propagator interface");
   }
-  // The SAT search reset needs a backend that can do one. LraCoordinator
-  // refuses it as well, but as an exception the engine reports as
-  // SOLVER_ERROR -- an internal failure, for a backend the caller chose.
-  // tools/stp refuses it before reading the input; this is the same refusal,
-  // in the same words, for the two routes that reach neither: a script's
-  // set-option, and the API.
+  // The four LraCoordinator preconditions. It refuses these as well, but as
+  // an exception the engine reports as SOLVER_ERROR -- an internal failure
+  // asking for a bug report, for a combination the caller chose. tools/stp
+  // refuses them before reading the input; these are the same refusals, in
+  // the same words and the same order, for the two routes that reach neither:
+  // a script's set-option, and the API.
+  //
+  // Checked by value, not presence: a control at 0 is the batch default and
+  // combines with anything.
+  {
+    std::vector<std::string> controls;
+    if (flags.lra_extension_mode != 0)
+      controls.push_back("--lra-extension-mode=" + std::to_string(flags.lra_extension_mode));
+    if (flags.lra_row_order != 0)
+      controls.push_back("--lra-row-order=" + std::to_string(flags.lra_row_order));
+    if (flags.lra_extension_restart_float_basis)
+      controls.push_back("--lra-extension-restart-float-basis=1");
+    if (flags.lra_extension_restart_sat)
+      controls.push_back("--lra-extension-restart-sat=1");
+    std::vector<std::string> sessions;
+    if (flags.lra_incremental_session)
+      sessions.push_back("--lra-incremental-session=1");
+    if (flags.lra_persistent_state)
+      sessions.push_back("--lra-persistent-state=1");
+    if (!controls.empty() && !sessions.empty())
+    {
+      const auto join = [](const std::vector<std::string>& names) {
+        std::string joined;
+        for (const std::string& name : names)
+          joined += (joined.empty() ? "" : ", ") + name;
+        return joined;
+      };
+      // The entry named is the first control, which is the one the refusal is
+      // about; the text names them all, as the command line's does.
+      fail_option(ErrorCode::OPTION_CONFLICT,
+                  controls.front().substr(2, controls.front().find('=') - 2),
+                  join(controls) + " cannot be combined with " + join(sessions) +
+                      ": the LRA extension controls apply to batch solves only");
+    }
+  }
   if (flags.lra_extension_restart_sat &&
       flags.solver_to_use != UserDefinedFlags::CADICAL_SOLVER)
   {
@@ -165,6 +201,21 @@ void validate_engine_options(const UserDefinedFlags& flags)
     fail_option(ErrorCode::OPTION_UNAVAILABLE, "lra-extension-restart-sat",
                 "--lra-extension-restart-sat=1 requires a build with CaDiCaL");
   }
+#ifdef STP_CADICAL_HAS_FACTOR
+  // Only an explicit 'on': the unnamed default and 'auto' are turned off for
+  // it (STP.cpp), so only a request that cannot be honoured is refused.
+  if (flags.lra_extension_restart_sat && flags.cadical_factor_explicit &&
+      flags.cadical_factor == UserDefinedFlags::BVAMode::ON)
+    fail_option(ErrorCode::OPTION_CONFLICT, "lra-extension-restart-sat",
+                "--lra-extension-restart-sat=1 requires --cadical-factor=off");
+#endif
+  // The decision hints hold CaDiCaL's propagator slot, which a search reset
+  // cannot carry over.
+  if (flags.lra_extension_restart_sat &&
+      flags.array_index_hints == UserDefinedFlags::ArrayIndexHints::DECIDE)
+    fail_option(ErrorCode::OPTION_CONFLICT, "lra-extension-restart-sat",
+                "--lra-extension-restart-sat=1 cannot be combined with "
+                "--array-index-hints=decide");
 }
 
 // ------------------------------------------------------------ SolverImpl
