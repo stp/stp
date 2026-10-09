@@ -2171,6 +2171,7 @@ ASTVec nextLazyCongruenceRound(STPMgr* manager,
   for (const ASTNode& lemma : broken)
     if (state.earned.insert(lemma).second)
       fresh.push_back(lemma);
+  state.stated.insert(state.stated.end(), fresh.begin(), fresh.end());
   state.lemmas += fresh.size();
   return fresh;
 }
