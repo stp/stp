@@ -207,12 +207,24 @@ bool occurs(const ASTNode& haystack, const ASTNode& needle,
 /* Memoized DAG rewrite under a symbol substitution. Rebuilding goes
  * through the same constructors the parser used: CreateRealTerm for Real
  * terms, CreateNode for formulas. Bit-vector terms cannot contain a Real
- * symbol, so an unchanged subtree returns itself and never rebuilds. */
+ * symbol, so an unchanged subtree returns itself and never rebuilds.
+ *
+ * A replacement is used as it stands, unless the rewrite is also told which
+ * symbols each value mentions. Then it is transitive: a value that mentions
+ * a key is rewritten first, so the result mentions no key at all, and the
+ * rewrite records which symbols its result may mention. That needs an
+ * acyclic substitution, which the definitions map is: a value is resolved
+ * when it is recorded, so it mentions only variables defined after it. A
+ * value that mentions no key is taken as it stands, so the values along a
+ * chain of definitions are not walked again each time it grows. */
+using Mentions = std::unordered_map<std::uint64_t, std::vector<std::uint64_t>>;
+
 class Rewriter final
 {
 public:
-  Rewriter(STPMgr& manager, const NodeMap& substitution)
-      : manager_(manager), substitution_(substitution)
+  Rewriter(STPMgr& manager, const NodeMap& substitution,
+           const Mentions* mentions = nullptr)
+      : manager_(manager), substitution_(substitution), mentions_(mentions)
   {
   }
 
@@ -240,8 +252,16 @@ public:
         pending.pop_back();
         continue;
       }
-      if (substitution_.find(node.GetNodeNum()) == substitution_.end() &&
-          frame.next < node.Degree())
+      const auto replaced = substitution_.find(node.GetNodeNum());
+      const bool resolve = replaced != substitution_.end() &&
+                           mentions_ != nullptr && !settled(node.GetNodeNum());
+      if (resolve && memo_.find(replaced->second.GetNodeNum()) == memo_.end())
+      {
+        const ASTNode value = replaced->second;
+        pending.push_back(Frame{value});
+        continue;
+      }
+      if (replaced == substitution_.end() && frame.next < node.Degree())
       {
         const ASTNode child = node[frame.next++];
         if (memo_.find(child.GetNodeNum()) == memo_.end())
@@ -249,9 +269,20 @@ public:
         continue;
       }
       ASTNode result = node;
-      const auto replaced = substitution_.find(node.GetNodeNum());
-      if (replaced != substitution_.end())
+      if (resolve)
+        result = memo_.at(replaced->second.GetNodeNum());
+      else if (replaced != substitution_.end())
+      {
         result = replaced->second;
+        if (mentions_ != nullptr)
+          for (std::uint64_t symbol : mentions_->at(node.GetNodeNum()))
+            mentioned_.insert(symbol);
+      }
+      else if (node.GetKind() == SYMBOL)
+      {
+        if (mentions_ != nullptr)
+          mentioned_.insert(node.GetNodeNum());
+      }
       else if (node.Degree() != 0)
       {
         ASTVec children;
@@ -279,10 +310,35 @@ public:
     return memo_.at(root.GetNodeNum());
   }
 
+  // The symbols a transitive rewrite's results may mention: never fewer
+  // than they do, since a factory fold can only drop one.
+  bool mayMention(const ASTNode& symbol) const
+  {
+    return mentioned_.count(symbol.GetNodeNum()) != 0;
+  }
+  std::vector<std::uint64_t> mentioned() const
+  {
+    return std::vector<std::uint64_t>(mentioned_.begin(), mentioned_.end());
+  }
+
 private:
+  // A key whose value mentions no key, so taking it as it stands resolves it.
+  bool settled(std::uint64_t key) const
+  {
+    const auto found = mentions_->find(key);
+    if (found == mentions_->end())
+      return false;
+    for (std::uint64_t symbol : found->second)
+      if (substitution_.find(symbol) != substitution_.end())
+        return false;
+    return true;
+  }
+
   STPMgr& manager_;
   const NodeMap& substitution_;
+  const Mentions* mentions_;
   NodeMap memo_;
+  std::unordered_set<std::uint64_t> mentioned_;
 };
 
 bool realSymbol(const ASTNode& node)
@@ -400,8 +456,13 @@ ASTNode solveViewFor(STPMgr& manager, const LinearView& view,
  * Real symbol not occurring in t defines x; substitute it through every
  * other conjunct and keep the definition conjoined, so x still has its
  * one defining row and every model question about it stays answerable.
- * Later definitions see earlier substitutions applied first, which keeps
- * the map triangular without a transitive-closure pass. */
+ * Later definitions see earlier substitutions applied first, transitively,
+ * which keeps the map triangular: a recorded value mentions only variables
+ * defined after it, so the map has no cycle. One level deep it could: from
+ * x = y, y = z, z = x it recorded z := y beside y := z. The final rewrite
+ * of the other conjuncts stays one level deep -- a use may still mention a
+ * defined variable, which is sound because every definition stays
+ * conjoined, and it keeps a long chain of definitions out of every use. */
 ASTNode substituteDefinitionsImpl(STPMgr& manager, const ASTNode& input,
                                   std::size_t& definitions_used,
                                   SubstitutionBudget* budget)
@@ -419,6 +480,9 @@ ASTNode substituteDefinitionsImpl(STPMgr& manager, const ASTNode& input,
     return input;
 
   NodeMap substitution;
+  // The symbols each recorded value may mention: what lets a rewrite
+  // resolve through the map without walking values that need nothing.
+  Mentions mentions;
   std::unordered_set<std::uint64_t> defined;
   std::vector<bool> is_definition(conjuncts.size(), false);
   std::vector<ASTNode> defines(conjuncts.size());
@@ -449,11 +513,14 @@ ASTNode substituteDefinitionsImpl(STPMgr& manager, const ASTNode& input,
     if (definition.GetKind() == SYMBOL &&
         definition.GetSourceSort().kind() != SourceSort::Kind::Real)
       continue;
-    Rewriter forward(manager, substitution);
+    Rewriter forward(manager, substitution, &mentions);
     const ASTNode resolved = forward.apply(definition, poll, created);
-    if (occurs(resolved, symbol, poll))
+    // Only a symbol the rewrite may have left in needs the walk to rule it
+    // out; the rest cannot occur.
+    if (forward.mayMention(symbol) && occurs(resolved, symbol, poll))
       continue;
     substitution.emplace(symbol.GetNodeNum(), resolved);
+    mentions.emplace(symbol.GetNodeNum(), forward.mentioned());
     defined.insert(symbol.GetNodeNum());
     is_definition[i] = true;
     defines[i] = symbol;
@@ -462,8 +529,16 @@ ASTNode substituteDefinitionsImpl(STPMgr& manager, const ASTNode& input,
   /* Gaussian pass: any remaining top-level linear equality is solved for
    * one of its variables, syntax notwithstanding -- 2x + 3y = z - 1
    * defines x as much as x = t does. Earlier substitutions are applied
-   * first, so the solved form cannot smuggle a defined variable back in; a
-   * variable-free equality that misses refutes the query outright. */
+   * first, transitively, so the solved form cannot smuggle a defined
+   * variable back in; a variable-free equality that misses refutes the
+   * query outright.
+   *
+   * Transitively, because a recorded value can mention a variable defined
+   * after it. One level deep, each row was solved against those stale
+   * values and carried them into its own: the definitions stopped being
+   * an elimination, and the denominators they mixed compounded. On a dense
+   * system the coefficients doubled in width with every row, until the
+   * exact arithmetic's budget gave the query up as unknown. */
   ASTVec gaussian_conflict;
   for (std::size_t i = 0; i < conjuncts.size(); ++i)
   {
@@ -475,7 +550,7 @@ ASTNode substituteDefinitionsImpl(STPMgr& manager, const ASTNode& input,
     if (conjunct.GetKind() != EQ || conjunct.Degree() != 2 ||
         conjunct[0].GetSourceSort().kind() != SourceSort::Kind::Real)
       continue;
-    Rewriter forward(manager, substitution);
+    Rewriter forward(manager, substitution, &mentions);
     const ASTNode resolved_conjunct = forward.apply(conjunct, poll, created);
     /* Substitution can collapse the equality at the factory: a second
      * definition of an already-defined symbol folds to a constant. Guard
@@ -527,6 +602,10 @@ ASTNode substituteDefinitionsImpl(STPMgr& manager, const ASTNode& input,
     if (occurs(solved, symbol, poll))
       continue;
     substitution.emplace(symbol.GetNodeNum(), solved);
+    std::vector<std::uint64_t>& solved_mentions = mentions[symbol.GetNodeNum()];
+    for (const auto& entry : view.coefficients)
+      if (entry.first != solve_for)
+        solved_mentions.push_back(entry.first);
     defined.insert(symbol.GetNodeNum());
     is_definition[i] = true;
     defines[i] = symbol;
