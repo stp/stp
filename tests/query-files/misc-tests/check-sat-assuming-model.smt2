@@ -8,12 +8,12 @@
 ; CHECK: ^sat
 (check-sat-assuming ((= x #x07)))
 ; The model reflects the assumption that pinned x.
-; CHECK: \|x\| +#x07
+; CHECK: \(x #x07\)
 (get-value (x))
 ; A fresh plain check restores a model...
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \|x\| +#x
+; CHECK: \(x #x
 (get-value (x))
 ; After an unsat answer there is no model to read.
 ; CHECK: ^unsat

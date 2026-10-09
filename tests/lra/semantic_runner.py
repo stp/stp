@@ -55,7 +55,7 @@ def main() -> int:
           (declare-const x Real)
           (assert (> x 0)) (assert (< x 1))
           (check-sat) (get-value (x))
-        """, ["sat"], ["(|x| (/ 1 4))"], []),
+        """, ["sat"], ["(x (/ 1 4))"], []),
         ("decimal-rational-alias-scale", """
           (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const x Real) (declare-const y Real)
@@ -65,19 +65,19 @@ def main() -> int:
           (assert (= (+ x y) (/ 1 4)))
           (assert (<= (+ x y) (/ 2 8)))
           (check-sat) (get-value (x y (+ x y)))
-        """, ["sat"], ["(|x| (/ 1 8))", "((+ |x| |y|) (/ 1 4))"], []),
+        """, ["sat"], ["(x (/ 1 8))", "((+ x y) (/ 1 4))"], []),
         ("free-redundant-duplicate-aliased", """
           (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const x Real) (declare-const free Real)
           (assert (= x 2)) (assert (= x 2))
           (assert (= (+ x x) 4)) (assert (= (* 3 x) 6))
           (check-sat) (get-value (x free))
-        """, ["sat"], ["(|x| 2)", "(|free| 0)"], []),
+        """, ["sat"], ["(x 2)", "(free 0)"], []),
         ("unconstrained-real-only", """
           (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const unconstrained Real)
           (check-sat) (get-value (unconstrained))
-        """, ["sat"], ["(|unconstrained| 0)"], []),
+        """, ["sat"], ["(unconstrained 0)"], []),
         ("equality-definition", """
           (set-logic QF_LRA) (declare-const x Real) (declare-const y Real)
           (assert (not (= (= x y) (and (<= x y) (>= x y)))))
@@ -120,7 +120,7 @@ def main() -> int:
                       (and (< x (- 1)) (>= x (- 1)))
                       (= x 7)))
           (check-sat) (get-value (x))
-        """, ["sat"], ["(|x| 7)"], []),
+        """, ["sat"], ["(x 7)"], []),
         ("abstraction-unsat-after-nogoods", """
           (set-logic QF_LRA) (declare-const x Real)
           (assert (or (and (< x 0) (>= x 0))
@@ -143,7 +143,7 @@ def main() -> int:
           (set-logic QF_LRA) (declare-const z Real)
           (assert (< z 0)) (check-sat)
         """, ["sat", "sat", "unsat", "sat", "unsat", "sat", "sat", "sat"],
-        ["(|x| 1)"], []),
+        ["(x 1)"], []),
         ("scoped-model-printing-full-reset", """
           (set-option :produce-models true) (set-logic QF_LRA)
           (declare-const x Real) (assert (= x 1))

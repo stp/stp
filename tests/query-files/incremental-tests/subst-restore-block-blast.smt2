@@ -23,6 +23,6 @@
 (pop 1)
 ; CHECK-NEXT: ^sat
 (check-sat)
-; CHECK: \|x\| +#xFF
+; CHECK: \(x #xFF\)
 (get-value (x))
 (exit)

@@ -8,11 +8,11 @@
 ; RUN: %solver --uninterpreted-functions --check-sanity --incremental=off %s 2>&1 | %OutputCheck %s
 ; RUN: %solver --uninterpreted-functions --check-sanity --incremental=on %s 2>&1 | %OutputCheck %s
 ; CHECK: ^sat$
-; CHECK-L: ( |x|  #x05 )
-; CHECK-L: ( |y|  #x05 )
-; CHECK-L: ( (|f| |x|)  #x2A )
-; CHECK-L: ( (|f| |y|)  #x2A )
-; CHECK-L: ( |a|  #x2A )
+; CHECK-L: (x #x05)
+; CHECK-L: (y #x05)
+; CHECK-L: ((f x) #x2A)
+; CHECK-L: ((f y) #x2A)
+; CHECK-L: (a #x2A)
 ;
 ; EXPECT: sat
 (set-logic QF_UFBV)

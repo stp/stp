@@ -30,9 +30,9 @@
 ; CHECK: ^sat
 (check-sat)
 ; the eliminated variable answers through its definition: x = a + 1
-; CHECK: \( \|a\|  #x00 \)
+; CHECK: \(a #x00\)
 (get-value (a))
-; CHECK: \( \|x\|  #x01 \)
+; CHECK: \(x #x01\)
 (get-value (x))
 (push 1)
 ; mentioning x invalidates the cached preparation; its equation returns,

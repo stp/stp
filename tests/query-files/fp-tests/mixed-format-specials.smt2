@@ -20,6 +20,6 @@
 ; The infinity and the signed zero are unique bit patterns. NaN's payload is
 ; deliberately not pinned here: SMT '=' makes every NaN equal to every other,
 ; so x is constrained through fp.isNaN above instead.
-; CHECK-L: |y| (fp #b0 #b11111 #b0000000000)
-; CHECK-L: |z| (fp #b1 #b000 #b0000)
+; CHECK-L: y (fp #b0 #b11111 #b0000000000)
+; CHECK-L: z (fp #b1 #b000 #b0000)
 (get-value (y z))

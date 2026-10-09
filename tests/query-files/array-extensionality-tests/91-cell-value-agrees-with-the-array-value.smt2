@@ -11,8 +11,8 @@
 ; RUN: %solver %s | %OutputCheck %s
 ; CHECK: ^sat$
 ; CHECK: \(define-fun \|a\| \(\) \(Array \(_ BitVec 4\) \(_ BitVec 6\)\) \(\(as const \(Array \(_ BitVec 4\) \(_ BitVec 6\)\)\) #b000000\)\)
-; CHECK: \(select \|a\| +#x0\) +#b000000
-; CHECK: \(select \|a\| +#x3\) +#b000000
+; CHECK: \(select a \(_ bv0 4\)\) #b000000
+; CHECK: \(select a \(_ bv3 4\)\) #b000000
 ; CHECK-NOT: #b111111
 (set-option :produce-models true)
 (set-logic QF_ABV)

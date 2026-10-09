@@ -10,7 +10,7 @@
 ; BATCH-NEXT: ^\)$
 ; BATCH-NEXT: ^sat
 ; BATCH-NEXT: ^\($
-; BATCH-NEXT: ^\( \(distinct \|x\| \|y\| \|z\|\) true \)$
+; BATCH-NEXT: ^\(\(distinct x y z\) true\)$
 ; BATCH-NEXT: ^\)$
 ;
 ; DRIVER: ^\($
@@ -18,7 +18,7 @@
 ; DRIVER-NEXT: ^\)$
 ; DRIVER-NEXT: ^sat
 ; DRIVER-NEXT: ^\($
-; DRIVER-NEXT: ^\( \(distinct \|x\| \|y\| \|z\|\) true \)$
+; DRIVER-NEXT: ^\(\(distinct x y z\) true\)$
 ; DRIVER-NEXT: ^\)$
 ;
 (set-logic QF_BV)

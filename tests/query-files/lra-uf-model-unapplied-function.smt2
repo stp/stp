@@ -17,5 +17,5 @@
 ; CHECK-NEXT: ^  0\)$
 ; CHECK: ^\(define-fun \|p\| \(\(x0 Real\) \(x1 Bool\)\) Bool$
 ; CHECK-NEXT: ^  false\)$
-; CHECK: \(\(\|f\| \|x\|\) 0\)
-; CHECK: \(\|p\| \|x\| true\) false
+; CHECK: \(\(f x\) 0\)
+; CHECK: \(p x true\) false

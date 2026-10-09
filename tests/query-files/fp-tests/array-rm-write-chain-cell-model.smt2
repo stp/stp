@@ -25,7 +25,7 @@
 ; completion for it instead of the value the solve decided would fail here.
 ;
 ; CHECK: ^sat
-; CHECK: ^\( \(select \|a\| \|i\|\) RNA \)$
+; CHECK: ^\(\(select a i\) RNA\)$
 (set-logic QF_ABVFP)
 (set-option :produce-models true)
 (declare-fun a () (Array RoundingMode RoundingMode))

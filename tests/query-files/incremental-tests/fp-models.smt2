@@ -10,14 +10,14 @@
 (assert (= f (fp #b0 #x80 #b10000000000000000000000)))
 ; CHECK-NEXT: ^sat
 (check-sat)
-; CHECK: \|f\| +\(fp #b0 #b10000000 #b10000000000000000000000\)
+; CHECK: \(f \(fp #b0 #b10000000 #b10000000000000000000000\)\)
 (get-value (f))
 (pop 1)
 (push 1)
 (assert (= f (fp #b0 #x7f #b00000000000000000000000)))
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \|f\| +\(fp #b0 #b01111111 #b00000000000000000000000\)
+; CHECK: \(f \(fp #b0 #b01111111 #b00000000000000000000000\)\)
 (get-value (f))
 (pop 1)
 ; after the pop the model is stale, per SMT-LIB

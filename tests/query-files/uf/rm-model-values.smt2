@@ -12,7 +12,7 @@
 ; CHECK: ^sat
 ; CHECK: define-fun \|k\| \(\(x0 \(_ BitVec 8\)\)\) RoundingMode
 ; CHECK: \(ite \(= x0  #x01\) RTZ RNE\)
-; CHECK: \( \(\|k\| \|x\|\) RTZ \)
+; CHECK: \(\(k x\) RTZ\)
 ; CHECK: REACHED-END
 ; CHECK-NOT: #b00000
 ;

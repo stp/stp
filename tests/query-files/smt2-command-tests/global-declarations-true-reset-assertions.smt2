@@ -20,6 +20,6 @@
 ; CHECK-NEXT: ^sat$
 (check-sat)
 ; CHECK-NEXT: ^\($
-; CHECK-NEXT: .*\|x\|.*#b011.*
+; CHECK-NEXT: .*x.*#b011.*
 ; CHECK-NEXT: ^\)$
 (get-value (x))

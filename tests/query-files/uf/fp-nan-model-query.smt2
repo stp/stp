@@ -24,13 +24,13 @@
 ; RUN: %solver --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
 ; RUN: %solver --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
 ; CHECK: ^sat
-; CHECK-L: ( (|f| |x|)  #x3 )
-; CHECK-L: ( (=  #x3 (|f| (fp.abs |x|))) true )
-; CHECK-L: ( (=  #x3 (|f| (fp #b0 #b11111111 #b10000000000000000000000))) true )
-; CHECK-L: ( (=  #x3 (|f| (fp #b0 #b11111111 #b10000000000000000000000))) true )
+; CHECK-L: ((f x) #x3)
+; CHECK-L: ((= (f (fp.abs x)) #x3) true)
+; CHECK-L: ((= (f (fp #b0 #b11111111 #b00000000000000000000001)) #x3) true)
+; CHECK-L: ((= (f (fp #b1 #b11111111 #b11000000000000000000000)) #x3) true)
 ; A non-NaN actual is a different value and carries no such obligation, so it
 ; resolves through the default instead. It must still be answerable.
-; CHECK-L: ( (bvadd  #x1 (|f| (fp #b0 #b10000000 #b00000000000000000000000)))
+; CHECK-L: ((bvadd (f (fp #b0 #b10000000 #b00000000000000000000000)) #x1)
 ; CHECK: REACHED-END
 ;
 (set-option :produce-models true)

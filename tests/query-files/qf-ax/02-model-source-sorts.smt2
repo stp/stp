@@ -6,7 +6,7 @@
 ; RUN: %solver --incremental=on  %s 2>&1 | %OutputCheck %s
 ; CHECK: ^sat
 ; CHECK: ^\(define-fun \|a\| \(\) \(Array Index Element\) \(store \(\(as const \(Array Index Element\)\) \(as \|@Element![0-9]+\| Element\)\) \(as \|@Index![0-9]+\| Index\) \(as \|@Element![0-9]+\| Element\)\)\)$
-; CHECK: ^\( \(select \|a\| \|i\|\) \(as \|@Element![0-9]+\| Element\) \)$
+; CHECK: ^\(\(select a i\) \(as \|@Element![0-9]+\| Element\)\)$
 ;
 (set-logic QF_AX)
 (set-option :produce-models true)

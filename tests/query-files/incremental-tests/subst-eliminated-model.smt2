@@ -15,8 +15,8 @@
 (assert (= x #x06))
 ; CHECK-NEXT: ^sat
 (check-sat)
-; CHECK: \|x\| +#x06
-; CHECK: \|y\| +#x05
+; CHECK: \(x #x06\)
+; CHECK: \(y #x05\)
 (get-value (x y))
 (pop 1)
 (push 1)

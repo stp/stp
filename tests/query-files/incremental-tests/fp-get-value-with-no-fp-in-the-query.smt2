@@ -35,7 +35,7 @@
 (check-sat)
 ; (CHECK-L because the echoed term holds regex metacharacters. Only the value
 ; is pinned: the echo is STP's own node, not the term as written.)
-; CHECK-L: (fp #b0 #b01111 #b0000000000) )
+; CHECK-L: (fp #b0 #b01111 #b0000000000))
 (get-value ((fp s e #b0000000000)))
 
 ; Answered, so nothing below the last match may be an error. These have to sit

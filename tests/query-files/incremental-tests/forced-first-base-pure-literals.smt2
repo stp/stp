@@ -14,8 +14,8 @@
 ; CHECK: Incremental profile cbp/backend: check=1 .*driver-clauses=0 .*base-preprocesses=1 base-eliminations=2
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \|p\| +true
-; CHECK: \|q\| +true
+; CHECK: \(p true\)
+; CHECK: \(q true\)
 (get-value (p q))
 
 (push 1)
@@ -26,8 +26,8 @@
 ; CHECK: Incremental profile cbp/backend: check=2 .*driver-clauses=4 .*base-preprocesses=0 base-eliminations=0
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \|p\| +true
-; CHECK: \|q\| +false
+; CHECK: \(p true\)
+; CHECK: \(q false\)
 (get-value (p q))
 (assert (not p))
 ; CHECK: ^unsat

@@ -71,16 +71,16 @@
 ; CHECK: ^sat$
 (check-sat)
 ; (CHECK-L because the echoed terms hold regex metacharacters.)
-; CHECK-L: ( (= |a| |b|) true )
-; CHECK-L: ( |x|  #x3 )
+; CHECK-L: ((= a b) true)
+; CHECK-L: (x #x3)
 (get-value ((= a b) x))
 
 ; Round two: the reproducer as filed. The assumption is a tautology, so it is
 ; rewritten away and the arrays still never reach the encoder.
 ; CHECK: ^sat$
 (check-sat-assuming ((=> (= a b) (= a b))))
-; CHECK-L: ( (= |a| |b|) true )
-; CHECK-L: ( |x|  #x3 )
+; CHECK-L: ((= a b) true)
+; CHECK-L: (x #x3)
 (get-value ((= a b) x))
 
 ; Both rounds answered, so nothing below the last match may be an error.

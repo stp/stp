@@ -16,5 +16,5 @@
 ; CHECK form would match vacuously.)
 ; CHECK-L: define-fun |r| () RoundingMode RTZ
 (get-model)
-; CHECK-L: ( |r| RTZ )
+; CHECK-L: (r RTZ)
 (get-value (r))

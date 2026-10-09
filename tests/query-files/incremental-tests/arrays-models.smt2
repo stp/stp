@@ -10,14 +10,14 @@
 (assert (= x (select a #x05)))
 ; CHECK-NEXT: ^sat
 (check-sat)
-; CHECK: \|x\| +#x40
+; CHECK: \(x #x40\)
 (get-value (x))
 (pop 1)
 (push 1)
 (assert (= x (bvadd (select a #x05) #x01)))
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \|x\| +#x41
+; CHECK: \(x #x41\)
 (get-value (x))
 (pop 1)
 (exit)

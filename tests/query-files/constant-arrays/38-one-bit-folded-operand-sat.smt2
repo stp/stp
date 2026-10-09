@@ -1,7 +1,7 @@
 ; RUN: %solver --array-equality -d %s | %OutputCheck %s
 ; RUN: %solver --array-equality --incremental=on -d %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
-; CHECK-L: ( |p| true )
+; CHECK-L: (p true)
 ; The satisfiable half of 37: only p = true makes the right operand the
 ; all-ones array the left one folds to. The recovery's all-zeros array gave
 ; p = false, a model -d refuses.

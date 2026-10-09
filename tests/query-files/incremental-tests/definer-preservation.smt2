@@ -38,7 +38,7 @@
 ; CHECK: ^sat
 (check-sat)
 ; the defining equation binds i for real
-; CHECK: \( \|i\|  #x3 \)
+; CHECK: \(i #x3\)
 (get-value (i))
 (pop 1)
 (pop 1)
@@ -53,7 +53,7 @@
 ; CHECK: 2 eliminated
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \( \|q\|  #x01 \)
+; CHECK: \(q #x01\)
 (get-value (q))
 (pop 1)
 (push 1)
@@ -63,7 +63,7 @@
 ; CHECK: ^sat
 (check-sat)
 ; a stale seeding of the popped branch would still answer #x01 here
-; CHECK: \( \|q\|  #x02 \)
+; CHECK: \(q #x02\)
 (get-value (q))
 (pop 1)
 (exit)

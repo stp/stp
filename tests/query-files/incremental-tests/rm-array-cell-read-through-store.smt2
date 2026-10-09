@@ -33,6 +33,6 @@
 (check-sat)
 ; CHECK: \(define-fun \|a\| \(\) \(Array RoundingMode RoundingMode\)
 (get-model)
-; CHECK: \(select \|a\| \|i\|\) +(RNE|RNA|RTP|RTN|RTZ) +\)
+; CHECK: \(\(select a i\) (RNE|RNA|RTP|RTN|RTZ)\)
 (get-value ((select a i)))
 (exit)

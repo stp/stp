@@ -12,16 +12,16 @@
 (assert (= y #x07))
 ; CHECK-NEXT: ^sat
 (check-sat)
-; CHECK: \|x\| +#x42
-; CHECK: \|y\| +#x07
+; CHECK: \(x #x42\)
+; CHECK: \(y #x07\)
 (get-value (x y))
 (pop 1)
 (push 1)
 (assert (= y #x09))
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \|x\| +#x42
-; CHECK: \|y\| +#x09
+; CHECK: \(x #x42\)
+; CHECK: \(y #x09\)
 (get-value (x y))
 (pop 1)
 ; after the pop the model is stale, per SMT-LIB

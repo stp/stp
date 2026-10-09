@@ -23,7 +23,7 @@
 ; CHECK: Incremental profile total: checks=2 .*ext-preprocesses=1 ext-eliminations=[1-9][0-9]*
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \|x\| +#x2A
+; CHECK: \(x #x2A\)
 (get-value (x))
 (pop 1)
 
@@ -34,7 +34,7 @@
 ; CHECK: Incremental profile total: checks=3 .*ext-preprocesses=2 ext-eliminations=[1-9][0-9]*
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \|x\| +#x7F
+; CHECK: \(x #x7F\)
 (get-value (x))
 (pop 1)
 (exit)

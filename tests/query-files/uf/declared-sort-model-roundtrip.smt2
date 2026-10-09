@@ -18,8 +18,8 @@
 ; get-value agrees with the model, for a symbol and for an application. That
 ; agreement is the point: the application's value used to be printed by handing
 ; the node to the term printer, which produced the carrier.
-; CHECK: ^\( \|a\| \(as \|@S![0-9]+\| S\) \)$
-; CHECK: ^\( \(\|f\| \|a\|\) \(as \|@S![0-9]+\| S\) \)$
+; CHECK: ^\(a \(as \|@S![0-9]+\| S\)\)$
+; CHECK: ^\(\(f a\) \(as \|@S![0-9]+\| S\)\)$
 ;
 ; There is deliberately no CHECK-NOT for the carrier width. A negative in this
 ; tool spans only the gap between the positives around it, so one placed at the

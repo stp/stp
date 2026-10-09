@@ -11,7 +11,7 @@
              (fp.roundToIntegral mode ((_ to_fp 8 24) #x3fc00000)))))
 ; CHECK: ^sat$
 (check-sat)
-; CHECK: ^\( \|mode\| (RNE|RNA|RTP|RTN|RTZ) \)$
+; CHECK: ^\(mode (RNE|RNA|RTP|RTN|RTZ)\)$
 (get-value (mode))
 (push 1)
 (assert (= mode RTZ))

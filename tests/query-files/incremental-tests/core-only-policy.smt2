@@ -17,8 +17,8 @@
 ; CHECK: Incremental profile cbp/backend: check=1 .*cbp-fed-levels=0 .*ext-preprocesses=0 .*base-preprocesses=0 .*policy=core extensionality=0 .*first-stack-preprocesses=0
 ; CHECK: ^sat
 (check-sat)
-; CHECK: \|x\| +#b00
-; CHECK: \|y\| +#b01
+; CHECK: \(x #b00\)
+; CHECK: \(y #b01\)
 (get-value (x y))
 (pop 1)
 

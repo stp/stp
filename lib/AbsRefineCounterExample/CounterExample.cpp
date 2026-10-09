@@ -2467,31 +2467,13 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
 
 // TODO move to printer file.
 //
-// One (term value) pair of a get-value response. `n` is any non-array term
-// the caller asked about, printed back as SMT-LIB2 followed by the value the
-// model gives it. Arrays are the caller's to refuse: they have no value
-// spelling here, and (get-model) prints their completed interpretations.
-//
-// The term printed is STP's node for it, which is what a get-value response
-// can be built from: hash-consing and rewriting happen in the node factory
-// as the parser builds each term, so the text the caller wrote is gone by
-// the time anything can be asked about the term. The node is equivalent to
-// what was asked about but frequently not equal to it in spelling -- (bvule
-// x y) comes back as (not (bvugt |x| |y|)), and a term the factory folds
-// comes back as the constant it folded to. Pairs are therefore matched
-// positionally: response i answers term i, as SMT-LIB requires.
-void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
+// The value half of a get-value pair: what the model gives `n`, printed as a
+// term of n's sort. The term half is the script's own spelling, which
+// Cpp_interface::getValue prints before calling this. Arrays print as the
+// store chain get-model would give them.
+void AbsRefine_CounterExample::PrintValueSMTLIB2(std::ostream& os,
+                                                 const ASTNode& n)
 {
-  os << "( ";
-  // The first component of the pair is a term, not just a name: a symbol
-  // prints as |x| exactly as it did when this only accepted symbols, and a
-  // compound term prints as itself. Not, however, as the caller spelled it --
-  // see the note above PrintSMTLIB2. Printed through the letizing entry
-  // point, because the node may be a shared DAG and a caller can build a
-  // large one out of very little input text.
-  printer::SMTLIB2_PrintTerm(os, bm, n);
-  os << " ";
-
   if (n.GetType() == stp::ARRAY_TYPE)
     PrintArrayValueSMTLIB2(os, n);
   else if (bm->isRoundingModeSortedTerm(n))
@@ -2529,7 +2511,6 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
     else
       os << "false";
   }
-  os << " )";
 }
 
 //todo does it need to be member?
@@ -2564,7 +2545,7 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
 
       if (bm->isRoundingModeSymbol(f))
       {
-        // As in PrintSMTLIB2: the sort and value are RoundingMode, not the
+        // As in PrintValueSMTLIB2: the sort and value are RoundingMode, not the
         // 5-bit carrier.
         os << " () RoundingMode ";
         const ASTNode v = TermToConstTermUsingModel(se, false);

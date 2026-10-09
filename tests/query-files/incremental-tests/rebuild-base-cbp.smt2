@@ -66,7 +66,7 @@
 ; CHECK: ^sat
 (check-sat)
 ; the bit-level pair fixed every bit: a = 0xff, replayed for the model
-; CHECK: \( \|a\|  #xFF \)
+; CHECK: \(a #xFF\)
 (get-value (a))
 ; contradicting the derived constant is unsat
 (push 1)

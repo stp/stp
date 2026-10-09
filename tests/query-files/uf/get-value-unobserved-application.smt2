@@ -16,19 +16,19 @@
 ; RUN: not %solver --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; CHECK-NEXT: ^\($
-; CHECK-NEXT: ^\( \(\|f\| \|x\|\)  #x03 \)$
+; CHECK-NEXT: ^\(\(f x\) #x03\)$
 ; CHECK-NEXT: ^\)$
 ; CHECK-NEXT: ^\($
-; CHECK-NEXT: ^\( \(\|f\|  #xEE\)  #x00 \)$
+; CHECK-NEXT: ^\(\(f #xee\) #x00\)$
 ; CHECK-NEXT: ^\)$
 ; A mixed list is one command and answers as one.
 ; CHECK-NEXT: ^\($
-; CHECK-NEXT: ^\( \(\|f\| \|x\|\)  #x03 \)$
-; CHECK-NEXT: ^\( \(\|f\|  #xEE\)  #x00 \)$
+; CHECK-NEXT: ^\(\(f x\) #x03\)$
+; CHECK-NEXT: ^\(\(f #xee\) #x00\)$
 ; CHECK-NEXT: ^\)$
 ; The completion agrees with the term path, which is what used to differ.
 ; CHECK-NEXT: ^\($
-; CHECK-NEXT: ^\( \(bvadd  #x01 \(\|f\|  #xEE\)\)  #x01 \)$
+; CHECK-NEXT: ^\(\(bvadd \(f #xee\) #x01\) #x01\)$
 ; CHECK-NEXT: ^\)$
 ; An assertion invalidates the model, and then there is genuinely nothing to
 ; answer from -- the generic refusal, as before uninterpreted functions.
