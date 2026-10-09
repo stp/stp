@@ -169,6 +169,32 @@ TEST(c_runs, parse_only_decides_nothing)
   EXPECT_EQ("\"done\"\n", h2.out);
 }
 
+TEST(c_runs, single_query_reads_a_script_as_data)
+{
+  Session a;
+  Heard h;
+  attach(a.s, h);
+  char* logic = stp_solver_declared_logic(a.s);
+  ASSERT_NE(nullptr, logic);
+  EXPECT_STREQ("", logic);
+  stp_free(logic);
+  ASSERT_EQ(STP_OK, stp_solver_parse_smt2(a.s, "(set-logic QF_BV)(declare-fun x () (_ BitVec 8))"
+                                               "(assert (= x #x05))(check-sat)(exit)",
+                                          STP_PARSE_SINGLE_QUERY));
+  EXPECT_EQ("", h.out); // nothing answered, nothing decided
+  EXPECT_EQ(1u, stp_solver_num_assertions(a.s));
+  logic = stp_solver_declared_logic(a.s);
+  EXPECT_STREQ("QF_BV", logic);
+  stp_free(logic);
+  // A command outside one query: refused by name, the solver as it was.
+  EXPECT_EQ(STP_ERROR, stp_solver_parse_smt2(a.s, "(assert false)(push 1)(check-sat)", STP_PARSE_SINGLE_QUERY));
+  EXPECT_EQ(STP_ERR_PARSE, stp_tm_error(a.tm)->code);
+  EXPECT_NE(nullptr, std::strstr(stp_tm_error(a.tm)->message, "(push) at line 1"));
+  stp_tm_clear_error(a.tm);
+  stp_solver_clear_error(a.s);
+  EXPECT_EQ(1u, stp_solver_num_assertions(a.s));
+}
+
 TEST(c_runs, execute_answers_a_script_from_a_source)
 {
   Session a;

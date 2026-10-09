@@ -100,6 +100,7 @@ cdef extern from "stp/stp.h":
         STP_PARSE_DECLARE_AND_ASSERT
         STP_PARSE_EXECUTE
         STP_PARSE_ONLY
+        STP_PARSE_SINGLE_QUERY
     ctypedef enum stp_cnf_scope:
         STP_CNF_WHOLE
         STP_CNF_PARTIAL
@@ -395,6 +396,7 @@ cdef extern from "stp/stp.h":
     stp_status stp_solver_push(stp_solver, uint32_t n)
     stp_status stp_solver_pop(stp_solver, uint32_t n)
     uint32_t stp_solver_level(stp_solver)
+    char* stp_solver_declared_logic(stp_solver)
     size_t stp_solver_num_assertions(stp_solver)
     stp_term stp_solver_assertion(stp_solver, size_t i)
     stp_status stp_solver_reset_assertions(stp_solver)

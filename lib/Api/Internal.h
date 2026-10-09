@@ -601,6 +601,9 @@ struct SolverImpl
   // SMT-LIB assertion labels belong to this solver's stack, even though
   // the nullary definitions introduced by :named belong to its manager.
   Cpp_interface::AssertionNames assertion_names;
+  // The logic the last parse that succeeded named in its set-logic
+  // (Solver::declared_logic), which the `logic` option above is not.
+  std::string declared_logic;
   // The same for the engine's counters (UserDefinedFlags::coverage, one per
   // manager): this solver's while another is active, so that each solver's
   // statistics count its own checks.

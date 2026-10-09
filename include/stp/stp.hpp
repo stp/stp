@@ -195,11 +195,28 @@ enum class Format : std::uint8_t
 ///     arrays needs array-equality = on there (UNSUPPORTED otherwise).
 ///   PARSE_ONLY: EXECUTE without the deciding (the command line's
 ///     --parse-only): check-sat is skipped.
+///   SINGLE_QUERY: a script as data. As DECLARE_AND_ASSERT, the script's
+///     declarations, definitions and assertions are applied and its
+///     check-sat is not run, but nothing in it may change the solver's
+///     configuration or state, and it must be one query: set-logic at most
+///     once, before any declaration or assertion; set-info (ignored);
+///     set-option for :print-success and :produce-models only (ignored);
+///     declare-const, declare-fun, declare-sort, define-fun, define-sort,
+///     define-const and assert; exactly one check-sat, after which only
+///     exit, any number of times. Any other command -- push, pop, reset,
+///     reset-assertions, check-sat-assuming, a get-* request, echo, a
+///     second check-sat, a declaration after the check-sat, any other
+///     set-option -- and a script with no check-sat are a PARSE error that
+///     names the command and its line. As after any parse that fails part
+///     way, in any mode, the solver is then as it was before the parse: its
+///     assertion stack, the symbols the script declared (not kept) and
+///     declared_logic().
 enum class ParseMode : std::uint8_t
 {
   DECLARE_AND_ASSERT = 0,
   EXECUTE,
-  PARSE_ONLY
+  PARSE_ONLY,
+  SINGLE_QUERY
 };
 /// How a CNF a check hands to the SAT solver relates to the query
 /// (Solver::set_cnf_sink, Solver::write_cnf): the whole query; partial, a
@@ -1167,6 +1184,10 @@ public:
   void push(std::uint32_t n = 1);
   void pop(std::uint32_t n = 1); ///< INVALID_ARGUMENT if n > level(); nothing removed
   std::uint32_t level() const noexcept;
+  /// The logic the last parse that succeeded named in its set-logic, or ""
+  /// when it named none; a failed parse leaves it as it was. A script's
+  /// set-logic does not set the `logic` option, which is the caller's.
+  std::string declared_logic() const;
   std::vector<Term> assertions() const; ///< outermost first
   void reset_assertions(); ///< keeps options
   void reset(); ///< assertions gone, options back to defaults, engine rebuilt
@@ -1208,6 +1229,8 @@ public:
   /// the assertion stack restored. In particular, declare-sort creates a
   /// new identity even at the same spelling; use a fresh manager for a new
   /// namespace. Ordinary symbols redeclared at the same sort keep their identity.
+  /// A NUL in `script` is INVALID_ARGUMENT: the lexer would end the script
+  /// there, silently. So is one in a stream (parse), when it is reached.
   void parse_smt2(std::string_view script, ParseMode = ParseMode::DECLARE_AND_ASSERT);
   void parse(std::string_view text, Format); ///< SMT-LIB 2: SMTLIB2 or AUTO
   void parse_file(std::string_view path, Format = Format::AUTO); ///< SMT-LIB 2: SMTLIB2 or AUTO

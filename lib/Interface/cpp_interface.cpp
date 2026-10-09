@@ -49,6 +49,9 @@ using std::cerr;
 using std::cout;
 using std::endl;
 
+// The lexer's line counter (smt2.lex): a refused command names its line.
+extern int smt2lineno;
+
 namespace stp
 {
 
@@ -962,9 +965,53 @@ void Cpp_interface::beginCurrentCommand()
     context->beginParserCommand();
 }
 
+void Cpp_interface::refuseInSingleQuery(const std::string& command,
+                                       const std::string& why)
+{
+  refuseCurrentCommand("the single-query parse mode refuses (" + command +
+                       ") at line " + std::to_string(smt2lineno) + ": " + why);
+}
+
+void Cpp_interface::admitInSingleQuery(const std::string& command)
+{
+  const bool content = command == "assert" || command == "declare-const" ||
+                       command == "declare-fun" || command == "declare-sort" ||
+                       command == "define-fun" || command == "define-sort" ||
+                       command == "define-const";
+  if (command == "exit")
+  {
+    if (single_query_checks == 0)
+      refuseInSingleQuery(command, "it comes before the check-sat");
+    single_query_exited = true;
+    return;
+  }
+  if (single_query_exited)
+    refuseInSingleQuery(command, "it follows the exit");
+  if (single_query_checks > 0)
+    refuseInSingleQuery(command, command == "check-sat"
+                                     ? "a single query has one check-sat"
+                                     : "it follows the check-sat");
+  if (command == "set-logic")
+  {
+    if (!declared_logic.empty())
+      refuseInSingleQuery(command, "the script names its logic once");
+    if (single_query_content)
+      refuseInSingleQuery(command,
+                          "it follows a declaration, definition or assertion");
+  }
+  else if (command == "check-sat")
+    ++single_query_checks;
+  else if (content)
+    single_query_content = true;
+  else if (command != "set-info" && command != "set-option")
+    refuseInSingleQuery(command, "it is not part of a single query");
+}
+
 void Cpp_interface::requireCommand(const std::string& command)
 {
   current_command_name = command;
+  if (single_query)
+    admitInSingleQuery(command);
   if (!protocol_checks)
     return;
   bool allowed = true;
@@ -1828,6 +1875,22 @@ void Cpp_interface::setOption(std::string option, std::string value)
       option == "produce-unsat-assumptions" || option == "produce-unsat-cores";
   if (boolean_option && value != "true" && value != "false")
     badBooleanOptionValue(option, value);
+  // A single query's caller configured the solver: the script may not. The
+  // two printing options change nothing such a parse does; an output
+  // channel would open a file.
+  if (single_query)
+  {
+    if (option == "print-success" || option == "produce-models")
+    {
+      success();
+      return;
+    }
+    refuseInSingleQuery("set-option :" + option,
+                        option == "regular-output-channel" ||
+                                option == "diagnostic-output-channel"
+                            ? "it would open a file"
+                            : "the solver's options are its caller's");
+  }
   // Accept production options on either side of set-logic, as cvc5 and
   // Bitwuzla do. Restrictions needed by an option's implementation belong
   // in its handler (for example, global-declarations below).

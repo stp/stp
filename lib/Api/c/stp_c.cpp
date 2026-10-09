@@ -461,6 +461,7 @@ static_assert(static_cast<int>(Validity::UNKNOWN) == STP_UNKNOWN_VALIDITY, "vali
 static_assert(static_cast<int>(UnknownReason::OTHER) == STP_REASON_OTHER, "reasons");
 static_assert(static_cast<int>(Format::GDL) == STP_FORMAT_GDL, "formats");
 static_assert(static_cast<int>(ParseMode::EXECUTE) == STP_PARSE_EXECUTE, "parse modes");
+static_assert(static_cast<int>(ParseMode::SINGLE_QUERY) == STP_PARSE_SINGLE_QUERY, "parse modes");
 static_assert(static_cast<int>(Tier::DIAGNOSTIC) == STP_TIER_DIAGNOSTIC, "tiers");
 static_assert(static_cast<int>(Settable::CONSTRUCTION) == STP_SETTABLE_CONSTRUCTION, "settable");
 static_assert(static_cast<int>(OptionScope::MANAGER) == STP_SCOPE_MANAGER, "scopes");

@@ -875,3 +875,22 @@ def test_a_busy_manager_refuses_other_threads_and_close_is_deferred():
     BitVec("afterwards", 8, tm=tm)  # the manager is idle again, and usable from any thread
     stp._core.drain_releases()
     assert stp._core.pending_releases() == 0
+
+
+def test_single_query_reads_a_script_as_data():
+    s = Solver()
+    assert s.declared_logic() == ""
+    s.from_string("(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(assert (= a #x07))(check-sat)(exit)",
+                  mode="single-query")
+    assert s.declared_logic() == "QF_BV"
+    assert len(s.assertions()) == 1
+    assert s.check() == sat
+    with pytest.raises(stp.ParseError, match=r"\(push\) at line 2"):
+        s.from_string("(assert false)\n(push 1)(check-sat)", mode="single-query")
+    assert len(s.assertions()) == 1
+    # A NUL would end the script where it stands: refused in every mode.
+    for mode in ("declare-and-assert", "execute", "parse-only", "single-query"):
+        with pytest.raises(ValueError, match="NUL"):
+            s.from_string("(assert false)\0(check-sat)", mode=mode)
+    assert len(s.assertions()) == 1
+

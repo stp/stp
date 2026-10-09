@@ -47,6 +47,7 @@ _PARSE_MODES = {
     "declare-and-assert": _core.PARSE_DECLARE_AND_ASSERT,
     "execute": _core.PARSE_EXECUTE,
     "parse-only": _core.PARSE_ONLY,
+    "single-query": _core.PARSE_SINGLE_QUERY,
 }
 
 
@@ -811,8 +812,10 @@ class Solver(_core.SolverHandle):
         """Parse an SMT-LIB 2 script into this solver (declarations, assertions, push/pop,
         options). A ParseError leaves the solver unchanged. The mode is "declare-and-assert"
         (nothing is decided), "execute" (the input runs as the stp command line runs it: its
-        commands answer, to the output sink) or "parse-only" (read as the command line's
-        --parse-only reads it)."""
+        commands answer, to the output sink), "parse-only" (read as the command line's
+        --parse-only reads it) or "single-query" (a script as data: declarations, definitions,
+        assertions and one check-sat, which is not run, and nothing that changes the solver;
+        any other command is a ParseError naming it and its line)."""
         code = _format_code(format)
         m = _parse_mode(mode)
         if code in (_core.FORMAT_SMTLIB2, _core.FORMAT_AUTO):

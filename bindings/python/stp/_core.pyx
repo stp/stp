@@ -2019,6 +2019,14 @@ cdef class SolverHandle:
         self._live()
         return stp_solver_level(self._s)
 
+    def declared_logic(self):
+        """The logic the last successful parse named in set-logic, or "" (not the "logic" option)."""
+        self._live()
+        cdef char* p = stp_solver_declared_logic(self._s)
+        if p == NULL:
+            self._m._fail("stp_solver_declared_logic")
+        return _take(p)
+
     def assertions(self):
         self._live()
         cdef size_t n = stp_solver_num_assertions(self._s), i
@@ -2920,6 +2928,7 @@ FORMAT_GDL = <int>STP_FORMAT_GDL
 PARSE_DECLARE_AND_ASSERT = <int>STP_PARSE_DECLARE_AND_ASSERT
 PARSE_EXECUTE = <int>STP_PARSE_EXECUTE
 PARSE_ONLY = <int>STP_PARSE_ONLY
+PARSE_SINGLE_QUERY = <int>STP_PARSE_SINGLE_QUERY
 FP_NORMAL = <int>STP_FP_NORMAL
 FP_SUBNORMAL = <int>STP_FP_SUBNORMAL
 FP_ZERO = <int>STP_FP_ZERO
