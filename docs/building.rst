@@ -18,11 +18,12 @@ Dependencies
 STP relies on flex, bison and python3, plus at least one SAT backend.
 Nothing else has to be installed: with ``-DENABLE_AUTO_DOWNLOAD=ON`` the
 build fetches every library it needs, and ``lit``, which drives the
-tests, into a virtual environment of its own. The one exception is
-``stp-p`` (``-DSTP_BUILD_PARALLEL=ON``, :doc:`tools`), which
-needs nlohmann/json 3.9 or later and does not download it: install it
-(Debian and Ubuntu: ``nlohmann-json3-dev``; Fedora: ``json-devel``) or
-point ``NLOHMANN_JSON_DIR`` at a copy.
+tests, into a virtual environment of its own. This includes nlohmann/json
+for ``stp-p`` (``-DSTP_BUILD_PARALLEL=ON``, :doc:`tools`). An installed
+copy must be version 3.9 or later (Debian and Ubuntu:
+``nlohmann-json3-dev``; Fedora: ``json-devel``); ``NLOHMANN_JSON_DIR``
+can name an existing copy. Otherwise the build fetches a pinned release
+and installs its headers into ``STP_DEP_DIR``.
 Configuration fails if no backend is enabled.
 
 On a Debian-like platform most of it comes from the package manager:
@@ -359,6 +360,9 @@ These apply to all generators:
    clone)
 -  ``CLI11_DIR`` -- build against an existing CLI11 rather than fetching
    one
+-  ``NLOHMANN_JSON_DIR`` -- use an existing nlohmann/json for ``stp-p``;
+   a directory containing ``nlohmann/json.hpp`` or an ``include/`` directory
+   that does. Version 3.9 or later is required
 -  ``LIBBF_DIR`` -- where to find an already-built LibBF
 -  ``IMATH_DIR`` -- where to find an already-built, STP-patched IMath
    (see above)
@@ -381,7 +385,7 @@ These apply to all generators:
    the network should be asked to
 -  ``STP_DEPS_LOCAL_ONLY`` -- use no dependency from outside the build
    directory. Off by default. An installed ABC, CaDiCaL, CLI11, LibBF,
-   MiniSat or SymFPU is not looked for and not used; each is built
+   MiniSat, nlohmann/json or SymFPU is not looked for and not used; each is built
    into ``STP_DEP_DIR`` instead, which is inside the build directory
    unless it was pointed elsewhere. Pair it with ``ENABLE_AUTO_DOWNLOAD``
    on a cold build directory, or there is nothing left to find and
