@@ -547,6 +547,77 @@ void substitutionGuards()
   require(run(dag).first == shared_result.first,
           "fresh queries must recover their substitution allowance after cancellation");
 }
+
+// A recorded definition can mention a variable defined after it. Every row
+// the Gaussian pass solves has to be resolved through such values, or it is
+// solved against stale ones: on a dense system the coefficients then doubled
+// in width with each row until the exact arithmetic gave up (#1290).
+void definitionsResolveTransitively()
+{
+  STPMgr manager;
+  SimplifyingNodeFactory factory(*manager.hashingNodeFactory, manager);
+  manager.defaultNodeFactory = &factory;
+  onlyMonotone(manager);
+  auto& flags = manager.UserFlags;
+  flags.lra_presolve_monotone = false;
+  flags.lra_presolve_subst = true;
+  const auto x = manager.CreateSourceSymbol("resolve_x", SourceSort::real());
+  const auto y = manager.CreateSourceSymbol("resolve_y", SourceSort::real());
+  const auto z = manager.CreateSourceSymbol("resolve_z", SourceSort::real());
+  const auto w = manager.CreateSourceSymbol("resolve_w", SourceSort::real());
+  const auto zero = manager.CreateRealConst("0");
+  const auto one = manager.CreateRealConst("1");
+  const auto three = manager.CreateRealConst("3");
+  const auto add = [&](const ASTNode& a, const ASTNode& b) {
+    return manager.CreateRealTerm(REAL_ADD, ASTVec{a, b});
+  };
+  const auto atom = [&](Kind kind, const ASTNode& a, const ASTNode& b) {
+    return manager.CreateRealPredicate(kind, a, b);
+  };
+  const auto presolve = [&](const ASTNode& formula) {
+    LraReconstruction reconstruction;
+    return presolveForSolve(manager, formula, nullptr, &reconstruction);
+  };
+
+  // x := y + 1, then the first row defines y := -w. The second row, x + w =
+  // 3, mentions y only through x's value. One level deep it kept y, solved
+  // for w instead and recorded w := 2 - y beside y := -w. Resolved through
+  // both, it reads 1 = 3: the query is refuted where it is presolved.
+  const auto stale = manager.CreateNode(AND, ASTVec{
+      atom(EQ, x, add(y, one)), atom(EQ, add(y, w), zero),
+      atom(EQ, add(x, w), three)});
+  require(presolve(stale) == manager.ASTFalse,
+          "a row must be solved against definitions resolved through each other");
+
+  // One level deep, x = y, y = z, z = x recorded z := y beside y := z, and a
+  // row reaching either would never finish resolving. Resolved transitively,
+  // z = x reads z = z and records nothing.
+  const auto cycle = manager.CreateNode(AND, ASTVec{
+      atom(EQ, x, y), atom(EQ, y, z), atom(EQ, z, x),
+      atom(EQ, add(y, w), one), atom(REAL_GT, w, zero)});
+  const auto acyclic = presolve(cycle);
+  require(acyclic != cycle, "the cycle probe must be substituted");
+  Frontend frontend(manager);
+  for (int xv = -1; xv <= 2; ++xv)
+    for (int yv = -1; yv <= 2; ++yv)
+      for (int zv = -1; zv <= 2; ++zv)
+        for (int wv = -1; wv <= 2; ++wv)
+        {
+          RealModel model(frontend.numberLimits(),
+                          {{x, std::to_string(xv), "1"},
+                           {y, std::to_string(yv), "1"},
+                           {z, std::to_string(zv), "1"},
+                           {w, std::to_string(wv), "1"}},
+                          ASTVec{x, y, z, w});
+          const auto value = [&](const ASTNode& formula) {
+            return acceptsRealFormula(formula, [&](const ASTNode& predicate) {
+              return model.predicateValue(predicate);
+            });
+          };
+          require(value(cycle) == value(acyclic),
+                  "substitution must preserve the original assignments exactly");
+        }
+}
 } // namespace
 
 int main()
@@ -558,7 +629,8 @@ int main()
     localMonotoneRefusal();
     repeatedPresolve();
     substitutionGuards();
-    std::cout << "PASS monotone and repeated presolve, reconstruction and substitution guards\n";
+    definitionsResolveTransitively();
+    std::cout << "PASS monotone and repeated presolve, reconstruction, substitution guards and resolution\n";
     return 0;
   }
   catch (const std::exception& error)
