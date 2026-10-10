@@ -104,6 +104,34 @@ TEST(SingleQuery, AppliesTheQueryAndRecordsItsLogic)
   EXPECT_EQ(s.declared_logic(), "");
 }
 
+TEST(SingleQuery, AResetForgetsTheDeclaredLogic)
+{
+  // The logic a set-logic named stops being in force at a reset: the
+  // script's own (reset), Solver::reset() and Solver::reset_assertions().
+  {
+    TermManager tm;
+    Solver s(tm);
+    s.parse_smt2("(set-logic QF_BV)(reset)(declare-const r Real)(assert (> r 0.0))",
+                 ParseMode::EXECUTE);
+    EXPECT_EQ(s.declared_logic(), "");
+    s.parse_smt2("(reset)(set-logic QF_ABV)", ParseMode::EXECUTE);
+    EXPECT_EQ(s.declared_logic(), "QF_ABV");
+  }
+  for (const bool everything : {true, false})
+  {
+    SCOPED_TRACE(everything ? "reset" : "reset_assertions");
+    TermManager tm;
+    Solver s(tm);
+    s.parse_smt2("(set-logic QF_ABV)(declare-const x (_ BitVec 8))(assert (= x #x01))");
+    EXPECT_EQ(s.declared_logic(), "QF_ABV");
+    if (everything)
+      s.reset();
+    else
+      s.reset_assertions();
+    EXPECT_EQ(s.declared_logic(), "");
+  }
+}
+
 TEST(SingleQuery, ScriptsThatHideCommandsInQuotedRegionsAreRefusedByName)
 {
   // Each holds, as STP's lexer reads it (and SMT-LIB's), a command outside

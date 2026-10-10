@@ -190,7 +190,7 @@ engine = { custom = "logic" }
 category = "frontend"
 implies = "QF_UF*/QF_AUF* -> the UF machinery on; QF_AX and QF_AUF* -> extensional arrays on; each as the content engages them under the uninterpreted-functions and array-equality entries' auto (their on and off win), and another logic, or none, takes it back. A script's own set-logic acts in the frontend (the QF_BV/QF_ABV engagement policy, QF_LRA's Real checks), not through this entry"
 cli_help = "the logic whose switches the run takes: the UF machinery for QF_UF*/QF_AUF*, extensional arrays for QF_AX/QF_AUF*; a script's own set-logic decides for the script"
-help = "the SMT-LIB logic; the same entry (set-logic) writes when a script is parsed"
+help = "the logic whose switches the run takes (the UF machinery, extensional arrays); a script's own set-logic does not write it -- see Solver::declared_logic()"
 
 [[option]]
 name = "simplify"

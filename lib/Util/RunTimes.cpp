@@ -161,6 +161,8 @@ std::vector<RunTimes::CategoryTotal> RunTimes::totals() const
   for (std::map<Category, int>::const_iterator it = counts.begin();
        it != counts.end(); it++)
   {
+    if (it->second == 0)
+      continue;
     const std::map<Category, int64_t>::const_iterator time =
         times.find(it->first);
     CategoryTotal total;
@@ -224,5 +226,10 @@ void RunTimes::stop(Category c)
 
 void RunTimes::start(Category c)
 {
+  // Reserve the records before opening the phase. stop() is also called
+  // from Scope's destructor while unwinding an allocation failure; trying
+  // to allocate these records then would throw again and terminate.
+  times.try_emplace(c, 0);
+  counts.try_emplace(c, 0);
   category_stack.push(std::make_pair(c, stp::getCurrentTime()));
 }

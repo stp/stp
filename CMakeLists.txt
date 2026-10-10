@@ -40,8 +40,21 @@ cmake_minimum_required(VERSION 3.18)
 # above the asan job in .github/workflows/ci.yml.
 option(SANITIZE "Use Clang sanitizers" OFF)
 if (SANITIZE)
-    # In the cache so it can be tweaked later.
-    set(CMAKE_CXX_COMPILER "clang++" CACHE FILEPATH "" FORCE)
+    # A clang++ the user named -- on the command line or in CXX -- is kept.
+    # Any other is replaced, in the cache so it can be tweaked later, by the
+    # clang++ on the PATH, by its full path: a bare name forced into an entry
+    # the command line set without a type (-DCMAKE_CXX_COMPILER=...) is made a
+    # path relative to the directory cmake runs in, and project() then finds
+    # no compiler there.
+    set(_stp_cxx "${CMAKE_CXX_COMPILER}")
+    if (NOT _stp_cxx)
+        set(_stp_cxx "$ENV{CXX}")
+    endif()
+    if (NOT _stp_cxx MATCHES "clang\\+\\+[^/]*$")
+        find_program(STP_SANITIZE_CLANGXX NAMES clang++ REQUIRED)
+        set(CMAKE_CXX_COMPILER "${STP_SANITIZE_CLANGXX}" CACHE FILEPATH "" FORCE)
+    endif()
+    unset(_stp_cxx)
 endif()
 
 project(STP)
@@ -1169,6 +1182,11 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
     set(MI_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_STATIC ON  CACHE BOOL "" FORCE)
     set(MI_OVERRIDE     ON  CACHE BOOL "" FORCE)
+    # The C build's replacement operator new aborts on allocation failure.
+    # Use the C++ implementation so bad_alloc reaches the API's RESOURCE
+    # handler, including when the shared allocator is preloaded by a client.
+    set(MI_USE_CXX      ON  CACHE BOOL "" FORCE)
+    set(MI_NO_USE_CXX   OFF CACHE BOOL "" FORCE)
     # SOURCE_SUBDIR names a directory mimalloc has not got, so MakeAvailable
     # populates without calling add_subdirectory(): this one needs
     # EXCLUDE_FROM_ALL, which MakeAvailable could not be told until CMake 3.28.
@@ -1528,8 +1546,8 @@ if (USE_MINISAT)
         add_definitions(-DSTP_MINISAT_HAS_UP)
     endif()
     # The include directory is no longer added project-wide: the MiniSat target
-    # carries it to lib/Sat and lib/Incremental, which are the two object
-    # libraries whose sources reach a MiniSat header, and to the unit tests
+    # carries it to lib/Sat, lib/Incremental and lib/Api, whose sources reach
+    # a MiniSat header, and to the unit tests
     # through AddSTPGTest. (There used to be a `set(LIBS ...)` here too, whose
     # value nothing ever read.)
 endif()

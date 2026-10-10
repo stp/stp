@@ -101,6 +101,10 @@ target_include_directories(stpapi PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_link_libraries(stpapi PRIVATE IMath)
+if(USE_MINISAT)
+    # Its allocation exception does not derive from std::exception.
+    target_link_libraries(stpapi PRIVATE MiniSat)
+endif()
 if(TARGET cryptominisat5)
     target_link_libraries(stpapi PRIVATE cryptominisat5)
 endif()
