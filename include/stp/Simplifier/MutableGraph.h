@@ -208,6 +208,7 @@ private:
   NormalisingNodeFactory normalising_;
   ASTNode root_;
   bool tearingDown_ = false;
+  const char* matReason_ = "api"; // for the trace: why a node is converted
 
   // The immutable side. Dense indices: the imported DAG first, then any
   // immutable node that entered the formula later.
@@ -250,7 +251,8 @@ private:
   void markStaleAbove(uint32_t idx);
   // Stale nodes held by a mutable parent, converted when the operation that
   // made them stale has finished: a mutable node holds current children.
-  std::vector<uint32_t> pendingStale_; // a heap, lowest number on top
+  std::vector<uint32_t> pendingStale_; // sorted on demand, lowest number last
+  bool staleSorted_ = true;
   struct StaleAfter
   {
     const MutableGraph* g;

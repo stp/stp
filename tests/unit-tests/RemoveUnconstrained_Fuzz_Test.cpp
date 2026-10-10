@@ -63,7 +63,6 @@ using namespace stp;
 
 namespace
 {
-const unsigned W = 2;
 const uint64_t MAX_COMBOS = 1u << 16;
 
 struct Fuzz

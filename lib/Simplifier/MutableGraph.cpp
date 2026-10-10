@@ -34,7 +34,6 @@ THE SOFTWARE.
 namespace stp
 {
 
-static const char* matReason_ = "api";
 
 // Public operations nest (a patch can merge, a merge patches parents).
 // Settling stale children waits for the outermost one to finish.
@@ -277,6 +276,12 @@ void MutableGraph::import(const ASTNode& root)
   }
 
   imported_ = nodes_.size();
+  // The first edit under a node converts the cone above it; on an unrolled
+  // trace that is most of the formula. Size the tables once for it.
+  owned_.reserve(imported_);
+  table_.reserve(imported_);
+  forward_.reserve(imported_);
+  mutParents_.reserve(imported_);
   if (trace_ && edges.size() < 60)
     for (const auto& e : edges)
       MG_TRACE("import edge " << nodes_[e.first].GetNodeNum() << " <- parent "
@@ -356,7 +361,7 @@ size_t MutableGraph::originParentCount(
 
 size_t MutableGraph::immutableParentCount(const ASTNode& n) const
 {
-  uint32_t idx;
+  uint32_t idx = 0;
   size_t count = 0;
   if (indexed(n, idx))
     count += liveImm_[idx];
@@ -456,7 +461,7 @@ ASTNode MutableGraph::current(const ASTNode& n) const
 
 bool MutableGraph::isStale(const ASTNode& n) const
 {
-  uint32_t idx;
+  uint32_t idx = 0;
   return indexed(n, idx) && stale_[idx];
 }
 
@@ -477,7 +482,7 @@ void MutableGraph::markStaleAbove(uint32_t start)
         stale_[p] = true;
         up.push_back(p);
         pendingStale_.push_back(p);
-        std::push_heap(pendingStale_.begin(), pendingStale_.end(), staleAfter_);
+        staleSorted_ = false;
       }
     };
     if (idx < imported_)
@@ -489,6 +494,7 @@ void MutableGraph::markStaleAbove(uint32_t start)
         visit(p);
   }
 }
+
 
 void MutableGraph::settle()
 {
@@ -506,7 +512,14 @@ void MutableGraph::settle()
     // Lowest number first: an immutable node outnumbers its children, so
     // a stale node is converted after every stale node below it and the
     // conversion of a 20,000-deep chain does not recurse through it.
-    std::pop_heap(pendingStale_.begin(), pendingStale_.end(), staleAfter_);
+    if (!staleSorted_)
+    {
+      // Highest number first in the vector, so the back is the lowest.
+      // Sorted once per batch; a node marked mid-batch (a rule's
+      // replacement) re-sorts what is left.
+      std::sort(pendingStale_.begin(), pendingStale_.end(), staleAfter_);
+      staleSorted_ = true;
+    }
     const uint32_t idx = pendingStale_.back();
     pendingStale_.pop_back();
     const ASTNode n = nodes_[idx];
@@ -762,7 +775,7 @@ ASTNode MutableGraph::normalise(const ASTNode& given)
         MG_TRACE("normalise " << given.GetNodeNum() << " -> " << c.GetNodeNum() << " not stale");
       return c;
     }
-    uint32_t idx;
+    uint32_t idx = 0;
     indexed(c, idx);
     if (!liveImmutable(idx) && !isRoot(c))
       return rebuildDetached(c);
@@ -896,7 +909,7 @@ MutableInterior* MutableGraph::materialise(const ASTNode& node)
   if (MutableInterior* m = asMutable(n))
     return m;
   assert(n.Degree() > 0); // a leaf has nothing to edit
-  uint32_t idx;
+  uint32_t idx = 0;
   const bool known = indexed(n, idx);
   assert(known);
   (void)known;
@@ -1541,7 +1554,7 @@ ASTNode MutableGraph::rebuild(const ASTNode& top)
       return !n.isMutableInterior();
     if (isForwarded(n))
       return false;
-    uint32_t idx;
+    uint32_t idx = 0;
     if (!indexed(n, idx))
       return true; // never in this graph: nothing below it was replaced
     return !stale_[idx];
