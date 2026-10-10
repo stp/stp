@@ -106,6 +106,7 @@ class STPMgr
                                        lra::LraReconstruction* reconstruction,
                                        bool highs_enabled);
   friend class ASTNode;
+  friend class MutableGraph; // FindInterior, to merge into an existing node
   friend class ASTInterior;
   friend class ASTBVConst;
   friend class ASTRealConst;
@@ -631,6 +632,9 @@ private:
   // Look up a unique interior node by (kind, children), creating it -- as a
   // single tail-allocated block -- only on a miss. Probes with a non-owning
   // key, so a cache hit builds nothing.
+  // The hash-consed node with this kind and these children, or NULL when
+  // none exists. Builds nothing.
+  ASTInterior* FindInterior(Kind kind, ASTChildren children);
   ASTInterior* LookupOrCreateInterior(Kind kind, ASTChildren children);
 
   // Create unique ASTSymbol node.

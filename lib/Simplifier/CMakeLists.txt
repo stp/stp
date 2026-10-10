@@ -27,6 +27,7 @@ add_library(simplifier OBJECT
     PropagateEqualities.cpp
     DistinctOrdering.cpp
     RemoveUnconstrained.cpp
+    MutableGraph.cpp
     Simplifier.cpp
     SubstitutionMap.cpp
     VariablesInExpression.cpp
