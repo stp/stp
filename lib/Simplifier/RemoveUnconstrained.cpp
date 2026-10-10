@@ -59,6 +59,11 @@ THE SOFTWARE.
  */
 
 #include "stp/Simplifier/RemoveUnconstrained.h"
+#include "stp/Simplifier/StrengthReducingNodeFactory.h"
+#include "stp/Simplifier/StrengthReduction.h"
+#include "stp/Simplifier/PropagateEqualities.h"
+#include "stp/Simplifier/NodeDomainAnalysis.h"
+#include <memory>
 #include <cstdlib>
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
@@ -262,6 +267,44 @@ static bool narrowingAbsorbsDivisorGrid(unsigned se, unsigned ss,
 // bit-vector sort; a declared sort, or an array over one, has to be
 // carried explicitly or a later array equality between the stand-in and
 // a source term sees two different sorts.
+ASTNode RemoveUnconstrained::exported(const ASTNode& n)
+{
+  const ASTNode c = g->current(n);
+  if (!c.isMutableInterior() && !g->isStale(c))
+    return c; // the hash-consed node already
+  ASTNode stand = freshLike(c, "export");
+  stand.SetExpWidth(c.GetExpWidth());
+  stand.SetSigWidth(c.GetSigWidth());
+  pendingExports_.push_back({stand, c});
+  return stand;
+}
+
+void RemoveUnconstrained::resolvePendingExports()
+{
+  if (pendingExports_.empty())
+    return;
+  std::vector<ASTNode> handles;
+  handles.reserve(pendingExports_.size());
+  for (const auto& pr : pendingExports_)
+    handles.push_back(pr.second);
+  std::vector<ASTNode> built;
+  g->exportNodes(handles, built);
+  // Into the map (or, refused, into the conjuncts), and out of any
+  // refused definition recorded before this point.
+  DenseNodeMap stands;
+  for (size_t i = 0; i < pendingExports_.size(); i++)
+  {
+    stands[pendingExports_[i].first] = built[i];
+    replace(pendingExports_[i].first, built[i]);
+  }
+  pendingExports_.clear();
+  for (ASTNode& def : refusedDefinitions)
+  {
+    DenseNodeMap cache;
+    def = SubstitutionMap::replace(def, stands, cache, nf);
+  }
+}
+
 ASTNode RemoveUnconstrained::freshLike(const ASTNode& like,
                                        const std::string& prefix)
 {
@@ -295,6 +338,10 @@ bool RemoveUnconstrained::unconstrained(const ASTNode& n)
   // A protected symbol is never free to be given a value here, however
   // it occurs.
   if (untouchable != NULL && untouchable->find(n) != untouchable->end())
+    return false;
+  // A symbol the equality propagation substituted stands for its term
+  // now; the graph would answer for the term.
+  if (g->current(n) != n)
     return false;
   ASTNode parent;
   return singleParent(n, parent);
@@ -343,6 +390,18 @@ void RemoveUnconstrained::drain()
   };
   for (const MutableGraph::Change& c : g->changes())
   {
+    // A node patched by someone else's substitution (the equality
+    // propagation's, say): its other symbol children may qualify for a
+    // rule beside the new sibling, as after one of this pass's splices.
+    if (c.what == MutableGraph::Change::Patched)
+    {
+      const ASTNode q = g->current(c.node);
+      if (q.Degree() <= 200)
+        for (const ASTNode& k : q)
+          if (k.GetKind() == SYMBOL)
+            worklist.push_back(k);
+      continue;
+    }
     if (c.what != MutableGraph::Change::CountChanged)
       continue;
     // The event names the handle whose count changed; a record may have
@@ -387,16 +446,30 @@ void RemoveUnconstrained::splice(const ASTNode& node, const ASTNode& by)
       if (c.GetKind() == SYMBOL)
         worklist.push_back(c);
   }
-  // The symbols inside `by` sit under new structure (a comparison
-  // rewritten as a predicate over the sibling, say) and may qualify for
-  // a rule there that they did not where they were. A symbol itself has
-  // no inside; a replacement over a handful of nodes is the usual case.
+  // The symbols near the top of `by` sit under new structure (a
+  // comparison rewritten as a predicate over the sibling, say) and may
+  // qualify for a rule there that they did not where they were. Only
+  // the top few levels are new; a sibling carried into the replacement
+  // can have most of the formula under it, and the rules look no deeper
+  // than three nodes.
   if (by.GetKind() != SYMBOL && !by.isConstant())
   {
-    std::vector<ASTNode> inside;
-    variablesIn(by, inside);
-    for (const ASTNode& v : inside)
-      worklist.push_back(v);
+    std::vector<std::pair<ASTNode, unsigned>> stack(1, {g->current(by), 0});
+    while (!stack.empty())
+    {
+      const ASTNode cur = stack.back().first;
+      const unsigned depth = stack.back().second;
+      stack.pop_back();
+      if (cur.GetKind() == SYMBOL)
+      {
+        worklist.push_back(cur);
+        continue;
+      }
+      if (depth >= 3 || cur.Degree() > 200)
+        continue;
+      for (const ASTNode& c : cur)
+        stack.push_back({g->current(c), depth + 1});
+    }
   }
 }
 
@@ -1200,8 +1273,10 @@ bool RemoveUnconstrained::tryGroundPathCollapse(const ASTNode& var)
     if (!singleParent(p, pp))
     {
       if (bm.UserFlags.unconstrained_image_vars && steps.size() == 1 &&
-          frames.empty())
-        return tryImageConstrainShared(var, p, steps[0]);
+          frames.empty() && tryImageConstrainShared(var, p, steps[0]))
+        return true;
+      // Declined or not applicable: the climb waits for p to become
+      // single-use, which the image rule's refusal does not change.
       blockedOn[p.GetNodeNum()].push_back(var);
       return false;
     }
@@ -1394,9 +1469,22 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
   imageConstraints.clear();
   imageConstraintsMade = 0;
+  pendingExports_.clear();
 
   MutableGraph graph(bm);
   graph.import(n);
+  // The strength reductions ride on the graph's factory: their replacement
+  // nodes are graph nodes, built through the simplifying rules.
+  std::unique_ptr<StrengthReducingNodeFactory> reducingLayer;
+  NodeFactory* reducerFactoryBefore = NULL;
+  if (reducer_ != NULL)
+  {
+    reducerFactoryBefore = reducer_->factory();
+    reducer_->setFactory(&graph.simplifyingFactory());
+    reducingLayer.reset(new StrengthReducingNodeFactory(
+        bm, graph.simplifyingFactory(), *reducer_, *domains_));
+    graph.installReducer(*reducingLayer, *domains_);
+  }
   if (checkGraph)
     std::cerr << "  [ru] start, root " << n.GetNodeNum() << std::endl;
   g = &graph;
@@ -1408,6 +1496,8 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   worklist.clear();
   deferredOn.clear();
   blockedOn.clear();
+  if (equalities_ != NULL)
+    equalities_->applyOnGraph(graph, untouchable);
   {
     std::vector<ASTNode> post;
     ASTNodeSet seen;
@@ -1417,14 +1507,16 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       size_t next = 0;
     };
     std::vector<Frame> stack;
-    stack.push_back({n});
-    seen.insert(n);
+    // Through the graph's current view: the equalities may have
+    // substituted under the imported root already.
+    stack.push_back({graph.current(n)});
+    seen.insert(graph.current(n));
     while (!stack.empty())
     {
       Frame& f = stack.back();
       if (f.next < f.node.Degree())
       {
-        const ASTNode c = f.node[f.next++];
+        const ASTNode c = graph.current(f.node[f.next++]);
         if (seen.insert(c).second)
           stack.push_back({c});
         continue;
@@ -1441,8 +1533,14 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   ASTNodeSet noCheck;
 
   // Candidates are appended while the loop runs; each is examined once
-  // per time it was put on the list, in the order it was put there.
-  for (size_t i = 0; i < worklist.size(); i++)
+  // per time it was put on the list, in the order it was put there. The
+  // eliminations expose top-level equalities (a comparison's fresh
+  // Boolean, say), so after the list drains the equalities run again and
+  // whatever that changed is examined, until a round applies nothing.
+  size_t resumeFrom = 0;
+  while (true)
+  {
+  for (size_t i = resumeFrom; i < worklist.size(); i++)
   {
     const ASTNode var = worklist[i];
     assert(var.GetKind() == SYMBOL);
@@ -2273,11 +2371,36 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
     // None of the per-kind rules fired (each detaches `var` from its
     // parent when it does). Try the generalised ground-path collapse.
-    if (unconstrained(var))
-      tryGroundPathCollapse(var);
+    if (unconstrained(var) && !tryGroundPathCollapse(var))
+    {
+      // Nothing applies with the parent held as it is now. The rules
+      // read the parent's own holder (a comparison above a multiply,
+      // say), so when that changes, examine again: a count change of
+      // the parent re-queues what waits on it.
+      ASTNode p;
+      if (singleParent(var, p))
+        blockedOn[p.GetNodeNum()].push_back(var);
+    }
+  }
+  resumeFrom = worklist.size();
+  if (equalities_ == NULL || equalities_->applyOnGraph(graph, untouchable) == 0)
+    break;
+  drain();
   }
 
+  resolvePendingExports();
   ASTNode result = graph.exportRoot();
+  // The root conjunction is usually too wide for the graph's rules, so
+  // conjuncts that became TRUE are still in it; one pass of the
+  // simplifying factory over the root drops them.
+  if (result.GetKind() == AND)
+    result = nf->CreateNode(AND, result.GetChildren());
+  if (reducer_ != NULL)
+  {
+    reducer_->setFactory(reducerFactoryBefore);
+    domains_->forgetMutable();
+    result = reducer_->finish(result, *domains_);
+  }
   if (checkGraph)
     std::cerr << "  [ru] end, export " << result << std::endl;
   g = NULL;

@@ -59,6 +59,7 @@ THE SOFTWARE.
 namespace stp
 {
 class MutableGraph;
+class NodeDomainAnalysis;
 
 // The raw factory over a graph. Sorting and NOT handling mirror
 // HashingNodeFactory, so a node built here has the same child order as its
@@ -90,13 +91,14 @@ public:
 class NormalisingNodeFactory : public NodeFactory
 {
   MutableGraph& graph;
-  NodeFactory& inner;
+  NodeFactory* inner;
 
 public:
   NormalisingNodeFactory(STPMgr& bm_, MutableGraph& g, NodeFactory& in)
-      : NodeFactory(bm_), graph(g), inner(in)
+      : NodeFactory(bm_), graph(g), inner(&in)
   {
   }
+  void setInner(NodeFactory& in) { inner = &in; }
   using NodeFactory::CreateArrayTerm;
   using NodeFactory::CreateNode;
   using NodeFactory::CreateTerm;
@@ -125,12 +127,29 @@ public:
   // are, edited regions are rebuilt through the manager's hashing factory.
   ASTNode exportRoot();
   // The same for any node of the current formula.
-  ASTNode exportNode(const ASTNode& n) { return rebuild(current(n)); }
+  typedef ankerl::unordered_dense::map<uint64_t, ASTNode> ExportMemo;
+  ASTNode exportNode(const ASTNode& n)
+  {
+    ExportMemo memo;
+    return rebuild(current(n), memo);
+  }
+  // Several at once over one memo: the cones overlap, and a pass that
+  // records hundreds of definitions over the converted region would
+  // otherwise rebuild it hundreds of times.
+  void exportNodes(const std::vector<ASTNode>& in, std::vector<ASTNode>& out);
 
   // The simplifying rules over this graph's nodes, every operand brought
   // to the current view first.
   NodeFactory& factory() { return normalising_; }
   NodeFactory& rawFactory() { return raw_; }
+  NodeFactory& simplifyingFactory() { return simplifying_; }
+
+  // A layer above the simplifying rules (StrengthReducingNodeFactory)
+  // and the domain memo it reads. Installed, the layer is what the
+  // factory builds through and what the queue runs over a changed node,
+  // and the queue recomputes a patched node's domains before the rules
+  // see it, climbing further while the domain keeps changing.
+  void installReducer(NodeFactory& layer, NodeDomainAnalysis& domains);
 
   static MutableInterior* asMutable(const ASTNode& n);
 
@@ -160,6 +179,39 @@ public:
   // The same for any interior node of the formula, mutable or not: an
   // immutable one is forwarded to `by` without being copied first.
   void replace(const ASTNode& node, const ASTNode& by);
+
+  // A symbol of the formula stands for `by` from here on: every holder
+  // of it holds `by`, which must not contain it (the caller checks).
+  void substitute(const ASTNode& symbol, const ASTNode& by);
+  // Holds the conversion back while several operations are made, so the
+  // cones above thousands of substituted symbols, which overlap, are
+  // converted once when the scope ends, as one rebuild would convert
+  // them. Reads through the graph inside the scope see current handles
+  // (normalise converts what it must on demand).
+  class Batch
+  {
+    MutableGraph& g;
+
+  public:
+    explicit Batch(MutableGraph& graph) : g(graph) { g.depth_++; }
+    ~Batch()
+    {
+      if (--g.depth_ == 0)
+        g.settle();
+    }
+    Batch(const Batch&) = delete;
+    Batch& operator=(const Batch&) = delete;
+  };
+  // Whether `symbol` occurs in the current cone of n.
+  bool contains(const ASTNode& n, const ASTNode& symbol) const;
+  bool isRootNode(const ASTNode& n) const { return n == root_; }
+  // Whether the graph indexes n: a node of the formula, or one that has
+  // been in it. A factory-built node nothing attached is not.
+  bool knows(const ASTNode& n) const
+  {
+    uint32_t idx;
+    return n.isMutableInterior() || indexed(n, idx);
+  }
 
   // An immutable node of the formula with a replaced node somewhere below
   // it: it still points at the old structure, and export rebuilds it.
@@ -206,6 +258,8 @@ private:
   MutableNodeFactory raw_;
   SimplifyingNodeFactory simplifying_;
   NormalisingNodeFactory normalising_;
+  NodeFactory* rules_ = &simplifying_; // what runRules builds through
+  NodeDomainAnalysis* domains_ = NULL;
   ASTNode root_;
   bool tearingDown_ = false;
   const char* matReason_ = "api"; // for the trace: why a node is converted
@@ -251,8 +305,7 @@ private:
   void markStaleAbove(uint32_t idx);
   // Stale nodes held by a mutable parent, converted when the operation that
   // made them stale has finished: a mutable node holds current children.
-  std::vector<uint32_t> pendingStale_; // sorted on demand, lowest number last
-  bool staleSorted_ = true;
+  std::vector<uint32_t> pendingStale_; // a heap, lowest number on top
   struct StaleAfter
   {
     const MutableGraph* g;
@@ -288,6 +341,14 @@ private:
   // an existing node a mutable node merged into). Mutable nodes carry
   // their own.
   ankerl::unordered_dense::map<uint64_t, std::vector<uint64_t>> immOrigins_;
+  // The running total of those origins' live parents, as originLive_ on a
+  // mutable node.
+  ankerl::unordered_dense::map<uint64_t, size_t> immOriginLive_;
+  // Every change to an immutable node's live-parent count goes through
+  // here, so that a forwarded node's standing is credited to whatever it
+  // stands for now.
+  void liveDelta(uint32_t idx, long delta);
+  void creditOrigin(const ASTNode& origin, long delta);
 
   // The mutable side.
   struct Probe
@@ -390,7 +451,7 @@ private:
     changes_.push_back(Change{what, n});
   }
 
-  ASTNode rebuild(const ASTNode& n);
+  ASTNode rebuild(const ASTNode& n, ExportMemo& memo);
 };
 }
 

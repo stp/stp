@@ -39,6 +39,9 @@ THE SOFTWARE.
 
 namespace stp
 {
+class StrengthReduction;
+class NodeDomainAnalysis;
+class PropagateEqualities;
 
 class RemoveUnconstrained
 {
@@ -93,7 +96,15 @@ class RemoveUnconstrained
   ASTNode replaceWithFresh(const ASTNode& node);
   // node := by in the formula.
   void splice(const ASTNode& node, const ASTNode& by);
-  ASTNode exported(const ASTNode& n) { return g->exportNode(n); }
+  // The hash-consed form of a graph node, for a definition in the solver
+  // map. A node of the converted region is not rebuilt here: a fresh
+  // symbol stands for it in the definition, and every such symbol is
+  // defined at the end of the run from one shared export (the map
+  // resolves the chain). Hundreds of definitions over a region that is
+  // most of the formula would otherwise rebuild it hundreds of times.
+  ASTNode exported(const ASTNode& n);
+  std::vector<std::pair<ASTNode, ASTNode>> pendingExports_; // (symbol, handle)
+  void resolvePendingExports();
 
   ASTNode topLevel_other(const ASTNode& n, Simplifier* simplifier);
 
@@ -110,6 +121,9 @@ class RemoveUnconstrained
   // formula and the variable it constrains as free (category A in
   // bench-hard/reports/2026-10-10-removeunconstrained-idempotence.md).
   size_t imageConstraintsMade = 0;
+  StrengthReduction* reducer_ = NULL;
+  NodeDomainAnalysis* domains_ = NULL;
+  PropagateEqualities* equalities_ = NULL;
 
   // The untouchable set installed for the current topLevel() call, so
   // that tryImageConstrainShared can add its fresh variables to it: their
@@ -146,6 +160,17 @@ class RemoveUnconstrained
   bool arrayRules;
 
 public:
+  // Run the strength reductions on the graph as well: every node the
+  // pass builds is reduced as it is made, and a patched node's domains
+  // are recomputed and its ancestors re-reduced while they change.
+  void withStrengthReduction(StrengthReduction* sr, NodeDomainAnalysis* nda)
+  {
+    reducer_ = sr;
+    domains_ = nda;
+  }
+  // Propagate the top-level equalities on the same graph, before the
+  // unconstrained symbols are examined.
+  void withEqualities(PropagateEqualities* pe) { equalities_ = pe; }
   size_t imageConstraintCount() const { return imageConstraintsMade; }
   RemoveUnconstrained(STPMgr& bm);
 	

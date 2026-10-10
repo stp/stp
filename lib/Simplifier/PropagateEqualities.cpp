@@ -22,7 +22,10 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/PropagateEqualities.h"
+#include "stp/Simplifier/MutableGraph.h"
 #include "stp/Util/DagWalk.h"
+#include <algorithm>
+#include <cstdlib>
 #include <string>
 #include <utility>
 #include <queue>
@@ -133,10 +136,15 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
     IdSet visited;
     IdSet variables;
     intersection(e.second, visited, variables, allLhsVariables, cache);
-    mapped.insert(std::make_pair(
+    // One definition per symbol: the one over the fewest other candidate
+    // symbols, so a constant beats a term that may come to loop.
+    const auto in = mapped.insert(std::make_pair(
         e.first.GetNodeNum(),
         PropagateEqualities::CandidateInfo{e.first, e.second,
-                                          std::move(variables), id++, 0}));
+                                          variables, id++, 0}));
+    if (!in.second && variables.size() < in.first->second.vars.size())
+      in.first->second = PropagateEqualities::CandidateInfo{
+          e.first, e.second, std::move(variables), in.first->second.id, 0};
   }
 
   return mapped;
@@ -149,6 +157,8 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
 // been replaced after that set's upTo, and an up-to-date set contains no
 // replaced variables at all -- which is why folding a dependency's set in
 // cannot re-introduce work, and why the fold order doesn't matter.
+static ASTNode currentTerm(MutableGraph& g, const ASTNode& rhs);
+
 static void update(const uint64_t start, MapToNodeSet& m,
                    const std::vector<uint64_t>& replacedOrder,
                    const IdToId& replacedIndex)
@@ -214,9 +224,14 @@ static void update(const uint64_t start, MapToNodeSet& m,
   }
 }
 
-void PropagateEqualities::processCandidates(bool preserveDefaultGrammar)
+size_t PropagateEqualities::processCandidates(bool preserveDefaultGrammar,
+                                              MutableGraph* g,
+                                              const std::set<ASTNode>* untouchable)
 {
-  assert(!simp->hasUnappliedSubstitutions());
+  // Without a graph the map is applied before and after; with one the
+  // unconstrained pass records definitions mid-round, which the graph's
+  // view already reflects.
+  assert(g != NULL || !simp->hasUnappliedSubstitutions());
 
   // Make a list of the variables on the LHS. We can ignore all others in the RHSs.
   IdSet allLhsVariables;
@@ -261,6 +276,7 @@ void PropagateEqualities::processCandidates(bool preserveDefaultGrammar)
 
   std::vector<uint64_t> replacedOrder;
   replacedOrder.reserve(mapped.size());
+  std::vector<std::pair<ASTNode, ASTNode>> batch; // for the graph
   IdToId replacedIndex;
   replacedIndex.reserve(mapped.size());
 
@@ -287,10 +303,27 @@ void PropagateEqualities::processCandidates(bool preserveDefaultGrammar)
       continue;
 
     if (rhsVariables.find(lhs_id) != rhsVariables.end())
+    {
+      if (g != NULL && std::getenv("STP_RU_CHECK_GRAPH") != NULL)
+        std::cerr << "  [pe] skip " << lhs.GetNodeNum() << " := " << rhs.GetNodeNum()
+                  << " (loops)" << std::endl;
       continue; // Loops already, so no more processing.
+    }
 
     if (replacedIndex.find(lhs_id) != replacedIndex.end())
       continue; // already replaced.
+
+    if (untouchable != NULL && untouchable->find(lhs) != untouchable->end())
+      continue; // constrained outside the graph
+    if (g != NULL && (g->current(lhs) != lhs ||
+                      (g->parentCount(lhs) == 0 && !g->isRootNode(lhs))))
+    {
+      if (std::getenv("STP_RU_CHECK_GRAPH") != NULL)
+        std::cerr << "  [pe] skip " << lhs.GetNodeNum() << " := " << rhs.GetNodeNum()
+                  << " (gone: current " << g->current(lhs).GetNodeNum() << " count "
+                  << g->parentCount(lhs) << ")" << std::endl;
+      continue; // substituted or eliminated already this round
+    }
 
     update(lhs_id, mapped, replacedOrder, replacedIndex);
 
@@ -304,9 +337,37 @@ void PropagateEqualities::processCandidates(bool preserveDefaultGrammar)
 
     if (rhsVariables.find(lhs_id) == rhsVariables.end())
     {
-      simp->UpdateSubstitutionMapFewChecks(lhs, rhs);
+      // The map takes the term as collected and resolves chains through
+      // it, as it always has; a graph node (a second round's candidate)
+      // is exported for it first. The graph gets the whole batch at the
+      // end, each term as the graph has it then.
+      const ASTNode definition =
+          (g == NULL || !rhs.isMutableInterior()) ? rhs : g->exportNode(rhs);
+      if (!simp->UpdateSubstitutionMapFewChecks(lhs, definition))
+        continue;
       replacedIndex.emplace(lhs_id, replacedOrder.size());
       replacedOrder.push_back(lhs_id);
+      if (g != NULL)
+        batch.push_back({lhs, rhs});
+    }
+  }
+  if (g != NULL && !batch.empty())
+  {
+    // Each term is taken as the graph has it when its turn comes (the
+    // earlier substitutions already in it); the conversion of the cones
+    // above waits for the scope to end.
+    MutableGraph::Batch scope(*g);
+    for (const auto& pr : batch)
+    {
+      if (g->current(pr.first) != pr.first)
+        continue;
+      const ASTNode term = currentTerm(*g, pr.second);
+      if (term == pr.first)
+        continue;
+      if (std::getenv("STP_RU_CHECK_GRAPH") != NULL)
+        std::cerr << "  [pe] substitute " << pr.first.GetNodeNum() << " := "
+                  << term.GetNodeNum() << " kind " << term.GetKind() << std::endl;
+      g->substitute(pr.first, term);
     }
   }
 
@@ -314,6 +375,87 @@ void PropagateEqualities::processCandidates(bool preserveDefaultGrammar)
     std::cerr <<  "{PropagateEqualities} Applied:" << replacedOrder.size() << std::endl;
 
   candidates.clear();
+  return replacedOrder.size();
+}
+
+// A candidate's term as the graph has it now. An inverse term the walk
+// built (BVNOT of a side, say) is a hash-consed node outside the graph
+// whose children may since have been substituted under it; it is rebuilt
+// through the graph's factory over their current forms. Formula nodes
+// normalise directly.
+static ASTNode currentTerm(MutableGraph& g, const ASTNode& rhs)
+{
+  if (rhs.Degree() == 0 || g.knows(rhs))
+    return g.normalise(rhs);
+  ASTVec kids;
+  for (const ASTNode& c : rhs)
+    kids.push_back(currentTerm(g, c));
+  if (rhs.GetIndexWidth() > 0)
+    return g.factory().CreateArrayTerm(rhs.GetKind(), rhs.GetIndexWidth(),
+                                       rhs.GetValueWidth(), kids);
+  if (rhs.GetValueWidth() > 0)
+    return g.factory().CreateTerm(rhs.GetKind(), rhs.GetValueWidth(), kids);
+  return g.factory().CreateNode(rhs.GetKind(), kids);
+}
+
+size_t PropagateEqualities::applyOnGraph(MutableGraph& g,
+                                         const std::set<ASTNode>* untouchable)
+{
+  assert(bm->UserFlags.propagate_equalities);
+  bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
+  todo = 0;
+  // The inverse terms the candidate walk builds must be graph nodes: the
+  // root conjunction's children are mutable after the first round. The
+  // raw factory, not the rules: hundreds of thousands of candidates are
+  // walked per round and most are never applied, and with the strength
+  // reductions riding on the rules each creation computed domains.
+  NodeFactory* const factoryBefore = nf;
+  nf = &g.rawFactory();
+  const ASTNode root = g.current(g.root());
+  // Walked afresh each round: a candidate passed over in an earlier
+  // round (shadowed by another definition of the same symbol, or
+  // looping then) can be the one to apply now. The decision over
+  // variable sets is the costly part, so candidates whose symbol is
+  // already substituted or gone are dropped before it; after the first
+  // round that is nearly all of them.
+  alreadyVisited.clear();
+  buildCandidateList(root);
+  {
+    size_t kept = 0;
+    for (size_t i = 0; i < candidates.size(); i++)
+    {
+      const ASTNode& lhs = candidates[i].first;
+      if (g.current(lhs) != lhs || (g.parentCount(lhs) == 0 && !g.isRootNode(lhs)))
+        continue;
+      candidates[kept++] = candidates[i];
+    }
+    candidates.resize(kept);
+  }
+
+  bool preserveDefaultGrammar = false;
+  if (bm->hasConstArrays())
+  {
+    ASTNodeSet seen;
+    ASTVec pending(1, root);
+    while (!pending.empty())
+    {
+      const ASTNode node = pending.back();
+      pending.pop_back();
+      if (!seen.insert(node).second)
+        continue;
+      if (node.GetKind() == CONST_ARRAY)
+      {
+        preserveDefaultGrammar = true;
+        break;
+      }
+      for (const ASTNode& child : node.GetChildren())
+        pending.push_back(child);
+    }
+  }
+  const size_t applied = processCandidates(preserveDefaultGrammar, &g, untouchable);
+  nf = factoryBefore;
+  bm->GetRunTimes()->stop(RunTimes::PropagateEqualities);
+  return applied;
 }
 
 ASTNode PropagateEqualities::topLevel(const ASTNode& a)

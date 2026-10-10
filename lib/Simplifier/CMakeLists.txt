@@ -28,6 +28,7 @@ add_library(simplifier OBJECT
     DistinctOrdering.cpp
     RemoveUnconstrained.cpp
     MutableGraph.cpp
+    StrengthReducingNodeFactory.cpp
     Simplifier.cpp
     SubstitutionMap.cpp
     VariablesInExpression.cpp

@@ -135,6 +135,37 @@ namespace
   // postOrderRebuild does the walking, on the heap: how deeply the input
   // nests is not this pass's choice, and a call per level exhausts the
   // stack. What is left here is the reduction of a single node.
+  ASTNode StrengthReduction::reduceNode(const ASTNode& n, NodeDomainAnalysis& nda)
+  {
+    ASTNode newN = n;
+    // buildMap memoises on the node, so it only needs redoing when the
+    // preceding reduction actually replaced the node.
+    nda.buildMap(newN);
+
+    ASTNode chased = chaseReadPastWrites(newN, nda);
+    if (chased != newN)
+    {
+      newN = chased;
+      nda.buildMap(newN);
+    }
+
+    ASTNode reduced = strengthReduction(newN, *nda.getCbitMap());
+
+    if (reduced != newN)
+    {
+      newN = reduced;
+      nda.buildMap(newN);
+    }
+    reduced = strengthReduction(newN, *nda.getIntervalMap());
+
+    if (reduced != newN)
+    {
+      newN = reduced;
+      nda.buildMap(newN);
+    }
+    return strengthReduction(newN, *nda.getValueSetMap());
+  }
+
   ASTNode StrengthReduction::visit(const ASTNode& n, NodeDomainAnalysis& nda, ASTNodeMap& cache)
   {
     return postOrderRebuild(
@@ -145,35 +176,7 @@ namespace
           else
             newN = nf->CreateArrayTerm(node.GetKind(), node.GetIndexWidth(),
                                        node.GetValueWidth(), children);
-
-          // buildMap memoises on the node, so it only needs redoing when the
-          // preceding reduction actually replaced the node.
-          nda.buildMap(newN);
-
-          ASTNode chased = chaseReadPastWrites(newN, nda);
-          if (chased != newN)
-          {
-            newN = chased;
-            nda.buildMap(newN);
-          }
-
-          ASTNode reduced = strengthReduction(newN, *nda.getCbitMap());
-
-          if (reduced != newN)
-          {
-            newN = reduced;
-            nda.buildMap(newN);
-          }
-          reduced = strengthReduction(newN, *nda.getIntervalMap());
-
-          if (reduced != newN)
-          {
-            newN = reduced;
-            nda.buildMap(newN);
-          }
-          newN = strengthReduction(newN, *nda.getValueSetMap());
-
-          return newN;
+          return reduceNode(newN, nda);
         });
   }
 

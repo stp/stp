@@ -795,27 +795,41 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     bm->ASTNodeStats("After Embedded Constraints: ", inputToSat);
   }
 
-  if (bm->UserFlags.propagate_equalities)
+  // With RemoveUnconstrained on, the equalities are propagated on its
+  // graph instead, in the same round and without the rebuild.
+  const bool equalitiesOnGraph = bm->UserFlags.propagate_equalities &&
+                                 bm->UserFlags.enable_unconstrained &&
+                                 bm->UserFlags.equalities_on_graph;
+  if (bm->UserFlags.propagate_equalities && !equalitiesOnGraph)
   {
     inputToSat = pe->topLevel(inputToSat);
     bm->ASTNodeStats(pe_message.c_str(), inputToSat);
   }
   
+  // The strength reductions run over the whole formula once, then ride
+  // on RemoveUnconstrained's graph: every node that pass builds is
+  // reduced as it is made, and a patched node's ancestors are re-reduced
+  // while their domains change. One graph, one export, both passes.
+  const bool reduce = bm->UserFlags.enable_use_intervals &&
+                      bm->UserFlags.bitConstantProp_flag;
+  StrengthReduction sr(bm->defaultNodeFactory, &bm->UserFlags);
+  if (reduce)
+  {
+    bm->GetRunTimes()->start(RunTimes::StrengthReduction);
+    inputToSat = sr.topLevel(inputToSat, *domain);
+    bm->GetRunTimes()->stop(RunTimes::StrengthReduction);
+    bm->ASTNodeStats(domain_message.c_str(), inputToSat);
+  }
+
   if (bm->UserFlags.enable_unconstrained)
   {
     RemoveUnconstrained r1(*bm);
+    if (reduce)
+      r1.withStrengthReduction(&sr, domain);
+    if (equalitiesOnGraph)
+      r1.withEqualities(pe);
     inputToSat = r1.topLevel(inputToSat, simp);
     bm->ASTNodeStats(uc_message.c_str(), inputToSat);
-  }
-
-  if (bm->UserFlags.enable_use_intervals && bm->UserFlags.bitConstantProp_flag)
-  {
-    bm->GetRunTimes()->start(RunTimes::StrengthReduction);
-    StrengthReduction sr(bm->defaultNodeFactory, &bm->UserFlags);
-    inputToSat = sr.topLevel(inputToSat, *domain);
-    bm->GetRunTimes()->stop(RunTimes::StrengthReduction);
-
-    bm->ASTNodeStats(domain_message.c_str(), inputToSat);
   }
 
   if (bm->UserFlags.enable_pure_literals)

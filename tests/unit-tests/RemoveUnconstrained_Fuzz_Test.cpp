@@ -48,7 +48,10 @@ THE SOFTWARE.
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/Parser/parser.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
+#include "stp/Simplifier/NodeDomainAnalysis.h"
+#include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/cpp_interface.h"
 #include <functional>
@@ -271,6 +274,19 @@ struct Fuzz
     const size_t k = 1 + pick(3);
     for (size_t i = 0; i < k; i++)
       conj.push_back(anyBool());
+    // Top-level definitions for the equality propagation to find.
+    if (std::getenv("MUTABLEGRAPH_FUZZ_PE") != NULL && !symbols.empty())
+    {
+      const size_t e = pick(3);
+      for (size_t i = 0; i < e; i++)
+      {
+        const ASTNode sym = symbols[pick(symbols.size())];
+        if (sym.GetValueWidth() == 0)
+          conj.push_back(coin(0.5) ? sym : hf->CreateNode(NOT, {sym}));
+        else
+          conj.push_back(hf->CreateNode(EQ, {sym, anyTerm(sym.GetValueWidth())}));
+      }
+    }
     return conj.size() == 1 ? conj[0] : hf->CreateNode(AND, conj);
   }
 
@@ -503,6 +519,7 @@ void runSeeds(bool imageVars)
   const char* only = std::getenv("MUTABLEGRAPH_FUZZ_ONLY");
   size_t skipped = 0, trivial = 0;
   size_t imageConstrained = 0; // category A, see the idempotence check
+  size_t reduced = 0;          // results the strength reductions changed
   for (int s = 1; s <= seeds; s++)
   {
     if (only != NULL && s != std::atoi(only))
@@ -537,8 +554,34 @@ void runSeeds(bool imageVars)
       continue;
     }
 
+    // MUTABLEGRAPH_FUZZ_SR: the strength reductions ride on the graph as
+    // well, so every reduction of a graph node is checked by the same
+    // oracle (pointwise identity or equisatisfiability).
+    const bool withSR = std::getenv("MUTABLEGRAPH_FUZZ_SR") != NULL;
+    NodeDomainAnalysis nda1(&fz.mgr);
+    StrengthReduction sr1(fz.mgr.defaultNodeFactory, &fz.mgr.UserFlags);
+    // MUTABLEGRAPH_FUZZ_PE: the top-level equalities are propagated on
+    // the graph first; the oracle back-substitutes their definitions
+    // like the pass's own.
+    const bool withPE = std::getenv("MUTABLEGRAPH_FUZZ_PE") != NULL;
+    fz.mgr.UserFlags.propagate_equalities = true;
+    PropagateEqualities pe1(&fz.simp, fz.mgr.defaultNodeFactory, &fz.mgr);
     RemoveUnconstrained r1(fz.mgr);
+    if (withSR)
+      r1.withStrengthReduction(&sr1, &nda1);
+    if (withPE)
+      r1.withEqualities(&pe1);
     const ASTNode result = r1.topLevel(f, &fz.simp);
+    if (withSR)
+    {
+      // How often the reductions change what the pass alone would give:
+      // the measure that the mode exercises them at all.
+      SubstitutionMap smPlain(&fz.mgr);
+      Simplifier simpPlain(&fz.mgr, &smPlain);
+      RemoveUnconstrained plain(fz.mgr);
+      if (plain.topLevel(f, &simpPlain) != result)
+        reduced++;
+    }
 
     // Idempotence. A run that made an image constraint is the known
     // exception: the constraint joins the formula after the graph is
@@ -556,7 +599,14 @@ void runSeeds(bool imageVars)
                                << "\nresult " << result << "\nrebuilt " << rebuilt;
     SubstitutionMap sm2(&fz.mgr);
     Simplifier simp2(&fz.mgr, &sm2);
+    NodeDomainAnalysis nda2(&fz.mgr);
+    StrengthReduction sr2(fz.mgr.defaultNodeFactory, &fz.mgr.UserFlags);
+    PropagateEqualities pe2(&simp2, fz.mgr.defaultNodeFactory, &fz.mgr);
     RemoveUnconstrained r2(fz.mgr);
+    if (withSR)
+      r2.withStrengthReduction(&sr2, &nda2);
+    if (withPE)
+      r2.withEqualities(&pe2);
     const ASTNode again = r2.topLevel(result, &simp2);
     if (r1.imageConstraintCount() > 0 && again != result)
       imageConstrained++;
@@ -581,7 +631,8 @@ void runSeeds(bool imageVars)
   }
   std::cerr << "seeds " << seeds << ", skipped (too many assignments) " << skipped
             << ", trivial " << trivial
-            << ", not idempotent after an image constraint " << imageConstrained << "\n";
+            << ", not idempotent after an image constraint " << imageConstrained
+            << ", changed by strength reduction " << reduced << "\n";
 }
 
 TEST(RemoveUnconstrainedFuzz, PointwiseIdentityAndIdempotence)

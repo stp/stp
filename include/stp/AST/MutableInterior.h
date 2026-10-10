@@ -65,6 +65,10 @@ class MutableInterior : public ASTInternal
   // The immutable nodes this one stands for. Their live immutable parents
   // are this node's parents too, and export follows them here.
   std::vector<uint64_t> origins_;
+  // The live immutable parents of those origins, kept as a running total:
+  // a node thousands of symbols were substituted by would otherwise be
+  // walked in full on every parent-count query.
+  size_t originLive_ = 0;
 
   // Replaced by another node; every holder has been repointed. Kept alive
   // by the graph until it is torn down, so a stale pointer in a pass is a
@@ -98,10 +102,13 @@ class MutableInterior : public ASTInternal
   // so the order of commutative children, which the rules read, is the
   // order the export will have. A node whose structure changes takes a
   // fresh number, as the export gives it a fresh node.
+public:
   static uint64_t freshNumber()
   {
     return node_uid_cntr.fetch_add(2, std::memory_order_relaxed) + 2;
   }
+
+private:
 
   MutableInterior(STPMgr* mgr, MutableGraph* graph, Kind kind,
                   ASTChildren children);

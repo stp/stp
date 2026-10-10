@@ -634,6 +634,17 @@ category = "simplification"
 help = "Refine interval analysis with sets of disjoint intervals (needs --use-intervals)"
 
 [[option]]
+name = "equalities-on-graph"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "equalities_on_graph" }
+category = "simplification"
+help = "Propagate top-level equalities on the unconstrained pass's graph, in the same round, instead of by a rebuild. Off: on formulas with hundreds of thousands of equalities the conversion of the region above them costs more than the rebuild."
+
+[[option]]
 name = "pure-literals"
 type = "bool"
 default = true

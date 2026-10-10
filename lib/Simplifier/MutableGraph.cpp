@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/MutableGraph.h"
+#include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/AST/ASTInterior.h"
 #include <algorithm>
 #include <climits>
@@ -189,7 +190,7 @@ ASTNode NormalisingNodeFactory::CreateNode(Kind kind, ASTChildren given)
 {
   ASTVec kids;
   graph.normalise(given, kids);
-  return inner.CreateNode(kind, ASTChildren(kids.data(), kids.size()));
+  return inner->CreateNode(kind, ASTChildren(kids.data(), kids.size()));
 }
 
 ASTNode NormalisingNodeFactory::CreateTerm(Kind kind, unsigned int width,
@@ -197,7 +198,7 @@ ASTNode NormalisingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 {
   ASTVec kids;
   graph.normalise(given, kids);
-  return inner.CreateTerm(kind, width, ASTChildren(kids.data(), kids.size()));
+  return inner->CreateTerm(kind, width, ASTChildren(kids.data(), kids.size()));
 }
 
 ASTNode NormalisingNodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
@@ -206,7 +207,7 @@ ASTNode NormalisingNodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
 {
   ASTVec kids;
   graph.normalise(given, kids);
-  return inner.CreateArrayTerm(kind, index, width,
+  return inner->CreateArrayTerm(kind, index, width,
                                ASTChildren(kids.data(), kids.size()));
 }
 
@@ -341,6 +342,8 @@ bool MutableGraph::liveImmutable(uint32_t idx) const
   return immutableParentCount(n) > 0;
 }
 
+// The walked form of the running totals; the invariant check compares
+// the two.
 size_t MutableGraph::originParentCount(
     const std::vector<uint64_t>& origins) const
 {
@@ -368,10 +371,27 @@ size_t MutableGraph::immutableParentCount(const ASTNode& n) const
   const auto m = mutParents_.find(n.GetNodeNum());
   if (m != mutParents_.end())
     count += m->second.size();
-  const auto o = immOrigins_.find(n.GetNodeNum());
-  if (o != immOrigins_.end())
-    count += originParentCount(o->second);
+  const auto o = immOriginLive_.find(n.GetNodeNum());
+  if (o != immOriginLive_.end())
+    count += o->second;
   return count;
+}
+
+void MutableGraph::creditOrigin(const ASTNode& origin, long delta)
+{
+  const ASTNode t = current(origin);
+  if (MutableInterior* m = asMutable(t))
+    m->originLive_ += delta;
+  else
+    immOriginLive_[t.GetNodeNum()] += delta;
+}
+
+void MutableGraph::liveDelta(uint32_t idx, long delta)
+{
+  liveImm_[idx] += delta;
+  const ASTNode& n = nodes_[idx];
+  if (isForwarded(n))
+    creditOrigin(n, delta);
 }
 
 size_t MutableGraph::parentCount(const ASTNode& node) const
@@ -381,7 +401,7 @@ size_t MutableGraph::parentCount(const ASTNode& node) const
   {
     if (m->dead_)
       return 0;
-    return m->parents_.size() + originParentCount(m->origins_);
+    return m->parents_.size() + m->originLive_;
   }
   return immutableParentCount(n);
 }
@@ -482,7 +502,7 @@ void MutableGraph::markStaleAbove(uint32_t start)
         stale_[p] = true;
         up.push_back(p);
         pendingStale_.push_back(p);
-        staleSorted_ = false;
+        std::push_heap(pendingStale_.begin(), pendingStale_.end(), staleAfter_);
       }
     };
     if (idx < imported_)
@@ -512,14 +532,10 @@ void MutableGraph::settle()
     // Lowest number first: an immutable node outnumbers its children, so
     // a stale node is converted after every stale node below it and the
     // conversion of a 20,000-deep chain does not recurse through it.
-    if (!staleSorted_)
-    {
-      // Highest number first in the vector, so the back is the lowest.
-      // Sorted once per batch; a node marked mid-batch (a rule's
-      // replacement) re-sorts what is left.
-      std::sort(pendingStale_.begin(), pendingStale_.end(), staleAfter_);
-      staleSorted_ = true;
-    }
+    // A heap, lowest number on top. A sort-on-demand was tried instead
+    // and re-sorted the whole remainder whenever a conversion marked a
+    // new stale node, which a batch of substitutions does constantly.
+    std::pop_heap(pendingStale_.begin(), pendingStale_.end(), staleAfter_);
     const uint32_t idx = pendingStale_.back();
     pendingStale_.pop_back();
     const ASTNode n = nodes_[idx];
@@ -572,6 +588,10 @@ void MutableGraph::unregisterParentEdge(MutableInterior* parent,
     const auto it = std::find(ps.begin(), ps.end(), parent);
     assert(it != ps.end());
     ps.erase(it);
+    // A parent still holding a forwarded handle was counted on the
+    // node it stands for (moveStanding took it in); not any more.
+    if (isForwarded(child))
+      creditOrigin(child, -1);
   }
   note(Change::CountChanged, child);
   if (parentCount(child) == 0 && !isRoot(child))
@@ -623,7 +643,7 @@ void MutableGraph::attach(const ASTNode& start)
         assert(!fresh || (!isForwarded(c) && !isStale(c)));
         const size_t before = parentCount(c);
         const uint32_t ci = indexOf(c);
-        liveImm_[ci]++;
+        liveDelta(ci, +1);
         if (fresh)
           extraParents_[c.GetNodeNum()].push_back(idx);
         note(Change::CountChanged, c);
@@ -678,7 +698,7 @@ void MutableGraph::detach(const ASTNode& start)
       {
         const uint32_t ci = indexOf(c);
         assert(liveImm_[ci] > 0);
-        liveImm_[ci]--;
+        liveDelta(ci, -1);
         note(Change::CountChanged, c);
         if (parentCount(c) == 0 && !isRoot(c))
           stack.push_back(current(c)); // a replaced child: its successor leaves
@@ -897,6 +917,7 @@ ASTNode MutableGraph::rebuildDetached(const ASTNode& n)
   {
     origins.insert(origins.end(), io->second.begin(), io->second.end());
     immOrigins_.erase(io);
+    immOriginLive_.erase(n.GetNodeNum());
   }
   moveStanding(origins, r, false);
   return r;
@@ -1075,6 +1096,7 @@ void MutableGraph::standFor(const ASTNode& n, const ASTNode& givenTarget,
   {
     origins.insert(origins.end(), io->second.begin(), io->second.end());
     immOrigins_.erase(io);
+    immOriginLive_.erase(n.GetNodeNum());
   }
   moveStanding(origins, target, edited);
   note(Change::CountChanged, target);
@@ -1084,7 +1106,7 @@ void MutableGraph::standFor(const ASTNode& n, const ASTNode& givenTarget,
   {
     const uint32_t ci = indexOf(c);
     assert(liveImm_[ci] > 0);
-    liveImm_[ci]--;
+    liveDelta(ci, -1);
     note(Change::CountChanged, c);
     if (parentCount(c) == 0 && !isRoot(c))
       detach(current(c)); // a replaced child: its successor leaves
@@ -1157,10 +1179,17 @@ ASTNode MutableGraph::runRules(Kind kind, unsigned index, unsigned width,
                                ASTChildren kids)
 {
   if (index > 0)
-    return simplifying_.CreateArrayTerm(kind, index, width, kids);
+    return rules_->CreateArrayTerm(kind, index, width, kids);
   if (width > 0)
-    return simplifying_.CreateTerm(kind, width, kids);
-  return simplifying_.CreateNode(kind, kids);
+    return rules_->CreateTerm(kind, width, kids);
+  return rules_->CreateNode(kind, kids);
+}
+
+void MutableGraph::installReducer(NodeFactory& layer, NodeDomainAnalysis& domains)
+{
+  rules_ = &layer;
+  normalising_.setInner(layer);
+  domains_ = &domains;
 }
 
 ASTNode MutableGraph::runRules(MutableInterior* m)
@@ -1356,11 +1385,32 @@ void MutableGraph::drainDirty()
       }
     }
     renumber(m); // its structure is new: a new number, above its children
+    // A patched node's memoised domains describe its old children:
+    // recomputed from the current ones before the rules look, and a
+    // domain that changed is news for every parent whatever the horizon
+    // says.
+    bool domainChanged = false;
+    if (domains_ != NULL)
+    {
+      NodeDomainAnalysis::DomainInfo was = domains_->take(ASTNode(m));
+      if (was.bits != NULL)
+      {
+        const NodeDomainAnalysis::DomainInfo now = domains_->recompute(ASTNode(m));
+        domainChanged = !NodeDomainAnalysis::same(was, now);
+        NodeDomainAnalysis::release(was);
+      }
+    }
     const ASTVec kids(m->children_);
     MG_TRACE("rules on " << m->GetNodeNum() << " kind " << m->GetKind());
     const ASTNode fresh = normalise(runRules(m->GetKind(), m->getIndexWidth(),
                                              m->getValueWidth(),
                                              ASTChildren(kids.data(), kids.size())));
+    if (domainChanged && !m->dead_ && fresh == ASTNode(m))
+    {
+      const std::vector<MutableInterior*> ps(m->parents_);
+      for (MutableInterior* p : ps)
+        markDirty(p, HORIZON);
+    }
     // A replacement re-keys the holders, which queues them; the parents of
     // the node m becomes are not touched otherwise, their cones unchanged.
     if (!m->dead_ && fresh != ASTNode(m))
@@ -1432,11 +1482,17 @@ void MutableGraph::moveStanding(const std::vector<uint64_t>& origins,
       editedForward_.insert(o);
     markStaleAbove(index_.at(o));
   }
+  // What the origins bring: their own live parents, once, on arrival.
+  const size_t standing = originParentCount(origins);
   if (MutableInterior* m = asMutable(to))
+  {
     m->origins_.insert(m->origins_.end(), origins.begin(), origins.end());
+    m->originLive_ += standing;
+  }
   else
   {
     indexOf(to);
+    immOriginLive_[to.GetNodeNum()] += standing;
     auto& v = immOrigins_[to.GetNodeNum()];
     v.insert(v.end(), origins.begin(), origins.end());
   }
@@ -1525,6 +1581,36 @@ void MutableGraph::replace(const ASTNode& node, const ASTNode& by)
   standFor(n, target, true);
 }
 
+void MutableGraph::substitute(const ASTNode& symbol, const ASTNode& by)
+{
+  MutableGraphNest nest(*this);
+  assert(symbol.GetKind() == SYMBOL);
+  assert(current(symbol) == symbol); // substituted once
+  if (parentCount(symbol) == 0 && !isRoot(symbol))
+    return;
+  const ASTNode target = normalise(by);
+  assert(target != symbol);
+  standFor(symbol, target, true);
+}
+
+bool MutableGraph::contains(const ASTNode& n, const ASTNode& symbol) const
+{
+  std::vector<ASTNode> stack(1, current(n));
+  ankerl::unordered_dense::set<uintptr_t> seen;
+  while (!stack.empty())
+  {
+    const ASTNode x = stack.back();
+    stack.pop_back();
+    if (x == symbol)
+      return true;
+    if (!seen.insert(identity(x)).second)
+      continue;
+    for (const ASTNode& c : x)
+      stack.push_back(current(c));
+  }
+  return false;
+}
+
 void MutableGraph::kill(MutableInterior* n)
 {
   if (n->dead_)
@@ -1541,13 +1627,23 @@ void MutableGraph::kill(MutableInterior* n)
 
 ASTNode MutableGraph::exportRoot()
 {
-  return rebuild(root_);
+  ExportMemo memo;
+  return rebuild(root_, memo);
+}
+
+void MutableGraph::exportNodes(const std::vector<ASTNode>& in,
+                               std::vector<ASTNode>& out)
+{
+  ExportMemo memo;
+  out.reserve(out.size() + in.size());
+  for (const ASTNode& n : in)
+    out.push_back(rebuild(current(n), memo));
 }
 
 // Hash-cons the current formula under n. Immutable nodes with no replaced
 // descendant return as they are; the ancestors of a replaced node, and
 // every mutable node, are rebuilt bottom-up through the hashing factory.
-ASTNode MutableGraph::rebuild(const ASTNode& top)
+ASTNode MutableGraph::rebuild(const ASTNode& top, ExportMemo& memo)
 {
   auto unchanged = [&](const ASTNode& n) {
     if (n.isMutableInterior() || n.Degree() == 0)
@@ -1560,7 +1656,6 @@ ASTNode MutableGraph::rebuild(const ASTNode& top)
     return !stale_[idx];
   };
 
-  ankerl::unordered_dense::map<uint64_t, ASTNode> memo;
   struct Frame
   {
     ASTNode n;
@@ -1682,6 +1777,21 @@ bool MutableGraph::checkInvariant(std::string* why) const
       return false;
     }
 
+  // Running origin totals agree with the walk.
+  for (const ASTNode& h : owned_)
+  {
+    const MutableInterior* m = asMutable(h);
+    if (!m->dead_ && m->originLive_ != originParentCount(m->origins_))
+      return fail("a mutable node's origin total disagrees with the walk");
+  }
+  for (const auto& e : immOrigins_)
+  {
+    const auto it = immOriginLive_.find(e.first);
+    const size_t cached = it == immOriginLive_.end() ? 0 : it->second;
+    if (!isForwarded(ASTNode(nodes_[index_.at(e.first)])) &&
+        cached != originParentCount(e.second))
+      return fail("an immutable node's origin total disagrees with the walk");
+  }
   // Table and back-pointers.
   for (const ASTNode& h : owned_)
   {
