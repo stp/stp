@@ -57,13 +57,19 @@ ABC's headers and the two have to agree, so they are recorded in the
 directory's stamp and a mismatch is reported.
 
 ``-DABC_DIR`` points at an existing ABC build, which is how to work on
-the ``stp/abc`` fork -- see :doc:`code-guide`.
+the ``stp/abc`` fork -- see :doc:`code-guide`. STP applies
+``cmake/deps-utils/abc-checked-allocations.patch`` to the ABC it builds:
+failed allocations throw ``std::bad_alloc`` through its C frames instead
+of returning unchecked null pointers. An external ABC needs the same
+patch and a rebuild to provide that behaviour.
 
 mimalloc is the exception: STP configures its build rather than
 consuming its output, so it is fetched with CMake's FetchContent, which
 downloads during configuration so that ``add_subdirectory`` has
 something to descend into. ``-DFETCHCONTENT_SOURCE_DIR_MIMALLOC``
 names an existing checkout.
+STP builds mimalloc with its C++ compiler so that a failed ``new`` throws
+``std::bad_alloc``; mimalloc's C implementation aborts instead.
 
 The command-line parser `CLI11 <https://github.com/CLIUtils/CLI11>`__ and
 the header-only floating-point library

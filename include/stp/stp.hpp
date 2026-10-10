@@ -315,6 +315,7 @@ public:
   ~Error() override;
 
 protected:
+  // Null is the RESOURCE fallback when even an error record cannot be allocated.
   std::shared_ptr<const detail::ErrorDetails> d_;
 };
 /// The call had no effect.
@@ -1284,8 +1285,10 @@ public:
   void pop(std::uint32_t n = 1); ///< INVALID_ARGUMENT if n > level(); nothing removed
   std::uint32_t level() const noexcept;
   /// The logic the last parse that succeeded named in its set-logic, or ""
-  /// when it named none; a failed parse leaves it as it was. A script's
-  /// set-logic does not set the `logic` option, which is the caller's.
+  /// when it named none or a reset came after it (the script's own (reset),
+  /// reset() or reset_assertions()); a failed parse leaves it as it was. A
+  /// script's set-logic does not set the `logic` option, which is the
+  /// caller's.
   std::string declared_logic() const;
   std::vector<Term> assertions() const; ///< outermost first
   void reset_assertions(); ///< keeps options; clears a before-search hook not yet used

@@ -1176,8 +1176,10 @@ void Cpp_interface::reset()
   if (GlobalSTP != NULL)
     GlobalSTP->incrementalSolvesRun = 0;
 
-  // A reason-unknown belongs to the session that produced it.
+  // A reason-unknown belongs to the session that produced it, and so does
+  // the logic a set-logic named (Solver::declared_logic).
   bm.clearUnknown();
+  declared_logic.clear();
 
   cleanUp();
 

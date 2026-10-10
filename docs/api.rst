@@ -66,6 +66,9 @@ does not fit its width) is a ``PARSE`` error with the solver as it was, and an
 engine failure inside any call is ``INTERNAL`` and poisons the manager, after
 which every call on it, its solvers, models and terms is refused with
 ``STATE`` naming the failure.
+An allocation failure is ``RESOURCE`` and also poisons the manager. If
+recording that error cannot allocate, its message is a fixed string and
+its optional details are empty.
 
 Names supplied to ``declare``, ``declare_sort`` and ``bind_symbol``, and
 prefixes supplied to ``mk_fresh`` and ``mk_fresh_sort``, must be representable
@@ -285,7 +288,9 @@ a declaration after the ``check-sat`` -- or a script without a
 caller then decides the query with its own ``check_sat``, under its own
 options. ``Solver::declared_logic()`` (C ``stp_solver_declared_logic``,
 Python ``declared_logic()``) is the logic the last successful parse named in
-``set-logic``, empty when it named none; it is not the ``logic`` option.
+``set-logic``, empty when it named none or a reset came after it (a
+script's ``(reset)``, ``reset`` or ``reset_assertions``); it is not the
+``logic`` option.
 
 A parse that fails part way, in any mode, leaves the solver as it was: its
 assertion stack, without the symbols the script declared, and its declared

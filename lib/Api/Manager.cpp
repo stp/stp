@@ -49,6 +49,10 @@ THE SOFTWARE.
 #include <ostream>
 #include <unordered_set>
 
+#ifdef USE_MINISAT
+#include <minisat/mtl/XAlloc.h>
+#endif
+
 namespace stp
 {
 namespace api
@@ -163,14 +167,22 @@ void ManagerImpl::check_alive(const char* fn)
 
 namespace
 {
-void poison(ManagerImpl* m, const char* fn, const std::string& what)
+void poison(ManagerImpl* m, const char* fn, std::string_view what)
 {
-  const std::string where = fn ? fn : "";
   if (m != nullptr && !m->poisoned)
   {
     m->poisoned = true;
-    m->poison_message =
-        "an engine failure in " + where + " (" + what + ") may have left its state inconsistent";
+    try
+    {
+      const std::string where = fn ? fn : "";
+      m->poison_message =
+          "an engine failure in " + where + " (" + std::string(what) +
+          ") may have left its state inconsistent";
+    }
+    catch (const std::bad_alloc&)
+    {
+      // The state is unsafe even when recording why cannot allocate.
+    }
   }
 }
 } // namespace
@@ -188,6 +200,28 @@ void fail_foreign(ManagerImpl* m, const char* fn, const std::exception& e)
     fail_engine(m, fn, e.what());
   poison(m, fn, "out of memory");
   fail_resource(fn, "out of memory; the term manager is poisoned and refuses every later call");
+}
+
+void fail_foreign(ManagerImpl* m, const char* fn, std::exception_ptr exception)
+{
+  try
+  {
+    std::rethrow_exception(exception);
+  }
+#ifdef USE_MINISAT
+  catch (const Minisat::OutOfMemoryException&)
+  {
+    fail_foreign(m, fn, std::bad_alloc());
+  }
+#endif
+  catch (const std::exception& e)
+  {
+    fail_foreign(m, fn, e);
+  }
+  catch (...)
+  {
+    fail_engine(m, fn, "an exception that is not a std::exception unwound through the engine");
+  }
 }
 
 void check_uf_sort_width(std::uint64_t width, const char* fn, std::optional<int> arg)

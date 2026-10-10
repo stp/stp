@@ -1,0 +1,79 @@
+diff --git a/src/misc/util/abc_global.h b/src/misc/util/abc_global.h
+--- a/src/misc/util/abc_global.h
++++ b/src/misc/util/abc_global.h
+@@ -263,3 +263,37 @@
+-#define ABC_ALLOC(type, num)     ((type *) malloc(sizeof(type) * (size_t)(num)))
+-#define ABC_CALLOC(type, num)    ((type *) calloc((size_t)(num), sizeof(type)))
+-#define ABC_FALLOC(type, num)    ((type *) memset(malloc(sizeof(type) * (size_t)(num)), 0xff, sizeof(type) * (size_t)(num)))
++/* STP catches allocation failure at its C++ API boundary. Never publish a
++ * null buffer to ABC's callers, which assume allocation succeeded. */
++#define ABC_STP_CHECKED_ALLOCATIONS 1
++extern void Abc_ThrowBadAlloc( void );
++
++static inline size_t Abc_AllocSize( size_t size, size_t count )
++{
++    if ( count && size > (size_t)-1 / count )
++        Abc_ThrowBadAlloc();
++    return size * count;
++}
++static inline void * Abc_AllocMemory( size_t size )
++{
++    void * result = malloc( size ? size : 1 );
++    if ( !result )
++        Abc_ThrowBadAlloc();
++    return result;
++}
++static inline void * Abc_CallocMemory( size_t size, size_t count )
++{
++    size_t bytes = Abc_AllocSize( size, count );
++    void * result = calloc( bytes ? bytes : 1, 1 );
++    if ( !result )
++        Abc_ThrowBadAlloc();
++    return result;
++}
++static inline void * Abc_ReallocMemory( void * ptr, size_t size )
++{
++    void * result = realloc( ptr, size ? size : 1 );
++    if ( !result )
++        Abc_ThrowBadAlloc();
++    return result;
++}
++
++#define ABC_ALLOC(type, num)     ((type *) Abc_AllocMemory(Abc_AllocSize(sizeof(type), (size_t)(num))))
++#define ABC_CALLOC(type, num)    ((type *) Abc_CallocMemory(sizeof(type), (size_t)(num)))
++#define ABC_FALLOC(type, num)    ((type *) memset(ABC_ALLOC(type, num), 0xff, Abc_AllocSize(sizeof(type), (size_t)(num))))
+@@ -268,2 +302 @@
+-        ((obj) ? ((type *) realloc((char *)(obj), sizeof(type) * (size_t)(num))) : \
+-         ((type *) malloc(sizeof(type) * (size_t)(num))))
++        ((type *) Abc_ReallocMemory((void *)(obj), Abc_AllocSize(sizeof(type), (size_t)(num))))
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -93,0 +94,5 @@
++# Allocation failures cross ABC's C frames on their way to STP's handler.
++# C++ unwinding needs exception tables even in translation units with no
++# cleanup of their own.
++list(APPEND ABC_SRC src/misc/util/utilAlloc.cpp)
++
+@@ -96,0 +102,3 @@
++    if(NOT MSVC)
++        target_compile_options(${target} PRIVATE -fexceptions)
++    endif()
+diff --git a/src/misc/util/utilAlloc.cpp b/src/misc/util/utilAlloc.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/misc/util/utilAlloc.cpp
+@@ -0,0 +1,13 @@
++// ABC's checked C allocation helpers report exhaustion to the embedding
++// C++ caller. Keep the throw here so ABC itself can still be compiled as C.
++#include <new>
++#include "misc/util/abc_global.h"
++
++ABC_NAMESPACE_IMPL_START
++
++void Abc_ThrowBadAlloc( void )
++{
++    throw std::bad_alloc();
++}
++
++ABC_NAMESPACE_IMPL_END

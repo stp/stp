@@ -915,17 +915,13 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
     // noted: this check has no answer
     out = SOLVER_UNDECIDED;
   }
-  catch (const std::exception& e)
+  catch (...)
   {
     // Anything else that unwound through the engine -- a backend refusing
     // its configuration, a callback's exception, an allocation failing --
     // left its tables in no known state: INTERNAL, or RESOURCE for
     // std::bad_alloc, and the manager poisoned, as for an engine failure.
-    fail_foreign(mgr, fn, e);
-  }
-  catch (...)
-  {
-    fail_engine(mgr, fn, "an exception that is not a std::exception unwound through the check");
+    fail_foreign(mgr, fn, std::current_exception());
   }
   last_wall = std::chrono::steady_clock::now() - started;
   const std::array<double, 4> phases_after = phase_totals(*bm->GetRunTimes());
@@ -1489,6 +1485,7 @@ void Solver::reset_assertions()
   s->assertion_names.clear();
   s->model.reset();
   s->candidate.reset();
+  s->declared_logic.clear();
 }
 
 void Solver::reset()
@@ -1498,6 +1495,7 @@ void Solver::reset()
   s->clear_before_search();
   s->options.reset_all();
   s->rebuild_engine();
+  s->declared_logic.clear();
 }
 
 Result Solver::check_sat()
@@ -2253,14 +2251,14 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
                  "the input holds a NUL byte at offset " + std::to_string(nul.offset) +
                      ", where the parser would stop reading");
   }
-  catch (const std::exception& e)
+  catch (...)
   {
     // anything else the engine threw inside the script, reported as
     // engine_call reports it, with the stack put back
     smt2lex_destroy();
     pi.retainUFDeclarations(false);
     restore_stack();
-    detail::fail_foreign(s->mgr, fn, e);
+    detail::fail_foreign(s->mgr, fn, std::current_exception());
   }
   smt2lex_destroy();
   // A command the frontend answered with (error ...) and then skipped (an
@@ -2579,11 +2577,11 @@ Term Solver::parse_term(std::string_view text) const
       bm->UserFlags.smtlib2_parser_flag = saved_smt2;
       detail::fail_engine(s->mgr, "Solver::parse_term", e.what());
     }
-    catch (const std::exception& e)
+    catch (...)
     {
       smt2lex_destroy();
       bm->UserFlags.smtlib2_parser_flag = saved_smt2;
-      detail::fail_foreign(s->mgr, "Solver::parse_term", e);
+      detail::fail_foreign(s->mgr, "Solver::parse_term", std::current_exception());
     }
     smt2lex_destroy();
     bm->UserFlags.smtlib2_parser_flag = saved_smt2;

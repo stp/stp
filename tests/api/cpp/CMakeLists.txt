@@ -46,6 +46,27 @@ AddSTPGTest(array-fill-models.cpp)
 AddSTPGTest(parsing.cpp)
 AddSTPGTest(errors.cpp)
 AddSTPGTest(engine-failure.cpp)
+# This fault injector supplies a matching new/delete pair and must keep it
+# active under both the configured allocator and Memcheck.
+function(add_resource_failure_test)
+    set(STP_ALLOCATOR_LIBRARY "")
+    list(APPEND VALGRIND_ARGS --soname-synonyms=somalloc=nouserintercepts)
+    AddSTPGTest(resource-failure.cpp)
+endfunction()
+add_resource_failure_test()
+
+# Address-space limits cannot coexist with sanitizer shadow mappings.
+if(BUILD_EXECUTABLES AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+   NOT SANITIZE AND NOT USE_VALGRIND AND
+   NOT "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS} ${CMAKE_EXE_LINKER_FLAGS}" MATCHES "sanitize=")
+    add_executable(allocation-limit allocation-limit.cpp)
+    target_link_libraries(allocation-limit stp)
+    add_test(NAME allocation-limits
+             COMMAND ${PYTHON_EXECUTABLE}
+                     ${PROJECT_SOURCE_DIR}/tests/api/allocation_limits.py
+                     $<TARGET_FILE:stp-bin> $<TARGET_FILE:allocation-limit>)
+    set_tests_properties(allocation-limits PROPERTIES TIMEOUT 180)
+endif()
 AddSTPGTest(rosetta.cpp)
 AddSTPGTest(const-arrays.cpp)
 AddSTPGTest(boolean-arrays.cpp)
