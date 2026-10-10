@@ -168,6 +168,10 @@ protected:
   // retaining discarded scopes. Used by lra::Frontend::containsRealSyntax.
   mutable bool real_syntax_known : 1;
   mutable bool real_syntax_present : 1;
+  // Set only by MutableInterior: the node belongs to a MutableGraph, is
+  // keyed in that graph's table rather than the manager's, and may be
+  // edited. The manager's table refuses a child with this bit.
+  bool mutable_interior : 1;
 
   mutable uint8_t iteration;
 
@@ -196,7 +200,7 @@ public:
       : nodeManager(mgr), node_uid(node_uid_cntr.fetch_add(2, std::memory_order_relaxed) + 2),
         _ref_count(0),
         _kind(kind), exposed(false), real_syntax_known(false),
-        real_syntax_present(false), iteration(0)
+        real_syntax_present(false), mutable_interior(false), iteration(0)
   {
   }
 
@@ -208,7 +212,7 @@ public:
   ASTInternal(const ASTInternal& int_node)
       : nodeManager(int_node.nodeManager), node_uid(int_node.node_uid),
         _ref_count(0), _kind(int_node._kind), exposed(false),
-        real_syntax_known(false), real_syntax_present(false), iteration(0)
+        real_syntax_known(false), real_syntax_present(false), mutable_interior(false), iteration(0)
 
   {
   }

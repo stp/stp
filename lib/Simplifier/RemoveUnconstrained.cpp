@@ -59,7 +59,7 @@ THE SOFTWARE.
  */
 
 #include "stp/Simplifier/RemoveUnconstrained.h"
-#include "stp/AST/MutableASTNode.h"
+#include <cstdlib>
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
@@ -73,7 +73,7 @@ namespace stp
 {
 using simplifier::constantBitP::Dependencies;
 
-RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm)
+RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm), checkGraph(getenv("STP_RU_CHECK_GRAPH") != NULL)
 {
   nf = _bm.defaultNodeFactory;
   simplifier = NULL;
@@ -191,7 +191,7 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
                                alsoUntouchable->end());
     effective = &mergedUntouchable;
   }
-  MutableASTNode::UntouchableScope protect(effective);
+  untouchable = effective;
   passUntouchable = effective == NULL ? NULL : &mergedUntouchable;
 
   bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
@@ -215,6 +215,7 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
 
   bm.GetRunTimes()->stop(RunTimes::RemoveUnconstrained);
   passUntouchable = NULL;
+  untouchable = NULL;
   return result;
 }
 
@@ -227,14 +228,6 @@ static bool eligibleArray(const ASTNode& n)
          !n.GetSourceSort().usesFloatingPointTheory();
 }
 
-bool allChildrenAreUnconstrained(vector<MutableASTNode*> children)
-{
-  for (size_t i = 0; i < children.size(); i++)
-    if (!children[i]->isUnconstrained())
-      return false;
-
-  return true;
-}
 
 static bool isRNEConstant(const ASTNode& n)
 {
@@ -280,20 +273,144 @@ ASTNode RemoveUnconstrained::freshLike(const ASTNode& like,
                                 prefix);
 }
 
-ASTNode
-RemoveUnconstrained::replaceParentWithFresh(MutableASTNode& mute,
-                                            vector<MutableASTNode*>& variables)
+bool RemoveUnconstrained::singleParent(const ASTNode& n, ASTNode& parent)
 {
-  const ASTNode& parent = mute.n;
-  // An array-sorted parent (a write, or an if-then-else over arrays)
+  std::vector<ASTNode> ps;
+  g->parents(n, ps);
+  if (ps.empty())
+    return false;
+  // One distinct parent: a node used twice by the same parent, as in
+  // (bvmul t t), still has one place that reads it.
+  for (size_t i = 1; i < ps.size(); i++)
+    if (ps[i] != ps[0])
+      return false;
+  parent = ps[0];
+  return true;
+}
+
+bool RemoveUnconstrained::unconstrained(const ASTNode& n)
+{
+  if (n.GetKind() != SYMBOL)
+    return false;
+  // A protected symbol is never free to be given a value here, however
+  // it occurs.
+  if (untouchable != NULL && untouchable->find(n) != untouchable->end())
+    return false;
+  ASTNode parent;
+  return singleParent(n, parent);
+}
+
+// As the graph sees them now: a replaced child is its replacement, and a
+// child standing above a replacement is converted, so that what the
+// rules read below it is current structure.
+void RemoveUnconstrained::kidsOf(const ASTNode& n, ASTVec& out)
+{
+  out.clear();
+  for (const ASTNode& c : n)
+    out.push_back(g->normalise(c));
+}
+
+void RemoveUnconstrained::variablesIn(const ASTNode& n,
+                                      std::vector<ASTNode>& out)
+{
+  ASTNodeSet seen;
+  std::vector<ASTNode> stack;
+  stack.push_back(g->current(n));
+  while (!stack.empty())
+  {
+    const ASTNode cur = stack.back();
+    stack.pop_back();
+    if (!seen.insert(cur).second)
+      continue;
+    if (cur.GetKind() == SYMBOL)
+      out.push_back(cur);
+    for (const ASTNode& c : cur)
+      stack.push_back(g->current(c));
+  }
+}
+
+// Symbols whose parent count changed are candidates again: the fresh
+// symbol a rule put in, and the symbols under whatever it took out.
+void RemoveUnconstrained::drain()
+{
+  auto requeue = [this](std::unordered_map<uint64_t, std::vector<ASTNode>>& m,
+                        uint64_t key) {
+    const auto d = m.find(key);
+    if (d == m.end())
+      return;
+    worklist.insert(worklist.end(), d->second.begin(), d->second.end());
+    m.erase(d);
+  };
+  for (const MutableGraph::Change& c : g->changes())
+  {
+    if (c.what != MutableGraph::Change::CountChanged)
+      continue;
+    // The event names the handle whose count changed; a record may have
+    // been keyed by what stands for it now.
+    requeue(blockedOn, c.node.GetNodeNum());
+    requeue(blockedOn, g->current(c.node).GetNodeNum());
+    if (c.node.GetKind() != SYMBOL)
+      continue;
+    worklist.push_back(c.node);
+    requeue(deferredOn, c.node.GetNodeNum());
+  }
+  g->clearChanges();
+}
+
+void RemoveUnconstrained::splice(const ASTNode& node, const ASTNode& by)
+{
+  // The nodes that held `node` now hold `by`: their other children, if
+  // symbols, may qualify for a rule with the new sibling that they did
+  // not with the old one. Bounded as the wide-conjunction check is.
+  std::vector<ASTNode> holders;
+  g->parents(node, holders);
+  if (checkGraph)
+    std::cerr << "  [ru] splice " << node.GetNodeNum() << " kind " << node.GetKind()
+              << " -> " << by.GetNodeNum() << " kind " << by.GetKind()
+              << " (" << holders.size() << " holders)" << std::endl;
+
+  g->replace(node, by);
+  if (checkGraph)
+  {
+    std::string why;
+    if (!g->checkInvariant(&why))
+      FatalError(("RemoveUnconstrained: graph invariant broken: " + why).c_str());
+  }
+  drain();
+
+  for (const ASTNode& h : holders)
+  {
+    const ASTNode q = g->current(h);
+    if (q.Degree() > 200)
+      continue;
+    for (const ASTNode& c : q)
+      if (c.GetKind() == SYMBOL)
+        worklist.push_back(c);
+  }
+  // The symbols inside `by` sit under new structure (a comparison
+  // rewritten as a predicate over the sibling, say) and may qualify for
+  // a rule there that they did not where they were. A symbol itself has
+  // no inside; a replacement over a handful of nodes is the usual case.
+  if (by.GetKind() != SYMBOL && !by.isConstant())
+  {
+    std::vector<ASTNode> inside;
+    variablesIn(by, inside);
+    for (const ASTNode& v : inside)
+      worklist.push_back(v);
+  }
+}
+
+ASTNode RemoveUnconstrained::replaceWithFresh(const ASTNode& node)
+{
+  // An array-sorted node (a write, or an if-then-else over arrays)
   // needs an array-sorted stand-in; the index width is zero for
   // everything else, so this is the ordinary case too.
-  ASTNode v = freshLike(parent, "unconstrained");
-  // A float-valued parent's stand-in must carry the format too, or the
+  ASTNode v = freshLike(node, "unconstrained");
+  // A float-valued node's stand-in must carry the format too, or the
   // blaster later meets a formatless bitvector where a float belongs.
-  v.SetExpWidth(parent.GetExpWidth());
-  v.SetSigWidth(parent.GetSigWidth());
-  mute.replaceWithVar(v, variables);
+  v.SetExpWidth(node.GetExpWidth());
+  v.SetSigWidth(node.GetSigWidth());
+  splice(node, v);
   return v;
 }
 
@@ -303,6 +420,9 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
 {
   assert(from.GetKind() == SYMBOL);
   assert(from.GetValueWidth() == to.GetValueWidth());
+  if (checkGraph)
+    std::cerr << "  [ru] define " << from.GetNodeNum() << " (count "
+              << (g != NULL ? g->parentCount(from) : 0) << ")" << std::endl;
   if (simplifier->UpdateSubstitutionMapFewChecks(from, to))
     return;
 
@@ -698,9 +818,9 @@ static void enumerateChainExtremes(const std::vector<GroundStep>& steps,
  * the image, t(projection(v)) differs from v, which is exactly what the
  * conjoined constraint excludes.
  */
-bool RemoveUnconstrained::tryImageConstrainShared(
-    const ASTNode& var, MutableASTNode& sharedNode, const GroundStep& step,
-    vector<MutableASTNode*>& variables)
+bool RemoveUnconstrained::tryImageConstrainShared(const ASTNode& var,
+                                                  const ASTNode& sharedNode,
+                                                  const GroundStep& step)
 {
   if (step.samePathAllOperands)
     return false; // squares: image genuinely scattered
@@ -870,9 +990,10 @@ bool RemoveUnconstrained::tryImageConstrainShared(
   assert(projection.GetValueWidth() == var.GetValueWidth());
   assert(passUntouchable != NULL);
   passUntouchable->insert(v);
-  sharedNode.replaceWithVar(v, variables);
+  splice(sharedNode, v);
   replace(var, projection);
   imageConstraints.push_back(constraint);
+  imageConstraintsMade++;
   return true;
 }
 
@@ -902,10 +1023,8 @@ bool RemoveUnconstrained::tryImageConstrainShared(
  * under the recorded definition every occurrence of it evaluates to v
  * (or to the distributed ITE, which is a pure equivalence).
  */
-bool RemoveUnconstrained::tryGroundPathCollapse(
-    MutableASTNode& muteNode, vector<MutableASTNode*>& variables)
+bool RemoveUnconstrained::tryGroundPathCollapse(const ASTNode& var)
 {
-  const ASTNode var = muteNode.n;
   if (var.GetValueWidth() == 0 || var.GetIndexWidth() != 0)
     return false;
 
@@ -913,31 +1032,36 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   // the predicate's constant before the image is built lets it be used as
   // a seed hint when the image degrades to samples.
   std::vector<GroundStep> steps;
-  MutableASTNode* predicate = NULL;
+  ASTNode predicate;
   Kind predKind = UNDEFINED;
   bool pathFirst = false;
   ASTNode predConst;
-  MutableASTNode* predOther = NULL; // set instead when the side is symbolic.
+  ASTNode predOther; // set instead when the side is symbolic.
 
   // ITE frames on the path, innermost first. Each frame costs one
   // rebuilt predicate around its other branch, so growth is linear in
   // the frame count; the cap bounds it.
   struct IteFrame
   {
-    MutableASTNode* cond;
-    MutableASTNode* other;
+    ASTNode cond;
+    ASTNode other;
     bool pathThen;
     size_t stepsBelow;
   };
   const size_t MAX_ITE_FRAMES = 4;
   std::vector<IteFrame> frames;
 
-  MutableASTNode* cur = &muteNode;
+  ASTNode cur = var;
+  ASTVec kids;
   for (unsigned depth = 0; depth < AchievableImage::MAX_PATH; depth++)
   {
-    MutableASTNode& parent = cur->getParent();
-    const ASTNode& p = parent.n;
-    const vector<MutableASTNode*>& kids = parent.children;
+    ASTNode p;
+    if (!singleParent(cur, p))
+      return false;
+    // Normalised, so that the grandparent's (normalised) children name
+    // it by the same handle when the walk compares them.
+    p = g->normalise(p);
+    kidsOf(p, kids);
 
     if (p.GetValueWidth() == 0)
     {
@@ -949,15 +1073,15 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
       pathFirst = (kids[0] == cur);
       if (kids[0] == kids[1] || (!pathFirst && kids[1] != cur))
         return false;
-      MutableASTNode* otherM = pathFirst ? kids[1] : kids[0];
-      if (otherM->n.GetValueWidth() != cur->n.GetValueWidth())
+      const ASTNode otherN = pathFirst ? kids[1] : kids[0];
+      if (otherN.GetValueWidth() != cur.GetValueWidth())
         return false;
-      predicate = &parent;
+      predicate = p;
       predKind = p.GetKind();
-      if (otherM->n.isConstant())
-        predConst = otherM->n;
+      if (otherN.isConstant())
+        predConst = otherN;
       else
-        predOther = otherM;
+        predOther = otherN;
       break;
     }
 
@@ -976,9 +1100,13 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
         return false;
       frames.push_back(
           {kids[0], inThen ? kids[2] : kids[1], inThen, steps.size()});
-      if (parent.parents.size() != 1)
+      ASTNode pp;
+      if (!singleParent(p, pp))
+      {
+        blockedOn[p.GetNodeNum()].push_back(var);
         return false;
-      cur = &parent;
+      }
+      cur = p;
       continue;
     }
 
@@ -994,7 +1122,7 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
         pathCount++;
         pathIdx = i;
       }
-      else if (!kids[i]->n.isConstant())
+      else if (!kids[i].isConstant())
         nonConstSibling = true;
     }
     if (nonConstSibling)
@@ -1009,7 +1137,7 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     GroundStep step;
     step.kind = kind;
     step.outWidth = p.GetValueWidth();
-    step.inWidth = cur->n.GetValueWidth();
+    step.inWidth = cur.GetValueWidth();
 
     if (samePathAllOperands)
     {
@@ -1029,8 +1157,8 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
       if (pathIdx != 0)
         return false;
       step.pathIndex = 0;
-      step.constants.push_back(kids[1]->n);
-      step.constants.push_back(kids[2]->n);
+      step.constants.push_back(kids[1]);
+      step.constants.push_back(kids[2]);
     }
     else if (kind == BVPLUS || kind == BVMULT || kind == BVAND ||
              kind == BVOR || kind == BVXOR)
@@ -1041,14 +1169,14 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
       if (kids.size() == 2)
       {
         step.pathIndex = pathIdx;
-        step.constants.push_back(kids[1 - pathIdx]->n);
+        step.constants.push_back(kids[1 - pathIdx]);
       }
       else
       {
         std::vector<CBV> consts;
         for (size_t i = 0; i < kids.size(); i++)
           if (i != pathIdx)
-            consts.push_back(kids[i]->n.GetBVConst());
+            consts.push_back(kids[i].GetBVConst());
         CBV folded = NonMemberBVConstEvaluator(kind, consts, step.outWidth);
         step.pathIndex = 0;
         step.constants.push_back(bm.CreateBVConst(folded, step.outWidth));
@@ -1060,7 +1188,7 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
       if (kids.size() != 2)
         return false;
       step.pathIndex = pathIdx;
-      step.constants.push_back(kids[1 - pathIdx]->n);
+      step.constants.push_back(kids[1 - pathIdx]);
     }
 
     steps.push_back(step);
@@ -1068,19 +1196,21 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     // Interior nodes must be single-use to step past them. A shared
     // single-step chain may still be eliminated by constraining a fresh
     // variable to its image.
-    if (parent.parents.size() != 1)
+    ASTNode pp;
+    if (!singleParent(p, pp))
     {
       if (bm.UserFlags.unconstrained_image_vars && steps.size() == 1 &&
           frames.empty())
-        return tryImageConstrainShared(var, parent, steps[0], variables);
+        return tryImageConstrainShared(var, p, steps[0]);
+      blockedOn[p.GetNodeNum()].push_back(var);
       return false;
     }
-    cur = &parent;
+    cur = p;
   }
-  if (predicate == NULL)
+  if (predicate.IsNull())
     return false; // too deep
 
-  if (predOther != NULL)
+  if (!predOther.IsNull())
   {
     /* The other side is symbolic, so achievability cannot be decided
      * statically; instead the predicate is rewritten into its
@@ -1110,15 +1240,21 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     // which copies t into the invertibility condition and by that extra
     // use would destroy the other side's unconstrainedness. Defer.
     {
-      vector<MutableASTNode*> otherVars;
-      std::unordered_set<MutableASTNode*> seen;
-      predOther->getAllVariablesRecursively(otherVars, seen);
-      for (MutableASTNode* ov : otherVars)
-        if (ov->isUnconstrained())
-          return false;
+      std::vector<ASTNode> otherVars;
+      variablesIn(predOther, otherVars);
+      bool deferred = false;
+      for (const ASTNode& ov : otherVars)
+        if (unconstrained(ov))
+        {
+          deferredOn[ov.GetNodeNum()].push_back(var);
+          deferred = true;
+        }
+      if (deferred)
+        return false;
     }
 
-    const ASTNode t = predOther->toASTNode(&bm);
+    // t as a graph handle, for what goes back into the formula.
+    const ASTNode t = predOther;
     ASTNode newP, xDef;
 
     if (predKind == EQ)
@@ -1127,7 +1263,7 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
       ASTNode u = t;
       bool ok = true;
       for (size_t i = steps.size(); i-- > 0 && ok;)
-        ok = invertStepSymbolic(nf, bm, simplifier, steps[i],
+        ok = invertStepSymbolic(gf, bm, simplifier, steps[i],
                                 /*isBottom=*/i == 0, u, conds);
       ASTNode v1, x1, v2, x2;
       if (ok)
@@ -1137,10 +1273,12 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
 
       const ASTNode b = bm.CreateFreshVariable(0, 0, "unconstrained_ic");
       conds.push_back(b);
-      newP = (conds.size() == 1) ? b : nf->CreateNode(AND, conds);
+      newP = (conds.size() == 1) ? b : gf->CreateNode(AND, conds);
+      // The definition is recorded over hash-consed terms.
+      const ASTNode tExp = exported(t);
       const ASTNode xAlt =
-          nf->CreateTerm(ITE, varW, nf->CreateNode(EQ, t, v1), x2, x1);
-      xDef = nf->CreateTerm(ITE, varW, newP, u, xAlt);
+          nf->CreateTerm(ITE, varW, nf->CreateNode(EQ, tExp, v1), x2, x1);
+      xDef = nf->CreateTerm(ITE, varW, exported(newP), exported(u), xAlt);
     }
     else
     {
@@ -1152,8 +1290,8 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
       enumerateChainExtremes(steps, varW, isSigned, bm, m, xm, M, xM);
 
       const auto mkP = [&](const ASTNode& v) {
-        return pathFirst ? nf->CreateNode(predKind, v, t)
-                         : nf->CreateNode(predKind, t, v);
+        return pathFirst ? gf->CreateNode(predKind, v, t)
+                         : gf->CreateNode(predKind, t, v);
       };
       // As a function of the chain's value, the predicate is monotone;
       // vTop maximises it and vBot minimises it, so P(vTop) is the
@@ -1169,38 +1307,27 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
 
       const ASTNode b = bm.CreateFreshVariable(0, 0, "unconstrained_ic");
       newP =
-          nf->CreateNode(AND, mkP(vTop), nf->CreateNode(OR, b, mkP(vBot)));
-      xDef = nf->CreateTerm(ITE, varW, newP, xTop, xBot);
+          gf->CreateNode(AND, mkP(vTop), gf->CreateNode(OR, b, mkP(vBot)));
+      xDef = nf->CreateTerm(ITE, varW, exported(newP), xTop, xBot);
     }
 
     // Distribute over any captured ITE frames with the rewritten
-    // predicate as the innermost leaf, then splice it in, reusing the
-    // existing mutable nodes for every variable it mentions.
-    vector<MutableASTNode*> vars;
-    std::unordered_set<MutableASTNode*> visited;
-    predOther->getAllVariablesRecursively(vars, visited);
+    // predicate as the innermost leaf, then splice it in. The frames'
+    // conditions and other branches are graph handles, so the splice
+    // reuses them as they are.
     ASTNode inner = newP;
     for (const IteFrame& fr : frames)
     {
-      ASTNode gt = fr.other->toASTNode(&bm);
+      ASTNode gt = fr.other;
       for (size_t i = fr.stepsBelow; i < steps.size(); i++)
-        gt = applyStepToNode(nf, bm, steps[i], gt);
-      const ASTNode elseP = pathFirst ? nf->CreateNode(predKind, gt, t)
-                                      : nf->CreateNode(predKind, t, gt);
-      inner = nf->CreateNode(ITE, fr.cond->toASTNode(&bm),
-                             fr.pathThen ? inner : elseP,
+        gt = applyStepToNode(gf, bm, steps[i], gt);
+      const ASTNode elseP = pathFirst ? gf->CreateNode(predKind, gt, t)
+                                      : gf->CreateNode(predKind, t, gt);
+      inner = gf->CreateNode(ITE, fr.cond, fr.pathThen ? inner : elseP,
                              fr.pathThen ? elseP : inner);
-      fr.cond->getAllVariablesRecursively(vars, visited);
-      fr.other->getAllVariablesRecursively(vars, visited);
     }
-    visited.clear();
 
-    std::unordered_map<uint64_t, MutableASTNode*> create;
-    for (MutableASTNode* mNode : vars)
-      create.insert(std::make_pair(mNode->n.GetNodeNum(), mNode));
-    vars.clear();
-
-    predicate->replaceWithAnotherNode(MutableASTNode::build(inner, create));
+    splice(predicate, inner);
     replace(var, xDef);
     if (bm.UserFlags.stats_flag)
     {
@@ -1227,8 +1354,8 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   if (frames.empty())
   {
     // The predicate has width 0, so this creates a fresh boolean and
-    // prunes the whole path out of the mutable tree.
-    ASTNode v = replaceParentWithFresh(*predicate, variables);
+    // prunes the whole path out of the formula.
+    ASTNode v = replaceWithFresh(predicate);
     replace(var, nf->CreateTerm(ITE, var.GetValueWidth(), v, d.witnessTrue,
                                 d.witnessFalse));
     return true;
@@ -1239,34 +1366,19 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   //     ==>  ite(c_k, ... ite(c_1, v, P(above_1(t_1))) ..., P(above_k(t_k)))
   // where above_i re-applies every ground step recorded above frame i.
   ASTNode v = bm.CreateFreshVariable(0, 0, "unconstrained_ite");
-  vector<MutableASTNode*> vars;
-  std::unordered_set<MutableASTNode*> visited;
   ASTNode inner = v;
   for (const IteFrame& fr : frames)
   {
-    ASTNode gt = fr.other->toASTNode(&bm);
+    ASTNode gt = fr.other;
     for (size_t i = fr.stepsBelow; i < steps.size(); i++)
-      gt = applyStepToNode(nf, bm, steps[i], gt);
-    ASTNode elseP = pathFirst ? nf->CreateNode(predKind, gt, predConst)
-                              : nf->CreateNode(predKind, predConst, gt);
-    inner = nf->CreateNode(ITE, fr.cond->toASTNode(&bm),
-                           fr.pathThen ? inner : elseP,
+      gt = applyStepToNode(gf, bm, steps[i], gt);
+    ASTNode elseP = pathFirst ? gf->CreateNode(predKind, gt, predConst)
+                              : gf->CreateNode(predKind, predConst, gt);
+    inner = gf->CreateNode(ITE, fr.cond, fr.pathThen ? inner : elseP,
                            fr.pathThen ? elseP : inner);
-    fr.cond->getAllVariablesRecursively(vars, visited);
-    fr.other->getAllVariablesRecursively(vars, visited);
   }
-  visited.clear();
 
-  // Splice the new formula in, reusing the existing mutable nodes for the
-  // variables it mentions (same mechanics as the comparison rule).
-  std::unordered_map<uint64_t, MutableASTNode*> create;
-  for (MutableASTNode* m : vars)
-    create.insert(std::make_pair(m->n.GetNodeNum(), m));
-  vars.clear();
-
-  MutableASTNode* newN = MutableASTNode::build(inner, create);
-  predicate->replaceWithAnotherNode(newN);
-
+  splice(predicate, inner);
   replace(var, nf->CreateTerm(ITE, var.GetValueWidth(), v, d.witnessTrue,
                               d.witnessFalse));
   return true;
@@ -1281,61 +1393,93 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   this->simplifier = simplifier;
 
   imageConstraints.clear();
+  imageConstraintsMade = 0;
 
-  MutableASTNode* topMutable = MutableASTNode::build(n);
+  MutableGraph graph(bm);
+  graph.import(n);
+  if (checkGraph)
+    std::cerr << "  [ru] start, root " << n.GetNodeNum() << std::endl;
+  g = &graph;
+  gf = &graph.factory();
 
-  vector<MutableASTNode*> variable_array;
-  topMutable->getAllUnconstrainedVariables(variable_array);
+  // Every symbol, parents before children (the reverse of a post-order
+  // walk), so that given (F(x_1,... x_10000) = v) with v unconstrained the
+  // whole of F is chopped out before its variables are examined.
+  worklist.clear();
+  deferredOn.clear();
+  blockedOn.clear();
+  {
+    std::vector<ASTNode> post;
+    ASTNodeSet seen;
+    struct Frame
+    {
+      ASTNode node;
+      size_t next = 0;
+    };
+    std::vector<Frame> stack;
+    stack.push_back({n});
+    seen.insert(n);
+    while (!stack.empty())
+    {
+      Frame& f = stack.back();
+      if (f.next < f.node.Degree())
+      {
+        const ASTNode c = f.node[f.next++];
+        if (seen.insert(c).second)
+          stack.push_back({c});
+        continue;
+      }
+      if (f.node.GetKind() == SYMBOL)
+        post.push_back(f.node);
+      stack.pop_back();
+    }
+    worklist.assign(post.rbegin(), post.rend());
+  }
+  graph.clearChanges();
 
   // We don't want to check some expensive nodes over and over again.
   ASTNodeSet noCheck;
 
-  for (size_t i = 0; i < variable_array.size(); i++)
+  // Candidates are appended while the loop runs; each is examined once
+  // per time it was put on the list, in the order it was put there.
+  for (size_t i = 0; i < worklist.size(); i++)
   {
-    // Don't make this is a reference. If the vector gets resized, it will point
-    // to memory that no longer contains the object.
-    MutableASTNode& muteNode = *variable_array[i];
-
-    const ASTNode var = muteNode.n;
+    const ASTNode var = worklist[i];
     assert(var.GetKind() == SYMBOL);
 
-    if (!muteNode.isUnconstrained())
+    if (!unconstrained(var))
       continue;
 
-    MutableASTNode& muteParent = muteNode.getParent();
+    ASTNode parent;
+    singleParent(var, parent);
+    // As the graph sees it: a parent standing above an earlier
+    // replacement is converted, so its children, and every comparison of
+    // handles below, are current.
+    parent = g->normalise(parent);
+    if (checkGraph)
+      std::cerr << "  [ru] examine " << var.GetNodeNum() << " under "
+                << parent.GetNodeNum() << " kind " << parent.GetKind()
+                << std::endl;
 
-    if (noCheck.find(muteParent.n) != noCheck.end())
+    if (noCheck.find(parent) != noCheck.end())
       continue;
 
-    vector<MutableASTNode*> mutable_children = muteParent.children;
-
-    // nb. The children might be dirty. i.e. not have substitutions written
-    // through them yet.
     ASTVec children;
-    children.reserve(mutable_children.size());
-    for (size_t j = 0; j < mutable_children.size(); j++)
-      children.push_back(mutable_children[j]->n);
+    kidsOf(parent, children);
 
     const size_t numberOfChildren = children.size();
-    const Kind kind = muteNode.getParent().n.GetKind();
-    unsigned width = muteNode.getParent().n.GetValueWidth();
-    unsigned indexWidth = muteNode.getParent().n.GetIndexWidth();
+    const Kind kind = parent.GetKind();
+    unsigned width = parent.GetValueWidth();
+    unsigned indexWidth = parent.GetIndexWidth();
 
     ASTNode other;
-    MutableASTNode* muteOther = NULL;
 
     if (numberOfChildren == 2)
     {
       if (children[0] != var)
-      {
         other = children[0];
-        muteOther = mutable_children[0];
-      }
       else
-      {
         other = children[1];
-        muteOther = mutable_children[1];
-      }
 
       if (kind != AND && kind != OR && kind != BVOR && kind != BVAND &&
           other == var)
@@ -1348,9 +1492,9 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       if (kind != AND && kind != OR && kind != BVOR && kind != BVAND)
       {
         size_t found = 0;
-        for (size_t i = 0; i < numberOfChildren; i++)
+        for (size_t j = 0; j < numberOfChildren; j++)
         {
-          if (children[i] == var)
+          if (children[j] == var)
             found++;
         }
 
@@ -1359,24 +1503,14 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       }
     }
 
-    /*
-    cout << i << " " << kind << " " << variable_array.size() <<  " " <<
-    mutable_children.size() << endl;
-    cout << "children[0]" << children[0] << endl;
-    cout << "children[1]" << children[1] << endl;
-    cout << muteParent.n << endl;
-
-     */
-
     switch (kind)
     {
       case BVCONCAT:
       {
         assert(numberOfChildren == 2);
-        if (mutable_children[0]->isUnconstrained() &&
-            (mutable_children[1]->isUnconstrained()))
+        if (unconstrained(children[0]) && unconstrained(children[1]))
         {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
 
           ASTNode top_lhs = bm.CreateBVConst(32, width - 1);
           ASTNode bottom_lhs =
@@ -1399,7 +1533,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
       case NOT:
       {
-        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+        ASTNode v = replaceWithFresh(parent);
         replace(children[0], nf->CreateNode(NOT, v));
       }
       break;
@@ -1408,7 +1542,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       case BVNOT:
       {
         assert(numberOfChildren == 1);
-        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+        ASTNode v = replaceWithFresh(parent);
         replace(var, nf->CreateTerm(kind, width, v));
       }
       break;
@@ -1458,10 +1592,9 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           c2 = biggestNumber;
         }
 
-        if (mutable_children[0]->isUnconstrained() &&
-            mutable_children[1]->isUnconstrained())
+        if (unconstrained(children[0]) && unconstrained(children[1]))
         {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
 
           ASTNode lhs = nf->CreateTerm(ITE, width, v, bm.CreateOneConst(width),
                                        bm.CreateZeroConst(width));
@@ -1475,7 +1608,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           if (children[1] == c1)
             continue; // always false. Or always false.
 
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
 
           ASTNode rhs =
               nf->CreateTerm(ITE, width, v, biggestNumber, smallestNumber);
@@ -1486,7 +1619,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           if (children[0] == c2)
             continue; // always false. Or always false.
 
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
 
           ASTNode rhs =
               nf->CreateTerm(ITE, width, v, smallestNumber, biggestNumber);
@@ -1496,59 +1629,36 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         {
           bool varOnLHS = (var == children[0]);
 
-          // All the ASTNode vars need to map to their existing MutableASTNodes.
-          // So we collect all the variables
-          vector<MutableASTNode*> vars;
-          std::unordered_set<MutableASTNode*> visited;
-          muteOther->getAllVariablesRecursively(vars, visited);
-          visited.clear();
-
-          std::unordered_map<uint64_t, MutableASTNode*> create;
-          for (vector<MutableASTNode*>::iterator it = vars.begin();
-               it != vars.end(); it++)
-            create.insert(std::make_pair((*it)->n.GetNodeNum(), *it));
-          vars.clear();
-
           ASTNode v = bm.CreateFreshVariable(0, 0, "STP_INTERNAL_comparison");
 
+          // The definition, over hash-consed terms; and the predicate that
+          // replaces the comparison, over the sibling as it is in the graph.
           ASTNode rhs;
-          ASTNode n;
+          ASTNode pred;
           if (varOnLHS)
           {
             rhs = nf->CreateTerm(ITE, width, v, biggestNumber, smallestNumber);
 
             if (kind == BVSGE || kind == BVGE)
-              n = nf->CreateNode(
-                  OR, v,
-                  nf->CreateNode(EQ, mutable_children[1]->toASTNode(&bm), c1));
+              pred = gf->CreateNode(OR, v, gf->CreateNode(EQ, children[1], c1));
             else
-              n = nf->CreateNode(
+              pred = gf->CreateNode(
                   AND, v,
-                  nf->CreateNode(
-                      NOT,
-                      nf->CreateNode(EQ, mutable_children[1]->toASTNode(&bm),
-                                     c1)));
+                  gf->CreateNode(NOT, gf->CreateNode(EQ, children[1], c1)));
           }
           else
           {
             rhs = nf->CreateTerm(ITE, width, v, smallestNumber, biggestNumber);
 
             if (kind == BVSGE || kind == BVGE)
-              n = nf->CreateNode(
-                  OR, v,
-                  nf->CreateNode(EQ, mutable_children[0]->toASTNode(&bm), c2));
+              pred = gf->CreateNode(OR, v, gf->CreateNode(EQ, children[0], c2));
             else
-              n = nf->CreateNode(
+              pred = gf->CreateNode(
                   AND, v,
-                  nf->CreateNode(
-                      NOT,
-                      nf->CreateNode(EQ, mutable_children[0]->toASTNode(&bm),
-                                     c2)));
+                  gf->CreateNode(NOT, gf->CreateNode(EQ, children[0], c2)));
           }
           replace(var, rhs);
-          MutableASTNode* newN = MutableASTNode::build(n, create);
-          muteParent.replaceWithAnotherNode(newN);
-          // assert(muteParent.checkInvariant());
+          splice(parent, pred);
         }
       }
       break;
@@ -1579,12 +1689,11 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         const ASTNode nan =
             bm.CreateFPSpecialConst(FPSpecial::NaN, exp_width, sig_width);
 
-        if (mutable_children[0]->isUnconstrained() &&
-            mutable_children[1]->isUnconstrained() &&
+        if (unconstrained(children[0]) && unconstrained(children[1]) &&
             children[0].GetSourceSort() == children[1].GetSourceSort())
         {
           // x > y: true via (+oo, +0), false via (NaN, NaN).
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
           replace(children[0],
                   nf->CreateTerm(ITE, width, v,
                                  bm.CreateFPSpecialConst(
@@ -1607,8 +1716,9 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           // rewritten; it leaves the formula along with the predicate.
           ASTNode constant = other;
           if (constant.GetKind() == FP_TOFP && constant.Degree() == 3 &&
-              constant[2].GetKind() == BVCONST)
-            constant = bm.CreateFPConst(constant[2], exp_width, sig_width);
+              g->current(constant[2]).GetKind() == BVCONST)
+            constant =
+                bm.CreateFPConst(g->current(constant[2]), exp_width, sig_width);
 
           if (!constant.isConstant())
             break;
@@ -1627,7 +1737,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
           // Both outcomes achievable: the variable's own extreme wins,
           // NaN loses.
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
           replace(var, nf->CreateTerm(ITE, width, v, unbeatable, nan));
         }
       }
@@ -1672,27 +1782,31 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         if (!isRNEConstant(rm))
           break;
 
-        if (muteParent.parents.size() != 1)
+        ASTNode narrow;
+        if (!singleParent(parent, narrow))
           break;
-        MutableASTNode& muteNarrow = muteParent.getParent();
-        const ASTNode narrow = muteNarrow.n;
-        if (narrow.GetKind() != FP_TOFP || narrow.Degree() != 4 ||
-            narrow[3] != muteParent.n || !isRNEConstant(narrow[2]))
+        narrow = g->normalise(narrow);
+        ASTVec narrowKids;
+        kidsOf(narrow, narrowKids);
+        if (narrow.GetKind() != FP_TOFP || narrowKids.size() != 4 ||
+            narrowKids[3] != parent || !isRNEConstant(narrowKids[2]))
           break;
 
         const ASTNode widen = children[1];
-        if (widen.GetKind() != FP_TOFP || widen.Degree() != 4)
+        ASTVec widenKids;
+        kidsOf(widen, widenKids);
+        if (widen.GetKind() != FP_TOFP || widenKids.size() != 4)
           break;
 
-        const unsigned te = narrow[0].GetUnsignedConst();
-        const unsigned ts = narrow[1].GetUnsignedConst();
-        const unsigned se = widen[0].GetUnsignedConst();
-        const unsigned ss = widen[1].GetUnsignedConst();
+        const unsigned te = narrowKids[0].GetUnsignedConst();
+        const unsigned ts = narrowKids[1].GetUnsignedConst();
+        const unsigned se = widenKids[0].GetUnsignedConst();
+        const unsigned ss = widenKids[1].GetUnsignedConst();
 
         // The numerator must be a widening from exactly the result's
         // format: that is what keeps the witness quotient x/t inside the
         // source format's normal range.
-        const ASTNode x = widen[3];
+        const ASTNode x = widenKids[3];
         if (x.GetExpWidth() != te || x.GetSigWidth() != ts)
           break;
 
@@ -1712,34 +1826,42 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         v.SetSigWidth(ts);
 
         const ASTNode nanT = bm.CreateFPSpecialConst(FPSpecial::NaN, te, ts);
-        const ASTNode isZeroX = nf->CreateNode(FP_ISZERO, x);
-        const ASTNode isInfX = nf->CreateNode(FP_ISINFINITE, x);
 
-        // v, confined to the class a special numerator pins.
-        const ASTNode vIfZero = nf->CreateTerm(
-            ITE, tw,
-            nf->CreateNode(OR, nf->CreateNode(FP_ISZERO, v),
-                           nf->CreateNode(FP_ISNAN, v)),
-            v, nanT);
-        const ASTNode vIfInf = nf->CreateTerm(
-            ITE, tw,
-            nf->CreateNode(OR, nf->CreateNode(FP_ISINFINITE, v),
-                           nf->CreateNode(FP_ISNAN, v)),
-            v, nanT);
-
-        const ASTNode replacement = nf->CreateTerm(
-            ITE, tw, nf->CreateNode(FP_ISNAN, x), nanT,
-            nf->CreateTerm(ITE, tw, isZeroX, vIfZero,
-                           nf->CreateTerm(ITE, tw, isInfX, vIfInf, v)));
+        // The stand-in, over x as it is in the graph: v, confined to the
+        // class a special numerator pins.
+        {
+          const ASTNode isZeroX = gf->CreateNode(FP_ISZERO, x);
+          const ASTNode isInfX = gf->CreateNode(FP_ISINFINITE, x);
+          const ASTNode vIfZero = gf->CreateTerm(
+              ITE, tw,
+              gf->CreateNode(OR, gf->CreateNode(FP_ISZERO, v),
+                             gf->CreateNode(FP_ISNAN, v)),
+              v, nanT);
+          const ASTNode vIfInf = gf->CreateTerm(
+              ITE, tw,
+              gf->CreateNode(OR, gf->CreateNode(FP_ISINFINITE, v),
+                             gf->CreateNode(FP_ISNAN, v)),
+              v, nanT);
+          const ASTNode replacement = gf->CreateTerm(
+              ITE, tw, gf->CreateNode(FP_ISNAN, x), nanT,
+              gf->CreateTerm(ITE, tw, isZeroX, vIfZero,
+                             gf->CreateTerm(ITE, tw, isInfX, vIfInf, v)));
+          splice(narrow, replacement);
+        }
 
         // The divisor that makes the original quotient come out at v,
-        // recorded for model construction. sign(quotient) = sign(x) XOR
-        // sign(u), so a zero or infinite quotient's sign picks the sign of
-        // the infinite (resp. zero) divisor, and NaN needs 0/0 (resp.
-        // oo/oo). Everywhere else fl_src(x/v) is the proof's witness, and
-        // IEEE's special quotients make the same expression cover v being
-        // NaN, a zero or an infinity.
-        const ASTNode isNegX = nf->CreateNode(FP_ISNEGATIVE, x);
+        // recorded for model construction, over hash-consed terms.
+        // sign(quotient) = sign(x) XOR sign(u), so a zero or infinite
+        // quotient's sign picks the sign of the infinite (resp. zero)
+        // divisor, and NaN needs 0/0 (resp. oo/oo). Everywhere else
+        // fl_src(x/v) is the proof's witness, and IEEE's special quotients
+        // make the same expression cover v being NaN, a zero or an
+        // infinity.
+        const ASTNode xExp = exported(x);
+        const ASTNode widenExp = exported(widen);
+        const ASTNode isZeroX = nf->CreateNode(FP_ISZERO, xExp);
+        const ASTNode isInfX = nf->CreateNode(FP_ISINFINITE, xExp);
+        const ASTNode isNegX = nf->CreateNode(FP_ISNEGATIVE, xExp);
         const ASTNode isNegV = nf->CreateNode(FP_ISNEGATIVE, v);
         const ASTNode signsDiffer = nf->CreateNode(XOR, isNegX, isNegV);
         const ASTNode pInfS =
@@ -1758,23 +1880,12 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
             ITE, sw, nf->CreateNode(FP_ISINFINITE, v),
             nf->CreateTerm(ITE, sw, signsDiffer, mZeroS, pZeroS), pInfS);
         const ASTNode uOtherwise = nf->CreateTerm(
-            FP_DIV, sw, rm, widen,
-            nf->CreateTerm(FP_TOFP, sw, {widen[0], widen[1], rm, v}));
+            FP_DIV, sw, rm, widenExp,
+            nf->CreateTerm(FP_TOFP, sw, {widenKids[0], widenKids[1], rm, v}));
         const ASTNode witness = nf->CreateTerm(
             ITE, sw, isZeroX, uWhenZero,
             nf->CreateTerm(ITE, sw, isInfX, uWhenInf, uOtherwise));
 
-        // Splice the stand-in over the narrowing node. x appears verbatim
-        // under the classifications, so seed the builder's memo with its
-        // existing mutable node: rebuilding that subtree instead would give
-        // every symbol below x a duplicate parent, and the next divisor in
-        // a chain of these would stop looking unconstrained.
-        std::unordered_map<uint64_t, MutableASTNode*> create;
-        create.insert(std::make_pair(x.GetNodeNum(),
-                                     mutable_children[1]->children[3]));
-
-        MutableASTNode* newN = MutableASTNode::build(replacement, create);
-        muteNarrow.replaceWithAnotherNode(newN);
         replace(var, witness);
       }
       break;
@@ -1784,11 +1895,15 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       case BVOR:
       case BVAND:
       {
-        if (allChildrenAreUnconstrained(mutable_children))
+        bool allUnconstrained = true;
+        for (size_t j = 0; j < numberOfChildren && allUnconstrained; j++)
+          allUnconstrained = unconstrained(children[j]);
+
+        if (allUnconstrained)
         {
           ASTNodeSet already;
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-          for (size_t i = 0; i < numberOfChildren; i++)
+          ASTNode v = replaceWithFresh(parent);
+          for (size_t j = 0; j < numberOfChildren; j++)
           {
             /* to avoid problems with:
             734:(AND
@@ -1796,10 +1911,10 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
             716:unconstrained_2
             732:unconstrained_4)
             */
-            if (already.find(children[i]) == already.end())
+            if (already.find(children[j]) == already.end())
             {
-              replace(children[i], v);
-              already.insert(children[i]);
+              replace(children[j], v);
+              already.insert(children[j]);
             }
           }
         }
@@ -1811,8 +1926,8 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           // eventually all the nodes become unconstrained we will miss it
           // and not rewrite the AND to a fresh unconstrained variable.
 
-          if (mutable_children.size() > 200)
-            noCheck.insert(muteParent.n);
+          if (numberOfChildren > 200)
+            noCheck.insert(parent);
         }
       }
       break;
@@ -1820,13 +1935,13 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       case XOR:
       case BVXOR:
       {
-        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+        ASTNode v = replaceWithFresh(parent);
 
         ASTVec others;
-        for (size_t i = 0; i < numberOfChildren; i++)
+        for (size_t j = 0; j < numberOfChildren; j++)
         {
-          if (children[i] != var)
-            others.push_back(mutable_children[i]->toASTNode(&bm));
+          if (children[j] != var)
+            others.push_back(exported(children[j]));
         }
         assert(others.size() + 1 == numberOfChildren);
         assert(others.size() >= 1);
@@ -1851,29 +1966,26 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
       case ITE:
       {
-        if (indexWidth > 0 && (!arrayRules || !eligibleArray(muteParent.n)))
+        if (indexWidth > 0 && (!arrayRules || !eligibleArray(parent)))
           continue;
 
-        if (mutable_children[0]->isUnconstrained() &&
-            mutable_children[1]->isUnconstrained() &&
+        if (unconstrained(children[0]) && unconstrained(children[1]) &&
             children[0] != children[1])
         {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
           replace(children[0], bm.ASTTrue);
           replace(children[1], v);
         }
-        else if (mutable_children[0]->isUnconstrained() &&
-                 mutable_children[2]->isUnconstrained() &&
+        else if (unconstrained(children[0]) && unconstrained(children[2]) &&
                  children[0] != children[2])
         {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
           replace(children[0], bm.ASTFalse);
           replace(children[2], v);
         }
-        else if (mutable_children[1]->isUnconstrained() &&
-                 mutable_children[2]->isUnconstrained())
+        else if (unconstrained(children[1]) && unconstrained(children[2]))
         {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
           replace(children[1], v);
           if (children[1] != children[2])
             replace(children[2], v);
@@ -1885,11 +1997,10 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       case BVSRSHIFT:
       {
         assert(numberOfChildren == 2);
-        if (mutable_children[0]->isUnconstrained() &&
-            mutable_children[1]->isUnconstrained())
+        if (unconstrained(children[0]) && unconstrained(children[1]))
         {
           assert(children[0] != children[1]);
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
           replace(children[1], bm.CreateZeroConst(width));
           replace(children[0], v);
         }
@@ -1901,15 +2012,14 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       case SBVMOD:
       {
         assert(numberOfChildren == 2);
-        if (mutable_children[0]->isUnconstrained() &&
-            mutable_children[1]->isUnconstrained())
+        if (unconstrained(children[0]) && unconstrained(children[1]))
         {
           assert(children[0] != children[1]);
           // STP defines remainder-by-zero as the dividend: bvurem, bvsrem and
           // bvsmod all return x when the divisor is 0 (see consteval.cpp). So
           // (v rem 0) == v, and a fresh dividend with divisor 0 reproduces
           // every value.
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
           replace(children[1], bm.CreateZeroConst(width));
           replace(children[0], v);
         }
@@ -1920,14 +2030,13 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       case SBVDIV:
       {
         assert(numberOfChildren == 2);
-        if (mutable_children[0]->isUnconstrained() &&
-            mutable_children[1]->isUnconstrained())
+        if (unconstrained(children[0]) && unconstrained(children[1]))
         {
           assert(children[0] != children[1]);
           // (v / 1) == v for both signed and unsigned division (and 1 avoids
           // the divide-by-zero result), so a fresh dividend with divisor 1
           // reproduces every value.
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
           replace(children[1], bm.CreateOneConst(width));
           replace(children[0], v);
         }
@@ -1937,17 +2046,17 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       {
         if (numberOfChildren == 2)
         {
-          if (mutable_children[1]->isUnconstrained() &&
-              mutable_children[0]->isUnconstrained()) // both are unconstrained
+          if (unconstrained(children[1]) &&
+              unconstrained(children[0])) // both are unconstrained
           {
-            ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+            ASTNode v = replaceWithFresh(parent);
             replace(children[0], bm.CreateOneConst(width));
             replace(children[1], v);
           }
 
           if (other.isConstant() && simplifier->BVConstIsOdd(other))
           {
-            ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+            ASTNode v = replaceWithFresh(parent);
             ASTNode inverse = simplifier->MultiplicativeInverse(other);
             ASTNode rhs = nf->CreateTerm(BVMULT, width, inverse, v);
             replace(var, rhs);
@@ -1962,20 +2071,20 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         // value. (An even constant pins low bits, so it disqualifies.)
         ASTNode oddConstant;
         bool eligible = true;
-        for (size_t i = 0; i < numberOfChildren && eligible; i++)
+        for (size_t j = 0; j < numberOfChildren && eligible; j++)
         {
-          if (children[i] == var || mutable_children[i]->isUnconstrained())
+          if (children[j] == var || unconstrained(children[j]))
             continue;
-          if (children[i].isConstant() && oddConstant.IsNull() &&
-              simplifier->BVConstIsOdd(children[i]))
-            oddConstant = children[i];
+          if (children[j].isConstant() && oddConstant.IsNull() &&
+              simplifier->BVConstIsOdd(children[j]))
+            oddConstant = children[j];
           else
             eligible = false;
         }
 
         if (eligible)
         {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          ASTNode v = replaceWithFresh(parent);
           if (!oddConstant.IsNull())
             v = nf->CreateTerm(
                 BVMULT, width,
@@ -1986,14 +2095,14 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           // substitution map for an already-substituted variable. (cf. the
           // AND/OR/BVAND/BVOR case above, which dedups for the same reason.)
           ASTNodeSet already;
-          for (size_t i = 0; i < numberOfChildren; i++)
+          for (size_t j = 0; j < numberOfChildren; j++)
           {
-            if (children[i] == var || children[i].isConstant())
+            if (children[j] == var || children[j].isConstant())
               continue;
-            if (already.find(children[i]) != already.end())
+            if (already.find(children[j]) != already.end())
               continue;
-            replace(children[i], bm.CreateOneConst(width));
-            already.insert(children[i]);
+            replace(children[j], bm.CreateOneConst(width));
+            already.insert(children[j]);
           }
           replace(var, v);
         }
@@ -2013,19 +2122,18 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         // becomes a fresh scalar. Recovering a from it needs an array
         // agreeing with v at i and free elsewhere, which is exactly a
         // write of v into a second fresh array.
-        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+        const ASTNode index = exported(children[1]);
+        ASTNode v = replaceWithFresh(parent);
         ASTNode rest = freshLike(var, "unconstrained_array");
         replace(var, nf->CreateArrayTerm(WRITE, var.GetIndexWidth(),
-                                         var.GetValueWidth(), rest,
-                                         mutable_children[1]->toASTNode(&bm),
-                                         v));
+                                         var.GetValueWidth(), rest, index, v));
       }
       break;
 
       case WRITE:
       {
         assert(numberOfChildren == 3);
-        if (!arrayRules || !eligibleArray(muteParent.n))
+        if (!arrayRules || !eligibleArray(parent))
           break;
 
         // Both the base array and the written value have to be free.
@@ -2033,17 +2141,16 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         // and is not an arbitrary array; see the header comment. A value
         // that is also the index is fixed in the same way, and the
         // definition below would make it its own read index: e := v[e].
-        if (mutable_children[0]->isUnconstrained() &&
-            mutable_children[2]->isUnconstrained() &&
+        if (unconstrained(children[0]) && unconstrained(children[2]) &&
             children[1] != children[2])
         {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          const ASTNode index = exported(children[1]);
+          ASTNode v = replaceWithFresh(parent);
           // write(a, i, e) == v is met by a := v and e := v[i], for any
           // i: writing a cell's own value back changes nothing.
           replace(children[0], v);
-          replace(children[2],
-                  nf->CreateTerm(READ, muteParent.n.GetValueWidth(), v,
-                                 mutable_children[1]->toASTNode(&bm)));
+          replace(children[2], nf->CreateTerm(READ, parent.GetValueWidth(), v,
+                                              index));
         }
       }
       break;
@@ -2054,23 +2161,24 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         // to NOT(XOR(a,b)) on creation, so the standard pipeline never feeds
         // an IFF node to this pass (it's handled by the NOT and XOR cases
         // instead). Kept as a defensive fallback for non-simplifying factories.
-        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+        const ASTNode otherExp = exported(other);
+        ASTNode v = replaceWithFresh(parent);
 
         ASTNode rhs =
-            nf->CreateNode(ITE, v, muteOther->toASTNode(&bm),
-                           nf->CreateNode(NOT, muteOther->toASTNode(&bm)));
+            nf->CreateNode(ITE, v, otherExp, nf->CreateNode(NOT, otherExp));
         replace(var, rhs);
       }
       break;
 
       case EQ:
       {
-        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+        const ASTNode otherExp = exported(other);
+        ASTNode v = replaceWithFresh(parent);
 
         width = var.GetValueWidth();
         ASTNode rhs = nf->CreateTerm(
-            ITE, width, v, muteOther->toASTNode(&bm),
-            nf->CreateTerm(BVPLUS, width, muteOther->toASTNode(&bm),
+            ITE, width, v, otherExp,
+            nf->CreateTerm(BVPLUS, width, otherExp,
                            bm.CreateOneConst(width)));
 
         replace(var, rhs);
@@ -2081,14 +2189,15 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       {
         assert(numberOfChildren == 2);
 
-        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+        const ASTNode otherExp = exported(other);
+        ASTNode v = replaceWithFresh(parent);
 
         ASTNode rhs;
 
         if (children[0] == var)
-          rhs = nf->CreateTerm(BVPLUS, width, v, muteOther->toASTNode(&bm));
+          rhs = nf->CreateTerm(BVPLUS, width, v, otherExp);
         if (children[1] == var)
-          rhs = nf->CreateTerm(BVSUB, width, muteOther->toASTNode(&bm), v);
+          rhs = nf->CreateTerm(BVSUB, width, otherExp, v);
 
         replace(var, rhs);
       }
@@ -2096,22 +2205,22 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
       case BVPLUS:
       {
-        ASTVec other;
-        for (size_t i = 0; i < children.size(); i++)
-          if (children[i] != var)
-            other.push_back(mutable_children[i]->toASTNode(&bm));
+        ASTVec otherOps;
+        for (size_t j = 0; j < children.size(); j++)
+          if (children[j] != var)
+            otherOps.push_back(exported(children[j]));
 
-        assert(other.size() == children.size() - 1);
-        assert(other.size() >= 1);
+        assert(otherOps.size() == children.size() - 1);
+        assert(otherOps.size() >= 1);
 
-        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+        ASTNode v = replaceWithFresh(parent);
 
         ASTNode rhs;
-        if (other.size() > 1)
+        if (otherOps.size() > 1)
           rhs = nf->CreateTerm(BVSUB, width, v,
-                               nf->CreateTerm(BVPLUS, width, other));
+                               nf->CreateTerm(BVPLUS, width, otherOps));
         else
-          rhs = nf->CreateTerm(BVSUB, width, v, other[0]);
+          rhs = nf->CreateTerm(BVSUB, width, v, otherOps[0]);
 
         replace(var, rhs);
       }
@@ -2119,7 +2228,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
       case BVEXTRACT:
       {
-        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+        ASTNode v = replaceWithFresh(parent);
 
         const unsigned operandWidth = var.GetValueWidth();
         assert(children[0] == var); // It can't be anywhere else.
@@ -2160,22 +2269,23 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       {
         // cerr << "!!!!" << kind << endl;
       }
-
-        //        cerr << var;
-        //      cerr << parent;
     }
 
     // None of the per-kind rules fired (each detaches `var` from its
     // parent when it does). Try the generalised ground-path collapse.
-    if (muteNode.isUnconstrained())
-      tryGroundPathCollapse(muteNode, variable_array);
+    if (unconstrained(var))
+      tryGroundPathCollapse(var);
   }
 
-  ASTNode result = topMutable->toASTNode(&bm);
-  topMutable->cleanup();
+  ASTNode result = graph.exportRoot();
+  if (checkGraph)
+    std::cerr << "  [ru] end, export " << result << std::endl;
+  g = NULL;
+  gf = NULL;
+  worklist.clear();
 
   // Membership constraints for image-constrained fresh variables join
-  // the formula here, once the mutable tree is materialised.
+  // the formula here, once the tree is materialised.
   if (!imageConstraints.empty())
   {
     ASTVec conj;

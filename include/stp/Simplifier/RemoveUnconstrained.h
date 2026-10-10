@@ -31,10 +31,11 @@ THE SOFTWARE.
 #ifndef REMOVEUNCONSTRAINED_H_
 #define REMOVEUNCONSTRAINED_H_
 #include "stp/AST/AST.h"
-#include "stp/AST/MutableASTNode.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/AchievableImage.h"
+#include "stp/Simplifier/MutableGraph.h"
 #include "stp/Simplifier/Simplifier.h"
+#include <unordered_map>
 
 namespace stp
 {
@@ -45,21 +46,70 @@ class RemoveUnconstrained
 
   ASTNode freshLike(const ASTNode& like, const std::string& prefix);
 
-  ASTNode replaceParentWithFresh(MutableASTNode& mute,
-                                 vector<MutableASTNode*>& variables);
+  // The formula during topLevel_other(): edits are made on the graph, and
+  // the rules read parents, children and counts from it. Handles are the
+  // graph's: a node's children are read through kidsOf(), which follows
+  // replacements. Terms that go back into the formula are built with gf,
+  // the graph's factory; terms recorded as definitions are built with nf
+  // over exported (hash-consed) operands.
+  MutableGraph* g = NULL;
+  NodeFactory* gf = NULL;
+
+  // Symbols that must never be reported unconstrained, however few
+  // occurrences they have: the array-equality procedure's anchors, the
+  // UF and floating-point abstraction's proxies, symbols the caller knows
+  // are constrained elsewhere. Installed for one topLevel() call.
+  const std::set<ASTNode>* untouchable = NULL;
+
+  // Symbols to examine. Fed by the graph's change log: a symbol whose
+  // parent count changed is a candidate again.
+  std::vector<ASTNode> worklist;
+  void drain();
+
+  // A collapse deferred because the predicate's other side held an
+  // unconstrained symbol, keyed by that symbol: when its count changes
+  // (it was eliminated, or gained a use), the deferred symbol is a
+  // candidate again. Without this a symbol examined once is never
+  // re-examined, and a second run of the pass finds work the first left.
+  std::unordered_map<uint64_t, std::vector<ASTNode>> deferredOn;
+  // Likewise a ground-path climb that stopped at a shared interior node,
+  // keyed by that node: when its count changes (it lost a parent), the
+  // symbol below it may climb further.
+  std::unordered_map<uint64_t, std::vector<ASTNode>> blockedOn;
+
+  // STP_RU_CHECK_GRAPH in the environment: recount the graph from scratch
+  // after every edit. For the fuzzers; O(formula) per edit.
+  const bool checkGraph;
+
+  // A symbol with exactly one distinct parent, and not protected.
+  bool unconstrained(const ASTNode& n);
+  // Any node with exactly one distinct parent, and that parent.
+  bool singleParent(const ASTNode& n, ASTNode& parent);
+  // n's children as they are now.
+  void kidsOf(const ASTNode& n, ASTVec& out);
+  // The symbols under n.
+  void variablesIn(const ASTNode& n, std::vector<ASTNode>& out);
+  // node := a fresh symbol of its sort; returns the symbol.
+  ASTNode replaceWithFresh(const ASTNode& node);
+  // node := by in the formula.
+  void splice(const ASTNode& node, const ASTNode& by);
+  ASTNode exported(const ASTNode& n) { return g->exportNode(n); }
 
   ASTNode topLevel_other(const ASTNode& n, Simplifier* simplifier);
 
-  bool tryGroundPathCollapse(MutableASTNode& muteNode,
-                             vector<MutableASTNode*>& variables);
+  bool tryGroundPathCollapse(const ASTNode& var);
 
-  bool tryImageConstrainShared(const ASTNode& var, MutableASTNode& sharedNode,
-                               const GroundStep& step,
-                               vector<MutableASTNode*>& variables);
+  bool tryImageConstrainShared(const ASTNode& var, const ASTNode& sharedNode,
+                               const GroundStep& step);
 
   // Membership constraints produced by tryImageConstrainShared during a
   // topLevel_other() run; conjoined onto the result before returning.
   ASTVec imageConstraints;
+  // How many a run made, for the fuzzer: a result with one is not a
+  // fixed point of the pass, since the next run sees the constraint as
+  // formula and the variable it constrains as free (category A in
+  // bench-hard/reports/2026-10-10-removeunconstrained-idempotence.md).
+  size_t imageConstraintsMade = 0;
 
   // The untouchable set installed for the current topLevel() call, so
   // that tryImageConstrainShared can add its fresh variables to it: their
@@ -96,6 +146,7 @@ class RemoveUnconstrained
   bool arrayRules;
 
 public:
+  size_t imageConstraintCount() const { return imageConstraintsMade; }
   RemoveUnconstrained(STPMgr& bm);
 	
   RemoveUnconstrained(RemoveUnconstrained const&) = delete;

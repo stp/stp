@@ -3793,7 +3793,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   assert(kind != stp::SYMBOL);
   // so are these.
 
-  assert(bm.hashingNodeFactory == &hashing);
+  // The raw delegate is the manager's hashing factory, or a MutableGraph's
+  // factory standing in for it over that graph's nodes.
+  assert(bm.hashingNodeFactory == &hashing || hashing.getName() == "mutable");
 
   // The partial floating-point operations cannot be constant-folded here:
   // their unspecified cases (fp.min/fp.max on opposite zeros, out-of-range

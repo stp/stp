@@ -59,6 +59,8 @@ class ASTNode
 {
   friend class STPMgr;
   friend class ASTInterior;
+  friend class MutableGraph; // reaches the node behind a mutable handle
+  friend class MutableInterior; // hands out a handle to itself
   friend class UFContext;
   friend class lra::Frontend;
   // The 3.x API keeps its terms as raw ASTInternal pointers behind an opaque
@@ -264,6 +266,10 @@ public:
 
   // Access Children of this Node
   ASTChildren GetChildren() const { return _int_node_ptr->GetChildren(); }
+
+  // Whether this node is a MutableGraph's editable interior node rather
+  // than one of the manager's hash-consed nodes.
+  bool isMutableInterior() const { return _int_node_ptr->mutable_interior; }
 
   // Return the number of child nodes
   size_t Degree() const { return GetChildren().size(); };
