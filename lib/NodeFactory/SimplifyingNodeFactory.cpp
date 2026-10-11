@@ -635,6 +635,166 @@ ASTNode SimplifyingNodeFactory::narrowWidenedFPEquality(Kind kind,
   return NodeFactory::CreateNode(kind, x, narrowed);
 }
 
+// The overflow predicates. Each bit-blasts to a widened adder or multiplier,
+// but with a constant operand, identical operands, or an operand that is the
+// other's complement, the answer is a comparison against a constant: cheaper
+// to encode, and readable by the interval and constant-bit analyses, which
+// the overflow kinds are opaque to. Found by tools/bv_rewrite_gen, which
+// also lists the rarer idioms (e.g. (bvuaddo (bvsub x y) y)) left out here.
+// Returns null when no rule applies.
+ASTNode SimplifyingNodeFactory::create_overflow_node(const Kind kind,
+                                                     const ASTChildren children)
+{
+  const ASTNode& a = children[0];
+  const ASTNode& b = children[1];
+  const unsigned width = a.GetValueWidth();
+  const ASTNode zero = bm.CreateZeroConst(width);
+  const ASTNode ones = bm.CreateMaxConst(width);
+  const ASTNode smin = get_smallest_number(width);
+  const ASTNode smax = get_largest_number(width);
+
+  // Constant arithmetic: the operands are constants, so these fold.
+  const auto plus = [&](const ASTNode& x, const ASTNode& y) {
+    return NodeFactory::CreateTerm(stp::BVPLUS, width, x, y);
+  };
+  const auto minus = [&](const ASTNode& x, const ASTNode& y) {
+    return NodeFactory::CreateTerm(stp::BVSUB, width, x, y);
+  };
+  const auto negative = [](const ASTNode& c) {
+    return CONSTANTBV::BitVector_msb_(c.GetBVConst());
+  };
+  const auto isNotOf = [](const ASTNode& x, const ASTNode& y) {
+    return x.GetKind() == stp::BVNOT && x[0] == y;
+  };
+  const auto isNegOf = [](const ASTNode& x, const ASTNode& y) {
+    return x.GetKind() == stp::BVUMINUS && x[0] == y;
+  };
+
+  switch (kind)
+  {
+    case stp::BVUSUBO:
+      // The subtraction borrows exactly when x <u y.
+      return NodeFactory::CreateNode(stp::BVLT, a, b);
+
+    case stp::BVUADDO:
+      // x + x carries out exactly when x's top bit is set; x + -x carries
+      // out for every x but 0.
+      if (a == b)
+        return NodeFactory::CreateNode(stp::BVSLT, a, zero);
+      if (isNegOf(a, b) || isNegOf(b, a))
+        return NodeFactory::CreateNode(
+            stp::NOT, NodeFactory::CreateNode(EQ, isNegOf(a, b) ? b : a, zero));
+      for (unsigned i = 0; i < 2; i++)
+      {
+        const ASTNode& x = children[i];
+        const ASTNode& other = children[1 - i];
+        // x + c > ones  <=>  x >u ones - c.
+        if (other.GetKind() == stp::BVCONST)
+          return NodeFactory::CreateNode(stp::BVGT, x, minus(ones, other));
+        // x + ~t = x + (ones - t) > ones  <=>  x >u t.
+        if (other.GetKind() == stp::BVNOT)
+          return NodeFactory::CreateNode(stp::BVGT, x, other[0]);
+      }
+      break;
+
+    case stp::BVSADDO:
+      // x + ~x = -1 never overflows; x + -x = 0 overflows only at smin,
+      // whose negation is itself.
+      if (isNotOf(a, b) || isNotOf(b, a))
+        return ASTFalse;
+      if (isNegOf(a, b) || isNegOf(b, a))
+        return NodeFactory::CreateNode(EQ, isNegOf(a, b) ? b : a, smin);
+      for (unsigned i = 0; i < 2; i++)
+      {
+        const ASTNode& x = children[i];
+        const ASTNode& c = children[1 - i];
+        if (c.GetKind() != stp::BVCONST)
+          continue;
+        if (c == zero)
+          return ASTFalse;
+        // A negative c can only underflow: x + c < smin <=> x <s smin - c.
+        // A positive one can only overflow: x + c > smax <=> x >s smax - c.
+        if (negative(c))
+          return NodeFactory::CreateNode(stp::BVSLT, x, minus(smin, c));
+        return NodeFactory::CreateNode(stp::BVSGT, x, minus(smax, c));
+      }
+      break;
+
+    case stp::BVSSUBO:
+      if (a == b)
+        return ASTFalse;
+      if (b.GetKind() == stp::BVCONST)
+      {
+        // x - c: a negative c can only overflow, x - c > smax <=> x >s
+        // smax + c; a positive one only underflow, x - c < smin <=> x <s
+        // smin + c.
+        if (b == zero)
+          return ASTFalse;
+        if (negative(b))
+          return NodeFactory::CreateNode(stp::BVSGT, a, plus(smax, b));
+        return NodeFactory::CreateNode(stp::BVSLT, a, plus(smin, b));
+      }
+      if (a.GetKind() == stp::BVCONST)
+      {
+        // c - x: a negative c can only underflow, c - x < smin <=> x >s c -
+        // smin; a non-negative one only overflow, c - x > smax <=> x <s c -
+        // smax. Either bound is representable; the other direction is not.
+        if (negative(a))
+          return NodeFactory::CreateNode(stp::BVSGT, b, minus(a, smin));
+        return NodeFactory::CreateNode(stp::BVSLT, b, minus(a, smax));
+      }
+      break;
+
+    case stp::BVUMULO:
+      for (unsigned i = 0; i < 2; i++)
+      {
+        const ASTNode& x = children[i];
+        const ASTNode& c = children[1 - i];
+        if (c.GetKind() != stp::BVCONST)
+          continue;
+        if (c == zero)
+          return ASTFalse;
+        // x * c > ones  <=>  x >u floor(ones / c).
+        return NodeFactory::CreateNode(
+            stp::BVGT, x, NodeFactory::CreateTerm(stp::BVDIV, width, ones, c));
+      }
+      break;
+
+    case stp::BVSMULO:
+      for (unsigned i = 0; i < 2; i++)
+      {
+        const ASTNode& x = children[i];
+        const ASTNode& c = children[1 - i];
+        if (c.GetKind() != stp::BVCONST)
+          continue;
+        if (c == zero)
+          return ASTFalse;
+        // x * -1 overflows only at smin. Tested before 1: at width 1 the two
+        // are the same constant, and it is -1.
+        if (c == ones)
+          return NodeFactory::CreateNode(EQ, x, smin);
+        if (c == bm.CreateOneConst(width))
+          return ASTFalse;
+        // |c| >= 2: the product fits exactly when lo <=s x <=s hi, where the
+        // bounds are the truncating divisions of the signed extremes by c.
+        // Truncation rounds towards zero, which is the direction each bound
+        // needs, and |c| >= 2 keeps both quotients representable.
+        const ASTNode lo = NodeFactory::CreateTerm(
+            stp::SBVDIV, width, negative(c) ? smax : smin, c);
+        const ASTNode hi = NodeFactory::CreateTerm(
+            stp::SBVDIV, width, negative(c) ? smin : smax, c);
+        return NodeFactory::CreateNode(
+            stp::OR, NodeFactory::CreateNode(stp::BVSGT, x, hi),
+            NodeFactory::CreateNode(stp::BVSGT, lo, x));
+      }
+      break;
+
+    default:
+      break;
+  }
+  return ASTNode();
+}
+
 ASTNode SimplifyingNodeFactory::create_gt_node(const ASTChildren children)
 {
   if (children[0] == children[1])
@@ -652,6 +812,51 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTChildren children)
       CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
   {
     return ASTFalse;
+  }
+
+  if (children[1].isConstant())
+  {
+    const unsigned width = children[1].GetValueWidth();
+    // x >u ones - 1: only ones is above it.
+    if (children[1] == NodeFactory::CreateTerm(stp::BVSUB, width,
+                                               bm.CreateMaxConst(width),
+                                               bm.CreateOneConst(width)))
+      return NodeFactory::CreateNode(EQ, children[0], bm.CreateMaxConst(width));
+    // x >u smax: exactly the values with the top bit set.
+    if (children[1] == get_largest_number(width))
+      return NodeFactory::CreateNode(stp::BVSGT, bm.CreateZeroConst(width),
+                                     children[0]);
+  }
+
+  // smin >u x: exactly the values with the top bit clear. One spelling for
+  // a sign test, so the two meet.
+  if (children[0].isConstant() &&
+      children[0] == get_smallest_number(children[0].GetValueWidth()))
+  {
+    const ASTNode zero = bm.CreateZeroConst(children[0].GetValueWidth());
+    return NodeFactory::CreateNode(
+        stp::NOT, NodeFactory::CreateNode(stp::BVSGT, zero, children[1]));
+  }
+
+  // Complement reverses the unsigned order, so a complemented side against
+  // a constant complements the constant instead: ~x >u c <=> ~c >u x.
+  for (unsigned side = 0; side < 2; side++)
+  {
+    const ASTNode& flipped = children[side];
+    const ASTNode& c = children[1 - side];
+    if (flipped.GetKind() == BVNOT && c.isConstant())
+    {
+      const ASTNode nc = NodeFactory::CreateTerm(BVNOT, c.GetValueWidth(), c);
+      return side == 0 ? NodeFactory::CreateNode(stp::BVGT, nc, flipped[0])
+                       : NodeFactory::CreateNode(stp::BVGT, flipped[0], nc);
+    }
+  }
+
+  // x >u -x <=> x >u smin: for x above smin, -x = 2^w - x is below x.
+  if (children[1].GetKind() == BVUMINUS && children[1][0] == children[0])
+  {
+    const ASTNode smin = get_smallest_number(children[0].GetValueWidth());
+    return NodeFactory::CreateNode(stp::BVGT, children[0], smin);
   }
 
   if (children[0].GetKind() == BVRIGHTSHIFT && children[0][0] == children[1])
@@ -916,6 +1121,54 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
             stp::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
       }
 
+      // x >s -1: the top bit is clear. Spelled as the negation of the sign
+      // test, so the two meet.
+      if (result.IsNull() && children[1].GetKind() == stp::BVCONST &&
+          children[1] == bm.CreateMaxConst(children[1].GetValueWidth()))
+      {
+        result = NodeFactory::CreateNode(
+            stp::NOT, NodeFactory::CreateNode(
+                          stp::BVSGT,
+                          bm.CreateZeroConst(children[1].GetValueWidth()),
+                          children[0]));
+      }
+
+      // Complement reverses the signed order too (~x = -x - 1), so a
+      // complemented side against a constant complements the constant
+      // instead: ~x >s c <=> ~c >s x.
+      for (unsigned side = 0; result.IsNull() && side < 2; side++)
+      {
+        const ASTNode& flipped = children[side];
+        const ASTNode& c = children[1 - side];
+        if (flipped.GetKind() == BVNOT && c.GetKind() == stp::BVCONST)
+        {
+          const ASTNode nc =
+              NodeFactory::CreateTerm(BVNOT, c.GetValueWidth(), c);
+          result = side == 0
+                       ? NodeFactory::CreateNode(stp::BVSGT, nc, flipped[0])
+                       : NodeFactory::CreateNode(stp::BVSGT, flipped[0], nc);
+        }
+      }
+
+      // x >s smax - 1 -> x == smax, and smin + 1 >s x -> x == smin: one
+      // value lies beyond each bound.
+      if (result.IsNull() && children[1].GetKind() == stp::BVCONST)
+      {
+        const unsigned width = children[1].GetValueWidth();
+        const ASTNode smax = get_largest_number(width);
+        if (children[1] == NodeFactory::CreateTerm(stp::BVSUB, width, smax,
+                                                   bm.CreateOneConst(width)))
+          result = NodeFactory::CreateNode(EQ, children[0], smax);
+      }
+      if (result.IsNull() && children[0].GetKind() == stp::BVCONST)
+      {
+        const unsigned width = children[0].GetValueWidth();
+        const ASTNode smin = get_smallest_number(width);
+        if (children[0] == NodeFactory::CreateTerm(stp::BVPLUS, width, smin,
+                                                   bm.CreateOneConst(width)))
+          result = NodeFactory::CreateNode(EQ, children[1], smin);
+      }
+
       // A 1-bit signed comparison has a single satisfying assignment:
       // 0 is the largest value and -1 (bit set) the smallest, so 0 >s 1.
       if (result.IsNull() && children[0].GetValueWidth() == 1)
@@ -1019,6 +1272,16 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
       result = NodeFactory::CreateNode(stp::NOT, a);
     }
     break;
+
+    case stp::BVUADDO:
+    case stp::BVSADDO:
+    case stp::BVUMULO:
+    case stp::BVSMULO:
+    case stp::BVUSUBO:
+    case stp::BVSSUBO:
+      assert(children.size() == 2);
+      result = create_overflow_node(kind, children);
+      break;
 
     case stp::NOT:
       result = CreateSimpleNot(children);

@@ -175,6 +175,7 @@ private:
   ASTNode handle_bvxor(unsigned int width, ASTChildren input_children);
   ASTNode handle_bvand(unsigned int width, ASTChildren children);
   ASTNode create_gt_node(ASTChildren children);
+  ASTNode create_overflow_node(Kind kind, ASTChildren children);
 
   // abs/neg of a constant float: clear (flip=false) or flip (flip=true) the
   // sign bit, keeping the rest of the packed bits and the format.
