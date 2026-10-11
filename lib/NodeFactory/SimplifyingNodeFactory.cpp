@@ -4058,11 +4058,13 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
   assert(bm.hashingNodeFactory == &hashing);
 
-  // The partial floating-point operations cannot be constant-folded here:
+  // The partial floating-point operations are not constant-folded here:
   // their unspecified cases (fp.min/fp.max on opposite zeros, out-of-range
   // fp.to_ubv/fp.to_sbv) only get an answer when FpTotalise adds its
   // never-constant unspecified-value child, and lowering requires that
-  // totalised arity. Every other floating-point term folds through the
+  // totalised arity. Their defined constant cases fold in the switch below,
+  // where the operands can be checked first. Every other floating-point
+  // term folds through the
   // constant evaluator's FP arm, which re-interns the result with its
   // format via the CreateFPConst funnel -- so both literal spellings,
   // ((_ to_fp e s) bits) and (fp s e m), intern to the same ASTFPConst,
@@ -5162,6 +5164,62 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
           else if (fpConstInfSign(children[k]) ==
                    (kind == stp::FP_MIN ? -1 : 1))
             result = children[k];
+        }
+        // Two constants: the smaller or the larger, decided by a constant
+        // comparison. Only the pair of opposite zeros is unspecified (two
+        // equal constants are one node, handled above), so it is the one
+        // pair left for the totalising pass.
+        if (result.IsNull() && fpFormattedConst(children[0]) &&
+            fpFormattedConst(children[1]) &&
+            !(fpConstIsZero(children[0]) && fpConstIsZero(children[1])))
+        {
+          const ASTNode less =
+              NodeFactory::CreateNode(stp::FP_LT, children[0], children[1]);
+          if (less == ASTTrue || less == ASTFalse)
+            result = ((less == ASTTrue) == (kind == stp::FP_MIN))
+                         ? children[0]
+                         : children[1];
+        }
+      }
+      break;
+
+    // fp.to_ubv/fp.to_sbv of a constant: unspecified for NaN, the infinities
+    // and a rounded value outside the result's range, defined everywhere
+    // else. The candidate comes from the evaluator over a totalised copy
+    // whose unspecified child is 0; it is accepted only when converting it
+    // back to the float format gives the rounded operand, which an
+    // out-of-range operand's candidate never does (the rounded value is then
+    // beyond every integer of the width). An operand rounding to -0 is left
+    // alone: it converts back to +0, which is `=`-distinct.
+    case stp::FP_TO_UBV:
+    case stp::FP_TO_SBV:
+      if (children.size() >= 3 && children[0].GetKind() == stp::BVCONST &&
+          children[1].GetKind() == stp::BVCONST &&
+          fpFormattedConst(children[2]))
+      {
+        const ASTNode& rm = children[1];
+        const ASTNode& x = children[2];
+        const unsigned eb = x.GetExpWidth(), sb = x.GetSigWidth();
+        const ASTNode rounded =
+            NodeFactory::CreateTerm(stp::FP_ROUNDTOINTEGRAL, eb + sb, rm, x);
+        if (fpFormattedConst(rounded) && !fpConstIsNaN(rounded) &&
+            fpConstInfSign(rounded) == 0 && fpConstZeroSign(rounded) >= 0)
+        {
+          const ASTNode totalised = hashing.CreateTerm(
+              kind, width,
+              {children[0], rm, x, bm.CreateZeroConst(width)});
+          const ASTNode candidate = NonMemberBVConstEvaluator(&bm, totalised);
+          const ASTNode back = NodeFactory::CreateTerm(
+              kind == stp::FP_TO_UBV ? stp::FP_TOFP_UNSIGNED
+                                     : stp::FP_TOFP_SIGNED,
+              eb + sb,
+              {bm.CreateBVConst(32, eb), bm.CreateBVConst(32, sb),
+               bm.CreateRMConst(stp::symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN),
+               candidate});
+          if (candidate.GetKind() == stp::BVCONST &&
+              NodeFactory::CreateNode(stp::FP_SMT_EQ, back, rounded) ==
+                  ASTTrue)
+            result = candidate;
         }
       }
       break;
