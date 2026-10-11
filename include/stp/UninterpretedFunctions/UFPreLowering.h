@@ -52,13 +52,11 @@ struct DLL_PUBLIC UFPreLoweringChoice
 // Resolve both options against `root`, which must be the completed root the
 // pass would be given.
 //
-// AUTO means on unless the query has Real content. The pass was written for
-// and measured on QF_UFBV, where it is a large win; on QF_UFLRA it is a
-// consistent loss across every family slow enough to measure, because those
-// queries reach their answer through refinement rounds that the rewriting
-// does not shorten. A query with no application at all is not this
-// function's business: callers test that first, since the pass has nothing
-// to do there whatever the options say.
+// AUTO means on for queries with neither pure QF_UF logic nor Real content.
+// The pass is a large win on QF_UFBV, whereas its extra
+// work hurts the measured QF_UF and QF_UFLRA corpora. Explicit ON still
+// runs it. A query with no application at all is not this function's
+// business: callers test that first.
 DLL_PUBLIC UFPreLoweringChoice chooseUFPreLowering(const STPMgr& manager,
                                                    const ASTNode& root);
 
@@ -99,8 +97,9 @@ struct DLL_PUBLIC UFPreLoweringStats
 // becomes that; an application equated with a constant becomes that
 // constant; and any conjunct at all holds wherever else it occurs, so its
 // recurrences become true and those of what it negates become false -- the
-// embedded-constraints rewrite, over the structure the query has before its
-// applications are hidden. Hash-consing then makes `(f x)` and `(f y)` one
+// replacement constant bit propagation makes at the end of the pipeline,
+// here over the structure the query has before its applications are
+// hidden. Hash-consing then makes `(f x)` and `(f y)` one
 // application when `x = y` was asserted, which is exactly the structural
 // merge an e-graph solver gets at internalisation.
 //

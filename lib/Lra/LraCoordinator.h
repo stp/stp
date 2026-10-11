@@ -269,6 +269,7 @@ public:
 private:
   bool decisionPolarityEnabled() const;
   bool separateModelValuesEnabled() const;
+  bool floatDriverEnabled() const;
   bool bindOpaqueAtoms(ToSATBase& tosat) noexcept;
   bool prepareTheorySearch() noexcept;
   bool readOpaqueValue(const ASTNode& atom, bool& value) const noexcept;

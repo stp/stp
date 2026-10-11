@@ -54,7 +54,9 @@ endif()
 # The floating-point rewrite-rule generator: enumerates small terms over a
 # float variable and special constants, looking for sound collapses the
 # SimplifyingNodeFactory is missing. A developer tool, not a test.
+# bv_rewrite_gen is the same search over the bit-vector overflow predicates.
 if (BUILD_EXTRA_TOOLS)
     add_subdirectory(fp_rewrite_gen)
+    add_subdirectory(bv_rewrite_gen)
 endif()
 

@@ -27,12 +27,22 @@ over the SAT variables the lowering registered, and the solver is asked
 again with the lemmas in place. A candidate no conflict refutes is a model;
 a solver that runs out of assignments has refuted the query.
 
-Two things happen before the lowering, while an application is still an
-ordinary term:
+For batch ``QF_UF`` with CaDiCaL, ``--uf-search-conflicts=1`` also checks
+congruence during SAT search. Once every argument bit of an application is
+assigned, it joins the applications of its function with the same argument
+values. If two such applications have opposing assigned result bits, the
+propagator sends a clause excluding that concrete argument and result
+assignment. CaDiCaL can then backtrack without finishing a candidate and
+starting another UF refinement round. The complete-model checker above
+still certifies the answer. This experimental option is off by default and
+does not engage for ``QF_UFLRA`` or the persistent incremental driver.
+
+Two optional passes can run before the lowering, while an application is
+still an ordinary term:
 
 *   The query's own top-level equalities and asserted atoms are pushed
-    through the applications (``--uf-propagate-equalities``, on by default
-    except on a query with Real content).
+    through the applications (``--uf-propagate-equalities``, off by default
+    for pure ``QF_UF`` and queries with Real content, on otherwise).
     A symbol equated with a constant, another symbol, an application or any
     other term free of wide arithmetic becomes that; an application pinned
     to a constant becomes the constant everywhere else; two applications
@@ -59,15 +69,20 @@ ordinary term:
     can cross an application.
 
 *   The Boolean skeleton is asked what it forces at the start of every round
-    (``--uf-skeleton-preproc``, on by default except on a query with Real
-    content), and those facts are read as well. A verification query states
-    most of its equalities under an implication whose guard the structure
+    (``--uf-skeleton-preproc``, on by default when the preceding pass runs
+    and the query has no Real content), and those facts are read as well.
+    A verification query states most of its equalities under an implication
+    whose guard the structure
     resolves; this is what lets them reach the applications. Asking again
     after each round matters: a round's rewrite renames the atoms and folds
     connectives, so a guard the structure could not see through before it is
     one it resolves after it. On the Certora queries this is the difference
     between a solve that ends in the rewrite and one that bit-blasts
     millions of gates.
+
+On the measured pure ``QF_UF`` corpus, skipping these passes improves the
+solve time alongside the declared-sort value bounds below. Explicit
+``--uf-propagate-equalities=on`` still enables the rewrite when wanted.
 
 Real positions
 --------------
@@ -102,6 +117,30 @@ is still decided; one with a Real position is decided as described above. A decl
 each other has them narrowed to ``ceil(log2(N+1))`` bits first
 (``--uf-narrow-results``), which is what keeps a 256-bit codomain from
 costing 256 bits per constraint.
+
+The experimental ``--uf-pair-seeding`` option uses budget left by ``auto``
+to add selected congruence constraints from declarations too large to select
+as a whole. It considers pairs whose arguments are already forced equal, and
+pure UF pairs whose results are forced distinct. Real pairs are admitted only
+when their arguments are forced equal; each costs 32 budget units to account
+for the arithmetic equality it adds. The model checker still covers all
+omitted pairs. This option is off by default.
+
+Declared-sort value bounds
+--------------------------
+
+In pure ``QF_UF``, a declared sort has equality but no interpreted values.
+The values of its ground terms can be renamed without changing the formula.
+``--uf-value-bounds=auto`` (the default) uses this symmetry: for each declared
+sort, STP orders the scalar symbols used by the UF checker and bounds the
+first to carrier value 0, the second to at most 1, and so on, up to 512
+symbols. Symbols in at least three asserted disequalities take the earliest
+ranks; this often pins an explicit finite-domain basis to values 0, 1, ... .
+The constraints remove unused high carrier bits while retaining the
+default ``--uf-sort-width=16``. Thus an ``unsat`` answer does not become
+``unknown`` merely because a smaller carrier ran out of values. A sort with
+a fixed uninterpreted constant in the input is skipped. ``on`` enables the
+bounds outside ``QF_UF`` too; ``off`` disables them.
 
 Wide arithmetic
 ---------------

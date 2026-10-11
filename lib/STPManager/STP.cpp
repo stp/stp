@@ -27,11 +27,11 @@ THE SOFTWARE.
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
-#include "stp/Simplifier/EmbeddedConstraints.h"
 #include "stp/Simplifier/SkeletonPreproc.h"
 #include "stp/UninterpretedFunctions/UFLowering.h"
 #include "stp/UninterpretedFunctions/UFPreLowering.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
+#include "stp/UninterpretedFunctions/UFSearchPropagator.h"
 #include "stp/UninterpretedFunctions/UFModel.h"
 #include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
@@ -41,6 +41,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 
 #include "stp/Sat/SATSolverFactory.h"
+#ifdef USE_CADICAL
+#include "stp/Sat/Cadical.h"
+#endif
 #include "Lra/LraAtomRegistry.h"
 #include "Lra/LraBudgetRefusal.h"
 #include "Lra/LraFrontend.h"
@@ -676,7 +679,7 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
     {
       bm->UserFlags.lra_force_exact_driver = true;
       if (bm->UserFlags.stats_flag)
-        std::cerr << "LRA: float tier blew up; re-solving on the exact driver"
+        std::cerr << "LRA: float tier rerouted; re-solving on the exact driver"
                   << std::endl;
       newS.reset(get_new_sat_solver());
       result = solve_by_sat_solver(newS.get(), roundInput(),
@@ -817,13 +820,6 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
       inputToSat = bm->defaultNodeFactory->CreateNode(AND, facts);
       bm->ASTNodeStats("After Skeleton Preprocessing: ", inputToSat);
     }
-  }
-
-  if (bm->UserFlags.embedded_constraints)
-  {
-    EmbeddedConstraints ec(bm);
-    inputToSat = ec.topLevel(inputToSat);
-    bm->ASTNodeStats("After Embedded Constraints: ", inputToSat);
   }
 
   if (bm->UserFlags.propagate_equalities)
@@ -1143,6 +1139,31 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   UFContext* ufSolveContext =
       batchUFView->active() ? bm->getUFContextIfAny() : NULL;
   UFContext::SolveScope ufSolveScope(ufSolveContext);
+
+  UFSearchPropagator ufSearch;
+  struct UFSearchScope
+  {
+    AbsRefine_CounterExample* counterexample;
+    STPMgr* manager;
+    UFSearchPropagator* propagator;
+    ~UFSearchScope()
+    {
+      counterexample->setUFSearchPropagator(NULL);
+      if (manager->UserFlags.stats_flag && propagator->connected())
+        std::cerr << "UF search congruence: applications="
+                  << propagator->observedApplications()
+                  << ", conflicts=" << propagator->conflicts() << std::endl;
+    }
+  } ufSearchScope{Ctr_Example, bm, &ufSearch};
+#ifdef USE_CADICAL
+  if (bm->UserFlags.uf_search_conflicts && bm->UserFlags.uf_qf_uf_logic &&
+      batchUFView->active() && bm->before_search == NULL &&
+      dynamic_cast<Cadical*>(&NewSolver) != NULL)
+  {
+    NewSolver.expectTheoryPropagator();
+    Ctr_Example->setUFSearchPropagator(&ufSearch);
+  }
+#endif
 
   std::unique_ptr<lra::LraCoordinator, QueryTimedDelete<lra::LraCoordinator>>
       lraCoordinator(nullptr, {bm->query_timing, QueryPhase::LraCleanup});

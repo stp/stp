@@ -149,13 +149,17 @@ struct DLL_PUBLIC UFEagerStats
   uint64_t budget = 0;
   uint64_t budgetSpent = 0;
   bool policyRan = false;
+  uint64_t seededPairs = 0;
+  uint64_t seededRealPairs = 0;
+  uint64_t seedCandidates = 0;
+  uint64_t seedImpossiblePairs = 0;
 
   uint64_t emittedConstraints() const
   {
     uint64_t total = 0;
     for (const UFEagerDeclarationStat& stat : declarations)
       total += stat.emittedConstraints;
-    return total;
+    return total + seededPairs;
   }
   uint64_t emittedInjectivity() const
   {
@@ -199,12 +203,10 @@ public:
   // changed no application. See UFPreLowering.
   ASTNodeMap handleAliases;
   ASTVec namingDefinitions;
-  // Side conditions without which a solve scalar would denote nothing. Only
-  // RoundingMode needs one today: its 5-bit carrier has thirty-two patterns
-  // and the sort has five values, so every RoundingMode scalar this lowering
-  // registers is pinned one-hot here. FpTotalise pins the same symbols when
-  // it runs, and the constraint is idempotent, but relying on that would make
-  // a model's legality depend on a pass ordering rather than on lowering.
+  // Side conditions on solve scalars. RoundingMode scalars are pinned to the
+  // five legal patterns; QF_UF declared-sort scalars can also receive sound
+  // value-symmetry bounds. The latter are optional search constraints, while
+  // the former are required to denote a valid rounding mode.
   ASTVec sortConstraints;
   // Pairwise congruence constraints installed before the first solve for the
   // declarations the eager policy selected. Empty when that policy selects

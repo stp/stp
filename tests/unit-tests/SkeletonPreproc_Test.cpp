@@ -236,8 +236,8 @@ TEST_F(SkeletonTest, an_arithmetic_contradiction_is_left_alone)
 
 // Facts about the structure itself. A disjunction the query never asserts
 // but forces -- here through an equivalence whose other side is a forced
-// atom -- is surfaced as a top-level fact, where EmbeddedConstraints can
-// replace its other occurrences. The atoms under it stay open.
+// atom -- is surfaced as a top-level fact, where constant bit propagation
+// replaces its other occurrences. The atoms under it stay open.
 TEST_F(SkeletonTest, a_forced_disjunction_buried_in_an_equivalence_is_surfaced)
 {
   if (!backendReports())

@@ -1028,7 +1028,7 @@ bool Cadical::PropagatorBridge::cb_check_found_model(
 
 bool Cadical::PropagatorBridge::cb_has_external_clause(bool& is_forgettable)
 {
-  // Every clause the theory hands over is a Farkas no-good: entailed by the
+  // Every clause the theory hands over is a theory no-good: entailed by the
   // theory, not by the current trail, so it stays true for the rest of the
   // solve and must not be forgotten.
   is_forgettable = false;

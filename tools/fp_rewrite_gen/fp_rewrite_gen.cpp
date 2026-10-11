@@ -65,6 +65,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 
 #include <cstdint>
+#include <functional>
 #include <cstdio>
 #include <map>
 #include <string>
@@ -310,6 +311,15 @@ struct Ctx
     {
       children.push_back(choice ? mgr.CreateOneConst(1)
                                 : mgr.CreateZeroConst(1));
+      changed = true;
+    }
+    // fp.to_ubv/fp.to_sbv: the unspecified value for NaN, the infinities
+    // and out-of-range operands; pinned to 0 or to ones, and a rule must
+    // hold under both.
+    if ((k == FP_TO_UBV || k == FP_TO_SBV) && n.Degree() == 3)
+    {
+      children.push_back(choice ? mgr.CreateMaxConst(n.GetValueWidth())
+                                : mgr.CreateZeroConst(n.GetValueWidth()));
       changed = true;
     }
     if (!changed)
@@ -848,12 +858,688 @@ struct Generator
   }
 };
 
+// ---------------------------------------------------------------------------
+// Phase 3: the conversions. (_ to_fp e s) of bits, of a signed or unsigned
+// integer, and of a float in another format; fp.to_ubv/fp.to_sbv;
+// fp.to_ieee_bv. None of these has a term rule in the factory. The variable
+// is a float x (format F) or a bit-vector b (width W, or the format's packed
+// width for the bits reinterpretation); the candidates are each conversion
+// alone, each under a classification predicate, a comparison with a special
+// constant, fp.abs/fp.neg, and the round trips (widen then narrow, bits of
+// the bits, integer of the integer). Targets are the depth-1 library plus
+// the conversion's operand (the round trips), and for a bit-vector result or
+// a bit-vector variable: b, b = 0, b <s 0, b = ones.
+//
+// A rule is confirmed on a second configuration (FB for FA, W+1 for W); one
+// that holds only on the first is a fact of that format's range, such as
+// "to_fp_unsigned of a 4-bit integer is never infinite", and is reported as
+// unconfirmed rather than as a rule.
+struct ConvGen
+{
+  Ctx& c;
+  int evaluated = 0;
+  explicit ConvGen(Ctx& ctx) : c(ctx) {}
+
+  struct Cfg
+  {
+    Fmt f;      // the float format
+    unsigned w; // the integer width
+  };
+
+  // What a candidate produces.
+  enum Res
+  {
+    R_FLOAT,
+    R_BV,
+    R_PRED
+  };
+
+  // A candidate: built from the variable, under a mode; `inner` is the
+  // operand a round trip may collapse to (null when none).
+  struct Shape
+  {
+    std::string name;
+    bool varIsFloat;
+    bool usesRm;
+    Res res;
+    std::function<ASTNode(NodeFactory*, const ASTNode& var, const ASTNode& rm,
+                          const Cfg&, ASTNode& inner)>
+        build;
+  };
+
+  ASTNode c32(unsigned v) { return c.mgr.CreateBVConst(32, v); }
+  ASTNode fmtTerm(Kind k, const Fmt& f, const ASTVec& ch)
+  {
+    ASTNode n = c.hf->CreateTerm(k, f.width(), ch);
+    n.SetExpWidth(f.eb);
+    n.SetSigWidth(f.sb);
+    return n;
+  }
+  ASTNode fmtTermNf(NodeFactory* nf, Kind k, const Fmt& f, const ASTVec& ch)
+  {
+    ASTNode n = nf->CreateTerm(k, f.width(), ch);
+    if (n.GetExpWidth() == 0)
+    {
+      n.SetExpWidth(f.eb);
+      n.SetSigWidth(f.sb);
+    }
+    return n;
+  }
+  ASTNode toFpBits(NodeFactory* nf, const Fmt& f, const ASTNode& b)
+  {
+    return fmtTermNf(nf, FP_TOFP, f, {c32(f.eb), c32(f.sb), b});
+  }
+  ASTNode toFpInt(NodeFactory* nf, bool sgn, const Fmt& f, const ASTNode& rm,
+                  const ASTNode& b)
+  {
+    return fmtTermNf(nf, sgn ? FP_TOFP_SIGNED : FP_TOFP_UNSIGNED, f,
+                     {c32(f.eb), c32(f.sb), rm, b});
+  }
+  ASTNode reformat(NodeFactory* nf, const Fmt& g, const ASTNode& rm,
+                   const ASTNode& x)
+  {
+    return fmtTermNf(nf, FP_TOFP, g, {c32(g.eb), c32(g.sb), rm, x});
+  }
+  ASTNode toBv(NodeFactory* nf, bool sgn, unsigned w, const ASTNode& rm,
+               const ASTNode& x)
+  {
+    return nf->CreateTerm(sgn ? FP_TO_SBV : FP_TO_UBV, w, {c32(w), rm, x});
+  }
+  ASTNode toIeee(NodeFactory* nf, const ASTNode& x)
+  {
+    return nf->CreateTerm(FP_TO_IEEE_BV, x.GetValueWidth(), x);
+  }
+  static Fmt wider(const Fmt& f) { return Fmt{f.eb + 1, f.sb + 1}; }
+  static Fmt widerExp(const Fmt& f) { return Fmt{f.eb + 1, f.sb}; }
+  static Fmt widerSig(const Fmt& f) { return Fmt{f.eb, f.sb + 1}; }
+
+  // The value vector of `n` over every value of `var`, keyed for `res`:
+  // floats modulo NaN in the result's own format `rf`.
+  std::vector<uint64_t> vec(const ASTNode& n, const ASTNode& var,
+                            bool varIsFloat, const Cfg& cfg, Res res,
+                            const Fmt& rf, int choice)
+  {
+    const ASTNode blasted = c.blastOnce(n, choice);
+    const uint64_t domain = varIsFloat ? cfg.f.values() : (1ull << cfg.w);
+    std::vector<uint64_t> out(domain);
+    for (uint64_t v = 0; v < domain; v++)
+    {
+      ASTNodeMap memo;
+      memo.insert({var, varIsFloat ? c.fpConst(cfg.f, v)
+                                   : c.mgr.CreateBVConst(cfg.w, v)});
+      out[v] = Ctx::key(c.foldBlasted(blasted, memo), rf, res == R_FLOAT);
+    }
+    return out;
+  }
+
+  // The result format a float-producing shape has, read off the node.
+  static Fmt fmtOf(const ASTNode& n)
+  {
+    return Fmt{n.GetExpWidth(), n.GetSigWidth()};
+  }
+
+  struct Tgt
+  {
+    std::string name;
+    std::vector<uint64_t> v;
+    std::function<ASTNode(NodeFactory*)> build; // through a factory
+  };
+
+  // The targets a result of kind `res` (format rf / width rw) over `var`
+  // may collapse to.
+  std::vector<Tgt> targets(Res res, const Fmt& rf, unsigned rw,
+                           const ASTNode& var, bool varIsFloat,
+                           const Cfg& cfg, const ASTNode& inner,
+                           const std::vector<uint64_t>* innerVec)
+  {
+    std::vector<Tgt> t;
+    const uint64_t domain = varIsFloat ? cfg.f.values() : (1ull << cfg.w);
+    auto constVec = [&](uint64_t k) {
+      return std::vector<uint64_t>(domain, k);
+    };
+    if (res == R_PRED)
+    {
+      t.push_back({"true", constVec(K_TRUE), [&](NodeFactory*) {
+                     return c.mgr.ASTTrue;
+                   }});
+      t.push_back({"false", constVec(K_FALSE), [&](NodeFactory*) {
+                     return c.mgr.ASTFalse;
+                   }});
+      if (varIsFloat)
+      {
+        struct P
+        {
+          const char* name;
+          Kind k;
+          bool (*g)(const RefFp&);
+        };
+        static const P preds[] = {
+            {"(fp.isNaN x)", FP_ISNAN, [](const RefFp& d) { return d.nan; }},
+            {"(fp.isZero x)", FP_ISZERO, [](const RefFp& d) { return d.zero; }},
+            {"(fp.isInfinite x)", FP_ISINFINITE,
+             [](const RefFp& d) { return d.inf; }},
+            {"(fp.isNegative x)", FP_ISNEGATIVE,
+             [](const RefFp& d) { return !d.nan && d.sign; }},
+            {"(fp.isPositive x)", FP_ISPOSITIVE,
+             [](const RefFp& d) { return !d.nan && !d.sign; }},
+        };
+        for (const P& p : preds)
+        {
+          std::vector<uint64_t> v(domain), nv(domain);
+          for (uint64_t i = 0; i < domain; i++)
+          {
+            const bool b = p.g(refDecode(cfg.f, i));
+            v[i] = b ? K_TRUE : K_FALSE;
+            nv[i] = b ? K_FALSE : K_TRUE;
+          }
+          const Kind k = p.k;
+          t.push_back({p.name, v, [k, var](NodeFactory* f) {
+                         return f->CreateNode(k, var);
+                       }});
+          t.push_back({std::string("(not ") + p.name + ")", nv,
+                       [k, var](NodeFactory* f) {
+                         return f->CreateNode(NOT, f->CreateNode(k, var));
+                       }});
+        }
+      }
+      else
+      {
+        std::vector<uint64_t> zero(domain), nzero(domain), neg(domain),
+            nneg(domain), ones(domain);
+        for (uint64_t i = 0; i < domain; i++)
+        {
+          zero[i] = i == 0 ? K_TRUE : K_FALSE;
+          nzero[i] = i == 0 ? K_FALSE : K_TRUE;
+          const bool msb = (i >> (cfg.w - 1)) & 1;
+          neg[i] = msb ? K_TRUE : K_FALSE;
+          nneg[i] = msb ? K_FALSE : K_TRUE;
+          ones[i] = (i + 1 == (1ull << cfg.w)) ? K_TRUE : K_FALSE;
+        }
+        const unsigned w = cfg.w;
+        t.push_back({"(= b 0)", zero, [this, var, w](NodeFactory* f) {
+                       return f->CreateNode(EQ, var, c.mgr.CreateZeroConst(w));
+                     }});
+        t.push_back({"(not (= b 0))", nzero, [this, var, w](NodeFactory* f) {
+                       return f->CreateNode(
+                           NOT,
+                           f->CreateNode(EQ, var, c.mgr.CreateZeroConst(w)));
+                     }});
+        t.push_back({"(bvslt b 0)", neg, [this, var, w](NodeFactory* f) {
+                       return f->CreateNode(BVSLT, var,
+                                            c.mgr.CreateZeroConst(w));
+                     }});
+        t.push_back({"(not (bvslt b 0))", nneg, [this, var, w](NodeFactory* f) {
+                       return f->CreateNode(
+                           NOT,
+                           f->CreateNode(BVSLT, var, c.mgr.CreateZeroConst(w)));
+                     }});
+        t.push_back({"(= b ones)", ones, [this, var, w](NodeFactory* f) {
+                       return f->CreateNode(EQ, var, c.mgr.CreateMaxConst(w));
+                     }});
+      }
+    }
+    else if (res == R_FLOAT)
+    {
+      for (int sc = 0; sc < S_COUNT; sc++)
+      {
+        const uint64_t bits = bitsOf((Special)sc, rf);
+        const Fmt f = rf;
+        t.push_back({specialName[sc], constVec(keyBits(bits, rf)),
+                     [this, f, bits](NodeFactory*) {
+                       return c.fpConst(f, bits);
+                     }});
+      }
+      if (varIsFloat && rf.eb == cfg.f.eb && rf.sb == cfg.f.sb)
+      {
+        std::vector<uint64_t> vx(domain), vn(domain), va(domain);
+        for (uint64_t i = 0; i < domain; i++)
+        {
+          vx[i] = keyBits(i, rf);
+          vn[i] = keyBits(i ^ rf.signBit(), rf);
+          va[i] = keyBits(i & ~rf.signBit(), rf);
+        }
+        const Fmt f = rf;
+        t.push_back({"x", vx, [var](NodeFactory*) { return var; }});
+        t.push_back({"(fp.neg x)", vn, [this, var, f](NodeFactory* nf) {
+                       return fmtTermNf(nf, FP_NEG, f, {var});
+                     }});
+        t.push_back({"(fp.abs x)", va, [this, var, f](NodeFactory* nf) {
+                       return fmtTermNf(nf, FP_ABS, f, {var});
+                     }});
+      }
+    }
+    else // R_BV
+    {
+      if (!varIsFloat && rw == cfg.w)
+      {
+        std::vector<uint64_t> vb(domain);
+        for (uint64_t i = 0; i < domain; i++)
+          vb[i] = i;
+        t.push_back({"b", vb, [var](NodeFactory*) { return var; }});
+      }
+    }
+    if (!inner.IsNull() && innerVec != nullptr)
+      t.push_back({"<operand>", *innerVec, [](NodeFactory*) {
+                     return ASTNode(); // compared by hand below
+                   }});
+    return t;
+  }
+
+  struct ConvFinding
+  {
+    std::string cand, target;
+    int modeMask;
+    bool confirmed;
+    bool handled;
+    std::string snfForm;
+  };
+
+  // Evaluate `sh` under `mode` on `cfg`: the matching target's index into a
+  // freshly built target list, or -1. Both pinned choices must agree.
+  int evalOne(const Shape& sh, int mode, const Cfg& cfg, std::string& tname)
+  {
+    evaluated++;
+    const ASTNode var = sh.varIsFloat ? c.fp(cfg.f)
+                                      : c.mgr.CreateSymbol(
+                                            ("b" + std::to_string(c.counter++))
+                                                .c_str(),
+                                            0, cfg.w);
+    const ASTNode rm = c.rm(RM_MODES[mode]);
+    ASTNode inner;
+    const ASTNode n = sh.build(c.hf, var, rm, cfg, inner);
+    if (n.IsNull())
+      return -1;
+    const Fmt rf = sh.res == R_FLOAT ? fmtOf(n) : cfg.f;
+    const unsigned rw = sh.res == R_BV ? n.GetValueWidth() : 0;
+
+    std::vector<uint64_t> innerVec;
+    const std::vector<uint64_t>* innerPtr = nullptr;
+    if (!inner.IsNull() && sh.res != R_PRED)
+    {
+      // The operand is a float or a bit-vector; its own kind, not the
+      // result's, keys its vector -- a round trip only matches when the
+      // two kinds agree, which the caller arranges.
+      const bool innerFloat = inner.GetExpWidth() != 0 || inner == var;
+      const Res ir = (inner.GetType() == BOOLEAN_TYPE)
+                         ? R_PRED
+                         : ((sh.varIsFloat && inner == var) ||
+                            inner.GetExpWidth() != 0)
+                               ? R_FLOAT
+                               : R_BV;
+      (void)innerFloat;
+      if (ir == sh.res)
+      {
+        innerVec = vec(inner, var, sh.varIsFloat, cfg, ir,
+                       ir == R_FLOAT ? fmtOf(inner) : cfg.f, 0);
+        if (ir != R_FLOAT ||
+            (fmtOf(inner).eb == rf.eb && fmtOf(inner).sb == rf.sb))
+          innerPtr = &innerVec;
+      }
+    }
+    const std::vector<Tgt> ts =
+        targets(sh.res, rf, rw, var, sh.varIsFloat, cfg, inner, innerPtr);
+    const std::vector<uint64_t> v0 =
+        vec(n, var, sh.varIsFloat, cfg, sh.res, rf, 0);
+    int hit = -1;
+    for (size_t i = 0; i < ts.size(); i++)
+      if (ts[i].v == v0)
+      {
+        hit = (int)i;
+        break;
+      }
+    if (hit < 0 && sh.res != R_PRED)
+    {
+      bool allEq = true;
+      for (const uint64_t k : v0)
+        allEq &= (k == v0[0]);
+      if (allEq)
+      {
+        tname = "const<" + std::to_string(v0[0]) + ">";
+        return 1000; // a constant outside the pool
+      }
+    }
+    if (hit < 0)
+      return -1;
+    // The other pinned choice must reach the same target.
+    const std::vector<uint64_t> v1 =
+        vec(n, var, sh.varIsFloat, cfg, sh.res, rf, 1);
+    if (v1 != v0)
+      return -1;
+    tname = ts[hit].name;
+    return hit;
+  }
+
+  // Does the factory already produce the target? Built through the
+  // simplifying factory, compared with the target built the same way.
+  void querySnf(const Shape& sh, int mode, const Cfg& cfg,
+                const std::string& tname, ConvFinding& f)
+  {
+    const ASTNode var = sh.varIsFloat ? c.fp(cfg.f)
+                                      : c.mgr.CreateSymbol(
+                                            ("b" + std::to_string(c.counter++))
+                                                .c_str(),
+                                            0, cfg.w);
+    const ASTNode rm = c.rm(RM_MODES[mode]);
+    ASTNode innerPlain, innerSimp;
+    const ASTNode plain = sh.build(c.hf, var, rm, cfg, innerPlain);
+    const ASTNode simp = sh.build(c.nf, var, rm, cfg, innerSimp);
+    const Fmt rf = sh.res == R_FLOAT ? fmtOf(plain) : cfg.f;
+    const unsigned rw = sh.res == R_BV ? plain.GetValueWidth() : 0;
+    ASTNode want;
+    if (tname == "<operand>")
+      want = innerSimp;
+    else if (tname.rfind("const<", 0) == 0)
+      want = ASTNode();
+    else
+    {
+      const std::vector<Tgt> ts =
+          targets(sh.res, rf, rw, var, sh.varIsFloat, cfg, ASTNode(), nullptr);
+      for (const Tgt& t : ts)
+        if (t.name == tname)
+          want = t.build(c.nf);
+    }
+    f.handled = !want.IsNull() && simp == want;
+    if (want.IsNull())
+      f.handled = simp.isConstant();
+    if (simp == plain)
+      f.snfForm = "unchanged";
+    else if (f.handled)
+      f.snfForm = "target";
+    else
+      f.snfForm = std::string("rewritten to ") + _kind_names[simp.GetKind()];
+  }
+
+  std::vector<Shape> shapes(const Cfg& cfg)
+  {
+    std::vector<Shape> out;
+    const Fmt F = cfg.f;
+    // The float-producing conversions, each a function of (nf, var, rm).
+    struct Inner
+    {
+      std::string name;
+      bool varIsFloat;
+      bool usesRm;
+      std::function<ASTNode(NodeFactory*, const ASTNode&, const ASTNode&)>
+          build;
+      Fmt fmt; // the float it produces
+    };
+    std::vector<Inner> inners;
+    const unsigned pw = F.width();
+    inners.push_back({"((_ to_fp e s) b)", false, false,
+                      [this, F](NodeFactory* nf, const ASTNode& b,
+                                const ASTNode&) { return toFpBits(nf, F, b); },
+                      F});
+    inners.push_back({"((_ to_fp e s) rm b)", false, true,
+                      [this, F](NodeFactory* nf, const ASTNode& b,
+                                const ASTNode& rm) {
+                        return toFpInt(nf, true, F, rm, b);
+                      },
+                      F});
+    inners.push_back({"((_ to_fp_unsigned e s) rm b)", false, true,
+                      [this, F](NodeFactory* nf, const ASTNode& b,
+                                const ASTNode& rm) {
+                        return toFpInt(nf, false, F, rm, b);
+                      },
+                      F});
+    inners.push_back({"((_ to_fp e s) rm x)", true, true,
+                      [this, F](NodeFactory* nf, const ASTNode& x,
+                                const ASTNode& rm) {
+                        return reformat(nf, F, rm, x);
+                      },
+                      F});
+    inners.push_back({"((_ to_fp e+1 s+1) rm x)", true, true,
+                      [this, F](NodeFactory* nf, const ASTNode& x,
+                                const ASTNode& rm) {
+                        return reformat(nf, wider(F), rm, x);
+                      },
+                      wider(F)});
+    inners.push_back({"((_ to_fp e+1 s) rm x)", true, true,
+                      [this, F](NodeFactory* nf, const ASTNode& x,
+                                const ASTNode& rm) {
+                        return reformat(nf, widerExp(F), rm, x);
+                      },
+                      widerExp(F)});
+    inners.push_back({"((_ to_fp e s+1) rm x)", true, true,
+                      [this, F](NodeFactory* nf, const ASTNode& x,
+                                const ASTNode& rm) {
+                        return reformat(nf, widerSig(F), rm, x);
+                      },
+                      widerSig(F)});
+    inners.push_back({"((_ to_fp e s) (fp.to_ieee_bv x))", true, false,
+                      [this, F](NodeFactory* nf, const ASTNode& x,
+                                const ASTNode&) {
+                        return toFpBits(nf, F, toIeee(nf, x));
+                      },
+                      F});
+
+    // Each conversion alone: for the float variable ones the targets
+    // include x, so the round trips land here.
+    for (const Inner& in : inners)
+      out.push_back({in.name, in.varIsFloat, in.usesRm, R_FLOAT,
+                     [in](NodeFactory* nf, const ASTNode& var,
+                          const ASTNode& rm, const Cfg&, ASTNode& inner) {
+                       inner = var;
+                       return in.build(nf, var, rm);
+                     }});
+
+    // Widen then narrow back.
+    for (size_t i = 4; i <= 6; i++)
+    {
+      const Inner in = inners[i];
+      out.push_back({"((_ to_fp e s) rm " + in.name + ")", true, true, R_FLOAT,
+                     [this, in, F](NodeFactory* nf, const ASTNode& var,
+                                   const ASTNode& rm, const Cfg&,
+                                   ASTNode& inner) {
+                       inner = var;
+                       return reformat(nf, F, rm, in.build(nf, var, rm));
+                     }});
+    }
+
+    // Classification predicates, fp.abs/fp.neg, and comparisons against the
+    // specials, over each conversion.
+    static const OpSig* CLS[] = {&CLASSIFIERS[0], &CLASSIFIERS[1],
+                                 &CLASSIFIERS[2], &CLASSIFIERS[3],
+                                 &CLASSIFIERS[4], &CLASSIFIERS[5],
+                                 &CLASSIFIERS[6]};
+    for (const Inner& in : inners)
+    {
+      for (const OpSig* cl : CLS)
+      {
+        const Kind k = cl->k;
+        out.push_back({std::string("(") + cl->name + " " + in.name + ")",
+                       in.varIsFloat, in.usesRm, R_PRED,
+                       [in, k](NodeFactory* nf, const ASTNode& var,
+                               const ASTNode& rm, const Cfg&, ASTNode& inner) {
+                         inner = ASTNode();
+                         return nf->CreateNode(k, in.build(nf, var, rm));
+                       }});
+      }
+      for (Kind k : {FP_ABS, FP_NEG})
+      {
+        const Fmt g = in.fmt;
+        out.push_back({std::string(k == FP_ABS ? "(fp.abs " : "(fp.neg ") +
+                           in.name + ")",
+                       in.varIsFloat, in.usesRm, R_FLOAT,
+                       [this, in, k, g](NodeFactory* nf, const ASTNode& var,
+                                        const ASTNode& rm, const Cfg&,
+                                        ASTNode& inner) {
+                         inner = in.build(nf, var, rm);
+                         return fmtTermNf(nf, k, g, {inner});
+                       }});
+      }
+      for (const OpSig& op : OPS)
+      {
+        if (!op.pred || op.floats != 2)
+          continue;
+        for (int sc = 0; sc < S_COUNT; sc++)
+          for (int side = 0; side < 2; side++)
+          {
+            const Kind k = op.k;
+            const Fmt g = in.fmt;
+            out.push_back(
+                {std::string("(") + op.name + " " +
+                     (side == 0
+                          ? in.name + " " + specialName[sc]
+                          : std::string(specialName[sc]) + " " + in.name) +
+                     ")",
+                 in.varIsFloat, in.usesRm, R_PRED,
+                 [this, in, k, g, sc, side](NodeFactory* nf, const ASTNode& var,
+                                            const ASTNode& rm, const Cfg&,
+                                            ASTNode& inner) {
+                   inner = ASTNode();
+                   const ASTNode t = in.build(nf, var, rm);
+                   const ASTNode kc = c.fpConst(g, bitsOf((Special)sc, g));
+                   return side == 0 ? nf->CreateNode(k, t, kc)
+                                    : nf->CreateNode(k, kc, t);
+                 }});
+          }
+      }
+    }
+
+    // The bit-vector-producing conversions of x, and of the integer
+    // conversions of b (the integer round trips).
+    for (bool sgn : {false, true})
+    {
+      const char* nm = sgn ? "fp.to_sbv" : "fp.to_ubv";
+      for (unsigned w : {cfg.w, cfg.w + 2})
+      {
+        out.push_back({std::string("((_ ") + nm + " " + std::to_string(w) +
+                           ") rm x)",
+                       true, true, R_BV,
+                       [this, sgn, w](NodeFactory* nf, const ASTNode& var,
+                                      const ASTNode& rm, const Cfg&,
+                                      ASTNode& inner) {
+                         inner = ASTNode();
+                         return toBv(nf, sgn, w, rm, var);
+                       }});
+      }
+      for (bool isgn : {false, true})
+        out.push_back({std::string("((_ ") + nm + " w) rm ((_ to_fp" +
+                           (isgn ? "" : "_unsigned") + " e s) rm b))",
+                       false, true, R_BV,
+                       [this, sgn, isgn, F](NodeFactory* nf, const ASTNode& var,
+                                            const ASTNode& rm, const Cfg& cfg,
+                                            ASTNode& inner) {
+                         inner = var;
+                         return toBv(nf, sgn, cfg.w, rm,
+                                     toFpInt(nf, isgn, F, rm, var));
+                       }});
+    }
+    out.push_back({"(fp.to_ieee_bv x)", true, false, R_BV,
+                   [this](NodeFactory* nf, const ASTNode& var, const ASTNode&,
+                          const Cfg&, ASTNode& inner) {
+                     inner = ASTNode();
+                     return toIeee(nf, var);
+                   }});
+    out.push_back({"(fp.to_ieee_bv ((_ to_fp e s) b))", false, false, R_BV,
+                   [this, F](NodeFactory* nf, const ASTNode& var,
+                             const ASTNode&, const Cfg&, ASTNode& inner) {
+                     inner = var;
+                     return toIeee(nf, toFpBits(nf, F, var));
+                   }});
+    (void)pw;
+    return out;
+  }
+
+  std::vector<ConvFinding> run()
+  {
+    std::vector<ConvFinding> findings;
+    // The bits reinterpretation wants b as wide as the packed float, the
+    // integer conversions a small integer: two configurations each, the
+    // second confirming the first.
+    const Cfg A{FA, 4}, B{FB, 5};
+    const Cfg Abits{FA, FA.width()}, Bbits{FB, FB.width()};
+    const std::vector<Shape> shA = shapes(A);
+    const std::vector<Shape> shB = shapes(B);
+    const std::vector<Shape> shAb = shapes(Abits);
+    const std::vector<Shape> shBb = shapes(Bbits);
+    const Cfg Wide{FA, FA.width() + 1};
+    const std::vector<Shape> shWide = shapes(Wide);
+    for (size_t i = 0; i < shA.size(); i++)
+    {
+      const Shape& sh = shA[i];
+      // The bits reinterpretation shapes use the packed-width config.
+      const bool bits = sh.name.find("(_ to_fp e s) b)") != std::string::npos ||
+                        sh.name.find("to_ieee_bv ((_ to_fp e s) b)") !=
+                            std::string::npos;
+      const Cfg& cfgA = bits ? Abits : A;
+      const Cfg& cfgB = bits ? Bbits : B;
+      const Shape& shAx = bits ? shAb[i] : shA[i];
+      const Shape& shBx = bits ? shBb[i] : shB[i];
+      const int modes = sh.usesRm ? NUM_RM : 1;
+      std::vector<std::pair<std::string, int>> groups; // target -> modes
+      for (int m = 0; m < modes; m++)
+      {
+        std::string tname;
+        if (evalOne(shAx, m, cfgA, tname) < 0)
+          continue;
+        bool found = false;
+        for (auto& g : groups)
+          if (g.first == tname)
+          {
+            g.second |= 1 << m;
+            found = true;
+          }
+        if (!found)
+          groups.push_back({tname, 1 << m});
+      }
+      for (const auto& g : groups)
+      {
+        ConvFinding f{sh.name, g.first, g.second, true, false, ""};
+        for (int m = 0; m < modes; m++)
+          if (g.second & (1 << m))
+          {
+            std::string tn;
+            if (evalOne(shBx, m, cfgB, tn) < 0 || tn != g.first)
+              f.confirmed = false;
+            // An integer wider than the format's largest finite value
+            // can overflow to an infinity, which the two small widths
+            // above never reach; a third, wide width catches the range
+            // facts that pose as rules ("a converted integer is below
+            // +oo").
+            if (!bits && !sh.varIsFloat &&
+                (evalOne(shWide[i], m, Wide, tn) < 0 || tn != g.first))
+              f.confirmed = false;
+          }
+        int m0 = 0;
+        while (!(g.second & (1 << m0)))
+          m0++;
+        querySnf(shAx, m0, cfgA, g.first, f);
+        findings.push_back(f);
+      }
+      if (i % 50 == 49)
+        printf("  %zu/%zu shapes (%d evaluations)\n", i + 1, shA.size(),
+               evaluated);
+    }
+    return findings;
+  }
+};
+
+static std::string modeText(int modeMask, bool usesRm)
+{
+  if (!usesRm || modeMask == (1 << NUM_RM) - 1)
+    return "";
+  std::string s = " [";
+  bool first = true;
+  for (int m = 0; m < NUM_RM; m++)
+    if (modeMask & (1 << m))
+    {
+      if (!first)
+        s += ",";
+      s += rmName[m];
+      first = false;
+    }
+  return s + "]";
+}
+
 int main(int argc, char** argv)
 {
   setbuf(stdout, nullptr);
-  // Optional argument: "1" or "2" restricts the search to that depth.
+  // Optional argument: "1", "2" or "3" restricts the search to that phase
+  // (3 = the conversions).
   const bool depth1 = (argc < 2) || std::string(argv[1]) == "1";
   const bool depth2 = (argc < 2) || std::string(argv[1]) == "2";
+  const bool conversions = (argc < 2) || std::string(argv[1]) == "3";
   printf("Floating-point rewrite-rule search\n");
   printf("search format (%u,%u); confirm format (%u,%u); FMA on (%u,%u)\n\n",
          FA.eb, FA.sb, FB.eb, FB.sb, FS.eb, FS.sb);
@@ -893,5 +1579,44 @@ int main(int argc, char** argv)
   printf("\n%d candidate evaluations, %zu rules found, %d missed by the "
          "factory\n",
          gen.evaluated, findings.size(), missed);
+
+  if (conversions)
+  {
+    printf("\n== Conversions: search (%u,%u)/w=4, confirm (%u,%u)/w=5 ==\n",
+           FA.eb, FA.sb, FB.eb, FB.sb);
+    ConvGen cg(gen.c);
+    const std::vector<ConvGen::ConvFinding> cf = cg.run();
+    int cmissed = 0, cunconfirmed = 0;
+    printf("\n== Conversion rules the SimplifyingNodeFactory does NOT have "
+           "==\n");
+    for (const auto& f : cf)
+    {
+      if (f.handled || !f.confirmed)
+        continue;
+      cmissed++;
+      printf("  %-52s -> %s%s\n", f.cand.c_str(), f.target.c_str(),
+             modeText(f.modeMask, f.cand.find(" rm ") != std::string::npos)
+                 .c_str());
+      if (f.snfForm != "unchanged")
+        printf("        (factory currently: %s)\n", f.snfForm.c_str());
+    }
+    printf("\n== Conversion facts of the search format only ==\n");
+    for (const auto& f : cf)
+    {
+      if (f.handled || f.confirmed)
+        continue;
+      cunconfirmed++;
+      printf("  %-52s -> %s%s\n", f.cand.c_str(), f.target.c_str(),
+             modeText(f.modeMask, f.cand.find(" rm ") != std::string::npos)
+                 .c_str());
+    }
+    printf("\n== Conversion rules already handled ==\n");
+    for (const auto& f : cf)
+      if (f.handled)
+        printf("  %-52s -> %s\n", f.cand.c_str(), f.target.c_str());
+    printf("\n%d conversion evaluations, %zu rules, %d missed, %d "
+           "format-specific\n",
+           cg.evaluated, cf.size(), cmissed, cunconfirmed);
+  }
   return 0;
 }

@@ -411,7 +411,6 @@ TEST(new_expr_kinds, kinds_are_reported_correctly)
 
   EXPECT_EQ(bvuaddo(a, b).kind(), Kind::BV_UADDO);
   EXPECT_EQ(bvsaddo(a, b).kind(), Kind::BV_SADDO);
-  EXPECT_EQ(bvusubo(a, b).kind(), Kind::BV_USUBO);
   EXPECT_EQ(bvssubo(a, b).kind(), Kind::BV_SSUBO);
   EXPECT_EQ(bvumulo(a, b).kind(), Kind::BV_UMULO);
   EXPECT_EQ(bvsmulo(a, b).kind(), Kind::BV_SMULO);
@@ -426,9 +425,10 @@ TEST(new_expr_kinds, kinds_are_reported_correctly)
  * BVConstEvaluator would abort on one with a constant operand. The
  * constructors expand them the same way the parser does.
  *
- * The remaining three are canonicalised by the manager's construction-time
+ * The remaining four are canonicalised by the manager's construction-time
  * folding (on by default): a zero-extend becomes a concat with a zero
- * constant, and the Boolean nand/nor a negated and/or.
+ * constant, the Boolean nand/nor a negated and/or, and bvusubo the unsigned
+ * comparison it is -- the subtraction borrows exactly when x <u y.
  *
  * Either way the equivalence proofs above are what pin down what the
  * constructors mean; a caller inspecting kind() should not expect to see the
@@ -452,6 +452,7 @@ TEST(new_expr_kinds, some_kinds_are_rewritten_on_construction)
   EXPECT_EQ(zero_extend(1, a).kind(), Kind::BV_CONCAT);
   EXPECT_EQ((!(p && q)).kind(), Kind::NOT);
   EXPECT_EQ((!(p || q)).kind(), Kind::NOT);
+  EXPECT_EQ(bvusubo(a, b).kind(), Kind::BV_UGT);
 
   // 3.x: without the folding (simplify = false) a zero-extend is kept as
   // written, while the negated bitwise operators still read as the negation
@@ -460,6 +461,7 @@ TEST(new_expr_kinds, some_kinds_are_rewritten_on_construction)
   const Term ra = raw.declare("a", raw.mk_bv_sort(W));
   const Term rb = raw.declare("b", raw.mk_bv_sort(W));
   EXPECT_EQ(zero_extend(1, ra).kind(), Kind::BV_ZERO_EXTEND);
+  EXPECT_EQ(bvusubo(ra, rb).kind(), Kind::BV_USUBO);
   const Term rawNand = bvnand(ra, rb);
   EXPECT_EQ(rawNand.kind(), Kind::BV_NOT);
   EXPECT_EQ(rawNand.child(0).kind(), Kind::BV_AND);

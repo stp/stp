@@ -61,6 +61,7 @@ class FpAbstraction;
 class FpEncodingContext;
 class ArrayReadRefinementProgress;
 class UFTheoryAdapter;
+class UFSearchPropagator;
 namespace lra {
 class LraCoordinator;
 }
@@ -98,6 +99,7 @@ private:
   // Non-owning current solve-mode coordinator. STP owns the fresh-query
   // adapter; IncrementalSolver owns the exact-stack adapter.
   UFTheoryAdapter* ufTheoryAdapter;
+  UFSearchPropagator* ufSearchPropagator;
 
   // Non-owning floating-point abstraction of the current batch solve, NULL
   // when nothing was abstracted. Its checker runs on every candidate after
@@ -213,6 +215,7 @@ public:
   AbsRefine_CounterExample(STPMgr* b, Simplifier* s, ArrayTransformer* at)
       : bm(b), simp(s), ArrayTransform(at), fpEncodingContext(NULL),
         fpEncodedEvaluationDepth(0), ufTheoryAdapter(NULL),
+        ufSearchPropagator(NULL),
         fpAbstraction(NULL), fpRepairAllowed(true)
   {
     ASTTrue = bm->CreateNode(TRUE);
@@ -228,6 +231,10 @@ public:
   void setUFTheoryAdapter(UFTheoryAdapter* adapter)
   {
     ufTheoryAdapter = adapter;
+  }
+  void setUFSearchPropagator(UFSearchPropagator* propagator)
+  {
+    ufSearchPropagator = propagator;
   }
   void setFpAbstraction(FpAbstraction* abstraction)
   {

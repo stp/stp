@@ -3,8 +3,11 @@
 
 #include "LraSolveContext.h"
 
+#include <chrono>
 #include <cstdint>
+#include <deque>
 #include <string>
+#include <unordered_map>
 
 namespace stp::lra {
 
@@ -61,11 +64,16 @@ public:
   void notifyBacktrack(size_t level) override;
   bool checkFoundModel() override;
   bool takeClause(std::vector<SATSolver::Lit>& clause) override;
+  bool propagate(SATSolver::Lit& literal) override;
+  bool reasonFor(SATSolver::Lit literal,
+                 std::vector<SATSolver::Lit>& clause) override;
   bool pastTimeLimit() noexcept;
   bool failed() const override;
   void setDecisionPolarity(bool enabled) noexcept { decision_polarity_ = enabled; }
   bool wantsDecisionPolarity() const override { return decision_polarity_; }
   bool decisionPolarity(uint32_t variable, bool& value) noexcept override;
+  void setAdaptiveDriver(bool enabled) noexcept { adaptive_driver_ = enabled; }
+  void setBoundPropagation(bool enabled) noexcept { bound_propagation_ = enabled; }
 
   // Prepare to drive the search rather than judge it: build the variable
   // map, open the root theory level, and report the variables the backend
@@ -115,6 +123,18 @@ private:
    * keep batches whose entries a deeper backjump already undid. */
   std::size_t unwind_low_level_ = static_cast<std::size_t>(-1);
   std::map<uint32_t, LraComponentId> component_by_variable_;
+  struct BoundImplication final
+  {
+    SATSolver::Lit source;
+    SATSolver::Lit target;
+  };
+  std::unordered_map<uint32_t, std::vector<SATSolver::Lit>> bound_implications_;
+  std::deque<BoundImplication> pending_bound_implications_;
+  std::unordered_map<uint32_t, SATSolver::Lit> bound_reasons_;
+  std::vector<std::int8_t> bound_assignments_;
+  std::vector<SATSolver::Lit> bound_assignment_trail_;
+  std::vector<std::size_t> bound_level_marks_;
+  bool bound_propagation_ = false;
   bool propagating_ = false;
   // Once a callback skips work at the deadline, re-arming the backend's
   // timer cannot make that incomplete propagation trail acceptable.
@@ -162,6 +182,8 @@ private:
    * tableau, so the fill ratio is measured every few checks rather than every
    * one. */
   unsigned float_reroute_sample_ = 0;
+  bool adaptive_driver_ = false;
+  std::chrono::steady_clock::time_point float_watch_start_{};
 
   bool assertOneLiteral(SATSolver::Lit literal) noexcept;
   // Open a core checkpoint for the current level, if it has none yet.

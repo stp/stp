@@ -338,6 +338,10 @@ public:
   // profiling is not distorted by verbose pass/backend output.
   bool incremental_profile = false;
 
+  // Permanent FP definitions may be substituted before bit-blasting. Their
+  // expanded uses must be totalised and classified again before encoding.
+  bool incremental_fp_definitions = false;
+
   // Run only the persistent assumption/refinement core. This disables the
   // fitted cross-level preprocessing, promotion, first-solve shortcuts and
   // adaptive backend policies, but deliberately keeps memory-relief epoch
@@ -476,6 +480,34 @@ public:
   // corpus is what the default should serve; --uf-ackermann-budget restores
   // the old behaviour for a query known to be that shape.
   unsigned uf_eager_budget = 256;
+
+  // Spend unused AUTO eager budget on a bounded set of individual application
+  // pairs from declarations that do not fit the all-or-nothing policy. The
+  // ordinary model checker still supplies every omitted congruence axiom.
+  // Kept selectable while the pair ranking is measured on UF and UFLRA.
+  bool uf_pair_seeding = false;
+
+  // Pure QF_UF has no interpreted values of a declared sort. Renaming those
+  // values in any fixed solve-scalar order therefore preserves every equality
+  // and function application. AUTO applies the value bounds only in that logic;
+  // ON and OFF let a caller measure or override the policy explicitly.
+  // On the 7,503-file QF_UF corpus at 20 s, this default changed STP from
+  // 5,660 to 7,341 solves (1,682 gains, one loss), and PAR2 from 87,350 to
+  // 13,217, with no conclusive answer disagreement. A same-build 1,000-file
+  // off/auto screen also gained 428 solves without a loss.
+  enum class UFValueBoundsMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  UFValueBoundsMode uf_value_bounds = UFValueBoundsMode::AUTO;
+  bool uf_qf_uf_logic = false;
+
+  // In batch QF_UF, report violated congruence from CaDiCaL's partial SAT
+  // trail instead of waiting for a complete candidate. The ordinary model
+  // checker still certifies the final answer. Kept opt-in for measurement.
+  bool uf_search_conflicts = false;
 
   // How many rounds a lazily-decided declaration may keep breaking congruence
   // before the rest of its relation is stated in one go. Each lazy round is
@@ -619,13 +651,12 @@ public:
   // application; see UFPreLowering. Verdict-preserving: the defining
   // conjunct is kept, so no model is lost or invented.
   //
-  // AUTO runs it unless the query has Real content. The pass was written
-  // for and measured on QF_UFBV, where it is a large win; on the Real path
-  // it is a consistent loss -- across QF_UFLRA families it costs between a
-  // third and a half of the runtime of the files slow enough to measure,
-  // and solves fewer of them -- because those queries reach an answer
-  // through refinement rounds the rewriting does not shorten. ON forces it
-  // on a Real query anyway; OFF is the way to measure without it.
+  // AUTO runs it unless the query uses pure QF_UF logic or Real content.
+  // It skips pure QF_UF, where
+  // declared-sort value bounds and the original formula performed better
+  // on the measured 7,503-file corpus, and queries with Real content, where
+  // refinement rounds make the extra rewrite a loss. ON forces it in either
+  // case; OFF disables it.
   // See OptionMode above for what AUTO promises.
   OptionMode uf_propagate_equalities = OptionMode::AUTO;
 
@@ -635,14 +666,11 @@ public:
   // the UF corpus -- every top-level assertion of a verification query is a
   // guarded implication -- and without this the fact never reaches (f x).
   // Distinct from --skeleton-preproc, which runs after lowering and cannot
-  // cross an application; this one is on by default for exactly that reason,
-  // and costs one SAT call over the skeleton per UF solve.
+  // cross an application; this one costs a SAT call over the skeleton when
+  // the pre-lowering pass is enabled.
   //
-  // AUTO follows the same rule as the pass it feeds, and for the same
-  // measurements: on unless the query has Real content. Asking the skeleton
-  // is only useful if the facts it returns are then propagated, so leaving
-  // this ON while the pass above resolves to off buys a SAT call and
-  // nothing else.
+  // AUTO asks the skeleton when the pass above is enabled and the query has
+  // no Real content. Asking is useful only when its facts can be propagated.
   OptionMode uf_skeleton_preproc = OptionMode::AUTO;
 
   // Whether a solve with uninterpreted functions abstracts its wide
@@ -773,14 +801,35 @@ public:
   // the simplifying MiniSat runs the full-lazy loop regardless.
   bool lra_theory_propagation = true;
 
+  // Experimental Real-only policy: choose a CNF generator from the estimated
+  // Boolean skeleton size, and choose the float or exact arithmetic driver
+  // from the registered tableau shape. Explicit CNF effort or disabling the
+  // float driver takes precedence.
+  bool lra_adaptive_cnf = false;
+  bool lra_adaptive_driver = false;
+
+  // Set only while a CaDiCaL batch check of a declared QF_LRA script runs.
+  // That is the corpus on which the fixed new-medium CNF / exact driver was
+  // measured; UF, arrays, HiGHS options, incremental sessions and native API
+  // queries keep their existing auto policy until measured separately.
+  bool lra_qf_lra_batch_default = false;
+
+  // Experimental alternative to the static per-row ordering clauses. The
+  // theory sends the same bound implications through IPASIR-UP with binary
+  // reasons, so the two delivery paths can be compared independently.
+  bool lra_bound_propagation = false;
+
   // Drive the propagator's partial checks with a double-precision simplex
   // (the engine's advisory floating-point tier), the exact core consulted
   // only to re-derive its conflicts and to judge complete assignments. Every
   // certificate and every model stays exact. On by default (medians of
   // three over 3,037 QF_LRA and QF_UFLRA files, no answer disagreement):
   // +38 QF_LRA files at 20 s, QF_UFLRA level, the typical file a quarter
-  // faster. =0 selects the exact core alone.
+  // faster. A later QF_LRA comparison found exact arithmetic stronger with
+  // new-medium CNF, so the implicit batch QF_LRA policy now selects exact.
+  // =0 always selects exact; an explicit =1 restores float there.
   bool lra_float_driver = true;
+  bool lra_float_driver_explicit = false;
   // When the float tier's live tableau grows past this multiple of its
   // pristine (as-built) nonzero count, the current query is re-solved on the
   // exact driver from its start. A handful of cpachecker `cilled` files
@@ -1070,9 +1119,6 @@ public:
   // it buys depends entirely on whether that structure decides anything.
   bool skeleton_preproc = false;
 
-  // Replace an assertion where it appears inside another assertion; see
-  // EmbeddedConstraints. Off by default while it is measured.
-  bool embedded_constraints = false;
   // The ceiling on how many times one of those three may be blocked before
   // its refinement stops enumerating and encodes the operation exactly
   // instead. Measured: through about thirty rounds the abstraction is still
@@ -1822,7 +1868,8 @@ public:
 
   // Whether AUTO should read the threshold the Real path's way. Set for an
   // active Real solve, and for nothing else; the bit-vector choice at either
-  // end of the threshold is untouched.
+  // end of the threshold is untouched. The measured batch QF_LRA/CaDiCaL
+  // policy chooses new-medium before this fallback is considered.
   //
   // Both bit-vector answers are wrong for the shape the Real path hands over
   // -- a wide, shallow conjunction of small clauses over opaque atoms, one

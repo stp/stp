@@ -168,6 +168,94 @@ struct Context
   }
 };
 
+/* The overflow predicates: a constant, identical or complemented operand
+   turns the widened adder or multiplier into a comparison; bvusubo is bvult. */
+TEST(SimplifyingNodeFactory_Exhaustive, overflow_predicates)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 3u, 4u})
+  {
+    ASTNode x = c.bv(w), y = c.bv(w);
+    ASTNode nx = c.hf->CreateTerm(BVNOT, w, x);
+    ASTNode negx = c.hf->CreateTerm(BVUMINUS, w, x);
+    c.checkNode(BVUSUBO, {x, y});
+    c.checkNode(BVUADDO, {x, x});
+    c.checkNode(BVUADDO, {nx, y});
+    c.checkNode(BVUADDO, {y, nx});
+    c.checkNode(BVSADDO, {x, nx});
+    c.checkNode(BVSADDO, {nx, x});
+    c.checkNode(BVSADDO, {x, negx});
+    c.checkNode(BVSADDO, {negx, x});
+    c.checkNode(BVSSUBO, {x, x});
+    c.checkNode(BVUADDO, {x, negx});
+    c.checkNode(BVUADDO, {negx, x});
+    for (unsigned k = 0; k < (1u << w); k++)
+    {
+      ASTNode kc = c.konst(k, w);
+      for (Kind kind : {BVUADDO, BVSADDO, BVUMULO, BVSMULO, BVSSUBO})
+      {
+        c.checkNode(kind, {x, kc});
+        c.checkNode(kind, {kc, x});
+      }
+    }
+    // Two unrelated variables: nothing to say, the predicate survives.
+    for (Kind kind : {BVUADDO, BVSADDO, BVUMULO, BVSMULO, BVSSUBO})
+      c.checkNode(kind, {x, y}, false);
+  }
+}
+
+/* One value beyond a bound: x >u ones-1, x >u smax, x >s smax-1, smin+1 >s x */
+TEST(SimplifyingNodeFactory_Exhaustive, comparison_one_beyond_bound)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 3u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    const unsigned ones = (1u << w) - 1, smax = ones >> 1, smin = smax + 1;
+    c.checkNode(stp::BVGT, {x, c.konst(ones - 1, w)});
+    c.checkNode(stp::BVGT, {x, c.konst(smax, w)});
+    c.checkNode(stp::BVSGT, {x, c.konst((smax - 1) & ones, w)});
+    c.checkNode(stp::BVSGT, {c.konst((smin + 1) & ones, w), x});
+  }
+}
+
+/* Sign tests spelled one way: smin >u x and x >s -1 become NOT(0 >s x) */
+TEST(SimplifyingNodeFactory_Exhaustive, sign_test_spelling)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 3u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    const unsigned ones = (1u << w) - 1, smin = (ones >> 1) + 1;
+    c.checkNode(stp::BVGT, {c.konst(smin, w), x});
+    c.checkNode(stp::BVSGT, {x, c.konst(ones, w)});
+    EXPECT_EQ(c.nf->CreateNode(stp::BVGT, c.konst(smin, w), x),
+              c.nf->CreateNode(stp::BVSGT, x, c.konst(ones, w)));
+  }
+}
+
+/* ~x against a constant: the complement moves onto the constant, both orders
+   and both signednesses; x >u -x becomes x >u smin */
+TEST(SimplifyingNodeFactory_Exhaustive, complement_against_constant)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 3u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode nx = c.hf->CreateTerm(BVNOT, w, x);
+    ASTNode negx = c.hf->CreateTerm(BVUMINUS, w, x);
+    for (unsigned k = 0; k < (1u << w); k++)
+    {
+      ASTNode kc = c.konst(k, w);
+      c.checkNode(stp::BVGT, {nx, kc});
+      c.checkNode(stp::BVGT, {kc, nx});
+      c.checkNode(stp::BVSGT, {nx, kc});
+      c.checkNode(stp::BVSGT, {kc, nx});
+    }
+    c.checkNode(stp::BVGT, {x, negx});
+  }
+}
+
 /* constant = constant + t --> combined-constant = t */
 TEST(SimplifyingNodeFactory_Exhaustive, eq_constant_plus)
 {
