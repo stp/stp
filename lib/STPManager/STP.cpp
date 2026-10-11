@@ -948,13 +948,6 @@ ASTNode STP::sizeReducingOnGraph(ASTNode inputToSat,
     }
   }
 
-  if (bm->UserFlags.embedded_constraints)
-  {
-    EmbeddedConstraints ec(bm);
-    inputToSat = ec.topLevel(inputToSat);
-    bm->ASTNodeStats("After Embedded Constraints: ", inputToSat);
-  }
-
   // With RemoveUnconstrained on, the equalities are propagated on its
   // graph, in the same round and without the rebuild. Off by default
   // with the rest of --passes-on-graph: on formulas with hundreds of
