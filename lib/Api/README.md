@@ -167,6 +167,13 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
 - `interrupt()` reaches CaDiCaL/MiniSat mid-search through
   `UserDefinedFlags::stop_poll`; CryptoMiniSat is interrupted between solver calls.
 
+Python's `TermManager.mk_terms(operations)` constructs a DAG in one call.
+Each operation is `(kind, arguments)` or `(kind, arguments, indices, sort)`.
+Arguments are existing terms or non-negative integer indices of earlier
+results in the batch. The returned list follows operation order. Every node
+uses the same constructor and manager checks as `mk_term`; an error raises
+without returning the list, although earlier valid nodes may be interned.
+
 ## Engine changes made for the API
 
 `UserDefinedFlags`: `timeout_max_time_ms`, `stop_poll`/`stop_poll_opaque`,
