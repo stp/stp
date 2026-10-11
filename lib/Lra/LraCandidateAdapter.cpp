@@ -1021,6 +1021,7 @@ bool LraCandidateAdapter::beginTheoryPropagation(
     float_checks_degraded_ = false;
     float_restarts_ = 0;
     float_promotions_ = 0;
+    float_watch_start_ = std::chrono::steady_clock::now();
     conflict_pending_ = false;
     float_level_marks_.clear();
     sync_batches_.clear();
@@ -1939,7 +1940,8 @@ bool LraCandidateAdapter::takeClause(std::vector<SATSolver::Lit>& clause)
 void LraCandidateAdapter::maybeRequestFloatReroute() noexcept
 {
   const unsigned budget = context_.floatRerouteBudget();
-  if (budget == 0 || !context_.floatActive() || context_.float_core_ == nullptr ||
+  if ((budget == 0 && !adaptive_driver_) || !context_.floatActive() ||
+      context_.float_core_ == nullptr ||
       solver_.theoryRerouteRequested())
     return;
   // liveNonzeros scans the rows, so sample the fill periodically rather than
@@ -1948,6 +1950,20 @@ void LraCandidateAdapter::maybeRequestFloatReroute() noexcept
   if (++float_reroute_sample_ < kSampleEvery)
     return;
   float_reroute_sample_ = 0;
+  // The exact driver is a better continuation after a long float search on
+  // the medium-sized tableau selected by the adaptive policy. Re-solve the
+  // entire query: the exact core must see the complete SAT trail, and the
+  // existing reroute machinery preserves the original deadline.
+  if (adaptive_driver_ &&
+      std::chrono::steady_clock::now() - float_watch_start_ >=
+          std::chrono::seconds(40))
+  {
+    ++context_.metrics_.float_reroutes;
+    solver_.requestTheoryReroute();
+    return;
+  }
+  if (budget == 0)
+    return;
   const std::uint64_t pristine = context_.float_core_->pristineNonzeros();
   if (pristine == 0)
     return;

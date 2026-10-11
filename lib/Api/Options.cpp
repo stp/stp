@@ -1168,6 +1168,12 @@ bool custom_lra_decision_polarity(EngineTarget& t, const OptionSpec&, const Opti
   t.flags.lra_decision_polarity_explicit = t.explicit_value;
   return true;
 }
+bool custom_lra_float_driver(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.lra_float_driver = as_bool(v);
+  t.flags.lra_float_driver_explicit = t.explicit_value;
+  return true;
+}
 bool custom_lra_verify_canonical(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.lra_verify_canonical = as_bool(v);

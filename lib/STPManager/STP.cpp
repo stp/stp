@@ -669,7 +669,7 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
     {
       bm->UserFlags.lra_force_exact_driver = true;
       if (bm->UserFlags.stats_flag)
-        std::cerr << "LRA: float tier blew up; re-solving on the exact driver"
+        std::cerr << "LRA: float tier rerouted; re-solving on the exact driver"
                   << std::endl;
       newS.reset(get_new_sat_solver());
       result = solve_by_sat_solver(newS.get(), roundInput(),

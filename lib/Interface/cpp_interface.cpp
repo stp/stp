@@ -1689,6 +1689,21 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
           query = assertionsSMT2[0];
         else
           query = bm.ASTTrue;
+        // The fixed policy was measured on batch QF_LRA, not on mixed or
+        // incremental Real queries. Restore the marker even if solving throws.
+        struct RestoreLraBatchDefault
+        {
+          UserDefinedFlags& flags;
+          bool saved;
+          ~RestoreLraBatchDefault() { flags.lra_qf_lra_batch_default = saved; }
+        } restore_lra_default{bm.UserFlags,
+                              bm.UserFlags.lra_qf_lra_batch_default};
+        bm.UserFlags.lra_qf_lra_batch_default =
+            lra_logic && !bm.UserFlags.enable_uninterpreted_functions &&
+            !bm.UserFlags.enable_array_equality &&
+            bm.UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER &&
+            !bm.UserFlags.lra_highs_lp && !bm.UserFlags.lra_highs_cuts &&
+            !bm.UserFlags.lra_highs_replay && !bm.UserFlags.lra_highs_mip;
         last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
       }
     }

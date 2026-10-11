@@ -940,15 +940,37 @@ category = "lra"
 help = "let the LRA theory take part in the SAT search, on a backend that hosts a propagator (CaDiCaL, CryptoMiniSat, MiniSat)"
 
 [[option]]
+name = "lra-adaptive-cnf"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_adaptive_cnf" }
+category = "lra"
+help = "for Real queries with CNF auto and an AIG size estimate, use medium CNF for small Boolean skeletons and new-medium for larger ones"
+
+[[option]]
+name = "lra-adaptive-driver"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_adaptive_driver" }
+category = "lra"
+help = "choose the float or exact LRA driver from the tableau shape and retry on exact after a long float search; --lra-float-driver=0 still forces exact"
+
+[[option]]
 name = "lra-float-driver"
 type = "bool"
 default = true
 tier = "expert"
 settable = "anytime"
 scope = "solver"
-engine = { field = "lra_float_driver" }
+engine = { custom = "lra_float_driver" }
 category = "lra"
-help = "drive partial theory checks with a double-precision simplex, conflicts and models re-derived exactly (under --lra-theory-propagation)"
+help = "drive partial theory checks with a double-precision simplex, conflicts and models re-derived exactly; batch QF_LRA defaults to exact and explicit =1 enables float there"
 
 [[option]]
 name = "lra-float-reroute"

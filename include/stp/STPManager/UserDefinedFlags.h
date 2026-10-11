@@ -765,14 +765,30 @@ public:
   // the simplifying MiniSat runs the full-lazy loop regardless.
   bool lra_theory_propagation = true;
 
+  // Experimental Real-only policy: choose a CNF generator from the estimated
+  // Boolean skeleton size, and choose the float or exact arithmetic driver
+  // from the registered tableau shape. Explicit CNF effort or disabling the
+  // float driver takes precedence.
+  bool lra_adaptive_cnf = false;
+  bool lra_adaptive_driver = false;
+
+  // Set only while a CaDiCaL batch check of a declared QF_LRA script runs.
+  // That is the corpus on which the fixed new-medium CNF / exact driver was
+  // measured; UF, arrays, HiGHS options, incremental sessions and native API
+  // queries keep their existing auto policy until measured separately.
+  bool lra_qf_lra_batch_default = false;
+
   // Drive the propagator's partial checks with a double-precision simplex
   // (the engine's advisory floating-point tier), the exact core consulted
   // only to re-derive its conflicts and to judge complete assignments. Every
   // certificate and every model stays exact. On by default (medians of
   // three over 3,037 QF_LRA and QF_UFLRA files, no answer disagreement):
   // +38 QF_LRA files at 20 s, QF_UFLRA level, the typical file a quarter
-  // faster. =0 selects the exact core alone.
+  // faster. A later QF_LRA comparison found exact arithmetic stronger with
+  // new-medium CNF, so the implicit batch QF_LRA policy now selects exact.
+  // =0 always selects exact; an explicit =1 restores float there.
   bool lra_float_driver = true;
+  bool lra_float_driver_explicit = false;
   // When the float tier's live tableau grows past this multiple of its
   // pristine (as-built) nonzero count, the current query is re-solved on the
   // exact driver from its start. A handful of cpachecker `cilled` files
@@ -1814,7 +1830,8 @@ public:
 
   // Whether AUTO should read the threshold the Real path's way. Set for an
   // active Real solve, and for nothing else; the bit-vector choice at either
-  // end of the threshold is untouched.
+  // end of the threshold is untouched. The measured batch QF_LRA/CaDiCaL
+  // policy chooses new-medium before this fallback is considered.
   //
   // Both bit-vector answers are wrong for the shape the Real path hands over
   // -- a wide, shallow conjunction of small clauses over opaque atoms, one
