@@ -5226,6 +5226,19 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                          ? children[0]
                          : children[1];
         }
+        // Commutative whenever the operands cannot be the two zeros, which a
+        // non-zero constant on either side rules out: then the operands
+        // order by node number, so min(x, c) and min(c, x) share a node. The
+        // all-symbolic pair stays as written -- SMT-LIB leaves min(+0, -0)
+        // and min(-0, +0) unspecified independently of each other, and the
+        // totalising pass keeps a choice cell for each order -- and so does
+        // a totalised node, whose choice child already belongs to its order.
+        if (result.IsNull() && children.size() == 2 &&
+            ((fpFormattedConst(children[0]) && !fpConstIsZero(children[0])) ||
+             (fpFormattedConst(children[1]) &&
+              !fpConstIsZero(children[1]))) &&
+            children[0].GetNodeNum() > children[1].GetNodeNum())
+          result = hashing.CreateTerm(kind, width, {children[1], children[0]});
       }
       break;
 
