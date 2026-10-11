@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
+#include "Lra/NumberBudget.h"
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTKind.h"
 #include "stp/AST/ArrayOps.h"
@@ -856,27 +857,46 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
   // Two constant Reals order by their exact values. The evaluator above
   // knows no Real kind, so the difference folds through the manager's exact
   // arithmetic and its sign decides. (Equality of two constants is in the EQ
-  // case: Real constants intern by value, so distinct nodes are unequal.)
+  // case: Real constants intern by value, so distinct nodes are unequal, and
+  // one node is equal to itself without arithmetic.) The exact arithmetic
+  // runs under the number budget; a comparison it refuses stays a
+  // comparison, for the frontend to refuse in its own words.
   if ((kind == stp::REAL_LT || kind == stp::REAL_LE || kind == stp::REAL_GT ||
        kind == stp::REAL_GE) &&
       children.size() == 2 && children[0].GetKind() == stp::REAL_CONST &&
       children[1].GetKind() == stp::REAL_CONST)
   {
-    const ASTNode difference = bm.CreateRealTerm(
-        stp::REAL_SUB, ASTVec(children.begin(), children.end()));
-    assert(difference.GetKind() == stp::REAL_CONST);
-    const std::string value = difference.GetRealCanonical();
-    const bool negative = !value.empty() && value[0] == '-';
-    const bool zero = value == "0";
-    bool holds = false;
-    switch (kind)
+    bool negative = false, zero = false, decided = true;
+    if (children[0] == children[1])
+      zero = true;
+    else
     {
-      case stp::REAL_LT: holds = negative; break;
-      case stp::REAL_LE: holds = negative || zero; break;
-      case stp::REAL_GT: holds = !negative && !zero; break;
-      default: holds = !negative; break;
+      try
+      {
+        const ASTNode difference = bm.CreateRealTerm(
+            stp::REAL_SUB, ASTVec(children.begin(), children.end()));
+        assert(difference.GetKind() == stp::REAL_CONST);
+        const std::string value = difference.GetRealCanonical();
+        negative = !value.empty() && value[0] == '-';
+        zero = value == "0";
+      }
+      catch (const stp::lra::NumberFailure&)
+      {
+        decided = false;
+      }
     }
-    return holds ? ASTTrue : ASTFalse;
+    if (decided)
+    {
+      bool holds = false;
+      switch (kind)
+      {
+        case stp::REAL_LT: holds = negative; break;
+        case stp::REAL_LE: holds = negative || zero; break;
+        case stp::REAL_GT: holds = !negative && !zero; break;
+        default: holds = !negative; break;
+      }
+      return holds ? ASTTrue : ASTFalse;
+    }
   }
 
   ASTNode result;
