@@ -735,7 +735,7 @@ help = "Uses simple boolean algebra rules to combine conjuncts at the top level"
 [[option]]
 name = "size-reducing-fixed-point-limit"
 type = "int"
-default = 0
+default = 100000
 sentinel = "-1 = always"
 tier = "expert"
 settable = "anytime"

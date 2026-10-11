@@ -752,6 +752,7 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat,
                               NodeDomainAnalysis* domain
                               )
 {
+  unsigned rounds = 0;
   while (true)
   {
     ASTNode last = inputToSat;
@@ -759,9 +760,13 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat,
       inputToSat = sizeReducingOnGraph(last, bvSolver, pe, domain);
     else
       inputToSat = sizeReducing(last, bvSolver, pe, domain);
+    rounds++;
     if (last == inputToSat)
       break;
   }
+  // The last round is the one that changed nothing.
+  if (bm->UserFlags.stats_flag)
+    std::cerr << "{sizeReducing} rounds to the fixed point: " << rounds << std::endl;
 
   return inputToSat;
 }
@@ -1589,7 +1594,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
   // so it's expensive to call.
-  if (!lraActive && !arrayops &&
+  if (!lraActive &&
       (-1 == bm->UserFlags.size_reducing_fixed_point ||
        initial_node_size < bm->UserFlags.size_reducing_fixed_point))
   {

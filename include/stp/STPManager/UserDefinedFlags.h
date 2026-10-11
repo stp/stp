@@ -284,7 +284,9 @@ public:
   int64_t common_subsum_budget = 16000000;
 
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
-  int64_t size_reducing_fixed_point = 0;
+  // Formulas under this many non-leaf nodes have the size-reducing passes
+  // run to a fixed point; -1 means always.
+  int64_t size_reducing_fixed_point = 100000;
   
 
   bool simplify_to_constants_only = false;
