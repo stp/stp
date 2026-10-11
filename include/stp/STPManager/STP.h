@@ -63,6 +63,15 @@ class STP
   // another SAT call over the whole propositional structure.
   bool skeletonAsked = false;
 
+  // Formulas the size-reducing round handed back unchanged: fixed points of
+  // its passes under the flags in force at the time. A query that reaches
+  // the round with one of them skips it. A few recent entries, newest last;
+  // each holds its formula alive.
+  std::vector<ASTNode> sizeReducingFixedPoints;
+  static const size_t maxSizeReducingFixedPoints = 8;
+  bool knownFixedPoint(const ASTNode& n) const;
+  void rememberFixedPoint(const ASTNode& n);
+
 
   ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver,
                        PropagateEqualities* pe, NodeDomainAnalysis* domain);
@@ -126,6 +135,10 @@ class STP
   uint64_t batchUFScopeGeneration = 0;
 
 public:
+  // The passes read the flags: a change makes every remembered fixed point
+  // uncertain.
+  void forgetFixedPoints() { sizeReducingFixedPoints.clear(); }
+
   STPMgr* bm;
   Simplifier* simp;
   ToSATBase* tosat;

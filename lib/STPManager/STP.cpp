@@ -71,6 +71,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/MutableGraph.h"
 #include "stp/Simplifier/MergeSame.h"
 #include "stp/Util/DagWalk.h"
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <map>
@@ -296,6 +297,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
 
     const bool saved = bm->UserFlags.uf_inject_args;
     bm->UserFlags.uf_inject_args = false;
+    forgetFixedPoints();
     // A second run of the pipeline is a second solve, and every solve reaches
     // topLevelSTPOnce over tables nobody has written yet: the SMT-LIB2 frontend
     // clears them in Cpp_interface::resetSolver, and the API before each of
@@ -314,6 +316,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     ClearAllTables();
     const SOLVER_RETURN_TYPE second = topLevelSTPOnce(inputasserts, query, deadline);
     bm->UserFlags.uf_inject_args = saved;
+    forgetFixedPoints();
     bm->clearInjectivityAssumed();
     skeletonAsked = false;
     return second;
@@ -753,7 +756,7 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat,
                               )
 {
   unsigned rounds = 0;
-  while (true)
+  while (!knownFixedPoint(inputToSat))
   {
     ASTNode last = inputToSat;
     if (bm->UserFlags.passes_on_graph)
@@ -769,6 +772,22 @@ ASTNode STP::callSizeReducing(ASTNode inputToSat,
     std::cerr << "{sizeReducing} rounds to the fixed point: " << rounds << std::endl;
 
   return inputToSat;
+}
+
+bool STP::knownFixedPoint(const ASTNode& n) const
+{
+  return std::find(sizeReducingFixedPoints.begin(),
+                   sizeReducingFixedPoints.end(),
+                   n) != sizeReducingFixedPoints.end();
+}
+
+void STP::rememberFixedPoint(const ASTNode& n)
+{
+  if (knownFixedPoint(n))
+    return;
+  if (sizeReducingFixedPoints.size() == maxSizeReducingFixedPoints)
+    sizeReducingFixedPoints.erase(sizeReducingFixedPoints.begin());
+  sizeReducingFixedPoints.push_back(n);
 }
 
 // These transformations should never increase the size of the DAG.
@@ -1564,9 +1583,20 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // A round that hands its input back has shown the formula to be a fixed
   // point of the passes, and recorded nothing on the way (every definition
   // comes with a change to the formula), so the repeat below has nothing
-  // to find. Over the suite that is the case for six calls in ten.
+  // to find. Over the suite that is the case for six calls in ten. A
+  // formula an earlier query already found to be one is skipped outright:
+  // a query the passes above reduce to a constant, or one that differs
+  // from an earlier query by a definition they substituted away.
   bool atFixedPoint = false;
-  if (!lraActive)
+  if (!lraActive && knownFixedPoint(inputToSat))
+  {
+    atFixedPoint = true;
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "{sizeReducing} the formula is a known fixed point, "
+                   "skipping the round"
+                << std::endl;
+  }
+  else if (!lraActive)
   {
     const ASTNode before = inputToSat;
     if (bm->UserFlags.passes_on_graph)
@@ -1610,7 +1640,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   {
     inputToSat =
         callSizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
+    atFixedPoint = true;
   }
+  if (atFixedPoint)
+    rememberFixedPoint(inputToSat);
 
   // Lower floating-point operations before the first pass that invokes the
   // bit-blaster. From here on the formula is a packed-bit circuit: float
