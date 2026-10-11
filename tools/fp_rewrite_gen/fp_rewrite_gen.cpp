@@ -1033,11 +1033,11 @@ struct ConvGen
             nv[i] = b ? K_FALSE : K_TRUE;
           }
           const Kind k = p.k;
-          t.push_back({p.name, v, [this, k, var](NodeFactory* f) {
+          t.push_back({p.name, v, [k, var](NodeFactory* f) {
                          return f->CreateNode(k, var);
                        }});
           t.push_back({std::string("(not ") + p.name + ")", nv,
-                       [this, k, var](NodeFactory* f) {
+                       [k, var](NodeFactory* f) {
                          return f->CreateNode(NOT, f->CreateNode(k, var));
                        }});
         }
