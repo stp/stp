@@ -242,17 +242,33 @@ static bool fpConstIsNegativeNonzero(const stp::ASTNode& c)
   return fpConstSign(c) < 0 && !fpConstIsZero(c);
 }
 
+// The conversion of an integer: (eb, sb, rm, bits), signed or unsigned. Its
+// value is never NaN, never -0 and never subnormal (every nonzero integer
+// is at least 1, and 1 is normal in every format with two exponent bits).
+static bool fpIsIntegerConversion(const stp::ASTNode& n)
+{
+  return (n.GetKind() == stp::FP_TOFP_SIGNED ||
+          n.GetKind() == stp::FP_TOFP_UNSIGNED) &&
+         n.Degree() == 4;
+}
+static bool fpIsUnsignedConversion(const stp::ASTNode& n)
+{
+  return n.GetKind() == stp::FP_TOFP_UNSIGNED && n.Degree() == 4;
+}
+
 // A term whose value is never below zero -- at the very least -0, or NaN:
 // fp.abs of anything; fp.sqrt of anything (a negative operand gives NaN, and
-// sqrt(-0) is -0); and a self-product t*t (the operand's sign cancels with
-// itself, and the invalid 0*oo needs distinct operands). The comparison
-// rules below only rely on "never strictly below -0".
+// sqrt(-0) is -0); a self-product t*t (the operand's sign cancels with
+// itself, and the invalid 0*oo needs distinct operands); and the conversion
+// of an unsigned integer. The comparison rules below only rely on "never
+// strictly below -0".
 static bool fpTermNeverNegative(const stp::ASTNode& n)
 {
   const stp::Kind k = n.GetKind();
   return (k == stp::FP_ABS && n.Degree() == 1) ||
          (k == stp::FP_SQRT && n.Degree() == 2) ||
-         (k == stp::FP_MUL && n.Degree() == 3 && n[1] == n[2]);
+         (k == stp::FP_MUL && n.Degree() == 3 && n[1] == n[2]) ||
+         fpIsUnsignedConversion(n);
 }
 
 // The shapes the classification predicates can look through (beyond the
@@ -634,6 +650,53 @@ ASTNode SimplifyingNodeFactory::narrowWidenedFPEquality(Kind kind,
   if (narrowed.IsNull())
     return ASTFalse;
   return NodeFactory::CreateNode(kind, x, narrowed);
+}
+
+// fp.gt / fp.geq between the conversion of an integer and -1.0, a zero or
+// 1.0: the conversion is monotone, exact at those three values and never
+// NaN, so the float order is the integer's order against -1, 0 or 1 -- and
+// no integer lies strictly between them, which is what lets fp.gt against
+// -1.0 become "not below 0". An unsigned integer is never below -1, and a
+// 1-bit signed one (0 or -1) never reaches 1. Returns null for other pairs.
+ASTNode SimplifyingNodeFactory::compareIntegerConversion(const Kind kind,
+                                                         const ASTNode& a,
+                                                         const ASTNode& b)
+{
+  const int ti =
+      fpIsIntegerConversion(a) ? 0 : fpIsIntegerConversion(b) ? 1 : -1;
+  if (ti < 0)
+    return ASTNode();
+  const ASTNode& t = ti == 0 ? a : b;
+  const ASTNode& c = ti == 0 ? b : a;
+  if (!fpFormattedConst(c))
+    return ASTNode();
+  int k = 0;
+  if (fpConstZeroSign(c) == 0)
+  {
+    k = fpConstPlusMinusOne(c);
+    if (k == 0)
+      return ASTNode();
+  }
+  const ASTNode& x = t[3];
+  const unsigned w = x.GetValueWidth();
+  const bool isUnsigned = fpIsUnsignedConversion(t);
+  // Decided outright: the integer is always above -1 (unsigned), or never
+  // at or above 1 (1-bit signed). "t first" means t > c or t >= c.
+  if (isUnsigned && k == -1)
+    return ti == 0 ? ASTTrue : ASTFalse;
+  if (!isUnsigned && k == 1 && w == 1)
+    return ti == 0 ? ASTFalse : ASTTrue;
+  const ASTNode kc = k == 0   ? bm.CreateZeroConst(w)
+                     : k == 1 ? bm.CreateOneConst(w)
+                              : bm.CreateMaxConst(w);
+  const Kind gt = isUnsigned ? stp::BVGT : stp::BVSGT;
+  if (kind == stp::FP_GT)
+    return ti == 0 ? NodeFactory::CreateNode(gt, x, kc)
+                   : NodeFactory::CreateNode(gt, kc, x);
+  // t >= c is not (c > t), and c >= t is not (t > c): never NaN, so total.
+  return NodeFactory::CreateNode(
+      stp::NOT, ti == 0 ? NodeFactory::CreateNode(gt, kc, x)
+                        : NodeFactory::CreateNode(gt, x, kc));
 }
 
 // The overflow predicates. Each bit-blasts to a widened adder or multiplier,
@@ -1453,6 +1516,28 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
            kind == stp::FP_ISINFINITE) &&
           !exactWideningOperand(t).IsNull())
         result = NodeFactory::CreateNode(kind, exactWideningOperand(t));
+      // A widening whose exponent grows by enough to hold the narrow
+      // subnormals as normals has no subnormal results: the wide normal
+      // range starts 2^(wide bias - narrow bias) binades below the narrow
+      // one, and the narrow subnormals occupy sb - 1 binades below that.
+      // (Infinite and normal are not asked of an integer conversion: both
+      // depend on the integer's width against the format's range.)
+      else if (kind == stp::FP_ISSUBNORMAL &&
+               !exactWideningOperand(t).IsNull() &&
+               t[0].GetUnsignedConst() < 63 &&
+               exactWideningOperand(t).GetExpWidth() < 63 &&
+               (1ull << (t[0].GetUnsignedConst() - 1)) -
+                       (1ull << (exactWideningOperand(t).GetExpWidth() - 1)) >=
+                   exactWideningOperand(t).GetSigWidth() - 1)
+        result = ASTFalse;
+      // An integer converts to a NaN never, to a subnormal never, and to a
+      // zero exactly when it is zero.
+      else if ((kind == stp::FP_ISNAN || kind == stp::FP_ISSUBNORMAL) &&
+               fpIsIntegerConversion(t))
+        result = ASTFalse;
+      else if (kind == stp::FP_ISZERO && fpIsIntegerConversion(t))
+        result = NodeFactory::CreateNode(
+            EQ, t[3], bm.CreateZeroConst(t[3].GetValueWidth()));
       else if (t.GetKind() == stp::FP_ABS || t.GetKind() == stp::FP_NEG)
         result = NodeFactory::CreateNode(kind, t[0]);
       else if (kind == stp::FP_ISNAN &&
@@ -1540,8 +1625,14 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
       // the zeros' signs, and NaN maps to NaN, failing both predicates).
       if (!exactWideningOperand(t).IsNull())
         result = NodeFactory::CreateNode(kind, exactWideningOperand(t));
-      else if (t.GetKind() == stp::FP_ABS || fpIsSelfProduct(t))
+      else if (t.GetKind() == stp::FP_ABS || fpIsSelfProduct(t) ||
+               fpIsUnsignedConversion(t))
         result = ASTFalse;
+      // A converted integer carries the integer's sign: negative exactly
+      // when the signed integer is (never NaN, and 0 converts to +0).
+      else if (fpIsIntegerConversion(t))
+        result = NodeFactory::CreateNode(
+            stp::BVSLT, t[3], bm.CreateZeroConst(t[3].GetValueWidth()));
       else if (t.GetKind() == stp::FP_NEG)
         result = NodeFactory::CreateNode(stp::FP_ISPOSITIVE, t[0]);
       else if (fpIsRoundToIntegral(t) || fpIsSelfSum(t))
@@ -1572,6 +1663,13 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
       // Same commute as FP_ISNEGATIVE: a widening keeps the sign.
       if (!exactWideningOperand(t).IsNull())
         result = NodeFactory::CreateNode(kind, exactWideningOperand(t));
+      else if (fpIsUnsignedConversion(t))
+        result = ASTTrue;
+      else if (fpIsIntegerConversion(t))
+        result = NodeFactory::CreateNode(
+            stp::NOT, NodeFactory::CreateNode(
+                          stp::BVSLT, t[3],
+                          bm.CreateZeroConst(t[3].GetValueWidth())));
       else if (t.GetKind() == stp::FP_ABS)
         result = NodeFactory::CreateNode(
             stp::NOT, NodeFactory::CreateNode(stp::FP_ISNAN, t[0]));
@@ -1628,6 +1726,9 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
     case stp::FP_GT:
       if (children.size() == 2)
       {
+        result = compareIntegerConversion(kind, children[0], children[1]);
+        if (!result.IsNull())
+          break;
         if (children[0] == children[1] || fpConstIsNaN(children[0]) ||
             fpConstIsNaN(children[1]) || fpConstInfSign(children[0]) == -1 ||
             fpConstInfSign(children[1]) == 1)
@@ -1642,6 +1743,18 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
                  fpConstIsNegativeNonzero(children[1]))
           result = NodeFactory::CreateNode(
               stp::NOT, NodeFactory::CreateNode(stp::FP_ISNAN, children[0]));
+        // A never-negative term is above a zero exactly when it is neither
+        // a zero nor NaN.
+        else if (fpTermNeverNegative(children[0]) &&
+                 fpConstZeroSign(children[1]) != 0)
+          result = NodeFactory::CreateNode(
+              stp::AND,
+              NodeFactory::CreateNode(
+                  stp::NOT,
+                  NodeFactory::CreateNode(stp::FP_ISZERO, children[0])),
+              NodeFactory::CreateNode(
+                  stp::NOT,
+                  NodeFactory::CreateNode(stp::FP_ISNAN, children[0])));
 
         if (result.IsNull())
           result =
@@ -1658,6 +1771,9 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
     case stp::FP_GEQ:
       if (children.size() == 2)
       {
+        result = compareIntegerConversion(kind, children[0], children[1]);
+        if (!result.IsNull())
+          break;
         if (fpConstIsNaN(children[0]) || fpConstIsNaN(children[1]))
           result = ASTFalse;
         else if (children[0] == children[1])
@@ -1761,6 +1877,58 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
             break;
           }
         }
+
+        // A converted integer equals a constant exactly when the integer
+        // equals the constant's value: never -0 (0 converts to +0), +0 for
+        // the integer 0, and +-1 for the integer +-1 (1 is exact in every
+        // format; -1 is below an unsigned integer's range).
+        // Reinterpreted bits equal a constant other than NaN exactly when
+        // the bits are the constant's: every non-NaN value has one packed
+        // pattern. (NaN has many; that case is the isNaN rule below.)
+        for (unsigned k = 0; result.IsNull() && k <= 1; k++)
+        {
+          const ASTNode& t = children[k];
+          const ASTNode& c = children[1 - k];
+          if (t.GetKind() == stp::FP_TOFP && t.Degree() == 3 &&
+              fpFormattedConst(c) && !fpConstIsNaN(c) &&
+              t[2].GetValueWidth() == c.GetValueWidth())
+            result = NodeFactory::CreateNode(
+                EQ, t[2],
+                bm.CreateBVConst(CONSTANTBV::BitVector_Clone(c.GetBVConst()),
+                                 c.GetValueWidth()));
+        }
+        if (!result.IsNull())
+          break;
+
+        for (unsigned k = 0; result.IsNull() && k <= 1; k++)
+        {
+          const ASTNode& t = children[k];
+          const ASTNode& c = children[1 - k];
+          if (!fpIsIntegerConversion(t) || !fpFormattedConst(c))
+            continue;
+          const ASTNode& b = t[3];
+          const unsigned w = b.GetValueWidth();
+          const int zs = fpConstZeroSign(c);
+          const int one = fpConstPlusMinusOne(c);
+          if (zs < 0)
+            result = ASTFalse;
+          // An unsigned integer never converts below zero, -oo included.
+          else if (fpConstInfSign(c) == -1 && fpIsUnsignedConversion(t))
+            result = ASTFalse;
+          else if (zs > 0)
+            result = NodeFactory::CreateNode(EQ, b, bm.CreateZeroConst(w));
+          // A 1-bit signed integer is 0 or -1, so 1.0 is out of its range.
+          else if (one == 1)
+            result = (w == 1 && !fpIsUnsignedConversion(t))
+                         ? ASTFalse
+                         : NodeFactory::CreateNode(EQ, b, bm.CreateOneConst(w));
+          else if (one == -1)
+            result = fpIsUnsignedConversion(t)
+                         ? ASTFalse
+                         : NodeFactory::CreateNode(EQ, b, bm.CreateMaxConst(w));
+        }
+        if (!result.IsNull())
+          break;
 
         // (= t NaN) is exactly (fp.isNaN t): SMT-LIB has a single NaN
         // value. Rewritten only when t is NOT a bare symbol --
@@ -5184,6 +5352,21 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       {
         result = chaseRead(children, width);
       }
+      // A read of a conditional array reads whichever array the condition
+      // picks. Done when a branch is a constant array, whose read is its
+      // default (the hashing factory folds it), so the result chooses
+      // between a value and one read rather than doubling the reads.
+      else if (children[0].GetKind() == ITE &&
+               (children[0][1].GetKind() == stp::CONST_ARRAY ||
+                children[0][2].GetKind() == stp::CONST_ARRAY))
+      {
+        result = NodeFactory::CreateTerm(
+            ITE, width, children[0][0],
+            NodeFactory::CreateTerm(stp::READ, width, children[0][1],
+                                    children[1]),
+            NodeFactory::CreateTerm(stp::READ, width, children[0][2],
+                                    children[1]));
+      }
       break;
 
     // ----- Cheap floating-point rewrites, applied before bit-blasting. -----
@@ -5296,9 +5479,43 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       else if (children[0].GetKind() == stp::BVCONST)
         result = foldFPSign(children[0], /*flip=*/false);
       // abs(t * t) = t * t: a self-product is never negative, and -0 (the
-      // one nonnegative value abs does change) cannot arise from it.
-      else if (fpIsSelfProduct(children[0]))
+      // one nonnegative value abs does change) cannot arise from it. Nor
+      // from the conversion of an unsigned integer.
+      else if (fpIsSelfProduct(children[0]) ||
+               fpIsUnsignedConversion(children[0]))
         result = children[0];
+      break;
+
+    // The round trips. A conversion into the operand's own format is the
+    // identity under every mode; converting back from an exact widening
+    // recovers the operand; and reinterpreting a float's own bits is the
+    // float (fp.to_ieee_bv collapses the NaN payload, which SMT-LIB's single
+    // NaN cannot tell apart).
+    case stp::FP_TOFP:
+      if (children.size() == 4 &&
+          children[3].GetType() == stp::FLOATINGPOINT_TYPE &&
+          children[0].GetKind() == stp::BVCONST &&
+          children[1].GetKind() == stp::BVCONST)
+      {
+        const unsigned eb = children[0].GetUnsignedConst();
+        const unsigned sb = children[1].GetUnsignedConst();
+        const ASTNode& x = children[3];
+        if (x.GetExpWidth() == eb && x.GetSigWidth() == sb)
+          result = x;
+        else
+        {
+          const ASTNode y = exactWideningOperand(x);
+          if (!y.IsNull() && y.GetExpWidth() == eb && y.GetSigWidth() == sb)
+            result = y;
+        }
+      }
+      else if (children.size() == 3 &&
+               children[2].GetKind() == stp::FP_TO_IEEE_BV &&
+               children[0].GetKind() == stp::BVCONST &&
+               children[1].GetKind() == stp::BVCONST &&
+               children[2][0].GetExpWidth() == children[0].GetUnsignedConst() &&
+               children[2][0].GetSigWidth() == children[1].GetUnsignedConst())
+        result = children[2][0];
       break;
 
     // Rounding an already-integral value -- and roundToIntegral yields

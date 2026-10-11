@@ -1335,6 +1335,143 @@ static void runPartialConstants(Ctx& c)
              bv(4, 3));
 }
 
+// The conversions: round trips, and what the conversion of an integer can
+// and cannot be. Checked against a 4-bit integer and the (EB, SB) format;
+// the width-1 signed case has its own check, since 1 = -1 there.
+static void runConversions(Ctx& c)
+{
+  const unsigned W = 4;
+  const unsigned w = EB + SB;
+  ASTNode x = c.fp(EB, SB);
+  ASTNode b = c.mgr.CreateSymbol("b_conv", 0, W);
+  ASTNode b1 = c.mgr.CreateSymbol("b_conv1", 0, 1);
+  auto c32 = [&](unsigned v) { return c.mgr.CreateBVConst(32, v); };
+  const ASTNode zero = c.mgr.CreateZeroConst(W);
+  const ASTNode pz = c.fpConst(EB, SB, packZero(EB, SB, false));
+  const ASTNode nz = c.fpConst(EB, SB, packZero(EB, SB, true));
+  const ASTNode pone = c.fpConst(EB, SB, packOne(EB, SB, false));
+  const ASTNode none = c.fpConst(EB, SB, packOne(EB, SB, true));
+  const ASTNode negB = c.nf->CreateNode(BVSLT, b, zero);
+  const ASTNode zeroB = c.nf->CreateNode(EQ, b, zero);
+
+  c.checkTermIs("to_fp(e s, to_ieee_bv x) = x", FP_TOFP, w,
+                {c32(EB), c32(SB), c.hf->CreateTerm(FP_TO_IEEE_BV, w, x)}, x);
+
+  const unsigned modes[] = {ROUND_NEAREST_TIES_TO_EVEN,
+                            ROUND_NEAREST_TIES_TO_AWAY, ROUND_TOWARD_POSITIVE,
+                            ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO};
+  for (unsigned mode : modes)
+  {
+    const ASTNode r = c.rm(mode);
+    c.checkTermIs("to_fp(e s, rm, x) = x", FP_TOFP, w,
+                  {c32(EB), c32(SB), r, x}, x);
+    const ASTNode wide = c.hf->CreateTerm(FP_TOFP, w + 2,
+                                          {c32(EB + 1), c32(SB + 1), r, x});
+    c.checkTermIs("to_fp(e s, rm, widen x) = x", FP_TOFP, w,
+                  {c32(EB), c32(SB), r, wide}, x);
+    c.checkNodeIs("isSubnormal(widen x) -> false", FP_ISSUBNORMAL, {wide},
+                  c.mgr.ASTFalse);
+
+    const ASTNode sgn =
+        c.hf->CreateTerm(FP_TOFP_SIGNED, w, {c32(EB), c32(SB), r, b});
+    const ASTNode uns =
+        c.hf->CreateTerm(FP_TOFP_UNSIGNED, w, {c32(EB), c32(SB), r, b});
+    for (const ASTNode& t : {sgn, uns})
+    {
+      c.checkNodeIs("isNaN(to_fp int) -> false", FP_ISNAN, {t},
+                    c.mgr.ASTFalse);
+      c.checkNodeIs("isSubnormal(to_fp int) -> false", FP_ISSUBNORMAL, {t},
+                    c.mgr.ASTFalse);
+      c.checkNodeIs("isZero(to_fp int) -> b = 0", FP_ISZERO, {t}, zeroB);
+      c.checkNodeIs("(= to_fp int -0) -> false", FP_SMT_EQ, {t, nz},
+                    c.mgr.ASTFalse);
+      c.checkNodeIs("(= to_fp int +0) -> b = 0", FP_SMT_EQ, {pz, t}, zeroB);
+      c.checkNodeIs("(= to_fp int 1.0) -> b = 1", FP_SMT_EQ, {t, pone},
+                    c.nf->CreateNode(EQ, b, c.mgr.CreateOneConst(W)));
+    }
+    c.checkNodeIs("isNegative(to_fp signed) -> b <s 0", FP_ISNEGATIVE, {sgn},
+                  negB);
+    c.checkNodeIs("isPositive(to_fp signed) -> not b <s 0", FP_ISPOSITIVE,
+                  {sgn}, c.nf->CreateNode(NOT, negB));
+    c.checkNodeIs("isNegative(to_fp unsigned) -> false", FP_ISNEGATIVE,
+                  {uns}, c.mgr.ASTFalse);
+    c.checkNodeIs("isPositive(to_fp unsigned) -> true", FP_ISPOSITIVE, {uns},
+                  c.mgr.ASTTrue);
+    c.checkTermIs("abs(to_fp unsigned) = itself", FP_ABS, w, {uns}, uns);
+    c.checkNodeIs("(= to_fp signed -1.0) -> b = ones", FP_SMT_EQ,
+                  {sgn, none},
+                  c.nf->CreateNode(EQ, b, c.mgr.CreateMaxConst(W)));
+    c.checkNodeIs("(= to_fp unsigned -1.0) -> false", FP_SMT_EQ, {none, uns},
+                  c.mgr.ASTFalse);
+
+    // Orderings against a zero, both spellings of zero, both sides.
+    c.checkNodeIs("to_fp signed > +0 -> b >s 0", FP_GT, {sgn, pz},
+                  c.nf->CreateNode(BVSGT, b, zero));
+    c.checkNodeIs("-0 > to_fp signed -> 0 >s b", FP_GT, {nz, sgn},
+                  c.nf->CreateNode(BVSGT, zero, b));
+    c.checkNodeIs("to_fp signed >= -0 -> not 0 >s b", FP_GEQ, {sgn, nz},
+                  c.nf->CreateNode(NOT, c.nf->CreateNode(BVSGT, zero, b)));
+    c.checkNodeIs("+0 >= to_fp signed -> not b >s 0", FP_GEQ, {pz, sgn},
+                  c.nf->CreateNode(NOT, c.nf->CreateNode(BVSGT, b, zero)));
+    c.checkNodeIs("to_fp signed < +0 -> 0 >s b", FP_LT, {sgn, pz},
+                  c.nf->CreateNode(BVSGT, zero, b));
+    c.checkNodeIs("to_fp unsigned > +0 -> b != 0", FP_GT, {uns, pz},
+                  c.nf->CreateNode(NOT, zeroB));
+    c.checkNodeIs("+0 > to_fp unsigned -> false", FP_GT, {pz, uns},
+                  c.mgr.ASTFalse);
+    c.checkNodeIs("to_fp unsigned >= -0 -> true", FP_GEQ, {uns, nz},
+                  c.mgr.ASTTrue);
+    c.checkNodeIs("-0 >= to_fp unsigned -> b = 0", FP_GEQ, {nz, uns}, zeroB);
+    c.checkNodeIs("to_fp unsigned > -1.0 -> true", FP_GT, {uns, none},
+                  c.mgr.ASTTrue);
+
+    // Against -1.0 and 1.0: no integer lies strictly between them and 0.
+    c.checkNodeIs("to_fp signed > -1.0 -> not 0 >s b", FP_GT, {sgn, none},
+                  c.nf->CreateNode(NOT, c.nf->CreateNode(BVSGT, zero, b)));
+    c.checkNodeIs("-1.0 >= to_fp signed -> 0 >s b", FP_GEQ, {none, sgn},
+                  c.nf->CreateNode(BVSGT, zero, b));
+    const ASTNode one = c.mgr.CreateOneConst(W);
+    c.checkNodeIs("to_fp signed >= 1.0 -> not 1 >s b", FP_GEQ, {sgn, pone},
+                  c.nf->CreateNode(NOT, c.nf->CreateNode(BVSGT, one, b)));
+    c.checkNodeIs("(= to_fp unsigned -oo) -> false", FP_SMT_EQ,
+                  {uns, c.fpConst(EB, SB, packInf(EB, SB, true))},
+                  c.mgr.ASTFalse);
+    c.checkNodeIs("to_fp unsigned < 1.0 -> 1 >u b", FP_LT, {uns, pone},
+                  c.nf->CreateNode(BVGT, c.mgr.CreateOneConst(W), b));
+    c.checkNodeIs("to_fp unsigned >= 1.0 -> not 1 >u b", FP_GEQ, {uns, pone},
+                  c.nf->CreateNode(
+                      NOT, c.nf->CreateNode(BVGT, c.mgr.CreateOneConst(W), b)));
+    c.checkNodeIs("-1.0 >= to_fp unsigned -> false", FP_GEQ, {none, uns},
+                  c.mgr.ASTFalse);
+
+    // Reinterpreted bits against a constant: the bits are the constant's.
+    {
+      ASTNode bits = c.mgr.CreateSymbol("b_bits", 0, w);
+      const ASTNode asFloat =
+          c.hf->CreateTerm(FP_TOFP, w, {c32(EB), c32(SB), bits});
+      for (const ASTNode& k : {pz, nz, pone, none})
+      {
+        const ASTNode plain = c.mgr.CreateBVConst(w, k.GetUnsignedConst());
+        c.checkNodeIs("(= to_fp(bits) const) -> bits = const", FP_SMT_EQ,
+                      {asFloat, k}, c.nf->CreateNode(EQ, bits, plain));
+      }
+    }
+
+    // Width 1: the signed integer is 0 or -1, so 1.0 is unreachable.
+    const ASTNode sgn1 =
+        c.hf->CreateTerm(FP_TOFP_SIGNED, w, {c32(EB), c32(SB), r, b1});
+    c.checkNodeIs("(= to_fp signed-1bit 1.0) -> false", FP_SMT_EQ,
+                  {sgn1, pone}, c.mgr.ASTFalse);
+    c.checkNodeIs("(= to_fp signed-1bit -1.0) -> b = 1", FP_SMT_EQ,
+                  {sgn1, none},
+                  c.nf->CreateNode(EQ, b1, c.mgr.CreateOneConst(1)));
+    c.checkNodeIs("to_fp signed-1bit >= 1.0 -> false", FP_GEQ, {sgn1, pone},
+                  c.mgr.ASTFalse);
+    c.checkNodeIs("1.0 > to_fp signed-1bit -> true", FP_GT, {pone, sgn1},
+                  c.mgr.ASTTrue);
+  }
+}
+
 int main()
 {
   setbuf(stdout, nullptr);
@@ -1342,6 +1479,7 @@ int main()
   Ctx c;
   run(c);
   runPartialConstants(c);
+  runConversions(c);
   printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }
