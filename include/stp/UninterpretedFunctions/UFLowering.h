@@ -149,13 +149,17 @@ struct DLL_PUBLIC UFEagerStats
   uint64_t budget = 0;
   uint64_t budgetSpent = 0;
   bool policyRan = false;
+  uint64_t seededPairs = 0;
+  uint64_t seededRealPairs = 0;
+  uint64_t seedCandidates = 0;
+  uint64_t seedImpossiblePairs = 0;
 
   uint64_t emittedConstraints() const
   {
     uint64_t total = 0;
     for (const UFEagerDeclarationStat& stat : declarations)
       total += stat.emittedConstraints;
-    return total;
+    return total + seededPairs;
   }
   uint64_t emittedInjectivity() const
   {

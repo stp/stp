@@ -2010,7 +2010,18 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_eager_budget" }
 category = "refinement.uf"
-help = "how many congruence constraints --uf-ackermann=auto may install up front"
+help = "automatic up-front congruence budget; whole-function pairs cost one unit each, and optional seeded Real pairs cost 32 units each"
+
+[[option]]
+name = "uf-pair-seeding"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_pair_seeding" }
+category = "refinement.uf"
+help = "experimentally seed selected pairs from large functions using unused automatic Ackermann budget; model refinement still checks every omitted pair"
 
 [[option]]
 name = "uf-lazy-in-place"

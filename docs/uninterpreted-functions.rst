@@ -108,6 +108,14 @@ each other has them narrowed to ``ceil(log2(N+1))`` bits first
 (``--uf-narrow-results``), which is what keeps a 256-bit codomain from
 costing 256 bits per constraint.
 
+The experimental ``--uf-pair-seeding`` option uses budget left by ``auto``
+to add selected congruence constraints from declarations too large to select
+as a whole. It considers pairs whose arguments are already forced equal, and
+pure UF pairs whose results are forced distinct. Real pairs are admitted only
+when their arguments are forced equal; each costs 32 budget units to account
+for the arithmetic equality it adds. The model checker still covers all
+omitted pairs. This option is off by default.
+
 Declared-sort value bounds
 --------------------------
 

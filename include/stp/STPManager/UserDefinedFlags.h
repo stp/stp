@@ -473,6 +473,12 @@ public:
   // the old behaviour for a query known to be that shape.
   unsigned uf_eager_budget = 256;
 
+  // Spend unused AUTO eager budget on a bounded set of individual application
+  // pairs from declarations that do not fit the all-or-nothing policy. The
+  // ordinary model checker still supplies every omitted congruence axiom.
+  // Kept selectable while the pair ranking is measured on UF and UFLRA.
+  bool uf_pair_seeding = false;
+
   // Pure QF_UF has no interpreted values of a declared sort. Renaming those
   // values in any fixed solve-scalar order therefore preserves every equality
   // and function application. AUTO applies the value bounds only in that logic;

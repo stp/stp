@@ -228,6 +228,118 @@ struct CongruenceGroups
   uint64_t estimate = 0;
 };
 
+using TermPair = std::pair<ASTNode, ASTNode>;
+
+TermPair orderedPair(ASTNode left, ASTNode right)
+{
+  if (right < left)
+    std::swap(left, right);
+  return std::make_pair(left, right);
+}
+
+// Only unit facts in the top-level conjunction are used. A fact under a
+// disjunction, implication, or negated conjunction cannot exclude a pair.
+// Keeping these relations query-local also makes them valid for an incremental
+// block whose whole encoding is guarded by that block's activation literal.
+struct GuaranteedRelations
+{
+  std::map<ASTNode, ASTNode> parent;
+  std::set<TermPair> different;
+
+  ASTNode representative(ASTNode term) const
+  {
+    auto found = parent.find(term);
+    while (found != parent.end())
+    {
+      term = found->second;
+      found = parent.find(term);
+    }
+    return term;
+  }
+
+  void equate(const ASTNode& left, const ASTNode& right)
+  {
+    const ASTNode a = representative(left);
+    const ASTNode b = representative(right);
+    if (a != b)
+    {
+      const TermPair pair = orderedPair(a, b);
+      parent[pair.second] = pair.first;
+    }
+  }
+
+  bool unequal(const ASTNode& left, const ASTNode& right) const
+  {
+    const ASTNode a = representative(left);
+    const ASTNode b = representative(right);
+    return a != b && different.count(orderedPair(a, b)) != 0;
+  }
+};
+
+GuaranteedRelations collectGuaranteedRelations(const ASTNode& root,
+                                               PreparationPoller& poll)
+{
+  GuaranteedRelations relations;
+  std::vector<TermPair> different;
+  std::set<TermPair> realLeq;
+  ASTVec pending(1, root);
+  ASTNodeSet seen;
+  while (!pending.empty())
+  {
+    poll();
+    ASTNode atom = pending.back();
+    pending.pop_back();
+    if (!seen.insert(atom).second)
+      continue;
+    if (atom.GetKind() == AND)
+    {
+      for (const ASTNode& child : atom)
+        pending.push_back(child);
+      continue;
+    }
+    bool negated = false;
+    if (atom.GetKind() == NOT)
+    {
+      negated = true;
+      atom = atom[0];
+    }
+    if (atom.Degree() != 2 ||
+        atom[0].GetSourceSort() != atom[1].GetSourceSort() ||
+        atom[0].GetSourceSort().kind() == SourceSort::Kind::FloatingPoint)
+      continue;
+    if (atom.GetKind() == EQ || atom.GetKind() == IFF)
+    {
+      if (negated)
+        different.push_back(orderedPair(atom[0], atom[1]));
+      else
+        relations.equate(atom[0], atom[1]);
+    }
+    else if (atom[0].GetSourceSort().kind() == SourceSort::Kind::Real &&
+             ((!negated && (atom.GetKind() == REAL_LT ||
+                            atom.GetKind() == REAL_GT)) ||
+              (negated && (atom.GetKind() == REAL_LE ||
+                           atom.GetKind() == REAL_GE))))
+      different.push_back(orderedPair(atom[0], atom[1]));
+    if (atom[0].GetSourceSort().kind() == SourceSort::Kind::Real)
+    {
+      if ((!negated && atom.GetKind() == REAL_LE) ||
+          (negated && atom.GetKind() == REAL_GT))
+        realLeq.insert(std::make_pair(atom[0], atom[1]));
+      else if ((!negated && atom.GetKind() == REAL_GE) ||
+               (negated && atom.GetKind() == REAL_LT))
+        realLeq.insert(std::make_pair(atom[1], atom[0]));
+    }
+  }
+  for (const TermPair& leq : realLeq)
+    if (realLeq.count(std::make_pair(leq.second, leq.first)) != 0)
+      relations.equate(leq.first, leq.second);
+  for (const TermPair& pair : different)
+    relations.different.insert(orderedPair(
+        relations.representative(pair.first),
+        relations.representative(pair.second)));
+  return relations;
+}
+
 CongruenceGroups
 groupForCongruence(const std::vector<const LoweredApplicationRecord*>& records)
 {
@@ -999,6 +1111,8 @@ void UFLowering::installEagerCongruence(
 
   std::map<const UFDecl*, std::vector<const LoweredApplicationRecord*>>
       byDeclaration;
+  std::map<const UFDecl*, std::vector<const LoweredApplicationRecord*>>
+      allByDeclaration;
   for (const LoweredApplicationRecord& record : view.applications)
   {
     poll();
@@ -1006,6 +1120,8 @@ void UFLowering::installEagerCongruence(
     // one application, which has no pairs to constrain anyway.
     if (!record.observableArguments)
       continue;
+    if (mode == Mode::AUTO && manager_->UserFlags.uf_pair_seeding)
+      allByDeclaration[record.declaration].push_back(&record);
     // A declaration the lazy round can decide is decided from committed
     // models instead, one earned pair at a time, unless eager was asked for
     // by name.
@@ -1068,6 +1184,7 @@ void UFLowering::installEagerCongruence(
   NodeFactory* const factory = manager_->defaultNodeFactory;
   const UnitBounds unitBounds = collectUnitBounds(view.semanticRoot);
   uint64_t budget = manager_->UserFlags.uf_eager_budget;
+  std::set<const UFDecl*> selectedDeclarations;
   for (const std::pair<uint64_t, const UFDecl*>& candidate : selection)
   {
     poll();
@@ -1116,6 +1233,7 @@ void UFLowering::installEagerCongruence(
       view.eagerStats.budgetSpent += candidate.first;
     }
     stat.outcome = UFEagerDeclarationStat::Outcome::Selected;
+    selectedDeclarations.insert(candidate.second);
 
     // Walk exactly what was charged for, and nothing else. Two kinds of pair
     // are charged nothing because they can produce nothing, and each has to be
@@ -1215,6 +1333,219 @@ void UFLowering::installEagerCongruence(
       }
     }
   }
+
+  // A whole large declaration can exceed AUTO's budget even though a few of
+  // its pairs would be valuable before the first candidate. Seed only a
+  // bounded, deterministic neighborhood of such declarations, then let the
+  // ordinary checker earn every pair the seed missed. Real pairs use the same
+  // AST axiom and the existing LRA registration path, but cost more budget
+  // units because their equality atoms become tableau rows.
+  if (mode == Mode::AUTO && manager_->UserFlags.uf_pair_seeding && budget != 0)
+  {
+    const GuaranteedRelations relations =
+        collectGuaranteedRelations(view.semanticRoot, poll);
+    std::map<ASTNode, unsigned> resultUse;
+    for (const auto& entry : allByDeclaration)
+      if (selectedDeclarations.count(entry.first) == 0 &&
+          entry.second.size() >= 2 && entry.second.size() <= 2048 &&
+          !hasFloatingPointPosition(entry.first->signature()))
+        for (const LoweredApplicationRecord* record : entry.second)
+          resultUse.emplace(record->resultSymbol, 0);
+    for (const auto& entry : allByDeclaration)
+      for (const LoweredApplicationRecord* record : entry.second)
+        for (const ASTNode& actual : record->namedActuals)
+        {
+          auto found = resultUse.find(actual);
+          if (found != resultUse.end() && found->second < 255)
+            ++found->second;
+        }
+    ASTNodeSet visited;
+    walkPreOrder(view.semanticRoot, [&](const ASTNode& node) -> bool {
+      poll();
+      if (!visited.insert(node).second)
+        return false;
+      const Kind kind = node.GetKind();
+      if (kind == EQ || kind == IFF || kind == REAL_LT ||
+          kind == REAL_LE || kind == REAL_GT || kind == REAL_GE)
+        for (const ASTNode& operand : node)
+        {
+          auto found = resultUse.find(operand);
+          if (found != resultUse.end() && found->second < 255)
+            ++found->second;
+        }
+      return true;
+    });
+
+    struct SeedCandidate
+    {
+      const UFDecl* declaration;
+      const LoweredApplicationRecord* left;
+      const LoweredApplicationRecord* right;
+      unsigned score;
+      unsigned cost;
+    };
+    std::vector<SeedCandidate> seeds;
+    for (const auto& entry : allByDeclaration)
+    {
+      poll();
+      const UFDecl* declaration = entry.first;
+      const auto& records = entry.second;
+      if (selectedDeclarations.count(declaration) != 0 ||
+          records.size() < 2 || records.size() > 2048 ||
+          hasFloatingPointPosition(declaration->signature()))
+        continue;
+      const bool real = hasRealPosition(declaration->signature());
+      const unsigned cost = real ? 32 : 1;
+      if (cost > budget)
+        continue;
+
+      std::set<std::pair<size_t, size_t>> seenPairs;
+      const size_t candidateLimit = 16384;
+      auto consider = [&](size_t i, size_t j) {
+        if (i == j || seenPairs.size() >= candidateLimit)
+          return;
+        if (j < i)
+          std::swap(i, j);
+        if (!seenPairs.insert(std::make_pair(i, j)).second)
+          return;
+        const auto& left = *records[i];
+        const auto& right = *records[j];
+        unsigned common = 0;
+        for (size_t k = 0; k < left.loweredActuals.size(); ++k)
+        {
+          const ASTNode a = relations.representative(left.loweredActuals[k]);
+          const ASTNode b = relations.representative(right.loweredActuals[k]);
+          if (a == b)
+            ++common;
+          else if ((a.isConstant() && b.isConstant()) ||
+                   relations.unequal(a, b))
+          {
+            ++view.eagerStats.seedImpossiblePairs;
+            return;
+          }
+        }
+        const bool forcedArguments = common == left.loweredActuals.size();
+        const bool differentResults =
+            relations.unequal(left.resultSymbol, right.resultSymbol);
+        // These are the pairs whose axiom has a concrete use in the current
+        // formula. Arbitrary pairs disturbed both the QG SAT search and the
+        // Real model: one UFLRA case went from one model check to 38. A Real
+        // pair is admitted only when its premise is already forced; otherwise
+        // even a handful of extra tableau equality atoms can be expensive.
+        if ((!forcedArguments && (real || !differentResults)) ||
+            relations.representative(left.resultSymbol) ==
+                relations.representative(right.resultSymbol))
+          return;
+        const unsigned leftUse = resultUse[left.resultSymbol];
+        const unsigned rightUse = resultUse[right.resultSymbol];
+        const unsigned score =
+            32 * common + std::min(16u, leftUse) +
+            std::min(16u, rightUse) +
+            (differentResults ? 128u : 0u);
+        seeds.push_back({declaration, &left, &right, score, cost});
+      };
+
+      // Nearby applications tend to be built by the same source construct.
+      // The fixed window also supplies candidates for unary functions, where
+      // two distinct applications rarely share an argument syntactically.
+      for (size_t i = 0; i < records.size(); ++i)
+      {
+        poll();
+        for (size_t j = i + 1; j < records.size() && j <= i + 3; ++j)
+          consider(i, j);
+      }
+      // Argument-equal neighbors have shorter premises and are often pulled
+      // together by the same constraints. Keep just three prior members per
+      // key, so a large common-argument bucket does not become quadratic.
+      std::map<std::pair<size_t, ASTNode>, std::vector<size_t>> recent;
+      for (size_t i = 0; i < records.size(); ++i)
+      {
+        poll();
+        for (size_t k = 0; k < records[i]->loweredActuals.size(); ++k)
+        {
+          auto& previous = recent[std::make_pair(
+              k, relations.representative(records[i]->loweredActuals[k]))];
+          for (size_t j : previous)
+            consider(j, i);
+          previous.push_back(i);
+          if (previous.size() > 3)
+            previous.erase(previous.begin());
+        }
+      }
+    }
+    view.eagerStats.seedCandidates = seeds.size();
+    std::sort(seeds.begin(), seeds.end(),
+              [](const SeedCandidate& a, const SeedCandidate& b) {
+                if (a.score != b.score) return a.score > b.score;
+                if (a.cost != b.cost) return a.cost < b.cost;
+                if (a.declaration->id() != b.declaration->id())
+                  return a.declaration->id() < b.declaration->id();
+                if (a.left->stableOrder != b.left->stableOrder)
+                  return a.left->stableOrder < b.left->stableOrder;
+                return a.right->stableOrder < b.right->stableOrder;
+              });
+    for (const SeedCandidate& candidate : seeds)
+    {
+      poll();
+      if (candidate.cost > budget)
+        continue;
+      const UFSignature& signature = candidate.declaration->signature();
+      ASTVec premise;
+      bool impossible = false;
+      for (size_t k = 0; k < signature.arity(); ++k)
+      {
+        const ASTNode& left = candidate.left->loweredActuals[k];
+        const ASTNode& right = candidate.right->loweredActuals[k];
+        if (relations.representative(left) == relations.representative(right))
+          continue;
+        if (relations.unequal(left, right))
+        {
+          impossible = true;
+          break;
+        }
+        const SourceSort sort = UFSignature::loweringSort(signature.domain()[k]);
+        const PositionVerdict comparison =
+            comparePosition(factory, left, right, sort, &unitBounds);
+        if (comparison == PositionVerdict::Distinct)
+        {
+          impossible = true;
+          break;
+        }
+        if (comparison == PositionVerdict::Unknown)
+          premise.push_back(factory->CreateNode(
+              sort.kind() == SourceSort::Kind::Bool ? IFF : EQ,
+              candidate.left->namedActuals[k],
+              candidate.right->namedActuals[k]));
+      }
+      if (impossible)
+      {
+        ++view.eagerStats.seedImpossiblePairs;
+        continue;
+      }
+      const ASTNode conclusion = factory->CreateNode(
+          signature.codomain().kind() == SourceSort::Kind::Bool ? IFF : EQ,
+          candidate.left->resultSymbol, candidate.right->resultSymbol);
+      const ASTNode premiseConj =
+          premise.empty() ? ASTNode()
+                          : premise.size() == 1 ? premise[0]
+                                                : factory->CreateNode(AND, premise);
+      view.congruenceConstraints.push_back(
+          premise.empty() ? conclusion
+                          : factory->CreateNode(IMPLIES, premiseConj, conclusion));
+      manager_->UserFlags.coverage.uf_constraints_installed++;
+      ++view.eagerStats.seededPairs;
+      if (candidate.cost > 1)
+        ++view.eagerStats.seededRealPairs;
+      budget -= candidate.cost;
+      view.eagerStats.budgetSpent += candidate.cost;
+      // A seed either has a premise already forced true or a conclusion
+      // already forced false. In the former case the injectivity converse has
+      // a true consequent; in the latter it has a false antecedent. It adds
+      // nothing even when --uf-inject-args is requested.
+      if (budget == 0)
+        break;
+    }
+  }
 }
 
 // Observability for the eager policy. Without this the only way to tell a
@@ -1267,6 +1598,11 @@ void UFLowering::reportEagerCongruence(const LoweredApplicationView& view) const
             << stats.emittedConstraints() << " constraints, budget "
             << stats.budgetSpent << "/" << stats.budget << " spent"
             << std::endl;
+  if (manager_->UserFlags.uf_pair_seeding)
+    std::cerr << "UF: pair seeding " << stats.seededPairs << " pairs ("
+              << stats.seededRealPairs << " Real), " << stats.seedCandidates
+              << " candidates, " << stats.seedImpossiblePairs
+              << " proven impossible" << std::endl;
   if (stats.emittedInjectivity() != 0)
     std::cerr << "UF: eager " << stats.emittedInjectivity()
               << " of those assume injectivity (--uf-inject-args), behind one "
