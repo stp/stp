@@ -1417,7 +1417,25 @@ void MutableGraph::drainDirty()
     {
       MG_TRACE("  rules gave " << fresh.GetNodeNum() << " kind " << fresh.GetKind());
       replaceNode(m, fresh);
+      // The rewriter has not seen what the rules built: queued, so that
+      // it runs over it in the formula, as over any other node.
+      if (rewriter_ != NULL)
+        if (MutableInterior* f = asMutable(current(fresh)))
+          if (!f->dead_ && f->attached_)
+            markDirty(f);
       continue;
+    }
+    // The sharing-aware rules, with m in the formula: the counts of m's
+    // children include m and nothing that has died.
+    if (rewriter_ != NULL && !m->dead_)
+    {
+      const ASTNode r = normalise(rewriter_->rewrite(ASTNode(m)));
+      if (!m->dead_ && r != ASTNode(m))
+      {
+        MG_TRACE("  rewriter gave " << r.GetNodeNum() << " kind " << r.GetKind());
+        replaceNode(m, r);
+        continue;
+      }
     }
     if (!m->dead_ && !anyMutable(m->GetChildren()))
     {

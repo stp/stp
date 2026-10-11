@@ -21,57 +21,80 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+
 /*
- Sharing aware rewriting. 
-*/
+ * Sharing-aware rewriting on a MutableGraph.
+ *
+ * Every rule here replaces a node by a smaller one only where the nodes it
+ * takes apart die with it, which the parent count decides. The pass used
+ * to count parents once over its input and rebuild the formula bottom-up;
+ * the counts went stale as rules fired, and a node whose child became
+ * single-use after it was visited was never looked at again. On the graph
+ * the counts are live: the formula is indexed in place, every node is
+ * examined once bottom-up, a rule that fires edits the graph, and the
+ * graph's queue runs the rules again over what changed. A count-change
+ * event on a node that now has one parent re-examines that parent.
+ */
 
 #ifndef REWRITING_H_
 #define REWRITING_H_
 
-
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Simplifier/Simplifier.h"
-#include <map>
+#include "stp/Simplifier/MutableGraph.h"
+#include <string>
 
 namespace stp
 {
 
-class Rewriting
+class Rewriting : public NodeRewriter
 {
   STPMgr* stpMgr;
+  // The factory the rules build through: the graph's while a run is on.
   NodeFactory* nf;
+  MutableGraph* g = NULL;
+  // STP_REWRITING_CHECK_GRAPH in the environment: recount the graph after
+  // every edit. For the fuzzers; O(formula) per edit.
+  const bool checkGraph;
+  unsigned fired = 0;
+  unsigned narrowedBitwise = 0;
 
-  // uint8_t wrapped: 257 references read back as 1, i.e. unshared.
-  std::unordered_map<uint64_t, uint32_t> shareCount;
-  std::unordered_map<uint64_t, ASTNode> fromTo;
+  // Exactly one place reads n now: the rule's own node, so n dies with it.
+  bool unshared(const ASTNode& n) const { return g->parentCount(n) <= 1; }
+  // In the formula as it stands, as opposed to built by a rule and not
+  // yet attached.
+  bool inFormula(const ASTNode& n) const
+  {
+    return g->isRootNode(n) || g->parentCount(n) > 0;
+  }
+  ASTNode rebuild(const ASTNode& n, const ASTVec& kids);
 
-  int removed;
-  unsigned narrowedBitwise;
-
-  // sharecount is 1 if the node has one reference in the tree.
-  void buildShareCount(const ASTNode& n);
+  // Every sharing-aware rule, in order, over one node. Each rule sees what
+  // the rules before it produced. Nothing here descends.
   ASTNode applyRules(ASTNode c);
-
-  // rewrite() walks the DAG with its frames on the heap: the input decides
-  // how deep the walk goes, so a call per level exhausts the stack on the
-  // deeply nested formulas that exist. See DeepDag_Test.cpp.
-  struct Frame;
-  bool alreadyKnown(const ASTNode& n, ASTNode& answer);
-  ASTNode rewrite(const ASTNode& n);
+  // The rules over a node a rule just built and over the fresh nodes
+  // under it, as the old rebuild fed a rule's result back through its
+  // walk. Nodes of the formula stop the descent: the sweep and the queue
+  // cover them. `rulesHere` false runs them over the children only.
+  ASTNode rewriteFresh(const ASTNode& n, bool rulesHere);
+  // The rules over a node of the formula; a result that differs replaces
+  // it in the graph.
+  void examine(const ASTNode& n);
+  // Count-change events since the last drain: a node that now has one
+  // parent may let a rule fire on that parent.
+  void drainCounts();
 
 public:
   Rewriting(const Rewriting&) = delete;
-  Rewriting & operator=(const Rewriting&) = delete;
-  
-  Rewriting(STPMgr* stp_, NodeFactory* nf_)
-  {
-    stpMgr = stp_;
-    nf = nf_;
-  }
+  Rewriting& operator=(const Rewriting&) = delete;
+  // `nf_` is what the pass builds through outside a run; a run builds
+  // through its graph.
+  Rewriting(STPMgr* stp_, NodeFactory* nf_);
+
+  // NodeRewriter: the rules over a queued node of the graph.
+  virtual ASTNode rewrite(const ASTNode& attached) override;
 
   ASTNode topLevel(ASTNode& n);
 };
 }
-
 #endif

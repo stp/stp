@@ -208,6 +208,7 @@ AddSTPGTest(DeepDag_Test.cpp)
 AddSTPGTest(MutableGraph_Test.cpp)
 AddSTPGTest(MutableGraph_Fuzz_Test.cpp)
 AddSTPGTest(RemoveUnconstrained_Fuzz_Test.cpp)
+AddSTPGTest(Rewriting_Fuzz_Test.cpp)
 # Instantiates BBNodeManagerAIG, whose inline members call ABC; a shared
 # libstp localises ABC's symbols, so this links its own copy the way
 # FloatBlast_Test does.

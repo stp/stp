@@ -61,6 +61,18 @@ namespace stp
 class MutableGraph;
 class NodeDomainAnalysis;
 
+// A rule set a pass installs over the graph's queue. The graph calls it
+// on a queued node the simplifying rules left as it is, while the node is
+// in the formula, so the parent counts of the node and its children are
+// exact. Returns the node itself when nothing fires, else what the node
+// should become, built through the graph's factory.
+class NodeRewriter
+{
+public:
+  virtual ~NodeRewriter() {}
+  virtual ASTNode rewrite(const ASTNode& attached) = 0;
+};
+
 // The raw factory over a graph. Sorting and NOT handling mirror
 // HashingNodeFactory, so a node built here has the same child order as its
 // hash-consed counterpart would.
@@ -150,6 +162,10 @@ public:
   // and the queue recomputes a patched node's domains before the rules
   // see it, climbing further while the domain keeps changing.
   void installReducer(NodeFactory& layer, NodeDomainAnalysis& domains);
+  // A rule set the queue runs after the simplifying rules, on the node as
+  // it stands in the formula (Rewriting's sharing-aware rules, which read
+  // parent counts). NULL uninstalls.
+  void installRewriter(NodeRewriter* r) { rewriter_ = r; }
 
   static MutableInterior* asMutable(const ASTNode& n);
 
@@ -260,6 +276,7 @@ private:
   NormalisingNodeFactory normalising_;
   NodeFactory* rules_ = &simplifying_; // what runRules builds through
   NodeDomainAnalysis* domains_ = NULL;
+  NodeRewriter* rewriter_ = NULL;
   ASTNode root_;
   bool tearingDown_ = false;
   const char* matReason_ = "api"; // for the trace: why a node is converted

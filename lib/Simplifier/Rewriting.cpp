@@ -21,6 +21,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+
 /*
   Consider (bvuminus(ite, p , 6 ,5 ))
   If there's no other use of the ite anywhere else, it'd be good to push the bvuminus through,
@@ -34,66 +35,176 @@ THE SOFTWARE.
   SimplifyingNodeFactory instead, where they apply on every node creation.
 
   Every rule here should leave the node count the same or smaller, using the
-  share count to prove that the nodes it replaces really die. The one
+  parent count to prove that the nodes it replaces really die. The one
   deliberate exception is the comparison-vs-plus splitting rules, which add
   a single node in exchange for eliminating a plus from under a comparison --
   a large win on the difficulty score.
+
+  The rules run over a MutableGraph of the formula (see Rewriting.h): the
+  parent counts they read are the formula's as it stands, the graph's queue
+  runs them again over whatever an edit changed, and a child that comes to
+  have one parent re-examines that parent.
 */
-
-
 
 #include "stp/Simplifier/Rewriting.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/Util/DagWalk.h"
-#include <list>
-#include <deque>
+#include <algorithm>
+#include <cstdlib>
 #include <vector>
 
 namespace stp
 {
+  Rewriting::Rewriting(STPMgr* stp_, NodeFactory* nf_)
+      : stpMgr(stp_), nf(nf_),
+        checkGraph(std::getenv("STP_REWRITING_CHECK_GRAPH") != NULL)
+  {
+  }
+
+  ASTNode Rewriting::rebuild(const ASTNode& n, const ASTVec& kids)
+  {
+    if (n.GetIndexWidth() > 0)
+      return nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),
+                                 n.GetValueWidth(), kids);
+    if (n.GetValueWidth() > 0)
+      return nf->CreateTerm(n.GetKind(), n.GetValueWidth(), kids);
+    return nf->CreateNode(n.GetKind(), kids);
+  }
+
+  ASTNode Rewriting::rewriteFresh(const ASTNode& n, bool rulesHere)
+  {
+    if (n.Degree() == 0 || inFormula(n))
+      return n;
+    ASTVec kids;
+    kids.reserve(n.Degree());
+    bool changed = false;
+    for (const ASTNode& k : n)
+    {
+      const ASTNode r = rewriteFresh(k, true);
+      changed |= (r != k);
+      kids.push_back(r);
+    }
+    const ASTNode c = changed ? rebuild(n, kids) : n;
+    if (!rulesHere)
+      return c;
+    const ASTNode r = applyRules(c);
+    if (r == c)
+      return c;
+    fired++;
+    return rewriteFresh(r, false);
+  }
+
+  ASTNode Rewriting::rewrite(const ASTNode& c)
+  {
+    const ASTNode r = applyRules(c);
+    if (r == c)
+      return c;
+    fired++;
+    return rewriteFresh(r, false);
+  }
+
+  void Rewriting::examine(const ASTNode& given)
+  {
+    const ASTNode c = g->current(given);
+    if (c.Degree() == 0 || !inFormula(c))
+      return;
+    const ASTNode r = rewrite(c);
+    if (r == c)
+      return;
+    g->replace(c, r);
+    if (checkGraph)
+    {
+      std::string why;
+      if (!g->checkInvariant(&why))
+        FatalError(("Rewriting: graph invariant broken: " + why).c_str());
+    }
+  }
+
+  void Rewriting::drainCounts()
+  {
+    std::vector<ASTNode> candidates;
+    while (true)
+    {
+      for (const MutableGraph::Change& ch : g->changes())
+      {
+        if (ch.what != MutableGraph::Change::CountChanged)
+          continue;
+        const ASTNode x = g->current(ch.node);
+        // The guards are on interior nodes; a leaf's count decides nothing.
+        if (x.Degree() == 0 || g->parentCount(x) != 1)
+          continue;
+        g->parents(x, candidates);
+      }
+      g->clearChanges();
+      if (candidates.empty())
+        return;
+      std::sort(candidates.begin(), candidates.end());
+      candidates.erase(std::unique(candidates.begin(), candidates.end()),
+                       candidates.end());
+      const std::vector<ASTNode> batch(candidates);
+      candidates.clear();
+      for (const ASTNode& p : batch)
+        examine(p);
+    }
+  }
 
   ASTNode Rewriting::topLevel(ASTNode& n)
   {
     stpMgr->GetRunTimes()->start(RunTimes::Rewriting);
-    
-    removed=0;
-    narrowedBitwise=0;
+    fired = 0;
+    narrowedBitwise = 0;
 
-    buildShareCount(n);
-    ASTNode result = rewrite(n);
+    ASTNode result = n;
+    if (n.Degree() > 0)
+    {
+      MutableGraph graph(*stpMgr);
+      graph.import(n);
+      graph.clearChanges();
+      NodeFactory* const before = nf;
+      nf = &graph.factory();
+      g = &graph;
+      graph.installRewriter(this);
+
+      // Every interior node once, children before parents: a node
+      // outnumbers its children, so ascending number is a bottom-up order.
+      // The list is taken before any edit; what stands for a node now is
+      // read as it is reached.
+      std::vector<ASTNode> order;
+      {
+        ankerl::unordered_dense::set<uint64_t> seen;
+        walkPreOrder(n, [&](const ASTNode& x) {
+          if (x.Degree() == 0 || !seen.insert(x.GetNodeNum()).second)
+            return false;
+          order.push_back(x);
+          return true;
+        });
+      }
+      std::sort(order.begin(), order.end(),
+                [](const ASTNode& a, const ASTNode& b) {
+                  return a.GetNodeNum() < b.GetNodeNum();
+                });
+      for (const ASTNode& x : order)
+      {
+        examine(x);
+        drainCounts();
+      }
+      result = graph.exportRoot();
+
+      graph.installRewriter(NULL);
+      g = NULL;
+      nf = before;
+    }
 
     if (stpMgr->UserFlags.stats_flag)
     {
-      std::cerr << "{Rewriting} Nodes removed:" << removed << std::endl;
+      std::cerr << "{Rewriting} rules fired:" << fired << std::endl;
       std::cerr << "{Rewriting} bitwise operations narrowed by an extract:"
                 << narrowedBitwise << std::endl;
     }
 
-    shareCount.clear();
-    fromTo.clear();
-
     stpMgr->GetRunTimes()->stop(RunTimes::Rewriting);
     return result;
-  }
-
-  // counter is 1 if the node has one reference in the tree.
-  //
-  // The walk is iterative because the input decides how deep it goes, and
-  // deep inputs exist: a call per level of the DAG exhausts the stack. The
-  // continuation stack holds pointers into each node's own child storage,
-  // which the node above keeps alive for the whole walk. It stores suspended
-  // ancestors, not every sibling in a wide frontier.
-  void Rewriting::buildShareCount(const ASTNode& n)
-  {
-    walkPreOrder(n, [&](const ASTNode& current) {
-      if (current.Degree() == 0)
-        return false;
-
-      if (shareCount[current.GetNodeNum()]++ > 0) // 0 first time, 1 second.
-        return false;
-      return true;
-    });
   }
 
   // Operators whose every output bit depends only on the operands' bit at
@@ -116,7 +227,7 @@ namespace stp
         && c[1].GetKind() == BVPLUS  
         && c[1][0].GetKind() == BVCONST  
         && c[1].Degree() > 2
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[1])
         )
      {
           // combine constants on the lhs. Note because the plus is two arity, we MUST consider sharing now.
@@ -137,7 +248,7 @@ namespace stp
          && c[0].GetKind() == ITE 
          && c[0][1].GetKind() == BVCONST 
          && c[0][2].GetKind() == BVCONST 
-         && shareCount[c[0].GetNodeNum()] <= 1
+         && unshared(c[0])
          )
      {
         // push the extract through.
@@ -154,7 +265,7 @@ namespace stp
         && c[1].GetKind() == ITE
         && c[1][1].GetKind() == BVCONST
         && c[1][2].GetKind() == BVCONST
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[1])
        )
        {
         // Push the addition through the ITE.
@@ -170,7 +281,7 @@ namespace stp
         && c[0].GetKind() == ITE
         && c[0][1].GetKind() == BVCONST
         && c[0][2].GetKind() == BVCONST
-        && shareCount[c[0].GetNodeNum()] <= 1
+        && unshared(c[0])
        )
        {
         // Push the uminus/bvnot through the ITE.
@@ -186,7 +297,7 @@ namespace stp
         c.GetKind() == BVEXTRACT
         && c[0].GetKind() == BVXOR
         && c[0][0].GetKind() == BVCONST
-        && shareCount[c[0].GetNodeNum()] <= 1
+        && unshared(c[0])
        )
        {
           // Extracts over BVXOR can be replaced by BVNOT maybe, or removed.
@@ -221,7 +332,7 @@ namespace stp
         && c.Degree() == 2
         && c[1].GetKind() == BVUMINUS
         && c[1][0].GetKind() == BVPLUS
-        && shareCount[c[1][0].GetNodeNum()] <= 1
+        && unshared(c[1][0])
        )
        {
 
@@ -262,7 +373,7 @@ namespace stp
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() ==2
         && c[1][0].GetKind() == BVCONST
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[1])
        )
        {
           const auto width = c[0].GetValueWidth();
@@ -299,7 +410,7 @@ namespace stp
           && c[1].Degree() == 2
           && c[0].isConstant()
           && c[1][0].isConstant()
-          && shareCount[c[1].GetNodeNum()] <= 1
+          && unshared(c[1])
           )
           {
             auto replacement = nf->CreateTerm(BVPLUS, c[0].GetValueWidth(), c[0], nf->CreateTerm(BVUMINUS, c[0].GetValueWidth(), c[1][0]));
@@ -330,7 +441,7 @@ namespace stp
           && c[0].Degree() == 2
           && c[0][0].isConstant()
           && c[1].isConstant()
-          && shareCount[c[0].GetNodeNum()] <= 1
+          && unshared(c[0])
           )
           {
             auto replacement = nf->CreateTerm(BVPLUS, c[1].GetValueWidth(), c[1], nf->CreateTerm(BVUMINUS, c[1].GetValueWidth(), c[0][0]));
@@ -365,7 +476,7 @@ namespace stp
         && c[1].GetKind() == ITE
         && c[1][1].GetKind() == BVCONST
         && c[1][2].GetKind() == BVCONST
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[1])
        )
        {
           const auto width  =  c.GetValueWidth();
@@ -388,7 +499,7 @@ namespace stp
         && c[1].GetKind() == ITE
         && c[1][1].GetKind() == BVCONST
         && c[1][2].GetKind() == BVCONST
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[1])
        )
        {
           const auto width  =  c.GetValueWidth();
@@ -437,7 +548,7 @@ namespace stp
         && c[0] == nf->CreateZeroConst(c[0].GetValueWidth())
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() == 2
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[1])
        )
        {
         const auto uminus =
@@ -459,7 +570,7 @@ namespace stp
         && c[1].GetKind() == BVPLUS
         && c[1].Degree() == 2
         && c[1][1].GetKind() == BVUMINUS
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[1])
        )
        {
           c = nf->CreateNode(EQ, c[1][0], nf->CreateTerm(BVPLUS, c[0].GetValueWidth(), c[0], c[1][1][0]));
@@ -480,7 +591,7 @@ namespace stp
         && c[1].GetKind() == ITE
         && c[1][1].GetKind() == BVCONST
         && c[1][2].GetKind() == BVCONST
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[1])
        )
        {
           const auto ite1 = nf->CreateNode(c.GetKind(), c[0], c[1][1]);
@@ -506,8 +617,8 @@ namespace stp
         && c[1].Degree() == 2
         && c[1][0].GetKind() == BVCONST
 
-        && shareCount[c[0].GetNodeNum()] <= 1
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[0])
+        && unshared(c[1])
 
         )
         {
@@ -533,8 +644,8 @@ namespace stp
         && c[1].Degree() == 2
         && c[1][0].GetKind() == BVCONST
         
-        && shareCount[c[0].GetNodeNum()] <= 1
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[0])
+        && unshared(c[1])
        
         )
         {
@@ -561,7 +672,7 @@ namespace stp
         if (mult.GetKind() != BVMULT || mult.Degree() != 2 ||
             mult[0].GetKind() != BVCONST ||
             !CONSTANTBV::BitVector_bit_test(mult[0].GetBVConst(), 0) ||
-            shareCount[mult.GetNodeNum()] > 1)
+            !unshared(mult))
           continue;
 
         const bool otherIsConst = other.GetKind() == BVCONST;
@@ -570,7 +681,7 @@ namespace stp
         const bool otherIsMult =
             other.GetKind() == BVMULT && other.Degree() == 2 &&
             other[0].GetKind() == BVCONST &&
-            shareCount[other.GetNodeNum()] <= 1;
+            unshared(other);
 
         if (!otherIsConst && !otherIsMult)
           continue;
@@ -601,8 +712,8 @@ namespace stp
     if (c.GetKind() == EQ
         && c[0].GetKind() == BVPLUS
         && c[1].GetKind() == BVPLUS
-        && shareCount[c[0].GetNodeNum()] <= 1
-        && shareCount[c[1].GetNodeNum()] <= 1)
+        && unshared(c[0])
+        && unshared(c[1]))
     {
       const ASTChildren ch0 = c[0].GetChildren();
       const ASTChildren ch1 = c[1].GetChildren();
@@ -649,8 +760,8 @@ namespace stp
         && c[0].Degree() == 2
         && c[1].GetKind() == BVMULT
         && c[1].Degree() == 2
-        && shareCount[c[0].GetNodeNum()] <= 1
-        && shareCount[c[1].GetNodeNum()] <= 1)
+        && unshared(c[0])
+        && unshared(c[1]))
     {
       bool fired = false;
       for (unsigned i = 0; i < 2 && !fired; i++)
@@ -689,8 +800,8 @@ namespace stp
         && c[1][1].GetKind() == BVPLUS
         && c[1][1].Degree() ==2
 
-        && shareCount[c[0].GetNodeNum()] <= 1
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[0])
+        && unshared(c[1])
 
         && c[0][0] == c[1][1][0]
         && c[1][0] == c[0][1][0]
@@ -732,7 +843,7 @@ namespace stp
         c.GetKind() == ITE
         && c[2].GetKind() == ITE
         && (c[2][1] == c[1] || c[2][2] == c[1])
-        && shareCount[c[2].GetNodeNum()] <= 1
+        && unshared(c[2])
        )
        {
           // Which branch of the inner if-then-else repeats the outer's then.
@@ -754,7 +865,7 @@ namespace stp
         c.GetKind() == ITE
         && c[1].GetKind() == ITE
         && (c[1][1] == c[2] || c[1][2] == c[2])
-        && shareCount[c[1].GetNodeNum()] <= 1
+        && unshared(c[1])
        )
        {
           // Which branch of the inner if-then-else repeats the outer's else.
@@ -793,7 +904,7 @@ namespace stp
 
         const ASTNode inner = c[branch];
         if ((inner.GetKind() != AND && inner.GetKind() != OR) ||
-            inner.Degree() < 3 || shareCount[inner.GetNodeNum()] > 1)
+            inner.Degree() < 3 || !unshared(inner))
           continue;
 
         const ASTNode cond = c[0];
@@ -873,7 +984,7 @@ namespace stp
       c.GetKind() == BVEXTRACT
       && stpMgr->UserFlags.extract_through_bitwise
       && isBitwise(c[0].GetKind())
-      && shareCount[c[0].GetNodeNum()] <= 1
+      && unshared(c[0])
      )
      {
         const auto width = c.GetValueWidth();
@@ -888,172 +999,5 @@ namespace stp
      }
 
     return c;
-  }
-
-  // A leaf, or a node already rewritten: answered without a frame, exactly
-  // as the recursive version answered it without a call.
-  bool Rewriting::alreadyKnown(const ASTNode& n, ASTNode& answer)
-  {
-    if (n.Degree() == 0)
-    {
-      answer = n;
-      return true;
-    }
-
-    const auto it = fromTo.find(n.GetNodeNum());
-    if (it != fromTo.end())
-    {
-      answer = it->second;
-      return true;
-    }
-    return false;
-  }
-
-  // One node's progress through its children. `phase` says what a value
-  // arriving from below is: the recursive rewrite() had two call sites per
-  // child -- the child itself, and again on whatever the rules made of it
-  // -- and a frame has to know which one it is waiting for.
-  struct Rewriting::Frame
-  {
-    ASTNode n;
-    ASTChildren children;
-    ASTVec newChildren; // copy on write: empty until a child changes.
-    bool changed = false;
-    unsigned i = 0; // the child being worked on
-
-    ASTNode begin; // that child as it was before anything ran on it
-    ASTNode start; // and as it was after rewriting, before the rules
-
-    enum Phase
-    {
-      Fresh,
-      AwaitingChild,
-      AwaitingTransformed
-    };
-    Phase phase = Fresh;
-
-    Frame(const ASTNode& n_) : n(n_), children(n_.GetChildren()) {}
-  };
-
-  ASTNode Rewriting::rewrite(const ASTNode& n)
-  {
-    ASTNode result;
-    if (alreadyKnown(n, result))
-      return result;
-
-    // A deque, so descending into a child never moves the frames above it:
-    // `current` stays valid across a push.
-    std::deque<Frame> stack;
-    stack.emplace_back(n);
-
-    // Copy on write.
-    auto fill = [](Frame& f, const ASTNode& find)
-    {
-      f.newChildren.reserve(f.children.size());
-      const auto findIt =
-          std::find(f.children.begin(), f.children.end(), find);
-      assert(findIt != f.children.end());
-      f.newChildren.insert(f.newChildren.end(), f.children.begin(), findIt);
-      f.changed = true;
-    };
-
-    // The tail of the recursive version's loop body: `c` is the child in
-    // its final form.
-    auto finishChild = [&fill](Frame& f, const ASTNode& c)
-    {
-      // TODO should probably update the sharecount.
-      if (f.begin != c && !f.changed)
-        fill(f, f.begin);
-      if (f.changed)
-        f.newChildren.push_back(c);
-      f.i++;
-    };
-
-    // With the child rewritten, run the rules over it. A rule that fires
-    // sends its result back through the walk, which is the second of the
-    // two call sites; true means this frame has descended for that.
-    auto afterRewrite = [&](Frame& f, const ASTNode& rewritten) -> bool
-    {
-      f.start = rewritten;
-      const ASTNode c = applyRules(rewritten);
-
-      if (f.start == c)
-      {
-        finishChild(f, c);
-        return false;
-      }
-
-      ASTNode known;
-      if (alreadyKnown(c, known))
-      {
-        removed++;
-        finishChild(f, known);
-        return false;
-      }
-
-      f.phase = Frame::AwaitingTransformed;
-      stack.emplace_back(c);
-      return true;
-    };
-
-    while (true)
-    {
-      Frame& current = stack.back();
-      bool descended = false;
-
-      // Take delivery of the child this frame descended for.
-      if (current.phase == Frame::AwaitingChild)
-      {
-        current.phase = Frame::Fresh;
-        descended = afterRewrite(current, result);
-      }
-      else if (current.phase == Frame::AwaitingTransformed)
-      {
-        current.phase = Frame::Fresh;
-        removed++;
-        finishChild(current, result);
-      }
-
-      while (!descended && current.i < current.children.size())
-      {
-        current.begin = current.children[current.i];
-
-        ASTNode known;
-        if (alreadyKnown(current.begin, known))
-        {
-          descended = afterRewrite(current, known);
-          continue;
-        }
-
-        current.phase = Frame::AwaitingChild;
-        stack.emplace_back(current.begin);
-        descended = true;
-      }
-
-      if (descended)
-        continue;
-
-      Frame& done = stack.back();
-      result = done.n;
-
-      if (done.newChildren.size() > 0)
-      {
-        assert(done.newChildren.size() == done.children.size());
-
-        if (done.n.GetType() == BOOLEAN_TYPE)
-          result = nf->CreateNode(done.n.GetKind(), done.newChildren);
-        else
-          result = nf->CreateArrayTerm(done.n.GetKind(), done.n.GetIndexWidth(),
-                                       done.n.GetValueWidth(),
-                                       done.newChildren);
-      }
-
-      //TODO is this right? We've replaced the children, but never this node?
-      fromTo.insert({done.n.GetNodeNum(), result});
-
-      stack.pop_back();
-      if (stack.empty())
-        return result;
-    }
   }
 }
