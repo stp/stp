@@ -209,9 +209,12 @@ public:
   bool optimize_flag = true; // the Simplifier functions (which might increase the size).
   bool wordlevel_solve_flag = true;   // turn on word level bitvector solver
   bool propagate_equalities = true; // Remove equalities.
-  // On RemoveUnconstrained's graph rather than by a rebuild; see
-  // --equalities-on-graph.
-  bool equalities_on_graph = false;
+  // Everything that has a graph version runs on the graph: the top-level
+  // equalities on the unconstrained pass's graph, and the sharing-aware
+  // rewriting, flattening and common-factor passes as rule sets over one
+  // (GraphRulePasses.h), instead of their rebuilding walks. Both paths
+  // are kept so they can be measured against each other.
+  bool passes_on_graph = false;
   bool bitConstantProp_flag = true; // Constant bit propagation enabled.
   bool enable_unconstrained = true;
   // Unconstrained elimination also replaces a shared single-step term of

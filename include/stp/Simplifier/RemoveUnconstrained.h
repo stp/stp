@@ -80,8 +80,8 @@ class RemoveUnconstrained
   // symbol below it may climb further.
   std::unordered_map<uint64_t, std::vector<ASTNode>> blockedOn;
 
-  // STP_RU_CHECK_GRAPH in the environment: recount the graph from scratch
-  // after every edit. For the fuzzers; O(formula) per edit.
+  // STP_CHECK_GRAPH in the environment: recount the graph from scratch
+  // after every edit, and trace. For the fuzzers; O(formula) per edit.
   const bool checkGraph;
 
   // A symbol with exactly one distinct parent, and not protected.
@@ -107,6 +107,24 @@ class RemoveUnconstrained
   void resolvePendingExports();
 
   ASTNode topLevel_other(const ASTNode& n, Simplifier* simplifier);
+  // The pass over a graph that already holds the formula: the worklist,
+  // the rules and the definitions, ending with the pending exports
+  // resolved. No import, no export, no reducer of its own.
+  void runOnGraph(MutableGraph& graph, Simplifier* simplifier);
+  // The symbols no rule may touch, from the formula as it stands.
+  void prepareUntouchable(const ASTNode& formula, Simplifier* simplifier,
+                          const std::set<ASTNode>* alsoUntouchable);
+  std::set<ASTNode> mergedUntouchable_;
+  // Refused definitions and image constraints join the formula at the
+  // graph's root, so the passes after this one on the same graph see
+  // them.
+  void conjoinAtRoot(MutableGraph& graph);
+  // A node built outside the graph during the run (a definition, a
+  // constraint) as a node of the graph: its operands brought to their
+  // current handles, fresh structure rebuilt through the graph's factory.
+  ASTNode throughGraph(MutableGraph& graph, const ASTNode& n);
+  // STP_CHECK_GRAPH: recount, and say where it went wrong.
+  void checkGraphAfter(MutableGraph& graph, const char* step);
 
   bool tryGroundPathCollapse(const ASTNode& var);
 
@@ -184,6 +202,14 @@ public:
   // both apply.
   ASTNode topLevel(const ASTNode& n, Simplifier* s,
                    const std::set<ASTNode>* alsoUntouchable = NULL);
+  // The same over a graph the caller owns and keeps (--passes-on-graph):
+  // the caller has applied pending substitutions and installed the
+  // strength-reducing layer; the refused definitions and image constraints
+  // are conjoined at the graph's root; the whole-formula steps that follow
+  // the export (dropping TRUE conjuncts, the write-chain finish) are the
+  // caller's, after its own export.
+  void topLevel(MutableGraph& graph, Simplifier* s,
+                const std::set<ASTNode>* alsoUntouchable = NULL);
 };
 }
 

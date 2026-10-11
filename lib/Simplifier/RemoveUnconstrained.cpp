@@ -78,17 +78,16 @@ namespace stp
 {
 using simplifier::constantBitP::Dependencies;
 
-RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm), checkGraph(getenv("STP_RU_CHECK_GRAPH") != NULL)
+RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm), checkGraph(getenv("STP_CHECK_GRAPH") != NULL)
 {
   nf = _bm.defaultNodeFactory;
   simplifier = NULL;
 }
 
-ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
-                                      const std::set<ASTNode>* alsoUntouchable)
+void RemoveUnconstrained::prepareUntouchable(
+    const ASTNode& formula, Simplifier* simplifier,
+    const std::set<ASTNode>* alsoUntouchable)
 {
-  ASTNode result(n);
-
   // Symbols the array-equality procedure depends on must not be
   // treated as unconstrained. Every rule below decides what to rewrite
   // from isUnconstrained(), and each one mutates the graph before
@@ -135,7 +134,7 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
         to.insert(sort.index().uninterpretedId());
     };
     ASTNodeSet visited;
-    std::vector<ASTNode> pending(1, result);
+    std::vector<ASTNode> pending(1, formula);
     std::vector<ASTNode> symbols;
     while (!pending.empty())
     {
@@ -177,7 +176,8 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   // The image-constrained fresh variables join this set as they are
   // made (tryImageConstrainShared), so the set is always materialised
   // when that rewrite is enabled.
-  std::set<ASTNode> mergedUntouchable;
+  std::set<ASTNode>& mergedUntouchable = mergedUntouchable_;
+  mergedUntouchable.clear();
   const std::set<ASTNode>* effective = NULL;
   if (extSet != NULL || ufSet != NULL || fpSet != NULL ||
       alsoUntouchable != NULL || !alreadyDefined.empty() ||
@@ -198,6 +198,14 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   }
   untouchable = effective;
   passUntouchable = effective == NULL ? NULL : &mergedUntouchable;
+}
+
+ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
+                                      const std::set<ASTNode>* alsoUntouchable)
+{
+  ASTNode result(n);
+
+  prepareUntouchable(result, simplifier, alsoUntouchable);
 
   bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
 
@@ -222,6 +230,79 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   passUntouchable = NULL;
   untouchable = NULL;
   return result;
+}
+
+void RemoveUnconstrained::topLevel(MutableGraph& graph, Simplifier* simplifier,
+                                   const std::set<ASTNode>* alsoUntouchable)
+{
+  if (graph.root().GetKind() == SYMBOL)
+    return; // top level is an unconstrained symbol
+  prepareUntouchable(graph.root(), simplifier, alsoUntouchable);
+  bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
+  runOnGraph(graph, simplifier);
+  checkGraphAfter(graph, "the run");
+  conjoinAtRoot(graph);
+  if (graph.root().GetKind() == SYMBOL)
+  {
+    const ASTNode symbol = graph.root();
+    replace(symbol, bm.ASTTrue);
+    graph.substitute(symbol, bm.ASTTrue);
+    conjoinAtRoot(graph); // the definition may have been refused
+  }
+  bm.GetRunTimes()->stop(RunTimes::RemoveUnconstrained);
+  passUntouchable = NULL;
+  untouchable = NULL;
+  bm.ASTNodeStats("After Removing Unconstrained. ", graph.root());
+}
+
+ASTNode RemoveUnconstrained::throughGraph(MutableGraph& graph, const ASTNode& n)
+{
+  if (n.Degree() == 0)
+    return n;
+  if (graph.knows(n))
+    return graph.current(n);
+  ASTVec kids;
+  kids.reserve(n.Degree());
+  for (const ASTNode& k : n)
+    kids.push_back(throughGraph(graph, k));
+  NodeFactory& f = graph.factory();
+  if (n.GetIndexWidth() > 0)
+    return f.CreateArrayTerm(n.GetKind(), n.GetIndexWidth(), n.GetValueWidth(), kids);
+  if (n.GetValueWidth() > 0)
+    return f.CreateTerm(n.GetKind(), n.GetValueWidth(), kids);
+  return f.CreateNode(n.GetKind(), kids);
+}
+
+void RemoveUnconstrained::checkGraphAfter(MutableGraph& graph, const char* step)
+{
+  if (!checkGraph)
+    return;
+  std::string why;
+  if (!graph.checkInvariant(&why))
+    FatalError((std::string("RemoveUnconstrained: graph invariant broken after ") +
+                step + ": " + why).c_str());
+}
+
+void RemoveUnconstrained::conjoinAtRoot(MutableGraph& graph)
+{
+  if (refusedDefinitions.empty() && imageConstraints.empty())
+    return;
+  const ASTNode root = graph.root();
+  ASTVec conj;
+  if (root.GetKind() == AND)
+    conj.insert(conj.end(), root.begin(), root.end());
+  else
+    conj.push_back(root);
+  // Built as plain nodes while the run went on: their operands may since
+  // have been replaced in the graph.
+  for (const ASTNode& def : refusedDefinitions)
+    conj.push_back(throughGraph(graph, def));
+  for (const ASTNode& constraint : imageConstraints)
+    conj.push_back(throughGraph(graph, constraint));
+  refusedDefinitions.clear();
+  imageConstraints.clear();
+  graph.setRoot(graph.factory().CreateNode(AND, conj));
+  checkGraphAfter(graph, "conjoining at the root");
 }
 
 // Whether an array-sorted node may take part in the array rules. A
@@ -1465,12 +1546,6 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   if (n.GetKind() == SYMBOL)
     return n; // top level is an unconstrained symbol/.
 
-  this->simplifier = simplifier;
-
-  imageConstraints.clear();
-  imageConstraintsMade = 0;
-  pendingExports_.clear();
-
   MutableGraph graph(bm);
   graph.import(n);
   // The strength reductions ride on the graph's factory: their replacement
@@ -1485,6 +1560,50 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         bm, graph.simplifyingFactory(), *reducer_, *domains_));
     graph.installReducer(*reducingLayer, *domains_);
   }
+  runOnGraph(graph, simplifier);
+  ASTNode result = graph.exportRoot();
+  // The root conjunction is usually too wide for the graph's rules, so
+  // conjuncts that became TRUE are still in it; one pass of the
+  // simplifying factory over the root drops them.
+  if (result.GetKind() == AND)
+    result = nf->CreateNode(AND, result.GetChildren());
+  if (reducer_ != NULL)
+  {
+    reducer_->setFactory(reducerFactoryBefore);
+    domains_->forgetMutable();
+    result = reducer_->finish(result, *domains_);
+  }
+  if (checkGraph)
+    std::cerr << "  [ru] end, export " << result << std::endl;
+
+  // Membership constraints for image-constrained fresh variables join
+  // the formula here, once the tree is materialised.
+  if (!imageConstraints.empty())
+  {
+    ASTVec conj;
+    conj.push_back(result);
+    conj.insert(conj.end(), imageConstraints.begin(), imageConstraints.end());
+    result = nf->CreateNode(AND, conj);
+    imageConstraints.clear();
+  }
+  if (result.GetKind() == SYMBOL)
+  {
+    replace(result, bm.ASTTrue);
+    result = bm.ASTTrue;
+  }
+  return result;
+}
+
+void RemoveUnconstrained::runOnGraph(MutableGraph& graph, Simplifier* simplifier)
+{
+  this->simplifier = simplifier;
+  imageConstraints.clear();
+  imageConstraintsMade = 0;
+  pendingExports_.clear();
+  // The splices widen (a term becomes a fresh symbol), so the domains
+  // above an edit are recomputed while this pass runs.
+  MutableGraph::DomainRecompute recompute(graph, true);
+  const ASTNode n = graph.root();
   if (checkGraph)
     std::cerr << "  [ru] start, root " << n.GetNodeNum() << std::endl;
   g = &graph;
@@ -2388,42 +2507,11 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   drain();
   }
 
+  checkGraphAfter(graph, "the worklist");
   resolvePendingExports();
-  ASTNode result = graph.exportRoot();
-  // The root conjunction is usually too wide for the graph's rules, so
-  // conjuncts that became TRUE are still in it; one pass of the
-  // simplifying factory over the root drops them.
-  if (result.GetKind() == AND)
-    result = nf->CreateNode(AND, result.GetChildren());
-  if (reducer_ != NULL)
-  {
-    reducer_->setFactory(reducerFactoryBefore);
-    domains_->forgetMutable();
-    result = reducer_->finish(result, *domains_);
-  }
-  if (checkGraph)
-    std::cerr << "  [ru] end, export " << result << std::endl;
+  checkGraphAfter(graph, "resolving the pending exports");
   g = NULL;
   gf = NULL;
   worklist.clear();
-
-  // Membership constraints for image-constrained fresh variables join
-  // the formula here, once the tree is materialised.
-  if (!imageConstraints.empty())
-  {
-    ASTVec conj;
-    conj.push_back(result);
-    conj.insert(conj.end(), imageConstraints.begin(), imageConstraints.end());
-    result = nf->CreateNode(AND, conj);
-    imageConstraints.clear();
-  }
-  // cout << result;
-  if (result.GetKind() == SYMBOL)
-  {
-    replace(result, bm.ASTTrue);
-    result = bm.ASTTrue;
-  }
-
-  return result;
 }
 }

@@ -51,6 +51,7 @@ THE SOFTWARE.
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Flatten.h"
+#include "stp/Simplifier/GraphRulePasses.h"
 #include "stp/Simplifier/Rewriting.h"
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
@@ -1630,6 +1631,71 @@ bool commonFactorOk(Context& c, unsigned depth)
   return cf.topLevel(f).GetKind() != UNDEFINED;
 }
 
+// The graph-backed passes behind --passes-on-graph on the same inputs:
+// their import, sweep and export must stay on the heap too, and the
+// flattening must take a chain in one application rather than one
+// intermediate node per level.
+bool graphRewritingIdentityOk(Context& c, unsigned depth)
+{
+  const ASTNode top = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(top);
+
+  GraphRewriting r(&c.mgr);
+  ASTNode f = top;
+  // No rule matches a BVXOR chain, so the pass is an identity here; any
+  // other answer means the traversal lost part of the DAG.
+  return r.topLevel(f) == top;
+}
+
+bool graphRewritingRuleFiresOk(Context& c, unsigned depth)
+{
+  const unsigned width = 8;
+  // The hashing factory orders a node's children by node number, and the
+  // rule matches EQ(const, plus): the constant has to exist before the
+  // operands do, or the equality comes out as EQ(plus, const) and nothing
+  // fires.
+  const ASTNode zero = c.mgr.CreateZeroConst(width);
+  const ASTNode a = c.mgr.CreateSymbol("a", 0, width);
+  const ASTNode b = c.mgr.CreateSymbol("b", 0, width);
+  const ASTNode plus = c.hf->CreateTerm(BVPLUS, width, a, b);
+  const ASTNode fires = c.hf->CreateNode(EQ, zero, plus);
+  if (fires[0].GetKind() != BVCONST || fires[1].GetKind() != BVPLUS)
+    return false; // not the shape the rule matches: prove nothing quietly.
+
+  const ASTNode top =
+      c.hf->CreateNode(AND, fires, c.formula(c.chain(BVXOR, depth, width)));
+  c.roots.push_back(top);
+
+  GraphRewriting r(&c.mgr);
+  ASTNode f = top;
+  // The equality is rewritten, so the pass must not be an identity.
+  return r.topLevel(f) != top;
+}
+
+bool graphFlattenChainOk(Context& c, unsigned depth)
+{
+  const ASTNode top = c.formula(c.chain(BVPLUS, depth));
+  c.roots.push_back(top);
+
+  GraphFlatten flattener(&c.mgr);
+  ASTNode f = top;
+  const ASTNode result = flattener.topLevel(f);
+  c.roots.push_back(result);
+
+  // The whole chain collapses into one BVPLUS over every symbol in it.
+  const ASTNode plus = Context::childOfKind(result, BVPLUS);
+  return plus.GetKind() == BVPLUS && plus.Degree() == depth;
+}
+
+bool graphCommonFactorOk(Context& c, unsigned depth)
+{
+  const ASTNode f = c.formula(c.chain(BVPLUS, depth));
+  c.roots.push_back(f);
+  GraphCommonFactor cf(&c.mgr);
+  return cf.topLevel(f).GetKind() != UNDEFINED;
+}
+
+
 // ArrayTransformer, whose three functions -- TransformFormula,
 // TransformTerm and TransformArrayRead -- reach each other once per level of
 // the input, and are one walk on the heap.
@@ -3029,6 +3095,10 @@ TEST(DeepDag, deep_abstraction_side_constraints)
 
 TEST(DeepDag, deep_common_sub_sum)              { EXPECT_STACK_SAFE(commonSubSumOk, 20000); }
 TEST(DeepDag, deep_common_factor)               { EXPECT_STACK_SAFE(commonFactorOk, 20000); }
+TEST(DeepDag, deep_graph_rewriting)             { EXPECT_STACK_SAFE(graphRewritingIdentityOk, 10000); }
+TEST(DeepDag, deep_graph_rewriting_rule_fires)  { EXPECT_STACK_SAFE(graphRewritingRuleFiresOk, 10000); }
+TEST(DeepDag, deep_graph_flatten_chain)         { EXPECT_STACK_SAFE(graphFlattenChainOk, 100000); }
+TEST(DeepDag, deep_graph_common_factor)         { EXPECT_STACK_SAFE(graphCommonFactorOk, 20000); }
 TEST(DeepDag, deep_work_list)          { EXPECT_STACK_SAFE(workListOk, 20000); }
 TEST(DeepDag, deep_remove_unconstrained) { EXPECT_STACK_SAFE(removeUnconstrainedOk, 20000); }
 TEST(DeepDag, deep_simplify_term)      { EXPECT_STACK_SAFE(simplifyTermOk, 20000); }

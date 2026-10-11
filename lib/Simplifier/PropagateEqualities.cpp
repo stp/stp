@@ -32,6 +32,13 @@ THE SOFTWARE.
 
 namespace stp
 {
+// STP_CHECK_GRAPH in the environment, the graph passes' recount-and-trace
+// switch (RemoveUnconstrained, GraphRulePass): read once.
+static bool checkGraphTrace()
+{
+  static const bool on = std::getenv("STP_CHECK_GRAPH") != NULL;
+  return on;
+}
 
 typedef PropagateEqualities::IdSet IdSet;
 typedef ankerl::unordered_dense::map<uint64_t, uint64_t> IdToId;
@@ -304,7 +311,7 @@ size_t PropagateEqualities::processCandidates(bool preserveDefaultGrammar,
 
     if (rhsVariables.find(lhs_id) != rhsVariables.end())
     {
-      if (g != NULL && std::getenv("STP_RU_CHECK_GRAPH") != NULL)
+      if (g != NULL && checkGraphTrace())
         std::cerr << "  [pe] skip " << lhs.GetNodeNum() << " := " << rhs.GetNodeNum()
                   << " (loops)" << std::endl;
       continue; // Loops already, so no more processing.
@@ -318,7 +325,7 @@ size_t PropagateEqualities::processCandidates(bool preserveDefaultGrammar,
     if (g != NULL && (g->current(lhs) != lhs ||
                       (g->parentCount(lhs) == 0 && !g->isRootNode(lhs))))
     {
-      if (std::getenv("STP_RU_CHECK_GRAPH") != NULL)
+      if (checkGraphTrace())
         std::cerr << "  [pe] skip " << lhs.GetNodeNum() << " := " << rhs.GetNodeNum()
                   << " (gone: current " << g->current(lhs).GetNodeNum() << " count "
                   << g->parentCount(lhs) << ")" << std::endl;
@@ -364,7 +371,7 @@ size_t PropagateEqualities::processCandidates(bool preserveDefaultGrammar,
       const ASTNode term = currentTerm(*g, pr.second);
       if (term == pr.first)
         continue;
-      if (std::getenv("STP_RU_CHECK_GRAPH") != NULL)
+      if (checkGraphTrace())
         std::cerr << "  [pe] substitute " << pr.first.GetNodeNum() << " := "
                   << term.GetNodeNum() << " kind " << term.GetKind() << std::endl;
       g->substitute(pr.first, term);

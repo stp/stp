@@ -302,7 +302,6 @@ void MutableGraph::import(const ASTNode& root)
   stale_.assign(imported_, false);
   for (uint32_t i = 0; i < imported_; i++)
     liveImm_[i] = offsets_[i + 1] - offsets_[i];
-  liveImm_[index_[root.GetNodeNum()]] += 1; // the root is held by the query
 }
 
 uint32_t MutableGraph::indexOf(const ASTNode& n)
@@ -338,8 +337,9 @@ bool MutableGraph::liveImmutable(uint32_t idx) const
   const ASTNode& n = nodes_[idx];
   if (isForwarded(n))
     return false;
-  // Its own parents, mutable parents, and the parents of nodes it stands for.
-  return immutableParentCount(n) > 0;
+  // Its own parents, mutable parents, the parents of nodes it stands for,
+  // or the query's hold.
+  return isRoot(n) || immutableParentCount(n) > 0;
 }
 
 // The walked form of the running totals; the invariant check compares
@@ -380,6 +380,8 @@ size_t MutableGraph::immutableParentCount(const ASTNode& n) const
 void MutableGraph::creditOrigin(const ASTNode& origin, long delta)
 {
   const ASTNode t = current(origin);
+  MG_TRACE("credit origin " << origin.GetNodeNum() << " -> " << t.GetNodeNum()
+                            << " by " << delta);
   if (MutableInterior* m = asMutable(t))
     m->originLive_ += delta;
   else
@@ -394,7 +396,7 @@ void MutableGraph::liveDelta(uint32_t idx, long delta)
     creditOrigin(n, delta);
 }
 
-size_t MutableGraph::parentCount(const ASTNode& node) const
+size_t MutableGraph::holders(const ASTNode& node) const
 {
   const ASTNode n = current(node);
   if (const MutableInterior* m = asMutable(n))
@@ -404,6 +406,12 @@ size_t MutableGraph::parentCount(const ASTNode& node) const
     return m->parents_.size() + m->originLive_;
   }
   return immutableParentCount(n);
+}
+
+size_t MutableGraph::parentCount(const ASTNode& node) const
+{
+  const ASTNode n = current(node);
+  return holders(n) + (isRoot(n) ? 1 : 0);
 }
 
 void MutableGraph::parents(const ASTNode& node, std::vector<ASTNode>& out) const
@@ -560,6 +568,7 @@ void MutableGraph::registerParentEdge(MutableInterior* parent,
   // attach below only ever walks current children.
   const ASTNode child = normalise(given);
   const size_t before = parentCount(child);
+  MG_TRACE("register edge " << parent->GetNodeNum() << " -> " << child.GetNodeNum());
   if (MutableInterior* m = asMutable(child))
     m->parents_.push_back(parent);
   else
@@ -575,6 +584,7 @@ void MutableGraph::registerParentEdge(MutableInterior* parent,
 void MutableGraph::unregisterParentEdge(MutableInterior* parent,
                                         const ASTNode& child)
 {
+  MG_TRACE("unregister edge " << parent->GetNodeNum() << " -> " << child.GetNodeNum());
   if (MutableInterior* m = asMutable(child))
   {
     auto& ps = m->parents_;
@@ -602,6 +612,7 @@ void MutableGraph::unregisterParentEdge(MutableInterior* parent,
 // down, continuing through any child that this brings into the formula.
 void MutableGraph::attach(const ASTNode& start)
 {
+  MG_TRACE("attach " << start.GetNodeNum() << " holders " << holders(start));
   std::vector<ASTNode> stack;
   stack.push_back(start);
   while (!stack.empty())
@@ -621,6 +632,7 @@ void MutableGraph::attach(const ASTNode& start)
       {
         assert(current(c) == c); // normalise() refreshed any temporary
         const size_t before = parentCount(c);
+        MG_TRACE("attach edge " << m->GetNodeNum() << " -> " << c.GetNodeNum());
         if (MutableInterior* mc = asMutable(c))
           mc->parents_.push_back(m);
         else
@@ -658,6 +670,7 @@ void MutableGraph::attach(const ASTNode& start)
 // through any child this takes out of the formula.
 void MutableGraph::detach(const ASTNode& start)
 {
+  MG_TRACE("detach " << start.GetNodeNum());
   std::vector<ASTNode> stack;
   stack.push_back(start);
   while (!stack.empty())
@@ -682,6 +695,13 @@ void MutableGraph::detach(const ASTNode& start)
         {
           auto& ps = mutParents_[c.GetNodeNum()];
           ps.erase(std::find(ps.begin(), ps.end(), m));
+          // As in unregisterParentEdge: a parent still holding a forwarded
+          // handle was counted on the node it stands for. A node that held
+          // the same forwarded child in two slots (EQ(y, y) after x := y)
+          // loses one slot to a repoint and the other here, and both have
+          // to come off that standing.
+          if (isForwarded(c))
+            creditOrigin(c, -1);
         }
         note(Change::CountChanged, c);
         if (parentCount(c) == 0 && !isRoot(c))
@@ -852,6 +872,8 @@ ASTNode MutableGraph::refresh(MutableInterior* m)
     {
       mutForward_[m] = fresh;
       m->dead_ = true;
+      if (root_ == ASTNode(m))
+        root_ = fresh;
     }
     else
       table_.insert(m);
@@ -863,6 +885,8 @@ ASTNode MutableGraph::refresh(MutableInterior* m)
   {
     mutForward_[m] = ASTNode(*hit);
     m->dead_ = true;
+    if (root_ == ASTNode(m))
+      root_ = ASTNode(*hit);
     return ASTNode(*hit);
   }
   if (!anyMutable(m->GetChildren()))
@@ -872,6 +896,8 @@ ASTNode MutableGraph::refresh(MutableInterior* m)
     {
       mutForward_[m] = ASTNode(e);
       m->dead_ = true;
+      if (root_ == ASTNode(m))
+        root_ = ASTNode(e);
       return ASTNode(e);
     }
   }
@@ -1385,12 +1411,14 @@ void MutableGraph::drainDirty()
       }
     }
     renumber(m); // its structure is new: a new number, above its children
-    // A patched node's memoised domains describe its old children:
-    // recomputed from the current ones before the rules look, and a
+    // A patched node's memoised domains describe its old children. Where
+    // the running pass's edits can widen a node's values they are
+    // recomputed from the current children before the rules look, and a
     // domain that changed is news for every parent whatever the horizon
-    // says.
+    // says (DomainRecompute). Under a pass whose edits are equivalences
+    // the memo stays sound as it is.
     bool domainChanged = false;
-    if (domains_ != NULL)
+    if (domains_ != NULL && recomputeDomains_)
     {
       NodeDomainAnalysis::DomainInfo was = domains_->take(ASTNode(m));
       if (was.bits != NULL)
@@ -1417,7 +1445,25 @@ void MutableGraph::drainDirty()
     {
       MG_TRACE("  rules gave " << fresh.GetNodeNum() << " kind " << fresh.GetKind());
       replaceNode(m, fresh);
+      // The rewriter has not seen what the rules built: queued, so that
+      // it runs over it in the formula, as over any other node.
+      if (rewriter_ != NULL)
+        if (MutableInterior* f = asMutable(current(fresh)))
+          if (!f->dead_ && f->attached_)
+            markDirty(f);
       continue;
+    }
+    // The sharing-aware rules, with m in the formula: the counts of m's
+    // children include m and nothing that has died.
+    if (rewriter_ != NULL && !m->dead_)
+    {
+      const ASTNode r = normalise(rewriter_->rewrite(ASTNode(m)));
+      if (!m->dead_ && r != ASTNode(m))
+      {
+        MG_TRACE("  rewriter gave " << r.GetNodeNum() << " kind " << r.GetKind());
+        replaceNode(m, r);
+        continue;
+      }
     }
     if (!m->dead_ && !anyMutable(m->GetChildren()))
     {
@@ -1484,6 +1530,8 @@ void MutableGraph::moveStanding(const std::vector<uint64_t>& origins,
   }
   // What the origins bring: their own live parents, once, on arrival.
   const size_t standing = originParentCount(origins);
+  MG_TRACE("standing " << standing << " moves to " << to.GetNodeNum()
+                       << " with " << origins.size() << " origins");
   if (MutableInterior* m = asMutable(to))
   {
     m->origins_.insert(m->origins_.end(), origins.begin(), origins.end());
@@ -1552,8 +1600,8 @@ void MutableGraph::replaceNode(MutableInterior* old, const ASTNode& given,
   {
     root_ = normalise(by);
     note(Change::CountChanged, root_);
-    if (parentCount(root_) == 0)
-      attach(root_); // the root's standing is the query's hold on it
+    if (holders(root_) == 0)
+      attach(root_); // nothing else holds it: its edges are registered here
   }
 
   old->diedByEdit_ = structural;
@@ -1585,12 +1633,44 @@ void MutableGraph::substitute(const ASTNode& symbol, const ASTNode& by)
 {
   MutableGraphNest nest(*this);
   assert(symbol.GetKind() == SYMBOL);
+  if (trace_)
+  {
+    std::vector<ASTNode> ps;
+    parents(symbol, ps);
+    uint32_t idx = 0;
+    const bool ix = indexed(symbol, idx);
+    MG_TRACE("substitute " << symbol.GetNodeNum() << ": liveImm "
+                           << (ix ? liveImm_[idx] : 0) << " parents " << ps.size());
+    for (const ASTNode& p : ps)
+      MG_TRACE("  holder " << p.GetNodeNum() << " kind " << p.GetKind()
+                           << (p.isMutableInterior() ? " mutable" : " immutable"));
+  }
   assert(current(symbol) == symbol); // substituted once
   if (parentCount(symbol) == 0 && !isRoot(symbol))
     return;
   const ASTNode target = normalise(by);
   assert(target != symbol);
   standFor(symbol, target, true);
+}
+
+void MutableGraph::setRoot(const ASTNode& by)
+{
+  MutableGraphNest nest(*this);
+  const ASTNode target = normalise(by);
+  const ASTNode old = root_;
+  if (target == old)
+    return;
+  // Attach the new root while the old one still has the query's hold, so
+  // that the walk down from the new root does not take the old root (held
+  // by nothing else) for a node whose edges are unregistered.
+  if (holders(target) == 0)
+    attach(target);
+  root_ = target;
+  note(Change::CountChanged, target);
+  note(Change::CountChanged, old);
+  // An old root the new one does not hold has left the formula.
+  if (holders(old) == 0 && old.Degree() > 0)
+    detach(old);
 }
 
 bool MutableGraph::contains(const ASTNode& n, const ASTNode& symbol) const
@@ -1790,7 +1870,14 @@ bool MutableGraph::checkInvariant(std::string* why) const
     const size_t cached = it == immOriginLive_.end() ? 0 : it->second;
     if (!isForwarded(ASTNode(nodes_[index_.at(e.first)])) &&
         cached != originParentCount(e.second))
-      return fail("an immutable node's origin total disagrees with the walk");
+    {
+      if (why != NULL)
+        *why = "immutable node " + std::to_string(e.first) + "'s origin total is " +
+               std::to_string(cached) + ", the walk over its " +
+               std::to_string(e.second.size()) + " origins says " +
+               std::to_string(originParentCount(e.second));
+      return false;
+    }
   }
   // Table and back-pointers.
   for (const ASTNode& h : owned_)

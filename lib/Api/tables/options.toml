@@ -634,15 +634,15 @@ category = "simplification"
 help = "Refine interval analysis with sets of disjoint intervals (needs --use-intervals)"
 
 [[option]]
-name = "equalities-on-graph"
+name = "passes-on-graph"
 type = "bool"
 default = false
 tier = "expert"
-settable = "before-first-check"
+settable = "anytime"
 scope = "solver"
-engine = { field = "equalities_on_graph" }
+engine = { field = "passes_on_graph" }
 category = "simplification"
-help = "Propagate top-level equalities on the unconstrained pass's graph, in the same round, instead of by a rebuild. Off: on formulas with hundreds of thousands of equalities the conversion of the region above them costs more than the rebuild."
+help = "Run everything that has a graph version on a mutable graph of the formula: the top-level equalities on the unconstrained pass's graph in the same round, and the sharing-aware rewriting, flattening and common-factor passes as rule sets reading live parent counts, instead of their rebuilding walks. Off: on formulas with hundreds of thousands of equalities the conversion above them costs more than the rebuild"
 
 [[option]]
 name = "pure-literals"

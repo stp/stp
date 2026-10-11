@@ -61,6 +61,18 @@ namespace stp
 class MutableGraph;
 class NodeDomainAnalysis;
 
+// A rule set a pass installs over the graph's queue. The graph calls it
+// on a queued node the simplifying rules left as it is, while the node is
+// in the formula, so the parent counts of the node and its children are
+// exact. Returns the node itself when nothing fires, else what the node
+// should become, built through the graph's factory.
+class NodeRewriter
+{
+public:
+  virtual ~NodeRewriter() {}
+  virtual ASTNode rewrite(const ASTNode& attached) = 0;
+};
+
 // The raw factory over a graph. Sorting and NOT handling mirror
 // HashingNodeFactory, so a node built here has the same child order as its
 // hash-consed counterpart would.
@@ -121,7 +133,8 @@ public:
 
   // Index the formula. Nothing is copied.
   void import(const ASTNode& root);
-  const ASTNode& root() const { return root_; }
+  // The current root: what stands for the imported root now.
+  ASTNode root() const { return current(root_); }
 
   // The formula as hash-consed nodes: unchanged subtrees come back as they
   // are, edited regions are rebuilt through the manager's hashing factory.
@@ -150,6 +163,33 @@ public:
   // and the queue recomputes a patched node's domains before the rules
   // see it, climbing further while the domain keeps changing.
   void installReducer(NodeFactory& layer, NodeDomainAnalysis& domains);
+  // Whether the queue recomputes a patched node's domains. Needed where an
+  // edit can widen a node's values (the unconstrained pass's splice of a
+  // term by a fresh symbol, the split of a symbol into fresh pieces): the
+  // old memo is then too narrow for the new formula. Where every edit
+  // replaces a node by an equivalent one (the rule passes), a patched
+  // node computes the same values as before, its memo stays sound, and
+  // nothing above the edit changes domain. A pass declares which for the
+  // time it runs, through a scope that restores what it found.
+  class DomainRecompute
+  {
+    MutableGraph& g;
+    const bool before;
+
+  public:
+    DomainRecompute(MutableGraph& graph, bool on)
+        : g(graph), before(graph.recomputeDomains_)
+    {
+      g.recomputeDomains_ = on;
+    }
+    ~DomainRecompute() { g.recomputeDomains_ = before; }
+    DomainRecompute(const DomainRecompute&) = delete;
+    DomainRecompute& operator=(const DomainRecompute&) = delete;
+  };
+  // A rule set the queue runs after the simplifying rules, on the node as
+  // it stands in the formula (Rewriting's sharing-aware rules, which read
+  // parent counts). NULL uninstalls.
+  void installRewriter(NodeRewriter* r) { rewriter_ = r; }
 
   static MutableInterior* asMutable(const ASTNode& n);
 
@@ -183,6 +223,10 @@ public:
   // A symbol of the formula stands for `by` from here on: every holder
   // of it holds `by`, which must not contain it (the caller checks).
   void substitute(const ASTNode& symbol, const ASTNode& by);
+  // The formula becomes `by`, which may hold the old root (a conjunction
+  // of it with new constraints): nothing is forwarded, the query's hold
+  // moves from the old root to the new.
+  void setRoot(const ASTNode& by);
   // Holds the conversion back while several operations are made, so the
   // cones above thousands of substituted symbols, which overlap, are
   // converted once when the scope ends, as one rebuild would convert
@@ -204,7 +248,7 @@ public:
   };
   // Whether `symbol` occurs in the current cone of n.
   bool contains(const ASTNode& n, const ASTNode& symbol) const;
-  bool isRootNode(const ASTNode& n) const { return n == root_; }
+  bool isRootNode(const ASTNode& n) const { return isRoot(n); }
   // Whether the graph indexes n: a node of the formula, or one that has
   // been in it. A factory-built node nothing attached is not.
   bool knows(const ASTNode& n) const
@@ -217,7 +261,8 @@ public:
   // it: it still points at the old structure, and export rebuilds it.
   bool isStale(const ASTNode& n) const;
 
-  // Places that read n in the current formula.
+  // Places that read n in the current formula, the query's hold on the
+  // root counted as one.
   size_t parentCount(const ASTNode& n) const;
   void parents(const ASTNode& n, std::vector<ASTNode>& out) const;
 
@@ -260,6 +305,8 @@ private:
   NormalisingNodeFactory normalising_;
   NodeFactory* rules_ = &simplifying_; // what runRules builds through
   NodeDomainAnalysis* domains_ = NULL;
+  bool recomputeDomains_ = true; // the safe side until a pass says otherwise
+  NodeRewriter* rewriter_ = NULL;
   ASTNode root_;
   bool tearingDown_ = false;
   const char* matReason_ = "api"; // for the trace: why a node is converted
@@ -274,7 +321,9 @@ private:
   // Parent edges from immutable nodes that entered after import, by child.
   ankerl::unordered_dense::map<uint64_t, std::vector<uint32_t>> extraParents_;
   // Live immutable parents per dense index: CSR and extra edges whose parent
-  // is still in the formula and not forwarded. The root carries one more.
+  // is still in the formula and not forwarded. The query's hold on the root
+  // is not here: parentCount adds it for whatever node is root_ now, so a
+  // change of root (setRoot) moves it with no bookkeeping.
   std::vector<uint32_t> liveImm_;
   // Mutable parents of an immutable node, one entry per child slot.
   ankerl::unordered_dense::map<uint64_t, std::vector<MutableInterior*>>
@@ -397,7 +446,20 @@ private:
     return !n.isMutableInterior() &&
            forward_.find(n.GetNodeNum()) != forward_.end();
   }
-  bool isRoot(const ASTNode& n) const { return n == root_; }
+  // root_ is kept current by the operations that replace a root, and a
+  // nested cascade that forwards it (refresh, a merge) updates it too;
+  // this looks through the forwards all the same, since parentCount's
+  // hold on the root depends on it.
+  bool isRoot(const ASTNode& n) const
+  {
+    if (n == root_)
+      return true;
+    const MutableInterior* m = asMutable(root_);
+    const bool live = m != NULL ? !m->dead_ : !isForwarded(root_);
+    return !live && n == current(root_);
+  }
+  // parentCount without the root's hold: what holds n in the formula.
+  size_t holders(const ASTNode& n) const;
   size_t immutableParentCount(const ASTNode& n) const;
   size_t originParentCount(const std::vector<uint64_t>& origins) const;
   bool liveImmutable(uint32_t idx) const;

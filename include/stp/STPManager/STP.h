@@ -63,7 +63,15 @@ class STP
   // another SAT call over the whole propositional structure.
   bool skeletonAsked = false;
 
+
   ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver,
+                       PropagateEqualities* pe, NodeDomainAnalysis* domain);
+
+
+  // The same with the three rule passes on the graph (--passes-on-graph).
+
+
+  ASTNode sizeReducingOnGraph(ASTNode input, BVSolver* bvSolver,
                        PropagateEqualities* pe, NodeDomainAnalysis* domain);
 
   // A copy of all the state we need to restore to a prior expression.
