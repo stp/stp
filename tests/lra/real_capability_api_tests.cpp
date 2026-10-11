@@ -506,7 +506,9 @@ void refusedRealAssertionLeavesNoAnswer()
     const Term rhs =
         real_mul(real_mul(a7, real_sub(real_mul(real_neg(a7), n0), n0)), a7);
     const Term big = real_mul(real_mul(real_mul(lhs, rhs), d6), real_add(n0, p5));
-    refused = real_lt(big, big);
+    // With a symbol in it: a comparison of two constants is decided at
+    // construction and would never reach preregistration.
+    refused = real_lt(real_add(x, big), big);
   }
   catch (const RecoverableError&)
   {

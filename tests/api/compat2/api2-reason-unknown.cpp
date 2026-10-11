@@ -272,7 +272,9 @@ void count_diagnostic(const char*)
   ++refusals_reported;
 }
 
-Expr refusedComparison(VC vc)
+// The comparison carries the symbol x: one of two constants is decided when
+// it is built and would never reach the preregistration this test refuses.
+Expr refusedComparison(VC vc, Expr x)
 {
   auto neg = [vc](Expr e) { return vc_realUMinusExpr(vc, e); };
   auto add = [vc](Expr l, Expr r) { return vc_realPlusExpr(vc, l, r); };
@@ -290,7 +292,7 @@ Expr refusedComparison(VC vc)
   Expr lhs = sub(neg(sub(d6, n0)), n0);
   Expr rhs = mul(mul(a7, sub(mul(neg(a7), n0), n0)), a7);
   Expr big = mul(mul(mul(lhs, rhs), d6), add(n0, p5));
-  return big == nullptr ? nullptr : vc_realLtExpr(vc, big, big);
+  return big == nullptr ? nullptr : vc_realLtExpr(vc, add(x, big), big);
 }
 } // namespace
 
@@ -302,7 +304,7 @@ TEST(reason_unknown, ARefusedAssertionLeavesTheQueryUnanswered)
   EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
 
   vc_push(vc);
-  Expr refused = refusedComparison(vc);
+  Expr refused = refusedComparison(vc, x);
   ASSERT_NE(refused, nullptr) << "every constructor should have stayed inside the budget";
   refusals_reported = 0;
   vc_registerErrorHandler(count_diagnostic);
