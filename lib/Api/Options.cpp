@@ -1101,6 +1101,7 @@ bool custom_enable_array_equality(EngineTarget& t, const OptionSpec&, const Opti
 bool custom_logic(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   const std::string& logic = as_str(v);
+  t.flags.uf_qf_uf_logic = logic == "QF_UF";
   if (t.solver == nullptr)
   {
     if (logic_selects_uf(logic))
@@ -1362,6 +1363,11 @@ bool custom_enable_uninterpreted_functions(EngineTarget& t, const OptionSpec&, c
 bool custom_uf_ackermann(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.uf_eager_mode = as_mode<Flags::UFEagerMode>(v);
+  return true;
+}
+bool custom_uf_value_bounds(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.uf_value_bounds = as_mode<Flags::UFValueBoundsMode>(v);
   return true;
 }
 bool custom_uf_bv_term_abstraction(EngineTarget& t, const OptionSpec&, const OptionValue& v)

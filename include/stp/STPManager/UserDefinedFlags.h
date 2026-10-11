@@ -469,6 +469,23 @@ public:
   // the old behaviour for a query known to be that shape.
   unsigned uf_eager_budget = 256;
 
+  // Pure QF_UF has no interpreted values of a declared sort. Renaming those
+  // values in any fixed solve-scalar order therefore preserves every equality
+  // and function application. AUTO applies the value bounds only in that logic;
+  // ON and OFF let a caller measure or override the policy explicitly.
+  // On the 7,503-file QF_UF corpus at 20 s, this default changed STP from
+  // 5,660 to 7,341 solves (1,682 gains, one loss), and PAR2 from 87,350 to
+  // 13,217, with no conclusive answer disagreement. A same-build 1,000-file
+  // off/auto screen also gained 428 solves without a loss.
+  enum class UFValueBoundsMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  UFValueBoundsMode uf_value_bounds = UFValueBoundsMode::AUTO;
+  bool uf_qf_uf_logic = false;
+
   // How many rounds a lazily-decided declaration may keep breaking congruence
   // before the rest of its relation is stated in one go. Each lazy round is
   // a whole re-solve, so a declaration that breaks again and again is paying
@@ -611,13 +628,12 @@ public:
   // application; see UFPreLowering. Verdict-preserving: the defining
   // conjunct is kept, so no model is lost or invented.
   //
-  // AUTO runs it unless the query has Real content. The pass was written
-  // for and measured on QF_UFBV, where it is a large win; on the Real path
-  // it is a consistent loss -- across QF_UFLRA families it costs between a
-  // third and a half of the runtime of the files slow enough to measure,
-  // and solves fewer of them -- because those queries reach an answer
-  // through refinement rounds the rewriting does not shorten. ON forces it
-  // on a Real query anyway; OFF is the way to measure without it.
+  // AUTO runs it unless the query uses pure QF_UF logic or Real content.
+  // It skips pure QF_UF, where
+  // declared-sort value bounds and the original formula performed better
+  // on the measured 7,503-file corpus, and queries with Real content, where
+  // refinement rounds make the extra rewrite a loss. ON forces it in either
+  // case; OFF disables it.
   // See OptionMode above for what AUTO promises.
   OptionMode uf_propagate_equalities = OptionMode::AUTO;
 
@@ -627,14 +643,11 @@ public:
   // the UF corpus -- every top-level assertion of a verification query is a
   // guarded implication -- and without this the fact never reaches (f x).
   // Distinct from --skeleton-preproc, which runs after lowering and cannot
-  // cross an application; this one is on by default for exactly that reason,
-  // and costs one SAT call over the skeleton per UF solve.
+  // cross an application; this one costs a SAT call over the skeleton when
+  // the pre-lowering pass is enabled.
   //
-  // AUTO follows the same rule as the pass it feeds, and for the same
-  // measurements: on unless the query has Real content. Asking the skeleton
-  // is only useful if the facts it returns are then propagated, so leaving
-  // this ON while the pass above resolves to off buys a SAT call and
-  // nothing else.
+  // AUTO asks the skeleton when the pass above is enabled and the query has
+  // no Real content. Asking is useful only when its facts can be propagated.
   OptionMode uf_skeleton_preproc = OptionMode::AUTO;
 
   // Whether a solve with uninterpreted functions abstracts its wide

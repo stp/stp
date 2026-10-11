@@ -383,20 +383,28 @@ UFPreLoweringChoice chooseUFPreLowering(const STPMgr& manager,
   const bool realQuery = anyAuto && manager.HasSeenRealSyntax() &&
                          containsRealSort(root);
 
-  const auto resolve = [realQuery](Mode mode) {
+  // Pure QF_UF's value-bound ordering does more for the finite-domain
+  // families than this rewrite, while the rewrite costs a skeleton SAT call
+  // and often changes a healthy search. Keep the pass for QF_UFBV, where it
+  // folds applications and wide arithmetic, and for an explicit ON request.
+  const auto resolvePropagation = [realQuery, &flags](Mode mode) {
+    return mode == Mode::ON ||
+           (mode == Mode::AUTO && !realQuery && !flags.uf_qf_uf_logic);
+  };
+  const auto resolveSkeleton = [realQuery](Mode mode) {
     return mode == Mode::ON || (mode == Mode::AUTO && !realQuery);
   };
 
   UFPreLoweringChoice choice;
   choice.propagate = flags.optimize_flag && flags.propagate_equalities &&
-                     resolve(flags.uf_propagate_equalities);
+                     resolvePropagation(flags.uf_propagate_equalities);
   // --skeleton-preproc is the separate, post-lowering option; when it is set
   // the skeleton is asked regardless of what this pass would have chosen.
   // Asking is only useful to a pass that then propagates, so a choice that
   // does not propagate does not ask on its own account.
   choice.askSkeleton =
       choice.propagate &&
-      (resolve(flags.uf_skeleton_preproc) || flags.skeleton_preproc);
+      (resolveSkeleton(flags.uf_skeleton_preproc) || flags.skeleton_preproc);
   return choice;
 }
 

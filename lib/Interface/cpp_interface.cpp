@@ -135,6 +135,7 @@ void Cpp_interface::init()
   pushed_in_session = false;
   delayed_bv_auto_engagement = false;
   lra_logic = false;
+  bm.UserFlags.uf_qf_uf_logic = false;
   last_check_work.clear();
 }
 
@@ -291,6 +292,7 @@ void Cpp_interface::setLogic(const std::string& logic)
   // measured. An explicit --incremental-auto-engage-at still wins below.
   delayed_bv_auto_engagement = logic == "QF_BV" || logic == "QF_ABV";
   lra_logic = logic == "QF_LRA";
+  bm.UserFlags.uf_qf_uf_logic = logic == "QF_UF";
 }
 
 void Cpp_interface::restoreUFOptionAfterLogic()
@@ -1867,6 +1869,7 @@ void Cpp_interface::cleanUp()
 
   restoreUFOptionAfterLogic();
   restoreArrayEqualityOptionAfterLogic();
+  bm.UserFlags.uf_qf_uf_logic = false;
 }
 
 // SMT-LIB gives these options a <b_value> argument (2.6, figure 3.9), so a

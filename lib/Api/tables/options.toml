@@ -2096,6 +2096,18 @@ category = "refinement.uf"
 help = "bit-vector width given to a sort introduced by (declare-sort S 0); it bounds how many elements of that sort a query can tell apart, so a larger value is always sound and only a smaller one is not"
 
 [[option]]
+name = "uf-value-bounds"
+type = "mode"
+default = "auto"
+values = ["on", "off", "auto"]
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "uf_value_bounds" }
+category = "refinement.uf"
+help = "bound declared-sort UF scalars by symmetry rank; in QF_UF, symbols in asserted disequalities receive early ranks"
+
+[[option]]
 name = "uf-narrow-results"
 type = "bool"
 default = true
@@ -2115,7 +2127,7 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_propagate_equalities" }
 category = "refinement.uf"
-help = "before lowering, rewrite the query under its own top-level equalities with applications still in place, so that `x = y` merges (f x) and (f y) into one application and `a = (f y)` or `(f 3) = 0` reach the terms built on a or (f 3); auto runs it unless the query has Real content, where it measures as a loss"
+help = "before lowering, rewrite the query under its own top-level equalities with applications still in place; auto skips pure QF_UF and queries with Real content, where the measured corpora favor the original formula"
 
 [[option]]
 name = "uf-skeleton-preproc"
