@@ -1625,11 +1625,14 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // run the apparatus rather than pay for it to do nothing.
   const bool difficultyReversionApplies = !lraActive;
 
+  // The scorer's evaluation count is cumulative, and under -s it has
+  // already scored the input, so take what this scoring adds: the non-leaf
+  // nodes of the formula as it stands.
+  const int64_t evaluatedBefore = difficulty.getEvalCount();
   int64_t initial_difficulty_score =
       difficultyReversionApplies ? difficulty.score(inputToSat, bm) : 0;
-
-  // It's helpful to know the initial node size. The difficulty scorer can easily get something similar:
-  const int64_t initial_node_size = difficulty.getEvalCount();
+  const int64_t initial_node_size =
+      difficulty.getEvalCount() - evaluatedBefore;
 
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
