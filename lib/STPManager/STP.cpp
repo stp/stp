@@ -1561,14 +1561,24 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // Boolean symbols and remember those assignments only in model-replay
   // tables; an opaque theory atom must instead remain in the SAT candidate so
   // a verified no-good can constrain the same literal on the next round.
+  // A round that hands its input back has shown the formula to be a fixed
+  // point of the passes, and recorded nothing on the way (every definition
+  // comes with a change to the formula), so the repeat below has nothing
+  // to find. Over the suite that is the case for six calls in ten.
+  bool atFixedPoint = false;
   if (!lraActive)
   {
+    const ASTNode before = inputToSat;
     if (bm->UserFlags.passes_on_graph)
       inputToSat = sizeReducingOnGraph(inputToSat, bvSolver.get(), pe.get(),
                                        domain.get());
     else
       inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get(),
                                 domain.get());
+    atFixedPoint = (before == inputToSat);
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "{sizeReducing} first round changed the formula: "
+                << (atFixedPoint ? "no" : "yes") << std::endl;
   }
 
   // Difficulty reversion asks whether the word-level simplifiers left the
@@ -1594,7 +1604,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
   // so it's expensive to call.
-  if (!lraActive &&
+  if (!lraActive && !atFixedPoint &&
       (-1 == bm->UserFlags.size_reducing_fixed_point ||
        initial_node_size < bm->UserFlags.size_reducing_fixed_point))
   {
