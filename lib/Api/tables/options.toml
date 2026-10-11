@@ -1781,17 +1781,6 @@ category = "refinement.uf"
 help = "ask the query's propositional skeleton what it forces, and assert that before solving"
 
 [[option]]
-name = "embedded-constraints"
-type = "bool"
-default = false
-tier = "experimental"
-settable = "anytime"
-scope = "solver"
-engine = { field = "embedded_constraints" }
-category = "refinement.uf"
-help = "replace an assertion where it occurs inside another assertion"
-
-[[option]]
 name = "bv-term-abstraction-mult"
 type = "bool"
 default = true

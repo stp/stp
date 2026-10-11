@@ -296,8 +296,9 @@ void readCandidates(const ASTNode& conjunct, size_t index,
 
   // Whatever the conjunct is, it holds: every other occurrence of it is
   // true, and every other occurrence of what it negates is false. This is
-  // the embedded-constraints rewrite, over the structure the query has
-  // before its applications are hidden. A Boolean symbol or application
+  // the replacement constant bit propagation makes at the end of the
+  // pipeline, here over the structure the query has before its
+  // applications are hidden. A Boolean symbol or application
   // asserted outright is the same rule with the atom as its own key.
   if (k == NOT)
     addCandidate(out, conjunct[0], astFalse, index, wideWidth, marks);

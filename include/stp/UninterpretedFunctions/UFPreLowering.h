@@ -97,8 +97,9 @@ struct DLL_PUBLIC UFPreLoweringStats
 // becomes that; an application equated with a constant becomes that
 // constant; and any conjunct at all holds wherever else it occurs, so its
 // recurrences become true and those of what it negates become false -- the
-// embedded-constraints rewrite, over the structure the query has before its
-// applications are hidden. Hash-consing then makes `(f x)` and `(f y)` one
+// replacement constant bit propagation makes at the end of the pipeline,
+// here over the structure the query has before its applications are
+// hidden. Hash-consing then makes `(f x)` and `(f y)` one
 // application when `x = y` was asserted, which is exactly the structural
 // merge an e-graph solver gets at internalisation.
 //
