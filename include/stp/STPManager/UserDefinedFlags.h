@@ -496,6 +496,11 @@ public:
   UFValueBoundsMode uf_value_bounds = UFValueBoundsMode::AUTO;
   bool uf_qf_uf_logic = false;
 
+  // In batch QF_UF, report violated congruence from CaDiCaL's partial SAT
+  // trail instead of waiting for a complete candidate. The ordinary model
+  // checker still certifies the final answer. Kept opt-in for measurement.
+  bool uf_search_conflicts = false;
+
   // How many rounds a lazily-decided declaration may keep breaking congruence
   // before the rest of its relation is stated in one go. Each lazy round is
   // a whole re-solve, so a declaration that breaks again and again is paying

@@ -27,6 +27,16 @@ over the SAT variables the lowering registered, and the solver is asked
 again with the lemmas in place. A candidate no conflict refutes is a model;
 a solver that runs out of assignments has refuted the query.
 
+For batch ``QF_UF`` with CaDiCaL, ``--uf-search-conflicts=1`` also checks
+congruence during SAT search. Once every argument bit of an application is
+assigned, it joins the applications of its function with the same argument
+values. If two such applications have opposing assigned result bits, the
+propagator sends a clause excluding that concrete argument and result
+assignment. CaDiCaL can then backtrack without finishing a candidate and
+starting another UF refinement round. The complete-model checker above
+still certifies the answer. This experimental option is off by default and
+does not engage for ``QF_UFLRA`` or the persistent incremental driver.
+
 Two optional passes can run before the lowering, while an application is
 still an ordinary term:
 

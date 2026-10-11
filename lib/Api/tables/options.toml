@@ -2024,6 +2024,17 @@ category = "refinement.uf"
 help = "experimentally seed selected pairs from large functions using unused automatic Ackermann budget; model refinement still checks every omitted pair"
 
 [[option]]
+name = "uf-search-conflicts"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "uf_search_conflicts" }
+category = "refinement.uf"
+help = "for batch QF_UF with CaDiCaL, report violated function congruence during SAT search; the ordinary UF model checker remains the final certifier"
+
+[[option]]
 name = "uf-lazy-in-place"
 type = "bool"
 default = true

@@ -36,6 +36,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/UninterpretedFunctions/UFModel.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
+#include "stp/UninterpretedFunctions/UFSearchPropagator.h"
 #include <vector>
 
 const bool debug_counterexample = false;
@@ -3018,6 +3019,13 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     };
     tosat->setBeforeSearch(arithmetic_callback);
   }
+  if (ufSearchPropagator != NULL)
+    tosat->setBeforeSearch([this, tosat, &SatSolver]() {
+      return ufSearchPropagator->connect(
+                 SatSolver, *ufTheoryAdapter->applicationView(),
+                 tosat->SATVar_to_SymbolIndexMap()) ||
+             !ufSearchPropagator->failed();
+    });
   if (STPMgr::BeforeSearchRequest* request = bm->before_search)
   {
     // A caller's hook (see STPMgr::before_search). It stands for the whole
@@ -3103,6 +3111,12 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     }
   }
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
+  if (ufSearchPropagator != NULL && ufSearchPropagator->failed())
+  {
+    std::cerr << "UF search propagator failed: "
+              << ufSearchPropagator->diagnostic() << std::endl;
+    return SOLVER_ERROR;
+  }
   const bool ufActive =
       ufTheoryAdapter != NULL && ufTheoryAdapter->active();
 
