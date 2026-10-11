@@ -32,13 +32,14 @@
 # dependency here is a header and an archive that a Find module names for
 # itself; this one was a package whose contents the package decided.
 #
-# What changed is what gets built. stp/cryptominisat's `stp` branch carries a
-# NOCADICAL option, and with it CryptoMiniSat stops fetching, building and
-# installing a CaDiCaL of its own -- which was both a collision with STP's (see
-# the guard in the top-level CMakeLists) and the reason its link interface
-# named an imported target a consumer had to resolve. What is left is an
-# archive whose link interface is Threads and GMP: a header and an archive,
-# nameable here exactly as cmake/FindCaDiCaL.cmake names CaDiCaL's.
+# What changed is what gets built. CryptoMiniSat's NOCADICAL option -- the one
+# in msoos/cryptominisat#841, which the fork pinned below is built on -- stops
+# it fetching, building and installing a CaDiCaL of its own, which was both a
+# collision with STP's (see the guard in the top-level CMakeLists) and the
+# reason its link interface named an imported target a consumer had to
+# resolve. What is left is an archive whose link interface is Threads and GMP:
+# a header and an archive, nameable here exactly as cmake/FindCaDiCaL.cmake
+# names CaDiCaL's.
 #
 # So rung 3 does not read the package at all, and STPConfig.cmake.in asks a
 # consumer to find_dependency(cryptominisat5) only when rung 0 or 1 supplied
@@ -143,17 +144,17 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
     endif()
 
     # Pinned to a commit, as MiniSat, LibBF, SymFPU and ABC are. It is on
-    # stp/cryptominisat's `stp-ipasir-up` branch: release/v5.14.7 with the
-    # NOCADICAL option this build depends on, as on the `stp` branch, plus the
-    # IPASIR-UP external propagator interface. The interface is what lets
-    # lib/Sat/CryptoMinisat5.cpp host a theory propagator; see
-    # CRYPTOMINISAT_HAS_UP below.
-    set(CryptoMiniSat_COMMIT "e06847e1006f06ec630a62349d930e5ead54def6"
+    # stp/cryptominisat's `stp-nocadical-ipasir-up` branch: release 5.16.0 with
+    # the NOCADICAL option this build depends on, as proposed upstream in
+    # msoos/cryptominisat#841, plus the IPASIR-UP external propagator interface.
+    # The interface is what lets lib/Sat/CryptoMinisat5.cpp host a theory
+    # propagator; see CRYPTOMINISAT_HAS_UP below.
+    set(CryptoMiniSat_COMMIT "84ec14e17014b02d1ebbe441b5f38977a2224acd"
         CACHE STRING "CryptoMiniSat commit to build when one has to be built")
     mark_as_advanced(CryptoMiniSat_COMMIT)
     # Not read off the checkout: nothing is checked out yet at configure time,
     # and the commit above fixes which release this is.
-    set(CryptoMiniSat_VERSION "5.14.7")
+    set(CryptoMiniSat_VERSION "5.16.0")
 
     set(CryptoMiniSat_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}cryptominisat5${CMAKE_STATIC_LIBRARY_SUFFIX}")
