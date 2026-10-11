@@ -1251,12 +1251,77 @@ static void run(Ctx& c)
   }
 }
 
+// The partial operations on constants: fp.min/fp.max of two constants fold
+// unless they are the opposite zeros; fp.to_ubv/fp.to_sbv of a constant fold
+// when the rounded value is in range, and stay for the totalising pass when
+// it is NaN, infinite or out of range.
+static void runPartialConstants(Ctx& c)
+{
+  const unsigned w = EB + SB;
+  auto c32 = [&](unsigned v) { return c.mgr.CreateBVConst(32, v); };
+  const ASTNode pz = c.fpConst(EB, SB, packZero(EB, SB, false));
+  const ASTNode nz = c.fpConst(EB, SB, packZero(EB, SB, true));
+  const ASTNode one = c.fpConst(EB, SB, packOne(EB, SB, false));
+  const ASTNode none = c.fpConst(EB, SB, packOne(EB, SB, true));
+  const ASTNode two = c.fpConst(EB, SB, 0x20);      // (3,4): 1.0 * 2^1
+  const ASTNode twoHalf = c.fpConst(EB, SB, 0x22);  // 1.25 * 2^1
+  const ASTNode three = c.fpConst(EB, SB, 0x24);    // 1.5 * 2^1
+  const ASTNode nan = c.fpConst(EB, SB, packNaN(EB, SB));
+  const ASTNode inf = c.fpConst(EB, SB, packInf(EB, SB, false));
+  const ASTNode rne = c.rm(ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode rna = c.rm(ROUND_NEAREST_TIES_TO_AWAY);
+  const ASTNode rtz = c.rm(ROUND_TOWARD_ZERO);
+
+  c.checkTermIs("min(1.0, 2.0) = 1.0", FP_MIN, w, {one, two}, one);
+  c.checkTermIs("max(1.0, 2.0) = 2.0", FP_MAX, w, {one, two}, two);
+  c.checkTermIs("min(2.0, -1.0) = -1.0", FP_MIN, w, {two, none}, none);
+  c.checkTermIs("max(-1.0, -0.0) = -0.0", FP_MAX, w, {none, nz}, nz);
+  c.checkTermIs("min(1.0, +oo) = 1.0", FP_MIN, w, {one, inf}, one);
+  report("min(+0, -0) stays for totalisation",
+         c.nf->CreateTerm(FP_MIN, w, {pz, nz}).GetKind() == FP_MIN);
+  report("max(-0, +0) stays for totalisation",
+         c.nf->CreateTerm(FP_MAX, w, {nz, pz}).GetKind() == FP_MAX);
+
+  auto toBv = [&](Kind k, unsigned m, const ASTNode& r, const ASTNode& x) {
+    return c.nf->CreateTerm(k, m, {c32(m), r, x});
+  };
+  auto bv = [&](unsigned m, unsigned v) { return c.mgr.CreateBVConst(m, v); };
+  report("to_ubv 4 RNE 3.0 = 3", toBv(FP_TO_UBV, 4, rne, three) == bv(4, 3));
+  report("to_ubv 4 RNE 2.5 = 2 (ties to even)",
+         toBv(FP_TO_UBV, 4, rne, twoHalf) == bv(4, 2));
+  report("to_ubv 4 RNA 2.5 = 3", toBv(FP_TO_UBV, 4, rna, twoHalf) == bv(4, 3));
+  report("to_ubv 4 RTZ 2.5 = 2", toBv(FP_TO_UBV, 4, rtz, twoHalf) == bv(4, 2));
+  report("to_ubv 2 RNE 3.0 = 3 (fits exactly)",
+         toBv(FP_TO_UBV, 2, rne, three) == bv(2, 3));
+  report("to_ubv 4 RNE +0 = 0", toBv(FP_TO_UBV, 4, rne, pz) == bv(4, 0));
+  report("to_sbv 4 RNE -1.0 = 0xF", toBv(FP_TO_SBV, 4, rne, none) == bv(4, 15));
+  report("to_sbv 2 RNE -2.0 = 0b10 (fits exactly)",
+         toBv(FP_TO_SBV, 2, rne, c.fpConst(EB, SB, 0x20 | (1u << (w - 1)))) ==
+             bv(2, 2));
+  report("to_ubv 1 RNE 3.0 stays (out of range)",
+         toBv(FP_TO_UBV, 1, rne, three).GetKind() == FP_TO_UBV);
+  report("to_sbv 2 RNE 2.0 stays (out of range)",
+         toBv(FP_TO_SBV, 2, rne, two).GetKind() == FP_TO_SBV);
+  report("to_ubv 4 RNE -1.0 stays (negative)",
+         toBv(FP_TO_UBV, 4, rne, none).GetKind() == FP_TO_UBV);
+  report("to_ubv 4 RNE NaN stays",
+         toBv(FP_TO_UBV, 4, rne, nan).GetKind() == FP_TO_UBV);
+  report("to_sbv 4 RNE +oo stays",
+         toBv(FP_TO_SBV, 4, rne, inf).GetKind() == FP_TO_SBV);
+  // A totalised copy (the unspecified child already added) folds the same.
+  const ASTNode unspecified = c.mgr.CreateSymbol("u", 0, 4);
+  report("totalised to_ubv 4 RNE 3.0 = 3",
+         c.nf->CreateTerm(FP_TO_UBV, 4, {c32(4), rne, three, unspecified}) ==
+             bv(4, 3));
+}
+
 int main()
 {
   setbuf(stdout, nullptr);
   printf("Exhaustive floating-point rewrite tests\n");
   Ctx c;
   run(c);
+  runPartialConstants(c);
   printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }
