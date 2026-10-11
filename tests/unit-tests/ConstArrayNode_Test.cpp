@@ -26,6 +26,7 @@ THE SOFTWARE.
 // default, and a rebuild that knows nothing about constant arrays keeps the
 // sort -- and the fold of a read to the default.
 
+#include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/SubstitutionMap.h"
 #include <gtest/gtest.h>
@@ -65,6 +66,36 @@ TEST(ConstArrayNode, ReadFoldsToTheDefault)
   const ASTNode k = mgr.CreateConstArray(SourceSort::array(bv8, bv8), x);
   EXPECT_EQ(x, mgr.hashingNodeFactory->CreateTerm(READ, 8, k, i));
   EXPECT_EQ(x, mgr.defaultNodeFactory->CreateTerm(READ, 8, k, i));
+}
+
+// A read of a conditional array with a constant-array branch becomes the
+// conditional of the reads, and the constant array's read is its default.
+TEST(ConstArrayNode, ReadOfAConditionalConstantArrayChoosesTheDefault)
+{
+  STPMgr mgr;
+  SimplifyingNodeFactory snf(*mgr.hashingNodeFactory, mgr);
+  mgr.defaultNodeFactory = &snf;
+  const SourceSort sort = SourceSort::array(bv8, bv8);
+  const ASTNode c = mgr.CreateSymbol("c", 0, 0);
+  const ASTNode i = mgr.CreateSourceSymbol("i", bv8);
+  const ASTNode a = mgr.CreateSourceSymbol("a", sort);
+  const ASTNode five = mgr.CreateBVConst(8, 5);
+  const ASTNode seven = mgr.CreateBVConst(8, 7);
+  const ASTNode k5 = mgr.CreateConstArray(sort, five);
+  const ASTNode k7 = mgr.CreateConstArray(sort, seven);
+
+  const ASTNode both = snf.CreateArrayTerm(ITE, 8, 8, c, k5, k7);
+  EXPECT_EQ(snf.CreateTerm(ITE, 8, c, five, seven),
+            snf.CreateTerm(READ, 8, both, i));
+
+  const ASTNode one = snf.CreateArrayTerm(ITE, 8, 8, c, a, k7);
+  EXPECT_EQ(snf.CreateTerm(ITE, 8, c, snf.CreateTerm(READ, 8, a, i), seven),
+            snf.CreateTerm(READ, 8, one, i));
+
+  // Neither branch constant: the read stays over the conditional array.
+  const ASTNode b = mgr.CreateSourceSymbol("b", sort);
+  const ASTNode none = snf.CreateArrayTerm(ITE, 8, 8, c, a, b);
+  EXPECT_EQ(READ, snf.CreateTerm(READ, 8, none, i).GetKind());
 }
 
 // The same default at two sorts with one carrier is two arrays. Neither the
