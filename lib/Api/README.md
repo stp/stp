@@ -166,6 +166,21 @@ is the C layer over it; `stp._core` (Cython) is the Python layer over the C laye
   (`statistics()` entries other than the per-solver ones) are per manager.
 - `interrupt()` reaches CaDiCaL/MiniSat mid-search through
   `UserDefinedFlags::stop_poll`; CryptoMiniSat is interrupted between solver calls.
+- With `incremental=on`, permanent Boolean and bit-vector definitions can be
+  substituted before encoding, with eliminated values reconstructed in models.
+  The experimental `incremental-fp-definitions=true` option also permits
+  floating-point bodies. It totalises partial operations before harvesting a
+  definition and after substitution, and retains definitions that cannot be
+  eliminated safely. Array-valued definitions and bodies containing array reads
+  are not substituted. The option defaults to false and must be set before the
+  first check. Python uses `incremental_fp_definitions=True`.
+
+Python's `TermManager.mk_terms(operations)` constructs a DAG in one call.
+Each operation is `(kind, arguments)` or `(kind, arguments, indices, sort)`.
+Arguments are existing terms or non-negative integer indices of earlier
+results in the batch. The returned list follows operation order. Every node
+uses the same constructor and manager checks as `mk_term`; an error raises
+without returning the list, although earlier valid nodes may be interned.
 
 ## Engine changes made for the API
 

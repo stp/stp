@@ -1169,6 +1169,12 @@ bool custom_lra_decision_polarity(EngineTarget& t, const OptionSpec&, const Opti
   t.flags.lra_decision_polarity_explicit = t.explicit_value;
   return true;
 }
+bool custom_lra_float_driver(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.lra_float_driver = as_bool(v);
+  t.flags.lra_float_driver_explicit = t.explicit_value;
+  return true;
+}
 bool custom_lra_verify_canonical(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.lra_verify_canonical = as_bool(v);
@@ -1357,6 +1363,11 @@ bool custom_enable_uninterpreted_functions(EngineTarget& t, const OptionSpec&, c
 bool custom_uf_ackermann(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.uf_eager_mode = as_mode<Flags::UFEagerMode>(v);
+  return true;
+}
+bool custom_uf_value_bounds(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.uf_value_bounds = as_mode<Flags::UFValueBoundsMode>(v);
   return true;
 }
 bool custom_uf_bv_term_abstraction(EngineTarget& t, const OptionSpec&, const OptionValue& v)

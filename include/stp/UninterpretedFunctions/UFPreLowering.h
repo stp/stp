@@ -52,13 +52,11 @@ struct DLL_PUBLIC UFPreLoweringChoice
 // Resolve both options against `root`, which must be the completed root the
 // pass would be given.
 //
-// AUTO means on unless the query has Real content. The pass was written for
-// and measured on QF_UFBV, where it is a large win; on QF_UFLRA it is a
-// consistent loss across every family slow enough to measure, because those
-// queries reach their answer through refinement rounds that the rewriting
-// does not shorten. A query with no application at all is not this
-// function's business: callers test that first, since the pass has nothing
-// to do there whatever the options say.
+// AUTO means on for queries with neither pure QF_UF logic nor Real content.
+// The pass is a large win on QF_UFBV, whereas its extra
+// work hurts the measured QF_UF and QF_UFLRA corpora. Explicit ON still
+// runs it. A query with no application at all is not this function's
+// business: callers test that first.
 DLL_PUBLIC UFPreLoweringChoice chooseUFPreLowering(const STPMgr& manager,
                                                    const ASTNode& root);
 

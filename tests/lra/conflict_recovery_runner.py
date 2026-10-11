@@ -27,6 +27,7 @@ def main():
             for setting in (None, 0, 1):
                 flags = [f"--lra-presolve-{stage}=0" for stage in
                          ("subst", "bounds", "rows", "propagate", "unconstrained")]
+                flags.append("--lra-float-driver=1")
                 flags.append(f"--lra-first-search={first_search}")
                 if setting is not None:
                     flags.append(f"--lra-conflict-recovery={setting}")

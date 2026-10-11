@@ -3,6 +3,7 @@
 
 #include "LraSolveContext.h"
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 
@@ -66,6 +67,7 @@ public:
   void setDecisionPolarity(bool enabled) noexcept { decision_polarity_ = enabled; }
   bool wantsDecisionPolarity() const override { return decision_polarity_; }
   bool decisionPolarity(uint32_t variable, bool& value) noexcept override;
+  void setAdaptiveDriver(bool enabled) noexcept { adaptive_driver_ = enabled; }
 
   // Prepare to drive the search rather than judge it: build the variable
   // map, open the root theory level, and report the variables the backend
@@ -162,6 +164,8 @@ private:
    * tableau, so the fill ratio is measured every few checks rather than every
    * one. */
   unsigned float_reroute_sample_ = 0;
+  bool adaptive_driver_ = false;
+  std::chrono::steady_clock::time_point float_watch_start_{};
 
   bool assertOneLiteral(SATSolver::Lit literal) noexcept;
   // Open a core checkpoint for the current level, if it has none yet.
