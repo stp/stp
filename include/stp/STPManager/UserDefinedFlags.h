@@ -330,6 +330,10 @@ public:
   // profiling is not distorted by verbose pass/backend output.
   bool incremental_profile = false;
 
+  // Permanent FP definitions may be substituted before bit-blasting. Their
+  // expanded uses must be totalised and classified again before encoding.
+  bool incremental_fp_definitions = false;
+
   // Run only the persistent assumption/refinement core. This disables the
   // fitted cross-level preprocessing, promotion, first-solve shortcuts and
   // adaptive backend policies, but deliberately keeps memory-relief epoch
