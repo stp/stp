@@ -352,6 +352,13 @@ if(STP_EXECUTABLE_AVAILABLE)
     COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/boolean_bounds_runner.py"
             "$<TARGET_FILE:stp-bin>" "$<IF:$<BOOL:${ENABLE_HIGHS}>,ON,OFF>")
   set_tests_properties(lra_boolean_bounds_cli PROPERTIES LABELS "lra;semantic;relu" TIMEOUT 180)
+  if (USE_CADICAL)
+    add_test(NAME lra_bound_propagation_cli
+      COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/bound_propagation_runner.py"
+              "$<TARGET_FILE:stp-bin>")
+    set_tests_properties(lra_bound_propagation_cli PROPERTIES
+      LABELS "lra;semantic;propagation" TIMEOUT 180)
+  endif()
   add_test(NAME lra_reconstruction_cli
     COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/reconstruction_runner.py"
             "$<TARGET_FILE:stp-bin>" "$<IF:$<BOOL:${ENABLE_HIGHS}>,ON,OFF>")

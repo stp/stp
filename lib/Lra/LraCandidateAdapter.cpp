@@ -1014,6 +1014,12 @@ bool LraCandidateAdapter::beginTheoryPropagation(
         !context_.bindingsReady())
       return false;
     component_by_variable_.clear();
+    bound_implications_.clear();
+    pending_bound_implications_.clear();
+    bound_reasons_.clear();
+    bound_assignments_.clear();
+    bound_assignment_trail_.clear();
+    bound_level_marks_.clear();
     level_checkpoints_.clear();
     pending_theory_clause_.clear();
     partial_checks_enabled_ = true;
@@ -1030,6 +1036,7 @@ bool LraCandidateAdapter::beginTheoryPropagation(
       context_.float_core_->undoTo(0);
     observed.clear();
     observed.reserve(context_.registry_snapshot_.components.size());
+    uint32_t maximum_observed = 0;
     for (const RegistryComponent& component :
          context_.registry_snapshot_.components)
     {
@@ -1048,6 +1055,12 @@ bool LraCandidateAdapter::beginTheoryPropagation(
       if (!component_by_variable_.emplace(variable, component.id).second)
         return false;
       observed.push_back(variable);
+      maximum_observed = std::max(maximum_observed, variable);
+    }
+    if (bound_propagation_)
+    {
+      bound_assignments_.resize(static_cast<std::size_t>(maximum_observed) + 1);
+      bound_level_marks_.push_back(0);
     }
     // The root level. Its checkpoint is opened by the first bound asserted
     // at it, like every other level.
@@ -1084,6 +1097,12 @@ void LraCandidateAdapter::endTheoryPropagation() noexcept
   }
   propagating_ = false;
   component_by_variable_.clear();
+  bound_implications_.clear();
+  pending_bound_implications_.clear();
+  bound_reasons_.clear();
+  bound_assignments_.clear();
+  bound_assignment_trail_.clear();
+  bound_level_marks_.clear();
   level_checkpoints_.clear();
   pending_theory_clause_.clear();
   float_level_marks_.clear();
@@ -1826,10 +1845,46 @@ void LraCandidateAdapter::notifyAssigned(
     return;
   if (pastTimeLimit())
     return;
-  for (SATSolver::Lit literal : literals)
+  try
   {
-    if (!assertOneLiteral(literal) || conflict_pending_)
-      return;
+    for (SATSolver::Lit literal : literals)
+    {
+      // A backend may have observed unrelated decision-hint variables before
+      // the theory connected. Its bridge forwards them too; they have no
+      // arithmetic component and must not enter this trail.
+      if (bound_propagation_ &&
+          component_by_variable_.find(SATSolver::var(literal)) !=
+              component_by_variable_.end())
+      {
+        const uint32_t variable = SATSolver::var(literal);
+        if (variable >= bound_assignments_.size())
+        {
+          context_.invalidate("bound propagation observed an unknown variable");
+          return;
+        }
+        const std::int8_t value = SATSolver::sign(literal) ? -1 : 1;
+        if (bound_assignments_[variable] == 0)
+        {
+          bound_assignments_[variable] = value;
+          bound_assignment_trail_.push_back(literal);
+          const auto found = bound_implications_.find(literal.x);
+          if (found != bound_implications_.end())
+            for (SATSolver::Lit target : found->second)
+              pending_bound_implications_.push_back({literal, target});
+        }
+        else if (bound_assignments_[variable] != value)
+        {
+          context_.invalidate("bound propagation saw conflicting SAT assignments");
+          return;
+        }
+      }
+      if (!assertOneLiteral(literal) || conflict_pending_)
+        return;
+    }
+  }
+  catch (...)
+  {
+    context_.invalidate("unexpected failure tracking bound propagation");
   }
 }
 
@@ -1843,6 +1898,8 @@ void LraCandidateAdapter::notifyNewLevel()
   try
   {
     float_level_marks_.emplace_back();
+    if (bound_propagation_)
+      bound_level_marks_.push_back(bound_assignment_trail_.size());
   }
   catch (...)
   {
@@ -1866,6 +1923,31 @@ void LraCandidateAdapter::notifyBacktrack(size_t level)
     return;
   try
   {
+    if (bound_propagation_)
+    {
+      while (bound_level_marks_.size() > level + 1)
+      {
+        const std::size_t mark = bound_level_marks_.back();
+        bound_level_marks_.pop_back();
+        while (bound_assignment_trail_.size() > mark)
+        {
+          const SATSolver::Lit removed = bound_assignment_trail_.back();
+          bound_assignment_trail_.pop_back();
+          bound_assignments_[SATSolver::var(removed)] = 0;
+          bound_reasons_.erase(removed.x);
+        }
+      }
+      pending_bound_implications_.clear();
+      // A lower-level source may still imply a literal that was assigned at
+      // a level just removed. Re-offer those implications after the backjump.
+      for (SATSolver::Lit source : bound_assignment_trail_)
+      {
+        const auto found = bound_implications_.find(source.x);
+        if (found != bound_implications_.end())
+          for (SATSolver::Lit target : found->second)
+            pending_bound_implications_.push_back({source, target});
+      }
+    }
     if (context_.floatActive())
     {
       /* The exact mirror unwinds lazily, at the next sync.  The one thing
@@ -1935,6 +2017,68 @@ bool LraCandidateAdapter::takeClause(std::vector<SATSolver::Lit>& clause)
   conflict_pending_ = false;
   ++context_.metrics_.clauses_inserted;
   return true;
+}
+
+bool LraCandidateAdapter::propagate(SATSolver::Lit& literal)
+{
+  if (!bound_propagation_ || !propagating_ || failed() || conflict_pending_)
+    return false;
+  try
+  {
+    while (!pending_bound_implications_.empty())
+    {
+      const BoundImplication next = pending_bound_implications_.front();
+      pending_bound_implications_.pop_front();
+      const uint32_t source_var = SATSolver::var(next.source);
+      const uint32_t target_var = SATSolver::var(next.target);
+      if (source_var >= bound_assignments_.size() ||
+          target_var >= bound_assignments_.size())
+      {
+        context_.invalidate("bound implication references an unknown variable");
+        return false;
+      }
+      if (bound_assignments_[source_var] !=
+              (SATSolver::sign(next.source) ? -1 : 1) ||
+          bound_assignments_[target_var] != 0)
+        continue;
+      bound_reasons_[next.target.x] = next.source;
+      literal = next.target;
+      ++context_.metrics_.bound_propagations;
+      return true;
+    }
+  }
+  catch (...)
+  {
+    context_.invalidate("unexpected failure producing a bound implication");
+  }
+  return false;
+}
+
+bool LraCandidateAdapter::reasonFor(SATSolver::Lit literal,
+                                    std::vector<SATSolver::Lit>& clause)
+{
+  if (!bound_propagation_ || failed())
+    return false;
+  try
+  {
+    const auto found = bound_reasons_.find(literal.x);
+    if (found == bound_reasons_.end())
+    {
+      context_.invalidate("missing reason for a propagated bound");
+      return false;
+    }
+    clause.clear();
+    clause.push_back(literal);
+    SATSolver::Lit antecedent = found->second;
+    antecedent.x ^= 1U;
+    clause.push_back(antecedent);
+    return true;
+  }
+  catch (...)
+  {
+    context_.invalidate("unexpected failure producing a bound reason");
+    return false;
+  }
 }
 
 void LraCandidateAdapter::maybeRequestFloatReroute() noexcept
@@ -2498,6 +2642,19 @@ AdapterResult LraCandidateAdapter::emitBoundOrderingAxioms() noexcept
 
     const auto addImplication = [&](SATSolver::Lit antecedent,
                                     SATSolver::Lit consequent) {
+      if (bound_propagation_ && propagating_)
+      {
+        bound_implications_[antecedent.x].push_back(consequent);
+        // The static clause (~antecedent v consequent) also propagates in
+        // the other direction when consequent is false. Keep both unit
+        // directions when replacing the clause with an online reason.
+        SATSolver::Lit negated_consequent = consequent;
+        negated_consequent.x ^= 1U;
+        SATSolver::Lit negated_antecedent = antecedent;
+        negated_antecedent.x ^= 1U;
+        bound_implications_[negated_consequent.x].push_back(negated_antecedent);
+        return;
+      }
       SATSolver::vec_literals clause;
       SATSolver::Lit negated = antecedent;
       negated.x ^= 1U;

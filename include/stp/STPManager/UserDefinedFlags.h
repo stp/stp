@@ -795,6 +795,11 @@ public:
   // queries keep their existing auto policy until measured separately.
   bool lra_qf_lra_batch_default = false;
 
+  // Experimental alternative to the static per-row ordering clauses. The
+  // theory sends the same bound implications through IPASIR-UP with binary
+  // reasons, so the two delivery paths can be compared independently.
+  bool lra_bound_propagation = false;
+
   // Drive the propagator's partial checks with a double-precision simplex
   // (the engine's advisory floating-point tier), the exact core consulted
   // only to re-derive its conflicts and to judge complete assignments. Every

@@ -962,6 +962,17 @@ category = "lra"
 help = "choose the float or exact LRA driver from the tableau shape and retry on exact after a long float search; --lra-float-driver=0 still forces exact"
 
 [[option]]
+name = "lra-bound-propagation"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_bound_propagation" }
+category = "lra"
+help = "send same-row bound implications to the SAT backend with binary reasons instead of emitting static ordering clauses, when LRA theory propagation is available"
+
+[[option]]
 name = "lra-float-driver"
 type = "bool"
 default = true

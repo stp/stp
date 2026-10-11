@@ -250,6 +250,7 @@ struct LraSolveMetrics final
   // solve, so that candidates differing only in implied atoms never reach the
   // theory at all.
   std::uint64_t ordering_axioms = 0;
+  std::uint64_t bound_propagations = 0;
   std::uint64_t polarity_queries = 0;
   std::uint64_t polarity_advice = 0;
   std::uint64_t polarity_changes = 0;

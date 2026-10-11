@@ -320,6 +320,7 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
     adapter_ = std::make_unique<LraCandidateAdapter>(*context_, solver_);
     adapter_->setDecisionPolarity(decisionPolarityEnabled());
     adapter_->setAdaptiveDriver(manager_.UserFlags.lra_adaptive_driver);
+    adapter_->setBoundPropagation(manager_.UserFlags.lra_bound_propagation);
     if (!context_->ready())
       rethrowContextFailure(*context_, "exact LRA adapter creation failed");
     addElapsed(metrics_.context_rebuild_nanoseconds, context_start);
@@ -741,6 +742,7 @@ void LraCoordinator::rebuildCoreAndContext()
   adapter_ = std::make_unique<LraCandidateAdapter>(*context_, solver_);
   adapter_->setDecisionPolarity(decisionPolarityEnabled());
   adapter_->setAdaptiveDriver(manager_.UserFlags.lra_adaptive_driver);
+  adapter_->setBoundPropagation(manager_.UserFlags.lra_bound_propagation);
   if (!context_->ready())
     rethrowContextFailure(*context_, "exact LRA adapter rebuild failed");
   addElapsed(metrics_.context_rebuild_nanoseconds, context_start);
@@ -1181,8 +1183,10 @@ bool LraCoordinator::prepareTheorySearch() noexcept
       }
       propagating_ = true;
     }
-    /* State the per-row bound ordering to the SAT solver, once, as plain
-     * clauses.  This has to happen between solves: the atoms are only bound to
+    /* State the per-row bound ordering to the SAT solver, once. By default
+     * these are clauses; the experimental online path registers equivalent
+     * implications with the propagator. This has to happen between solves:
+     * the atoms are only bound to
      * SAT variables once the CNF exists, and adding a clause while a
      * backend is in its satisfied state invalidates the model the candidate
      * reader is about to consume. The after-CNF hook can also emit them
@@ -2023,6 +2027,7 @@ void LraCoordinator::printMetrics(std::ostream& out) const
       << ",\"registry_active_components\":"
       << registry_metrics.active_components
       << ",\"ordering_axioms\":" << solve.ordering_axioms
+      << ",\"bound_propagations\":" << solve.bound_propagations
       << ",\"sat_candidates\":" << metrics_.candidates
       << ",\"lra_consistent\":" << metrics_.lra_consistent
       << ",\"lra_conflicts\":" << metrics_.lra_conflicts
