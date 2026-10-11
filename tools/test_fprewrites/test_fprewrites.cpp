@@ -1282,6 +1282,26 @@ static void runPartialConstants(Ctx& c)
   report("max(-0, +0) stays for totalisation",
          c.nf->CreateTerm(FP_MAX, w, {nz, pz}).GetKind() == FP_MAX);
 
+  // Operand order: a non-zero constant makes min/max commutative; a zero
+  // constant or two symbols do not.
+  {
+    ASTNode x = c.fp(EB, SB), y = c.fp(EB, SB);
+    for (Kind k : {FP_MIN, FP_MAX})
+    {
+      auto both = [&](const ASTNode& a, const ASTNode& b) {
+        return c.nf->CreateTerm(k, w, {a, b}) == c.nf->CreateTerm(k, w, {b, a});
+      };
+      report("min/max(x, 2.0) and (2.0, x) share a node", both(x, two));
+      report("min/max(x, -1.0) and (-1.0, x) share a node", both(x, none));
+      report("min/max(x, +0) keeps its order", !both(x, pz));
+      report("min/max(x, y) keeps its order", !both(x, y));
+    }
+    // The reordered node means the same thing on every pair of operands. The
+    // constants were made before x, so (x, c) is the order that moves.
+    c.checkTerm("min(x, 2.0) reordered is equivalent", FP_MIN, w, {x, two});
+    c.checkTerm("max(x, -1.0) reordered is equivalent", FP_MAX, w, {x, none});
+  }
+
   auto toBv = [&](Kind k, unsigned m, const ASTNode& r, const ASTNode& x) {
     return c.nf->CreateTerm(k, m, {c32(m), r, x});
   };
