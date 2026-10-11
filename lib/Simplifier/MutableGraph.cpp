@@ -585,19 +585,22 @@ void MutableGraph::unregisterParentEdge(MutableInterior* parent,
                                         const ASTNode& child)
 {
   MG_TRACE("unregister edge " << parent->GetNodeNum() << " -> " << child.GetNodeNum());
-  if (MutableInterior* m = asMutable(child))
-  {
-    auto& ps = m->parents_;
+  // The parent lists are unordered: the entry found swaps with the last
+  // and the list shrinks by one. Erasing in place moved the tail each
+  // time, and a constant that a wide conjunction holds in hundreds of
+  // thousands of slots loses them one by one when that conjunction is
+  // detached.
+  auto drop = [&](std::vector<MutableInterior*>& ps) {
     const auto it = std::find(ps.begin(), ps.end(), parent);
     assert(it != ps.end());
-    ps.erase(it);
-  }
+    *it = ps.back();
+    ps.pop_back();
+  };
+  if (MutableInterior* m = asMutable(child))
+    drop(m->parents_);
   else
   {
-    auto& ps = mutParents_[child.GetNodeNum()];
-    const auto it = std::find(ps.begin(), ps.end(), parent);
-    assert(it != ps.end());
-    ps.erase(it);
+    drop(mutParents_[child.GetNodeNum()]);
     // A parent still holding a forwarded handle was counted on the
     // node it stands for (moveStanding took it in); not any more.
     if (isForwarded(child))
@@ -684,17 +687,22 @@ void MutableGraph::detach(const ASTNode& start)
       if (!m->attached_)
         continue;
       m->attached_ = false;
+      // Swap with the last entry, as unregisterParentEdge does: a wide
+      // conjunction holding one constant in hundreds of thousands of
+      // slots comes off that constant's list once per slot.
+      auto drop = [&](std::vector<MutableInterior*>& ps) {
+        const auto it = std::find(ps.begin(), ps.end(), m);
+        assert(it != ps.end());
+        *it = ps.back();
+        ps.pop_back();
+      };
       for (const ASTNode& c : m->children_)
       {
         if (MutableInterior* mc = asMutable(c))
-        {
-          auto& ps = mc->parents_;
-          ps.erase(std::find(ps.begin(), ps.end(), m));
-        }
+          drop(mc->parents_);
         else
         {
-          auto& ps = mutParents_[c.GetNodeNum()];
-          ps.erase(std::find(ps.begin(), ps.end(), m));
+          drop(mutParents_[c.GetNodeNum()]);
           // As in unregisterParentEdge: a parent still holding a forwarded
           // handle was counted on the node it stands for. A node that held
           // the same forwarded child in two slots (EQ(y, y) after x := y)
@@ -1077,9 +1085,10 @@ MutableGraph::SlotIndex& MutableGraph::slotIndex(MutableInterior* wide)
   return it->second;
 }
 
-void MutableGraph::repointAll(MutableInterior* p, const ASTNode& from,
-                              const ASTNode& to, bool structural)
+size_t MutableGraph::repointAll(MutableInterior* p, const ASTNode& from,
+                                const ASTNode& to, bool structural)
 {
+  size_t patched = 0;
   if (p->wide_)
   {
     // Slots are stable in a wide node; patch each slot holding `from`.
@@ -1088,10 +1097,11 @@ void MutableGraph::repointAll(MutableInterior* p, const ASTNode& from,
       const SlotIndex& index = slotIndex(p);
       const auto it = index.find(identity(from));
       if (it == index.end() || it->second.empty())
-        return;
+        return patched;
       replaceChild(p, it->second.back(), to, structural);
+      patched++;
     }
-    return;
+    return patched;
   }
   while (!p->dead_)
   {
@@ -1099,9 +1109,11 @@ void MutableGraph::repointAll(MutableInterior* p, const ASTNode& from,
     while (slot < p->children_.size() && p->children_[slot] != from)
       slot++;
     if (slot == p->children_.size())
-      return;
+      return patched;
     replaceChild(p, slot, to, structural);
+    patched++;
   }
+  return patched;
 }
 
 void MutableGraph::standFor(const ASTNode& n, const ASTNode& givenTarget,

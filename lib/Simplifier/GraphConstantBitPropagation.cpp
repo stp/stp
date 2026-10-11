@@ -281,17 +281,9 @@ void GraphConstantBitPropagation::topLevel(MutableGraph& graph, Simplifier* s)
                                                    : graph.materialise(h);
         if (m == NULL || m->isDead())
           continue;
-        // Slots from the back: a repoint can re-key the node, not its arity.
-        for (size_t i = m->GetChildren().size(); i-- > 0;)
-        {
-          if (m->isDead())
-            break; // merged under a repoint: the twin's holders are patched there
-          if (m->GetChildren()[i] == graph.current(node))
-          {
-            graph.replaceChild(m, i, f.constant);
-            nodesReplaced++;
-          }
-        }
+        // A wide holder (the root conjunction, with a slot per fact) is
+        // patched through the graph's slot index, not scanned per fact.
+        nodesReplaced += graph.repointAll(m, graph.current(node), f.constant);
       }
       node = graph.current(node);
       if (node.Degree() == 0)

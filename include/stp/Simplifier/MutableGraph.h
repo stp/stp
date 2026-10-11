@@ -206,6 +206,13 @@ public:
   // Point one child slot of an editable node elsewhere. Re-keys the node;
   // a node that comes to equal another merges into it.
   void replaceChild(MutableInterior* parent, size_t slot, const ASTNode& child);
+  // Every slot of p that holds `from` now holds `to`; how many there were.
+  // A wide p is patched through its slot index rather than scanned.
+  size_t repointAll(MutableInterior* p, const ASTNode& from, const ASTNode& to,
+                    bool structural = true);
+  // Above this many children a node is not keyed, sorted or merged: see
+  // MutableInterior::wide_.
+  static const size_t WIDE = 64;
   // `structural` false when the slot merely moves to a copy of the same
   // structure: re-keyed, but the rules do not run.
   void replaceChild(MutableInterior* parent, size_t slot, const ASTNode& child,
@@ -348,9 +355,6 @@ private:
   // above an edit is mutable and keyed in the table, and a parent count
   // is exact with respect to structure rather than to handles.
   std::vector<bool> stale_;
-  // Above this many children a node is not keyed, sorted or merged: see
-  // MutableInterior::wide_.
-  static const size_t WIDE = 64;
   void markStaleAbove(uint32_t idx);
   // Stale nodes held by a mutable parent, converted when the operation that
   // made them stale has finished: a mutable node holds current children.
@@ -494,8 +498,6 @@ private:
   // place in the formula. n's own child edges are withdrawn. `edited` says
   // whether target differs from n in structure (an edit) or is a copy.
   void standFor(const ASTNode& n, const ASTNode& target, bool edited);
-  void repointAll(MutableInterior* p, const ASTNode& from, const ASTNode& to,
-                  bool structural = true);
   bool eraseFromTable(MutableInterior* m);
   ASTNode refresh(MutableInterior* m);
   // The simplifying rules over m's kind and current children: m itself

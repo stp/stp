@@ -106,6 +106,12 @@ protected:
   void drainCounts();
   ankerl::unordered_dense::map<uint64_t, size_t> countsBefore_;
   ankerl::unordered_dense::set<uint64_t> drained_; // one query per node per drain
+  // Wide parents a count change asks to re-examine. A rule over a wide
+  // node reads all its children, so examining it after each edit beneath
+  // it is quadratic in its arity; these are examined once the sweep is
+  // done, and again only if that examination changed something.
+  std::vector<ASTNode> wideLater_;
+  void examineWideLater();
   void snapshotCounts(const ASTNode& c);
   // Whether the sweep goes parents before children. Bottom-up suits rules
   // that read what their operands became (Rewriting, CommonFactor).

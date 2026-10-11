@@ -162,7 +162,28 @@ namespace stp
       const std::vector<ASTNode> batch(candidates);
       candidates.clear();
       for (const ASTNode& p : batch)
+      {
+        if (p.Degree() > MutableGraph::WIDE)
+          wideLater_.push_back(p);
+        else
+          examine(p);
+      }
+    }
+  }
+
+  void GraphRulePass::examineWideLater()
+  {
+    while (!wideLater_.empty())
+    {
+      std::vector<ASTNode> batch;
+      batch.swap(wideLater_);
+      std::sort(batch.begin(), batch.end());
+      batch.erase(std::unique(batch.begin(), batch.end()), batch.end());
+      for (const ASTNode& p : batch)
+      {
         examine(p);
+        drainCounts();
+      }
     }
   }
 
@@ -204,6 +225,7 @@ namespace stp
       examine(x);
       drainCounts();
     }
+    examineWideLater();
 
     graph.installRewriter(NULL);
     g = NULL;
