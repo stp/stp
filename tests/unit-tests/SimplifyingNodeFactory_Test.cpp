@@ -1148,6 +1148,31 @@ TEST(SimplifyingNodeFactory_Test, rounding_mode_literal_agrees_with_its_carrier)
   EXPECT_NE(conj, c.mgr.ASTFalse);
 }
 
+TEST(SimplifyingNodeFactory_Test, constant_real_orderings_fold)
+{
+  Context c;
+  NodeFactory& f = c.snf;
+  const ASTNode a = c.mgr.CreateRealConst("2.2");
+  const ASTNode b = c.mgr.CreateRealConst("2");
+  const ASTNode m = c.mgr.CreateRealConst("-1/3");
+  EXPECT_EQ(c.mgr.ASTFalse, f.CreateNode(stp::REAL_LT, a, b));
+  EXPECT_EQ(c.mgr.ASTFalse, f.CreateNode(stp::REAL_LE, a, b));
+  EXPECT_EQ(c.mgr.ASTTrue, f.CreateNode(stp::REAL_GT, a, b));
+  EXPECT_EQ(c.mgr.ASTTrue, f.CreateNode(stp::REAL_GE, a, b));
+  EXPECT_EQ(c.mgr.ASTFalse, f.CreateNode(stp::REAL_LT, b, b));
+  EXPECT_EQ(c.mgr.ASTTrue, f.CreateNode(stp::REAL_LE, b, b));
+  EXPECT_EQ(c.mgr.ASTFalse, f.CreateNode(stp::REAL_GT, b, b));
+  EXPECT_EQ(c.mgr.ASTTrue, f.CreateNode(stp::REAL_GE, b, b));
+  EXPECT_EQ(c.mgr.ASTTrue, f.CreateNode(stp::REAL_LT, m, b));
+  EXPECT_EQ(c.mgr.ASTFalse, f.CreateNode(stp::REAL_GE, m, a));
+  EXPECT_EQ(c.mgr.ASTTrue, f.CreateNode(stp::REAL_GT, b, m));
+  // A symbolic side keeps the comparison for the arithmetic frontend.
+  const ASTNode x =
+      c.mgr.CreateSourceSymbol("ord-x", stp::SourceSort::real());
+  EXPECT_EQ(stp::REAL_LT, f.CreateNode(stp::REAL_LT, x, b).GetKind());
+  EXPECT_EQ(stp::REAL_GE, f.CreateNode(stp::REAL_GE, a, x).GetKind());
+}
+
 TEST(SimplifyingNodeFactory_Test, pinned_condition_rebuilds_real_ite)
 {
   // Mixed Real/BV construction is supported by the API. Substituting a

@@ -853,6 +853,32 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
     return c;
   }
 
+  // Two constant Reals order by their exact values. The evaluator above
+  // knows no Real kind, so the difference folds through the manager's exact
+  // arithmetic and its sign decides. (Equality of two constants is in the EQ
+  // case: Real constants intern by value, so distinct nodes are unequal.)
+  if ((kind == stp::REAL_LT || kind == stp::REAL_LE || kind == stp::REAL_GT ||
+       kind == stp::REAL_GE) &&
+      children.size() == 2 && children[0].GetKind() == stp::REAL_CONST &&
+      children[1].GetKind() == stp::REAL_CONST)
+  {
+    const ASTNode difference = bm.CreateRealTerm(
+        stp::REAL_SUB, ASTVec(children.begin(), children.end()));
+    assert(difference.GetKind() == stp::REAL_CONST);
+    const std::string value = difference.GetRealCanonical();
+    const bool negative = !value.empty() && value[0] == '-';
+    const bool zero = value == "0";
+    bool holds = false;
+    switch (kind)
+    {
+      case stp::REAL_LT: holds = negative; break;
+      case stp::REAL_LE: holds = negative || zero; break;
+      case stp::REAL_GT: holds = !negative && !zero; break;
+      default: holds = !negative; break;
+    }
+    return holds ? ASTTrue : ASTFalse;
+  }
+
   ASTNode result;
   switch (kind)
   {
