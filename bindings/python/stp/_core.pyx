@@ -961,6 +961,50 @@ cdef class Manager:
         self._check()
         return self._mk(<stp_kind>kind, args, tuple(indices), sort, "stp_mk_term")
 
+    def mk_terms(self, operations):
+        """Construct a term DAG in order, returning one term per operation.
+
+        Each operation is (kind, arguments) or (kind, arguments, indices, sort).
+        Arguments are terms or non-negative integer indices of earlier results.
+        Constructor validation and manager ownership checks apply to every node.
+        On failure no result list is returned; earlier nodes may be interned.
+        """
+        self._check()
+        cdef list results = []
+        cdef list arguments
+        cdef tuple indices
+        cdef Sort sort
+        cdef int kind
+        cdef Py_ssize_t reference
+        for operation in operations:
+            if len(operation) == 2:
+                kind = int(operation[0])
+                supplied = operation[1]
+                indices = ()
+                sort = None
+            elif len(operation) == 4:
+                kind = int(operation[0])
+                supplied = operation[1]
+                indices = tuple(int(index) for index in operation[2])
+                sort = operation[3]
+            else:
+                raise ValueError("a term operation needs two or four fields")
+            arguments = []
+            for operand in supplied:
+                if isinstance(operand, Term):
+                    arguments.append(operand)
+                elif isinstance(operand, int) and not isinstance(operand, bool):
+                    reference = operand
+                    if reference < 0 or reference >= len(results):
+                        raise ValueError("term reference must name an earlier result")
+                    arguments.append(results[reference])
+                else:
+                    raise TypeError("a term argument must be a term or an earlier result index")
+            # Consuming user iterables can run Python and release the GIL.
+            self._check()
+            results.append(self._mk(<stp_kind>kind, arguments, indices, sort, "stp_mk_term"))
+        return results
+
     def rewrap(self, Term t not None, cls):
         """A NEW wrapper of t's node of class `cls` (a Term subclass), holding its own
         reference and not entered in the identity map: for value views that decorate a

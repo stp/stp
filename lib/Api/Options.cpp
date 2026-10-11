@@ -1101,6 +1101,7 @@ bool custom_enable_array_equality(EngineTarget& t, const OptionSpec&, const Opti
 bool custom_logic(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   const std::string& logic = as_str(v);
+  t.flags.uf_qf_uf_logic = logic == "QF_UF";
   if (t.solver == nullptr)
   {
     if (logic_selects_uf(logic))
@@ -1166,6 +1167,12 @@ bool custom_lra_decision_polarity(EngineTarget& t, const OptionSpec&, const Opti
 {
   t.flags.lra_decision_polarity = as_bool(v);
   t.flags.lra_decision_polarity_explicit = t.explicit_value;
+  return true;
+}
+bool custom_lra_float_driver(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.lra_float_driver = as_bool(v);
+  t.flags.lra_float_driver_explicit = t.explicit_value;
   return true;
 }
 bool custom_lra_verify_canonical(EngineTarget& t, const OptionSpec&, const OptionValue& v)
@@ -1356,6 +1363,11 @@ bool custom_enable_uninterpreted_functions(EngineTarget& t, const OptionSpec&, c
 bool custom_uf_ackermann(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.uf_eager_mode = as_mode<Flags::UFEagerMode>(v);
+  return true;
+}
+bool custom_uf_value_bounds(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.uf_value_bounds = as_mode<Flags::UFValueBoundsMode>(v);
   return true;
 }
 bool custom_uf_bv_term_abstraction(EngineTarget& t, const OptionSpec&, const OptionValue& v)

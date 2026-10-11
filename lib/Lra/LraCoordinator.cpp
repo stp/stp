@@ -158,6 +158,22 @@ bool LraCoordinator::decisionPolarityEnabled() const
          solver_.supportsTheoryPropagator() && solver_.supportsDecisionPolarity();
 }
 
+bool LraCoordinator::floatDriverEnabled() const
+{
+  const auto& flags = manager_.UserFlags;
+  if (!flags.lra_float_driver || flags.lra_force_exact_driver)
+    return false;
+  if (!flags.lra_adaptive_driver)
+    return !flags.lra_qf_lra_batch_default || flags.lra_float_driver_explicit;
+  // A compact but highly constrained tableau is the one region in the
+  // follow-up where float often finds a model first. Small and large Real
+  // tableaux benefit from avoiding its replay and certification overhead.
+  // Read the registered shape, never a benchmark name or answer.
+  const std::size_t rows = context_->registry_snapshot_.rows.size();
+  const std::size_t symbols = context_->registry_snapshot_.symbols.size();
+  return rows >= 5000 && rows < 20000 && symbols <= (rows - 1) / 3;
+}
+
 LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
                                const ASTNode& submitted_formula,
                                const std::vector<ASTNode>& spread_symbols)
@@ -295,8 +311,7 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
     context_->setFloatPromotionBudget(manager_.UserFlags.lra_float_promotion_budget);
     context_->setSeparateModelValues(separateModelValuesEnabled());
     context_->setDenseRecovery(manager_.UserFlags.lra_dense_recovery);
-    context_->setFloatDriver(manager_.UserFlags.lra_float_driver &&
-                             !manager_.UserFlags.lra_force_exact_driver);
+    context_->setFloatDriver(floatDriverEnabled());
     context_->setFloatRerouteBudget(manager_.UserFlags.lra_float_reroute);
     context_->setFloatRerouteFloor(manager_.UserFlags.lra_float_reroute_floor);
     context_->setConflictRecovery(manager_.UserFlags.lra_conflict_recovery);
@@ -304,6 +319,7 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
       rethrowContextFailure(*context_, "exact LRA context creation failed");
     adapter_ = std::make_unique<LraCandidateAdapter>(*context_, solver_);
     adapter_->setDecisionPolarity(decisionPolarityEnabled());
+    adapter_->setAdaptiveDriver(manager_.UserFlags.lra_adaptive_driver);
     if (!context_->ready())
       rethrowContextFailure(*context_, "exact LRA adapter creation failed");
     addElapsed(metrics_.context_rebuild_nanoseconds, context_start);
@@ -708,8 +724,7 @@ void LraCoordinator::rebuildCoreAndContext()
     context_->setFloatPromotionBudget(manager_.UserFlags.lra_float_promotion_budget);
     context_->setSeparateModelValues(separateModelValuesEnabled());
     context_->setDenseRecovery(manager_.UserFlags.lra_dense_recovery);
-    context_->setFloatDriver(manager_.UserFlags.lra_float_driver &&
-                             !manager_.UserFlags.lra_force_exact_driver);
+    context_->setFloatDriver(floatDriverEnabled());
     context_->setFloatRerouteBudget(manager_.UserFlags.lra_float_reroute);
     context_->setFloatRerouteFloor(manager_.UserFlags.lra_float_reroute_floor);
     context_->setConflictRecovery(manager_.UserFlags.lra_conflict_recovery);
@@ -725,6 +740,7 @@ void LraCoordinator::rebuildCoreAndContext()
   }
   adapter_ = std::make_unique<LraCandidateAdapter>(*context_, solver_);
   adapter_->setDecisionPolarity(decisionPolarityEnabled());
+  adapter_->setAdaptiveDriver(manager_.UserFlags.lra_adaptive_driver);
   if (!context_->ready())
     rethrowContextFailure(*context_, "exact LRA adapter rebuild failed");
   addElapsed(metrics_.context_rebuild_nanoseconds, context_start);

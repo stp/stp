@@ -11,12 +11,14 @@ is the DPLL(T) arrangement of Dutertre and de Moura ("A Fast
 Linear-Arithmetic Solver for DPLL(T)", CAV 2006), whose general simplex STP
 implements.
 
-Two layers sit on top of the exact core and are on by default. A presolve
-rewrites the query before any atom is made, and a double-precision simplex
-does most of the checking while the search runs. Neither can change an
-answer. Every conflict the float tier reports is certified exactly before
-the search sees it, and every model, from whichever layer, is checked in
-exact arithmetic against the query as written before it is printed.
+Two layers sit on top of the exact core. A presolve, on by default, rewrites
+the query before any atom is made. A double-precision simplex can do most
+of the checking while the search runs. Batch QF_LRA checks using CaDiCaL
+default to the exact core instead; other Real checks retain the float
+default. Neither layer can change an answer. Every conflict the float tier
+reports is certified exactly before the search sees it, and every model,
+from whichever layer, is checked in exact arithmetic against the query as
+written before it is printed.
 
 Usage
 -----
@@ -142,8 +144,8 @@ the current assignment already satisfies (``--lra-decision-polarity``).
 It is on wherever it is supported. On other backends the option can be
 left alone, and asking for it explicitly there is an error.
 
-**The floating-point tier.** By default a double-precision simplex over
-the same rows and bounds does the partial checks and proposes models
+**The floating-point tier.** A double-precision simplex over the same rows
+and bounds can do the partial checks and propose models
 (``--lra-float-driver``). The exact core is consulted only to certify
 what the float tier reports. A float conflict is kept when its weights,
 reconstructed as exact rationals, prove it. Otherwise the conflict is
@@ -153,7 +155,12 @@ exact core. A float model is certified, and repaired over the pinned
 bounds if it needs to be. Over 3,037 QF_LRA and QF_UFLRA files (medians
 of three), the float tier solved 38 more QF_LRA files at 20 s, left
 QF_UFLRA level, and made the typical file a quarter faster, with no
-answer disagreement.
+answer disagreement. A later CaDiCaL comparison on the 1,753
+non-incremental QF_LRA files found the fixed ``new-medium`` CNF plus exact
+driver strongest at 20 seconds: 1,609 solved versus 1,568 for that build's
+old no-flags policy. This is the batch QF_LRA default. The older policy
+remains for other Real fragments, HiGHS options and incremental sessions,
+which were not part of that comparison.
 
 The float tableau starts as a substitution tableau. When fill-in makes it
 expensive, it switches to a sparse LU basis kept current by Forrest--Tomlin
@@ -172,7 +179,7 @@ settles the same file in under a second. When the fill exceeds both
 query is solved again from its start on the exact driver, within the same
 deadline. The exact driver then stays in charge for the rest of that
 ``STPMgr`` or validity checker. Under ``-s`` this prints ``LRA: float
-tier blew up; re-solving on the exact driver``.
+tier rerouted; re-solving on the exact driver``.
 
 **Presolve.** Before any atom is made, a query with Real content is
 rewritten in five stages, each behind its own option and each on by
@@ -295,6 +302,14 @@ Search and the float tier
   Take part in the SAT search on a backend that hosts a propagator, as
   described above. Off, every backend runs the full-lazy loop.
 
+``--lra-adaptive-cnf`` (off)
+  Experimental. On Real queries using CaDiCaL and CNF ``auto``, choose
+  the existing auto route below 16,384 estimated AND nodes, ``medium``
+  from 16,384 to 49,999, and ``new-medium`` above. An explicit
+  ``--cnf-generation-effort`` takes precedence. Batch QF_LRA with CaDiCaL
+  uses fixed ``new-medium`` by default; turning on this selector replaces
+  that fixed choice.
+
 ``--lra-decision-polarity`` (on where supported)
   Pick the polarity of arithmetic decisions. It needs
   ``--lra-theory-propagation`` and the patched CaDiCaL or a MiniSat that
@@ -302,9 +317,18 @@ Search and the float tier
   the backend's own polarity, and an explicit ``=1`` without support is
   an error.
 
-``--lra-float-driver`` (on)
-  Drive partial checks with the double-precision simplex. ``=0`` uses the
-  exact core alone.
+``--lra-float-driver`` (on except batch QF_LRA with CaDiCaL)
+  Drive partial checks with the double-precision simplex. Batch QF_LRA
+  with CaDiCaL uses the exact core by default; explicit ``=1`` restores
+  float there. ``=0`` always uses exact.
+
+``--lra-adaptive-driver`` (off)
+  Experimental. Use the float driver for tableaux with 5,000 to 19,999
+  rows and fewer than one symbol per three rows, and the exact driver
+  otherwise. If a selected float search is still active after 40 seconds,
+  retry it on exact arithmetic within the same query deadline. This
+  overrides the fixed QF_LRA driver choice. An explicit
+  ``--lra-float-driver=0`` always chooses exact.
 
 ``--lra-conflict-recovery`` (on)
   Recover a rejected float conflict's weights by bounded exact
