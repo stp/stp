@@ -1100,9 +1100,6 @@ public:
   // it buys depends entirely on whether that structure decides anything.
   bool skeleton_preproc = false;
 
-  // Replace an assertion where it appears inside another assertion; see
-  // EmbeddedConstraints. Off by default while it is measured.
-  bool embedded_constraints = false;
   // The ceiling on how many times one of those three may be blocked before
   // its refinement stops enumerating and encodes the operation exactly
   // instead. Measured: through about thirty rounds the abstraction is still

@@ -765,8 +765,7 @@ declare -a g_simplify=(
 #                          over variables used nowhere else. FuzzSMT only ever
 #                          writes the binary (distinct a b), which is a
 #                          disequality with no ordering to fix.
-#   --skeleton-preproc=1   and --embedded-constraints=1 never fire on a
-#                          generated query.
+#   --skeleton-preproc=1   never fires on a generated query.
 # And not --common-subsum-budget: --common-subsum itself is already absent
 # for finding nothing to factor, so capping its tally changes nothing either.
 )
@@ -1596,7 +1595,7 @@ declare -a NOT_FUZZED=(
 --fp-domain-simplify --fp-domain-derived-bounds --fp-domain-extremal-selectors
 --fp-domain-sound-zero-facts --fp-domain-row-bounds
 --mulo-recognition --distinct-ordering --skeleton-preproc
---embedded-constraints --common-subsum --common-subsum-budget --switch-word
+--common-subsum --common-subsum-budget --switch-word
 --uninterpreted-functions --uf-narrow-results --uf-inject-args
 --congruence-candidate-limit --congruence-candidate-conflicts
 # CaDiCaL's variable elimination settings. They need --cadical, but paired

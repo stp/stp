@@ -27,7 +27,6 @@ THE SOFTWARE.
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FpAbstraction.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
-#include "stp/Simplifier/EmbeddedConstraints.h"
 #include "stp/Simplifier/SkeletonPreproc.h"
 #include "stp/UninterpretedFunctions/UFLowering.h"
 #include "stp/UninterpretedFunctions/UFPreLowering.h"
@@ -786,13 +785,6 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
       inputToSat = bm->defaultNodeFactory->CreateNode(AND, facts);
       bm->ASTNodeStats("After Skeleton Preprocessing: ", inputToSat);
     }
-  }
-
-  if (bm->UserFlags.embedded_constraints)
-  {
-    EmbeddedConstraints ec(bm);
-    inputToSat = ec.topLevel(inputToSat);
-    bm->ASTNodeStats("After Embedded Constraints: ", inputToSat);
   }
 
   if (bm->UserFlags.propagate_equalities)

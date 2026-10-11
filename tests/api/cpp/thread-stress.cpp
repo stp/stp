@@ -75,7 +75,7 @@ const std::vector<OptionSet> kOptionSets = {
     {{"interval-sets", "true"}, {"linear-form", "true"}, {"merge-same", "true"}},
     {{"aig-core-simplification", "true"}},
     {{"aig-core-simplification", "true"}, {"ite-context-simplifications", "true"}},
-    {{"skeleton-preproc", "true"}, {"embedded-constraints", "true"}},
+    {{"skeleton-preproc", "true"}},
     {{"bb.div-v3", "true"}, {"bb.div-v4", "true"}, {"bb.mult-v2", "true"}},
     {{"fp-domain-simplify", "true"}, {"fp-domain-row-bounds", "true"}},
     {{"array-index-hints", "decide"}},

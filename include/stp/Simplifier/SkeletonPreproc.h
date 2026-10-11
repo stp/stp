@@ -50,7 +50,7 @@ namespace stp
 //     nothing to them, and a conjunct of the query is already at the top
 //     level. What remains is a fact that was buried -- a disjunction
 //     reached only through an equivalence, say -- and surfacing it is what
-//     lets EmbeddedConstraints replace its other occurrences and
+//     lets constant bit propagation replace its other occurrences and
 //     PropagateEqualities substitute an equivalence with a symbol on one
 //     side;
 //
