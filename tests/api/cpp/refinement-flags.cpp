@@ -84,6 +84,7 @@ const char* const kProfile = "bv-term-abstraction-profile";
 const char* const kRounds = "bv-term-abstraction-rounds";
 
 using Mode = stp::UserDefinedFlags::UFEagerMode;
+using ValueMode = stp::UserDefinedFlags::UFValueBoundsMode;
 
 // Options with the engine's model self-check on (check-sanity), as every 2.x
 // checker had it: a sat answer whose model does not satisfy the assertions is
@@ -141,6 +142,7 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   EXPECT_FALSE(f.uf_inject_args);
   EXPECT_EQ(0u, f.uf_lemmas_per_round);
   EXPECT_EQ(Mode::AUTO, f.uf_eager_mode);
+  EXPECT_EQ(ValueMode::AUTO, f.uf_value_bounds);
   EXPECT_EQ(256u, f.uf_eager_budget);
   EXPECT_TRUE(f.uf_phase_hints);
   EXPECT_EQ(16u, f.uf_sort_width);
@@ -168,6 +170,7 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   EXPECT_FALSE(o.get_bool("uf-inject-args"));
   EXPECT_EQ(0u, o.get_uint("uf-lemmas-per-round"));
   EXPECT_EQ("auto", o.get_str("uf-ackermann"));
+  EXPECT_EQ("auto", o.get_str("uf-value-bounds"));
   EXPECT_EQ(256u, o.get_uint("uf-ackermann-budget"));
   EXPECT_TRUE(o.get_bool("uf-phase-hints"));
   EXPECT_EQ(16u, tm.uf_sort_width()); // a manager setting
@@ -386,6 +389,13 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
   EXPECT_EQ(Mode::OFF, flags(s).uf_eager_mode);
   o.set_str("uf-ackermann", "auto");
   EXPECT_EQ(Mode::AUTO, flags(s).uf_eager_mode);
+
+  o.set_str("uf-value-bounds", "on");
+  EXPECT_EQ(ValueMode::ON, flags(s).uf_value_bounds);
+  o.set_str("uf-value-bounds", "off");
+  EXPECT_EQ(ValueMode::OFF, flags(s).uf_value_bounds);
+  o.set_str("uf-value-bounds", "auto");
+  EXPECT_EQ(ValueMode::AUTO, flags(s).uf_value_bounds);
 
   // Unset, DIV/MOD follows the older switch back on too, and so does the
   // engine.

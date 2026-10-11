@@ -135,6 +135,7 @@ void Cpp_interface::init()
   pushed_in_session = false;
   delayed_bv_auto_engagement = false;
   lra_logic = false;
+  bm.UserFlags.uf_qf_uf_logic = false;
   last_check_work.clear();
 }
 
@@ -291,6 +292,7 @@ void Cpp_interface::setLogic(const std::string& logic)
   // measured. An explicit --incremental-auto-engage-at still wins below.
   delayed_bv_auto_engagement = logic == "QF_BV" || logic == "QF_ABV";
   lra_logic = logic == "QF_LRA";
+  bm.UserFlags.uf_qf_uf_logic = logic == "QF_UF";
 }
 
 void Cpp_interface::restoreUFOptionAfterLogic()
@@ -1689,6 +1691,21 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
           query = assertionsSMT2[0];
         else
           query = bm.ASTTrue;
+        // The fixed policy was measured on batch QF_LRA, not on mixed or
+        // incremental Real queries. Restore the marker even if solving throws.
+        struct RestoreLraBatchDefault
+        {
+          UserDefinedFlags& flags;
+          bool saved;
+          ~RestoreLraBatchDefault() { flags.lra_qf_lra_batch_default = saved; }
+        } restore_lra_default{bm.UserFlags,
+                              bm.UserFlags.lra_qf_lra_batch_default};
+        bm.UserFlags.lra_qf_lra_batch_default =
+            lra_logic && !bm.UserFlags.enable_uninterpreted_functions &&
+            !bm.UserFlags.enable_array_equality &&
+            bm.UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER &&
+            !bm.UserFlags.lra_highs_lp && !bm.UserFlags.lra_highs_cuts &&
+            !bm.UserFlags.lra_highs_replay && !bm.UserFlags.lra_highs_mip;
         last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
       }
     }
@@ -1852,6 +1869,7 @@ void Cpp_interface::cleanUp()
 
   restoreUFOptionAfterLogic();
   restoreArrayEqualityOptionAfterLogic();
+  bm.UserFlags.uf_qf_uf_logic = false;
 }
 
 // SMT-LIB gives these options a <b_value> argument (2.6, figure 3.9), so a

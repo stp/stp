@@ -1300,6 +1300,8 @@ struct IncrementalSolver::Impl
       out =
           SubstitutionMap::replace(out, sigma0, cache, bm->defaultNodeFactory);
     }
+    if (sigma0HasFp && containsFloatingPointTheory(out, bm))
+      out = fpContext()->prepare(out);
     // The equality-propagation-and-simplify pipeline is a TRIAL, run on
     // its own scratch state. Its result is NOVEL nodes: adopting it
     // forfeits every bit-blast-memo hit the raw form's subterms would
@@ -1496,6 +1498,7 @@ struct IncrementalSolver::Impl
   // is welcome. It is also why rewrite caches are per use, never shared
   // across calls: a cache entry can predate an expansion.
   ASTNodeMap sigma0;
+  bool sigma0HasFp = false;
 
   // Defining equations that must reach the solver as real constraints.
   // A variable whose bits were already encoded in an EARLIER check-sat is
@@ -2163,15 +2166,14 @@ struct IncrementalSolver::Impl
     if (var == term)
       return false;
 
-    // Only plain bit-vector/boolean definitions. An array-typed symbol is
-    // not a substitutable value; and the replacement must not smuggle
-    // theory content -- array reads, opaque equalities -- into conjuncts
+    // An array-typed symbol is not a substitutable value; the replacement
+    // must not smuggle theory content -- array reads, opaque equalities --
+    // into conjuncts
     // whose transform decisions (raw-conjunct properties) were already
     // made without it. A floating-point body is allowed where the caller
-    // re-checks the substituted conjunct for totalisation (the pushed
-    // harvest): these definitions are how a query's FP-computed array
-    // indices ever fold to constants, and refusing them leaves every
-    // read symbolic for the refinement loop to disentangle.
+    // re-checks the substituted conjunct for totalisation: these definitions
+    // let a query's FP-computed array indices fold to constants, and refusing
+    // them leaves every read symbolic for the refinement loop to disentangle.
     if (var.GetIndexWidth() != 0)
       return false;
     if (!allowFp && bm->has_floating_point_theory &&
@@ -2191,7 +2193,11 @@ struct IncrementalSolver::Impl
   void harvestSigma0(const ASTNode& c)
   {
     ASTNode var, term;
-    if (!recogniseDefinition(c, var, term))
+    const bool allowFp = bm->UserFlags.incremental_fp_definitions;
+    ASTNode candidate = c;
+    if (allowFp && fragment(c).fp)
+      candidate = fpContext()->prepare(c);
+    if (!recogniseDefinition(candidate, var, term, allowFp))
       return;
     if (sigma0.find(var) != sigma0.end())
       return;
@@ -2229,6 +2235,8 @@ struct IncrementalSolver::Impl
     sigma0DefiningConjunctOf[var] = c;
 
     sigma0[var] = expanded;
+    if (allowFp && containsFloatingPointTheory(expanded, bm))
+      sigma0HasFp = true;
   }
 
   // A definition found at a PUSHED level. It holds only while its level is
@@ -2312,6 +2320,8 @@ struct IncrementalSolver::Impl
           SubstitutionMap::replace(out, sigma0, cache, bm->defaultNodeFactory);
     }
 
+    if (sigma0HasFp && containsFloatingPointTheory(out, bm))
+      out = fpContext()->prepare(out);
     return simplifyAlone(out);
   }
 
@@ -2587,6 +2597,10 @@ struct IncrementalSolver::Impl
       toEncode = prepareConjunct(toEncode);
     }
 
+    // A base definition can introduce FP into a formerly plain BV use.
+    // Its totalised form may also contain new array reads.
+    if (sigma0HasFp)
+      frag = &fragment(toEncode);
     const int lit = encodePrepared(conjunct, toEncode, *frag);
     rootLitOf[conjunct] = lit;
     return lit;

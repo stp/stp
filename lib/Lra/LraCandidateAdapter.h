@@ -3,6 +3,7 @@
 
 #include "LraSolveContext.h"
 
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <string>
@@ -71,6 +72,7 @@ public:
   void setDecisionPolarity(bool enabled) noexcept { decision_polarity_ = enabled; }
   bool wantsDecisionPolarity() const override { return decision_polarity_; }
   bool decisionPolarity(uint32_t variable, bool& value) noexcept override;
+  void setAdaptiveDriver(bool enabled) noexcept { adaptive_driver_ = enabled; }
   void setBoundPropagation(bool enabled) noexcept { bound_propagation_ = enabled; }
 
   // Prepare to drive the search rather than judge it: build the variable
@@ -180,6 +182,8 @@ private:
    * tableau, so the fill ratio is measured every few checks rather than every
    * one. */
   unsigned float_reroute_sample_ = 0;
+  bool adaptive_driver_ = false;
+  std::chrono::steady_clock::time_point float_watch_start_{};
 
   bool assertOneLiteral(SATSolver::Lit literal) noexcept;
   // Open a core checkpoint for the current level, if it has none yet.

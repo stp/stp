@@ -940,6 +940,28 @@ category = "lra"
 help = "let the LRA theory take part in the SAT search, on a backend that hosts a propagator (CaDiCaL, CryptoMiniSat, MiniSat)"
 
 [[option]]
+name = "lra-adaptive-cnf"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_adaptive_cnf" }
+category = "lra"
+help = "for Real queries with CNF auto and an AIG size estimate, use medium CNF for small Boolean skeletons and new-medium for larger ones"
+
+[[option]]
+name = "lra-adaptive-driver"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "anytime"
+scope = "solver"
+engine = { field = "lra_adaptive_driver" }
+category = "lra"
+help = "choose the float or exact LRA driver from the tableau shape and retry on exact after a long float search; --lra-float-driver=0 still forces exact"
+
+[[option]]
 name = "lra-bound-propagation"
 type = "bool"
 default = false
@@ -957,9 +979,9 @@ default = true
 tier = "expert"
 settable = "anytime"
 scope = "solver"
-engine = { field = "lra_float_driver" }
+engine = { custom = "lra_float_driver" }
 category = "lra"
-help = "drive partial theory checks with a double-precision simplex, conflicts and models re-derived exactly (under --lra-theory-propagation)"
+help = "drive partial theory checks with a double-precision simplex, conflicts and models re-derived exactly; batch QF_LRA defaults to exact and explicit =1 enables float there"
 
 [[option]]
 name = "lra-float-reroute"
@@ -1927,6 +1949,17 @@ category = "incremental"
 help = "offer the whole active stack to the exact-stack preprocessor on every incremental check rather than only on a forced first engagement, and offer it stacks carrying array reads and floating point rather than plain bit-vectors alone"
 
 [[option]]
+name = "incremental-fp-definitions"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "incremental_fp_definitions" }
+category = "incremental"
+help = "substitute permanent definitions with floating-point bodies"
+
+[[option]]
 name = "uninterpreted-functions"
 id = 12
 type = "mode"
@@ -2085,6 +2118,18 @@ category = "refinement.uf"
 help = "bit-vector width given to a sort introduced by (declare-sort S 0); it bounds how many elements of that sort a query can tell apart, so a larger value is always sound and only a smaller one is not"
 
 [[option]]
+name = "uf-value-bounds"
+type = "mode"
+default = "auto"
+values = ["on", "off", "auto"]
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { custom = "uf_value_bounds" }
+category = "refinement.uf"
+help = "bound declared-sort UF scalars by symmetry rank; in QF_UF, symbols in asserted disequalities receive early ranks"
+
+[[option]]
 name = "uf-narrow-results"
 type = "bool"
 default = true
@@ -2104,7 +2149,7 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "uf_propagate_equalities" }
 category = "refinement.uf"
-help = "before lowering, rewrite the query under its own top-level equalities with applications still in place, so that `x = y` merges (f x) and (f y) into one application and `a = (f y)` or `(f 3) = 0` reach the terms built on a or (f 3); auto runs it unless the query has Real content, where it measures as a loss"
+help = "before lowering, rewrite the query under its own top-level equalities with applications still in place; auto skips pure QF_UF and queries with Real content, where the measured corpora favor the original formula"
 
 [[option]]
 name = "uf-skeleton-preproc"

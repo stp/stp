@@ -293,6 +293,7 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
   // choice the solve's encoding made; a later evaluation cannot know it, so
   // the value of every such node in the checked formula is recorded now.
   std::vector<ASTNode> partials;
+  std::map<ASTNode, std::vector<ASTNode>> applications; // Real UF identity -> applications
   {
     std::vector<ASTNode> roots = bm->GetAsserts();
     roots.insert(roots.end(), last_assumptions.begin(), last_assumptions.end());
@@ -322,6 +323,10 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
         if (bm->HasRealModelValue(n) && bm->RealModelValueNode(n, value) && !value.IsNull())
           snap->scalars[n] = value;
       }
+      if (k == UF_APPLY)
+        if (const UFDecl* d = mgr->decl_of(n[0]))
+          if (involves_real(d->signature()))
+            applications[n[0]].push_back(n);
       // A partial FP operation used as a constant-array default carries the
       // solve's choice too: the default is an ordinary child.
       for (const ASTNode& c : n.GetChildren())
@@ -361,24 +366,6 @@ std::shared_ptr<const ModelSnapshot> SolverImpl::take_snapshot(Verdict v)
   // of the function, which is how an application built later is answered;
   // any other application completes to the codomain's default.
   {
-    std::map<ASTNode, std::vector<ASTNode>> applications; // identity -> applications
-    std::vector<ASTNode> roots = bm->GetAsserts();
-    roots.insert(roots.end(), last_assumptions.begin(), last_assumptions.end());
-    ASTNodeSet seen;
-    std::vector<ASTNode> stack(roots.begin(), roots.end());
-    while (!stack.empty())
-    {
-      const ASTNode n = stack.back();
-      stack.pop_back();
-      if (n.IsNull() || !seen.insert(n).second)
-        continue;
-      if (n.GetKind() == UF_APPLY)
-        if (const UFDecl* d = mgr->decl_of(n[0]))
-          if (involves_real(d->signature()))
-            applications[n[0]].push_back(n);
-      for (const ASTNode& c : n.GetChildren())
-        stack.push_back(c);
-    }
     std::vector<ASTNode> valued;
     for (const auto& entry : applications)
       for (const ASTNode& app : entry.second)

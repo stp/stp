@@ -341,9 +341,11 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   // generation is most of the cost, and the in-house route generates in a
   // fraction of the time at a quarter of the transient.
   //
-  // Three fallthroughs keep today's behaviour where the evidence is thin.
-  // Array refinement still resolves from the ABC node count inside the ABC
-  // lowering, because the in-house rungs have not been measured under it.
+  // Three fallthroughs keep today's behaviour where the evidence is thin,
+  // outside the measured batch QF_LRA default or an explicitly enabled
+  // experimental Real policy.
+  // Array refinement otherwise resolves from the ABC node count inside the
+  // ABC lowering, because the in-house rungs have not been measured under it.
   // Solvers other than CaDiCaL keep the old scale -- MiniSat demonstrably
   // cannot finish some proofs on gia-low CNF it finishes at the size-based
   // rung. And with no estimate recorded (the incremental driver, direct
@@ -356,18 +358,56 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   // estimate like a plain query. Left to the fallback, a UF solve of a
   // large circuit was handed very-low -- on QF_UFBV/20210312-Bouvier the
   // vlsat3 files went from under a second to a 30s timeout, 67 of 200.
+  // Keep the existing auto choice on tiny Real skeletons. They are cheap to
+  // encode already, and switching their SAT structure to medium can turn a
+  // short proof into a timeout. The moderate band still covers the two
+  // tropical-matrix cases for which medium is essential.
+  const bool realAdaptive = bm->UserFlags.cnf_auto_real_path &&
+                            bm->UserFlags.lra_adaptive_cnf &&
+                            bm->expected_blast_ands >= 16384;
+  // The measured batch QF_LRA default is the fixed in-house writer. Keep
+  // explicit CNF levels and the experimental adaptive selector authoritative.
+  // This route also works when no size estimate was recorded.
   if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
-      (!needAbsRef || ufOnlyRefinement_) && bm->expected_blast_ands > 0 &&
+      bm->UserFlags.lra_qf_lra_batch_default &&
+      !bm->UserFlags.lra_adaptive_cnf &&
       bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER)
   {
-    const bool large = (uint64_t)bm->expected_blast_ands >=
-                       bm->UserFlags.cnf_auto_threshold;
-    bm->UserFlags.cnf_effort = large ? UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM
-                                     : UserDefinedFlags::CNF_EFFORT_GIA_LOW;
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM;
     if (bm->UserFlags.stats_flag)
-      std::cerr << "cnf-auto: estimated " << bm->expected_blast_ands
-                << " AND nodes, chose " << (large ? "new-medium" : "gia-low")
+      std::cerr << "cnf-auto: batch QF_LRA default chose new-medium"
                 << std::endl;
+  }
+  if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
+      (!needAbsRef || ufOnlyRefinement_ || realAdaptive) &&
+      bm->expected_blast_ands > 0 &&
+      bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER)
+  {
+    // Experimental Real policy. The Boolean skeleton is known before either
+    // writer runs, so this decision does not inspect the input's name or the
+    // SAT result. A medium ABC CNF helped the small Real tail, while the
+    // in-house new-medium writer won most larger Real searches.
+    if (realAdaptive)
+    {
+      const bool small = bm->expected_blast_ands < 50000;
+      bm->UserFlags.cnf_effort = small ? UserDefinedFlags::CNF_EFFORT_MEDIUM
+                                      : UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM;
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "cnf-auto: Real adaptive estimated "
+                  << bm->expected_blast_ands << " AND nodes, chose "
+                  << (small ? "medium" : "new-medium") << std::endl;
+    }
+    else
+    {
+      const bool large = (uint64_t)bm->expected_blast_ands >=
+                         bm->UserFlags.cnf_auto_threshold;
+      bm->UserFlags.cnf_effort = large ? UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM
+                                       : UserDefinedFlags::CNF_EFFORT_GIA_LOW;
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "cnf-auto: estimated " << bm->expected_blast_ands
+                  << " AND nodes, chose " << (large ? "new-medium" : "gia-low")
+                  << std::endl;
+    }
   }
   const enum UserDefinedFlags::CNFEffort e = bm->UserFlags.cnf_effort;
   if (e == UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW ||

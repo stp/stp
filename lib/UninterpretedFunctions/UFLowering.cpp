@@ -36,6 +36,7 @@ THE SOFTWARE.
 #include <iostream>
 #include <limits>
 #include <map>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -1621,6 +1622,119 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
   for (LoweredApplicationRecord& record : view.applications)
     if (!record.observableArguments)
       record.namedActuals.clear();
+
+  // Equality is the only operation on a declared sort in QF_UF. Any model
+  // can therefore rename the values observed at these solve scalars in any
+  // fixed order: the first scalar uses value 0, the second uses at most 1,
+  // and so on. Bounds on the 16-bit carrier eliminate unused high
+  // bits without asking the user to choose a possibly incomplete
+  // --uf-sort-width. The rank is local to each declared sort.
+  //
+  // A source-level constant has a fixed carrier, so its sort is ineligible.
+  // ON is intended for controlled experiments outside QF_UF; the same
+  // constant check still applies there.
+  const UserDefinedFlags::UFValueBoundsMode valueBoundsMode =
+      manager_->UserFlags.uf_value_bounds;
+  if (valueBoundsMode == UserDefinedFlags::UFValueBoundsMode::ON ||
+      (valueBoundsMode == UserDefinedFlags::UFValueBoundsMode::AUTO &&
+       manager_->UserFlags.uf_qf_uf_logic))
+  {
+    std::set<unsigned> fixedSorts;
+    ASTNodeSet visited;
+    walkPreOrder(publicRoot, [&](const ASTNode& node) -> bool {
+      poll();
+      if (!visited.insert(node).second)
+        return false;
+      const SourceSort sort = node.GetSourceSort();
+      if (node.isConstant() &&
+          sort.kind() == SourceSort::Kind::Uninterpreted)
+        fixedSorts.insert(sort.uninterpretedId());
+      return true;
+    });
+
+    // Give symbols in many asserted disequalities the earliest ranks. The
+    // rank bounds are sound in any order, but this often places an asserted
+    // finite basis first, making its distinct members take 0, 1, ... .
+    // Consider only top-level conjuncts: a disequality beneath a disjunction
+    // need not hold and gives no useful reason to choose its endpoints.
+    std::map<ASTNode, size_t> disequalityDegree;
+    if (manager_->UserFlags.uf_qf_uf_logic)
+    {
+      ASTVec pending(1, publicRoot);
+      ASTNodeSet seenConjuncts;
+      while (!pending.empty())
+      {
+        poll();
+        const ASTNode conjunct = pending.back();
+        pending.pop_back();
+        if (!seenConjuncts.insert(conjunct).second)
+          continue;
+        if (conjunct.GetKind() == AND)
+        {
+          for (const ASTNode& child : conjunct)
+            pending.push_back(child);
+          continue;
+        }
+        if (conjunct.GetKind() != NOT || conjunct[0].GetKind() != EQ)
+          continue;
+        const ASTNode& left = conjunct[0][0];
+        const ASTNode& right = conjunct[0][1];
+        if (left.GetKind() != SYMBOL || right.GetKind() != SYMBOL ||
+            left.GetSourceSort() != right.GetSourceSort() ||
+            left.GetSourceSort().kind() != SourceSort::Kind::Uninterpreted)
+          continue;
+        ++disequalityDegree[left];
+        ++disequalityDegree[right];
+      }
+    }
+
+    std::map<unsigned, std::vector<ASTNode>> bySort;
+    for (const ASTNode& scalar : view.solveScalars)
+    {
+      poll();
+      const SourceSort sort = scalar.GetSourceSort();
+      if (sort.kind() == SourceSort::Kind::Uninterpreted &&
+          fixedSorts.count(sort.uninterpretedId()) == 0)
+        bySort[sort.uninterpretedId()].push_back(scalar);
+    }
+    size_t bounded = 0;
+    for (auto& entry : bySort)
+    {
+      std::vector<ASTNode>& scalars = entry.second;
+      // One or two isolated inequalities do not identify a finite basis;
+      // leave their symbols in the original node order.
+      std::sort(scalars.begin(), scalars.end(),
+                [&](const ASTNode& left, const ASTNode& right) {
+                  const auto degree = [&](const ASTNode& scalar) {
+                    const auto it = disequalityDegree.find(scalar);
+                    return it != disequalityDegree.end() && it->second >= 3
+                               ? it->second
+                               : size_t{0};
+                  };
+                  const size_t leftDegree = degree(left);
+                  const size_t rightDegree = degree(right);
+                  if (leftDegree != rightDegree)
+                    return leftDegree > rightDegree;
+                  return left.GetNodeNum() < right.GetNodeNum();
+                });
+      const unsigned width = scalars.front().GetValueWidth();
+      const uint64_t capacity = width >= 64
+                                    ? std::numeric_limits<uint64_t>::max()
+                                    : uint64_t{1} << width;
+      // Keep the number of new comparisons bounded on very large queries.
+      const size_t limit = std::min<size_t>(scalars.size(), 512);
+      for (size_t i = 0; i < limit && i < capacity; ++i)
+      {
+        poll();
+        view.sortConstraints.push_back(manager_->defaultNodeFactory->CreateNode(
+            BVLE, scalars[i], manager_->CreateBVConst(width, i)));
+        ++bounded;
+      }
+    }
+    if (manager_->UserFlags.stats_flag && bounded != 0)
+      std::cerr << "UF: bounded " << bounded << " declared-sort scalars by "
+                << "symmetry rank" << std::endl;
+  }
 
   std::set<const UFDecl*> injectable;
   ASTNode injectivityGuard;
