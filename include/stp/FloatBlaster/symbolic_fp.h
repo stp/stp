@@ -206,7 +206,7 @@ template <bool isSigned> class bitVector : public nodeWrapper
 protected:
   typedef typename signedToLiteralType<isSigned>::literalType literalType;
 
-  ASTNode fromProposition(const ASTNode& node) const;
+  static ASTNode fromProposition(const ASTNode& node);
   bool checkNodeType(const ASTNode& n);
   friend bitVector<!isSigned>;
 
