@@ -131,7 +131,6 @@ class CommandModes(unittest.TestCase):
         options = '''
 (set-option :produce-models true)
 (set-option :produce-assignments true)
-(set-option :produce-assertions true)
 (set-option :global-declarations true)
 (set-option :produce-unsat-assumptions true)
 (set-option :produce-unsat-cores true)
@@ -144,7 +143,6 @@ class CommandModes(unittest.TestCase):
 (declare-const x (_ BitVec 8))
 (pop 1)
 (assert (! (= x #x2a) :named answer))
-(get-assertions)
 (check-sat)
 (get-value (x))
 (get-assignment)
@@ -252,15 +250,12 @@ class CommandModes(unittest.TestCase):
         result = run('''
 (set-option :global-declarations true)
 (set-option :produce-models true)
-(set-option :produce-assertions true)
 (set-option :produce-unsat-assumptions true)
 (set-logic QF_BV)
 (declare-const p Bool)
 (assert p)
-(get-assertions)
 (reset-assertions)
 (get-option :produce-models)
-(get-option :produce-assertions)
 (get-option :produce-unsat-assumptions)
 (get-option :global-declarations)
 (check-sat-assuming (p (not p)))
@@ -269,16 +264,15 @@ class CommandModes(unittest.TestCase):
 (get-value (p))
 (reset)
 (get-option :produce-models)
-(get-option :produce-assertions)
 (get-option :produce-unsat-assumptions)
 (get-option :global-declarations)
 (set-logic QF_BV)
 (check-sat)
 ''')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('true\ntrue\ntrue\ntrue\nunsat\n', result.stdout)
+        self.assertIn('true\ntrue\ntrue\nunsat\n', result.stdout)
         self.assertIn('(not |p|)', result.stdout)
-        self.assertTrue(result.stdout.endswith('false\nfalse\nfalse\nfalse\nsat\n'))
+        self.assertTrue(result.stdout.endswith('false\nfalse\nfalse\nsat\n'))
 
     def test_information_query_modes(self):
         for before in ['', '(check-sat)', '(assert false)(check-sat)',
@@ -306,24 +300,21 @@ class CommandModes(unittest.TestCase):
         self.assertRegex(result.stdout, r'\(:check-sat-calls 0\n'
                          r' :cpu-time [\d.]+\n :peak-memory-mb [\d.]+\)\n$')
 
-    def test_assertions_are_always_available(self):
-        for option in ['', '(set-option :produce-assertions false)',
-                       '(set-option :produce-assertions true)']:
-            with self.subTest(option=option):
-                result = run(option + '''
-(get-assertions)
+    def test_get_assertions_and_its_option_are_unsupported(self):
+        # The stored formulas are the node factory's, not the text asserted,
+        # which the standard requires. The script continues past each.
+        result = run('''
+(set-option :produce-assertions true)
+(set-option :interactive-mode false)
+(get-option :produce-assertions)
 (set-logic QF_BV)
 (declare-const p Bool)
-(assert p)
-(push 1)
-(assert (not p))
+(assert (not (not p)))
 (get-assertions)
-(pop 1)
-(get-assertions)
+(check-sat)
 ''')
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertEqual(result.stdout,
-                                 '(\n)\n(\n|p|\n(not |p|)\n)\n(\n|p|\n)\n')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, 'unsupported\n' * 4 + 'sat\n')
 
 
 class SortAliases(unittest.TestCase):
@@ -475,7 +466,6 @@ class NamedUnsatCores(unittest.TestCase):
 (check-sat)
 (get-unsat-core)
 (get-unsat-core)
-(get-assertions)
 (check-sat)
 (get-unsat-core)
 '''
@@ -484,7 +474,6 @@ class NamedUnsatCores(unittest.TestCase):
                 output = self.check_script(script, args)
                 self.assertEqual(output.count('(|positive| |negative|)'), 3)
                 self.assertNotIn('|irrelevant|', output)
-                self.assertIn('(\n|p|\n|q|\n(not |p|)\n)', output)
 
     def test_unnamed_background_and_syntactic_labels(self):
         # All these named subterms become definitions, but none labels its
