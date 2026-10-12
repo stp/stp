@@ -28,15 +28,18 @@ THE SOFTWARE.
 #include "Exchange.h"
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <cerrno>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <iostream>
 #include <map>
 #include <set>
 #include <stdexcept>
 #include <string>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -56,6 +59,54 @@ struct RingTestAccess
   }
 };
 } // namespace stpp
+
+TEST(WorkerDescriptors, RetainsOnlyStderrAndReportChannel)
+{
+  rlimit limits{};
+  ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &limits), 0);
+  if (limits.rlim_cur < 512)
+    GTEST_SKIP() << "descriptor fixture needs 512 descriptor slots";
+  // Exercise adjacent, coincident, low and high retained descriptors. Every
+  // mutation is in a child; gtest's own descriptors stay untouched.
+  for (int keep : {0, 1, 2, 3, 31, 127})
+  {
+    const pid_t child = fork();
+    ASSERT_GE(child, 0);
+    if (!child)
+    {
+      const int original = open("/dev/null", O_RDWR | O_CLOEXEC);
+      const int source = original < 0 ? -1 : fcntl(original, F_DUPFD_CLOEXEC, 256);
+      if (source < 0)
+        _exit(90);
+      for (int fd = 0; fd != 32; ++fd)
+        if (dup2(source, fd) != fd)
+          _exit(91);
+      for (int fd : {127, 191, 255})
+        if (dup2(source, fd) != fd)
+          _exit(92);
+      stpp::close_worker_descriptors(keep);
+      for (int fd = 0; fd != 512; ++fd)
+      {
+        errno = 0;
+        const int flags = fcntl(fd, F_GETFD);
+        if (fd == keep || fd == 2)
+        {
+          if (flags < 0)
+            _exit(93);
+        }
+        else if (flags >= 0 || errno != EBADF)
+          _exit(94);
+      }
+      _exit(0);
+    }
+    int status = 0;
+    pid_t waited;
+    do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
+    ASSERT_EQ(waited, child);
+    ASSERT_TRUE(WIFEXITED(status));
+    EXPECT_EQ(WEXITSTATUS(status), 0) << "keep=" << keep;
+  }
+}
 
 namespace
 {
