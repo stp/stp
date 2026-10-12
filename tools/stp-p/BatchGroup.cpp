@@ -385,6 +385,7 @@ void settle(std::vector<Root>& children, const Options& o,
 Json batch_group(Source& input, const Options& o)
 {
   const double started = now();
+  const bool details = !o.stats.empty();
   auto tm = std::make_unique<stp::TermManager>();
   // The roots exchange clauses through CaDiCaL's clause-import extension, so
   // the group runs on CaDiCaL even in a build whose default is another
@@ -674,21 +675,24 @@ Json batch_group(Source& input, const Options& o)
     try
     {
       solver->set_terminator(nullptr);
-      auto stats = solver->statistics();
       Json data = {{"answer", answer_text(result)},
                    {"reason", result.reason_message()},
                    {"check_s", now() - check_started},
-                   {"sat_s", stats.real("time.sat_ms") / 1000.0},
                    {"joined", joined}};
-      if (endpoint)
+      if (details)
       {
-        auto x = endpoint->counters();
-        for (const char* key : {"exported", "filtered", "polls", "imported",
-                                "import-units", "import-dropped",
-                                "import-satisfied", "import-backtracks"})
-          x[std::string("backend_") + key] =
-              stats.uint64(std::string("sat.exchange.") + key);
-        data["exchange"] = x;
+        auto stats = solver->statistics();
+        data["sat_s"] = stats.real("time.sat_ms") / 1000.0;
+        if (endpoint)
+        {
+          auto x = endpoint->counters();
+          for (const char* key : {"exported", "filtered", "polls", "imported",
+                                  "import-units", "import-dropped",
+                                  "import-satisfied", "import-backtracks"})
+            x[std::string("backend_") + key] =
+                stats.uint64(std::string("sat.exchange.") + key);
+          data["exchange"] = x;
+        }
       }
       root_exit(report_fd, data);
     }
@@ -737,11 +741,13 @@ Json batch_group(Source& input, const Options& o)
   // own. Its resident and proportional sizes before and after say what that
   // saved.
   std::uint64_t rss_kib = 0, pss_kib = 0, rss_after_kib = 0, pss_after_kib = 0;
-  memory_rollup(getpid(), rss_kib, pss_kib);
+  if (details)
+    memory_rollup(getpid(), rss_kib, pss_kib);
   solver.reset();
   tm.reset();
   release_memory();
-  memory_rollup(getpid(), rss_after_kib, pss_after_kib);
+  if (details)
+    memory_rollup(getpid(), rss_after_kib, pss_after_kib);
 
   std::string decision = "unknown", decided_by;
   double decision_at = 0;
@@ -878,11 +884,14 @@ Json batch_group(Source& input, const Options& o)
   {
     report["fork_point_s"] = fork_point - started;
     report["fork_span_s"] = forks_done - fork_point;
-    report["rings"] = rings ? rings->audit() : Json();
-    report["owner_memory_kib"] = {{"rss_before_drop", rss_kib},
-                                  {"pss_before_drop", pss_kib},
-                                  {"rss_after_drop", rss_after_kib},
-                                  {"pss_after_drop", pss_after_kib}};
+    if (details)
+    {
+      report["rings"] = rings ? rings->audit() : Json();
+      report["owner_memory_kib"] = {{"rss_before_drop", rss_kib},
+                                    {"pss_before_drop", pss_kib},
+                                    {"rss_after_drop", rss_after_kib},
+                                    {"pss_after_drop", pss_after_kib}};
+    }
   }
   return report;
 }
