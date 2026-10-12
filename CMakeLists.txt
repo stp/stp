@@ -1249,14 +1249,17 @@ add_feature_info(Allocator "NOT STP_ALLOCATOR STREQUAL system"
 #
 #   OFF            do not look for it              (was -DNOCRYPTOMINISAT=ON)
 #   ON             it is required; fail if it is missing  (was -DFORCE_CMS=ON)
-#   AUTO (default) use it if it happens to be installed
+#   AUTO (default) use it if it is installed, or if ENABLE_AUTO_DOWNLOAD
+#                  can build it
 #
-# AUTO rather than ON because STP does not build CryptoMiniSat for you: an
-# installed one is linked and becomes the default backend, and a machine
-# without one still configures and still gets CaDiCaL. Say -DUSE_CRYPTOMINISAT=ON
-# to make a missing CryptoMiniSat a configuration error, or OFF to pin the
-# build to the backends it names regardless of what the machine has installed.
-set(CMS_OPTION_DOC "Use the CryptoMiniSat solver backend: ON requires it, OFF never uses it, AUTO uses it if installed")
+# AUTO rather than ON because CryptoMiniSat is optional, and building it needs
+# GMP, which STP cannot build: an installed one is linked and becomes the
+# default backend, ENABLE_AUTO_DOWNLOAD builds the pinned one like any other
+# dependency when GMP is there, and a machine with neither still configures and
+# still gets CaDiCaL. Say -DUSE_CRYPTOMINISAT=ON to make a missing CryptoMiniSat
+# a configuration error, or OFF to pin the build to the backends it names
+# regardless of what the machine has installed.
+set(CMS_OPTION_DOC "Use the CryptoMiniSat solver backend: ON requires it, OFF never uses it, AUTO uses it if installed or buildable")
 set(USE_CRYPTOMINISAT "AUTO" CACHE STRING "${CMS_OPTION_DOC}")
 set_property(CACHE USE_CRYPTOMINISAT PROPERTY STRINGS OFF ON AUTO)
 
@@ -1301,8 +1304,8 @@ if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
   # REQUIRED only when it was asked for by name: an explicit ON makes a missing
   # CryptoMiniSat a configuration error, while leaving the option unset means
   # "use it if it is there". cmake/FindCryptoMiniSat.cmake carries the GMP
-  # warning, the cadical/cadiback preamble and the reason it is the one
-  # dependency STP does not build for you.
+  # warning, the cadical/cadiback preamble an installed copy needs, and the
+  # pinned copy it builds when there is none.
   # 5.11 is the floor, and it is chosen from evidence rather than taste: it is
   # the oldest release anything in this repository builds -- the Dockerfiles do
   # -- and every method lib/Sat/CryptoMinisat5.cpp calls exists in it. Nothing

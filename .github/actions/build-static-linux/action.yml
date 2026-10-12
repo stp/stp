@@ -71,9 +71,9 @@ runs:
   # builds CryptoMiniSat into a static-linkable prefix, and the only one that
   # needs neither gtest nor OutputCheck.
   #
-  # Only deps/install: the setup script installs a self-contained CMake
-  # package there -- archives and configs, with no path pointing back at
-  # deps/cms -- so the source and build trees are worth nothing after the
+  # Only deps/install: what the dependencies install there is self-contained
+  # -- archives and headers, with no path pointing back at where they were
+  # built -- so the source and build trees are worth nothing after the
   # install and several hundred megabytes to carry. On a hit the step below
   # is skipped and they are not wanted; on a miss they are cloned again.
   # This is what every other job caches.
@@ -106,10 +106,11 @@ runs:
   # CaDiCaL because its author has contributed to STP, so STP ships his
   # solver by preference -- note that UserDefinedFlags would pick CaDiCaL
   # ahead of it if both were compiled in, so this build deliberately does not
-  # enable USE_CADICAL. CryptoMiniSat uses CaDiCaL internally regardless.
+  # enable USE_CADICAL. The CryptoMiniSat STP builds is -DNOCADICAL=ON, so
+  # the binary carries no CaDiCaL at all.
   #
-  # Linking it needs GMP: the CryptoMiniSat config puts it on the link line,
-  # and with STATICCOMPILE it is looked up as libgmp.a, hence libgmp-dev
+  # Linking it needs GMP: cmake/FindCryptoMiniSat.cmake puts it on the link
+  # line, and with STATICCOMPILE it is looked up as libgmp.a, hence libgmp-dev
   # above. The runner image happens to ship that package already, but the
   # dependency is this action's, so it is named rather than assumed.
   #

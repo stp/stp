@@ -24,11 +24,13 @@ Which solvers are present depends on the build configuration, and a static
 build puts their code inside the binary, so the released binaries carry them:
 	* CryptoMiniSat Copyright (C) 2009-2020 Authors of CryptoMiniSat. The
 		released binaries are built against it.
-	* CaDiCaL Copyright (c) 2016-2026 by the authors listed below, and
-		CadiBack Copyright (c) 2023 Armin Biere. CryptoMiniSat 5.14 builds
-		both and bundles them into its own library, so they are present
-		whenever CryptoMiniSat is, as well as when CaDiCaL is selected
-		directly with -DUSE_CADICAL=ON.
+	* CaDiCaL Copyright (c) 2016-2026 by the authors listed below, when
+		selected with -DUSE_CADICAL=ON.
+	* CadiBack Copyright (c) 2023 Armin Biere, with CaDiCaL, when STP is
+		linked against a CryptoMiniSat 5.14 or later built with its
+		defaults, which bundles both into its own library. The
+		CryptoMiniSat STP builds itself is configured -DNOCADICAL=ON and
+		carries neither.
 	* MiniSat Copyright (c) 2003-2010 Niklas Een, Niklas Sorensson, when
 		selected with -DUSE_MINISAT=ON.
 
