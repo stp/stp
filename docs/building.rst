@@ -57,11 +57,10 @@ ABC's headers and the two have to agree, so they are recorded in the
 directory's stamp and a mismatch is reported.
 
 ``-DABC_DIR`` points at an existing ABC build, which is how to work on
-the ``stp/abc`` fork -- see :doc:`code-guide`. STP applies
-``cmake/deps-utils/abc-checked-allocations.patch`` to the ABC it builds:
-failed allocations throw ``std::bad_alloc`` through its C frames instead
-of returning unchecked null pointers. An external ABC needs the same
-patch and a rebuild to provide that behaviour.
+the ``stp/abc`` fork -- see :doc:`code-guide`. The pinned commit checks
+ABC's allocations: a failed one throws ``std::bad_alloc`` through ABC's C
+frames instead of returning an unchecked null pointer. An ABC built from
+elsewhere needs that commit too to provide that behaviour.
 
 mimalloc is the exception: STP configures its build rather than
 consuming its output, so it is fetched with CMake's FetchContent, which

@@ -72,9 +72,10 @@ elseif(NOT STP_DEPS_LOCAL_ONLY)
     endif()
 endif()
 
-# An earlier STP build may have installed the unchecked ABC into the shared
-# dependency directory. Rebuild that copy with the allocation checks below;
-# an explicitly supplied ABC_DIR remains the caller's dependency.
+# An earlier STP build may have installed an ABC without the allocation checks
+# the pinned commit carries (see below) into the shared dependency directory.
+# Rebuild that copy; an explicitly supplied ABC_DIR remains the caller's
+# dependency.
 if(ABC_FOUND_SYSTEM AND NOT ABC_DIR AND
    ABC_LIBRARY STREQUAL "${STP_DEP_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}abc-pic${CMAKE_STATIC_LIBRARY_SUFFIX}")
     file(STRINGS "${ABC_INCLUDE_DIR}/misc/util/abc_global.h" _abc_checked
@@ -113,7 +114,14 @@ if(NOT ABC_FOUND_SYSTEM)
     #
     # All four leave the CNF byte-identical except the overflow fix, which
     # only changes a formula that was malformed.
-    set(ABC_GIT_TAG "e19e80d78388a779198c0f3da4623f785bf319b1" CACHE STRING
+    #
+    # And on top of those, ABC's allocation macros check what they get back.
+    # A failed allocation throws std::bad_alloc to STP, which reports the query
+    # as out of resources, where ABC would otherwise dereference the null it
+    # was handed. That one compiles ABC's C with unwind tables (-fexceptions)
+    # so that the exception can cross it, and defines
+    # ABC_STP_CHECKED_ALLOCATIONS, which the check above looks for.
+    set(ABC_GIT_TAG "6ec0420ae87db219ce3f890d9eda2c99a761645e" CACHE STRING
         "ABC revision to build when one has to be built")
     mark_as_advanced(ABC_GIT_TAG)
 
@@ -189,8 +197,6 @@ if(NOT ABC_FOUND_SYSTEM)
         ${STP_EP_COMMON_CONFIG}
         GIT_REPOSITORY https://github.com/stp/abc.git
         GIT_TAG ${ABC_GIT_TAG}
-        PATCH_COMMAND ${CMAKE_COMMAND} "-DSOURCE_DIR=<SOURCE_DIR>"
-                      -P "${CMAKE_CURRENT_LIST_DIR}/deps-utils/patch-abc.cmake"
         CONFIGURE_COMMAND
             ${CMAKE_COMMAND} -E env ABC_USE_NO_CUDD=1 ABC_USE_NO_PTHREADS=1
             ${CMAKE_COMMAND} -S <SOURCE_DIR> -B <BINARY_DIR>
