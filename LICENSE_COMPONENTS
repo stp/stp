@@ -13,22 +13,24 @@ STP imports code from the following libraries:
 	* nlohmann/json Copyright (c) 2013-2025 Niels Lohmann (only compiled
 		into stp-p, with -DSTP_BUILD_PARALLEL=ON, from the system's copy).
 	* IMath Copyright (c) 2002-2009 Michael J. Fromberger. Not imported:
-		cmake/FindIMath.cmake fetches v1.35 commit
-		a4de3dea7e65e2374a91d9938e292b887896fd24 and builds `imath.c` and
-		`imrat.c` from it, statically, into `libstp`. STP applies one pinned
-		patch, kept beside that module, which renames IMath's GMP-shaped
-		private type and makes its tuning globals immutable.
+		cmake/FindIMath.cmake fetches a commit of STP's fork, stp/imath,
+		and builds `imath.c` and `imrat.c` from it, statically, into
+		`libstp`. The fork is release v1.35 with one source change, which
+		renames IMath's GMP-shaped value types and makes its tuning
+		globals immutable, and a CMake build of those two files.
 
 STP is built against a SAT solver, which it does not import but does link.
 Which solvers are present depends on the build configuration, and a static
 build puts their code inside the binary, so the released binaries carry them:
 	* CryptoMiniSat Copyright (C) 2009-2020 Authors of CryptoMiniSat. The
 		released binaries are built against it.
-	* CaDiCaL Copyright (c) 2016-2026 by the authors listed below, and
-		CadiBack Copyright (c) 2023 Armin Biere. CryptoMiniSat 5.14 builds
-		both and bundles them into its own library, so they are present
-		whenever CryptoMiniSat is, as well as when CaDiCaL is selected
-		directly with -DUSE_CADICAL=ON.
+	* CaDiCaL Copyright (c) 2016-2026 by the authors listed below, when
+		selected with -DUSE_CADICAL=ON.
+	* CadiBack Copyright (c) 2023 Armin Biere, with CaDiCaL, when STP is
+		linked against a CryptoMiniSat 5.14 or later built with its
+		defaults, which bundles both into its own library. The
+		CryptoMiniSat STP builds itself is configured -DNOCADICAL=ON and
+		carries neither.
 	* MiniSat Copyright (c) 2003-2010 Niklas Een, Niklas Sorensson, when
 		selected with -DUSE_MINISAT=ON.
 

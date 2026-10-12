@@ -797,17 +797,24 @@ jobs:
       working-directory: build
 
   build-cadical:
-    name: gcc (cadical ${{ matrix.cadical_tag }})
+    name: gcc (cadical ${{ matrix.cadical }})
     runs-on: ubuntu-latest
 
     # Both supported CaDiCaL lines: 3.x compiles in --cadical-factor and its
     # variable-translation machinery (ctest grows a factor-forced lit sweep),
     # 2.x compiles the wrapper without it and has to keep building and
     # declining the flag gracefully.
+    #
+    # 3.x is the pin, which needs nothing said. 2.x is the head of
+    # stp/cadical's stp-2.1.3 branch: release 2.1.3 with the CMake build and
+    # the witness fix STP needs, and none of the 3.x extensions.
     strategy:
       fail-fast: false
       matrix:
-        cadical_tag: [rel-3.0.1, rel-2.1.3]
+        include:
+          - cadical: "3.0.1"
+          - cadical: "2.1.3"
+            cadical_tag: 243a4ff61a259a36d4fbee0f9a53e45d3e0014c5
 
     # 400M rather than 800M; see the note on the gcc/clang job above.
     env:
@@ -853,9 +860,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: deps
-        # The tag is part of the key by hand: cache-key.sh hashes the setup
-        # scripts, and the matrix override never changes their content.
-        key: deps-cadical-${{ matrix.cadical_tag }}-${{ steps.deps-key.outputs.key }}
+        # The 2.x commit is part of the key by hand: cache-key.sh hashes the
+        # Find modules, where the 3.x pin lives, and never sees this file.
+        key: deps-cadical-${{ matrix.cadical }}-${{ matrix.cadical_tag || 'pin' }}-${{ steps.deps-key.outputs.key }}
 
     # CryptoMiniSat is left out: USE_CADICAL makes CaDiCaL the default
     # solver, so building CMS as well would only add build time. The
@@ -874,8 +881,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/ccache
-        key: ccache-cadical-${{ matrix.cadical_tag }}/${{ github.run_id }}
-        restore-keys: ccache-cadical-${{ matrix.cadical_tag }}/
+        key: ccache-cadical-${{ matrix.cadical }}/${{ github.run_id }}
+        restore-keys: ccache-cadical-${{ matrix.cadical }}/
 
     # CMAKE_INSTALL_PREFIX is set so that the install steps below land in the
     # workspace rather than needing root. It has to be settled here rather
@@ -884,13 +891,13 @@ jobs:
     # the prefix. Neither affects what is built or tested - the Python tests
     # run out of the build tree.
     # STP_BUILD_PARALLEL builds stp-p here, the one job where it can run:
-    # rel-3.0.1 gets the clause-import patch and runs the group; rel-2.1.3
-    # does not, and checks that -jN is refused.
+    # 3.x has clause import and runs the group; 2.x has not, and checks that
+    # -jN is refused.
     - name: Configure
       run: |
         mkdir build
         cd build
-        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCaDiCaL_TAG:STRING=${{ matrix.cadical_tag }} -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DSTP_BUILD_PARALLEL:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON ${{ matrix.cadical_tag && format('-DCaDiCaL_TAG:STRING={0} -DCaDiCaL_VERSION:STRING={1}', matrix.cadical_tag, matrix.cadical) || '' }} -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DSTP_BUILD_PARALLEL:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |

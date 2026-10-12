@@ -57,11 +57,10 @@ ABC's headers and the two have to agree, so they are recorded in the
 directory's stamp and a mismatch is reported.
 
 ``-DABC_DIR`` points at an existing ABC build, which is how to work on
-the ``stp/abc`` fork -- see :doc:`code-guide`. STP applies
-``cmake/deps-utils/abc-checked-allocations.patch`` to the ABC it builds:
-failed allocations throw ``std::bad_alloc`` through its C frames instead
-of returning unchecked null pointers. An external ABC needs the same
-patch and a rebuild to provide that behaviour.
+the ``stp/abc`` fork -- see :doc:`code-guide`. The pinned commit checks
+ABC's allocations: a failed one throws ``std::bad_alloc`` through ABC's C
+frames instead of returning an unchecked null pointer. An ABC built from
+elsewhere needs that commit too to provide that behaviour.
 
 mimalloc is the exception: STP configures its build rather than
 consuming its output, so it is fetched with CMake's FetchContent, which
@@ -96,20 +95,23 @@ build wants the first.
 Upstream LibBF publishes release tarballs and no git repository, which is
 what ``stp/libbf`` is for. It is laid out like STP's ABC fork: ``master``
 holds the release tarballs verbatim, one commit each, and ``stp`` -- the
-branch the pin names -- adds STP's MSVC portability changes on top. Moving
+branch the pin names -- adds STP's changes on top: MSVC portability, a fix
+for undefined behaviour, and a CMake build of the library. Moving
 to a newer release means importing its tarball there and rebasing ``stp``
 onto it, then moving the pin here.
 
 `IMath <https://github.com/creachadair/imath>`__, the arbitrary-precision
 integer and rational arithmetic under STP's exact linear real arithmetic, is
-required too and is not vendored either. STP builds it from a pinned commit
-of release 1.35, against STP's own allocation hooks, and with one patch, kept
-in ``cmake/deps-utils``, that renames IMath's GMP-shaped private type --
-which would otherwise collide with a real GMP in the same link -- and makes
-its tuning globals immutable. STP's sources name the renamed type, so an
-unpatched copy does not compile against them, and that is why an installed
-IMath -- a distribution's, say -- is never looked for. That leaves two ways
-to get it, tried in this order:
+required too and is not vendored either. STP builds it, against STP's own
+allocation hooks, from a pinned commit of its fork
+`stp/imath <https://github.com/stp/imath>`__, whose ``stp`` branch is
+release 1.35 with two commits on top: one renames IMath's GMP-shaped value
+type -- which would otherwise collide with a real GMP's -- and makes its
+tuning globals immutable, and one adds the CMake build of the two files STP
+needs. STP's sources name the renamed type, so an upstream copy does not
+compile against them, and that is why an installed IMath -- a
+distribution's, say -- is never looked for. That leaves two ways to get it,
+tried in this order:
 
 -  ``-DIMATH_DIR=<path>`` naming a prefix that holds ``include/imrat.h``
    and ``lib/`` with the ``imath`` library, as an earlier build installs
@@ -117,8 +119,8 @@ to get it, tried in this order:
    LibBF, and an ``STP_DEP_DIR`` that an earlier build filled is searched
    as well
 -  ``-DENABLE_AUTO_DOWNLOAD=ON``, which clones
-   `creachadair/imath <https://github.com/creachadair/imath>`__ at the
-   pinned commit, applies the patch, and builds it as part of this build
+   `stp/imath <https://github.com/stp/imath>`__ at the pinned commit and
+   builds it as part of this build
 
 Without either, configuration fails and says so.
 
@@ -136,21 +138,25 @@ CryptoMiniSat is therefore the default wherever it is linked, and
 CaDiCaL is what a stock build solves with. CaDiCaL is also the one
 always available: it is enabled when nothing is said, needs no system
 library, and the build can produce one itself, so a query is never left
-without a solver. CryptoMiniSat is linked whenever it is installed
-(``-DUSE_CRYPTOMINISAT=AUTO``, the default). Either way ``--cadical``,
-``--cryptominisat`` or ``--minisat`` overrides the order for one run.
+without a solver. CryptoMiniSat is linked whenever it is installed, or
+can be built (``-DUSE_CRYPTOMINISAT=AUTO``, the default). Either way
+``--cadical``, ``--cryptominisat`` or ``--minisat`` overrides the order
+for one run.
 
 The two other values are for builds that would rather not depend on what
 the machine has lying around: ``-DUSE_CRYPTOMINISAT=ON`` makes a missing
 CryptoMiniSat a configuration error, and ``-DUSE_CRYPTOMINISAT=OFF``
 never looks for one, which is what pins a build's set of backends to the
-flags that produced it. With ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do: STP clones and
+flags that produced it. With ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do: STP downloads and
 builds `stp/cryptominisat <https://github.com/stp/cryptominisat>`__ at a
-pinned commit, as it does for its other dependencies. That commit, on the
-fork's ``stp-ipasir-up`` branch, is release 5.14.7 with the ``NOCADICAL``
-option and the IPASIR-UP propagator interface the linear-arithmetic theory
-drives. A CryptoMiniSat without the interface -- a release, or your
-distribution's -- still builds STP;
+pinned commit, as it does for its other dependencies. That commit is
+release 5.17.0 with the IPASIR-UP propagator interface the
+linear-arithmetic theory drives, which is proposed upstream as
+`msoos/cryptominisat#842 <https://github.com/msoos/cryptominisat/pull/842>`__
+and is all the fork adds. Building it needs GMP, through ``pkg-config``,
+since STP cannot build GMP; under ``AUTO`` a machine without it simply
+builds without CryptoMiniSat. A CryptoMiniSat without the interface -- a
+release, or your distribution's -- still builds STP;
 the arithmetic theory then runs in the full-lazy loop on it.
 Configure warns when the copy it found lacks the interface, because
 CryptoMiniSat is then still the default backend: ``--cadical`` restores the
@@ -165,7 +171,7 @@ is found and preferred, including one installed into ``deps/install``:
 
     git clone https://github.com/stp/cryptominisat
     cd cryptominisat
-    git checkout e06847e1006f06ec630a62349d930e5ead54def6
+    git checkout 0a71f0c46903351543bf2f15ddb0df372b8471d6
     mkdir build && cd build
     cmake .. -DNOCADICAL=ON -DBUILD_SHARED_LIBS=OFF -DSTATIC_BINARY=OFF \
              -DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -184,13 +190,21 @@ CaDiCaL is compiled in by default, is what a build without
 CryptoMiniSat solves with, and is worth having on hard bitvector
 problems. With
 ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do but ask for it;
-otherwise an installed CaDiCaL is found the way any library is, or
-The bundled CaDiCaL is pinned to a commit in ``stp/cadical`` based on 3.0.1,
-with a fix that returns generated cube literals in external numbering.
-``CaDiCaL_TAG`` can select a different release tag or commit. For a commit,
-also set ``CaDiCaL_VERSION`` to its release version so STP selects the right
-patches and capabilities; a ``rel-<version>`` tag supplies that version itself.
-These settings affect bundled builds, not an explicit ``CADICAL_DIR``.
+otherwise an installed CaDiCaL is found the way any library is, or one
+is named with ``CADICAL_DIR`` (below).
+
+The CaDiCaL STP builds is pinned to a commit of
+`stp/cadical <https://github.com/stp/cadical>`__. Its ``stp`` branch is
+release 3.0.1 with the changes STP needs as commits on top -- generated
+cubes returned in external literal numbering, a witness-marked variable
+restored when it becomes observed, decision polarity advice for a theory
+propagator, and clause import with search diversification for ``stp-p``
+-- and a CMake build of the library, which a native Windows host needs.
+``-DCaDiCaL_TAG`` selects another commit of the fork; set
+``-DCaDiCaL_VERSION`` to its release version with it, since that is what
+decides the capabilities STP compiles in. The ``stp-2.1.3`` branch is the
+2.x line, which CI builds to keep it working. These settings affect a
+CaDiCaL STP builds, not one named with ``CADICAL_DIR``.
 
 ``CADICAL_DIR`` points at a checkout:
 
@@ -235,9 +249,10 @@ backends in took a shared CryptoMiniSat in a prefix of its own, or giving
 up STP's pinned CaDiCaL for the 2.x copy CryptoMiniSat carried.
 
 STP builds `stp/cryptominisat <https://github.com/stp/cryptominisat>`__
-with ``-DNOCADICAL=ON``, which fetches and installs no CaDiCaL at all, so
-none of that arises. ``-DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON`` is an
-ordinary configure, and the CaDiCaL linked is the one STP pins.
+with ``-DNOCADICAL=ON``, an option CryptoMiniSat has had since 5.17.0,
+which fetches and installs no CaDiCaL at all, so none of that arises.
+``-DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON`` is an ordinary configure, and
+the CaDiCaL linked is the one STP pins.
 
 That option is sound because backbone extraction -- reached only through
 CryptoMiniSat's ``backbone`` simplification token or its
@@ -377,7 +392,7 @@ These apply to all generators:
    a directory containing ``nlohmann/json.hpp`` or an ``include/`` directory
    that does. Version 3.9 or later is required
 -  ``LIBBF_DIR`` -- where to find an already-built LibBF
--  ``IMATH_DIR`` -- where to find an already-built, STP-patched IMath
+-  ``IMATH_DIR`` -- where to find an already-built IMath from ``stp/imath``
    (see above)
 -  ``ENABLE_HIGHS`` -- link `HiGHS <https://highs.dev>`__ into ``libstp``
    as an advisory LP and MIP engine for the linear-arithmetic searches that
@@ -397,8 +412,9 @@ These apply to all generators:
    not found, rather than failing. Off by default: a build that reaches
    the network should be asked to
 -  ``STP_DEPS_LOCAL_ONLY`` -- use no dependency from outside the build
-   directory. Off by default. An installed ABC, CaDiCaL, CLI11, LibBF,
-   MiniSat, nlohmann/json or SymFPU is not looked for and not used; each is built
+   directory. Off by default. An installed ABC, CaDiCaL, CLI11,
+   CryptoMiniSat, LibBF, MiniSat, nlohmann/json or SymFPU is not looked for
+   and not used; each is built
    into ``STP_DEP_DIR`` instead, which is inside the build directory
    unless it was pointed elsewhere. Pair it with ``ENABLE_AUTO_DOWNLOAD``
    on a cold build directory, or there is nothing left to find and
@@ -411,13 +427,10 @@ These apply to all generators:
    says nothing *are* a search, and are skipped along with the rest; pass
    ``-DLIBBF_DIR=<path>`` or ``-DIMATH_DIR=<path>`` to use a copy there
    anyway.
-   CryptoMiniSat is the exception, being the one dependency STP cannot
-   build: under this option it is used only if ``cryptominisat5_DIR``
-   names one, and ``-DUSE_CRYPTOMINISAT=ON`` without that is a
-   configuration error. A *static* CryptoMiniSat named that way brings a
-   CaDiCaL of its own, which now meets one this build compiled rather
-   than the same installed copy, so the collision described above is
-   reached where it was not before: use a shared CryptoMiniSat, or
+   A *static* CryptoMiniSat named by ``cryptominisat5_DIR`` may bring a
+   CaDiCaL of its own, which then meets the one this build compiled, so
+   the collision described above can be reached: name one built
+   ``-DNOCADICAL=ON``, or a shared one, or configure with
    ``-DUSE_CADICAL=OFF``.
 
    This is narrower than CMake's own
@@ -683,16 +696,16 @@ STP records what filled it in ``.stp-dep-config`` and warns when the
 compiler, sanitizer, toolchain or ABC ABI settings differ from the build
 now using it. An ASan build in particular wants a directory of its own.
 
-CaDiCaL is built with STP's own patches (``cmake/deps-utils/``), and the
-install records which set of them it was built from. In a build directory's
-own dependency directory, a CaDiCaL from another set is simply patched and
-built again. In a shared one, other build directories may be using it, so
-the configure stops instead, and names the two ways out: give this build
-directory a dependency directory of its own (``-USTP_DEP_DIR``), or remove
-that CaDiCaL alone -- ``lib/libcadical.a``, ``lib/cadical-patch-set.txt``
-and ``include/cadical/`` under ``STP_DEP_DIR`` -- so that the next build
-makes it again from the current set. The other dependencies stay. A
-directory filled before STP recorded its patch set counts as another set.
+CaDiCaL's install records which revision of the fork it was built from.
+In a build directory's own dependency directory, a CaDiCaL from another
+revision is simply built again. In a shared one, other build directories
+may be using it, so the configure stops instead, and names the two ways
+out: give this build directory a dependency directory of its own
+(``-USTP_DEP_DIR``), or remove that CaDiCaL alone -- ``lib/libcadical.a``,
+``lib/cadical-source.txt`` and ``include/cadical/`` under ``STP_DEP_DIR``
+-- so that the next build makes it again from the current revision. The
+other dependencies stay. A directory filled before STP recorded the
+revision counts as another revision.
 
 The build type is deliberately not recorded, except on MSVC: sharing a
 differently-optimised ABC is a choice rather than a fault, but on MSVC

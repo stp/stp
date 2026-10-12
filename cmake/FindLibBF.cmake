@@ -81,11 +81,13 @@ if(NOT LibBF_FOUND_SYSTEM)
 
     # Upstream publishes release tarballs on bellard.org and no repository, so
     # STP mirrors them in stp/libbf: master holds the releases verbatim, one
-    # commit each, and the stp branch adds STP's MSVC portability changes on
-    # top. A commit rather than a tag, because that branch is rebased onto each
-    # new import and a tag on it would not survive -- which is also why this is
-    # a git clone rather than a tarball with a checksum.
-    set(LibBF_VERSION "3df8db0a56efd2a621cd04dd16c881be66403f2a")
+    # commit each, and the stp branch adds STP's changes on top -- MSVC
+    # portability, a fix for undefined behaviour, and a CMake build of the
+    # library, which upstream has no build system for. A commit rather than a
+    # tag, because that branch is rebased onto each new import and a tag on it
+    # would not survive -- which is also why this is a git clone rather than a
+    # tarball with a checksum.
+    set(LibBF_VERSION "bd33cd392d9cf5745f7060352cfd758d0cbdd4eb")
 
     set(LibBF_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}bf${CMAKE_STATIC_LIBRARY_SUFFIX}")
@@ -95,12 +97,6 @@ if(NOT LibBF_FOUND_SYSTEM)
         ${STP_EP_COMMON_CONFIG}
         GIT_REPOSITORY https://github.com/stp/libbf
         GIT_TAG ${LibBF_VERSION}
-        # The mirror is the upstream tarball verbatim, so it also carries tests,
-        # benchmarks, softfp templates and a calculator demo, and it has no
-        # CMakeLists of its own. Supply one that builds the two files STP needs.
-        PATCH_COMMAND ${CMAKE_COMMAND} -E copy
-                      "${CMAKE_CURRENT_LIST_DIR}/deps-utils/libbf-CMakeLists.txt"
-                      <SOURCE_DIR>/CMakeLists.txt
         CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
                    -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
                    -DCMAKE_INSTALL_LIBDIR=lib

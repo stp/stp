@@ -26,19 +26,19 @@
 #   IMATH_INCLUDE_DIR / IMATH_LIBRARY   what the target was built from
 #
 # See cmake/deps-helper.cmake for the ladder this follows -- with one rung
-# missing. There is deliberately no system rung: STP applies a patch that
-# renames IMath's GMP-shaped private type (mpz_t, which collides with a real
-# GMP in the same link) and makes its tuning globals immutable. STP's own
-# sources name the renamed type, so an unpatched copy -- distribution package
-# or otherwise -- would not compile against them, and silently linking one
-# would be worse than not finding it.
+# missing. There is deliberately no system rung: what STP builds is the `stp`
+# branch of its fork, stp/imath, which renames IMath's GMP-shaped value type
+# (mpz_t, which collides with a real GMP's) and makes its tuning globals
+# immutable. STP's own sources name the renamed type, so an upstream copy --
+# distribution package or otherwise -- would not compile against them, and
+# silently linking one would be worse than not finding it.
 
 include(deps-helper)
 
 # Rung 0. A copy already built by a previous run, or built deliberately, in the
 # layout this file installs.
 set(IMATH_DIR "" CACHE PATH
-    "Path to a built, STP-patched IMath: a prefix holding include/imrat.h and lib/ with the imath library")
+    "Path to a built IMath from stp/imath's stp branch: a prefix holding include/imrat.h and lib/ with the imath library")
 
 # A copy at deps/imath is used with no flags, as cmake/FindLibBF.cmake uses
 # deps/libbf, and for the same reason it is kept apart from IMATH_DIR: a named
@@ -73,26 +73,22 @@ if(NOT (IMATH_INCLUDE_DIR AND IMATH_LIBRARY))
         check_auto_download("IMath" "")
     endif()
 
-    # v1.35. A commit rather than the tag, so that a retagged release cannot
-    # change what STP builds; the patch below is pinned to exactly this tree.
-    set(IMath_VERSION "a4de3dea7e65e2374a91d9938e292b887896fd24")
+    # The `stp` branch of stp/imath: release v1.35 with STP's two changes as
+    # commits -- the renamed value types and constant tuning globals, and a
+    # CMake build of the two files STP needs against STP's allocation hooks,
+    # which upstream's makefile has no notion of.
+    set(IMath_VERSION "73b6a998f0f64d872d47e9cdb20af176fa7683f7")
 
     set(IMath_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}imath${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
-    # Patched through deps-utils/patch-imath.cmake rather than a bare
-    # `git apply`: ExternalProject repeats its patch step whenever the step's
-    # arguments change, a moved STP_DEP_DIR included, and the second run would
-    # otherwise fail on the checkout the first one patched. The script also
-    # supplies the CMakeLists upstream does not carry, which builds the two
-    # files STP needs against STP's allocation hooks.
+    # The allocation hooks are STP's header, so the fork's build is told where
+    # it is rather than carrying a copy.
     ExternalProject_Add(
         IMath-EP
         ${STP_EP_COMMON_CONFIG}
-        GIT_REPOSITORY https://github.com/creachadair/imath
+        GIT_REPOSITORY https://github.com/stp/imath
         GIT_TAG ${IMath_VERSION}
-        PATCH_COMMAND ${CMAKE_COMMAND} "-DSOURCE_DIR=<SOURCE_DIR>"
-                      -P "${CMAKE_CURRENT_LIST_DIR}/deps-utils/patch-imath.cmake"
         CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
                    -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
                    -DCMAKE_INSTALL_LIBDIR=lib
