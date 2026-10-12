@@ -31,7 +31,7 @@ hash=$(
     # The FetchContent pins live beside what they are added to rather than in
     # a Find module: mimalloc and unordered_dense in the top-level CMakeLists,
     # GoogleTest and OutputCheck in the test tree.
-    grep -hE "GIT_TAG|GIT_REPOSITORY|ABC_GIT_TAG" \
+    grep -hE "GIT_TAG|GIT_REPOSITORY|ABC_GIT_TAG|UNORDERED_DENSE_(COMMIT|CHECKSUM)" \
         "${root}"/CMakeLists.txt "${root}"/tests/CMakeLists.txt
   } | sha256sum | cut -d' ' -f1
 )
