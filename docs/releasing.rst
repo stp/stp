@@ -144,8 +144,8 @@ CryptoMiniSat rather than CaDiCaL because its author has contributed to
 STP, and STP ships his solver by preference. Note the consequence:
 ``USE_CADICAL`` is deliberately *not* enabled, since the order above would
 then invert that preference silently -- enabling both is not a way to ship
-both. CaDiCaL is in the binary regardless, as CryptoMiniSat 5.14 builds and
-uses it internally.
+both. CaDiCaL is not in the binary at all: STP builds CryptoMiniSat
+``-DNOCADICAL=ON``, so it brings none of its own.
 
 Two configure arguments matter, and ``publish`` confirms both in the
 finished binary rather than trusting the command line:

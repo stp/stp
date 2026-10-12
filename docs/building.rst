@@ -136,21 +136,25 @@ CryptoMiniSat is therefore the default wherever it is linked, and
 CaDiCaL is what a stock build solves with. CaDiCaL is also the one
 always available: it is enabled when nothing is said, needs no system
 library, and the build can produce one itself, so a query is never left
-without a solver. CryptoMiniSat is linked whenever it is installed
-(``-DUSE_CRYPTOMINISAT=AUTO``, the default). Either way ``--cadical``,
-``--cryptominisat`` or ``--minisat`` overrides the order for one run.
+without a solver. CryptoMiniSat is linked whenever it is installed, or
+can be built (``-DUSE_CRYPTOMINISAT=AUTO``, the default). Either way
+``--cadical``, ``--cryptominisat`` or ``--minisat`` overrides the order
+for one run.
 
 The two other values are for builds that would rather not depend on what
 the machine has lying around: ``-DUSE_CRYPTOMINISAT=ON`` makes a missing
 CryptoMiniSat a configuration error, and ``-DUSE_CRYPTOMINISAT=OFF``
 never looks for one, which is what pins a build's set of backends to the
-flags that produced it. With ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do: STP clones and
+flags that produced it. With ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do: STP downloads and
 builds `stp/cryptominisat <https://github.com/stp/cryptominisat>`__ at a
-pinned commit, as it does for its other dependencies. That commit, on the
-fork's ``stp-ipasir-up`` branch, is release 5.14.7 with the ``NOCADICAL``
-option and the IPASIR-UP propagator interface the linear-arithmetic theory
-drives. A CryptoMiniSat without the interface -- a release, or your
-distribution's -- still builds STP;
+pinned commit, as it does for its other dependencies. That commit is
+release 5.17.0 with the IPASIR-UP propagator interface the
+linear-arithmetic theory drives, which is proposed upstream as
+`msoos/cryptominisat#842 <https://github.com/msoos/cryptominisat/pull/842>`__
+and is all the fork adds. Building it needs GMP, through ``pkg-config``,
+since STP cannot build GMP; under ``AUTO`` a machine without it simply
+builds without CryptoMiniSat. A CryptoMiniSat without the interface -- a
+release, or your distribution's -- still builds STP;
 the arithmetic theory then runs in the full-lazy loop on it.
 Configure warns when the copy it found lacks the interface, because
 CryptoMiniSat is then still the default backend: ``--cadical`` restores the
@@ -165,7 +169,7 @@ is found and preferred, including one installed into ``deps/install``:
 
     git clone https://github.com/stp/cryptominisat
     cd cryptominisat
-    git checkout e06847e1006f06ec630a62349d930e5ead54def6
+    git checkout 0a71f0c46903351543bf2f15ddb0df372b8471d6
     mkdir build && cd build
     cmake .. -DNOCADICAL=ON -DBUILD_SHARED_LIBS=OFF -DSTATIC_BINARY=OFF \
              -DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -235,9 +239,10 @@ backends in took a shared CryptoMiniSat in a prefix of its own, or giving
 up STP's pinned CaDiCaL for the 2.x copy CryptoMiniSat carried.
 
 STP builds `stp/cryptominisat <https://github.com/stp/cryptominisat>`__
-with ``-DNOCADICAL=ON``, which fetches and installs no CaDiCaL at all, so
-none of that arises. ``-DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON`` is an
-ordinary configure, and the CaDiCaL linked is the one STP pins.
+with ``-DNOCADICAL=ON``, an option CryptoMiniSat has had since 5.17.0,
+which fetches and installs no CaDiCaL at all, so none of that arises.
+``-DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON`` is an ordinary configure, and
+the CaDiCaL linked is the one STP pins.
 
 That option is sound because backbone extraction -- reached only through
 CryptoMiniSat's ``backbone`` simplification token or its
@@ -397,8 +402,9 @@ These apply to all generators:
    not found, rather than failing. Off by default: a build that reaches
    the network should be asked to
 -  ``STP_DEPS_LOCAL_ONLY`` -- use no dependency from outside the build
-   directory. Off by default. An installed ABC, CaDiCaL, CLI11, LibBF,
-   MiniSat, nlohmann/json or SymFPU is not looked for and not used; each is built
+   directory. Off by default. An installed ABC, CaDiCaL, CLI11,
+   CryptoMiniSat, LibBF, MiniSat, nlohmann/json or SymFPU is not looked for
+   and not used; each is built
    into ``STP_DEP_DIR`` instead, which is inside the build directory
    unless it was pointed elsewhere. Pair it with ``ENABLE_AUTO_DOWNLOAD``
    on a cold build directory, or there is nothing left to find and
@@ -411,13 +417,10 @@ These apply to all generators:
    says nothing *are* a search, and are skipped along with the rest; pass
    ``-DLIBBF_DIR=<path>`` or ``-DIMATH_DIR=<path>`` to use a copy there
    anyway.
-   CryptoMiniSat is the exception, being the one dependency STP cannot
-   build: under this option it is used only if ``cryptominisat5_DIR``
-   names one, and ``-DUSE_CRYPTOMINISAT=ON`` without that is a
-   configuration error. A *static* CryptoMiniSat named that way brings a
-   CaDiCaL of its own, which now meets one this build compiled rather
-   than the same installed copy, so the collision described above is
-   reached where it was not before: use a shared CryptoMiniSat, or
+   A *static* CryptoMiniSat named by ``cryptominisat5_DIR`` may bring a
+   CaDiCaL of its own, which then meets the one this build compiled, so
+   the collision described above can be reached: name one built
+   ``-DNOCADICAL=ON``, or a shared one, or configure with
    ``-DUSE_CADICAL=OFF``.
 
    This is narrower than CMake's own
