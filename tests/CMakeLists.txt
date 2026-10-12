@@ -388,6 +388,17 @@ endif()
 
 add_subdirectory(lra)
 
+# The LRA version map must not override --exclude-libs and expose private
+# dependencies. Check the actual library with both GNU ld and LLD builds.
+if(BUILD_SHARED_LIBS AND UNIX AND NOT APPLE AND CMAKE_NM)
+  add_test(NAME private-library-symbols
+    COMMAND "${PYTHON_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/private_library_symbols.py"
+      "${CMAKE_NM}" "$<TARGET_FILE:stp>")
+  set_tests_properties(private-library-symbols PROPERTIES
+    LABELS "api;visibility" TIMEOUT 30)
+endif()
+
 if(STP_EXECUTABLE_AVAILABLE)
     add_test(NAME smtlib-protocol
         COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/smtlib_protocol.py"

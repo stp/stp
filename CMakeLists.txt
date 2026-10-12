@@ -1745,6 +1745,8 @@ add_dependencies(stp stp_lra_product_objects)
 # visibility even when their template argument is a hidden LRA type.  Keep
 # that compiler-owned spelling from disclosing the private Tableau ABI.
 # Other public STP symbols retain their existing annotations and exports.
+# The map only localises LRA symbols: a global wildcard would override
+# --exclude-libs under LLD and re-export private dependency archives.
 if(BUILD_SHARED_LIBS AND UNIX AND NOT APPLE)
   set(stp_lra_private_map
     "${CMAKE_CURRENT_SOURCE_DIR}/lib/Lra/stp_lra_private.map")
