@@ -22,10 +22,23 @@
 # STP_ALLOCATOR, so a default build already needs it. Anyone on an older CMake
 # can configure with -DSTP_ALLOCATOR=system, which skips that subdirectory.
 #
-# Nothing here sets a policy explicitly: every policy STP cares about
-# (CMP0048, CMP0074, CMP0077, CMP0092 - the newest introduced in 3.15) is NEW
-# by default at this minimum.
+# Every policy STP cares about (CMP0048, CMP0074, CMP0077, CMP0092 - the
+# newest introduced in 3.15) is NEW by default at this minimum. The one that
+# is set explicitly below postdates it.
 cmake_minimum_required(VERSION 3.18)
+
+# CMP0135 (CMake 3.24): files extracted from a downloaded archive get the time
+# of extraction, not the time stored in the archive. The dependencies fetched
+# as tarballs (URL rather than GIT_REPOSITORY, through ExternalProject or
+# FetchContent) otherwise keep their release dates, so a moved pin can leave
+# its files looking older than what was built from the previous one, and
+# nothing is rebuilt. Left unset, every one of them also prints a developer
+# warning on every configure saying so.
+# Set before anything includes ExternalProject or FetchContent, whose
+# functions remember the policies in force where they were defined.
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
 
 # SANITIZE forces clang++, and a compiler has to be chosen before project()
 # detects one. Forced afterwards, as this was, the detection has already run
