@@ -95,7 +95,8 @@ build wants the first.
 Upstream LibBF publishes release tarballs and no git repository, which is
 what ``stp/libbf`` is for. It is laid out like STP's ABC fork: ``master``
 holds the release tarballs verbatim, one commit each, and ``stp`` -- the
-branch the pin names -- adds STP's MSVC portability changes on top. Moving
+branch the pin names -- adds STP's changes on top: MSVC portability, a fix
+for undefined behaviour, and a CMake build of the library. Moving
 to a newer release means importing its tarball there and rebasing ``stp``
 onto it, then moving the pin here.
 
