@@ -302,6 +302,62 @@ void queryRecovery(PreparationStage stage, unsigned stop_after = 1)
           "fresh query retained a borrowed preparation control");
 }
 
+void realSessionRecovery(PreparationStage stage, bool reused = false)
+{
+  STPMgr manager;
+  STP engine(&manager);
+  manager.UserFlags.lra_persistent_state = true;
+  manager.UserFlags.lra_float_driver = false;
+  const auto x = manager.CreateSourceSymbol("session_x", SourceSort::real());
+  ASTVec base{manager.CreateRealPredicate(EQ, x, manager.CreateRealConst("1"))};
+  ASTVec pushed{manyRows(manager)};
+  std::vector<ASTVec*> levels{&base};
+  bool handled = false;
+  if (reused)
+  {
+    require(engine.checkSatRealSession(levels, handled) == SOLVER_SATISFIABLE &&
+                handled && manager.HasRealModel(),
+            "control Real session did not build a model");
+    levels.push_back(&pushed);
+  }
+  else
+    base.push_back(pushed.front());
+
+  const unsigned limit = stage == PreparationStage::Boundary ? 1 : 3;
+  StopAfter stop{stage, limit};
+  const PreparationControl observed(PreparationControl::Clock::time_point::max(),
+                                    nullptr, StopAfter::observe, &stop);
+  {
+    PreparationScope scope(manager.preparation_control, observed);
+    const auto result = engine.checkSatRealSession(levels, handled);
+    if (result != SOLVER_UNKNOWN || !handled)
+      throw std::runtime_error(std::string("Real session cancellation failed at ") +
+          preparationStageName(stage) + (reused ? " (reused)" : " (fresh)") +
+          ": result=" + std::to_string(result) +
+          ", handled=" + std::to_string(handled) +
+          ", polls=" + std::to_string(stop.calls));
+    require(manager.getUnknownReason() == UnknownReason::Timeout &&
+                manager.soft_timeout_expired && !manager.HasRealModel(),
+            "cancelled Real session lost its reason or retained a model");
+    require(manager.preparation_control == &observed,
+            "Real session did not restore its outer preparation observer");
+  }
+  require(stop.calls == limit, "Real session did not reach its cancellation point");
+  const auto active = lra::LraAtomRegistry(manager).metrics();
+  require(active.active_frames == 0 && active.active_rows == 0 &&
+              active.active_components == 0,
+          "cancelled Real session retained an active preparation frame");
+  manager.GetRunTimes()->print();
+  manager.clearUnknown(); // the API and command frontends clear this per check
+  require(engine.checkSatRealSession(levels, handled) == SOLVER_SATISFIABLE &&
+              handled && manager.HasRealModel() &&
+              manager.GetRealModelValue(x) == "1" &&
+              manager.getUnknownReason() == UnknownReason::None,
+          "Real session did not recover after preparation cancellation");
+  require(manager.preparation_control == nullptr,
+          "Real session retained a borrowed preparation control");
+}
+
 ASTNode encodingFormula(STPMgr& manager)
 {
   ASTVec clauses;
@@ -523,6 +579,16 @@ int main()
                        PreparationStage::BitBlasting, PreparationStage::CNFConversion,
                        PreparationStage::ClauseLoading})
       queryRecovery(stage, 3);
+    for (auto stage : {PreparationStage::Boundary,
+                       PreparationStage::LraPreregistration,
+                       PreparationStage::LraRegistry, PreparationStage::LraCore,
+                       PreparationStage::BitBlasting, PreparationStage::CNFConversion,
+                       PreparationStage::ClauseLoading})
+      realSessionRecovery(stage);
+    for (auto stage : {PreparationStage::LraPreregistration,
+                       PreparationStage::LraRegistry, PreparationStage::LraCore,
+                       PreparationStage::RefinementEncoding})
+      realSessionRecovery(stage, true);
     congruenceRecovery();
     congruenceRecovery(PreparationStage::RefinementEncoding);
     constantBitOwnership();

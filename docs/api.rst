@@ -395,7 +395,10 @@ Limits of the alpha
    of declared sorts as indices and elements. Real and nested array
    components remain unsupported.
 -  ``unsat_assumptions`` after a batch check reports every assumption; the
-   failed subset comes from a check the incremental driver ran.
+   failed subset comes from a check the incremental driver or an opted-in
+   persistent Real session ran. For Boolean/Real API checks, select
+   ``incremental=on`` and ``lra-incremental-session=true`` or
+   ``lra-persistent-state=true`` to use that session.
 -  ``stop-after-cnf`` stops the batch pipeline only: once pushes have made the
    session incremental, a check the incremental driver runs is answered.
 -  Under ``simplify = false`` a few kinds still come back lowered, having no

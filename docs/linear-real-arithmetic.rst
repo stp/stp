@@ -493,6 +493,15 @@ Incremental sessions
   Inside that session, also keep the arithmetic registrations and bases
   across checks. This implies the session.
 
+Both session options also apply to the C++ API's ``check_sat`` calls when
+``incremental=on``. The first check encodes the base, installs the pushed
+assertions and assumptions, and then starts searching. API assumptions have
+separate activation literals, so ``unsat_assumptions()`` can report the
+source assumptions used in a backend conflict. A backend may report a
+non-minimal subset. Scripted ``check-sat-assuming`` still takes the batch path.
+Preparation and search share the check's time budget; a budget exhausted
+during preparation answers ``unknown`` without retrying the batch pipeline.
+
 Search-state experiments
 ~~~~~~~~~~~~~~~~~~~~~~~~
 

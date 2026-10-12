@@ -40,6 +40,20 @@ THE SOFTWARE.
 namespace stp
 {
 
+bool ToSATAIG::encodeWithoutSearch(SATSolver& satSolver, const ASTNode& input,
+                                  bool needAbsRef)
+{
+  assert(first && !encode_only_);
+  struct Reset
+  {
+    bool& flag;
+    ~Reset() { flag = false; }
+  } reset{encode_only_};
+  encode_only_ = true;
+  internalSolveFailed = false;
+  internalSolveFailure.clear();
+  return CallSAT(satSolver, input, needAbsRef);
+}
 
 bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
                        bool needAbsRef)
@@ -74,7 +88,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
     // evaluator invent values for symbols which never reached SAT.
     UFContext* uf = bm->getUFContextIfAny();
     if ((uf == NULL || !uf->activeInSolve() || uf->getSolveScalars().empty()) &&
-        requiredSolveAssumptions.empty())
+        requiredSolveAssumptions.empty() && !encode_only_)
     {
       return true;
     }
@@ -1123,6 +1137,8 @@ void ToSATAIG::suggest_array_index_hints(SATSolver& satSolver, bool needAbsRef)
 bool ToSATAIG::runSolver(SATSolver& satSolver)
 {
   bm->checkPreparation(PreparationStage::Encoding);
+  if (encode_only_)
+    return true;
   bm->GetRunTimes()->start(RunTimes::Solving);
   // A failure describes the solve that recorded it. An encoder that lives on
   // (refinement rounds, a persistent Real session) must not abandon its next

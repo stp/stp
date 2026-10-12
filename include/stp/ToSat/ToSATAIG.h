@@ -51,6 +51,7 @@ private:
   // empty (a before-search callback's failure text is the caller's).
   bool internalSolveFailed = false;
   std::string internalSolveFailure;
+  bool encode_only_ = false;
   simplifier::constantBitP::ConstantBitPropagation* cb;
 
   ArrayTransformer* arrayTransformer;
@@ -206,6 +207,12 @@ public:
 
   bool CallSAT(SATSolver& satSolver, const ASTNode& input,
                bool needAbsRef) override;
+  // Install the initial encoding without searching or invoking before-search
+  // callbacks. A persistent session can then install all live frames before
+  // its first solve. False means encoding failed (or input is constant false),
+  // never a result from a SAT search.
+  bool encodeWithoutSearch(SATSolver& satSolver, const ASTNode& input,
+                           bool needAbsRef);
   // Tell the lowering that the refinement it should expect is only the
   // uninterpreted-function loop; see ufOnlyRefinement_. Set before CallSAT.
   void setUFOnlyRefinement(bool ufOnly) { ufOnlyRefinement_ = ufOnly; }
