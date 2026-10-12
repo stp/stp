@@ -601,6 +601,7 @@ struct SolverImpl
   }
   std::string search_point_outcome = "none";
   std::string search_point_refusal;
+  std::uint64_t search_point_rediversifications = 0;
 
   // interrupts
   std::atomic<bool> interrupt{false};

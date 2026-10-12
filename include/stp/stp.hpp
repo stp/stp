@@ -1203,13 +1203,15 @@ public:
   /// Connect `exchange` (not owned; nullptr disconnects) to this check's
   /// backend, exporting only clauses over the variables it holds now. false
   /// when the backend cannot exchange clauses (CaDiCaL without STP's
-  /// clause-import extension). Connected until the backend goes with the
-  /// check, whose final counters are then the solver's sat.exchange.*
-  /// statistics.
+  /// clause-import extension). Arithmetic-only refinement is supported.
+  /// A backend rebuild stops sharing because its variable numbering is
+  /// private. The closing counters are the solver's sat.exchange.* statistics.
   bool connect_clause_exchange(ClauseExchange* exchange,
                                const ClauseExchangeSettings& settings = {});
   /// Diversify this check's search (SearchDiversification). false when the
-  /// backend does not support it; nothing then changed.
+  /// backend does not support it; nothing then changed. Accepted settings
+  /// are restored on replacement backends of this check, without calling
+  /// the hook again or reconnecting its clause exchange.
   bool diversify(const SearchDiversification& diversification);
   SearchPoint(const SearchPoint&) = delete;
   SearchPoint& operator=(const SearchPoint&) = delete;
@@ -1306,10 +1308,11 @@ public:
   /// pipeline, and `hook` runs at most once, at the moment the check's SAT
   /// backend, with its CNF loaded, would start to search. A check decided
   /// before that (by preprocessing) answers, and the hook is never called.
-  /// The point is offered only when the main solve may not be followed by
-  /// refinement: lazy array axioms, uninterpreted functions, Real
-  /// arithmetic, and the bit-vector and floating-point abstractions (their
-  /// options alone refuse, whatever the query holds) all may. An array
+  /// Arithmetic-only refinement is supported: copies retain the common
+  /// atom meanings and certify their models and conflicts exactly. Other
+  /// refinement refuses the point: lazy array axioms, uninterpreted
+  /// functions, and the bit-vector and floating-point abstractions (their
+  /// options alone refuse, whatever the query holds). An array
   /// equality the pipeline expands eagerly instead -- most equalities
   /// between stores over bit-vector arrays -- is offered; one left to lazy
   /// extensionality (a large one, or one over a constant array or

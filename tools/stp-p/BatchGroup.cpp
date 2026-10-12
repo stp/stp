@@ -352,9 +352,10 @@ void settle(std::vector<Root>& children, const Options& o,
 // (unknown); batch-all lets every root run to its own answer instead of
 // stopping at the first.
 //
-// A root's answer is the query's: its database is the batch CNF plus clauses
-// implied by it, and it assumed nothing. The first complete answer from a
-// root or the hedge that exited normally wins (or the owner's, when it
+// A root's answer is the query's: its database is the common batch CNF plus
+// query-valid lemmas. Arithmetic activation assumptions are identical in
+// every root. The first complete answer from a root or the hedge that
+// exited normally wins (or the owner's, when it
 // searched or preprocessing decided); the rest are killed and reaped. Every
 // complete report read before or after the kill is compared, and passed on
 // to the parent as it arrives: two that disagree end the whole invocation.
@@ -663,6 +664,8 @@ Json batch_group(Source& input, const Options& o)
       if (details)
       {
         auto stats = solver->statistics();
+        data["joined"]["rediversifications"] =
+            stats.uint64("before-search.rediversifications");
         data["sat_s"] = stats.real("time.sat_ms") / 1000.0;
         if (endpoint)
         {

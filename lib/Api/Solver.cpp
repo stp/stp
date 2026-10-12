@@ -74,6 +74,7 @@ struct SearchPointState
 {
   ::stp::SATSolver* backend;
   SolverImpl* solver;
+  ::stp::STPMgr::BeforeSearchRequest* request;
 };
 
 // set_before_search hands its hook a SearchPoint over the check's backend.
@@ -731,6 +732,7 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
   closed_exchange = {};
   search_point_outcome = search_hook ? "not reached" : "none";
   search_point_refusal.clear();
+  search_point_rediversifications = 0;
 
   // an interrupt that arrived before the check is consumed by it
   if (interrupt.exchange(false))
@@ -817,6 +819,7 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
                                 : request.offered ? "offered"
                                                   : "not reached";
       s->search_point_refusal = request.refusal;
+      s->search_point_rediversifications = request.rediversifications;
     }
   } clear_search_request{this,         bm,         search_request,
                          bool(search_hook), batch_only, batch_only};
@@ -826,12 +829,13 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
     search_request.reason = before_search_reason;
     search_request.search_unoffered =
         before_search_otherwise == NoSearchPoint::search;
-    search_request.hook = [&search_hook, this](::stp::SATSolver& backend) {
-      detail::SearchPointState state{&backend, this};
-      SearchPoint point = detail::SearchPointAccess::make(&state);
-      const InCallback callback;
-      return search_hook(point);
-    };
+    search_request.hook =
+        [&search_hook, &search_request, this](::stp::SATSolver& backend) {
+          detail::SearchPointState state{&backend, this, &search_request};
+          SearchPoint point = detail::SearchPointAccess::make(&state);
+          const InCallback callback;
+          return search_hook(point);
+        };
     bm->before_search = &search_request;
   }
 
@@ -1596,7 +1600,12 @@ bool SearchPoint::connect_clause_exchange(ClauseExchange* exchange,
 
 bool SearchPoint::diversify(const SearchDiversification& d)
 {
-  return diversify_backend(state_->backend, d);
+  if (!diversify_backend(state_->backend, d))
+    return false;
+  state_->request->diversify_replacement =
+      [d](::stp::SATSolver& backend) { return diversify_backend(&backend, d); };
+  state_->request->diversification_applied = true;
+  return true;
 }
 
 Entailment Solver::entails(const Term& formula, std::optional<CheckBudget> budget)
@@ -2917,6 +2926,7 @@ CnfScope Solver::write_cnf(std::ostream& os) const
     bool interrupt;
     ::stp::SATSolver::ExchangeCounters exchange;
     std::string search_outcome, search_refusal;
+    std::uint64_t rediversifications;
     ~LastCheck()
     {
       s->last = last;
@@ -2936,6 +2946,7 @@ CnfScope Solver::write_cnf(std::ostream& os) const
       s->closed_exchange = exchange;
       s->search_point_outcome = std::move(search_outcome);
       s->search_point_refusal = std::move(search_refusal);
+      s->search_point_rediversifications = rediversifications;
     }
   } kept{s,
          s->last,
@@ -2952,7 +2963,8 @@ CnfScope Solver::write_cnf(std::ostream& os) const
          s->interrupt.exchange(false),
          s->closed_exchange,
          s->search_point_outcome,
-         s->search_point_refusal};
+         s->search_point_refusal,
+         s->search_point_rediversifications};
   // The first CNF and its scope -- how it relates to the assertions -- come
   // from the listener the engine tells of every CNF, which is the export's
   // for the call: the solver's own sink sees the CNFs checks hand to the SAT
@@ -3073,6 +3085,7 @@ Statistics Solver::statistics() const
   }
   e["before-search.outcome"] = s->search_point_outcome;
   e["before-search.refusal"] = s->search_point_refusal;
+  e["before-search.rediversifications"] = s->search_point_rediversifications;
   static const char* const kinds[] = {"eq", "compare", "ite", "plus", "mult", "divmod"};
   static const int kind_index[] = {UF::ABSTRACT_EQ, UF::ABSTRACT_COMPARE, UF::ABSTRACT_ITE,
                                    UF::ABSTRACT_PLUS, UF::ABSTRACT_MULT, UF::ABSTRACT_DIVMOD};

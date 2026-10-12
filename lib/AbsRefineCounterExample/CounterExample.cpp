@@ -3030,25 +3030,50 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
   {
     // A caller's hook (see STPMgr::before_search). It stands for the whole
     // check, so it is offered once, at the moment this solve's search would
-    // start -- a solve that a shortcut decides never gets there -- and only
-    // when nothing may refine after this solve; otherwise the point is
-    // refused at that same moment, and the check is abandoned or searches in
-    // place, as the caller asked (NoSearchPoint).
+    // start -- a solve that a shortcut decides never gets there. Arithmetic
+    // may refine in each copy: the fork preserves the atom registry, CNF,
+    // activation assumption and coordinator, and every theory clause is an
+    // exact consequence of the same arithmetic. Other refinement still
+    // refuses the point at that moment (NoSearchPoint).
     if (request->abandoned)
     {
       bm->noteUnknown(UnknownReason::Incomplete, request->reason);
       return bm->unknownResult();
     }
-    if (!request->offered && !request->refused && request->main == &SatSolver)
+    if (request->offered && !request->refused && request->main == &SatSolver &&
+        request->diversify_replacement && !request->diversification_applied)
     {
-      // What may refine after this solve, if anything: the point is refused
-      // then. That is a conservative rule, not a soundness one -- a copy
-      // forked at the point continues the same check, refinement included --
-      // kept until refining copies that share clauses have been analysed.
-      // The abstraction options refuse by themselves, whether or not this
-      // query has anything to abstract.
+      // A reroute has a new encoding and cannot reuse the exchange. Restore
+      // only the accepted Boolean search settings, after its CNF is loaded;
+      // calling the original hook again could fork a second group.
+      SATSolver* backend = &SatSolver;
+      tosat->setBeforeSearch([request, backend, arithmetic_callback]() {
+        if (arithmetic_callback && !arithmetic_callback())
+          return false;
+        if (!request->diversify_replacement(*backend))
+        {
+          request->abandoned = true;
+          request->reason =
+              "the replacement SAT backend could not restore search diversification";
+          return false;
+        }
+        ++request->rediversifications;
+        request->diversification_applied = true;
+        return true;
+      });
+    }
+    else if (!request->offered && !request->refused &&
+             request->main == &SatSolver)
+    {
+      // The driver distinguishes arithmetic-only refinement from a mixed
+      // query. Never infer that distinction from the script's logic label.
+      // Clauses mentioning variables created after the fork are filtered by
+      // the exchange's fixed cutoff. A full solver rebuild (e.g. a float
+      // reroute) destroys that exchange, so its new numbering is never shared.
+      const bool arithmetic_only =
+          lra_coordinator != NULL && tosat->arithmeticOnlyRefinement();
       const char* refines = NULL;
-      if (lra_coordinator != NULL)
+      if (lra_coordinator != NULL && !arithmetic_only)
         refines = "Real arithmetic";
       else if (ufTheoryAdapter != NULL && ufTheoryAdapter->active())
         refines = "uninterpreted functions";
@@ -3058,7 +3083,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
         refines = "the bit-vector equality abstraction";
       else if (bm->UserFlags.fp_abstraction)
         refines = "the floating-point abstraction";
-      else if (refinement)
+      else if (refinement && !arithmetic_only)
         refines = "lazy array axioms or uninterpreted functions";
       const std::string refusal =
           refines == NULL
@@ -3078,17 +3103,22 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
       }
       else
       {
-        // Replaces the arithmetic coordinator's callback, which a check with
-        // a coordinator never needs: it is abandoned here (it refines).
+        // When arithmetic connects before the first search, finish its
+        // binding before offering the hook. Every fork then owns the same
+        // prepared coordinator as well as the loaded SAT backend. Keeping
+        // this callback is also required when the caller simply proceeds.
         tosat->setBeforeSearch(
-            [request, backend, refusal]() {
+            [request, backend, refusal, arithmetic_callback]() {
+              if (refusal.empty() && arithmetic_callback &&
+                  !arithmetic_callback())
+                return false;
               request->offered = true;
               if (!refusal.empty())
               {
                 request->refused = true;
                 request->refusal = refusal;
-                request->reason = "the before-search hook needs a check with "
-                                  "exactly one solve ahead of it: " +
+                request->reason = "the before-search hook does not support "
+                                  "this check: " +
                                   refusal + "; " + request->reason;
                 request->abandoned = true;
                 return false;

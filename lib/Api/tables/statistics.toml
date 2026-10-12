@@ -349,6 +349,12 @@ tier = "diagnostic"
 help = "why the last check could not offer its before-search point, or empty"
 
 [[stat]]
+name = "before-search.rediversifications"
+type = "uint64"
+tier = "diagnostic"
+help = "replacement SAT backends given the last check's saved Boolean search diversification; the hook and clause exchange are not repeated"
+
+[[stat]]
 name = "sat.exchange.connected"
 type = "uint64"
 tier = "diagnostic"

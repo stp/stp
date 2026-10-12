@@ -326,6 +326,8 @@ with tempfile.TemporaryDirectory(prefix='stpp-cli-') as tmp:
     f32 = '(_ FloatingPoint 8 24)'
     one, two = '((_ to_fp 8 24) RNE 1.0)', '((_ to_fp 8 24) RNE 2.0)'
     theory = [
+        ('QF_LRA', '(declare-const x Real)(assert (> x 0))(assert (< x 1))',
+                   '(assert (= x 1))'),
         ('QF_ABV', '(declare-const a (Array (_ BitVec 8) (_ BitVec 8)))(declare-const i (_ BitVec 8))'
                    '(assert (= (select a i) #x01))', '(assert (= (select a i) #x02))'),
         ('QF_FP', f'(declare-const x {f32})(assert (fp.gt x {one}))(assert (fp.lt x {two}))',
