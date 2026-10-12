@@ -67,8 +67,7 @@ DLL_PUBLIC void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* stp,
                                   bool definately_bv = false);
 
 // Prints just the expression, without the declarations that the "PrintBack"
-// functions emit. Used by get-assertions, which must print the asserted
-// formulas alone.
+// functions emit.
 DLL_PUBLIC void SMTLIB2_Print1(ostream& os, const stp::ASTNode n,
                                int indentation, bool letize);
 

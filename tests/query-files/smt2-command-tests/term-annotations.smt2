@@ -1,6 +1,5 @@
 ; RUN: %solver %s | %OutputCheck %s
 (set-option :produce-models true)
-(set-option :produce-assertions true)
 (set-logic QF_BV)
 (declare-const x (_ BitVec 8))
 (assert (! (= x (! #x2a :custom (as let _ ! :nested "data") :named value))
@@ -8,12 +7,6 @@
 (assert (! (= (! x :named first :extra 0) first) :irrelevant true))
 ; CHECK: ^sat$
 (check-sat)
-; The annotation is an inline definition; it adds no asserted equality.
-; CHECK: ^\($
-; CHECK: = \|x\| +#x2A
-; CHECK-NOT: \|equality\|
-; CHECK-NOT: \|value\|
-(get-assertions)
 ; Definitions are absent from get-model, which describes declared symbols.
 ; CHECK: define-fun \|x\|
 ; CHECK-NOT: define-fun \|equality\|

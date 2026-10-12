@@ -578,7 +578,7 @@ void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
 }
 
 // Thin wrapper over the shared traversal. Declared in printers.h because
-// get-assertions prints the asserted formulas through it.
+// the interface and the API print single formulas through it.
 void SMTLIB2_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 {
   SMTLIB_Print1(os, n, indentation, letize);
