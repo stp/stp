@@ -33,6 +33,8 @@ THE SOFTWARE.
 
 #include <climits>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -176,7 +178,7 @@ TEST(BeforeSearch, AThrowingHookAbandonsTheCheck)
 
 TEST(BeforeSearch, ACheckWithRefinementAheadIsNeverOffered)
 {
-  // The floating-point and bit-vector abstractions, Real arithmetic, lazy
+  // The floating-point and bit-vector abstractions, mixed arithmetic, lazy
   // array axioms and uninterpreted functions: each may need another solve
   // after the first. The hook is never called; the check is abandoned, or
   // searched in place on the batch pipeline (NoSearchPoint::search).
@@ -196,9 +198,12 @@ TEST(BeforeSearch, ACheckWithRefinementAheadIsNeverOffered)
        "(assert (= (bvmul x y) #x0000008f))(assert (bvugt x #x00000001))"
        "(assert (bvugt y #x00000001))(assert (bvult x #x00000100))"
        "(assert (bvult y #x00000100))"},
-      {"incremental", "off",
+      {"bv-term-abstraction", "true",
        "(declare-const r Real)(declare-const s Real)(assert (> (+ r s) 1))"
-       "(assert (< r 1))(assert (< s 1))"},
+       "(assert (< r 1))(assert (< s 1))"
+       "(declare-const x (_ BitVec 32))(declare-const y (_ BitVec 32))"
+       "(assert (= (bvmul x y) #x0000008f))(assert (bvugt x #x00000001))"
+       "(assert (bvugt y #x00000001))"},
       {"bv-eq-abstraction", "true",
        "(declare-const x (_ BitVec 32))(declare-const y (_ BitVec 32))"
        "(assert (= (bvmul x y) #x0000008f))(assert (= (bvadd x y) #x00000018))"},
@@ -253,7 +258,7 @@ TEST(BeforeSearch, ACheckWithRefinementAheadIsNeverOffered)
       {
         ASSERT_TRUE(r.is_unknown()) << r.reason_message();
         EXPECT_EQ(r.reason(), UnknownReason::INCOMPLETE);
-        EXPECT_NE(r.reason_message().find("exactly one solve"), std::string::npos)
+        EXPECT_NE(r.reason_message().find("may refine after its first solve"), std::string::npos)
             << r.reason_message();
       }
       EXPECT_TRUE(s.check_sat().is_sat());
@@ -272,12 +277,12 @@ static long first_search_connections(const std::string& text)
   return std::strtol(text.c_str() + at + key.size(), nullptr, 10);
 }
 
-TEST(BeforeSearch, AnArithmeticCheckSearchedInPlaceKeepsItsCoordinatorsCallback)
+TEST(BeforeSearch, AnArithmeticHookKeepsItsCoordinatorsCallback)
 {
   // With lra-first-search the coordinator binds its atoms and joins the
-  // search from a callback at the before-search point. A refused point
-  // searched in place keeps that callback: the coordinator connects to the
-  // first search exactly as it does with no hook.
+  // search from a callback at the before-search point. Offering the hook
+  // keeps that callback: arithmetic connects to the first search exactly
+  // as it does with no hook.
   const char* script = "(declare-const r Real)(declare-const s Real)"
                        "(assert (> (+ r s) 1))(assert (< r 1))(assert (< s 1))";
   auto run = [&](bool hooked, unsigned& calls, std::string& outcome)
@@ -309,10 +314,99 @@ TEST(BeforeSearch, AnArithmeticCheckSearchedInPlaceKeepsItsCoordinatorsCallback)
   const long plain = run(false, calls, outcome);
   EXPECT_EQ(outcome, "none");
   const long hooked = run(true, calls, outcome);
-  EXPECT_EQ(outcome, "refused");
-  EXPECT_EQ(calls, 0u);
+  EXPECT_EQ(outcome, "offered");
+  EXPECT_EQ(calls, 1u);
   EXPECT_GE(plain, 1);
   EXPECT_EQ(hooked, plain);
+}
+
+TEST(BeforeSearch, ArithmeticMixedWithArraysOrUfRefusesTheForkPoint)
+{
+  const char* real =
+      "(declare-const r Real)(declare-const s Real)"
+      "(assert (> (+ r s) 1))(assert (< r 1))(assert (< s 1))"
+      // Keep a Boolean search ahead, so this tests refusal rather than a
+      // preprocessing answer that legitimately never reaches the hook.
+      "(declare-const p (_ BitVec 12))(declare-const q (_ BitVec 12))"
+      "(assert (= (bvmul p q) (_ bv35 12)))"
+      "(assert (bvugt p (_ bv1 12)))(assert (bvugt q (_ bv1 12)))";
+  // Sixteen reads survive the eager array rewrite's ten-read threshold.
+  // Smaller arrays can be completely lowered before the point, which is
+  // safe to offer because no array refinement remains.
+  std::string array = "(declare-const a (Array (_ BitVec 8) (_ BitVec 8)))";
+  for (unsigned i = 0; i < 16; ++i)
+  {
+    const auto name = "i" + std::to_string(i);
+    array += "(declare-const " + name + " (_ BitVec 8))";
+    array += "(assert (= (select a " + name + ") (_ bv" + std::to_string(i) + " 8)))";
+  }
+  const std::string others[] = {array,
+      "(declare-fun f ((_ BitVec 8)) (_ BitVec 8))(declare-const x (_ BitVec 8))"
+      "(assert (= (f x) #x03))(assert (= (f (bvadd x #x01)) #x04))"};
+  for (const auto& other : others)
+  {
+    TermManager tm;
+    Solver s(tm, batch_options());
+    s.parse_smt2(std::string(real) + other);
+    unsigned calls = 0;
+    s.set_before_search([&](SearchPoint&) { ++calls; return true; }, "mixed arithmetic");
+    const auto result = s.check_sat();
+    ASSERT_TRUE(result.is_unknown()) << other << ": "
+                                    << s.statistics().str("before-search.outcome");
+    EXPECT_EQ(result.reason(), UnknownReason::INCOMPLETE);
+    EXPECT_EQ(calls, 0u);
+    EXPECT_EQ(s.statistics().str("before-search.outcome"), "refused");
+  }
+}
+
+TEST(BeforeSearch, ArithmeticRerouteKeepsDiversificationWithoutRepeatingTheHook)
+{
+  if (!exchange_available)
+    GTEST_SKIP() << "the backend has no search diversification";
+  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+                    "query-files/lra-float-reroute-preserves-answer.smt2";
+  std::ifstream input(path);
+  ASSERT_TRUE(input) << path;
+  std::ostringstream script;
+  script << input.rdbuf();
+  TermManager tm;
+  Options o = batch_options();
+  o.set("lra-float-driver", "true");
+  o.set("lra-float-reroute", "1");
+  o.set("lra-float-reroute-floor", "0");
+  o.set("print-functionstat", "true");
+  Solver s(tm, o);
+  Counting exchange;
+  unsigned calls = 0;
+  bool rerouted = false;
+  std::size_t exported_at_rebuild = 0;
+  s.set_diagnostic_sink([&](std::string_view text) {
+    if (text.find("re-solving on the exact driver") != std::string_view::npos)
+    {
+      rerouted = true;
+      exported_at_rebuild = exchange.learned_clauses;
+    }
+  });
+  s.parse_smt2(script.str(), ParseMode::SINGLE_QUERY);
+  s.set_before_search([&](SearchPoint& point) {
+    ++calls;
+    EXPECT_TRUE(point.diversify({0, 2, false, 0}));
+    EXPECT_TRUE(point.connect_clause_exchange(&exchange));
+    return true;
+  }, "reroute regression");
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_TRUE(rerouted);
+  EXPECT_EQ(calls, 1u);
+  EXPECT_EQ(s.statistics().uint64("before-search.rediversifications"), 1u);
+  // The original exchange was destroyed before the diagnostic, and the
+  // replacement backend must never publish in that variable namespace.
+  EXPECT_EQ(exchange.learned_clauses, exported_at_rebuild);
+  std::ostringstream cnf;
+  s.write_cnf(cnf);
+  EXPECT_EQ(s.statistics().uint64("before-search.rediversifications"), 1u);
+  EXPECT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(calls, 1u);
+  EXPECT_EQ(s.statistics().uint64("before-search.rediversifications"), 0u);
 }
 
 TEST(BeforeSearch, AClearedHookIsGoneAndAHookNeedsAReason)

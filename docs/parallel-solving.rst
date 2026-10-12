@@ -5,8 +5,8 @@ Parallel solving
 query the way ordinary STP does, once, and forks copies of the loaded SAT
 solver that search differently and pass each other short learned clauses.
 The first answer wins. Without ``-j`` it uses the CPUs the process is
-allowed, at most 8 -- what the measurements below support; more CPUs are not
-faster. Each holds a copy of the loaded solver, so memory grows with N:
+allowed, capped at 8 by default following the bit-vector measurements below.
+Each holds a copy of the loaded solver, so memory grows with N:
 ``--worker-memory-mib`` bounds each process and ``--memory-mib`` the whole
 invocation. ``-j1`` is the sequential run: ordinary STP's pipeline through
 STP's API, on the build's default SAT backend, without models and under the
@@ -112,6 +112,34 @@ With ``-jN`` and N greater than 1 the owner runs a group on N CPUs:
   2\ :sup:`16` literals of each other root's ring, and imports every unit
   and at most one longer clause per conflict, shortest first.
 
+For ``QF_LRA``, every root also inherits the arithmetic coordinator and its
+atom registry. Each root solves the complete query with its own arithmetic
+state and different Boolean search settings, sharing CDCL-learned clauses
+over the common encoding. Simplex remains sequential; the arithmetic
+problem is not divided into subproblems. There is no incremental hedge for
+``QF_LRA``, and every group size uses the generic launch policy.
+
+The Boolean skeleton is an abstraction. Each root continues the full
+arithmetic check, and exact arithmetic certifies conflicts and SAT models.
+Floating-point simplex supplies advisory proposals; sharing never relies
+on an uncertified floating-point result. All roots use the same activation
+assumption. Binding arithmetic atoms after the fork maps them onto existing
+Boolean variables with the same meaning in every copy. Variables introduced
+later lie above the exchange cutoff and cannot occur in shared clauses.
+
+The library permits arithmetic-only refinement at the fork point. Mixed
+queries with active array, uninterpreted-function or abstraction refinement
+retain the ordinary refusal/fallback behavior. Admission and the general
+refinement flag use the same predicate for non-arithmetic refinement
+sources.
+
+A root that rebuilds its SAT backend, for example to reroute from
+floating-point simplex to the exact driver, stops sharing because its new
+variable numbering is private. Its accepted Boolean search settings are
+restored after loading the new CNF. The original hook runs only once and
+does not fork another group during a reroute.
+``before-search.rediversifications`` counts these restorations.
+
 A check that preprocessing decides answers at once, in the owner. A check
 that cannot offer the fork point, because it may refine after its first
 solve (array axioms STP leaves lazy, when reads survive simplification, or
@@ -212,8 +240,9 @@ Input and limits
 ----------------
 
 One decision-only query: declarations, definitions, assertions and one
-``check-sat``, in ``QF_BV``, ``QF_ABV``, ``QF_FP``, ``QF_BVFP`` or
-``QF_ABVFP``, at ``-j1`` and at ``-jN``; the hedge takes ``QF_BV`` only. A
+``check-sat``, in ``QF_BV``, ``QF_ABV``, ``QF_FP``, ``QF_BVFP``,
+``QF_ABVFP`` or ``QF_LRA``, at ``-j1`` and at ``-jN``; the hedge takes
+``QF_BV`` only. A
 script with no ``set-logic`` is read with every theory's keywords and
 decided by ordinary STP, with no hedge. Admission goes by the label alone:
 a script labelled ``QF_BV`` that declares an uninterpreted function or a
@@ -338,13 +367,14 @@ the largest files (mcm ``184`` and ``186``) the 24 copies exceeded the
 128 GiB guard, and ``AND-NESTED-32-32`` aborts at 16 GiB per process even
 alone (an open decision below).
 
-**Real arithmetic** is not parallel. Sequential STP decided 18 of the 40
-QF_LRA files of the same track when this was measured (6 October 2026,
-before later changes to STP's arithmetic presolve). In the competition's
+**Real arithmetic, historical baseline.** Sequential STP decided 18 of the
+40 QF_LRA files of the same track when this was measured (6 October 2026,
+before parallel arithmetic support and later changes to STP's arithmetic
+presolve). In the competition's
 results file
 OpenSMT-SMTS-base decides 18 at one CPU second per wall-clock second, and
-OpenSMT-SMTS decides 22 at a median of 126. The group's fork point needs a
-check with one solve, and the arithmetic is checked outside the SAT solver.
+OpenSMT-SMTS decides 22 at a median of 126. These are historical sequential
+results, not measurements of the current arithmetic group.
 
 The interface it is built on
 ----------------------------
@@ -354,9 +384,9 @@ possible and can be used without ``stp-p``:
 
 - ``Solver::set_before_search`` runs a hook for the next check, at most
   once, at the moment its CNF is loaded and its search would start; a
-  process may fork there. A check that may refine after its first solve
-  does not offer the point, and is abandoned or searched in place, as the
-  caller asks;
+  process may fork there. A check that may refine outside arithmetic after
+  its first solve does not offer the point, and is abandoned or searched in
+  place, as the caller asks;
 - the hook's ``SearchPoint`` connects a ``ClauseExchange`` (learned clauses
   out, clauses to import in, in the backend's own numbering) to that
   check's backend, or diversifies its search and nothing else.
@@ -366,11 +396,9 @@ Open decisions
 
 Each of these is open, with the measurement that would settle it:
 
-- **More than 8 CPUs by default**: the default stops at 8 because nothing
-  measured favours more. A start-up ramp (seven roots at once, the rest
-  after a fixed delay) would have to keep inputs under 10 s within 5% of
-  ``-j8`` and beat ``-j8`` on the hard ones by more than the spread of
-  repeated runs.
+- **More than 8 CPUs by default**: the default remains at 8. A broader
+  default needs evidence across supported logics and resource budgets,
+  including short inputs, comparing latency and CPU cost.
 - **Memory-aware allocation**: fewer roots, or roots shed at runtime, when
   the loaded solver is large; two of the competition's largest files
   exceeded a 128 GiB guard at 24 CPUs. Measured by sampling each root's PSS
@@ -394,8 +422,9 @@ Each of these is open, with the measurement that would settle it:
   the group would re-fork each round.
 - **An automatic** ``ackermanize`` **rule**, chosen from the input's array
   reads (a sequential question).
-- **Real arithmetic**: a seed and configuration screen on the QF_LRA files
-  STP leaves open; a portfolio is worth building only if four or more fall.
+- **Real arithmetic**: ``QF_LRA`` uses the clause-sharing group. Parallel
+  simplex, arithmetic subproblem partitioning and HiGHS work sharing remain
+  separate possible approaches to measure.
 - **The 17 track files nobody decides**, by family.
 - **An in-library API**: the group's coordinator in ``libstp`` with a
   parallel options block on ``check_sat``, the C and Python mirrors of the

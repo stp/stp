@@ -77,7 +77,7 @@ std::uint64_t input_limit(const Options&);
 // none.
 std::string parse_query(stp::Solver& solver, Source& source);
 // The logics a route takes: QF_BV, and on the routes that run ordinary STP's
-// own pipeline (`theories`) also QF_ABV, QF_FP, QF_BVFP and QF_ABVFP; a
+// own pipeline (`theories`) also QF_ABV, QF_FP, QF_BVFP, QF_ABVFP and QF_LRA; a
 // script that names no logic is taken by every route. Anything else is
 // refused, after the parse that read the logic.
 void admit_logic(const std::string& logic, bool theories);

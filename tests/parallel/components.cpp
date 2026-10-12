@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
@@ -38,6 +39,7 @@ THE SOFTWARE.
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
@@ -520,6 +522,43 @@ bool stall_valid(std::vector<int> c)
 } // namespace
 
 using namespace stpp;
+
+TEST(StppComponents, DuplicateExportsDoNotSpendTheBurstBudget)
+{
+  Rings rings(2, 64);
+  Endpoint::Settings limited;
+  limited.rate = 2;
+  Endpoint writer(rings, 0, limited), reader(rings, 1, limited);
+  const int first[] = {1, -2}, reordered[] = {-2, 1}, second[] = {3, -4};
+  writer.learned(first, 2);
+  writer.learned(reordered, 2);
+  writer.learned(second, 2);
+  EXPECT_EQ(writer.counters()["exported"], 2);
+  EXPECT_EQ(writer.counters()["rate_limited"], 0);
+  reader.begin_import(2);
+  std::vector<int> clause;
+  std::set<std::vector<int>> accepted;
+  while (reader.next(clause))
+    accepted.insert(clause);
+  EXPECT_EQ(accepted, (std::set<std::vector<int>>{{-2, 1}, {-4, 3}}));
+}
+
+TEST(StppComponents, AThrottledClauseCanBeExportedAfterRefill)
+{
+  Rings rings(2, 64);
+  Endpoint::Settings limited;
+  limited.rate = 2;
+  Endpoint writer(rings, 0, limited);
+  const int first[] = {1, 2}, second[] = {3, 4}, third[] = {5, 6};
+  writer.learned(first, 2);
+  writer.learned(second, 2);
+  writer.learned(third, 2);
+  ASSERT_EQ(writer.counters()["exported"], 2);
+  ASSERT_EQ(writer.counters()["rate_limited"], 1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(600));
+  writer.learned(third, 2);
+  EXPECT_EQ(writer.counters()["exported"], 3);
+}
 
 // Rings: a writer that laps a reader several times, and a reader that
 // falls behind, must only ever see whole clauses that were written.

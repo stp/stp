@@ -898,15 +898,24 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   {
     STPMgr::BeforeSearchRequest* request;
     SATSolver* saved;
+    bool saved_diversification;
     ~MainBackend()
     {
       if (request != NULL)
+      {
         request->main = saved;
+        request->diversification_applied = saved_diversification;
+      }
     }
   } main_backend{bm->before_search,
-                 bm->before_search != NULL ? bm->before_search->main : NULL};
+                 bm->before_search != NULL ? bm->before_search->main : NULL,
+                 bm->before_search != NULL &&
+                     bm->before_search->diversification_applied};
   if (bm->before_search != NULL)
+  {
     bm->before_search->main = &NewSolver;
+    bm->before_search->diversification_applied = false;
+  }
   if (bm->has_distinct && containsKind(original_input, DISTINCT))
     FatalError("DISTINCT reached ordinary batch preprocessing", original_input);
   if (bm->UserFlags.enable_uninterpreted_functions &&
@@ -1791,11 +1800,14 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // The bit-vector abstractions are refined from candidate models too, so a
   // query carrying one needs the refinement machinery kept alive even with no
   // array operation in it.
-  const bool maybeRefinement =
-      lraActive || (arrayops && !bm->UserFlags.ackermannisation) ||
+  // Keep every non-arithmetic refinement source in this one expression:
+  // adding a source also disqualifies arithmetic clause sharing below.
+  const bool nonArithmeticRefinement =
+      (arrayops && !bm->UserFlags.ackermannisation) ||
       bm->UserFlags.bv_eq_abstraction ||
       bm->UserFlags.bv_term_abstraction || batchUFView->active() ||
       fpAbstractionActive;
+  const bool maybeRefinement = lraActive || nonArithmeticRefinement;
 
   simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
   std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
@@ -1816,6 +1828,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
+  toSATAIG.setArithmeticOnlyRefinement(
+      lraActive && !nonArithmeticRefinement && !arrayops && !extActive);
   // The encoder may consume CB before CNF conversion. Match that handoff
   // on every exit, including cancellation after it has already deleted CB.
   struct ReleaseConsumedCB

@@ -282,9 +282,9 @@ public:
   // the check until one reaches the moment its search would start; a solve
   // a shortcut decides never does, and a check decided that way answers
   // without the hook. At that moment the hook runs -- with the CNF loaded and
-  // nothing searched -- if the solve cannot be followed by refinement
-  // (maybeRefinement: no `refinement` round, arithmetic coordinator,
-  // uninterpreted-function adapter or abstraction); otherwise the point is
+  // nothing searched -- if the solve cannot be followed by refinement other
+  // than arithmetic (whose stable atom meanings and exact theory clauses
+  // permit sharing). A mixed arithmetic query still refuses. Otherwise the point is
   // refused there (`refused`, with `refusal` saying why), and the check is
   // abandoned or, with `search_unoffered`, searches in place with the hook
   // never called and whatever callback the solve had kept. When the hook
@@ -298,6 +298,11 @@ public:
   struct BeforeSearchRequest
   {
     std::function<bool(SATSolver&)> hook;
+    // Accepted Boolean search settings survive a backend rebuild. The
+    // original hook remains single-use; an exchange never follows a rebuild.
+    std::function<bool(SATSolver&)> diversify_replacement;
+    bool diversification_applied = false;
+    uint64_t rediversifications = 0;
     SATSolver* main = nullptr;
     std::string reason;
     bool search_unoffered = false;
