@@ -111,7 +111,6 @@ void Cpp_interface::init()
   bm.UserFlags.produce_models = initial_produce_models;
   bm.UserFlags.random_seed = initial_random_seed;
   solver_random_seed = initial_random_seed;
-  produce_assertions = false;
   produce_assignments = false;
   produce_unsat_assumptions = false;
   produce_unsat_cores = false;
@@ -212,8 +211,8 @@ const ASTVec Cpp_interface::GetAsserts(void)
 
 const ASTVec Cpp_interface::getAssertVector(void)
 {
-  // Keep assertion occurrences intact: labels and get-assertions refer to
-  // the original assertions, even after a check has conjoined a level.
+  // Keep assertion occurrences intact: labels refer to the original
+  // assertions, even after a check has conjoined a level.
   ASTVec result;
   for (const ASTVec* level : bm.AssertLevels())
     result.push_back(level->empty() ? bm.ASTTrue
@@ -1890,8 +1889,7 @@ void Cpp_interface::badBooleanOptionValue(const std::string& option,
 void Cpp_interface::setOption(std::string option, std::string value)
 {
   const bool boolean_option = option == "print-success" ||
-      option == "global-declarations" || option == "interactive-mode" ||
-      option == "produce-assertions" || option == "produce-assignments" ||
+      option == "global-declarations" || option == "produce-assignments" ||
       option == "produce-models" || option == "produce-proofs" ||
       option == "produce-unsat-assumptions" || option == "produce-unsat-cores";
   if (boolean_option && value != "true" && value != "false")
@@ -2016,11 +2014,6 @@ void Cpp_interface::setOption(std::string option, std::string value)
     produce_unsat_cores = value == "true";
     success();
   }
-  else if (option == "produce-assertions" || option == "interactive-mode")
-  {
-    produce_assertions = value == "true";
-    success();
-  }
   else if (option == "diagnostic-output-channel" ||
            option == "regular-output-channel")
   {
@@ -2065,8 +2058,6 @@ void Cpp_interface::getOption(std::string option)
     cout << (produce_models ? "true" : "false") << endl;
   else if (option == "global-declarations")
     cout << (global_declarations ? "true" : "false") << endl;
-  else if (option == "produce-assertions" || option == "interactive-mode")
-    cout << (produce_assertions ? "true" : "false") << endl;
   else if (option == "produce-unsat-assumptions")
     cout << (produce_unsat_assumptions ? "true" : "false") << endl;
   else if (option == "produce-assignments")
@@ -2422,24 +2413,6 @@ bool declaredSortCarrierMayBeShort(const STPMgr& bm, const ASTVec& assertions,
     return true;
   }
   return false;
-}
-
-void Cpp_interface::getAssertions()
-{
-  // Assertions are always retained. Like cvc5, allow inspection regardless
-  // of :produce-assertions rather than reject information already available.
-  // GetAsserts() flattens the stack into the individual asserted formulas,
-  // unlike getAssertVector(), which conjoins each level.
-  const ASTVec v = GetAsserts();
-
-  cout << "(" << endl;
-  for (const ASTNode& n : v)
-  {
-    printer::SMTLIB2_Print1(cout, n, 0, false);
-    cout << endl;
-  }
-  cout << ")" << endl;
-  flush(cout);
 }
 
 // Prints one pair of the response: the term as the script spelled it, then
