@@ -26,6 +26,8 @@ THE SOFTWARE.
 #include "Portfolio.h"
 #include <algorithm>
 #include <cerrno>
+#include <cstdlib>
+#include <dirent.h>
 #include <fstream>
 #include <limits>
 #include <poll.h>
@@ -34,6 +36,7 @@ THE SOFTWARE.
 #include <stdexcept>
 #include <sys/prctl.h>
 #include <sys/resource.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 // The allocator's own release, where one is linked: mimalloc's when stp-p
@@ -43,6 +46,38 @@ extern "C" int malloc_trim(std::size_t pad) __attribute__((weak));
 
 namespace stpp
 {
+void close_worker_descriptors(int keep)
+{
+#ifdef SYS_close_range
+  if (keep >= 0)
+  {
+    // There are at most three intervals around the two retained descriptors.
+    // A partial failure is harmless: the fallback scans what remains open.
+    const unsigned first = unsigned(std::min(2, keep));
+    const unsigned last = unsigned(std::max(2, keep));
+    if ((!first || syscall(SYS_close_range, 0u, first - 1, 0u) == 0) &&
+        (last <= first + 1 ||
+         syscall(SYS_close_range, first + 1, last - 1, 0u) == 0) &&
+        syscall(SYS_close_range, last + 1,
+                std::numeric_limits<unsigned>::max(), 0u) == 0)
+      return;
+  }
+#endif
+  DIR* dir = opendir("/proc/self/fd");
+  if (!dir)
+    _exit(2);
+  std::vector<int> descriptors;
+  while (auto* entry = readdir(dir))
+  {
+    char* end = nullptr;
+    auto n = strtol(entry->d_name, &end, 10);
+    if (*entry->d_name && !*end && n != 2 && n != keep && n != dirfd(dir))
+      descriptors.push_back(int(n));
+  }
+  closedir(dir);
+  for (int fd : descriptors)
+    close(fd);
+}
 double now()
 {
   return std::chrono::duration<double>(

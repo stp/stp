@@ -107,6 +107,9 @@ struct Options
   bool pin = false;
   std::string control, inject;
 };
+// In a forked worker, retain only stderr and its report channel. Bulk closing
+// falls back to /proc when the kernel does not support or allow it.
+void close_worker_descriptors(int keep);
 // Whether `inject` names the fault `kind` ("hold-hedge"), or for
 // "wrong-root" the answer a slot is to report ("" when none).
 bool injected(const Options&, const std::string& kind);

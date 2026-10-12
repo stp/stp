@@ -44,25 +44,6 @@ namespace stpp
 {
 namespace
 {
-// Everything but stderr and `keep`: a root holds no other root's channel, so
-// a killed root cannot keep a pipe it inherited open.
-void close_except(int keep)
-{
-  DIR* dir = opendir("/proc/self/fd");
-  if (!dir)
-    _exit(2);
-  std::vector<int> descriptors;
-  while (auto* entry = readdir(dir))
-  {
-    char* end = nullptr;
-    auto n = strtol(entry->d_name, &end, 10);
-    if (*entry->d_name && !*end && n != 2 && n != keep && n != dirfd(dir))
-      descriptors.push_back(int(n));
-  }
-  closedir(dir);
-  for (int fd : descriptors)
-    close(fd);
-}
 double cpu_seconds(const rusage& u)
 {
   return u.ru_utime.tv_sec + u.ru_utime.tv_usec / 1e6 + u.ru_stime.tv_sec +
@@ -452,7 +433,7 @@ Json batch_group(Source& input, const Options& o)
         parent_death(owner);
         signal(SIGINT, SIG_DFL);
         signal(SIGTERM, SIG_DFL);
-        close_except(fd);
+        close_worker_descriptors(fd);
         prctl(PR_SET_NAME, "stp-p hedge");
         if (o.pin)
         {
@@ -567,7 +548,7 @@ Json batch_group(Source& input, const Options& o)
               parent_death(owner);
               signal(SIGINT, SIG_DFL);
               signal(SIGTERM, SIG_DFL);
-              close_except(report_fd);
+              close_worker_descriptors(report_fd);
               prctl(PR_SET_NAME, "stp-p root");
               joined = {{"slot", slot}};
               if (injected(o, "fail-root-setup"))
