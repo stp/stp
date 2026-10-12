@@ -38,6 +38,15 @@ set(CADICAL_DIR "" CACHE PATH
 set(CaDiCaL_FOUND_SYSTEM FALSE)
 set(CADICAL_VERSION "unknown")
 
+# CaDiCaL 3.0.1 with generated cube literals translated back to external
+# numbering. Keep the version separate from the immutable source revision:
+# the feature gates and patch selection need a release number, not a hash.
+set(CaDiCaL_TAG "17ababb48ecb0e5d61f45e941ebbd8b59312fff5" CACHE STRING
+    "CaDiCaL tag or commit to build when one has to be built")
+set(CaDiCaL_VERSION "3.0.1" CACHE STRING
+    "Release version of a CaDiCaL commit; rel-<version> tags supply their own")
+mark_as_advanced(CaDiCaL_TAG CaDiCaL_VERSION)
+
 # The CaDiCaL patch set STP carries, as one hash: the patch step records it in
 # the checkout and the install, so that a changed set is applied again to an
 # existing checkout and an install built from another set is not adopted. The
@@ -49,7 +58,9 @@ file(GLOB _cadical_patch_files CONFIGURE_DEPENDS
      "${CMAKE_CURRENT_LIST_DIR}/deps-utils/patch-cadical.cmake"
      "${CMAKE_CURRENT_LIST_DIR}/deps-utils/cadical-CMakeLists.txt")
 list(SORT _cadical_patch_files)
-set(_cadical_patch_hashes "")
+# An installed bundled archive must match the source revision as well as the
+# patches: a new pin must not silently adopt an older shared dependency.
+set(_cadical_patch_hashes "${CaDiCaL_TAG};${CaDiCaL_VERSION};")
 foreach(_file ${_cadical_patch_files})
     file(SHA256 "${_file}" _hash)
     string(APPEND _cadical_patch_hashes "${_hash}")
@@ -183,13 +194,11 @@ if(NOT CaDiCaL_FOUND_SYSTEM)
         check_auto_download("CaDiCaL" "-DUSE_CADICAL=OFF")
     endif()
 
-    set(CaDiCaL_TAG "rel-3.0.1" CACHE STRING
-        "CaDiCaL tag to build when one has to be built")
-    mark_as_advanced(CaDiCaL_TAG)
-    # The tag is rel-<version>, and the version is what the feature gates below
-    # are decided from -- so derive one from the other rather than writing the
-    # number twice and letting them drift.
-    string(REGEX REPLACE "^rel-" "" CADICAL_VERSION "${CaDiCaL_TAG}")
+    if(CaDiCaL_TAG MATCHES "^rel-([0-9]+\\.[0-9]+\\.[0-9]+)$")
+        set(CADICAL_VERSION "${CMAKE_MATCH_1}")
+    else()
+        set(CADICAL_VERSION "${CaDiCaL_VERSION}")
+    endif()
 
     set(CaDiCaL_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}cadical${CMAKE_STATIC_LIBRARY_SUFFIX}")
@@ -203,7 +212,7 @@ if(NOT CaDiCaL_FOUND_SYSTEM)
     ExternalProject_Add(
         CaDiCaL-EP
         ${STP_EP_COMMON_CONFIG}
-        GIT_REPOSITORY https://github.com/arminbiere/cadical
+        GIT_REPOSITORY https://github.com/stp/cadical
         GIT_TAG ${CaDiCaL_TAG}
         PATCH_COMMAND ${CMAKE_COMMAND} "-DSOURCE_DIR=<SOURCE_DIR>"
                       "-DCADICAL_VERSION=${CADICAL_VERSION}"
