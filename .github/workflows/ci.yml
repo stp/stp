@@ -1555,6 +1555,62 @@ jobs:
         mkdir -p .ccache deps
         sudo chown -R "$(id -u):$(id -g)" .ccache deps
 
+  # Every other gcc job compiles with the runner's GCC 13, and a newer GCC
+  # warns where 13 does not: GCC 16 failed -Werror on a member function
+  # called from a base-class initialiser, which 13 through 15 all let pass.
+  # This builds with the newest release, in the official image, with every
+  # backend so that as much of STP as possible meets the new compiler. See
+  # scripts/ci-newest-gcc.sh.
+  #
+  # Bump the version when a newer GCC is released. The point is to be a step
+  # ahead of what the distributions ship, not to pin one version forever. The
+  # version is in the cache keys too, so a bump starts from cold rather than
+  # from objects built by the previous compiler.
+  build-newest-gcc:
+    strategy:
+      matrix:
+        gcc: [16]
+
+    name: gcc ${{ matrix.gcc }}
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      uses: actions/cache@v4
+      with:
+        path: deps
+        key: deps-gcc${{ matrix.gcc }}-${{ steps.deps-key.outputs.key }}
+
+    # Inside the workspace so the bind mount carries it back out to the
+    # runner for the post-job save.
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ccache-gcc${{ matrix.gcc }}/${{ github.run_id }}
+        restore-keys: ccache-gcc${{ matrix.gcc }}/
+
+    - name: Build and test with GCC ${{ matrix.gcc }}
+      run: |
+        mkdir -p .ccache
+        docker run --rm -v "$GITHUB_WORKSPACE":/stp -w /stp \
+          -e CCACHE_DIR=/stp/.ccache -e CCACHE_MAXSIZE=400M -e CCACHE_UMASK=022 \
+          gcc:${{ matrix.gcc }} ./scripts/ci-newest-gcc.sh
+
+    # As for i386: the container writes as root.
+    - name: Reclaim ownership of cached trees
+      if: always()
+      run: |
+        mkdir -p .ccache deps
+        sudo chown -R "$(id -u):$(id -g)" .ccache deps
+
   # The MSVC leg is the MiniSat one out of necessity, not preference: MSVC
   # compiles neither CryptoMiniSat (POSIX-only oracle code) nor CaDiCaL
   # (unguarded __builtin_* throughout), so MiniSat is the only backend a
