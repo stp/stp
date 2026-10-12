@@ -13,11 +13,11 @@ STP imports code from the following libraries:
 	* nlohmann/json Copyright (c) 2013-2025 Niels Lohmann (only compiled
 		into stp-p, with -DSTP_BUILD_PARALLEL=ON, from the system's copy).
 	* IMath Copyright (c) 2002-2009 Michael J. Fromberger. Not imported:
-		cmake/FindIMath.cmake fetches v1.35 commit
-		a4de3dea7e65e2374a91d9938e292b887896fd24 and builds `imath.c` and
-		`imrat.c` from it, statically, into `libstp`. STP applies one pinned
-		patch, kept beside that module, which renames IMath's GMP-shaped
-		private type and makes its tuning globals immutable.
+		cmake/FindIMath.cmake fetches a commit of STP's fork, stp/imath,
+		and builds `imath.c` and `imrat.c` from it, statically, into
+		`libstp`. The fork is release v1.35 with one source change, which
+		renames IMath's GMP-shaped value types and makes its tuning
+		globals immutable, and a CMake build of those two files.
 
 STP is built against a SAT solver, which it does not import but does link.
 Which solvers are present depends on the build configuration, and a static
