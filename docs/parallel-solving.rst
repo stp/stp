@@ -1,7 +1,7 @@
 Parallel solving
 ================
 
-``stp-p`` decides one SMT-LIB query on several CPUs at once. It encodes the
+``stp-p`` decides one SMT-LIB query on several CPUs at once. By default it encodes the
 query the way ordinary STP does, once, and forks copies of the loaded SAT
 solver that search differently and pass each other short learned clauses.
 The first answer wins. Without ``-j`` it uses the CPUs the process is
@@ -148,11 +148,51 @@ supervisor samples the summed resident size every 50 ms and, when that is
 over the limit, the summed PSS, which counts each copy-on-write page once,
 at most every 0.5 s; over the limit in PSS the answer is ``unknown``.
 
+Optional encoding groups
+------------------------
+
+``--encoding-groups`` opts into two independent encodings for named ``QF_BV``
+queries with ``--config default`` and at least four jobs:
+
+.. code-block:: bash
+
+    stp-p -j24 --encoding-groups --stats-json report.json problem.smt2
+
+The coordinator parses once and forks two owners over the same assertions.
+The default encoding gets half the job budget, rounded up, including the
+retained hedge; GIA-high gets the remaining jobs without another hedge.
+Each owner builds its own CNF and forks its roots from that loaded solver.
+Learned clauses stay within that owner's encoding; no clauses cross between
+groups. Other supported logics and unnamed queries use the ordinary single
+group over the already parsed assertions. Without the option, the existing
+single-encoding route and worker budget apply at every job count.
+
+A validated decision note requests cancellation of the other encoding before
+the winning owner finishes teardown. Owners stop their workers and drain their
+reports, preserving the comparison of complete answers. An owner that does
+not respond within a bounded grace period is forcibly stopped; in that case,
+only evidence already forwarded by that owner remains available for comparison.
+The invocation's deadline and memory guard still cover the entire process tree.
+
+If one encoding fails while the other is running, the coordinator first reaps
+the failed group's descendants, then makes one replacement group using the
+surviving encoding and the freed job budget. The survivor retains its search
+state. The replacement has a different seed and its own clause rings, and must
+build its CNF again. No further replacement is attempted if that attempt fails.
+To support this fallback, the coordinator retains the parsed assertions until
+the run ends. Slots allocated to an encoding that is still being generated are
+not redistributed while it is merely slow.
+
+The JSON report identifies the groups, their budgets, any replacement, and
+cooperative or forced cancellation. This option permits comparison with and
+without grouping using the same executable; it makes no performance guarantee.
+
 What ``-jN`` runs, and why
 --------------------------
 
 Plain ``-jN`` is the configuration the measurements below chose; the test
-driver can vary each policy, ``stp-p`` cannot.
+driver can vary its search and transport policies. The encoding-group option
+above is separate and off by default.
 
 - **Root 0 exports and never imports**. Imports
   slow a solver down, and on some inputs only ordinary STP's own search

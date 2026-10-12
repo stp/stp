@@ -309,6 +309,8 @@ struct Watch final : stp::Terminator
   Watch(double e, Root* h, const Options& options) : end(e), hedge(h), o(options) {}
   bool terminate() override
   {
+    if (o.cancelled())
+      return true;
     if (end && now() >= end)
       return true;
     if (!hedge || answered)
@@ -382,10 +384,15 @@ void settle(std::vector<Root>& children, const Options& o,
 // same wrong answer. A root, or the hedge, that ends unknown before the
 // deadline has answered unknown, with the library's reason; only a death or
 // a failed setup is a failure.
-Json batch_group(Source& input, const Options& o)
+Json batch_group(Source& input, const Options& o, ParsedQuery* prepared)
 {
   const double started = now();
-  auto tm = std::make_unique<stp::TermManager>();
+  if (prepared && !prepared->manager)
+    throw std::runtime_error("group received an empty parsed query");
+  auto tm = prepared ? std::move(prepared->manager)
+                     : std::make_unique<stp::TermManager>();
+  auto assertions = prepared ? std::move(prepared->assertions)
+                            : std::vector<stp::Term>();
   // The roots exchange clauses through CaDiCaL's clause-import extension, so
   // the group runs on CaDiCaL even in a build whose default is another
   // backend; where CaDiCaL is the default this changes nothing.
@@ -393,7 +400,10 @@ Json batch_group(Source& input, const Options& o)
   if (!options.is_set("sat-backend"))
     options.set("sat-backend", "cadical");
   auto solver = std::make_unique<stp::Solver>(*tm, options);
-  const std::string logic = parse_query(*solver, input);
+  const std::string logic = prepared ? prepared->logic : parse_query(*solver, input);
+  for (const auto& assertion : assertions)
+    solver->assert_formula(assertion);
+  std::vector<stp::Term>().swap(assertions);
   admit_logic(logic, true);
   release_memory();
   const double parsed = now();
@@ -434,7 +444,7 @@ Json batch_group(Source& input, const Options& o)
     // It asserts the parsed terms in a solver of its own over the same
     // manager, shared copy-on-write: nothing is parsed twice.
     const auto assertions = solver->assertions();
-    int channel[2];
+    int channel[2] = {-1, -1};
     const pid_t pid = pipe2(channel, O_CLOEXEC | O_NONBLOCK) ? -1
                       : injected(o, "fork-fails")          ? (errno = EAGAIN, -1)
                                                             : fork();
@@ -539,6 +549,8 @@ Json batch_group(Source& input, const Options& o)
         variables = point.variables();
         for (unsigned slot = 0; slot < roots; ++slot)
         {
+          if (o.cancelled())
+            break;
           int channel[2];
           if (pipe2(channel, O_CLOEXEC | O_NONBLOCK))
           {
@@ -796,7 +808,7 @@ Json batch_group(Source& input, const Options& o)
       // fork-in-hook test checks each against an oracle).
       if ((decision != "unknown" && o.control != "batch-all") || all_done)
         break;
-      if (o.deadline && now() >= o.deadline)
+      if (o.cancelled() || (o.deadline && now() >= o.deadline))
         break;
       if (!fds.empty())
         continue;
@@ -858,7 +870,8 @@ Json batch_group(Source& input, const Options& o)
                  {"sharing", bool(rings)},
                  {"hedge", hedge_row},
                  {"variables", variables},
-                 {"parse_s", parsed - started},
+                 {"parse_s", prepared ? 0.0 : parsed - started},
+                 {"parsed_query_reused", bool(prepared)},
                  {"base_config", o.config},
                  {"owner_checks", owner_checks},
                  {"owner_check", owner_check},
