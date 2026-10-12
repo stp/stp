@@ -102,14 +102,16 @@ onto it, then moving the pin here.
 
 `IMath <https://github.com/creachadair/imath>`__, the arbitrary-precision
 integer and rational arithmetic under STP's exact linear real arithmetic, is
-required too and is not vendored either. STP builds it from a pinned commit
-of release 1.35, against STP's own allocation hooks, and with one patch, kept
-in ``cmake/deps-utils``, that renames IMath's GMP-shaped private type --
-which would otherwise collide with a real GMP in the same link -- and makes
-its tuning globals immutable. STP's sources name the renamed type, so an
-unpatched copy does not compile against them, and that is why an installed
-IMath -- a distribution's, say -- is never looked for. That leaves two ways
-to get it, tried in this order:
+required too and is not vendored either. STP builds it, against STP's own
+allocation hooks, from a pinned commit of its fork
+`stp/imath <https://github.com/stp/imath>`__, whose ``stp`` branch is
+release 1.35 with two commits on top: one renames IMath's GMP-shaped value
+type -- which would otherwise collide with a real GMP's -- and makes its
+tuning globals immutable, and one adds the CMake build of the two files STP
+needs. STP's sources name the renamed type, so an upstream copy does not
+compile against them, and that is why an installed IMath -- a
+distribution's, say -- is never looked for. That leaves two ways to get it,
+tried in this order:
 
 -  ``-DIMATH_DIR=<path>`` naming a prefix that holds ``include/imrat.h``
    and ``lib/`` with the ``imath`` library, as an earlier build installs
@@ -117,8 +119,8 @@ to get it, tried in this order:
    LibBF, and an ``STP_DEP_DIR`` that an earlier build filled is searched
    as well
 -  ``-DENABLE_AUTO_DOWNLOAD=ON``, which clones
-   `creachadair/imath <https://github.com/creachadair/imath>`__ at the
-   pinned commit, applies the patch, and builds it as part of this build
+   `stp/imath <https://github.com/stp/imath>`__ at the pinned commit and
+   builds it as part of this build
 
 Without either, configuration fails and says so.
 
@@ -377,7 +379,7 @@ These apply to all generators:
    a directory containing ``nlohmann/json.hpp`` or an ``include/`` directory
    that does. Version 3.9 or later is required
 -  ``LIBBF_DIR`` -- where to find an already-built LibBF
--  ``IMATH_DIR`` -- where to find an already-built, STP-patched IMath
+-  ``IMATH_DIR`` -- where to find an already-built IMath from ``stp/imath``
    (see above)
 -  ``ENABLE_HIGHS`` -- link `HiGHS <https://highs.dev>`__ into ``libstp``
    as an advisory LP and MIP engine for the linear-arithmetic searches that
