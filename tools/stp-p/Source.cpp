@@ -212,12 +212,13 @@ std::string parse_query(stp::Solver& solver, Source& source)
 void admit_logic(const std::string& logic, bool theories)
 {
   const bool theory = logic == "QF_ABV" || logic == "QF_FP" ||
-                      logic == "QF_BVFP" || logic == "QF_ABVFP";
+                      logic == "QF_BVFP" || logic == "QF_ABVFP" ||
+                      logic == "QF_LRA";
   if (!logic.empty() && logic != "QF_BV" && !(theories && theory))
     throw std::runtime_error(
         "unsupported/invalid SMT-LIB: " +
-        std::string(theories ? "logic must be QF_BV, QF_ABV, QF_FP, QF_BVFP "
-                               "or QF_ABVFP"
+        std::string(theories ? "logic must be QF_BV, QF_ABV, QF_FP, QF_BVFP, "
+                               "QF_ABVFP or QF_LRA"
                              : "logic must be QF_BV") +
         ", not " + logic);
 }

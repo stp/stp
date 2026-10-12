@@ -71,15 +71,22 @@ if(SANITIZE OR CMAKE_CXX_FLAGS MATCHES "-fsanitize=([a-z,=-]*,)?(address|thread|
   set(STPP_SANITIZED 1)
 endif()
 
-foreach(name cli lifecycle portfolio hedge batch encoding_groups)
+foreach(name cli lifecycle portfolio hedge batch lra encoding_groups)
   add_test(NAME stpp-${name} COMMAND ${PYTHON_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/${name}.py $<TARGET_FILE:stp-p> $<TARGET_FILE:stpp-drive>)
 endforeach()
 add_test(NAME stpp-group COMMAND ${PYTHON_EXECUTABLE}
   ${CMAKE_CURRENT_SOURCE_DIR}/group.py $<TARGET_FILE:stp-p> $<TARGET_FILE:stpp-drive> 60)
-set_tests_properties(stpp-cli stpp-lifecycle stpp-portfolio stpp-hedge stpp-batch stpp-encoding_groups
+set_tests_properties(stpp-cli stpp-lifecycle stpp-portfolio stpp-hedge stpp-batch stpp-lra stpp-encoding_groups
   stpp-group PROPERTIES LABELS "parallel" ENVIRONMENT "STPP_SANITIZED=${STPP_SANITIZED}")
 set_tests_properties(stpp-cli stpp-lifecycle stpp-portfolio stpp-hedge
   stpp-encoding_groups
   PROPERTIES TIMEOUT 300)
 set_tests_properties(stpp-batch stpp-group PROPERTIES TIMEOUT 600)
+set_tests_properties(stpp-lra PROPERTIES TIMEOUT 300)
+
+# Differential-fuzzer report handling uses synthetic executables.
+add_test(NAME stpp-lra-differential COMMAND ${PYTHON_EXECUTABLE}
+  ${PROJECT_SOURCE_DIR}/scripts/tests/lra-parallel-differential.py)
+set_tests_properties(stpp-lra-differential PROPERTIES
+  LABELS "parallel;lra" TIMEOUT 30)

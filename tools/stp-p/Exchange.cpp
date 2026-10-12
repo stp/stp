@@ -51,6 +51,14 @@ std::uint64_t mix(std::uint64_t x)
   return x ^ (x >> 31);
 }
 constexpr std::size_t seen_slots = 1u << 16;
+std::uint64_t clause_hash(std::vector<int>& literals) noexcept
+{
+  std::sort(literals.begin(), literals.end());
+  std::uint64_t h = 0x84222325cbf29ce4ull ^ literals.size();
+  for (int l : literals)
+    h = mix(h ^ std::uint64_t(std::uint32_t(l)));
+  return h | 1; // zero marks an empty slot
+}
 } // namespace
 
 Rings::Rings(unsigned slots, std::size_t literals_per_ring)
@@ -115,11 +123,7 @@ Endpoint::Endpoint(const Rings& r, unsigned own, const Settings& s)
 
 bool Endpoint::fresh(std::vector<int>& literals) noexcept
 {
-  std::sort(literals.begin(), literals.end());
-  std::uint64_t h = 0x84222325cbf29ce4ull ^ literals.size();
-  for (int l : literals)
-    h = mix(h ^ std::uint64_t(std::uint32_t(l)));
-  h |= 1; // zero marks an empty slot
+  const auto h = clause_hash(literals);
   auto& entry = seen[h & (seen_slots - 1)];
   if (entry == h)
     return false;
@@ -136,6 +140,18 @@ void Endpoint::learned(const int* literals, std::size_t size) noexcept
     ++oversize;
     return;
   }
+  try
+  {
+    scratch.assign(literals, literals + size);
+  }
+  catch (...)
+  {
+    return; // out of memory for a copy of at most max_size literals
+  }
+  const auto fingerprint = clause_hash(scratch);
+  auto& remembered = seen[fingerprint & (seen_slots - 1)];
+  if (remembered == fingerprint)
+    return; // duplicates spend no export budget
   if (size > 1)
   {
     const double t = coarse_now();
@@ -148,16 +164,9 @@ void Endpoint::learned(const int* literals, std::size_t size) noexcept
     }
     tokens -= 1;
   }
-  try
-  {
-    scratch.assign(literals, literals + size);
-  }
-  catch (...)
-  {
-    return; // out of memory for a copy of at most max_size literals
-  }
-  if (!fresh(scratch))
-    return; // this root already exported or imported it
+  // Remember only clauses that pass the rate limit. A rejected clause may
+  // be offered again after the token bucket refills.
+  remembered = fingerprint;
   auto* h = rings.header(slot);
   auto* d = rings.data(slot);
   const std::size_t cap = rings.capacity();

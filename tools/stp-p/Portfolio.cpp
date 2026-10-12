@@ -52,6 +52,16 @@ const std::vector<Config>& configs()
        "pattern recovery without maximal-AND collapse"},
       {"no-factor", R::Batch, 0, {{"cadical-factor", "off"}},
        "CaDiCaL without bounded variable addition"},
+      {"lra-first-search", R::Batch, 0, {{"lra-first-search", "true"}},
+       "bind arithmetic before the first SAT search"},
+      {"lra-lazy", R::Batch, 0, {{"lra-theory-propagation", "false"}},
+       "check arithmetic on complete Boolean candidates"},
+      {"lra-exact", R::Batch, 0, {{"lra-float-driver", "false"}},
+       "exact arithmetic driver for partial theory checks"},
+      {"lra-reroute", R::Batch, 0,
+       {{"lra-float-driver", "true"}, {"lra-float-reroute", "1"},
+        {"lra-float-reroute-floor", "0"}},
+       "exercise an arithmetic backend rebuild"},
   };
   return table;
 }

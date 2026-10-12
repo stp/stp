@@ -159,8 +159,8 @@ int run(int argc, char** argv, bool testing)
                                 v.git_sha + ")";
                        });
   app.footer(
-      "One decision-only nonincremental query: QF_BV, QF_ABV, QF_FP, QF_BVFP or\n"
-      "QF_ABVFP, or one with no set-logic, which is admitted whatever it holds;\n"
+      "One decision-only nonincremental query: QF_BV, QF_ABV, QF_FP, QF_BVFP,\n"
+      "QF_ABVFP or QF_LRA; without set-logic, admitted whatever it holds;\n"
       "read as one query by STP's parser. stdin is read when the input\n"
       "is absent or -, and must not be a terminal. The input may be at most\n"
       "--worker-memory-mib (16384 with 0).\n"

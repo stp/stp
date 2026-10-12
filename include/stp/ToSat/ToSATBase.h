@@ -85,6 +85,7 @@ protected:
   STPMgr* bm;
   std::function<bool()> before_search_;
   std::string before_search_failure_;
+  bool arithmetic_refinement_only_ = false;
 
 public:
   typedef std::unordered_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
@@ -121,6 +122,19 @@ public:
     before_search_failure_ = std::move(failure);
   }
   void clearBeforeSearch() noexcept { before_search_ = nullptr; }
+
+  // The batch driver establishes this from the active theories, before
+  // encoding. Arithmetic refinement preserves the meaning of every shared
+  // atom; copies may exchange its consequences. Other refinement paths have
+  // not made that guarantee and still refuse the caller's fork point.
+  void setArithmeticOnlyRefinement(bool value) noexcept
+  {
+    arithmetic_refinement_only_ = value;
+  }
+  bool arithmeticOnlyRefinement() const noexcept
+  {
+    return arithmetic_refinement_only_;
+  }
 
   virtual ASTNodeToSATVar& SATVar_to_SymbolIndexMap() = 0;
 
