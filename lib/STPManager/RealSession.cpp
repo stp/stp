@@ -35,10 +35,12 @@
 #include "stp/Sat/SATSolver.h"
 #include "stp/Sat/SATSolverFactory.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/Util/PreparationControl.h"
 #include "Lra/ASTRealConst.h"
 #include "Lra/LraCoordinator.h"
 #include "Lra/LraFrontend.h"
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <set>
@@ -61,6 +63,7 @@ struct RealSessionState final
   std::vector<ASTNode> base_encoded;
   bool base_unsat = false;
   uint64_t checks = 0;
+  std::vector<size_t> failed_assumptions;
 };
 
 namespace
@@ -165,21 +168,28 @@ void STP::discardRealSession()
   realSession = nullptr;
 }
 
+std::vector<size_t> STP::realSessionUnsatAssumptionIndices() const
+{
+  return realSession ? realSession->failed_assumptions : std::vector<size_t>{};
+}
+
 SOLVER_RETURN_TYPE STP::checkSatRealSession(const std::vector<ASTVec*>& levels,
-                                            bool& handled)
+                                            bool& handled,
+                                            size_t assumption_levels)
 {
   handled = false;
-  if (levels.empty())
+  if (levels.empty() || assumption_levels >= levels.size())
     return SOLVER_ERROR;
+  const auto deadline = bm->UserFlags.hasQueryTimeLimit()
+      ? bm->UserFlags.queryDeadline(PreparationControl::Clock::now())
+      : PreparationControl::Clock::time_point::max();
+  const PreparationControl preparation(deadline, bm->preparation_control);
+  const PreparationScope preparation_scope(bm->preparation_control, preparation);
   const bool fresh = realSession == nullptr;
   if (fresh)
     realSession = new RealSessionState();
   RealSessionState& session = *realSession;
-  const auto decline = [&]() -> SOLVER_RETURN_TYPE {
-    discardRealSession();
-    handled = false;
-    return SOLVER_ERROR;
-  };
+  session.failed_assumptions.clear();
   // A check that ran out of its own time or conflict budget has its answer:
   // unknown, as the batch path answers when its budget runs out. Declining
   // would hand the batch path the same check with a fresh budget of its own,
@@ -195,6 +205,31 @@ SOLVER_RETURN_TYPE STP::checkSatRealSession(const std::vector<ASTVec*>& levels,
     discardRealSession();
     handled = true;
     return bm->unknownResult();
+  };
+  const auto preparationStopped = [&](const PreparationInterrupted& stopped) {
+    bm->soft_timeout_expired = true;
+    if (bm->getUnknownReason() == UnknownReason::None)
+      bm->noteUnknown(UnknownReason::Timeout,
+                      std::string("during ") + preparationStageName(stopped.stage));
+    return giveUp();
+  };
+  const auto decline = [&]() -> SOLVER_RETURN_TYPE {
+    // Coordinator extensions report interruptions through their return
+    // values. Preserve those stops before discarding the session: a batch
+    // retry would otherwise arm a fresh budget for the same check.
+    try
+    {
+      if (session.coordinator)
+        session.coordinator->rethrowPreparationInterruption();
+      bm->checkPreparation(PreparationStage::Boundary);
+    }
+    catch (const PreparationInterrupted& stopped)
+    {
+      return preparationStopped(stopped);
+    }
+    discardRealSession();
+    handled = false;
+    return SOLVER_ERROR;
   };
 
   // Every check starts the way a batch query does. The batch path clears the
@@ -214,19 +249,21 @@ SOLVER_RETURN_TYPE STP::checkSatRealSession(const std::vector<ASTVec*>& levels,
 
   try
   {
+    bm->checkPreparation(PreparationStage::Boundary);
     SATSolver* solver = nullptr;
     ToSATAIG* tosat = nullptr;
     lra::LraCoordinator* coordinator = nullptr;
 
     if (fresh)
     {
-      // Level 0 is the base; every deeper level is a frame. The base is
-      // encoded and solved once, here.
+      // Encode the base first, then install every live frame before searching.
+      // A harder base must not spend the check's budget before a contradictory
+      // pushed assertion or assumption is installed.
       session.solver.reset(get_new_sat_solver());
       if (bm->UserFlags.stats_flag)
         session.solver->setVerbosity(1);
       solver = session.solver.get();
-      applySolveBudgets(*solver, bm->UserFlags);
+      applySolveBudgets(*solver, bm->UserFlags, deadline);
       session.tosat = std::make_unique<ToSATAIG>(bm, nullptr, arrayTransformer);
       tosat = session.tosat.get();
 
@@ -253,15 +290,22 @@ SOLVER_RETURN_TYPE STP::checkSatRealSession(const std::vector<ASTVec*>& levels,
       bm->ClearAllTables();
       bm->TermsAlreadySeenMap_Clear();
       Ctr_Example->ClearAllTables();
-      SOLVER_RETURN_TYPE base_res = lraSessionSolve(
-          *solver, *tosat, *coordinator, inputToSat, /*first=*/true);
-      if (budgetSpent())
-        return giveUp();
-      if (base_res == SOLVER_ERROR || base_res == SOLVER_UNKNOWN ||
-          bm->soft_timeout_expired)
-        return decline();
-      if (base_res == SOLVER_VALID)
+      if (inputToSat == bm->ASTFalse)
         session.base_unsat = true;
+      else
+      {
+        // Reserve the theory interface before the backend receives clauses;
+        // CaDiCaL's elimination options cannot be changed after that point.
+        if (!coordinator->beforeSolverCall())
+          return decline();
+        const bool encoded = tosat->encodeWithoutSearch(
+            *solver, inputToSat, /*needAbsRef=*/true);
+        if (budgetSpent())
+          return giveUp();
+        if (!encoded || bm->soft_timeout_expired ||
+            !coordinator->afterCnf(*tosat))
+          return decline();
+      }
     }
     else
     {
@@ -270,7 +314,7 @@ SOLVER_RETURN_TYPE STP::checkSatRealSession(const std::vector<ASTVec*>& levels,
       // check arms it again rather than inheriting a deadline already
       // spent; a check that spends its budget answers unknown (giveUp
       // above) rather than being solved a second time on the batch path.
-      applySolveBudgets(*session.solver, bm->UserFlags);
+      applySolveBudgets(*session.solver, bm->UserFlags, deadline);
     }
     solver = session.solver.get();
     tosat = session.tosat.get();
@@ -370,12 +414,44 @@ SOLVER_RETURN_TYPE STP::checkSatRealSession(const std::vector<ASTVec*>& levels,
     bm->ClearAllTables();
     bm->TermsAlreadySeenMap_Clear();
     Ctr_Example->ClearAllTables();
-    SOLVER_RETURN_TYPE res = lraSessionSolve(
-        *solver, *tosat, *coordinator, bm->ASTTrue, /*first=*/false);
+    SOLVER_RETURN_TYPE res = lraSessionSolve(*solver, *tosat, *coordinator);
     if (budgetSpent())
       return giveUp();
     if (res == SOLVER_ERROR || bm->soft_timeout_expired)
       return decline();
+    if (res == SOLVER_VALID && assumption_levels)
+    {
+      // Capture the backend core immediately, before any further mutation.
+      // Each API assumption has its own activation frame, so the proof can
+      // omit irrelevant predicates. The permanent and user-pushed frames
+      // remain part of the query against which this core is valid.
+      auto& bindings = tosat->SATVar_to_SymbolIndexMap();
+      SATSolver::vec_literals live;
+      for (const ASTNode& activation : coordinator->liveActivations())
+      {
+        const auto found = bindings.find(activation);
+        if (found == bindings.end() || found->second.size() != 1 ||
+            !solver->validVariable(found->second.front()))
+          return decline();
+        live.push(SATSolver::mkLit(found->second.front(), false));
+      }
+      std::vector<int> failed;
+      solver->unsatAssumptions(live, failed);
+      const size_t first = levels.size() - assumption_levels;
+      for (size_t i = 0; i < assumption_levels; ++i)
+      {
+        const ASTNode& activation = session.frames[first + i - 1].activation;
+        if (activation.IsNull()) // an empty/constant-true assumption frame
+          continue;
+        const auto found = bindings.find(activation);
+        if (found == bindings.end() || found->second.size() != 1)
+          return decline();
+        const int literal = SATSolver::toInt(
+            SATSolver::mkLit(found->second.front(), false));
+        if (std::find(failed.begin(), failed.end(), literal) != failed.end())
+          session.failed_assumptions.push_back(i);
+      }
+    }
     if (bm->UserFlags.stats_flag)
       std::cerr << "Real session: check " << session.checks + 1 << ", levels "
                 << levels.size() << ", frames " << session.frames.size()
@@ -383,6 +459,10 @@ SOLVER_RETURN_TYPE STP::checkSatRealSession(const std::vector<ASTVec*>& levels,
     ++session.checks;
     handled = true;
     return res;
+  }
+  catch (const PreparationInterrupted& stopped)
+  {
+    return preparationStopped(stopped);
   }
   catch (...)
   {
@@ -405,14 +485,11 @@ ASTNode STP::CreateFreshSessionActivation()
 }
 
 SOLVER_RETURN_TYPE STP::lraSessionSolve(SATSolver& solver, ToSATAIG& tosat,
-                                        lra::LraCoordinator& coordinator,
-                                        const ASTNode& modified_input,
-                                        bool first)
+                                        lra::LraCoordinator& coordinator)
 {
-  (void)first;
   const ASTNode& skeleton = coordinator.booleanFormula();
   SOLVER_RETURN_TYPE res = Ctr_Example->CallSAT_ResultCheck(
-      solver, modified_input, skeleton, skeleton, &tosat, true, &coordinator);
+      solver, bm->ASTTrue, skeleton, skeleton, &tosat, true, &coordinator);
   while (res == SOLVER_UNDECIDED)
   {
     if (bm->soft_timeout_expired)

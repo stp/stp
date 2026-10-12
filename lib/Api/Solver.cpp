@@ -841,6 +841,7 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
 
   SOLVER_RETURN_TYPE out = SOLVER_UNDECIDED;
   last_incremental = false;
+  bool last_real_session = false;
   try
   {
     bool active_real = lra::Frontend::containsRealSyntax(query);
@@ -862,6 +863,29 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
         IncrementalSolver::forcedFirstSolve(stp->incrementalFromStart, stp->incrementalSolvesRun);
     stp->incrementalSolvesRun++;
     bool done = false;
+    if (!batch_only && active_real && stp->sessionIncremental &&
+        flags.incremental_mode != UserDefinedFlags::IncrementalMode::OFF &&
+        (flags.lra_incremental_session || flags.lra_persistent_state))
+    {
+      std::vector<ASTVec> assumption_frames;
+      assumption_frames.reserve(assumptions.size());
+      for (const ASTNode& assumption : assumptions)
+        assumption_frames.push_back(ASTVec{assumption});
+      ASTVec submitted = bm->GetAsserts();
+      submitted.insert(submitted.end(), assumptions.begin(), assumptions.end());
+      if (stp->realSessionCanHandle(submitted))
+      {
+        auto levels = bm->AssertLevels();
+        // Separate activations preserve source assumption identities in a
+        // backend conflict. Their atoms can already belong to the base.
+        for (auto& frame : assumption_frames)
+          levels.push_back(&frame);
+        out = stp->checkSatRealSession(levels, done, assumption_frames.size());
+        last_real_session = done;
+      }
+      if (!done)
+        stp->discardRealSession();
+    }
     if (use_incremental)
     {
       // One formula per level, built without the engine's getVectorOfAsserts,
@@ -960,7 +984,12 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
       r = Result(Verdict::UNSAT, UnknownReason::NONE, "");
       // Both frontends use the occurrence IDs captured before lowering.
       // The batch pipeline retains the complete assumption set.
-      if (last_incremental && stp->hasIncrementalSolver())
+      if (last_real_session)
+      {
+        for (std::size_t i : stp->realSessionUnsatAssumptionIndices())
+          last_failed_assumptions.push_back(assumptions[i]);
+      }
+      else if (last_incremental && stp->hasIncrementalSolver())
       {
         for (std::size_t i : stp->getIncrementalSolver()->lastUnsatAssumptionIndices())
           last_failed_assumptions.push_back(assumptions[i]);

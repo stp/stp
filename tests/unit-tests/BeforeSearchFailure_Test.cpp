@@ -123,4 +123,33 @@ TEST_F(BeforeSearchFailureTest, ProceedingCallbackSearches)
   ASSERT_EQ(1u, calls);
 }
 
+TEST_F(BeforeSearchFailureTest, DeferredEncodingDoesNotSearch)
+{
+  unsigned calls = 0;
+  encoder->setBeforeSearch([&calls]() {
+    ++calls;
+    return false;
+  });
+  ASSERT_TRUE(encoder->encodeWithoutSearch(*solver, formula, true));
+  EXPECT_GT(solver->nVars(), 0u);
+  EXPECT_EQ(0u, calls);
+  EXPECT_FALSE(encoder->hasInternalSolveFailure());
+  // The callback still belongs to the first actual search. It must neither
+  // have run during encoding nor have been consumed by it.
+  EXPECT_EQ(SOLVER_UNKNOWN, check(mgr.ASTTrue));
+  EXPECT_EQ(1u, calls);
+}
+
+TEST_F(BeforeSearchFailureTest, DeferredEmptyEncodingAcceptsLaterClauses)
+{
+  ASSERT_TRUE(encoder->encodeWithoutSearch(*solver, mgr.ASTTrue, true));
+  const unsigned var = solver->newVar();
+  SATSolver::vec_literals positive, negative;
+  positive.push(SATSolver::mkLit(var, false));
+  negative.push(SATSolver::mkLit(var, true));
+  solver->addClause(positive);
+  solver->addClause(negative);
+  EXPECT_FALSE(encoder->CallSAT(*solver, mgr.ASTTrue, true));
+}
+
 } // namespace
