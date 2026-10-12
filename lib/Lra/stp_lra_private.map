@@ -1,6 +1,4 @@
 {
-  global:
-    *;
   local:
     _Z*3stp3lra*;
 };
