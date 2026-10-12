@@ -561,8 +561,22 @@ with tempfile.TemporaryDirectory(prefix='stpp-cli-') as tmp:
     # Parent-directed signals clean a blocked input owner without publishing SAT.
     for sig in (signal.SIGINT, signal.SIGTERM):
         p = subprocess.Popen([binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        time.sleep(.03); p.send_signal(sig); p.wait(timeout=3)
-        assert p.returncode == 128+sig and not p.stdout.read()
+        # Sanitizer startup can exceed 30 ms. Send the signal after the
+        # supervisor has installed its handler, while input remains blocked.
+        until = time.monotonic() + 3
+        while time.monotonic() < until:
+            status = pathlib.Path('/proc', str(p.pid), 'status').read_text()
+            caught = int(next(line.split()[1] for line in status.splitlines()
+                              if line.startswith('SigCgt:')), 16)
+            if caught & (1 << (sig - 1)):
+                break
+            time.sleep(.01)
+        else:
+            p.kill()
+            p.wait(timeout=3)
+            raise AssertionError(('supervisor did not install signal handler', sig))
+        p.send_signal(sig); p.wait(timeout=3)
+        assert p.returncode == 128+sig and not p.stdout.read(), (sig, p.returncode, p.stderr.read())
         p.stdin.close()
     # A stats file that cannot be opened is a usage error, before anything
     # runs; one whose write fails at the end costs the stats, never the
