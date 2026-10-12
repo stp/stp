@@ -926,8 +926,16 @@ include_directories(# For extlib-constbv
 # -----------------------------------------------------------------------------
 # A single header, used in place of std::unordered_map where it pays off. It
 # used to be a copy of that header sitting in lib/extlib-unordered-dense; there
-# is no reason for STP to carry upstream's file, so it is fetched at a pinned
-# release like everything else.
+# is no reason for STP to carry the file, so it is fetched at a pinned commit
+# like everything else.
+#
+# The commit is on the `stp` branch of STP's fork, stp/unordered_dense: release
+# 4.5.0 with two changes STP's allocation-failure handling needs. table::swap
+# swaps two tables with equal allocators member by member, where upstream's
+# goes through move assignment, which allocates inside a noexcept function;
+# and stp_insertion_may_rehash() says whether the next insertion rebuilds the
+# bucket array, from the container's own integral threshold. Both are what the
+# hash-consing tables in lib/STPManager build on.
 #
 # FetchContent rather than an ExternalProject, and for once not because
 # anything has to be compiled: stp/AST/AST.h includes it, so effectively every
@@ -938,7 +946,8 @@ include_directories(# For extlib-constbv
 # first compile that needs it. FetchContent populates during configuration,
 # which is the guarantee. There is nothing to build, so that costs nothing.
 set(UNORDERED_DENSE_VERSION "4.5.0")
-set(UNORDERED_DENSE_CHECKSUM "2364ce4bc4c23bd02549bbb3a7572d881684cd46057f3737fd53be53669743aa")
+set(UNORDERED_DENSE_COMMIT "288348f1306f386786bea20f66e8011c42183ae0")
+set(UNORDERED_DENSE_CHECKSUM "f74700612e464ec1fa1151976d4015a2ede5a3e5d7900fcbd76be33eebeae0cd")
 
 # FETCHCONTENT_FULLY_DISCONNECTED is the rung between the two: a base directory
 # some earlier build already populated. It is what the dependencies built by
@@ -958,14 +967,37 @@ endif()
 
 FetchContent_Declare(
     unordereddense
-    URL https://github.com/martinus/unordered_dense/archive/refs/tags/v${UNORDERED_DENSE_VERSION}.tar.gz
+    URL https://github.com/stp/unordered_dense/archive/${UNORDERED_DENSE_COMMIT}.tar.gz
     URL_HASH SHA256=${UNORDERED_DENSE_CHECKSUM}
     SOURCE_SUBDIR stp-does-not-build-this
 )
 FetchContent_MakeAvailable(unordereddense)
 message(STATUS "ankerl::unordered_dense ${UNORDERED_DENSE_VERSION}: ${unordereddense_SOURCE_DIR}")
 
-include(cmake/PrepareUnorderedDense.cmake)
+# The archive's hash vouches for a download, and says nothing about a source
+# directory given with FETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE, or one a shared
+# FETCHCONTENT_BASE_DIR was populated with before the pin moved to the fork.
+# Either can be upstream's header, which lacks what STP calls: say so here,
+# rather than as a compile error in lib/STPManager.
+set(_stp_unordered_dense_header
+    "${unordereddense_SOURCE_DIR}/include/ankerl/unordered_dense.h")
+file(STRINGS "${_stp_unordered_dense_header}" _stp_unordered_dense_fork
+     REGEX "stp_insertion_may_rehash" LIMIT_COUNT 1)
+if(NOT _stp_unordered_dense_fork)
+    message(FATAL_ERROR
+        "${_stp_unordered_dense_header} is not from the `stp` branch of "
+        "stp/unordered_dense, which STP needs. Point "
+        "FETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE at a checkout of that branch, "
+        "or, for a shared FETCHCONTENT_BASE_DIR populated before STP pinned "
+        "the fork, remove its unordereddense-* directories and configure "
+        "again with -DENABLE_AUTO_DOWNLOAD=ON.")
+endif()
+unset(_stp_unordered_dense_fork)
+unset(_stp_unordered_dense_header)
+
+# Named once, for the targets that list their include directories themselves
+# (lib/, lib/Lra and tests/lra) as well as for the project-wide include below.
+set(STP_UNORDERED_DENSE_INCLUDE_DIR "${unordereddense_SOURCE_DIR}/include")
 
 # SYSTEM, and project-wide because stp/AST/AST.h reaches it: upstream code
 # whose warnings STP does not control, compiled into nearly every translation
