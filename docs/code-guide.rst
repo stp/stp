@@ -83,7 +83,8 @@ own targets; the other two are small enough to be carried in the tree:
 -  ankerl::unordered_dense:
    `a densely stored hash map and set <https://github.com/martinus/unordered_dense>`__,
    used in place of ``std::unordered_map`` where it pays off. A single
-   header, fetched at a pinned release.
+   header, fetched at a pinned commit of
+   `stp/unordered_dense <https://github.com/stp/unordered_dense>`__.
 
 CLI11, the command-line parser of the ``stp`` executable, and SymFPU, the
 header-only implementation of the floating-point operations in terms of
@@ -91,8 +92,9 @@ bitvectors that ``FloatBlaster`` uses, used to sit here as submodules too.
 Both are now fetched by ``cmake/FindCLI11.cmake`` and
 ``cmake/FindSymFPU.cmake`` -- being headers, there is nothing about them
 for STP's own build to reach into, which is what keeps ABC and mimalloc
-here. STP's four local fixes to SymFPU live in ``cmake/deps-utils/symfpu``
-and are applied to the copy the build fetches.
+here. STP's fixes to SymFPU are commits on the ``stp`` branch of its fork,
+`stp/symfpu <https://github.com/stp/symfpu>`__, which is what the build
+fetches.
 
 The executables are built from ``tools/``; :doc:`command-line` and
 :doc:`tools` describe how to run them.
@@ -119,3 +121,49 @@ The executables are built from ``tools/``; :doc:`command-line` and
 
 The Python package is in ``bindings/python``, and the tests are in
 ``tests/`` (see :doc:`testing`).
+
+Changing a dependency
+---------------------
+
+STP builds every dependency from a pinned revision, as that revision
+stands. When STP needs a dependency to be different -- a fix, an interface
+it needs, a build that works on a platform -- the change is a commit in
+STP's fork of that dependency, and the pin moves to the commit. It is not a
+patch file, a ``PATCH_COMMAND``, or CMake that edits the fetched sources:
+a change made at build time cannot be read where the dependency is read,
+has to be re-applied by hand at every bump with nothing to say where it
+stopped applying, and leaves two different programs calling themselves the
+pinned revision.
+
+``scripts/check-dependency-patches.py`` holds the build to that, and CI
+runs it. It fails on a tracked ``*.patch`` or ``*.diff``, on
+``PATCH_COMMAND``, ``git apply`` or ``patch -p``, and on CMake that reads a
+fetched dependency's sources whole or writes into its source tree. Its
+``ALLOWED`` list names the exceptions still being worked off, each with
+the reason, and an entry that no longer excuses anything fails the check
+as well.
+
+The forks, and the branch each pin is a commit of:
+
+-  ABC: `stp/abc <https://github.com/stp/abc>`__, on the pinned line
+   described above, with each change also on ``stp``.
+-  CaDiCaL: `stp/cadical <https://github.com/stp/cadical>`__, ``stp``
+   (3.x); ``stp-2.1.3`` is the 2.x line CI keeps building.
+-  CryptoMiniSat: `stp/cryptominisat <https://github.com/stp/cryptominisat>`__,
+   ``stp-5.17.0-ipasir-up``, which is upstream's release with the IPASIR-UP
+   interface proposed as msoos/cryptominisat#842.
+-  IMath: `stp/imath <https://github.com/stp/imath>`__, ``stp``.
+-  LibBF: `stp/libbf <https://github.com/stp/libbf>`__, ``stp``.
+-  MiniSat: `stp/minisat <https://github.com/stp/minisat>`__, ``master``.
+-  SymFPU: `stp/symfpu <https://github.com/stp/symfpu>`__, ``stp``.
+-  unordered_dense:
+   `stp/unordered_dense <https://github.com/stp/unordered_dense>`__,
+   ``stp``.
+
+CLI11, nlohmann/json, mimalloc and GoogleTest are built from upstream
+releases unmodified, and have no fork; a dependency that needs a change
+gets one. HiGHS is the exception still on the ``ALLOWED`` list: its
+optional root-cut logging is a patch until it moves to a fork too.
+
+A change that would serve the dependency's other users belongs upstream as
+well, and once a release carries it the pin can move back to that release.

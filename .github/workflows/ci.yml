@@ -25,6 +25,23 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
+  # STP builds every dependency from a commit of its fork as that commit
+  # stands; a change a dependency needs is a commit in the fork and a moved
+  # pin, never a patch applied at build time. See "Changing a dependency" in
+  # docs/code-guide.rst. This fails on patch files, PATCH_COMMAND, `git apply`
+  # and CMake that rewrites a fetched dependency's sources, and says so.
+  # Nothing to build, so it answers in seconds rather than after the matrix.
+  dependency-patches:
+    name: no dependency patches
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    - name: Check
+      run: python3 scripts/check-dependency-patches.py
+
   build:
     strategy:
       fail-fast: false
