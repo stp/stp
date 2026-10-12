@@ -184,13 +184,21 @@ CaDiCaL is compiled in by default, is what a build without
 CryptoMiniSat solves with, and is worth having on hard bitvector
 problems. With
 ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do but ask for it;
-otherwise an installed CaDiCaL is found the way any library is, or
-The bundled CaDiCaL is pinned to a commit in ``stp/cadical`` based on 3.0.1,
-with a fix that returns generated cube literals in external numbering.
-``CaDiCaL_TAG`` can select a different release tag or commit. For a commit,
-also set ``CaDiCaL_VERSION`` to its release version so STP selects the right
-patches and capabilities; a ``rel-<version>`` tag supplies that version itself.
-These settings affect bundled builds, not an explicit ``CADICAL_DIR``.
+otherwise an installed CaDiCaL is found the way any library is, or one
+is named with ``CADICAL_DIR`` (below).
+
+The CaDiCaL STP builds is pinned to a commit of
+`stp/cadical <https://github.com/stp/cadical>`__. Its ``stp`` branch is
+release 3.0.1 with the changes STP needs as commits on top -- generated
+cubes returned in external literal numbering, a witness-marked variable
+restored when it becomes observed, decision polarity advice for a theory
+propagator, and clause import with search diversification for ``stp-p``
+-- and a CMake build of the library, which a native Windows host needs.
+``-DCaDiCaL_TAG`` selects another commit of the fork; set
+``-DCaDiCaL_VERSION`` to its release version with it, since that is what
+decides the capabilities STP compiles in. The ``stp-2.1.3`` branch is the
+2.x line, which CI builds to keep it working. These settings affect a
+CaDiCaL STP builds, not one named with ``CADICAL_DIR``.
 
 ``CADICAL_DIR`` points at a checkout:
 
@@ -683,16 +691,16 @@ STP records what filled it in ``.stp-dep-config`` and warns when the
 compiler, sanitizer, toolchain or ABC ABI settings differ from the build
 now using it. An ASan build in particular wants a directory of its own.
 
-CaDiCaL is built with STP's own patches (``cmake/deps-utils/``), and the
-install records which set of them it was built from. In a build directory's
-own dependency directory, a CaDiCaL from another set is simply patched and
-built again. In a shared one, other build directories may be using it, so
-the configure stops instead, and names the two ways out: give this build
-directory a dependency directory of its own (``-USTP_DEP_DIR``), or remove
-that CaDiCaL alone -- ``lib/libcadical.a``, ``lib/cadical-patch-set.txt``
-and ``include/cadical/`` under ``STP_DEP_DIR`` -- so that the next build
-makes it again from the current set. The other dependencies stay. A
-directory filled before STP recorded its patch set counts as another set.
+CaDiCaL's install records which revision of the fork it was built from.
+In a build directory's own dependency directory, a CaDiCaL from another
+revision is simply built again. In a shared one, other build directories
+may be using it, so the configure stops instead, and names the two ways
+out: give this build directory a dependency directory of its own
+(``-USTP_DEP_DIR``), or remove that CaDiCaL alone -- ``lib/libcadical.a``,
+``lib/cadical-source.txt`` and ``include/cadical/`` under ``STP_DEP_DIR``
+-- so that the next build makes it again from the current revision. The
+other dependencies stay. A directory filled before STP recorded the
+revision counts as another revision.
 
 The build type is deliberately not recorded, except on MSVC: sharing a
 differently-optimised ABC is a choice rather than a fault, but on MSVC
