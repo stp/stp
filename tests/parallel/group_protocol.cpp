@@ -76,6 +76,52 @@ Root launch(unsigned slot, const std::string& line, After after, bool hedge = fa
 }
 } // namespace
 
+// The compact report still carries complete answers for the agreement
+// protocol. Expensive diagnostic data is present only when requested.
+TEST(GroupProtocol, CompactReportsPreserveAnswers)
+{
+#if !defined(STP_CADICAL_HAS_CLAUSE_IMPORT)
+  GTEST_SKIP() << "clause import is unavailable";
+#else
+  const unsigned jobs = std::min(3u, unsigned(allowed_cpus().size()));
+  if (jobs < 2)
+    GTEST_SKIP() << "two CPUs are required";
+  const std::string formula =
+      "(set-logic QF_BV)(declare-const x (_ BitVec 40))"
+      "(declare-const y (_ BitVec 40))(assert (= (bvmul x y) (_ bv" +
+      std::to_string(46337ull * 46327) + " 40)))"
+      "(assert (bvugt x (_ bv1 40)))(assert (bvugt y (_ bv1 40)))"
+      "(assert (bvult x (_ bv65536 40)))(assert (bvult y (_ bv65536 40)))"
+      "(check-sat)";
+  for (unsigned mode = 0; mode < 2; ++mode)
+  {
+    Options o;
+    o.jobs = o.roots = jobs;
+    o.hedge = "none";
+    o.deadline = now() + 20;
+    if (mode == 1)
+      o.stats = "requested-by-caller"; // batch_group itself opens no file
+    Source source(formula);
+    const Json report = batch_group(source, o);
+    ASSERT_EQ(report["answer"], "sat") << report;
+    ASSERT_EQ(report["fork_point"], "forked") << report;
+    EXPECT_EQ(report.contains("owner_memory_kib"), mode != 0);
+    EXPECT_EQ(report.contains("rings"), mode != 0);
+    unsigned completed = 0;
+    for (const auto& child : report["children"])
+      if (child["report"].is_object())
+      {
+        const auto& root = child["report"];
+        ASSERT_EQ(root["answer"], "sat") << root;
+        EXPECT_EQ(root.contains("sat_s"), mode != 0);
+        EXPECT_EQ(root.contains("exchange"), mode != 0);
+        ++completed;
+      }
+    EXPECT_GT(completed, 0u);
+  }
+#endif
+}
+
 // Root 1's report is in its pipe when the group stops it: settle reads it
 // after the kill, and the disagreement ends the invocation.
 TEST(GroupProtocol, AReportCompleteBeforeTheKillIsCompared)
