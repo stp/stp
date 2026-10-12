@@ -185,6 +185,13 @@ CryptoMiniSat solves with, and is worth having on hard bitvector
 problems. With
 ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do but ask for it;
 otherwise an installed CaDiCaL is found the way any library is, or
+The bundled CaDiCaL is pinned to a commit in ``stp/cadical`` based on 3.0.1,
+with a fix that returns generated cube literals in external numbering.
+``CaDiCaL_TAG`` can select a different release tag or commit. For a commit,
+also set ``CaDiCaL_VERSION`` to its release version so STP selects the right
+patches and capabilities; a ``rel-<version>`` tag supplies that version itself.
+These settings affect bundled builds, not an explicit ``CADICAL_DIR``.
+
 ``CADICAL_DIR`` points at a checkout:
 
 .. code-block:: bash
