@@ -63,6 +63,10 @@ struct Options
   // a process that died without one. The supervisor and the race set it to
   // the channel to their parent; not an option.
   std::function<void(const Json&)> note;
+  // A grouped encoding's cooperative stop request. Empty on other routes.
+  std::function<bool()> stop;
+  bool cancelled() const { return stop && stop(); }
+  bool encoding_groups = false;
   // A portfolio's ordinary side takes QF_BV only (not an option).
   bool strict_logic = false;
   std::string config = "default"; // see Portfolio.cpp
@@ -133,8 +137,11 @@ struct Failure : std::runtime_error
 struct Stop final : stp::Terminator
 {
   double end;
-  explicit Stop(double value) : end(value) {}
-  bool terminate() override { return end && now() >= end; }
+  std::function<bool()> stopped;
+  explicit Stop(double value, std::function<bool()> stop = {})
+      : end(value), stopped(std::move(stop)) {}
+  bool terminate() override
+  { return (stopped && stopped()) || (end && now() >= end); }
 };
 stp::Options solver_options(const Options&, bool retained = false);
 void memory_limit(std::uint64_t mib);
@@ -184,6 +191,8 @@ Json retained(Source&, const Options&);
 // report.
 Json hedge_check(stp::Solver&, const Options&, const std::string& logic);
 Json race(Source&, const Options&);
-Json batch_group(Source&, const Options&);
+struct ParsedQuery;
+Json batch_group(Source&, const Options&, ParsedQuery* = nullptr);
+Json encoding_groups(Source&, const Options&);
 int supervise(const Options&);
 } // namespace stpp

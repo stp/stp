@@ -25,7 +25,7 @@
 # only, built with -DSTP_BUILD_PARALLEL=ON, on STP's public C++ API.
 find_package(NlohmannJson REQUIRED)
 add_library(stpp STATIC Cli.cpp Common.cpp Source.cpp Driver.cpp Portfolio.cpp
-  Race.cpp Exchange.cpp BatchGroup.cpp)
+  Race.cpp Exchange.cpp BatchGroup.cpp EncodingGroups.cpp)
 target_compile_features(stpp PUBLIC cxx_std_17)
 target_include_directories(stpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(stpp PUBLIC stp NlohmannJson PRIVATE CLI11)

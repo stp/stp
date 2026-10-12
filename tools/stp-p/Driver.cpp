@@ -218,7 +218,8 @@ Json execute(Options o)
   // the hedge itself (on QF_BV) and its roots. A race is the test driver's
   // portfolio.
   if (o.roots && o.portfolio.empty())
-    return sized(batch_group(input, o));
+    return sized(o.encoding_groups ? encoding_groups(input, o)
+                                    : batch_group(input, o));
   if (!o.portfolio.empty())
     return sized(race(input, o));
   if (config(o.config).route == Config::Route::Retained)
@@ -243,7 +244,7 @@ Json ordinary(Source& input, const Options& o)
   // The owner's resident size once the query is parsed and its source
   // released, and its peak during the parse (regression tests bound both).
   const std::uint64_t parse_rss = own_rss(), parse_peak = peak_rss();
-  Stop stop(o.deadline);
+  Stop stop(o.deadline, o.stop);
   solver.set_terminator(&stop);
   const auto r = solver.check_sat();
   solver.set_terminator(nullptr);
@@ -284,7 +285,7 @@ Json retained(Source& input, const Options& o)
 Json hedge_check(stp::Solver& solver, const Options& o, const std::string& logic)
 {
   const double started = now();
-  Stop stop(o.deadline);
+  Stop stop(o.deadline, o.stop);
   solver.set_terminator(&stop);
   const auto r = solver.check_sat();
   solver.set_terminator(nullptr);
