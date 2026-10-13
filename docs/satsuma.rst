@@ -1,5 +1,5 @@
 Satsuma CNF preprocessing
-========================
+=========================
 
 Satsuma optionally preprocesses STP's complete CNF before it is loaded into
 the SAT backend. It uses an output callback inside the process, with no
@@ -38,7 +38,7 @@ The output contains the simplified formula and symmetry-breaking clauses;
 its size can grow, and solving it can be slower than solving the original.
 
 Model preservation and supported queries
----------------------------------------
+----------------------------------------
 
 Original variable numbers are retained, extension variables are allocated
 before clauses are loaded, and removed assignments are restored as unit
