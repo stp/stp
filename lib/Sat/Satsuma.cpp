@@ -14,6 +14,20 @@ namespace stp
 {
 namespace
 {
+template <typename Preprocessor>
+auto setCostBudget(Preprocessor& preprocessor, uint64_t limit, int)
+    -> decltype(preprocessor.set_total_cost_limit(limit), void())
+{
+  preprocessor.set_total_cost_limit(limit);
+}
+
+template <typename Preprocessor>
+void setCostBudget(Preprocessor&, uint64_t, long)
+{
+  throw std::runtime_error(
+      "Satsuma quick profile requires a fork with the cost budget API");
+}
+
 class SolverOutput final : public satsuma::cnf_output
 {
   SATSolver& solver;
@@ -148,7 +162,7 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
   preprocessor.set_add_reduced_as_unit(true);
   preprocessor.set_preprocess_cnf_unit(true);
   if (quick)
-    preprocessor.set_total_cost_limit(20000000);
+    setCostBudget(preprocessor, 20000000, 0);
   const bool competition = manager.UserFlags.satsuma_profile == "competition";
   const int componentLimit = manager.UserFlags.satsuma_component_limit >= 0
       ? manager.UserFlags.satsuma_component_limit : competition ? 5000000 : 500000;
