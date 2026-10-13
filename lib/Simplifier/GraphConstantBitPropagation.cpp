@@ -81,7 +81,7 @@ void GraphConstantBitPropagation::propagate()
     if (n.isConstant())
       continue;
     FixedBits* nBits = bitsOf(n);
-    const int previousTop = nBits->countFixed();
+    const unsigned previousTop = nBits->countFixed();
     const unsigned degree = n.Degree();
     childrenBits.clear();
     previousChildrenFixedCount.clear();
