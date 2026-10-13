@@ -34,7 +34,7 @@ def rank(seed, tag, path):
     return hashlib.sha256(f'{seed}:{tag}:{path}'.encode()).digest()
 
 
-def samples(manifest, seed):
+def samples(manifest, seed, screen_cap=8, refine_cap=24, confirmation_cap=16):
     strata = defaultdict(list)
     for row in manifest:
         size = int(row['bytes'])
@@ -71,8 +71,8 @@ def samples(manifest, seed):
             selected.extend(chosen)
         return sorted(selected, key=lambda r: rank(seed, 'execution', r['path']))
 
-    return dict(screen=choose('training', 8), refine=choose('training', 24),
-                confirmation=choose('confirmation', 16))
+    return dict(screen=choose('training', screen_cap), refine=choose('training', refine_cap),
+                confirmation=choose('confirmation', confirmation_cap))
 
 
 def config(backend, label, settings=None):
@@ -192,6 +192,9 @@ def main():
     parser.add_argument('--timeout', type=float, default=24)
     parser.add_argument('--memory-gb', type=float, default=8)
     parser.add_argument('--workers', type=int, default=24)
+    parser.add_argument('--screen-per-family', type=int, default=8)
+    parser.add_argument('--refine-per-family', type=int, default=24)
+    parser.add_argument('--confirmation-per-family', type=int, default=16)
     parser.add_argument('--status', action='store_true')
     args = parser.parse_args()
     campaign = args.campaign.resolve()
@@ -220,6 +223,9 @@ def main():
     for name in ('root', 'manifest', 'binary', 'framework', 'runner_checkout'):
         if getattr(args, name) is None:
             parser.error(f'--{name.replace("_", "-")} is required')
+    if (args.screen_per_family < 1 or args.refine_per_family < args.screen_per_family
+            or args.confirmation_per_family < 1):
+        parser.error('sample caps must be positive and refinement must include the screening sample')
     campaign.mkdir(parents=True, exist_ok=True)
     with (campaign / 'controller.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -244,9 +250,12 @@ def orchestrate(args, campaign):
         raise ValueError(f'no inputs for {args.logic}')
     if len(manifest) != len({row['path'] for row in manifest}):
         raise ValueError('full manifest contains duplicate files')
-    selected = samples(manifest, args.seed)
+    selected = samples(manifest, args.seed, args.screen_per_family,
+                       args.refine_per_family, args.confirmation_per_family)
     selection = campaign / 'selection'
     plan = dict(seed=args.seed, logic=args.logic, files=len(manifest), stages={k:len(v) for k,v in selected.items()},
+                per_family=dict(screen=args.screen_per_family, refine=args.refine_per_family,
+                                confirmation=args.confirmation_per_family),
                 timeout=args.timeout, memory_gb=args.memory_gb, workers=args.workers,
                 solvers=['cadical', 'kissat'], sampling='family and file-size strata; training/confirmation partitioned before candidate results',
                 root=str(args.root.resolve()), manifest_sha256=runner.sha256_file(args.manifest),
