@@ -3,6 +3,7 @@
 include(deps-helper)
 
 set(SATSUMA_DIR "" CACHE PATH "Prefix of an installed Satsuma CNF output API")
+option(USE_SATSUMA_CLIQUER "Enable optional Cliquer column ordering" OFF)
 set(Satsuma_FOUND_SYSTEM FALSE)
 if(SATSUMA_DIR)
     find_path(SATSUMA_INCLUDE_DIR NAMES satsuma.h
@@ -51,6 +52,19 @@ set_target_properties(Satsuma PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${SATSUMA_INCLUDE_DIR}"
     INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${SATSUMA_INCLUDE_DIR}"
     INTERFACE_COMPILE_FEATURES cxx_std_20)
+if(USE_SATSUMA_CLIQUER)
+    if(NOT Satsuma_FOUND_SYSTEM)
+        message(FATAL_ERROR "Cliquer experiments require an installed Satsuma prefix in SATSUMA_DIR")
+    endif()
+    get_filename_component(_satsuma_prefix "${SATSUMA_INCLUDE_DIR}/../.." ABSOLUTE)
+    find_library(SATSUMA_CLIQUER_LIBRARY NAMES cliquer_c
+        PATHS "${_satsuma_prefix}/lib" NO_DEFAULT_PATH)
+    if(NOT SATSUMA_CLIQUER_LIBRARY OR NOT EXISTS "${SATSUMA_INCLUDE_DIR}/cliquer/cliquer.h")
+        message(FATAL_ERROR "Satsuma prefix does not provide Cliquer headers and archive")
+    endif()
+    set_property(TARGET Satsuma PROPERTY INTERFACE_LINK_LIBRARIES
+        "${SATSUMA_CLIQUER_LIBRARY}")
+endif()
 if(NOT Satsuma_FOUND_SYSTEM)
     add_dependencies(Satsuma Satsuma-EP)
 endif()

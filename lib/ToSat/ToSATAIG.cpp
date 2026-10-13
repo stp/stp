@@ -680,6 +680,14 @@ void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf)
   RunTimes::Scope clause_runtime(*bm->GetRunTimes(), RunTimes::SendingToSAT);
   PreparationPoller poll(bm->preparation_control, PreparationStage::ClauseLoading);
 
+  if (bm->UserFlags.kissat_batch_only && satsuma_allowed_ && !encode_only_ &&
+      requiredSolveAssumptions.empty() && satSolver.submittedClauses() == 0)
+  {
+    const bool configured = satSolver.configureOneShot();
+    if (bm->UserFlags.stats_flag)
+      cerr << "Kissat one-shot: " << (configured ? "on" : "declined") << endl;
+  }
+
 #if STP_BUILD_WITH_SATSUMA
   if (bm->UserFlags.satsuma_mode != "off")
   {

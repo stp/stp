@@ -130,6 +130,8 @@ uint32_t Kissat::newVar()
 bool Kissat::addClauseInternal(const vec_literals& clause)
 {
   requireHealthy();
+  if (one_shot && solve_calls)
+    throw std::logic_error("clauses added after a one-shot Kissat search");
   for (int i = 0; i < clause.size(); ++i)
     kissat_add(solver, literal(clause[i]));
   kissat_add(solver, 0);
@@ -170,6 +172,8 @@ int Kissat::terminate(void* state)
 bool Kissat::run(bool& timeout_expired)
 {
   requireHealthy();
+  if (one_shot && solve_calls)
+    throw std::logic_error("a one-shot Kissat backend was searched twice");
   // Allocated STP variables need not occur in any current clause. Reserve
   // their IDs before BVA can use that apparently empty part of the namespace.
   if (kissat_get_option(solver, "factor") &&
@@ -197,6 +201,8 @@ bool Kissat::solveWithAssumptionsInternal(const vec_literals& assumptions,
                                           bool& timeout_expired)
 {
   requireHealthy();
+  if (one_shot)
+    throw std::logic_error("assumptions passed to a one-shot Kissat backend");
   for (int i = 0; i < assumptions.size(); ++i)
     kissat_assume(solver, literal(assumptions[i]));
   return run(timeout_expired);
@@ -252,6 +258,17 @@ bool Kissat::enableBVAInternal()
 {
   requireHealthy();
   kissat_set_option(solver, "factor", 1);
+  return true;
+}
+
+bool Kissat::configureOneShot()
+{
+  requireHealthy();
+  if (!configurationOpen() || solve_calls)
+    throw std::logic_error("one-shot Kissat requires a fresh backend");
+  kissat_set_option(solver, "incremental", 0);
+  kissat_set_option(solver, "incrementalreuse", 0);
+  one_shot = true;
   return true;
 }
 

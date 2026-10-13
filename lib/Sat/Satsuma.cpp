@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <climits>
+#include <limits>
 #include <stdexcept>
 
 namespace stp
@@ -131,17 +132,32 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
   preprocessor.set_cnf_output(&output);
   preprocessor.set_add_reduced_as_unit(true);
   preprocessor.set_preprocess_cnf_unit(true);
-  preprocessor.set_proof_dense_crossover(60);
-  preprocessor.set_component_size_limit(500000);
-  preprocessor.set_order_model_budget(750000);
-  preprocessor.set_dense_model_budget(20000000);
+  const bool competition = manager.UserFlags.satsuma_profile == "competition";
+  const int componentLimit = manager.UserFlags.satsuma_component_limit >= 0
+      ? manager.UserFlags.satsuma_component_limit : competition ? 5000000 : 500000;
+  preprocessor.set_proof_dense_crossover(competition ? 64 : 60);
+  preprocessor.set_component_size_limit(componentLimit);
+  preprocessor.set_order_model_budget(competition
+      ? std::numeric_limits<uint64_t>::max() : 750000);
+  preprocessor.set_dense_model_budget(competition
+      ? std::numeric_limits<uint64_t>::max() : 20000000);
+  if (competition)
+    preprocessor.set_full_skip_limit(100000000);
+  std::string ordering = manager.UserFlags.satsuma_ordering;
+  if (ordering == "auto")
+    ordering = competition && manager.UserFlags.satsuma_mode == "fix" ? "clique" : "off";
+#if !CLIQUES
+  if (ordering != "off")
+    throw std::runtime_error("Satsuma column ordering requires USE_SATSUMA_CLIQUER=ON");
+#endif
   if (manager.UserFlags.satsuma_mode == "fix")
   {
     preprocessor.set_orbitopal_fixing(true);
     preprocessor.set_orbitopal_fixing_only(true);
     preprocessor.set_schreier_fixing(true);
     preprocessor.set_negation_fixing(true);
-    preprocessor.set_reorder(true);
+    preprocessor.set_reorder(ordering != "off");
+    preprocessor.set_reorder_cliquer(ordering == "clique");
     preprocessor.set_iterate(true);
     preprocessor.set_preprocess_cnf_pure(true);
   }
@@ -153,6 +169,8 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
     const double seconds = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - start).count();
     std::cerr << "satsuma: mode=" << manager.UserFlags.satsuma_mode
+              << " profile=" << manager.UserFlags.satsuma_profile
+              << " ordering=" << ordering << " component_limit=" << componentLimit
               << " seconds=" << seconds
               << " input_vars=" << cnf.varCount() - 1
               << " input_clauses=" << cnf.clauseCount() + extraClauses.size()

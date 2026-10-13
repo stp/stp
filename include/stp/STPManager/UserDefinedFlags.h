@@ -2006,12 +2006,16 @@ public:
 
   enum SATSolvers solver_to_use;
   std::string satsuma_mode = "off";
+  std::string satsuma_profile = "stp";
+  std::string satsuma_ordering = "auto";
+  int satsuma_component_limit = -1;
 
   // Which answer to tune the SAT search towards. NONE, the default, leaves
   // every backend at its own settings, so the option is opt-in.
   SearchBias search_bias = static_cast<SearchBias>(0);
   bool kissat_trail_reuse = true;
   int kissat_stable = -1;
+  bool kissat_batch_only = false;
 
   CadicalOptions cadical_options;
 

@@ -788,6 +788,57 @@ requires = { build = "satsuma" }
 help = "experimental: preprocess a complete, non-incremental CNF with Satsuma before the SAT backend: off (default), lex, or fix. Refinement and incremental encodings are left to the backend"
 
 [[option]]
+name = "satsuma-profile"
+type = "enum"
+default = "stp"
+values = ["stp", "competition"]
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "satsuma_profile" }
+category = "sat"
+requires = { build = "satsuma" }
+help = "Satsuma preprocessing limits: stp retains the existing bounded policy; competition matches the Satsuma-iter submission"
+
+[[option]]
+name = "satsuma-ordering"
+type = "enum"
+default = "auto"
+values = ["auto", "off", "weight", "clique"]
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "satsuma_ordering" }
+category = "sat"
+requires = { build = "satsuma" }
+help = "Satsuma column ordering: auto disables ordering with the stp profile and selects Cliquer with competition fix; off, weight and clique explicitly choose a heuristic"
+
+[[option]]
+name = "satsuma-component-limit"
+type = "int"
+default = -1
+range = { min = -1, max = 2147483647 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "satsuma_component_limit" }
+category = "sat"
+requires = { build = "satsuma" }
+help = "override Satsuma's graph component size limit; -1 follows the profile and 0 removes the component limit"
+
+[[option]]
+name = "kissat-batch-only"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_batch_only" }
+category = "sat"
+requires = { build = "kissat" }
+help = "use non-incremental Kissat on a fresh complete batch encoding; incremental sessions and refinement queries retain incremental solving"
+
+[[option]]
 name = "cadical-elim"
 type = "int"
 default = -1

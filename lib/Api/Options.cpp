@@ -1030,6 +1030,18 @@ bool custom_satsuma(EngineTarget& t, const OptionSpec&, const OptionValue& v)
   return true;
 }
 
+bool custom_satsuma_profile(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.satsuma_profile = as_str(v);
+  return true;
+}
+
+bool custom_satsuma_ordering(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.satsuma_ordering = as_str(v);
+  return true;
+}
+
 bool custom_produce_models(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   t.flags.request_counterexample = as_bool(v);

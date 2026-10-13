@@ -14,6 +14,31 @@ SATSolver::vec_literals clause(std::initializer_list<SATSolver::Lit> lits)
 }
 } // namespace
 
+TEST(Kissat, OneShotCompleteFormulaHasAValidModel)
+{
+  stp::Kissat solver;
+  ASSERT_TRUE(solver.configureOneShot());
+  EXPECT_FALSE(solver.supportsAssumptions());
+  const auto x = solver.newVar(), y = solver.newVar();
+  solver.addClause(clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)}));
+  solver.addClause(clause({SATSolver::mkLit(x, true), SATSolver::mkLit(y, false)}));
+  bool timeout = false;
+  ASSERT_TRUE(solver.solve(timeout));
+  EXPECT_FALSE(timeout);
+  EXPECT_EQ(solver.true_literal(), solver.modelValue(y));
+  EXPECT_THROW(solver.addClause(clause({SATSolver::mkLit(y, true)})), std::logic_error);
+  EXPECT_THROW(solver.solve(timeout), std::logic_error);
+}
+
+TEST(Kissat, OneShotConfigurationRequiresAnEmptyBackend)
+{
+  stp::Kissat solver;
+  const auto x = solver.newVar();
+  solver.addClause(clause({SATSolver::mkLit(x, false)}));
+  EXPECT_THROW(solver.configureOneShot(), std::logic_error);
+  EXPECT_TRUE(solver.supportsAssumptions());
+}
+
 TEST(Kissat, AssumptionsRetractAfterUnsat)
 {
   stp::Kissat solver;
