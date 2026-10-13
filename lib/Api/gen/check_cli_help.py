@@ -74,6 +74,7 @@ def main():
         'cadical': 'cadical' in solvers,
         'cryptominisat': 'cryptominisat' in solvers,
         'minisat': 'minisat' in solvers.replace('cryptominisat', ''),
+        'kissat': 'kissat' in solvers,
     }
 
     help_out = run([args.stp, '--help']).stdout
@@ -128,7 +129,8 @@ def main():
             ['--incremental'], ['--incremental=off'], ['--array-equality'], ['--stop-after-cnf'],
             ['--sat-backend=auto'], ['--produce-models=false'], ['--simplify=false'],
         ]
-        for value, flag in (('cadical', '--cadical'), ('cryptominisat', '--cryptominisat')):
+        for value, flag in (('cadical', '--cadical'), ('cryptominisat', '--cryptominisat'),
+                            ('kissat', '--kissat')):
             if have.get(value):
                 samples.append([flag])
         for s in samples:
