@@ -152,7 +152,12 @@ void Kissat::setFrozen(uint32_t var)
   requireHealthy();
   if (!frozen.at(var))
   {
-    kissat_protect(solver, external.at(var));
+    // The batch loader can request model-variable protection even when its
+    // complete encoding needs no refinement. A one-shot solver reconstructs
+    // its original-variable model itself and accepts no later clauses, so it
+    // does not need Kissat's incremental-only protection API.
+    if (!one_shot)
+      kissat_protect(solver, external.at(var));
     frozen[var] = true;
   }
 }
@@ -248,7 +253,7 @@ bool Kissat::setSearchBiasInternal(SearchBias bias)
                        : bias == SearchBias::UNSAT ? "unsat"
                                                    : "default";
   const bool supported = kissat_set_configuration(solver, config);
-  kissat_set_option(solver, "incremental", 1);
+  kissat_set_option(solver, "incremental", one_shot ? 0 : 1);
   if (search_mode >= 0)
     kissat_set_option(solver, "stable", search_mode);
   return supported;
@@ -275,7 +280,7 @@ bool Kissat::configureOneShot()
 bool Kissat::enableTrailReuseInternal(TrailReuse scope)
 {
   requireHealthy();
-  if (!trail_reuse_allowed)
+  if (!trail_reuse_allowed || one_shot)
     return false;
   const int mode = scope == TrailReuse::ALL ? 2 : 1;
   kissat_set_option(solver, "incrementalreuse", mode);
