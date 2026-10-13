@@ -3,13 +3,15 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = Path('/home/avj/clones/stp/master/scripts/benchmark-sat-backends.py')
+SOURCE = Path(os.environ.get('STP_SAT_BENCH_RUNNER',
+    '/home/avj/clones/stp/master/scripts/benchmark-sat-backends.py'))
 spec = importlib.util.spec_from_file_location('stp_sat_benchmark', SOURCE)
 runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
