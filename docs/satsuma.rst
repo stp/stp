@@ -53,6 +53,15 @@ Surviving array operations or an active equality registry also force bypass.
 Formulas with at least five million variables, or beyond integer arena
 size limits, use ordinary clause loading.
 
+Eligibility depends on the encoding path, rather than the declared SMT
+logic. QF_ABV and QF_ABVFP queries can use Satsuma when the early eager
+array pass removes their array operations, floating-point operations are
+encoded exactly, and no other refinement source is active. Queries using
+lazy array reads, lazy array equality, or FP abstraction bypass it. This
+restriction applies regardless of the SAT backend. With ``-s``, the
+``satsuma: mode=...`` or ``satsuma: skipped ...`` line reports whether
+preprocessing ran when CNF reached clause loading.
+
 STP polls its preparation budget while translating and loading clauses and
 before and after Satsuma. Satsuma's core currently has no cooperative
 wall-clock cancellation hook. An external process watchdog is needed to
