@@ -40,6 +40,8 @@ SAT backends (disable with --no-<name>):
   --cadical-dir=PATH  a CaDiCaL checkout (implies --cadical)
   --cryptominisat     require CryptoMiniSat; --no-cryptominisat never uses it.
                       Named neither way, it is used if it is installed
+  --kissat            use incremental Kissat
+  --kissat-dir=PATH    an incremental Kissat checkout (implies --kissat)
   --minisat           use MiniSat
 
 Features (disable with --no-<name>):
@@ -88,6 +90,8 @@ local_deps=default
 dep_dir=${STP_DEP_DIR:-default}
 dep_path=""
 
+kissat=default
+kissat_dir=default
 cadical=default
 cadical_dir=default
 cryptominisat=default
@@ -142,6 +146,10 @@ do
     --dep-path) die "missing argument to $1 (try -h)";;
     --dep-path=*) dep_path="${dep_path:+${dep_path};}${1##*=}";;
 
+    --kissat) kissat=ON;;
+    --no-kissat) kissat=OFF;;
+    --kissat-dir) die "missing argument to $1 (try -h)";;
+    --kissat-dir=*) kissat_dir=${1##*=}; kissat=ON;;
     --cadical) cadical=ON;;
     --no-cadical) cadical=OFF;;
     --cadical-dir) die "missing argument to $1 (try -h)";;
@@ -227,6 +235,8 @@ add ENABLE_AUTO_DOWNLOAD   "$auto_download"
 add STP_DEPS_LOCAL_ONLY    "$local_deps"
 add ABC_DIR                "$abc_dir"
 add STP_DEP_DIR            "$dep_dir"
+add USE_KISSAT             "$kissat"
+add KISSAT_DIR             "$kissat_dir"
 add USE_CADICAL            "$cadical"
 add CADICAL_DIR            "$cadical_dir"
 add USE_CRYPTOMINISAT      "$cryptominisat"

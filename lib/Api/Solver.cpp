@@ -3093,6 +3093,7 @@ Statistics Solver::statistics() const
   {
     case UF::CRYPTOMINISAT5_SOLVER: backend = "cryptominisat"; break;
     case UF::CADICAL_SOLVER: backend = "cadical"; break;
+    case UF::KISSAT_SOLVER: backend = "kissat"; break;
     case UF::SIMPLIFYING_MINISAT_SOLVER: backend = "simplifying-minisat"; break;
     default: break;
   }

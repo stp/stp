@@ -4,8 +4,8 @@ Satsuma CNF preprocessing
 Satsuma optionally preprocesses STP's complete CNF before it is loaded into
 the SAT backend. It uses an output callback inside the process, with no
 temporary DIMACS file or preprocessing subprocess. The same adapter supports
-CaDiCaL and CryptoMiniSat. Both the build option and runtime option are off
-by default; this is an experimental pipeline.
+CaDiCaL, CryptoMiniSat and Kissat. Both the build option and runtime option
+are off by default; this is an experimental pipeline.
 
 Build and use
 -------------
@@ -27,8 +27,10 @@ installation without the CNF output API is rejected during configuration.
 
 The runtime option is ``satsuma=off|lex|fix``. API clients can set it through
 ``options.set("satsuma", "lex")`` before their first check. Explicit backend
-selection is supported: ``--cadical`` or ``--cryptominisat`` on the CLI,
-and ``options.set("sat-backend", "cadical")`` in the C++ API.
+selection is supported: ``--cadical``, ``--cryptominisat`` or ``--kissat``
+on the CLI, and ``options.set("sat-backend", "kissat")`` in the C++ API.
+Enable ``-DUSE_KISSAT=ON`` together with ``-DUSE_SATSUMA=ON`` to use the two
+features together.
 
 Lex uses unit propagation, removed-variable units, a component limit of
 500,000, an order-model budget of 750,000, and a dense-model budget of
@@ -75,15 +77,17 @@ Testing and performance
 .. code-block:: bash
 
    cmake -S . -B build -DENABLE_AUTO_DOWNLOAD=ON -DUSE_SATSUMA=ON \
-     -DENABLE_TESTING=ON -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON
+     -DENABLE_TESTING=ON -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON -DUSE_KISSAT=ON
    cmake --build build --parallel
    ctest --test-dir build -L satsuma --output-on-failure
 
-The tests run both backends through off, lex, and fix modes. They include
+The tests run each enabled backend through off, lex, and fix modes. They include
 exhaustive Boolean oracles, pigeonhole symmetry, original-model checking,
 floating-point arithmetic, refinement bypass, incremental push/pop, and a
-standalone public C++ API client. The fork separately compares callback
-output byte for byte against its original DIMACS output path.
+standalone public C++ API client. CI covers all three backends with assertions
+enabled and disabled, and also builds Satsuma with Kissat as the only backend.
+The fork separately compares callback output byte for byte against its original
+DIMACS output path.
 
 The prototype experiment on 63,441 non-incremental QF_BV/QF_BVFP files,
 using CaDiCaL 3.0.1, had the following PAR2 at a 60-second end-to-end cutoff

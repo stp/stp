@@ -111,14 +111,14 @@ name = "sat-backend"
 id = 1
 type = "enum"
 default = "auto"
-values = ["auto", "cryptominisat", "cadical", "minisat", "simplifying-minisat"]
+values = ["auto", "cryptominisat", "cadical", "minisat", "simplifying-minisat", "kissat"]
 tier = "stable"
 settable = "construction"
 scope = "solver"
 engine = { custom = "sat_backend" }
 category = "sat"
-requires = { build = "the named backend; auto picks the first available of cryptominisat, cadical, minisat" }
-cli_help = "the SAT backend: auto picks the first this build has of CryptoMiniSat, CaDiCaL and MiniSat; a backend it lacks is refused"
+requires = { build = "the named backend; auto picks the first available of cryptominisat, cadical, minisat, kissat" }
+cli_help = "the SAT backend: auto picks the first this build has of CryptoMiniSat, CaDiCaL, MiniSat and Kissat; a backend it lacks is refused"
 help = "the SAT backend; one this build lacks is a recoverable OPTION_UNAVAILABLE when a solver is made with it, never exit(-1) at solve time"
 
 [[option]]
@@ -318,6 +318,12 @@ group = "Miscellaneous options"
 # ============================================================================ CLI aliases that map to a value of another entry
 # (kept so that existing command lines keep working: each is a bare flag of tools/stp that sets `of` to `value`; the
 # flags of one entry exclude each other on the command line)
+
+[[alias]]
+name = "kissat"
+of = "sat-backend"
+value = "kissat"
+help = "use incremental kissat as the solver"
 
 [[alias]]
 name = "cadical"
@@ -828,6 +834,7 @@ help = "CaDiCaL maximum elimination effort; overrides CADICAL_ELIMMAXEFF. The ba
 
 [[option]]
 name = "cadical-factor"
+aliases = ["kissat-factor"]
 type = "mode"
 default = "on"
 values = ["on", "off", "auto"]
@@ -837,8 +844,33 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "cadical_factor" }
 category = "sat"
-requires = { build = "cadical" }
-help = "let cadical use bounded variable addition: 'on' (the default), 'off', or 'auto' (on only for problems with array operations, which was the default until it was measured on bitvector-only problems). Needs a CaDiCaL 3.x build; otherwise an explicit request is declined with a warning"
+requires = { build = "bva" }
+help = "let the SAT backend use bounded variable addition: 'on' (the default), 'off', or 'auto' (on only for problems with array operations). Requires CaDiCaL 3.x or incremental Kissat; --kissat-factor is an alias. Other backends decline an explicit request with a warning"
+
+[[option]]
+name = "kissat-trail-reuse"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_trail_reuse" }
+category = "sat"
+requires = { build = "kissat" }
+help = "allow Kissat to retain the shared assumption prefix across checks and unaffected search decisions across refinement rounds"
+
+[[option]]
+name = "kissat-stable"
+type = "int"
+default = -1
+range = { min = -1, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_stable" }
+category = "sat"
+requires = { build = "kissat" }
+help = "Kissat search mode: -1 follows --search-bias, 0 focused only, 1 switches focused and stable, 2 stable only; an explicit mode overrides the search bias hint"
 
 [[option]]
 name = "incremental-inprobing"
@@ -861,8 +893,8 @@ settable = "anytime"
 scope = "solver"
 engine = { field = "refinement_trail_reuse" }
 category = "sat"
-requires = { build = "cadical" }
-help = "keep cadical's search trail between the solve calls of a refinement loop (array reads, bit-vector abstractions, uninterpreted functions) instead of restarting each round from the root"
+requires = { build = "bva" }
+help = "keep the CaDiCaL or Kissat search trail between the solve calls of a refinement loop (array reads, bit-vector abstractions, uninterpreted functions)"
 
 [[option]]
 name = "threads"

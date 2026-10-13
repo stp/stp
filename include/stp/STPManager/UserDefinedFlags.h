@@ -2000,7 +2000,8 @@ public:
     MINISAT_SOLVER = 0,
     SIMPLIFYING_MINISAT_SOLVER,
     CRYPTOMINISAT5_SOLVER,
-    CADICAL_SOLVER
+    CADICAL_SOLVER,
+    KISSAT_SOLVER
   };
 
   enum SATSolvers solver_to_use;
@@ -2009,6 +2010,8 @@ public:
   // Which answer to tune the SAT search towards. NONE, the default, leaves
   // every backend at its own settings, so the option is opt-in.
   SearchBias search_bias = static_cast<SearchBias>(0);
+  bool kissat_trail_reuse = true;
+  int kissat_stable = -1;
 
   CadicalOptions cadical_options;
 
@@ -2312,13 +2315,16 @@ public:
     // CryptoMiniSat leads because a build that went to the trouble of
     // linking it meant to use it; CaDiCaL follows because it is the only
     // backend on by default, so it is what a stock build solves with.
-    // MiniSat is the last resort and is not guarded: CMakeLists.txt refuses
-    // a build with no backend at all, so the fall-through is only reached
-    // when MiniSat is the one that is there.
+    // MiniSat follows those two, then the optional incremental Kissat.
+    // CMakeLists.txt refuses a build with no backend at all.
 #if STP_BUILD_WITH_CRYPTOMINISAT
     solver_to_use = CRYPTOMINISAT5_SOLVER;
 #elif STP_BUILD_WITH_CADICAL
     solver_to_use = CADICAL_SOLVER;
+#elif STP_BUILD_WITH_MINISAT
+    solver_to_use = MINISAT_SOLVER;
+#elif STP_BUILD_WITH_KISSAT
+    solver_to_use = KISSAT_SOLVER;
 #else
     solver_to_use = MINISAT_SOLVER;
 #endif

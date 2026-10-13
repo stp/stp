@@ -36,8 +36,8 @@ public:
       throw std::runtime_error("Satsuma returned an invalid CNF size");
     variables = variableCount;
     clauses = clauseCount;
-    // CNF uses 1..n. CMS retains its unused variable 0, and CaDiCaL
-    // allocates 1..n+1, just as ordinary STP clause loading does. Keeping
+    // CNF uses 1..n. Keep STP's unused variable 0 and allocate the whole
+    // output domain, just as ordinary STP clause loading does. Keeping
     // the original domain also makes unconstrained input bits modelable.
     const uint32_t count = std::max(originalVariables,
                                    static_cast<uint32_t>(variableCount) + 1);

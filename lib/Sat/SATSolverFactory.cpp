@@ -41,6 +41,10 @@ THE SOFTWARE.
 #include "stp/Sat/SimplifyingMinisat.h"
 #endif
 
+#ifdef USE_KISSAT
+#include "stp/Sat/Kissat.h"
+#endif
+
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -89,6 +93,10 @@ std::vector<std::string> compiledSolverVersions()
   // MiniSat has no version API, and STP links a checkout that carries no
   // version of its own either.
   solvers.push_back("minisat (no version reported)");
+#endif
+
+#ifdef USE_KISSAT
+  solvers.push_back(std::string("kissat ") + kissat_version() + " (incremental)");
 #endif
 
   return solvers;
@@ -146,6 +154,14 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
                 << std::endl;
       exit(-1);
 #endif
+    case UserDefinedFlags::KISSAT_SOLVER:
+#ifdef USE_KISSAT
+      newS = new Kissat(flags.kissat_trail_reuse, flags.kissat_stable);
+#else
+      std::cerr << "Kissat support was not enabled at configure time." << std::endl;
+      exit(-1);
+#endif
+      break;
     default:
       std::cerr << "ERROR: Undefined solver to use." << std::endl;
       exit(-1);

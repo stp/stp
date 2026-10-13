@@ -481,6 +481,10 @@ bool option_build_supported(const OptionSpec& spec)
   if (spec.requires_build == nullptr)
     return true;
   const std::string b = spec.requires_build;
+  if (b == "kissat")
+    return STP_BUILD_WITH_KISSAT != 0;
+  if (b == "bva")
+    return STP_BUILD_WITH_CADICAL != 0 || STP_BUILD_WITH_KISSAT != 0;
   if (b == "cadical")
     return STP_BUILD_WITH_CADICAL != 0;
   if (b == "satsuma")
@@ -841,6 +845,10 @@ void OptionsImpl::resolve(const char* /*fn*/) const
           have = "cryptominisat";
 #elif STP_BUILD_WITH_CADICAL
           have = "cadical";
+#elif STP_BUILD_WITH_MINISAT
+          have = "minisat";
+#elif STP_BUILD_WITH_KISSAT
+          have = "kissat";
 #else
           have = "minisat";
 #endif
@@ -1038,11 +1046,16 @@ bool custom_sat_backend(EngineTarget& t, const OptionSpec& spec, const OptionVal
     t.flags.solver_to_use = Flags::CRYPTOMINISAT5_SOLVER;
 #elif STP_BUILD_WITH_CADICAL
     t.flags.solver_to_use = Flags::CADICAL_SOLVER;
+#elif STP_BUILD_WITH_MINISAT
+    t.flags.solver_to_use = Flags::MINISAT_SOLVER;
+#elif STP_BUILD_WITH_KISSAT
+    t.flags.solver_to_use = Flags::KISSAT_SOLVER;
 #else
     t.flags.solver_to_use = Flags::MINISAT_SOLVER;
 #endif
     return true;
   }
+  const bool have_kissat = STP_BUILD_WITH_KISSAT != 0;
   const bool have_cms = STP_BUILD_WITH_CRYPTOMINISAT != 0;
   const bool have_cadical = STP_BUILD_WITH_CADICAL != 0;
   const bool have_minisat = STP_BUILD_WITH_MINISAT != 0;
@@ -1050,6 +1063,8 @@ bool custom_sat_backend(EngineTarget& t, const OptionSpec& spec, const OptionVal
     t.flags.solver_to_use = Flags::CRYPTOMINISAT5_SOLVER;
   else if (s == "cadical" && have_cadical)
     t.flags.solver_to_use = Flags::CADICAL_SOLVER;
+  else if (s == "kissat" && have_kissat)
+    t.flags.solver_to_use = Flags::KISSAT_SOLVER;
   else if (s == "minisat" && have_minisat)
     t.flags.solver_to_use = Flags::MINISAT_SOLVER;
   else if (s == "simplifying-minisat" && have_minisat)
@@ -1062,6 +1077,7 @@ bool custom_sat_backend(EngineTarget& t, const OptionSpec& spec, const OptionVal
                       for (const auto& [have, name] :
                            {std::pair<bool, const char*>{have_cms, "cryptominisat"},
                             {have_cadical, "cadical"},
+                            {have_kissat, "kissat"},
                             {have_minisat, "minisat"},
                             {have_minisat, "simplifying-minisat"}})
                         if (have)

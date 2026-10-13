@@ -391,9 +391,10 @@ add_subdirectory(lra)
 if(STP_BUILD_WITH_SATSUMA)
     add_executable(satsuma-api-client satsuma_client.cpp)
     target_link_libraries(satsuma-api-client PRIVATE stp)
-    foreach(_satsuma_backend cadical cryptominisat)
+    foreach(_satsuma_backend cadical cryptominisat kissat)
         if((_satsuma_backend STREQUAL "cadical" AND USE_CADICAL) OR
-           (_satsuma_backend STREQUAL "cryptominisat" AND USE_CRYPTOMINISAT))
+           (_satsuma_backend STREQUAL "cryptominisat" AND USE_CRYPTOMINISAT) OR
+           (_satsuma_backend STREQUAL "kissat" AND USE_KISSAT))
             if(BUILD_EXECUTABLES)
                 add_test(NAME satsuma-${_satsuma_backend}
                     COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/satsuma.py"

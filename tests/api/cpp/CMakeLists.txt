@@ -41,6 +41,8 @@ AddSTPGTest(permanent-assertions.cpp)
 AddSTPGTest(real-sessions.cpp)
 AddSTPGTest(single-query.cpp)
 AddSTPGTest(before-search.cpp)
+target_compile_definitions(before-searchTests PRIVATE
+    STP_TEST_QUERY_DIR="${PROJECT_SOURCE_DIR}/tests/query-files")
 AddSTPGTest(solvers.cpp)
 AddSTPGTest(models.cpp)
 AddSTPGTest(array-fill-models.cpp)

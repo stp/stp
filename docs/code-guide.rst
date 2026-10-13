@@ -153,6 +153,8 @@ The forks, and the branch each pin is a commit of:
    ``stp-5.17.0-ipasir-up``, which is upstream's release with the IPASIR-UP
    interface proposed as msoos/cryptominisat#842.
 -  IMath: `stp/imath <https://github.com/stp/imath>`__, ``stp``.
+-  Kissat: `stp/kissat <https://github.com/stp/kissat>`__, ``stp``;
+   ``master`` and ``upstream`` mirror the unmodified upstream revision.
 -  LibBF: `stp/libbf <https://github.com/stp/libbf>`__, ``stp``.
 -  MiniSat: `stp/minisat <https://github.com/stp/minisat>`__, ``master``.
 -  SymFPU: `stp/symfpu <https://github.com/stp/symfpu>`__, ``stp``.

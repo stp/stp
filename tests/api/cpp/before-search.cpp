@@ -316,7 +316,10 @@ TEST(BeforeSearch, AnArithmeticHookKeepsItsCoordinatorsCallback)
   const long hooked = run(true, calls, outcome);
   EXPECT_EQ(outcome, "offered");
   EXPECT_EQ(calls, 1u);
-  EXPECT_GE(plain, 1);
+  if (sat_backends() == std::vector<std::string>{"kissat"})
+    EXPECT_EQ(plain, 0); // Kissat runs arithmetic on complete assignments.
+  else
+    EXPECT_GE(plain, 1);
   EXPECT_EQ(hooked, plain);
 }
 
@@ -363,8 +366,8 @@ TEST(BeforeSearch, ArithmeticRerouteKeepsDiversificationWithoutRepeatingTheHook)
 {
   if (!exchange_available)
     GTEST_SKIP() << "the backend has no search diversification";
-  const auto path = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
-                    "query-files/lra-float-reroute-preserves-answer.smt2";
+  const auto path = std::filesystem::path(STP_TEST_QUERY_DIR) /
+                    "lra-float-reroute-preserves-answer.smt2";
   std::ifstream input(path);
   ASSERT_TRUE(input) << path;
   std::ostringstream script;

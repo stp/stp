@@ -37,6 +37,10 @@ if (USE_CADICAL)
     set(sat_lib_to_add ${sat_lib_to_add} Cadical.cpp)
 endif()
 
+if(USE_KISSAT)
+    list(APPEND sat_lib_to_add Kissat.cpp)
+endif()
+
 if (STP_BUILD_WITH_SATSUMA)
     list(APPEND sat_lib_to_add Satsuma.cpp)
     set_source_files_properties(Satsuma.cpp PROPERTIES
@@ -44,6 +48,9 @@ if (STP_BUILD_WITH_SATSUMA)
 endif()
 
 add_library(sat OBJECT ${sat_lib_to_add})
+if(USE_KISSAT)
+    target_link_libraries(sat PRIVATE Kissat)
+endif()
 
 if (STP_BUILD_WITH_SATSUMA)
     target_link_libraries(sat PRIVATE Satsuma)
