@@ -13,7 +13,7 @@ import numpy as np
 
 def analyze(run, baseline, repetitions, seed):
     metadata = json.loads((run / 'metadata.json').read_text())
-    manifest = list(csv.DictReader(Path(metadata['manifest']).open()))
+    manifest = list(csv.DictReader((run / 'manifest.csv').open()))
     configurations = [c['name'] for c in metadata['configurations']]
     if baseline not in configurations:
         raise ValueError(f'unknown baseline {baseline}')
@@ -31,6 +31,8 @@ def analyze(run, baseline, repetitions, seed):
 
     disagreements, status_errors, input_errors = [], [], []
     known = defaultdict(list)
+    ignored_incremental_statuses = []
+    query_coverage = defaultdict(int)
     root = Path(metadata['root'])
     for row in manifest:
         path = row['path']
@@ -41,12 +43,43 @@ def analyze(run, baseline, repetitions, seed):
         commands = re.sub(rb'"(?:[^"]|"")*"|\|[^|]*\||;[^\n]*', b' ', data)
         declared = re.search(rb'\(\s*set-info\s+:status\s+(sat|unsat)\s*\)', commands)
         declared = declared[1].decode() if declared else None
+        checks = int(row['checks'])
+        actual_checks = len(re.findall(rb'\(\s*check-sat(?:-assuming)?\b', commands))
+        if actual_checks != checks:
+            input_errors.append(dict(path=path, expected_checks=checks,
+                                     actual_checks=actual_checks))
+        # A session-wide :status declaration cannot specify the verdict at
+        # every query of an incremental file. Check it only for one-query inputs.
+        if declared and checks != 1:
+            ignored_incremental_statuses.append(path)
+            declared = None
         if declared:
             known[declared].append(path)
-        answers = {r['answers'][0] for r in grouped[path].values()
-                   if r['answers'] and r['answers'][0] in ('sat', 'unsat')}
-        if len(answers) > 1:
-            disagreements.append(path)
+        for name, observation in grouped[path].items():
+            answers = observation['answers']
+            if (observation['expected_checks'] != checks or
+                    observation['answered_checks'] != len(answers) or
+                    len(answers) > checks):
+                raise ValueError(f'invalid query accounting: {path}, {name}')
+            stdout = (run / observation['stdout']).read_text(errors='replace')
+            recorded = [line.strip() for line in stdout.splitlines()
+                        if line.strip() in ('sat', 'unsat', 'unknown')]
+            if recorded != answers:
+                raise ValueError(f'journal differs from captured answers: {path}, {name}')
+            if observation['status'] == 'solved' and (
+                    len(answers) != checks or 'unknown' in answers or
+                    observation['returncode'] != 0):
+                raise ValueError(f'incomplete session counted as solved: {path}, {name}')
+        for query in range(checks):
+            observed = {name: r['answers'][query]
+                        for name, r in grouped[path].items()
+                        if query < len(r['answers']) and r['answers'][query] in ('sat', 'unsat')}
+            query_coverage['expected'] += 1
+            query_coverage['answered_by_any'] += bool(observed)
+            query_coverage['answered_by_at_least_two'] += len(observed) >= 2
+            query_coverage['answered_by_all'] += len(observed) == len(configurations)
+            if len(set(observed.values())) > 1:
+                disagreements.append(dict(path=path, query=query + 1, answers=observed))
         if declared:
             for name, observation in grouped[path].items():
                 if any(a in ('sat', 'unsat') and a != declared
@@ -98,6 +131,16 @@ def analyze(run, baseline, repetitions, seed):
             common_solved=int(both.sum()),
             common_solved_geomean_ratio=float(np.exp(np.log(values[both] / base[both]).mean()))
                 if both.any() else None,
+            expected_queries=sum(r['expected_checks'] for r in own),
+            definitive_queries=sum(a in ('sat', 'unsat') for r in own for a in r['answers']),
+            queries_in_completed_sessions=sum(r['expected_checks'] for r in own
+                                              if r['status'] == 'solved'),
+            definitive_queries_in_incomplete_sessions=sum(
+                a in ('sat', 'unsat') for r in own if r['status'] != 'solved'
+                for a in r['answers']),
+            sat_queries=sum(a == 'sat' for r in own for a in r['answers']),
+            unsat_queries=sum(a == 'unsat' for r in own for a in r['answers']),
+            family_macro_par2_mean=float(np.mean([r['par2_mean'] for r in by_family])),
             gained_solutions=[p for i, p in enumerate(paths) if solved[i] and not base_solved[i]],
             lost_solutions=[p for i, p in enumerate(paths) if base_solved[i] and not solved[i]],
             declared_sat_solved=sum(grouped[p][name]['status'] == 'solved' for p in known['sat']),
@@ -108,6 +151,8 @@ def analyze(run, baseline, repetitions, seed):
         weighting='one weight per selected file; families sampled as clusters for confidence intervals',
         bootstrap_repetitions=repetitions, bootstrap_seed=seed,
         declared_status_counts={key: len(value) for key, value in known.items()},
+        ignored_incremental_statuses=ignored_incremental_statuses,
+        query_coverage=dict(query_coverage),
         answer_disagreements=disagreements, declared_status_errors=status_errors,
         changed_inputs=input_errors, comparisons=comparisons)
 
@@ -132,7 +177,9 @@ def plot(run, output):
     ax.set_xlim(0.01, metadata['timeout'])
     ax.set_xlabel('Complete SMT-LIB session wall time in seconds')
     ax.set_ylabel('Sessions solved')
-    ax.set_title(f'QF_BV comparison at {metadata["timeout"]:g} seconds')
+    manifest = list(csv.DictReader((run / 'manifest.csv').open()))
+    logics = ', '.join(sorted({row['logic'] for row in manifest}))
+    ax.set_title(f'{logics} comparison at {metadata["timeout"]:g} seconds')
     ax.grid(True, alpha=0.2)
     ax.legend(loc='lower right')
     fig.tight_layout()
