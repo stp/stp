@@ -1,5 +1,5 @@
 Incremental Kissat in STP
-========================
+=========================
 
 STP can use an incremental extension of Kissat 4.0.4 for bitvector, array,
 and floating-point problems. The backend supports permanent clause additions,
@@ -137,6 +137,16 @@ used in those experiments. The automatic CNF policy contains settings
 specific to CaDiCaL, so choosing a SAT backend can also require choosing an
 encoding policy.
 
+Satsuma preprocessing
+---------------------
+
+Kissat supports the optional :doc:`Satsuma CNF preprocessing <satsuma>`
+pipeline. Configure with ``-DUSE_KISSAT=ON -DUSE_SATSUMA=ON`` and select
+``--kissat --satsuma=lex`` or ``--kissat --satsuma=fix`` at runtime.
+Satsuma uses the same variable and clause interfaces as ordinary STP clause
+loading. It is restricted to complete batch encodings; incremental sessions
+and refinement queries bypass preprocessing, including with Kissat.
+
 Testing
 -------
 
@@ -144,6 +154,8 @@ The CI job builds STP with Kissat alone and with CaDiCaL alongside it.
 The unit tests cover assumptions, cores, variable identities under factoring,
 clause additions after a solve, interruption, and trail reuse. Query tests
 exercise push/pop, model checking, arrays, and abstraction with Kissat.
+Satsuma tests additionally cover both preprocessing modes, original models,
+symmetry and the incremental/refinement bypass.
 
 The fork also has its own Debug and Release CI jobs. Its CMake test runs
 exhaustive differential checks of incremental results, models and cores;

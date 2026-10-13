@@ -7,7 +7,7 @@ import sys
 
 binary = sys.argv[1]
 backend = sys.argv[2] if len(sys.argv) > 2 else "cadical"
-assert backend in ("cadical", "cryptominisat"), backend
+assert backend in ("cadical", "cryptominisat", "kissat"), backend
 cases = 0
 
 

@@ -43,7 +43,7 @@ jobs:
       run: python3 scripts/check-dependency-patches.py
 
   satsuma:
-    name: Satsuma / both backends / assertions ${{ matrix.assertions }}
+    name: Satsuma / three backends / assertions ${{ matrix.assertions }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -80,11 +80,11 @@ jobs:
             -DENABLE_AUTO_DOWNLOAD=ON -DCMAKE_BUILD_TYPE=Release \
             -DENABLE_TESTING=ON -DENABLE_PYTHON_API=OFF -DWERROR=ON \
             -DENABLE_ASSERTIONS=${{ matrix.assertions }} \
-            -DUSE_SATSUMA=ON -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON \
+            -DUSE_SATSUMA=ON -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON -DUSE_KISSAT=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       - name: Build
         run: cmake --build build --target stp-bin satsuma-api-client --parallel "$(nproc)"
-      - name: Test Satsuma with both backends
+      - name: Test Satsuma with CaDiCaL, CryptoMiniSat and Kissat
         run: ctest --test-dir build -L satsuma --output-on-failure
       - name: Dependency diagnostics
         if: failure()
@@ -894,7 +894,7 @@ jobs:
           -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
           -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
           -DENABLE_AUTO_DOWNLOAD=ON -DENABLE_TESTING=ON -DWERROR=ON \
-          -DUSE_KISSAT=ON -DUSE_CADICAL=${{ matrix.cadical }} \
+          -DUSE_KISSAT=ON -DUSE_CADICAL=${{ matrix.cadical }} -DUSE_SATSUMA=ON \
           -DUSE_CRYPTOMINISAT=OFF -DUSE_MINISAT=OFF -DENABLE_PYTHON_API=OFF \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
