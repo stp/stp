@@ -168,9 +168,13 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
       break;
   };
 
+  std::unique_ptr<SATSolver> configured(newS);
+  if (flags.sat_search_options.hasOverrides() &&
+      !configured->setSearchOptions(flags.sat_search_options))
+    throw std::invalid_argument("SAT phase options require CaDiCaL or Kissat");
   if (flags.random_seed != 0)
-    newS->setSeed(flags.random_seed);
-  return newS;
+    configured->setSeed(flags.random_seed);
+  return configured.release();
 }
 
 void validateCadicalOptions(const UserDefinedFlags& flags)
@@ -183,10 +187,14 @@ void validateCadicalOptions(const UserDefinedFlags& flags)
 
 void applySearchBias(SATSolver& s, const UserDefinedFlags& flags, bool warn)
 {
-  if (flags.search_bias == SearchBias::NONE ||
-      s.setSearchBias(flags.search_bias))
+  if (flags.search_bias == SearchBias::NONE)
     return;
-  if (warn)
+  const bool accepted = s.setSearchBias(flags.search_bias);
+  // Explicit phase choices take precedence over named configurations.
+  if (flags.sat_search_options.hasOverrides() &&
+      !s.setSearchOptions(flags.sat_search_options))
+    throw std::invalid_argument("SAT phase options require CaDiCaL or Kissat");
+  if (!accepted && warn)
   {
     std::cerr << "Warning: the SAT solver in use has no '"
               << searchBiasName(flags.search_bias)

@@ -218,6 +218,7 @@ public:
   bool reportsRootFixed() const override { return true; }
 
   bool setSearchBiasInternal(SearchBias bias) override;
+  bool setSearchOptionsInternal(const SatSearchOptions& options) override;
 
   bool enableBVAInternal() override;
 

@@ -7,6 +7,7 @@
 #include <limits>
 #include <new>
 #include <stdexcept>
+#include <string>
 #include <unordered_set>
 
 namespace stp
@@ -232,6 +233,10 @@ void Kissat::setSeed(uint64_t seed)
 
 void Kissat::printStats() const
 {
+  std::cerr << "Kissat search: phase=" << kissat_get_option(solver, "phase")
+            << " forcephase=" << kissat_get_option(solver, "forcephase")
+            << " rephase=" << kissat_get_option(solver, "rephase")
+            << " target=" << kissat_get_option(solver, "target") << '\n';
   std::cerr << "Kissat: variables=" << nVars()
             << " submitted-clauses=" << submittedClauses()
             << " solves=" << solve_calls << '\n';
@@ -274,6 +279,22 @@ bool Kissat::configureOneShot()
   kissat_set_option(solver, "incremental", 0);
   kissat_set_option(solver, "incrementalreuse", 0);
   one_shot = true;
+  return true;
+}
+
+bool Kissat::setSearchOptionsInternal(const SatSearchOptions& options)
+{
+  requireHealthy();
+  for (const auto& option : options.entries())
+    if (option.value >= 0)
+    {
+      const int maximum = std::string(option.name) == "target" ? 2 : 1;
+      if (option.value > maximum)
+        throw std::invalid_argument("Kissat search option outside its range");
+      kissat_set_option(solver, option.name, option.value);
+      if (kissat_get_option(solver, option.name) != option.value)
+        throw std::invalid_argument("Kissat rejected a search option");
+    }
   return true;
 }
 

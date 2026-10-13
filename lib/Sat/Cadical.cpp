@@ -392,6 +392,10 @@ Cadical::~Cadical()
 
 void Cadical::printStats() const
 {
+  std::cerr << "CaDiCaL search: phase=" << s->get("phase")
+            << " forcephase=" << s->get("forcephase")
+            << " rephase=" << s->get("rephase")
+            << " target=" << s->get("target") << '\n';
   std::cerr << "CaDiCaL elimination:";
   for (const char* name : {"elim", "elimmineff", "elimmaxeff"})
   {
@@ -511,6 +515,20 @@ void Cadical::setVerbosity(int v)
       s->set("verbose",1);
     }
 
+}
+
+bool Cadical::setSearchOptionsInternal(const SatSearchOptions& options)
+{
+  for (const auto& option : options.entries())
+    if (option.value >= 0)
+    {
+      const std::string name(option.name);
+      const int maximum = name == "target" || name == "rephase" ? 2 : 1;
+      if (option.value > maximum || !s->set(option.name, option.value) ||
+          s->get(option.name) != option.value)
+        throw std::invalid_argument("CaDiCaL rejected a search option");
+    }
+  return true;
 }
 
 bool Cadical::okay()
