@@ -2009,6 +2009,8 @@ public:
   std::string satsuma_profile = "stp";
   std::string satsuma_ordering = "auto";
   int satsuma_component_limit = -1;
+  int satsuma_input_limit = -1;
+  int satsuma_iteration_limit = -1;
 
   // Which answer to tune the SAT search towards. NONE, the default, leaves
   // every backend at its own settings, so the option is opt-in.

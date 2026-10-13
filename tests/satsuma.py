@@ -31,6 +31,9 @@ def check(text, expected, extra=(), require_preprocessing=False):
         if "--ackermanize" in extra and mode != "off":
             assert "satsuma: mode=" not in proc.stderr, proc.stderr
             assert "satsuma: skipped" in proc.stderr, proc.stderr
+        if "--satsuma-input-limit=0" in extra and mode != "off":
+            assert "satsuma: mode=" not in proc.stderr, proc.stderr
+            assert "satsuma: skipped" in proc.stderr, proc.stderr
 
 
 check("(set-logic QF_BV)(assert true)(check-sat)", ["sat"])
@@ -39,6 +42,16 @@ check("""(set-logic QF_BV)
 (declare-fun x () (_ BitVec 8))(declare-fun y () (_ BitVec 8))
 (assert (and (= (bvmul x y) #x06) (bvult x #x10) (bvult y #x10)))
 (check-sat)""", ["sat"], require_preprocessing=True)
+
+# Resource guards must preserve the ordinary CNF loader and reconstructed model.
+bounded = """(set-logic QF_BV)
+(declare-fun x () (_ BitVec 8))(declare-fun y () (_ BitVec 8))
+(assert (and (= (bvmul x y) #x06) (bvult x #x10) (bvult y #x10)))
+(check-sat)"""
+check(bounded, ["sat"], extra=("--satsuma-input-limit=0",))
+for limit in (0, 1):
+    check(bounded, ["sat"], extra=(f"--satsuma-iteration-limit={limit}",),
+          require_preprocessing=True)
 
 # Pigeonhole formulas exercise actual permutation symmetry, for both verdicts.
 for pigeons, holes in ((4, 4), (5, 4), (6, 5)):

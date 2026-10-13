@@ -85,6 +85,18 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
       cnf.literalCount() > INT_MAX / 2)
     return false;
 
+  // Check this before constructing Satsuma's duplicate clause and graph
+  // structures. A declined request leaves the original CNF for the ordinary
+  // clause loader and does not submit anything to the backend.
+  if (manager.UserFlags.satsuma_input_limit >= 0)
+  {
+    uint64_t inputSize = cnf.varCount() - 1 + cnf.literalCount();
+    for (const auto& extra : extraClauses)
+      inputSize += extra.size();
+    if (inputSize > static_cast<uint64_t>(manager.UserFlags.satsuma_input_limit))
+      return false;
+  }
+
   const auto start = std::chrono::steady_clock::now();
   PreparationPoller poll(manager.preparation_control, PreparationStage::ClauseLoading);
   cnf2wl formula;
@@ -158,7 +170,9 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
     preprocessor.set_negation_fixing(true);
     preprocessor.set_reorder(ordering != "off");
     preprocessor.set_reorder_cliquer(ordering == "clique");
-    preprocessor.set_iterate(true);
+    preprocessor.set_iterate(manager.UserFlags.satsuma_iteration_limit != 0);
+    if (manager.UserFlags.satsuma_iteration_limit > 0)
+      preprocessor.set_iteration_limit(manager.UserFlags.satsuma_iteration_limit);
     preprocessor.set_preprocess_cnf_pure(true);
   }
   poll.check();
@@ -171,6 +185,7 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
     std::cerr << "satsuma: mode=" << manager.UserFlags.satsuma_mode
               << " profile=" << manager.UserFlags.satsuma_profile
               << " ordering=" << ordering << " component_limit=" << componentLimit
+              << " iteration_limit=" << manager.UserFlags.satsuma_iteration_limit
               << " seconds=" << seconds
               << " input_vars=" << cnf.varCount() - 1
               << " input_clauses=" << cnf.clauseCount() + extraClauses.size()
