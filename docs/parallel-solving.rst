@@ -309,14 +309,15 @@ limited. A refusal is exit status 2, never an answer.
 Results
 -------
 
-These are a development version's numbers, measured on one 24-vCPU VM, one
-invocation at a time; it pinned each root to a CPU and ran its hedge as a
-side of its own. An earlier carve of this tool was checked against it at
-``-j8`` on the reserved sample below: both decided the same 40 files with
-the same answers, the carve at 1.006 times the development version's PAR-2
-score and 0.96 times its geometric-mean time. The tool has changed since in
-how it reads its input and where it forks its hedge, and has not been
-measured on the sample again.
+The reserved sample and the competition track are a development version's
+numbers, measured on one 24-vCPU VM, one invocation at a time; it pinned
+each root to a CPU and ran its hedge as a side of its own. An earlier carve
+of this tool was checked against it at ``-j8`` on the reserved sample
+below: both decided the same 40 files with the same answers, the carve at
+1.006 times the development version's PAR-2 score and 0.96 times its
+geometric-mean time. The tool has changed since in how it reads its input
+and where it forks its hedge, and has not been measured on the sample
+again.
 
 **A reserved sample** of 51 QF_BV files from 14 families, drawn after every
 design choice above was fixed and never tuned on, split by whether ordinary
@@ -354,16 +355,15 @@ STP needs 10 s; a 120 s cap and 8 GiB per process:
 ``-j8`` is 2.4 times faster than ordinary STP on the hard files (2.5 times
 than ``-j1``), with ten material wins over ``-j1`` and no loss, and decides
 two files ordinary STP does not; on the easy files it is 1.5 times faster
-(1.6 than ``-j1``). ``-j24`` is not faster than ``-j8``: on the hard files
-it took 0.97 times ``-j8``'s time, within the spread of single runs (three
-runs of one of those files at ``-j24`` differed by up to 2.5 times), and on
-the files under 10 s it is slower than ``-j8`` (by 0.22 s at the median
-over all 26), because of the contention described under "What ``-jN``
-runs": each of k busy processes runs 1.12 times slower than alone at k = 8
-and 1.60 times at k = 24, so a search of 4–10 s pays 1–3 s before sharing
-can repay it. There was no disagreement,
-and 40 of the 41 decided files are confirmed by Bitwuzla or a checked
-witness.
+(1.6 than ``-j1``). On this sample ``-j24`` is not faster than ``-j8``: on
+the hard files it took 0.97 times ``-j8``'s time, within the spread of
+single runs (three runs of one of those files at ``-j24`` differed by up to
+2.5 times), and on the files under 10 s it is slower than ``-j8`` (by
+0.22 s at the median over all 26), because of the contention described
+under "What ``-jN`` runs": each of k busy processes runs 1.12 times slower
+than alone at k = 8 and 1.60 times at k = 24, so a search of 4–10 s pays
+1–3 s before sharing can repay it. There was no disagreement, and 40 of
+the 41 decided files are confirmed by Bitwuzla or a checked witness.
 
 **The QF_BV division of the SMT-COMP 2026 parallel track**, 52 files under
 the competition's 1 200 s limit, run with the development version at 16 GiB
@@ -407,6 +407,41 @@ the largest files (mcm ``184`` and ``186``) the 24 copies exceeded the
 128 GiB guard, and ``AND-NESTED-32-32`` aborts at 16 GiB per process even
 alone (an open decision below).
 
+**Beyond 24 CPUs**: ten hard files of the same division, chosen to include
+ones where earlier runs had gained, lost and decided nothing -- so, unlike
+the reserved sample, not unseen -- run with a later development build on
+12 and 13 October 2026, on a 64-core VM with two NUMA nodes and 251 GiB,
+``-jN`` allowed one hardware thread on each of N cores; seed 0, one run
+each, a 180 s cap and 16 GiB per process. The row without sharing is the
+test driver's ``--clause-sharing off``:
+
+.. list-table::
+   :header-rows: 1
+
+   * - mode
+     - decided at ``-j8`` (of 10)
+     - at ``-j24``
+     - at ``-j64``
+     - PAR-2 at ``-j8``, ``-j24``, ``-j64``
+   * - ``stp-p -jN``
+     - 2
+     - 5
+     - 7
+     - 3 198, 2 292, 1 733
+   * - without sharing
+     - 2
+     - 2
+     - 3
+     - 3 100, 3 082, 2 797
+
+A group wider than 8 can pay on a hard query, and sharing is what pays: each
+of the four unsatisfiable files decided was decided only with it, while
+without it the group decided satisfiable files alone, two of them at
+``-j8`` where the sharing group did not. The default stays at 8 for the
+short files above and for memory (open decisions below). Six of the seven
+decided files agree with the competition's published answers; the seventh,
+``Sage2/bench_6746``, was sat in every run that decided it, unconfirmed.
+
 **Real arithmetic, historical baseline.** Sequential STP decided 18 of the
 40 QF_LRA files of the same track when this was measured (6 October 2026,
 before parallel arithmetic support and later changes to STP's arithmetic
@@ -441,8 +476,11 @@ Each of these is open, with the measurement that would settle it:
   including short inputs, comparing latency and CPU cost.
 - **Memory-aware allocation**: fewer roots, or roots shed at runtime, when
   the loaded solver is large; two of the competition's largest files
-  exceeded a 128 GiB guard at 24 CPUs. Measured by sampling each root's PSS
-  against the owner's size after encoding.
+  exceeded a 128 GiB guard at 24 CPUs. At 64 they passed a 192 GiB guard
+  within 36 s, and on one (mcm ``186``) memory grew too fast for the guard,
+  which samples: the kernel killed a process at a 224 GiB cgroup limit
+  first. Measured by sampling each root's PSS against the owner's size
+  after encoding.
 - **Aborts at the address-space limit**: a process that exhausts
   ``--worker-memory-mib`` aborts or crashes rather than failing cleanly;
   when every process dies that way the answer is an error (exit 2), not
@@ -472,6 +510,6 @@ Each of these is open, with the measurement that would settle it:
 - **Builds without the extension**: ``-jN`` is refused where CaDiCaL is
   missing or unpatched; an independent-seed portfolio could run there
   instead.
-- **Beyond 24 CPUs**: what ``-j48`` gains, NUMA-aware forking, and handing
-  the CNF to a distributed solver as the comparison to make before building
-  more.
+- **Beyond 24 CPUs**: ``-j64`` gains on hard files (above); what it costs
+  on the rest, NUMA-aware forking, and handing the CNF to a distributed
+  solver as the comparison to make before building more.
