@@ -579,6 +579,11 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
   if (accept_function_definition && !accept_function_definition(name))
     refuseCurrentCommand("the name '" + name +
                          "' conflicts with a name retained by the term manager");
+  // function_def_name checks the name before the body is parsed, and a
+  // :named in the body can take it in between. Refuse the duplicate here:
+  // an insert over an existing key would keep the first definition.
+  if (lookupFunction(name) != NULL)
+    refuseCurrentCommand("name '" + name + "' already denotes a define-fun");
   Function f;
   f.name = name;
   f.named = named;
