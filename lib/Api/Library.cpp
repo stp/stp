@@ -67,6 +67,9 @@ std::vector<std::string> sat_backends()
   out.emplace_back("minisat");
   out.emplace_back("simplifying-minisat");
 #endif
+#if STP_BUILD_WITH_KISSAT
+  out.emplace_back("kissat");
+#endif
   return out;
 }
 
@@ -121,6 +124,9 @@ std::map<std::string, std::string> capabilities()
   c["smtlib.named-unsat-cores"] = "true";
   c["solvers-per-manager"] = "unbounded";
   c["interrupt.cryptominisat"] = "between-solver-calls";
+#ifdef USE_KISSAT
+  c["interrupt.kissat"] = "during-search";
+#endif
 #ifdef USE_MINISAT
 #ifdef STP_MINISAT_HAS_TERMINATOR
   c["interrupt.minisat"] = "during-search";

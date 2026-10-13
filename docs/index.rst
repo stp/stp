@@ -125,6 +125,7 @@ page <https://smt-lib.org/>`__.
    array-extensionality
    uninterpreted-functions
    incremental-solving
+   kissat
    bv-abstraction
    fp-abstraction
    linear-real-arithmetic

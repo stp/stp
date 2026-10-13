@@ -37,7 +37,14 @@ if (USE_CADICAL)
     set(sat_lib_to_add ${sat_lib_to_add} Cadical.cpp)
 endif()
 
+if(USE_KISSAT)
+    list(APPEND sat_lib_to_add Kissat.cpp)
+endif()
+
 add_library(sat OBJECT ${sat_lib_to_add})
+if(USE_KISSAT)
+    target_link_libraries(sat PRIVATE Kissat)
+endif()
 
 # cryptominisat.h includes gmpxx.h, and the cryptominisat5 imported target
 # carries that requirement as PkgConfig::GMP in its link interface. Linking
