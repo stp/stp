@@ -23,11 +23,19 @@ sources = {
     'satsuma': ROOT / 'build-experiments/satsuma-install/bin/satsuma',
 }
 hashes = {}
-for name, source in sources.items():
-    dest = components / name
-    shutil.copy2(source, dest)
-    hashes[name] = hashlib.sha256(dest.read_bytes()).hexdigest()
-(components / 'provenance.json').write_text(json.dumps(hashes, indent=2) + '\n')
+provenance = components / 'provenance.json'
+if provenance.exists():
+    hashes = json.loads(provenance.read_text())
+    for name, expected in hashes.items():
+        actual = hashlib.sha256((components / name).read_bytes()).hexdigest()
+        if actual != expected:
+            raise RuntimeError(f'archived diagnostic component changed: {name}')
+else:
+    for name, source in sources.items():
+        dest = components / name
+        shutil.copy2(source, dest)
+        hashes[name] = hashlib.sha256(dest.read_bytes()).hexdigest()
+    provenance.write_text(json.dumps(hashes, indent=2) + '\n')
 
 
 def run_one(binary, config, file, row, index, cpu, args, dest, environment):
