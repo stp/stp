@@ -1828,6 +1828,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
+  // Explicit Ackermannisation can coexist with lazy array equality. An
+  // active registry can still add clauses, whatever the generic flag says.
+  toSATAIG.setSatsumaAllowed(!maybeRefinement && !arrayops && !extActive);
   toSATAIG.setArithmeticOnlyRefinement(
       lraActive && !nonArithmeticRefinement && !arrayops && !extActive);
   // The encoder may consume CB before CNF conversion. Match that handoff

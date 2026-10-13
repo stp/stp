@@ -2004,6 +2004,7 @@ public:
   };
 
   enum SATSolvers solver_to_use;
+  std::string satsuma_mode = "off";
 
   // Which answer to tune the SAT search towards. NONE, the default, leaves
   // every backend at its own settings, so the option is opt-in.
