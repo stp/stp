@@ -28,6 +28,20 @@ void setCostBudget(Preprocessor&, uint64_t, long)
       "Satsuma quick profile requires a fork with the cost budget API");
 }
 
+template <typename Preprocessor>
+auto setSimplificationOnly(Preprocessor& preprocessor, int)
+    -> decltype(preprocessor.set_simplify_only(true), void())
+{
+  preprocessor.set_simplify_only(true);
+}
+
+template <typename Preprocessor>
+void setSimplificationOnly(Preprocessor&, long)
+{
+  throw std::runtime_error(
+      "Satsuma simplify mode requires a fork with the simplification API");
+}
+
 class SolverOutput final : public satsuma::cnf_output
 {
   SATSolver& solver;
@@ -161,6 +175,8 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
   preprocessor.set_cnf_output(&output);
   preprocessor.set_add_reduced_as_unit(true);
   preprocessor.set_preprocess_cnf_unit(true);
+  if (manager.UserFlags.satsuma_mode == "simplify")
+    setSimplificationOnly(preprocessor, 0);
   if (quick)
     setCostBudget(preprocessor, 20000000, 0);
   const bool competition = manager.UserFlags.satsuma_profile == "competition";

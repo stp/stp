@@ -778,14 +778,14 @@ help = "replace a (distinct ...) over variables that occur nowhere else with a s
 name = "satsuma"
 type = "enum"
 default = "off"
-values = ["off", "lex", "fix"]
+values = ["off", "lex", "fix", "simplify"]
 tier = "expert"
 settable = "before-first-check"
 scope = "solver"
 engine = { custom = "satsuma" }
 category = "sat"
 requires = { build = "satsuma" }
-help = "experimental: preprocess a complete, non-incremental CNF with Satsuma before the SAT backend: off (default), lex, or fix. Refinement and incremental encodings are left to the backend"
+help = "experimental: preprocess a complete, non-incremental CNF with Satsuma before the SAT backend: off (default), lex, fix, or simplify (unit propagation and clause preprocessing without symmetry discovery). Refinement and incremental encodings are left to the backend"
 
 [[option]]
 name = "satsuma-profile"
