@@ -12,9 +12,9 @@ invocation. ``-j1`` is the sequential run: ordinary STP's pipeline through
 STP's API, on the build's default SAT backend, without models and under the
 per-process memory limit. Input is read as "Input and limits" describes. It
 is a Linux program, built with ``-DSTP_BUILD_PARALLEL=ON`` (:doc:`tools`),
-and it needs CaDiCaL with STP's clause-import extension, which the build
-applies when it fetches a 3.x CaDiCaL (the default); on a build with no
-CaDiCaL, or another one, ``-jN`` is refused, the default is 1, and ``-j1``
+and it needs CaDiCaL with STP's clause-import extension, which the default
+pin of STP's CaDiCaL fork carries. On a build with no CaDiCaL, or one
+without the extension, ``-jN`` is refused, the default is 1, and ``-j1``
 still works.
 
 .. code-block:: bash
@@ -451,6 +451,60 @@ OpenSMT-SMTS-base decides 18 at one CPU second per wall-clock second, and
 OpenSMT-SMTS decides 22 at a median of 126. These are historical sequential
 results, not measurements of the current arithmetic group.
 
+**Real arithmetic, clause-sharing group.** All 1,753 non-incremental
+QF_LRA benchmarks in a corpus spanning 17 families were run at ``-j1`` and
+``-j12`` on 12 and 13 October 2026, using
+`commit 87c582d18
+<https://github.com/stp/stp/commit/87c582d1818be1befe2974931c21853ca2a1cf16>`_.
+Both modes used the same frozen release executable and library, built with
+Clang 21, mimalloc and CaDiCaL 3.0.1, on a shared 24-vCPU VMware host.
+They were confined to the same 12 CPUs, one invocation at a time with
+alternating job order. The whole-invocation wall deadline was 60 s,
+with 16 GiB of address space per process and a 64 GiB aggregate PSS guard.
+There was one full-corpus run per mode. PAR-2 below is the mean seconds per
+benchmark: a complete answer within the deadline costs its end-to-end wall
+time; an undecided or failed invocation costs 120 s.
+
+.. list-table::
+   :header-rows: 1
+
+   * - mode
+     - decided (of 1,753)
+     - timeouts
+     - PAR-2 mean (s)
+   * - ``stp-p -j1``
+     - 1,639
+     - 114
+     - 10.679
+   * - ``stp-p -j12``
+     - 1,686
+     - 67
+     - 6.676
+
+``-j12`` reduced PAR-2 by 37.5%, decided 47 additional inputs and lost
+none. The additional decisions came from LassoRanker (29), invariant
+synthesis (7), miplib (6), 2019-ezsmt (4) and tropical-matrix (1). On the
+1,639 inputs both modes decided, total runtime was 0.493 times ``-j1``'s
+and geometric-mean runtime 0.965 times: gains were concentrated in
+expensive inputs, while very easy families were often slower in parallel.
+All 67 remaining undecided ``-j12`` inputs were wall timeouts, including
+30 in LassoRanker, 14 in miplib and 8 in tropical-matrix.
+
+**Selected follow-ups** used the same build and limits. Repeating 32
+baseline gain/regression cases twice per mode gave 32 of 64 decisions at
+``-j1`` and 63 of 64 at ``-j12``. On 48 selected hard inputs, the test
+driver at ``-j12`` with sharing decided 34 and had mean PAR-2 46.113 s;
+with ``--clause-sharing off`` it decided 30 and had mean PAR-2 59.661 s,
+29.4% higher. Sharing on/off order alternated between blocks of eight
+inputs. These subsets were selected after the baseline and are exploratory,
+not further full-corpus estimates. Across the 3,730 baseline and follow-up
+trials, the audit found no solver errors, benchmark-status mismatches or
+contradictory complete answers.
+
+These results support the existing arithmetic group and its clause sharing.
+They do not compare ``-j8`` with ``-j12`` or measure QF_LRA at ``-j24``;
+the eight-CPU default remains unchanged.
+
 The interface it is built on
 ----------------------------
 
@@ -500,9 +554,12 @@ Each of these is open, with the measurement that would settle it:
   the group would re-fork each round.
 - **An automatic** ``ackermanize`` **rule**, chosen from the input's array
   reads (a sequential question).
-- **Real arithmetic**: ``QF_LRA`` uses the clause-sharing group. Parallel
-  simplex, arithmetic subproblem partitioning and HiGHS work sharing remain
-  separate possible approaches to measure.
+- **Real arithmetic**: the comparison above supports the clause-sharing
+  group. Profiling the 67 remaining ``-j12`` timeouts should distinguish
+  Boolean-search cost from arithmetic-check cost; very easy files still
+  incur parallel overhead. Parallel simplex, arithmetic subproblem
+  partitioning and HiGHS work sharing remain separate possible approaches
+  to measure.
 - **The 17 track files nobody decides**, by family.
 - **An in-library API**: the group's coordinator in ``libstp`` with a
   parallel options block on ``check_sat``, the C and Python mirrors of the
