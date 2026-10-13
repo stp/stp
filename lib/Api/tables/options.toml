@@ -791,14 +791,14 @@ help = "experimental: preprocess a complete, non-incremental CNF with Satsuma be
 name = "satsuma-profile"
 type = "enum"
 default = "stp"
-values = ["stp", "competition"]
+values = ["stp", "competition", "quick"]
 tier = "expert"
 settable = "before-first-check"
 scope = "solver"
 engine = { custom = "satsuma_profile" }
 category = "sat"
 requires = { build = "satsuma" }
-help = "Satsuma preprocessing limits: stp retains the existing bounded policy; competition matches the Satsuma-iter submission"
+help = "Satsuma preprocessing limits: stp retains the existing bounded policy; competition uses the Satsuma-iter limits; quick limits the input to one million variables plus literal occurrences, Schreier cost to twenty million, and fix mode to one pass"
 
 [[option]]
 name = "satsuma-ordering"

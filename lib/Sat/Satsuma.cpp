@@ -88,12 +88,15 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
   // Check this before constructing Satsuma's duplicate clause and graph
   // structures. A declined request leaves the original CNF for the ordinary
   // clause loader and does not submit anything to the backend.
-  if (manager.UserFlags.satsuma_input_limit >= 0)
+  const bool quick = manager.UserFlags.satsuma_profile == "quick";
+  const int inputLimit = manager.UserFlags.satsuma_input_limit >= 0
+      ? manager.UserFlags.satsuma_input_limit : quick ? 1000000 : -1;
+  if (inputLimit >= 0)
   {
     uint64_t inputSize = cnf.varCount() - 1 + cnf.literalCount();
     for (const auto& extra : extraClauses)
       inputSize += extra.size();
-    if (inputSize > static_cast<uint64_t>(manager.UserFlags.satsuma_input_limit))
+    if (inputSize > static_cast<uint64_t>(inputLimit))
       return false;
   }
 
@@ -144,9 +147,13 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
   preprocessor.set_cnf_output(&output);
   preprocessor.set_add_reduced_as_unit(true);
   preprocessor.set_preprocess_cnf_unit(true);
+  if (quick)
+    preprocessor.set_total_cost_limit(20000000);
   const bool competition = manager.UserFlags.satsuma_profile == "competition";
   const int componentLimit = manager.UserFlags.satsuma_component_limit >= 0
       ? manager.UserFlags.satsuma_component_limit : competition ? 5000000 : 500000;
+  const int iterationLimit = manager.UserFlags.satsuma_iteration_limit >= 0
+      ? manager.UserFlags.satsuma_iteration_limit : quick ? 0 : -1;
   preprocessor.set_proof_dense_crossover(competition ? 64 : 60);
   preprocessor.set_component_size_limit(componentLimit);
   preprocessor.set_order_model_budget(competition
@@ -170,9 +177,9 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
     preprocessor.set_negation_fixing(true);
     preprocessor.set_reorder(ordering != "off");
     preprocessor.set_reorder_cliquer(ordering == "clique");
-    preprocessor.set_iterate(manager.UserFlags.satsuma_iteration_limit != 0);
-    if (manager.UserFlags.satsuma_iteration_limit > 0)
-      preprocessor.set_iteration_limit(manager.UserFlags.satsuma_iteration_limit);
+    preprocessor.set_iterate(iterationLimit != 0);
+    if (iterationLimit > 0)
+      preprocessor.set_iteration_limit(iterationLimit);
     preprocessor.set_preprocess_cnf_pure(true);
   }
   poll.check();
@@ -185,7 +192,7 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
     std::cerr << "satsuma: mode=" << manager.UserFlags.satsuma_mode
               << " profile=" << manager.UserFlags.satsuma_profile
               << " ordering=" << ordering << " component_limit=" << componentLimit
-              << " iteration_limit=" << manager.UserFlags.satsuma_iteration_limit
+              << " input_limit=" << inputLimit << " iteration_limit=" << iterationLimit
               << " seconds=" << seconds
               << " input_vars=" << cnf.varCount() - 1
               << " input_clauses=" << cnf.clauseCount() + extraClauses.size()
