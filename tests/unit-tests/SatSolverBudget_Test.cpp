@@ -15,6 +15,9 @@
 #ifdef USE_MINISAT
 #include "stp/Sat/MinisatCore.h"
 #endif
+#ifdef USE_KISSAT
+#include "stp/Sat/Kissat.h"
+#endif
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -121,7 +124,7 @@ TEST(SatSolverBudget, PublicBatchQueriesStartFreshAfterTimeout)
   }
 }
 
-#if defined(USE_CRYPTOMINISAT) || defined(USE_MINISAT)
+#if defined(USE_CRYPTOMINISAT) || defined(USE_MINISAT) || defined(USE_KISSAT)
 
 // Pigeonhole 6 pigeons / 5 holes over fresh solver variables, every clause
 // guarded by ~sel so the whole formula is retractable.
@@ -156,10 +159,13 @@ void addGuardedPigeonhole(stp::SATSolver& s, uint32_t sel, int P = 6)
       }
 }
 
-void budgetIsPerArming(stp::SATSolver& s)
+void budgetIsPerArming(stp::SATSolver& s, int pigeons = 6, bool freeze = false)
 {
   const uint32_t sel = s.newVar();
-  addGuardedPigeonhole(s, sel);
+  addGuardedPigeonhole(s, sel, pigeons);
+  if (freeze)
+    for (uint32_t var = 0; var < s.nVars(); ++var)
+      s.setFrozen(var);
 
   // Far too little budget for the pigeonhole: exhausted, and the budget's
   // conflicts are spent.
@@ -185,7 +191,7 @@ void budgetIsPerArming(stp::SATSolver& s)
 
 // Only compiled where something calls it: a MiniSat-only build against a
 // MiniSat with no terminator hook has neither caller.
-#if defined(USE_CRYPTOMINISAT) || defined(STP_MINISAT_HAS_TERMINATOR)
+#if defined(USE_CRYPTOMINISAT) || defined(STP_MINISAT_HAS_TERMINATOR) || defined(USE_KISSAT)
 // A time budget has to be able to stop a search already in progress, not only
 // be noticed between calls into the solver. MiniSat counts work rather than
 // time and cannot be handed a deadline, so STP connects a terminator that
@@ -225,6 +231,22 @@ void timeBudgetStopsASearchInProgress(stp::SATSolver& s)
 #endif
 
 } // namespace
+
+#ifdef USE_KISSAT
+TEST(SatSolverBudget, kissat_budget_is_per_arming)
+{
+  stp::Kissat s;
+  // Keep the formula in CDCL: Kissat can refute the smaller case entirely
+  // during preprocessing, where a CDCL conflict budget need not expire.
+  budgetIsPerArming(s, 9, true);
+}
+
+TEST(SatSolverBudget, kissat_time_budget_stops_a_search_in_progress)
+{
+  stp::Kissat s;
+  timeBudgetStopsASearchInProgress(s);
+}
+#endif
 
 #ifdef USE_CRYPTOMINISAT
 TEST(SatSolverBudget, cryptominisat_budget_is_per_arming)

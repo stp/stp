@@ -682,7 +682,7 @@ TEST(Options, unavailable_in_this_build)
   for (const std::string& b : backends)
     EXPECT_TRUE(has_sat_backend(b));
   EXPECT_FALSE(has_sat_backend("z3"));
-  for (const char* b : {"cryptominisat", "cadical", "minisat", "simplifying-minisat"})
+  for (const char* b : {"cryptominisat", "cadical", "minisat", "simplifying-minisat", "kissat"})
   {
     Options o;
     o.set_str("sat-backend", b); // every member is accepted here; one the build lacks is refused by Solver
@@ -887,7 +887,7 @@ TEST(Options, info_names_help_and_the_stable_tier)
   EXPECT_TRUE(mt.values.empty());
   const OptionInfo sb = o.info("sat-backend");
   EXPECT_EQ(sb.type, "enum");
-  EXPECT_EQ(sb.values, (std::vector<std::string>{"auto", "cryptominisat", "cadical", "minisat", "simplifying-minisat"}));
+  EXPECT_EQ(sb.values, (std::vector<std::string>{"auto", "cryptominisat", "cadical", "minisat", "simplifying-minisat", "kissat"}));
   EXPECT_EQ(sb.settable, Settable::CONSTRUCTION);
   const OptionInfo ce = o.info("cadical-elim");
   EXPECT_EQ(ce.min, std::optional<std::int64_t>(-1));

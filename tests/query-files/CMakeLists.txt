@@ -31,6 +31,11 @@ if (USE_CADICAL)
 else()
     set(STP_CADICAL_PYBOOL "False")
 endif()
+if (USE_KISSAT)
+    set(STP_KISSAT_PYBOOL "True")
+else()
+    set(STP_KISSAT_PYBOOL "False")
+endif()
 if (STP_BUILD_WITH_CRYPTOMINISAT)
     set(STP_CRYPTOMINISAT_PYBOOL "True")
 else()
@@ -76,6 +81,7 @@ add_test(NAME query-files
     COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 )
+set_tests_properties(query-files PROPERTIES RESOURCE_LOCK query-files-exec-root)
 
 # CaDiCaL's bounded variable addition is on by default, so the run above
 # already covers the declare/translate machinery across the whole corpus --
@@ -104,7 +110,7 @@ endif()
 # What it no longer covers is the other side of the switch, so this sweep
 # forces the trail dropped instead: the re-descending path has to keep
 # answering identically.
-if (USE_CADICAL)
+if (USE_CADICAL OR USE_KISSAT)
     add_test(NAME query-files-refinement-trail-reuse-off
         COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG>
                 --param solver_params=--refinement-trail-reuse=0 .

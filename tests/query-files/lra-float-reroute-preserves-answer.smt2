@@ -1,3 +1,4 @@
+; REQUIRES: default-backend-propagator
 ; RUN: %solver --SMTLIB2 %s | %OutputCheck %s
 ; RUN: %solver --SMTLIB2 -s --lra-float-driver=1 --lra-float-reroute=1 --lra-float-reroute-floor=0 %s 2>&1 | %OutputCheck --check-prefix=REROUTE %s
 ;

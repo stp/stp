@@ -10,15 +10,17 @@
 ; result[1] to zero and turn this satisfiable query unsat -- which is why
 ; `sat` below is the assertion that catches the bug.
 ;
-; Which fact fires is not pinned. It depends on the candidate, and so on the
+; Use a fixed CNF rung: different encodings can produce a correct first
+; candidate and need no lemma at all. Which fact fires is not pinned. It
+; depends on the candidate, and so on the
 ; backend: CaDiCaL 3.0.1 violates ADD_ZERO here and 2.1.3 violates the
 ; overflow fact over the other operand reading. What matters is that a
 ; schema is what refined it, which is the difference between the two legs
 ; below.
 ;
-; RUN: %solver --incremental=off --disable-simplifications -s --bv-abstraction-width=1 --bv-term-abstraction=1 --bv-term-abstraction-plus=1 --bv-term-abstraction-schema-groups=add %s 2>&1 | %OutputCheck --check-prefix=SCHEMAS %s
-; RUN: %solver --incremental=off --disable-simplifications -s --bv-abstraction-width=1 --bv-term-abstraction=1 --bv-term-abstraction-plus=1 --bv-term-abstraction-schemas=0 --bv-term-abstraction-schema-groups=add %s 2>&1 | %OutputCheck --check-prefix=NOSCHEMAS %s
-; RUN: %solver --incremental=off --disable-simplifications %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
+; RUN: %solver --cnf-generation-effort=very-low --incremental=off --disable-simplifications -s --bv-abstraction-width=1 --bv-term-abstraction=1 --bv-term-abstraction-plus=1 --bv-term-abstraction-schema-groups=add %s 2>&1 | %OutputCheck --check-prefix=SCHEMAS %s
+; RUN: %solver --cnf-generation-effort=very-low --incremental=off --disable-simplifications -s --bv-abstraction-width=1 --bv-term-abstraction=1 --bv-term-abstraction-plus=1 --bv-term-abstraction-schemas=0 --bv-term-abstraction-schema-groups=add %s 2>&1 | %OutputCheck --check-prefix=NOSCHEMAS %s
+; RUN: %solver --cnf-generation-effort=very-low --incremental=off --disable-simplifications %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
 ;
 ; SCHEMAS-NOT: Fatal Error
 ; SCHEMAS-NOT: Assertion

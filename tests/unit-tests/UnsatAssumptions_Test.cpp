@@ -16,6 +16,9 @@
 #ifdef USE_CADICAL
 #include "stp/Sat/Cadical.h"
 #endif
+#ifdef USE_KISSAT
+#include "stp/Sat/Kissat.h"
+#endif
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
 #endif
@@ -109,6 +112,14 @@ TEST(UnsatAssumptions, CadicalReportsCulpritUnderFactor)
   s.unsatAssumptions(assumps, failed);
   EXPECT_TRUE(std::find(failed.begin(), failed.end(),
                         SATSolver::mkLit(b, false).x) != failed.end());
+}
+#endif
+
+#ifdef USE_KISSAT
+TEST(UnsatAssumptions, KissatReportsCulprit)
+{
+  stp::Kissat s;
+  culpritIsReported(s);
 }
 #endif
 

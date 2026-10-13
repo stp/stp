@@ -16,6 +16,9 @@
 #ifdef USE_CADICAL
 #include "stp/Sat/Cadical.h"
 #endif
+#ifdef USE_KISSAT
+#include "stp/Sat/Kissat.h"
+#endif
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
 #endif
@@ -129,6 +132,24 @@ TEST(SearchBias, CadicalAcceptsBothDirections)
     stp::Cadical s;
     EXPECT_TRUE(s.setSearchBias(SearchBias::UNSAT));
   }
+}
+#endif
+
+#ifdef USE_KISSAT
+TEST(SearchBias, KissatVerdictsAreStable)
+{
+  const SolverFactory make = [] {
+    return std::unique_ptr<SATSolver>(new stp::Kissat);
+  };
+  checkUnsatVerdict(make, "kissat");
+  checkSatVerdict(make, "kissat");
+}
+
+TEST(SearchBias, KissatAcceptsBothDirections)
+{
+  stp::Kissat sat, unsat;
+  EXPECT_TRUE(sat.setSearchBias(SearchBias::SAT));
+  EXPECT_TRUE(unsat.setSearchBias(SearchBias::UNSAT));
 }
 #endif
 

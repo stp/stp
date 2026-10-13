@@ -796,6 +796,88 @@ jobs:
           ctest --parallel "$(nproc)" -L threads --output-on-failure
       working-directory: build
 
+  build-kissat:
+    name: gcc (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: kissat-only
+            cadical: 'OFF'
+          - name: kissat-cadical
+            cadical: 'ON'
+
+    env:
+      CCACHE_MAXSIZE: 400M
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bison build-essential ccache cmake flex \
+          git ninja-build python3 python3-venv zlib1g-dev
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      uses: actions/cache@v4
+      with:
+        path: deps
+        key: deps-${{ matrix.name }}-${{ steps.deps-key.outputs.key }}
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-${{ matrix.name }}/${{ github.run_id }}
+        restore-keys: ccache-${{ matrix.name }}/
+
+    - name: Configure
+      run: |
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DENABLE_AUTO_DOWNLOAD=ON -DENABLE_TESTING=ON -DWERROR=ON \
+          -DUSE_KISSAT=ON -DUSE_CADICAL=${{ matrix.cadical }} \
+          -DUSE_CRYPTOMINISAT=OFF -DUSE_MINISAT=OFF -DENABLE_PYTHON_API=OFF \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    - name: Build
+      run: cmake --build build --parallel "$(nproc)"
+
+    # With Kissat alone the entire default-backend suite exercises it. With
+    # CaDiCaL alongside it, the Kissat-specific unit and query tests also
+    # verify both archives can be linked and used in the same process.
+    - name: Test STP
+      run: ctest --test-dir build --parallel "$(nproc)" --output-on-failure
+
+    - name: Test the pinned Kissat API with assertions
+      if: matrix.name == 'kissat-only'
+      run: |
+        revision=$(sed -n 's/^Kissat_TAG:STRING=//p' build/CMakeCache.txt)
+        test -n "$revision"
+        source="$RUNNER_TEMP/kissat-api"
+        git clone https://github.com/stp/kissat "$source"
+        git -C "$source" checkout --detach "$revision"
+        cmake -S "$source" -B build/kissat-api -G Ninja \
+          -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DKISSAT_BUILD_CLI=OFF \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+        cmake --build build/kissat-api --parallel "$(nproc)"
+        ctest --test-dir build/kissat-api --output-on-failure
+
+    - name: Keep the dependency build logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ep-logs-${{ matrix.name }}
+        path: build/deps/src/*-stamp/*.log
+        if-no-files-found: ignore
+
   build-cadical:
     name: gcc (cadical ${{ matrix.cadical }})
     runs-on: ubuntu-latest

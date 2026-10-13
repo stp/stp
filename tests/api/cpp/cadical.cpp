@@ -147,7 +147,7 @@ TEST(cadical, interface_flag_values_are_unchanged)
   EXPECT_EQ("sat-backend", Options::name_of(Option::SAT_BACKEND));
   const OptionInfo info = Options().info("sat-backend");
   EXPECT_EQ((std::vector<std::string>{"auto", "cryptominisat", "cadical", "minisat",
-                                      "simplifying-minisat"}),
+                                      "simplifying-minisat", "kissat"}),
             info.values);
   EXPECT_EQ(Settable::CONSTRUCTION, info.settable);
 }
