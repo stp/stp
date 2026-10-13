@@ -22,10 +22,23 @@
 # STP_ALLOCATOR, so a default build already needs it. Anyone on an older CMake
 # can configure with -DSTP_ALLOCATOR=system, which skips that subdirectory.
 #
-# Nothing here sets a policy explicitly: every policy STP cares about
-# (CMP0048, CMP0074, CMP0077, CMP0092 - the newest introduced in 3.15) is NEW
-# by default at this minimum.
+# Every policy STP cares about (CMP0048, CMP0074, CMP0077, CMP0092 - the
+# newest introduced in 3.15) is NEW by default at this minimum. The one that
+# is set explicitly below postdates it.
 cmake_minimum_required(VERSION 3.18)
+
+# CMP0135 (CMake 3.24): files extracted from a downloaded archive get the time
+# of extraction, not the time stored in the archive. The dependencies fetched
+# as tarballs (URL rather than GIT_REPOSITORY, through ExternalProject or
+# FetchContent) otherwise keep their release dates, so a moved pin can leave
+# its files looking older than what was built from the previous one, and
+# nothing is rebuilt. Left unset, every one of them also prints a developer
+# warning on every configure saying so.
+# Set before anything includes ExternalProject or FetchContent, whose
+# functions remember the policies in force where they were defined.
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
 
 # SANITIZE forces clang++, and a compiler has to be chosen before project()
 # detects one. Forced afterwards, as this was, the detection has already run
@@ -926,8 +939,16 @@ include_directories(# For extlib-constbv
 # -----------------------------------------------------------------------------
 # A single header, used in place of std::unordered_map where it pays off. It
 # used to be a copy of that header sitting in lib/extlib-unordered-dense; there
-# is no reason for STP to carry upstream's file, so it is fetched at a pinned
-# release like everything else.
+# is no reason for STP to carry the file, so it is fetched at a pinned commit
+# like everything else.
+#
+# The commit is on the `stp` branch of STP's fork, stp/unordered_dense: release
+# 4.5.0 with two changes STP's allocation-failure handling needs. table::swap
+# swaps two tables with equal allocators member by member, where upstream's
+# goes through move assignment, which allocates inside a noexcept function;
+# and stp_insertion_may_rehash() says whether the next insertion rebuilds the
+# bucket array, from the container's own integral threshold. Both are what the
+# hash-consing tables in lib/STPManager build on.
 #
 # FetchContent rather than an ExternalProject, and for once not because
 # anything has to be compiled: stp/AST/AST.h includes it, so effectively every
@@ -938,7 +959,8 @@ include_directories(# For extlib-constbv
 # first compile that needs it. FetchContent populates during configuration,
 # which is the guarantee. There is nothing to build, so that costs nothing.
 set(UNORDERED_DENSE_VERSION "4.5.0")
-set(UNORDERED_DENSE_CHECKSUM "2364ce4bc4c23bd02549bbb3a7572d881684cd46057f3737fd53be53669743aa")
+set(UNORDERED_DENSE_COMMIT "288348f1306f386786bea20f66e8011c42183ae0")
+set(UNORDERED_DENSE_CHECKSUM "f74700612e464ec1fa1151976d4015a2ede5a3e5d7900fcbd76be33eebeae0cd")
 
 # FETCHCONTENT_FULLY_DISCONNECTED is the rung between the two: a base directory
 # some earlier build already populated. It is what the dependencies built by
@@ -958,14 +980,37 @@ endif()
 
 FetchContent_Declare(
     unordereddense
-    URL https://github.com/martinus/unordered_dense/archive/refs/tags/v${UNORDERED_DENSE_VERSION}.tar.gz
+    URL https://github.com/stp/unordered_dense/archive/${UNORDERED_DENSE_COMMIT}.tar.gz
     URL_HASH SHA256=${UNORDERED_DENSE_CHECKSUM}
     SOURCE_SUBDIR stp-does-not-build-this
 )
 FetchContent_MakeAvailable(unordereddense)
 message(STATUS "ankerl::unordered_dense ${UNORDERED_DENSE_VERSION}: ${unordereddense_SOURCE_DIR}")
 
-include(cmake/PrepareUnorderedDense.cmake)
+# The archive's hash vouches for a download, and says nothing about a source
+# directory given with FETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE, or one a shared
+# FETCHCONTENT_BASE_DIR was populated with before the pin moved to the fork.
+# Either can be upstream's header, which lacks what STP calls: say so here,
+# rather than as a compile error in lib/STPManager.
+set(_stp_unordered_dense_header
+    "${unordereddense_SOURCE_DIR}/include/ankerl/unordered_dense.h")
+file(STRINGS "${_stp_unordered_dense_header}" _stp_unordered_dense_fork
+     REGEX "stp_insertion_may_rehash" LIMIT_COUNT 1)
+if(NOT _stp_unordered_dense_fork)
+    message(FATAL_ERROR
+        "${_stp_unordered_dense_header} is not from the `stp` branch of "
+        "stp/unordered_dense, which STP needs. Point "
+        "FETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE at a checkout of that branch, "
+        "or, for a shared FETCHCONTENT_BASE_DIR populated before STP pinned "
+        "the fork, remove its unordereddense-* directories and configure "
+        "again with -DENABLE_AUTO_DOWNLOAD=ON.")
+endif()
+unset(_stp_unordered_dense_fork)
+unset(_stp_unordered_dense_header)
+
+# Named once, for the targets that list their include directories themselves
+# (lib/, lib/Lra and tests/lra) as well as for the project-wide include below.
+set(STP_UNORDERED_DENSE_INCLUDE_DIR "${unordereddense_SOURCE_DIR}/include")
 
 # SYSTEM, and project-wide because stp/AST/AST.h reaches it: upstream code
 # whose warnings STP does not control, compiled into nearly every translation
@@ -1249,14 +1294,17 @@ add_feature_info(Allocator "NOT STP_ALLOCATOR STREQUAL system"
 #
 #   OFF            do not look for it              (was -DNOCRYPTOMINISAT=ON)
 #   ON             it is required; fail if it is missing  (was -DFORCE_CMS=ON)
-#   AUTO (default) use it if it happens to be installed
+#   AUTO (default) use it if it is installed, or if ENABLE_AUTO_DOWNLOAD
+#                  can build it
 #
-# AUTO rather than ON because STP does not build CryptoMiniSat for you: an
-# installed one is linked and becomes the default backend, and a machine
-# without one still configures and still gets CaDiCaL. Say -DUSE_CRYPTOMINISAT=ON
-# to make a missing CryptoMiniSat a configuration error, or OFF to pin the
-# build to the backends it names regardless of what the machine has installed.
-set(CMS_OPTION_DOC "Use the CryptoMiniSat solver backend: ON requires it, OFF never uses it, AUTO uses it if installed")
+# AUTO rather than ON because CryptoMiniSat is optional, and building it needs
+# GMP, which STP cannot build: an installed one is linked and becomes the
+# default backend, ENABLE_AUTO_DOWNLOAD builds the pinned one like any other
+# dependency when GMP is there, and a machine with neither still configures and
+# still gets CaDiCaL. Say -DUSE_CRYPTOMINISAT=ON to make a missing CryptoMiniSat
+# a configuration error, or OFF to pin the build to the backends it names
+# regardless of what the machine has installed.
+set(CMS_OPTION_DOC "Use the CryptoMiniSat solver backend: ON requires it, OFF never uses it, AUTO uses it if installed or buildable")
 set(USE_CRYPTOMINISAT "AUTO" CACHE STRING "${CMS_OPTION_DOC}")
 set_property(CACHE USE_CRYPTOMINISAT PROPERTY STRINGS OFF ON AUTO)
 
@@ -1301,8 +1349,8 @@ if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
   # REQUIRED only when it was asked for by name: an explicit ON makes a missing
   # CryptoMiniSat a configuration error, while leaving the option unset means
   # "use it if it is there". cmake/FindCryptoMiniSat.cmake carries the GMP
-  # warning, the cadical/cadiback preamble and the reason it is the one
-  # dependency STP does not build for you.
+  # warning, the cadical/cadiback preamble an installed copy needs, and the
+  # pinned copy it builds when there is none.
   # 5.11 is the floor, and it is chosen from evidence rather than taste: it is
   # the oldest release anything in this repository builds -- the Dockerfiles do
   # -- and every method lib/Sat/CryptoMinisat5.cpp calls exists in it. Nothing
@@ -1745,6 +1793,8 @@ add_dependencies(stp stp_lra_product_objects)
 # visibility even when their template argument is a hidden LRA type.  Keep
 # that compiler-owned spelling from disclosing the private Tableau ABI.
 # Other public STP symbols retain their existing annotations and exports.
+# The map only localises LRA symbols: a global wildcard would override
+# --exclude-libs under LLD and re-export private dependency archives.
 if(BUILD_SHARED_LIBS AND UNIX AND NOT APPLE)
   set(stp_lra_private_map
     "${CMAKE_CURRENT_SOURCE_DIR}/lib/Lra/stp_lra_private.map")

@@ -47,17 +47,14 @@ option(ENABLE_AUTO_DOWNLOAD
 add_feature_info(AutoDownload ENABLE_AUTO_DOWNLOAD
                  "Downloads and builds dependencies that are not installed")
 
-# Rung 1 skipped: an installed ABC, CaDiCaL, CLI11, LibBF, MiniSat,
-# nlohmann/json or SymFPU is not looked for, and each is built into STP_DEP_DIR
-# instead. Pair it with ENABLE_AUTO_DOWNLOAD on a cold build directory, or
-# there is nothing left for the ladder to reach and configuration stops at
-# rung 4.
+# Rung 1 skipped: an installed ABC, CaDiCaL, CLI11, CryptoMiniSat, LibBF,
+# MiniSat, nlohmann/json or SymFPU is not looked for, and each is built into
+# STP_DEP_DIR instead. Pair it with ENABLE_AUTO_DOWNLOAD on a cold build
+# directory, or there is nothing left for the ladder to reach and configuration
+# stops at rung 4.
 #
 # Rung 0 is deliberately untouched: -DABC_DIR and friends are an answer rather
 # than a search, and a caller who names a copy has said which one to use.
-# CryptoMiniSat, which has no rung 3 because STP cannot build it, is therefore
-# the one dependency this turns off rather than relocates -- see
-# cmake/FindCryptoMiniSat.cmake.
 option(STP_DEPS_LOCAL_ONLY
        "Never satisfy a dependency from outside this build directory" OFF)
 add_feature_info(LocalDeps STP_DEPS_LOCAL_ONLY
@@ -72,8 +69,9 @@ add_feature_info(LocalDeps STP_DEPS_LOCAL_ONLY
 # per-build-directory and not negotiable. Stamp files are mutable
 # per-configuration state, and two builds sharing them corrupt each other.
 #
-# The install tree's contents are determined by the pinned revisions (and, for
-# CaDiCaL, by STP's patch set, which FindCaDiCaL checks), so it can be shared.
+# The install tree's contents are determined by the pinned revisions (which,
+# for CaDiCaL, the install records and FindCaDiCaL checks), so it can be
+# shared.
 # STP_DEP_DIR names it, and it also goes on CMAKE_PREFIX_PATH, which is the
 # whole trick: point several build directories at one and only the first pays
 # to build anything, because the rest find what it installed at rung 1 of the

@@ -180,18 +180,17 @@ public:
   DLL_PUBLIC void resetIncrementalSolver();
   DLL_PUBLIC bool realSessionCanHandle(const ASTVec& assertions) const;
   DLL_PUBLIC SOLVER_RETURN_TYPE checkSatRealSession(
-      const std::vector<ASTVec*>& levels, bool& handled);
+      const std::vector<ASTVec*>& levels, bool& handled,
+      size_t assumption_levels = 0);
+  DLL_PUBLIC std::vector<size_t> realSessionUnsatAssumptionIndices() const;
   DLL_PUBLIC void discardRealSession();
 private:
-  // The LRA-only solve loop the session runs: one SAT solve (blasting
-  // `modified_input`, or nothing when it is TRUE), then draining the
+  // The LRA-only solve loop the session runs: one SAT solve over the existing
+  // CNF and all live activations, then draining the
   // coordinator's pending theory clauses until it decides. No UF or array
-  // refinement -- the session declines both. `first` blasts the base's
-  // skeleton; later checks pass TRUE because the solver already holds
-  // everything.
+  // refinement -- the session declines both.
   SOLVER_RETURN_TYPE lraSessionSolve(SATSolver& solver, ToSATAIG& tosat,
-                                     lra::LraCoordinator& coordinator,
-                                     const ASTNode& modified_input, bool first);
+                                     lra::LraCoordinator& coordinator);
   ASTNode CreateFreshSessionActivation();
 public:
   bool hasIncrementalSolver() const { return incrementalSolver != nullptr; }

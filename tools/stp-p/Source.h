@@ -76,8 +76,15 @@ std::uint64_t input_limit(const Options&);
 // Returns the logic the script named in its set-logic, "" when it named
 // none.
 std::string parse_query(stp::Solver& solver, Source& source);
+// Inherited by encoding owners; assertion handles die before their manager.
+struct ParsedQuery
+{
+  std::unique_ptr<stp::TermManager> manager;
+  std::vector<stp::Term> assertions;
+  std::string logic;
+};
 // The logics a route takes: QF_BV, and on the routes that run ordinary STP's
-// own pipeline (`theories`) also QF_ABV, QF_FP, QF_BVFP and QF_ABVFP; a
+// own pipeline (`theories`) also QF_ABV, QF_FP, QF_BVFP, QF_ABVFP and QF_LRA; a
 // script that names no logic is taken by every route. Anything else is
 // refused, after the parse that read the logic.
 void admit_logic(const std::string& logic, bool theories);

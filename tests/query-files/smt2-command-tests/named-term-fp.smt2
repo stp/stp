@@ -1,0 +1,42 @@
+; Labels on floating-point literals, special values, rounding modes and
+; operations stand for their term exactly: get-value prints the same value
+; for both.
+; RUN: %solver %s | %OutputCheck %s
+(set-option :produce-models true)
+(set-logic QF_FP)
+(declare-const x Float32)
+(declare-const y Float32)
+(declare-const z Float32)
+(declare-const r RoundingMode)
+(assert (= x (! (fp #b0 #x80 #b00000000000000000000000) :named two)))
+(assert (= y (! (_ +oo 8 24) :named inf)))
+(assert (= z (! (_ NaN 8 24) :named nan)))
+(assert (= r (! roundTowardZero :named rtz)))
+(assert (! (fp.eq (! (_ +zero 8 24) :named pz) (! (_ -zero 8 24) :named nz)) :named zeros-eq))
+(assert (! (distinct x y) :named df))
+(assert (! (fp.eq (! (fp.mul (! RNE :named rm) x x) :named sq) (! (fp.add rm x two) :named four)) :named sq-is-four))
+; CHECK: ^sat$
+(check-sat)
+; CHECK-L: (two (fp #b0 #b10000000 #b00000000000000000000000))
+; CHECK-L: ((fp #b0 #x80 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000))
+; CHECK-L: (inf (fp #b0 #b11111111 #b00000000000000000000000))
+; CHECK-L: ((_ +oo 8 24) (fp #b0 #b11111111 #b00000000000000000000000))
+; CHECK-L: (nan (fp #b0 #b11111111 #b10000000000000000000000))
+; CHECK-L: ((_ NaN 8 24) (fp #b0 #b11111111 #b10000000000000000000000))
+; CHECK-L: (rtz RTZ)
+; CHECK-L: (roundTowardZero RTZ)
+; CHECK-L: (rm RNE)
+; CHECK-L: (pz (fp #b0 #b00000000 #b00000000000000000000000))
+; CHECK-L: (nz (fp #b1 #b00000000 #b00000000000000000000000))
+; CHECK-L: (zeros-eq true)
+; CHECK-L: (df true)
+; CHECK-L: (sq (fp #b0 #b10000001 #b00000000000000000000000))
+; CHECK-L: ((fp.mul RNE x x) (fp #b0 #b10000001 #b00000000000000000000000))
+; CHECK-L: (four (fp #b0 #b10000001 #b00000000000000000000000))
+; CHECK-L: ((fp.add RNE x two) (fp #b0 #b10000001 #b00000000000000000000000))
+; CHECK-L: (sq-is-four true)
+(get-value (two (fp #b0 #x80 #b00000000000000000000000) inf (_ +oo 8 24) nan (_ NaN 8 24) rtz roundTowardZero rm pz nz zeros-eq df sq (fp.mul RNE x x) four (fp.add RNE x two) sq-is-four))
+; CHECK-NOT: define-fun \|two\|
+; CHECK-NOT: define-fun \|rm\|
+; CHECK-L: (define-fun |r| () RoundingMode RTZ)
+(get-model)

@@ -37,10 +37,6 @@ using std::string;
 class LetMgr
 {
 private:
-  typedef ankerl::unordered_dense::map<string, ASTNode, TransparentStringHash,
-                                       std::equal_to<>>
-      MapType;
-
   // This maps from bound IDs that occur in LETs to
   // expressions. It's used to replace the IDs
   // with the corresponding expressions.
@@ -56,11 +52,21 @@ private:
                                TransparentStringHash, std::equal_to<>>
       bindings;
 
-  // The names bound in each open frame, so pop() can undo them.
-  // Initally empty because we expect push() to be called before any bindings are added.
-  std::vector<std::vector<string>> frames;
+  // One per open frame, innermost last: the names bound in it, so pop() can
+  // undo them, and where the bindings of its own list start in pending.
+  struct Frame
+  {
+    std::vector<string> names;
+    size_t firstPending;
+  };
+  std::vector<Frame> frames;
 
-  MapType interim;
+  // The bindings read so far of every binding list still being read,
+  // innermost list last. A list's bindings are kept out of resolution until
+  // the whole list has been read (commit), so they cannot see each other.
+  // That holds inside a let nested in one of the list's right-hand sides
+  // too: the nested list commits only its own bindings, off the top.
+  std::vector<std::pair<string, ASTNode>> pending;
 
   // Adds to the current frame. Returns false if the name is already
   // bound in the current frame (leaving the existing binding in place).
@@ -70,7 +76,7 @@ public:
   LetMgr([[maybe_unused]] ASTNode undefined)
   {
     assert(!undefined.IsNull());
-    push(); // the outermost frame, which commit() binds into outside any let
+    push(); // the outermost frame, which no let opens
   }
 
   ~LetMgr() 

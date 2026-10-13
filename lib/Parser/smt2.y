@@ -1709,8 +1709,7 @@
     const std::string& name = attribute.name;
     const auto& value = attribute.value;
     const bool boolean = name == "print-success" || name == "global-declarations" ||
-        name == "interactive-mode" || name == "produce-models" ||
-        name == "produce-assertions" || name == "produce-assignments" ||
+        name == "produce-models" || name == "produce-assignments" ||
         name == "produce-proofs" || name == "produce-unsat-cores" ||
         name == "produce-unsat-assumptions";
     if (boolean && value.kind != Kind::Symbol)
@@ -2247,7 +2246,10 @@ cmdi:
 |
      GET_ASSERTIONS_TOK
     {
-       stp::GlobalParserInterface->getAssertions();
+       /* The stored formulas are what the node factory made of the input,
+          not the input: (not (not p)) is stored as p. The standard asks for
+          each formula as it was asserted, so the command is unsupported. */
+       stp::GlobalParserInterface->unsupported();
     }
 |
      RESET_ASSERTIONS_TOK

@@ -32,13 +32,13 @@
 # dependency here is a header and an archive that a Find module names for
 # itself; this one was a package whose contents the package decided.
 #
-# What changed is what gets built. stp/cryptominisat's `stp` branch carries a
-# NOCADICAL option, and with it CryptoMiniSat stops fetching, building and
-# installing a CaDiCaL of its own -- which was both a collision with STP's (see
-# the guard in the top-level CMakeLists) and the reason its link interface
-# named an imported target a consumer had to resolve. What is left is an
-# archive whose link interface is Threads and GMP: a header and an archive,
-# nameable here exactly as cmake/FindCaDiCaL.cmake names CaDiCaL's.
+# What changed is what gets built. Since 5.17.0 CryptoMiniSat has a NOCADICAL
+# option (msoos/cryptominisat#841), and with it CryptoMiniSat stops fetching,
+# building and installing a CaDiCaL of its own -- which was both a collision
+# with STP's (see the guard in the top-level CMakeLists) and the reason its
+# link interface named an imported target a consumer had to resolve. What is
+# left is an archive whose link interface is Threads and GMP: a header and an
+# archive, nameable here exactly as cmake/FindCaDiCaL.cmake names CaDiCaL's.
 #
 # So rung 3 does not read the package at all, and STPConfig.cmake.in asks a
 # consumer to find_dependency(cryptominisat5) only when rung 0 or 1 supplied
@@ -59,9 +59,8 @@ set(cryptominisat5_DIR "" CACHE PATH
 
 # Rungs 0 and 1 are one call here, so STP_DEPS_LOCAL_ONLY cannot skip the
 # second by itself: it skips the whole search unless cryptominisat5_DIR names a
-# copy, which is rung 0 and stays honoured. With no rung 3 to fall back on that
-# leaves nothing, which is the honest answer -- STP does not build this one, so
-# under that option a named copy is the only way to have it at all.
+# copy, which is rung 0 and stays honoured. Otherwise the search is skipped and
+# rung 3 builds the pinned copy, as it does for every other dependency.
 if(cryptominisat5_DIR OR NOT STP_DEPS_LOCAL_ONLY)
     # STP does not look for GMP. It is CryptoMiniSat's dependency, not STP's:
     # no STP source includes it, and it reaches STP through the cryptominisat5
@@ -110,20 +109,20 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
     # CryptoMiniSat was not self-contained. What it reached STP as was a CMake
     # package -- one an ExternalProject writes at build time, too late for the
     # configure that has to read it. That is still true of the package, and the
-    # way past it is to stop needing one: what the fork pinned below
-    # builds is an archive and a header, the shape every other dependency here
-    # arrives in, so this can name the pieces itself exactly as
-    # cmake/FindCaDiCaL.cmake does.
+    # way past it is to stop needing one: what is pinned below builds an
+    # archive and a header, the shape every other dependency here arrives in,
+    # so this can name the pieces itself exactly as cmake/FindCaDiCaL.cmake
+    # does.
     #
-    # The fork is what makes that possible. Upstream CryptoMiniSat >= 5.14
+    # NOCADICAL is what makes that possible. By default CryptoMiniSat >= 5.14
     # fetches and installs its own CaDiCaL, whose imported target a static
     # libcryptominisat5 then names in its link interface -- so a consumer that
     # did not go through the package would be left with an unresolved `cadical`
     # target, and one that did would put a second CaDiCaL on libstp's link
     # line. Built -DNOCADICAL=ON the link interface is Threads and GMP and
-    # nothing else, which is nameable here. The option is sound for STP because
-    # nothing in STP asks for backbone extraction, which is all CryptoMiniSat
-    # wants CaDiCaL for.
+    # nothing else, which is nameable here, and the build fetches nothing of
+    # its own. The option is sound for STP because nothing in STP asks for
+    # backbone extraction, which is all CryptoMiniSat wants CaDiCaL for.
     #
     # Unlike the others on this ladder, CryptoMiniSat is optional:
     # USE_CRYPTOMINISAT defaults to AUTO, which means "use it if it is there".
@@ -142,18 +141,55 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
         return()
     endif()
 
-    # Pinned to a commit, as MiniSat, LibBF, SymFPU and ABC are. It is on
-    # stp/cryptominisat's `stp-ipasir-up` branch: release/v5.14.7 with the
-    # NOCADICAL option this build depends on, as on the `stp` branch, plus the
-    # IPASIR-UP external propagator interface. The interface is what lets
-    # lib/Sat/CryptoMinisat5.cpp host a theory propagator; see
-    # CRYPTOMINISAT_HAS_UP below.
-    set(CryptoMiniSat_COMMIT "e06847e1006f06ec630a62349d930e5ead54def6"
-        CACHE STRING "CryptoMiniSat commit to build when one has to be built")
-    mark_as_advanced(CryptoMiniSat_COMMIT)
-    # Not read off the checkout: nothing is checked out yet at configure time,
+    # GMP is CryptoMiniSat's dependency and STP has never had to look for it:
+    # cryptominisat5Config.cmake did, and the target it wrote carried
+    # PkgConfig::GMP into STP's link and its include directory into the compile
+    # of CryptoMinisat5.cpp, which includes gmpxx.h through cryptominisat.h.
+    # Without that package this is the one thing that has to be picked up here
+    # instead -- the same lookup, in the same shape, moved one level out.
+    #
+    # And looked up before anything is set up to build, because it decides
+    # whether anything can be: CryptoMiniSat's own configure needs GMP too, and
+    # STP cannot build GMP. The same rule as above applies to its absence. Asked
+    # for by name, that is an error that says what to install; under AUTO it is
+    # a build without CryptoMiniSat, exactly as when ENABLE_AUTO_DOWNLOAD is
+    # off, rather than an AUTO configure that fails over an optional backend.
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(GMP QUIET IMPORTED_TARGET gmp)
+    endif()
+    if(NOT GMP_FOUND)
+        if(CryptoMiniSat_FIND_REQUIRED)
+            message(FATAL_ERROR
+                "CryptoMiniSat needs GMP, which it looks up through pkg-config, "
+                "and no gmp.pc was found. Install GMP and pkg-config (on "
+                "Debian and Ubuntu, libgmp-dev and pkg-config), or configure "
+                "with -DUSE_CRYPTOMINISAT=OFF.")
+        endif()
+        message(STATUS "Not building CryptoMiniSat: it needs GMP through "
+                       "pkg-config, and no gmp.pc was found")
+        set(CryptoMiniSat_FOUND FALSE)
+        set(STP_CMS_FROM_PACKAGE FALSE)
+        return()
+    endif()
+    find_package(Threads REQUIRED)
+
+    # Pinned to a commit of stp/cryptominisat, as MiniSat, LibBF, SymFPU and
+    # ABC are pinned in their forks: release 5.17.0 plus the IPASIR-UP
+    # external propagator interface, which is proposed upstream as
+    # msoos/cryptominisat#842 and is the only thing the fork adds. The
+    # interface is what lets lib/Sat/CryptoMinisat5.cpp host a theory
+    # propagator; see CRYPTOMINISAT_HAS_UP below. Once it is in a release,
+    # the pin can be that release.
+    #
+    # A tarball rather than a clone: a clone brings the repository's history
+    # and, recursively, its ten submodules, none of which this build reads --
+    # 110 MB on disk, for sources that arrive as a 1.2 MB archive.
+    set(CryptoMiniSat_COMMIT "0a71f0c46903351543bf2f15ddb0df372b8471d6")
+    set(CryptoMiniSat_CHECKSUM "aaec9caa0f3708ac0fbc757aaf6197c2d0cbc26635362458e66f444a6015febb")
+    # Not read off the sources: nothing is downloaded yet at configure time,
     # and the commit above fixes which release this is.
-    set(CryptoMiniSat_VERSION "5.14.7")
+    set(CryptoMiniSat_VERSION "5.17.0")
 
     set(CryptoMiniSat_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}cryptominisat5${CMAKE_STATIC_LIBRARY_SUFFIX}")
@@ -166,8 +202,8 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
     ExternalProject_Add(
         CryptoMiniSat-EP
         ${STP_EP_COMMON_CONFIG}
-        GIT_REPOSITORY https://github.com/stp/cryptominisat
-        GIT_TAG ${CryptoMiniSat_COMMIT}
+        URL https://github.com/stp/cryptominisat/archive/${CryptoMiniSat_COMMIT}.tar.gz
+        URL_HASH SHA256=${CryptoMiniSat_CHECKSUM}
         CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
                    -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
                    -DCMAKE_INSTALL_LIBDIR=lib
@@ -180,16 +216,6 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
         BUILD_BYPRODUCTS <INSTALL_DIR>/lib/${CryptoMiniSat_ARCHIVE}
     )
     add_dependencies(deps CryptoMiniSat-EP)
-
-    # GMP is CryptoMiniSat's dependency and STP has never had to look for it:
-    # cryptominisat5Config.cmake did, and the target it wrote carried
-    # PkgConfig::GMP into STP's link and its include directory into the compile
-    # of CryptoMinisat5.cpp, which includes gmpxx.h through cryptominisat.h.
-    # Without that package this is the one thing that has to be picked up here
-    # instead -- the same lookup, in the same shape, moved one level out.
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(GMP REQUIRED IMPORTED_TARGET gmp)
-    find_package(Threads REQUIRED)
 
     # Deliberately no INTERFACE_INCLUDE_DIRECTORIES, so that this target
     # behaves as the packaged one does: it carries the link interface and not

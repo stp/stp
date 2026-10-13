@@ -44,25 +44,6 @@ namespace stpp
 {
 namespace
 {
-// Everything but stderr and `keep`: a root holds no other root's channel, so
-// a killed root cannot keep a pipe it inherited open.
-void close_except(int keep)
-{
-  DIR* dir = opendir("/proc/self/fd");
-  if (!dir)
-    _exit(2);
-  std::vector<int> descriptors;
-  while (auto* entry = readdir(dir))
-  {
-    char* end = nullptr;
-    auto n = strtol(entry->d_name, &end, 10);
-    if (*entry->d_name && !*end && n != 2 && n != keep && n != dirfd(dir))
-      descriptors.push_back(int(n));
-  }
-  closedir(dir);
-  for (int fd : descriptors)
-    close(fd);
-}
 double cpu_seconds(const rusage& u)
 {
   return u.ru_utime.tv_sec + u.ru_utime.tv_usec / 1e6 + u.ru_stime.tv_sec +
@@ -309,6 +290,8 @@ struct Watch final : stp::Terminator
   Watch(double e, Root* h, const Options& options) : end(e), hedge(h), o(options) {}
   bool terminate() override
   {
+    if (o.cancelled())
+      return true;
     if (end && now() >= end)
       return true;
     if (!hedge || answered)
@@ -371,9 +354,10 @@ void settle(std::vector<Root>& children, const Options& o,
 // (unknown); batch-all lets every root run to its own answer instead of
 // stopping at the first.
 //
-// A root's answer is the query's: its database is the batch CNF plus clauses
-// implied by it, and it assumed nothing. The first complete answer from a
-// root or the hedge that exited normally wins (or the owner's, when it
+// A root's answer is the query's: its database is the common batch CNF plus
+// query-valid lemmas. Arithmetic activation assumptions are identical in
+// every root. The first complete answer from a root or the hedge that
+// exited normally wins (or the owner's, when it
 // searched or preprocessing decided); the rest are killed and reaped. Every
 // complete report read before or after the kill is compared, and passed on
 // to the parent as it arrives: two that disagree end the whole invocation.
@@ -382,10 +366,16 @@ void settle(std::vector<Root>& children, const Options& o,
 // same wrong answer. A root, or the hedge, that ends unknown before the
 // deadline has answered unknown, with the library's reason; only a death or
 // a failed setup is a failure.
-Json batch_group(Source& input, const Options& o)
+Json batch_group(Source& input, const Options& o, ParsedQuery* prepared)
 {
   const double started = now();
-  auto tm = std::make_unique<stp::TermManager>();
+  const bool details = !o.stats.empty();
+  if (prepared && !prepared->manager)
+    throw std::runtime_error("group received an empty parsed query");
+  auto tm = prepared ? std::move(prepared->manager)
+                     : std::make_unique<stp::TermManager>();
+  auto assertions = prepared ? std::move(prepared->assertions)
+                            : std::vector<stp::Term>();
   // The roots exchange clauses through CaDiCaL's clause-import extension, so
   // the group runs on CaDiCaL even in a build whose default is another
   // backend; where CaDiCaL is the default this changes nothing.
@@ -393,7 +383,10 @@ Json batch_group(Source& input, const Options& o)
   if (!options.is_set("sat-backend"))
     options.set("sat-backend", "cadical");
   auto solver = std::make_unique<stp::Solver>(*tm, options);
-  const std::string logic = parse_query(*solver, input);
+  const std::string logic = prepared ? prepared->logic : parse_query(*solver, input);
+  for (const auto& assertion : assertions)
+    solver->assert_formula(assertion);
+  std::vector<stp::Term>().swap(assertions);
   admit_logic(logic, true);
   release_memory();
   const double parsed = now();
@@ -434,7 +427,7 @@ Json batch_group(Source& input, const Options& o)
     // It asserts the parsed terms in a solver of its own over the same
     // manager, shared copy-on-write: nothing is parsed twice.
     const auto assertions = solver->assertions();
-    int channel[2];
+    int channel[2] = {-1, -1};
     const pid_t pid = pipe2(channel, O_CLOEXEC | O_NONBLOCK) ? -1
                       : injected(o, "fork-fails")          ? (errno = EAGAIN, -1)
                                                             : fork();
@@ -452,7 +445,7 @@ Json batch_group(Source& input, const Options& o)
         parent_death(owner);
         signal(SIGINT, SIG_DFL);
         signal(SIGTERM, SIG_DFL);
-        close_except(fd);
+        close_worker_descriptors(fd);
         prctl(PR_SET_NAME, "stp-p hedge");
         if (o.pin)
         {
@@ -539,6 +532,8 @@ Json batch_group(Source& input, const Options& o)
         variables = point.variables();
         for (unsigned slot = 0; slot < roots; ++slot)
         {
+          if (o.cancelled())
+            break;
           int channel[2];
           if (pipe2(channel, O_CLOEXEC | O_NONBLOCK))
           {
@@ -567,7 +562,7 @@ Json batch_group(Source& input, const Options& o)
               parent_death(owner);
               signal(SIGINT, SIG_DFL);
               signal(SIGTERM, SIG_DFL);
-              close_except(report_fd);
+              close_worker_descriptors(report_fd);
               prctl(PR_SET_NAME, "stp-p root");
               joined = {{"slot", slot}};
               if (injected(o, "fail-root-setup"))
@@ -674,21 +669,26 @@ Json batch_group(Source& input, const Options& o)
     try
     {
       solver->set_terminator(nullptr);
-      auto stats = solver->statistics();
       Json data = {{"answer", answer_text(result)},
                    {"reason", result.reason_message()},
                    {"check_s", now() - check_started},
-                   {"sat_s", stats.real("time.sat_ms") / 1000.0},
                    {"joined", joined}};
-      if (endpoint)
+      if (details)
       {
-        auto x = endpoint->counters();
-        for (const char* key : {"exported", "filtered", "polls", "imported",
-                                "import-units", "import-dropped",
-                                "import-satisfied", "import-backtracks"})
-          x[std::string("backend_") + key] =
-              stats.uint64(std::string("sat.exchange.") + key);
-        data["exchange"] = x;
+        auto stats = solver->statistics();
+        data["joined"]["rediversifications"] =
+            stats.uint64("before-search.rediversifications");
+        data["sat_s"] = stats.real("time.sat_ms") / 1000.0;
+        if (endpoint)
+        {
+          auto x = endpoint->counters();
+          for (const char* key : {"exported", "filtered", "polls", "imported",
+                                  "import-units", "import-dropped",
+                                  "import-satisfied", "import-backtracks"})
+            x[std::string("backend_") + key] =
+                stats.uint64(std::string("sat.exchange.") + key);
+          data["exchange"] = x;
+        }
       }
       root_exit(report_fd, data);
     }
@@ -737,11 +737,13 @@ Json batch_group(Source& input, const Options& o)
   // own. Its resident and proportional sizes before and after say what that
   // saved.
   std::uint64_t rss_kib = 0, pss_kib = 0, rss_after_kib = 0, pss_after_kib = 0;
-  memory_rollup(getpid(), rss_kib, pss_kib);
+  if (details)
+    memory_rollup(getpid(), rss_kib, pss_kib);
   solver.reset();
   tm.reset();
   release_memory();
-  memory_rollup(getpid(), rss_after_kib, pss_after_kib);
+  if (details)
+    memory_rollup(getpid(), rss_after_kib, pss_after_kib);
 
   std::string decision = "unknown", decided_by;
   double decision_at = 0;
@@ -796,7 +798,7 @@ Json batch_group(Source& input, const Options& o)
       // fork-in-hook test checks each against an oracle).
       if ((decision != "unknown" && o.control != "batch-all") || all_done)
         break;
-      if (o.deadline && now() >= o.deadline)
+      if (o.cancelled() || (o.deadline && now() >= o.deadline))
         break;
       if (!fds.empty())
         continue;
@@ -858,7 +860,8 @@ Json batch_group(Source& input, const Options& o)
                  {"sharing", bool(rings)},
                  {"hedge", hedge_row},
                  {"variables", variables},
-                 {"parse_s", parsed - started},
+                 {"parse_s", prepared ? 0.0 : parsed - started},
+                 {"parsed_query_reused", bool(prepared)},
                  {"base_config", o.config},
                  {"owner_checks", owner_checks},
                  {"owner_check", owner_check},
@@ -878,11 +881,14 @@ Json batch_group(Source& input, const Options& o)
   {
     report["fork_point_s"] = fork_point - started;
     report["fork_span_s"] = forks_done - fork_point;
-    report["rings"] = rings ? rings->audit() : Json();
-    report["owner_memory_kib"] = {{"rss_before_drop", rss_kib},
-                                  {"pss_before_drop", pss_kib},
-                                  {"rss_after_drop", rss_after_kib},
-                                  {"pss_after_drop", pss_after_kib}};
+    if (details)
+    {
+      report["rings"] = rings ? rings->audit() : Json();
+      report["owner_memory_kib"] = {{"rss_before_drop", rss_kib},
+                                    {"pss_before_drop", pss_kib},
+                                    {"rss_after_drop", rss_after_kib},
+                                    {"pss_after_drop", pss_after_kib}};
+    }
   }
   return report;
 }

@@ -28,15 +28,20 @@ THE SOFTWARE.
 #include "Exchange.h"
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <iostream>
 #include <map>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -56,6 +61,54 @@ struct RingTestAccess
   }
 };
 } // namespace stpp
+
+TEST(WorkerDescriptors, RetainsOnlyStderrAndReportChannel)
+{
+  rlimit limits{};
+  ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &limits), 0);
+  if (limits.rlim_cur < 512)
+    GTEST_SKIP() << "descriptor fixture needs 512 descriptor slots";
+  // Exercise adjacent, coincident, low and high retained descriptors. Every
+  // mutation is in a child; gtest's own descriptors stay untouched.
+  for (int keep : {0, 1, 2, 3, 31, 127})
+  {
+    const pid_t child = fork();
+    ASSERT_GE(child, 0);
+    if (!child)
+    {
+      const int original = open("/dev/null", O_RDWR | O_CLOEXEC);
+      const int source = original < 0 ? -1 : fcntl(original, F_DUPFD_CLOEXEC, 256);
+      if (source < 0)
+        _exit(90);
+      for (int fd = 0; fd != 32; ++fd)
+        if (dup2(source, fd) != fd)
+          _exit(91);
+      for (int fd : {127, 191, 255})
+        if (dup2(source, fd) != fd)
+          _exit(92);
+      stpp::close_worker_descriptors(keep);
+      for (int fd = 0; fd != 512; ++fd)
+      {
+        errno = 0;
+        const int flags = fcntl(fd, F_GETFD);
+        if (fd == keep || fd == 2)
+        {
+          if (flags < 0)
+            _exit(93);
+        }
+        else if (flags >= 0 || errno != EBADF)
+          _exit(94);
+      }
+      _exit(0);
+    }
+    int status = 0;
+    pid_t waited;
+    do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
+    ASSERT_EQ(waited, child);
+    ASSERT_TRUE(WIFEXITED(status));
+    EXPECT_EQ(WEXITSTATUS(status), 0) << "keep=" << keep;
+  }
+}
 
 namespace
 {
@@ -469,6 +522,43 @@ bool stall_valid(std::vector<int> c)
 } // namespace
 
 using namespace stpp;
+
+TEST(StppComponents, DuplicateExportsDoNotSpendTheBurstBudget)
+{
+  Rings rings(2, 64);
+  Endpoint::Settings limited;
+  limited.rate = 2;
+  Endpoint writer(rings, 0, limited), reader(rings, 1, limited);
+  const int first[] = {1, -2}, reordered[] = {-2, 1}, second[] = {3, -4};
+  writer.learned(first, 2);
+  writer.learned(reordered, 2);
+  writer.learned(second, 2);
+  EXPECT_EQ(writer.counters()["exported"], 2);
+  EXPECT_EQ(writer.counters()["rate_limited"], 0);
+  reader.begin_import(2);
+  std::vector<int> clause;
+  std::set<std::vector<int>> accepted;
+  while (reader.next(clause))
+    accepted.insert(clause);
+  EXPECT_EQ(accepted, (std::set<std::vector<int>>{{-2, 1}, {-4, 3}}));
+}
+
+TEST(StppComponents, AThrottledClauseCanBeExportedAfterRefill)
+{
+  Rings rings(2, 64);
+  Endpoint::Settings limited;
+  limited.rate = 2;
+  Endpoint writer(rings, 0, limited);
+  const int first[] = {1, 2}, second[] = {3, 4}, third[] = {5, 6};
+  writer.learned(first, 2);
+  writer.learned(second, 2);
+  writer.learned(third, 2);
+  ASSERT_EQ(writer.counters()["exported"], 2);
+  ASSERT_EQ(writer.counters()["rate_limited"], 1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(600));
+  writer.learned(third, 2);
+  EXPECT_EQ(writer.counters()["exported"], 3);
+}
 
 // Rings: a writer that laps a reader several times, and a reader that
 // falls behind, must only ever see whole clauses that were written.

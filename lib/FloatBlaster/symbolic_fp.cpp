@@ -240,9 +240,11 @@ bitVector<isSigned>::bitVector(const bitVector<isSigned>& old)
 }
 
 // symfpu's propositions are Boolean nodes; where it stores one into a
-// bitvector, select a bit.
+// bitvector, select a bit. Static because bitVector(const proposition&)
+// calls it to initialise its own base, and calling a member function on an
+// object whose base is not yet constructed is undefined behaviour.
 template <bool isSigned>
-ASTNode bitVector<isSigned>::fromProposition(const ASTNode& node) const
+ASTNode bitVector<isSigned>::fromProposition(const ASTNode& node)
 {
   // Sequenced deliberately: two constants built in one call expression are
   // unordered against each other, and their node ids decide how commutative

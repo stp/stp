@@ -395,7 +395,10 @@ Limits of the alpha
    of declared sorts as indices and elements. Real and nested array
    components remain unsupported.
 -  ``unsat_assumptions`` after a batch check reports every assumption; the
-   failed subset comes from a check the incremental driver ran.
+   failed subset comes from a check the incremental driver or an opted-in
+   persistent Real session ran. For Boolean/Real API checks, select
+   ``incremental=on`` and ``lra-incremental-session=true`` or
+   ``lra-persistent-state=true`` to use that session.
 -  ``stop-after-cnf`` stops the batch pipeline only: once pushes have made the
    session incremental, a check the incremental driver runs is answered.
 -  Under ``simplify = false`` a few kinds still come back lowered, having no
@@ -470,10 +473,11 @@ mode refuse to run while one is set. The check takes the batch pipeline,
 and ``hook`` runs at most once, at the moment the check's SAT backend, with
 its CNF loaded, would start to search. A check that preprocessing decides,
 or that its solve decides as soon as it is encoded, answers without ever
-calling the hook. The point is offered only when the main solve may not be
-followed by refinement: lazy array axioms, uninterpreted functions, Real
-arithmetic, and the bit-vector and floating-point abstractions (their
-options alone refuse) all may. An array equality the pipeline expands
+calling the hook. Arithmetic-only refinement is supported: each copy
+retains the common atom meanings and certifies its models and conflicts
+exactly. Other refinement refuses the point: lazy array axioms,
+uninterpreted functions, and the bit-vector and floating-point abstractions
+(their options alone refuse). An array equality the pipeline expands
 eagerly instead -- most equalities between stores over bit-vector arrays --
 is offered; one left to lazy extensionality (a large one, or one over a
 constant array or floating-point elements) refuses. Such a check does what
@@ -503,8 +507,8 @@ poll's real cap). Literals are the backend's own numbering, which means
 something only between copies forked at the same point, and every clause
 handed over must have been learned by such a copy. It then holds in every
 model of the query: it is implied by the clauses every copy shares, and, in
-a copy that refined after the point (a model on eager array axioms that
-failed its replay), by the lemmas that refinement added, which are valid for
+a copy that refined after the point (an exact arithmetic lemma, or a model
+on eager array axioms that failed its replay), by lemmas that are valid for
 the query. That needs the copies to run the same backend options, no
 technique that removes models to run between the fork and the connection,
 and the variables created after the connection (the backend's extension
@@ -512,6 +516,13 @@ variables, a refinement's encoding) to lie above the connection's cutoff,
 which no exported clause crosses. The cutoff is the backend's own variable
 count at connection, at most ``SearchPoint::variables()``. Both callbacks
 run inside the search and must not call the solver.
+
+If the check rebuilds its SAT backend, for example when arithmetic reroutes
+to the exact driver, sharing stops: the new encoding has private variable
+numbering. Accepted ``diversify`` settings are restored before that
+backend's first search, without calling the hook again. The diagnostic
+``before-search.rediversifications`` counts these restorations; it resets
+on the next check and is preserved by a CNF export.
 
 The exchange needs CaDiCaL with STP's clause-import extension, which is
 applied to the 3.x CaDiCaL a build fetches (the default); ``capabilities()``

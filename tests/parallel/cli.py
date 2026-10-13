@@ -326,6 +326,8 @@ with tempfile.TemporaryDirectory(prefix='stpp-cli-') as tmp:
     f32 = '(_ FloatingPoint 8 24)'
     one, two = '((_ to_fp 8 24) RNE 1.0)', '((_ to_fp 8 24) RNE 2.0)'
     theory = [
+        ('QF_LRA', '(declare-const x Real)(assert (> x 0))(assert (< x 1))',
+                   '(assert (= x 1))'),
         ('QF_ABV', '(declare-const a (Array (_ BitVec 8) (_ BitVec 8)))(declare-const i (_ BitVec 8))'
                    '(assert (= (select a i) #x01))', '(assert (= (select a i) #x02))'),
         ('QF_FP', f'(declare-const x {f32})(assert (fp.gt x {one}))(assert (fp.lt x {two}))',
@@ -561,8 +563,22 @@ with tempfile.TemporaryDirectory(prefix='stpp-cli-') as tmp:
     # Parent-directed signals clean a blocked input owner without publishing SAT.
     for sig in (signal.SIGINT, signal.SIGTERM):
         p = subprocess.Popen([binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        time.sleep(.03); p.send_signal(sig); p.wait(timeout=3)
-        assert p.returncode == 128+sig and not p.stdout.read()
+        # Sanitizer startup can exceed 30 ms. Send the signal after the
+        # supervisor has installed its handler, while input remains blocked.
+        until = time.monotonic() + 3
+        while time.monotonic() < until:
+            status = pathlib.Path('/proc', str(p.pid), 'status').read_text()
+            caught = int(next(line.split()[1] for line in status.splitlines()
+                              if line.startswith('SigCgt:')), 16)
+            if caught & (1 << (sig - 1)):
+                break
+            time.sleep(.01)
+        else:
+            p.kill()
+            p.wait(timeout=3)
+            raise AssertionError(('supervisor did not install signal handler', sig))
+        p.send_signal(sig); p.wait(timeout=3)
+        assert p.returncode == 128+sig and not p.stdout.read(), (sig, p.returncode, p.stderr.read())
         p.stdin.close()
     # A stats file that cannot be opened is a usage error, before anything
     # runs; one whose write fails at the end costs the stats, never the

@@ -45,13 +45,9 @@ void LetMgr::LetExprMgr(string name, const ASTNode& letExpr)
   assert(frames.size() > 0);
 
   // A binding is visible only once the whole list of them has been read
-  // (commit), so the bindings of one let cannot see each other.
-  if (interim.find(name) != interim.end())
-  {
-    string msg = "Let already created:" + name;
-    FatalError(msg.c_str());
-  }
-  interim.insert(make_pair(name, letExpr));
+  // (commit), so the bindings of one let cannot see each other. commit()
+  // is also where a name bound twice in the list is caught.
+  pending.emplace_back(std::move(name), letExpr);
 }
 
 bool LetMgr::insertIntoFrame(const string& name, const ASTNode& letExpr)
@@ -61,26 +57,31 @@ bool LetMgr::insertIntoFrame(const string& name, const ASTNode& letExpr)
     return false;
 
   shadows.emplace_back(frames.size() - 1, letExpr);
-  frames.back().push_back(name);
+  frames.back().names.push_back(name);
   return true;
 }
 
-// We're ready for these bindings to participate.
+// We're ready for these bindings to participate. Any let nested in the
+// list's right-hand sides has been closed by now, so frames.back() is the
+// frame this list opened, and its bindings are the top of pending.
 void LetMgr::commit()
 {
-  if (interim.size() == 0)
-    return;
-
-  for (const auto& k : interim)
-    insertIntoFrame(k.first, k.second);
-  interim.clear();
+  const size_t first = frames.back().firstPending;
+  for (size_t i = first; i < pending.size(); i++)
+    if (!insertIntoFrame(pending[i].first, pending[i].second))
+    {
+      string msg = "Let already created:" + pending[i].first;
+      FatalError(msg.c_str());
+    }
+  pending.erase(pending.begin() + first, pending.end());
 }
 
-
+// Opens the frame of a let whose binding list is about to be read. The
+// bindings of any list still being read stay pending: this let may sit in
+// one of that list's right-hand sides, where they must not be seen.
 void LetMgr::push()
 {
-  commit();
-  frames.push_back(std::vector<string>());
+  frames.push_back({{}, pending.size()});
 }
 
 void LetMgr::pop()
@@ -88,7 +89,7 @@ void LetMgr::pop()
   if (frames.size() == 0)
     FatalError("Popping from empty let stack");
 
-  for (const string& name : frames.back())
+  for (const string& name : frames.back().names)
   {
     auto it = bindings.find(name);
     assert(it != bindings.end());

@@ -692,7 +692,7 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
 %%
 <ATTRIBUTE>[ \n\t\r]+ { countNewlines(yytext, yyleng); }
-<ATTRIBUTE>";"[^\n]* { }
+<ATTRIBUTE>";"[^\n\r]* { }
 <ATTRIBUTE>":"({LETTER}|{OPCHAR}){ANYTHING}* {
   smt2lval.str = new std::string(smt2text + 1); return ATTRIBUTE_KEYWORD_TOK;
 }
@@ -777,8 +777,11 @@ bv{DIGIT}+             { return lookup(smt2text); }
                          return realTokensActive ? REAL_DECIMAL_TOK
                                                  : DECIMAL_TOK;}
 
+ /* A comment ends at a line feed or a carriage return (SMT-LIB 2.6 section
+    3.1). Only the line feed counts a line, so CRLF is counted once. */
 ";" { BEGIN COMMENT; }
-<COMMENT>"\n" { smt2lineno++; BEGIN INITIAL; /* return to normal mode */}
+<COMMENT>"\n" { smt2lineno++; BEGIN INITIAL; }
+<COMMENT>"\r" { BEGIN INITIAL; }
 <COMMENT>.    { /* stay in comment mode */ }
 
 <INITIAL>"\""   { BEGIN STRING_LITERAL;
@@ -883,7 +886,7 @@ bv{DIGIT}+             { return lookup(smt2text); }
                                        /* string literal */ }
 <SKIP_SEXPR>"|"[^|]*"|"             { countNewlines(yytext, yyleng);
                                        /* quoted symbol */ }
-<SKIP_SEXPR>";"[^\n]*               { /* comment: not captured */ }
+<SKIP_SEXPR>";"[^\n\r]*             { /* comment: not captured */ }
 <SKIP_SEXPR>"("                     { skippedDepth++;  }
 <SKIP_SEXPR>")"                     { if (skippedDepth == 0)
                                         {
@@ -907,7 +910,7 @@ bv{DIGIT}+             { return lookup(smt2text); }
   * counts those inside a quoted symbol or string, and sees no others. */
 <GET_VALUE_LIST>[ \t\r\f]+            { }
 <GET_VALUE_LIST>\n                    { smt2lineno++; }
-<GET_VALUE_LIST>";"[^\n]*             { }
+<GET_VALUE_LIST>";"[^\n\r]*           { }
 <GET_VALUE_LIST>"("                   { smt2lval.uintval = ++parenthesisDepth;
                                         dropCapturedTerms();
                                         BEGIN GET_VALUE_TERM;
@@ -917,7 +920,7 @@ bv{DIGIT}+             { return lookup(smt2text); }
 
 <GET_VALUE_TERM>[ \t\r\f]+            { }
 <GET_VALUE_TERM>\n                    { smt2lineno++; }
-<GET_VALUE_TERM>";"[^\n]*             { }
+<GET_VALUE_TERM>";"[^\n\r]*           { }
 <GET_VALUE_TERM>"\""([^"]|"\"\"")*"\""  { captureText(smt2text, smt2leng);
                                         if (capturedDepth == 0)
                                           return capturedTermToken(); }

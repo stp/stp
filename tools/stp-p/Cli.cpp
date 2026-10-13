@@ -98,7 +98,13 @@ const CLI::Validator faults(
         const auto colon = item.find(':');
         auto slot = [](const std::string& s)
         { return !s.empty() && s.find_first_not_of("0123456789") == std::string::npos; };
-        const bool known =
+        bool encoding_fault = false;
+        for (const char* fault : {"fail-encoding=", "crash-encoding=",
+                                  "hold-encoding=", "linger-encoding=",
+                                  "unresponsive-encoding="})
+          for (const char* encoding : {"default", "cnf-gia-high"})
+            encoding_fault |= item == std::string(fault) + encoding;
+        const bool known = encoding_fault ||
             item == "hold-hedge" || item == "fail-root-setup" ||
             item == "fork-fails" || item == "linger" || item == "contradict" ||
             item == "cut-report" ||
@@ -109,7 +115,8 @@ const CLI::Validator faults(
         if (!known)
           return std::string("takes wrong-root=SLOT:sat|unsat, hold-root=SLOT, "
                              "hold-hedge, fail-root-setup, fork-fails, linger, "
-                             "contradict and cut-report");
+                             "contradict, cut-report, or fail/crash/hold/linger-encoding="
+                             "default|cnf-gia-high");
         at = comma + 1;
       }
       return std::string();
@@ -152,8 +159,8 @@ int run(int argc, char** argv, bool testing)
                                 v.git_sha + ")";
                        });
   app.footer(
-      "One decision-only nonincremental query: QF_BV, QF_ABV, QF_FP, QF_BVFP or\n"
-      "QF_ABVFP, or one with no set-logic, which is admitted whatever it holds;\n"
+      "One decision-only nonincremental query: QF_BV, QF_ABV, QF_FP, QF_BVFP,\n"
+      "QF_ABVFP or QF_LRA; without set-logic, admitted whatever it holds;\n"
       "read as one query by STP's parser. stdin is read when the input\n"
       "is absent or -, and must not be a terminal. The input may be at most\n"
       "--worker-memory-mib (16384 with 0).\n"
@@ -195,6 +202,9 @@ int run(int argc, char** argv, bool testing)
       ->check(CLI::IsMember(config_names(testing)));
   app.add_option("--stats-json", o.stats, "Write bounded answer-support statistics")
       ->check(not_empty);
+  app.add_flag("--encoding-groups", o.encoding_groups,
+               "Opt in to independent default/GIA-high encodings for QF_BV; "
+               "requires the default configuration and at least 4 jobs");
   app.add_option("input", o.input, "The query, a file or - for stdin")
       ->option_text("[input.smt2|-]");
 
@@ -334,6 +344,10 @@ int run(int argc, char** argv, bool testing)
         (std::uint64_t(1) << 32))
       throw std::runtime_error("--import-window times the other roots must "
                                "stay below 2^32 literals");
+    if (o.encoding_groups && (o.jobs < 4 || o.config != "default" ||
+                              !o.portfolio.empty() || !o.control.empty()))
+      throw std::runtime_error("--encoding-groups needs at least 4 jobs, "
+                               "--config default and no test portfolio/control");
     if (o.jobs > allowed_cpus().size())
       throw std::runtime_error("requested jobs exceed allowed CPU slots");
     o.deadline = o.timeout ? started + o.timeout : 0;

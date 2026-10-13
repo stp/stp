@@ -405,7 +405,6 @@ private:
   // The seed used by the last solve. Changes take effect at the next solve,
   // so setting the option does not destroy a still-readable model or core.
   uint64_t solver_random_seed;
-  bool produce_assertions = false;
   bool produce_assignments = false;
   bool produce_unsat_assumptions = false;
   bool produce_unsat_cores = false;
@@ -863,8 +862,6 @@ public:
   // verdict is reportable then -- see the call site in checkSat.
   bool sortCarrierExhausted(const ASTVec& assertions,
                             std::string& detail) const;
-
-  DLL_PUBLIC void getAssertions();
 
   DLL_PUBLIC void getModel();
   void getAssignment();

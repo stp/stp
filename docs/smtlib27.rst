@@ -96,8 +96,10 @@ Implemented language and protocol features
    * - Other queries
      - ``check-sat-assuming`` accepts Boolean terms; ``get-unsat-assumptions``
        and ``get-unsat-core`` require their production options. Named cores
-       report labels on active assertions. STP always retains assertions, so
-       ``get-assertions`` works regardless of ``:produce-assertions``.
+       report labels on active assertions. ``get-assertions`` and
+       ``:produce-assertions`` are unsupported: STP stores what its node
+       factory made of each assertion, and the standard requires the
+       formula as it was asserted.
        ``get-info :all-statistics`` is available before solving and after
        context changes. Other information and option queries report the
        implemented settings.
@@ -146,7 +148,7 @@ reports that it uses 2.6 semantics when asked for version 2.7.
    * - ``get-assertions`` with ``:produce-assertions false``
      - Accepts
      - Command unsupported
-     - Accepts
+     - Command unsupported
    * - Model query after ``define-fun``
      - Accepts
      - Accepts
