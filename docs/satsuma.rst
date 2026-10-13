@@ -44,7 +44,10 @@ Model preservation and supported queries
 
 Original variable numbers are retained, extension variables are allocated
 before clauses are loaded, and removed assignments are restored as unit
-clauses. STP can therefore read a model of its original encoding.
+clauses using ``set_add_reduced_as_unit(true)``, the API equivalent of
+``--add-reduced-as-unit``. This is required because STP reads the original
+CNF variables directly from the backend model rather than running Satsuma
+model reconstruction. STP can therefore read a model of its original encoding.
 
 Preprocessing is restricted to a complete batch encoding on a fresh SAT
 backend. Incremental sessions, assumptions, auxiliary solvers, and queries

@@ -14,6 +14,51 @@ SATSolver::vec_literals clause(std::initializer_list<SATSolver::Lit> lits)
 }
 } // namespace
 
+TEST(Kissat, OneShotCompleteFormulaHasAValidModel)
+{
+  stp::Kissat solver;
+  ASSERT_TRUE(solver.configureOneShot());
+  EXPECT_FALSE(solver.supportsAssumptions());
+  const auto x = solver.newVar(), y = solver.newVar();
+  solver.setFrozen(x);
+  solver.setFrozen(y);
+  solver.addClause(clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)}));
+  solver.addClause(clause({SATSolver::mkLit(x, true), SATSolver::mkLit(y, false)}));
+  // STP's batch loader can also make these requests after loading the CNF.
+  solver.setFrozen(x);
+  solver.setFrozen(y);
+  bool timeout = false;
+  ASSERT_TRUE(solver.solve(timeout));
+  EXPECT_FALSE(timeout);
+  EXPECT_EQ(solver.true_literal(), solver.modelValue(y));
+  EXPECT_THROW(solver.addClause(clause({SATSolver::mkLit(y, true)})), std::logic_error);
+  EXPECT_THROW(solver.solve(timeout), std::logic_error);
+}
+
+TEST(Kissat, OneShotSearchBiasKeepsTheNonIncrementalConfiguration)
+{
+  stp::Kissat solver;
+  ASSERT_TRUE(solver.configureOneShot());
+  ASSERT_TRUE(solver.setSearchBias(stp::SearchBias::SAT));
+  EXPECT_FALSE(solver.enableTrailReuse(SATSolver::TrailReuse::ALL));
+  const auto x = solver.newVar();
+  solver.setFrozen(x);
+  solver.addClause(clause({SATSolver::mkLit(x, false)}));
+  bool timeout = false;
+  ASSERT_TRUE(solver.solve(timeout));
+  EXPECT_FALSE(timeout);
+  EXPECT_EQ(solver.true_literal(), solver.modelValue(x));
+}
+
+TEST(Kissat, OneShotConfigurationRequiresAnEmptyBackend)
+{
+  stp::Kissat solver;
+  const auto x = solver.newVar();
+  solver.addClause(clause({SATSolver::mkLit(x, false)}));
+  EXPECT_THROW(solver.configureOneShot(), std::logic_error);
+  EXPECT_TRUE(solver.supportsAssumptions());
+}
+
 TEST(Kissat, AssumptionsRetractAfterUnsat)
 {
   stp::Kissat solver;

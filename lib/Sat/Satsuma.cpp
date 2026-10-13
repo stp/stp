@@ -7,12 +7,41 @@
 
 #include <chrono>
 #include <climits>
+#include <limits>
 #include <stdexcept>
 
 namespace stp
 {
 namespace
 {
+template <typename Preprocessor>
+auto setCostBudget(Preprocessor& preprocessor, uint64_t limit, int)
+    -> decltype(preprocessor.set_total_cost_limit(limit), void())
+{
+  preprocessor.set_total_cost_limit(limit);
+}
+
+template <typename Preprocessor>
+void setCostBudget(Preprocessor&, uint64_t, long)
+{
+  throw std::runtime_error(
+      "Satsuma quick profile requires a fork with the cost budget API");
+}
+
+template <typename Preprocessor>
+auto setSimplificationOnly(Preprocessor& preprocessor, int)
+    -> decltype(preprocessor.set_simplify_only(true), void())
+{
+  preprocessor.set_simplify_only(true);
+}
+
+template <typename Preprocessor>
+void setSimplificationOnly(Preprocessor&, long)
+{
+  throw std::runtime_error(
+      "Satsuma simplify mode requires a fork with the simplification API");
+}
+
 class SolverOutput final : public satsuma::cnf_output
 {
   SATSolver& solver;
@@ -84,6 +113,21 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
       cnf.literalCount() > INT_MAX / 2)
     return false;
 
+  // Check this before constructing Satsuma's duplicate clause and graph
+  // structures. A declined request leaves the original CNF for the ordinary
+  // clause loader and does not submit anything to the backend.
+  const bool quick = manager.UserFlags.satsuma_profile == "quick";
+  const int inputLimit = manager.UserFlags.satsuma_input_limit >= 0
+      ? manager.UserFlags.satsuma_input_limit : quick ? 1000000 : -1;
+  if (inputLimit >= 0)
+  {
+    uint64_t inputSize = cnf.varCount() - 1 + cnf.literalCount();
+    for (const auto& extra : extraClauses)
+      inputSize += extra.size();
+    if (inputSize > static_cast<uint64_t>(inputLimit))
+      return false;
+  }
+
   const auto start = std::chrono::steady_clock::now();
   PreparationPoller poll(manager.preparation_control, PreparationStage::ClauseLoading);
   cnf2wl formula;
@@ -129,20 +173,46 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
   preprocessor.set_tracker(&tracker);
   preprocessor.set_log_output(&silent);
   preprocessor.set_cnf_output(&output);
+  // STP reads original CNF variables directly from the SAT model. Retain
+  // assignments eliminated by Satsuma as units so that this model satisfies
+  // the original encoding without a separate reconstruction pass.
   preprocessor.set_add_reduced_as_unit(true);
   preprocessor.set_preprocess_cnf_unit(true);
-  preprocessor.set_proof_dense_crossover(60);
-  preprocessor.set_component_size_limit(500000);
-  preprocessor.set_order_model_budget(750000);
-  preprocessor.set_dense_model_budget(20000000);
+  if (manager.UserFlags.satsuma_mode == "simplify")
+    setSimplificationOnly(preprocessor, 0);
+  if (quick)
+    setCostBudget(preprocessor, 20000000, 0);
+  const bool competition = manager.UserFlags.satsuma_profile == "competition";
+  const int componentLimit = manager.UserFlags.satsuma_component_limit >= 0
+      ? manager.UserFlags.satsuma_component_limit : competition ? 5000000 : 500000;
+  const int iterationLimit = manager.UserFlags.satsuma_iteration_limit >= 0
+      ? manager.UserFlags.satsuma_iteration_limit : quick ? 0 : -1;
+  preprocessor.set_proof_dense_crossover(competition ? 64 : 60);
+  preprocessor.set_component_size_limit(componentLimit);
+  preprocessor.set_order_model_budget(competition
+      ? std::numeric_limits<uint64_t>::max() : 750000);
+  preprocessor.set_dense_model_budget(competition
+      ? std::numeric_limits<uint64_t>::max() : 20000000);
+  if (competition)
+    preprocessor.set_full_skip_limit(100000000);
+  std::string ordering = manager.UserFlags.satsuma_ordering;
+  if (ordering == "auto")
+    ordering = competition && manager.UserFlags.satsuma_mode == "fix" ? "clique" : "off";
+#if !CLIQUES
+  if (ordering != "off")
+    throw std::runtime_error("Satsuma column ordering requires USE_SATSUMA_CLIQUER=ON");
+#endif
   if (manager.UserFlags.satsuma_mode == "fix")
   {
     preprocessor.set_orbitopal_fixing(true);
     preprocessor.set_orbitopal_fixing_only(true);
     preprocessor.set_schreier_fixing(true);
     preprocessor.set_negation_fixing(true);
-    preprocessor.set_reorder(true);
-    preprocessor.set_iterate(true);
+    preprocessor.set_reorder(ordering != "off");
+    preprocessor.set_reorder_cliquer(ordering == "clique");
+    preprocessor.set_iterate(iterationLimit != 0);
+    if (iterationLimit > 0)
+      preprocessor.set_iteration_limit(iterationLimit);
     preprocessor.set_preprocess_cnf_pure(true);
   }
   poll.check();
@@ -153,6 +223,9 @@ bool addSatsumaCnfToSolver(STPMgr& manager, SATSolver& solver, const CNF& cnf,
     const double seconds = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - start).count();
     std::cerr << "satsuma: mode=" << manager.UserFlags.satsuma_mode
+              << " profile=" << manager.UserFlags.satsuma_profile
+              << " ordering=" << ordering << " component_limit=" << componentLimit
+              << " input_limit=" << inputLimit << " iteration_limit=" << iterationLimit
               << " seconds=" << seconds
               << " input_vars=" << cnf.varCount() - 1
               << " input_clauses=" << cnf.clauseCount() + extraClauses.size()

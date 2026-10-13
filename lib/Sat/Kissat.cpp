@@ -130,6 +130,8 @@ uint32_t Kissat::newVar()
 bool Kissat::addClauseInternal(const vec_literals& clause)
 {
   requireHealthy();
+  if (one_shot && solve_calls)
+    throw std::logic_error("clauses added after a one-shot Kissat search");
   for (int i = 0; i < clause.size(); ++i)
     kissat_add(solver, literal(clause[i]));
   kissat_add(solver, 0);
@@ -150,7 +152,12 @@ void Kissat::setFrozen(uint32_t var)
   requireHealthy();
   if (!frozen.at(var))
   {
-    kissat_protect(solver, external.at(var));
+    // The batch loader can request model-variable protection even when its
+    // complete encoding needs no refinement. A one-shot solver reconstructs
+    // its original-variable model itself and accepts no later clauses, so it
+    // does not need Kissat's incremental-only protection API.
+    if (!one_shot)
+      kissat_protect(solver, external.at(var));
     frozen[var] = true;
   }
 }
@@ -170,6 +177,8 @@ int Kissat::terminate(void* state)
 bool Kissat::run(bool& timeout_expired)
 {
   requireHealthy();
+  if (one_shot && solve_calls)
+    throw std::logic_error("a one-shot Kissat backend was searched twice");
   // Allocated STP variables need not occur in any current clause. Reserve
   // their IDs before BVA can use that apparently empty part of the namespace.
   if (kissat_get_option(solver, "factor") &&
@@ -197,6 +206,8 @@ bool Kissat::solveWithAssumptionsInternal(const vec_literals& assumptions,
                                           bool& timeout_expired)
 {
   requireHealthy();
+  if (one_shot)
+    throw std::logic_error("assumptions passed to a one-shot Kissat backend");
   for (int i = 0; i < assumptions.size(); ++i)
     kissat_assume(solver, literal(assumptions[i]));
   return run(timeout_expired);
@@ -242,7 +253,7 @@ bool Kissat::setSearchBiasInternal(SearchBias bias)
                        : bias == SearchBias::UNSAT ? "unsat"
                                                    : "default";
   const bool supported = kissat_set_configuration(solver, config);
-  kissat_set_option(solver, "incremental", 1);
+  kissat_set_option(solver, "incremental", one_shot ? 0 : 1);
   if (search_mode >= 0)
     kissat_set_option(solver, "stable", search_mode);
   return supported;
@@ -255,10 +266,21 @@ bool Kissat::enableBVAInternal()
   return true;
 }
 
+bool Kissat::configureOneShot()
+{
+  requireHealthy();
+  if (!configurationOpen() || solve_calls)
+    throw std::logic_error("one-shot Kissat requires a fresh backend");
+  kissat_set_option(solver, "incremental", 0);
+  kissat_set_option(solver, "incrementalreuse", 0);
+  one_shot = true;
+  return true;
+}
+
 bool Kissat::enableTrailReuseInternal(TrailReuse scope)
 {
   requireHealthy();
-  if (!trail_reuse_allowed)
+  if (!trail_reuse_allowed || one_shot)
     return false;
   const int mode = scope == TrailReuse::ALL ? 2 : 1;
   kissat_set_option(solver, "incrementalreuse", mode);

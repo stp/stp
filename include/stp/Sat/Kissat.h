@@ -29,6 +29,7 @@ class DLL_PUBLIC Kissat : public SATSolver
   bool trail_reuse_allowed;
   int search_mode;
   uint64_t solve_calls = 0;
+  bool one_shot = false;
 
   void requireHealthy() const;
   int literal(Lit lit) const;
@@ -39,7 +40,8 @@ public:
   explicit Kissat(bool trail_reuse_allowed = true, int search_mode = -1);
   ~Kissat() override;
   bool okay() const override;
-  bool supportsAssumptions() const override { return true; }
+  bool supportsAssumptions() const override { return !one_shot; }
+  bool configureOneShot() override;
   uint8_t modelValue(uint32_t var) const override;
   uint32_t newVar() override;
   uint32_t nVars() const override

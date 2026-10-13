@@ -239,6 +239,10 @@ if(USE_KISSAT)
     endif()
 endif()
 
+if(STP_BUILD_WITH_SATSUMA AND USE_SATSUMA_CLIQUER)
+    list(APPEND stp_link_libs ${SATSUMA_CLIQUER_LIBRARY})
+endif()
+
 # PRIVATE, not LINK_PUBLIC: these are implementation details of libstp, and
 # naming them in the link interface put them in the exported STPTargets.cmake,
 # where they were unusable - $<TARGET_FILE:libabc-pic> names a target no

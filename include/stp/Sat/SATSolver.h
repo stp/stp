@@ -131,6 +131,10 @@ public:
 
   virtual bool supportsAssumptions() const { return false; }
 
+  // The caller guarantees a complete formula, one ordinary search, no
+  // assumptions and no later refinement clauses. Optional performance hint.
+  virtual bool configureOneShot() { return false; }
+
   typedef uint8_t lbool;
 
   static inline Lit mkLit(uint32_t var, bool sign)

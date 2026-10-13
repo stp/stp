@@ -44,7 +44,7 @@ endif()
 if (STP_BUILD_WITH_SATSUMA)
     list(APPEND sat_lib_to_add Satsuma.cpp)
     set_source_files_properties(Satsuma.cpp PROPERTIES
-        COMPILE_DEFINITIONS "CLIQUES=0")
+        COMPILE_DEFINITIONS "CLIQUES=$<BOOL:${USE_SATSUMA_CLIQUER}>")
 endif()
 
 add_library(sat OBJECT ${sat_lib_to_add})
