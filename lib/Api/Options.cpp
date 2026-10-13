@@ -483,6 +483,8 @@ bool option_build_supported(const OptionSpec& spec)
   const std::string b = spec.requires_build;
   if (b == "cadical")
     return STP_BUILD_WITH_CADICAL != 0;
+  if (b == "satsuma")
+    return STP_BUILD_WITH_SATSUMA != 0;
   if (b == "cryptominisat")
     return STP_BUILD_WITH_CRYPTOMINISAT != 0;
   if (b == "minisat")
@@ -1013,6 +1015,12 @@ template <class F, class V> void assign_flag(F& field, V value)
 }
 
 using Flags = UserDefinedFlags;
+
+bool custom_satsuma(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.satsuma_mode = as_str(v);
+  return true;
+}
 
 bool custom_produce_models(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {

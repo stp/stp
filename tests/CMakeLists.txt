@@ -388,6 +388,27 @@ endif()
 
 add_subdirectory(lra)
 
+if(STP_BUILD_WITH_SATSUMA)
+    add_executable(satsuma-api-client satsuma_client.cpp)
+    target_link_libraries(satsuma-api-client PRIVATE stp)
+    foreach(_satsuma_backend cadical cryptominisat)
+        if((_satsuma_backend STREQUAL "cadical" AND USE_CADICAL) OR
+           (_satsuma_backend STREQUAL "cryptominisat" AND USE_CRYPTOMINISAT))
+            if(BUILD_EXECUTABLES)
+                add_test(NAME satsuma-${_satsuma_backend}
+                    COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/satsuma.py"
+                            $<TARGET_FILE:stp-bin> ${_satsuma_backend})
+                set_tests_properties(satsuma-${_satsuma_backend}
+                    PROPERTIES LABELS "satsuma" TIMEOUT 180)
+            endif()
+            add_test(NAME satsuma-api-${_satsuma_backend}
+                COMMAND satsuma-api-client ${_satsuma_backend})
+            set_tests_properties(satsuma-api-${_satsuma_backend}
+                PROPERTIES LABELS "satsuma" TIMEOUT 180)
+        endif()
+    endforeach()
+endif()
+
 # The LRA version map must not override --exclude-libs and expose private
 # dependencies. Check the actual library with both GNU ld and LLD builds.
 if(BUILD_SHARED_LIBS AND UNIX AND NOT APPLE AND CMAKE_NM)

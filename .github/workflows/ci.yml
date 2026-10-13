@@ -42,6 +42,57 @@ jobs:
     - name: Check
       run: python3 scripts/check-dependency-patches.py
 
+  satsuma:
+    name: Satsuma / both backends / assertions ${{ matrix.assertions }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        assertions: ["ON", "OFF"]
+    env:
+      CCACHE_MAXSIZE: 400M
+    steps:
+      - uses: actions/checkout@v7
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bison build-essential ccache cmake flex git \
+            libgmp-dev ninja-build python3 python3-venv zlib1g-dev
+      - name: Resolve dependency revisions
+        id: deps-key
+        run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+      - name: Dependencies
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: deps-satsuma-${{ matrix.assertions }}-x86_64-${{ steps.deps-key.outputs.key }}
+      - name: Compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-satsuma-${{ matrix.assertions }}/${{ github.run_id }}
+          restore-keys: ccache-satsuma-${{ matrix.assertions }}/
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+            -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+            -DENABLE_AUTO_DOWNLOAD=ON -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_TESTING=ON -DENABLE_PYTHON_API=OFF -DWERROR=ON \
+            -DENABLE_ASSERTIONS=${{ matrix.assertions }} \
+            -DUSE_SATSUMA=ON -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Build
+        run: cmake --build build --target stp-bin satsuma-api-client --parallel "$(nproc)"
+      - name: Test Satsuma with both backends
+        run: ctest --test-dir build -L satsuma --output-on-failure
+      - name: Dependency diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: satsuma-${{ matrix.assertions }}-dependency-logs
+          path: build/deps/src/*-stamp/*-*.log
+
   build:
     strategy:
       fail-fast: false
