@@ -1116,6 +1116,15 @@ endif()
 # surface as a link failure with nothing pointing back here.
 include(deps-helper)
 
+# Optional CNF symmetry preprocessing. Satsuma is installed by a pinned
+# ExternalProject when no compatible installed header API is available.
+option(USE_SATSUMA "Build optional Satsuma CNF symmetry preprocessing" OFF)
+set(STP_BUILD_WITH_SATSUMA ${USE_SATSUMA})
+if(USE_SATSUMA)
+    find_package(Satsuma REQUIRED)
+endif()
+add_feature_info(Satsuma USE_SATSUMA "Enables optional Satsuma CNF preprocessing")
+
 # -----------------------------------------------------------------------------
 # MiniSat
 # -----------------------------------------------------------------------------

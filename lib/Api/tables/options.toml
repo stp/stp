@@ -775,6 +775,19 @@ category = "simplification"
 help = "replace a (distinct ...) over variables that occur nowhere else with a strict chain, which fixes one of the n! equivalent orderings the bit-blaster would otherwise search. Incremental solves keep the rewrite behind a retractable root assumption"
 
 [[option]]
+name = "satsuma"
+type = "enum"
+default = "off"
+values = ["off", "lex", "fix"]
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "satsuma" }
+category = "sat"
+requires = { build = "satsuma" }
+help = "experimental: preprocess a complete, non-incremental CNF with Satsuma before the SAT backend: off (default), lex, or fix. Refinement and incremental encodings are left to the backend"
+
+[[option]]
 name = "cadical-elim"
 type = "int"
 default = -1

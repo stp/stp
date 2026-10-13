@@ -41,9 +41,19 @@ if(USE_KISSAT)
     list(APPEND sat_lib_to_add Kissat.cpp)
 endif()
 
+if (STP_BUILD_WITH_SATSUMA)
+    list(APPEND sat_lib_to_add Satsuma.cpp)
+    set_source_files_properties(Satsuma.cpp PROPERTIES
+        COMPILE_DEFINITIONS "CLIQUES=0")
+endif()
+
 add_library(sat OBJECT ${sat_lib_to_add})
 if(USE_KISSAT)
     target_link_libraries(sat PRIVATE Kissat)
+endif()
+
+if (STP_BUILD_WITH_SATSUMA)
+    target_link_libraries(sat PRIVATE Satsuma)
 endif()
 
 # cryptominisat.h includes gmpxx.h, and the cryptominisat5 imported target

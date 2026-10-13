@@ -78,6 +78,7 @@ you have built but not installed, static builds, and Windows.
 
    building
    architecture
+   satsuma
 
 
 Command-line usage
