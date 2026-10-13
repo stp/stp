@@ -49,6 +49,17 @@ bounded = """(set-logic QF_BV)
 (assert (and (= (bvmul x y) #x06) (bvult x #x10) (bvult y #x10)))
 (check-sat)"""
 check(bounded, ["sat"], extra=("--satsuma-input-limit=0",))
+if backend == "kissat":
+    # Small array formulas are eagerly lowered to a complete batch CNF, but
+    # their model registry still asks to freeze the original index bits.
+    # One-shot Kissat must accept those requests without its incremental API.
+    check("""(set-logic QF_ABV)
+(declare-fun a () (Array (_ BitVec 8) (_ BitVec 8)))
+(declare-fun x () (_ BitVec 8))(declare-fun y () (_ BitVec 8))
+(assert (= (select a x) x))(assert (= (select a y) y))
+(assert (and (= (bvmul x y) #x06) (bvult x #x10) (bvult y #x10)))
+(check-sat)""", ["sat"], extra=("--kissat-batch-only=true",),
+          require_preprocessing=True)
 for limit in (0, 1):
     check(bounded, ["sat"], extra=(f"--satsuma-iteration-limit={limit}",),
           require_preprocessing=True)
