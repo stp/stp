@@ -68,8 +68,13 @@ def analyze(run, baseline, repetitions, seed):
                 raise ValueError(f'journal differs from captured answers: {path}, {name}')
             if observation['status'] == 'solved' and (
                     len(answers) != checks or 'unknown' in answers or
-                    observation['returncode'] != 0):
+                    observation['returncode'] != 0 or
+                    any(line.lstrip().startswith('(error') for line in stdout.splitlines())):
                 raise ValueError(f'incomplete session counted as solved: {path}, {name}')
+            expected_par2 = (observation['seconds'] if observation['status'] == 'solved'
+                             else 2 * metadata['timeout'])
+            if observation['par2'] != expected_par2 or observation['seconds'] < 0:
+                raise ValueError(f'invalid complete-session PAR2: {path}, {name}')
         for query in range(checks):
             observed = {name: r['answers'][query]
                         for name, r in grouped[path].items()
