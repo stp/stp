@@ -59,6 +59,8 @@ class ASTNode
 {
   friend class STPMgr;
   friend class ASTInterior;
+  friend class MutableGraph; // reaches the node behind a mutable handle
+  friend class MutableInterior; // hands out a handle to itself
   friend class UFContext;
   friend class lra::Frontend;
   // The 3.x API keeps its terms as raw ASTInternal pointers behind an opaque
@@ -205,9 +207,17 @@ public:
         return _int_node_ptr->getDeclaredSourceSort().kind() ==
                SourceSort::Kind::Real;
       case ITE:
+      {
         // An ite is a Real term exactly when its branches are. The condition
-        // is Boolean either way, so the branch decides.
-        return Degree() == 3 && (*this)[1].isRealTerm();
+        // is Boolean either way, so the branch decides. Memoised: a chain of
+        // nested ites is walked once, not once per width query.
+        if (_int_node_ptr->real_term_known)
+          return _int_node_ptr->real_term;
+        const bool real = Degree() == 3 && (*this)[1].isRealTerm();
+        _int_node_ptr->real_term = real;
+        _int_node_ptr->real_term_known = true;
+        return real;
+      }
       case UF_APPLY:
         // An application is a Real term when the function returns one. The
         // kind alone cannot say so -- every application shares it -- which is
@@ -264,6 +274,10 @@ public:
 
   // Access Children of this Node
   ASTChildren GetChildren() const { return _int_node_ptr->GetChildren(); }
+
+  // Whether this node is a MutableGraph's editable interior node rather
+  // than one of the manager's hash-consed nodes.
+  bool isMutableInterior() const { return _int_node_ptr->mutable_interior; }
 
   // Return the number of child nodes
   size_t Degree() const { return GetChildren().size(); };

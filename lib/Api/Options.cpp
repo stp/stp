@@ -1501,7 +1501,12 @@ void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
   DerivedOptions local;
   DerivedOptions& derived = t.solver != nullptr ? t.solver->derived_options : local;
   if (derived.generation != o.generation)
+  {
     derive_options(o, derived);
+    // The engine's remembered fixed points were ones under the old values.
+    if (t.solver != nullptr && t.solver->stp != nullptr)
+      t.solver->stp->forgetFixedPoints();
+  }
   for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
   {
     const OptionSpec& spec = kOptionSpecs[i];

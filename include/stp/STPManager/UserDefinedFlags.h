@@ -209,6 +209,12 @@ public:
   bool optimize_flag = true; // the Simplifier functions (which might increase the size).
   bool wordlevel_solve_flag = true;   // turn on word level bitvector solver
   bool propagate_equalities = true; // Remove equalities.
+  // Everything that has a graph version runs on the graph: the top-level
+  // equalities on the unconstrained pass's graph, and the sharing-aware
+  // rewriting, flattening and common-factor passes as rule sets over one
+  // (GraphRulePasses.h), instead of their rebuilding walks. Both paths
+  // are kept so they can be measured against each other.
+  bool passes_on_graph = false;
   bool bitConstantProp_flag = true; // Constant bit propagation enabled.
   bool enable_unconstrained = true;
   // Unconstrained elimination also replaces a shared single-step term of
@@ -278,7 +284,9 @@ public:
   int64_t common_subsum_budget = 16000000;
 
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
-  int64_t size_reducing_fixed_point = 0;
+  // Formulas under this many non-leaf nodes have the size-reducing passes
+  // run to a fixed point; -1 means always.
+  int64_t size_reducing_fixed_point = 100000;
   
 
   bool simplify_to_constants_only = false;

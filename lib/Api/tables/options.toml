@@ -640,6 +640,17 @@ category = "simplification"
 help = "Refine interval analysis with sets of disjoint intervals (needs --use-intervals)"
 
 [[option]]
+name = "passes-on-graph"
+type = "bool"
+default = false
+tier = "expert"
+settable = "anytime"
+scope = "solver"
+engine = { field = "passes_on_graph" }
+category = "simplification"
+help = "Run everything that has a graph version on a mutable graph of the formula: the top-level equalities on the unconstrained pass's graph in the same round, and the sharing-aware rewriting, flattening and common-factor passes as rule sets reading live parent counts, instead of their rebuilding walks. Off: on formulas with hundreds of thousands of equalities the conversion above them costs more than the rebuild"
+
+[[option]]
 name = "pure-literals"
 type = "bool"
 default = true
@@ -730,7 +741,7 @@ help = "Uses simple boolean algebra rules to combine conjuncts at the top level"
 [[option]]
 name = "size-reducing-fixed-point-limit"
 type = "int"
-default = 0
+default = 100000
 sentinel = "-1 = always"
 tier = "expert"
 settable = "anytime"
