@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
+#include <unordered_map>
 
 namespace stp
 {
@@ -146,6 +147,11 @@ public:
   // or, for a chain over a constant array, the anchor of its transformed
   // default `baseDefault`, with `baseArray` null.
   // Refinement pins `symbol` with path lemmas over the anchors.
+  //
+  // Under a registry, `nestedReads` and `nestedChains` are the rows the
+  // levels and the default mention, closed over those rows' own index
+  // terms and chain rows. A transform that reuses the row reports them
+  // as touched, exactly as the transform that built it did.
   struct ChainRow
   {
     ASTNode symbol;
@@ -155,6 +161,8 @@ public:
     ASTNode baseDefault;
     ASTNode baseReadSymbol;
     std::vector<ChainLevel> levels;
+    ReadKeys nestedReads;
+    ReadKeys nestedChains;
   };
   typedef std::map<ASTNode, ChainRow> ChainIndexMap; // read index -> row
   typedef std::map<ASTNode, ChainIndexMap> ChainReadsMap; // chain node ->
@@ -239,6 +247,19 @@ private:
 
   bool markLazyChainCut(const ASTNode& writeNode, const ASTNode& readIndex);
   ASTNode anchorForChainTerm(const ASTNode& term);
+
+  // The row each read or chain symbol stands for, over the rows this run
+  // has touched so far: every symbol a term transformed in this run
+  // mentions was touched in it. Indexed lazily, and only under a registry.
+  typedef std::unordered_map<ASTNode, ReadKey, ASTNode::ASTNodeHasher,
+                             ASTNode::ASTNodeEqual>
+      RowOfSymbol;
+  RowOfSymbol touchedReadOf;
+  RowOfSymbol touchedChainOf;
+  size_t touchedReadsIndexed = 0;
+  size_t touchedChainsIndexed = 0;
+  void collectNestedRows(ChainRow& row);
+  static void keepFirstOccurrences(ReadKeys& keys);
 
   // The sort constraints owed by the read abstractions this run minted, to
   // be conjoined onto the formula that minted them. Emptied at the start of
