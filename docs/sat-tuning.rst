@@ -102,6 +102,11 @@ tuned option stays unset. After a check selects a profile,
 effective defaults. Copying options copies user choices and the tuning policy,
 and a new solver selects its own profile from its logic and session.
 
+Option timing rules also apply when resetting user choices would enable an
+automatic default. In particular, ``SolverOptions::reset_all`` refuses the
+whole reset if removing an explicit baseline value would change a search
+control after its first-check window has closed.
+
 Measurements
 ------------
 

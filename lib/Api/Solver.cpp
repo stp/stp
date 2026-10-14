@@ -1288,7 +1288,18 @@ void SolverOptions::reset_all()
     if (s->options.is_set[i] &&
         detail::option_text(specs[i], s->options.values[i]) != specs[i].default_text)
       live_write(s, specs[i].name, "SolverOptions::reset_all");
-  s->options.reset_all();
+  // Removing an explicit baseline value can now enable an automatic default,
+  // including other phase/mode controls suppressed by explicit search-bias.
+  // Check the entire proposed effective set before changing any user options.
+  detail::OptionsImpl reset = s->options;
+  reset.reset_all();
+  detail::DerivedOptions current, proposed;
+  detail::derive_options(s->options, current, &s->sat_tuning);
+  detail::derive_options(reset, proposed, &s->sat_tuning);
+  for (std::size_t i = 0; i < n; ++i)
+    if (current.resolved[i] != proposed.resolved[i])
+      live_write(s, specs[i].name, "SolverOptions::reset_all");
+  s->options = std::move(reset);
   s->apply_options("SolverOptions::reset_all");
 }
 OptionInfo SolverOptions::info(std::string_view name) const

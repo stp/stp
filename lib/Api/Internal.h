@@ -433,6 +433,8 @@ struct SatTuningDefaults
 void apply_sat_tuning_defaults(const OptionsImpl& options,
                                const SatTuningDefaults& tuning,
                                DerivedOptions& derived);
+void derive_options(const OptionsImpl& options, DerivedOptions& derived,
+                     const SatTuningDefaults* tuning);
 
 // Where a validated value goes: the engine. `flags` is the manager's
 // UserDefinedFlags; the solver applies through this after every write.
