@@ -924,18 +924,11 @@ TEST(Options, info_names_help_and_the_stable_tier)
   EXPECT_EQ(total, all.size());
   const std::vector<std::string> stable = o.names(Tier::STABLE);
   ASSERT_EQ(stable.size(), static_cast<std::size_t>(Option::NUM_STABLE_OPTIONS));
-  std::set<Option> stable_ids;
-  for (const std::string& name : stable)
-  {
-    const std::optional<Option> id = Options::stable_option(name);
-    ASSERT_TRUE(id.has_value()) << name;
-    EXPECT_EQ(Options::name_of(*id), name);
-    EXPECT_TRUE(stable_ids.insert(*id).second) << name;
-  }
-  // Registry/category order can differ from the pinned public enum order.
-  // Require every enum member exactly once without coupling the two orders.
   for (std::size_t i = 0; i < stable.size(); ++i)
-    EXPECT_EQ(stable_ids.count(static_cast<Option>(i)), 1u);
+  {
+    EXPECT_EQ(Options::name_of(static_cast<Option>(i)), stable[i]);
+    EXPECT_EQ(Options::stable_option(stable[i]), std::optional<Option>(static_cast<Option>(i)));
+  }
   EXPECT_EQ(Options::name_of(Option::MAX_TIME), "max-time");
   EXPECT_EQ(Options::name_of(Option::SAT_BACKEND), "sat-backend");
   EXPECT_EQ(Options::stable_option("flattening"), std::nullopt);
