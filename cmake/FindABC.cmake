@@ -127,8 +127,11 @@ if(NOT ABC_FOUND_SYSTEM)
     # walk follows is as long as the mapped logic is deep, which a wide
     # divider makes long: a 512-bit remainder under low or gia-low nested
     # 130,000 frames and overflowed an 8MB stack, and a 640-bit one does so
-    # under every effort that maps. The CNF is byte-identical.
-    set(ABC_GIT_TAG "596502bf1f7edc0ab6a36172e97408822766423b" CACHE STRING
+    # under every effort that maps. And Gia_ManHashOne mixes its key in
+    # unsigned arithmetic, as Aig_Hash already did: its int products overflow
+    # once a Gia passes about 270,600 objects, which UBSan stops on. Both
+    # leave the CNF byte-identical.
+    set(ABC_GIT_TAG "c99aed3e65772a17397bcd5425acd2765a9492f3" CACHE STRING
         "ABC revision to build when one has to be built")
     mark_as_advanced(ABC_GIT_TAG)
 
