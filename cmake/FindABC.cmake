@@ -121,7 +121,14 @@ if(NOT ABC_FOUND_SYSTEM)
     # was handed. That one compiles ABC's C with unwind tables (-fexceptions)
     # so that the exception can cross it, and defines
     # ABC_STP_CHECKED_ALLOCATIONS, which the check above looks for.
-    set(ABC_GIT_TAG "6ec0420ae87db219ce3f890d9eda2c99a761645e" CACHE STRING
+    #
+    # And the mapper's exact-area round walks its reference counts with an
+    # explicit stack rather than a call frame per cut. The chain of cuts that
+    # walk follows is as long as the mapped logic is deep, which a wide
+    # divider makes long: a 512-bit remainder under low or gia-low nested
+    # 130,000 frames and overflowed an 8MB stack, and a 640-bit one does so
+    # under every effort that maps. The CNF is byte-identical.
+    set(ABC_GIT_TAG "596502bf1f7edc0ab6a36172e97408822766423b" CACHE STRING
         "ABC revision to build when one has to be built")
     mark_as_advanced(ABC_GIT_TAG)
 
