@@ -927,6 +927,14 @@ OptionInfo OptionsImpl::info(std::string_view name) const
 std::vector<std::string> OptionsImpl::names(std::optional<Tier> tier) const
 {
   std::vector<std::string> out;
+  if (tier == Tier::STABLE)
+  {
+    // Stable names follow the pinned enum IDs, regardless of table order.
+    out.reserve(kNumStableOptions);
+    for (std::size_t id = 0; id < kNumStableOptions; ++id)
+      out.emplace_back(stable_option_spec(id)->name);
+    return out;
+  }
   for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
     if (!tier.has_value() || kOptionSpecs[i].tier == *tier)
       out.emplace_back(kOptionSpecs[i].name);
