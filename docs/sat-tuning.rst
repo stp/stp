@@ -27,6 +27,15 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - Batch
       - ``sat-phase=0``, ``cnf-generation-effort=new-medium``
     * - CaDiCaL
+      - QF_BV
+      - Incremental
+      - ``sat-rephase=0``
+    * - Kissat
+      - QF_BV
+      - Incremental
+      - ``search-bias=unsat``, ``cnf-generation-effort=new-medium``,
+        ``kissat-factor=off``
+    * - CaDiCaL
       - QF_ABV
       - Batch
       - ``search-bias=unsat``, ``cnf-generation-effort=gia-low``,
@@ -39,10 +48,11 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
     * - Kissat
       - QF_ABV
       - Incremental
-      - ``search-bias=sat``, ``kissat-stable=2``, ``kissat-factor=off``
+      - ``search-bias=sat``, ``kissat-stable=2``, ``sat-target=0``,
+        ``sat-rephase=0``, ``cnf-generation-effort=new-medium``,
+        ``kissat-probe=false``, ``kissat-factor=off``
 
-Other combinations use the baseline policy. The QF_BV incremental experiments
-gave little or negative improvement, and the Kissat QF_ABV batch finalist
+Other combinations use the baseline policy. The Kissat QF_ABV batch finalist
 was slower than its baseline. The CaDiCaL QF_ABV batch profile uses
 ``gia-low`` after the pinned ABC mapper was changed to use an explicit stack
 for its cut-reference walks, fixing the stack overflow on wide
@@ -76,7 +86,8 @@ Explicit options and diagnostics
 
 User options take precedence individually. Presence matters: an explicit
 ``--cnf-generation-effort=auto``, ``--search-bias=none``, or ``--sat-phase=-1``
-is preserved even though it equals the baseline value. The factoring aliases
+is preserved even though it equals the baseline value. An explicit
+``--kissat-probe=true`` keeps probing enabled. The factoring aliases
 refer to one option, so an explicit ``--kissat-factor=on`` also overrides an
 automatic ``cadical-factor=off``.
 
@@ -130,3 +141,46 @@ Every comparison used the same files for all configurations and audited
 captured answer sequences without a SAT/UNSAT disagreement. These are results
 for explicit finalists, not a rerun of the automatic resolver; late pushes
 and explicit user options can change which defaults it supplies.
+
+A follow-up measured the automatic resolver with the updated incremental
+profiles above on all 1,244 multiple-check QF_BV files and all 970
+multiple-check QF_ABV files. It used three complete repetitions at the same
+24-second cutoff and 8 GiB limit. The table averages each file's median PAR2
+across those repetitions; lower is better.
+
+.. list-table:: Automatic profiles, mean of per-file median PAR2 in seconds
+    :header-rows: 1
+    :widths: 25 15 30 30
+
+    * - Logic
+      - Files
+      - CaDiCaL
+      - Kissat
+    * - QF_BV
+      - 1,244
+      - 2.261
+      - 2.231
+    * - QF_ABV
+      - 970
+      - 1.986
+      - 1.666
+    * - Combined
+      - 2,214
+      - 2.140
+      - 1.983
+
+Kissat completed 2,137 files in every repetition. CaDiCaL completed 2,132
+files in at least two repetitions, and 2,131 in every repetition. The combined
+Kissat score was 7.3 percent lower than automatic CaDiCaL and 6.9 percent
+lower than the explicit CaDiCaL finalist's score of 2.131 seconds. The QF_BV
+improvement was small; QF_ABV accounted for most of the combined improvement.
+These profiles were selected using the measured corpus, so repeating it
+checks timing stability without providing an independent holdout.
+
+A separate single-pass check forced ``--incremental=on`` on 122 files:
+all 58 QF_BV files with at least 32 checks and 64 selected QF_ABV files.
+CaDiCaL's mean PAR2 was 18.225 seconds and Kissat's was 18.452 seconds.
+On the QF_ABV sample alone the scores were 2.482 and 3.597 seconds,
+respectively. Forced engagement has a different performance pattern and
+needs separate profile experiments. The main table uses the existing
+automatic engagement policy.

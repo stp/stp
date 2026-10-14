@@ -142,6 +142,20 @@ used in those experiments. The automatic CNF policy contains settings
 specific to CaDiCaL, so choosing a SAT backend can also require choosing an
 encoding policy.
 
+Probing controls
+----------------
+
+``--kissat-probe=true|false`` controls Kissat's probing preprocessing and
+probe-based inprocessing. Its baseline default is ``true``. The automatic
+incremental QF_ABV profile supplies ``false`` when this option is unset;
+an explicit ``true`` preserves the user's choice. The SMT-LIB spelling is
+``(set-option :kissat-probe false)``. Set it before the first check.
+
+Disabling probing retains CDCL search and scheduled variable elimination.
+It also skips the initial preprocessing route that requires probing. This
+can reduce the cost of repeated array refinement without disabling the
+incremental SAT API or changing the problem's meaning.
+
 Decision phase controls
 -----------------------
 
@@ -212,8 +226,8 @@ Current scope
 -------------
 
 The backend implements the incremental SAT contract needed for refinement.
-It does not expose theory propagation callbacks, clause exchange, search
-reset, or control of probe-based inprocessing. STP uses its existing
+It does not expose theory propagation callbacks, clause exchange, or search
+reset. STP uses its existing
 fallbacks for optional backend capabilities. Restoring the entire extension
 can cost more than restoring only the variables a new clause needs.
 Incremental proof output is outside the scope of this port.

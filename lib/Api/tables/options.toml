@@ -937,6 +937,18 @@ requires = { build = "kissat" }
 help = "allow Kissat to retain the shared assumption prefix across checks and unaffected search decisions across refinement rounds"
 
 [[option]]
+name = "kissat-probe"
+type = "bool"
+default = true
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_probe" }
+category = "sat"
+requires = { build = "kissat" }
+help = "allow Kissat's probing preprocessing and probe-based inprocessing; disabling it keeps the ordinary CDCL search and variable elimination available"
+
+[[option]]
 name = "kissat-stable"
 type = "int"
 default = -1
