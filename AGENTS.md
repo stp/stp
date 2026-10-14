@@ -150,10 +150,11 @@ whichever is wrong.
 
 ## Dependencies and documentation
 
-- Every fetched dependency is a pinned commit of its fork under
-  github.com/stp or a checksum-verified upstream release. A change STP
-  needs is a commit in the fork and a moved pin in `cmake/Find<Name>.cmake`;
-  never a patch, `PATCH_COMMAND` or CMake that edits fetched sources.
+- Fetched dependencies are pinned to commits or release tags; archive
+  downloads are checksum-verified. When STP needs source changes, commit
+  them to its fork under github.com/stp and move the pin in
+  `cmake/Find<Name>.cmake`. Never introduce a patch, `PATCH_COMMAND` or
+  CMake that edits fetched sources.
   `docs/code-guide.rst` names the forks and their branches, and
   `scripts/check-dependency-patches.py` is the check; its exceptions are
   being worked off, not a pattern to copy.
@@ -185,9 +186,9 @@ whichever is wrong.
 - Time one benchmark invocation at a time on a quiet machine, with the
   same build settings apart from the change under test, from one build
   directory per side. `uptime` is the first check, not the last: record
-  what else was running. Contention shifts timings systematically while
-  repeats stay tight, so repeats do not reveal it; re-measure on an idle
-  machine before calling anything a regression, and never justify a
+  what else was running. Contention can shift timings systematically even
+  when repeats stay tight. Repetition alone does not establish isolation;
+  confirm performance regressions on an idle machine, and never justify a
   default with contended timings. Answer cross-checks against other
   solvers can run concurrently, away from a timing campaign.
 - A performance summary leads with what got slower, then with what got
