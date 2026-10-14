@@ -1001,6 +1001,54 @@ category = "sat"
 help = "tune the SAT search towards one answer: 'unsat' (best for unsatisfiable / verification workloads), 'sat', or 'none' (the default, leaving the solver at its own settings). Solvers with no such setting ignore it"
 
 [[option]]
+name = "sat-phase"
+type = "int"
+default = -1
+range = { min = -1, max = 1 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "sat_search_options.phase" }
+category = "sat"
+help = "CaDiCaL/Kissat initial decision polarity: -1 preserves the backend policy, 0 prefers false, 1 prefers true; explicit choices override search-bias"
+
+[[option]]
+name = "sat-forcephase"
+type = "int"
+default = -1
+range = { min = -1, max = 1 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "sat_search_options.forcephase" }
+category = "sat"
+help = "CaDiCaL/Kissat forced initial polarity: -1 preserves the backend policy, 0 permits saved/target phases, 1 always chooses the initial phase"
+
+[[option]]
+name = "sat-rephase"
+type = "int"
+default = -1
+range = { min = -1, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "sat_search_options.rephase" }
+category = "sat"
+help = "CaDiCaL/Kissat phase resetting: -1 preserves the backend policy, 0 disables, 1 enables; 2 resets only in stable search and requires CaDiCaL"
+
+[[option]]
+name = "sat-target"
+type = "int"
+default = -1
+range = { min = -1, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "sat_search_options.target" }
+category = "sat"
+help = "CaDiCaL/Kissat target phases: -1 preserves the backend policy, 0 disables, 1 uses them in stable search, 2 also uses them in focused search"
+
+[[option]]
 name = "ackermanize"
 short = "r"
 type = "bool"

@@ -68,6 +68,7 @@ protected:
                                     bool& timeout_expired) override;
   bool canInterruptSearch() const override { return true; }
   bool setSearchBiasInternal(SearchBias bias) override;
+  bool setSearchOptionsInternal(const SatSearchOptions& options) override;
   bool enableBVAInternal() override;
   bool enableTrailReuseInternal(TrailReuse scope) override;
   bool disableLuckyPhasesInternal() override;

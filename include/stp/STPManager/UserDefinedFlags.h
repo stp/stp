@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 #include "stp/Util/Attributes.h"
 #include "stp/Sat/CadicalOptions.h"
+#include "stp/Sat/SatSearchOptions.h"
 #include "stp/config.h"
 
 #include <chrono>
@@ -2020,6 +2021,7 @@ public:
   bool kissat_batch_only = false;
 
   CadicalOptions cadical_options;
+  SatSearchOptions sat_search_options;
 
   // Whether CaDiCaL may use bounded variable addition (its "factor"
   // technique). ON is the default: measured on QF_BV, where the AUTO

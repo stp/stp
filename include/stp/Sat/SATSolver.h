@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define SATSOLVER_H_
 
 #include "SearchBias.h"
+#include "SatSearchOptions.h"
 #include <cassert>
 #include <chrono>
 #include <cstdint>
@@ -159,6 +160,12 @@ public:
   {
     assertConfigurable("setSearchBias");
     return setSearchBiasInternal(bias);
+  }
+
+  bool setSearchOptions(const SatSearchOptions& options)
+  {
+    assertConfigurable("setSearchOptions");
+    return setSearchOptionsInternal(options);
   }
 
   // Ask the backend to turn on bounded variable addition (BVA, CaDiCaL's
@@ -669,6 +676,10 @@ protected:
   // above, which check the window first. FALSE means the backend has no such
   // technique -- a performance hint declined, not an error.
   virtual bool setSearchBiasInternal(SearchBias /*bias*/) { return false; }
+  virtual bool setSearchOptionsInternal(const SatSearchOptions& /*options*/)
+  {
+    return false;
+  }
   virtual bool enableBVAInternal() { return false; }
   virtual bool enableTrailReuseInternal(TrailReuse /*scope*/)
   {
