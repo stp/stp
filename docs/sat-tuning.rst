@@ -204,3 +204,53 @@ On the QF_ABV sample alone the scores were 2.482 and 3.597 seconds,
 respectively. Forced engagement has a different performance pattern and
 needs separate profile experiments. The main table uses the existing
 automatic engagement policy.
+
+Forced QF_ABV confirmation
+--------------------------
+
+A subsequent comparison used all 970 multiple-check QF_ABV files from the
+CPAchecker k-induction collection, forcing ``--incremental=on`` from the first
+check. Three paired repetitions used the same release build, 24-second
+whole-session cutoff, 8 GiB limit, and files for each configuration. The table
+averages each file's median PAR2; unsuccessful sessions receive 48 seconds.
+
+.. list-table:: Forced incremental QF_ABV, three repetitions
+    :header-rows: 1
+    :widths: 35 25 20 20
+
+    * - Configuration
+      - Completed in at least two runs
+      - Completed in every run
+      - Mean PAR2 (s)
+    * - CaDiCaL automatic profile
+      - 932 / 970
+      - 932 / 970
+      - 3.381829
+    * - Previous Kissat profile (reuse mode -1)
+      - 926 / 970
+      - 925 / 970
+      - 3.192792
+    * - Kissat with whole-trail reuse (mode 2)
+      - 932 / 970
+      - 931 / 970
+      - 2.904779
+
+Whole-trail reuse lowers PAR2 by 14.1 percent versus the current CaDiCaL
+profile and 9.0 percent versus the previous Kissat profile. It gains eight
+majority completions and loses two versus the previous Kissat policy. Against
+CaDiCaL, each completes eight files the other does not. CaDiCaL retains an
+advantage on some individual cases, including Kissat memory-limit failures.
+
+These results support a separate forced QF_ABV default. The AUTO engagement
+policy retains its earlier measured profile. The initial 64-file forced
+sample did not predict the full-corpus ranking; the corpus was also used to
+compare candidates, so this confirmation does not establish performance on
+other benchmark families. All captured definite answer sequences agree.
+
+SAT-stream replay helps distinguish the causes of the large remaining losses.
+On Netxen, Kissat needs roughly 144 seconds of SAT time on a captured stream
+CaDiCaL handles in roughly 12 seconds. On OPL3, Kissat handles CaDiCaL's
+refinement stream quickly but struggles with the stream generated from its
+own models. Model-driven refinement and retained search decisions therefore
+matter alongside the SAT core's search speed. These longer diagnostic replays
+are separate from the 24-second comparison.
