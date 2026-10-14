@@ -998,7 +998,20 @@ settable = "before-first-check"
 scope = "solver"
 engine = { custom = "search_bias" }
 category = "sat"
-help = "tune the SAT search towards one answer: 'unsat' (best for unsatisfiable / verification workloads), 'sat', or 'none' (the default, leaving the solver at its own settings). Solvers with no such setting ignore it"
+help = "tune the SAT search towards one answer: 'unsat' (for unsatisfiable / verification workloads), 'sat', or 'none' (the baseline default). An unset value may follow the automatic SAT profile; explicitly naming a value owns the search configuration, with explicit phase/mode overrides taking precedence. Solvers with no such setting ignore it"
+
+[[option]]
+name = "sat-tuning"
+id = 22
+type = "enum"
+default = "auto"
+values = ["auto", "off"]
+tier = "stable"
+settable = "before-first-check"
+scope = "solver"
+engine = { custom = "sat_tuning" }
+category = "sat"
+help = "choose measured SAT/CNF defaults using the selected backend, declared logic and incremental session mode: auto applies supported profiles to unset options, off retains the baseline defaults. Explicit option values always win, including explicit values equal to the baseline. Use -s to report the selected profile"
 
 [[option]]
 name = "sat-phase"

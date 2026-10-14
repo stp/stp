@@ -2013,8 +2013,12 @@ public:
   int satsuma_input_limit = -1;
   int satsuma_iteration_limit = -1;
 
-  // Which answer to tune the SAT search towards. NONE, the default, leaves
-  // every backend at its own settings, so the option is opt-in.
+  // Automatic profiles supply defaults only after a frontend identifies the
+  // logic and session mode. Explicit option values take precedence.
+  bool sat_tuning_auto = true;
+
+  // Which answer to tune the SAT search towards. NONE leaves the backend's
+  // settings alone when no automatic profile supplies a bias.
   SearchBias search_bias = static_cast<SearchBias>(0);
   bool kissat_trail_reuse = true;
   int kissat_stable = -1;

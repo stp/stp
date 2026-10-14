@@ -1,0 +1,120 @@
+Automatic SAT tuning
+====================
+
+``--sat-tuning=auto`` is the default. It selects SAT search and CNF settings
+using the compiled backend selected for the run, the SMT-LIB ``set-logic``,
+and the incremental session mode. Native API clients can supply the logic
+through the ``logic`` option. A missing or unmeasured logic uses the baseline
+policy. Automatic backend selection still uses STP's existing backend order.
+
+Profiles
+--------
+
+The initial profiles come from full-corpus QF_BV and QF_ABV comparisons with
+CaDiCaL 3.0.1 and incremental Kissat 4.0.4. They use a 24-second cutoff for
+each complete SMT-LIB file and an 8 GiB address-space limit.
+
+.. list-table:: Defaults supplied to unset options
+    :header-rows: 1
+    :widths: 15 15 15 55
+
+    * - Backend
+      - Logic
+      - Session
+      - Settings
+    * - Kissat
+      - QF_BV
+      - Batch
+      - ``sat-phase=0``, ``cnf-generation-effort=new-medium``
+    * - CaDiCaL
+      - QF_ABV
+      - Incremental
+      - ``search-bias=sat``, ``sat-target=0``,
+        ``cnf-generation-effort=new-medium``, ``cadical-factor=off``
+    * - Kissat
+      - QF_ABV
+      - Incremental
+      - ``search-bias=sat``, ``kissat-stable=2``, ``kissat-factor=off``
+
+Other combinations use the baseline policy. The QF_BV incremental experiments
+gave little or negative improvement, and the Kissat QF_ABV batch finalist
+was slower than its baseline. The small CaDiCaL QF_ABV batch improvement
+required ``gia-low``; that profile is deferred until an existing ABC recursion
+stack overflow on wide division/remainder encodings is fixed.
+
+Session detection
+-----------------
+
+``--incremental=on`` (or the bare ``--incremental``) and SMT-LIB
+``(set-option :incremental true)`` select the incremental profile. ``off``
+selects the batch profile even when the input pushes. In the default ``auto``
+mode, the first observed push makes the session incremental. This also covers
+the temporary frame used by ``check-sat-assuming``. Unsat-core requests that
+require the persistent driver are also classified as incremental.
+
+The SMT-LIB reader processes a stream in order. If a push follows an earlier
+check, it affects the tuning of subsequent checks. It cannot inform an
+earlier solve. The profile is selected before encoding or constructing a SAT
+backend, and can change while checks still use fresh batch encodings. Once
+the persistent driver exists, its profile stays fixed across checks, memory
+relief rebuilds, and switches between solvers sharing a manager. The session's
+reset paths retire that selection along with the persistent driver.
+
+This classification describes the session, including its initial batch
+checks. It does not change ``incremental-auto-engage-at`` or force earlier
+persistent-driver engagement. The experiments used the existing engagement
+policy; timings for forced engagement may differ.
+
+Explicit options and diagnostics
+--------------------------------
+
+User options take precedence individually. Presence matters: an explicit
+``--cnf-generation-effort=auto``, ``--search-bias=none``, or ``--sat-phase=-1``
+is preserved even though it equals the baseline value. The factoring aliases
+refer to one option, so an explicit ``--kissat-factor=on`` also overrides an
+automatic ``cadical-factor=off``.
+
+An explicit ``search-bias`` also owns the phase/mode policy of that named
+configuration. Automatic phase, target and Kissat stable-mode choices are
+suppressed in that case; individual explicit phase/mode options take
+precedence over the named configuration as usual. Encoding and factoring
+defaults can still come from the automatic profile.
+
+Use ``--sat-tuning=off`` to reproduce baseline defaults or compare manual
+configurations without automatic tuning. The SMT-LIB spelling is
+``(set-option :sat-tuning off)``. Set it before the first check.
+
+.. code-block:: bash
+
+    stp --kissat -s input.smt2
+    stp --cadical --incremental -s input.smt2
+    stp --kissat --cnf-generation-effort=auto input.smt2
+    stp --kissat --sat-tuning=off input.smt2
+
+``-s`` reports the selected profile and the effective values of its options,
+including explicit overrides, through STP's diagnostic stream. Backend
+statistics also report the actual phase settings accepted by the SAT solver.
+
+Automatic choices are kept separately from user options. The API's ``get``
+and ``is_set`` continue to describe what the user supplied; an automatically
+tuned option stays unset. After a check selects a profile,
+``SolverOptions::resolved`` and ``SolverOptions::info().resolved`` include its
+effective defaults. Copying options copies user choices and the tuning policy,
+and a new solver selects its own profile from its logic and session.
+
+Measurements
+------------
+
+The confirmed finalists reduced mean PAR2 from 1.759 to 1.577 seconds on
+46,191 batch QF_BV files with Kissat; from 4.695 to 2.806 seconds on 1,272
+files in the incremental QF_ABV directory with CaDiCaL; and from 4.469 to
+3.780 seconds on the same directory with Kissat. These measured commands set
+their tuning options from the start of the file.
+
+The incremental directory contains 970 files with multiple checks and 302
+with one check. On the multiple-check subset, the CaDiCaL finalist reduced
+mean PAR2 from 4.025 to 2.120 seconds, and Kissat from 3.571 to 3.061 seconds.
+Every comparison used the same files for all configurations and audited
+captured answer sequences without a SAT/UNSAT disagreement. These are results
+for explicit finalists, not a rerun of the automatic resolver; late pushes
+and explicit user options can change which defaults it supplies.
