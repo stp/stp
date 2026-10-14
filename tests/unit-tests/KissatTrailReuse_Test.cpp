@@ -1,3 +1,11 @@
+/********************************************************************
+ * AUTHORS: Andrew Teylu
+ *
+ * BEGIN DATE: Oct, 2026
+ *
+ * LICENSE: Please view LICENSE file in the home dir of this Program
+ ********************************************************************/
+
 #include "stp/Sat/SATSolver.h"
 #include <gtest/gtest.h>
 #include <set>
