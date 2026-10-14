@@ -47,10 +47,15 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
         ``cnf-generation-effort=new-medium``, ``cadical-factor=off``
     * - Kissat
       - QF_ABV
-      - Incremental
+      - Incremental (AUTO)
       - ``search-bias=sat``, ``kissat-stable=2``, ``sat-target=0``,
         ``sat-rephase=0``, ``cnf-generation-effort=new-medium``,
         ``kissat-probe=false``, ``kissat-factor=off``
+    * - Kissat
+      - QF_ABV
+      - Forced incremental
+      - The AUTO incremental settings above, plus
+        ``kissat-trail-reuse-mode=2``
 
 Other combinations use the baseline policy. The Kissat QF_ABV batch finalist
 was slower than its baseline. The CaDiCaL QF_ABV batch profile uses
@@ -81,6 +86,13 @@ checks. It does not change ``incremental-auto-engage-at`` or force earlier
 persistent-driver engagement. The experiments used the existing engagement
 policy; timings for forced engagement may differ.
 
+Forced QF_ABV sessions use a separate Kissat profile. ``--incremental=on``
+and ``(set-option :incremental true)`` engage the persistent backend from the
+first check, where array refinement can repeatedly solve under identical
+assumptions. Reuse mode 2 retains the unaffected search trail in that case;
+when assumptions change it retains only their compatible prefix. AUTO
+keeps its previously measured profile and engagement policy.
+
 Explicit options and diagnostics
 --------------------------------
 
@@ -90,6 +102,14 @@ is preserved even though it equals the baseline value. An explicit
 ``--kissat-probe=true`` keeps probing enabled. The factoring aliases
 refer to one option, so an explicit ``--kissat-factor=on`` also overrides an
 automatic ``cadical-factor=off``.
+
+``--kissat-trail-reuse-mode=-1`` explicitly preserves STP's scope hints,
+even in forced QF_ABV sessions. Modes 0, 1 and 2 select no reuse, assumption
+prefix reuse, and whole-trail reuse under unchanged assumptions. An explicit
+``--kissat-trail-reuse=false`` disables reuse regardless of the mode. A
+one-shot backend also disables it. These controls apply only to Kissat.
+``--incremental-core-only`` suppresses the automatic reuse-mode default;
+an explicitly selected reuse mode remains an explicit backend request.
 
 An explicit ``search-bias`` also owns the phase/mode policy of that named
 configuration. Automatic phase, target and Kissat stable-mode choices are
@@ -184,3 +204,42 @@ On the QF_ABV sample alone the scores were 2.482 and 3.597 seconds,
 respectively. Forced engagement has a different performance pattern and
 needs separate profile experiments. The main table uses the existing
 automatic engagement policy.
+
+Forced QF_ABV confirmation
+--------------------------
+
+A subsequent comparison used all 970 multiple-check QF_ABV files from the
+CPAchecker k-induction collection, forcing ``--incremental=on`` from the first
+check. Three paired repetitions used the same release build, 24-second
+whole-session cutoff, 8 GiB limit, and files for each configuration. The table
+averages each file's median PAR2; unsuccessful sessions receive 48 seconds.
+Eight workers each used one pinned CPU. The collection was also used to
+compare candidates, so these results do not establish performance on other
+benchmark families.
+
+.. list-table:: Forced incremental QF_ABV, three repetitions
+    :header-rows: 1
+    :widths: 35 25 20 20
+
+    * - Configuration
+      - Completed in at least two runs
+      - Completed in every run
+      - Mean PAR2 (s)
+    * - CaDiCaL automatic profile
+      - 932 / 970
+      - 932 / 970
+      - 3.381829
+    * - Previous Kissat profile (reuse mode -1)
+      - 926 / 970
+      - 925 / 970
+      - 3.192792
+    * - Kissat with whole-trail reuse (mode 2)
+      - 932 / 970
+      - 931 / 970
+      - 2.904779
+
+Whole-trail reuse loses two majority completions and gains eight versus the
+previous Kissat policy. Against CaDiCaL, each completes eight files the other
+does not; some Kissat cases reach the memory limit. Overall PAR2 falls by
+14.1 percent versus the current CaDiCaL profile and 9.0 percent versus the
+previous Kissat profile. All captured definite answer sequences agree.

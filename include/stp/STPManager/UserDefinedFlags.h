@@ -2021,6 +2021,7 @@ public:
   // settings alone when no automatic profile supplies a bias.
   SearchBias search_bias = static_cast<SearchBias>(0);
   bool kissat_trail_reuse = true;
+  int kissat_trail_reuse_mode = -1;
   bool kissat_probe = true;
   int kissat_stable = -1;
   bool kissat_batch_only = false;

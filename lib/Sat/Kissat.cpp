@@ -82,9 +82,18 @@ Kissat::Kissat(bool trail_reuse_allowed, int search_mode)
 }
 
 Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed)
-    : allocations(new Allocations), solver(nullptr),
-      trail_reuse_allowed(trail_reuse_allowed), search_mode(search_mode)
+    : Kissat(trail_reuse_allowed, search_mode, probing_allowed, -1)
 {
+}
+
+Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed,
+               int trail_reuse_mode)
+    : allocations(new Allocations), solver(nullptr),
+      trail_reuse_allowed(trail_reuse_allowed),
+      trail_reuse_mode(trail_reuse_mode), search_mode(search_mode)
+{
+  if (trail_reuse_mode < -1 || trail_reuse_mode > 2)
+    throw std::invalid_argument("Kissat trail reuse mode outside its range");
   const kissat_allocator allocator = {allocations.get(), Allocations::allocate,
                                       Allocations::resize,
                                       Allocations::deallocate};
@@ -93,6 +102,11 @@ Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed)
   kissat_set_option(solver, "factor", 0);
   kissat_set_option(solver, "quiet", 1);
   kissat_set_option(solver, "probe", probing_allowed ? 1 : 0);
+  // A selected mode can enable reuse before the driver's size-gated hint.
+  // This matches the measured forced-incremental profile. The boolean opt-out
+  // and a later one-shot configuration take precedence over this mode.
+  if (trail_reuse_allowed && trail_reuse_mode >= 0)
+    kissat_set_option(solver, "incrementalreuse", trail_reuse_mode);
   if (search_mode >= 0)
     kissat_set_option(solver, "stable", search_mode);
 }
@@ -244,7 +258,9 @@ void Kissat::printStats() const
             << " rephase=" << kissat_get_option(solver, "rephase")
             << " target=" << kissat_get_option(solver, "target")
             << " stable=" << kissat_get_option(solver, "stable")
-            << " probe=" << kissat_get_option(solver, "probe") << '\n';
+            << " probe=" << kissat_get_option(solver, "probe")
+            << " trail-reuse=" << kissat_get_option(solver, "incrementalreuse")
+            << '\n';
   std::cerr << "Kissat: variables=" << nVars()
             << " submitted-clauses=" << submittedClauses()
             << " solves=" << solve_calls << '\n';
@@ -309,11 +325,13 @@ bool Kissat::setSearchOptionsInternal(const SatSearchOptions& options)
 bool Kissat::enableTrailReuseInternal(TrailReuse scope)
 {
   requireHealthy();
-  if (!trail_reuse_allowed || one_shot)
+  if (!trail_reuse_allowed || one_shot || trail_reuse_mode == 0)
     return false;
-  const int mode = scope == TrailReuse::ALL ? 2 : 1;
+  const int requested = scope == TrailReuse::ALL ? 2 : 1;
+  const int mode = trail_reuse_mode >= 0 ? trail_reuse_mode : requested;
   kissat_set_option(solver, "incrementalreuse", mode);
-  return kissat_get_option(solver, "incrementalreuse") == mode;
+  return mode >= requested &&
+         kissat_get_option(solver, "incrementalreuse") == mode;
 }
 
 bool Kissat::disableLuckyPhasesInternal()
