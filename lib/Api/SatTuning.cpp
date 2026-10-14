@@ -55,6 +55,7 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
 {
   // Full-corpus confirmation at a 24-second complete-session cutoff:
   // Kissat/QF_BV batch: 1.759 -> 1.577s mean PAR2 (46,191 files).
+  // CaDiCaL/QF_ABV batch: 0.717 -> 0.685s (15,148 files).
   // CaDiCaL/QF_ABV incremental: 4.695 -> 2.806s (1,272 files).
   // Kissat/QF_ABV incremental: 4.469 -> 3.780s (1,272 files).
   // Incremental directories included single-check files; their multi-check
@@ -63,6 +64,11 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
   static const Profile kissat_bv_batch{
       "kissat-qf-bv-batch",
       {{"sat-phase", "0"}, {"cnf-generation-effort", "new-medium"}}};
+  static const Profile cadical_abv_batch{
+      "cadical-qf-abv-batch",
+      {{"search-bias", "unsat"},
+       {"cnf-generation-effort", "gia-low"},
+       {"cadical-factor", "off"}}};
   static const Profile cadical_abv_incremental{
       "cadical-qf-abv-incremental",
       {{"search-bias", "sat"},
@@ -76,6 +82,8 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
 
   if (backend == Flags::KISSAT_SOLVER && logic == "QF_BV" && !incremental)
     return kissat_bv_batch;
+  if (backend == Flags::CADICAL_SOLVER && logic == "QF_ABV" && !incremental)
+    return cadical_abv_batch;
   if (logic == "QF_ABV" && incremental)
   {
     if (backend == Flags::CADICAL_SOLVER)
@@ -83,9 +91,8 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     if (backend == Flags::KISSAT_SOLVER)
       return kissat_abv_incremental;
   }
-  // QF_BV incremental gains were marginal or negative. The CaDiCaL batch
-  // QF_ABV finalist requires gia-low, whose ABC recursion overflow must be
-  // fixed before that encoding is selected automatically for new workloads.
+  // QF_BV incremental gains were marginal or negative, and the Kissat batch
+  // QF_ABV finalist was slower than its baseline.
   return baseline;
 }
 

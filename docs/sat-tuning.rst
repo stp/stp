@@ -28,6 +28,11 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - ``sat-phase=0``, ``cnf-generation-effort=new-medium``
     * - CaDiCaL
       - QF_ABV
+      - Batch
+      - ``search-bias=unsat``, ``cnf-generation-effort=gia-low``,
+        ``cadical-factor=off``
+    * - CaDiCaL
+      - QF_ABV
       - Incremental
       - ``search-bias=sat``, ``sat-target=0``,
         ``cnf-generation-effort=new-medium``, ``cadical-factor=off``
@@ -38,9 +43,10 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
 
 Other combinations use the baseline policy. The QF_BV incremental experiments
 gave little or negative improvement, and the Kissat QF_ABV batch finalist
-was slower than its baseline. The small CaDiCaL QF_ABV batch improvement
-required ``gia-low``; that profile is deferred until an existing ABC recursion
-stack overflow on wide division/remainder encodings is fixed.
+was slower than its baseline. The CaDiCaL QF_ABV batch profile uses
+``gia-low`` after the pinned ABC mapper was changed to use an explicit stack
+for its cut-reference walks, fixing the stack overflow on wide
+division/remainder encodings.
 
 Session detection
 -----------------
@@ -113,8 +119,9 @@ Measurements
 The confirmed finalists reduced mean PAR2 from 1.759 to 1.577 seconds on
 46,191 batch QF_BV files with Kissat; from 4.695 to 2.806 seconds on 1,272
 files in the incremental QF_ABV directory with CaDiCaL; and from 4.469 to
-3.780 seconds on the same directory with Kissat. These measured commands set
-their tuning options from the start of the file.
+3.780 seconds on the same directory with Kissat. On 15,148 batch QF_ABV
+files, the CaDiCaL finalist reduced mean PAR2 from 0.717 to 0.685 seconds.
+These measured commands set their tuning options from the start of the file.
 
 The incremental directory contains 970 files with multiple checks and 302
 with one check. On the multiple-check subset, the CaDiCaL finalist reduced
