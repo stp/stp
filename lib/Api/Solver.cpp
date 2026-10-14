@@ -463,10 +463,15 @@ void SolverImpl::reapply_engine_defaults()
   apply_all_options(t, options, /*force_all=*/true);
 }
 
-void SolverImpl::apply_options(const char* fn)
+void SolverImpl::apply_options(const char* fn, bool tuning_only)
 {
   EngineTarget t{mgr->bm->UserFlags, mgr, this};
-  engine_call(mgr, fn, [&] { apply_all_options(t, options); });
+  engine_call(mgr, fn, [&] {
+    if (tuning_only)
+      apply_sat_tuning_options(t, options);
+    else
+      apply_all_options(t, options);
+  });
 }
 
 // An entry latched by another behaves as before-first-check while that one
@@ -686,7 +691,7 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
     options.resolve(fn);
     consistent_generation = options.generation;
   }
-  apply_options(fn);
+  prepare_sat_tuning(declared_logic, stp->sessionIncremental);
   validate_engine_options(mgr->bm->UserFlags);
 
   STPMgr* bm = mgr->bm;
@@ -1036,6 +1041,7 @@ Result SolverImpl::run_check_impl(const char* fn, const std::vector<ASTNode>& as
 
 void SolverImpl::rebuild_engine()
 {
+  clear_sat_tuning();
   // Called through enter(): this solver is the active one.
   model.reset();
   candidate.reset();
@@ -1051,6 +1057,7 @@ void SolverImpl::rebuild_engine()
   stp = new STP(mgr->bm);
   mgr->bm->Push();
   checks = 0;
+  pushed = false;
   constructed = false;
   reapply_engine_defaults();
   });
@@ -1256,7 +1263,11 @@ OptionValue SolverOptions::resolved(std::string_view name) const
   const detail::OptionSpec* s = detail::find_option(name);
   if (s == nullptr)
     detail::fail_option(ErrorCode::OPTION_UNKNOWN, std::string(name), "unknown option");
-  return viewed(solver_, "SolverOptions::resolved")->options.resolved(detail::option_index(s));
+  const SolverImpl* owner = viewed(solver_, "SolverOptions::resolved");
+  const std::size_t index = detail::option_index(s);
+  return owner->derived_options.generation == owner->options.generation
+             ? owner->derived_options.resolved[index]
+             : owner->options.resolved(index);
 }
 bool SolverOptions::is_set(std::string_view name) const { return viewed(solver_, "SolverOptions::is_set")->options.info(name).is_set; }
 void SolverOptions::reset(std::string_view name)
@@ -1277,10 +1288,26 @@ void SolverOptions::reset_all()
     if (s->options.is_set[i] &&
         detail::option_text(specs[i], s->options.values[i]) != specs[i].default_text)
       live_write(s, specs[i].name, "SolverOptions::reset_all");
-  s->options.reset_all();
+  // Removing an explicit baseline value can now enable an automatic default,
+  // including other phase/mode controls suppressed by explicit search-bias.
+  // Check the entire proposed effective set before changing any user options.
+  detail::OptionsImpl reset = s->options;
+  reset.reset_all();
+  detail::DerivedOptions current, proposed;
+  detail::derive_options(s->options, current, &s->sat_tuning);
+  detail::derive_options(reset, proposed, &s->sat_tuning);
+  for (std::size_t i = 0; i < n; ++i)
+    if (current.resolved[i] != proposed.resolved[i])
+      live_write(s, specs[i].name, "SolverOptions::reset_all");
+  s->options = std::move(reset);
   s->apply_options("SolverOptions::reset_all");
 }
-OptionInfo SolverOptions::info(std::string_view name) const { return viewed(solver_, "SolverOptions::info")->options.info(name); }
+OptionInfo SolverOptions::info(std::string_view name) const
+{
+  OptionInfo info = viewed(solver_, "SolverOptions::info")->options.info(name);
+  info.resolved = resolved(name);
+  return info;
+}
 std::vector<std::string> SolverOptions::names(std::optional<Tier> tier) const { return viewed(solver_, "SolverOptions::names")->options.names(tier); }
 std::string SolverOptions::help(std::optional<Tier> tier) const { return viewed(solver_, "SolverOptions::help")->options.help(tier); }
 void SolverOptions::resolve() const { viewed(solver_, "SolverOptions::resolve")->options.resolve("SolverOptions::resolve"); }
@@ -1519,6 +1546,7 @@ void Solver::reset_assertions()
   s->model.reset();
   s->candidate.reset();
   s->declared_logic.clear();
+  s->clear_sat_tuning();
 }
 
 void Solver::reset()
@@ -1927,6 +1955,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
     // back, even when the only assertion changes were additions.
     s->stp->ClearAllTables();
     s->stp->resetIncrementalSolver();
+    s->clear_sat_tuning();
     s->stp->discardRealSession();
     bool only_added = bm->getAssertLevel() >= stack_before.size();
     for (std::size_t i = 0; i < stack_before.size() && only_added; ++i)
@@ -2137,6 +2166,7 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
   pi.onPublicReset([bm, mgr = s->mgr, s, options_before_parse] {
     s->options = options_before_parse;
     s->checks = 0;
+    s->clear_sat_tuning();
     s->apply_options("Solver::parse reset");
     bool any = false;
     for (const auto& entry : mgr->symbols)
@@ -2152,9 +2182,10 @@ void run_parser(SolverImpl* s, const ParseSource& source, Format format, ParseMo
     if (any)
       bm->noteReal();
   });
-  pi.onCheckOptions([bm](std::string& diagnostic) {
+  pi.onCheckOptions([s, bm, &pi](std::string& diagnostic) {
     try
     {
+      s->prepare_sat_tuning(pi.declaredLogic(), pi.incrementalSession(), false);
       detail::validate_engine_options(bm->UserFlags);
     }
     catch (const Error& error)

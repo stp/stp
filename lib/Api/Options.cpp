@@ -927,6 +927,14 @@ OptionInfo OptionsImpl::info(std::string_view name) const
 std::vector<std::string> OptionsImpl::names(std::optional<Tier> tier) const
 {
   std::vector<std::string> out;
+  if (tier == Tier::STABLE)
+  {
+    // Stable names follow the pinned enum IDs, regardless of table order.
+    out.reserve(kNumStableOptions);
+    for (std::size_t id = 0; id < kNumStableOptions; ++id)
+      out.emplace_back(stable_option_spec(id)->name);
+    return out;
+  }
   for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
     if (!tier.has_value() || kOptionSpecs[i].tier == *tier)
       out.emplace_back(kOptionSpecs[i].name);
@@ -1321,6 +1329,12 @@ bool custom_incremental_inprobing(EngineTarget& t, const OptionSpec&, const Opti
   t.flags.incremental_inprobing = as_mode<Flags::BVAMode>(v);
   return true;
 }
+bool custom_sat_tuning(EngineTarget& t, const OptionSpec&, const OptionValue& v)
+{
+  t.flags.sat_tuning_auto = as_str(v) == "auto";
+  return true;
+}
+
 bool custom_search_bias(EngineTarget& t, const OptionSpec&, const OptionValue& v)
 {
   const std::string& s = as_str(v);
@@ -1467,9 +1481,10 @@ bool apply_option_to_engine(EngineTarget& t, std::size_t index, const OptionSpec
 #include "gen/option_apply.inc"
 }
 
-// Each entry's resolved value and whether it is at its default: the options
-// alone decide both, so a solver keeps them for the options' generation.
-void derive_options(const OptionsImpl& o, DerivedOptions& d)
+// Each entry's effective value and whether it is at its baseline default.
+// A solver invalidates this cache when its tuning context changes.
+void derive_options(const OptionsImpl& o, DerivedOptions& d,
+                     const SatTuningDefaults* tuning)
 {
   const ResolutionIndex& index = resolution_index();
   d.generation = 0; // holds nothing until complete
@@ -1487,6 +1502,8 @@ void derive_options(const OptionsImpl& o, DerivedOptions& d)
         !o.is_set[i] && (r == index.defaults[i] ? static_cast<bool>(index.default_prints_as_default[i])
                                                 : option_text(spec, r) == spec.default_text);
   }
+  if (tuning != nullptr)
+    apply_sat_tuning_defaults(o, *tuning, d);
   d.generation = o.generation;
 }
 
@@ -1501,7 +1518,7 @@ void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
   DerivedOptions local;
   DerivedOptions& derived = t.solver != nullptr ? t.solver->derived_options : local;
   if (derived.generation != o.generation)
-    derive_options(o, derived);
+    derive_options(o, derived, t.solver != nullptr ? &t.solver->sat_tuning : nullptr);
   for (std::size_t i = 0; i < kNumOptionSpecs; ++i)
   {
     const OptionSpec& spec = kOptionSpecs[i];
@@ -1522,6 +1539,32 @@ void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all)
     apply_option_to_engine(t, i, spec, r);
     if (off_default != nullptr)
       (*off_default)[i] = !at_default;
+  }
+  t.explicit_value = true;
+}
+
+// Parsed checks need only the tuning controls refreshed when their context
+// changes. Other registry entries can own frontend or theory state that must
+// be preserved through a streamed check. Include baseline values here too so
+// retiring a profile restores the controls it previously supplied.
+void apply_sat_tuning_options(EngineTarget& t, const OptionsImpl& options)
+{
+  assert(t.solver != nullptr);
+  DerivedOptions& derived = t.solver->derived_options;
+  if (derived.generation != options.generation)
+    derive_options(options, derived, &t.solver->sat_tuning);
+  for (const char* name : {"search-bias", "sat-phase", "sat-forcephase",
+                           "sat-rephase", "sat-target", "kissat-stable",
+                           "cnf-generation-effort", "cadical-factor"})
+  {
+    const OptionSpec& spec = *find_option(name);
+    const std::size_t index = option_index(&spec);
+    const bool at_default = derived.at_default[index];
+    if (at_default && !t.solver->engine_off_default[index])
+      continue;
+    t.explicit_value = options.is_set[index];
+    apply_option_to_engine(t, index, spec, derived.resolved[index]);
+    t.solver->engine_off_default[index] = !at_default;
   }
   t.explicit_value = true;
 }

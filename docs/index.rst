@@ -127,6 +127,7 @@ page <https://smt-lib.org/>`__.
    uninterpreted-functions
    incremental-solving
    kissat
+   sat-tuning
    bv-abstraction
    fp-abstraction
    linear-real-arithmetic

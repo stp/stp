@@ -128,6 +128,11 @@ search and overrides the search-bias hint; its default of -1 follows the hint.
 Search profiles
 ---------------
 
+``--sat-tuning=auto`` applies measured :doc:`automatic SAT defaults
+<sat-tuning>` for supported backend, logic and session combinations. Explicit
+options take precedence. ``--sat-tuning=off`` selects the baseline policy for
+manual experiments such as the earlier profiles below.
+
 The incremental benchmark experiments selected
 ``--kissat --search-bias=sat --kissat-factor=off`` for short sessions.
 Focused search (``--search-bias=unsat``) also performed well at longer

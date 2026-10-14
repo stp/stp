@@ -407,14 +407,34 @@ struct DLL_PUBLIC OptionsImpl
   void reset_all();
 };
 
-// Each entry's resolved value (OptionsImpl::resolved) and whether it is the
-// entry's default, for the options of one generation (0: none yet).
+// Each entry's effective value and whether it is at its baseline default,
+// for one option generation and tuning context (0: none yet).
 struct DerivedOptions
 {
   std::uint64_t generation = 0;
   std::vector<OptionValue> resolved;
   std::vector<bool> at_default;
 };
+
+// Selected separately from the user's option values. It may change while
+// checks use fresh encodings, and stays fixed while a persistent driver owns
+// its SAT backend and encoding. A changed context invalidates DerivedOptions.
+struct SatTuningDefaults
+{
+  bool prepared = false;
+  std::string logic;
+  bool incremental = false;
+  UserDefinedFlags::SATSolvers backend = UserDefinedFlags::MINISAT_SOLVER;
+  const char* profile = "backend-defaults";
+  std::vector<std::pair<std::size_t, OptionValue>> entries;
+  std::uint64_t reported_generation = 0;
+};
+
+void apply_sat_tuning_defaults(const OptionsImpl& options,
+                               const SatTuningDefaults& tuning,
+                               DerivedOptions& derived);
+void derive_options(const OptionsImpl& options, DerivedOptions& derived,
+                     const SatTuningDefaults* tuning);
 
 // Where a validated value goes: the engine. `flags` is the manager's
 // UserDefinedFlags; the solver applies through this after every write.
@@ -432,6 +452,7 @@ struct EngineTarget
 bool apply_option_to_engine(EngineTarget& t, std::size_t index,
                             const OptionSpec& spec, const OptionValue& v);
 DLL_PUBLIC void apply_all_options(EngineTarget& t, const OptionsImpl& o, bool force_all = false);
+void apply_sat_tuning_options(EngineTarget& t, const OptionsImpl& options);
 std::vector<std::string> unmapped_options(); // rows the apply table cannot reach yet
 
 // ---------------------------------------------------------------- models
@@ -641,12 +662,12 @@ struct SolverImpl
   // its default through another), as last applied. An entry that goes back
   // to its default is applied again only then (apply_all_options).
   std::vector<bool> engine_off_default;
-  // What apply_all_options derives from the options at every application --
-  // each entry's resolved value, and whether that is its default -- kept for
-  // the options' generation, so that a check after no write derives nothing;
-  // and the generation whose consistency (OptionsImpl::resolve) a check last
-  // established.
+  // What apply_all_options derives from the options and tuning context --
+  // each entry's effective value and whether that is its baseline default.
+  // Cached for the generation; changing the context invalidates the cache.
   DerivedOptions derived_options;
+  SatTuningDefaults sat_tuning;
+  // The generation whose consistency a check last established.
   std::uint64_t consistent_generation = 0;
 
   SolverImpl(ManagerImpl* m, const Options& o);
@@ -660,7 +681,10 @@ struct SolverImpl
   void deactivate();          // shelve them (the active solver only)
   std::size_t level_count() const; // engine levels while active, shelved ones otherwise
   void reapply_engine_defaults(); // every registry default, then this solver's options
-  void apply_options(const char* fn);
+  void apply_options(const char* fn, bool tuning_only = false);
+  void prepare_sat_tuning(std::string_view declared_logic, bool incremental_session,
+                          bool reapply_options = true);
+  void clear_sat_tuning();
   Settable effective_settable(const OptionSpec& spec) const; // latched_by applied
   bool option_window_open(const OptionSpec& spec) const;
   void ensure_snapshot(); // materialise a pending model before the tables change

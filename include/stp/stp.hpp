@@ -813,7 +813,7 @@ struct STP_API_EXPORT OptionInfo
   std::string type; ///< bool|int|uint|mode|enum|set|string|path|duration
   OptionValue default_value;
   OptionValue current;
-  OptionValue resolved; ///< after implications
+  OptionValue resolved; ///< after implications and, on a solver, selected automatic defaults
   std::optional<std::int64_t> min, max;
   std::vector<std::string> values; ///< enum/set members
   Tier tier;
@@ -929,6 +929,8 @@ public:
   std::string get_str(std::string_view name) const;
   std::vector<std::string> get_names(std::string_view name) const;
   std::chrono::milliseconds get_duration(std::string_view name) const;
+  /// Effective value, including automatic SAT defaults once a check selects
+  /// its logic/session profile. get() and is_set() describe user options.
   OptionValue resolved(std::string_view name) const;
   bool is_set(std::string_view name) const;
   void reset(std::string_view name);

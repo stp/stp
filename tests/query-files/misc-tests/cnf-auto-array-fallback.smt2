@@ -1,4 +1,4 @@
-; Under array read refinement, `auto` keeps the older size-based choice made
+; Under array read refinement, the CNF effort `auto` keeps the size-based choice made
 ; from the built ABC AIG's node count. The estimate-based resolution is for
 ; the eager encodings only: the in-house and Gia rungs are unmeasured under
 ; refinement, so a refining query must keep taking the ABC path whatever the
@@ -6,8 +6,9 @@
 ;
 ; Twelve reads at distinct symbolic indexes, so the read count is past the
 ; eager-encoding regime and the solve actually refines.
+; Name the CNF effort explicitly so SAT tuning cannot select a profile's encoder.
 ;
-; RUN: %solver --SMTLIB2 -s %s 2>&1 | %OutputCheck %s
+; RUN: %solver --SMTLIB2 --cnf-generation-effort=auto -s %s 2>&1 | %OutputCheck %s
 ;
 ; CHECK-NOT: estimated
 ; CHECK: ^cnf-auto: [0-9]+ AIG nodes, chose medium$

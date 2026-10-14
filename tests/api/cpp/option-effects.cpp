@@ -30,6 +30,7 @@ THE SOFTWARE.
 // again first.
 
 #include "api_engine.hpp"
+#include "stp/Sat/SearchBias.h"
 
 #include <limits>
 #include <string>
@@ -44,6 +45,17 @@ namespace
 stp::UserDefinedFlags& flags_after(TermManager& tm)
 {
   return api_test::engine_manager(tm).UserFlags;
+}
+
+void add_tuning_array_problem(TermManager& tm, Solver& s)
+{
+  const Sort byte = tm.mk_bv_sort(8);
+  const Term a = tm.declare("tuning_array", tm.mk_array_sort(byte, byte));
+  const Term x = a[tm.mk_bv(8, 0)];
+  const Term y = tm.declare("tuning_factor", byte);
+  s.add(bvmul(x, y) == 143);
+  s.add(bvugt(x, 1));
+  s.add(bvugt(y, 1));
 }
 
 enum class TakeBack
@@ -345,4 +357,101 @@ TEST(OptionEffects, the_fp_abstraction_driver_keeps_its_array_strategy)
   EXPECT_FALSE(flags_after(tm).ackermannisation);
   ASSERT_TRUE(a.check_sat().is_sat());
   EXPECT_TRUE(flags_after(tm).ackermannisation);
+}
+
+TEST(OptionEffects, cadical_abv_batch_tuning_reaches_the_first_encoding)
+{
+  if (!has_sat_backend("cadical"))
+    GTEST_SKIP() << "CaDiCaL is not part of this build";
+  using Flags = stp::UserDefinedFlags;
+  TermManager tm;
+  Options o;
+  o.set_str("sat-backend", "cadical");
+  o.set_str("logic", "QF_ABV");
+  Solver s(tm, o);
+  add_tuning_array_problem(tm, s);
+  bool emitted = false;
+  s.set_cnf_sink([&](std::string_view, CnfScope) {
+    emitted = true;
+    EXPECT_EQ(flags_after(tm).search_bias, stp::SearchBias::UNSAT);
+    EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_GIA_LOW);
+    EXPECT_EQ(flags_after(tm).cadical_factor, Flags::BVAMode::OFF);
+  });
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_TRUE(emitted);
+  EXPECT_EQ(s.options().get_str("search-bias"), "none");
+  EXPECT_EQ(s.options().get_str("cnf-generation-effort"), "auto");
+  EXPECT_EQ(s.options().get_str("cadical-factor"), "on");
+  for (const char* name : {"search-bias", "cnf-generation-effort", "cadical-factor"})
+    EXPECT_FALSE(s.options().is_set(name));
+  EXPECT_EQ(std::get<std::string>(s.options().resolved("search-bias")), "unsat");
+  EXPECT_EQ(std::get<std::string>(s.options().info("cnf-generation-effort").resolved), "gia-low");
+}
+
+TEST(OptionEffects, cadical_abv_tuning_preserves_explicit_baseline_choices)
+{
+  if (!has_sat_backend("cadical"))
+    GTEST_SKIP() << "CaDiCaL is not part of this build";
+  using Flags = stp::UserDefinedFlags;
+  struct Choice
+  {
+    const char* name;
+    const char* value;
+    stp::SearchBias bias;
+    Flags::CNFEffort effort;
+    Flags::BVAMode factor;
+  };
+  const Choice choices[] = {
+      {"sat-tuning", "off", stp::SearchBias::NONE,
+       Flags::CNF_EFFORT_AUTO, Flags::BVAMode::ON},
+      {"search-bias", "none", stp::SearchBias::NONE,
+       Flags::CNF_EFFORT_GIA_LOW, Flags::BVAMode::OFF},
+      {"cnf-generation-effort", "auto", stp::SearchBias::UNSAT,
+       Flags::CNF_EFFORT_AUTO, Flags::BVAMode::OFF},
+      {"kissat-factor", "on", stp::SearchBias::UNSAT,
+       Flags::CNF_EFFORT_GIA_LOW, Flags::BVAMode::ON},
+      {"incremental", "on", stp::SearchBias::SAT,
+       Flags::CNF_EFFORT_NEW_MEDIUM, Flags::BVAMode::OFF},
+  };
+  for (const Choice& choice : choices)
+  {
+    SCOPED_TRACE(choice.name);
+    TermManager tm;
+    Options o;
+    o.set_str("sat-backend", "cadical");
+    o.set_str("logic", "QF_ABV");
+    o.set(choice.name, choice.value);
+    Solver s(tm, o);
+    add_tuning_array_problem(tm, s);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_TRUE(s.options().is_set(choice.name));
+    EXPECT_EQ(flags_after(tm).search_bias, choice.bias);
+    EXPECT_EQ(flags_after(tm).cnf_effort, choice.effort);
+    EXPECT_EQ(flags_after(tm).cadical_factor, choice.factor);
+  }
+}
+
+TEST(OptionEffects, cadical_abv_late_push_replaces_batch_tuning_before_engagement)
+{
+  if (!has_sat_backend("cadical"))
+    GTEST_SKIP() << "CaDiCaL is not part of this build";
+  using Flags = stp::UserDefinedFlags;
+  TermManager tm;
+  Options o;
+  o.set_str("sat-backend", "cadical");
+  o.set_str("logic", "QF_ABV");
+  o.set("incremental-auto-engage-at", "1");
+  Solver s(tm, o);
+  add_tuning_array_problem(tm, s);
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_FALSE(api_test::engine_solver(s).hasIncrementalSolver());
+  EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_GIA_LOW);
+  s.push();
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_TRUE(api_test::engine_solver(s).hasIncrementalSolver());
+  EXPECT_EQ(flags_after(tm).search_bias, stp::SearchBias::SAT);
+  EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_NEW_MEDIUM);
+  s.pop();
+  ASSERT_TRUE(s.check_sat().is_sat());
+  EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_NEW_MEDIUM);
 }
