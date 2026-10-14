@@ -12,8 +12,8 @@ whichever is wrong.
 - Restate the scope and the test level before starting anything long; one
   topic per branch.
 - Carry an approved task through to its report without asking again for
-  steps already agreed. A resumption does not renew approval for a run
-  that would otherwise be announced first.
+  steps already agreed. Resuming does not waive the requirement to announce
+  a long run; existing task authorisation still applies.
 - Before a heavy build, test run or benchmark, look at what is already
   running and at CPU and memory use. Never overlap another session's
   timing campaign, and never stop another session's jobs.
@@ -24,7 +24,9 @@ whichever is wrong.
   before it starts, with its expected duration, and runs in the background
   with a log that records the command, limits, result paths and exit
   status. Launching a job is not validating it.
-- After a resumption, inspect what is running and what already exists
+- For substantial work, keep source revisions, result locations, pending
+  items and the next action in the task's existing artifacts.
+- After a resumption, inspect running jobs and the task's artifacts
   before continuing or repeating a run. Keep interrupted results and mark
   retries as retries.
 - Nothing a running job reads is modified: not its build directory, its
@@ -60,15 +62,16 @@ whichever is wrong.
 
 ## Building for verification
 
-- Choose verification from what changed: a docs change needs the docs
-  build, a solver or API change the focused regression and the affected
-  suites. Say what was not run; local checks do not replace CI.
-- Configure with Ninja and `-DENABLE_AUTO_DOWNLOAD=ON -DENABLE_TESTING=ON
-  -DWERROR=ON`. `WERROR` is off by default and on in every CI job except
-  the three sanitizer legs and the static release leg, which leave it off
-  on purpose, so a build without it compiles what CI rejects. With
+- Choose verification from what changed: manual changes need the docs
+  build; other documentation needs the relevant checks. Solver or API
+  changes need the focused regression and affected suites. Say what was
+  not run; local checks do not replace CI.
+- For code verification, configure with Ninja and
+  `-DENABLE_AUTO_DOWNLOAD=ON -DENABLE_TESTING=ON -DWERROR=ON`. `WERROR`
+  is off by default; the normal Linux gcc and clang CI jobs enable it.
+  Other configurations differ; see `.github/workflows/ci.yml`. With
   `CMAKE_BUILD_TYPE` unset the build is RelWithDebInfo with assertions,
-  which is what the CI jobs named `gcc` and `clang` build.
+  as in the CI jobs named `gcc` and `clang`.
 - Before pushing a change to the solver or a dependency, build what the
   other legs see: the affected backends, `-DCMAKE_BUILD_TYPE=Release`
   (assertions off, so a variable read only in an `assert` is unused; the
@@ -168,20 +171,22 @@ whichever is wrong.
 
 - A change to a default is an upstream change only if it helps, or leaves
   alone, every configuration: each SAT backend, batch and incremental, each
-  theory. Measure every arm in one pass and name the arms not measured;
-  limited coverage is not evidence of universal improvement. A change that
-  helps some and costs others is a flag, reported as a sensitivity.
+  theory. Define the supported combinations in a verification matrix before
+  measurement, with fixed inputs and limits. Name unmeasured combinations;
+  limited coverage is not evidence of universal improvement. Resume an
+  interrupted campaign only with the same frozen sources, builds, inputs
+  and limits. A change that helps some and costs others is a flag,
+  reported as a sensitivity.
 - Fix the benchmark population, configurations, limits and metrics before
   measuring. Keep every raw row, timeouts, errors and lost solves included;
   never drop an unfavourable row or pick settings by benchmark identity.
   Report solved counts and PAR-2 with their population and timeout.
-- Timings are taken one process at a time on a quiet machine, on the same
-  build settings apart from the change under test, from one build directory
-  per side. `uptime` is the first check, not the last: record what else
-  was running. Under load, per-file differences below about 3x mean
-  nothing, and contended timings justify no default. Answer cross-checks
-  against other solvers are not timings and can run many at a time, away
-  from a timing campaign.
+- Time one benchmark invocation at a time on a quiet machine, with the
+  same build settings apart from the change under test, from one build
+  directory per side. `uptime` is the first check, not the last: record
+  what else was running. Repeat close comparisons to assess noise;
+  contended timings justify no default. Answer cross-checks against other
+  solvers can run concurrently, away from a timing campaign.
 - A performance summary leads with what got slower, then with what got
   faster. Matching `scripts/cnf-manifest.sh` hashes prove byte-identical
   CNF only for the inputs that produced one: the script stops at the first
