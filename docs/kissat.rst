@@ -226,8 +226,8 @@ Current scope
 -------------
 
 The backend implements the incremental SAT contract needed for refinement.
-It does not expose theory propagation callbacks, clause exchange, search
-reset, or control of probe-based inprocessing. STP uses its existing
+It does not expose theory propagation callbacks, clause exchange, or search
+reset. STP uses its existing
 fallbacks for optional backend capabilities. Restoring the entire extension
 can cost more than restoring only the variables a new clause needs.
 Incremental proof output is outside the scope of this port.
