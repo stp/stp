@@ -108,6 +108,8 @@ even in forced QF_ABV sessions. Modes 0, 1 and 2 select no reuse, assumption
 prefix reuse, and whole-trail reuse under unchanged assumptions. An explicit
 ``--kissat-trail-reuse=false`` disables reuse regardless of the mode. A
 one-shot backend also disables it. These controls apply only to Kissat.
+``--incremental-core-only`` suppresses the automatic reuse-mode default;
+an explicitly selected reuse mode remains an explicit backend request.
 
 An explicit ``search-bias`` also owns the phase/mode policy of that named
 configuration. Automatic phase, target and Kissat stable-mode choices are

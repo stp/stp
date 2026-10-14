@@ -177,6 +177,11 @@ void apply_sat_tuning_defaults(const OptionsImpl& options,
     // options also outrank a profile default.
     if (!derived.at_default[index])
       continue;
+    // The diagnostic core-only policy disables trail reuse. An explicitly
+    // selected mode is already preserved by the presence check above.
+    if (std::string_view(spec_at(index).name) == "kissat-trail-reuse-mode" &&
+        std::get<bool>(options.resolved(index_of("incremental-core-only"))))
+      continue;
     // An explicitly named search configuration owns its phase/mode policy.
     // Individual explicit phase/mode controls still override it normally.
     if (explicit_bias && search_setting(spec_at(index).name))

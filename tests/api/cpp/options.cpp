@@ -1123,3 +1123,26 @@ TEST(Options, kissat_trail_reuse_forced_defaults_and_explicit_overrides)
       ASSERT_TRUE(solver.check_sat().is_sat());
     }
 }
+
+TEST(Options, kissat_trail_reuse_preserves_core_only_diagnostics)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not compiled in";
+  for (int mode : {-2, -1, 0, 1, 2})
+  {
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", "kissat");
+    options.set_str("logic", "QF_ABV");
+    options.set_str("incremental", "on");
+    options.set_bool("incremental-core-only", true);
+    if (mode != -2)
+      options.set_int("kissat-trail-reuse-mode", mode);
+    Solver solver(tm, options);
+    const Term x = tm.declare("core_reuse_x", tm.mk_bv_sort(8));
+    solver.add(x == 1);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_EQ(solver.options().resolved("kissat-trail-reuse-mode"),
+              OptionValue(std::int64_t(mode == -2 ? -1 : mode)));
+  }
+}
