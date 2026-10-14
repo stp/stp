@@ -137,6 +137,48 @@ used in those experiments. The automatic CNF policy contains settings
 specific to CaDiCaL, so choosing a SAT backend can also require choosing an
 encoding policy.
 
+Decision phase controls
+-----------------------
+
+CaDiCaL and Kissat expose four expert options for controlled search
+experiments. Each defaults to ``-1``, which preserves the backend's policy,
+including any settings selected by ``--search-bias``. An explicit value
+overrides the corresponding setting in the named search configuration.
+
+.. list-table:: Phase options
+    :header-rows: 1
+    :widths: 25 75
+
+    * - Option
+      - Values
+    * - ``--sat-phase``
+      - ``0`` prefers false initially; ``1`` prefers true initially.
+    * - ``--sat-forcephase``
+      - ``0`` permits saved and target phases; ``1`` always chooses the initial phase.
+    * - ``--sat-rephase``
+      - ``0`` disables phase resetting; ``1`` enables it. CaDiCaL also accepts
+        ``2`` to reset phases only during stable search.
+    * - ``--sat-target``
+      - ``0`` disables target phases; ``1`` uses them during stable search;
+        ``2`` also uses them during focused search.
+
+Set these options before the first check. The C++ and SMT-LIB interfaces use
+the same option names, for example ``(set-option :sat-phase 0)``.
+Other SAT backends reject explicit phase overrides. Use ``-s`` to print the
+effective settings to the diagnostic stream.
+
+.. code-block:: bash
+
+    stp --kissat --search-bias=sat --sat-phase=0 -s input.smt2
+    stp --cadical --sat-phase=0 --sat-forcephase=1 input.smt2
+
+``scripts/benchmark-sat-backends.py`` records complete-session PAR2 and
+supports frozen, resumable comparisons. Its
+``scripts/benchmark-default-sat-backends.json`` preset selects the four SAT
+backends with their defaults. ``scripts/sweep-sat-options.py`` screens
+CaDiCaL and Kissat configurations, refines their CNF and factoring settings,
+and evaluates fixed finalists against the defaults on the full selected logic.
+
 Satsuma preprocessing
 ---------------------
 
