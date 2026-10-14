@@ -13,7 +13,7 @@ whichever is wrong.
   topic per branch.
 - Carry an approved task through to its report without asking again for
   steps already agreed. Resuming does not waive the requirement to announce
-  a long run; existing task authorisation still applies.
+  a long run.
 - Before a heavy build, test run or benchmark, look at what is already
   running and at CPU and memory use. Never overlap another session's
   timing campaign, and never stop another session's jobs.
@@ -68,10 +68,11 @@ whichever is wrong.
   not run; local checks do not replace CI.
 - For code verification, configure with Ninja and
   `-DENABLE_AUTO_DOWNLOAD=ON -DENABLE_TESTING=ON -DWERROR=ON`. `WERROR`
-  is off by default; the normal Linux gcc and clang CI jobs enable it.
-  Other configurations differ; see `.github/workflows/ci.yml`. With
-  `CMAKE_BUILD_TYPE` unset the build is RelWithDebInfo with assertions,
-  as in the CI jobs named `gcc` and `clang`.
+  is off by default and on in every Linux test job except the three
+  sanitizer legs and the static release build, and off on Windows, so a
+  build without it compiles what CI rejects. With `CMAKE_BUILD_TYPE`
+  unset the build is RelWithDebInfo with assertions, as in the CI jobs
+  named `gcc` and `clang`.
 - Before pushing a change to the solver or a dependency, build what the
   other legs see: the affected backends, `-DCMAKE_BUILD_TYPE=Release`
   (assertions off, so a variable read only in an `assert` is unused; the
@@ -184,8 +185,10 @@ whichever is wrong.
 - Time one benchmark invocation at a time on a quiet machine, with the
   same build settings apart from the change under test, from one build
   directory per side. `uptime` is the first check, not the last: record
-  what else was running. Repeat close comparisons to assess noise;
-  contended timings justify no default. Answer cross-checks against other
+  what else was running. Contention shifts timings systematically while
+  repeats stay tight, so repeats do not reveal it; re-measure on an idle
+  machine before calling anything a regression, and never justify a
+  default with contended timings. Answer cross-checks against other
   solvers can run concurrently, away from a timing campaign.
 - A performance summary leads with what got slower, then with what got
   faster. Matching `scripts/cnf-manifest.sh` hashes prove byte-identical
