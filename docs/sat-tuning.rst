@@ -47,10 +47,15 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
         ``cnf-generation-effort=new-medium``, ``cadical-factor=off``
     * - Kissat
       - QF_ABV
-      - Incremental
+      - Incremental (AUTO)
       - ``search-bias=sat``, ``kissat-stable=2``, ``sat-target=0``,
         ``sat-rephase=0``, ``cnf-generation-effort=new-medium``,
         ``kissat-probe=false``, ``kissat-factor=off``
+    * - Kissat
+      - QF_ABV
+      - Forced incremental
+      - The AUTO incremental settings above, plus
+        ``kissat-trail-reuse-mode=2``
 
 Other combinations use the baseline policy. The Kissat QF_ABV batch finalist
 was slower than its baseline. The CaDiCaL QF_ABV batch profile uses
@@ -81,6 +86,13 @@ checks. It does not change ``incremental-auto-engage-at`` or force earlier
 persistent-driver engagement. The experiments used the existing engagement
 policy; timings for forced engagement may differ.
 
+Forced QF_ABV sessions use a separate Kissat profile. ``--incremental=on``
+and ``(set-option :incremental true)`` engage the persistent backend from the
+first check, where array refinement can repeatedly solve under identical
+assumptions. Reuse mode 2 retains the unaffected search trail in that case;
+when assumptions change it retains only their compatible prefix. AUTO
+keeps its previously measured profile and engagement policy.
+
 Explicit options and diagnostics
 --------------------------------
 
@@ -90,6 +102,12 @@ is preserved even though it equals the baseline value. An explicit
 ``--kissat-probe=true`` keeps probing enabled. The factoring aliases
 refer to one option, so an explicit ``--kissat-factor=on`` also overrides an
 automatic ``cadical-factor=off``.
+
+``--kissat-trail-reuse-mode=-1`` explicitly preserves STP's scope hints,
+even in forced QF_ABV sessions. Modes 0, 1 and 2 select no reuse, assumption
+prefix reuse, and whole-trail reuse under unchanged assumptions. An explicit
+``--kissat-trail-reuse=false`` disables reuse regardless of the mode. A
+one-shot backend also disables it. These controls apply only to Kissat.
 
 An explicit ``search-bias`` also owns the phase/mode policy of that named
 configuration. Automatic phase, target and Kissat stable-mode choices are

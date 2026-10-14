@@ -424,6 +424,7 @@ struct SatTuningDefaults
   bool prepared = false;
   std::string logic;
   bool incremental = false;
+  bool forced_incremental = false;
   UserDefinedFlags::SATSolvers backend = UserDefinedFlags::MINISAT_SOLVER;
   const char* profile = "backend-defaults";
   std::vector<std::pair<std::size_t, OptionValue>> entries;

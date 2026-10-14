@@ -51,7 +51,7 @@ struct Profile
 };
 
 const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
-                              bool incremental)
+                              bool incremental, bool forced_incremental)
 {
   // Initial full-corpus confirmation at a 24-second complete-session cutoff:
   // Kissat/QF_BV batch: 1.759 -> 1.577s mean PAR2 (46,191 files).
@@ -94,6 +94,12 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
        {"cnf-generation-effort", "new-medium"},
        {"kissat-probe", "false"},
        {"cadical-factor", "off"}}};
+  static const Profile kissat_abv_forced_incremental = [] {
+    Profile profile = kissat_abv_incremental;
+    profile.name = "kissat-qf-abv-forced-incremental";
+    profile.settings.push_back({"kissat-trail-reuse-mode", "2"});
+    return profile;
+  }();
 
   if (backend == Flags::KISSAT_SOLVER && logic == "QF_BV" && !incremental)
     return kissat_bv_batch;
@@ -111,7 +117,8 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     if (backend == Flags::CADICAL_SOLVER)
       return cadical_abv_incremental;
     if (backend == Flags::KISSAT_SOLVER)
-      return kissat_abv_incremental;
+      return forced_incremental ? kissat_abv_forced_incremental
+                                : kissat_abv_incremental;
   }
   // The Kissat batch QF_ABV finalist was slower than its baseline.
   return baseline;
@@ -190,6 +197,8 @@ void SolverImpl::prepare_sat_tuning(std::string_view declared,
                                     bool reapply_options)
 {
   const Flags& flags = mgr->bm->UserFlags;
+  const bool forced_incremental =
+      flags.incremental_mode == Flags::IncrementalMode::ON;
   const bool incremental =
       flags.incremental_mode == Flags::IncrementalMode::ON ||
       (flags.incremental_mode == Flags::IncrementalMode::AUTO &&
@@ -205,15 +214,19 @@ void SolverImpl::prepare_sat_tuning(std::string_view declared,
   if (!sat_tuning.prepared || (!stp->hasIncrementalSolver() &&
                                (sat_tuning.logic != selected_logic ||
                                 sat_tuning.incremental != incremental ||
+                                sat_tuning.forced_incremental !=
+                                    forced_incremental ||
                                 sat_tuning.backend != flags.solver_to_use)))
   {
     SatTuningDefaults selected;
     selected.prepared = true;
     selected.logic = selected_logic;
     selected.incremental = incremental;
+    selected.forced_incremental = forced_incremental;
     selected.backend = flags.solver_to_use;
     const Profile& profile =
-        select_profile(selected.backend, selected.logic, selected.incremental);
+        select_profile(selected.backend, selected.logic, selected.incremental,
+                       selected.forced_incremental);
     selected.profile = profile.name;
     for (const Setting& setting : profile.settings)
     {

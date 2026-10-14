@@ -937,6 +937,19 @@ requires = { build = "kissat" }
 help = "allow Kissat to retain the shared assumption prefix across checks and unaffected search decisions across refinement rounds"
 
 [[option]]
+name = "kissat-trail-reuse-mode"
+type = "int"
+default = -1
+range = { min = -1, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_trail_reuse_mode" }
+category = "sat"
+requires = { build = "kissat" }
+help = "Kissat incremental trail reuse: -1 follows STP's scope hints, 0 disables reuse, 1 keeps the common assumption prefix, 2 retains the whole trail when assumptions are unchanged and otherwise keeps their common prefix; --kissat-trail-reuse=false disables every mode"
+
+[[option]]
 name = "kissat-probe"
 type = "bool"
 default = true

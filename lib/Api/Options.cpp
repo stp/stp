@@ -1556,6 +1556,7 @@ void apply_sat_tuning_options(EngineTarget& t, const OptionsImpl& options)
   for (const char* name : {"search-bias", "sat-phase", "sat-forcephase",
                            "sat-rephase", "sat-target", "kissat-stable",
                            "kissat-probe",
+                           "kissat-trail-reuse-mode",
                            "cnf-generation-effort", "cadical-factor"})
   {
     const OptionSpec& spec = *find_option(name);
