@@ -1555,6 +1555,7 @@ void apply_sat_tuning_options(EngineTarget& t, const OptionsImpl& options)
     derive_options(options, derived, &t.solver->sat_tuning);
   for (const char* name : {"search-bias", "sat-phase", "sat-forcephase",
                            "sat-rephase", "sat-target", "kissat-stable",
+                           "kissat-probe",
                            "cnf-generation-effort", "cadical-factor"})
   {
     const OptionSpec& spec = *find_option(name);

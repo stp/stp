@@ -924,11 +924,18 @@ TEST(Options, info_names_help_and_the_stable_tier)
   EXPECT_EQ(total, all.size());
   const std::vector<std::string> stable = o.names(Tier::STABLE);
   ASSERT_EQ(stable.size(), static_cast<std::size_t>(Option::NUM_STABLE_OPTIONS));
-  for (std::size_t i = 0; i < stable.size(); ++i)
+  std::set<Option> stable_ids;
+  for (const std::string& name : stable)
   {
-    EXPECT_EQ(Options::name_of(static_cast<Option>(i)), stable[i]);
-    EXPECT_EQ(Options::stable_option(stable[i]), std::optional<Option>(static_cast<Option>(i)));
+    const std::optional<Option> id = Options::stable_option(name);
+    ASSERT_TRUE(id.has_value()) << name;
+    EXPECT_EQ(Options::name_of(*id), name);
+    EXPECT_TRUE(stable_ids.insert(*id).second) << name;
   }
+  // Registry/category order can differ from the pinned public enum order.
+  // Require every enum member exactly once without coupling the two orders.
+  for (std::size_t i = 0; i < stable.size(); ++i)
+    EXPECT_EQ(stable_ids.count(static_cast<Option>(i)), 1u);
   EXPECT_EQ(Options::name_of(Option::MAX_TIME), "max-time");
   EXPECT_EQ(Options::name_of(Option::SAT_BACKEND), "sat-backend");
   EXPECT_EQ(Options::stable_option("flattening"), std::nullopt);
@@ -1058,4 +1065,34 @@ TEST(Options, a_latched_entry_closes_at_the_first_check)
   ASSERT_TRUE(t.check_sat().is_sat());
   t.options().set_bool("fp-abstraction", true);
   EXPECT_TRUE(t.check_sat().is_sat());
+}
+
+TEST(Options, kissat_probing_automatic_defaults_and_explicit_overrides)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not compiled in";
+  for (int choice = 0; choice != 3; ++choice)
+  {
+    TermManager tm;
+    Options o;
+    o.set_str("sat-backend", "kissat");
+    o.set_str("logic", "QF_ABV");
+    o.set_str("incremental", "on");
+    if (choice)
+      o.set_bool("kissat-probe", choice == 1);
+    Solver s(tm, o);
+    const Term x = tm.declare("probe_x", tm.mk_bv_sort(8));
+    s.add(x == 1);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_EQ(s.options().is_set("kissat-probe"), choice != 0);
+    EXPECT_EQ(s.options().get_bool("kissat-probe"), choice != 2);
+    EXPECT_EQ(s.options().resolved("kissat-probe"), OptionValue(choice == 1));
+    EXPECT_EQ(s.options().info("kissat-probe").resolved, OptionValue(choice == 1));
+    EXPECT_EQ(s.options().resolved("sat-target"), OptionValue(std::int64_t(0)));
+    EXPECT_EQ(s.options().resolved("sat-rephase"), OptionValue(std::int64_t(0)));
+    EXPECT_EQ(s.options().resolved("cnf-generation-effort"),
+              OptionValue(std::string("new-medium")));
+    API_EXPECT_ERROR(ErrorCode::OPTION_TIMING,
+                     s.options().set_bool("kissat-probe", choice == 2));
+  }
 }

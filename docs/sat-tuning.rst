@@ -27,6 +27,15 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - Batch
       - ``sat-phase=0``, ``cnf-generation-effort=new-medium``
     * - CaDiCaL
+      - QF_BV
+      - Incremental
+      - ``sat-rephase=0``
+    * - Kissat
+      - QF_BV
+      - Incremental
+      - ``search-bias=unsat``, ``cnf-generation-effort=new-medium``,
+        ``kissat-factor=off``
+    * - CaDiCaL
       - QF_ABV
       - Batch
       - ``search-bias=unsat``, ``cnf-generation-effort=gia-low``,
@@ -39,10 +48,11 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
     * - Kissat
       - QF_ABV
       - Incremental
-      - ``search-bias=sat``, ``kissat-stable=2``, ``kissat-factor=off``
+      - ``search-bias=sat``, ``kissat-stable=2``, ``sat-target=0``,
+        ``sat-rephase=0``, ``cnf-generation-effort=new-medium``,
+        ``kissat-probe=false``, ``kissat-factor=off``
 
-Other combinations use the baseline policy. The QF_BV incremental experiments
-gave little or negative improvement, and the Kissat QF_ABV batch finalist
+Other combinations use the baseline policy. The Kissat QF_ABV batch finalist
 was slower than its baseline. The CaDiCaL QF_ABV batch profile uses
 ``gia-low`` after the pinned ABC mapper was changed to use an explicit stack
 for its cut-reference walks, fixing the stack overflow on wide
@@ -76,7 +86,8 @@ Explicit options and diagnostics
 
 User options take precedence individually. Presence matters: an explicit
 ``--cnf-generation-effort=auto``, ``--search-bias=none``, or ``--sat-phase=-1``
-is preserved even though it equals the baseline value. The factoring aliases
+is preserved even though it equals the baseline value. An explicit
+``--kissat-probe=true`` keeps probing enabled. The factoring aliases
 refer to one option, so an explicit ``--kissat-factor=on`` also overrides an
 automatic ``cadical-factor=off``.
 

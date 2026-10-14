@@ -156,7 +156,8 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
 #endif
     case UserDefinedFlags::KISSAT_SOLVER:
 #ifdef USE_KISSAT
-      newS = new Kissat(flags.kissat_trail_reuse, flags.kissat_stable);
+      newS = new Kissat(flags.kissat_trail_reuse, flags.kissat_stable,
+                       flags.kissat_probe);
 #else
       std::cerr << "Kissat support was not enabled at configure time." << std::endl;
       exit(-1);

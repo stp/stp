@@ -77,6 +77,11 @@ struct Kissat::Allocations
 };
 
 Kissat::Kissat(bool trail_reuse_allowed, int search_mode)
+    : Kissat(trail_reuse_allowed, search_mode, true)
+{
+}
+
+Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed)
     : allocations(new Allocations), solver(nullptr),
       trail_reuse_allowed(trail_reuse_allowed), search_mode(search_mode)
 {
@@ -87,6 +92,7 @@ Kissat::Kissat(bool trail_reuse_allowed, int search_mode)
   kissat_set_option(solver, "incremental", 1);
   kissat_set_option(solver, "factor", 0);
   kissat_set_option(solver, "quiet", 1);
+  kissat_set_option(solver, "probe", probing_allowed ? 1 : 0);
   if (search_mode >= 0)
     kissat_set_option(solver, "stable", search_mode);
 }
@@ -236,7 +242,9 @@ void Kissat::printStats() const
   std::cerr << "Kissat search: phase=" << kissat_get_option(solver, "phase")
             << " forcephase=" << kissat_get_option(solver, "forcephase")
             << " rephase=" << kissat_get_option(solver, "rephase")
-            << " target=" << kissat_get_option(solver, "target") << '\n';
+            << " target=" << kissat_get_option(solver, "target")
+            << " stable=" << kissat_get_option(solver, "stable")
+            << " probe=" << kissat_get_option(solver, "probe") << '\n';
   std::cerr << "Kissat: variables=" << nVars()
             << " submitted-clauses=" << submittedClauses()
             << " solves=" << solve_calls << '\n';

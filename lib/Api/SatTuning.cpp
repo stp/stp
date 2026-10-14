@@ -53,13 +53,16 @@ struct Profile
 const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
                               bool incremental)
 {
-  // Full-corpus confirmation at a 24-second complete-session cutoff:
+  // Initial full-corpus confirmation at a 24-second complete-session cutoff:
   // Kissat/QF_BV batch: 1.759 -> 1.577s mean PAR2 (46,191 files).
   // CaDiCaL/QF_ABV batch: 0.717 -> 0.685s (15,148 files).
   // CaDiCaL/QF_ABV incremental: 4.695 -> 2.806s (1,272 files).
   // Kissat/QF_ABV incremental: 4.469 -> 3.780s (1,272 files).
   // Incremental directories included single-check files; their multi-check
   // subset independently supported both QF_ABV profiles.
+  // A follow-up on all multi-check QF_BV/QF_ABV inputs selected focused
+  // QF_BV search, and found that QF_ABV benefits from pairing the in-house
+  // encoding with disabled target phases, rephasing and Kissat probing.
   static const Profile baseline{"backend-defaults", {}};
   static const Profile kissat_bv_batch{
       "kissat-qf-bv-batch",
@@ -75,15 +78,34 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
        {"sat-target", "0"},
        {"cnf-generation-effort", "new-medium"},
        {"cadical-factor", "off"}}};
-  static const Profile kissat_abv_incremental{"kissat-qf-abv-incremental",
-                                              {{"search-bias", "sat"},
-                                               {"kissat-stable", "2"},
-                                               {"cadical-factor", "off"}}};
+  static const Profile cadical_bv_incremental{
+      "cadical-qf-bv-incremental", {{"sat-rephase", "0"}}};
+  static const Profile kissat_bv_incremental{
+      "kissat-qf-bv-incremental",
+      {{"search-bias", "unsat"},
+       {"cnf-generation-effort", "new-medium"},
+       {"cadical-factor", "off"}}};
+  static const Profile kissat_abv_incremental{
+      "kissat-qf-abv-incremental",
+      {{"search-bias", "sat"},
+       {"kissat-stable", "2"},
+       {"sat-target", "0"},
+       {"sat-rephase", "0"},
+       {"cnf-generation-effort", "new-medium"},
+       {"kissat-probe", "false"},
+       {"cadical-factor", "off"}}};
 
   if (backend == Flags::KISSAT_SOLVER && logic == "QF_BV" && !incremental)
     return kissat_bv_batch;
   if (backend == Flags::CADICAL_SOLVER && logic == "QF_ABV" && !incremental)
     return cadical_abv_batch;
+  if (logic == "QF_BV" && incremental)
+  {
+    if (backend == Flags::CADICAL_SOLVER)
+      return cadical_bv_incremental;
+    if (backend == Flags::KISSAT_SOLVER)
+      return kissat_bv_incremental;
+  }
   if (logic == "QF_ABV" && incremental)
   {
     if (backend == Flags::CADICAL_SOLVER)
@@ -91,8 +113,7 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     if (backend == Flags::KISSAT_SOLVER)
       return kissat_abv_incremental;
   }
-  // QF_BV incremental gains were marginal or negative, and the Kissat batch
-  // QF_ABV finalist was slower than its baseline.
+  // The Kissat batch QF_ABV finalist was slower than its baseline.
   return baseline;
 }
 
