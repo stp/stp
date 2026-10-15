@@ -34,6 +34,7 @@ THE SOFTWARE.
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <utility>
 #include <vector>
@@ -68,6 +69,10 @@ public:
     owner.touchedReads.swap(savedTouchedReads);
     owner.touchedChains.swap(savedTouchedChains);
     owner.recordTouchedReads = true;
+    owner.touchedReadOf.clear();
+    owner.touchedChainOf.clear();
+    owner.touchedReadsIndexed = 0;
+    owner.touchedChainsIndexed = 0;
   }
 
   ~RegistryScope()
@@ -81,6 +86,8 @@ public:
     owner.ack_pair.swap(registry.ackPairs);
     owner.chainReads.swap(registry.chains);
     owner.chainAnchorOf.swap(registry.chainAnchors);
+    RowOfSymbol().swap(owner.touchedReadOf);
+    RowOfSymbol().swap(owner.touchedChainOf);
   }
 };
 
@@ -213,6 +220,11 @@ ArrayTransformer::TransformFormulaWithRegistry(const ASTNode& form,
 {
   RegistryScope scope(*this, registry);
   const ASTNode transformed = TransformFormula_TopLevel(form);
+  // Report each row once, however many reads reached it: a reused chain
+  // row repeats its nested rows on every read of it, and the caller
+  // re-binds every level of every chain row it is given.
+  keepFirstOccurrences(touchedReads);
+  keepFirstOccurrences(touchedChains);
   return TransformResult(transformed, touchedReads, touchedChains);
 }
 
@@ -279,6 +291,83 @@ ASTNode ArrayTransformer::anchorForChainTerm(const ASTNode& term)
   chainAnchorOf.insert(std::make_pair(term, anchor));
   chainAnchorEquations.push_back(nf->CreateNode(EQ, term, anchor));
   return anchor;
+}
+
+void ArrayTransformer::keepFirstOccurrences(ReadKeys& keys)
+{
+  std::set<ReadKey> seen;
+  size_t kept = 0;
+  for (size_t i = 0; i < keys.size(); i++)
+    if (seen.insert(keys[i]).second)
+      keys[kept++] = keys[i];
+  keys.resize(kept);
+}
+
+void ArrayTransformer::collectNestedRows(ChainRow& row)
+{
+  for (; touchedReadsIndexed < touchedReads.size(); ++touchedReadsIndexed)
+  {
+    const ReadKey& key = touchedReads[touchedReadsIndexed];
+    ArrType::const_iterator ait = arrayToIndexToRead.find(key.first);
+    if (ait == arrayToIndexToRead.end())
+      continue;
+    arrTypeMap::const_iterator rit = ait->second.find(key.second);
+    if (rit != ait->second.end())
+      touchedReadOf.insert(std::make_pair(rit->second.symbol, key));
+  }
+  for (; touchedChainsIndexed < touchedChains.size(); ++touchedChainsIndexed)
+  {
+    const ReadKey& key = touchedChains[touchedChainsIndexed];
+    ChainReadsMap::const_iterator cit = chainReads.find(key.first);
+    if (cit == chainReads.end())
+      continue;
+    ChainIndexMap::const_iterator rit = cit->second.find(key.second);
+    if (rit != cit->second.end())
+      touchedChainOf.insert(std::make_pair(rit->second.symbol, key));
+  }
+
+  // A read row brings its index term, whose binding a reuse re-asserts; a
+  // chain row brings its index term, its fall-through read and its own
+  // closure.
+  std::set<ReadKey> reads;
+  std::set<ReadKey> chains;
+  ASTVec work;
+  for (const ChainLevel& level : row.levels)
+  {
+    work.push_back(level.index);
+    work.push_back(level.value);
+  }
+  if (!row.baseDefault.IsNull())
+    work.push_back(row.baseDefault);
+  ASTNodeSet visited;
+  while (!work.empty())
+  {
+    const ASTNode n = work.back();
+    work.pop_back();
+    if (!visited.insert(n).second)
+      continue;
+    if (n.GetKind() != SYMBOL)
+    {
+      work.insert(work.end(), n.begin(), n.end());
+      continue;
+    }
+    RowOfSymbol::const_iterator rit = touchedReadOf.find(n);
+    if (rit != touchedReadOf.end() && reads.insert(rit->second).second)
+      work.push_back(rit->second.second);
+    RowOfSymbol::const_iterator cit = touchedChainOf.find(n);
+    if (cit != touchedChainOf.end() && chains.insert(cit->second).second)
+    {
+      const ChainRow& nested =
+          chainReads.at(cit->second.first).at(cit->second.second);
+      reads.insert(nested.nestedReads.begin(), nested.nestedReads.end());
+      chains.insert(nested.nestedChains.begin(), nested.nestedChains.end());
+      if (!nested.baseArray.IsNull())
+        reads.insert(std::make_pair(nested.baseArray, nested.index));
+      work.push_back(nested.index);
+    }
+  }
+  row.nestedReads.assign(reads.begin(), reads.end());
+  row.nestedChains.assign(chains.begin(), chains.end());
 }
 
 // The tail every arm of TransformTerm shares.
@@ -1119,11 +1208,20 @@ class ArrayTransformer::TransformDriver
               {
                 if (recordTouchedReads)
                 {
+                  const ChainRow& row = rit->second;
                   owner.touchedChains.push_back(
                       std::make_pair(arrName, readIndex));
-                  if (!rit->second.baseArray.IsNull())
+                  if (!row.baseArray.IsNull())
                     touchedReads.push_back(
-                        std::make_pair(rit->second.baseArray, readIndex));
+                        std::make_pair(row.baseArray, readIndex));
+                  // The levels were transformed by the run that built the
+                  // row, so this run never visits the rows they mention.
+                  touchedReads.insert(touchedReads.end(),
+                                      row.nestedReads.begin(),
+                                      row.nestedReads.end());
+                  owner.touchedChains.insert(owner.touchedChains.end(),
+                                             row.nestedChains.begin(),
+                                             row.nestedChains.end());
                 }
                 return finishRead(rit->second.symbol);
               }
@@ -1367,6 +1465,9 @@ class ArrayTransformer::TransformDriver
           if (recordTouchedReads)
             touchedReads.push_back(std::make_pair(row.baseArray, row.index));
         }
+
+        if (recordTouchedReads)
+          owner.collectNestedRows(row);
 
         ASTNode readVar = bm->CreateDeterministicVariable(
             term.GetIndexWidth(), term.GetValueWidth(), "chain_read",
