@@ -1146,3 +1146,245 @@ TEST(Options, kissat_trail_reuse_preserves_core_only_diagnostics)
               OptionValue(std::int64_t(mode == -2 ? -1 : mode)));
   }
 }
+
+TEST(Options, forced_abvfp_tuning_resolves_without_setting_user_options)
+{
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    SCOPED_TRACE(backend);
+    const bool kissat = std::string(backend) == "kissat";
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", backend);
+    options.set_str("logic", "QF_ABVFP");
+    options.set_str("incremental", "on");
+    Solver solver(tm, options);
+    const Term x = tm.declare("abvfp_x", tm.mk_bv_sort(8));
+    solver.add(x == 1);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    const auto& effective = solver.options();
+    EXPECT_EQ(effective.resolved("search-bias"),
+              OptionValue(std::string("sat")));
+    EXPECT_EQ(effective.resolved("sat-phase"),
+              OptionValue(std::int64_t(kissat ? -1 : 0)));
+    EXPECT_EQ(effective.resolved("sat-target"), OptionValue(std::int64_t(0)));
+    EXPECT_EQ(effective.resolved("sat-rephase"),
+              OptionValue(std::int64_t(kissat ? 0 : -1)));
+    EXPECT_EQ(effective.resolved("kissat-stable"),
+              OptionValue(std::int64_t(kissat ? 2 : -1)));
+    EXPECT_EQ(effective.resolved("kissat-probe"), OptionValue(!kissat));
+    EXPECT_EQ(effective.resolved("kissat-trail-reuse-mode"),
+              OptionValue(std::int64_t(kissat ? 2 : -1)));
+    EXPECT_EQ(effective.resolved("cnf-generation-effort"),
+              OptionValue(std::string(kissat ? "new-medium" : "auto")));
+    EXPECT_EQ(effective.resolved("cadical-factor"),
+              OptionValue(std::string("off")));
+    const Options baseline;
+    for (const char* name :
+         {"search-bias", "sat-phase", "sat-target", "sat-rephase",
+          "kissat-stable", "kissat-probe", "kissat-trail-reuse-mode",
+          "cnf-generation-effort", "cadical-factor"})
+    {
+      SCOPED_TRACE(name);
+      EXPECT_FALSE(effective.is_set(name));
+      EXPECT_EQ(effective.get(name), baseline.get(name));
+      EXPECT_EQ(effective.info(name).resolved, effective.resolved(name));
+    }
+    solver.push();
+    solver.add(x == 2);
+    ASSERT_TRUE(solver.check_sat().is_unsat());
+    solver.pop();
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_EQ(effective.resolved("sat-phase"),
+              OptionValue(std::int64_t(kissat ? -1 : 0)));
+  }
+}
+
+TEST(Options, forced_abvfp_tuning_preserves_explicit_baseline_values)
+{
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    SCOPED_TRACE(backend);
+    for (const char* name :
+         {"sat-phase", "sat-target", "sat-rephase", "kissat-stable",
+          "kissat-probe", "kissat-trail-reuse-mode", "cnf-generation-effort",
+          "cadical-factor", "kissat-factor"})
+    {
+      SCOPED_TRACE(name);
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", backend);
+      options.set_str("logic", "QF_ABVFP");
+      options.set_str("incremental", "on");
+      options.set(name, text_of(baseline.info(name), baseline.get(name)));
+      Solver solver(tm, options);
+      const Term x = tm.declare("abvfp_override_x", tm.mk_bv_sort(8));
+      solver.add(x == 1);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_TRUE(solver.options().is_set(name));
+      EXPECT_EQ(solver.options().resolved(name), baseline.get(name));
+      EXPECT_EQ(solver.options().resolved("search-bias"),
+                OptionValue(std::string("sat")));
+    }
+  }
+}
+
+TEST(Options, forced_abvfp_tuning_respects_named_search_policies_and_opt_out)
+{
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    SCOPED_TRACE(backend);
+    for (const char* bias : {"none", "sat", "unsat"})
+    {
+      SCOPED_TRACE(bias);
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", backend);
+      options.set_str("logic", "QF_ABVFP");
+      options.set_str("incremental", "on");
+      options.set_str("search-bias", bias);
+      const Options explicit_policy = options;
+      Solver solver(tm, options);
+      const Term x = tm.declare("abvfp_bias_x", tm.mk_bv_sort(8));
+      solver.add(x == 1);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      for (const char* name :
+           {"sat-phase", "sat-target", "sat-rephase", "kissat-stable"})
+      {
+        SCOPED_TRACE(name);
+        EXPECT_EQ(solver.options().resolved(name),
+                  explicit_policy.resolved(name));
+      }
+      EXPECT_EQ(solver.options().resolved("cadical-factor"),
+                OptionValue(std::string("off")));
+    }
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", backend);
+    options.set_str("logic", "QF_ABVFP");
+    options.set_str("incremental", "on");
+    options.set_str("sat-tuning", "off");
+    Solver solver(tm, options);
+    const Term x = tm.declare("abvfp_untuned_x", tm.mk_bv_sort(8));
+    solver.add(x == 1);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    for (const char* name :
+         {"search-bias", "sat-phase", "sat-target", "sat-rephase",
+          "kissat-stable", "kissat-probe", "kissat-trail-reuse-mode",
+          "cnf-generation-effort", "cadical-factor"})
+      EXPECT_EQ(solver.options().resolved(name), options.resolved(name));
+  }
+}
+
+TEST(Options,
+     abvfp_tuning_keeps_unmeasured_session_modes_and_logics_at_baseline)
+{
+  for (const char* backend :
+       {"cadical", "kissat", "minisat", "simplifying-minisat", "cryptominisat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    for (const char* logic : {"", "QF_FP", "QF_BVFP", "QF_ABVFP"})
+      for (const char* incremental : {"on", "auto", "off"})
+      {
+        if (std::string(logic) == "QF_ABVFP" &&
+            std::string(incremental) == "on" &&
+            (std::string(backend) == "cadical" ||
+             std::string(backend) == "kissat"))
+          continue;
+        SCOPED_TRACE(std::string(backend) + "/" + logic + "/" + incremental);
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", backend);
+        if (*logic)
+          options.set_str("logic", logic);
+        options.set_str("incremental", incremental);
+        Solver solver(tm, options);
+        const Term x = tm.declare("abvfp_baseline_x", tm.mk_bv_sort(8));
+        solver.push();
+        solver.add(x == 1);
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        for (const char* name :
+             {"search-bias", "sat-phase", "sat-target", "sat-rephase",
+              "kissat-stable", "kissat-probe", "kissat-trail-reuse-mode",
+              "cnf-generation-effort", "cadical-factor"})
+          EXPECT_EQ(solver.options().resolved(name), options.resolved(name))
+              << name;
+      }
+  }
+}
+
+TEST(Options, copying_abvfp_options_selects_a_fresh_profile)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not compiled in";
+  TermManager tm;
+  Options options;
+  options.set_str("sat-backend", "kissat");
+  options.set_str("logic", "QF_ABVFP");
+  options.set_str("incremental", "on");
+  Solver solver(tm, options);
+  const Term x = tm.declare("abvfp_copy_x", tm.mk_bv_sort(8));
+  solver.add(x == 1);
+  ASSERT_TRUE(solver.check_sat().is_sat());
+  EXPECT_EQ(solver.options().resolved("sat-target"),
+            OptionValue(std::int64_t(0)));
+  Options copied = solver.options().copy();
+  EXPECT_FALSE(copied.is_set("sat-target"));
+  copied.set_str("logic", "QF_FP");
+  Solver other(tm, copied);
+  other.add(x == 2);
+  ASSERT_TRUE(other.check_sat().is_sat());
+  EXPECT_EQ(other.options().resolved("sat-target"),
+            OptionValue(std::int64_t(-1)));
+  ASSERT_TRUE(solver.check_sat().is_sat());
+  EXPECT_EQ(solver.options().resolved("sat-target"),
+            OptionValue(std::int64_t(0)));
+  solver.reset_assertions();
+  solver.add(x == 3);
+  ASSERT_TRUE(solver.check_sat().is_sat());
+  EXPECT_EQ(solver.options().resolved("sat-target"),
+            OptionValue(std::int64_t(0)));
+  solver.reset();
+  solver.options().set_str("logic", "QF_FP");
+  solver.add(x == 4);
+  ASSERT_TRUE(solver.check_sat().is_sat());
+  EXPECT_EQ(solver.options().resolved("sat-target"),
+            OptionValue(std::int64_t(-1)));
+}
+
+TEST(Options, forced_abvfp_tuning_keeps_reuse_diagnostic_overrides)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not compiled in";
+  for (const bool core_only : {false, true})
+    for (const bool explicit_mode : {false, true})
+    {
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", "kissat");
+      options.set_str("logic", "QF_ABVFP");
+      options.set_str("incremental", "on");
+      options.set_bool("incremental-core-only", core_only);
+      options.set_bool("kissat-trail-reuse", false);
+      if (explicit_mode)
+        options.set_int("kissat-trail-reuse-mode", 1);
+      Solver solver(tm, options);
+      const Term x = tm.declare("abvfp_reuse_x", tm.mk_bv_sort(8));
+      solver.add(x == 1);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_EQ(solver.options().resolved("kissat-trail-reuse"),
+                OptionValue(false));
+      EXPECT_EQ(solver.options().resolved("kissat-trail-reuse-mode"),
+                OptionValue(std::int64_t(explicit_mode ? 1
+                                         : core_only   ? -1
+                                                       : 2)));
+    }
+}

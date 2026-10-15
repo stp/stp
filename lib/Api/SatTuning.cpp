@@ -100,6 +100,18 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     profile.settings.push_back({"kissat-trail-reuse-mode", "2"});
     return profile;
   }();
+  static const Profile cadical_abvfp_forced_incremental{
+      "cadical-qf-abvfp-forced-incremental",
+      {{"search-bias", "sat"},
+       {"sat-phase", "0"},
+       {"sat-target", "0"},
+       {"cadical-factor", "off"}}};
+  static const Profile kissat_abvfp_forced_incremental = []
+  {
+    Profile profile = kissat_abv_forced_incremental;
+    profile.name = "kissat-qf-abvfp-forced-incremental";
+    return profile;
+  }();
 
   if (backend == Flags::KISSAT_SOLVER && logic == "QF_BV" && !incremental)
     return kissat_bv_batch;
@@ -119,6 +131,13 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     if (backend == Flags::KISSAT_SOLVER)
       return forced_incremental ? kissat_abv_forced_incremental
                                 : kissat_abv_incremental;
+  }
+  if (logic == "QF_ABVFP" && forced_incremental)
+  {
+    if (backend == Flags::CADICAL_SOLVER)
+      return cadical_abvfp_forced_incremental;
+    if (backend == Flags::KISSAT_SOLVER)
+      return kissat_abvfp_forced_incremental;
   }
   // The Kissat batch QF_ABV finalist was slower than its baseline.
   return baseline;
