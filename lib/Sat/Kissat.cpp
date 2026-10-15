@@ -88,12 +88,21 @@ Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed)
 
 Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed,
                int trail_reuse_mode)
+    : Kissat(trail_reuse_allowed, search_mode, probing_allowed,
+             trail_reuse_mode, -1)
+{
+}
+
+Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed,
+               int trail_reuse_mode, int elimination)
     : allocations(new Allocations), solver(nullptr),
       trail_reuse_allowed(trail_reuse_allowed),
       trail_reuse_mode(trail_reuse_mode), search_mode(search_mode)
 {
   if (trail_reuse_mode < -1 || trail_reuse_mode > 2)
     throw std::invalid_argument("Kissat trail reuse mode outside its range");
+  if (elimination < -1 || elimination > 1)
+    throw std::invalid_argument("Kissat elimination option outside its range");
   const kissat_allocator allocator = {allocations.get(), Allocations::allocate,
                                       Allocations::resize,
                                       Allocations::deallocate};
@@ -102,6 +111,8 @@ Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed,
   kissat_set_option(solver, "factor", 0);
   kissat_set_option(solver, "quiet", 1);
   kissat_set_option(solver, "probe", probing_allowed ? 1 : 0);
+  if (elimination >= 0)
+    kissat_set_option(solver, "eliminate", elimination);
   // A selected mode can enable reuse before the driver's size-gated hint.
   // This matches the measured forced-incremental profile. The boolean opt-out
   // and a later one-shot configuration take precedence over this mode.
@@ -259,6 +270,7 @@ void Kissat::printStats() const
             << " target=" << kissat_get_option(solver, "target")
             << " stable=" << kissat_get_option(solver, "stable")
             << " probe=" << kissat_get_option(solver, "probe")
+            << " eliminate=" << kissat_get_option(solver, "eliminate")
             << " trail-reuse=" << kissat_get_option(solver, "incrementalreuse")
             << '\n';
   std::cerr << "Kissat: variables=" << nVars()

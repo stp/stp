@@ -2023,6 +2023,7 @@ public:
   bool kissat_trail_reuse = true;
   int kissat_trail_reuse_mode = -1;
   bool kissat_probe = true;
+  int kissat_eliminate = -1;
   int kissat_stable = -1;
   bool kissat_batch_only = false;
 
