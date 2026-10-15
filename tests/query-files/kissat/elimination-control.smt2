@@ -22,11 +22,11 @@
 ; RUN: %solver --kissat --incremental=on --kissat-eliminate=0 --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=OFF %s
 ; RUN: %solver --kissat --incremental=off --kissat-eliminate=1 --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=ON %s
 ; RUN: %solver --kissat --incremental=on --kissat-eliminate=-1 --check-sanity -s %s 2>&1 | %OutputCheck --check-prefix=DEFAULT %s
-; OFF: ^Kissat search:.* eliminate=0 
+; OFF: ^Kissat search:.* eliminate=0[ ]
 ; OFF: ^sat$
 ; OFF: ^unsat$
 ; OFF: ^sat$
-; ON: ^Kissat search:.* eliminate=1 
+; ON: ^Kissat search:.* eliminate=1[ ]
 ; ON: ^sat$
 ; ON: ^unsat$
 ; ON: ^sat$

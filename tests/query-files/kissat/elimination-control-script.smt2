@@ -20,7 +20,7 @@
 ;
 ; REQUIRES: kissat
 ; RUN: %solver --kissat --kissat-eliminate=1 --check-sanity -s %s 2>&1 | %OutputCheck %s
-; CHECK: ^Kissat search:.* eliminate=0 
+; CHECK: ^Kissat search:.* eliminate=0[ ]
 ; CHECK: ^sat$
 ; CHECK: ^unsat$
 ; CHECK: ^sat$
