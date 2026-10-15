@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <new>
@@ -15,6 +17,227 @@ struct Kissat::Allocations
 {
   detail::KissatAllocations owner;
 };
+
+struct Kissat::LuckyProbe
+{
+  static constexpr size_t maximumLiterals = 4000000;
+  static constexpr int maximumVariable = 1000000;
+  static constexpr uint64_t minimumAddedClauses = 100000;
+  static constexpr uint64_t growthFactor = 4;
+
+  // Original external literals, including a zero after each clause. Only the
+  // incremental driver enables this journal; batch encodings do not keep it.
+  std::vector<int> clauses;
+  std::vector<lbool> model;
+  LuckyProbeStatistics statistics;
+  uint64_t clauses_at_last_solve = 0;
+  bool recording = true;
+  bool model_valid = false;
+
+  void stopRecording()
+  {
+    recording = false;
+    std::vector<int>().swap(clauses);
+  }
+
+  struct Backend
+  {
+    detail::KissatAllocations owner;
+    kissat* solver = nullptr;
+    const Kissat& parent;
+    bool& interrupted;
+    const std::chrono::steady_clock::time_point deadline;
+
+    Backend(const Kissat& parent, bool& interrupted)
+        : parent(parent), interrupted(interrupted),
+          deadline(std::chrono::steady_clock::now() +
+                   std::chrono::milliseconds(250))
+    {
+      const kissat_allocator allocator = {
+          &owner, detail::KissatAllocations::allocate,
+          detail::KissatAllocations::resize,
+          detail::KissatAllocations::deallocate};
+      solver = kissat_init_with_allocator(&allocator);
+      kissat_set_option(solver, "quiet", 1);
+      kissat_set_option(solver, "factor", 0);
+      kissat_set_option(solver, "preprocess", 0);
+      kissat_set_option(solver, "probe", 0);
+      kissat_set_option(solver, "eliminate", 0);
+      kissat_set_option(solver, "lucky", 1);
+      kissat_set_option(solver, "luckyearly", 1);
+      kissat_set_option(solver, "luckylate", 0);
+      // The candidate pass may finish, but an unsuccessful pass must not
+      // start an independent CDCL search before the persistent fallback.
+      kissat_set_conflict_limit(solver, 0);
+      kissat_set_decision_limit(solver, 0);
+      kissat_set_terminate(solver, this, terminate);
+    }
+
+    bool stopped() const
+    {
+      if (parent.timeLimitExpired())
+        interrupted = true;
+      return interrupted || std::chrono::steady_clock::now() >= deadline;
+    }
+
+    static int terminate(void* state)
+    {
+      return static_cast<Backend*>(state)->stopped();
+    }
+
+    ~Backend()
+    {
+      if (solver && !owner.failed)
+        kissat_release(solver);
+    }
+  };
+};
+
+bool Kissat::enableLuckyProbe()
+{
+  requireHealthy();
+#ifndef KISSAT_HAS_INTERRUPTIBLE_LUCKY
+  return false;
+#else
+  if (one_shot || !configurationOpen())
+    return false;
+  if (!lucky_probe)
+    try
+    {
+      lucky_probe = std::make_unique<LuckyProbe>();
+    }
+    catch (const std::bad_alloc&)
+    {
+      return false;
+    }
+  return true;
+#endif
+}
+
+Kissat::LuckyProbeStatistics Kissat::luckyProbeStatistics() const
+{
+  if (!lucky_probe)
+    return {};
+  auto result = lucky_probe->statistics;
+  result.retained_literals = lucky_probe->clauses.size();
+  return result;
+}
+
+bool Kissat::tryLuckyProbe(const vec_literals& assumptions,
+                           bool& timeout_expired)
+{
+  if (!lucky_probe)
+    return false;
+  auto& probe = *lucky_probe;
+  probe.model_valid = false;
+  const uint64_t clauses = submittedClauses();
+  const uint64_t previous = probe.clauses_at_last_solve;
+  probe.clauses_at_last_solve = clauses;
+  const uint64_t added = clauses - previous;
+  if (!probe.recording || added < LuckyProbe::minimumAddedClauses ||
+      added / LuckyProbe::growthFactor < previous || max_conflicts >= 0)
+    return false;
+
+  ++probe.statistics.attempts;
+  try
+  {
+    LuckyProbe::Backend candidate(*this, timeout_expired);
+    size_t polled = 0;
+    for (int lit : probe.clauses)
+    {
+      if (!(polled++ & 1023) && candidate.stopped())
+      {
+        ++probe.statistics.inconclusive;
+        return false;
+      }
+      kissat_add(candidate.solver, lit);
+    }
+    for (int i = 0; i < assumptions.size(); ++i)
+    {
+      if (!(i & 1023) && candidate.stopped())
+      {
+        ++probe.statistics.inconclusive;
+        return false;
+      }
+      kissat_add(candidate.solver, literal(assumptions[i]));
+      kissat_add(candidate.solver, 0);
+    }
+    if (kissat_solve(candidate.solver) != 10)
+    {
+      ++probe.statistics.inconclusive;
+      return false;
+    }
+
+    std::vector<int8_t> values(static_cast<size_t>(last_external) + 1, 0);
+    for (int var = 1; var <= last_external; ++var)
+    {
+      if (!(var & 1023) && candidate.stopped())
+      {
+        ++probe.statistics.inconclusive;
+        return false;
+      }
+      const int value = kissat_value(candidate.solver, var);
+      values[var] = value > 0 ? 1 : value < 0 ? -1 : 0;
+    }
+    const auto satisfied = [&values](int lit)
+    {
+      // An unassigned variable is completed with false. This also checks
+      // clauses simplified away while the disposable formula was loaded.
+      const bool value = values[static_cast<size_t>(std::abs(lit))] > 0;
+      return value == (lit > 0);
+    };
+    bool clause_satisfied = false;
+    for (int lit : probe.clauses)
+    {
+      if (!(polled++ & 1023) && candidate.stopped())
+      {
+        ++probe.statistics.inconclusive;
+        return false;
+      }
+      if (lit)
+        clause_satisfied |= satisfied(lit);
+      else
+      {
+        if (!clause_satisfied)
+        {
+          ++probe.statistics.rejected_models;
+          return false;
+        }
+        clause_satisfied = false;
+      }
+    }
+    for (int i = 0; i < assumptions.size(); ++i)
+      if (!satisfied(literal(assumptions[i])))
+      {
+        ++probe.statistics.rejected_models;
+        return false;
+      }
+
+    std::vector<lbool> model;
+    model.reserve(external.size());
+    for (int var : external)
+      model.push_back(values[var] > 0   ? true_literal()
+                      : values[var] < 0 ? false_literal()
+                                        : undef_literal());
+    probe.model = std::move(model);
+    if (candidate.stopped())
+    {
+      ++probe.statistics.inconclusive;
+      return false;
+    }
+    probe.model_valid = true;
+    ++probe.statistics.successes;
+    return true;
+  }
+  catch (const std::bad_alloc&)
+  {
+    // Optional copying must not poison the persistent solver's allocator.
+    // Abandon future copies and give their memory back to ordinary solving.
+    probe.stopRecording();
+    ++probe.statistics.inconclusive;
+    return false;
+  }
+}
 
 Kissat::Kissat(bool trail_reuse_allowed, int search_mode)
     : Kissat(trail_reuse_allowed, search_mode, true)
@@ -96,6 +319,8 @@ uint32_t Kissat::newVar()
     throw std::overflow_error("Kissat external variable limit reached");
   external.push_back(++last_external);
   frozen.push_back(false);
+  if (lucky_probe && last_external > LuckyProbe::maximumVariable)
+    lucky_probe->stopRecording();
   return static_cast<uint32_t>(external.size() - 1);
 }
 
@@ -104,6 +329,28 @@ bool Kissat::addClauseInternal(const vec_literals& clause)
   requireHealthy();
   if (one_shot && solve_calls)
     throw std::logic_error("clauses added after a one-shot Kissat search");
+  if (lucky_probe)
+  {
+    auto& probe = *lucky_probe;
+    probe.model_valid = false;
+    if (probe.recording)
+    {
+      if (static_cast<size_t>(clause.size()) + 1 >
+          LuckyProbe::maximumLiterals - probe.clauses.size())
+        probe.stopRecording();
+      else
+        try
+        {
+          for (int i = 0; i < clause.size(); ++i)
+            probe.clauses.push_back(literal(clause[i]));
+          probe.clauses.push_back(0);
+        }
+        catch (const std::bad_alloc&)
+        {
+          probe.stopRecording();
+        }
+    }
+  }
   for (int i = 0; i < clause.size(); ++i)
     kissat_add(solver, literal(clause[i]));
   kissat_add(solver, 0);
@@ -113,7 +360,17 @@ bool Kissat::addClauseInternal(const vec_literals& clause)
 uint8_t Kissat::modelValue(uint32_t var) const
 {
   requireHealthy();
-  const int value = kissat_value(solver, external.at(var));
+  const int native_var = external.at(var);
+  if (lucky_probe && lucky_probe->model_valid)
+  {
+    const auto& model = lucky_probe->model;
+    if (var >= model.size())
+      return undef_literal();
+    // A model variable with no constraints can be completed with false.
+    return frozen.at(var) && model[var] == undef_literal() ? false_literal()
+                                                           : model[var];
+  }
+  const int value = kissat_value(solver, native_var);
   return value > 0   ? true_literal()
          : value < 0 ? false_literal()
                      : undef_literal();
@@ -171,6 +428,18 @@ bool Kissat::run(bool& timeout_expired)
 
 bool Kissat::solveInternal(bool& timeout_expired)
 {
+  requireHealthy();
+  const vec_literals assumptions;
+  if (tryLuckyProbe(assumptions, timeout_expired))
+  {
+    ++solve_calls;
+    return true;
+  }
+  if (timeout_expired || timeLimitExpired())
+  {
+    timeout_expired = true;
+    return false;
+  }
   return run(timeout_expired);
 }
 
@@ -180,6 +449,16 @@ bool Kissat::solveWithAssumptionsInternal(const vec_literals& assumptions,
   requireHealthy();
   if (one_shot)
     throw std::logic_error("assumptions passed to a one-shot Kissat backend");
+  if (tryLuckyProbe(assumptions, timeout_expired))
+  {
+    ++solve_calls;
+    return true;
+  }
+  if (timeout_expired || timeLimitExpired())
+  {
+    timeout_expired = true;
+    return false;
+  }
   for (int i = 0; i < assumptions.size(); ++i)
     kissat_assume(solver, literal(assumptions[i]));
   return run(timeout_expired);
@@ -216,6 +495,15 @@ void Kissat::printStats() const
   std::cerr << "Kissat: variables=" << nVars()
             << " submitted-clauses=" << submittedClauses()
             << " solves=" << solve_calls << '\n';
+  if (lucky_probe)
+  {
+    const auto stats = luckyProbeStatistics();
+    std::cerr << "Kissat lucky probe: attempts=" << stats.attempts
+              << " successes=" << stats.successes
+              << " inconclusive=" << stats.inconclusive
+              << " rejected-models=" << stats.rejected_models
+              << " retained-literals=" << stats.retained_literals << '\n';
+  }
 }
 
 void Kissat::setVerbosity(int)
@@ -255,6 +543,7 @@ bool Kissat::configureOneShot()
   kissat_set_option(solver, "incremental", 0);
   kissat_set_option(solver, "incrementalreuse", 0);
   one_shot = true;
+  lucky_probe.reset();
   return true;
 }
 

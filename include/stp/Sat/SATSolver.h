@@ -637,6 +637,12 @@ public:
 
   virtual void enableRefinement(const bool /*enable*/) {}
 
+  // Enable an optional disposable candidate search on large additions to a
+  // persistent formula. A candidate must satisfy the original clauses and
+  // current assumptions; inconclusive attempts leave ordinary solving intact.
+  // Called while the backend is still empty. Other backends may decline.
+  virtual bool enableLuckyProbe() { return false; }
+
   // TRUE when nClauses() is implemented, i.e. the backend can report how
   // many clauses it currently holds (after simplify(), the post-propagation
   // count). Callers with a fallback should ask this before calling it.

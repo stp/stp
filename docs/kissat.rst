@@ -208,6 +208,31 @@ Satsuma uses the same variable and clause interfaces as ordinary STP clause
 loading. It is restricted to complete batch encodings; incremental sessions
 and refinement queries bypass preprocessing, including with Kissat.
 
+Disposable incremental candidates
+---------------------------------
+
+``--kissat-lucky-probe=true`` enables an optional greedy candidate pass on
+the incremental driver's persistent Kissat backend. It is off by default.
+After a large increase in clauses, STP copies the original clauses into a
+disposable solver and adds the current assumptions as units there. The copy
+does no CDCL search. STP accepts a SAT candidate only after checking every
+original clause and current assumption; the ordinary model and theory
+refinement pipeline then checks it as usual. Other results fall back to the
+persistent backend. The copy's units and deductions never enter that backend.
+
+An attempt requires at least 100,000 new clauses and at least four times
+the preceding check's clause count in additions. The retained input is
+capped at four million literal entries, including clause terminators, and
+one million external variable IDs. Exceeding either cap releases the
+journal and disables further attempts on that backend instance. Batch
+encodings and other SAT backends do not retain a journal.
+
+An attempt shares the check's deadline and cancellation callback and has
+its own 250 ms soft time allowance. An explicit conflict budget bypasses the
+candidate pass. Original solving continues to enforce those controls.
+Statistics printed by ``-s`` include attempts, successful candidates,
+inconclusive attempts, rejected models and retained input size.
+
 Testing
 -------
 
