@@ -962,6 +962,20 @@ requires = { build = "kissat" }
 help = "allow Kissat's probing preprocessing and probe-based inprocessing; disabling it keeps the ordinary CDCL search and variable elimination available"
 
 [[option]]
+name = "kissat-eliminate"
+type = "int"
+default = -1
+range = { min = -1, max = 1 }
+sentinel = "-1 = unset: Kissat's own default applies"
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_eliminate" }
+category = "sat"
+requires = { build = "kissat" }
+help = "Kissat variable elimination: -1 preserves the backend policy, 0 disables and 1 enables; independent of kissat-probe"
+
+[[option]]
 name = "kissat-stable"
 type = "int"
 default = -1

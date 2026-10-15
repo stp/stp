@@ -504,3 +504,51 @@ TEST(OptionEffects, forced_abvfp_tuning_reaches_the_incremental_solver)
     }
   }
 }
+
+TEST(OptionEffects, kissat_elimination_control_reaches_native_and_parsed_checks)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  for (const bool parsed : {false, true})
+    for (const char* incremental : {"on", "off"})
+      for (int elimination : {-1, 0, 1})
+      {
+        SCOPED_TRACE(std::string(parsed ? "SMT-LIB/" : "native/") +
+                     incremental + "/" + std::to_string(elimination));
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", "kissat");
+        options.set_str("incremental", incremental);
+        options.set_bool("check-sanity", true);
+        if (!parsed)
+          options.set_int("kissat-eliminate", elimination);
+        Solver solver(tm, options);
+        if (parsed)
+          solver.parse_smt2("(set-option :kissat-eliminate " +
+                            std::to_string(elimination) + ")");
+        add_tuning_array_problem(tm, solver);
+        bool emitted = false;
+        solver.set_cnf_sink(
+            [&](std::string_view, CnfScope)
+            {
+              emitted = true;
+              EXPECT_EQ(flags_after(tm).kissat_eliminate, elimination);
+            });
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        EXPECT_EQ(flags_after(tm).kissat_eliminate, elimination);
+        if (std::string(incremental) == "off")
+        {
+          EXPECT_TRUE(emitted);
+        }
+        else
+        {
+          EXPECT_TRUE(api_test::engine_solver(solver).hasIncrementalSolver());
+        }
+        EXPECT_EQ(solver.options().resolved("kissat-eliminate"),
+                  OptionValue(std::int64_t(elimination)));
+        EXPECT_TRUE(solver.options().is_set("kissat-eliminate"));
+        API_EXPECT_ERROR(ErrorCode::OPTION_TIMING,
+                         solver.options().set_int("kissat-eliminate",
+                                                  elimination == 0 ? 1 : 0));
+      }
+}

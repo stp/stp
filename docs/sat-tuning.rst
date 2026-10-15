@@ -120,6 +120,11 @@ is preserved even though it equals the baseline value. An explicit
 refer to one option, so an explicit ``--kissat-factor=on`` also overrides an
 automatic ``cadical-factor=off``.
 
+``--kissat-eliminate=0`` disables variable elimination independently of
+``kissat-probe``. Value 1 enables it, and the default -1 preserves the backend
+policy. Set this option before the first check. No automatic profile changes
+its value.
+
 ``--kissat-trail-reuse-mode=-1`` explicitly preserves STP's scope hints,
 even in forced QF_ABV sessions. Modes 0, 1 and 2 select no reuse, assumption
 prefix reuse, and whole-trail reuse under unchanged assumptions. An explicit

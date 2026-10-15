@@ -42,6 +42,8 @@ public:
   Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed);
   Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed,
          int trail_reuse_mode);
+  Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed,
+         int trail_reuse_mode, int elimination);
   ~Kissat() override;
   bool okay() const override;
   bool supportsAssumptions() const override { return !one_shot; }

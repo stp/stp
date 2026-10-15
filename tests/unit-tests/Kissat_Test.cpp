@@ -59,6 +59,67 @@ TEST(Kissat, OneShotConfigurationRequiresAnEmptyBackend)
   EXPECT_TRUE(solver.supportsAssumptions());
 }
 
+TEST(Kissat, EliminationControlSurvivesSearchBiasAndIncrementalSolves)
+{
+  for (int elimination : {-1, 0, 1})
+    for (const auto bias :
+         {stp::SearchBias::NONE, stp::SearchBias::SAT, stp::SearchBias::UNSAT})
+    {
+      stp::Kissat solver(true, -1, false, 2, elimination);
+      ASSERT_TRUE(solver.setSearchBias(bias));
+      testing::internal::CaptureStderr();
+      solver.printStats();
+      const std::string stats = testing::internal::GetCapturedStderr();
+      EXPECT_NE(stats.find("probe=0"), std::string::npos);
+      EXPECT_NE(stats.find(elimination == 0 ? "eliminate=0" : "eliminate=1"),
+                std::string::npos);
+      const auto x = solver.newVar(), y = solver.newVar();
+      solver.setFrozen(x);
+      solver.setFrozen(y);
+      ASSERT_TRUE(solver.addClause(
+          clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)})));
+      bool timeout = false;
+      const auto noX = clause({SATSolver::mkLit(x, true)});
+      ASSERT_TRUE(solver.solveWithAssumptions(noX, timeout));
+      EXPECT_EQ(solver.true_literal(), solver.modelValue(y));
+      ASSERT_TRUE(solver.addClause(clause({SATSolver::mkLit(x, false)})));
+      EXPECT_FALSE(solver.solveWithAssumptions(noX, timeout));
+      std::vector<int> core;
+      solver.unsatAssumptions(noX, core);
+      ASSERT_EQ(core.size(), 1u);
+      EXPECT_EQ(core[0], static_cast<int>(noX[0].x));
+      ASSERT_TRUE(solver.solve(timeout));
+      EXPECT_FALSE(timeout);
+    }
+}
+
+TEST(Kissat, EliminationControlRejectsOutOfRangeValues)
+{
+  EXPECT_THROW(stp::Kissat(true, -1, true, -1, -2), std::invalid_argument);
+  EXPECT_THROW(stp::Kissat(true, -1, true, -1, 2), std::invalid_argument);
+}
+
+TEST(Kissat, OneShotEliminationControlHasAValidModel)
+{
+  for (int elimination : {0, 1})
+  {
+    stp::Kissat solver(true, -1, true, -1, elimination);
+    ASSERT_TRUE(solver.configureOneShot());
+    ASSERT_TRUE(solver.setSearchBias(stp::SearchBias::UNSAT));
+    const auto x = solver.newVar(), y = solver.newVar();
+    solver.setFrozen(x);
+    solver.setFrozen(y);
+    ASSERT_TRUE(solver.addClause(
+        clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)})));
+    ASSERT_TRUE(solver.addClause(clause({SATSolver::mkLit(x, true)})));
+    bool timeout = false;
+    ASSERT_TRUE(solver.solve(timeout));
+    EXPECT_FALSE(timeout);
+    EXPECT_EQ(solver.false_literal(), solver.modelValue(x));
+    EXPECT_EQ(solver.true_literal(), solver.modelValue(y));
+  }
+}
+
 TEST(Kissat, AssumptionsRetractAfterUnsat)
 {
   stp::Kissat solver;
