@@ -14,6 +14,15 @@ elseif(NOT STP_DEPS_LOCAL_ONLY)
   find_library(HIGHS_LIBRARY NAMES highs)
 endif()
 if(NOT HIGHS_INCLUDE_DIR OR NOT HIGHS_LIBRARY)
+  set(stp_highs_cut_log_default ON)
+else()
+  set(stp_highs_cut_log_default OFF)
+endif()
+# Bundled HiGHS can carry the callback patch; ordinary installed HiGHS need
+# not have this STP-specific extension. An explicit cache value still wins.
+option(ENABLE_HIGHS_CUT_LOG "Enable the optional HiGHS root-cut recipe patch"
+  ${stp_highs_cut_log_default})
+if(NOT HIGHS_INCLUDE_DIR OR NOT HIGHS_LIBRARY)
   check_ep_downloaded("HiGHS-EP")
   if(NOT HiGHS-EP_DOWNLOADED)
     check_auto_download("HiGHS" "-DENABLE_HIGHS=OFF")
@@ -26,11 +35,22 @@ if(NOT HIGHS_INCLUDE_DIR OR NOT HIGHS_LIBRARY)
     set(stp_highs_patch_args PATCH_COMMAND ${CMAKE_COMMAND}
       "-DSOURCE_DIR=<SOURCE_DIR>" -P "${CMAKE_CURRENT_LIST_DIR}/deps-utils/patch-highs.cmake")
   endif()
+  set(stp_highs_assert_args)
+  if(ENABLE_ASSERTIONS)
+    # STP strips NDEBUG from its configuration flags, but HiGHS configures
+    # separately and would restore it, hiding assertion-only regressions.
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" stp_highs_config)
+    set(stp_highs_c_flags "CMAKE_C_FLAGS_${stp_highs_config}")
+    set(stp_highs_cxx_flags "CMAKE_CXX_FLAGS_${stp_highs_config}")
+    list(APPEND stp_highs_assert_args
+      "-D${stp_highs_c_flags}:STRING=${${stp_highs_c_flags}}"
+      "-D${stp_highs_cxx_flags}:STRING=${${stp_highs_cxx_flags}}")
+  endif()
   ExternalProject_Add(HiGHS-EP ${STP_EP_COMMON_CONFIG}
-    URL https://codeload.github.com/ERGO-Code/HiGHS/tar.gz/refs/tags/v1.12.0
-    URL_HASH SHA256=cd0daddaca57e66b55524588d715dc62dcee06b5ab9ad186412dc23bc71ae342
+    URL https://codeload.github.com/ERGO-Code/HiGHS/tar.gz/38e323294bd29e15f5e6cdfb07021a4f8bd9dc52
+    URL_HASH SHA256=ec5b6fe5f34f62699fb810eb0ec9022bf77a6b24cc3b6c8cd2162f76098caf90
     ${stp_highs_patch_args}
-    CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
+    CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS} ${stp_highs_assert_args}
       -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR> -DCMAKE_INSTALL_LIBDIR=lib
       -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF
       -DBUILD_CXX_EXE=OFF -DZLIB=OFF -DHIGHS_NO_DEFAULT_THREADS=ON
