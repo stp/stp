@@ -14,6 +14,228 @@ SATSolver::vec_literals clause(std::initializer_list<SATSolver::Lit> lits)
 }
 } // namespace
 
+#ifdef KISSAT_HAS_INTERRUPTIBLE_LUCKY
+namespace
+{
+// The policy counts original submissions, including redundant clauses.
+// Tautologies reach its size threshold without making these regressions hard.
+void addProbeGrowth(stp::Kissat& solver, uint32_t var, unsigned count = 100000)
+{
+  const auto tautology =
+      clause({SATSolver::mkLit(var, false), SATSolver::mkLit(var, true)});
+  for (unsigned i = 0; i < count; ++i)
+    ASSERT_TRUE(solver.addClause(tautology));
+}
+} // namespace
+
+TEST(Kissat, LuckyProbeModelSurvivesNewVariablesAndAssumptionsRetract)
+{
+  stp::Kissat solver;
+  ASSERT_TRUE(solver.enableLuckyProbe());
+  const auto x = solver.newVar(), y = solver.newVar();
+  solver.setFrozen(x);
+  solver.setFrozen(y);
+  ASSERT_TRUE(solver.addClause(
+      clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)})));
+  addProbeGrowth(solver, x);
+  bool timeout = false;
+  const auto notX = clause({SATSolver::mkLit(x, true)});
+  ASSERT_TRUE(solver.solveWithAssumptions(notX, timeout));
+  ASSERT_FALSE(timeout);
+  ASSERT_EQ(1u, solver.luckyProbeStatistics().attempts);
+  ASSERT_EQ(1u, solver.luckyProbeStatistics().successes);
+  EXPECT_EQ(solver.false_literal(), solver.modelValue(x));
+  EXPECT_EQ(solver.true_literal(), solver.modelValue(y));
+
+  const auto fresh = solver.newVar();
+  EXPECT_EQ(solver.true_literal(), solver.modelValue(y));
+  EXPECT_EQ(solver.undef_literal(), solver.modelValue(fresh));
+  ASSERT_TRUE(solver.addClause(clause({SATSolver::mkLit(fresh, true)})));
+  const auto notY = clause({SATSolver::mkLit(y, true)});
+  ASSERT_TRUE(solver.solveWithAssumptions(notY, timeout));
+  EXPECT_EQ(solver.true_literal(), solver.modelValue(x));
+  EXPECT_EQ(solver.false_literal(), solver.modelValue(y));
+  EXPECT_EQ(solver.false_literal(), solver.modelValue(fresh));
+  EXPECT_EQ(1u, solver.luckyProbeStatistics().attempts);
+  EXPECT_TRUE(solver.okay());
+  EXPECT_FALSE(timeout);
+}
+
+TEST(Kissat, LuckyProbeUnsatFallsBackToFailedAssumptions)
+{
+  stp::Kissat solver;
+  ASSERT_TRUE(solver.enableLuckyProbe());
+  const auto x = solver.newVar(), y = solver.newVar();
+  solver.addClause(
+      clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)}));
+  addProbeGrowth(solver, x);
+  const auto assumptions =
+      clause({SATSolver::mkLit(x, true), SATSolver::mkLit(y, true)});
+  bool timeout = false;
+  ASSERT_FALSE(solver.solveWithAssumptions(assumptions, timeout));
+  ASSERT_FALSE(timeout);
+  EXPECT_EQ(1u, solver.luckyProbeStatistics().attempts);
+  EXPECT_EQ(0u, solver.luckyProbeStatistics().successes);
+  EXPECT_EQ(1u, solver.luckyProbeStatistics().inconclusive);
+  std::vector<int> core;
+  solver.unsatAssumptions(assumptions, core);
+  EXPECT_FALSE(core.empty());
+  ASSERT_TRUE(solver.solve(timeout));
+  EXPECT_TRUE(solver.okay());
+}
+
+TEST(Kissat, LuckyProbeInconclusiveFallsBackToSearch)
+{
+  stp::Kissat solver;
+  ASSERT_TRUE(solver.enableLuckyProbe());
+  uint32_t pigeons[8][7];
+  for (auto& pigeon : pigeons)
+    for (auto& hole : pigeon)
+      hole = solver.newVar();
+  for (auto& pigeon : pigeons)
+  {
+    SATSolver::vec_literals someHole;
+    for (auto hole : pigeon)
+      someHole.push(SATSolver::mkLit(hole, false));
+    solver.addClause(someHole);
+  }
+  for (unsigned h = 0; h < 7; ++h)
+    for (unsigned a = 0; a < 8; ++a)
+      for (unsigned b = a + 1; b < 8; ++b)
+        solver.addClause(clause({SATSolver::mkLit(pigeons[a][h], true),
+                                 SATSolver::mkLit(pigeons[b][h], true)}));
+  addProbeGrowth(solver, pigeons[0][0]);
+  bool timeout = false;
+  EXPECT_FALSE(solver.solve(timeout));
+  EXPECT_FALSE(timeout);
+  EXPECT_EQ(1u, solver.luckyProbeStatistics().attempts);
+  EXPECT_EQ(0u, solver.luckyProbeStatistics().successes);
+  EXPECT_EQ(1u, solver.luckyProbeStatistics().inconclusive);
+}
+
+TEST(Kissat, LuckyProbeSkipsSmallChangesAndIsOptIn)
+{
+  for (bool enabled : {false, true})
+  {
+    stp::Kissat solver;
+    if (enabled)
+    {
+      ASSERT_TRUE(solver.enableLuckyProbe());
+    }
+    const auto x = solver.newVar();
+    solver.addClause(clause({SATSolver::mkLit(x, false)}));
+    bool timeout = false;
+    ASSERT_TRUE(solver.solve(timeout));
+    EXPECT_EQ(0u, solver.luckyProbeStatistics().attempts);
+    EXPECT_EQ(enabled ? 2u : 0u,
+              solver.luckyProbeStatistics().retained_literals);
+  }
+}
+
+TEST(Kissat, LuckyProbeHonorsResourceControls)
+{
+  for (unsigned control = 0; control < 3; ++control)
+  {
+    stp::Kissat solver;
+    ASSERT_TRUE(solver.enableLuckyProbe());
+    const auto x = solver.newVar();
+    addProbeGrowth(solver, x);
+    if (control == 0)
+      solver.setMaxTime(30);
+    else if (control == 1)
+      solver.setStopPoll([](void*) { return false; }, nullptr);
+    else
+      solver.setMaxConflicts(1000);
+    bool timeout = false;
+    ASSERT_TRUE(solver.solve(timeout));
+    EXPECT_FALSE(timeout);
+    EXPECT_EQ(control == 2 ? 0u : 1u, solver.luckyProbeStatistics().attempts);
+  }
+}
+
+TEST(Kissat, LuckyProbeCancellationDoesNotLeavePendingAssumptions)
+{
+  stp::Kissat solver;
+  ASSERT_TRUE(solver.enableLuckyProbe());
+  const auto x = solver.newVar(), y = solver.newVar();
+  solver.addClause(
+      clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)}));
+  addProbeGrowth(solver, x);
+  unsigned polls = 0;
+  solver.setStopPoll([](void* p) { return ++*static_cast<unsigned*>(p) == 10; },
+                     &polls);
+  const auto notX = clause({SATSolver::mkLit(x, true)});
+  bool timeout = false;
+  EXPECT_FALSE(solver.solveWithAssumptions(notX, timeout));
+  EXPECT_TRUE(timeout);
+  EXPECT_EQ(1u, solver.luckyProbeStatistics().attempts);
+  EXPECT_EQ(0u, solver.luckyProbeStatistics().successes);
+  solver.setStopPoll(nullptr, nullptr);
+  timeout = false;
+  const auto notY = clause({SATSolver::mkLit(y, true)});
+  ASSERT_TRUE(solver.solveWithAssumptions(notY, timeout));
+  EXPECT_EQ(solver.true_literal(), solver.modelValue(x));
+  EXPECT_EQ(solver.false_literal(), solver.modelValue(y));
+  EXPECT_FALSE(timeout);
+}
+
+TEST(Kissat, LuckyProbeIsDisabledForOneShot)
+{
+  stp::Kissat solver;
+  ASSERT_TRUE(solver.enableLuckyProbe());
+  ASSERT_TRUE(solver.configureOneShot());
+  EXPECT_FALSE(solver.enableLuckyProbe());
+  const auto x = solver.newVar();
+  addProbeGrowth(solver, x);
+  bool timeout = false;
+  ASSERT_TRUE(solver.solve(timeout));
+  EXPECT_EQ(0u, solver.luckyProbeStatistics().attempts);
+  EXPECT_EQ(0u, solver.luckyProbeStatistics().retained_literals);
+}
+
+TEST(Kissat, LuckyProbeReleasesJournalAtVariableLimit)
+{
+  stp::Kissat solver;
+  ASSERT_TRUE(solver.enableLuckyProbe());
+  const auto x = solver.newVar();
+  solver.addClause(clause({SATSolver::mkLit(x, false)}));
+  EXPECT_EQ(2u, solver.luckyProbeStatistics().retained_literals);
+  while (solver.nVars() <= 1000000)
+    solver.newVar();
+  EXPECT_EQ(0u, solver.luckyProbeStatistics().retained_literals);
+  addProbeGrowth(solver, x);
+  bool timeout = false;
+  ASSERT_TRUE(solver.solve(timeout));
+  EXPECT_EQ(0u, solver.luckyProbeStatistics().attempts);
+}
+
+TEST(Kissat, LuckyProbeReleasesJournalAtLiteralLimit)
+{
+  stp::Kissat solver;
+  ASSERT_TRUE(solver.enableLuckyProbe());
+  const auto x = solver.newVar();
+  SATSolver::vec_literals large;
+  for (unsigned i = 0; i < 2000000; ++i)
+  {
+    large.push(SATSolver::mkLit(x, false));
+    large.push(SATSolver::mkLit(x, true));
+  }
+  ASSERT_TRUE(solver.addClause(large));
+  EXPECT_EQ(0u, solver.luckyProbeStatistics().retained_literals);
+  addProbeGrowth(solver, x);
+  bool timeout = false;
+  ASSERT_TRUE(solver.solve(timeout));
+  EXPECT_EQ(0u, solver.luckyProbeStatistics().attempts);
+}
+
+#else
+TEST(Kissat, LuckyProbeRequiresAnInterruptibleBackend)
+{
+  stp::Kissat solver;
+  EXPECT_FALSE(solver.enableLuckyProbe());
+}
+#endif
+
 TEST(Kissat, OneShotCompleteFormulaHasAValidModel)
 {
   stp::Kissat solver;

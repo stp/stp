@@ -20,7 +20,9 @@ namespace stp
 class DLL_PUBLIC Kissat : public SATSolver
 {
   struct Allocations;
+  struct LuckyProbe;
   std::unique_ptr<Allocations> allocations;
+  std::unique_ptr<LuckyProbe> lucky_probe;
   kissat* solver;
   std::vector<int> external;
   std::vector<bool> frozen;
@@ -35,6 +37,7 @@ class DLL_PUBLIC Kissat : public SATSolver
   void requireHealthy() const;
   int literal(Lit lit) const;
   bool run(bool& timeout_expired);
+  bool tryLuckyProbe(const vec_literals& assumptions, bool& timeout_expired);
   static int terminate(void* state);
 
 public:
@@ -48,6 +51,16 @@ public:
   bool okay() const override;
   bool supportsAssumptions() const override { return !one_shot; }
   bool configureOneShot() override;
+  bool enableLuckyProbe() override;
+  struct LuckyProbeStatistics
+  {
+    uint64_t attempts = 0;
+    uint64_t successes = 0;
+    uint64_t inconclusive = 0;
+    uint64_t rejected_models = 0;
+    uint64_t retained_literals = 0;
+  };
+  LuckyProbeStatistics luckyProbeStatistics() const;
   uint8_t modelValue(uint32_t var) const override;
   uint32_t newVar() override;
   uint32_t nVars() const override

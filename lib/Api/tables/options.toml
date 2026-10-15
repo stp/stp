@@ -962,6 +962,18 @@ requires = { build = "kissat" }
 help = "allow Kissat's probing preprocessing and probe-based inprocessing; disabling it keeps the ordinary CDCL search and variable elimination available"
 
 [[option]]
+name = "kissat-lucky-probe"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_lucky_probe" }
+category = "sat"
+requires = { build = "kissat" }
+help = "try a disposable greedy SAT candidate after large incremental CNF growth; retain the persistent solver for fallback. Uses a 250 ms soft time allowance per attempt; skipped with an explicit conflict budget"
+
+[[option]]
 name = "kissat-eliminate"
 type = "int"
 default = -1
