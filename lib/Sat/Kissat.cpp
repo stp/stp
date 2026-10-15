@@ -1,79 +1,19 @@
 #include "stp/Sat/Kissat.h"
+#include "KissatAllocations.h"
 
 #include <algorithm>
 #include <cassert>
-#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <new>
 #include <stdexcept>
 #include <string>
-#include <unordered_set>
 
 namespace stp
 {
-// A failed C allocation must reach STP's RESOURCE handler. Own every block,
-// including temporary inprocessing allocations, so an interrupted allocation
-// can discard the partial C solver without walking its unfinished structures.
 struct Kissat::Allocations
 {
-  std::unordered_set<void*> blocks;
-  bool failed = false;
-
-  ~Allocations()
-  {
-    for (void* block : blocks)
-      std::free(block);
-  }
-
-  static void* allocate(void* state, size_t bytes)
-  {
-    auto& self = *static_cast<Allocations*>(state);
-    void* block = std::malloc(bytes);
-    if (!block)
-    {
-      self.failed = true;
-      throw std::bad_alloc();
-    }
-    try
-    {
-      self.blocks.insert(block);
-    }
-    catch (...)
-    {
-      std::free(block);
-      self.failed = true;
-      throw;
-    }
-    return block;
-  }
-
-  static void* resize(void* state, void* ptr, size_t bytes)
-  {
-    if (!ptr)
-      return allocate(state, bytes);
-    auto& self = *static_cast<Allocations*>(state);
-    auto node = self.blocks.extract(ptr);
-    assert(!node.empty());
-    void* block = std::realloc(ptr, bytes);
-    if (!block)
-    {
-      // Reinserting an extracted node at the same size needs no allocation.
-      self.blocks.insert(std::move(node));
-      self.failed = true;
-      throw std::bad_alloc();
-    }
-    node.value() = block;
-    self.blocks.insert(std::move(node));
-    return block;
-  }
-
-  static void deallocate(void* state, void* ptr)
-  {
-    auto& self = *static_cast<Allocations*>(state);
-    self.blocks.erase(ptr);
-    std::free(ptr);
-  }
+  detail::KissatAllocations owner;
 };
 
 Kissat::Kissat(bool trail_reuse_allowed, int search_mode)
@@ -103,9 +43,9 @@ Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed,
     throw std::invalid_argument("Kissat trail reuse mode outside its range");
   if (elimination < -1 || elimination > 1)
     throw std::invalid_argument("Kissat elimination option outside its range");
-  const kissat_allocator allocator = {allocations.get(), Allocations::allocate,
-                                      Allocations::resize,
-                                      Allocations::deallocate};
+  const kissat_allocator allocator = {
+      &allocations->owner, detail::KissatAllocations::allocate,
+      detail::KissatAllocations::resize, detail::KissatAllocations::deallocate};
   solver = kissat_init_with_allocator(&allocator);
   kissat_set_option(solver, "incremental", 1);
   kissat_set_option(solver, "factor", 0);
@@ -124,13 +64,13 @@ Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed,
 
 Kissat::~Kissat()
 {
-  if (!allocations->failed)
+  if (!allocations->owner.failed)
     kissat_release(solver);
 }
 
 void Kissat::requireHealthy() const
 {
-  if (allocations->failed)
+  if (allocations->owner.failed)
     throw std::bad_alloc();
 }
 
