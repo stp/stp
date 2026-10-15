@@ -56,6 +56,15 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - Forced incremental
       - The AUTO incremental settings above, plus
         ``kissat-trail-reuse-mode=2``
+    * - CaDiCaL
+      - QF_ABVFP
+      - Forced incremental
+      - ``search-bias=sat``, ``sat-phase=0``, ``sat-target=0``,
+        ``cadical-factor=off``
+    * - Kissat
+      - QF_ABVFP
+      - Forced incremental
+      - The forced QF_ABV settings above
 
 Other combinations use the baseline policy. The Kissat QF_ABV batch finalist
 was slower than its baseline. The CaDiCaL QF_ABV batch profile uses
@@ -92,6 +101,14 @@ first check, where array refinement can repeatedly solve under identical
 assumptions. Reuse mode 2 retains the unaffected search trail in that case;
 when assumptions change it retains only their compatible prefix. AUTO
 keeps its previously measured profile and engagement policy.
+
+Forced QF_ABVFP sessions have separate profiles for both backends. They are
+selected only by ``--incremental=on`` or ``(set-option :incremental true)``.
+The QF_ABVFP AUTO and batch policies use baseline settings; pushes alone do
+not select a forced-session profile. CaDiCaL retains its baseline CNF
+encoding and selects an initial false phase. Kissat uses ``new-medium``
+and retains its backend phase policy. Explicit user options take precedence
+over each profile setting.
 
 Explicit options and diagnostics
 --------------------------------
@@ -243,3 +260,45 @@ previous Kissat policy. Against CaDiCaL, each completes eight files the other
 does not; some Kissat cases reach the memory limit. Overall PAR2 falls by
 14.1 percent versus the current CaDiCaL profile and 9.0 percent versus the
 previous Kissat profile. All captured definite answer sequences agree.
+
+Forced QF_ABVFP confirmation
+----------------------------
+
+A separate comparison forced incremental solving on all 18,429 QF_ABVFP
+files, including 53 single-check files. Its initial paired full-population
+pass reduced Kissat's mean PAR2 from 1.459540 seconds at baseline to 1.181654
+with the transferred settings, completing 18,179 files versus 18,109.
+CaDiCaL's selected profile reduced its score from 1.381655 to 1.107810,
+completing 18,202 files versus 18,138. These are single-pass scores.
+
+Three fresh repetitions then compared the
+selected CaDiCaL profile with the transferred Kissat profile and a Kissat
+variant using an initial false phase. Each used the same release build,
+24-second whole-session cutoff and 8 GiB limit, with 18 workers pinned to
+individual CPUs. The table averages each file's median PAR2; every failed
+session, including an error, receives 48 seconds.
+
+.. list-table:: Forced incremental QF_ABVFP, three repetitions
+    :header-rows: 1
+    :widths: 45 30 25
+
+    * - Configuration
+      - Completed in at least two runs
+      - Mean PAR2 (s)
+    * - CaDiCaL, initial false phase and baseline encoding
+      - 18,213 / 18,429
+      - 1.042647
+    * - Kissat, transferred forced QF_ABV settings
+      - 18,190 / 18,429
+      - 1.115577
+    * - Kissat, transferred settings and initial false phase
+      - 18,195 / 18,429
+      - 1.119420
+
+CaDiCaL remains faster on this collection. The transferred Kissat settings
+have lower PAR2 than its false-phase variant, which completes five more
+files in a majority of runs. The automatic forced QF_ABVFP profiles use
+these selected settings. The configurations were selected on this
+collection, one family supplies 18,367 files, and concurrent workers affect
+timings; these results do not establish performance on other populations
+or in AUTO and batch modes.

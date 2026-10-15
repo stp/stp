@@ -455,3 +455,52 @@ TEST(OptionEffects, cadical_abv_late_push_replaces_batch_tuning_before_engagemen
   ASSERT_TRUE(s.check_sat().is_sat());
   EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_NEW_MEDIUM);
 }
+
+TEST(OptionEffects, forced_abvfp_tuning_reaches_the_incremental_solver)
+{
+  using Flags = stp::UserDefinedFlags;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    const bool kissat = std::string(backend) == "kissat";
+    for (const bool parsed : {false, true})
+    {
+      SCOPED_TRACE(std::string(backend) + (parsed ? "/SMT-LIB" : "/native"));
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", backend);
+      options.set_bool("check-sanity", true);
+      if (!parsed)
+      {
+        options.set_str("logic", "QF_ABVFP");
+        options.set_str("incremental", "on");
+      }
+      Solver solver(tm, options);
+      if (parsed)
+        solver.parse_smt2("(set-logic QF_ABVFP)(set-option :incremental true)");
+      add_tuning_array_problem(tm, solver);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_TRUE(api_test::engine_solver(solver).hasIncrementalSolver());
+      const auto& flags = flags_after(tm);
+      EXPECT_EQ(flags.search_bias, stp::SearchBias::SAT);
+      EXPECT_EQ(flags.sat_search_options.phase, kissat ? -1 : 0);
+      EXPECT_EQ(flags.sat_search_options.target, 0);
+      EXPECT_EQ(flags.sat_search_options.rephase, kissat ? 0 : -1);
+      EXPECT_EQ(flags.cnf_effort,
+                kissat ? Flags::CNF_EFFORT_NEW_MEDIUM : Flags::CNF_EFFORT_AUTO);
+      EXPECT_EQ(flags.cadical_factor, Flags::BVAMode::OFF);
+      if (kissat)
+      {
+        EXPECT_FALSE(flags.kissat_probe);
+        EXPECT_EQ(flags.kissat_stable, 2);
+        EXPECT_EQ(flags.kissat_trail_reuse_mode, 2);
+      }
+      solver.push();
+      solver.add(tm.mk_bool(false));
+      ASSERT_TRUE(solver.check_sat().is_unsat());
+      solver.pop();
+      ASSERT_TRUE(solver.check_sat().is_sat());
+    }
+  }
+}
