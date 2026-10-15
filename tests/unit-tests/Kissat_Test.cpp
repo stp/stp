@@ -345,3 +345,47 @@ TEST(Kissat, RefinementBacktracksAReusedModelForClausesAndUnits)
   EXPECT_NE(z, solver.modelValue(variables[4]) == solver.true_literal());
   EXPECT_FALSE(timeout);
 }
+
+TEST(Kissat, GrowingProtectedFormulaRetainsModelsAndFailedAssumptions)
+{
+  for (bool reuse : {false, true})
+  {
+    SCOPED_TRACE(reuse);
+    stp::Kissat solver(reuse);
+    if (reuse)
+    {
+      ASSERT_TRUE(solver.enableTrailReuse(SATSolver::TrailReuse::ALL));
+    }
+    const auto first = solver.newVar();
+    solver.setFrozen(first);
+    auto last = first;
+    bool timeout = false;
+    for (unsigned round = 0; round != 16; ++round)
+    {
+      // Repeated growth crosses the capacities of several backend arrays,
+      // while protection keeps the earlier variables available for reuse.
+      for (unsigned i = 0; i != 256; ++i)
+      {
+        const auto next = solver.newVar();
+        solver.setFrozen(next);
+        ASSERT_TRUE(solver.addClause(clause(
+            {SATSolver::mkLit(last, true), SATSolver::mkLit(next, false)})));
+        last = next;
+      }
+      ASSERT_TRUE(solver.solveWithAssumptions(
+          clause({SATSolver::mkLit(first, false)}), timeout));
+      EXPECT_EQ(solver.true_literal(), solver.modelValue(last));
+      const auto conflict = clause(
+          {SATSolver::mkLit(first, false), SATSolver::mkLit(last, true)});
+      ASSERT_FALSE(solver.solveWithAssumptions(conflict, timeout));
+      EXPECT_TRUE(solver.okay());
+      std::vector<int> core;
+      solver.unsatAssumptions(conflict, core);
+      EXPECT_EQ(2u, core.size());
+      ASSERT_TRUE(solver.solveWithAssumptions(
+          clause({SATSolver::mkLit(first, true)}), timeout));
+      EXPECT_EQ(solver.false_literal(), solver.modelValue(first));
+    }
+    EXPECT_FALSE(timeout);
+  }
+}
