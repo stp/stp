@@ -3408,7 +3408,19 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "array_equality_gia_cnf" }
 category = "cnf"
-help = "choose gia-low CNF for a batch query whose whole-array equality still needs refinement, when cnf-generation-effort is auto; eagerly discharged equalities and explicit CNF efforts keep their ordinary choice"
+help = "choose gia-low CNF for a batch query whose whole-array equality still needs refinement and meets array-equality-gia-min-reads, when cnf-generation-effort is auto; eagerly discharged equalities and explicit CNF efforts keep their ordinary choice"
+
+[[option]]
+name = "array-equality-gia-min-reads"
+type = "int"
+default = 16
+range = { min = 0, max = 1000000 }
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_equality_gia_min_reads" }
+category = "cnf"
+help = "minimum distinct reads after batch preprocessing and equality preparation for array-equality-gia-cnf; 0 removes the read-count guard"
 
 [[option]]
 name = "cnf-link-shared-cells"

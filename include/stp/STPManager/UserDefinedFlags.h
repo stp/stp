@@ -1821,6 +1821,7 @@ public:
   // Optional batch CNF choice while whole-array equality still needs
   // refinement. An explicit CNF effort remains authoritative.
   bool array_equality_gia_cnf = false;
+  int array_equality_gia_min_reads = 16;
 
   // AND-node count at or above which AUTO stops paying for CNF
   // minimisation: against the recorded estimate it selects NEW_MEDIUM

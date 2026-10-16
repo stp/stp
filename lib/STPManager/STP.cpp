@@ -1770,6 +1770,22 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // skipping it for a prepared registry would silently bind no reads.
   assert(!extPrepared || arrayops);
 
+  // Select from the registry that remains active after preprocessing, and
+  // require a read structure beyond the equality witnesses. The solve's
+  // RestoreFlags scope restores this query-local CNF choice on every exit.
+  const bool chooseEqualityGia =
+      bm->UserFlags.array_equality_gia_cnf && extActive &&
+      bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
+      !numberOfReadsLessThan(inputToSat,
+                             bm->UserFlags.array_equality_gia_min_reads);
+  if (bm->UserFlags.array_equality_gia_cnf && bm->UserFlags.stats_flag)
+    cerr << "Array equality CNF policy: active=" << (extActive ? "on" : "off")
+         << " min-reads=" << bm->UserFlags.array_equality_gia_min_reads
+         << " selected=" << (chooseEqualityGia ? "gia-low" : "unchanged")
+         << endl;
+  if (chooseEqualityGia)
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
+
   // Delay this optional choice until bit-vector preprocessing has reduced
   // the array graph. Keep array equality on its own refinement path, and
   // retain the explicit request's ordinary lowering policy.
@@ -1834,19 +1850,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       bm->UserFlags.bv_term_abstraction || batchUFView->active() ||
       fpAbstractionActive;
   const bool maybeRefinement = lraActive || nonArithmeticRefinement;
-
-  // Select from the registry that remains active after preprocessing.
-  // Eagerly discharged equalities retain their ordinary encoding. The
-  // solve's RestoreFlags scope restores this query-local choice on every exit.
-  const bool chooseEqualityGia =
-      bm->UserFlags.array_equality_gia_cnf && extActive &&
-      bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO;
-  if (bm->UserFlags.array_equality_gia_cnf && bm->UserFlags.stats_flag)
-    cerr << "Array equality CNF policy: active=" << (extActive ? "on" : "off")
-         << " selected=" << (chooseEqualityGia ? "gia-low" : "unchanged")
-         << endl;
-  if (chooseEqualityGia)
-    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
 
   simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
   std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
