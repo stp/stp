@@ -592,6 +592,7 @@ public:
   // leaves the existing early/lazy policy in charge. Both bounds are strict.
   int array_late_read_limit = 0;
   unsigned array_late_expansion_limit = 200;
+  unsigned array_late_congruence_limit = 4000;
 
   // Whether to bias the first candidate so that the scalars the congruence
   // checker reads start out pairwise different.

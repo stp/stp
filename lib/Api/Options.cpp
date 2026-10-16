@@ -1571,6 +1571,7 @@ void apply_sat_tuning_options(EngineTarget& t, const OptionsImpl& options)
                            "cadical-factor",
                            "array-late-read-limit",
                            "array-late-expansion-limit",
+                           "array-late-congruence-limit",
                            "array-equality-gia-cnf",
                            "array-equality-gia-min-reads"})
   {

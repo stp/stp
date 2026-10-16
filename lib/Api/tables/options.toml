@@ -2389,7 +2389,7 @@ settable = "before-first-check"
 scope = "solver"
 engine = { field = "array_late_read_limit" }
 category = "arrays"
-help = "strict read-count bound for an optional eager array choice after batch preprocessing; 0 disables the late choice. Both this bound and array-late-expansion-limit must admit the query; explicit --ackermanize keeps its existing meaning"
+help = "strict read-count bound for an optional eager array choice after batch preprocessing; 0 disables the late choice. This bound, array-late-expansion-limit and array-late-congruence-limit must admit the query; explicit --ackermanize keeps its existing meaning"
 
 [[option]]
 name = "array-late-expansion-limit"
@@ -2402,6 +2402,18 @@ scope = "solver"
 engine = { field = "array_late_expansion_limit" }
 category = "arrays"
 help = "strict structural cost bound for the optional late eager array choice; each read charges reachable writes and array ITEs. Used only when array-late-read-limit is positive; 0 disables the late choice"
+
+[[option]]
+name = "array-late-congruence-limit"
+type = "uint"
+default = 4000
+range = { max = 4294967295 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_late_congruence_limit" }
+category = "arrays"
+help = "maximum estimated index comparisons for the optional late eager array choice; distinct symbolic indexes are paired per base array, and constant-against-constant comparisons cost nothing"
 
 [[option]]
 name = "array-ackermann-budget"

@@ -1792,15 +1792,27 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   const bool considerLateEager = arrayops && !extActive &&
                                  !bm->UserFlags.ackermannisation &&
                                  bm->UserFlags.array_late_read_limit > 0;
-  const bool expandLateArrays =
+  const bool fitsLateArrayStructure =
       considerLateEager &&
       numberOfReadsLessThan(inputToSat, bm->UserFlags.array_late_read_limit) &&
       arrayEagerCostLessThan(inputToSat,
                              bm->UserFlags.array_late_expansion_limit);
+  // Read expansion and read congruence have independent costs: many reads
+  // over a flat array can pass the structural bound while introducing a
+  // quadratic number of index comparisons.
+  const uint64_t lateCongruenceCost =
+      fitsLateArrayStructure ? arrayCongruenceEstimate(inputToSat) : 0;
+  const bool expandLateArrays =
+      fitsLateArrayStructure &&
+      lateCongruenceCost <= bm->UserFlags.array_late_congruence_limit;
   if (bm->UserFlags.stats_flag && considerLateEager)
     cerr << "Array late eager policy: read-limit="
          << bm->UserFlags.array_late_read_limit
          << " expansion-limit=" << bm->UserFlags.array_late_expansion_limit
+         << " congruence-limit=" << bm->UserFlags.array_late_congruence_limit
+         << " congruence-estimate="
+         << (fitsLateArrayStructure ? std::to_string(lateCongruenceCost)
+                                    : "skipped")
          << " selected=" << (expandLateArrays ? "on" : "off") << endl;
   if (expandLateArrays)
     bm->UserFlags.ackermannisation = true;
