@@ -1294,10 +1294,13 @@ TEST(Options,
     for (const char* logic : {"", "QF_FP", "QF_BVFP", "QF_ABVFP"})
       for (const char* incremental : {"on", "auto", "off"})
       {
-        if (std::string(logic) == "QF_ABVFP" &&
-            std::string(incremental) == "on" &&
-            (std::string(backend) == "cadical" ||
-             std::string(backend) == "kissat"))
+        const bool measured_abvfp = std::string(logic) == "QF_ABVFP" &&
+                                    (std::string(backend) == "cadical" ||
+                                     std::string(backend) == "kissat");
+        const bool measured_bvfp =
+            std::string(logic) == "QF_BVFP" && std::string(backend) == "kissat";
+        if (std::string(incremental) == "on" &&
+            (measured_abvfp || measured_bvfp))
           continue;
         SCOPED_TRACE(std::string(backend) + "/" + logic + "/" + incremental);
         TermManager tm;
@@ -1318,6 +1321,116 @@ TEST(Options,
           EXPECT_EQ(solver.options().resolved(name), options.resolved(name))
               << name;
       }
+  }
+}
+
+TEST(Options, kissat_greedy_tuning_resolves_by_logic_and_session)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not compiled in";
+  const Options baseline;
+  for (const char* logic :
+       {"", "QF_BV", "QF_BVFP", "QF_ABVFP", "QF_ABV", "QF_FP"})
+    for (const char* incremental : {"on", "auto", "off"})
+    {
+      SCOPED_TRACE(std::string(logic) + "/" + incremental);
+      const bool bv = std::string(logic) == "QF_BV";
+      const bool bvfp = std::string(logic) == "QF_BVFP";
+      const bool abvfp = std::string(logic) == "QF_ABVFP";
+      const bool tuned =
+          std::string(incremental) == "on" && (bv || bvfp || abvfp);
+      Options expected;
+      if (tuned)
+      {
+        expected.set_int("kissat-incremental-greedy", bv ? 4 : 2);
+        if (bvfp)
+        {
+          expected.set_int("kissat-greedy-conflicts", 0);
+          expected.set_int("kissat-greedy-decisions", 0);
+          expected.set_bool("kissat-greedy-phase-cache", true);
+        }
+        if (abvfp)
+          expected.set_int("kissat-greedy-growth", 1);
+      }
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", "kissat");
+      if (*logic)
+        options.set_str("logic", logic);
+      options.set_str("incremental", incremental);
+      Solver solver(tm, options);
+      const Term x = tm.declare("greedy_scope_x", tm.mk_bv_sort(8));
+      solver.push();
+      solver.add(x == 1);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      const auto& effective = solver.options();
+      for (const char* name :
+           {"kissat-incremental-greedy", "kissat-greedy-conflicts",
+            "kissat-greedy-decisions", "kissat-greedy-growth",
+            "kissat-greedy-phase-cache", "kissat-lucky-probe"})
+      {
+        SCOPED_TRACE(name);
+        EXPECT_EQ(effective.resolved(name), expected.resolved(name));
+        EXPECT_FALSE(effective.is_set(name));
+        EXPECT_EQ(effective.get(name), baseline.get(name));
+        EXPECT_EQ(effective.info(name).resolved, effective.resolved(name));
+      }
+      solver.pop();
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_EQ(effective.resolved("kissat-incremental-greedy"),
+                expected.resolved("kissat-incremental-greedy"));
+    }
+}
+
+TEST(Options, kissat_greedy_tuning_preserves_explicit_values_and_opt_out)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not compiled in";
+  const Options baseline;
+  for (const char* logic : {"QF_BV", "QF_BVFP", "QF_ABVFP"})
+  {
+    SCOPED_TRACE(logic);
+    for (const char* name :
+         {"kissat-incremental-greedy", "kissat-greedy-conflicts",
+          "kissat-greedy-decisions", "kissat-greedy-growth",
+          "kissat-greedy-phase-cache"})
+      for (const bool use_baseline : {false, true})
+      {
+        SCOPED_TRACE(name);
+        SCOPED_TRACE(use_baseline);
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", "kissat");
+        options.set_str("logic", logic);
+        options.set_str("incremental", "on");
+        options.set(name, use_baseline
+                              ? text_of(baseline.info(name), baseline.get(name))
+                          : std::string(name) == "kissat-greedy-phase-cache"
+                              ? "true"
+                              : "1");
+        Solver solver(tm, options);
+        const Term x = tm.declare("greedy_override_x", tm.mk_bv_sort(8));
+        solver.add(x == 1);
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        EXPECT_TRUE(solver.options().is_set(name));
+        EXPECT_EQ(solver.options().resolved(name), options.resolved(name));
+      }
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", "kissat");
+    options.set_str("logic", logic);
+    options.set_str("incremental", "on");
+    options.set_str("sat-tuning", "off");
+    Solver solver(tm, options);
+    const Term x = tm.declare("greedy_opt_out_x", tm.mk_bv_sort(8));
+    solver.add(x == 1);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    for (const char* name :
+         {"kissat-incremental-greedy", "kissat-greedy-conflicts",
+          "kissat-greedy-decisions", "kissat-greedy-growth",
+          "kissat-greedy-phase-cache", "kissat-lucky-probe"})
+      EXPECT_EQ(solver.options().resolved(name), baseline.resolved(name))
+          << name;
   }
 }
 

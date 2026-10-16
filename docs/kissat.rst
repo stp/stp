@@ -233,6 +233,57 @@ candidate pass. Original solving continues to enforce those controls.
 Statistics printed by ``-s`` include attempts, successful candidates,
 inconclusive attempts, rejected models and retained input size.
 
+Native incremental greedy completion
+------------------------------------
+
+``--kissat-incremental-greedy`` selects an optional SAT completion inside
+the persistent incremental backend. Mode 0 disables it, mode 1 tries a
+forward false-first walk, and mode 2 tries four combinations of variable
+order and polarity above the assumptions. Mode 3 only backtracks to the
+assumptions as a diagnostic control. Mode 4 tries the four walks above the
+current search trail. An unsuccessful walk restores its protected prefix
+and resumes ordinary search without learning conditional root units. A
+successful walk supplies a fully propagated assignment to the ordinary
+model and theory checks. It does not retain an input journal or create a
+disposable solver.
+
+The baseline mode is 0. With automatic SAT tuning and explicitly enabled
+incremental mode (``--incremental=on`` or the corresponding SMT-LIB option),
+the declared logic selects these defaults when each option is unset:
+
+.. list-table:: Automatic native greedy defaults
+   :header-rows: 1
+
+   * - Logic
+     - Mode
+     - Additional defaults
+   * - QF_BV
+     - 4
+     - Existing work thresholds and growth backoff
+   * - QF_BVFP
+     - 2
+     - Immediate attempt, successful phase caching, factoring off
+   * - QF_ABVFP
+     - 2
+     - Retry growth multiplier 1
+
+QF_ABV retains its existing profile. Batch mode and automatic detection of
+an incremental session do not enable this feature. Explicit option values,
+including mode 0, take precedence over the profile; ``--sat-tuning=off``
+disables automatic profiles altogether.
+
+``--kissat-greedy-conflicts`` (100) and ``--kissat-greedy-decisions``
+(10,000) are alternative work thresholds within a solve; 0 permits an
+immediate attempt. A formula needs at least 100,000 original clauses.
+After an inconclusive attempt, a retry needs at least 100,000 new original
+clauses and the original clause count multiplied by
+``--kissat-greedy-growth`` (4). A multiplier of 1 retains only the absolute
+growth requirement. ``--kissat-greedy-phase-cache`` (false) saves a
+successful completion's phases. Every solve makes at most one attempt with
+a 250 ms soft allowance, sharing cancellation and the enclosing deadline;
+individual propagation calls can exceed that allowance. Explicit conflict
+budgets bypass the attempt. ``-s`` prints the effective settings.
+
 Testing
 -------
 

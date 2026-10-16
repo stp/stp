@@ -2024,6 +2024,11 @@ public:
   int kissat_trail_reuse_mode = -1;
   bool kissat_probe = true;
   bool kissat_lucky_probe = false;
+  int kissat_incremental_greedy = 0;
+  int kissat_greedy_conflicts = 100;
+  int kissat_greedy_decisions = 10000;
+  int kissat_greedy_growth = 4;
+  bool kissat_greedy_phase_cache = false;
   int kissat_eliminate = -1;
   int kissat_stable = -1;
   bool kissat_batch_only = false;

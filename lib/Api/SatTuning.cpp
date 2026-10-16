@@ -85,6 +85,20 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
       {{"search-bias", "unsat"},
        {"cnf-generation-effort", "new-medium"},
        {"cadical-factor", "off"}}};
+  static const Profile kissat_bv_forced_incremental = []
+  {
+    Profile profile = kissat_bv_incremental;
+    profile.name = "kissat-qf-bv-forced-incremental";
+    profile.settings.push_back({"kissat-incremental-greedy", "4"});
+    return profile;
+  }();
+  static const Profile kissat_bvfp_forced_incremental{
+      "kissat-qf-bvfp-forced-incremental",
+      {{"kissat-incremental-greedy", "2"},
+       {"kissat-greedy-conflicts", "0"},
+       {"kissat-greedy-decisions", "0"},
+       {"kissat-greedy-phase-cache", "true"},
+       {"cadical-factor", "off"}}};
   static const Profile kissat_abv_incremental{
       "kissat-qf-abv-incremental",
       {{"search-bias", "sat"},
@@ -110,6 +124,8 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
   {
     Profile profile = kissat_abv_forced_incremental;
     profile.name = "kissat-qf-abvfp-forced-incremental";
+    profile.settings.push_back({"kissat-incremental-greedy", "2"});
+    profile.settings.push_back({"kissat-greedy-growth", "1"});
     return profile;
   }();
 
@@ -122,8 +138,12 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     if (backend == Flags::CADICAL_SOLVER)
       return cadical_bv_incremental;
     if (backend == Flags::KISSAT_SOLVER)
-      return kissat_bv_incremental;
+      return forced_incremental ? kissat_bv_forced_incremental
+                                : kissat_bv_incremental;
   }
+  if (backend == Flags::KISSAT_SOLVER && logic == "QF_BVFP" &&
+      forced_incremental)
+    return kissat_bvfp_forced_incremental;
   if (logic == "QF_ABV" && incremental)
   {
     if (backend == Flags::CADICAL_SOLVER)

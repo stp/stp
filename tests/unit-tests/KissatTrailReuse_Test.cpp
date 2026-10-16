@@ -9,6 +9,7 @@
 #include "stp/Sat/SATSolver.h"
 #include <gtest/gtest.h>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -23,9 +24,17 @@ void expectMode(const stp::Kissat& solver, int mode)
   testing::internal::CaptureStderr();
   solver.printStats();
   const std::string stats = testing::internal::GetCapturedStderr();
-  EXPECT_NE(stats.find(" trail-reuse=" + std::to_string(mode) + "\n"),
-            std::string::npos)
-      << stats;
+  std::istringstream fields(stats);
+  const std::string expected = "trail-reuse=" + std::to_string(mode);
+  std::string field;
+  bool found = false;
+  while (fields >> field)
+    if (field == expected)
+    {
+      found = true;
+      break;
+    }
+  EXPECT_TRUE(found) << "Missing " << expected << " in:\n" << stats;
 }
 } // namespace
 

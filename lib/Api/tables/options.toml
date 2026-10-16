@@ -974,6 +974,70 @@ requires = { build = "kissat" }
 help = "try a disposable greedy SAT candidate after large incremental CNF growth; retain the persistent solver for fallback. Uses a 250 ms soft time allowance per attempt; skipped with an explicit conflict budget"
 
 [[option]]
+name = "kissat-incremental-greedy"
+type = "int"
+default = 0
+range = { min = 0, max = 4 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_incremental_greedy" }
+category = "sat"
+requires = { build = "kissat" }
+help = "bounded greedy completion inside incremental Kissat: 0 disables, 1 tries false-first, 2 tries four orders above the assumptions, 3 only restarts at the assumptions (diagnostic), 4 tries four orders above the current trail; an unset value may follow the automatic SAT profile"
+
+[[option]]
+name = "kissat-greedy-conflicts"
+type = "int"
+default = 100
+range = { min = 0, max = 2147483647 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_greedy_conflicts" }
+category = "sat"
+requires = { build = "kissat" }
+help = "new conflicts in a solve before an optional incremental greedy attempt; either this or the decision threshold can trigger it, and 0 permits an immediate attempt"
+
+[[option]]
+name = "kissat-greedy-decisions"
+type = "int"
+default = 10000
+range = { min = 0, max = 2147483647 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_greedy_decisions" }
+category = "sat"
+requires = { build = "kissat" }
+help = "new decisions in a solve before an optional incremental greedy attempt; either this or the conflict threshold can trigger it, and 0 permits an immediate attempt"
+
+[[option]]
+name = "kissat-greedy-growth"
+type = "int"
+default = 4
+range = { min = 1, max = 16 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_greedy_growth" }
+category = "sat"
+requires = { build = "kissat" }
+help = "minimum original clause count multiplier after an inconclusive incremental greedy attempt; every retry also needs 100,000 new original clauses, so 1 retains only that absolute growth requirement"
+
+[[option]]
+name = "kissat-greedy-phase-cache"
+type = "bool"
+default = false
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_greedy_phase_cache" }
+category = "sat"
+requires = { build = "kissat" }
+help = "save the phases of a successful incremental greedy completion for later search"
+
+[[option]]
 name = "kissat-eliminate"
 type = "int"
 default = -1
