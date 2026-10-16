@@ -588,6 +588,11 @@ public:
   // and ignores this; 0 refuses every unasked selection.
   unsigned array_eager_budget = 4000;
 
+  // Optional late eager choice after ordinary batch preprocessing. Zero
+  // leaves the existing early/lazy policy in charge. Both bounds are strict.
+  int array_late_read_limit = 0;
+  unsigned array_late_expansion_limit = 200;
+
   // Whether to bias the first candidate so that the scalars the congruence
   // checker reads start out pairwise different.
   //

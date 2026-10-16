@@ -2380,6 +2380,30 @@ category = "refinement.uf"
 help = "in auto mode, the least applications a UF function must have before its congruence is escalated to the closure; the files the closure helps carry a function of many hundreds of applications, so this keeps auto off the medium functions where escalating only adds overhead"
 
 [[option]]
+name = "array-late-read-limit"
+type = "int"
+default = 0
+range = { min = 0, max = 1000000 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_late_read_limit" }
+category = "arrays"
+help = "strict read-count bound for an optional eager array choice after batch preprocessing; 0 disables the late choice. Both this bound and array-late-expansion-limit must admit the query; explicit --ackermanize keeps its existing meaning"
+
+[[option]]
+name = "array-late-expansion-limit"
+type = "uint"
+default = 200
+range = { max = 4294967295 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_late_expansion_limit" }
+category = "arrays"
+help = "strict structural cost bound for the optional late eager array choice; each read charges reachable writes and array ITEs. Used only when array-late-read-limit is positive; 0 disables the late choice"
+
+[[option]]
 name = "array-ackermann-budget"
 type = "uint"
 default = 4000

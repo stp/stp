@@ -1559,7 +1559,8 @@ void apply_sat_tuning_options(EngineTarget& t, const OptionsImpl& options)
         "kissat-incremental-greedy", "kissat-greedy-conflicts",
         "kissat-greedy-decisions", "kissat-greedy-growth",
         "kissat-greedy-phase-cache", "kissat-trail-reuse-mode",
-        "cnf-generation-effort", "cadical-factor"})
+        "cnf-generation-effort", "cadical-factor", "array-late-read-limit",
+        "array-late-expansion-limit"})
   {
     const OptionSpec& spec = *find_option(name);
     const std::size_t index = option_index(&spec);
