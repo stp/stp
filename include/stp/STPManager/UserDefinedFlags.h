@@ -1818,6 +1818,10 @@ public:
 
   enum CNFEffort cnf_effort = CNF_EFFORT_AUTO;
 
+  // Optional batch CNF choice while whole-array equality still needs
+  // refinement. An explicit CNF effort remains authoritative.
+  bool array_equality_gia_cnf = false;
+
   // AND-node count at or above which AUTO stops paying for CNF
   // minimisation: against the recorded estimate it selects NEW_MEDIUM
   // there, and on the estimate-less fallback it drops MEDIUM to VERY_LOW.

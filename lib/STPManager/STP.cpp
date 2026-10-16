@@ -1835,6 +1835,19 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       fpAbstractionActive;
   const bool maybeRefinement = lraActive || nonArithmeticRefinement;
 
+  // Select from the registry that remains active after preprocessing.
+  // Eagerly discharged equalities retain their ordinary encoding. The
+  // solve's RestoreFlags scope restores this query-local choice on every exit.
+  const bool chooseEqualityGia =
+      bm->UserFlags.array_equality_gia_cnf && extActive &&
+      bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO;
+  if (bm->UserFlags.array_equality_gia_cnf && bm->UserFlags.stats_flag)
+    cerr << "Array equality CNF policy: active=" << (extActive ? "on" : "off")
+         << " selected=" << (chooseEqualityGia ? "gia-low" : "unchanged")
+         << endl;
+  if (chooseEqualityGia)
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
+
   simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
   std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
 

@@ -3400,6 +3400,17 @@ cli_bad_value = "Unknown --cnf-generation-effort value '{value}'. Expected one o
 help = "effort spent minimising the CNF: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, new-high. Higher is slower to generate but yields a smaller CNF; auto picks gia-low or, for large estimated blasts, new-medium, since minimising a large one costs more than the solver saves - falling back to the very-low/medium choice under array refinement, on solvers other than cadical, or with no estimate recorded. The new-* rungs blast through STP's own AIG instead of ABC's and write the CNF directly: new-very-low is plain Tseitin, new-low recovers XOR and if-then-else, new-medium also collapses n-ary ANDs and ORs. The gia-* rungs are low, high and very-high again, reaching the same generator over a Gia the blaster built rather than one converted from an ABC AIG"
 
 [[option]]
+name = "array-equality-gia-cnf"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_equality_gia_cnf" }
+category = "cnf"
+help = "choose gia-low CNF for a batch query whose whole-array equality still needs refinement, when cnf-generation-effort is auto; eagerly discharged equalities and explicit CNF efforts keep their ordinary choice"
+
+[[option]]
 name = "cnf-link-shared-cells"
 type = "bool"
 default = false
