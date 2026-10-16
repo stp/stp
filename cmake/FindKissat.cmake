@@ -4,7 +4,7 @@ include(deps-helper)
 
 set(KISSAT_DIR "" CACHE PATH
     "Incremental Kissat checkout containing src/kissat.h and build/libkissat.a")
-set(_kissat_default_tag "b639548e355a47e8f785c21570f608dac12c5b9f")
+set(_kissat_default_tag "3d740435838e931ed67e2a48a42694a36aed3f21")
 if(NOT DEFINED CACHE{Kissat_TAG}
    OR "$CACHE{Kissat_TAG}" STREQUAL "$CACHE{_STP_Kissat_TAG_DEFAULT}")
     set(Kissat_TAG "${_kissat_default_tag}" CACHE STRING
@@ -81,6 +81,7 @@ if(Kissat_FOUND_SYSTEM)
     file(WRITE "${_kissat_probe}"
         "extern \"C\" {\n#include <kissat/kissat.h>\n}\n#include <cstdio>\n#include <cstdlib>\n"
         "#ifndef KISSAT_HAS_INCREMENTAL\n#error incremental Kissat required\n#endif\n"
+        "#ifndef KISSAT_HAS_INCREMENTAL_GREEDY\n#error incremental greedy Kissat required\n#endif\n"
         "int main() { const kissat_allocator a = {nullptr, "
         "[](void*, size_t n) { return std::malloc(n); }, "
         "[](void*, void *p, size_t n) { return std::realloc(p, n); }, "
@@ -89,6 +90,11 @@ if(Kissat_FOUND_SYSTEM)
         "kissat_set_option(s, \"quiet\", 1); "
         "kissat_set_option(s, \"incremental\", 1); "
         "kissat_set_option(s, \"incrementalreuse\", 2); "
+        "if (kissat_get_option(s, \"incrementallucky\") != 0 || "
+        "kissat_get_option(s, \"incrementalluckyinit\") != 100 || "
+        "kissat_get_option(s, \"incrementalluckydecisions\") != 10000 || "
+        "kissat_get_option(s, \"incrementalluckygrowth\") != 4 || "
+        "kissat_get_option(s, \"incrementalluckyphasecache\") != 0) return 6; "
         "if (kissat_get_option(s, \"incremental\") != 1 || "
         "kissat_get_option(s, \"incrementalreuse\") != 2) return 1; "
         "kissat_add(s, 1); kissat_add(s, 0); "

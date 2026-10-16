@@ -14,6 +14,9 @@ extern "C"
 #ifndef KISSAT_HAS_INCREMENTAL
 #error "STP requires Kissat with the incremental API"
 #endif
+#ifndef KISSAT_HAS_INCREMENTAL_GREEDY
+#error "STP requires Kissat with bounded incremental greedy completion"
+#endif
 
 namespace stp
 {
@@ -48,6 +51,15 @@ public:
   Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed,
          int trail_reuse_mode, int elimination);
   ~Kissat() override;
+  struct GreedyOptions
+  {
+    int mode = 0;
+    int conflicts = 100;
+    int decisions = 10000;
+    int growth = 4;
+    bool phase_cache = false;
+  };
+  void setGreedyOptions(const GreedyOptions& options);
   bool okay() const override;
   bool supportsAssumptions() const override { return !one_shot; }
   bool configureOneShot() override;

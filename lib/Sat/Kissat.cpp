@@ -291,6 +291,31 @@ Kissat::~Kissat()
     kissat_release(solver);
 }
 
+void Kissat::setGreedyOptions(const GreedyOptions& options)
+{
+  requireHealthy();
+  if (!configurationOpen() || solve_calls)
+    throw std::logic_error("Kissat greedy options require a fresh backend");
+  if (options.mode < 0 || options.mode > 4 || options.conflicts < 0 ||
+      options.decisions < 0 || options.growth < 1 || options.growth > 16)
+    throw std::invalid_argument("Kissat greedy option outside its range");
+  const struct
+  {
+    const char* name;
+    int value;
+  } settings[] = {{"incrementallucky", options.mode},
+                  {"incrementalluckyinit", options.conflicts},
+                  {"incrementalluckydecisions", options.decisions},
+                  {"incrementalluckygrowth", options.growth},
+                  {"incrementalluckyphasecache", options.phase_cache ? 1 : 0}};
+  for (const auto& setting : settings)
+  {
+    kissat_set_option(solver, setting.name, setting.value);
+    if (kissat_get_option(solver, setting.name) != setting.value)
+      throw std::invalid_argument("Kissat rejected a greedy option");
+  }
+}
+
 void Kissat::requireHealthy() const
 {
   if (allocations->owner.failed)
@@ -491,7 +516,15 @@ void Kissat::printStats() const
             << " probe=" << kissat_get_option(solver, "probe")
             << " eliminate=" << kissat_get_option(solver, "eliminate")
             << " trail-reuse=" << kissat_get_option(solver, "incrementalreuse")
-            << '\n';
+            << " greedy=" << kissat_get_option(solver, "incrementallucky")
+            << " greedy-conflicts="
+            << kissat_get_option(solver, "incrementalluckyinit")
+            << " greedy-decisions="
+            << kissat_get_option(solver, "incrementalluckydecisions")
+            << " greedy-growth="
+            << kissat_get_option(solver, "incrementalluckygrowth")
+            << " greedy-phase-cache="
+            << kissat_get_option(solver, "incrementalluckyphasecache") << '\n';
   std::cerr << "Kissat: variables=" << nVars()
             << " submitted-clauses=" << submittedClauses()
             << " solves=" << solve_calls << '\n';
