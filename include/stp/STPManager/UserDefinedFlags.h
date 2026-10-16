@@ -2043,6 +2043,8 @@ public:
   int kissat_eliminate = -1;
   int kissat_stable = -1;
   bool kissat_batch_only = false;
+  int kissat_import_order = 0;
+  bool kissat_adaptive_cnf = false;
 
   CadicalOptions cadical_options;
   SatSearchOptions sat_search_options;

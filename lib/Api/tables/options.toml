@@ -853,6 +853,31 @@ requires = { build = "satsuma" }
 help = "limit additional Satsuma fix rounds after the first pass; -1 keeps the library policy and 0 requests a single pass"
 
 [[option]]
+name = "kissat-adaptive-cnf"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_adaptive_cnf" }
+category = "cnf"
+requires = { build = "kissat" }
+help = "enable the estimate-based gia-low/new-medium selector for Kissat when cnf-generation-effort is auto; the ordinary refinement gates and explicit CNF choices remain authoritative"
+
+[[option]]
+name = "kissat-import-order"
+type = "int"
+default = 0
+range = { min = 0, max = 2 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "kissat_import_order" }
+category = "sat"
+requires = { build = "kissat" }
+help = "experimental initial variable import order: 0 follows clauses, 1 imports allocated IDs numerically, 2 imports the maximum allocated ID before clauses; future incremental variables retain clause order"
+
+[[option]]
 name = "kissat-batch-only"
 type = "bool"
 default = false

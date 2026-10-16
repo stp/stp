@@ -257,6 +257,82 @@ TEST(Kissat, OneShotCompleteFormulaHasAValidModel)
   EXPECT_THROW(solver.solve(timeout), std::logic_error);
 }
 
+TEST(Kissat, InitialImportOrdersPreserveModelsAssumptionsAndLaterVariables)
+{
+  for (int order : {0, 1, 2})
+    for (const bool factoring : {false, true})
+    {
+      SCOPED_TRACE(order);
+      SCOPED_TRACE(factoring);
+      stp::Kissat solver;
+      solver.setImportOrder(order);
+      if (factoring)
+      {
+        ASSERT_TRUE(solver.enableBVA());
+      }
+      const auto x = solver.newVar(), y = solver.newVar();
+      solver.setFrozen(x);
+      solver.setFrozen(y);
+      ASSERT_TRUE(solver.addClause(
+          clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)})));
+      bool timeout = false;
+      const auto noX = clause({SATSolver::mkLit(x, true)});
+      ASSERT_TRUE(solver.solveWithAssumptions(noX, timeout));
+      EXPECT_EQ(solver.false_literal(), solver.modelValue(x));
+      EXPECT_EQ(solver.true_literal(), solver.modelValue(y));
+
+      const auto z = solver.newVar();
+      solver.setFrozen(z);
+      ASSERT_TRUE(solver.addClause(clause({SATSolver::mkLit(z, true)})));
+      const auto noXY =
+          clause({SATSolver::mkLit(x, true), SATSolver::mkLit(y, true)});
+      ASSERT_FALSE(solver.solveWithAssumptions(noXY, timeout));
+      EXPECT_TRUE(solver.okay());
+      std::vector<int> core;
+      solver.unsatAssumptions(noXY, core);
+      EXPECT_FALSE(core.empty());
+      ASSERT_TRUE(solver.solve(timeout));
+      EXPECT_EQ(solver.false_literal(), solver.modelValue(z));
+      EXPECT_FALSE(timeout);
+    }
+}
+
+TEST(Kissat, InitialImportOrdersPreserveOneShotModels)
+{
+  for (int order : {0, 1, 2})
+  {
+    SCOPED_TRACE(order);
+    stp::Kissat solver;
+    solver.setImportOrder(order);
+    ASSERT_TRUE(solver.configureOneShot());
+    const auto x = solver.newVar(), y = solver.newVar();
+    solver.setFrozen(x);
+    solver.setFrozen(y);
+    ASSERT_TRUE(solver.addClause(
+        clause({SATSolver::mkLit(x, false), SATSolver::mkLit(y, false)})));
+    ASSERT_TRUE(solver.addClause(clause({SATSolver::mkLit(x, true)})));
+    bool timeout = false;
+    ASSERT_TRUE(solver.solve(timeout));
+    EXPECT_EQ(solver.false_literal(), solver.modelValue(x));
+    EXPECT_EQ(solver.true_literal(), solver.modelValue(y));
+    EXPECT_FALSE(timeout);
+    EXPECT_FALSE(solver.supportsAssumptions());
+  }
+}
+
+TEST(Kissat, ImportOrderRejectsInvalidValuesAndLateChanges)
+{
+  stp::Kissat solver;
+  EXPECT_THROW(solver.setImportOrder(-1), std::invalid_argument);
+  EXPECT_THROW(solver.setImportOrder(3), std::invalid_argument);
+  solver.setImportOrder(2);
+  const auto x = solver.newVar();
+  ASSERT_TRUE(solver.addClause(clause({SATSolver::mkLit(x, false)})));
+  bool timeout = false;
+  ASSERT_TRUE(solver.solve(timeout));
+  EXPECT_THROW(solver.setImportOrder(0), std::logic_error);
+}
+
 TEST(Kissat, OneShotSearchBiasKeepsTheNonIncrementalConfiguration)
 {
   stp::Kissat solver;

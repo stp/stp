@@ -552,3 +552,53 @@ TEST(OptionEffects, kissat_elimination_control_reaches_native_and_parsed_checks)
                                                   elimination == 0 ? 1 : 0));
       }
 }
+
+TEST(OptionEffects,
+     kissat_import_and_cnf_controls_reach_native_and_parsed_checks)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  for (const bool parsed : {false, true})
+    for (const char* incremental : {"on", "off"})
+      for (int order : {0, 1, 2})
+        for (const bool adaptive : {false, true})
+        {
+          SCOPED_TRACE(parsed);
+          SCOPED_TRACE(incremental);
+          SCOPED_TRACE(order);
+          SCOPED_TRACE(adaptive);
+          TermManager tm;
+          Options options;
+          options.set_str("sat-backend", "kissat");
+          options.set_str("incremental", incremental);
+          options.set_str("cnf-generation-effort", "auto");
+          options.set_bool("check-sanity", true);
+          if (!parsed)
+          {
+            options.set_int("kissat-import-order", order);
+            options.set_bool("kissat-adaptive-cnf", adaptive);
+          }
+          Solver solver(tm, options);
+          if (parsed)
+            solver.parse_smt2("(set-option :kissat-import-order " +
+                              std::to_string(order) +
+                              ")(set-option :kissat-adaptive-cnf " +
+                              (adaptive ? "true" : "false") + ")");
+          add_tuning_array_problem(tm, solver);
+          ASSERT_TRUE(solver.check_sat().is_sat());
+          EXPECT_EQ(flags_after(tm).kissat_import_order, order);
+          EXPECT_EQ(flags_after(tm).kissat_adaptive_cnf, adaptive);
+          EXPECT_EQ(solver.options().resolved("kissat-import-order"),
+                    OptionValue(std::int64_t(order)));
+          EXPECT_EQ(solver.options().resolved("kissat-adaptive-cnf"),
+                    OptionValue(adaptive));
+          EXPECT_TRUE(solver.options().is_set("kissat-import-order"));
+          EXPECT_TRUE(solver.options().is_set("kissat-adaptive-cnf"));
+          API_EXPECT_ERROR(ErrorCode::OPTION_TIMING,
+                           solver.options().set_int("kissat-import-order",
+                                                    order == 0 ? 1 : 0));
+          API_EXPECT_ERROR(
+              ErrorCode::OPTION_TIMING,
+              solver.options().set_bool("kissat-adaptive-cnf", !adaptive));
+        }
+}

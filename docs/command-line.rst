@@ -234,6 +234,17 @@ against its size. ``--cnf-link-shared-cells`` makes the ``new-*`` rungs
 keep a comparator cell propagation-complete when its exclusive-or has
 another reader, at the price of a few more clauses.
 
+With Kissat, ``--kissat-adaptive-cnf=true`` enables the estimate-based
+``gia-low``/``new-medium`` choice when ``--cnf-generation-effort=auto``.
+``--cnf-auto-threshold`` controls the switch between them. The existing
+array-refinement gates apply, and a fixed CNF effort takes precedence.
+
+``--kissat-import-order`` controls the first variables STP hands to Kissat:
+``0`` follows clause order, ``1`` reserves allocated IDs in ascending order,
+and ``2`` reserves the maximum allocated ID before clauses. This choice
+applies at the first clause; later incremental variables use the ordinary
+import path.
+
 Other options
 -------------
 

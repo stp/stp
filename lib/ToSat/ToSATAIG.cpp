@@ -396,7 +396,9 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
       (!needAbsRef || ufOnlyRefinement_ || realAdaptive) &&
       bm->expected_blast_ands > 0 &&
-      bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER)
+      (bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER ||
+       (bm->UserFlags.solver_to_use == UserDefinedFlags::KISSAT_SOLVER &&
+        bm->UserFlags.kissat_adaptive_cnf)))
   {
     // Experimental Real policy. The Boolean skeleton is known before either
     // writer runs, so this decision does not inspect the input's name or the
