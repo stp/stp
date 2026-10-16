@@ -2380,6 +2380,42 @@ category = "refinement.uf"
 help = "in auto mode, the least applications a UF function must have before its congruence is escalated to the closure; the files the closure helps carry a function of many hundreds of applications, so this keeps auto off the medium functions where escalating only adds overhead"
 
 [[option]]
+name = "array-late-read-limit"
+type = "int"
+default = 0
+range = { min = 0, max = 1000000 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_late_read_limit" }
+category = "arrays"
+help = "strict read-count bound for an optional eager array choice after batch preprocessing; 0 disables the late choice. This bound, array-late-expansion-limit and array-late-congruence-limit must admit the query; explicit --ackermanize keeps its existing meaning"
+
+[[option]]
+name = "array-late-expansion-limit"
+type = "uint"
+default = 200
+range = { max = 4294967295 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_late_expansion_limit" }
+category = "arrays"
+help = "strict structural cost bound for the optional late eager array choice; each read charges reachable writes and array ITEs. Used only when array-late-read-limit is positive; 0 disables the late choice"
+
+[[option]]
+name = "array-late-congruence-limit"
+type = "uint"
+default = 4000
+range = { max = 4294967295 }
+tier = "expert"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_late_congruence_limit" }
+category = "arrays"
+help = "maximum estimated index comparisons for the optional late eager array choice; distinct symbolic indexes are paired per base array, and constant-against-constant comparisons cost nothing"
+
+[[option]]
 name = "array-ackermann-budget"
 type = "uint"
 default = 4000
@@ -3374,6 +3410,29 @@ engine = { custom = "cnf_generation_effort" }
 category = "cnf"
 cli_bad_value = "Unknown --cnf-generation-effort value '{value}'. Expected one of: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, new-high, gia-low, gia-high, gia-very-high."
 help = "effort spent minimising the CNF: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, new-high. Higher is slower to generate but yields a smaller CNF; auto picks gia-low or, for large estimated blasts, new-medium, since minimising a large one costs more than the solver saves - falling back to the very-low/medium choice under array refinement, on solvers other than cadical, or with no estimate recorded. The new-* rungs blast through STP's own AIG instead of ABC's and write the CNF directly: new-very-low is plain Tseitin, new-low recovers XOR and if-then-else, new-medium also collapses n-ary ANDs and ORs. The gia-* rungs are low, high and very-high again, reaching the same generator over a Gia the blaster built rather than one converted from an ABC AIG"
+
+[[option]]
+name = "array-equality-gia-cnf"
+type = "bool"
+default = false
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_equality_gia_cnf" }
+category = "cnf"
+help = "choose gia-low CNF for a batch query whose whole-array equality still needs refinement and meets array-equality-gia-min-reads, when cnf-generation-effort is auto; eagerly discharged equalities and explicit CNF efforts keep their ordinary choice"
+
+[[option]]
+name = "array-equality-gia-min-reads"
+type = "int"
+default = 16
+range = { min = 0, max = 1000000 }
+tier = "experimental"
+settable = "before-first-check"
+scope = "solver"
+engine = { field = "array_equality_gia_min_reads" }
+category = "cnf"
+help = "minimum distinct reads after batch preprocessing and equality preparation for array-equality-gia-cnf; 0 removes the read-count guard"
 
 [[option]]
 name = "cnf-link-shared-cells"

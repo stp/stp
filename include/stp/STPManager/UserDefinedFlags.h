@@ -588,6 +588,12 @@ public:
   // and ignores this; 0 refuses every unasked selection.
   unsigned array_eager_budget = 4000;
 
+  // Optional late eager choice after ordinary batch preprocessing. Zero
+  // leaves the existing early/lazy policy in charge. Both bounds are strict.
+  int array_late_read_limit = 0;
+  unsigned array_late_expansion_limit = 200;
+  unsigned array_late_congruence_limit = 4000;
+
   // Whether to bias the first candidate so that the scalars the congruence
   // checker reads start out pairwise different.
   //
@@ -1812,6 +1818,11 @@ public:
   }
 
   enum CNFEffort cnf_effort = CNF_EFFORT_AUTO;
+
+  // Optional batch CNF choice while whole-array equality still needs
+  // refinement. An explicit CNF effort remains authoritative.
+  bool array_equality_gia_cnf = false;
+  int array_equality_gia_min_reads = 16;
 
   // AND-node count at or above which AUTO stops paying for CNF
   // minimisation: against the recorded estimate it selects NEW_MEDIUM

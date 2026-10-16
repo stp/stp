@@ -1770,10 +1770,64 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // skipping it for a prepared registry would silently bind no reads.
   assert(!extPrepared || arrayops);
 
+  // Select from the registry that remains active after preprocessing, and
+  // require a read structure beyond the equality witnesses. The solve's
+  // RestoreFlags scope restores this query-local CNF choice on every exit.
+  const bool chooseEqualityGia =
+      bm->UserFlags.array_equality_gia_cnf && extActive &&
+      bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
+      !numberOfReadsLessThan(inputToSat,
+                             bm->UserFlags.array_equality_gia_min_reads);
+  if (bm->UserFlags.array_equality_gia_cnf && bm->UserFlags.stats_flag)
+    cerr << "Array equality CNF policy: active=" << (extActive ? "on" : "off")
+         << " min-reads=" << bm->UserFlags.array_equality_gia_min_reads
+         << " selected=" << (chooseEqualityGia ? "gia-low" : "unchanged")
+         << endl;
+  if (chooseEqualityGia)
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
+
+  // Delay this optional choice until bit-vector preprocessing has reduced
+  // the array graph. Keep array equality on its own refinement path, and
+  // retain the explicit request's ordinary lowering policy.
+  const bool considerLateEager = arrayops && !extActive &&
+                                 !bm->UserFlags.ackermannisation &&
+                                 bm->UserFlags.array_late_read_limit > 0;
+  const bool fitsLateArrayStructure =
+      considerLateEager &&
+      numberOfReadsLessThan(inputToSat, bm->UserFlags.array_late_read_limit) &&
+      arrayEagerCostLessThan(inputToSat,
+                             bm->UserFlags.array_late_expansion_limit);
+  // Read expansion and read congruence have independent costs: many reads
+  // over a flat array can pass the structural bound while introducing a
+  // quadratic number of index comparisons.
+  const uint64_t lateCongruenceCost =
+      fitsLateArrayStructure ? arrayCongruenceEstimate(inputToSat) : 0;
+  const bool expandLateArrays =
+      fitsLateArrayStructure &&
+      lateCongruenceCost <= bm->UserFlags.array_late_congruence_limit;
+  if (bm->UserFlags.stats_flag && considerLateEager)
+    cerr << "Array late eager policy: read-limit="
+         << bm->UserFlags.array_late_read_limit
+         << " expansion-limit=" << bm->UserFlags.array_late_expansion_limit
+         << " congruence-limit=" << bm->UserFlags.array_late_congruence_limit
+         << " congruence-estimate="
+         << (fitsLateArrayStructure ? std::to_string(lateCongruenceCost)
+                                    : "skipped")
+         << " selected=" << (expandLateArrays ? "on" : "off") << endl;
+  if (expandLateArrays)
+    bm->UserFlags.ackermannisation = true;
+
   if (arrayops)
   {
     inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
     bm->ASTNodeStats("after transformation: ", inputToSat);
+    if (expandLateArrays)
+    {
+      // The eager transform includes every read axiom, so arrays no longer
+      // require another SAT call. Other refinement sources remain separate.
+      arrayops = false;
+      assert(!containsArrayOps(inputToSat, bm));
+    }
   }
   bm->TermsAlreadySeenMap_Clear();
 
