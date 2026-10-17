@@ -88,8 +88,13 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
   static const Profile cadical_abv_batch{
       "cadical-qf-abv-batch",
       {{"search-bias", "unsat"},
-       {"cnf-generation-effort", "gia-low"},
-       {"cadical-factor", "off"}}};
+       {"cnf-generation-effort", "auto"},
+       {"cadical-factor", "off"},
+       {"array-late-read-limit", "1024"},
+       {"array-late-expansion-limit", "100000"},
+       {"array-late-congruence-limit", "16000"},
+       {"array-equality-gia-cnf", "true"},
+       {"array-equality-gia-min-reads", "16"}}};
   static const Profile cadical_abv_incremental{
       "cadical-qf-abv-incremental",
       {{"search-bias", "sat"},

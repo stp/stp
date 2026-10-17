@@ -98,6 +98,16 @@ const TuningSetting kissat_abv_batch_settings[] = {
     {"array-equality-gia-cnf", "true"},
     {"array-equality-gia-min-reads", "16"}};
 
+const TuningSetting cadical_abv_batch_settings[] = {
+    {"search-bias", "unsat"},
+    {"cnf-generation-effort", "auto"},
+    {"cadical-factor", "off"},
+    {"array-late-read-limit", "1024"},
+    {"array-late-expansion-limit", "100000"},
+    {"array-late-congruence-limit", "16000"},
+    {"array-equality-gia-cnf", "true"},
+    {"array-equality-gia-min-reads", "16"}};
+
 std::vector<TuningSetting> fp_batch_settings(bool kissat)
 {
   if (!kissat)
@@ -448,28 +458,49 @@ TEST(OptionEffects, cadical_abv_batch_tuning_reaches_the_first_encoding)
   if (!has_sat_backend("cadical"))
     GTEST_SKIP() << "CaDiCaL is not part of this build";
   using Flags = stp::UserDefinedFlags;
-  TermManager tm;
-  Options o;
-  o.set_str("sat-backend", "cadical");
-  o.set_str("logic", "QF_ABV");
-  Solver s(tm, o);
-  add_tuning_array_problem(tm, s);
-  bool emitted = false;
-  s.set_cnf_sink([&](std::string_view, CnfScope) {
-    emitted = true;
-    EXPECT_EQ(flags_after(tm).search_bias, stp::SearchBias::UNSAT);
-    EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_GIA_LOW);
-    EXPECT_EQ(flags_after(tm).cadical_factor, Flags::BVAMode::OFF);
-  });
-  ASSERT_TRUE(s.check_sat().is_sat());
-  EXPECT_TRUE(emitted);
-  EXPECT_EQ(s.options().get_str("search-bias"), "none");
-  EXPECT_EQ(s.options().get_str("cnf-generation-effort"), "auto");
-  EXPECT_EQ(s.options().get_str("cadical-factor"), "on");
-  for (const char* name : {"search-bias", "cnf-generation-effort", "cadical-factor"})
-    EXPECT_FALSE(s.options().is_set(name));
-  EXPECT_EQ(std::get<std::string>(s.options().resolved("search-bias")), "unsat");
-  EXPECT_EQ(std::get<std::string>(s.options().info("cnf-generation-effort").resolved), "gia-low");
+  const Options baseline;
+  Options expected;
+  for (const auto& setting : cadical_abv_batch_settings)
+    expected.set(setting.name, setting.value);
+  for (const bool parsed : {false, true})
+  {
+    SCOPED_TRACE(parsed);
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", "cadical");
+    options.set_bool("check-sanity", true);
+    if (!parsed)
+      options.set_str("logic", "QF_ABV");
+    Solver s(tm, options);
+    if (parsed)
+      s.parse_smt2("(set-logic QF_ABV)");
+    add_tuning_array_problem(tm, s);
+    bool emitted = false;
+    s.set_cnf_sink(
+        [&](std::string_view, CnfScope)
+        {
+          emitted = true;
+          const auto& flags = flags_after(tm);
+          EXPECT_EQ(flags.search_bias, stp::SearchBias::UNSAT);
+          EXPECT_EQ(flags.cnf_effort, Flags::CNF_EFFORT_AUTO);
+          EXPECT_EQ(flags.cadical_factor, Flags::BVAMode::OFF);
+          EXPECT_EQ(flags.array_late_read_limit, 1024);
+          EXPECT_EQ(flags.array_late_expansion_limit, 100000u);
+          EXPECT_EQ(flags.array_late_congruence_limit, 16000u);
+          EXPECT_TRUE(flags.array_equality_gia_cnf);
+          EXPECT_EQ(flags.array_equality_gia_min_reads, 16);
+        });
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_TRUE(emitted);
+    for (const auto& setting : cadical_abv_batch_settings)
+    {
+      SCOPED_TRACE(setting.name);
+      EXPECT_EQ(s.options().resolved(setting.name),
+                expected.resolved(setting.name));
+      EXPECT_EQ(s.options().get(setting.name), baseline.get(setting.name));
+      EXPECT_FALSE(s.options().is_set(setting.name));
+    }
+  }
 }
 
 TEST(OptionEffects, cadical_abv_tuning_preserves_explicit_baseline_choices)
@@ -486,16 +517,18 @@ TEST(OptionEffects, cadical_abv_tuning_preserves_explicit_baseline_choices)
     Flags::BVAMode factor;
   };
   const Choice choices[] = {
-      {"sat-tuning", "off", stp::SearchBias::NONE,
-       Flags::CNF_EFFORT_AUTO, Flags::BVAMode::ON},
-      {"search-bias", "none", stp::SearchBias::NONE,
-       Flags::CNF_EFFORT_GIA_LOW, Flags::BVAMode::OFF},
+      {"sat-tuning", "off", stp::SearchBias::NONE, Flags::CNF_EFFORT_AUTO,
+       Flags::BVAMode::ON},
+      {"search-bias", "none", stp::SearchBias::NONE, Flags::CNF_EFFORT_AUTO,
+       Flags::BVAMode::OFF},
       {"cnf-generation-effort", "auto", stp::SearchBias::UNSAT,
        Flags::CNF_EFFORT_AUTO, Flags::BVAMode::OFF},
-      {"kissat-factor", "on", stp::SearchBias::UNSAT,
-       Flags::CNF_EFFORT_GIA_LOW, Flags::BVAMode::ON},
-      {"incremental", "on", stp::SearchBias::SAT,
-       Flags::CNF_EFFORT_NEW_MEDIUM, Flags::BVAMode::OFF},
+      {"cnf-generation-effort", "gia-low", stp::SearchBias::UNSAT,
+       Flags::CNF_EFFORT_GIA_LOW, Flags::BVAMode::OFF},
+      {"kissat-factor", "on", stp::SearchBias::UNSAT, Flags::CNF_EFFORT_AUTO,
+       Flags::BVAMode::ON},
+      {"incremental", "on", stp::SearchBias::SAT, Flags::CNF_EFFORT_NEW_MEDIUM,
+       Flags::BVAMode::OFF},
   };
   for (const Choice& choice : choices)
   {
@@ -520,24 +553,113 @@ TEST(OptionEffects, cadical_abv_late_push_replaces_batch_tuning_before_engagemen
   if (!has_sat_backend("cadical"))
     GTEST_SKIP() << "CaDiCaL is not part of this build";
   using Flags = stp::UserDefinedFlags;
+  const Options baseline;
+  for (const bool parsed : {false, true})
+  {
+    SCOPED_TRACE(parsed);
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", "cadical");
+    options.set("incremental-auto-engage-at", "1");
+    if (!parsed)
+      options.set_str("logic", "QF_ABV");
+    Solver s(tm, options);
+    if (parsed)
+      s.parse_smt2("(set-logic QF_ABV)");
+    add_tuning_array_problem(tm, s);
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_FALSE(api_test::engine_solver(s).hasIncrementalSolver());
+    EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_AUTO);
+    EXPECT_EQ(flags_after(tm).array_late_read_limit, 1024);
+    if (parsed)
+      s.parse_smt2("(push 1)");
+    else
+      s.push();
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_TRUE(api_test::engine_solver(s).hasIncrementalSolver());
+    EXPECT_EQ(flags_after(tm).search_bias, stp::SearchBias::SAT);
+    EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_NEW_MEDIUM);
+    for (const char* name :
+         {"array-late-read-limit", "array-late-expansion-limit",
+          "array-late-congruence-limit", "array-equality-gia-cnf",
+          "array-equality-gia-min-reads"})
+      EXPECT_EQ(s.options().resolved(name), baseline.get(name)) << name;
+    EXPECT_EQ(flags_after(tm).array_late_read_limit, 0);
+    EXPECT_EQ(flags_after(tm).array_late_expansion_limit, 200u);
+    EXPECT_EQ(flags_after(tm).array_late_congruence_limit, 4000u);
+    EXPECT_FALSE(flags_after(tm).array_equality_gia_cnf);
+    if (parsed)
+      s.parse_smt2("(pop 1)");
+    else
+      s.pop();
+    ASSERT_TRUE(s.check_sat().is_sat());
+    EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_NEW_MEDIUM);
+    EXPECT_EQ(flags_after(tm).array_late_read_limit, 0);
+  }
+}
+
+TEST(OptionEffects,
+     cadical_abv_batch_defaults_preserve_explicit_baseline_values)
+{
+  if (!has_sat_backend("cadical"))
+    GTEST_SKIP() << "CaDiCaL is not part of this build";
+  const Options baseline;
+  for (const bool parsed : {false, true})
+    for (const auto& setting : cadical_abv_batch_settings)
+    {
+      SCOPED_TRACE(parsed);
+      SCOPED_TRACE(setting.name);
+      TermManager tm;
+      Options options;
+      options.set_str("sat-backend", "cadical");
+      if (!parsed)
+      {
+        options.set_str("logic", "QF_ABV");
+        options.set(setting.name,
+                    scalar_option_text(baseline.get(setting.name)));
+      }
+      Solver s(tm, options);
+      if (parsed)
+        s.parse_smt2(
+            "(set-logic QF_ABV)(set-option :" + std::string(setting.name) +
+            " " + scalar_option_text(baseline.get(setting.name)) + ")");
+      const Term x = tm.declare("cadical_batch_explicit_x", tm.mk_bv_sort(8));
+      s.add(x == 1);
+      ASSERT_TRUE(s.check_sat().is_sat());
+      EXPECT_TRUE(s.options().is_set(setting.name));
+      EXPECT_EQ(s.options().resolved(setting.name), baseline.get(setting.name));
+    }
+}
+
+TEST(OptionEffects,
+     copying_cadical_batch_options_does_not_copy_automatic_values)
+{
+  if (!has_sat_backend("cadical"))
+    GTEST_SKIP() << "CaDiCaL is not part of this build";
+  const Options baseline;
   TermManager tm;
-  Options o;
-  o.set_str("sat-backend", "cadical");
-  o.set_str("logic", "QF_ABV");
-  o.set("incremental-auto-engage-at", "1");
-  Solver s(tm, o);
-  add_tuning_array_problem(tm, s);
-  ASSERT_TRUE(s.check_sat().is_sat());
-  EXPECT_FALSE(api_test::engine_solver(s).hasIncrementalSolver());
-  EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_GIA_LOW);
-  s.push();
-  ASSERT_TRUE(s.check_sat().is_sat());
-  EXPECT_TRUE(api_test::engine_solver(s).hasIncrementalSolver());
-  EXPECT_EQ(flags_after(tm).search_bias, stp::SearchBias::SAT);
-  EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_NEW_MEDIUM);
-  s.pop();
-  ASSERT_TRUE(s.check_sat().is_sat());
-  EXPECT_EQ(flags_after(tm).cnf_effort, Flags::CNF_EFFORT_NEW_MEDIUM);
+  Options options;
+  options.set_str("sat-backend", "cadical");
+  options.set_str("logic", "QF_ABV");
+  Solver original(tm, options);
+  const Term x = tm.declare("cadical_batch_copy_x", tm.mk_bv_sort(8));
+  original.add(x == 1);
+  ASSERT_TRUE(original.check_sat().is_sat());
+  Options copied(original.options());
+  for (const auto& setting : cadical_abv_batch_settings)
+  {
+    EXPECT_FALSE(copied.is_set(setting.name));
+    EXPECT_EQ(copied.get(setting.name), baseline.get(setting.name));
+  }
+  copied.set_str("logic", "QF_BV");
+  Solver other(tm, copied);
+  other.add(x == 1);
+  ASSERT_TRUE(other.check_sat().is_sat());
+  EXPECT_EQ(flags_after(tm).array_late_read_limit, 0);
+  EXPECT_FALSE(flags_after(tm).array_equality_gia_cnf);
+  ASSERT_TRUE(original.check_sat().is_sat());
+  EXPECT_EQ(flags_after(tm).array_late_read_limit, 1024);
+  EXPECT_TRUE(flags_after(tm).array_equality_gia_cnf);
 }
 
 TEST(OptionEffects, forced_abvfp_tuning_reaches_the_incremental_solver)

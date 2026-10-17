@@ -45,8 +45,11 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
     * - CaDiCaL
       - QF_ABV
       - Batch
-      - ``search-bias=unsat``, ``cnf-generation-effort=gia-low``,
-        ``cadical-factor=off``
+      - ``search-bias=unsat``, ``cnf-generation-effort=auto``,
+        ``cadical-factor=off``, ``array-late-read-limit=1024``,
+        ``array-late-expansion-limit=100000``,
+        ``array-late-congruence-limit=16000``,
+        ``array-equality-gia-cnf=true``, ``array-equality-gia-min-reads=16``
     * - Kissat
       - QF_ABV
       - Batch
@@ -103,10 +106,9 @@ retaining the ordinary search mode. Its greedy setting applies to calls
 that retain native incremental solving.
 It also lifts conditional definitions of bit-vector symbols. An explicit
 ``disable-simplifications`` keeps this rewrite disabled.
-The CaDiCaL QF_ABV batch profile uses
-``gia-low`` after the pinned ABC mapper was changed to use an explicit stack
-for its cut-reference walks, fixing the stack overflow on wide
-division/remainder encodings.
+The CaDiCaL QF_ABV batch profile uses the same bounded late array expansion
+and congruence settings with automatic CNF selection. It retains the baseline
+CNF size threshold, and an explicit encoding choice takes precedence.
 
 Session detection
 -----------------
