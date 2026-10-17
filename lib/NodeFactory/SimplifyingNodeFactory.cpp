@@ -3027,6 +3027,26 @@ ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(
   }
   else
   {
+    if (bm.UserFlags.enable_conditional_equality && child1.GetKind() == EQ &&
+        child2.GetKind() == EQ && child1.Degree() == 2 && child2.Degree() == 2)
+      for (unsigned i = 0; i < 2 && retval.IsNull(); i++)
+        for (unsigned j = 0; j < 2 && retval.IsNull(); j++)
+        {
+          const ASTNode& symbol = child1[i];
+          if (symbol.GetKind() != stp::SYMBOL || symbol != child2[j] ||
+              symbol.GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
+            continue;
+          // Pull a conditional definition into one equality, so word-level
+          // substitution can see it. A symbol also prevents cycling with
+          // the constant-equality distribution in CreateSimpleEQ.
+          const ASTNode value =
+              NodeFactory::CreateTerm(ITE, symbol.GetValueWidth(), child0,
+                                      child1[1 - i], child2[1 - j]);
+          retval = NodeFactory::CreateNode(EQ, symbol, value);
+        }
+    if (!retval.IsNull())
+      return retval;
+
     // Each branch knows its own condition, so a test the condition decides
     // goes. e.g. y=2 rules out y=1 without the two ever matching.
     const ASTNode thenBranch = decideBranch(child0, true, child1);
