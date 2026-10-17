@@ -237,4 +237,24 @@ else()
 endif()
 message(STATUS "Kissat clause exchange: ${KISSAT_HAS_CLAUSE_EXCHANGE}")
 
+# External propagation (IPASIR-UP) with decision polarity advice, the STP
+# extension a theory propagator needs; probed and assumed the same way.
+unset(KISSAT_HAS_EXTERNAL_PROPAGATOR CACHE)
+if(Kissat_FOUND_SYSTEM)
+    set(_kissat_propagator_probe "${PROJECT_BINARY_DIR}/kissat-propagator.cpp")
+    file(WRITE "${_kissat_propagator_probe}"
+        "extern \"C\" {\n#include <kissat/kissat.h>\n}\n"
+        "#ifndef KISSAT_HAS_EXTERNAL_PROPAGATOR\n#error no external propagator\n#endif\n"
+        "int main() { kissat *s = kissat_init(); kissat_external_propagator p = {}; "
+        "(void) p.advise_decision_polarity; kissat_reset_observed_vars(s); "
+        "int d = kissat_is_decision(s, 1); kissat_release(s); return d; }\n")
+    try_compile(KISSAT_HAS_EXTERNAL_PROPAGATOR
+        "${PROJECT_BINARY_DIR}/kissat-propagator-probe" "${_kissat_propagator_probe}"
+        CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${KISSAT_INCLUDE_DIR}"
+        LINK_LIBRARIES ${_kissat_libraries})
+else()
+    set(KISSAT_HAS_EXTERNAL_PROPAGATOR ON)
+endif()
+message(STATUS "Kissat external propagator: ${KISSAT_HAS_EXTERNAL_PROPAGATOR}")
+
 mark_as_advanced(Kissat_TAG KISSAT_SOURCE_INCLUDE_DIR KISSAT_LIBRARY KISSAT_INCREMENTAL_API)

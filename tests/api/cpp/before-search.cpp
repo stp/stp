@@ -73,6 +73,18 @@ bool backend_exchanges()
 }
 const bool exchange_available = backend_exchanges();
 
+// Whether that backend hosts the arithmetic propagator: Kissat does with the
+// IPASIR-UP extension of STP's fork, and otherwise checks complete
+// assignments only.
+bool backend_hosts_theory()
+{
+#if defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+  return true;
+#else
+  return test_backend() != "kissat";
+#endif
+}
+
 Options batch_options()
 {
   Options o;
@@ -338,10 +350,10 @@ TEST(BeforeSearch, AnArithmeticHookKeepsItsCoordinatorsCallback)
   const long hooked = run(true, calls, outcome);
   EXPECT_EQ(outcome, "offered");
   EXPECT_EQ(calls, 1u);
-  if (test_backend() == "kissat")
-    EXPECT_EQ(plain, 0); // Kissat runs arithmetic on complete assignments.
-  else
+  if (backend_hosts_theory())
     EXPECT_GE(plain, 1);
+  else
+    EXPECT_EQ(plain, 0); // Arithmetic runs on complete assignments.
   EXPECT_EQ(hooked, plain);
 }
 
@@ -389,8 +401,8 @@ TEST(BeforeSearch, ArithmeticRerouteKeepsDiversificationWithoutRepeatingTheHook)
   if (!exchange_available)
     GTEST_SKIP() << "the backend has no search diversification";
   // The reroute follows a partial theory check, which needs the arithmetic
-  // propagator in the search; Kissat checks complete assignments only.
-  if (test_backend() == "kissat")
+  // propagator in the search.
+  if (!backend_hosts_theory())
     GTEST_SKIP() << "the backend does not host the arithmetic propagator";
   const auto path = std::filesystem::path(STP_TEST_QUERY_DIR) /
                     "lra-float-reroute-preserves-answer.smt2";

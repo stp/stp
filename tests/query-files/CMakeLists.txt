@@ -55,13 +55,16 @@ else()
 endif()
 # Whether the backend a query gets when its RUN line names none can host the
 # theory propagator. That backend is CryptoMiniSat when it is compiled in,
-# else CaDiCaL, else MiniSat (UserDefinedFlags.h). CaDiCaL always can, and
-# CryptoMiniSat and MiniSat when built with the interface.
+# else CaDiCaL, else MiniSat, else Kissat (UserDefinedFlags.h). CaDiCaL
+# always can, and CryptoMiniSat, MiniSat and Kissat when built with the
+# interface.
 if (STP_BUILD_WITH_CRYPTOMINISAT)
     set(_stp_default_backend_propagates "${CRYPTOMINISAT_HAS_UP}")
 elseif (STP_BUILD_WITH_CADICAL)
     set(_stp_default_backend_propagates TRUE)
-elseif (MINISAT_HAS_UP)
+elseif (USE_MINISAT)
+    set(_stp_default_backend_propagates "${MINISAT_HAS_UP}")
+elseif (STP_BUILD_WITH_KISSAT AND KISSAT_HAS_EXTERNAL_PROPAGATOR)
     set(_stp_default_backend_propagates TRUE)
 else()
     set(_stp_default_backend_propagates FALSE)
@@ -180,6 +183,9 @@ if (STP_BUILD_WITH_CRYPTOMINISAT AND CRYPTOMINISAT_HAS_UP)
 endif()
 if (USE_MINISAT AND MINISAT_HAS_UP)
     list(APPEND _stp_lra_backends "--minisat")
+endif()
+if (USE_KISSAT AND KISSAT_HAS_EXTERNAL_PROPAGATOR)
+    list(APPEND _stp_lra_backends "--kissat")
 endif()
 list(LENGTH _stp_lra_backends _stp_lra_backend_count)
 # A default backend that can host the propagator is on the list, and a list

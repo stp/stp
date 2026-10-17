@@ -306,6 +306,23 @@ external variable *v* + 1 until the search starts, and factoring numbers
 its variables above that. ``capabilities()`` lists Kissat in
 ``sat.clause-exchange.backends`` when the library has the extension.
 
+Theory propagation
+------------------
+
+The fork implements IPASIR-UP, the external propagator interface CaDiCaL
+offers, as C callbacks, together with the decision polarity advice of STP's
+CaDiCaL fork. The adapter connects STP's theory propagator through it, so
+real arithmetic takes part in the search on Kissat
+(:doc:`linear-real-arithmetic`). Observing an atom protects its variable
+from elimination and substitution, restoring it first if inprocessing
+already removed it. Kissat tells the theory every assignment of an atom in
+trail order, with root assignments at the root and assignments that
+chronological backtracking keeps told again, and accepts a complete
+assignment only when the theory does. It takes a propagated literal's
+reason clause at once rather than when conflict analysis needs it, and it
+skips lucky and greedy assignments, and the adapter its disposable
+candidate pass, while a theory is connected.
+
 Testing
 -------
 
@@ -323,8 +340,9 @@ the original configure/make test suite continues to run separately.
 Current scope
 -------------
 
-The backend implements the incremental SAT contract needed for refinement.
-It does not expose theory propagation callbacks or search reset. STP uses
-its existing fallbacks for optional backend capabilities. Restoring the entire extension
+The backend implements the incremental SAT contract needed for refinement,
+and hosts a theory propagator through the fork's IPASIR-UP interface (see
+below). It does not expose decision hints or search reset. STP uses its
+existing fallbacks for optional backend capabilities. Restoring the entire extension
 can cost more than restoring only the variables a new clause needs.
 Incremental proof output is outside the scope of this port.
