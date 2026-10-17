@@ -258,6 +258,10 @@ void apply_sat_tuning_defaults(const OptionsImpl& options,
       std::get<std::string>(options.resolved(index_of("sat-tuning"))) != "auto")
     return;
   const bool explicit_bias = options.is_set[index_of("search-bias")];
+  const std::size_t ackermann = index_of("ackermanize");
+  const bool explicit_lazy_arrays =
+      !derived.at_default[ackermann] &&
+      !std::get<bool>(derived.resolved[ackermann]);
   for (const auto& [index, value] : tuning.entries)
   {
     // Presence protects even an explicit "auto", "none", -1, or a value
@@ -265,18 +269,26 @@ void apply_sat_tuning_defaults(const OptionsImpl& options,
     // options also outrank a profile default.
     if (!derived.at_default[index])
       continue;
+    // Late expansion may temporarily enable Ackermannization. Do not supply
+    // its budgets against an explicit request for lazy arrays. Individually
+    // explicit budgets were already preserved above.
+    const std::string_view name = spec_at(index).name;
+    if (explicit_lazy_arrays && (name == "array-late-read-limit" ||
+                                 name == "array-late-expansion-limit" ||
+                                 name == "array-late-congruence-limit"))
+      continue;
     // The diagnostic core-only policy disables trail reuse. An explicitly
     // selected mode is already preserved by the presence check above.
-    if (std::string_view(spec_at(index).name) == "kissat-trail-reuse-mode" &&
+    if (name == "kissat-trail-reuse-mode" &&
         std::get<bool>(options.resolved(index_of("incremental-core-only"))))
       continue;
     // An explicitly named search configuration owns its phase/mode policy.
     // Individual explicit phase/mode controls still override it normally.
-    if (explicit_bias && search_setting(spec_at(index).name))
+    if (explicit_bias && search_setting(name))
       continue;
     // A user-selected global mode also governs a complete one-shot copy.
     // A separately explicit one-shot mode still takes precedence normally.
-    if (std::string_view(spec_at(index).name) == "kissat-one-shot-stable" &&
+    if (name == "kissat-one-shot-stable" &&
         options.is_set[index_of("kissat-stable")])
       continue;
     derived.resolved[index] = value;

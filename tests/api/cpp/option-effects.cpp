@@ -2078,3 +2078,71 @@ TEST(OptionEffects, batch_defaults_yield_to_first_assumptions_and_core_requests)
       }
   }
 }
+
+TEST(OptionEffects, batch_defaults_preserve_explicit_lazy_array_lowering)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned array batch backend is part of this build";
+  }
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    for (const bool parsed : {false, true})
+      for (const bool explicit_late_budget : {false, true})
+      {
+        SCOPED_TRACE(backend);
+        SCOPED_TRACE(parsed);
+        SCOPED_TRACE(explicit_late_budget);
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", backend);
+        options.set_bool("check-sanity", true);
+        if (!parsed)
+        {
+          options.set_str("logic", "QF_ABV");
+          options.set_bool("ackermanize", false);
+          if (explicit_late_budget)
+            options.set_int("array-late-read-limit", 1024);
+        }
+        Solver solver(tm, options);
+        if (parsed)
+          solver.parse_smt2(
+              std::string("(set-logic QF_ABV)(set-option :ackermanize false)") +
+              (explicit_late_budget ? "(set-option :array-late-read-limit 1024)"
+                                    : ""));
+        add_tuning_array_problem(tm, solver);
+        bool emitted = false;
+        solver.set_cnf_sink(
+            [&](std::string_view, CnfScope)
+            {
+              emitted = true;
+              const auto& flags = flags_after(tm);
+              if (!explicit_late_budget)
+              {
+                EXPECT_FALSE(flags.ackermannisation);
+              }
+              EXPECT_EQ(flags.array_late_read_limit,
+                        explicit_late_budget ? 1024 : 0);
+              EXPECT_EQ(flags.array_late_expansion_limit, 200u);
+              EXPECT_EQ(flags.array_late_congruence_limit, 4000u);
+            });
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        EXPECT_TRUE(emitted);
+        EXPECT_TRUE(solver.options().is_set("ackermanize"));
+        EXPECT_FALSE(std::get<bool>(solver.options().resolved("ackermanize")));
+        EXPECT_EQ(solver.options().is_set("array-late-read-limit"),
+                  explicit_late_budget);
+        EXPECT_EQ(solver.options().resolved("array-late-read-limit"),
+                  OptionValue(std::int64_t(explicit_late_budget ? 1024 : 0)));
+        for (const char* name :
+             {"array-late-expansion-limit", "array-late-congruence-limit"})
+        {
+          EXPECT_EQ(solver.options().resolved(name), baseline.get(name));
+          EXPECT_FALSE(solver.options().is_set(name));
+        }
+      }
+  }
+}

@@ -109,6 +109,9 @@ It also lifts conditional definitions of bit-vector symbols. An explicit
 The CaDiCaL QF_ABV batch profile uses the same bounded late array expansion
 and congruence settings with automatic CNF selection. It retains the baseline
 CNF size threshold, and an explicit encoding choice takes precedence.
+An explicit ``--ackermanize=false`` keeps the automatic late array expansion
+budgets at their baseline values. Individually supplied late budgets retain
+their existing meaning.
 
 Session detection
 -----------------
