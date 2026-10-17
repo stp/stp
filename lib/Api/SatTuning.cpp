@@ -146,6 +146,22 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     profile.settings.push_back({"kissat-greedy-growth", "1"});
     return profile;
   }();
+  static const Profile kissat_abvfp_batch = []
+  {
+    Profile profile = kissat_abvfp_forced_incremental;
+    profile.name = "kissat-qf-abvfp-batch";
+    return profile;
+  }();
+  static const Profile kissat_bvfp_batch = []
+  {
+    Profile profile = kissat_abvfp_batch;
+    profile.name = "kissat-qf-bvfp-batch";
+    return profile;
+  }();
+  static const Profile cadical_abvfp_batch{"cadical-qf-abvfp-batch",
+                                           {{"cadical-factor", "off"}}};
+  static const Profile cadical_bvfp_batch{"cadical-qf-bvfp-batch",
+                                          {{"cadical-factor", "off"}}};
 
   if (backend == Flags::KISSAT_SOLVER && logic == "QF_BV" && !incremental)
     return kissat_bv_batch;
@@ -155,6 +171,13 @@ const Profile& select_profile(Flags::SATSolvers backend, std::string_view logic,
     return kissat_abv_batch;
   if (backend == Flags::CADICAL_SOLVER && logic == "QF_ABV" && !incremental)
     return cadical_abv_batch;
+  if (!incremental && (logic == "QF_ABVFP" || logic == "QF_BVFP"))
+  {
+    if (backend == Flags::KISSAT_SOLVER)
+      return logic == "QF_ABVFP" ? kissat_abvfp_batch : kissat_bvfp_batch;
+    if (backend == Flags::CADICAL_SOLVER)
+      return logic == "QF_ABVFP" ? cadical_abvfp_batch : cadical_bvfp_batch;
+  }
   if (logic == "QF_BV" && incremental)
   {
     if (backend == Flags::CADICAL_SOLVER)

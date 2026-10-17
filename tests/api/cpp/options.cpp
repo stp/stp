@@ -1302,6 +1302,12 @@ TEST(Options,
         if (std::string(incremental) == "on" &&
             (measured_abvfp || measured_bvfp))
           continue;
+        if (std::string(incremental) == "off" &&
+            (std::string(logic) == "QF_ABVFP" ||
+             std::string(logic) == "QF_BVFP") &&
+            (std::string(backend) == "cadical" ||
+             std::string(backend) == "kissat"))
+          continue;
         SCOPED_TRACE(std::string(backend) + "/" + logic + "/" + incremental);
         TermManager tm;
         Options options;
@@ -1339,18 +1345,18 @@ TEST(Options, kissat_greedy_tuning_resolves_by_logic_and_session)
       const bool abvfp = std::string(logic) == "QF_ABVFP";
       const bool tuned =
           (std::string(incremental) == "on" && (bv || bvfp || abvfp)) ||
-          (std::string(incremental) == "off" && bv);
+          (std::string(incremental) == "off" && (bv || bvfp || abvfp));
       Options expected;
       if (tuned)
       {
         expected.set_int("kissat-incremental-greedy", bv ? 4 : 2);
-        if (bvfp)
+        if (bvfp && std::string(incremental) == "on")
         {
           expected.set_int("kissat-greedy-conflicts", 0);
           expected.set_int("kissat-greedy-decisions", 0);
           expected.set_bool("kissat-greedy-phase-cache", true);
         }
-        if (abvfp)
+        if (abvfp || (bvfp && std::string(incremental) == "off"))
           expected.set_int("kissat-greedy-growth", 1);
       }
       TermManager tm;

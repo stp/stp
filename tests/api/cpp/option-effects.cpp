@@ -98,6 +98,39 @@ const TuningSetting kissat_abv_batch_settings[] = {
     {"array-equality-gia-cnf", "true"},
     {"array-equality-gia-min-reads", "16"}};
 
+std::vector<TuningSetting> fp_batch_settings(bool kissat)
+{
+  if (!kissat)
+    return {{"cadical-factor", "off"}};
+  return {{"search-bias", "sat"},
+          {"kissat-stable", "2"},
+          {"sat-target", "0"},
+          {"sat-rephase", "0"},
+          {"cnf-generation-effort", "new-medium"},
+          {"kissat-probe", "false"},
+          {"cadical-factor", "off"},
+          {"kissat-trail-reuse-mode", "2"},
+          {"kissat-incremental-greedy", "2"},
+          {"kissat-greedy-growth", "1"}};
+}
+
+void add_tuning_fp_problem(TermManager& tm, Solver& solver, bool arrays)
+{
+  const Sort half = tm.mk_fp_sort(5, 11);
+  const Term x =
+      arrays
+          ? tm.declare("fp_tuning_array",
+                       tm.mk_array_sort(tm.mk_bv_sort(8), half))[tm.mk_bv(8, 0)]
+          : tm.declare("fp_tuning_x", half);
+  const Term y = tm.declare("fp_tuning_y", half);
+  const Term one = tm.mk_fp_from_bits(half, tm.mk_bv(16, 0x3c00));
+  const Term three = tm.mk_fp_from_bits(half, tm.mk_bv(16, 0x4200));
+  const Term four = tm.mk_fp_from_bits(half, tm.mk_bv(16, 0x4400));
+  solver.add(fp_gt(x, one) && fp_lt(x, three));
+  solver.add(fp_gt(y, one) && fp_lt(y, three));
+  solver.add(fp_eq(fp_add(tm.mk_rm(RoundingMode::RNE), x, y), four));
+}
+
 std::string scalar_option_text(const OptionValue& value)
 {
   if (const auto* v = std::get_if<bool>(&value))
@@ -1578,4 +1611,203 @@ TEST(OptionEffects, bv_batch_defaults_preserve_explicit_composite_settings)
                 OptionValue(!disabled));
       EXPECT_EQ(flags_after(tm).sat_search_options.phase, 0);
     }
+}
+
+TEST(OptionEffects, fp_batch_defaults_reach_native_and_parsed_encodings)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned FP batch backend is part of this build";
+  }
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    const auto settings = fp_batch_settings(std::string(backend) == "kissat");
+    Options expected;
+    for (const auto& setting : settings)
+      expected.set(setting.name, setting.value);
+    for (const char* logic : {"QF_BVFP", "QF_ABVFP"})
+      for (const bool parsed : {false, true})
+      {
+        SCOPED_TRACE(backend);
+        SCOPED_TRACE(logic);
+        SCOPED_TRACE(parsed);
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", backend);
+        options.set_bool("check-sanity", true);
+        if (!parsed)
+          options.set_str("logic", logic);
+        Solver solver(tm, options);
+        if (parsed)
+          solver.parse_smt2("(set-logic " + std::string(logic) + ")");
+        add_tuning_fp_problem(tm, solver, std::string(logic) == "QF_ABVFP");
+        bool emitted = false;
+        solver.set_cnf_sink(
+            [&](std::string_view, CnfScope)
+            {
+              emitted = true;
+              for (const auto& setting : settings)
+              {
+                SCOPED_TRACE(setting.name);
+                EXPECT_EQ(solver.options().resolved(setting.name),
+                          expected.resolved(setting.name));
+              }
+            });
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        EXPECT_TRUE(emitted);
+        for (const auto& setting : settings)
+        {
+          SCOPED_TRACE(setting.name);
+          EXPECT_EQ(solver.options().resolved(setting.name),
+                    expected.resolved(setting.name));
+          EXPECT_FALSE(solver.options().is_set(setting.name));
+          EXPECT_EQ(solver.options().get(setting.name),
+                    baseline.get(setting.name));
+        }
+      }
+  }
+}
+
+TEST(OptionEffects, fp_batch_defaults_preserve_explicit_baseline_values)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned FP batch backend is part of this build";
+  }
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    for (const char* logic : {"QF_BVFP", "QF_ABVFP"})
+      for (const bool parsed : {false, true})
+        for (const auto& setting :
+             fp_batch_settings(std::string(backend) == "kissat"))
+        {
+          SCOPED_TRACE(backend);
+          SCOPED_TRACE(logic);
+          SCOPED_TRACE(parsed);
+          SCOPED_TRACE(setting.name);
+          TermManager tm;
+          Options options;
+          options.set_str("sat-backend", backend);
+          if (!parsed)
+          {
+            options.set_str("logic", logic);
+            options.set(setting.name,
+                        scalar_option_text(baseline.get(setting.name)));
+          }
+          Solver solver(tm, options);
+          if (parsed)
+            solver.parse_smt2("(set-logic " + std::string(logic) +
+                              ")(set-option :" + setting.name + " " +
+                              scalar_option_text(baseline.get(setting.name)) +
+                              ")");
+          const Term x = tm.declare("fp_explicit_x", tm.mk_bv_sort(8));
+          solver.add(x == 1);
+          ASSERT_TRUE(solver.check_sat().is_sat());
+          EXPECT_TRUE(solver.options().is_set(setting.name));
+          EXPECT_EQ(solver.options().resolved(setting.name),
+                    baseline.get(setting.name));
+        }
+  }
+}
+
+TEST(OptionEffects, fp_batch_defaults_retire_before_a_late_push)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned FP batch backend is part of this build";
+  }
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    const auto settings = fp_batch_settings(std::string(backend) == "kissat");
+    for (const char* logic : {"QF_BVFP", "QF_ABVFP"})
+      for (const bool parsed : {false, true})
+      {
+        SCOPED_TRACE(backend);
+        SCOPED_TRACE(logic);
+        SCOPED_TRACE(parsed);
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", backend);
+        options.set_bool("check-sanity", true);
+        options.set("incremental-auto-engage-at", "1");
+        if (!parsed)
+          options.set_str("logic", logic);
+        Solver solver(tm, options);
+        if (parsed)
+          solver.parse_smt2("(set-logic " + std::string(logic) + ")");
+        add_tuning_fp_problem(tm, solver, std::string(logic) == "QF_ABVFP");
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        EXPECT_FALSE(api_test::engine_solver(solver).hasIncrementalSolver());
+        EXPECT_EQ(flags_after(tm).cadical_factor,
+                  stp::UserDefinedFlags::BVAMode::OFF);
+        if (parsed)
+          solver.parse_smt2("(push 1)");
+        else
+          solver.push();
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        EXPECT_TRUE(api_test::engine_solver(solver).hasIncrementalSolver());
+        for (const auto& setting : settings)
+        {
+          SCOPED_TRACE(setting.name);
+          EXPECT_EQ(solver.options().resolved(setting.name),
+                    baseline.resolved(setting.name));
+        }
+        if (parsed)
+          solver.parse_smt2("(pop 1)");
+        else
+          solver.pop();
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        for (const auto& setting : settings)
+          EXPECT_EQ(solver.options().resolved(setting.name),
+                    baseline.resolved(setting.name));
+      }
+  }
+}
+
+TEST(OptionEffects, fp_batch_defaults_respect_opt_out_and_named_search)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned FP batch backend is part of this build";
+  }
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    for (const char* logic : {"QF_BVFP", "QF_ABVFP"})
+      for (const char* policy : {"off", "none", "sat", "unsat"})
+      {
+        SCOPED_TRACE(backend);
+        SCOPED_TRACE(logic);
+        SCOPED_TRACE(policy);
+        const bool off = std::string(policy) == "off";
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", backend);
+        options.set_str("logic", logic);
+        options.set_str(off ? "sat-tuning" : "search-bias", policy);
+        Solver solver(tm, options);
+        const Term x = tm.declare("fp_policy_x", tm.mk_bv_sort(8));
+        solver.add(x == 1);
+        ASSERT_TRUE(solver.check_sat().is_sat());
+        for (const char* name :
+             {"sat-phase", "sat-rephase", "sat-target", "kissat-stable"})
+          EXPECT_EQ(solver.options().resolved(name), options.resolved(name));
+        if (off)
+          for (const auto& setting :
+               fp_batch_settings(std::string(backend) == "kissat"))
+            EXPECT_EQ(solver.options().resolved(setting.name),
+                      baseline.get(setting.name));
+      }
+  }
 }

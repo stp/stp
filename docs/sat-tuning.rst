@@ -73,6 +73,18 @@ each complete SMT-LIB file and an 8 GiB address-space limit.
       - The AUTO incremental settings above, plus
         ``kissat-trail-reuse-mode=2``
     * - CaDiCaL
+      - QF_BVFP, QF_ABVFP
+      - Batch
+      - ``cadical-factor=off``
+    * - Kissat
+      - QF_BVFP, QF_ABVFP
+      - Batch
+      - ``search-bias=sat``, ``kissat-stable=2``, ``sat-target=0``,
+        ``sat-rephase=0``, ``cnf-generation-effort=new-medium``,
+        ``kissat-probe=false``, ``kissat-factor=off``,
+        ``kissat-trail-reuse-mode=2``, ``kissat-incremental-greedy=2``,
+        ``kissat-greedy-growth=1``
+    * - CaDiCaL
       - QF_ABVFP
       - Forced incremental
       - ``search-bias=sat``, ``sat-phase=0``, ``sat-target=0``,
@@ -128,8 +140,9 @@ keeps its previously measured profile and engagement policy.
 
 Forced QF_ABVFP sessions have separate profiles for both backends. They are
 selected only by ``--incremental=on`` or ``(set-option :incremental true)``.
-The QF_ABVFP AUTO and batch policies use baseline settings; pushes alone do
-not select a forced-session profile. CaDiCaL retains its baseline CNF
+The QF_ABVFP AUTO incremental policy uses baseline settings; pushes alone do
+not select a forced-session profile. Its batch policy is listed separately
+above and retires when AUTO observes a push. CaDiCaL retains its baseline CNF
 encoding and selects an initial false phase. Kissat uses ``new-medium``
 and retains its backend phase policy. Explicit user options take precedence
 over each profile setting.
