@@ -1993,3 +1993,85 @@ TEST(OptionEffects, fp_batch_defaults_respect_opt_out_and_named_search)
       }
   }
 }
+
+TEST(OptionEffects, batch_defaults_yield_to_first_assumptions_and_core_requests)
+{
+  if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
+  {
+    GTEST_SKIP() << "No tuned batch backend is part of this build";
+  }
+  const Options baseline;
+  for (const char* backend : {"cadical", "kissat"})
+  {
+    if (!has_sat_backend(backend))
+      continue;
+    for (const char* logic : {"QF_BV", "QF_ABV", "QF_BVFP", "QF_ABVFP"})
+      for (const std::string request : {"assuming", "assuming-empty", "cores"})
+      {
+        SCOPED_TRACE(backend);
+        SCOPED_TRACE(logic);
+        SCOPED_TRACE(request);
+        TermManager tm;
+        Options options;
+        options.set_str("sat-backend", backend);
+        options.set_bool("check-sanity", true);
+        options.set_int("incremental-auto-engage-at", 1);
+        std::string said;
+        Solver solver(tm, options);
+        solver.set_output_sink([&](std::string_view text)
+                               { said.append(text); });
+        std::string script = "(set-logic " + std::string(logic) + ")";
+        if (request == "cores")
+          script += "(set-option :produce-unsat-cores true)";
+        script += "(declare-const x (_ BitVec 8))"
+                  "(declare-const y (_ BitVec 8))"
+                  "(declare-const gate Bool)"
+                  "(assert (= (bvmul x y) #x8f))"
+                  "(assert (bvugt x #x01))(assert (bvugt y #x01))";
+        script += request == "cores"      ? "(check-sat)"
+                  : request == "assuming" ? "(check-sat-assuming (gate))"
+                                          : "(check-sat-assuming ())";
+        solver.parse_smt2(script, ParseMode::EXECUTE);
+        ASSERT_EQ(said, "sat\n");
+        // Even the first empty assuming command creates a temporary frame.
+        // Its AUTO incremental profile must precede encoding, and remain
+        // selected when the temporary frame has gone away.
+        for (const bool second_check : {false, true})
+        {
+          if (second_check)
+          {
+            ASSERT_TRUE(solver.check_sat().is_sat());
+          }
+          for (const char* name :
+               {"kissat-batch-only", "kissat-one-shot-stable",
+                "kissat-adaptive-cnf", "kissat-import-order",
+                "bv-conditional-equality", "cnf-auto-threshold",
+                "array-late-read-limit", "array-late-expansion-limit",
+                "array-late-congruence-limit", "array-equality-gia-cnf",
+                "array-equality-gia-min-reads"})
+          {
+            SCOPED_TRACE(name);
+            EXPECT_EQ(solver.options().resolved(name), baseline.get(name));
+            EXPECT_FALSE(solver.options().is_set(name));
+          }
+          const auto& flags = flags_after(tm);
+          EXPECT_FALSE(flags.kissat_batch_only);
+          EXPECT_FALSE(flags.kissat_adaptive_cnf);
+          EXPECT_EQ(flags.kissat_import_order, 0);
+          EXPECT_FALSE(flags.enable_conditional_equality);
+          EXPECT_EQ(flags.array_late_read_limit, 0);
+          EXPECT_EQ(flags.array_late_expansion_limit, 200u);
+          EXPECT_EQ(flags.array_late_congruence_limit, 4000u);
+          EXPECT_FALSE(flags.array_equality_gia_cnf);
+          if (std::string(logic) == "QF_BVFP" ||
+              std::string(logic) == "QF_ABVFP")
+          {
+            EXPECT_EQ(solver.options().resolved("cadical-factor"),
+                      baseline.get("cadical-factor"));
+            EXPECT_EQ(solver.options().resolved("kissat-stable"),
+                      baseline.get("kissat-stable"));
+          }
+        }
+      }
+  }
+}
