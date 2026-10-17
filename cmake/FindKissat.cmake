@@ -4,7 +4,7 @@ include(deps-helper)
 
 set(KISSAT_DIR "" CACHE PATH
     "Incremental Kissat checkout containing src/kissat.h and build/libkissat.a")
-set(_kissat_default_tag "3d740435838e931ed67e2a48a42694a36aed3f21")
+set(_kissat_default_tag "f8c5fcef2f8aaf3456aec596f5864e877c9773fd")
 if(NOT DEFINED CACHE{Kissat_TAG}
    OR "$CACHE{Kissat_TAG}" STREQUAL "$CACHE{_STP_Kissat_TAG_DEFAULT}")
     set(Kissat_TAG "${_kissat_default_tag}" CACHE STRING
@@ -213,4 +213,28 @@ endif()
 if(NOT Kissat_FOUND_SYSTEM)
     add_dependencies(Kissat Kissat-EP)
 endif()
+
+# Learned-clause exchange and post-load diversification: also an STP
+# extension on the fork, which stp-p's group can run on. Probed for a Kissat
+# that was not built here; the pinned commit carries it.
+unset(KISSAT_HAS_CLAUSE_EXCHANGE CACHE)
+if(Kissat_FOUND_SYSTEM)
+    set(_kissat_exchange_probe "${PROJECT_BINARY_DIR}/kissat-exchange.cpp")
+    file(WRITE "${_kissat_exchange_probe}"
+        "extern \"C\" {\n#include <kissat/kissat.h>\n}\n"
+        "#ifndef KISSAT_HAS_CLAUSE_EXCHANGE\n#error no clause exchange\n#endif\n"
+        "int main() { kissat *s = kissat_init(); kissat_import_statistics i; "
+        "kissat_set_learn(s, nullptr, 0, nullptr); "
+        "kissat_set_import(s, nullptr, 0, nullptr, nullptr); "
+        "kissat_diversify(s, 0, 2, 0); kissat_get_import_statistics(s, &i); "
+        "kissat_release(s); return (int) i.polls; }\n")
+    try_compile(KISSAT_HAS_CLAUSE_EXCHANGE
+        "${PROJECT_BINARY_DIR}/kissat-exchange-probe" "${_kissat_exchange_probe}"
+        CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${KISSAT_INCLUDE_DIR}"
+        LINK_LIBRARIES ${_kissat_libraries})
+else()
+    set(KISSAT_HAS_CLAUSE_EXCHANGE ON)
+endif()
+message(STATUS "Kissat clause exchange: ${KISSAT_HAS_CLAUSE_EXCHANGE}")
+
 mark_as_advanced(Kissat_TAG KISSAT_SOURCE_INCLUDE_DIR KISSAT_LIBRARY KISSAT_INCREMENTAL_API)

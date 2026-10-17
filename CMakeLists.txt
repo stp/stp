@@ -1171,6 +1171,9 @@ if(USE_KISSAT)
     find_package(Kissat REQUIRED)
     add_definitions(-DUSE_KISSAT)
     set(STP_BUILD_WITH_KISSAT ON)
+    if (KISSAT_HAS_CLAUSE_EXCHANGE)
+        add_definitions(-DSTP_KISSAT_HAS_CLAUSE_EXCHANGE)
+    endif()
 endif()
 
 # stp-p's group needs CaDiCaL with STP's clause-import extension; without it

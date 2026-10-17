@@ -38,6 +38,10 @@ class DLL_PUBLIC Kissat : public SATSolver
   uint64_t solve_calls = 0;
   bool one_shot = false;
   int import_order = 0;
+  // Clause exchange (connectClauseExchange), through the exchange extension
+  // of STP's Kissat fork.
+  struct Exchange;
+  std::unique_ptr<Exchange> exchange;
 
   void requireHealthy() const;
   int literal(Lit lit) const;
@@ -92,6 +96,10 @@ public:
   void clearMaxConflicts() override { max_conflicts = -1; }
   void printStats() const override;
   void setVerbosity(int verbosity) override;
+  bool connectClauseExchange(ClauseExchange* exchange,
+                             const ExchangeSettings& settings) override;
+  ExchangeCounters exchangeCounters() const override;
+  bool diversify(const Diversification& d) override;
   lbool true_literal() const override { return 1; }
   lbool false_literal() const override { return 0; }
   lbool undef_literal() const override { return 2; }

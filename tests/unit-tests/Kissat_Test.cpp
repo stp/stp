@@ -1,5 +1,9 @@
 #include "stp/Sat/Kissat.h"
+#include <climits>
+#include <cstdint>
+#include <cstdlib>
 #include <gtest/gtest.h>
+#include <vector>
 
 using stp::SATSolver;
 
@@ -757,3 +761,162 @@ TEST(Kissat, GrowingProtectedFormulaRetainsModelsAndFailedAssumptions)
     EXPECT_FALSE(timeout);
   }
 }
+
+#ifdef STP_KISSAT_HAS_CLAUSE_EXCHANGE
+namespace
+{
+// Pigeons into holes, one more pigeon than holes: unsatisfiable, and it
+// takes a few thousand conflicts, so there is something to exchange.
+void addPigeonholes(SATSolver& solver, unsigned holes)
+{
+  std::vector<std::vector<uint32_t>> in(holes + 1);
+  for (auto& pigeon : in)
+    for (unsigned h = 0; h < holes; ++h)
+      pigeon.push_back(solver.newVar());
+  for (const auto& pigeon : in)
+  {
+    SATSolver::vec_literals somewhere;
+    for (uint32_t var : pigeon)
+      somewhere.push(SATSolver::mkLit(var, false));
+    ASSERT_TRUE(solver.addClause(somewhere));
+  }
+  for (unsigned h = 0; h < holes; ++h)
+    for (unsigned p = 0; p < in.size(); ++p)
+      for (unsigned q = p + 1; q < in.size(); ++q)
+        solver.addClause(clause({SATSolver::mkLit(in[p][h], true),
+                                 SATSolver::mkLit(in[q][h], true)}));
+}
+
+// Clauses out into `learned`; clauses in from `inbox`.
+struct Recorder final : SATSolver::ClauseExchange
+{
+  std::vector<std::vector<int>> learned_clauses, inbox;
+  std::size_t at = 0, polls = 0;
+  bool closed = false;
+  SATSolver::ExchangeCounters final_counters;
+  void learned(const int* literals, std::size_t size) override
+  {
+    learned_clauses.emplace_back(literals, literals + size);
+  }
+  bool next(std::vector<int>& literals) override
+  {
+    if (at == inbox.size())
+      return false;
+    literals.insert(literals.end(), inbox[at].begin(), inbox[at].end());
+    ++at;
+    return true;
+  }
+  void beginImport(std::size_t) override { ++polls; }
+  void closing(const SATSolver::ExchangeCounters& counters) override
+  {
+    closed = true;
+    final_counters = counters;
+  }
+};
+} // namespace
+
+TEST(Kissat, DiversifyOnlyBeforeTheFirstSolve)
+{
+  // Exactly one of a and b, and c when a: three models, none forced, for
+  // every search mode (0 the backend's, 1 focused only, 2 stable only).
+  for (std::int32_t mode : {0, 1, 2})
+  {
+    SCOPED_TRACE(mode);
+    stp::Kissat solver;
+    const auto a = solver.newVar(), b = solver.newVar(), c = solver.newVar();
+    ASSERT_TRUE(solver.addClause(
+        clause({SATSolver::mkLit(a, false), SATSolver::mkLit(b, false)})));
+    ASSERT_TRUE(solver.addClause(
+        clause({SATSolver::mkLit(a, true), SATSolver::mkLit(b, true)})));
+    ASSERT_TRUE(solver.addClause(
+        clause({SATSolver::mkLit(a, true), SATSolver::mkLit(c, false)})));
+    SATSolver::Diversification d;
+    d.seed = 3;
+    d.phase = 0;
+    d.shuffle = true;
+    d.mode = mode;
+    EXPECT_TRUE(solver.diversify(d));
+    bool timeout = false;
+    ASSERT_TRUE(solver.solve(timeout));
+    // A solve has run: refused, and nothing changed.
+    EXPECT_FALSE(solver.diversify(d));
+    ASSERT_TRUE(solver.solve(timeout));
+    const bool va = solver.modelValue(a) == solver.true_literal();
+    const bool vb = solver.modelValue(b) == solver.true_literal();
+    EXPECT_NE(va, vb);
+    if (va)
+    {
+      EXPECT_EQ(solver.true_literal(), solver.modelValue(c));
+    }
+  }
+  stp::Kissat solver;
+  SATSolver::Diversification negative;
+  negative.seed = -1;
+  EXPECT_FALSE(solver.diversify(negative));
+}
+
+TEST(Kissat, CopiesOfOneFormulaShareLearnedClauses)
+{
+  // One copy exports what it learns, over the variables that existed at
+  // connection; another, given those clauses, imports them and reaches the
+  // same answer. Both report their counters as they are destroyed.
+  Recorder first, second;
+  {
+    stp::Kissat exporter, importer;
+    addPigeonholes(exporter, 6);
+    addPigeonholes(importer, 6);
+    const auto variables = exporter.nVars();
+    SATSolver::ExchangeSettings settings;
+    settings.importInterval = 1;
+    ASSERT_TRUE(exporter.connectClauseExchange(&first, settings));
+    bool timeout = false;
+    EXPECT_FALSE(exporter.solve(timeout));
+    ASSERT_FALSE(first.learned_clauses.empty());
+    for (const auto& c : first.learned_clauses)
+    {
+      ASSERT_FALSE(c.empty());
+      ASSERT_LE(c.size(), settings.maxSize);
+      for (int lit : c)
+        ASSERT_TRUE(lit != 0 && std::abs(lit) <= int(variables));
+    }
+    const auto out = exporter.exchangeCounters();
+    EXPECT_TRUE(out.connected);
+    EXPECT_EQ(out.variables, variables);
+    EXPECT_EQ(out.exported, first.learned_clauses.size());
+
+    second.inbox = first.learned_clauses;
+    ASSERT_TRUE(importer.connectClauseExchange(&second, settings));
+    EXPECT_FALSE(importer.solve(timeout));
+    const auto in = importer.exchangeCounters();
+    EXPECT_GT(in.polls, 0u);
+    EXPECT_EQ(in.polls, second.polls);
+    EXPECT_GT(in.imported, 0u);
+  }
+  EXPECT_TRUE(first.closed);
+  EXPECT_TRUE(second.closed);
+  EXPECT_EQ(first.final_counters.exported, first.learned_clauses.size());
+  EXPECT_GT(second.final_counters.imported, 0u);
+}
+
+TEST(Kissat, ClausesThatCannotBeImportedAreDropped)
+{
+  // An empty clause, a zero literal, INT_MIN and literals beyond the
+  // exchange's variables are skipped before Kissat sees them; a clause over
+  // a variable no clause mentions is dropped by Kissat.
+  Recorder junk;
+  junk.inbox = {{}, {1, 0, 2}, {INT_MIN}, {1, 2000000000}, {-2000000000}};
+  stp::Kissat solver;
+  addPigeonholes(solver, 6);
+  const auto unused = solver.newVar();
+  junk.inbox.push_back({int(unused) + 1, 1});
+  SATSolver::ExchangeSettings settings;
+  settings.importInterval = 1;
+  ASSERT_TRUE(solver.connectClauseExchange(&junk, settings));
+  bool timeout = false;
+  EXPECT_FALSE(solver.solve(timeout));
+  const auto counters = solver.exchangeCounters();
+  ASSERT_GT(counters.polls, 0u);
+  EXPECT_EQ(counters.dropped, 6u);
+  EXPECT_EQ(counters.imported, 0u);
+}
+#endif
