@@ -102,6 +102,9 @@ public:
   void setFrozen(uint32_t var) override;
   void suggestPhase(uint32_t var, bool value) override;
   bool preferDecisions(const std::vector<DecisionHint>& wanted) override;
+  int simplifyOnly() override;
+  int rootFixed(unsigned var) override;
+  bool reportsRootFixed() const override;
   void unsatAssumptions(const vec_literals& assumptions,
                         std::vector<int>& out) override;
   void setSeed(uint64_t seed) override;

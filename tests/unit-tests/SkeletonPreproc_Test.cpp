@@ -44,6 +44,8 @@ THE SOFTWARE.
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -61,6 +63,13 @@ protected:
 
   void SetUp() override
   {
+    // CTest runs these a second time on Kissat, which reports root-fixed
+    // literals through the simplification extension of STP's fork.
+#ifdef USE_KISSAT
+    const char* backend = std::getenv("STP_TEST_SAT_BACKEND");
+    if (backend && std::strcmp(backend, "kissat") == 0)
+      mgr.UserFlags.solver_to_use = UserDefinedFlags::KISSAT_SOLVER;
+#endif
     nf = mgr.defaultNodeFactory;
     // Three predicates over bit-vectors. Each is a leaf to the skeleton:
     // an EQ whose children are terms, so the walk stops and abstracts it.
@@ -75,7 +84,8 @@ protected:
   ASTNode NOTof(const ASTNode& n) { return nf->CreateNode(NOT, n); }
 
   // The pass reads what the SAT backend fixed at the root, and only CaDiCaL
-  // reports that; everywhere else it is a sound no-op. The checks below come
+  // and Kissat with STP's fork report that; everywhere else it is a sound
+  // no-op. The checks below come
   // in two kinds, and only one of them survives such a build: that a fact
   // reported is right holds always, and that a fact is reported at all holds
   // only where the backend can say so.

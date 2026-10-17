@@ -833,6 +833,47 @@ bool Kissat::preferDecisions(const std::vector<DecisionHint>& wanted)
 #endif
 }
 
+int Kissat::simplifyOnly()
+{
+#if defined(STP_KISSAT_HAS_ROOT_SIMPLIFY)
+  requireHealthy();
+  // What the first solve runs before its first decision, preprocessing
+  // rounds included, and nothing more. It may decide the formula outright;
+  // what the caller wants is whatever ends up fixed at the root. It is a
+  // solve call, so hints are declined after it as after a search. A
+  // one-shot backend has its single solve to keep and leaves the formula
+  // alone, which is always a correct answer here.
+  if (one_shot)
+    return 0;
+  ++solve_calls;
+  return kissat_simplify(solver);
+#else
+  return 0;
+#endif
+}
+
+int Kissat::rootFixed(unsigned var)
+{
+#if defined(STP_KISSAT_HAS_ROOT_SIMPLIFY)
+  requireHealthy();
+  if (var >= external.size())
+    return 0;
+  return kissat_root_fixed(solver, external[var]);
+#else
+  (void)var;
+  return 0;
+#endif
+}
+
+bool Kissat::reportsRootFixed() const
+{
+#if defined(STP_KISSAT_HAS_ROOT_SIMPLIFY)
+  return !one_shot;
+#else
+  return false;
+#endif
+}
+
 void Kissat::connectHints()
 {
 #if defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)

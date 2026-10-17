@@ -107,6 +107,15 @@ AddSTPGTest(BVDivSchema_Test.cpp)
 AddSTPGTest(BVDivRemSchema_Test.cpp)
 AddSTPGTest(BVExactBudget_Test.cpp)
 AddSTPGTest(SkeletonPreproc_Test.cpp)
+# The same checks on Kissat, which reports root-fixed literals where it has
+# the simplification extension; the run above takes the build's default.
+if(USE_KISSAT AND KISSAT_HAS_ROOT_SIMPLIFY)
+    add_test(NAME SkeletonPreproc_Test-kissatTests-gtest
+        COMMAND SkeletonPreproc_TestTests
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(SkeletonPreproc_Test-kissatTests-gtest PROPERTIES
+        ENVIRONMENT "STP_TEST_SAT_BACKEND=kissat")
+endif()
 AddSTPGTest(BVExactEncoder_Test.cpp)
 AddSTPGTest(BVValueLemmaAllowance_Test.cpp)
 AddSTPGTest(BVEQCongruenceClosure_Test.cpp)
