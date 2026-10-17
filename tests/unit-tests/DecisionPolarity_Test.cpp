@@ -4,8 +4,16 @@
 #include <vector>
 
 #if defined(USE_CADICAL) && defined(STP_CADICAL_HAS_DECISION_POLARITY)
+#define STP_TEST_CADICAL_POLARITY
 #include "stp/Sat/Cadical.h"
+#endif
+#if defined(USE_CRYPTOMINISAT) && defined(STP_CRYPTOMINISAT_HAS_UP)
+#define STP_TEST_CRYPTOMINISAT_POLARITY
+#include "stp/Sat/CryptoMinisat5.h"
+#endif
 
+#if defined(STP_TEST_CADICAL_POLARITY) ||                                      \
+    defined(STP_TEST_CRYPTOMINISAT_POLARITY)
 namespace {
 using stp::SATSolver;
 
@@ -36,14 +44,10 @@ struct Advice final : SATSolver::TheoryPropagator
   }
 };
 
-std::vector<SATSolver::Lit> exercise(Advice::Mode mode, bool factor)
+// On a fresh solver, which is disconnected again before this returns.
+std::vector<SATSolver::Lit> exercise(SATSolver& solver, Advice::Mode mode)
 {
-  Advice advice(mode); // outlives the solver's connection
-  stp::Cadical solver;
-  if (factor)
-  {
-    EXPECT_TRUE(solver.enableBVA());
-  }
+  Advice advice(mode);
   auto a = solver.newVar(), b = solver.newVar();
   auto guard = solver.newVar(), root = solver.newVar();
   auto add = [&](std::initializer_list<SATSolver::Lit> literals) {
@@ -94,24 +98,55 @@ std::vector<SATSolver::Lit> exercise(Advice::Mode mode, bool factor)
   solver.disconnectTheoryPropagator();
   return advice.offered;
 }
-} // namespace
 
+// The advice changes the sign of a decision and nothing else: the first
+// decision offered is the same whatever the advice was.
+template <class Run> void preservesSelection(Run run)
+{
+  auto baseline = run(Advice::Abstain);
+  auto flipped = run(Advice::Flip);
+  auto throwing = run(Advice::Throw);
+  run(Advice::Disabled);
+  ASSERT_FALSE(baseline.empty());
+  ASSERT_FALSE(flipped.empty());
+  ASSERT_FALSE(throwing.empty());
+  EXPECT_EQ(baseline.front().x, flipped.front().x);
+  EXPECT_EQ(baseline.front().x, throwing.front().x);
+}
+} // namespace
+#endif
+
+#if defined(STP_TEST_CADICAL_POLARITY)
 TEST(DecisionPolarity, PreservesVariableSelectionAndTranslatesSigns)
 {
   for (bool factor : {false, true})
-  {
-    auto baseline = exercise(Advice::Abstain, factor);
-    auto flipped = exercise(Advice::Flip, factor);
-    auto throwing = exercise(Advice::Throw, factor);
-    exercise(Advice::Disabled, factor);
-    ASSERT_FALSE(baseline.empty());
-    ASSERT_FALSE(flipped.empty());
-    ASSERT_FALSE(throwing.empty());
-    EXPECT_EQ(baseline.front().x, flipped.front().x);
-    EXPECT_EQ(baseline.front().x, throwing.front().x);
-  }
+    preservesSelection(
+        [factor](Advice::Mode mode)
+        {
+          stp::Cadical solver;
+          if (factor)
+          {
+            EXPECT_TRUE(solver.enableBVA());
+          }
+          return exercise(solver, mode);
+        });
 }
-#else
+#endif
+
+#if defined(STP_TEST_CRYPTOMINISAT_POLARITY)
+TEST(DecisionPolarity, CryptoMiniSatTranslatesSigns)
+{
+  preservesSelection(
+      [](Advice::Mode mode)
+      {
+        stp::CryptoMiniSat5 solver(1);
+        return exercise(solver, mode);
+      });
+}
+#endif
+
+#if !defined(STP_TEST_CADICAL_POLARITY) &&                                     \
+    !defined(STP_TEST_CRYPTOMINISAT_POLARITY)
 TEST(DecisionPolarity, BackendCapabilityUnavailable)
 {
   GTEST_SKIP() << "this backend has no decision-polarity API";

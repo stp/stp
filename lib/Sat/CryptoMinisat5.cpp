@@ -66,6 +66,7 @@ public:
     // theory, not of the trail; the solver may drop it once it is done with
     // it, like any other learned clause.
     are_reasons_forgettable = true;
+    advises_polarity = theory.wantsDecisionPolarity();
   }
 
   void reserveNotificationBuffer(size_t count) { translated.reserve(count); }
@@ -101,6 +102,21 @@ public:
     if (theory.failed())
       return true;
     return theory.checkFoundModel();
+  }
+  CMSat::Lit cb_decide_polarity(CMSat::Lit lit) override
+  {
+    bool value = !lit.sign();
+    if (theory.failed())
+      return lit;
+    try
+    {
+      if (theory.decisionPolarity(lit.var(), value))
+        return CMSat::Lit(lit.var(), !value);
+    }
+    catch (...)
+    {
+    }
+    return lit;
   }
   bool cb_has_external_clause(bool& is_forgettable) override
   {

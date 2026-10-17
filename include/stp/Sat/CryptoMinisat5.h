@@ -62,11 +62,13 @@ namespace stp
 
 public:
   // Only a CryptoMiniSat with the IPASIR-UP interface can host a propagator
-  // (cmake/FindCryptoMiniSat.cmake decides). Without it the SATSolver
-  // defaults stand: nothing is hosted, and expectTheoryPropagator() does
-  // nothing.
+  // (cmake/FindCryptoMiniSat.cmake decides). It also advises decision
+  // polarity, so the theory may pick the sign of a decision on an arithmetic
+  // atom. Without it the SATSolver defaults stand: nothing is hosted, and
+  // expectTheoryPropagator() does nothing.
 #ifdef STP_CRYPTOMINISAT_HAS_UP
   bool supportsTheoryPropagator() const override { return num_threads == 1; }
+  bool supportsDecisionPolarity() const override { return num_threads == 1; }
   bool connectTheoryPropagator(
       SATSolver::TheoryPropagator* propagator,
       const std::vector<uint32_t>& observed) override;
