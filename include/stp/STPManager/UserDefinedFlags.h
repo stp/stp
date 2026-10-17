@@ -231,6 +231,7 @@ public:
   // The guarded unsigned successor/predecessor bounds can change SAT search.
   bool enable_adjacent_bounds = false;
   bool enable_conditional_equality = false;
+  bool enable_double_equality = false;
 
   // Take a factor several of a sum's products have in common out of the
   // sum, so one multiplication is built where there were several. See
@@ -2178,6 +2179,7 @@ public:
     enable_common_subsum = false;
     enable_adjacent_bounds = false;
     enable_conditional_equality = false;
+    enable_double_equality = false;
     enable_common_factor = false;
     enable_linear_form = false;
     enable_ite_context = false;

@@ -19,8 +19,9 @@
 ; THE SOFTWARE.
 ;
 ; Cancel a doubled addend, retaining modular and scoped semantics.
-; RUN: %solver --check-sanity %s | %OutputCheck %s
-; RUN: %solver --check-sanity --incremental %s | %OutputCheck %s
+; RUN: %solver --bv-double-equality=true --check-sanity %s | %OutputCheck %s
+; RUN: %solver --bv-double-equality=true --check-sanity --incremental %s | %OutputCheck %s
+; RUN: %solver --bv-double-equality=false --check-sanity %s | %OutputCheck %s
 ; CHECK: ^unsat$
 ; CHECK-NEXT: ^unsat$
 ; CHECK-NEXT: ^unsat$

@@ -2346,8 +2346,9 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTChildren children)
 
   // x + y = 2*x is y = x even when the addition wraps. Peeling a run
   // iteratively also handles deeply shared sums without one frame per step.
-  if ((k1 == BVPLUS && in1.Degree() == 2) ||
-      (k2 == BVPLUS && in2.Degree() == 2))
+  if (bm.UserFlags.enable_double_equality &&
+      ((k1 == BVPLUS && in1.Degree() == 2) ||
+       (k2 == BVPLUS && in2.Degree() == 2)))
   {
     ASTNode lhs = in1, rhs = in2;
     bool changed = false;

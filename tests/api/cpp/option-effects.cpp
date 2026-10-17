@@ -780,3 +780,72 @@ TEST(OptionEffects, conditional_equality_option_handles_prebuilt_raw_terms)
   EXPECT_TRUE(flags_after(tm).enable_conditional_equality);
   EXPECT_FALSE(emitted);
 }
+
+TEST(OptionEffects, double_equality_option_reaches_native_and_parsed_checks)
+{
+  EXPECT_FALSE(Options().get_bool("bv-double-equality"));
+  for (const bool parsed : {false, true})
+  {
+    SCOPED_TRACE(parsed);
+    TermManager tm;
+    Options options;
+    options.set_bool("check-sanity", true);
+    if (!parsed)
+      options.set_bool("bv-double-equality", true);
+    Solver solver(tm, options);
+    if (parsed)
+      solver.parse_smt2("(set-option :bv-double-equality true)");
+    solver.parse_smt2("(set-logic QF_BV)(declare-const x (_ BitVec 8))"
+                      "(declare-const y (_ BitVec 8))"
+                      "(assert (= (bvadd x y) (bvshl x #x01)))");
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_TRUE(flags_after(tm).enable_double_equality);
+    EXPECT_TRUE(solver.options().is_set("bv-double-equality"));
+    EXPECT_EQ(solver.options().resolved("bv-double-equality"),
+              OptionValue(true));
+    API_EXPECT_ERROR(ErrorCode::OPTION_TIMING,
+                     solver.options().set_bool("bv-double-equality", false));
+    solver.push();
+    solver.parse_smt2("(assert (distinct x y))");
+    ASSERT_TRUE(solver.check_sat().is_unsat());
+    solver.pop();
+    ASSERT_TRUE(solver.check_sat().is_sat());
+  }
+}
+
+TEST(OptionEffects, double_equality_option_retires_on_solver_activation)
+{
+  TermManager tm;
+  Options options;
+  options.set_bool("bv-double-equality", true);
+  Solver on(tm, options), off(tm);
+  const Term x = tm.declare("double_switch_x", tm.mk_bv_sort(8));
+  on.add(x == 1);
+  off.add(x == 2);
+  ASSERT_TRUE(on.check_sat().is_sat());
+  EXPECT_TRUE(flags_after(tm).enable_double_equality);
+  ASSERT_TRUE(off.check_sat().is_sat());
+  EXPECT_FALSE(flags_after(tm).enable_double_equality);
+  ASSERT_TRUE(on.check_sat().is_sat());
+  EXPECT_TRUE(flags_after(tm).enable_double_equality);
+}
+
+TEST(OptionEffects, double_equality_option_handles_prebuilt_raw_terms)
+{
+  TermManager::Config config;
+  config.simplify = false;
+  TermManager tm(config);
+  const Sort word = tm.mk_bv_sort(8);
+  const Term x = tm.declare("double_raw_x", word);
+  const Term y = tm.declare("double_raw_y", word);
+  const Term identity = bvadd(x, y) == bvshl(x, tm.mk_bv(8, 1));
+  Options options;
+  options.set_bool("bv-double-equality", true);
+  Solver solver(tm, options);
+  solver.add(identity && x != y);
+  bool emitted = false;
+  solver.set_cnf_sink([&](std::string_view, CnfScope) { emitted = true; });
+  ASSERT_TRUE(solver.check_sat().is_unsat());
+  EXPECT_TRUE(flags_after(tm).enable_double_equality);
+  EXPECT_FALSE(emitted);
+}

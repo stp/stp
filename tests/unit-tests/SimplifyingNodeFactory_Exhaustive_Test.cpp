@@ -398,6 +398,7 @@ TEST(SimplifyingNodeFactory_Exhaustive,
 TEST(SimplifyingNodeFactory_Exhaustive, doubled_operand_equality)
 {
   Context c;
+  c.mgr.UserFlags.enable_double_equality = true;
   for (unsigned width : {1u, 2u, 3u, 4u, 5u, 6u})
   {
     SCOPED_TRACE(width);
@@ -436,6 +437,7 @@ TEST(SimplifyingNodeFactory_Exhaustive, doubled_operand_equality)
 TEST(SimplifyingNodeFactory_Exhaustive, doubled_operand_equality_wide)
 {
   Context c;
+  c.mgr.UserFlags.enable_double_equality = true;
   for (unsigned width : {2u, 32u, 65u, 20000u})
   {
     const ASTNode x = c.bv(width), y = c.bv(width);
@@ -453,6 +455,7 @@ TEST(SimplifyingNodeFactory_Exhaustive, doubled_operand_equality_wide)
 TEST(SimplifyingNodeFactory_Exhaustive, double_shift_cancellation_is_iterative)
 {
   Context c;
+  c.mgr.UserFlags.enable_double_equality = true;
   const unsigned width = 8;
   const ASTNode x = c.bv(width), y = c.bv(width);
   const ASTNode equal = c.nf->CreateNode(EQ, x, y);
@@ -467,6 +470,27 @@ TEST(SimplifyingNodeFactory_Exhaustive, double_shift_cancellation_is_iterative)
   const ASTNode result = c.nf->CreateNode(EQ, lhs, rhs);
   // Report IDs rather than printing a deeply nested formula on failure.
   EXPECT_EQ(equal.GetNodeNum(), result.GetNodeNum());
+}
+
+TEST(SimplifyingNodeFactory_Exhaustive, double_equality_is_opt_in)
+{
+  const UserDefinedFlags defaults;
+  EXPECT_FALSE(defaults.enable_double_equality);
+  Context c;
+  const unsigned width = 8;
+  const ASTNode x = c.bv(width), y = c.bv(width);
+  const ASTNode sum = c.hf->CreateTerm(BVPLUS, width, x, y);
+  const ASTNode twice =
+      c.hf->CreateTerm(BVLEFTSHIFT, width, x, c.mgr.CreateOneConst(width));
+  const ASTNode before = c.hf->CreateNode(EQ, sum, twice);
+  EXPECT_EQ(before, c.nf->CreateNode(EQ, sum, twice));
+  c.mgr.UserFlags.enable_double_equality = true;
+  const ASTNode reduced = c.nf->CreateNode(EQ, sum, twice);
+  EXPECT_NE(before, reduced);
+  c.checkEquivalent(before, reduced);
+  c.mgr.UserFlags.disableSimplifications();
+  EXPECT_FALSE(c.mgr.UserFlags.enable_double_equality);
+  EXPECT_EQ(before, c.nf->CreateNode(EQ, sum, twice));
 }
 
 /* The overflow predicates: a constant, identical or complemented operand
