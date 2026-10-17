@@ -1243,6 +1243,50 @@ TEST(OptionEffects, copying_kissat_batch_options_does_not_copy_automatic_values)
             OptionValue(std::int64_t(0)));
 }
 
+TEST(OptionEffects, kissat_batch_threshold_updates_remain_explicit_after_checks)
+{
+  if (!has_sat_backend("kissat"))
+    GTEST_SKIP() << "Kissat is not part of this build";
+  const Options baseline;
+  const auto threshold = baseline.get_uint("cnf-auto-threshold");
+  for (const bool parsed : {false, true})
+  {
+    SCOPED_TRACE(parsed);
+    TermManager tm;
+    Options options;
+    options.set_str("sat-backend", "kissat");
+    options.set_bool("check-sanity", true);
+    if (!parsed)
+      options.set_str("logic", "QF_ABV");
+    Solver solver(tm, options);
+    if (parsed)
+      solver.parse_smt2("(set-logic QF_ABV)");
+    add_tuning_array_problem(tm, solver);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_FALSE(solver.options().is_set("cnf-auto-threshold"));
+    for (const auto value : {threshold + 1, threshold})
+    {
+      if (parsed)
+        solver.parse_smt2("(set-option :cnf-auto-threshold " +
+                          std::to_string(value) + ")");
+      else
+        solver.options().set_uint("cnf-auto-threshold", value);
+      ASSERT_TRUE(solver.check_sat().is_sat());
+      EXPECT_EQ(flags_after(tm).cnf_auto_threshold, value);
+      EXPECT_TRUE(solver.options().is_set("cnf-auto-threshold"));
+      EXPECT_EQ(solver.options().resolved("cnf-auto-threshold"),
+                OptionValue(value));
+    }
+    solver.push();
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_EQ(flags_after(tm).cnf_auto_threshold, threshold);
+    solver.pop();
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_EQ(flags_after(tm).cnf_auto_threshold, threshold);
+    EXPECT_TRUE(solver.options().is_set("cnf-auto-threshold"));
+  }
+}
+
 TEST(OptionEffects, bv_batch_defaults_reach_native_and_parsed_encodings)
 {
   if (!has_sat_backend("cadical") && !has_sat_backend("kissat"))
