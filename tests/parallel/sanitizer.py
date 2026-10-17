@@ -3,11 +3,17 @@ the build is instrumented by an address, thread or memory sanitizer, whose
 shadow memory does not fit under an address-space limit: every stp-p and
 stpp-drive run then gets --worker-memory-mib 0 unless it sets its own, and
 a script can set the sanitizers' runtime reports aside before it compares
-stderr. In any other build nothing changes."""
+stderr. In any other build nothing changes.
+
+The SAT backend too: CMake sets STPP_SAT_BACKEND to run the scripts a second
+time on Kissat in a build where both CaDiCaL and Kissat exchange clauses, and
+every stp-p and stpp-drive run then gets --sat-backend with it unless it
+names its own."""
 import os
 import subprocess
 
 ON = os.environ.get('STPP_SANITIZED') == '1'
+BACKEND = os.environ.get('STPP_SAT_BACKEND', '')
 
 
 def flags():
@@ -17,17 +23,22 @@ def flags():
 
 def install(*executables):
     """Every subprocess.Popen (and so subprocess.run) of one of `executables`
-    gets flags(), unless its command line sets --worker-memory-mib."""
-    if not ON:
+    gets flags(), unless its command line sets --worker-memory-mib, and the
+    backend STPP_SAT_BACKEND names, unless it sets --sat-backend."""
+    if not ON and not BACKEND:
         return
     names = {str(e) for e in executables}
     base = subprocess.Popen
 
     class Popen(base):
         def __init__(self, args, *rest, **kwargs):
-            if (isinstance(args, (list, tuple)) and args and str(args[0]) in names
-                    and '--worker-memory-mib' not in args):
-                args = [args[0], *flags(), *args[1:]]
+            if isinstance(args, (list, tuple)) and args and str(args[0]) in names:
+                extra = []
+                if '--worker-memory-mib' not in args:
+                    extra += flags()
+                if BACKEND and '--sat-backend' not in args:
+                    extra += ['--sat-backend', BACKEND]
+                args = [args[0], *extra, *args[1:]]
             super().__init__(args, *rest, **kwargs)
 
     subprocess.Popen = Popen

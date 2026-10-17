@@ -525,7 +525,10 @@ backend's first search, without calling the hook again. The diagnostic
 on the next check and is preserved by a CNF export.
 
 The exchange needs CaDiCaL with STP's clause-import extension, which is
-applied to the 3.x CaDiCaL a build fetches (the default); ``capabilities()``
-reports it as ``sat.clause-exchange``, and without it
-``connect_clause_exchange`` and ``diversify`` return ``false``. The
+applied to the 3.x CaDiCaL a build fetches (the default), or Kissat with
+STP's clause exchange, which the pinned Kissat carries.
+``capabilities()`` reports whether any backend can as
+``sat.clause-exchange`` and lists them in ``sat.clause-exchange.backends``;
+on any other backend ``connect_clause_exchange`` and ``diversify`` return
+``false``. The
 ``sat.exchange.*`` statistics count the last check's exchange.

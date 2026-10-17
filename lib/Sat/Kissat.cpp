@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <climits>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -92,6 +93,83 @@ struct Kissat::LuckyProbe
     }
   };
 };
+
+#if defined(STP_KISSAT_HAS_CLAUSE_EXCHANGE)
+// Learned clauses out and shared clauses in through the exchange extension
+// of STP's Kissat fork. Kissat's external numbering is what both directions
+// speak, which every copy forked at one point before the search shares:
+// STP variable v is external v + 1 until the search starts, and factoring
+// numbers its variables above everything allocated by then. Only clauses
+// over the variables that existed when the exchange connected leave; Kissat
+// keeps clauses over factoring's variables back itself.
+struct Kissat::Exchange
+{
+  Exchange(SATSolver::ClauseExchange& target,
+           const SATSolver::ExchangeSettings& settings, int variables)
+      : target(target), settings(settings), variables(variables)
+  {
+  }
+
+  static void learn(void* state, unsigned size, const int* clause)
+  {
+    auto& self = *static_cast<Exchange*>(state);
+    for (unsigned i = 0; i < size; ++i)
+      if (std::abs(clause[i]) > self.variables)
+      {
+        ++self.filtered;
+        return;
+      }
+    self.target.learned(clause, size);
+    ++self.exported;
+  }
+  static unsigned budget(void* state)
+  {
+    // The exchange learns the poll's real cap: with no budget set that is
+    // this backend's own, the same as CaDiCaL's.
+    auto& self = *static_cast<Exchange*>(state);
+    const int cap =
+        self.settings.importBudget > 0 ? self.settings.importBudget : 1 << 14;
+    self.target.beginImport(size_t(cap));
+    return unsigned(cap);
+  }
+  static const int* next(void* state, unsigned* size)
+  {
+    // A literal beyond the shared variables names something this copy
+    // numbered on its own: such a clause is never handed over. INT_MIN has
+    // no magnitude to compare, and a skipped clause is cleared before the
+    // next, so an exchange that appends rather than assigns adds nothing.
+    auto& self = *static_cast<Exchange*>(state);
+    std::vector<int>& clause = self.buffer;
+    clause.clear();
+    while (self.target.next(clause))
+    {
+      bool shared = !clause.empty();
+      for (int lit : clause)
+        shared = shared && lit != 0 && lit != INT_MIN &&
+                 std::abs(lit) <= self.variables;
+      if (shared)
+      {
+        *size = static_cast<unsigned>(clause.size());
+        return clause.data();
+      }
+      ++self.skipped;
+      clause.clear();
+    }
+    return nullptr;
+  }
+
+  SATSolver::ClauseExchange& target;
+  const SATSolver::ExchangeSettings settings;
+  const int variables;
+  std::vector<int> buffer;
+  // Clauses kept back on export, and handed over but not shared on import.
+  uint64_t exported = 0, filtered = 0, skipped = 0;
+};
+#else
+struct Kissat::Exchange
+{
+};
+#endif
 
 bool Kissat::enableLuckyProbe()
 {
@@ -287,8 +365,13 @@ Kissat::Kissat(bool trail_reuse_allowed, int search_mode, bool probing_allowed,
 
 Kissat::~Kissat()
 {
-  if (!allocations->owner.failed)
-    kissat_release(solver);
+  if (allocations->owner.failed)
+    return;
+#if defined(STP_KISSAT_HAS_CLAUSE_EXCHANGE)
+  if (exchange)
+    exchange->target.closing(exchangeCounters());
+#endif
+  kissat_release(solver);
 }
 
 void Kissat::setGreedyOptions(const GreedyOptions& options)
@@ -644,6 +727,75 @@ bool Kissat::enableTrailReuseInternal(TrailReuse scope)
   kissat_set_option(solver, "incrementalreuse", mode);
   return mode >= requested &&
          kissat_get_option(solver, "incrementalreuse") == mode;
+}
+
+bool Kissat::connectClauseExchange(ClauseExchange* target,
+                                   const ExchangeSettings& settings)
+{
+#if defined(STP_KISSAT_HAS_CLAUSE_EXCHANGE)
+  requireHealthy();
+  if (exchange)
+  {
+    // Connected only before the backend has searched (at its before-search
+    // point), so the exchange replaced here has counted nothing.
+    kissat_set_learn(solver, nullptr, 0, nullptr);
+    kissat_set_import(solver, nullptr, 0, nullptr, nullptr);
+    exchange.reset();
+  }
+  if (!target)
+    return true;
+  exchange.reset(new Exchange(*target, settings, last_external));
+  kissat_set_learn(solver, exchange.get(), settings.maxSize, Exchange::learn);
+  if (settings.import)
+    kissat_set_import(solver, exchange.get(),
+                      unsigned(std::max(settings.importInterval, 1)),
+                      Exchange::budget, Exchange::next);
+  return true;
+#else
+  (void)target;
+  (void)settings;
+  return false;
+#endif
+}
+
+SATSolver::ExchangeCounters Kissat::exchangeCounters() const
+{
+  ExchangeCounters out;
+#if defined(STP_KISSAT_HAS_CLAUSE_EXCHANGE)
+  if (!exchange || allocations->owner.failed)
+    return out;
+  kissat_import_statistics in;
+  kissat_get_import_statistics(solver, &in);
+  out.connected = true;
+  out.variables = uint64_t(exchange->variables);
+  out.exported = exchange->exported;
+  out.filtered = exchange->filtered;
+  out.polls = in.polls;
+  out.imported = in.clauses;
+  out.units = in.units;
+  out.dropped = in.dropped + exchange->skipped;
+  out.satisfied = in.satisfied;
+  out.backtracks = in.backtracks;
+#endif
+  return out;
+}
+
+bool Kissat::diversify(const Diversification& d)
+{
+#if defined(STP_KISSAT_HAS_CLAUSE_EXCHANGE)
+  requireHealthy();
+  // Before the first solve only (a SearchPoint is, by construction): the
+  // first search reads the search mode. Kissat takes seeds from 0.
+  if (solve_calls || d.seed < 0)
+    return false;
+  if (d.mode == 1 || d.mode == 2)
+    kissat_set_option(solver, "stable", d.mode == 1 ? 0 : 2);
+  kissat_diversify(solver, d.seed, d.phase, d.shuffle ? 1 : 0);
+  return true;
+#else
+  (void)d;
+  return false;
+#endif
 }
 
 bool Kissat::disableLuckyPhasesInternal()

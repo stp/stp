@@ -376,12 +376,19 @@ Json batch_group(Source& input, const Options& o, ParsedQuery* prepared)
                      : std::make_unique<stp::TermManager>();
   auto assertions = prepared ? std::move(prepared->assertions)
                             : std::vector<stp::Term>();
-  // The roots exchange clauses through CaDiCaL's clause-import extension, so
-  // the group runs on CaDiCaL even in a build whose default is another
-  // backend; where CaDiCaL is the default this changes nothing.
+  // The roots exchange clauses, so the group runs on a backend that can:
+  // --sat-backend's, or else the first of exchange_backends() -- CaDiCaL
+  // with STP's clause-import extension, then Kissat with STP's clause
+  // exchange -- even in a build whose default is another backend.
   stp::Options options = solver_options(o);
   if (!options.is_set("sat-backend"))
-    options.set("sat-backend", "cadical");
+  {
+    const auto exchanging = exchange_backends();
+    if (!exchanging.empty())
+      options.set("sat-backend", exchanging.front());
+    else if (stp::has_sat_backend("cadical"))
+      options.set("sat-backend", "cadical");
+  }
   auto solver = std::make_unique<stp::Solver>(*tm, options);
   const std::string logic = prepared ? prepared->logic : parse_query(*solver, input);
   for (const auto& assertion : assertions)
@@ -841,32 +848,36 @@ Json batch_group(Source& input, const Options& o, ParsedQuery* prepared)
   Json hedge_row = hedged ? row(children.front()) : hedge;
   if (hedged)
     hedge_row["forked"] = true;
-  Json report = {{"answer", decision},
-                 {"decision_at", decision_at},
-                 {"engine", "batch-group"},
-                 {"logic", logic},
-                 {"requested_jobs", o.jobs},
-                 {"winner", decided_by.empty() ? Json("none")
-                            : decided_by == "owner" || decided_by == "hedge"
-                                ? Json(decided_by)
-                                : Json("root")},
-                 {"winner_slot", winner_slot},
-                 {"fork_point", !hook_ran ? (outcome == "refused" ? "refused" : "none")
-                                : searched ? "failed"
-                                           : "forked"},
-                 {"roots", handed ? roots : 0},
-                 {"forked", handed},
-                 {"fork_errors", fork_errors},
-                 {"sharing", bool(rings)},
-                 {"hedge", hedge_row},
-                 {"variables", variables},
-                 {"parse_s", prepared ? 0.0 : parsed - started},
-                 {"parsed_query_reused", bool(prepared)},
-                 {"base_config", o.config},
-                 {"owner_checks", owner_checks},
-                 {"owner_check", owner_check},
-                 {"owner_check_s", now() - check_started},
-                 {"children", root_rows(children)}};
+  Json report = {
+      {"answer", decision},
+      {"decision_at", decision_at},
+      {"engine", "batch-group"},
+      {"logic", logic},
+      {"requested_jobs", o.jobs},
+      {"winner", decided_by.empty() ? Json("none")
+                 : decided_by == "owner" || decided_by == "hedge"
+                     ? Json(decided_by)
+                     : Json("root")},
+      {"winner_slot", winner_slot},
+      {"fork_point", !hook_ran  ? (outcome == "refused" ? "refused" : "none")
+                     : searched ? "failed"
+                                : "forked"},
+      {"roots", handed ? roots : 0},
+      {"forked", handed},
+      {"fork_errors", fork_errors},
+      {"sharing", bool(rings)},
+      {"hedge", hedge_row},
+      {"variables", variables},
+      {"parse_s", prepared ? 0.0 : parsed - started},
+      {"parsed_query_reused", bool(prepared)},
+      {"base_config", o.config},
+      {"sat_backend", options.is_set("sat-backend")
+                          ? options.get_str("sat-backend")
+                          : std::string()},
+      {"owner_checks", owner_checks},
+      {"owner_check", owner_check},
+      {"owner_check_s", now() - check_started},
+      {"children", root_rows(children)}};
   if (!reason.empty())
     report["reason"] = reason;
   if (!unshared.empty())

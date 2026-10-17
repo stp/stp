@@ -201,6 +201,7 @@ with tempfile.TemporaryDirectory(prefix='stpp-batch-') as temp:
         assert (p.returncode, p.stdout) == (code[expected], expected + '\n'), (path, p)
         s = json.loads(stats.read_text())
         assert s['base_config'] == 'eager-arrays' and s['forked'] == 3, s
+        assert s['sat_backend'] == (sanitizer.BACKEND or s['sat_backend']) != '', s
         assert s['fork_point_s'] >= 0 and s['fork_span_s'] >= 0, s
         clean()
         records.append({'base_config': path.name})

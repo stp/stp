@@ -12,10 +12,10 @@ invocation. ``-j1`` is the sequential run: ordinary STP's pipeline through
 STP's API, on the build's default SAT backend, without models and under the
 per-process memory limit. Input is read as "Input and limits" describes. It
 is a Linux program, built with ``-DSTP_BUILD_PARALLEL=ON`` (:doc:`tools`),
-and it needs CaDiCaL with STP's clause-import extension, which the default
-pin of STP's CaDiCaL fork carries. On a build with no CaDiCaL, or one
-without the extension, ``-jN`` is refused, the default is 1, and ``-j1``
-still works.
+and it needs a SAT backend that exchanges learned clauses: CaDiCaL with
+STP's clause-import extension, or Kissat with STP's clause exchange, which
+the default pins of STP's forks carry. On a build with neither, ``-jN`` is
+refused, the default is 1, and ``-j1`` still works.
 
 .. code-block:: bash
 
@@ -95,13 +95,16 @@ With ``-jN`` and N greater than 1 the owner runs a group on N CPUs:
   no ``set-logic``, there is no hedge, and the roots take its CPU. An answer
   from the hedge while the owner is still encoding stops the encoding.
 - **The roots**, on the other N − 1 CPUs (N without a hedge). The owner
-  runs ordinary STP on the query, on CaDiCaL whatever the build's default
-  backend -- simplification, bit-blasting, CNF -- up to the moment the CNF
-  is loaded into CaDiCaL and its search would start
+  runs ordinary STP on the query, on the group's backend whatever the
+  build's default -- CaDiCaL where it exchanges clauses, else Kissat, or the
+  one ``--sat-backend`` names -- through simplification, bit-blasting and
+  CNF up to the moment the CNF is loaded into that backend and its search
+  would start
   (``Solver::set_before_search``). There it forks one root per CPU and
   abandons its own check; the roots are not pinned, and the kernel places
   them on the CPUs the process may use. Every root holds the same loaded
-  solver, copy-on-write. Root 0 searches as ordinary STP does on CaDiCaL;
+  solver, copy-on-write. Root 0 searches as ordinary STP does on that
+  backend;
   root *i* > 0 is diversified by a fixed table (seed N + *i*, N being
   ``--random-seed`` or 0; saved phases, a shuffled decision order,
   focused- or stable-only search). The roots publish learned clauses of at
@@ -144,9 +147,9 @@ A check that preprocessing decides answers at once, in the owner. A check
 that cannot offer the fork point, because it may refine after its first
 solve (array axioms STP leaves lazy, when reads survive simplification, or
 an uninterpreted function), searches in place in the owner, once, as
-ordinary STP on CaDiCaL: on ``QF_BV`` the hedge runs beside it; on the
-other logics there is no hedge, so the owner works alone on one of the N
-CPUs. The report records ``fork_point`` ``refused`` and the library's
+ordinary STP on the group's backend: on ``QF_BV`` the hedge runs beside it;
+on the other logics there is no hedge, so the owner works alone on one of
+the N CPUs. The report records ``fork_point`` ``refused`` and the library's
 reason. An array equality the pipeline expands eagerly (between stores over
 bit-vector arrays, say) does not refuse the point. When the rings cannot be
 mapped (a small ``--worker-memory-mib``) the roots run without sharing and
@@ -159,8 +162,8 @@ from the same loaded solver, and holds in every model of the query. It is
 implied by the clauses all of them share -- or, under ``--config
 eager-arrays``, where a root whose model fails its replay adds array axioms
 after the fork, by those axioms, which are valid for the query -- because
-every root runs the same CaDiCaL options (diversification changes only the
-search), no technique that removes models runs between the fork and the
+every root runs the same backend with the same options (diversification
+changes only the search), no technique that removes models runs between the fork and the
 connection, and the variables created later lie above the cutoff that no
 exported clause crosses. Every complete answer in hand is compared
 with the others -- each root's, the hedge's, the owner's, and one written by
@@ -248,7 +251,7 @@ Options
 
 ``-j N``, ``-jN``, ``--jobs=N``
   Without it, the CPUs the process is allowed, at most 8 (1 on a build
-  without the extension). 1 is ordinary STP's pipeline (above). N > 1 is the
+  with no backend that exchanges clauses). 1 is ordinary STP's pipeline (above). N > 1 is the
   group on N CPUs (N − 1 roots and the hedge on ``QF_BV``, N roots
   otherwise), holding N copies of the loaded solver. N may not exceed the
   CPUs the process is allowed. Numbers are read in base 10.
@@ -258,6 +261,12 @@ Options
 ``--random-seed N``
   The native seed of ordinary STP, of the hedge and of root 0; root *i* > 0
   takes N + *i*.
+``--sat-backend NAME``
+  The SAT backend of every process, one of the build's. Without it ``-j1``
+  runs the build's default, the hedge CaDiCaL where it is built, and the
+  roots the first backend that exchanges clauses, CaDiCaL before Kissat.
+  With ``-jN`` it must be one that does. The group's policy and every
+  measurement below were chosen and taken on CaDiCaL.
 ``--worker-memory-mib M``, ``--memory-mib M``
   The per-process address-space limit (default 16384, 0 inherits), which
   also bounds the input, and the invocation's PSS guard (default 0: none).
@@ -270,9 +279,9 @@ Options
   floating-point elements, or one with a constant array, still refines and
   does not.
 ``--stats-json FILE``
-  A JSON report: the answer, which side and which root decided, whether the
-  fork point was offered, timings, the memory peaks, and each root's
-  exchange counters.
+  A JSON report: the answer, which side and which root decided, the roots'
+  SAT backend, whether the fork point was offered, timings, the memory
+  peaks, and each root's exchange counters.
 ``--help``, ``--version``
   The usage, or the version and commit of the STP library it runs on.
 
@@ -518,7 +527,9 @@ possible and can be used without ``stp-p``:
   place, as the caller asks;
 - the hook's ``SearchPoint`` connects a ``ClauseExchange`` (learned clauses
   out, clauses to import in, in the backend's own numbering) to that
-  check's backend, or diversifies its search and nothing else.
+  check's backend, or diversifies its search and nothing else. CaDiCaL with
+  STP's clause-import extension and Kissat with STP's clause exchange
+  implement both.
 
 Open decisions
 --------------
@@ -564,9 +575,14 @@ Each of these is open, with the measurement that would settle it:
 - **An in-library API**: the group's coordinator in ``libstp`` with a
   parallel options block on ``check_sat``, the C and Python mirrors of the
   two members above, and every ``stp-p`` option settable through it.
-- **Builds without the extension**: ``-jN`` is refused where CaDiCaL is
-  missing or unpatched; an independent-seed portfolio could run there
-  instead.
+- **Builds without the extension**: ``-jN`` is refused where neither
+  CaDiCaL nor Kissat carries STP's extension; an independent-seed portfolio
+  could run there instead.
+- **Kissat groups**: a group on Kissat runs the policy chosen on CaDiCaL and
+  has not been measured.
+- **Mixed groups**: roots on different backends would need the CNF loaded
+  into both before the fork and clauses exchanged in STP's numbering rather
+  than each backend's.
 - **Beyond 24 CPUs**: ``-j64`` gains on hard files (above); what it costs
   on the rest, NUMA-aware forking, and handing the CNF to a distributed
   solver as the comparison to make before building more.
