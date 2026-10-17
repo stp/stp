@@ -357,6 +357,73 @@ TEST(BeforeSearch, AnArithmeticHookKeepsItsCoordinatorsCallback)
   EXPECT_EQ(hooked, plain);
 }
 
+// Hands every learned clause back to the backend that learned it.
+struct Echo final : ClauseExchange
+{
+  std::vector<std::vector<int>> clauses;
+  std::size_t returned = 0;
+  void learned(const int* clause, std::size_t size) noexcept override
+  {
+    try
+    {
+      clauses.emplace_back(clause, clause + size);
+    }
+    catch (...)
+    {
+    }
+  }
+  bool next(std::vector<int>& clause) noexcept override
+  {
+    if (returned == clauses.size())
+      return false;
+    clause = clauses[returned++];
+    return true;
+  }
+};
+
+TEST(BeforeSearch, AnArithmeticCheckSharesClausesWhileItsTheoryPropagates)
+{
+  // A group's root on arithmetic: the coordinator joins the first search as
+  // a propagator, and the clauses the search learns from its lemmas go out
+  // and come back in through the exchange the hook connected. Eight Reals
+  // in {0, 1} cannot sum to 9/2, which takes the theory many conflicts.
+  if (!exchange_available)
+    GTEST_SKIP() << "the backend does not exchange clauses";
+  std::string script;
+  std::string sum;
+  for (int i = 0; i < 8; i++)
+  {
+    const std::string r = "r" + std::to_string(i);
+    script += "(declare-const " + r + " Real)(assert (or (= " + r +
+              " 0) (= " + r + " 1)))";
+    sum += " " + r;
+  }
+  script += "(assert (= (+" + sum + ") (/ 9 2)))";
+  TermManager tm;
+  Options o = batch_options();
+  o.set("lra-first-search", "true");
+  o.set("print-functionstat", "true");
+  Solver s(tm, o);
+  std::string diagnostics;
+  s.set_diagnostic_sink([&](std::string_view text) { diagnostics += text; });
+  s.parse_smt2(script);
+  Echo echo;
+  ClauseExchangeSettings settings;
+  settings.import_interval = 1;
+  s.set_before_search(
+      [&](SearchPoint& point)
+      { return point.connect_clause_exchange(&echo, settings); },
+      "the group", NoSearchPoint::search);
+  EXPECT_TRUE(s.check_sat().is_unsat());
+  EXPECT_EQ(s.statistics().str("before-search.outcome"), "offered");
+  EXPECT_GT(s.statistics().uint64("sat.exchange.exported"), 0u);
+  EXPECT_GT(s.statistics().uint64("sat.exchange.imported"), 0u);
+  if (backend_hosts_theory())
+  {
+    EXPECT_GE(first_search_connections(diagnostics), 1);
+  }
+}
+
 TEST(BeforeSearch, ArithmeticMixedWithArraysOrUfRefusesTheForkPoint)
 {
   const char* real =
