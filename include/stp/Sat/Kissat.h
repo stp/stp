@@ -42,6 +42,12 @@ class DLL_PUBLIC Kissat : public SATSolver
   // of STP's Kissat fork.
   struct Exchange;
   std::unique_ptr<Exchange> exchange;
+  // A connected TheoryPropagator (connectTheoryPropagator), through the
+  // IPASIR-UP interface of STP's Kissat fork, and the STP variable of every
+  // external variable STP allocated (external[v] + 1 maps back to v + 1).
+  struct PropagatorBridge;
+  std::unique_ptr<PropagatorBridge> propagator_bridge;
+  std::vector<uint32_t> stp_of_external;
 
   void requireHealthy() const;
   int literal(Lit lit) const;
@@ -100,6 +106,11 @@ public:
                              const ExchangeSettings& settings) override;
   ExchangeCounters exchangeCounters() const override;
   bool diversify(const Diversification& d) override;
+  bool supportsTheoryPropagator() const override;
+  bool supportsDecisionPolarity() const override;
+  bool connectTheoryPropagator(TheoryPropagator* propagator,
+                               const std::vector<uint32_t>& observed) override;
+  void disconnectTheoryPropagator() override;
   lbool true_literal() const override { return 1; }
   lbool false_literal() const override { return 0; }
   lbool undef_literal() const override { return 2; }

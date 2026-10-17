@@ -1174,6 +1174,9 @@ if(USE_KISSAT)
     if (KISSAT_HAS_CLAUSE_EXCHANGE)
         add_definitions(-DSTP_KISSAT_HAS_CLAUSE_EXCHANGE)
     endif()
+    if (KISSAT_HAS_EXTERNAL_PROPAGATOR)
+        add_definitions(-DSTP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+    endif()
 endif()
 
 # stp-p's group needs a backend that exchanges clauses: CaDiCaL with STP's

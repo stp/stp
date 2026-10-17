@@ -171,6 +171,178 @@ struct Kissat::Exchange
 };
 #endif
 
+#if defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+// A TheoryPropagator through the IPASIR-UP interface of STP's Kissat fork,
+// the counterpart of the CaDiCaL adapter's bridge: Kissat's external
+// literals in, STP's literals out. Kissat tells the theory every assignment
+// of an observed variable in trail order, root assignments at the root and
+// assignments kept by chronological backtracking again; it takes a
+// propagated literal's reason at once, and accepts a model only when the
+// theory does. A clause the theory hands over is a theory no-good, entailed
+// for the rest of the solve, so none is forgettable; reasons may be
+// forgotten.
+struct Kissat::PropagatorBridge
+{
+  PropagatorBridge(Kissat& owner, SATSolver::TheoryPropagator& theory)
+      : owner(owner), theory(theory)
+  {
+  }
+
+  bool stpLiteral(int external, SATSolver::Lit& literal) const
+  {
+    const size_t var = size_t(std::abs(external));
+    if (external == 0 || external == INT_MIN ||
+        var >= owner.stp_of_external.size() || !owner.stp_of_external[var])
+      return false;
+    literal.x = ((owner.stp_of_external[var] - 1) << 1) |
+                (external < 0 ? 1u : 0u);
+    return true;
+  }
+  int externalLiteral(SATSolver::Lit literal) const
+  {
+    return owner.literal(literal);
+  }
+
+  static PropagatorBridge& of(void* state)
+  {
+    return *static_cast<PropagatorBridge*>(state);
+  }
+  static void notifyAssignment(void* state, const int* lits, size_t size)
+  {
+    auto& self = of(state);
+    if (self.theory.failed())
+      return;
+    self.translated.clear();
+    SATSolver::Lit literal;
+    for (size_t i = 0; i < size; ++i)
+      if (self.stpLiteral(lits[i], literal))
+        self.translated.push_back(literal);
+    if (!self.translated.empty())
+      self.theory.notifyAssigned(self.translated);
+  }
+  static void notifyNewDecisionLevel(void* state)
+  {
+    auto& self = of(state);
+    if (!self.theory.failed())
+      self.theory.notifyNewLevel();
+  }
+  static void notifyBacktrack(void* state, size_t level)
+  {
+    // A clause staged for the level being left is no longer about the
+    // current trail, so it goes with it.
+    auto& self = of(state);
+    self.pending.clear();
+    self.pending_index = 0;
+    self.pending_active = false;
+    if (!self.theory.failed())
+      self.theory.notifyBacktrack(level);
+  }
+  static int checkFoundModel(void* state, const int*, size_t)
+  {
+    // A failed theory cannot vouch for anything; the caller checks failed()
+    // and discards the verdict, and accepting is what lets the solve end.
+    auto& self = of(state);
+    return self.theory.failed() || self.theory.checkFoundModel();
+  }
+  static int hasExternalClause(void* state, int* forgettable)
+  {
+    auto& self = of(state);
+    *forgettable = 0;
+    if (self.pending_active)
+      return 1;
+    if (self.theory.failed())
+      return 0;
+    self.pending.clear();
+    self.pending_index = 0;
+    if (!self.theory.takeClause(self.pending) || self.pending.empty())
+      return 0;
+    self.pending_active = true;
+    return 1;
+  }
+  static int addExternalClauseLit(void* state)
+  {
+    auto& self = of(state);
+    if (!self.pending_active)
+      return 0;
+    if (self.pending_index == self.pending.size())
+    {
+      self.pending.clear();
+      self.pending_index = 0;
+      self.pending_active = false;
+      return 0; // terminator
+    }
+    return self.externalLiteral(self.pending[self.pending_index++]);
+  }
+  static int propagate(void* state)
+  {
+    auto& self = of(state);
+    SATSolver::Lit literal;
+    if (self.theory.failed() || !self.theory.propagate(literal))
+      return 0;
+    return self.externalLiteral(literal);
+  }
+  static int addReasonClauseLit(void* state, int propagated)
+  {
+    // One reason at a time, literal by literal, starting with the
+    // propagated literal; a lookup cannot fail short of the theory having
+    // failed, after which nothing it says counts.
+    auto& self = of(state);
+    if (self.reason_for != propagated)
+    {
+      self.reason.clear();
+      self.reason_index = 0;
+      self.reason_for = propagated;
+      SATSolver::Lit literal;
+      if (self.theory.failed() || !self.stpLiteral(propagated, literal) ||
+          !self.theory.reasonFor(literal, self.reason))
+      {
+        self.reason.clear();
+        self.reason_for = 0;
+        return 0;
+      }
+    }
+    if (self.reason_index == self.reason.size())
+    {
+      self.reason.clear();
+      self.reason_index = 0;
+      self.reason_for = 0;
+      return 0; // terminator
+    }
+    return self.externalLiteral(self.reason[self.reason_index++]);
+  }
+  static int adviseDecisionPolarity(void* state, int offered)
+  {
+    // Kissat supplied the variable; zero keeps its own sign.
+    auto& self = of(state);
+    SATSolver::Lit literal;
+    if (self.theory.failed() || !self.stpLiteral(offered, literal))
+      return 0;
+    bool value = offered > 0;
+    try
+    {
+      if (self.theory.decisionPolarity(SATSolver::var(literal), value))
+        return value ? std::abs(offered) : -std::abs(offered);
+    }
+    catch (...)
+    {
+      // Advice has no semantic authority. A failed hint retains SAT's choice.
+    }
+    return 0;
+  }
+
+  Kissat& owner;
+  SATSolver::TheoryPropagator& theory;
+  std::vector<SATSolver::Lit> translated, pending, reason;
+  size_t pending_index = 0, reason_index = 0;
+  bool pending_active = false;
+  int reason_for = 0;
+};
+#else
+struct Kissat::PropagatorBridge
+{
+};
+#endif
+
 bool Kissat::enableLuckyProbe()
 {
   requireHealthy();
@@ -449,6 +621,9 @@ uint32_t Kissat::newVar()
     throw std::overflow_error("Kissat external variable limit reached");
   external.push_back(++last_external);
   frozen.push_back(false);
+  if (stp_of_external.size() <= size_t(last_external))
+    stp_of_external.resize(size_t(last_external) + 1, 0);
+  stp_of_external[last_external] = uint32_t(external.size());
   if (lucky_probe && last_external > LuckyProbe::maximumVariable)
     lucky_probe->stopRecording();
   return static_cast<uint32_t>(external.size() - 1);
@@ -572,7 +747,8 @@ bool Kissat::solveInternal(bool& timeout_expired)
 {
   requireHealthy();
   const vec_literals assumptions;
-  if (tryLuckyProbe(assumptions, timeout_expired))
+  // A disposable candidate is a model no theory has checked.
+  if (!propagator_bridge && tryLuckyProbe(assumptions, timeout_expired))
   {
     ++solve_calls;
     return true;
@@ -591,7 +767,7 @@ bool Kissat::solveWithAssumptionsInternal(const vec_literals& assumptions,
   requireHealthy();
   if (one_shot)
     throw std::logic_error("assumptions passed to a one-shot Kissat backend");
-  if (tryLuckyProbe(assumptions, timeout_expired))
+  if (!propagator_bridge && tryLuckyProbe(assumptions, timeout_expired))
   {
     ++solve_calls;
     return true;
@@ -795,6 +971,67 @@ bool Kissat::diversify(const Diversification& d)
 #else
   (void)d;
   return false;
+#endif
+}
+
+bool Kissat::supportsTheoryPropagator() const
+{
+#if defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+  // The interface needs incremental mode, which a one-shot backend gave up.
+  return !one_shot;
+#else
+  return false;
+#endif
+}
+
+bool Kissat::supportsDecisionPolarity() const
+{
+  return supportsTheoryPropagator();
+}
+
+bool Kissat::connectTheoryPropagator(SATSolver::TheoryPropagator* propagator,
+                                     const std::vector<uint32_t>& observed)
+{
+#if defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+  requireHealthy();
+  if (propagator == nullptr || propagator_bridge || one_shot)
+    return false;
+  propagator_bridge.reset(new PropagatorBridge(*this, *propagator));
+  kissat_external_propagator callbacks = {};
+  callbacks.state = propagator_bridge.get();
+  callbacks.notify_assignment = PropagatorBridge::notifyAssignment;
+  callbacks.notify_new_decision_level =
+      PropagatorBridge::notifyNewDecisionLevel;
+  callbacks.notify_backtrack = PropagatorBridge::notifyBacktrack;
+  callbacks.check_found_model = PropagatorBridge::checkFoundModel;
+  callbacks.has_external_clause = PropagatorBridge::hasExternalClause;
+  callbacks.add_external_clause_lit = PropagatorBridge::addExternalClauseLit;
+  callbacks.propagate = PropagatorBridge::propagate;
+  callbacks.add_reason_clause_lit = PropagatorBridge::addReasonClauseLit;
+  if (propagator->wantsDecisionPolarity())
+    callbacks.advise_decision_polarity =
+        PropagatorBridge::adviseDecisionPolarity;
+  kissat_connect_external_propagator(solver, &callbacks);
+  // Observing protects the variable, so inprocessing will not eliminate or
+  // substitute an atom the theory is reasoning about; one already
+  // eliminated is restored first.
+  for (uint32_t var : observed)
+    kissat_add_observed_var(solver, external.at(var));
+  return true;
+#else
+  (void)propagator;
+  (void)observed;
+  return false;
+#endif
+}
+
+void Kissat::disconnectTheoryPropagator()
+{
+#if defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+  if (!propagator_bridge)
+    return;
+  kissat_disconnect_external_propagator(solver);
+  propagator_bridge.reset();
 #endif
 }
 
