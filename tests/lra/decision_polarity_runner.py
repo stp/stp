@@ -85,9 +85,12 @@ CMS_SOURCE = """
 (exit)
 """
 
+# Kissat's first decision on SOURCE is one the advice agrees with, so
+# LATE_SOURCE serves for both.
 SOURCES = {
     "--minisat": (FALSE_SOURCE, FALSE_LATE_SOURCE),
     "--cryptominisat": (CMS_SOURCE, CMS_SOURCE),
+    "--kissat": (LATE_SOURCE, LATE_SOURCE),
 }
 
 

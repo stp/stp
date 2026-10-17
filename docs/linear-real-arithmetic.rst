@@ -320,8 +320,8 @@ Search and the float tier
 
 ``--lra-decision-polarity`` (on where supported)
   Pick the polarity of arithmetic decisions. It needs
-  ``--lra-theory-propagation`` and the patched CaDiCaL or a MiniSat or
-  CryptoMiniSat that hosts the propagator. ``=0`` restores
+  ``--lra-theory-propagation`` and the patched CaDiCaL or a MiniSat,
+  CryptoMiniSat or Kissat that hosts the propagator. ``=0`` restores
   the backend's own polarity, and an explicit ``=1`` without support is
   an error.
 

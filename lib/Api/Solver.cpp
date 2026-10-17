@@ -166,12 +166,15 @@ void validate_engine_options(const UserDefinedFlags& flags)
         flags.solver_to_use == UserDefinedFlags::CRYPTOMINISAT5_SOLVER &&
         flags.num_solver_threads == 1;
 #endif
+#if defined(USE_KISSAT) && defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+    supported |= flags.solver_to_use == UserDefinedFlags::KISSAT_SOLVER;
+#endif
     if (!supported)
       fail_option(ErrorCode::OPTION_UNAVAILABLE, "lra-decision-polarity",
                   "--lra-decision-polarity requires CaDiCaL built with "
                   "cmake/deps-utils/cadical-decision-polarity.patch, or "
-                  "MiniSat or single-threaded CryptoMiniSat with the "
-                  "external-propagator interface");
+                  "MiniSat, single-threaded CryptoMiniSat or Kissat with "
+                  "the external-propagator interface");
   }
   // The four LraCoordinator preconditions. It refuses these as well, but as
   // an exception the engine reports as SOLVER_ERROR -- an internal failure

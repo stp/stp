@@ -457,6 +457,12 @@ if(STP_EXECUTABLE_AVAILABLE)
               "$<TARGET_FILE:stp-bin>" "--cryptominisat")
     set_tests_properties(lra_polarity_cli_cryptominisat PROPERTIES LABELS "lra;semantic;polarity" TIMEOUT 120)
   endif()
+  if(USE_KISSAT AND KISSAT_HAS_EXTERNAL_PROPAGATOR)
+    add_test(NAME lra_polarity_cli_kissat
+      COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/decision_polarity_runner.py"
+              "$<TARGET_FILE:stp-bin>" "--kissat")
+    set_tests_properties(lra_polarity_cli_kissat PROPERTIES LABELS "lra;semantic;polarity" TIMEOUT 120)
+  endif()
   foreach(arithmetic float exact)
     if(arithmetic STREQUAL "float")
       set(first_search_float 1)
