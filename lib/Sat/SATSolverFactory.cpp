@@ -160,6 +160,7 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
       auto solver = std::make_unique<Kissat>(
           flags.kissat_trail_reuse, flags.kissat_stable, flags.kissat_probe,
           flags.kissat_trail_reuse_mode, flags.kissat_eliminate);
+      solver->setImportOrder(flags.kissat_import_order);
       solver->setGreedyOptions(
           {flags.kissat_incremental_greedy, flags.kissat_greedy_conflicts,
            flags.kissat_greedy_decisions, flags.kissat_greedy_growth,

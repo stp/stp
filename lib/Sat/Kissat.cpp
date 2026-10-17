@@ -316,6 +316,16 @@ void Kissat::setGreedyOptions(const GreedyOptions& options)
   }
 }
 
+void Kissat::setImportOrder(int order)
+{
+  requireHealthy();
+  if (!configurationOpen() || solve_calls)
+    throw std::logic_error("Kissat import order requires a fresh backend");
+  if (order < 0 || order > 2)
+    throw std::invalid_argument("Kissat import order outside its range");
+  import_order = order;
+}
+
 void Kissat::requireHealthy() const
 {
   if (allocations->owner.failed)
@@ -354,6 +364,18 @@ bool Kissat::addClauseInternal(const vec_literals& clause)
   requireHealthy();
   if (one_shot && solve_calls)
     throw std::logic_error("clauses added after a one-shot Kissat search");
+  // Reserve the currently allocated IDs before loading the first clause.
+  // Variables allocated later keep the ordinary import path.
+  if (import_order && submittedClauses() == 1 && last_external)
+  {
+    const int incremental = kissat_get_option(solver, "incremental");
+    const int tumble = kissat_get_option(solver, "tumble");
+    kissat_set_option(solver, "incremental", import_order == 2 ? 1 : 0);
+    kissat_set_option(solver, "tumble", import_order == 1 ? 0 : tumble);
+    kissat_reserve(solver, last_external);
+    kissat_set_option(solver, "tumble", tumble);
+    kissat_set_option(solver, "incremental", incremental);
+  }
   if (lucky_probe)
   {
     auto& probe = *lucky_probe;
