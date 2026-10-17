@@ -257,4 +257,24 @@ else()
 endif()
 message(STATUS "Kissat external propagator: ${KISSAT_HAS_EXTERNAL_PROPAGATOR}")
 
+# Simplification without search and the root-fixed literals it leaves, the
+# STP extension skeleton preprocessing reads; probed and assumed the same way.
+unset(KISSAT_HAS_ROOT_SIMPLIFY CACHE)
+if(Kissat_FOUND_SYSTEM)
+    set(_kissat_simplify_probe "${PROJECT_BINARY_DIR}/kissat-simplify.cpp")
+    file(WRITE "${_kissat_simplify_probe}"
+        "extern \"C\" {\n#include <kissat/kissat.h>\n}\n"
+        "#ifndef KISSAT_HAS_ROOT_SIMPLIFY\n#error no root simplification\n#endif\n"
+        "int main() { kissat *s = kissat_init(); kissat_add(s, 1); kissat_add(s, 0); "
+        "int r = kissat_simplify(s) + kissat_root_fixed(s, 1); "
+        "kissat_release(s); return r == 1 ? 0 : 1; }\n")
+    try_compile(KISSAT_HAS_ROOT_SIMPLIFY
+        "${PROJECT_BINARY_DIR}/kissat-simplify-probe" "${_kissat_simplify_probe}"
+        CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${KISSAT_INCLUDE_DIR}"
+        LINK_LIBRARIES ${_kissat_libraries})
+else()
+    set(KISSAT_HAS_ROOT_SIMPLIFY ON)
+endif()
+message(STATUS "Kissat root simplification: ${KISSAT_HAS_ROOT_SIMPLIFY}")
+
 mark_as_advanced(Kissat_TAG KISSAT_SOURCE_INCLUDE_DIR KISSAT_LIBRARY KISSAT_INCREMENTAL_API)

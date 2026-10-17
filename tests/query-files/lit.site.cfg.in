@@ -10,6 +10,7 @@ config.stp_have_minisat = @STP_MINISAT_PYBOOL@
 config.stp_have_cadical = @STP_CADICAL_PYBOOL@
 config.stp_have_kissat = @STP_KISSAT_PYBOOL@
 config.stp_kissat_propagator = @STP_KISSAT_PROPAGATOR_PYBOOL@
+config.stp_kissat_root_simplify = @STP_KISSAT_ROOT_SIMPLIFY_PYBOOL@
 config.stp_have_cryptominisat = @STP_CRYPTOMINISAT_PYBOOL@
 config.stp_cadical_inprobing = @STP_CADICAL_INPROBING_PYBOOL@
 config.stp_cadical_3 = @STP_CADICAL_3_PYBOOL@

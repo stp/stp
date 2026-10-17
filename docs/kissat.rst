@@ -344,7 +344,10 @@ The backend implements the incremental SAT contract needed for refinement,
 and hosts a theory propagator through the fork's IPASIR-UP interface (see
 below). It takes decision hints (``--array-index-hints=decide``) through
 the same interface before its first search, and a theory that connects
-later takes their place. It does not expose search reset. STP uses its
+later takes their place. Skeleton preprocessing (``--skeleton-preproc``,
+``--uf-skeleton-preproc``) reads the literals Kissat fixes at the root
+when it simplifies without searching, an extension of the fork as well.
+It does not expose search reset. STP uses its
 existing fallbacks for optional backend capabilities. Restoring the entire extension
 can cost more than restoring only the variables a new clause needs.
 Incremental proof output is outside the scope of this port.

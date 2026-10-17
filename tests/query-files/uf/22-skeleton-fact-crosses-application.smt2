@@ -5,7 +5,9 @@
 ; is w and the query is refuted with no divider built and no lemma learned.
 ;
 ; The skeleton pass reads what the SAT backend fixed at the root, which
-; only CaDiCaL reports, so the pass is a no-op under another backend.
+; only CaDiCaL and a Kissat with STP's simplification extension report, so
+; the pass is a no-op under another backend.
+; 22-skeleton-fact-crosses-application-kissat.smt2 runs this on Kissat.
 ; REQUIRES: cadical
 ;
 ; RUN: %solver --cadical -s --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
