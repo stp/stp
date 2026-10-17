@@ -200,7 +200,8 @@ LraCoordinator::LraCoordinator(STPMgr& manager, SATSolver& solver,
         throw std::runtime_error(
             "--lra-decision-polarity requires CaDiCaL built with "
             "cmake/deps-utils/cadical-decision-polarity.patch, or MiniSat "
-            "with the external-propagator interface");
+            "or single-threaded CryptoMiniSat with the external-propagator "
+            "interface");
     }
 
     const auto& controls = manager_.UserFlags;
