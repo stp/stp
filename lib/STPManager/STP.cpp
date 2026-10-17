@@ -885,6 +885,20 @@ bool lraGaveUpOnABudget(const std::exception& thrown)
 {
   return lra::gaveUpOnABudget(thrown);
 }
+
+// The backends the UF search propagator runs on: CaDiCaL, and Kissat when
+// it hosts a theory propagator (a one-shot Kissat does not). The others that
+// can host one (CryptoMiniSat and MiniSat with the interface) have not been
+// tried with it.
+bool hostsUFSearch(SATSolver& solver, const UserDefinedFlags& flags)
+{
+#ifdef USE_CADICAL
+  if (dynamic_cast<Cadical*>(&solver) != NULL)
+    return true;
+#endif
+  return flags.solver_to_use == UserDefinedFlags::KISSAT_SOLVER &&
+         solver.supportsTheoryPropagator();
+}
 } // namespace
 
 SOLVER_RETURN_TYPE
@@ -945,15 +959,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
                   << ", conflicts=" << propagator->conflicts() << std::endl;
     }
   } ufSearchScope{Ctr_Example, bm, &ufSearch};
-#ifdef USE_CADICAL
   if (bm->UserFlags.uf_search_conflicts && bm->UserFlags.uf_qf_uf_logic &&
       batchUFView->active() && bm->before_search == NULL &&
-      dynamic_cast<Cadical*>(&NewSolver) != NULL)
+      hostsUFSearch(NewSolver, bm->UserFlags))
   {
     NewSolver.expectTheoryPropagator();
     Ctr_Example->setUFSearchPropagator(&ufSearch);
   }
-#endif
 
   std::unique_ptr<lra::LraCoordinator, QueryTimedDelete<lra::LraCoordinator>>
       lraCoordinator(nullptr, {bm->query_timing, QueryPhase::LraCleanup});
