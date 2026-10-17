@@ -639,3 +639,66 @@ TEST(OptionEffects, kissat_one_shot_mode_reaches_native_and_parsed_checks)
                                                     mode == 0 ? 1 : 0));
         }
 }
+
+TEST(OptionEffects, adjacent_bounds_option_reaches_native_and_parsed_checks)
+{
+  EXPECT_FALSE(Options().get_bool("bv-adjacent-bounds"));
+  for (const bool parsed : {false, true})
+  {
+    SCOPED_TRACE(parsed);
+    TermManager tm;
+    Options options;
+    if (!parsed)
+      options.set_bool("bv-adjacent-bounds", true);
+    Solver solver(tm, options);
+    if (parsed)
+      solver.parse_smt2("(set-option :bv-adjacent-bounds true)");
+    const Term x = tm.declare("adjacent_option_x", tm.mk_bv_sort(8));
+    solver.add(x == 1);
+    ASSERT_TRUE(solver.check_sat().is_sat());
+    EXPECT_TRUE(flags_after(tm).enable_adjacent_bounds);
+    EXPECT_TRUE(solver.options().is_set("bv-adjacent-bounds"));
+    EXPECT_EQ(solver.options().resolved("bv-adjacent-bounds"),
+              OptionValue(true));
+    API_EXPECT_ERROR(ErrorCode::OPTION_TIMING,
+                     solver.options().set_bool("bv-adjacent-bounds", false));
+  }
+}
+
+TEST(OptionEffects, adjacent_bounds_option_is_restored_on_solver_activation)
+{
+  TermManager tm;
+  Options enabled;
+  enabled.set_bool("bv-adjacent-bounds", true);
+  Solver on(tm, enabled), off(tm);
+  const Term x = tm.declare("adjacent_switch_x", tm.mk_bv_sort(8));
+  on.add(x == 1);
+  off.add(x == 2);
+  ASSERT_TRUE(on.check_sat().is_sat());
+  EXPECT_TRUE(flags_after(tm).enable_adjacent_bounds);
+  ASSERT_TRUE(off.check_sat().is_sat());
+  EXPECT_FALSE(flags_after(tm).enable_adjacent_bounds);
+  ASSERT_TRUE(on.check_sat().is_sat());
+  EXPECT_TRUE(flags_after(tm).enable_adjacent_bounds);
+}
+
+TEST(OptionEffects, adjacent_bounds_option_handles_prebuilt_raw_terms)
+{
+  TermManager::Config config;
+  config.simplify = false;
+  TermManager tm(config);
+  const Sort word = tm.mk_bv_sort(32);
+  const Term x = tm.declare("adjacent_raw_x", word);
+  const Term y = tm.declare("adjacent_raw_y", word);
+  const Term lower = bvult(x, y);
+  const Term upper = bvugt(bvadd(x, tm.mk_bv(32, 1)), y);
+  Options options;
+  options.set_bool("bv-adjacent-bounds", true);
+  Solver solver(tm, options);
+  solver.add(lower);
+  solver.add(upper);
+  bool emitted = false;
+  solver.set_cnf_sink([&](std::string_view, CnfScope) { emitted = true; });
+  ASSERT_TRUE(solver.check_sat().is_unsat());
+  EXPECT_FALSE(emitted);
+}
