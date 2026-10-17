@@ -61,6 +61,37 @@ using std::endl;
 
 static bool debug_simplifyingNodeFactory = false;
 
+// Recover x from a two-times-x term, including the concat/extract form of
+// a constant left shift. Inspect existing constants without allocating any.
+static stp::ASTNode doubledOperand(const stp::ASTNode& term)
+{
+  const unsigned width = term.GetValueWidth();
+  if (width <= 1 || term.Degree() != 2)
+    return stp::ASTNode();
+  if (term.GetKind() == stp::BVLEFTSHIFT && term[1].GetKind() == stp::BVCONST &&
+      CONSTANTBV::Set_Max(term[1].GetBVConst()) == 0)
+    return term[0];
+  if (term.GetKind() == stp::BVMULT)
+    for (unsigned i = 0; i < 2; i++)
+      if (term[i].GetKind() == stp::BVCONST &&
+          CONSTANTBV::Set_Min(term[i].GetBVConst()) == 1 &&
+          CONSTANTBV::Set_Max(term[i].GetBVConst()) == 1)
+        return term[1 - i];
+  if (term.GetKind() != stp::BVCONCAT || term[1].GetKind() != stp::BVCONST ||
+      term[1].GetValueWidth() != 1 ||
+      !CONSTANTBV::BitVector_is_empty(term[1].GetBVConst()))
+    return stp::ASTNode();
+  const stp::ASTNode& high = term[0];
+  if (high.GetKind() != stp::BVEXTRACT || high.Degree() != 3 ||
+      high.GetValueWidth() != width - 1 || high[0].GetValueWidth() != width ||
+      high[1].GetKind() != stp::BVCONST || high[2].GetKind() != stp::BVCONST ||
+      !CONSTANTBV::BitVector_is_empty(high[2].GetBVConst()) ||
+      CONSTANTBV::Set_Max(high[1].GetBVConst()) >= 32 ||
+      high[1].GetUnsignedConst() != width - 2)
+    return stp::ASTNode();
+  return high[0];
+}
+
 // True if the constant has exactly one bit set.
 static bool hasSingleOneBit(const stp::ASTNode& n)
 {
@@ -2312,6 +2343,41 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTChildren children)
   // bits, not the identities.
   if (stp::BVCONST == k1 && stp::BVCONST == k2)
     return stp::constantsSameBits(in1, in2) ? ASTTrue : ASTFalse;
+
+  // x + y = 2*x is y = x even when the addition wraps. Peeling a run
+  // iteratively also handles deeply shared sums without one frame per step.
+  if ((k1 == BVPLUS && in1.Degree() == 2) ||
+      (k2 == BVPLUS && in2.Degree() == 2))
+  {
+    ASTNode lhs = in1, rhs = in2;
+    bool changed = false;
+    for (;;)
+    {
+      bool matched = false;
+      for (unsigned side = 0; side < 2 && !matched; side++)
+      {
+        const ASTNode& sum = side == 0 ? lhs : rhs;
+        if (sum.GetKind() != BVPLUS || sum.Degree() != 2)
+          continue;
+        const ASTNode base = doubledOperand(side == 0 ? rhs : lhs);
+        if (base.IsNull())
+          continue;
+        for (unsigned i = 0; i < 2; i++)
+          if (sum[i] == base)
+          {
+            const ASTNode other = sum[1 - i];
+            lhs = other;
+            rhs = base;
+            matched = changed = true;
+            break;
+          }
+      }
+      if (!matched)
+        break;
+    }
+    if (changed)
+      return NodeFactory::CreateNode(EQ, lhs, rhs);
+  }
 
   if ((k1 == BVNOT && k2 == BVNOT) || (k1 == BVUMINUS && k2 == BVUMINUS))
     return NodeFactory::CreateNode(EQ, in1[0], in2[0]);
