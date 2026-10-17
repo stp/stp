@@ -6,6 +6,7 @@
 #include <chrono>
 #include <climits>
 #include <cstdlib>
+#include <deque>
 #include <iostream>
 #include <limits>
 #include <new>
@@ -337,8 +338,100 @@ struct Kissat::PropagatorBridge
   bool pending_active = false;
   int reason_for = 0;
 };
+
+// Turns preferDecisions() into decisions, as the CaDiCaL adapter does: a
+// propagator that proposes the hinted literals, in order, whenever Kissat
+// asks it for a decision, until each has been proposed once. It propagates
+// nothing, adds no clauses and accepts every model, so the search is
+// Kissat's own except for where it starts. Kissat ignores a proposed
+// literal that is already assigned, but that spends the decision on its own
+// choice rather than the next hint, so the assignment of every hinted
+// variable is kept from the notifications and assigned hints are skipped:
+// root assignments arrive as notifications too, a variable fixed before it
+// was observed included, and assignments that chronological backtracking
+// keeps arrive again, which the idempotence below absorbs.
+struct Kissat::DecisionHints
+{
+  // A literal in Kissat's external numbering.
+  void hint(int lit)
+  {
+    grow(std::abs(lit));
+    queue.push_back(lit);
+  }
+  bool exhausted() const { return queue.empty(); }
+
+  static DecisionHints& of(void* state)
+  {
+    return *static_cast<DecisionHints*>(state);
+  }
+  static void notifyAssignment(void* state, const int* lits, size_t size)
+  {
+    auto& self = of(state);
+    for (size_t i = 0; i < size; ++i)
+    {
+      const int v = std::abs(lits[i]);
+      self.grow(v);
+      if (self.assigned[v] != 0)
+        continue;
+      self.assigned[v] = lits[i] < 0 ? -1 : 1;
+      self.trail.push_back(v);
+    }
+  }
+  static void notifyNewDecisionLevel(void* state)
+  {
+    auto& self = of(state);
+    self.levels.push_back(self.trail.size());
+  }
+  static void notifyBacktrack(void* state, size_t new_level)
+  {
+    auto& self = of(state);
+    if (new_level >= self.levels.size())
+      return; // nothing above that level was ever notified
+    const size_t keep = self.levels[new_level];
+    self.levels.resize(new_level);
+    while (self.trail.size() > keep)
+    {
+      self.assigned[self.trail.back()] = 0;
+      self.trail.pop_back();
+    }
+  }
+  static int checkFoundModel(void*, const int*, size_t) { return 1; }
+  static int hasExternalClause(void*, int* forgettable)
+  {
+    *forgettable = 0;
+    return 0;
+  }
+  static int addExternalClauseLit(void*) { return 0; }
+  static int decide(void* state)
+  {
+    auto& self = of(state);
+    while (!self.queue.empty())
+    {
+      const int lit = self.queue.front();
+      self.queue.pop_front();
+      if (self.assigned[std::abs(lit)] == 0)
+        return lit;
+    }
+    return 0;
+  }
+
+private:
+  void grow(int v)
+  {
+    if ((size_t)v >= assigned.size())
+      assigned.resize((size_t)v + 1, 0);
+  }
+
+  std::vector<int8_t> assigned; // by variable: the current value, 0 open
+  std::vector<int> trail;       // hinted variables in assignment order
+  std::vector<size_t> levels;   // trail size at each decision level
+  std::deque<int> queue;        // literals to propose, oldest first
+};
 #else
 struct Kissat::PropagatorBridge
+{
+};
+struct Kissat::DecisionHints
 {
 };
 #endif
@@ -715,6 +808,60 @@ void Kissat::suggestPhase(uint32_t var, bool value)
   kissat_set_phase(solver, value ? lit : -lit);
 }
 
+bool Kissat::preferDecisions(const std::vector<DecisionHint>& wanted)
+{
+#if defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+  requireHealthy();
+  // Before the first search, as on CaDiCaL, and never in place of a theory:
+  // Kissat has one propagator slot, and the caller phases the hints instead
+  // when they are declined. A one-shot backend gave up the incremental mode
+  // a propagator needs.
+  if (solve_calls || wanted.empty() || one_shot || propagator_bridge)
+    return false;
+  if (!hints)
+    connectHints();
+  for (const DecisionHint& h : wanted)
+  {
+    const int var = external.at(h.var);
+    kissat_add_observed_var(solver, var);
+    hints->hint(h.value ? var : -var);
+  }
+  return true;
+#else
+  (void)wanted;
+  return false;
+#endif
+}
+
+void Kissat::connectHints()
+{
+#if defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+  hints.reset(new DecisionHints());
+  kissat_external_propagator callbacks = {};
+  callbacks.state = hints.get();
+  callbacks.notify_assignment = DecisionHints::notifyAssignment;
+  callbacks.notify_new_decision_level = DecisionHints::notifyNewDecisionLevel;
+  callbacks.notify_backtrack = DecisionHints::notifyBacktrack;
+  callbacks.check_found_model = DecisionHints::checkFoundModel;
+  callbacks.has_external_clause = DecisionHints::hasExternalClause;
+  callbacks.add_external_clause_lit = DecisionHints::addExternalClauseLit;
+  callbacks.decide = DecisionHints::decide;
+  kissat_connect_external_propagator(solver, &callbacks);
+#endif
+}
+
+// A connected propagator also turns off Kissat's lucky and greedy
+// completions, which nothing but the first decisions needed to give up.
+void Kissat::disconnectHints()
+{
+#if defined(STP_KISSAT_HAS_EXTERNAL_PROPAGATOR)
+  if (!hints)
+    return;
+  kissat_disconnect_external_propagator(solver);
+  hints.reset();
+#endif
+}
+
 int Kissat::terminate(void* state)
 {
   return static_cast<Kissat*>(state)->timeLimitExpired();
@@ -736,6 +883,8 @@ bool Kissat::run(bool& timeout_expired)
                     max_conflicts, std::numeric_limits<unsigned>::max())));
   kissat_set_terminate(solver, this,
                        hasTimeLimit() || hasStopPoll() ? terminate : nullptr);
+  if (hints && hints->exhausted())
+    disconnectHints();
   ++solve_calls;
   const int result = kissat_solve(solver);
   if (result == 0)
@@ -868,6 +1017,8 @@ bool Kissat::configureOneShot()
   requireHealthy();
   if (!configurationOpen() || solve_calls)
     throw std::logic_error("one-shot Kissat requires a fresh backend");
+  if (hints)
+    return false; // decision hints need the incremental mode
   kissat_set_option(solver, "incremental", 0);
   kissat_set_option(solver, "incrementalreuse", 0);
   one_shot = true;
@@ -996,6 +1147,11 @@ bool Kissat::connectTheoryPropagator(SATSolver::TheoryPropagator* propagator,
   requireHealthy();
   if (propagator == nullptr || propagator_bridge || one_shot)
     return false;
+  // The decision hints may hold the one propagator slot: they are handed
+  // over while the first CNF is built, before the atoms exist that bring a
+  // theory here. They are advisory and a refusal here is not, so the theory
+  // takes the slot; the hinted variables are no longer observed.
+  disconnectHints();
   propagator_bridge.reset(new PropagatorBridge(*this, *propagator));
   kissat_external_propagator callbacks = {};
   callbacks.state = propagator_bridge.get();

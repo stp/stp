@@ -48,6 +48,12 @@ class DLL_PUBLIC Kissat : public SATSolver
   struct PropagatorBridge;
   std::unique_ptr<PropagatorBridge> propagator_bridge;
   std::vector<uint32_t> stp_of_external;
+  // The propagator that turns preferDecisions() into decisions, through the
+  // same interface; a theory takes its place when one connects.
+  struct DecisionHints;
+  std::unique_ptr<DecisionHints> hints;
+  void connectHints();
+  void disconnectHints();
 
   void requireHealthy() const;
   int literal(Lit lit) const;
@@ -95,6 +101,7 @@ public:
   }
   void setFrozen(uint32_t var) override;
   void suggestPhase(uint32_t var, bool value) override;
+  bool preferDecisions(const std::vector<DecisionHint>& wanted) override;
   void unsatAssumptions(const vec_literals& assumptions,
                         std::vector<int>& out) override;
   void setSeed(uint64_t seed) override;

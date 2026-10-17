@@ -2081,7 +2081,7 @@ settable = "anytime"
 scope = "solver"
 engine = { custom = "array_index_hints" }
 category = "arrays"
-help = "seed the free indices of each array's reads apart before the first solve, so that fewer candidates collide two reads on one index: 'off' (the default), 'phase' (suggest a counting value per index), or 'decide' (also decide those bits first, through cadical's external propagator; other backends get the phases)"
+help = "seed the free indices of each array's reads apart before the first solve, so that fewer candidates collide two reads on one index: 'off' (the default), 'phase' (suggest a counting value per index), or 'decide' (also decide those bits first, through the external propagator of cadical, or of kissat built with stp's fork; other backends get the phases)"
 
 [[option]]
 name = "congruence-candidates"

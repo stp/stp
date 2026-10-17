@@ -342,7 +342,9 @@ Current scope
 
 The backend implements the incremental SAT contract needed for refinement,
 and hosts a theory propagator through the fork's IPASIR-UP interface (see
-below). It does not expose decision hints or search reset. STP uses its
+below). It takes decision hints (``--array-index-hints=decide``) through
+the same interface before its first search, and a theory that connects
+later takes their place. It does not expose search reset. STP uses its
 existing fallbacks for optional backend capabilities. Restoring the entire extension
 can cost more than restoring only the variables a new clause needs.
 Incremental proof output is outside the scope of this port.
